@@ -1,0 +1,113 @@
+import map
+import stream
+import random
+
+import test
+
+// user-defined generator for arbitrary, unique Integers in ascending order
+def uniqueInt{body: => Unit / Generator[Int]}: Unit / random = {
+  try body() with Generator[Int]{
+    def generate() = resume{
+      var next = randomInt(-100, 100)
+      do emit(next)
+      while(true){
+        next = next + randomInt(1, 5)
+        do emit(next)
+      }
+    }
+    def shrink(v) = <>
+  }
+}
+
+// precondition: provided handler for Generator[K] needs to produce unique keys in ascending order!
+// otherwise the generated trees aren't valid binary search trees
+def arbitraryBinTree[K, V] (numKeys: Int) { body: => Unit / Generator[internal::Tree[K, V]] }: Unit / {Generator[K], Generator[V]} = {
+  def buildTree[K, V](pairs: List[(K, V)]): internal::Tree[K,V] = {
+    if (pairs.isEmpty) {
+      internal::Tip()
+    } else {
+      val midIdx = pairs.size() / 2
+      with on[OutOfBounds].panic;
+      val midEl = pairs.get(midIdx)
+      val leftTree = buildTree(pairs.take(midIdx)) 
+      val rightTree = buildTree(pairs.drop(midIdx + 1))
+      val size = 1 + internal::size(leftTree) + internal::size(rightTree)
+
+      internal::Bin(size, midEl.first, midEl.second, leftTree, rightTree)
+    }
+  }
+
+  try body() with Generator[internal::Tree[K, V]] {
+    def generate() = resume {
+        while(true) {
+          val l1 = collectList[K]{with boundary; with limit[K](numKeys); do generate[K]}
+          val l2 = collectList[V]{with boundary; with limit[V](numKeys); do generate[V]}
+          val sortedPairs = zip(l1,l2)
+          do emit(buildTree[K, V](sortedPairs))
+          //TODO try to use zip again
+        }
+    }
+    def shrink(v) = <>
+    }
+}
+
+def main()= {
+  with minstd(1337);
+
+  with arbitraryChar;
+  with arbitraryString(5);
+  with uniqueInt; 
+  with arbitraryBinTree[Int, String](8);
+
+  // Don't print out times in CI.
+  suite("PBT: Tree Map Examples", false) {
+
+    // get-put law: get(put(M, K, V), K) = V
+    forall[String, internal::Tree[Int, String], Int]("get-put law", 100)
+      { (v, t, k) =>
+        val newT = internal::put(t, compareInt, k, v)
+        internal::get(newT, compareInt, k) match {
+          case Some(value) => assertEqual(value, v)
+          case None() => do assert(false, "Key not in the tree")
+        }
+    }
+
+    // put-put law: get(put(put(M, K, V1), K, V2), K) = V2
+    forall[String, internal::Tree[Int, String], Int]("put-put law", 100)
+      { (v1, t, k) =>
+        val v2 = v1 ++ show(k) ++ v1 
+        val newT1 = internal::put(t, compareInt, k, v1)
+        val newT2 = internal::put(newT1, compareInt, k, v2)
+        internal::get(newT2, compareInt, k) match {
+          case Some(v) => assertEqual(v, v2)
+          case None() => do assert(false, "Key in the tree")
+        }
+    }
+
+    // put-get law: put(M, K, get(M, K)) = M
+    forall[internal::Tree[Int, String]]("put-get law", 100)
+      { t =>
+        // put-get law only make sense if K is present in the tree ~> get the keys of the tree
+        var keys = Nil()
+        t.internal::foreach[Int, String] { (k, _v) => keys = Cons(k, keys)}
+
+        with on[OutOfBounds].panic
+        val k = keys.get(randomInt(0, keys.size() - 1)) // only check the property for key's present in the tree (= non trivial test case)
+        internal::get(t, compareInt, k) match {
+          case Some(v) => {
+            val newT = internal::put(t, compareInt, k, v)
+            assertEqual(t, newT)}
+          case None() => do assert(false, "Key not in the tree")
+        }
+    }
+
+    // Law: `m.forget === m.map { (_k, _v) => () }
+    forall[internal::Tree[Int, String]]("forget-map relation", 100){t =>
+      val tForget = internal::forget(t)
+      val tMap = internal::map(t){ (_k, _v) => ()}
+      assertEqual(tForget, tMap)
+    }
+  };
+
+  ()
+}

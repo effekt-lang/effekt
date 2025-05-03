@@ -1,0 +1,9 @@
+PBT: Tree Map Examples
+✓ get-put law, passed 100 tests 
+✓ put-put law, passed 100 tests
+✓ put-get law, passed 100 tests 
+✓ forget-map relation, passed 100 tests 
+ 
+ 4 pass
+ 0 fail
+ 4 test(s) total

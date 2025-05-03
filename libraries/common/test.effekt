@@ -1,6 +1,8 @@
 import tty
 import process
 import bench
+import stream
+import random
 
 interface Assertion {
   def assert(condition: Bool, msg: String): Unit
@@ -56,10 +58,238 @@ def assertEqual[A](obtained: A, expected: A) { equals: (A, A) => Bool } { show: 
   // NOTE:                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   //             Here's an accidental capture! Can we prevent this somehow nicely?
 
+/// Represents push stream based generators with manual shrinking
+interface Generator[T] {
+  /// Generates a push stream of values of type `T` 
+  def generate(): Unit/emit[T]
+  
+  /// Produces a puh stream of simplified (shrunk) versions of a given value of type `T`
+  def shrink(v: T): Unit/emit[T]
+}
+
+def arbitraryInt { body: => Unit / Generator[Int] }: Unit / random =
+  try body() with Generator[Int] {
+    def generate() = resume {
+      //[0, -1, 1, int.minVal, int.maxVal, -2, 2].each // This can reduce the need for shrinking by emitting common edge cases first
+      while (true) {
+        do emit(randomInt(-50, 50))
+      }
+    }
+
+    def shrink(v: Int) = resume {
+      var shrunk: Int = v/2
+      while (shrunk != 0 && shrunk != v) {
+        do emit(shrunk)
+        do emit(neg(shrunk))
+        shrunk = shrunk / 2 // in case of odd numbers, rounds to the smaller half (e.g. 5 -> round(2.5) = 2 )
+      }
+      do emit(0)
+    }
+  }
+
+// same as other arbitraryInt but for quantifier version that explicitely takes the generator as input
+def arbitraryInt { body: {Generator[Int]} => Unit }: Unit /random = {
+  try body{g} with g: Generator[Int] {
+    def generate() = resume {   
+      while (true) {
+        do emit(randomInt(-50, 50))
+      }
+    }
+
+    def shrink(v: Int) = resume {
+      var shrunk: Int = v/2
+      while (shrunk != 0 && shrunk != v) {
+        do emit(shrunk)
+        do emit(neg(shrunk))
+        shrunk = shrunk / 2 // in case of odd numbers, rounds to the smaller half (e.g. 5 -> round(2.5) = 2 )
+      }
+      do emit(0)
+    }
+  }
+}
+
+def chooseInt(minInclusive: Int, maxExclusive: Int) { body: => Unit / Generator[Int] }: Unit / random=
+  try body() with Generator[Int] {
+    def generate() = resume {
+      while (true) {
+        do emit(randomInt(minInclusive, maxExclusive))
+      }
+    }
+
+    def shrink(v: Int) = resume {
+      var shrunk: Int = v/2
+      while (shrunk != 0 && shrunk != v) {
+        do emit(shrunk)
+        do emit(neg(shrunk))
+        shrunk = shrunk / 2 // in case of odd numbers, rounds to the smaller half (e.g. 5 -> round(2.5) = 2 )
+      }
+      do emit(0)
+    }
+  }
+
+def arbitraryBool { body: => Unit/Generator[Bool] }: Unit / random= 
+  try body() with Generator[Bool]{
+    def generate() = resume {
+      while (true) {
+        do emit(randomBool())
+      }
+    }
+
+    def shrink(v: Bool) = resume {
+      var out = v
+      if(v){
+        out = false
+      }else {
+        out = true
+      }
+      do emit(out)
+    }
+  }
+
+def arbitraryDouble { body: => Unit/Generator[Double] }: Unit / random = 
+  try body() with Generator[Double]{
+    def generate() = resume {
+      while (true) {
+        do emit(randomDouble())
+      }
+    }
+
+    def shrink(v: Double) = resume {
+      var shrink: Double = v/2.0
+      while (shrink != 0.0 && shrink != v) {
+        do emit(shrink)
+        do emit(neg(shrink)) 
+        shrink = shrink / 2.0 // in case of odd numbers, rounds to the smaller half (e.g. 5 -> round(2.5) = 2 )
+      }
+      do emit(0.0)
+    }
+  }
+
+
+def arbitraryChar { body: => Unit / Generator[Char] }: Unit / random =
+  try body() with Generator[Char] {
+    def generate() = resume {
+      // ASCII printable characters range from 32 to 126
+      while (true) {
+        do emit(randomInt(32, 127).toChar) 
+      }
+    }
+
+    def shrink(v: Char) = resume { <> }
+  }
+
+def arbitraryString { body: => Unit / Generator[String] }: Unit / {Generator[Char], random } = {
+  try body() with Generator[String] {
+    def generate() = resume {
+      while (true) {
+        val string: String = collectString { 
+          with boundary;
+          with limit[Char](randomInt(1, 20))
+          do generate[Char]() 
+        }
+        do emit(string)
+      }
+    }
+
+    def shrink(v: String) = resume { <> }
+  }
+}
+
+def arbitraryString(len: Int) { body: => Unit / Generator[String] }: Unit / { Generator[Char], random } = {
+  try body() with Generator[String] {
+    def generate() = resume {
+      while (true) {
+        val string: String = collectString { 
+          with boundary;
+          with limit[Char](len)
+          do generate[Char]() 
+        }
+        do emit(string)
+      }
+    }
+
+    def shrink(v: String) = resume { <> }
+  }
+}
+
+def arbitraryList[T] { body: => Unit / Generator[List[T]]} : Unit / { Generator[T], random } = {
+  try body() with Generator[List[T]]{ 
+    def generate() = resume {
+      while (true) {
+        val list = collectList[T]{ 
+          with boundary;
+          with limit[T](randomInt(1, 10))
+          do generate[T]()
+        }
+        do emit(list)
+      }
+    }
+
+    def shrink(v: List[T]) = resume { <> }
+  }
+}
+
+def arbitraryList[T](len: Int) { body: => Unit/Generator[List[T]]} : Unit / { Generator[T], random } = {
+  try body() with Generator[List[T]]{ 
+    def generate() = resume {
+      while (true) {
+        val list = collectList[T]{ 
+          with boundary;
+          with limit[T](len)
+          do generate[T]()
+        }
+        do emit(list)
+      }
+    }
+
+    def shrink(v: List[T]) = resume { <> }
+  }
+}
+
+def evenNumbers { body: => Unit / Generator[Int] }: Unit / random = 
+  try body() with Generator[Int] {
+    def generate() = resume {
+      while(true) {
+        val nextEmit = randomInt(-50, 50)
+        if(nextEmit.mod(2) == 0)
+          do emit(nextEmit)
+      }
+    }
+
+    def shrink(v: Int) = resume {
+      // we know v is even because the generator only produces even numbers
+      var shrink = v - 2
+      while(shrink != 0 && shrink != v){
+        do emit(shrink)
+        shrink = shrink / 2 
+      }
+      do emit(0)
+    }
+  }
+
+def alphabeticChar { body: => Unit / Generator[Char] }: Unit / random = {
+  try body() with Generator[Char] {
+    def generate() = resume {
+      // ASCII printable characters range from 32 to 126
+      val min = 32
+      val max = 127 // max is exclusive in randomInt
+      while (true) {
+        do emit(randomInt(65, 91).toChar) 
+      }
+    }
+
+    def shrink(v: Char) = resume { <> }
+  }
+}
+
 
 interface Test {
   def success(name: String, duration: Int): Unit
+  def successForall(name: String, passed: Int, duration: Int): Unit
+  def successExists(name: String, tried: Int, msg: String, duration: Int): Unit
   def failure(name: String, msg: String, duration: Int): Unit
+  def failureForall(name: String, passed: Int, msg: String, duration: Int): Unit
+  def failureExists(name: String, tried: Int, duration: Int): Unit
 }
 
 /// Runs the `body` as a test under the given `name`
@@ -80,6 +310,185 @@ def test(name: String) { body: => Unit / Assertion } = {
   }
 }
 
+/// forall quantifier for property-based testing
+/// version that uses the closest generator in scope (fully value-based generation)
+def forall[A](name: String, n: Int)
+  { body: A => Unit / Assertion }: Unit / { Test, Generator[A] } = {
+
+  val startTime = bench::relativeTimestamp()
+  var successCounter = 0
+  with boundary;
+  with val x = for[A] { with limit[A](n + 1); do generate[A]() } 
+
+  try {
+    body(x)
+    if(successCounter == n) {
+      val duration = Duration::diff(startTime, bench::relativeTimestamp())
+      do successForall(name, n, duration) 
+    }
+  } with Assertion { 
+    def assert(condition, msg) = 
+      if (condition) {
+        successCounter = successCounter + 1 
+        resume(())}
+      else {
+        val duration = Duration::diff(startTime, bench::relativeTimestamp())
+        do failureForall(name, successCounter, msg ++ "\n  failed on input:\n    1. " ++ genericShow(x), duration)
+        do stop()
+      }
+  }
+}
+
+/// forall quantifier for property-based testing
+/// version that that explicitely gets the generators as inputs (type-based-style generation)
+def forall[A](name: String, n: Int)
+  { g: Generator[A]}
+  { body: A => Unit / Assertion }: Unit / {Test} = {
+
+  val startTime = bench::relativeTimestamp()
+  var successCounter = 0
+  with boundary
+  with val x = for[A] {with limit[A](n + 1); g.generate[A]()}
+
+  try {
+    body(x)
+    if(successCounter == n) {
+      val duration = Duration::diff(startTime, bench::relativeTimestamp())
+      do successForall(name, n, duration) 
+    }
+  } with Assertion { 
+    def assert(condition, msg) = 
+      if(condition) {
+        successCounter = successCounter + 1 
+        resume(())
+      }
+      else {
+        val duration = Duration::diff(startTime, bench::relativeTimestamp())
+        do failureForall(name, successCounter, msg ++ "\n  failed on input:\n    1. " ++ genericShow(x), duration)
+        do stop()
+      }
+  }
+}
+
+def forall[A, B](name: String, n: Int)
+  { body: (A, B) => Unit / Assertion }: Unit / {Test, Generator[A], Generator[B]} = {
+
+  val startTime = bench::relativeTimestamp()
+  var successCounter = 0
+  with boundary;
+  with val x = for[A] {with limit[A](n + 1); do generate[A]()}
+  with val y = for[B] {with limit[B](n + 1); do generate[B]()}
+
+  try {
+    body(x, y)
+    if(successCounter == n) {
+      val duration = Duration::diff(startTime, bench::relativeTimestamp())
+      do successForall(name, n, duration) 
+      do stop()
+    }
+  } with Assertion { 
+    def assert(condition, msg) = 
+      if(condition) {
+        successCounter = successCounter + 1 
+        resume(())
+      }
+      else {
+        val duration = Duration::diff(startTime, bench::relativeTimestamp())
+        do failureForall(name, successCounter, msg ++ "\n  failed on inputs:\n    1. " ++ genericShow(x) ++ "\n    2. " ++ genericShow(y), duration)
+        do stop()
+      }
+  }
+}
+
+def forall[A, B, C](name: String, n: Int)
+  { body: (A, B, C) => Unit / Assertion }: Unit / {Test, Generator[A], Generator[B], Generator[C]} = {
+
+  val startTime = bench::relativeTimestamp()
+  var successCounter = 0
+  with boundary;
+  with val x = for[A] {with limit[A](n + 1); do generate[A]()}
+  with val y = for[B] {with limit[B](n + 1); do generate[B]()}
+  with val z = for[C] {with limit[C](n + 1); do generate[C]()}
+
+  try {
+    body(x, y, z)
+    if(successCounter == n) {
+      val duration = Duration::diff(startTime, bench::relativeTimestamp())
+      do successForall(name, n, duration) 
+      do stop() 
+      }
+  } with Assertion { 
+    def assert(condition, msg) = 
+      if(condition) {
+        successCounter = successCounter + 1 
+        resume(())
+      }
+      else {
+        val duration = Duration::diff(startTime, bench::relativeTimestamp())
+        do failureForall(name, successCounter, msg ++ "\n  failed on inputs:\n    1. " ++ genericShow(x) ++ "\n    2. " ++ genericShow(y) ++ "\n    3. " ++ genericShow(z), duration)
+        do stop()
+      }
+  }
+}
+
+/// exists quantifier for property-based testing
+def exists[A](name: String, n: Int) 
+  { body: A => Unit / Assertion }: Unit / {Test, Generator[A]} = {
+
+  val startTime = bench::relativeTimestamp()
+  var triedCounter = 0
+  with boundary
+  with val x = for[A] {with limit[A](n + 1); do generate[A]()}
+
+  try {
+    body(x)
+    if(triedCounter == n) {
+      val duration = Duration::diff(startTime, bench::relativeTimestamp())
+      do failureExists(name, triedCounter, duration) 
+    }
+  } with Assertion { 
+    def assert(condition, msg) = 
+      if (condition) {
+        val duration = Duration::diff(startTime, bench::relativeTimestamp())
+        do successExists(name, triedCounter, " example value:\n    1. " ++ genericShow(x), duration)
+        do stop()
+      }
+      else {
+        triedCounter = triedCounter + 1 
+        resume(())
+      }
+  }
+}
+
+def exists[A, B](name: String, n: Int) 
+  { body: (A, B) => Unit / Assertion }: Unit / {Test, Generator[A], Generator[B]} = {
+
+  val startTime = bench::relativeTimestamp()
+  var triedCounter = 0
+  with boundary
+  with val x = for[A] {with limit[A](n + 1); do generate[A]()}
+  with val y = for[B] {with limit[B](n + 1); do generate[B]()}
+
+  try {
+    body(x, y)
+    if(triedCounter == n) {
+      val duration = Duration::diff(startTime, bench::relativeTimestamp())
+      do failureExists(name, triedCounter, duration)
+    } 
+  } with Assertion { 
+    def assert(condition, msg) = 
+      if(condition) {
+        val duration = Duration::diff(startTime, bench::relativeTimestamp())
+        do successExists(name, triedCounter, "\n  example values:\n    1. " ++ genericShow(x) ++ "\n    2. " ++ genericShow(y), duration)
+        do stop()
+      }
+      else {
+        triedCounter = triedCounter + 1 
+        resume(())
+      }
+  }
+}
+
 /// Run a test suite with a given `name`.
 /// - If `printTimes` is `true` (or missing), prints out time in milliseconds.
 /// - Formats automatically using ANSI escapes.
@@ -90,6 +499,13 @@ def test(name: String) { body: => Unit / Assertion } = {
 /// suite("My Tests") {
 ///   test("1 + 1 == 2") {
 ///     assertEqual(1 + 1, 2)
+///   }
+///   with arbitraryInt;
+///   forall[Int]("reverse-singleton", 100){ x =>
+///     assertEqual(
+///       reverse([x]),
+///       [x]
+///     )
 ///   }
 /// }
 /// ```
@@ -107,8 +523,13 @@ def suite(name: String, printTimes: Bool) { body: => Unit / { Test, Formatted } 
     if (n == 0) { dim(s) }
     else { colorIfNonZero(s) }
 
-  var failed = 0
-  var passed = 0
+  var failedUnit = 0
+  var passedUnit = 0
+  var failedForall = 0
+  var passedForall = 0
+  var failedExists = 0
+  var passedExists = 0
+  // TODO check if computing time works correctly
 
   // 1) Print the name of the test
   println(name.bold)
@@ -116,31 +537,71 @@ def suite(name: String, printTimes: Bool) { body: => Unit / { Test, Formatted } 
   // 2) Run the tests, timing them
   val totalDuration = timed {
     try { body() } with Test {
-      // 2a) Handle a passing test on success
+      // 2a) Handle a passing unit test on success
       def success(name, duration) = {
-        passed = passed + 1
+        passedUnit = passedUnit + 1
         println("✓".green ++ " " ++ name ++ duration.ms)
         resume(())
       }
 
-      // 2b) Handle a failing test on failure, additionally printing its message
+      // 2b) Handle a failing unit test on failure, additionally printing its message
       def failure(name, msg, duration) = {
-        failed = failed + 1
+        failedUnit = failedUnit + 1
         println("✕".red ++ " " ++ name ++ duration.ms)
         println("  " ++ msg.red)
+        resume(())
+      }
+
+      // 2c) Handle a passing forall test on success
+      def successForall(name, passed, duration) = {
+        passedForall = passedForall + 1
+        println("✓".green ++ " " ++ name ++ ", passed " ++ passed.show ++ " tests " ++ duration.ms)
+        resume(())
+      }
+
+      // 2d) Handle a failing forall test on failure, additionally printing its message
+      def failureForall(name, passed, msg, duration) = {
+        failedForall = failedForall + 1
+        println("✕".red ++ " " ++ name ++ duration.ms)
+        if(passed == 1){
+          println("  ! Falsified after " ++ show(passed).red ++ " passed test:" ++ duration.ms)
+          } else { println("  ! Falsified after " ++ show(passed).red ++ " passed tests:" ++ duration.ms) }
+        println("  " ++ msg.red)
+        resume(())
+      }
+
+      // 2e) Handle a passing exists test on success
+      def successExists(name, tried, msg, duration) = {
+        passedExists = passedExists + 1
+        //println("✓".green ++ " " ++ name ++ ", found after " ++ tried.show ++ " tests " ++ duration.ms)
+        println("✓".green ++ " " ++ name  ++ duration.ms)
+        if(tried == 1){
+          println("  Verified after " ++ tried.show ++ " tried input")
+        } else { println("  Verified after " ++ tried.show ++ " tried inputs") }
+        println(" " ++ msg.green)
+        resume(())
+      }
+
+      // 2f) Handle a failing exists test on failure, additionally printing its message
+      def failureExists(name, tried, duration) = {
+        failedExists = failedExists + 1
+        println("✕".red ++ " " ++ name ++ duration.ms)
+        println("  ! Tried " ++ tried.show ++ " different inputs but all failed" ++ duration.ms)
         resume(())
       }
     }
   }
 
   // 3) Format the test results
+  println(" ")
+  println(" " ++ (show(passedUnit + passedForall + passedExists) ++ " pass").dimWhenZeroElse(passedUnit + passedForall + passedExists) { green })
+  println(" " ++ (show(failedUnit + failedForall + failedExists) ++ " fail").dimWhenZeroElse(failedUnit + failedForall + failedExists) { red })
+  println(" " ++ (passedUnit + failedUnit + passedForall + failedForall + passedExists + failedExists).show ++ " test(s) total" ++ totalDuration.ms)
+
   println("")
-  println(" " ++ (passed.show ++ " pass").dimWhenZeroElse(passed) { green })
-  println(" " ++ (failed.show ++ " fail").dimWhenZeroElse(failed) { red })
-  println(" " ++ (passed + failed).show ++ " tests total" ++ totalDuration.ms)
 
   // 4) Return true if all tests succeeded, otherwise false
-  return failed == 0
+  return failedUnit == 0 && failedForall == 0 && failedExists == 0 
 }
 
 /// See `suite` above.
