@@ -495,14 +495,6 @@ class RecursiveDescentTests extends munit.FunSuite {
         |val y = 5
         |""".stripMargin)
 
-    parseDefinitions(
-      """/// list namespace
-        |namespace list {
-        |  val x = 4
-        |  val y = 5
-        |}
-        |""".stripMargin)
-
     val nested = parseDefinitions(
       """namespace list {
         |  val x = 4
@@ -668,6 +660,15 @@ class RecursiveDescentTests extends munit.FunSuite {
       """/// extern foo definition
         |extern def foo(): Int = "bar ${test} baz ${bam}"
         |""".stripMargin)
+
+    parseToplevel(
+      """/// list namespace
+        |namespace list {
+        |  val x = 4
+        |  val y = 5
+        |}
+        |""".stripMargin)
+
   }
 
   test("Programs") {
