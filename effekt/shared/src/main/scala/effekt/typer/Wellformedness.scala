@@ -316,7 +316,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       val boundCapts = bps.map(_.id.symbol.asBlockParam.capture).toSet
       binding(types = boundTypes, captures = boundCapts) { bodies.foreach(query) }
 
-    case tree @ source.RegDef(id, annot, region, init) =>
+    case tree @ source.RegDef(id, annot, region, init, doc) =>
       wellformed(Context.typeOf(id.symbol), tree, pp" inferred as type of region-allocated variable")
       query(init)
   }
