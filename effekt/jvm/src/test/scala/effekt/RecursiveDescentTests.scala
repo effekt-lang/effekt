@@ -471,6 +471,17 @@ class RecursiveDescentTests extends munit.FunSuite {
         |""".stripMargin)
 
     parseDefinition(
+      """/// type A
+        |type A[X] {
+        |  /// Foo of A
+        |  Foo();
+        |
+        |  /// Bar of A
+        |  Bar()
+        |}
+        |""".stripMargin)
+
+    parseDefinition(
       """type DATATYPE[X] {
         |  Foo()
         |  Bar()
@@ -482,6 +493,14 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseDefinitions(
       """val x = 4
         |val y = 5
+        |""".stripMargin)
+
+    parseDefinitions(
+      """/// list namespace
+        |namespace list {
+        |  val x = 4
+        |  val y = 5
+        |}
         |""".stripMargin)
 
     val nested = parseDefinitions(
@@ -544,6 +563,13 @@ class RecursiveDescentTests extends munit.FunSuite {
           |""".stripMargin),
       DefDef(IdDef("foo"), None, Var(IdRef(Nil, "f")), None))
 
+    assertEquals(
+      parseDefinition(
+        """/// foo function
+          |def foo = f
+          |""".stripMargin),
+      DefDef(IdDef("foo"), None, Var(IdRef(Nil, "f")), Some(" foo function")))
+
     parseDefinition(
         """def foo: Exc = f
           |""".stripMargin)
@@ -566,9 +592,21 @@ class RecursiveDescentTests extends munit.FunSuite {
   }
 
   test("Toplevel definitions") {
+    parseToplevel(
+      """/// foo function
+        |def foo() = ()
+        |""".stripMargin)
     parseToplevel("def foo() = ()")
+    parseToplevel(
+      """/// Foo effect
+        |effect Foo = {}
+        |""".stripMargin)
     parseToplevel("effect Foo = {}")
     parseToplevel("effect Foo(): Int")
+    parseToplevel(
+      """/// Foo interface
+        |interface Foo {}
+        |""".stripMargin)
     parseToplevel("interface Foo {}")
 
     parseToplevel(
@@ -586,18 +624,49 @@ class RecursiveDescentTests extends munit.FunSuite {
         |""".stripMargin)
 
     parseToplevel(
+      """/// State interface
+        |interface State {
+        |  /// get operation
+        |  def get(): Int
+        |
+        |  /// set operation
+        |  def set(n: Int): Unit
+        |}
+        |""".stripMargin)
+
+    parseToplevel(
       """extern include "foo/text.txt"
+        |""".stripMargin)
+    parseToplevel(
+      """/// include extern file
+        |extern include "foo/text.txt"
         |""".stripMargin)
 
     parseToplevel("extern type Foo[S]")
+    parseToplevel(
+      """/// extern Foo type
+        |extern type Foo[S]
+        |""".stripMargin)
     parseToplevel("extern resource foo: Foo")
+    parseToplevel(
+      """/// extern Foo resource
+        |extern resource foo: Foo
+        |""".stripMargin)
 
     parseToplevel(
       """extern "function() { console.log('hey!'); }"
         |""".stripMargin)
+    parseToplevel(
+      """/// extern function
+        |extern "function() { console.log('hey!'); }"
+        |""".stripMargin)
 
     parseToplevel(
       """extern def foo(): Int = "bar ${test} baz ${bam}"
+        |""".stripMargin)
+    parseToplevel(
+      """/// extern foo definition
+        |extern def foo(): Int = "bar ${test} baz ${bam}"
         |""".stripMargin)
   }
 
@@ -628,6 +697,13 @@ class RecursiveDescentTests extends munit.FunSuite {
         |def main() = ()
         |
         |// foo""".stripMargin)
+
+    parseProgram(
+      """/// Module with Doc Comment
+        |module commented_module
+        |
+        |def main() = ()
+        |""".stripMargin)
   }
 
   test("Extern definition") {
