@@ -4,6 +4,8 @@ package source
 import effekt.context.Context
 import effekt.symbols.Symbol
 
+import scala.annotation.tailrec
+
 /**
  * Data type representing source program trees.
  *
@@ -127,6 +129,7 @@ enum FeatureFlag extends Tree {
 }
 object FeatureFlag {
   extension (self: List[ExternBody]) {
+    @tailrec
     def supportedByFeatureFlags(names: List[String]): Boolean = names match {
       case Nil => false
       case name :: other =>

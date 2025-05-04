@@ -16,7 +16,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(value: Any): Document = pretty(toDoc(value), 80)
 
   def toDoc(value: Any): Doc = value match {
-    case sym: effekt.symbols.Symbol => string(sym.name.name + "_" + sym.id.toString)
+    case sym: effekt.symbols.Symbol => string(sym.show)
     case Nil => "Nil"
     case l: List[a] => "List" <> parens(l.map(toDoc))
     case l: Map[a, b] => "Map" <> parens(l.map {

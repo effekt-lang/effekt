@@ -110,7 +110,7 @@ extern io def inspect[R](value: R): Unit =
 // Strings
 // =======
 extern pure def infixConcat(s1: String, s2: String): String =
-  js "((${s1}) + (${s2}))"
+  js "${s1} + ${s2}"
   chez "(string-append ${s1} ${s2})"
   llvm """
     %spz = call %Pos @c_bytearray_concatenate(%Pos ${s1}, %Pos ${s2})
@@ -203,7 +203,7 @@ def println(o: Ordering): Unit = println(o.show)
 /// Structural equality: Not available in the LLVM backend
 extern pure def equals[R](x: R, y: R): Bool =
   js "$effekt.equals(${x}, ${y})"
-  chez "(equal? ${x} ${y})"
+  chez "(equal_impl ${x} ${y})"
 
 def differsFrom[R](x: R, y: R): Bool =
   not(equals(x, y))
@@ -344,7 +344,7 @@ extern pure def infixSub(x: Double, y: Double): Double =
 
 extern pure def infixDiv(x: Double, y: Double): Double =
   js "(${x} / ${y})"
-  chez "(/ ${x} ${y})"
+  chez "(fl/ ${x} ${y})"
   llvm "%z = fdiv %Double ${x}, ${y} ret %Double %z"
   vm "effekt::infixDiv(Double, Double)"
 
@@ -442,14 +442,14 @@ extern pure def toInt(d: Double): Int =
 
 extern pure def toDouble(d: Int): Double =
   js "${d}"
-  chez "${d}"
+  chez "(fixnum->flonum ${d})"
   llvm "%z = sitofp i64 ${d} to double ret double %z"
   vm "effekt::toDouble(Int)"
 
 
 extern pure def round(d: Double): Int =
   js "Math.round(${d})"
-  chez "(round ${d})"
+  chez "(flonum->fixnum (round ${d}))"
   llvm """
     %i = call %Double @llvm.round.f64(double ${d})
     %z = fptosi double %i to %Int ret %Int %z

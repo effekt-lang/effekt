@@ -4,6 +4,7 @@ package symbols
 import effekt.source.IdRef
 import effekt.util.messages.ErrorReporter
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 /**
@@ -100,6 +101,7 @@ object scopes {
 
   case class Scoping(modulePath: List[String], var scope: Scope) {
     def importAs(imports: Bindings, path: List[String])(using E: ErrorReporter): Unit =
+      @tailrec
       def go(path: List[String], in: Namespace): Unit = path match {
         case pathSeg :: rest => go(rest, in.getNamespace(pathSeg))
         case Nil => in.importAll(imports)

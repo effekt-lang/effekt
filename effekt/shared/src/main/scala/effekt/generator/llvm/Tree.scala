@@ -7,12 +7,18 @@ package llvm
  *  see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST.html#t:Definition
  */
 enum Definition {
-  case Function(callingConvention: CallingConvention, returnType: Type, name: String, parameters: List[Parameter], basicBlocks: List[BasicBlock])
+  case Function(linkage: Linkage, callingConvention: CallingConvention, returnType: Type, name: String, parameters: List[Parameter], basicBlocks: List[BasicBlock])
   case VerbatimFunction(callingConvention: CallingConvention, returnType: Type, name: String, parameters: List[Parameter], body: String)
   case Verbatim(content: String)
   case GlobalConstant(name: String, initializer: Operand) // initializer should be constant
 }
 export Definition.*
+
+enum Linkage {
+  case External()
+  case Private()
+}
+export Linkage.*
 
 enum CallingConvention {
   case Ccc()

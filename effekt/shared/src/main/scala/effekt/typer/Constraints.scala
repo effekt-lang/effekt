@@ -121,16 +121,25 @@ class Constraints(
    * Unification variables which are not in scope anymore, but also haven't been solved, yet.
    */
   private var pendingInactive: Set[CNode] = Set.empty
-
 )(using C: ErrorReporter) {
+
+  /**
+   * Caches type substitutions, which are only invalidated if the mapping from node to typevar changes.
+   *
+   * This significantly improves the performance of Typer (see https://github.com/effekt-lang/effekt/pull/954)
+   */
+  private var _typeSubstitution:  Map[TypeVar, ValueType] = _
+  private def invalidate(): Unit = _typeSubstitution = null
 
   /**
    * The currently known substitutions
    */
   def subst: Substitutions =
-    val types = classes.flatMap[TypeVar, ValueType] { case (k, v) => typeSubstitution.get(v).map { k -> _ } }
+    if _typeSubstitution == null then {
+      _typeSubstitution = classes.flatMap[TypeVar, ValueType] { case (k, v) => typeSubstitution.get(v).map { k -> _ } }
+    }
     val captures = captSubstitution.asInstanceOf[Map[CaptVar, Captures]]
-    Substitutions(types, captures)
+    Substitutions(_typeSubstitution, captures)
 
   /**
    * Should only be called on unification variables where we do not know any types, yet
@@ -308,16 +317,18 @@ class Constraints(
     private [typer] def upperNodes: Map[CNode, Filter] = getData(x).upperNodes
     private def lower_=(bounds: Set[Capture]): Unit =
       captureConstraints = captureConstraints.updated(x, getData(x).copy(lower = Some(bounds)))
+
     private def upper_=(bounds: Set[Capture]): Unit =
       captureConstraints = captureConstraints.updated(x, getData(x).copy(upper = Some(bounds)))
+
     private def addLower(other: CNode, exclude: Filter): Unit =
       val oldData = getData(x)
 
       // compute the intersection of filters
       val oldFilter = oldData.lowerNodes.get(other)
       val newFilter = oldFilter.map { _ intersect exclude }.getOrElse { exclude }
-
       captureConstraints = captureConstraints.updated(x, oldData.copy(lowerNodes = oldData.lowerNodes + (other -> newFilter)))
+
     private def addUpper(other: CNode, exclude: Filter): Unit =
       val oldData = getData(x)
 
@@ -462,6 +473,7 @@ class Constraints(
    */
   private def updateSubstitution(): Unit =
     val substitution = subst
+    invalidate()
     typeSubstitution = typeSubstitution.map { case (node, tpe) => node -> substitution.substitute(tpe) }
 
   private def getNode(x: UnificationVar): Node =

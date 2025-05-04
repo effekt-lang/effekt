@@ -12,9 +12,9 @@ object PrettyPrinter {
     definitions.map(show).mkString("\n\n")
 
   def show(definition: Definition)(using C: Context): LLVMString = definition match {
-    case Function(callingConvention, returnType, name, parameters, basicBlocks) =>
+    case Function(linkage, callingConvention, returnType, name, parameters, basicBlocks) =>
       s"""
-define ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
+define ${show(linkage)} ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
     ${indentedLines(basicBlocks.map(show).mkString)}
 }
 """
@@ -36,6 +36,11 @@ define ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${comm
 
     case GlobalConstant(name, initializer) =>
       s"@$name = private constant ${show(initializer)}"
+  }
+
+  def show(linkage: Linkage): LLVMString = linkage match {
+    case External() => "external"
+    case Private() => "private"
   }
 
   def show(callingConvention: CallingConvention): LLVMString = callingConvention match {

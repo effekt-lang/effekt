@@ -125,6 +125,7 @@ object Normalizer { normal =>
    * A good testcase to look at for this is:
    *   examples/pos/capture/regions.effekt
    */
+  @tailrec
   private def active[R](b: Block)(using C: Context): NormalizedBlock =
     normalize(b) match {
       case b: Block.BlockLit   => NormalizedBlock.Known(b, None)
@@ -400,7 +401,6 @@ object Normalizer { normal =>
 
     renamedIds.foreach(copyUsage)
 
-    val newUsage = usage.collect { case (id, usage) if util.show(id) contains "foreach" => (id, usage) }
 
     // (2) substitute
     val body = substitutions.substitute(renamedLit, targs, vargs, bvars)

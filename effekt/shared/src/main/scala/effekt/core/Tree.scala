@@ -91,10 +91,11 @@ sealed trait Tree extends Product {
  */
 type Id = symbols.Symbol
 object Id {
-  def apply(n: String): Id = new symbols.Symbol {
-    val name = symbols.Name.local(n)
+  def apply(n: symbols.Name): Id = new symbols.Symbol {
+    val name = n
   }
-  def apply(n: Id): Id = apply(n.name.name)
+  def apply(n: String): Id = apply(symbols.Name.local(n))
+  def apply(n: Id): Id = apply(n.name)
 }
 
 /**
@@ -431,6 +432,7 @@ object Tree {
         case (id, lit) => query(lit)
     }
     def query(b: ExternBody)(using Ctx): Res = structuralQuery(b, externBody)
+    def query(m: ModuleDecl)(using Ctx) = structuralQuery(m, PartialFunction.empty)
   }
 
   class Rewrite extends Structural {

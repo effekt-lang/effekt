@@ -24,6 +24,7 @@ import map
 import option
 import process
 import queue
+import random
 import ref
 import regex
 import resizable_array

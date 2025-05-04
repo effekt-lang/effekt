@@ -1,0 +1,12 @@
+interface Greet { def sayHello(): Unit }
+interface Welcome { def sayHello(): Unit }
+
+def helloWorld() = try {
+  sayHello() 
+} with Greet {
+  def sayHello() = { println("Hello from Greet!"); resume(()) }
+}
+
+def main() = {
+  helloWorld() 
+}
