@@ -355,10 +355,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       manyWhile(toplevel(), isToplevel)
 
-  def isDefinition: Boolean = documentedKind match {
+  def isDefinition: Boolean = peek.kind match {
     case `val` | `def` | `type` | `effect` | `namespace` => true
     case `extern` | `effect` | `interface` | `type` | `record` =>
-      val kw = documentedKind
+      val kw = peek.kind
       fail(s"Only supported on the toplevel: ${kw.toString} declaration.")
     case _ => false
   }
