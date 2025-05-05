@@ -26,6 +26,7 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "pos" / "bidirectional",
     examplesDir / "pos" / "object",
     examplesDir / "pos" / "type_omission_op.effekt",
+    examplesDir / "pos" / "issue972.effekt",
 
     // filesystem operations and bytearrays are not yet supported in our Chez backend
     examplesDir / "benchmarks" / "input_output" / "word_count_ascii.effekt",
