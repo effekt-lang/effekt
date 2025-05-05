@@ -1,0 +1,61 @@
+import stream
+
+/// Warning: This currently has the wrong time complexity.
+def ints(): Unit / emit[Int] = {
+  do emit(1)
+  for[Int] {ints} { x => do emit(x + 1) }
+}
+
+/// Take the `n` first elements of a `stream`, put them in a list.
+def take[A](n: Int) { stream: () => Unit / emit[A] }: List[A] = {
+  with collectList[A]
+  with boundary
+  with limit[A](n + 1)
+  stream()
+}
+
+// ∫x^n := 1/(n+1) * x^(n + 1) + C
+// => integral = C + all original Taylor series terms shifted by one and divided by n + 1
+def integrate(c: Double) { taylor: () => Unit / emit[Double] } = {
+  do emit(c)
+  zip[Double, Int] {taylor} {ints} { (f, n) => do emit(f / n.toDouble) }
+}
+
+// e^x := ∫_{0}^x e^y dy + 1
+def exponential(): Unit / emit[Double] =
+  integrate(1.0) {exponential}
+
+// evaluate a taylor series, taking `steps`
+def eval(steps: Int, x: Double) { taylor: () => Unit / emit[Double] } = {
+  var acc = 0.0
+  for[Double] { take[Double](steps) {taylor}.reverse.each } { a =>
+    acc = a + acc * x
+  }
+  acc
+}
+
+// sin x := ∫_{0}^x cos y dy
+def sine(): Unit / emit[Double] = integrate(0.0) {cosine}
+
+// cos x := - ∫_{0}^x sin y dy + 1
+//        = -(∫_{0}^x sin y dy - 1)
+def cosine(): Unit / emit[Double] =
+  for[Double] { integrate(-1.0) {sine} } { x => do emit(x.neg) }
+
+def main() = {
+  def rnd(one: Double) = one.round(5)
+  def rnd(many: List[Double]) = many.map { one => rnd(one) }
+
+
+  println(take[Int](5) {ints})
+  println(take[Double](5) {exponential}.rnd)
+  println(eval(20, 2.0) {exponential}.rnd)
+  println(eval(20, 2.0) {sine}.rnd)
+  println(eval(20, 2.0) {cosine}.rnd)
+  println(eval(20, 1.0) {sine}.rnd)
+  println(eval(20, 1.0) {cosine}.rnd)
+  println(eval(20, 0.0) {sine}.rnd)
+  println(eval(20, 0.0) {cosine}.rnd)
+  println(eval(20, PI) {sine}.rnd)
+  println(eval(20, PI) {cosine}.rnd)
+}
