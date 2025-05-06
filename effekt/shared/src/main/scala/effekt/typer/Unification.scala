@@ -199,10 +199,10 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     assert(cparams.size == (bparams.size + eff.distinct.size),
       pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.size}.\n  ${tpe}")
 
-    given Instantiation = Instantiation((tparams zip targs).toMap, (cparams zip cargs).toMap)
+    given Instantiation = Instantiation((tparams.unspan zip targs).toMap, (cparams zip cargs).toMap)
 
-    val substitutedVparams = vparams map instantiate
-    val substitutedBparams = bparams map instantiate
+    val substitutedVparams = vparams.unspan map instantiate
+    val substitutedBparams = bparams.unspan map instantiate
     val substitutedReturn = instantiate(ret)
 
     val substitutedEffects = instantiate(eff)
@@ -219,7 +219,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     val position = C.focus
     val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
-    val typeRigids = tparams map { t => ValueTypeRef(freshTypeVar(t, position)) }
+    val typeRigids = tparams.unspan map { t => ValueTypeRef(freshTypeVar(t, position)) }
     val captRigids = cparams.map { param => freshCaptVar(CaptUnificationVar.VariableInstantiation(param, position)) }
 
     (typeRigids, captRigids, instantiate(tpe, typeRigids, captRigids))
@@ -355,7 +355,7 @@ trait TypeInstantiator { self: Unification =>
   def instantiate(t: FunctionType)(using i: Instantiation): FunctionType = t match {
     case FunctionType(tps, cps, vps, bps, ret, eff) =>
       // do not substitute with types parameters bound by this function!
-      given Instantiation = without(tps, cps)(using i)
+      given Instantiation = without(tps.unspan, cps)(using i)
       FunctionType(
         tps,
         cps,

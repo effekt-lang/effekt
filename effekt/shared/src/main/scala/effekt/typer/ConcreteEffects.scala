@@ -111,7 +111,7 @@ private def unknowns(tpe: TypeVar): Set[Unknown] = tpe match {
 
 private def unknowns(tpe: BlockType): Set[Unknown] = tpe match {
   case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
-    vparams.flatMap(unknowns).toSet ++ bparams.flatMap(unknowns).toSet ++ unknowns(result) ++ unknowns(effects)
+    vparams.unspan.flatMap(unknowns).toSet ++ bparams.unspan.flatMap(unknowns).toSet ++ unknowns(result) ++ unknowns(effects)
   case InterfaceType(tpe, args) => args.flatMap(unknowns).toSet
 }
 
