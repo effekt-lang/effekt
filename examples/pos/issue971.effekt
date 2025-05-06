@@ -1,0 +1,17 @@
+effect bdeff{ body: => Unit }: Unit
+
+def hnd{ body: => Unit / bdeff }: Unit =
+  try {
+    body()
+  } with bdeff {
+    resume { {b} => b() }
+    resume { {b} => () }
+  }
+
+def main() = {
+  hnd{
+    do bdeff{
+      ()
+    }
+  }
+}

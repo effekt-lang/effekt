@@ -258,6 +258,7 @@ case class TypeAlias(name: Name, tparams: List[TypeParam], tpe: ValueType) exten
  * - [[DataType]]
  * - [[Record]]
  * - [[ExternType]]
+ * - [[ErrorValueType]] used solely for symbols coming out of bad surface.Tree.Types, created in [[Namer]]
  */
 enum TypeConstructor extends TypeSymbol {
   def tparams: List[TypeParam]
@@ -265,6 +266,7 @@ enum TypeConstructor extends TypeSymbol {
   case DataType(name: Name, tparams: List[TypeParam], var constructors: List[Constructor] = Nil)
   case Record(name: Name, tparams: List[TypeParam], var constructor: Constructor)
   case ExternType(name: Name, tparams: List[TypeParam])
+  case ErrorValueType(name: Name = NoName, tparams: List[TypeParam] = Nil)
 }
 export TypeConstructor.*
 
@@ -296,6 +298,7 @@ enum BlockTypeConstructor extends BlockTypeSymbol {
 
   case Interface(name: Name, tparams: List[TypeParam], var operations: List[Operation] = Nil)
   case ExternInterface(name: Name, tparams: List[TypeParam])
+  case ErrorBlockType(name: Name = NoName, tparams: List[TypeParam] = Nil)
 }
 export BlockTypeConstructor.*
 

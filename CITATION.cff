@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this work, please cite the 'Effects as capabilities' paper."
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Brachthäuser"
+      given-names: "Jonathan Immanuel"
+      orcid: "https://orcid.org/0000-0001-9128-0391"
+    - family-names: "Schuster"
+      given-names: "Philipp"
+      orcid: "https://orcid.org/0000-0001-8011-0506"
+    - family-names: "Ostermann"
+      given-names: "Klaus"
+      orcid: https://orcid.org/0000-0001-5294-5506
+  title: "Effects as capabilities: effect handlers and lightweight effect polymorphism"
+  doi: "10.1145/3428194"
+  journal: "Proc. ACM Program. Lang."
+  publisher: "Association for Computing Machinery"
+  volume: "4"
+  issue: "OOPSLA"
+  month: 11
+  year: 2020
+  url: "https://doi.org/10.1145/3428194"

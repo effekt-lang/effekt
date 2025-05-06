@@ -6,7 +6,7 @@ package typer
  */
 import effekt.context.{Annotation, Annotations, Context, ContextOps}
 import effekt.context.assertions.*
-import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, MatchGuard, MatchPattern, ModuleDecl, OpClause, Stmt, TagPattern, Term, Tree, resolve, symbol}
+import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, Many, MatchGuard, MatchPattern, Maybe, ModuleDecl, OpClause, Stmt, TagPattern, Term, Tree, resolve, resolveBlockRef, resolveBlockType, resolveValueType, symbol}
 import effekt.source.Term.BlockLiteral
 import effekt.symbols.*
 import effekt.symbols.builtins.*
@@ -150,7 +150,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       case c @ source.Do(effect, op, targs, vargs, bargs) =>
         // (1) first check the call
-        val Result(tpe, effs) = checkOverloadedFunctionCall(c, op, targs map { _.resolve }, vargs, bargs, expected)
+        val Result(tpe, effs) = checkOverloadedFunctionCall(c, op, targs map { _.resolveValueType }, vargs, bargs, expected)
         // (2) now we need to find a capability as the receiver of this effect operation
         // (2a) compute substitution for inferred type arguments
         val typeArgs = Context.annotatedTypeArgs(c)
@@ -168,7 +168,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Result(tpe, effs ++ ConcreteEffects(List(effect)))
 
       case c @ source.Call(t: source.IdTarget, targs, vargs, bargs) =>
-        checkOverloadedFunctionCall(c, t.id, targs map { _.resolve }, vargs, bargs, expected)
+        checkOverloadedFunctionCall(c, t.id, targs map { _.resolveValueType }, vargs, bargs, expected)
 
       case c @ source.Call(source.ExprTarget(e), targs, vargs, bargs) =>
         val Result(tpe, funEffs) = checkExprAsBlock(e, None) match {
@@ -176,13 +176,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case _ => Context.abort("Cannot infer function type for callee.")
         }
 
-        val Result(t, eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, vargs, bargs, expected)
+        val Result(t, eff) = checkCallTo(c, "function", tpe, targs map { _.resolveValueType }, vargs, bargs, expected)
         Result(t, eff ++ funEffs)
 
       // precondition: PreTyper translates all uniform-function calls to `Call`.
       //   so the method calls here are actually methods calls on blocks as receivers.
       case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
-        checkOverloadedMethodCall(c, receiver, id, targs map { _.resolve }, vargs, bargs, expected)
+        checkOverloadedMethodCall(c, receiver, id, targs map { _.resolveValueType }, vargs, bargs, expected)
 
       case tree @ source.Region(name, body) =>
         val reg = tree.symbol
@@ -199,7 +199,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         // (1) extract all handled effects and capabilities
         val providedCapabilities: List[symbols.BlockParam] = handlers map Context.withFocus { h =>
-          val effect: InterfaceType = h.effect.resolve
+          val effect: InterfaceType = h.effect.resolveBlockRef
           val capability = h.capability.map { _.symbol }.getOrElse { Context.freshCapabilityFor(effect) }
           val tpe = capability.tpe.getOrElse { INTERNAL_ERROR("Block type annotation required") }
           Context.bind(capability, tpe, CaptureSet(capability.capture))
@@ -355,7 +355,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       var handlerEffects: ConcreteEffects = Pure
 
       // Extract interface and type arguments from annotated effect
-      val tpe @ InterfaceType(constructor, targs) = sig.resolve
+      val tpe @ InterfaceType(constructor, targs) = sig.resolveBlockRef
       val interface = constructor.asInterface // can only implement concrete interfaces
 
       // (3) check all operations are covered
@@ -374,7 +374,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case d @ source.OpClause(op, tparams, vparams, bparams, retAnnotation, body, resume) =>
 
           retAnnotation.foreach {
-            case Effectful(otherTpe, otherEffs2) =>
+            case Effectful(otherTpe, otherEffs2, span) =>
               // if there is a return type annotation from the user, report an error
               // see PR #148 for more details
               // TODO: Can we somehow use the return type provided by the user?
@@ -662,7 +662,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
   def precheckDef(d: Def)(using Context): Unit = Context.focusing(d) {
-    case d @ source.FunDef(id, tps, vps, bps, ret, body, doc) =>
+    case d @ source.FunDef(id, tps, vps, bps, ret, body, doc, span) =>
       val fun = d.symbol
 
       // (1) make up a fresh capture unification variable and annotate on function symbol
@@ -681,7 +681,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // (2) annotate capture variable and implemented blocktype
       Context.bind(obj, Context.resolvedType(tpe).asInterfaceType, cap)
 
-    case d @ source.ExternDef(cap, id, tps, vps, bps, tpe, body, doc) =>
+    case d @ source.ExternDef(cap, id, tps, vps, bps, tpe, body, doc, span) =>
       val fun = d.symbol
 
       Context.bind(fun, fun.toType, fun.capture)
@@ -730,7 +730,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def synthDef(d: Def)(using Context, Captures): Result[Unit] = Context.at(d) {
     d match {
-      case d @ source.FunDef(id, tps, vps, bps, ret, body, doc) =>
+      case d @ source.FunDef(id, tps, vps, bps, ret, body, doc, span) =>
         val sym = d.symbol
         // was assigned by precheck
         val functionCapture = Context.lookupCapture(sym)
@@ -856,7 +856,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Result((), effBinding)
         }
 
-      case d @ source.ExternDef(captures, id, tps, vps, bps, tpe, bodies, doc) => Context.withUnificationScope {
+      case d @ source.ExternDef(captures, id, tps, vps, bps, tpe, bodies, doc, span) => Context.withUnificationScope {
         val sym = d.symbol
         sym.vparams foreach Context.bind
         sym.bparams foreach Context.bind

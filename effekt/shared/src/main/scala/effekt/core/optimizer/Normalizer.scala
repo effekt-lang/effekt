@@ -187,6 +187,15 @@ object Normalizer { normal =>
     case Stmt.App(b, targs, vargs, bargs) =>
       active(b) match {
         case NormalizedBlock.Known(b: BlockLit, boundBy) if shouldInline(b, boundBy, bargs) =>
+          val blockUsage = boundBy.flatMap { bv => C.usage.get(bv.id) }.getOrElse(Usage.Once)
+          if (blockUsage == Usage.Many) {
+            // This is a conservative approximation:
+            // Since the block is used more than once, we will use the free variables multiple times
+            // after inlining.
+            Variables.free(b).toSet.foreach { v =>
+              C.usage.put(v.id, C.usage.getOrElse(v.id, Usage.Never) * Usage.Many)
+            }
+          }
           reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
         case normalized =>
            Stmt.App(normalized.shared, targs, vargs.map(normalize), bargs.map(normalize))

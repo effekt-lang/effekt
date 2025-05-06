@@ -6,6 +6,7 @@ import kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
 import TypePrinter.show
+import effekt.source.Maybe
 
 object DeclPrinter extends ParenPrettyPrinter {
 

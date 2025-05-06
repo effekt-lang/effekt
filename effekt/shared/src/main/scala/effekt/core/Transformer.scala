@@ -2,15 +2,15 @@ package effekt
 package core
 
 import scala.collection.mutable.ListBuffer
-import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.{Annotations, Context, ContextOps}
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
 import effekt.core.PatternMatchingCompiler.Clause
-import effekt.source.{ MatchGuard, MatchPattern, ResolveExternDefs }
-import effekt.symbols.Binder.{ RegBinder, VarBinder }
+import effekt.source.{Many, MatchGuard, MatchPattern, ResolveExternDefs}
+import effekt.symbols.Binder.{RegBinder, VarBinder}
 import effekt.typer.Substitutions
-import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR }
+import effekt.util.messages.{ErrorReporter, INTERNAL_ERROR}
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
@@ -44,7 +44,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def transform(mod: Module, tree: source.ModuleDecl)(using Context): ModuleDecl = Context.using(mod) {
-    val source.ModuleDecl(path, imports, defs, doc) = tree
+    val source.ModuleDecl(path, imports, defs, doc, span) = tree
     val exports = transform(mod.exports)
     val toplevelDeclarations = defs.flatMap(d => transformToplevel(d))
 
@@ -62,12 +62,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def transformToplevel(d: source.Def)(using Context): List[Toplevel | Declaration | Extern] = d match {
-    case f @ source.FunDef(id, tps, vps, bps, ret, body, doc) =>
+    case f @ source.FunDef(id, tps, vps, bps, ret, body, doc, span) =>
       val tparams = tps.map { p => p.symbol }
       val cparams = bps.map { b => b.symbol.capture }
       val vparams = vps map transform
       val bparams = bps map transform
-      List(Toplevel.Def(f.symbol, BlockLit(tparams, cparams, vparams, bparams, transform(body))))
+      List(Toplevel.Def(f.symbol, BlockLit(tparams.unspan, cparams.unspan, vparams.unspan, bparams.unspan, transform(body))))
 
     case d @ source.DataDef(id, _, ctors, doc) =>
       val datatype = d.symbol
@@ -104,7 +104,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       List(core.Interface(interface, interface.tparams,
         interface.operations.map { op => core.Property(op, operationAtDeclaration(interface.tparams, op)) }))
 
-    case f @ source.ExternDef(pure, id, _, vps, bps, _, bodies, doc) =>
+    case f @ source.ExternDef(pure, id, _, vps, bps, _, bodies, doc, span) =>
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.capture)
@@ -120,7 +120,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case _ =>
           Context.abort("Externs should be resolved and desugared before core.Transformer")
       }
-      List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt), tBody))
+      List(Extern.Def(sym, tps, cps.unspan, vps.unspan map transform, bps.unspan map transform, transform(ret), transform(capt), tBody))
 
     case e @ source.ExternInclude(ff, path, contents, _, doc) =>
       List(Extern.Include(ff, contents.get))
@@ -166,12 +166,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       transform(b)
 
     case source.DefStmt(d, rest) => d match {
-      case f @ source.FunDef(id, tps, vps, bps, ret, body, doc) =>
+      case f @ source.FunDef(id, tps, vps, bps, ret, body, doc, span) =>
         val tparams = tps.map { p => p.symbol }
         val cparams = bps.map { b => b.symbol.capture }
         val vparams = vps map transform
         val bparams = bps map transform
-        Def(f.symbol, BlockLit(tparams, cparams, vparams, bparams, transform(body)), transform(rest))
+        Def(f.symbol, BlockLit(tparams.unspan, cparams.unspan, vparams.unspan, bparams.unspan, transform(body)), transform(rest))
 
       case v @ source.ValDef(id, tpe, binding, doc) =>
         val transformed = transform(binding)
@@ -772,6 +772,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case InterfaceType(i: ExternInterface, targs) =>
       Context.panic("Cannot select from an extern interface")
+
+    case InterfaceType(i: ErrorBlockType, targs) =>
+      INTERNAL_ERROR("Error block type coming from Namer should not get to Transformer!")
   }
 
   def operationAtDeclaration(tparamsInterface: List[Id], op: symbols.Operation)(using Context): core.BlockType = op match {

@@ -1,8 +1,9 @@
 package effekt.core
-import effekt.{symbols, Phase}
+import effekt.{Phase, symbols}
 import munit.Location
 import kiama.parsing.{NoSuccess, Success}
 import effekt.PhaseResult.CoreTransformed
+import effekt.source.Span
 
 /** Base class for tests of [[core]]-related stuff.
  * Provides helpers to parse inputs and test for alpha-equivalence(*),
@@ -105,7 +106,7 @@ trait CorePhaseTests[P <: Phase[CoreTransformed, CoreTransformed]](phase: P) ext
     override def content: String =
       throw NotImplementedError("The original Effekt source is not available in core tests.")
   }
-  protected val theSourceModuleDecl: effekt.source.ModuleDecl = effekt.source.ModuleDecl("(core test)", Nil, Nil, None) // FIXME sentinel value
+  protected val theSourceModuleDecl: effekt.source.ModuleDecl = effekt.source.ModuleDecl("(core test)", Nil, Nil, None, Span.missing(theSource)) // FIXME sentinel value
 
   protected val theSourceModule: effekt.symbols.Module = effekt.symbols.Module(theSourceModuleDecl, theSource)
 

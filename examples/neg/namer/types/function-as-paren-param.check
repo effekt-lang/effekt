@@ -1,0 +1,9 @@
+[error] examples/neg/namer/types/function-as-paren-param.effekt:1:12: Expected value type, but got a second-class function type (Int, Int) => Bool.
+def bar(f: (Int, Int) => Bool) = <>
+           ^^^^^^^^^^^^^^^^^^
+[info] examples/neg/namer/types/function-as-paren-param.effekt:1:12: Did you mean to use braces in order to receive a block type `(Int, Int) => Bool`?
+def bar(f: (Int, Int) => Bool) = <>
+           ^^^^^^^^^^^^^^^^^^
+[info] examples/neg/namer/types/function-as-paren-param.effekt:1:12: Did you mean to use a first-class, boxed function type `(Int, Int) => Bool at {}`?
+def bar(f: (Int, Int) => Bool) = <>
+           ^^^^^^^^^^^^^^^^^^

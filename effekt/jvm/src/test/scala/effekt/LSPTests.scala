@@ -723,8 +723,62 @@ class LSPTests extends FunSuite {
   test("When showIR=source, server should provide source AST") {
     withClientAndServer { (client, server) =>
       val source =
+        raw"""def main() = <>""".textDocument
+      val textDoc = new TextDocumentItem("file://path/to/test.effekt", "effekt", 0, source.getText)
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"showIR": "source"}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val expectedIRContents =
+        raw"""ModuleDecl(
+             |  test,
+             |  Nil,
+             |  List(
+             |    FunDef(
+             |      IdDef(
+             |        main,
+             |        Span(StringSource(def main() = <>, file://test.effekt), 4, 8, Real())
+             |      ),
+             |      Many(
+             |        Nil,
+             |        Span(StringSource(def main() = <>, file://test.effekt), 8, 8, Real())
+             |      ),
+             |      Many(
+             |        Nil,
+             |        Span(StringSource(def main() = <>, file://test.effekt), 8, 10, Real())
+             |      ),
+             |      Many(
+             |        Nil,
+             |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
+             |      ),
+             |      Maybe(
+             |        None(),
+             |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
+             |      ),
+             |      Return(Hole(Return(Literal((), ValueTypeApp(Unit_whatever, Nil))))),
+             |      Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
+             |    )
+             |  ),
+             |  Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
+             |)""".stripMargin
+
+      val receivedIRContent = client.receivedIR()
+      assertEquals(receivedIRContent.length, 1)
+      val fixedReceivedIR = receivedIRContent.head.content.replaceAll("Unit_\\d+", "Unit_whatever")
+      assertEquals(fixedReceivedIR, expectedIRContents)
+    }
+  }
+
+  test("When configuration changes, server should publish requested IR") {
+    withClientAndServer { (client, server) =>
+      val source =
         raw"""
-             |def main() = { println("Hello, world!") }
+             |val foo = 42
              |"""
       val textDoc = new TextDocumentItem("file://path/to/test.effekt", "effekt", 0, source.stripMargin)
       val initializeParams = new InitializeParams()
@@ -736,36 +790,60 @@ class LSPTests extends FunSuite {
       didOpenParams.setTextDocument(helloWorld)
       server.getTextDocumentService().didOpen(didOpenParams)
 
+      // Receive the initial IR
+      assertEquals(client.receivedIR().length, 1)
+
+      val configParams = new DidChangeConfigurationParams()
+      // When configuring the VSCode language client with `synchronize: { configurationSection: 'effekt' }`,
+      // we get a `DidChangeConfigurationParams` with the configuration nested under the "effekt" key.
+      val settings: JsonElement = JsonParser.parseString("""{"effekt": {"showIR": "core", "showTree": true}}""")
+      configParams.setSettings(settings)
+      server.getWorkspaceService().didChangeConfiguration(configParams)
+
+      // Send a didSave event to trigger recompilation and IR publication
+      val didSaveParams = new DidSaveTextDocumentParams()
+      didSaveParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      didSaveParams.setText(textDoc.getText)
+      server.getTextDocumentService().didSave(didSaveParams)
+
       val expectedIRContents =
         raw"""ModuleDecl(
              |  test,
              |  Nil,
              |  List(
              |    FunDef(
-             |      IdDef(main),
-             |      Nil,
-             |      Nil,
-             |      Nil,
-             |      None(),
-             |      BlockStmt(
-             |        Return(
-             |          Call(
-             |            IdTarget(IdRef(Nil, println)),
-             |            Nil,
-             |            List(Literal(Hello, world!, ValueTypeApp(String_whatever, Nil))),
-             |            Nil
-             |          )
-             |        )
+             |      IdDef(
+             |        main,
+             |        Span(StringSource(def main() = <>, file://test.effekt), 4, 8, Real())
              |      ),
-             |      None()
+             |      Many(
+             |        Nil,
+             |        Span(StringSource(def main() = <>, file://test.effekt), 8, 8, Real())
+             |      ),
+             |      Many(
+             |        Nil,
+             |        Span(StringSource(def main() = <>, file://test.effekt), 8, 10, Real())
+             |      ),
+             |      Many(
+             |        Nil,
+             |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
+             |      ),
+             |      Maybe(
+             |        None(),
+             |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
+             |      ),
+             |      Return(Hole(Return(Literal((), ValueTypeApp(Unit_whatever, Nil))))),
+             |      None,
+             |      Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
              |    )
              |  ),
-             |  None()
+             |  Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
              |)""".stripMargin
+
 
       val receivedIRContent = client.receivedIR()
       assertEquals(receivedIRContent.length, 1)
-      val fixedReceivedIR = receivedIRContent.head.content.replaceAll("String_\\d+", "String_whatever")
+      val fixedReceivedIR = receivedIRContent.head.content.replaceAll("Int_\\d+", "Int_whatever").replaceAll("foo_\\d+", "foo_whatever")
       assertEquals(fixedReceivedIR, expectedIRContents)
     }
   }

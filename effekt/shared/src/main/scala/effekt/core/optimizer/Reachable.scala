@@ -149,6 +149,16 @@ enum Usage {
     case (Usage.Once, Usage.Many) => Usage.Many
   }
 
+  def *(other: Usage): Usage = (this, other) match {
+    case (Usage.Never, other) => Usage.Never
+    case (other, Usage.Never) => Usage.Never
+    case (Usage.Once, other) => other
+    case (other, Usage.Once) => other
+    case (Usage.Recursive, other) => Usage.Recursive
+    case (other, Usage.Recursive) => Usage.Recursive
+    case _ => Usage.Many
+  }
+
   // -1
   def decrement: Usage = this match {
     case Usage.Never => Usage.Never

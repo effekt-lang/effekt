@@ -1,0 +1,1 @@
+def bar(f: (Int, Int) => Bool) = <>

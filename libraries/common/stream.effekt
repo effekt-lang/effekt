@@ -173,9 +173,22 @@ def replicate[A](number: Int) { action: () => A }: Unit / emit[A] =
     replicate(number - 1) {action}
   }
 
+/// Creates an infinite iterated stream given by an `initial` seed and a `step` function:
+/// iterate(a){f} ~> a, f(a), f(f(a)), f(f(f(a))), ...
+def iterate[A](initial: A) { step: A => A }: Unit / emit[A] = {
+  var current = initial
+  while (true) {
+    do emit(current)
+    current = step(current)
+  }
+}
 
-def sum { stream : () => Unit / emit[Int] }: Int =
+
+def sum { stream: () => Unit / emit[Int] }: Int =
   returning::sum[Unit]{stream}.second
+
+def product { stream: () => Unit / emit[Int] }: Int =
+  returning::product[Unit]{stream}.second
 
 def collectList[A] { stream: () => Unit / emit[A] }: List[A] =
   returning::collectList[A, Unit]{stream}.second
@@ -409,6 +422,88 @@ def each(string: String): Unit / emit[Char] =
 def collectString { stream: () => Unit / emit[Char] }: String =
   returning::collectString[Unit]{stream}.second
 
+namespace internal {
+  effect snapshot(): Unit
+}
+
+/// Use cons to handle prod, but also emit to the outside.
+/// The outside controls iteration, i.e., if cons aborts, the rest of prod will still be emitted.
+/// 
+/// Starts by executing cons. Will stop cons during execution if the outside stops consuming.
+/// 
+/// Example, printing all values consumed by the outside:
+///
+///     with teeing{ {s} => for{s}{ e => println(e) } }
+///     prod() // some producer
+///
+/// Laws-ish (hopefully):
+/// - hnd{ prd() } === hnd{ teeing{t}{ prd() } } for all hnd and t that calls its argument at most once (and has no other captures)
+def teeing[A]{ cons: { => Unit / emit[A] } => Unit }{ prod: => Unit / emit[A] }: Unit / emit[A] = region r {
+  var consDone = false
+  var k in r = box { prod() } // what still needs to run of prod after cons exits
+  try {
+    cons{
+      try {
+        prod()
+        k = box { () }
+      } with emit[A] { v =>
+        do internal::snapshot() // remember that we need to continue here if cons aborts
+        if(not(consDone)) do emit(v)
+        outer.emit(v)
+        resume(())
+      }
+      if(consDone) do stop() // cons already exited, so skip continuing there
+    } // end cons
+    consDone = true
+  }
+  with stop { () => () }
+  with outer: emit[A]{ v => resume(do emit(v)) }
+  with internal::snapshot{ () =>
+    k = box { resume(()) }
+    resume(())
+  }
+  k()
+}
+
+/// Binds a `teeing`-like function in the body, stopping the inner producer once all consumers in tees are done consuming.
+/// 
+/// Example of use, equivalent to `tee[A]{cns1}{cns2}{prd}`:
+/// 
+///     manyTee[A] { {tee} =>
+///       with tee{cns1}
+///       with tee{cns2}
+///       prd()
+///     }
+///
+def manyTee[A]{ body: { { { => Unit / emit[A] } => Unit }{ => Unit / emit[A] } => Unit / emit[A] } => Unit / emit[A] }: Unit = {
+  var running = 0
+  try {
+    body{ {hnd}{prod} =>
+      running = running + 1
+      teeing[A]{ {b} => hnd{b}; running = running - 1 }{prod}
+    }
+  } with emit[A] { _ =>
+    if(running > 0) resume(())
+  }
+}
+
+/// Streams prod to both cons1 and cons2. Stops once both cons1 and cons2 stopped.
+/// Only runs prod once, resuming at most once at each emit.
+///
+///     var sumRes = 0
+///     var productRes = 0
+///     tee{ s => sumRes = sum{s} }{ s => productRes = product{s} }{ range(0, 10) }
+///     assertEquals(sum{ range(0, 10) }, sumRes)
+///     assertEquals(product{ range(0, 10) }, productRes)
+///
+def tee[A]{ cons1: { => Unit / emit[A] } => Unit }{ cons2: { => Unit / emit[A] } => Unit }{ prod: => Unit / emit[A] }: Unit = {
+  manyTee[A]{ {tee} =>
+    with tee{cons1}
+    with tee{cons2}
+    prod()
+  }
+}
+
 namespace returning {
 
 /// Canonical handler of push streams that performs `action` for every
@@ -461,12 +556,22 @@ def limit[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop 
   }
 }
 
-def sum[R] { stream : () => R / emit[Int] }: (R, Int) = {
+def sum[R] { stream: () => R / emit[Int] }: (R, Int) = {
   var s = 0;
   try {
     (stream(), s)
   } with emit[Int] { v =>
     s = s + v;
+    resume(())
+  }
+}
+
+def product[R] { stream: () => R / emit[Int] }: (R, Int) = {
+  var s = 1;
+  try {
+    (stream(), s)
+  } with emit[Int] { v =>
+    s = s * v;
     resume(())
   }
 }

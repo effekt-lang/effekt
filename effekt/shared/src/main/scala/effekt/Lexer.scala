@@ -7,7 +7,7 @@ import scala.collection.mutable
 import scala.collection.immutable
 import scala.collection.BufferedIterator
 import scala.util.matching.Regex
-
+import effekt.source.Span
 import effekt.context.Context
 
 import kiama.util.{ Source, Range }
@@ -20,7 +20,10 @@ case class LexerError(msg: String, start: Int, end: Int) extends Throwable(msg)
  * A token consist of the absolute starting position, the absolute end position in the source file
  * and the kind of token. Both position are to be understood as inclusive.
  */
-case class Token(start: Int, end: Int, kind: TokenKind)
+case class Token(start: Int, end: Int, kind: TokenKind) {
+  def span(source: Source): Span = Span(source, start, end)
+}
+
 
 enum TokenKind {
   // literals
@@ -313,9 +316,7 @@ class Lexer(source: Source) {
       kind match {
         case TokenKind.EOF =>
           eof = true
-          // EOF has the position of one after the last character
-          // this may be useful for a streaming lexer
-          tokens += Token(current + 1, current + 1, TokenKind.EOF)
+          tokens += Token(current, current, TokenKind.EOF)
         case k =>
           tokens += makeToken(k)
       }

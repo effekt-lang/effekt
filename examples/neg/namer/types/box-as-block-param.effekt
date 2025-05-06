@@ -1,0 +1,1 @@
+def foo { f: (Int, Int) => Bool at {} } = <>

@@ -3,7 +3,7 @@ package source
 
 import effekt.context.Context
 import effekt.symbols.Symbol
-
+import kiama.util.{Source, StringSource}
 import scala.annotation.tailrec
 
 /**
@@ -72,12 +72,16 @@ import scala.annotation.tailrec
  *     │  │─ [[ TagPattern ]]
  *     │  │─ [[ IgnorePattern ]]
  *     │  │─ [[ LiteralPattern ]]
+ *     │  │─ [[ MultiPattern ]]
  *     │
  *     │─ [[ Type ]]
- *     │  │─ [[ ValueType ]]
- *     │  │─ [[ BlockType ]]
+ *     │  │─ [[ ValueTypeTree ]]
+ *     │  │─ [[ BlockTypeTree ]]
+ *     │  │─ [[ TypeRef ]]
+ *     │  │─ [[ BoxedType ]]
+ *     │  │─ [[ FunctionType ]]
+ *     │  │─ [[ Effectful ]]
  *     │
- *     │─ [[ Effectful ]]
  *     │─ [[ Effects ]]
  *     │─ [[ CaptureSet ]]
  *
@@ -101,6 +105,41 @@ case object NoSource extends Tree
 case class Comment() extends Tree
 
 type Doc = Option[String]
+
+/**
+ * The origin of the span
+ *
+ * Possible values:
+ * - Real: the node has direct representation in the source code and this is its span
+ * - Synthesized: the node does not have a direct representation in the source code, but this is the span
+ *                we would like to point at for any error messages that need to refer to this node.
+ *                If the user can express this node explicitly, it should also point to the place where the
+ *                user could write it out explicitly.
+ * - Missing: this node doesn't or can't have a span yet, but we would like to add one later
+ */
+enum Origin {
+  case Real, Synthesized, Missing
+}
+
+case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = Origin.Real) {
+  /**
+   * creates a fake empty Span immediately after this one
+   * Example:
+   * [ - Span - ]
+   *             [] <- emptyAfter
+   */
+  def emptyAfter: Span = Span(source, to + 1,  to + 1, origin = Origin.Synthesized)
+
+  /**
+   * creates a fake copy of this span
+   */
+  def synthesized: Span = Span(source, from, to, origin = Origin.Synthesized)
+}
+
+object Span {
+  def missing(source: Source) = Span(source, 0, 0, origin = Origin.Missing)
+  def missing = Span(StringSource(""), 0, 0, origin = Origin.Missing)
+}
 
 /**
  * Used to mark externs for different backends
@@ -164,16 +203,16 @@ sealed trait Id extends Tree {
   def symbol(using C: Context): Symbol = C.symbolOf(this)
   def clone(using C: Context): Id
 }
-case class IdDef(name: String) extends Id {
+case class IdDef(name: String, span: Span) extends Id {
   def clone(using C: Context): IdDef = {
-    val copy = IdDef(name)
+    val copy = IdDef(name, span)
     C.positions.dupPos(this, copy)
     copy
   }
 }
-case class IdRef(path: List[String], name: String) extends Id {
+case class IdRef(path: List[String], name: String, span: Span) extends Id {
   def clone(using C: Context): IdRef = {
-    val copy = IdRef(path, name)
+    val copy = IdRef(path, name, span)
     C.positions.dupPos(this, copy)
     copy
   }
@@ -199,7 +238,7 @@ sealed trait Reference extends Named {
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  *
  */
-case class ModuleDecl(path: String, includes: List[Include], defs: List[Def], doc: Doc) extends Tree
+case class ModuleDecl(path: String, includes: List[Include], defs: List[Def], doc: Doc, span: Span) extends Tree
 case class Include(path: String) extends Tree
 
 /**
@@ -211,6 +250,71 @@ enum Param extends Definition {
 }
 export Param.*
 
+/**
+ * A `List` (usually of `Tree`s) with a `span` that spans all elements of the list
+ */
+case class Many[T](unspan: List[T], span: Span) {
+  def map[B](f: T => B): Many[B] =
+    Many(unspan.map(f), span)
+
+  def unzip [A1, A2](implicit asPair: T => (A1, A2)): (Many[A1], Many[A2]) = {
+    val (list1: List[A1], list2: List[A2]) = unspan.unzip(asPair)
+    (Many(list1, span), Many(list2, span))
+  }
+
+  def collect[B](pf: PartialFunction[T, B]): Many[B] =
+    Many(unspan.collect(pf), span)
+
+  def zip[B](that: IterableOnce[B]): Many[(T, B)] = Many(unspan.zip(that), span)
+
+  def flatMap[B](f: T => IterableOnce[B]): Many[B] =
+    Many(unspan.flatMap(f), span)
+
+  export unspan.{foreach, toSet, isEmpty, nonEmpty, mkString, size, length, init, last}
+}
+
+object Many {
+   def empty[T](span: Span) = Many[T](Nil, span)
+}
+
+/**
+ * An `Option` with a `span`
+ *
+ * If the `Option` is `Some`, the `span` is the span of the value.
+ * If the `Option` is `None`, the `span` is an empty span pointing to where the optional value would be expected.
+ */
+case class Maybe[T](unspan: Option[T], span: Span) {
+  def map[B](f: T => B): Maybe[B] = Maybe(unspan.map(f), span)
+  def flatMap[B](f: T => Maybe[B]): Maybe[B] = unspan match {
+    case None => Maybe(None, span)
+    case Some(x) => f(x)
+  }
+
+  def orElse[B >: T](alternative: => Maybe[B]): Maybe[B] =
+   unspan match {
+      case Some(x) => Maybe(unspan, span)
+      case None => alternative
+    }
+
+  export unspan.{foreach, get, getOrElse}
+}
+
+object Maybe {
+  def Some[T](value: T, span: Span): Maybe[T] = Maybe(scala.Some(value), span)
+
+  def None[T](span: Span): Maybe[T] = Maybe(scala.None, span)
+}
+
+object SpannedOps {
+  extension [T](self: Option[T]) {
+    inline def spanned(span: Span): Maybe[T] = Maybe(self, span)
+  }
+
+  extension [T](self: List[T]) {
+    inline def spanned(span: Span): Many[T] = Many(self, span)
+  }
+}
+export SpannedOps._
 
 /**
  * Global and local definitions
@@ -239,7 +343,7 @@ export Param.*
  */
 enum Def extends Definition {
 
-  case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt, doc: Doc)
+  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, doc: Doc, span: Span)
   case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, doc: Doc)
   case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, doc: Doc)
   case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, doc: Doc)
@@ -247,9 +351,9 @@ enum Def extends Definition {
 
   case NamespaceDef(id: IdDef, definitions: List[Def], doc: Doc)
 
-  case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], doc: Doc)
-  case DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor], doc: Doc)
-  case RecordDef(id: IdDef, tparams: List[Id], fields: List[ValueParam], doc: Doc)
+  case InterfaceDef(id: IdDef, tparams: Many[Id], ops: List[Operation], doc: Doc)
+  case DataDef(id: IdDef, tparams: Many[Id], ctors: List[Constructor], doc: Doc)
+  case RecordDef(id: IdDef, tparams: Many[Id], fields: Many[ValueParam], doc: Doc)
 
   /**
    * Type aliases like `type Matrix[T] = List[List[T]]`
@@ -264,11 +368,11 @@ enum Def extends Definition {
   /**
    * Only valid on the toplevel!
    */
-  case ExternType(id: IdDef, tparams: List[Id], doc: Doc)
+  case ExternType(id: IdDef, tparams: Many[Id], doc: Doc)
 
   case ExternDef(capture: CaptureSet, id: IdDef,
-                 tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful,
-                 bodies: List[ExternBody], doc: Doc) extends Def
+                 tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Effectful,
+                 bodies: List[ExternBody], doc: Doc, span: Span) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType, doc: Doc)
 
@@ -280,7 +384,7 @@ enum Def extends Definition {
    * @note Storing content and id as user-visible fields is a workaround for the limitation that Enum's cannot
    *   have case specific refinements.
    */
-  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef = IdDef(""), doc: Doc)
+  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef, doc: Doc)
 
   def doc: Doc
 }
@@ -370,7 +474,7 @@ enum Term extends Tree {
    * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
    * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
    */
-  case Do(effect: Option[BlockType.BlockTypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
+  case Do(effect: Option[TypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
 
   /**
    * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
@@ -436,8 +540,8 @@ export CallTarget.*
 
 // Declarations
 // ------------
-case class Constructor(id: IdDef, tparams: List[Id], params: List[ValueParam], doc: Doc) extends Definition
-case class Operation(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, doc: Doc) extends Definition
+case class Constructor(id: IdDef, tparams: Many[Id], params: Many[ValueParam], doc: Doc) extends Definition
+case class Operation(id: IdDef, tparams: Many[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, doc: Doc) extends Definition
 
 // Implementations
 // ---------------
@@ -451,7 +555,7 @@ case class Operation(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bp
  *
  * Called "template" or "class" in other languages.
  */
-case class Implementation(interface: BlockType.BlockTypeRef, clauses: List[OpClause]) extends Reference {
+case class Implementation(interface: TypeRef, clauses: List[OpClause]) extends Reference {
   def id = interface.id
 }
 
@@ -532,68 +636,61 @@ export MatchPattern.*
  * ----------[[ effekt.source.Type ]]----------
  *
  *   ─ [[ Type ]]
- *     │─ [[ ValueType ]]
- *     │  │─ [[ ValueTypeTree ]]
- *     │  │─ [[ BoxedType ]]
- *     │  │─ [[ ValueTypeRef ]]
- *     │
- *     │─ [[ BlockType ]]
- *     │  │─ [[ BlockTypeTree ]]
- *     │  │─ [[ FunctionType ]]
- *     │  │─ [[ BlockTypeRef ]]
- *     │
+ *     │─ [[ ValueTypeTree ]]
+ *     │─ [[ BlockTypeTree ]]
+ *     │─ [[ TypeRef ]]
+ *     │─ [[ BoxedType ]]
+ *     │─ [[ FunctionType ]]
+ *     │─ [[ Effectful ]]
  *
  * --------------------------------------------
  */
 sealed trait Type extends Tree
 
 /**
- * Value Types
+ * Trees that represent inferred or synthesized *value* types (not present in the source = not parsed)
  */
-enum ValueType extends Type {
-
-  /**
-   * Trees that represent inferred or synthesized types (not present in the source)
-   */
-  case ValueTypeTree(tpe: symbols.ValueType)
-
-  /**
-   * Types of first-class functions
-   */
-  case BoxedType(tpe: BlockType, capt: CaptureSet)
-
-  // Bound occurrences (args can be empty)
-  case ValueTypeRef(id: IdRef, args: List[ValueType]) extends ValueType, Reference
-}
-export ValueType.*
+case class ValueTypeTree(tpe: symbols.ValueType) extends Type
 
 /**
- * Block Types
+ * Trees that represent inferred or synthesized *block* types (not present in the source = not parsed)
  */
-enum BlockType extends Type {
+case class BlockTypeTree(eff: symbols.BlockType) extends Type
 
-  /**
-   * Trees that represent inferred or synthesized types (not present in the source)
-   */
-  case BlockTypeTree(eff: symbols.BlockType)
-  case FunctionType(tparams: List[Id], vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects)
-  case BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference
-}
+/*
+ * Reference to a type, potentially with bound occurences in `args`
+ */
+case class TypeRef(id: IdRef, args: Many[ValueType]) extends Type, Reference
 
-export BlockType.*
+/**
+ * Types of first-class computations
+ */
+case class BoxedType(tpe: BlockType, capt: CaptureSet) extends Type
 
-// We have Effectful as a tree in order to apply code actions on it (see Server.inferEffectsAction)
-case class Effectful(tpe: ValueType, eff: Effects) extends Tree
+/**
+ * Types of (second-class) functions
+ */
+case class FunctionType(tparams: Many[Id], vparams: Many[ValueType], bparams: Many[(Maybe[IdDef], BlockType)], result: ValueType, effects: Effects) extends Type
+
+
+/**
+ * Type-and-effect annotations
+ */
+case class Effectful(tpe: ValueType, eff: Effects, span: Span) extends Type
+
+// These are just type aliases for documentation purposes.
+type BlockType = Type
+type ValueType = Type
 
 /**
  * Represents an annotated set of effects. Before name resolution, we cannot know
- * the concrete nature of its elements (so it is generic [[BlockTypeRef]]).
+ * the concrete nature of its elements (so it is generic [[TypeRef]]).
  */
-case class Effects(effs: List[BlockType.BlockTypeRef]) extends Tree
+case class Effects(effs: List[TypeRef]) extends Tree
 object Effects {
   val Pure: Effects = Effects()
-  def apply(effs: BlockTypeRef*): Effects = Effects(effs.toSet)
-  def apply(effs: Set[BlockTypeRef]): Effects = Effects(effs.toList)
+  def apply(effs: TypeRef*): Effects = Effects(effs.toSet)
+  def apply(effs: Set[TypeRef]): Effects = Effects(effs.toList)
 }
 
 case class CaptureSet(captures: List[IdRef]) extends Tree
@@ -606,10 +703,9 @@ object Named {
   type Defs = FunDef | ValDef | VarDef | DefDef | RegDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
   type Definitions =  Externs | Defs | Params | Operation | Constructor | Region | AnyPattern
 
-  type Types = ValueTypeRef | BlockTypeRef
   type Vars = Var | Assign
   type Calls = Do | Select | MethodCall | IdTarget
-  type References = Types | Vars | Calls | TagPattern | Handler | OpClause | Implementation
+  type References = Vars | Calls | TagPattern | Handler | OpClause | Implementation
 
   type ResolvedDefinitions[T <: Definitions] = T match {
     // Defs
@@ -642,9 +738,7 @@ object Named {
   }
 
   type ResolvedReferences[T <: References] = T match {
-    // Types
-    case ValueTypeRef => symbols.TypeConstructor
-    case BlockTypeRef => symbols.BlockTypeConstructor
+    case TypeRef => symbols.TypeConstructor | symbols.BlockTypeConstructor
 
     // Vars
     case Var    => symbols.TermSymbol
@@ -673,29 +767,26 @@ object Named {
 }
 export Named.symbol
 
+// Can we actually move this to namer?
+
 // MOVE TO NAMER
 object Resolvable {
-
-  // Value Types
+  // Block Types
   // -----------
-  extension (t: ValueType) {
-    def resolve(using C: Context): symbols.ValueType = C.resolvedType(t).asInstanceOf
+  extension (t: BlockTypeTree) {
+    def resolve(using C: Context): symbols.BlockType = C.resolvedType(t).asInstanceOf[symbols.BlockType]
   }
 
-  // BLock Types
-  // -----------
-  // we need to avoid widening, so here we define BlockType as a sum without a common parent
-  // (see https://github.com/lampepfl/dotty/issues/16299)
-  type BlockTypes = BlockTypeTree | FunctionType | BlockTypeRef
-
-  type Resolved[T <: BlockTypes] = T match {
-    case BlockTypeTree => symbols.BlockType
-    case FunctionType => symbols.FunctionType
-    case BlockTypeRef => symbols.InterfaceType
+  extension (t: TypeRef) {
+    def resolveBlockRef(using C: Context): symbols.InterfaceType = C.resolvedType(t).asInstanceOf[symbols.InterfaceType]
   }
 
-  extension [T <: BlockTypes] (t: T) {
-    def resolve(using C: Context): Resolved[T] = C.resolvedType(t).asInstanceOf
+  // NOTE(jiribenes, 2024-04-21):
+  // So these are technically unsafe, but we ought to report the errors after Namer anyways,
+  // so they should be "safe" within Typer and other phases, I think?
+  extension (t: Type) {
+    def resolveValueType(using C: Context): symbols.ValueType = C.resolvedType(t).asInstanceOf[symbols.ValueType]
+    def resolveBlockType(using C: Context): symbols.BlockType = C.resolvedType(t).asInstanceOf[symbols.BlockType]
   }
 
   // Capture Sets
@@ -704,8 +795,15 @@ object Resolvable {
     def resolve(using C: Context): symbols.CaptureSet = C.resolvedCapture(capt)
   }
 }
-export Resolvable.resolve
+export Resolvable.*
 
+extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] =
+  C.positions.getRange(positioned).flatMap { range =>
+    C.positions.substring(range.from, range.to)
+  }
+
+extension [T](positioned: T) def sourceOf(using C: Context): String =
+  positioned.sourceOfOpt.getOrElse { s"${positioned}" }
 
 object Tree {
 
