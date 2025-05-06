@@ -475,7 +475,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       `effect` ~> operation() match {
         case op @ Operation(id, tps, vps, bps, ret) =>
-          InterfaceDef(IdDef(id.name, id.span) withPositionOf op, tps, List(Operation(id, Many.empty(tps.span.asSynthesized), vps, bps, ret) withPositionOf op))
+          InterfaceDef(IdDef(id.name, id.span) withPositionOf op, tps, List(Operation(id, Many.empty(tps.span.synthesized), vps, bps, ret) withPositionOf op))
       }
 
   def operation(): Operation =
@@ -725,7 +725,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       // Interface[...] { case ... => ... }
       def operationImplementation() = idRef() ~ maybeTypeArgs() ~ implicitResume ~ functionArg() match {
         case (id ~ tps ~ k ~ BlockLiteral(_, vps, bps, body)) =>
-          val synthesizedId = IdRef(Nil, id.name, id.span.asSynthesized).withPositionOf(id)
+          val synthesizedId = IdRef(Nil, id.name, id.span.synthesized).withPositionOf(id)
           val interface = TypeRef(id, tps.unspan).withPositionOf(id)
           val operation = OpClause(synthesizedId, Nil, vps, bps, None, body, k).withRangeOf(id, body)
           Implementation(interface, List(operation))
@@ -803,7 +803,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case _ if isLiteral => LiteralPattern(literal())
         case `(` => some(matchPattern, `(`, `,`, `)`) match {
           case Many(p :: Nil , _) => fail("Pattern matching on tuples requires more than one element")
-          case Many(ps, span) => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}", span.asSynthesized), ps)
+          case Many(ps, span) => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}", span.synthesized), ps)
         }
         case _ => fail("Expected pattern")
       }
@@ -847,9 +847,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   private def binaryOp(lhs: Term, op: Token, rhs: Term): Term =
     nonterminal:
        if isThunkedOp(op.kind) then
-         Call(IdTarget(IdRef(Nil, opName(op.kind), op.span(source).asSynthesized)), Nil, Nil, List(BlockLiteral(Nil, Nil, Nil, Return(lhs)), BlockLiteral(Nil, Nil, Nil, Return(rhs))))
+         Call(IdTarget(IdRef(Nil, opName(op.kind), op.span(source).synthesized)), Nil, Nil, List(BlockLiteral(Nil, Nil, Nil, Return(lhs)), BlockLiteral(Nil, Nil, Nil, Return(rhs))))
        else
-         Call(IdTarget(IdRef(Nil, opName(op.kind), op.span(source).asSynthesized)), Nil, List(lhs, rhs), Nil)
+         Call(IdTarget(IdRef(Nil, opName(op.kind), op.span(source).synthesized)), Nil, List(lhs, rhs), Nil)
 
   private def isThunkedOp(op: TokenKind): Boolean = op match {
     case `||` | `&&` => true
@@ -874,7 +874,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
 
   def TypeTuple(tps: Many[Type]): Type =
-    TypeRef(IdRef(List("effekt"), s"Tuple${tps.size}", tps.span.asSynthesized), tps.unspan)
+    TypeRef(IdRef(List("effekt"), s"Tuple${tps.size}", tps.span.synthesized), tps.unspan)
 
   /**
    * This is a compound production for
@@ -1051,7 +1051,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case Maybe(None, _) ~ Template(str :: Nil, Nil) => StringLit(str)
         // s"a${x}b${y}" ~> s { do literal("a"); do splice(x); do literal("b"); do splice(y); return () }
         case id ~ Template(strs, args) =>
-          val target = id.getOrElse(IdRef(Nil, "s", id.span.asSynthesized))
+          val target = id.getOrElse(IdRef(Nil, "s", id.span.synthesized))
           val doLits = strs.map { s =>
             Do(None, IdRef(Nil, "literal", Span.missing(source)), Nil, List(StringLit(s)), Nil)
           }

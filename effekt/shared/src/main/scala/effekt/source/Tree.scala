@@ -131,7 +131,7 @@ case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = 
   /**
    * creates a fake copy of this span
    */
-  def asSynthesized: Span = Span(source, from, to, origin = Origin.Synthesized)
+  def synthesized: Span = Span(source, from, to, origin = Origin.Synthesized)
 }
 
 object Span {
