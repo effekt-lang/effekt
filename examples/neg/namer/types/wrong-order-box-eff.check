@@ -1,0 +1,6 @@
+[error] examples/neg/namer/types/wrong-order-box-eff.effekt:1:14: Expected block type, but got a type-and-effect annotation (Int, Int) => Bool at {} / Exc.
+def foo { f: (Int, Int) => Bool at {} / Exc } = <>
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[info] examples/neg/namer/types/wrong-order-box-eff.effekt:1:14: Did you want to write a boxed type with effects, `(Int, Int) => Bool / Exc at {}`?
+def foo { f: (Int, Int) => Bool at {} / Exc } = <>
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -72,12 +72,16 @@ import scala.annotation.tailrec
  *     │  │─ [[ TagPattern ]]
  *     │  │─ [[ IgnorePattern ]]
  *     │  │─ [[ LiteralPattern ]]
+ *     │  │─ [[ MultiPattern ]]
  *     │
  *     │─ [[ Type ]]
- *     │  │─ [[ ValueType ]]
- *     │  │─ [[ BlockType ]]
+ *     │  │─ [[ ValueTypeTree ]]
+ *     │  │─ [[ BlockTypeTree ]]
+ *     │  │─ [[ TypeRef ]]
+ *     │  │─ [[ BoxedType ]]
+ *     │  │─ [[ FunctionType ]]
+ *     │  │─ [[ Effectful ]]
  *     │
- *     │─ [[ Effectful ]]
  *     │─ [[ Effects ]]
  *     │─ [[ CaptureSet ]]
  *
@@ -366,7 +370,7 @@ enum Term extends Tree {
    * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
    * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
    */
-  case Do(effect: Option[BlockType.BlockTypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
+  case Do(effect: Option[TypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
 
   /**
    * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
@@ -447,7 +451,7 @@ case class Operation(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bp
  *
  * Called "template" or "class" in other languages.
  */
-case class Implementation(interface: BlockType.BlockTypeRef, clauses: List[OpClause]) extends Reference {
+case class Implementation(interface: TypeRef, clauses: List[OpClause]) extends Reference {
   def id = interface.id
 }
 
@@ -528,68 +532,60 @@ export MatchPattern.*
  * ----------[[ effekt.source.Type ]]----------
  *
  *   ─ [[ Type ]]
- *     │─ [[ ValueType ]]
- *     │  │─ [[ ValueTypeTree ]]
- *     │  │─ [[ BoxedType ]]
- *     │  │─ [[ ValueTypeRef ]]
- *     │
- *     │─ [[ BlockType ]]
- *     │  │─ [[ BlockTypeTree ]]
- *     │  │─ [[ FunctionType ]]
- *     │  │─ [[ BlockTypeRef ]]
- *     │
+ *     │─ [[ ValueTypeTree ]]
+ *     │─ [[ BlockTypeTree ]]
+ *     │─ [[ TypeRef ]]
+ *     │─ [[ BoxedType ]]
+ *     │─ [[ FunctionType ]]
+ *     │─ [[ Effectful ]]
  *
  * --------------------------------------------
  */
 sealed trait Type extends Tree
 
 /**
- * Value Types
+ * Trees that represent inferred or synthesized *value* types (not present in the source = not parsed)
  */
-enum ValueType extends Type {
-
-  /**
-   * Trees that represent inferred or synthesized types (not present in the source)
-   */
-  case ValueTypeTree(tpe: symbols.ValueType)
-
-  /**
-   * Types of first-class functions
-   */
-  case BoxedType(tpe: BlockType, capt: CaptureSet)
-
-  // Bound occurrences (args can be empty)
-  case ValueTypeRef(id: IdRef, args: List[ValueType]) extends ValueType, Reference
-}
-export ValueType.*
+case class ValueTypeTree(tpe: symbols.ValueType) extends Type
 
 /**
- * Block Types
+ * Trees that represent inferred or synthesized *block* types (not present in the source = not parsed)
  */
-enum BlockType extends Type {
+case class BlockTypeTree(eff: symbols.BlockType) extends Type
 
-  /**
-   * Trees that represent inferred or synthesized types (not present in the source)
-   */
-  case BlockTypeTree(eff: symbols.BlockType)
-  case FunctionType(tparams: List[Id], vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects)
-  case BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference
-}
+/*
+ * Reference to a type, potentially with bound occurences in `args`
+ */
+case class TypeRef(id: IdRef, args: List[ValueType]) extends Type, Reference
 
-export BlockType.*
+/**
+ * Types of first-class computations
+ */
+case class BoxedType(tpe: BlockType, capt: CaptureSet) extends Type
 
-// We have Effectful as a tree in order to apply code actions on it (see Server.inferEffectsAction)
-case class Effectful(tpe: ValueType, eff: Effects) extends Tree
+/**
+ * Types of (second-class) functions
+ */
+case class FunctionType(tparams: List[Id], vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects) extends Type
+
+/**
+ * Type-and-effect annotations
+ */
+case class Effectful(tpe: ValueType, eff: Effects) extends Type
+
+// These are just type aliases for documentation purposes.
+type BlockType = Type
+type ValueType = Type
 
 /**
  * Represents an annotated set of effects. Before name resolution, we cannot know
- * the concrete nature of its elements (so it is generic [[BlockTypeRef]]).
+ * the concrete nature of its elements (so it is generic [[TypeRef]]).
  */
-case class Effects(effs: List[BlockType.BlockTypeRef]) extends Tree
+case class Effects(effs: List[TypeRef]) extends Tree
 object Effects {
   val Pure: Effects = Effects()
-  def apply(effs: BlockTypeRef*): Effects = Effects(effs.toSet)
-  def apply(effs: Set[BlockTypeRef]): Effects = Effects(effs.toList)
+  def apply(effs: TypeRef*): Effects = Effects(effs.toSet)
+  def apply(effs: Set[TypeRef]): Effects = Effects(effs.toList)
 }
 
 case class CaptureSet(captures: List[IdRef]) extends Tree
@@ -602,10 +598,9 @@ object Named {
   type Defs = FunDef | ValDef | VarDef | DefDef | RegDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
   type Definitions =  Externs | Defs | Params | Operation | Constructor | Region | AnyPattern
 
-  type Types = ValueTypeRef | BlockTypeRef
   type Vars = Var | Assign
   type Calls = Do | Select | MethodCall | IdTarget
-  type References = Types | Vars | Calls | TagPattern | Handler | OpClause | Implementation
+  type References = Vars | Calls | TagPattern | Handler | OpClause | Implementation
 
   type ResolvedDefinitions[T <: Definitions] = T match {
     // Defs
@@ -638,9 +633,7 @@ object Named {
   }
 
   type ResolvedReferences[T <: References] = T match {
-    // Types
-    case ValueTypeRef => symbols.TypeConstructor
-    case BlockTypeRef => symbols.BlockTypeConstructor
+    case TypeRef => symbols.TypeConstructor | symbols.BlockTypeConstructor
 
     // Vars
     case Var    => symbols.TermSymbol
@@ -669,29 +662,26 @@ object Named {
 }
 export Named.symbol
 
+// Can we actually move this to namer?
+
 // MOVE TO NAMER
 object Resolvable {
-
-  // Value Types
+  // Block Types
   // -----------
-  extension (t: ValueType) {
-    def resolve(using C: Context): symbols.ValueType = C.resolvedType(t).asInstanceOf
+  extension (t: BlockTypeTree) {
+    def resolve(using C: Context): symbols.BlockType = C.resolvedType(t).asInstanceOf[symbols.BlockType]
   }
 
-  // BLock Types
-  // -----------
-  // we need to avoid widening, so here we define BlockType as a sum without a common parent
-  // (see https://github.com/lampepfl/dotty/issues/16299)
-  type BlockTypes = BlockTypeTree | FunctionType | BlockTypeRef
-
-  type Resolved[T <: BlockTypes] = T match {
-    case BlockTypeTree => symbols.BlockType
-    case FunctionType => symbols.FunctionType
-    case BlockTypeRef => symbols.InterfaceType
+  extension (t: TypeRef) {
+    def resolveBlockRef(using C: Context): symbols.InterfaceType = C.resolvedType(t).asInstanceOf[symbols.InterfaceType]
   }
 
-  extension [T <: BlockTypes] (t: T) {
-    def resolve(using C: Context): Resolved[T] = C.resolvedType(t).asInstanceOf
+  // NOTE(jiribenes, 2024-04-21):
+  // So these are technically unsafe, but we ought to report the errors after Namer anyways,
+  // so they should be "safe" within Typer and other phases, I think?
+  extension (t: Type) {
+    def resolveValueType(using C: Context): symbols.ValueType = C.resolvedType(t).asInstanceOf[symbols.ValueType]
+    def resolveBlockType(using C: Context): symbols.BlockType = C.resolvedType(t).asInstanceOf[symbols.BlockType]
   }
 
   // Capture Sets
@@ -700,8 +690,15 @@ object Resolvable {
     def resolve(using C: Context): symbols.CaptureSet = C.resolvedCapture(capt)
   }
 }
-export Resolvable.resolve
+export Resolvable.*
 
+extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] =
+  C.positions.getRange(positioned).flatMap { range =>
+    C.positions.substring(range.from, range.to)
+  }
+
+extension [T](positioned: T) def sourceOf(using C: Context): String =
+  positioned.sourceOfOpt.getOrElse { s"${positioned}" }
 
 object Tree {
 

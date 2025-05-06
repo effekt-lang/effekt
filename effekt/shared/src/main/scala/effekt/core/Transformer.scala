@@ -772,6 +772,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case InterfaceType(i: ExternInterface, targs) =>
       Context.panic("Cannot select from an extern interface")
+
+    case InterfaceType(i: ErrorBlockType, targs) =>
+      INTERNAL_ERROR("Error block type coming from Namer should not get to Transformer!")
   }
 
   def operationAtDeclaration(tparamsInterface: List[Id], op: symbols.Operation)(using Context): core.BlockType = op match {

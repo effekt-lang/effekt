@@ -260,6 +260,8 @@ class RecursiveDescentTests extends munit.FunSuite {
         |""".stripMargin)
 
     parseStmts("val (left, right) = list; return left")
+
+    parseStmts("val g: () => Unit / Exc at {exc} = fun() { closure() }; ()")
   }
 
   test("Semicolon insertion") {
@@ -325,7 +327,7 @@ class RecursiveDescentTests extends munit.FunSuite {
   test("Value types") {
     assertEquals(
       parseValueType("Int"),
-      ValueTypeRef(IdRef(Nil, "Int"), Nil))
+      TypeRef(IdRef(Nil, "Int"), Nil))
 
     parseValueType("List[Int]")
     parseValueType("list::List[Int]")
@@ -342,8 +344,8 @@ class RecursiveDescentTests extends munit.FunSuite {
 
     assertEquals(
       parseBlockType("(Int, String) => Int"),
-      FunctionType(Nil, List(ValueTypeRef(IdRef(Nil,"Int"), Nil),
-        ValueTypeRef(IdRef(Nil,"String"), Nil)), Nil, ValueTypeRef(IdRef(Nil, "Int"), Nil), Effects(Nil)))
+      FunctionType(Nil, List(TypeRef(IdRef(Nil,"Int"), Nil),
+        TypeRef(IdRef(Nil,"String"), Nil)), Nil, TypeRef(IdRef(Nil, "Int"), Nil), Effects(Nil)))
 
     parseBlockType("(Int, String) => Int / Exc")
     parseBlockType("[T](Int, String) => Int / { Exc, State[T] }")
@@ -356,6 +358,9 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseBlockType("[T] => T") // Not sure we want this...
 
     parseValueType("Exc at { a, b, c }")
+    intercept[Throwable] { parseBlockType("Exc / Eff") }
+    intercept[Throwable] { parseBlockType("Exc / {}") }
+
     parseValueType("() => (Exc at {}) / {} at { a, b, c }")
 
     assertEquals(
@@ -368,6 +373,8 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseValueType("() => (Int at { a, b, c }) at {}")
     parseValueType("(() => Int) at { a, b, c }")
     parseValueType("(() => Int at {}) => Int at { a, b, c }")
+
+    parseValueType("() => Unit / Socket at {io, async, global}")
   }
 
   test("Params") {
@@ -413,7 +420,7 @@ class RecursiveDescentTests extends munit.FunSuite {
   test("Implementations") {
     assertEquals(
       parseImplementation("Foo {}"),
-      Implementation(BlockTypeRef(IdRef(Nil, "Foo"), Nil), Nil))
+      Implementation(TypeRef(IdRef(Nil, "Foo"), Nil), Nil))
 
     parseImplementation("Foo[T] {}")
     parseImplementation("Foo[T] { def bar() = 42 }")
@@ -431,7 +438,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     assertEquals(
       parseImplementation("Foo { 43 }"),
       Implementation(
-        BlockTypeRef(IdRef(Nil, "Foo"), Nil),
+        TypeRef(IdRef(Nil, "Foo"), Nil),
         List(OpClause(IdRef(Nil, "Foo"), Nil, Nil, Nil, None,
           Return(Literal(43, symbols.builtins.TInt)), IdDef("resume")))))
   }
@@ -563,6 +570,11 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseDefinition(
         """def foo[T](x: Int): String / {} = e
           |""".stripMargin)
+
+    parseDefinition(
+        """def op(): Int => Int at {greeter} / Greet = f
+          |""".stripMargin
+    )
   }
 
   test("Toplevel definitions") {

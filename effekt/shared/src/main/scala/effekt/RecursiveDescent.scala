@@ -702,11 +702,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def implementation(): Implementation =
     nonterminal:
       // Interface[...] {}
-      def emptyImplementation() = backtrack { Implementation(interfaceType(), `{` ~> Nil <~ `}`) }
+      def emptyImplementation() = backtrack { Implementation(blockTypeRef(), `{` ~> Nil <~ `}`) }
 
       // Interface[...] { def <NAME> = ... }
       def interfaceImplementation() = backtrack {
-        val tpe = interfaceType()
+        val tpe = blockTypeRef()
         consume(`{`)
         if !peek(`def`) then fail("Expected at least one operation definition to implement this interface.")
         tpe
@@ -719,7 +719,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       def operationImplementation() = idRef() ~ maybeTypeArgs() ~ implicitResume ~ functionArg() match {
         case (id ~ tps ~ k ~ BlockLiteral(_, vps, bps, body)) =>
           val synthesizedId = IdRef(Nil, id.name).withPositionOf(id)
-          val interface = BlockTypeRef(id, tps).withPositionOf(id): BlockTypeRef
+          val interface = TypeRef(id, tps).withPositionOf(id)
           val operation = OpClause(synthesizedId, Nil, vps, bps, None, body, k).withRangeOf(id, body)
           Implementation(interface, List(operation))
       }
@@ -866,9 +866,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     case _ => sys.error(s"Internal compiler error: not a valid operator ${op}")
   }
 
-  private def TupleTypeTree(tps: List[ValueType]): ValueType =
-    ValueTypeRef(IdRef(List("effekt"), s"Tuple${tps.size}"), tps)
-    // TODO positions!
+  def TypeTuple(tps: List[Type]): Type =
+    TypeRef(IdRef(List("effekt"), s"Tuple${tps.size}"), tps)
 
   /**
    * This is a compound production for
@@ -1100,78 +1099,109 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case _ => fail(s"Expected identifier")
       }
 
-
-  /**
-   * Types
-   */
-
-  def valueType(): ValueType = valueType2(true)
-
-  /**
-   * Uses backtracking!
+  /*
+   * Type grammar by precedence:
    *
-   * This is not very efficient. To parse a value type, we first parse a block type,
-   * just to see that it either is no blocktype or it is not followed by an `at`
-   * and just "looked" like a block type...
+   * Type ::= Id ('[' Type ',' ... ']')?                                           refType
    *
-   * The parameter [[boxedAllowed]] controls whether on the right a dangling `at`
-   * can occur. This way we prevent parsing `() => S at {} at {}` and force users
-   * to manually parenthesize.
+   *       | '(' Type ',' ... ')'                                                  atomicType
+   *       | '(' Type ')'
+   *
+   *       | Type '=>' Type ('/' SetType)?                                         functionType
+   *       | '(' Type ',' ... ')' ('{' Type '}')* '=>' Type ('/' SetType)?
+   *
+   *       | Type 'at' Id                                                          boxedType
+   *       | Type 'at' '{' Id ',' ... '}'
+   *       | Type ('/' SetType)?
+   *
+   * SetType ::= Type
+   *        | '{' Type ',' ... '}'
    */
-  private def valueType2(boxedAllowed: Boolean): ValueType = nonterminal {
-    def boxedBlock = backtrack {
-      BoxedType(blockType2(false), `at` ~> captureSet())
-    }
-    if (boxedAllowed) { boxedBlock getOrElse atomicValueType() }
-    else atomicValueType()
+  def effects(): Effects =
+    nonterminal:
+      if peek(`{`) then Effects(many(refType, `{`, `,`, `}`))
+      else Effects(refType())
+
+  def maybeEffects(): Effects = {
+    nonterminal:
+      when(`/`) {
+        effects()
+      } {
+        Effects.Pure
+      }
   }
 
-  def atomicValueType(): ValueType =
+  def refType(): TypeRef =
+    nonterminal:
+      TypeRef(idRef(), maybeTypeArgs())
+
+  // Parse atomic types: Tuples, parenthesized types, type references (highest precedence)
+  private def atomicType(): Type =
     nonterminal:
       peek.kind match {
-        case `(` => some(valueType, `(`, `,`, `)`) match {
-          case tpe :: Nil => tpe
-          case tpes => TupleTypeTree(tpes)
-        }
-        case _ => ValueTypeRef(idRef(), maybeTypeArgs())
+        case `(` =>
+          some(boxedType, `(`, `,`, `)`) match {
+            case tpe :: Nil => tpe
+            case tpes => TypeTuple(tpes)
+          }
+        case _ => refType()
       }
 
+  // Parse function types (middle precedence)
+  private def functionType(): Type = {
+    // Complex function type: [T]*(Int, String)*{Exc} => Int / {Effect}
+    def functionTypeComplex = backtrack {
+      maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ atomicType() ~ maybeEffects() match {
+        case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams, vparams, bparams, t, effs)
+      }
+    }
 
-  /**
-   * Uses backtracking!
-   *
-   * TODO improve errors
-   *   i.e. fail("Expected either a function type (e.g., (A) => B / {E} or => B) or an interface type (e.g., State[T]).")
-   */
-  def blockType(): BlockType = blockType2(true)
-  private def blockType2(boxedAllowed: Boolean): BlockType =
+    // Simple function type: Int => Int
+    def functionTypeSimple = backtrack {
+      refType() <~ `=>`
+    } map { tpe =>
+      FunctionType(Nil, List(tpe), Nil, atomicType(), maybeEffects())
+    }
+
+    // Try to parse each function type variant, fall back to basic type if none match
     nonterminal:
+      functionTypeSimple orElse functionTypeComplex getOrElse atomicType()
+  }
 
-      def simpleFunType = backtrack {
-        ValueTypeRef(idRef(), maybeTypeArgs()) <~ `=>`
-      } map { tpe =>
-        FunctionType(Nil, List(tpe), Nil, valueType2(boxedAllowed), maybeEffects())
-      }
-
-      def funType = backtrack {
-        maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ valueType2(boxedAllowed) ~ maybeEffects() match {
-          case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams, vparams, bparams, t, effs)
-        }
-      }
-      def parenthesized = backtrack { parens { blockType() } }
-
-      def interface() =
-        val res = interfaceType()
-        if peek(`/`) then
-          fail("Effects not allowed here. Maybe you mean to use a function type `() => T / E`?")
-        else res
-
-      simpleFunType orElse funType orElse parenthesized getOrElse interface()
-
-  def interfaceType(): BlockTypeRef =
+  // Parse boxed types and effectfuls (lowest precedence)
+  // "Top-level" parser for a generic type.
+  private def boxedType(): Type = {
     nonterminal:
-      BlockTypeRef(idRef(), maybeTypeArgs()): BlockTypeRef
-    // TODO error "Expected an interface type"
+      // Parse the function type first
+      val tpe = functionType()
+
+      // TODO: these should probably be in a loop to parse as many `at`s and `\`s as possible?
+      val boxed = when(`at`) {
+        BoxedType(tpe, captureSet())
+      } {
+        tpe
+      }
+
+      if (peek(`/`)) {
+        Effectful(boxed, maybeEffects())
+      } else {
+        boxed
+      }
+  }
+
+  // NOTE: ValueType, BlockType are just aliases for Type.
+  def blockType(): BlockType = boxedType()
+  def valueType(): ValueType = boxedType()
+
+  // Completely specialized for TypeRef: we only parse `refType` here, we don't go through the whole hierarchy.
+  // This results in slightly worse errors, but massively simplifies the design.
+  inline def blockTypeRef(): TypeRef = refType()
+
+  // Somewhat specialized: we parse a normal type, if it's not a ${tpe} / ${effs},
+  // then pretend the effect set is empty. This seems to work out fine :)
+  def effectful(): Effectful = boxedType() match
+    case eff: Effectful => eff
+    case tpe => Effectful(tpe, Effects.Pure)
 
   def maybeTypeParams(): List[Id] =
     nonterminal:
@@ -1181,15 +1211,15 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       some(idDef, `[`, `,`, `]`)
 
-  def maybeBlockTypeParams(): List[(Option[IdDef], BlockType)] =
+  def maybeBlockTypeParams(): List[(Option[IdDef], Type)] =
     nonterminal:
       if peek(`{`) then blockTypeParams() else Nil
 
-  def blockTypeParams(): List[(Option[IdDef], BlockType)] =
+  def blockTypeParams(): List[(Option[IdDef], Type)] =
     nonterminal:
       someWhile(blockTypeParam(), `{`)
 
-  def blockTypeParam(): (Option[IdDef], BlockType) =
+  def blockTypeParam(): (Option[IdDef], Type) =
     nonterminal:
       braces { (backtrack { idDef() <~ `:` }, blockType()) }
 
@@ -1259,33 +1289,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       BlockParam(idDef(), when(`:`)(Some(blockType()))(None))
 
-
-  def maybeValueTypes(): List[ValueType] =
+  def maybeValueTypes(): List[Type] =
     nonterminal:
       if peek(`(`) then valueTypes() else Nil
 
-  def valueTypes(): List[ValueType] =
+  def valueTypes(): List[Type] =
     nonterminal:
       many(valueType, `(`, `,`, `)`)
 
   def captureSet(): CaptureSet =
     nonterminal:
       CaptureSet(many(idRef, `{`, `,` , `}`))
-
-  def effectful(): Effectful =
-    nonterminal:
-      Effectful(valueType(), maybeEffects())
-
-  def maybeEffects(): Effects =
-    nonterminal:
-      when(`/`) { effects() } { Effects.Pure }
-
-  // TODO error "Expected an effect set"
-  def effects(): Effects =
-    nonterminal:
-      if peek(`{`) then Effects(many(interfaceType, `{`, `,`, `}`))
-      else Effects(interfaceType())
-
 
   // Generic utility functions
   // -------------------------
