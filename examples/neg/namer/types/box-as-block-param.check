@@ -1,0 +1,9 @@
+[error] examples/neg/namer/types/box-as-block-param.effekt:1:14: Expected block type, but got a boxed type (Int, Int) => Bool at {}.
+def foo { f: (Int, Int) => Bool at {} } = <>
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+[info] examples/neg/namer/types/box-as-block-param.effekt:1:14: Did you mean to use parentheses in order to receive a value type (Int, Int) => Bool at {}?
+def foo { f: (Int, Int) => Bool at {} } = <>
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+[info] examples/neg/namer/types/box-as-block-param.effekt:1:14: Did you mean to use the block type (Int, Int) => Bool without 'at {}'?
+def foo { f: (Int, Int) => Bool at {} } = <>
+             ^^^^^^^^^^^^^^^^^^^^^^^^

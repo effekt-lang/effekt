@@ -1,0 +1,6 @@
+[error] examples/neg/namer/types/function-in-record.effekt:1:28: Expected value type, but got a second-class function type (Int, Int) => Bool.
+record Comparison(compare: (Int, Int) => Bool)
+                           ^^^^^^^^^^^^^^^^^^
+[info] examples/neg/namer/types/function-in-record.effekt:1:28: Did you mean to use a first-class, boxed function type `(Int, Int) => Bool at {}`?
+record Comparison(compare: (Int, Int) => Bool)
+                           ^^^^^^^^^^^^^^^^^^
