@@ -704,10 +704,11 @@ object Namer extends Phase[Parsed, NameResolved] {
         Substitutions.types(tparams, targs).substitute(tpe)
       case other =>
         Context.error(pretty"Expected value type, but got block type ${other}.")
-        other match
+        other match {
           case constructor: BlockTypeConstructor =>
             Context.info(pretty"Did you mean to box the interface ${constructor}, i.e. `${other} at {}`?")
           case _ => ()
+        }
 
         // Dummy value type in order to aggregate more errors (see #947)
         ValueTypeApp(ErrorValueType(), Nil)
@@ -719,7 +720,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       BoxedType(resolveBlockType(tpe), resolve(capt))
     case other =>
       Context.error(pretty"Expected value type, but got ${describeType(other)}.")
-      other match
+      other match {
         case funTpe: source.FunctionType =>
           if isParam then Context.info(pretty"Did you mean to use braces in order to receive a block type `${funTpe.sourceOf}`?")
           Context.info(pretty"Did you mean to use a first-class, boxed function type `${funTpe.sourceOf} at {}`?")
@@ -737,6 +738,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           if isParam then Context.info(pretty"Did you mean to use braces and a function type `() => ${innerTpe.sourceOf} / ${eff.sourceOf}`?")
           Context.info(pretty"Did you mean to use a first-class, boxed type `() => ${innerTpe.sourceOf} at {} / ${eff.sourceOf}`?")
         case _ => ()
+      }
 
       // Dummy value type in order to aggregate more errors (see #947)
       ValueTypeApp(ErrorValueType(), Nil)
