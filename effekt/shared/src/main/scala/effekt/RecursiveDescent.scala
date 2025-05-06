@@ -726,7 +726,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       def operationImplementation() = idRef() ~ maybeTypeArgs() ~ implicitResume ~ functionArg() match {
         case (id ~ tps ~ k ~ BlockLiteral(_, vps, bps, body)) =>
           val synthesizedId = IdRef(Nil, id.name, id.span.synthesized).withPositionOf(id)
-          val interface = TypeRef(id, tps.unspan).withPositionOf(id)
+          val interface = TypeRef(id, tps).withPositionOf(id)
           val operation = OpClause(synthesizedId, Nil, vps, bps, None, body, k).withRangeOf(id, body)
           Implementation(interface, List(operation))
       }
@@ -874,7 +874,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
 
   def TypeTuple(tps: Many[Type]): Type =
-    TypeRef(IdRef(List("effekt"), s"Tuple${tps.size}", tps.span.synthesized), tps.unspan)
+    TypeRef(IdRef(List("effekt"), s"Tuple${tps.size}", tps.span.synthesized), tps)
 
   /**
    * This is a compound production for
@@ -1142,7 +1142,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def refType(): TypeRef =
     nonterminal:
-      TypeRef(idRef(), maybeTypeArgs().unspan)
+      TypeRef(idRef(), maybeTypeArgs())
 
   // Parse atomic types: Tuples, parenthesized types, type references (highest precedence)
   private def atomicType(): Type =
@@ -1169,7 +1169,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     def functionTypeSimple: Maybe[Type] = backtrack {
       refType() <~ `=>`
     } map { tpe =>
-      FunctionType(Many.empty(???), Many(List(tpe), ???), Many.empty(???), atomicType(), maybeEffects())
+      FunctionType(Many.empty(Span.missing(source)), Many(List(tpe), Span.missing(source)), Many.empty(Span.missing(source)), atomicType(), maybeEffects())
     }
 
     // Try to parse each function type variant, fall back to basic type if none match

@@ -541,28 +541,28 @@ class RecursiveDescentTests extends munit.FunSuite {
     {
       val (source, pos) =
         raw""": Int / { Exc, State[T] }
-             |  ↑  ↑    ↑  ↑ ↑    ↑↑↑  ↑
+             |  ↑  ↑    ↑  ↑ ↑    ↑↑↑↑ ↑
              |""".sourceAndPositions
       assertEquals(
         parseReturnAnnotation(source.content),
         Effectful(
-          ValueTypeRef(
+          TypeRef(
             IdRef(Nil, "Int", Span(source, pos(0), pos(1))),
             Many.empty(Span(source, pos(1), pos(1)))
           ),
           Effects(
-            BlockTypeRef(
+            TypeRef(
               IdRef(Nil, "Exc", Span(source, pos(2), pos(3))),
-              Nil
+              Many.empty(Span(source, pos(3), pos(3)))
             ),
-            BlockTypeRef(
+            TypeRef(
               IdRef(Nil, "State", Span(source, pos(4), pos(5))),
-              List(
-                ValueTypeRef(
+              Many(List(
+                TypeRef(
                   IdRef(Nil, "T", Span(source, pos(6), pos(7))),
                   Many.empty(Span(source, pos(7), pos(7)))
                 )
-              )
+              ), Span(source, pos(5), pos(8)))
             )
           ),
           Span(source, pos.head, pos.last)
@@ -685,7 +685,7 @@ class RecursiveDescentTests extends munit.FunSuite {
              |""".sourceAndSpan
       assertEquals(
         parseImplementation(source.content),
-        Implementation(TypeRef(IdRef(Nil, "Foo", span), Nil), Nil))
+        Implementation(TypeRef(IdRef(Nil, "Foo", span), Many.empty(Span(source, span.to, span.to))), Nil))
     }
     parseImplementation("Foo[T] {}")
     parseImplementation("Foo[T] { def bar() = 42 }")
@@ -708,8 +708,8 @@ class RecursiveDescentTests extends munit.FunSuite {
       assertEquals(
         parseImplementation(source.content),
         Implementation(
-          TypeRef(IdRef(Nil, "Foo", Span(source, pos(0), pos(1))), Nil),
-          List(OpClause(IdRef(Nil, "Foo", Span(source, pos(0), pos(1))), Nil, Nil, Nil, None,
+          TypeRef(IdRef(Nil, "Foo", Span(source, pos(0), pos(1))), Many.empty(Span(source, pos(1), pos(1)))),
+          List(OpClause(IdRef(Nil, "Foo", Span(source, pos(0), pos(1), Synthesized)), Nil, Nil, Nil, None,
             Return(Literal(43, symbols.builtins.TInt)), IdDef("resume", Span(source, pos(1), pos(1)))))))
     }
   }

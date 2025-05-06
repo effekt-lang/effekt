@@ -656,7 +656,7 @@ case class BlockTypeTree(eff: symbols.BlockType) extends Type
 /*
  * Reference to a type, potentially with bound occurences in `args`
  */
-case class TypeRef(id: IdRef, args: List[ValueType]) extends Type, Reference
+case class TypeRef(id: IdRef, args: Many[ValueType]) extends Type, Reference
 
 /**
  * Types of first-class computations

@@ -691,7 +691,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    */
   def resolveValueType(tpe: source.ValueType, isParam: Boolean = false)(using Context): ValueType = resolvingType(tpe) {
     case source.TypeRef(id, args) => Context.resolveType(id) match {
-      case constructor: TypeConstructor => ValueTypeApp(constructor, args.map(resolveValueType))
+      case constructor: TypeConstructor => ValueTypeApp(constructor, args.unspan.map(resolveValueType))
       case id: TypeVar =>
         if (args.nonEmpty) {
           Context.abort(pretty"Type variables cannot be applied, but received ${args.size} arguments.")
@@ -702,7 +702,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         if (tparams.size != targs.size) {
           Context.abort(pretty"Type alias ${name} expects ${tparams.size} type arguments, but got ${targs.size}.")
         }
-        Substitutions.types(tparams, targs).substitute(tpe)
+        Substitutions.types(tparams, targs.unspan).substitute(tpe)
       case other =>
         Context.error(pretty"Expected value type, but got block type ${other}.")
         other match {
@@ -818,9 +818,9 @@ object Namer extends Phase[Parsed, NameResolved] {
             Context.abort(pretty"Effect alias ${name} expects ${tparams.size} type arguments, but got ${args.size}.")
           }
           val targs = args.map(resolveValueType)
-          val subst = Substitutions.types(tparams, targs)
+          val subst = Substitutions.types(tparams, targs.unspan)
           effs.toList.map(subst.substitute)
-        case i: BlockTypeConstructor => List(InterfaceType(i, args.map(resolveValueType)))
+        case i: BlockTypeConstructor => List(InterfaceType(i, args.unspan.map(resolveValueType)))
         case other =>
           Context.error(pretty"Expected an interface type, but got value type ${other}.")
           // Dummy interface type in order to aggregate more errors (see #947)
