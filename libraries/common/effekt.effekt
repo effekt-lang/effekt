@@ -234,6 +234,10 @@ extern pure def infixNeq(x: Int, y: Int): Bool =
   """
   vm "effekt::infixNeq(Int, Int)"
 
+def infixEq(x: Byte, y: Byte): Bool = {
+  x.toInt == y.toInt
+}
+
 extern pure def infixEq(x: Char, y: Char): Bool =
   js "${x} === ${y}"
   chez "(equal? ${x} ${y})"
