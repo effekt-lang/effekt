@@ -576,7 +576,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     // NOTE(jiribenes, 2025-04-21):
     //   How do we get around this case? How do we know which one is expected? Do we even need to do this?
     //   ... or should we just choose based on the syntax?
-    case tpe: source.Type         => Context.abort(s"Unexpected kindless type: $tpe.")
+    case tpe: source.Type         => util.messages.INTERNAL_ERROR(s"Unexpected kindless type: $tpe.")
 
     // THIS COULD ALSO BE A TYPE!
     case id: IdRef                => Context.resolveTerm(id)
