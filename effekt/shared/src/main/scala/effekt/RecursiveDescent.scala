@@ -966,7 +966,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
             val names = List.tabulate(arity){ n => s"__arg${n}" }
             BlockLiteral(
               Nil,
-              names.map{ name => ValueParam(IdDef(name, Span.missing(source)), None) },
+              names.map { name => ValueParam(IdDef(name, Span.missing(source)), None) },
               Nil,
               Return(Match(names.map{ name => Var(IdRef(Nil, name, Span.missing(source))) }, cs.unspan, None))) : BlockLiteral
           }
@@ -1426,7 +1426,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   inline def braces[T](p: => T): T =
     consume(`{`)
-    val res =  p
+    val res = p
     consume(`}`)
     res
 

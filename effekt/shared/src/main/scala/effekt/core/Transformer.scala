@@ -696,7 +696,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case (sym, FunctionType(Nil, Nil, List(`tpe`, `tpe`), Nil, builtins.TBoolean, _)) =>
           (lhs: Pure, rhs: Pure) => core.PureApp(BlockVar(sym), Nil, List(lhs, rhs))
         // generic version
-        case (sym, FunctionType( List(tparam), Nil, List(ValueTypeRef(t1), ValueTypeRef(t2)), Nil, builtins.TBoolean, _))
+        case (sym, FunctionType(List(tparam), Nil, List(ValueTypeRef(t1), ValueTypeRef(t2)), Nil, builtins.TBoolean, _))
             if t1 == tparam && t2 == tparam =>
           (lhs: Pure, rhs: Pure) => core.PureApp(BlockVar(sym), List(transform(tpe)), List(lhs, rhs))
       } getOrElse { Context.panic(pp"Cannot find == for type ${tpe} in prelude!") }
