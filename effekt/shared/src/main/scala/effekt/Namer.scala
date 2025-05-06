@@ -725,14 +725,10 @@ object Namer extends Phase[Parsed, NameResolved] {
           if isParam then Context.info(pretty"Did you mean to use braces in order to receive a block type `${funTpe.sourceOf}`?")
           Context.info(pretty"Did you mean to use a first-class, boxed function type `${funTpe.sourceOf} at {}`?")
         case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects) =>
-          val combinedEffects = funEffects.effs.toSet ++ effects.effs.toSet
-          val prettyEffects = combinedEffects.toList.map { _.sourceOf } match
-            case List(eff) => eff
-            case Nil => "{}"
-            case many => many.mkString("{", ", ", "}")
+          val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
           // TODO(jiribenes, 2025-04-22): `Effects` seem to have bad position information. Why?!
-          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${prettyEffects}` instead of `/ ${funEffects} / ${effects}`?")
-        case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects) =>
+          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects} / ${effects}`?")
+        case source.Effectful(source.BoxedType(tpe@source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
         case source.Effectful(innerTpe, eff) =>
           if isParam then Context.info(pretty"Did you mean to use braces and a function type `() => ${innerTpe.sourceOf} / ${eff.sourceOf}`?")
@@ -756,13 +752,9 @@ object Namer extends Phase[Parsed, NameResolved] {
           if isParam then Context.info(pretty"Did you mean to use parentheses in order to receive a value type ${other.sourceOf}?")
           Context.info(pretty"Did you mean to use the block type ${innerTpe.sourceOf} without 'at ${eff.sourceOf}'?")
         case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects) =>
-          val combinedEffects = funEffects.effs.toSet ++ effects.effs.toSet
-          val prettyEffects = combinedEffects.toList.map { _.sourceOf } match
-            case List(eff) => eff
-            case Nil => "{}"
-            case many => many.mkString("{", ", ", "}")
+          val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
           // TODO(jiribenes, 2025-04-22): `Effects` seem to have bad position information. Why?!
-          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${prettyEffects}` instead of `/ ${funEffects} / ${effects}`?")
+          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects} / ${effects}`?")
         case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
         case source.Effectful(innerTpe, effs) =>
@@ -877,6 +869,13 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.ValueTypeTree(tpe) => s"a value type tree ${tpe}"
     case source.BlockTypeTree(eff) => s"a block type tree ${eff}"
   }
+
+  private def prettySourceEffectSet(effects: Set[source.TypeRef])(using Context) =
+    effects.toList.map { _.sourceOf } match {
+      case List(eff) => eff
+      case Nil => "{}"
+      case many => many.mkString("{", ", ", "}")
+    }
 }
 
 /**
