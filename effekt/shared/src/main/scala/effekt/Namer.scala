@@ -693,7 +693,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       case constructor: TypeConstructor => ValueTypeApp(constructor, args.map(resolveValueType))
       case id: TypeVar =>
         if (args.nonEmpty) {
-          Context.abort(pretty"Type variables cannot be applied, but receieved ${args.size} arguments.")
+          Context.abort(pretty"Type variables cannot be applied, but received ${args.size} arguments.")
         }
         ValueTypeRef(id)
       case TypeAlias(name, tparams, tpe) =>
