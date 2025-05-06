@@ -659,7 +659,6 @@ object Named {
 }
 export Named.symbol
 
-// TODO(jiribenes, 2024-04-21): Which of these do we need?
 // Can we actually move this to namer?
 
 // MOVE TO NAMER
