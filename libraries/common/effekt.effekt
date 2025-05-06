@@ -90,7 +90,7 @@ extern pure def show(value: Char): String =
 
 extern pure def show(value: Byte): String =
   js "'' + ${value}"
-  chez "(string ${value})"
+  chez "(string (integer->char ${value}))"
   llvm """
     %z = call %Pos @c_bytearray_show_Byte(i8 ${value})
     ret %Pos %z
