@@ -1,0 +1,32 @@
+effect exit(): Unit
+effect locally { body: => Unit }: Unit
+
+def scope { body: => Unit / locally }: Unit =
+  try {
+    body()
+  } with locally {
+    try {
+      resume { {b} =>
+        b()
+        exit.exit()
+      }
+    } with exit: exit { () }
+    resume { {b} => if (false) b() } // should be just (), blocked on #971
+  }
+
+def main() = {
+  scope {
+    var x = 12
+    println(x)
+    do locally {
+       x = 5
+       println(x)
+       do locally {
+        x = 7
+        println(x)
+       }
+       println(x)
+    }
+    println(x)
+  }
+}

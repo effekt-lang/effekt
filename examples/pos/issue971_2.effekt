@@ -1,0 +1,12 @@
+def hnd{ body: => Unit }: Unit = {
+  def resum{ bod: {=> Unit} => Unit }: Unit = {
+    bod{body}  
+  }
+  resum { {b} => b() }
+  resum { {b} => () }
+}
+def main() = {
+  hnd{
+    ()
+  }
+}
