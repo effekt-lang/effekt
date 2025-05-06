@@ -173,9 +173,22 @@ def replicate[A](number: Int) { action: () => A }: Unit / emit[A] =
     replicate(number - 1) {action}
   }
 
+/// Creates an infinite iterated stream given by an `initial` seed and a `step` function:
+/// iterate(a){f} ~> a, f(a), f(f(a)), f(f(f(a))), ...
+def iterate[A](initial: A) { step: A => A }: Unit / emit[A] = {
+  var current = initial
+  while (true) {
+    do emit(current)
+    current = step(current)
+  }
+}
 
-def sum { stream : () => Unit / emit[Int] }: Int =
+
+def sum { stream: () => Unit / emit[Int] }: Int =
   returning::sum[Unit]{stream}.second
+
+def product { stream: () => Unit / emit[Int] }: Int =
+  returning::product[Unit]{stream}.second
 
 def collectList[A] { stream: () => Unit / emit[A] }: List[A] =
   returning::collectList[A, Unit]{stream}.second
@@ -543,12 +556,22 @@ def limit[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop 
   }
 }
 
-def sum[R] { stream : () => R / emit[Int] }: (R, Int) = {
+def sum[R] { stream: () => R / emit[Int] }: (R, Int) = {
   var s = 0;
   try {
     (stream(), s)
   } with emit[Int] { v =>
     s = s + v;
+    resume(())
+  }
+}
+
+def product[R] { stream: () => R / emit[Int] }: (R, Int) = {
+  var s = 1;
+  try {
+    (stream(), s)
+  } with emit[Int] { v =>
+    s = s * v;
     resume(())
   }
 }
