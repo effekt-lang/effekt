@@ -6,7 +6,7 @@ package typer
  */
 import effekt.context.{Annotation, Annotations, Context, ContextOps}
 import effekt.context.assertions.*
-import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, MatchGuard, MatchPattern, ModuleDecl, OpClause, Stmt, TagPattern, Term, Tree, resolve, resolveBlockRef, resolveValueType, resolveBlockType, symbol}
+import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, Many, MatchGuard, MatchPattern, Maybe, ModuleDecl, OpClause, Stmt, TagPattern, Term, Tree, resolve, resolveBlockRef, resolveBlockType, resolveValueType, symbol}
 import effekt.source.Term.BlockLiteral
 import effekt.symbols.*
 import effekt.symbols.builtins.*
@@ -374,7 +374,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case d @ source.OpClause(op, tparams, vparams, bparams, retAnnotation, body, resume) =>
 
           retAnnotation.foreach {
-            case Effectful(otherTpe, otherEffs2) =>
+            case Effectful(otherTpe, otherEffs2, span) =>
               // if there is a return type annotation from the user, report an error
               // see PR #148 for more details
               // TODO: Can we somehow use the return type provided by the user?
@@ -662,7 +662,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
   def precheckDef(d: Def)(using Context): Unit = Context.focusing(d) {
-    case d @ source.FunDef(id, tps, vps, bps, ret, body) =>
+    case d @ source.FunDef(id, tps, vps, bps, ret, body, span) =>
       val fun = d.symbol
 
       // (1) make up a fresh capture unification variable and annotate on function symbol
@@ -681,7 +681,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // (2) annotate capture variable and implemented blocktype
       Context.bind(obj, Context.resolvedType(tpe).asInterfaceType, cap)
 
-    case d @ source.ExternDef(cap, id, tps, vps, bps, tpe, body) =>
+    case d @ source.ExternDef(cap, id, tps, vps, bps, tpe, body, span) =>
       val fun = d.symbol
 
       Context.bind(fun, fun.toType, fun.capture)
@@ -730,7 +730,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def synthDef(d: Def)(using Context, Captures): Result[Unit] = Context.at(d) {
     d match {
-      case d @ source.FunDef(id, tps, vps, bps, ret, body) =>
+      case d @ source.FunDef(id, tps, vps, bps, ret, body, span) =>
         val sym = d.symbol
         // was assigned by precheck
         val functionCapture = Context.lookupCapture(sym)
@@ -856,7 +856,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Result((), effBinding)
         }
 
-      case d @ source.ExternDef(captures, id, tps, vps, bps, tpe, bodies) => Context.withUnificationScope {
+      case d @ source.ExternDef(captures, id, tps, vps, bps, tpe, bodies, span) => Context.withUnificationScope {
         val sym = d.symbol
         sym.vparams foreach Context.bind
         sym.bparams foreach Context.bind

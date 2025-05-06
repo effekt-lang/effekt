@@ -3,7 +3,7 @@ package source
 
 import effekt.context.Context
 import effekt.symbols.Symbol
-
+import kiama.util.{Source, StringSource}
 import scala.annotation.tailrec
 
 /**
@@ -105,6 +105,41 @@ case object NoSource extends Tree
 case class Comment() extends Tree
 
 /**
+ * The origin of the span
+ *
+ * Possible values:
+ * - Real: the node has direct representation in the source code and this is its span
+ * - Synthesized: the node does not have a direct representation in the source code, but this is the span
+ *                we would like to point at for any error messages that need to refer to this node.
+ *                If the user can express this node explicitly, it should also point to the place where the
+ *                user could write it out explicitly.
+ * - Missing: this node doesn't or can't have a span yet, but we would like to add one later
+ */
+enum Origin {
+  case Real, Synthesized, Missing
+}
+
+case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = Origin.Real) {
+  /**
+   * creates a fake empty Span immediately after this one
+   * Example:
+   * [ - Span - ]
+   *             [] <- emptyAfter
+   */
+  def emptyAfter: Span = Span(source, to + 1,  to + 1, origin = Origin.Synthesized)
+
+  /**
+   * creates a fake copy of this span
+   */
+  def synthesized: Span = Span(source, from, to, origin = Origin.Synthesized)
+}
+
+object Span {
+  def missing(source: Source) = Span(source, 0, 0, origin = Origin.Missing)
+  def missing = Span(StringSource(""), 0, 0, origin = Origin.Missing)
+}
+
+/**
  * Used to mark externs for different backends
  */
 enum FeatureFlag extends Tree {
@@ -166,16 +201,16 @@ sealed trait Id extends Tree {
   def symbol(using C: Context): Symbol = C.symbolOf(this)
   def clone(using C: Context): Id
 }
-case class IdDef(name: String) extends Id {
+case class IdDef(name: String, span: Span) extends Id {
   def clone(using C: Context): IdDef = {
-    val copy = IdDef(name)
+    val copy = IdDef(name, span)
     C.positions.dupPos(this, copy)
     copy
   }
 }
-case class IdRef(path: List[String], name: String) extends Id {
+case class IdRef(path: List[String], name: String, span: Span) extends Id {
   def clone(using C: Context): IdRef = {
-    val copy = IdRef(path, name)
+    val copy = IdRef(path, name, span)
     C.positions.dupPos(this, copy)
     copy
   }
@@ -201,7 +236,7 @@ sealed trait Reference extends Named {
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  *
  */
-case class ModuleDecl(path: String, includes: List[Include], defs: List[Def]) extends Tree
+case class ModuleDecl(path: String, includes: List[Include], defs: List[Def], span: Span) extends Tree
 case class Include(path: String) extends Tree
 
 /**
@@ -213,6 +248,71 @@ enum Param extends Definition {
 }
 export Param.*
 
+/**
+ * A `List` (usually of `Tree`s) with a `span` that spans all elements of the list
+ */
+case class Many[T](unspan: List[T], span: Span) {
+  def map[B](f: T => B): Many[B] =
+    Many(unspan.map(f), span)
+
+  def unzip [A1, A2](implicit asPair: T => (A1, A2)): (Many[A1], Many[A2]) = {
+    val (list1: List[A1], list2: List[A2]) = unspan.unzip(asPair)
+    (Many(list1, span), Many(list2, span))
+  }
+
+  def collect[B](pf: PartialFunction[T, B]): Many[B] =
+    Many(unspan.collect(pf), span)
+
+  def zip[B](that: IterableOnce[B]): Many[(T, B)] = Many(unspan.zip(that), span)
+
+  def flatMap[B](f: T => IterableOnce[B]): Many[B] =
+    Many(unspan.flatMap(f), span)
+
+  export unspan.{foreach, toSet, isEmpty, nonEmpty, mkString, size, length, init, last}
+}
+
+object Many {
+   def empty[T](span: Span) = Many[T](Nil, span)
+}
+
+/**
+ * An `Option` with a `span`
+ *
+ * If the `Option` is `Some`, the `span` is the span of the value.
+ * If the `Option` is `None`, the `span` is an empty span pointing to where the optional value would be expected.
+ */
+case class Maybe[T](unspan: Option[T], span: Span) {
+  def map[B](f: T => B): Maybe[B] = Maybe(unspan.map(f), span)
+  def flatMap[B](f: T => Maybe[B]): Maybe[B] = unspan match {
+    case None => Maybe(None, span)
+    case Some(x) => f(x)
+  }
+
+  def orElse[B >: T](alternative: => Maybe[B]): Maybe[B] =
+   unspan match {
+      case Some(x) => Maybe(unspan, span)
+      case None => alternative
+    }
+
+  export unspan.{foreach, get, getOrElse}
+}
+
+object Maybe {
+  def Some[T](value: T, span: Span): Maybe[T] = Maybe(scala.Some(value), span)
+
+  def None[T](span: Span): Maybe[T] = Maybe(scala.None, span)
+}
+
+object SpannedOps {
+  extension [T](self: Option[T]) {
+    inline def spanned(span: Span): Maybe[T] = Maybe(self, span)
+  }
+
+  extension [T](self: List[T]) {
+    inline def spanned(span: Span): Many[T] = Many(self, span)
+  }
+}
+export SpannedOps._
 
 /**
  * Global and local definitions
@@ -241,7 +341,7 @@ export Param.*
  */
 enum Def extends Definition {
 
-  case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
+  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, span: Span)
   case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
   case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt)
   case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
@@ -249,9 +349,9 @@ enum Def extends Definition {
 
   case NamespaceDef(id: IdDef, definitions: List[Def])
 
-  case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation])
-  case DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor])
-  case RecordDef(id: IdDef, tparams: List[Id], fields: List[ValueParam])
+  case InterfaceDef(id: IdDef, tparams: Many[Id], ops: List[Operation])
+  case DataDef(id: IdDef, tparams: Many[Id], ctors: List[Constructor])
+  case RecordDef(id: IdDef, tparams: Many[Id], fields: Many[ValueParam])
 
   /**
    * Type aliases like `type Matrix[T] = List[List[T]]`
@@ -266,11 +366,11 @@ enum Def extends Definition {
   /**
    * Only valid on the toplevel!
    */
-  case ExternType(id: IdDef, tparams: List[Id])
+  case ExternType(id: IdDef, tparams: Many[Id])
 
   case ExternDef(capture: CaptureSet, id: IdDef,
-                 tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful,
-                 bodies: List[ExternBody]) extends Def
+                 tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Effectful,
+                 bodies: List[ExternBody], span: Span) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)
 
@@ -282,7 +382,7 @@ enum Def extends Definition {
    * @note Storing content and id as user-visible fields is a workaround for the limitation that Enum's cannot
    *   have case specific refinements.
    */
-  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef = IdDef(""))
+  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef)
 }
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude
@@ -436,8 +536,8 @@ export CallTarget.*
 
 // Declarations
 // ------------
-case class Constructor(id: IdDef, tparams: List[Id], params: List[ValueParam]) extends Definition
-case class Operation(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful) extends Definition
+case class Constructor(id: IdDef, tparams: Many[Id], params: Many[ValueParam]) extends Definition
+case class Operation(id: IdDef, tparams: Many[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful) extends Definition
 
 // Implementations
 // ---------------
@@ -556,7 +656,7 @@ case class BlockTypeTree(eff: symbols.BlockType) extends Type
 /*
  * Reference to a type, potentially with bound occurences in `args`
  */
-case class TypeRef(id: IdRef, args: List[ValueType]) extends Type, Reference
+case class TypeRef(id: IdRef, args: Many[ValueType]) extends Type, Reference
 
 /**
  * Types of first-class computations
@@ -566,12 +666,13 @@ case class BoxedType(tpe: BlockType, capt: CaptureSet) extends Type
 /**
  * Types of (second-class) functions
  */
-case class FunctionType(tparams: List[Id], vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects) extends Type
+case class FunctionType(tparams: Many[Id], vparams: Many[ValueType], bparams: Many[(Maybe[IdDef], BlockType)], result: ValueType, effects: Effects) extends Type
+
 
 /**
  * Type-and-effect annotations
  */
-case class Effectful(tpe: ValueType, eff: Effects) extends Type
+case class Effectful(tpe: ValueType, eff: Effects, span: Span) extends Type
 
 // These are just type aliases for documentation purposes.
 type BlockType = Type

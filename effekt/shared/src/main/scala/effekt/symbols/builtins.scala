@@ -1,11 +1,10 @@
 package effekt
 package symbols
 
-import effekt.source.ModuleDecl
+import effekt.source.{Many, ModuleDecl, Span}
 import effekt.context.Context
 import effekt.symbols.ErrorMessageInterpolator
 import effekt.util.messages.ErrorMessageReifier
-
 import kiama.util.StringSource
 
 /**
@@ -15,7 +14,8 @@ object builtins {
 
   // a dummy module for built in types. Can be dropped, once they are
   // defined in the prelude
-  lazy val prelude = Module(ModuleDecl("effekt", Nil, Nil), StringSource("", "effekt.effekt"))
+  val builtinSource = StringSource("", "effekt.effekt")
+  lazy val prelude = Module(ModuleDecl("effekt", Nil, Nil, source.Span(builtinSource, 0, 0)), builtinSource)
 
   private def name(s: String) = QualifiedName(List("effekt"), s)
 

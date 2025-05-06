@@ -5,6 +5,7 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.context.assertions.*
 import effekt.source.Tree.Rewrite
+import effekt.source.SpannedOps._
 
 /**
  * Transformation on source trees that translates programs into explicit capability-passing style
@@ -29,11 +30,11 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
     Some(input.copy(tree = rewritten))
 
   override def defn(using Context) = {
-    case f @ FunDef(id, tps, vps, bps, ret, body) =>
+    case f @ FunDef(id, tps, vps, bps, ret, body, span) =>
       val capabilities = Context.annotation(Annotations.BoundCapabilities, f)
       val capParams = capabilities.map(definitionFor)
-      f.copy(bparams = bps ++ capParams, body = rewrite(body))
-    case extDef @ ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
+      f.copy(bparams = (bps.unspan ++ capParams).spanned(bps.span), body = rewrite(body))
+    case extDef @ ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, span) =>
       val rewrittenBodies = bodies.map { rewrite }
       extDef.copy(bodies = rewrittenBodies)
   }
@@ -144,14 +145,14 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
     }
 
   def referenceToCapability(capability: BlockParam)(using C: Context): Var =
-    val id = IdRef(Nil, capability.name.name)
+    val id = IdRef(Nil, capability.name.name, Span.missing)
     C.assignSymbol(id, capability)
     val ref: Var = Var(id)
     C.annotate(Annotations.InferredBlockType, ref, C.blockTypeOf(capability))
     ref
 
   def definitionFor(s: symbols.BlockParam)(using C: Context): source.BlockParam =
-    val id = IdDef(s.name.name)
+    val id = IdDef(s.name.name, Span.missing)
     C.assignSymbol(id, s)
     val tree: source.BlockParam = source.BlockParam(id, s.tpe.map { source.BlockTypeTree.apply })
     tree
