@@ -623,7 +623,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def maybeReturnAnnotation(): Maybe[Effectful] =
     nonterminal:
-      when(`:`) { Some(effectful()) } { None }.spanned
+      when(`:`) { Maybe.Some(effectful(), span()) } { Maybe.None(span()) }
 
   def returnAnnotation(): Effectful =
     if peek(`:`) then  `:` ~> effectful()
@@ -1217,7 +1217,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def maybeTypeParams(): Many[Id] =
     nonterminal:
-      if peek(`[`) then typeParams() else Nil.spanned
+      if peek(`[`) then typeParams() else Many.empty(span())
 
   def typeParams(): Many[Id] =
     nonterminal:
@@ -1264,7 +1264,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def maybeValueParams(): Many[ValueParam] =
     nonterminal:
-      if peek(`(`) then valueParams() else Nil.spanned
+      if peek(`(`) then valueParams() else Many.empty(span())
 
   def valueParams(): Many[ValueParam] =
     nonterminal:
@@ -1280,7 +1280,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def maybeBlockParams(): Many[BlockParam] =
     nonterminal:
-      manyWhile(`{` ~> blockParam() <~ `}`, `{`).spanned
+      Many(manyWhile(`{` ~> blockParam() <~ `}`, `{`), span())
 
   def blockParams(): List[BlockParam] =
     nonterminal:
@@ -1560,14 +1560,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     positions.setFinish(res, endPos)
 
     res
-  }
-
-  extension [T](self: Option[T]) {
-    inline def spanned: Maybe[T] = Maybe(self, span())
-  }
-
-  extension [T](self: List[T]) {
-    inline def spanned: Many[T] = Many(self, span())
   }
 
   extension [T](self: T) {
