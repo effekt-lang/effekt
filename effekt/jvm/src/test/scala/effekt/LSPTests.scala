@@ -774,6 +774,57 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("When configuration changes, server should publish requested IR") {
+    withClientAndServer { (client, server) =>
+      val source =
+        raw"""
+             |val foo = 42
+             |"""
+      val textDoc = new TextDocumentItem("file://path/to/test.effekt", "effekt", 0, source.stripMargin)
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"showIR": "source"}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(helloWorld)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      // Receive the initial IR
+      assertEquals(client.receivedIR().length, 1)
+
+      val configParams = new DidChangeConfigurationParams()
+      // When configuring the VSCode language client with `synchronize: { configurationSection: 'effekt' }`,
+      // we get a `DidChangeConfigurationParams` with the configuration nested under the "effekt" key.
+      val settings: JsonElement = JsonParser.parseString("""{"effekt": {"showIR": "core", "showTree": true}}""")
+      configParams.setSettings(settings)
+      server.getWorkspaceService().didChangeConfiguration(configParams)
+
+      // Send a didSave event to trigger recompilation and IR publication
+      val didSaveParams = new DidSaveTextDocumentParams()
+      didSaveParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      didSaveParams.setText(textDoc.getText)
+      server.getTextDocumentService().didSave(didSaveParams)
+
+      val expectedIRContents =
+        raw"""ModuleDecl(
+             |  test,
+             |  List(effekt, option, list, result, exception, array, string, ref),
+             |  Nil,
+             |  Nil,
+             |  List(
+             |    Val(foo_whatever, Data(Int_whatever, Nil), Return(Literal(42, Data(Int_whatever, Nil))))
+             |  ),
+             |  List(foo_whatever)
+             |)""".stripMargin
+
+      val receivedIRContent = client.receivedIR()
+      assertEquals(receivedIRContent.length, 1)
+      val fixedReceivedIR = receivedIRContent.head.content.replaceAll("Int_\\d+", "Int_whatever").replaceAll("foo_\\d+", "foo_whatever")
+      assertEquals(fixedReceivedIR, expectedIRContents)
+    }
+  }
+
   // Text document DSL
   //
   //
