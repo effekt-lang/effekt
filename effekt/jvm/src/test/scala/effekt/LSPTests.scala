@@ -856,6 +856,98 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("codeAction can close hole with an expression") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, range) =
+        raw"""
+             |def foo(x: Int): Int = <{ x }>
+             |                       ↑     ↑
+             |""".textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val codeActionParams = new CodeActionParams()
+      codeActionParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      codeActionParams.setRange(range)
+
+      val expected: Seq[messages.Either[Command, CodeAction]] = Seq(
+        messages.Either.forRight[Command, CodeAction]({
+          val action = new CodeAction()
+          action.setTitle("Close hole")
+          action.setKind(CodeActionKind.Refactor)
+
+          val edit = new WorkspaceEdit()
+
+          val textEdit = new TextEdit()
+          textEdit.setRange(range)
+          textEdit.setNewText("x")
+
+          val changes = new util.HashMap[String, util.List[TextEdit]]()
+          val textEdits = new util.ArrayList[TextEdit]()
+          textEdits.add(textEdit)
+          changes.put("file://test.effekt", textEdits)
+
+          edit.setChanges(changes)
+
+          action.setEdit(edit)
+
+          action
+        })
+      )
+
+      val response = server.codeAction(codeActionParams).get()
+      assertEquals(response, expected.asJava)
+    }
+  }
+
+  test("codeAction can close hole with statements") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, range) =
+        raw"""
+             |def foo[T](x: T): Unit = <{ println("1"); println("2") }>
+             |                         ↑                              ↑
+             |""".textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val codeActionParams = new CodeActionParams()
+      codeActionParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      codeActionParams.setRange(range)
+
+      val expected: Seq[messages.Either[Command, CodeAction]] = Seq(
+        messages.Either.forRight[Command, CodeAction]({
+          val action = new CodeAction()
+          action.setTitle("Close hole")
+          action.setKind(CodeActionKind.Refactor)
+
+          val edit = new WorkspaceEdit()
+
+          val textEdit = new TextEdit()
+          textEdit.setRange(range)
+          textEdit.setNewText("locally { println(\"1\"); println(\"2\") }")
+
+          val changes = new util.HashMap[String, util.List[TextEdit]]()
+          val textEdits = new util.ArrayList[TextEdit]()
+          textEdits.add(textEdit)
+          changes.put("file://test.effekt", textEdits)
+
+          edit.setChanges(changes)
+
+          action.setEdit(edit)
+
+          action
+        })
+      )
+
+      val response = server.codeAction(codeActionParams).get()
+      assertEquals(response, expected.asJava)
+    }
+  }
+
   // Effekt: Publish IR
   //
   //
