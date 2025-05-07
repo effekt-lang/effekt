@@ -192,7 +192,7 @@ trait Compiler[Executable] {
    *       Note that it is not sufficient to just cache the Parser phase because BoxUnboxInference
    *       will rewrite the tree, meaning some nodes change their original object identity.
    */
-  val ParserUntilTyper: Phase[kiama.util.Source, Typechecked]= Phase.cached[Typechecked]("parser-until-typer") {
+  val ParserUntilTyper = Phase.cached("parser-until-typer") {
     /**
      * Parses a file to a syntax tree
      * [[Source]] --> [[Parsed]]
