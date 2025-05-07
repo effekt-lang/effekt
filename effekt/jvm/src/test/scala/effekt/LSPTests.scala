@@ -4,6 +4,7 @@ import com.google.gson.{JsonElement, JsonParser}
 import munit.FunSuite
 import org.eclipse.lsp4j.{DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, VersionedTextDocumentIdentifier}
 import org.eclipse.lsp4j.jsonrpc.messages
+import effekt.core.CoreTests
 
 import java.io.{PipedInputStream, PipedOutputStream}
 import java.util
@@ -19,7 +20,6 @@ class LSPTests extends FunSuite {
   // Test helpers
   //
   //
-
 
   /**
    * @param compileOnChange The server currently uses `compileOnChange = false` by default, but we set it to `true` for testing
@@ -48,8 +48,21 @@ class LSPTests extends FunSuite {
   def withClientAndServer(testBlock: (MockLanguageClient, Server) => Unit): Unit = {
     withClientAndServer(true)(testBlock)
   }
+  
+  /** Normalize the output of the IR by replacing the generated identifiers and stripping all whitespace
+   */
+  def normalizeIRString(ir: String): String = {
+    ir.replaceAll("_\\d+", "_whatever")
+      .replaceAll("\\s+", "")
+  }
+  
+  def assertIREquals(ir: String, expected: String): Unit = {
+    val normalizedIR = normalizeIRString(ir)
+    val normalizedExpected = normalizeIRString(expected)
+    assertEquals(normalizedIR, normalizedExpected)
+  }
 
-    // Fixtures
+  // Fixtures
   //
   //
 
@@ -769,8 +782,7 @@ class LSPTests extends FunSuite {
 
       val receivedIRContent = client.receivedIR()
       assertEquals(receivedIRContent.length, 1)
-      val fixedReceivedIR = receivedIRContent.head.content.replaceAll("Unit_\\d+", "Unit_whatever")
-      assertEquals(fixedReceivedIR, expectedIRContents)
+      assertIREquals(receivedIRContent.head.content, expectedIRContents)
     }
   }
 
@@ -806,12 +818,21 @@ class LSPTests extends FunSuite {
       didSaveParams.setText(textDoc.getText)
       server.getTextDocumentService().didSave(didSaveParams)
 
-      // FIXME: Due to a non-determinism between generated identifiers, the exact formatting of the generated IR
-      // changes between executions. As a workaround, we don't check the exact content of the IR for now.
+      val expectedIRContents =
+        raw"""ModuleDecl(
+             |  test,
+             |  List(effekt, option, list, result, exception, array, string, ref),
+             |  Nil,
+             |  Nil,
+             |  List(
+             |    Val(foo_whatever, Data(Int_whatever, Nil), Return(Literal(42, Data(Int_whatever, Nil))))
+             |  ),
+             |  List(foo_whatever)
+             |)""".stripMargin
+
       val receivedIRContent = client.receivedIR()
       assertEquals(receivedIRContent.length, 1)
-      assert(receivedIRContent.startsWith("ModuleDecl"))
-      assert(receivedIRContent.head.content.contains("foo"))
+      assertIREquals(receivedIRContent.head.content, expectedIRContents)
     }
   }
 
