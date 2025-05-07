@@ -61,7 +61,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
             Some(d)
         }
 
-      case Def.ExternInclude(featureFlag, path, contents, id, doc) if featureFlag.matches(supported) =>
+      case Def.ExternInclude(featureFlag, path, contents, id, doc, span) if featureFlag.matches(supported) =>
         if (featureFlag.isDefault) {
           val supported = Context.compiler.supportedFeatureFlags.mkString(", ")
           Context.warning("Found extern include without feature flag. It is likely that this will fail in other backends, "
@@ -69,11 +69,11 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
         }
 
         Some(defn)
-      case Def.ExternInclude(_, _, _, _, _) => None // Drop, not for this backend
+      case Def.ExternInclude(_, _, _, _, _, _) => None // Drop, not for this backend
 
       // recurse into namespaces
-      case Def.NamespaceDef(id, defs, doc) =>
-        val d = Def.NamespaceDef(id, defs.flatMap(rewrite), doc)
+      case Def.NamespaceDef(id, defs, doc, span) =>
+        val d = Def.NamespaceDef(id, defs.flatMap(rewrite), doc, span)
         Context.copyAnnotations(defn, d)
         Some(d)
       case defn => Some(defn)

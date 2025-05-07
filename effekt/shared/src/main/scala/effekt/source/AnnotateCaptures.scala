@@ -80,7 +80,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
 
   override def stmt(using Context, Unit) = {
     // local state
-    case source.DefStmt(tree @ VarDef(id, annot, binding, doc), rest) =>
+    case source.DefStmt(tree @ VarDef(id, annot, binding, doc, span), rest) =>
       query(binding) ++ (query(rest) -- CaptureSet(tree.symbol.capture))
   }
 
@@ -93,7 +93,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       cpt
 
     // regions
-    case tree @ RegDef(id, annot, region, binding, doc) =>
+    case tree @ RegDef(id, annot, region, binding, doc, span) =>
       val regSymbol = region.symbol.asBlockSymbol
       val regCapture = captureOf(regSymbol)
       Context.annotate(Annotations.Captures, tree.symbol, regCapture)

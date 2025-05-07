@@ -124,7 +124,7 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
   }
 
   def flattenNamespaces(t: Def)(using C: Context): List[Def] = t match {
-    case Def.NamespaceDef(name, defs, doc) => defs.flatMap(flattenNamespaces)
+    case Def.NamespaceDef(name, defs, doc, span) => defs.flatMap(flattenNamespaces)
     case d => List(rewrite(d))
   }
 
@@ -133,16 +133,16 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     case FunDef(id, tparams, vparams, bparams, ret, body, doc, span) =>
       FunDef(id, tparams, vparams, bparams, ret, rewrite(body), doc, span)
 
-    case ValDef(id, annot, binding, doc) =>
-      ValDef(id, annot, rewrite(binding), doc)
+    case ValDef(id, annot, binding, doc, span) =>
+      ValDef(id, annot, rewrite(binding), doc, span)
 
-    case RegDef(id, annot, region, binding, doc) =>
-      RegDef(id, annot, region, rewrite(binding), doc)
+    case RegDef(id, annot, region, binding, doc, span) =>
+      RegDef(id, annot, region, rewrite(binding), doc, span)
 
-    case VarDef(id, annot, binding, doc) =>
-      VarDef(id, annot, rewrite(binding), doc)
+    case VarDef(id, annot, binding, doc, span) =>
+      VarDef(id, annot, rewrite(binding), doc, span)
 
-    case DefDef(id, annot, binding, doc) =>
+    case DefDef(id, annot, binding, doc, span) =>
       val block = rewriteAsBlock(binding)
       (binding, block) match {
         case (Unbox(_), _) => ()
@@ -152,7 +152,7 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
         case (_, u @ Unbox(_)) => C.annotate(Annotations.UnboxParentDef, u, t)
         case (_, _) => ()
       }
-      DefDef(id, annot, block, doc)
+      DefDef(id, annot, block, doc, span)
 
     case d: InterfaceDef   => d
     case d: DataDef        => d

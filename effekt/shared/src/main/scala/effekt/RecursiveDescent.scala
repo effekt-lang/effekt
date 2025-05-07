@@ -343,10 +343,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           case `{` =>
             val defs = braces(toplevelDefs())
             val df = toplevelDefs()
-            NamespaceDef(id, defs, doc) :: df
+            NamespaceDef(id, defs, doc, span()) :: df
           case _   =>
             val defs = toplevelDefs()
-            List(NamespaceDef(id, defs, doc))
+            List(NamespaceDef(id, defs, doc, span()))
         }
       case _ =>
         if (isToplevel) toplevel() :: toplevelDefs()
@@ -389,7 +389,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def valDef(): Def =
     nonterminal:
       documented { doc =>
-        ValDef(`val` ~> idDef(), maybeValueTypeAnnotation(), `=` ~> stmt(), doc)
+        ValDef(`val` ~> idDef(), maybeValueTypeAnnotation(), `=` ~> stmt(), doc, span())
       }
 
   /**
@@ -405,14 +405,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       } map {
         case id ~ tpe =>
           val binding = stmt()
-          val valDef = ValDef(id, tpe, binding, doc).withRangeOf(startMarker, binding)
+          val valDef = ValDef(id, tpe, binding, doc, span()).withRangeOf(startMarker, binding)
           DefStmt(valDef, { semi(); stmts() })
       }
       def matchLhs() =
         maybeDocumentation() ~ (`val` ~> matchPattern()) ~ manyWhile(`and` ~> matchGuard(), `and`) <~ `=` match {
           case doc ~ AnyPattern(id) ~ Nil =>
             val binding = stmt()
-            val valDef = ValDef(id, None, binding, doc).withRangeOf(startMarker, binding)
+            val valDef = ValDef(id, None, binding, doc, span()).withRangeOf(startMarker, binding)
             DefStmt(valDef, { semi(); stmts() })
           case doc ~ p ~ guards =>
             // TODO: use doc
@@ -430,8 +430,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def varDef(): Def =
     nonterminal:
       maybeDocumentation() ~ (`var` ~> idDef()) ~ maybeValueTypeAnnotation() ~ when(`in`) { Some(idRef()) } { None } ~ (`=` ~> stmt()) match {
-        case doc ~ id ~ tpe ~ Some(reg) ~ expr => RegDef(id, tpe, reg, expr, doc)
-        case doc ~ id ~ tpe ~ None ~ expr      => VarDef(id, tpe, expr, doc)
+        case doc ~ id ~ tpe ~ Some(reg) ~ expr => RegDef(id, tpe, reg, expr, doc, span())
+        case doc ~ id ~ tpe ~ None ~ expr      => VarDef(id, tpe, expr, doc, span())
       }
 
   def defDef(): Def =
@@ -443,7 +443,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
       if isBlockDef then
         // (: <VALUETYPE>)? `=` <EXPR>
-        DefDef(id, maybeBlockTypeAnnotation(), `=` ~> expr(), doc)
+        DefDef(id, maybeBlockTypeAnnotation(), `=` ~> expr(), doc, span())
       else
         // [...](<PARAM>...) {...} `=` <STMT>>
         val (tps, vps, bps) = params()
@@ -457,20 +457,20 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       val id ~ tps = (`type` ~> idDef()) ~ maybeTypeParams()
 
       peek.kind match {
-        case `=` => `=` ~> TypeDef(id, tps.unspan, valueType(), doc)
-        case _ => braces { DataDef(id, tps, manyWhile({ constructor() <~ semi() }, !peek(`}`)), doc) }
+        case `=` => `=` ~> TypeDef(id, tps.unspan, valueType(), doc, span())
+        case _ => braces { DataDef(id, tps, manyWhile({ constructor() <~ semi() }, !peek(`}`)), doc, span()) }
       }
 
   def recordDef(): Def =
     nonterminal:
       documented { doc =>
-        RecordDef(`record` ~> idDef(), maybeTypeParams(), valueParams(), doc)
+        RecordDef(`record` ~> idDef(), maybeTypeParams(), valueParams(), doc, span())
       }
 
   def constructor(): Constructor =
     nonterminal:
       documented { doc =>
-        Constructor(idDef(), maybeTypeParams(), valueParams(), doc)
+        Constructor(idDef(), maybeTypeParams(), valueParams(), doc, span())
       }
 
   // On the top-level both
@@ -487,7 +487,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       // effect <NAME> = <EFFECTS>
       documented { doc =>
-        EffectDef(`effect` ~> idDef(), maybeTypeParams().unspan, `=` ~> effects(), doc)
+        EffectDef(`effect` ~> idDef(), maybeTypeParams().unspan, `=` ~> effects(), doc, span())
       }
 
   // effect <NAME>[...](...): ...
@@ -495,21 +495,22 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       val doc = maybeDocumentation()
       `effect` ~> operation(doc) match {
-        case op @ Operation(id, tps, vps, bps, ret, doc) => // TODO: should the same `doc` be used here?
-          InterfaceDef(IdDef(id.name, id.span) withPositionOf op, tps, List(Operation(id, Many.empty(tps.span.synthesized), vps, bps, ret, doc) withPositionOf op), doc)
+        // TODO: which doc/span should be used when and where?
+        case op @ Operation(id, tps, vps, bps, ret, opDoc, opSpan) =>
+          InterfaceDef(IdDef(id.name, id.span) withPositionOf op, tps, List(Operation(id, Many.empty(tps.span.synthesized), vps, bps, ret, opDoc, opSpan) withPositionOf op), doc, span())
       }
 
   def operation(doc: Doc): Operation =
     nonterminal:
       idDef() ~ params() ~ returnAnnotation() match {
-        case id ~ (tps, vps, bps) ~ ret => Operation(id, tps, vps.unspan, bps.unspan, ret, doc)
+        case id ~ (tps, vps, bps) ~ ret => Operation(id, tps, vps.unspan, bps.unspan, ret, doc, span())
       }
 
   def interfaceDef(): InterfaceDef =
     nonterminal:
       documented { doc =>
         InterfaceDef(`interface` ~> idDef(), maybeTypeParams(),
-          `{` ~> manyWhile(documented { opDoc => `def` ~> operation(opDoc) }, documentedKind == `def`) <~ `}`, doc)
+          `{` ~> manyWhile(documented { opDoc => `def` ~> operation(opDoc) }, documentedKind == `def`) <~ `}`, doc, span())
       }
 
   def namespaceDef(): Def =
@@ -518,10 +519,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       consume(`namespace`)
       val id = idDef()
       // namespace foo { <DEFINITION>* }
-      if peek(`{`) then braces { NamespaceDef(id, definitions(), doc) }
+      if peek(`{`) then braces { NamespaceDef(id, definitions(), doc, span()) }
       // namespace foo
       // <DEFINITION>*
-      else { semi(); NamespaceDef(id, definitions(), doc) }
+      else { semi(); NamespaceDef(id, definitions(), doc, span()) }
 
 
   def externDef(): Def =
@@ -557,24 +558,24 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def externType(doc: Doc): Def =
     nonterminal:
-      ExternType(`type` ~> idDef(), maybeTypeParams(), doc)
+      ExternType(`type` ~> idDef(), maybeTypeParams(), doc, span())
   def externInterface(doc: Doc): Def =
     nonterminal:
-      ExternInterface(`interface` ~> idDef(), maybeTypeParams().unspan, doc)
+      ExternInterface(`interface` ~> idDef(), maybeTypeParams().unspan, doc, span())
   def externResource(doc: Doc): Def =
     nonterminal:
-      ExternResource(`resource` ~> idDef(), blockTypeAnnotation(), doc)
+      ExternResource(`resource` ~> idDef(), blockTypeAnnotation(), doc, span())
   def externInclude(doc: Doc): Def =
     nonterminal:
       val posAfterInclude = pos()
-      `include` ~> ExternInclude(maybeFeatureFlag(), path().stripPrefix("\"").stripSuffix("\""), None, IdDef("", Span(source, posAfterInclude, posAfterInclude, Synthesized)), doc=doc)
+      `include` ~> ExternInclude(maybeFeatureFlag(), path().stripPrefix("\"").stripSuffix("\""), None, IdDef("", Span(source, posAfterInclude, posAfterInclude, Synthesized)), doc=doc, span=span())
 
   def externString(doc: Doc): Def =
     nonterminal:
       val posAfterExtern = pos()
       val ff = maybeFeatureFlag()
       next().kind match {
-        case Str(contents, _) => ExternInclude(ff, "", Some(contents), IdDef("", Span(source, posAfterExtern, posAfterExtern, Synthesized)), doc=doc)
+        case Str(contents, _) => ExternInclude(ff, "", Some(contents), IdDef("", Span(source, posAfterExtern, posAfterExtern, Synthesized)), doc=doc, span=span())
         case _ => fail("Expected string literal.")
       }
 

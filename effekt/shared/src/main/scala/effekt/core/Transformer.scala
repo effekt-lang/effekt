@@ -69,15 +69,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val bparams = bps map transform
       List(Toplevel.Def(f.symbol, BlockLit(tparams.unspan, cparams.unspan, vparams.unspan, bparams.unspan, transform(body))))
 
-    case d @ source.DataDef(id, _, ctors, doc) =>
+    case d @ source.DataDef(id, _, ctors, doc, span) =>
       val datatype = d.symbol
       List(Data(datatype, datatype.tparams, datatype.constructors.map(transform)))
 
-    case d @ source.RecordDef(id, _, _, doc) =>
+    case d @ source.RecordDef(id, _, _, doc, span) =>
       val rec = d.symbol
       List(Data(rec, rec.tparams, List(transform(rec.constructor))))
 
-    case v @ source.ValDef(id, tpe, binding, doc) if pureOrIO(binding) =>
+    case v @ source.ValDef(id, tpe, binding, doc, span) if pureOrIO(binding) =>
       val transformed = transform(binding)
       val transformedTpe = v.symbol.tpe match {
         case Some(tpe) => transform(tpe)
@@ -85,10 +85,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
       List(Toplevel.Val(v.symbol, transformedTpe, transformed))
 
-    case v @ source.ValDef(id, _, binding, doc) =>
+    case v @ source.ValDef(id, _, binding, doc, span) =>
       Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
 
-    case v @ source.DefDef(id, annot, binding, doc) =>
+    case v @ source.DefDef(id, annot, binding, doc, span) =>
       val sym = v.symbol
       val (definition, bindings) = Context.withBindings {
         Toplevel.Def(sym, transformAsBlock(binding))
@@ -99,7 +99,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case _: source.VarDef | _: source.RegDef =>
       Context.at(d) { Context.abort("Mutable variable bindings not allowed on the toplevel") }
 
-    case d @ source.InterfaceDef(id, tparamsInterface, ops, doc) =>
+    case d @ source.InterfaceDef(id, tparamsInterface, ops, doc, span) =>
       val interface = d.symbol
       List(core.Interface(interface, interface.tparams,
         interface.operations.map { op => core.Property(op, operationAtDeclaration(interface.tparams, op)) }))
@@ -122,7 +122,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
       List(Extern.Def(sym, tps, cps.unspan, vps.unspan map transform, bps.unspan map transform, transform(ret), transform(capt), tBody))
 
-    case e @ source.ExternInclude(ff, path, contents, _, doc) =>
+    case e @ source.ExternInclude(ff, path, contents, _, doc, span) =>
       List(Extern.Include(ff, contents.get))
 
     // For now we forget about all of the following definitions in core:
@@ -173,7 +173,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         val bparams = bps map transform
         Def(f.symbol, BlockLit(tparams.unspan, cparams.unspan, vparams.unspan, bparams.unspan, transform(body)), transform(rest))
 
-      case v @ source.ValDef(id, tpe, binding, doc) =>
+      case v @ source.ValDef(id, tpe, binding, doc, span) =>
         val transformed = transform(binding)
         val transformedTpe = v.symbol.tpe match {
           case Some(tpe) => transform(tpe)
@@ -181,19 +181,19 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         }
         Val(v.symbol, transformedTpe, transformed, transform(rest))
 
-      case v @ source.DefDef(id, annot, binding, doc) =>
+      case v @ source.DefDef(id, annot, binding, doc, span) =>
         val sym = v.symbol
         insertBindings {
           Def(sym, transformAsBlock(binding), transform(rest))
         }
 
-      case v @ source.RegDef(id, _, reg, binding, doc) =>
+      case v @ source.RegDef(id, _, reg, binding, doc, span) =>
         val sym = v.symbol
         insertBindings {
           Alloc(sym, Context.bind(transform(binding)), sym.region, transform(rest))
         }
 
-      case v @ source.VarDef(id, _, binding, doc) =>
+      case v @ source.VarDef(id, _, binding, doc, span) =>
         val sym = v.symbol
         insertBindings {
           Var(sym, Context.bind(transform(binding)), sym.capture, transform(rest))

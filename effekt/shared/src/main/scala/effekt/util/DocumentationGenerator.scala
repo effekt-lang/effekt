@@ -92,7 +92,7 @@ trait DocumentationGenerator {
   })
 
   def generate(constructor: Constructor): DocValue = constructor match {
-    case Constructor(id, tparams, vparams, doc) => obj(HashMap(
+    case Constructor(id, tparams, vparams, doc, span) => obj(HashMap(
       "kind" -> str("Constructor"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams.unspan),
@@ -102,7 +102,7 @@ trait DocumentationGenerator {
   }
 
   def generate(operation: Operation): DocValue = operation match {
-    case Operation(id, tparams, vparams, bparams, ret, doc) => obj(HashMap(
+    case Operation(id, tparams, vparams, bparams, ret, doc, span) => obj(HashMap(
       "kind" -> str("Operation"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams.unspan),
@@ -131,14 +131,14 @@ trait DocumentationGenerator {
       "doc" -> generate(doc),
     ))
 
-    case Def.ValDef(id, annot, binding, doc) => obj(HashMap(
+    case Def.ValDef(id, annot, binding, doc, span) => obj(HashMap(
       "kind" -> str("ValDef"),
       "id" -> generate(id),
       "annot" -> annot.map(generate).getOrElse(empty),
       "doc" -> generate(doc),
     ))
 
-    case Def.RegDef(id, annot, region, binding, doc) => obj(HashMap(
+    case Def.RegDef(id, annot, region, binding, doc, span) => obj(HashMap(
       "kind" -> str("RegDef"),
       "id" -> generate(id),
       "annot" -> annot.map(generate).getOrElse(empty),
@@ -146,28 +146,28 @@ trait DocumentationGenerator {
       "doc" -> generate(doc),
     ))
 
-    case Def.VarDef(id, annot, binding, doc) => obj(HashMap(
+    case Def.VarDef(id, annot, binding, doc, span) => obj(HashMap(
       "kind" -> str("VarDef"),
       "id" -> generate(id),
       "annot" -> annot.map(generate).getOrElse(empty),
       "doc" -> generate(doc),
     ))
 
-    case Def.DefDef(id, annot, block, doc) => obj(HashMap(
+    case Def.DefDef(id, annot, block, doc, span) => obj(HashMap(
       "kind" -> str("DefDef"),
       "id" -> generate(id),
       "annot" -> annot.map(generate).getOrElse(empty),
       "doc" -> generate(doc),
     ))
 
-    case Def.NamespaceDef(id, definitions, doc) => obj(HashMap(
+    case Def.NamespaceDef(id, definitions, doc, span) => obj(HashMap(
       "kind" -> str("NamespaceDef"),
       "id" -> generate(id),
       "definitions" -> arr(definitions.map(generate)),
       "doc" -> generate(doc),
     ))
 
-    case Def.InterfaceDef(id, tparams, ops, doc) => obj(HashMap(
+    case Def.InterfaceDef(id, tparams, ops, doc, span) => obj(HashMap(
       "kind" -> str("InterfaceDef"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams.unspan),
@@ -175,7 +175,7 @@ trait DocumentationGenerator {
       "doc" -> generate(doc),
     ))
 
-    case Def.DataDef(id, tparams, ctors, doc) => obj(HashMap(
+    case Def.DataDef(id, tparams, ctors, doc, span) => obj(HashMap(
       "kind" -> str("DataDef"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams.unspan),
@@ -183,7 +183,7 @@ trait DocumentationGenerator {
       "doc" -> generate(doc),
     ))
 
-    case Def.RecordDef(id, tparams, fields, doc) => obj(HashMap(
+    case Def.RecordDef(id, tparams, fields, doc, span) => obj(HashMap(
       "kind" -> str("RecordDef"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams.unspan),
@@ -191,7 +191,7 @@ trait DocumentationGenerator {
       "doc" -> generate(doc),
     ))
 
-    case Def.TypeDef(id, tparams, tpe, doc) => obj(HashMap(
+    case Def.TypeDef(id, tparams, tpe, doc, span) => obj(HashMap(
       "kind" -> str("TypeDef"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams),
@@ -199,7 +199,7 @@ trait DocumentationGenerator {
       "doc" -> generate(doc),
     ))
 
-    case Def.EffectDef(id, tparams, effs, doc) => obj(HashMap(
+    case Def.EffectDef(id, tparams, effs, doc, span) => obj(HashMap(
       "kind" -> str("EffectDef"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams),
@@ -207,7 +207,7 @@ trait DocumentationGenerator {
       "doc" -> generate(doc),
     ))
 
-    case Def.ExternType(id, tparams, doc) => obj(HashMap(
+    case Def.ExternType(id, tparams, doc, span) => obj(HashMap(
       "kind" -> str("ExternType"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams.unspan),
@@ -223,21 +223,21 @@ trait DocumentationGenerator {
       "doc" -> generate(doc),
     ))
 
-    case Def.ExternResource(id, tpe, doc) => obj(HashMap(
+    case Def.ExternResource(id, tpe, doc, span) => obj(HashMap(
       "kind" -> str("ExternResource"),
       "id" -> generate(id),
       "tpe" -> generate(tpe),
       "doc" -> generate(doc),
     ))
 
-    case Def.ExternInterface(id, tparams, doc) => obj(HashMap(
+    case Def.ExternInterface(id, tparams, doc, span) => obj(HashMap(
       "kind" -> str("ExternInterface"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams),
       "doc" -> generate(doc),
     ))
 
-    case Def.ExternInclude(featureFlag, path, contents, id, doc) => obj(HashMap(
+    case Def.ExternInclude(featureFlag, path, contents, id, doc, span) => obj(HashMap(
       "kind" -> str("ExternInclude"),
       "featureFlag" -> str(featureFlag.toString),
       "path" -> str(path),

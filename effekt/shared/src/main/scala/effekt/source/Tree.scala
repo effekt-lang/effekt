@@ -344,39 +344,39 @@ export SpannedOps._
 enum Def extends Definition {
 
   case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, doc: Doc, span: Span)
-  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, doc: Doc)
-  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, doc: Doc)
-  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, doc: Doc)
-  case DefDef(id: IdDef, annot: Option[BlockType], block: Term, doc: Doc)
+  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, doc: Doc, span: Span)
+  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, doc: Doc, span: Span)
+  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, doc: Doc, span: Span)
+  case DefDef(id: IdDef, annot: Option[BlockType], block: Term, doc: Doc, span: Span)
 
-  case NamespaceDef(id: IdDef, definitions: List[Def], doc: Doc)
+  case NamespaceDef(id: IdDef, definitions: List[Def], doc: Doc, span: Span)
 
-  case InterfaceDef(id: IdDef, tparams: Many[Id], ops: List[Operation], doc: Doc)
-  case DataDef(id: IdDef, tparams: Many[Id], ctors: List[Constructor], doc: Doc)
-  case RecordDef(id: IdDef, tparams: Many[Id], fields: Many[ValueParam], doc: Doc)
+  case InterfaceDef(id: IdDef, tparams: Many[Id], ops: List[Operation], doc: Doc, span: Span)
+  case DataDef(id: IdDef, tparams: Many[Id], ctors: List[Constructor], doc: Doc, span: Span)
+  case RecordDef(id: IdDef, tparams: Many[Id], fields: Many[ValueParam], doc: Doc, span: Span)
 
   /**
    * Type aliases like `type Matrix[T] = List[List[T]]`
    */
-  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType, doc: Doc)
+  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType, doc: Doc, span: Span)
 
   /**
    * Effect aliases like `effect Set = { Get, Put }`
    */
-  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects, doc: Doc)
+  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects, doc: Doc, span: Span)
 
   /**
    * Only valid on the toplevel!
    */
-  case ExternType(id: IdDef, tparams: Many[Id], doc: Doc)
+  case ExternType(id: IdDef, tparams: Many[Id], doc: Doc, span: Span)
 
   case ExternDef(capture: CaptureSet, id: IdDef,
                  tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Effectful,
                  bodies: List[ExternBody], doc: Doc, span: Span) extends Def
 
-  case ExternResource(id: IdDef, tpe: BlockType, doc: Doc)
+  case ExternResource(id: IdDef, tpe: BlockType, doc: Doc, span: Span)
 
-  case ExternInterface(id: IdDef, tparams: List[Id], doc: Doc)
+  case ExternInterface(id: IdDef, tparams: List[Id], doc: Doc, span: Span)
 
   /**
    * Namer resolves the path and loads the contents in field [[contents]]
@@ -384,9 +384,10 @@ enum Def extends Definition {
    * @note Storing content and id as user-visible fields is a workaround for the limitation that Enum's cannot
    *   have case specific refinements.
    */
-  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef, doc: Doc)
+  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef, doc: Doc, span: Span)
 
   def doc: Doc
+  def span: Span
 }
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude
@@ -540,8 +541,8 @@ export CallTarget.*
 
 // Declarations
 // ------------
-case class Constructor(id: IdDef, tparams: Many[Id], params: Many[ValueParam], doc: Doc) extends Definition
-case class Operation(id: IdDef, tparams: Many[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, doc: Doc) extends Definition
+case class Constructor(id: IdDef, tparams: Many[Id], params: Many[ValueParam], doc: Doc, span: Span) extends Definition
+case class Operation(id: IdDef, tparams: Many[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, doc: Doc, span: Span) extends Definition
 
 // Implementations
 // ---------------
