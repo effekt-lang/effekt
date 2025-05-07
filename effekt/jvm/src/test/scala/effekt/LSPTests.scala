@@ -292,6 +292,34 @@ class LSPTests extends FunSuite {
     }
   }
 
+  // TODO: Hovering over a hole should show effects as well!
+  test("Hovering over hole doesn't show effects") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, cursor) = raw"""
+                                |effect raise(): Unit
+                                |def foo(x: Int): Int / { raise } = <{ do raise(); 42 }>
+                                |                                     ↑
+                                |""".textDocumentAndPosition
+      val hoverContents =
+        raw"""| | Outside       | Inside        |
+             | |:------------- |:------------- |
+             | | `Int` | `Int` |
+             |""".stripMargin
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
+      val hover = server.getTextDocumentService().hover(hoverParams).get()
+
+      val expectedHover = new Hover()
+      expectedHover.setRange(new Range(cursor, cursor))
+      expectedHover.setContents(new MarkupContent("markdown", hoverContents))
+      assertEquals(hover, expectedHover)
+    }
+  }
+
   test("Hovering over mutable binder without extended description") {
     withClientAndServer { (client, server) =>
       val (textDoc, cursor) = raw"""
