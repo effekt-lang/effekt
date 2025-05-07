@@ -52,7 +52,7 @@ class LSPTests extends FunSuite {
    */
   def normalizeIRString(ir: String): String = {
     ir.replaceAll("_\\d+", "_whatever")
-      .replaceAll("\\s+", " ")
+      .replaceAll("\\s+", "")
   }
   
   def assertIREquals(ir: String, expected: String): Unit = {
