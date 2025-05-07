@@ -807,7 +807,7 @@ class LSPTests extends FunSuite {
 
           val textEdit = new TextEdit()
           textEdit.setRange(Range(positions1(1), positions1(1)))
-          textEdit.setNewText(": ValueTypeApp(Nothing,List()) / Effects(List())")
+          textEdit.setNewText(": Nothing / {}")
 
           val changes = new util.HashMap[String, util.List[TextEdit]]()
           val textEdits = new util.ArrayList[TextEdit]()
@@ -833,7 +833,7 @@ class LSPTests extends FunSuite {
           val textEdit = new TextEdit()
           val range = new Range(positions2(1), positions2(1))
           textEdit.setRange(range)
-          textEdit.setNewText(": ValueTypeApp(Nothing,List()) / Effects(List())")
+          textEdit.setNewText(": Nothing / {}")
 
           val changes = new util.HashMap[String, util.List[TextEdit]]()
           val textEdits = new util.ArrayList[TextEdit]()
