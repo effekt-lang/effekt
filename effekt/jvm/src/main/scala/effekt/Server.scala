@@ -449,16 +449,6 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     }
   }
 
-  /**
-   * FIXME: The following comment was left on the previous Kiama-based implementation and can now be addressed:
-   *
-   * TODO it would be great, if Kiama would allow setting the position of the code action separately
-   * from the node to replace. Here, we replace the annotated return type, but would need the
-   * action on the function (since the return type might not exist in the original program).
-   *
-   * Also, it is necessary to be able to manually set the code action kind (and register them on startup).
-   * This way, we can use custom kinds like `refactor.closehole` that can be mapped to keys.
-   */
   def inferEffectsAction(fun: FunDef)(using C: Context): Option[CodeAction] = for {
     (tpe, eff) <- C.inferredTypeAndEffectOption(fun)
     ann = for {
