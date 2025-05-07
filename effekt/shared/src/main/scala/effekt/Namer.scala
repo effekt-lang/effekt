@@ -49,8 +49,8 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Produces a cyclic import error when this is already the case
    */
   private def recursiveProtect[R](mod: ModuleDecl)(body: => R)(using Context): R = {
-    if (currentlyNaming.value.contains(mod)) {
-      val cycle = mod :: currentlyNaming.value.takeWhile(_ != mod).reverse
+    if (currentlyNaming.value.exists { m => m.span.source == mod.span.source }) {
+      val cycle = mod :: currentlyNaming.value.takeWhile{ m => m.span.source != mod.span.source }.reverse
       Context.abort(
         pretty"""Cyclic import: ${mod.path} depends on itself, via:\n\t${cycle.map(_.path).mkString(" -> ")} -> ${mod.path}""")
     } else {
