@@ -33,6 +33,9 @@ def assert(obtained: String, expected: String, msg: String): Unit / Assertion =
 def assert(obtained: Int, expected: Int): Unit / { Assertion, Formatted } =
   assertEqual(obtained, expected) { (x, y) => x == y } { x => show(x) }
 
+def assert(obtained: Byte, expected: Byte): Unit / { Assertion, Formatted } =
+  assertEqual(obtained, expected) { (x, y) => x == y } { x => show(x) }
+
 def assert(obtained: Bool, expected: Bool): Unit / { Assertion, Formatted } =
   assertEqual(obtained, expected) { (x, y) => x == y } { x => show(x) }
 
