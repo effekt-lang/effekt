@@ -835,7 +835,7 @@ class RecursiveDescentTests extends munit.FunSuite {
 
       assertEquals(
         parseDefinition(source.content),
-        DefDef(IdDef("foo", Span(source, pos(0), pos(1))), None, Var(IdRef(Nil, "f", Span(source, pos(2), pos(3)))), None))
+        DefDef(IdDef("foo", Span(source, pos(0), pos(1))), None, Var(IdRef(Nil, "f", Span(source, pos(2), pos(3)))), None, Span(source, 0, 11)))
     }
 
     parseDefinition(
@@ -1030,7 +1030,7 @@ class RecursiveDescentTests extends munit.FunSuite {
 
     val definition = parseToplevel(source.content)
     val recordDef = definition match {
-      case rd@RecordDef(id, tparams, fields, doc) => rd
+      case rd@RecordDef(id, tparams, fields, doc, span) => rd
       case other =>
         throw new IllegalArgumentException(s"Expected RecordDef but got ${other.getClass.getSimpleName}")
     }
