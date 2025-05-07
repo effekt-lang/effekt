@@ -449,29 +449,31 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     }
   }
 
-  /**
-   * FIXME: The following comment was left on the previous Kiama-based implementation and can now be addressed:
-   *
-   * TODO it would be great, if Kiama would allow setting the position of the code action separately
-   * from the node to replace. Here, we replace the annotated return type, but would need the
-   * action on the function (since the return type might not exist in the original program).
-   *
-   * Also, it is necessary to be able to manually set the code action kind (and register them on startup).
-   * This way, we can use custom kinds like `refactor.closehole` that can be mapped to keys.
-   */
   def inferEffectsAction(fun: FunDef)(using C: Context): Option[CodeAction] = for {
-    // the inferred type
     (tpe, eff) <- C.inferredTypeAndEffectOption(fun)
-    // the annotated type
     ann = for {
       result <- fun.symbol.annotatedResult
       effects <- fun.symbol.annotatedEffects
     } yield (result, effects)
-    if ann.map {
-      needsUpdate(_, (tpe, eff))
-    }.getOrElse(true)
-    res <- EffektCodeAction("Update return type with inferred effects", fun.ret, s": $tpe / $eff")
-  } yield res
+    if ann.map(needsUpdate(_, (tpe, eff))).getOrElse(true)
+  } yield {
+    val newText = if (eff.effects.nonEmpty)
+        s": ${TypePrinter.show(tpe)} / ${TypePrinter.show(eff)}"
+    else
+        s": ${TypePrinter.show(tpe)}"
+    val textEdit = new TextEdit(
+      convertRange(fun.ret.span.range),
+      newText
+    )
+    val changes = Map(
+      fun.ret.span.source.name -> seqToJavaList(List(textEdit))
+    )
+    val workspaceEdit = new WorkspaceEdit(mapToJavaMap(changes))
+    val action = new CodeAction("Update return type with inferred effects")
+    action.setKind(CodeActionKind.Refactor)
+    action.setEdit(workspaceEdit)
+    action
+  }
 
   def closeHoleAction(hole: Hole)(using C: Context): Option[CodeAction] = for {
     holeTpe <- C.inferredTypeOption(hole)
