@@ -460,18 +460,27 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
    * This way, we can use custom kinds like `refactor.closehole` that can be mapped to keys.
    */
   def inferEffectsAction(fun: FunDef)(using C: Context): Option[CodeAction] = for {
-    // the inferred type
     (tpe, eff) <- C.inferredTypeAndEffectOption(fun)
-    // the annotated type
     ann = for {
       result <- fun.symbol.annotatedResult
       effects <- fun.symbol.annotatedEffects
     } yield (result, effects)
-    if ann.map {
-      needsUpdate(_, (tpe, eff))
-    }.getOrElse(true)
-    res <- EffektCodeAction("Update return type with inferred effects", fun.ret, s": $tpe / $eff")
-  } yield res
+    if ann.map(needsUpdate(_, (tpe, eff))).getOrElse(true)
+  } yield {
+    val newText = s": $tpe / $eff"
+    val textEdit = new TextEdit(
+      convertRange(fun.ret.span.range),
+      newText
+    )
+    val changes = Map(
+      fun.ret.span.source.name -> seqToJavaList(List(textEdit))
+    )
+    val workspaceEdit = new WorkspaceEdit(mapToJavaMap(changes))
+    val action = new CodeAction("Update return type with inferred effects")
+    action.setKind(CodeActionKind.Refactor)
+    action.setEdit(workspaceEdit)
+    action
+  }
 
   def closeHoleAction(hole: Hole)(using C: Context): Option[CodeAction] = for {
     holeTpe <- C.inferredTypeOption(hole)
