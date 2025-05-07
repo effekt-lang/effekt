@@ -4,12 +4,12 @@ import effekt.source.*
 import kiama.util.Source
 import scala.collection.immutable.HashMap
 
-// TODO: include spans
 trait DocumentationGenerator {
   type Documentation = HashMap[String, DocValue]
 
   // A recursive structure that resembles JSON
   enum DocValue {
+    case DocNumber(value: Int)
     case DocString(value: String)
     case DocArray(value: List[DocValue])
     case DocObject(value: Documentation)
@@ -17,11 +17,18 @@ trait DocumentationGenerator {
   import DocValue.*
 
   def empty = DocObject(HashMap.empty)
+  def num(n: Int) = DocNumber(n)
   def str(s: String) = DocString(s)
   def arr(docs: List[DocValue]) = DocArray(docs)
   def obj(doc: Documentation) = DocObject(doc)
 
   def generate(doc: Doc): DocValue = str(doc.getOrElse("").replace("\"", "\\\""))
+
+  def generate(span: Span): DocValue = obj(HashMap(
+    "source" -> str(span.source.name),
+    "from" -> num(span.from),
+    "to" -> num(span.to),
+  ))
 
   def generate(effects: Effects): DocValue = arr(effects.effs.map(generate))
 
@@ -65,9 +72,10 @@ trait DocumentationGenerator {
   }
 
   // TODO: should we provide more information here?
-  def generate(id: IdDef): DocValue = str(id.name)
-  def generate(id: IdRef): DocValue = str(id.name)
-  def generate(id: Id): DocValue = str(id.name)
+  def generate(id: Id): DocValue = obj(HashMap(
+    "name" -> str(id.name),
+    "span" -> generate(id.span),
+  ))
 
   def generate(capt: CaptureSet): DocValue = arr(capt.captures.map(generate))
 
@@ -98,6 +106,7 @@ trait DocumentationGenerator {
       "tparams" -> generateTparams(tparams.unspan),
       "vparams" -> generateVparams(vparams.unspan),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
   }
 
@@ -110,6 +119,7 @@ trait DocumentationGenerator {
       "bparams" -> generateBparams(bparams),
       "ret" -> generate(ret),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
   }
 
@@ -129,6 +139,7 @@ trait DocumentationGenerator {
       "bparams" -> generateBparams(bparams.unspan),
       "ret" -> ret.map(generate).getOrElse(empty),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
 
     case Def.ValDef(id, annot, binding, doc, span) => obj(HashMap(
@@ -136,6 +147,7 @@ trait DocumentationGenerator {
       "id" -> generate(id),
       "annot" -> annot.map(generate).getOrElse(empty),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
 
     case Def.RegDef(id, annot, region, binding, doc, span) => obj(HashMap(
@@ -144,6 +156,7 @@ trait DocumentationGenerator {
       "annot" -> annot.map(generate).getOrElse(empty),
       "region" -> generate(region),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
 
     case Def.VarDef(id, annot, binding, doc, span) => obj(HashMap(
@@ -151,6 +164,7 @@ trait DocumentationGenerator {
       "id" -> generate(id),
       "annot" -> annot.map(generate).getOrElse(empty),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
 
     case Def.DefDef(id, annot, block, doc, span) => obj(HashMap(
@@ -158,6 +172,7 @@ trait DocumentationGenerator {
       "id" -> generate(id),
       "annot" -> annot.map(generate).getOrElse(empty),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
 
     case Def.NamespaceDef(id, definitions, doc, span) => obj(HashMap(
@@ -165,6 +180,7 @@ trait DocumentationGenerator {
       "id" -> generate(id),
       "definitions" -> arr(definitions.map(generate)),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
 
     case Def.InterfaceDef(id, tparams, ops, doc, span) => obj(HashMap(
@@ -173,6 +189,7 @@ trait DocumentationGenerator {
       "tparams" -> generateTparams(tparams.unspan),
       "ops" -> arr(ops.map(generate)),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
 
     case Def.DataDef(id, tparams, ctors, doc, span) => obj(HashMap(
@@ -181,6 +198,7 @@ trait DocumentationGenerator {
       "tparams" -> generateTparams(tparams.unspan),
       "ctors" -> arr(ctors.map(generate)),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
 
     case Def.RecordDef(id, tparams, fields, doc, span) => obj(HashMap(
@@ -189,6 +207,7 @@ trait DocumentationGenerator {
       "tparams" -> generateTparams(tparams.unspan),
       "vparams" -> generateVparams(fields.unspan),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
 
     case Def.TypeDef(id, tparams, tpe, doc, span) => obj(HashMap(
@@ -197,6 +216,7 @@ trait DocumentationGenerator {
       "tparams" -> generateTparams(tparams),
       "tpe" -> generate(tpe),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
 
     case Def.EffectDef(id, tparams, effs, doc, span) => obj(HashMap(
@@ -205,6 +225,7 @@ trait DocumentationGenerator {
       "tparams" -> generateTparams(tparams),
       "effs" -> generate(effs),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
 
     case Def.ExternType(id, tparams, doc, span) => obj(HashMap(
@@ -212,6 +233,7 @@ trait DocumentationGenerator {
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams.unspan),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
 
     case Def.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) => obj(HashMap(
@@ -221,6 +243,7 @@ trait DocumentationGenerator {
       "vparams" -> generateVparams(vparams.unspan),
       "bparams" -> generateBparams(bparams.unspan),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
 
     case Def.ExternResource(id, tpe, doc, span) => obj(HashMap(
@@ -228,6 +251,7 @@ trait DocumentationGenerator {
       "id" -> generate(id),
       "tpe" -> generate(tpe),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
 
     case Def.ExternInterface(id, tparams, doc, span) => obj(HashMap(
@@ -235,6 +259,7 @@ trait DocumentationGenerator {
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
 
     case Def.ExternInclude(featureFlag, path, contents, id, doc, span) => obj(HashMap(
@@ -243,6 +268,7 @@ trait DocumentationGenerator {
       "path" -> str(path),
       "id" -> generate(id),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
   }
 
@@ -253,6 +279,7 @@ trait DocumentationGenerator {
       "includes" -> arr(includes.map(generate)),
       "defs" -> arr(defs.map(generate)),
       "doc" -> generate(doc),
+      "span" -> generate(span),
     ))
   }
 }
@@ -261,6 +288,7 @@ case class JSONDocumentationGenerator(ast: ModuleDecl, name: String = "") extend
   def toJSON(values: List[DocValue]): String = s"[${values.map(toJSON).mkString(",")}]"
 
   def toJSON(docValue: DocValue): String = docValue match {
+    case DocValue.DocNumber(num) => num.toString
     case DocValue.DocString(str) => s"\"${str}\""
     case DocValue.DocObject(obj) => toJSON(obj)
     case DocValue.DocArray(arr) => toJSON(arr)
