@@ -835,7 +835,7 @@ class RecursiveDescentTests extends munit.FunSuite {
 
       assertEquals(
         parseDefinition(source.content),
-        DefDef(IdDef("foo", Span(source, pos(0), pos(1))), None, Var(IdRef(Nil, "f", None, Span(source, pos(2), pos(3)))), None))
+        DefDef(IdDef("foo", Span(source, pos(0), pos(1))), None, Var(IdRef(Nil, "f", Span(source, pos(2), pos(3)))), None))
     }
 
     parseDefinition(
@@ -873,7 +873,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     val definition = parseDefinition(source.content)
 
     val funDef = definition match {
-      case fd@FunDef(id, tparams, vparams, bparams, ret, body, span) => fd
+      case fd@FunDef(id, tparams, vparams, bparams, ret, body, doc, span) => fd
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
@@ -892,7 +892,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     val definition = parseDefinition(source.content)
 
     val funDef = definition match {
-      case fd@FunDef(id, tparams, vparams, bparams, ret, body, span) => fd
+      case fd@FunDef(id, tparams, vparams, bparams, ret, body, doc, span) => fd
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
@@ -909,7 +909,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     val definition = parseDefinition(source.content)
 
     val funDef = definition match {
-      case fd@FunDef(id, tparams, vparams, bparams, ret, body, span) => fd
+      case fd@FunDef(id, tparams, vparams, bparams, ret, body, doc, span) => fd
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
@@ -926,7 +926,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     val definition = parseDefinition(source.content)
 
     val funDef = definition match {
-      case fd@FunDef(id, tparams, vparams, bparams, ret, body, span) => fd
+      case fd@FunDef(id, tparams, vparams, bparams, ret, body, doc, span) => fd
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
@@ -1030,7 +1030,7 @@ class RecursiveDescentTests extends munit.FunSuite {
 
     val definition = parseToplevel(source.content)
     val recordDef = definition match {
-      case rd@RecordDef(id, tparams, fields) => rd
+      case rd@RecordDef(id, tparams, fields, doc) => rd
       case other =>
         throw new IllegalArgumentException(s"Expected RecordDef but got ${other.getClass.getSimpleName}")
     }

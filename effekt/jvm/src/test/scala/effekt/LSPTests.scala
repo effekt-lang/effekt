@@ -761,9 +761,11 @@ class LSPTests extends FunSuite {
              |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
              |      ),
              |      Return(Hole(Return(Literal((), ValueTypeApp(Unit_whatever, Nil))))),
+             |      None(),
              |      Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
              |    )
              |  ),
+             |  None(),
              |  Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
              |)""".stripMargin
 
@@ -809,35 +811,13 @@ class LSPTests extends FunSuite {
       val expectedIRContents =
         raw"""ModuleDecl(
              |  test,
+             |  List(effekt, option, list, result, exception, array, string, ref),
+             |  Nil,
              |  Nil,
              |  List(
-             |    FunDef(
-             |      IdDef(
-             |        main,
-             |        Span(StringSource(def main() = <>, file://test.effekt), 4, 8, Real())
-             |      ),
-             |      Many(
-             |        Nil,
-             |        Span(StringSource(def main() = <>, file://test.effekt), 8, 8, Real())
-             |      ),
-             |      Many(
-             |        Nil,
-             |        Span(StringSource(def main() = <>, file://test.effekt), 8, 10, Real())
-             |      ),
-             |      Many(
-             |        Nil,
-             |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
-             |      ),
-             |      Maybe(
-             |        None(),
-             |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
-             |      ),
-             |      Return(Hole(Return(Literal((), ValueTypeApp(Unit_whatever, Nil))))),
-             |      None,
-             |      Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
-             |    )
+             |    Val(foo_whatever, Data(Int_whatever, Nil), Return(Literal(42, Data(Int_whatever, Nil))))
              |  ),
-             |  Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
+             |  List(foo_whatever)
              |)""".stripMargin
 
 

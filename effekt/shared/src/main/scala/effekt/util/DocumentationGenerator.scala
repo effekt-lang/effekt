@@ -22,25 +22,28 @@ trait DocumentationGenerator {
 
   def generate(doc: Doc): DocString = str(s"${doc.getOrElse("").replace("\"", "\\\"")}")
 
-  def generateTparams(list: List[Id]): DocValue = arr(list.map(generate))
-
   def generate(effects: Effects): DocValue = arr(effects.effs.map(generate))
 
-  def generate(effectful: Effectful): DocValue = effectful match {
-    case Effectful(tpe, eff) => obj(HashMap(
+  def generate(tpe: Type): DocValue = tpe match {
+    case TypeRef(id, args) => obj(HashMap(
+      "kind" -> str("TypeRef"),
+      "id" -> generate(id),
+      "args" -> arr(args.unspan.map(generate))
+    ))
+
+    case Effectful(tpe, eff, span) => obj(HashMap(
       "kind" -> str("Effectful"),
       "tpe" -> generate(tpe),
       "eff" -> generate(eff),
     ))
-  }
 
-  def generate(tpe: BlockType): DocValue = tpe match {
+    // block params
     case BlockTypeTree(eff) => ??? // ignore?
     case FunctionType(tparams, vparams, bparams, result, effects) => obj(HashMap(
       "kind" -> str("FunctionType"),
-      "tparams" -> generateTparams(tparams),
-      "vparams" -> arr(vparams.map(generate)),
-      "bparams" -> arr(bparams.map((id, tpe) =>
+      "tparams" -> generateTparams(tparams.unspan),
+      "vparams" -> arr(vparams.unspan.map(generate)),
+      "bparams" -> arr(bparams.unspan.map((id, tpe) =>
         obj(HashMap(
           "kind" -> str("FunctionBlockParam"),
           "id" -> id.map(generate).getOrElse(str("")),
@@ -50,24 +53,13 @@ trait DocumentationGenerator {
       "result" -> generate(result),
       "effects" -> generate(effects),
     ))
-    case BlockTypeRef(id, args) => obj(HashMap(
-      "kind" -> str("BlockTypeRef"),
-      "id" -> generate(id),
-      "args" -> arr(args.map(generate))
-    ))
-  }
 
-  def generate(tpe: ValueType): DocValue = tpe match {
+    // value params
     case ValueTypeTree(tpe) => ??? // ignore?
     case BoxedType(tpe, capt) => obj(HashMap(
       "kind" -> str("BoxedType"),
       "tpe" -> generate(tpe),
       "capt" -> generate(capt),
-    ))
-    case ValueTypeRef(id, args) => obj(HashMap(
-      "kind" -> str("ValueTypeRef"),
-      "id" -> generate(id),
-      "args" -> arr(args.map(generate))
     ))
   }
 
@@ -77,6 +69,8 @@ trait DocumentationGenerator {
   def generate(id: Id): DocValue = str(id.name)
 
   def generate(capt: CaptureSet): DocValue = arr(capt.captures.map(generate))
+
+  def generateTparams(list: List[Id]): DocValue = arr(list.map(generate))
 
   def generateVparams(list: List[ValueParam]): DocValue = arr(list.map {
     case ValueParam(id, tpe) =>
@@ -100,8 +94,8 @@ trait DocumentationGenerator {
     case Constructor(id, tparams, vparams, doc) => obj(HashMap(
       "kind" -> str("Constructor"),
       "id" -> generate(id),
-      "tparams" -> generateTparams(tparams),
-      "vparams" -> generateVparams(vparams),
+      "tparams" -> generateTparams(tparams.unspan),
+      "vparams" -> generateVparams(vparams.unspan),
       "doc" -> generate(doc),
     ))
   }
@@ -110,7 +104,7 @@ trait DocumentationGenerator {
     case Operation(id, tparams, vparams, bparams, ret, doc) => obj(HashMap(
       "kind" -> str("Operation"),
       "id" -> generate(id),
-      "tparams" -> generateTparams(tparams),
+      "tparams" -> generateTparams(tparams.unspan),
       "vparams" -> generateVparams(vparams),
       "bparams" -> generateBparams(bparams),
       "ret" -> generate(ret),
@@ -126,12 +120,12 @@ trait DocumentationGenerator {
   }
 
   def generate(definition: Def): DocValue = definition match {
-    case Def.FunDef(id, tparams, vparams, bparams, ret, body, doc) => obj(HashMap(
+    case Def.FunDef(id, tparams, vparams, bparams, ret, body, doc, span) => obj(HashMap(
       "kind" -> str("FunDef"),
       "id" -> generate(id),
-      "tparams" -> generateTparams(tparams),
-      "vparams" -> generateVparams(vparams),
-      "bparams" -> generateBparams(bparams),
+      "tparams" -> generateTparams(tparams.unspan),
+      "vparams" -> generateVparams(vparams.unspan),
+      "bparams" -> generateBparams(bparams.unspan),
       "ret" -> ret.map(generate).getOrElse(empty),
       "doc" -> generate(doc),
     ))
@@ -175,7 +169,7 @@ trait DocumentationGenerator {
     case Def.InterfaceDef(id, tparams, ops, doc) => obj(HashMap(
       "kind" -> str("InterfaceDef"),
       "id" -> generate(id),
-      "tparams" -> generateTparams(tparams),
+      "tparams" -> generateTparams(tparams.unspan),
       "ops" -> arr(ops.map(generate)),
       "doc" -> generate(doc),
     ))
@@ -183,7 +177,7 @@ trait DocumentationGenerator {
     case Def.DataDef(id, tparams, ctors, doc) => obj(HashMap(
       "kind" -> str("DataDef"),
       "id" -> generate(id),
-      "tparams" -> generateTparams(tparams),
+      "tparams" -> generateTparams(tparams.unspan),
       "ctors" -> arr(ctors.map(generate)),
       "doc" -> generate(doc),
     ))
@@ -191,8 +185,8 @@ trait DocumentationGenerator {
     case Def.RecordDef(id, tparams, fields, doc) => obj(HashMap(
       "kind" -> str("RecordDef"),
       "id" -> generate(id),
-      "tparams" -> generateTparams(tparams),
-      "vparams" -> generateVparams(fields),
+      "tparams" -> generateTparams(tparams.unspan),
+      "vparams" -> generateVparams(fields.unspan),
       "doc" -> generate(doc),
     ))
 
@@ -215,16 +209,16 @@ trait DocumentationGenerator {
     case Def.ExternType(id, tparams, doc) => obj(HashMap(
       "kind" -> str("ExternType"),
       "id" -> generate(id),
-      "tparams" -> generateTparams(tparams),
+      "tparams" -> generateTparams(tparams.unspan),
       "doc" -> generate(doc),
     ))
 
-    case Def.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc) => obj(HashMap(
+    case Def.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) => obj(HashMap(
       "kind" -> str("ExternDef"),
       "id" -> generate(id),
-      "tparams" -> generateTparams(tparams),
-      "vparams" -> generateVparams(vparams),
-      "bparams" -> generateBparams(bparams),
+      "tparams" -> generateTparams(tparams.unspan),
+      "vparams" -> generateVparams(vparams.unspan),
+      "bparams" -> generateBparams(bparams.unspan),
       "doc" -> generate(doc),
     ))
 
@@ -252,7 +246,7 @@ trait DocumentationGenerator {
   }
 
   def generate(module: ModuleDecl): DocValue = module match {
-    case ModuleDecl(path, includes, defs, doc) => obj(HashMap(
+    case ModuleDecl(path, includes, defs, doc, span) => obj(HashMap(
       "kind" -> str("ModuleDecl"),
       "path" -> str(path),
       "includes" -> arr(includes.map(generate)),
