@@ -467,7 +467,10 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     } yield (result, effects)
     if ann.map(needsUpdate(_, (tpe, eff))).getOrElse(true)
   } yield {
-    val newText = s": ${TypePrinter.show(tpe)} / ${TypePrinter.show(eff)}"
+    val newText = if (eff.effects.nonEmpty)
+        s": ${TypePrinter.show(tpe)} / ${TypePrinter.show(eff)}"
+    else
+        s": ${TypePrinter.show(tpe)}"
     val textEdit = new TextEdit(
       convertRange(fun.ret.span.range),
       newText

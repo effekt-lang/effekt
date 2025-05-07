@@ -762,6 +762,100 @@ class LSPTests extends FunSuite {
   //
   //
 
+  test("codeAction infers return type and effects") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, positions) =
+        raw"""
+             |effect bar(): Unit
+             |def foo(x: Int) = { do bar(); x }
+             |    ↑          ↑
+             |""".textDocumentAndPositions
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val codeActionParams = new CodeActionParams()
+      codeActionParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      codeActionParams.setRange(new Range(positions(0), positions(0)))
+
+      val expected: Seq[messages.Either[Command, CodeAction]] = Seq(
+        messages.Either.forRight[Command, CodeAction]({
+          val action = new CodeAction()
+          action.setTitle("Update return type with inferred effects")
+          action.setKind(CodeActionKind.Refactor)
+
+          val edit = new WorkspaceEdit()
+
+          val textEdit = new TextEdit()
+          textEdit.setRange(Range(positions(1), positions(1)))
+          textEdit.setNewText(": Int / { bar }")
+
+          val changes = new util.HashMap[String, util.List[TextEdit]]()
+          val textEdits = new util.ArrayList[TextEdit]()
+          textEdits.add(textEdit)
+          changes.put("file://test.effekt", textEdits)
+
+          edit.setChanges(changes)
+
+          action.setEdit(edit)
+
+          action
+        })
+      )
+
+      val response = server.codeAction(codeActionParams).get()
+      assertEquals(response, expected.asJava)
+    }
+  }
+
+  test("codeAction doesn't show empty effects list") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, positions) =
+        raw"""
+             |def foo(x: Int) = x
+             |    ↑          ↑
+             |""".textDocumentAndPositions
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val codeActionParams = new CodeActionParams()
+      codeActionParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      codeActionParams.setRange(new Range(positions(0), positions(0)))
+
+      val expected: Seq[messages.Either[Command, CodeAction]] = Seq(
+        messages.Either.forRight[Command, CodeAction]({
+          val action = new CodeAction()
+          action.setTitle("Update return type with inferred effects")
+          action.setKind(CodeActionKind.Refactor)
+
+          val edit = new WorkspaceEdit()
+
+          val textEdit = new TextEdit()
+          textEdit.setRange(Range(positions(1), positions(1)))
+          // Rather than `: Int / {}`, we just show `: Int`
+          textEdit.setNewText(": Int")
+
+          val changes = new util.HashMap[String, util.List[TextEdit]]()
+          val textEdits = new util.ArrayList[TextEdit]()
+          textEdits.add(textEdit)
+          changes.put("file://test.effekt", textEdits)
+
+          edit.setChanges(changes)
+
+          action.setEdit(edit)
+
+          action
+        })
+      )
+
+      val response = server.codeAction(codeActionParams).get()
+      assertEquals(response, expected.asJava)
+    }
+  }
+
   // Regression test: we had codeActions targeting the wrong file
   test("codeAction response targets correct file") {
     withClientAndServer { (client, server) =>
@@ -807,7 +901,7 @@ class LSPTests extends FunSuite {
 
           val textEdit = new TextEdit()
           textEdit.setRange(Range(positions1(1), positions1(1)))
-          textEdit.setNewText(": Nothing / {}")
+          textEdit.setNewText(": Nothing")
 
           val changes = new util.HashMap[String, util.List[TextEdit]]()
           val textEdits = new util.ArrayList[TextEdit]()
@@ -833,7 +927,7 @@ class LSPTests extends FunSuite {
           val textEdit = new TextEdit()
           val range = new Range(positions2(1), positions2(1))
           textEdit.setRange(range)
-          textEdit.setNewText(": Nothing / {}")
+          textEdit.setNewText(": Nothing")
 
           val changes = new util.HashMap[String, util.List[TextEdit]]()
           val textEdits = new util.ArrayList[TextEdit]()
