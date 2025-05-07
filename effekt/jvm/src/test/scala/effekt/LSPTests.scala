@@ -4,7 +4,6 @@ import com.google.gson.{JsonElement, JsonParser}
 import munit.FunSuite
 import org.eclipse.lsp4j.{DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, VersionedTextDocumentIdentifier}
 import org.eclipse.lsp4j.jsonrpc.messages
-import effekt.core.CoreTests
 
 import java.io.{PipedInputStream, PipedOutputStream}
 import java.util
