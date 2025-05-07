@@ -20,7 +20,6 @@ class LSPTests extends FunSuite {
   //
   //
 
-
   /**
    * @param compileOnChange The server currently uses `compileOnChange = false` by default, but we set it to `true` for testing
    *                        because we would like to switch to `didChange` events once we have working caching for references.
@@ -48,8 +47,21 @@ class LSPTests extends FunSuite {
   def withClientAndServer(testBlock: (MockLanguageClient, Server) => Unit): Unit = {
     withClientAndServer(true)(testBlock)
   }
+  
+  /** Normalize the output of the IR by replacing the generated identifiers and stripping all whitespace
+   */
+  def normalizeIRString(ir: String): String = {
+    ir.replaceAll("_\\d+", "_whatever")
+      .replaceAll("\\s+", " ")
+  }
+  
+  def assertIREquals(ir: String, expected: String): Unit = {
+    val normalizedIR = normalizeIRString(ir)
+    val normalizedExpected = normalizeIRString(expected)
+    assertEquals(normalizedIR, normalizedExpected)
+  }
 
-    // Fixtures
+  // Fixtures
   //
   //
 
@@ -769,8 +781,7 @@ class LSPTests extends FunSuite {
 
       val receivedIRContent = client.receivedIR()
       assertEquals(receivedIRContent.length, 1)
-      val fixedReceivedIR = receivedIRContent.head.content.replaceAll("Unit_\\d+", "Unit_whatever")
-      assertEquals(fixedReceivedIR, expectedIRContents)
+      assertIREquals(receivedIRContent.head.content, expectedIRContents)
     }
   }
 
@@ -820,8 +831,7 @@ class LSPTests extends FunSuite {
 
       val receivedIRContent = client.receivedIR()
       assertEquals(receivedIRContent.length, 1)
-      val fixedReceivedIR = receivedIRContent.head.content.replaceAll("Int_\\d+", "Int_whatever").replaceAll("foo_\\d+", "foo_whatever")
-      assertEquals(fixedReceivedIR, expectedIRContents)
+      assertIREquals(receivedIRContent.head.content, expectedIRContents)
     }
   }
 
