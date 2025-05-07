@@ -7,20 +7,21 @@ import scala.collection.immutable.HashMap
 // TODO: include spans
 trait DocumentationGenerator {
   type Documentation = HashMap[String, DocValue]
-  type EffektTree[T <: Tree] = kiama.relation.Tree[AnyRef & Product, T]
 
   // A recursive structure that resembles JSON
-  sealed trait DocValue
-  case class DocString(value: String) extends DocValue
-  case class DocArray(value: List[DocValue]) extends DocValue
-  case class DocObject(value: Documentation) extends DocValue
+  enum DocValue {
+    case DocString(value: String)
+    case DocArray(value: List[DocValue])
+    case DocObject(value: Documentation)
+  }
+  import DocValue.*
 
   def empty = DocObject(HashMap.empty)
   def str(s: String) = DocString(s)
   def arr(docs: List[DocValue]) = DocArray(docs)
   def obj(doc: Documentation) = DocObject(doc)
 
-  def generate(doc: Doc): DocString = str(s"${doc.getOrElse("").replace("\"", "\\\"")}")
+  def generate(doc: Doc): DocValue = str(doc.getOrElse("").replace("\"", "\\\""))
 
   def generate(effects: Effects): DocValue = arr(effects.effs.map(generate))
 
@@ -260,9 +261,9 @@ case class JSONDocumentationGenerator(ast: ModuleDecl, name: String = "") extend
   def toJSON(values: List[DocValue]): String = s"[${values.map(toJSON).mkString(",")}]"
 
   def toJSON(docValue: DocValue): String = docValue match {
-    case DocString(str) => s"\"${str}\""
-    case DocObject(obj) => toJSON(obj)
-    case DocArray(arr) => toJSON(arr)
+    case DocValue.DocString(str) => s"\"${str}\""
+    case DocValue.DocObject(obj) => toJSON(obj)
+    case DocValue.DocArray(arr) => toJSON(arr)
   }
 
   def toJSON(doc: Documentation): String = {
