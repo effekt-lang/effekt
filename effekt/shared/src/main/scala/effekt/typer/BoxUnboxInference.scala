@@ -19,8 +19,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
 
 
   def rewrite(e: ModuleDecl)(using C: Context): ModuleDecl = visit(e) {
-    case ModuleDecl(path, imports, defs, span) =>
-      ModuleDecl(path, imports, defs.flatMap(flattenNamespaces), span)
+    case ModuleDecl(path, imports, defs, doc, span) =>
+      ModuleDecl(path, imports, defs.flatMap(flattenNamespaces), doc, span)
   }
 
   /**
@@ -124,25 +124,25 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
   }
 
   def flattenNamespaces(t: Def)(using C: Context): List[Def] = t match {
-    case Def.NamespaceDef(name, defs) => defs.flatMap(flattenNamespaces)
+    case Def.NamespaceDef(name, defs, doc, span) => defs.flatMap(flattenNamespaces)
     case d => List(rewrite(d))
   }
 
   def rewrite(t: Def)(using C: Context): Def = visit(t) {
 
-    case FunDef(id, tparams, vparams, bparams, ret, body, span) =>
-      FunDef(id, tparams, vparams, bparams, ret, rewrite(body), span)
+    case FunDef(id, tparams, vparams, bparams, ret, body, doc, span) =>
+      FunDef(id, tparams, vparams, bparams, ret, rewrite(body), doc, span)
 
-    case ValDef(id, annot, binding) =>
-      ValDef(id, annot, rewrite(binding))
+    case ValDef(id, annot, binding, doc, span) =>
+      ValDef(id, annot, rewrite(binding), doc, span)
 
-    case RegDef(id, annot, region, binding) =>
-      RegDef(id, annot, region, rewrite(binding))
+    case RegDef(id, annot, region, binding, doc, span) =>
+      RegDef(id, annot, region, rewrite(binding), doc, span)
 
-    case VarDef(id, annot, binding) =>
-      VarDef(id, annot, rewrite(binding))
+    case VarDef(id, annot, binding, doc, span) =>
+      VarDef(id, annot, rewrite(binding), doc, span)
 
-    case DefDef(id, annot, binding) =>
+    case DefDef(id, annot, binding, doc, span) =>
       val block = rewriteAsBlock(binding)
       (binding, block) match {
         case (Unbox(_), _) => ()
@@ -152,7 +152,7 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
         case (_, u @ Unbox(_)) => C.annotate(Annotations.UnboxParentDef, u, t)
         case (_, _) => ()
       }
-      DefDef(id, annot, block)
+      DefDef(id, annot, block, doc, span)
 
     case d: InterfaceDef   => d
     case d: DataDef        => d

@@ -43,7 +43,7 @@ def fastexp(n: Int, k: Int) = product {
 }
 
 def main() = {
-  /// Computes n^exp for integers. (from #923!)
+  // Computes n^exp for integers. (from #923!)
   def pow(n: Int, exp: Int): Int = {
     def go(n: Int, exp: Int, acc: Int): Int = {
       if (exp == 0) {
