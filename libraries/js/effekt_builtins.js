@@ -54,6 +54,17 @@ $effekt.println = function println$impl(str) {
   console.log(str); return $effekt.unit;
 }
 
+$effekt.readln = function readln$impl(callback) {
+  const readline = require('node:readline').createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  readline.question('', (answer) => {
+    readline.close();
+    callback(answer);
+  });
+}
+
 $effekt.unit = { __unit: true }
 
 $effekt.emptyMatch = function() { throw "empty match" }

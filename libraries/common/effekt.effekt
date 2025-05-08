@@ -47,10 +47,12 @@ extern def println(value: String): Unit =
   """
   vm "effekt::println(String)"
 
-extern def readln(): String =
+extern async def readln(): String =
+  js "$effekt.capture(callback => $effekt.readln(callback))"
   llvm """
     %result = call %Pos @c_io_readln()
-    ret %Pos %result
+    tail call void @resume_Pos(%Stack %stack, %Pos %result)
+    ret void
   """
 
 def println(value: Int): Unit = println(value.show)
