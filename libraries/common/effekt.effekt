@@ -42,7 +42,7 @@ extern def println(value: String): Unit =
   js "$effekt.println(${value})"
   chez "(println_impl ${value})"
   llvm """
-    call void @c_io_println_String(%Pos ${value})
+    call void @c_io_println(%Pos ${value})
     ret %Pos zeroinitializer ; Unit
   """
   vm "effekt::println(String)"

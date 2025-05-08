@@ -3,10 +3,7 @@
 declare i64 @c_get_argc()
 declare %Pos @c_get_arg(i64)
 
-declare void @c_io_println_Boolean(%Pos)
-declare void @c_io_println_Int(%Int)
-declare void @c_io_println_Double(%Double)
-declare void @c_io_println_String(%Pos)
+declare void @c_io_println(%Pos)
 
 declare void @hole()
 declare void @duplicated_prompt()
