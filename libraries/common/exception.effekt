@@ -54,7 +54,7 @@ extern io def panic(msg: String): Nothing =
   js "(function() { throw ${msg} })()"
   chez "(raise ${msg})"
   llvm """
-    call void @c_io_println_String(%Pos ${msg})
+    call void @c_io_println(%Pos ${msg})
     call void @exit(i32 1)
     ret %Pos zeroinitializer ; Unit
   """

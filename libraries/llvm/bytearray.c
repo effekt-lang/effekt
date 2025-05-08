@@ -72,7 +72,7 @@ struct Pos c_bytearray_from_nullterminated_string(const char *data) {
 char* c_bytearray_into_nullterminated_string(const struct Pos arr) {
     uint64_t size = arr.tag;
 
-    char* result = (char*)malloc(size + 1);
+    char* result = malloc(size + 1);
 
     memcpy(result, c_bytearray_data(arr), size);
 
