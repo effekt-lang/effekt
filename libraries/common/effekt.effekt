@@ -47,6 +47,12 @@ extern def println(value: String): Unit =
   """
   vm "effekt::println(String)"
 
+extern def readln(): String =
+  llvm """
+    %result = call %Pos @c_io_readln()
+    ret %Pos %result
+  """
+
 def println(value: Int): Unit = println(value.show)
 def println(value: Unit): Unit = println(value.show)
 def println(value: Double): Unit = println(value.show)

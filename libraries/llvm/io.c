@@ -4,16 +4,35 @@
 #include <uv.h>
 #include <string.h> // to compare flag names
 
-// Println
-// -------
+// Println and Readln
+// ------------------
 
 void c_io_println(String text) {
-    for (uint64_t j = 0; j < text.tag; ++j)
+    for (uint64_t j = 0; j < text.tag; ++j) {
         putchar(c_bytearray_data(text)[j]);
+    };
     erasePositive(text);
     putchar('\n');
 }
 
+String c_io_readln() {
+    uint64_t capacity = 64;
+    uint64_t length = 0;
+    char* buffer = malloc(capacity * sizeof(char));
+
+    for (int c = getchar(); c != '\n' && c != EOF; c = getchar()) {
+        if (length >= capacity) {
+            capacity *= 2;
+            buffer = realloc(buffer, capacity * sizeof(char));
+        }
+        buffer[length] = (char)c;
+        length++;
+    }
+
+    String result = c_bytearray_construct(length, (const uint8_t*)buffer);
+    free(buffer);
+    return result;
+}
 
 // Lib UV Bindings
 // ---------------
