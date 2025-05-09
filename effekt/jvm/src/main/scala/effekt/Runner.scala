@@ -99,17 +99,23 @@ trait Runner[Executable] {
     else
       Process(execFile, Context.config.runArgs())
 
-    val exitCode = process.run(new ProcessLogger {
+    // Check if the output is a stdout one. TODO use a different method for tests and remove the default case
+    val exitCode = C.config.output() match {
+      case _: kiama.util.OutputEmitter =>
+        process.!< // we are not capturing the output, so forward directly
+      case outs =>
+        process.run(new ProcessLogger {
 
-      override def out(s: => String): Unit = {
-        C.config.output().emitln(s)
-      }
+          override def out(s: => String): Unit = {
+            outs.emitln(s)
+          }
 
-      override def err(s: => String): Unit = System.err.println(s)
+          override def err(s: => String): Unit = System.err.println(s)
 
-      override def buffer[T](f: => T): T = f
+          override def buffer[T](f: => T): T = f
 
-    }, connectInput = true).exitValue()
+        }, connectInput = true).exitValue()
+    }
 
     if (exitCode != 0) {
       C.error(s"Process exited with non-zero exit code ${exitCode}.")
