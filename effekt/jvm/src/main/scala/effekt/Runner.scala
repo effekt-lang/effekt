@@ -107,7 +107,7 @@ trait Runner[Executable] {
         process.run(new ProcessLogger {
 
           override def out(s: => String): Unit = {
-            C.config.output().emitln(s)
+            out.emitln(s)
           }
 
           override def err(s: => String): Unit = System.err.println(s)
