@@ -103,11 +103,11 @@ trait Runner[Executable] {
     val exitCode = C.config.output() match {
       case _: kiama.util.OutputEmitter =>
         process.!< // we are not capturing the output, so forward directly
-      case out =>
+      case outs =>
         process.run(new ProcessLogger {
 
           override def out(s: => String): Unit = {
-            out.emitln(s)
+            outs.emitln(s)
           }
 
           override def err(s: => String): Unit = System.err.println(s)
