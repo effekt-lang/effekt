@@ -340,6 +340,10 @@ object LLVMRunner extends Runner[String] {
         "-flto=full"
       )
 
+      if (C.config.native()) {
+        clangArgs :+= "-march=native"
+      }
+
       exec(clangArgs: _*)
     } else {
       exec(opt, llPath, "-O2", "-o", bcPath)

@@ -88,6 +88,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
     group = advanced
   )
 
+  val native: ScallopOption[Boolean] = toggle(
+    "native",
+    descrYes = "Optimize the executable for the native CPU. May break executable on other Devices. Only works for the LLVM backend",
+    default = Some(false),
+    group = advanced
+  )
+
   val preludePath: ScallopOption[List[String]] = opt[List[String]](
     "prelude",
     descr = "Modules to be automatically imported in every file",
