@@ -336,19 +336,8 @@ object LLVMRunner extends Runner[String] {
       var clangArgs = Seq(clang, clangMainFile, bcPath, "-o", executableFile) ++ linkedLibraries
 
       clangArgs ++= Seq(
-        "-flto=full",                // Explicitly use full LTO
-//        "-fuse-ld=lld",              // Use LLVM's linker when available
-//        "-Wl,--lto-O3",              // Optimization level for LTO
-        "-fwhole-program-vtables",   // Enable whole program devirtualization
-        "-fvisibility=hidden",       // Hide symbols by default
-      )
-
-      clangArgs ++= Seq(
-        "-O3",                  // Maximum optimization
-        "-march=native",        // Optimize for current CPU
-        "-fomit-frame-pointer", // Remove frame pointers when possible
-        "-ffunction-sections",  // Place each function in its own section
-        "-fdata-sections",      // Place each data item in its own section
+        "-O3",
+        "-flto=full"
       )
 
       exec(clangArgs: _*)
