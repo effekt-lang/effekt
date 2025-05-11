@@ -337,7 +337,8 @@ object LLVMRunner extends Runner[String] {
 
       clangArgs ++= Seq(
         "-O3",
-        "-flto=full"
+        "-flto=full",
+        "-Wno-override-module"
       )
 
       if (C.config.native()) {
@@ -348,7 +349,7 @@ object LLVMRunner extends Runner[String] {
     } else {
       exec(opt, llPath, "-O2", "-o", bcPath)
 
-      var clangArgs = Seq(clang, clangMainFile, "-o", executableFile, bcPath) ++ linkedLibraries
+      var clangArgs = Seq(clang, clangMainFile, "-o", executableFile, bcPath, "-Wno-override-module") ++ linkedLibraries
 
       if (C.config.debug()) clangArgs ++= Seq("-g", "-Wall", "-Wextra", "-Werror")
       if (C.config.valgrind()) clangArgs ++= Seq("-O0", "-g")
