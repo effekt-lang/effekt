@@ -315,7 +315,6 @@ object LLVMRunner extends Runner[String] {
     val out = C.config.outputPath()
     val basePath = (out / path.stripSuffix(".ll")).unixPath
     val llPath  = basePath + ".ll"
-    // val optPath = basePath + ".opt.ll"
     val bcPath  = basePath + ".bc"
     val linkedLibraries = Seq(
       "-lm", // Math library
