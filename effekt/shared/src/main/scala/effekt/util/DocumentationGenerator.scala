@@ -1,5 +1,6 @@
 package effekt.util
 
+import effekt.context.{ Annotations, Context }
 import effekt.source.*
 import kiama.util.Source
 import scala.collection.immutable.HashMap
@@ -25,14 +26,16 @@ trait DocumentationGenerator {
   def generate(doc: Doc): DocValue = str(doc.getOrElse("").replace("\"", "\\\""))
 
   def generate(span: Span): DocValue = obj(HashMap(
-    "source" -> str(span.source.name),
-    "from" -> num(span.from),
-    "to" -> num(span.to),
+    "file" -> str(span.source.name),
+    "lineStart" -> num(span.range.from.line),
+    "lineEnd" -> num(span.range.to.line),
+    "columnStart" -> num(span.range.from.column),
+    "columnEnd" -> num(span.range.to.column),
   ))
 
-  def generate(effects: Effects): DocValue = arr(effects.effs.map(generate))
+  def generate(effects: Effects)(using C: Context): DocValue = arr(effects.effs.map(generate))
 
-  def generate(tpe: Type): DocValue = tpe match {
+  def generate(tpe: Type)(using C: Context): DocValue = tpe match {
     case TypeRef(id, args) => obj(HashMap(
       "kind" -> str("TypeRef"),
       "id" -> generate(id),
@@ -71,17 +74,35 @@ trait DocumentationGenerator {
     ))
   }
 
+  // from Intelligence
+  def getDefinitionOf(s: effekt.symbols.Symbol)(using C: Context): Option[Span] = s match {
+    case u: effekt.symbols.UserFunction => Some(u.decl.span)
+    case u: effekt.symbols.Binder       => Some(u.decl.span)
+    case d: effekt.symbols.Operation    => C.definitionTreeOption(d.interface).map(_.span)
+    // case a: effekt.symbols.Anon         => Some(a.decl.span)
+    case m: effekt.symbols.Module       => Some(m.decl.span)
+    case u => C.definitionTreeOption(u).map(_.span)
+  }
+
+  def findOrigin(id: Id)(using C: Context): Option[DocValue] = for {
+    sym <- C.symbolOption(id)
+    dfn <- getDefinitionOf(id.symbol)
+  } yield generate(dfn)
+
   // TODO: should we provide more information here?
-  def generate(id: Id): DocValue = obj(HashMap(
+  def generate(id: Id)(using C: Context): DocValue = obj(HashMap(
     "name" -> str(id.name),
-    "span" -> generate(id.span),
+    "source" -> generate(id.span),
+    "origin" -> findOrigin(id).getOrElse(empty),
   ))
 
-  def generate(capt: CaptureSet): DocValue = arr(capt.captures.map(generate))
+  def generate(capt: CaptureSet)(using C: Context): DocValue =
+    arr(capt.captures.map(generate))
 
-  def generateTparams(list: List[Id]): DocValue = arr(list.map(generate))
+  def generateTparams(list: List[Id])(using C: Context): DocValue =
+    arr(list.map(generate))
 
-  def generateVparams(list: List[ValueParam]): DocValue = arr(list.map {
+  def generateVparams(list: List[ValueParam])(using C: Context): DocValue = arr(list.map {
     case ValueParam(id, tpe) =>
       obj(HashMap(
         "kind" -> str("ValueParam"),
@@ -90,7 +111,7 @@ trait DocumentationGenerator {
       ))
   })
 
-  def generateBparams(list: List[BlockParam]): DocValue = arr(list.map {
+  def generateBparams(list: List[BlockParam])(using C: Context): DocValue = arr(list.map {
     case BlockParam(id, tpe) =>
       obj(HashMap(
         "kind" -> str("BlockParam"),
@@ -99,7 +120,7 @@ trait DocumentationGenerator {
       ))
   })
 
-  def generate(constructor: Constructor): DocValue = constructor match {
+  def generate(constructor: Constructor)(using C: Context): DocValue = constructor match {
     case Constructor(id, tparams, vparams, doc, span) => obj(HashMap(
       "kind" -> str("Constructor"),
       "id" -> generate(id),
@@ -110,7 +131,7 @@ trait DocumentationGenerator {
     ))
   }
 
-  def generate(operation: Operation): DocValue = operation match {
+  def generate(operation: Operation)(using C: Context): DocValue = operation match {
     case Operation(id, tparams, vparams, bparams, ret, doc, span) => obj(HashMap(
       "kind" -> str("Operation"),
       "id" -> generate(id),
@@ -130,7 +151,7 @@ trait DocumentationGenerator {
     ))
   }
 
-  def generate(definition: Def): DocValue = definition match {
+  def generate(definition: Def)(using C: Context): DocValue = definition match {
     case Def.FunDef(id, tparams, vparams, bparams, ret, body, doc, span) => obj(HashMap(
       "kind" -> str("FunDef"),
       "id" -> generate(id),
@@ -272,7 +293,7 @@ trait DocumentationGenerator {
     ))
   }
 
-  def generate(module: ModuleDecl): DocValue = module match {
+  def generate(module: ModuleDecl)(using C: Context): DocValue = module match {
     case ModuleDecl(path, includes, defs, doc, span) => obj(HashMap(
       "kind" -> str("ModuleDecl"),
       "path" -> str(path),
@@ -284,7 +305,7 @@ trait DocumentationGenerator {
   }
 }
 
-case class JSONDocumentationGenerator(ast: ModuleDecl, name: String = "") extends Source, DocumentationGenerator {
+case class JSONDocumentationGenerator(ast: ModuleDecl, name: String = "")(using C: Context) extends Source, DocumentationGenerator {
   def toJSON(values: List[DocValue]): String = s"[${values.map(toJSON).mkString(",")}]"
 
   def toJSON(docValue: DocValue): String = docValue match {
