@@ -9,7 +9,7 @@ import effekt.source.Tree
 import effekt.symbols.Binder.{ValBinder, VarBinder}
 import effekt.symbols.BlockTypeConstructor.{ExternInterface, Interface}
 import effekt.symbols.TypeConstructor.{DataType, ExternType}
-import effekt.symbols.{Anon, Binder, Callable, Effects, Module, Param, Symbol, TypeAlias, TypePrinter, UserFunction, ValueType, isSynthetic}
+import effekt.symbols.{Anon, Binder, Callable, Effects, ErrorMessageInterpolator, Module, Param, Symbol, TypeAlias, TypePrinter, UserFunction, ValueType, isSynthetic}
 import effekt.util.{PlainMessaging, PrettyPrinter}
 import effekt.util.messages.EffektError
 import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
@@ -458,9 +458,9 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     if ann.map(needsUpdate(_, (tpe, eff))).getOrElse(true)
   } yield {
     val newText = if (eff.effects.nonEmpty)
-        s": ${TypePrinter.show(tpe)} / ${TypePrinter.show(eff)}"
+        pp": ${tpe} / ${eff}"
     else
-        s": ${TypePrinter.show(tpe)}"
+        pp": ${tpe}"
     val textEdit = new TextEdit(
       convertRange(fun.ret.span.range),
       newText
