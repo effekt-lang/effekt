@@ -614,22 +614,22 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def documented[T](p: Doc => T): T =
     p(maybeDocumentation())
 
-  def maybeDocumentation(): Option[String] = {
-    val buffer = new StringBuffer()
-    var found = false
+  def maybeDocumentation(): Doc =
+    nonterminal:
+      peek.kind match
+        case DocComment(_) =>
+          val docComments = manyWhile({
+            val msg = peek.kind match {
+              case DocComment(message) => message
+              case _ => ""
+            }
+            consume(peek.kind)
+            msg
+          }, peek.kind.isInstanceOf[DocComment])
 
-    while (peek.kind match {
-      case DocComment(msg) =>
-        consume(peek.kind)
-        if (found) buffer.append("\n")
-        buffer.append(msg)
-        found = true
-        true
-      case _ => false
-    }) ()
-
-    if (found) Some(buffer.toString) else None
-  }
+          if (docComments.isEmpty) None
+          else Some(docComments.mkString("\\n"))
+        case _ => None
 
   def documentedKind(position: Int): TokenKind = peek(position).kind match {
     case DocComment(_) => documentedKind(position + 1)
