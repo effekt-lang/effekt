@@ -757,6 +757,9 @@ def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }
 
 def repeat(n: Int) { action: () {Control} => Unit } = each(0, n) { (n) {l} => action() {l} }
 
+// NOTE: This is emitted by the close hole code action: do not remove unless you also adjust the code action
+/// Scopes a local computation
+def locally[R] { p: => R } : R = p()
 
 // Splices
 // =======
