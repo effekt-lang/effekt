@@ -272,19 +272,19 @@ object LLVMRunner extends Runner[String] {
 
   override def includes(path: File): List[File] = List(path / ".." / "llvm")
 
-  lazy val gccCmd = discoverExecutable(List("cc", "clang", "gcc"), List("--version"))
+  lazy val clangCmd = discoverExecutable(List("clang", "clang-18"), List("--version"))
   lazy val llcCmd = discoverExecutable(List("llc", "llc-18"), List("--version"))
   lazy val optCmd = discoverExecutable(List("opt", "opt-18"), List("--version"))
 
   def checkSetup(): Either[String, Unit] =
-    gccCmd.getOrElseAborting { return Left("Cannot find gcc. This is required to use the LLVM backend.") }
+    clangCmd.getOrElseAborting { return Left("Cannot find clang. This is required to use the LLVM backend.") }
     llcCmd.getOrElseAborting { return Left("Cannot find llc. This is required to use the LLVM backend.") }
     optCmd.getOrElseAborting { return Left("Cannot find opt. This is required to use the LLVM backend.") }
     Right(())
 
   def libuvArgs(using C: Context): Seq[String] =
     val OS = System.getProperty("os.name").toLowerCase
-    val libraries = C.config.gccLibraries.toOption.map(file).orElse {
+    val libraries = C.config.clangLibraries.toOption.map(file).orElse {
       OS match {
         case os if os.contains("mac")  => Some(file("/opt/homebrew/lib"))
         case os if os.contains("win") => None
@@ -292,7 +292,7 @@ object LLVMRunner extends Runner[String] {
         case os => None
       }
     }
-    val includes = C.config.gccIncludes.toOption.map(file).orElse {
+    val includes = C.config.clangIncludes.toOption.map(file).orElse {
       OS match {
         case os if os.contains("mac")  => Some(file("/opt/homebrew/include"))
         case os if os.contains("win") => None
@@ -303,9 +303,12 @@ object LLVMRunner extends Runner[String] {
     (libraries, includes) match {
       case (Some(lib), Some(include)) => Seq(s"-L${lib.unixPath}", "-luv", s"-I${include.unixPath}")
       case _ =>
-        C.warning(s"Cannot find libuv on ${OS}; please use --gcc-libraries and --gcc-includes to configure the paths for the libuv dylib and header files, respectively.")
+        C.warning(s"Cannot find libuv on ${OS}; please use --clang-libraries and --clang-includes to configure the paths for the libuv dylib and header files, respectively.")
         Seq()
     }
+
+  def useLTO(using C: Context): Boolean =
+    !C.config.debug() && !C.config.valgrind() && C.config.optimize()
 
   /**
    * Compile the LLVM source file (`<...>.ll`) to an executable
@@ -318,29 +321,47 @@ object LLVMRunner extends Runner[String] {
     val out = C.config.outputPath()
     val basePath = (out / path.stripSuffix(".ll")).unixPath
     val llPath  = basePath + ".ll"
-    val optPath = basePath + ".opt.ll"
-    val objPath = basePath + ".o"
+    val bcPath  = basePath + ".bc"
     val linkedLibraries = Seq(
       "-lm", // Math library
     ) ++ libuvArgs
 
     def missing(cmd: String) = C.abort(s"Cannot find ${cmd}. This is required to use the LLVM backend.")
-    val gcc = gccCmd.getOrElse(missing("gcc"))
+    val clang = clangCmd.getOrElse(missing("clang"))
     val llc = llcCmd.getOrElse(missing("llc"))
     val opt = optCmd.getOrElse(missing("opt"))
 
-    exec(opt, llPath, "-S", "-O2", "-o", optPath)
-    exec(llc, "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)
-
-    val gccMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
+    val clangMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
     val executableFile = basePath
-    var gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath) ++ linkedLibraries
 
-    if (C.config.debug()) gccArgs ++= Seq("-g", "-Wall", "-Wextra", "-Werror")
-    if (C.config.valgrind()) gccArgs ++= Seq("-O0", "-g")
-    else if (C.config.debug()) gccArgs ++= Seq("-fsanitize=address,undefined", "-fstack-protector-all")
+    if (useLTO) {
+      // Convert to bitcode with aggressive optimizations
+      exec(opt, llPath, "-O3", "-o", bcPath)
 
-    exec(gccArgs: _*)
+      var clangArgs = Seq(clang, clangMainFile, bcPath, "-o", executableFile) ++ linkedLibraries
+
+      clangArgs ++= Seq(
+        "-O3",
+        "-flto=full",
+        "-Wno-override-module"
+      )
+
+      if (C.config.native()) {
+        clangArgs :+= "-march=native"
+      }
+
+      exec(clangArgs: _*)
+    } else {
+      exec(opt, llPath, "-O2", "-o", bcPath)
+
+      var clangArgs = Seq(clang, clangMainFile, "-o", executableFile, bcPath, "-Wno-override-module") ++ linkedLibraries
+
+      if (C.config.debug()) clangArgs ++= Seq("-g", "-Wall", "-Wextra", "-Werror")
+      if (C.config.valgrind()) clangArgs ++= Seq("-O0", "-g")
+      else if (C.config.debug()) clangArgs ++= Seq("-fsanitize=address,undefined", "-fstack-protector-all")
+
+      exec(clangArgs: _*)
+    }
 
     Some(executableFile)
 }
