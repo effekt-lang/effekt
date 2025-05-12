@@ -263,6 +263,7 @@ trait DocumentationGenerator {
       "tparams" -> generateTparams(tparams.unspan),
       "vparams" -> generateVparams(vparams.unspan),
       "bparams" -> generateBparams(bparams.unspan),
+      "ret" -> generate(ret),
       "doc" -> generate(doc),
       "span" -> generate(span),
     ))
