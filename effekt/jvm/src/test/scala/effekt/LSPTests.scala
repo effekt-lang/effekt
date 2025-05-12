@@ -2,7 +2,7 @@ package effekt
 
 import com.google.gson.{JsonElement, JsonParser}
 import munit.FunSuite
-import org.eclipse.lsp4j.{DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, VersionedTextDocumentIdentifier}
+import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit}
 import org.eclipse.lsp4j.jsonrpc.messages
 
 import java.io.{PipedInputStream, PipedOutputStream}
@@ -266,15 +266,45 @@ class LSPTests extends FunSuite {
     }
   }
 
-  // FIXME: Hovering over holes does not work at the moment.
-  // https://github.com/effekt-lang/effekt/issues/549
-  test("Hovering over hole shows nothing") {
+  test("Hovering over hole shows inside and outside types") {
     withClientAndServer { (client, server) =>
       val (textDoc, cursor) = raw"""
-                                |def foo(x: Int) = <>
-                                |                  ↑
+                                |def foo(x: Int): Bool = <{ x }>
+                                |                          ↑
                                 |""".textDocumentAndPosition
-      val hoverContents = ""
+      val hoverContents =
+        raw"""| | Outside       | Inside        |
+             | |:------------- |:------------- |
+             | | `Bool` | `Int` |
+             |""".stripMargin
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
+      val hover = server.getTextDocumentService().hover(hoverParams).get()
+
+      val expectedHover = new Hover()
+      expectedHover.setRange(new Range(cursor, cursor))
+      expectedHover.setContents(new MarkupContent("markdown", hoverContents))
+      assertEquals(hover, expectedHover)
+    }
+  }
+
+  // TODO: Hovering over a hole should show effects as well!
+  test("Hovering over hole doesn't show effects") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, cursor) = raw"""
+                                |effect raise(): Unit
+                                |def foo(x: Int): Int / { raise } = <{ do raise(); 42 }>
+                                |                                     ↑
+                                |""".textDocumentAndPosition
+      val hoverContents =
+        raw"""| | Outside       | Inside        |
+             | |:------------- |:------------- |
+             | | `Int` | `Int` |
+             |""".stripMargin
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
@@ -725,6 +755,104 @@ class LSPTests extends FunSuite {
 
       val inlayHintsAfterChange = server.getTextDocumentService().inlayHint(paramsAfterChange).get()
       assertEquals(inlayHintsAfterChange, expectedInlayHints.asJava)
+    }
+  }
+
+  // LSP: Code Actions
+  //
+  //
+
+  // Regression test: we had codeActions targeting the wrong file
+  test("codeAction response targets correct file") {
+    withClientAndServer { (client, server) =>
+      val (textDoc1, positions1) =
+        raw"""
+             |def foo(x: Int) = <{ x }>
+             |    ↑          ↑↑
+             |""".textDocumentAndPositions
+
+      textDoc1.setUri("file://foo.effekt")
+
+      val (textDoc2, positions2) =
+        raw"""
+             |def bar(x: Int) = <{ x }>
+             |     ↑         ↑↑
+             |""".textDocumentAndPositions
+
+      textDoc2.setUri("file://bar.effekt")
+
+      val didOpenParams1 = new DidOpenTextDocumentParams()
+      didOpenParams1.setTextDocument(textDoc1)
+      server.getTextDocumentService().didOpen(didOpenParams1)
+
+      val didOpenParams2 = new DidOpenTextDocumentParams()
+      didOpenParams2.setTextDocument(textDoc2)
+      server.getTextDocumentService().didOpen(didOpenParams2)
+
+      val codeActionParams1 = new CodeActionParams()
+      codeActionParams1.setTextDocument(textDoc1.versionedTextDocumentIdentifier)
+      codeActionParams1.setRange(new Range(positions1(0), positions1(0)))
+
+      val codeActionParams2 = new CodeActionParams()
+      codeActionParams2.setTextDocument(textDoc2.versionedTextDocumentIdentifier)
+      codeActionParams2.setRange(new Range(positions2(0), positions2(0)))
+
+      val expected1: Seq[messages.Either[Command, CodeAction]] = Seq(
+        messages.Either.forRight[Command, CodeAction]({
+          val action = new CodeAction()
+          action.setTitle("Update return type with inferred effects")
+          action.setKind(CodeActionKind.Refactor)
+
+          val edit = new WorkspaceEdit()
+
+          val textEdit = new TextEdit()
+          textEdit.setRange(Range(positions1(2), positions1(1)))
+          textEdit.setNewText(": ValueTypeApp(Nothing,List()) / Effects(List())")
+
+          val changes = new util.HashMap[String, util.List[TextEdit]]()
+          val textEdits = new util.ArrayList[TextEdit]()
+          textEdits.add(textEdit)
+          changes.put("file://foo.effekt", textEdits)
+
+          edit.setChanges(changes)
+
+          action.setEdit(edit)
+
+          action
+        })
+      )
+
+      val expected2: Seq[messages.Either[Command, CodeAction]] = Seq(
+        messages.Either.forRight[Command, CodeAction]({
+          val action = new CodeAction()
+          action.setTitle("Update return type with inferred effects")
+          action.setKind(CodeActionKind.Refactor)
+
+          val edit = new WorkspaceEdit()
+
+          val textEdit = new TextEdit()
+          val range = new Range(positions2(2), positions2(1))
+          textEdit.setRange(range)
+          textEdit.setNewText(": ValueTypeApp(Nothing,List()) / Effects(List())")
+
+          val changes = new util.HashMap[String, util.List[TextEdit]]()
+          val textEdits = new util.ArrayList[TextEdit]()
+          textEdits.add(textEdit)
+          changes.put("file://bar.effekt", textEdits)
+
+          edit.setChanges(changes)
+
+          action.setEdit(edit)
+
+          action
+        })
+      )
+
+      val response1 = server.codeAction(codeActionParams1).get()
+      val response2 = server.codeAction(codeActionParams2).get()
+
+      assertEquals(response1, expected1.asJava)
+      assertEquals(response2, expected2.asJava)
     }
   }
 
