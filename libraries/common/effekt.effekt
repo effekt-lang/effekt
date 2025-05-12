@@ -42,10 +42,31 @@ extern def println(value: String): Unit =
   js "$effekt.println(${value})"
   chez "(println_impl ${value})"
   llvm """
-    call void @c_io_println_String(%Pos ${value})
+    call void @c_io_println(%Pos ${value})
     ret %Pos zeroinitializer ; Unit
   """
   vm "effekt::println(String)"
+
+extern jsNode """
+$effekt.readln = function readln$impl(callback) {
+  const readline = require('node:readline').createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  readline.question('', (answer) => {
+    readline.close();
+    callback(answer);
+  });
+}
+"""
+
+extern async def readln(): String =
+  jsNode "$effekt.capture(callback => $effekt.readln(callback))"
+  llvm """
+    %result = call %Pos @c_io_readln()
+    tail call void @resume_Pos(%Stack %stack, %Pos %result)
+    ret void
+  """
 
 def println(value: Int): Unit = println(value.show)
 def println(value: Unit): Unit = println(value.show)
