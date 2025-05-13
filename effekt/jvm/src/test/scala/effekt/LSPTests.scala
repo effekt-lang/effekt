@@ -1089,7 +1089,16 @@ class LSPTests extends FunSuite {
              |      ),
              |      Return(
              |        Hole(
-             |          Return(Literal((), ValueTypeApp(Unit_whatever, Nil))),
+             |          IdDef(
+             |            hole,
+             |            Span(
+             |              StringSource(def main() = <>, file://test.effekt),
+             |              13,
+             |              15,
+             |              Synthesized()
+             |            )
+             |          ),
+             |          Return(Literal((), ValueTypeApp(Unit_405, Nil))),
              |          Span(StringSource(def main() = <>, file://test.effekt), 13, 15, Real())
              |        )
              |      ),
