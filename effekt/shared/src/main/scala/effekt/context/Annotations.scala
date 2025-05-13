@@ -322,7 +322,7 @@ object Annotations {
  * The DB is also "global" in the sense, that modifications cannot be backtracked.
  * It should thus only be used to store a "ground" truth that will not be changed again.
  */
-trait TreeAnnotations { self: Context =>
+trait TreeAnnotations { self: ErrorReporter =>
   private type AnnotationsMap = Map[TreeAnnotation[_, _], Any]
 
   private type Annotations = Map[TreeAnnotation[_, _], Any]
@@ -433,50 +433,11 @@ trait TreeAnnotations { self: Context =>
   // Symbols
   // -------
 
-  /**
-   * Stores symbol `sym` as the corresponding symbol for `id`
-   *
-   * Almost all calls to this method are performed by Namer, which
-   * resolves identifier and then assigns the symbols.
-   *
-   * Typer also calls this method to resolve overloads and store
-   * the result of overload resolution.
-   */
-  def assignSymbol(id: source.Id, sym: Symbol): Unit = id match {
-    case id: source.IdDef =>
-      annotate(Annotations.DefinitionTree, sym, id)
-      sym match {
-        case _: ResumeParam =>
-        case s: symbols.TrackedParam =>
-          // for tracked params, also note the id als definition site for the capture.
-          annotate(Annotations.DefinitionTree, s.capture, id)
-        case _ =>
-      }
-      annotate(Annotations.Symbol, id, sym)
-      addDefinedSymbolToSource(sym)
-    case _ =>
-      annotate(Annotations.Symbol, id, sym)
-      // addDefinedSymbolToSource(sym)
-  }
-
   def symbolOf(id: source.Id): Symbol = symbolOption(id) getOrElse {
     panic(s"Internal Compiler Error: Cannot find symbol for ${id}")
   }
   def symbolOption(id: source.Id): Option[Symbol] =
     annotationOption(Annotations.Symbol, id)
-
-  /**
-   * Searching the definitions for a Reference
-   *
-   * This one can fail.
-   */
-  def symbolOf(tree: source.Reference): Symbol = {
-    val sym = symbolOf(tree.id)
-
-    val refs = annotationOption(Annotations.References, sym).getOrElse(Nil)
-    annotate(Annotations.References, sym, tree :: refs)
-    sym
-  }
 
   /**
    * Searching the symbol for a definition
@@ -494,7 +455,7 @@ trait TreeAnnotations { self: Context =>
  * Even when a separate Source object is crated for the same file contents, it should track the same annotations.
  * This situation frequently occurs in the language server where sources are transmitted from the language client (editor).
  */
-trait SourceAnnotations { self: Context =>
+trait SourceAnnotations { self: ErrorReporter =>
   import scala.collection.mutable
 
   private val sourceAnnotationsDB: mutable.Map[kiama.util.Source, Map[SourceAnnotation[_, _], Any]] =
@@ -518,23 +479,12 @@ trait SourceAnnotations { self: Context =>
    */
   def sourceSymbolsFor(src: kiama.util.Source): Set[symbols.Symbol] =
     annotationOption(Annotations.DefinedSymbols, src).getOrElse(Set.empty)
-
-  /**
-   * Adds [[s]] to the set of defined symbols for the current module, by writing
-   * it into the [[Annotations.DefinedSymbols]] annotation.
-   */
-  def addDefinedSymbolToSource(s: symbols.Symbol): Unit =
-    if (module != null) {
-      val src = module.source
-      val syms = annotationOption(Annotations.DefinedSymbols, src).getOrElse(Set.empty)
-      annotate(Annotations.DefinedSymbols, src, syms + s)
-    }
 }
 
 /**
  * Global annotations on symbols
  */
-trait SymbolAnnotations { self: Context =>
+trait SymbolAnnotations { self: ErrorReporter =>
 
   private val symbolAnnotationsDB: util.IdentityHashMap[symbols.Symbol, Map[SymbolAnnotation[_, _], Any]] =
     new util.IdentityHashMap()

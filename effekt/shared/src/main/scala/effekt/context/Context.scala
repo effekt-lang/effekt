@@ -5,10 +5,10 @@ import effekt.namer.NamerOps
 import effekt.typer.TyperOps
 import effekt.core.TransformerOps
 import effekt.source.Tree
-import effekt.util.messages.{ ErrorReporter, EffektMessages }
+import effekt.symbols.TrackedParam.ResumeParam
+import effekt.util.messages.{EffektMessages, ErrorReporter}
 import effekt.util.Timers
-import effekt.symbols.Module
-
+import effekt.symbols.{Module, Symbol}
 import kiama.util.Positions
 
 /**
@@ -20,7 +20,7 @@ trait ContextOps
     extends ErrorReporter
     with TreeAnnotations
     with SourceAnnotations 
-    with SymbolAnnotations { self: Context =>
+    with SymbolAnnotations { Self: ErrorReporter =>
 
   /**
    * Used throughout the compiler to create a new "scope"
@@ -127,6 +127,56 @@ abstract class Context(val positions: Positions)
     db = s.annotations
     cache = s.cache
   }
+
+  /**
+   * Stores symbol `sym` as the corresponding symbol for `id`
+   *
+   * Almost all calls to this method are performed by Namer, which
+   * resolves identifier and then assigns the symbols.
+   *
+   * Typer also calls this method to resolve overloads and store
+   * the result of overload resolution.
+   */
+  def assignSymbol(id: source.Id, sym: Symbol): Unit = id match {
+    case id: source.IdDef =>
+      annotate(Annotations.DefinitionTree, sym, id)
+      sym match {
+        case _: ResumeParam =>
+        case s: symbols.TrackedParam =>
+          // for tracked params, also note the id als definition site for the capture.
+          annotate(Annotations.DefinitionTree, s.capture, id)
+        case _ =>
+      }
+      annotate(Annotations.Symbol, id, sym)
+      addDefinedSymbolToSource(sym)
+    case _ =>
+      annotate(Annotations.Symbol, id, sym)
+    // addDefinedSymbolToSource(sym)
+  }
+
+  /**
+   * Searching the definitions for a Reference
+   *
+   * This one can fail.
+   */
+  def symbolOf(tree: source.Reference): Symbol = {
+    val sym = symbolOf(tree.id)
+
+    val refs = annotationOption(Annotations.References, sym).getOrElse(Nil)
+    annotate(Annotations.References, sym, tree :: refs)
+    sym
+  }
+
+  /**
+   * Adds [[s]] to the set of defined symbols for the current module, by writing
+   * it into the [[Annotations.DefinedSymbols]] annotation.
+   */
+  def addDefinedSymbolToSource(s: symbols.Symbol): Unit =
+    if (module != null) {
+      val src = module.source
+      val syms = annotationOption(Annotations.DefinedSymbols, src).getOrElse(Set.empty)
+      annotate(Annotations.DefinedSymbols, src, syms + s)
+    }
 }
 
 /**

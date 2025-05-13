@@ -4,7 +4,7 @@ package typer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{Annotation, Annotations, Context, ContextOps}
+import effekt.context.{Annotation, Annotations, Context, ContextOps, SymbolAnnotations, TreeAnnotations}
 import effekt.context.assertions.*
 import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, Many, MatchGuard, MatchPattern, Maybe, ModuleDecl, OpClause, Stmt, TagPattern, Term, Tree, resolve, resolveBlockRef, resolveBlockType, resolveValueType, symbol}
 import effekt.source.Term.BlockLiteral
@@ -1438,7 +1438,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
  */
 private[typer] case class TyperState(annotations: Annotations, unification: UnificationState, capabilityScope: CapabilityScope)
 
-trait TyperOps extends ContextOps { self: Context =>
+trait TyperOps extends ContextOps { self: ErrorReporter =>
 
 
   /**
@@ -1501,11 +1501,11 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] var capabilityScope: CapabilityScope = GlobalCapabilityScope
 
-  private [typer] def bindingCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam])(f: => R): R = {
+  private [typer] def bindingCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam])(f: => R)(using C: Context): R = {
     bindCapabilities(binder, caps)
     capabilityScope = BindSome(
       binder,
-      caps.map { c => c.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType -> c }.toMap,
+      caps.map { c => c.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType(using self) -> c }.toMap,
       capabilityScope
     )
     val result = f
@@ -1513,9 +1513,9 @@ trait TyperOps extends ContextOps { self: Context =>
     result
   }
 
-  private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit =
+  private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam])(using C: Context): Unit =
     val capabilities = caps map { cap =>
-      assertConcreteEffect(cap.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType)
+      assertConcreteEffect(cap.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType(using self))
       positions.dupPos(binder, cap)
       cap
     }
@@ -1532,7 +1532,7 @@ trait TyperOps extends ContextOps { self: Context =>
   /**
    * Has the potential side-effect of creating a fresh capability. Also see [[BindAll.capabilityFor()]]
    */
-  private [typer] def capabilityFor(tpe: InterfaceType): symbols.BlockParam =
+  private [typer] def capabilityFor(tpe: InterfaceType)(using C: Context): symbols.BlockParam =
     assertConcreteEffect(tpe)
     val cap = capabilityScope.capabilityFor(tpe)
     annotations.update(Annotations.Captures, cap, CaptureSet(cap.capture))
@@ -1552,12 +1552,12 @@ trait TyperOps extends ContextOps { self: Context =>
     bind(param, capture)
     param
 
-  private [typer] def provideCapabilities(call: source.CallLike, effs: List[InterfaceType]): List[BlockParam] =
+  private [typer] def provideCapabilities(call: source.CallLike, effs: List[InterfaceType])(using C: Context): List[BlockParam] =
     val caps = effs.map(capabilityFor)
     annotations.update(Annotations.CapabilityArguments, call, caps)
     caps
 
-  private [typer] def capabilityReceiver(call: source.Do, eff: InterfaceType): BlockParam =
+  private [typer] def capabilityReceiver(call: source.Do, eff: InterfaceType)(using C: Context): BlockParam =
     val cap = capabilityFor(eff)
     annotations.update(Annotations.CapabilityReceiver, call, cap)
     cap
@@ -1647,7 +1647,7 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def annotatedTypeArgs(call: source.CallLike): List[symbols.ValueType] = {
-    annotations.apply(Annotations.TypeArguments, call)
+    annotations.apply(Annotations.TypeArguments, call)(using self)
   }
 
   //</editor-fold>
@@ -1669,7 +1669,7 @@ trait TyperOps extends ContextOps { self: Context =>
     capabilityScope = st.capabilityScope.copy
   }
 
-  private[typer] def commitTypeAnnotations(): Unit = {
+  private[typer] def commitTypeAnnotations()(using treesDB: TreeAnnotations, symbolsDB: SymbolAnnotations): Unit = {
     val subst = unification.substitution
 
     var capturesForLSP: List[(Tree, CaptureSet)] = Nil
