@@ -67,6 +67,16 @@ def repeat(str: String, n: Int): String = {
   go(n, "")
 }
 
+/// Left-pad the given string with spaces
+def padLeft(str: String, n: Int): String = {
+  " ".repeat(n - str.length) ++ str
+}
+
+/// Right-pad the given string with spaces
+def padRight(str: String, n: Int): String = {
+  str ++ " ".repeat(n - str.length)
+}
+
 // TODO use .split() in JS
 def split(str: String, sep: String): List[String] = {
   val strLength = str.length

@@ -67,4 +67,9 @@ def main() = {
   println("foobarbaz".lastIndexOf("a"))
   println("foobarba".lastIndexOf("a"))
 
+  println("a".padLeft(0))
+  println("a".padLeft(8))
+  println("b".padRight(0))
+  println("b".padRight(8))
+
 }
