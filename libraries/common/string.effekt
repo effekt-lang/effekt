@@ -64,7 +64,7 @@ def repeat(str: String, n: Int): String = {
     if (n == 0) result
     else go(n - 1, result ++ str)
   }
-  go(n, "")
+  if(n < 0) { go(n, "") } else { "" }
 }
 
 /// Left-pad the given string with spaces
