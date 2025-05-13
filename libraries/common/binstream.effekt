@@ -72,13 +72,12 @@ def bytesBE(n: Int): Unit / emit[Byte] = bytesBE(n, 4)
 def bytes(n: Int): Unit / emit[Byte] = bytesBE(n)
 
 /// emit bytes of the given int as width bytes (in 2s-complement) in little-endian byte order
-def signedBytesLE(int: Int, width: Int): Unit / emit[Byte] = {
+def signedBytesLE(int: Int, width: Int): Unit / emit[Byte] =
   if (int < 0) {
     bytesLE(bitwiseNot(neg(int)) + 1, width)
   } else {
     bytesLE(int, width)
   }
-}
 /// emit bytes of the given int as width bytes (in 2s-complement) in big-endian byte order
 def signedBytesBE(int: Int, width: Int): Unit / emit[Byte] = {
   if (int < 0) {
