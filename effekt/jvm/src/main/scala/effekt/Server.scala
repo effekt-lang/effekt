@@ -5,7 +5,7 @@ import kiama.util.Convert.*
 import effekt.context.Context
 import effekt.source.Def.FunDef
 import effekt.source.Term.Hole
-import effekt.source.Tree
+import effekt.source.{Span, Tree}
 import effekt.symbols.Binder.{ValBinder, VarBinder}
 import effekt.symbols.BlockTypeConstructor.{ExternInterface, Interface}
 import effekt.symbols.TypeConstructor.{DataType, ExternType}
@@ -434,19 +434,14 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     case _ => None
   }
 
-  def EffektCodeAction(description: String, oldNode: Any, newText: String): Option[CodeAction] = {
-    for {
-      posFrom <- positions.getStart(oldNode)
-      posTo <- positions.getFinish(oldNode)
-    } yield {
-      val textEdit = new TextEdit(convertRange(Some(posFrom), Some(posTo)), newText)
-      val changes = Map(posFrom.source.name -> seqToJavaList(List(textEdit)))
-      val workspaceEdit = new WorkspaceEdit(mapToJavaMap(changes))
-      val action = new CodeAction(description)
-      action.setKind(CodeActionKind.Refactor)
-      action.setEdit(workspaceEdit)
-      action
-    }
+  def EffektCodeAction(description: String, source: Source, range: kiama.util.Range, newText: String): CodeAction = {
+    val textEdit = new TextEdit(convertRange(range), newText)
+    val changes = Map(source.name -> seqToJavaList(List(textEdit)))
+    val workspaceEdit = new WorkspaceEdit(mapToJavaMap(changes))
+    val action = new CodeAction(description)
+    action.setKind(CodeActionKind.Refactor)
+    action.setEdit(workspaceEdit)
+    action
   }
 
   def inferEffectsAction(fun: FunDef)(using C: Context): Option[CodeAction] = for {
@@ -458,21 +453,10 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     if ann.map(needsUpdate(_, (tpe, eff))).getOrElse(true)
   } yield {
     val newText = if (eff.effects.nonEmpty)
-        pp": ${tpe} / ${eff}"
+      pp": ${tpe} / ${eff}"
     else
-        pp": ${tpe}"
-    val textEdit = new TextEdit(
-      convertRange(fun.ret.span.range),
-      newText
-    )
-    val changes = Map(
-      fun.ret.span.source.name -> seqToJavaList(List(textEdit))
-    )
-    val workspaceEdit = new WorkspaceEdit(mapToJavaMap(changes))
-    val action = new CodeAction("Update return type with inferred effects")
-    action.setKind(CodeActionKind.Refactor)
-    action.setEdit(workspaceEdit)
-    action
+      pp": ${tpe}"
+    EffektCodeAction("Update return type with inferred effects", fun.ret.span.source, fun.ret.span.range, newText)
   }
 
   def closeHoleAction(hole: Hole)(using C: Context): Option[CodeAction] = for {
@@ -481,15 +465,17 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     if holeTpe == contentTpe
     res <- hole match {
       case Hole(source.Return(exp)) => for {
+        posFrom <- positions.getStart(hole)
+        posTo <- positions.getFinish(hole)
         text <- positions.textOf(exp)
-        res <- EffektCodeAction("Close hole", hole, text)
-      } yield res
+      } yield EffektCodeAction("Close hole", posFrom.source, kiama.util.Range(posFrom, posTo), text)
 
       // <{ s1 ; s2; ... }>
       case Hole(stmts) => for {
+        posFrom <- positions.getStart(hole)
+        posTo <- positions.getFinish(hole)
         text <- positions.textOf(stmts)
-        res <- EffektCodeAction("Close hole", hole, s"locally { ${text} }")
-      } yield res
+      } yield EffektCodeAction("Close hole", posFrom.source, kiama.util.Range(posFrom, posTo), s"locally { ${text} }")
     }
   } yield res
 
