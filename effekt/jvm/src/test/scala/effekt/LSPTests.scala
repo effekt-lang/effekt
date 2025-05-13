@@ -1,6 +1,7 @@
 package effekt
 
 import com.google.gson.{JsonElement, JsonParser}
+import effekt.Intelligence.{TermBinding, TypeBinding}
 import munit.FunSuite
 import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit}
 import org.eclipse.lsp4j.jsonrpc.messages
@@ -1154,6 +1155,78 @@ class LSPTests extends FunSuite {
     }
   }
 
+  // Effekt: Publish holes
+  //
+  //
+
+  test("Server publishes list of holes in file") {
+    withClientAndServer { (client, server) =>
+      val source =
+        raw"""
+             |type MyInt = Int
+             |def foo(x: Int): Bool = <{ x }>
+             |def bar(x: String): Int = <>
+             |""".textDocument
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"showHoles": true}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val expectedHoles = List()
+
+      val termsFoo = List(
+        TermBinding(
+          qualifier = List(),
+          name = "hole",
+          `type` = None
+        ),
+        TermBinding(
+          qualifier = List(),
+          name = "x",
+          `type` = Some(
+            value = "Int"
+          )
+        ),
+        TermBinding(
+          qualifier = List(),
+          name = "bar",
+          `type` = Some(
+            value = "String => Int"
+          )
+        ),
+        TermBinding(
+          qualifier = List(),
+          name = "foo",
+          `type` = Some(
+            value = "Int => Bool"
+          )
+        )
+      )
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 2)
+      assertEquals(receivedHoles.head.holes(0).id, "hole")
+      assertEquals(receivedHoles.head.holes(0).innerType, Some("Int"))
+      assertEquals(receivedHoles.head.holes(0).expectedType, Some("Bool"))
+      assertEquals(receivedHoles.head.holes(0).terms.toList, termsFoo.toList)
+      assertEquals(receivedHoles.head.holes(0).types, List(
+        TypeBinding(
+          qualifier = Nil,
+          name = "MyInt",
+          definition = "type MyInt = Int"
+        )
+      ))
+      assertEquals(receivedHoles.head.holes(1).id, "hole")
+      assertEquals(receivedHoles.head.holes(1).innerType, Some("Unit"))
+      assertEquals(receivedHoles.head.holes(1).expectedType, Some("Int"))
+    }
+  }
+
   // Text document DSL
   //
   //
@@ -1196,6 +1269,7 @@ class LSPTests extends FunSuite {
 class MockLanguageClient extends EffektLanguageClient {
   private val diagnosticQueue: mutable.Queue[PublishDiagnosticsParams] = mutable.Queue.empty
   private val publishIRQueue: mutable.Queue[EffektPublishIRParams] = mutable.Queue.empty
+  private val publishHolesQueue: mutable.Queue[EffektPublishHolesParams] = mutable.Queue.empty
 
   /**
    * Pops all diagnostics received since the last call to this method.
@@ -1213,6 +1287,12 @@ class MockLanguageClient extends EffektLanguageClient {
     val irs = publishIRQueue.toSeq
     publishIRQueue.clear()
     irs
+  }
+
+  def receivedHoles(): Seq[EffektPublishHolesParams] = {
+    val holes = publishHolesQueue.toSeq
+    publishHolesQueue.clear()
+    holes
   }
 
   override def telemetryEvent(`object`: Any): Unit = {
@@ -1238,6 +1318,10 @@ class MockLanguageClient extends EffektLanguageClient {
 
   override def publishIR(params: EffektPublishIRParams): Unit = {
     publishIRQueue.enqueue(params)
+  }
+
+  override def publishHoles(params: EffektPublishHolesParams): Unit = {
+    publishHolesQueue.enqueue(params)
   }
 }
 
