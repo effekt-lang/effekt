@@ -453,9 +453,9 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     if ann.map(needsUpdate(_, (tpe, eff))).getOrElse(true)
   } yield {
     val newText = if (eff.effects.nonEmpty)
-      pp": ${tpe} / ${eff}"
+      s": ${TypePrinter.show(tpe)} / ${TypePrinter.show(eff)}"
     else
-      pp": ${tpe}"
+      s": ${TypePrinter.show(tpe)}"
     EffektCodeAction("Update return type with inferred effects", fun.ret.span.source, fun.ret.span.range, newText)
   }
 
