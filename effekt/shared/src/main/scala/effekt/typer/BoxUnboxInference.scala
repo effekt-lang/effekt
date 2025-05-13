@@ -106,8 +106,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     case Region(name, body) =>
       Region(name, rewrite(body))
 
-    case Hole(stmts) =>
-      Hole(rewrite(stmts))
+    case Hole(stmts, span) =>
+      Hole(rewrite(stmts), span)
 
     case Box(c, b) =>
       Box(c, rewriteAsBlock(b))

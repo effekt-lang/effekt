@@ -132,6 +132,8 @@ case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = 
    * creates a fake copy of this span
    */
   def synthesized: Span = Span(source, from, to, origin = Origin.Synthesized)
+
+  def range: kiama.util.Range = kiama.util.Range(source.offsetToPosition(from), source.offsetToPosition(to))
 }
 
 object Span {
@@ -449,7 +451,7 @@ enum Term extends Tree {
   case Assign(id: IdRef, expr: Term) extends Term, Reference
 
   case Literal(value: Any, tpe: symbols.ValueType)
-  case Hole(stmts: Stmt)
+  case Hole(stmts: Stmt, span: Span)
 
   // Boxing and unboxing to represent first-class values
   case Box(capt: Option[CaptureSet], block: Term)

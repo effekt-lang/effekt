@@ -1026,11 +1026,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     }
 
   def isHole: Boolean = peek(`<>`) || peek(`<{`)
-  def hole(): Term = peek.kind match {
-    case `<>` => `<>` ~> Hole(Return(UnitLit()))
-    case `<{` => `<{` ~> Hole(stmts()) <~ `}>`
-    case _ => fail("Expected hole")
-  }
+  def hole(): Term = {
+    nonterminal:
+      peek.kind match {
+        case `<>` => `<>` ~> Hole(Return(UnitLit()), span())
+        case `<{` => Hole(`<{` ~> stmts() <~ `}>`, span())
+        case _ => fail("Expected hole")
+      }
+    }
 
   def isLiteral: Boolean = peek.kind match {
     case _: (Integer | Float | Str | Chr) => true

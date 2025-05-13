@@ -762,13 +762,107 @@ class LSPTests extends FunSuite {
   //
   //
 
+  test("codeAction infers return type and effects") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, positions) =
+        raw"""
+             |effect bar(): Unit
+             |def foo(x: Int) = { do bar(); x }
+             |    ↑          ↑
+             |""".textDocumentAndPositions
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val codeActionParams = new CodeActionParams()
+      codeActionParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      codeActionParams.setRange(new Range(positions(0), positions(0)))
+
+      val expected: Seq[messages.Either[Command, CodeAction]] = Seq(
+        messages.Either.forRight[Command, CodeAction]({
+          val action = new CodeAction()
+          action.setTitle("Update return type with inferred effects")
+          action.setKind(CodeActionKind.Refactor)
+
+          val edit = new WorkspaceEdit()
+
+          val textEdit = new TextEdit()
+          textEdit.setRange(Range(positions(1), positions(1)))
+          textEdit.setNewText(": Int / { bar }")
+
+          val changes = new util.HashMap[String, util.List[TextEdit]]()
+          val textEdits = new util.ArrayList[TextEdit]()
+          textEdits.add(textEdit)
+          changes.put("file://test.effekt", textEdits)
+
+          edit.setChanges(changes)
+
+          action.setEdit(edit)
+
+          action
+        })
+      )
+
+      val response = server.codeAction(codeActionParams).get()
+      assertEquals(response, expected.asJava)
+    }
+  }
+
+  test("codeAction doesn't show empty effects list") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, positions) =
+        raw"""
+             |def foo(x: Int) = x
+             |    ↑          ↑
+             |""".textDocumentAndPositions
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val codeActionParams = new CodeActionParams()
+      codeActionParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      codeActionParams.setRange(new Range(positions(0), positions(0)))
+
+      val expected: Seq[messages.Either[Command, CodeAction]] = Seq(
+        messages.Either.forRight[Command, CodeAction]({
+          val action = new CodeAction()
+          action.setTitle("Update return type with inferred effects")
+          action.setKind(CodeActionKind.Refactor)
+
+          val edit = new WorkspaceEdit()
+
+          val textEdit = new TextEdit()
+          textEdit.setRange(Range(positions(1), positions(1)))
+          // Rather than `: Int / {}`, we just show `: Int`
+          textEdit.setNewText(": Int")
+
+          val changes = new util.HashMap[String, util.List[TextEdit]]()
+          val textEdits = new util.ArrayList[TextEdit]()
+          textEdits.add(textEdit)
+          changes.put("file://test.effekt", textEdits)
+
+          edit.setChanges(changes)
+
+          action.setEdit(edit)
+
+          action
+        })
+      )
+
+      val response = server.codeAction(codeActionParams).get()
+      assertEquals(response, expected.asJava)
+    }
+  }
+
   // Regression test: we had codeActions targeting the wrong file
   test("codeAction response targets correct file") {
     withClientAndServer { (client, server) =>
       val (textDoc1, positions1) =
         raw"""
              |def foo(x: Int) = <{ x }>
-             |    ↑          ↑↑
+             |    ↑          ↑
              |""".textDocumentAndPositions
 
       textDoc1.setUri("file://foo.effekt")
@@ -776,7 +870,7 @@ class LSPTests extends FunSuite {
       val (textDoc2, positions2) =
         raw"""
              |def bar(x: Int) = <{ x }>
-             |     ↑         ↑↑
+             |     ↑         ↑
              |""".textDocumentAndPositions
 
       textDoc2.setUri("file://bar.effekt")
@@ -806,8 +900,8 @@ class LSPTests extends FunSuite {
           val edit = new WorkspaceEdit()
 
           val textEdit = new TextEdit()
-          textEdit.setRange(Range(positions1(2), positions1(1)))
-          textEdit.setNewText(": ValueTypeApp(Nothing,List()) / Effects(List())")
+          textEdit.setRange(Range(positions1(1), positions1(1)))
+          textEdit.setNewText(": Nothing")
 
           val changes = new util.HashMap[String, util.List[TextEdit]]()
           val textEdits = new util.ArrayList[TextEdit]()
@@ -831,9 +925,9 @@ class LSPTests extends FunSuite {
           val edit = new WorkspaceEdit()
 
           val textEdit = new TextEdit()
-          val range = new Range(positions2(2), positions2(1))
+          val range = new Range(positions2(1), positions2(1))
           textEdit.setRange(range)
-          textEdit.setNewText(": ValueTypeApp(Nothing,List()) / Effects(List())")
+          textEdit.setNewText(": Nothing")
 
           val changes = new util.HashMap[String, util.List[TextEdit]]()
           val textEdits = new util.ArrayList[TextEdit]()
@@ -992,7 +1086,12 @@ class LSPTests extends FunSuite {
              |        None(),
              |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
              |      ),
-             |      Return(Hole(Return(Literal((), ValueTypeApp(Unit_whatever, Nil))))),
+             |      Return(
+             |        Hole(
+             |          Return(Literal((), ValueTypeApp(Unit_whatever, Nil))),
+             |          Span(StringSource(def main() = <>, file://test.effekt), 13, 15, Real())
+             |        )
+             |      ),
              |      Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
              |    )
              |  ),

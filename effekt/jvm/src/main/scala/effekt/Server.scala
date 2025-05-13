@@ -1,24 +1,24 @@
 package effekt
 
 import com.google.gson.JsonElement
-import kiama.util.Convert.*
 import effekt.context.Context
 import effekt.source.Def.FunDef
 import effekt.source.Term.Hole
-import effekt.source.Tree
+import effekt.source.{Span, Tree}
 import effekt.symbols.Binder.{ValBinder, VarBinder}
 import effekt.symbols.BlockTypeConstructor.{ExternInterface, Interface}
 import effekt.symbols.TypeConstructor.{DataType, ExternType}
 import effekt.symbols.{Anon, Binder, Callable, Effects, Module, Param, Symbol, TypeAlias, TypePrinter, UserFunction, ValueType, isSynthetic}
-import effekt.util.{PlainMessaging, PrettyPrinter}
 import effekt.util.messages.EffektError
+import effekt.util.{PlainMessaging, PrettyPrinter}
 import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
+import kiama.util.Convert.*
 import kiama.util.{Collections, Convert, Position, Source}
 import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
 import org.eclipse.lsp4j.jsonrpc.{Launcher, messages}
 import org.eclipse.lsp4j.launch.LSPLauncher
 import org.eclipse.lsp4j.services.*
-import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, MessageParams, MessageType, PublishDiagnosticsParams, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, SymbolInformation, SymbolKind, TextDocumentSaveRegistrationOptions, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, WorkspaceEdit, Range as LSPRange}
+import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, MessageParams, MessageType, PublishDiagnosticsParams, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, SymbolInformation, SymbolKind, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, WorkspaceEdit, Range as LSPRange}
 
 import java.io.{InputStream, OutputStream, PrintWriter}
 import java.net.ServerSocket
@@ -434,60 +434,44 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     case _ => None
   }
 
-  def EffektCodeAction(description: String, oldNode: Any, newText: String): Option[CodeAction] = {
-    for {
-      posFrom <- positions.getStart(oldNode)
-      posTo <- positions.getFinish(oldNode)
-    } yield {
-      val textEdit = new TextEdit(convertRange(Some(posFrom), Some(posTo)), newText)
-      val changes = Map(posFrom.source.name -> seqToJavaList(List(textEdit)))
-      val workspaceEdit = new WorkspaceEdit(mapToJavaMap(changes))
-      val action = new CodeAction(description)
-      action.setKind(CodeActionKind.Refactor)
-      action.setEdit(workspaceEdit)
-      action
-    }
+  def EffektCodeAction(description: String, span: Span, newText: String): CodeAction = {
+    val textEdit = new TextEdit(convertRange(span.range), newText)
+    val changes = Map(span.source.name -> seqToJavaList(List(textEdit)))
+    val workspaceEdit = new WorkspaceEdit(mapToJavaMap(changes))
+    val action = new CodeAction(description)
+    action.setKind(CodeActionKind.Refactor)
+    action.setEdit(workspaceEdit)
+    action
   }
 
-  /**
-   * FIXME: The following comment was left on the previous Kiama-based implementation and can now be addressed:
-   *
-   * TODO it would be great, if Kiama would allow setting the position of the code action separately
-   * from the node to replace. Here, we replace the annotated return type, but would need the
-   * action on the function (since the return type might not exist in the original program).
-   *
-   * Also, it is necessary to be able to manually set the code action kind (and register them on startup).
-   * This way, we can use custom kinds like `refactor.closehole` that can be mapped to keys.
-   */
   def inferEffectsAction(fun: FunDef)(using C: Context): Option[CodeAction] = for {
-    // the inferred type
     (tpe, eff) <- C.inferredTypeAndEffectOption(fun)
-    // the annotated type
     ann = for {
       result <- fun.symbol.annotatedResult
       effects <- fun.symbol.annotatedEffects
     } yield (result, effects)
-    if ann.map {
-      needsUpdate(_, (tpe, eff))
-    }.getOrElse(true)
-    res <- EffektCodeAction("Update return type with inferred effects", fun.ret, s": $tpe / $eff")
-  } yield res
+    if ann.map(needsUpdate(_, (tpe, eff))).getOrElse(true)
+  } yield {
+    val newText = if (eff.effects.nonEmpty)
+      s": ${TypePrinter.show(tpe)} / ${TypePrinter.show(eff)}"
+    else
+      s": ${TypePrinter.show(tpe)}"
+    EffektCodeAction("Update return type with inferred effects", fun.ret.span, newText)
+  }
 
   def closeHoleAction(hole: Hole)(using C: Context): Option[CodeAction] = for {
     holeTpe <- C.inferredTypeOption(hole)
     contentTpe <- C.inferredTypeOption(hole.stmts)
     if holeTpe == contentTpe
     res <- hole match {
-      case Hole(source.Return(exp)) => for {
+      case Hole(source.Return(exp), span) => for {
         text <- positions.textOf(exp)
-        res <- EffektCodeAction("Close hole", hole, text)
-      } yield res
+      } yield EffektCodeAction("Close hole", span, text)
 
       // <{ s1 ; s2; ... }>
-      case Hole(stmts) => for {
+      case Hole(stmts, span) => for {
         text <- positions.textOf(stmts)
-        res <- EffektCodeAction("Close hole", hole, s"locally { ${text} }")
-      } yield res
+      } yield EffektCodeAction("Close hole", span, s"locally { ${text} }")
     }
   } yield res
 
