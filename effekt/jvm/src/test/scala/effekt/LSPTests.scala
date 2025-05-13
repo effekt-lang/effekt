@@ -1165,7 +1165,7 @@ class LSPTests extends FunSuite {
         raw"""
              |type MyInt = Int
              |def foo(x: Int): Bool = <{ x }>
-             |def bar(x: String): Int = <>
+             |def bar(x: String): Int = <{ <> }> // a hole within a hole
              |""".textDocument
       val initializeParams = new InitializeParams()
       val initializationOptions = """{"showHoles": true}"""
@@ -1179,11 +1179,6 @@ class LSPTests extends FunSuite {
       val expectedHoles = List()
 
       val termsFoo = List(
-        TermBinding(
-          qualifier = List(),
-          name = "hole",
-          `type` = None
-        ),
         TermBinding(
           qualifier = List(),
           name = "x",
@@ -1209,8 +1204,8 @@ class LSPTests extends FunSuite {
 
       val receivedHoles = client.receivedHoles()
       assertEquals(receivedHoles.length, 1)
-      assertEquals(receivedHoles.head.holes.length, 2)
-      assertEquals(receivedHoles.head.holes(0).id, "hole")
+      assertEquals(receivedHoles.head.holes.length, 3)
+      assertEquals(receivedHoles.head.holes(0).id, "foo0")
       assertEquals(receivedHoles.head.holes(0).innerType, Some("Int"))
       assertEquals(receivedHoles.head.holes(0).expectedType, Some("Bool"))
       assertEquals(receivedHoles.head.holes(0).terms.toList, termsFoo.toList)
@@ -1221,9 +1216,13 @@ class LSPTests extends FunSuite {
           definition = "type MyInt = Int"
         )
       ))
-      assertEquals(receivedHoles.head.holes(1).id, "hole")
-      assertEquals(receivedHoles.head.holes(1).innerType, Some("Unit"))
+      assertEquals(receivedHoles.head.holes(1).id, "bar0")
+      assertEquals(receivedHoles.head.holes(1).innerType, Some("Nothing"))
       assertEquals(receivedHoles.head.holes(1).expectedType, Some("Int"))
+
+      assertEquals(receivedHoles.head.holes(2).id, "bar1")
+      assertEquals(receivedHoles.head.holes(2).innerType, Some("Unit"))
+      assertEquals(receivedHoles.head.holes(2).expectedType, None)
     }
   }
 

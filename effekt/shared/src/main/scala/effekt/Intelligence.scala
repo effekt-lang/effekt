@@ -130,7 +130,7 @@ trait Intelligence {
     expectedType = hole.expectedType.map { t => pp"${t}" }
   } yield {
     val BindingInfo(importedTerms, importedTypes, terms, types) = allBindings(scope)
-    HoleInfo(hole.decl.id.name, hole.decl.span, innerType, expectedType, importedTerms.toList.distinct, importedTypes.toList.distinct, terms.toList.distinct, types.toList.distinct)
+    HoleInfo(hole.name.name, hole.decl.span, innerType, expectedType, importedTerms.toList.distinct, importedTypes.toList.distinct, terms.toList.distinct, types.toList.distinct)
   }
 
   def allBindings(scope: Scope)(using C: Context): BindingInfo =
