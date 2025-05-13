@@ -1,0 +1,41 @@
+
+type Term {
+  Add(x: Int, k: Term)
+  Return(v: Int)
+}
+
+def interp(t: Term): Int = {
+  var st = t
+  var pre = 0
+  loop{ {l} =>
+    st match {
+      case Add(x, k) => 
+        pre = pre + x
+        st = k
+      case Return(v) => l.break(pre + v)
+    }
+  }
+}
+
+def ctl_min(l: List[Int]): Option[Int] = {
+  var c_min = None()
+  var c_l = l
+  loop{ {l} =>
+    c_l match {
+      case Nil() => l.break()
+      case Cons(x, k) and c_min is None() =>
+        c_min = Some(x)
+        c_l = k
+      case Cons(x, k) and c_min is Some(m) and x < m => 
+        c_min = Some(x)
+        c_l = k
+      case Cons(x, k) => c_l = k
+    }
+  }
+  c_min
+}
+
+def main() = {
+  println(interp(Add(2, Add(3, Return(0)))))
+  println(ctl_min(Cons(0, Cons(1, Cons(-1, Nil())))))
+}

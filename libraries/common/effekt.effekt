@@ -722,6 +722,10 @@ interface Control {
   def break(): Unit
   def continue(): Unit
 }
+interface ControlAt[T] {
+  def break(t: T): Unit
+  def continue(): Unit
+}
 
 def loop { f: () => Unit }: Unit = {
   def go(): Unit = { f(); go() }
@@ -734,6 +738,13 @@ def loop { f: {Control} => Unit }: Unit = try {
 } with label: Control {
   def break() = ()
   def continue() = loop { f }
+}
+def loop[T] { f: {ControlAt[T]} => Unit }: T = try {
+  def go(): T = { f{label}; go() }
+  go()
+} with label: ControlAt[T] {
+  def break(v) = v
+  def continue() = loop{f}
 }
 
 /// Calls provided action repeatedly. `start` is inclusive, `end` is not.
