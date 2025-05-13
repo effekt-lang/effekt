@@ -1,6 +1,5 @@
 module scanner
 
-import char
 import stream
 
 interface Scan[A] {
