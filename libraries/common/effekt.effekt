@@ -722,10 +722,6 @@ interface Control {
   def break(): Unit
   def continue(): Unit
 }
-interface ControlAt[T] {
-  def break(t: T): Unit
-  def continue(): Unit
-}
 
 def loop { f: () => Unit }: Unit = {
   def go(): Unit = { f(); go() }
@@ -739,6 +735,12 @@ def loop { f: {Control} => Unit }: Unit = try {
   def break() = ()
   def continue() = loop { f }
 }
+
+interface ControlAt[T] {
+  def break(t: T): Unit
+  def continue(): Unit
+}
+
 def loop[T] { f: {ControlAt[T]} => Unit }: T = try {
   def go(): T = { f{label}; go() }
   go()

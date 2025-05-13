@@ -35,7 +35,19 @@ def ctl_min(l: List[Int]): Option[Int] = {
   c_min
 }
 
+effect exit(): Unit
+def nobreak(): Unit = {
+  var x = 12
+  try{
+    loop{ {l} =>
+      do exit()
+      l.continue()
+    }
+  } with exit { () => () }
+}
+
 def main() = {
   println(interp(Add(2, Add(3, Return(0)))))
   println(ctl_min(Cons(0, Cons(1, Cons(-1, Nil())))))
+  println(nobreak())
 }
