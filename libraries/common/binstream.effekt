@@ -2,7 +2,6 @@ import option
 import stringbuffer
 import stream
 import char
-import test
 import io/error
 import bytearray
 
