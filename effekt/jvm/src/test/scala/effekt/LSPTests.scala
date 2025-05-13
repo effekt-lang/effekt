@@ -1086,7 +1086,12 @@ class LSPTests extends FunSuite {
              |        None(),
              |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
              |      ),
-             |      Return(Hole(Return(Literal((), ValueTypeApp(Unit_whatever, Nil))))),
+             |      Return(
+             |        Hole(
+             |          Return(Literal((), ValueTypeApp(Unit_whatever, Nil))),
+             |          Span(StringSource(def main() = <>, file://test.effekt), 13, 15, Real())
+             |        )
+             |      ),
              |      Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
              |    )
              |  ),

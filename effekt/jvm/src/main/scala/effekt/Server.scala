@@ -464,18 +464,14 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     contentTpe <- C.inferredTypeOption(hole.stmts)
     if holeTpe == contentTpe
     res <- hole match {
-      case Hole(source.Return(exp)) => for {
-        posFrom <- positions.getStart(hole)
-        posTo <- positions.getFinish(hole)
+      case Hole(source.Return(exp), span) => for {
         text <- positions.textOf(exp)
-      } yield EffektCodeAction("Close hole", posFrom.source, kiama.util.Range(posFrom, posTo), text)
+      } yield EffektCodeAction("Close hole", span.source, span.range, text)
 
       // <{ s1 ; s2; ... }>
-      case Hole(stmts) => for {
-        posFrom <- positions.getStart(hole)
-        posTo <- positions.getFinish(hole)
+      case Hole(stmts, span) => for {
         text <- positions.textOf(stmts)
-      } yield EffektCodeAction("Close hole", posFrom.source, kiama.util.Range(posFrom, posTo), s"locally { ${text} }")
+      } yield EffektCodeAction("Close hole", span.source, span.range, s"locally { ${text} }")
     }
   } yield res
 

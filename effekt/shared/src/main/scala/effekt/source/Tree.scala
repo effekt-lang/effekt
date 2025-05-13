@@ -451,7 +451,7 @@ enum Term extends Tree {
   case Assign(id: IdRef, expr: Term) extends Term, Reference
 
   case Literal(value: Any, tpe: symbols.ValueType)
-  case Hole(stmts: Stmt)
+  case Hole(stmts: Stmt, span: Span)
 
   // Boxing and unboxing to represent first-class values
   case Box(capt: Option[CaptureSet], block: Term)
