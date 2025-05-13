@@ -49,6 +49,15 @@ def readSome[A, B] { convert: A => Option[B] }: B / { Scan[A], stop } =
     do stop()
   }
 
+/// like `readSome`, but for functions `A => B / Exception[WrongFormat]` such as `char::digitValue`
+def tryRead[A, B] { convert: A => B / Exception[WrongFormat] }: B / { Scan[A], stop } = {
+  with on[WrongFormat].default { do stop() }
+
+  val t = convert(do peek())
+  do skip[A]()
+  return t
+}
+
 /// Reads until the predicate does not hold for the next token.
 /// Emits the tokens read.
 def readWhile[A] { predicate: A => Bool }: Unit / { Scan[A], emit[A] } =
@@ -78,7 +87,7 @@ def readString(string: String): Unit / { Scan[Char], stop } =
 
 /// Check that the next character is a digit in base 10, and if so read and return it.
 def readDigit(): Int / { Scan[Char], stop } =
-  readSome[Char, Int]{ char => digitValue(char) }
+  tryRead[Char, Int]{ char => digitValue(char) }
 
 /// Read a positive decimal number.
 def readDecimal(): Int / Scan[Char] = {
@@ -91,7 +100,7 @@ def readDecimal(): Int / Scan[Char] = {
 
 /// Check that the next character is a digit in base 16, and if so read and return it.
 def readHexDigit(): Int / { Scan[Char], stop } =
-  readSome[Char, Int]{ char => hexDigitValue(char) }
+  tryRead[Char, Int]{ char => hexDigitValue(char) }
 
 /// Read a hexadecimal number.
 def readHexadecimal(): Int / Scan[Char] = {

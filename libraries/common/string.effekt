@@ -117,7 +117,7 @@ def toInt(str: String): Int / Exception[WrongFormat] = {
   def go(index: Int, acc: Int): Int = {
     result[Char, OutOfBounds] { str.charAt(index) } match {
       case Success(c) =>
-        val d: Int = char::digitValue(c)
+        val d = char::digitValue(c)
         go(index + 1, 10 * acc + d)
       // wrong index means we are done parsing
       case Error(_, _) => acc
@@ -141,7 +141,7 @@ def toInt(str: String, base: Int): Int / Exception[WrongFormat] = {
   def go(index: Int, acc: Int): Int = {
     result[Char, OutOfBounds] { str.charAt(index) } match {
       case Success(c) =>
-        val d: Int = char::digitValue(c, base)
+        val d = char::digitValue(c, base)
         go(index + 1, base * acc + d)
       // wrong index means we are done parsing
       case Error(_, _) => acc

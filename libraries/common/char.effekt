@@ -27,11 +27,6 @@ def digitValue(char: Char): Int / Exception[WrongFormat] =
     wrongFormat("Not a valid digit: '" ++ char.toString ++ "' in base 10")
   }
 
-/// Gets the value of a given ASCII digit in base 10,
-/// returning None on wrong format
-def digitValue(char: Char): Option[Int] =
-  on[WrongFormat].option { digitValue(char) }
-
 /// Gets the value of a given ASCII digit in base 16,
 /// throwing an exception on wrong format
 def hexDigitValue(char: Char): Int / Exception[WrongFormat] =
@@ -41,11 +36,6 @@ def hexDigitValue(char: Char): Int / Exception[WrongFormat] =
     case char and char >= 'a' && char <= 'f' => (char.toInt - 'a'.toInt) + 10
     case _ => wrongFormat("Not a valid digit: '" ++ char.toString ++ "' in base 16")
   }
-
-/// Gets the value of a given ASCII digit in base 16,
-/// returning None on wrong format
-def hexDigitValue(char: Char): Option[Int] =
-  on[WrongFormat].option { hexDigitValue(char) }
 
 /// Gets the value of a given ASCII digit in the given base up to 36,
 /// throwing an exception on wrong format
@@ -61,11 +51,6 @@ def digitValue(char: Char, base: Int): Int / Exception[WrongFormat] = {
   }
   digit
 }
-
-/// Gets the value of a given ASCII digit in the given base up to 36,
-/// returning None on wrong format
-def digitValue(char: Char, base: Int): Option[Int] =
-  on[WrongFormat].option { digitValue(char, base) }
 
 /// Checks if the given character is an ASCII digit in base 10
 /// Prefer using `digitValue(c: Char)` to get the numeric value out.
