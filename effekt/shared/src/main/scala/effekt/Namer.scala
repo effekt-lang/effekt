@@ -47,7 +47,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   /** Current parent top-level definition (if any) */
   private val currentDefinition: DynamicVariable[Option[Def]] = DynamicVariable(None)
   /** Counter to disambiguate hole identifiers */
-  private val holeCount: mutable.HashMap[String, Int] = mutable.HashMap[String, Int]()
+  private var holeCount: mutable.HashMap[String, Int] = mutable.HashMap[String, Int]()
 
   /**
    * Run body in a context where we are currently naming `mod`.
@@ -103,6 +103,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.annotate(Annotations.IncludedSymbols, im, mod)
         mod
     }
+
+    holeCount = mutable.HashMap()
 
     Context.timed(phaseName, src.name) { resolveGeneric(decl) }
 
