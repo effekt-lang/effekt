@@ -177,6 +177,13 @@ object JSNodeRunner extends Runner[String] {
     // create "executable" using shebang besides the .js file
     val jsScript = s"require('./${jsFileName}').main()"
 
+    // Create a package.json that declares that the generated JavaScript files are CommonJS modules (rather than ES modules).
+    // This is needed in case the user has set the global default to ES modules, for instance with a default ~/package.json file.
+    // See https://github.com/effekt-lang/effekt/issues/834 for more details
+    val packageJson = """{ "type": "commonjs" }"""
+    val packageJsonFilePath = (out / "package.json").canonicalPath.escape
+    IO.createFile(packageJsonFilePath, packageJson)
+
     os match {
       case OS.POSIX =>
         val shebang = "#!/usr/bin/env node"
