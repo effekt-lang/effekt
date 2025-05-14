@@ -203,8 +203,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     }
     try {
       publishHoles(source, config)
-    }
-    catch {
+    } catch {
       case e => client.logMessage(new MessageParams(MessageType.Error, e.toString + ":" + e.getMessage))
     }
   }

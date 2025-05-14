@@ -316,23 +316,25 @@ trait Intelligence {
 }
 
 object Intelligence {
-  case class HoleInfo(id: String,
-                      span: Span,
-                      innerType: Option[String],
-                      expectedType: Option[String],
-                      importedTerms: Seq[TermBinding], importedTypes: Seq[TypeBinding],
-                      terms: Seq[TermBinding], types: Seq[TypeBinding])
+  case class HoleInfo(
+     id: String,
+     span: Span,
+     innerType: Option[String],
+     expectedType: Option[String],
+     importedTerms: Seq[TermBinding], importedTypes: Seq[TypeBinding],
+     terms: Seq[TermBinding], types: Seq[TypeBinding]
+  )
 
   case class TermBinding(qualifier: Seq[String], name: String, `type`: Option[String])
 
   case class TypeBinding(qualifier: Seq[String], name: String, definition: String)
 
   case class BindingInfo(
-                          importedTerms: Iterable[TermBinding],
-                          importedTypes: Iterable[TypeBinding],
-                          terms: Iterable[TermBinding],
-                          types: Iterable[TypeBinding]) {
-
+    importedTerms: Iterable[TermBinding],
+    importedTypes: Iterable[TypeBinding],
+    terms: Iterable[TermBinding],
+    types: Iterable[TypeBinding]
+  ) {
     def ++(other: BindingInfo): BindingInfo =
       BindingInfo(
         importedTerms ++ other.importedTerms,
