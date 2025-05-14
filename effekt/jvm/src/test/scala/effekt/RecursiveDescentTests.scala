@@ -541,7 +541,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     {
       val (source, pos) =
         raw""": Int / { Exc, State[T] }
-             |  ↑  ↑    ↑  ↑ ↑    ↑↑↑↑ ↑
+             |  ↑  ↑  ↑ ↑  ↑ ↑    ↑↑↑↑ ↑
              |""".sourceAndPositions
       assertEquals(
         parseReturnAnnotation(source.content),
@@ -551,19 +551,22 @@ class RecursiveDescentTests extends munit.FunSuite {
             Many.empty(Span(source, pos(1), pos(1)))
           ),
           Effects(
-            TypeRef(
-              IdRef(Nil, "Exc", Span(source, pos(2), pos(3))),
-              Many.empty(Span(source, pos(3), pos(3)))
+            List(
+              TypeRef(
+                IdRef(Nil, "Exc", Span(source, pos(3), pos(4))),
+                Many.empty(Span(source, pos(4), pos(4)))
+              ),
+              TypeRef(
+                IdRef(Nil, "State", Span(source, pos(5), pos(6))),
+                Many(List(
+                  TypeRef(
+                    IdRef(Nil, "T", Span(source, pos(7), pos(8))),
+                    Many.empty(Span(source, pos(8), pos(8)))
+                  )
+                ), Span(source, pos(6), pos(9)))
+              )
             ),
-            TypeRef(
-              IdRef(Nil, "State", Span(source, pos(4), pos(5))),
-              Many(List(
-                TypeRef(
-                  IdRef(Nil, "T", Span(source, pos(6), pos(7))),
-                  Many.empty(Span(source, pos(7), pos(7)))
-                )
-              ), Span(source, pos(5), pos(8)))
-            )
+            Span(source, pos(2), pos.last)
           ),
           Span(source, pos.head, pos.last)
         )
@@ -604,7 +607,7 @@ class RecursiveDescentTests extends munit.FunSuite {
         FunctionType(Many.empty(Span(source, pos(0), pos(1))),
           Many(List(TypeRef(IdRef(Nil, "Int", Span(source, pos(1), pos(2))), Many.empty(Span(source, pos(2), pos(2)))),
             TypeRef(IdRef(Nil, "String", Span(source, pos(3), pos(4))), Many.empty(Span(source, pos(4), pos(4))))), Span(source, pos(0), pos(5))),
-          Many.empty(Span(source, pos(5), pos(5))), TypeRef(IdRef(Nil, "Int", Span(source, pos(6), pos(7))), Many.empty(Span(source, pos(7), pos(7)))), Effects(Nil)))
+          Many.empty(Span(source, pos(5), pos(5))), TypeRef(IdRef(Nil, "Int", Span(source, pos(6), pos(7))), Many.empty(Span(source, pos(7), pos(7)))), Effects(Nil, Span(source, pos.last, pos.last, Synthesized))))
     }
 
     parseBlockType("(Int, String) => Int / Exc")

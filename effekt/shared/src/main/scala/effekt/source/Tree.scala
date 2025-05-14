@@ -684,11 +684,9 @@ type ValueType = Type
  * Represents an annotated set of effects. Before name resolution, we cannot know
  * the concrete nature of its elements (so it is generic [[TypeRef]]).
  */
-case class Effects(effs: List[TypeRef]) extends Tree
+case class Effects(effs: List[TypeRef], span: Span) extends Tree
 object Effects {
-  val Pure: Effects = Effects()
-  def apply(effs: TypeRef*): Effects = Effects(effs.toSet)
-  def apply(effs: Set[TypeRef]): Effects = Effects(effs.toList)
+  def Pure(span: Span): Effects = Effects(List(), span)
 }
 
 case class CaptureSet(captures: List[IdRef]) extends Tree

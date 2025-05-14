@@ -1133,15 +1133,19 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    */
   def effects(): Effects =
     nonterminal:
-      if peek(`{`) then Effects(many(refType, `{`, `,`, `}`).unspan)
-      else Effects(refType())
+      if (peek(`{`)) {
+        val effects = many(refType, `{`, `,`, `}`)
+        Effects(effects.unspan, effects.span)
+      }
+      else
+        Effects(List(refType()), span())
 
   def maybeEffects(): Effects = {
     nonterminal:
       when(`/`) {
         effects()
       } {
-        Effects.Pure
+        Effects.Pure(span().synthesized)
       }
   }
 
@@ -1217,7 +1221,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       boxedType() match
         case eff: Effectful => eff
-        case tpe => Effectful(tpe, Effects.Pure, span())
+        case tpe => {
+          Effectful(tpe, Effects.Pure(Span(source, pos(), pos(), Synthesized)), span())
+        }
   }
 
   def maybeTypeParams(): Many[Id] =
