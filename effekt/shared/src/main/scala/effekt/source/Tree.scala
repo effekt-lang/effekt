@@ -90,6 +90,8 @@ import scala.annotation.tailrec
  * We extend product to allow reflective access by Kiama.
  */
 sealed trait Tree extends Product {
+  val span: Span = Span.missing
+
   def inheritPosition(from: Tree)(implicit C: Context): this.type = {
     C.positions.dupPos(from, this);
     this
@@ -203,14 +205,14 @@ sealed trait Id extends Tree {
   def symbol(using C: Context): Symbol = C.symbolOf(this)
   def clone(using C: Context): Id
 }
-case class IdDef(name: String, span: Span) extends Id {
+case class IdDef(name: String, override val span: Span) extends Id {
   def clone(using C: Context): IdDef = {
     val copy = IdDef(name, span)
     C.positions.dupPos(this, copy)
     copy
   }
 }
-case class IdRef(path: List[String], name: String, span: Span) extends Id {
+case class IdRef(path: List[String], name: String, override val span: Span) extends Id {
   def clone(using C: Context): IdRef = {
     val copy = IdRef(path, name, span)
     C.positions.dupPos(this, copy)
@@ -238,7 +240,7 @@ sealed trait Reference extends Named {
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  *
  */
-case class ModuleDecl(path: String, includes: List[Include], defs: List[Def], span: Span) extends Tree
+case class ModuleDecl(path: String, includes: List[Include], defs: List[Def], override val span: Span) extends Tree
 case class Include(path: String) extends Tree
 
 /**
@@ -343,7 +345,7 @@ export SpannedOps._
  */
 enum Def extends Definition {
 
-  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, span: Span)
+  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, override val span: Span)
   case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
   case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt)
   case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
@@ -372,7 +374,7 @@ enum Def extends Definition {
 
   case ExternDef(capture: CaptureSet, id: IdDef,
                  tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Effectful,
-                 bodies: List[ExternBody], span: Span) extends Def
+                 bodies: List[ExternBody], override val span: Span) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)
 
@@ -451,7 +453,7 @@ enum Term extends Tree {
   case Assign(id: IdRef, expr: Term) extends Term, Reference
 
   case Literal(value: Any, tpe: symbols.ValueType)
-  case Hole(id: IdDef, stmts: Stmt, span: Span)
+  case Hole(id: IdDef, stmts: Stmt, override val span: Span)
 
   // Boxing and unboxing to represent first-class values
   case Box(capt: Option[CaptureSet], block: Term)
@@ -674,7 +676,7 @@ case class FunctionType(tparams: Many[Id], vparams: Many[ValueType], bparams: Ma
 /**
  * Type-and-effect annotations
  */
-case class Effectful(tpe: ValueType, eff: Effects, span: Span) extends Type
+case class Effectful(tpe: ValueType, eff: Effects, override val span: Span) extends Type
 
 // These are just type aliases for documentation purposes.
 type BlockType = Type
@@ -684,7 +686,7 @@ type ValueType = Type
  * Represents an annotated set of effects. Before name resolution, we cannot know
  * the concrete nature of its elements (so it is generic [[TypeRef]]).
  */
-case class Effects(effs: List[TypeRef], span: Span) extends Tree
+case class Effects(effs: List[TypeRef], override val span: Span) extends Tree
 object Effects {
   def Pure(span: Span): Effects = Effects(List(), span)
 }
@@ -794,10 +796,23 @@ object Resolvable {
 }
 export Resolvable.*
 
-extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] =
-  C.positions.getRange(positioned).flatMap { range =>
-    C.positions.substring(range.from, range.to)
+extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] = {
+  positioned match {
+    case m: Many[_] if m.span.origin != Origin.Missing =>
+      C.positions.substring(m.span.range.from, m.span.range.to)
+
+    case m: Maybe[_] if m.span.origin != Origin.Missing =>
+      C.positions.substring(m.span.range.from, m.span.range.to)
+
+    case t: Tree if t.span.origin != Origin.Missing =>
+      C.positions.substring(t.span.range.from, t.span.range.to)
+
+    case _ =>
+      C.positions.getRange(positioned).flatMap { range =>
+        C.positions.substring(range.from, range.to)
+      }
   }
+}
 
 extension [T](positioned: T) def sourceOf(using C: Context): String =
   positioned.sourceOfOpt.getOrElse { s"${positioned}" }
