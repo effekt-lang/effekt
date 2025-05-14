@@ -1,0 +1,1 @@
+def qux[A, B] { f: A => B / raise / log }: B = <>
