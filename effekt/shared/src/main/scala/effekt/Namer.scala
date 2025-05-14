@@ -7,11 +7,10 @@ package namer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.*
 import effekt.typer.Substitutions
-import effekt.source.{ Def, Id, IdDef, IdRef, Many, MatchGuard, ModuleDecl, Tree, sourceOf }
+import effekt.source.{ Def, Id, IdDef, IdRef, Many, MatchGuard, ModuleDecl, Term, Tree, sourceOf }
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
 import effekt.symbols.scopes.*
-import effekt.source.FeatureFlag.supportedByFeatureFlags
 
 import scala.annotation.tailrec
 import scala.util.DynamicVariable
@@ -251,32 +250,8 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
   }
 
-  /**
-   * An effectful traversal with two side effects:
-   * 1) the passed environment is enriched with definitions
-   * 2) names are resolved using the environment and written to the table
-   */
-  def resolveGeneric(tree: Tree)(using Context): Unit = Context.focusing(tree) {
-
-    // (1) === Binding Occurrences ===
-    case source.ModuleDecl(path, includes, definitions, span) =>
-      definitions foreach { preresolve }
-      resolveAll(definitions)
-
-    case source.DefStmt(d, rest) =>
-      // resolve declarations but do not resolve bodies
-      preresolve(d)
-      // resolve bodies
-      resolveGeneric(d)
-      resolveGeneric(rest)
-
-    case source.ValueParam(id, tpe) =>
-      Context.define(id, ValueParam(Name.local(id), tpe.map(resolveValueType)))
-
-    case source.BlockParam(id, tpe) =>
-      val p = BlockParam(Name.local(id), tpe.map { resolveBlockType })
-      Context.define(id, p)
-      Context.bind(p.capture)
+  def resolve(term: source.Term)(using Context): Unit = ???
+  def resolve(d: Def)(using Context): Unit = d match {
 
     case d @ source.ValDef(id, annot, binding) =>
       val tpe = annot.map(resolveValueType)
@@ -375,9 +350,6 @@ object Namer extends Phase[Parsed, NameResolved] {
         definitions.foreach(resolveGeneric)
       }
 
-    case source.TypeDef(id, tparams, tpe) => ()
-    case source.EffectDef(id, tparams, effs)       => ()
-
     // The type itself has already been resolved, now resolve constructors
     case d @ source.DataDef(id, tparams, ctors) =>
       val data = d.symbol
@@ -403,10 +375,40 @@ object Namer extends Phase[Parsed, NameResolved] {
       record.constructor = constructor
       constructor.fields = resolveFields(fs.unspan, constructor)
 
-    case source.ExternType(id, tparams) => ()
-    case source.ExternInterface(id, tparams) => ()
-    case source.ExternResource(id, tpe) => ()
+    case source.TypeDef(id, tparams, tpe)     => ()
+    case source.EffectDef(id, tparams, effs)  => ()
+    case source.ExternType(id, tparams)       => ()
+    case source.ExternInterface(id, tparams)  => ()
+    case source.ExternResource(id, tpe)       => ()
     case source.ExternInclude(ff, path, _, _) => ()
+  }
+
+  /**
+   * An effectful traversal with two side effects:
+   * 1) the passed environment is enriched with definitions
+   * 2) names are resolved using the environment and written to the table
+   */
+  def resolveGeneric(tree: Tree)(using Context): Unit = Context.focusing(tree) {
+
+    // (1) === Binding Occurrences ===
+    case source.ModuleDecl(path, includes, definitions, span) =>
+      definitions foreach { preresolve }
+      resolveAll(definitions)
+
+    case source.DefStmt(d, rest) =>
+      // resolve declarations but do not resolve bodies
+      preresolve(d)
+      // resolve bodies
+      resolveGeneric(d)
+      resolveGeneric(rest)
+
+    case source.ValueParam(id, tpe) =>
+      Context.define(id, ValueParam(Name.local(id), tpe.map(resolveValueType)))
+
+    case source.BlockParam(id, tpe) =>
+      val p = BlockParam(Name.local(id), tpe.map { resolveBlockType })
+      Context.define(id, p)
+      Context.bind(p.capture)
 
     case source.If(guards, thn, els) =>
       Context scoped { guards.foreach(resolve); resolveGeneric(thn) }
@@ -581,6 +583,8 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // THIS COULD ALSO BE A TYPE!
     case id: IdRef                => Context.resolveTerm(id)
+
+    case d: Def                   => resolve(d)
 
     case other                    => resolveAll(other)
   }
