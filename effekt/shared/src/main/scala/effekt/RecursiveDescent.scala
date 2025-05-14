@@ -726,7 +726,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       def operationImplementation() = idRef() ~ maybeTypeArgs() ~ implicitResume ~ functionArg() match {
         case (id ~ tps ~ k ~ BlockLiteral(_, vps, bps, body)) =>
           val synthesizedId = IdRef(Nil, id.name, id.span.synthesized).withPositionOf(id)
-          val interface = TypeRef(id, tps).withPositionOf(id)
+          val interface = TypeRef(id, tps, id.span.synthesized).withPositionOf(id)
           val operation = OpClause(synthesizedId, Nil, vps, bps, None, body, k).withRangeOf(id, body)
           Implementation(interface, List(operation))
       }
@@ -874,7 +874,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
 
   def TypeTuple(tps: Many[Type]): Type =
-    TypeRef(IdRef(List("effekt"), s"Tuple${tps.size}", tps.span.synthesized), tps)
+    TypeRef(IdRef(List("effekt"), s"Tuple${tps.size}", tps.span.synthesized), tps, tps.span.synthesized)
 
   /**
    * This is a compound production for
@@ -1133,21 +1133,25 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    */
   def effects(): Effects =
     nonterminal:
-      if peek(`{`) then Effects(many(refType, `{`, `,`, `}`).unspan)
-      else Effects(refType())
+      if (peek(`{`)) {
+        val effects = many(refType, `{`, `,`, `}`)
+        Effects(effects.unspan, effects.span)
+      }
+      else
+        Effects(List(refType()), span())
 
   def maybeEffects(): Effects = {
     nonterminal:
       when(`/`) {
         effects()
       } {
-        Effects.Pure
+        Effects.Pure(span().synthesized)
       }
   }
 
   def refType(): TypeRef =
     nonterminal:
-      TypeRef(idRef(), maybeTypeArgs())
+      TypeRef(idRef(), maybeTypeArgs(), span())
 
   // Parse atomic types: Tuples, parenthesized types, type references (highest precedence)
   private def atomicType(): Type =
@@ -1217,7 +1221,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       boxedType() match
         case eff: Effectful => eff
-        case tpe => Effectful(tpe, Effects.Pure, span())
+        case tpe => {
+          Effectful(tpe, Effects.Pure(Span(source, pos(), pos(), Synthesized)), span())
+        }
   }
 
   def maybeTypeParams(): Many[Id] =

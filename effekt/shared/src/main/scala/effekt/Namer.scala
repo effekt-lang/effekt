@@ -718,7 +718,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    * This way error messages might suffer; however it simplifies the compiler a lot.
    */
   def resolveValueType(tpe: source.ValueType, isParam: Boolean = false)(using Context): ValueType = resolvingType(tpe) {
-    case source.TypeRef(id, args) => Context.resolveType(id) match {
+    case source.TypeRef(id, args, span) => Context.resolveType(id) match {
       case constructor: TypeConstructor => ValueTypeApp(constructor, args.unspan.map(resolveValueType))
       case id: TypeVar =>
         if (args.nonEmpty) {
@@ -755,8 +755,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.info(pretty"Did you mean to use a first-class, boxed function type `${funTpe.sourceOf} at {}`?")
         case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects, span ) =>
           val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
-          // TODO(jiribenes, 2025-04-22): `Effects` seem to have bad position information. Why?!
-          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects} / ${effects}`?")
+          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects.sourceOf} / ${effects.sourceOf}`?")
         case source.Effectful(source.BoxedType(tpe@source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects, span) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
         case source.Effectful(innerTpe, eff, span) =>
@@ -782,8 +781,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.info(pretty"Did you mean to use the block type ${innerTpe.sourceOf} without 'at ${eff.sourceOf}'?")
         case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects, span) =>
           val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
-          // TODO(jiribenes, 2025-04-22): `Effects` seem to have bad position information. Why?!
-          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects} / ${effects}`?")
+          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects.sourceOf} / ${effects.sourceOf}`?")
         case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects, span) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
         case source.Effectful(innerTpe, effs, span) =>
@@ -840,7 +838,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    */
   def resolveWithAliases(tpe: source.TypeRef)(using Context): List[InterfaceType] = Context.at(tpe) {
     val resolved: List[InterfaceType] = tpe match {
-      case source.TypeRef(id, args) => Context.resolveType(id) match {
+      case source.TypeRef(id, args, span) => Context.resolveType(id) match {
         case EffectAlias(name, tparams, effs) =>
           if (tparams.size != args.size) {
             Context.abort(pretty"Effect alias ${name} expects ${tparams.size} type arguments, but got ${args.size}.")
