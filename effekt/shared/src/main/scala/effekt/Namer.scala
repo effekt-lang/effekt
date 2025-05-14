@@ -250,7 +250,13 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
   }
 
-  def resolve(stmt: source.Stmt)(using Context): Unit = Context.focusing(stmt) {
+  def resolve(m: source.ModuleDecl)(using Context): Unit = Context.focusing(m) {
+    case source.ModuleDecl(path, includes, definitions, span) =>
+      definitions foreach { preresolve }
+      resolveAll(definitions)
+  }
+
+  def resolve(s: source.Stmt)(using Context): Unit = Context.focusing(s) {
 
     case source.DefStmt(d, rest) =>
       // resolve declarations but do not resolve bodies
@@ -270,7 +276,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context scoped { resolveGeneric(stmts) }
   }
 
-  def resolve(d: Def)(using Context): Unit = Context.focusing(d) {
+  def resolve(d: source.Def)(using Context): Unit = Context.focusing(d) {
 
     case d @ source.ValDef(id, annot, binding) =>
       val tpe = annot.map(resolveValueType)
@@ -402,25 +408,21 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.ExternInclude(ff, path, _, _) => ()
   }
 
-  /**
-   * An effectful traversal with two side effects:
-   * 1) the passed environment is enriched with definitions
-   * 2) names are resolved using the environment and written to the table
-   */
-  def resolveGeneric(tree: Tree)(using Context): Unit = Context.focusing(tree) {
+  def resolve(t: source.Term)(using Context): Unit = Context.focusing(t) {
 
-    // (1) === Binding Occurrences ===
-    case source.ModuleDecl(path, includes, definitions, span) =>
-      definitions foreach { preresolve }
-      resolveAll(definitions)
+    case source.Literal(value, tpe) => ()
 
-    case source.ValueParam(id, tpe) =>
-      Context.define(id, ValueParam(Name.local(id), tpe.map(resolveValueType)))
+    case source.Hole(stmts, span) =>
+      Context.scoped { resolve(stmts) }
 
-    case source.BlockParam(id, tpe) =>
-      val p = BlockParam(Name.local(id), tpe.map { resolveBlockType })
-      Context.define(id, p)
-      Context.bind(p.capture)
+    case source.Unbox(term) => resolve(term)
+
+    case source.New(impl) => resolveGeneric(impl)
+
+    case source.Match(scrutinees, clauses, default) =>
+      scrutinees.foreach(resolve)
+      clauses.foreach(resolveGeneric)
+      Context.scoped { default.foreach(resolve) }
 
     case source.If(guards, thn, els) =>
       Context scoped { guards.foreach(resolve); resolveGeneric(thn) }
@@ -451,55 +453,6 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context scoped {
         Context.bindBlock(reg)
         resolveGeneric(body)
-      }
-
-    case source.Implementation(interface, clauses) =>
-      val eff: Interface = Context.at(interface) { resolveBlockRef(interface).typeConstructor.asInterface }
-
-      clauses.foreach {
-        case clause @ source.OpClause(op, tparams, vparams, bparams, ret, body, resumeId) => Context.at(clause) {
-
-          // try to find the operation in the handled effect:
-          eff.operations.find { o => o.name.toString == op.name } map { opSym =>
-            Context.assignSymbol(op, opSym)
-          } getOrElse {
-            Context.abort(pretty"Operation ${op} is not part of interface ${eff}.")
-          }
-          Context scoped {
-            val tps = tparams.map(resolve)
-            val vps = vparams.map(resolve)
-            val bps = bparams.map(resolve)
-            Context.bindValues(vps)
-            Context.bindBlocks(bps)
-            Context.define(resumeId, ResumeParam(Context.module))
-            resolveGeneric(body)
-          }
-        }
-      }
-
-    case source.MatchClause(pattern, guards, body) =>
-      val ps = resolve(pattern)
-      Context scoped {
-        // variables bound by patterns are available in the guards.
-        ps.foreach { Context.bind }
-        guards.foreach { resolve }
-
-        // wellformedness: only linear patterns
-        var names: Set[Name] = Set.empty
-        ps foreach { p =>
-          if (names contains p.name)
-            Context.error(pp"Patterns have to be linear: names can only occur once, but ${p.name} shows up multiple times.")
-
-          val cs = Context.allConstructorsFor(p.name)
-          if (cs.nonEmpty) {
-            Context.warning(pp"Pattern binds variable ${p.name}. Maybe you meant to match on equally named constructor of type ${cs.head.tpe}?")
-          }
-          names = names + p.name
-        }
-
-        Context scoped {
-          resolveGeneric(body)
-        }
       }
 
     case f @ source.BlockLiteral(tparams, vparams, bparams, stmt) =>
@@ -582,6 +535,76 @@ object Namer extends Phase[Parsed, NameResolved] {
       case y: Wildcard => Context.abort(s"Trying to assign to a wildcard, which is not allowed.")
       case _ => Context.abort(s"Can only assign to mutable variables.")
     }
+  }
+
+  /**
+   * An effectful traversal with two side effects:
+   * 1) the passed environment is enriched with definitions
+   * 2) names are resolved using the environment and written to the table
+   */
+  def resolveGeneric(tree: Tree)(using Context): Unit = Context.focusing(tree) {
+
+    case m: ModuleDecl => resolve(m)
+
+    case t: Term => resolve(t)
+
+    case source.ValueParam(id, tpe) =>
+      Context.define(id, ValueParam(Name.local(id), tpe.map(resolveValueType)))
+
+    case source.BlockParam(id, tpe) =>
+      val p = BlockParam(Name.local(id), tpe.map { resolveBlockType })
+      Context.define(id, p)
+      Context.bind(p.capture)
+
+
+    case source.Implementation(interface, clauses) =>
+      val eff: Interface = Context.at(interface) { resolveBlockRef(interface).typeConstructor.asInterface }
+
+      clauses.foreach {
+        case clause @ source.OpClause(op, tparams, vparams, bparams, ret, body, resumeId) => Context.at(clause) {
+
+          // try to find the operation in the handled effect:
+          eff.operations.find { o => o.name.toString == op.name } map { opSym =>
+            Context.assignSymbol(op, opSym)
+          } getOrElse {
+            Context.abort(pretty"Operation ${op} is not part of interface ${eff}.")
+          }
+          Context scoped {
+            val tps = tparams.map(resolve)
+            val vps = vparams.map(resolve)
+            val bps = bparams.map(resolve)
+            Context.bindValues(vps)
+            Context.bindBlocks(bps)
+            Context.define(resumeId, ResumeParam(Context.module))
+            resolveGeneric(body)
+          }
+        }
+      }
+
+    case source.MatchClause(pattern, guards, body) =>
+      val ps = resolve(pattern)
+      Context scoped {
+        // variables bound by patterns are available in the guards.
+        ps.foreach { Context.bind }
+        guards.foreach { resolve }
+
+        // wellformedness: only linear patterns
+        var names: Set[Name] = Set.empty
+        ps foreach { p =>
+          if (names contains p.name)
+            Context.error(pp"Patterns have to be linear: names can only occur once, but ${p.name} shows up multiple times.")
+
+          val cs = Context.allConstructorsFor(p.name)
+          if (cs.nonEmpty) {
+            Context.warning(pp"Pattern binds variable ${p.name}. Maybe you meant to match on equally named constructor of type ${cs.head.tpe}?")
+          }
+          names = names + p.name
+        }
+
+        Context scoped {
+          resolveGeneric(body)
+        }
+      }
 
     case tpe: source.FunctionType => resolve(tpe)
 
