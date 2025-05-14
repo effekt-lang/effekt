@@ -68,9 +68,6 @@ def bytesBE(n: Int, width: Int): Unit / emit[Byte] = {
 /// emit bytes of the given int as a 4 bytes in big-endian byte order
 def bytesBE(n: Int): Unit / emit[Byte] = bytesBE(n, 4)
 
-/// emit bytes of the given int as a 4 bytes in big-endian byte order
-def bytes(n: Int): Unit / emit[Byte] = bytesBE(n)
-
 /// emit bytes of the given int as width bytes (in 2s-complement) in little-endian byte order
 def signedBytesLE(int: Int, width: Int): Unit / emit[Byte] =
   if (int < 0) {
@@ -178,9 +175,6 @@ def bitsBE(byte: Byte): Unit / emit[Bit] = {
   }
 }
 
-/// emit bits of the given Byte as 8 Bits in big-endian bit order
-def bits(byte: Byte): Unit / emit[Bit] = bitsBE(byte)
-
 /// emit bits of the given Byte as width Bits in little-endian bit order
 def bitsLE(v: Int, width: Int): Unit / emit[Bit] = {
   var mask = 1
@@ -222,8 +216,8 @@ def collectBitsBE{ body: => Unit / emit[Bit] }: Int = {
 }
 
 /// split emitted bytes and emit the individual bits in big-endian bit order
-def ungroupBytes{ body: => Unit / emit[Byte] }: Unit / emit[Bit] =
-  for[Byte]{body}{ b => bits(b) }
+def ungroupBytesBE{ body: => Unit / emit[Byte] }: Unit / emit[Bit] =
+  for[Byte]{body}{ b => bitsBE(b) }
 
 /// streaming negation in 2s-complement for little-endian bitstreams
 def twoscomplementLE{ body: => Unit / emit[Bit] }: Unit / emit[Bit] = {
@@ -273,11 +267,6 @@ def groupBytesLE{ body: => Unit / emit[Bit] }: Unit / emit[Byte] = {
   }
 }
 
-/// group 8 bits into a byte each, big-endian bit order.
-/// NOTE: The remainder is dropped.
-def groupBytes{ body: => Unit / emit[Bit] }: Unit / emit[Byte] =
-  groupBytesBE{body}
-
 // Literals/splices
 // ----------------
 /// Splices allowed in bit stream literals
@@ -293,7 +282,7 @@ effect BitSplices = {
 /// Ignores whitespace
 def bit{ body: => Unit / { literal, BitSplices } }: Unit / emit[Bit] = {
   try {
-    ungroupBytes{
+    ungroupBytesBE{
       try {
         body()
       }
@@ -317,7 +306,7 @@ def bit{ body: => Unit / { literal, BitSplices } }: Unit / emit[Bit] = {
   }
   with splice[Unit] { _ => resume(()) }
   with splice[Bit] { b => do emit(b); resume(()) }
-  with splice[Byte] { b => bits(b); resume(()) }
+  with splice[Byte] { b => bitsBE(b); resume(()) }
   with splice[OfWidth[LE[Int]]] { i =>
     bitsLE(i.raw.raw, i.width)
     resume(())
