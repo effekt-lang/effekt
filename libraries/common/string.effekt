@@ -61,10 +61,10 @@ def endsWith(str: String, suffix: String): Bool =
 /// TODO use a more efficient way of appending strings like a buffer
 def repeat(str: String, n: Int): String = {
   def go(n: Int, result: String): String = {
-    if (n == 0) result
+    if (n <= 0) result
     else go(n - 1, result ++ str)
   }
-  if(n > 0) { go(n, "") } else { "" }
+  go(n, "")
 }
 
 /// Left-pad the given string with spaces
