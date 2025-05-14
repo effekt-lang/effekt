@@ -44,8 +44,8 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   /** Shadow stack of modules currently named, for detection of cyclic imports */
   private val currentlyNaming: DynamicVariable[List[ModuleDecl]] = DynamicVariable(List())
-  /** Current parent top-level definition (if any) */
-  private val currentDefinition: DynamicVariable[Option[Def]] = DynamicVariable(None)
+  /** Current parent definition (if any) */
+  private val parentDefinitions: DynamicVariable[List[Def]] = DynamicVariable(List())
   /** Counter to disambiguate hole identifiers */
   private val holeCount: mutable.HashMap[String, Int] = mutable.HashMap[String, Int]()
 
@@ -603,8 +603,11 @@ object Namer extends Phase[Parsed, NameResolved] {
    */
   def withDefinition[T](tree: Tree)(block: Tree => T)(using Context): T = {
     tree match {
-      case d: Def => currentDefinition.withValue(Some(d)) {
-        Context.focusing(tree)(block)
+      case d: Def => {
+        val defs = parentDefinitions.value
+        parentDefinitions.withValue(d :: defs) {
+          Context.focusing(tree)(block)
+        }
       }
       case _ => Context.focusing(tree)(block)
     }
@@ -910,7 +913,10 @@ object Namer extends Phase[Parsed, NameResolved] {
    * depth-first order as Namer traverses the syntax tree.
    */
   private def freshHoleId: String = {
-    val prefix = currentDefinition.value.map(_.id.name).getOrElse("hole")
+    val prefix = parentDefinitions.value match {
+      case Nil => "hole"
+      case nonempty => nonempty.reverse.map(_.id.name).mkString("_")
+    }
     val count = holeCount.getOrElseUpdate(prefix, 0)
     holeCount(prefix) = count + 1
     s"${prefix}${count}"
