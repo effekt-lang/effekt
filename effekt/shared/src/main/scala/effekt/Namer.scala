@@ -250,8 +250,27 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
   }
 
-  def resolve(term: source.Term)(using Context): Unit = ???
-  def resolve(d: Def)(using Context): Unit = d match {
+  def resolve(stmt: source.Stmt)(using Context): Unit = Context.focusing(stmt) {
+
+    case source.DefStmt(d, rest) =>
+      // resolve declarations but do not resolve bodies
+      preresolve(d)
+      // resolve bodies
+      resolveGeneric(d)
+      resolveGeneric(rest)
+
+    case source.ExprStmt(term, rest) =>
+      resolveGeneric(term)
+      resolveGeneric(rest)
+
+    case source.Return(term) =>
+      resolveGeneric(term)
+
+    case source.BlockStmt(stmts) =>
+      Context scoped { resolveGeneric(stmts) }
+  }
+
+  def resolve(d: Def)(using Context): Unit = Context.focusing(d) {
 
     case d @ source.ValDef(id, annot, binding) =>
       val tpe = annot.map(resolveValueType)
@@ -395,13 +414,6 @@ object Namer extends Phase[Parsed, NameResolved] {
       definitions foreach { preresolve }
       resolveAll(definitions)
 
-    case source.DefStmt(d, rest) =>
-      // resolve declarations but do not resolve bodies
-      preresolve(d)
-      // resolve bodies
-      resolveGeneric(d)
-      resolveGeneric(rest)
-
     case source.ValueParam(id, tpe) =>
       Context.define(id, ValueParam(Name.local(id), tpe.map(resolveValueType)))
 
@@ -417,9 +429,6 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.While(guards, block, default) =>
       Context scoped { guards.foreach(resolve); resolveGeneric(block) }
       Context scoped { default foreach resolveGeneric }
-
-    case source.BlockStmt(block) =>
-      Context scoped { resolveGeneric(block) }
 
     case tree @ source.TryHandle(body, handlers) =>
       resolveAll(handlers)
@@ -584,7 +593,8 @@ object Namer extends Phase[Parsed, NameResolved] {
     // THIS COULD ALSO BE A TYPE!
     case id: IdRef                => Context.resolveTerm(id)
 
-    case d: Def                   => resolve(d)
+    case d: source.Def            => resolve(d)
+    case s: source.Stmt           => resolve(s)
 
     case other                    => resolveAll(other)
   }
