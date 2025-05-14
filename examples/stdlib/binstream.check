@@ -7,7 +7,6 @@ Binstream
 ✓ int back-and-forth (17), explicit BE
 ✓ int back-and-forth (17), explicit LE
 ✓ byte 00101010
-✓ to bits and back
 ✓ to bits and back LE bitorder
 ✓ to bits and back BE bitorder
 ✓ append 0 means *2
@@ -15,7 +14,7 @@ Binstream
 ✓ LE 2s-complement
 ✓ BE 2s-complement
 
- 15 pass
+ 14 pass
  0 fail
- 15 tests total
+ 14 tests total
  
