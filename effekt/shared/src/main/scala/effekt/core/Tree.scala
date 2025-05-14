@@ -108,7 +108,9 @@ case class ModuleDecl(
   externs: List[Extern],
   definitions: List[Toplevel],
   exports: List[Id]
-) extends Tree
+) extends Tree {
+  def show: String = util.show(this)
+}
 
 /**
  * Toplevel data and interface declarations
@@ -157,6 +159,8 @@ enum Toplevel {
 sealed trait Expr extends Tree {
   val tpe: ValueType = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
+
+  def show: String = util.show(this)
 }
 
 // invariant, block b is {io}.
@@ -219,6 +223,8 @@ enum Block extends Tree {
 
   val tpe: BlockType = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
+
+  def show: String = util.show(this)
 }
 export Block.*
 
@@ -301,6 +307,8 @@ enum Stmt extends Tree {
 
   val tpe: ValueType = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
+
+  def show: String = util.show(this)
 }
 export Stmt.*
 

@@ -29,7 +29,9 @@ type Captures = Set[Capture]
  *
  * -------------------------------------------
  */
-sealed trait Type
+sealed trait Type {
+  def show: String = util.show(this)
+}
 
 enum ValueType extends Type {
   case Var(name: Id)
