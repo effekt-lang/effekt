@@ -180,6 +180,14 @@ object Annotations {
   )
 
   /**
+   * Used by LSP to list all holes
+   */
+  val HolesForFile = SourceAnnotation[kiama.util.Source, List[(symbols.Hole, symbols.scopes.Scope)]](
+    "HolesForFile",
+    "All holes with information about the names in scope"
+  )
+  
+  /**
    * The module a given symbol is defined in
    *
    * @deprecated

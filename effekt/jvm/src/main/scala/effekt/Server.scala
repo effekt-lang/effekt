@@ -175,6 +175,16 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     }
   }
 
+  /**
+   * Publish holes in the given source file
+   */
+  def publishHoles(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
+    if (!workspaceService.settingBool("showHoles")) return
+    val holes = getHoles(source)
+    if (holes.isEmpty) return
+    client.publishHoles(EffektPublishHolesParams(source.name, holes.map(EffektHoleInfo.fromHoleInfo)))
+  }
+
   // Driver methods
   //
   //
@@ -188,6 +198,11 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     }
     try {
       publishIR(source, config)
+    } catch {
+      case e => client.logMessage(new MessageParams(MessageType.Error, e.toString + ":" + e.getMessage))
+    }
+    try {
+      publishHoles(source, config)
     } catch {
       case e => client.logMessage(new MessageParams(MessageType.Error, e.toString + ":" + e.getMessage))
     }
@@ -464,12 +479,12 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     contentTpe <- C.inferredTypeOption(hole.stmts)
     if holeTpe == contentTpe
     res <- hole match {
-      case Hole(source.Return(exp), span) => for {
+      case Hole(id, source.Return(exp), span) => for {
         text <- positions.textOf(exp)
       } yield EffektCodeAction("Close hole", span, text)
 
       // <{ s1 ; s2; ... }>
-      case Hole(stmts, span) => for {
+      case Hole(id, stmts, span) => for {
         text <- positions.textOf(stmts)
       } yield EffektCodeAction("Close hole", span, s"locally { ${text} }")
     }
@@ -574,6 +589,9 @@ trait EffektLanguageClient extends LanguageClient {
    */
   @JsonNotification("$/effekt/publishIR")
   def publishIR(params: EffektPublishIRParams): Unit
+
+  @JsonNotification("$/effekt/publishHoles")
+  def publishHoles(params: EffektPublishHolesParams): Unit
 }
 
 /**
@@ -585,3 +603,39 @@ trait EffektLanguageClient extends LanguageClient {
 case class EffektPublishIRParams(filename: String,
                                  content: String
 )
+
+/**
+ * Custom LSP notification to publish Effekt holes
+ *
+ * @param uri The URI of the source file
+ * @param holes The holes in the source file
+ */
+case class EffektPublishHolesParams(uri: String, holes: List[EffektHoleInfo])
+
+/**
+ * Information about a typed hole
+ *
+ * The difference to Intelligence.HoleInfo is that it uses the appropriate LSP type for the range
+ */
+case class EffektHoleInfo(id: String,
+                    range: LSPRange,
+                    innerType: Option[String],
+                    expectedType: Option[String],
+                    importedTerms: Seq[Intelligence.TermBinding], importedTypes: Seq[Intelligence.TypeBinding],
+                    terms: Seq[Intelligence.TermBinding], types: Seq[Intelligence.TypeBinding])
+
+object EffektHoleInfo {
+  def fromHoleInfo(info: Intelligence.HoleInfo): EffektHoleInfo = {
+    EffektHoleInfo(
+      info.id,
+      convertRange(info.span.range),
+      info.innerType,
+      info.expectedType,
+      info.importedTerms,
+      info.importedTypes,
+      info.terms,
+      info.types
+    )
+  }
+}
+
