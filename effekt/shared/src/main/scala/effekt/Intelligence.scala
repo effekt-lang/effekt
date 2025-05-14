@@ -1,13 +1,16 @@
 package effekt
 
-import effekt.context.{ Annotations, Context }
-import effekt.source.{ FunDef, ModuleDecl, Tree, Include }
-import kiama.util.{ Position, Source }
+import effekt.context.{Annotations, Context}
+import effekt.source.{FunDef, Include, ModuleDecl, Span, Tree}
+import effekt.symbols.Hole
+import kiama.util.{Position, Source}
+import effekt.symbols.scopes.Scope
 
 trait Intelligence {
 
   import effekt.symbols._
   import builtins.TState
+  import Intelligence._
 
   type EffektTree = kiama.relation.Tree[AnyRef & Product, ModuleDecl]
 
@@ -120,6 +123,49 @@ trait Intelligence {
                | |:------------- |:------------- |
                | | `${outerTpe}` | `${innerTpe}` |
                |""".stripMargin
+
+  def getHoles(src: Source)(using C: Context): List[HoleInfo] = for {
+    (hole, scope) <- C.annotationOption(Annotations.HolesForFile, src).getOrElse(Nil)
+    innerType = hole.innerType.map { t => pp"${t}" }
+    expectedType = hole.expectedType.map { t => pp"${t}" }
+  } yield {
+    val BindingInfo(importedTerms, importedTypes, terms, types) = allBindings(scope)
+    HoleInfo(hole.name.name, hole.decl.span, innerType, expectedType, importedTerms.toList.distinct, importedTypes.toList.distinct, terms.toList.distinct, types.toList.distinct)
+  }
+
+  def allBindings(scope: Scope)(using C: Context): BindingInfo =
+    scope match {
+      case Scope.Global(imports, bindings) =>
+        val (te1, ty1) = allBindings(imports)
+        val (te2, ty2) = allBindings(bindings)
+        BindingInfo(te1, ty1, te2, ty2)
+      case Scope.Named(name, bindings, outer) =>
+        val (te, ty) = allBindings(bindings)
+        BindingInfo(Seq.empty, Seq.empty, te, ty) ++ allBindings(outer)
+      case Scope.Local(imports, bindings, outer) =>
+        val outerBindings = allBindings(outer)
+        val (te1, ty1) = allBindings(imports)
+        val (te2, ty2) = allBindings(bindings)
+        BindingInfo(te1, ty1, te2, ty2) ++ allBindings(outer)
+    }
+
+  def allBindings(bindings: Namespace, path: List[String] = Nil)(using C: Context): (Iterable[TermBinding], Iterable[TypeBinding]) =
+    val types = bindings.types.flatMap {
+      case (name, sym) =>
+        // TODO this is extremely hacky, printing is not defined for all types at the moment
+        try { Some(TypeBinding(path, name, DeclPrinter(sym))) } catch { case e => None }
+    }
+    val terms = bindings.terms.flatMap { case (name, syms) =>
+      syms.collect {
+        case sym: ValueSymbol => TermBinding(path, name, C.valueTypeOption(sym).map(t => pp"${t}"))
+        case sym: BlockSymbol => TermBinding(path, name, C.blockTypeOption(sym).map(t => pp"${t}"))
+      }
+    }
+    val (nestedTerms, nestedTypes) = bindings.namespaces.map {
+      case (name, namespace) => allBindings(namespace, path :+ name)
+    }.unzip
+
+    (terms ++ nestedTerms.flatten, types ++ nestedTypes.flatten)
 
   def allCaptures(src: Source)(using C: Context): List[(Tree, CaptureSet)] =
     C.annotationOption(Annotations.CaptureForFile, src).getOrElse(Nil)
@@ -266,5 +312,34 @@ trait Intelligence {
     case c: DefBinder =>
       val signature = C.blockTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
       SymbolInfo(c, "Block binder", signature, None)
+  }
+}
+
+object Intelligence {
+  case class HoleInfo(
+     id: String,
+     span: Span,
+     innerType: Option[String],
+     expectedType: Option[String],
+     importedTerms: Seq[TermBinding], importedTypes: Seq[TypeBinding],
+     terms: Seq[TermBinding], types: Seq[TypeBinding]
+  )
+
+  case class TermBinding(qualifier: Seq[String], name: String, `type`: Option[String])
+
+  case class TypeBinding(qualifier: Seq[String], name: String, definition: String)
+
+  case class BindingInfo(
+    importedTerms: Iterable[TermBinding],
+    importedTypes: Iterable[TypeBinding],
+    terms: Iterable[TermBinding],
+    types: Iterable[TypeBinding]
+  ) {
+    def ++(other: BindingInfo): BindingInfo =
+      BindingInfo(
+        importedTerms ++ other.importedTerms,
+        importedTypes ++ other.importedTypes,
+        terms ++ other.terms,
+        types ++ other.types)
   }
 }

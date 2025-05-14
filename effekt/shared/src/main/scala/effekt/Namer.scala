@@ -4,16 +4,16 @@ package namer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.{Annotations, Context, ContextOps}
 import effekt.context.assertions.*
 import effekt.typer.Substitutions
-import effekt.source.{ Def, Id, IdDef, IdRef, Many, MatchGuard, ModuleDecl, Tree, sourceOf }
+import effekt.source.{Def, Id, IdDef, IdRef, Many, MatchGuard, ModuleDecl, Tree, sourceOf}
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
 import effekt.symbols.scopes.*
-import effekt.source.FeatureFlag.supportedByFeatureFlags
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.DynamicVariable
 
 /**
@@ -44,6 +44,11 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   /** Shadow stack of modules currently named, for detection of cyclic imports */
   private val currentlyNaming: DynamicVariable[List[ModuleDecl]] = DynamicVariable(List())
+  /** Current parent definition (if any) */
+  private val parentDefinitions: DynamicVariable[List[Def]] = DynamicVariable(List())
+  /** Counter to disambiguate hole identifiers */
+  private val holeCount: mutable.HashMap[String, Int] = mutable.HashMap[String, Int]()
+
   /**
    * Run body in a context where we are currently naming `mod`.
    * Produces a cyclic import error when this is already the case
@@ -98,6 +103,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.annotate(Annotations.IncludedSymbols, im, mod)
         mod
     }
+
+    holeCount.clear()
 
     Context.timed(phaseName, src.name) { resolveGeneric(decl) }
 
@@ -256,7 +263,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    * 1) the passed environment is enriched with definitions
    * 2) names are resolved using the environment and written to the table
    */
-  def resolveGeneric(tree: Tree)(using Context): Unit = Context.focusing(tree) {
+  def resolveGeneric(tree: Tree)(using Context): Unit = withDefinition(tree) {
 
     // (1) === Binding Occurrences ===
     case source.ModuleDecl(path, includes, definitions, span) =>
@@ -418,6 +425,12 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.BlockStmt(block) =>
       Context scoped { resolveGeneric(block) }
+
+    case hole @ source.Hole(id, stmts, span) =>
+      val h = Hole(Name.local(freshHoleId), hole)
+      Context.addHole(h)
+      Context.assignSymbol(id, h)
+      Context scoped { resolveGeneric(stmts) }
 
     case tree @ source.TryHandle(body, handlers) =>
       resolveAll(handlers)
@@ -583,6 +596,21 @@ object Namer extends Phase[Parsed, NameResolved] {
     case id: IdRef                => Context.resolveTerm(id)
 
     case other                    => resolveAll(other)
+  }
+
+  /**
+   * Track the current top-level definition (if any)
+   */
+  def withDefinition[T](tree: Tree)(block: Tree => T)(using Context): T = {
+    tree match {
+      case d: Def => {
+        val defs = parentDefinitions.value
+        parentDefinitions.withValue(d :: defs) {
+          Context.focusing(tree)(block)
+        }
+      }
+      case _ => Context.focusing(tree)(block)
+    }
   }
 
   // TODO move away
@@ -877,6 +905,22 @@ object Namer extends Phase[Parsed, NameResolved] {
       case Nil => "{}"
       case many => many.mkString("{", ", ", "}")
     }
+
+  /**
+   * Generate a fresh hole id that is unique in the current module.
+   * Ideally, this id should be somewhat stable wrt. edits to the source code.
+   * For this, we use the name of the current top-level definition, disambiguated by a counter that increments in
+   * depth-first order as Namer traverses the syntax tree.
+   */
+  private def freshHoleId: String = {
+    val prefix = parentDefinitions.value match {
+      case Nil => "hole"
+      case nonempty => nonempty.reverse.map(_.id.name).mkString("_")
+    }
+    val count = holeCount.getOrElseUpdate(prefix, 0)
+    holeCount(prefix) = count + 1
+    s"${prefix}${count}"
+  }
 }
 
 /**
@@ -889,7 +933,10 @@ trait NamerOps extends ContextOps { Context: Context =>
    */
   private var scope: Scoping = _
 
-  private[namer] def initNamerstate(s: Scoping): Unit = scope = s
+  private[namer] def initNamerstate(s: Scoping): Unit = {
+    annotate(Annotations.HolesForFile, module.source, Nil)
+    scope = s
+  }
 
   /**
    * Override the dynamically scoped `in` to also reset namer state.
@@ -962,6 +1009,11 @@ trait NamerOps extends ContextOps { Context: Context =>
     assignSymbol(id, sym)
     sym
   }
+
+  private[namer] def addHole(h: Hole): Unit =
+    val src = module.source
+    val holesSoFar = annotationOption(Annotations.HolesForFile, src).getOrElse(Nil)
+    annotate(Annotations.HolesForFile, src, holesSoFar :+ (h, scope.scope))
 
   private[namer] def allConstructorsFor(name: Name): Set[Constructor] = name match {
     case NoName => panic("Constructor needs to be named")
