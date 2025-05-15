@@ -40,7 +40,7 @@ class LLVM extends Compiler[String] {
   // The Compilation Pipeline
   // ------------------------
   // Source => Core => Machine => LLVM
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.PolymorphismBoxing andThen DeadCodeElimination andThen optimizer.Optimizer andThen Machine map {
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen DeadCodeElimination andThen core.Mono andThen optimizer.Optimizer andThen Machine map {
     case (mod, main, prog) => (mod, llvm.Transformer.transform(prog))
   }
 
