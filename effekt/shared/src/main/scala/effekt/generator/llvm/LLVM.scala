@@ -7,6 +7,8 @@ import effekt.core.optimizer
 import effekt.machine
 import kiama.output.PrettyPrinterTypes.{ Document, emptyLinks }
 import kiama.util.Source
+import effekt.core.DeadCodeElimination
+import effekt.generator.chez.DeadCodeElimination
 
 
 class LLVM extends Compiler[String] {
