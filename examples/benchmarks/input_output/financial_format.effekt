@@ -1,7 +1,6 @@
 import examples/benchmarks/runner
 
 import bytearray
-import char
 import io/error
 import io/filesystem
 import stream

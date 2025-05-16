@@ -1,7 +1,10 @@
 /// Warning: This library currently only works with ASCII characters, **not** unicode!
 module char
 
+import effekt
 import exception
+import option
+import result
 
 
 /// Checks if the given character is an ASCII whitespace
@@ -15,56 +18,51 @@ def isWhitespace(c: Char): Bool = c match {
   case _      => false
 }
 
-/// Gets the value of a given ASCII digit in base 10
-def digitValue(char: Char): Option[Int] =
-  // TODO use fail
+/// Gets the value of a given ASCII digit in base 10,
+/// throwing an exception on wrong format
+def digitValue(char: Char): Int / Exception[WrongFormat] =
   if (char >= '0' && char <= '9') {
-    Some(char.toInt - '0'.toInt)
+    char.toInt - '0'.toInt
   } else {
-    None()
+    wrongFormat("Not a valid digit: '" ++ char.toString ++ "' in base 10")
   }
 
-/// Gets the value of a given ASCII digit in base 16
-def hexDigitValue(char: Char): Option[Int] =
-  // TODO use fail
+/// Gets the value of a given ASCII digit in base 16,
+/// throwing an exception on wrong format
+def hexDigitValue(char: Char): Int / Exception[WrongFormat] =
   char match {
-    case char and char >= '0' && char <= '9' => Some(char.toInt - '0'.toInt)
-    case char and char >= 'A' && char <= 'F' => Some((char.toInt - 'A'.toInt) + 10)
-    case char and char >= 'a' && char <= 'f' => Some((char.toInt - 'a'.toInt) + 10)
-    case _ => None()
+    case char and char >= '0' && char <= '9' => char.toInt - '0'.toInt
+    case char and char >= 'A' && char <= 'F' => (char.toInt - 'A'.toInt) + 10
+    case char and char >= 'a' && char <= 'f' => (char.toInt - 'a'.toInt) + 10
+    case _ => wrongFormat("Not a valid digit: '" ++ char.toString ++ "' in base 16")
   }
 
-/// Gets the value of a given ASCII digit in the given base up to 36
-def digitValue(char: Char, base: Int): Option[Int] = {
-  // TODO use fail
-  val perhapsDigit = char match {
-      case char and char >= '0' && char <= '9' => Some(char.toInt - '0'.toInt)
-      case char and char >= 'A' && char <= 'Z' => Some((char.toInt - 'A'.toInt) + 10)
-      case char and char >= 'a' && char <= 'z' => Some((char.toInt - 'a'.toInt) + 10)
-      case _ => None()
-    }
-  perhapsDigit match {
-    case Some(digit) =>
-      if (digit < base) {
-        Some(digit)
-      } else {
-        None()
-      }
-    case None() => None()
+/// Gets the value of a given ASCII digit in the given base up to 36,
+/// throwing an exception on wrong format
+def digitValue(char: Char, base: Int): Int / Exception[WrongFormat] = {
+  val digit = char match {
+    case char and char >= '0' && char <= '9' => char.toInt - '0'.toInt
+    case char and char >= 'A' && char <= 'Z' => (char.toInt - 'A'.toInt) + 10
+    case char and char >= 'a' && char <= 'z' => (char.toInt - 'a'.toInt) + 10
+    case _ => wrongFormat("Not a valid digit: '" ++ char.toString ++ "'")
   }
+  if (digit >= base) {
+    wrongFormat("Digit '" ++ digit.show ++ "' is too big for base " ++ base.show)
+  }
+  digit
 }
 
 /// Checks if the given character is an ASCII digit in base 10
-/// Use `digitValue(c: Char)` to get the numeric value out.
-def isDigit(char: Char): Bool = digitValue(char).isDefined
+/// Prefer using `digitValue(c: Char)` to get the numeric value out.
+def isDigit(char: Char): Bool = result[Int, WrongFormat] { digitValue(char) }.isSuccess
 
 /// Checks if the given character is an ASCII digit in base 16
-/// Use `hexDigitValue(c: Char)` to get the numeric value out.
-def isHexDigit(char: Char): Bool = hexDigitValue(char).isDefined
+/// Prefer using `hexDigitValue(c: Char)` to get the numeric value out.
+def isHexDigit(char: Char): Bool = result[Int, WrongFormat] { hexDigitValue(char)}.isSuccess
 
 /// Checks if the given character is an ASCII digit in base 10
-/// Use `digitValue(c: Char)` to get the numeric value out.
-def isDigit(char: Char, base: Int): Bool = digitValue(char, base).isDefined
+/// Prefer using `digitValue(c: Char, base: Int)` to get the numeric value out.
+def isDigit(char: Char, base: Int): Bool = result[Int, WrongFormat] { digitValue(char, base) }.isSuccess
 
 /// Checks if a given character is a 7-bit ASCII character
 def isASCII(c: Char): Bool = { c.toInt < 128 }
@@ -80,3 +78,100 @@ def isAlphanumeric(c: Char): Bool = isDigit(c) || isLower(c) || isUpper(c)
 
 /// Checks if a given character is an ASCII alphabetic character
 def isAlphabetic(c: Char): Bool = isLower(c) || isUpper(c)
+
+// Characters
+// ----------
+//
+//   JS: Int (Unicode codepoints)
+//   Chez: ?
+//   LLVM: i64 representing utf-8 (varying length 1-4 bytes)
+
+extern pure def toString(ch: Char): String =
+  js "String.fromCodePoint(${ch})"
+  chez "(string (integer->char ${ch}))"
+  llvm """
+    %z = call %Pos @c_bytearray_show_Char(%Int ${ch})
+    ret %Pos %z
+  """
+
+// Since we currently represent Char by integers in all backends, we could reuse comparison
+extern pure def toInt(ch: Char): Int =
+  js "${ch}"
+  chez "${ch}"
+  llvm "ret %Int ${ch}"
+  vm "string::toInt(Char)"
+
+extern pure def toChar(codepoint: Int): Char =
+  js "${codepoint}"
+  chez "${codepoint}"
+  llvm "ret %Int ${codepoint}"
+  vm "string::toChar(Int)"
+
+
+extern pure def infixLt(x: Char, y: Char): Bool =
+  js "(${x} < ${y})"
+  chez "(< ${x} ${y})"
+  llvm """
+    %z = icmp slt %Int ${x}, ${y}
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+  vm "string::infixLt(Char, Char)"
+
+extern pure def infixLte(x: Char, y: Char): Bool =
+  js "(${x} <= ${y})"
+  chez "(<= ${x} ${y})"
+  llvm """
+    %z = icmp sle %Int ${x}, ${y}
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+  vm "string::infixLte(Char, Char)"
+
+extern pure def infixGt(x: Char, y: Char): Bool =
+  js "(${x} > ${y})"
+  chez "(> ${x} ${y})"
+  llvm """
+    %z = icmp sgt %Int ${x}, ${y}
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+  vm "string::infixGt(Char, Char)"
+
+extern pure def infixGte(x: Char, y: Char): Bool =
+  js "(${x} >= ${y})"
+  chez "(>= ${x} ${y})"
+  llvm """
+    %z = icmp sge %Int ${x}, ${y}
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+  vm "string::infixGte(Char, Char)"
+
+
+/**
+ * Determines the number of bytes needed by a codepoint
+ *
+ * Also see: https://en.wikipedia.org/wiki/UTF-8
+ */
+def utf8ByteCount(codepoint: Char): Int = codepoint match {
+  case c and c >= \u0000  and c <= \u007F   => 1
+  case c and c >= \u0080  and c <= \u07FF   => 2
+  case c and c >= \u0800  and c <= \uFFFF   => 3
+  case c and c >= \u10000 and c <= \u10FFFF => 4
+  case c => panic("Not a valid code point")
+}
+
+def utf16UnitCount(codepoint: Char): Int = codepoint match {
+  case c and c >= \u0000  and c <= \uFFFF   => 1
+  case c and c >= \u10000 and c <= \u10FFFF => 4
+  case c => panic("Not a valid code point")
+}
+
+extern pure def charWidth(c: Char): Int =
+  // JavaScript strings are UTF-16 where every unicode character after 0xffff takes two units
+  js "(${c} > 0xffff) ? 2 : 1"

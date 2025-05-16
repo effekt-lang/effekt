@@ -2,7 +2,6 @@ import examples/benchmarks/runner
 
 import io/error
 import io/filesystem
-import char
 import stream
 
 
