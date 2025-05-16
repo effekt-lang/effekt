@@ -819,6 +819,21 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
+    examplesDir / "pos" / "diy_binder.effekt" -> Some(Summary(
+      staticDispatches = 28,
+      dynamicDispatches = 0,
+      patternMatches = 28,
+      branches = 26,
+      pushedFrames = 1,
+      poppedFrames = 1,
+      allocations = 30,
+      closures = 0,
+      variableReads = 28,
+      variableWrites = 29,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
   )
 
   val testFiles: Seq[(File, Option[Summary])] =
