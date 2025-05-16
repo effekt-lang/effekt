@@ -21,6 +21,7 @@ def main() = {
       x = None()
     }
   }
+  x = Some(12)
   whil{ cond }{
     println(do lookupX())
     x = Some(do lookupX() - 1)
