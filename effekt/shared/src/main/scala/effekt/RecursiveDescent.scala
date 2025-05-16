@@ -825,8 +825,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case other => other
       }
 
-  def orExpr(): Term = infix(andExpr, `||`)
-  def andExpr(): Term = infix(eqExpr, `&&`)
+  def orExpr(): Term = infixConfused(andExpr, `||`, `or`)
+  def andExpr(): Term = infixConfused(eqExpr, `&&`, `and`)
   def eqExpr(): Term = infix(relExpr, `===`, `!==`)
   def relExpr(): Term = infix(addExpr, `<=`, `>=`, `<`, `>`)
   def addExpr(): Term = infix(mulExpr, `++`, `+`, `-`)
@@ -839,6 +839,24 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
          val op = next()
          val right = nonTerminal()
          left = binaryOp(left, op, right).withRangeOf(left, right)
+      }
+      left
+
+  inline def infixConfused(nonTerminal: () => Term, op: TokenKind, confused: TokenKind): Term =
+    nonterminal:
+      var left = nonTerminal()
+      while (peek.kind == op || peek.kind == confused) {
+        val opToken = {
+          val before = position
+          val tok = next()
+          val after = position
+
+          if (tok.kind == confused) softFail(s"`$confused` is not a logical operator, did you mean to use `$op`?", before, after)
+
+          Token(tok.start, tok.end, op) // hack
+        }
+        val right = nonTerminal()
+        left = binaryOp(left, opToken, right).withRangeOf(left, right)
       }
       left
 

@@ -117,6 +117,7 @@ object TokenKind {
   val `resume` = TokenKind.Ident("resume")
   val `in` = TokenKind.Ident("in")
   val `at` = TokenKind.Ident("at")
+  val `or` = TokenKind.Ident("or") // unused!
   val `__` = Ident("_")
 
   def explain(kind: TokenKind): String = kind match {
