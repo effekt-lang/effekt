@@ -982,7 +982,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val vps = vparams.map { p =>
         val param = p.symbol
         val tpe = p.symbol.tpe.getOrElse {
-          INTERNAL_ERROR("Expected type needs to be known for function arguments at the moment.")
+          Context.at(p.id) {
+            Context.abort(pretty"Value parameter ${p.id} of a block literal is ambiguous, please provide a type annotation.")
+          }
         }
         Context.bind(param, tpe)
         tpe
@@ -990,7 +992,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val bps = bparams.map { p =>
         val param = p.symbol
         val tpe = param.tpe.getOrElse {
-          INTERNAL_ERROR("Expected type need to be know for function arguments at the moment.")
+          Context.at(p.id) {
+            Context.abort(pretty"Block parameter ${p.id} of a block literal is ambiguous, please provide a type annotation.")
+          }
         }
         Context.bind(param, tpe)
         tpe
