@@ -1,0 +1,31 @@
+effect lookupX(): Int
+
+// With parametric polymorphism on effects, this could be
+// def whil[E: EffectSet]{ cond: [R]{ => R / E }{ => R } => R }{ body: => Unit / E }: Unit
+def whil{ cond: [R]{ => R / lookupX }{ => R } => R }{ body: => Unit / lookupX }: Unit = {
+  cond{ body(); whil{cond}{body} }{ () }
+}
+
+def main() = {
+  var x = Some(12)
+  // desugared cond
+  def cond[R]{thn: => R / lookupX}{els: => R} = {
+    if(x is Some(y)){ 
+      try { thn() } with lookupX{ () => resume(y) }
+    } else { els() }
+  }
+  whil{ cond }{
+    println(do lookupX())
+    x = Some(do lookupX() - 1)
+    if (do lookupX() == 0) {
+      x = None()
+    }
+  }
+  whil{ cond }{
+    println(do lookupX())
+    x = Some(do lookupX() - 1)
+    if (do lookupX() == 0) {
+      x = None()
+    }
+  }
+}
