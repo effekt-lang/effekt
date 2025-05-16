@@ -61,10 +61,20 @@ def endsWith(str: String, suffix: String): Bool =
 /// TODO use a more efficient way of appending strings like a buffer
 def repeat(str: String, n: Int): String = {
   def go(n: Int, result: String): String = {
-    if (n == 0) result
+    if (n <= 0) result
     else go(n - 1, result ++ str)
   }
   go(n, "")
+}
+
+/// Left-pad the given string with spaces
+def padLeft(str: String, n: Int): String = {
+  " ".repeat(n - str.length) ++ str
+}
+
+/// Right-pad the given string with spaces
+def padRight(str: String, n: Int): String = {
+  str ++ " ".repeat(n - str.length)
 }
 
 // TODO use .split() in JS
