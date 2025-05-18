@@ -1,6 +1,5 @@
 module json
 
-import char
 import scanner
 import stream
 

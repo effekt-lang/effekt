@@ -74,17 +74,24 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
     group = advanced
   )
 
-  val gccIncludes: ScallopOption[File] = opt[File](
-    "gcc-includes",
-    descr = "Additional include path for gcc (necessary for libuv on the llvm backend)",
+  val clangIncludes: ScallopOption[File] = opt[File](
+    "clang-includes",
+    descr = "Additional include path for clang (necessary for libuv on the llvm backend)",
     noshort = true,
     group = advanced
   )
 
-  val gccLibraries: ScallopOption[File] = opt[File](
-    "gcc-libraries",
-    descr = "Additional library path for gcc (necessary for libuv on the llvm backend)",
+  val clangLibraries: ScallopOption[File] = opt[File](
+    "clang-libraries",
+    descr = "Additional library path for clang (necessary for libuv on the llvm backend)",
     noshort = true,
+    group = advanced
+  )
+
+  val native: ScallopOption[Boolean] = toggle(
+    "native",
+    descrYes = "Optimize the executable for the native CPU. May break executable on other Devices. Only works for the LLVM backend",
+    default = Some(false),
     group = advanced
   )
 

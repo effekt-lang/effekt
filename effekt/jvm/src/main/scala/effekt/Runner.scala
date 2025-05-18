@@ -43,7 +43,7 @@ trait Runner[Executable] {
    * if module A depends on module B, then B should come before A.
    * - Furthermore, each module mentioned here must import the `effekt` module as its first import.
    */
-  def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
+  def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "char", "string", "ref")
 
   /**
    * Creates a OS-specific script file that will execute the command when executed,
@@ -99,17 +99,23 @@ trait Runner[Executable] {
     else
       Process(execFile, Context.config.runArgs())
 
-    val exitCode = process.run(new ProcessLogger {
+    // Check if the output is a stdout one. TODO use a different method for tests and remove the default case
+    val exitCode = C.config.output() match {
+      case _: kiama.util.OutputEmitter =>
+        process.!< // we are not capturing the output, so forward directly
+      case outs =>
+        process.run(new ProcessLogger {
 
-      override def out(s: => String): Unit = {
-        C.config.output().emitln(s)
-      }
+          override def out(s: => String): Unit = {
+            outs.emitln(s)
+          }
 
-      override def err(s: => String): Unit = System.err.println(s)
+          override def err(s: => String): Unit = System.err.println(s)
 
-      override def buffer[T](f: => T): T = f
+          override def buffer[T](f: => T): T = f
 
-    }, connectInput = true).exitValue()
+        }, connectInput = true).exitValue()
+    }
 
     if (exitCode != 0) {
       C.error(s"Process exited with non-zero exit code ${exitCode}.")
@@ -170,6 +176,13 @@ object JSNodeRunner extends Runner[String] {
     val jsFileName = path.unixPath.split("/").last
     // create "executable" using shebang besides the .js file
     val jsScript = s"require('./${jsFileName}').main()"
+
+    // Create a package.json that declares that the generated JavaScript files are CommonJS modules (rather than ES modules).
+    // This is needed in case the user has set the global default to ES modules, for instance with a default ~/package.json file.
+    // See https://github.com/effekt-lang/effekt/issues/834 for more details
+    val packageJson = """{ "type": "commonjs" }"""
+    val packageJsonFilePath = (out / "package.json").canonicalPath.escape
+    IO.createFile(packageJsonFilePath, packageJson)
 
     os match {
       case OS.POSIX =>
@@ -266,19 +279,19 @@ object LLVMRunner extends Runner[String] {
 
   override def includes(path: File): List[File] = List(path / ".." / "llvm")
 
-  lazy val gccCmd = discoverExecutable(List("cc", "clang", "gcc"), List("--version"))
-  lazy val llcCmd = discoverExecutable(List("llc", "llc-18"), List("--version"))
-  lazy val optCmd = discoverExecutable(List("opt", "opt-18"), List("--version"))
+  lazy val clangCmd = discoverExecutable(List("clang-18", "clang"), List("--version"))
+  lazy val llcCmd = discoverExecutable(List("llc-18", "llc"), List("--version"))
+  lazy val optCmd = discoverExecutable(List("opt-18", "opt"), List("--version"))
 
   def checkSetup(): Either[String, Unit] =
-    gccCmd.getOrElseAborting { return Left("Cannot find gcc. This is required to use the LLVM backend.") }
+    clangCmd.getOrElseAborting { return Left("Cannot find clang. This is required to use the LLVM backend.") }
     llcCmd.getOrElseAborting { return Left("Cannot find llc. This is required to use the LLVM backend.") }
     optCmd.getOrElseAborting { return Left("Cannot find opt. This is required to use the LLVM backend.") }
     Right(())
 
   def libuvArgs(using C: Context): Seq[String] =
     val OS = System.getProperty("os.name").toLowerCase
-    val libraries = C.config.gccLibraries.toOption.map(file).orElse {
+    val libraries = C.config.clangLibraries.toOption.map(file).orElse {
       OS match {
         case os if os.contains("mac")  => Some(file("/opt/homebrew/lib"))
         case os if os.contains("win") => None
@@ -286,7 +299,7 @@ object LLVMRunner extends Runner[String] {
         case os => None
       }
     }
-    val includes = C.config.gccIncludes.toOption.map(file).orElse {
+    val includes = C.config.clangIncludes.toOption.map(file).orElse {
       OS match {
         case os if os.contains("mac")  => Some(file("/opt/homebrew/include"))
         case os if os.contains("win") => None
@@ -297,9 +310,12 @@ object LLVMRunner extends Runner[String] {
     (libraries, includes) match {
       case (Some(lib), Some(include)) => Seq(s"-L${lib.unixPath}", "-luv", s"-I${include.unixPath}")
       case _ =>
-        C.warning(s"Cannot find libuv on ${OS}; please use --gcc-libraries and --gcc-includes to configure the paths for the libuv dylib and header files, respectively.")
+        C.warning(s"Cannot find libuv on ${OS}; please use --clang-libraries and --clang-includes to configure the paths for the libuv dylib and header files, respectively.")
         Seq()
     }
+
+  def useLTO(using C: Context): Boolean =
+    !C.config.debug() && !C.config.valgrind() && C.config.optimize()
 
   /**
    * Compile the LLVM source file (`<...>.ll`) to an executable
@@ -312,29 +328,47 @@ object LLVMRunner extends Runner[String] {
     val out = C.config.outputPath()
     val basePath = (out / path.stripSuffix(".ll")).unixPath
     val llPath  = basePath + ".ll"
-    val optPath = basePath + ".opt.ll"
-    val objPath = basePath + ".o"
+    val bcPath  = basePath + ".bc"
     val linkedLibraries = Seq(
       "-lm", // Math library
     ) ++ libuvArgs
 
     def missing(cmd: String) = C.abort(s"Cannot find ${cmd}. This is required to use the LLVM backend.")
-    val gcc = gccCmd.getOrElse(missing("gcc"))
+    val clang = clangCmd.getOrElse(missing("clang"))
     val llc = llcCmd.getOrElse(missing("llc"))
     val opt = optCmd.getOrElse(missing("opt"))
 
-    exec(opt, llPath, "-S", "-O2", "-o", optPath)
-    exec(llc, "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)
-
-    val gccMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
+    val clangMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
     val executableFile = basePath
-    var gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath) ++ linkedLibraries
 
-    if (C.config.debug()) gccArgs ++= Seq("-g", "-Wall", "-Wextra", "-Werror")
-    if (C.config.valgrind()) gccArgs ++= Seq("-O0", "-g")
-    else if (C.config.debug()) gccArgs ++= Seq("-fsanitize=address,undefined", "-fstack-protector-all")
+    if (useLTO) {
+      // Convert to bitcode with aggressive optimizations
+      exec(opt, llPath, "-O3", "-o", bcPath)
 
-    exec(gccArgs: _*)
+      var clangArgs = Seq(clang, clangMainFile, bcPath, "-o", executableFile) ++ linkedLibraries
+
+      clangArgs ++= Seq(
+        "-O3",
+        "-flto=full",
+        "-Wno-override-module"
+      )
+
+      if (C.config.native()) {
+        clangArgs :+= "-march=native"
+      }
+
+      exec(clangArgs: _*)
+    } else {
+      exec(opt, llPath, "-O2", "-o", bcPath)
+
+      var clangArgs = Seq(clang, clangMainFile, "-o", executableFile, bcPath, "-Wno-override-module") ++ linkedLibraries
+
+      if (C.config.debug()) clangArgs ++= Seq("-g", "-Wall", "-Wextra", "-Werror")
+      if (C.config.valgrind()) clangArgs ++= Seq("-O0", "-g")
+      else if (C.config.debug()) clangArgs ++= Seq("-fsanitize=address,undefined", "-fstack-protector-all")
+
+      exec(clangArgs: _*)
+    }
 
     Some(executableFile)
 }

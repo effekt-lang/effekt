@@ -1,6 +1,5 @@
 module wordcount
 
-import char
 import io
 import io/error
 import io/filesystem

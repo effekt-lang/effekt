@@ -4,16 +4,16 @@ package namer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.{Annotations, Context, ContextOps}
 import effekt.context.assertions.*
 import effekt.typer.Substitutions
-import effekt.source.{ Def, Id, IdDef, IdRef, Many, MatchGuard, ModuleDecl, Tree, sourceOf }
+import effekt.source.{Def, Id, IdDef, IdRef, Many, MatchGuard, ModuleDecl, Term, Tree, sourceOf}
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
 import effekt.symbols.scopes.*
-import effekt.source.FeatureFlag.supportedByFeatureFlags
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.DynamicVariable
 
 /**
@@ -44,6 +44,11 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   /** Shadow stack of modules currently named, for detection of cyclic imports */
   private val currentlyNaming: DynamicVariable[List[ModuleDecl]] = DynamicVariable(List())
+  /** Current parent definition (if any) */
+  private val parentDefinitions: DynamicVariable[List[Def]] = DynamicVariable(List())
+  /** Counter to disambiguate hole identifiers */
+  private val holeCount: mutable.HashMap[String, Int] = mutable.HashMap[String, Int]()
+
   /**
    * Run body in a context where we are currently naming `mod`.
    * Produces a cyclic import error when this is already the case
@@ -99,7 +104,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         mod
     }
 
-    Context.timed(phaseName, src.name) { resolveGeneric(decl) }
+    holeCount.clear()
+    Context.timed(phaseName, src.name) { resolve(decl) }
 
     // We only want to import each dependency once.
     val allIncludes = (processedPreludes ++ includes).distinct
@@ -251,36 +257,37 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
   }
 
-  /**
-   * An effectful traversal with two side effects:
-   * 1) the passed environment is enriched with definitions
-   * 2) names are resolved using the environment and written to the table
-   */
-  def resolveGeneric(tree: Tree)(using Context): Unit = Context.focusing(tree) {
-
-    // (1) === Binding Occurrences ===
+  def resolve(m: source.ModuleDecl)(using Context): Unit = Context.focusing(m) {
     case source.ModuleDecl(path, includes, definitions, doc, span) =>
       definitions foreach { preresolve }
-      resolveAll(definitions)
+      definitions.foreach { resolve }
+  }
+
+  def resolve(s: source.Stmt)(using Context): Unit = Context.focusing(s) {
 
     case source.DefStmt(d, rest) =>
       // resolve declarations but do not resolve bodies
       preresolve(d)
       // resolve bodies
-      resolveGeneric(d)
-      resolveGeneric(rest)
+      resolve(d)
+      resolve(rest)
 
-    case source.ValueParam(id, tpe) =>
-      Context.define(id, ValueParam(Name.local(id), tpe.map(resolveValueType)))
+    case source.ExprStmt(term, rest) =>
+      resolve(term)
+      resolve(rest)
 
-    case source.BlockParam(id, tpe) =>
-      val p = BlockParam(Name.local(id), tpe.map { resolveBlockType })
-      Context.define(id, p)
-      Context.bind(p.capture)
+    case source.Return(term) =>
+      resolve(term)
+
+    case source.BlockStmt(stmts) =>
+      Context scoped { resolve(stmts) }
+  }
+
+  def resolve(d: source.Def)(using Context): Unit = withDefinition(d) {
 
     case d @ source.ValDef(id, annot, binding, doc, span) =>
       val tpe = annot.map(resolveValueType)
-      resolveGeneric(binding)
+      resolve(binding)
       Context.define(id, ValBinder(Context.nameFor(id), tpe, d))
 
 
@@ -288,7 +295,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.VarDef(id, annot, binding, doc, span) =>
       val tpe = annot.map(resolveValueType)
 
-      resolveGeneric(binding)
+      resolve(binding)
       val sym = VarBinder(Context.nameFor(id), tpe, d)
       Context.define(id, sym)
       Context.bind(sym.capture)
@@ -301,18 +308,18 @@ object Namer extends Phase[Parsed, NameResolved] {
         case _ => Context.abort("Region needs to be a block.")
       }
 
-      resolveGeneric(binding)
+      resolve(binding)
       val sym = RegBinder(Context.nameFor(id), tpe, reg, d)
 
       Context.define(id, sym)
 
     // already has been preresolved (to enable recursive definitions)
     case d @ source.DefDef(id, annot, source.New(impl), doc, span) =>
-      resolveGeneric(impl)
+      resolve(impl)
 
     case d @ source.DefDef(id, annot, binding, doc, span) =>
       val tpe = annot.map(resolveBlockType)
-      resolveGeneric(binding)
+      resolve(binding)
       Context.define(id, DefBinder(Context.nameFor(id), tpe, d))
 
     // FunDef and InterfaceDef have already been resolved as part of the module declaration
@@ -323,7 +330,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
 
-        resolveGeneric(body)
+        resolve(body)
       }
 
     case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) =>
@@ -333,8 +340,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
         bodies.foreach {
-          case source.ExternBody.StringExternBody(ff, body) => body.args.foreach(resolveGeneric)
-          case source.ExternBody.EffektExternBody(ff, body) => resolveGeneric(body)
+          case source.ExternBody.StringExternBody(ff, body) => body.args.foreach(resolve)
+          case source.ExternBody.EffektExternBody(ff, body) => resolve(body)
           case u: source.ExternBody.Unsupported => u
         }
       }
@@ -372,11 +379,8 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.NamespaceDef(id, definitions, doc, span) =>
       Context.namespace(id.name) {
-        definitions.foreach(resolveGeneric)
+        definitions.foreach(resolve)
       }
-
-    case source.TypeDef(id, tparams, tpe, doc, span) => ()
-    case source.EffectDef(id, tparams, effs, doc, span) => ()
 
     // The type itself has already been resolved, now resolve constructors
     case d @ source.DataDef(id, tparams, ctors, doc, span) =>
@@ -403,24 +407,43 @@ object Namer extends Phase[Parsed, NameResolved] {
       record.constructor = constructor
       constructor.fields = resolveFields(fs.unspan, constructor)
 
-    case source.ExternType(id, tparams, doc, span) => ()
-    case source.ExternInterface(id, tparams, doc, span) => ()
-    case source.ExternResource(id, tpe, doc, span) => ()
+    case source.TypeDef(id, tparams, tpe, doc, span)     => ()
+    case source.EffectDef(id, tparams, effs, doc, span)  => ()
+    case source.ExternType(id, tparams, doc, span)       => ()
+    case source.ExternInterface(id, tparams, doc, span)  => ()
+    case source.ExternResource(id, tpe, doc, span)       => ()
     case source.ExternInclude(ff, path, _, _, doc, span) => ()
+  }
+
+  def resolve(t: source.Term)(using Context): Unit = Context.focusing(t) {
+
+    case source.Literal(value, tpe) => ()
+
+    case hole @ source.Hole(id, stmts, span) =>
+      val h = Hole(Name.local(freshHoleId), hole)
+      Context.addHole(h)
+      Context.assignSymbol(id, h)
+      Context scoped { resolve(stmts) }
+
+    case source.Unbox(term) => resolve(term)
+
+    case source.New(impl) => resolve(impl)
+
+    case source.Match(scrutinees, clauses, default) =>
+      scrutinees.foreach(resolve)
+      clauses.foreach(resolve)
+      Context.scoped { default.foreach(resolve) }
 
     case source.If(guards, thn, els) =>
-      Context scoped { guards.foreach(resolve); resolveGeneric(thn) }
-      Context scoped { resolveGeneric(els) }
+      Context scoped { guards.foreach(resolve); resolve(thn) }
+      Context scoped { resolve(els) }
 
     case source.While(guards, block, default) =>
-      Context scoped { guards.foreach(resolve); resolveGeneric(block) }
-      Context scoped { default foreach resolveGeneric }
-
-    case source.BlockStmt(block) =>
-      Context scoped { resolveGeneric(block) }
+      Context scoped { guards.foreach(resolve); resolve(block) }
+      Context scoped { default foreach resolve }
 
     case tree @ source.TryHandle(body, handlers) =>
-      resolveAll(handlers)
+      handlers.foreach(resolve)
 
       Context scoped {
 
@@ -431,7 +454,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           }
         }
 
-        resolveGeneric(body)
+        resolve(body)
       }
 
     case tree @ source.Region(name, body) =>
@@ -439,56 +462,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(name, reg)
       Context scoped {
         Context.bindBlock(reg)
-        resolveGeneric(body)
-      }
-
-    case source.Implementation(interface, clauses) =>
-      val eff: Interface = Context.at(interface) { resolveBlockRef(interface).typeConstructor.asInterface }
-
-      clauses.foreach {
-        case clause @ source.OpClause(op, tparams, vparams, bparams, ret, body, resumeId) => Context.at(clause) {
-
-          // try to find the operation in the handled effect:
-          eff.operations.find { o => o.name.toString == op.name } map { opSym =>
-            Context.assignSymbol(op, opSym)
-          } getOrElse {
-            Context.abort(pretty"Operation ${op} is not part of interface ${eff}.")
-          }
-          Context scoped {
-            val tps = tparams.map(resolve)
-            val vps = vparams.map(resolve)
-            val bps = bparams.map(resolve)
-            Context.bindValues(vps)
-            Context.bindBlocks(bps)
-            Context.define(resumeId, ResumeParam(Context.module))
-            resolveGeneric(body)
-          }
-        }
-      }
-
-    case source.MatchClause(pattern, guards, body) =>
-      val ps = resolve(pattern)
-      Context scoped {
-        // variables bound by patterns are available in the guards.
-        ps.foreach { Context.bind }
-        guards.foreach { resolve }
-
-        // wellformedness: only linear patterns
-        var names: Set[Name] = Set.empty
-        ps foreach { p =>
-          if (names contains p.name)
-            Context.error(pp"Patterns have to be linear: names can only occur once, but ${p.name} shows up multiple times.")
-
-          val cs = Context.allConstructorsFor(p.name)
-          if (cs.nonEmpty) {
-            Context.warning(pp"Pattern binds variable ${p.name}. Maybe you meant to match on equally named constructor of type ${cs.head.tpe}?")
-          }
-          names = names + p.name
-        }
-
-        Context scoped {
-          resolveGeneric(body)
-        }
+        resolve(body)
       }
 
     case f @ source.BlockLiteral(tparams, vparams, bparams, stmt) =>
@@ -500,12 +474,12 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.bindValues(vps)
         Context.bindBlocks(bps)
 
-        resolveGeneric(stmt)
+        resolve(stmt)
       }
 
     case source.Box(capt, block) =>
       capt foreach resolve
-      resolveGeneric(block)
+      resolve(block)
 
     // (2) === Bound Occurrences ===
 
@@ -513,7 +487,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.panic("Cannot happen since Select is introduced later")
 
     case source.MethodCall(receiver, target, targs, vargs, bargs) =>
-      resolveGeneric(receiver)
+      resolve(receiver)
 
       // We are a bit context sensitive in resolving the method
       Context.focusing(target) { _ =>
@@ -545,45 +519,42 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
       }
       targs foreach resolveValueType
-      resolveAll(vargs)
-      resolveAll(bargs)
+      vargs foreach resolve
+      bargs foreach resolve
 
     case source.Do(effect, target, targs, vargs, bargs) =>
       Context.resolveEffectCall(effect map resolveBlockRef, target)
       targs foreach resolveValueType
-      resolveAll(vargs)
-      resolveAll(bargs)
+      vargs foreach resolve
+      bargs foreach resolve
 
     case source.Call(target, targs, vargs, bargs) =>
       Context.focusing(target) {
         case source.IdTarget(id)     => Context.resolveFunctionCalltarget(id)
-        case source.ExprTarget(expr) => resolveGeneric(expr)
+        case source.ExprTarget(expr) => resolve(expr)
       }
       targs foreach resolveValueType
-      resolveAll(vargs)
-      resolveAll(bargs)
+      vargs foreach resolve
+      bargs foreach resolve
 
     case source.Var(id) => Context.resolveVar(id)
 
     case source.Assign(id, expr) => Context.resolveVar(id) match {
-      case _: VarBinder | _: RegBinder => resolveGeneric(expr)
+      case _: VarBinder | _: RegBinder => resolve(expr)
       case _: ValBinder | _: ValueParam => Context.abort(pretty"Can only assign to mutable variables, but ${id.name} is a constant.")
       case y: Wildcard => Context.abort(s"Trying to assign to a wildcard, which is not allowed.")
       case _ => Context.abort(s"Can only assign to mutable variables.")
     }
-
-    case tpe: source.FunctionType => resolve(tpe)
-
-    // NOTE(jiribenes, 2025-04-21):
-    //   How do we get around this case? How do we know which one is expected? Do we even need to do this?
-    //   ... or should we just choose based on the syntax?
-    case tpe: source.Type         => util.messages.INTERNAL_ERROR(s"Unexpected kindless type: $tpe.")
-
-    // THIS COULD ALSO BE A TYPE!
-    case id: IdRef                => Context.resolveTerm(id)
-
-    case other                    => resolveAll(other)
   }
+
+  /**
+   * Track the current top-level definition (if any)
+   */
+  def withDefinition[T](d: Def)(block: Def => T)(using Context): T =
+    val defs = parentDefinitions.value
+    parentDefinitions.withValue(d :: defs) {
+      Context.focusing(d)(block)
+    }
 
   // TODO move away
   def resolveFields(params: List[source.ValueParam], constructor: Constructor)(using Context): List[Field] = {
@@ -603,13 +574,38 @@ object Namer extends Phase[Parsed, NameResolved] {
     }
   }
 
-  def resolveAll(obj: Any)(using Context): Unit = obj match {
-    case p: Product => p.productIterator.foreach {
-      case t: Tree => resolveGeneric(t)
-      case other   => resolveAll(other)
-    }
-    case t: Iterable[t] => t.foreach { t => resolveAll(t) }
-    case leaf           => ()
+  def resolve(h: source.Handler)(using Context): Unit = h match {
+    case source.Handler(capability, impl) =>
+      resolve(impl)
+      capability.foreach { param =>
+        Context.bind(resolve(param))
+      }
+  }
+
+  def resolve(i: source.Implementation)(using Context): Unit = Context.focusing(i) {
+    case source.Implementation(interface, clauses) =>
+      val eff: Interface = Context.at(interface) { resolveBlockRef(interface).typeConstructor.asInterface }
+
+      clauses.foreach {
+        case clause @ source.OpClause(op, tparams, vparams, bparams, ret, body, resumeId) => Context.at(clause) {
+
+          // try to find the operation in the handled effect:
+          eff.operations.find { o => o.name.toString == op.name } map { opSym =>
+            Context.assignSymbol(op, opSym)
+          } getOrElse {
+            Context.abort(pretty"Operation ${op} is not part of interface ${eff}.")
+          }
+          Context scoped {
+            val tps = tparams.map(resolve)
+            val vps = vparams.map(resolve)
+            val bps = bparams.map(resolve)
+            Context.bindValues(vps)
+            Context.bindBlocks(bps)
+            Context.define(resumeId, ResumeParam(Context.module))
+            resolve(body)
+          }
+        }
+      }
   }
 
   /**
@@ -637,6 +633,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     Context.assignSymbol(p.id, sym)
     sym
   }
+
   def resolve(p: source.ValueParam)(using Context): ValueParam = {
     val sym = ValueParam(Name.local(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = true)))
     Context.assignSymbol(p.id, sym)
@@ -646,6 +643,33 @@ object Namer extends Phase[Parsed, NameResolved] {
     val sym: BlockParam = BlockParam(Name.local(p.id), p.tpe.map { tpe => resolveBlockType(tpe, isParam = true) })
     Context.assignSymbol(p.id, sym)
     sym
+  }
+
+  def resolve(m: source.MatchClause)(using Context): Unit = Context.focusing(m) {
+    case source.MatchClause(pattern, guards, body) =>
+      val ps = resolve(pattern)
+      Context scoped {
+        // variables bound by patterns are available in the guards.
+        ps.foreach { Context.bind }
+        guards.foreach { resolve }
+
+        // wellformedness: only linear patterns
+        var names: Set[Name] = Set.empty
+        ps foreach { p =>
+          if (names contains p.name)
+            Context.error(pp"Patterns have to be linear: names can only occur once, but ${p.name} shows up multiple times.")
+
+          val cs = Context.allConstructorsFor(p.name)
+          if (cs.nonEmpty) {
+            Context.warning(pp"Pattern binds variable ${p.name}. Maybe you meant to match on equally named constructor of type ${cs.head.tpe}?")
+          }
+          names = names + p.name
+        }
+
+        Context scoped {
+          resolve(body)
+        }
+      }
   }
 
   /**
@@ -673,9 +697,9 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(p: source.MatchGuard)(using Context): Unit = p match {
-    case MatchGuard.BooleanGuard(condition) => resolveGeneric(condition)
+    case MatchGuard.BooleanGuard(condition) => resolve(condition)
     case MatchGuard.PatternGuard(scrutinee, pattern) =>
-      resolveGeneric(scrutinee)
+      resolve(scrutinee)
       val ps = resolve(pattern)
       ps.foreach { Context.bind }
   }
@@ -690,7 +714,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    * This way error messages might suffer; however it simplifies the compiler a lot.
    */
   def resolveValueType(tpe: source.ValueType, isParam: Boolean = false)(using Context): ValueType = resolvingType(tpe) {
-    case source.TypeRef(id, args) => Context.resolveType(id) match {
+    case source.TypeRef(id, args, span) => Context.resolveType(id) match {
       case constructor: TypeConstructor => ValueTypeApp(constructor, args.unspan.map(resolveValueType))
       case id: TypeVar =>
         if (args.nonEmpty) {
@@ -727,8 +751,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.info(pretty"Did you mean to use a first-class, boxed function type `${funTpe.sourceOf} at {}`?")
         case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects, span ) =>
           val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
-          // TODO(jiribenes, 2025-04-22): `Effects` seem to have bad position information. Why?!
-          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects} / ${effects}`?")
+          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects.sourceOf} / ${effects.sourceOf}`?")
         case source.Effectful(source.BoxedType(tpe@source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects, span) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
         case source.Effectful(innerTpe, eff, span) =>
@@ -754,8 +777,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.info(pretty"Did you mean to use the block type ${innerTpe.sourceOf} without 'at ${eff.sourceOf}'?")
         case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects, span) =>
           val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
-          // TODO(jiribenes, 2025-04-22): `Effects` seem to have bad position information. Why?!
-          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects} / ${effects}`?")
+          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects.sourceOf} / ${effects.sourceOf}`?")
         case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects, span) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
         case source.Effectful(innerTpe, effs, span) =>
@@ -812,7 +834,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    */
   def resolveWithAliases(tpe: source.TypeRef)(using Context): List[InterfaceType] = Context.at(tpe) {
     val resolved: List[InterfaceType] = tpe match {
-      case source.TypeRef(id, args) => Context.resolveType(id) match {
+      case source.TypeRef(id, args, span) => Context.resolveType(id) match {
         case EffectAlias(name, tparams, effs) =>
           if (tparams.size != args.size) {
             Context.abort(pretty"Effect alias ${name} expects ${tparams.size} type arguments, but got ${args.size}.")
@@ -877,6 +899,22 @@ object Namer extends Phase[Parsed, NameResolved] {
       case Nil => "{}"
       case many => many.mkString("{", ", ", "}")
     }
+
+  /**
+   * Generate a fresh hole id that is unique in the current module.
+   * Ideally, this id should be somewhat stable wrt. edits to the source code.
+   * For this, we use the name of the current top-level definition, disambiguated by a counter that increments in
+   * depth-first order as Namer traverses the syntax tree.
+   */
+  private def freshHoleId: String = {
+    val prefix = parentDefinitions.value match {
+      case Nil => "hole"
+      case nonempty => nonempty.reverse.map(_.id.name).mkString("_")
+    }
+    val count = holeCount.getOrElseUpdate(prefix, 0)
+    holeCount(prefix) = count + 1
+    s"${prefix}${count}"
+  }
 }
 
 /**
@@ -889,7 +927,10 @@ trait NamerOps extends ContextOps { Context: Context =>
    */
   private var scope: Scoping = _
 
-  private[namer] def initNamerstate(s: Scoping): Unit = scope = s
+  private[namer] def initNamerstate(s: Scoping): Unit = {
+    annotate(Annotations.HolesForFile, module.source, Nil)
+    scope = s
+  }
 
   /**
    * Override the dynamically scoped `in` to also reset namer state.
@@ -962,6 +1003,11 @@ trait NamerOps extends ContextOps { Context: Context =>
     assignSymbol(id, sym)
     sym
   }
+
+  private[namer] def addHole(h: Hole): Unit =
+    val src = module.source
+    val holesSoFar = annotationOption(Annotations.HolesForFile, src).getOrElse(Nil)
+    annotate(Annotations.HolesForFile, src, holesSoFar :+ (h, scope.scope))
 
   private[namer] def allConstructorsFor(name: Name): Set[Constructor] = name match {
     case NoName => panic("Constructor needs to be named")

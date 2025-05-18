@@ -36,10 +36,11 @@ trait DocumentationGenerator {
   def generate(effects: Effects)(using C: Context): DocValue = arr(effects.effs.map(generate))
 
   def generate(tpe: Type)(using C: Context): DocValue = tpe match {
-    case TypeRef(id, args) => obj(HashMap(
+    case TypeRef(id, args, span) => obj(HashMap(
       "kind" -> str("TypeRef"),
       "id" -> generate(id),
-      "args" -> arr(args.unspan.map(generate))
+      "args" -> arr(args.unspan.map(generate)),
+      "span" -> generate(span),
     ))
 
     case Effectful(tpe, eff, span) => obj(HashMap(

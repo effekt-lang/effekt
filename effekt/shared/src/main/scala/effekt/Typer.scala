@@ -327,8 +327,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // we can unify with everything.
         Result(Context.join(tpes: _*), resEff)
 
-      case source.Hole(stmt) =>
+      case source.Hole(id, stmt, span) =>
         val Result(tpe, effs) = checkStmt(stmt, None)
+        val h = id.symbol.asHole
+
+        h.expectedType = expected
+        h.innerType = Some(tpe)
+
         Result(expected.getOrElse(TBottom), Pure)
 
       case tree : source.New => Context.abort("Expected an expression, but got an object implementation (which is a block).")
@@ -977,7 +982,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val vps = vparams.map { p =>
         val param = p.symbol
         val tpe = p.symbol.tpe.getOrElse {
-          INTERNAL_ERROR("Expected type needs to be known for function arguments at the moment.")
+          Context.at(p.id) {
+            Context.abort(pretty"Value parameter ${p.id} of a block literal is ambiguous, please provide a type annotation.")
+          }
         }
         Context.bind(param, tpe)
         tpe
@@ -985,7 +992,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val bps = bparams.map { p =>
         val param = p.symbol
         val tpe = param.tpe.getOrElse {
-          INTERNAL_ERROR("Expected type need to be know for function arguments at the moment.")
+          Context.at(p.id) {
+            Context.abort(pretty"Block parameter ${p.id} of a block literal is ambiguous, please provide a type annotation.")
+          }
         }
         Context.bind(param, tpe)
         tpe

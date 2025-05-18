@@ -1,0 +1,6 @@
+[error] examples/neg/namer/types/multiple-effect-sets.effekt:1:20: Expected block type, but got a type-and-effect annotation A => B / raise / log.
+def qux[A, B] { f: A => B / raise / log }: B = <>
+                   ^^^^^^^^^^^^^^^^^^^^
+[info] examples/neg/namer/types/multiple-effect-sets.effekt:1:20: A function type cannot have multiple effect sets, did you mean to use `/ {raise, log}` instead of `/ raise / log`?
+def qux[A, B] { f: A => B / raise / log }: B = <>
+                   ^^^^^^^^^^^^^^^^^^^^

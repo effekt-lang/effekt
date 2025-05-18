@@ -5,6 +5,7 @@ import option
 import list
 import exception
 import result
+import char
 
 // TODO
 // - [ ] handle unicode codepoints (that can span two indices) correctly
@@ -61,10 +62,20 @@ def endsWith(str: String, suffix: String): Bool =
 /// TODO use a more efficient way of appending strings like a buffer
 def repeat(str: String, n: Int): String = {
   def go(n: Int, result: String): String = {
-    if (n == 0) result
+    if (n <= 0) result
     else go(n - 1, result ++ str)
   }
   go(n, "")
+}
+
+/// Left-pad the given string with spaces
+def padLeft(str: String, n: Int): String = {
+  " ".repeat(n - str.length) ++ str
+}
+
+/// Right-pad the given string with spaces
+def padRight(str: String, n: Int): String = {
+  str ++ " ".repeat(n - str.length)
 }
 
 // TODO use .split() in JS
@@ -113,20 +124,18 @@ def toBool(s: String): Bool / Exception[WrongFormat] = s match {
 
 // TODO optimize (right now this will be horribly slow (compared to the native JS version)
 def toInt(str: String): Int / Exception[WrongFormat] = {
-
-  val zero = '0'.toInt
-
   def go(index: Int, acc: Int): Int = {
-    result[Char, OutOfBounds] { str.charAt(index) } match {
-      case Success(c) and c >= '0' and c <= '9' =>
-        go(index + 1, 10 * acc + (c.toInt - zero))
-      case Success(c) => wrongFormat("Not a valid number: '" ++ str ++ "'")
-      // wrong index means we are done parsing
-      case Error(_, _) => acc
-    }
+    // wrong index means we're done parsing
+    with on[OutOfBounds].default { () => acc };
+
+    val c = str.charAt(index)
+    val d = char::digitValue(c)
+    go(index + 1, 10 * acc + d)
   }
 
-  with default[OutOfBounds, Int] { wrongFormat("Empty string is not a valid number") };
+  with on[OutOfBounds].default {
+    wrongFormat("Empty string is not a valid number")
+  }
 
   str.charAt(0) match {
     case '-' => 0 - go(1, 0)
@@ -136,38 +145,22 @@ def toInt(str: String): Int / Exception[WrongFormat] = {
 
 // TODO optimize (right now this will be horribly slow (compared to the native JS version)
 def toInt(str: String, base: Int): Int / Exception[WrongFormat] = {
-
-  if( base > 36 || base < 1 ) {
+  if (base > 36 || base < 1) {
     wrongFormat("Invalid base: " ++ base.show)
   }
 
-  val zero = '0'.toInt
-  val l_a = 'a'.toInt
-  val u_a = 'A'.toInt
-
-  def parseDigit(c: Char): Option[Int] = {
-    if( c >= '0' and c <= '9' and c.toInt - zero < base ) {
-      Some(c.toInt - zero)
-    } else if( c >= 'a' and c <= 'z' and c.toInt - l_a < base - 10 ) {
-      Some(c.toInt - l_a + 10)
-    } else if( c >= 'A' and c <= 'Z' and c.toInt - u_a < base - 10) {
-      Some(c.toInt - u_a + 10)
-    } else {
-      None()
-    }
-  }
-
   def go(index: Int, acc: Int): Int = {
-    result[Char, OutOfBounds] { str.charAt(index) } match {
-      case Success(c) and parseDigit(c) is Some(d) =>
-        go(index + 1, base * acc + d)
-      case Success(c) => wrongFormat("Not a valid number: '" ++ str ++ "'")
-      // wrong index means we are done parsing
-      case Error(_, _) => acc
-    }
+    // wrong index means we're done parsing
+    with on[OutOfBounds].default { () => acc };
+
+    val c = str.charAt(index)
+    val d = char::digitValue(c, base)
+    go(index + 1, base * acc + d)
   }
 
-  with default[OutOfBounds, Int] { wrongFormat("Empty string is not a valid number") };
+  with on[OutOfBounds].default {
+    wrongFormat("Empty string is not a valid number")
+  }
 
   str.charAt(0) match {
     case '-' => 0 - go(1, 0)
@@ -221,104 +214,6 @@ def lastIndexOf(str: String, sub: String, from: Int): Option[Int] = {
 
 // extern pure def unsafeIndexOf(str: String, sub: String): Int =
 //   js "${str}.indexOf(${sub})"
-
-
-// Characters
-// ----------
-//
-//   JS: Int (Unicode codepoints)
-//   Chez: ?
-//   LLVM: i64 representing utf-8 (varying length 1-4 bytes)
-
-extern pure def toString(ch: Char): String =
-  js "String.fromCodePoint(${ch})"
-  chez "(string (integer->char ${ch}))"
-  llvm """
-    %z = call %Pos @c_bytearray_show_Char(%Int ${ch})
-    ret %Pos %z
-  """
-
-// Since we currently represent Char by integers in all backends, we could reuse comparison
-extern pure def toInt(ch: Char): Int =
-  js "${ch}"
-  chez "${ch}"
-  llvm "ret %Int ${ch}"
-  vm "string::toInt(Char)"
-
-extern pure def toChar(codepoint: Int): Char =
-  js "${codepoint}"
-  chez "${codepoint}"
-  llvm "ret %Int ${codepoint}"
-  vm "string::toChar(Int)"
-
-
-extern pure def infixLt(x: Char, y: Char): Bool =
-  js "(${x} < ${y})"
-  chez "(< ${x} ${y})"
-  llvm """
-    %z = icmp slt %Int ${x}, ${y}
-    %fat_z = zext i1 %z to i64
-    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
-    ret %Pos %adt_boolean
-  """
-  vm "string::infixLt(Char, Char)"
-
-extern pure def infixLte(x: Char, y: Char): Bool =
-  js "(${x} <= ${y})"
-  chez "(<= ${x} ${y})"
-  llvm """
-    %z = icmp sle %Int ${x}, ${y}
-    %fat_z = zext i1 %z to i64
-    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
-    ret %Pos %adt_boolean
-  """
-  vm "string::infixLte(Char, Char)"
-
-extern pure def infixGt(x: Char, y: Char): Bool =
-  js "(${x} > ${y})"
-  chez "(> ${x} ${y})"
-  llvm """
-    %z = icmp sgt %Int ${x}, ${y}
-    %fat_z = zext i1 %z to i64
-    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
-    ret %Pos %adt_boolean
-  """
-  vm "string::infixGt(Char, Char)"
-
-extern pure def infixGte(x: Char, y: Char): Bool =
-  js "(${x} >= ${y})"
-  chez "(>= ${x} ${y})"
-  llvm """
-    %z = icmp sge %Int ${x}, ${y}
-    %fat_z = zext i1 %z to i64
-    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
-    ret %Pos %adt_boolean
-  """
-  vm "string::infixGte(Char, Char)"
-
-
-/**
- * Determines the number of bytes needed by a codepoint
- *
- * Also see: https://en.wikipedia.org/wiki/UTF-8
- */
-def utf8ByteCount(codepoint: Char): Int = codepoint match {
-  case c and c >= \u0000  and c <= \u007F   => 1
-  case c and c >= \u0080  and c <= \u07FF   => 2
-  case c and c >= \u0800  and c <= \uFFFF   => 3
-  case c and c >= \u10000 and c <= \u10FFFF => 4
-  case c => panic("Not a valid code point")
-}
-
-def utf16UnitCount(codepoint: Char): Int = codepoint match {
-  case c and c >= \u0000  and c <= \uFFFF   => 1
-  case c and c >= \u10000 and c <= \u10FFFF => 4
-  case c => panic("Not a valid code point")
-}
-
-extern pure def charWidth(c: Char): Int =
-  // JavaScript strings are UTF-16 where every unicode character after 0xffff takes two units
-  js "(${c} > 0xffff) ? 2 : 1"
 
 def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
   if (index < 0 || index >= length(str))
