@@ -127,13 +127,13 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
       }
   }
 
-  def generateDocumentation(ast: ModuleDecl, source: Source)(implicit C: Context): String =
+  def generateDocumentation(ast: ModuleDecl, source: Source)(using C: Context): String =
     JSONDocumentationGenerator(ast, source.name).content
 
-  def showDocumentation(ast: ModuleDecl, source: Source)(implicit C: Context): Unit =
+  def showDocumentation(ast: ModuleDecl, source: Source)(using C: Context): Unit =
     println(generateDocumentation(ast, source))
 
-  def writeDocumentation(ast: ModuleDecl, source: Source, output: String)(implicit C: Context): Unit =
+  def writeDocumentation(ast: ModuleDecl, source: Source, output: String)(using C: Context): Unit =
     val name = source.name.split("/").last + ".json"
     IO.createFile((output / name).unixPath, generateDocumentation(ast, source))
 
