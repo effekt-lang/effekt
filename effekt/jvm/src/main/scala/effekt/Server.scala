@@ -180,7 +180,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
    */
   def publishHoles(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
     if (!workspaceService.settingBool("showHoles")) return
-    val holes = getHoles(source).toArray
+    val holes = getHoles(source)
     if (holes.isEmpty) return
     client.publishHoles(EffektPublishHolesParams(source.name, holes.map(EffektHoleInfo.fromHoleInfo)))
   }
@@ -596,7 +596,7 @@ case class EffektPublishIRParams(filename: String,
  * @param uri The URI of the source file
  * @param holes The holes in the source file
  */
-case class EffektPublishHolesParams(uri: String, holes: Array[EffektHoleInfo])
+case class EffektPublishHolesParams(uri: String, holes: List[EffektHoleInfo])
 
 /**
  * Information about a typed hole
