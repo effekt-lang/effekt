@@ -11,7 +11,7 @@ def printListOfPairs(list: List[Tuple2[Int, Int]]): Unit = {
 }
 
 // used to circumvent missing universal `show` & `println` on some backends
-def printListOfPairs(list: List[These[Int, Int]]): Unit = {
+def printListOfThese(list: List[These[Int, Int]]): Unit = {
   val strings: List[String] = list.map {
     case These(fst, snd) => "These(" ++ show(fst) ++ ", " ++ show(snd) ++ ")"
     case This(fst) => "This(" ++ show(fst) ++ ")"
