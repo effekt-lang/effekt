@@ -1,0 +1,13 @@
+import stream
+
+def main() = {
+  def stream1() = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].each
+  // Ideally this would be an array to demonstrate the capabilities. 
+  def stream2() = ['H', 'e', 'l', 'l', 'o'].each
+
+  zipLongest[Int, Char]{stream1}{stream2} {
+    case These(a, b) => println(show(a) ++ ", " ++ show(b))
+    case This(a) => println(show(a))
+    case That(b) => println("?, " ++ show(b))
+  }
+}
