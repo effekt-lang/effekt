@@ -601,6 +601,40 @@ def zip[A, B](left: List[A], right: List[B]): List[(A, B)] = {
   go(Nil(), left, right)
 }
 
+/// Produce a list of These from two lists.
+/// The length is the maximum of lenghts of the two lists.
+///
+/// Examples:
+/// ```
+/// > zipLongest([1, 2, 3], [100, 200, 300])
+/// [These(1, 100), These(2, 200), These(3, 300)]
+///
+/// > zip([1, 2, 3], Nil[Int]())
+/// [This(1), This(2), This(3)]
+///
+/// > zip(Nil[Int](), [1, 2, 3])
+/// [That(1), That(2), That(3)]
+///
+/// > zip([1, 2, 3], [42])
+/// [These(1, 42), This(2), This(3)]
+/// ```
+///
+/// O(N)
+def zipLongest[A, B](left: List[A], right: List[B]): List[These[A, B]] = {
+  def go(acc: List[These[A, B]], left: List[A], right: List[B]): List[These[A,B]] = {
+    (left, right) match {
+      case (Cons(a, as), Cons(b, bs)) =>
+        go(Cons(These(a, b), acc), as, bs)
+      case (Cons(a, as), Nil()) =>
+        go(Cons(This(a), acc), as, Nil())
+      case (Nil(), Cons(b, bs)) =>
+        go(Cons(That(b), acc), Nil(), bs)
+      case _ => acc.reverse
+    }
+  }
+  go(Nil(), left, right)
+}
+
 /// Combine two lists with the given function.
 /// The length of the result is the minimum of lengths of the two lists.
 ///

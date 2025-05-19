@@ -285,6 +285,28 @@ def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] 
   }
 }
 
+/// Combines two streams together producing a stream of These in lockstep.
+/// Terminates when both of them terminated.
+def zipLongest[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] } { action: These[A, B] => Unit }: Unit = {
+  with source[A] { stream1 }
+  with source[B] { stream2 }
+
+  exhaustively {
+     try {
+      val a = do read[A]()
+      try {
+        val b = do read[B]()
+        action(These(a, b))
+      } with stop { () =>
+        action(This(a))
+      }
+    } with stop{ () =>
+      val b = do read[B]()
+      action(That(b))
+    }
+  }
+}
+
 def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[IOError] = {
 
   val file = openForWriting(path);

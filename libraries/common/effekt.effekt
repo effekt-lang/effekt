@@ -715,6 +715,13 @@ record Tuple4[A, B, C, D](first: A, second: B, third: C, fourth: D)
 record Tuple5[A, B, C, D, E](first: A, second: B, third: C, fourth: D, fifth: E)
 record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth: E, sixth: F)
 
+// These
+// =====
+type These[A, B] {
+  This(a: A)
+  That(b: B)
+  These(a: A, b: B)
+}
 
 // Control Flow
 // ============
