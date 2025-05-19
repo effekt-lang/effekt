@@ -1,6 +1,6 @@
 package effekt
 
-import com.google.gson.{JsonElement, JsonParser}
+import com.google.gson.{Gson, GsonBuilder, JsonElement, JsonParser}
 import effekt.Intelligence.{TermBinding, TypeBinding}
 import munit.FunSuite
 import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit}
@@ -40,7 +40,7 @@ class LSPTests extends FunSuite {
     val mockClient = new MockLanguageClient()
     server.connect(mockClient)
 
-    val launcher = server.launch(mockClient, serverIn, serverOut)
+    val launcher = server.launch(_ => mockClient, serverIn, serverOut)
 
     testBlock(mockClient, server)
   }
@@ -1192,21 +1192,21 @@ class LSPTests extends FunSuite {
           qualifier = List(),
           name = "x",
           `type` = Some(
-            value = "Int"
+            "Int"
           )
         ),
         TermBinding(
           qualifier = List(),
           name = "bar",
           `type` = Some(
-            value = "String => Int"
+            "String => Int"
           )
         ),
         TermBinding(
           qualifier = List(),
           name = "foo",
           `type` = Some(
-            value = "Int => Bool"
+            "Int => Bool"
           )
         )
       )
@@ -1217,7 +1217,7 @@ class LSPTests extends FunSuite {
       assertEquals(receivedHoles.head.holes(0).id, "foo0")
       assertEquals(receivedHoles.head.holes(0).innerType, Some("Int"))
       assertEquals(receivedHoles.head.holes(0).expectedType, Some("Bool"))
-      assertEquals(receivedHoles.head.holes(0).terms.toList, termsFoo.toList)
+      assertEquals(receivedHoles.head.holes(0).terms, termsFoo)
       assertEquals(receivedHoles.head.holes(0).types, List(
         TypeBinding(
           qualifier = Nil,
@@ -1260,6 +1260,50 @@ class LSPTests extends FunSuite {
       assertEquals(receivedHoles.head.holes.head.id, "foo_bar0")
     }
   }
+
+  /**
+   * By default, Scala types such as List and Option show pathological (de)serialization behavior with Gson.
+   * We use a custom extension method `withScalaSupport` which adds support for Scala collections, fixing serialization.
+   */
+  test("Hole info serializes to expected JSON") {
+    val holeInfo = EffektHoleInfo(
+      id = "foo_bar0",
+      range = new Range(
+        new Position(0, 0),
+        new Position(0, 0)
+      ),
+      innerType = None,
+      expectedType = Some("Bool"),
+      importedTerms = Nil,
+      importedTypes = Nil,
+      terms = List(
+        TermBinding(
+          qualifier = Nil,
+          name = "x",
+          `type` = Some("Int")
+        )
+      ),
+      types = List(
+        TypeBinding(
+          qualifier = Nil,
+          name = "MyInt",
+          definition = "type MyInt = Int"
+        )
+      )
+    )
+
+    val expectedJsonStr =
+      """{"id":"foo_bar0","range":{"start":{"line":0,"character":0},"end":{"line":0,"character":0}},"expectedType":"Bool","importedTerms":[],"importedTypes":[],"terms":[{"qualifier":[],"name":"x","type":"Int"}],"types":[{"qualifier":[],"name":"MyInt","definition":"type MyInt = Int"}]}""".stripMargin
+
+    val expectedJson: JsonElement = JsonParser.parseString(expectedJsonStr)
+
+    val gson: Gson = new GsonBuilder().withScalaSupport.create()
+
+    val actualJson: JsonElement = gson.toJsonTree(holeInfo)
+
+    assertEquals(actualJson, expectedJson)
+  }
+
 
   // Text document DSL
   //

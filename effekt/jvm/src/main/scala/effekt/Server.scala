@@ -222,25 +222,6 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     this.client = client
   }
 
-  /**
-   * Launch a language server using provided input/output streams.
-   * This allows tests to connect via in-memory pipes.
-   */
-  def launch(client: EffektLanguageClient, in: InputStream, out: OutputStream): Launcher[EffektLanguageClient] = {
-    val executor = Executors.newSingleThreadExecutor()
-    val launcher =
-      new LSPLauncher.Builder()
-        .setLocalService(this)
-        .setRemoteInterface(classOf[EffektLanguageClient])
-        .setInput(in)
-        .setOutput(out)
-        .setExecutorService(executor)
-        .create()
-    this.connect(client)
-    launcher.startListening()
-    launcher
-  }
-
   // LSP Document Lifecycle
   //
   //
@@ -539,6 +520,34 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   }
 
   /**
+   * Launch a language server using provided input/output streams.
+   * This allows tests to connect via in-memory pipes.
+   */
+  def launch(getClient: Launcher[EffektLanguageClient] => EffektLanguageClient, in: InputStream, out: OutputStream, trace: Boolean = false): Launcher[EffektLanguageClient] = {
+    // Create a single-threaded executor to serialize all requests.
+    val executor: ExecutorService = Executors.newSingleThreadExecutor()
+
+    val builder =
+      new LSPLauncher.Builder()
+        .setLocalService(this)
+        .setRemoteInterface(classOf[EffektLanguageClient])
+        .setInput(in)
+        .setOutput(out)
+        .setExecutorService(executor)
+        // This line makes sure that the List and Option Scala types serialize correctly
+        .configureGson(_.withScalaSupport)
+
+    if (trace) {
+      builder.traceMessages(new PrintWriter(System.err, true))
+    }
+
+    val launcher = builder.create()
+    this.connect(getClient(launcher))
+    launcher.startListening()
+    launcher
+  }
+
+  /**
    * Launch a language server with a given `ServerConfig`
    */
   def launch(config: ServerConfig): Unit = {
@@ -549,32 +558,9 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
       val serverSocket = new ServerSocket(config.debugPort)
       System.err.println(s"Starting language server in debug mode on port ${config.debugPort}")
       val socket = serverSocket.accept()
-
-      val launcher =
-        new LSPLauncher.Builder()
-          .setLocalService(this)
-          .setRemoteInterface(classOf[EffektLanguageClient])
-          .setInput(socket.getInputStream)
-          .setOutput(socket.getOutputStream)
-          .setExecutorService(executor)
-          .traceMessages(new PrintWriter(System.err, true))
-          .create()
-      val client = launcher.getRemoteProxy
-      this.connect(client)
-      launcher.startListening()
+      launch(_.getRemoteProxy, socket.getInputStream, socket.getOutputStream, trace = true)
     } else {
-      val launcher =
-        new LSPLauncher.Builder()
-          .setLocalService(this)
-          .setRemoteInterface(classOf[EffektLanguageClient])
-          .setInput(System.in)
-          .setOutput(System.out)
-          .setExecutorService(executor)
-          .create()
-
-      val client = launcher.getRemoteProxy
-      this.connect(client)
-      launcher.startListening()
+      launch(_.getRemoteProxy, System.in, System.out)
     }
   }
 }
@@ -621,8 +607,8 @@ case class EffektHoleInfo(id: String,
                     range: LSPRange,
                     innerType: Option[String],
                     expectedType: Option[String],
-                    importedTerms: Seq[Intelligence.TermBinding], importedTypes: Seq[Intelligence.TypeBinding],
-                    terms: Seq[Intelligence.TermBinding], types: Seq[Intelligence.TypeBinding])
+                    importedTerms: List[Intelligence.TermBinding], importedTypes: List[Intelligence.TypeBinding],
+                    terms: List[Intelligence.TermBinding], types: List[Intelligence.TypeBinding])
 
 object EffektHoleInfo {
   def fromHoleInfo(info: Intelligence.HoleInfo): EffektHoleInfo = {
@@ -638,4 +624,3 @@ object EffektHoleInfo {
     )
   }
 }
-

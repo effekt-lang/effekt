@@ -321,13 +321,13 @@ object Intelligence {
      span: Span,
      innerType: Option[String],
      expectedType: Option[String],
-     importedTerms: Seq[TermBinding], importedTypes: Seq[TypeBinding],
-     terms: Seq[TermBinding], types: Seq[TypeBinding]
+     importedTerms: List[TermBinding], importedTypes: List[TypeBinding],
+     terms: List[TermBinding], types: List[TypeBinding]
   )
 
-  case class TermBinding(qualifier: Seq[String], name: String, `type`: Option[String])
+  case class TermBinding(qualifier: List[String], name: String, `type`: Option[String])
 
-  case class TypeBinding(qualifier: Seq[String], name: String, definition: String)
+  case class TypeBinding(qualifier: List[String], name: String, definition: String)
 
   case class BindingInfo(
     importedTerms: Iterable[TermBinding],
