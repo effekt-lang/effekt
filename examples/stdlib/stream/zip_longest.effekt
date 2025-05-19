@@ -6,7 +6,7 @@ def main() = {
   def stream2() = ['H', 'e', 'l', 'l', 'o'].each
 
   zipLongest[Int, Char]{stream1}{stream2} {
-    case These(a, b) => println(show(a) ++ ", " ++ show(b))
+    case Both(a, b) => println(show(a) ++ ", " ++ show(b))
     case This(a) => println(show(a))
     case That(b) => println("?, " ++ show(b))
   }

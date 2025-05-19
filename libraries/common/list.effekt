@@ -601,13 +601,13 @@ def zip[A, B](left: List[A], right: List[B]): List[(A, B)] = {
   go(Nil(), left, right)
 }
 
-/// Produce a list of These from two lists.
+/// Produce a list of OneOrBoth from two lists.
 /// The length is the maximum of lenghts of the two lists.
 ///
 /// Examples:
 /// ```
 /// > zipLongest([1, 2, 3], [100, 200, 300])
-/// [These(1, 100), These(2, 200), These(3, 300)]
+/// [Both(1, 100), Both(2, 200), Both(3, 300)]
 ///
 /// > zipLongest([1, 2, 3], Nil[Int]())
 /// [This(1), This(2), This(3)]
@@ -620,11 +620,11 @@ def zip[A, B](left: List[A], right: List[B]): List[(A, B)] = {
 /// ```
 ///
 /// O(N)
-def zipLongest[A, B](left: List[A], right: List[B]): List[These[A, B]] = {
-  def go(acc: List[These[A, B]], left: List[A], right: List[B]): List[These[A,B]] = {
+def zipLongest[A, B](left: List[A], right: List[B]): List[OneOrBoth[A, B]] = {
+  def go(acc: List[OneOrBoth[A, B]], left: List[A], right: List[B]): List[OneOrBoth[A,B]] = {
     (left, right) match {
       case (Cons(a, as), Cons(b, bs)) =>
-        go(Cons(These(a, b), acc), as, bs)
+        go(Cons(Both(a, b), acc), as, bs)
       case (Cons(a, as), Nil()) =>
         go(Cons(This(a), acc), as, Nil())
       case (Nil(), Cons(b, bs)) =>

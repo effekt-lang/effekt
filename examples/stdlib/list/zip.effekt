@@ -11,9 +11,9 @@ def printListOfPairs(list: List[Tuple2[Int, Int]]): Unit = {
 }
 
 // used to circumvent missing universal `show` & `println` on some backends
-def printListOfThese(list: List[These[Int, Int]]): Unit = {
+def printListOfOneOrBoth(list: List[OneOrBoth[Int, Int]]): Unit = {
   val strings: List[String] = list.map {
-    case These(fst, snd) => "These(" ++ show(fst) ++ ", " ++ show(snd) ++ ")"
+    case Both(fst, snd) => "Both(" ++ show(fst) ++ ", " ++ show(snd) ++ ")"
     case This(fst) => "This(" ++ show(fst) ++ ")"
     case That(snd) => "That(" ++ show(snd) ++ ")"
   }
@@ -27,8 +27,8 @@ def main() = {
   printListOfPairs(zip(Nil[Int](), [1, 2, 3]))
   printListOfPairs(zip([1, 2, 3], [42]))
   // synchronized with doctest in `zipLongest`
-  printListOfThese(zipLongest([1, 2, 3], [100, 200, 300]))
-  printListOfThese(zipLongest([1, 2, 3], Nil[Int]()))
-  printListOfThese(zipLongest(Nil[Int](), [1, 2, 3]))
-  printListOfThese(zipLongest([1, 2, 3], [42]))
+  printListOfOneOrBoth(zipLongest([1, 2, 3], [100, 200, 300]))
+  printListOfOneOrBoth(zipLongest([1, 2, 3], Nil[Int]()))
+  printListOfOneOrBoth(zipLongest(Nil[Int](), [1, 2, 3]))
+  printListOfOneOrBoth(zipLongest([1, 2, 3], [42]))
 }

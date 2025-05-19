@@ -285,9 +285,9 @@ def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] 
   }
 }
 
-/// Combines two streams together calling action on These in lockstep.
+/// Combines two streams together calling action on OneOrBoth in lockstep.
 /// Terminates when both of them terminated.
-def zipLongest[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] } { action: These[A, B] => Unit }: Unit = {
+def zipLongest[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] } { action: OneOrBoth[A, B] => Unit }: Unit = {
   with source[A] { stream1 }
   with source[B] { stream2 }
 
@@ -296,7 +296,7 @@ def zipLongest[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / e
       val a = do read[A]()
       try {
         val b = do read[B]()
-        action(These(a, b))
+        action(Both(a, b))
       } with stop { () =>
         action(This(a))
       }
