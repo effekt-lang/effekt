@@ -609,13 +609,13 @@ def zip[A, B](left: List[A], right: List[B]): List[(A, B)] = {
 /// > zipLongest([1, 2, 3], [100, 200, 300])
 /// [These(1, 100), These(2, 200), These(3, 300)]
 ///
-/// > zip([1, 2, 3], Nil[Int]())
+/// > zipLongest([1, 2, 3], Nil[Int]())
 /// [This(1), This(2), This(3)]
 ///
-/// > zip(Nil[Int](), [1, 2, 3])
+/// > zipLongest(Nil[Int](), [1, 2, 3])
 /// [That(1), That(2), That(3)]
 ///
-/// > zip([1, 2, 3], [42])
+/// > zipLongest([1, 2, 3], [42])
 /// [These(1, 42), This(2), This(3)]
 /// ```
 ///
