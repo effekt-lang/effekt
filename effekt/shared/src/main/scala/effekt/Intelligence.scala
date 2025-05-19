@@ -292,14 +292,15 @@ trait Intelligence {
       SymbolInfo(c, "Mutable variable binder", signature, Some(ex))
 
     case s: RegBinder =>
+      val signature = C.blockTypeOption(s).map(TState.extractType).orElse(s.tpe).map { tpe => pp"${s.name}: ${tpe}" }
 
       val ex =
-        pp"""|The region a variable is allocated into (${s.region}) not only affects its lifetime, but
-             |also its backtracking behavior in combination with continuation capture and
-             |resumption.
-             |""".stripMargin
+        s"""|The region `${s.region.name}` the variable `${s.name}` is allocated into
+            |not only affects its lifetime, but also its backtracking behavior
+            |in combination with continuation capture and resumption.
+            |""".stripMargin
 
-      SymbolInfo(s, "Variable in region", None, Some(ex))
+      SymbolInfo(s, "Variable in region", signature, Some(ex))
 
     case c: ValueParam =>
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
