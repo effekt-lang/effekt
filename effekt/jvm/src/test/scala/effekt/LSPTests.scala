@@ -1185,25 +1185,25 @@ class LSPTests extends FunSuite {
       didOpenParams.setTextDocument(source)
       server.getTextDocumentService().didOpen(didOpenParams)
 
-      val expectedHoles = Array[EffektHoleInfo]()
+      val expectedHoles = List()
 
       val termsFoo = List(
         TermBinding(
-          qualifier = Nil,
+          qualifier = List(),
           name = "x",
           `type` = Some(
             "Int"
           )
         ),
         TermBinding(
-          qualifier = Nil,
+          qualifier = List(),
           name = "bar",
           `type` = Some(
             "String => Int"
           )
         ),
         TermBinding(
-          qualifier = Nil,
+          qualifier = List(),
           name = "foo",
           `type` = Some(
             "Int => Bool"
