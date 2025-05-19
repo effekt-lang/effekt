@@ -43,20 +43,18 @@ class ScalaListTypeAdapter extends JsonSerializer[scala.collection.immutable.Lis
   }
 }
 
-implicit class GsonBuilderScalaOps(val builder: GsonBuilder) extends AnyVal {
-  /**
-   * Make the Scala Option[_] and List[_] types (de)serialize correctly with Gson.
-   *
-   * As a Java library, Gson does not special case any Scala types. This leads to unexpected (de)serialization by default.
-   * By default, Some(x) serializes to {"value":x} and None serializes to {}.
-   * List serializes to nested JSON objects.
-   *
-   * This method adds custom (de)serializers such that
-   * - Some(x) serializes to x and None serializes to null
-   * - List serializes to a flat JSON array.
-   */
-  def withScalaSupport: GsonBuilder =
-    builder
-      .registerTypeHierarchyAdapter(classOf[Option[_]], new ScalaOptionTypeAdapter)
-      .registerTypeHierarchyAdapter(classOf[List[_]],   new ScalaListTypeAdapter)
-}
+/**
+ * Make the Scala Option[_] and List[_] types (de)serialize correctly with Gson.
+ *
+ * As a Java library, Gson does not special case any Scala types. This leads to unexpected (de)serialization by default.
+ * By default, Some(x) serializes to {"value":x} and None serializes to {}.
+ * List serializes to nested JSON objects.
+ *
+ * This method adds custom (de)serializers such that
+ * - Some(x) serializes to x and None serializes to null
+ * - List serializes to a flat JSON array.
+ */
+extension (builder: GsonBuilder) def withScalaSupport: GsonBuilder =
+  builder
+    .registerTypeHierarchyAdapter(classOf[Option[_]], new ScalaOptionTypeAdapter)
+    .registerTypeHierarchyAdapter(classOf[List[_]], new ScalaListTypeAdapter)
