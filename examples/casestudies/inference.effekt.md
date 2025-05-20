@@ -1,10 +1,10 @@
 ---
 layout: docs
-title: Inference
+title: Probabilistic Inference
 permalink: docs/casestudies/inference
 ---
 
-# Inference
+# Probabilistic Inference
 
 This case study shows how we can perform inference over probabilistic models with the help of effects.
 
@@ -19,6 +19,12 @@ import exception
 We need some effects to perform probabilistic operations:
 
 ```
+type Distribution {
+  Gaussian(mean: Double, variance: Double)
+  Uniform(lower: Double, upper: Double)
+  Beta(mean: Double, sampleSize: Double)
+}
+type Probability = Double
 effect sample(dist: Distribution): Double
 effect observe(value: Double, dist: Distribution): Unit
 effect random(): Double
@@ -29,17 +35,6 @@ interface Emit[A] {
 ```
 
 With the effect `sample`, we can sample from a given distribution, and with the effect `observe` we can determine how probable it is to observe a given value under a given distribution (probability density function (PDF)).
-
-We also need to define some type aliases:
-
-```
-type Distribution {
-  Gaussian(mean: Double, variance: Double)
-  Uniform(lower: Double, upper: Double)
-  Beta(mean: Double, sampleSize: Double)
-}
-type Probability = Double
-```
 
 Currently, we support models with Gaussian, Uniform or Beta distributions. Thus, we need a way to draw from these distributions and to compute the probability density.
 
@@ -208,7 +203,7 @@ def handleRejection[R] { program: () => R / weight }: R / random = {
 
 Intuitively, invoking `do weight(p)` in some program `prog` assigns this path the probability of `p` such that `prog` is non-deterministically repeated until it is accepted by the underlying proposal distribution.
 
-```repl
+```effekt:repl
 region _ {
   with linearCongruentialGenerator(1)
   with handleSample
@@ -464,6 +459,26 @@ Remember from earlier that `handleObserve` uses the `weight` effect operation.
 Therefore, the call `do observe(y, Gaussian(m * x + c, 1.0))` can be understood as `P(Y | C)` where `Y` are the observations and `C` are the parameters sampled from a Gaussian given by `m ~ N(0, 3)` and `c ~ N(0, 2)`.
 If the chosen parameters do not explain the observations well, it is likely it will be rejected and new parameters will be sampled. Conversely, if the model fits well, it is unlikely it will be rejected.
 
+```effekt:repl
+locally {
+  with linearCongruentialGenerator(1)
+  with onEmit[Point] { s => println(s.show) };
+
+  limit[Point](5) {
+    with rejectionSampling[Point]
+
+    linearRegression([
+      Point(5.0, 5.0),
+      Point(1.0, 1.0),
+      Point(-2.0, -2.0),
+      Point(3.0, 3.0),
+      Point(20.0, 20.0),
+      Point(5.0, 5.0)
+    ])
+  }
+}
+```
+
 ### Robot Movements
 
 It is also possible to construct bigger examples on which we can apply these algorithms.
@@ -484,6 +499,7 @@ In this example, we also define a type alias for `Measurement`:
 
 ```
 type Measurement = Double
+type Path = List[State]
 ```
 
 For simulating the movement of the robot at a given state, we sample accelerations `xa`, `ya` along the x and y axis from a Gaussian distribution.
@@ -523,6 +539,61 @@ def step(s0: State, m1: Measurement): State / { sample, observe } = {
   val s1 = move(s0)
   measure(s1, m1)
   return s1
+}
+```
+
+We can now put our model to the test by running the following simple example:
+
+```effekt:repl
+locally {
+  with linearCongruentialGenerator(1)
+  with onEmit[State] { s => println(s.show) };
+
+  limit[State](5) {
+    with sliceSampling[State](5)
+
+    val init = State(0.0, 3.0, 2.0, 0.0)
+    step(init, 5.0)
+  }
+}
+```
+
+As a more complex example, we now also probabilisticly augment the distance measurements by applying Gaussian noise to it instead of keeping constant.
+More importantly, we now predict five different possible paths consisting of five states each.
+
+```effekt:hide
+def show(path: Path): String = {
+  "[" ++ path.foldLeft("") { (acc, s) =>
+    val comma = acc match {
+      case "" => acc
+      case _ => acc ++ ", "
+    }
+    comma ++ s.show
+  } ++ "]"
+}
+```
+
+```effekt:repl
+locally {
+  with linearCongruentialGenerator(1)
+  with onEmit[Path] { path => println(path.show) };
+
+  limit[Path](5) {
+    with sliceSampling[Path](1);
+
+    var nextState = State(0.0, 3.0, 2.0, 0.0)
+    var nextdis = 5.0
+    var m = 5
+    var path = [nextState]
+    while (m > 0) {
+      nextState = step(nextState, nextdis)
+      val noise = do sample(Gaussian(0.0, 1.0))
+      nextdis = nextdis + noise
+      path = append(path, [nextState])
+      m = m - 1
+    }
+    path
+  }
 }
 ```
 
@@ -581,11 +652,62 @@ def step(p0: Population, pr1: Double): Population / { sample, observe } = {
 }
 ```
 
----
+Testing it on a simple example, is similar as we have seen previously with the robot movement predictions:
 
-Finally, we can use the implemented inference methods to run some concrete examples:
+```effekt:repl
+locally {
+  with linearCongruentialGenerator(1)
+  with onEmit[Population] { p => println(p.show) };
 
+  limit[Population](5) {
+    with metropolisHastings[Population](5)
+
+    val init = Population(0.7, 0.2, 0.1)
+    step(init, 0.8)
+  }
+}
 ```
+
+```effekt:hide
+def show(path: List[Population]): String = {
+  "[" ++ path.foldLeft("") { (acc, s) =>
+    val comma = acc match {
+      case "" => acc
+      case _ => acc ++ ", "
+    }
+    comma ++ s.show
+  } ++ "]"
+}
+```
+
+We again can also predict multiple different scenarios where the disease spreads differently throughout a population:
+
+```effekt:repl
+locally {
+  with linearCongruentialGenerator(1)
+  with onEmit[List[Population]] { ps => println(ps.show) }
+
+  limit[List[Population]](1) {
+    with metropolisHastings[List[Population]](1)
+
+    var nextPop = Population(0.7, 0.2, 0.1)
+    var nextpr = 0.8
+    var m = 5
+    var path : List[Population] = [nextPop]
+    while (m > 0) {
+      nextPop = step(nextPop, nextpr)
+      val noise = do sample(Gaussian(0.0, 0.01))
+      var nextpr1 = nextpr + noise
+      if (not(nextpr1 < 0.0 || nextpr1 > 1.0)) { nextpr = nextpr1 }
+      path = append(path, [nextPop])
+      m = m - 1
+    }
+    path
+  }
+}
+```
+
+```effekt:ignore:hide
 type Path = List[State]
 
 def main() = {
