@@ -2,6 +2,7 @@
 layout: docs
 title: ANF Transformation
 permalink: docs/casestudies/anf
+redirect_to: docs/casestudies/frontend/#anf
 ---
 
 # ANF Transformation

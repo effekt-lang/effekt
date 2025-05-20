@@ -2,6 +2,7 @@
 layout: docs
 title: Parser
 permalink: docs/casestudies/parser
+redirect_to: docs/casestudies/frontend/#parser
 ---
 
 # Parsing

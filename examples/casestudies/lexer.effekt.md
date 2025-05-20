@@ -2,6 +2,7 @@
 layout: docs
 title: Lexer
 permalink: docs/casestudies/lexer
+redirect_to: docs/casestudies/frontend/#pull-based-lexing
 ---
 
 # Pull-based Lexing
