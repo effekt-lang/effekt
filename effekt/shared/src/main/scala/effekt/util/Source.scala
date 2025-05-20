@@ -17,21 +17,46 @@ case class MarkdownSource(source: Source) extends Source {
 
   lazy val content = {
     var inCode = false
-    var inOtherFence = false
+    var inRepl = false
+    var repl = ""
+    var replCounter = 0
     // we map non-code lines to empty lines to preserve line numbers
-    val lines = source.content.linesIterator.map {
-      case line if fenceLine.matches(line) && !inOtherFence =>
-        inCode = !inCode
-        ""
-      case line if otherFenceLine.matches(line) =>
-        inOtherFence = !inOtherFence
-        ""
-      case line if inCode =>
-        line
-      case _ =>
-        ""
+    val lines = source.content.linesIterator.map { line =>
+      line match {
+        case fenceLine(line, ots, _) =>
+          val opts = if (ots != null) { ots.tail.split(":").toList } else { Nil }
+          if (opts.contains("repl")) {
+            inRepl = true
+            ""
+          } else if (inRepl) {
+            inRepl = false
+            val res = s"def repl$replCounter() = $repl"
+            replCounter = replCounter + 1
+            res
+          } else {
+            inCode = !inCode
+            ""
+          }
+        case line if inRepl =>
+          repl = line
+          ""
+        case line if inCode => line
+        case _ => ""
+      }
     }
-    lines.mkString("\n")
+    val prog = lines.mkString("\n")
+    val repls = 0.until(replCounter).map { i => s"repl${i}()"}
+    val main = if (replCounter > 0) {
+      s"""
+      |def main() = {
+      |  ${repls.map { r => s"inspect($r)" }.mkString("\n") }
+      |  ()
+      |}
+      """.stripMargin
+    } else { "" }
+    val res = prog ++ main
+    println(res)
+    res
   }
 }
 
