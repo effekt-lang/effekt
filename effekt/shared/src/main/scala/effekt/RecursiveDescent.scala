@@ -137,7 +137,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def skip(): Unit =
     previous = tokens(position)
     position += 1;
-//    currentLabel = None // TODO(jiribenes, 2025-05-20): ???
     spaces()
 
   def isSpace(kind: TokenKind): Boolean =
@@ -148,8 +147,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   @tailrec
   final def spaces(): Unit = if hasNext() then peek.kind match {
-    // TODO(jiribenes, 2025-05-20): ???
-    case kind if isSpace(kind) => position += 1; /* currentLabel = None; */ spaces()
+    case kind if isSpace(kind) => position += 1; spaces()
     case _ => ()
   }
 
