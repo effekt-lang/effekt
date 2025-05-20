@@ -2,11 +2,6 @@
 layout: docs
 title: Compiler Frontend Phases
 permalink: docs/casestudies/frontend
-redirect_from:
-  - docs/casestudies/lexer
-  - docs/casestudies/parser
-  - docs/casestudies/prettyprinter
-  - docs/casestudies/anf
 ---
 
 # Compiler Frontend Phases

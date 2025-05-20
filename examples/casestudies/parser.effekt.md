@@ -2,7 +2,7 @@
 layout: docs
 title: Parser
 permalink: docs/casestudies/parser
-redirect_to: docs/casestudies/frontend/#parser
+redirect_to: docs/casestudies/frontend#parsing
 ---
 
 # Parsing
@@ -12,11 +12,11 @@ In this case study, we show how to implement a parser, using the lexer from the
 ---
 
 Again, we require some imports -- in particular, we reuse the lexer implementation.
-```
+
+```effekt:ignore
 module examples/casestudies/parser
 
 import examples/casestudies/lexer
-import string
 ```
 
 Parsers can be expressed by using the lexer effect and process the token stream. To model different alternatives in the grammar, we use the following effect for non-determinism:

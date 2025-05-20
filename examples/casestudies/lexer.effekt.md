@@ -2,7 +2,7 @@
 layout: docs
 title: Lexer
 permalink: docs/casestudies/lexer
-redirect_to: docs/casestudies/frontend/#pull-based-lexing
+redirect_to: docs/casestudies/frontend#pull-based-lexing
 ---
 
 # Pull-based Lexing
@@ -11,8 +11,9 @@ in terms of effect handlers.
 
 ---
 
-Before we get started, we require a few imports to deal with strings and regular expressions.
-```
+Before we get started, we require a few imports to deal with regular expressions.
+
+```effekt:ignore
 module examples/casestudies/lexer
 
 import string

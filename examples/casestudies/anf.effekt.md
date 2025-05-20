@@ -2,7 +2,7 @@
 layout: docs
 title: ANF Transformation
 permalink: docs/casestudies/anf
-redirect_to: docs/casestudies/frontend/#anf
+redirect_to: docs/casestudies/frontend#anf
 ---
 
 # ANF Transformation
@@ -14,7 +14,7 @@ non-locally insert binders for non-trivial expressions.
 The source language of our transformation is the `Tree` data type from the
 [parser case study](parser).
 
-```
+```effekt:ignore
 module examples/casestudies/anf
 
 import examples/casestudies/parser // for the Tree datatype

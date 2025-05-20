@@ -2,7 +2,7 @@
 layout: docs
 title: Pretty Printer
 permalink: docs/casestudies/prettyprinter
-redirect_to: docs/casestudies/frontend/#prettyprinter
+redirect_to: docs/casestudies/frontend#prettyprinter
 ---
 
 # Pretty Printer
@@ -17,11 +17,10 @@ but adapt it to the setting of effect handlers.
 Furthermore, the library presented here is neither linear
 (it uses simple backtracking), bounded (backtracking is arbitrary), nor functional (combinators are imperative style).
 
-```
+```effekt:ignore
 module examples/casestudies/prettyprinter
 
 import examples/casestudies/parser // just needed for the example (Tree)
-import string
 ```
 
 Similar to the [parser case study](parser), the pretty printing library is based
