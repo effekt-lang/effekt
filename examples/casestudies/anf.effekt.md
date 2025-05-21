@@ -15,8 +15,6 @@ The source language of our transformation is the `Tree` data type from the
 [parser case study](parser).
 
 ```
-module examples/casestudies/anf
-
 import examples/casestudies/parser // for the Tree datatype
 import examples/casestudies/prettyprinter // for the combined example
 ```

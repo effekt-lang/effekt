@@ -109,13 +109,12 @@ val exampleTokens = [
 ]
 ```
 we can compose the two handlers to run our example consumer:
-```
-def runExample1() =
-  report {
-    exampleTokens.lexerFromList {
-      inspect(example1())
-    }
+```effekt:repl
+report {
+  exampleTokens.lexerFromList {
+    inspect(example1())
   }
+}
 ```
 
 ## Handling the Lexer Effect by Processing a String
@@ -192,13 +191,12 @@ the input, or not.
 }
 ```
 Running our above consumer with the string `"foo()"`
-```
-def runExample2() =
-  report {
-    lexer("foo()") {
-      inspect(example1())
-    }
+```effekt:repl
+report {
+  lexer("foo()") {
+    inspect(example1())
   }
+}
 ```
 yields the output:
 ```
@@ -223,24 +221,13 @@ def skipWhitespace[R] { prog: => R / Lexer }: R / Lexer =
 ```
 The handler `skipWhitespace` simply skips all spaces by using the `Lexer` effect itself.
 
-```
-def runExample3() =
-  report {
-    lexer("foo (   \n  )") {
-      skipWhitespace {
-        inspect(example1())
-      }
+```effekt:repl
+report {
+  lexer("foo (   \n  )") {
+    skipWhitespace {
+      inspect(example1())
     }
   }
-```
-
-### Running the Examples
-To run this markdown file, simply supply its name as argument to the `effekt` binary.
-```
-def lexer() = {
-  runExample1()
-  runExample2()
-  runExample3()
 }
 ```
 
@@ -453,8 +440,8 @@ the lexer positions will be restored when calling the continuation a second time
 ## Running the Examples
 Having implemented a handler for the `Parser` effect, we can run our example "grammars" on some inputs.
 
-```
-def prettyprinter() = {
+```effekt:repl
+locally {
   inspect(parse("42") { parseCalls() })
   inspect(parse("foo(1)") { parseCalls() })
   inspect(parse("foo(1, 2)") { parseCalls() })
@@ -853,8 +840,8 @@ def example4() = parseAndPrint("let x = (let y = 2 in 1) in 42", 10)
 
 ## Additional Examples
 
-```
-def parser() = {
+```effekt:repl
+locally {
 
   println("-----");
   println(pretty(5) { example1([1,2,3,4]) });
@@ -1105,8 +1092,8 @@ def pipeline(input: String): String =
 
 Here we use `pipeline` to translate some examples:
 
-```
-def anf() = {
+```effekt:repl
+locally {
   inspect(exampleResult)
   println(examplePretty)
 
@@ -1124,14 +1111,5 @@ def anf() = {
 
   println("----")
   println(pipeline("let x = (let y = f(42) in 1) in 42"))
-}
-```
-
-```
-def main() = {
-  lexer()
-  parser()
-  prettyprinter()
-  anf()
 }
 ```

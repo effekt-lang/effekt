@@ -128,8 +128,8 @@ def supplyInput[R](store: Store) { prog: => R / { needInput } }: R / { keyNotFou
 
 The `main` function runs all examples.
 
-```
-def main() = {
+```effekt:repl
+locally {
     val inputs = [("A1", 10), ("A2", 20)];
     try {
         val result1 = supplyInput(inputs) { build ("B2") { (key) => example1(key) } };

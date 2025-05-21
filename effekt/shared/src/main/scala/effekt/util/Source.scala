@@ -106,7 +106,6 @@ case class MarkdownSource(source: Source) extends Source {
       "def main() = ()"
     }
     val res = prog ++ main
-    println(res)
     res
   }
 }

@@ -136,8 +136,8 @@ def backwards(in: Double) { prog: NumB => NumB / AD[NumB] }: Double = {
 ## Example Usages
 We can use forwards and backwards propagation to compute derivatives of a few
 examples.
-```
-def main() = {
+```effekt:repl
+locally {
   println(forwards(2.0) { x => prog(x) })
   println(backwards(2.0) { x => prog(x) })
 
@@ -178,8 +178,4 @@ def main() = {
   }
   println(result3)
 }
-```
-
-In the following REPL you can run the examples (try entering `main()`):
-```effekt:repl
 ```

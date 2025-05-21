@@ -14,8 +14,6 @@ In this case study, we show how to implement a parser, using the lexer from the
 Again, we require some imports -- in particular, we reuse the lexer implementation.
 
 ```
-module examples/casestudies/parser
-
 import examples/casestudies/lexer
 ```
 

@@ -18,8 +18,6 @@ Furthermore, the library presented here is neither linear
 (it uses simple backtracking), bounded (backtracking is arbitrary), nor functional (combinators are imperative style).
 
 ```
-module examples/casestudies/prettyprinter
-
 import examples/casestudies/parser // just needed for the example (Tree)
 ```
 

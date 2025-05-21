@@ -110,8 +110,8 @@ We can now construct sentences like
 
 as:
 
-```
-val s1 = Say(John, Mary.loves(John))
+```effekt:repl
+Say(John, Mary.loves(John))
 ```
 
 ### The Speaker Effect
@@ -225,9 +225,8 @@ similar to let-insertion ([Yallop, 2017][@yallop2017staged]).
 
 ### Running the Examples
 Finally, we can run our examples to inspect the generated sentences.
-```
-def main() = {
-  inspect(s1)
+```effekt:repl
+locally {
   inspect(s1a())
   inspect(s1c())
   inspect(s2())

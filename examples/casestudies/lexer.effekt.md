@@ -13,9 +13,7 @@ in terms of effect handlers.
 
 Before we get started, we require a few imports to deal with regular expressions.
 
-```effekt
-module examples/casestudies/lexer
-
+```
 import string
 import regex
 ```
