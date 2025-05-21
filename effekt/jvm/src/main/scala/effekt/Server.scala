@@ -407,14 +407,14 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
               pos = fun.ret.span.range.from
             } yield {
               val prettyType = pp": ${tpe.result} / ${tpe.effects}"
-              val inlayHint = new InlayHint(convertPosition(pos), messages.Either.forLeft(pp": ${tpe.result} / ${tpe.effects}"))
+              val inlayHint = new InlayHint(convertPosition(pos), messages.Either.forLeft(prettyType))
               inlayHint.setKind(InlayHintKind.Type)
               val markup = new MarkupContent()
               markup.setValue(s"return type${prettyType}")
               markup.setKind("markdown")
               inlayHint.setTooltip(markup)
               inlayHint.setPaddingLeft(true)
-              inlayHint.setData("omitted-type-annotation")
+              inlayHint.setData("return-type-annotation")
               val textEdit = new TextEdit(convertRange(fun.ret.span.range), prettyType)
               inlayHint.setTextEdits(Collections.seqToJavaList(List(textEdit)))
               inlayHint

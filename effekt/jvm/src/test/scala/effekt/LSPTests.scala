@@ -632,7 +632,7 @@ class LSPTests extends FunSuite {
       omittedHint.setKind(InlayHintKind.Type)
       omittedHint.setPosition(positions(1))
       omittedHint.setLabel(": Int / {}")
-      omittedHint.setData("omitted-type-annotation")
+      omittedHint.setData("return-type-annotation")
       omittedHint.setTextEdits(List(
         new TextEdit(
           new Range(positions(1), positions(1)),
