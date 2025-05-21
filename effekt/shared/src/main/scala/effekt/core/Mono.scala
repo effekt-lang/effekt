@@ -17,6 +17,8 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             val polys = findConstraints(definitions)
             polys.foreach(p => println(p))
             println()
+            println("Has cycle: " + hasCycle(polys))
+            println()
           }
         }
       }
@@ -30,8 +32,13 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 //       so we can generate the required monomorphic functions
 
 enum PolyType {
-  case Var(val sym: symbols.Symbol)
   case Base(val tpe: symbols.Symbol)
+  case Var(val sym: symbols.Symbol)
+
+  def toSymbol: symbols.Symbol = this match {
+    case Base(tpe) => tpe 
+    case Var(sym) => sym
+  }
 }
 
 type PolyConstraints = Map[symbols.Symbol, Set[PolyType]]
@@ -94,29 +101,25 @@ def findConstraints(definitions: List[Toplevel]): PolyConstraints =
   }
   typeFlow
 
-object PolyGraphCalc {
-  var visited: Set[symbols.Symbol] = Set()
-  var recStack: Set[symbols.Symbol] = Set()
+def hasCycle(constraints: PolyConstraints): Boolean =
+    var visited: Set[symbols.Symbol] = Set()
+    var recStack: Set[symbols.Symbol] = Set()
 
-  def hasCycle(vertex: symbols.Symbol, adjacency: PolyConstraints): Boolean =  
-    if (recStack.contains(vertex)) return true
+    def hasCycleHelper(vertex: symbols.Symbol): Boolean =
+      if (recStack.contains(vertex)) return true
+      if (visited.contains(vertex)) return false
 
-    if (visited.contains(vertex)) return false
+      visited += vertex
+      recStack += vertex
 
-    visited += vertex
-    recStack += vertex
+      var cycleFound = false
+      constraints.getOrElse(vertex, Set()).foreach(v => cycleFound |= hasCycleHelper(v.toSymbol))
 
-    adjacency.foreach((v, edges) => if (hasCycle(v, adjacency)) return true)
+      recStack -= vertex
 
-    recStack -= vertex
-    false
+      cycleFound
+      
+    var cycleFound = false
+    constraints.keys.foreach(v => cycleFound |= !visited.contains(v) && hasCycleHelper(v))
 
-  def hasCycle(constraints: PolyConstraints): Boolean =
-    visited = Set()
-    recStack = Set()
-
-    constraints.keys.foreach(v => if (hasCycle(v, constraints)) return true)
-
-    false
-}
-
+    cycleFound
