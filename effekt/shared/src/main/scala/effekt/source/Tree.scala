@@ -298,7 +298,7 @@ case class Maybe[T](unspan: Option[T], span: Span) {
       case None => alternative
     }
 
-  export unspan.{foreach, get, getOrElse}
+  export unspan.{foreach, get, getOrElse, isEmpty}
 }
 
 object Maybe {
