@@ -389,96 +389,92 @@ def example4() = parseAndPrint("let x = (let y = 2 in 1) in 42", 10)
 ## Additional Examples
 
 ```effekt:repl
-locally {
+println("-----");
+println(pretty(5) { example1([1,2,3,4]) });
 
-  println("-----");
-  println(pretty(5) { example1([1,2,3,4]) });
+println("----------");
+println(pretty(10) { example1([1,2,3,4,5,6,7,8,9,1,2,3,4]) });
 
-  println("----------");
-  println(pretty(10) { example1([1,2,3,4,5,6,7,8,9,1,2,3,4]) });
+println("----------")
+println(example4())
 
-  println("----------")
-  println(example4())
-
-  def example4b() = {
-    text("def"); space(); text("foo"); parens {
-      group {
-        nest(2) {
-          linebreak();
-          group { text("x"); text(":"); space(); text("Int"); text(",") };
-          line();
-          group { text("y"); text(":"); space(); text("String") }
-        };
-        linebreak()
-      }
-    }
-  }
-  def example3b() = {
-    example4b();
-    space();
-    braces {
-      group {
-        nest(2) {
-          line();
-          text("var"); space(); text("z"); space(); text("="); space(); text("42"); text(";")
-        };
-        line()
-      }
-    }
-  }
-
-  def example6() = {
+def example4b() = {
+  text("def"); space(); text("foo"); parens {
     group {
-      text("this");
-      nest(9) {
+      nest(2) {
+        linebreak();
+        group { text("x"); text(":"); space(); text("Int"); text(",") };
         line();
-        group { text("takes"); line(); text("many"); line(); text("f") }
+        group { text("y"); text(":"); space(); text("String") }
       };
-      line();
-      text("l")
+      linebreak()
     }
   }
-
-  def example7() = {
+}
+def example3b() = {
+  example4b();
+  space();
+  braces {
     group {
-      text("this");
-      line();
-      text("will");
-      nest(9) {
+      nest(2) {
         line();
-        group { text("take"); line(); text("many") }
+        text("var"); space(); text("z"); space(); text("="); space(); text("42"); text(";")
       };
-      line();
-      text("lines")
+      line()
     }
   }
-
-  def helloWorld() = {
-    text("hello")
-    line()
-    text("world")
-  }
-
-  println("------------------------------");
-  println(pretty(30) { example4b() });
-  println("--------------------");
-  println(pretty(20) { example4b() });
-
-  println("----------");
-  println(pretty(50) { example3b() });
-  println(pretty(15) { example3b() });
-
-  println("------");
-  println(pretty(6) { example2() });
-
-  println("---------------");
-  println(pretty(15) { example3() });
-
-  println("--------------");
-  println(pretty(14) { example6() });
-
-  println("--------------");
-  println(pretty(14) { example7() })
 }
 
+def example6() = {
+  group {
+    text("this");
+    nest(9) {
+      line();
+      group { text("takes"); line(); text("many"); line(); text("f") }
+    };
+    line();
+    text("l")
+  }
+}
+
+def example7() = {
+  group {
+    text("this");
+    line();
+    text("will");
+    nest(9) {
+      line();
+      group { text("take"); line(); text("many") }
+    };
+    line();
+    text("lines")
+  }
+}
+
+def helloWorld() = {
+  text("hello")
+  line()
+  text("world")
+}
+
+println("------------------------------");
+println(pretty(30) { example4b() });
+println("--------------------");
+println(pretty(20) { example4b() });
+
+println("----------");
+println(pretty(50) { example3b() });
+println(pretty(15) { example3b() });
+
+println("------");
+println(pretty(6) { example2() });
+
+println("---------------");
+println(pretty(15) { example3() });
+
+println("--------------");
+println(pretty(14) { example6() });
+
+println("--------------");
+println(pretty(14) { example7() })
 ```

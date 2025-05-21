@@ -261,10 +261,8 @@ def runDiscrete(numberOfParticles: Int) =
 ```
 
 ```effekt:repl
-locally {
-  runDiscrete(15)
-  runSMC(100)
-}
+runDiscrete(15)
+runSMC(100)
 ```
 
 

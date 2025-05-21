@@ -460,22 +460,20 @@ Therefore, the call `do observe(y, Gaussian(m * x + c, 1.0))` can be understood 
 If the chosen parameters do not explain the observations well, it is likely it will be rejected and new parameters will be sampled. Conversely, if the model fits well, it is unlikely it will be rejected.
 
 ```effekt:repl
-locally {
-  with linearCongruentialGenerator(1)
-  with onEmit[Point] { s => println(s.show) };
+with linearCongruentialGenerator(1)
+with onEmit[Point] { s => println(s.show) };
 
-  limit[Point](5) {
-    with rejectionSampling[Point]
+limit[Point](5) {
+  with rejectionSampling[Point]
 
-    linearRegression([
-      Point(5.0, 5.0),
-      Point(1.0, 1.0),
-      Point(-2.0, -2.0),
-      Point(3.0, 3.0),
-      Point(20.0, 20.0),
-      Point(5.0, 5.0)
-    ])
-  }
+  linearRegression([
+    Point(5.0, 5.0),
+    Point(1.0, 1.0),
+    Point(-2.0, -2.0),
+    Point(3.0, 3.0),
+    Point(20.0, 20.0),
+    Point(5.0, 5.0)
+  ])
 }
 ```
 
@@ -545,7 +543,7 @@ def step(s0: State, m1: Measurement): State / { sample, observe } = {
 We can now put our model to the test by running the following simple example:
 
 ```effekt:repl
-locally {
+ {
   with linearCongruentialGenerator(1)
   with onEmit[State] { s => println(s.show) };
 
@@ -574,26 +572,24 @@ def show(path: Path): String = {
 ```
 
 ```effekt:repl
-locally {
-  with linearCongruentialGenerator(1)
-  with onEmit[Path] { path => println(path.show) };
+with linearCongruentialGenerator(1)
+with onEmit[Path] { path => println(path.show) };
 
-  limit[Path](5) {
-    with sliceSampling[Path](1);
+limit[Path](5) {
+  with sliceSampling[Path](1);
 
-    var nextState = State(0.0, 3.0, 2.0, 0.0)
-    var nextdis = 5.0
-    var m = 5
-    var path = [nextState]
-    while (m > 0) {
-      nextState = step(nextState, nextdis)
-      val noise = do sample(Gaussian(0.0, 1.0))
-      nextdis = nextdis + noise
-      path = append(path, [nextState])
-      m = m - 1
-    }
-    path
+  var nextState = State(0.0, 3.0, 2.0, 0.0)
+  var nextdis = 5.0
+  var m = 5
+  var path = [nextState]
+  while (m > 0) {
+    nextState = step(nextState, nextdis)
+    val noise = do sample(Gaussian(0.0, 1.0))
+    nextdis = nextdis + noise
+    path = append(path, [nextState])
+    m = m - 1
   }
+  path
 }
 ```
 
@@ -655,16 +651,14 @@ def step(p0: Population, pr1: Double): Population / { sample, observe } = {
 Testing it on a simple example, is similar as we have seen previously with the robot movement predictions:
 
 ```effekt:repl
-locally {
-  with linearCongruentialGenerator(1)
-  with onEmit[Population] { p => println(p.show) };
+with linearCongruentialGenerator(1)
+with onEmit[Population] { p => println(p.show) };
 
-  limit[Population](5) {
-    with metropolisHastings[Population](5)
+limit[Population](5) {
+  with metropolisHastings[Population](5)
 
-    val init = Population(0.7, 0.2, 0.1)
-    step(init, 0.8)
-  }
+  val init = Population(0.7, 0.2, 0.1)
+  step(init, 0.8)
 }
 ```
 
@@ -683,27 +677,25 @@ def show(path: List[Population]): String = {
 We again can also predict multiple different scenarios where the disease spreads differently throughout a population:
 
 ```effekt:repl
-locally {
-  with linearCongruentialGenerator(1)
-  with onEmit[List[Population]] { ps => println(ps.show) }
+with linearCongruentialGenerator(1)
+with onEmit[List[Population]] { ps => println(ps.show) }
 
-  limit[List[Population]](1) {
-    with metropolisHastings[List[Population]](1)
+limit[List[Population]](1) {
+  with metropolisHastings[List[Population]](1)
 
-    var nextPop = Population(0.7, 0.2, 0.1)
-    var nextpr = 0.8
-    var m = 5
-    var path : List[Population] = [nextPop]
-    while (m > 0) {
-      nextPop = step(nextPop, nextpr)
-      val noise = do sample(Gaussian(0.0, 0.01))
-      var nextpr1 = nextpr + noise
-      if (not(nextpr1 < 0.0 || nextpr1 > 1.0)) { nextpr = nextpr1 }
-      path = append(path, [nextPop])
-      m = m - 1
-    }
-    path
+  var nextPop = Population(0.7, 0.2, 0.1)
+  var nextpr = 0.8
+  var m = 5
+  var path : List[Population] = [nextPop]
+  while (m > 0) {
+    nextPop = step(nextPop, nextpr)
+    val noise = do sample(Gaussian(0.0, 0.01))
+    var nextpr1 = nextpr + noise
+    if (not(nextpr1 < 0.0 || nextpr1 > 1.0)) { nextpr = nextpr1 }
+    path = append(path, [nextPop])
+    m = m - 1
   }
+  path
 }
 ```
 

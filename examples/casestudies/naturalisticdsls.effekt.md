@@ -226,11 +226,9 @@ similar to let-insertion ([Yallop, 2017][@yallop2017staged]).
 ### Running the Examples
 Finally, we can run our examples to inspect the generated sentences.
 ```effekt:repl
-locally {
-  inspect(s1a())
-  inspect(s1c())
-  inspect(s2())
-}
+inspect(s1a())
+inspect(s1c())
+inspect(s2())
 ```
 
 [@hudak96building]: https://doi.org/10.1145/242224.242477

@@ -12,12 +12,6 @@ In this case study, we start reproducing the build systems from:
 > Andrey Mokhov, Neil Mitchell, Simon Peyton Jones
 > ICFP '18
 
-As usual, we start with the module name and imports.
-
-```
-module examples/casestudies/buildsystem
-```
-
 This example revolves around a single effect: `Need`.
 
 ```
@@ -129,17 +123,15 @@ def supplyInput[R](store: Store) { prog: => R / { needInput } }: R / { keyNotFou
 The `main` function runs all examples.
 
 ```effekt:repl
-locally {
-    val inputs = [("A1", 10), ("A2", 20)];
-    try {
-        val result1 = supplyInput(inputs) { build ("B2") { (key) => example1(key) } };
-        println(result1);
-        println("");
-        val result2 = supplyInput(inputs) { build ("B2") { (key) => example2(key) } };
-        println(result2);
-        println("");
-        val result3 = supplyInput(inputs) { build ("B2") { (key) => memo { example2(key) } } };
-        println(result3)
-    } with keyNotFound { (key) => println("Key not found: " ++ key) }
-}
+val inputs = [("A1", 10), ("A2", 20)];
+try {
+    val result1 = supplyInput(inputs) { build ("B2") { (key) => example1(key) } };
+    println(result1);
+    println("");
+    val result2 = supplyInput(inputs) { build ("B2") { (key) => example2(key) } };
+    println(result2);
+    println("");
+    val result3 = supplyInput(inputs) { build ("B2") { (key) => memo { example2(key) } } };
+    println(result3)
+} with keyNotFound { (key) => println("Key not found: " ++ key) }
 ```

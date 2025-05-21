@@ -166,23 +166,21 @@ def pipeline(input: String): String =
 Here we use `pipeline` to translate some examples:
 
 ```effekt:repl
-locally {
-  inspect(exampleResult)
-  println(examplePretty)
+inspect(exampleResult)
+println(examplePretty)
 
-  println("----")
-  println(pipeline("42"))
+println("----")
+println(pipeline("42"))
 
-  println("----")
-  println(pipeline("let x = 4 in 42"))
+println("----")
+println(pipeline("let x = 4 in 42"))
 
-  println("----")
-  println(pipeline("let x = let y = 2 in 1 in 42"))
+println("----")
+println(pipeline("let x = let y = 2 in 1 in 42"))
 
-  println("----")
-  println(pipeline("let x = (let y = 2 in 1) in 42"))
+println("----")
+println(pipeline("let x = (let y = 2 in 1) in 42"))
 
-  println("----")
-  println(pipeline("let x = (let y = f(42) in 1) in 42"))
-}
+println("----")
+println(pipeline("let x = (let y = f(42) in 1) in 42"))
 ```
