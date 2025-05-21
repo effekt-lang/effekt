@@ -7,10 +7,16 @@ permalink: docs/casestudies/smc
 # Sequential Monte Carlo
 
 
-```effekt:prelude:hide
+```effekt:hide
 import list
 import option
 import array
+
+extern type Cont[A, R]
+extern def apply[A, R](k: Cont[A, R], x: A): R =
+  js "RUN(function (ks, k) { ${k}(${x}, ks, k) })"
+extern def cont[A, R] {k: A => R }: Cont[A, R] =
+  js "${box k}"
 ```
 
 In this case study we implement the Sequential Monte Carlo algorithm for doing
@@ -199,19 +205,19 @@ def importance[R](n: Int) { p : => R / SMC } = {
 
 ```effekt:hide
 extern async def sleep(n: Int): Unit =
-  "$effekt.callcc(k => window.setTimeout(() => k(null), n))"
+  jsWeb "$effekt.capture(k => window.setTimeout(() => k(null), n))"
 
 // here we set a time out to allow rerendering
 extern async def reportMeasurementJS[R](w: Double, d: R): Unit =
-  "$effekt.callcc(k => { showPoint(w, d); window.setTimeout(() => k(null), 0)})"
+  jsWeb "$effekt.capture(k => { showPoint(w, d); window.setTimeout(() => k(null), 0)})"
 
 extern async def reportDiscreteMeasurementJS[R](w: Double, d: R): Unit =
-  "$effekt.callcc(k => { showPoint(w, d, { discrete: true }); window.setTimeout(() => k(null), 0)})"
+  jsWeb "$effekt.capture(k => { showPoint(w, d, { discrete: true }); window.setTimeout(() => k(null), 0)})"
 
 
 // here we set a time out to allow rerendering
 extern io def setupGraphJS(): Unit =
-  "setup()"
+  jsWeb "setup()"
 ```
 To visualize the results, we define the following helper function `report` that
 handles `Measure` effects by adding the data points to a graph (below).
@@ -252,6 +258,13 @@ def runDiscrete(numberOfParticles: Int) =
   reportDiscrete(0, smc(numberOfParticles) {
     if (bernoulli(0.5)) { "hello" } else { "world" }
   })
+```
+
+```effekt:repl
+locally {
+  runDiscrete(15)
+  runSMC(100)
+}
 ```
 
 
