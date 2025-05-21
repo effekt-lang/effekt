@@ -116,6 +116,17 @@ trait Intelligence {
     case s             => s
   }
 
+  def getSymbolHover(position: Position, fullDescription: Boolean = true)(using C: Context): Option[String] = for {
+    (tree, sym) <- getSymbolAt(position)
+    info <- getInfoOf(sym)
+  } yield if (fullDescription) info.fullDescription else info.shortDescription
+
+  def getHoleHover(position: Position)(using C: Context): Option[String] = for {
+    trees <- getTreesAt(position)
+    tree <- trees.collectFirst { case h: source.Hole => h }
+    info <- getHoleInfo(tree)
+  } yield info
+
   def getHoleInfo(hole: source.Hole)(using C: Context): Option[String] = for {
     (outerTpe, outerEff) <- C.inferredTypeAndEffectOption(hole)
     (innerTpe, innerEff) <- C.inferredTypeAndEffectOption(hole.stmts)
