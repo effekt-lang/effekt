@@ -264,24 +264,13 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     }
     position match
       case Some(position) => {
-        val hover = getSymbolHover(position) orElse getHoleHover(position)
+        val hover = getSymbolHover(position, settingBool("showExplanations"))(using context) orElse getHoleHover(position)(using context)
         val markup = new MarkupContent("markdown", hover.getOrElse(""))
         val result = new Hover(markup, new LSPRange(params.getPosition, params.getPosition))
         CompletableFuture.completedFuture(result)
       }
       case None => CompletableFuture.completedFuture(new Hover())
   }
-
-  def getSymbolHover(position: Position): Option[String] = for {
-    (tree, sym) <- getSymbolAt(position)(using context)
-    info <- getInfoOf(sym)(using context)
-  } yield if (settingBool("showExplanations")) info.fullDescription else info.shortDescription
-
-  def getHoleHover(position: Position): Option[String] = for {
-    trees <- getTreesAt(position)(using context)
-    tree <- trees.collectFirst { case h: source.Hole => h }
-    info <- getHoleInfo(tree)(using context)
-  } yield info
 
   // LSP Document Symbols
   //

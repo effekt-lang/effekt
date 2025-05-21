@@ -72,11 +72,9 @@ class LanguageServer extends Intelligence {
   @JSExport
   def infoAt(path: String, pos: lsp.Position): String = {
     val p = fromLSPPosition(pos, VirtualFileSource(path))
-    for {
-      (tree, sym) <- getSymbolAt(p)
-      info <- getInfoOf(sym)
-    } yield info.fullDescription
-  }.orNull
+    val hover = getSymbolHover(p)(using context) orElse getHoleHover(p)(using context)
+    hover.orNull
+  }
 
   @JSExport
   def typecheck(path: String): js.Array[lsp.Diagnostic] = {
