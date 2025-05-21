@@ -17,7 +17,7 @@ but adapt it to the setting of effect handlers.
 Furthermore, the library presented here is neither linear
 (it uses simple backtracking), bounded (backtracking is arbitrary), nor functional (combinators are imperative style).
 
-```effekt:ignore
+```
 module examples/casestudies/prettyprinter
 
 import examples/casestudies/parser // just needed for the example (Tree)
@@ -390,8 +390,8 @@ def example4() = parseAndPrint("let x = (let y = 2 in 1) in 42", 10)
 
 ## Additional Examples
 
-```
-def main() = {
+```effekt:repl
+locally {
 
   println("-----");
   println(pretty(5) { example1([1,2,3,4]) });

@@ -13,7 +13,7 @@ In this case study, we show how to implement a parser, using the lexer from the
 
 Again, we require some imports -- in particular, we reuse the lexer implementation.
 
-```effekt:ignore
+```
 module examples/casestudies/parser
 
 import examples/casestudies/lexer
@@ -222,8 +222,8 @@ the lexer positions will be restored when calling the continuation a second time
 ## Running the Examples
 Having implemented a handler for the `Parser` effect, we can run our example "grammars" on some inputs.
 
-```
-def main() = {
+```effekt:repl
+locally {
   inspect(parse("42") { parseCalls() })
   inspect(parse("foo(1)") { parseCalls() })
   inspect(parse("foo(1, 2)") { parseCalls() })

@@ -22,7 +22,7 @@ the weight they picked up so far.
 We define the following `SMC` effect to model probabilistic processes and the
 `Measure` effect to deal with the results.
 ```
-effect SMC {
+interface SMC {
   def resample(): Unit
   def uniform(): Double
   def score(d: Double): Unit
@@ -198,14 +198,14 @@ def importance[R](n: Int) { p : => R / SMC } = {
 ### Running the Examples
 
 ```effekt:hide
-extern control def sleep(n: Int): Unit =
+extern async def sleep(n: Int): Unit =
   "$effekt.callcc(k => window.setTimeout(() => k(null), n))"
 
 // here we set a time out to allow rerendering
-extern control def reportMeasurementJS[R](w: Double, d: R): Unit =
+extern async def reportMeasurementJS[R](w: Double, d: R): Unit =
   "$effekt.callcc(k => { showPoint(w, d); window.setTimeout(() => k(null), 0)})"
 
-extern control def reportDiscreteMeasurementJS[R](w: Double, d: R): Unit =
+extern async def reportDiscreteMeasurementJS[R](w: Double, d: R): Unit =
   "$effekt.callcc(k => { showPoint(w, d, { discrete: true }); window.setTimeout(() => k(null), 0)})"
 
 

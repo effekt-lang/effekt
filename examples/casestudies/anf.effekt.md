@@ -14,7 +14,7 @@ non-locally insert binders for non-trivial expressions.
 The source language of our transformation is the `Tree` data type from the
 [parser case study](parser).
 
-```effekt:ignore
+```
 module examples/casestudies/anf
 
 import examples/casestudies/parser // for the Tree datatype
@@ -166,8 +166,9 @@ def pipeline(input: String): String =
 ```
 
 Here we use `pipeline` to translate some examples:
-```
-def main() = {
+
+```effekt:repl
+locally {
   inspect(exampleResult)
   println(examplePretty)
 

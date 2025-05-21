@@ -13,7 +13,7 @@ in terms of effect handlers.
 
 Before we get started, we require a few imports to deal with regular expressions.
 
-```effekt:ignore
+```effekt
 module examples/casestudies/lexer
 
 import string
@@ -108,13 +108,12 @@ val exampleTokens = [
 ]
 ```
 we can compose the two handlers to run our example consumer:
-```
-def runExample1() =
-  report {
-    exampleTokens.lexerFromList {
-      inspect(example1())
-    }
+```effekt:repl
+report {
+  exampleTokens.lexerFromList {
+    inspect(example1())
   }
+}
 ```
 
 ## Handling the Lexer Effect by Processing a String
@@ -191,8 +190,7 @@ the input, or not.
 }
 ```
 Running our above consumer with the string `"foo()"`
-```
-def runExample2() =
+```effekt:repl
   report {
     lexer("foo()") {
       inspect(example1())
@@ -222,8 +220,7 @@ def skipWhitespace[R] { prog: => R / Lexer }: R / Lexer =
 ```
 The handler `skipWhitespace` simply skips all spaces by using the `Lexer` effect itself.
 
-```
-def runExample3() =
+```effekt:repl
   report {
     lexer("foo (   \n  )") {
       skipWhitespace {
@@ -231,14 +228,4 @@ def runExample3() =
       }
     }
   }
-```
-
-### Running the Examples
-To run this markdown file, simply supply its name as argument to the `effekt` binary.
-```
-def main() = {
-  runExample1()
-  runExample2()
-  runExample3()
-}
 ```

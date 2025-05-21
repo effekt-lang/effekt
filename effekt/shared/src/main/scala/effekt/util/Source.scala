@@ -63,7 +63,7 @@ case class MarkdownSource(source: Source) extends Source {
                         replCounter += 1
                         c
                       case hd :: rest =>
-                        val c = s"def repl$replCounter() = $hd\n  ${rest.mkString("\n  ")}"
+                        val c = s"def repl$replCounter() = { $hd\n  ${rest.mkString("\n  ")} }"
                         replCounter += 1
                         c
                     }
@@ -86,7 +86,7 @@ case class MarkdownSource(source: Source) extends Source {
             }
           }
         // collect code if in code fence
-        case _ if fenceType.isDefined =>
+        case _ if fenceType.isDefined && line != "" =>
           code += line
         // do nothing if outside of code fence
         case _ =>
