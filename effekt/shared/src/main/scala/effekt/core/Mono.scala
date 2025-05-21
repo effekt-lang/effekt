@@ -14,10 +14,17 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case CoreTransformed(source, tree, mod, core) => {
         core match {
           case ModuleDecl(path, includes, declarations, externs, definitions, exports) => {
-            val polys = findConstraints(definitions)
-            polys.foreach(p => println(p))
+            val constraints = findConstraints(definitions)
+            println("Constraints")
+            constraints.foreach(c => println(c))
             println()
-            println("Has cycle: " + hasCycle(polys))
+            if (!hasCycle(constraints)) {
+              val solvedConstraints = solveConstraints(constraints)
+              println("Solved constraints")
+              solvedConstraints.foreach(sc => println(sc))
+            } else {
+              println("Cycle detected, skipping solveConstraints")
+            }
             println()
           }
         }
@@ -43,6 +50,24 @@ enum PolyType {
 
 type PolyConstraints = Map[symbols.Symbol, Set[PolyType]]
 type PolyConstraintEntry = (symbols.Symbol, Set[PolyType])
+
+def solveConstraints(constraints: PolyConstraints): PolyConstraints =
+  var solved: PolyConstraints = Map()
+
+  def solveConstraint(sym: symbols.Symbol, types: Set[PolyType]): Set[PolyType] =
+    var polyTypes: Set[PolyType] = Set()
+    types.foreach(t => {
+      t match {
+        case PolyType.Var(symbol) => polyTypes ++= solved.getOrElse(symbol, solveConstraint(symbol, constraints.getOrElse(symbol, Set())))
+        case base => polyTypes += base 
+      }
+    })
+    solved += (sym -> polyTypes)
+    polyTypes
+
+  constraints.foreach(solveConstraint)
+
+  solved
 
 def appendConstraint(map: PolyConstraints, sym: symbols.Symbol, tpe: ValueType): PolyConstraintEntry =
   val currentFlow = map.getOrElse(sym, Set())
