@@ -543,16 +543,14 @@ def step(s0: State, m1: Measurement): State / { sample, observe } = {
 We can now put our model to the test by running the following simple example:
 
 ```effekt:repl
- {
-  with linearCongruentialGenerator(1)
-  with onEmit[State] { s => println(s.show) };
+with linearCongruentialGenerator(1)
+with onEmit[State] { s => println(s.show) };
 
-  limit[State](5) {
-    with sliceSampling[State](5)
+limit[State](5) {
+  with sliceSampling[State](5)
 
-    val init = State(0.0, 3.0, 2.0, 0.0)
-    step(init, 5.0)
-  }
+  val init = State(0.0, 3.0, 2.0, 0.0)
+  step(init, 5.0)
 }
 ```
 
