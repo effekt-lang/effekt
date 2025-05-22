@@ -609,20 +609,21 @@ class LSPTests extends FunSuite {
     }
   }
 
-  test("inlayHint shows omitted return type") {
+  test("inlayHint shows omitted return type and effect") {
     withClientAndServer { (client, server) =>
       val (textDoc, positions) =
-        raw"""
+        raw"""effect raise(): Unit
+             |
              |↑
-             |def foo() = 5
-             |         ↑
+             |def foo() = { do raise(); 5 }
+             |↑        ↑
              |
              |↑
              |""".textDocumentAndPositions
 
       val captureHint = new InlayHint()
       captureHint.setKind(InlayHintKind.Type)
-      captureHint.setPosition(new Position(1, 0))
+      captureHint.setPosition(positions(1))
       captureHint.setLabel("{}")
       captureHint.setData("capture")
       captureHint.setTooltip(new MarkupContent("markdown", "captures: `{}`"))
@@ -630,16 +631,16 @@ class LSPTests extends FunSuite {
 
       val omittedHint = new InlayHint()
       omittedHint.setKind(InlayHintKind.Type)
-      omittedHint.setPosition(positions(1))
-      omittedHint.setLabel(": Int / {}")
+      omittedHint.setPosition(positions(2))
+      omittedHint.setLabel(": Int / { raise }")
       omittedHint.setData("return-type-annotation")
       omittedHint.setTextEdits(List(
         new TextEdit(
-          new Range(positions(1), positions(1)),
-          ": Int / {}"
+          new Range(positions(2), positions(2)),
+          ": Int / { raise }"
         )
       ).asJava)
-      omittedHint.setTooltip(new MarkupContent("markdown", "return type: Int / {}"))
+      omittedHint.setTooltip(new MarkupContent("markdown", "return type: Int / { raise }"))
       omittedHint.setPaddingLeft(true)
 
       val expectedInlayHints = List(captureHint, omittedHint)
@@ -650,7 +651,7 @@ class LSPTests extends FunSuite {
 
       val params = new InlayHintParams()
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
-      params.setRange(new Range(positions(0), positions(2)))
+      params.setRange(new Range(positions(0), positions(3)))
 
       val inlayHints = server.getTextDocumentService().inlayHint(params).get()
       assertEquals(expectedInlayHints.asJava, inlayHints)
