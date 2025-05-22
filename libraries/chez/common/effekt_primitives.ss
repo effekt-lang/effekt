@@ -2,6 +2,7 @@
   (cond
     [(number? obj) (show-number obj)]
     [(string? obj) obj]
+    [(null? obj) "()"]
     [(boolean? obj) (if obj "true" "false")]
     [(char? obj) (show-char obj)]
     ; [(record? obj)
@@ -11,6 +12,7 @@
     ;     (string-append name))]
     [(list? obj) (map show_impl obj)]
     [(record? obj) (show-record obj)]
+    [(eqv? obj (void)) "()"]
     [else (generic-show obj)]))
 
 (define (generic-show obj)
