@@ -33,62 +33,61 @@ case class MarkdownSource(source: Source) extends Source {
     // we map non-code lines to empty lines to preserve line numbers
     source.content.linesIterator.foreach { 
       case fenceLine(lang, ots) =>
-          val opts = if (ots != null) { ots.tail.split(":").toList } else { Nil }
-          if (opts.contains("ignore")) {
-            fenceType = Some(Ignore)
-            lines += ""
-          } else if (opts.contains("repl")) {
-            fenceType = Some(Repl)
-            // opening fences are replaced by a wrapper function
-            lines += s"def repl${replCounter}() = {"
-            replCounter += 1
-          } else {
-            fenceType match {
-              // opening fences
-              case None =>
-                // ```effekt
-                if (lang != null && lang == "effekt") {
-                  fenceType = Some(Code)
-                // ```scala
-                } else if (lang != null) {
-                  fenceType = Some(Other)
-                // ```
-                } else {
-                  fenceType = Some(Code)
-                }
-                lines += ""
-              // closing fences
-              case Some(fence) =>
-                fence match {
-                  // closing fence of ```effekt:repl
-                  case Repl =>
-                    // take care when wrapping to preserve line numbers
-                    lines ++= code
-                    // remember to close wrapper function
-                    lines += "}"
-                  // closing fence of ```effekt or ```
-                  case Code =>
-                    lines ++= code
-                    lines += ""
-                  // closing fence of ```effekt:ignore
-                  case Ignore =>
-                    lines += ""
-                  // closing fence of ```scala or other languages
-                  // same semantic as effekt:ignore
-                  case Other =>
-                    lines += ""
-                }
-                fenceType = None
-                code = ListBuffer.empty
-            }
-          }
-        // collect code if in code fence
-        case _ if fenceType.isDefined && line != "" =>
-          code += line
-        // add empty lines to preserve positional information outside of code fences
-        case _ =>
+        val opts = if (ots != null) { ots.tail.split(":").toList } else { Nil }
+        if (opts.contains("ignore")) {
+          fenceType = Some(Ignore)
           lines += ""
-      }
+        } else if (opts.contains("repl")) {
+          fenceType = Some(Repl)
+          // opening fences are replaced by a wrapper function
+          lines += s"def repl${replCounter}() = {"
+          replCounter += 1
+        } else {
+          fenceType match {
+            // opening fences
+            case None =>
+              // ```effekt
+              if (lang != null && lang == "effekt") {
+                fenceType = Some(Code)
+              // ```scala
+              } else if (lang != null) {
+                fenceType = Some(Other)
+              // ```
+              } else {
+                fenceType = Some(Code)
+              }
+              lines += ""
+            // closing fences
+            case Some(fence) =>
+              fence match {
+                // closing fence of ```effekt:repl
+                case Repl =>
+                  // take care when wrapping to preserve line numbers
+                  lines ++= code
+                  // remember to close wrapper function
+                  lines += "}"
+                // closing fence of ```effekt or ```
+                case Code =>
+                  lines ++= code
+                  lines += ""
+                // closing fence of ```effekt:ignore
+                case Ignore =>
+                  lines += ""
+                // closing fence of ```scala or other languages
+                // same semantic as effekt:ignore
+                case Other =>
+                  lines += ""
+              }
+              fenceType = None
+              code = ListBuffer.empty
+          }
+        }
+      // collect code if in code fence
+      case line if fenceType.isDefined && line != "" =>
+        code += line
+      // add empty lines to preserve positional information outside of code fences
+      case line =>
+        lines += ""
     }
     val prog = lines.mkString("\n")
     val repls = 0.until(replCounter).map { i => s"inspect(repl${i}())"}
