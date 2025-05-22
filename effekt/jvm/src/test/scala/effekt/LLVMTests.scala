@@ -33,6 +33,9 @@ class LLVMTests extends EffektTests {
     // unsafe cont
     examplesDir / "pos" / "propagators.effekt",
 
+    // no generic inspect
+    examplesDir / "casestudies",
+
     // Only JS (tests should be moved to a JS folder)
     examplesDir / "pos" / "genericcompare.effekt",
     examplesDir / "pos" / "multiline_extern_definition.effekt",
