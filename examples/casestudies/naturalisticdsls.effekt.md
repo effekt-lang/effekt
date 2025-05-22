@@ -76,8 +76,6 @@ translate the examples to Effekt.
 We start by describing the language (DSL) of nominal phrases as the following datatype:
 
 ```
-module examples/casestudies/naturalisticdsls
-
 record Person(name: String)
 ```
 

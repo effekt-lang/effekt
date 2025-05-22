@@ -13,10 +13,6 @@ In this case study we reimplement automatic differentiation as presented in
 Instead of using the control operators `shift` and `reset`, we are using effects and
 handlers.
 
-```effekt:sketch:hide
-module examples/casestudies/ad
-```
-
 ```effekt:prelude:hide
 import ref
 ```
