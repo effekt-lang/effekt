@@ -245,10 +245,10 @@ class RecursiveDescentTests extends munit.FunSuite {
 
   test("Peeking") {
     implicit def toToken(t: TokenKind): Token = Token(0, 0, t)
-    def peek(tokens: IndexedSeq[Token], offset: Int): Token =
+    def peek(tokens: Array[Token], offset: Int): Token =
       new RecursiveDescent(new Positions, tokens, StringSource("", "test")).peek(offset)
 
-    val tokens = Vector[Token](`(`, Space, Newline, `)`, Space, `=>`, EOF)
+    val tokens = Vector[Token](`(`, Space, Newline, `)`, Space, `=>`, EOF).toArray
     assertEquals(peek(tokens, 0).kind, `(`)
     assertEquals(peek(tokens, 1).kind, `)`)
     assertEquals(peek(tokens, 2).kind, `=>`)

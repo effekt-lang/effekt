@@ -169,7 +169,7 @@ class Lexer(source: Source) {
    */
   var current: Int = 0
   /** The sequence of tokens the source strings contains. Returned as the result by [[Lexer.run()]] */
-  val tokens: mutable.ArrayBuffer[Token] = new mutable.ArrayBuffer(initialSize = 256)
+  val tokens: mutable.ArrayBuffer[Token] = new mutable.ArrayBuffer(initialSize = 128)
   // For future improvement, this is probably more performant than using substring on the source
   // val currLexeme: mutable.StringBuilder = mutable.StringBuilder()
   /** A peekable iterator of the source string. This is used instead of directly indexing the source string.
@@ -273,7 +273,7 @@ class Lexer(source: Source) {
     r.matches(candidate)
   }
 
-  def lex()(using ctx: Context): IArray[Token] =
+  def lex()(using ctx: Context): Array[Token] =
     try {
       run()
     } catch {
@@ -289,7 +289,7 @@ class Lexer(source: Source) {
    * If an error is encountered, all successfully scanned tokens this far will returned,
    * including the error.
    */
-  def run(): IArray[Token] = {
+  def run(): Array[Token] = {
     var eof = false
     while (!eof) {
       val kind =
@@ -320,7 +320,7 @@ class Lexer(source: Source) {
       }
       start = current
     }
-    IArray.from(tokens)
+    tokens.toArray
   }
 
   // --- Literal and comment matchers ---
