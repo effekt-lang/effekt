@@ -1610,10 +1610,8 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def annotateSymbol(id: source.IdRef, sym: symbols.Symbol) =
     annotations.update(Annotations.Symbol, id, sym)
 
-  override def symbolOption(id: source.Id): Option[Symbol] = id match {
-    case x: source.IdRef => Context.annotations.get(Annotations.Symbol, x).orElse { super.symbolOption(id) }
-    case _ => super.symbolOption(id)
-  }
+  override def symbolOption(id: source.Id): Option[Symbol] =
+    Context.annotations.get(Annotations.Symbol, id).orElse { super.symbolOption(id) }
 
   private[typer] def bind(s: ValueSymbol, tpe: ValueType): Unit =
     annotations.update(Annotations.ValueType, s, tpe)
