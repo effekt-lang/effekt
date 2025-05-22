@@ -316,13 +316,14 @@ class RecursiveDescentTests extends munit.FunSuite {
     )
     assertNotEqualModuloSpans(
       parseExpr("box { 42 }"),
-      parseExpr("box {} { 42 }")
+      parseExpr("box { 42 } at {}")
     )
     parseExpr("box { (x: Int) => x }")
     parseExpr("box new Fresh { def fresh() = \"42\" }")
     parseExpr("box foo()")
     parseExpr("box bar(1)")
     parseExpr("box baz(quux)")
+    parseExpr("box { (x, y) => compareByteString(x, y) } at {io, global}")
 
     // { f } is parsed as a capture set and not backtracked.
     intercept[Throwable] { parseExpr("box { f }") }
