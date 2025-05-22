@@ -13,7 +13,7 @@ class LLVMTests extends EffektTests {
   override def valgrind = sys.env.get("EFFEKT_VALGRIND").nonEmpty
   override def debug = sys.env.get("EFFEKT_DEBUG").nonEmpty
 
-  override lazy val positives: List[File] = List(
+  override lazy val positives: Set[File] = Set(
     examplesDir / "llvm",
     examplesDir / "pos",
     examplesDir / "benchmarks",
@@ -23,7 +23,7 @@ class LLVMTests extends EffektTests {
    * Documentation of currently failing tests because of missing features
    * and their reason
    */
-  lazy val missingFeatures: List[File] = List(
+  lazy val missingFeatures: Set[File] = Set(
     // Regex
     examplesDir / "pos" / "simpleparser.effekt",
 
@@ -56,7 +56,7 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "issue733.effekt",
   )
 
-  override lazy val withoutOptimizations: List[File] = List(
+  override lazy val withoutOptimizations: Set[File] = Set(
     // contifying under reset
     examplesDir / "pos" / "issue842.effekt",
     examplesDir / "pos" / "issue861.effekt",
@@ -77,14 +77,14 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "bidirectional" / "effectfulobject.effekt",
   )
 
-  override lazy val ignored: List[File] = missingFeatures ++ noValgrind(examplesDir)
+  override lazy val ignored: Set[File] = missingFeatures ++ noValgrind(examplesDir) ++ super.ignored
 }
 
 /**
  * Documentation of tests that succeed in running, but fail valgrind
  * and their reason
  */
-def noValgrind(examplesDir: File): List[File] = List(
+def noValgrind(examplesDir: File): Set[File] = Set(
   examplesDir / "llvm" / "prompt-duplication.effekt",
 )
 
@@ -94,5 +94,5 @@ class LLVMNoValgrindTests extends EffektTests {
   override def valgrind = false
   override def debug = false
 
-  override lazy val positives: List[File] = noValgrind(examplesDir)
+  override lazy val positives: Set[File] = noValgrind(examplesDir)
 }
