@@ -615,7 +615,7 @@ class LSPTests extends FunSuite {
                                 |
                                 |↑
                                 |val bar = box { () => foo() }
-                                |              ↑
+                                |                             ↑
                                 |
                                 |↑
                                 |""".textDocumentAndPositions

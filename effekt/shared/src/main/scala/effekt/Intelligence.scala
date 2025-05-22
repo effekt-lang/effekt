@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.{Annotations, Context}
-import effekt.source.{FunDef, Include, ModuleDecl, Span, Tree}
+import effekt.source.{FunDef, Include, Maybe, ModuleDecl, Span, Tree}
 import effekt.symbols.Hole
 import kiama.util.{Position, Source}
 import effekt.symbols.scopes.Scope
@@ -196,10 +196,9 @@ trait Intelligence {
       case (t: source.DefDef, c) => for {
         pos <- C.positions.getStart(t)
       } yield (pos, c)
-      case (source.Box(None, block), _) if C.inferredCaptureOption(block).isDefined => for {
-        pos <- C.positions.getStart(block)
+      case (source.Box(Maybe(None, span), block), _) if C.inferredCaptureOption(block).isDefined => for {
         capt <- C.inferredCaptureOption(block)
-      } yield (pos, capt)
+      } yield (span.range.from, capt)
     }.flatten
 
   def getInfoOf(sym: Symbol)(using C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {

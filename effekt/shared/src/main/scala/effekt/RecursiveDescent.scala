@@ -674,7 +674,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       Region(`region` ~> idDef(), stmt())
 
-  def boxExpr(): Term =
+  def boxExpr(): Term = {
     nonterminal:
       consume(`box`)
       val expr = if (peek(`{`)) functionArg()
@@ -683,13 +683,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       val captures = backtrack {
         `at` ~> captureSet()
       }
-      Box(captures.unspan, expr)
+      Box(captures, expr)
+  }
 
   // TODO deprecate
   def funExpr(): Term =
     nonterminal:
-      `fun` ~> Box(None, BlockLiteral(Nil, valueParams().unspan, Nil, braces { stmts() }))
-    // TODO positions
+      val blockLiteral = `fun` ~> BlockLiteral(Nil, valueParams().unspan, Nil, braces { stmts() })
+      Box(Maybe.None(Span(source, pos(), pos(), Synthesized)), blockLiteral)
 
   def unboxExpr(): Term =
     nonterminal:
@@ -1349,8 +1350,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   inline def backtrack[T](inline p: => T): Maybe[T] =
     val before = position
-    try { Maybe.Some(p, span(before)) } catch {
-      case Fail(_, _) => position = before; Maybe.None(span(before))
+    val beforePrevious = previous
+    try { Maybe.Some(p, span(tokens(before).end)) } catch {
+      case Fail(_, _) => {
+        position = before
+        previous = beforePrevious
+        Maybe.None(Span(source, previous.end + 1, previous.end + 1, Synthesized))
+      }
     }
 
   def interleave[A](xs: List[A], ys: List[A]): List[A] = (xs, ys) match {
