@@ -149,7 +149,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       fail(s"Expected ${explain(kind)} but got ${explain(t.kind)}")
     }
 
-  private def expect[T](expected: String)(f: PartialFunction[TokenKind, T]): T =
+  inline def expect[T](expected: String)(inline f: PartialFunction[TokenKind, T]): T =
     val kind = peek.kind
     if f.isDefinedAt(kind) then { skip(); f(kind) } else fail(s"Expected ${expected}")
 
