@@ -8,7 +8,7 @@ import effekt.source.{Span, Tree}
 import effekt.symbols.Binder.{ValBinder, VarBinder}
 import effekt.symbols.BlockTypeConstructor.{ExternInterface, Interface}
 import effekt.symbols.TypeConstructor.{DataType, ExternType}
-import effekt.symbols.{Anon, Binder, Callable, Effects, Module, Param, Symbol, TypeAlias, TypePrinter, UserFunction, ValueType, isSynthetic}
+import effekt.symbols.{Anon, Binder, Callable, Effects, ErrorMessageInterpolator, Module, Param, Symbol, TypeAlias, TypePrinter, UserFunction, ValueType, isSynthetic}
 import effekt.util.messages.EffektError
 import effekt.util.{PlainMessaging, PrettyPrinter}
 import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
@@ -373,7 +373,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
       source <- sources.get(params.getTextDocument.getUri)
       hints = {
         val range = fromLSPRange(params.getRange, source)
-        getInferredCaptures(range)(using context).map {
+        val captures = getInferredCaptures(range)(using context).map {
           case (p, c) =>
             val prettyCaptures = TypePrinter.show(c)
             val inlayHint = new InlayHint(convertPosition(p), messages.Either.forLeft(prettyCaptures))
@@ -386,6 +386,32 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
             inlayHint.setData("capture")
             inlayHint
         }.toVector
+
+        val unannotated = getTreesInRange(range)(using context).map { trees =>
+          trees.collect {
+            // Functions without an annotated type:
+            case fun: FunDef if fun.ret.isEmpty => for {
+              sym <- context.symbolOption(fun.id)
+              tpe <- context.functionTypeOption(sym)
+              pos = fun.ret.span.range.from
+            } yield {
+              val prettyType = pp": ${tpe.result} / ${tpe.effects}"
+              val inlayHint = new InlayHint(convertPosition(pos), messages.Either.forLeft(prettyType))
+              inlayHint.setKind(InlayHintKind.Type)
+              val markup = new MarkupContent()
+              markup.setValue(s"return type${prettyType}")
+              markup.setKind("markdown")
+              inlayHint.setTooltip(markup)
+              inlayHint.setPaddingLeft(true)
+              inlayHint.setData("return-type-annotation")
+              val textEdit = new TextEdit(convertRange(fun.ret.span.range), prettyType)
+              inlayHint.setTextEdits(Collections.seqToJavaList(List(textEdit)))
+              inlayHint
+            }
+          }.flatten
+        }.getOrElse(Vector())
+
+        captures ++ unannotated
       }
     } yield hints
 

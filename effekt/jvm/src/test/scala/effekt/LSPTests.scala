@@ -572,11 +572,11 @@ class LSPTests extends FunSuite {
   //
   //
 
-  test("inlayHints should show the io effect") {
+  test("inlayHint should show the io effect") {
     withClientAndServer { (client, server) =>
       val (textDoc, positions) = raw"""
                                 |↑
-                                |def main() = {
+                                |def main(): Unit = {
                                 |↑
                                 |  println("Hello, world!")
                                 |}
@@ -609,12 +609,61 @@ class LSPTests extends FunSuite {
     }
   }
 
-  test("inlayHints work after editing") {
+  test("inlayHint shows omitted return type and effect") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, positions) =
+        raw"""effect raise(): Unit
+             |
+             |↑
+             |def foo() = { do raise(); 5 }
+             |↑        ↑
+             |
+             |↑
+             |""".textDocumentAndPositions
+
+      val captureHint = new InlayHint()
+      captureHint.setKind(InlayHintKind.Type)
+      captureHint.setPosition(positions(1))
+      captureHint.setLabel("{}")
+      captureHint.setData("capture")
+      captureHint.setTooltip(new MarkupContent("markdown", "captures: `{}`"))
+      captureHint.setPaddingRight(true)
+
+      val omittedHint = new InlayHint()
+      omittedHint.setKind(InlayHintKind.Type)
+      omittedHint.setPosition(positions(2))
+      omittedHint.setLabel(": Int / { raise }")
+      omittedHint.setData("return-type-annotation")
+      omittedHint.setTextEdits(List(
+        new TextEdit(
+          new Range(positions(2), positions(2)),
+          ": Int / { raise }"
+        )
+      ).asJava)
+      omittedHint.setTooltip(new MarkupContent("markdown", "return type: Int / { raise }"))
+      omittedHint.setPaddingLeft(true)
+
+      val expectedInlayHints = List(captureHint, omittedHint)
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val params = new InlayHintParams()
+      params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      params.setRange(new Range(positions(0), positions(3)))
+
+      val inlayHints = server.getTextDocumentService().inlayHint(params).get()
+      assertEquals(expectedInlayHints.asJava, inlayHints)
+    }
+  }
+
+  test("inlayHint works after editing") {
     withClientAndServer { (client, server) =>
       val (textDoc, positions) =
         raw"""
              |↑
-             |def main() = {
+             |def main(): Unit = {
              |↑
              |  println("Hello, world!")
              |}
@@ -652,7 +701,7 @@ class LSPTests extends FunSuite {
       val (newTextDoc, changeEvent) = textDoc.changeTo(
         raw"""
              |
-             |def main() = {
+             |def main(): Unit = {
              |  println("Hello, world!")
              |}
              |""".stripMargin
@@ -694,12 +743,12 @@ class LSPTests extends FunSuite {
 
   }
 
-  test("inlayHints work after invalid edits") {
+  test("inlayHint works after invalid edits") {
     withClientAndServer(false) { (client, server) =>
       val (textDoc, positions) =
         raw"""
              |↑
-             |def main() = {
+             |def main(): Unit = {
              |↑
              |  println("Hello, world!")
              |}
@@ -736,7 +785,7 @@ class LSPTests extends FunSuite {
 
       val (newTextDoc, changeEvent) = textDoc.changeTo(
         raw"""
-             |def main() = {
+             |def main(): Unit = {
              |  println("Hello, world!")
              |}
              |invalid syntax
