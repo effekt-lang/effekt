@@ -18,7 +18,7 @@ import scala.util.boundary.break
 case class Fail(message: String, position: Int) extends Throwable(null, null, false, false)
 case class SoftFail(message: String, positionStart: Int, positionEnd: Int)
 
-class RecursiveDescent(positions: Positions, tokens: IArray[Token], source: Source) {
+class RecursiveDescent(positions: Positions, tokens: IndexedSeq[Token], source: Source) {
 
   import scala.collection.mutable.ListBuffer
 
