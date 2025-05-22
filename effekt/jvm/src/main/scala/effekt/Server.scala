@@ -1,6 +1,7 @@
 package effekt
 
 import com.google.gson.JsonElement
+import effekt.Intelligence.CaptureInfo
 import effekt.context.Context
 import effekt.source.Def.FunDef
 import effekt.source.Term.Hole
@@ -374,15 +375,19 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
       hints = {
         val range = fromLSPRange(params.getRange, source)
         val captures = getInferredCaptures(range)(using context).map {
-          case (p, c) =>
+          case CaptureInfo(p, c, atSyntax) =>
             val prettyCaptures = TypePrinter.show(c)
-            val inlayHint = new InlayHint(convertPosition(p), messages.Either.forLeft(prettyCaptures))
+            val codeEdit = if atSyntax then s"at ${prettyCaptures}" else prettyCaptures
+            val inlayHint = new InlayHint(convertPosition(p), messages.Either.forLeft(codeEdit))
             inlayHint.setKind(InlayHintKind.Type)
             val markup = new MarkupContent()
             markup.setValue(s"captures: `${prettyCaptures}`")
             markup.setKind("markdown")
             inlayHint.setTooltip(markup)
-            inlayHint.setPaddingRight(true)
+            if (atSyntax) then
+              inlayHint.setPaddingLeft(true)
+            else
+              inlayHint.setPaddingRight(true)
             inlayHint.setData("capture")
             inlayHint
         }.toVector

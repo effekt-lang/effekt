@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.{Annotations, Context}
 import effekt.source.{FunDef, Include, Maybe, ModuleDecl, Span, Tree}
-import effekt.symbols.Hole
+import effekt.symbols.{CaptureSet, Hole}
 import kiama.util.{Position, Source}
 import effekt.symbols.scopes.Scope
 
@@ -182,7 +182,7 @@ trait Intelligence {
     C.annotationOption(Annotations.CaptureForFile, src).getOrElse(Nil)
 
   // For now, we only show captures of function definitions and calls to box
-  def getInferredCaptures(range: kiama.util.Range)(using C: Context): List[(Position, CaptureSet)] =
+  def getInferredCaptures(range: kiama.util.Range)(using C: Context): List[CaptureInfo] =
     val src = range.from.source
     allCaptures(src).filter {
       // keep only captures in the current range
@@ -192,13 +192,13 @@ trait Intelligence {
     }.collect {
       case (t: source.FunDef, c) => for {
         pos <- C.positions.getStart(t)
-      } yield (pos, c)
+      } yield CaptureInfo(pos, c)
       case (t: source.DefDef, c) => for {
         pos <- C.positions.getStart(t)
-      } yield (pos, c)
+      } yield CaptureInfo(pos, c)
       case (source.Box(Maybe(None, span), block), _) if C.inferredCaptureOption(block).isDefined => for {
         capt <- C.inferredCaptureOption(block)
-      } yield (span.range.from, capt)
+      } yield CaptureInfo(span.range.from, capt, true)
     }.flatten
 
   def getInfoOf(sym: Symbol)(using C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
@@ -353,4 +353,13 @@ object Intelligence {
         terms ++ other.terms,
         types ++ other.types)
   }
+
+  case class CaptureInfo(
+    position: Position,
+    captures: CaptureSet,
+    /**
+     * Whether this capture set could be written into the source code at `position` using the `at { captures }` syntax
+     */
+    atSyntax: Boolean = false,
+  )
 }
