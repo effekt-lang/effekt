@@ -1,3 +1,3 @@
-[error] examples/neg/parsing/path.effekt:1:16: Expected path as string literal
+[error] examples/neg/parsing/extern-path.effekt:1:16: Expected path as string literal
 extern include 42
                ^^
