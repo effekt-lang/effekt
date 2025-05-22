@@ -39,29 +39,27 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 //       so we can generate the required monomorphic functions
 
 enum PolyType {
-  case Base(val tpe: symbols.Symbol)
-  case Var(val sym: symbols.Symbol)
+  case Base(val tpe: Id)
+  case Var(val sym: Id)
 
-  def toSymbol: symbols.Symbol = this match {
+  def toSymbol: Id = this match {
     case Base(tpe) => tpe 
     case Var(sym) => sym
   }
 }
 
-type PolyConstraints = Map[symbols.Symbol, Set[PolyType]]
-type PolyConstraintEntry = (symbols.Symbol, Set[PolyType])
+type PolyConstraints = Map[Id, Set[PolyType]]
+type PolyConstraintEntry = (Id, Set[PolyType])
 
 def solveConstraints(constraints: PolyConstraints): PolyConstraints =
   var solved: PolyConstraints = Map()
 
-  def solveConstraint(sym: symbols.Symbol, types: Set[PolyType]): Set[PolyType] =
+  def solveConstraint(sym: Id, types: Set[PolyType]): Set[PolyType] =
     var polyTypes: Set[PolyType] = Set()
-    types.foreach(t => {
-      t match {
-        case PolyType.Var(symbol) => polyTypes ++= solved.getOrElse(symbol, solveConstraint(symbol, constraints.getOrElse(symbol, Set())))
-        case base => polyTypes += base 
-      }
-    })
+    types.foreach {
+      case PolyType.Var(symbol) => polyTypes ++= solved.getOrElse(symbol, solveConstraint(symbol, constraints.getOrElse(symbol, Set())))
+      case base => polyTypes += base
+    }
     solved += (sym -> polyTypes)
     polyTypes
 
@@ -69,8 +67,9 @@ def solveConstraints(constraints: PolyConstraints): PolyConstraints =
 
   solved
 
-def appendConstraint(map: PolyConstraints, sym: symbols.Symbol, tpe: ValueType): PolyConstraintEntry =
+def appendConstraint(map: PolyConstraints, sym: Id, tpe: ValueType): PolyConstraintEntry =
   val currentFlow = map.getOrElse(sym, Set())
+  println("Append: " + tpe + ", " + sym)
   tpe match {
     // Ignore self cycling types A -> A
     case ValueType.Data(name, targs) if name != sym => (sym -> (currentFlow + PolyType.Base(name)))
@@ -122,15 +121,15 @@ def findConstraints(definitions: List[Toplevel]): PolyConstraints =
             case _ =>
           }
         case _ => 
-    case _ =>
+    case _ => 
   }
   typeFlow
 
 def hasCycle(constraints: PolyConstraints): Boolean =
-    var visited: Set[symbols.Symbol] = Set()
-    var recStack: Set[symbols.Symbol] = Set()
+    var visited: Set[Id] = Set()
+    var recStack: Set[Id] = Set()
 
-    def hasCycleHelper(vertex: symbols.Symbol): Boolean =
+    def hasCycleHelper(vertex: Id): Boolean =
       if (recStack.contains(vertex)) return true
       if (visited.contains(vertex)) return false
 
