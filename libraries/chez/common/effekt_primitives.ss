@@ -2,7 +2,6 @@
   (cond
     [(number? obj) (show-number obj)]
     [(string? obj) obj]
-    [(null? obj) "()"]
     [(boolean? obj) (if obj "true" "false")]
     [(char? obj) (show-char obj)]
     ; [(record? obj)

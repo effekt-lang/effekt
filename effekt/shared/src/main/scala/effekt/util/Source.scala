@@ -31,9 +31,8 @@ case class MarkdownSource(source: Source) extends Source {
     val lines = ListBuffer.empty[String]
     var fenceType: Option[FenceType] = None
     // we map non-code lines to empty lines to preserve line numbers
-    for (line <- source.content.linesIterator) {
-      line match {
-        case fenceLine(lang, ots) =>
+    source.content.linesIterator.foreach { 
+      case fenceLine(lang, ots) =>
           val opts = if (ots != null) { ots.tail.split(":").toList } else { Nil }
           if (opts.contains("ignore")) {
             fenceType = Some(Ignore)
