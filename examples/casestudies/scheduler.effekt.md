@@ -78,31 +78,24 @@ def fork { b1: => Unit / Proc } { b2: => Unit / Proc } =
 
 Finally, we run some examples using our `scheduler` by `fork`ing once to get two concurrent processes and then letting each run concurrently.
 
-```
-def main() = {
-  scheduler {
-    fork {
-      println("hello 1")
-      do yield()
-      println(1)
-      do yield()
-      println(2)
-      do exit()
-      println(3)
-    } {
-      println("hello 2")
-      do yield()
-      println(4)
-      do yield()
-      println(5)
-      do yield()
-      println(6)
-    }
+```effekt:repl
+scheduler {
+  fork {
+    println("hello 1")
+    do yield()
+    println(1)
+    do yield()
+    println(2)
+    do exit()
+    println(3)
+  } {
+    println("hello 2")
+    do yield()
+    println(4)
+    do yield()
+    println(5)
+    do yield()
+    println(6)
   }
 }
-```
-
-Try guessing first what you expect the output to be and then run it with `main()`:
-
-```effekt:repl
 ```

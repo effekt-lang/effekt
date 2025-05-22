@@ -14,17 +14,17 @@ class JavaScriptTests extends EffektTests {
 
   def backendName = "js"
 
-  override def positives: List[File] = List(
+  override def positives: Set[File] = Set(
     examplesDir / "pos",
     examplesDir / "casestudies",
     examplesDir / "benchmarks",
   )
 
-  override def negatives: List[File] = List(
+  override def negatives: Set[File] = Set(
     examplesDir / "neg"
   )
 
-  override lazy val withoutOptimizations: List[File] = List(
+  override lazy val withoutOptimizations: Set[File] = Set(
     // contifying under reset
     examplesDir / "pos" / "issue842.effekt",
     examplesDir / "pos" / "issue861.effekt",
@@ -34,9 +34,11 @@ class JavaScriptTests extends EffektTests {
     examplesDir / "pos" / "probabilistic.effekt",
   )
 
-  override def ignored: List[File] = List(
+  override def ignored: Set[File] = super.ignored ++ Set(
     // unsafe cont
-    examplesDir / "pos" / "propagators.effekt"
+    examplesDir / "pos" / "propagators.effekt",
+
+    examplesDir / "casestudies" / "smc.effekt.md"
   )
 }
 

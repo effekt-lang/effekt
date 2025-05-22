@@ -2,6 +2,7 @@
 layout: docs
 title: ANF Transformation
 permalink: docs/casestudies/anf
+redirect_to: docs/casestudies/frontend#anf
 ---
 
 # ANF Transformation
@@ -14,8 +15,6 @@ The source language of our transformation is the `Tree` data type from the
 [parser case study](parser).
 
 ```
-module examples/casestudies/anf
-
 import examples/casestudies/parser // for the Tree datatype
 import examples/casestudies/prettyprinter // for the combined example
 ```
@@ -165,24 +164,23 @@ def pipeline(input: String): String =
 ```
 
 Here we use `pipeline` to translate some examples:
-```
-def main() = {
-  inspect(exampleResult)
-  println(examplePretty)
 
-  println("----")
-  println(pipeline("42"))
+```effekt:repl
+inspect(exampleResult)
+println(examplePretty)
 
-  println("----")
-  println(pipeline("let x = 4 in 42"))
+println("----")
+println(pipeline("42"))
 
-  println("----")
-  println(pipeline("let x = let y = 2 in 1 in 42"))
+println("----")
+println(pipeline("let x = 4 in 42"))
 
-  println("----")
-  println(pipeline("let x = (let y = 2 in 1) in 42"))
+println("----")
+println(pipeline("let x = let y = 2 in 1 in 42"))
 
-  println("----")
-  println(pipeline("let x = (let y = f(42) in 1) in 42"))
-}
+println("----")
+println(pipeline("let x = (let y = 2 in 1) in 42"))
+
+println("----")
+println(pipeline("let x = (let y = f(42) in 1) in 42"))
 ```
