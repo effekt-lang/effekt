@@ -467,7 +467,7 @@ trait TreeAnnotations { self: Context =>
       // addDefinedSymbolToSource(sym)
   }
 
-  def symbolOf(id: source.Id): Symbol = symbolOption(id) getOrElse {
+  def symbolOf(id: source.Id): Symbol = this.symbolOption(id) getOrElse {
     panic(s"Internal Compiler Error: Cannot find symbol for ${id}")
   }
   def symbolOption(id: source.Id): Option[Symbol] =
