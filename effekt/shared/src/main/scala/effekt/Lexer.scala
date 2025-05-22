@@ -273,7 +273,7 @@ class Lexer(source: Source) {
     r.matches(candidate)
   }
 
-  def lex()(using ctx: Context): Array[Token] =
+  def lex()(using ctx: Context): IArray[Token] =
     try {
       run()
     } catch {
@@ -289,7 +289,7 @@ class Lexer(source: Source) {
    * If an error is encountered, all successfully scanned tokens this far will returned,
    * including the error.
    */
-  def run(): Array[Token] = {
+  def run(): IArray[Token] = {
     var eof = false
     while (!eof) {
       val kind =
@@ -320,7 +320,7 @@ class Lexer(source: Source) {
       }
       start = current
     }
-    tokens.toArray
+    IArray.from(tokens)
   }
 
   // --- Literal and comment matchers ---
