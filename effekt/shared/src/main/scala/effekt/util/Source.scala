@@ -37,76 +37,74 @@ case class MarkdownSource(source: Source) extends Source {
           val opts = if (ots != null) { ots.tail.split(":").toList } else { Nil }
           if (opts.contains("ignore")) {
             fenceType = Some(Ignore)
+            lines += ""
           } else if (opts.contains("repl")) {
             fenceType = Some(Repl)
+            // opening fences are replaced by a wrapper function
+            lines += s"def repl${replCounter}() = {"
+            replCounter += 1
           } else {
             fenceType match {
-              // ```effekt
-              case None if lang != null && lang == "effekt" =>
-                fenceType = Some(Code)
-              // ```scala
-              case None if lang != null =>
-                fenceType = Some(Other)
-              // ```
+              // opening fences
               case None =>
-                fenceType = Some(Code)
-              // closing fence of ```effekt:ignore
+                // ```effekt
+                if (lang != null && lang == "effekt") {
+                  fenceType = Some(Code)
+                // ```scala
+                } else if (lang != null) {
+                  fenceType = Some(Other)
+                // ```
+                } else {
+                  fenceType = Some(Code)
+                }
+                lines += ""
+              // closing fences
               case Some(fence) =>
                 fence match {
                   // closing fence of ```effekt:repl
                   case Repl =>
                     // take care when wrapping to preserve line numbers
-                    val wrapped = code.toList match {
-                      case Nil => ""
-                      case List(l) =>
-                        val c = s"def repl$replCounter() = ${code.mkString}"
-                        replCounter += 1
-                        c
-                      case hd :: rest =>
-                        val c = s"def repl$replCounter() = { $hd\n  ${rest.mkString("\n  ")} }"
-                        replCounter += 1
-                        c
-                    }
-                    lines += wrapped
+                    lines ++= code
+                    // remember to close wrapper function
+                    lines += "}"
                   // closing fence of ```effekt or ```
                   case Code =>
                     lines ++= code
+                    lines += ""
                   // closing fence of ```effekt:ignore
                   case Ignore =>
-                    ()
+                    lines += ""
                   // closing fence of ```scala or other languages
                   // same semantic as effekt:ignore
                   case Other =>
-                    ()
+                    lines += ""
                 }
                 fenceType = None
                 code = ListBuffer.empty
-                // make sure to add empty line for closing fence
-                lines += ""
             }
           }
         // collect code if in code fence
         case _ if fenceType.isDefined && line != "" =>
           code += line
-        // do nothing if outside of code fence
+        // add empty lines to preserve positional information outside of code fences
         case _ =>
-          ()
+          lines += ""
       }
     }
     val prog = lines.mkString("\n")
-    val repls = 0.until(replCounter).map { i => s"repl${i}()"}
+    val repls = 0.until(replCounter).map { i => s"inspect(repl${i}())"}
+    // We either allow to have one manually defined main function XOR one or more REPLs
     val main = if (replCounter > 0) {
       s"""
       |def main() = {
-      |${repls.map { r => s"  inspect($r)" }.mkString("\n") }
-      |  ()
+      |${repls.mkString("\n") }
+      |()
       |}
       """.stripMargin
     } else {
-      "def main() = ()"
+      ""
     }
-    val res = prog ++ main
-    res
+    prog ++ main
   }
 }
 
