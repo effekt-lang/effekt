@@ -255,6 +255,10 @@ class RecursiveDescentTests extends munit.FunSuite {
     assertEquals(peek(tokens, 3).kind, EOF)
   }
 
+  // Parsing tests
+  //
+  //
+
   test("Simple expressions") {
     parseExpr("42")
     parseExpr("f")
@@ -316,13 +320,27 @@ class RecursiveDescentTests extends munit.FunSuite {
     )
     assertNotEqualModuloSpans(
       parseExpr("box { 42 }"),
-      parseExpr("box {} { 42 }")
+      parseExpr("box { 42 } at {}")
     )
     parseExpr("box { (x: Int) => x }")
     parseExpr("box new Fresh { def fresh() = \"42\" }")
     parseExpr("box foo()")
     parseExpr("box bar(1)")
     parseExpr("box baz(quux)")
+    parseExpr("box { (x, y) => compareByteString(x, y) } at {io, global}")
+
+    {
+      val (source, pos) =
+        raw"""box { (x, y) => compareByteString(x, y) }
+             |                                         ↑
+             |""".sourceAndPosition
+      val b = parseExpr(source.content)
+      b match {
+        case Term.Box(c, _) => assertEquals(c.span, Span(source, pos, pos, Synthesized))
+        case other =>
+          throw new IllegalArgumentException(s"Expected Box but got ${other.getClass.getSimpleName}")
+      }
+    }
 
     // { f } is parsed as a capture set and not backtracked.
     intercept[Throwable] { parseExpr("box { f }") }

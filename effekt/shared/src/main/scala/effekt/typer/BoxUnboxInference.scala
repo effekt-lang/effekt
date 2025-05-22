@@ -50,12 +50,12 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     case v: Var => v.definition match {
       // TODO maybe we should synthesize a call to get here already?
       case sym: (ValueSymbol | symbols.RefBinder) => v
-      case sym: BlockSymbol => Box(None, v).inheritPosition(v)
+      case sym: BlockSymbol => Box(Maybe.None(v.span.emptyAfter), v).inheritPosition(v)
     }
 
-    case n: New => Box(None, rewriteAsBlock(n)).inheritPosition(n)
+    case n: New => Box(Maybe.None(n.span.emptyAfter), rewriteAsBlock(n)).inheritPosition(n)
 
-    case b: BlockLiteral => Box(None, rewriteAsBlock(b)).inheritPosition(b)
+    case b: BlockLiteral => Box(Maybe.None(b.span.emptyAfter), rewriteAsBlock(b)).inheritPosition(b)
 
     case l: Literal => l
 
