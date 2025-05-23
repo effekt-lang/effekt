@@ -1,0 +1,283 @@
+import stream
+import io
+import io/error
+import stringbuffer
+
+// Async iterables
+// ---------------
+
+record EffektAsyncIterator[T](next: => Promise[Option[T]] at {io, async, global})
+def getNext[T](it: EffektAsyncIterator[T]): Option[T] =
+  (it.next)().await()
+def each[T](it: EffektAsyncIterator[T]): Unit / emit[T] = {
+  while(it.getNext() is Some(x)) { do emit(x) }
+}
+
+// Types
+// -----
+
+type Protocol { HTTP(); HTTPS() }
+def show(p: Protocol): String = p match {
+  case HTTP() => "http"
+  case HTTPS() => "https"
+}
+type Method { GET(); POST() }
+def show(m: Method): String = m match {
+  case GET() => "GET"
+  case POST() => "POST"
+}
+interface RequestBuilder {
+  def method(method: Method): Unit
+  def hostname(host: String): Unit
+  def path(path: String): Unit
+  def port(port: Int): Unit
+  def protocol(proto: Protocol): Unit
+  def header(key: String, value: String): Unit
+}
+interface ResponseReader {
+  def status(): Int
+  def body(): Unit / emit[Byte]
+  def getHeader(key: String): Option[String]
+  //def headers(): Unit / emit[(String, String)]
+}
+
+record RequestError()
+
+// Backend-specific implementations
+// --------------------------------
+
+namespace js {
+  extern type AsyncIterator[T]
+  extern type IterableResult[T]
+  extern io def nextPromise[T](it: AsyncIterator[T]): Promise[IterableResult[T]] =
+    js "{ promise: ${it}.next() }"
+  extern def done[T](r: IterableResult[T]): Bool =
+    js "${r}.done"
+  extern io def unsafeValue[T](r: IterableResult[T]): T =
+    js "${r}.value"
+  extern def fromValue[T](v: T): IterableResult[T] =
+    js "{ value: ${v}, done: false }"
+  extern def done[T](): IterableResult[T] =
+    js "{ value: undefined, done: true }"
+
+  def next[T](it: AsyncIterator[T]): IterableResult[T] =
+    it.nextPromise().await()
+
+  def each[T](it: AsyncIterator[T]): Unit / emit[T] = {
+    while(it.next() is r and not(r.done)) {
+      do emit(r.unsafeValue())
+    }
+  }
+  // broken if we resolve a promise inside
+  // extern def makeAsyncIterator[T](next: => Promise[IterableResult[T]] at {io, async, global}): AsyncIterator[T] =
+  //   js """{ next: () => $effekt.runToplevel((ks,k) => ${next}(ks, k)) }"""
+
+  // Native Byte Buffers
+  // -------------------
+  extern type NativeBytes
+  extern pure def length(n: NativeBytes): Int =
+    js "${n}.length"
+  extern pure def get(n: NativeBytes, x: Int): Byte =
+    js "${n}[${x}]"
+  def each(n: NativeBytes): Unit / emit[Byte] = {
+    each(0, n.length){ i =>
+      do emit(n.get(i))
+    }
+  }
+
+  // Event emitters
+  // --------------
+  extern type Undefined
+  extern type EventEmitter
+  record Event[T](name: String)
+  namespace ev {
+    def data(): Event[js::NativeBytes] = Event("data")
+    def end(): Event[Undefined] = Event("end")
+  }
+
+  extern io def unsafeOn[T](em: EventEmitter, ev: String, handler: T => Unit at {io, async, global}): Unit =
+    js "${em}.on(${ev}, (param) => $effekt.runToplevel((ks,k) => ${handler}(param, ks, k)))"
+  def on[T](em: EventEmitter, ev: Event[T], handler: T => Unit at {io, async, global}): Unit =
+    em.unsafeOn(ev.name, handler)
+  extern async def unsafeWait[T](em: EventEmitter, ev: String): T =
+    js "$effekt.capture(k => ${em}.on(${ev}, k))"
+  def wait[T](em: EventEmitter, ev: Event[T]): T =
+    em.unsafeWait(ev.name)
+
+  // Dict-like JS objects
+  // --------------------
+  extern type JsObj
+  extern def empty(): JsObj =
+    js "{}"
+    
+  extern io def set(obj: JsObj, key: String, value: Any): Unit =
+    js "${obj}[${key}] = ${value};"
+  extern io def set(obj: JsObj, key1: String, key2: String, value: Any): Unit =
+    js "${obj}[${key1}][${key2}] = ${value};"
+}
+
+namespace jsNode {
+  extern jsNode """
+    const http = require('node:http')
+    const https = require('node:https')
+  """
+ 
+  extern type NativeResponse
+  extern async def runHTTP(obj: js::JsObj): NativeResponse =
+    jsNode "$effekt.capture(callback => http.request(${obj}, callback).on('error', callback).end())"
+  extern async def runHTTPS(obj: js::JsObj): NativeResponse =
+    jsNode "$effekt.capture(callback => https.request(${obj}, callback).on('error', callback).end())"
+
+  extern io def statusCode(r: NativeResponse): Int =
+    jsNode "${r}.statusCode"
+  extern pure def getHeader(r: NativeResponse, h: String): String =
+    jsNode "${r}.headers[${h}]"
+
+  extern pure def events(r: NativeResponse): js::EventEmitter = jsNode "${r}"
+  
+  def getBody(r: NativeResponse): EffektAsyncIterator[js::NativeBytes] = {
+    val nextResolve = ref(promise::make())
+    r.events.js::on(js::ev::data(), box { chunk =>
+      val waitingResolve = nextResolve.get().await()
+      nextResolve.set(promise::make())
+      waitingResolve.resolve(Some(chunk))
+    })
+    r.events.js::on(js::ev::end(), box { _ =>
+      val waitingResolve = nextResolve.get().await()
+      nextResolve.set(promise::make())
+      waitingResolve.resolve(None())
+    })
+    EffektAsyncIterator(box {
+      val resPromise = promise::make()
+      nextResolve.get().resolve(resPromise)
+      resPromise
+    })
+  }
+
+  extern io def isError(r: NativeResponse): Bool =
+    jsNode "(${r} instanceof Error)"
+
+  // outside interface
+  def request[R]{ body: => Unit / RequestBuilder }{ k: {ResponseReader} => R }: R / Exception[RequestError] = {
+    val options = js::empty()
+    options.js::set("headers", js::empty())
+    var protocol = HTTPS()
+    try body() with RequestBuilder {
+      def method(m) = resume(options.js::set("method", m.show))
+      def hostname(n) = resume(options.js::set("hostname", n))
+      def path(p) = resume(options.js::set("path", p))
+      def port(p) = resume(options.js::set("port", p))
+      def header(k, v) = resume(options.js::set("headers", k, v))
+      def protocol(p) = resume(protocol = p)
+    }
+    val res = protocol match {
+      case HTTP() => runHTTP(options)
+      case HTTPS() => runHTTPS(options)
+    }
+    if(res.isError) { println(res.genericShow); do raise(RequestError(), "Request failed") }
+    
+    val resbody = res.getBody
+    def rr = new ResponseReader{
+      def status() = res.statusCode
+      def body() = {
+        for[js::NativeBytes]{ resbody.each }{ b => b.js::each }
+      }
+      def getHeader(k) = undefinedToOption(res.getHeader(k))
+      //def headers() = <>
+    }
+    k{rr}
+  }
+}
+
+namespace jsWeb {
+  extern type RequestInit
+  extern type NativeResponse
+  extern async def run(url: String, obj: js::JsObj): NativeResponse =
+    jsWeb """$effekt.capture(k => fetch(${url}, ${obj}).then(k).catch(k))"""
+  extern pure def isError(r: NativeResponse): Bool =
+    jsWeb """(${r} instanceof Error)"""
+
+  extern pure def statusCode(r: NativeResponse): Int =
+    jsWeb """${r}.status"""
+  extern pure def getHeader(r: NativeResponse, name: String): String =
+    jsWeb """${r}.headers.get(${name})"""
+  extern type Reader
+  extern io def getBody(r: NativeResponse): Reader =
+    jsWeb """${r}.body.getReader()"""
+  extern io def read(r: Reader): Promise[js::IterableResult[js::NativeBytes]] =
+    jsWeb """{ promise: ${r}.read() }"""
+  def each(r: Reader): Unit / emit[js::NativeBytes] = {
+    while(r.read().await() is r and not(r.js::done)) {
+      do emit(r.js::unsafeValue())
+    }
+  }
+
+  def request[R]{ body: => Unit / RequestBuilder }{ k: {ResponseReader} => R }: R / Exception[RequestError] = {
+    val options = js::empty()
+    options.js::set("headers", js::empty())
+    var protocol = HTTPS()
+    var hostname = ""
+    var path = "/"
+    var port = 443
+    try body() with RequestBuilder {
+      def method(m) = resume(options.js::set("method", m.show))
+      def hostname(n) = resume(hostname = n)
+      def path(p) = resume(path = p)
+      def port(p) = resume(port = p)
+      def header(k,  v) = resume(options.js::set("headers", k, v))
+      def protocol(p) = resume(protocol = p)
+    }
+    val url = s"${protocol.show}://${hostname}:${port.show}${path}"
+    val res = run(url, options)
+    if(res.isError) { println(res.genericShow); do raise(RequestError(), "Request failed") }
+
+    def rr = new ResponseReader {
+      def status() = res.statusCode
+      def body() = for[js::NativeBytes]{ res.getBody().each() }{ b => b.js::each }
+      def getHeader(k) = undefinedToOption(res.getHeader(k))
+    }
+    k{rr}
+  }
+}
+
+namespace internal {
+  extern pure def backend(): String =
+    jsNode { "js-node" }
+    jsWeb { "js-web" }
+}
+
+def request[R]{ body: => Unit / RequestBuilder }{ res: {ResponseReader} => R }: R / Exception[RequestError] = internal::backend() match {
+  case "js-node" => jsNode::request{body}{res}
+  case "js-web" => jsWeb::request{body}{res}
+  case _ => <>
+}
+
+namespace example {
+  def main() = {
+    with on[RequestError].panic
+    with def res = request{
+      do method(GET())
+      do hostname("effekt-lang.org")
+      //do header("user-agent", "Effekt/script") // dont use this on js-web
+      do path("/")
+      do port(443)
+    }
+    if(res.status() == 200){
+      println("OK")
+      println(res.getHeader("content-type").show{ x => x })
+      with source[Byte]{ res.body() }
+      with decodeUTF8
+      with stringBuffer
+      exhaustively{
+        do read[Char]() match {
+          case '\n' => println(do flush())
+          case c =>
+          do write(c.show)
+        }
+      }
+      println(do flush())
+    } else {
+      println(res.status().show)
+    }
+  }
+}
