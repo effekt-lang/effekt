@@ -2,6 +2,7 @@ import stream
 import io
 import io/error
 import stringbuffer
+import bytearray
 
 // Async iterables
 // ---------------
@@ -33,6 +34,7 @@ interface RequestBuilder {
   def port(port: Int): Unit
   def protocol(proto: Protocol): Unit
   def header(key: String, value: String): Unit
+  def body{ writer: => Unit / emit[Byte] }: Unit
 }
 interface ResponseReader {
   def status(): Int
@@ -123,10 +125,18 @@ namespace jsNode {
   """
  
   extern type NativeResponse
-  extern async def runHTTP(obj: js::JsObj): NativeResponse =
-    jsNode "$effekt.capture(callback => http.request(${obj}, callback).on('error', callback).end())"
-  extern async def runHTTPS(obj: js::JsObj): NativeResponse =
-    jsNode "$effekt.capture(callback => https.request(${obj}, callback).on('error', callback).end())"
+  extern async def runHTTP(obj: js::JsObj, body: ByteArray): NativeResponse =
+    jsNode """$effekt.capture(callback => {
+      let req = http.request(${obj}, callback).on('error', callback);
+      req.write(${body})
+      req.end()
+    })"""
+  extern async def runHTTPS(obj: js::JsObj, body: ByteArray): NativeResponse =
+    jsNode """$effekt.capture(callback => {
+      let req = https.request(${obj}, callback).on('error', callback);
+      req.write(${body})
+      req.end();
+    })"""
 
   extern io def statusCode(r: NativeResponse): Int =
     jsNode "${r}.statusCode"
@@ -162,6 +172,7 @@ namespace jsNode {
     val options = js::empty()
     options.js::set("headers", js::empty())
     var protocol = HTTPS()
+    var reqBody: ByteArray = allocate(0)
     try body() with RequestBuilder {
       def method(m) = resume(options.js::set("method", m.show))
       def hostname(n) = resume(options.js::set("hostname", n))
@@ -169,10 +180,11 @@ namespace jsNode {
       def port(p) = resume(options.js::set("port", p))
       def header(k, v) = resume(options.js::set("headers", k, v))
       def protocol(p) = resume(protocol = p)
+      def body() = resume{ {wr} => reqBody = collectBytes{ wr } }
     }
     val res = protocol match {
-      case HTTP() => runHTTP(options)
-      case HTTPS() => runHTTPS(options)
+      case HTTP() => runHTTP(options, reqBody)
+      case HTTPS() => runHTTPS(options, reqBody)
     }
     if(res.isError) { println(res.genericShow); do raise(RequestError(), "Request failed") }
     
@@ -226,6 +238,7 @@ namespace jsWeb {
       def port(p) = resume(port = p)
       def header(k,  v) = resume(options.js::set("headers", k, v))
       def protocol(p) = resume(protocol = p)
+      def body() = resume{ {wr} => options.js::set("body", collectBytes{wr}) }
     }
     val url = s"${protocol.show}://${hostname}:${port.show}${path}"
     val res = run(url, options)
