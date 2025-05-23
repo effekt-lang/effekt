@@ -22,11 +22,18 @@ def show(p: Protocol): String = p match {
   case HTTP() => "http"
   case HTTPS() => "https"
 }
+def defaultPort(p: Protocol): Int = p match {
+  case HTTP() => 80
+  case HTTPS() => 443
+}
 type Method { GET(); POST() }
 def show(m: Method): String = m match {
   case GET() => "GET"
   case POST() => "POST"
 }
+/// Interface to build HTTP requests.
+///
+/// Each of method, hostname, path, port, and protocol must be called at least once!
 interface RequestBuilder {
   def method(method: Method): Unit
   def hostname(host: String): Unit
@@ -36,19 +43,28 @@ interface RequestBuilder {
   def header(key: String, value: String): Unit
   def body{ writer: => Unit / emit[Byte] }: Unit
 }
+/// Interface returned by HTTP requests.
 interface ResponseReader {
+  /// Gets the response HTTP status code
   def status(): Int
+
+  /// Returns the body of the response by emitting Bytes
+  /// May be called at most once.
   def body(): Unit / emit[Byte]
+
+  /// Get the specified HTTP header, key should be lower-case
   def getHeader(key: String): Option[String]
+
   //def headers(): Unit / emit[(String, String)]
 }
 
 record RequestError()
-
 // Backend-specific implementations
 // --------------------------------
 
 namespace js {
+  // Async iterators in JS
+  // ---------------------
   extern type AsyncIterator[T]
   extern type IterableResult[T]
   extern io def nextPromise[T](it: AsyncIterator[T]): Promise[IterableResult[T]] =
@@ -70,13 +86,14 @@ namespace js {
       do emit(r.unsafeValue())
     }
   }
-  // broken if we resolve a promise inside
+  // broken if we resolve a promise inside, see issue #1016
   // extern def makeAsyncIterator[T](next: => Promise[IterableResult[T]] at {io, async, global}): AsyncIterator[T] =
   //   js """{ next: () => $effekt.runToplevel((ks,k) => ${next}(ks, k)) }"""
 
   // Native Byte Buffers
   // -------------------
   extern type NativeBytes
+  // jsNode "Buffer"
   extern pure def length(n: NativeBytes): Int =
     js "${n}.length"
   extern pure def get(n: NativeBytes, x: Int): Byte =
@@ -116,6 +133,8 @@ namespace js {
     js "${obj}[${key}] = ${value};"
   extern io def set(obj: JsObj, key1: String, key2: String, value: Any): Unit =
     js "${obj}[${key1}][${key2}] = ${value};"
+  extern io def isSet(obj: JsObj, key: String): Bool =
+    js "${obj}[${key}] !== undefined"
 }
 
 namespace jsNode {
@@ -182,6 +201,7 @@ namespace jsNode {
       def protocol(p) = resume(protocol = p)
       def body() = resume{ {wr} => reqBody = collectBytes{ wr } }
     }
+    if(not(options.js::isSet("port"))) { options.js::set("port", protocol.defaultPort()) }
     val res = protocol match {
       case HTTP() => runHTTP(options, reqBody)
       case HTTPS() => runHTTPS(options, reqBody)
@@ -230,17 +250,17 @@ namespace jsWeb {
     var protocol = HTTPS()
     var hostname = ""
     var path = "/"
-    var port = 443
+    var port = None()
     try body() with RequestBuilder {
       def method(m) = resume(options.js::set("method", m.show))
       def hostname(n) = resume(hostname = n)
       def path(p) = resume(path = p)
-      def port(p) = resume(port = p)
+      def port(p) = resume(port = Some(p))
       def header(k,  v) = resume(options.js::set("headers", k, v))
       def protocol(p) = resume(protocol = p)
       def body() = resume{ {wr} => options.js::set("body", collectBytes{wr}) }
     }
-    val url = s"${protocol.show}://${hostname}:${port.show}${path}"
+    val url = s"${protocol.show}://${hostname}:${port.getOrElse{ protocol.defaultPort }.show}${path}"
     val res = run(url, options)
     if(res.isError) { println(res.genericShow); do raise(RequestError(), "Request failed") }
 
@@ -273,7 +293,7 @@ namespace example {
       do hostname("effekt-lang.org")
       //do header("user-agent", "Effekt/script") // dont use this on js-web
       do path("/")
-      do port(443)
+      // do port(443) // optional
     }
     if(res.status() == 200){
       println("OK")
