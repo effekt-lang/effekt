@@ -216,9 +216,9 @@ namespace jsWeb {
   extern type Reader
   extern io def getBody(r: NativeResponse): Reader =
     jsWeb """${r}.body.getReader()"""
-  extern io def read(r: Reader): Promise[js::IterableResult[js::NativeBytes]] =
+  extern io def read(r: Reader): Promise[js::IterableResult[ByteArray]] =
     jsWeb """{ promise: ${r}.read() }"""
-  def each(r: Reader): Unit / emit[js::NativeBytes] = {
+  def each(r: Reader): Unit / emit[ByteArray] = {
     while(r.read().await() is r and not(r.js::done)) {
       do emit(r.js::unsafeValue())
     }
@@ -246,7 +246,7 @@ namespace jsWeb {
 
     def rr = new ResponseReader {
       def status() = res.statusCode
-      def body() = for[js::NativeBytes]{ res.getBody().each() }{ b => b.js::each }
+      def body() = for[ByteArray]{ res.getBody().each() }{ b => b.each }
       def getHeader(k) = undefinedToOption(res.getHeader(k))
     }
     k{rr}
