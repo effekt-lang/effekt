@@ -117,7 +117,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
   val maxInlineSize: ScallopOption[Long] = opt(
     "max-inline-size",
     descr = "Maximum size (number of core tree-nodes) of a function considered by the inliner",
-    default = Some(50L),
+    default = Some(20L),
     noshort = true,
     group = advanced
   )
