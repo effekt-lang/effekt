@@ -1516,6 +1516,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       Span(source, start, end)
     }
 
+  /* Hack: Resolving Kiama positions takes a lot of time, let's cache `offset` ~> `kiama.Position`.
+   * This makes the parser about 30% faster. */
+  private val positionCache = scala.collection.mutable.HashMap[Int, Position]()
+  private def getPosition(offset: Int): Position =
+    positionCache.getOrElseUpdate(offset, source.offsetToPosition(offset))
+
   // the handler for the "span" effect.
   private val _start: scala.util.DynamicVariable[Int] = scala.util.DynamicVariable(0)
   inline def nonterminal[T](inline p: => T): T = _start.withValue(peek.start) {
@@ -1539,8 +1545,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     //      case _ => ()
     //    }
 
-    val startPos = source.offsetToPosition(start)
-    val endPos = source.offsetToPosition(end)
+    val startPos = getPosition(start)
+    val endPos = getPosition(end)
 
     // recursively add positions to subtrees that are not yet annotated
     // this is better than nothing and means we have positions for desugared stuff
