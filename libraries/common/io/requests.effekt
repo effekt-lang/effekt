@@ -37,6 +37,7 @@ def show(m: Method): String = m match {
 /// Each of method, hostname, path, port, and protocol must be called at least once!
 interface RequestBuilder {
   def method(method: Method): Unit
+  def auth(authStr: String): Unit
   def hostname(host: String): Unit
   def path(path: String): Unit
   def port(port: Int): Unit
@@ -195,6 +196,7 @@ namespace jsNode {
     var reqBody: ByteArray = allocate(0)
     try body() with RequestBuilder {
       def method(m) = resume(options.js::set("method", m.show))
+      def auth(a) = resume(options.js::set("auth", a))
       def hostname(n) = resume(options.js::set("hostname", n))
       def path(p) = resume(options.js::set("path", p))
       def port(p) = resume(options.js::set("port", p))
@@ -249,11 +251,13 @@ namespace jsWeb {
     val options = js::empty()
     options.js::set("headers", js::empty())
     var protocol = HTTPS()
+    var auth = None()
     var hostname = ""
     var path = "/"
     var port = None()
     try body() with RequestBuilder {
       def method(m) = resume(options.js::set("method", m.show))
+      def auth(a) = resume(auth = Some(a))
       def hostname(n) = resume(hostname = n)
       def path(p) = resume(path = p)
       def port(p) = resume(port = Some(p))
@@ -261,7 +265,8 @@ namespace jsWeb {
       def protocol(p) = resume(protocol = p)
       def body() = resume{ {wr} => options.js::set("body", collectBytes{wr}) }
     }
-    val url = s"${protocol.show}://${hostname}:${port.getOrElse{ protocol.defaultPort }.show}${path}"
+    val authStr = auth.map{ a => a ++ "@" }.getOrElse{ "" }
+    val url = s"${protocol.show}://${authStr}${hostname}:${port.getOrElse{ protocol.defaultPort }.show}${path}"
     val res = run(url, options)
     if(res.isError) { println(res.genericShow); do raise(RequestError(), "Request failed") }
 
@@ -284,7 +289,7 @@ def uri(uri: String): Unit / { RequestBuilder, Exception[WrongFormat] } = {
         case "HTTPS" => do protocol(HTTPS())
         case _ => do raise(WrongFormat(), "Unsupported protocol " ++ sc)
       })
-      def userinfo(u) = <>
+      def userinfo(u) = resume(do auth(u))
       def host(h) = resume(do hostname(h))
       def port(p) = resume(do port(p))
       def path(p) = resume(do write(p))
