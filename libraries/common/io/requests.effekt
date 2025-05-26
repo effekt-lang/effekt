@@ -18,6 +18,7 @@ def each[T](it: EffektAsyncIterator[T]): Unit / emit[T] = {
 // Types
 // -----
 
+/// HTTP-style Protocol for requests to send.
 type Protocol { HTTP(); HTTPS() }
 def show(p: Protocol): String = p match {
   case HTTP() => "http"
@@ -27,6 +28,8 @@ def defaultPort(p: Protocol): Int = p match {
   case HTTP() => 80
   case HTTPS() => 443
 }
+
+/// HTTP request method
 type Method { GET(); POST() }
 def show(m: Method): String = m match {
   case GET() => "GET"
@@ -34,15 +37,24 @@ def show(m: Method): String = m match {
 }
 /// Interface to build HTTP requests.
 ///
-/// Each of method, hostname, path, port, and protocol must be called at least once!
+/// Each of method, hostname, path, and protocol must be called at least once!
+/// See `uri` for a simple way to fill those.
 interface RequestBuilder {
+  /// HTTP request method to use
   def method(method: Method): Unit
+  /// (optional) user authentication to use, e.g. user:letmein
   def auth(authStr: String): Unit
+  /// hostname of the request, e.g. effekt-lang.org
   def hostname(host: String): Unit
+  /// path of the request, e.g. /index.html
   def path(path: String): Unit
+  /// port to use, defaults to the standard port of the protocol
   def port(port: Int): Unit
+  /// Protocol to use, e.g. HTTP(), HTTPS()
   def protocol(proto: Protocol): Unit
+  /// Add the given request header
   def header(key: String, value: String): Unit
+  /// Write to the body of the request. May only be called once.
   def body{ writer: => Unit / emit[Byte] }: Unit
 }
 /// Interface returned by HTTP requests.
@@ -279,6 +291,7 @@ namespace jsWeb {
   }
 }
 
+/// Sets the values in the `RequestBuilder` from a given URI string.
 def uri(uri: String): Unit / { RequestBuilder, Exception[WrongFormat] } = {
   stringBuffer{
     try parseURI(uri) with URIBuilder {
@@ -300,12 +313,24 @@ def uri(uri: String): Unit / { RequestBuilder, Exception[WrongFormat] } = {
   }
 }
 
+def defaultHeaders(): Unit / RequestBuilder = {
+  if(internal::backend() != "js-web"){
+    do header("user-agent", "Effekt script / Script written in the Effekt language")
+  }
+  // TODO should we add more?
+}
+
 namespace internal {
   extern pure def backend(): String =
     jsNode { "js-node" }
     jsWeb { "js-web" }
 }
 
+/// Make a HTTP(S) request on the backend-specific implementation,
+/// then pass the response to the second block parameter to process.
+///
+/// The Request body is buffered, the response is streaming (as far
+/// as the backend implementation allows).
 def request[R]{ body: => Unit / RequestBuilder }{ res: {ResponseReader} => R }: R / Exception[RequestError] = internal::backend() match {
   case "js-node" => jsNode::request{body}{res}
   case "js-web" => jsWeb::request{body}{res}
@@ -319,10 +344,7 @@ namespace example {
     with def res = request{
       do method(GET())
       uri("https://effekt-lang.org/")
-      //do hostname("effekt-lang.org")
-      //do header("user-agent", "Effekt/script") // dont use this on js-web
-      //do path("/")
-      // do port(443) // optional
+      defaultHeaders()
     }
     if(res.status() == 200){
       println("OK")
