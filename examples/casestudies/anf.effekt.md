@@ -97,7 +97,7 @@ def translate(e: Tree): Stmt =
 For our example, calling `translate` results in:
 ```
 val exampleResult = translate(exampleTree)
-//> CLet(x, CLet(xxxx1, CRet(CLit(42)),
+//> CLet(x, CLet(x1, CRet(CLit(42)),
 //    CLet(x2, CApp(g, CVar(x1)), CApp(f, CVar(x2)))),
 //    CRet(CVar(x)))
 ```
