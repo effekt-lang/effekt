@@ -456,7 +456,7 @@ enum Term extends Tree {
   case Hole(id: IdDef, stmts: Stmt, override val span: Span)
 
   // Boxing and unboxing to represent first-class values
-  case Box(capt: Option[CaptureSet], block: Term)
+  case Box(capt: Maybe[CaptureSet], block: Term)
   case Unbox(term: Term)
 
   /**

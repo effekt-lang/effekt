@@ -572,7 +572,7 @@ class LSPTests extends FunSuite {
   //
   //
 
-  test("inlayHint should show the io effect") {
+  test("inlayHint shows the io capture on a def") {
     withClientAndServer { (client, server) =>
       val (textDoc, positions) = raw"""
                                 |↑
@@ -592,6 +592,43 @@ class LSPTests extends FunSuite {
       markup.setValue("captures: `{io}`")
       inlayHint.setTooltip(markup)
       inlayHint.setPaddingRight(true)
+      inlayHint.setData("capture")
+
+      val expectedInlayHints = List(inlayHint)
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val params = new InlayHintParams()
+      params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      params.setRange(new Range(positions(0), positions(2)))
+
+      val inlayHints = server.getTextDocumentService().inlayHint(params).get()
+      assertEquals(inlayHints, expectedInlayHints.asJava)
+    }
+  }
+
+  test("inlayHint shows the io capture in explicit box syntax") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, positions) = raw"""def foo(): Unit = { println("foo") }
+                                |
+                                |↑
+                                |val bar = box { () => foo() }
+                                |                             ↑
+                                |
+                                |↑
+                                |""".textDocumentAndPositions
+
+      val inlayHint = new InlayHint()
+      inlayHint.setKind(InlayHintKind.Type)
+      inlayHint.setPosition(positions(1))
+      inlayHint.setLabel("at {io}")
+      val markup = new MarkupContent()
+      markup.setKind("markdown")
+      markup.setValue("captures: `{io}`")
+      inlayHint.setTooltip(markup)
+      inlayHint.setPaddingLeft(true)
       inlayHint.setData("capture")
 
       val expectedInlayHints = List(inlayHint)

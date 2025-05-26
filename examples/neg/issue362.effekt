@@ -1,7 +1,7 @@
 interface Exc { def op(): Unit }
 def read {t: Exc}: Unit = t.op()
 
-def foo() {arr: Exc} = box {} { read {arr} }
+def foo() {arr: Exc} = box { read {arr} } at {}
 
 def main() = {
   val cap = try {
