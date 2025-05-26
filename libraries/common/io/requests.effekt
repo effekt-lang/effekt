@@ -3,6 +3,7 @@ import io
 import io/error
 import stringbuffer
 import bytearray
+import io/uri
 
 // Async iterables
 // ---------------
@@ -273,6 +274,27 @@ namespace jsWeb {
   }
 }
 
+def uri(uri: String): Unit / { RequestBuilder, Exception[WrongFormat] } = {
+  stringBuffer{
+    try parseURI(uri) with URIBuilder {
+      def scheme(sc) = resume(sc match {
+        case "http" => do protocol(HTTP())
+        case "HTTP" => do protocol(HTTP())
+        case "https" => do protocol(HTTPS())
+        case "HTTPS" => do protocol(HTTPS())
+        case _ => do raise(WrongFormat(), "Unsupported protocol " ++ sc)
+      })
+      def userinfo(u) = <>
+      def host(h) = resume(do hostname(h))
+      def port(p) = resume(do port(p))
+      def path(p) = resume(do write(p))
+      def query(q) = { do write("?"); do write(q); resume(()) }
+      def fragment(f) = { do write("#"); do write(f); resume(()) }
+    }
+    do path(do flush())
+  }
+}
+
 namespace internal {
   extern pure def backend(): String =
     jsNode { "js-node" }
@@ -288,11 +310,13 @@ def request[R]{ body: => Unit / RequestBuilder }{ res: {ResponseReader} => R }: 
 namespace example {
   def main() = {
     with on[RequestError].panic
+    with on[WrongFormat].panic
     with def res = request{
       do method(GET())
-      do hostname("effekt-lang.org")
+      uri("https://effekt-lang.org/")
+      //do hostname("effekt-lang.org")
       //do header("user-agent", "Effekt/script") // dont use this on js-web
-      do path("/")
+      //do path("/")
       // do port(443) // optional
     }
     if(res.status() == 200){
