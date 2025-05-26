@@ -91,6 +91,7 @@ import scala.annotation.tailrec
  */
 sealed trait Tree extends Product {
   val span: Span = Span.missing
+  val doc: Doc = None
 
   def inheritPosition(from: Tree)(implicit C: Context): this.type = {
     C.positions.dupPos(from, this);
@@ -242,7 +243,7 @@ sealed trait Reference extends Named {
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  *
  */
-case class ModuleDecl(path: String, includes: List[Include], defs: List[Def], doc: Doc, override val span: Span) extends Tree
+case class ModuleDecl(path: String, includes: List[Include], defs: List[Def], override val doc: Doc, override val span: Span) extends Tree
 case class Include(path: String) extends Tree
 
 /**
@@ -347,40 +348,40 @@ export SpannedOps._
  */
 enum Def extends Definition {
 
-  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, doc: Doc, override val span: Span)
-  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, doc: Doc, override val span: Span)
-  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, doc: Doc, override val span: Span)
-  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, doc: Doc, override val span: Span)
-  case DefDef(id: IdDef, annot: Option[BlockType], block: Term, doc: Doc, override val span: Span)
+  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, override val doc: Doc, override val span: Span)
+  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, override val doc: Doc, override val span: Span)
+  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, override val doc: Doc, override val span: Span)
+  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, override val doc: Doc, override val span: Span)
+  case DefDef(id: IdDef, annot: Option[BlockType], block: Term, override val doc: Doc, override val span: Span)
 
-  case NamespaceDef(id: IdDef, definitions: List[Def], doc: Doc, override val span: Span)
+  case NamespaceDef(id: IdDef, definitions: List[Def], override val doc: Doc, override val span: Span)
 
-  case InterfaceDef(id: IdDef, tparams: Many[Id], ops: List[Operation], doc: Doc, override val span: Span)
-  case DataDef(id: IdDef, tparams: Many[Id], ctors: List[Constructor], doc: Doc, override val span: Span)
-  case RecordDef(id: IdDef, tparams: Many[Id], fields: Many[ValueParam], doc: Doc, override val span: Span)
+  case InterfaceDef(id: IdDef, tparams: Many[Id], ops: List[Operation], override val doc: Doc, override val span: Span)
+  case DataDef(id: IdDef, tparams: Many[Id], ctors: List[Constructor], override val doc: Doc, override val span: Span)
+  case RecordDef(id: IdDef, tparams: Many[Id], fields: Many[ValueParam], override val doc: Doc, override val span: Span)
 
   /**
    * Type aliases like `type Matrix[T] = List[List[T]]`
    */
-  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType, doc: Doc, override val span: Span)
+  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType, override val doc: Doc, override val span: Span)
 
   /**
    * Effect aliases like `effect Set = { Get, Put }`
    */
-  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects, doc: Doc, override val span: Span)
+  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects, override val doc: Doc, override val span: Span)
 
   /**
    * Only valid on the toplevel!
    */
-  case ExternType(id: IdDef, tparams: Many[Id], doc: Doc, override val span: Span)
+  case ExternType(id: IdDef, tparams: Many[Id], override val doc: Doc, override val span: Span)
 
   case ExternDef(capture: CaptureSet, id: IdDef,
                  tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Effectful,
-                 bodies: List[ExternBody], doc: Doc, override val span: Span) extends Def
+                 bodies: List[ExternBody], override val doc: Doc, override val span: Span) extends Def
 
-  case ExternResource(id: IdDef, tpe: BlockType, doc: Doc, override val span: Span)
+  case ExternResource(id: IdDef, tpe: BlockType, override val doc: Doc, override val span: Span)
 
-  case ExternInterface(id: IdDef, tparams: List[Id], doc: Doc, override val span: Span)
+  case ExternInterface(id: IdDef, tparams: List[Id], override val doc: Doc, override val span: Span)
 
   /**
    * Namer resolves the path and loads the contents in field [[contents]]
@@ -388,9 +389,7 @@ enum Def extends Definition {
    * @note Storing content and id as user-visible fields is a workaround for the limitation that Enum's cannot
    *   have case specific refinements.
    */
-  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef, doc: Doc, override val span: Span)
-
-  def doc: Doc
+  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef, override val doc: Doc, override val span: Span)
 }
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude
@@ -544,8 +543,8 @@ export CallTarget.*
 
 // Declarations
 // ------------
-case class Constructor(id: IdDef, tparams: Many[Id], params: Many[ValueParam], doc: Doc, override val span: Span) extends Definition
-case class Operation(id: IdDef, tparams: Many[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, doc: Doc, override val span: Span) extends Definition
+case class Constructor(id: IdDef, tparams: Many[Id], params: Many[ValueParam], override val doc: Doc, override val span: Span) extends Definition
+case class Operation(id: IdDef, tparams: Many[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, override val doc: Doc, override val span: Span) extends Definition
 
 // Implementations
 // ---------------

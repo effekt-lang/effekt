@@ -18,15 +18,18 @@ trait Intelligence {
     symbol: Symbol,
     header: String,
     signature: Option[String],
-    description: Option[String]
+    description: Option[String],
+    documentation: Option[String]
   ) {
     def fullDescription: String = {
       val sig = signature.map(sig => s"```effekt\n$sig\n```").getOrElse { "" }
       val desc = description.getOrElse("")
+      val doc = documentation.getOrElse("")
 
       s"""|#### $header
           |$sig
           |$desc
+          |$doc
           |""".stripMargin
     }
 
@@ -194,10 +197,12 @@ trait Intelligence {
   def getInfoOf(sym: Symbol)(using C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
 
     case b: ExternFunction =>
-      SymbolInfo(b, "External function definition", Some(DeclPrinter(b)), None)
+      val doc = getDefinitionOf(b).flatMap(_.doc)
+      SymbolInfo(b, "External function definition", Some(DeclPrinter(b)), None, doc)
 
     case f: UserFunction if C.functionTypeOption(f).isDefined =>
-      SymbolInfo(f, "Function", Some(DeclPrinter(f)), None)
+      val doc = getDefinitionOf(f).flatMap(_.doc)
+      SymbolInfo(f, "Function", Some(DeclPrinter(f)), None, doc)
 
     case f: Operation =>
       val ex =
@@ -219,32 +224,40 @@ trait Intelligence {
              |handled by the handler. This is important when considering higher-order functions.
              |""".stripMargin
 
-      SymbolInfo(f, "Effect operation", Some(DeclPrinter(f)), Some(ex))
+      val doc = getDefinitionOf(f).flatMap(_.doc)
+      SymbolInfo(f, "Effect operation", Some(DeclPrinter(f)), Some(ex), doc)
 
     case f: EffectAlias =>
-      SymbolInfo(f, "Effect alias", Some(DeclPrinter(f)), None)
+      val doc = getDefinitionOf(f).flatMap(_.doc)
+      SymbolInfo(f, "Effect alias", Some(DeclPrinter(f)), None, doc)
 
     case t: TypeAlias =>
-      SymbolInfo(t, "Type alias", Some(DeclPrinter(t)), None)
+      val doc = getDefinitionOf(t).flatMap(_.doc)
+      SymbolInfo(t, "Type alias", Some(DeclPrinter(t)), None, doc)
 
     case t: ExternType =>
-      SymbolInfo(t, "External type definition", Some(DeclPrinter(t)), None)
+      val doc = getDefinitionOf(t).flatMap(_.doc)
+      SymbolInfo(t, "External type definition", Some(DeclPrinter(t)), None, doc)
 
     case t: ExternInterface =>
-      SymbolInfo(t, "External interface definition", Some(DeclPrinter(t)), None)
+      val doc = getDefinitionOf(t).flatMap(_.doc)
+      SymbolInfo(t, "External interface definition", Some(DeclPrinter(t)), None, doc)
 
     case t: ExternResource =>
-      SymbolInfo(t, "External resource definition", Some(DeclPrinter(t)), None)
+      val doc = getDefinitionOf(t).flatMap(_.doc)
+      SymbolInfo(t, "External resource definition", Some(DeclPrinter(t)), None, doc)
 
     case c: Constructor =>
+      val doc = getDefinitionOf(c).flatMap(_.doc)
       val ex = pp"""|Instances of data types like `${c.tpe}` can only store
                     |_values_, not _blocks_. Hence, constructors like `${c.name}` only have
                     |value parameter lists, not block parameters.
                     |""".stripMargin
 
-      SymbolInfo(c, s"Constructor of data type `${c.tpe}`", Some(DeclPrinter(c)), Some(ex))
+      SymbolInfo(c, s"Constructor of data type `${c.tpe}`", Some(DeclPrinter(c)), Some(ex), doc)
 
     case c: BlockParam =>
+      val doc = getDefinitionOf(c).flatMap(_.doc)
       val signature = C.functionTypeOption(c).map { tpe => pp"{ ${c.name}: ${tpe} }" }
 
       val ex =
@@ -257,9 +270,10 @@ trait Intelligence {
             |yielded to.
             |""".stripMargin
 
-      SymbolInfo(c, "Block parameter", signature, Some(ex))
+      SymbolInfo(c, "Block parameter", signature, Some(ex), doc)
 
     case c: ResumeParam =>
+      val doc = getDefinitionOf(c).flatMap(_.doc)
       val tpe = C.functionTypeOption(c)
       val signature = tpe.map { tpe => pp"{ ${c.name}: ${tpe} }" }
       val hint = tpe.map { tpe => pp"(i.e., `${tpe.result}`)" }.getOrElse { " " }
@@ -274,9 +288,10 @@ trait Intelligence {
             |- the return type of the resumption.
             |""".stripMargin
 
-      SymbolInfo(c, "Resumption", signature, Some(ex))
+      SymbolInfo(c, "Resumption", signature, Some(ex), doc)
 
     case c: VarBinder =>
+      val doc = getDefinitionOf(c).flatMap(_.doc)
       val signature = C.blockTypeOption(c).map(TState.extractType).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
 
       val ex =
@@ -289,29 +304,32 @@ trait Intelligence {
             |combination with effect handlers.
          """.stripMargin
 
-      SymbolInfo(c, "Mutable variable binder", signature, Some(ex))
+      SymbolInfo(c, "Mutable variable binder", signature, Some(ex), doc)
 
     case s: RegBinder =>
-
+      val doc = getDefinitionOf(s).flatMap(_.doc)
       val ex =
         pp"""|The region a variable is allocated into (${s.region}) not only affects its lifetime, but
              |also its backtracking behavior in combination with continuation capture and
              |resumption.
              |""".stripMargin
 
-      SymbolInfo(s, "Variable in region", None, Some(ex))
+      SymbolInfo(s, "Variable in region", None, Some(ex), doc)
 
     case c: ValueParam =>
+      val doc = getDefinitionOf(c).flatMap(_.doc)
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
-      SymbolInfo(c, "Value parameter", signature, None)
+      SymbolInfo(c, "Value parameter", signature, None, doc)
 
     case c: ValBinder =>
+      val doc = getDefinitionOf(c).flatMap(_.doc)
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
-      SymbolInfo(c, "Value binder", signature, None)
+      SymbolInfo(c, "Value binder", signature, None, doc)
 
     case c: DefBinder =>
+      val doc = getDefinitionOf(c).flatMap(_.doc)
       val signature = C.blockTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
-      SymbolInfo(c, "Block binder", signature, None)
+      SymbolInfo(c, "Block binder", signature, None, doc)
   }
 }
 
