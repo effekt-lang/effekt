@@ -2,6 +2,7 @@
 layout: docs
 title: Parser
 permalink: docs/casestudies/parser
+redirect_to: docs/casestudies/frontend#parsing
 ---
 
 # Parsing
@@ -11,11 +12,9 @@ In this case study, we show how to implement a parser, using the lexer from the
 ---
 
 Again, we require some imports -- in particular, we reuse the lexer implementation.
-```
-module examples/casestudies/parser
 
+```
 import examples/casestudies/lexer
-import string
 ```
 
 Parsers can be expressed by using the lexer effect and process the token stream. To model different alternatives in the grammar, we use the following effect for non-determinism:
@@ -221,21 +220,19 @@ the lexer positions will be restored when calling the continuation a second time
 ## Running the Examples
 Having implemented a handler for the `Parser` effect, we can run our example "grammars" on some inputs.
 
-```
-def main() = {
-  inspect(parse("42") { parseCalls() })
-  inspect(parse("foo(1)") { parseCalls() })
-  inspect(parse("foo(1, 2)") { parseCalls() })
-  inspect(parse("foo(1, 2, 3, 4)") { parseCalls() })
-  inspect(parse("foo(1, 2, bar(4, 5))") { parseCalls() })
-  inspect(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() })
+```effekt:repl
+inspect(parse("42") { parseCalls() })
+inspect(parse("foo(1)") { parseCalls() })
+inspect(parse("foo(1, 2)") { parseCalls() })
+inspect(parse("foo(1, 2, 3, 4)") { parseCalls() })
+inspect(parse("foo(1, 2, bar(4, 5))") { parseCalls() })
+inspect(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() })
 
-  inspect(parse("}42") { parseExpr() })
-  inspect(parse("42") { parseExpr() })
-  inspect(parse("let x = 4 in 42") { parseExpr() })
-  inspect(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
-  inspect(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
-  inspect(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
-  inspect(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
-}
+inspect(parse("}42") { parseExpr() })
+inspect(parse("42") { parseExpr() })
+inspect(parse("let x = 4 in 42") { parseExpr() })
+inspect(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
+inspect(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
+inspect(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
+inspect(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
 ```

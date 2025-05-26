@@ -11,6 +11,7 @@
     ;     (string-append name))]
     [(list? obj) (map show_impl obj)]
     [(record? obj) (show-record obj)]
+    [(eqv? obj (void)) "()"]
     [else (generic-show obj)]))
 
 (define (generic-show obj)

@@ -1,8 +1,8 @@
 package effekt
 
 import effekt.context.{Annotations, Context}
-import effekt.source.{FunDef, Include, ModuleDecl, Span, Tree}
-import effekt.symbols.Hole
+import effekt.source.{FunDef, Include, Maybe, ModuleDecl, Span, Tree}
+import effekt.symbols.{CaptureSet, Hole}
 import kiama.util.{Position, Source}
 import effekt.symbols.scopes.Scope
 
@@ -116,6 +116,17 @@ trait Intelligence {
     case s             => s
   }
 
+  def getSymbolHover(position: Position, fullDescription: Boolean = true)(using C: Context): Option[String] = for {
+    (tree, sym) <- getSymbolAt(position)
+    info <- getInfoOf(sym)
+  } yield if (fullDescription) info.fullDescription else info.shortDescription
+
+  def getHoleHover(position: Position)(using C: Context): Option[String] = for {
+    trees <- getTreesAt(position)
+    tree <- trees.collectFirst { case h: source.Hole => h }
+    info <- getHoleInfo(tree)
+  } yield info
+
   def getHoleInfo(hole: source.Hole)(using C: Context): Option[String] = for {
     (outerTpe, outerEff) <- C.inferredTypeAndEffectOption(hole)
     (innerTpe, innerEff) <- C.inferredTypeAndEffectOption(hole.stmts)
@@ -171,7 +182,7 @@ trait Intelligence {
     C.annotationOption(Annotations.CaptureForFile, src).getOrElse(Nil)
 
   // For now, we only show captures of function definitions and calls to box
-  def getInferredCaptures(range: kiama.util.Range)(using C: Context): List[(Position, CaptureSet)] =
+  def getInferredCaptures(range: kiama.util.Range)(using C: Context): List[CaptureInfo] =
     val src = range.from.source
     allCaptures(src).filter {
       // keep only captures in the current range
@@ -181,14 +192,13 @@ trait Intelligence {
     }.collect {
       case (t: source.FunDef, c) => for {
         pos <- C.positions.getStart(t)
-      } yield (pos, c)
+      } yield CaptureInfo(pos, c)
       case (t: source.DefDef, c) => for {
         pos <- C.positions.getStart(t)
-      } yield (pos, c)
-      case (source.Box(None, block), _) if C.inferredCaptureOption(block).isDefined => for {
-        pos <- C.positions.getStart(block)
+      } yield CaptureInfo(pos, c)
+      case (source.Box(Maybe(None, span), block), _) if C.inferredCaptureOption(block).isDefined => for {
         capt <- C.inferredCaptureOption(block)
-      } yield (pos, capt)
+      } yield CaptureInfo(span.range.from, capt, true)
     }.flatten
 
   def getInfoOf(sym: Symbol)(using C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
@@ -292,14 +302,15 @@ trait Intelligence {
       SymbolInfo(c, "Mutable variable binder", signature, Some(ex))
 
     case s: RegBinder =>
+      val signature = C.blockTypeOption(s).map(TState.extractType).orElse(s.tpe).map { tpe => pp"${s.name}: ${tpe}" }
 
       val ex =
-        pp"""|The region a variable is allocated into (${s.region}) not only affects its lifetime, but
-             |also its backtracking behavior in combination with continuation capture and
-             |resumption.
-             |""".stripMargin
+        s"""|The region `${s.region.name}` the variable `${s.name}` is allocated into
+            |not only affects its lifetime, but also its backtracking behavior
+            |in combination with continuation capture and resumption.
+            |""".stripMargin
 
-      SymbolInfo(s, "Variable in region", None, Some(ex))
+      SymbolInfo(s, "Variable in region", signature, Some(ex))
 
     case c: ValueParam =>
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
@@ -321,13 +332,13 @@ object Intelligence {
      span: Span,
      innerType: Option[String],
      expectedType: Option[String],
-     importedTerms: Seq[TermBinding], importedTypes: Seq[TypeBinding],
-     terms: Seq[TermBinding], types: Seq[TypeBinding]
+     importedTerms: List[TermBinding], importedTypes: List[TypeBinding],
+     terms: List[TermBinding], types: List[TypeBinding]
   )
 
-  case class TermBinding(qualifier: Seq[String], name: String, `type`: Option[String])
+  case class TermBinding(qualifier: List[String], name: String, `type`: Option[String])
 
-  case class TypeBinding(qualifier: Seq[String], name: String, definition: String)
+  case class TypeBinding(qualifier: List[String], name: String, definition: String)
 
   case class BindingInfo(
     importedTerms: Iterable[TermBinding],
@@ -342,4 +353,13 @@ object Intelligence {
         terms ++ other.terms,
         types ++ other.types)
   }
+
+  case class CaptureInfo(
+    position: Position,
+    captures: CaptureSet,
+    /**
+     * Whether this capture set could be written into the source code at `position` using the `at { captures }` syntax
+     */
+    atSyntax: Boolean = false,
+  )
 }

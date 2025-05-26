@@ -1,12 +1,12 @@
 package effekt
 
-import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
-
-import effekt.util.{ PlainMessaging, getOrElseAborting }
-import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
+import effekt.Intelligence.CaptureInfo
+import effekt.context.{Context, VirtualFileSource, VirtualModuleDB}
+import effekt.util.{PlainMessaging, getOrElseAborting}
+import effekt.util.messages.{BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError}
 import effekt.util.paths.*
 import effekt.generator.js.JavaScriptWeb
-import kiama.util.{ Messaging, Position, Positions, Severities, Source, StringSource }
+import kiama.util.{Messaging, Position, Positions, Severities, Source, StringSource}
 
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -72,11 +72,9 @@ class LanguageServer extends Intelligence {
   @JSExport
   def infoAt(path: String, pos: lsp.Position): String = {
     val p = fromLSPPosition(pos, VirtualFileSource(path))
-    for {
-      (tree, sym) <- getSymbolAt(p)
-      info <- getInfoOf(sym)
-    } yield info.fullDescription
-  }.orNull
+    val hover = getSymbolHover(p)(using context) orElse getHoleHover(p)(using context)
+    hover.orNull
+  }
 
   @JSExport
   def typecheck(path: String): js.Array[lsp.Diagnostic] = {
@@ -119,7 +117,7 @@ class LanguageServer extends Intelligence {
     val source = VirtualFileSource(path)
     val range = kiama.util.Range(source.offsetToPosition(0), source.offsetToPosition(source.charCount))
     getInferredCaptures(range).map {
-      case (p, c) => new lsp.CaptureInfo(toLSPPosition(p), c.toString)
+      case CaptureInfo(p, c, _) => new lsp.CaptureInfo(toLSPPosition(p), c.toString)
     }.toJSArray
   }
 

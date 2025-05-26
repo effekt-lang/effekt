@@ -210,7 +210,7 @@ trait Transformer {
   }
 
   def toChez(expr: Expr): chez.Expr = expr match {
-    case Literal((), _)         => chez.RawValue("#f")
+    case Literal((), _)         => chez.RawValue("(void)")
 
     case Literal(s: String, _)  => escape(s)
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")

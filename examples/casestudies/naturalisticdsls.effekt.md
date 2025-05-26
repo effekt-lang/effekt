@@ -76,8 +76,6 @@ translate the examples to Effekt.
 We start by describing the language (DSL) of nominal phrases as the following datatype:
 
 ```
-module examples/casestudies/naturalisticdsls
-
 record Person(name: String)
 ```
 
@@ -110,8 +108,8 @@ We can now construct sentences like
 
 as:
 
-```
-val s1 = Say(John, Mary.loves(John))
+```effekt:repl
+Say(John, Mary.loves(John))
 ```
 
 ### The Speaker Effect
@@ -225,13 +223,10 @@ similar to let-insertion ([Yallop, 2017][@yallop2017staged]).
 
 ### Running the Examples
 Finally, we can run our examples to inspect the generated sentences.
-```
-def main() = {
-  inspect(s1)
-  inspect(s1a())
-  inspect(s1c())
-  inspect(s2())
-}
+```effekt:repl
+inspect(s1a())
+inspect(s1c())
+inspect(s2())
 ```
 
 [@hudak96building]: https://doi.org/10.1145/242224.242477

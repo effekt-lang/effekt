@@ -1179,7 +1179,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // use the typer state after this checking pass
         Context.restoreTyperstate(st)
         // reassign symbol of fun to resolved calltarget symbol
-        Context.assignSymbol(id, sym)
+        Context.annotateSymbol(id, sym)
 
         return tpe
 
@@ -1607,6 +1607,12 @@ trait TyperOps extends ContextOps { self: Context =>
       }
     }
 
+  private[typer] def annotateSymbol(id: source.IdRef, sym: symbols.Symbol) =
+    annotations.update(Annotations.Symbol, id, sym)
+
+  override def symbolOption(id: source.Id): Option[Symbol] =
+    Context.annotations.get(Annotations.Symbol, id).orElse { super.symbolOption(id) }
+
   private[typer] def bind(s: ValueSymbol, tpe: ValueType): Unit =
     annotations.update(Annotations.ValueType, s, tpe)
 
@@ -1702,6 +1708,8 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.updateAndCommit(Annotations.BoundCapabilities) { case (t, caps) => caps }
     annotations.updateAndCommit(Annotations.CapabilityArguments) { case (t, caps) => caps }
     annotations.updateAndCommit(Annotations.CapabilityReceiver) { case (t, caps) => caps }
+
+    annotations.updateAndCommit(Annotations.Symbol) { case (t, sym) => sym }
   }
 
   //</editor-fold>

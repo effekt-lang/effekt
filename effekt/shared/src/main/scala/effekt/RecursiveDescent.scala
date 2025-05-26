@@ -155,6 +155,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       fail(s"Expected ${explain(kind)} but got ${explain(t.kind)}")
     }
 
+  inline def expect[T](expected: String)(inline f: PartialFunction[TokenKind, T]): T =
+    val kind = peek.kind
+    if f.isDefinedAt(kind) then { skip(); f(kind) } else fail(s"Expected ${expected}")
 
   /* The actual parser itself
   * ------------------------
@@ -547,12 +550,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case _ => externFun(doc)
       }
 
-  def featureFlag(): FeatureFlag =
-    next().kind match {
+  def featureFlag(): FeatureFlag = {
+    expect("feature flag identifier") {
       case Ident("default") => FeatureFlag.Default
       case Ident(flag)      => FeatureFlag.NamedFeatureFlag(flag)
-      case _                => fail("Expected identifier")
     }
+  }
 
   def maybeFeatureFlag(): FeatureFlag =
     nonterminal:
@@ -568,14 +571,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     val posAfterInclude = pos()
     `extern` ~> `include` ~> ExternInclude(maybeFeatureFlag(), path().stripPrefix("\"").stripSuffix("\""), None, IdDef("", Span(source, posAfterInclude, posAfterInclude, Synthesized)), doc=doc, span=span())
 
-  def externString(doc: Doc): Def =
-    val posAfterExtern = pos()
-    consume(`extern`)
-    val ff = maybeFeatureFlag()
-    next().kind match {
-      case Str(contents, _) => ExternInclude(ff, "", Some(contents), IdDef("", Span(source, posAfterExtern, posAfterExtern, Synthesized)), doc=doc, span=span())
-      case _ => fail("Expected string literal.")
-    }
+  def externString(): Def =
+    nonterminal:
+      consume(`extern`)
+      val posAfterExtern = pos()
+      val ff = maybeFeatureFlag()
+      expect("string literal") {
+        case Str(contents, _) => ExternInclude(ff, "", Some(contents), IdDef("", Span(source, posAfterExtern, posAfterExtern, Synthesized)))
+      }
 
   def externFun(doc: Doc): Def =
     ((`extern` ~> maybeExternCapture()) ~ (`def` ~> idDef()) ~ params() ~ (returnAnnotation() <~ `=`)) match {
@@ -648,18 +651,15 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def path(): String =
     nonterminal:
-      next().kind match {
+      expect("path as string literal") {
         case Str(s, false) => s
-        case _ => fail("Expected path as string literal.")
       }
 
   def string(): String =
     nonterminal:
-      next().kind match {
+      expect("string literal") {
         case Str(s, _) => s
-        case _ => fail("Expected string literal.")
       }
-
 
   def maybeValueTypeAnnotation(): Option[ValueType] =
     nonterminal:
@@ -722,20 +722,22 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       Region(`region` ~> idDef(), stmt())
 
-  def boxExpr(): Term =
+  def boxExpr(): Term = {
     nonterminal:
-      val captures = `box` ~> backtrack(captureSet())
+      consume(`box`)
       val expr = if (peek(`{`)) functionArg()
-        else if (peek(`new`)) newExpr()
-        else callExpr()
-      Box(captures.unspan, expr)
-
+      else callExpr()
+      val captures = backtrack {
+        `at` ~> captureSet()
+      }
+      Box(captures, expr)
+  }
 
   // TODO deprecate
   def funExpr(): Term =
     nonterminal:
-      `fun` ~> Box(None, BlockLiteral(Nil, valueParams().unspan, Nil, braces { stmts() }))
-    // TODO positions
+      val blockLiteral = `fun` ~> BlockLiteral(Nil, valueParams().unspan, Nil, braces { stmts() })
+      Box(Maybe.None(Span(source, pos(), pos(), Synthesized)), blockLiteral)
 
   def unboxExpr(): Term =
     nonterminal:
@@ -1117,6 +1119,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           Call(IdTarget(target), Nil, Nil, List(blk))
       }
 
+  // TODO: This should use `expect` as it follows the same pattern.
+  // However, we currently cannot use `expect` here as the unit literal consists of two tokens
   def literal(): Literal =
     nonterminal:
       peek.kind match {
@@ -1156,10 +1160,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
   def ident(): String =
     nonterminal:
-      next().kind match {
-        case Ident(id) => id
-        case _ => fail(s"Expected identifier")
-      }
+      expect("identifier") { case Ident(id) => id }
 
   /*
    * Type grammar by precedence:
@@ -1395,8 +1396,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   inline def backtrack[T](inline p: => T): Maybe[T] =
     val before = position
-    try { Maybe.Some(p, span(before)) } catch {
-      case Fail(_, _) => position = before; Maybe.None(span(before))
+    val beforePrevious = previous
+    try { Maybe.Some(p, span(tokens(before).end)) } catch {
+      case Fail(_, _) => {
+        position = before
+        previous = beforePrevious
+        Maybe.None(Span(source, previous.end + 1, previous.end + 1, Synthesized))
+      }
     }
 
   def interleave[A](xs: List[A], ys: List[A]): List[A] = (xs, ys) match {

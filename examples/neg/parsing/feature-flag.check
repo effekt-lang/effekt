@@ -1,0 +1,3 @@
+[error] examples/neg/parsing/feature-flag.effekt:1:29: Unexpected end of input
+extern def whatever: Unit = 42 "whatever"
+                            ^^

@@ -68,7 +68,15 @@ trait Timers {
     }.mkString("")
   }
 
-  def timesToJSON(): String = {
+  private def withENLocale[T](p: => T): T = {
+    val locale = java.util.Locale.getDefault
+    java.util.Locale.setDefault(java.util.Locale.US)
+    val result = p
+    java.util.Locale.setDefault(locale)
+    result
+  }
+
+  def timesToJSON(): String = withENLocale {
     val spacetab = " ".repeat(4)
     val entries = times.map { (name, ts) =>
       val subs = ts.map { case Timed(subname, time) =>

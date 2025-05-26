@@ -1,0 +1,17 @@
+extern type BitArray
+type IntArray = Unit
+
+def nums(): IntArray = ()
+
+def for(arr: BitArray) { action: Byte => Unit }: Unit = ()
+def for(arr: IntArray) { action: Int => Unit }: Unit = ()
+
+def print(b: Byte) = println(b)
+def print(i: Int) = println(i)
+
+def main() = {
+  val arr: IntArray = nums()
+  arr.for { x =>
+    print(x)
+  }
+}

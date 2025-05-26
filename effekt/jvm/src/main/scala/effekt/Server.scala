@@ -1,6 +1,7 @@
 package effekt
 
 import com.google.gson.JsonElement
+import effekt.Intelligence.CaptureInfo
 import effekt.context.Context
 import effekt.source.Def.FunDef
 import effekt.source.Term.Hole
@@ -8,7 +9,7 @@ import effekt.source.{Span, Tree}
 import effekt.symbols.Binder.{ValBinder, VarBinder}
 import effekt.symbols.BlockTypeConstructor.{ExternInterface, Interface}
 import effekt.symbols.TypeConstructor.{DataType, ExternType}
-import effekt.symbols.{Anon, Binder, Callable, Effects, Module, Param, Symbol, TypeAlias, TypePrinter, UserFunction, ValueType, isSynthetic}
+import effekt.symbols.{Anon, Binder, Callable, Effects, ErrorMessageInterpolator, Module, Param, Symbol, TypeAlias, TypePrinter, UserFunction, ValueType, isSynthetic}
 import effekt.util.messages.EffektError
 import effekt.util.{PlainMessaging, PrettyPrinter}
 import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
@@ -222,25 +223,6 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     this.client = client
   }
 
-  /**
-   * Launch a language server using provided input/output streams.
-   * This allows tests to connect via in-memory pipes.
-   */
-  def launch(client: EffektLanguageClient, in: InputStream, out: OutputStream): Launcher[EffektLanguageClient] = {
-    val executor = Executors.newSingleThreadExecutor()
-    val launcher =
-      new LSPLauncher.Builder()
-        .setLocalService(this)
-        .setRemoteInterface(classOf[EffektLanguageClient])
-        .setInput(in)
-        .setOutput(out)
-        .setExecutorService(executor)
-        .create()
-    this.connect(client)
-    launcher.startListening()
-    launcher
-  }
-
   // LSP Document Lifecycle
   //
   //
@@ -283,24 +265,13 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     }
     position match
       case Some(position) => {
-        val hover = getSymbolHover(position) orElse getHoleHover(position)
+        val hover = getSymbolHover(position, settingBool("showExplanations"))(using context) orElse getHoleHover(position)(using context)
         val markup = new MarkupContent("markdown", hover.getOrElse(""))
         val result = new Hover(markup, new LSPRange(params.getPosition, params.getPosition))
         CompletableFuture.completedFuture(result)
       }
       case None => CompletableFuture.completedFuture(new Hover())
   }
-
-  def getSymbolHover(position: Position): Option[String] = for {
-    (tree, sym) <- getSymbolAt(position)(using context)
-    info <- getInfoOf(sym)(using context)
-  } yield if (settingBool("showExplanations")) info.fullDescription else info.shortDescription
-
-  def getHoleHover(position: Position): Option[String] = for {
-    trees <- getTreesAt(position)(using context)
-    tree <- trees.collectFirst { case h: source.Hole => h }
-    info <- getHoleInfo(tree)(using context)
-  } yield info
 
   // LSP Document Symbols
   //
@@ -403,19 +374,49 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
       source <- sources.get(params.getTextDocument.getUri)
       hints = {
         val range = fromLSPRange(params.getRange, source)
-        getInferredCaptures(range)(using context).map {
-          case (p, c) =>
+        val captures = getInferredCaptures(range)(using context).map {
+          case CaptureInfo(p, c, atSyntax) =>
             val prettyCaptures = TypePrinter.show(c)
-            val inlayHint = new InlayHint(convertPosition(p), messages.Either.forLeft(prettyCaptures))
+            val codeEdit = if atSyntax then s"at ${prettyCaptures}" else prettyCaptures
+            val inlayHint = new InlayHint(convertPosition(p), messages.Either.forLeft(codeEdit))
             inlayHint.setKind(InlayHintKind.Type)
             val markup = new MarkupContent()
             markup.setValue(s"captures: `${prettyCaptures}`")
             markup.setKind("markdown")
             inlayHint.setTooltip(markup)
-            inlayHint.setPaddingRight(true)
+            if (atSyntax) then
+              inlayHint.setPaddingLeft(true)
+            else
+              inlayHint.setPaddingRight(true)
             inlayHint.setData("capture")
             inlayHint
         }.toVector
+
+        val unannotated = getTreesInRange(range)(using context).map { trees =>
+          trees.collect {
+            // Functions without an annotated type:
+            case fun: FunDef if fun.ret.isEmpty => for {
+              sym <- context.symbolOption(fun.id)
+              tpe <- context.functionTypeOption(sym)
+              pos = fun.ret.span.range.from
+            } yield {
+              val prettyType = pp": ${tpe.result} / ${tpe.effects}"
+              val inlayHint = new InlayHint(convertPosition(pos), messages.Either.forLeft(prettyType))
+              inlayHint.setKind(InlayHintKind.Type)
+              val markup = new MarkupContent()
+              markup.setValue(s"return type${prettyType}")
+              markup.setKind("markdown")
+              inlayHint.setTooltip(markup)
+              inlayHint.setPaddingLeft(true)
+              inlayHint.setData("return-type-annotation")
+              val textEdit = new TextEdit(convertRange(fun.ret.span.range), prettyType)
+              inlayHint.setTextEdits(Collections.seqToJavaList(List(textEdit)))
+              inlayHint
+            }
+          }.flatten
+        }.getOrElse(Vector())
+
+        captures ++ unannotated
       }
     } yield hints
 
@@ -539,6 +540,34 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   }
 
   /**
+   * Launch a language server using provided input/output streams.
+   * This allows tests to connect via in-memory pipes.
+   */
+  def launch(getClient: Launcher[EffektLanguageClient] => EffektLanguageClient, in: InputStream, out: OutputStream, trace: Boolean = false): Launcher[EffektLanguageClient] = {
+    // Create a single-threaded executor to serialize all requests.
+    val executor: ExecutorService = Executors.newSingleThreadExecutor()
+
+    val builder =
+      new LSPLauncher.Builder()
+        .setLocalService(this)
+        .setRemoteInterface(classOf[EffektLanguageClient])
+        .setInput(in)
+        .setOutput(out)
+        .setExecutorService(executor)
+        // This line makes sure that the List and Option Scala types serialize correctly
+        .configureGson(_.withScalaSupport)
+
+    if (trace) {
+      builder.traceMessages(new PrintWriter(System.err, true))
+    }
+
+    val launcher = builder.create()
+    this.connect(getClient(launcher))
+    launcher.startListening()
+    launcher
+  }
+
+  /**
    * Launch a language server with a given `ServerConfig`
    */
   def launch(config: ServerConfig): Unit = {
@@ -549,32 +578,9 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
       val serverSocket = new ServerSocket(config.debugPort)
       System.err.println(s"Starting language server in debug mode on port ${config.debugPort}")
       val socket = serverSocket.accept()
-
-      val launcher =
-        new LSPLauncher.Builder()
-          .setLocalService(this)
-          .setRemoteInterface(classOf[EffektLanguageClient])
-          .setInput(socket.getInputStream)
-          .setOutput(socket.getOutputStream)
-          .setExecutorService(executor)
-          .traceMessages(new PrintWriter(System.err, true))
-          .create()
-      val client = launcher.getRemoteProxy
-      this.connect(client)
-      launcher.startListening()
+      launch(_.getRemoteProxy, socket.getInputStream, socket.getOutputStream, trace = true)
     } else {
-      val launcher =
-        new LSPLauncher.Builder()
-          .setLocalService(this)
-          .setRemoteInterface(classOf[EffektLanguageClient])
-          .setInput(System.in)
-          .setOutput(System.out)
-          .setExecutorService(executor)
-          .create()
-
-      val client = launcher.getRemoteProxy
-      this.connect(client)
-      launcher.startListening()
+      launch(_.getRemoteProxy, System.in, System.out)
     }
   }
 }
@@ -621,8 +627,8 @@ case class EffektHoleInfo(id: String,
                     range: LSPRange,
                     innerType: Option[String],
                     expectedType: Option[String],
-                    importedTerms: Seq[Intelligence.TermBinding], importedTypes: Seq[Intelligence.TypeBinding],
-                    terms: Seq[Intelligence.TermBinding], types: Seq[Intelligence.TypeBinding])
+                    importedTerms: List[Intelligence.TermBinding], importedTypes: List[Intelligence.TypeBinding],
+                    terms: List[Intelligence.TermBinding], types: List[Intelligence.TypeBinding])
 
 object EffektHoleInfo {
   def fromHoleInfo(info: Intelligence.HoleInfo): EffektHoleInfo = {
@@ -638,4 +644,3 @@ object EffektHoleInfo {
     )
   }
 }
-
