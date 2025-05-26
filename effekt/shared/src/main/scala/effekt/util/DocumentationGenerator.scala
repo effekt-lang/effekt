@@ -50,7 +50,7 @@ trait DocumentationGenerator {
     ))
 
     // block params
-    case BlockTypeTree(eff) => ??? // ignore?
+    case BlockTypeTree(eff) => ???
     case FunctionType(tparams, vparams, bparams, result, effects) => obj(HashMap(
       "kind" -> str("FunctionType"),
       "tparams" -> generateTparams(tparams.unspan),
@@ -67,7 +67,7 @@ trait DocumentationGenerator {
     ))
 
     // value params
-    case ValueTypeTree(tpe) => ??? // ignore?
+    case ValueTypeTree(tpe) => ???
     case BoxedType(tpe, capt) => obj(HashMap(
       "kind" -> str("BoxedType"),
       "tpe" -> generate(tpe),
@@ -75,12 +75,12 @@ trait DocumentationGenerator {
     ))
   }
 
-  // from Intelligence
+  // from LSP Intelligence
   def getDefinitionOf(s: effekt.symbols.Symbol)(using C: Context): Option[Span] = s match {
     case u: effekt.symbols.UserFunction => Some(u.decl.span)
     case u: effekt.symbols.Binder       => Some(u.decl.span)
     case d: effekt.symbols.Operation    => C.definitionTreeOption(d.interface).map(_.span)
-    // case a: effekt.symbols.Anon         => Some(a.decl.span)
+    case a: effekt.symbols.Anon         => Some(a.decl.span)
     case m: effekt.symbols.Module       => Some(m.decl.span)
     case u => C.definitionTreeOption(u).map(_.span)
   }
@@ -90,7 +90,6 @@ trait DocumentationGenerator {
     dfn <- getDefinitionOf(id.symbol)
   } yield generate(dfn)
 
-  // TODO: should we provide more information here?
   def generate(id: Id)(using C: Context): DocValue = obj(HashMap(
     "name" -> str(id.name),
     "source" -> generate(id.span),

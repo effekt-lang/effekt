@@ -399,23 +399,26 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def valStmt(): Stmt =
     nonterminal:
       val doc = maybeDocumentation()
+      val startPos = pos()
       val startMarker = nonterminal { new {} }
       def simpleLhs() = backtrack {
         `val` ~> idDef() ~ maybeValueTypeAnnotation() <~ `=`
       } map {
         case id ~ tpe =>
           val binding = stmt()
-          val valDef = ValDef(id, tpe, binding, doc, span()).withRangeOf(startMarker, binding)
+          val endPos = pos()
+          val valDef = ValDef(id, tpe, binding, doc, Span(source, startPos, endPos)).withRangeOf(startMarker, binding)
           DefStmt(valDef, { semi(); stmts() })
       }
       def matchLhs() =
         maybeDocumentation() ~ (`val` ~> matchPattern()) ~ manyWhile(`and` ~> matchGuard(), `and`) <~ `=` match {
           case doc ~ AnyPattern(id) ~ Nil =>
             val binding = stmt()
-            val valDef = ValDef(id, None, binding, doc, span()).withRangeOf(startMarker, binding)
+            val endPos = pos()
+            val valDef = ValDef(id, None, binding, doc, Span(source, startPos, endPos)).withRangeOf(startMarker, binding)
             DefStmt(valDef, { semi(); stmts() })
           case doc ~ p ~ guards =>
-            // TODO: use doc
+            // matches do not support doc comments, so we ignore `doc`
             val sc = expr()
             val default = when(`else`) { Some(stmt()) } { None }
             val body = semi() ~> stmts()
