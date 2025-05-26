@@ -19,6 +19,7 @@ import io/filesystem
 import io/network
 import io/requests
 import io/time
+import io/uri
 import json
 import list
 import map
