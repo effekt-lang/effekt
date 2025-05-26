@@ -149,6 +149,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       fail(s"Expected ${explain(kind)} but got ${explain(t.kind)}")
     }
 
+  inline def expect[T](expected: String)(inline f: PartialFunction[TokenKind, T]): T =
+    val kind = peek.kind
+    if f.isDefinedAt(kind) then { skip(); f(kind) } else fail(s"Expected ${expected}")
 
   /* The actual parser itself
   * ------------------------
@@ -517,12 +520,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case _ => externFun()
       }
 
-  def featureFlag(): FeatureFlag =
-    next().kind match {
+  def featureFlag(): FeatureFlag = {
+    expect("feature flag identifier") {
       case Ident("default") => FeatureFlag.Default
       case Ident(flag)      => FeatureFlag.NamedFeatureFlag(flag)
-      case _                => fail("Expected identifier")
     }
+  }
 
   def maybeFeatureFlag(): FeatureFlag =
     nonterminal:
@@ -549,9 +552,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       consume(`extern`)
       val posAfterExtern = pos()
       val ff = maybeFeatureFlag()
-      next().kind match {
+      expect("string literal") {
         case Str(contents, _) => ExternInclude(ff, "", Some(contents), IdDef("", Span(source, posAfterExtern, posAfterExtern, Synthesized)))
-        case _ => fail("Expected string literal.")
       }
 
   def externFun(): Def =
@@ -600,18 +602,15 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def path(): String =
     nonterminal:
-      next().kind match {
+      expect("path as string literal") {
         case Str(s, false) => s
-        case _ => fail("Expected path as string literal.")
       }
 
   def string(): String =
     nonterminal:
-      next().kind match {
+      expect("string literal") {
         case Str(s, _) => s
-        case _ => fail("Expected string literal.")
       }
-
 
   def maybeValueTypeAnnotation(): Option[ValueType] =
     nonterminal:
@@ -1071,6 +1070,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           Call(IdTarget(target), Nil, Nil, List(blk))
       }
 
+  // TODO: This should use `expect` as it follows the same pattern.
+  // However, we currently cannot use `expect` here as the unit literal consists of two tokens
   def literal(): Literal =
     nonterminal:
       peek.kind match {
@@ -1110,10 +1111,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
   def ident(): String =
     nonterminal:
-      next().kind match {
-        case Ident(id) => id
-        case _ => fail(s"Expected identifier")
-      }
+      expect("identifier") { case Ident(id) => id }
 
   /*
    * Type grammar by precedence:
