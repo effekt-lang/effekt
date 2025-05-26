@@ -848,7 +848,7 @@ class RecursiveDescentTests extends munit.FunSuite {
 
       assertEquals(
         parseDefinition(source.content),
-        DefDef(IdDef("foo", Span(source, pos(0), pos(1))), None, Var(IdRef(Nil, "f", Span(source, pos(2), pos(3)))), None, Span(source, 0, 11)))
+        DefDef(IdDef("foo", Span(source, pos(0), pos(1))), None, Var(IdRef(Nil, "f", Span(source, pos(2), pos(3)))), None, Span(source, 0, pos.last)))
     }
 
     parseDefinition(
@@ -945,6 +945,284 @@ class RecursiveDescentTests extends munit.FunSuite {
     }
     assertEquals(funDef.bparams.span, Span(source, pos(0), pos(1)))
     assertEquals(funDef.ret.span, Span(source, pos(1), pos(1)))
+  }
+
+  test("Value definition parses with correct span") {
+    val (source, span) =
+      raw"""val foo = 5
+           |↑         ↑
+           |""".sourceAndSpan
+
+    val definition = parseDefinition(source.content)
+
+    val valDef = definition match {
+      case vd@ValDef(id, annot, binding, doc, span) => vd
+      case other =>
+        throw new IllegalArgumentException(s"Expected ValDef but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(valDef.span, span)
+  }
+
+  test("Value definition and docs parses with correct span") {
+    val (source, span) =
+      raw"""/// Some doc comment
+           |↑
+           |val foo = 5
+           |          ↑
+           |""".sourceAndSpan
+
+    val definition = parseDefinition(source.content)
+
+    val valDef = definition match {
+      case vd@ValDef(id, annot, binding, doc, span) => vd
+      case other =>
+        throw new IllegalArgumentException(s"Expected ValDef but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(valDef.span, span)
+  }
+
+
+  test("Region definition parses with correct span") {
+    val (source, span) =
+      raw"""var foo: Int in bar = 5; ()
+           |↑                     ↑
+           |""".sourceAndSpan
+
+    val definition = parseStmts(source.content)
+
+    val regDef = definition match {
+      case DefStmt(rd@RegDef(id, annot, region, binding, doc, span), _) => rd
+      case other =>
+        throw new IllegalArgumentException(s"Expected RegDef but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(regDef.span, span)
+  }
+
+  test("Var definition parses with correct span") {
+    val (source, span) =
+      raw"""var foo = 7; ()
+           |↑         ↑
+           |""".sourceAndSpan
+
+    val definition = parseStmts(source.content)
+
+    val varDef = definition match {
+      case DefStmt(vd@VarDef(id, annot, binding, doc, span), _) => vd
+      case other =>
+        throw new IllegalArgumentException(s"Expected VarDef but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(varDef.span, span)
+  }
+
+  test("Namespace definition parses with correct span") {
+    val (source, span) =
+      raw"""namespace Foo {
+           |↑
+           |}
+           |↑""".sourceAndSpan
+
+    val definition = parseDefinition(source.content)
+
+    val nsDef = definition match {
+      case nd@NamespaceDef(id, defs, doc, span) => nd
+      case other =>
+        throw new IllegalArgumentException(s"Expected NamespaceDef but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(nsDef.span, span)
+  }
+
+  test("Interface definition parses with correct span") {
+    val (source, span) =
+      raw"""interface IBar {}
+           |↑               ↑
+           |""".sourceAndSpan
+
+    val definition = parseToplevel(source.content)
+
+    val intDef = definition match {
+      case id@InterfaceDef(name, tparams, ops, doc, span) => id
+      case other =>
+        throw new IllegalArgumentException(s"Expected InterfaceDef but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(intDef.span, span)
+  }
+
+  test("Data definition parses with correct span") {
+    val (source, span) =
+      raw"""type Option[T] {
+           |↑
+           |  Some();
+           |}
+           |↑""".sourceAndSpan
+
+    val definition = parseDefinition(source.content)
+
+    val dataDef = definition match {
+      case dd@DataDef(id, tparams, ctors, doc, span) => dd
+      case other =>
+        throw new IllegalArgumentException(s"Expected DataDef but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(dataDef.span, span)
+  }
+
+  test("Record definition parses with correct span") {
+    val (source, span) =
+      raw"""record R(x: Int)
+           |↑              ↑
+           |""".sourceAndSpan
+
+    val definition = parseToplevel(source.content)
+
+    val recDef = definition match {
+      case rd@RecordDef(id, tparams, fields, doc, span) => rd
+      case other =>
+        throw new IllegalArgumentException(s"Expected RecordDef but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(recDef.span, span)
+  }
+
+  test("Type alias definition parses with correct span") {
+    val (source, span) =
+      raw"""type Matrix[T] = List[List[T]]
+           |↑                            ↑
+           |""".sourceAndSpan
+
+    val definition = parseDefinition(source.content)
+
+    val typeDef = definition match {
+      case td@TypeDef(id, tparams, tpe, doc, span) => td
+      case other =>
+        throw new IllegalArgumentException(s"Expected TypeDef but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(typeDef.span, span)
+  }
+
+  test("Effect definition parses with correct span") {
+    val (source, span) =
+      raw"""effect Set = { Get, Put }
+           |↑                       ↑
+           |""".sourceAndSpan
+
+    val definition = parseDefinition(source.content)
+
+    val effDef = definition match {
+      case ed@EffectDef(id, tparams, effs, doc, span) => ed
+      case other =>
+        throw new IllegalArgumentException(s"Expected EffectDef but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(effDef.span, span)
+  }
+
+  test("Extern type definition parses with correct span") {
+    val (source, span) =
+      raw"""extern type Foo
+           |↑             ↑
+           |""".sourceAndSpan
+
+    val definition = parseToplevel(source.content)
+
+    val extType = definition match {
+      case et@ExternType(id, tparams, doc, span) => et
+      case other =>
+        throw new IllegalArgumentException(s"Expected ExternType but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(extType.span, span)
+  }
+
+  test("Extern interface definition parses with correct span") {
+    val (source, span) =
+      raw"""extern interface IFace[T]
+           |↑                       ↑
+           |""".sourceAndSpan
+
+    val definition = parseToplevel(source.content)
+
+    val extIfc = definition match {
+      case ei@ExternInterface(id, tparams, doc, span) => ei
+      case other =>
+        throw new IllegalArgumentException(s"Expected ExternInterface but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(extIfc.span, span)
+  }
+
+  test("Extern resource definition parses with correct span") {
+    val (source, span) =
+      raw"""extern resource Res: Int
+           |↑                      ↑
+           |""".sourceAndSpan
+
+    val definition = parseToplevel(source.content)
+
+    val extRes = definition match {
+      case er@ExternResource(id, tpe, doc, span) => er
+      case other =>
+        throw new IllegalArgumentException(s"Expected ExternResource but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(extRes.span, span)
+  }
+
+  test("Extern include definition parses with correct span") {
+    val (source, span) =
+      raw"""extern include "foo.effekt"
+           |↑                         ↑
+           |""".sourceAndSpan
+
+    val definition = parseToplevel(source.content)
+
+    val extInc = definition match {
+      case ei@ExternInclude(flag, path, contents, id, doc, span) => ei
+      case other =>
+        throw new IllegalArgumentException(s"Expected ExternInclude but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(extInc.span, span)
+  }
+
+  test("Extern function definition parses with correct span") {
+    val (source, span) =
+      raw"""extern def foo(): Int = "body"
+           |↑                            ↑
+           |""".sourceAndSpan
+
+    val definition = parseToplevel(source.content)
+
+    val extFun = definition match {
+      case ef@ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) => ef
+      case other =>
+        throw new IllegalArgumentException(s"Expected ExternDef but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(extFun.span, span)
+  }
+
+  test("Extern effect‐body parses with correct span") {
+    val (source, span) =
+      raw"""extern def foo(): Int = default { foo() }
+           |↑                                       ↑
+           |""".sourceAndSpan
+
+    val definition = parseToplevel(source.content)
+
+    val extDef = definition match {
+      case ed: ExternDef => ed
+      case other =>
+        throw new IllegalArgumentException(s"Expected ExternDef but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(extDef.span, span)
   }
 
   test("Toplevel definitions") {

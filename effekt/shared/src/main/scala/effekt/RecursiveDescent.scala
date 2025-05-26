@@ -461,7 +461,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
       peek.kind match {
         case `=` => `=` ~> TypeDef(id, tps.unspan, valueType(), doc, span())
-        case _ => braces { DataDef(id, tps, manyWhile({ constructor() <~ semi() }, !peek(`}`)), doc, span()) }
+        case _ => DataDef(id, tps, braces { manyWhile({ constructor() <~ semi() }, !peek(`}`)) }, doc, span())
       }
 
   def recordDef(): Def =
@@ -522,7 +522,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       consume(`namespace`)
       val id = idDef()
       // namespace foo { <DEFINITION>* }
-      if peek(`{`) then braces { NamespaceDef(id, definitions(), doc, span()) }
+      if peek(`{`) then NamespaceDef(id, braces { definitions() }, doc, span())
       // namespace foo
       // <DEFINITION>*
       else { semi(); NamespaceDef(id, definitions(), doc, span()) }
@@ -560,45 +560,38 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       backtrack(featureFlag()).getOrElse(FeatureFlag.Default)
 
   def externType(doc: Doc): Def =
-    nonterminal:
-      ExternType(`type` ~> idDef(), maybeTypeParams(), doc, span())
+    ExternType(`type` ~> idDef(), maybeTypeParams(), doc, span())
   def externInterface(doc: Doc): Def =
-    nonterminal:
-      ExternInterface(`interface` ~> idDef(), maybeTypeParams().unspan, doc, span())
+    ExternInterface(`interface` ~> idDef(), maybeTypeParams().unspan, doc, span())
   def externResource(doc: Doc): Def =
-    nonterminal:
-      ExternResource(`resource` ~> idDef(), blockTypeAnnotation(), doc, span())
+    ExternResource(`resource` ~> idDef(), blockTypeAnnotation(), doc, span())
   def externInclude(doc: Doc): Def =
-    nonterminal:
-      val posAfterInclude = pos()
-      `include` ~> ExternInclude(maybeFeatureFlag(), path().stripPrefix("\"").stripSuffix("\""), None, IdDef("", Span(source, posAfterInclude, posAfterInclude, Synthesized)), doc=doc, span=span())
+    val posAfterInclude = pos()
+    `include` ~> ExternInclude(maybeFeatureFlag(), path().stripPrefix("\"").stripSuffix("\""), None, IdDef("", Span(source, posAfterInclude, posAfterInclude, Synthesized)), doc=doc, span=span())
 
   def externString(doc: Doc): Def =
-    nonterminal:
-      val posAfterExtern = pos()
-      val ff = maybeFeatureFlag()
-      next().kind match {
-        case Str(contents, _) => ExternInclude(ff, "", Some(contents), IdDef("", Span(source, posAfterExtern, posAfterExtern, Synthesized)), doc=doc, span=span())
-        case _ => fail("Expected string literal.")
-      }
+    val posAfterExtern = pos()
+    val ff = maybeFeatureFlag()
+    next().kind match {
+      case Str(contents, _) => ExternInclude(ff, "", Some(contents), IdDef("", Span(source, posAfterExtern, posAfterExtern, Synthesized)), doc=doc, span=span())
+      case _ => fail("Expected string literal.")
+    }
 
   def externFun(doc: Doc): Def =
-    nonterminal:
-      (maybeExternCapture() ~ (`def` ~> idDef()) ~ params() ~ (returnAnnotation() <~ `=`)) match {
-        case capt ~ id ~ (tps, vps, bps) ~ ret =>
-          val bodies = manyWhile(externBody(), isExternBodyStart)
-          ExternDef(capt, id, tps, vps, bps, ret, bodies, doc, span())
-      }
+    (maybeExternCapture() ~ (`def` ~> idDef()) ~ params() ~ (returnAnnotation() <~ `=`)) match {
+      case capt ~ id ~ (tps, vps, bps) ~ ret =>
+        val bodies = manyWhile(externBody(), isExternBodyStart)
+        ExternDef(capt, id, tps, vps, bps, ret, bodies, doc, span())
+    }
 
   def externBody(): ExternBody =
-    nonterminal:
-      peek.kind match {
-        case _: Ident => peek(1).kind match {
-          case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> stmts() <~ `}`)
-          case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template())
-        }
+    peek.kind match {
+      case _: Ident => peek(1).kind match {
+        case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> stmts() <~ `}`)
         case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template())
       }
+      case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template())
+    }
 
   private def isExternBodyStart: Boolean =
     peek.kind match {
