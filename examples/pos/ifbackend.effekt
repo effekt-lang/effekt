@@ -1,4 +1,4 @@
-extern {thn,els} def ifJS[R]{ thn: => R }{ els: => R}: R =
+extern pure def ifJS[R]{ thn: => R }{ els: => R}: R =
   js { thn() }
   default { els() }
 
