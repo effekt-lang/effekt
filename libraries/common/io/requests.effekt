@@ -4,6 +4,8 @@ import io/error
 import stringbuffer
 import bytearray
 import io/uri
+import scanner
+import char
 
 // Async iterables
 // ---------------
@@ -297,6 +299,135 @@ namespace jsWeb {
   }
 }
 
+namespace plain {
+  def constructRequest{ body: => Unit / RequestBuilder }: Unit / emit[Byte] = {
+    def crlf() = {
+      do emit('\n'.toInt.toByte)
+      do emit('\r'.toInt.toByte)
+    }
+
+    with encodeUTF8
+    var method = GET()
+    var port = 80
+    var path = "/"
+    var headers = Nil[(String, String)]()
+    var reqBody: ByteArray = allocate(0)
+    try body() with RequestBuilder {
+      def protocol(p) = p match {
+        case HTTP() => ()
+        case _ => panic("Only HTTP is supported by constructRequest")
+      }
+      def method(m) = resume(method = m)
+      def hostname(n) = <>
+      def auth(a) = <>
+      def port(p) = resume(port = p)
+      def path(p) = resume(path = p)
+      def header(k, v) = resume(headers = Cons((k, v), headers))
+      def body() = resume{ {b} => reqBody = collectBytes{ b() } }
+    }
+    // start line
+    method.show.each
+    do emit(' ')
+    path.each
+    do emit(' ')
+    "HTTP/1.1".each
+    crlf()
+    // field-line's
+    headers.reverse.foreach{ case (k,v) =>
+      k.each
+      do emit(':')
+      do emit(' ')
+      v.each
+      crlf()
+    }
+    crlf()
+    // body
+    reqBody.each
+  }
+
+  def parseHTTPVersion(): (Int, Int) / { Scan[Char], Exception[WrongFormat] } = {
+    returning::expect("HTTP version"){
+      readIf('H'); readIf('T'); readIf('T'); readIf('P')
+      readIf('/')
+      val maj = tryRead{ c => digitValue(c) }
+      readIf('.')
+      val min = tryRead{ c => digitValue(c) }
+      (maj, min)
+    }
+  }
+
+  def isHTTPTokenChar(c: Char): Bool = c match {
+    case '!' => true
+    case '#' => true
+    case '$' => true
+    case '%' => true
+    case '&' => true
+    case '\'' => true
+    case '*' => true
+    case '+' => true
+    case '-' => true
+    case '.' => true
+    case '^' => true
+    case '_' => true
+    case '`' => true
+    case '|' => true
+    case '~' => true
+    case d and d.isAlphanumeric => true
+    case _ => false
+  }
+
+  def parseHeaderLine(): (String, String) / { Scan[Char], Exception[WrongFormat] } = {
+    with returning::expect("HTTP Header line")
+    val k = collectString { readWhile { c => c.isHTTPTokenChar() } }
+    readIf(':')
+    skipWhile { c => c == ' ' || c == '\t' }
+    val v = collectString { readWhile { c => c != '\n' } }
+    skipWhile { c => c == ' ' || c == '\t' }
+    (k, v)
+  }
+
+  def parseResponse[R]{ body: {ResponseReader} => R }: R / { read[Byte], Exception[WrongFormat] } = {
+    with decodeUTF8
+    with returning::scanner[Char, R]
+
+    var statusCode = -1
+    var headers: List[(String, String)] = Nil()
+    expect("HTTP response"){
+      val version = parseHTTPVersion()
+      readIf(' ')
+      statusCode = readInteger()
+      if (statusCode > 599 || statusCode < 100) { do raise(WrongFormat(), "Invalid status code") }
+      readIf(' ')
+      val reason = collectString{ readWhile{ c => c != '\n' } }
+      readIf('\n')
+      readIf('\r')
+      headers = collectList {
+        while(do peek[Char]() != '\n') {
+          do emit(parseHeaderLine())
+          readIf('\n')
+          readIf('\r')
+        }
+      }
+      readIf('\n')
+      readIf('\r')
+    }
+
+    try body{res} with res: ResponseReader {
+      def status() = resume(statusCode)
+      def getHeader(key) = { // TODO should be case-insensitive
+        var r = None()
+        headers.foreach {
+          case (k, v) and k == key => r = Some(v)
+          case _ => ()
+        }
+        resume(r)
+      }
+      def body() = resume { exhaustively{ do emit(do read[Byte]()) } }
+    }
+  }
+}
+
+
 /// Sets the values in the `RequestBuilder` from a given URI string.
 def uri(uri: String): Unit / { RequestBuilder, Exception[WrongFormat] } = {
   stringBuffer{
@@ -463,10 +594,53 @@ namespace example {
     with httpClient
     println(get("https://effekt-lang.org"))
   }
+  def plainApi(): Unit = {
+    with on[WrongFormat].panic
+    println(collectString{
+      with source[Byte]{
+        plain::constructRequest{
+          do method(GET())
+          uri("http://effekt-lang.org")
+          defaultHeaders()
+        }
+      }
+      with decodeUTF8
+      exhaustively{ do emit(do read[Char]()) }
+    })
+    with source[Byte]{
+      def crlf() = {
+        do emit('\n'.toInt.toByte)
+        do emit('\r'.toInt.toByte)
+      }
+      with encodeUTF8;
+      "HTTP/1.1 200 OK".each;
+      crlf()
+      "content-type: text/plain".each;
+      crlf()
+      crlf()
+      "Hello!".each
+    }
+    with def res = plain::parseResponse
+    println(res.status())
+    println(res.getHeader("content-type").show{ x => x })
+    with source[Byte]{ res.body() }
+    with decodeUTF8
+    with stringBuffer
+    exhaustively{
+      do read[Char]() match {
+        case '\n' => println(do flush())
+        case c =>
+        do write(c.show)
+      }
+    }
+    println(do flush())
+  }
   def main() = {
     println("Low-level: ")
     lowLevelApi()
     println("Simple: ")
     simpleApi()
+    println("Plain: ")
+    plainApi()
   }
 }
