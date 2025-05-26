@@ -315,7 +315,7 @@ def uri(uri: String): Unit / { RequestBuilder, Exception[WrongFormat] } = {
 
 def defaultHeaders(): Unit / RequestBuilder = {
   if(internal::backend() != "js-web"){
-    do header("user-agent", "Effekt script / Script written in the Effekt language")
+    do header("User-Agent", "Effekt-io-requests/0.1.0")
   }
   // TODO should we add more?
 }
