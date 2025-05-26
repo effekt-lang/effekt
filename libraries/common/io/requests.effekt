@@ -180,6 +180,7 @@ namespace jsNode {
   
   def getBody(r: NativeResponse): EffektAsyncIterator[js::NativeBytes] = {
     val nextResolve = ref(promise::make())
+    val done = ref(false)
     r.events.js::on(js::ev::data(), box { chunk =>
       val waitingResolve = nextResolve.get().await()
       nextResolve.set(promise::make())
@@ -187,12 +188,17 @@ namespace jsNode {
     })
     r.events.js::on(js::ev::end(), box { _ =>
       val waitingResolve = nextResolve.get().await()
-      nextResolve.set(promise::make())
+      //nextResolve.set(promise::make())
       waitingResolve.resolve(None())
+      done.set(true)
     })
     EffektAsyncIterator(box {
       val resPromise = promise::make()
-      nextResolve.get().resolve(resPromise)
+      if (done.get()) {
+        resPromise.resolve(None())
+      } else {
+        nextResolve.get().resolve(resPromise)
+      }
       resPromise
     })
   }
