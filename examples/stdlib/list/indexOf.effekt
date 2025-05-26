@@ -1,0 +1,52 @@
+module examples/stdlib/list/indexOf
+
+import list
+
+def main() = {
+  def indexOf(list: List[String], element: String) =
+    list.indexOf(element) { (s1, s2) => s1 == s2 }
+
+  def lastIndexOf(list: List[String], element: String) =
+    list.lastIndexOf(element) { (s1, s2) => s1 == s2 }
+
+  def section { f: => Unit } = {
+    f()
+    println("")
+  }
+
+  section {
+    val empty: List[String] = []
+    println(empty.indexOf("e"))
+    println(empty.lastIndexOf("e"))
+  }
+
+  section {
+    val effekt = ["e", "f", "f", "e", "k", "t"]
+    println(effekt.indexOf("e"))
+    println(effekt.lastIndexOf("e"))
+  }
+
+  section {
+    val bread = ["b", "r", "e", "a", "d"]
+    println(bread.indexOf("e"))
+    println(bread.lastIndexOf("e"))
+  }
+
+  val bananas = ["b", "a", "n", "a", "n", "a", "s"]
+
+  section {
+    println(bananas.indexOf("b"))
+    println(bananas.lastIndexOf("b"))
+    println(bananas.indexOf("a"))
+    println(bananas.lastIndexOf("a"))
+    println(bananas.indexOf("n"))
+    println(bananas.lastIndexOf("n"))
+    println(bananas.indexOf("s"))
+    println(bananas.lastIndexOf("s"))
+  }
+
+  println(bananas.indexOf("na"))
+  println(bananas.lastIndexOf("na"))
+  println(bananas.indexOf(""))
+  println(bananas.lastIndexOf(""))
+}
