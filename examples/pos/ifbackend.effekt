@@ -1,0 +1,14 @@
+extern {thn,els} def ifJS{ thn: => R }{ els: => R}: R =
+  js { thn() }
+  default { els() }
+
+extern pure def jsOnly(): String =
+  js """ "Hallo" """
+
+def main() = {
+  ifJS{
+    println(jsOnly())
+  }{
+    println("Hallo")
+  }
+}
