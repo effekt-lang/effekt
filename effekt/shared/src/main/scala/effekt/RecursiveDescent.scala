@@ -568,8 +568,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def externResource(doc: Doc): Def =
     ExternResource(`extern` ~> `resource` ~> idDef(), blockTypeAnnotation(), doc, span())
   def externInclude(doc: Doc): Def =
+    consume(`extern`)
+    consume(`include`)
     val posAfterInclude = pos()
-    `extern` ~> `include` ~> ExternInclude(maybeFeatureFlag(), path().stripPrefix("\"").stripSuffix("\""), None, IdDef("", Span(source, posAfterInclude, posAfterInclude, Synthesized)), doc=doc, span=span())
+    ExternInclude(maybeFeatureFlag(), path().stripPrefix("\"").stripSuffix("\""), None, IdDef("", Span(source, posAfterInclude, posAfterInclude, Synthesized)), doc=doc, span=span())
 
   def externString(): Def =
     nonterminal:
