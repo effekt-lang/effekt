@@ -267,12 +267,6 @@ runSMC(100)
 ```
 
 
-In the below REPL you can try the examples. Click `run` and then try entering `runSMC(100)` (then click `run` again):
-```effekt:repl
-
-```
-
-
 <div id="graph"></div>
 <p>Particles: <span id="count"></span></p>
 
