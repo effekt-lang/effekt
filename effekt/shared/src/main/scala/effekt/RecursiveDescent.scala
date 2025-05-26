@@ -1068,6 +1068,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           Call(IdTarget(target), Nil, Nil, List(blk))
       }
 
+  // TODO: This should use `expect` as it follows the same pattern.
+  // However, we currently cannot use `expect` here as the unit literal consists of two tokens
   def literal(): Literal =
     nonterminal:
       peek.kind match {
