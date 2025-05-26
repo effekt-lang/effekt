@@ -332,13 +332,101 @@ namespace internal {
 /// The Request body is buffered, the response is streaming (as far
 /// as the backend implementation allows).
 def request[R]{ body: => Unit / RequestBuilder }{ res: {ResponseReader} => R }: R / Exception[RequestError] = internal::backend() match {
+  // TODO use a proper dispatch after #448 is resolved
   case "js-node" => jsNode::request{body}{res}
   case "js-web" => jsWeb::request{body}{res}
   case _ => <>
 }
 
+// Simple API
+// ----------
+interface HttpClient {
+  def get[R](url: String, body: Option[String], headers: List[(String, String)]){ r: {ResponseReader} => R }: R / Exception[RequestError]
+  def post[R](url: String, body: Option[String], headers: List[(String, String)]){ r: {ResponseReader} => R }: R / Exception[RequestError]
+}
+
+def httpClient[R]{ body: => R / HttpClient }: R = {
+  try body() with HttpClient {
+    def get[R](url, body, headers) = resume { {k} =>
+      with on[WrongFormat].default{ do raise(RequestError(), "Malformed URL") }
+      request{
+        do method(GET())
+        uri(url)
+        defaultHeaders()
+        body.foreach { data =>
+          do body{
+            with encodeUTF8
+            data.each
+          }
+        }
+        headers.foreach { case (k, v) =>
+          do header(k, v)
+        }
+      }{k}
+    }
+    def post[R](url, body, headers) = resume { {k} =>
+      with on[WrongFormat].default{ do raise(RequestError(), "Malformed URL") }
+      request{
+        do method(POST())
+        uri(url)
+        defaultHeaders()
+        body.foreach { data =>
+          do body{
+            with encodeUTF8
+            data.each
+          }
+        }
+        headers.foreach { case (k, v) =>
+          do header(k, v)
+        }
+      }{k}
+    }
+  }
+}
+
+/// GET the given URL with the given body and headers, emitting the response characters.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def getStreaming(url: String, body: Option[String], headers: List[(String, String)]): Unit / { emit[Char], Exception[RequestError], HttpClient } =
+  do get(url, body, headers){ {r} =>
+    if(r.status() != 200) { do raise(RequestError(), "Non-200 response") }
+    with source[Byte]{ r.body() }
+    with decodeUTF8
+    exhaustively{ do emit(do read[Char]()) }
+  }
+/// GET the given URL with the given body and headers, returning the response body.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def get(url: String, body: Option[String], headers: List[(String, String)]): String / { Exception[RequestError], HttpClient } =
+  collectString{ getStreaming(url, body, headers) }
+/// GET the given URL, returning the response body.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def get(url: String): String / { Exception[RequestError], HttpClient } = get(url, None(), Nil())
+/// GET the given URL, emitting the response characters.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def getStreaming(url: String): Unit / { emit[Char], Exception[RequestError], HttpClient } = getStreaming(url, None(), Nil())
+
+/// POST to the given URL with the given body and headers, emitting the response characters.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def postStreaming(url: String, body: Option[String], headers: List[(String, String)]): Unit / { emit[Char], Exception[RequestError], HttpClient } =
+  do post(url, body, headers){ {r} =>
+    if(r.status() != 200) { do raise(RequestError(), "Non-200 response") }
+    with source[Byte]{ r.body() }
+    with decodeUTF8
+    exhaustively{ do emit(do read[Char]()) }
+  }
+/// POST to the given URL with the given body and headers, returning the response body.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def post(url: String, body: Option[String], headers: List[(String, String)]): String / { Exception[RequestError], HttpClient } =
+  collectString{ postStreaming(url, body, headers) }
+/// POST to the given URL, returning the response body.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def post(url: String): String / { Exception[RequestError], HttpClient } = post(url, None(), Nil())
+/// POST to the given URL, emitting the response characters.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def post(url: String): Unit / { emit[Char], Exception[RequestError], HttpClient } = postStreaming(url, None(), Nil())
+
 namespace example {
-  def main() = {
+
+  def lowLevelApi() = {
     with on[RequestError].panic
     with on[WrongFormat].panic
     with def res = request{
@@ -363,5 +451,16 @@ namespace example {
     } else {
       println(res.status().show)
     }
+  }
+  def simpleApi() = {
+    with on[RequestError].panic
+    with httpClient
+    println(get("https://effekt-lang.org"))
+  }
+  def main() = {
+    println("Low-level: ")
+    lowLevelApi()
+    println("Simple: ")
+    simpleApi()
   }
 }
