@@ -1,0 +1,251 @@
+import scanner
+import stream
+
+def hexDigit(for: Int): Char = for match {
+  case i and i >= 0 and i < 10 => ('0'.toInt + i).toChar
+  case i and i >= 0 and i < 16 => ('A'.toInt + (i - 10)).toChar
+  case _ => <>
+}
+
+/// %-encodes the characters for which `shouldEncode` returns true.
+/// Always %-encodes %.
+def urlencode(s: String){ shouldEncode: Char => Bool }: String = collectString {
+  def encoded(c: Char): Unit = {
+    do emit('%')
+    val cc = c.toInt
+    if (cc >= 256){ panic("Unicode not supported") } // TODO
+    do emit((cc / 16).hexDigit)
+    do emit(mod(cc, 16).hexDigit)
+  }
+  for[Char]{ s.each }{
+    case '%' => encoded('%')
+    case c and c.shouldEncode => encoded(c)
+    case other => do emit(other)
+  }
+}
+
+/// gen-delims as per RFC 3986
+def isGenDelim(c: Char): Bool = c match {
+  case ':' => true
+  case '/' => true
+  case '?' => true
+  case '#' => true
+  case '[' => true
+  case ']' => true
+  case '@' => true
+  case _ => false
+}
+
+/// sub-delims as per RFC 3986
+def isSubDelim(c: Char): Bool = c match {
+  case '!' => true
+  case '$' => true
+  case '&' => true
+  case '\'' => true
+  case '(' => true
+  case ')' => true
+  case '*' => true
+  case '+' => true
+  case ',' => true
+  case ';' => true
+  case '=' => true
+  case _ => false
+}
+
+/// Encodes the string for urls using %-escapes
+def urlencode(s: String): String = urlencode(s){
+  case '%' => true
+  case ' ' => true
+  case c and c.isGenDelim || c.isSubDelim => true
+  case _ => false
+}
+
+/// Unreserved characters as per RFC 3986
+def isUnreserved(c: Char): Bool = c match {
+  case c and c.isAlphanumeric => true
+  case '-' => true
+  case '.' => true
+  case '_' => true
+  case '~' => true
+  case _ => false
+}
+
+/// Encodes the string for urls using %-escapes,
+/// escaping everything that is not an unreserved character
+/// as per RFC 3986.
+def urlencodeStrict(s: String): String =
+  urlencode(s){ c => not(c.isUnreserved) }
+
+
+/// Decodes %-escapes in the given string
+def urldecode(s: String): String = collectString {
+  with feed(s)
+  with scanner[Char]
+
+  exhaustively{
+    do read[Char]() match {
+      case '%' =>
+        val a = readHexDigit()
+        val b = readHexDigit()
+        do emit((a * 16 + b).toChar)
+      case o => do emit(o)
+    }
+  }
+}
+
+interface URIBuilder {
+  def scheme(s: String): Unit
+  def userinfo(a: String): Unit
+  def host(h: String): Unit
+  def port(p: Int): Unit
+  def path(p: String): Unit
+  def query(q: String): Unit
+  def fragment(f: String): Unit
+}
+
+def parseScheme(): String / { Scan[Char], stop } = {
+  with collectString
+  do emit(readIf{ c => c.isAlphabetic })
+  readWhile{ c => c.isAlphanumeric || c == '+' || c == '-' || c == '.' }
+}
+
+def unread[A, R](c: A){ body: => R / Scan[A] }: R / Scan[A] = {
+  var read = false
+  try body() with Scan[A] {
+    def peek() = if(read) { resume{do peek()} } else { resume{ () => c } }
+    def skip() = if(read) { resume{do skip[A]()} } else { resume{read = true} }
+  }
+}
+def unread[R](s: String){ body: => R / Scan[Char] }: R / Scan[Char] = {
+  var pos = 0
+  try body() with Scan[Char] {
+    def peek() = if (pos < s.length) { resume{s.unsafeCharAt(pos)} } else { resume{do peek()} }
+    def skip() = if (pos < s.length) { resume{pos = pos + 1} } else { resume{do skip[Char]()} }
+  }
+}
+
+def parseHostAndPort(): Unit / { URIBuilder, Scan[Char] } = {
+  try {
+    do peek[Char]() match {
+      case '[' => // IP-literal
+        // this is more permissive than the spec
+        do host(collectString{ readWhile{ c => c != ']' } } ++ "]")
+        readIf(']')
+      case _ =>
+        do host(collectString{ readWhile{
+          case '%' => true
+          case c and c.isUnreserved => true
+          case c and c.isSubDelim => true
+          case _ => false
+        } })
+    }
+  } with stop { () =>
+    do host("")
+  }
+  attempt{
+    readIf(':')
+    do port(readInteger())
+  }{
+    // no port
+    ()
+  }
+}
+
+def parseAuthority(): Unit / { URIBuilder, Scan[Char] } = {
+  // try parsing as userinfo@...
+  val fst = collectString{ readWhile{
+    case '%' => true
+    case ':' => true
+    case c and c.isUnreserved => true
+    case c and c.isSubDelim => true
+    case _ => false
+  } }
+  attempt{ // was userinfo
+    readIf('@')
+    do userinfo(fst)
+    parseHostAndPort()
+  }{ // was not userinfo
+    with unread(fst)
+    parseHostAndPort()
+  }
+}
+
+def parsePathQueryFragment(): Unit / { URIBuilder, Scan[Char], Exception[WrongFormat] } = {
+  do path(collectString{ readWhile{ 
+    case '?' => false
+    case '#' => false
+    case _ => true
+  }})
+  boundary{
+    readIf('?')
+    do query(collectString{ readWhile{ c => c != '#' }})
+  }
+  boundary{
+    readIf('#')
+    do fragment(collectString{ readWhile[Char]{ c => true } })
+  }
+}
+
+def parseURI(uri: String): Unit / { URIBuilder, Exception[WrongFormat] } = {
+  try {
+    with feed(uri)
+    with scanner[Char]
+
+    do scheme(parseScheme())
+    readIf(':')
+
+    val c = read[Char]()
+    if (c == '/' and do peek[Char]() == '/'){
+      // starts with `//`
+      readIf('/')
+      parseAuthority()
+      boundary{
+        do peek[Char]() match {
+          case '?' => ()
+          case '#' => ()
+          case '/' => ()
+          case _ => do raise(WrongFormat(), "Path must be empty or start with / if there is an authority component.")
+        }
+      }
+      parsePathQueryFragment()
+    } else {
+      with unread(c)
+      parsePathQueryFragment()
+    }
+  } with stop { () =>
+    do raise(WrongFormat(), "Could not parse URI")
+  }
+}
+
+namespace example {
+  def report(uri: String): Unit = {
+    with on[WrongFormat].panic
+    println(uri)
+    try parseURI(uri) with URIBuilder {
+      def scheme(s) = resume(println("  Scheme: " ++ s))
+      def userinfo(u) = resume(println("  Userinfo: " ++ u))
+      def host(h) = resume(println("  Host: " ++ h))
+      def path(p) = resume(println("  Path: " ++ p))
+      def port(p) = resume(println("  Port: " ++ p.show))
+      def query(q) = resume(println("  Query: " ++ q))
+      def fragment(q) = resume(println("  Fragment: " ++ q))
+    }
+  }
+  def main() = {
+    println(urldecode("%2F%20%20!"))
+    println(urldecode(urlencode("Hallo Welt!/&^$@^*(&$)(*!_!_+\")")))
+    println(urlencode("Hallo Welt!/&^$@^*(&$)(*!_!_+\")"))
+    println(urldecode(urlencodeStrict("Hallo Welt!/&^$@^*(&$)(*!_!_+\")")))
+    println(urlencodeStrict("Hallo Welt!/&^$@^*(&$)(*!_!_+\")"))
+
+    // examples from the spec
+    report("ftp://ftp.is.co.za/rfc/rfc1808.txt")
+    report("http://www.ietf.org/rfc/rfc2396.txt")
+    report("ldap://[2001:db8::7]/c=GB?objectClass?one")
+    report("mailto:John.Doe@example.com")
+    report("news:comp.infosystems.www.servers.unix")
+    report("tel:+1-816-555-1212")
+    report("telnet://192.0.2.16:80/")
+    report("urn:oasis:names:specification:docbook:dtd:xml:4.1")
+  }
+}
