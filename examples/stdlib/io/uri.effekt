@@ -15,10 +15,10 @@ def report(uri: String): Unit = {
 }
 def main() = {
   println(urldecode("%2F%20%20!"))
+  println(urldecode(urlencodePermissive("Hallo Welt!/&^$@^*(&$)(*!_!_+\")")))
+  println(urlencodePermissive("Hallo Welt!/&^$@^*(&$)(*!_!_+\")"))
   println(urldecode(urlencode("Hallo Welt!/&^$@^*(&$)(*!_!_+\")")))
   println(urlencode("Hallo Welt!/&^$@^*(&$)(*!_!_+\")"))
-  println(urldecode(urlencodeStrict("Hallo Welt!/&^$@^*(&$)(*!_!_+\")")))
-  println(urlencodeStrict("Hallo Welt!/&^$@^*(&$)(*!_!_+\")"))
 
   // examples from the spec
   report("ftp://ftp.is.co.za/rfc/rfc1808.txt")
