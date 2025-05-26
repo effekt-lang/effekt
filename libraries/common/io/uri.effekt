@@ -216,36 +216,3 @@ def parseURI(uri: String): Unit / { URIBuilder, Exception[WrongFormat] } = {
     do raise(WrongFormat(), "Could not parse URI")
   }
 }
-
-namespace example {
-  def report(uri: String): Unit = {
-    with on[WrongFormat].panic
-    println(uri)
-    try parseURI(uri) with URIBuilder {
-      def scheme(s) = resume(println("  Scheme: " ++ s))
-      def userinfo(u) = resume(println("  Userinfo: " ++ u))
-      def host(h) = resume(println("  Host: " ++ h))
-      def path(p) = resume(println("  Path: " ++ p))
-      def port(p) = resume(println("  Port: " ++ p.show))
-      def query(q) = resume(println("  Query: " ++ q))
-      def fragment(q) = resume(println("  Fragment: " ++ q))
-    }
-  }
-  def main() = {
-    println(urldecode("%2F%20%20!"))
-    println(urldecode(urlencode("Hallo Welt!/&^$@^*(&$)(*!_!_+\")")))
-    println(urlencode("Hallo Welt!/&^$@^*(&$)(*!_!_+\")"))
-    println(urldecode(urlencodeStrict("Hallo Welt!/&^$@^*(&$)(*!_!_+\")")))
-    println(urlencodeStrict("Hallo Welt!/&^$@^*(&$)(*!_!_+\")"))
-
-    // examples from the spec
-    report("ftp://ftp.is.co.za/rfc/rfc1808.txt")
-    report("http://www.ietf.org/rfc/rfc2396.txt")
-    report("ldap://[2001:db8::7]/c=GB?objectClass?one")
-    report("mailto:John.Doe@example.com")
-    report("news:comp.infosystems.www.servers.unix")
-    report("tel:+1-816-555-1212")
-    report("telnet://192.0.2.16:80/")
-    report("urn:oasis:names:specification:docbook:dtd:xml:4.1")
-  }
-}
