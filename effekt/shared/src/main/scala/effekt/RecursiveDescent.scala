@@ -189,6 +189,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           val result = `return` ~> Return(expr())
           maybeSemi()
           result
+        case `}` => // Unexpected end of <STMTS> =>
+          // insert a synthetic `return ()` into the block
+          Return(UnitLit())
         case _ =>
           val e = expr()
           semi()
