@@ -53,7 +53,7 @@ def isSubDelim(c: Char): Bool = c match {
 }
 
 /// Encodes the string for urls using %-escapes
-def urlencode(s: String): String = urlencode(s){
+def urlencodePermissive(s: String): String = urlencode(s){
   case '%' => true
   case ' ' => true
   case c and c.isGenDelim || c.isSubDelim => true
@@ -73,7 +73,7 @@ def isUnreserved(c: Char): Bool = c match {
 /// Encodes the string for urls using %-escapes,
 /// escaping everything that is not an unreserved character
 /// as per RFC 3986.
-def urlencodeStrict(s: String): String =
+def urlencode(s: String): String =
   urlencode(s){ c => not(c.isUnreserved) }
 
 
