@@ -531,7 +531,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def externDef(): Def =
     nonterminal:
       val doc = maybeDocumentation()
-      consume(`extern`)
       peek.kind match {
         case `type`      => externType(doc)
         case `interface` => externInterface(doc)
@@ -560,17 +559,18 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       backtrack(featureFlag()).getOrElse(FeatureFlag.Default)
 
   def externType(doc: Doc): Def =
-    ExternType(`type` ~> idDef(), maybeTypeParams(), doc, span())
+    ExternType(`extern` ~> `type` ~> idDef(), maybeTypeParams(), doc, span())
   def externInterface(doc: Doc): Def =
-    ExternInterface(`interface` ~> idDef(), maybeTypeParams().unspan, doc, span())
+    ExternInterface(`extern` ~> `interface` ~> idDef(), maybeTypeParams().unspan, doc, span())
   def externResource(doc: Doc): Def =
-    ExternResource(`resource` ~> idDef(), blockTypeAnnotation(), doc, span())
+    ExternResource(`extern` ~> `resource` ~> idDef(), blockTypeAnnotation(), doc, span())
   def externInclude(doc: Doc): Def =
     val posAfterInclude = pos()
-    `include` ~> ExternInclude(maybeFeatureFlag(), path().stripPrefix("\"").stripSuffix("\""), None, IdDef("", Span(source, posAfterInclude, posAfterInclude, Synthesized)), doc=doc, span=span())
+    `extern` ~> `include` ~> ExternInclude(maybeFeatureFlag(), path().stripPrefix("\"").stripSuffix("\""), None, IdDef("", Span(source, posAfterInclude, posAfterInclude, Synthesized)), doc=doc, span=span())
 
   def externString(doc: Doc): Def =
     val posAfterExtern = pos()
+    consume(`extern`)
     val ff = maybeFeatureFlag()
     next().kind match {
       case Str(contents, _) => ExternInclude(ff, "", Some(contents), IdDef("", Span(source, posAfterExtern, posAfterExtern, Synthesized)), doc=doc, span=span())
@@ -578,7 +578,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     }
 
   def externFun(doc: Doc): Def =
-    (maybeExternCapture() ~ (`def` ~> idDef()) ~ params() ~ (returnAnnotation() <~ `=`)) match {
+    ((`extern` ~> maybeExternCapture()) ~ (`def` ~> idDef()) ~ params() ~ (returnAnnotation() <~ `=`)) match {
       case capt ~ id ~ (tps, vps, bps) ~ ret =>
         val bodies = manyWhile(externBody(), isExternBodyStart)
         ExternDef(capt, id, tps, vps, bps, ret, bodies, doc, span())
