@@ -534,7 +534,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def externDef(): Def =
     nonterminal:
       val doc = maybeDocumentation()
-      peek.kind match {
+      { peek(`extern`); peek(1).kind } match {
         case `type`      => externType(doc)
         case `interface` => externInterface(doc)
         case `resource`  => externResource(doc)
@@ -543,7 +543,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case s: Str      => externString(doc)
         case Ident(_) | `pure` =>
           // extern IDENT def ...
-          if (peek(1, `def`)) externFun(doc)
+          if (peek(2, `def`)) externFun(doc)
           // extern IDENT """..."""
           else externString(doc)
         // extern {...} def ...
@@ -573,13 +573,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     val posAfterInclude = pos()
     ExternInclude(maybeFeatureFlag(), path().stripPrefix("\"").stripSuffix("\""), None, IdDef("", Span(source, posAfterInclude, posAfterInclude, Synthesized)), doc=doc, span=span())
 
-  def externString(): Def =
+  def externString(doc: Doc): Def =
     nonterminal:
       consume(`extern`)
       val posAfterExtern = pos()
       val ff = maybeFeatureFlag()
       expect("string literal") {
-        case Str(contents, _) => ExternInclude(ff, "", Some(contents), IdDef("", Span(source, posAfterExtern, posAfterExtern, Synthesized)))
+        case Str(contents, _) => ExternInclude(ff, "", Some(contents), IdDef("", Span(source, posAfterExtern, posAfterExtern, Synthesized)), doc, span())
       }
 
   def externFun(doc: Doc): Def =
