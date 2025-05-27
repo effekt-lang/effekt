@@ -148,13 +148,13 @@ namespace js {
     em.on(dataEv, box { chunk =>
       loop { {l} =>
         nextWasCalled.get().await()
-        nextWasCalled.set(promise::make())
         waitingNexts.get() match {
           case Cons(hd, tl) =>
             waitingNexts.set(tl)
             hd.resolve(Some(chunk))
             l.break()
-          case Nil() => ()
+          case Nil() =>
+            nextWasCalled.set(promise::make())
         }
       }
     })
