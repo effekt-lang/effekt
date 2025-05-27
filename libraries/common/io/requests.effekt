@@ -139,6 +139,33 @@ namespace js {
   def wait[T](em: EventEmitter, ev: Event[T]): T =
     em.unsafeWait(ev.name)
 
+  /// Returns the data emitted via dataEv as an async stream until endEv
+  def asyncStreamOf[D, E](em: EventEmitter, dataEv: Event[D], endEv: Event[E]): (EffektAsyncIterator[D], Promise[E]) = {
+    val nextResolve = ref(promise::make())
+    val done = ref(false)
+    val endPromise = promise::make()
+    em.on(dataEv, box { chunk =>
+      val waitingResolve = nextResolve.get().await()
+      nextResolve.set(promise::make())
+      waitingResolve.resolve(Some(chunk))
+    })
+    em.on(endEv, box { e =>
+      val waitingResolve = nextResolve.get().await()
+      waitingResolve.resolve(None())
+      done.set(true)
+      endPromise.resolve(e)
+    })
+    (EffektAsyncIterator(box {
+      val resPromise = promise::make()
+      if(done.get()) {
+        resPromise.resolve(None())
+      } else {
+        nextResolve.get().resolve(resPromise)
+      }
+      resPromise
+    }), endPromise)
+  }
+
   // Dict-like JS objects
   // --------------------
   extern type JsObj
@@ -181,28 +208,8 @@ namespace jsNode {
   extern pure def events(r: NativeResponse): js::EventEmitter = jsNode "${r}"
   
   def getBody(r: NativeResponse): EffektAsyncIterator[js::NativeBytes] = {
-    val nextResolve = ref(promise::make())
-    val done = ref(false)
-    r.events.js::on(js::ev::data(), box { chunk =>
-      val waitingResolve = nextResolve.get().await()
-      nextResolve.set(promise::make())
-      waitingResolve.resolve(Some(chunk))
-    })
-    r.events.js::on(js::ev::end(), box { _ =>
-      val waitingResolve = nextResolve.get().await()
-      //nextResolve.set(promise::make())
-      waitingResolve.resolve(None())
-      done.set(true)
-    })
-    EffektAsyncIterator(box {
-      val resPromise = promise::make()
-      if (done.get()) {
-        resPromise.resolve(None())
-      } else {
-        nextResolve.get().resolve(resPromise)
-      }
-      resPromise
-    })
+    val (res, _) = js::asyncStreamOf(r.events, js::ev::data(), js::ev::end())
+    res
   }
 
   extern io def isError(r: NativeResponse): Bool =
