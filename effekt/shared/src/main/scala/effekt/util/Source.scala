@@ -68,7 +68,7 @@ case class MarkdownSource(source: Source) extends Source {
                   lines += "}"
                 // closing fence of ```effekt or ```
                 case Code =>
-                  lines ++= code
+                  if (!code.isEmpty) lines ++= code
                   lines += ""
                 // closing fence of ```effekt:ignore
                 case Ignore =>
@@ -83,7 +83,7 @@ case class MarkdownSource(source: Source) extends Source {
           }
         }
       // collect code if in code fence
-      case line if fenceType.isDefined && line != "" =>
+      case line if fenceType.isDefined =>
         code += line
       // add empty lines to preserve positional information outside of code fences
       case line =>
