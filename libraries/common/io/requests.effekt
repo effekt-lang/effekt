@@ -141,28 +141,37 @@ namespace js {
 
   /// Returns the data emitted via dataEv as an async stream until endEv
   def asyncStreamOf[D, E](em: EventEmitter, dataEv: Event[D], endEv: Event[E]): (EffektAsyncIterator[D], Promise[E]) = {
-    val nextResolve = ref(promise::make())
+    val waitingNexts = ref(Nil[Promise[Option[D]]]())
+    val nextWasCalled = ref(promise::make())
     val done = ref(false)
     val endPromise = promise::make()
     em.on(dataEv, box { chunk =>
-      val waitingResolve = nextResolve.get().await()
-      nextResolve.set(promise::make())
-      waitingResolve.resolve(Some(chunk))
+      loop { {l} =>
+        nextWasCalled.get().await()
+        nextWasCalled.set(promise::make())
+        waitingNexts.get() match {
+          case Cons(hd, tl) =>
+            waitingNexts.set(tl)
+            hd.resolve(Some(chunk))
+            l.break()
+          case Nil() => ()
+        }
+      }
     })
     em.on(endEv, box { e =>
-      val waitingResolve = nextResolve.get().await()
-      waitingResolve.resolve(None())
       done.set(true)
+      waitingNexts.get().foreach{ p => p.resolve(None()) }
       endPromise.resolve(e)
     })
     (EffektAsyncIterator(box {
-      val resPromise = promise::make()
-      if(done.get()) {
-        resPromise.resolve(None())
+      val res = promise::make()
+      if (done.get()) {
+        res.resolve(None())
       } else {
-        nextResolve.get().resolve(resPromise)
+        waitingNexts.set(waitingNexts.get().append([res]))
+        nextWasCalled.get().resolve(())
       }
-      resPromise
+      res
     }), endPromise)
   }
 
