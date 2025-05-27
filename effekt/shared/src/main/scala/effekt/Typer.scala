@@ -869,6 +869,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val functionCapture = Context.lookupCapture(sym)
         val inferredCapture = Context.freshCaptVar(CaptUnificationVar.ExternDefRegion(d))
 
+
+        flowsIntoWithout(inferredCapture, functionCapture) {
+          sym.bparams.map(_.capture)
+        }
         flowingInto(inferredCapture) {
 
           // Note: Externs are always annotated with a type
@@ -880,11 +884,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
               checkStmt(body, Some(expectedReturnType))
             case u: source.ExternBody.Unsupported => u
           }
-
-        }
-
-        flowsIntoWithout(inferredCapture, functionCapture){
-          sym.bparams.map(_.capture)
         }
 
         Result((), Pure)
