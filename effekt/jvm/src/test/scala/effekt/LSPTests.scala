@@ -1390,6 +1390,27 @@ class LSPTests extends FunSuite {
     assertEquals(actualJson, expectedJson)
   }
 
+  test("Empty holes list is sent when there are no holes") {
+    withClientAndServer { (client, server) =>
+      val source =
+        raw"""
+             |def foo(x: Int): Int = x + 1
+             |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"showHoles": true}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assert(receivedHoles.head.holes.isEmpty)
+    }
+  }
 
   // Text document DSL
   //

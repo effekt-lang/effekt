@@ -182,7 +182,6 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   def publishHoles(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
     if (!workspaceService.settingBool("showHoles")) return
     val holes = getHoles(source)
-    if (holes.isEmpty) return
     client.publishHoles(EffektPublishHolesParams(source.name, holes.map(EffektHoleInfo.fromHoleInfo)))
   }
 
