@@ -1438,7 +1438,8 @@ class LSPTests extends FunSuite {
         |        "qualifier": [],
         |        "name": "x",
         |        "origin": "Defined",
-        |        "type": "Int"
+        |        "type": "Int",
+        |        "kind": "Term"
         |      }
         |    ],
         |    "outer": {
@@ -1452,7 +1453,8 @@ class LSPTests extends FunSuite {
         |            "qualifier": [],
         |            "name": "MyInt",
         |            "origin": "Defined",
-        |            "definition": "type MyInt = Int"
+        |            "definition": "type MyInt = Int",
+        |            "kind": "Type"
         |          }
         |        ]
         |      }

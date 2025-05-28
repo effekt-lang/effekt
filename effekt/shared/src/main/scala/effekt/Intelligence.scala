@@ -353,14 +353,20 @@ object Intelligence {
     final val Imported = "Imported"
   }
 
+  object BindingKind {
+    final val Term = "Term"
+    final val Type = "Type"
+  }
+
   sealed trait BindingInfo {
     val qualifier: List[String]
     val name: String
     val origin: String
+    val kind: String
   }
 
-  case class TermBinding(qualifier: List[String], name: String, origin: String, `type`: Option[String]) extends BindingInfo
-  case class TypeBinding(qualifier: List[String], name: String, origin: String, definition: String) extends BindingInfo
+  case class TermBinding(qualifier: List[String], name: String, origin: String, `type`: Option[String], kind: String = BindingKind.Term) extends BindingInfo
+  case class TypeBinding(qualifier: List[String], name: String, origin: String, definition: String, kind: String = BindingKind.Type) extends BindingInfo
 
   // These need to be strings (rather than cases of an enum) so that they get serialized correctly
   object ScopeKind {
