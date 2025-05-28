@@ -30,6 +30,16 @@ effect stop(): Nothing
 def for[A] { stream: () => Unit / emit[A] } { action: A => Unit }: Unit =
   returning::for[A, Unit]{stream}{action}
 
+/// Applies the given function on each emitted element and reemits the result.
+///
+/// e.g. map[Int,String]{ x => x.show } { range(0, 5) }
+def map[A, B] { function: A => B } { stream: () => Unit / emit[A] }: Unit / emit[B] =
+  returning::map[A, B, Unit]{function}{stream}
+
+/// Runs the given action whenever the given reader reads an element.
+def tap[A] { action: () => A / stop } { reader: () => Unit / read[A] }: Unit =
+  returning::tap[A, Unit]{action}{reader}
+
 /// Runs the stream as a message queue,
 /// handling each of its elements that can produce new elements ("messages"),
 /// until a fixed point is reached.
@@ -513,6 +523,20 @@ def for[A, R] { stream: () => R / emit[A] } { action: A => Unit }: R =
     stream()
   } with emit[A] { value =>
     resume(action(value))
+  }
+
+def map[A, B, R] { function: A => B } { stream: () => R / emit[A] }: R / emit[B] =
+  try {
+    stream()
+  } with emit[A] { value =>
+    resume(do emit(function(value)))
+  }
+
+def tap[A, R] { action: () => A / stop } { reader: () => R / read[A] }: R =
+  try {
+    reader()
+  } with read[A] { () =>
+    resume { action() }
   }
 
 def boundary[R] { program: () => R / stop }: Option[R] =
