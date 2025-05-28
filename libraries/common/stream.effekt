@@ -172,8 +172,8 @@ def index[A] { stream: () => Unit / emit[A] }: Unit / emit[Indexed[A]] =
 
 
 /// If `number` is zero or negative it does nothing
-def limit[A](number: Int) { stream: () => Unit / emit[A] }: Unit / {emit[A], stop} =
-  returning::limit[A, Unit](number){stream}
+def limit[A](number: Int) { stream: () => Unit / emit[A] }: Unit / emit[A] =
+  boundary { returning::limit[A, Unit](number){stream} }
 
 
 /// If `number` is zero or negative it does nothing
@@ -566,17 +566,21 @@ def index[A, R] { stream: () => R / emit[A] }: R / emit[Indexed[A]] = {
 
 /// If `number` is zero or negative it does nothing
 def limit[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop } = {
-  if (number <= 0) do stop();
-  var i = 1;
-  try {
-    stream()
-  } with emit[A] { v =>
-    if (i < number) {
-      i = i + 1;
-      resume(do emit(v))
-    } else {
-      do stop()
+  if (number > 0) {
+    var i = number;
+    try {
+      stream()
+    } with emit[A] { v =>
+      do emit(v);
+      i = i - 1;
+      if (i > 0) {
+        resume(())
+      } else {
+        do stop()
+      }
     }
+  } else {
+    do stop()
   }
 }
 
