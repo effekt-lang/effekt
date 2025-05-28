@@ -438,7 +438,7 @@ def each(string: String): Unit / emit[Char] =
 def collectString { stream: () => Unit / emit[Char] }: String =
   returning::collectString[Unit]{stream}.second
 
-def readLine { body: => Unit / read[Char] }: Unit / read[Char] =
+def readLine { body: => Unit / read[Char] }: Unit / {read[Char], stop} =
   returning::readLine[Unit]{body}
 
 
