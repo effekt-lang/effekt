@@ -336,7 +336,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // The captures of the handler continue flowing into the outer scope
         usingCapture(continuationCapt)
 
-        Result(ret, (effs -- handled) ++ handlerEffs)
+        Result(ret, (effs -- handled) ++ handlerEffs ++ finalizerEffs)
 
       case tree @ source.Match(sc, clauses, default) =>
 
