@@ -415,6 +415,12 @@ def encodeUTF8[R] { stream: () => R / emit[Char] }: R / emit[Byte] =
     resume(encodeChar(char))
   }
 
+def writeFileUTF8[R](path: String) { stream: () => R / emit[Char] }: R / Exception[IOError] =
+  writeFile(path) { encodeUTF8 { stream() } }
+
+def readFileUTF8[R](path: String) { reader: () => R / read[Char] }: R / Exception[IOError] =
+  readFile(path) { decodeUTF8 { reader() } }
+
 def feed[R](string: String) { reader: () => R / read[Char] } =
   feed(string.fromString) {
     decodeUTF8 {
@@ -431,6 +437,10 @@ def each(string: String): Unit / emit[Char] =
 
 def collectString { stream: () => Unit / emit[Char] }: String =
   returning::collectString[Unit]{stream}.second
+
+def readLine(){ body: => Unit / read[Char] }: Unit / read[Char] =
+  returning::readLine[Unit]{body}
+
 
 namespace internal {
   effect snapshot(): Unit
@@ -641,6 +651,24 @@ def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
 def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
   val (result, bytes) = collectBytes[R] { encodeUTF8 { stream } }
   (result, bytes.toString)
+}
+
+def readLine[R](){ body: => R / read[Char] }: R / read[Char] = {
+  var stopped = false
+  try {
+    body()
+  } with read[Char] {
+    resume {
+      if(stopped){
+        do stop()
+      } else {
+        do read[Char] match {
+          case '\n' => stopped = true; do stop()
+          case char => char
+        }
+      }
+    }
+  }
 }
 
 def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }: R = {
