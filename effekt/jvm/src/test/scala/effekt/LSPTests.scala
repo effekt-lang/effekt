@@ -1,7 +1,7 @@
 package effekt
 
 import com.google.gson.{Gson, GsonBuilder, JsonElement, JsonParser}
-import effekt.Intelligence.{TermBinding, TypeBinding}
+import effekt.Intelligence.{BindingInfo, BindingOrigin, ScopeInfo, ScopeKind, TermBinding, TypeBinding}
 import munit.FunSuite
 import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit}
 import org.eclipse.lsp4j.jsonrpc.messages
@@ -1273,17 +1273,22 @@ class LSPTests extends FunSuite {
 
       val expectedHoles = List()
 
-      val termsFoo = List(
+      val innerScopeBindings = List(
         TermBinding(
           qualifier = List(),
           name = "x",
+          origin = BindingOrigin.Defined,
           `type` = Some(
             "Int"
           )
-        ),
+        )
+      )
+
+      val globalScopeBindings = List(
         TermBinding(
           qualifier = List(),
           name = "bar",
+          origin = BindingOrigin.Defined,
           `type` = Some(
             "String => Int"
           )
@@ -1291,33 +1296,55 @@ class LSPTests extends FunSuite {
         TermBinding(
           qualifier = List(),
           name = "foo",
+          origin = BindingOrigin.Defined,
           `type` = Some(
             "Int => Bool"
           )
+        ),
+        TypeBinding(
+          qualifier = Nil,
+          name = "MyInt",
+          origin = BindingOrigin.Defined,
+          definition = "type MyInt = Int"
         )
       )
 
       val receivedHoles = client.receivedHoles()
       assertEquals(receivedHoles.length, 1)
-      assertEquals(receivedHoles.head.holes.length, 3)
-      assertEquals(receivedHoles.head.holes(0).id, "foo0")
-      assertEquals(receivedHoles.head.holes(0).innerType, Some("Int"))
-      assertEquals(receivedHoles.head.holes(0).expectedType, Some("Bool"))
-      assertEquals(receivedHoles.head.holes(0).terms, termsFoo)
-      assertEquals(receivedHoles.head.holes(0).types, List(
-        TypeBinding(
-          qualifier = Nil,
-          name = "MyInt",
-          definition = "type MyInt = Int"
-        )
-      ))
-      assertEquals(receivedHoles.head.holes(1).id, "bar0")
-      assertEquals(receivedHoles.head.holes(1).innerType, Some("Nothing"))
-      assertEquals(receivedHoles.head.holes(1).expectedType, Some("Int"))
 
-      assertEquals(receivedHoles.head.holes(2).id, "bar1")
-      assertEquals(receivedHoles.head.holes(2).innerType, Some("Unit"))
-      assertEquals(receivedHoles.head.holes(2).expectedType, None)
+      val hole0 = receivedHoles.head.holes(0)
+
+      assertEquals(receivedHoles.head.holes.length, 3)
+      assertEquals(hole0.id, "foo0")
+      assertEquals(hole0.innerType, Some("Int"))
+      assertEquals(hole0.expectedType, Some("Bool"))
+      assertEquals(hole0.scope.kind, ScopeKind.Local)
+      assertEquals(hole0.scope.bindings, innerScopeBindings)
+      val globalScope = hole0.scope.outer.get
+      assertEquals(globalScope.kind, ScopeKind.Global)
+
+      assert(globalScopeBindings.forall(globalScope.bindings.contains),
+        s"Expected global scope to contain: $globalScopeBindings, but was: ${globalScope.bindings}")
+
+      // ... the remaining bindings come from the prelude
+      val importedBindings = globalScope.bindings.filterNot(globalScopeBindings.contains)
+      importedBindings.foreach { b =>
+        assertEquals(
+          BindingOrigin.Imported,
+          b.origin,
+          s"Expected imported binding for $b, but origin was ${b.origin}"
+        )
+      }
+
+      val hole1 = receivedHoles.head.holes(1)
+      assertEquals(hole1.id, "bar0")
+      assertEquals(hole1.innerType, Some("Nothing"))
+      assertEquals(hole1.expectedType, Some("Int"))
+
+      val hole2 = receivedHoles.head.holes(2)
+      assertEquals(hole2.id, "bar1")
+      assertEquals(hole2.innerType, Some("Unit"))
+      assertEquals(hole2.expectedType, None)
     }
   }
 
@@ -1360,26 +1387,78 @@ class LSPTests extends FunSuite {
       ),
       innerType = None,
       expectedType = Some("Bool"),
-      importedTerms = Nil,
-      importedTypes = Nil,
-      terms = List(
-        TermBinding(
-          qualifier = Nil,
-          name = "x",
-          `type` = Some("Int")
-        )
-      ),
-      types = List(
-        TypeBinding(
-          qualifier = Nil,
-          name = "MyInt",
-          definition = "type MyInt = Int"
-        )
-      )
-    )
+      scope = ScopeInfo(
+        name = None,
+        kind = ScopeKind.Local,
+        bindings = List(
+          TermBinding(
+            qualifier = List(),
+            name = "x",
+            origin = BindingOrigin.Defined,
+            `type` = Some("Int")
+          )
+        ),
+        outer = Some(ScopeInfo(
+          name = Some("something"),
+          kind = ScopeKind.Namespace,
+          bindings = List(),
+          outer = Some(ScopeInfo(
+            name = None,
+            kind = ScopeKind.Global,
+            bindings = List(
+              TypeBinding(
+                qualifier = List(),
+                name = "MyInt",
+                origin = BindingOrigin.Defined,
+                definition = "type MyInt = Int"
+              )),
+            outer = None
+          ))
+        ))
+    ))
 
     val expectedJsonStr =
-      """{"id":"foo_bar0","range":{"start":{"line":0,"character":0},"end":{"line":0,"character":0}},"expectedType":"Bool","importedTerms":[],"importedTypes":[],"terms":[{"qualifier":[],"name":"x","type":"Int"}],"types":[{"qualifier":[],"name":"MyInt","definition":"type MyInt = Int"}]}""".stripMargin
+      """{
+        |  "id": "foo_bar0",
+        |  "range": {
+        |    "start": {
+        |      "line": 0,
+        |      "character": 0
+        |    },
+        |    "end": {
+        |      "line": 0,
+        |      "character": 0
+        |    }
+        |  },
+        |  "expectedType": "Bool",
+        |  "scope": {
+        |    "kind": "Local",
+        |    "bindings": [
+        |      {
+        |        "qualifier": [],
+        |        "name": "x",
+        |        "origin": "Defined",
+        |        "type": "Int"
+        |      }
+        |    ],
+        |    "outer": {
+        |      "name": "something",
+        |      "kind": "Namespace",
+        |      "bindings": [],
+        |      "outer": {
+        |        "kind": "Global",
+        |        "bindings": [
+        |          {
+        |            "qualifier": [],
+        |            "name": "MyInt",
+        |            "origin": "Defined",
+        |            "definition": "type MyInt = Int"
+        |          }
+        |        ]
+        |      }
+        |    }
+        |  }
+        |}""".stripMargin
 
     val expectedJson: JsonElement = JsonParser.parseString(expectedJsonStr)
 
