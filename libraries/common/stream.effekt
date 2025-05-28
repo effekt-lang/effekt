@@ -438,7 +438,7 @@ def each(string: String): Unit / emit[Char] =
 def collectString { stream: () => Unit / emit[Char] }: String =
   returning::collectString[Unit]{stream}.second
 
-def readLine(){ body: => Unit / read[Char] }: Unit / read[Char] =
+def readLine { body: => Unit / read[Char] }: Unit / read[Char] =
   returning::readLine[Unit]{body}
 
 
@@ -653,19 +653,17 @@ def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
   (result, bytes.toString)
 }
 
-def readLine[R](){ body: => R / read[Char] }: R / read[Char] = {
+def readLine[R] { body: => R / read[Char] }: R / {read[Char], stop} = {
   var stopped = false
   try {
     body()
   } with read[Char] {
-    resume {
-      if(stopped){
-        do stop()
-      } else {
-        do read[Char] match {
-          case '\n' => stopped = true; do stop()
-          case char => char
-        }
+    if(stopped){
+      resume { do stop() }
+    } else {
+      do read[Char] match {
+        case '\n' => stopped = true; resume { do stop() }
+        case char => resume { char }
       }
     }
   }
