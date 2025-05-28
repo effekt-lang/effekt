@@ -663,7 +663,7 @@ def readLine[R] { body: => R / read[Char] }: R / {read[Char], stop} = {
     } else {
       do read[Char] match {
         case '\n' => stopped = true; resume { do stop() }
-        case char => resume { char }
+        case char => resume { return char }
       }
     }
   }
