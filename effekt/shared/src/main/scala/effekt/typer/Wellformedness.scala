@@ -99,7 +99,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
   }
 
   override def stmt(using Context, WFContext) = {
-    case stmt @ source.DefStmt(tree @ source.VarDef(id, annot, rhs), rest) =>
+    case stmt @ source.DefStmt(tree @ source.VarDef(id, annot, rhs, doc, span), rest) =>
       val capt = tree.symbol.capture
       binding(captures = Set(capt)) {
 
@@ -299,7 +299,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
   }
 
   override def defn(using C: Context, WF: WFContext) = {
-    case tree @ source.FunDef(id, tps, vps, bps, ret, body, span) =>
+    case tree @ source.FunDef(id, tps, vps, bps, ret, body, doc, span) =>
       val boundTypes = tps.map(_.symbol.asTypeParam).toSet[TypeVar]
       val capabilities = Context.annotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
       val blocks = bps.map(_.id.symbol.asBlockParam.capture).toSet
@@ -311,12 +311,12 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
         wellformed(tpe, body, pp" inferred as return type of ${id}")
       }
 
-    case tree @ source.ExternDef(capture, id, tps, vps, bps, ret, bodies, span) =>
+    case tree @ source.ExternDef(capture, id, tps, vps, bps, ret, bodies, doc, span) =>
       val boundTypes = tps.map(_.symbol.asTypeParam).toSet[TypeVar]
       val boundCapts = bps.map(_.id.symbol.asBlockParam.capture).toSet
       binding(types = boundTypes, captures = boundCapts) { bodies.foreach(query) }
 
-    case tree @ source.RegDef(id, annot, region, init) =>
+    case tree @ source.RegDef(id, annot, region, init, doc, span) =>
       wellformed(Context.typeOf(id.symbol), tree, pp" inferred as type of region-allocated variable")
       query(init)
   }

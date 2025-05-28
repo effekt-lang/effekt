@@ -11,7 +11,7 @@ import kiama.parsing.ParseResult
 import kiama.util.{ IO, Source }
 import effekt.util.messages.{ BufferedMessaging, CompilerPanic, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.file
-import effekt.util.{ AnsiColoredMessaging, MarkdownSource, getOrElseAborting }
+import effekt.util.{ JSONDocumentationGenerator, AnsiColoredMessaging, MarkdownSource, getOrElseAborting }
 
 import scala.sys.process.Process
 
@@ -66,8 +66,9 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
           }
         }
 
-        // we are in one of three exclusive modes: LSPServer, Compile, Run
-        if (config.server()) { compiler.runFrontend(src) }
+        // we are in one of four exclusive modes: Documenter, LSPServer, Compile, Run
+        if (config.documenter()) { documenter(source, config)(context) }
+        else if (config.server()) { compiler.runFrontend(src) }
         else if (config.interpret()) { compile() foreach runner.eval }
         else if (config.build()) { compile() foreach runner.build }
         else if (config.compile()) { compile() }
@@ -125,6 +126,25 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
         IO.createFile((out / name).unixPath, s)
       }
   }
+
+  def generateDocumentation(ast: ModuleDecl, source: Source)(using C: Context): String =
+    JSONDocumentationGenerator(ast, source.name).content
+
+  def showDocumentation(ast: ModuleDecl, source: Source)(using C: Context): Unit =
+    println(generateDocumentation(ast, source))
+
+  def writeDocumentation(ast: ModuleDecl, source: Source, output: String)(using C: Context): Unit =
+    val name = source.name.split("/").last + ".json"
+    IO.createFile((output / name).unixPath, generateDocumentation(ast, source))
+
+  def documenter(source: Source, config: EffektConfig)(implicit C: Context): Unit =
+    C.compiler.runFrontend(source)
+    val astOpt = C.compiler.getAST(source)
+    if (astOpt.isEmpty) return
+
+    val out = config.outputPath().getAbsolutePath
+    if (config.writeDocumentation()) writeDocumentation(astOpt.get, source, out)
+    if (config.showDocumentation()) showDocumentation(astOpt.get, source)
 
   /**
    * Overridden in [[Server]] to also publish core and js compilation results to VSCode

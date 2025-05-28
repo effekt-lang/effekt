@@ -709,7 +709,7 @@ namespace internal {
   ///
   /// O(???)
   def union[K, V](m1: Tree[K, V], m2: Tree[K, V], compare: (K, K) => Ordering at {}) { combine : (K, V, V) => V }: Tree[K, V] = {
-    /// Internal function similar to `putWithKey`, but right-biased. Only used here, recursively.
+    // Internal function similar to `putWithKey`, but right-biased. Only used here, recursively.
     def putWithKeyR(m: Tree[K, V], k: K, v: V): Tree[K, V] = {
       m match {
         case Tip() => singleton(k, v)
