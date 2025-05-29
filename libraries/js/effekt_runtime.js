@@ -86,8 +86,13 @@ const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 function RESET(prog, onSuspend, onResume, onReturn, ks, k) {
   const prompt = _prompt++;
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, onSuspend: ks.onSuspend, onSuspendData: ks.onSuspendData, onResume: ks.onResume, rest: ks.rest }
-  const onRet = onReturn ? (x, ks) => onReturn(x, ks.rest, ks.rest.stack) : RETURN
-  const finalizer = { stack: onRet, prompt, arena: Arena([]), onSuspend: onSuspend, onSuspendData: null, onResume: onResume, rest: rest }
+  let finalizer
+  if (!!onSuspend || !!onResume || !!onReturn) {
+    const onRet = onReturn ? (x, ks) => onReturn(x, ks.rest, ks.rest.stack) : RETURN
+    finalizer = { stack: onRet, prompt, arena: Arena([]), onSuspend: onSuspend, onSuspendData: null, onResume: onResume, rest: rest }
+  } else {
+    finalizer = rest
+  }
   return prog(prompt, { prompt, arena: Arena([]), onSuspend: null, onSuspendData: null, onResume: null, rest: finalizer }, RETURN)
 }
 
