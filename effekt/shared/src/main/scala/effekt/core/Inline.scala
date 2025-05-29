@@ -98,7 +98,7 @@ object Inline {
 
   def blockDefFor(id: Id)(using ctx: InlineContext): Option[Block] =
     ctx.defs.get(id) map {
-      case Definition.Def(id, block) => rewrite(block)
+      case Definition.Def(id, block) => block // rewrite(block)
       case Definition.Let(id, _, binding) => INTERNAL_ERROR("Should not happen")
     }
 
@@ -130,9 +130,14 @@ object Inline {
     case Stmt.Invoke(b, method, methodTpe, targs, vargs, bargs) =>
       invoke(rewrite(b), method, methodTpe, targs, vargs.map(rewrite), bargs.map(rewrite))
 
-    case Stmt.Reset(body, onSuspend, onResume, onReturn) =>
+    case Stmt.Reset(body, None, None, None) =>
       // conjecture: we cannot inline the body of a reset clause, since even if the prompt is unused, we still need to
       // account for on suspend and resume clauses when a shift to another prompt occurs.
+      rewrite(body) match {
+        case BlockLit(tparams, cparams, vparams, List(prompt), body) if !used(prompt.id) => body
+        case b => Stmt.Reset(b, None, None, None)
+      }
+    case Stmt.Reset(body, onSuspend, onResume, onReturn) =>
       Stmt.Reset(rewrite(body), onSuspend.map { rewrite }, onResume.map { rewrite }, onReturn.map { rewrite })
 
     // congruences
