@@ -438,9 +438,11 @@ def each(string: String): Unit / emit[Char] =
 def collectString { stream: () => Unit / emit[Char] }: String =
   returning::collectString[Unit]{stream}.second
 
-def readLine { body: => Unit / read[Char] }: Unit / {read[Char], stop} =
-  returning::readLine[Unit]{body}
+def writeLine { body: () => Unit / emit[Char] }: Unit / emit[Char] =
+  returning::writeLine[Unit]{body}
 
+def readLine { body: () => Unit / read[Char] }: Unit / {read[Char], stop} =
+  returning::readLine[Unit]{body}
 
 namespace internal {
   effect snapshot(): Unit
@@ -653,7 +655,13 @@ def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
   (result, bytes.toString)
 }
 
-def readLine[R] { body: => R / read[Char] }: R / {read[Char], stop} = {
+def writeLine[R] { body: () => R / emit[Char] }: R / emit[Char] = {
+  val result = body()
+  do emit('\n')
+  return result
+}
+
+def readLine[R] { body: () => R / read[Char] }: R / {read[Char], stop} = {
   var stopped = false
   try {
     body()
