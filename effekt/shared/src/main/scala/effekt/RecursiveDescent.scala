@@ -327,7 +327,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       Include(`import` ~> moduleName())
 
   def moduleName(): String =
-    some(ident, `/`).mkString("/")
+    some(ident, `/`).mkString("/") labelled "module name"
 
   def isToplevel: Boolean = peek.kind match {
     case `val` | `fun` | `def` | `type` | `effect` | `namespace` |
@@ -477,7 +477,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def constructor(): Constructor =
     nonterminal:
-      Constructor(idDef(), maybeTypeParams(), valueParams())
+      Constructor(idDef(), maybeTypeParams(), valueParams()) labelled "constructor"
 
   // On the top-level both
   //    effect Foo = {}
@@ -658,7 +658,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     else fail("a type annotation", peek.kind)
 
   def expr(): Term = peek.kind match {
-    case _ => matchExpr()
+    case _ => matchExpr() labelled "expression"
   }
 
   def ifExpr(): Term =
