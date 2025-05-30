@@ -754,23 +754,22 @@ define void @run_Pos(%Neg %f, %Pos %argument) {
 }
 
 
-; Coercions (extern use those, hence ccc)
-define ccc %Pos @coerceNegPos(%Neg %input) {
-    %vtable = extractvalue %Neg %input, 0
-    %heap_obj = extractvalue %Neg %input, 1
-    %vtable_as_int = ptrtoint ptr %vtable to i64
-    %pos_result = insertvalue %Pos undef, i64 %vtable_as_int, 0
-    %pos_result_with_heap = insertvalue %Pos %pos_result, ptr %heap_obj, 1
-    ret %Pos %pos_result_with_heap
+define ccc %Pos @coerceNegPos(%Neg %neg) {
+    %arrayPointer = extractvalue %Neg %neg, 0
+    %object = extractvalue %Neg %neg, 1
+    %tagValue = ptrtoint ptr %arrayPointer to i64
+    %boxed1 = insertvalue %Pos undef, i64 %tagValue, 0
+    %boxed2 = insertvalue %Pos %boxed1, ptr %object, 1
+    ret %Pos %boxed2
 }
 
-define ccc %Neg @coercePosNeg(%Pos %input) {
-    %tag = extractvalue %Pos %input, 0
-    %heap_obj = extractvalue %Pos %input, 1
-    %vtable = inttoptr i64 %tag to ptr
-    %neg_result = insertvalue %Neg undef, ptr %vtable, 0
-    %neg_result_with_heap = insertvalue %Neg %neg_result, ptr %heap_obj, 1
-    ret %Neg %neg_result_with_heap
+define ccc %Neg @coercePosNeg(%Pos %pos) {
+    %tagValue = extractvalue %Pos %pos, 0
+    %object = extractvalue %Pos %pos, 1
+    %arrayPointer = inttoptr i64 %tagValue to ptr
+    %unboxed1 = insertvalue %Neg undef, ptr %arrayPointer, 0
+    %unboxed2 = insertvalue %Neg %unboxed1, ptr %object, 1
+    ret %Neg %unboxed2
 }
 
 define ccc %Pos @coerceIntPos(%Int %input) {
