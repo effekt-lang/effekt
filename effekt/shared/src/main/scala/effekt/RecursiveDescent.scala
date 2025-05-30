@@ -139,6 +139,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def skip(): Unit =
     previous = tokens(position)
     position += 1;
+    currentLabel = None
     spaces()
 
   def isSpace(kind: TokenKind): Boolean =
