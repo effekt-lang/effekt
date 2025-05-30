@@ -15,7 +15,11 @@ import scala.util.boundary
 import scala.util.boundary.break
 
 
-case class Fail(message: String, position: Int) extends Throwable(null, null, false, false)
+case class Fail(msg: String, position: Int) extends Throwable(null, null, false, false)
+object Fail {
+  def expectedButGot(expected: String, got: String, position: Int): Fail =
+    Fail(s"Expected ${expected} but got ${got}", position)
+}
 case class SoftFail(message: String, positionStart: Int, positionEnd: Int)
 
 class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source) {
@@ -67,6 +71,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       case Fail(msg, pos) => kiama.parsing.Error(msg, input.copy(offset = pos))
     }
 
+  var currentLabel: Option[String] = None
+
+  extension[T](inline p: => T) inline def labelled(inline label: String): T = {
+    val labelBefore = currentLabel
+    if (currentLabel.isEmpty) {
+      currentLabel = Some(label)
+    }
+    val res = p
+    currentLabel = labelBefore
+    res
+  }
 
   // Interfacing with the token stream
   // ---------------------------------
@@ -124,6 +139,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def skip(): Unit =
     previous = tokens(position)
     position += 1;
+    currentLabel = None
     spaces()
 
   def isSpace(kind: TokenKind): Boolean =
@@ -146,12 +162,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     if (t.kind != kind) {
       // we need to fail at the position before consuming
       position = positionBefore
-      fail(s"Expected ${explain(kind)} but got ${explain(t.kind)}")
+      fail(explain(kind), t.kind) // s"Expected ${explain(kind)} but got ${explain(t.kind)}")
     }
 
   inline def expect[T](expected: String)(inline f: PartialFunction[TokenKind, T]): T =
     val kind = peek.kind
-    if f.isDefinedAt(kind) then { skip(); f(kind) } else fail(s"Expected ${expected}")
+    if f.isDefinedAt(kind) then { skip(); f(kind) } else fail(expected, kind)
 
   /* The actual parser itself
   * ------------------------
@@ -180,7 +196,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    */
   def stmts(): Stmt =
     nonterminal:
-      peek.kind match {
+      (peek.kind match {
         case `val`  => valStmt()
         case _ if isDefinition => DefStmt(definition(), semi() ~> stmts())
         case `with` => withStmt()
@@ -197,7 +213,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           semi()
           if returnPosition then Return(e)
           else ExprStmt(e, stmts())
-      }
+      }) labelled "statements"
 
   // ATTENTION: here the grammar changed (we added `with val` to disambiguate)
   // with val <ID> (: <TYPE>)? = <EXPR>; <STMTS>
@@ -265,8 +281,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def stmt(): Stmt =
     nonterminal:
-      if peek(`{`) then braces { BlockStmt(stmts()) }
-      else when(`return`) { Return(expr()) } { Return(expr()) }
+      {
+        if peek(`{`) then braces { BlockStmt(stmts()) }
+        else when(`return`) { Return(expr()) } { Return(expr()) }
+      } labelled "statement"
 
 
   /**
@@ -309,7 +327,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       Include(`import` ~> moduleName())
 
   def moduleName(): String =
-    some(ident, `/`).mkString("/")
+    some(ident, `/`).mkString("/") labelled "module name"
 
   def isToplevel: Boolean = peek.kind match {
     case `val` | `fun` | `def` | `type` | `effect` | `namespace` |
@@ -459,7 +477,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def constructor(): Constructor =
     nonterminal:
-      Constructor(idDef(), maybeTypeParams(), valueParams())
+      Constructor(idDef(), maybeTypeParams(), valueParams()) labelled "constructor"
 
   // On the top-level both
   //    effect Foo = {}
@@ -570,10 +588,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def externBody(): ExternBody =
     nonterminal:
       peek.kind match {
-        case _: Ident => peek(1).kind match {
+        case _: Ident => (peek(1).kind match {
           case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> stmts() <~ `}`)
           case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template())
-        }
+        }) labelled "extern body (string or block)"
         case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template())
       }
 
@@ -629,18 +647,18 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def returnAnnotation(): Effectful =
     if peek(`:`) then  `:` ~> effectful()
-    else fail("Expected return type annotation")
+    else fail("return type annotation", peek.kind)
 
   def valueTypeAnnotation(): ValueType =
     if peek(`:`) then  `:` ~> valueType()
-    else fail("Expected a type annotation")
+    else fail("a type annotation", peek.kind)
 
   def blockTypeAnnotation(): BlockType =
     if peek(`:`) then  `:` ~> blockType()
-    else fail("Expected a type annotation")
+    else fail("a type annotation", peek.kind)
 
   def expr(): Term = peek.kind match {
-    case _ => matchExpr()
+    case _ => matchExpr() labelled "expression"
   }
 
   def ifExpr(): Term =
@@ -735,7 +753,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           Implementation(interface, List(operation))
       }
 
-      emptyImplementation() orElse interfaceImplementation() getOrElse operationImplementation()
+      (emptyImplementation() orElse interfaceImplementation() getOrElse operationImplementation()) labelled "interface implementation (starting with its name)"
 
   def opClause(): OpClause =
     nonterminal:
@@ -809,7 +827,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           case Many(p :: Nil , _) => fail("Pattern matching on tuples requires more than one element")
           case Many(ps, span) => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}", span.synthesized), ps)
         }
-        case _ => fail("Expected pattern")
+        case k => fail("pattern", k)
       }
 
   def matchExpr(): Term =
@@ -929,7 +947,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   //   ()             ()
   def isArguments: Boolean = lookbehind(1).kind != Newline && (peek(`(`) || peek(`[`) || peek(`{`))
   def arguments(): (List[ValueType], List[Term], List[Term]) =
-    if (!isArguments) fail("Expected at least one argument section (types, values, or blocks)")
+    if (!isArguments) fail("at least one argument section (types, values, or blocks)", peek.kind)
     (maybeTypeArgs().unspan, maybeValueArgs(), maybeBlockArgs())
 
   def maybeTypeArgs(): Many[ValueType] =
@@ -1005,7 +1023,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     case _ if isHole         => hole()
     case _ if isTupleOrGroup => tupleOrGroup()
     case _ if isListLiteral  => listLiteral()
-    case _ => fail(s"Expected variables, literals, tuples, lists, holes or group")
+    case k => fail("variables, literals, tuples, lists, holes or group", k)
   }
 
   def isListLiteral: Boolean = peek.kind match {
@@ -1037,7 +1055,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case `<{` =>
           val s = `<{` ~> stmts() <~ `}>`
           Hole(IdDef("hole", span().synthesized), s, span())
-        case _ => fail("Expected hole")
+        case k => fail("hole", k)
       }
     }
 
@@ -1085,7 +1103,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case `true`             => skip(); BooleanLit(true)
         case `false`            => skip(); BooleanLit(false)
         case t if isUnitLiteral => skip(); skip(); UnitLit()
-        case t => fail("Expected a literal")
+        case t => fail("a literal", t)
       }
 
   // Will also recognize ( ) as unit if we do not emit space in the lexer...
@@ -1134,7 +1152,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    * SetType ::= Type
    *        | '{' Type ',' ... '}'
    */
-  def effects(): Effects =
+  def effects(): Effects = {
     nonterminal:
       if (peek(`{`)) {
         val effects = many(refType, `{`, `,`, `}`)
@@ -1142,6 +1160,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       }
       else
         Effects(List(refType()), span())
+  } labelled "effect set"
 
   def maybeEffects(): Effects = {
     nonterminal:
@@ -1172,8 +1191,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   private def functionType(): Type = {
     // Complex function type: [T]*(Int, String)*{Exc} => Int / {Effect}
     def functionTypeComplex: Maybe[Type] = backtrack {
-      maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ atomicType() ~ maybeEffects() match {
-        case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams, vparams, bparams, t, effs)
+      maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`)
+    } map { case tparams ~ vparams ~ bparams =>
+      (atomicType() labelled "return type") ~ maybeEffects() match {
+        case  t ~ effs => FunctionType(tparams, vparams, bparams, t, effs)
       }
     }
 
@@ -1211,8 +1232,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
 
   // NOTE: ValueType, BlockType are just aliases for Type.
-  def blockType(): BlockType = boxedType()
-  def valueType(): ValueType = boxedType()
+  def blockType(): BlockType = boxedType() labelled "block type"
+  def valueType(): ValueType = boxedType() labelled "value type"
 
   // Completely specialized for TypeRef: we only parse `refType` here, we don't go through the whole hierarchy.
   // This results in slightly worse errors, but massively simplifies the design.
@@ -1222,11 +1243,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   // then pretend the effect set is empty. This seems to work out fine :)
   def effectful(): Effectful = {
     nonterminal:
-      boxedType() match
+      (boxedType() match
         case eff: Effectful => eff
         case tpe => {
           Effectful(tpe, Effects.Pure(Span(source, pos(), pos(), Synthesized)), span())
-        }
+        }) labelled "return-type and effects"
   }
 
   def maybeTypeParams(): Many[Id] =
@@ -1336,7 +1357,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   /**
    * Aborts parsing with the given message
    */
-  def fail(message: String): Nothing = throw Fail(message, position)
+  def fail(expected: String, got: TokenKind): Nothing =
+    throw Fail.expectedButGot(currentLabel.getOrElse { expected }, explain(got), position)
+
+  def fail(msg: String): Nothing =
+    throw Fail(msg, position)
 
   def softFail(message: String, start: Int, end: Int): Unit = {
     softFails += SoftFail(message, start, end)
@@ -1351,10 +1376,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   inline def backtrack[T](inline p: => T): Maybe[T] =
     val before = position
     val beforePrevious = previous
+    val labelBefore = currentLabel
     try { Maybe.Some(p, span(tokens(before).end)) } catch {
       case Fail(_, _) => {
         position = before
         previous = beforePrevious
+        currentLabel = labelBefore
         Maybe.None(Span(source, previous.end + 1, previous.end + 1, Synthesized))
       }
     }

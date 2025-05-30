@@ -1,0 +1,5 @@
+def foo{ body: => Unit / }: Unit = {
+  body()
+}
+
+def main() = ()
