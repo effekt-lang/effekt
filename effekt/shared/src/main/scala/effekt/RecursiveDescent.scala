@@ -196,7 +196,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    */
   def stmts(): Stmt =
     nonterminal:
-      peek.kind match {
+      (peek.kind match {
         case `val`  => valStmt()
         case _ if isDefinition => DefStmt(definition(), semi() ~> stmts())
         case `with` => withStmt()
@@ -213,7 +213,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           semi()
           if returnPosition then Return(e)
           else ExprStmt(e, stmts())
-      }
+      }) labelled "statements"
 
   // ATTENTION: here the grammar changed (we added `with val` to disambiguate)
   // with val <ID> (: <TYPE>)? = <EXPR>; <STMTS>
@@ -281,8 +281,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def stmt(): Stmt =
     nonterminal:
-      if peek(`{`) then braces { BlockStmt(stmts()) }
-      else when(`return`) { Return(expr()) } { Return(expr()) }
+      {
+        if peek(`{`) then braces { BlockStmt(stmts()) }
+        else when(`return`) { Return(expr()) } { Return(expr()) }
+      } labelled "statement"
 
 
   /**
@@ -751,7 +753,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           Implementation(interface, List(operation))
       }
 
-      emptyImplementation() orElse interfaceImplementation() getOrElse operationImplementation()
+      (emptyImplementation() orElse interfaceImplementation() getOrElse operationImplementation()) labelled "interface implementation (starting with its name)"
 
   def opClause(): OpClause =
     nonterminal:
