@@ -11,11 +11,11 @@ def main() = {
     }
   }
   def a{ b: => Unit / emit[Int] }: Unit = {
-    println(collectList[Int]{boundary{limit[Int](5){b}}})
+    println(collectList[Int]{boundary{limit[Int](4){b}}})
     println("a done")
   }
   def b{ b: => Unit / emit[Int] }: Unit = {
-    println(collectList[Int]{boundary{limit[Int](10){b}}})
+    println(collectList[Int]{boundary{limit[Int](9){b}}})
     println("b done")
   }
   println("a{ ... }")
