@@ -1189,8 +1189,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   private def functionType(): Type = {
     // Complex function type: [T]*(Int, String)*{Exc} => Int / {Effect}
     def functionTypeComplex: Maybe[Type] = backtrack {
-      maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ (atomicType() labelled "return type") ~ maybeEffects() match {
-        case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams, vparams, bparams, t, effs)
+      maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`)
+    } map { case tparams ~ vparams ~ bparams =>
+      (atomicType() labelled "return type") ~ maybeEffects() match {
+        case  t ~ effs => FunctionType(tparams, vparams, bparams, t, effs)
       }
     }
 
