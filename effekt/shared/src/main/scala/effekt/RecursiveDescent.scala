@@ -75,7 +75,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   extension[T](inline p: => T) inline def labelled(inline label: String): T = {
     val labelBefore = currentLabel
-    currentLabel = Some(label)
+    if (currentLabel.isEmpty) {
+      currentLabel = Some(label)
+    }
     val res = p
     currentLabel = labelBefore
     res
