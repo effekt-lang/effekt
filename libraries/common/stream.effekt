@@ -37,6 +37,8 @@ def map[A, B] { function: A => B } { stream: () => Unit / emit[A] }: Unit / emit
   returning::map[A, B, Unit]{function}{stream}
 
 /// Runs the given action whenever the given reader reads an element.
+///
+/// e.g. var i = -1; with tap { i = i + 1; i }; reader()
 def tap[A] { action: () => A / stop } { reader: () => Unit / read[A] }: Unit =
   returning::tap[A, Unit]{action}{reader}
 
