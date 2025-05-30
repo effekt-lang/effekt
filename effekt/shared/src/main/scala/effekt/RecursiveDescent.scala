@@ -586,10 +586,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def externBody(): ExternBody =
     nonterminal:
       peek.kind match {
-        case _: Ident => peek(1).kind match {
+        case _: Ident => (peek(1).kind match {
           case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> stmts() <~ `}`)
           case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template())
-        }
+        }) labelled "extern body (string or block)"
         case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template())
       }
 
@@ -1150,7 +1150,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    * SetType ::= Type
    *        | '{' Type ',' ... '}'
    */
-  def effects(): Effects =
+  def effects(): Effects = {
     nonterminal:
       if (peek(`{`)) {
         val effects = many(refType, `{`, `,`, `}`)
@@ -1158,6 +1158,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       }
       else
         Effects(List(refType()), span())
+  } labelled "effect set"
 
   def maybeEffects(): Effects = {
     nonterminal:
@@ -1238,11 +1239,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   // then pretend the effect set is empty. This seems to work out fine :)
   def effectful(): Effectful = {
     nonterminal:
-      boxedType() match
+      (boxedType() match
         case eff: Effectful => eff
         case tpe => {
           Effectful(tpe, Effects.Pure(Span(source, pos(), pos(), Synthesized)), span())
-        }
+        }) labelled "return-type and effects"
   }
 
   def maybeTypeParams(): Many[Id] =
