@@ -130,7 +130,7 @@ function SHIFT(p, body, ks, k, cont) {
 
   const k1 = meta.stack
   // TODO why is this needed?
-  // meta.stack = null
+  meta.stack = null
   return body(cont, meta, k1)
 }
 
@@ -154,7 +154,7 @@ function RESUME(cont, c, b, ks, k) {
 
   const k1 = meta.stack // TODO instead copy meta here, like elsewhere?
   // TODO why is this needed?
-  // meta.stack = null
+  meta.stack = null
   return () => c(meta, k1)
 }
 
