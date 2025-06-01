@@ -294,7 +294,7 @@ object LLVMRunner extends Runner[String] {
 
   def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
-  val flags = Properties.envOrElse("LLVM_FLAGS", "").split(" ").toSeq
+  val flags = Properties.envOrElse("CFLAGS", "").split(" ").toSeq
 
   override def includes(path: File): List[File] = List(path / ".." / "llvm")
 
