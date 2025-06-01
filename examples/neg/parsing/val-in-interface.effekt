@@ -1,0 +1,5 @@
+interface Foo {
+  val x = 4
+}
+
+def main() = ()
