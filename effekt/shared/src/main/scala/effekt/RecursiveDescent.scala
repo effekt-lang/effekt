@@ -501,7 +501,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       val doc = maybeDocumentation()
       `effect` ~> operation(doc) match {
-        // TODO: which doc/span should be used when and where?
         case op @ Operation(id, tps, vps, bps, ret, opDoc, opSpan) =>
           InterfaceDef(IdDef(id.name, id.span) withPositionOf op, tps, List(Operation(id, Many.empty(tps.span.synthesized), vps, bps, ret, opDoc, opSpan) withPositionOf op), doc, span())
       }

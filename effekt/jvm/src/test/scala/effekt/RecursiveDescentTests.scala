@@ -1141,6 +1141,26 @@ class RecursiveDescentTests extends munit.FunSuite {
     assertEquals(effDef.span, span)
   }
 
+  test("Effect operation definition parses with correct span") {
+    val (source, pos) =
+      raw"""effect emit[A](value: A): Unit
+           |↑      ↑   ↑  ↑               ↑
+           |""".sourceAndPositions
+
+    val definition = parseToplevel(source.content)
+
+    val intDef = definition match {
+      case id@InterfaceDef(name, tparams, ops, doc, span) => id
+      case other =>
+        throw new IllegalArgumentException(s"Expected InterfaceDef but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(intDef.tparams.span, Span(source, pos(2), pos(3)))
+    assertEquals(intDef.ops.head.span, Span(source, pos(1), pos.last))
+    assertEquals(intDef.ops.head.tparams.span, Span(source, pos(2), pos(3), Synthesized))
+    assertEquals(intDef.span, Span(source, pos(0), pos.last))
+  }
+
   test("Extern type definition parses with correct span") {
     val (source, span) =
       raw"""extern type Foo
