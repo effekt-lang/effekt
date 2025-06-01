@@ -465,7 +465,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
       peek.kind match {
         case `=` => `=` ~> TypeDef(id, tps.unspan, valueType())
-        case _ => braces { DataDef(id, tps, manyWhile({ constructor() <~ semi() }, !peek(`}`))) }
+        case _ => braces { DataDef(id, tps, manyUntil({ constructor() <~ semi() }, `}`)) }
       }
 
   def recordDef(): Def =
@@ -507,7 +507,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def interfaceDef(): InterfaceDef =
     nonterminal:
-      InterfaceDef(`interface` ~> idDef(), maybeTypeParams(), `{` ~> manyWhile(`def` ~> operation(), `def`) <~ `}`)
+      InterfaceDef(`interface` ~> idDef(), maybeTypeParams(), `{` ~> manyUntil({ `def` ~> operation() } labelled "operation declaration", `}`) <~ `}`)
 
   def namespaceDef(): Def =
     nonterminal:
@@ -737,7 +737,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         if !peek(`def`) then fail("Expected at least one operation definition to implement this interface.")
         tpe
       } map { tpe =>
-        Implementation(tpe, manyWhile(opClause(), `def`)) <~ `}`
+        Implementation(tpe, manyUntil(opClause() labelled "operation clause", `}`)) <~ `}`
       }
 
       // Interface[...] { () => ... }
@@ -1454,12 +1454,18 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   inline def manyWhile[T](p: => T, lookahead: TokenKind): List[T] =
     manyWhile(p, peek(lookahead))
 
+  inline def manyUntil[T](p: => T, lookahead: TokenKind): List[T] =
+    manyUntil(p, peek(lookahead))
+
   inline def manyWhile[T](p: => T, predicate: => Boolean): List[T] =
     val components: ListBuffer[T] = ListBuffer.empty
     while (predicate) {
       components += p
     }
     components.toList
+
+  inline def manyUntil[T](p: => T, predicate: => Boolean): List[T] =
+    manyWhile(p, !predicate)
 
   inline def parens[T](p: => T): T =
     consume(`(`)
