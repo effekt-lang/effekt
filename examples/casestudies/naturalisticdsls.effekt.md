@@ -191,12 +191,7 @@ def every(who: Predicate) = do quantify(who)
 We can use it as follows:
 ```
 def s2(): Sentence = scoped { John.said { every(Woman()).loves(me()) } }
-```
-The effect operation `every` takes a predicate (&ie;, `Woman`)
-and introduces a universal quantification at the position of the handler `scoped`.
 
-The quantification effect is handled by `scoped`:
-```
 def scoped { s: => Sentence / Quantification }: Sentence = {
   var tmp = 0;
   def fresh(): Person = { val x = Person("x" ++ show(tmp)); tmp = tmp + 1; x }
@@ -208,12 +203,16 @@ def scoped { s: => Sentence / Quantification }: Sentence = {
   }
 }
 ```
+The effect operation `every` takes a predicate (i.e. `Woman`)
+and introduces a universal quantification at the position of the handler `scoped`.
+
+The quantification effect is handled by `scoped`.
 This is already a more involved handler. It generates a fresh person name and
 then systematically rewrites the syntax tree, moving the introduced
 binder and the predicate up to the handler:
-```
-//> ForAll(Person(x0), Implies(Is(Person(x0), Woman()),
-//    Say(Person(John), Is(Person(x0), InLoveWith(Person(John))))))
+```raw
+ForAll(Person(x0), Implies(Is(Person(x0), Woman()),
+  Say(Person(John), Is(Person(x0), InLoveWith(Person(John))))))
 ```
 Every invocation of the effect operation `every` introduces an additional
 quantifier.

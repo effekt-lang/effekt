@@ -9,12 +9,7 @@ redirect_to: docs/casestudies/frontend#pull-based-lexing
 In this case study, we show how to implement a _pull-based_ lexer
 in terms of effect handlers.
 
----
-
-Before we get started, we require a few imports to deal with regular expressions.
-
-```
-import string
+```effekt:prelude
 import regex
 ```
 
@@ -120,6 +115,7 @@ processes an input and computes the tokens contained therein.
 
 This time, we use a number of different regular expressions to recognize lexemes.
 First, we define the different token types as a list of pairs of regular expressions and token types.
+
 ```
 record TokenRx(kind: TokenKind, rx: Regex)
 
@@ -131,19 +127,17 @@ val tokenDesriptors = [
 ]
 ```
 
+Now, we can define the function `lexer` which receives a string as input as well as a computation `prog` for which it handles the `Lexer` effect:
+
 ```
 def lexer[R](in: String) { prog: => R / Lexer } : R / LexerError = {
-```
-Additionally, we keep track of the current position in the input stream, by maintaining
-three mutable variables for the zero based index, and one-based column and line position.
-```
-  var index = 0;
-  var col = 1;
-  var line = 1;
-```
-A few local helper functions ease the handling of the input stream.
-At the same time, we need to keep track of the line information.
-```
+  // Additionally, we keep track of the current position in the input stream, by maintaining
+  // three mutable variables for the zero based index, and one-based column and line position.
+  var index = 0
+  var col = 1
+  var line = 1
+  // A few local helper functions ease the handling of the input stream.
+  // At the same time, we need to keep track of the line information.
   def position() = Position(line, col, index)
   def input() = in.substring(index)
   def consume(text: String): Unit = {
@@ -156,11 +150,9 @@ At the same time, we need to keep track of the line information.
     if (lines.size == 1) { col = col + text.length } else { col = offset }
   }
   def eos(): Bool = index >= in.length
-```
-The function `tryMatch` applies a given token description to the current position of
-the input stream, without advancing it. Its companion `tryMatchAll` returns the first token
-matched by any of the matches in the given description list.
-```
+  // The function `tryMatch` applies a given token description to the current position of
+  // the input stream, without advancing it. Its companion `tryMatchAll` returns the first token
+  // matched by any of the matches in the given description list.
   def tryMatch(desc: TokenRx): Option[Token] =
       desc.rx.exec(input()).map { m => Token(desc.kind, m.matched, position()) }
 
@@ -168,10 +160,8 @@ matched by any of the matches in the given description list.
     case Nil() => None()
     case Cons(desc, descs) => tryMatch(desc).orElse { tryMatchAll(descs) }
   }
-```
-Now defining the lexer is trivial. We just need to use `tryMatchAll` and either consume
-the input, or not.
-```
+  // Now defining the lexer is trivial. We just need to use `tryMatchAll` and either consume
+  // the input, or not.
   try { prog() } with Lexer {
     def peek() = resume(tryMatchAll(tokenDesriptors))
     def next() =
@@ -187,17 +177,13 @@ the input, or not.
   }
 }
 ```
-Running our above consumer with the string `"foo()"`
+Running our above consumer with the string `"foo()"`:
 ```effekt:repl
   report {
     lexer("foo()") {
       inspect(example1())
     }
   }
-```
-yields the output:
-```
-//> (Token(Ident(), foo, Position(1, 1, 0)), Token(Punct(), (, Position(1, 4, 3)), Token(Punct(), ), Position(1, 5, 4)))
 ```
 
 ## Whitespace Skipping

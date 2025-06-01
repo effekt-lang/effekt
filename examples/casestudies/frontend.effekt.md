@@ -7,7 +7,7 @@ permalink: docs/casestudies/frontend
 # Compiler Frontend Phases
 
 In this case study we collected multiple case studies useful and related to compiler frontend phases.
-Namly, we showcase a pull-based lexer, a parser with backtracking behavior, a pretty printer and an ANF transformer.
+Namely, we showcase a pull-based lexer, a parser with backtracking behavior, a pretty printer and an ANF transformer.
 
 ---
 
@@ -15,9 +15,7 @@ Namly, we showcase a pull-based lexer, a parser with backtracking behavior, a pr
 In this case study, we show how to implement a _pull-based_ lexer
 in terms of effect handlers.
 
-Before we get started, we require a few imports to deal with regular expressions.
-
-```
+```effekt:prelude
 import regex
 ```
 
@@ -123,6 +121,7 @@ processes an input and computes the tokens contained therein.
 
 This time, we use a number of different regular expressions to recognize lexemes.
 First, we define the different token types as a list of pairs of regular expressions and token types.
+
 ```
 record TokenRx(kind: TokenKind, rx: Regex)
 
@@ -134,19 +133,17 @@ val tokenDesriptors = [
 ]
 ```
 
+Now, we can define the function `lexer` which receives a string as input as well as a computation `prog` for which it handles the `Lexer` effect:
+
 ```
 def lexer[R](in: String) { prog: => R / Lexer } : R / LexerError = {
-```
-Additionally, we keep track of the current position in the input stream, by maintaining
-three mutable variables for the zero based index, and one-based column and line position.
-```
-  var index = 0;
-  var col = 1;
-  var line = 1;
-```
-A few local helper functions ease the handling of the input stream.
-At the same time, we need to keep track of the line information.
-```
+  // Additionally, we keep track of the current position in the input stream, by maintaining
+  // three mutable variables for the zero based index, and one-based column and line position.
+  var index = 0
+  var col = 1
+  var line = 1
+  // A few local helper functions ease the handling of the input stream.
+  // At the same time, we need to keep track of the line information.
   def position() = Position(line, col, index)
   def input() = in.substring(index)
   def consume(text: String): Unit = {
@@ -159,11 +156,9 @@ At the same time, we need to keep track of the line information.
     if (lines.size == 1) { col = col + text.length } else { col = offset }
   }
   def eos(): Bool = index >= in.length
-```
-The function `tryMatch` applies a given token description to the current position of
-the input stream, without advancing it. Its companion `tryMatchAll` returns the first token
-matched by any of the matches in the given description list.
-```
+  // The function `tryMatch` applies a given token description to the current position of
+  // the input stream, without advancing it. Its companion `tryMatchAll` returns the first token
+  // matched by any of the matches in the given description list.
   def tryMatch(desc: TokenRx): Option[Token] =
       desc.rx.exec(input()).map { m => Token(desc.kind, m.matched, position()) }
 
@@ -171,10 +166,8 @@ matched by any of the matches in the given description list.
     case Nil() => None()
     case Cons(desc, descs) => tryMatch(desc).orElse { tryMatchAll(descs) }
   }
-```
-Now defining the lexer is trivial. We just need to use `tryMatchAll` and either consume
-the input, or not.
-```
+  // Now defining the lexer is trivial. We just need to use `tryMatchAll` and either consume
+  // the input, or not.
   try { prog() } with Lexer {
     def peek() = resume(tryMatchAll(tokenDesriptors))
     def next() =
@@ -190,17 +183,13 @@ the input, or not.
   }
 }
 ```
-Running our above consumer with the string `"foo()"`
+Running our above consumer with the string `"foo()"`:
 ```effekt:repl
-report {
-  lexer("foo()") {
-    inspect(example1())
+  report {
+    lexer("foo()") {
+      inspect(example1())
+    }
   }
-}
-```
-yields the output:
-```
-//> (Token(Ident(), foo, Position(1, 1, 0)), Token(Punct(), (, Position(1, 4, 3)), Token(Punct(), ), Position(1, 5, 4)))
 ```
 
 ## Whitespace Skipping
@@ -222,13 +211,13 @@ def skipWhitespace[R] { prog: => R / Lexer }: R / Lexer =
 The handler `skipWhitespace` simply skips all spaces by using the `Lexer` effect itself.
 
 ```effekt:repl
-report {
-  lexer("foo (   \n  )") {
-    skipWhitespace {
-      inspect(example1())
+  report {
+    lexer("foo (   \n  )") {
+      skipWhitespace {
+        inspect(example1())
+      }
     }
   }
-}
 ```
 
 ---
@@ -331,6 +320,7 @@ semantics of effects.
 
 Similarly, we can write parsers for let bindings, by sequentially composing
 our existing parsers:
+
 ```
 def parseLet(): Tree / Parser = {
   kw("let");
@@ -341,14 +331,7 @@ def parseLet(): Tree / Parser = {
   val body = parseExpr();
   Let(name, binding, body)
 }
-```
-Again, note how naturally the result can be composed from the individual results, much like
-manually writing a recursive descent parser. Compared to handcrafted parsers, the imperative
-parser combinators presented here offer a similar flexibility. At the same time, the semantics
-of `alt` and `fail` is still left open, offering flexibility in the implementation of the actual underlying parsing algorithm.
 
-We proceed to implement the remaining parsers for our expression language:
-```
 def parseGroup() = or { parseAtom() } {
   punct("(");
   val res = parseExpr();
@@ -366,7 +349,13 @@ def parseApp(): Tree / Parser = {
 
 def parseExpr(): Tree / Parser =
   or { parseLet() } { or { parseApp() } { parseGroup() } }
+
 ```
+
+Again, note how naturally the result can be composed from the individual results, much like
+manually writing a recursive descent parser. Compared to handcrafted parsers, the imperative
+parser combinators presented here offer a similar flexibility. At the same time, the semantics
+of `alt` and `fail` is still left open, offering flexibility in the implementation of the actual underlying parsing algorithm.
 
 ## Example: Combining Parsers and Local Mutable State
 It is possible to combine the imperative parser combinators with
@@ -376,8 +365,8 @@ This is important for use cases like the parser example where the continuation i
 potentially called multiple times.
 
 The following example implements an example
-```
-// <EXPR> ::= <NUMBER> | <IDENT> `(` <EXPR> (`,` <EXPR>)*  `)`
+```raw
+<EXPR> ::= <NUMBER> | <IDENT> `(` <EXPR> (`,` <EXPR>)*  `)`
 ```
 It uses local (mutable) variables to count the number of leafs as semantic action.
 ```
@@ -406,27 +395,25 @@ ambiguities, we have the choice whether we want to recognize only the first resu
 or compute all possible alternative ways to recognize the input.
 
 For this case study, we implement a depth-first parser, computing the first
-successful result. Results are represented by the following datatype:
-```
-type ParseResult[R] {
-  Success(t: R);
-  Failure(msg: String)
-}
-```
-
+successful result. Results are represented by the `ParseResult` datatype.
 The parsing algorithm is simply implemented as a handler for `Parser`.
 
 ```
+type ParseResult[R] {
+  ParseSuccess(t: R);
+  ParseFailure(msg: String)
+}
+
 def parse[R](input: String) { p: => R / Parser }: ParseResult[R] = try {
-  lexer(input) { skipWhitespace { Success(p()) } }
+  lexer(input) { skipWhitespace { ParseSuccess(p()) } }
 } with Nondet {
   def alt() = resume(true) match {
-    case Failure(msg) => resume(false)
-    case Success(res) => Success(res)
+    case ParseFailure(msg) => resume(false)
+    case ParseSuccess(res) => ParseSuccess(res)
   }
-  def fail(msg) = Failure(msg)
+  def fail(msg) = ParseFailure(msg)
 } with LexerError { (msg, pos) =>
-  Failure(msg)
+  ParseFailure(msg)
 }
 ```
 The handler reuses the lexer implementation of the [Lexer case study](lexer). The lexer
@@ -473,36 +460,32 @@ Furthermore, the library presented here is neither linear
 
 Similar to the [parser case study](parser), the pretty printing library is based
 on a non-deterministic description of layouts. In particular, to fill the horizontal
-space as best as possible, we first try to  pretty print _horizontally_ and fall
+space as best as possible, we first try to pretty print _horizontally_ and fall
 back to _vertical_ mode, if not enough space is available. For example, the
 following text overflows when trying to layout horizontally:
 
-```
-// -------
-// hello world
+```raw
+hello world
 ```
 
 Treating the space as a potential line break, we can try again, this time vertically.
-```
-// -------
-// hello
-// world
+```raw
+hello
+world
 ```
 
 Pretty printing also often includes ways to _group_ parts of a document. If a group does not
 fit horizontally, all of its elements will be layouted vertically:
 
-```
-// --------------
-// hello (this (is too) long)
+```raw
+hello (this (is too) long)
 ```
 Even though the first two words of the group would fit, the document will be pretty printed as
 
-```
-// -------------
-// hello (this
-// is too
-// long)
+```raw
+hello (this
+is too
+long)
 ```
 
 ## Layout as Effects
@@ -658,11 +641,11 @@ def example1(l: List[Int]) = {
 This layouts a list by potentially adding a linebreak after each comma. Pretty printing the
 list `[1, 2, 3, 4]` at width `5` gives:
 
-```
-// -----
-// [1,
-// 2, 3,
-// 4, ]
+```raw
+-----
+[1,
+2, 3,
+4, ]
 ```
 For simplicity, we keep the trailing comma.
 
@@ -674,10 +657,10 @@ def example2() = {
 }
 ```
 which pretty printed at width `6` yields:
-```
-// ------
-// Hi
-// you!!!
+```raw
+------
+Hi
+you!!!
 ```
 
 The next example illustrates that revising the layout decision for the parent group can also lead to a
@@ -697,12 +680,12 @@ def example3() = {
 ```
 Pretty printing results in:
 
-```
-// ---------------
-// this
-//          takes
-//          four
-// lines
+```raw
+---------------
+this
+         takes
+         four
+lines
 ```
 
 
@@ -747,11 +730,6 @@ def printer(width: Int, defaultIndent: Int) { prog: => Unit / { Emit, Layout } }
   with Indent { () => resume(0) }
   // simply handle the default indentation with a constant
   with DefaultIndent { () => resume(defaultIndent) }
-```
-Maybe most interestingly, here we update the current position and invoke the effect operation `fail`, if
-the document exceeds the width. This will potentially cause backtracking and revision of a preceeding layout decision.
-If the current text still fits the line, we simply re-emit it.
-```
   with Emit {
     def emitText(t) = {
       pos = pos + t.length;
@@ -763,7 +741,13 @@ If the current text still fits the line, we simply re-emit it.
 }
 ```
 
+Maybe most interestingly, we update the current position and invoke the effect operation `fail`, if
+the document exceeds the width.
+This will potentially cause backtracking and revision of a preceeding layout decision.
+If the current text still fits the line, we simply re-emit it.
+
 Finally, we can compose the different handlers to a single pretty printing handler:
+
 ```
 def pretty(width: Int) { doc: => Unit / Pretty }: String = {
   val result = searchLayout { writer { printer(width, 2) { doc() } } };
@@ -820,8 +804,8 @@ a parse tree, which we then pretty print:
 ```
 def parseAndPrint(text: String, width: Int): String =
   parse(text) { parseExpr() } match {
-    case Success(tree) => pretty(width) { toDoc(tree) }
-    case Failure(text) => text
+    case ParseSuccess(tree) => pretty(width) { toDoc(tree) }
+    case ParseFailure(text) => text
   }
 ```
 
@@ -998,10 +982,7 @@ def traverse(e: Tree): Stmt / { Bind, Fresh } = e match {
     // should be inserted.
     CLet(x, bindHere { traverse(b) }, bindHere { traverse(body) })
 }
-```
-The handler `bindHere` handles `Bind` by generating a fresh name and
-inserting a let binding:
-```
+
 def bindHere { prog: => Stmt / Bind } : Stmt / Fresh =
   try { prog() }
   with Bind { (e) =>
@@ -1009,6 +990,7 @@ def bindHere { prog: => Stmt / Bind } : Stmt / Fresh =
     CLet(id, e, resume(CVar(id)))
   }
 ```
+The handler `bindHere` handles `Bind` by generating a fresh name and inserting a let binding.
 Note, that the let binding will _enclose_ the overall result of `prog`. It is inserted on the outside.
 
 The overall ANF transformation is simply a matter of composing the two handlers and calling `traverse`:
@@ -1020,7 +1002,7 @@ def translate(e: Tree): Stmt =
 For our example, calling `translate` results in:
 ```
 val exampleResult = translate(exampleTree)
-//> CLet(x, CLet(x1, CRet(CLit(42)),
+//> CLet(x, CLet(xxxx1, CRet(CLit(42)),
 //    CLet(x2, CApp(g, CVar(x1)), CApp(f, CVar(x2)))),
 //    CRet(CVar(x)))
 ```
@@ -1079,8 +1061,8 @@ our input:
 ```
 def pipeline(input: String): String =
   parse(input) { parseExpr() } match {
-    case Success(tree) => pretty(translate(tree))
-    case Failure(msg) => msg
+    case ParseSuccess(tree) => pretty(translate(tree))
+    case ParseFailure(msg) => msg
   }
 ```
 

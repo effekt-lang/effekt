@@ -77,10 +77,7 @@ def traverse(e: Tree): Stmt / { Bind, Fresh } = e match {
     // should be inserted.
     CLet(x, bindHere { traverse(b) }, bindHere { traverse(body) })
 }
-```
-The handler `bindHere` handles `Bind` by generating a fresh name and
-inserting a let binding:
-```
+
 def bindHere { prog: => Stmt / Bind } : Stmt / Fresh =
   try { prog() }
   with Bind { (e) =>
@@ -88,6 +85,7 @@ def bindHere { prog: => Stmt / Bind } : Stmt / Fresh =
     CLet(id, e, resume(CVar(id)))
   }
 ```
+The handler `bindHere` handles `Bind` by generating a fresh name and inserting a let binding.
 Note, that the let binding will _enclose_ the overall result of `prog`. It is inserted on the outside.
 
 The overall ANF transformation is simply a matter of composing the two handlers and calling `traverse`:
@@ -158,8 +156,8 @@ our input:
 ```
 def pipeline(input: String): String =
   parse(input) { parseExpr() } match {
-    case parser::Success(tree) => pretty(translate(tree))
-    case parser::Failure(msg) => msg
+    case ParseSuccess(tree) => pretty(translate(tree))
+    case ParseFailure(msg) => msg
   }
 ```
 
