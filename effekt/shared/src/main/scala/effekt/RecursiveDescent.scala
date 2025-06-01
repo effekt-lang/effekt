@@ -155,15 +155,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
 
   def consume(kind: TokenKind): Unit =
-    // if !hasNext() then fail(s"Expected ${kind}, but reached end of file")
-    val positionBefore = position
-    val t = next()
-
-    if (t.kind != kind) {
-      // we need to fail at the position before consuming
-      position = positionBefore
-      fail(explain(kind), t.kind) // s"Expected ${explain(kind)} but got ${explain(t.kind)}")
+    if !hasNext() then fail(s"Expected ${kind}, but reached end of file")
+    if (peek.kind != kind) {
+      fail(explain(kind), peek.kind) // s"Expected ${explain(kind)} but got ${explain(t.kind)}")
     }
+    val t = next()
+    ()
 
   inline def expect[T](expected: String)(inline f: PartialFunction[TokenKind, T]): T =
     val kind = peek.kind
