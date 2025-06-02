@@ -80,12 +80,12 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
 
   override def stmt(using Context, Unit) = {
     // local state
-    case source.DefStmt(tree @ VarDef(id, annot, binding), rest) =>
+    case source.DefStmt(tree @ VarDef(id, annot, binding, doc, span), rest) =>
       query(binding) ++ (query(rest) -- CaptureSet(tree.symbol.capture))
   }
 
   override def defn(using Context, Unit) = {
-    case tree @ source.FunDef(id, tps, vps, bps, ret, body, span) =>
+    case tree @ source.FunDef(id, tps, vps, bps, ret, body, doc, span) =>
       val cpt = query(body) -- boundCapabilities(tree) -- CaptureSet(bps.unspan.map(_.symbol.capture))
       // TODO Why do we need to update the annotation on the symbol here? Is the inferred capture for recursive functions
       //   wrong? Problematic example: examples/benchmarks/tree.effekt (chooseHandler has the empty set, but should have {this})
@@ -93,7 +93,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       cpt
 
     // regions
-    case tree @ RegDef(id, annot, region, binding) =>
+    case tree @ RegDef(id, annot, region, binding, doc, span) =>
       val regSymbol = region.symbol.asBlockSymbol
       val regCapture = captureOf(regSymbol)
       Context.annotate(Annotations.Captures, tree.symbol, regCapture)

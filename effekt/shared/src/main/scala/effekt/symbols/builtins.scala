@@ -15,7 +15,7 @@ object builtins {
   // a dummy module for built in types. Can be dropped, once they are
   // defined in the prelude
   val builtinSource = StringSource("", "effekt.effekt")
-  lazy val prelude = Module(ModuleDecl("effekt", Nil, Nil, source.Span(builtinSource, 0, 0)), builtinSource)
+  lazy val prelude = Module(ModuleDecl("effekt", Nil, Nil, None, source.Span(builtinSource, 0, 0)), builtinSource)
 
   private def name(s: String) = QualifiedName(List("effekt"), s)
 

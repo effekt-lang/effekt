@@ -1188,9 +1188,11 @@ class LSPTests extends FunSuite {
              |          Span(StringSource(def main() = <>, file://test.effekt), 13, 15, Real())
              |        )
              |      ),
+             |      None(),
              |      Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
              |    )
              |  ),
+             |  None(),
              |  Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
              |)""".stripMargin
 
@@ -1243,6 +1245,7 @@ class LSPTests extends FunSuite {
              |  ),
              |  List(foo_whatever)
              |)""".stripMargin
+
 
       val receivedIRContent = client.receivedIR()
       assertEquals(receivedIRContent.length, 1)
