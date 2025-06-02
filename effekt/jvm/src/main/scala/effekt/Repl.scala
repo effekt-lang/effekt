@@ -41,11 +41,6 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
    * Called by the Driver if no arguments are provided to the Effekt binary
    */
   def run(config: EffektConfig): Unit = {
-    if (config.showPrelude()) {
-      println(config.prelude().mkString(","))
-      return
-    }
-
     val out = config.output()
     out.emitln(banner)
     usingCommandHistory(config) {

@@ -21,7 +21,9 @@ object Main {
         return
     }
 
-    if (config.server()) {
+    if (config.showPrelude()) {
+      println(config.prelude().mkString(","))
+    } else if (config.server()) {
       val serverConfig = ServerConfig(
         debug = config.debug(),
         debugPort = config.debugPort()
