@@ -29,9 +29,7 @@ trait EffektTests extends munit.FunSuite {
   def examplesDir = new File("examples")
 
   // Test files which are to be ignored (since features are missing or known bugs exist)
-  def ignored: Set[File] = Set(
-    examplesDir / "benchmarks" / "other" / "smc.effekt.md"
-  )
+  def ignored: Set[File] = Set()
 
   // Folders to discover and run tests in
   def positives: Set[File] = Set()
