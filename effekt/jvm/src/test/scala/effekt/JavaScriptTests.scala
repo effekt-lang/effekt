@@ -38,7 +38,7 @@ class JavaScriptTests extends EffektTests {
     // unsafe cont
     examplesDir / "pos" / "propagators.effekt",
 
-    examplesDir / "casestudies" / "smc.effekt.md"
+    examplesDir / "benchmarks" / "other" / "smc.effekt.md"
   )
 }
 

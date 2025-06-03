@@ -21,7 +21,7 @@ abstract class ChezSchemeTests extends EffektTests {
 
     examplesDir / "llvm",
 
-    examplesDir / "casestudies" / "smc.effekt.md",
+    examplesDir / "benchmarks" / "other" / "smc.effekt.md",
 
     // bidirectional effects are not yet supported in our Chez backend
     examplesDir / "pos" / "maps.effekt",
