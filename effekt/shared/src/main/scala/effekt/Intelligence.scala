@@ -6,6 +6,8 @@ import effekt.symbols.{CaptureSet, Hole}
 import kiama.util.{Position, Source}
 import effekt.symbols.scopes.Scope
 
+import scala.collection.mutable
+
 trait Intelligence {
 
   import effekt.symbols._
@@ -165,16 +167,26 @@ trait Intelligence {
         ScopeInfo(None, ScopeKind.Local, bindingsOut.toList, Some(allBindings(outer)))
     }
 
-  def allBindings(origin: String, bindings: Namespace, path: List[String] = Nil)(using C: Context): Iterable[BindingInfo] =
-    val types = bindings.types.flatMap {
-      case (name, sym) =>
-        // TODO this is extremely hacky, printing is not defined for all types at the moment
-        try { Some(TypeBinding(path, name, origin, DeclPrinter(sym))) } catch { case e => None }
+  def allBindings(origin: String, bindings: Namespace, path: List[String] = Nil)(using C: Context): Iterable[BindingInfo] = {
+    val types = bindings.typeNames.flatMap { name =>
+      bindings.types.get(name).flatMap { sym =>
+          // TODO this is extremely hacky, printing is not defined for all types at the moment
+          try {
+            Some(TypeBinding(path, name, origin, DeclPrinter(sym)))
+          } catch {
+            case e => None
+          }
+       }
     }
-    val terms = bindings.terms.flatMap { case (name, syms) =>
-      syms.collect {
-        case sym: ValueSymbol => TermBinding(path, name, origin, C.valueTypeOption(sym).map(t => pp"${t}"))
-        case sym: BlockSymbol => TermBinding(path, name, origin, C.blockTypeOption(sym).map(t => pp"${t}"))
+
+    val termIndex = mutable.Map.empty[String, Int].withDefaultValue(0)
+    val terms = bindings.termNames.map { name =>
+      val syms = bindings.terms(name)
+      val idx = termIndex(name)
+      termIndex(name) = idx + 1
+      syms.toList(idx) match {
+        case vs: ValueSymbol => TermBinding(path, name, origin, C.valueTypeOption(vs).map(t => pp"$t"))
+        case bs: BlockSymbol => TermBinding(path, name, origin, C.blockTypeOption(bs).map(t => pp"$t"))
       }
     }
     val nestedBindings = bindings.namespaces.flatMap {
@@ -182,6 +194,7 @@ trait Intelligence {
     }
 
     terms ++ types ++ nestedBindings
+  }
 
   def allCaptures(src: Source)(using C: Context): List[(Tree, CaptureSet)] =
     C.annotationOption(Annotations.CaptureForFile, src).getOrElse(Nil)

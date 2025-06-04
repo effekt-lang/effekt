@@ -25,8 +25,12 @@ object Bindings {
  * A mutable container of bindings
  */
 class Namespace(
-  var terms: mutable.Map[String, Set[TermSymbol]],
+  var termsList: mutable.Map[String, List[TermSymbol]],
+  // Term variables in the order they were defined
+  var termNames: mutable.ArrayBuffer[String],
   var types: mutable.Map[String, TypeSymbol],
+  // Type variables in the order they were defined
+  var typeNames: mutable.ArrayBuffer[String],
   var captures: mutable.Map[String, Capture],
   var namespaces: mutable.Map[String, Namespace]
 ) {
@@ -38,11 +42,19 @@ class Namespace(
       namespaces2.foreach { case (k, v) => getNamespace(k).importAll(v) }
   }
 
+  def terms: mutable.Map[String, Set[TermSymbol]] =
+    termsList.map { case (k, v) => k -> v.toSet }
+
   def addTerm(name: String, sym: TermSymbol): Unit =
-    val before = terms.getOrElse(name, Set.empty)
-    terms.update(name, before + sym)
-  def setType(name: String, sym: TypeSymbol): Unit =
+    val before = termsList.getOrElse(name, List.empty)
+    if (before.contains(sym)) return
+    termNames += name
+    termsList.update(name, before :+ sym)
+  def setType(name: String, sym: TypeSymbol): Unit = {
+    typeNames += name
     types.update(name, sym)
+  }
+
   def setCapture(name: String, sym: Capture): Unit =
     captures.update(name, sym)
 
@@ -65,7 +77,7 @@ class Namespace(
     namespaces.map { case (k, v) => k -> v.toBindings }.toMap)
 }
 object Namespace {
-  def empty: Namespace = Namespace(mutable.Map.empty, mutable.Map.empty, mutable.Map.empty, mutable.Map.empty)
+  def empty: Namespace = Namespace(mutable.Map.empty, mutable.ArrayBuffer(), mutable.Map.empty, mutable.ArrayBuffer(), mutable.Map.empty, mutable.Map.empty)
 }
 
 object scopes {
@@ -196,7 +208,7 @@ object scopes {
 
     def lookupFirstBlockParam(path: List[String], name: String)(using ErrorReporter): Set[BlockParam] =
        first(path, scope) { namespace =>
-        namespace.terms.get(name).map(set => 
+        namespace.terms.get(name).map(set =>
           set.collect { case bp: BlockParam => bp }
         )
       }.getOrElse(Set.empty)
