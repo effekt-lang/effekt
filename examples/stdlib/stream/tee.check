@@ -3,7 +3,6 @@ a{ ... }
 2
 3
 4
-5
 Cons(1, Cons(2, Cons(3, Cons(4, Nil()))))
 a done
 b{ ... }
@@ -16,7 +15,6 @@ b{ ... }
 7
 8
 9
-10
 Cons(1, Cons(2, Cons(3, Cons(4, Cons(5, Cons(6, Cons(7, Cons(8, Cons(9, Nil())))))))))
 b done
 tee{a}{b}{ ... }
@@ -24,14 +22,13 @@ tee{a}{b}{ ... }
 2
 3
 4
-5
 Cons(1, Cons(2, Cons(3, Cons(4, Nil()))))
 a done
+5
 6
 7
 8
 9
-10
 Cons(1, Cons(2, Cons(3, Cons(4, Cons(5, Cons(6, Cons(7, Cons(8, Cons(9, Nil())))))))))
 b done
 tee{b}{a}{ ... }
@@ -39,14 +36,13 @@ tee{b}{a}{ ... }
 2
 3
 4
-5
 Cons(1, Cons(2, Cons(3, Cons(4, Nil()))))
 a done
+5
 6
 7
 8
 9
-10
 Cons(1, Cons(2, Cons(3, Cons(4, Cons(5, Cons(6, Cons(7, Cons(8, Cons(9, Nil())))))))))
 b done
 a{ teeing{b}{ ... } }
@@ -54,7 +50,6 @@ a{ teeing{b}{ ... } }
 2
 3
 4
-5
 Cons(1, Cons(2, Cons(3, Cons(4, Nil()))))
 a done
 b{ teeing{a}{ ... } }
@@ -62,13 +57,12 @@ b{ teeing{a}{ ... } }
 2
 3
 4
-5
 Cons(1, Cons(2, Cons(3, Cons(4, Nil()))))
 a done
+5
 6
 7
 8
 9
-10
 Cons(1, Cons(2, Cons(3, Cons(4, Cons(5, Cons(6, Cons(7, Cons(8, Cons(9, Nil())))))))))
 b done

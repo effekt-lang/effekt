@@ -11,7 +11,7 @@ def main() = {
   println("The sum of squares from 1 to " ++ show(max) ++ " is:")
   println(sum {
     with boundary
-    with limit[Int](max + 1)
+    with limit[Int](max)
     squares()
   })
 }
