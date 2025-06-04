@@ -71,11 +71,9 @@ case class MarkdownSource(source: Source) extends Source {
                   if (!code.isEmpty) lines ++= code
                   lines += ""
                 // closing fence of ```effekt:ignore
-                case Ignore =>
-                  lines += ""
                 // closing fence of ```scala or other languages
-                // same semantic as effekt:ignore
-                case Other =>
+                case _ =>
+                  lines ++= code.map { _ => "" }
                   lines += ""
               }
               fenceType = None
