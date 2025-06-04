@@ -1374,6 +1374,35 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("Server publishes term names in the correct order") {
+    withClientAndServer { (client, server) =>
+      val source =
+        raw"""
+             |def foo(z: Int, y: Int, x: Int): Int = <>
+             |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"showHoles": true}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+
+      // Check that the scope bindings are in the correct order
+      val hole = receivedHoles.head.holes.head
+      assertEquals(hole.scope.bindings.length, 3)
+      assertEquals(hole.scope.bindings(0).name, "z")
+      assertEquals(hole.scope.bindings(1).name, "y")
+      assertEquals(hole.scope.bindings(2).name, "x")
+    }
+  }
+
   /**
    * By default, Scala types such as List and Option show pathological (de)serialization behavior with Gson.
    * We use a custom extension method `withScalaSupport` which adds support for Scala collections, fixing serialization.
