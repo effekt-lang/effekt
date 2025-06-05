@@ -768,6 +768,21 @@ class RecursiveDescentTests extends munit.FunSuite {
     )
   }
 
+  test("Try handler capability parses with correct span") {
+    val (source, pos) =
+      raw"""try { 42 } with eff: Eff { 42 }
+           |                ↑  ↑
+           |""".sourceAndPositions
+
+    val tryExpr = parseTry(source.content) match {
+      case t: Term.TryHandle => t
+      case other =>
+        throw new IllegalArgumentException(s"Expected Try but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(tryExpr.handlers.head.capability.get.span, Span(source, pos(0), pos(1), Synthesized))
+  }
+
   test("Type definition") {
     parseDefinition("type A = Int")
     parseDefinition("type A[X] = Int")

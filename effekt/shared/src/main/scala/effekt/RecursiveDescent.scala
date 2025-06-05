@@ -775,7 +775,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       `with` ~> backtrack(idDef() <~ `:`) ~ implementation() match {
         case capabilityName ~ impl =>
-          val capability = capabilityName map { name => BlockParam(name, Some(impl.interface)): BlockParam }
+          val capability = capabilityName map { name => BlockParam(name, Some(impl.interface), name.span.synthesized): BlockParam }
           Handler(capability.unspan, impl)
       }
 
@@ -1040,7 +1040,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
             val names = List.tabulate(arity){ n => s"__arg${n}" }
             BlockLiteral(
               Nil,
-              names.map { name => ValueParam(IdDef(name, Span.missing(source)), None) },
+              names.map { name => ValueParam(IdDef(name, Span.missing(source)), None, Span.missing(source)) },
               Nil,
               Return(Match(names.map{ name => Var(IdRef(Nil, name, Span.missing(source))) }, cs.unspan, None))) : BlockLiteral
           }
@@ -1325,7 +1325,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def lambdaParams(): (List[Id], List[ValueParam], List[BlockParam]) =
     nonterminal:
-      if isVariable then (Nil, List(ValueParam(idDef(), None)), Nil)  else paramsOpt()
+      if isVariable then (Nil, List(ValueParam(idDef(), None, span())), Nil)  else paramsOpt()
 
   def params(): (Many[Id], Many[ValueParam], Many[BlockParam]) =
     nonterminal:
@@ -1359,11 +1359,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def valueParam(): ValueParam =
     nonterminal:
-      ValueParam(idDef(), Some(valueTypeAnnotation()))
+      ValueParam(idDef(), Some(valueTypeAnnotation()), span())
 
   def valueParamOpt(): ValueParam =
     nonterminal:
-      ValueParam(idDef(), maybeValueTypeAnnotation())
+      ValueParam(idDef(), maybeValueTypeAnnotation(), span())
 
   def maybeBlockParams(): Many[BlockParam] =
     nonterminal:
@@ -1383,12 +1383,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def blockParam(): BlockParam =
     nonterminal:
-      BlockParam(idDef(), Some(blockTypeAnnotation()))
+      BlockParam(idDef(), Some(blockTypeAnnotation()), span())
 
   def blockParamOpt(): BlockParam =
     nonterminal:
-      BlockParam(idDef(), when(`:`)(Some(blockType()))(None))
-
+      BlockParam(idDef(), when(`:`)(Some(blockType()))(None), span())
 
   def maybeValueTypes(): Many[Type] =
     nonterminal:

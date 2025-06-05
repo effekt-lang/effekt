@@ -103,7 +103,7 @@ trait DocumentationGenerator {
     arr(list.map(generate))
 
   def generateVparams(list: List[ValueParam])(using C: Context): DocValue = arr(list.map {
-    case ValueParam(id, tpe) =>
+    case ValueParam(id, tpe, span) =>
       obj(HashMap(
         "kind" -> str("ValueParam"),
         "id" -> generate(id),
@@ -112,7 +112,7 @@ trait DocumentationGenerator {
   })
 
   def generateBparams(list: List[BlockParam])(using C: Context): DocValue = arr(list.map {
-    case BlockParam(id, tpe) =>
+    case BlockParam(id, tpe, span) =>
       obj(HashMap(
         "kind" -> str("BlockParam"),
         "id" -> generate(id),

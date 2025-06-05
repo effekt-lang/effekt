@@ -243,14 +243,14 @@ sealed trait Reference extends Named {
  *
  */
 case class ModuleDecl(path: String, includes: List[Include], defs: List[Def], doc: Doc, override val span: Span) extends Tree
-case class Include(path: String, span: Span) extends Tree
+case class Include(path: String, override val span: Span) extends Tree
 
 /**
  * Parameters and arguments
  */
 enum Param extends Definition {
-  case ValueParam(id: IdDef, tpe: Option[ValueType])
-  case BlockParam(id: IdDef, tpe: Option[BlockType])
+  case ValueParam(id: IdDef, tpe: Option[ValueType], override val span: Span)
+  case BlockParam(id: IdDef, tpe: Option[BlockType], override val span: Span)
 }
 export Param.*
 
