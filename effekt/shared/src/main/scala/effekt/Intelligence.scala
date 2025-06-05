@@ -24,25 +24,29 @@ trait Intelligence {
     def fullDescription: String = {
       val sig = signature.map(sig => s"```effekt\n$sig\n```").getOrElse { "" }
       val desc = description.getOrElse("")
-      val doc = documentation.flatten.getOrElse("").replace("\\n", "\n")
+      val doc = showDocumentation(documentation)
 
       s"""|#### $header
           |$sig
-          |$desc
-          |$doc
+          |$desc$doc
           |""".stripMargin
     }
 
     def shortDescription: String = {
       val sig = signature.map(sig => s"```effekt\n$sig\n```").getOrElse { "" }
-      val doc = documentation.flatten.getOrElse("").replace("\\n", "\n")
+      val doc = showDocumentation(documentation)
 
       s"""|#### $header
-          |$sig
-          |$doc
+          |$sig$doc
           |""".stripMargin
     }
   }
+
+  def showDocumentation(documentation: Option[Doc]): String =
+    documentation.flatten
+      .map('\n' +: _)
+      .getOrElse("")
+      .replace("\\n", "\n")
 
   private def sortByPosition(trees: Vector[Tree])(using C: Context): Vector[Tree] =
     val pos = C.positions
