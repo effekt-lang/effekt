@@ -1247,10 +1247,10 @@ class RecursiveDescentTests extends munit.FunSuite {
   }
 
   test("Extern effect‐body parses with correct span") {
-    val (source, span) =
+    val (source, pos) =
       raw"""extern def foo(): Int = default { foo() }
-           |↑                                       ↑
-           |""".sourceAndSpan
+           |↑                       ↑      ↑         ↑
+           |""".sourceAndPositions
 
     val definition = parseToplevel(source.content)
 
@@ -1260,7 +1260,8 @@ class RecursiveDescentTests extends munit.FunSuite {
         throw new IllegalArgumentException(s"Expected ExternDef but got ${other.getClass.getSimpleName}")
     }
 
-    assertEquals(extDef.span, span)
+    assertEquals(extDef.bodies.head.featureFlag.span, Span(source, pos(1), pos(2)))
+    assertEquals(extDef.span, Span(source, pos(0), pos.last))
   }
 
   test("Toplevel definitions") {

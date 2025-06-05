@@ -572,14 +572,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def featureFlag(): FeatureFlag = {
     expect("feature flag identifier") {
-      case Ident("default") => FeatureFlag.Default
-      case Ident(flag)      => FeatureFlag.NamedFeatureFlag(flag)
+      case Ident("default") => FeatureFlag.Default(span())
+      case Ident(flag)      => FeatureFlag.NamedFeatureFlag(flag, span())
     }
   }
 
   def maybeFeatureFlag(): FeatureFlag =
     nonterminal:
-      backtrack(featureFlag()).getOrElse(FeatureFlag.Default)
+      backtrack(featureFlag()).getOrElse(FeatureFlag.Default(span()))
 
   def externType(doc: Doc): Def =
     ExternType(`extern` ~> `type` ~> idDef(), maybeTypeParams(), doc, span())

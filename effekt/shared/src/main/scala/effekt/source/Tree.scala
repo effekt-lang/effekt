@@ -149,25 +149,25 @@ object Span {
  * Used to mark externs for different backends
  */
 enum FeatureFlag extends Tree {
-  case NamedFeatureFlag(id: String)
-  case Default
+  case NamedFeatureFlag(id: String, override val span: Span)
+  case Default(override val span: Span)
 
   def matches(name: String, matchDefault: Boolean = true): Boolean = this match {
-    case NamedFeatureFlag(n) if n == name => true
-    case Default => matchDefault
+    case NamedFeatureFlag(n, span) if n == name => true
+    case Default(span) => matchDefault
     case _ => false
   }
   def isDefault: Boolean = this == Default
 
   def matches(names: List[String]): Boolean = this match {
-    case NamedFeatureFlag(n) if names.contains(n) => true
-    case Default => true
+    case NamedFeatureFlag(n, span) if names.contains(n) => true
+    case Default(span) => true
     case _ => false
   }
 
   override def toString: String = this match {
-    case FeatureFlag.NamedFeatureFlag(id) => id
-    case FeatureFlag.Default => "else"
+    case FeatureFlag.NamedFeatureFlag(id, span) => id
+    case FeatureFlag.Default(span) => "else"
   }
 }
 object FeatureFlag {
@@ -191,7 +191,7 @@ object ExternBody {
   case class StringExternBody(featureFlag: FeatureFlag, template: Template[source.Term]) extends ExternBody
   case class EffektExternBody(featureFlag: FeatureFlag, body: source.Stmt) extends ExternBody
   case class Unsupported(message: util.messages.EffektError) extends ExternBody {
-    override def featureFlag: FeatureFlag = FeatureFlag.Default
+    override def featureFlag: FeatureFlag = FeatureFlag.Default(Span.missing)
   }
 }
 
