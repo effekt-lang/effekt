@@ -80,7 +80,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
 
   override def stmt(using Context, Unit) = {
     // local state
-    case source.DefStmt(tree @ VarDef(id, annot, binding, doc, span), rest) =>
+    case source.DefStmt(tree @ VarDef(id, annot, binding, doc, span), rest, _) =>
       query(binding) ++ (query(rest) -- CaptureSet(tree.symbol.capture))
   }
 

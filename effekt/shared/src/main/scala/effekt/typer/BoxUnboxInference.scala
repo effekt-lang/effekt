@@ -170,17 +170,17 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
   }
 
   def rewrite(t: Stmt)(using C: Context): Stmt = visit(t) {
-    case DefStmt(d, rest) =>
-      flattenNamespaces(d).foldRight(rewrite(rest)) { case (d, rest) => DefStmt(d, rest) }
+    case DefStmt(d, rest, span) =>
+      flattenNamespaces(d).foldRight(rewrite(rest)) { case (d, rest) => DefStmt(d, rest, span) }
 
-    case ExprStmt(e, rest) =>
-      ExprStmt(rewriteAsExpr(e), rewrite(rest))
+    case ExprStmt(e, rest, span) =>
+      ExprStmt(rewriteAsExpr(e), rewrite(rest), span)
 
-    case Return(e) =>
-      Return(rewriteAsExpr(e))
+    case Return(e, span) =>
+      Return(rewriteAsExpr(e), span)
 
-    case BlockStmt(b) =>
-      BlockStmt(rewrite(b))
+    case BlockStmt(b, span) =>
+      BlockStmt(rewrite(b), span)
   }
 
   def rewrite(h: Handler)(using Context): Handler = visit(h) {

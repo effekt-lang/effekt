@@ -627,7 +627,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   def checkStmt(stmt: Stmt, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
     checkAgainst(stmt, expected) {
       // local mutable state
-      case source.DefStmt(d @ source.VarDef(id, annot, binding, doc, span), rest) =>
+      case source.DefStmt(d @ source.VarDef(id, annot, binding, doc, span), rest, _) =>
         val sym = d.symbol
         val stCapt = CaptureSet(sym.capture)
 
@@ -648,20 +648,20 @@ object Typer extends Phase[NameResolved, Typechecked] {
           }
         }
 
-      case source.DefStmt(b, rest) =>
+      case source.DefStmt(b, rest, span) =>
         val Result(t, effBinding) = Context in { precheckDef(b); synthDef(b) }
         val Result(r, effStmt) = checkStmt(rest, expected)
         Result(r, effBinding ++ effStmt)
 
       // <expr> ; <stmt>
-      case source.ExprStmt(e, rest) =>
+      case source.ExprStmt(e, rest, span) =>
         val Result(_, eff1) = checkExpr(e, None)
         val Result(r, eff2) = checkStmt(rest, expected)
         Result(r, eff1 ++ eff2)
 
-      case source.Return(e)        => checkExpr(e, expected)
+      case source.Return(e, span)        => checkExpr(e, expected)
 
-      case source.BlockStmt(stmts) => Context in { checkStmt(stmts, expected) }
+      case source.BlockStmt(stmts, span) => Context in { checkStmt(stmts, expected) }
     }
 
   // not really checking, only if defs are fully annotated, we add them to the typeDB

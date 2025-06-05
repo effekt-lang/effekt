@@ -147,25 +147,25 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transform(tree: source.Stmt)(using Context): Stmt = tree match {
     // { e; stmt } --> { let _ = e; stmt }
-    case source.ExprStmt(e, rest) if pureOrIO(e) =>
+    case source.ExprStmt(e, rest, span) if pureOrIO(e) =>
       val (expr, bs) = Context.withBindings { transformAsExpr(e) }
       val let = Let(Wildcard(), expr.tpe, expr, transform(rest))
       Binding(bs, let)
 
     // { e; stmt } --> { val _ = e; stmt }
-    case source.ExprStmt(e, rest) =>
+    case source.ExprStmt(e, rest, span) =>
       val binding = insertBindings { Return(transformAsPure(e)) }
       Val(Wildcard(), binding.tpe, binding, transform(rest))
 
     // return e
-    case source.Return(e) =>
+    case source.Return(e, span) =>
       insertBindings { Return(transformAsPure(e)) }
 
     // simply drop superfluous {}s
-    case source.BlockStmt(b) =>
+    case source.BlockStmt(b, span) =>
       transform(b)
 
-    case source.DefStmt(d, rest) => d match {
+    case source.DefStmt(d, rest, span) => d match {
       case f @ source.FunDef(id, tps, vps, bps, ret, body, doc, span) =>
         val tparams = tps.map { p => p.symbol }
         val cparams = bps.map { b => b.symbol.capture }
@@ -536,7 +536,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case _ => None
   }
   def collectClauses(stmt: source.Stmt)(using Context): Option[List[Clause]] = stmt match {
-    case source.Stmt.Return(d) => collectClauses(d)
+    case source.Stmt.Return(d, span) => collectClauses(d)
     case _ => None
   }
 

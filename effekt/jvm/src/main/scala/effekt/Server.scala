@@ -479,7 +479,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     contentTpe <- C.inferredTypeOption(hole.stmts)
     if holeTpe == contentTpe
     res <- hole match {
-      case Hole(id, source.Return(exp), span) => for {
+      case Hole(id, source.Return(exp, _), span) => for {
         text <- positions.textOf(exp)
       } yield EffektCodeAction("Close hole", span, text)
 

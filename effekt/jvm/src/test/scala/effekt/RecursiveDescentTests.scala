@@ -734,14 +734,14 @@ class RecursiveDescentTests extends munit.FunSuite {
     {
       val (source, pos) =
         raw"""Foo { 43 }
-             |↑  ↑
+             |↑  ↑  ↑ ↑
              |""".sourceAndPositions
       assertEquals(
         parseImplementation(source.content),
         Implementation(
           TypeRef(IdRef(Nil, "Foo", Span(source, pos(0), pos(1))), Many.empty(Span(source, pos(1), pos(1))), Span(source, pos(0), pos(1), Synthesized)),
           List(OpClause(IdRef(Nil, "Foo", Span(source, pos(0), pos(1), Synthesized)), Nil, Nil, Nil, None,
-            Return(Literal(43, symbols.builtins.TInt)), IdDef("resume", Span(source, pos(1), pos(1)))))))
+            Return(Literal(43, symbols.builtins.TInt), Span(source, pos(2), pos(3))), IdDef("resume", Span(source, pos(1), pos(1)))))))
     }
   }
 
@@ -1026,7 +1026,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     val definition = parseStmts(source.content)
 
     val regDef = definition match {
-      case DefStmt(rd@RegDef(id, annot, region, binding, doc, span), _) => rd
+      case DefStmt(rd@RegDef(id, annot, region, binding, doc, span), _, _) => rd
       case other =>
         throw new IllegalArgumentException(s"Expected RegDef but got ${other.getClass.getSimpleName}")
     }
@@ -1043,7 +1043,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     val definition = parseStmts(source.content)
 
     val varDef = definition match {
-      case DefStmt(vd@VarDef(id, annot, binding, doc, span), _) => vd
+      case DefStmt(vd@VarDef(id, annot, binding, doc, span), _, _) => vd
       case other =>
         throw new IllegalArgumentException(s"Expected VarDef but got ${other.getClass.getSimpleName}")
     }

@@ -265,21 +265,21 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   def resolve(s: source.Stmt)(using Context): Unit = Context.focusing(s) {
 
-    case source.DefStmt(d, rest) =>
+    case source.DefStmt(d, rest, span) =>
       // resolve declarations but do not resolve bodies
       preresolve(d)
       // resolve bodies
       resolve(d)
       resolve(rest)
 
-    case source.ExprStmt(term, rest) =>
+    case source.ExprStmt(term, rest, span) =>
       resolve(term)
       resolve(rest)
 
-    case source.Return(term) =>
+    case source.Return(term, span) =>
       resolve(term)
 
-    case source.BlockStmt(stmts) =>
+    case source.BlockStmt(stmts, span) =>
       Context scoped { resolve(stmts) }
   }
 

@@ -201,21 +201,20 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       (peek.kind match {
         case `val`  => valStmt()
-        case _ if isDefinition => DefStmt(definition(), semi() ~> stmts())
+        case _ if isDefinition => DefStmt(definition(), semi() ~> stmts(), span())
         case `with` => withStmt()
-        case `var`  => DefStmt(varDef(), semi() ~> stmts())
+        case `var`  => DefStmt(varDef(), semi() ~> stmts(), span())
         case `return` =>
-          val result = `return` ~> Return(expr())
-          maybeSemi()
+          val result = `return` ~> Return(expr() <~ maybeSemi(), span())
           result
         case `}` => // Unexpected end of <STMTS> =>
           // insert a synthetic `return ()` into the block
-          Return(UnitLit())
+          Return(UnitLit(), span())
         case _ =>
           val e = expr()
           semi()
-          if returnPosition then Return(e)
-          else ExprStmt(e, stmts())
+          if returnPosition then Return(e, span())
+          else ExprStmt(e, stmts(), span())
       }) labelled "statements"
 
   // ATTENTION: here the grammar changed (we added `with val` to disambiguate)
@@ -228,30 +227,30 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case `(` => valueParamsOpt()
         case _ => List(valueParamOpt()) // TODO copy position
       })
-      desugarWith(params, Nil, `=` ~> expr(), semi() ~> stmts())
+      desugarWith(params, Nil, `=` ~> expr(), semi() ~> stmts(), span())
 
     case `def` =>
       val params = (`def` ~> peek.kind match {
         case `{` => blockParamsOpt()
         case _ => List(blockParamOpt()) // TODO copy position
       })
-      desugarWith(Nil, params, `=` ~> expr(), semi() ~> stmts())
+      desugarWith(Nil, params, `=` ~> expr(), semi() ~> stmts(), span())
 
-    case _ => desugarWith(Nil, Nil, expr(), semi() ~> stmts())
+    case _ => desugarWith(Nil, Nil, expr(), semi() ~> stmts(), span())
   }
 
-  def desugarWith(vparams: List[ValueParam], bparams: List[BlockParam], call: Term, body: Stmt): Stmt = call match {
+  def desugarWith(vparams: List[ValueParam], bparams: List[BlockParam], call: Term, body: Stmt, span: Span): Stmt = call match {
      case m@MethodCall(receiver, id, tps, vargs, bargs) =>
-       Return(MethodCall(receiver, id, tps, vargs, bargs :+ (BlockLiteral(Nil, vparams, bparams, body))))
+       Return(MethodCall(receiver, id, tps, vargs, bargs :+ (BlockLiteral(Nil, vparams, bparams, body))), span.synthesized)
      case c@Call(callee, tps, vargs, bargs) =>
-       Return(Call(callee, tps, vargs, bargs :+ (BlockLiteral(Nil, vparams, bparams, body))))
+       Return(Call(callee, tps, vargs, bargs :+ (BlockLiteral(Nil, vparams, bparams, body))), span.synthesized)
      case Var(id) =>
        val tgt = IdTarget(id)
-       Return(Call(tgt, Nil, Nil, (BlockLiteral(Nil, vparams, bparams, body)) :: Nil))
+       Return(Call(tgt, Nil, Nil, (BlockLiteral(Nil, vparams, bparams, body)) :: Nil), span.synthesized)
      case Do(effect, id, targs, vargs, bargs) =>
-      Return(Do(effect, id, targs, vargs, bargs :+ BlockLiteral(Nil, vparams, bparams, body)))
+      Return(Do(effect, id, targs, vargs, bargs :+ BlockLiteral(Nil, vparams, bparams, body)), span.synthesized)
      case term =>
-       Return(Call(ExprTarget(term), Nil, Nil, (BlockLiteral(Nil, vparams, bparams, body)) :: Nil))
+       Return(Call(ExprTarget(term), Nil, Nil, (BlockLiteral(Nil, vparams, bparams, body)) :: Nil), span.synthesized)
   }
 
   def maybeSemi(): Unit = if isSemi then semi()
@@ -285,8 +284,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def stmt(): Stmt =
     nonterminal:
       {
-        if peek(`{`) then braces { BlockStmt(stmts()) }
-        else when(`return`) { Return(expr()) } { Return(expr()) }
+        if peek(`{`) then BlockStmt(braces { stmts() }, span())
+        else when(`return`) { Return(expr(), span()) } { Return(expr(), span()) }
       } labelled "statement"
 
 
@@ -429,7 +428,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           val binding = stmt()
           val endPos = pos()
           val valDef = ValDef(id, tpe, binding, doc, Span(source, startPos, endPos)).withRangeOf(startMarker, binding)
-          DefStmt(valDef, { semi(); stmts() })
+          DefStmt(valDef, { semi(); stmts() }, span())
       }
       def matchLhs() =
         maybeDocumentation() ~ (`val` ~> matchPattern()) ~ manyWhile(`and` ~> matchGuard(), `and`) <~ `=` match {
@@ -437,7 +436,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
             val binding = stmt()
             val endPos = pos()
             val valDef = ValDef(id, None, binding, doc, Span(source, startPos, endPos)).withRangeOf(startMarker, binding)
-            DefStmt(valDef, { semi(); stmts() })
+            DefStmt(valDef, { semi(); stmts() }, span())
           case doc ~ p ~ guards =>
             // matches do not support doc comments, so we ignore `doc`
             val sc = expr()
@@ -445,7 +444,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
             val body = semi() ~> stmts()
             val clause = MatchClause(p, guards, body).withRangeOf(p, sc)
             val matching = Match(List(sc), List(clause), default).withRangeOf(startMarker, sc)
-            Return(matching)
+            Return(matching, span())
         }
 
       simpleLhs() getOrElse matchLhs()
@@ -717,7 +716,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       If(`if` ~> parens { matchGuards().unspan },
         stmt(),
-        when(`else`) { stmt() } { Return(UnitLit()) })
+        when(`else`) { stmt() } { Return(UnitLit(), span().emptyAfter) })
 
   def whileExpr(): Term =
     nonterminal:
@@ -921,7 +920,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   private def binaryOp(lhs: Term, op: Token, rhs: Term): Term =
     nonterminal:
        if isThunkedOp(op.kind) then
-         Call(IdTarget(IdRef(Nil, opName(op.kind), op.span(source).synthesized)), Nil, Nil, List(BlockLiteral(Nil, Nil, Nil, Return(lhs)), BlockLiteral(Nil, Nil, Nil, Return(rhs))))
+         Call(IdTarget(IdRef(Nil, opName(op.kind), op.span(source).synthesized)), Nil, Nil, List(BlockLiteral(Nil, Nil, Nil, Return(lhs, lhs.span)), BlockLiteral(Nil, Nil, Nil, Return(rhs, rhs.span))))
        else
          Call(IdTarget(IdRef(Nil, opName(op.kind), op.span(source).synthesized)), Nil, List(lhs, rhs), Nil)
 
@@ -1042,7 +1041,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
               Nil,
               names.map { name => ValueParam(IdDef(name, Span.missing(source)), None, Span.missing(source)) },
               Nil,
-              Return(Match(names.map{ name => Var(IdRef(Nil, name, Span.missing(source))) }, cs.unspan, None))) : BlockLiteral
+              Return(Match(names.map{ name => Var(IdRef(Nil, name, Span.missing(source))) }, cs.unspan, None), Span.missing(source))) : BlockLiteral
           }
           case _ =>
             // { (x: Int) => ... }
@@ -1103,7 +1102,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def hole(): Term = {
     nonterminal:
       peek.kind match {
-        case `<>` => `<>` ~> Hole(IdDef("hole", span().synthesized), Return(UnitLit()), span())
+        case `<>` => `<>` ~> Hole(IdDef("hole", span().synthesized), Return(UnitLit(), span().synthesized), span())
         case `<{` =>
           val s = `<{` ~> stmts() <~ `}>`
           Hole(IdDef("hole", span().synthesized), s, span())
@@ -1138,7 +1137,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
             Do(None, IdRef(Nil, "splice", Span.missing(source)), Nil, List(arg), Nil)
           }
           val body = interleave(doLits, doSplices)
-            .foldRight(Return(UnitLit())) { (term, acc) => ExprStmt(term, acc) }
+            .foldRight(Return(UnitLit(), Span.missing(source))) { (term, acc) => ExprStmt(term, acc, Span.missing(source)) }
           val blk = BlockLiteral(Nil, Nil, Nil, body)
           Call(IdTarget(target), Nil, Nil, List(blk))
       }

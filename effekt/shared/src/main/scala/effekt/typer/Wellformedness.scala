@@ -99,7 +99,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
   }
 
   override def stmt(using Context, WFContext) = {
-    case stmt @ source.DefStmt(tree @ source.VarDef(id, annot, rhs, doc, span), rest) =>
+    case stmt @ source.DefStmt(tree @ source.VarDef(id, annot, rhs, doc, span), rest, _) =>
       val capt = tree.symbol.capture
       binding(captures = Set(capt)) {
 

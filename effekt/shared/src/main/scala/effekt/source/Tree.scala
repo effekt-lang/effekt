@@ -415,10 +415,10 @@ export Def.*
  *
  */
 enum Stmt extends Tree {
-  case DefStmt(d: Def, rest: Stmt)
-  case ExprStmt(d: Term, rest: Stmt)
-  case Return(d: Term)
-  case BlockStmt(stmts: Stmt)
+  case DefStmt(d: Def, rest: Stmt, override val span: Span)
+  case ExprStmt(d: Term, rest: Stmt, override val span: Span)
+  case Return(d: Term, override val span: Span)
+  case BlockStmt(stmts: Stmt, override val span: Span)
 }
 export Stmt.*
 
