@@ -108,6 +108,7 @@ trait DocumentationGenerator {
         "kind" -> str("ValueParam"),
         "id" -> generate(id),
         "tpe" -> tpe.map(generate).getOrElse(empty),
+        "span" -> generate(span),
       ))
   })
 
@@ -117,6 +118,7 @@ trait DocumentationGenerator {
         "kind" -> str("BlockParam"),
         "id" -> generate(id),
         "tpe" -> tpe.map(generate).getOrElse(empty),
+        "span" -> generate(span),
       ))
   })
 
@@ -148,6 +150,7 @@ trait DocumentationGenerator {
     case Include(path, span) => obj(HashMap(
       "kind" -> str("Include"),
       "path" -> str(path),
+      "span" -> generate(span),
     ))
   }
 
