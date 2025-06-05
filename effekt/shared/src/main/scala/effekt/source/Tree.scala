@@ -177,8 +177,8 @@ object FeatureFlag {
       case Nil => false
       case name :: other =>
         self.collectFirst {
-          case ExternBody.StringExternBody(flag, a) if flag.matches(name) => ()
-          case ExternBody.EffektExternBody(flag, a) if flag.matches(name) => ()
+          case ExternBody.StringExternBody(flag, a, span) if flag.matches(name) => ()
+          case ExternBody.EffektExternBody(flag, a, span) if flag.matches(name) => ()
         }.isDefined || (self.supportedByFeatureFlags(other))
     }
   }
@@ -188,8 +188,8 @@ sealed trait ExternBody extends Tree {
   def featureFlag: FeatureFlag
 }
 object ExternBody {
-  case class StringExternBody(featureFlag: FeatureFlag, template: Template[source.Term]) extends ExternBody
-  case class EffektExternBody(featureFlag: FeatureFlag, body: source.Stmt) extends ExternBody
+  case class StringExternBody(featureFlag: FeatureFlag, template: Template[source.Term], override val span: Span) extends ExternBody
+  case class EffektExternBody(featureFlag: FeatureFlag, body: source.Stmt, override val span: Span) extends ExternBody
   case class Unsupported(message: util.messages.EffektError) extends ExternBody {
     override def featureFlag: FeatureFlag = FeatureFlag.Default(Span.missing)
   }

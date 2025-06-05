@@ -340,8 +340,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
         bodies.foreach {
-          case source.ExternBody.StringExternBody(ff, body) => body.args.foreach(resolve)
-          case source.ExternBody.EffektExternBody(ff, body) => resolve(body)
+          case source.ExternBody.StringExternBody(ff, body, span) => body.args.foreach(resolve)
+          case source.ExternBody.EffektExternBody(ff, body, span) => resolve(body)
           case u: source.ExternBody.Unsupported => u
         }
       }

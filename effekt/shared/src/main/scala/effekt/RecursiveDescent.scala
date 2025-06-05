@@ -614,10 +614,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       peek.kind match {
         case _: Ident => (peek(1).kind match {
-          case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> stmts() <~ `}`)
-          case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template())
+          case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> stmts() <~ `}`, span())
+          case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template(), span())
         }) labelled "extern body (string or block)"
-        case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template())
+        case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template(), span())
       }
 
   private def isExternBodyStart: Boolean =

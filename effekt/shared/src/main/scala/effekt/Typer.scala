@@ -871,9 +871,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
           // Note: Externs are always annotated with a type
           val expectedReturnType = d.symbol.annotatedType.get.result
           bodies.foreach {
-            case source.ExternBody.StringExternBody(ff, body) =>
+            case source.ExternBody.StringExternBody(ff, body, span) =>
               body.args.foreach { arg => checkExpr(arg, None) }
-            case source.ExternBody.EffektExternBody(ff, body) =>
+            case source.ExternBody.EffektExternBody(ff, body, span) =>
               checkStmt(body, Some(expectedReturnType))
             case u: source.ExternBody.Unsupported => u
           }

@@ -109,7 +109,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.capture)
       val tBody = bodies match {
-        case source.ExternBody.StringExternBody(ff, body) :: Nil =>
+        case source.ExternBody.StringExternBody(ff, body, span) :: Nil =>
           val args = body.args.map(transformAsExpr).map {
             case p: Pure => p: Pure
             case _ => Context.abort("Spliced arguments need to be pure expressions.")

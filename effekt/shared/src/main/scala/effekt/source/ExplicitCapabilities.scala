@@ -132,13 +132,13 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
   override def rewrite(body: ExternBody)(using context.Context): ExternBody = 
     body match {
-      case b @ source.ExternBody.StringExternBody(ff, body) =>
+      case b @ source.ExternBody.StringExternBody(ff, body, span) =>
         val rewrittenTemplate =
           body.copy(
             args = body.args.map { rewrite }
           )
         b.copy(template = rewrittenTemplate)
-      case b @ source.ExternBody.EffektExternBody(ff, body) =>
+      case b @ source.ExternBody.EffektExternBody(ff, body, span) =>
         val rewrittenBody = rewrite(body) 
         b.copy(body = rewrittenBody)
       case u: source.ExternBody.Unsupported => u
