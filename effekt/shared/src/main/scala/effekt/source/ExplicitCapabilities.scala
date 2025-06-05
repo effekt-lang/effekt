@@ -132,13 +132,13 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
   override def rewrite(body: ExternBody)(using context.Context): ExternBody = 
     body match {
-      case b @ source.ExternBody.StringExternBody(ff, body) =>
+      case b @ source.ExternBody.StringExternBody(ff, body, span) =>
         val rewrittenTemplate =
           body.copy(
             args = body.args.map { rewrite }
           )
         b.copy(template = rewrittenTemplate)
-      case b @ source.ExternBody.EffektExternBody(ff, body) =>
+      case b @ source.ExternBody.EffektExternBody(ff, body, span) =>
         val rewrittenBody = rewrite(body) 
         b.copy(body = rewrittenBody)
       case u: source.ExternBody.Unsupported => u
@@ -154,6 +154,6 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
   def definitionFor(s: symbols.BlockParam)(using C: Context): source.BlockParam =
     val id = IdDef(s.name.name, Span.missing)
     C.assignSymbol(id, s)
-    val tree: source.BlockParam = source.BlockParam(id, s.tpe.map { source.BlockTypeTree.apply })
+    val tree: source.BlockParam = source.BlockParam(id, s.tpe.map { source.BlockTypeTree.apply }, Span.missing)
     tree
 }

@@ -92,7 +92,7 @@ trait Intelligence {
 
   def getSymbolOf(tree: Tree)(using C: Context): Option[Symbol] =
     tree match {
-      case i @ Include(path) => C.annotationOption(Annotations.IncludedSymbols, i)
+      case i @ Include(path, span) => C.annotationOption(Annotations.IncludedSymbols, i)
       case _ => None
     }
 

@@ -97,7 +97,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // process all includes, updating the terms and types in scope
     val includes = decl.includes collect {
-      case im @ source.Include(path) =>
+      case im @ source.Include(path, span) =>
         // [[recursiveProtect]] is called here so the source position is the recursive import
         val mod = Context.at(im) { recursiveProtect(decl){ importDependency(path) } }
         Context.annotate(Annotations.IncludedSymbols, im, mod)
@@ -265,21 +265,21 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   def resolve(s: source.Stmt)(using Context): Unit = Context.focusing(s) {
 
-    case source.DefStmt(d, rest) =>
+    case source.DefStmt(d, rest, span) =>
       // resolve declarations but do not resolve bodies
       preresolve(d)
       // resolve bodies
       resolve(d)
       resolve(rest)
 
-    case source.ExprStmt(term, rest) =>
+    case source.ExprStmt(term, rest, span) =>
       resolve(term)
       resolve(rest)
 
-    case source.Return(term) =>
+    case source.Return(term, span) =>
       resolve(term)
 
-    case source.BlockStmt(stmts) =>
+    case source.BlockStmt(stmts, span) =>
       Context scoped { resolve(stmts) }
   }
 
@@ -340,8 +340,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
         bodies.foreach {
-          case source.ExternBody.StringExternBody(ff, body) => body.args.foreach(resolve)
-          case source.ExternBody.EffektExternBody(ff, body) => resolve(body)
+          case source.ExternBody.StringExternBody(ff, body, span) => body.args.foreach(resolve)
+          case source.ExternBody.EffektExternBody(ff, body, span) => resolve(body)
           case u: source.ExternBody.Unsupported => u
         }
       }

@@ -69,8 +69,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(ff: FeatureFlag): Doc = ff match {
-    case FeatureFlag.NamedFeatureFlag(name) => name
-    case FeatureFlag.Default => "default"
+    case FeatureFlag.NamedFeatureFlag(name, span) => name
+    case FeatureFlag.Default(span) => "default"
   }
 
   def toDoc(t: Template[Pure]): Doc =

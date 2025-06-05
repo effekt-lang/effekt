@@ -149,25 +149,28 @@ object Span {
  * Used to mark externs for different backends
  */
 enum FeatureFlag extends Tree {
-  case NamedFeatureFlag(id: String)
-  case Default
+  case NamedFeatureFlag(id: String, override val span: Span)
+  case Default(override val span: Span)
 
   def matches(name: String, matchDefault: Boolean = true): Boolean = this match {
-    case NamedFeatureFlag(n) if n == name => true
-    case Default => matchDefault
+    case NamedFeatureFlag(n, span) if n == name => true
+    case Default(span) => matchDefault
     case _ => false
   }
-  def isDefault: Boolean = this == Default
+  def isDefault: Boolean = this match {
+    case Default(_) => true
+    case _          => false
+  }
 
   def matches(names: List[String]): Boolean = this match {
-    case NamedFeatureFlag(n) if names.contains(n) => true
-    case Default => true
+    case NamedFeatureFlag(n, span) if names.contains(n) => true
+    case Default(span) => true
     case _ => false
   }
 
   override def toString: String = this match {
-    case FeatureFlag.NamedFeatureFlag(id) => id
-    case FeatureFlag.Default => "else"
+    case FeatureFlag.NamedFeatureFlag(id, span) => id
+    case FeatureFlag.Default(span) => "else"
   }
 }
 object FeatureFlag {
@@ -177,8 +180,8 @@ object FeatureFlag {
       case Nil => false
       case name :: other =>
         self.collectFirst {
-          case ExternBody.StringExternBody(flag, a) if flag.matches(name) => ()
-          case ExternBody.EffektExternBody(flag, a) if flag.matches(name) => ()
+          case ExternBody.StringExternBody(flag, a, span) if flag.matches(name) => ()
+          case ExternBody.EffektExternBody(flag, a, span) if flag.matches(name) => ()
         }.isDefined || (self.supportedByFeatureFlags(other))
     }
   }
@@ -188,10 +191,10 @@ sealed trait ExternBody extends Tree {
   def featureFlag: FeatureFlag
 }
 object ExternBody {
-  case class StringExternBody(featureFlag: FeatureFlag, template: Template[source.Term]) extends ExternBody
-  case class EffektExternBody(featureFlag: FeatureFlag, body: source.Stmt) extends ExternBody
+  case class StringExternBody(featureFlag: FeatureFlag, template: Template[source.Term], override val span: Span) extends ExternBody
+  case class EffektExternBody(featureFlag: FeatureFlag, body: source.Stmt, override val span: Span) extends ExternBody
   case class Unsupported(message: util.messages.EffektError) extends ExternBody {
-    override def featureFlag: FeatureFlag = FeatureFlag.Default
+    override def featureFlag: FeatureFlag = FeatureFlag.Default(Span.missing)
   }
 }
 
@@ -243,14 +246,14 @@ sealed trait Reference extends Named {
  *
  */
 case class ModuleDecl(path: String, includes: List[Include], defs: List[Def], doc: Doc, override val span: Span) extends Tree
-case class Include(path: String) extends Tree
+case class Include(path: String, override val span: Span) extends Tree
 
 /**
  * Parameters and arguments
  */
 enum Param extends Definition {
-  case ValueParam(id: IdDef, tpe: Option[ValueType])
-  case BlockParam(id: IdDef, tpe: Option[BlockType])
+  case ValueParam(id: IdDef, tpe: Option[ValueType], override val span: Span)
+  case BlockParam(id: IdDef, tpe: Option[BlockType], override val span: Span)
 }
 export Param.*
 
@@ -415,10 +418,10 @@ export Def.*
  *
  */
 enum Stmt extends Tree {
-  case DefStmt(d: Def, rest: Stmt)
-  case ExprStmt(d: Term, rest: Stmt)
-  case Return(d: Term)
-  case BlockStmt(stmts: Stmt)
+  case DefStmt(d: Def, rest: Stmt, override val span: Span)
+  case ExprStmt(d: Term, rest: Stmt, override val span: Span)
+  case Return(d: Term, override val span: Span)
+  case BlockStmt(stmts: Stmt, override val span: Span)
 }
 export Stmt.*
 

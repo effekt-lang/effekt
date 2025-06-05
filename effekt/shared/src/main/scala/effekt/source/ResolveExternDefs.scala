@@ -41,7 +41,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
   def rewrite(defn: Def)(using Context): Option[Def] = Context.focusing(defn) {
       case Def.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) =>
         findPreferred(bodies) match {
-          case body@ExternBody.StringExternBody(featureFlag, template) =>
+          case body@ExternBody.StringExternBody(featureFlag, template, span) =>
             if (featureFlag.isDefault) {
               Context.warning(s"Extern definition ${id} contains extern string without feature flag. This will likely not work in other backends, "
                 + s"please annotate it with a feature flag (Supported by the current backend: ${Context.compiler.supportedFeatureFlags.mkString(", ")})")
@@ -50,7 +50,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
             val d = Def.ExternDef(capture, id, tparams, vparams, bparams, ret, List(body), doc, span)
             Context.copyAnnotations(defn, d)
             Some(d)
-          case ExternBody.EffektExternBody(featureFlag, body) =>
+          case ExternBody.EffektExternBody(featureFlag, body, span) =>
             val d = Def.FunDef(id, tparams, vparams, bparams, Some(ret).spanned(ret.span), body, doc, span)
             Context.copyAnnotations(defn, d)
             Context.annotate(Annotations.BoundCapabilities, d, Nil) // TODO ??

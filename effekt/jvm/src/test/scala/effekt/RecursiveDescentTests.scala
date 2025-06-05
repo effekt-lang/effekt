@@ -734,14 +734,14 @@ class RecursiveDescentTests extends munit.FunSuite {
     {
       val (source, pos) =
         raw"""Foo { 43 }
-             |↑  ↑
+             |↑  ↑  ↑ ↑
              |""".sourceAndPositions
       assertEquals(
         parseImplementation(source.content),
         Implementation(
           TypeRef(IdRef(Nil, "Foo", Span(source, pos(0), pos(1))), Many.empty(Span(source, pos(1), pos(1))), Span(source, pos(0), pos(1), Synthesized)),
           List(OpClause(IdRef(Nil, "Foo", Span(source, pos(0), pos(1), Synthesized)), Nil, Nil, Nil, None,
-            Return(Literal(43, symbols.builtins.TInt)), IdDef("resume", Span(source, pos(1), pos(1)))))))
+            Return(Literal(43, symbols.builtins.TInt), Span(source, pos(2), pos(3))), IdDef("resume", Span(source, pos(1), pos(1)))))))
     }
   }
 
@@ -766,6 +766,21 @@ class RecursiveDescentTests extends munit.FunSuite {
       with Eff3 { def op(x, y) = { x } def op2() = { () }}
       """
     )
+  }
+
+  test("Try handler capability parses with correct span") {
+    val (source, pos) =
+      raw"""try { 42 } with eff: Eff { 42 }
+           |                ↑  ↑
+           |""".sourceAndPositions
+
+    val tryExpr = parseTry(source.content) match {
+      case t: Term.TryHandle => t
+      case other =>
+        throw new IllegalArgumentException(s"Expected Try but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(tryExpr.handlers.head.capability.get.span, Span(source, pos(0), pos(1), Synthesized))
   }
 
   test("Type definition") {
@@ -1011,7 +1026,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     val definition = parseStmts(source.content)
 
     val regDef = definition match {
-      case DefStmt(rd@RegDef(id, annot, region, binding, doc, span), _) => rd
+      case DefStmt(rd@RegDef(id, annot, region, binding, doc, span), _, _) => rd
       case other =>
         throw new IllegalArgumentException(s"Expected RegDef but got ${other.getClass.getSimpleName}")
     }
@@ -1028,7 +1043,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     val definition = parseStmts(source.content)
 
     val varDef = definition match {
-      case DefStmt(vd@VarDef(id, annot, binding, doc, span), _) => vd
+      case DefStmt(vd@VarDef(id, annot, binding, doc, span), _, _) => vd
       case other =>
         throw new IllegalArgumentException(s"Expected VarDef but got ${other.getClass.getSimpleName}")
     }
@@ -1247,10 +1262,10 @@ class RecursiveDescentTests extends munit.FunSuite {
   }
 
   test("Extern effect‐body parses with correct span") {
-    val (source, span) =
+    val (source, pos) =
       raw"""extern def foo(): Int = default { foo() }
-           |↑                                       ↑
-           |""".sourceAndSpan
+           |↑                       ↑      ↑         ↑
+           |""".sourceAndPositions
 
     val definition = parseToplevel(source.content)
 
@@ -1260,7 +1275,9 @@ class RecursiveDescentTests extends munit.FunSuite {
         throw new IllegalArgumentException(s"Expected ExternDef but got ${other.getClass.getSimpleName}")
     }
 
-    assertEquals(extDef.span, span)
+    assertEquals(extDef.bodies.head.span, Span(source, pos(1), pos.last))
+    assertEquals(extDef.bodies.head.featureFlag.span, Span(source, pos(1), pos(2)))
+    assertEquals(extDef.span, Span(source, pos(0), pos.last))
   }
 
   test("Toplevel definitions") {
