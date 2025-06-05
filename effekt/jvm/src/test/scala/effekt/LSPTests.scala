@@ -1324,6 +1324,30 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("Server publishes holes for literate Effekt") {
+    withClientAndServer { (client, server) =>
+      val source = new TextDocumentItem("file://path/to/test.effekt.md", "literate effekt", 0,
+        raw"""# Some title
+             |```effekt
+             |def foo(x: Int): Bool = <>
+             |```
+             |""".stripMargin)
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"showHoles": true}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+    }
+  }
+  
   test("Server publishes hole id for nested defs") {
     withClientAndServer { (client, server) =>
       val source =
