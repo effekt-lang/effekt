@@ -1147,6 +1147,7 @@ class LSPTests extends FunSuite {
       didOpenParams.setTextDocument(source)
       server.getTextDocumentService().didOpen(didOpenParams)
 
+
       val expectedIRContents =
         raw"""ModuleDecl(
              |  test,
@@ -1184,9 +1185,18 @@ class LSPTests extends FunSuite {
              |              Synthesized()
              |            )
              |          ),
-             |          Return(Literal((), ValueTypeApp(Unit_405, Nil))),
+             |          Return(
+             |            Literal((), ValueTypeApp(Unit_whatever, Nil)),
+             |            Span(
+             |              StringSource(def main() = <>, file://test.effekt),
+             |              13,
+             |              15,
+             |              Synthesized()
+             |            )
+             |          ),
              |          Span(StringSource(def main() = <>, file://test.effekt), 13, 15, Real())
-             |        )
+             |        ),
+             |        Span(StringSource(def main() = <>, file://test.effekt), 13, 15, Real())
              |      ),
              |      None(),
              |      Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
@@ -1194,7 +1204,8 @@ class LSPTests extends FunSuite {
              |  ),
              |  None(),
              |  Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
-             |)""".stripMargin
+             |)
+             |""".stripMargin
 
       val receivedIRContent = client.receivedIR()
       assertEquals(receivedIRContent.length, 1)
