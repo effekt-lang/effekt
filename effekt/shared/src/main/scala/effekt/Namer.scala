@@ -97,7 +97,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // process all includes, updating the terms and types in scope
     val includes = decl.includes collect {
-      case im @ source.Include(path) =>
+      case im @ source.Include(path, span) =>
         // [[recursiveProtect]] is called here so the source position is the recursive import
         val mod = Context.at(im) { recursiveProtect(decl){ importDependency(path) } }
         Context.annotate(Annotations.IncludedSymbols, im, mod)

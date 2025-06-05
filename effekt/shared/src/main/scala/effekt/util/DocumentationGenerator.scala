@@ -145,7 +145,7 @@ trait DocumentationGenerator {
   }
 
   def generate(module: Include): DocValue = module match {
-    case Include(path) => obj(HashMap(
+    case Include(path, span) => obj(HashMap(
       "kind" -> str("Include"),
       "path" -> str(path),
     ))

@@ -328,7 +328,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def includeDecl(): Include =
     nonterminal:
-      Include(`import` ~> moduleName())
+      Include(`import` ~> moduleName(), span())
 
   def moduleName(): String =
     some(ident, `/`).mkString("/") labelled "module name"
