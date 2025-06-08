@@ -358,6 +358,11 @@ object Transformer {
         eraseValues(List(v), freeVariables(rest));
         transform(rest)
 
+      case machine.LiteralChar(machine.Variable(name, _), n, rest) =>
+        emit(Comment(s"literalChar $name, n=$n"))
+        emit(Add(name, ConstantInteger8(n.byteValue), ConstantInteger8(0)));
+        transform(rest)
+
       case machine.ForeignCall(variable @ machine.Variable(resultName, resultType), foreign, values, rest) =>
         emit(Comment(s"foreignCall $resultName : $resultType, foreign $foreign, ${values.length} values"))
         shareValues(values, freeVariables(rest));
@@ -431,6 +436,7 @@ object Transformer {
     case machine.Type.Int()          => IntegerType64()
     case machine.Type.Byte()         => IntegerType8()
     case machine.Type.Double()       => DoubleType()
+    case machine.Type.Char()         => IntegerType8()
     case machine.Type.Reference(tpe) => referenceType
   }
 
@@ -446,6 +452,7 @@ object Transformer {
       case machine.Type.Int()        => 8 // TODO Make fat?
       case machine.Type.Byte()       => 1
       case machine.Type.Double()     => 8 // TODO Make fat?
+      case machine.Type.Char()       => 1
       case machine.Type.Reference(_) => 16
     }
 

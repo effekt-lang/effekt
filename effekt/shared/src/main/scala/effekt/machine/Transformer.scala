@@ -410,6 +410,12 @@ object Transformer {
         LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
       }
 
+    case core.Literal(value: Char, _) =>
+      val literal_binding = Variable(freshName("charLiteral"), Type.Char());
+      shift { k => 
+        LiteralChar(literal_binding, value, k(literal_binding))
+      }
+
     case core.PureApp(core.BlockVar(blockName, tpe: core.BlockType.Function, _), List(), List(arg)) if blockName.name.name.startsWith("@coerce") =>
       val variable = Variable(freshName("coerceApp"), transform(tpe.result))
       transform(arg).flatMap { value =>
