@@ -49,7 +49,11 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(rest) - name
     case LiteralUTF8String(name, utf8, rest) =>
       freeVariables(rest) - name
+    case LiteralChar(name, value, rest) =>
+      freeVariables(rest) - name
     case ForeignCall(name, builtin, arguments, rest) =>
       arguments.toSet ++ (freeVariables(rest) - name)
+    case Coerce(name, value, rest) =>
+      Set(value) ++ (freeVariables(rest) - name)
     case Hole => Set.empty
   }

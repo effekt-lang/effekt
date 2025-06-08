@@ -32,6 +32,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.Int()          => "Int"
     case Type.Byte()         => "Byte"
     case Type.Double()       => "Double"
+    case Type.Char()         => "Char"
     case Type.Reference(tpe) => toDoc(tpe) <> "*"
   }
 
@@ -106,6 +107,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case LiteralUTF8String(name, utf8, rest) =>
       "let" <+> name <+> "=" <+> ("\"" + (utf8.map { b => "\\" + f"$b%02x" }).mkString + "\"") <> ";" <> line <> toDocStmts(rest)
+
+    case LiteralChar(name, value, rest) =>
+      "let" <+> name <+> "=" <+> value <> ";" <> line <> toDocStmts(rest)
+
+    case Coerce(name, value, rest) =>
+      "let" <+> name <+> ":" <+> toDoc(name.tpe) <+> "=" <+> "coerce" <+> value <+> ":" <+> toDoc(value.tpe) <> ";" <> line <> toDocStmts(rest)
 
     case Hole => "<>"
   }
