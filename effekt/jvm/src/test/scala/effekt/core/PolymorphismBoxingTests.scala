@@ -18,6 +18,8 @@ abstract class AbstractPolymorphismBoxingTests extends CorePhaseTests(Polymorphi
     "boxInt" -> Id("boxInt"),
     "unboxInt" -> Id("unboxInt"),
     "unboxString" -> Id("unboxInt"),
+    "coerceIntPos" -> Id("@coerceIntPos"),
+    "coercePosInt" -> Id("@coercePosInt"),
   )
   val boxDecls = List(
     Declaration.Data(defaultNames("BoxedString"), List(),
@@ -87,7 +89,7 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
       """module main
         |
         |def id = { ['A](a: 'A) => return a: 'A }
-        |def idInt = { (x: Int) => return (unboxInt: (BoxedInt) => Int @ {})((id: ['A]('A) => 'A @ {})[BoxedInt]((boxInt: (Int) => BoxedInt @ {})(x: Int))) }
+        |def idInt = { (x: Int) => return (coercePosInt: (BoxedInt) => Int @ {})((id: ['A]('A) => 'A @ {})[BoxedInt]((coerceIntPos: (Int) => BoxedInt @ {})(x: Int))) }
         |""".stripMargin
     assertTransformsTo(from, to)
   }
@@ -103,7 +105,7 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
       """module main
         |
         |def id = { ['A](a: 'A) => return a: 'A }
-        |def idInt = { (x: Int) => val tmp = (id: ['A]('A) => 'A @ {})[BoxedInt]((boxInt: (Int) => BoxedInt @ {})(x: Int)) ; return (unboxInt: (BoxedInt) => Int @ {})(tmp:BoxedInt) }
+        |def idInt = { (x: Int) => val tmp = (id: ['A]('A) => 'A @ {})[BoxedInt]((coerceIntPos: (Int) => BoxedInt @ {})(x: Int)) ; return (coercePosInt: (BoxedInt) => Int @ {})(tmp:BoxedInt) }
         |""".stripMargin
     assertTransformsTo(from, to)
   }
@@ -125,8 +127,8 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |
         |def id = { ['A](a: 'A) => return a: 'A }
         |def idInt = { (x: Int) =>
-        |  let boxed = !(id: ['A]('A) => 'A @ {})[BoxedInt]((boxInt: (Int) => BoxedInt @ {})(x: Int))
-        |  let unboxed = (unboxInt: (BoxedInt) => Int @ {})(boxed:BoxedInt)
+        |  let boxed = !(id: ['A]('A) => 'A @ {})[BoxedInt]((coerceIntPos: (Int) => BoxedInt @ {})(x: Int))
+        |  let unboxed = (coercePosInt: (BoxedInt) => Int @ {})(boxed:BoxedInt)
         |  return unboxed: Int
         |}
         |""".stripMargin
@@ -145,12 +147,11 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |def test = { () =>
         |    val r = (hof: ['A](){ b : ('A) => 'A } => 'A @ {} )[BoxedInt](){ (boxedX: BoxedInt) =>
         |      {
-        |         def originalFn = { (x: Int) => return x: Int }
-        |         val result = (originalFn: (Int) => Int @ {})((unboxInt: (BoxedInt) => Int @ {})(boxedX: BoxedInt));
-        |         return (boxInt: (Int) => BoxedInt @ {})(result: Int)
+        |         val result = ({ (a: Int) => return a: Int })((coercePosInt: (BoxedInt) => Int @ {})(boxedX: BoxedInt));
+        |         return (coerceIntPos: (Int) => BoxedInt @ {})(result: Int)
         |      }
         |    };
-        |    return (unboxInt: (BoxedInt) => Int @ {})(r:BoxedInt)
+        |    return (coercePosInt: (BoxedInt) => Int @ {})(r:BoxedInt)
         |}
         |""".stripMargin
     assertTransformsTo(from, to)
@@ -173,19 +174,17 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |    val result = (hhof: ['A](){ b: (){ hhofarg: ('A) => 'A } => 'A } => 'A @ {})[BoxedInt](){
         |        (){ hhofargB: ('A) => 'A } =>
         |          {
-        |              def originalFn = { (){ hhofarg: (Int) => Int } => (hhofarg: (Int) => Int @ {})(5) }
-        |              val res = (originalFn: (){ hhofarg: (Int) => Int } => Int @ {})(){
+        |              val res = ({ (){ hhofarg: (Int) => Int } => (hhofarg: (Int) => Int @ {})(5) })(){
         |                  (hhofargarg: Int) =>
         |                      {
-        |                        def tmp = hhofargB: ('A) => 'A @ {}
-        |                        val rres:BoxedInt = (tmp: ('A) => 'A @ {})((boxInt: (Int) => BoxedInt @ {})(hhofargarg: Int));
-        |                        return (unboxInt: (BoxedInt) => Int @ {})(rres:BoxedInt)
+        |                        val rres:BoxedInt = (hhofargB: ('A) => 'A @ {})((coerceIntPos: (Int) => BoxedInt @ {})(hhofargarg: Int));
+        |                        return (coercePosInt: (BoxedInt) => Int @ {})(rres:BoxedInt)
         |                      }
         |              };
-        |              return (boxInt: (Int) => BoxedInt @ {})(res:Int)
+        |              return (coerceIntPos: (Int) => BoxedInt @ {})(res:Int)
         |          }
         |    };
-        |    return (unboxInt: (BoxedInt) => Int @ {})(result:BoxedInt)
+        |    return (coercePosInt: (BoxedInt) => Int @ {})(result:BoxedInt)
         |}
         |""".stripMargin
     assertTransformsTo(from, to)
