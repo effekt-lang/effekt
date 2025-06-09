@@ -14,12 +14,21 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case CoreTransformed(source, tree, mod, core) => {
         core match {
           case ModuleDecl(path, includes, declarations, externs, definitions, exports) => {
+            // Find constraints in the definitions
             val constraints = findConstraints(definitions)
             println("Constraints")
             constraints.foreach(c => println(c))
             println()
-            if (!hasCycle(constraints)) {
-              val solvedConstraints = solveConstraints(constraints)
+
+            // Filter out self referencing constraints
+            val filtered = constraints.map((id, tpes) => (id, tpes.filter(tpe => tpe.toSymbol != id)))
+            println("Filtered")
+            filtered.foreach(f => println(f))
+            println()
+
+            // Solve if constraints are non-cyclic
+            if (!hasCycle(filtered)) {
+              val solvedConstraints = solveConstraints(filtered)
               println("Solved constraints")
               solvedConstraints.foreach(sc => println(sc))
             } else {
@@ -67,63 +76,58 @@ def solveConstraints(constraints: PolyConstraints): PolyConstraints =
 
   solved
 
-def appendConstraint(map: PolyConstraints, sym: Id, tpe: ValueType): PolyConstraintEntry =
-  val currentFlow = map.getOrElse(sym, Set())
-  println("Append: " + tpe + ", " + sym)
-  tpe match {
-    // Ignore self cycling types A -> A
-    case ValueType.Data(name, targs) if name != sym => (sym -> (currentFlow + PolyType.Base(name)))
-    case ValueType.Var(name) if name != sym => (sym -> (currentFlow + PolyType.Var(name)))
-    // TODO: What do we do with boxed types?
-    case o@ValueType.Boxed(tpe, capt) => 
-      println("Hit boxed type: " + o)
-      (sym -> currentFlow)
-    case _ => (sym -> currentFlow) // self cycling flow
-  }
-
-def findConstraintRec(value: Val, typeFlow: PolyConstraints): PolyConstraints =
-  var newTypeFlow = typeFlow
-  value.binding match {
-    case App(callee, targ :: targs, vargs, bargs) =>
-      callee match {
-        case BlockVar(id, annotatedTpe, annotatedCapt) =>
-          annotatedTpe match {
-            case BlockType.Function(tparam :: tparams, cparams, vparams, bparams, result) =>
-              newTypeFlow += appendConstraint(newTypeFlow, tparam, targ)
-            case _ =>
-          }
-        case _ =>
-      }
-    case _ =>
-  }
-  value.body match {
-    case v@Val(_, _, _, _) => findConstraintRec(v, newTypeFlow)
-    case _ => newTypeFlow
-  }
+def combineConstraints(a: PolyConstraints, b: PolyConstraints): PolyConstraints = {
+  a ++ b.map { case (k, v) => k -> (v ++ a.getOrElse(k, Iterable.empty)) }
+}
 
 def findConstraints(definitions: List[Toplevel]): PolyConstraints =
-  var typeFlow: PolyConstraints = Map()
-  definitions.foreach {
-    case Toplevel.Def(id, block) =>
-      block match
-        case BlockLit(tparam :: tparams, cparams, vparams, bparams, body) =>
-          body match {
-            case v@Val(id, annotatedTpe, binding, body) => 
-              typeFlow ++= findConstraintRec(v, typeFlow)
-            case Return(expr) => 
-              typeFlow += appendConstraint(typeFlow, tparam, expr.tpe)
-            case _ =>
-          }
-        case BlockLit(tparams, cparams, vparams, bparams, body) =>
-          body match {
-            case v@Val(id, annotatedTpe, binding, body) => 
-              typeFlow ++= findConstraintRec(v, typeFlow)
-            case _ =>
-          }
-        case _ => 
-    case _ => 
-  }
-  typeFlow
+  definitions.map(findConstraints).reduce(combineConstraints)
+
+def findConstraints(toplevel: Toplevel): PolyConstraints = toplevel match {
+  case Toplevel.Def(id, block) => findConstraints(block, List.empty)
+  case Toplevel.Val(id, tpe, binding) => ???
+}
+
+def findConstraints(block: Block, targs: List[ValueType]): PolyConstraints = block match {
+  case BlockLit(tparam :: tparams, cparams, vparams, bparams, body) => findConstraints(body, tparam :: tparams)
+  case BlockLit(List(), cparams, vparams, bparams, body) => findConstraints(body, List.empty)
+  case BlockVar(id, annotatedTpe, annotatedCapt) => findConstraints(annotatedTpe, targs)
+  case New(impl) => ???
+  case Unbox(pure) => ???
+  case _ => Map.empty
+}
+
+def findConstraints(stmt: Stmt, tparams: List[Id]): PolyConstraints = stmt match {
+  case App(callee, targs, vargs, bargs) => findConstraints(callee, targs)
+  case Return(expr) if !tparams.isEmpty => Map(tparams.head -> Set(findPolyType(expr.tpe)))
+  case Return(expr) => Map.empty
+  case Val(id, annotatedTpe, binding, body) => combineConstraints(findConstraints(binding, tparams), findConstraints(body, tparams))
+  // TODO: Let & If case is wrong, but placeholders are required as they are used in print
+  case Let(id, annotatedTpe, binding, body) => Map.empty
+  case If(cond, thn, els) => Map.empty
+  case o => println(o); ???
+}
+
+def findConstraints(value: Val): PolyConstraints = value match {
+  // TODO: List.empty might be wrong
+  case Val(id, annotatedTpe, binding, body) => combineConstraints(findConstraints(binding, List.empty), findConstraints(body, List.empty))
+}
+
+def findConstraints(blockType: BlockType, targs: List[ValueType]): PolyConstraints = blockType match {
+  case BlockType.Function(tparams, cparams, vparams, bparams, result) => tparams.zip(targs).map((id, tpe) => (id -> Set(findPolyType(tpe)))).toMap
+  case BlockType.Interface(name, targs) => ???
+}
+
+def findPolyType(blockType: BlockType, targs: List[ValueType]): List[PolyType] = blockType match {
+  case BlockType.Function(tparams, cparams, vparams, bparams, result) => ???
+  case BlockType.Interface(name, targs) => ???
+}
+
+def findPolyType(valueType: ValueType): PolyType = valueType match {
+  case ValueType.Boxed(tpe, capt) => ???
+  case ValueType.Data(name, targs) => PolyType.Base(name)
+  case ValueType.Var(name) => PolyType.Var(name)
+}
 
 def hasCycle(constraints: PolyConstraints): Boolean =
     var visited: Set[Id] = Set()
