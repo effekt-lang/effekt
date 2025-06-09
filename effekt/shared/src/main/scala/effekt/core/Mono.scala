@@ -58,16 +58,16 @@ enum PolyType {
 }
 
 type PolyConstraints = Map[Id, Set[PolyType]]
-type PolyConstraintEntry = (Id, Set[PolyType])
+type PolyConstraintsSolved = Map[Id, Set[PolyType.Base]]
 
-def solveConstraints(constraints: PolyConstraints): PolyConstraints =
-  var solved: PolyConstraints = Map()
+def solveConstraints(constraints: PolyConstraints): PolyConstraintsSolved =
+  var solved: PolyConstraintsSolved = Map()
 
-  def solveConstraint(sym: Id, types: Set[PolyType]): Set[PolyType] =
-    var polyTypes: Set[PolyType] = Set()
+  def solveConstraint(sym: Id, types: Set[PolyType]): Set[PolyType.Base] =
+    var polyTypes: Set[PolyType.Base] = Set()
     types.foreach {
       case PolyType.Var(symbol) => polyTypes ++= solved.getOrElse(symbol, solveConstraint(symbol, constraints.getOrElse(symbol, Set())))
-      case base => polyTypes += base
+      case PolyType.Base(tpe) => polyTypes += PolyType.Base(tpe)
     }
     solved += (sym -> polyTypes)
     polyTypes
