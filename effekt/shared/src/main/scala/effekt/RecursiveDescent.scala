@@ -959,40 +959,43 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    * This way expressions like `foo.bar.baz()(x).bam.boo()` are
    * parsed with the correct left-associativity.
    */
-  def callExpr(): Term = nonterminal {
-    var e = primExpr()
-
-    while (peek(`.`) || isArguments)
-      peek.kind match {
-        // member selection (or method call)
-        //   <EXPR>.<NAME>
-        // | <EXPR>.<NAME>( ... )
-        case `.` =>
-          consume(`.`)
-          val member = idRef()
-          // method call
-          if (isArguments) {
-            val (targs, vargs, bargs) = arguments()
-            e = Term.MethodCall(e, member, targs, vargs, bargs)
-          } else {
-            e = Term.MethodCall(e, member, Nil, Nil, Nil)
-          }
-
-        // function call
-        case _ if isArguments =>
-          val callee = e match {
-            case Term.Var(id) => IdTarget(id)
-            case other => ExprTarget(other)
-          }
-          val (targs, vargs, bargs) = arguments()
-          e = Term.Call(callee, targs, vargs, bargs)
-
-        // nothing to do
-        case _ => ()
+  def callExpr(): Term =
+    nonterminal:
+      var e = peek.kind match {
+        case `{` => blockArg()
+        case _ => primExpr()
       }
 
-    e
-  }
+      while (peek(`.`) || isArguments)
+        peek.kind match {
+          // member selection (or method call)
+          //   <EXPR>.<NAME>
+          // | <EXPR>.<NAME>( ... )
+          case `.` =>
+            consume(`.`)
+            val member = idRef()
+            // method call
+            if (isArguments) {
+              val (targs, vargs, bargs) = arguments()
+              e = Term.MethodCall(e, member, targs, vargs, bargs)
+            } else {
+              e = Term.MethodCall(e, member, Nil, Nil, Nil)
+            }
+
+          // function call
+          case _ if isArguments =>
+            val callee = e match {
+              case Term.Var(id) => IdTarget(id)
+              case other => ExprTarget(other)
+            }
+            val (targs, vargs, bargs) = arguments()
+            e = Term.Call(callee, targs, vargs, bargs)
+
+          // nothing to do
+          case _ => ()
+        }
+      e
+
 
   // argument lists cannot follow a linebreak:
   //   foo      ==    foo;

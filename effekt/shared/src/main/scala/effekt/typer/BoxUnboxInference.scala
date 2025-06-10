@@ -97,7 +97,11 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
       if (hasMethods) {
         MethodCall(rewriteAsBlock(receiver), id, targs, vargsTransformed, bargsTransformed)
       } else {
-        Call(IdTarget(id).inheritPosition(id), targs, rewriteAsExpr(receiver) :: vargsTransformed, bargsTransformed)
+        receiver match
+          case _: BlockLiteral =>
+            Call(IdTarget(id).inheritPosition(id), targs, vargsTransformed, rewriteAsBlock(receiver) :: bargsTransformed)
+          case _ => 
+            Call(IdTarget(id).inheritPosition(id), targs, rewriteAsExpr(receiver) :: vargsTransformed, bargsTransformed)
       }
 
     case TryHandle(prog, handlers) =>
