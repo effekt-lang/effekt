@@ -525,18 +525,16 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
 
   def settingBool(name: String): Boolean = {
-    if (settings == null) return false
+    if (settings == null || settings.isJsonNull) return false
     val obj = settings.getAsJsonObject
-    if (obj == null) return false
     val value = obj.get(name)
     if (value == null) return false
     value.getAsBoolean
   }
 
   def settingString(name: String): Option[String] = {
-    if (settings == null) return None
+    if (settings == null || settings.isJsonNull) return None
     val obj = settings.getAsJsonObject
-    if (obj == null) return None
     val value = obj.get(name)
     if (value == null) return None
     Some(value.getAsString)
