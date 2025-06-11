@@ -47,9 +47,9 @@ object TransformerCps extends Transformer {
   /**
    * Entrypoint used by the compiler to compile whole programs
    */
-  def compile(input: cps.ModuleDecl, coreModule: core.ModuleDecl, mainSymbol: symbols.TermSymbol)(using Context): js.Module =
-    val exports = List(js.Export(JSName("main"), js.Lambda(Nil,
-      js.Return(Call(RUN_TOPLEVEL, nameRef(mainSymbol))))))
+  def compile(input: cps.ModuleDecl, coreModule: core.ModuleDecl, mainSymbol: Option[symbols.TermSymbol])(using Context): js.Module =
+    val exports = mainSymbol.map(m => js.Export(JSName("main"), js.Lambda(Nil,
+      js.Return(Call(RUN_TOPLEVEL, nameRef(m)))))).toList
 
     given DeclarationContext = new DeclarationContext(coreModule.declarations, coreModule.externs)
     toJS(input, exports)

@@ -41,7 +41,7 @@ type Tag = Int
 /**
  * A module declaration
  */
-case class Program(declarations: List[Declaration], program: List[Definition], entry: Label)
+case class Program(declarations: List[Declaration], program: List[Definition], entry: Option[Label])
 
 /**
  * Toplevel declarations for FFI

@@ -16,20 +16,20 @@ object Transformer {
 
   def transform(main: CoreTransformed, mainSymbol: TermSymbol)(using C: Context): Program = {
     C.using(module = main.mod) {
-      transform(mainSymbol, main.core);
+      transform(Some(mainSymbol), main.core);
     }
   }
 
-  def transform(mainSymbol: TermSymbol, mod: core.ModuleDecl)(using E: ErrorReporter): Program = {
+  def transform(mainSymbol: Option[TermSymbol], mod: core.ModuleDecl)(using E: ErrorReporter): Program = {
 
-    val mainName = transform(mainSymbol)
+    val mainName = mainSymbol.map(transform(_))
     given BC: BlocksParamsContext = BlocksParamsContext();
     given DC: DeclarationContext = core.DeclarationContext(mod.declarations, mod.externs)
 
     // collect all information
     val declarations = mod.externs.map(transform)
     val definitions = mod.definitions
-    val mainEntry = Label(mainName, Nil)
+    val mainEntry = mainName.map(Label(_, Nil))
 
     findToplevelBlocksParams(definitions)
 
