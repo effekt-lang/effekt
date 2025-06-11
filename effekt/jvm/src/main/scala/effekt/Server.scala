@@ -512,7 +512,6 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     }
     val newSettingsObj = newSettings.getAsJsonObject
     this.settings = newSettingsObj;
-    if (newSettingsObj == null) return
     val effektSection = newSettingsObj.get("effekt")
     if (effektSection != null) {
       this.settings = effektSection
