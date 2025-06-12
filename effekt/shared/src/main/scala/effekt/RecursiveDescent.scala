@@ -782,7 +782,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       `with` ~> backtrack(idDef() <~ `:`) ~ implementation() match {
         case capabilityName ~ impl =>
           val capability = capabilityName map { name => BlockParam(name, Some(impl.interface), name.span.synthesized): BlockParam }
-          Handler(capability.unspan, impl)
+          Handler(capability.unspan, impl, span())
       }
 
   // This nonterminal uses limited backtracking: It parses the interface type multiple times.

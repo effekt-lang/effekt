@@ -104,7 +104,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val hs = (handlers zip capabilities).map {
         case (h, cap) => visit(h) {
           // here we annotate the synthesized capability
-          case h @ Handler(_, impl) => Handler(Some(definitionFor(cap)), rewrite(impl))
+          case h @ Handler(_, impl, span) => Handler(Some(definitionFor(cap)), rewrite(impl), span)
         }
       }
 

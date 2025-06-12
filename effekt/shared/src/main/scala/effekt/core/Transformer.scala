@@ -453,7 +453,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val promptParam: core.BlockParam = core.BlockParam(promptId, promptTpe, Set(promptCapt))
 
       val transformedHandlers = handlers.map {
-        case h @ source.Handler(cap, impl) =>
+        case h @ source.Handler(cap, impl, _) =>
           val id = h.capability.get.symbol
           Binding.Def(id, New(transform(impl, Some(promptVar))))
       }

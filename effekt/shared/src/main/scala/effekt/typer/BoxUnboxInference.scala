@@ -184,8 +184,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
   }
 
   def rewrite(h: Handler)(using Context): Handler = visit(h) {
-    case Handler(capability, impl) =>
-      Handler(capability, rewrite(impl))
+    case Handler(capability, impl, span) =>
+      Handler(capability, rewrite(impl), span)
   }
 
   def rewrite(i: Implementation)(using Context): Implementation = visit(i) {

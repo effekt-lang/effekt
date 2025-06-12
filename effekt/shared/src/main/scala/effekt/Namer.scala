@@ -575,7 +575,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(h: source.Handler)(using Context): Unit = h match {
-    case source.Handler(capability, impl) =>
+    case source.Handler(capability, impl, _) =>
       resolve(impl)
       capability.foreach { param =>
         Context.bind(resolve(param))

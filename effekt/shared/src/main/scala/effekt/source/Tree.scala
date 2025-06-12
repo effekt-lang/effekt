@@ -570,7 +570,7 @@ case class Implementation(interface: TypeRef, clauses: List[OpClause], override 
 /**
  * A handler is a pair of an optionally named capability and the handler [[Implementation]]
  */
-case class Handler(capability: Option[BlockParam] = None, impl: Implementation) extends Reference {
+case class Handler(capability: Option[BlockParam] = None, impl: Implementation, override val span: Span) extends Reference {
   def effect = impl.interface
   def clauses = impl.clauses
   def id = impl.id
