@@ -789,7 +789,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def implementation(): Implementation =
     nonterminal:
       // Interface[...] {}
-      def emptyImplementation() = backtrack { Implementation(blockTypeRef(), `{` ~> Nil <~ `}`) }
+      def emptyImplementation() = backtrack { Implementation(blockTypeRef(), `{` ~> Nil <~ `}`, span()) }
 
       // Interface[...] { def <NAME> = ... }
       def interfaceImplementation() = backtrack {
@@ -798,7 +798,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         if !peek(`def`) then fail("Expected at least one operation definition to implement this interface.")
         tpe
       } map { tpe =>
-        Implementation(tpe, manyUntil(opClause() labelled "operation clause", `}`)) <~ `}`
+        Implementation(tpe, manyUntil(opClause() labelled "operation clause", `}`) <~ `}`, span())
       }
 
       // Interface[...] { () => ... }
@@ -808,7 +808,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           val synthesizedId = IdRef(Nil, id.name, id.span.synthesized).withPositionOf(id)
           val interface = TypeRef(id, tps, id.span.synthesized).withPositionOf(id)
           val operation = OpClause(synthesizedId, Nil, vps, bps, None, body, k).withRangeOf(id, body)
-          Implementation(interface, List(operation))
+          Implementation(interface, List(operation), span())
       }
 
       (emptyImplementation() orElse interfaceImplementation() getOrElse operationImplementation()) labelled "interface implementation (starting with its name)"

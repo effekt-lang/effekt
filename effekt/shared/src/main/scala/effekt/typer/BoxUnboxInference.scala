@@ -189,8 +189,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
   }
 
   def rewrite(i: Implementation)(using Context): Implementation = visit(i) {
-    case Implementation(interface, clauses) =>
-      Implementation(interface, clauses.map(rewrite))
+    case Implementation(interface, clauses, span) =>
+      Implementation(interface, clauses.map(rewrite), span)
   }
 
   def rewrite(h: OpClause)(using Context): OpClause = visit(h) {

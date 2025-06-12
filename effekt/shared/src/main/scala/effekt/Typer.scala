@@ -355,7 +355,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
    * The [[continuationDetails]] are only provided, if a continuation is captured (that is for implementations as part of effect handlers).
    */
   def checkImplementation(impl: source.Implementation, continuationDetails: Option[(ValueType, CaptUnificationVar)])(using Context, Captures): Result[InterfaceType] = Context.focusing(impl) {
-    case source.Implementation(sig, clauses) =>
+    case source.Implementation(sig, clauses, _) =>
 
       var handlerEffects: ConcreteEffects = Pure
 
@@ -677,7 +677,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // (2) Store the annotated type (important for (mutually) recursive and out-of-order definitions)
       fun.annotatedType.foreach { tpe => Context.bind(fun, tpe) }
 
-    case d @ source.DefDef(id, annot, source.New(source.Implementation(tpe, clauses), _), doc, span) =>
+    case d @ source.DefDef(id, annot, source.New(source.Implementation(tpe, clauses, _), _), doc, span) =>
       val obj = d.symbol
 
       // (1) make up a fresh capture unification variable

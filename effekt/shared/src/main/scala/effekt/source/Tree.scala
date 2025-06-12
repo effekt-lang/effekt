@@ -563,7 +563,7 @@ case class Operation(id: IdDef, tparams: Many[Id], vparams: List[ValueParam], bp
  *
  * Called "template" or "class" in other languages.
  */
-case class Implementation(interface: TypeRef, clauses: List[OpClause]) extends Reference {
+case class Implementation(interface: TypeRef, clauses: List[OpClause], override val span: Span) extends Reference {
   def id = interface.id
 }
 

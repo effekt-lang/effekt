@@ -110,7 +110,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
       TryHandle(body, hs, span)
 
-    case n @ source.New(impl @ Implementation(interface, clauses), span) => {
+    case n @ source.New(impl @ Implementation(interface, clauses, implSpan), newSpan) => {
       val cs = clauses map {
         case op @ OpClause(id, tparams, vparams, bparams, ret, body, resume) => {
           val capabilities = Context.annotation(Annotations.BoundCapabilities, op)
@@ -118,8 +118,8 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
           OpClause(id, tparams, vparams, bparams ++ capabilityParams, ret, rewrite(body), resume)
         }
       }
-      val newImpl = Implementation(interface, cs)
-      val tree = source.New(newImpl, span)
+      val newImpl = Implementation(interface, cs, implSpan)
+      val tree = source.New(newImpl, newSpan)
       Context.copyAnnotations(impl, newImpl)
       tree
     }
