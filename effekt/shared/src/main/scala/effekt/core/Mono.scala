@@ -31,10 +31,17 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
               val solvedConstraints = solveConstraints(filtered)
               println("Solved constraints")
               solvedConstraints.foreach(sc => println(sc))
+
+              println()
+              val monomorphized = monomorphize(core)(using MonoContext(solvedConstraints))
+              println("Mono definitions")
+              monomorphized.definitions.foreach(println)
             } else {
               println("Cycle detected, skipping solveConstraints")
             }
             println()
+
+            
           }
         }
       }
@@ -42,6 +49,77 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
     Some(input)
   }
 }
+
+type PolyConstraints = Map[Id, Set[PolyType]]
+type PolyConstraintsSolved = Map[Id, Set[PolyType.Base]]
+type PolyConstraintSingle = Map[Id, PolyType.Base]
+
+class MonoContext(val solvedConstraints: PolyConstraintsSolved)
+
+var monoCounter = 0
+def freshMonoName(baseId: Id, tpe: PolyType.Base): Id =
+  monoCounter += 1
+  Id(baseId.name.name + tpe.tpe.name.name + monoCounter)
+
+def freshMonoName(baseId: Id, tpes: List[PolyType.Base]): Id =
+  monoCounter += 1
+  var tpesString = ""
+  tpes.foreach(tpe => tpesString += tpe.tpe.name.name)
+  Id(baseId.name.name + tpesString + monoCounter)
+
+// TODO: The following two are awful and surely doing redundant work.
+def generator(xs: List[Set[PolyConstraintSingle]]): List[Set[PolyConstraintSingle]] = xs.foldRight(List(Set.empty)) { (next, combinations) =>
+  (for (a <- next; as <- combinations) yield as + a).toList
+}
+
+def gen(xs: PolyConstraintsSolved) = {
+  (for ((id, constrs) <- xs) yield (for (c <- constrs) yield Map((id -> c)))).toList
+}
+
+def monomorphize(decl: ModuleDecl)(using ctx: MonoContext): ModuleDecl = decl match
+  case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+    ModuleDecl(path, includes, declarations, externs, definitions flatMap monomorphize, exports)
+
+def monomorphize(definition: Toplevel)(using ctx: MonoContext): List[Toplevel] = definition match {
+  case Toplevel.Def(id, block) => monomorphize(block, id).map((newId, newBlock) => Toplevel.Def(newId, newBlock)).toList
+  case Toplevel.Val(id, tpe, binding) => ???
+}
+
+def monomorphize(block: Block, baseId: Id)(using ctx: MonoContext): Map[Id, Block] = block match {
+  case BlockLit(List(), cparams, vparams, bparams, body) => Map(baseId -> block)
+  case BlockLit(tparams, cparams, vparams, bparams, body) => {
+    // TODO: There is some redundancy here, but it works for now
+    val relevantConstraints = tparams.map(tp => Map(tp -> ctx.solvedConstraints.getOrElse(tp, Set.empty)).filter((_, s) => !s.isEmpty))
+    val splitConstraints = relevantConstraints.flatMap(gen)
+    val combinations = generator(splitConstraints)
+    val flattened = combinations.map(c => c.flatten.toMap)
+    flattened.map(f => {
+      val newId = freshMonoName(baseId, f.values.toList)
+      (newId -> BlockLit(List(), cparams, vparams.map(monomorphize(_, f)), bparams, monomorphize(body, f)))
+    }).toMap
+  }
+  case BlockVar(id, annotatedTpe, annotatedCapt) => ???
+  case New(impl) => ???
+  case Unbox(pure) => ???
+}
+
+def monomorphize(stmt: Stmt, replacementTparam: Map[Id, PolyType.Base]): Stmt = stmt match {
+  case Return(expr) => Return(monomorphize(expr, replacementTparam))
+  case _ => ???
+}
+
+def monomorphize(pure: Pure, replacementTparam: Map[Id, PolyType.Base]): Pure = pure match
+  case ValueVar(id, annotatedType) => ValueVar(id, monomorphize(annotatedType, replacementTparam))
+  case _ => ???
+
+def monomorphize(vparam: ValueParam, replacementTparam: Map[Id, PolyType.Base]): ValueParam = vparam match {
+  case ValueParam(id, tpe) => ValueParam(id, monomorphize(tpe, replacementTparam))
+}
+
+def monomorphize(valueType: ValueType, replacementTparam: Map[Id, PolyType.Base]): ValueType = valueType match
+  case ValueType.Var(name) => replacementTparam.get(name).get.toValueType
+  case ValueType.Data(name, targs) => ???
+  case ValueType.Boxed(tpe, capt) => ???
 
 // TODO: After solving the constraints it would be helpful to know
 //       which functions have which tparams
@@ -55,10 +133,12 @@ enum PolyType {
     case Base(tpe) => tpe 
     case Var(sym) => sym
   }
-}
 
-type PolyConstraints = Map[Id, Set[PolyType]]
-type PolyConstraintsSolved = Map[Id, Set[PolyType.Base]]
+  def toValueType: ValueType = this match {
+    case Base(tpe) => ValueType.Data(tpe, List.empty)
+    case Var(sym) => ValueType.Var(sym)
+  }
+}
 
 def solveConstraints(constraints: PolyConstraints): PolyConstraintsSolved =
   var solved: PolyConstraintsSolved = Map()
