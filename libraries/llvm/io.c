@@ -616,44 +616,50 @@ struct Pos c_future_make() {
 void c_future_fill(struct Pos future, struct Pos value) {
     Future* f = (Future*)future.obj;
     switch (f->state) {
-    case EMPTY:
-        f->state = FILLED;
-        f->payload.value = value;
-        break;
-    case FILLED:
-        erasePositive(future);
-        erasePositive(value);
-        // TODO more graceful panic
-        fprintf(stderr, "ERROR: Future already filled\n");
-        exit(1);
-        break;
-    case WAITED:
-        Stack stack = f->payload.stack;
-        free(f);
-        resume_Pos(stack, value);
-        break;
+        case EMPTY: {
+            f->state = FILLED;
+            f->payload.value = value;
+            break;
+        }
+        case FILLED: {
+            erasePositive(future);
+            erasePositive(value);
+            // TODO more graceful panic
+            fprintf(stderr, "ERROR: Future already filled\n");
+            exit(1);
+            break;
+        }
+        case WAITED: {
+            Stack stack = f->payload.stack;
+            free(f);
+            resume_Pos(stack, value);
+            break;
+        }
     }
 }
 
 void c_future_wait(struct Pos future, Stack stack) {
     Future* f = (Future*)future.obj;
     switch (f->state) {
-    case EMPTY:
-        f->state = WAITED;
-        f->payload.stack = stack;
-        break;
-    case FILLED:
-        struct Pos value = f->payload.value;
-        free(f);
-        resume_Pos(stack, value);
-        break;
-    case WAITED:
-        erasePositive(future);
-        eraseStack(stack);
-        // TODO more graceful panic
-        fprintf(stderr, "ERROR: Future already waited\n");
-        exit(1);
-        break;
+        case EMPTY: {
+            f->state = WAITED;
+            f->payload.stack = stack;
+            break;
+        }
+        case FILLED: {
+            struct Pos value = f->payload.value;
+            free(f);
+            resume_Pos(stack, value);
+            break;
+        }
+        case WAITED: {
+            erasePositive(future);
+            eraseStack(stack);
+            // TODO more graceful panic
+            fprintf(stderr, "ERROR: Future already waited\n");
+            exit(1);
+            break;
+        }
     }
 }
 
