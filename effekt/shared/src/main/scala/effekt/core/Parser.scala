@@ -2,10 +2,10 @@ package effekt
 package core
 
 import effekt.core.ValueParam
-import effekt.source.{FeatureFlag, NoSource}
-import effekt.util.messages.{ DebugMessaging, ErrorReporter, ParseError }
-import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Success }
-import kiama.util.{ Position, Positions, Range, Source, StringSource }
+import effekt.source.{FeatureFlag, NoSource, Span}
+import effekt.util.messages.{DebugMessaging, ErrorReporter, ParseError}
+import kiama.parsing.{Failure, Input, NoSuccess, ParseResult, Success}
+import kiama.util.{Position, Positions, Range, Source, StringSource}
 
 import scala.util.matching.Regex
 
@@ -77,8 +77,8 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     })
 
   lazy val featureFlag: P[FeatureFlag] =
-    ("else" ^^ { _ => FeatureFlag.Default }
-    | ident ^^ FeatureFlag.NamedFeatureFlag.apply
+    ("else" ^^ { _ => FeatureFlag.Default(Span.missing) }
+    | ident ^^ (id => FeatureFlag.NamedFeatureFlag(id, Span.missing))
     )
 
 

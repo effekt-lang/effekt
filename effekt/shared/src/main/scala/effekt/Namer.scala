@@ -97,7 +97,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // process all includes, updating the terms and types in scope
     val includes = decl.includes collect {
-      case im @ source.Include(path) =>
+      case im @ source.Include(path, span) =>
         // [[recursiveProtect]] is called here so the source position is the recursive import
         val mod = Context.at(im) { recursiveProtect(decl){ importDependency(path) } }
         Context.annotate(Annotations.IncludedSymbols, im, mod)
@@ -135,7 +135,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     // allow recursive definitions of objects
-    case d @ source.DefDef(id, annot, source.New(source.Implementation(interface, clauses)), doc, span) =>
+    case d @ source.DefDef(id, annot, source.New(source.Implementation(interface, clauses, _), _), doc, span) =>
       val tpe = Context.at(interface) { resolveBlockRef(interface) }
       val sym = Binder.DefBinder(Context.nameFor(id), Some(tpe), d)
       Context.define(id, sym)
@@ -265,21 +265,21 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   def resolve(s: source.Stmt)(using Context): Unit = Context.focusing(s) {
 
-    case source.DefStmt(d, rest) =>
+    case source.DefStmt(d, rest, span) =>
       // resolve declarations but do not resolve bodies
       preresolve(d)
       // resolve bodies
       resolve(d)
       resolve(rest)
 
-    case source.ExprStmt(term, rest) =>
+    case source.ExprStmt(term, rest, span) =>
       resolve(term)
       resolve(rest)
 
-    case source.Return(term) =>
+    case source.Return(term, span) =>
       resolve(term)
 
-    case source.BlockStmt(stmts) =>
+    case source.BlockStmt(stmts, span) =>
       Context scoped { resolve(stmts) }
   }
 
@@ -314,7 +314,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, sym)
 
     // already has been preresolved (to enable recursive definitions)
-    case d @ source.DefDef(id, annot, source.New(impl), doc, span) =>
+    case d @ source.DefDef(id, annot, source.New(impl, _), doc, span) =>
       resolve(impl)
 
     case d @ source.DefDef(id, annot, binding, doc, span) =>
@@ -340,8 +340,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
         bodies.foreach {
-          case source.ExternBody.StringExternBody(ff, body) => body.args.foreach(resolve)
-          case source.ExternBody.EffektExternBody(ff, body) => resolve(body)
+          case source.ExternBody.StringExternBody(ff, body, span) => body.args.foreach(resolve)
+          case source.ExternBody.EffektExternBody(ff, body, span) => resolve(body)
           case u: source.ExternBody.Unsupported => u
         }
       }
@@ -417,7 +417,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   def resolve(t: source.Term)(using Context): Unit = Context.focusing(t) {
 
-    case source.Literal(value, tpe) => ()
+    case source.Literal(value, tpe, _) => ()
 
     case hole @ source.Hole(id, stmts, span) =>
       val h = Hole(Name.local(freshHoleId), hole)
@@ -425,24 +425,24 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.assignSymbol(id, h)
       Context scoped { resolve(stmts) }
 
-    case source.Unbox(term) => resolve(term)
+    case source.Unbox(term, _) => resolve(term)
 
-    case source.New(impl) => resolve(impl)
+    case source.New(impl, _) => resolve(impl)
 
-    case source.Match(scrutinees, clauses, default) =>
+    case source.Match(scrutinees, clauses, default, _) =>
       scrutinees.foreach(resolve)
       clauses.foreach(resolve)
       Context.scoped { default.foreach(resolve) }
 
-    case source.If(guards, thn, els) =>
+    case source.If(guards, thn, els, _) =>
       Context scoped { guards.foreach(resolve); resolve(thn) }
       Context scoped { resolve(els) }
 
-    case source.While(guards, block, default) =>
+    case source.While(guards, block, default, _) =>
       Context scoped { guards.foreach(resolve); resolve(block) }
       Context scoped { default foreach resolve }
 
-    case tree @ source.TryHandle(body, handlers) =>
+    case tree @ source.TryHandle(body, handlers, _) =>
       handlers.foreach(resolve)
 
       Context scoped {
@@ -457,7 +457,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolve(body)
       }
 
-    case tree @ source.Region(name, body) =>
+    case tree @ source.Region(name, body, _) =>
       val reg = BlockParam(Name.local(name.name), Some(builtins.TRegion))
       Context.define(name, reg)
       Context scoped {
@@ -465,7 +465,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolve(body)
       }
 
-    case f @ source.BlockLiteral(tparams, vparams, bparams, stmt) =>
+    case f @ source.BlockLiteral(tparams, vparams, bparams, stmt, _) =>
       Context scoped {
         val tps = tparams map resolve
         val vps = vparams map resolve
@@ -477,22 +477,22 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolve(stmt)
       }
 
-    case source.Box(capt, block) =>
+    case source.Box(capt, block, _) =>
       capt foreach resolve
       resolve(block)
 
     // (2) === Bound Occurrences ===
 
-    case source.Select(receiver, target) =>
+    case source.Select(receiver, target, _) =>
       Context.panic("Cannot happen since Select is introduced later")
 
-    case source.MethodCall(receiver, target, targs, vargs, bargs) =>
+    case source.MethodCall(receiver, target, targs, vargs, bargs, _) =>
       resolve(receiver)
 
       // We are a bit context sensitive in resolving the method
       Context.focusing(target) { _ =>
         receiver match {
-          case source.Var(id) => Context.resolveTerm(id) match {
+          case source.Var(id, _) => Context.resolveTerm(id) match {
             // (foo: ValueType).bar(args)  = Call(bar, foo :: args)
             case symbol: ValueSymbol =>
               if !Context.resolveOverloadedFunction(target)
@@ -508,7 +508,7 @@ object Namer extends Phase[Parsed, NameResolved] {
               then Context.abort(pp"Cannot resolve operation ${target}, called on a receiver that is a computation.")
           }
           // (unbox term).bar(args)  = Invoke(Unbox(term), bar, args)
-          case source.Unbox(term) =>
+          case source.Unbox(term, _) =>
             if !Context.resolveOverloadedOperation(target)
             then Context.abort(pp"Cannot resolve operation ${target}, called on an unboxed computation.")
 
@@ -522,13 +522,13 @@ object Namer extends Phase[Parsed, NameResolved] {
       vargs foreach resolve
       bargs foreach resolve
 
-    case source.Do(effect, target, targs, vargs, bargs) =>
+    case source.Do(effect, target, targs, vargs, bargs, _) =>
       Context.resolveEffectCall(effect map resolveBlockRef, target)
       targs foreach resolveValueType
       vargs foreach resolve
       bargs foreach resolve
 
-    case source.Call(target, targs, vargs, bargs) =>
+    case source.Call(target, targs, vargs, bargs, _) =>
       Context.focusing(target) {
         case source.IdTarget(id)     => Context.resolveFunctionCalltarget(id)
         case source.ExprTarget(expr) => resolve(expr)
@@ -537,9 +537,9 @@ object Namer extends Phase[Parsed, NameResolved] {
       vargs foreach resolve
       bargs foreach resolve
 
-    case source.Var(id) => Context.resolveVar(id)
+    case source.Var(id, _) => Context.resolveVar(id)
 
-    case source.Assign(id, expr) => Context.resolveVar(id) match {
+    case source.Assign(id, expr, _) => Context.resolveVar(id) match {
       case _: VarBinder | _: RegBinder => resolve(expr)
       case _: ValBinder | _: ValueParam => Context.abort(pretty"Can only assign to mutable variables, but ${id.name} is a constant.")
       case y: Wildcard => Context.abort(s"Trying to assign to a wildcard, which is not allowed.")
@@ -575,7 +575,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(h: source.Handler)(using Context): Unit = h match {
-    case source.Handler(capability, impl) =>
+    case source.Handler(capability, impl, _) =>
       resolve(impl)
       capability.foreach { param =>
         Context.bind(resolve(param))
@@ -583,11 +583,11 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(i: source.Implementation)(using Context): Unit = Context.focusing(i) {
-    case source.Implementation(interface, clauses) =>
+    case source.Implementation(interface, clauses, _) =>
       val eff: Interface = Context.at(interface) { resolveBlockRef(interface).typeConstructor.asInterface }
 
       clauses.foreach {
-        case clause @ source.OpClause(op, tparams, vparams, bparams, ret, body, resumeId) => Context.at(clause) {
+        case clause @ source.OpClause(op, tparams, vparams, bparams, ret, body, resumeId, _) => Context.at(clause) {
 
           // try to find the operation in the handled effect:
           eff.operations.find { o => o.name.toString == op.name } map { opSym =>
@@ -646,7 +646,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(m: source.MatchClause)(using Context): Unit = Context.focusing(m) {
-    case source.MatchClause(pattern, guards, body) =>
+    case source.MatchClause(pattern, guards, body, _) =>
       val ps = resolve(pattern)
       Context scoped {
         // variables bound by patterns are available in the guards.
@@ -678,13 +678,13 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Returns the value params it binds
    */
   def resolve(p: source.MatchPattern)(using Context): List[ValueParam] = p match {
-    case source.IgnorePattern()     => Nil
-    case source.LiteralPattern(lit) => Nil
-    case source.AnyPattern(id) =>
+    case source.IgnorePattern(_)     => Nil
+    case source.LiteralPattern(lit, _) => Nil
+    case source.AnyPattern(id, _) =>
       val p = ValueParam(Name.local(id), None)
       Context.assignSymbol(id, p)
       List(p)
-    case source.TagPattern(id, patterns) =>
+    case source.TagPattern(id, patterns, _) =>
       Context.resolveTerm(id) match {
         case symbol: Constructor => ()
         case _ => Context.at(id) {
@@ -692,13 +692,13 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
       }
       patterns.flatMap { resolve }
-    case source.MultiPattern(patterns) =>
+    case source.MultiPattern(patterns, _) =>
       patterns.flatMap { resolve }
   }
 
   def resolve(p: source.MatchGuard)(using Context): Unit = p match {
-    case MatchGuard.BooleanGuard(condition) => resolve(condition)
-    case MatchGuard.PatternGuard(scrutinee, pattern) =>
+    case MatchGuard.BooleanGuard(condition, _) => resolve(condition)
+    case MatchGuard.PatternGuard(scrutinee, pattern, _) =>
       resolve(scrutinee)
       val ps = resolve(pattern)
       ps.foreach { Context.bind }
@@ -738,10 +738,10 @@ object Namer extends Phase[Parsed, NameResolved] {
         // Dummy value type in order to aggregate more errors (see #947)
         ValueTypeApp(ErrorValueType(), Nil)
     }
-    case source.ValueTypeTree(tpe) =>
+    case source.ValueTypeTree(tpe, _) =>
       tpe
     // TODO reconsider reusing the same set for terms and types...
-    case source.BoxedType(tpe, capt) =>
+    case source.BoxedType(tpe, capt, _) =>
       BoxedType(resolveBlockType(tpe), resolve(capt))
     case other =>
       Context.error(pretty"Expected value type, but got ${describeType(other)}.")
@@ -749,10 +749,10 @@ object Namer extends Phase[Parsed, NameResolved] {
         case funTpe: source.FunctionType =>
           if isParam then Context.info(pretty"Did you mean to use braces in order to receive a block type `${funTpe.sourceOf}`?")
           Context.info(pretty"Did you mean to use a first-class, boxed function type `${funTpe.sourceOf} at {}`?")
-        case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects, span ) =>
+        case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects, _), effects, span ) =>
           val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
           Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects.sourceOf} / ${effects.sourceOf}`?")
-        case source.Effectful(source.BoxedType(tpe@source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects, span) =>
+        case source.Effectful(source.BoxedType(tpe@source.FunctionType(tparams, vparams, bparams, result, funEffects, _), capt, _), effects, span) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
         case source.Effectful(innerTpe, eff, span) =>
           if isParam then Context.info(pretty"Did you mean to use braces and a function type `() => ${innerTpe.sourceOf} / ${eff.sourceOf}`?")
@@ -772,13 +772,13 @@ object Namer extends Phase[Parsed, NameResolved] {
     case other =>
       Context.error(pretty"Expected block type, but got ${describeType(other)}.")
       other match
-        case source.BoxedType(innerTpe, eff) =>
+        case source.BoxedType(innerTpe, eff, _) =>
           if isParam then Context.info(pretty"Did you mean to use parentheses in order to receive a value type ${other.sourceOf}?")
           Context.info(pretty"Did you mean to use the block type ${innerTpe.sourceOf} without 'at ${eff.sourceOf}'?")
-        case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects, span) =>
+        case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects, _), effects, span) =>
           val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
           Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects.sourceOf} / ${effects.sourceOf}`?")
-        case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects, span) =>
+        case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects, _), capt, _), effects, span) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
         case source.Effectful(innerTpe, effs, span) =>
           // NOTE: We could use `isParam` to write a more precise message, but what exactly would it be?
@@ -794,7 +794,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     /**
      * TODO share code with [[typer.Typer.makeFunctionType]]
      */
-    case source.FunctionType(tparams, vparams, bparams, ret, effects) => Context scoped {
+    case source.FunctionType(tparams, vparams, bparams, ret, effects, _) => Context scoped {
       val tps = tparams.map(resolve)
       val vps = vparams.map(resolveValueType)
 
@@ -889,8 +889,8 @@ object Namer extends Phase[Parsed, NameResolved] {
     case _: source.Effectful => s"a type-and-effect annotation ${t.sourceOf}"
 
     // THESE TWO SHOULD NEVER BE USER-VISIBLE!
-    case source.ValueTypeTree(tpe) => s"a value type tree ${tpe}"
-    case source.BlockTypeTree(eff) => s"a block type tree ${eff}"
+    case source.ValueTypeTree(tpe, _) => s"a value type tree ${tpe}"
+    case source.BlockTypeTree(eff, _) => s"a block type tree ${eff}"
   }
 
   private def prettySourceEffectSet(effects: Set[source.TypeRef])(using Context) =

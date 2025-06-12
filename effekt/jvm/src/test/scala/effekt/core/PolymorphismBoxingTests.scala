@@ -4,7 +4,7 @@ package core
 import effekt.{core, source, symbols}
 import effekt.context.Context
 import effekt.core.{Block, DirectApp, PolymorphismBoxing, Pure, Stmt}
-import effekt.source.{IdDef, Include}
+import effekt.source.{IdDef, Include, Span}
 import effekt.util.messages
 import effekt.util.messages.DebugMessaging
 import kiama.parsing.{Failure, NoSuccess, Success}
@@ -27,10 +27,10 @@ abstract class AbstractPolymorphismBoxingTests extends CorePhaseTests(Polymorphi
   val boxExterns = List(
     Extern.Def(defaultNames("boxInt"), Nil, Nil, List(ValueParam(Id("i"), ValueType.Data(defaultNames("Int"), Nil))), Nil,
       ValueType.Data(defaultNames("BoxedInt"), Nil), Set.empty,
-      ExternBody.StringExternBody(source.FeatureFlag.Default, Template(List("<box int>"), Nil))),
+      ExternBody.StringExternBody(source.FeatureFlag.Default(Span.missing), Template(List("<box int>"), Nil))),
     Extern.Def(defaultNames("unboxInt"), Nil, Nil, List(ValueParam(Id("i"), ValueType.Data(defaultNames("BoxedInt"), Nil))), Nil,
       ValueType.Data(defaultNames("Int"), Nil), Set.empty,
-      ExternBody.StringExternBody(source.FeatureFlag.Default, Template(List("<unbox int>"), Nil)))
+      ExternBody.StringExternBody(source.FeatureFlag.Default(Span.missing), Template(List("<unbox int>"), Nil)))
   )
 
   override def transform(input: ModuleDecl): ModuleDecl = input match {

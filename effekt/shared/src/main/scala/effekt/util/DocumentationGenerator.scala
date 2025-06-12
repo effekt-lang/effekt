@@ -50,8 +50,8 @@ trait DocumentationGenerator {
     ))
 
     // block params
-    case BlockTypeTree(eff) => ???
-    case FunctionType(tparams, vparams, bparams, result, effects) => obj(HashMap(
+    case BlockTypeTree(eff, _) => ???
+    case FunctionType(tparams, vparams, bparams, result, effects, span) => obj(HashMap(
       "kind" -> str("FunctionType"),
       "tparams" -> generateTparams(tparams.unspan),
       "vparams" -> arr(vparams.unspan.map(generate)),
@@ -64,14 +64,16 @@ trait DocumentationGenerator {
       )),
       "result" -> generate(result),
       "effects" -> generate(effects),
+      "span" -> generate(span),
     ))
 
     // value params
-    case ValueTypeTree(tpe) => ???
-    case BoxedType(tpe, capt) => obj(HashMap(
+    case ValueTypeTree(tpe, _) => ???
+    case BoxedType(tpe, capt, span) => obj(HashMap(
       "kind" -> str("BoxedType"),
       "tpe" -> generate(tpe),
       "capt" -> generate(capt),
+      "span" -> generate(span),
     ))
   }
 
@@ -103,20 +105,22 @@ trait DocumentationGenerator {
     arr(list.map(generate))
 
   def generateVparams(list: List[ValueParam])(using C: Context): DocValue = arr(list.map {
-    case ValueParam(id, tpe) =>
+    case ValueParam(id, tpe, span) =>
       obj(HashMap(
         "kind" -> str("ValueParam"),
         "id" -> generate(id),
         "tpe" -> tpe.map(generate).getOrElse(empty),
+        "span" -> generate(span),
       ))
   })
 
   def generateBparams(list: List[BlockParam])(using C: Context): DocValue = arr(list.map {
-    case BlockParam(id, tpe) =>
+    case BlockParam(id, tpe, span) =>
       obj(HashMap(
         "kind" -> str("BlockParam"),
         "id" -> generate(id),
         "tpe" -> tpe.map(generate).getOrElse(empty),
+        "span" -> generate(span),
       ))
   })
 
@@ -145,9 +149,10 @@ trait DocumentationGenerator {
   }
 
   def generate(module: Include): DocValue = module match {
-    case Include(path) => obj(HashMap(
+    case Include(path, span) => obj(HashMap(
       "kind" -> str("Include"),
       "path" -> str(path),
+      "span" -> generate(span),
     ))
   }
 
