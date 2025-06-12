@@ -94,7 +94,8 @@ extern {io, global} def resolve[T](promise: Promise[T], value: T): Unit =
       case Pending(futures) =>
         // TODO use reference.set
         set(reference, Resolved(value))
-        futures.reverse.foreach { future => future.fill(value) }
+        // TODO use futures.reverse.foreach
+        foreach(reverse(futures)) { future => fill(future, value) }
     }
   }
 
