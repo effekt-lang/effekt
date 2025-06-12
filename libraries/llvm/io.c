@@ -619,6 +619,7 @@ void c_future_fill(struct Pos future, struct Pos value) {
         case EMPTY: {
             f->state = FILLED;
             f->payload.value = value;
+            erasePositive(future);
             break;
         }
         case FILLED: {
@@ -631,7 +632,8 @@ void c_future_fill(struct Pos future, struct Pos value) {
         }
         case WAITED: {
             Stack stack = f->payload.stack;
-            free(f);
+            f->state = EMPTY;
+            erasePositive(future);
             resume_Pos(stack, value);
             break;
         }
@@ -644,11 +646,13 @@ void c_future_wait(struct Pos future, Stack stack) {
         case EMPTY: {
             f->state = WAITED;
             f->payload.stack = stack;
+            erasePositive(future);
             break;
         }
         case FILLED: {
             struct Pos value = f->payload.value;
-            free(f);
+            f->state = EMPTY;
+            erasePositive(future);
             resume_Pos(stack, value);
             break;
         }
