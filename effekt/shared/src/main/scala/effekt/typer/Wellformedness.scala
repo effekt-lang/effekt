@@ -1,10 +1,10 @@
 package effekt
 package typer
 
-import effekt.context.{ Annotations, Context }
+import effekt.context.{Annotations, Context}
 import effekt.symbols.*
 import effekt.context.assertions.*
-import effekt.source.{ CallTarget, Def, ExprTarget, IdTarget, MatchGuard, MatchPattern, Tree }
+import effekt.source.{CallTarget, Def, ExprTarget, IdTarget, MatchGuard, MatchPattern, Span, Tree}
 import effekt.source.Tree.Visit
 import effekt.util.messages.ErrorReporter
 
@@ -164,8 +164,8 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
     case tree @ source.Match(scrutinees, clauses, default, _) => Context.at(tree) {
       // TODO copy annotations from default to synthesized defaultClause (in particular positions)
       val defaultPattern = scrutinees match {
-        case List(_) => source.IgnorePattern()
-        case scs => source.MultiPattern(List.fill(scs.length){source.IgnorePattern()})
+        case List(_) => source.IgnorePattern(Span.missing)
+        case scs => source.MultiPattern(List.fill(scs.length){source.IgnorePattern(Span.missing)}, Span.missing)
       }
 
       val defaultClause = default.toList.map(body => source.MatchClause(defaultPattern, Nil, body))
@@ -293,7 +293,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
   }
 
   def existentials(p: MatchPattern)(using Context): Set[TypeVar] = p match {
-    case p @ MatchPattern.TagPattern(id, patterns) =>
+    case p @ MatchPattern.TagPattern(id, patterns, _) =>
       Context.annotation(Annotations.TypeParameters, p).toSet ++ patterns.flatMap(existentials)
     case _ => Set.empty
   }

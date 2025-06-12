@@ -505,8 +505,9 @@ class RecursiveDescentTests extends munit.FunSuite {
         MatchClause(
           TagPattern(
             IdRef(List("effekt"),"Tuple2",Span(source,pos(0),pos(5),Synthesized)),
-            List(AnyPattern(IdDef("left", Span(source,pos(1),pos(2)))),
-              AnyPattern(IdDef("right",Span(source,pos(3),pos(4)))))
+            List(AnyPattern(IdDef("left", Span(source,pos(1),pos(2))), Span(source,pos(1),pos(2))),
+              AnyPattern(IdDef("right",Span(source,pos(3),pos(4))), Span(source,pos(3),pos(4)))),
+            Span(source,pos(0),pos(5))
           ),
           List(),
           Return(Var(IdRef(List(),"left",Span(source,pos(9),pos(10))),
@@ -560,23 +561,27 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseMatchPattern("Cons(x, y)")
     assertEqualModuloSpans(
       parseMatchPattern("_"),
-      IgnorePattern())
+      IgnorePattern(Span.missing))
     parseMatchPattern("Cons(x, Cons(x, Nil()))")
 
     {
       val (source, pos) =
         raw"""(left, Cons(x, right))
-             |↑↑   ↑ ↑   ↑↑↑ ↑    ↑ ↑
+             |↑↑   ↑ ↑   ↑↑↑ ↑    ↑↑↑
              |""".sourceAndPositions
       assertEquals(
         parseMatchPattern(source.content),
-        TagPattern(IdRef(List("effekt"), "Tuple2", Span(source, pos(0), pos(9), Synthesized)),
-          List(AnyPattern(IdDef("left", Span(source, pos(1), pos(2)))),
+        TagPattern(IdRef(List("effekt"), "Tuple2", Span(source, pos(0), pos.last, Synthesized)),
+          List(AnyPattern(IdDef("left", Span(source, pos(1), pos(2))), Span(source, pos(1), pos(2))),
             TagPattern(
               IdRef(List(), "Cons", Span(source, pos(3), pos(4))),
-              List(AnyPattern(IdDef("x", Span(source, pos(5), pos(6)))),
-                AnyPattern(IdDef("right", Span(source, pos(7), pos(8)))))
-            ))))
+              List(AnyPattern(IdDef("x", Span(source, pos(5), pos(6))), Span(source, pos(5), pos(6))),
+                AnyPattern(IdDef("right", Span(source, pos(7), pos(8))), Span(source, pos(7), pos(8)))),
+              Span(source, pos(3), pos(9))
+            )),
+          Span(source, pos(0), pos.last)
+        )
+      )
     }
   }
 

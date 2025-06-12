@@ -437,7 +437,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       }
       def matchLhs() =
         maybeDocumentation() ~ (`val` ~> matchPattern()) ~ manyWhile(`and` ~> matchGuard(), `and`) <~ `=` match {
-          case doc ~ AnyPattern(id) ~ Nil =>
+          case doc ~ AnyPattern(id, _) ~ Nil =>
             val binding = stmt()
             val endPos = pos()
             val valDef = ValDef(id, None, binding, doc, Span(source, startPos, endPos)).withRangeOf(startMarker, binding)
@@ -847,7 +847,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       val patterns = `case` ~> some(matchPattern, `,`)
       val pattern: MatchPattern = patterns match {
         case Many(List(pat), _) => pat
-        case pats => MultiPattern(pats.unspan)
+        case pats => MultiPattern(pats.unspan, pats.span)
       }
       MatchClause(
         pattern,
@@ -871,19 +871,19 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def matchPattern(): MatchPattern =
     nonterminal:
       peek.kind match {
-        case `__` => skip(); IgnorePattern()
+        case `__` => skip(); IgnorePattern(span())
         case _ if isVariable  =>
           idRef() match {
-            case id if peek(`(`) => TagPattern(id, many(matchPattern, `(`, `,`, `)`).unspan)
-            case IdRef(Nil, name, span) => AnyPattern(IdDef(name, span))
+            case id if peek(`(`) => TagPattern(id, many(matchPattern, `(`, `,`, `)`).unspan, span())
+            case IdRef(Nil, name, span) => AnyPattern(IdDef(name, span), span)
             case IdRef(_, name, _) => fail("Cannot use qualified names to bind a pattern variable")
           }
         case _ if isVariable =>
-          AnyPattern(idDef())
-        case _ if isLiteral => LiteralPattern(literal())
+          AnyPattern(idDef(), span())
+        case _ if isLiteral => LiteralPattern(literal(), span())
         case `(` => some(matchPattern, `(`, `,`, `)`) match {
           case Many(p :: Nil , _) => fail("Pattern matching on tuples requires more than one element")
-          case Many(ps, span) => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}", span.synthesized), ps)
+          case Many(ps, _) => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}", span().synthesized), ps, span())
         }
         case k => fail("pattern", k)
       }
@@ -1051,7 +1051,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           // { case ... => ... }
           case `case` => someWhile(matchClause(), `case`) match { case cs =>
             val arity = cs match {
-              case Many(MatchClause(MultiPattern(ps), _, _) :: _, _) => ps.length
+              case Many(MatchClause(MultiPattern(ps, _), _, _) :: _, _) => ps.length
               case _ => 1
             }
             // TODO fresh names should be generated for the scrutinee

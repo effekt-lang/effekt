@@ -100,7 +100,7 @@ object ExhaustivityChecker {
   def preprocess(roots: List[source.Term], cl: source.MatchClause)(using Context): Clause = (roots, cl) match {
     case (List(root), source.MatchClause(pattern, guards, body)) =>
       Clause.normalized(Condition.Patterns(Map(Trace.Root(root) -> preprocessPattern(pattern))) :: guards.map(preprocessGuard), cl)
-    case (roots, source.MatchClause(MultiPattern(patterns), guards, body)) =>
+    case (roots, source.MatchClause(MultiPattern(patterns, _), guards, body)) =>
       val rootConds: Map[Trace, Pattern] = (roots zip patterns).map { case (root, pattern) =>
         Trace.Root(root) -> preprocessPattern(pattern)
       }.toMap
@@ -108,11 +108,11 @@ object ExhaustivityChecker {
     case (_, _) => Context.abort("Malformed multi-match")
   }
   def preprocessPattern(p: source.MatchPattern)(using Context): Pattern = p match {
-    case AnyPattern(id)  => Pattern.Any()
-    case IgnorePattern() => Pattern.Any()
-    case p @ TagPattern(id, patterns) => Pattern.Tag(p.definition, patterns.map(preprocessPattern))
-    case LiteralPattern(lit) => Pattern.Literal(lit.value, lit.tpe)
-    case MultiPattern(patterns) =>
+    case AnyPattern(id, _)  => Pattern.Any()
+    case IgnorePattern(_) => Pattern.Any()
+    case p @ TagPattern(id, patterns, _) => Pattern.Tag(p.definition, patterns.map(preprocessPattern))
+    case LiteralPattern(lit, _) => Pattern.Literal(lit.value, lit.tpe)
+    case MultiPattern(patterns, _) =>
       Context.panic("Multi-pattern should have been split in preprocess already / nested MultiPattern")
   }
   def preprocessGuard(g: source.MatchGuard)(using Context): Condition = g match {

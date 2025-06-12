@@ -603,26 +603,26 @@ enum MatchPattern extends Tree {
    *
    *   case a => ...
    */
-  case AnyPattern(id: IdDef) extends MatchPattern, Definition
+  case AnyPattern(id: IdDef, override val span: Span) extends MatchPattern, Definition
 
   /**
    * Pattern matching on a constructor
    *
    *   case Cons(a, as) => ...
    */
-  case TagPattern(id: IdRef, patterns: List[MatchPattern]) extends MatchPattern, Reference
+  case TagPattern(id: IdRef, patterns: List[MatchPattern], override val span: Span) extends MatchPattern, Reference
 
   /**
    * A wildcard pattern ignoring the matched value
    *
    *   case _ => ...
    */
-  case IgnorePattern()
+  case IgnorePattern(override val span: Span)
 
   /**
    * A pattern that matches a single literal value
    */
-  case LiteralPattern(l: Literal)
+  case LiteralPattern(l: Literal, override val span: Span)
 
   /**
    * A pattern for multiple values
@@ -631,7 +631,7 @@ enum MatchPattern extends Tree {
    *
    * Currently should *only* occur in lambda-cases during Parsing
    */
-  case MultiPattern(patterns: List[MatchPattern]) extends MatchPattern
+  case MultiPattern(patterns: List[MatchPattern], override val span: Span) extends MatchPattern
 }
 export MatchPattern.*
 

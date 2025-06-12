@@ -678,13 +678,13 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Returns the value params it binds
    */
   def resolve(p: source.MatchPattern)(using Context): List[ValueParam] = p match {
-    case source.IgnorePattern()     => Nil
-    case source.LiteralPattern(lit) => Nil
-    case source.AnyPattern(id) =>
+    case source.IgnorePattern(_)     => Nil
+    case source.LiteralPattern(lit, _) => Nil
+    case source.AnyPattern(id, _) =>
       val p = ValueParam(Name.local(id), None)
       Context.assignSymbol(id, p)
       List(p)
-    case source.TagPattern(id, patterns) =>
+    case source.TagPattern(id, patterns, _) =>
       Context.resolveTerm(id) match {
         case symbol: Constructor => ()
         case _ => Context.at(id) {
@@ -692,7 +692,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
       }
       patterns.flatMap { resolve }
-    case source.MultiPattern(patterns) =>
+    case source.MultiPattern(patterns, _) =>
       patterns.flatMap { resolve }
   }
 

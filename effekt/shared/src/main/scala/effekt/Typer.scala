@@ -283,7 +283,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // check that number of patterns matches number of scrutinees
         val arity = scs.length
         clauses.foreach {
-          case cls @ source.MatchClause(source.MultiPattern(patterns), guards, body) =>
+          case cls @ source.MatchClause(source.MultiPattern(patterns, _), guards, body) =>
             if (patterns.length != arity) {
               Context.at(cls){
                 Context.error(pp"Number of patterns (${patterns.length}) does not match number of parameters / scrutinees (${arity}).")
@@ -301,7 +301,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case source.MatchClause(p, guards, body) =>
             // (3) infer types for pattern(s)
             p match {
-              case source.MultiPattern(ps) =>
+              case source.MultiPattern(ps, _) =>
                 (results zip ps).foreach { case (Result(tpe, effs), p) =>
                   Context.bind(checkPattern(tpe, p))
                 }
@@ -566,12 +566,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="pattern matching">
   def checkPattern(sc: ValueType, pattern: MatchPattern)(using Context, Captures): Map[Symbol, ValueType] = Context.focusing(pattern) {
-    case source.IgnorePattern()    => Map.empty
-    case p @ source.AnyPattern(id) => Map(p.symbol -> sc)
-    case p @ source.LiteralPattern(lit) =>
+    case source.IgnorePattern(_)    => Map.empty
+    case p @ source.AnyPattern(id, _) => Map(p.symbol -> sc)
+    case p @ source.LiteralPattern(lit, _) =>
       Context.requireSubtype(sc, lit.tpe, ErrorContext.PatternMatch(p))
       Map.empty
-    case p @ source.TagPattern(id, patterns) =>
+    case p @ source.TagPattern(id, patterns, _) =>
 
       // symbol of the constructor we match against
       val sym: Constructor = p.definition
@@ -607,7 +607,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       bindings
-    case source.MultiPattern(patterns) =>
+    case source.MultiPattern(patterns, _) =>
       Context.panic("Multi-pattern should have been split at the match and not occur nested.")
   } match { case res => Context.annotateInferredType(pattern, sc); res }
 
