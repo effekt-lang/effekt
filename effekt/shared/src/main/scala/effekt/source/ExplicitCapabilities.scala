@@ -112,10 +112,10 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
     case n @ source.New(impl @ Implementation(interface, clauses, implSpan), newSpan) => {
       val cs = clauses map {
-        case op @ OpClause(id, tparams, vparams, bparams, ret, body, resume) => {
+        case op @ OpClause(id, tparams, vparams, bparams, ret, body, resume, span) => {
           val capabilities = Context.annotation(Annotations.BoundCapabilities, op)
           val capabilityParams = capabilities.map(definitionFor)
-          OpClause(id, tparams, vparams, bparams ++ capabilityParams, ret, rewrite(body), resume)
+          OpClause(id, tparams, vparams, bparams ++ capabilityParams, ret, rewrite(body), resume, span)
         }
       }
       val newImpl = Implementation(interface, cs, implSpan)

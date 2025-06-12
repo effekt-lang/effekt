@@ -376,7 +376,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.error("Duplicate definitions of operations")
 
       clauses foreach Context.withFocus {
-        case d @ source.OpClause(op, tparams, vparams, bparams, retAnnotation, body, resume) =>
+        case d @ source.OpClause(op, tparams, vparams, bparams, retAnnotation, body, resume, _) =>
 
           retAnnotation.foreach {
             case Effectful(otherTpe, otherEffs2, span) =>

@@ -555,7 +555,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }
 
     Implementation(coreType, sig.operations.map(clauses.apply).map {
-      case op @ source.OpClause(id, tparams, vparams, bparams, ret, body, resume) =>
+      case op @ source.OpClause(id, tparams, vparams, bparams, ret, body, resume, _) =>
         val vps = vparams.map(transform)
         val tps = tparams.map { p => p.symbol }
 

@@ -807,7 +807,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case (id ~ tps ~ k ~ BlockLiteral(_, vps, bps, body, _)) =>
           val synthesizedId = IdRef(Nil, id.name, id.span.synthesized).withPositionOf(id)
           val interface = TypeRef(id, tps, id.span.synthesized).withPositionOf(id)
-          val operation = OpClause(synthesizedId, Nil, vps, bps, None, body, k).withRangeOf(id, body)
+          val operation = OpClause(synthesizedId, Nil, vps, bps, None, body, k, Span(source, id.span.from, body.span.to, Synthesized)).withRangeOf(id, body)
           Implementation(interface, List(operation), span())
       }
 
@@ -835,7 +835,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           }
 
           // TODO the implicitResume needs to have the correct position assigned (maybe move it up again...)
-          OpClause(id, tps, vps, bps, ret.unspan, body, implicitResume)
+          OpClause(id, tps, vps, bps, ret.unspan, body, implicitResume, span())
       }
 
   def implicitResume: IdDef =

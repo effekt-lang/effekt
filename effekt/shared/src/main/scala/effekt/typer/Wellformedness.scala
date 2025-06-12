@@ -266,7 +266,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
   }
 
   override def query(op: source.OpClause)(using Context, WFContext): Unit = op match {
-    case tree @ source.OpClause(id, tps, vps, bps, ret, body, resume) =>
+    case tree @ source.OpClause(id, tps, vps, bps, ret, body, resume, _) =>
       val boundTypes = Context.annotation(Annotations.TypeParameters, op).toSet
       // bound capabilities are ONLY available on New(Implementation(OpClause ... )))
       // but not TryHandle(Implementation(OpClause) since their they are bound by the resumption

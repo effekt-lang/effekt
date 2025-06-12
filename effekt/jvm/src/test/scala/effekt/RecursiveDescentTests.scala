@@ -791,7 +791,9 @@ class RecursiveDescentTests extends munit.FunSuite {
         Implementation(
           TypeRef(IdRef(Nil, "Foo", Span(source, pos(0), pos(1))), Many.empty(Span(source, pos(1), pos(1))), Span(source, pos(0), pos(1), Synthesized)),
           List(OpClause(IdRef(Nil, "Foo", Span(source, pos(0), pos(1), Synthesized)), Nil, Nil, Nil, None,
-            Return(Literal(43, symbols.builtins.TInt, Span(source, pos(2), pos(3))), Span(source, pos(2), pos(3))), IdDef("resume", Span(source, pos(1), pos(1))))),
+            Return(Literal(43, symbols.builtins.TInt, Span(source, pos(2), pos(3))), Span(source, pos(2), pos(3))), IdDef("resume", Span(source, pos(1), pos(1))),
+            Span(source, pos(0), pos(3), Synthesized))
+          ),
           Span(source, pos(0), pos.last)
         ))
     }

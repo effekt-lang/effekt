@@ -587,7 +587,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val eff: Interface = Context.at(interface) { resolveBlockRef(interface).typeConstructor.asInterface }
 
       clauses.foreach {
-        case clause @ source.OpClause(op, tparams, vparams, bparams, ret, body, resumeId) => Context.at(clause) {
+        case clause @ source.OpClause(op, tparams, vparams, bparams, ret, body, resumeId, _) => Context.at(clause) {
 
           // try to find the operation in the handled effect:
           eff.operations.find { o => o.name.toString == op.name } map { opSym =>
