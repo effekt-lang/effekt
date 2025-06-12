@@ -658,12 +658,12 @@ sealed trait Type extends Tree
 /**
  * Trees that represent inferred or synthesized *value* types (not present in the source = not parsed)
  */
-case class ValueTypeTree(tpe: symbols.ValueType) extends Type
+case class ValueTypeTree(tpe: symbols.ValueType, override val span: Span) extends Type
 
 /**
  * Trees that represent inferred or synthesized *block* types (not present in the source = not parsed)
  */
-case class BlockTypeTree(eff: symbols.BlockType) extends Type
+case class BlockTypeTree(eff: symbols.BlockType, override val span: Span) extends Type
 
 /*
  * Reference to a type, potentially with bound occurences in `args`
@@ -673,12 +673,12 @@ case class TypeRef(id: IdRef, args: Many[ValueType], override val span: Span) ex
 /**
  * Types of first-class computations
  */
-case class BoxedType(tpe: BlockType, capt: CaptureSet) extends Type
+case class BoxedType(tpe: BlockType, capt: CaptureSet, override val span: Span) extends Type
 
 /**
  * Types of (second-class) functions
  */
-case class FunctionType(tparams: Many[Id], vparams: Many[ValueType], bparams: Many[(Maybe[IdDef], BlockType)], result: ValueType, effects: Effects) extends Type
+case class FunctionType(tparams: Many[Id], vparams: Many[ValueType], bparams: Many[(Maybe[IdDef], BlockType)], result: ValueType, effects: Effects, override val span: Span) extends Type
 
 
 /**
@@ -699,7 +699,7 @@ object Effects {
   def Pure(span: Span): Effects = Effects(List(), span)
 }
 
-case class CaptureSet(captures: List[IdRef]) extends Tree
+case class CaptureSet(captures: List[IdRef], override val span: Span) extends Tree
 
 
 object Named {

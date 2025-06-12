@@ -50,8 +50,8 @@ trait DocumentationGenerator {
     ))
 
     // block params
-    case BlockTypeTree(eff) => ???
-    case FunctionType(tparams, vparams, bparams, result, effects) => obj(HashMap(
+    case BlockTypeTree(eff, _) => ???
+    case FunctionType(tparams, vparams, bparams, result, effects, span) => obj(HashMap(
       "kind" -> str("FunctionType"),
       "tparams" -> generateTparams(tparams.unspan),
       "vparams" -> arr(vparams.unspan.map(generate)),
@@ -64,14 +64,16 @@ trait DocumentationGenerator {
       )),
       "result" -> generate(result),
       "effects" -> generate(effects),
+      "span" -> generate(span),
     ))
 
     // value params
-    case ValueTypeTree(tpe) => ???
-    case BoxedType(tpe, capt) => obj(HashMap(
+    case ValueTypeTree(tpe, _) => ???
+    case BoxedType(tpe, capt, span) => obj(HashMap(
       "kind" -> str("BoxedType"),
       "tpe" -> generate(tpe),
       "capt" -> generate(capt),
+      "span" -> generate(span),
     ))
   }
 

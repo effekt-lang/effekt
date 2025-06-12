@@ -670,13 +670,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       val posn = pos()
       if peek(`{`) || peek(`pure`) || isVariable then externCapture()
-      else CaptureSet(List(IdRef(List("effekt"), "io", Span(source, posn, posn, Synthesized))))
+      else CaptureSet(List(IdRef(List("effekt"), "io", Span(source, posn, posn, Synthesized))), span())
 
   def externCapture(): CaptureSet =
     nonterminal:
       if peek(`{`) then captureSet()
-      else if peek(`pure`) then `pure` ~> CaptureSet(Nil)
-      else CaptureSet(List(idRef()))
+      else if peek(`pure`) then `pure` ~> CaptureSet(Nil, span())
+      else CaptureSet(List(idRef()), span())
 
   def path(): String =
     nonterminal:
@@ -1268,7 +1268,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`)
     } map { case tparams ~ vparams ~ bparams =>
       (atomicType() labelled "return type") ~ maybeEffects() match {
-        case  t ~ effs => FunctionType(tparams, vparams, bparams, t, effs)
+        case  t ~ effs => FunctionType(tparams, vparams, bparams, t, effs, span())
       }
     }
 
@@ -1276,7 +1276,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     def functionTypeSimple: Maybe[Type] = backtrack {
       refType() <~ `=>`
     } map { tpe =>
-      FunctionType(Many.empty(Span.missing(source)), Many(List(tpe), Span.missing(source)), Many.empty(Span.missing(source)), atomicType(), maybeEffects())
+      FunctionType(Many.empty(tpe.span.emptyAfter), Many(List(tpe), tpe.span.emptyAfter), Many.empty(tpe.span.emptyAfter), atomicType(), maybeEffects(), span())
     }
 
     // Try to parse each function type variant, fall back to basic type if none match
@@ -1293,7 +1293,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
       // TODO: these should probably be in a loop to parse as many `at`s and `\`s as possible?
       val boxed = when(`at`) {
-        BoxedType(tpe, captureSet())
+        BoxedType(tpe, captureSet(), span())
       } {
         tpe
       }
@@ -1421,7 +1421,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def captureSet(): CaptureSet =
     nonterminal:
-      CaptureSet(many(idRef, `{`, `,` , `}`).unspan)
+      CaptureSet(many(idRef, `{`, `,` , `}`).unspan, span())
 
   // Generic utility functions
   // -------------------------

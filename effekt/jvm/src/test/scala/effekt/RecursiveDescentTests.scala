@@ -672,7 +672,8 @@ class RecursiveDescentTests extends munit.FunSuite {
           ), Span(source, pos(0), pos(5))),
           Many.empty(Span(source, pos(5), pos(5))),
           TypeRef(IdRef(Nil, "Int", Span(source, pos(6), pos(7))), Many.empty(Span(source, pos(7), pos(7))), Span(source, pos(6), pos(7))),
-          Effects(Nil, Span(source, pos.last, pos.last, Synthesized))
+          Effects(Nil, Span(source, pos.last, pos.last, Synthesized)),
+          Span(source, pos(0), pos.last)
         )
       )
     }

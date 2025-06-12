@@ -738,10 +738,10 @@ object Namer extends Phase[Parsed, NameResolved] {
         // Dummy value type in order to aggregate more errors (see #947)
         ValueTypeApp(ErrorValueType(), Nil)
     }
-    case source.ValueTypeTree(tpe) =>
+    case source.ValueTypeTree(tpe, _) =>
       tpe
     // TODO reconsider reusing the same set for terms and types...
-    case source.BoxedType(tpe, capt) =>
+    case source.BoxedType(tpe, capt, _) =>
       BoxedType(resolveBlockType(tpe), resolve(capt))
     case other =>
       Context.error(pretty"Expected value type, but got ${describeType(other)}.")
@@ -749,10 +749,10 @@ object Namer extends Phase[Parsed, NameResolved] {
         case funTpe: source.FunctionType =>
           if isParam then Context.info(pretty"Did you mean to use braces in order to receive a block type `${funTpe.sourceOf}`?")
           Context.info(pretty"Did you mean to use a first-class, boxed function type `${funTpe.sourceOf} at {}`?")
-        case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects, span ) =>
+        case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects, _), effects, span ) =>
           val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
           Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects.sourceOf} / ${effects.sourceOf}`?")
-        case source.Effectful(source.BoxedType(tpe@source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects, span) =>
+        case source.Effectful(source.BoxedType(tpe@source.FunctionType(tparams, vparams, bparams, result, funEffects, _), capt, _), effects, span) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
         case source.Effectful(innerTpe, eff, span) =>
           if isParam then Context.info(pretty"Did you mean to use braces and a function type `() => ${innerTpe.sourceOf} / ${eff.sourceOf}`?")
@@ -772,13 +772,13 @@ object Namer extends Phase[Parsed, NameResolved] {
     case other =>
       Context.error(pretty"Expected block type, but got ${describeType(other)}.")
       other match
-        case source.BoxedType(innerTpe, eff) =>
+        case source.BoxedType(innerTpe, eff, _) =>
           if isParam then Context.info(pretty"Did you mean to use parentheses in order to receive a value type ${other.sourceOf}?")
           Context.info(pretty"Did you mean to use the block type ${innerTpe.sourceOf} without 'at ${eff.sourceOf}'?")
-        case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects, span) =>
+        case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects, _), effects, span) =>
           val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
           Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects.sourceOf} / ${effects.sourceOf}`?")
-        case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects, span) =>
+        case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects, _), capt, _), effects, span) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
         case source.Effectful(innerTpe, effs, span) =>
           // NOTE: We could use `isParam` to write a more precise message, but what exactly would it be?
@@ -794,7 +794,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     /**
      * TODO share code with [[typer.Typer.makeFunctionType]]
      */
-    case source.FunctionType(tparams, vparams, bparams, ret, effects) => Context scoped {
+    case source.FunctionType(tparams, vparams, bparams, ret, effects, _) => Context scoped {
       val tps = tparams.map(resolve)
       val vps = vparams.map(resolveValueType)
 
@@ -889,8 +889,8 @@ object Namer extends Phase[Parsed, NameResolved] {
     case _: source.Effectful => s"a type-and-effect annotation ${t.sourceOf}"
 
     // THESE TWO SHOULD NEVER BE USER-VISIBLE!
-    case source.ValueTypeTree(tpe) => s"a value type tree ${tpe}"
-    case source.BlockTypeTree(eff) => s"a block type tree ${eff}"
+    case source.ValueTypeTree(tpe, _) => s"a value type tree ${tpe}"
+    case source.BlockTypeTree(eff, _) => s"a block type tree ${eff}"
   }
 
   private def prettySourceEffectSet(effects: Set[source.TypeRef])(using Context) =
