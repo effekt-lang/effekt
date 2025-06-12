@@ -4,6 +4,7 @@ import bytearray
 import list
 import io
 import io/error
+import io/promise
 import io/filesystem
 
 
