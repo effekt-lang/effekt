@@ -78,7 +78,7 @@ extern {async, global} def await[T](promise: Promise[T]): T =
         return value
       case Pending(futures) =>
         val future = future::allocate()
-        // TODO user reference.set and future.wait
+        // TODO use reference.set and future.wait
         set(reference, Pending(Cons(future, futures)))
         wait(future)
     }
