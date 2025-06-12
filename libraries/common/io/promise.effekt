@@ -5,6 +5,7 @@ import io
 // Futures
 // -------
 
+/// Must be filled exactly once and waited exactly once
 extern type Future[T]
 
 namespace future {
