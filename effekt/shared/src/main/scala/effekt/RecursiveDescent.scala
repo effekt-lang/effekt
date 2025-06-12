@@ -119,9 +119,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     go(position, offset)
 
   // the previously consumed token
-  var previous = tokens(position)
+  var previous: Option[Token] = {
+    if position == 0 then None
+    else Some(tokens(position).failOnErrorToken)
+  }
+  // The current position, the position after the previous token
+  // The `+ 1` is needed since positions by lexer are inclusive, but kiama is exclusive
+  def pos(): Int = previous.map(_.end + 1).getOrElse(0)
 
-  def pos() = previous.end + 1
   def peek(kind: TokenKind): Boolean =
     peek.kind == kind
   def peek(offset: Int, kind: TokenKind): Boolean =
@@ -137,7 +142,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    * Skips the current token and then all subsequent whitespace
    */
   def skip(): Unit =
-    previous = tokens(position)
+    previous = Some(tokens(position))
     position += 1;
     currentLabel = None
     spaces()
@@ -1450,7 +1455,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         position = before
         previous = beforePrevious
         currentLabel = labelBefore
-        Maybe.None(Span(source, previous.end + 1, previous.end + 1, Synthesized))
+        Maybe.None(Span(source, pos(), pos(), Synthesized))
       }
     }
 
@@ -1600,7 +1605,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   // creates a Span with a given start and the end position of the previous token
   inline def span(start : Int ): Span =
-    val end = previous.end + 1 // since positions by lexer are inclusive, but kiama is exclusive
+    val end = pos()
 
     // We need some special handling in the case where we did not consume any tokens.
     // In this case, we have that start > end.
@@ -1620,7 +1625,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
     if start > end then {
       // We did not consume anything (except for whitespace), so we generate an empty span just after the previous token
-      Span(source, previous.end + 1, previous.end + 1 )
+      Span(source, pos(), pos())
     } else {
       Span(source, start, end)
     }
@@ -1637,8 +1642,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     val startToken = peek
     val start = startToken.start
     val res = p
-    val endToken = previous
-    val end = endToken.end + 1 // since positions by lexer are inclusive, but kiama is exclusive
+    val end = pos()
 
     //    val sc: Any = res
     //    if sc.isInstanceOf[Implementation] then sc match {
