@@ -506,7 +506,6 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     // The former is sent by the VSCode extension for `initializationOptions`,
     // the latter by newer extension versions for `workspace/didChangeConfiguration`.
     val newSettings = params.getSettings.asInstanceOf[JsonElement].getAsJsonObject
-    this.settings = newSettings;
     if (newSettings == null) return
     val effektSection = newSettings.get("effekt")
     if (effektSection != null) {

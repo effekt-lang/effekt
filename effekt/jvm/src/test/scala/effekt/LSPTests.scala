@@ -379,7 +379,7 @@ class LSPTests extends FunSuite {
       server.getTextDocumentService().didOpen(didOpenParams)
 
       val configParams = new DidChangeConfigurationParams()
-      val settings: JsonElement = JsonParser.parseString("""{"showExplanations": true}""")
+      val settings: JsonElement = JsonParser.parseString("""{"effekt": {"showExplanations": true}}""")
       configParams.setSettings(settings)
       server.getWorkspaceService().didChangeConfiguration(configParams)
 
@@ -1139,7 +1139,7 @@ class LSPTests extends FunSuite {
         raw"""def main() = <>""".textDocument
       val textDoc = new TextDocumentItem("file://path/to/test.effekt", "effekt", 0, source.getText)
       val initializeParams = new InitializeParams()
-      val initializationOptions = """{"showIR": "source"}"""
+      val initializationOptions = """{"effekt": {"showIR": "source"}}"""
       initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
       server.initialize(initializeParams).get()
 
@@ -1210,7 +1210,7 @@ class LSPTests extends FunSuite {
              |"""
       val textDoc = new TextDocumentItem("file://path/to/test.effekt", "effekt", 0, source.stripMargin)
       val initializeParams = new InitializeParams()
-      val initializationOptions = """{"showIR": "source"}"""
+      val initializationOptions = """{"effekt": {"showIR": "source"}}"""
       initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
       server.initialize(initializeParams).get()
 
@@ -1266,7 +1266,7 @@ class LSPTests extends FunSuite {
              |def bar(x: String): Int = <{ <> }> // a hole within a hole
              |""".textDocument
       val initializeParams = new InitializeParams()
-      val initializationOptions = """{"showHoles": true}"""
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
       initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
       server.initialize(initializeParams).get()
 
@@ -1335,7 +1335,7 @@ class LSPTests extends FunSuite {
              |""".textDocument
 
       val initializeParams = new InitializeParams()
-      val initializationOptions = """{"showHoles": true}"""
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
       initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
       server.initialize(initializeParams).get()
 
@@ -1401,7 +1401,7 @@ class LSPTests extends FunSuite {
              |""".textDocument
 
       val initializeParams = new InitializeParams()
-      val initializationOptions = """{"showHoles": true}"""
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
       initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
       server.initialize(initializeParams).get()
 
