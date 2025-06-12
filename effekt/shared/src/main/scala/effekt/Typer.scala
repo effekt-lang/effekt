@@ -283,13 +283,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // check that number of patterns matches number of scrutinees
         val arity = scs.length
         clauses.foreach {
-          case cls @ source.MatchClause(source.MultiPattern(patterns, _), guards, body) =>
+          case cls @ source.MatchClause(source.MultiPattern(patterns, _), guards, body, _) =>
             if (patterns.length != arity) {
               Context.at(cls){
                 Context.error(pp"Number of patterns (${patterns.length}) does not match number of parameters / scrutinees (${arity}).")
               }
             }
-          case cls @ source.MatchClause(pattern, guards, body) =>
+          case cls @ source.MatchClause(pattern, guards, body, _) =>
             if (arity != 1) {
               Context.at(cls) {
                 Context.error(pp"Number of patterns (1) does not match number of parameters / scrutinees (${arity}).")
@@ -298,7 +298,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         }
 
         val tpes = clauses.map {
-          case source.MatchClause(p, guards, body) =>
+          case source.MatchClause(p, guards, body, _) =>
             // (3) infer types for pattern(s)
             p match {
               case source.MultiPattern(ps, _) =>
@@ -612,10 +612,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
   } match { case res => Context.annotateInferredType(pattern, sc); res }
 
   def checkGuard(guard: MatchGuard)(using Context, Captures): Result[Map[Symbol, ValueType]] = guard match {
-    case MatchGuard.BooleanGuard(condition) =>
+    case MatchGuard.BooleanGuard(condition, _) =>
       val Result(tpe, effs) = checkExpr(condition, Some(TBoolean))
       Result(Map.empty, effs)
-    case MatchGuard.PatternGuard(scrutinee, pattern) =>
+    case MatchGuard.PatternGuard(scrutinee, pattern, _) =>
       val Result(tpe, effs) = checkExpr(scrutinee, None)
       Result(checkPattern(tpe, pattern), effs)
   }

@@ -168,7 +168,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
         case scs => source.MultiPattern(List.fill(scs.length){source.IgnorePattern(Span.missing)}, Span.missing)
       }
 
-      val defaultClause = default.toList.map(body => source.MatchClause(defaultPattern, Nil, body))
+      val defaultClause = default.toList.map(body => source.MatchClause(defaultPattern, Nil, body, Span.missing))
       ExhaustivityChecker.checkExhaustive(scrutinees, clauses ++ defaultClause)
 
       scrutinees foreach { query }
@@ -252,7 +252,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
   }
 
   override def query(c: source.MatchClause)(using Context, WFContext): Unit = c match {
-    case source.MatchClause(pattern, guards, body) =>
+    case source.MatchClause(pattern, guards, body, _) =>
 
       var bound: Set[TypeVar] = existentials(pattern)
 
@@ -284,10 +284,10 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
   }
 
   def queryGuardsExistentials(p: MatchGuard)(using Context, WFContext): Set[TypeVar] = p match {
-    case MatchGuard.BooleanGuard(condition) =>
+    case MatchGuard.BooleanGuard(condition, _) =>
       query(condition);
       Set.empty
-    case MatchGuard.PatternGuard(scrutinee, pattern) =>
+    case MatchGuard.PatternGuard(scrutinee, pattern, _) =>
       query(scrutinee);
       existentials(pattern)
   }

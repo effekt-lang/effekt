@@ -512,7 +512,8 @@ class RecursiveDescentTests extends munit.FunSuite {
           List(),
           Return(Var(IdRef(List(),"left",Span(source,pos(9),pos(10))),
             Span(source,pos(9),pos(10))),
-            Span(source,pos(8),pos(10)))
+            Span(source,pos(8),pos(10))),
+          Span(source,pos(0),pos(7))
         )
       ),
       None,

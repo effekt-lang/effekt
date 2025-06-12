@@ -448,7 +448,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
             val endPos = pos()
             val default = when(`else`) { Some(stmt()) } { None }
             val body = semi() ~> stmts()
-            val clause = MatchClause(p, guards, body).withRangeOf(p, sc)
+            val clause = MatchClause(p, guards, body, Span(source, p.span.from, sc.span.to)).withRangeOf(p, sc)
             val matching = Match(List(sc), List(clause), default, Span(source, startPos, endPos, Synthesized)).withRangeOf(startMarker, sc)
             Return(matching, span().synthesized)
         }
@@ -854,7 +854,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         manyWhile(`and` ~> matchGuard(), `and`),
         // allow a statement enclosed in braces or without braces
         // both is allowed since match clauses are already delimited by `case`
-        `=>` ~> (if (peek(`{`)) { stmt() } else { stmts() })
+        `=>` ~> (if (peek(`{`)) { stmt() } else { stmts() }),
+        span()
       )
 
   def matchGuards() =
@@ -864,8 +865,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def matchGuard(): MatchGuard =
     nonterminal:
       expr() ~ when(`is`) { Some(matchPattern()) } { None } match {
-        case e ~ Some(p) => MatchGuard.PatternGuard(e, p)
-        case e ~ None    => MatchGuard.BooleanGuard(e)
+        case e ~ Some(p) => MatchGuard.PatternGuard(e, p, span())
+        case e ~ None    => MatchGuard.BooleanGuard(e, span())
       }
 
   def matchPattern(): MatchPattern =
@@ -1051,7 +1052,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           // { case ... => ... }
           case `case` => someWhile(matchClause(), `case`) match { case cs =>
             val arity = cs match {
-              case Many(MatchClause(MultiPattern(ps, _), _, _) :: _, _) => ps.length
+              case Many(MatchClause(MultiPattern(ps, _), _, _, _) :: _, _) => ps.length
               case _ => 1
             }
             // TODO fresh names should be generated for the scrutinee

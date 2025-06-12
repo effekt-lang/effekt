@@ -381,7 +381,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.BlockLiteral(tps, vps, bps, body, _) =>
       transformBox(tree)
 
-    case source.If(List(MatchGuard.BooleanGuard(cond)), thn, els, _) =>
+    case source.If(List(MatchGuard.BooleanGuard(cond, _)), thn, els, _) =>
       val c = transformAsPure(cond)
       Context.bind(If(c, transform(thn), transform(els)))
 
@@ -412,7 +412,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val elseBranch = default.map(transform).getOrElse(Return(Literal((), core.Type.TUnit)))
 
       val loopBody = guards match {
-        case List(MatchGuard.BooleanGuard(cond)) =>
+        case List(MatchGuard.BooleanGuard(cond, _)) =>
           insertBindings { core.If(transformAsPure(cond), thenBranch, elseBranch) }
         case _ =>
           insertBindings {
@@ -672,8 +672,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case source.MultiPattern(patterns, _) => patterns.flatMap(boundInPattern)
     }
     def boundInGuard(g: source.MatchGuard): List[core.ValueParam] = g match {
-      case MatchGuard.BooleanGuard(condition) => Nil
-      case MatchGuard.PatternGuard(scrutinee, pattern) => boundInPattern(pattern)
+      case MatchGuard.BooleanGuard(condition, _) => Nil
+      case MatchGuard.PatternGuard(scrutinee, pattern, _) => boundInPattern(pattern)
     }
     def boundTypesInPattern(p: source.MatchPattern): List[Id] = p match {
       case source.AnyPattern(id, _) => List()
@@ -682,8 +682,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case source.MultiPattern(patterns, _) => patterns.flatMap(boundTypesInPattern)
     }
     def boundTypesInGuard(g: source.MatchGuard): List[Id] = g match {
-      case MatchGuard.BooleanGuard(condition) => Nil
-      case MatchGuard.PatternGuard(scrutinee, pattern) => boundTypesInPattern(pattern)
+      case MatchGuard.BooleanGuard(condition, _) => Nil
+      case MatchGuard.PatternGuard(scrutinee, pattern, _) => boundTypesInPattern(pattern)
     }
     def equalsFor(tpe: symbols.ValueType): (Pure, Pure) => Pure =
       val prelude = Context.module.findDependency(QualifiedName(Nil, "effekt")).getOrElse {
@@ -723,9 +723,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     def transformGuard(p: source.MatchGuard): List[Condition] =
       val (cond, bindings) = Context.withBindings {
         p match {
-          case MatchGuard.BooleanGuard(condition) =>
+          case MatchGuard.BooleanGuard(condition, _) =>
             Condition.Predicate(transformAsPure(condition))
-          case MatchGuard.PatternGuard(scrutinee, pattern) =>
+          case MatchGuard.PatternGuard(scrutinee, pattern, _) =>
             val x = Context.bind(transformAsPure(scrutinee))
             Condition.Patterns(Map(x -> transformPattern(pattern)))
         }

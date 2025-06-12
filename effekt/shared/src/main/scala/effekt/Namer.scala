@@ -646,7 +646,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(m: source.MatchClause)(using Context): Unit = Context.focusing(m) {
-    case source.MatchClause(pattern, guards, body) =>
+    case source.MatchClause(pattern, guards, body, _) =>
       val ps = resolve(pattern)
       Context scoped {
         // variables bound by patterns are available in the guards.
@@ -697,8 +697,8 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(p: source.MatchGuard)(using Context): Unit = p match {
-    case MatchGuard.BooleanGuard(condition) => resolve(condition)
-    case MatchGuard.PatternGuard(scrutinee, pattern) =>
+    case MatchGuard.BooleanGuard(condition, _) => resolve(condition)
+    case MatchGuard.PatternGuard(scrutinee, pattern, _) =>
       resolve(scrutinee)
       val ps = resolve(pattern)
       ps.foreach { Context.bind }

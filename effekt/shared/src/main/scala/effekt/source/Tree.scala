@@ -583,16 +583,16 @@ case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], bp
 // Pattern Matching
 // ----------------
 
-case class MatchClause(pattern: MatchPattern, guards: List[MatchGuard], body: Stmt) extends Tree
+case class MatchClause(pattern: MatchPattern, guards: List[MatchGuard], body: Stmt, override val span: Span) extends Tree
 
 enum MatchGuard extends Tree {
 
-  case BooleanGuard(condition: Term)
+  case BooleanGuard(condition: Term, override val span: Span)
 
   /**
    * i.e. <EXPR> is <PATTERN>
    */
-  case PatternGuard(scrutinee: Term, pattern: MatchPattern)
+  case PatternGuard(scrutinee: Term, pattern: MatchPattern, override val span: Span)
 }
 export MatchGuard.*
 
