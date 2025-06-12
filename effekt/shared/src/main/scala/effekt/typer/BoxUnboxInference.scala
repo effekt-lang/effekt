@@ -33,57 +33,57 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
    */
   def rewriteAsBlock(e: Term)(using C: Context): Term = visit(e) {
     case v: Var => v.definition match {
-      case sym: (ValueSymbol | symbols.RefBinder) => Unbox(v).inheritPosition(v)
+      case sym: (ValueSymbol | symbols.RefBinder) => Unbox(v, v.span.synthesized).inheritPosition(v)
       case sym: BlockSymbol => v
     }
 
-    case Unbox(t) => Unbox(rewriteAsExpr(t))
-    case New(impl) => New(rewrite(impl))
-    case BlockLiteral(tps, vps, bps, body) => BlockLiteral(tps, vps, bps, rewrite(body))
-    case other => Unbox(rewriteAsExpr(other))
+    case Unbox(t, span) => Unbox(rewriteAsExpr(t), span)
+    case New(impl, span) => New(rewrite(impl), span)
+    case BlockLiteral(tps, vps, bps, body, span) => BlockLiteral(tps, vps, bps, rewrite(body), span)
+    case other => Unbox(rewriteAsExpr(other), other.span.synthesized)
   }
 
   def rewriteAsExpr(e: Term)(using C: Context): Term = visit(e) {
 
-    case Unbox(expr) => rewriteAsExpr(expr)
+    case Unbox(expr, _) => rewriteAsExpr(expr)
 
     case v: Var => v.definition match {
       // TODO maybe we should synthesize a call to get here already?
       case sym: (ValueSymbol | symbols.RefBinder) => v
-      case sym: BlockSymbol => Box(Maybe.None(v.span.emptyAfter), v).inheritPosition(v)
+      case sym: BlockSymbol => Box(Maybe.None(v.span.emptyAfter), v, v.span.synthesized).inheritPosition(v)
     }
 
-    case n: New => Box(Maybe.None(n.span.emptyAfter), rewriteAsBlock(n)).inheritPosition(n)
+    case n: New => Box(Maybe.None(n.span.emptyAfter), rewriteAsBlock(n), n.span.synthesized).inheritPosition(n)
 
-    case b: BlockLiteral => Box(Maybe.None(b.span.emptyAfter), rewriteAsBlock(b)).inheritPosition(b)
+    case b: BlockLiteral => Box(Maybe.None(b.span.emptyAfter), rewriteAsBlock(b), b.span.synthesized).inheritPosition(b)
 
     case l: Literal => l
 
-    case Assign(id, expr) =>
-      Assign(id, rewriteAsExpr(expr))
+    case Assign(id, expr, span) =>
+      Assign(id, rewriteAsExpr(expr), span)
 
-    case If(guards, thn, els) =>
-      If(guards.map(rewrite), rewrite(thn), rewrite(els))
+    case If(guards, thn, els, span) =>
+      If(guards.map(rewrite), rewrite(thn), rewrite(els), span)
 
-    case While(guards, body, default) =>
-      While(guards.map(rewrite), rewrite(body), default.map(rewrite))
+    case While(guards, body, default, span) =>
+      While(guards.map(rewrite), rewrite(body), default.map(rewrite), span)
 
-    case Match(scs, clauses, default) =>
-      Match(scs.map(rewriteAsExpr), clauses.map(rewrite), default.map(rewrite))
+    case Match(scs, clauses, default, span) =>
+      Match(scs.map(rewriteAsExpr), clauses.map(rewrite), default.map(rewrite), span)
 
-    case s @ Select(recv, name) if s.definition.isInstanceOf[Field] =>
-      Select(rewriteAsExpr(recv), name)
+    case s @ Select(recv, name, span) if s.definition.isInstanceOf[Field] =>
+      Select(rewriteAsExpr(recv), name, span)
 
-    case s @ Select(recv, name) =>
+    case s @ Select(recv, name, span) =>
       C.abort("selection on blocks not supported yet.")
 
-    case Do(effect, id, targs, vargs, bargs) =>
-      Do(effect, id, targs, vargs.map(rewriteAsExpr), bargs.map(rewriteAsBlock))
+    case Do(effect, id, targs, vargs, bargs, span) =>
+      Do(effect, id, targs, vargs.map(rewriteAsExpr), bargs.map(rewriteAsBlock), span)
 
-    case Call(fun, targs, vargs, bargs) =>
-      Call(rewrite(fun), targs, vargs.map(rewriteAsExpr), bargs.map(rewriteAsBlock))
+    case Call(fun, targs, vargs, bargs, span) =>
+      Call(rewrite(fun), targs, vargs.map(rewriteAsExpr), bargs.map(rewriteAsBlock), span)
 
-    case m @ MethodCall(receiver, id, targs, vargs, bargs) =>
+    case m @ MethodCall(receiver, id, targs, vargs, bargs, span) =>
       val vargsTransformed = vargs.map(rewriteAsExpr)
       val bargsTransformed = bargs.map(rewriteAsBlock)
 
@@ -95,29 +95,29 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
 
       // we prefer methods over uniform call syntax
       if (hasMethods) {
-        MethodCall(rewriteAsBlock(receiver), id, targs, vargsTransformed, bargsTransformed)
+        MethodCall(rewriteAsBlock(receiver), id, targs, vargsTransformed, bargsTransformed, span)
       } else {
-        Call(IdTarget(id).inheritPosition(id), targs, rewriteAsExpr(receiver) :: vargsTransformed, bargsTransformed)
+        Call(IdTarget(id).inheritPosition(id), targs, rewriteAsExpr(receiver) :: vargsTransformed, bargsTransformed, span)
       }
 
-    case TryHandle(prog, handlers) =>
-      TryHandle(rewrite(prog), handlers.map(rewrite))
+    case TryHandle(prog, handlers, span) =>
+      TryHandle(rewrite(prog), handlers.map(rewrite), span)
 
-    case Region(name, body) =>
-      Region(name, rewrite(body))
+    case Region(name, body, span) =>
+      Region(name, rewrite(body), span)
 
     case Hole(id, stmts, span) =>
       Hole(id, rewrite(stmts), span)
 
-    case Box(c, b) =>
-      Box(c, rewriteAsBlock(b))
+    case Box(c, b, span) =>
+      Box(c, rewriteAsBlock(b), span)
   }
 
   def rewrite(target: source.CallTarget)(using C: Context): source.CallTarget = visit(target) {
     case source.ExprTarget(receiver) => source.ExprTarget(rewriteAsBlock(receiver))
     case t: source.IdTarget => t.definition match {
       case sym: (ValueSymbol | symbols.RefBinder) =>
-        source.ExprTarget(source.Unbox(source.Var(t.id).inheritPosition(t)).inheritPosition(t)).inheritPosition(t)
+        source.ExprTarget(source.Unbox(source.Var(t.id, t.id.span).inheritPosition(t), t.span.synthesized).inheritPosition(t)).inheritPosition(t)
       case sym: BlockSymbol =>
         t
     }
@@ -145,11 +145,11 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     case DefDef(id, annot, binding, doc, span) =>
       val block = rewriteAsBlock(binding)
       (binding, block) match {
-        case (Unbox(_), _) => ()
+        case (Unbox(_, _), _) => ()
         // If the binding wasn't an `Unbox` and now it is, it means that the compiler synthesized it.
         // We therefore annotate the new `Unbox` expression with its original definition.
         // See [[Annotations.UnboxParentDef]] for more details about this annotation.
-        case (_, u @ Unbox(_)) => C.annotate(Annotations.UnboxParentDef, u, t)
+        case (_, u @ Unbox(_, _)) => C.annotate(Annotations.UnboxParentDef, u, t)
         case (_, _) => ()
       }
       DefDef(id, annot, block, doc, span)

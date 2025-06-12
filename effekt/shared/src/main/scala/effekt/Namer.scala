@@ -135,7 +135,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     // allow recursive definitions of objects
-    case d @ source.DefDef(id, annot, source.New(source.Implementation(interface, clauses)), doc, span) =>
+    case d @ source.DefDef(id, annot, source.New(source.Implementation(interface, clauses), _), doc, span) =>
       val tpe = Context.at(interface) { resolveBlockRef(interface) }
       val sym = Binder.DefBinder(Context.nameFor(id), Some(tpe), d)
       Context.define(id, sym)
@@ -314,7 +314,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, sym)
 
     // already has been preresolved (to enable recursive definitions)
-    case d @ source.DefDef(id, annot, source.New(impl), doc, span) =>
+    case d @ source.DefDef(id, annot, source.New(impl, _), doc, span) =>
       resolve(impl)
 
     case d @ source.DefDef(id, annot, binding, doc, span) =>
@@ -417,7 +417,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   def resolve(t: source.Term)(using Context): Unit = Context.focusing(t) {
 
-    case source.Literal(value, tpe) => ()
+    case source.Literal(value, tpe, _) => ()
 
     case hole @ source.Hole(id, stmts, span) =>
       val h = Hole(Name.local(freshHoleId), hole)
@@ -425,24 +425,24 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.assignSymbol(id, h)
       Context scoped { resolve(stmts) }
 
-    case source.Unbox(term) => resolve(term)
+    case source.Unbox(term, _) => resolve(term)
 
-    case source.New(impl) => resolve(impl)
+    case source.New(impl, _) => resolve(impl)
 
-    case source.Match(scrutinees, clauses, default) =>
+    case source.Match(scrutinees, clauses, default, _) =>
       scrutinees.foreach(resolve)
       clauses.foreach(resolve)
       Context.scoped { default.foreach(resolve) }
 
-    case source.If(guards, thn, els) =>
+    case source.If(guards, thn, els, _) =>
       Context scoped { guards.foreach(resolve); resolve(thn) }
       Context scoped { resolve(els) }
 
-    case source.While(guards, block, default) =>
+    case source.While(guards, block, default, _) =>
       Context scoped { guards.foreach(resolve); resolve(block) }
       Context scoped { default foreach resolve }
 
-    case tree @ source.TryHandle(body, handlers) =>
+    case tree @ source.TryHandle(body, handlers, _) =>
       handlers.foreach(resolve)
 
       Context scoped {
@@ -457,7 +457,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolve(body)
       }
 
-    case tree @ source.Region(name, body) =>
+    case tree @ source.Region(name, body, _) =>
       val reg = BlockParam(Name.local(name.name), Some(builtins.TRegion))
       Context.define(name, reg)
       Context scoped {
@@ -465,7 +465,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolve(body)
       }
 
-    case f @ source.BlockLiteral(tparams, vparams, bparams, stmt) =>
+    case f @ source.BlockLiteral(tparams, vparams, bparams, stmt, _) =>
       Context scoped {
         val tps = tparams map resolve
         val vps = vparams map resolve
@@ -477,22 +477,22 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolve(stmt)
       }
 
-    case source.Box(capt, block) =>
+    case source.Box(capt, block, _) =>
       capt foreach resolve
       resolve(block)
 
     // (2) === Bound Occurrences ===
 
-    case source.Select(receiver, target) =>
+    case source.Select(receiver, target, _) =>
       Context.panic("Cannot happen since Select is introduced later")
 
-    case source.MethodCall(receiver, target, targs, vargs, bargs) =>
+    case source.MethodCall(receiver, target, targs, vargs, bargs, _) =>
       resolve(receiver)
 
       // We are a bit context sensitive in resolving the method
       Context.focusing(target) { _ =>
         receiver match {
-          case source.Var(id) => Context.resolveTerm(id) match {
+          case source.Var(id, _) => Context.resolveTerm(id) match {
             // (foo: ValueType).bar(args)  = Call(bar, foo :: args)
             case symbol: ValueSymbol =>
               if !Context.resolveOverloadedFunction(target)
@@ -508,7 +508,7 @@ object Namer extends Phase[Parsed, NameResolved] {
               then Context.abort(pp"Cannot resolve operation ${target}, called on a receiver that is a computation.")
           }
           // (unbox term).bar(args)  = Invoke(Unbox(term), bar, args)
-          case source.Unbox(term) =>
+          case source.Unbox(term, _) =>
             if !Context.resolveOverloadedOperation(target)
             then Context.abort(pp"Cannot resolve operation ${target}, called on an unboxed computation.")
 
@@ -522,13 +522,13 @@ object Namer extends Phase[Parsed, NameResolved] {
       vargs foreach resolve
       bargs foreach resolve
 
-    case source.Do(effect, target, targs, vargs, bargs) =>
+    case source.Do(effect, target, targs, vargs, bargs, _) =>
       Context.resolveEffectCall(effect map resolveBlockRef, target)
       targs foreach resolveValueType
       vargs foreach resolve
       bargs foreach resolve
 
-    case source.Call(target, targs, vargs, bargs) =>
+    case source.Call(target, targs, vargs, bargs, _) =>
       Context.focusing(target) {
         case source.IdTarget(id)     => Context.resolveFunctionCalltarget(id)
         case source.ExprTarget(expr) => resolve(expr)
@@ -537,9 +537,9 @@ object Namer extends Phase[Parsed, NameResolved] {
       vargs foreach resolve
       bargs foreach resolve
 
-    case source.Var(id) => Context.resolveVar(id)
+    case source.Var(id, _) => Context.resolveVar(id)
 
-    case source.Assign(id, expr) => Context.resolveVar(id) match {
+    case source.Assign(id, expr, _) => Context.resolveVar(id) match {
       case _: VarBinder | _: RegBinder => resolve(expr)
       case _: ValBinder | _: ValueParam => Context.abort(pretty"Can only assign to mutable variables, but ${id.name} is a constant.")
       case y: Wildcard => Context.abort(s"Trying to assign to a wildcard, which is not allowed.")

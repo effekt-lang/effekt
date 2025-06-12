@@ -210,12 +210,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def transformUnbox(tree: source.Term)(implicit C: Context): Block = tree match {
-    case source.Unbox(b) => Unbox(transformAsPure(b))
+    case source.Unbox(b, _) => Unbox(transformAsPure(b))
     case _ => Unbox(transformAsPure(tree))
   }
 
   def transformBox(tree: source.Term)(implicit C: Context): Pure = tree match {
-    case source.Box(capt, block) => Box(transformAsBlock(tree), transform(Context.inferredCapture(block)))
+    case source.Box(capt, block, _) => Box(transformAsBlock(tree), transform(Context.inferredCapture(block)))
     case _ => Box(transformAsBlock(tree), transform(Context.inferredCapture(tree)))
   }
 
@@ -241,10 +241,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v: source.Var =>
       BlockVar(v.definition.asInstanceOf[BlockSymbol])
 
-    case source.BlockLiteral(tparams, vparams, bparams, body) =>
+    case source.BlockLiteral(tparams, vparams, bparams, body, _) =>
       Context.panic(s"Using block literal ${tree} but an object was expected.")
 
-    case source.New(impl) =>
+    case source.New(impl, _) =>
       New(transform(impl, None))
 
     case _ => transformUnbox(tree)
@@ -308,12 +308,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           Context.abort(s"Expected a function but got an object of type ${t}")
       }
 
-    case source.BlockLiteral(tps, vps, bps, body) =>
+    case source.BlockLiteral(tps, vps, bps, body, _) =>
       val tparams = tps.map(t => t.symbol)
       val cparams = bps.map { b => b.symbol.capture }
       BlockLit(tparams, cparams, vps map transform, bps map transform, transform(body))
 
-    case s @ source.New(impl) =>
+    case s @ source.New(impl, _) =>
       Context.abort(s"Expected a function but got an object instantiation: ${s}")
 
     case _ => transformUnbox(tree)
@@ -336,11 +336,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case sym: BlockSymbol => transformBox(tree)
     }
 
-    case source.Literal(value, tpe) =>
+    case source.Literal(value, tpe, _) =>
       Literal(value, transform(tpe))
 
     // [[ sc.field ]] = val x = sc match { tag: { (_, _, x, _) => return x } }; ...
-    case s @ source.Select(receiver, selector) =>
+    case s @ source.Select(receiver, selector, _) =>
       val field: Field = s.definition
 
       val constructor = field.constructor
@@ -369,23 +369,23 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Context.bind(Stmt.Match(transformAsPure(receiver),
         List((constructor, BlockLit(Nil, Nil, params, Nil, Stmt.Return(Pure.ValueVar(selected, tpe))))), None))
 
-    case source.Box(capt, block) =>
+    case source.Box(capt, block, _) =>
       transformBox(block)
 
-    case source.New(impl) =>
+    case source.New(impl, _) =>
       transformBox(tree)
 
-    case source.Unbox(b) =>
+    case source.Unbox(b, _) =>
       transformBox(tree)
 
-    case source.BlockLiteral(tps, vps, bps, body) =>
+    case source.BlockLiteral(tps, vps, bps, body, _) =>
       transformBox(tree)
 
-    case source.If(List(MatchGuard.BooleanGuard(cond)), thn, els) =>
+    case source.If(List(MatchGuard.BooleanGuard(cond)), thn, els, _) =>
       val c = transformAsPure(cond)
       Context.bind(If(c, transform(thn), transform(els)))
 
-    case source.If(guards, thn, els) =>
+    case source.If(guards, thn, els, _) =>
       val thnClause = preprocess("thn", Nil, guards, transform(thn))
       val elsClause = preprocess("els", Nil, Nil, transform(els))
       Context.bind(PatternMatchingCompiler.compile(List(thnClause, elsClause)))
@@ -399,7 +399,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // [[ while(cond) { body } ]] =
     //   def loop$13() = if ([[cond]]) { [[ body ]]; loop$13() } else { return () }
     //   loop$13()
-    case source.While(guards, body, default) =>
+    case source.While(guards, body, default, _) =>
       val loopName = TmpBlock("while")
       val loopType = core.BlockType.Function(Nil, Nil, Nil, Nil, core.Type.TUnit)
 
@@ -427,11 +427,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Context.bind(loopCall)
 
     // Empty match (matching on Nothing)
-    case source.Match(List(sc), Nil, None) =>
+    case source.Match(List(sc), Nil, None, _) =>
       val scrutinee: ValueVar = Context.bind(transformAsPure(sc))
       Context.bind(core.Match(scrutinee, Nil, None))
 
-    case source.Match(scs, cs, default) =>
+    case source.Match(scs, cs, default, _) =>
       // (1) Bind scrutinee and all clauses so we do not have to deal with sharing on demand.
       val scrutinees: List[ValueVar] = scs.map{ sc => Context.bind(transformAsPure(sc)) }
       val clauses = cs.zipWithIndex.map((c, i) => preprocess(s"k${i}", scrutinees, c))
@@ -439,7 +439,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val compiledMatch = PatternMatchingCompiler.compile(clauses ++ defaultClause)
       Context.bind(compiledMatch)
 
-    case source.TryHandle(prog, handlers) =>
+    case source.TryHandle(prog, handlers, _) =>
 
       val transformedProg = transform(prog)
 
@@ -463,7 +463,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       Context.bind(Reset(body))
 
-    case r @ source.Region(name, body) =>
+    case r @ source.Region(name, body, _) =>
       val region = r.symbol
       val tpe = Context.blockTypeOf(region)
       val cap: core.BlockParam = core.BlockParam(region, transform(tpe), Set(region.capture))
@@ -472,14 +472,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Hole(id, stmts, span) =>
       Context.bind(core.Hole())
 
-    case a @ source.Assign(id, expr) =>
+    case a @ source.Assign(id, expr, _) =>
       val sym = a.definition
       // emits `ref := value; return ()`
       Context.bind(Put(sym, transform(Context.captureOf(sym)), transformAsPure(expr), Return(Literal((), core.Type.TUnit))))
       Literal((), core.Type.TUnit)
 
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
-    case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
+    case c @ source.MethodCall(receiver, id, targs, vargs, bargs, _) =>
       val rec = transformAsObject(receiver)
       val typeArgs = Context.typeArguments(c).map(transform)
       val valueArgs = vargs.map(transformAsPure)
@@ -497,7 +497,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       Context.bind(Invoke(rec, operation, opType, remainingTypeArgs, valueArgs, blockArgs))
 
-    case c @ source.Call(source.ExprTarget(source.Unbox(expr)), targs, vargs, bargs) =>
+    case c @ source.Call(source.ExprTarget(source.Unbox(expr, _)), targs, vargs, bargs, _) =>
 
       val (funTpe, capture) = Context.inferredTypeOf(expr) match {
         case BoxedType(s: FunctionType, c: CaptureSet) => (s, c)
@@ -511,14 +511,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       Context.bind(App(Unbox(e), typeArgs, valueArgs, blockArgs))
 
-    case c @ source.Call(fun: source.IdTarget, _, vargs, bargs) =>
+    case c @ source.Call(fun: source.IdTarget, _, vargs, bargs, _) =>
       // assumption: typer removed all ambiguous references, so there is exactly one
       makeFunctionCall(c, fun.definition, vargs, bargs)
 
-    case c @ source.Call(s: source.ExprTarget, targs, vargs, bargs) =>
+    case c @ source.Call(s: source.ExprTarget, targs, vargs, bargs, _) =>
       Context.panic("Should not happen. Unbox should have been inferred.")
 
-    case source.Do(effect, id, targs, vargs, bargs) =>
+    case source.Do(effect, id, targs, vargs, bargs, _) =>
       Context.panic("Should have been translated away (to explicit selection `@CAP.op()`) by capability passing.")
   }
 
@@ -526,7 +526,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
    * Aims to flatten sequenced ifs into a single match
    */
   def collectClauses(term: source.Term)(using Context): Option[List[Clause]] = term match {
-    case source.If(guards, thn, els) =>
+    case source.If(guards, thn, els, _) =>
       val thenClause = preprocess("thn", Nil, guards, transform(thn))
       val elseClauses = collectClauses(els) match {
         case Some(clauses) => clauses
@@ -714,7 +714,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Pattern.Tag(id.symbol, tparams, patterns.map { p => (transformPattern(p), transform(Context.inferredTypeOf(p))) })
       case source.IgnorePattern() =>
         Pattern.Ignore()
-      case source.LiteralPattern(source.Literal(value, tpe)) =>
+      case source.LiteralPattern(source.Literal(value, tpe, _)) =>
         Pattern.Literal(Literal(value, transform(tpe)), equalsFor(tpe))
       case source.MultiPattern(patterns) =>
         Context.panic("Multi-pattern should have been split on toplevel / nested MultiPattern")

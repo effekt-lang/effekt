@@ -270,12 +270,20 @@ class RecursiveDescentTests extends munit.FunSuite {
     {
       val (source, pos) =
         raw"""loop { f }
-             |↑   ↑  ↑↑
+             |↑   ↑  ↑↑ ↑
              |""".sourceAndPositions
 
       assertEquals(
         parseExpr(source.content),
-        Call(IdTarget(IdRef(Nil, "loop", Span(source, pos(0), pos(1)))), Nil, Nil, List(Var(IdRef(Nil, "f", Span(source, pos(2), pos(3)))))))
+        Call(
+          IdTarget(IdRef(Nil, "loop", Span(source, pos(0), pos(1)))),
+          Nil, Nil,
+          List(
+            Var(IdRef(Nil, "f", Span(source, pos(2), pos(3))), Span(source, pos(2), pos(3)))
+          ),
+          Span(source, pos(0), pos.last)
+        )
+      )
     }
 
     assertNotEqualModuloSpans(
@@ -294,7 +302,12 @@ class RecursiveDescentTests extends munit.FunSuite {
       assertEquals(
         parseExpr(source.content),
         // At the moment uniform function call syntax is always a method call
-        MethodCall(Var(IdRef(Nil, "foo", Span(source, pos(0), pos(1)))), IdRef(Nil, "bar", Span(source, pos(2), pos(3))), Nil, Nil, Nil))
+        MethodCall(
+          Var(IdRef(Nil, "foo", Span(source, pos(0), pos(1))), Span(source, pos(0), pos(1))),
+          IdRef(Nil, "bar", Span(source, pos(2), pos(3))), Nil, Nil, Nil,
+          Span(source, pos(0), pos.last)
+        )
+      )
     }
 
     parseExpr("resume(42)")
@@ -336,7 +349,7 @@ class RecursiveDescentTests extends munit.FunSuite {
              |""".sourceAndPosition
       val b = parseExpr(source.content)
       b match {
-        case Term.Box(c, _) => assertEquals(c.span, Span(source, pos, pos, Synthesized))
+        case Term.Box(c, _, _) => assertEquals(c.span, Span(source, pos, pos, Synthesized))
         case other =>
           throw new IllegalArgumentException(s"Expected Box but got ${other.getClass.getSimpleName}")
       }
@@ -379,28 +392,28 @@ class RecursiveDescentTests extends munit.FunSuite {
         raw"""map
              |↑ ↑
              |""".sourceAndSpan
-      assertEquals(parseExpr(source.content), Var(IdRef(List(), "map", span)))
+      assertEquals(parseExpr(source.content), Var(IdRef(List(), "map", span), span))
     }
     {
       val (source, span) =
         raw"""list::map
              |↑       ↑
              |""".sourceAndSpan
-      assertEquals(parseExpr(source.content), Var(IdRef(List("list"), "map", span)))
+      assertEquals(parseExpr(source.content), Var(IdRef(List("list"), "map", span), span))
     }
     {
       val (source, span) =
         raw"""list::internal::map
              |↑                 ↑
              |""".sourceAndSpan
-      assertEquals(parseExpr(source.content), Var(IdRef(List("list", "internal"), "map", span)))
+      assertEquals(parseExpr(source.content), Var(IdRef(List("list", "internal"), "map", span), span))
     }
     {
       val (source, span) =
         raw"""list::internal::test
              |↑                  ↑
              |""".sourceAndSpan
-      assertEquals(parseExpr(source.content), Var(IdRef(List("list", "internal"), "test", span)))
+      assertEquals(parseExpr(source.content), Var(IdRef(List("list", "internal"), "test", span), span))
     }
   }
 
@@ -741,7 +754,7 @@ class RecursiveDescentTests extends munit.FunSuite {
         Implementation(
           TypeRef(IdRef(Nil, "Foo", Span(source, pos(0), pos(1))), Many.empty(Span(source, pos(1), pos(1))), Span(source, pos(0), pos(1), Synthesized)),
           List(OpClause(IdRef(Nil, "Foo", Span(source, pos(0), pos(1), Synthesized)), Nil, Nil, Nil, None,
-            Return(Literal(43, symbols.builtins.TInt), Span(source, pos(2), pos(3))), IdDef("resume", Span(source, pos(1), pos(1)))))))
+            Return(Literal(43, symbols.builtins.TInt, Span(source, pos(2), pos(3))), Span(source, pos(2), pos(3))), IdDef("resume", Span(source, pos(1), pos(1)))))))
     }
   }
 
@@ -881,7 +894,11 @@ class RecursiveDescentTests extends munit.FunSuite {
 
       assertEquals(
         parseDefinition(source.content),
-        DefDef(IdDef("foo", Span(source, pos(0), pos(1))), None, Var(IdRef(Nil, "f", Span(source, pos(2), pos(3)))), None, Span(source, 0, pos.last)))
+        DefDef(
+          IdDef("foo", Span(source, pos(0), pos(1))),
+          None,
+          Var(IdRef(Nil, "f", Span(source, pos(2), pos(3))), Span(source, pos(2), pos(3))),
+          None, Span(source, 0, pos.last)))
     }
 
     parseDefinition(

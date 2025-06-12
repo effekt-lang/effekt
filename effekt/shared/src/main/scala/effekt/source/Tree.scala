@@ -456,15 +456,15 @@ export Stmt.*
 enum Term extends Tree {
 
   // Variable / Value use (can now also stand for blocks)
-  case Var(id: IdRef) extends Term, Reference
-  case Assign(id: IdRef, expr: Term) extends Term, Reference
+  case Var(id: IdRef, override val span: Span) extends Term, Reference
+  case Assign(id: IdRef, expr: Term, override val span: Span) extends Term, Reference
 
-  case Literal(value: Any, tpe: symbols.ValueType)
+  case Literal(value: Any, tpe: symbols.ValueType, override val span: Span)
   case Hole(id: IdDef, stmts: Stmt, override val span: Span)
 
   // Boxing and unboxing to represent first-class values
-  case Box(capt: Maybe[CaptureSet], block: Term)
-  case Unbox(term: Term)
+  case Box(capt: Maybe[CaptureSet], block: Term, override val span: Span)
+  case Unbox(term: Term, override val span: Span)
 
   /**
    * Models:
@@ -473,7 +473,7 @@ enum Term extends Tree {
    *
    * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
    */
-  case Select(receiver: Term, id: IdRef) extends Term, Reference
+  case Select(receiver: Term, id: IdRef, override val span: Span) extends Term, Reference
 
   /**
    * A call to an effect operation, i.e., `do raise()`.
@@ -481,12 +481,12 @@ enum Term extends Tree {
    * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
    * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
    */
-  case Do(effect: Option[TypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
+  case Do(effect: Option[TypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term], override val span: Span) extends Term, Reference
 
   /**
    * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
    */
-  case Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[Term])
+  case Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[Term], override val span: Span)
 
   /**
    * Models:
@@ -495,12 +495,12 @@ enum Term extends Tree {
    *
    * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
    */
-  case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
+  case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term], override val span: Span) extends Term, Reference
 
   // Control Flow
-  case If(guards: List[MatchGuard], thn: Stmt, els: Stmt)
-  case While(guards: List[MatchGuard], block: Stmt, default: Option[Stmt])
-  case Match(scrutinees: List[Term], clauses: List[MatchClause], default: Option[Stmt])
+  case If(guards: List[MatchGuard], thn: Stmt, els: Stmt, override val span: Span)
+  case While(guards: List[MatchGuard], block: Stmt, default: Option[Stmt], override val span: Span)
+  case Match(scrutinees: List[Term], clauses: List[MatchClause], default: Option[Stmt], override val span: Span)
 
   /**
    * Handling effects
@@ -511,25 +511,25 @@ enum Term extends Tree {
    *
    * Each with-clause is modeled as an instance of type [[Handler]].
    */
-  case TryHandle(prog: Stmt, handlers: List[Handler])
-  case Region(id: IdDef, body: Stmt) extends Term, Definition
+  case TryHandle(prog: Stmt, handlers: List[Handler], override val span: Span)
+  case Region(id: IdDef, body: Stmt, override val span: Span) extends Term, Definition
 
   /**
    * Lambdas / function literals (e.g., { x => x + 1 })
    */
-  case BlockLiteral(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends Term
-  case New(impl: Implementation)
+  case BlockLiteral(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt, override val span: Span) extends Term
+  case New(impl: Implementation, override val span: Span)
 }
 export Term.*
 
 // Smart Constructors for literals
 // -------------------------------
-def UnitLit(): Literal = Literal((), symbols.builtins.TUnit)
-def IntLit(value: Long): Literal = Literal(value, symbols.builtins.TInt)
-def BooleanLit(value: Boolean): Literal = Literal(value, symbols.builtins.TBoolean)
-def DoubleLit(value: Double): Literal = Literal(value, symbols.builtins.TDouble)
-def StringLit(value: String): Literal = Literal(value, symbols.builtins.TString)
-def CharLit(value: Int): Literal = Literal(value, symbols.builtins.TChar)
+def UnitLit(span: Span): Literal = Literal((), symbols.builtins.TUnit, span)
+def IntLit(value: Long, span: Span): Literal = Literal(value, symbols.builtins.TInt, span)
+def BooleanLit(value: Boolean, span: Span): Literal = Literal(value, symbols.builtins.TBoolean, span)
+def DoubleLit(value: Double, span: Span): Literal = Literal(value, symbols.builtins.TDouble, span)
+def StringLit(value: String, span: Span): Literal = Literal(value, symbols.builtins.TString, span)
+def CharLit(value: Int, span: Span): Literal = Literal(value, symbols.builtins.TChar, span)
 
 type CallLike = Call | Do | Select | MethodCall
 
@@ -548,6 +548,7 @@ export CallTarget.*
 // Declarations
 // ------------
 case class Constructor(id: IdDef, tparams: Many[Id], params: Many[ValueParam], doc: Doc, override val span: Span) extends Definition
+
 case class Operation(id: IdDef, tparams: Many[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, doc: Doc, override val span: Span) extends Definition
 
 // Implementations
