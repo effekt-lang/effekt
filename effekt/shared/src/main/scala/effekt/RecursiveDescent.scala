@@ -449,8 +449,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
             val default = when(`else`) { Some(stmt()) } { None }
             val body = semi() ~> stmts()
             val clause = MatchClause(p, guards, body).withRangeOf(p, sc)
-            val matching = Match(List(sc), List(clause), default, Span(source, startPos, endPos)).withRangeOf(startMarker, sc)
-            Return(matching, span())
+            val matching = Match(List(sc), List(clause), default, Span(source, startPos, endPos, Synthesized)).withRangeOf(startMarker, sc)
+            Return(matching, span().synthesized)
         }
 
       simpleLhs() getOrElse matchLhs()

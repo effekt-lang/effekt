@@ -494,6 +494,32 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseStmts("val g: () => Unit / Exc at {exc} = fun() { closure() }; ()")
   }
 
+  test("Pattern-matching val parses with correct span") {
+    val (source, pos) =
+      raw"""val (left, right) = list; return left
+           |    ↑↑   ↑ ↑    ↑↑  ↑   ↑ ↑      ↑   ↑
+           |""".sourceAndPositions
+    val expected = Return(Match(
+      List(Var(IdRef(List(), "list", Span(source,pos(6),pos(7))),Span(source,pos(6),pos(7)))),
+      List(
+        MatchClause(
+          TagPattern(
+            IdRef(List("effekt"),"Tuple2",Span(source,pos(0),pos(5),Synthesized)),
+            List(AnyPattern(IdDef("left", Span(source,pos(1),pos(2)))),
+              AnyPattern(IdDef("right",Span(source,pos(3),pos(4)))))
+          ),
+          List(),
+          Return(Var(IdRef(List(),"left",Span(source,pos(9),pos(10))),
+            Span(source,pos(9),pos(10))),
+            Span(source,pos(8),pos(10)))
+        )
+      ),
+      None,
+      Span(source,0,pos(7), Synthesized)
+    ),Span(source,0,pos.last, Synthesized));
+    assertEquals(parseStmts(source.content), expected)
+  }
+
   test("Semicolon insertion") {
     parseStmts("f(); return x")
     parseStmts(
@@ -639,7 +665,7 @@ class RecursiveDescentTests extends munit.FunSuite {
              |""".sourceAndPositions
       assertEquals(
         parseBlockType(source.content),
-        FunctionType(Many.empty(Span(source, pos(0), pos(1))),
+        FunctionType(Many.empty(Span(source, pos(0), pos(0))),
           Many(List(
             TypeRef(IdRef(Nil, "Int", Span(source, pos(1), pos(2))), Many.empty(Span(source, pos(2), pos(2))), Span(source, pos(1), pos(2))),
             TypeRef(IdRef(Nil, "String", Span(source, pos(3), pos(4))), Many.empty(Span(source, pos(4), pos(4))), Span(source, pos(3), pos(4)))
