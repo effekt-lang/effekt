@@ -102,6 +102,15 @@ class LSPTests extends FunSuite {
     }
   }
 
+  // Regression test: https://github.com/effekt-lang/effekt/issues/1041
+  test("Initialization with initializationOptions set to null does not crash") {
+    withClientAndServer { (client, server) =>
+      val params = new InitializeParams()
+      params.setInitializationOptions(JsonParser.parseString("null"))
+      server.initialize(params).get()
+    }
+  }
+
   test("didOpen yields empty diagnostics") {
     withClientAndServer { (client, server) =>
       val didOpenParams = new DidOpenTextDocumentParams()

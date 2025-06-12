@@ -505,10 +505,15 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     // nested under an "effekt" key `{ "effekt": { "showIR": "core", ... } }`
     // The former is sent by the VSCode extension for `initializationOptions`,
     // the latter by newer extension versions for `workspace/didChangeConfiguration`.
-    val newSettings = params.getSettings.asInstanceOf[JsonElement].getAsJsonObject
-    this.settings = newSettings;
-    if (newSettings == null) return
-    val effektSection = newSettings.get("effekt")
+    val newSettings = params.getSettings.asInstanceOf[JsonElement]
+    // When the settings come via `initializationOptions`, they can be null as per the LSP spec.
+    if (newSettings.isJsonNull) {
+      this.settings = null;
+      return;
+    }
+    val newSettingsObj = newSettings.getAsJsonObject
+    this.settings = newSettingsObj;
+    val effektSection = newSettingsObj.get("effekt")
     if (effektSection != null) {
       this.settings = effektSection
     }
@@ -521,18 +526,16 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
 
   def settingBool(name: String): Boolean = {
-    if (settings == null) return false
+    if (settings == null || settings.isJsonNull) return false
     val obj = settings.getAsJsonObject
-    if (obj == null) return false
     val value = obj.get(name)
     if (value == null) return false
     value.getAsBoolean
   }
 
   def settingString(name: String): Option[String] = {
-    if (settings == null) return None
+    if (settings == null || settings.isJsonNull) return None
     val obj = settings.getAsJsonObject
-    if (obj == null) return None
     val value = obj.get(name)
     if (value == null) return None
     Some(value.getAsString)
