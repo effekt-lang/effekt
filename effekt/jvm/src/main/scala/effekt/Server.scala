@@ -508,6 +508,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     val newSettings = params.getSettings.asInstanceOf[JsonElement]
     // When the settings come via `initializationOptions`, they can be null as per the LSP spec.
     if (newSettings.isJsonNull) {
+      this.settings = null;
       return;
     }
     val newSettingsObj = newSettings.getAsJsonObject
