@@ -305,11 +305,108 @@ void c_tcp_write(Int handle, struct Pos buffer, Int offset, Int size, Stack stac
 void c_tcp_close_cb(uv_handle_t* handle) {
     Stack stack = (Stack)handle->data;
     free(handle);
+    // TODO resume_Pos Unit
     resume_Int(stack, 0);
 }
 
 void c_tcp_close(Int handle, Stack stack) {
     uv_handle_t* uv_handle = (uv_handle_t*)handle;
+    uv_handle->data = stack;
+    uv_close(uv_handle, c_tcp_close_cb);
+}
+
+void c_tcp_listen(String host, Int port, Int backlog, Stack stack) {
+    // TODO make non-async
+    char* host_str = c_bytearray_into_nullterminated_string(host);
+    erasePositive(host);
+
+    uv_tcp_t* tcp_handle = malloc(sizeof(uv_tcp_t));
+    int result = uv_tcp_init(uv_default_loop(), tcp_handle);
+
+    if (result < 0) {
+        free(tcp_handle);
+        free(host_str);
+        resume_Int(stack, result);
+        return;
+    }
+
+    struct sockaddr_in addr;
+    result = uv_ip4_addr(host_str, port, &addr);
+    free(host_str);
+
+    if (result < 0) {
+        free(tcp_handle);
+        resume_Int(stack, result);
+        return;
+    }
+
+    result = uv_tcp_bind(tcp_handle, (const struct sockaddr*)&addr, 0);
+    if (result < 0) {
+        free(tcp_handle);
+        resume_Int(stack, result);
+        return;
+    }
+
+    result = uv_listen((uv_stream_t*)tcp_handle, backlog, NULL);
+    if (result < 0) {
+        free(tcp_handle);
+        resume_Int(stack, result);
+        return;
+    }
+
+    resume_Int(stack, (int64_t)tcp_handle);
+}
+
+void c_tcp_accept_cb(uv_stream_t* server, int status) {
+    Stack stack = (Stack)server->data;
+
+    if (status < 0) {
+        resume_Int(stack, status);
+        return;
+    }
+
+    uv_tcp_t* client = malloc(sizeof(uv_tcp_t));
+    int result = uv_tcp_init(uv_default_loop(), client);
+
+    if (result < 0) {
+        free(client);
+        // TODO share stack?
+        resume_Int(stack, result);
+        return;
+    }
+
+    result = uv_accept(server, (uv_stream_t*)client);
+    if (result < 0) {
+        uv_close((uv_handle_t*)client, NULL);
+        free(client);
+        // TODO share stack?
+        resume_Int(stack, result);
+        return;
+    }
+
+    // TODO share resumption
+    // shareStack(stack);
+    resume_Int(stack, (int64_t)client);
+}
+
+void c_tcp_accept(Int server_handle, Stack stack) {
+    uv_stream_t* server = (uv_stream_t*)server_handle;
+    server->data = stack;  // Store stack for multiple resumes
+
+    int result = uv_listen(server, 0, c_tcp_accept_cb);
+    if (result < 0) {
+        resume_Int(stack, result);
+    }
+}
+
+void c_tcp_close_listener(Int handle, Stack stack) {
+    uv_handle_t* uv_handle = (uv_handle_t*)handle;
+
+    Stack registered_stack = (Stack)uv_handle->data;
+    if (registered_stack) {
+        eraseStack(registered_stack);
+    }
+
     uv_handle->data = stack;
     uv_close(uv_handle, c_tcp_close_cb);
 }
