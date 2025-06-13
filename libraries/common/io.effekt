@@ -1,6 +1,5 @@
 module io
 
-import ref
 
 // Event Loop
 // ----------

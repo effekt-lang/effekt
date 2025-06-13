@@ -1,45 +1,14 @@
 module io/promise
 
 import io
-
-// Futures
-// -------
-
-/// Must be filled exactly once and waited exactly once
-extern type Future[T]
-
-namespace future {
-  extern global def allocate[T](): Future[T] =
-    llvm """
-      %future = call %Pos @c_future_make()
-      ret %Pos %future
-    """
-}
-
-extern global def fill[T](future: Future[T], value: T): Unit =
-  llvm """
-    call void @c_future_fill(%Pos ${future}, %Pos ${value})
-    ret %Pos zeroinitializer
-  """
-
-extern async def wait[T](future: Future[T]): T =
-  llvm """
-    call void @c_future_wait(%Pos ${future}, %Stack %stack)
-    ret void
-  """
-
-extern llvm """
-  declare %Pos @c_future_make()
-  declare void @c_future_fill(%Pos, %Pos)
-  declare void @c_future_wait(%Pos, %Stack)
-"""
+import io/channel
 
 // Promises
 // --------
 
 type State[T] {
   Resolved(value: T)
-  Pending(futures: List[Future[T]])
+  Pending(channels: List[Channel[T]])
 }
 
 extern type Promise[T]
@@ -76,11 +45,11 @@ extern {async, global} def await[T](promise: Promise[T]): T =
     get(reference) match {
       case Resolved(value) =>
         return value
-      case Pending(futures) =>
-        val future = future::allocate()
-        // TODO use reference.set and future.wait
-        set(reference, Pending(Cons(future, futures)))
-        wait(future)
+      case Pending(channels) =>
+        val channel = channel::allocate()
+        // TODO use reference.set and channel.wait
+        set(reference, Pending(Cons(channel, channels)))
+        wait(channel)
     }
   }
 
@@ -92,11 +61,11 @@ extern {io, global} def resolve[T](promise: Promise[T], value: T): Unit =
     get(reference) match {
       case Resolved(value) =>
         panic("ERROR: Promise already resolved")
-      case Pending(futures) =>
+      case Pending(channels) =>
         // TODO use reference.set
         set(reference, Resolved(value))
-        // TODO use futures.reverse.foreach
-        foreach(reverse(futures)) { future => fill(future, value) }
+        // TODO use channels.reverse.foreach
+        foreach(reverse(channels)) { channel => send(channel, value) }
     }
   }
 
