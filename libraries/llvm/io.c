@@ -81,6 +81,7 @@ void c_fs_open(String path, int flags, Stack stack) {
     int result = uv_fs_open(uv_default_loop(), request, path_str, flags, 0777, c_resume_int_fs);
 
     if (result < 0) {
+        // TODO free path_str?
         uv_fs_req_cleanup(request);
         free(request);
         resume_Int(stack, result);
@@ -177,6 +178,142 @@ void c_fs_mkdir(String path, Stack stack) {
 
     return;
 }
+
+// Network
+// -------
+
+void c_tcp_connect_cb(uv_connect_t* request, int status) {
+    Stack stack = (Stack)request->data;
+
+    if (status < 0) {
+        uv_close((uv_handle_t*)request->handle, NULL);
+        free(request->handle);
+        free(request);
+        resume_Int(stack, status);
+    } else {
+        int64_t handle = (int64_t)request->handle;
+        free(request);
+        resume_Int(stack, handle);
+    }
+}
+
+void c_tcp_connect(String host, Int port, Stack stack) {
+    char* host_str = c_bytearray_into_nullterminated_string(host);
+    erasePositive(host);
+
+    uv_tcp_t* tcp_handle = malloc(sizeof(uv_tcp_t));
+    int result = uv_tcp_init(uv_default_loop(), tcp_handle);
+
+    if (result < 0) {
+        free(tcp_handle);
+        free(host_str);
+        resume_Int(stack, result);
+        return;
+    }
+
+    uv_connect_t* connect_req = malloc(sizeof(uv_connect_t));
+    connect_req->data = stack;
+
+    struct sockaddr_in addr;
+    result = uv_ip4_addr(host_str, port, &addr);
+
+    if (result < 0) {
+        free(tcp_handle);
+        free(connect_req);
+        free(host_str);
+        resume_Int(stack, result);
+        return;
+    }
+
+    result = uv_tcp_connect(connect_req, tcp_handle, (const struct sockaddr*)&addr, c_tcp_connect_cb);
+
+    if (result < 0) {
+        free(tcp_handle);
+        free(connect_req);
+        free(host_str);
+        resume_Int(stack, result);
+        return;
+    }
+}
+
+typedef struct {
+    Stack stack;
+    size_t size;
+    char* data;
+} tcp_read_closure_t;
+
+void c_tcp_read_cb(uv_stream_t* stream, ssize_t bytes_read, const uv_buf_t* buf) {
+    tcp_read_closure_t* read_closure = (tcp_read_closure_t*)stream->data;
+    Stack stack = read_closure->stack;
+
+    uv_read_stop(stream);
+    free(read_closure);
+
+    resume_Int(stack, (int64_t)bytes_read);
+}
+
+void c_tcp_read_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
+    tcp_read_closure_t* read_closure = (tcp_read_closure_t*)handle->data;
+    buf->base = read_closure->data;
+    buf->len = read_closure->size;
+}
+
+void c_tcp_read(Int handle, struct Pos buffer, Int offset, Int size, Stack stack) {
+    uv_stream_t* stream = (uv_stream_t*)handle;
+
+    char* buffer_ptr = (char*)(c_bytearray_data(buffer) + offset);
+    erasePositive(buffer);
+
+    tcp_read_closure_t* read_closure = malloc(sizeof(tcp_read_closure_t));
+    read_closure->stack = stack;
+    read_closure->size = size;
+    read_closure->data = buffer_ptr;
+    stream->data = read_closure;
+
+    int result = uv_read_start(stream, c_tcp_read_alloc_cb, c_tcp_read_cb);
+
+    if (result < 0) {
+        free(read_closure);
+        stream->data = NULL;
+        resume_Int(stack, result);
+    }
+}
+
+void c_tcp_write_cb(uv_write_t* request, int status) {
+    Stack stack = (Stack)request->data;
+    free(request);
+    resume_Int(stack, (int64_t)status);
+}
+
+void c_tcp_write(Int handle, struct Pos buffer, Int offset, Int size, Stack stack) {
+    uv_stream_t* stream = (uv_stream_t*)handle;
+
+    uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
+    erasePositive(buffer);
+
+    uv_write_t* request = malloc(sizeof(uv_write_t));
+    request->data = stack;
+
+    int result = uv_write(request, stream, &buf, 1, c_tcp_write_cb);
+
+    if (result < 0) {
+        free(request);
+        resume_Int(stack, result);
+    }
+}
+
+void c_tcp_close_cb(uv_handle_t* handle) {
+    Stack stack = (Stack)handle->data;
+    free(handle);
+    resume_Int(stack, 0);
+}
+
+void c_tcp_close(Int handle, Stack stack) {
+    uv_handle_t* uv_handle = (uv_handle_t*)handle;
+    uv_handle->data = stack;
+    uv_close(uv_handle, c_tcp_close_cb);
+}
+
 
 /**
  * Maps the libuv error code to a stable (platform independent) numeric value.
