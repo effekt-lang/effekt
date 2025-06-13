@@ -15,7 +15,7 @@ import kiama.util.Source
  *
  * This is, for example, used by the interpreter.
  */
-class VM extends Compiler[(Id, symbols.Module, ModuleDecl)] {
+class VM extends Compiler[(Option[Id], symbols.Module, ModuleDecl)] {
 
   def extension = ".effekt-core.ir"
 
@@ -25,7 +25,7 @@ class VM extends Compiler[(Id, symbols.Module, ModuleDecl)] {
 
   override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = None
 
-  override def compile(source: Source)(using C: Context): Option[(Map[String, String], (Id, symbols.Module, ModuleDecl))] =
+  override def compile(source: Source)(using C: Context): Option[(Map[String, String], (Option[Id], symbols.Module, ModuleDecl))] =
     Optimized.run(source).map { res => (Map.empty, res) }
 
 

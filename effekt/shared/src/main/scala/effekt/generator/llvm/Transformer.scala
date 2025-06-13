@@ -22,13 +22,15 @@ object Transformer {
 
       val globals = MC.definitions; MC.definitions = null;
 
-      val entryInstructions = List(
-        Call("stack", Ccc(), stackType, withEmptyStack, List()),
-        Call("_", Tailcc(false), VoidType(), transform(entry), List(LocalReference(stackType, "stack"))))
-      val entryBlock = BasicBlock("entry", entryInstructions, RetVoid())
-      val entryFunction = Function(External(), Ccc(), VoidType(), "effektMain", List(), List(entryBlock))
+      val entryFunction = entry.map(entry => {
+        val entryInstructions = List(
+          Call("stack", Ccc(), stackType, withEmptyStack, List()),
+          Call("_", Tailcc(false), VoidType(), transform(entry), List(LocalReference(stackType, "stack"))))
+        val entryBlock = BasicBlock("entry", entryInstructions, RetVoid())
+        Function(External(), Ccc(), VoidType(), "effektMain", List(), List(entryBlock))
+      }).toList;
 
-      declarations.map(transform) ++ globals :+ entryFunction
+      declarations.map(transform) ++ globals ++ entryFunction
   }
 
   // context getters

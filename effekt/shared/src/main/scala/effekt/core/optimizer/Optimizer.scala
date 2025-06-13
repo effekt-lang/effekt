@@ -19,7 +19,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
         Some(CoreTransformed(source, tree, mod, optimized))
     }
 
-  def optimize(source: Source, mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context): ModuleDecl =
+  def optimize(source: Source, mainSymbol: Option[symbols.Symbol], core: ModuleDecl)(using Context): ModuleDecl =
 
     val isLLVM = Context.config.backend().name == "llvm"
 
@@ -34,12 +34,12 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     // (2) lift static arguments
     tree = Context.timed("static-argument-transformation", source.name) {
-      StaticArguments.transform(mainSymbol, tree)
+      StaticArguments.transform(tree)
     }
 
     def normalize(m: ModuleDecl) = {
       val anfed = BindSubexpressions.transform(m)
-      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt, isLLVM)
+      val normalized = Normalizer.normalize(mainSymbol.toSet, anfed, Context.config.maxInlineSize().toInt, isLLVM)
       val live = Deadcode.remove(mainSymbol, normalized)
       val tailRemoved = RemoveTailResumptions(live)
       val contified = DirectStyle.rewrite(tailRemoved)

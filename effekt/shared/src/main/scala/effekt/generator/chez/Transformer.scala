@@ -55,9 +55,10 @@ trait Transformer {
   def state(id: ChezName, init: chez.Expr, body: chez.Block): chez.Expr =
     Builtin("state", init, chez.Lambda(List(id), body))
 
-  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl)(using ErrorReporter): chez.Block = {
+  def compilationUnit(mainSymbol: Option[Symbol], mod: Module, core: ModuleDecl)(using ErrorReporter): chez.Block = {
     val definitions = toChez(core)
-    chez.Block(generateStateAccessors(pure) ++ definitions, Nil, runMain(nameRef(mainSymbol)))
+    val main = mainSymbol.map(m => runMain(nameRef(m))).getOrElse(unit)
+    chez.Block(generateStateAccessors(pure) ++ definitions, Nil, main)
   }
 
   def toChez(p: ValueParam): ChezName = nameDef(p.id)

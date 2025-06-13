@@ -37,7 +37,7 @@ class OptimizerTests extends CoreTests {
     assertTransformsTo(input, expected) { tree =>
       val anfed = BindSubexpressions.transform(tree)
       val normalized = Normalizer.normalize(Set(mainSymbol), anfed, 50, false)
-      Deadcode.remove(mainSymbol, normalized)
+      Deadcode.remove(Some(mainSymbol), normalized)
     }
 
   test("toplevel"){

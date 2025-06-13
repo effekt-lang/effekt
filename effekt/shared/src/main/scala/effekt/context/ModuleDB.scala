@@ -56,48 +56,46 @@ trait ModuleDB { self: Context =>
   /**
    * Util to check whether main exists on the given module
    */
-  def checkMain(mod: Module)(implicit C: Context): TermSymbol = C.at(mod.decl) {
+  def checkMain(mod: Module)(implicit C: Context): Option[TermSymbol] = C.at(mod.decl) {
 
     // deep discovery of main: should be replaced by explicit @main annotation
     def findMain(b: Bindings): Set[TermSymbol] =
       b.terms.getOrElse("main", Set()) ++ b.namespaces.flatMap { case (_, b) => findMain(b) }
 
+    def validateMain(main: UserFunction) = Context.at(main.decl) {
+        val mainValueParams = C.functionTypeOf(main).vparams
+        val mainBlockParams = C.functionTypeOf(main).bparams
+        if (mainValueParams.nonEmpty || mainBlockParams.nonEmpty) {
+          C.abort("Main does not take arguments")
+        }
+
+        val tpe = C.functionTypeOf(main)
+        val controlEffects = tpe.effects
+        if (controlEffects.nonEmpty) {
+          C.abort(pp"Main cannot have effects, but includes effects: ${controlEffects}")
+        }
+
+        tpe.result match {
+          case symbols.builtins.TInt =>
+            C.abort(pp"Main must return Unit, please use `exit(n)` to return an error code.")
+          case symbols.builtins.TUnit =>
+            ()
+          case other =>
+            C.abort(pp"Main must return Unit, but returns ${other}.")
+        }
+    }
+
     val mains = findMain(mod.exports)
 
     if (mains.isEmpty) {
-      C.abort("No main function defined")
-    }
-
-    if (mains.size > 1) {
+      None
+    } else if (mains.size > 1) {
       val names = mains.toList.map(sym => pp"${sym.name}").mkString(", ")
       C.abort(pp"Multiple main functions defined: ${names}")
-    }
-
-    val main = mains.head.asUserFunction
-
-    Context.at(main.decl) {
-      val mainValueParams = C.functionTypeOf(main).vparams
-      val mainBlockParams = C.functionTypeOf(main).bparams
-      if (mainValueParams.nonEmpty || mainBlockParams.nonEmpty) {
-        C.abort("Main does not take arguments")
-      }
-
-      val tpe = C.functionTypeOf(main)
-      val controlEffects = tpe.effects
-      if (controlEffects.nonEmpty) {
-        C.abort(pp"Main cannot have effects, but includes effects: ${controlEffects}")
-      }
-
-      tpe.result match {
-        case symbols.builtins.TInt =>
-          C.abort(pp"Main must return Unit, please use `exit(n)` to return an error code.")
-        case symbols.builtins.TUnit =>
-          ()
-        case other =>
-          C.abort(pp"Main must return Unit, but returns ${other}.")
-      }
-
-      main
+    } else {
+      val main = mains.head.asUserFunction
+      validateMain(main)
+      Some(main)
     }
   }
 }

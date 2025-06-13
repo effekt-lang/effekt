@@ -20,7 +20,7 @@ class VMTests extends munit.FunSuite {
     override lazy val compiler = frontend.asInstanceOf
   }
 
-  def compileString(content: String): (Id, symbols.Module, ModuleDecl) =
+  def compileString(content: String): (Option[Id], symbols.Module, ModuleDecl) =
     val config = new EffektConfig(Seq("--Koutput", "string"))
     config.verify()
     context.setup(config)
@@ -31,7 +31,7 @@ class VMTests extends munit.FunSuite {
       sys error errors
     }
 
-  def compileFile(path: String): (Id, symbols.Module, ModuleDecl) =
+  def compileFile(path: String): (Option[Id], symbols.Module, ModuleDecl) =
     val config = new EffektConfig(Seq("--Koutput", "string"))
     config.verify()
     context.setup(config)
@@ -83,11 +83,11 @@ class VMTests extends munit.FunSuite {
 
   def runString(contents: String): (String, Summary) =
     val (main, mod, decl) = compileString(contents)
-    runCounting(main, decl)
+    runCounting(main.get, decl)
 
   def runFile(file: String): (String, Summary) =
     val (main, mod, decl) = compileFile(file)
-    runCounting(main, decl)
+    runCounting(main.get, decl)
 
 
   case class Summary(

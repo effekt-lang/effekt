@@ -201,7 +201,7 @@ object StaticArguments {
     case pure: Pure => rewrite(pure)
   }
 
-  def transform(entrypoint: Id, m: ModuleDecl): ModuleDecl =
+  def transform(m: ModuleDecl): ModuleDecl =
     val recursiveFunctions = Recursive(m)
 
     val statics: Map[Id, IsStatic] = recursiveFunctions.map {
