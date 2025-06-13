@@ -1,20 +1,20 @@
 ---
-title: Computation
+title: Computations
 permalink: tour/computation
 ---
 
-# Computation
+# Computations
 
-## Values vs. Computation
+## Values vs. Computations
 
-Following Paul Levy's [Call-By-Push-Value](https://www.cs.bham.ac.uk/~pbl/papers/thesisqmwphd.pdf), Effekt distinguishes between **values** (such as `42`, `true`, or instances of datatypes) and **computation**.
+Following Paul Levy's [Call-By-Push-Value](https://www.cs.bham.ac.uk/~pbl/papers/thesisqmwphd.pdf), Effekt distinguishes between **values** (such as `42`, `true`, or instances of datatypes) and **computations**.
 
-Examples of "computation" in Effekt are:
+Examples of "computations" in Effekt are:
 - blocks (this is what we call functions),
 - instances of interfaces (also known as "objects"), and
 - regions
 
-Functions (and all other computation types) are _second-class_ in Effekt. To make this difference explicit, we pass values in parentheses (e.g. `f(42)`) and computation in braces (e.g. `f { x => println(x) }`).
+Functions (and all other computation types) are _second-class_ in Effekt. To make this difference explicit, we pass values in parentheses (e.g. `f(42)`) and computations in braces (e.g. `f { x => println(x) }`).
 
 ```
 def myMap[A, B](xs: List[A]) { f: A => B }: List[B] =
@@ -58,7 +58,7 @@ The effects used in the passed block thus need to be handled exactly where the b
 
 ## Comparison
 
-|   | Values (First-class) | Computation (Second-class) |
+|   | Values (First-class) | Computations (Second-class) |
 |---|:---|---:|
 | Term-level | `42`, `"hello"`, `true`, `Cons(1, Nil)`, `box { [A](x: A) => x }` ... | `{ [A](x: A) => x }`, `new Exception`, `region r`, `unbox exc`  |
 | | Literals, instances of datatypes and boxed computations | Blocks, objects and regions |

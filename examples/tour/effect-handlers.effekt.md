@@ -111,6 +111,7 @@ genFibs(15).foreach { x => println(x) }
 ## Singleton operation
 
 Often, we want to declare an interface that is entirely defined by just one operation (like a "single-abstract-method" in Java). In this case, you can declare it as a singleton operation:
+
 ```
 effect tell(): Int
 ```
@@ -127,6 +128,11 @@ def tellTime[A] { prog: () => A / tell }: A =
   }
 ```
 
+Here, `prog` is expected to be passed a computation (block) and not as a value.
+You can read more about their distinction in the section about [computations](computation).
+
+Using the function `tellTime` that _handles_ the effect `tell` of `prog`, we can write the following program for measuring the execution time for computing the first 1500 Fibonacci Numbers:
+
 ```effekt:repl
 tellTime {
   val start = do tell()
@@ -137,8 +143,10 @@ tellTime {
 ```
 
 ## `with` handler
+
 We can decompose `genFibs` into a more general helper function `collect` that collects the
 yielded values by abstracting over the generating program:
+
 ```
 def collect[A](n: Int) { prog: () => Unit / Yield[A] }: List[A] = {
   var yielded: List[A] = []
@@ -156,7 +164,9 @@ def collect[A](n: Int) { prog: () => Unit / Yield[A] }: List[A] = {
   yielded
 }
 ```
+
 Let us define another handler for `Yield` to filter values:
+
 ```
 def filter[A] { keep: A => Bool } { prog: () => Unit / Yield[A] }: Unit / Yield[A] =
   try prog()
@@ -166,6 +176,7 @@ def filter[A] { keep: A => Bool } { prog: () => Unit / Yield[A] }: Unit / Yield[
 ```
 
 We can avoid the nesting of higher-order function calls like `collect[Int](limit) { filter { x => x.mod(2) == 0 } { fib() } }` and write:
+
 ```
 def evenFibs(limit: Int): List[Int] = {
   with collect(limit)
@@ -173,8 +184,6 @@ def evenFibs(limit: Int): List[Int] = {
   fib()
 }
 ```
-
-
 
 ```effekt:repl
 evenFibs(15).foreach { x => println(x) }
