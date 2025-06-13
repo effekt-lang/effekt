@@ -13,6 +13,7 @@ import effekt
 import exception
 import heap
 import io
+import io/channel
 import io/console
 import io/error
 import io/filesystem
