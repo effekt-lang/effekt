@@ -572,95 +572,95 @@ void c_yield(Stack stack) {
     c_timer_start(0, stack);
 }
 
-// Futures
-// -------
+// Channels
+// --------
 
-typedef enum { EMPTY, FILLED, WAITED } future_state_t;
+typedef enum { EMPTY, SENDED, WAITED } channel_state_t;
 
 typedef struct {
     uint64_t rc;
     void* eraser;
-    future_state_t state;
+    channel_state_t state;
     union {
         struct Pos value;
         Stack stack;
     } payload;
-} Future;
+} Channel;
 
-void c_future_erase(void *envPtr) {
-    // envPtr points to a Future _after_ the eraser, so let's adjust it to point to the beginning.
-    Future *future = (Future*) (envPtr - offsetof(Future, state));
-    future_state_t state = future->state;
+void c_channel_erase(void *envPtr) {
+    // envPtr points to a Channel _after_ the eraser, so let's adjust it to point to the beginning.
+    Channel *channel = (Channel*) (envPtr - offsetof(Channel, state));
+    channel_state_t state = channel->state;
     switch (state) {
     case EMPTY:
         break;
-    case FILLED:
-        erasePositive(future->payload.value);
+    case SENDED:
+        erasePositive(channel->payload.value);
         break;
     case WAITED:
-        eraseStack(future->payload.stack);
+        eraseStack(channel->payload.stack);
         break;
     }
 }
 
-struct Pos c_future_make() {
-    Future* future = (Future*)malloc(sizeof(Future));
+struct Pos c_channel_make() {
+    Channel* channel = (Channel*)malloc(sizeof(Channel));
 
-    future->rc = 0;
-    future->eraser = c_future_erase;
-    future->state = EMPTY;
+    channel->rc = 0;
+    channel->eraser = c_channel_erase;
+    channel->state = EMPTY;
 
-    return (struct Pos) { .tag = 0, .obj = future, };
+    return (struct Pos) { .tag = 0, .obj = channel, };
 }
 
-void c_future_fill(struct Pos future, struct Pos value) {
-    Future* f = (Future*)future.obj;
+void c_channel_send(struct Pos channel, struct Pos value) {
+    Channel* f = (Channel*)channel.obj;
     switch (f->state) {
         case EMPTY: {
-            f->state = FILLED;
+            f->state = SENDED;
             f->payload.value = value;
-            erasePositive(future);
+            erasePositive(channel);
             break;
         }
-        case FILLED: {
-            erasePositive(future);
+        case SENDED: {
+            erasePositive(channel);
             erasePositive(value);
             // TODO more graceful panic
-            fprintf(stderr, "ERROR: Future already filled\n");
+            fprintf(stderr, "ERROR: Channel already sended\n");
             exit(1);
             break;
         }
         case WAITED: {
             Stack stack = f->payload.stack;
             f->state = EMPTY;
-            erasePositive(future);
+            erasePositive(channel);
             resume_Pos(stack, value);
             break;
         }
     }
 }
 
-void c_future_wait(struct Pos future, Stack stack) {
-    Future* f = (Future*)future.obj;
+void c_channel_wait(struct Pos channel, Stack stack) {
+    Channel* f = (Channel*)channel.obj;
     switch (f->state) {
         case EMPTY: {
             f->state = WAITED;
             f->payload.stack = stack;
-            erasePositive(future);
+            erasePositive(channel);
             break;
         }
-        case FILLED: {
+        case SENDED: {
             struct Pos value = f->payload.value;
             f->state = EMPTY;
-            erasePositive(future);
+            erasePositive(channel);
             resume_Pos(stack, value);
             break;
         }
         case WAITED: {
-            erasePositive(future);
+            erasePositive(channel);
             eraseStack(stack);
             // TODO more graceful panic
-            fprintf(stderr, "ERROR: Future already waited\n");
+            fprintf(stderr, "ERROR: Channel already waited\n");
             exit(1);
             break;
         }
