@@ -464,3 +464,14 @@ namespace internal {
     """
 
 }
+
+namespace internal {
+  def checkResult(result: Int): Int / Exception[IOError] =
+    if (result < 0) {
+      val ioError = fromNumber(internal::errorNumber(result));
+      do raise[IOError](ioError, message(ioError))
+    } else {
+      result
+    }
+}
+
