@@ -135,6 +135,15 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
   // ---------
   private val debugging = group("Compiler Development")
 
+  val showPrelude: ScallopOption[Boolean] = toggle(
+    "show-prelude",
+    descrYes = "Print modules to be automatically imported in every file",
+    default = Some(false),
+    noshort = true,
+    prefix = "no-",
+    group = debugging
+  )
+
   val showIR: ScallopOption[Option[Stage]] = choice(
     choices = List("none", "core", "machine", "target"),
     name = "ir-show",
