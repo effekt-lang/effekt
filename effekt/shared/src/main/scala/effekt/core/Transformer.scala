@@ -443,7 +443,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       val transformedProg = transform(prog)
 
-      val answerType = transformedProg.tpe
+      val answerType = transform(Context.inferredTypeOf(prog))
 
       // create a fresh prompt, a variable referring to it, and a parameter binding it
       val promptId   = Id("p")
