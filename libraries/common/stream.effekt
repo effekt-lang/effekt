@@ -30,6 +30,18 @@ effect stop(): Nothing
 def for[A] { stream: () => Unit / emit[A] } { action: A => Unit }: Unit =
   returning::for[A, Unit]{stream}{action}
 
+/// Applies the given function on each emitted element and reemits the result.
+///
+/// e.g. map[Int,String]{ x => x.show } { range(0, 5) }
+def map[A, B] { function: A => B } { stream: () => Unit / emit[A] }: Unit / emit[B] =
+  returning::map[A, B, Unit]{function}{stream}
+
+/// Runs the given action whenever the given reader reads an element.
+///
+/// e.g. var i = -1; with tap { i = i + 1; i }; reader()
+def tap[A] { action: () => A / stop } { reader: () => Unit / read[A] }: Unit =
+  returning::tap[A, Unit]{action}{reader}
+
 /// Runs the stream as a message queue,
 /// handling each of its elements that can produce new elements ("messages"),
 /// until a fixed point is reached.
@@ -162,8 +174,8 @@ def index[A] { stream: () => Unit / emit[A] }: Unit / emit[Indexed[A]] =
 
 
 /// If `number` is zero or negative it does nothing
-def limit[A](number: Int) { stream: () => Unit / emit[A] }: Unit / {emit[A], stop} =
-  returning::limit[A, Unit](number){stream}
+def limit[A](number: Int) { stream: () => Unit / emit[A] }: Unit / emit[A] =
+  boundary { returning::limit[A, Unit](number){stream} }
 
 
 /// If `number` is zero or negative it does nothing
@@ -405,6 +417,12 @@ def encodeUTF8[R] { stream: () => R / emit[Char] }: R / emit[Byte] =
     resume(encodeChar(char))
   }
 
+def writeFileUTF8[R](path: String) { stream: () => R / emit[Char] }: R / Exception[IOError] =
+  writeFile(path) { encodeUTF8 { stream() } }
+
+def readFileUTF8[R](path: String) { reader: () => R / read[Char] }: R / Exception[IOError] =
+  readFile(path) { decodeUTF8 { reader() } }
+
 def feed[R](string: String) { reader: () => R / read[Char] } =
   feed(string.fromString) {
     decodeUTF8 {
@@ -421,6 +439,12 @@ def each(string: String): Unit / emit[Char] =
 
 def collectString { stream: () => Unit / emit[Char] }: String =
   returning::collectString[Unit]{stream}.second
+
+def writeLine { body: () => Unit / emit[Char] }: Unit / emit[Char] =
+  returning::writeLine[Unit]{body}
+
+def readLine { body: () => Unit / read[Char] }: Unit / {read[Char], stop} =
+  returning::readLine[Unit]{body}
 
 namespace internal {
   effect snapshot(): Unit
@@ -515,6 +539,20 @@ def for[A, R] { stream: () => R / emit[A] } { action: A => Unit }: R =
     resume(action(value))
   }
 
+def map[A, B, R] { function: A => B } { stream: () => R / emit[A] }: R / emit[B] =
+  try {
+    stream()
+  } with emit[A] { value =>
+    resume(do emit(function(value)))
+  }
+
+def tap[A, R] { action: () => A / stop } { reader: () => R / read[A] }: R =
+  try {
+    reader()
+  } with read[A] { () =>
+    resume { action() }
+  }
+
 def boundary[R] { program: () => R / stop }: Option[R] =
   try {
     Some(program())
@@ -542,17 +580,21 @@ def index[A, R] { stream: () => R / emit[A] }: R / emit[Indexed[A]] = {
 
 /// If `number` is zero or negative it does nothing
 def limit[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop } = {
-  if (number <= 0) do stop();
-  var i = 1;
-  try {
-    stream()
-  } with emit[A] { v =>
-    if (i < number) {
-      i = i + 1;
-      resume(do emit(v))
-    } else {
-      do stop()
+  if (number > 0) {
+    var i = number;
+    try {
+      stream()
+    } with emit[A] { v =>
+      do emit(v);
+      i = i - 1;
+      if (i > 0) {
+        resume(())
+      } else {
+        do stop()
+      }
     }
+  } else {
+    do stop()
   }
 }
 
@@ -613,6 +655,28 @@ def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
 def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
   val (result, bytes) = collectBytes[R] { encodeUTF8 { stream } }
   (result, bytes.toString)
+}
+
+def writeLine[R] { body: () => R / emit[Char] }: R / emit[Char] = {
+  val result = body()
+  do emit('\n')
+  return result
+}
+
+def readLine[R] { body: () => R / read[Char] }: R / {read[Char], stop} = {
+  var stopped = false
+  try {
+    body()
+  } with read[Char] {
+    if(stopped){
+      resume { do stop() }
+    } else {
+      do read[Char] match {
+        case '\n' => stopped = true; resume { do stop() }
+        case char => resume { return char }
+      }
+    }
+  }
 }
 
 def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }: R = {
