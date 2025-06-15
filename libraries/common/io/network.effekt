@@ -46,41 +46,41 @@ namespace internal {
     declare void @c_tcp_close_listener(%Int, %Stack)
   """
 
- extern async def connect(host: String, port: Int): Int =
-   llvm """
-     call void @c_tcp_connect(%Pos ${host}, %Int ${port}, %Stack %stack)
-     ret void
-   """
+  extern async def connect(host: String, port: Int): Int =
+    llvm """
+      call void @c_tcp_connect(%Pos ${host}, %Int ${port}, %Stack %stack)
+      ret void
+    """
 
- extern async def read(handle: Int, buffer: ByteArray, offset: Int, size: Int): Int =
-   llvm """
-     call void @c_tcp_read(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
-     ret void
-   """
+  extern async def read(handle: Int, buffer: ByteArray, offset: Int, size: Int): Int =
+    llvm """
+      call void @c_tcp_read(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
+      ret void
+    """
 
- extern async def write(handle: Int, buffer: ByteArray, offset: Int, size: Int): Int =
-   llvm """
-     call void @c_tcp_write(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
-     ret void
-   """
+  extern async def write(handle: Int, buffer: ByteArray, offset: Int, size: Int): Int =
+    llvm """
+      call void @c_tcp_write(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
+      ret void
+    """
 
- extern async def close(handle: Int): Int =
-   llvm """
-     call void @c_tcp_close(%Int ${handle}, %Stack %stack)
-     ret void
-   """
+  extern async def close(handle: Int): Int =
+    llvm """
+      call void @c_tcp_close(%Int ${handle}, %Stack %stack)
+      ret void
+    """
 
- extern async def listen(host: String, port: Int, backlog: Int): Int =
-   llvm """
-     call void @c_tcp_listen(%Pos ${host}, %Int ${port}, %Int ${backlog}, %Stack %stack)
-     ret void
-   """
+  extern async def listen(host: String, port: Int, backlog: Int): Int =
+    llvm """
+      call void @c_tcp_listen(%Pos ${host}, %Int ${port}, %Int ${backlog}, %Stack %stack)
+      ret void
+    """
 
- extern async def accept(listener: Int): Int =
-   llvm """
-     call void @c_tcp_accept(%Int ${listener}, %Stack %stack)
-     ret void
-   """
+  extern async def accept(listener: Int): Int =
+    llvm """
+      call void @c_tcp_accept(%Int ${listener}, %Stack %stack)
+      ret void
+    """
 
   extern async def close_listener(handle: Int): Int =
     llvm """
