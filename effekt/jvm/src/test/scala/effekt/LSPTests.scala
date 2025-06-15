@@ -267,6 +267,37 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("Hovering over documented symbol shows doc comment") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, cursor) = raw"""
+                                |/// Calculate the answer to the ultimate question of life, the universe, and everything
+                                |def calculate() = 42
+                                |
+                                |def main() = println(calculate())
+                                |                     ↑
+                                |""".textDocumentAndPosition
+      val hoverContents =
+        raw"""#### Function
+             |```effekt
+             |def calculate(): Int / {}
+             |```
+             | Calculate the answer to the ultimate question of life, the universe, and everything
+             |""".stripMargin
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
+      val hover = server.getTextDocumentService().hover(hoverParams).get()
+
+      val expectedHover = new Hover()
+      expectedHover.setRange(new Range(cursor, cursor))
+      expectedHover.setContents(new MarkupContent("markdown", hoverContents))
+      assertEquals(hover, expectedHover)
+    }
+  }
+
   test("Hovering over hole shows inside and outside types") {
     withClientAndServer { (client, server) =>
       val (textDoc, cursor) = raw"""
