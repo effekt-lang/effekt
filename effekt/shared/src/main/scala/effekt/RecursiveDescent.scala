@@ -311,13 +311,19 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
      nonterminal:
        // skip spaces at the start
        spaces()
-       val doc = maybeDocumentation()
-       val res = ModuleDecl(moduleDecl(), manyWhile(includeDecl(), `import`), toplevelDefs(), doc, span())
+       val (name, doc) = moduleDecl()
+       val res = ModuleDecl(name, manyWhile(includeDecl(), `import`), toplevelDefs(), doc, span())
        if peek(`EOF`) then res else fail("Unexpected end of input")
        // failure("Required at least one top-level function or effect definition")
 
-  def moduleDecl(): String =
-    when(`module`) { moduleName() } { defaultModulePath }
+  def moduleDecl(): Tuple2[String, Doc] =
+    documentedKind match {
+      case `module` =>
+        val doc = maybeDocumentation()
+        consume(`module`)
+        (moduleName(), doc)
+      case _ => (defaultModulePath, None)
+    }
 
   // we are purposefully not using File here since the parser needs to work both
   // on the JVM and in JavaScript
