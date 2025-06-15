@@ -22,7 +22,7 @@ object Fail {
 }
 case class SoftFail(message: String, positionStart: Int, positionEnd: Int)
 
-class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source) {
+class RecursiveDescent(positions: Positions, tokens: Array[Token], source: Source) {
 
   import scala.collection.mutable.ListBuffer
 
