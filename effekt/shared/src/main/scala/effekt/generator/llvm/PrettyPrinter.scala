@@ -93,6 +93,8 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 
     case Add(result, operand0, ConstantInt(n)) =>
       s"${localName(result)} = add ${show(operand0)}, $n"
+    case Add(result, operand0, ConstantInteger8(n)) =>
+      s"${localName(result)} = add ${show(operand0)}, $n"
     case Add(result, LocalReference(t1, n1), LocalReference(t2, n2)) =>
       assert(t1 == t2)
       s"${localName(result)} = add ${show(t1)} ${localName(n1)}, ${localName(n2)}"
