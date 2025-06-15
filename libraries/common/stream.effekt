@@ -286,7 +286,7 @@ def feed[R](bytes: ByteArray) { reader: () => R / read[Byte] }: R = {
 def source[A] { stream: () => Unit / emit[A] } { reader: () => Unit / read[A] }: Unit =
   returning::source[A, Unit]{stream}{reader}
 
-/// Combines two streams together producing a stream of pairs in lockstep.
+/// Combines two streams together calling action on pairs in lockstep.
 /// Terminates when either of them terminates.
 def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] } { action: (A, B) => Unit }: Unit = {
   with source[A] { stream1 }
@@ -294,6 +294,28 @@ def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] 
 
   exhaustively {
     action(do read[A](), do read[B]())
+  }
+}
+
+/// Combines two streams together calling action on OneOrBoth in lockstep.
+/// Terminates when both of them terminated.
+def zipLongest[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] } { action: OneOrBoth[A, B] => Unit }: Unit = {
+  with source[A] { stream1 }
+  with source[B] { stream2 }
+
+  exhaustively {
+     try {
+      val a = do read[A]()
+      try {
+        val b = do read[B]()
+        action(Both(a, b))
+      } with stop { () =>
+        action(This(a))
+      }
+    } with stop{ () =>
+      val b = do read[B]()
+      action(That(b))
+    }
   }
 }
 
