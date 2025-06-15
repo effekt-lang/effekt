@@ -1,0 +1,86 @@
+module io/promise
+
+import io
+import io/channel
+
+// Promises
+// --------
+
+type State[T] {
+  Resolved(value: T)
+  Pending(channels: List[Channel[T]])
+}
+
+extern type Promise[T]
+  // = js "{resolve: ƒ, promise: Promise}"
+  // = llvm "Ref[State[T]]"
+
+extern pure def toPromise[T](promise: Ref[State[T]]): Promise[T] =
+  llvm """
+    ret %Pos ${promise}
+  """
+
+extern pure def toRefState[T](promise: Promise[T]): Ref[State[T]] =
+  llvm """
+    ret %Pos ${promise}
+  """
+
+namespace promise {
+  extern global def make[T](): Promise[T] =
+    js "promise$make()"
+    llvm { toPromise(ref(Pending(Nil()))) }
+}
+
+def promise[T](task: Task[T]): Promise[T] = {
+  val p = promise::make[T]();
+  spawn(box { p.resolve(task()) });
+  return p
+}
+
+extern {async, global} def await[T](promise: Promise[T]): T =
+  js "$effekt.capture(k => ${promise}.promise.then(k))"
+  llvm {
+    val reference = toRefState(promise)
+    // TODO use reference.get
+    get(reference) match {
+      case Resolved(value) =>
+        return value
+      case Pending(channels) =>
+        val channel = channel::allocate()
+        // TODO use reference.set and channel.wait
+        set(reference, Pending(Cons(channel, channels)))
+        wait(channel)
+    }
+  }
+
+extern {io, global} def resolve[T](promise: Promise[T], value: T): Unit =
+  js "promise$resolve(${promise}, ${value})"
+  llvm {
+    val reference = toRefState(promise)
+    // TODO use reference.get
+    get(reference) match {
+      case Resolved(value) =>
+        panic("ERROR: Promise already resolved")
+      case Pending(channels) =>
+        // TODO use reference.set
+        set(reference, Resolved(value))
+        // TODO use channels.reverse.foreach
+        foreach(reverse(channels)) { channel => send(channel, value) }
+    }
+  }
+
+
+extern js """
+  function promise$make() {
+    let resolve;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+    });
+    return { resolve: resolve, promise: promise };
+  }
+
+  function promise$resolve(promise, value) {
+    promise.resolve(value);
+    return $effekt.unit
+  }
+"""
