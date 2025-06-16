@@ -536,7 +536,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         // InterfaceDef(`interface` ~> idDef(), maybeTypeParams(),
         //   `{` ~> manyWhile(documented { opDoc => `def` ~> operation(opDoc) }, documentedKind == `def`) <~ `}`, doc, span())
         InterfaceDef(`interface` ~> idDef(), maybeTypeParams(),
-          `{` ~> manyUntil(documented { opDoc => { `def` ~> operation(opDoc) } labelled "operation declaration" }, `}`) <~ `}`, doc, span())
+          `{` ~> manyUntil(documented { opDoc => { `def` ~> operation(opDoc) } labelled "} or another operation declaration" }, `}`) <~ `}`, doc, span())
       }
 
   def namespaceDef(): Def =
