@@ -35,64 +35,65 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
    *
    * In LSP mode: invoked for each file opened in an editor
    */
-  override def compileSource(source: Source, config: EffektConfig): Unit = try {
-    val src = if (source.name.endsWith(".md")) { MarkdownSource(source) } else { source }
+  override def compileSource(source: Source, config: EffektConfig): Unit = {
+      val src = if (source.name.endsWith(".md")) { MarkdownSource(source) } else { source }
+      try {
+        // remember that we have seen this source, this is used by LSP (kiama.util.Server)
+        sources(source.name) = src
 
-    // remember that we have seen this source, this is used by LSP (kiama.util.Server)
-    sources(source.name) = src
+        implicit val C = context
+        C.setup(config)
 
-    implicit val C = context
-    C.setup(config)
-
-    def saveOutput(path: String, doc: String): Unit =
-      if (C.config.requiresCompilation()) {
-        val out = C.config.outputPath()
-        out.mkdirs
-        IO.createFile((out / path).unixPath, doc)
-      }
-
-    C.backend match {
-
-      case Backend(name, compiler, runner) =>
-        // measure the total compilation time here
-        def compile() = C.timed("total", source.name) {
-          compiler.compile(src) map {
-            case (outputFiles, exec) =>
-              outputFiles.foreach {
-                case (filename, doc) =>
-                  saveOutput(filename, doc)
-              }
-              exec
+        def saveOutput(path: String, doc: String): Unit =
+          if (C.config.requiresCompilation()) {
+            val out = C.config.outputPath()
+            out.mkdirs
+            IO.createFile((out / path).unixPath, doc)
           }
-        }
 
-        // we are in one of four exclusive modes: Documenter, LSPServer, Compile, Run
-        if (config.documenter()) { documenter(source, config)(context) }
-        else if (config.server()) { compiler.runFrontend(src) }
-        else if (config.interpret()) { compile() foreach runner.eval }
-        else if (config.build()) { compile() foreach runner.build }
-        else if (config.compile()) { compile() }
-    }
-  } catch {
-    case FatalPhaseError(msg) => context.report(msg)
-    case e @ CompilerPanic(msg) =>
-      context.report(msg)
-      e.getStackTrace.foreach { line =>
-        context.info("  at " + line)
+        C.backend match {
+
+          case Backend(name, compiler, runner) =>
+            // measure the total compilation time here
+            def compile() = C.timed("total", source.name) {
+              compiler.compile(src) map {
+                case (outputFiles, exec) =>
+                  outputFiles.foreach {
+                    case (filename, doc) =>
+                      saveOutput(filename, doc)
+                  }
+                  exec
+              }
+            }
+
+            // we are in one of four exclusive modes: Documenter, LSPServer, Compile, Run
+            if (config.documenter()) { documenter(source, config)(context) }
+            else if (config.server()) { compiler.runFrontend(src) }
+            else if (config.interpret()) { compile() foreach runner.eval }
+            else if (config.build()) { compile() foreach runner.build }
+            else if (config.compile()) { compile() }
+        }
+      } catch {
+        case FatalPhaseError(msg) => context.report(msg)
+        case e @ CompilerPanic(msg) =>
+          context.report(msg)
+          e.getStackTrace.foreach { line =>
+            context.info("  at " + line)
+          }
+        // when in server-mode, do not crash but report the error to avoid
+        // restarting the server.
+        case e if config.server() =>
+          context.info("Effekt Compiler Crash: " + e.getMessage)
+          e.getStackTrace.foreach { line =>
+            context.info("  at " + line)
+          }
+      } finally {
+        outputTimes(src, config)(context)
+        showIR(src, config)(context)
+        writeIRs(src, config)(context)
+        // This reports error messages
+        afterCompilation(src, config)(context)
       }
-    // when in server-mode, do not crash but report the error to avoid
-    // restarting the server.
-    case e if config.server() =>
-      context.info("Effekt Compiler Crash: " + e.getMessage)
-      e.getStackTrace.foreach { line =>
-        context.info("  at " + line)
-      }
-  } finally {
-    outputTimes(source, config)(context)
-    showIR(source, config)(context)
-    writeIRs(source, config)(context)
-    // This reports error messages
-    afterCompilation(source, config)(context)
   }
 
   /**
