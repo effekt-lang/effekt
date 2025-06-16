@@ -1,5 +1,6 @@
 /// Demo of an effectful Normalization by Evaluation (NbE) implementation for the pure, untyped lambda calculus.
 /// Uses the Call-by-Value reduction order, same as host.
+module examples/benchmarks/nbe
 
 import io
 import map
