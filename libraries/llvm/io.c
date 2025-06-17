@@ -626,7 +626,7 @@ void c_channel_send(struct Pos channel, struct Pos value) {
             erasePositive(channel);
             erasePositive(value);
             // TODO more graceful panic
-            fprintf(stderr, "ERROR: Channel already sended\n");
+            fprintf(stderr, "ERROR: Channel already used for sending\n");
             exit(1);
             break;
         }
@@ -660,7 +660,7 @@ void c_channel_wait(struct Pos channel, Stack stack) {
             erasePositive(channel);
             eraseStack(stack);
             // TODO more graceful panic
-            fprintf(stderr, "ERROR: Channel already waited\n");
+            fprintf(stderr, "ERROR: Channel already used for waiting\n");
             exit(1);
             break;
         }
