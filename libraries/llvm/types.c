@@ -34,6 +34,9 @@ typedef struct StackValue* Stack;
 
 // Defined in rts.ll
 
+extern struct Pos box(struct Neg);
+extern struct Neg unbox(struct Pos);
+
 extern void resume_Int(Stack, Int);
 extern void resume_Pos(Stack, struct Pos);
 
