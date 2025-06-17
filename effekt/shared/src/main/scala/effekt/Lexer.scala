@@ -493,7 +493,7 @@ class Lexer(source: Source) {
   }
 
   /** Matches a hole containing natural language text.
-   * Holes may contain unquotes, i.e., "${ do foo }" that include arbitrary expressions.
+   * Holes may contain unquotes, e.g., "${ do foo }" that include arbitrary expressions.
    * Unlike regular string literals, holes cannot contain escape sequences.
    * They do emit [[TokenKind.Str]] tokens with the `multiline` flag set to `true`.
    */
@@ -518,7 +518,7 @@ class Lexer(source: Source) {
           return TokenKind.HoleStr(stringContent.mkString)
         }
         case None =>
-          return err("Unterminated string.", start, start + offset)
+          return err("Unterminated hole.", start, start + offset)
         case Some(c) =>
           consume()
           stringContent.addOne(c)
