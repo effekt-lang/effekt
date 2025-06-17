@@ -1,10 +1,10 @@
 package effekt
 package typer
 
-import effekt.context.{ Annotations, Context }
+import effekt.context.{Annotations, Context}
 import effekt.symbols.*
 import effekt.context.assertions.*
-import effekt.source.{ CallTarget, Def, ExprTarget, IdTarget, MatchGuard, MatchPattern, Tree }
+import effekt.source.{CallTarget, Def, ExprTarget, IdTarget, MatchGuard, MatchPattern, Span, Tree}
 import effekt.source.Tree.Visit
 import effekt.util.messages.ErrorReporter
 
@@ -99,7 +99,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
   }
 
   override def stmt(using Context, WFContext) = {
-    case stmt @ source.DefStmt(tree @ source.VarDef(id, annot, rhs, doc, span), rest) =>
+    case stmt @ source.DefStmt(tree @ source.VarDef(id, annot, rhs, doc, span), rest, _) =>
       val capt = tree.symbol.capture
       binding(captures = Set(capt)) {
 
@@ -125,7 +125,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
     /**
      * For handlers we check that the return type does not mention any bound capabilities
      */
-    case tree @ source.TryHandle(prog, handlers) =>
+    case tree @ source.TryHandle(prog, handlers, _) =>
       val bound = Context.annotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
       val usedEffects = Context.annotation(Annotations.InferredEffect, tree)
       val tpe = Context.inferredTypeOf(prog)
@@ -149,7 +149,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
         wellformed(tpe, prog, locationDetail = " as part of the inferred effect")
       }
 
-    case tree @ source.Region(id, body) =>
+    case tree @ source.Region(id, body, _) =>
       val reg = tree.symbol
       val tpe = Context.inferredTypeOf(body)
 
@@ -161,14 +161,14 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
             pp"The return type ${tpe} of the region body is not allowed to refer to region ${reg.capture}."
         })
 
-    case tree @ source.Match(scrutinees, clauses, default) => Context.at(tree) {
+    case tree @ source.Match(scrutinees, clauses, default, _) => Context.at(tree) {
       // TODO copy annotations from default to synthesized defaultClause (in particular positions)
       val defaultPattern = scrutinees match {
-        case List(_) => source.IgnorePattern()
-        case scs => source.MultiPattern(List.fill(scs.length){source.IgnorePattern()})
+        case List(_) => source.IgnorePattern(Span.missing)
+        case scs => source.MultiPattern(List.fill(scs.length){source.IgnorePattern(Span.missing)}, Span.missing)
       }
 
-      val defaultClause = default.toList.map(body => source.MatchClause(defaultPattern, Nil, body))
+      val defaultClause = default.toList.map(body => source.MatchClause(defaultPattern, Nil, body, Span.missing))
       ExhaustivityChecker.checkExhaustive(scrutinees, clauses ++ defaultClause)
 
       scrutinees foreach { query }
@@ -179,7 +179,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       wellformed(tpe, tree, " inferred as return type of the match")
     }
 
-    case tree @ source.BlockLiteral(tps, vps, bps, body) =>
+    case tree @ source.BlockLiteral(tps, vps, bps, body, _) =>
       val boundTypes = tps.map(_.symbol.asTypeParam).toSet[TypeVar]
       val capabilities = Context.annotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
       val blocks = bps.map(_.id.symbol.asBlockParam.capture).toSet
@@ -190,7 +190,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
         wellformed(tpe, tree, " inferred as return type")
       }
 
-    case tree @ source.Call(target, targs, vargs, bargs) =>
+    case tree @ source.Call(target, targs, vargs, bargs, _) =>
       target match {
         case CallTarget.IdTarget(id) => ()
         case ExprTarget(e) => query(e)
@@ -202,7 +202,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       vargs.foreach(query)
       bargs.foreach(query)
 
-    case tree @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
+    case tree @ source.MethodCall(receiver, id, targs, vargs, bargs, _) =>
       query(receiver)
 
       val inferredTypeArgs = Context.typeArguments(tree)
@@ -212,7 +212,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       vargs.foreach(query)
       bargs.foreach(query)
 
-    case tree @ source.Do(effect, id, targs, vargs, bargs) =>
+    case tree @ source.Do(effect, id, targs, vargs, bargs, _) =>
       val inferredTypeArgs = Context.typeArguments(tree)
       inferredTypeArgs.zipWithIndex.foreach { case (tpe, index) =>
         wellformed(tpe, tree, pp" inferred as ${showPosition(index + 1)} type argument")
@@ -220,7 +220,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       vargs.foreach(query)
       bargs.foreach(query)
 
-    case tree @ source.If(guards, thn, els) =>
+    case tree @ source.If(guards, thn, els, _) =>
       var bound: Set[TypeVar] = Set.empty
 
       guards.foreach { g =>
@@ -235,7 +235,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       val tpe = Context.inferredTypeOf(tree)
       wellformed(tpe, tree, " inferred for the result of the if statement")
 
-    case tree @ source.While(guards, block, default) =>
+    case tree @ source.While(guards, block, default, _) =>
       var bound: Set[TypeVar] = Set.empty
 
       guards.foreach { g =>
@@ -252,7 +252,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
   }
 
   override def query(c: source.MatchClause)(using Context, WFContext): Unit = c match {
-    case source.MatchClause(pattern, guards, body) =>
+    case source.MatchClause(pattern, guards, body, _) =>
 
       var bound: Set[TypeVar] = existentials(pattern)
 
@@ -266,7 +266,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
   }
 
   override def query(op: source.OpClause)(using Context, WFContext): Unit = op match {
-    case tree @ source.OpClause(id, tps, vps, bps, ret, body, resume) =>
+    case tree @ source.OpClause(id, tps, vps, bps, ret, body, resume, _) =>
       val boundTypes = Context.annotation(Annotations.TypeParameters, op).toSet
       // bound capabilities are ONLY available on New(Implementation(OpClause ... )))
       // but not TryHandle(Implementation(OpClause) since their they are bound by the resumption
@@ -284,16 +284,16 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
   }
 
   def queryGuardsExistentials(p: MatchGuard)(using Context, WFContext): Set[TypeVar] = p match {
-    case MatchGuard.BooleanGuard(condition) =>
+    case MatchGuard.BooleanGuard(condition, _) =>
       query(condition);
       Set.empty
-    case MatchGuard.PatternGuard(scrutinee, pattern) =>
+    case MatchGuard.PatternGuard(scrutinee, pattern, _) =>
       query(scrutinee);
       existentials(pattern)
   }
 
   def existentials(p: MatchPattern)(using Context): Set[TypeVar] = p match {
-    case p @ MatchPattern.TagPattern(id, patterns) =>
+    case p @ MatchPattern.TagPattern(id, patterns, _) =>
       Context.annotation(Annotations.TypeParameters, p).toSet ++ patterns.flatMap(existentials)
     case _ => Set.empty
   }

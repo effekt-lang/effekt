@@ -108,7 +108,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
       }
       output.emitln("")
 
-      runFrontend(StringSource(""), module.make(StringSource(""), UnitLit()), config) { cu =>
+      runFrontend(StringSource(""), module.make(StringSource(""), UnitLit(Span.missing)), config) { cu =>
         module.definitions.foreach {
           case u: Def =>
             outputCode(DeclPrinter(context.symbolOf(u)), config)
@@ -217,7 +217,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
     case d: Def =>
       val extendedDefs = module + d
-      val decl = extendedDefs.make(source, UnitLit())
+      val decl = extendedDefs.make(source, UnitLit(Span.missing))
 
       runFrontend(source, decl, config) { cu =>
         module = extendedDefs
@@ -311,7 +311,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
      */
     def make(source: Source, expr: Term): ModuleDecl = {
 
-      val body = Return(expr)
+      val body = Return(expr, expr.span.synthesized)
       val fakeSpan = Span(source, 0, 0, origin = Origin.Synthesized)
       val fullSpan = Span(source, 0, source.content.length, origin = Origin.Synthesized)
       ModuleDecl("interactive", includes,
@@ -321,7 +321,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
     def makeEval(source: Source, expr: Term): ModuleDecl = {
       val fakeSpan = Span(source, 0, 0, origin = Origin.Synthesized)
-      make(source, Call(IdTarget(IdRef(List(), "println", fakeSpan)), Nil, List(expr), Nil))
+      make(source, Call(IdTarget(IdRef(List(), "println", fakeSpan)), Nil, List(expr), Nil, fakeSpan))
     }
   }
   lazy val emptyModule = ReplModule(Nil, Nil)

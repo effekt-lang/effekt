@@ -100,7 +100,7 @@ trait Intelligence {
 
   def getSymbolOf(tree: Tree)(using C: Context): Option[Symbol] =
     tree match {
-      case i @ Include(path) => C.annotationOption(Annotations.IncludedSymbols, i)
+      case i @ Include(path, span) => C.annotationOption(Annotations.IncludedSymbols, i)
       case _ => None
     }
 
@@ -214,7 +214,7 @@ trait Intelligence {
       case (t: source.DefDef, c) => for {
         pos <- C.positions.getStart(t)
       } yield CaptureInfo(pos, c)
-      case (source.Box(Maybe(None, span), block), _) if C.inferredCaptureOption(block).isDefined => for {
+      case (source.Box(Maybe(None, span), block, _), _) if C.inferredCaptureOption(block).isDefined => for {
         capt <- C.inferredCaptureOption(block)
       } yield CaptureInfo(span.range.from, capt, true)
     }.flatten
