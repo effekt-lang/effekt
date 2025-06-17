@@ -400,7 +400,6 @@ void c_tcp_accept_cb(uv_stream_t* server, int status) {
         return;
     }
 
-    // Call the handler with the new client connection
     run_Int(unbox(accept_closure->handler), (int64_t)client);
 }
 
