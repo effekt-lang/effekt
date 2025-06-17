@@ -30,6 +30,7 @@ enum TokenKind {
   case Integer(n: Long)
   case Float(d: Double)
   case Str(s: String, multiline: Boolean)
+  case HoleStr(s: String)
   case Chr(c: Int)
   // identifiers
   case Ident(id: String)
@@ -307,10 +308,11 @@ class Lexer(source: Source) {
               delimiters.pop() match {
                 case `${{` | `{{` =>  err(errMsg)
                 case strDelim: StrDelim => matchString(strDelim, true)
+                case `<{{` => matchHole(true)
               }
             // Last `}` is not be considered as part of string interpolation. Let the parser fail if braces don't match
             // and just continue lexing
-            case `{{` | `"` | `"""` | `'` => nextToken()
+            case `{{` | `"` | `"""` | `'` | `<{{` => nextToken()
           }
         } else nextToken()
       kind match {
@@ -399,6 +401,7 @@ class Lexer(source: Source) {
   case object `"""` extends StrDelim
   /** Delimiter for characters */
   case object `'` extends StrDelim
+  case object `<{{` extends Delimiter
 
   /** Matches a string literal -- both single- and multi-line strings.
    * Strings may contain space characters (e.g. \n, \t, \r), which are stored unescaped.
@@ -487,6 +490,42 @@ class Lexer(source: Source) {
     }
 
     TokenKind.Str(stringContent.mkString, delim.isMultiline)
+  }
+
+  /** Matches a hole containing natural language text.
+   * Holes may contain unquotes, i.e., "${ do foo }" that include arbitrary expressions.
+   * Unlike regular string literals, holes cannot contain escape sequences.
+   * They do emit [[TokenKind.Str]] tokens with the `multiline` flag set to `true`.
+   */
+  def matchHole(continued: Boolean = false): TokenKind = {
+    val delim = `<{{`
+    if (nextMatches("}>")) return TokenKind.Str("", true)
+    val offset = 2
+    val st = if (continued) start else start + offset
+    var endString = false
+    val stringContent = StringBuilder()
+
+    delimiters.push(delim)
+    while (!endString) {
+      peek() match {
+        case Some(c) if c == '}' && peekN(2).contains('>') => {
+          consume();
+          consume();
+          delimiters.pop()
+          endString = true
+        }
+        case Some('$') if peekN(2).contains('{') => {
+          return TokenKind.HoleStr(stringContent.mkString)
+        }
+        case None =>
+          return err("Unterminated string.", start, start + offset)
+        case Some(c) =>
+          consume()
+          stringContent.addOne(c)
+      }
+    }
+
+    TokenKind.HoleStr(stringContent.mkString)
   }
 
   /** Matches a character: '.+' */
@@ -596,7 +635,7 @@ class Lexer(source: Source) {
       case ':' => `:`
       case ';' => `;`
       case '@' => `@`
-      case '<' if nextMatches('{') => `<{`
+      case '<' if nextMatches('{') => matchHole()
       case '<' if nextMatches('>') => `<>`
       case '<' if nextMatches('=') => `<=`
       case '<' => `<`

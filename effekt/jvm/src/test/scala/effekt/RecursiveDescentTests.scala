@@ -359,6 +359,14 @@ class RecursiveDescentTests extends munit.FunSuite {
     intercept[Throwable] { parseExpr("box { f }") }
   }
 
+  test("Holes") {
+    parseExpr("<>")
+    parseExpr("<{ natural language text }>")
+    parseExpr("<{ natural language text with { braces } }>")
+    parseExpr("<{ natural language text with terms like ${ 1 + 1 } inside }>")
+    parseExpr("<{ deeply ${ 1 + <{ nested stuff ${ 2 } }> + 3 } }>")
+  }
+
   test("Pattern matching") {
     parseExpr(
       """do raise(RuntimeError(), msg) match {}
