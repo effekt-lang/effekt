@@ -426,8 +426,6 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
   //
 
-  // FIXME: This is the code actions code from the previous language server implementation.
-  // It doesn't even work in the previous implementation.
   override def codeAction(params: CodeActionParams): CompletableFuture[util.List[messages.Either[Command, CodeAction]]] = {
     val codeActions = for {
       position <- sources.get(params.getTextDocument.getUri).map { source =>
@@ -474,21 +472,26 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     EffektCodeAction("Update return type with inferred effects", fun.ret.span, newText)
   }
 
-  def closeHoleAction(hole: Hole)(using C: Context): Option[CodeAction] = for {
-    holeTpe <- C.inferredTypeOption(hole)
-    contentTpe <- C.inferredTypeOption(hole.stmts)
-    if holeTpe == contentTpe
-    res <- hole match {
-      case Hole(id, source.Return(exp, _), span) => for {
-        text <- positions.textOf(exp)
-      } yield EffektCodeAction("Close hole", span, text)
+  def closeHoleAction(hole: Hole)(using C: Context): Option[CodeAction] = {
+    val Template(strings, stmts) = hole.body
+    if (stmts.length != 1) return None
+    val stmt = stmts.head
+    for {
+      holeTpe <- C.inferredTypeOption(hole)
+      contentTpe <- C.inferredTypeOption(stmt)
+      if holeTpe == contentTpe
+      res <- stmt match {
+        case source.Return(exp, _) => for {
+          text <- positions.textOf(exp)
+        } yield EffektCodeAction("Close hole", hole.span, text)
 
-      // <{ s1 ; s2; ... }>
-      case Hole(id, stmts, span) => for {
-        text <- positions.textOf(stmts)
-      } yield EffektCodeAction("Close hole", span, s"locally { ${text} }")
-    }
-  } yield res
+        // <{ ${s1 ; s2; ...} }>
+        case _ => for {
+          text <- positions.textOf(stmt)
+        } yield EffektCodeAction("Close hole", hole.span, s"locally { ${text} }")
+      }
+    } yield res
+  }
 
   def needsUpdate(annotated: (ValueType, Effects), inferred: (ValueType, Effects))(using Context): Boolean = {
     val (tpe1, effs1) = annotated

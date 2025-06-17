@@ -419,11 +419,13 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.Literal(value, tpe, _) => ()
 
-    case hole @ source.Hole(id, stmts, span) =>
+    case hole @ source.Hole(id, Template(strings, args), span) =>
       val h = Hole(Name.local(freshHoleId), hole)
       Context.addHole(h)
       Context.assignSymbol(id, h)
-      Context scoped { resolve(stmts) }
+      Context scoped {
+        args.foreach(resolve)
+      }
 
     case source.Unbox(term, _) => resolve(term)
 

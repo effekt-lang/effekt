@@ -327,12 +327,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // we can unify with everything.
         Result(Context.join(tpes: _*), resEff)
 
-      case source.Hole(id, stmt, span) =>
-        val Result(tpe, effs) = checkStmt(stmt, None)
+      case source.Hole(id, Template(strings, args), span) =>
         val h = id.symbol.asHole
-
+        val tpes = args.map(stmt =>
+          val Result(tpe, effs) = checkStmt(stmt, None)
+          Some(tpe)
+        )
         h.expectedType = expected
-        h.innerType = Some(tpe)
+        h.argTypes = tpes
 
         Result(expected.getOrElse(TBottom), Pure)
 
