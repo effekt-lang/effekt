@@ -1145,11 +1145,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       }
     }
 
-  def holeTemplate(): Template[Term] =
+  def holeTemplate(): Template[Stmt] =
     nonterminal:
       val first = holeString()
-      val (exprs, strs) = manyWhile((`${` ~> expr() <~ `}`, holeString()), `${`).unzip
-      Template(first :: strs, exprs)
+      val (s, strs) = manyWhile((`${` ~> stmts() <~ `}`, holeString()), `${`).unzip
+      Template(first :: strs, s)
 
   def holeString(): String =
     nonterminal:
