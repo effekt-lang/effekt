@@ -1,7 +1,5 @@
 ; Run-Time System
 
-%Evidence = type i64
-
 ; Basic types
 
 %Environment = type ptr
@@ -734,7 +732,7 @@ define void @run_Int(%Neg %f, i64 %argument) {
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
     ; call
-    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, i64 %argument, %Stack %stack)
+    tail call tailcc %Pos %functionPointer(%Object %object, i64 %argument, %Stack %stack)
     ret void
 }
 
@@ -749,7 +747,7 @@ define void @run_Pos(%Neg %f, %Pos %argument) {
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
     ; call
-    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Pos %argument, %Stack %stack)
+    tail call tailcc %Pos %functionPointer(%Object %object, %Pos %argument, %Stack %stack)
     ret void
 }
 
