@@ -726,7 +726,10 @@ define void @resume_Pos(%Stack %stack, %Pos %argument) {
     ret void
 }
 
-define void @run(%Neg %f) {
+define void @run(%Pos %boxed) {
+    ; unbox
+    %f = call %Neg @unbox(%Pos %boxed)
+
     ; fresh stack
     %stack = call %Stack @withEmptyStack()
 
@@ -741,7 +744,10 @@ define void @run(%Neg %f) {
     ret void
 }
 
-define void @run_Int(%Neg %f, i64 %argument) {
+define void @run_Int(%Pos %boxed, i64 %argument) {
+    ; unbox
+    %f = call %Neg @unbox(%Pos %boxed)
+
     ; fresh stack
     %stack = call %Stack @withEmptyStack()
 
@@ -756,7 +762,10 @@ define void @run_Int(%Neg %f, i64 %argument) {
     ret void
 }
 
-define void @run_Pos(%Neg %f, %Pos %argument) {
+define void @run_Pos(%Pos %boxed, %Pos %argument) {
+    ; unbox
+    %f = call %Neg @unbox(%Pos %boxed)
+
     ; fresh stack
     %stack = call %Stack @withEmptyStack()
 
