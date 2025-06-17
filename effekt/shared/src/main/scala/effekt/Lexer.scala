@@ -297,7 +297,7 @@ class Lexer(source: Source) {
       val kind =
         // If the last token was `}` and we are currently inside unquotes, remember to directly continue
         // lexing a string
-        if (tokens.lastOption.map { _.kind }.contains(TokenKind.`}`) && !delimiters.isEmpty) {
+        if (tokens.lastOption.map { _.kind }.contains(TokenKind.`}`) && delimiters.nonEmpty) {
           delimiters.pop() match {
             case `${{` =>
               // there has to be a string delimiter on the stack since `${ }` may only appear in strings
