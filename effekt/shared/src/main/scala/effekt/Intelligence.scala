@@ -147,17 +147,16 @@ trait Intelligence {
 
   def getHoleInfo(hole: source.Hole)(using C: Context): Option[String] = for {
     (outerTpe, outerEff) <- C.inferredTypeAndEffectOption(hole)
-    (innerTpe, innerEff) <- C.inferredTypeAndEffectOption(hole.stmts)
-  } yield pp"""| | Outside       | Inside        |
-               | |:------------- |:------------- |
-               | | `${outerTpe}` | `${innerTpe}` |
-               |""".stripMargin
+  } yield pp"Hole of type `${outerTpe}`".stripMargin
 
   def getHoles(src: Source)(using C: Context): List[HoleInfo] = for {
     (hole, scope) <- C.annotationOption(Annotations.HolesForFile, src).getOrElse(Nil)
-    innerType = hole.innerType.map { t => pp"${t}" }
-    expectedType = hole.expectedType.map { t => pp"${t}" }
   } yield {
+    val innerType = hole.argTypes match {
+      case Some(t) :: Nil => Some(pp"${t}")
+      case _ => None
+    };
+    val expectedType = hole.expectedType.map { t => pp"${t}" }
     val scopeInfo = allBindings(scope)
     HoleInfo(
       hole.name.name,

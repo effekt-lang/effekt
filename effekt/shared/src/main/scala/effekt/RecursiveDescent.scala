@@ -1136,10 +1136,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def hole(): Term = {
     nonterminal:
       peek.kind match {
-        case `<>` => `<>` ~> Hole(IdDef("hole", span().synthesized), Return(UnitLit(span().synthesized), span().synthesized), span())
+        case `<>` => `<>` ~> Hole(IdDef("hole", span().synthesized), Template(Nil, Nil), span())
         case _: HoleStr => {
-          holeTemplate()
-          Hole(IdDef("hole", span().synthesized), Return(UnitLit(span().synthesized), span().synthesized), span())
+          val body = holeTemplate()
+          Hole(IdDef("hole", span().synthesized), body, span())
         }
         case k => fail("hole", k)
       }
