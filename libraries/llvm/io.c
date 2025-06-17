@@ -401,7 +401,7 @@ void c_tcp_accept_cb(uv_stream_t* server, int status) {
     }
 
     sharePositive(accept_closure->handler);
-    run_Int(unbox(accept_closure->handler), (int64_t)client);
+    run_Int(accept_closure->handler, (int64_t)client);
 }
 
 void c_tcp_accept(Int listener, struct Pos handler, Stack stack) {
