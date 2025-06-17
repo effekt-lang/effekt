@@ -288,7 +288,7 @@ class Lexer(source: Source) {
     }
 
   /** Main entry-point of the lexer. Whitespace is ignored and comments are collected.
-   * If an error is encountered, all successfully scanned tokens this far will returned,
+   * If an error is encountered, all successfully scanned tokens this far will be returned,
    * including the error.
    */
   def run(): Vector[Token] = {
