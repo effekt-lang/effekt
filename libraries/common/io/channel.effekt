@@ -3,7 +3,7 @@ module io/channel
 // Channels
 // --------
 
-/// Must be sended exactly once and waited exactly once
+/// Must sent to exactly once and waited for exactly once
 extern type Channel[T]
 
 namespace channel {
