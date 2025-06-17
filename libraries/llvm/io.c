@@ -400,6 +400,7 @@ void c_tcp_accept_cb(uv_stream_t* server, int status) {
         return;
     }
 
+    sharePositive(accept_closure->handler);
     run_Int(unbox(accept_closure->handler), (int64_t)client);
 }
 
