@@ -1374,7 +1374,7 @@ class LSPTests extends FunSuite {
              |""".stripMargin)
 
       val initializeParams = new InitializeParams()
-      val initializationOptions = """{"showHoles": true}"""
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
       initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
       server.initialize(initializeParams).get()
 
