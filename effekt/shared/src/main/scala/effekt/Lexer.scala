@@ -308,11 +308,11 @@ class Lexer(source: Source) {
               delimiters.pop() match {
                 case `${{` | `{{` =>  err(errMsg)
                 case strDelim: StrDelim => matchString(strDelim, true)
-                case `<{{` => matchHole(true)
+                case `<""` => matchHole(true)
               }
             // Last `}` is not be considered as part of string interpolation. Let the parser fail if braces don't match
             // and just continue lexing
-            case `{{` | `"` | `"""` | `'` | `<{{` => nextToken()
+            case `{{` | `"` | `"""` | `'` | `<""` => nextToken()
           }
         } else nextToken()
       kind match {
@@ -401,7 +401,7 @@ class Lexer(source: Source) {
   case object `"""` extends StrDelim
   /** Delimiter for characters */
   case object `'` extends StrDelim
-  case object `<{{` extends Delimiter
+  case object `<""` extends Delimiter
 
   /** Matches a string literal -- both single- and multi-line strings.
    * Strings may contain space characters (e.g. \n, \t, \r), which are stored unescaped.
@@ -498,8 +498,8 @@ class Lexer(source: Source) {
    * They do emit [[TokenKind.Str]] tokens with the `multiline` flag set to `true`.
    */
   def matchHole(continued: Boolean = false): TokenKind = {
-    val delim = `<{{`
-    if (nextMatches("}>")) return TokenKind.Str("", true)
+    val delim = `<""`
+    if (nextMatches("\">")) return TokenKind.Str("", true)
     val offset = 2
     val st = if (continued) start else start + offset
     var endString = false
@@ -508,7 +508,7 @@ class Lexer(source: Source) {
     delimiters.push(delim)
     while (!endString) {
       peek() match {
-        case Some(c) if c == '}' && peekN(2).contains('>') => {
+        case Some(c) if c == '"' && peekN(2).contains('>') => {
           consume();
           consume();
           delimiters.pop()
@@ -635,7 +635,8 @@ class Lexer(source: Source) {
       case ':' => `:`
       case ';' => `;`
       case '@' => `@`
-      case '<' if nextMatches('{') => matchHole()
+      case '<' if nextMatches('"') => matchHole()
+      case '<' if nextMatches('{') => `<{`
       case '<' if nextMatches('>') => `<>`
       case '<' if nextMatches('=') => `<=`
       case '<' => `<`
