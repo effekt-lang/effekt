@@ -1130,6 +1130,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def isHole: Boolean = peek.kind match {
     case `<>` => true
+    case `<{` => true
     case HoleStr(_) => true
     case _ => false
   }
@@ -1137,6 +1138,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       peek.kind match {
         case `<>` => `<>` ~> Hole(IdDef("hole", span().synthesized), Template(Nil, Nil), span())
+        case `<{` => {
+          val s = `<{` ~> stmts() <~ `}>`
+          Hole(IdDef("hole", span().synthesized), Template(Nil, List(s)), span())
+        }
         case _: HoleStr => {
           val body = holeTemplate()
           Hole(IdDef("hole", span().synthesized), body, span())

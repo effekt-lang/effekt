@@ -361,15 +361,15 @@ class RecursiveDescentTests extends munit.FunSuite {
 
   test("Holes") {
     parseExpr("<>")
-    parseExpr("<{ natural language text }>")
-    parseExpr("<{ natural language text with { braces } }>")
-    parseExpr("<{ natural language text with terms like ${ 1 + 1 } inside }>")
-    parseExpr("<{ deeply ${ 1 + <{ nested stuff ${ 2 } }> + 3 } }>")
-    parseExpr("<{ you can use statements like ${ val foo = 42 } inside }>")
+    parseExpr("<\" natural language text \">")
+    parseExpr("<\" natural language text with { braces } \">")
+    parseExpr("<\" natural language text with terms like ${ 1 + 1 } inside \">")
+    parseExpr("<\" deeply ${ 1 + <\" nested stuff ${ 2 } \"> + 3 } \">")
+    parseExpr("<\" you can use statements like ${ val foo = 42 } inside \">")
 
     {
       val (source, expectedSpan) =
-        """<{ let's check that the span is correct }>
+        """<" let's check that the span is correct ">
           |↑                                        ↑
           |""".sourceAndSpan
       val hole = parseExpr(source.content)
