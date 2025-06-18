@@ -501,10 +501,8 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
 
   def didChangeConfiguration(params: DidChangeConfigurationParams): Unit = {
-    // The configuration can be sent as a flat JSON object `{ "showIR": "core", ... }` or
-    // nested under an "effekt" key `{ "effekt": { "showIR": "core", ... } }`
-    // The former is sent by the VSCode extension for `initializationOptions`,
-    // the latter by newer extension versions for `workspace/didChangeConfiguration`.
+    // The configuration arrives as a JSON object nested under the "effekt" key
+    // `{ "effekt": { "showIR": "core", ... } }`
     val newSettings = params.getSettings.asInstanceOf[JsonElement]
     // When the settings come via `initializationOptions`, they can be null as per the LSP spec.
     if (newSettings.isJsonNull) {
@@ -512,7 +510,6 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
       return;
     }
     val newSettingsObj = newSettings.getAsJsonObject
-    this.settings = newSettingsObj;
     val effektSection = newSettingsObj.get("effekt")
     if (effektSection != null) {
       this.settings = effektSection
