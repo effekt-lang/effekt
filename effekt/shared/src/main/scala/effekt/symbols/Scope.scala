@@ -85,7 +85,7 @@ object scopes {
     /**
      * A local scope introduced by functions, blocks, etc.
      */
-    case Local(imports: Namespace, bindings: Namespace, outer: Scope)
+    case Local(name: Option[String], imports: Namespace, bindings: Namespace, outer: Scope)
 
     /**
      * All scopes introduce (mutable) namespaces for their bindings
@@ -95,7 +95,7 @@ object scopes {
     def imports(using E: ErrorReporter): Namespace = this match {
       case s: Scope.Named => E.abort("Can only import at the top of a file or function definition.")
       case s @ Scope.Global(imports, bindings) => imports
-      case s @ Scope.Local(imports, bindings, outer) => imports
+      case s @ Scope.Local(_, imports, bindings, outer) => imports
     }
   }
 
@@ -130,7 +130,7 @@ object scopes {
           qualified(path, bindings) orElse qualified(path, imports)
         case Scope.Named(name, bindings, outer) =>
           qualified(path, bindings) orElse first(path, outer)(select)
-        case Scope.Local(imports, bindings, outer) =>
+        case Scope.Local(_, imports, bindings, outer) =>
           qualified(path, bindings) orElse qualified(path, imports) orElse first(path, outer)(select)
       }
 
@@ -148,7 +148,7 @@ object scopes {
           qualified(path, bindings) ++ qualified(path, imports)
         case Scope.Named(name, bindings, outer) =>
           qualified(path, bindings) ++ all(path, outer)(select)
-        case Scope.Local(imports, bindings, outer) =>
+        case Scope.Local(_, imports, bindings, outer) =>
           qualified(path, bindings) ++ qualified(path, imports) ++ all(path, outer)(select)
       }
 
@@ -257,9 +257,14 @@ object scopes {
 
     def exports: Bindings = scope.bindings.toBindings
 
+    def scoped[R](name: String, block: => R): R =
+      val before = scope
+      scope = Scope.Local(Some(name), Namespace.empty, Namespace.empty, before)
+      try { block } finally { scope = before }
+
     def scoped[R](block: => R): R =
       val before = scope
-      scope = Scope.Local(Namespace.empty, Namespace.empty, before)
+      scope = Scope.Local(None, Namespace.empty, Namespace.empty, before)
       try { block } finally { scope = before }
 
     // (re-)enter the namespace
@@ -278,7 +283,7 @@ object scopes {
           // name spaces also START a new path, if there hasn't been one, already
           case None => Some(List(name))
         }
-        case Scope.Local(imports, bindings, outer) => None
+        case Scope.Local(_, imports, bindings, outer) => None
       }
       collect(scope)
   }

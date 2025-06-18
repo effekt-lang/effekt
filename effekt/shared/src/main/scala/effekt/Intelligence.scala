@@ -159,10 +159,10 @@ trait Intelligence {
       case Scope.Named(name, bindings, outer) =>
         val bindingsOut = allBindings(BindingOrigin.Defined, bindings)
         ScopeInfo(Some(name), ScopeKind.Namespace, bindingsOut.toList, Some(allBindings(outer)))
-      case Scope.Local(imports, bindings, outer) =>
+      case Scope.Local(name, imports, bindings, outer) =>
         val bindingsOut = allBindings(BindingOrigin.Imported, imports)
           ++ allBindings(BindingOrigin.Defined, bindings)
-        ScopeInfo(None, ScopeKind.Local, bindingsOut.toList, Some(allBindings(outer)))
+        ScopeInfo(name, ScopeKind.Local, bindingsOut.toList, Some(allBindings(outer)))
     }
 
   def allBindings(origin: String, bindings: Namespace, path: List[String] = Nil)(using C: Context): Iterable[BindingInfo] =

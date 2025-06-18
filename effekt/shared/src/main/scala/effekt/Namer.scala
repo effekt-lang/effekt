@@ -325,7 +325,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     // FunDef and InterfaceDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, bparams, ret, body, span) =>
       val sym = f.symbol
-      Context scoped {
+      Context.scopedWithName(id.name) {
         sym.tparams.foreach { p => Context.bind(p) }
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
@@ -335,7 +335,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, span) =>
       val sym = f.symbol
-      Context scoped {
+      Context.scopedWithName(id.name) {
         sym.tparams.foreach { p => Context.bind(p) }
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
@@ -353,7 +353,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         case op @ source.Operation(id, tparams, vparams, bparams, ret) => Context.at(op) {
           val name = Context.nameFor(id)
 
-          Context scoped {
+          Context.scopedWithName(id.name) {
             // the parameters of the interface are in scope
             interface.tparams.foreach { p => Context.bind(p) }
 
@@ -1167,6 +1167,10 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   private[namer] def scoped[R](block: => R): R = Context in {
     scope.scoped { block }
+  }
+
+  private[namer] def scopedWithName[R](name: String)(block: => R): R = Context in {
+    scope.scoped(name, block)
   }
 
   private[namer] def namespace[R](name: String)(block: => R): R = Context in {

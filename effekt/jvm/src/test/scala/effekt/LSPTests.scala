@@ -1318,6 +1318,7 @@ class LSPTests extends FunSuite {
       assertEquals(hole0.id, "foo0")
       assertEquals(hole0.innerType, Some("Int"))
       assertEquals(hole0.expectedType, Some("Bool"))
+      assertEquals(hole0.scope.name, Some("foo"))
       assertEquals(hole0.scope.kind, ScopeKind.Local)
       assertEquals(hole0.scope.bindings, innerScopeBindings)
       val globalScope = hole0.scope.outer.get
