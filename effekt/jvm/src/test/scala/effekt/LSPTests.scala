@@ -1073,7 +1073,7 @@ class LSPTests extends FunSuite {
     withClientAndServer { (client, server) =>
       val (textDoc, range) =
         """
-             |def foo(x: Int): Int = <{ ${ x } }>
+             |def foo(x: Int): Int = <" ${ x } ">
              |                       ↑          ↑
              |""".textDocumentAndRange
 
@@ -1119,7 +1119,7 @@ class LSPTests extends FunSuite {
     withClientAndServer { (client, server) =>
       val (textDoc, range) =
            """
-             |def foo[T](x: T): Unit = <{ ${ println("1"); println("2") } }>
+             |def foo[T](x: T): Unit = <" ${ println("1"); println("2") } ">
              |                         ↑                                   ↑
              |""".textDocumentAndRange
 
@@ -1297,8 +1297,8 @@ class LSPTests extends FunSuite {
       val source =
            """
              |type MyInt = Int
-             |def foo(x: Int): Bool = <{ ${ x } }>
-             |def bar(x: String): Int = <{ ${ <> } }> // a hole within a hole
+             |def foo(x: Int): Bool = <" ${ x } ">
+             |def bar(x: String): Int = <" ${ <> } "> // a hole within a hole
              |""".textDocument
       val initializeParams = new InitializeParams()
       val initializationOptions = """{"effekt": {"showHoles": true}}"""
