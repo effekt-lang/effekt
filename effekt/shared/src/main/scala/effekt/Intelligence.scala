@@ -158,43 +158,48 @@ trait Intelligence {
     innerType = hole.innerType.map { t => pp"${t}" }
     expectedType = hole.expectedType.map { t => pp"${t}" }
   } yield {
-    val BindingInfo(importedTerms, importedTypes, terms, types) = allBindings(scope)
-    HoleInfo(hole.name.name, hole.decl.span, innerType, expectedType, importedTerms.toList.distinct, importedTypes.toList.distinct, terms.toList.distinct, types.toList.distinct)
+    val scopeInfo = allBindings(scope)
+    HoleInfo(
+      hole.name.name,
+      hole.decl.span,
+      innerType,
+      expectedType,
+      scopeInfo
+    )
   }
 
-  def allBindings(scope: Scope)(using C: Context): BindingInfo =
+  def allBindings(scope: Scope)(using C: Context): ScopeInfo =
     scope match {
       case Scope.Global(imports, bindings) =>
-        val (te1, ty1) = allBindings(imports)
-        val (te2, ty2) = allBindings(bindings)
-        BindingInfo(te1, ty1, te2, ty2)
+        val bindingsOut = allBindings(BindingOrigin.Imported, imports)
+          ++ allBindings(BindingOrigin.Defined, bindings)
+        ScopeInfo(None, ScopeKind.Global, bindingsOut.toList, None)
       case Scope.Named(name, bindings, outer) =>
-        val (te, ty) = allBindings(bindings)
-        BindingInfo(Seq.empty, Seq.empty, te, ty) ++ allBindings(outer)
-      case Scope.Local(imports, bindings, outer) =>
-        val outerBindings = allBindings(outer)
-        val (te1, ty1) = allBindings(imports)
-        val (te2, ty2) = allBindings(bindings)
-        BindingInfo(te1, ty1, te2, ty2) ++ allBindings(outer)
+        val bindingsOut = allBindings(BindingOrigin.Defined, bindings)
+        ScopeInfo(Some(name), ScopeKind.Namespace, bindingsOut.toList, Some(allBindings(outer)))
+      case Scope.Local(name, imports, bindings, outer) =>
+        val bindingsOut = allBindings(BindingOrigin.Imported, imports)
+          ++ allBindings(BindingOrigin.Defined, bindings)
+        ScopeInfo(name, ScopeKind.Local, bindingsOut.toList, Some(allBindings(outer)))
     }
 
-  def allBindings(bindings: Namespace, path: List[String] = Nil)(using C: Context): (Iterable[TermBinding], Iterable[TypeBinding]) =
+  def allBindings(origin: String, bindings: Namespace, path: List[String] = Nil)(using C: Context): Iterable[BindingInfo] =
     val types = bindings.types.flatMap {
       case (name, sym) =>
         // TODO this is extremely hacky, printing is not defined for all types at the moment
-        try { Some(TypeBinding(path, name, DeclPrinter(sym))) } catch { case e => None }
+        try { Some(TypeBinding(path, name, origin, DeclPrinter(sym))) } catch { case e => None }
     }
     val terms = bindings.terms.flatMap { case (name, syms) =>
       syms.collect {
-        case sym: ValueSymbol => TermBinding(path, name, C.valueTypeOption(sym).map(t => pp"${t}"))
-        case sym: BlockSymbol => TermBinding(path, name, C.blockTypeOption(sym).map(t => pp"${t}"))
+        case sym: ValueSymbol => TermBinding(path, name, origin, C.valueTypeOption(sym).map(t => pp"${t}"))
+        case sym: BlockSymbol => TermBinding(path, name, origin, C.blockTypeOption(sym).map(t => pp"${t}"))
       }
     }
-    val (nestedTerms, nestedTypes) = bindings.namespaces.map {
-      case (name, namespace) => allBindings(namespace, path :+ name)
-    }.unzip
+    val nestedBindings = bindings.namespaces.flatMap {
+      case (name, namespace) => allBindings(origin, namespace, path :+ name)
+    }
 
-    (terms ++ nestedTerms.flatten, types ++ nestedTypes.flatten)
+    terms ++ types ++ nestedBindings
 
   def allCaptures(src: Source)(using C: Context): List[(Tree, CaptureSet)] =
     C.annotationOption(Annotations.CaptureForFile, src).getOrElse(Nil)
@@ -366,27 +371,49 @@ object Intelligence {
      span: Span,
      innerType: Option[String],
      expectedType: Option[String],
-     importedTerms: List[TermBinding], importedTypes: List[TypeBinding],
-     terms: List[TermBinding], types: List[TypeBinding]
+     scope: ScopeInfo,
   )
 
-  case class TermBinding(qualifier: List[String], name: String, `type`: Option[String])
-
-  case class TypeBinding(qualifier: List[String], name: String, definition: String)
-
-  case class BindingInfo(
-    importedTerms: Iterable[TermBinding],
-    importedTypes: Iterable[TypeBinding],
-    terms: Iterable[TermBinding],
-    types: Iterable[TypeBinding]
-  ) {
-    def ++(other: BindingInfo): BindingInfo =
-      BindingInfo(
-        importedTerms ++ other.importedTerms,
-        importedTypes ++ other.importedTypes,
-        terms ++ other.terms,
-        types ++ other.types)
+  // These need to be strings (rather than cases of an enum) so that they get serialized correctly
+  object BindingOrigin {
+    /**
+     * The binding was defined in this scope
+     */
+    final val Defined = "Defined"
+    /**
+     * The binding was imported in this scope
+     */
+    final val Imported = "Imported"
   }
+
+  object BindingKind {
+    final val Term = "Term"
+    final val Type = "Type"
+  }
+
+  sealed trait BindingInfo {
+    val qualifier: List[String]
+    val name: String
+    val origin: String
+    val kind: String
+  }
+
+  case class TermBinding(qualifier: List[String], name: String, origin: String, `type`: Option[String], kind: String = BindingKind.Term) extends BindingInfo
+  case class TypeBinding(qualifier: List[String], name: String, origin: String, definition: String, kind: String = BindingKind.Type) extends BindingInfo
+
+  // These need to be strings (rather than cases of an enum) so that they get serialized correctly
+  object ScopeKind {
+    final val Namespace: String = "Namespace"
+    final val Local: String = "Local"
+    final val Global: String = "Global"
+  }
+
+  case class ScopeInfo(
+      name: Option[String],
+      kind: String,
+      bindings: List[BindingInfo],
+      outer: Option[ScopeInfo]
+  )
 
   case class CaptureInfo(
     position: Position,

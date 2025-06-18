@@ -622,12 +622,13 @@ case class EffektPublishHolesParams(uri: String, holes: List[EffektHoleInfo])
  *
  * The difference to Intelligence.HoleInfo is that it uses the appropriate LSP type for the range
  */
-case class EffektHoleInfo(id: String,
-                    range: LSPRange,
-                    innerType: Option[String],
-                    expectedType: Option[String],
-                    importedTerms: List[Intelligence.TermBinding], importedTypes: List[Intelligence.TypeBinding],
-                    terms: List[Intelligence.TermBinding], types: List[Intelligence.TypeBinding])
+case class EffektHoleInfo(
+  id: String,
+  range: LSPRange,
+  innerType: Option[String],
+  expectedType: Option[String],
+  scope: Intelligence.ScopeInfo
+ )
 
 object EffektHoleInfo {
   def fromHoleInfo(info: Intelligence.HoleInfo): EffektHoleInfo = {
@@ -636,10 +637,7 @@ object EffektHoleInfo {
       convertRange(info.span.range),
       info.innerType,
       info.expectedType,
-      info.importedTerms,
-      info.importedTypes,
-      info.terms,
-      info.types
+      info.scope
     )
   }
 }
