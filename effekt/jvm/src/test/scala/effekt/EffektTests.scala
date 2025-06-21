@@ -107,7 +107,7 @@ trait EffektTests extends munit.FunSuite {
     foreachFileIn(dir) {
       case (f, None) => sys error s"Missing checkfile for ${f.getPath}"
       case (f, Some(expected)) =>
-        test(s"${f.getPath} (${backendName})") {
+        test(s"${f.getPath} (${backendName}-noopt)") {
           assertNoDiff(run(f, false), expected)
         }
     }
