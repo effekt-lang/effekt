@@ -1477,6 +1477,19 @@ class RecursiveDescentTests extends munit.FunSuite {
         |
         |def main() = ()
         |""".stripMargin)
+
+    parseProgram(
+      """#!/usr/bin/env effekt
+        |
+        |def main() = ()
+        |""".stripMargin)
+
+    parseProgram(
+      """#!/usr/bin/env nix
+        |#!nix run effekt-nix
+        |
+        |def main() = ()
+        |""".stripMargin)
   }
 
   test("Extern definition") {

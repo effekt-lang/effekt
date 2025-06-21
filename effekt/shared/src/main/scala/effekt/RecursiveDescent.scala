@@ -147,12 +147,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     currentLabel = None
     spaces()
 
-  def isDocComment(kind: TokenKind): Boolean =
-    kind match {
-      case DocComment(_) => true
-      case _ => false
-    }
-
   def isSpace(kind: TokenKind): Boolean =
     kind match {
       case TokenKind.Space | TokenKind.Comment(_) | TokenKind.Newline => true
@@ -315,10 +309,18 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
      nonterminal:
        // skip spaces at the start
        spaces()
+       shebang()
+       spaces()
        val (name, doc) = moduleDecl()
        val res = ModuleDecl(name, manyWhile(includeDecl(), `import`), toplevelDefs(), doc, span())
        if peek(`EOF`) then res else fail("Unexpected end of input")
        // failure("Required at least one top-level function or effect definition")
+
+  def shebang(): Unit =
+    peek.kind match {
+      case Shebang(_) => consume(peek.kind); shebang()
+      case _ => ()
+    }
 
   def moduleDecl(): Tuple2[String, Doc] =
     documentedKind match {

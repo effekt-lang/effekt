@@ -36,6 +36,7 @@ enum TokenKind {
   // misc
   case Comment(msg: String)
   case DocComment(msg: String)
+  case Shebang(cmd: String)
   case Newline
   case Space
   case EOF
@@ -556,6 +557,21 @@ class Lexer(source: Source) {
       TokenKind.Comment(comment)
   }
 
+  def matchShebang(): TokenKind = {
+    var reachedNewline = false
+    while (!reachedNewline) {
+      // peek to ensure the newline is not part of the command
+      peek() match {
+        // command is terminated when encountering a new line
+        case Some('\n') => reachedNewline = true
+        case None => reachedNewline = true
+        case _ => consume()
+      }
+    }
+    val command = slice(start + 2, current)
+    TokenKind.Shebang(command)
+  }
+
   @tailrec
   final def matchWhitespaces(): Unit = {
       peek() match {
@@ -616,6 +632,7 @@ class Lexer(source: Source) {
       case '.' => `.`
       case '/' if nextMatches('*') => matchMultilineComment()
       case '/' if nextMatches('/') => matchComment()
+      case '#' if nextMatches('!') => matchShebang()
       case '/' => `/`
       case '!' if nextMatches('=') => `!==`
       case '!' => `!`
