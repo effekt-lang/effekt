@@ -263,6 +263,7 @@ void c_tcp_read(Int handle, struct Pos buffer, Int offset, Int size, Stack stack
 
     char* buffer_ptr = (char*)(c_bytearray_data(buffer) + offset);
     erasePositive(buffer);
+    // TODO panic if this was the last reference
 
     tcp_read_closure_t* read_closure = malloc(sizeof(tcp_read_closure_t));
     read_closure->stack = stack;
@@ -290,6 +291,7 @@ void c_tcp_write(Int handle, struct Pos buffer, Int offset, Int size, Stack stac
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
     erasePositive(buffer);
+    // TODO panic if this was the last reference
 
     uv_write_t* request = malloc(sizeof(uv_write_t));
     request->data = stack;
