@@ -16,7 +16,7 @@ extern def spawn(task: Task[Unit]) at async: Unit =
   js "$effekt.capture(k => { setTimeout(() => k($effekt.unit), 0); return $effekt.run(${task}) })"
   llvm """
     call void @c_yield(%Stack %stack)
-    call void @run(%Pos %task)
+    call void @run(%Pos ${task})
     ret void
   """
 
