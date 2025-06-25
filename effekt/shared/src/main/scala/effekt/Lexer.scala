@@ -499,7 +499,7 @@ class Lexer(source: Source) {
    */
   def matchHole(continued: Boolean = false): TokenKind = {
     val delim = `<""`
-    if (nextMatches("\">")) return TokenKind.Str("", true)
+    if (nextMatches("\">")) return TokenKind.HoleStr("")
     val offset = 2
     val st = if (continued) start else start + offset
     var endString = false
