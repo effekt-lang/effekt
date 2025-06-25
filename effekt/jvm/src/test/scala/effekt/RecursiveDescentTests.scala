@@ -359,6 +359,31 @@ class RecursiveDescentTests extends munit.FunSuite {
     intercept[Throwable] { parseExpr("box { f }") }
   }
 
+  test("Holes") {
+    parseExpr("<>")
+    parseExpr("<\" natural language text \">")
+    parseExpr("<\" natural language text with { braces } \">")
+    parseExpr("<\" natural language text with terms like ${ 1 + 1 } inside \">")
+    parseExpr("<\" deeply ${ 1 + <\" nested stuff ${ 2 } \"> + 3 } \">")
+    parseExpr("<\" you can use statements like ${ val foo = 42 } inside \">")
+    parseExpr("<\"\">")
+    parseExpr("<\" ${ x }\">")
+
+    {
+      val (source, expectedSpan) =
+        """<" let's check that the span is correct ">
+          |↑                                        ↑
+          |""".sourceAndSpan
+      val hole = parseExpr(source.content)
+      hole match {
+        case Term.Hole(_, _, span) =>
+          assertEquals(span, expectedSpan)
+        case other =>
+          throw new IllegalArgumentException(s"Expected Hole but got ${other.getClass.getSimpleName}")
+      }
+    }
+  }
+
   test("Pattern matching") {
     parseExpr(
       """do raise(RuntimeError(), msg) match {}

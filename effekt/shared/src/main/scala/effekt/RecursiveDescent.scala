@@ -1128,17 +1128,39 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case Many(xs, _) => Call(IdTarget(IdRef(List("effekt"), s"Tuple${xs.size}", span().synthesized)), Nil, xs.toList, Nil, span().synthesized)
       }
 
-  def isHole: Boolean = peek(`<>`) || peek(`<{`)
+  def isHole: Boolean = peek.kind match {
+    case `<>` => true
+    case `<{` => true
+    case HoleStr(_) => true
+    case _ => false
+  }
   def hole(): Term = {
     nonterminal:
       peek.kind match {
-        case `<>` => `<>` ~> Hole(IdDef("hole", span().synthesized), Return(UnitLit(span().synthesized), span().synthesized), span())
-        case `<{` =>
+        case `<>` => `<>` ~> Hole(IdDef("hole", span().synthesized), Template(Nil, Nil), span())
+        case `<{` => {
           val s = `<{` ~> stmts() <~ `}>`
-          Hole(IdDef("hole", span().synthesized), s, span())
+          Hole(IdDef("hole", span().synthesized), Template(Nil, List(s)), span())
+        }
+        case _: HoleStr => {
+          val body = holeTemplate()
+          Hole(IdDef("hole", span().synthesized), body, span())
+        }
         case k => fail("hole", k)
       }
     }
+
+  def holeTemplate(): Template[Stmt] =
+    nonterminal:
+      val first = holeString()
+      val (s, strs) = manyWhile((`${` ~> stmts() <~ `}`, holeString()), `${`).unzip
+      Template(first :: strs, s)
+
+  def holeString(): String =
+    nonterminal:
+      expect("natural language text") {
+        case HoleStr(s) => s
+      }
 
   def isLiteral: Boolean = peek.kind match {
     case _: (Integer | Float | Str | Chr) => true

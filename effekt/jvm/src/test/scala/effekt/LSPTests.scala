@@ -313,11 +313,7 @@ class LSPTests extends FunSuite {
                                 |def foo(x: Int): Bool = <{ x }>
                                 |                          ↑
                                 |""".textDocumentAndPosition
-      val hoverContents =
-        raw"""| | Outside       | Inside        |
-             | |:------------- |:------------- |
-             | | `Bool` | `Int` |
-             |""".stripMargin
+      val hoverContents = "Hole of type `Bool`"
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
@@ -341,11 +337,7 @@ class LSPTests extends FunSuite {
                                 |def foo(x: Int): Int / { raise } = <{ do raise(); 42 }>
                                 |                                     ↑
                                 |""".textDocumentAndPosition
-      val hoverContents =
-        raw"""| | Outside       | Inside        |
-             | |:------------- |:------------- |
-             | | `Int` | `Int` |
-             |""".stripMargin
+      val hoverContents = "Hole of type `Int`"
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
@@ -1080,9 +1072,9 @@ class LSPTests extends FunSuite {
   test("codeAction can close hole with an expression") {
     withClientAndServer { (client, server) =>
       val (textDoc, range) =
-        raw"""
-             |def foo(x: Int): Int = <{ x }>
-             |                       ↑     ↑
+        """
+             |def foo(x: Int): Int = <" ${ x } ">
+             |                       ↑          ↑
              |""".textDocumentAndRange
 
       val didOpenParams = new DidOpenTextDocumentParams()
@@ -1126,9 +1118,9 @@ class LSPTests extends FunSuite {
   test("codeAction can close hole with statements") {
     withClientAndServer { (client, server) =>
       val (textDoc, range) =
-        raw"""
-             |def foo[T](x: T): Unit = <{ println("1"); println("2") }>
-             |                         ↑                              ↑
+           """
+             |def foo[T](x: T): Unit = <" ${ println("1"); println("2") } ">
+             |                         ↑                                   ↑
              |""".textDocumentAndRange
 
       val didOpenParams = new DidOpenTextDocumentParams()
@@ -1225,24 +1217,7 @@ class LSPTests extends FunSuite {
              |              Synthesized()
              |            )
              |          ),
-             |          Return(
-             |            Literal(
-             |              (),
-             |              ValueTypeApp(Unit_whatever, Nil),
-             |              Span(
-             |                StringSource(def main() = <>, file://test.effekt),
-             |                13,
-             |                15,
-             |                Synthesized()
-             |              )
-             |            ),
-             |            Span(
-             |              StringSource(def main() = <>, file://test.effekt),
-             |              13,
-             |              15,
-             |              Synthesized()
-             |            )
-             |          ),
+             |          Template(Nil, Nil),
              |          Span(StringSource(def main() = <>, file://test.effekt), 13, 15, Real())
              |        ),
              |        Span(StringSource(def main() = <>, file://test.effekt), 13, 15, Real())
@@ -1320,10 +1295,10 @@ class LSPTests extends FunSuite {
   test("Server publishes list of holes in file") {
     withClientAndServer { (client, server) =>
       val source =
-        raw"""
+           """
              |type MyInt = Int
-             |def foo(x: Int): Bool = <{ x }>
-             |def bar(x: String): Int = <{ <> }> // a hole within a hole
+             |def foo(x: Int): Bool = <" ${ x } ">
+             |def bar(x: String): Int = <" ${ <> } "> // a hole within a hole
              |""".textDocument
       val initializeParams = new InitializeParams()
       val initializationOptions = """{"effekt": {"showHoles": true}}"""
@@ -1407,7 +1382,7 @@ class LSPTests extends FunSuite {
 
       val hole2 = receivedHoles.head.holes(2)
       assertEquals(hole2.id, "bar1")
-      assertEquals(hole2.innerType, Some("Unit"))
+      assertEquals(hole2.innerType, None)
       assertEquals(hole2.expectedType, None)
     }
   }
