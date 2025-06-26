@@ -236,10 +236,10 @@ object Namer extends Phase[Parsed, NameResolved] {
       })
     }
 
-    case source.ExternResource(id, tpe, doc, span) =>
+    case d @ source.ExternResource(id, tpe, doc, span) =>
       val name = Context.nameFor(id)
       val btpe = resolveBlockType(tpe)
-      val sym = ExternResource(name, btpe)
+      val sym = ExternResource(name, btpe, d)
       Context.define(id, sym)
       Context.bindBlock(sym)
 
