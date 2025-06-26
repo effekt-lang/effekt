@@ -386,11 +386,11 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.DataDef(id, tparams, ctors, doc, span) =>
       val data = d.symbol
       data.constructors = ctors map {
-        case source.Constructor(id, tparams, ps, doc, span) =>
+        case c @ source.Constructor(id, tparams, ps, doc, span) =>
           val constructor = Context scoped {
             val name = Context.nameFor(id)
             val tps = tparams map resolve
-            Constructor(name, data.tparams ++ tps.unspan, Nil, data)
+            Constructor(name, data.tparams ++ tps.unspan, Nil, data, c)
           }
           Context.define(id, constructor)
           constructor.fields = resolveFields(ps.unspan, constructor)
@@ -401,7 +401,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.RecordDef(id, tparams, fs, doc, span) =>
       val record = d.symbol
       val name = Context.nameFor(id)
-      val constructor = Constructor(name, record.tparams, Nil, record)
+      val constructor = Constructor(name, record.tparams, Nil, record, d)
       // we define the constructor on a copy to avoid confusion with symbols
       Context.define(id.clone, constructor)
       record.constructor = constructor

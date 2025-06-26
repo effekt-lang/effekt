@@ -274,7 +274,7 @@ enum TypeConstructor extends TypeSymbol {
 export TypeConstructor.*
 
 
-case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Field], tpe: TypeConstructor) extends Callable {
+case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Field], tpe: TypeConstructor, override val decl: source.Tree) extends Callable {
   // Parameters and return type of the constructor
   lazy val vparams: List[ValueParam] = fields.map { f => f.param }
   val bparams: List[BlockParam] = Nil
