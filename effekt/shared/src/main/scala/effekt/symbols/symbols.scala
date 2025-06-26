@@ -316,7 +316,7 @@ case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValuePa
  * Effect aliases are *not* block types, or block type constructors. They have to be dealiased by [[Namer]]
  * before usage.
  */
-case class EffectAlias(name: Name, tparams: List[TypeParam], effs: Effects) extends BlockTypeSymbol
+case class EffectAlias(name: Name, tparams: List[TypeParam], effs: Effects, override val decl: source.Tree) extends BlockTypeSymbol
 
 
 /**

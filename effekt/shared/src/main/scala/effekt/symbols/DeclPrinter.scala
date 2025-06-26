@@ -37,7 +37,7 @@ object DeclPrinter extends ParenPrettyPrinter {
       val tps = show(tparams)
       "type" <+> name.toString <> tps <+> "=" <+> pp"$tpe"
 
-    case EffectAlias(name, tparams, eff) =>
+    case EffectAlias(name, tparams, eff, _) =>
       val tps = show(tparams)
       "effect" <+> name.toString <> tps <+> "=" <+> pp"${eff}"
 

@@ -181,11 +181,11 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, alias)
 
-    case source.EffectDef(id, tparams, effs, doc, span) =>
+    case d @ source.EffectDef(id, tparams, effs, doc, span) =>
       val tps = Context scoped { tparams map resolve }
       val alias = Context scoped {
         tps.foreach { t => Context.bind(t) }
-        EffectAlias(Context.nameFor(id), tps, resolve(effs))
+        EffectAlias(Context.nameFor(id), tps, resolve(effs), d)
       }
       Context.define(id, alias)
 
@@ -837,7 +837,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolveWithAliases(tpe: source.TypeRef)(using Context): List[InterfaceType] = Context.at(tpe) {
     val resolved: List[InterfaceType] = tpe match {
       case source.TypeRef(id, args, span) => Context.resolveType(id) match {
-        case EffectAlias(name, tparams, effs) =>
+        case EffectAlias(name, tparams, effs, _) =>
           if (tparams.size != args.size) {
             Context.abort(pretty"Effect alias ${name} expects ${tparams.size} type arguments, but got ${args.size}.")
           }
