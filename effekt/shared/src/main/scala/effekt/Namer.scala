@@ -173,11 +173,11 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, effectSym)
 
-    case source.TypeDef(id, tparams, tpe, doc, span) =>
+    case d @ source.TypeDef(id, tparams, tpe, doc, span) =>
       val tps = Context scoped { tparams map resolve }
       val alias = Context scoped {
         tps.foreach { t => Context.bind(t) }
-        TypeAlias(Context.nameFor(id), tps, resolveValueType(tpe))
+        TypeAlias(Context.nameFor(id), tps, resolveValueType(tpe), d)
       }
       Context.define(id, alias)
 
@@ -723,7 +723,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.abort(pretty"Type variables cannot be applied, but received ${args.size} arguments.")
         }
         ValueTypeRef(id)
-      case TypeAlias(name, tparams, tpe) =>
+      case TypeAlias(name, tparams, tpe, _) =>
         val targs = args.map(resolveValueType)
         if (tparams.size != targs.size) {
           Context.abort(pretty"Type alias ${name} expects ${tparams.size} type arguments, but got ${targs.size}.")

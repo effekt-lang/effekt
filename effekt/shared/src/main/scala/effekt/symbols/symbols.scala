@@ -253,7 +253,7 @@ enum TypeVar(val name: Name) extends ValueTypeSymbol {
 }
 export TypeVar.*
 
-case class TypeAlias(name: Name, tparams: List[TypeParam], tpe: ValueType) extends ValueTypeSymbol
+case class TypeAlias(name: Name, tparams: List[TypeParam], tpe: ValueType, override val decl: source.Tree) extends ValueTypeSymbol
 
 /**
  * Types that _can_ be used in type constructor position. e.g. >>>List<<<[T]
