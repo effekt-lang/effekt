@@ -41,14 +41,14 @@ object DeclPrinter extends ParenPrettyPrinter {
       val tps = show(tparams)
       "effect" <+> name.toString <> tps <+> "=" <+> pp"${eff}"
 
-    case DataType(name, tparams, ctors) =>
+    case DataType(name, tparams, ctors, _) =>
       val tps = show(tparams)
       val ctrs = ctors map { ctor =>
         format("def", ctor, ctor.annotatedResult, ctor.annotatedEffects)
       }
       "type" <+> name.toString <> tps <+> braces(nest(line <> vsep(ctrs)) <> line)
 
-    case Record(name, tparams, ctor) =>
+    case Record(name, tparams, ctor, _) =>
       val tps = show(tparams)
       val ctrs = format("def", ctor, ctor.annotatedResult, ctor.annotatedEffects)
       "type" <+> name.toString <> tps <+> braces(nest(line <> ctrs) <> line)
@@ -56,7 +56,7 @@ object DeclPrinter extends ParenPrettyPrinter {
     case f: ExternFunction =>
       format("extern def", f, f.annotatedResult, f.annotatedEffects)
 
-    case ExternType(name, tparams) =>
+    case ExternType(name, tparams, _) =>
       val tps = show(tparams)
       pp"extern type ${name}$tps"
 

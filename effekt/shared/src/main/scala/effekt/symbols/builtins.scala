@@ -19,32 +19,32 @@ object builtins {
 
   private def name(s: String) = QualifiedName(List("effekt"), s)
 
-  val UnitSymbol = ExternType(name("Unit"), Nil)
+  val UnitSymbol = ExternType(name("Unit"), Nil, NoSource)
   val TUnit = ValueTypeApp(UnitSymbol, Nil)
 
-  val BooleanSymbol = ExternType(name("Bool"), Nil)
+  val BooleanSymbol = ExternType(name("Bool"), Nil, NoSource)
   val TBoolean = ValueTypeApp(BooleanSymbol, Nil)
 
-  val IntSymbol = ExternType(name("Int"), Nil)
+  val IntSymbol = ExternType(name("Int"), Nil, NoSource)
   val TInt = ValueTypeApp(IntSymbol, Nil)
 
-  val DoubleSymbol = ExternType(name("Double"), Nil)
+  val DoubleSymbol = ExternType(name("Double"), Nil, NoSource)
   val TDouble = ValueTypeApp(DoubleSymbol, Nil)
 
-  val StringSymbol = ExternType(name("String"), Nil)
+  val StringSymbol = ExternType(name("String"), Nil, NoSource)
   val TString = ValueTypeApp(StringSymbol, Nil)
 
-  val CharSymbol = ExternType(name("Char"), Nil)
+  val CharSymbol = ExternType(name("Char"), Nil, NoSource)
   val TChar = ValueTypeApp(CharSymbol, Nil)
 
-  val ByteSymbol = ExternType(name("Byte"), Nil)
+  val ByteSymbol = ExternType(name("Byte"), Nil, NoSource)
   val TByte = ValueTypeApp(ByteSymbol, Nil)
 
-  val TopSymbol = ExternType(name("Any"), Nil)
+  val TopSymbol = ExternType(name("Any"), Nil, NoSource)
   val TTop = ValueTypeApp(TopSymbol, Nil)
 
   // should this be a datatype, not an extern type?
-  val BottomSymbol = ExternType(name("Nothing"), Nil)
+  val BottomSymbol = ExternType(name("Nothing"), Nil, NoSource)
   val TBottom = ValueTypeApp(BottomSymbol, Nil)
 
   val IOSymbol = Interface(Name.local("IO"), Nil, Nil, decl = NoSource)

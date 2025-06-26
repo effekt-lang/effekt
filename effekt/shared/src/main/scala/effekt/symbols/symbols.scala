@@ -266,9 +266,9 @@ case class TypeAlias(name: Name, tparams: List[TypeParam], tpe: ValueType, overr
 enum TypeConstructor extends TypeSymbol {
   def tparams: List[TypeParam]
 
-  case DataType(name: Name, tparams: List[TypeParam], var constructors: List[Constructor] = Nil)
-  case Record(name: Name, tparams: List[TypeParam], var constructor: Constructor)
-  case ExternType(name: Name, tparams: List[TypeParam])
+  case DataType(name: Name, tparams: List[TypeParam], var constructors: List[Constructor] = Nil, override val decl: source.Tree)
+  case Record(name: Name, tparams: List[TypeParam], var constructor: Constructor, override val decl: source.Tree)
+  case ExternType(name: Name, tparams: List[TypeParam], override val decl: source.Tree)
   case ErrorValueType(name: Name = NoName, tparams: List[TypeParam] = Nil)
 }
 export TypeConstructor.*

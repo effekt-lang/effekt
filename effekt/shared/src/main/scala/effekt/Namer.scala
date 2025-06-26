@@ -189,28 +189,28 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, alias)
 
-    case source.DataDef(id, tparams, ctors, doc, span) =>
+    case d @ source.DataDef(id, tparams, ctors, doc, span) =>
       val typ = Context scoped {
         val tps = tparams map resolve
         // we do not resolve the constructors here to allow them to refer to types that are defined
         // later in the file
-        DataType(Context.nameFor(id), tps.unspan)
+        DataType(Context.nameFor(id), tps.unspan, List(), d)
       }
       Context.define(id, typ)
 
-    case source.RecordDef(id, tparams, fields, doc, span) =>
+    case d @ source.RecordDef(id, tparams, fields, doc, span) =>
       lazy val sym: Record = {
         val tps = Context scoped { tparams map resolve }
         // we do not resolve the fields here to allow them to refer to types that are defined
         // later in the file
-        Record(Context.nameFor(id), tps.unspan, null)
+        Record(Context.nameFor(id), tps.unspan, null, d)
       }
       Context.define(id, sym)
 
-    case source.ExternType(id, tparams, doc, span) =>
+    case d @source.ExternType(id, tparams, doc, span) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
-        ExternType(Context.nameFor(id), tps.unspan)
+        ExternType(Context.nameFor(id), tps.unspan, d)
       })
 
     case decl @ source.ExternInterface(id, tparams, doc, span) =>

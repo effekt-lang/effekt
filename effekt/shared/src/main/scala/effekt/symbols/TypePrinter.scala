@@ -91,9 +91,9 @@ object TypePrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(t: TypeConstructor): Doc = t match {
-    case DataType(name, tparams, constructors)  => name <> typeParams(tparams)
-    case Record(name, tparams, constructor) => name <> typeParams(tparams)
-    case ExternType(name, tparams) => name
+    case DataType(name, tparams, constructors, _)  => name <> typeParams(tparams)
+    case Record(name, tparams, constructor, _) => name <> typeParams(tparams)
+    case ExternType(name, tparams, _) => name
     case ErrorValueType(name, tparams) => "?"
   }
 
