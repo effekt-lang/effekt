@@ -1711,7 +1711,7 @@ class LSPTests extends FunSuite {
       val source =
         raw"""namespace Foo {
              |  effect e1: Int
-             |  def foo(z: Int, y: Int, x: Int): Int = <>
+             |  def foo(z: Int, y: Int, x: Int){b1: => Int}{b2: => Bool}: Int = <>
              |  effect e2: Int
              |}
              |""".textDocument
@@ -1734,10 +1734,12 @@ class LSPTests extends FunSuite {
 
       val innerBindings = hole.scope.bindings
 
-      assertEquals(innerBindings.length, 3)
+      assertEquals(innerBindings.length, 5)
       assertEquals(innerBindings(0).name, "z")
       assertEquals(innerBindings(1).name, "y")
       assertEquals(innerBindings(2).name, "x")
+      assertEquals(innerBindings(3).name, "b1")
+      assertEquals(innerBindings(4).name, "b2")
 
       val outerBindings = hole.scope.outer.get.bindings
 

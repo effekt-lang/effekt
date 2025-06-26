@@ -123,7 +123,7 @@ sealed trait TrackedParam extends Param, BlockSymbol {
   }
 }
 object TrackedParam {
-  case class BlockParam(name: Name, tpe: Option[BlockType]) extends TrackedParam
+  case class BlockParam(name: Name, tpe: Option[BlockType], override val decl: source.Tree) extends TrackedParam
   case class ResumeParam(module: Module) extends TrackedParam { val name = Name.local("resume") }
   case class ExternResource(name: Name, tpe: BlockType) extends TrackedParam
 }
