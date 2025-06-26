@@ -285,7 +285,7 @@ case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Fi
 }
 
 // TODO maybe split into Field (the symbol) and Selector (the synthetic function)
-case class Field(name: Name, param: ValueParam, constructor: Constructor) extends Callable {
+case class Field(name: Name, param: ValueParam, constructor: Constructor, override val decl: source.Tree) extends Callable {
   val tparams: List[TypeParam] = constructor.tparams
   val vparams = List(ValueParam(constructor.name, Some(constructor.appliedDatatype), decl = NoSource))
   val bparams = List.empty[BlockParam]

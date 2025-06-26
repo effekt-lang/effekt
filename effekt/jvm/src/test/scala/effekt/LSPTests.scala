@@ -1750,6 +1750,104 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("Server correctly publishes different constructor fields with same name") {
+    withClientAndServer { (client, server) =>
+      val source =
+        raw"""namespace N {
+             |  type Foo {
+             |    MkFoo(theField: String)
+             |  }
+             |
+             |  type Bar {
+             |    MkBar(theField: Int)
+             |  }
+             |
+             |  def main() = <>
+             |}
+             |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val expectedBindings = List(
+        TypeBinding(
+          qualifier = Nil,
+          name = "Foo",
+          origin = "Defined",
+          definition = """type Foo {
+  def MkFoo(theField: String): Foo / {}
+}""",
+          kind = "Type"
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "MkFoo",
+          origin = "Defined",
+          `type` = Some(
+            value = "String => Foo"
+          ),
+          kind = "Term"
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "theField",
+          origin = "Defined",
+          `type` = None,
+          kind = "Term"
+        ),
+        TypeBinding(
+          qualifier = Nil,
+          name = "Bar",
+          origin = "Defined",
+          definition = """type Bar {
+  def MkBar(theField: Int): Bar / {}
+}""",
+          kind = "Type"
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "MkBar",
+          origin = "Defined",
+          `type` = Some(
+            value = "Int => Bar"
+          ),
+          kind = "Term"
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "theField",
+          origin = "Defined",
+          `type` = None,
+          kind = "Term"
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "main",
+          origin = "Defined",
+          `type` = Some(
+            value = "() => Nothing"
+          ),
+          kind = "Term"
+        )
+      )
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+
+      val hole = receivedHoles.head.holes.head
+      val outerScope = hole.scope.outer.get
+
+      assertEquals(outerScope.bindings, expectedBindings)
+    }
+  }
+
   // Text document DSL
   //
   //

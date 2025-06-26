@@ -570,7 +570,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       case (paramSym, paramTree) =>
         val fieldId = paramTree.id.clone
         val name = Context.nameFor(fieldId)
-        val fieldSym = Field(name, paramSym, constructor)
+        val fieldSym = Field(name, paramSym, constructor, paramTree)
         Context.define(fieldId, fieldSym)
         fieldSym
     }

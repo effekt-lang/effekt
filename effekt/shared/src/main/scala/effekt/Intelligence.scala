@@ -186,7 +186,7 @@ trait Intelligence {
     }
 
   def allBindings(origin: String, bindings: Namespace, path: List[String] = Nil)(using C: Context): List[BindingInfo] =
-    val symbols = allSymbols(origin, bindings, path).toArray
+    val symbols = allSymbols(origin, bindings, path)
 
     val sorted = if (origin == BindingOrigin.Imported) {
       symbols.sortBy(_._1.toLowerCase())
@@ -208,8 +208,8 @@ trait Intelligence {
         }
     }).toList
 
-  def allSymbols(origin: String, bindings: Namespace, path: List[String] = Nil)(using C: Context): Iterable[(String, TypeSymbol | TermSymbol)] = {
-    bindings.types ++ bindings.terms.flatMap((name, syms) => syms.map((name, _))) ++ bindings.namespaces.flatMap {
+  def allSymbols(origin: String, bindings: Namespace, path: List[String] = Nil)(using C: Context): Array[(String, TypeSymbol | TermSymbol)] = {
+    bindings.types.toArray ++ bindings.terms.toArray.flatMap((name, syms) => syms.map((name, _))) ++ bindings.namespaces.toArray.flatMap {
       case (name, namespace) => allSymbols(origin, namespace, path :+ name)
     }
   }
