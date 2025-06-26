@@ -167,7 +167,6 @@ class LanguageServer extends Intelligence {
     compiler.Optimized.run(VirtualFileSource(path)) match {
       case None => "Compile error!"
       case Some((main, mod, decl)) =>
-        println(util.show(decl))
         effekt.core.vm.Interpreter(core.vm.NoInstrumentation, out).run(main, decl)
         out.output()
     }
