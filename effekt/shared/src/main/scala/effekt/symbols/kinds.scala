@@ -87,8 +87,8 @@ package object kinds {
   }
 
   private def wellformedBlockTypeConstructor(e: BlockTypeConstructor)(using Context): Kind.Fun = e match {
-    case Interface(_, tparams, _) => Kind.Fun(tparams map { p => Kind.VType }, Kind.BType)
-    case ExternInterface(_, tparams) => Kind.Fun(tparams map { p => Kind.VType }, Kind.BType)
+    case Interface(_, tparams, _, _) => Kind.Fun(tparams map { p => Kind.VType }, Kind.BType)
+    case ExternInterface(_, tparams, _) => Kind.Fun(tparams map { p => Kind.VType }, Kind.BType)
     case ErrorBlockType(_, tparams) => Kind.Fun(tparams map { p => Kind.VType }, Kind.BType)
   }
 }

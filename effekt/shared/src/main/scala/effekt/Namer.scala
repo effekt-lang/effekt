@@ -162,14 +162,14 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, sym)
 
-    case source.InterfaceDef(id, tparams, ops, doc, span) =>
+    case decl @ source.InterfaceDef(id, tparams, ops, doc, span) =>
       val effectName = Context.nameFor(id)
       // we use the localName for effects, since they will be bound as capabilities
       val effectSym = Context scoped {
         val tps = tparams map resolve
         // we do not resolve the effect operations here to allow them to refer to types that are defined
         // later in the file
-        Interface(effectName, tps.unspan)
+        Interface(effectName, tps.unspan, List(), decl)
       }
       Context.define(id, effectSym)
 
@@ -213,10 +213,10 @@ object Namer extends Phase[Parsed, NameResolved] {
         ExternType(Context.nameFor(id), tps.unspan)
       })
 
-    case source.ExternInterface(id, tparams, doc, span) =>
+    case decl @ source.ExternInterface(id, tparams, doc, span) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
-        ExternInterface(Context.nameFor(id), tps)
+        ExternInterface(Context.nameFor(id), tps, decl)
       })
 
     case source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) => {
@@ -370,9 +370,9 @@ object Namer extends Phase[Parsed, NameResolved] {
             //   2) the annotated type parameters on the concrete operation
             val (result, effects) = resolve(ret)
 
-            val op = Operation(name, interface.tparams ++ tps.unspan, resVparams, resBparams, result, effects, interface)
-            Context.define(id, op)
-            op
+            val opSym = Operation(name, interface.tparams ++ tps.unspan, resVparams, resBparams, result, effects, interface, op)
+            Context.define(id, opSym)
+            opSym
           }
         }
       }

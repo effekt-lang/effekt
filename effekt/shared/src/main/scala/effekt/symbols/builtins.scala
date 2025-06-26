@@ -47,20 +47,20 @@ object builtins {
   val BottomSymbol = ExternType(name("Nothing"), Nil)
   val TBottom = ValueTypeApp(BottomSymbol, Nil)
 
-  val IOSymbol = Interface(Name.local("IO"), Nil, Nil)
+  val IOSymbol = Interface(Name.local("IO"), Nil, Nil, decl = NoSource)
   val IOCapability = ExternResource(name("io"), InterfaceType(IOSymbol, Nil))
 
-  val AsyncSymbol = Interface(Name.local("Async"), Nil, Nil)
+  val AsyncSymbol = Interface(Name.local("Async"), Nil, Nil, decl = NoSource)
   val AsyncCapability = ExternResource(name("async"), InterfaceType(AsyncSymbol, Nil))
 
-  val GlobalSymbol = Interface(Name.local("Global"), Nil, Nil)
+  val GlobalSymbol = Interface(Name.local("Global"), Nil, Nil, decl = NoSource)
   val GlobalCapability = ExternResource(name("global"), InterfaceType(GlobalSymbol, Nil))
 
   object TState {
     val S: TypeParam = TypeParam(Name.local("S"))
-    val interface: Interface = Interface(Name.local("Ref"), List(S), Nil)
-    val get = Operation(name("get"), List(S), Nil, Nil, ValueTypeRef(S), Effects.Pure, interface)
-    val put = Operation(name("put"), List(S), List(ValueParam(Name.local("s"), Some(ValueTypeRef(S)), decl = NoSource)), Nil, TUnit, Effects.Pure, interface)
+    val interface: Interface = Interface(Name.local("Ref"), List(S), Nil, decl = NoSource)
+    val get = Operation(name("get"), List(S), Nil, Nil, ValueTypeRef(S), Effects.Pure, interface, decl = NoSource)
+    val put = Operation(name("put"), List(S), List(ValueParam(Name.local("s"), Some(ValueTypeRef(S)), decl = NoSource)), Nil, TUnit, Effects.Pure, interface, decl = NoSource)
     interface.operations = List(get, put)
 
     def apply(stateType: ValueType) = InterfaceType(interface, List(stateType))
@@ -72,7 +72,7 @@ object builtins {
       }
   }
 
-  val RegionSymbol = Interface(Name.local("Region"), Nil, Nil)
+  val RegionSymbol = Interface(Name.local("Region"), Nil, Nil, decl = NoSource)
   val TRegion = InterfaceType(RegionSymbol, Nil)
 
   val rootTypes: Map[String, TypeSymbol] = Map(

@@ -299,14 +299,14 @@ case class Field(name: Name, param: ValueParam, constructor: Constructor) extend
 enum BlockTypeConstructor extends BlockTypeSymbol {
   def tparams: List[TypeParam]
 
-  case Interface(name: Name, tparams: List[TypeParam], var operations: List[Operation] = Nil)
-  case ExternInterface(name: Name, tparams: List[TypeParam])
+  case Interface(name: Name, tparams: List[TypeParam], var operations: List[Operation] = Nil, override val decl: source.Tree)
+  case ExternInterface(name: Name, tparams: List[TypeParam], override val decl: source.Tree)
   case ErrorBlockType(name: Name = NoName, tparams: List[TypeParam] = Nil)
 }
 export BlockTypeConstructor.*
 
 
-case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], bparams: List[BlockParam], resultType: ValueType, effects: Effects, interface: BlockTypeConstructor.Interface) extends Callable {
+case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], bparams: List[BlockParam], resultType: ValueType, effects: Effects, interface: BlockTypeConstructor.Interface, override val decl: source.Tree) extends Callable {
   def annotatedResult: Option[ValueType] = Some(resultType)
   def annotatedEffects: Option[Effects] = Some(Effects(effects.toList))
   def appliedInterface: InterfaceType = InterfaceType(interface, interface.tparams map ValueTypeRef.apply)

@@ -1709,8 +1709,11 @@ class LSPTests extends FunSuite {
   test("Server publishes term names in the correct order") {
     withClientAndServer { (client, server) =>
       val source =
-        raw"""
-             |def foo(z: Int, y: Int, x: Int): Int = <>
+        raw"""namespace Foo {
+             |  effect e1: Int
+             |  def foo(z: Int, y: Int, x: Int): Int = <>
+             |  effect e2: Int
+             |}
              |""".textDocument
 
       val initializeParams = new InitializeParams()
@@ -1728,10 +1731,20 @@ class LSPTests extends FunSuite {
 
       // Check that the scope bindings are in the correct order
       val hole = receivedHoles.head.holes.head
-      assertEquals(hole.scope.bindings.length, 3)
-      assertEquals(hole.scope.bindings(0).name, "z")
-      assertEquals(hole.scope.bindings(1).name, "y")
-      assertEquals(hole.scope.bindings(2).name, "x")
+
+      val innerBindings = hole.scope.bindings
+
+      assertEquals(innerBindings.length, 3)
+      assertEquals(innerBindings(0).name, "z")
+      assertEquals(innerBindings(1).name, "y")
+      assertEquals(innerBindings(2).name, "x")
+
+      val outerBindings = hole.scope.outer.get.bindings
+
+      assertEquals(outerBindings.length, 3)
+      assertEquals(outerBindings(0).name, "e1")
+      assertEquals(outerBindings(1).name, "foo")
+      assertEquals(outerBindings(2).name, "e2")
     }
   }
 

@@ -17,10 +17,10 @@ object DeclPrinter extends ParenPrettyPrinter {
 
   def toDoc(t: Symbol, context: Context): Doc = t match {
 
-    case e @ Interface(name, tparams, List(op)) =>
+    case e @ Interface(name, tparams, List(op), _) =>
       format("effect", op, op.annotatedResult, op.annotatedEffects)
 
-    case e @ Interface(name, tparams, ops) =>
+    case e @ Interface(name, tparams, ops, _) =>
       val tps = show(tparams)
       val effs = ops.map { op => format("def", op, op.annotatedResult, op.annotatedEffects) }
       "effect" <+> name.toString <> tps <+> braces(nest(line <> vsep(effs)) <> line)
@@ -60,7 +60,7 @@ object DeclPrinter extends ParenPrettyPrinter {
       val tps = show(tparams)
       pp"extern type ${name}$tps"
 
-    case ExternInterface(name, tparams) =>
+    case ExternInterface(name, tparams, _) =>
       pp"extern interface ${name}${show(tparams)}"
 
     case ExternResource(name, tpe) =>

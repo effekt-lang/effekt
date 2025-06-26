@@ -51,7 +51,7 @@ class Namespace(
 
   def operations: Map[String, Set[Operation]] =
     types.values.toSet.flatMap {
-      case BlockTypeConstructor.Interface(_, _, operations) => operations.toSet
+      case BlockTypeConstructor.Interface(_, _, operations, _) => operations.toSet
       case _ => Set.empty
     }.groupMap(_.name.name)(op => op)
 
