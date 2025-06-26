@@ -1631,7 +1631,7 @@ trait TyperOps extends ContextOps { self: Context =>
     }
 
   private[typer] def bind(p: ValueParam): Unit = p match {
-    case s @ ValueParam(name, Some(tpe)) => bind(s, tpe)
+    case s @ ValueParam(name, Some(tpe), _) => bind(s, tpe)
     case s => panic(pretty"Internal Error: Cannot add $s to typing context.")
   }
 

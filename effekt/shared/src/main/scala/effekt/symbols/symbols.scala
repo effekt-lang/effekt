@@ -1,7 +1,7 @@
 package effekt
 package symbols
 
-import effekt.source.{Def, DefDef, FeatureFlag, FunDef, ModuleDecl, RegDef, ValDef, VarDef}
+import effekt.source.{Def, DefDef, FeatureFlag, FunDef, ModuleDecl, NoSource, RegDef, ValDef, VarDef}
 import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
@@ -18,7 +18,9 @@ import effekt.util.messages.ErrorReporter
  */
 
 
-sealed trait TermSymbol extends Symbol
+sealed trait TermSymbol extends Symbol {
+  val decl: source.Tree = NoSource
+}
 
 // the two universes of values and blocks
 sealed trait ValueSymbol extends TermSymbol
@@ -108,7 +110,7 @@ case class Module(
 sealed trait RefBinder extends BlockSymbol
 
 sealed trait Param extends TermSymbol
-case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param, ValueSymbol
+case class ValueParam(name: Name, tpe: Option[ValueType], override val decl: source.Tree) extends Param, ValueSymbol
 
 
 sealed trait TrackedParam extends Param, BlockSymbol {
@@ -163,7 +165,7 @@ case class UserFunction(
   bparams: List[BlockParam],
   annotatedResult: Option[ValueType],
   annotatedEffects: Option[Effects],
-  decl: FunDef
+  override val decl: FunDef
 ) extends Callable
 
 /**
@@ -171,10 +173,9 @@ case class UserFunction(
  */
 sealed trait Anon extends TermSymbol {
   val name = NoName
-  def decl: source.Tree
 }
 
-case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: source.Tree) extends Callable, Anon {
+case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], override val decl: source.Tree) extends Callable, Anon {
   // Lambdas currently do not have an annotated return type
   def annotatedResult = None
   def annotatedEffects = None
@@ -183,7 +184,7 @@ case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: so
   def tparams = Nil
 }
 
-case class Hole(name: Name, decl: source.Hole, var expectedType: Option[ValueType] = None, var argTypes: List[Option[ValueType]] = Nil) extends ValueSymbol
+case class Hole(name: Name, override val decl: source.Hole, var expectedType: Option[ValueType] = None, var argTypes: List[Option[ValueType]] = Nil) extends ValueSymbol
 
 /**
  * Binders represent local value and variable binders
@@ -192,15 +193,13 @@ case class Hole(name: Name, decl: source.Hole, var expectedType: Option[ValueTyp
  */
 enum Binder extends TermSymbol {
   def tpe: Option[Type]
-  def decl: Def
 
-  case ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder, ValueSymbol
-  case RegBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: RegDef) extends Binder, RefBinder
-  case VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder, RefBinder, TrackedParam
-  case DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
+  case ValBinder(name: Name, tpe: Option[ValueType], override val decl: ValDef) extends Binder, ValueSymbol
+  case RegBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, override val decl: RegDef) extends Binder, RefBinder
+  case VarBinder(name: Name, tpe: Option[ValueType], override val decl: VarDef) extends Binder, RefBinder, TrackedParam
+  case DefBinder(name: Name, tpe: Option[BlockType], override val decl: DefDef) extends Binder, BlockSymbol
 }
 export Binder.*
-
 
 /**
  * Synthetic symbol representing potentially multiple call targets
@@ -222,7 +221,9 @@ case class TmpBlock(hint: String = "tmp") extends BlockSymbol { val name = Name.
  * - [[BlockTypeSymbol]]
  * - [[Capture]]
  */
-sealed trait TypeSymbol extends Symbol
+sealed trait TypeSymbol extends Symbol {
+  val decl: source.Tree = NoSource
+}
 sealed trait ValueTypeSymbol extends TypeSymbol
 sealed trait BlockTypeSymbol extends TypeSymbol
 
@@ -286,7 +287,7 @@ case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Fi
 // TODO maybe split into Field (the symbol) and Selector (the synthetic function)
 case class Field(name: Name, param: ValueParam, constructor: Constructor) extends Callable {
   val tparams: List[TypeParam] = constructor.tparams
-  val vparams = List(ValueParam(constructor.name, Some(constructor.appliedDatatype)))
+  val vparams = List(ValueParam(constructor.name, Some(constructor.appliedDatatype), decl = NoSource))
   val bparams = List.empty[BlockParam]
 
   val returnType = param.tpe.get
