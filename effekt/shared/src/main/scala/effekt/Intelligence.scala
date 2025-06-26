@@ -185,23 +185,34 @@ trait Intelligence {
         ScopeInfo(name, ScopeKind.Local, bindingsOut.toList, Some(allBindings(outer)))
     }
 
-  def allBindings(origin: String, bindings: Namespace, path: List[String] = Nil)(using C: Context): Iterable[BindingInfo] =
-    val types = bindings.types.flatMap {
-      case (name, sym) =>
-        // TODO this is extremely hacky, printing is not defined for all types at the moment
-        try { Some(TypeBinding(path, name, origin, DeclPrinter(sym))) } catch { case e => None }
-    }
-    val terms = bindings.terms.flatMap { case (name, syms) =>
-      syms.collect {
-        case sym: ValueSymbol => TermBinding(path, name, origin, C.valueTypeOption(sym).map(t => pp"${t}"))
-        case sym: BlockSymbol => TermBinding(path, name, origin, C.blockTypeOption(sym).map(t => pp"${t}"))
-      }
-    }
-    val nestedBindings = bindings.namespaces.flatMap {
-      case (name, namespace) => allBindings(origin, namespace, path :+ name)
+  def allBindings(origin: String, bindings: Namespace, path: List[String] = Nil)(using C: Context): List[BindingInfo] =
+    val symbols = allSymbols(origin, bindings, path).toArray
+
+    val sorted = if (origin == BindingOrigin.Imported) {
+      symbols.sortBy(_._1.toLowerCase())
+    } else {
+      symbols.sortBy((name, sym) => sym match {
+        case s: TypeSymbol => s.decl.span
+        case s: TermSymbol => s.decl.span
+      })
     }
 
-    terms ++ types ++ nestedBindings
+    sorted.flatMap((name, sym) => sym match {
+      case sym: TypeSymbol =>
+        // TODO this is extremely hacky, printing is not defined for all types at the moment
+        try { Some(TypeBinding(path, name, origin, DeclPrinter(sym))) } catch { case e => None }
+      case sym: TermSymbol =>
+        sym match {
+          case sym: ValueSymbol => Some(TermBinding(path, name, origin, C.valueTypeOption(sym).map(t => pp"${t}")))
+          case sym: BlockSymbol => Some(TermBinding(path, name, origin, C.blockTypeOption(sym).map(t => pp"${t}")))
+        }
+    }).toList
+
+  def allSymbols(origin: String, bindings: Namespace, path: List[String] = Nil)(using C: Context): Iterable[(String, TypeSymbol | TermSymbol)] = {
+    bindings.types ++ bindings.terms.flatMap((name, syms) => syms.map((name, _))) ++ bindings.namespaces.flatMap {
+      case (name, namespace) => allSymbols(origin, namespace, path :+ name)
+    }
+  }
 
   def holeBody(template: Template[source.Stmt], argTypes: List[Option[ValueType]])(using C: Context): List[HoleItem] = {
     val Template(strings, args) = template
