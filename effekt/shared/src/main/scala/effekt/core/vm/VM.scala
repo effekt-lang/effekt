@@ -447,7 +447,8 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
       val next = try {
         step(other)
       } catch {
-        case e => throw new Exception(s"Error running ${util.show(other.asInstanceOf[State.Step].stmt)}", e)
+        case e =>
+          throw new Exception(s"Error running ${util.show(other.asInstanceOf[State.Step].stmt)}: ${e.getMessage}", e)
       }
       run(next)
   }

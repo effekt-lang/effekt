@@ -10,10 +10,9 @@ trait EffektConfig {
 
   def includes(): List[String] = List(
     "common",
-    "js",
     ".")
 
-  def backend(): Backend = Backend()
+  def backend(): Backend
 
   def outputPath(): String = "out"
 

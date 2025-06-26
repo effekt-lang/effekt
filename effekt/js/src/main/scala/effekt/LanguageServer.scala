@@ -1,16 +1,21 @@
 package effekt
 
 import effekt.Intelligence.CaptureInfo
-import effekt.context.{Context, VirtualFileSource, VirtualModuleDB}
-import effekt.util.{PlainMessaging, getOrElseAborting}
-import effekt.util.messages.{BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError}
+import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
+import effekt.core.ModuleDecl
+import effekt.util.{ MarkdownSource, PlainMessaging, getOrElseAborting }
+import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.*
-import effekt.generator.js.JavaScriptWeb
-import kiama.util.{Messaging, Position, Positions, Severities, Source, StringSource}
+import effekt.generator.js.{ JavaScript, JavaScriptWeb }
+import kiama.util.{ FileSource, Messaging, Position, Positions, Severities, Source, StringSource }
 
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.annotation.*
+import core.Id
+import effekt.generator.chez.ChezScheme
+import effekt.generator.llvm.LLVM
+import effekt.generator.vm.VM
 
 // the LSP types
 // https://github.com/microsoft/vscode-languageserver-node/blob/master/types/src/main.ts
@@ -61,13 +66,13 @@ class LanguageServer extends Intelligence {
 
   val positions: Positions = new Positions
 
-  object config extends EffektConfig
-
   implicit object context extends Context(positions) with VirtualModuleDB {
     object messaging extends PlainMessaging
   }
 
-  context.setup(config)
+  context.setup(new EffektConfig {
+    override def backend() = VMBackend()
+  })
 
   @JSExport
   def infoAt(path: String, pos: lsp.Position): String = {
@@ -121,17 +126,51 @@ class LanguageServer extends Intelligence {
     }.toJSArray
   }
 
+
+
   /**
    * Has the side effect of saving the generated output to a file
    */
    object compileWhole extends Phase[Source, String] {
      val phaseName = "compile"
      def run(src: Source)(using Context) =
-      context.compiler.compileWeb(src).map {
-        case (files, mainPath) =>
-          files.foreach { case (path, content) => writeFile(path, content) }
-          mainPath
-      }
+       context.compiler match {
+         case js: JavaScript => js.compileWeb(src).map {
+           case (files, mainPath) =>
+             files.foreach { case (path, content) => writeFile(path, content) }
+             mainPath
+         }
+         case _ => sys.error("Can only compile with js web compiler")
+       }
+  }
+
+  class OutputCapturingRuntime extends core.vm.Runtime {
+
+    import java.io.{ByteArrayOutputStream, PrintStream}
+
+    private val outputStream = new ByteArrayOutputStream()
+    val out = new PrintStream(outputStream)
+
+    def output(): String = {
+      out.flush()
+      outputStream.toString
+    }
+  }
+
+  @JSExport
+  def runCore(path: String): String = {
+    val compiler = context.backend.compiler match {
+      case vm: VM => vm
+      case _ => ???
+    }
+    val out = OutputCapturingRuntime()
+    compiler.Optimized.run(VirtualFileSource(path)) match {
+      case None => "Compile error!"
+      case Some((main, mod, decl)) =>
+        println(util.show(decl))
+        effekt.core.vm.Interpreter(core.vm.NoInstrumentation, out).run(main, decl)
+        out.output()
+    }
   }
 
   // Here we cache the full pipeline for a single file, including writing the result
