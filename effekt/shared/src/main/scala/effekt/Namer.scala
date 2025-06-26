@@ -219,7 +219,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         ExternInterface(Context.nameFor(id), tps, decl)
       })
 
-    case source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) => {
+    case d @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) => {
       val name = Context.nameFor(id)
       val capt = resolve(capture)
       Context.define(id, Context scoped {
@@ -232,7 +232,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           resolve(ret)
         }
 
-        ExternFunction(name, tps.unspan, vps.unspan, bps.unspan, tpe, eff, capt, bodies)
+        ExternFunction(name, tps.unspan, vps.unspan, bps.unspan, tpe, eff, capt, bodies, d)
       })
     }
 

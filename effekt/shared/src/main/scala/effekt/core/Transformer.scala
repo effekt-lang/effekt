@@ -31,7 +31,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case Pure, Direct, Control
   }
   def callingConvention(callable: Callable)(using Context): CallingConvention = callable match {
-    case f @ ExternFunction(name, _, _, _, _, _, capture, bodies) =>
+    case f @ ExternFunction(name, _, _, _, _, _, capture, bodies, _) =>
       // resolve the preferred body again and hope it's the same
       val body = ResolveExternDefs.findPreferred(bodies)
       body match {
@@ -105,7 +105,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         interface.operations.map { op => core.Property(op, operationAtDeclaration(interface.tparams, op)) }))
 
     case f @ source.ExternDef(pure, id, _, vps, bps, _, bodies, doc, span) =>
-      val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol
+      val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _, _) = f.symbol
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.capture)
       val tBody = bodies match {

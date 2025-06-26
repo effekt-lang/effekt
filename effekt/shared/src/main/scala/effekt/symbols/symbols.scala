@@ -415,7 +415,8 @@ case class ExternFunction(
   result: ValueType,
   effects: Effects,
   capture: CaptureSet,
-  bodies: List[source.ExternBody]
+  bodies: List[source.ExternBody],
+  override val decl: source.Tree
 ) extends Callable {
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)
