@@ -1572,7 +1572,39 @@ class LSPTests extends FunSuite {
     }
   }
 
-  test("Server publishes holes with their bodies if program typechecks") {
+  test("Server publishes single-expression hole body") {
+    withClientAndServer { (client, server) =>
+      val source =
+        """
+          |def foo(x: Int): Int = <{ x + 1 }>
+          |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val expectedBody = List(
+        Code(
+          kind = HoleItemKind.Code,
+          text = "x + 1",
+          `type` = Some("Int")
+        )
+      )
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+      val hole = receivedHoles.head.holes.head
+      assertEquals(hole.body, expectedBody)
+    }
+  }
+
+  test("Server publishes hole body if program typechecks") {
     withClientAndServer { (client, server) =>
       val source =
              """
@@ -1628,8 +1660,7 @@ class LSPTests extends FunSuite {
     }
   }
 
-
-  test("Server publishes holes with their bodies if program doesn't typecheck") {
+  test("Server publishes hole body if program doesn't typecheck") {
     withClientAndServer { (client, server) =>
       val source =
         """

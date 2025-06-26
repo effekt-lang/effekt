@@ -214,6 +214,16 @@ trait Intelligence {
     val strIt = strings.iterator
     val argIt = argsAndTypes.iterator
 
+    // Case 1: there is a single argument and no strings
+    // This happens when the hole is defined as a single statement/expression using the `<{ stmt }>` syntax
+    if (strIt.isEmpty && argIt.hasNext) {
+      val (stmt, tpeOpt) = argIt.next()
+      buf += Code(HoleItemKind.Code, stmt.sourceOf, tpeOpt.map(t => pp"${t}"))
+      return buf.result()
+    }
+
+    // Case 2: starting with a string, it alternates between strings and arguments
+    // This happens when the hole is defined as a template using the `<"text ${ arg } text ${arg} ...">` syntax
     while (strIt.hasNext) {
       buf += NaturalLanguage(HoleItemKind.NaturalLanguage, strIt.next())
       if (argIt.hasNext) {
