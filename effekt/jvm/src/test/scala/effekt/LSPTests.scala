@@ -1750,17 +1750,16 @@ class LSPTests extends FunSuite {
     }
   }
 
-  test("Server correctly publishes different constructor fields with same name") {
+  test("Server correctly publishes overloaded field accessors") {
     withClientAndServer { (client, server) =>
       val source =
         raw"""namespace N {
-             |  type Foo {
-             |    MkFoo(theField: String)
-             |  }
+             |  // Accessor functions are generated for all record fields
+             |  record Foo1(theField: String)
+             |  record Foo2(theField: String)
              |
-             |  type Bar {
-             |    MkBar(theField: Int)
-             |  }
+             |  // There are no accessor functions for data type constructor fields
+             |  type Bar { Bar(theField: Int) }
              |
              |  def main() = <>
              |}
@@ -1778,19 +1777,19 @@ class LSPTests extends FunSuite {
       val expectedBindings = List(
         TypeBinding(
           qualifier = Nil,
-          name = "Foo",
+          name = "Foo1",
           origin = "Defined",
-          definition = """type Foo {
-  def MkFoo(theField: String): Foo / {}
+          definition = """type Foo1 {
+  def Foo1(theField: String): Foo1 / {}
 }""",
           kind = "Type"
         ),
         TermBinding(
           qualifier = Nil,
-          name = "MkFoo",
+          name = "Foo1",
           origin = "Defined",
           `type` = Some(
-            value = "String => Foo"
+            value = "String => Foo1"
           ),
           kind = "Term"
         ),
@@ -1798,7 +1797,36 @@ class LSPTests extends FunSuite {
           qualifier = Nil,
           name = "theField",
           origin = "Defined",
-          `type` = None,
+          `type` = Some(
+            value = "Foo1 => String"
+          ),
+          kind = "Term"
+        ),
+        TypeBinding(
+          qualifier = Nil,
+          name = "Foo2",
+          origin = "Defined",
+          definition = """type Foo2 {
+  def Foo2(theField: String): Foo2 / {}
+}""",
+          kind = "Type"
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "Foo2",
+          origin = "Defined",
+          `type` = Some(
+            value = "String => Foo2"
+          ),
+          kind = "Term"
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "theField",
+          origin = "Defined",
+          `type` = Some(
+            value = "Foo2 => String"
+          ),
           kind = "Term"
         ),
         TypeBinding(
@@ -1806,24 +1834,17 @@ class LSPTests extends FunSuite {
           name = "Bar",
           origin = "Defined",
           definition = """type Bar {
-  def MkBar(theField: Int): Bar / {}
+  def Bar(theField: Int): Bar / {}
 }""",
           kind = "Type"
         ),
         TermBinding(
           qualifier = Nil,
-          name = "MkBar",
+          name = "Bar",
           origin = "Defined",
           `type` = Some(
             value = "Int => Bar"
           ),
-          kind = "Term"
-        ),
-        TermBinding(
-          qualifier = Nil,
-          name = "theField",
-          origin = "Defined",
-          `type` = None,
           kind = "Term"
         ),
         TermBinding(

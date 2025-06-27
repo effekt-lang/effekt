@@ -393,7 +393,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             Constructor(name, data.tparams ++ tps.unspan, Nil, data, c)
           }
           Context.define(id, constructor)
-          constructor.fields = resolveFields(ps.unspan, constructor)
+          constructor.fields = resolveFields(ps.unspan, constructor, false)
           constructor
       }
 
@@ -405,7 +405,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       // we define the constructor on a copy to avoid confusion with symbols
       Context.define(id.clone, constructor)
       record.constructor = constructor
-      constructor.fields = resolveFields(fs.unspan, constructor)
+      constructor.fields = resolveFields(fs.unspan, constructor, true)
 
     case source.TypeDef(id, tparams, tpe, doc, span)     => ()
     case source.EffectDef(id, tparams, effs, doc, span)  => ()
@@ -559,7 +559,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     }
 
   // TODO move away
-  def resolveFields(params: List[source.ValueParam], constructor: Constructor)(using Context): List[Field] = {
+  def resolveFields(params: List[source.ValueParam], constructor: Constructor, defineAccessors: Boolean)(using Context): List[Field] = {
     val vps = Context scoped {
       // Bind the type parameters
       constructor.tparams.foreach { t => Context.bind(t) }
@@ -571,7 +571,11 @@ object Namer extends Phase[Parsed, NameResolved] {
         val fieldId = paramTree.id.clone
         val name = Context.nameFor(fieldId)
         val fieldSym = Field(name, paramSym, constructor, paramTree)
-        Context.define(fieldId, fieldSym)
+        if (defineAccessors) {
+          Context.define(fieldId, fieldSym)
+        } else {
+          Context.assignSymbol(fieldId, fieldSym)
+        }
         fieldSym
     }
   }
