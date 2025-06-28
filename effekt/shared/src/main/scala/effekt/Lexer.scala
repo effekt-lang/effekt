@@ -219,6 +219,19 @@ class Lexer(source: Source) {
       case _ => ()
     }
 
+  def consumeUntilNewline(): Unit = {
+    var reachedNewline = false
+    while (!reachedNewline) {
+      // peek to ensure the newline is not part of the comment
+      peek() match {
+        // comment is terminated when encountering a new line
+        case Some('\n') => reachedNewline = true
+        case None => reachedNewline = true
+        case _ => consume()
+      }
+    }
+  }
+
   /** Peek at the next character. Returns [[None]] if EOF is reached. */
   def peek(): Option[Char] = chars.headOption
 
@@ -536,16 +549,7 @@ class Lexer(source: Source) {
 
   /** Matches a single-line comment delimited by // and a newline. */
   def matchComment(): TokenKind = {
-    var reachedNewline = false
-    while (!reachedNewline) {
-      // peek to ensure the newline is not part of the comment
-      peek() match {
-        // comment is terminated when encountering a new line
-        case Some('\n') => reachedNewline = true
-        case None => reachedNewline = true
-        case _ => consume()
-      }
-    }
+    consumeUntilNewline()
     // exclude //
     val comment = slice(start + 2, current)
     // TokenKind.Comment(comment)
@@ -558,16 +562,7 @@ class Lexer(source: Source) {
   }
 
   def matchShebang(): TokenKind = {
-    var reachedNewline = false
-    while (!reachedNewline) {
-      // peek to ensure the newline is not part of the command
-      peek() match {
-        // command is terminated when encountering a new line
-        case Some('\n') => reachedNewline = true
-        case None => reachedNewline = true
-        case _ => consume()
-      }
-    }
+    consumeUntilNewline()
     val command = slice(start + 2, current)
     TokenKind.Shebang(command)
   }
