@@ -20,10 +20,10 @@ def main() = {
 
   println("started")
 
-  val results = array::build(2) { i =>
+  val results = array::build(10) { i =>
     promise(box {
       with on[IOError].result
-      wait(1000)
+      wait(100 * i)
       val connection = connect("127.0.0.1", 8080)
       println("connected")
       var buffer = bytearray::allocate(4096)
