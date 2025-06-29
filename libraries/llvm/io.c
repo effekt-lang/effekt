@@ -416,7 +416,7 @@ void c_tcp_accept(Int listener, struct Pos handler, Stack stack) {
     accept_closure->handler = handler;
     server->data = accept_closure;
 
-    int result = uv_listen(server, 0, c_tcp_accept_cb);
+    int result = uv_listen(server, SOMAXCONN, c_tcp_accept_cb);
     if (result < 0) {
         free(accept_closure);
         erasePositive(handler);
