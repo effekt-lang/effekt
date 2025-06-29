@@ -216,11 +216,11 @@ void c_tcp_connect(String host, Int port, Stack stack) {
 
     struct sockaddr_in addr;
     result = uv_ip4_addr(host_str, port, &addr);
+    free(host_str);
 
     if (result < 0) {
         free(tcp_handle);
         free(connect_req);
-        free(host_str);
         resume_Int(stack, result);
         return;
     }
@@ -230,7 +230,6 @@ void c_tcp_connect(String host, Int port, Stack stack) {
     if (result < 0) {
         free(tcp_handle);
         free(connect_req);
-        free(host_str);
         resume_Int(stack, result);
         return;
     }
