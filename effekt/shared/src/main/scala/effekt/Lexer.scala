@@ -37,6 +37,7 @@ enum TokenKind {
   // misc
   case Comment(msg: String)
   case DocComment(msg: String)
+  case Shebang(cmd: String)
   case Newline
   case Space
   case EOF
@@ -218,6 +219,19 @@ class Lexer(source: Source) {
       case Some(c) if pred(c) => consume(); consumeWhile(pred)
       case _ => ()
     }
+
+  def consumeUntilNewline(): Unit = {
+    var reachedNewline = false
+    while (!reachedNewline) {
+      // peek to ensure the newline is not part of the comment
+      peek() match {
+        // comment is terminated when encountering a new line
+        case Some('\n') => reachedNewline = true
+        case None => reachedNewline = true
+        case _ => consume()
+      }
+    }
+  }
 
   /** Peek at the next character. Returns [[None]] if EOF is reached. */
   def peek(): Option[Char] = chars.headOption
@@ -574,16 +588,7 @@ class Lexer(source: Source) {
 
   /** Matches a single-line comment delimited by // and a newline. */
   def matchComment(): TokenKind = {
-    var reachedNewline = false
-    while (!reachedNewline) {
-      // peek to ensure the newline is not part of the comment
-      peek() match {
-        // comment is terminated when encountering a new line
-        case Some('\n') => reachedNewline = true
-        case None => reachedNewline = true
-        case _ => consume()
-      }
-    }
+    consumeUntilNewline()
     // exclude //
     val comment = slice(start + 2, current)
     // TokenKind.Comment(comment)
@@ -593,6 +598,12 @@ class Lexer(source: Source) {
       TokenKind.DocComment(docComment)
     else
       TokenKind.Comment(comment)
+  }
+
+  def matchShebang(): TokenKind = {
+    consumeUntilNewline()
+    val command = slice(start + 2, current)
+    TokenKind.Shebang(command)
   }
 
   @tailrec
@@ -656,6 +667,7 @@ class Lexer(source: Source) {
       case '.' => `.`
       case '/' if nextMatches('*') => matchMultilineComment()
       case '/' if nextMatches('/') => matchComment()
+      case '#' if nextMatches('!') => matchShebang()
       case '/' => `/`
       case '!' if nextMatches('=') => `!==`
       case '!' => `!`
