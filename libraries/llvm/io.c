@@ -216,11 +216,11 @@ void c_tcp_connect(String host, Int port, Stack stack) {
 
     struct sockaddr_in addr;
     result = uv_ip4_addr(host_str, port, &addr);
+    free(host_str);
 
     if (result < 0) {
         free(tcp_handle);
         free(connect_req);
-        free(host_str);
         resume_Int(stack, result);
         return;
     }
@@ -230,7 +230,6 @@ void c_tcp_connect(String host, Int port, Stack stack) {
     if (result < 0) {
         free(tcp_handle);
         free(connect_req);
-        free(host_str);
         resume_Int(stack, result);
         return;
     }
@@ -243,6 +242,7 @@ typedef struct {
 } tcp_read_closure_t;
 
 void c_tcp_read_cb(uv_stream_t* stream, ssize_t bytes_read, const uv_buf_t* buf) {
+    (void)(buf);
     tcp_read_closure_t* read_closure = (tcp_read_closure_t*)stream->data;
     Stack stack = read_closure->stack;
 
@@ -253,6 +253,7 @@ void c_tcp_read_cb(uv_stream_t* stream, ssize_t bytes_read, const uv_buf_t* buf)
 }
 
 void c_tcp_read_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
+    (void)(suggested_size);
     tcp_read_closure_t* read_closure = (tcp_read_closure_t*)handle->data;
     buf->base = read_closure->data;
     buf->len = read_closure->size;
@@ -414,7 +415,7 @@ void c_tcp_accept(Int listener, struct Pos handler, Stack stack) {
     accept_closure->handler = handler;
     server->data = accept_closure;
 
-    int result = uv_listen(server, 0, c_tcp_accept_cb);
+    int result = uv_listen(server, SOMAXCONN, c_tcp_accept_cb);
     if (result < 0) {
         free(accept_closure);
         erasePositive(handler);
