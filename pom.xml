@@ -7,7 +7,7 @@
  <groupId>de.bstudios</groupId>
  <artifactId>Effekt</artifactId>
  <name>Effekt</name>
- <version>0.35.0</version>
+ <version>0.36.0</version>
  <modelVersion>4.0.0</modelVersion>
 
    <dependencies>
