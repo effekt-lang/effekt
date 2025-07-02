@@ -254,6 +254,12 @@ class Lexer(source: Source) extends Iterator[Token] {
       case MultiStringDelim => true
       case CharDelim => false
       case HoleDelim => true
+
+    def isMultiline: Boolean = this match
+      case StringDelim => false
+      case MultiStringDelim => true
+      case CharDelim => false
+      case HoleDelim => true
   }
   export Delimiter.*
 
@@ -345,10 +351,10 @@ class Lexer(source: Source) extends Iterator[Token] {
   // String interpolation resumption
   private def resumeStringAfterInterpolation(): TokenKind =
     if (delimiters.nonEmpty) {
-      delimiters.top match {
-        case StringDelim => return lexString(StringDelim, continued = true)
-        case MultiStringDelim => return lexString(MultiStringDelim, continued = true)
-        case HoleDelim => return lexString(HoleDelim, continued = true)
+      val next = delimiters.top
+      next match {
+        case StringDelim | MultiStringDelim | HoleDelim =>
+          return lexString(next, continued = true)
         case _ => ()
       }
     }
@@ -505,37 +511,32 @@ class Lexer(source: Source) extends Iterator[Token] {
   private def lexString(delimiter: Delimiter, continued: Boolean = false): TokenKind = {
     if !continued then delimiters.push(delimiter)
 
-    // TODO(jiribenes): add this to help the churn?
-//    def finish() = {
-//      delimiters.pop()
-//      if (delimiter == HoleDelim) {
-//        TokenKind.HoleStr(contents.toString)
-//      } else {
-//        TokenKind.Str(contents.toString, multiline = isMultiline(delimiter))
-//      }
-//    }
-
     val contents = StringBuilder()
+    def close(shouldPop: Boolean = true) = {
+      if shouldPop then delimiters.pop()
+
+      if (delimiter == HoleDelim) {
+        TokenKind.HoleStr(contents.toString)
+      } else {
+        TokenKind.Str(contents.toString, multiline = delimiter.isMultiline)
+      }
+    }
 
     while (!atEndOfInput) {
       (currentChar, nextChar) match {
         // closing characters
         case ('"', '"') if delimiter == MultiStringDelim && peekAhead(2) == '"' =>
           advance(); advance(); advance()
-          delimiters.pop()
-          return TokenKind.Str(contents.toString, multiline = true)
+          return close()
         case ('"', _) if delimiter == StringDelim =>
           advance()
-          delimiters.pop()
-          return TokenKind.Str(contents.toString, multiline = false)
+          return close()
         case ('"', '>') if delimiter == HoleDelim =>
           advance(); advance()
-          delimiters.pop()
-          return TokenKind.HoleStr(contents.toString) // TODO(jiribenes): Huh?! FIXME XXX
+          return close()
         case ('\'', _) if delimiter == CharDelim =>
           advance()
-          delimiters.pop()
-          return TokenKind.Str(contents.toString, multiline = false)
+          return close()
 
         // escapes
         case ('\\', _) if delimiter == StringDelim || delimiter == CharDelim =>
@@ -555,12 +556,11 @@ class Lexer(source: Source) extends Iterator[Token] {
 
         // interpolation
         case ('$', '{') if delimiter.allowsInterpolation =>
-          if delimiter == HoleDelim
-          then return TokenKind.HoleStr(contents.toString)
-          else return TokenKind.Str(contents.toString, delimiter == HoleDelim || delimiter == MultiStringDelim) // TODO(jiribenes): Huh? HACK FIXME XXX
+          // We *do not* pop in this case, we need to remember what happened!
+          return close(shouldPop = false)
 
         // newlines
-        case ('\n', _) if delimiter != HoleDelim && delimiter != MultiStringDelim =>
+        case ('\n', _) if !delimiter.isMultiline =>
           return TokenKind.Error(LexerError.LinebreakInSinglelineString)
 
         // "normal" characters of a string
