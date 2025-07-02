@@ -71,8 +71,7 @@ class RecursiveDescentTests extends munit.FunSuite {
 
   def parser(input: String, positions: Positions)(using munit.Location): RecursiveDescent = {
     val source = StringSource(input, "")
-    val lexer = effekt.lexer.Lexer(source)
-    val tokens = lexer.run()
+    val tokens = effekt.lexer.Lexer.lex(source)
     // TODO catch LexerError exception?
     new RecursiveDescent(positions, tokens, source)
   }
@@ -322,6 +321,13 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseExpr("[]")
     parseExpr("[,]")
     intercept[Throwable] { parseExpr("[,1]") }
+  }
+
+  test("Strings") {
+    parseExpr("\"\"")
+    parseExpr("\"hello\"")
+    parseExpr("\"Hello, ${name}\"")
+    parseExpr("\"My name is ${person.lastName}, ${person.firstName} ${person.lastName}\"")
   }
 
   test("Boxing") {

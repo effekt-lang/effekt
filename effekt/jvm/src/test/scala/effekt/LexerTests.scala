@@ -11,24 +11,20 @@ import munit.Location
 class LexerTests extends munit.FunSuite {
 
   def assertTokensEq(prog: String, expected: TokenKind*)(using Location): Unit = {
-    val tokens = Lexer(StringSource(prog, "")).run()
-    tokens.zipAll(expected, null, null).foreach((t1, t2) => assertEquals(t1.kind, t2))
+    val tokens = Lexer.lex(StringSource(prog, ""))
+    // println(tokens)
+    assertEquals(tokens.map { t => t.kind }, expected.toVector)
   }
 
   def assertSuccess(prog: String)(using Location): Unit =
-    try {
-      Lexer(StringSource(prog, "")).run()
-    } catch {
-        case LexerError(msg, start, end) => fail(s"$msg at $start...$end")
-    }
+    val tokens = Lexer.lex(StringSource(prog, ""))
+    assertEquals(tokens, tokens.filterNot { t => t.isError }, "Expected no error tokens!")
 
   def assertFailure(prog: String)(using Location): Unit =
-    try {
-      Lexer(StringSource(prog, "")).run()
-      fail(s"expected an lexer error but found none")
-    } catch {
-      case LexerError(_, _, _) => ()
-    }
+    val tokens = Lexer.lex(StringSource(prog, ""))
+    println(tokens)
+    // TODO(jiribenes, 2025-07-01): Can we do better here? The error is a bit confusing tbh.
+    assertNotEquals(tokens, tokens.filterNot { t => t.isError }, "Expected at least one error token!")
 
   test("function definition") {
     val prog =
@@ -46,9 +42,10 @@ class LexerTests extends munit.FunSuite {
   }
 
   test("braces") {
-    assertFailure("${}")
     assertFailure("\" before ${ ${} } after\"")
 
+
+    assertSuccess("${}") // only rejected in the parser!
     assertSuccess("}")
     assertSuccess("{}}")
     assertSuccess("{ 42 ")
@@ -114,7 +111,7 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq("\\uFFFF", Chr(0xFFFF), EOF)
     assertTokensEq("\\u10FFFF{ val", Chr(0x10FFFF), `{`, `val`, EOF)
     assertTokensEq("val s =\\u0000+ 1", `val`, Ident("s"), `=`, Chr(0), `+`, Integer(1), EOF)
-    assertTokensEq("''", Error(LexerError("Empty character literal", 0, 2)), EOF)
+    assertTokensEq("''", Error(LexerError.EmptyCharLiteral), EOF)
   }
 
   test("multi line strings") {
@@ -140,11 +137,16 @@ class LexerTests extends munit.FunSuite {
       Str("this is a quote ",false),
       `${`, Ident("xs"), `.`, Ident("map"),
       `{`, Ident("x"), `=>`, Str(" ",false),
-      `${`, Ident("x"), `+`, Integer(1), TokenKind.`}`,
-      Str("",false), TokenKind.`}`, TokenKind.`}`,
+      `${`, Ident("x"), `+`, Integer(1), TokenKind.`}$`,
+      Str("",false), TokenKind.`}`, TokenKind.`}$`,
       Str(" after the quote",false),
       EOF
     )
+  }
+
+  test("missing interpolation") {
+    val prog = """ "hello ${ xs.map { x => "${x + 1}" } " """
+    assertFailure(prog)
   }
 
   test("interpolated string") {
@@ -152,9 +154,9 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq(
       prog,
       Str("", false),
-      `${`, Ident("x"), `+`, Integer(1), TokenKind.`}`,
+      `${`, Ident("x"), `+`, Integer(1), TokenKind.`}$`,
       Str("", false),
-      `${`, Ident("x"), `+`, Integer(2), TokenKind.`}`,
+      `${`, Ident("x"), `+`, Integer(2), TokenKind.`}$`,
       Str("", false),
       EOF
     )
@@ -168,7 +170,7 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq(
       prog,
       Str("multi-line quote\n", true),
-      `${`, Ident("x"), `+`, Integer(1), `}`, Str(", ", true), `${`, Ident("y"), `+`, Integer(1), `}`, Str(" \n", true),
+      `${`, Ident("x"), `+`, Integer(1), `}$`, Str(", ", true), `${`, Ident("y"), `+`, Integer(1), `}$`, Str(" \n", true),
       EOF
     )
   }
@@ -176,6 +178,22 @@ class LexerTests extends munit.FunSuite {
   test("simple nested interpolated string") {
     val prog = "\"${\"${1}\"2}\""
     assertSuccess(prog)
+  }
+
+  test("trivial comment") {
+    val prog = "//"
+    assertTokensEq(
+      prog,
+      Comment(""), EOF
+    )
+  }
+
+  test("unicode comment") {
+    val prog = "// ≤"
+    assertTokensEq(
+      prog,
+      Comment(" ≤"), EOF
+    )
   }
 
   test("singleline comment") {
@@ -253,10 +271,31 @@ class LexerTests extends munit.FunSuite {
     )
   }
 
-  test("big file") {
-    // val start = System.nanoTime()
-    val file = scala.io.Source.fromFile("libraries/common/list.effekt").mkString
+  def assertSuccessFile(filename: String): Unit = {
+    val start = System.nanoTime()
+    val file = scala.io.Source.fromFile(filename).mkString
     assertSuccess(file)
-    // println((System.nanoTime() - start) * 1e-9)
+    println(s"${filename}: ${(System.nanoTime() - start) * 1e-9}")
+  }
+/*
+libraries/common/list.effekt: 0.017573333
+libraries/common/effekt.effekt: 0.008536792000000001
+libraries/common/stringbuffer.effekt: 0.0010087920000000001
+libraries/common/exception.effekt: 0.001104375
+libraries/common/array.effekt: 0.004643333
+libraries/common/bytearray.effekt: 0.001793375
+libraries/common/char.effekt: 0.0018657090000000001
+libraries/common/stream.effekt: 0.0034919580000000003
+libraries/common/map.effekt: 0.008496875000000001*/
+  test("big files") {
+    assertSuccessFile("libraries/common/list.effekt")
+    assertSuccessFile("libraries/common/effekt.effekt")
+    assertSuccessFile("libraries/common/stringbuffer.effekt")
+    assertSuccessFile("libraries/common/exception.effekt")
+    assertSuccessFile("libraries/common/array.effekt")
+    assertSuccessFile("libraries/common/bytearray.effekt")
+    assertSuccessFile("libraries/common/char.effekt")
+    assertSuccessFile("libraries/common/stream.effekt")
+    assertSuccessFile("libraries/common/map.effekt")
   }
 }

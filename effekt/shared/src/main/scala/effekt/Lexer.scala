@@ -1,47 +1,69 @@
 package effekt.lexer
 
-import java.lang.Integer
-
-import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.immutable
-import scala.collection.BufferedIterator
-import scala.util.matching.Regex
 import effekt.source.Span
-import effekt.context.Context
+import kiama.util.Source
 
-import kiama.util.{ Source, Range }
+/** Lexing errors that can occur during tokenization */
+enum LexerError:
+  case InvalidEscapeSequence(char: Char)
+  case Expected(char: Char)
+  case UnknownChar(char: Char)
+  case UnterminatedString
+  case UnterminatedComment
+  case EmptyCharLiteral
+  case MultipleCodePointsInChar
+  case InvalidUnicodeLiteral
+  case InvalidNumberFormat
 
-/** An error encountered during lexing a source string. */
-case class LexerError(msg: String, start: Int, end: Int) extends Throwable(msg)
-
+  def message: String = this match
+    case InvalidEscapeSequence(char) =>
+      s"Invalid character in escape sequence: '$char' (U+${char.toInt.toHexString})"
+    case Expected(char) =>
+      s"Expected '$char' (U+${char.toInt.toHexString}) while lexing"
+    case UnknownChar(char) =>
+      s"Unknown character '$char' (U+${char.toInt.toHexString}) in file"
+    case UnterminatedString => "Unterminated string literal"
+    case UnterminatedComment => "Unterminated multi-line comment; expected closing `*/`"
+    case EmptyCharLiteral => "Empty character literal"
+    case MultipleCodePointsInChar => "Character literal consists of multiple code points"
+    case InvalidUnicodeLiteral => "Invalid unicode literal"
+    case InvalidNumberFormat => "Invalid number format"
 
 /**
  * A token consist of the absolute starting position, the absolute end position in the source file
- * and the kind of token. Both position are to be understood as inclusive.
+ * and the kind of token. Both positions are to be understood as inclusive.
  */
-case class Token(start: Int, end: Int, kind: TokenKind) {
+case class Token(start: Int, end: Int, kind: TokenKind):
   def span(source: Source): Span = Span(source, start, end)
-}
+  def isError: Boolean = this.kind match {
+    case TokenKind.Error(_) => true
+    case _ => false
+  }
 
+enum TokenKind:
+  // control tokens
+  case EOF // end of input
+  case Error(error: LexerError) // invalid token with a reason
+  case Newline // newline
 
-enum TokenKind {
   // literals
   case Integer(n: Long)
   case Float(d: Double)
   case Str(s: String, multiline: Boolean)
   case HoleStr(s: String)
   case Chr(c: Int)
+
   // identifiers
   case Ident(id: String)
+
   // misc
   case Comment(msg: String)
   case DocComment(msg: String)
   case Shebang(cmd: String)
-  case Newline
-  case Space
-  case EOF
-  case Error(err: LexerError)
+  case Space // Note: unused now
+
   // symbols
   case `=`
   case `===`
@@ -79,6 +101,7 @@ enum TokenKind {
   case `++`
   case `-`
   case `*`
+
   // keywords
   case `let`
   case `true`
@@ -114,593 +137,580 @@ enum TokenKind {
   case `is`
   case `namespace`
   case `pure`
-}
-object TokenKind {
+
+object TokenKind:
   // "Soft" keywords
   val `resume` = TokenKind.Ident("resume")
   val `in` = TokenKind.Ident("in")
   val `at` = TokenKind.Ident("at")
   val `__` = Ident("_")
 
-  def explain(kind: TokenKind): String = kind match {
+  def explain(kind: TokenKind): String = kind match
     case t if keywords.contains(t) => s"keyword ${kind}"
     case Ident(n)             => s"identifier ${n}"
     case Integer(n)           => s"integer ${n}"
     case Float(d)             => s"float ${d}"
-    case Str(s, true)         => s"multi-line string"
+    case Str(_, true)         => s"multi-line string"
     case Str(s, false)        => s"string \"${s}\""
-    case Chr(c)               => s"character '${c}'"
-    case Comment(contents)    => "comment"
-    case DocComment(contents) => "doc comment"
+    case Chr(c)               => s"character '${c.toChar}'"
+    case Comment(_)           => "comment"
+    case DocComment(_)        => "doc comment"
     case Newline              => "newline"
     case Space                => "space"
     case EOF                  => "end of file"
+    case Error(error)         => s"invalid token: ${error.message}"
     case other                => other.toString
-  }
 
   val keywords = Vector(
     `let`, `true`, `false`, `val`, `var`, `if`, `else`, `while`, `type`, `effect`, `interface`,
     `try`, `with`, `case`, `do`, `fun`, `match`, `def`, `module`, `import`, `export`, `extern`,
     `include`, `record`, `box`, `unbox`, `return`, `region`, `resource`, `new`, `and`, `is`,
-    `namespace`, `pure`)
-
-}
-
-
-
-
-object Lexer {
-  import TokenKind.*
+    `namespace`, `pure`
+  )
 
   val keywordMap: immutable.HashMap[String, TokenKind] =
-    immutable.HashMap.from(TokenKind.keywords.map { case t => t.toString -> t })
-}
+    immutable.HashMap.from(keywords.map(k => k.toString -> k))
+
+// Full position tracking
+case class Position(index: Int, byteOffset: Int, line: Int, column: Int):
+  def advance(charWidth: Int, isNewline: Boolean): Position =
+    if isNewline then
+      Position(index + charWidth, byteOffset + 1, line + 1, 1)
+    else
+      Position(index + charWidth, byteOffset + 1, line, column + charWidth)
+
+object Position:
+  def begin: Position = Position(0, 0, 1, 1)
 
 /**
+ * Tracks brace/paren/bracket depth for string interpolation.
  *
- * @param source A string of a Effekt program to be lexed.
+ * DESIGN NOTE: This is specifically for tracking brace depth to determine
+ * interpolation boundaries. When we see ${, we record the current brace depth
+ * and know the interpolation ends when we return to that depth.
  */
-class Lexer(source: Source) {
-  import Lexer.*
+case class BraceTracker(var parens: Int, var braces: Int, var brackets: Int):
+  def incrementParens = { this.parens += 1 }
+  def decrementParens = { this.parens -= 1 }
+  def incrementBraces = { this.braces += 1 }
+  def decrementBraces = { this.braces -= 1 }
+  def incrementBrackets = { this.brackets += 1 }
+  def decrementBrackets = { this.brackets -= 1 }
 
-  /** The absolute starting index in the source string of the currently scanned token */
-  var start: Int = 0
-  /** The absolute index of the lexer's reading 'head' in the source string. Example
-   * "hello world"
-   *   ^
-   *  current = 1
-   *  chars.next() = 'e'
+/**
+ * Never throws exceptions - always returns Error tokens for errors.
+ *
+ * @param source The source file to be lexed
+ */
+class Lexer(source: Source) extends Iterator[Token]:
+  import TokenKind.*
+
+  // Lexer state with current/next character lookahead
+  private var currentChar: Char = if source.content.nonEmpty then source.content(0) else '\u0000'
+  private var nextChar: Char = if source.content.length > 1 then source.content(1) else '\u0000'
+  private var position: Position = Position.begin
+  private var tokenStartPosition: Position = Position.begin
+  private val charIterator = source.content.iterator.drop(2) // we already consumed first two chars
+
+  // String interpolation state
+  private val delimiters = mutable.Stack[Delimiter]()
+  private val braceTracker = BraceTracker(0, 0, 0)
+  private val interpolationDepths = mutable.Stack[Int]()
+
+  /**
+   * DESIGN DECISION: String interpolation requires a two-step dance.
+   *
+   * When we see `}` ending interpolation:
+   * 1. MUST return the `}$` token first (Iterator contract)
+   * 2. NEXT call to next() must resume string lexing
+   *
+   * Any alternative (token buffering, state machines, etc.) just moves this
+   * complexity elsewhere without eliminating it.
    */
-  var current: Int = 0
-  /** The sequence of tokens the source strings contains. Returned as the result by [[Lexer.run()]] */
-  val tokens: mutable.ListBuffer[Token] = mutable.ListBuffer.empty
-  // For future improvement, this is probably more performant than using substring on the source
-  // val currLexeme: mutable.StringBuilder = mutable.StringBuilder()
-  /** A peekable iterator of the source string. This is used instead of directly indexing the source string.
-  * This may only be advanced by using the `consume` function, otherwise positions cannot be keept track of.
-  */
-  val chars: BufferedIterator[Char] = source.content.iterator.buffered
+  private var resumeStringNext = false
 
-  val str: String = source.content
+  // Character classification
+  // TODO(jiribenes, 2025-07-01): properly benchmark against functions?
+  //                              so far, all benchmarks are inconclusive, the lexer is too darn fast
+  private val nameFirst = ('a'.to('z').iterator ++ 'A'.to('Z').iterator ++ List('_').iterator).toSet
+  private val nameRest = ('a'.to('z').iterator ++ 'A'.to('Z').iterator ++ '0'.to('9').iterator ++ List('_', '!', '?', '$').iterator).toSet
+  private val hexDigits = ('0'.to('9').iterator ++ 'a'.to('f').iterator ++ 'A'.to('F').iterator).toSet
 
-  lazy val whitespace: Regex = """([ \t\r\n])""".r // single whitespace characters
-  val whitespaces = Set(' ', '\t', '\r', '\n')
-  val nameFirst = ('a'.to('z').iterator ++ 'A'.to('Z').iterator ++ List('_').iterator).toSet
-  val nameRest = ('a'.to('z').iterator ++ 'A'.to('Z').iterator ++ '0'.to('9').iterator ++ List('_', '!', '?', '$').iterator).toSet
-
-  def isEOF: Boolean =
-    current >= str.length
-
-  /** Advance the [[Lexer.chars]] iterator and [[Lexer.current]] index. Returns [[None]] if EOF is reached. */
-  def consume(): Option[Char] = {
-    if (!chars.hasNext) {
-      None
-    } else {
-      current += 1
-      Some(chars.next())
-    }
-  }
-
-  def expect(c: Char): Unit = {
-    val copt = consume()
-    copt match {
-      case Some(c1) =>
-        if (c == c1) ()
-        else err(s"Expected $c but found $c1 instead.")
-      case None => err(s"Expected $c but reached end of file.")
-    }
-
-  }
-
-  /** Advance the [[Lexer.chars]] iterator while the next character matches the given predicate. */
-  @tailrec
-  final def consumeWhile(pred: Char => Boolean): Unit =
-    peek() match {
-      case Some(c) if pred(c) => consume(); consumeWhile(pred)
-      case _ => ()
-    }
-
-  def consumeUntilNewline(): Unit = {
-    var reachedNewline = false
-    while (!reachedNewline) {
-      // peek to ensure the newline is not part of the comment
-      peek() match {
-        // comment is terminated when encountering a new line
-        case Some('\n') => reachedNewline = true
-        case None => reachedNewline = true
-        case _ => consume()
-      }
-    }
-  }
-
-  /** Peek at the next character. Returns [[None]] if EOF is reached. */
-  def peek(): Option[Char] = chars.headOption
-
-  def peekMatches(pred: Char => Boolean): Boolean = peek().exists(pred)
-
-  def peekN(lookahead: Int): Option[Char] = {
-    if (current - 1 + lookahead < str.length) Some(str.charAt(current - 1 + lookahead))
-    else None
-  }
-
-  /** Convenience function for creating a token.
-   * Assumed Invariant: When making a token, the lexer's head [[current]] is pointing not at the token's
-   * last position but at the next one.
-   */
-  def makeToken(kind: TokenKind): Token =
-    Token(start, current - 1, kind)
-
-  /** Used for reporting erros while lexing. These are only caught by the `lex` function. */
-  def err(msg: String, start: Int = start, end: Int = current): Nothing =
-    throw LexerError(msg, start, end)
-
-  /** Checks if the characters starting at [[start]] match the expected string and only then
-   * consumes all corresponding characters. That is, if there's no match, no characters are consumed.
-   **/
-  def matches(expected: String, start: Int = start): Boolean = {
-    val len = expected.length
-    val end = start + len - 1
-    if (end >= str.length) return false
-    val slice = str.substring(start, end + 1)
-    if (slice == expected) {
-      (start to end).foreach(_ => consume())
-      true
-    } else {
-      false
-    }
-  }
-
-  /** Extract a slice of the source string delimited by the starting and (exclusive) current index */
-  def slice(start: Int = start, end: Int = current): String =
-    str.substring(start, end)
-
-  /** Like [[Lexer.matches]] but starts matching at the lexer's current head [[current]]. */
-  def nextMatches(expected: String): Boolean = matches(expected, current)
-
-  def nextMatches(expected: Char): Boolean =
-    peek().exists { c =>
-      val eq = c == expected
-      if (eq) consume()
-      eq
-    }
-
-  def matchesRegex(r: Regex): Boolean = {
-    val rest = str.substring(start)
-    val candidate = rest.takeWhile { c => !whitespace.matches(c.toString) }
-    r.matches(candidate)
-  }
-
-  def lex()(using ctx: Context): Vector[Token] =
-    try {
-      run()
-    } catch {
-      case LexerError(msg, start, end) => {
-        val relativeStart = source.offsetToPosition(start)
-        val relativeEnd = source.offsetToPosition(end)
-        val range = Range(relativeStart, relativeEnd)
-        ctx.abort(effekt.util.messages.ParseError(msg, Some(range)))
-      }
-    }
-
-  /** Main entry-point of the lexer. Whitespace is ignored and comments are collected.
-   * If an error is encountered, all successfully scanned tokens this far will be returned,
-   * including the error.
-   */
-  def run(): Vector[Token] = {
-    var eof = false
-    while (!eof) {
-      val kind =
-        // If the last token was `}` and we are currently inside unquotes, remember to directly continue
-        // lexing a string
-        if (tokens.lastOption.map { _.kind }.contains(TokenKind.`}`) && delimiters.nonEmpty) {
-          delimiters.pop() match {
-            case `${{` =>
-              // there has to be a string delimiter on the stack since `${ }` may only appear in strings
-              // and cannot be directly nested within other `${}`
-              val errMsg = "string interpolation ${ ... } may only appear inside strings"
-              if (delimiters.isEmpty) err(errMsg)
-              delimiters.pop() match {
-                case `${{` | `{{` =>  err(errMsg)
-                case strDelim: StrDelim => matchString(strDelim, true)
-                case `<""` => matchHole(true)
-              }
-            // Last `}` is not be considered as part of string interpolation. Let the parser fail if braces don't match
-            // and just continue lexing
-            case `{{` | `"` | `"""` | `'` | `<""` => nextToken()
-          }
-        } else nextToken()
-      kind match {
-        case TokenKind.EOF =>
-          eof = true
-          tokens += Token(current, current, TokenKind.EOF)
-        case k =>
-          tokens += makeToken(k)
-      }
-      start = current
-    }
-    tokens.toVector
-  }
-
-  // --- Literal and comment matchers ---
-  // It is assumed that the prefix character which was used for deciding on the kind of the token is already consumed.
-
-  /** Matches a number literal -- both floats and integers. However, signs are not lexed but instead
-   * are to be handled by the parser later on.
-   */
-  def matchNumber(): TokenKind = {
-    consumeWhile(_.isDigit)
-    peekN(1) match {
-      case Some('.') => {
-        peekN(2) match {
-          case Some(c) if c.isDigit =>
-            consume()
-            consumeWhile(_.isDigit)
-            slice().toDoubleOption match {
-              case None => err("Not a 64bit floating point literal.")
-              case Some(n) => TokenKind.Float(n)
-            }
-          case _ => slice().toLongOption match {
-            case None => err("Not a 64bit integer literal.")
-            case Some(n) => TokenKind.Integer(n)
-          }
-        }
-      }
-      case _ =>
-        slice().toLongOption match {
-          case None => err("Not a 64bit integer literal.")
-          case Some(n) => TokenKind.Integer(n)
-        }
-    }
-  }
-
-  /** This is for remembering delimiters of strings and unquotes for string interpolation (`${`, `}`).
-  * If we encounter a `"` or `"""`, we push it onto the stack and pop from the stack if we see such
-  * delimiters again while lexing a string.
-  * Likewise, if we are at a `${`, push it onto the stack and pop from the stack upon seeing a `}`.
-  */
-  val delimiters = mutable.Stack[Delimiter]()
   sealed trait Delimiter
-  sealed trait InterpolateDelim extends Delimiter
-  case object `${{` extends InterpolateDelim
-  case object `{{` extends InterpolateDelim
-  sealed trait StrDelim extends Delimiter {
-    def offset: Int =
-      this match {
-        case `"` => 1
-        case `"""` => 3
-        case `'` => 1
-      }
+  case object StringDelim extends Delimiter
+  case object MultiStringDelim extends Delimiter
+  case object CharDelim extends Delimiter
+  case object HoleDelim extends Delimiter
+  case object InterpolationDelim extends Delimiter
 
-    def first: Char =
-      this match {
-        case `"` | `"""` => '"'
-        case `'` => '\''
-      }
+  private var done: Boolean = false
 
-    override def toString: String =
-      this match {
-        case `"` => "\""
-        case `"""` => "\"\"\""
-        case `'` => "'"
-      }
+  override def hasNext: Boolean = !done
 
-    def isMultiline: Boolean =
-      this match {
-        case `"` => false
-        case `"""` => true
-        case `'` => false
-      }
-  }
-  case object `"` extends StrDelim
-  case object `"""` extends StrDelim
-  /** Delimiter for characters */
-  case object `'` extends StrDelim
-  case object `<""` extends Delimiter
+  override def next(): Token =
+    if !resumeStringNext then
+      skipWhitespaceAndNewlines()
 
-  /** Matches a string literal -- both single- and multi-line strings.
-   * Strings may contain space characters (e.g. \n, \t, \r), which are stored unescaped.
-   * Strings may also contain unquotes, i.e., "f = ${x + 1}" that include arbitrary expressions.
+    tokenStartPosition = position
+
+    val kind = nextToken()
+
+    makeToken(kind)
+
+  private def makeToken(kind: TokenKind): Token =
+    if kind == TokenKind.EOF then
+      done = true
+      Token(tokenStartPosition.byteOffset, position.byteOffset, kind)
+    else
+      Token(tokenStartPosition.byteOffset, position.byteOffset - 1, kind)
+
+  private def skipWhitespaceAndNewlines(): Unit =
+    while !atEndOfInput do
+      currentChar match
+        case ' ' | '\t' => advance()
+        case '\n' => return // Stop here, let newline be handled as a token
+        case '\r' =>
+          if nextChar == '\n' then return // Stop here for \r\n
+          else advance() // Treat standalone \r as whitespace
+        case _ => return
+
+  private def atEndOfInput: Boolean =
+    position.byteOffset >= source.content.length
+
+  private def advance(): Char =
+    val ret = currentChar
+    currentChar = nextChar
+    nextChar = if charIterator.hasNext then charIterator.next() else '\u0000'
+    position = position.advance(1 /* ret.toString.getBytes("UTF-8").length */, ret == '\n')
+    ret
+
+  private def advanceWith(token: TokenKind): TokenKind =
+    advance()
+    token
+
+  private def advance2With(token: TokenKind): TokenKind =
+    advance()
+    advance()
+    token
+
+  private def peek(): Char = currentChar
+  private def peekNext(): Char = nextChar
+
+  private def expect(expected: Char, token: TokenKind): TokenKind =
+    if currentChar == expected then
+      advanceWith(token)
+    else
+      advanceWith(TokenKind.Error(LexerError.Expected(expected)))
+
+  private def getCurrentSlice: String =
+    source.content.substring(tokenStartPosition.byteOffset, position.byteOffset)
+
+  private def advanceWhile(predicate: (Char, Char) => Boolean): String =
+    while predicate(currentChar, nextChar) && !atEndOfInput do
+      advance()
+    getCurrentSlice
+
+  private def peekAhead(offset: Int): Char =
+    val targetIndex = position.byteOffset + offset
+    if targetIndex < source.content.length then
+      source.content(targetIndex)
+    else
+      '\u0000'
+
+  /**
+   * Check if we're at an interpolation boundary.
+   * This happens when the current brace depth matches the depth when interpolation started.
    */
-  def matchString(delim: StrDelim, continued: Boolean = false): TokenKind = {
-    if (nextMatches(delim.toString)) return TokenKind.Str("", delim.isMultiline)
-    val offset = delim.offset
-    val st = if (continued) start else start + offset
-    var endString = false
-    val stringContent = StringBuilder()
+  private def isAtInterpolationBoundary: Boolean =
+    interpolationDepths.nonEmpty && interpolationDepths.top == braceTracker.braces
 
-    delimiters.push(delim)
-    while (!endString) {
-      peek() match {
-        case Some(c) if c == delim.first => {
-          consume()
-          delim match {
-            case `"""`  if (peekN(1).contains('\"') && peekN(2).contains('\"')) => {
-              consume(); consume()
-              delimiters.pop()
-              endString = true
-            }
-            case `"` => {
-              delimiters.pop()
-              endString = true
-            }
-            case `'` => {
-              delimiters.pop()
-              endString = true
-            }
-            case _ => stringContent.addOne(c)
-          }
-        }
-        case Some('\n') if !delim.isMultiline =>
-          return err("Linebreaks are not allowed in single-line strings.")
-        // handle escape sequences
-        case Some('\\') if !delim.isMultiline => {
-          expect('\\')
-          peek() match {
-            case Some('"') => consume(); stringContent.addOne('"')
-            case Some('\'') => consume(); stringContent.addOne('\'')
-            case Some('n') => consume(); stringContent.addOne('\n')
-            case Some('t') => consume(); stringContent.addOne('\t')
-            case Some('r') => consume(); stringContent.addOne('\r')
-            case Some('\\') => consume(); stringContent.addOne('\\')
-            case Some('$') => consume(); stringContent.addOne('$')
-            case Some('u') => {
-              consume()
-
-              def isHexDigit(c: Char) = c.isDigit || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
-
-              val hexCodePoint = peek() match {
-                case Some(c) if isHexDigit(c) =>
-                  val escapeStart = current
-                  consumeWhile(isHexDigit)
-                  slice(escapeStart, current)
-                case Some('{') =>
-                  consume()
-                  val escapeStart = current
-                  consumeWhile(c => c != '}')
-                  expect('}')
-                  slice(escapeStart, current - 1)
-                case _ => err("Invalid escape sequence.", current - 1, current)
-              }
-
-              try {
-                val codePoint = Integer.parseInt(hexCodePoint, 16)
-                stringContent.append(String.valueOf(Character.toChars(codePoint)))
-              } catch {
-                case e: NumberFormatException => err(e.toString)
-              }
-            }
-            case _ => err("Invalid escape sequence.", current - 1, current)
-          }
-        }
-        case Some('$') if peekN(2).contains('{') => {
-          return TokenKind.Str(stringContent.mkString, delim.isMultiline)
-        }
-        case None =>
-          return err("Unterminated string.", start, start + offset)
-        case Some(c) =>
-          consume()
-          stringContent.addOne(c)
-      }
-    }
-
-    TokenKind.Str(stringContent.mkString, delim.isMultiline)
-  }
-
-  /** Matches a hole containing natural language text.
-   * Holes may contain unquotes, e.g., "${ do foo }" that include arbitrary expressions.
-   * Unlike regular string literals, holes cannot contain escape sequences.
-   * They do emit [[TokenKind.Str]] tokens with the `multiline` flag set to `true`.
+  /**
+   * Handle the end of an interpolation expression.
+   * This pops the interpolation state and sets up string resumption.
    */
-  def matchHole(continued: Boolean = false): TokenKind = {
-    val delim = `<""`
-    if (nextMatches("\">")) return TokenKind.HoleStr("")
-    val offset = 2
-    val st = if (continued) start else start + offset
-    var endString = false
-    val stringContent = StringBuilder()
+  private def handleInterpolationEnd(): Unit =
+    interpolationDepths.pop()
+    braceTracker.decrementBraces
+    advance() // consume '}'
 
-    delimiters.push(delim)
-    while (!endString) {
-      peek() match {
-        case Some(c) if c == '"' && peekN(2).contains('>') => {
-          consume();
-          consume();
+    if delimiters.nonEmpty && delimiters.top == InterpolationDelim then
+      delimiters.pop()
+      resumeStringNext = true
+
+  // String interpolation resumption
+  private def resumeStringAfterInterpolation(): TokenKind =
+    if delimiters.nonEmpty then
+      delimiters.top match
+        case StringDelim => lexString(continued = true)
+        case MultiStringDelim => lexString(multiline = true, continued = true)
+        case HoleDelim =>
+          lexString(delimiter = '>', continued = true, allowInterpolation = true) match
+            case TokenKind.Str(content, _) => TokenKind.HoleStr(content)
+            case other => other
+        case InterpolationDelim | CharDelim =>
+          nextToken() // recovery
+    else
+      nextToken() // recovery
+
+  /**
+   * "Main" function for getting the next token kind.
+   * Wrapped on the outside by [[Lexer.next]] which handles whitespace.
+   */
+  private def nextToken(): TokenKind =
+    if resumeStringNext then
+      resumeStringNext = false
+      return resumeStringAfterInterpolation()
+
+    currentChar match
+      case '\n' => advanceWith(TokenKind.Newline)
+      case '\r' if nextChar == '\n' => advance2With(TokenKind.Newline)
+
+      // Numbers
+      case c if c.isDigit => lexNumber()
+
+      // Identifiers and keywords
+      case c if nameFirst.contains(c) => lexAlphanumeric()
+
+      // String literals
+      case '"' =>
+        if nextChar == '"' && peekAhead(2) == '"' then
+          advance(); advance(); advance()
+          lexString(multiline = true)
+        else
+          advance()
+          lexString(multiline = false)
+
+      // Character literals
+      case '\'' => advance(); lexCharLiteral()
+
+      // Hole literals - let lexHole handle consuming the opening delimiter
+      case '<' if nextChar == '"' =>
+        advance(); advance()
+        lexString(delimiter = '>', allowInterpolation = true) match
+          case TokenKind.Str(content, _) => TokenKind.HoleStr(content)
+          case other => other
+
+      // Unicode literals
+      // TODO(jiribenes, 2025-07-01): Do we even want to keep supporting these?
+      case '\\' if nextChar == 'u' =>
+        advance(); advance()
+        lexUnicodeLiteral()
+
+      // Comments
+      case '/' =>
+        nextChar match
+          case '*' => advance(); advance(); lexMultilineComment()
+          case '/' => advance(); advance(); lexSinglelineComment()
+          case _ => advanceWith(TokenKind.`/`)
+
+      // Shebang
+      case '#' if nextChar == '!' =>
+        advance(); advance()
+        lexShebang()
+
+      // Two-character operators
+      case '=' =>
+        nextChar match
+          case '=' => advance2With(TokenKind.`===`)
+          case '>' => advance2With(TokenKind.`=>`)
+          case _ => advanceWith(TokenKind.`=`)
+
+      case '!' =>
+        nextChar match
+          case '=' => advance2With(TokenKind.`!==`)
+          case _ => advanceWith(TokenKind.`!`)
+
+      case '<' =>
+        nextChar match
+          case '=' => advance2With(TokenKind.`<=`)
+          case '>' => advance2With(TokenKind.`<>`)
+          case '{' => advance2With(TokenKind.`<{`)
+          case _ => advanceWith(TokenKind.`<`)
+
+      case '>' =>
+        nextChar match
+          case '=' => advance2With(TokenKind.`>=`)
+          case _ => advanceWith(TokenKind.`>`)
+
+      case ':' =>
+        nextChar match
+          case ':' => advance2With(TokenKind.`::`)
+          case _ => advanceWith(TokenKind.`:`)
+
+      case '|' =>
+        nextChar match
+          case '|' => advance2With(TokenKind.`||`)
+          case _ => advanceWith(TokenKind.`|`)
+
+      case '&' =>
+        nextChar match
+          case '&' => advance2With(TokenKind.`&&`)
+          case _ => advanceWith(TokenKind.`&`)
+
+      case '+' =>
+        nextChar match
+          case '+' => advance2With(TokenKind.`++`)
+          case _ => advanceWith(TokenKind.`+`)
+
+      case '-' =>
+        if nextChar.isDigit then
+          advance()
+          lexNumber(negative = true)
+        else
+          advanceWith(TokenKind.`-`)
+
+      case '$' =>
+        if nextChar == '{' then
+          // Record the current brace depth for interpolation tracking
+          interpolationDepths.push(braceTracker.braces + 1)
+          braceTracker.incrementBraces
+          delimiters.push(InterpolationDelim)
+          advance2With(TokenKind.`${`)
+        else
+          advanceWith(TokenKind.Error(LexerError.UnknownChar('$')))
+
+      case '}' =>
+        if isAtInterpolationBoundary then
+          handleInterpolationEnd()
+          TokenKind.`}$`
+        else
+          braceTracker.decrementBraces
+          nextChar match
+            case '>' => advance2With(TokenKind.`}>`)
+            case _ => advanceWith(TokenKind.`}`)
+
+      // Single-character tokens
+      case ';' => advanceWith(TokenKind.`;`)
+      case '@' => advanceWith(TokenKind.`@`)
+      case '{' =>
+        braceTracker.incrementBraces
+        advanceWith(TokenKind.`{`)
+      case '(' =>
+        braceTracker.incrementParens
+        advanceWith(TokenKind.`(`)
+      case ')' =>
+        braceTracker.decrementParens
+        advanceWith(TokenKind.`)`)
+      case '[' =>
+        braceTracker.incrementBrackets
+        advanceWith(TokenKind.`[`)
+      case ']' =>
+        braceTracker.decrementBrackets
+        advanceWith(TokenKind.`]`)
+      case ',' => advanceWith(TokenKind.`,`)
+      case '.' => advanceWith(TokenKind.`.`)
+      case '*' => advanceWith(TokenKind.`*`)
+
+      case '\u0000' =>
+        TokenKind.EOF
+
+      case c =>
+        advance()
+        TokenKind.Error(LexerError.UnknownChar(c))
+
+  private def lexNumber(negative: Boolean = false): TokenKind =
+    // Consume the integer part
+    advanceWhile { (curr, _) => curr.isDigit }
+
+    if currentChar == '.' && nextChar.isDigit then
+      advance() // consume '.'
+      // Consume fractional part
+      advanceWhile { (curr, _) => curr.isDigit }
+
+      // Get the entire float string
+      val floatString = getCurrentSlice
+
+      floatString.toDoubleOption match
+        case Some(float) => TokenKind.Float(float)
+        case None => TokenKind.Error(LexerError.InvalidNumberFormat)
+    else
+      // Get the integer string
+      val integerString = getCurrentSlice
+
+      integerString.toLongOption match
+        case Some(integer) => TokenKind.Integer(integer)
+        case None => TokenKind.Error(LexerError.InvalidNumberFormat)
+
+  private def lexAlphanumeric(): TokenKind =
+    advanceWhile { (curr, _) => nameRest.contains(curr) }
+    val word = getCurrentSlice
+
+    TokenKind.keywordMap.getOrElse(word, TokenKind.Ident(word))
+
+  private def lexString(
+                         delimiter: Char = '"',
+                         multiline: Boolean = false,
+                         continued: Boolean = false,
+                         allowInterpolation: Boolean = true
+                       ): TokenKind =
+
+    val delimiterType = delimiter match
+      case '"' => if multiline then MultiStringDelim else StringDelim
+      case '\'' => CharDelim
+      case '>' => HoleDelim // for <"...">
+      case _ => StringDelim
+
+    if !continued then delimiters.push(delimiterType)
+
+    val contents = StringBuilder()
+
+    while !atEndOfInput do
+      currentChar match
+        case '"' =>
+          if delimiter == '"' then
+            if multiline then
+              if nextChar == '"' && peekAhead(2) == '"' then
+                advance();
+                advance();
+                advance()
+                delimiters.pop()
+                return TokenKind.Str(contents.toString, multiline)
+              else
+                contents.addOne(advance())
+            else
+              advance()
+              delimiters.pop()
+              return TokenKind.Str(contents.toString, multiline)
+          else if delimiter == '>' && nextChar == '>' then
+            advance();
+            advance() // consume ">
+            delimiters.pop()
+            return TokenKind.Str(contents.toString, multiline = false)
+          else
+            contents.addOne(advance())
+
+        case c if c == delimiter && delimiter != '"' =>
+          advance()
           delimiters.pop()
-          endString = true
-        }
-        case Some('$') if peekN(2).contains('{') => {
-          return TokenKind.HoleStr(stringContent.mkString)
-        }
-        case None =>
-          return err("Unterminated hole.", start, start + offset)
-        case Some(c) =>
-          consume()
-          stringContent.addOne(c)
-      }
-    }
+          return TokenKind.Str(contents.toString, multiline)
 
-    TokenKind.HoleStr(stringContent.mkString)
-  }
+        case '\\' if delimiter != '\'' || !multiline =>
+          advance()
+          currentChar match
+            case '\\' | '"' | '\'' | '$' => contents.addOne(advance())
+            case 'n' => advance(); contents.addOne('\n')
+            case 'r' => advance(); contents.addOne('\r')
+            case 't' => advance(); contents.addOne('\t')
+            case 'u' =>
+              advance()
+              lexUnicodeEscape() match
+                case -1 => return TokenKind.Error(LexerError.InvalidUnicodeLiteral)
+                case codePoint => contents.append(String.valueOf(Character.toChars(codePoint)))
+            case c =>
+              return TokenKind.Error(LexerError.InvalidEscapeSequence(c))
 
-  /** Matches a character: '.+' */
-  def matchChar(): TokenKind = {
-    matchString(`'`) match {
+        case '$' if allowInterpolation && nextChar == '{' =>
+          // Don't consume the '$', just return what we have so far
+          if delimiter == '>'
+          then return TokenKind.HoleStr(contents.toString)
+          else return TokenKind.Str(contents.toString, multiline)
+
+        case '\n' if !multiline =>
+          return TokenKind.Error(LexerError.UnterminatedString)
+
+        case c =>
+          contents.addOne(advance())
+
+    // End of input reached
+    delimiters.pop()
+    TokenKind.Error(LexerError.UnterminatedString)
+
+  private def lexCharLiteral(): TokenKind =
+    lexString(delimiter = '\'', allowInterpolation = false) match
       case TokenKind.Str("", _) =>
-        TokenKind.Error(LexerError("Empty character literal", start, current))
-      case TokenKind.Str(cs, _) if (cs.codePointCount(0, cs.length) > 1) =>
-        TokenKind.Error(LexerError("Character literal consists " +
-            "of multiple code points.", start, current))
+        TokenKind.Error(LexerError.EmptyCharLiteral)
+      case TokenKind.Str(cs, _) if cs.codePointCount(0, cs.length) > 1 =>
+        TokenKind.Error(LexerError.MultipleCodePointsInChar)
       case TokenKind.Str(cs, _) =>
         TokenKind.Chr(cs.codePointAt(0))
       case err => err
-    }
-  }
 
-  lazy val hexadecimal = ('a' to 'f') ++ ('A' to 'F') ++ ('0' to '9')
+  private def lexUnicodeLiteral(): TokenKind =
+    advanceWhile { (curr, _) => hexDigits.contains(curr) }
+    val hexStr = getCurrentSlice.substring(2) // Remove '\u'
 
-  /** \u<HEXADECIMAL>+ */
-  def matchUnicodeLiteral(): TokenKind = {
-    consumeWhile(hexadecimal.contains(_))
-    val n = slice(start + 2, current)
-    try {
-      TokenKind.Chr(Integer.parseInt(n, 16))
-    } catch {
-      case e: Throwable => err("Invalid unicode literal.")
-    }
-  }
+    if hexStr.isEmpty then
+      return TokenKind.Error(LexerError.InvalidUnicodeLiteral)
 
-  /** Matches a mult-line comment delimited by /* and */. */
-  def matchMultilineComment(): TokenKind = {
-    var closed = false
-    while (!closed) {
-      consume() match {
-        // end comment on */
-        case Some('*') if nextMatches('/') => closed = true
-        case Some(_) => ()
-        // reached EOF without encountering */
-        case None => return err("Unterminated multi-line comment; expected closing `*/`.")
-      }
-    }
-    // exclude /* and */ from the comment's content
-    val comment = slice(start + 2, current - 2)
-    TokenKind.Comment(comment)
-  }
+    try
+      val codePoint = java.lang.Integer.parseInt(hexStr, 16)
+      TokenKind.Chr(codePoint)
+    catch
+      case _: NumberFormatException =>
+        TokenKind.Error(LexerError.InvalidUnicodeLiteral)
 
-  /** Matches a single-line comment delimited by // and a newline. */
-  def matchComment(): TokenKind = {
-    consumeUntilNewline()
-    // exclude //
-    val comment = slice(start + 2, current)
-    // TokenKind.Comment(comment)
+  // Returns a Char represented as a 32bit integer or -1 on failure
+  private def lexUnicodeEscape(): Int =
+    currentChar match
+      case '{' =>
+        advance()
+        val start = position.byteOffset
+        advanceWhile { (curr, _) => curr != '}' }
+        if currentChar != '}' then return -1
+        advance() // consume '}'
+        val hexStr = source.content.substring(start, position.byteOffset - 1)
+        try java.lang.Integer.parseInt(hexStr, 16)
+        catch case _: NumberFormatException => -1
+
+      case c if hexDigits.contains(c) =>
+        val start = position.byteOffset
+        advanceWhile { (curr, _) => hexDigits.contains(curr) }
+        val hexStr = source.content.substring(start, position.byteOffset)
+        try java.lang.Integer.parseInt(hexStr, 16)
+        catch case _: NumberFormatException => -1
+
+      case _ => -1
+
+  private def lexSinglelineComment(): TokenKind =
+    advanceWhile { (curr, _) => curr != '\n' }
+    val comment = getCurrentSlice.substring(2) // Remove '//'
+
     if comment.startsWith("/") then
-      // exclude ///
-      val docComment = slice(start + 3, current)
-      TokenKind.DocComment(docComment)
+      TokenKind.DocComment(comment.substring(1)) // Remove '///'
     else
       TokenKind.Comment(comment)
-  }
 
-  def matchShebang(): TokenKind = {
-    consumeUntilNewline()
-    val command = slice(start + 2, current)
+  private def lexMultilineComment(): TokenKind =
+    var done = false
+    while !atEndOfInput && !done do
+      (currentChar, nextChar) match {
+        case ('/', '*') => advance(); advance() // ignored!
+        case ('*', '/') => advance(); advance(); done = true
+        case _ => advance()
+      }
+
+    if !done then
+      TokenKind.Error(LexerError.UnterminatedComment)
+    else
+      val comment = getCurrentSlice.substring(2, getCurrentSlice.length - 2) // Remove /* and */
+      TokenKind.Comment(comment)
+
+  private def lexMultilineCommentNested(): TokenKind =
+    var depth = 1
+
+    while depth > 0 && !atEndOfInput do
+      currentChar match
+        case '/' if nextChar == '*' =>
+          advance(); advance()
+          depth += 1
+        case '*' if nextChar == '/' =>
+          advance(); advance()
+          depth -= 1
+        case _ =>
+          advance()
+
+    if depth > 0 then
+      TokenKind.Error(LexerError.UnterminatedComment)
+    else
+      val comment = getCurrentSlice.substring(2, getCurrentSlice.length - 2) // Remove /* and */
+      TokenKind.Comment(comment)
+
+  private def lexShebang(): TokenKind =
+    advanceWhile { (curr, _) => curr != '\n' }
+    val command = getCurrentSlice.substring(2) // Remove '#!'
     TokenKind.Shebang(command)
-  }
 
-  @tailrec
-  final def matchWhitespaces(): Unit = {
-      peek() match {
-        case Some(' ') | Some('\t') => {
-          consume()
-          // currently, we ignore any whitespace other than newlines
-          // tokens += makeToken(TokenKind.Space)
-          matchWhitespaces()
-        }
-        case Some('\n') => {
-          consume()
-          tokens += makeToken(TokenKind.Newline)
-          matchWhitespaces()
-        }
-        // windows, of course, has to do things differently. A newline there is represented by \r\n
-        case Some('\r') => {
-          consume()
-          nextMatches("\n")
-          tokens += makeToken(TokenKind.Newline)
-          matchWhitespaces()
-        }
-        case _ => start = current
-      }
-  }
-
-  def nextToken(): TokenKind = {
-    import TokenKind.*
-    matchWhitespaces()
-    val maybeChar = consume()
-    if (maybeChar.isEmpty) return EOF
-    val c = maybeChar.get
-    c match {
-      // --- symbols & pre- and infix operations ---
-      case '=' if nextMatches('>') => `=>`
-      case '=' if nextMatches('=') => `===`
-      case '=' => `=`
-      case ':' if nextMatches(':') => `::`
-      case ':' => `:`
-      case ';' => `;`
-      case '@' => `@`
-      case '<' if nextMatches('"') => matchHole()
-      case '<' if nextMatches('{') => `<{`
-      case '<' if nextMatches('>') => `<>`
-      case '<' if nextMatches('=') => `<=`
-      case '<' => `<`
-      case '>' if nextMatches('=') => `>=`
-      case '>' => `>`
-      case '{' => {
-        delimiters.push(`{{`)
-        `{`
-      }
-      case '}' if nextMatches('>') => `}>`
-      case '}' => `}`
-      case '(' => `(`
-      case ')' => `)`
-      case '[' => `[`
-      case ']' => `]`
-      case ',' => `,`
-      case '.' => `.`
-      case '/' if nextMatches('*') => matchMultilineComment()
-      case '/' if nextMatches('/') => matchComment()
-      case '#' if nextMatches('!') => matchShebang()
-      case '/' => `/`
-      case '!' if nextMatches('=') => `!==`
-      case '!' => `!`
-      case '|' if nextMatches('|') => `||`
-      case '|' => `|`
-      case '&' if nextMatches('&') => `&&`
-      case '&' => `&`
-      case '*' => `*`
-      case '+' if nextMatches('+') => `++`
-      case '+' => `+`
-      case '-' if peek().exists(_.isDigit) => matchNumber()
-      case '-' => `-`
-      case '$' if nextMatches('{') => {
-        delimiters.push(`${{`)
-        TokenKind.`${`
-      }
-      case '$' => TokenKind.`${`
-      // --- literals ---
-      case '\'' => matchChar()
-      case '\\' if nextMatches("u") => matchUnicodeLiteral()
-      case '\"' if nextMatches("\"\"") => matchString(`"""`)
-      case '\"' => matchString(`"`)
-      case c if c.isDigit => matchNumber()
-      // --- keywords & identifiers ---
-      case c if nameFirst.contains(c) => {
-        // since keywords are a subclass of identifiers and we want to match either keywords or identifiers,
-        // we look for valid names
-        consumeWhile { c => nameRest.contains(c) }
-        val s = slice()
-        // check if the slice matches any know keyword, otherwise it is necessarily an identifier
-        keywordMap.getOrElse(s, TokenKind.Ident(s))
-      }
-      case c => err(s"Invalid keyword/identifier: $c.")
-    }
-  }
-}
+object Lexer:
+  def lex(source: Source): Vector[Token] =
+    val lexer = Lexer(source)
+    lexer.toVector

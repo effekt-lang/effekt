@@ -54,8 +54,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
    * and everything else that can occur on the top-level.
    */
   override def parse(source: Source): ParseResult[Tree] = {
-    val lexer = effekt.lexer.Lexer(source)
-    val tokens = lexer.lex()
+    val tokens = effekt.lexer.Lexer.lex(source)
     val parser = RecursiveDescent(context.positions, tokens, source)
     parser.parseRepl(Input(source, 0))
   }

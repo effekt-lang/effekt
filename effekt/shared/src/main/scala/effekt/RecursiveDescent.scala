@@ -28,6 +28,15 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   val softFails: ListBuffer[SoftFail] = ListBuffer[SoftFail]()
 
+  private def reportSoftFails()(using C: Context): Unit =
+    softFails.foreach {
+      case SoftFail(msg, from, to) =>
+        val fromPos = source.offsetToPosition(tokens(from).start)
+        val toPos = source.offsetToPosition(tokens(to).end)
+        val range = Range(fromPos, toPos)
+        C.report(effekt.util.messages.ParseError(msg, Some(range)))
+    }
+
   def parse(input: Input)(using C: Context): Option[ModuleDecl] =
 
     try {
@@ -38,15 +47,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       //println(s"${input.source.name}: ${after - before}ms")
 
       // Report soft fails
-      softFails.foreach {
-        case SoftFail(msg, from, to) =>
-          val source = input.source
-          val fromPos = source.offsetToPosition(tokens(from).start)
-          val toPos = source.offsetToPosition(tokens(to).end)
-          val range = Range(fromPos, toPos)
-          C.report(effekt.util.messages.ParseError(msg, Some(range)))
-      }
-
+      reportSoftFails()
       if (softFails.isEmpty) { res } else { None }
     } catch {
       case Fail(msg, pos) =>
@@ -90,7 +91,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   var position: Int = 0
 
   extension(token: Token) def failOnErrorToken: Token = token.kind match {
-    case TokenKind.Error(err) => fail(err.msg)
+    case TokenKind.Error(err) => fail(err.message)
     case _ => token
   }
 
@@ -644,7 +645,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       // TODO handle case where the body is not a string, e.g.
       // Expected an extern definition, which can either be a single-line string (e.g., "x + y") or a multi-line string (e.g., """...""")
       val first = string()
-      val (exprs, strs) = manyWhile((`${` ~> expr() <~ `}`, string()), `${`).unzip
+      val (exprs, strs) = manyWhile((`${` ~> expr() <~ `}$`, string()), `${`).unzip
       Template(first :: strs, exprs)
 
   def documented[T](p: Doc => T): T =
@@ -1105,6 +1106,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     case _ if isHole         => hole()
     case _ if isTupleOrGroup => tupleOrGroup()
     case _ if isListLiteral  => listLiteral()
+    case `${` =>
+      val startPosition = position
+      manyUntil(next(), `}$`)
+      val endPosition = position
+      if peek(`}$`) then consume(`}$`) else if peek(`}`) then consume(`}`)
+
+      val msg = s"Unexpected splice: string interpolation $${ ... } is only allowed in strings!"
+      softFail(msg, startPosition, endPosition)
+
+      UnitLit() // XXX(jiribenes, 2025-07-01): HACK!
+
     case k => fail("variables, literals, tuples, lists, holes or group", k)
   }
 
@@ -1461,11 +1473,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   /**
    * Aborts parsing with the given message
    */
-  def fail(expected: String, got: TokenKind): Nothing =
+  def fail(expected: String, got: TokenKind): Nothing = {
+    // TODO(jiribenes, 2025-07-01): report soft fails!
+    // reportSoftFails()
     throw Fail.expectedButGot(currentLabel.getOrElse { expected }, explain(got), position)
+  }
 
-  def fail(msg: String): Nothing =
+  def fail(msg: String): Nothing = {
+    // TODO(jiribenes, 2025-07-01): report soft fails!
+    // reportSoftFails()
     throw Fail(msg, position)
+  }
 
   def softFail(message: String, start: Int, end: Int): Unit = {
     softFails += SoftFail(message, start, end)
