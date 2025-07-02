@@ -7,7 +7,7 @@ import effekt.context.assertions.*
 import effekt.core.{ *, given }
 import effekt.core.Variables
 import effekt.core.Variables.{ all, bound, free }
-import effekt.symbols.{ Module, Symbol, Wildcard, Namespace }
+import effekt.symbols.{ Module, Symbol, Wildcard, Bindings }
 
 import scala.collection.mutable
 
@@ -154,7 +154,7 @@ trait Transformer {
     val dependencies = input.mod.dependencies
 
     // Create a mapping Termsymbol -> Module
-    def definedIn(m: Module, b: Namespace): Map[Id, Module] =
+    def definedIn(m: Module, b: Bindings): Map[Id, Module] =
       b.terms.values.flatten.map { sym => (sym : Id) -> m }.toMap ++
         b.namespaces.values.flatMap(bs => definedIn(m, bs))
 
