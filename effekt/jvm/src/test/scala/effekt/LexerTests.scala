@@ -194,6 +194,43 @@ class LexerTests extends munit.FunSuite {
     )
   }
 
+  test("multiline string holes") {
+    val prog1: String =
+      """<" Here it starts
+        |  and here it continues ">
+        |""".stripMargin
+    assertTokensEq(
+      prog1,
+      HoleStr(" Here it starts\n  and here it continues "), Newline, EOF
+    )
+
+    val prog2: String =
+      """<" Oh look, a number!
+        |   ${ 42 }
+        |  and here it continues ">
+        |""".stripMargin
+    assertTokensEq(
+      prog2,
+      HoleStr(" Oh look, a number!\n   "),
+      `${`, Integer(42), `}$`,
+      HoleStr("\n  and here it continues "), Newline,
+      EOF
+    )
+
+    val prog3: String =
+      """effect foo(): Int
+        |effect bar(): String
+        |def baz(x: Int): Int / {foo, bar} = <"
+        |  This is some natural language text.
+        |  ${ do foo() }
+        |  Some more text.
+        |  ${ do bar() }
+        |">
+        |""".stripMargin
+
+    assertSuccess(prog3)
+  }
+
   test("quoted multi-line string") {
     val prog =
       "\"\"\"multi-line quote\n" +

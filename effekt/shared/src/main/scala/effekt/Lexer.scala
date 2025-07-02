@@ -351,7 +351,7 @@ class Lexer(source: Source) extends Iterator[Token]:
         case StringDelim => lexString(continued = true)
         case MultiStringDelim => lexString(multiline = true, continued = true)
         case HoleDelim =>
-          lexString(delimiter = '>', continued = true, allowInterpolation = true) match
+          lexString(delimiter = '>', multiline = true, continued = true, allowInterpolation = true) match
             case TokenKind.Str(content, _) => TokenKind.HoleStr(content)
             case other => other
         case InterpolationDelim | CharDelim =>
@@ -394,7 +394,7 @@ class Lexer(source: Source) extends Iterator[Token]:
       // Hole literals - let lexHole handle consuming the opening delimiter
       case '<' if nextChar == '"' =>
         advance(); advance()
-        lexString(delimiter = '>', allowInterpolation = true) match
+        lexString(delimiter = '>', multiline = true, allowInterpolation = true) match
           case TokenKind.Str(content, _) => TokenKind.HoleStr(content)
           case other => other
 
