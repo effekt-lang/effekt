@@ -57,7 +57,7 @@ package object kinds {
     case DataType(_, tparams, _, _)  => Kind.Fun(tparams map { p => Kind.VType }, Kind.VType)
     case Record(_, tparams, _, _) => Kind.Fun(tparams map { p => Kind.VType }, Kind.VType)
     case ExternType(_, tparams, _)  => Kind.Fun(tparams map { p => Kind.VType }, Kind.VType)
-    case ErrorValueType(_, tparams) => Kind.Fun(tparams map { p => Kind.VType}, Kind.VType)
+    case ErrorValueType(_, tparams, _) => Kind.Fun(tparams map { p => Kind.VType}, Kind.VType)
   }
 
   private def wellformedType(tpe: ValueType)(using C: Context): Kind = tpe match {
@@ -89,6 +89,6 @@ package object kinds {
   private def wellformedBlockTypeConstructor(e: BlockTypeConstructor)(using Context): Kind.Fun = e match {
     case Interface(_, tparams, _, _) => Kind.Fun(tparams map { p => Kind.VType }, Kind.BType)
     case ExternInterface(_, tparams, _) => Kind.Fun(tparams map { p => Kind.VType }, Kind.BType)
-    case ErrorBlockType(_, tparams) => Kind.Fun(tparams map { p => Kind.VType }, Kind.BType)
+    case ErrorBlockType(_, tparams, _) => Kind.Fun(tparams map { p => Kind.VType }, Kind.BType)
   }
 }
