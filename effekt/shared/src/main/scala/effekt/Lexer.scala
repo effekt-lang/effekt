@@ -233,12 +233,16 @@ class Lexer(source: Source) extends Iterator[Token]:
    */
   private var resumeStringNext = false
 
-  // Character classification
-  // TODO(jiribenes, 2025-07-01): properly benchmark against functions?
-  //                              so far, all benchmarks are inconclusive, the lexer is too darn fast
-  private val nameFirst = ('a'.to('z').iterator ++ 'A'.to('Z').iterator ++ List('_').iterator).toSet
-  private val nameRest = ('a'.to('z').iterator ++ 'A'.to('Z').iterator ++ '0'.to('9').iterator ++ List('_', '!', '?', '$').iterator).toSet
-  private val hexDigits = ('0'.to('9').iterator ++ 'a'.to('f').iterator ++ 'A'.to('F').iterator).toSet
+  // Character classification functions
+  // NOTE: These were measured to be slightly faster than `('a' to 'z').iterator.toSet`, esp. on larger files.
+  inline private def isNameFirst(c: Char): Boolean =
+    (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
+
+  inline private def isNameRest(c: Char): Boolean =
+    isNameFirst(c) || (c >= '0' && c <= '9') || c == '!' || c == '?' || c == '$'
+
+  private def isHexDigit(c: Char): Boolean =
+    (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 
   sealed trait Delimiter
   case object StringDelim extends Delimiter
@@ -373,7 +377,7 @@ class Lexer(source: Source) extends Iterator[Token]:
       case c if c.isDigit => lexNumber()
 
       // Identifiers and keywords
-      case c if nameFirst.contains(c) => lexAlphanumeric()
+      case c if isNameFirst(c) => lexAlphanumeric()
 
       // String literals
       case '"' =>
@@ -536,7 +540,7 @@ class Lexer(source: Source) extends Iterator[Token]:
         case None => TokenKind.Error(LexerError.InvalidIntegerFormat)
 
   private def lexAlphanumeric(): TokenKind =
-    advanceWhile { (curr, _) => nameRest.contains(curr) }
+    advanceWhile { (curr, _) => isNameRest(curr) }
     val word = getCurrentSlice
 
     TokenKind.keywordMap.getOrElse(word, TokenKind.Ident(word))
@@ -630,7 +634,7 @@ class Lexer(source: Source) extends Iterator[Token]:
       case err => err
 
   private def lexUnicodeLiteral(): TokenKind =
-    advanceWhile { (curr, _) => hexDigits.contains(curr) }
+    advanceWhile { (curr, _) => isHexDigit(curr) }
     val hexStr = getCurrentSlice.substring(2) // Remove '\u'
 
     if hexStr.isEmpty then
@@ -656,9 +660,9 @@ class Lexer(source: Source) extends Iterator[Token]:
         try java.lang.Integer.parseInt(hexStr, 16)
         catch case _: NumberFormatException => -1
 
-      case c if hexDigits.contains(c) =>
+      case c if isHexDigit(c) =>
         val start = position.byteOffset
-        advanceWhile { (curr, _) => hexDigits.contains(curr) }
+        advanceWhile { (curr, _) => isHexDigit(curr) }
         val hexStr = source.content.substring(start, position.byteOffset)
         try java.lang.Integer.parseInt(hexStr, 16)
         catch case _: NumberFormatException => -1
