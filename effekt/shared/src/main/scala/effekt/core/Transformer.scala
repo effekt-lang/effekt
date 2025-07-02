@@ -135,7 +135,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   /**
    * In core, we only export value binders and proper functions
    */
-  def transform(exports: Bindings): List[Id] = exports.terms.flatMap {
+  def transform(exports: Namespace): List[Id] = exports.terms.flatMap {
     case (name, syms) => syms.collect {
       case sym: Callable if !sym.isInstanceOf[Operation] && !sym.isInstanceOf[Field] => sym
       case sym: ValBinder => sym

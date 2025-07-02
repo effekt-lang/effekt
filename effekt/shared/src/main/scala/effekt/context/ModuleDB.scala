@@ -59,7 +59,7 @@ trait ModuleDB { self: Context =>
   def checkMain(mod: Module)(implicit C: Context): TermSymbol = C.at(mod.decl) {
 
     // deep discovery of main: should be replaced by explicit @main annotation
-    def findMain(b: Bindings): Set[TermSymbol] =
+    def findMain(b: Namespace): Set[TermSymbol] =
       b.terms.getOrElse("main", Set()) ++ b.namespaces.flatMap { case (_, b) => findMain(b) }
 
     val mains = findMain(mod.exports)

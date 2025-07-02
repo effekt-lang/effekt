@@ -44,8 +44,8 @@ case class Module(
 
   def path = decl.path
 
-  private var _exports: Bindings = _
-  def exports: Bindings = _exports
+  private var _exports: Namespace = _
+  def exports: Namespace = _exports
 
   def terms = exports.terms
   def types = exports.types
@@ -95,7 +95,7 @@ case class Module(
    */
   def exports(
     includes: List[Module],
-    exports: Bindings
+    exports: Namespace
   ): this.type = {
     _includes = includes
     _exports = exports

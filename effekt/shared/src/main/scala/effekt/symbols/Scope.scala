@@ -5,20 +5,6 @@ import effekt.source.IdRef
 import effekt.util.messages.ErrorReporter
 
 /**
- * An immutable container of bindings
- */
-case class Bindings(
-  terms: Map[String, Set[TermSymbol]], // terms can be overloaded
-  types: Map[String, TypeSymbol],
-  captures: Map[String, Capture],
-  namespaces: Map[String, Bindings]
-)
-
-object Bindings {
-  def empty: Bindings = Bindings(Map.empty, Map.empty, Map.empty, Map.empty)
-}
-
-/**
  * An immutable container of bindings.
  */
 case class Namespace(
@@ -28,8 +14,8 @@ case class Namespace(
   namespaces: Map[String, Namespace] = Map.empty
 ) {
 
-  def importAll(other: Bindings): Namespace = other match {
-    case Bindings(terms2, types2, captures2, namespaces2) =>
+  def importAll(other: Namespace): Namespace = other match {
+    case Namespace(terms2, types2, captures2, namespaces2) =>
       val withTerms = terms2.foldLeft(this) {
         case (ns, (name, syms)) =>
           syms.foldLeft(ns) { (ns2, sym) =>
@@ -71,8 +57,8 @@ case class Namespace(
       case _ => Set.empty
     }.groupMap(_.name.name)(op => op)
 
-  def toBindings: Bindings =
-    Bindings(
+  def toBindings: Namespace =
+    Namespace(
       terms,
       types,
       captures,
@@ -144,7 +130,7 @@ object scopes {
   }
 
   case class Scoping(modulePath: List[String], var scope: Scope) {
-    def importAs(bindings: Bindings, path: List[String])(using E: ErrorReporter): Unit = {
+    def importAs(bindings: Namespace, path: List[String])(using E: ErrorReporter): Unit = {
       def go(ns: Namespace, path: List[String]): Namespace = path match {
         case pathSeg :: rest =>
           ns.updateNamespace(pathSeg, child => go(child, rest))
@@ -157,7 +143,7 @@ object scopes {
 
     // TODO check shadowing etc. Also here concrete functions will *always* shadow imports,
     //   regardless of the order of importing / defining.
-    def importAll(imports: Bindings)(using E: ErrorReporter): Unit = {
+    def importAll(imports: Namespace)(using E: ErrorReporter): Unit = {
       scope = scope.withImports(scope.imports.importAll(imports))
     }
 
@@ -304,7 +290,7 @@ object scopes {
     def define(name: String, capt: Capture)(using ErrorReporter): Unit =
       scope = scope.withBindings(scope.bindings.setCapture(name, capt))
 
-    def exports: Bindings = scope.bindings.toBindings
+    def exports: Namespace = scope.bindings.toBindings
 
     def scoped[R](name: String, block: => R): R =
       val before = scope
@@ -338,7 +324,7 @@ object scopes {
       collect(scope)
   }
 
-  def toplevel(modulePath: List[String], prelude: Bindings): Scoping =
+  def toplevel(modulePath: List[String], prelude: Namespace): Scoping =
     val imports = Namespace.empty.importAll(prelude)
     Scoping(modulePath, Scope.Global(imports, Namespace.empty))
 }
