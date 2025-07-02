@@ -162,6 +162,17 @@ class LexerTests extends munit.FunSuite {
     )
   }
 
+  test("interpolated hole string") {
+    val prog = "<\" natural language text with terms like ${ 1 + 1 } inside \">"
+    assertTokensEq(
+      prog,
+      HoleStr(" natural language text with terms like "),
+      `${`, Integer(1), `+`, Integer(1), `}$`,
+      HoleStr(" inside "),
+      EOF
+    )
+  }
+
   test("quoted multi-line string") {
     val prog =
       "\"\"\"multi-line quote\n" +

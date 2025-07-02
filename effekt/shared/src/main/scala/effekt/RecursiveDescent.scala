@@ -192,7 +192,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   */
 
   // tokens that delimit a statement
-  def returnPosition: Boolean = peek(`}`) || peek(`case`) || peek(`}>`) || peek(EOF)
+  def returnPosition: Boolean = peek(`}`) || peek(`}$`) || peek(`case`) || peek(`}>`) || peek(EOF)
 
   /**
    * Statements
@@ -207,7 +207,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case `return` =>
           val result = `return` ~> Return(expr() <~ maybeSemi(), span())
           result
-        case `}` => // Unexpected end of <STMTS> =>
+        case `}` | `}$` => // Unexpected end of <STMTS> =>
           // insert a synthetic `return ()` into the block
           Return(UnitLit(span().emptyAfter.synthesized), span().emptyAfter.synthesized)
         case _ =>
@@ -1107,15 +1107,16 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     case _ if isTupleOrGroup => tupleOrGroup()
     case _ if isListLiteral  => listLiteral()
     case `${` =>
-      val startPosition = position
-      manyUntil(next(), `}$`)
-      val endPosition = position
-      if peek(`}$`) then consume(`}$`) else if peek(`}`) then consume(`}`)
+      nonterminal:
+        val startPosition = position
+        manyUntil(next(), `}$`)
+        val endPosition = position
+        if peek(`}$`) then consume(`}$`) else if peek(`}`) then consume(`}`)
 
-      val msg = s"Unexpected splice: string interpolation $${ ... } is only allowed in strings!"
-      softFail(msg, startPosition, endPosition)
+        val msg = s"Unexpected splice: string interpolation $${ ... } is only allowed in strings!"
+        softFail(msg, startPosition, endPosition)
 
-      UnitLit() // XXX(jiribenes, 2025-07-01): HACK!
+        UnitLit(span().synthesized) // XXX(jiribenes, 2025-07-01): HACK!
 
     case k => fail("variables, literals, tuples, lists, holes or group", k)
   }
@@ -1167,7 +1168,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def holeTemplate(): Template[Stmt] =
     nonterminal:
       val first = holeString()
-      val (s, strs) = manyWhile((`${` ~> stmts() <~ `}`, holeString()), `${`).unzip
+      val (s, strs) = manyWhile((`${` ~> stmts() <~ `}$`, holeString()), `${`).unzip
       Template(first :: strs, s)
 
   def holeString(): String =
