@@ -317,12 +317,6 @@ void c_tcp_close(Int handle, Stack stack) {
     uv_close(uv_handle, c_tcp_close_cb);
 }
 
-
-typedef struct {
-    Stack stack;
-    struct Pos handler;
-} tcp_accept_closure_t;
-
 void c_tcp_listen(String host, Int port, Int backlog, Stack stack) {
     // TODO make non-async
     char* host_str = c_bytearray_into_nullterminated_string(host);
@@ -343,27 +337,32 @@ void c_tcp_listen(String host, Int port, Int backlog, Stack stack) {
     free(host_str);
 
     if (result < 0) {
-        free(tcp_handle);
+        uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
         resume_Int(stack, result);
         return;
     }
 
     result = uv_tcp_bind(tcp_handle, (const struct sockaddr*)&addr, 0);
     if (result < 0) {
-        free(tcp_handle);
+        uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
         resume_Int(stack, result);
         return;
     }
 
     result = uv_listen((uv_stream_t*)tcp_handle, backlog, NULL);
     if (result < 0) {
-        free(tcp_handle);
+        uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
         resume_Int(stack, result);
         return;
     }
 
     resume_Int(stack, (int64_t)tcp_handle);
 }
+
+typedef struct {
+    Stack stack;
+    struct Pos handler;
+} tcp_accept_closure_t;
 
 void c_tcp_accept_cb(uv_stream_t* server, int status) {
     tcp_accept_closure_t* accept_closure = (tcp_accept_closure_t*)server->data;
