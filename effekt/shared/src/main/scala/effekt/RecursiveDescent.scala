@@ -1133,7 +1133,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         val msg = s"Unexpected splice: string interpolation $${ ... } is only allowed in strings!"
         softFail(msg, startPosition, endPosition)
 
-        StringLit("<splice>", span().synthesized) // XXX(jiribenes, 2025-07-01): HACK!
+        StringLit("<splice>", span().synthesized) // HACK(jiribenes, 2025-07-01): We should really make a Tree.Error for these situations.
 
     case k => fail("variables, literals, tuples, lists, holes or group", k)
   }
