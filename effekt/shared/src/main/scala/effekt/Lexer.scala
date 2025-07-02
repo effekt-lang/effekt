@@ -263,27 +263,24 @@ class Lexer(source: Source) extends Iterator[Token] {
   }
   export Delimiter.*
 
-  private var done: Boolean = false
+  private var eof: Boolean = false
 
-  override def hasNext: Boolean = !done
+  override def hasNext: Boolean = !eof
 
   override def next(): Token =
     if !resumeStringNext || delimiters.isEmpty then
-      skipWhitespaceAndNewlines()
+      skipWhitespace()
 
     tokenStartPosition = position
     val kind = nextToken()
 
-    makeToken(kind)
-
-  private def makeToken(kind: TokenKind): Token =
     if kind == TokenKind.EOF then
-      done = true
+      eof = true
       Token(tokenStartPosition.offset, position.offset, kind)
     else
       Token(tokenStartPosition.offset, position.offset - 1, kind)
 
-  private def skipWhitespaceAndNewlines(): Unit =
+  private def skipWhitespace(): Unit =
     while !atEndOfInput do
       currentChar match
         case ' ' | '\t' => advance()
@@ -294,7 +291,7 @@ class Lexer(source: Source) extends Iterator[Token] {
         case _ => return
 
   private def atEndOfInput: Boolean =
-    position.offset >= source.content.length
+    currentChar == '\u0000'
 
   private def advance(): Char =
     val ret = currentChar
@@ -344,8 +341,7 @@ class Lexer(source: Source) extends Iterator[Token] {
   private def handleInterpolationEnd(): Unit =
     interpolationDepths.pop()
     depthTracker.braces -= 1
-    advance() // consume '}'
-
+    // remember to resume with a string next!
     resumeStringNext = true
 
   // String interpolation resumption
@@ -448,7 +444,7 @@ class Lexer(source: Source) extends Iterator[Token] {
 
       case ('}', _) if isAtInterpolationBoundary =>
         handleInterpolationEnd()
-        TokenKind.`}$` // note that we don't advance here!
+        advanceWith(TokenKind.`}$`)
       case ('}', '>') => advance2With(TokenKind.`}>`)
       case ('}', _) =>
         depthTracker.braces -= 1
@@ -508,10 +504,20 @@ class Lexer(source: Source) extends Iterator[Token] {
 
     TokenKind.keywordMap.getOrElse(word, TokenKind.Ident(word))
 
+  /**
+   * Lexes any kind of string given by [[Delimiter]].
+   * [[continued]] is set when we return to lexing a string after a stint in a splice.
+   *
+   * Contract: Expects its caller to already consume the delimiter itself!
+   */
   private def lexString(delimiter: Delimiter, continued: Boolean = false): TokenKind = {
     if !continued then delimiters.push(delimiter)
 
     val contents = StringBuilder()
+
+    /**
+     * Creates the correct token to be returned, takes care of the [[delimiters]] stack.
+     */
     def close(shouldPop: Boolean = true) = {
       if shouldPop then delimiters.pop()
 
