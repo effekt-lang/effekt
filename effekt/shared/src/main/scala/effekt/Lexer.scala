@@ -6,7 +6,7 @@ import effekt.source.Span
 import kiama.util.Source
 
 /** Lexing errors that can occur during tokenization */
-enum LexerError:
+enum LexerError {
   case InvalidEscapeSequence(char: Char)
   case Expected(char: Char)
   case UnknownChar(char: Char)
@@ -34,19 +34,21 @@ enum LexerError:
     case InvalidUnicodeLiteral => "Invalid unicode literal"
     case InvalidIntegerFormat => "Invalid integer format, not a 64bit integer literal"
     case InvalidDoubleFormat => "Invalid float format, not a double literal"
+}
 
 /**
  * A token consist of the absolute starting position, the absolute end position in the source file
  * and the kind of token. Both positions are to be understood as inclusive.
  */
-case class Token(start: Int, end: Int, kind: TokenKind):
+case class Token(start: Int, end: Int, kind: TokenKind) {
   def span(source: Source): Span = Span(source, start, end)
   def isError: Boolean = this.kind match {
     case TokenKind.Error(_) => true
     case _ => false
   }
+}
 
-enum TokenKind:
+enum TokenKind {
   // control tokens
   case EOF // end of input
   case Error(error: LexerError) // invalid token with a reason
@@ -141,8 +143,9 @@ enum TokenKind:
   case `is`
   case `namespace`
   case `pure`
+}
 
-object TokenKind:
+object TokenKind {
   // "Soft" keywords
   val `resume` = TokenKind.Ident("resume")
   val `in` = TokenKind.Ident("in")
@@ -174,17 +177,20 @@ object TokenKind:
 
   val keywordMap: immutable.HashMap[String, TokenKind] =
     immutable.HashMap.from(keywords.map(k => k.toString -> k))
+}
 
 // Full position tracking
-case class Position(index: Int, byteOffset: Int, line: Int, column: Int):
+case class Position(index: Int, byteOffset: Int, line: Int, column: Int) {
   def advance(charWidth: Int, isNewline: Boolean): Position =
     if isNewline then
       Position(index + charWidth, byteOffset + 1, line + 1, 1)
     else
       Position(index + charWidth, byteOffset + 1, line, column + charWidth)
+}
 
-object Position:
+object Position {
   def begin: Position = Position(0, 0, 1, 1)
+}
 
 /**
  * Tracks brace/paren/bracket depth for string interpolation.
@@ -193,20 +199,21 @@ object Position:
  * interpolation boundaries. When we see ${, we record the current brace depth
  * and know the interpolation ends when we return to that depth.
  */
-case class BraceTracker(var parens: Int, var braces: Int, var brackets: Int):
+case class BraceTracker(var parens: Int, var braces: Int, var brackets: Int) {
   def incrementParens = { this.parens += 1 }
   def decrementParens = { this.parens -= 1 }
   def incrementBraces = { this.braces += 1 }
   def decrementBraces = { this.braces -= 1 }
   def incrementBrackets = { this.brackets += 1 }
   def decrementBrackets = { this.brackets -= 1 }
+}
 
 /**
  * Never throws exceptions - always returns Error tokens for errors.
  *
  * @param source The source file to be lexed
  */
-class Lexer(source: Source) extends Iterator[Token]:
+class Lexer(source: Source) extends Iterator[Token] {
   import TokenKind.*
 
   // Lexer state with current/next character lookahead
@@ -244,17 +251,16 @@ class Lexer(source: Source) extends Iterator[Token]:
   private def isHexDigit(c: Char): Boolean =
     (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 
-  sealed trait Delimiter
-  case object StringDelim extends Delimiter
-  case object MultiStringDelim extends Delimiter
-  case object CharDelim extends Delimiter
-  case object HoleDelim extends Delimiter
+  enum Delimiter {
+    case StringDelim, MultiStringDelim, CharDelim, HoleDelim
 
-  def allowsInterpolation(d: Delimiter): Boolean = d match
-    case StringDelim => true
-    case MultiStringDelim => true
-    case CharDelim => false
-    case HoleDelim => true
+    def allowsInterpolation: Boolean = this match
+      case StringDelim => true
+      case MultiStringDelim => true
+      case CharDelim => false
+      case HoleDelim => true
+  }
+  export Delimiter.*
 
   private var done: Boolean = false
 
@@ -296,21 +302,15 @@ class Lexer(source: Source) extends Iterator[Token]:
     position = position.advance(1 /* ret.toString.getBytes("UTF-8").length */, ret == '\n')
     ret
 
-  private def advanceWith(token: TokenKind): TokenKind =
-    advance()
-    token
+  private def advanceWith(kind: TokenKind): TokenKind =
+    advance(); kind
 
-  private def advance2With(token: TokenKind): TokenKind =
-    advance()
-    advance()
-    token
+  private def advance2With(kind: TokenKind): TokenKind =
+    advance(); advance(); kind
 
-  private def peek(): Char = currentChar
-  private def peekNext(): Char = nextChar
-
-  private def expect(expected: Char, token: TokenKind): TokenKind =
+  private def expect(expected: Char, kind: TokenKind): TokenKind =
     if currentChar == expected then
-      advanceWith(token)
+      advanceWith(kind)
     else
       advanceWith(TokenKind.Error(LexerError.Expected(expected)))
 
@@ -349,16 +349,16 @@ class Lexer(source: Source) extends Iterator[Token]:
 
   // String interpolation resumption
   private def resumeStringAfterInterpolation(): TokenKind =
-    if delimiters.nonEmpty then
-      delimiters.top match
-        case StringDelim => lexString(StringDelim, continued = true)
-        case MultiStringDelim => lexString(MultiStringDelim, continued = true)
-        case HoleDelim => lexString(HoleDelim, continued = true)
-        case CharDelim =>
-          skipWhitespaceAndNewlines()
-          nextToken() // recovery
-    else
-      nextToken() // recovery
+    if (delimiters.nonEmpty) {
+      delimiters.top match {
+        case StringDelim => return lexString(StringDelim, continued = true)
+        case MultiStringDelim => return lexString(MultiStringDelim, continued = true)
+        case HoleDelim => return lexString(HoleDelim, continued = true)
+        case _ => ()
+      }
+    }
+    // otherwise, try to recover
+    nextToken()
 
   /**
    * "Main" function for getting the next token kind.
@@ -520,7 +520,6 @@ class Lexer(source: Source) extends Iterator[Token]:
 //      }
 //    }
 
-
     val contents = StringBuilder()
 
     while (!atEndOfInput) {
@@ -560,7 +559,7 @@ class Lexer(source: Source) extends Iterator[Token]:
               return TokenKind.Error(LexerError.InvalidEscapeSequence(c))
 
         // interpolation
-        case ('$', '{') if allowsInterpolation(delimiter) =>
+        case ('$', '{') if delimiter.allowsInterpolation =>
           if delimiter == HoleDelim
           then return TokenKind.HoleStr(contents.toString)
           else return TokenKind.Str(contents.toString, delimiter == HoleDelim || delimiter == MultiStringDelim) // TODO(jiribenes): Huh? HACK FIXME XXX
@@ -611,11 +610,13 @@ class Lexer(source: Source) extends Iterator[Token]:
         val start = position.byteOffset
         advanceWhile { (curr, _) => curr != '}' }
         if currentChar != '}' then return -1
+
         advance() // consume '}'
         val hexStr = source.content.substring(start, position.byteOffset - 1)
         try java.lang.Integer.parseInt(hexStr, 16)
         catch case _: NumberFormatException => -1
 
+      // TODO(jiribenes): revamp this syntax, count to 4 at most?
       case c if isHexDigit(c) =>
         val start = position.byteOffset
         advanceWhile { (curr, _) => isHexDigit(curr) }
@@ -636,12 +637,13 @@ class Lexer(source: Source) extends Iterator[Token]:
 
   private def lexMultilineComment(): TokenKind =
     var done = false
-    while !atEndOfInput && !done do
+    while (!atEndOfInput && !done) {
       (currentChar, nextChar) match {
         case ('/', '*') => advance(); advance() // ignored!
         case ('*', '/') => advance(); advance(); done = true
         case _ => advance()
       }
+    }
 
     if !done then
       TokenKind.Error(LexerError.UnterminatedComment)
@@ -673,8 +675,10 @@ class Lexer(source: Source) extends Iterator[Token]:
     advanceWhile { (curr, _) => curr != '\n' }
     val command = getCurrentSlice.substring(2) // Remove '#!'
     TokenKind.Shebang(command)
+}
 
-object Lexer:
+object Lexer {
   def lex(source: Source): Vector[Token] =
     val lexer = Lexer(source)
     lexer.toVector
+}
