@@ -73,8 +73,6 @@ object Namespace {
 object scopes {
 
   enum Scope {
-    self =>
-
     /**
      * The toplevel global scope ("project scope")
      */
@@ -106,8 +104,30 @@ object scopes {
      */
     def withBindings(newBindings: Namespace): Scope = this match {
       case g@Global(_, _) => g.copy(bindings = newBindings)
-      case n@Named(_, _, _) => n.copy(bindings = newBindings)
+      case n@Named(_, _, _) =>
+        // Changing the bindings in a namespace requires us to update the outer scope(s) to point to the new bindings as well.
+        val updatedOuter = updateOuterScopes(n.outer, n.name, newBindings)
+        Named(n.name, newBindings, updatedOuter)
       case l@Local(_, _, _, _) => l.copy(bindings = newBindings)
+    }
+
+    /**
+     * Update the outer scope so that in its `bindings.namespaces` map the entry `key -> childBindings` is updated.
+     * Returns the current scope with the updated outer scope.
+     */
+    private def updateOuterScopes(current: Scope, key: String, childBindings: Namespace): Scope = current match {
+      case g: Global =>
+        val updatedBindings = g.bindings.copy(namespaces = g.bindings.namespaces.updated(key, childBindings))
+        Global(g.imports, updatedBindings)
+
+      case n: Named =>
+        val updatedBindings = n.bindings.copy(namespaces = n.bindings.namespaces.updated(key, childBindings))
+        val updatedOuter = updateOuterScopes(n.outer, n.name, updatedBindings)
+        Named(n.name, updatedBindings, updatedOuter)
+
+      case l: Local =>
+        val updatedOuter = updateOuterScopes(l.outer, key, childBindings)
+        Local(l.name, l.imports, l.bindings, updatedOuter)
     }
 
     /**
@@ -122,12 +142,12 @@ object scopes {
     /**
      * Returns a new scope with the `newNamespaces`
      */
-    def withNamespaces(newNamespaces: Map[String, Namespace]): Scope = this match {
-      case g@Global(imports, bindings) => g.copy(bindings = bindings.copy(namespaces = newNamespaces))
-      case n@Named(name, bindings, outer) => n.copy(bindings = bindings.copy(namespaces = newNamespaces))
-      case l@Local(name, imports, bindings, outer) => l.copy(bindings = bindings.copy(namespaces = newNamespaces))
+    def withNamespaces(newNamespaces: Map[String, Namespace]): Scope = {
+      val updatedBindings = bindings.copy(namespaces = newNamespaces)
+      withBindings(updatedBindings)
     }
   }
+
 
   case class Scoping(modulePath: List[String], var scope: Scope) {
     def importAs(bindings: Namespace, path: List[String])(using E: ErrorReporter): Unit = {
@@ -306,8 +326,8 @@ object scopes {
     def namespace[R](name: String)(block: => R): R =
       val before = scope
       val childNamespace = before.bindings.getNamespace(name).getOrElse(Namespace.empty)
-      val newBefore = before.withNamespaces(before.bindings.namespaces.updated(name, childNamespace))
-      scope = Scope.Named(name, childNamespace, newBefore)
+      val newOuter = before.withNamespaces(before.bindings.namespaces.updated(name, childNamespace))
+      scope = Scope.Named(name, childNamespace, newOuter)
       try { block } finally { scope = before.withNamespaces(before.bindings.namespaces.updated(name, scope.bindings)) }
 
     // returns the current path
