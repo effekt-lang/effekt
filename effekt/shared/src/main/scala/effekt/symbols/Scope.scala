@@ -4,8 +4,6 @@ package symbols
 import effekt.source.IdRef
 import effekt.util.messages.ErrorReporter
 
-import scala.annotation.tailrec
-
 /**
  * An immutable container of bindings
  */
@@ -147,7 +145,6 @@ object scopes {
 
   case class Scoping(modulePath: List[String], var scope: Scope) {
     def importAs(bindings: Bindings, path: List[String])(using E: ErrorReporter): Unit = {
-      @tailrec
       def go(ns: Namespace, path: List[String]): Namespace = path match {
         case pathSeg :: rest =>
           ns.updateNamespace(pathSeg, child => go(child, rest))
