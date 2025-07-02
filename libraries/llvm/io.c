@@ -186,8 +186,7 @@ void c_tcp_connect_cb(uv_connect_t* request, int status) {
     Stack stack = (Stack)request->data;
 
     if (status < 0) {
-        uv_close((uv_handle_t*)request->handle, NULL);
-        free(request->handle);
+        uv_close((uv_handle_t*)request->handle, (uv_close_cb)free);
         free(request);
         resume_Int(stack, status);
     } else {
@@ -394,8 +393,7 @@ void c_tcp_accept_cb(uv_stream_t* server, int status) {
     result = uv_accept(server, (uv_stream_t*)client);
     if (result < 0) {
         // TODO resume last
-        uv_close((uv_handle_t*)client, NULL);
-        free(client);
+        uv_close((uv_handle_t*)client, (uv_close_cb)free);
         erasePositive(accept_closure->handler);
         resume_Int(accept_closure->stack, result);
         free(accept_closure);
