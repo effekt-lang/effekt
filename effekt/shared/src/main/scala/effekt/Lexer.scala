@@ -179,34 +179,29 @@ object TokenKind {
     immutable.HashMap.from(keywords.map(k => k.toString -> k))
 }
 
-// Full position tracking
-case class Position(index: Int, byteOffset: Int, line: Int, column: Int) {
-  def advance(charWidth: Int, isNewline: Boolean): Position =
+/**
+ * We use `Position` to track the byte offset (0-indexed), line (1-indexed) and column (1-indexed).
+ */
+case class Position(offset: Int, line: Int, column: Int) {
+  def advance(isNewline: Boolean): Position =
     if isNewline then
-      Position(index + charWidth, byteOffset + 1, line + 1, 1)
+      Position(offset + 1, line + 1, 1)
     else
-      Position(index + charWidth, byteOffset + 1, line, column + charWidth)
+      Position(offset + 1, line, column + 1)
 }
 
 object Position {
-  def begin: Position = Position(0, 0, 1, 1)
+  def begin: Position = Position(0, 1, 1)
 }
 
 /**
- * Tracks brace/paren/bracket depth for string interpolation.
+ * Tracks brace/paren/bracket depth for string interpolation and error recovery.
  *
- * DESIGN NOTE: This is specifically for tracking brace depth to determine
+ * This is specifically for tracking brace depth to determine
  * interpolation boundaries. When we see ${, we record the current brace depth
  * and know the interpolation ends when we return to that depth.
  */
-case class BraceTracker(var parens: Int, var braces: Int, var brackets: Int) {
-  def incrementParens = { this.parens += 1 }
-  def decrementParens = { this.parens -= 1 }
-  def incrementBraces = { this.braces += 1 }
-  def decrementBraces = { this.braces -= 1 }
-  def incrementBrackets = { this.brackets += 1 }
-  def decrementBrackets = { this.brackets -= 1 }
-}
+case class DepthTracker(var parens: Int, var braces: Int, var brackets: Int)
 
 /**
  * Never throws exceptions - always returns Error tokens for errors.
@@ -225,7 +220,7 @@ class Lexer(source: Source) extends Iterator[Token] {
 
   // String interpolation state
   private val delimiters = mutable.Stack[Delimiter]()
-  private val braceTracker = BraceTracker(0, 0, 0)
+  private val depthTracker = DepthTracker(0, 0, 0)
   private val interpolationDepths = mutable.Stack[Int]()
 
   /**
@@ -278,9 +273,9 @@ class Lexer(source: Source) extends Iterator[Token] {
   private def makeToken(kind: TokenKind): Token =
     if kind == TokenKind.EOF then
       done = true
-      Token(tokenStartPosition.byteOffset, position.byteOffset, kind)
+      Token(tokenStartPosition.offset, position.offset, kind)
     else
-      Token(tokenStartPosition.byteOffset, position.byteOffset - 1, kind)
+      Token(tokenStartPosition.offset, position.offset - 1, kind)
 
   private def skipWhitespaceAndNewlines(): Unit =
     while !atEndOfInput do
@@ -293,13 +288,13 @@ class Lexer(source: Source) extends Iterator[Token] {
         case _ => return
 
   private def atEndOfInput: Boolean =
-    position.byteOffset >= source.content.length
+    position.offset >= source.content.length
 
   private def advance(): Char =
     val ret = currentChar
     currentChar = nextChar
     nextChar = if charIterator.hasNext then charIterator.next() else '\u0000'
-    position = position.advance(1 /* ret.toString.getBytes("UTF-8").length */, ret == '\n')
+    position = position.advance(ret == '\n')
     ret
 
   private def advanceWith(kind: TokenKind): TokenKind =
@@ -315,7 +310,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       advanceWith(TokenKind.Error(LexerError.Expected(expected)))
 
   private def getCurrentSlice: String =
-    source.content.substring(tokenStartPosition.byteOffset, position.byteOffset)
+    source.content.substring(tokenStartPosition.offset, position.offset)
 
   private def advanceWhile(predicate: (Char, Char) => Boolean): String =
     while predicate(currentChar, nextChar) && !atEndOfInput do
@@ -323,7 +318,7 @@ class Lexer(source: Source) extends Iterator[Token] {
     getCurrentSlice
 
   private def peekAhead(offset: Int): Char =
-    val targetIndex = position.byteOffset + offset
+    val targetIndex = position.offset + offset
     if targetIndex < source.content.length then
       source.content(targetIndex)
     else
@@ -334,7 +329,7 @@ class Lexer(source: Source) extends Iterator[Token] {
    * This happens when the current brace depth matches the depth when interpolation started.
    */
   private def isAtInterpolationBoundary: Boolean =
-    interpolationDepths.nonEmpty && interpolationDepths.top == braceTracker.braces
+    interpolationDepths.nonEmpty && interpolationDepths.top == depthTracker.braces
 
   /**
    * Handle the end of an interpolation expression.
@@ -342,7 +337,7 @@ class Lexer(source: Source) extends Iterator[Token] {
    */
   private def handleInterpolationEnd(): Unit =
     interpolationDepths.pop()
-    braceTracker.decrementBraces
+    depthTracker.braces -= 1
     advance() // consume '}'
 
     resumeStringNext = true
@@ -439,8 +434,8 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('-', _)  => advanceWith(TokenKind.`-`)
 
       case ('$', '{') =>
-        interpolationDepths.push(braceTracker.braces + 1)
-        braceTracker.incrementBraces
+        interpolationDepths.push(depthTracker.braces + 1)
+        depthTracker.braces += 1
         advance2With(TokenKind.`${`)
       case ('$', _) =>
         advanceWith(TokenKind.Error(LexerError.UnknownChar('$')))
@@ -450,26 +445,26 @@ class Lexer(source: Source) extends Iterator[Token] {
         TokenKind.`}$` // note that we don't advance here!
       case ('}', '>') => advance2With(TokenKind.`}>`)
       case ('}', _) =>
-        braceTracker.decrementBraces
+        depthTracker.braces -= 1
         advanceWith(TokenKind.`}`)
 
       // Single-character tokens
       case (';', _) => advanceWith(TokenKind.`;`)
       case ('@', _) => advanceWith(TokenKind.`@`)
       case ('{', _) =>
-        braceTracker.incrementBraces
+        depthTracker.braces += 1
         advanceWith(TokenKind.`{`)
       case ('(', _) =>
-        braceTracker.incrementParens
+        depthTracker.parens += 1
         advanceWith(TokenKind.`(`)
       case (')', _) =>
-        braceTracker.decrementParens
+        depthTracker.parens -= 1
         advanceWith(TokenKind.`)`)
       case ('[', _) =>
-        braceTracker.incrementBrackets
+        depthTracker.brackets += 1
         advanceWith(TokenKind.`[`)
       case (']', _) =>
-        braceTracker.decrementBrackets
+        depthTracker.brackets -= 1
         advanceWith(TokenKind.`]`)
       case (',', _) => advanceWith(TokenKind.`,`)
       case ('.', _) => advanceWith(TokenKind.`.`)
@@ -607,20 +602,20 @@ class Lexer(source: Source) extends Iterator[Token] {
     currentChar match
       case '{' =>
         advance()
-        val start = position.byteOffset
+        val start = position.offset
         advanceWhile { (curr, _) => curr != '}' }
         if currentChar != '}' then return -1
 
         advance() // consume '}'
-        val hexStr = source.content.substring(start, position.byteOffset - 1)
+        val hexStr = source.content.substring(start, position.offset - 1)
         try java.lang.Integer.parseInt(hexStr, 16)
         catch case _: NumberFormatException => -1
 
       // TODO(jiribenes): revamp this syntax, count to 4 at most?
       case c if isHexDigit(c) =>
-        val start = position.byteOffset
+        val start = position.offset
         advanceWhile { (curr, _) => isHexDigit(curr) }
-        val hexStr = source.content.substring(start, position.byteOffset)
+        val hexStr = source.content.substring(start, position.offset)
         try java.lang.Integer.parseInt(hexStr, 16)
         catch case _: NumberFormatException => -1
 
