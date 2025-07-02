@@ -308,6 +308,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
          case `import` => includeDecl()
          case _ => expr()
        }
+       // NOTE: This means we expected EOF, but there's still some stuff left over.
        if peek(`EOF`) then res else fail("Unexpected item")
 
   /**
@@ -323,6 +324,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
        val res = ModuleDecl(name, manyWhile(includeDecl(), `import`), toplevelDefs(), doc, span())
 
        if (!peek(`EOF`)) {
+         // NOTE: This means we expected EOF, but there's still some _stuff_ left over.
+
          val startPosition = position
          manyUntil({ skip() }, `EOF`)
          val endPosition = position
@@ -330,9 +333,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
          softFail("Expected top-level definition", startPosition, endPosition)
        }
        res
-
-       // if peek(`EOF`) then res else fail("Unexpected end of input TEST2")
-       // failure("Required at least one top-level function or effect definition")
 
   def shebang(): Unit =
     peek.kind match {
