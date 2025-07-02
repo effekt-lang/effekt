@@ -1,7 +1,7 @@
 package effekt
 
 import com.google.gson.{Gson, GsonBuilder, JsonElement, JsonParser}
-import effekt.Intelligence.{BindingInfo, BindingOrigin, ScopeInfo, ScopeKind, TermBinding, TypeBinding}
+import effekt.Intelligence.{BindingInfo, BindingOrigin, Code, HoleItemKind, NaturalLanguage, ScopeInfo, ScopeKind, TermBinding, TypeBinding}
 import munit.FunSuite
 import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit}
 import org.eclipse.lsp4j.jsonrpc.messages
@@ -1478,7 +1478,12 @@ class LSPTests extends FunSuite {
             outer = None
           ))
         ))
-    ))
+      ),
+      body = List(
+        NaturalLanguage(text = "This is some natural language text."),
+        Code(text = "do foo()", `type` = Some("String"))
+      )
+    )
 
     val expectedJsonStr =
       """{
@@ -1522,7 +1527,18 @@ class LSPTests extends FunSuite {
         |        ]
         |      }
         |    }
-        |  }
+        |  },
+        |  "body": [
+        |    {
+        |      "kind": "NaturalLanguage",
+        |      "text": "This is some natural language text."
+        |    },
+        |    {
+        |      "kind": "Code",
+        |      "text": "do foo()",
+        |      "type": "String"
+        |    }
+        |  ]
         |}""".stripMargin
 
     val expectedJson: JsonElement = JsonParser.parseString(expectedJsonStr)
@@ -1553,6 +1569,140 @@ class LSPTests extends FunSuite {
       val receivedHoles = client.receivedHoles()
       assertEquals(receivedHoles.length, 1)
       assert(receivedHoles.head.holes.isEmpty)
+    }
+  }
+
+  test("Server publishes single-expression hole body") {
+    withClientAndServer { (client, server) =>
+      val source =
+        """
+          |def foo(x: Int): Int = <{ x + 1 }>
+          |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val expectedBody = List(
+        Code(
+          text = "x + 1",
+          `type` = Some("Int")
+        )
+      )
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+      val hole = receivedHoles.head.holes.head
+      assertEquals(hole.body, expectedBody)
+    }
+  }
+
+  test("Server publishes hole body if program typechecks") {
+    withClientAndServer { (client, server) =>
+      val source =
+             """
+             |effect foo(): Int
+             |effect bar(): String
+             |def baz(x: Int): Int / {foo, bar} = <"
+             |  This is some natural language text.
+             |  ${ do foo() }
+             |  Some more text.
+             |  ${ do bar() }
+             |">
+             |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val expectedBody = List(
+        NaturalLanguage(
+          text = "\n  This is some natural language text.\n  "
+        ),
+        Code(
+          text = "do foo()",
+          `type` = Some("Int")
+        ),
+        NaturalLanguage(
+          text = "\n  Some more text.\n  "
+        ),
+        Code(
+          text = "do bar()",
+          `type` = Some("String")
+        ),
+        NaturalLanguage(
+          text = "\n"
+        )
+      )
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+      val hole = receivedHoles.head.holes.head
+      assertEquals(hole.body, expectedBody)
+    }
+  }
+
+  test("Server publishes hole body if program doesn't typecheck") {
+    withClientAndServer { (client, server) =>
+      val source =
+        """
+          |effect foo(): Int
+          |effect bar(): String
+          |// Missing effect annotations in the return type, so this doesn't typecheck
+          |def baz(x: Int): Int = <"
+          |  This is some natural language text.
+          |  ${ do foo() }
+          |  Some more text.
+          |  ${ do bar() }
+          |">
+          |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val expectedBody = List(
+        NaturalLanguage(
+          text = "\n  This is some natural language text.\n  "
+        ),
+        Code(
+          text = "do foo()",
+          `type` = None
+        ),
+        NaturalLanguage(
+          text = "\n  Some more text.\n  "
+        ),
+        Code(
+          text = "do bar()",
+          `type` = None
+        ),
+        NaturalLanguage(
+          text = "\n"
+        )
+      )
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+      val hole = receivedHoles.head.holes.head
+      assertEquals(hole.body, expectedBody)
     }
   }
 

@@ -5,6 +5,7 @@ import effekt.source.{FunDef, Include, Maybe, ModuleDecl, Span, Tree, Doc}
 import effekt.symbols.{CaptureSet, Hole}
 import kiama.util.{Position, Source}
 import effekt.symbols.scopes.Scope
+import effekt.source.sourceOf
 
 trait Intelligence {
 
@@ -158,12 +159,14 @@ trait Intelligence {
     };
     val expectedType = hole.expectedType.map { t => pp"${t}" }
     val scopeInfo = allBindings(scope)
+    val body = holeBody(hole.decl.body, hole.argTypes)
     HoleInfo(
       hole.name.name,
       hole.decl.span,
       innerType,
       expectedType,
-      scopeInfo
+      scopeInfo,
+      body
     )
   }
 
@@ -199,6 +202,38 @@ trait Intelligence {
     }
 
     terms ++ types ++ nestedBindings
+
+  def holeBody(template: Template[source.Stmt], argTypes: List[Option[ValueType]])(using C: Context): List[HoleItem] = {
+    val Template(strings, args) = template
+    val argsAndTypes = if (argTypes.isEmpty) {
+      args.map((_, None))
+    } else {
+      args.zip(argTypes)
+    }
+    val buf = List.newBuilder[HoleItem]
+    val strIt = strings.iterator
+    val argIt = argsAndTypes.iterator
+
+    // Case 1: there is a single argument and no strings
+    // This happens when the hole is defined as a single statement/expression using the `<{ stmt }>` syntax
+    if (strIt.isEmpty && argIt.hasNext) {
+      val (stmt, tpeOpt) = argIt.next()
+      buf += Code(stmt.sourceOf, tpeOpt.map(t => pp"${t}"))
+      return buf.result()
+    }
+
+    // Case 2: starting with a string, it alternates between strings and arguments
+    // This happens when the hole is defined as a template using the `<"text ${ arg } text ${arg} ...">` syntax
+    while (strIt.hasNext) {
+      buf += NaturalLanguage(strIt.next())
+      if (argIt.hasNext) {
+        val (stmt, tpeOpt) = argIt.next()
+        buf += Code(stmt.sourceOf, tpeOpt.map(t => pp"${t}"))
+      }
+    }
+
+    buf.result()
+  }
 
   def allCaptures(src: Source)(using C: Context): List[(Tree, CaptureSet)] =
     C.annotationOption(Annotations.CaptureForFile, src).getOrElse(Nil)
@@ -368,9 +403,22 @@ object Intelligence {
   case class HoleInfo(
      id: String,
      span: Span,
+     /**
+      * If the hole contains a single expression, this is the type of that expression.
+      */
      innerType: Option[String],
+     /**
+      * The expected type of the hole, if available.
+      */
      expectedType: Option[String],
+     /**
+      * The scope in which the hole is defined, including all bindings.
+      */
      scope: ScopeInfo,
+     /**
+      * The body of the hole: a list of natural language and code.
+      */
+     body: List[HoleItem]
   )
 
   // These need to be strings (rather than cases of an enum) so that they get serialized correctly
@@ -413,6 +461,22 @@ object Intelligence {
       bindings: List[BindingInfo],
       outer: Option[ScopeInfo]
   )
+
+  sealed trait HoleItem {
+    val kind: String
+  }
+
+  object HoleItemKind {
+    final val NaturalLanguage = "NaturalLanguage"
+    final val Code = "Code"
+  }
+
+  case class NaturalLanguage(text: String) extends HoleItem {
+    val kind = HoleItemKind.NaturalLanguage
+  }
+  case class Code(text: String, `type`: Option[String]) extends HoleItem {
+    val kind = HoleItemKind.Code
+  }
 
   case class CaptureInfo(
     position: Position,

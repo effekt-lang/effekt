@@ -630,7 +630,8 @@ case class EffektHoleInfo(
   range: LSPRange,
   innerType: Option[String],
   expectedType: Option[String],
-  scope: Intelligence.ScopeInfo
+  scope: Intelligence.ScopeInfo,
+  body: List[Intelligence.HoleItem],
  )
 
 object EffektHoleInfo {
@@ -640,7 +641,8 @@ object EffektHoleInfo {
       convertRange(info.span.range),
       info.innerType,
       info.expectedType,
-      info.scope
+      info.scope,
+      info.body
     )
   }
 }
