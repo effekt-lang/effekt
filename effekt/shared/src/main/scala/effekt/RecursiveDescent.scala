@@ -1511,7 +1511,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     val before = position
     val beforePrevious = previous
     val labelBefore = currentLabel
-    val softFailsBefore = softFails
+    val softFailsBefore = softFails.clone()
     try { Maybe.Some(p, span(tokens(before).end)) } catch {
       case Fail(_, _) => {
         position = before
