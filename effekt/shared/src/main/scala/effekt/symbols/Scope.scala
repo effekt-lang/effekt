@@ -5,7 +5,6 @@ import effekt.source.IdRef
 import effekt.util.messages.ErrorReporter
 
 import scala.annotation.tailrec
-import scala.collection.mutable
 
 /**
  * An immutable container of bindings
@@ -22,32 +21,51 @@ object Bindings {
 }
 
 /**
- * A mutable container of bindings
+ * An immutable container of bindings.
  */
-class Namespace(
-  var terms: mutable.Map[String, Set[TermSymbol]],
-  var types: mutable.Map[String, TypeSymbol],
-  var captures: mutable.Map[String, Capture],
-  var namespaces: mutable.Map[String, Namespace]
+case class Namespace(
+  terms: Map[String, Set[TermSymbol]] = Map.empty,
+  types: Map[String, TypeSymbol] = Map.empty,
+  captures: Map[String, Capture] = Map.empty,
+  namespaces: Map[String, Namespace] = Map.empty
 ) {
-  def importAll(other: Bindings): Unit = other match {
+
+  def importAll(other: Bindings): Namespace = other match {
     case Bindings(terms2, types2, captures2, namespaces2) =>
-      terms2.foreach { case (k, syms) => syms.foreach(addTerm(k, _)) }
-      types2.foreach { case (k, v) => setType(k, v) }
-      captures2.foreach { case (k, v) => setCapture(k, v) }
-      namespaces2.foreach { case (k, v) => getNamespace(k).importAll(v) }
+      val withTerms = terms2.foldLeft(this) {
+        case (ns, (name, syms)) =>
+          syms.foldLeft(ns) { (ns2, sym) =>
+            ns2.addTerm(name, sym)
+          }
+      }
+      val withTypes = types2.foldLeft(withTerms) {
+        case (ns, (name, tpe)) =>
+          ns.setType(name, tpe)
+      }
+      val withCaptures = captures2.foldLeft(withTypes) {
+        case (ns, (name, capt)) =>
+          ns.setCapture(name, capt)
+      }
+      namespaces2.foldLeft(withCaptures) {
+        case (ns, (name, otherNs)) =>
+          ns.updateNamespace(name, _.importAll(otherNs))
+      }
   }
 
-  def addTerm(name: String, sym: TermSymbol): Unit =
-    val before = terms.getOrElse(name, Set.empty)
-    terms.update(name, before + sym)
-  def setType(name: String, sym: TypeSymbol): Unit =
-    types.update(name, sym)
-  def setCapture(name: String, sym: Capture): Unit =
-    captures.update(name, sym)
+  def addTerm(name: String, sym: TermSymbol): Namespace =
+    copy(terms = terms.updated(name, terms.getOrElse(name, Set.empty) + sym))
 
-  def getNamespace(name: String): Namespace =
-    namespaces.getOrElseUpdate(name, Namespace.empty)
+  def setType(name: String, sym: TypeSymbol): Namespace =
+    copy(types = types.updated(name, sym))
+
+  def setCapture(name: String, capt: Capture): Namespace =
+    copy(captures = captures.updated(name, capt))
+
+  def updateNamespace(name: String, f: Namespace => Namespace): Namespace =
+    copy(namespaces = namespaces.updated(name, f(namespaces.getOrElse(name, Namespace.empty))))
+
+  def getNamespace(name: String): Option[Namespace] =
+    namespaces.get(name)
 
   def operations: Map[String, Set[Operation]] =
     types.values.toSet.flatMap {
@@ -55,22 +73,23 @@ class Namespace(
       case _ => Set.empty
     }.groupMap(_.name.name)(op => op)
 
-  /**
-   * Convert to immutable bindings
-   */
-  def toBindings: Bindings = Bindings(
-    terms.toMap,
-    types.toMap,
-    captures.toMap,
-    namespaces.map { case (k, v) => k -> v.toBindings }.toMap)
+  def toBindings: Bindings =
+    Bindings(
+      terms,
+      types,
+      captures,
+      namespaces.view.mapValues(_.toBindings).toMap
+    )
 }
+
 object Namespace {
-  def empty: Namespace = Namespace(mutable.Map.empty, mutable.Map.empty, mutable.Map.empty, mutable.Map.empty)
+  val empty: Namespace = Namespace()
 }
 
 object scopes {
 
-  enum Scope { self =>
+  enum Scope {
+    self =>
 
     /**
      * The toplevel global scope ("project scope")
@@ -94,23 +113,56 @@ object scopes {
 
     def imports(using E: ErrorReporter): Namespace = this match {
       case s: Scope.Named => E.abort("Can only import at the top of a file or function definition.")
-      case s @ Scope.Global(imports, bindings) => imports
-      case s @ Scope.Local(_, imports, bindings, outer) => imports
+      case s@Scope.Global(imports, bindings) => imports
+      case s@Scope.Local(_, imports, bindings, outer) => imports
+    }
+
+    /**
+     * Return a new Scope with `newBindings`.
+     */
+    def withBindings(newBindings: Namespace): Scope = this match {
+      case g@Global(_, _) => g.copy(bindings = newBindings)
+      case n@Named(_, _, _) => n.copy(bindings = newBindings)
+      case l@Local(_, _, _, _) => l.copy(bindings = newBindings)
+    }
+
+    /**
+     * Return a new Scope with `newImports`.
+     */
+    def withImports(newImports: Namespace): Scope = this match {
+      case g@Global(_, _) => g.copy(imports = newImports)
+      case n@Named(_, _, _) => throw new IllegalStateException("Cannot change imports in a named scope")
+      case l@Local(_, _, _, _) => l.copy(imports = newImports)
+    }
+
+    /**
+     * Returns a new scope with the `newNamespaces`
+     */
+    def withNamespaces(newNamespaces: Map[String, Namespace]): Scope = this match {
+      case g@Global(imports, bindings) => g.copy(bindings = bindings.copy(namespaces = newNamespaces))
+      case n@Named(name, bindings, outer) => n.copy(bindings = bindings.copy(namespaces = newNamespaces))
+      case l@Local(name, imports, bindings, outer) => l.copy(bindings = bindings.copy(namespaces = newNamespaces))
     }
   }
 
   case class Scoping(modulePath: List[String], var scope: Scope) {
-    def importAs(imports: Bindings, path: List[String])(using E: ErrorReporter): Unit =
+    def importAs(bindings: Bindings, path: List[String])(using E: ErrorReporter): Unit = {
       @tailrec
-      def go(path: List[String], in: Namespace): Unit = path match {
-        case pathSeg :: rest => go(rest, in.getNamespace(pathSeg))
-        case Nil => in.importAll(imports)
+      def go(ns: Namespace, path: List[String]): Namespace = path match {
+        case pathSeg :: rest =>
+          ns.updateNamespace(pathSeg, child => go(child, rest))
+        case Nil =>
+          ns.importAll(bindings)
       }
-      go(path, scope.imports)
+
+      scope = scope.withImports(go(scope.imports, path))
+    }
 
     // TODO check shadowing etc. Also here concrete functions will *always* shadow imports,
     //   regardless of the order of importing / defining.
-    def importAll(imports: Bindings)(using E: ErrorReporter): Unit = scope.imports.importAll(imports)
+    def importAll(imports: Bindings)(using E: ErrorReporter): Unit = {
+      scope = scope.withImports(scope.imports.importAll(imports))
+    }
 
     /**
      * Defines the scoping rules by searching with [[ search ]] in an
@@ -196,7 +248,7 @@ object scopes {
 
     def lookupFirstBlockParam(path: List[String], name: String)(using ErrorReporter): Set[BlockParam] =
        first(path, scope) { namespace =>
-        namespace.terms.get(name).map(set => 
+        namespace.terms.get(name).map(set =>
           set.collect { case bp: BlockParam => bp }
         )
       }.getOrElse(Set.empty)
@@ -238,7 +290,7 @@ object scopes {
             E.abort(s"Block ${name} has the same name as a value definition in the same scope, which is not allowed.")
           }
       }
-      bindings.addTerm(name, sym)
+      scope = scope.withBindings(scope.bindings.addTerm(name, sym))
     }
 
     def define(name: String, sym: TypeSymbol)(using E: ErrorReporter): Unit =
@@ -250,10 +302,10 @@ object scopes {
         if sym.isInstanceOf[TypeVar] && !shadowed.isInstanceOf[TypeVar] then
           E.warning(pp"Type parameter ${name} shadows outer definition of ${sym}")
       }
-      bindings.setType(name, sym)
+      scope = scope.withBindings(bindings.setType(name, sym))
 
     def define(name: String, capt: Capture)(using ErrorReporter): Unit =
-      scope.bindings.setCapture(name, capt)
+      scope = scope.withBindings(scope.bindings.setCapture(name, capt))
 
     def exports: Bindings = scope.bindings.toBindings
 
@@ -270,9 +322,10 @@ object scopes {
     // (re-)enter the namespace
     def namespace[R](name: String)(block: => R): R =
       val before = scope
-      val namespace = before.bindings.getNamespace(name)
-      scope = Scope.Named(name, namespace, before)
-      try { block } finally { scope = before }
+      val childNamespace = before.bindings.getNamespace(name).getOrElse(Namespace.empty)
+      val newBefore = before.withNamespaces(before.bindings.namespaces.updated(name, childNamespace))
+      scope = Scope.Named(name, childNamespace, newBefore)
+      try { block } finally { scope = before.withNamespaces(before.bindings.namespaces.updated(name, scope.bindings)) }
 
     // returns the current path
     def path: Option[List[String]] =
@@ -289,7 +342,6 @@ object scopes {
   }
 
   def toplevel(modulePath: List[String], prelude: Bindings): Scoping =
-    val imports = Namespace.empty
-    imports.importAll(prelude)
+    val imports = Namespace.empty.importAll(prelude)
     Scoping(modulePath, Scope.Global(imports, Namespace.empty))
 }

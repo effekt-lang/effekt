@@ -1437,6 +1437,42 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("Server does not publish binders outside of the hole scope") {
+    withClientAndServer { (client, server) =>
+      val source =
+        raw"""
+             |def foo(): Unit = {
+             |  def bar() = <>
+             |  val baz = 42
+             |}
+             |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+
+      val expectedBindings = List(
+        TermBinding(
+          qualifier = List(),
+          name = "bar",
+          origin = BindingOrigin.Defined,
+          `type` = Some("() => Nothing")
+        )
+      )
+
+      assertEquals(receivedHoles.head.holes.head.scope.outer.get.bindings, expectedBindings)
+    }
+  }
+
   /**
    * By default, Scala types such as List and Option show pathological (de)serialization behavior with Gson.
    * We use a custom extension method `withScalaSupport` which adds support for Scala collections, fixing serialization.
