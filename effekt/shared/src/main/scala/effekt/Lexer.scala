@@ -246,20 +246,24 @@ class Lexer(source: Source) extends Iterator[Token] {
   private def isHexDigit(c: Char): Boolean =
     (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 
+  // Various kinds of string delimiters supported by Effekt
   enum Delimiter {
-    case StringDelim, MultiStringDelim, CharDelim, HoleDelim
+    //          "...",   """...""",      '...',    <"...">
+    case SingleString, MultiString, CharString, HoleString
 
     def allowsInterpolation: Boolean = this match
-      case StringDelim => true
-      case MultiStringDelim => true
-      case CharDelim => false
-      case HoleDelim => true
+      case SingleString => true
+      case MultiString => true
+      case CharString => false
+      case HoleString => true
 
     def isMultiline: Boolean = this match
-      case StringDelim => false
-      case MultiStringDelim => true
-      case CharDelim => false
-      case HoleDelim => true
+      case SingleString => false
+      case MultiString => true
+      case CharString => false
+      case HoleString => true
+
+    def allowsEscapes: Boolean = !this.isMultiline
   }
   export Delimiter.*
 
@@ -335,39 +339,21 @@ class Lexer(source: Source) extends Iterator[Token] {
     interpolationDepths.nonEmpty && interpolationDepths.top == depthTracker.braces
 
   /**
-   * Handle the end of an interpolation expression.
-   * This pops the interpolation state and sets up string resumption.
-   */
-  private def handleInterpolationEnd(): Unit =
-    interpolationDepths.pop()
-    depthTracker.braces -= 1
-    // remember to resume with a string next!
-    resumeStringNext = true
-
-  // String interpolation resumption
-  private def resumeStringAfterInterpolation(): TokenKind =
-    if (delimiters.nonEmpty) {
-      val next = delimiters.top
-      next match {
-        case StringDelim | MultiStringDelim | HoleDelim =>
-          return lexString(next, continued = true)
-        case _ => ()
-      }
-    }
-    // otherwise, try to recover
-    nextToken()
-
-  /**
    * "Main" function for getting the next token kind.
    * Wrapped on the outside by [[Lexer.next]] which handles whitespace.
    */
   private def nextToken(): TokenKind =
-    if resumeStringNext then
+    // First handle pending string continuation / return from a splice.
+    if (resumeStringNext) {
       resumeStringNext = false
-      return resumeStringAfterInterpolation()
+      if (delimiters.nonEmpty) {
+        return lexString(delimiters.top, continued = true)
+      }
+      // otherwise fallthrough
+    }
 
     (currentChar, nextChar) match
-      case ('\n', _) => advanceWith(TokenKind.Newline)
+      case ('\n',   _) => advanceWith(TokenKind.Newline)
       case ('\r', '\n') => advance2With(TokenKind.Newline)
 
       // Numbers
@@ -379,10 +365,10 @@ class Lexer(source: Source) extends Iterator[Token] {
       // String literals
       case ('"', '"') if peekAhead(2) == '"' =>
           advance(); advance(); advance()
-          lexString(MultiStringDelim)
+          lexString(MultiString)
       case ('"', _) =>
           advance()
-          lexString(StringDelim)
+          lexString(SingleString)
 
       // Character literals
       case ('\'', _) => advance(); lexCharLiteral()
@@ -390,7 +376,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       // Hole literals - let lexHole handle consuming the opening delimiter
       case ('<', '"') =>
         advance(); advance()
-        lexString(HoleDelim)
+        lexString(HoleString)
 
       // Unicode literals
       // TODO(jiribenes, 2025-07-01): Do we even want to keep supporting these?
@@ -443,7 +429,9 @@ class Lexer(source: Source) extends Iterator[Token] {
         advanceWith(TokenKind.Error(LexerError.UnknownChar('$')))
 
       case ('}', _) if isAtInterpolationBoundary =>
-        handleInterpolationEnd()
+        interpolationDepths.pop()
+        depthTracker.braces -= 1
+        resumeStringNext = true // remember to resume with a string next!
         advanceWith(TokenKind.`}$`)
       case ('}', '>') => advance2With(TokenKind.`}>`)
       case ('}', _) =>
@@ -521,7 +509,7 @@ class Lexer(source: Source) extends Iterator[Token] {
     def close(shouldPop: Boolean = true) = {
       if shouldPop then delimiters.pop()
 
-      if (delimiter == HoleDelim) {
+      if (delimiter == HoleString) {
         TokenKind.HoleStr(contents.toString)
       } else {
         TokenKind.Str(contents.toString, multiline = delimiter.isMultiline)
@@ -531,21 +519,21 @@ class Lexer(source: Source) extends Iterator[Token] {
     while (!atEndOfInput) {
       (currentChar, nextChar) match {
         // closing characters
-        case ('"', '"') if delimiter == MultiStringDelim && peekAhead(2) == '"' =>
+        case ('"', '"') if delimiter == MultiString && peekAhead(2) == '"' =>
           advance(); advance(); advance()
           return close()
-        case ('"', _) if delimiter == StringDelim =>
+        case ('"', _) if delimiter == SingleString =>
           advance()
           return close()
-        case ('"', '>') if delimiter == HoleDelim =>
+        case ('"', '>') if delimiter == HoleString =>
           advance(); advance()
           return close()
-        case ('\'', _) if delimiter == CharDelim =>
+        case ('\'', _) if delimiter == CharString =>
           advance()
           return close()
 
         // escapes
-        case ('\\', _) if delimiter == StringDelim || delimiter == CharDelim =>
+        case ('\\', _) if delimiter.allowsEscapes =>
           advance()
           currentChar match
             case '\\' | '"' | '\'' | '$' => contents.addOne(advance())
@@ -580,7 +568,7 @@ class Lexer(source: Source) extends Iterator[Token] {
   }
 
   private def lexCharLiteral(): TokenKind =
-    lexString(delimiter = CharDelim) match
+    lexString(delimiter = CharString) match
       case TokenKind.Str("", _) =>
         TokenKind.Error(LexerError.EmptyCharLiteral)
       case TokenKind.Str(cs, _) if cs.codePointCount(0, cs.length) > 1 =>

@@ -1,10 +1,10 @@
 package effekt
 
 import effekt.lexer.TokenKind.*
-import effekt.lexer.{Lexer, Token, TokenKind, LexerError }
+import effekt.lexer.{Lexer, TokenKind, LexerError }
 import effekt.lexer.LexerError.*
 
-import kiama.util.{ StringSource }
+import kiama.util.StringSource
 
 import munit.Location
 
