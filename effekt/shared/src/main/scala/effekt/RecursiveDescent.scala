@@ -6,13 +6,11 @@ import effekt.source.*
 import effekt.context.Context
 import effekt.source.Origin.Synthesized
 import kiama.parsing.{Input, ParseResult}
-import kiama.util.{Position, Positions, Range, Source, StringSource}
+import kiama.util.{Position, Positions, Range, Source}
 
 import scala.annotation.{tailrec, targetName}
-import scala.util.matching.Regex
 import scala.language.implicitConversions
-import scala.util.boundary
-import scala.util.boundary.break
+import scala.collection.mutable.ListBuffer
 
 
 case class Fail(msg: String, position: Int) extends Throwable(null, null, false, false)
@@ -23,7 +21,6 @@ object Fail {
 case class SoftFail(message: String, positionStart: Int, positionEnd: Int)
 
 class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source) {
-  import scala.collection.mutable.ListBuffer
 
   var softFails: ListBuffer[SoftFail] = ListBuffer[SoftFail]()
 
@@ -151,7 +148,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    */
   def skip(): Unit =
     previous = Some(tokens(position))
-    position += 1;
+    position += 1
     currentLabel = None
     spaces()
 
@@ -334,7 +331,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
        }
        res
 
-  def shebang(): Unit =
+  @tailrec
+  private def shebang(): Unit =
     peek.kind match {
       case Shebang(_) => consume(peek.kind); shebang()
       case _ => ()

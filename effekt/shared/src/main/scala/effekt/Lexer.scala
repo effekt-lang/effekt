@@ -359,7 +359,7 @@ class Lexer(source: Source) extends Iterator[Token] {
     if (resumeStringNext) {
       resumeStringNext = false
       if (delimiters.nonEmpty) {
-        return lexString(delimiters.top, continued = true)
+        return string(delimiters.top, continued = true)
       }
       // otherwise fallthrough
     }
@@ -369,28 +369,28 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('\r', '\n') => advance2With(TokenKind.Newline)
 
       // Numbers
-      case (c, _) if c.isDigit => lexNumber()
+      case (c, _) if c.isDigit => number()
 
       // Identifiers and keywords
-      case (c, _) if isNameFirst(c) => lexAlphanumeric()
+      case (c, _) if isNameFirst(c) => identifier()
 
       // String literals, character literals, hole string literals
-      case ('"', '"') if peekAhead(2) == '"' => advance3With(lexString(MultiString))
-      case ('"',   _)                        => advanceWith(lexString(SingleString))
-      case ('\'',  _)                        => advanceWith(lexCharLiteral())
-      case ('<', '"')                        => advance2With(lexString(HoleString))
+      case ('"', '"') if peekAhead(2) == '"' => advance3With(string(MultiString))
+      case ('"',   _)                        => advanceWith(string(SingleString))
+      case ('\'',  _)                        => advanceWith(character())
+      case ('<', '"')                        => advance2With(string(HoleString))
 
       // Unicode literals
       // TODO(jiribenes, 2025-07-01): Do we even want to keep supporting these?
-      case ('\\', 'u') => advance2With(lexUnicodeLiteral())
+      case ('\\', 'u') => advance2With(unicodeLiteral())
 
       // Comments
-      case ('/', '*') => advance2With(lexMultilineComment())
-      case ('/', '/') => advance2With(lexSinglelineComment())
+      case ('/', '*') => advance2With(multilineComment())
+      case ('/', '/') => advance2With(singlelineComment())
       case ('/',   _) => advanceWith(TokenKind.`/`)
 
       // Shebang
-      case ('#', '!') => advance2With(lexShebang())
+      case ('#', '!') => advance2With(shebang())
 
       // Two-character operators
       case ('=', '=') => advance2With(TokenKind.`===`)
@@ -420,7 +420,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('+', '+') => advance2With(TokenKind.`++`)
       case ('+',   _) => advanceWith(TokenKind.`+`)
 
-      case ('-', c) if c.isDigit => advanceWith(lexNumber(negative = true))
+      case ('-', c) if c.isDigit => advanceWith(number(negative = true))
       case ('-', _)              => advanceWith(TokenKind.`-`)
 
       case ('$', '{') =>
@@ -465,7 +465,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('\u0000', _) => TokenKind.EOF
       case (c,        _) => advanceWith(TokenKind.Error(LexerError.UnknownChar(c)))
 
-  private def lexNumber(negative: Boolean = false): TokenKind =
+  private def number(negative: Boolean = false): TokenKind =
     // Consume the integer part
     advanceWhile { (curr, _) => curr.isDigit }
 
@@ -488,7 +488,7 @@ class Lexer(source: Source) extends Iterator[Token] {
         case Some(integer) => TokenKind.Integer(integer)
         case None => TokenKind.Error(LexerError.InvalidIntegerFormat)
 
-  private def lexAlphanumeric(): TokenKind =
+  private def identifier(): TokenKind =
     advanceWhile { (curr, _) => isNameRest(curr) }
     val word = getCurrentSlice
 
@@ -500,7 +500,7 @@ class Lexer(source: Source) extends Iterator[Token] {
    *
    * Contract: Expects its caller to already consume the delimiter itself!
    */
-  private def lexString(delimiter: Delimiter, continued: Boolean = false): TokenKind = {
+  private def string(delimiter: Delimiter, continued: Boolean = false): TokenKind = {
     if !continued then delimiters.push(delimiter)
 
     val contents = StringBuilder()
@@ -533,7 +533,7 @@ class Lexer(source: Source) extends Iterator[Token] {
         // escapes
         case ('\\', _) if delimiter.allowsEscapes =>
           advance()
-          currentChar match
+          currentChar match {
             case '\\' | '"' | '\'' | '$' => contents.addOne(advance())
             case 'n' => advance(); contents.addOne('\n')
             case 'r' => advance(); contents.addOne('\r')
@@ -545,10 +545,12 @@ class Lexer(source: Source) extends Iterator[Token] {
                 case codePoint => contents.append(String.valueOf(Character.toChars(codePoint)))
             case c =>
               return TokenKind.Error(LexerError.InvalidEscapeSequence(c))
+          }
 
         // interpolation
         case ('$', '{') if delimiter.allowsInterpolation =>
-          // We *do not* pop in this case, we need to remember what happened!
+          // We *do not* pop in this case, we need to keep the delimiter on the stack
+          // in order to know into what kind of string we should resume!
           return close(shouldPop = false)
 
         // newlines
@@ -565,8 +567,8 @@ class Lexer(source: Source) extends Iterator[Token] {
     TokenKind.Error(LexerError.UnterminatedString)
   }
 
-  private def lexCharLiteral(): TokenKind =
-    lexString(delimiter = CharString) match
+  private def character(): TokenKind =
+    string(delimiter = CharString) match
       case TokenKind.Str("", _) =>
         TokenKind.Error(LexerError.EmptyCharLiteral)
       case TokenKind.Str(cs, _) if cs.codePointCount(0, cs.length) > 1 =>
@@ -575,19 +577,11 @@ class Lexer(source: Source) extends Iterator[Token] {
         TokenKind.Chr(cs.codePointAt(0))
       case err => err
 
-  private def lexUnicodeLiteral(): TokenKind =
-    advanceWhile { (curr, _) => isHexDigit(curr) }
-    val hexStr = getCurrentSlice.substring(2) // Remove '\u'
-
-    if hexStr.isEmpty then
-      return TokenKind.Error(LexerError.InvalidUnicodeLiteral)
-
-    try
-      val codePoint = java.lang.Integer.parseInt(hexStr, 16)
-      TokenKind.Chr(codePoint)
-    catch
-      case _: NumberFormatException =>
-        TokenKind.Error(LexerError.InvalidUnicodeLiteral)
+  private def unicodeLiteral(): TokenKind =
+    lexUnicodeEscape() match {
+      case -1 => TokenKind.Error(LexerError.InvalidUnicodeLiteral)
+      case codePoint => TokenKind.Chr(codePoint)
+    }
 
   // Returns a Char represented as a 32bit integer or -1 on failure
   private def lexUnicodeEscape(): Int =
@@ -613,7 +607,7 @@ class Lexer(source: Source) extends Iterator[Token] {
 
       case _ => -1
 
-  private def lexSinglelineComment(): TokenKind =
+  private def singlelineComment(): TokenKind =
     advanceWhile { (curr, _) => curr != '\n' }
     val comment = getCurrentSlice.substring(2) // Remove '//'
 
@@ -622,7 +616,7 @@ class Lexer(source: Source) extends Iterator[Token] {
     else
       TokenKind.Comment(comment)
 
-  private def lexMultilineComment(): TokenKind =
+  private def multilineComment(): TokenKind =
     var done = false
     while (!atEndOfInput && !done) {
       (currentChar, nextChar) match {
@@ -638,7 +632,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       val comment = getCurrentSlice.substring(2, getCurrentSlice.length - 2) // Remove /* and */
       TokenKind.Comment(comment)
 
-  private def lexMultilineCommentNested(): TokenKind =
+  private def multilineCommentNested(): TokenKind =
     var depth = 1
 
     while depth > 0 && !atEndOfInput do
@@ -658,7 +652,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       val comment = getCurrentSlice.substring(2, getCurrentSlice.length - 2) // Remove /* and */
       TokenKind.Comment(comment)
 
-  private def lexShebang(): TokenKind =
+  private def shebang(): TokenKind =
     advanceWhile { (curr, _) => curr != '\n' }
     val command = getCurrentSlice.substring(2) // Remove '#!'
     TokenKind.Shebang(command)
