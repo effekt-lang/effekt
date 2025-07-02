@@ -388,6 +388,22 @@ class RecursiveDescentTests extends munit.FunSuite {
           throw new IllegalArgumentException(s"Expected Hole but got ${other.getClass.getSimpleName}")
       }
     }
+
+    {
+      val (source, expectedSpan) =
+        """<>
+          |↑↑
+          |""".sourceAndSpan
+
+      val hole = parseExpr(source.content)
+      hole match {
+        case Term.Hole(_, _, span) =>
+          println(hole)
+          assertEquals(span, expectedSpan)
+        case other =>
+          throw new IllegalArgumentException(s"Expected Hole but got ${other.getClass.getSimpleName}")
+      }
+    }
   }
 
   test("Pattern matching") {

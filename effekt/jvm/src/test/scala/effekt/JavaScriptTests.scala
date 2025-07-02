@@ -16,8 +16,8 @@ class JavaScriptTests extends EffektTests {
 
   override def positives: Set[File] = Set(
     examplesDir / "pos",
-//    examplesDir / "casestudies",
-//    examplesDir / "benchmarks",
+    examplesDir / "casestudies",
+    examplesDir / "benchmarks",
   )
 
   override def negatives: Set[File] = Set(
