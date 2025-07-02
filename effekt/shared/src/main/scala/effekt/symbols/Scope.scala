@@ -56,14 +56,6 @@ case class Bindings(
       case BlockTypeConstructor.Interface(_, _, operations, _) => operations.toSet
       case _ => Set.empty
     }.groupMap(_.name.name)(op => op)
-
-  def toBindings: Bindings =
-    Bindings(
-      terms,
-      types,
-      captures,
-      namespaces.view.mapValues(_.toBindings).toMap
-    )
 }
 
 object Bindings {
@@ -310,7 +302,7 @@ object scopes {
     def define(name: String, capt: Capture)(using ErrorReporter): Unit =
       scope = scope.withBindings(scope.bindings.setCapture(name, capt))
 
-    def exports: Bindings = scope.bindings.toBindings
+    def exports: Bindings = scope.bindings
 
     def scoped[R](name: String, block: => R): R =
       val before = scope
