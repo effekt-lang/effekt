@@ -297,6 +297,12 @@ class Lexer(source: Source) extends Iterator[Token] {
   private def atEndOfInput: Boolean =
     currentChar == '\u0000'
 
+  /**
+   * Advances the lexer by one, consuming (and returning) the current character.
+   *
+   * Consider using the [[advanceWith]], [[advance2With]], [[advance3With]] versions
+   * for when you need to [[advance]] and then return the given token kind.
+   */
   private def advance(): Char =
     val ret = currentChar
     currentChar = nextChar
@@ -304,11 +310,15 @@ class Lexer(source: Source) extends Iterator[Token] {
     position = position.advance(ret == '\n')
     ret
 
-  private def advanceWith(kind: TokenKind): TokenKind =
-    advance(); kind
+  inline def advance(inline k: Int): Unit =
+    if k > 0 then { advance(); advance(k - 1) }
 
-  private def advance2With(kind: TokenKind): TokenKind =
-    advance(); advance(); kind
+  inline def advanceWith(inline k: Int, inline kind: => TokenKind): TokenKind =
+    advance(k); kind
+
+  inline def advanceWith(inline kind: => TokenKind): TokenKind = advanceWith(1, kind)
+  inline def advance2With(inline kind: => TokenKind): TokenKind = advanceWith(2, kind)
+  inline def advance3With(inline kind: => TokenKind): TokenKind = advanceWith(3, kind)
 
   private def expect(expected: Char, kind: TokenKind): TokenKind =
     if currentChar == expected then
@@ -319,10 +329,12 @@ class Lexer(source: Source) extends Iterator[Token] {
   private def getCurrentSlice: String =
     source.content.substring(tokenStartPosition.offset, position.offset)
 
-  private def advanceWhile(predicate: (Char, Char) => Boolean): String =
+  private def advanceWhile(predicate: (Char, Char) => Boolean): String = {
     while predicate(currentChar, nextChar) && !atEndOfInput do
       advance()
+
     getCurrentSlice
+  }
 
   private def peekAhead(offset: Int): Char =
     val targetIndex = position.offset + offset
@@ -353,7 +365,7 @@ class Lexer(source: Source) extends Iterator[Token] {
     }
 
     (currentChar, nextChar) match
-      case ('\n',   _) => advanceWith(TokenKind.Newline)
+      case ('\n',    _) => advanceWith(TokenKind.Newline)
       case ('\r', '\n') => advance2With(TokenKind.Newline)
 
       // Numbers
@@ -362,64 +374,54 @@ class Lexer(source: Source) extends Iterator[Token] {
       // Identifiers and keywords
       case (c, _) if isNameFirst(c) => lexAlphanumeric()
 
-      // String literals
-      case ('"', '"') if peekAhead(2) == '"' =>
-          advance(); advance(); advance()
-          lexString(MultiString)
-      case ('"', _) =>
-          advance()
-          lexString(SingleString)
-
-      // Character literals
-      case ('\'', _) => advance(); lexCharLiteral()
-
-      // Hole literals - let lexHole handle consuming the opening delimiter
-      case ('<', '"') =>
-        advance(); advance()
-        lexString(HoleString)
+      // String literals, character literals, hole string literals
+      case ('"', '"') if peekAhead(2) == '"' => advance3With(lexString(MultiString))
+      case ('"',   _)                        => advanceWith(lexString(SingleString))
+      case ('\'',  _)                        => advanceWith(lexCharLiteral())
+      case ('<', '"')                        => advance2With(lexString(HoleString))
 
       // Unicode literals
       // TODO(jiribenes, 2025-07-01): Do we even want to keep supporting these?
-      case ('\\', 'u') => advance(); advance(); lexUnicodeLiteral()
+      case ('\\', 'u') => advance2With(lexUnicodeLiteral())
 
       // Comments
-      case ('/', '*') => advance(); advance(); lexMultilineComment()
-      case ('/', '/') => advance(); advance(); lexSinglelineComment()
-      case ('/', _)   => advanceWith(TokenKind.`/`)
+      case ('/', '*') => advance2With(lexMultilineComment())
+      case ('/', '/') => advance2With(lexSinglelineComment())
+      case ('/',   _) => advanceWith(TokenKind.`/`)
 
       // Shebang
-      case ('#', '!') => advance(); advance(); lexShebang()
+      case ('#', '!') => advance2With(lexShebang())
 
       // Two-character operators
       case ('=', '=') => advance2With(TokenKind.`===`)
       case ('=', '>') => advance2With(TokenKind.`=>`)
-      case ('=', _)   => advanceWith(TokenKind.`=`)
+      case ('=',   _) => advanceWith(TokenKind.`=`)
 
       case ('!', '=') => advance2With(TokenKind.`!==`)
-      case ('!', _)   => advanceWith(TokenKind.`!`)
+      case ('!',   _) => advanceWith(TokenKind.`!`)
 
       case ('<', '=') => advance2With(TokenKind.`<=`)
       case ('<', '>') => advance2With(TokenKind.`<>`)
       case ('<', '{') => advance2With(TokenKind.`<{`)
-      case ('<', _)   => advanceWith(TokenKind.`<`)
+      case ('<',   _) => advanceWith(TokenKind.`<`)
 
       case ('>', '=') => advance2With(TokenKind.`>=`)
-      case ('>', _)   => advanceWith(TokenKind.`>`)
+      case ('>',   _) => advanceWith(TokenKind.`>`)
 
       case (':', ':') => advance2With(TokenKind.`::`)
-      case (':', _)   => advanceWith(TokenKind.`:`)
+      case (':',   _) => advanceWith(TokenKind.`:`)
 
       case ('|', '|') => advance2With(TokenKind.`||`)
-      case ('|', _)   => advanceWith(TokenKind.`|`)
+      case ('|',   _) => advanceWith(TokenKind.`|`)
 
       case ('&', '&') => advance2With(TokenKind.`&&`)
-      case ('&', _)   => advanceWith(TokenKind.`&`)
+      case ('&',   _) => advanceWith(TokenKind.`&`)
 
       case ('+', '+') => advance2With(TokenKind.`++`)
-      case ('+', _)   => advanceWith(TokenKind.`+`)
+      case ('+',   _) => advanceWith(TokenKind.`+`)
 
-      case ('-', c) if c.isDigit => advance(); lexNumber(negative = true)
-      case ('-', _)  => advanceWith(TokenKind.`-`)
+      case ('-', c) if c.isDigit => advanceWith(lexNumber(negative = true))
+      case ('-', _)              => advanceWith(TokenKind.`-`)
 
       case ('$', '{') =>
         interpolationDepths.push(depthTracker.braces + 1)
@@ -461,7 +463,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('*', _) => advanceWith(TokenKind.`*`)
 
       case ('\u0000', _) => TokenKind.EOF
-      case (c,        _) => advance(); TokenKind.Error(LexerError.UnknownChar(c))
+      case (c,        _) => advanceWith(TokenKind.Error(LexerError.UnknownChar(c)))
 
   private def lexNumber(negative: Boolean = false): TokenKind =
     // Consume the integer part
@@ -520,17 +522,13 @@ class Lexer(source: Source) extends Iterator[Token] {
       (currentChar, nextChar) match {
         // closing characters
         case ('"', '"') if delimiter == MultiString && peekAhead(2) == '"' =>
-          advance(); advance(); advance()
-          return close()
+          return advance3With(close())
         case ('"', _) if delimiter == SingleString =>
-          advance()
-          return close()
+          return advanceWith(close())
         case ('"', '>') if delimiter == HoleString =>
-          advance(); advance()
-          return close()
+          return advance2With(close())
         case ('\'', _) if delimiter == CharString =>
-          advance()
-          return close()
+          return advanceWith(close())
 
         // escapes
         case ('\\', _) if delimiter.allowsEscapes =>
