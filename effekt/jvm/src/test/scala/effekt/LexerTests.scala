@@ -167,7 +167,17 @@ class LexerTests extends munit.FunSuite {
 
   test("missing interpolation") {
     val prog = """ "hello ${ xs.map { x => "${x + 1}" } " """
-    assertFailure(prog)
+    assertTokensEq(
+      prog,
+      Str("hello ", multiline = false),
+      `${`, Ident("xs"), `.`, Ident("map"),
+      `{`, Ident("x"), `=>`,
+      Str("", multiline = false),
+      `${`, Ident("x"), `+`, Integer(1), `}$`,
+      Str("", multiline = false),
+      `}`, Error(UnterminatedString),
+      EOF
+    )
   }
 
   test("interpolated string") {
