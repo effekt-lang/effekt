@@ -369,30 +369,29 @@ class Lexer(source: Source) extends Iterator[Token]:
       resumeStringNext = false
       return resumeStringAfterInterpolation()
 
-    currentChar match
-      case '\n' => advanceWith(TokenKind.Newline)
-      case '\r' if nextChar == '\n' => advance2With(TokenKind.Newline)
+    (currentChar, nextChar) match
+      case ('\n', _) => advanceWith(TokenKind.Newline)
+      case ('\r', '\n') => advance2With(TokenKind.Newline)
 
       // Numbers
-      case c if c.isDigit => lexNumber()
+      case (c, _) if c.isDigit => lexNumber()
 
       // Identifiers and keywords
-      case c if isNameFirst(c) => lexAlphanumeric()
+      case (c, _) if isNameFirst(c) => lexAlphanumeric()
 
       // String literals
-      case '"' =>
-        if nextChar == '"' && peekAhead(2) == '"' then
+      case ('"', '"') if peekAhead(2) == '"' =>
           advance(); advance(); advance()
           lexString(multiline = true)
-        else
+      case ('"', _) =>
           advance()
           lexString(multiline = false)
 
       // Character literals
-      case '\'' => advance(); lexCharLiteral()
+      case ('\'', _) => advance(); lexCharLiteral()
 
       // Hole literals - let lexHole handle consuming the opening delimiter
-      case '<' if nextChar == '"' =>
+      case ('<', '"') =>
         advance(); advance()
         lexString(delimiter = '>', multiline = true, allowInterpolation = true) match
           case TokenKind.Str(content, _) => TokenKind.HoleStr(content)
@@ -400,121 +399,87 @@ class Lexer(source: Source) extends Iterator[Token]:
 
       // Unicode literals
       // TODO(jiribenes, 2025-07-01): Do we even want to keep supporting these?
-      case '\\' if nextChar == 'u' =>
-        advance(); advance()
-        lexUnicodeLiteral()
+      case ('\\', 'u') => advance(); advance(); lexUnicodeLiteral()
 
       // Comments
-      case '/' =>
-        nextChar match
-          case '*' => advance(); advance(); lexMultilineComment()
-          case '/' => advance(); advance(); lexSinglelineComment()
-          case _ => advanceWith(TokenKind.`/`)
+      case ('/', '*') => advance(); advance(); lexMultilineComment()
+      case ('/', '/') => advance(); advance(); lexSinglelineComment()
+      case ('/', _)   => advanceWith(TokenKind.`/`)
 
       // Shebang
-      case '#' if nextChar == '!' =>
-        advance(); advance()
-        lexShebang()
+      case ('#', '!') => advance(); advance(); lexShebang()
 
       // Two-character operators
-      case '=' =>
-        nextChar match
-          case '=' => advance2With(TokenKind.`===`)
-          case '>' => advance2With(TokenKind.`=>`)
-          case _ => advanceWith(TokenKind.`=`)
+      case ('=', '=') => advance2With(TokenKind.`===`)
+      case ('=', '>') => advance2With(TokenKind.`=>`)
+      case ('=', _)   => advanceWith(TokenKind.`=`)
 
-      case '!' =>
-        nextChar match
-          case '=' => advance2With(TokenKind.`!==`)
-          case _ => advanceWith(TokenKind.`!`)
+      case ('!', '=') => advance2With(TokenKind.`!==`)
+      case ('!', _)   => advanceWith(TokenKind.`!`)
 
-      case '<' =>
-        nextChar match
-          case '=' => advance2With(TokenKind.`<=`)
-          case '>' => advance2With(TokenKind.`<>`)
-          case '{' => advance2With(TokenKind.`<{`)
-          case _ => advanceWith(TokenKind.`<`)
+      case ('<', '=') => advance2With(TokenKind.`<=`)
+      case ('<', '>') => advance2With(TokenKind.`<>`)
+      case ('<', '{') => advance2With(TokenKind.`<{`)
+      case ('<', _)   => advanceWith(TokenKind.`<`)
 
-      case '>' =>
-        nextChar match
-          case '=' => advance2With(TokenKind.`>=`)
-          case _ => advanceWith(TokenKind.`>`)
+      case ('>', '=') => advance2With(TokenKind.`>=`)
+      case ('>', _)   => advanceWith(TokenKind.`>`)
 
-      case ':' =>
-        nextChar match
-          case ':' => advance2With(TokenKind.`::`)
-          case _ => advanceWith(TokenKind.`:`)
+      case (':', ':') => advance2With(TokenKind.`::`)
+      case (':', _)   => advanceWith(TokenKind.`:`)
 
-      case '|' =>
-        nextChar match
-          case '|' => advance2With(TokenKind.`||`)
-          case _ => advanceWith(TokenKind.`|`)
+      case ('|', '|') => advance2With(TokenKind.`||`)
+      case ('|', _)   => advanceWith(TokenKind.`|`)
 
-      case '&' =>
-        nextChar match
-          case '&' => advance2With(TokenKind.`&&`)
-          case _ => advanceWith(TokenKind.`&`)
+      case ('&', '&') => advance2With(TokenKind.`&&`)
+      case ('&', _)   => advanceWith(TokenKind.`&`)
 
-      case '+' =>
-        nextChar match
-          case '+' => advance2With(TokenKind.`++`)
-          case _ => advanceWith(TokenKind.`+`)
+      case ('+', '+') => advance2With(TokenKind.`++`)
+      case ('+', _)   => advanceWith(TokenKind.`+`)
 
-      case '-' =>
-        if nextChar.isDigit then
-          advance()
-          lexNumber(negative = true)
-        else
-          advanceWith(TokenKind.`-`)
+      case ('-', c) if c.isDigit => advance(); lexNumber(negative = true)
+      case ('-', _)  => advanceWith(TokenKind.`-`)
 
-      case '$' =>
-        if nextChar == '{' then
-          // Record the current brace depth for interpolation tracking
-          interpolationDepths.push(braceTracker.braces + 1)
-          braceTracker.incrementBraces
-          delimiters.push(InterpolationDelim)
-          advance2With(TokenKind.`${`)
-        else
-          advanceWith(TokenKind.Error(LexerError.UnknownChar('$')))
+      case ('$', '{') =>
+        interpolationDepths.push(braceTracker.braces + 1)
+        braceTracker.incrementBraces
+        delimiters.push(InterpolationDelim)
+        advance2With(TokenKind.`${`)
+      case ('$', _) =>
+        advanceWith(TokenKind.Error(LexerError.UnknownChar('$')))
 
-      case '}' =>
-        if isAtInterpolationBoundary then
-          handleInterpolationEnd()
-          TokenKind.`}$`
-        else
-          braceTracker.decrementBraces
-          nextChar match
-            case '>' => advance2With(TokenKind.`}>`)
-            case _ => advanceWith(TokenKind.`}`)
+      case ('}', _) if isAtInterpolationBoundary =>
+        handleInterpolationEnd()
+        TokenKind.`}$` // note that we don't advance here!
+      case ('}', '>') => advance2With(TokenKind.`}>`)
+      case ('}', _) =>
+        braceTracker.decrementBraces
+        advanceWith(TokenKind.`}`)
 
       // Single-character tokens
-      case ';' => advanceWith(TokenKind.`;`)
-      case '@' => advanceWith(TokenKind.`@`)
-      case '{' =>
+      case (';', _) => advanceWith(TokenKind.`;`)
+      case ('@', _) => advanceWith(TokenKind.`@`)
+      case ('{', _) =>
         braceTracker.incrementBraces
         advanceWith(TokenKind.`{`)
-      case '(' =>
+      case ('(', _) =>
         braceTracker.incrementParens
         advanceWith(TokenKind.`(`)
-      case ')' =>
+      case (')', _) =>
         braceTracker.decrementParens
         advanceWith(TokenKind.`)`)
-      case '[' =>
+      case ('[', _) =>
         braceTracker.incrementBrackets
         advanceWith(TokenKind.`[`)
-      case ']' =>
+      case (']', _) =>
         braceTracker.decrementBrackets
         advanceWith(TokenKind.`]`)
-      case ',' => advanceWith(TokenKind.`,`)
-      case '.' => advanceWith(TokenKind.`.`)
-      case '*' => advanceWith(TokenKind.`*`)
+      case (',', _) => advanceWith(TokenKind.`,`)
+      case ('.', _) => advanceWith(TokenKind.`.`)
+      case ('*', _) => advanceWith(TokenKind.`*`)
 
-      case '\u0000' =>
-        TokenKind.EOF
-
-      case c =>
-        advance()
-        TokenKind.Error(LexerError.UnknownChar(c))
+      case ('\u0000', _) => TokenKind.EOF
+      case (c,        _) => advance(); TokenKind.Error(LexerError.UnknownChar(c))
 
   private def lexNumber(negative: Boolean = false): TokenKind =
     // Consume the integer part
