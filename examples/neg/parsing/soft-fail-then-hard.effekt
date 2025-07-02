@@ -1,0 +1,7 @@
+val rogue_splice = ${ a a }
+
+val too_long_int = 123456789012345678901234567890
+
+val unterminated_string = "
+
+println(unterminated_string)

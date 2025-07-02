@@ -23,21 +23,22 @@ object Fail {
 case class SoftFail(message: String, positionStart: Int, positionEnd: Int)
 
 class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source) {
-
   import scala.collection.mutable.ListBuffer
 
-  val softFails: ListBuffer[SoftFail] = ListBuffer[SoftFail]()
+  var softFails: ListBuffer[SoftFail] = ListBuffer[SoftFail]()
 
-  private def reportSoftFails()(using C: Context): Unit =
-    softFails.foreach {
-      case SoftFail(msg, from, to) =>
-        val fromPos = source.offsetToPosition(tokens(from).start)
-        val toPos = source.offsetToPosition(tokens(to).end)
-        val range = Range(fromPos, toPos)
-        C.report(effekt.util.messages.ParseError(msg, Some(range)))
-    }
+  private def report(msg: String, fromPosition: Int, toPosition: Int, source: Source = source)(using C: Context) = {
+    val from = source.offsetToPosition(tokens(fromPosition).start)
+    val to = source.offsetToPosition(tokens(toPosition).end + 1)
+    val range = Range(from, to)
+    C.report(effekt.util.messages.ParseError(msg, Some(range)))
+  }
 
-  def parse(input: Input)(using C: Context): Option[ModuleDecl] =
+  def parse(input: Input)(using C: Context): Option[ModuleDecl] = {
+    def reportSoftFails()(using C: Context): Unit =
+      softFails.foreach {
+        case SoftFail(msg, from, to) => report(msg, from, to, source = input.source)
+      }
 
     try {
       //println(input.tokens)
@@ -48,23 +49,16 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
       // Report soft fails
       reportSoftFails()
-      if (softFails.isEmpty) { res } else { None }
+      if softFails.isEmpty then res else None
     } catch {
       case Fail(msg, pos) =>
-        val source = input.source
-        val range = tokens.lift(pos) match {
-          case Some(value) =>
-            val from = source.offsetToPosition(value.start)
-            val to = source.offsetToPosition(value.end + 1)
-            Some(Range(from, to))
-          case None =>
-            val pos = Position(0, 0, source)
-            Some(Range(pos, pos))
-        }
+        // Don't forget soft fails!
+        reportSoftFails()
 
-        C.report(effekt.util.messages.ParseError(msg, range)) // fix error reporting
+        report(msg, pos, pos, source = input.source)
         None
     }
+  }
 
   // here we need to convert to kiamas error format since REPL is defined in kiama
   def parseRepl(input: Input)(using C: Context): ParseResult[Tree] =
@@ -90,12 +84,25 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   // always points to the latest non-space position
   var position: Int = 0
 
-  extension(token: Token) def failOnErrorToken: Token = token.kind match {
-    case TokenKind.Error(err) => fail(err.message)
+  extension(token: Token) def failOnErrorToken(tokenPosition: Int = position): Token = token.kind match {
+    case TokenKind.Error(err) =>
+      val recoveredKind = err match
+        case LexerError.UnterminatedString => TokenKind.Str("<unterminated>", multiline = false)
+        case LexerError.UnterminatedComment => TokenKind.Comment("<unterminated>")
+        case LexerError.EmptyCharLiteral => TokenKind.Chr('?')
+        case LexerError.MultipleCodePointsInChar => TokenKind.Chr('?')
+        case LexerError.InvalidUnicodeLiteral => TokenKind.Chr('?')
+        case LexerError.InvalidIntegerFormat => TokenKind.Integer(0)
+        case LexerError.InvalidDoubleFormat => TokenKind.Float(java.lang.Double.NaN)
+        case _ => fail(err.message)
+
+      // NOTE: This relies on the fact that the `fail` above ^ throws!
+      softFail(err.message, tokenPosition, tokenPosition)
+      token.copy(kind = recoveredKind)
     case _ => token
   }
 
-  def peek: Token = tokens(position).failOnErrorToken
+  def peek: Token = tokens(position).failOnErrorToken(position)
 
   /**
    * Negative lookahead
@@ -111,7 +118,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     def go(position: Int, offset: Int): Token =
       if position >= tokens.length then fail("Unexpected end of file")
 
-      tokens(position).failOnErrorToken match {
+      tokens(position).failOnErrorToken(position) match {
         case token if isSpace(token.kind) => go(position + 1, offset)
         case token if offset <= 0 => token
         case _ => go(position + 1, offset - 1)
@@ -122,7 +129,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   // the previously consumed token
   var previous: Option[Token] = {
     if position == 0 then None
-    else Some(tokens(position).failOnErrorToken)
+    else Some(tokens(position).failOnErrorToken(position))
   }
   // The current position, the position after the previous token
   // The `+ 1` is needed since positions by lexer are inclusive, but kiama is exclusive
@@ -135,7 +142,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def hasNext(): Boolean = position < tokens.length
   def next(): Token =
-    val t = tokens(position).failOnErrorToken
+    val t = tokens(position).failOnErrorToken(position)
     skip()
     t
 
@@ -301,7 +308,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
          case `import` => includeDecl()
          case _ => expr()
        }
-       if peek(`EOF`) then res else fail("Unexpected end of input")
+       if peek(`EOF`) then res else fail("Unexpected item")
 
   /**
    * Main entry point
@@ -314,7 +321,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
        spaces()
        val (name, doc) = moduleDecl()
        val res = ModuleDecl(name, manyWhile(includeDecl(), `import`), toplevelDefs(), doc, span())
-       if peek(`EOF`) then res else fail("Unexpected end of input")
+
+       if (!peek(`EOF`)) {
+         val startPosition = position
+         manyUntil({ skip() }, `EOF`)
+         val endPosition = position
+
+         softFail("Expected top-level definition", startPosition, endPosition)
+       }
+       res
+
+       // if peek(`EOF`) then res else fail("Unexpected end of input TEST2")
        // failure("Required at least one top-level function or effect definition")
 
   def shebang(): Unit =
@@ -1109,14 +1126,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     case `${` =>
       nonterminal:
         val startPosition = position
-        manyUntil(next(), `}$`)
+        val _ = manyUntil({ skip() }, `}$`)
         val endPosition = position
         if peek(`}$`) then consume(`}$`) else if peek(`}`) then consume(`}`)
 
         val msg = s"Unexpected splice: string interpolation $${ ... } is only allowed in strings!"
         softFail(msg, startPosition, endPosition)
 
-        UnitLit(span().synthesized) // XXX(jiribenes, 2025-07-01): HACK!
+        StringLit("<splice>", span().synthesized) // XXX(jiribenes, 2025-07-01): HACK!
 
     case k => fail("variables, literals, tuples, lists, holes or group", k)
   }
@@ -1474,17 +1491,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   /**
    * Aborts parsing with the given message
    */
-  def fail(expected: String, got: TokenKind): Nothing = {
-    // TODO(jiribenes, 2025-07-01): report soft fails!
-    // reportSoftFails()
+  def fail(expected: String, got: TokenKind): Nothing =
     throw Fail.expectedButGot(currentLabel.getOrElse { expected }, explain(got), position)
-  }
 
-  def fail(msg: String): Nothing = {
-    // TODO(jiribenes, 2025-07-01): report soft fails!
-    // reportSoftFails()
-    throw Fail(msg, position)
-  }
+  def fail(msg: String): Nothing =
+    throw Fail(msg, position + 1)
 
   def softFail(message: String, start: Int, end: Int): Unit = {
     softFails += SoftFail(message, start, end)
@@ -1500,11 +1511,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     val before = position
     val beforePrevious = previous
     val labelBefore = currentLabel
+    val softFailsBefore = softFails
     try { Maybe.Some(p, span(tokens(before).end)) } catch {
       case Fail(_, _) => {
         position = before
         previous = beforePrevious
         currentLabel = labelBefore
+        softFails = softFailsBefore
         Maybe.None(Span(source, pos(), pos(), Synthesized))
       }
     }

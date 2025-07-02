@@ -10,12 +10,14 @@ enum LexerError:
   case InvalidEscapeSequence(char: Char)
   case Expected(char: Char)
   case UnknownChar(char: Char)
+  case LinebreakInSinglelineString
   case UnterminatedString
   case UnterminatedComment
   case EmptyCharLiteral
   case MultipleCodePointsInChar
   case InvalidUnicodeLiteral
-  case InvalidNumberFormat
+  case InvalidIntegerFormat
+  case InvalidDoubleFormat
 
   def message: String = this match
     case InvalidEscapeSequence(char) =>
@@ -24,12 +26,14 @@ enum LexerError:
       s"Expected '$char' (U+${char.toInt.toHexString}) while lexing"
     case UnknownChar(char) =>
       s"Unknown character '$char' (U+${char.toInt.toHexString}) in file"
+    case LinebreakInSinglelineString => "Unexpected line break in a single-line string"
     case UnterminatedString => "Unterminated string literal"
     case UnterminatedComment => "Unterminated multi-line comment; expected closing `*/`"
     case EmptyCharLiteral => "Empty character literal"
     case MultipleCodePointsInChar => "Character literal consists of multiple code points"
     case InvalidUnicodeLiteral => "Invalid unicode literal"
-    case InvalidNumberFormat => "Invalid number format"
+    case InvalidIntegerFormat => "Invalid integer format, not a 64bit integer literal"
+    case InvalidDoubleFormat => "Invalid float format, not a double literal"
 
 /**
  * A token consist of the absolute starting position, the absolute end position in the source file
@@ -252,7 +256,6 @@ class Lexer(source: Source) extends Iterator[Token]:
       skipWhitespaceAndNewlines()
 
     tokenStartPosition = position
-
     val kind = nextToken()
 
     makeToken(kind)
@@ -348,6 +351,7 @@ class Lexer(source: Source) extends Iterator[Token]:
             case TokenKind.Str(content, _) => TokenKind.HoleStr(content)
             case other => other
         case InterpolationDelim | CharDelim =>
+          skipWhitespaceAndNewlines()
           nextToken() // recovery
     else
       nextToken() // recovery
@@ -522,14 +526,14 @@ class Lexer(source: Source) extends Iterator[Token]:
 
       floatString.toDoubleOption match
         case Some(float) => TokenKind.Float(float)
-        case None => TokenKind.Error(LexerError.InvalidNumberFormat)
+        case None => TokenKind.Error(LexerError.InvalidDoubleFormat)
     else
       // Get the integer string
       val integerString = getCurrentSlice
 
       integerString.toLongOption match
         case Some(integer) => TokenKind.Integer(integer)
-        case None => TokenKind.Error(LexerError.InvalidNumberFormat)
+        case None => TokenKind.Error(LexerError.InvalidIntegerFormat)
 
   private def lexAlphanumeric(): TokenKind =
     advanceWhile { (curr, _) => nameRest.contains(curr) }
@@ -544,11 +548,11 @@ class Lexer(source: Source) extends Iterator[Token]:
                          allowInterpolation: Boolean = true
                        ): TokenKind =
 
-    val delimiterType = delimiter match
+    val delimiterType: Delimiter = delimiter match
       case '"' => if multiline then MultiStringDelim else StringDelim
       case '\'' => CharDelim
       case '>' => HoleDelim // for <"...">
-      case _ => StringDelim
+      case _ => ??? // TODO(jiribenes, 2025-07-02): take the delimiter explicitly...
 
     if !continued then delimiters.push(delimiterType)
 
@@ -606,7 +610,7 @@ class Lexer(source: Source) extends Iterator[Token]:
           else return TokenKind.Str(contents.toString, multiline)
 
         case '\n' if !multiline =>
-          return TokenKind.Error(LexerError.UnterminatedString)
+          return TokenKind.Error(LexerError.LinebreakInSinglelineString)
 
         case c =>
           contents.addOne(advance())

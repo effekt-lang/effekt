@@ -1,3 +1,3 @@
 [error] examples/neg/parsing/rogue-splice.effekt:1:13: Unexpected splice: string interpolation ${ ... } is only allowed in strings!
 val rogue = ${}
-            ^^
+            ^^^

@@ -22,7 +22,7 @@ class LexerTests extends munit.FunSuite {
 
   def assertFailure(prog: String)(using Location): Unit =
     val tokens = Lexer.lex(StringSource(prog, ""))
-    println(tokens)
+    // println(tokens)
     // TODO(jiribenes, 2025-07-01): Can we do better here? The error is a bit confusing tbh.
     assertNotEquals(tokens, tokens.filterNot { t => t.isError }, "Expected at least one error token!")
 
@@ -42,10 +42,20 @@ class LexerTests extends munit.FunSuite {
   }
 
   test("braces") {
-    assertFailure("\" before ${ ${} } after\"")
+    // only rejected in the parser!
+    assertSuccess("${}")
+    assertSuccess("\" before ${ ${} } after\"")
 
+    {
+      val prog = "${ ${} }"
 
-    assertSuccess("${}") // only rejected in the parser!
+      assertTokensEq(
+        prog,
+        `${`, `${`, `}$`, `}$`,
+        EOF
+      )
+    }
+
     assertSuccess("}")
     assertSuccess("{}}")
     assertSuccess("{ 42 ")
@@ -71,6 +81,13 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq("-9223372036854775808", Integer(-9223372036854775808L), EOF)
     // the max double value is 1.7976931348623157E308, without "e notation/scientific notation" support in the lexer,
     // we refrain from writing it down in full length here
+
+    val num = "println(9223372036854775808)"
+    assertTokensEq(
+      num,
+      Ident("println"), `(`, Error(InvalidIntegerFormat), `)`,
+      EOF
+    )
   }
 
   test("symbols") {
@@ -126,8 +143,12 @@ class LexerTests extends munit.FunSuite {
       EOF
     )
     assertTokensEq("\" \"\"\"", Str(" ", false), Str("", false), EOF)
-    assertFailure("\"\"\"")
     assertFailure("\"\"\" \"")
+
+    assertTokensEq(
+      "\"\"\"",
+      Error(UnterminatedString), EOF
+    )
   }
 
   test("quoted single-line string") {

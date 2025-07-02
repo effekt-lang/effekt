@@ -1,0 +1,9 @@
+[error] examples/neg/parsing/soft-fail-then-hard.effekt:1:20: Unexpected splice: string interpolation ${ ... } is only allowed in strings!
+val rogue_splice = ${ a a }
+                   ^^^^^^^^
+[error] examples/neg/parsing/soft-fail-then-hard.effekt:3:20: Invalid integer format, not a 64bit integer literal
+val too_long_int = 123456789012345678901234567890
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[error] examples/neg/parsing/soft-fail-then-hard.effekt:5:28: Unexpected line break in a single-line string
+val unterminated_string = "
+                           ^
