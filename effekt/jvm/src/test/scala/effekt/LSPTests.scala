@@ -1480,8 +1480,8 @@ class LSPTests extends FunSuite {
         ))
       ),
       body = List(
-        NaturalLanguage(kind = HoleItemKind.NaturalLanguage, text = "This is some natural language text."),
-        Code(kind = HoleItemKind.Code, text = "do foo()", `type` = Some("String"))
+        NaturalLanguage(text = "This is some natural language text."),
+        Code(text = "do foo()", `type` = Some("String"))
       )
     )
 
@@ -1590,7 +1590,6 @@ class LSPTests extends FunSuite {
 
       val expectedBody = List(
         Code(
-          kind = HoleItemKind.Code,
           text = "x + 1",
           `type` = Some("Int")
         )
@@ -1629,25 +1628,20 @@ class LSPTests extends FunSuite {
 
       val expectedBody = List(
         NaturalLanguage(
-          kind = HoleItemKind.NaturalLanguage,
           text = "\n  This is some natural language text.\n  "
         ),
         Code(
-          kind = HoleItemKind.Code,
           text = "do foo()",
           `type` = Some("Int")
         ),
         NaturalLanguage(
-          kind = HoleItemKind.NaturalLanguage,
           text = "\n  Some more text.\n  "
         ),
         Code(
-          kind = HoleItemKind.Code,
           text = "do bar()",
           `type` = Some("String")
         ),
         NaturalLanguage(
-          kind = HoleItemKind.NaturalLanguage,
           text = "\n"
         )
       )
@@ -1686,25 +1680,20 @@ class LSPTests extends FunSuite {
 
       val expectedBody = List(
         NaturalLanguage(
-          kind = HoleItemKind.NaturalLanguage,
           text = "\n  This is some natural language text.\n  "
         ),
         Code(
-          kind = HoleItemKind.Code,
           text = "do foo()",
           `type` = None
         ),
         NaturalLanguage(
-          kind = HoleItemKind.NaturalLanguage,
           text = "\n  Some more text.\n  "
         ),
         Code(
-          kind = HoleItemKind.Code,
           text = "do bar()",
           `type` = None
         ),
         NaturalLanguage(
-          kind = HoleItemKind.NaturalLanguage,
           text = "\n"
         )
       )

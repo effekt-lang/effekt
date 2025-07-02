@@ -218,17 +218,17 @@ trait Intelligence {
     // This happens when the hole is defined as a single statement/expression using the `<{ stmt }>` syntax
     if (strIt.isEmpty && argIt.hasNext) {
       val (stmt, tpeOpt) = argIt.next()
-      buf += Code(HoleItemKind.Code, stmt.sourceOf, tpeOpt.map(t => pp"${t}"))
+      buf += Code(stmt.sourceOf, tpeOpt.map(t => pp"${t}"))
       return buf.result()
     }
 
     // Case 2: starting with a string, it alternates between strings and arguments
     // This happens when the hole is defined as a template using the `<"text ${ arg } text ${arg} ...">` syntax
     while (strIt.hasNext) {
-      buf += NaturalLanguage(HoleItemKind.NaturalLanguage, strIt.next())
+      buf += NaturalLanguage(strIt.next())
       if (argIt.hasNext) {
         val (stmt, tpeOpt) = argIt.next()
-        buf += Code(HoleItemKind.Code, stmt.sourceOf, tpeOpt.map(t => pp"${t}"))
+        buf += Code(stmt.sourceOf, tpeOpt.map(t => pp"${t}"))
       }
     }
 
@@ -471,8 +471,12 @@ object Intelligence {
     final val Code = "Code"
   }
 
-  case class NaturalLanguage(kind: String, text: String) extends HoleItem
-  case class Code(kind: String, text: String, `type`: Option[String]) extends HoleItem
+  case class NaturalLanguage(text: String) extends HoleItem {
+    val kind = HoleItemKind.NaturalLanguage
+  }
+  case class Code(text: String, `type`: Option[String]) extends HoleItem {
+    val kind = HoleItemKind.Code
+  }
 
   case class CaptureInfo(
     position: Position,
