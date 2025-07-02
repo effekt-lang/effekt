@@ -249,21 +249,19 @@ class Lexer(source: Source) extends Iterator[Token]:
   case object MultiStringDelim extends Delimiter
   case object CharDelim extends Delimiter
   case object HoleDelim extends Delimiter
-  case object InterpolationDelim extends Delimiter
 
   def allowsInterpolation(d: Delimiter): Boolean = d match
     case StringDelim => true
     case MultiStringDelim => true
     case CharDelim => false
     case HoleDelim => true
-    case InterpolationDelim => ???
 
   private var done: Boolean = false
 
   override def hasNext: Boolean = !done
 
   override def next(): Token =
-    if !resumeStringNext then
+    if !resumeStringNext || delimiters.isEmpty then
       skipWhitespaceAndNewlines()
 
     tokenStartPosition = position
@@ -347,9 +345,7 @@ class Lexer(source: Source) extends Iterator[Token]:
     braceTracker.decrementBraces
     advance() // consume '}'
 
-    if delimiters.nonEmpty && delimiters.top == InterpolationDelim then
-      delimiters.pop()
-      resumeStringNext = true
+    resumeStringNext = true
 
   // String interpolation resumption
   private def resumeStringAfterInterpolation(): TokenKind =
@@ -358,7 +354,7 @@ class Lexer(source: Source) extends Iterator[Token]:
         case StringDelim => lexString(StringDelim, continued = true)
         case MultiStringDelim => lexString(MultiStringDelim, continued = true)
         case HoleDelim => lexString(HoleDelim, continued = true)
-        case InterpolationDelim | CharDelim =>
+        case CharDelim =>
           skipWhitespaceAndNewlines()
           nextToken() // recovery
     else
@@ -445,7 +441,6 @@ class Lexer(source: Source) extends Iterator[Token]:
       case ('$', '{') =>
         interpolationDepths.push(braceTracker.braces + 1)
         braceTracker.incrementBraces
-        delimiters.push(InterpolationDelim)
         advance2With(TokenKind.`${`)
       case ('$', _) =>
         advanceWith(TokenKind.Error(LexerError.UnknownChar('$')))
