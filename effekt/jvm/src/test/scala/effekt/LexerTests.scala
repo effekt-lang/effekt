@@ -283,22 +283,13 @@ class LexerTests extends munit.FunSuite {
   }
 
   def assertSuccessFile(filename: String): Unit = {
-    val start = System.nanoTime()
+    // val start = System.nanoTime()
     val file = scala.io.Source.fromFile(filename).mkString
     assertSuccess(file)
-    println(s"${filename}: ${(System.nanoTime() - start) * 1e-9}")
+    // println(s"${filename}: ${(System.nanoTime() - start) * 1e-9}")
   }
-/*
-libraries/common/list.effekt: 0.017573333
-libraries/common/effekt.effekt: 0.008536792000000001
-libraries/common/stringbuffer.effekt: 0.0010087920000000001
-libraries/common/exception.effekt: 0.001104375
-libraries/common/array.effekt: 0.004643333
-libraries/common/bytearray.effekt: 0.001793375
-libraries/common/char.effekt: 0.0018657090000000001
-libraries/common/stream.effekt: 0.0034919580000000003
-libraries/common/map.effekt: 0.008496875000000001*/
-  test("big files") {
+
+  test("big stdlib files") {
     assertSuccessFile("libraries/common/list.effekt")
     assertSuccessFile("libraries/common/effekt.effekt")
     assertSuccessFile("libraries/common/stringbuffer.effekt")
