@@ -224,14 +224,13 @@ class Lexer(source: Source) extends Iterator[Token] {
   private val interpolationDepths = mutable.Stack[Int]()
 
   /**
-   * DESIGN DECISION: String interpolation requires a two-step dance.
+   * String interpolation requires a two-step dance.
    *
-   * When we see `}` ending interpolation:
-   * 1. MUST return the `}$` token first (Iterator contract)
-   * 2. NEXT call to next() must resume string lexing
+   * When we see a `}` ending interpolation, we
+   * 1. MUST return the `}$` token first,
+   * 2. and ensure that the NEXT call to next() must resume lexing a string.
    *
-   * Any alternative (token buffering, state machines, etc.) just moves this
-   * complexity elsewhere without eliminating it.
+   * In order to do step 2, we have this [[resumeStringNext]] flag.
    */
   private var resumeStringNext = false
 

@@ -179,6 +179,16 @@ class LexerTests extends munit.FunSuite {
     )
   }
 
+  test("simple interpolated string") {
+    assertTokensEq(
+      "\"Hello ${ 42 } world\"",
+      Str("Hello ", false),
+      `${`, Integer(42), `}$`,
+      Str(" world", false),
+      EOF
+    )
+  }
+
   test("interpolated string") {
     val prog = """ "${x + 1}${x + 2}" """
     assertTokensEq(
