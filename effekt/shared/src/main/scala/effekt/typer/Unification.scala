@@ -16,7 +16,7 @@ case object Invariant extends Polarity { def flip = Invariant }
 /**
  * The state of the unification scope, used for backtracking on overload resolution
  *
- * See [[Unification.ubackup]] and [[Unification.restore]]
+ * See [[Unification.backupUnification]] and [[Unification.restore]]
  */
 case class UnificationState(
   scope: Scope,
@@ -86,7 +86,7 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator { self: Cont
 
   // Lifecycle management
   // --------------------
-  def ubackup(): UnificationState = UnificationState(scope, constraints.clone())
+  def backupUnification(): UnificationState = UnificationState(scope, constraints.clone())
   def restore(state: UnificationState): Unit =
     scope = state.scope
     constraints = state.constraints.clone()
