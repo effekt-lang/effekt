@@ -1084,12 +1084,19 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   def maybeValueArgs(): List[Term] = if peek(`(`) then valueArgs() else Nil
   def maybeBlockArgs(): List[Term] = if peek(`{`) then blockArgs() else Nil
 
+  inline def maybeNamed[T](inline of: () => T): () => T = () => {
+    if (isIdent && peek(1).kind == `=`) {
+      (ident() <~ `=`) ~ of() match {
+        case _name ~ v => v
+      }
+    } else { of() }
+  }
   def typeArgs(): Many[ValueType] =
     nonterminal:
       some(valueType, `[`, `,`, `]`)
   def valueArgs(): List[Term] =
     nonterminal:
-      many(expr, `(`, `,`, `)`).unspan
+      many(maybeNamed(expr), `(`, `,`, `)`).unspan
   def blockArgs(): List[Term] =
     nonterminal:
       someWhile(blockArg(), `{`).unspan
