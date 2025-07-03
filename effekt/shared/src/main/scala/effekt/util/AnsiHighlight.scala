@@ -5,8 +5,6 @@ import effekt.lexer.TokenKind.*
 import kiama.util.{ Positions, StringSource, Source }
 import effekt.lexer.{ Lexer, Token, TokenKind }
 
-import scala.util.matching.*
-
 object AnsiHighlight {
 
   private def highlight(token: Token)(using Source): String = token.kind match {
@@ -62,7 +60,7 @@ object AnsiHighlight {
     //     2 4
     //
     // so we need to emit from offset 3 to 4 (non-inclusive).
-    var previousOffset = 0
+    var previousOffset = -1
 
     val out = new StringBuffer
 
