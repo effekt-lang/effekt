@@ -27,9 +27,11 @@ static const struct Pos BooleanTrue = (struct Pos) { .tag = 1, .obj = NULL, };
 
 typedef struct Pos String;
 
-struct StackValue;
-
-typedef struct StackValue* Stack;
+typedef struct {
+    char* base;
+    char* sp;
+    char* limit;
+} Stack;
 
 
 // Defined in rts.ll
