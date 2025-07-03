@@ -263,7 +263,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseExpr("f")
     parseExpr("f(a)")
     parseExpr("f(a, 42)")
-    parseExpr("\\u0000")
+    parseExpr("'\\u0000'")
 
     parseExpr("l.foreach { _ => 42 }")
     {

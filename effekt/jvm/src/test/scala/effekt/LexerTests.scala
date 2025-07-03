@@ -123,10 +123,10 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq("'\\\\'", Chr('\\'), EOF)
     assertTokensEq("'\\n'", Chr('\n'), EOF)
     assertTokensEq("'\\t'", Chr('\t'), EOF)
-    assertTokensEq("\\u0000", Chr(0), EOF)
-    assertTokensEq("\\uFFFF", Chr(0xFFFF), EOF)
-    assertTokensEq("\\u10FFFF{ val", Chr(0x10FFFF), `{`, `val`, EOF)
-    assertTokensEq("val s =\\u0000+ 1", `val`, Ident("s"), `=`, Chr(0), `+`, Integer(1), EOF)
+    assertTokensEq("'\\u0000'", Chr(0), EOF)
+    assertTokensEq("'\\uFFFF'", Chr(0xFFFF), EOF)
+    assertTokensEq("'\\u10FFFF'{ val", Chr(0x10FFFF), `{`, `val`, EOF)
+    assertTokensEq("val s ='\\u0000'+ 1", `val`, Ident("s"), `=`, Chr(0), `+`, Integer(1), EOF)
     assertTokensEq("''", Error(LexerError.EmptyCharLiteral), EOF)
   }
 

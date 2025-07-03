@@ -7,21 +7,20 @@ import kiama.util.Source
 
 /** Lexing errors that can occur during tokenization */
 enum LexerError {
-  case InvalidEscapeSequence(char: Char)
+  case InvalidEscapeSequence(escapeString: String)
   case Expected(char: Char)
   case UnknownChar(char: Char)
   case UnterminatedStringLike(kind: TokenKind)
   case UnterminatedComment
   case EmptyCharLiteral
   case MultipleCodePointsInChar
-  case InvalidUnicodeLiteral
   case InvalidIntegerFormat
   case InvalidDoubleFormat
   case UnterminatedInterpolation(depth: Int)
 
   def message: String = this match {
-    case InvalidEscapeSequence(char) =>
-      s"Invalid character in escape sequence: '$char' (U+${char.toInt.toHexString})"
+    case InvalidEscapeSequence(str) =>
+      s"Invalid character in escape sequence: `\\${str}`"
     case Expected(char) =>
       s"Expected '$char' (U+${char.toInt.toHexString}) while lexing"
     case UnknownChar(char) =>
@@ -33,7 +32,6 @@ enum LexerError {
     case UnterminatedComment => "Unterminated multi-line comment; expected closing `*/`"
     case EmptyCharLiteral => "Empty character literal"
     case MultipleCodePointsInChar => "Character literal consists of multiple code points"
-    case InvalidUnicodeLiteral => "Invalid unicode literal"
     case InvalidIntegerFormat => "Invalid integer format, not a 64bit integer literal"
     case InvalidDoubleFormat => "Invalid float format, not a double literal"
     case UnterminatedInterpolation(depth) =>
@@ -378,7 +376,7 @@ class Lexer(source: Source) extends Iterator[Token] {
     if (resumeStringNext) {
       resumeStringNext = false
       if (delimiters.nonEmpty) {
-        return string(delimiters.top, continued = true)
+        return stringLike(delimiters.top, continued = true)
       }
       // otherwise fallthrough
     }
@@ -394,14 +392,10 @@ class Lexer(source: Source) extends Iterator[Token] {
       case (c, _) if isNameFirst(c) => identifier()
 
       // String literals, character literals, hole string literals
-      case ('"', '"') if peekAhead(2) == '"' => advance3With(string(MultiString))
-      case ('"',   _)                        => advanceWith(string(SingleString))
-      case ('\'',  _)                        => advanceWith(string(CharString))
-      case ('<', '"')                        => advance2With(string(HoleString))
-
-      // Unicode literals
-      // TODO(jiribenes, 2025-07-01): Do we even want to keep supporting these?
-      case ('\\', 'u') => advance2With(unicodeLiteral())
+      case ('"', '"') if peekAhead(2) == '"' => advance3With(stringLike(MultiString)) // """ ... """
+      case ('"',   _)                        => advanceWith(stringLike(SingleString)) // " ... """
+      case ('\'',  _)                        => advanceWith(stringLike(CharString))   // ' ... '
+      case ('<', '"')                        => advance2With(stringLike(HoleString))  // <" ... ">
 
       // Comments
       case ('/', '*') => advance2With(multilineComment())
@@ -535,7 +529,7 @@ class Lexer(source: Source) extends Iterator[Token] {
    *
    * Contract: Expects its caller to already consume the delimiter itself!
    */
-  private def string(delimiter: Delimiter, continued: Boolean = false): TokenKind = {
+  private def stringLike(delimiter: Delimiter, continued: Boolean = false): TokenKind = {
     if !continued then delimiters.push(delimiter)
 
     val contents = StringBuilder()
@@ -576,13 +570,14 @@ class Lexer(source: Source) extends Iterator[Token] {
             case 'r' => advance(); contents.addOne('\r')
             case 't' => advance(); contents.addOne('\t')
             case 'u' =>
+              val start = position.offset
               advance()
               lexUnicodeEscape() match {
-                case -1 => return TokenKind.Error(LexerError.InvalidUnicodeLiteral)
+                case -1 => return TokenKind.Error(LexerError.InvalidEscapeSequence(source.content.substring(start, position.offset - 1)))
                 case codePoint => contents.append(String.valueOf(Character.toChars(codePoint)))
               }
             case c =>
-              return TokenKind.Error(LexerError.InvalidEscapeSequence(c))
+              return TokenKind.Error(LexerError.InvalidEscapeSequence(c.toString))
           }
 
         // interpolation
@@ -603,12 +598,6 @@ class Lexer(source: Source) extends Iterator[Token] {
     // End of input reached
     close(unterminated = true)
   }
-
-  private def unicodeLiteral(): TokenKind =
-    lexUnicodeEscape() match {
-      case -1 => TokenKind.Error(LexerError.InvalidUnicodeLiteral)
-      case codePoint => TokenKind.Chr(codePoint)
-    }
 
   // Returns a Char represented as a 32bit integer or -1 on failure
   private def lexUnicodeEscape(): Int =
