@@ -31,7 +31,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case Pure, Direct, Control
   }
   def callingConvention(callable: Callable)(using Context): CallingConvention = callable match {
-    case f @ ExternFunction(name, _, _, _, _, _, capture, bodies) =>
+    case f @ ExternFunction(name, _, _, _, _, _, capture, bodies, _) =>
       // resolve the preferred body again and hope it's the same
       val body = ResolveExternDefs.findPreferred(bodies)
       body match {
@@ -105,7 +105,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         interface.operations.map { op => core.Property(op, operationAtDeclaration(interface.tparams, op)) }))
 
     case f @ source.ExternDef(pure, id, _, vps, bps, _, bodies, doc, span) =>
-      val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol
+      val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _, _) = f.symbol
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.capture)
       val tBody = bodies match {
@@ -753,7 +753,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def operationAtCallsite(receiver: symbols.BlockType, member: symbols.Operation)(using Context): BlockType = receiver.asInterfaceType match {
     case InterfaceType(i: Interface, targs) => member match {
       // For operations, we substitute the first type parameters by concrete type args.
-      case Operation(name, tparams, vparams, bparams, resultType, effects, _) =>
+      case Operation(name, tparams, vparams, bparams, resultType, effects, _, _) =>
         val substitution = Substitutions((tparams zip targs).toMap, Map.empty)
         val remainingTypeParams = tparams.drop(targs.size)
         // TODO this is exactly like in [[Callable.toType]] -- TODO repeated here:
@@ -778,7 +778,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def operationAtDeclaration(tparamsInterface: List[Id], op: symbols.Operation)(using Context): core.BlockType = op match {
-    case symbols.Operation(name, tps, vps, bps, resultType, effects, interface) =>
+    case symbols.Operation(name, tps, vps, bps, resultType, effects, interface, _) =>
       // like in asSeenFrom we need to make up cparams, they cannot occur free in the result type
       val capabilities = CanonicalOrdering(effects.toList)
       val tparams = tps.drop(tparamsInterface.size)

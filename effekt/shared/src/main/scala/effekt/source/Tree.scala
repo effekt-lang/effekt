@@ -127,7 +127,7 @@ enum Origin {
   case Real, Synthesized, Missing
 }
 
-case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = Origin.Real) {
+case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = Origin.Real) extends Ordered[Span] {
   /**
    * creates a fake empty Span immediately after this one
    * Example:
@@ -142,6 +142,16 @@ case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = 
   def synthesized: Span = Span(source, from, to, origin = Origin.Synthesized)
 
   def range: kiama.util.Range = kiama.util.Range(source.offsetToPosition(from), source.offsetToPosition(to))
+
+  override def compare(that: Span): Int = {
+    val nameCmp = this.source.name compareTo that.source.name
+    if (nameCmp != 0) nameCmp
+    else {
+      val startCmp = this.from compareTo that.from
+      if (startCmp != 0) startCmp
+      else this.to compareTo that.to
+    }
+  }
 }
 
 object Span {

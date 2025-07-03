@@ -1706,6 +1706,169 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("Server publishes term names in the correct order") {
+    withClientAndServer { (client, server) =>
+      val source =
+        raw"""namespace Foo {
+             |  effect e1: Int
+             |  def foo(z: Int, y: Int, x: Int){b1: => Int}{b2: => Bool}: Int = <>
+             |  effect e2: Int
+             |}
+             |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+
+      // Check that the scope bindings are in the correct order
+      val hole = receivedHoles.head.holes.head
+
+      val innerBindings = hole.scope.bindings
+
+      assertEquals(innerBindings.length, 5)
+      assertEquals(innerBindings(0).name, "z")
+      assertEquals(innerBindings(1).name, "y")
+      assertEquals(innerBindings(2).name, "x")
+      assertEquals(innerBindings(3).name, "b1")
+      assertEquals(innerBindings(4).name, "b2")
+
+      val outerBindings = hole.scope.outer.get.bindings
+
+      assertEquals(outerBindings.length, 3)
+      assertEquals(outerBindings(0).name, "e1")
+      assertEquals(outerBindings(1).name, "foo")
+      assertEquals(outerBindings(2).name, "e2")
+    }
+  }
+
+  test("Server correctly publishes overloaded field accessors") {
+    withClientAndServer { (client, server) =>
+      val source =
+        raw"""namespace N {
+             |  // Accessor functions are generated for all record fields
+             |  record Foo1(theField: String)
+             |  record Foo2(theField: String)
+             |
+             |  // There are no accessor functions for data type constructor fields
+             |  type Bar { Bar(theField: Int) }
+             |
+             |  def main() = <>
+             |}
+             |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val expectedBindings = List(
+        TypeBinding(
+          qualifier = Nil,
+          name = "Foo1",
+          origin = "Defined",
+          definition = """type Foo1 {
+  def Foo1(theField: String): Foo1 / {}
+}""",
+          kind = "Type"
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "Foo1",
+          origin = "Defined",
+          `type` = Some(
+            value = "String => Foo1"
+          ),
+          kind = "Term"
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "theField",
+          origin = "Defined",
+          `type` = Some(
+            value = "Foo1 => String"
+          ),
+          kind = "Term"
+        ),
+        TypeBinding(
+          qualifier = Nil,
+          name = "Foo2",
+          origin = "Defined",
+          definition = """type Foo2 {
+  def Foo2(theField: String): Foo2 / {}
+}""",
+          kind = "Type"
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "Foo2",
+          origin = "Defined",
+          `type` = Some(
+            value = "String => Foo2"
+          ),
+          kind = "Term"
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "theField",
+          origin = "Defined",
+          `type` = Some(
+            value = "Foo2 => String"
+          ),
+          kind = "Term"
+        ),
+        TypeBinding(
+          qualifier = Nil,
+          name = "Bar",
+          origin = "Defined",
+          definition = """type Bar {
+  def Bar(theField: Int): Bar / {}
+}""",
+          kind = "Type"
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "Bar",
+          origin = "Defined",
+          `type` = Some(
+            value = "Int => Bar"
+          ),
+          kind = "Term"
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "main",
+          origin = "Defined",
+          `type` = Some(
+            value = "() => Nothing"
+          ),
+          kind = "Term"
+        )
+      )
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+
+      val hole = receivedHoles.head.holes.head
+      val outerScope = hole.scope.outer.get
+
+      assertEquals(outerScope.bindings, expectedBindings)
+    }
+  }
+
   // Text document DSL
   //
   //

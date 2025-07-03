@@ -6,7 +6,7 @@ package typer
  */
 import effekt.context.{Annotation, Annotations, Context, ContextOps}
 import effekt.context.assertions.*
-import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, Many, MatchGuard, MatchPattern, Maybe, ModuleDecl, OpClause, Stmt, TagPattern, Term, Tree, resolve, resolveBlockRef, resolveBlockType, resolveValueType, symbol}
+import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, Many, MatchGuard, MatchPattern, Maybe, ModuleDecl, NoSource, OpClause, Stmt, TagPattern, Term, Tree, resolve, resolveBlockRef, resolveBlockType, resolveValueType, symbol}
 import effekt.source.Term.BlockLiteral
 import effekt.symbols.*
 import effekt.symbols.builtins.*
@@ -1548,7 +1548,7 @@ trait TyperOps extends ContextOps { self: Context =>
     cap
 
   private [typer] def freshCapabilityFor(tpe: InterfaceType): symbols.BlockParam =
-    val param: BlockParam = BlockParam(tpe.name, Some(tpe))
+    val param: BlockParam = BlockParam(tpe.name, Some(tpe), NoSource)
     // TODO FIXME -- generated capabilities need to be ignored in LSP!
 //     {
 //      override def synthetic = true
@@ -1631,13 +1631,13 @@ trait TyperOps extends ContextOps { self: Context =>
     }
 
   private[typer] def bind(p: ValueParam): Unit = p match {
-    case s @ ValueParam(name, Some(tpe)) => bind(s, tpe)
+    case s @ ValueParam(name, Some(tpe), _) => bind(s, tpe)
     case s => panic(pretty"Internal Error: Cannot add $s to typing context.")
   }
 
   private[typer] def bind(p: TrackedParam): Unit = p match {
-    case s @ BlockParam(name, tpe) => bind(s, tpe.get, CaptureSet(p.capture))
-    case s @ ExternResource(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
+    case s @ BlockParam(name, tpe, _) => bind(s, tpe.get, CaptureSet(p.capture))
+    case s @ ExternResource(name, tpe, _) => bind(s, tpe, CaptureSet(p.capture))
     case s : VarBinder => bind(s, CaptureSet(s.capture))
     case r : ResumeParam => panic("Cannot bind resume")
   }
