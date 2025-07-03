@@ -416,8 +416,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       override def apply(t: Pure): Pure = to match {
         case core.Type.TInt     => Pure.Literal(1337L, core.Type.TInt)
         case core.Type.TDouble  => Pure.Literal(13.37, core.Type.TDouble)
-        // Do strings need to be boxed? Really?
-        case core.Type.TString  => Pure.Literal("<?nothing>", core.Type.TString)
         case core.Type.TByte    => Pure.Literal(1337, core.Type.TByte)
         case core.Type.TChar    => Pure.Literal('a', core.Type.TChar)
         case t if boxer.isDefinedAt(t) => sys error s"No default value defined for ${t}"
