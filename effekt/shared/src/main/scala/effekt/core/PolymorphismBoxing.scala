@@ -40,7 +40,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   def coercerType(from: core.ValueType, into: core.ValueType): core.BlockType.Function =
     core.BlockType.Function(List(), List(), List(from), List(), into)
 
-  val TBoxedInt = ValueType.Data(Id("BoxedInt"), Nil)
+  val TBoxedInt: ValueType.Data = ValueType.Data(Id("BoxedInt"), Nil)
   val TBoxedByte = ValueType.Data(Id("BoxedByte"), Nil)
   val TBoxedDouble = ValueType.Data(Id("BoxedDouble"), Nil)
 

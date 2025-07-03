@@ -12,34 +12,16 @@ import kiama.parsing.{Failure, NoSuccess, Success}
 abstract class AbstractPolymorphismBoxingTests extends CorePhaseTests(PolymorphismBoxing) {
 
   override protected val defaultNames: Map[String, _root_.effekt.symbols.Symbol] = super.defaultNames ++ Map(
-    "BoxedInt" -> Id("BoxedInt"),
+    "BoxedInt" -> PolymorphismBoxing.TBoxedInt.name,
     "BoxedString" -> Id("BoxedString"),
     "MkBoxedString" -> Id("MkBoxedString"),
-    "boxInt" -> Id("boxInt"),
-    "unboxInt" -> Id("unboxInt"),
-    "unboxString" -> Id("unboxInt"),
-    "coerceIntPos" -> Id("@coerceIntPos"),
-    "coercePosInt" -> Id("@coercePosInt"),
-  )
-  val boxDecls = List(
-    Declaration.Data(defaultNames("BoxedString"), List(),
-      List(Constructor(defaultNames("MkBoxedString"),
-        List(Field(defaultNames("unboxString"), ValueType.Data(defaultNames("String"), Nil))))))
-  )
-  val boxExterns = List(
-    Extern.Def(defaultNames("boxInt"), Nil, Nil, List(ValueParam(Id("i"), ValueType.Data(defaultNames("Int"), Nil))), Nil,
-      ValueType.Data(defaultNames("BoxedInt"), Nil), Set.empty,
-      ExternBody.StringExternBody(source.FeatureFlag.Default(Span.missing), Template(List("<box int>"), Nil))),
-    Extern.Def(defaultNames("unboxInt"), Nil, Nil, List(ValueParam(Id("i"), ValueType.Data(defaultNames("BoxedInt"), Nil))), Nil,
-      ValueType.Data(defaultNames("Int"), Nil), Set.empty,
-      ExternBody.StringExternBody(source.FeatureFlag.Default(Span.missing), Template(List("<unbox int>"), Nil)))
   )
 
   override def transform(input: ModuleDecl): ModuleDecl = input match {
     case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-      super.transform(ModuleDecl(path, includes, boxDecls ++ declarations, boxExterns ++ externs, definitions, exports)) match {
+      super.transform(ModuleDecl(path, includes, declarations, externs, definitions, exports)) match {
         case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-          ModuleDecl(path, includes, declarations.filterNot(boxDecls.contains), externs.filterNot(boxExterns.contains), definitions, exports)
+          ModuleDecl(path, includes, declarations, externs, definitions, exports)
       }
   }
 
