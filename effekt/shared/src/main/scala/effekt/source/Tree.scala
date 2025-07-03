@@ -272,6 +272,13 @@ enum Param extends Definition {
 }
 export Param.*
 
+case class ValueArg(name: Option[String], value: Term, span: Span) extends Tree
+
+object ValueArg {
+  def Named(name: String, value: Term, span: Span): ValueArg = ValueArg(Some(name), value, span)
+  def Unnamed(value: Term): ValueArg = ValueArg(None, value, value.span)
+}
+
 /**
  * A `List` (usually of `Tree`s) with a `span` that spans all elements of the list
  */
@@ -496,12 +503,12 @@ enum Term extends Tree {
    * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
    * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
    */
-  case Do(effect: Option[TypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term], span: Span) extends Term, Reference
+  case Do(effect: Option[TypeRef], id: IdRef, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span) extends Term, Reference
 
   /**
    * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
    */
-  case Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[Term], span: Span)
+  case Call(target: CallTarget, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span)
 
   /**
    * Models:
@@ -510,7 +517,7 @@ enum Term extends Tree {
    *
    * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
    */
-  case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term], span: Span) extends Term, Reference
+  case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span) extends Term, Reference
 
   // Control Flow
   case If(guards: List[MatchGuard], thn: Stmt, els: Stmt, span: Span)
@@ -881,6 +888,7 @@ object Tree {
     def rewrite(c: MatchGuard)(using Context): MatchGuard = structuralVisit(c)
     def rewrite(t: source.CallTarget)(using Context): source.CallTarget = structuralVisit(t)
     def rewrite(b: ExternBody)(using Context): source.ExternBody = structuralVisit(b)
+    def rewrite(a: ValueArg)(using Context): ValueArg = structuralVisit(a)
 
     /**
      * Hook that can be overridden to perform an action at every node in the tree
@@ -944,6 +952,7 @@ object Tree {
     def query(c: MatchClause)(using Context, Ctx): Res = structuralQuery(c)
     def query(c: MatchGuard)(using Context, Ctx): Res = structuralQuery(c)
     def query(b: ExternBody)(using Context, Ctx): Res = structuralQuery(b)
+    def query(a: ValueArg)(using Context, Ctx): Res = structuralQuery(a)
 
     def query(t: Template[Term])(using Context, Ctx): Res =
       combineAll(t.args.map(query))

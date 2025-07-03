@@ -146,7 +146,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.abort("Expected an expression, but got an unbox (which is a block).")
 
       case c @ source.Select(receiver, field, _) =>
-        checkOverloadedFunctionCall(c, field, Nil, List(receiver), Nil, expected)
+        checkOverloadedFunctionCall(c, field, Nil, List(source.ValueArg.Unnamed(receiver)), Nil, expected)
 
       case c @ source.Do(effect, op, targs, vargs, bargs, _) =>
         // (1) first check the call
@@ -1055,7 +1055,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     receiver: source.Term,
     id: source.IdRef,
     targs: List[ValueType],
-    vargs: List[source.Term],
+    vargs: List[source.ValueArg],
     bargs: List[source.Term],
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
@@ -1121,7 +1121,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     call: source.CallLike,
     id: source.IdRef,
     targs: List[ValueType],
-    vargs: List[source.Term],
+    vargs: List[source.ValueArg],
     bargs: List[source.Term],
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
@@ -1211,7 +1211,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     name: String,
     funTpe: FunctionType,
     targs: List[ValueType],
-    vargs: List[source.Term],
+    vargs: List[source.ValueArg],
     bargs: List[source.Term],
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
@@ -1240,7 +1240,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     var effs: ConcreteEffects = Pure
 
     (vps zip vargs) foreach { case (tpe, expr) =>
-      val Result(t, eff) = checkExpr(expr, Some(tpe))
+      val Result(t, eff) = checkExpr(expr.value, Some(tpe))
       effs = effs ++ eff
     }
 

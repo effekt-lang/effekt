@@ -63,7 +63,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
     // the function is a field, desugar to select
     case c @ Call(fun: IdTarget, targs, List(receiver), Nil, span) if fun.definition.isInstanceOf[Field] =>
-      Select(rewrite(receiver), fun.id, span.synthesized)
+      Select(rewrite(receiver.value), fun.id, span.synthesized)
 
     case c @ MethodCall(receiver, id, targs, vargs, bargs, span) =>
       val valueArgs = vargs.map { a => rewrite(a) }

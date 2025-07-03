@@ -996,7 +996,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
        else
          Call(
            IdTarget(IdRef(Nil, opName(op.kind), op.span(source).synthesized)),
-           Nil, List(lhs, rhs), Nil,
+           Nil, List(ValueArg.Unnamed(lhs), ValueArg.Unnamed(rhs)), Nil,
            Span(source, lhs.span.from, rhs.span.to, Synthesized)
          )
 
@@ -1074,29 +1074,30 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   //   foo      ==    foo;
   //   ()             ()
   def isArguments: Boolean = lookbehind(1).kind != Newline && (peek(`(`) || peek(`[`) || peek(`{`))
-  def arguments(): (List[ValueType], List[Term], List[Term]) =
+  def arguments(): (List[ValueType], List[ValueArg], List[Term]) =
     if (!isArguments) fail("at least one argument section (types, values, or blocks)", peek.kind)
     (maybeTypeArgs().unspan, maybeValueArgs(), maybeBlockArgs())
 
   def maybeTypeArgs(): Many[ValueType] =
     nonterminal:
       if peek(`[`) then typeArgs() else Many.empty(span())
-  def maybeValueArgs(): List[Term] = if peek(`(`) then valueArgs() else Nil
+  def maybeValueArgs(): List[ValueArg] = if peek(`(`) then valueArgs() else Nil
   def maybeBlockArgs(): List[Term] = if peek(`{`) then blockArgs() else Nil
 
-  inline def maybeNamed[T](inline of: () => T): () => T = () => {
+  inline def valueArg(): ValueArg = {
     if (isIdent && peek(1).kind == `=`) {
-      (ident() <~ `=`) ~ of() match {
-        case _name ~ v => v
-      }
-    } else { of() }
+      nonterminal:
+        (ident() <~ `=`) ~ expr() match {
+          case name ~ v => ValueArg.Named(name, v, span())
+        }
+    } else { ValueArg.Unnamed(expr()) }
   }
   def typeArgs(): Many[ValueType] =
     nonterminal:
       some(valueType, `[`, `,`, `]`)
-  def valueArgs(): List[Term] =
+  def valueArgs(): List[ValueArg] =
     nonterminal:
-      many(maybeNamed(expr), `(`, `,`, `)`).unspan
+      many(valueArg, `(`, `,`, `)`).unspan
   def blockArgs(): List[Term] =
     nonterminal:
       someWhile(blockArg(), `{`).unspan
@@ -1187,14 +1188,14 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     Call(IdTarget(IdRef(List(), "Nil", Span.missing(source))), Nil, Nil, Nil, Span.missing(source))
 
   private def ConsTree(el: Term, rest: Term): Term =
-    Call(IdTarget(IdRef(List(), "Cons", Span.missing(source))), Nil, List(el, rest), Nil, Span.missing(source))
+    Call(IdTarget(IdRef(List(), "Cons", Span.missing(source))), Nil, List(ValueArg.Unnamed(el), ValueArg.Unnamed(rest)), Nil, Span.missing(source))
 
   def isTupleOrGroup: Boolean = peek(`(`)
   def tupleOrGroup(): Term =
     nonterminal:
       some(expr, `(`, `,`, `)`) match {
         case Many(e :: Nil, _) => e
-        case Many(xs, _) => Call(IdTarget(IdRef(List("effekt"), s"Tuple${xs.size}", span().synthesized)), Nil, xs.toList, Nil, span().synthesized)
+        case Many(xs, _) => Call(IdTarget(IdRef(List("effekt"), s"Tuple${xs.size}", span().synthesized)), Nil, xs.map(ValueArg.Unnamed), Nil, span().synthesized)
       }
 
   def isHole: Boolean = peek.kind match {
@@ -1252,10 +1253,10 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         case id ~ Template(strs, args) =>
           val target = id.getOrElse(IdRef(Nil, "s", id.span.synthesized))
           val doLits = strs.map { s =>
-            Do(None, IdRef(Nil, "literal", Span.missing(source)), Nil, List(StringLit(s, Span.missing(source))), Nil, Span.missing(source))
+            Do(None, IdRef(Nil, "literal", Span.missing(source)), Nil, List(ValueArg.Unnamed(StringLit(s, Span.missing(source)))), Nil, Span.missing(source))
           }
           val doSplices = args.map { arg =>
-            Do(None, IdRef(Nil, "splice", Span.missing(source)), Nil, List(arg), Nil, Span.missing(source))
+            Do(None, IdRef(Nil, "splice", Span.missing(source)), Nil, List(ValueArg.Unnamed(arg)), Nil, Span.missing(source))
           }
           val body = interleave(doLits, doSplices)
             .foldRight(Return(UnitLit(Span.missing(source)), Span.missing(source))) { (term, acc) => ExprStmt(term, acc, Span.missing(source)) }
