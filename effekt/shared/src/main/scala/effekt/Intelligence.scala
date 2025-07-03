@@ -185,7 +185,7 @@ trait Intelligence {
         ScopeInfo(name, ScopeKind.Local, bindingsOut.toList, Some(allBindings(outer)))
     }
 
-  def allBindings(origin: String, bindings: Namespace, path: List[String] = Nil)(using C: Context): List[BindingInfo] =
+  def allBindings(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): List[BindingInfo] =
     val symbols = allSymbols(origin, bindings, path)
 
     val sorted = if (origin == BindingOrigin.Imported) {
@@ -203,7 +203,7 @@ trait Intelligence {
       case sym: BlockSymbol => TermBinding(path, name, origin, C.blockTypeOption(sym).map(t => pp"${t}"))
     }).toList
 
-  def allSymbols(origin: String, bindings: Namespace, path: List[String] = Nil)(using C: Context): Array[(String, TypeSymbol | TermSymbol)] = {
+  def allSymbols(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): Array[(String, TypeSymbol | TermSymbol)] = {
     bindings.types.toArray ++ bindings.terms.toArray.flatMap((name, syms) => syms.map((name, _))) ++ bindings.namespaces.toArray.flatMap {
       case (name, namespace) => allSymbols(origin, namespace, path :+ name)
     }
