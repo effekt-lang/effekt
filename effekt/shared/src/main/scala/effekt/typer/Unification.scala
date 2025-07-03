@@ -229,12 +229,12 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator { self: Cont
   // Implementation Details
   // ----------------------
 
-  def uabort(msg: String): Nothing = this.uabort(msg)
-  def uabort(msg: String, ctx: ErrorContext) = this.uabort(ErrorContext.explainInContext(msg, ctx))
+  def uabort(msg: String): Nothing = this.abort(msg)
+  def uabort(msg: String, ctx: ErrorContext) = this.abort(ErrorContext.explainInContext(msg, ctx))
 
-  def uerror(msg: String): Nothing = this.uerror(msg)
-  def uerror(msg: String, ctx: ErrorContext) = this.uerror(ErrorContext.explainInContext(msg, ctx))
-  def uerror(left: symbols.Type, right: symbols.Type, ctx: ErrorContext) = this.uerror(ErrorContext.explainMismatch(left, right, ctx))
+  def uerror(msg: String) = this.error(msg)
+  def uerror(msg: String, ctx: ErrorContext) = this.error(ErrorContext.explainInContext(msg, ctx))
+  def uerror(left: symbols.Type, right: symbols.Type, ctx: ErrorContext) = this.error(ErrorContext.explainMismatch(left, right, ctx))
 
   def requireEqual(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit =
     requireLowerBound(x, tpe, ctx)
