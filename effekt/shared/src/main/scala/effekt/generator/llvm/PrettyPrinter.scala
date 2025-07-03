@@ -72,7 +72,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case Call(_, Tailcc(false), VoidType(), LocalReference(_, name), arguments) =>
       s"call tailcc void ${localName(name)}(${commaSeparated(arguments.map(show))})"
     case Call(result, Tailcc(true), resultType, function, arguments) =>
-      s"musttail ${show(Call(result, Tailcc(false), resultType, function, arguments))}"
+      s"tail ${show(Call(result, Tailcc(false), resultType, function, arguments))}"
     case Call(_, Tailcc(_), tpe, _, _) =>
       C.abort(s"tail call to non-void function returning: $tpe")
 
