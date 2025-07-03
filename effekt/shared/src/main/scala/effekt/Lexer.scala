@@ -646,33 +646,12 @@ class Lexer(source: Source) extends Iterator[Token] {
     if !done then
       TokenKind.Error(LexerError.UnterminatedComment)
     else
-      val comment = getCurrentSlice.substring(2, getCurrentSlice.length - 2) // Remove /* and */
-      TokenKind.Comment(comment)
-
-  private def multilineCommentNested(): TokenKind =
-    var depth = 1
-
-    while depth > 0 && !atEndOfInput do
-      currentChar match {
-        case '/' if nextChar == '*' =>
-          advance(); advance()
-          depth += 1
-        case '*' if nextChar == '/' =>
-          advance(); advance()
-          depth -= 1
-        case _ =>
-          advance()
-      }
-
-    if depth > 0 then
-      TokenKind.Error(LexerError.UnterminatedComment)
-    else
-      val comment = getCurrentSlice.substring(2, getCurrentSlice.length - 2) // Remove /* and */
+      val comment = getCurrentSlice.substring(2, getCurrentSlice.length - 2) // Remove `/*` and `*/`
       TokenKind.Comment(comment)
 
   private def shebang(): TokenKind =
     advanceWhile { (curr, _) => curr != '\n' }
-    val command = getCurrentSlice.substring(2) // Remove '#!'
+    val command = getCurrentSlice.substring(2) // Remove `#!`
     TokenKind.Shebang(command)
 }
 
