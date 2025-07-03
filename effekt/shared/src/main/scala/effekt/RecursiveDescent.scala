@@ -5,12 +5,38 @@ import effekt.lexer.TokenKind.{`::` as PathSep, *}
 import effekt.source.*
 import effekt.context.Context
 import effekt.source.Origin.Synthesized
+import effekt.util.VirtualSource
 import kiama.parsing.{Input, ParseResult}
 import kiama.util.{Position, Positions, Range, Source}
 
 import scala.annotation.{tailrec, targetName}
 import scala.language.implicitConversions
 import scala.collection.mutable.ListBuffer
+
+/**
+ * String templates containing unquotes `${... : T}`
+ */
+case class Template[+T](strings: List[String], args: List[T]) {
+  def map[R](f: T => R): Template[R] = Template(strings, args.map(f))
+}
+
+object Parser extends Phase[Source, Parsed] {
+
+  val phaseName = "parser"
+
+  def run(source: Source)(implicit C: Context): Option[PhaseResult.Parsed] = source match {
+    case VirtualSource(decl, _) => Some(decl)
+    case source =>
+      //println(s"parsing ${source.name}")
+      Context.timed(phaseName, source.name) {
+        val tokens = effekt.lexer.Lexer.lex(source)
+        val parser = RecursiveDescent(C.positions, tokens, source)
+        parser.parse(Input(source, 0))
+      }
+  } map { tree =>
+    Parsed(source, tree)
+  }
+}
 
 
 case class Fail(msg: String, position: Int) extends Throwable(null, null, false, false)
