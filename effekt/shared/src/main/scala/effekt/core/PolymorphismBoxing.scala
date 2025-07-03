@@ -100,20 +100,20 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         val unbox = findPureExternFn("unbox" ++ name).getOrElse { boundary.break(None) }
         val boxRet = box.annotatedTpe match {
           case BlockType.Function(_, _, _, _, result) => result
-          case _ => Context.uabort(pp"${box} is not of function type.")
+          case _ => Context.abort(pp"${box} is not of function type.")
         }
         unbox.annotatedTpe match {
           case BlockType.Function(_, _, List(unboxArg), List(), _) =>
             if (unboxArg != boxRet) {
-              Context.uabort(pp"Argument type of ${unbox} and return type of ${box} do not match up.")
+              Context.abort(pp"Argument type of ${unbox} and return type of ${box} do not match up.")
             }
-          case _ => Context.uabort(pp"${unbox} is not of function type.")
+          case _ => Context.abort(pp"${unbox} is not of function type.")
         }
         Some(ExternFnBoxer(boxRet, box, unbox))
       }
 
       findExternFnBoxer() getOrElse {
-        Context.uabort(s"Type ${name}, which needs to be boxed, is used as a type argument but no " +
+        Context.abort(s"Type ${name}, which needs to be boxed, is used as a type argument but no " +
           s"corresponding pure externs box${name} and unbox${name} were defined in the prelude.")
       }
     }
@@ -199,13 +199,13 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(implementation: Implementation)(using PContext): Implementation = implementation match {
     case Implementation(BlockType.Interface(symbol, targs), operations) =>
-      val ifce = PContext.findInterface(symbol).getOrElse { Context.uabort(s"No declaration for interface ${symbol}") }
+      val ifce = PContext.findInterface(symbol).getOrElse { Context.abort(s"No declaration for interface ${symbol}") }
       Implementation(BlockType.Interface(symbol, targs map transformArg), operations map transform(ifce, targs))
   }
 
   def transform(ifce: Interface, targs: List[ValueType])(operation: Operation)(using PContext): Operation = operation match {
     case Operation(name, tparams, cparams, vparams, bparams, body) =>
-      val prop = ifce.properties.find { p => p.id == name }.getOrElse { Context.uabort(s"Interface ${ifce} declares no operation ${name}.") }
+      val prop = ifce.properties.find { p => p.id == name }.getOrElse { Context.abort(s"Interface ${ifce} declares no operation ${name}.") }
       val propTpe = prop.tpe.asInstanceOf[BlockType.Function]
 
       val blockTpe = BlockType.Function(tparams, propTpe.cparams, propTpe.vparams.map(transform), propTpe.bparams.map(transform), transform(propTpe.result))
@@ -292,7 +292,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
               )
               (id, coerce(transform(clause), Type.instantiate(casetpe, targs map transformArg, List())))
           }, default map transform)
-        case t => Context.uabort(pp"Match on value of type ${t}")
+        case t => Context.abort(pp"Match on value of type ${t}")
       }
     case Stmt.Alloc(id, init, region, body) =>
       Stmt.Alloc(id, transform(init), region, transform(body))
@@ -496,7 +496,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         case (f, t) if f == t => IdentityCoercer(f, t)
         case (f: BlockType.Function, t: BlockType.Function) => FunctionCoercer(f, t, targs)
         case (f: BlockType.Interface, t: BlockType.Interface) => IdentityCoercer(f, t)
-        case _ => Context.uabort(pp"Unsupported coercion from ${from} to ${to}")
+        case _ => Context.abort(pp"Unsupported coercion from ${from} to ${to}")
       }
 
     class IdentityCoercer(val from: BlockType, val to: BlockType) extends BlockCoercer {

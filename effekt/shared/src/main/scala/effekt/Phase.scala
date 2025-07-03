@@ -25,7 +25,7 @@ import kiama.util.Source
  *
  * To perform any interesting computation, they receive the current compiler [[Context]].
  * A phase can also abort (by throwing [[FatalPhaseError]]) -- this exception is then converted to
- * an [[Context.uerror]] and the phase returns [[None]].
+ * an [[Context.error]] and the phase returns [[None]].
  *
  * @note Caching intermediate "micro-phases" somehow leads to inconsistencies and should
  *       be avoided (The problem is that Typer performs backtracking; caching could potentially

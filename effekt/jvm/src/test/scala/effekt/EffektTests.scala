@@ -60,7 +60,7 @@ trait EffektTests extends munit.FunSuite {
     ))
     configs.verify()
     compiler.compileFile(input.getPath, configs)
-    compiler.context.ubackup
+    compiler.context.backup
 
   def run(input: File, optimizations: Boolean): String =
     val compiler = driver

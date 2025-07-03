@@ -113,7 +113,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             usingCapture(capt)
             Result(vtpe, Pure)
         }
-        case b: BlockSymbol => Context.uabort("Expected an expression, but got a block.")
+        case b: BlockSymbol => Context.abort("Expected an expression, but got a block.")
         case x: ValueSymbol => Result(Context.lookup(x), Pure)
       }
 
@@ -143,7 +143,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         }
 
       case source.Unbox(_, _) =>
-        Context.uabort("Expected an expression, but got an unbox (which is a block).")
+        Context.abort("Expected an expression, but got an unbox (which is a block).")
 
       case c @ source.Select(receiver, field, _) =>
         checkOverloadedFunctionCall(c, field, Nil, List(receiver), Nil, expected)
@@ -173,7 +173,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case c @ source.Call(source.ExprTarget(e), targs, vargs, bargs, _) =>
         val Result(tpe, funEffs) = checkExprAsBlock(e, None) match {
           case Result(b: FunctionType, capt) => Result(b, capt)
-          case _ => Context.uabort("Cannot infer function type for callee.")
+          case _ => Context.abort("Cannot infer function type for callee.")
         }
 
         val Result(t, eff) = checkCallTo(c, "function", tpe, targs map { _.resolveValueType }, vargs, bargs, expected)
@@ -286,13 +286,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case cls @ source.MatchClause(source.MultiPattern(patterns, _), guards, body, _) =>
             if (patterns.length != arity) {
               Context.at(cls){
-                Context.uerror(pp"Number of patterns (${patterns.length}) does not match number of parameters / scrutinees (${arity}).")
+                Context.error(pp"Number of patterns (${patterns.length}) does not match number of parameters / scrutinees (${arity}).")
               }
             }
           case cls @ source.MatchClause(pattern, guards, body, _) =>
             if (arity != 1) {
               Context.at(cls) {
-                Context.uerror(pp"Number of patterns (1) does not match number of parameters / scrutinees (${arity}).")
+                Context.error(pp"Number of patterns (1) does not match number of parameters / scrutinees (${arity}).")
               }
             }
         }
@@ -338,8 +338,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result(expected.getOrElse(TBottom), Pure)
 
-      case tree : source.New => Context.uabort("Expected an expression, but got an object implementation (which is a block).")
-      case tree : source.BlockLiteral => Context.uabort("Expected an expression, but got a block literal.")
+      case tree : source.New => Context.abort("Expected an expression, but got an object implementation (which is a block).")
+      case tree : source.BlockLiteral => Context.abort("Expected an expression, but got a block literal.")
     }
 
   // Sideeffect: binds names in the current scope
@@ -375,7 +375,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       if (covered.size > covered.distinct.size)
-        Context.uerror("Duplicate definitions of operations")
+        Context.error("Duplicate definitions of operations")
 
       clauses foreach Context.withFocus {
         case d @ source.OpClause(op, tparams, vparams, bparams, retAnnotation, body, resume, _) =>
@@ -466,7 +466,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             case Some(ret, continuationCapt) =>
 
               if (bparams.nonEmpty)
-                Context.uerror("Block parameters are bound by resume and not the effect operation itself")
+                Context.error("Block parameters are bound by resume and not the effect operation itself")
 
               def isBidirectional = canonical.nonEmpty || declared.bparams.nonEmpty
 
@@ -561,7 +561,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case None => inferFunctionArgument(arg)
       }
 
-      case other => Context.uabort("Expected block, but got an expression.")
+      case other => Context.abort("Expected block, but got an expression.")
     }
 
   //</editor-fold>
@@ -601,7 +601,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       var bindings = Map.empty[Symbol, ValueType]
 
       if (patterns.size != vps.size)
-          Context.uabort(s"Wrong number of pattern arguments, given ${patterns.size}, expected ${vps.size}.")
+          Context.abort(s"Wrong number of pattern arguments, given ${patterns.size}, expected ${vps.size}.")
 
       (patterns zip vps) foreach {
         case (pat, par: ValueType) =>
@@ -693,7 +693,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       Context.bind(fun, fun.toType, fun.capture)
       if (fun.effects.canonical.nonEmpty) {
-        Context.uabort("Unhandled control effects on extern defs not allowed")
+        Context.abort("Unhandled control effects on extern defs not allowed")
       }
 
     case d @ source.ExternResource(id, tpe, doc, span) =>
@@ -702,7 +702,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case d @ source.InterfaceDef(id, tparams, ops, doc, span) =>
       d.symbol.operations.foreach { op =>
         if (op.effects.toList contains op.appliedInterface) {
-          Context.uerror("Bidirectional effects that mention the same effect recursively are not (yet) supported.")
+          Context.error("Bidirectional effects that mention the same effect recursively are not (yet) supported.")
         }
 
         val tpe = op.toType
@@ -832,9 +832,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case b: BlockSymbol =>
             Context.lookup(b) match {
               case (TRegion, capt) => capt
-              case _               => Context.at(reg) { Context.uabort("Expected a region.") }
+              case _               => Context.at(reg) { Context.abort("Expected a region.") }
             }
-          case _ => Context.at(reg) { Context.uabort("Expected a region.") }
+          case _ => Context.at(reg) { Context.abort("Expected a region.") }
         }
 
         // bind region as capture for the variable
@@ -911,13 +911,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (2) Check wellformedness
       if (tps.size != tparams.size)
-        Context.uabort(s"Wrong number of type arguments, given ${tparams.size}, but function expects ${tps.size}.")
+        Context.abort(s"Wrong number of type arguments, given ${tparams.size}, but function expects ${tps.size}.")
 
       if (vps.size != vparams.size)
-        Context.uabort(s"Wrong number of value arguments, given ${vparams.size}, but function expects ${vps.size}.")
+        Context.abort(s"Wrong number of value arguments, given ${vparams.size}, but function expects ${vps.size}.")
 
       if (bps.size != bparams.size)
-        Context.uabort(s"Wrong number of block arguments, given ${bparams.size}, but function expects ${bps.size}.")
+        Context.abort(s"Wrong number of block arguments, given ${bparams.size}, but function expects ${bps.size}.")
 
       // (3) Substitute type parameters
       val typeParams = tparams.map { p => p.symbol.asTypeParam }
@@ -1081,7 +1081,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // 1) check arity of explicitly provided type arguments
 
       if (targs.nonEmpty && targs.size != funTpe.tparams.size)
-        Context.uabort(s"Wrong number of type arguments, given ${targs.size} but expected ${funTpe.tparams.size}")
+        Context.abort(s"Wrong number of type arguments, given ${targs.size} but expected ${funTpe.tparams.size}")
 
       // 2)
       // args present: check prefix against receiver
@@ -1131,7 +1131,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case CallTarget(syms) => syms
       // already resolved by a previous attempt to typecheck
       case sym: BlockSymbol => List(Set(sym))
-      case id: ValueSymbol => Context.uabort(pp"Cannot call value ${id}")
+      case id: ValueSymbol => Context.abort(pp"Cannot call value ${id}")
     }
 
     // TODO right now unhandled effects (via capability search) influences overload resolution.
@@ -1193,7 +1193,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     failures match {
       case Nil =>
-        Context.uabort("Cannot typecheck call.")
+        Context.abort("Cannot typecheck call.")
 
       // exactly one error
       case List((sym, errs)) =>
@@ -1217,13 +1217,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
   )(using Context, Captures): Result[ValueType] = {
 
     if (targs.nonEmpty && targs.size != funTpe.tparams.size)
-      Context.uabort(s"Wrong number of type arguments, given ${targs.size}, but ${name} expects ${funTpe.tparams.size}.")
+      Context.abort(s"Wrong number of type arguments, given ${targs.size}, but ${name} expects ${funTpe.tparams.size}.")
 
     if (vargs.size != funTpe.vparams.size)
-      Context.uabort(s"Wrong number of value arguments, given ${vargs.size}, but ${name} expects ${funTpe.vparams.size}.")
+      Context.abort(s"Wrong number of value arguments, given ${vargs.size}, but ${name} expects ${funTpe.vparams.size}.")
 
     if (bargs.size != funTpe.bparams.size)
-      Context.uabort(s"Wrong number of block arguments, given ${bargs.size}, but ${name} expects ${funTpe.bparams.size}.")
+      Context.abort(s"Wrong number of block arguments, given ${bargs.size}, but ${name} expects ${funTpe.bparams.size}.")
 
     val callsite = currentCapture
 

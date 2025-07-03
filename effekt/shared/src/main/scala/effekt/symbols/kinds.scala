@@ -19,8 +19,8 @@ package object kinds {
 
   def wellformed(tpe: ValueType)(using C: Context): Unit = wellformedType(tpe) match {
     case Kind.VType => ()
-    case Kind.Fun(args, Kind.VType) => C.uabort(s"${tpe} needs to be applied to ${args.size} type arguments")
-    case _ => C.uabort(s"Expected a value type but got ${tpe}")
+    case Kind.Fun(args, Kind.VType) => C.abort(s"${tpe} needs to be applied to ${args.size} type arguments")
+    case _ => C.abort(s"Expected a value type but got ${tpe}")
   }
 
   def wellformed(tpe: BlockType)(using Context): Unit = tpe match {
@@ -30,8 +30,8 @@ package object kinds {
 
   def wellformed(eff: InterfaceType)(using C: Context): Unit = wellformedInterfaceType(eff) match {
     case Kind.BType => ()
-    case Kind.Fun(args, Kind.BType) => C.uabort(s"${eff} needs to be applied to ${args.size} type arguments")
-    case o => C.uabort(s"Expected a block type but got a type ${eff} of kind ${o}")
+    case Kind.Fun(args, Kind.BType) => C.abort(s"${eff} needs to be applied to ${args.size} type arguments")
+    case o => C.abort(s"Expected a block type but got a type ${eff} of kind ${o}")
   }
 
   def wellformed(b: FunctionType)(using C: Context): Unit = b match {
@@ -65,9 +65,9 @@ package object kinds {
     case _: ValueTypeRef => Kind.VType
     case ValueTypeApp(tpe, args) => wellformedTypeConstructor(tpe) match {
       case Kind.Fun(params, res) if params.isEmpty && args.nonEmpty =>
-        C.uabort(s"Cannot apply type ${tpe}. Type ${ tpe } does not expect any arguments, but is applied to ${ args.size }.")
+        C.abort(s"Cannot apply type ${tpe}. Type ${ tpe } does not expect any arguments, but is applied to ${ args.size }.")
       case Kind.Fun(params, res) if (args.size != params.size) =>
-        C.uabort(s"Wrong type constructor arity. Type constructor ${tpe} expects ${params.size} parameters, but got ${args.size} arguments.")
+        C.abort(s"Wrong type constructor arity. Type constructor ${tpe} expects ${params.size} parameters, but got ${args.size} arguments.")
       case Kind.Fun(params, res) =>
         args foreach { a => wellformedType(a) };
         Kind.VType
@@ -77,9 +77,9 @@ package object kinds {
   private def wellformedInterfaceType(e: InterfaceType)(using C: Context): Kind = e match {
     case InterfaceType(eff, args) => wellformedBlockTypeConstructor(eff) match {
       case Kind.Fun(params, res) if args.isEmpty && params.nonEmpty =>
-        C.uabort(s"Wrong number of type arguments. Interface ${eff} expects ${params.size} parameters, but no arguments were provided.")
+        C.abort(s"Wrong number of type arguments. Interface ${eff} expects ${params.size} parameters, but no arguments were provided.")
       case Kind.Fun(params, res) if args.size != params.size =>
-        C.uabort(s"Wrong number of type arguments. Interface ${ eff } expects ${ params.size } parameters, but got ${ args.size } arguments.")
+        C.abort(s"Wrong number of type arguments. Interface ${ eff } expects ${ params.size } parameters, but got ${ args.size } arguments.")
       case Kind.Fun(params, res) =>
         args foreach { a => wellformed(a) }
         Kind.BType

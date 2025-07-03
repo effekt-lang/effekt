@@ -66,7 +66,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case Call(_, Ccc(), VoidType(), LocalReference(_, name), arguments) =>
       s"call ccc void ${localName(name)}(${commaSeparated(arguments.map(show))})"
     case Call(_, Ccc(), _, nonglobal, _) =>
-      C.uabort(s"cannot call non-global operand: $nonglobal") // why not?
+      C.abort(s"cannot call non-global operand: $nonglobal") // why not?
     case Call(_, Tailcc(false), VoidType(), ConstantGlobal(name), arguments) =>
       s"call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
     case Call(_, Tailcc(false), VoidType(), LocalReference(_, name), arguments) =>
@@ -74,11 +74,11 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case Call(result, Tailcc(true), resultType, function, arguments) =>
       s"musttail ${show(Call(result, Tailcc(false), resultType, function, arguments))}"
     case Call(_, Tailcc(_), tpe, _, _) =>
-      C.uabort(s"tail call to non-void function returning: $tpe")
+      C.abort(s"tail call to non-void function returning: $tpe")
 
     case Load(result, tpe, LocalReference(PointerType(), name), alias) =>
       s"${localName(result)} = load ${show(tpe)}, ${show(LocalReference(PointerType(), name))}, !noalias ${alias.noalias}, !alias.scope ${alias.scope}"
-    case Load(_, _, operand, _) => C.uabort(s"WIP: loading anything but local references not yet implemented: $operand")
+    case Load(_, _, operand, _) => C.abort(s"WIP: loading anything but local references not yet implemented: $operand")
 
     // TODO [jfrech, 2022-07-26] Why does `Load` explicitly check for a local reference and `Store` does not?
     case Store(address, value, alias) =>
@@ -86,7 +86,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 
     case GetElementPtr(result, tpe, ptr @ LocalReference(_, name), i :: is) =>
       s"${localName(result)} = getelementptr ${show(tpe)}, ${show(ptr)}, i64 $i" + is.map(", i32 " + _).mkString
-    case GetElementPtr(_, _, operand, _) => C.uabort(s"can only form a pointer to a local reference, not: $operand")
+    case GetElementPtr(_, _, operand, _) => C.abort(s"can only form a pointer to a local reference, not: $operand")
 
     case BitCast(result, operand, tpe) =>
       s"${localName(result)} = bitcast ${show(operand)} to ${show(tpe)}"
@@ -97,12 +97,12 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
       assert(t1 == t2)
       s"${localName(result)} = add ${show(t1)} ${localName(n1)}, ${localName(n2)}"
     case Add(_, _, operand1) =>
-      C.uabort(s"WIP: currently only right-constant additions are supported, not: $operand1")
+      C.abort(s"WIP: currently only right-constant additions are supported, not: $operand1")
 
     case FAdd(result, operand0, ConstantDouble(x)) =>
       s"${localName(result)} = fadd ${show(operand0)}, $x"
     case FAdd(_, _, operand1) =>
-      C.uabort(s"WIP: currently only right-constant floating-point additions are supported, not: $operand1")
+      C.abort(s"WIP: currently only right-constant floating-point additions are supported, not: $operand1")
 
     case InsertValue(result, aggregate, element, index) =>
       s"${localName(result)} = insertvalue ${show(aggregate)}, ${show(element)}, $index"
