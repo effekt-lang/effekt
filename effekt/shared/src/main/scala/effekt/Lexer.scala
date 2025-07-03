@@ -343,15 +343,13 @@ class Lexer(source: Source) extends Iterator[Token] {
     else
       advanceWith(TokenKind.Error(LexerError.Expected(expected)))
 
-  private def getCurrentSlice: String =
-    source.content.substring(tokenStartPosition.offset, position.offset)
+  private def getCurrentSlice(skipAfterStart: Int = 0, skipBeforeEnd: Int = 0): String =
+    source.content.substring(tokenStartPosition.offset + skipAfterStart, position.offset - skipBeforeEnd)
 
-  private def advanceWhile(predicate: (Char, Char) => Boolean): String = {
-    while predicate(currentChar, nextChar) && !atEndOfInput do
+  private def advanceWhile(predicate: (Char, Char) => Boolean): Unit =
+    while (predicate(currentChar, nextChar) && !atEndOfInput) {
       advance()
-
-    getCurrentSlice
-  }
+    }
 
   private def peekAhead(offset: Int): Char =
     val targetIndex = position.offset + offset
@@ -502,7 +500,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       advanceWhile { (curr, _) => curr.isDigit }
 
       // Get the entire float string
-      val floatString = getCurrentSlice
+      val floatString = getCurrentSlice()
 
       floatString.toDoubleOption match {
         case Some(float) => TokenKind.Float(float)
@@ -510,7 +508,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       }
     else
       // Get the integer string
-      val integerString = getCurrentSlice
+      val integerString = getCurrentSlice()
 
       integerString.toLongOption match {
         case Some(integer) => TokenKind.Integer(integer)
@@ -519,7 +517,7 @@ class Lexer(source: Source) extends Iterator[Token] {
 
   private def identifier(): TokenKind =
     advanceWhile { (curr, _) => isNameRest(curr) }
-    val word = getCurrentSlice
+    val word = getCurrentSlice()
 
     TokenKind.keywordMap.getOrElse(word, TokenKind.Ident(word))
 
@@ -625,13 +623,13 @@ class Lexer(source: Source) extends Iterator[Token] {
     }
 
   private def singlelineComment(): TokenKind =
+    val isDocComment = currentChar == '/'
     advanceWhile { (curr, _) => curr != '\n' }
-    val comment = getCurrentSlice.substring(2) // Remove '//'
 
-    if comment.startsWith("/") then
-      TokenKind.DocComment(comment.substring(1)) // Remove '///'
+    if isDocComment then
+      TokenKind.DocComment(getCurrentSlice(skipAfterStart = 3)) // Remove '///'
     else
-      TokenKind.Comment(comment)
+      TokenKind.Comment(getCurrentSlice(skipAfterStart = 2)) // Remove '//'
 
   private def multilineComment(): TokenKind =
     var done = false
@@ -646,12 +644,12 @@ class Lexer(source: Source) extends Iterator[Token] {
     if !done then
       TokenKind.Error(LexerError.UnterminatedComment)
     else
-      val comment = getCurrentSlice.substring(2, getCurrentSlice.length - 2) // Remove `/*` and `*/`
+      val comment = getCurrentSlice(skipAfterStart = 2, skipBeforeEnd = 2) // Remove `/*` and `*/`
       TokenKind.Comment(comment)
 
   private def shebang(): TokenKind =
     advanceWhile { (curr, _) => curr != '\n' }
-    val command = getCurrentSlice.substring(2) // Remove `#!`
+    val command = getCurrentSlice(skipAfterStart = 2) // Remove `#!`
     TokenKind.Shebang(command)
 }
 
