@@ -1680,7 +1680,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def restoreTyperstate(st: TyperState): Unit = {
     annotations = st.annotations.copy
-    this.restore(st.unification)
+    this.restoreUnification(st.unification)
     capabilityScope = st.capabilityScope.copy
   }
 

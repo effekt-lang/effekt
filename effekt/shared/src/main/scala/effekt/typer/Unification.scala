@@ -16,7 +16,7 @@ case object Invariant extends Polarity { def flip = Invariant }
 /**
  * The state of the unification scope, used for backtracking on overload resolution
  *
- * See [[Unification.backupUnification]] and [[Unification.restore]]
+ * See [[Unification.backupUnification]] and [[Unification.restoreUnification]]
  */
 case class UnificationState(
   scope: Scope,
@@ -39,7 +39,11 @@ case class LocalScope(
  * TODO
  *   - [ ] All incoming types need to be "normalized": substituted and dealiased.
  */
-trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator { self: Context =>
+trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator, ErrorReporter {
+
+  // bring into scope
+  given ErrorReporter = this
+
 
   // State of the unification engine
   // -------------------------------
@@ -87,7 +91,7 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator { self: Cont
   // Lifecycle management
   // --------------------
   def backupUnification(): UnificationState = UnificationState(scope, constraints.clone())
-  def restore(state: UnificationState): Unit =
+  def restoreUnification(state: UnificationState): Unit =
     scope = state.scope
     constraints = state.constraints.clone()
 
@@ -165,7 +169,7 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator { self: Cont
       case (CaptureSet(lows), CaptureSet(ups)) =>
         val notAllowed = lows -- (ups ++ filter)
         if (notAllowed.nonEmpty)
-          uerror(pp"Used captures ${CaptureSet(notAllowed)} are not in the allowed set ${upper}", ctx)
+          error(pp"Used captures ${CaptureSet(notAllowed)} are not in the allowed set ${upper}", ctx)
       case (x: CaptUnificationVar, y: CaptUnificationVar) =>
         constraints.connect(x, y, filter)
       case (x: CaptUnificationVar, CaptureSet(cs)) =>
@@ -230,11 +234,11 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator { self: Cont
   // ----------------------
 
   def uabort(msg: String): Nothing = this.abort(msg)
-  def uabort(msg: String, ctx: ErrorContext) = this.abort(ErrorContext.explainInContext(msg, ctx))
+  def abort(msg: String, ctx: ErrorContext) = this.abort(ErrorContext.explainInContext(msg, ctx))
 
   def uerror(msg: String) = this.error(msg)
-  def uerror(msg: String, ctx: ErrorContext) = this.error(ErrorContext.explainInContext(msg, ctx))
-  def uerror(left: symbols.Type, right: symbols.Type, ctx: ErrorContext) = this.error(ErrorContext.explainMismatch(left, right, ctx))
+  def error(msg: String, ctx: ErrorContext) = this.error(ErrorContext.explainInContext(msg, ctx))
+  def error(left: symbols.Type, right: symbols.Type, ctx: ErrorContext) = this.error(ErrorContext.explainMismatch(left, right, ctx))
 
   def requireEqual(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit =
     requireLowerBound(x, tpe, ctx)
@@ -249,7 +253,7 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator { self: Cont
   def mergeCaptures(oldBound: Captures, newBound: Captures, ctx: ErrorContext): Captures = (oldBound, newBound, ctx.polarity) match {
     case (CaptureSet(xs), CaptureSet(ys), Covariant) => CaptureSet(xs intersect ys)
     case (CaptureSet(xs), CaptureSet(ys), Contravariant) => CaptureSet(xs union ys)
-    case (CaptureSet(xs), CaptureSet(ys), Invariant) => if (xs == ys) oldBound else uabort(pp"Capture set ${CaptureSet(xs)} is not equal to ${CaptureSet(ys)}", ctx)
+    case (CaptureSet(xs), CaptureSet(ys), Invariant) => if (xs == ys) oldBound else abort(pp"Capture set ${CaptureSet(xs)} is not equal to ${CaptureSet(ys)}", ctx)
     case (x: CaptUnificationVar, CaptureSet(ys), p) if ys.isEmpty => x
     case (CaptureSet(xs), y: CaptUnificationVar, p) if xs.isEmpty => y
     case (x: CaptUnificationVar, CaptureSet(ys), p) => mergeCaptures(ys.toList, List(x), ctx)
