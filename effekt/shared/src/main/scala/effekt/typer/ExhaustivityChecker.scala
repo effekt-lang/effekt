@@ -105,7 +105,7 @@ object ExhaustivityChecker {
         Trace.Root(root) -> preprocessPattern(pattern)
       }.toMap
       Clause.normalized(Condition.Patterns(rootConds) :: guards.map(preprocessGuard), cl)
-    case (_, _) => Context.abort("Malformed multi-match")
+    case (_, _) => Context.uabort("Malformed multi-match")
   }
   def preprocessPattern(p: source.MatchPattern)(using Context): Pattern = p match {
     case AnyPattern(id, _)  => Pattern.Any()

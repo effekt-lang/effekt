@@ -118,8 +118,8 @@ trait Runner[Executable] {
     }
 
     if (exitCode != 0) {
-      C.error(s"Process exited with non-zero exit code ${exitCode}.")
-      if (C.config.valgrind()) C.error(s"Valgrind log:\n" ++ scala.io.Source.fromFile("valgrind.log").mkString)
+      C.uerror(s"Process exited with non-zero exit code ${exitCode}.")
+      if (C.config.valgrind()) C.uerror(s"Valgrind log:\n" ++ scala.io.Source.fromFile("valgrind.log").mkString)
     }
   }
 
@@ -333,7 +333,7 @@ object LLVMRunner extends Runner[String] {
       "-lm", // Math library
     ) ++ libuvArgs
 
-    def missing(cmd: String) = C.abort(s"Cannot find ${cmd}. This is required to use the LLVM backend.")
+    def missing(cmd: String) = C.uabort(s"Cannot find ${cmd}. This is required to use the LLVM backend.")
     val clang = clangCmd.getOrElse(missing("clang"))
     val llc = llcCmd.getOrElse(missing("llc"))
     val opt = optCmd.getOrElse(missing("opt"))

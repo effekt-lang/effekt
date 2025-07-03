@@ -86,7 +86,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       List(Toplevel.Val(v.symbol, transformedTpe, transformed))
 
     case v @ source.ValDef(id, _, binding, doc, span) =>
-      Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
+      Context.at(d) { Context.uabort("Effectful bindings not allowed on the toplevel") }
 
     case v @ source.DefDef(id, annot, binding, doc, span) =>
       val sym = v.symbol
@@ -97,7 +97,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       bindings.map(core.Binding.toToplevel) ++ List(definition)
 
     case _: source.VarDef | _: source.RegDef =>
-      Context.at(d) { Context.abort("Mutable variable bindings not allowed on the toplevel") }
+      Context.at(d) { Context.uabort("Mutable variable bindings not allowed on the toplevel") }
 
     case d @ source.InterfaceDef(id, tparamsInterface, ops, doc, span) =>
       val interface = d.symbol
@@ -112,13 +112,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case source.ExternBody.StringExternBody(ff, body, span) :: Nil =>
           val args = body.args.map(transformAsExpr).map {
             case p: Pure => p: Pure
-            case _ => Context.abort("Spliced arguments need to be pure expressions.")
+            case _ => Context.uabort("Spliced arguments need to be pure expressions.")
           }
           ExternBody.StringExternBody(ff, Template(body.strings, args))
         case source.ExternBody.Unsupported(err) :: Nil =>
           ExternBody.Unsupported(err)
         case _ =>
-          Context.abort("Externs should be resolved and desugared before core.Transformer")
+          Context.uabort("Externs should be resolved and desugared before core.Transformer")
       }
       List(Extern.Def(sym, tps, cps.unspan, vps.unspan map transform, bps.unspan map transform, transform(ret), transform(capt), tBody))
 
@@ -305,7 +305,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             case sym: BlockSymbol => BlockVar(sym)
           }
         case t: BlockType.InterfaceType =>
-          Context.abort(s"Expected a function but got an object of type ${t}")
+          Context.uabort(s"Expected a function but got an object of type ${t}")
       }
 
     case source.BlockLiteral(tps, vps, bps, body, _) =>
@@ -314,7 +314,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       BlockLit(tparams, cparams, vps map transform, bps map transform, transform(body))
 
     case s @ source.New(impl, _) =>
-      Context.abort(s"Expected a function but got an object instantiation: ${s}")
+      Context.uabort(s"Expected a function but got an object instantiation: ${s}")
 
     case _ => transformUnbox(tree)
   }
@@ -657,7 +657,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val patterns = (clause.pattern, scs) match {
       case (source.MultiPattern(ps, _), scs) => scs.zip(ps)
       case (pattern, List(sc)) => List((sc, clause.pattern))
-      case (_, _) => Context.abort("Malformed multi-match")
+      case (_, _) => Context.uabort("Malformed multi-match")
     }
     preprocess(label, patterns, clause.guards, transform(clause.body))
   }
@@ -808,7 +808,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case f: Callable if callingConvention(f) == CallingConvention.Direct =>
         DirectApp(BlockVar(f), targs, vargsT, bargsT)
       case r: Constructor =>
-        if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")
+        if (bargs.nonEmpty) Context.uabort("Constructors cannot take block arguments.")
         val universals = targs.take(r.tpe.tparams.length)
         val existentials = targs.drop(r.tpe.tparams.length)
         Make(core.ValueType.Data(r.tpe, universals), r, existentials, vargsT)

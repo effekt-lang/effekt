@@ -75,7 +75,7 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
       Select(rewriteAsExpr(recv), name, span)
 
     case s @ Select(recv, name, span) =>
-      C.abort("selection on blocks not supported yet.")
+      C.uabort("selection on blocks not supported yet.")
 
     case Do(effect, id, targs, vargs, bargs, span) =>
       Do(effect, id, targs, vargs.map(rewriteAsExpr), bargs.map(rewriteAsBlock), span)

@@ -250,7 +250,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       // only load include if it is required by the backend.
       if (ff matches Context.compiler.supportedFeatureFlags) {
         d.contents = Some(Context.contentsOf(path).getOrElse {
-          Context.abort(s"Missing include: ${path}")
+          Context.uabort(s"Missing include: ${path}")
         })
       } else {
         d.contents = None
@@ -305,7 +305,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val tpe = annot.map(resolveValueType)
       val reg = Context.resolveTerm(region) match {
         case t: BlockSymbol => t
-        case _ => Context.abort("Region needs to be a block.")
+        case _ => Context.uabort("Region needs to be a block.")
       }
 
       resolve(binding)
@@ -498,26 +498,26 @@ object Namer extends Phase[Parsed, NameResolved] {
             // (foo: ValueType).bar(args)  = Call(bar, foo :: args)
             case symbol: ValueSymbol =>
               if !Context.resolveOverloadedFunction(target)
-              then Context.abort(pp"Cannot resolve function ${target}, called on a value receiver.")
+              then Context.uabort(pp"Cannot resolve function ${target}, called on a value receiver.")
 
             case symbol: RefBinder =>
               if !Context.resolveOverloadedFunction(target)
-              then Context.abort(pp"Cannot resolve function ${target}, called on a receiver that is a reference.")
+              then Context.uabort(pp"Cannot resolve function ${target}, called on a receiver that is a reference.")
 
             // (foo: BlockType).bar(args)  = Invoke(foo, bar, args)
             case symbol: BlockSymbol =>
               if !Context.resolveOverloadedOperation(target)
-              then Context.abort(pp"Cannot resolve operation ${target}, called on a receiver that is a computation.")
+              then Context.uabort(pp"Cannot resolve operation ${target}, called on a receiver that is a computation.")
           }
           // (unbox term).bar(args)  = Invoke(Unbox(term), bar, args)
           case source.Unbox(term, _) =>
             if !Context.resolveOverloadedOperation(target)
-            then Context.abort(pp"Cannot resolve operation ${target}, called on an unboxed computation.")
+            then Context.uabort(pp"Cannot resolve operation ${target}, called on an unboxed computation.")
 
           // expr.bar(args) = Call(bar, expr :: args)
           case term =>
             if !Context.resolveOverloadedFunction(target)
-            then Context.abort(pp"Cannot resolve function ${target}, called on an expression.")
+            then Context.uabort(pp"Cannot resolve function ${target}, called on an expression.")
         }
       }
       targs foreach resolveValueType
@@ -544,8 +544,8 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.Assign(id, expr, _) => Context.resolveVar(id) match {
       case _: VarBinder | _: RegBinder => resolve(expr)
       case _: ValBinder | _: ValueParam => Context.abort(pretty"Can only assign to mutable variables, but ${id.name} is a constant.")
-      case y: Wildcard => Context.abort(s"Trying to assign to a wildcard, which is not allowed.")
-      case _ => Context.abort(s"Can only assign to mutable variables.")
+      case y: Wildcard => Context.uabort(s"Trying to assign to a wildcard, which is not allowed.")
+      case _ => Context.uabort(s"Can only assign to mutable variables.")
     }
   }
 
@@ -659,7 +659,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         var names: Set[Name] = Set.empty
         ps foreach { p =>
           if (names contains p.name)
-            Context.error(pp"Patterns have to be linear: names can only occur once, but ${p.name} shows up multiple times.")
+            Context.uerror(pp"Patterns have to be linear: names can only occur once, but ${p.name} shows up multiple times.")
 
           val cs = Context.allConstructorsFor(p.name)
           if (cs.nonEmpty) {
@@ -690,7 +690,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.resolveTerm(id) match {
         case symbol: Constructor => ()
         case _ => Context.at(id) {
-          Context.error("Can only pattern match on constructors of data types.")
+          Context.uerror("Can only pattern match on constructors of data types.")
         }
       }
       patterns.flatMap { resolve }
@@ -825,9 +825,9 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   def resolveBlockRef(tpe: source.TypeRef)(using Context): InterfaceType = resolvingType(tpe) { tpe =>
     resolveWithAliases(tpe) match {
-      case Nil => Context.abort("Expected a single interface type, not an empty effect set.")
+      case Nil => Context.uabort("Expected a single interface type, not an empty effect set.")
       case resolved :: Nil => resolved
-      case _ => Context.abort("Expected a single interface type, arbitrary effect aliases are not allowed.")
+      case _ => Context.uabort("Expected a single interface type, arbitrary effect aliases are not allowed.")
     }
   }
 

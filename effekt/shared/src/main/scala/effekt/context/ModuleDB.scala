@@ -33,14 +33,14 @@ trait ModuleDB { self: Context =>
    * Used by Namer and Evaluator to resolve imports
    */
   def moduleOf(path: String): Module =
-    moduleOf(findSource(path).getOrElse { abort(s"Cannot find source for $path") })
+    moduleOf(findSource(path).getOrElse { uabort(s"Cannot find source for $path") })
 
   /**
    * Tries to find a module for the given source, will run compiler on demand
    */
   def moduleOf(source: Source): Module =
     tryModuleOf(source).getOrElse {
-      abort(s"Cannot compile dependency: ${stripSuffix(source.name)}")
+      uabort(s"Cannot compile dependency: ${stripSuffix(source.name)}")
     }
 
   private def stripSuffix(path: String): String =
@@ -65,12 +65,12 @@ trait ModuleDB { self: Context =>
     val mains = findMain(mod.exports)
 
     if (mains.isEmpty) {
-      C.abort("No main function defined")
+      C.uabort("No main function defined")
     }
 
     if (mains.size > 1) {
       val names = mains.toList.map(sym => pp"${sym.name}").mkString(", ")
-      C.abort(pp"Multiple main functions defined: ${names}")
+      C.uabort(pp"Multiple main functions defined: ${names}")
     }
 
     val main = mains.head.asUserFunction
@@ -79,22 +79,22 @@ trait ModuleDB { self: Context =>
       val mainValueParams = C.functionTypeOf(main).vparams
       val mainBlockParams = C.functionTypeOf(main).bparams
       if (mainValueParams.nonEmpty || mainBlockParams.nonEmpty) {
-        C.abort("Main does not take arguments")
+        C.uabort("Main does not take arguments")
       }
 
       val tpe = C.functionTypeOf(main)
       val controlEffects = tpe.effects
       if (controlEffects.nonEmpty) {
-        C.abort(pp"Main cannot have effects, but includes effects: ${controlEffects}")
+        C.uabort(pp"Main cannot have effects, but includes effects: ${controlEffects}")
       }
 
       tpe.result match {
         case symbols.builtins.TInt =>
-          C.abort(pp"Main must return Unit, please use `exit(n)` to return an error code.")
+          C.uabort(pp"Main must return Unit, please use `exit(n)` to return an error code.")
         case symbols.builtins.TUnit =>
           ()
         case other =>
-          C.abort(pp"Main must return Unit, but returns ${other}.")
+          C.uabort(pp"Main must return Unit, but returns ${other}.")
       }
 
       main
