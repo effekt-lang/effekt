@@ -526,9 +526,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // TODO here we also need unification variables for block types!
         // C.unify(tpe, BoxedType())
         Context.unification(vtpe) match {
-          case BoxedType(btpe, capt2) => ???
-//            usingCapture(capt2)
-//            Result(btpe, eff1)
+          case BoxedType(btpe, capt2) =>
+            usingCapture(capt2)
+            Result(btpe, eff1)
           case _ =>
             Context.annotationOption(Annotations.UnboxParentDef, u) match {
               case Some(source.DefDef(id, annot, block, doc, span)) =>
