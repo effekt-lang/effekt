@@ -30,7 +30,7 @@ object Parser extends Phase[Source, Parsed] {
       //println(s"parsing ${source.name}")
       Context.timed(phaseName, source.name) {
         val tokens = effekt.lexer.Lexer.lex(source)
-        val parser = RecursiveDescent(C.positions, tokens, source)
+        val parser = new Parser(C.positions, tokens, source)
         parser.parse(Input(source, 0))
       }
   } map { tree =>
@@ -46,7 +46,7 @@ object Fail {
 }
 case class SoftFail(message: String, positionStart: Int, positionEnd: Int)
 
-class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source) {
+class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   var softFails: ListBuffer[SoftFail] = ListBuffer[SoftFail]()
 

@@ -67,16 +67,16 @@ object SpanSyntax {
 }
 
 
-class RecursiveDescentTests extends munit.FunSuite {
+class ParserTests extends munit.FunSuite {
 
-  def parser(input: String, positions: Positions)(using munit.Location): RecursiveDescent = {
+  def parser(input: String, positions: Positions)(using munit.Location): Parser = {
     val source = StringSource(input, "")
     val tokens = effekt.lexer.Lexer.lex(source)
     // TODO catch LexerError exception?
-    new RecursiveDescent(positions, tokens, source)
+    new Parser(positions, tokens, source)
   }
 
-  def parse[R](input: String, f: RecursiveDescent => R, positions: Positions = new Positions())(using munit.Location): R =
+  def parse[R](input: String, f: Parser => R, positions: Positions = new Positions())(using munit.Location): R =
     try {
       val p = parser(input, positions)
       val result = f(p)
@@ -245,7 +245,7 @@ class RecursiveDescentTests extends munit.FunSuite {
   test("Peeking") {
     implicit def toToken(t: TokenKind): Token = Token(0, 0, t)
     def peek(tokens: Seq[Token], offset: Int): Token =
-      new RecursiveDescent(new Positions, tokens, StringSource("", "test")).peek(offset)
+      new Parser(new Positions, tokens, StringSource("", "test")).peek(offset)
 
     val tokens = List[Token](`(`, Space, Newline, `)`, Space, `=>`, EOF)
     assertEquals(peek(tokens, 0).kind, `(`)
