@@ -1,0 +1,5 @@
+def length(x: Double, y: Double): Double = sqrt((x * x) + (y * y))
+
+def main() = {
+  println(length(x = 3.0, y = 4.0))
+}
