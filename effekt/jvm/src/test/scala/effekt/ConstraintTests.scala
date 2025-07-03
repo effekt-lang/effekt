@@ -2,10 +2,12 @@ package effekt
 package typer
 package constraints
 
+import effekt.context.Context
 import effekt.source.NoSource
 import effekt.symbols.*
-import effekt.util.messages.{ DebugMessaging, ErrorReporter, FatalPhaseError }
+import effekt.util.messages.{DebugMessaging, ErrorReporter, FatalPhaseError}
 import kiama.util.Positions
+import effekt.core.TestContext
 
 import scala.language.implicitConversions
 
@@ -15,7 +17,7 @@ abstract class ConstraintTests extends munit.FunSuite {
 
   given ErrorReporter with { var focus = NoSource; val messaging = messages; val positions = new Positions }
 
-  lazy val scope = { val s = new Unification; s.enterScope(); s }
+  lazy val scope = { val s = new TestContext; s.enterScope(); s }
 
   lazy val R = freshTypeVar("R")
   lazy val S = freshTypeVar("S")
