@@ -1,8 +1,7 @@
 package effekt
 package context
 
-import effekt.util.
-Resources
+import effekt.util.Resources
 import effekt.util.paths._
 
 import kiama.util.Source
