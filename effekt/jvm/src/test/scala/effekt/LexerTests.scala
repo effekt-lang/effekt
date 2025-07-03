@@ -142,11 +142,16 @@ class LexerTests extends munit.FunSuite {
       EOF
     )
     assertTokensEq("\" \"\"\"", Str(" ", false), Str("", false), EOF)
-    assertFailure("\"\"\" \"")
+    assertTokensEq(
+      "\"\"\" \"",
+      Error(UnterminatedStringLike(Str(" \"", true))),
+      EOF
+    )
 
     assertTokensEq(
       "\"\"\"",
-      Error(UnterminatedString), EOF
+      Error(UnterminatedStringLike(Str("", true))),
+      EOF
     )
   }
 
@@ -174,7 +179,9 @@ class LexerTests extends munit.FunSuite {
       Str("", multiline = false),
       `${`, Ident("x"), `+`, Integer(1), `}$`,
       Str("", multiline = false),
-      `}`, Error(UnterminatedString),
+      `}`,
+      Error(UnterminatedStringLike(Str(" ", multiline = false))),
+      Error(UnterminatedInterpolation(depth = 1)),
       EOF
     )
   }
@@ -355,6 +362,26 @@ class LexerTests extends munit.FunSuite {
       `def`, Ident("operation"), Newline, `[`, Ident("C"), `]`, Newline, `(`, Ident("x"), `:`, Ident("C"), `)`, `:`, Newline, Newline, `(`, Ident("A"), `,`, Ident("B"), `)`, Newline,
       Newline,
       `}`, Newline,
+      EOF
+    )
+  }
+
+  test("resilience") {
+    val prog =
+      """
+        |val a = ${}
+        |val b = 123456789012345678901234567890
+        |val c = "
+        |inspect(c)
+        |""".stripMargin
+
+    assertTokensEq(
+      prog,
+      Newline,
+      `val`, Ident("a"), `=`, `${`, `}$`, Newline,
+      `val`, Ident("b"), `=`, Error(InvalidIntegerFormat), Newline,
+      `val`, Ident("c"), `=`, Error(UnterminatedStringLike(Str("", multiline = false))), Newline,
+      Ident("inspect"), `(`, Ident("c"), `)`, Newline,
       EOF
     )
   }

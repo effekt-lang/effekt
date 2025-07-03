@@ -81,10 +81,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   // always points to the latest non-space position
   var position: Int = 0
 
-  extension(token: Token) def failOnErrorToken(tokenPosition: Int = position): Token = token.kind match {
+  def recover(tokenKind: TokenKind, tokenPosition: Int): TokenKind = tokenKind match {
     case TokenKind.Error(err) =>
-      val recoveredKind = err match
-        case LexerError.UnterminatedString => TokenKind.Str("<unterminated>", multiline = false)
+      val recoveredKind = err match {
+        case LexerError.UnterminatedStringLike(kind) => recover(kind, tokenPosition) // for nested errors
         case LexerError.UnterminatedComment => TokenKind.Comment("<unterminated>")
         case LexerError.EmptyCharLiteral => TokenKind.Chr('?')
         case LexerError.MultipleCodePointsInChar => TokenKind.Chr('?')
@@ -92,12 +92,19 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case LexerError.InvalidIntegerFormat => TokenKind.Integer(0)
         case LexerError.InvalidDoubleFormat => TokenKind.Float(java.lang.Double.NaN)
         case _ => fail(err.message)
+      }
 
       // NOTE: This relies on the fact that the `fail` above ^ throws!
       softFail(err.message, tokenPosition, tokenPosition)
-      token.copy(kind = recoveredKind)
-    case _ => token
+      recoveredKind
+    case _ => tokenKind
   }
+
+  extension(token: Token) def failOnErrorToken(tokenPosition: Int = position): Token =
+    token.kind match {
+      case TokenKind.Error(err) => token.copy(kind = recover(token.kind, tokenPosition))
+      case _                    => token
+    }
 
   def peek: Token = tokens(position).failOnErrorToken(position)
 
