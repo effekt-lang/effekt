@@ -19,7 +19,7 @@ enum LexerError {
   case InvalidIntegerFormat
   case InvalidDoubleFormat
 
-  def message: String = this match
+  def message: String = this match {
     case InvalidEscapeSequence(char) =>
       s"Invalid character in escape sequence: '$char' (U+${char.toInt.toHexString})"
     case Expected(char) =>
@@ -34,6 +34,7 @@ enum LexerError {
     case InvalidUnicodeLiteral => "Invalid unicode literal"
     case InvalidIntegerFormat => "Invalid integer format, not a 64bit integer literal"
     case InvalidDoubleFormat => "Invalid float format, not a double literal"
+  }
 }
 
 /**
@@ -152,7 +153,7 @@ object TokenKind {
   val `at` = TokenKind.Ident("at")
   val `__` = Ident("_")
 
-  def explain(kind: TokenKind): String = kind match
+  def explain(kind: TokenKind): String = kind match {
     case t if keywords.contains(t) => s"keyword ${kind}"
     case Ident(n)             => s"identifier ${n}"
     case Integer(n)           => s"integer ${n}"
@@ -167,6 +168,7 @@ object TokenKind {
     case EOF                  => "end of file"
     case Error(error)         => s"invalid token: ${error.message}"
     case other                => other.toString
+  }
 
   val keywords = Vector(
     `let`, `true`, `false`, `val`, `var`, `if`, `else`, `while`, `type`, `effect`, `interface`,
@@ -250,17 +252,19 @@ class Lexer(source: Source) extends Iterator[Token] {
     //          "...",   """...""",      '...',    <"...">
     case SingleString, MultiString, CharString, HoleString
 
-    def allowsInterpolation: Boolean = this match
+    def allowsInterpolation: Boolean = this match {
       case SingleString => true
       case MultiString => true
       case CharString => false
       case HoleString => true
+    }
 
-    def isMultiline: Boolean = this match
+    def isMultiline: Boolean = this match {
       case SingleString => false
       case MultiString => true
       case CharString => false
       case HoleString => true
+    }
 
     def allowsEscapes: Boolean = !this.isMultiline
   }
@@ -285,13 +289,14 @@ class Lexer(source: Source) extends Iterator[Token] {
 
   private def skipWhitespace(): Unit =
     while !atEndOfInput do
-      currentChar match
+      currentChar match {
         case ' ' | '\t' => advance()
         case '\n' => return // Stop here, let newline be handled as a token
         case '\r' =>
           if nextChar == '\n' then return // Stop here for \r\n
           else advance() // Treat standalone \r as whitespace
         case _ => return
+      }
 
   private def atEndOfInput: Boolean =
     currentChar == '\u0000'
@@ -363,7 +368,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       // otherwise fallthrough
     }
 
-    (currentChar, nextChar) match
+    (currentChar, nextChar) match {
       case ('\n',    _) => advanceWith(TokenKind.Newline)
       case ('\r', '\n') => advance2With(TokenKind.Newline)
 
@@ -463,6 +468,7 @@ class Lexer(source: Source) extends Iterator[Token] {
 
       case ('\u0000', _) => TokenKind.EOF
       case (c,        _) => advanceWith(TokenKind.Error(LexerError.UnknownChar(c)))
+    }
 
   private def number(negative: Boolean = false): TokenKind =
     // Consume the integer part
@@ -476,16 +482,18 @@ class Lexer(source: Source) extends Iterator[Token] {
       // Get the entire float string
       val floatString = getCurrentSlice
 
-      floatString.toDoubleOption match
+      floatString.toDoubleOption match {
         case Some(float) => TokenKind.Float(float)
         case None => TokenKind.Error(LexerError.InvalidDoubleFormat)
+      }
     else
       // Get the integer string
       val integerString = getCurrentSlice
 
-      integerString.toLongOption match
+      integerString.toLongOption match {
         case Some(integer) => TokenKind.Integer(integer)
         case None => TokenKind.Error(LexerError.InvalidIntegerFormat)
+      }
 
   private def identifier(): TokenKind =
     advanceWhile { (curr, _) => isNameRest(curr) }
@@ -539,9 +547,10 @@ class Lexer(source: Source) extends Iterator[Token] {
             case 't' => advance(); contents.addOne('\t')
             case 'u' =>
               advance()
-              lexUnicodeEscape() match
+              lexUnicodeEscape() match {
                 case -1 => return TokenKind.Error(LexerError.InvalidUnicodeLiteral)
                 case codePoint => contents.append(String.valueOf(Character.toChars(codePoint)))
+              }
             case c =>
               return TokenKind.Error(LexerError.InvalidEscapeSequence(c))
           }
@@ -567,7 +576,7 @@ class Lexer(source: Source) extends Iterator[Token] {
   }
 
   private def character(): TokenKind =
-    string(delimiter = CharString) match
+    string(delimiter = CharString) match {
       case TokenKind.Str("", _) =>
         TokenKind.Error(LexerError.EmptyCharLiteral)
       case TokenKind.Str(cs, _) if cs.codePointCount(0, cs.length) > 1 =>
@@ -575,6 +584,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       case TokenKind.Str(cs, _) =>
         TokenKind.Chr(cs.codePointAt(0))
       case err => err
+    }
 
   private def unicodeLiteral(): TokenKind =
     lexUnicodeEscape() match {
@@ -584,7 +594,7 @@ class Lexer(source: Source) extends Iterator[Token] {
 
   // Returns a Char represented as a 32bit integer or -1 on failure
   private def lexUnicodeEscape(): Int =
-    currentChar match
+    currentChar match {
       case '{' =>
         advance()
         val start = position.offset
@@ -605,6 +615,7 @@ class Lexer(source: Source) extends Iterator[Token] {
         catch case _: NumberFormatException => -1
 
       case _ => -1
+    }
 
   private def singlelineComment(): TokenKind =
     advanceWhile { (curr, _) => curr != '\n' }
@@ -635,7 +646,7 @@ class Lexer(source: Source) extends Iterator[Token] {
     var depth = 1
 
     while depth > 0 && !atEndOfInput do
-      currentChar match
+      currentChar match {
         case '/' if nextChar == '*' =>
           advance(); advance()
           depth += 1
@@ -644,6 +655,7 @@ class Lexer(source: Source) extends Iterator[Token] {
           depth -= 1
         case _ =>
           advance()
+      }
 
     if depth > 0 then
       TokenKind.Error(LexerError.UnterminatedComment)
