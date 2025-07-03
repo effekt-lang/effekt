@@ -1494,14 +1494,12 @@ trait TyperOps extends ContextOps { self: Context =>
    * Contains mutable variables. The methods [[unification.backup()]] and [[unification.restore()]]
    * allow to save a copy of the current state.
    */
-  private[typer] val unification = new Unification(using this)
-  export unification.{ requireSubtype, requireSubregion, join, instantiate, instantiateFresh, freshTypeVar, freshCaptVar, without, requireSubregionWithout }
 
   // opens a fresh unification scope
   private[typer] def withUnificationScope[T](additional: List[CaptUnificationVar])(block: => T): T = {
-    unification.enterScope()
+    this.enterScope()
     val res = block
-    unification.leaveScope(additional)
+    this.leaveScope(additional)
     res
   }
   private[typer] def withUnificationScope[T](block: => T): T = withUnificationScope(Nil)(block)
@@ -1660,7 +1658,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def annotateTypeArgs(call: source.CallLike, targs: List[symbols.ValueType]): Unit = {
     // apply what we know before saving
-    annotations.update(Annotations.TypeArguments, call, targs map unification.apply)
+    annotations.update(Annotations.TypeArguments, call, targs map this.unification)
   }
 
   private[typer] def annotatedTypeArgs(call: source.CallLike): List[symbols.ValueType] = {
@@ -1674,20 +1672,20 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def initTyperstate(): Unit = {
     annotations = Annotations.empty
     capabilityScope = GlobalCapabilityScope
-    unification.init()
+    this.init()
   }
 
   private[typer] def backupTyperstate(): TyperState =
-    TyperState(annotations.copy, unification.backup(), capabilityScope.copy)
+    TyperState(annotations.copy, this.backupUnification(), capabilityScope.copy)
 
   private[typer] def restoreTyperstate(st: TyperState): Unit = {
     annotations = st.annotations.copy
-    unification.restore(st.unification)
+    this.restoreUnification(st.unification)
     capabilityScope = st.capabilityScope.copy
   }
 
   private[typer] def commitTypeAnnotations(): Unit = {
-    val subst = unification.substitution
+    val subst = this.substitution
 
     var capturesForLSP: List[(Tree, CaptureSet)] = Nil
 
