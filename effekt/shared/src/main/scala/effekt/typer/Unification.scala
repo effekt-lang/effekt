@@ -233,10 +233,7 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator, ErrorReport
   // Implementation Details
   // ----------------------
 
-  def uabort(msg: String): Nothing = this.abort(msg)
   def abort(msg: String, ctx: ErrorContext) = this.abort(ErrorContext.explainInContext(msg, ctx))
-
-  def uerror(msg: String) = this.error(msg)
   def error(msg: String, ctx: ErrorContext) = this.error(ErrorContext.explainInContext(msg, ctx))
   def error(left: symbols.Type, right: symbols.Type, ctx: ErrorContext) = this.error(ErrorContext.explainMismatch(left, right, ctx))
 
