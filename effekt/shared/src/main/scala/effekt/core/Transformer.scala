@@ -86,7 +86,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       List(Toplevel.Val(v.symbol, transformedTpe, transformed))
 
     case v @ source.ValDef(id, _, binding, doc, span) =>
-      Context.at(d) { Context.uabort("Effectful bindings not allowed on the toplevel") }
+      Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
 
     case v @ source.DefDef(id, annot, binding, doc, span) =>
       val sym = v.symbol
@@ -97,7 +97,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       bindings.map(core.Binding.toToplevel) ++ List(definition)
 
     case _: source.VarDef | _: source.RegDef =>
-      Context.at(d) { Context.uabort("Mutable variable bindings not allowed on the toplevel") }
+      Context.at(d) { Context.abort("Mutable variable bindings not allowed on the toplevel") }
 
     case d @ source.InterfaceDef(id, tparamsInterface, ops, doc, span) =>
       val interface = d.symbol
@@ -112,7 +112,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case source.ExternBody.StringExternBody(ff, body, span) :: Nil =>
           val args = body.args.map(transformAsExpr).map {
             case p: Pure => p: Pure
-            case _ => Context.uabort("Spliced arguments need to be pure expressions.")
+            case _ => Context.abort("Spliced arguments need to be pure expressions.")
           }
           ExternBody.StringExternBody(ff, Template(body.strings, args))
         case source.ExternBody.Unsupported(err) :: Nil =>
