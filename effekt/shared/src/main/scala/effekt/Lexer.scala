@@ -248,7 +248,7 @@ class Lexer(source: Source) extends Iterator[Token] {
   inline private def isNameRest(c: Char): Boolean =
     isNameFirst(c) || (c >= '0' && c <= '9') || c == '!' || c == '?' || c == '$'
 
-  private def isHexDigit(c: Char): Boolean =
+  inline private def isHexDigit(c: Char): Boolean =
     (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 
   // Various kinds of string delimiters supported by Effekt
