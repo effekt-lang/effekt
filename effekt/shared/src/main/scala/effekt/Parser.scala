@@ -400,15 +400,15 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   def toplevel(): Def =
     nonterminal:
       documentedKind match {
-        case `val` => valDef()
-        case `def` => defDef()
+        case `val`       => valDef()
+        case `def`       => defDef()
         case `interface` => interfaceDef()
-        case `type` => typeOrAliasDef()
-        case `record` => recordDef()
-        case `extern` => externDef()
-        case `effect` => effectOrOperationDef()
+        case `type`      => typeOrAliasDef()
+        case `record`    => recordDef()
+        case `extern`    => externDef()
+        case `effect`    => effectOrOperationDef()
         case `namespace` => namespaceDef()
-        case `var` => backtrack {
+        case `var`       => backtrack {
           softFailWith("Mutable variable declarations are currently not supported on the toplevel.") {
             varDef()
           }
