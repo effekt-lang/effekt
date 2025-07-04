@@ -67,17 +67,16 @@ object SpanSyntax {
 }
 
 
-class RecursiveDescentTests extends munit.FunSuite {
+class ParserTests extends munit.FunSuite {
 
-  def parser(input: String, positions: Positions)(using munit.Location): RecursiveDescent = {
+  def parser(input: String, positions: Positions)(using munit.Location): Parser = {
     val source = StringSource(input, "")
-    val lexer = effekt.lexer.Lexer(source)
-    val tokens = lexer.run()
+    val tokens = effekt.lexer.Lexer.lex(source)
     // TODO catch LexerError exception?
-    new RecursiveDescent(positions, tokens, source)
+    new Parser(positions, tokens, source)
   }
 
-  def parse[R](input: String, f: RecursiveDescent => R, positions: Positions = new Positions())(using munit.Location): R =
+  def parse[R](input: String, f: Parser => R, positions: Positions = new Positions())(using munit.Location): R =
     try {
       val p = parser(input, positions)
       val result = f(p)
@@ -246,7 +245,7 @@ class RecursiveDescentTests extends munit.FunSuite {
   test("Peeking") {
     implicit def toToken(t: TokenKind): Token = Token(0, 0, t)
     def peek(tokens: Seq[Token], offset: Int): Token =
-      new RecursiveDescent(new Positions, tokens, StringSource("", "test")).peek(offset)
+      new Parser(new Positions, tokens, StringSource("", "test")).peek(offset)
 
     val tokens = List[Token](`(`, Space, Newline, `)`, Space, `=>`, EOF)
     assertEquals(peek(tokens, 0).kind, `(`)
@@ -264,7 +263,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseExpr("f")
     parseExpr("f(a)")
     parseExpr("f(a, 42)")
-    parseExpr("\\u0000")
+    parseExpr("'\\u0000'")
 
     parseExpr("l.foreach { _ => 42 }")
     {
@@ -324,6 +323,13 @@ class RecursiveDescentTests extends munit.FunSuite {
     intercept[Throwable] { parseExpr("[,1]") }
   }
 
+  test("Strings") {
+    parseExpr("\"\"")
+    parseExpr("\"hello\"")
+    parseExpr("\"Hello, ${name}\"")
+    parseExpr("\"My name is ${person.lastName}, ${person.firstName} ${person.lastName}\"")
+  }
+
   test("Boxing") {
     parseExpr("box f")
     parseExpr("unbox f")
@@ -377,6 +383,22 @@ class RecursiveDescentTests extends munit.FunSuite {
       val hole = parseExpr(source.content)
       hole match {
         case Term.Hole(_, _, span) =>
+          assertEquals(span, expectedSpan)
+        case other =>
+          throw new IllegalArgumentException(s"Expected Hole but got ${other.getClass.getSimpleName}")
+      }
+    }
+
+    {
+      val (source, expectedSpan) =
+        """<>
+          |↑↑
+          |""".sourceAndSpan
+
+      val hole = parseExpr(source.content)
+      hole match {
+        case Term.Hole(_, _, span) =>
+          println(hole)
           assertEquals(span, expectedSpan)
         case other =>
           throw new IllegalArgumentException(s"Expected Hole but got ${other.getClass.getSimpleName}")

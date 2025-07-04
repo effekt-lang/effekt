@@ -14,7 +14,7 @@ val int = 42 * 2
 val bool = true && false
 val str = "hello" ++ ", " ++ "world"
 val c = 'c'
-val unicode = \u039E // Ξ
+val unicode = '\u039E' // Ξ
 ```
 
 Most values of built-in types can be printed with `println`, however, `println` is not defined for others, e.g., `Char` or user-defined data types.
