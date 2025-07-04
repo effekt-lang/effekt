@@ -1,0 +1,44 @@
+import test
+
+def main() = {
+  // Don't print out times in CI.
+  suite("Test test suite on Exceptions", false) {
+    // on[E] variant
+    // -------------
+    test("Test test assertNotThrown pass") {
+      with on[MissingValue].assertNotThrown
+      assert(Some(12).value, 12)
+    }
+    test("Test test assertNotThrown fail") {
+      with on[MissingValue].assertNotThrown
+      assert(None().value, 12)
+    }
+    test("Test test assertThrown fail") {
+      with on[MissingValue].assertThrown
+      assert(Some(12).value, 12)
+    }
+    test("Test test assertThrows pass") {
+      with on[MissingValue].assertThrown[MissingValue]
+      assert(None().value, 12)
+    }
+    // direct variant
+    // --------------
+    test("Test test assertNoThrow pass") {
+      with assertNoThrow[MissingValue]
+      assert(Some(12).value, 12)
+    }
+    test("Test test assertNoThrow fail") {
+      with assertNoThrow[MissingValue]
+      assert(None().value, 12)
+    }
+    test("Test test assertThrows fail") {
+      with assertThrows[MissingValue]
+      assert(Some(12).value, 12)
+    }
+    test("Test test assertThrows pass") {
+      with assertThrows[MissingValue]
+      assert(None().value, 12)
+    }
+  };
+  ()
+}
