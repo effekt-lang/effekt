@@ -393,7 +393,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   def isToplevel: Boolean = documentedKind match {
     case `val` | `fun` | `def` | `type` | `effect` | `namespace` |
-         `extern` | `effect` | `interface` | `type` | `record` | `var` => true
+         `extern` | `interface` | `type` | `record` | `var` => true
     case _ => false
   }
 
@@ -442,7 +442,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   def isDefinition: Boolean = peek.kind match {
     case `val` | `def` | `type` | `effect` | `namespace` => true
-    case `extern` | `effect` | `interface` | `type` | `record` =>
+    case `extern` | `interface` | `type` | `record` =>
       val kw = peek.kind
       fail(s"Only supported on the toplevel: ${kw.toString} declaration.")
     case _ => false
