@@ -1246,7 +1246,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     (vpnames.map(Some.apply).zipAll(vargs, None, source.ValueArg.Unnamed(source.UnitLit(source.Span.missing)))) foreach {
       case (Some(expName), source.ValueArg(Some(gotName), _, _)) if expName != gotName =>
-        Context.error(s"Unexpected name in named argument: got ${gotName}, but expected ${expName}.")
+        if (vpnames.contains(gotName)) {
+          Context.error(s"Unexpected name in named argument: got ${gotName}, but expected ${expName} in this position. " ++
+            s"Named arguments must still be in the correct position.")
+        } else {
+          Context.error(s"Unexpected name in named argument: got ${gotName}, but expected ${expName}.")
+        }
       case (None, source.ValueArg(Some(gotName), _, _)) =>
         Context.error(s"Unexpected named argument: got ${gotName}, but function call is not to a known function.")
       case _ => ()
