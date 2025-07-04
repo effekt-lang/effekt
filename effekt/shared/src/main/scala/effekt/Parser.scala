@@ -314,7 +314,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     //      ^
     case _ if lookbehind(1).kind == Newline => ()
 
-    case _ => fail("Expected ;")
+    case _ => fail("Expected terminator: `;` or a newline")
   }
 
   def stmt(): Stmt =
@@ -355,11 +355,9 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
        if (!peek(`EOF`)) {
          // NOTE: This means we expected EOF, but there's still some _stuff_ left over.
 
-         val startPosition = position
-         manyUntil({ skip() }, `EOF`)
-         val endPosition = position
-
-         softFail("Expected top-level definition", startPosition, endPosition)
+         softFailWith("Expected top-level definition") {
+           manyUntil({ skip() }, `EOF`)
+         }
        }
        res
 
@@ -395,22 +393,26 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   def isToplevel: Boolean = documentedKind match {
     case `val` | `fun` | `def` | `type` | `effect` | `namespace` |
-         `extern` | `effect` | `interface` | `type` | `record` => true
+         `extern` | `effect` | `interface` | `type` | `record` | `var` => true
     case _ => false
   }
 
   def toplevel(): Def =
     nonterminal:
       documentedKind match {
-        case `val`       => valDef()
-        case `def`       => defDef()
+        case `val` => valDef()
+        case `def` => defDef()
         case `interface` => interfaceDef()
-        case `type`      => typeOrAliasDef()
-        case `record`    => recordDef()
-        case `extern`    => externDef()
-        case `effect`    => effectOrOperationDef()
+        case `type` => typeOrAliasDef()
+        case `record` => recordDef()
+        case `extern` => externDef()
+        case `effect` => effectOrOperationDef()
         case `namespace` => namespaceDef()
-        case `var`       => fail("Mutable variable declarations are currently not supported on the toplevel.")
+        case `var` => backtrack {
+          softFailWith("Mutable variable declarations are currently not supported on the toplevel.") {
+            varDef()
+          }
+        } getOrElse fail("Mutable variable declarations are currently not supported on the toplevel.")
         case _ => fail("Expected a top-level definition")
       }
 
@@ -876,22 +878,18 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
          if (isSemi) {
            semi()
 
-           val startPosition = position
-
            if (!peek(`}`) && !peek(`def`) && !peek(EOF)) {
-              // consume until the next `def` or `}` or EOF
-              while (!peek(`}`) && !peek(`def`) && !peek(EOF)) {
-                next()
-              }
+             softFailWith("Unexpected tokens after operation definition. Expected either a new operation definition or the end of the implementation.") {
+               // consume until the next `def` or `}` or EOF
+               while (!peek(`}`) && !peek(`def`) && !peek(EOF)) {
+                 next()
+               }
+             }
+           }
+         }
 
-              val endPosition = position
-              val msg = "Unexpected tokens after operation definition. Expected either a new operation definition or the end of the implementation."
-              softFail(msg, startPosition, endPosition)
-            }
-          }
-
-          // TODO the implicitResume needs to have the correct position assigned (maybe move it up again...)
-          OpClause(id, tps, vps, bps, ret.unspan, body, implicitResume, span())
+         // TODO the implicitResume needs to have the correct position assigned (maybe move it up again...)
+         OpClause(id, tps, vps, bps, ret.unspan, body, implicitResume, span())
       }
 
   def implicitResume: IdDef =
@@ -1525,10 +1523,19 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     throw Fail.expectedButGot(currentLabel.getOrElse { expected }, explain(got), position)
 
   def fail(msg: String): Nothing =
-    throw Fail(msg, position + 1)
+    throw Fail(msg, position)
 
   def softFail(message: String, start: Int, end: Int): Unit = {
     softFails += SoftFail(message, start, end)
+  }
+
+  inline def softFailWith[T](inline message: String)(inline p: => T): T = {
+    val startPosition = position
+    val result = p
+    val endPosition = position
+
+    softFail(message, startPosition, endPosition)
+    result
   }
 
   /**
