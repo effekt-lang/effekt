@@ -868,7 +868,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
         sym.vparams foreach Context.bind
         sym.bparams foreach Context.bind
 
-        flowingInto(Context.lookupCapture(sym)) {
+        val functionCapture = Context.lookupCapture(sym)
+        val inferredCapture = Context.freshCaptVar(CaptUnificationVar.ExternDefRegion(d))
+
+
+        flowsIntoWithout(inferredCapture, functionCapture) {
+          sym.bparams.map(_.capture)
+        }
+        flowingInto(inferredCapture) {
 
           // Note: Externs are always annotated with a type
           val expectedReturnType = d.symbol.annotatedType.get.result
@@ -879,7 +886,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
               checkStmt(body, Some(expectedReturnType))
             case u: source.ExternBody.Unsupported => u
           }
-
         }
 
         Result((), Pure)
