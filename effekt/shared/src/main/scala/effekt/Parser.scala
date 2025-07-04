@@ -1534,7 +1534,11 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     val result = p
     val endPosition = position
 
-    softFail(message, startPosition, endPosition)
+    if (startPosition == endPosition) {
+      softFail(message, startPosition, startPosition)
+    } else {
+      softFail(message, startPosition, endPosition - 1)
+    }
     result
   }
 
