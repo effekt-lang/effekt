@@ -2,28 +2,48 @@ package effekt
 package util
 
 import effekt.lexer.TokenKind.*
-import kiama.util.{ Positions, StringSource, Source }
+import kiama.util.{ StringSource, Source }
 import effekt.lexer.{ Lexer, Token, TokenKind }
 
 object AnsiHighlight {
 
+  // Styles
+  // ------
+
+  private def number(text: String): String =
+    Console.BLUE + text + Console.RESET
+
+  private def string(text: String): String =
+    Console.GREEN + text + Console.RESET
+
+  private def comment(text: String): String =
+    Console.WHITE + text + Console.RESET
+
+  private def keyword(text: String): String =
+    Console.MAGENTA + text + Console.RESET
+
+  private def error(text: String): String =
+    Console.RED + Console.UNDERLINED + text + Console.RESET
+
+
+  // Highlighting
+  // ------------
+
   private def highlight(token: Token)(using Source): String = token.kind match {
-    case Error(error) => Console.RED + Console.UNDERLINED + token.content + Console.RESET
+    case Error(message) => error(token.content)
 
-    // numbers
-    case Integer(n) => Console.BLUE + n.toString + Console.RESET
-    case Float(d) => Console.BLUE + d.toString + Console.RESET
+    case Integer(n) => number(n.toString)
+    case Float(d)   => number(d.toString)
 
-    // strings
-    case Str(s, multiline) => Console.GREEN + token.content + Console.RESET
-    case HoleStr(s) => Console.GREEN + token.content + Console.RESET
-    case Chr(c) => Console.GREEN + token.content + Console.RESET
+    case Str(s, multiline) => string(token.content)
+    case HoleStr(s)        => string(token.content)
+    case Chr(c)            => string(token.content)
 
     case Ident(id) => id
 
-    case Comment(msg) => Console.WHITE + token.content + Console.RESET
-    case DocComment(msg) => Console.WHITE + token.content + Console.RESET
-    case Shebang(cmd) => Console.WHITE + token.content + Console.RESET
+    case Comment(msg)    => comment(token.content)
+    case DocComment(msg) => comment(token.content)
+    case Shebang(cmd)    => comment(token.content)
 
     // keywords
     case
@@ -32,8 +52,7 @@ object AnsiHighlight {
       `true` | `false` |
       `match` | `def` | `module`| `import`| `export`| `extern`| `include`|
       `record`| `box`| `unbox`| `return`| `region`|
-      `resource`| `new`| `and`| `is`| `namespace`| `pure` =>
-        Console.MAGENTA + token.content + Console.RESET
+      `resource`| `new`| `and`| `is`| `namespace`| `pure` => keyword(token.content)
 
     case EOF => ""
 
