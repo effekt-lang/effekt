@@ -314,7 +314,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     //      ^
     case _ if lookbehind(1).kind == Newline => ()
 
-    case _ => fail("Expected ;")
+    case _ => fail("Expected terminator: `;` or a newline")
   }
 
   def stmt(): Stmt =
@@ -355,11 +355,9 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
        if (!peek(`EOF`)) {
          // NOTE: This means we expected EOF, but there's still some _stuff_ left over.
 
-         val startPosition = position
-         manyUntil({ skip() }, `EOF`)
-         val endPosition = position
-
-         softFail("Expected top-level definition", startPosition, endPosition)
+         softFailWith("Expected top-level definition") {
+           manyUntil({ skip() }, `EOF`)
+         }
        }
        res
 
@@ -395,7 +393,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   def isToplevel: Boolean = documentedKind match {
     case `val` | `fun` | `def` | `type` | `effect` | `namespace` |
-         `extern` | `effect` | `interface` | `type` | `record` => true
+         `extern` | `interface` | `type` | `record` | `var` => true
     case _ => false
   }
 
@@ -410,7 +408,11 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         case `extern`    => externDef()
         case `effect`    => effectOrOperationDef()
         case `namespace` => namespaceDef()
-        case `var`       => fail("Mutable variable declarations are currently not supported on the toplevel.")
+        case `var`       => backtrack {
+          softFailWith("Mutable variable declarations are currently not supported on the toplevel.") {
+            varDef()
+          }
+        } getOrElse fail("Mutable variable declarations are currently not supported on the toplevel.")
         case _ => fail("Expected a top-level definition")
       }
 
@@ -440,7 +442,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   def isDefinition: Boolean = peek.kind match {
     case `val` | `def` | `type` | `effect` | `namespace` => true
-    case `extern` | `effect` | `interface` | `type` | `record` =>
+    case `extern` | `interface` | `type` | `record` =>
       val kw = peek.kind
       fail(s"Only supported on the toplevel: ${kw.toString} declaration.")
     case _ => false
@@ -564,9 +566,21 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   //    effect Foo(): Int
   // are allowed. Here we simply backtrack, since effect definitions shouldn't be
   // very long and cannot be nested.
-  def effectOrOperationDef(): Def =
+  def effectOrOperationDef(): Def = {
+    // We used to use `effect Foo { def a(); def b(); ... }` for multi-operation interfaces,
+    // but now we use `interface Foo { ... }` instead.
+    // If we can't parse `effectDef` or `operationDef`, we should try parsing an interface with the wrong keyword
+    // and report an error to the user if the malformed interface would be valid.
+    def interfaceDefUsingEffect(): Maybe[InterfaceDef] =
+      backtrack(restoreSoftFails = false):
+        softFailWith("Unexpected 'effect', did you mean to declare an interface of multiple operations using the 'interface' keyword?"):
+          interfaceDef(`effect`)
+
     nonterminal:
-      backtrack { effectDef() } getOrElse { operationDef() }
+      backtrack { effectDef() }
+        .orElse { interfaceDefUsingEffect() }
+        .getOrElse { operationDef() } // The `operationDef` should be last as to not cause spurious errors later.
+  }
 
   def effectDef(): Def =
     nonterminal:
@@ -590,13 +604,13 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         case id ~ (tps, vps, bps) ~ ret => Operation(id, tps, vps.unspan, bps.unspan, ret, doc, span())
       }
 
-  def interfaceDef(): InterfaceDef =
+  def interfaceDef(keyword: TokenKind = `interface`): InterfaceDef =
     nonterminal:
       documented { doc =>
         // TODO
-        // InterfaceDef(`interface` ~> idDef(), maybeTypeParams(),
+        // InterfaceDef(keyword ~> idDef(), maybeTypeParams(),
         //   `{` ~> manyWhile(documented { opDoc => `def` ~> operation(opDoc) }, documentedKind == `def`) <~ `}`, doc, span())
-        InterfaceDef(`interface` ~> idDef(), maybeTypeParams(),
+        InterfaceDef(keyword ~> idDef(), maybeTypeParams(),
           `{` ~> manyUntil(documented { opDoc => { `def` ~> operation(opDoc) } labelled "} or another operation declaration" }, `}`) <~ `}`, doc, span())
       }
 
@@ -876,22 +890,18 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
          if (isSemi) {
            semi()
 
-           val startPosition = position
-
            if (!peek(`}`) && !peek(`def`) && !peek(EOF)) {
-              // consume until the next `def` or `}` or EOF
-              while (!peek(`}`) && !peek(`def`) && !peek(EOF)) {
-                next()
-              }
+             softFailWith("Unexpected tokens after operation definition. Expected either a new operation definition or the end of the implementation.") {
+               // consume until the next `def` or `}` or EOF
+               while (!peek(`}`) && !peek(`def`) && !peek(EOF)) {
+                 next()
+               }
+             }
+           }
+         }
 
-              val endPosition = position
-              val msg = "Unexpected tokens after operation definition. Expected either a new operation definition or the end of the implementation."
-              softFail(msg, startPosition, endPosition)
-            }
-          }
-
-          // TODO the implicitResume needs to have the correct position assigned (maybe move it up again...)
-          OpClause(id, tps, vps, bps, ret.unspan, body, implicitResume, span())
+         // TODO the implicitResume needs to have the correct position assigned (maybe move it up again...)
+         OpClause(id, tps, vps, bps, ret.unspan, body, implicitResume, span())
       }
 
   def implicitResume: IdDef =
@@ -1525,10 +1535,23 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     throw Fail.expectedButGot(currentLabel.getOrElse { expected }, explain(got), position)
 
   def fail(msg: String): Nothing =
-    throw Fail(msg, position + 1)
+    throw Fail(msg, position)
 
   def softFail(message: String, start: Int, end: Int): Unit = {
     softFails += SoftFail(message, start, end)
+  }
+
+  inline def softFailWith[T](inline message: String)(inline p: => T): T = {
+    val startPosition = position
+    val result = p
+    val endPosition = position
+
+    if (startPosition == endPosition) {
+      softFail(message, startPosition, startPosition)
+    } else {
+      softFail(message, startPosition, endPosition - 1)
+    }
+    result
   }
 
   /**
@@ -1537,7 +1560,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   inline def when[T](t: TokenKind)(inline thn: => T)(inline els: => T): T =
     if peek(t) then { consume(t); thn } else els
 
-  inline def backtrack[T](inline p: => T): Maybe[T] =
+  inline def backtrack[T](inline restoreSoftFails: Boolean = true)(inline p: => T): Maybe[T] =
     val before = position
     val beforePrevious = previous
     val labelBefore = currentLabel
@@ -1547,10 +1570,11 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         position = before
         previous = beforePrevious
         currentLabel = labelBefore
-        softFails = softFailsBefore
+        if restoreSoftFails then softFails = softFailsBefore
         Maybe.None(Span(source, pos(), pos(), Synthesized))
       }
     }
+  inline def backtrack[T](inline p: => T): Maybe[T] = backtrack(restoreSoftFails = true)(p)
 
   def interleave[A](xs: List[A], ys: List[A]): List[A] = (xs, ys) match {
     case (x :: xs, y :: ys) => x :: y :: interleave(xs, ys)

@@ -1,0 +1,5 @@
+val x = 100
+var y = 42
+var z = 1
+
+def main() = println(x + y + z)

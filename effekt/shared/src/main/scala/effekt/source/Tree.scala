@@ -305,7 +305,7 @@ object Many {
  * If the `Option` is `Some`, the `span` is the span of the value.
  * If the `Option` is `None`, the `span` is an empty span pointing to where the optional value would be expected.
  */
-case class Maybe[T](unspan: Option[T], span: Span) {
+case class Maybe[+T](unspan: Option[T], span: Span) {
   def map[B](f: T => B): Maybe[B] = Maybe(unspan.map(f), span)
   def flatMap[B](f: T => Maybe[B]): Maybe[B] = unspan match {
     case None => Maybe(None, span)
