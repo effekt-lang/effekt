@@ -5,6 +5,16 @@ import effekt.lexer.TokenKind.*
 import kiama.util.{ StringSource, Source }
 import effekt.lexer.{ Lexer, Token, TokenKind }
 
+/**
+ * Highlights Effekt code using Ansi colors.
+ *
+ * The generated output should be exactly the same as the input
+ * (including whitespaces), modulo the added colors.
+ *
+ * Use like:
+ *
+ *   AnsiHighlight("val x = 3; return x + 1")
+ */
 object AnsiHighlight {
 
   // Styles
@@ -29,21 +39,22 @@ object AnsiHighlight {
   // Highlighting
   // ------------
 
-  private def highlight(token: Token)(using Source): String = token.kind match {
-    case Error(message) => error(token.content)
+  private def highlight(kind: TokenKind, text: String): String = kind match {
+    case EOF               => ""
+    case Error(message)    => error(text)
 
-    case Integer(n) => number(n.toString)
-    case Float(d)   => number(d.toString)
+    case Integer(n)        => number(text)
+    case Float(d)          => number(text)
 
-    case Str(s, multiline) => string(token.content)
-    case HoleStr(s)        => string(token.content)
-    case Chr(c)            => string(token.content)
+    case Str(s, multiline) => string(text)
+    case HoleStr(s)        => string(text)
+    case Chr(c)            => string(text)
 
-    case Ident(id) => id
+    case Ident(id)         => id
 
-    case Comment(msg)    => comment(token.content)
-    case DocComment(msg) => comment(token.content)
-    case Shebang(cmd)    => comment(token.content)
+    case Comment(msg)      => comment(text)
+    case DocComment(msg)   => comment(text)
+    case Shebang(cmd)      => comment(text)
 
     // keywords
     case
@@ -52,11 +63,9 @@ object AnsiHighlight {
       `true` | `false` |
       `match` | `def` | `module`| `import`| `export`| `extern`| `include`|
       `record`| `box`| `unbox`| `return`| `region`|
-      `resource`| `new`| `and`| `is`| `namespace`| `pure` => keyword(token.content)
+      `resource`| `new`| `and`| `is`| `namespace`| `pure` => keyword(text)
 
-    case EOF => ""
-
-    case _ => token.content
+    case _ => text
   }
 
   extension (token: Token) {
@@ -91,7 +100,7 @@ object AnsiHighlight {
       }
       previousOffset = token.end
 
-      out.append(highlight(token))
+      out.append(highlight(token.kind, token.content))
     }
     out.toString
   }
