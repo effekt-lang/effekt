@@ -84,6 +84,9 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "") extends 
         Block.BlockLit(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite,
           rewrite(body))
       }
+    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => 
+      val resolvedCapts = annotatedCapt map rewrite
+      withBinding(id) { Block.BlockVar(rewrite(id), rewrite(annotatedTpe), resolvedCapts) }
   }
 
   override def rewrite(o: Operation): Operation = o match {

@@ -1,0 +1,10 @@
+effect fail(): Nothing
+
+def f(): Char / fail = do fail()
+
+def main(): Unit =
+  try {
+    println(show(f()))
+  } with fail {
+    ()
+  }
