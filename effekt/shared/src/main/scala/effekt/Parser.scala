@@ -566,9 +566,21 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   //    effect Foo(): Int
   // are allowed. Here we simply backtrack, since effect definitions shouldn't be
   // very long and cannot be nested.
-  def effectOrOperationDef(): Def =
+  def effectOrOperationDef(): Def = {
+    // We used to use `effect Foo { def a(); def b(); ... }` for multi-operation interfaces,
+    // but now we use `interface Foo { ... }` instead.
+    // If we can't parse `effectDef` or `operationDef`, we should try parsing an interface with the wrong keyword
+    // and report an error to the user if the malformed interface would be valid.
+    def interfaceDefUsingEffect(): Maybe[InterfaceDef] =
+      backtrack(restoreSoftFails = false):
+        softFailWith("Unexpected 'effect', did you mean to declare an interface of multiple operations using the 'interface' keyword?"):
+          interfaceDef(`effect`)
+
     nonterminal:
-      backtrack { effectDef() } getOrElse { operationDef() }
+      backtrack { effectDef() }
+        .orElse { interfaceDefUsingEffect() }
+        .getOrElse { operationDef() } // The `operationDef` should be last as to not cause spurious errors later.
+  }
 
   def effectDef(): Def =
     nonterminal:
@@ -592,13 +604,13 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         case id ~ (tps, vps, bps) ~ ret => Operation(id, tps, vps.unspan, bps.unspan, ret, doc, span())
       }
 
-  def interfaceDef(): InterfaceDef =
+  def interfaceDef(keyword: TokenKind = `interface`): InterfaceDef =
     nonterminal:
       documented { doc =>
         // TODO
-        // InterfaceDef(`interface` ~> idDef(), maybeTypeParams(),
+        // InterfaceDef(keyword ~> idDef(), maybeTypeParams(),
         //   `{` ~> manyWhile(documented { opDoc => `def` ~> operation(opDoc) }, documentedKind == `def`) <~ `}`, doc, span())
-        InterfaceDef(`interface` ~> idDef(), maybeTypeParams(),
+        InterfaceDef(keyword ~> idDef(), maybeTypeParams(),
           `{` ~> manyUntil(documented { opDoc => { `def` ~> operation(opDoc) } labelled "} or another operation declaration" }, `}`) <~ `}`, doc, span())
       }
 
@@ -1548,7 +1560,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   inline def when[T](t: TokenKind)(inline thn: => T)(inline els: => T): T =
     if peek(t) then { consume(t); thn } else els
 
-  inline def backtrack[T](inline p: => T): Maybe[T] =
+  inline def backtrack[T](inline restoreSoftFails: Boolean = true)(inline p: => T): Maybe[T] =
     val before = position
     val beforePrevious = previous
     val labelBefore = currentLabel
@@ -1558,10 +1570,11 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         position = before
         previous = beforePrevious
         currentLabel = labelBefore
-        softFails = softFailsBefore
+        if restoreSoftFails then softFails = softFailsBefore
         Maybe.None(Span(source, pos(), pos(), Synthesized))
       }
     }
+  inline def backtrack[T](inline p: => T): Maybe[T] = backtrack(restoreSoftFails = true)(p)
 
   def interleave[A](xs: List[A], ys: List[A]): List[A] = (xs, ys) match {
     case (x :: xs, y :: ys) => x :: y :: interleave(xs, ys)

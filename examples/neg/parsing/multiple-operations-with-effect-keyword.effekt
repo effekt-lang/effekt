@@ -1,0 +1,20 @@
+record Token()
+
+effect Lexer {
+  def peek(): Option[Token]
+  def next(): Token
+}
+
+effect Emit {
+  def text(content: String): Unit
+  def newline(): Unit
+}
+
+effect Foo {
+  def foo(): Token
+}
+
+effect myeffect(x: Int)
+
+effect Next(): String
+effect Choice(): Boolean
