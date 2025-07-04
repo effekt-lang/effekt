@@ -1,5 +1,11 @@
 def length(x: Double, y: Double): Double = sqrt((x * x) + (y * y))
 
+def increase(value: Int, to: Int): Int = to
+def increase(value: Int, by: Int): Int = value + by
+
 def main() = {
   println(length(x = 3.0, y = 4.0))
+
+  // we can resolve overloads with named parameters:
+  println(increase(12, by = 2))
 }
