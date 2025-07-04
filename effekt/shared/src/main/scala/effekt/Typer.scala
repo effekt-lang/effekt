@@ -146,7 +146,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.abort("Expected an expression, but got an unbox (which is a block).")
 
       case c @ source.Select(receiver, field, _) =>
-        checkOverloadedFunctionCall(c, field, Nil, List(receiver), Nil, expected)
+        checkOverloadedFunctionCall(c, field, Nil, List(source.ValueArg.Unnamed(receiver)), Nil, expected)
 
       case c @ source.Do(effect, op, targs, vargs, bargs, _) =>
         // (1) first check the call
@@ -176,7 +176,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case _ => Context.abort("Cannot infer function type for callee.")
         }
 
-        val Result(t, eff) = checkCallTo(c, "function", tpe, targs map { _.resolveValueType }, vargs, bargs, expected)
+        val Result(t, eff) = checkCallTo(c, "function", Nil, tpe, targs map { _.resolveValueType }, vargs, bargs, expected)
         Result(t, eff ++ funEffs)
 
       // precondition: PreTyper translates all uniform-function calls to `Call`.
@@ -1055,7 +1055,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     receiver: source.Term,
     id: source.IdRef,
     targs: List[ValueType],
-    vargs: List[source.Term],
+    vargs: List[source.ValueArg],
     bargs: List[source.Term],
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
@@ -1105,7 +1105,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       //   1. make up and annotate unification variables, if no type arguments are there
       //   2. type check call with either existing or made up type arguments
 
-      checkCallTo(call, op.name.name, funTpe, synthTargs, vargs, bargs, expected)
+      checkCallTo(call, op.name.name, op.vparams.map { p => p.name.name }, funTpe, synthTargs, vargs, bargs, expected)
     }
     resolveOverload(id, List(successes), errors)
   }
@@ -1121,7 +1121,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     call: source.CallLike,
     id: source.IdRef,
     targs: List[ValueType],
-    vargs: List[source.Term],
+    vargs: List[source.ValueArg],
     bargs: List[source.Term],
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
@@ -1154,7 +1154,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // - If there is exactly one match, fully typecheck the call with this.
     val results = scopes map { scope => tryEach(scope.toList) { receiver =>
       val (funTpe, capture) = findFunctionTypeFor(receiver)
-      val Result(tpe, effs) = checkCallTo(call, receiver.name.name, funTpe, targs, vargs, bargs, expected)
+      val vpnames = receiver match {
+        case c: Callable  => c.vparams.map(_.name.name)
+        case _ => Nil
+      }
+      val Result(tpe, effs) = checkCallTo(call, receiver.name.name, vpnames, funTpe, targs, vargs, bargs, expected)
       // This is different, compared to method calls:
       usingCapture(capture)
       Result(tpe, effs)
@@ -1209,9 +1213,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
   def checkCallTo(
     call: source.CallLike,
     name: String,
+    vpnames: List[String],
     funTpe: FunctionType,
     targs: List[ValueType],
-    vargs: List[source.Term],
+    vargs: List[source.ValueArg],
     bargs: List[source.Term],
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
@@ -1239,8 +1244,21 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     var effs: ConcreteEffects = Pure
 
+    (vpnames.map(Some.apply).zipAll(vargs, None, source.ValueArg.Unnamed(source.UnitLit(source.Span.missing)))) foreach {
+      case (Some(expName), source.ValueArg(Some(gotName), _, _)) if expName != gotName =>
+        if (vpnames.contains(gotName)) {
+          Context.error(s"Unexpected name in named argument: got ${gotName}, but expected ${expName} in this position. " ++
+            s"Named arguments must still be in the correct position.")
+        } else {
+          Context.error(s"Unexpected name in named argument: got ${gotName}, but expected ${expName}.")
+        }
+      case (None, source.ValueArg(Some(gotName), _, _)) =>
+        Context.error(s"Unexpected named argument: got ${gotName}, but function call is not to a known function.")
+      case _ => ()
+    }
+
     (vps zip vargs) foreach { case (tpe, expr) =>
-      val Result(t, eff) = checkExpr(expr, Some(tpe))
+      val Result(t, eff) = checkExpr(expr.value, Some(tpe))
       effs = effs ++ eff
     }
 

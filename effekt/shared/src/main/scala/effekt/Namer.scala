@@ -415,6 +415,10 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.ExternInclude(ff, path, _, _, doc, span) => ()
   }
 
+  def resolve(a: source.ValueArg)(using Context): Unit = Context.focusing(a) { _ =>
+    resolve(a.value)
+  }
+
   def resolve(t: source.Term)(using Context): Unit = Context.focusing(t) {
 
     case source.Literal(value, tpe, _) => ()

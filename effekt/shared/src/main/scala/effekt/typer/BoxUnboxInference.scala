@@ -43,6 +43,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     case other => Unbox(rewriteAsExpr(other), other.span.synthesized)
   }
 
+  def rewriteAsExpr(a: ValueArg)(using C: Context): ValueArg = ValueArg(a.name, rewriteAsExpr(a.value), a.span)
+
   def rewriteAsExpr(e: Term)(using C: Context): Term = visit(e) {
 
     case Unbox(expr, _) => rewriteAsExpr(expr)
@@ -97,7 +99,7 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
       if (hasMethods) {
         MethodCall(rewriteAsBlock(receiver), id, targs, vargsTransformed, bargsTransformed, span)
       } else {
-        Call(IdTarget(id).inheritPosition(id), targs, rewriteAsExpr(receiver) :: vargsTransformed, bargsTransformed, span)
+        Call(IdTarget(id).inheritPosition(id), targs, rewriteAsExpr(ValueArg.Unnamed(receiver)) :: vargsTransformed, bargsTransformed, span)
       }
 
     case TryHandle(prog, handlers, span) =>

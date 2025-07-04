@@ -482,7 +482,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case c @ source.MethodCall(receiver, id, targs, vargs, bargs, _) =>
       val rec = transformAsObject(receiver)
       val typeArgs = Context.typeArguments(c).map(transform)
-      val valueArgs = vargs.map(transformAsPure)
+      val valueArgs = vargs.map { a => transformAsPure(a.value) }
       val blockArgs = bargs.map(transformAsBlock)
 
       // TODO if we always just use .capt, then why annotate it?
@@ -505,7 +505,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
       val e = transformAsPure(expr)
       val typeArgs = Context.typeArguments(c).map(transform)
-      val valueArgs = vargs.map(transformAsPure)
+      val valueArgs = vargs.map { a => transformAsPure(a.value) }
       val blockArgs = bargs.map(transformAsBlock)
       // val captArgs = blockArgs.map(b => b.capt) //transform(Context.inferredCapture(b)))
 
@@ -794,12 +794,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       core.BlockType.Function(tparams, cparams, vparams, bparams, transform(resultType))
     }
 
-  def makeFunctionCall(call: source.CallLike, sym: TermSymbol, vargs: List[source.Term], bargs: List[source.Term])(using Context): Expr = {
+  def makeFunctionCall(call: source.CallLike, sym: TermSymbol, vargs: List[source.ValueArg], bargs: List[source.Term])(using Context): Expr = {
     // the type arguments, inferred by typer
     val targs = Context.typeArguments(call).map(transform)
     // val cargs = bargs.map(b => transform(Context.inferredCapture(b)))
 
-    val vargsT = vargs.map(transformAsPure)
+    val vargsT = vargs.map { a => transformAsPure(a.value) }
     val bargsT = bargs.map(transformAsBlock)
 
     sym match {
