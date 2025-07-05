@@ -20,7 +20,7 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
 
   def rewrite(e: ModuleDecl)(using C: Context): ModuleDecl = visit(e) {
     case ModuleDecl(path, imports, defs, doc, span) =>
-      ModuleDecl(path, imports, defs.flatMap(flattenNamespaces), doc, span)
+      ModuleDecl(path, imports, defs.map(rewrite), doc, span)
   }
 
   /**
@@ -125,11 +125,6 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     }
   }
 
-  def flattenNamespaces(t: Def)(using C: Context): List[Def] = t match {
-    case Def.NamespaceDef(name, defs, doc, span) => defs.flatMap(flattenNamespaces)
-    case d => List(rewrite(d))
-  }
-
   def rewrite(t: Def)(using C: Context): Def = visit(t) {
 
     case FunDef(id, tparams, vparams, bparams, ret, body, doc, span) =>
@@ -156,6 +151,9 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
       }
       DefDef(id, annot, block, doc, span)
 
+    case NamespaceDef(name, defs, doc, span) =>
+      NamespaceDef(name, defs.map(rewrite), doc, span)
+
     case d: InterfaceDef   => d
     case d: DataDef        => d
     case d: RecordDef      => d
@@ -167,13 +165,11 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     case d: ExternResource => d
     case d: ExternInterface => d
     case d: ExternInclude  => d
-
-    case d: NamespaceDef => Context.panic("Should have been removed by flattenNamespaces")
   }
 
   def rewrite(t: Stmt)(using C: Context): Stmt = visit(t) {
     case DefStmt(d, rest, span) =>
-      flattenNamespaces(d).foldRight(rewrite(rest)) { case (d, rest) => DefStmt(d, rest, span) }
+      DefStmt(rewrite(d), rewrite(rest), span)
 
     case ExprStmt(e, rest, span) =>
       ExprStmt(rewriteAsExpr(e), rewrite(rest), span)

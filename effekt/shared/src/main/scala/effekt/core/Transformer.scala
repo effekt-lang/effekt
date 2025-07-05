@@ -125,11 +125,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case e @ source.ExternInclude(ff, path, contents, _, doc, span) =>
       List(Extern.Include(ff, contents.get))
 
+    case d @ source.NamespaceDef(name, defs, doc, span) =>
+      defs.flatMap(transformToplevel)
+
     // For now we forget about all of the following definitions in core:
     case d: source.Def.Extern => Nil
     case d: source.Def.Alias => Nil
-
-    case d: source.Def.NamespaceDef => Context.panic("Should have been removed by BoxUnboxInference")
   }
 
   /**
@@ -199,13 +200,21 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           Var(sym, Context.bind(transform(binding)), sym.capture, transform(rest))
         }
 
+      case d @ source.NamespaceDef(name, defs, doc, span) =>
+        def flatten(t: source.Def): List[source.Def] = t match {
+          case source.NamespaceDef(name, defs, doc, span) => defs.flatMap(flatten)
+          case d => List(d)
+        }
+        val stmt = flatten(d).foldRight(rest) {
+          case (d, rest) => source.DefStmt(d, rest, span)
+        }
+        transform(stmt)
+
       case d: source.Def.Extern => Context.panic("Only allowed on the toplevel")
       case d: source.Def.Declaration => Context.panic("Only allowed on the toplevel")
 
       // For now we forget about all of the following definitions in core:
       case d: source.Def.Alias => transform(rest)
-
-      case d: source.Def.NamespaceDef => Context.panic("Should have been removed by BoxUnboxInference")
     }
   }
 
