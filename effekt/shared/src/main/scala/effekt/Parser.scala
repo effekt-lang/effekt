@@ -486,7 +486,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       val startMarker = nonterminal { new {} }
       def simpleLhs() = backtrack {
         // Make sure there's either a `:` or `=` next, otherwise goto `matchLhs`
-        `val` ~> idDef() <~ (if !peek(`:`) && !peek(`=`) then fail("Expected type or right-hand-side of a `val`"))
+        `val` ~> idDef() <~ (expect("Expected type or right-hand-side of a `val`") { case `:` | `=` => () })
       } map { id =>
           val tpe = maybeValueTypeAnnotation() <~ `=`
           val binding = stmt()
