@@ -360,10 +360,35 @@ object Transformer {
 
       case machine.ForeignCall(variable @ machine.Variable(resultName, resultType), foreign, values, rest) =>
         emit(Comment(s"foreignCall $resultName : $resultType, foreign $foreign, ${values.length} values"))
-        val functionType = PointerType();
         shareValues(values, freeVariables(rest));
         emit(Call(resultName, Ccc(), transform(resultType), ConstantGlobal(foreign), values.map(transform)));
         eraseValues(List(variable), freeVariables(rest))
+        transform(rest)
+
+      case machine.Coerce(name, value, rest) =>
+        emit(Comment(s"coerce from ${value.tpe} to ${name.tpe}"));
+        // Only share and erase negative types
+        (value.tpe, name.tpe) match {
+          case (machine.Type.Positive(), machine.Type.Negative()) =>
+            shareValues(List(value), freeVariables(rest))
+            emit(Call(name.name, Ccc(), transform(name.tpe), ConstantGlobal("coercePosNeg"), List(transform(value))))
+            eraseValues(List(name), freeVariables(rest))
+          case (machine.Type.Negative(), machine.Type.Positive()) =>
+            shareValues(List(value), freeVariables(rest))
+            emit(Call(name.name, Ccc(), transform(name.tpe), ConstantGlobal("coerceNegPos"), List(transform(value))))
+            eraseValues(List(name), freeVariables(rest))
+          case (from, into) =>
+            val coerce = (from, into) match {
+              case (machine.Type.Int(), machine.Type.Positive()) => "coerceIntPos"
+              case (machine.Type.Positive(), machine.Type.Int()) => "coercePosInt"
+              case (machine.Type.Byte(), machine.Type.Positive()) => "coerceBytePos"
+              case (machine.Type.Positive(), machine.Type.Byte()) => "coercePosByte"
+              case (machine.Type.Double(), machine.Type.Positive()) => "coerceDoublePos"
+              case (machine.Type.Positive(), machine.Type.Double()) => "coercePosDouble"
+              case (tpe1, tpe2) => sys.error(s"Should not coerce $tpe1 to $tpe2")
+            }
+            emit(Call(name.name, Ccc(), transform(name.tpe), ConstantGlobal(coerce), List(transform(value))))
+        }
         transform(rest)
 
       case machine.Statement.Hole =>

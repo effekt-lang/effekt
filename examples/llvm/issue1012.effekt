@@ -1,0 +1,13 @@
+def f(x: Int) : Int = {
+  1
+}
+
+def use { g: (Int) => Int } : Int = {
+  2
+}
+
+def main() : Unit = {
+  val t = [f]
+  list::map(t) { y => use {y} }
+  println("hi")
+}
