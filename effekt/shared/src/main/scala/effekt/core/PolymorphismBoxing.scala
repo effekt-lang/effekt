@@ -32,9 +32,9 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
    * @param boxFn The extern function to call to box
    * @param unboxFn The extern function to call to unbox
    */
-  case class Boxer(val tpe: ValueType, other: ValueType, boxFn: String, unboxFn: String) {
-    def box(p: Pure) = Pure.PureApp(core.BlockVar(Id(boxFn), coercerType(other, tpe), Set()), Nil, List(p))
-    def unbox(p: Pure) = Pure.PureApp(core.BlockVar(Id(unboxFn), coercerType(tpe, other), Set()), Nil, List(p))
+  case class Boxer(val tpe: ValueType, other: ValueType, boxFn: Id, unboxFn: Id) {
+    def box(p: Pure) = Pure.PureApp(core.BlockVar(boxFn, coercerType(other, tpe), Set()), Nil, List(p))
+    def unbox(p: Pure) = Pure.PureApp(core.BlockVar(unboxFn, coercerType(tpe, other), Set()), Nil, List(p))
   }
 
   def coercerType(from: core.ValueType, into: core.ValueType): core.BlockType.Function =
@@ -43,6 +43,13 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   val TBoxedInt: ValueType.Data = ValueType.Data(Id("BoxedInt"), Nil)
   val TBoxedByte = ValueType.Data(Id("BoxedByte"), Nil)
   val TBoxedDouble = ValueType.Data(Id("BoxedDouble"), Nil)
+
+  val TCoerceIntPos = Id("@coerceIntPos")
+  val TCoercePosInt = Id("@coercePosInt")
+  val TCoerceBytePos = Id("@coerceBytePos")
+  val TCoercePosByte = Id("@coercePosByte")
+  val TCoerceDoublePos = Id("@coerceDoublePos")
+  val TCoercePosDouble = Id("@coercePosDouble")
 
   /**
    * Partial function to describe which values to box and how.
@@ -53,13 +60,13 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
    */
   def boxer: PartialFunction[ValueType, Boxer] = {
     case core.Type.TInt =>
-      Boxer(TBoxedInt, core.Type.TInt, "@coerceIntPos", "@coercePosInt")
+      Boxer(TBoxedInt, core.Type.TInt, TCoerceIntPos, TCoercePosInt)
     case core.Type.TChar =>
-      Boxer(TBoxedInt, core.Type.TChar, "@coerceIntPos", "@coercePosInt")
+      Boxer(TBoxedInt, core.Type.TChar, TCoerceIntPos, TCoercePosInt)
     case core.Type.TByte =>
-      Boxer(TBoxedByte, core.Type.TByte, "@coerceBytePos", "@coercePosByte")
+      Boxer(TBoxedByte, core.Type.TByte, TCoerceBytePos, TCoercePosByte)
     case core.Type.TDouble =>
-      Boxer(TBoxedDouble, core.Type.TDouble, "@coerceDoublePos", "@coercePosDouble")
+      Boxer(TBoxedDouble, core.Type.TDouble, TCoerceDoublePos, TCoercePosDouble)
   }
 
   def DeclarationContext(using ctx: DeclarationContext): DeclarationContext = ctx

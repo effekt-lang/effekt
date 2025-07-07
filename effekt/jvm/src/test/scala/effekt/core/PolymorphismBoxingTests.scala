@@ -15,6 +15,8 @@ abstract class AbstractPolymorphismBoxingTests extends CorePhaseTests(Polymorphi
     "BoxedInt" -> PolymorphismBoxing.TBoxedInt.name,
     "BoxedString" -> Id("BoxedString"),
     "MkBoxedString" -> Id("MkBoxedString"),
+    "coercePosInt" -> PolymorphismBoxing.TCoercePosInt,
+    "coerceIntPos" -> PolymorphismBoxing.TCoerceIntPos,
   )
 
   override def transform(input: ModuleDecl): ModuleDecl = input match {
