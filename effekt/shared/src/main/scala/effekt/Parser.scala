@@ -486,7 +486,8 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       val startMarker = nonterminal { new {} }
       def simpleLhs() = backtrack {
         // Make sure there's either a `:` or `=` next, otherwise goto `matchLhs`
-        `val` ~> idDef() <~ (expect("Expected type or right-hand-side of a `val`") { case `:` | `=` => () })
+        def canCut: Boolean = peek(`:`) || peek(`=`)
+        `val` ~> idDef() <~ (if !canCut then fail("Expected a `:` or a `=`"))
       } map { id =>
           val tpe = maybeValueTypeAnnotation() <~ `=`
           val binding = stmt()
