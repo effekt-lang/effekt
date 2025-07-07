@@ -1,6 +1,6 @@
 effect fail(): Nothing
 
-def f(): Char / fail = do fail()
+def f(): Int / fail = do fail()
 
 def main(): Unit =
   try {
