@@ -102,6 +102,9 @@ class ParserTests extends munit.FunSuite {
   def parseMatchClause(input: String, positions: Positions = new Positions())(using munit.Location): MatchClause =
     parse(input, _.matchClause())
 
+  def parseValueTypeAnnotation(input: String, positions: Positions = new Positions())(using munit.Location): ValueType =
+    parse(input, _.valueTypeAnnotation())
+
   def parseReturnAnnotation(input: String, positions: Positions = new Positions())(using munit.Location): Effectful =
     parse(input, _.returnAnnotation())
 
@@ -643,6 +646,13 @@ class ParserTests extends munit.FunSuite {
     parseExpr("map(x) { map(x) { return 42 } }")
   }
 
+  test("Value type annotation") {
+    parseValueTypeAnnotation(": Int")
+    parseValueTypeAnnotation(": List[Int]")
+    parseValueTypeAnnotation(": Int => Int at {}")
+    parseValueTypeAnnotation(": String => List[Bool] at {p}")
+  }
+
   test("Return annotations") {
     parseReturnAnnotation(": Int")
     parseReturnAnnotation(": Int / Exc")
@@ -701,6 +711,7 @@ class ParserTests extends munit.FunSuite {
     parseValueType("List[Int]")
     parseValueType("list::List[Int]")
     parseValueType("list::List[effekt::Int]")
+    parseValueType("S => T at {p}")
   }
 
   test("Block types") {

@@ -485,9 +485,10 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       val startPos = pos()
       val startMarker = nonterminal { new {} }
       def simpleLhs() = backtrack {
-        `val` ~> idDef() ~ maybeValueTypeAnnotation() <~ `=`
-      } map {
-        case id ~ tpe =>
+        // Make sure there's either a `:` or `=` next, otherwise goto `matchLhs`
+        `val` ~> idDef() <~ (if !peek(`:`) && !peek(`=`) then fail("Expected type or right-hand-side of a `val`"))
+      } map { id =>
+          val tpe = maybeValueTypeAnnotation() <~ `=`
           val binding = stmt()
           val endPos = pos()
           val valDef = ValDef(id, tpe, binding, doc, Span(source, startPos, endPos)).withRangeOf(startMarker, binding)
@@ -1402,7 +1403,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
       // TODO: these should probably be in a loop to parse as many `at`s and `\`s as possible?
       val boxed = when(`at`) {
-        BoxedType(tpe, captureSet(), span())
+        BoxedType(tpe, captureSet() labelled "capture set", span())
       } {
         tpe
       }
