@@ -295,154 +295,99 @@ void c_yield(Stack stack) {
     c_timer_start(0, stack);
 }
 
-
-// Promises
+// Channels
 // --------
 
-typedef enum { UNRESOLVED, RESOLVED } promise_state_t;
-
-typedef struct Listeners {
-    Stack head;
-    struct Listeners* tail;
-} Listeners;
+typedef enum { EMPTY, SENDED, WAITED } channel_state_t;
 
 typedef struct {
     uint64_t rc;
     void* eraser;
-    promise_state_t state;
-    // state of {
-    //   case UNRESOLVED => Possibly empty (head is NULL) list of listeners
-    //   case RESOLVED   => Pos (the result)
-    // }
+    channel_state_t state;
     union {
         struct Pos value;
-        Listeners listeners;
+        Stack stack;
     } payload;
-} Promise;
+} Channel;
 
-void c_promise_erase_listeners(void *envPtr) {
-    // envPtr points to a Promise _after_ the eraser, so let's adjust it to point to the promise.
-    Promise *promise = (Promise*) (envPtr - offsetof(Promise, state));
-    promise_state_t state = promise->state;
-
-    Stack head;
-    Listeners* tail;
-    Listeners* current;
-
+void c_channel_erase(void *envPtr) {
+    // envPtr points to a Channel _after_ the eraser, so let's adjust it to point to the beginning.
+    Channel *channel = (Channel*) (envPtr - offsetof(Channel, state));
+    channel_state_t state = channel->state;
     switch (state) {
-        case UNRESOLVED:
-            head = promise->payload.listeners.head;
-            tail = promise->payload.listeners.tail;
-            if (head != NULL) {
-                // Erase head
-                eraseStack(head);
-                // Erase tail
-                current = tail;
-                while (current != NULL) {
-                    head = current->head;
-                    tail = current->tail;
-                    free(current);
-                    eraseStack(head);
-                    current = tail;
-                };
-            };
-            break;
-        case RESOLVED:
-            erasePositive(promise->payload.value);
-            break;
+    case EMPTY:
+        break;
+    case SENDED:
+        erasePositive(channel->payload.value);
+        break;
+    case WAITED:
+        eraseStack(channel->payload.stack);
+        break;
     }
 }
 
-void c_promise_resume_listeners(Listeners* listeners, struct Pos value) {
-    if (listeners != NULL) {
-        Stack head = listeners->head;
-        Listeners* tail = listeners->tail;
-        free(listeners);
-        c_promise_resume_listeners(tail, value);
-        sharePositive(value);
-        resume_Pos(head, value);
-    }
+struct Pos c_channel_make() {
+    Channel* channel = (Channel*)malloc(sizeof(Channel));
+
+    channel->rc = 0;
+    channel->eraser = c_channel_erase;
+    channel->state = EMPTY;
+
+    return (struct Pos) { .tag = 0, .obj = channel, };
 }
 
-void c_promise_resolve(struct Pos promise, struct Pos value, Stack stack) {
-    Promise* p = (Promise*)promise.obj;
-
-    Stack head;
-    Listeners* tail;
-
-    switch (p->state) {
-        case UNRESOLVED:
-            head = p->payload.listeners.head;
-            tail = p->payload.listeners.tail;
-
-            p->state = RESOLVED;
-            p->payload.value = value;
-            resume_Pos(stack, Unit);
-
-            if (head != NULL) {
-                // Execute tail
-                c_promise_resume_listeners(tail, value);
-                // Execute head
-                sharePositive(value);
-                resume_Pos(head, value);
-            };
+void c_channel_send(struct Pos channel, struct Pos value) {
+    Channel* f = (Channel*)channel.obj;
+    switch (f->state) {
+        case EMPTY: {
+            f->state = SENDED;
+            f->payload.value = value;
+            erasePositive(channel);
             break;
-        case RESOLVED:
-            erasePositive(promise);
+        }
+        case SENDED: {
+            erasePositive(channel);
             erasePositive(value);
-            eraseStack(stack);
-            fprintf(stderr, "ERROR: Promise already resolved\n");
+            // TODO more graceful panic
+            fprintf(stderr, "ERROR: Channel already used for sending\n");
             exit(1);
             break;
-    }
-    // TODO stack overflow?
-    // We need to erase the promise now, since we consume it.
-    erasePositive(promise);
-}
-
-void c_promise_await(struct Pos promise, Stack stack) {
-    Promise* p = (Promise*)promise.obj;
-
-    Stack head;
-    Listeners* tail;
-    Listeners* node;
-    struct Pos value;
-
-    switch (p->state) {
-        case UNRESOLVED:
-            head = p->payload.listeners.head;
-            tail = p->payload.listeners.tail;
-            if (head != NULL) {
-                node = (Listeners*)malloc(sizeof(Listeners));
-                node->head = head;
-                node->tail = tail;
-                p->payload.listeners.head = stack;
-                p->payload.listeners.tail = node;
-            } else {
-                p->payload.listeners.head = stack;
-            };
-            break;
-        case RESOLVED:
-            value = p->payload.value;
-            sharePositive(value);
+        }
+        case WAITED: {
+            Stack stack = f->payload.stack;
+            f->state = EMPTY;
+            erasePositive(channel);
             resume_Pos(stack, value);
             break;
-    };
-    // TODO hmm, stack overflow?
-    erasePositive(promise);
+        }
+    }
 }
 
-struct Pos c_promise_make() {
-    Promise* promise = (Promise*)malloc(sizeof(Promise));
-
-    promise->rc = 0;
-    promise->eraser = c_promise_erase_listeners;
-    promise->state = UNRESOLVED;
-    promise->payload.listeners.head = NULL;
-    promise->payload.listeners.tail = NULL;
-
-    return (struct Pos) { .tag = 0, .obj = promise, };
+void c_channel_wait(struct Pos channel, Stack stack) {
+    Channel* f = (Channel*)channel.obj;
+    switch (f->state) {
+        case EMPTY: {
+            f->state = WAITED;
+            f->payload.stack = stack;
+            erasePositive(channel);
+            break;
+        }
+        case SENDED: {
+            struct Pos value = f->payload.value;
+            f->state = EMPTY;
+            erasePositive(channel);
+            resume_Pos(stack, value);
+            break;
+        }
+        case WAITED: {
+            erasePositive(channel);
+            eraseStack(stack);
+            // TODO more graceful panic
+            fprintf(stderr, "ERROR: Channel already used for waiting\n");
+            exit(1);
+            break;
+        }
+    }
 }
-
 
 #endif
