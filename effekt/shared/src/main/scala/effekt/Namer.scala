@@ -691,11 +691,8 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.assignSymbol(id, p)
       List(p)
     case source.TagPattern(id, patterns, _) =>
-      Context.resolveTerm(id) match {
-        case symbol: Constructor => ()
-        case _ => Context.at(id) {
-          Context.error("Can only pattern match on constructors of data types.")
-        }
+      if (!Context.resolveOverloadedTag(id)) {
+        Context.error("Can only pattern match on constructors of data types.")
       }
       patterns.flatMap { resolve }
     case source.MultiPattern(patterns, _) =>
@@ -1008,6 +1005,18 @@ trait NamerOps extends ContextOps { Context: Context =>
     val sym = scope.lookupFirstTerm(id)
     assignSymbol(id, sym)
     sym
+  }
+
+  private[namer] def resolveOverloadedTag(id: IdRef): Boolean = at(id) {
+    val syms = scope.lookupTerms(id).flatMap { ssyms =>
+      val conss = ssyms.collect {
+        case c: Constructor => c
+      }
+      if conss.isEmpty then Nil else List(conss)
+    }
+
+    if (syms.nonEmpty) { assignSymbol(id, MatchTarget(syms)); true } else { false}
+
   }
 
   private[namer] def addHole(h: Hole): Unit =

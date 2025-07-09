@@ -215,6 +215,16 @@ case class CallTarget(symbols: List[Set[BlockSymbol]]) extends BlockSymbol {
 }
 
 /**
+ * Synthetic symbol representing potentially multiple tags for matching
+ *
+ * Refined by typer.
+ */
+case class MatchTarget(symbols: List[Set[Constructor]]) extends BlockSymbol {
+  val name = NoName
+  val decl = NoSource
+}
+
+/**
  * Introduced by Transformer
  */
 case class Wildcard() extends ValueSymbol {

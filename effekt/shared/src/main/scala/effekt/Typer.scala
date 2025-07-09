@@ -567,6 +567,45 @@ object Typer extends Phase[NameResolved, Typechecked] {
   //</editor-fold>
 
   //<editor-fold desc="pattern matching">
+  private def resolveTagOverload(id: source.IdRef,
+                               successes: List[List[(Constructor, Map[Symbol, ValueType], TyperState)]],
+                               failures: List[(Constructor, EffektMessages)]
+                             )(using Context): Map[Symbol, ValueType] = {
+
+    successes foreachAborting {
+      // continue in outer scope
+      case Nil => ()
+
+      // Exactly one successful result in the current scope
+      case List((sym, tpe, st)) =>
+        // use the typer state after this checking pass
+        Context.restoreTyperstate(st)
+        // reassign symbol of fun to resolved calltarget symbol
+        Context.annotateSymbol(id, sym)
+
+        return tpe
+
+      // Ambiguous reference
+      case results =>
+        val successfulOverloads = results.map { (sym, res, st) => (sym, findFunctionTypeFor(sym)._1) }
+        Context.abort(AmbiguousOverloadError(successfulOverloads, Context.rangeOf(id)))
+    }
+
+    failures match {
+      case Nil =>
+        Context.abort("Cannot typecheck call.")
+
+      // exactly one error
+      case List((sym, errs)) =>
+        Context.abortWith(errs)
+
+      case failed =>
+        // reraise all and abort
+        val failures = failed.map { case (block, msgs) => (block, findFunctionTypeFor(block)._1, msgs) }
+        Context.abort(FailedOverloadError(failures, Context.currentRange))
+    }
+  }
+
   def checkPattern(sc: ValueType, pattern: MatchPattern)(using Context, Captures): Map[Symbol, ValueType] = Context.focusing(pattern) {
     case source.IgnorePattern(_)    => Map.empty
     case p @ source.AnyPattern(id, _) => Map(p.symbol -> sc)
@@ -575,40 +614,55 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Map.empty
     case p @ source.TagPattern(id, patterns, _) =>
 
-      // symbol of the constructor we match against
-      val sym: Constructor = p.definition
+      def checkTagPattern(sym: Constructor, patterns: List[MatchPattern]): Map[Symbol, ValueType] = {
+        val universals = sym.tparams.take(sym.tpe.tparams.size)
+        val existentials = sym.tparams.drop(sym.tpe.tparams.size)
 
-      val universals   = sym.tparams.take(sym.tpe.tparams.size)
-      val existentials = sym.tparams.drop(sym.tpe.tparams.size)
+        // create fresh unification variables
+        val freshUniversals = universals.map { t => Context.freshTypeVar(t, pattern) }
+        // create fresh **bound** variables
+        val freshExistentials = existentials.map { t => TypeVar.TypeParam(t.name) }
 
-      // create fresh unification variables
-      val freshUniversals   = universals.map { t => Context.freshTypeVar(t, pattern) }
-      // create fresh **bound** variables
-      val freshExistentials = existentials.map { t => TypeVar.TypeParam(t.name) }
+        Context.annotate(Annotations.TypeParameters, p, freshExistentials)
 
-      Context.annotate(Annotations.TypeParameters, p, freshExistentials)
+        val targs = (freshUniversals ++ freshExistentials).map { t => ValueTypeRef(t) }
 
-      val targs = (freshUniversals ++ freshExistentials).map { t => ValueTypeRef(t) }
+        // (4) Compute blocktype of this constructor with rigid type vars
+        // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
+        val (vps, _, ret, _) = Context.instantiate(sym.toType, targs, Nil)
 
-      // (4) Compute blocktype of this constructor with rigid type vars
-      // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
-      val (vps, _, ret, _) = Context.instantiate(sym.toType, targs, Nil)
+        // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
+        matchPattern(sc, ret, p)
 
-      // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
-      matchPattern(sc, ret, p)
+        // (6) check nested patterns
+        var bindings = Map.empty[Symbol, ValueType]
 
-      // (6) check nested patterns
-      var bindings = Map.empty[Symbol, ValueType]
-
-      if (patterns.size != vps.size)
+        if (patterns.size != vps.size)
           Context.abort(s"Wrong number of pattern arguments, given ${patterns.size}, expected ${vps.size}.")
 
-      (patterns zip vps) foreach {
-        case (pat, par: ValueType) =>
-          bindings ++= checkPattern(par, pat)
+        (patterns zip vps) foreach {
+          case (pat, par: ValueType) =>
+            bindings ++= checkPattern(par, pat)
+        }
+
+        bindings
       }
 
-      bindings
+      // symbol of the constructor we match against
+      val scopes = p.definition match {
+        case MatchTarget(syms) => syms
+        case sym: Constructor => List(Set(sym))
+      }
+
+      val bindingss = scopes map { scope => tryEach(scope.toList) { constructor =>
+        checkTagPattern(constructor, patterns)
+      }}
+
+      val successes = bindingss.map { scope => scope._1 }
+      val errors = bindingss.flatMap { scope => scope._2 }
+
+      resolveTagOverload(id, successes, errors)
+
     case source.MultiPattern(patterns, _) =>
       Context.panic("Multi-pattern should have been split at the match and not occur nested.")
   } match { case res => Context.annotateInferredType(pattern, sc); res }
