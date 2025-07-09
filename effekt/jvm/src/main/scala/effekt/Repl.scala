@@ -110,7 +110,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
       runFrontend(StringSource(""), module.make(StringSource(""), UnitLit(Span.missing)), config) { cu =>
         module.definitions.foreach {
           case u: Def =>
-            outputCode(DeclPrinter(context.symbolOf(u)), config)
+            outputCode(DeclPrinter(context.symbolOf(u)).get, config)
         }
       }
     }
@@ -201,14 +201,14 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
         output.emitln(s"Imported Types\n==============")
         cu.exports.types.toList.sortBy { case (n, _) => n }.collect {
           case (name, sym) if !sym.isSynthetic =>
-            outputCode(DeclPrinter(sym), config)
+            outputCode(DeclPrinter(sym).get, config)
         }
         output.emitln(s"\nImported Functions\n==================")
         cu.exports.terms.toList.sortBy { case (n, _) => n }.foreach {
           case (name, syms) =>
             syms.collect {
               case sym if !sym.isSynthetic =>
-                outputCode(DeclPrinter(sym), config)
+                outputCode(DeclPrinter(sym).get, config)
             }
         }
         module = extendedIncludes
