@@ -1905,6 +1905,24 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("Server does not crash on file with type variables") {
+    withClientAndServer { (client, server) =>
+      val source =
+        raw"""def foo[T]() = <>
+             |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+    }
+  }
+  
   // Text document DSL
   //
   //

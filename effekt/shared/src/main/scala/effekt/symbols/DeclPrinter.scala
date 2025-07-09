@@ -12,10 +12,10 @@ object DeclPrinter extends ParenPrettyPrinter {
 
   override val defaultIndent = 2
 
-  def apply(t: Symbol)(implicit context: Context): String =
-    pretty(toDoc(t, context)).layout
+  def apply(t: Symbol)(implicit context: Context): Option[String] =
+    toDoc(t, context).map { d => pretty(d).layout }
 
-  def toDoc(t: Symbol, context: Context): Doc = t match {
+  def toDoc(t: Symbol, context: Context): Option[Doc] = Some(t match {
 
     case e @ Interface(name, tparams, List(op), _) =>
       format("effect", op, op.annotatedResult, op.annotatedEffects)
@@ -73,7 +73,9 @@ object DeclPrinter extends ParenPrettyPrinter {
     case d: DefBinder =>
       val tpe = context.blockTypeOption(d).getOrElse { d.tpe.get }
       pp"def ${ d.name }: ${ tpe }"
-  }
+
+    case other => return None
+  })
 
   def format(kw: String, f: Callable, result: Option[ValueType], effects: Option[Effects]): Doc = {
     val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.mkString(", ")}]"

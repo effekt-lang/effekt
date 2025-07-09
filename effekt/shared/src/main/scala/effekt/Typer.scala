@@ -115,6 +115,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         }
         case b: BlockSymbol => Context.abort("Expected an expression, but got a block.")
         case x: ValueSymbol => Result(Context.lookup(x), Pure)
+        case other => Context.panic(s"Impossible case reached: ${other}")
       }
 
       case e @ source.Assign(id, expr, _) => e.definition match {
@@ -549,6 +550,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Result(tpe, Pure)
         case e: ValueSymbol =>
           Context.abort(pretty"Expected a block variable, but ${id} is a value. Maybe use explicit syntax: { () => ${id} }")
+        case other => Context.panic(s"Impossible case reached: ${other}")
       }
 
       case source.New(impl, _) => checkImplementation(impl, None)
@@ -1132,6 +1134,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // already resolved by a previous attempt to typecheck
       case sym: BlockSymbol => List(Set(sym))
       case id: ValueSymbol => Context.abort(pp"Cannot call value ${id}")
+      case other => Context.panic(s"Impossible case reached: ${other}")
     }
 
     // TODO right now unhandled effects (via capability search) influences overload resolution.

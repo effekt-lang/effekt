@@ -91,9 +91,7 @@ sealed trait Tree extends Product {
  */
 type Id = symbols.Symbol
 object Id {
-  def apply(n: symbols.Name): Id = new symbols.Symbol {
-    val name = n
-  }
+  def apply(n: symbols.Name): Id = symbols.Symbol(n)
   def apply(n: String): Id = apply(symbols.Name.local(n))
   def apply(n: Id): Id = apply(n.name)
 }

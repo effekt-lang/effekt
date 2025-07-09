@@ -197,10 +197,10 @@ trait Intelligence {
       })
     }
 
-    sorted.map((name, sym) => sym match {
-      case sym: TypeSymbol => TypeBinding(path, name, origin, DeclPrinter(sym))
-      case sym: ValueSymbol => TermBinding(path, name, origin, C.valueTypeOption(sym).map(t => pp"${t}"))
-      case sym: BlockSymbol => TermBinding(path, name, origin, C.blockTypeOption(sym).map(t => pp"${t}"))
+    sorted.flatMap((name, sym) => sym match {
+      case sym: TypeSymbol => DeclPrinter(sym).map(TypeBinding(path, name, origin, _))
+      case sym: ValueSymbol => Some(TermBinding(path, name, origin, C.valueTypeOption(sym).map(t => pp"${t}")))
+      case sym: BlockSymbol => Some(TermBinding(path, name, origin, C.blockTypeOption(sym).map(t => pp"${t}")))
     }).toList
 
   def allSymbols(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): Array[(String, TypeSymbol | TermSymbol)] = {
@@ -268,11 +268,11 @@ trait Intelligence {
 
     case b: ExternFunction =>
       val doc = getDocumentationOf(b)
-      SymbolInfo(b, "External function definition", Some(DeclPrinter(b)), None, doc)
+      SymbolInfo(b, "External function definition", Some(DeclPrinter(b).get), None, doc)
 
     case f: UserFunction if C.functionTypeOption(f).isDefined =>
       val doc = getDocumentationOf(f)
-      SymbolInfo(f, "Function", Some(DeclPrinter(f)), None, doc)
+      SymbolInfo(f, "Function", Some(DeclPrinter(f).get), None, doc)
 
     case f: Operation =>
       val doc = getDocumentationOf(f)
@@ -295,27 +295,27 @@ trait Intelligence {
              |handled by the handler. This is important when considering higher-order functions.
              |""".stripMargin
 
-      SymbolInfo(f, "Effect operation", Some(DeclPrinter(f)), Some(ex), doc)
+      SymbolInfo(f, "Effect operation", Some(DeclPrinter(f).get), Some(ex), doc)
 
     case f: EffectAlias =>
       val doc = getDocumentationOf(f)
-      SymbolInfo(f, "Effect alias", Some(DeclPrinter(f)), None, doc)
+      SymbolInfo(f, "Effect alias", Some(DeclPrinter(f).get), None, doc)
 
     case t: TypeAlias =>
       val doc = getDocumentationOf(t)
-      SymbolInfo(t, "Type alias", Some(DeclPrinter(t)), None, doc)
+      SymbolInfo(t, "Type alias", Some(DeclPrinter(t).get), None, doc)
 
     case t: ExternType =>
       val doc = getDocumentationOf(t)
-      SymbolInfo(t, "External type definition", Some(DeclPrinter(t)), None, doc)
+      SymbolInfo(t, "External type definition", Some(DeclPrinter(t).get), None, doc)
 
     case t: ExternInterface =>
       val doc = getDocumentationOf(t)
-      SymbolInfo(t, "External interface definition", Some(DeclPrinter(t)), None, doc)
+      SymbolInfo(t, "External interface definition", Some(DeclPrinter(t).get), None, doc)
 
     case t: ExternResource =>
       val doc = getDocumentationOf(t)
-      SymbolInfo(t, "External resource definition", Some(DeclPrinter(t)), None, doc)
+      SymbolInfo(t, "External resource definition", Some(DeclPrinter(t).get), None, doc)
 
     case c: Constructor =>
       val doc = getDocumentationOf(c)
@@ -324,7 +324,7 @@ trait Intelligence {
                     |value parameter lists, not block parameters.
                     |""".stripMargin
 
-      SymbolInfo(c, s"Constructor of data type `${c.tpe}`", Some(DeclPrinter(c)), Some(ex), doc)
+      SymbolInfo(c, s"Constructor of data type `${c.tpe}`", Some(DeclPrinter(c).get), Some(ex), doc)
 
     case c: BlockParam =>
       val doc = getDocumentationOf(c)

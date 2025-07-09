@@ -35,6 +35,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
     case source.Var(id, _) => id.symbol match {
       case b: BlockSymbol => captureOf(b)
       case x: ValueSymbol => CaptureSet.empty
+      case other => Context.panic(s"Impossible case reached: ${other}")
     }
 
     case e @ source.Assign(id, expr, _) =>
