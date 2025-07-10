@@ -1905,6 +1905,39 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("Server publishes qualifiers for symbols") {
+    withClientAndServer { (client, server) =>
+      val source =
+        """
+          |namespace N {
+          |  namespace A {
+          |    namespace B {
+          |      def foo(): Int = 42
+          |    }
+          |  }
+          |  def bar() = <>
+          |}
+          |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+      val hole = receivedHoles.head.holes.head
+      val bindings = hole.scope.outer.get.bindings
+      assertEquals(bindings(0).name, "foo")
+      assertEquals(bindings(0).qualifier, List("A", "B"))
+      assertEquals(bindings(1).name, "bar")
+      assertEquals(bindings(1).qualifier, Nil)
+    }
+  }
+
   // Text document DSL
   //
   //

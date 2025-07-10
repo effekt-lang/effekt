@@ -175,14 +175,14 @@ trait Intelligence {
       case Scope.Global(imports, bindings) =>
         val bindingsOut = allBindings(BindingOrigin.Imported, imports)
           ++ allBindings(BindingOrigin.Defined, bindings)
-        ScopeInfo(None, ScopeKind.Global, bindingsOut.toList, None)
+        ScopeInfo(None, ScopeKind.Global, bindingsOut, None)
       case Scope.Named(name, bindings, outer) =>
         val bindingsOut = allBindings(BindingOrigin.Defined, bindings)
-        ScopeInfo(Some(name), ScopeKind.Namespace, bindingsOut.toList, Some(allBindings(outer)))
+        ScopeInfo(Some(name), ScopeKind.Namespace, bindingsOut, Some(allBindings(outer)))
       case Scope.Local(name, imports, bindings, outer) =>
         val bindingsOut = allBindings(BindingOrigin.Imported, imports)
           ++ allBindings(BindingOrigin.Defined, bindings)
-        ScopeInfo(name, ScopeKind.Local, bindingsOut.toList, Some(allBindings(outer)))
+        ScopeInfo(name, ScopeKind.Local, bindingsOut, Some(allBindings(outer)))
     }
 
   def allBindings(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): List[BindingInfo] =
@@ -191,20 +191,22 @@ trait Intelligence {
     val sorted = if (origin == BindingOrigin.Imported) {
       symbols.sortBy(_._1.toLowerCase())
     } else {
-      symbols.sortBy((name, sym) => sym match {
+      symbols.sortBy((name, path, sym) => sym match {
         case s: TypeSymbol => s.decl.span
         case s: TermSymbol => s.decl.span
       })
     }
 
-    sorted.map((name, sym) => sym match {
+    sorted.map((name, path, sym) => sym match {
       case sym: TypeSymbol => TypeBinding(path, name, origin, DeclPrinter(sym))
       case sym: ValueSymbol => TermBinding(path, name, origin, C.valueTypeOption(sym).map(t => pp"${t}"))
       case sym: BlockSymbol => TermBinding(path, name, origin, C.blockTypeOption(sym).map(t => pp"${t}"))
     }).toList
 
-  def allSymbols(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): Array[(String, TypeSymbol | TermSymbol)] = {
-    bindings.types.toArray ++ bindings.terms.toArray.flatMap((name, syms) => syms.map((name, _))) ++ bindings.namespaces.toArray.flatMap {
+  def allSymbols(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): Array[(String, List[String], TypeSymbol | TermSymbol)] = {
+    bindings.types.toArray.map((name, sym) => (name, path, sym))
+      ++ bindings.terms.toArray.flatMap((name, syms) => syms.map((name, path, _)))
+      ++ bindings.namespaces.toArray.flatMap {
       case (name, namespace) => allSymbols(origin, namespace, path :+ name)
     }
   }
