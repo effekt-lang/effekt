@@ -51,9 +51,8 @@ type TypeParams = Map[Id, TypeArg.Var]
 
 class MonoContext {
   var typingContext: TypeParams = Map()
-  var functionId: FunctionId = Id("notAValidId")
 
-  def extendTypingContext(tparam: Id, index: Int) =
+  def extendTypingContext(tparam: Id, index: Int, functionId: FunctionId) =
     typingContext += (tparam -> TypeArg.Var(functionId, index))
 }
 
@@ -61,14 +60,15 @@ def findConstraints(definitions: List[Toplevel])(using MonoContext): Constraints
   definitions flatMap findConstraints
 
 def findConstraints(definition: Toplevel)(using ctx: MonoContext): Constraints = definition match
-  case Toplevel.Def(id, block) =>  ctx.functionId = id; findConstraints(block)
+  case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
+    tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
+    findConstraints(body)
+  case Toplevel.Def(id, block) => ???
   case Toplevel.Val(id, tpe, binding) => ???
 
 def findConstraints(block: Block)(using ctx: MonoContext): Constraints = block match
   case BlockVar(id, annotatedTpe, annotatedCapt) => ???
-  case BlockLit(tparams, cparams, vparams, bparams, body) => 
-    tparams.zipWithIndex.foreach(ctx.extendTypingContext)
-    findConstraints(body)
+  case BlockLit(tparams, cparams, vparams, bparams, body) => ???
   case Unbox(pure) => ???
   case New(impl) => ???
 
