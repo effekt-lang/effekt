@@ -20,9 +20,9 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             constraints.foreach(c => println(c))
             println()
 
-            // val solved = solveConstraint(constraints)
-            // println("Solved")
-            // solved.foreach(println)
+            val solved = solveConstraints(constraints)
+            println("Solved")
+            solved.foreach(println)
             println()
 
             
@@ -38,8 +38,7 @@ type FunctionId = Id
 case class Constraint(lower: Vector[TypeArg], upper: FunctionId)
 type Constraints = List[Constraint]
 
-// case class SolvedConstraint(lower: Vector[TypeArg.Base], upper: FunctionId | TypeArg.Var)
-// type SolvedConstraints = List[SolvedConstraint]
+type Solution = Map[FunctionId, Set[Vector[TypeArg.Base]]]
 
 enum TypeArg {
   case Base(val tpe: Id)
@@ -91,6 +90,39 @@ def findId(vt: ValueType)(using ctx: MonoContext): TypeArg = vt match
   case ValueType.Data(name, targs) => TypeArg.Base(name)
   case ValueType.Var(name) => ctx.typingContext(name)
 
+def solveConstraints(constraints: Constraints): Solution =
+  var solved: Solution = Map()
+
+  val groupedConstraints = constraints.groupBy(c => c.upper)
+  val vecConstraints = groupedConstraints.map((sym, constraints) => (sym -> constraints.map(c => c.lower)))
+
+  vecConstraints.foreach((sym, tas) => 
+    val sol = solveConstraints(sym).map(bs => bs.toVector)
+    solved += (sym -> sol)
+  )
+
+  def solveConstraints(funId: FunctionId): Set[List[TypeArg.Base]] =
+    val filteredConstraints = vecConstraints(funId)
+    var nbs: Set[List[TypeArg.Base]] = Set.empty
+    filteredConstraints.foreach(b => 
+      var l: List[List[TypeArg.Base]] = List(List.empty)
+      def listFromIndex(ind: Int) = if (ind >= l.length) List.empty else l(ind)
+      b.foreach({
+        case TypeArg.Base(tpe) => l = productAppend(l, List(TypeArg.Base(tpe)))
+        case TypeArg.Var(funId, pos) => 
+          val funSolved = solved.getOrElse(funId, solveConstraints(funId))
+          val posArgs = funSolved.map(v => v(pos))
+          l = posArgs.zipWithIndex.map((base, ind) => listFromIndex(ind) :+ base).toList
+          println(l)
+      })
+      nbs ++= l
+    )
+    nbs
+
+  solved
+
+def productAppend[A](ls: List[List[A]], rs: List[A]): List[List[A]] =
+  rs.flatMap(r => ls.map(l => l :+ r))
 
 // Old stuff
 
@@ -219,110 +251,3 @@ def findId(vt: ValueType)(using ctx: MonoContext): TypeArg = vt match
 // TODO: After solving the constraints it would be helpful to know
 //       which functions have which tparams
 //       so we can generate the required monomorphic functions
-
-// enum PolyType {
-//   case Base(val tpe: Id)
-//   case Var(val sym: Id)
-
-//   def toSymbol: Id = this match {
-//     case Base(tpe) => tpe 
-//     case Var(sym) => sym
-//   }
-
-//   def toValueType: ValueType = this match {
-//     case Base(tpe) => ValueType.Data(tpe, List.empty)
-//     case Var(sym) => ValueType.Var(sym)
-//   }
-// }
-
-// def solveConstraints(constraints: PolyConstraints): PolyConstraintsSolved =
-//   var solved: PolyConstraintsSolved = Map()
-
-//   def solveConstraint(sym: Id, types: Set[PolyType]): Set[PolyType.Base] =
-//     var polyTypes: Set[PolyType.Base] = Set()
-//     types.foreach {
-//       case PolyType.Var(symbol) => polyTypes ++= solved.getOrElse(symbol, solveConstraint(symbol, constraints.getOrElse(symbol, Set())))
-//       case PolyType.Base(tpe) => polyTypes += PolyType.Base(tpe)
-//     }
-//     solved += (sym -> polyTypes)
-//     polyTypes
-
-//   constraints.foreach(solveConstraint)
-
-//   solved
-
-// def combineConstraints(a: PolyConstraints, b: PolyConstraints): PolyConstraints = {
-//   a ++ b.map { case (k, v) => k -> (v ++ a.getOrElse(k, Iterable.empty)) }
-// }
-
-// def findConstraints(definitions: List[Toplevel]): PolyConstraints =
-//   definitions.map(findConstraints).reduce(combineConstraints)
-
-// def findConstraints(toplevel: Toplevel): PolyConstraints = toplevel match {
-//   case Toplevel.Def(id, block) => findConstraints(block, List.empty)
-//   case Toplevel.Val(id, tpe, binding) => ???
-// }
-
-// def findConstraints(block: Block, targs: List[ValueType]): PolyConstraints = block match {
-//   case BlockLit(tparam :: tparams, cparams, vparams, bparams, body) => findConstraints(body, tparam :: tparams)
-//   case BlockLit(List(), cparams, vparams, bparams, body) => findConstraints(body, List.empty)
-//   case BlockVar(id, annotatedTpe, annotatedCapt) => findConstraints(annotatedTpe, targs)
-//   case New(impl) => ???
-//   case Unbox(pure) => ???
-//   case _ => Map.empty
-// }
-
-// def findConstraints(stmt: Stmt, tparams: List[Id]): PolyConstraints = stmt match {
-//   case App(callee, targs, vargs, bargs) => findConstraints(callee, targs)
-//   case Return(expr) if !tparams.isEmpty => Map(tparams.head -> Set(findPolyType(expr.tpe)))
-//   case Return(expr) => Map.empty
-//   case Val(id, annotatedTpe, binding, body) => combineConstraints(findConstraints(binding, tparams), findConstraints(body, tparams))
-//   // TODO: Let & If case is wrong, but placeholders are required as they are used in print
-//   case Let(id, annotatedTpe, binding, body) => Map.empty
-//   case If(cond, thn, els) => Map.empty
-//   case o => println(o); ???
-// }
-
-// def findConstraints(value: Val): PolyConstraints = value match {
-//   // TODO: List.empty might be wrong
-//   case Val(id, annotatedTpe, binding, body) => combineConstraints(findConstraints(binding, List.empty), findConstraints(body, List.empty))
-// }
-
-// def findConstraints(blockType: BlockType, targs: List[ValueType]): PolyConstraints = blockType match {
-//   case BlockType.Function(tparams, cparams, vparams, bparams, result) => tparams.zip(targs).map((id, tpe) => (id -> Set(findPolyType(tpe)))).toMap
-//   case BlockType.Interface(name, targs) => ???
-// }
-
-// def findPolyType(blockType: BlockType, targs: List[ValueType]): List[PolyType] = blockType match {
-//   case BlockType.Function(tparams, cparams, vparams, bparams, result) => ???
-//   case BlockType.Interface(name, targs) => ???
-// }
-
-// def findPolyType(valueType: ValueType): PolyType = valueType match {
-//   case ValueType.Boxed(tpe, capt) => ???
-//   case ValueType.Data(name, targs) => PolyType.Base(name)
-//   case ValueType.Var(name) => PolyType.Var(name)
-// }
-
-// def hasCycle(constraints: PolyConstraints): Boolean =
-//     var visited: Set[Id] = Set()
-//     var recStack: Set[Id] = Set()
-
-//     def hasCycleHelper(vertex: Id): Boolean =
-//       if (recStack.contains(vertex)) return true
-//       if (visited.contains(vertex)) return false
-
-//       visited += vertex
-//       recStack += vertex
-
-//       var cycleFound = false
-//       constraints.getOrElse(vertex, Set()).foreach(v => cycleFound |= hasCycleHelper(v.toSymbol))
-
-//       recStack -= vertex
-
-//       cycleFound
-      
-//     var cycleFound = false
-//     constraints.keys.foreach(v => cycleFound |= !visited.contains(v) && hasCycleHelper(v))
-
-//     cycleFound
