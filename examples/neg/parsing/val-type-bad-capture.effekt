@@ -1,0 +1,14 @@
+interface State[S] {
+  def get(): S
+  def put(value: S): Unit
+}
+
+def state[S, T](init: S) { p: => T / State[S] }: T = {
+  val f: S => T at p = try p() with State[S] {
+    def get() = <> // box { (s: S) => (resume(s))(s) }
+    def put(v) = <>
+  }
+  f(init)
+}
+
+def main() = ()
