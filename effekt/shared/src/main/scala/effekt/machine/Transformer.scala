@@ -392,6 +392,12 @@ object Transformer {
         LiteralInt(variable, value, k(variable))
       }
 
+    case core.Literal(value: Char, _) =>
+      val variable = Variable(freshName("charLiteral"), Type.Int());
+      shift { k =>
+        LiteralInt(variable, value, k(variable))
+      }
+
     case core.Literal(value: Boolean, _) =>
       val variable = Variable(freshName("booleanLiteral"), Positive())
       shift { k =>
