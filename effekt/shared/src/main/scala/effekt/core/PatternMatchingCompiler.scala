@@ -224,9 +224,17 @@ object PatternMatchingCompiler {
       core.Match(scrutinee, branches, default)
     }
 
+    // (3c) Split or-patterns
+    def splitOnOr(ps: List[Pattern]) =
+      val Clause(Condition.Patterns(patterns) :: rest, target, targs, args) = headClause : @unchecked
+      compile(ps.map { p =>
+        Clause(Condition.Patterns(patterns + (scrutinee -> p)) :: rest, target, targs, args)
+      } ++ remainingClauses)
+
     patterns(scrutinee) match {
       case Pattern.Literal(lit, equals) => splitOnLiteral(lit, equals)
       case p: Pattern.Tag => splitOnTag()
+      case Pattern.Or(ps) => splitOnOr(ps)
       case _ => ???
     }
   }
@@ -278,9 +286,11 @@ object PatternMatchingCompiler {
       case Condition.Patterns(other) :: rest =>
         val substituted = other.map(substitute)
         val additionalSubst = substituted.collect { case (sc, Pattern.Any(id)) => id -> sc }
-        val filtered = substituted.collect {
-          case (sc, p: Pattern.Tag) => sc -> p
-          case (sc, p: Pattern.Literal) => sc -> p
+        val filtered = substituted.flatMap {
+          case (sc, p: Pattern.Tag) => Some(sc -> p)
+          case (sc, p: Pattern.Literal) => Some(sc -> p)
+          case (sc, p: Pattern.Or) => Some(sc -> p)
+          case (sc, Pattern.Ignore() | Pattern.Any(_)) => None
         }
         normalize(patterns ++ filtered, rest, substitution ++ additionalSubst)
 
