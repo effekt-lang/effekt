@@ -1,0 +1,9 @@
+type A { X() }
+type B { X() }
+
+def main() = {
+  val a: A = X()
+  a match {
+    case X() => println("X()")
+  }
+}
