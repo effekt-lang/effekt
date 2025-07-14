@@ -658,7 +658,14 @@ enum MatchPattern extends Tree {
    *
    * Currently should *only* occur in lambda-cases during Parsing
    */
-  case MultiPattern(patterns: List[MatchPattern], span: Span) extends MatchPattern
+  case MultiPattern(patterns: List[MatchPattern], span: Span)
+
+  /**
+   * A pattern with different alternatives that share the right and side
+   *
+   *   case "a" | "b" => ...
+   */
+  case OrPattern(patterns: List[MatchPattern], span: Span)
 }
 export MatchPattern.*
 

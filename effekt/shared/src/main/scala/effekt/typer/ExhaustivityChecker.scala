@@ -114,6 +114,7 @@ object ExhaustivityChecker {
     case LiteralPattern(lit, _) => Pattern.Literal(lit.value, lit.tpe)
     case MultiPattern(patterns, _) =>
       Context.panic("Multi-pattern should have been split in preprocess already / nested MultiPattern")
+    case OrPattern(patterns, _) => Pattern.Any() // TODO
   }
   def preprocessGuard(g: source.MatchGuard)(using Context): Condition = g match {
     case MatchGuard.BooleanGuard(condition, _) =>

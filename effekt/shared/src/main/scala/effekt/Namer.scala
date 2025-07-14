@@ -704,6 +704,15 @@ object Namer extends Phase[Parsed, NameResolved] {
       patterns.flatMap { resolve }
     case source.MultiPattern(patterns, _) =>
       patterns.flatMap { resolve }
+    case source.OrPattern(patterns, _) =>
+      patterns.foreach { p =>
+        val bindings = resolve(p)
+        if (bindings.nonEmpty) {
+          val bs = bindings.map { b => pretty"`${b.name}`" }.mkString(", ")
+          Context.error(pretty"Pattern ${p} binds ${bs}, but or-patterns should not bind values.")
+        }
+      }
+      Nil
   }
 
   def resolve(p: source.MatchGuard)(using Context): Unit = p match {

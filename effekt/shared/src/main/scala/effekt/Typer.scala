@@ -609,8 +609,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       bindings
+
     case source.MultiPattern(patterns, _) =>
       Context.panic("Multi-pattern should have been split at the match and not occur nested.")
+
+    case source.OrPattern(patterns, _) =>
+      patterns.foreach { p => checkPattern(sc, p) }
+      Map.empty
   } match { case res => Context.annotateInferredType(pattern, sc); res }
 
   def checkGuard(guard: MatchGuard)(using Context, Captures): Result[Map[Symbol, ValueType]] = guard match {

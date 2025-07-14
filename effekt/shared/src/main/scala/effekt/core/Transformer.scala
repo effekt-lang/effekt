@@ -670,6 +670,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case source.TagPattern(id, patterns, _) => patterns.flatMap(boundInPattern)
       case _: source.LiteralPattern | _: source.IgnorePattern => Nil
       case source.MultiPattern(patterns, _) => patterns.flatMap(boundInPattern)
+      case source.OrPattern(patterns, _) => Nil
     }
     def boundInGuard(g: source.MatchGuard): List[core.ValueParam] = g match {
       case MatchGuard.BooleanGuard(condition, _) => Nil
@@ -680,6 +681,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case p @ source.TagPattern(id, patterns, _) => Context.annotation(Annotations.TypeParameters, p) ++ patterns.flatMap(boundTypesInPattern)
       case _: source.LiteralPattern | _: source.IgnorePattern => Nil
       case source.MultiPattern(patterns, _) => patterns.flatMap(boundTypesInPattern)
+      case source.OrPattern(patterns, _) => Nil
     }
     def boundTypesInGuard(g: source.MatchGuard): List[Id] = g match {
       case MatchGuard.BooleanGuard(condition, _) => Nil
@@ -718,6 +720,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Pattern.Literal(Literal(value, transform(tpe)), equalsFor(tpe))
       case source.MultiPattern(patterns, _) =>
         Context.panic("Multi-pattern should have been split on toplevel / nested MultiPattern")
+      case source.OrPattern(pattern, _) =>
+        Pattern.Or(pattern.map(transformPattern))
     }
 
     def transformGuard(p: source.MatchGuard): List[Condition] =

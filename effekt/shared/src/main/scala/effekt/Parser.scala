@@ -910,7 +910,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   def matchClause(): MatchClause =
     nonterminal:
-      val patterns = `case` ~> some(matchPattern, `,`)
+      val patterns = `case` ~> some(orPattern, `,`)
       val pattern: MatchPattern = patterns match {
         case Many(List(pat), _) => pat
         case pats => MultiPattern(pats.unspan, pats.span)
@@ -930,9 +930,23 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   def matchGuard(): MatchGuard =
     nonterminal:
-      expr() ~ when(`is`) { Some(matchPattern()) } { None } match {
+      expr() ~ when(`is`) { Some(orPattern()) } { None } match {
         case e ~ Some(p) => MatchGuard.PatternGuard(e, p, span())
         case e ~ None    => MatchGuard.BooleanGuard(e, span())
+      }
+
+  // TODO check positions and potentially change syntax
+  def orPattern(): MatchPattern =
+    nonterminal:
+      val subpatterns = ListBuffer.empty[MatchPattern]
+      subpatterns.addOne(matchPattern())
+      while (peek.kind == TokenKind.`|`) {
+        next()
+        subpatterns.addOne(matchPattern())
+      }
+      subpatterns.toList match {
+        case p :: Nil => p
+        case ps => OrPattern(ps, span())
       }
 
   def matchPattern(): MatchPattern =
@@ -941,14 +955,14 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         case `__` => skip(); IgnorePattern(span())
         case _ if isVariable  =>
           idRef() match {
-            case id if peek(`(`) => TagPattern(id, many(matchPattern, `(`, `,`, `)`).unspan, span())
+            case id if peek(`(`) => TagPattern(id, many(orPattern, `(`, `,`, `)`).unspan, span())
             case IdRef(Nil, name, span) => AnyPattern(IdDef(name, span), span)
             case IdRef(_, name, _) => fail("Cannot use qualified names to bind a pattern variable")
           }
         case _ if isVariable =>
           AnyPattern(idDef(), span())
         case _ if isLiteral => LiteralPattern(literal(), span())
-        case `(` => some(matchPattern, `(`, `,`, `)`) match {
+        case `(` => some(orPattern, `(`, `,`, `)`) match {
           case Many(p :: Nil , _) => fail("Pattern matching on tuples requires more than one element")
           case Many(ps, _) => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}", span().synthesized), ps, span())
         }
