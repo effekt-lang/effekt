@@ -2,6 +2,7 @@ package effekt
 package core
 
 import effekt.core.substitutions.Substitution
+import effekt.symbols.TypeConstructor
 
 import scala.collection.mutable
 
@@ -141,9 +142,22 @@ object PatternMatchingCompiler {
       normalized.foreach {
         case Clause(Split(Pattern.Literal(lit, _), restPatterns, restConds), label, targs, args) =>
           addClause(lit, Clause(Condition.Patterns(restPatterns) :: restConds, label, targs, args))
-        case c =>
-          addDefault(c)
-          variants.foreach { v => addClause(v, c) }
+
+        case c => lit match {
+          // finite domain
+          case Literal(_, core.Type.TBoolean) =>
+            val allBools = Set(Literal(true, core.Type.TBoolean), Literal(false, core.Type.TBoolean))
+            if allBools.exists(b => !variants.contains(b)) then
+              addDefault(c)
+            variants.foreach { v => addClause(v, c) }
+          case Literal(_, core.Type.TUnit) =>
+            if !variants.contains(Literal((), core.Type.TUnit)) then
+              addDefault(c)
+            variants.foreach { v => addClause(v, c) }
+          case _ =>
+            addDefault(c)
+            variants.foreach { v => addClause(v, c) }
+        }
       }
 
       // special case matching on ()
@@ -159,7 +173,18 @@ object PatternMatchingCompiler {
     }
 
     // (3b) Match on a data type constructor
-    def splitOnTag() = {
+    def splitOnTag(id: Id) = {
+
+      // TODO annotate all necessary info on Pattern.Tag in preprocessing.
+      val allVariants: Set[Id] = id match {
+        case c: symbols.Constructor => c.tpe match {
+          case TypeConstructor.DataType(name, tparams, constructors, decl) => constructors.toSet
+          case TypeConstructor.Record(name, tparams, constructor, decl) => Set(constructor)
+          case _ => ???
+        }
+        case _ => ???
+      }
+
       // collect all variants that are mentioned in the clauses
       val variants: List[Id] = normalized.collect {
         case Clause(Split(p: Pattern.Tag, _, _), _, _, _) => p.id
@@ -206,9 +231,13 @@ object PatternMatchingCompiler {
         case c =>
           // Clauses that don't match on that var are duplicated.
           // So we want to choose our branching heuristic to minimize this
-          addDefault(c)
+
           // here we duplicate clauses!
           variants.foreach { v => addClause(v, c) }
+
+          // only if the variants do not cover the data type, add a default!
+          if allVariants.exists(v => !variants.contains(v)) then
+            addDefault(c)
       }
 
       // (4) assemble syntax tree for the pattern match
@@ -226,7 +255,7 @@ object PatternMatchingCompiler {
 
     patterns(scrutinee) match {
       case Pattern.Literal(lit, equals) => splitOnLiteral(lit, equals)
-      case p: Pattern.Tag => splitOnTag()
+      case Pattern.Tag(id, tparams, patterns) => splitOnTag(id)
       case _ => ???
     }
   }
