@@ -711,7 +711,17 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Pattern.Any(id.symbol)
       case p @ source.TagPattern(id, patterns, _) =>
         val tparams = Context.annotation(Annotations.TypeParameters, p)
-        Pattern.Tag(id.symbol, tparams, patterns.map { p => (transformPattern(p), transform(Context.inferredTypeOf(p))) })
+
+        val allVariants: List[Id] = id.symbol match {
+          case c: symbols.Constructor => c.tpe match {
+            case TypeConstructor.DataType(name, tparams, constructors, decl) => constructors
+            case TypeConstructor.Record(name, tparams, constructor, decl) => List(constructor)
+            case _ => INTERNAL_ERROR("Constructors can only be part of a data types or records")
+          }
+          case _ => INTERNAL_ERROR("Can only use constructors as tags.")
+        }
+
+        Pattern.Tag(id.symbol, tparams, allVariants, patterns.map { p => (transformPattern(p), transform(Context.inferredTypeOf(p))) })
       case source.IgnorePattern(_) =>
         Pattern.Ignore()
       case source.LiteralPattern(source.Literal(value, tpe, _), _) =>

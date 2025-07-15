@@ -67,9 +67,12 @@ object PatternMatchingCompiler {
   }
 
   enum Pattern {
-    // sub-patterns are annotated with the inferred type of the scrutinee at this point
-    // i.e. Cons(Some(x : TInt): Option[Int], xs: List[Option[Int]])
-    case Tag(id: Id, tparams: List[Id], patterns: List[(Pattern, ValueType)])
+    // The pattern matching compiler requires some information:
+    // - type of the scrutinee on subpatterns,
+    //   i.e. Cons(Some(x : TInt): Option[Int], xs: List[Option[Int]])
+    // - the variants of the data type
+    //   i.e. Tag("Red", ..., List("Red", "Green", "Blue"), ...)
+    case Tag(id: Id, tparams: List[Id], variants: List[Id], patterns: List[(Pattern, ValueType)])
     case Ignore()
     case Any(id: Id)
     case Or(patterns: List[Pattern])
@@ -141,25 +144,44 @@ object PatternMatchingCompiler {
       normalized.foreach {
         case Clause(Split(Pattern.Literal(lit, _), restPatterns, restConds), label, targs, args) =>
           addClause(lit, Clause(Condition.Patterns(restPatterns) :: restConds, label, targs, args))
-        case c =>
-          addDefault(c)
-          variants.foreach { v => addClause(v, c) }
-      }
 
-      // special case matching on ()
-      val unit: Literal = Literal((), core.Type.TUnit)
-      if (lit == unit) return compile(clausesFor.getOrElse(unit, Nil))
+        case c =>
+          val finite: Option[List[Any]] = lit.annotatedType match {
+            case core.Type.TBoolean => Some(List(true, false))
+            case core.Type.TUnit => Some(List(()))
+            case core.Type.TBottom => Some(Nil)
+            case _ => None
+          }
+
+          finite match {
+            case Some(values) =>
+              if values.exists(b => !variants.map(_.value).contains(b)) then
+                addDefault(c)
+              variants.foreach { v => addClause(v, c) }
+            case None =>
+              addDefault(c)
+              variants.foreach { v => addClause(v, c) }
+          }
+      }
 
       // (4) assemble syntax tree for the pattern match
       variants.foldRight(compile(defaults)) {
         case (lit, elsStmt) =>
           val thnStmt = compile(clausesFor.getOrElse(lit, Nil))
-          core.If(equals(scrutinee, lit), thnStmt, elsStmt)
+          lit.value match {
+            case () => thnStmt
+            case true =>
+              core.If(scrutinee, thnStmt, elsStmt)
+            case false =>
+              core.If(scrutinee, elsStmt, thnStmt)
+            case _ =>
+              core.If(equals(scrutinee, lit), thnStmt, elsStmt)
+          }
       }
     }
 
     // (3b) Match on a data type constructor
-    def splitOnTag() = {
+    def splitOnTag(id: Id, allVariants: List[Id]) = {
       // collect all variants that are mentioned in the clauses
       val variants: List[Id] = normalized.collect {
         case Clause(Split(p: Pattern.Tag, _, _), _, _, _) => p.id
@@ -191,7 +213,7 @@ object PatternMatchingCompiler {
         )
 
       normalized.foreach {
-        case Clause(Split(Pattern.Tag(constructor, tparams, patternsAndTypes), restPatterns, restConds), label, targs, args) =>
+        case Clause(Split(Pattern.Tag(constructor, tparams, variants, patternsAndTypes), restPatterns, restConds), label, targs, args) =>
           // NOTE: Ideally, we would use a `DeclarationContext` here, but we cannot: we're currently in the Source->Core transformer, so we do not have all of the details yet.
           val fieldNames: List[String] = constructor match {
             case c: symbols.Constructor => c.fields.map(_.name.name)
@@ -206,9 +228,13 @@ object PatternMatchingCompiler {
         case c =>
           // Clauses that don't match on that var are duplicated.
           // So we want to choose our branching heuristic to minimize this
-          addDefault(c)
+
           // here we duplicate clauses!
           variants.foreach { v => addClause(v, c) }
+
+          // only if the variants do not cover the data type, add a default!
+          if allVariants.exists(v => !variants.contains(v)) then
+            addDefault(c)
       }
 
       // (4) assemble syntax tree for the pattern match
@@ -226,7 +252,7 @@ object PatternMatchingCompiler {
 
     patterns(scrutinee) match {
       case Pattern.Literal(lit, equals) => splitOnLiteral(lit, equals)
-      case p: Pattern.Tag => splitOnTag()
+      case Pattern.Tag(id, tparams, variants, patterns) => splitOnTag(id, variants)
       case _ => ???
     }
   }
@@ -323,7 +349,8 @@ object PatternMatchingCompiler {
   }
 
   def show(p: Pattern): String = p match {
-    case Pattern.Tag(id, tparams, patterns) => util.show(id) + tparams.map(util.show).mkString("[", ",", "]") + patterns.map { case (p, tpe) => show(p) }.mkString("(", ", ", ")")
+    case Pattern.Tag(id, tparams, variants, patterns) =>
+      util.show(id) + tparams.map(util.show).mkString("[", ",", "]") + patterns.map { case (p, tpe) => show(p) }.mkString("(", ", ", ")")
     case Pattern.Ignore() => "_"
     case Pattern.Any(id) => util.show(id)
     case Pattern.Or(patterns) => patterns.map(show).mkString(" | ")
