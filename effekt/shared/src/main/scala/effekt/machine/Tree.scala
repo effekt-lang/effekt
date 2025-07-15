@@ -211,7 +211,7 @@ enum Statement {
   /**
    * Statement that is executed when a Hole is encountered.
    */
-  case Hole
+  case Hole(span: effekt.source.Span)
 }
 export Statement.*
 
