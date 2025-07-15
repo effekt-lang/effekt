@@ -8,7 +8,7 @@
 // see PR #823 & issue #815 for context
 
 void hole(const char* message) {
-    printf("PANIC: Reached a hole in the program at %s\n", message);
+    printf("PANIC: %s reached a hole in the program\n", message);
     exit(1);
 }
 

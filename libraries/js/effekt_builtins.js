@@ -58,4 +58,4 @@ $effekt.unit = { __unit: true }
 
 $effekt.emptyMatch = function() { throw "empty match" }
 
-$effekt.hole = function(pos) { throw "not implemented, yet @ " + pos }
+$effekt.hole = function(pos) { throw pos + " not implemented yet" }

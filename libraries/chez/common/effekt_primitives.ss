@@ -134,4 +134,4 @@
   (raise
     (condition
       (make-error)
-      (make-message-condition (string-append "not implemented " pos)))))
+      (make-message-condition (string-append pos " not implemented yet" )))))

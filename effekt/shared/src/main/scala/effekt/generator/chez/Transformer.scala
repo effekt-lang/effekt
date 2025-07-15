@@ -90,7 +90,7 @@ trait Transformer {
       }
       chez.Cond(cls, default.map(toChezExpr))
 
-    case Hole(span) => chez.Call(chez.Builtin("hole"), chez.ChezString(span.range.from.format))
+    case Hole(span) => chez.Builtin("hole", chez.ChezString(span.range.from.format))
 
     case Var(ref, init, capt, body) =>
       state(nameDef(ref), toChez(init), toChez(body))
