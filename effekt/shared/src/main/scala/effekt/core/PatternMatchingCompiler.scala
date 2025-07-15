@@ -104,10 +104,9 @@ object PatternMatchingCompiler {
         return core.Let(x, tpe, binding, compile(Clause(rest, target, targs, args) :: remainingClauses))
       // - We need to check a predicate
       case Clause(Condition.Predicate(pred) :: rest, target, targs, args) =>
-        return core.If(pred,
-          compile(Clause(rest, target, targs, args) :: remainingClauses),
-          compile(remainingClauses)
-        )
+        val thn = compile(Clause(rest, target, targs, args) :: remainingClauses)
+        if remainingClauses.isEmpty then return thn
+        else return core.If(pred, thn, compile(remainingClauses))
       case Clause(Condition.Patterns(patterns) :: rest, target, targs, args) =>
         patterns
     }
@@ -165,18 +164,29 @@ object PatternMatchingCompiler {
       }
 
       // (4) assemble syntax tree for the pattern match
-      variants.foldRight(compile(defaults)) {
-        case (lit, elsStmt) =>
-          val thnStmt = compile(clausesFor.getOrElse(lit, Nil))
-          lit.value match {
-            case () => thnStmt
-            case true =>
-              core.If(scrutinee, thnStmt, elsStmt)
-            case false =>
-              core.If(scrutinee, elsStmt, thnStmt)
-            case _ =>
-              core.If(equals(scrutinee, lit), thnStmt, elsStmt)
-          }
+      //
+      // If there are no clauses, then this branch is unreachable.
+      // We represent unreachable branches by None
+      val els = if defaults.nonEmpty then Some(compile(defaults)) else None
+      variants.foldRight(els) {
+        case (lit, maybeElse) => clausesFor.get(lit) match {
+          case Some(thnClauses) if thnClauses.nonEmpty =>
+            val thnStmt = compile(thnClauses)
+            (lit.value, maybeElse) match {
+              case (_, None) => Some(thnStmt)
+              case ((), _) => Some(thnStmt)
+              case (true, Some(elsStmt)) =>
+                Some(core.If(scrutinee, thnStmt, elsStmt))
+              case (false, Some(elsStmt)) =>
+                Some(core.If(scrutinee, elsStmt, thnStmt))
+              case (_, Some(elsStmt)) =>
+                Some(core.If(equals(scrutinee, lit), thnStmt, elsStmt))
+            }
+          case _ => maybeElse
+        }
+      } getOrElse {
+        // TODO maybe move the option to the result of `compile`
+        core.Hole()
       }
     }
 
