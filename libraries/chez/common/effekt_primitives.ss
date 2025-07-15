@@ -130,8 +130,8 @@
     (run warmup)
     (run iterations)))
 
-(define (hole)
+(define (hole pos)
   (raise
     (condition
       (make-error)
-      (make-message-condition "not implemented"))))
+      (make-message-condition (string-append "not implemented " pos)))))

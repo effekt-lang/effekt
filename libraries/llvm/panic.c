@@ -7,8 +7,8 @@
 // this should _morally_ be using `stderr`, but we don't tee it in tests
 // see PR #823 & issue #815 for context
 
-void hole() {
-    printf("PANIC: Reached a hole in the program\n");
+void hole(const char* message) {
+    printf("PANIC: Reached a hole in the program at %s\n", message);
     exit(1);
 }
 
