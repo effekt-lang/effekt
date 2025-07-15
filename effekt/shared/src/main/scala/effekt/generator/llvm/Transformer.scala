@@ -391,7 +391,8 @@ object Transformer {
         }
         transform(rest)
 
-      case machine.Statement.Hole =>
+      case machine.Statement.Hole(span) => // TODO: call `hole` with `posfmt`
+        val posfmt = span.range.from.format
         emit(Comment("Hole"))
         emit(Call("_", Ccc(), VoidType(), ConstantGlobal("hole"), List.empty))
         RetVoid()

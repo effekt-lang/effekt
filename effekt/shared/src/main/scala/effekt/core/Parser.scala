@@ -347,7 +347,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
       }
     | (`if` ~> `(` ~/> pure <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
     | `region` ~> blockLit ^^ Stmt.Region.apply
-    | `<>` ^^^ Hole()
+    | `<>` ^^^ Hole(effekt.source.Span.missing)
     | (pure <~ `match`) ~/ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
     )
 

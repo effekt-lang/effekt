@@ -40,7 +40,7 @@ object RemoveTailResumptions {
       case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) => false
       case Stmt.Shift(prompt, body) => stmt.tpe == Type.TBottom
       case Stmt.Resume(k2, body) => k2.id == k // what if k is free in body?
-      case Stmt.Hole() => true
+      case Stmt.Hole(span) => true
     }
 
   def removeTailResumption(k: Id, stmt: Stmt): Stmt = stmt match {
@@ -60,7 +60,7 @@ object RemoveTailResumptions {
 
     case Stmt.Resume(k, body) => stmt
     case Stmt.Shift(prompt, body) => stmt
-    case Stmt.Hole() => stmt
+    case Stmt.Hole(span) => stmt
     case Stmt.Return(expr) => stmt
     case Stmt.App(callee, targs, vargs, bargs) => stmt
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => stmt
