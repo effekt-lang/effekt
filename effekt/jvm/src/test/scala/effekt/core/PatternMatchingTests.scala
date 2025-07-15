@@ -124,7 +124,7 @@ class PatternMatchingTests extends CoreTests {
     val result = compile(List(
       Clause(
         List(
-          Condition.Patterns(Map(opt -> Pattern.Tag(SomeC, List(), List(Pattern.Any(v.id) -> TInt)))),
+          Condition.Patterns(Map(opt -> Pattern.Tag(SomeC, List(), List(SomeC, NoneC), List(Pattern.Any(v.id) -> TInt)))),
           Condition.Val(p.id, TBoolean, trivalPredicate),
           Condition.Predicate(p)),
         b1, Nil, List(v)),

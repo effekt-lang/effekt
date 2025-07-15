@@ -68,9 +68,12 @@ object PatternMatchingCompiler {
   }
 
   enum Pattern {
-    // sub-patterns are annotated with the inferred type of the scrutinee at this point
-    // i.e. Cons(Some(x : TInt): Option[Int], xs: List[Option[Int]])
-    case Tag(id: Id, tparams: List[Id], patterns: List[(Pattern, ValueType)])
+    // The pattern matching compiler requires some information:
+    // - type of the scrutinee on subpatterns,
+    //   i.e. Cons(Some(x : TInt): Option[Int], xs: List[Option[Int]])
+    // - the variants of the data type
+    //   i.e. Tag("Red", ..., List("Red", "Green", "Blue"), ...)
+    case Tag(id: Id, tparams: List[Id], variants: List[Id], patterns: List[(Pattern, ValueType)])
     case Ignore()
     case Any(id: Id)
     case Or(patterns: List[Pattern])
@@ -173,18 +176,7 @@ object PatternMatchingCompiler {
     }
 
     // (3b) Match on a data type constructor
-    def splitOnTag(id: Id) = {
-
-      // TODO annotate all necessary info on Pattern.Tag in preprocessing.
-      val allVariants: Set[Id] = id match {
-        case c: symbols.Constructor => c.tpe match {
-          case TypeConstructor.DataType(name, tparams, constructors, decl) => constructors.toSet
-          case TypeConstructor.Record(name, tparams, constructor, decl) => Set(constructor)
-          case _ => ???
-        }
-        case _ => ???
-      }
-
+    def splitOnTag(id: Id, allVariants: List[Id]) = {
       // collect all variants that are mentioned in the clauses
       val variants: List[Id] = normalized.collect {
         case Clause(Split(p: Pattern.Tag, _, _), _, _, _) => p.id
@@ -216,7 +208,7 @@ object PatternMatchingCompiler {
         )
 
       normalized.foreach {
-        case Clause(Split(Pattern.Tag(constructor, tparams, patternsAndTypes), restPatterns, restConds), label, targs, args) =>
+        case Clause(Split(Pattern.Tag(constructor, tparams, variants, patternsAndTypes), restPatterns, restConds), label, targs, args) =>
           // NOTE: Ideally, we would use a `DeclarationContext` here, but we cannot: we're currently in the Source->Core transformer, so we do not have all of the details yet.
           val fieldNames: List[String] = constructor match {
             case c: symbols.Constructor => c.fields.map(_.name.name)
@@ -255,7 +247,7 @@ object PatternMatchingCompiler {
 
     patterns(scrutinee) match {
       case Pattern.Literal(lit, equals) => splitOnLiteral(lit, equals)
-      case Pattern.Tag(id, tparams, patterns) => splitOnTag(id)
+      case Pattern.Tag(id, tparams, variants, patterns) => splitOnTag(id, variants)
       case _ => ???
     }
   }
@@ -352,7 +344,8 @@ object PatternMatchingCompiler {
   }
 
   def show(p: Pattern): String = p match {
-    case Pattern.Tag(id, tparams, patterns) => util.show(id) + tparams.map(util.show).mkString("[", ",", "]") + patterns.map { case (p, tpe) => show(p) }.mkString("(", ", ", ")")
+    case Pattern.Tag(id, tparams, variants, patterns) =>
+      util.show(id) + tparams.map(util.show).mkString("[", ",", "]") + patterns.map { case (p, tpe) => show(p) }.mkString("(", ", ", ")")
     case Pattern.Ignore() => "_"
     case Pattern.Any(id) => util.show(id)
     case Pattern.Or(patterns) => patterns.map(show).mkString(" | ")
