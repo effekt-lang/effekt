@@ -141,8 +141,6 @@ object PatternMatchingCompiler {
       def addDefault(cl: Clause): Unit =
         defaults = defaults :+ cl
 
-
-
       normalized.foreach {
         case Clause(Split(Pattern.Literal(lit, _), restPatterns, restConds), label, targs, args) =>
           addClause(lit, Clause(Condition.Patterns(restPatterns) :: restConds, label, targs, args))
