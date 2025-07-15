@@ -2,7 +2,6 @@ package effekt
 package core
 
 import effekt.core.substitutions.Substitution
-import effekt.symbols.TypeConstructor
 
 import scala.collection.mutable
 
@@ -142,36 +141,44 @@ object PatternMatchingCompiler {
       def addDefault(cl: Clause): Unit =
         defaults = defaults :+ cl
 
+
+
       normalized.foreach {
         case Clause(Split(Pattern.Literal(lit, _), restPatterns, restConds), label, targs, args) =>
           addClause(lit, Clause(Condition.Patterns(restPatterns) :: restConds, label, targs, args))
 
-        case c => lit match {
-          // finite domain
-          case Literal(_, core.Type.TBoolean) =>
-            val allBools = Set(Literal(true, core.Type.TBoolean), Literal(false, core.Type.TBoolean))
-            if allBools.exists(b => !variants.contains(b)) then
-              addDefault(c)
-            variants.foreach { v => addClause(v, c) }
-          case Literal(_, core.Type.TUnit) =>
-            if !variants.contains(Literal((), core.Type.TUnit)) then
-              addDefault(c)
-            variants.foreach { v => addClause(v, c) }
-          case _ =>
-            addDefault(c)
-            variants.foreach { v => addClause(v, c) }
-        }
-      }
+        case c =>
+          val finite: Option[List[Any]] = lit.annotatedType match {
+            case core.Type.TBoolean => Some(List(true, false))
+            case core.Type.TUnit => Some(List(()))
+            case core.Type.TBottom => Some(Nil)
+            case _ => None
+          }
 
-      // special case matching on ()
-      val unit: Literal = Literal((), core.Type.TUnit)
-      if (lit == unit) return compile(clausesFor.getOrElse(unit, Nil))
+          finite match {
+            case Some(values) =>
+              if values.exists(b => !variants.map(_.value).contains(b)) then
+                addDefault(c)
+              variants.foreach { v => addClause(v, c) }
+            case None =>
+              addDefault(c)
+              variants.foreach { v => addClause(v, c) }
+          }
+      }
 
       // (4) assemble syntax tree for the pattern match
       variants.foldRight(compile(defaults)) {
         case (lit, elsStmt) =>
           val thnStmt = compile(clausesFor.getOrElse(lit, Nil))
-          core.If(equals(scrutinee, lit), thnStmt, elsStmt)
+          lit.value match {
+            case () => thnStmt
+            case true =>
+              core.If(scrutinee, thnStmt, elsStmt)
+            case false =>
+              core.If(scrutinee, elsStmt, thnStmt)
+            case _ =>
+              core.If(equals(scrutinee, lit), thnStmt, elsStmt)
+          }
       }
     }
 
