@@ -707,10 +707,8 @@ define void @run(%Neg %f) {
     %stack = call %Stack @withEmptyStack()
 
     ; prepare call
-    %arrayPointer = extractvalue %Neg %f, 0
+    %functionPointer = extractvalue %Neg %f, 0
     %object = extractvalue %Neg %f, 1
-    %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
-    %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
     ; call
     tail call tailcc %Pos %functionPointer(%Object %object, %Stack %stack)
@@ -722,10 +720,8 @@ define void @run_Int(%Neg %f, i64 %argument) {
     %stack = call %Stack @withEmptyStack()
 
     ; prepare call
-    %arrayPointer = extractvalue %Neg %f, 0
+    %functionPointer = extractvalue %Neg %f, 0
     %object = extractvalue %Neg %f, 1
-    %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
-    %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
     ; call
     tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, i64 %argument, %Stack %stack)
@@ -737,10 +733,8 @@ define void @run_Pos(%Neg %f, %Pos %argument) {
     %stack = call %Stack @withEmptyStack()
 
     ; prepare call
-    %arrayPointer = extractvalue %Neg %f, 0
+    %functionPointer = extractvalue %Neg %f, 0
     %object = extractvalue %Neg %f, 1
-    %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
-    %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
     ; call
     tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Pos %argument, %Stack %stack)
