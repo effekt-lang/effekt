@@ -118,6 +118,25 @@ def readInteger(): Int / Scan[Char] =
     readDecimal()
   }
 
+/// Handle Scan[A] in the body to first read the given character,
+/// then continue with the outside scanner.
+def unread[A, R](c: A){ body: => R / Scan[A] }: R / Scan[A] = {
+  var read = false
+  try body() with Scan[A] {
+    def peek() = if(read) { resume{do peek()} } else { resume{ () => c } }
+    def skip() = if(read) { resume{do skip[A]()} } else { resume{read = true} }
+  }
+}
+
+/// Handle Scan[Char] in the body to first read the given string,
+/// then continue with the outside scanner.
+def unread[R](s: String){ body: => R / Scan[Char] }: R / Scan[Char] = {
+  var pos = 0
+  try body() with Scan[Char] {
+    def peek() = if (pos < s.length) { resume{s.unsafeCharAt(pos)} } else { resume{do peek()} }
+    def skip() = if (pos < s.length) { resume{pos = pos + 1} } else { resume{do skip[Char]()} }
+  }
+}
 
 namespace returning {
 

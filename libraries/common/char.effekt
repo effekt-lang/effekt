@@ -52,6 +52,15 @@ def digitValue(char: Char, base: Int): Int / Exception[WrongFormat] = {
   digit
 }
 
+/// Encodes a number in the range 0..15 as a hex character.
+///
+/// Panics on all other numbers.
+def hexDigit(for: Int): Char = for match {
+  case i and i >= 0 and i < 10 => ('0'.toInt + i).toChar
+  case i and i >= 0 and i < 16 => ('A'.toInt + (i - 10)).toChar
+  case _ => panic(for.show ++ " is not in [0,16).")
+}
+
 /// Checks if the given character is an ASCII digit in base 10
 /// Prefer using `digitValue(c: Char)` to get the numeric value out.
 def isDigit(char: Char): Bool = result[Int, WrongFormat] { digitValue(char) }.isSuccess
