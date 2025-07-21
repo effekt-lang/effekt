@@ -233,46 +233,54 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   /**
    * Statements
    */
-  def stmts(): Stmt =
+  def stmts(inBraces: Boolean): Stmt =
     nonterminal:
       (peek.kind match {
-        case `val`  => valStmt()
-        case _ if isDefinition => DefStmt(definition(), semi() ~> stmts(), span())
-        case `with` => withStmt()
-        case `var`  => DefStmt(varDef(), semi() ~> stmts(), span())
+        case `val`  => valStmt(inBraces)
+        case _ if isDefinition && inBraces => DefStmt(definition(), semi() ~> stmts(inBraces), span())
+        case _ if isDefinition => fail("Definitions are only allowed, when enclosed in braces.")
+        case `with` => withStmt(inBraces)
+        case `var`  => DefStmt(varDef(), semi() ~> stmts(inBraces), span())
         case `return` =>
-          val result = `return` ~> Return(expr() <~ maybeSemi(), span())
-          result
-        case `}` | `}$` => // Unexpected end of <STMTS> =>
+          // trailing semicolon only allowed when in braces
+          `return` ~> Return(expr() <~ (if inBraces then maybeSemi()), span())
+        case `}` | `}$` if inBraces => // Unexpected end of <STMTS> =>
           // insert a synthetic `return ()` into the block
           Return(UnitLit(span().emptyAfter.synthesized), span().emptyAfter.synthesized)
+        // for now we do not allow multiple expressions in single-statement mode.
+        // That is, we rule out
+        //     def foo() =
+        //       expr;
+        //       expr
+        case _ if !inBraces =>
+          Return(expr(), span())
         case _ =>
           val e = expr()
           semi()
           if returnPosition then Return(e, span())
-          else ExprStmt(e, stmts(), span())
+          else ExprStmt(e, stmts(inBraces), span())
       }) labelled "statements"
 
   // ATTENTION: here the grammar changed (we added `with val` to disambiguate)
   // with val <ID> (: <TYPE>)? = <EXPR>; <STMTS>
   // with val (<ID> (: <TYPE>)?...) = <EXPR>
   // with <EXPR>; <STMTS>
-  def withStmt(): Stmt = `with` ~> peek.kind match {
+  def withStmt(inBraces: Boolean): Stmt = `with` ~> peek.kind match {
     case `val` =>
       val params = (`val` ~> peek.kind match {
         case `(` => valueParamsOpt()
         case _ => List(valueParamOpt()) // TODO copy position
       })
-      desugarWith(params, Nil, `=` ~> expr(), semi() ~> stmts(), span())
+      desugarWith(params, Nil, `=` ~> expr(), semi() ~> stmts(inBraces), span())
 
     case `def` =>
       val params = (`def` ~> peek.kind match {
         case `{` => blockParamsOpt()
         case _ => List(blockParamOpt()) // TODO copy position
       })
-      desugarWith(Nil, params, `=` ~> expr(), semi() ~> stmts(), span())
+      desugarWith(Nil, params, `=` ~> expr(), semi() ~> stmts(inBraces), span())
 
-    case _ => desugarWith(Nil, Nil, expr(), semi() ~> stmts(), span())
+    case _ => desugarWith(Nil, Nil, expr(), semi() ~> stmts(inBraces), span())
   }
 
   def desugarWith(vparams: List[ValueParam], bparams: List[BlockParam], call: Term, body: Stmt, withSpan: Span): Stmt = call match {
@@ -320,10 +328,9 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   def stmt(): Stmt =
     nonterminal:
       {
-        if peek(`{`) then BlockStmt(braces { stmts() }, span())
-        else when(`return`) { Return(expr(), span()) } { Return(expr(), span()) }
+        if peek(`{`) then BlockStmt(braces { stmts(inBraces = true) }, span())
+        else stmts(inBraces = false)
       } labelled "statement"
-
 
   /**
    * Main entry point for the repl.
@@ -479,7 +486,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
    * In statement position, val-definitions can also be destructing:
    *   i.e. val (l, r) = point(); ...
    */
-  def valStmt(): Stmt =
+  def valStmt(inBraces: Boolean): Stmt =
     nonterminal:
       val doc = maybeDocumentation()
       val startPos = pos()
@@ -493,7 +500,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
           val binding = stmt()
           val endPos = pos()
           val valDef = ValDef(id, tpe, binding, doc, Span(source, startPos, endPos)).withRangeOf(startMarker, binding)
-          DefStmt(valDef, { semi(); stmts() }, span())
+          DefStmt(valDef, { semi(); stmts(inBraces) }, span())
       }
       def matchLhs() =
         maybeDocumentation() ~ (`val` ~> matchPattern()) ~ manyWhile(`and` ~> matchGuard(), `and`) <~ `=` match {
@@ -501,13 +508,13 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
             val binding = stmt()
             val endPos = pos()
             val valDef = ValDef(id, None, binding, doc, Span(source, startPos, endPos)).withRangeOf(startMarker, binding)
-            DefStmt(valDef, { semi(); stmts() }, span())
+            DefStmt(valDef, { semi(); stmts(inBraces) }, span())
           case doc ~ p ~ guards =>
             // matches do not support doc comments, so we ignore `doc`
             val sc = expr()
             val endPos = pos()
             val default = when(`else`) { Some(stmt()) } { None }
-            val body = semi() ~> stmts()
+            val body = semi() ~> stmts(inBraces)
             val clause = MatchClause(p, guards, body, Span(source, p.span.from, sc.span.to)).withRangeOf(p, sc)
             val matching = Match(List(sc), List(clause), default, Span(source, startPos, endPos, Synthesized)).withRangeOf(startMarker, sc)
             Return(matching, span().synthesized)
@@ -691,7 +698,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     nonterminal:
       peek.kind match {
         case _: Ident => (peek(1).kind match {
-          case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> stmts() <~ `}`, span())
+          case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> stmts(inBraces = true) <~ `}`, span())
           case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template(), span())
         }) labelled "extern body (string or block)"
         case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template(), span())
@@ -838,7 +845,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   // TODO deprecate
   def funExpr(): Term =
     nonterminal:
-      val blockLiteral = `fun` ~> BlockLiteral(Nil, valueParams().unspan, Nil, braces { stmts() }, span())
+      val blockLiteral = `fun` ~> BlockLiteral(Nil, valueParams().unspan, Nil, braces { stmts(inBraces = true) }, span())
       Box(Maybe.None(Span(source, pos(), pos(), Synthesized)), blockLiteral, blockLiteral.span.synthesized)
 
   def unboxExpr(): Term =
@@ -922,7 +929,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         manyWhile(`and` ~> matchGuard(), `and`),
         // allow a statement enclosed in braces or without braces
         // both is allowed since match clauses are already delimited by `case`
-        `=>` ~> (if (peek(`{`)) { stmt() } else { stmts() }),
+        `=>` ~> (if (peek(`{`)) { stmt() } else { stmts(inBraces = true) }),
         span()
       )
 
@@ -1145,10 +1152,10 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
           case _ =>
             // { (x: Int) => ... }
             backtrack { lambdaParams() <~ `=>` } map {
-              case (tps, vps, bps) => BlockLiteral(tps, vps, bps, stmts(), Span.missing(source)) : BlockLiteral
+              case (tps, vps, bps) => BlockLiteral(tps, vps, bps, stmts(inBraces = true), Span.missing(source)) : BlockLiteral
             } getOrElse {
               // { <STMTS> }
-              BlockLiteral(Nil, Nil, Nil, stmts(), Span.missing(source)) : BlockLiteral
+              BlockLiteral(Nil, Nil, Nil, stmts(inBraces = true), Span.missing(source)) : BlockLiteral
             }
         }
       }
@@ -1221,7 +1228,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       peek.kind match {
         case `<>` => `<>` ~> Hole(IdDef("hole", span().synthesized), Template(Nil, Nil), span())
         case `<{` => {
-          val s = `<{` ~> stmts() <~ `}>`
+          val s = `<{` ~> stmts(inBraces = true) <~ `}>`
           Hole(IdDef("hole", span().synthesized), Template(Nil, List(s)), span())
         }
         case _: HoleStr => {
@@ -1235,7 +1242,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   def holeTemplate(): Template[Stmt] =
     nonterminal:
       val first = holeString()
-      val (s, strs) = manyWhile((`${` ~> stmts() <~ `}$`, holeString()), `${`).unzip
+      val (s, strs) = manyWhile((`${` ~> stmts(inBraces = true) <~ `}$`, holeString()), `${`).unzip
       Template(first :: strs, s)
 
   def holeString(): String =

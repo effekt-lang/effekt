@@ -94,7 +94,7 @@ class ParserTests extends munit.FunSuite {
     parse(input, _.stmt())
 
   def parseStmts(input: String, positions: Positions = new Positions())(using munit.Location): Stmt =
-    parse(input, _.stmts())
+    parse(input, _.stmts(inBraces = true))
 
   def parseMatchPattern(input: String, positions: Positions = new Positions())(using munit.Location): MatchPattern =
     parse(input, _.matchPattern())
