@@ -39,7 +39,7 @@ def parens(): Int / { flip, next, fail } =
 // Int = Result
 def reader[R](s: Stream) { p : => R / next } : R / fail =
   var inn = s;
-  try p() with next { () =>
+  try p() with next {
     inn match {
       case Nil() =>
         do fail("Unexpected Nil")
@@ -52,36 +52,34 @@ def reader[R](s: Stream) { p : => R / next } : R / fail =
 def eager[R] { p: => R / { flip, fail, error } }: ParseResult[R] = try {
   Success(p())
 } with flip { () =>
-    resume(true) match {
-        case Failure(msg) => resume(false)
-        case Success(res) => Success(res)
-        case ParseError(msg) => ParseError(msg)
-    }
+  resume(true) match {
+    case Failure(msg) => resume(false)
+    case Success(res) => Success(res)
+    case ParseError(msg) => ParseError(msg)
+  }
 } with fail { (msg) =>
-    Failure(msg)
+  Failure(msg)
 } with error { (msg) =>
-    ParseError(msg)
+  ParseError(msg)
 }
 
 def commit[R] { p : => R / fail } : R / error =
-  try { p() } with fail { (msg) =>
+  try p() with fail { (msg) =>
     do error(msg)
   }
 
 def nocut[R] { p: => R / error } : R / fail =
-  try { p() } with error { (msg) =>
-     do fail(msg)
+  try p() with error { (msg) =>
+    do fail(msg)
   }
 
 def opt[R] { p: => R }: Option[R] / flip =
-   or { Some(p()) } { None() }
+  or { Some(p()) } { None() }
 
 def parse[R](s: Stream) { p : => R / { flip, next, fail, error } } =
-  eager {
-    reader(s) {
-      p()
-    }
-  }
+  with eager
+  with reader(s)
+  p()
 
 def ex() =
   or {
