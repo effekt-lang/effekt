@@ -201,11 +201,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         }
 
       case d @ source.NamespaceDef(name, defs, doc, span) =>
-        def flatten(t: source.Def)(using C: Context): List[source.Def] = t match {
+        def flatten(t: source.Def): List[source.Def] = t match {
           case source.NamespaceDef(name, defs, doc, span) => defs.flatMap(flatten)
           case d => List(d)
         }
-        val stmt: source.Stmt = flatten(d).foldRight(rest) {
+        val stmt = flatten(d).foldRight(rest) {
           case (d, rest) => source.DefStmt(d, rest, span)
         }
         transform(stmt)
