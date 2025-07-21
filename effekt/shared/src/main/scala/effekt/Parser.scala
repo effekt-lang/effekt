@@ -233,9 +233,10 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   /**
    * Statements
    */
-  def stmts(inBraces: Boolean): Stmt =
+  def stmts(inBraces: Boolean = false): Stmt =
     nonterminal:
       (peek.kind match {
+        case `{` => BlockStmt(braces { stmts(inBraces = true) }, span())
         case `val`  => valStmt(inBraces)
         case _ if isDefinition && inBraces => DefStmt(definition(), semi() ~> stmts(inBraces), span())
         case _ if isDefinition => fail("Definitions are only allowed, when enclosed in braces.")
@@ -329,7 +330,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     nonterminal:
       {
         if peek(`{`) then BlockStmt(braces { stmts(inBraces = true) }, span())
-        else stmts(inBraces = false)
+        else when(`return`) { Return(expr(), span()) } { Return(expr(), span()) }
       } labelled "statement"
 
   /**
@@ -474,7 +475,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     nonterminal:
       manyWhile(definition(), isDefinition)
 
-  def functionBody: Stmt = stmt() // TODO error context: "the body of a function definition"
+  def functionBody: Stmt = stmts() // TODO error context: "the body of a function definition"
 
   def valDef(): Def =
     nonterminal:
@@ -543,7 +544,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       else
         // [...](<PARAM>...) {...} `=` <STMT>>
         val (tps, vps, bps) = params()
-        FunDef(id, tps, vps, bps, maybeReturnAnnotation(), `=` ~> stmt(), doc, span())
+        FunDef(id, tps, vps, bps, maybeReturnAnnotation(), `=` ~> stmts(), doc, span())
 
 
   // right now: data type definitions (should be renamed to `data`) and type aliases
@@ -800,14 +801,14 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   def ifExpr(): Term =
     nonterminal:
       If(`if` ~> parens { matchGuards().unspan },
-        stmt(),
-        when(`else`) { stmt() } { Return(UnitLit(span().emptyAfter), span().emptyAfter) }, span())
+        stmts(),
+        when(`else`) { stmts() } { Return(UnitLit(span().emptyAfter), span().emptyAfter) }, span())
 
   def whileExpr(): Term =
     nonterminal:
       While(`while` ~> parens { matchGuards().unspan },
-        stmt(),
-        when(`else`) { Some(stmt()) } { None },
+        stmts(),
+        when(`else`) { Some(stmts()) } { None },
         span())
 
   def doExpr(): Term =
@@ -927,9 +928,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       MatchClause(
         pattern,
         manyWhile(`and` ~> matchGuard(), `and`),
-        // allow a statement enclosed in braces or without braces
-        // both is allowed since match clauses are already delimited by `case`
-        `=>` ~> (if (peek(`{`)) { stmt() } else { stmts(inBraces = true) }),
+        `=>` ~> stmts(inBraces = true),
         span()
       )
 
