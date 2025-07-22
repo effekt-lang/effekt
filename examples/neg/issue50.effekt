@@ -18,7 +18,7 @@ def escape { prog: () => Unit / { Effect1, Effect2 } }: Unit = region this {
     }
   }
 
-  (unbox k)(())
+  k(())
 }
 
 def main() = {

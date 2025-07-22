@@ -6,7 +6,7 @@ def main() = {
   val f = try { // @Yield =>
     val g = fun(){ do Yield() }
     twice {
-      def unboxed() = { (unbox g)() };
+      def unboxed() = { g() };
       unboxed()// (@Yield)
     }
   } with Yield { println("yielded!"); resume(()) }
