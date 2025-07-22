@@ -33,7 +33,7 @@ def globalCapabilities { console: MyConsole } { time: Time }: Unit = {
 
   val n = repeater { () => sayTime() };
   val n1 = repeater { sayTime };
-  val b2 : () => Unit at {console, time} = box { () => (unbox n)(3) };
+  val b2 : () => Unit at {console, time} = box { () => n(3) };
   val b3 = n(3);
   val b4 = box { () => n(3) };
   val r = repeater { b };

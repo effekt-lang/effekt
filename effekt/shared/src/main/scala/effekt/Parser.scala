@@ -841,10 +841,6 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       val blockLiteral = `fun` ~> BlockLiteral(Nil, valueParams().unspan, Nil, braces { stmts() }, span())
       Box(Maybe.None(Span(source, pos(), pos(), Synthesized)), blockLiteral, blockLiteral.span.synthesized)
 
-  def unboxExpr(): Term =
-    nonterminal:
-      Unbox(`unbox` ~> expr(), span())
-
   def newExpr(): Term =
     nonterminal:
       New(`new` ~> implementation(), span())
@@ -1159,7 +1155,6 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     case `try`    => tryExpr()
     case `region` => regionExpr()
     case `box`    => boxExpr()
-    case `unbox`  => unboxExpr()
     case `fun`    => funExpr()
     case `new`    => newExpr()
     case `do`                => doExpr()

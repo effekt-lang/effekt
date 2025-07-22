@@ -11,9 +11,9 @@ def repeater { f: => Unit }: Int => Int at {f} = {
 def main() =
   try {
     val repeat = repeater { do Yield(); println("hello") };
-    def closure(): Int = (unbox repeat)(3);
+    def closure(): Int = repeat(3);
     val g = fun(n: Int) { closure(); n + 1 }
-     def unboxed() = (unbox g)(1);
+    def unboxed() = g(1);
     unboxed();
     ()
   } with Yield { println("yielded"); resume(()) }
