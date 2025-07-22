@@ -13,13 +13,13 @@ def numbers() = {
 
 def main() = region this {
 
-  var generator: () => Result at {this} in this = fun() { Done() }
+  var generator: () => Result at {this} in this = box { Done() }
 
   try {
     numbers()
-    generator = fun() { Done() }
+    generator = box { Done() }
   } with Yield { n =>
-    generator = fun() { resume(()); Next(n) }
+    generator = box { resume(()); Next(n) }
   }
 
   // right now we do not infer unbox for a mutable variable since it

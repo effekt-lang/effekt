@@ -4,7 +4,7 @@ effect Yield(): Unit
 
 def repeater { f: => Unit }: Int => Int at {f} = {
   def rec(n: Int): Int = if (n == 0) { f(); n } else rec(n - 1)
-  fun(n: Int) { rec(n) }
+  box { n => rec(n) }
 }
 
 
@@ -12,7 +12,7 @@ def main() =
   try {
     val repeat = repeater { do Yield(); println("hello") };
     def closure(): Int = repeat(3);
-    val g = fun(n: Int) { closure(); n + 1 }
+    val g = box { (n: Int) => closure(); n + 1 }
     def unboxed() = g(1);
     unboxed();
     ()

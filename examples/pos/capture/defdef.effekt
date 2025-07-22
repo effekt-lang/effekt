@@ -3,7 +3,7 @@ def myModule { eff : Eff } = region this {
 
   def outer = this;
 
-  val e1 = fun() { eff.use(); () };
+  val e1 = box { eff.use(); () };
   def x = e1;
 
   def test1() = x();

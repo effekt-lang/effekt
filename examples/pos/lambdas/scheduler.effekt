@@ -20,12 +20,12 @@ def scheduler { prog: => Unit / Proc } = region this {
   }
   try { prog() } with Proc {
     def yield() = {
-      queue = queue.pushFront(fun() { resume(()) })
+      queue = queue.pushFront(box { resume(()) })
     }
     def fork() = {
       queue = queue
-        .pushFront(fun() { resume(true) })
-        .pushFront(fun() { resume(false) })
+        .pushFront(box { resume(true) })
+        .pushFront(box { resume(false) })
     }
     def exit() = ()
   }
