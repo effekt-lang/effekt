@@ -197,10 +197,11 @@ trait Intelligence {
       })
     }
 
-    sorted.map((name, path, sym) => sym match {
-      case sym: TypeSymbol => TypeBinding(path, name, origin, DeclPrinter(sym))
-      case sym: ValueSymbol => TermBinding(path, name, origin, C.valueTypeOption(sym).map(t => pp"${t}"))
-      case sym: BlockSymbol => TermBinding(path, name, origin, C.blockTypeOption(sym).map(t => pp"${t}"))
+    sorted.flatMap((name, path, sym) => sym match {
+      // TODO this is extremely hacky, printing is not defined for all types at the moment
+      case sym: TypeSymbol => try { Some(TypeBinding(path, name, origin, DeclPrinter(sym))) } catch { case e => None }
+      case sym: ValueSymbol => Some(TermBinding(path, name, origin, C.valueTypeOption(sym).map(t => pp"${t}")))
+      case sym: BlockSymbol => Some(TermBinding(path, name, origin, C.blockTypeOption(sym).map(t => pp"${t}")))
     }).toList
 
   def allSymbols(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): Array[(String, List[String], TypeSymbol | TermSymbol)] = {
