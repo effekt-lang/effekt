@@ -80,7 +80,6 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val `with` = keyword("with")
   lazy val `case` = keyword("case")
   lazy val `do` = keyword("do")
-  lazy val `fun` = keyword("fun")
   lazy val `resume` = keyword("resume")
   lazy val `match` = keyword("match")
   lazy val `def` = keyword("def")
