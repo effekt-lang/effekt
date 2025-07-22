@@ -1,0 +1,31 @@
+import stream
+
+def infixShl(x: Int, y: Int): Int = bitwiseShl(x, y)
+def infixShr(x: Int, y: Int): Int = bitwiseShr(x, y)
+
+def infixPipe(x: Int, y: Int): Int = bitwiseOr(x, y)
+def infixAmp(x: Int, y: Int): Int = bitwiseAnd(x, y)
+def infixHat(x: Int, y: Int): Int = bitwiseXor(x, y)
+
+def infixDotDot(x: Int, y: Int): Unit / emit[Int] = range(x, y)
+
+
+def main() =
+  for[Int] { 0 .. 255 } { redValue =>
+    // Combine RGB channels into a single 24-bit color value
+    val greenValue = (redValue * 3) / 4  // Slightly less green
+    val blueValue = redValue / 2         // Half blue
+
+    // Pack RGB into 24-bit color: RRRRRRRRGGGGGGGGBBBBBBBB
+    val rgb = (redValue << 16) | (greenValue << 8) | blueValue
+
+    // Extract individual channels back out
+    val extractedRed = (rgb >> 16) & 255
+    val extractedGreen = (rgb >> 8) & 255
+    val extractedBlue = rgb & 255
+
+    // Convert to grayscale using standard weights
+    val grayscale = (extractedRed * 3 + extractedGreen * 6 + extractedBlue) / 10
+
+    println(grayscale)
+  }

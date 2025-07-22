@@ -975,10 +975,17 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       }
 
   def orExpr(): Term = infix(andExpr, `||`)
-  def andExpr(): Term = infix(eqExpr, `&&`)
+  def andExpr(): Term = infix(pipeExpr, `&&`)
+  def pipeExpr(): Term = infix(bitOrExpr, `<|`, `|>`)
+  def bitOrExpr(): Term = infix(bitAndExpr, TokenKind.`|`)
+  def bitAndExpr(): Term = infix(eqExpr, `&`)
   def eqExpr(): Term = infix(relExpr, `===`, `!==`)
-  def relExpr(): Term = infix(addExpr, `<=`, `>=`, `<`, `>`)
-  def addExpr(): Term = infix(mulExpr, `++`, `+`, `-`)
+  def relExpr(): Term = infix(rangeExpr, `<=`, `>=`, `<`, `>`)
+  def rangeExpr(): Term = infix(tildeExpr, `..`, `...`)
+  def tildeExpr(): Term = infix(addExpr, TokenKind.`~`, TokenKind.`~>`, TokenKind.`<~`)
+  def addExpr(): Term = infix(shiftExpr, `++`, `--`, `+`, `-`)
+  def shiftExpr(): Term = infix(powExpr, `<<`, `>>`)
+  def powExpr(): Term = infix(mulExpr, `^`, `^^`)
   def mulExpr(): Term = infix(callExpr, `*`, `/`)
 
   inline def infix(nonTerminal: () => Term, ops: TokenKind*): Term =
@@ -1031,6 +1038,23 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     case `*` => "infixMul"
     case `/` => "infixDiv"
     case `++` => "infixConcat"
+    case `>>` => "infixShr"
+    case `<<` => "infixShl"
+    case `--` => "infixRemove"
+
+    case TokenKind.`~`  => "infixTilde"
+    case TokenKind.`~>` => "infixTildeRight"
+    case TokenKind.`<~` => "infixTildeLeft"
+    case TokenKind.`|`  => "infixPipe"
+    case TokenKind.`&`  => "infixAmp"
+
+    case `<|`  => "infixPipeLeft"
+    case `|>`  => "infixPipeRight"
+    case `..`  => "infixDotDot"
+    case `...` => "infixDotDotDot"
+    case `^^`  => "infixHatHat"
+    case `^`   => "infixHat"
+
     case _ => sys.error(s"Internal compiler error: not a valid operator ${op}")
   }
 
