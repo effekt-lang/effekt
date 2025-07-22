@@ -408,7 +408,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     some(ident, `/`).mkString("/") labelled "module name"
 
   def isToplevel: Boolean = peek.kind match {
-    case `val` | `fun` | `def` | `type` | `effect` | `namespace` | `interface` | `type` | `record` | `var` | `include` | `extern` => true
+    case `val` | `def` | `type` | `effect` | `namespace` | `interface` | `type` | `record` | `var` | `include` | `extern` => true
     case _ => false
   }
 
@@ -861,12 +861,6 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       Box(captures, expr, span())
   }
 
-  // TODO deprecate
-  def funExpr(): Term =
-    nonterminal:
-      val blockLiteral = `fun` ~> BlockLiteral(Nil, valueParams().unspan, Nil, braces { stmts(inBraces = true) }, span())
-      Box(Maybe.None(Span(source, pos(), pos(), Synthesized)), blockLiteral, blockLiteral.span.synthesized)
-
   def newExpr(): Term =
     nonterminal:
       New(`new` ~> implementation(), span())
@@ -1179,7 +1173,6 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     case `try`    => tryExpr()
     case `region` => regionExpr()
     case `box`    => boxExpr()
-    case `fun`    => funExpr()
     case `new`    => newExpr()
     case `do`                => doExpr()
     case _ if isString       => templateString()
