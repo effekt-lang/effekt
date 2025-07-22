@@ -9,7 +9,6 @@ def infixHat(x: Int, y: Int): Int = bitwiseXor(x, y)
 
 def infixDotDot(x: Int, y: Int): Unit / emit[Int] = range(x, y)
 
-
 def main() =
   for[Int] { 0 .. 255 } { redValue =>
     // Combine RGB channels into a single 24-bit color value
