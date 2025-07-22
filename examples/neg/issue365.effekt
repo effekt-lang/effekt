@@ -5,6 +5,6 @@ extern io def cap(): Cap at {} = default { <> }
 
 def main() = {
   def myCap = cap()
-  val unboxed: Cap at {} = myCap;
+  val unboxed: Cap at {} = box myCap;
   ()
 }

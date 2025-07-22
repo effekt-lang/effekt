@@ -2,5 +2,5 @@
   Unit
 but got type
   () => Unit / { MyPrint } at ?C
-    resume(prog);
-           ^^^^
+    resume(box prog);
+           ^^^^^^^^

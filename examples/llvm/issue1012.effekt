@@ -7,7 +7,7 @@ def use { g: (Int) => Int } : Int = {
 }
 
 def main() : Unit = {
-  val t = [f]
+  val t = [box f]
   list::map(t) { y => use {y} }
   println("hi")
 }

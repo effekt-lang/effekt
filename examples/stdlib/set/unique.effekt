@@ -3,7 +3,7 @@ import set
 import bytearray
 
 def unique(words: List[String]): Set[String] = {
-  var s: Set[String] = set::empty(compareStringBytes);
+  var s: Set[String] = set::empty(box compareStringBytes);
 
   list::foreach(words) { word =>
     s = s.insert(word)
@@ -58,8 +58,8 @@ def main() = {
   println(uniqueSpeech.toList)
   testSorted(uniqueSpeech)
 
-  println(set::fromList(speech, compareStringBytes).toList)
-  testSorted(set::fromList(speech, compareStringBytes))
+  println(set::fromList(speech, box compareStringBytes).toList)
+  testSorted(set::fromList(speech, box compareStringBytes))
 
   // ---
   println("")

@@ -103,7 +103,7 @@ def emptyQueue[T](initialCapacity: Int): Queue[T] at {global} = {
       tail.set(mod(tail.get + 1, capacity.get))
     }
   }
-  queue
+  box queue
 }
 
 namespace examples {
