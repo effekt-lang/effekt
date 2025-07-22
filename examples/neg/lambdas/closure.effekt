@@ -1,10 +1,10 @@
 def twice { someBlock: () => Unit / {} } = {
-  fun() { someBlock(); someBlock() }
+  box { someBlock(); someBlock() }
 }
 effect Yield(): Unit
 def main() = {
   val f = try { // @Yield =>
-    val g = fun(){ do Yield() }
+    val g = box { do Yield() }
     twice {
       def unboxed() = { g() };
       unboxed()// (@Yield)

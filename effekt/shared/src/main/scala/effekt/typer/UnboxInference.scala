@@ -4,11 +4,11 @@ package typer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 
-object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
+object UnboxInference extends Phase[NameResolved, NameResolved] {
 
   import source._
 
-  val phaseName = "box-unbox"
+  val phaseName = "unbox"
 
   def run(input: NameResolved)(using Context) = {
     val transformedTree = Context.timed(phaseName, input.source.name) { rewrite(input.tree) }
@@ -52,12 +52,18 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     case v: Var => v.definition match {
       // TODO maybe we should synthesize a call to get here already?
       case sym: (ValueSymbol | symbols.RefBinder) => v
-      case sym: BlockSymbol => v //Box(Maybe.None(v.span.emptyAfter), v, v.span.synthesized).inheritPosition(v)
+      case sym: BlockSymbol =>
+        C.error(pp"Computation ${sym} is used in an expression position, which requires boxing (e.g. `box ${sym}`")
+        v
     }
 
-    case n: New => rewriteAsBlock(n) // Box(Maybe.None(n.span.emptyAfter), rewriteAsBlock(n), n.span.synthesized).inheritPosition(n)
+    case n: New =>
+      C.error(pp"Creating an instance in an expression requires boxing (e.g. `box new ${n.impl.id}[...] { ... }`")
+      rewriteAsBlock(n)
 
-    case b: BlockLiteral => rewriteAsBlock(b) // Box(Maybe.None(b.span.emptyAfter), rewriteAsBlock(b), b.span.synthesized).inheritPosition(b)
+    case b: BlockLiteral =>
+      C.error(pp"Function literals in expression position require boxing (e.g. `box { (${b.vparams.map(_.id).mkString(", ")}) => ... `")
+      rewriteAsBlock(b)
 
     case l: Literal => l
 

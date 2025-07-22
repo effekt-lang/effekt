@@ -1,6 +1,6 @@
 def bar {r: Region} = {
   var x in r = 42
-  fun() { x = x + 1; x }
+  box { x = x + 1; x }
 }
 
 def ex1() = region this {

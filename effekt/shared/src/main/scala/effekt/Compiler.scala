@@ -6,7 +6,7 @@ import effekt.core.Transformer
 import effekt.namer.Namer
 import effekt.source.{AnnotateCaptures, ExplicitCapabilities, ModuleDecl, ResolveExternDefs}
 import effekt.symbols.Module
-import effekt.typer.{BoxUnboxInference, Typer, Wellformedness}
+import effekt.typer.{UnboxInference, Typer, Wellformedness}
 import effekt.util.messages.{CompilerPanic, FatalPhaseError}
 import effekt.util.{SourceTask, Task, VirtualSource, paths}
 import kiama.output.PrettyPrinterTypes.Document
@@ -207,7 +207,7 @@ trait Compiler[Executable] {
        * Explicit box transformation
        * [[NameResolved]] --> [[NameResolved]]
        */
-      BoxUnboxInference andThen
+      UnboxInference andThen
       /**
        * Wellformedness checks (exhaustivity, non-escape)
        * [[Typechecked]] --> [[Typechecked]]
