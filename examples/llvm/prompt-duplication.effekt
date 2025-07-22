@@ -9,8 +9,8 @@ def main() : Unit = {
     } with E { () =>
         def f() = { () }
         def g() = {
-          resume(f)
+          resume(box f)
         }
-        resume(g)
+        resume(box g)
     }
 }

@@ -31,14 +31,14 @@ def mapping[A, B] {f: A => B} : Unit / {Reduce[A], Iterate[B]} =
   }
 
 def reduce[A, B] {iterator: () => Unit / Iterate[A]} {reducer: () => B / Reduce[A]} = {
-  var coroutine = fun() {Absent()}
-  coroutine = fun() {
+  var coroutine = box { Absent() }
+  coroutine = box {
     try {
       iterator()
       Absent()
     } with Iterate[A] {
       def emit(e) = {
-        coroutine = fun() {resume(())}
+        coroutine = box { resume(()) }
         Present(e)
       }
     }
