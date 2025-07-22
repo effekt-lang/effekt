@@ -979,13 +979,9 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   def pipeExpr(): Term = infix(bitOrExpr, `<|`, `|>`)
   def bitOrExpr(): Term = infix(bitAndExpr, TokenKind.`|`)
   def bitAndExpr(): Term = infix(eqExpr, `&`)
-  def eqExpr(): Term = infix(relExpr, `===`, `!==`)
-  def relExpr(): Term = infix(rangeExpr, `<=`, `>=`, `<`, `>`)
-  def rangeExpr(): Term = infix(tildeExpr, `..`, `...`)
-  def tildeExpr(): Term = infix(addExpr, TokenKind.`~`, TokenKind.`~>`, TokenKind.`<~`)
-  def addExpr(): Term = infix(shiftExpr, `++`, `--`, `+`, `-`)
-  def shiftExpr(): Term = infix(powExpr, `<<`, `>>`)
-  def powExpr(): Term = infix(mulExpr, `^`, `^^`)
+  def eqExpr(): Term = infix(rangeExpr, `===`, `!==`, `<=`, `>=`, `<`, `>`)
+  def rangeExpr(): Term = infix(addExpr, `..`, `...`, TokenKind.`~`, TokenKind.`~>`, TokenKind.`<~`)
+  def addExpr(): Term = infix(mulExpr, `++`, `--`, `+`, `-`, `<<`, `>>`, `^`, `^^`)
   def mulExpr(): Term = infix(callExpr, `*`, `/`)
 
   inline def infix(nonTerminal: () => Term, ops: TokenKind*): Term =
