@@ -21,17 +21,13 @@ type ParseResult[R] {
   ParseError(msg: String)
 }
 
-def accept(exp: String) = {
-    val got = do next();
-    if (got == exp) {
-        got
-    } else {
-        do fail("Expected " ++ exp ++ " but got " ++ got)
-    }
-}
+def accept(exp: String) =
+  val got = do next();
+  if (got == exp) got
+  else do fail("Expected " ++ exp ++ " but got " ++ got)
 
 def or[R] { p: => R } { q: => R } =
-  if (do flip()) { p() } else { q() }
+  if (do flip()) p() else q()
 
 def asOrB(): Int / { flip, next, fail } =
   or { accept("a"); asOrB() + 1 } { accept("b"); 0 }
@@ -41,53 +37,49 @@ def parens(): Int / { flip, next, fail } =
      { accept("("); val res = parens(); accept(")"); res + 1 }
 
 // Int = Result
-def reader[R](s: Stream) { p : => R / next } : R / fail = {
-    var inn = s;
-    try{
-      p()
-    } with next { () => inn match {
-        case Nil() =>
-          do fail("Unexpected Nil")
-        case Cons(el, rest) =>
-          inn = rest;
-          resume(el)
-      }
+def reader[R](s: Stream) { p : => R / next } : R / fail =
+  var inn = s;
+  try p() with next {
+    inn match {
+      case Nil() =>
+        do fail("Unexpected Nil")
+      case Cons(el, rest) =>
+        inn = rest;
+        resume(el)
     }
-}
+  }
 
 def eager[R] { p: => R / { flip, fail, error } }: ParseResult[R] = try {
   Success(p())
 } with flip { () =>
-    resume(true) match {
-        case Failure(msg) => resume(false)
-        case Success(res) => Success(res)
-        case ParseError(msg) => ParseError(msg)
-    }
+  resume(true) match {
+    case Failure(msg) => resume(false)
+    case Success(res) => Success(res)
+    case ParseError(msg) => ParseError(msg)
+  }
 } with fail { (msg) =>
-    Failure(msg)
+  Failure(msg)
 } with error { (msg) =>
-    ParseError(msg)
+  ParseError(msg)
 }
 
 def commit[R] { p : => R / fail } : R / error =
-  try { p() } with fail { (msg) =>
+  try p() with fail { (msg) =>
     do error(msg)
   }
 
 def nocut[R] { p: => R / error } : R / fail =
-  try { p() } with error { (msg) =>
-     do fail(msg)
+  try p() with error { (msg) =>
+    do fail(msg)
   }
 
 def opt[R] { p: => R }: Option[R] / flip =
-   or { Some(p()) } { None() }
+  or { Some(p()) } { None() }
 
 def parse[R](s: Stream) { p : => R / { flip, next, fail, error } } =
-  eager {
-    reader(s) {
-      p()
-    }
-  }
+  with eager
+  with reader(s)
+  p()
 
 def ex() =
   or {
@@ -99,34 +91,30 @@ def ex() =
     1
   }
 
-def p1() = {
+def p1() =
   val inn = ["a", "a", "a", "b"];
   parse(inn) { asOrB() } match {
     case Success(n) => println(n)
     case Failure(msg) => ()
     case ParseError(msg) => ()
   }
-}
 
-def p2() = {
+
+def p2() =
   val inn = ["do", "foo"];
   parse(inn) { ex() } match {
     case Success(n) => println(n)
     case Failure(msg) => ()
     case ParseError(msg) => ()
   }
-}
 
-def p4() = {
+def p4() =
   val inn = ["(", "(", "()", ")", ")"];
   parse(inn) { parens() } match {
     case Success(n) => println(n)
     case Failure(msg) => ()
     case ParseError(msg) => ()
   }
-}
-
-
 
 def main() = {
     p1();
