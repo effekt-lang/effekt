@@ -29,7 +29,7 @@ def globalCapabilities { console: MyConsole } { time: Time }: Unit = {
   val repeatTime = repeater { sayTime };
 
   // some more variants illustrating closure and capability sets
-  val b = sayTime;
+  val b = box sayTime;
 
   val n = repeater { () => sayTime() };
   val n1 = repeater { sayTime };
@@ -50,7 +50,7 @@ def localCapabilities { console: MyConsole } { time: Time }: Unit =
   }
 
 def effectHandlers { console: MyConsole } { time: Time }: Unit = {
-  def report(t: Int) = console.myprintln(show(t) ++ "ms") 
+  def report(t: Int) = console.myprintln(show(t) ++ "ms")
   val before = time.now();
 
   try {
@@ -73,7 +73,7 @@ def run[T] { prog : {MyConsole} {Time} => T }: T = {
     } with console: MyConsole {
         def myprintln(msg) = { println(msg); resume(()) }
     } with time: Time {
-        def now() = { 
+        def now() = {
 			i = i + 1
 			resume(i)
 		}

@@ -67,7 +67,7 @@ def loop[T] { f: => Unit / Loop[T] }: T = {
 }
 
 
-def DigitalOut(name: String) = new Output {
+def DigitalOut(name: String) = box new Output {
   def set(n: Bool) = useOut()
   def get() = { useOut(); true }
 }
@@ -99,7 +99,7 @@ def main() = {
     if (x <= 0) do break("STOP");
 
     // also ok!
-    precise.timeout(100.millis, flip)
+    precise.timeout(100.millis, box flip)
   }
 
   // not allowed!
