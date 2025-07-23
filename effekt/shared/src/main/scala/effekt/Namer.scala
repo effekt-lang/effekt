@@ -219,7 +219,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         ExternInterface(Context.nameFor(id), tps, decl)
       })
 
-    case d @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) => {
+    case d @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) =>
       val name = Context.nameFor(id)
       val capt = resolve(capture)
       Context.define(id, Context scoped {
@@ -234,7 +234,6 @@ object Namer extends Phase[Parsed, NameResolved] {
 
         ExternFunction(name, tps.unspan, vps.unspan, bps.unspan, tpe, eff, capt, bodies, d)
       })
-    }
 
     case d @ source.ExternResource(id, tpe, doc, span) =>
       val name = Context.nameFor(id)
@@ -346,14 +345,14 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
       }
 
-    case source.InterfaceDef(id, tparams, operations, doc, span) =>
+    case source.InterfaceDef(interfaceId, tparams, operations, doc, span) =>
       // symbol has already been introduced by the previous traversal
-      val interface = Context.symbolOf(id).asInterface
+      val interface = Context.symbolOf(interfaceId).asInterface
       interface.operations = operations.map {
         case op @ source.Operation(id, tparams, vparams, bparams, ret, doc, span) => Context.at(op) {
           val name = Context.nameFor(id)
 
-          Context.scopedWithName(id.name) {
+          val opSym = Context.scopedWithName(id.name) {
             // the parameters of the interface are in scope
             interface.tparams.foreach { p => Context.bind(p) }
 
@@ -370,10 +369,16 @@ object Namer extends Phase[Parsed, NameResolved] {
             //   2) the annotated type parameters on the concrete operation
             val (result, effects) = resolve(ret)
 
-            val opSym = Operation(name, interface.tparams ++ tps.unspan, resVparams, resBparams, result, effects, interface, op)
-            Context.define(id, opSym)
-            opSym
+            Operation(name, interface.tparams ++ tps.unspan, resVparams, resBparams, result, effects, interface, op)
           }
+
+          // define in namespace ...
+          Context.namespace(interfaceId.name) {
+            Context.define(id, opSym)
+          }
+          // ... and bind outside
+          Context.bind(opSym)
+          opSym
         }
       }
 
@@ -383,7 +388,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     // The type itself has already been resolved, now resolve constructors
-    case d @ source.DataDef(id, tparams, ctors, doc, span) =>
+    case d @ source.DataDef(typeId, tparams, ctors, doc, span) =>
       val data = d.symbol
       data.constructors = ctors map {
         case c @ source.Constructor(id, tparams, ps, doc, span) =>
@@ -392,7 +397,13 @@ object Namer extends Phase[Parsed, NameResolved] {
             val tps = tparams map resolve
             Constructor(name, data.tparams ++ tps.unspan, Nil, data, c)
           }
-          Context.define(id, constructor)
+          // define in namespace ...
+          Context.namespace(typeId.name) {
+            Context.define(id, constructor)
+          }
+          // ... and bind outside
+          Context.bind(constructor)
+
           constructor.fields = resolveFields(ps.unspan, constructor, false)
           constructor
       }
@@ -528,8 +539,8 @@ object Namer extends Phase[Parsed, NameResolved] {
       vargs foreach resolve
       bargs foreach resolve
 
-    case source.Do(effect, target, targs, vargs, bargs, _) =>
-      Context.resolveEffectCall(effect map resolveBlockRef, target)
+    case source.Do(target, targs, vargs, bargs, _) =>
+      Context.resolveEffectCall(target)
       targs foreach resolveValueType
       vargs foreach resolve
       bargs foreach resolve
@@ -1138,15 +1149,9 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * Resolves a potentially overloaded call to an effect
    */
-  private[namer] def resolveEffectCall(eff: Option[InterfaceType], id: IdRef): Unit = at(id) {
+  private[namer] def resolveEffectCall(id: IdRef): Unit = at(id) {
 
-    val syms = eff match {
-      case Some(tpe) =>
-        val interface = tpe.typeConstructor.asInterface
-        val operations = interface.operations.filter { op => op.name.name == id.name }
-        if (operations.isEmpty) Nil else List(operations.toSet)
-      case None => scope.lookupOperation(id.path, id.name)
-    }
+    val syms = scope.lookupOperation(id.path, id.name)
 
     if (syms.isEmpty) {
       abort(pretty"Cannot resolve effect operation ${id}")

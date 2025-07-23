@@ -50,12 +50,6 @@ case class Bindings(
 
   def getNamespace(name: String): Option[Bindings] =
     namespaces.get(name)
-
-  def operations: Map[String, Set[Operation]] =
-    types.values.toSet.flatMap {
-      case BlockTypeConstructor.Interface(_, _, operations, _) => operations.toSet
-      case _ => Set.empty
-    }.groupMap(_.name.name)(op => op)
 }
 
 object Bindings {
@@ -228,12 +222,13 @@ object scopes {
 
     def lookupOverloadedMethod(id: IdRef, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[Operation]] =
       all(id.path, scope) { namespace =>
-        namespace.operations.getOrElse(id.name, Set.empty).filter(filter)
+        namespace.terms.getOrElse(id.name, Set.empty).collect { case op: Operation if filter(op) => op }
       }
 
+    // the last element in the path can also be the type of the name.
     def lookupOperation(path: List[String], name: String)(using ErrorReporter): List[Set[Operation]] =
       all(path, scope) { namespace =>
-        namespace.operations.getOrElse(name, Set.empty)
+        namespace.terms.getOrElse(name, Set.empty).collect { case op: Operation => op }
       }.filter { namespace => namespace.nonEmpty }
 
     def lookupFunction(path: List[String], name: String)(using ErrorReporter): List[Set[Callable]] =

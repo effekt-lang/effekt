@@ -1884,6 +1884,15 @@ class LSPTests extends FunSuite {
           kind = "Term"
         ),
         TermBinding(
+          qualifier = List("Bar"),
+          name = "Bar",
+          origin = "Defined",
+          `type` = Some(
+            value = "Int => Bar"
+          ),
+          kind = "Term"
+        ),
+        TermBinding(
           qualifier = Nil,
           name = "main",
           origin = "Defined",

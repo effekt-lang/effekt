@@ -292,8 +292,8 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
      case Var(id, varSpan) =>
        val tgt = IdTarget(id)
        Return(Call(tgt, Nil, Nil, (BlockLiteral(Nil, vparams, bparams, body, body.span.synthesized)) :: Nil, varSpan), withSpan.synthesized)
-     case Do(effect, id, targs, vargs, bargs, doSpan) =>
-      Return(Do(effect, id, targs, vargs, bargs :+ BlockLiteral(Nil, vparams, bparams, body, body.span.synthesized), doSpan), withSpan.synthesized)
+     case Do(id, targs, vargs, bargs, doSpan) =>
+      Return(Do(id, targs, vargs, bargs :+ BlockLiteral(Nil, vparams, bparams, body, body.span.synthesized), doSpan), withSpan.synthesized)
      case term =>
        Return(Call(ExprTarget(term), Nil, Nil, (BlockLiteral(Nil, vparams, bparams, body, body.span.synthesized)) :: Nil, term.span.synthesized), withSpan.synthesized)
   }
@@ -814,7 +814,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   def doExpr(): Term =
     nonterminal:
       (`do` ~> idRef()) ~ arguments() match {
-        case id ~ (targs, vargs, bargs) => Do(None, id, targs, vargs, bargs, span())
+        case id ~ (targs, vargs, bargs) => Do(id, targs, vargs, bargs, span())
       }
 
   /*
@@ -1271,10 +1271,10 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         case id ~ Template(strs, args) =>
           val target = id.getOrElse(IdRef(Nil, "s", id.span.synthesized))
           val doLits = strs.map { s =>
-            Do(None, IdRef(Nil, "literal", Span.missing(source)), Nil, List(ValueArg.Unnamed(StringLit(s, Span.missing(source)))), Nil, Span.missing(source))
+            Do(IdRef(Nil, "literal", Span.missing(source)), Nil, List(ValueArg.Unnamed(StringLit(s, Span.missing(source)))), Nil, Span.missing(source))
           }
           val doSplices = args.map { arg =>
-            Do(None, IdRef(Nil, "splice", Span.missing(source)), Nil, List(ValueArg.Unnamed(arg)), Nil, Span.missing(source))
+            Do(IdRef(Nil, "splice", Span.missing(source)), Nil, List(ValueArg.Unnamed(arg)), Nil, Span.missing(source))
           }
           val body = interleave(doLits, doSplices)
             .foldRight(Return(UnitLit(Span.missing(source)), Span.missing(source))) { (term, acc) => ExprStmt(term, acc, Span.missing(source)) }

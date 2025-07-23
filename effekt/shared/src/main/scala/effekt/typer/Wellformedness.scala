@@ -212,7 +212,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       vargs.foreach(query)
       bargs.foreach(query)
 
-    case tree @ source.Do(effect, id, targs, vargs, bargs, _) =>
+    case tree @ source.Do(id, targs, vargs, bargs, _) =>
       val inferredTypeArgs = Context.typeArguments(tree)
       inferredTypeArgs.zipWithIndex.foreach { case (tpe, index) =>
         wellformed(tpe, tree, pp" inferred as ${showPosition(index + 1)} type argument")
