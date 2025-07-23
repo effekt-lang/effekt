@@ -113,10 +113,14 @@ def solveConstraints(constraints: Constraints): Solution =
   val groupedConstraints = constraints.groupBy(c => c.upper)
   val vecConstraints = groupedConstraints.map((sym, constraints) => (sym -> constraints.map(c => c.lower)))
 
+  while (true) {
+    val previousSolved = solved
   vecConstraints.foreach((sym, tas) => 
     val sol = solveConstraints(sym).map(bs => bs.toVector)
-    solved += (sym -> sol)
-  )
+      solved += (sym -> sol)
+    )
+    if (previousSolved == solved) return solved
+  }
 
   def solveConstraints(funId: FunctionId): Set[List[TypeArg.Base]] =
     val filteredConstraints = vecConstraints(funId)
@@ -127,7 +131,7 @@ def solveConstraints(constraints: Constraints): Solution =
       b.foreach({
         case TypeArg.Base(tpe) => l = productAppend(l, List(TypeArg.Base(tpe)))
         case TypeArg.Var(funId, pos) => 
-          val funSolved = solved.getOrElse(funId, solveConstraints(funId))
+          val funSolved = solved.getOrElse(funId, Set.empty)
           val posArgs = funSolved.map(v => v(pos))
           l = posArgs.zipWithIndex.map((base, ind) => listFromIndex(ind) :+ base).toList
       })
