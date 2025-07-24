@@ -441,7 +441,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
               List(NamespaceDef(id, defs, doc, span()))
           }
         case _ =>
-          if (isToplevel) toplevelDef(doc) :: toplevelDefs()
+          if (isToplevel) nonterminal { toplevelDef(doc) } :: toplevelDefs()
           else Nil
       }
 
