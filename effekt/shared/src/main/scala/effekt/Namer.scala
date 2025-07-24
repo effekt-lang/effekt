@@ -390,23 +390,24 @@ object Namer extends Phase[Parsed, NameResolved] {
     // The type itself has already been resolved, now resolve constructors
     case d @ source.DataDef(typeId, tparams, ctors, doc, span) =>
       val data = d.symbol
-      data.constructors = ctors map {
+      val constructors = ctors map {
         case c @ source.Constructor(id, tparams, ps, doc, span) =>
           val constructor = Context scoped {
             val name = Context.nameFor(id)
             val tps = tparams map resolve
             Constructor(name, data.tparams ++ tps.unspan, Nil, data, c)
           }
-          // define in namespace ...
+          // DataType::Constructor()
           Context.namespace(typeId.name) {
             Context.define(id, constructor)
           }
-          // ... and bind outside
-          Context.bind(constructor)
-
           constructor.fields = resolveFields(ps.unspan, constructor, false)
           constructor
       }
+      // export DataType::{Constructor1, ...}
+      constructors.foreach { c => Context.bind(c) }
+
+      data.constructors = constructors
 
     // The record has been resolved as part of the preresolution step
     case d @ source.RecordDef(id, tparams, fs, doc, span) =>
