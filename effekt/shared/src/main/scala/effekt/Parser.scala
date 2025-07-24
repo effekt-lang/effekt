@@ -407,6 +407,9 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   def toplevel(): Def =
     documented: doc =>
+      toplevelDef(doc)
+
+  private def toplevelDef(doc: Doc): Def =
       peek.kind match {
         case `val`       => valDef(doc)
         case `def`       => defDef(doc)
@@ -424,29 +427,25 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         case _ => fail("Expected a top-level definition")
       }
 
-  def toplevelDefs(): List[Def] =
-    documentedKind match {
-      case `namespace` =>
-        val doc = maybeDocumentation()
-        consume(`namespace`)
-        val id = idDef()
-        peek.kind match {
-          case `{` =>
-            val defs = braces(toplevelDefs())
-            val df = toplevelDefs()
-            NamespaceDef(id, defs, doc, span()) :: df
-          case _   =>
-            val defs = toplevelDefs()
-            List(NamespaceDef(id, defs, doc, span()))
-        }
-      case _ =>
-        if (isToplevel) toplevel() :: toplevelDefs()
-        else Nil
-    }
-
-  def toplevels(): List[Def] =
-    nonterminal:
-      manyWhile(toplevel(), isToplevel)
+  private def toplevelDefs(): List[Def] =
+    documented: doc =>
+      peek.kind match {
+        case `namespace` =>
+          consume(`namespace`)
+          val id = idDef()
+          peek.kind match {
+            case `{` =>
+              val defs = braces(toplevelDefs())
+              val df = toplevelDefs()
+              NamespaceDef(id, defs, doc, span()) :: df
+            case _   =>
+              val defs = toplevelDefs()
+              List(NamespaceDef(id, defs, doc, span()))
+          }
+        case _ =>
+          if (isToplevel) toplevelDef(doc) :: toplevelDefs()
+          else Nil
+      }
 
   def isDefinition: Boolean = peek.kind match {
     case `val` | `def` | `type` | `effect` | `namespace` => true
@@ -595,9 +594,6 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       }
 
   def interfaceDef(doc: Doc, keyword: TokenKind = `interface`): InterfaceDef =
-    // TODO
-    // InterfaceDef(keyword ~> idDef(), maybeTypeParams(),
-    //   `{` ~> manyWhile(documented { opDoc => `def` ~> operation(opDoc) }, documentedKind == `def`) <~ `}`, doc, span())
     InterfaceDef(keyword ~> idDef(), maybeTypeParams(),
       `{` ~> manyUntil(documented { opDoc => { `def` ~> operation(opDoc) } labelled "} or another operation declaration" }, `}`) <~ `}`, doc, span())
 
