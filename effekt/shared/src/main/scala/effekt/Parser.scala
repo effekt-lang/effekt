@@ -241,7 +241,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         case _ if isDefinition && inBraces => DefStmt(definition(), semi() ~> stmts(inBraces), span())
         case _ if isDefinition => fail("Definitions are only allowed, when enclosed in braces.")
         case `with` => withStmt(inBraces)
-        case `var`  => DefStmt(varDef(), semi() ~> stmts(inBraces), span())
+        case `var`  => DefStmt(varDef(None), semi() ~> stmts(inBraces), span())
         case `return` =>
           // trailing semicolon only allowed when in braces
           `return` ~> Return(expr() <~ (if inBraces then maybeSemi()), span())
@@ -406,19 +406,19 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   }
 
   def toplevel(): Def =
-    nonterminal:
-      documentedKind match {
-        case `val`       => valDef()
-        case `def`       => defDef()
-        case `interface` => interfaceDef()
-        case `type`      => typeOrAliasDef()
-        case `record`    => recordDef()
-        case `extern`    => externDef()
-        case `effect`    => effectOrOperationDef()
-        case `namespace` => namespaceDef()
+    documented: doc =>
+      peek.kind match {
+        case `val`       => valDef(doc)
+        case `def`       => defDef(doc)
+        case `interface` => interfaceDef(doc)
+        case `type`      => typeOrAliasDef(doc)
+        case `record`    => recordDef(doc)
+        case `extern`    => externDef(doc)
+        case `effect`    => effectOrOperationDef(doc)
+        case `namespace` => namespaceDef(doc)
         case `var`       => backtrack {
           softFailWith("Mutable variable declarations are currently not supported on the toplevel.") {
-            varDef()
+            varDef(doc)
           }
         } getOrElse fail("Mutable variable declarations are currently not supported on the toplevel.")
         case _ => fail("Expected a top-level definition")
@@ -457,13 +457,13 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   }
 
   def definition(): Def =
-    nonterminal:
-      documentedKind match {
-        case `val`       => valDef()
-        case `def`       => defDef()
-        case `type`      => typeOrAliasDef()
-        case `effect`    => effectDef()
-        case `namespace` => namespaceDef()
+    documented: doc =>
+      peek.kind match {
+        case `val`       => valDef(doc)
+        case `def`       => defDef(doc)
+        case `type`      => typeOrAliasDef(doc)
+        case `effect`    => effectDef(doc)
+        case `namespace` => namespaceDef(doc)
         // TODO
         //     (`extern` | `effect` | `interface` | `type` | `record`).into { (kw: String) =>
         //        failure(s"Only supported on the toplevel: ${kw} declaration.")
@@ -477,19 +477,15 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   def functionBody: Stmt = stmts() // TODO error context: "the body of a function definition"
 
-  def valDef(): Def =
-    nonterminal:
-      documented { doc =>
-        ValDef(`val` ~> idDef(), maybeValueTypeAnnotation(), `=` ~> stmt(), doc, span())
-      }
+  def valDef(doc: Doc): Def =
+    ValDef(`val` ~> idDef(), maybeValueTypeAnnotation(), `=` ~> stmt(), doc, span())
 
   /**
    * In statement position, val-definitions can also be destructing:
    *   i.e. val (l, r) = point(); ...
    */
   def valStmt(inBraces: Boolean): Stmt =
-    nonterminal:
-      val doc = maybeDocumentation()
+    documented: doc =>
       val startPos = pos()
       val startMarker = nonterminal { new {} }
       def simpleLhs() = backtrack {
@@ -504,13 +500,13 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
           DefStmt(valDef, { semi(); stmts(inBraces) }, span())
       }
       def matchLhs() =
-        maybeDocumentation() ~ (`val` ~> matchPattern()) ~ manyWhile(`and` ~> matchGuard(), `and`) <~ `=` match {
-          case doc ~ AnyPattern(id, _) ~ Nil =>
+        (`val` ~> matchPattern()) ~ manyWhile(`and` ~> matchGuard(), `and`) <~ `=` match {
+          case AnyPattern(id, _) ~ Nil =>
             val binding = stmt()
             val endPos = pos()
             val valDef = ValDef(id, None, binding, doc, Span(source, startPos, endPos)).withRangeOf(startMarker, binding)
             DefStmt(valDef, { semi(); stmts(inBraces) }, span())
-          case doc ~ p ~ guards =>
+          case p ~ guards =>
             // matches do not support doc comments, so we ignore `doc`
             val sc = expr()
             val endPos = pos()
@@ -524,51 +520,41 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       simpleLhs() getOrElse matchLhs()
 
 
-  def varDef(): Def =
-    nonterminal:
-      maybeDocumentation() ~ (`var` ~> idDef()) ~ maybeValueTypeAnnotation() ~ when(`in`) { Some(idRef()) } { None } ~ (`=` ~> stmt()) match {
-        case doc ~ id ~ tpe ~ Some(reg) ~ expr => RegDef(id, tpe, reg, expr, doc, span())
-        case doc ~ id ~ tpe ~ None ~ expr      => VarDef(id, tpe, expr, doc, span())
-      }
+  def varDef(doc: Doc): Def =
+    (`var` ~> idDef()) ~ maybeValueTypeAnnotation() ~ when(`in`) { Some(idRef()) } { None } ~ (`=` ~> stmt()) match {
+      case id ~ tpe ~ Some(reg) ~ expr => RegDef(id, tpe, reg, expr, doc, span())
+      case id ~ tpe ~ None ~ expr      => VarDef(id, tpe, expr, doc, span())
+    }
 
-  def defDef(): Def =
-    nonterminal:
-      val doc = maybeDocumentation()
-      val id = consume(`def`) ~> idDef()
+  def defDef(doc: Doc): Def =
+    val id = consume(`def`) ~> idDef()
 
-      def isBlockDef: Boolean = peek(`:`) || peek(`=`)
+    def isBlockDef: Boolean = peek(`:`) || peek(`=`)
 
-      if isBlockDef then
-        // (: <VALUETYPE>)? `=` <EXPR>
-        DefDef(id, maybeBlockTypeAnnotation(), `=` ~> expr(), doc, span())
-      else
-        // [...](<PARAM>...) {...} `=` <STMT>>
-        val (tps, vps, bps) = params()
-        FunDef(id, tps, vps, bps, maybeReturnAnnotation(), `=` ~> stmts(), doc, span())
+    if isBlockDef then
+      // (: <VALUETYPE>)? `=` <EXPR>
+      DefDef(id, maybeBlockTypeAnnotation(), `=` ~> expr(), doc, span())
+    else
+      // [...](<PARAM>...) {...} `=` <STMT>>
+      val (tps, vps, bps) = params()
+      FunDef(id, tps, vps, bps, maybeReturnAnnotation(), `=` ~> stmts(), doc, span())
 
 
   // right now: data type definitions (should be renamed to `data`) and type aliases
-  def typeOrAliasDef(): Def =
-    nonterminal:
-      val doc = maybeDocumentation()
-      val id ~ tps = (`type` ~> idDef()) ~ maybeTypeParams()
+  def typeOrAliasDef(doc: Doc): Def =
+    val id ~ tps = (`type` ~> idDef()) ~ maybeTypeParams()
 
-      peek.kind match {
-        case `=` => `=` ~> TypeDef(id, tps.unspan, valueType(), doc, span())
-        case _ => DataDef(id, tps, braces { manyUntil({ constructor() <~ semi() }, `}`) }, doc, span())
-      }
+    peek.kind match {
+      case `=` => `=` ~> TypeDef(id, tps.unspan, valueType(), doc, span())
+      case _ => DataDef(id, tps, braces { manyUntil({ constructor() <~ semi() }, `}`) }, doc, span())
+    }
 
-  def recordDef(): Def =
-    nonterminal:
-      documented { doc =>
-        RecordDef(`record` ~> idDef(), maybeTypeParams(), valueParams(), doc, span())
-      }
+  def recordDef(doc: Doc): Def =
+    RecordDef(`record` ~> idDef(), maybeTypeParams(), valueParams(), doc, span())
 
   def constructor(): Constructor =
-    nonterminal:
-      documented { doc =>
-        Constructor(idDef(), maybeTypeParams(), valueParams(), doc, span()) labelled "constructor"
-      }
+    documented: doc =>
+      Constructor(idDef(), maybeTypeParams(), valueParams(), doc, span()) labelled "constructor"
 
   // On the top-level both
   //    effect Foo = {}
@@ -576,7 +562,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   //    effect Foo(): Int
   // are allowed. Here we simply backtrack, since effect definitions shouldn't be
   // very long and cannot be nested.
-  def effectOrOperationDef(): Def = {
+  def effectOrOperationDef(doc: Doc): Def = {
     // We used to use `effect Foo { def a(); def b(); ... }` for multi-operation interfaces,
     // but now we use `interface Foo { ... }` instead.
     // If we can't parse `effectDef` or `operationDef`, we should try parsing an interface with the wrong keyword
@@ -584,29 +570,23 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     def interfaceDefUsingEffect(): Maybe[InterfaceDef] =
       backtrack(restoreSoftFails = false):
         softFailWith("Unexpected 'effect', did you mean to declare an interface of multiple operations using the 'interface' keyword?"):
-          interfaceDef(`effect`)
+          interfaceDef(doc, `effect`)
 
-    nonterminal:
-      backtrack { effectDef() }
-        .orElse { interfaceDefUsingEffect() }
-        .getOrElse { operationDef() } // The `operationDef` should be last as to not cause spurious errors later.
+    backtrack { effectDef(doc) }
+      .orElse { interfaceDefUsingEffect() }
+      .getOrElse { operationDef(doc) } // The `operationDef` should be last as to not cause spurious errors later.
   }
 
-  def effectDef(): Def =
-    nonterminal:
-      // effect <NAME> = <EFFECTS>
-      documented { doc =>
-        EffectDef(`effect` ~> idDef(), maybeTypeParams().unspan, `=` ~> effects(), doc, span())
-      }
+  def effectDef(doc: Doc): Def =
+    // effect <NAME> = <EFFECTS>
+    EffectDef(`effect` ~> idDef(), maybeTypeParams().unspan, `=` ~> effects(), doc, span())
 
   // effect <NAME>[...](...): ...
-  def operationDef(): Def =
-    nonterminal:
-      val doc = maybeDocumentation()
-      `effect` ~> operation(doc) match {
-        case op @ Operation(id, tps, vps, bps, ret, opDoc, opSpan) =>
-          InterfaceDef(IdDef(id.name, id.span) withPositionOf op, tps, List(Operation(id, Many.empty(tps.span.synthesized), vps, bps, ret, opDoc, opSpan) withPositionOf op), doc, span())
-      }
+  def operationDef(doc: Doc): Def =
+    `effect` ~> operation(doc) match {
+      case op @ Operation(id, tps, vps, bps, ret, opDoc, opSpan) =>
+        InterfaceDef(IdDef(id.name, id.span) withPositionOf op, tps, List(Operation(id, Many.empty(tps.span.synthesized), vps, bps, ret, opDoc, opSpan) withPositionOf op), doc, span())
+    }
 
   def operation(doc: Doc): Operation =
     nonterminal:
@@ -720,7 +700,8 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       Template(first :: strs, exprs)
 
   def documented[T](p: Doc => T): T =
-    p(maybeDocumentation())
+    nonterminal:
+      p(maybeDocumentation())
 
   def maybeDocumentation(): Doc =
     nonterminal:

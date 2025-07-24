@@ -142,7 +142,7 @@ class ParserTests extends munit.FunSuite {
     parse(input, _.program())
 
   def parseExternDef(input: String, positions: Positions = new Positions())(using munit.Location): Def =
-    parse(input, _.externDef())
+    parse(input, _.externDef(None))
 
   // Custom asserts
   //
