@@ -42,7 +42,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
   override def expr(using Context) = {
 
     // an effect call -- translate to method call on the inferred capability
-    case c @ Do(effect, id, targs, vargs, bargs, span) =>
+    case c @ Do(id, targs, vargs, bargs, span) =>
       val transformedValueArgs = vargs.map(rewrite)
       val transformedBlockArgs = bargs.map(rewrite)
 
@@ -130,7 +130,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       source.BlockLiteral(tps, vps, bps ++ capParams, rewrite(body), span)
   }
 
-  override def rewrite(body: ExternBody)(using context.Context): ExternBody = 
+  override def rewrite(body: ExternBody)(using context.Context): ExternBody =
     body match {
       case b @ source.ExternBody.StringExternBody(ff, body, span) =>
         val rewrittenTemplate =
@@ -139,7 +139,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
           )
         b.copy(template = rewrittenTemplate)
       case b @ source.ExternBody.EffektExternBody(ff, body, span) =>
-        val rewrittenBody = rewrite(body) 
+        val rewrittenBody = rewrite(body)
         b.copy(body = rewrittenBody)
       case u: source.ExternBody.Unsupported => u
     }

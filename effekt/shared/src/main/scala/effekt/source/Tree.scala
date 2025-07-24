@@ -499,11 +499,8 @@ enum Term extends Tree {
 
   /**
    * A call to an effect operation, i.e., `do raise()`.
-   *
-   * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
-   * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
    */
-  case Do(effect: Option[TypeRef], id: IdRef, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span) extends Term, Reference
+  case Do(id: IdRef, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span) extends Term, Reference
 
   /**
    * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
