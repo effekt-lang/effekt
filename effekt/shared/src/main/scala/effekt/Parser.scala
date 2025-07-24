@@ -351,30 +351,43 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   /**
    * Main entry point
    */
-   def program(): ModuleDecl =
-     nonterminal:
-       // skip spaces at the start
-       spaces()
-       shebang()
-       spaces()
-       val (name, doc) = documentedKind match {
-         case `module` =>
-           val doc = maybeDocumentation()
-           consume(`module`)
-           (moduleName(), doc)
-         case _ => (defaultModulePath, None)
-       }
+  def program(): ModuleDecl =
+    nonterminal:
+      // skip spaces at the start
+      spaces()
+      shebang()
+      spaces()
 
-       val res = ModuleDecl(name, manyWhile(includeDecl(), `import`), toplevelDefs(), doc, span())
+      // potential documentation for the file / module
+      documented: doc =>
 
-       if (!peek(`EOF`)) {
-         // NOTE: This means we expected EOF, but there's still some _stuff_ left over.
+        val (name, moduleDoc, unusedDoc) = peek.kind match {
+          case `module` =>
+            consume(`module`)
+            (moduleName(), doc, None)
+          case `import` if doc.isDefined =>
+            softFail("Imports cannot be documented", span().from, span().to)
+            (defaultModulePath, None, None)
+          case _ =>
+            (defaultModulePath, None, doc)
+        }
 
-         softFailWith("Expected top-level definition") {
-           manyUntil({ skip() }, `EOF`)
-         }
-       }
-       res
+        val imports = manyWhile(includeDecl(), `import`)
+
+        val definitions = if (unusedDoc.isDefined) {
+          toplevelDefs(unusedDoc)
+        } else {
+          toplevelDefs()
+        }
+
+        if (!peek(`EOF`)) {
+          // NOTE: This means we expected EOF, but there's still some _stuff_ left over.
+          softFailWith("Expected top-level definition") {
+            manyUntil({ skip() }, `EOF`)
+          }
+        }
+
+        ModuleDecl(name, imports, definitions, moduleDoc, span())
 
   @tailrec
   private def shebang(): Unit =
@@ -389,7 +402,6 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     val baseWithExt = source.name.split("[\\\\/]").last
     baseWithExt.split('.').head
 
-
   def includeDecl(): Include =
     nonterminal:
       Include(`import` ~> moduleName(), span())
@@ -397,7 +409,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   def moduleName(): String =
     some(ident, `/`).mkString("/") labelled "module name"
 
-  def isToplevel: Boolean = documentedKind match {
+  def isToplevel: Boolean = peek.kind match {
     case `val` | `fun` | `def` | `type` | `effect` | `namespace` |
          `extern` | `interface` | `type` | `record` | `var` => true
     case _ => false
@@ -427,6 +439,10 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   private def toplevelDefs(): List[Def] =
     documented: doc =>
+      toplevelDefs(doc)
+
+  private def toplevelDefs(doc: Doc): List[Def] =
+    nonterminal:
       peek.kind match {
         case `namespace` =>
           consume(`namespace`)
@@ -689,29 +705,21 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     nonterminal:
       p(maybeDocumentation())
 
-  def maybeDocumentation(): Doc =
-    nonterminal:
-      peek.kind match
-        case DocComment(_) =>
-          val docComments = manyWhile({
-            val msg = peek.kind match {
-              case DocComment(message) => message
-              case _ => ""
-            }
-            consume(peek.kind)
-            msg
-          }, peek.kind.isInstanceOf[DocComment])
+  private def maybeDocumentation(): Doc =
+    peek.kind match
+      case DocComment(_) =>
+        val docComments = manyWhile({
+          val msg = peek.kind match {
+            case DocComment(message) => message
+            case _ => ""
+          }
+          consume(peek.kind)
+          msg
+        }, peek.kind.isInstanceOf[DocComment])
 
-          if (docComments.isEmpty) None
-          else Some(docComments.mkString("\\n"))
-        case _ => None
-
-  def documentedKind(position: Int): TokenKind = peek(position).kind match {
-    case DocComment(_) => documentedKind(position + 1)
-    case k => k
-  }
-
-  def documentedKind: TokenKind = documentedKind(0)
+        if (docComments.isEmpty) None
+        else Some(docComments.mkString("\\n"))
+      case _ => None
 
   def maybeExternCapture(): CaptureSet =
     nonterminal:
