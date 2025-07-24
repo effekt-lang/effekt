@@ -357,7 +357,14 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
        spaces()
        shebang()
        spaces()
-       val (name, doc) = moduleDecl()
+       val (name, doc) = documentedKind match {
+         case `module` =>
+           val doc = maybeDocumentation()
+           consume(`module`)
+           (moduleName(), doc)
+         case _ => (defaultModulePath, None)
+       }
+
        val res = ModuleDecl(name, manyWhile(includeDecl(), `import`), toplevelDefs(), doc, span())
 
        if (!peek(`EOF`)) {
@@ -374,15 +381,6 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     peek.kind match {
       case Shebang(_) => consume(peek.kind); shebang()
       case _ => ()
-    }
-
-  def moduleDecl(): Tuple2[String, Doc] =
-    documentedKind match {
-      case `module` =>
-        val doc = maybeDocumentation()
-        consume(`module`)
-        (moduleName(), doc)
-      case _ => (defaultModulePath, None)
     }
 
   // we are purposefully not using File here since the parser needs to work both
