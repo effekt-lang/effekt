@@ -671,10 +671,11 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   def externFun(doc: Doc): Def =
     nonterminal:
-      ((`extern` ~> maybeExternCapture()) ~ (`def` ~> idDef()) ~ params() ~ (returnAnnotation() <~ `=`)) match {
-        case capt ~ id ~ (tps, vps, bps) ~ ret =>
+      ((`extern` ~> pos()) ~ maybeExternCapture() ~ (`def` ~> idDef()) ~ params() ~ (returnAnnotation() <~ `=`)) match {
+        case posn ~ capt ~ id ~ (tps, vps, bps) ~ ret =>
           val bodies = manyWhile(externBody(), isExternBodyStart)
-          ExternDef(capt, id, tps, vps, bps, ret, bodies, doc, span())
+          val capture = capt.getOrElse(defaultCapture(Span(source, posn, posn, Synthesized)))
+          ExternDef(capture, id, tps, vps, bps, ret, bodies, doc, span())
       }
 
   def externBody(): ExternBody =
@@ -721,11 +722,41 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         else Some(docComments.mkString("\\n"))
       case _ => None
 
-  def maybeExternCapture(): CaptureSet =
+  //  def modifiers(): List[Modifier] =
+  //    manyWhile(modifier(), isModifier)
+  //
+  //  def modifier(): Modifier =
+  //    expect("modifier") {
+  //      case `private` => Modifier.Private(span())
+  //    }
+  //
+  //  def isModifier = peek(`private`)
+
+  // /// some documentation
+  // private
+  // extern
+  // {io}
+  def info(): Info =
+    nonterminal {
+      val doc = maybeDocumentation()
+      val isPrivate = nonterminal {
+        when(`private`) { Maybe.Some((), span()) } { Maybe.None(span()) }
+      }
+      val isExtern = nonterminal {
+        when(`extern`) { Maybe.Some((), span()) } { Maybe.None(span()) }
+      }
+      val externCapture = maybeExternCapture()
+      Info(doc, isPrivate, isExtern, externCapture)
+    }
+
+  def maybeExternCapture(): Option[CaptureSet] =
     nonterminal:
       val posn = pos()
-      if peek(`{`) || peek(`pure`) || isVariable then externCapture()
-      else CaptureSet(List(IdRef(List("effekt"), "io", Span(source, posn, posn, Synthesized))), span())
+      if peek(`{`) || peek(`pure`) || isVariable then Some(externCapture())
+      else None
+
+  def defaultCapture(span: Span): CaptureSet =
+    CaptureSet(List(IdRef(List("effekt"), "io", span)), span)
 
   def externCapture(): CaptureSet =
     nonterminal:

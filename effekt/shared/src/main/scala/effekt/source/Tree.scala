@@ -113,6 +113,29 @@ case class Comment() extends Tree {
 type Doc = Option[String]
 
 /**
+ * The meta-data of a definition / declaration, consisting of everything up
+ * until, but not including the introducing keyword (such as `def`, or `interface`).
+ * For example:
+ *
+ *     /// documentation
+ *     private
+ *     extern
+ *     pure
+ *     def
+ */
+case class Info(
+  doc: Doc,
+  // we use Maybe[Unit] instead of Boolean to have position info for validation errors
+  isPrivate: Maybe[Unit],
+  isExtern: Maybe[Unit],
+  // TODO this should be moved from the Info to extern functions, once we changed the syntax
+  externCapture: Option[CaptureSet]
+)
+object Info {
+  def empty(span: Span) = Info(None, Maybe.None(span), Maybe.None(span), None)
+}
+
+/**
  * The origin of the span
  *
  * Possible values:
@@ -212,7 +235,6 @@ object ExternBody {
     override def featureFlag: FeatureFlag = FeatureFlag.Default(Span.missing)
   }
 }
-
 
 /**
  * We distinguish between identifiers corresponding to
