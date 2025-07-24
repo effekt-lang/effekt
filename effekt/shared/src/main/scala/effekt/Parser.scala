@@ -594,53 +594,45 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         case id ~ (tps, vps, bps) ~ ret => Operation(id, tps, vps.unspan, bps.unspan, ret, doc, span())
       }
 
-  def interfaceDef(keyword: TokenKind = `interface`): InterfaceDef =
-    nonterminal:
-      documented { doc =>
-        // TODO
-        // InterfaceDef(keyword ~> idDef(), maybeTypeParams(),
-        //   `{` ~> manyWhile(documented { opDoc => `def` ~> operation(opDoc) }, documentedKind == `def`) <~ `}`, doc, span())
-        InterfaceDef(keyword ~> idDef(), maybeTypeParams(),
-          `{` ~> manyUntil(documented { opDoc => { `def` ~> operation(opDoc) } labelled "} or another operation declaration" }, `}`) <~ `}`, doc, span())
-      }
+  def interfaceDef(doc: Doc, keyword: TokenKind = `interface`): InterfaceDef =
+    // TODO
+    // InterfaceDef(keyword ~> idDef(), maybeTypeParams(),
+    //   `{` ~> manyWhile(documented { opDoc => `def` ~> operation(opDoc) }, documentedKind == `def`) <~ `}`, doc, span())
+    InterfaceDef(keyword ~> idDef(), maybeTypeParams(),
+      `{` ~> manyUntil(documented { opDoc => { `def` ~> operation(opDoc) } labelled "} or another operation declaration" }, `}`) <~ `}`, doc, span())
 
-  def namespaceDef(): Def =
-    nonterminal:
-      val doc = maybeDocumentation()
-      consume(`namespace`)
-      val id = idDef()
-      // namespace foo { <DEFINITION>* }
-      if peek(`{`) then NamespaceDef(id, braces { definitions() }, doc, span())
-      // namespace foo
-      // <DEFINITION>*
-      else { semi(); NamespaceDef(id, definitions(), doc, span()) }
+  def namespaceDef(doc: Doc): Def =
+    consume(`namespace`)
+    val id = idDef()
+    // namespace foo { <DEFINITION>* }
+    if peek(`{`) then NamespaceDef(id, braces { definitions() }, doc, span())
+    // namespace foo
+    // <DEFINITION>*
+    else { semi(); NamespaceDef(id, definitions(), doc, span()) }
 
 
-  def externDef(): Def =
-    nonterminal:
-      val doc = maybeDocumentation()
-      { peek(`extern`); peek(1).kind } match {
-        case `type`      => externType(doc)
-        case `interface` => externInterface(doc)
-        case `resource`  => externResource(doc)
-        case `include`   => externInclude(doc)
-        // extern """..."""
-        case s: Str      => externString(doc)
-        case Ident(_) | `pure` =>
-          // extern IDENT def ...
-          if (peek(2, `def`)) externFun(doc)
-          // extern IDENT """..."""
-          else externString(doc)
-        // extern {...} def ...
-        case _ => externFun(doc)
-      }
+  def externDef(doc: Doc): Def =
+    { peek(`extern`); peek(1).kind } match {
+      case `type`      => externType(doc)
+      case `interface` => externInterface(doc)
+      case `resource`  => externResource(doc)
+      case `include`   => externInclude(doc)
+      // extern """..."""
+      case s: Str      => externString(doc)
+      case Ident(_) | `pure` =>
+        // extern IDENT def ...
+        if (peek(2, `def`)) externFun(doc)
+        // extern IDENT """..."""
+        else externString(doc)
+      // extern {...} def ...
+      case _ => externFun(doc)
+    }
 
-  def featureFlag(): FeatureFlag = {
+  def featureFlag(): FeatureFlag =
     expect("feature flag identifier") {
       case Ident("default") => FeatureFlag.Default(span())
       case Ident(flag)      => FeatureFlag.NamedFeatureFlag(flag, span())
     }
-  }
 
   def maybeFeatureFlag(): FeatureFlag =
     nonterminal:
