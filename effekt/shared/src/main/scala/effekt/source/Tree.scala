@@ -130,7 +130,11 @@ case class Info(
   isExtern: Maybe[Unit],
   // TODO this should be moved from the Info to extern functions, once we changed the syntax
   externCapture: Option[CaptureSet]
-)
+) {
+  def isEmpty = doc.isEmpty && isPrivate.isEmpty && isExtern.isEmpty && externCapture.isEmpty
+  def nonEmpty = !isEmpty
+}
+
 object Info {
   def empty(span: Span) = Info(None, Maybe.None(span), Maybe.None(span), None)
 }
@@ -347,7 +351,7 @@ case class Maybe[+T](unspan: Option[T], span: Span) {
       case None => alternative
     }
 
-  export unspan.{foreach, get, getOrElse, isEmpty}
+  export unspan.{foreach, get, getOrElse, isEmpty, nonEmpty}
 }
 
 object Maybe {
@@ -394,40 +398,40 @@ export SpannedOps._
  */
 enum Def extends Definition {
 
-  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, doc: Doc, span: Span)
-  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, doc: Doc, span: Span)
-  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, doc: Doc, span: Span)
-  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, doc: Doc, span: Span)
-  case DefDef(id: IdDef, annot: Option[BlockType], block: Term, doc: Doc, span: Span)
+  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, info: Info, span: Span)
+  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, _doc: Doc, span: Span)
+  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, _doc: Doc, span: Span)
+  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, _doc: Doc, span: Span)
+  case DefDef(id: IdDef, annot: Option[BlockType], block: Term, _doc: Doc, span: Span)
 
-  case NamespaceDef(id: IdDef, definitions: List[Def], doc: Doc, span: Span)
+  case NamespaceDef(id: IdDef, definitions: List[Def], _doc: Doc, span: Span)
 
-  case InterfaceDef(id: IdDef, tparams: Many[Id], ops: List[Operation], doc: Doc, span: Span)
-  case DataDef(id: IdDef, tparams: Many[Id], ctors: List[Constructor], doc: Doc, span: Span)
-  case RecordDef(id: IdDef, tparams: Many[Id], fields: Many[ValueParam], doc: Doc, span: Span)
+  case InterfaceDef(id: IdDef, tparams: Many[Id], ops: List[Operation], _doc: Doc, span: Span)
+  case DataDef(id: IdDef, tparams: Many[Id], ctors: List[Constructor], _doc: Doc, span: Span)
+  case RecordDef(id: IdDef, tparams: Many[Id], fields: Many[ValueParam], _doc: Doc, span: Span)
 
   /**
    * Type aliases like `type Matrix[T] = List[List[T]]`
    */
-  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType, doc: Doc, span: Span)
+  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType, _doc: Doc, span: Span)
 
   /**
    * Effect aliases like `effect Set = { Get, Put }`
    */
-  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects, doc: Doc, span: Span)
+  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects, _doc: Doc, span: Span)
 
   /**
    * Only valid on the toplevel!
    */
-  case ExternType(id: IdDef, tparams: Many[Id], doc: Doc, span: Span)
+  case ExternType(id: IdDef, tparams: Many[Id], _doc: Doc, span: Span)
 
   case ExternDef(capture: CaptureSet, id: IdDef,
                  tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Effectful,
-                 bodies: List[ExternBody], doc: Doc, span: Span) extends Def
+                 bodies: List[ExternBody], info: Info, span: Span) extends Def
 
-  case ExternResource(id: IdDef, tpe: BlockType, doc: Doc, span: Span)
+  case ExternResource(id: IdDef, tpe: BlockType, _doc: Doc, span: Span)
 
-  case ExternInterface(id: IdDef, tparams: List[Id], doc: Doc, span: Span)
+  case ExternInterface(id: IdDef, tparams: List[Id], _doc: Doc, span: Span)
 
   /**
    * Namer resolves the path and loads the contents in field [[contents]]
@@ -435,9 +439,9 @@ enum Def extends Definition {
    * @note Storing content and id as user-visible fields is a workaround for the limitation that Enum's cannot
    *   have case specific refinements.
    */
-  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef, doc: Doc, span: Span)
+  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef, _doc: Doc, span: Span)
 
-  def doc: Doc
+  def doc: Doc = ???
 }
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude
