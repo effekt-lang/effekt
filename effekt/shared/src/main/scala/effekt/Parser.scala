@@ -629,9 +629,11 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       case `interface` => externInterface(info)
       case `resource`  => externResource(info)
       case `include`   => externInclude(info)
+      case `def`       => externFun(info)
       // extern """..."""
       case s: Str      => externString(info)
-      case `def`       => externFun(info)
+      // extern js """..."""
+      case t if info.externCapture.nonEmpty => fail(s"Expected string literal but got ${explain(t)}")
       case _           => fail("Expected an extern definition")
     }
 
