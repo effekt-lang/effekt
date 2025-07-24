@@ -48,14 +48,14 @@ class LSPTests extends FunSuite {
   def withClientAndServer(testBlock: (MockLanguageClient, Server) => Unit): Unit = {
     withClientAndServer(true)(testBlock)
   }
-  
+
   /** Normalize the output of the IR by replacing the generated identifiers and stripping all whitespace
    */
   def normalizeIRString(ir: String): String = {
     ir.replaceAll("_\\d+", "_whatever")
       .replaceAll("\\s+", "")
   }
-  
+
   def assertIREquals(ir: String, expected: String): Unit = {
     val normalizedIR = normalizeIRString(ir)
     val normalizedExpected = normalizeIRString(expected)
@@ -1222,7 +1222,18 @@ class LSPTests extends FunSuite {
              |        ),
              |        Span(StringSource(def main() = <>, file://test.effekt), 13, 15, Real())
              |      ),
-             |      None(),
+             |      Info(
+             |        None(),
+             |        Maybe(
+             |          None(),
+             |          Span(StringSource(def main() = <>, file://test.effekt), 0, 0, Real())
+             |        ),
+             |        Maybe(
+             |          None(),
+             |          Span(StringSource(def main() = <>, file://test.effekt), 0, 0, Real())
+             |        ),
+             |        None()
+             |      ),
              |      Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
              |    )
              |  ),
@@ -1410,7 +1421,7 @@ class LSPTests extends FunSuite {
       assertEquals(receivedHoles.head.holes.length, 1)
     }
   }
-  
+
   test("Server publishes hole id for nested defs") {
     withClientAndServer { (client, server) =>
       val source =

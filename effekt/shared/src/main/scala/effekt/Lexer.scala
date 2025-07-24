@@ -130,11 +130,7 @@ enum TokenKind {
   case `fun`
   case `match`
   case `def`
-  case `module`
-  case `import`
-  case `export`
   case `extern`
-  case `include`
   case `record`
   case `box`
   case `unbox`
@@ -146,6 +142,12 @@ enum TokenKind {
   case `is`
   case `namespace`
   case `pure`
+
+  case `module`
+  case `import`
+  case `export`
+  case `include`
+  case `private`
 }
 
 object TokenKind {
@@ -178,7 +180,7 @@ object TokenKind {
     `let`, `true`, `false`, `val`, `var`, `if`, `else`, `while`, `type`, `effect`, `interface`,
     `try`, `with`, `case`, `do`, `fun`, `match`, `def`, `module`, `import`, `export`, `extern`,
     `include`, `record`, `box`, `unbox`, `return`, `region`, `resource`, `new`, `and`, `is`,
-    `namespace`, `pure`
+    `namespace`, `pure`, `private`
   )
 
   val keywordMap: immutable.HashMap[String, TokenKind] =
