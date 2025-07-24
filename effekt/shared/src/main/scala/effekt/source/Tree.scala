@@ -399,39 +399,39 @@ export SpannedOps._
 enum Def extends Definition {
 
   case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, info: Info, span: Span)
-  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, _doc: Doc, span: Span)
-  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, _doc: Doc, span: Span)
-  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, _doc: Doc, span: Span)
-  case DefDef(id: IdDef, annot: Option[BlockType], block: Term, _doc: Doc, span: Span)
+  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, info: Info, span: Span)
+  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, info: Info, span: Span)
+  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, info: Info, span: Span)
+  case DefDef(id: IdDef, annot: Option[BlockType], block: Term, info: Info, span: Span)
 
-  case NamespaceDef(id: IdDef, definitions: List[Def], _doc: Doc, span: Span)
+  case NamespaceDef(id: IdDef, definitions: List[Def], info: Info, span: Span)
 
-  case InterfaceDef(id: IdDef, tparams: Many[Id], ops: List[Operation], _doc: Doc, span: Span)
-  case DataDef(id: IdDef, tparams: Many[Id], ctors: List[Constructor], _doc: Doc, span: Span)
-  case RecordDef(id: IdDef, tparams: Many[Id], fields: Many[ValueParam], _doc: Doc, span: Span)
+  case InterfaceDef(id: IdDef, tparams: Many[Id], ops: List[Operation], info: Info, span: Span)
+  case DataDef(id: IdDef, tparams: Many[Id], ctors: List[Constructor], info: Info, span: Span)
+  case RecordDef(id: IdDef, tparams: Many[Id], fields: Many[ValueParam], info: Info, span: Span)
 
   /**
    * Type aliases like `type Matrix[T] = List[List[T]]`
    */
-  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType, _doc: Doc, span: Span)
+  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType, info: Info, span: Span)
 
   /**
    * Effect aliases like `effect Set = { Get, Put }`
    */
-  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects, _doc: Doc, span: Span)
+  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects, info: Info, span: Span)
 
   /**
    * Only valid on the toplevel!
    */
-  case ExternType(id: IdDef, tparams: Many[Id], _doc: Doc, span: Span)
+  case ExternType(id: IdDef, tparams: Many[Id], info: Info, span: Span)
 
   case ExternDef(capture: CaptureSet, id: IdDef,
                  tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Effectful,
                  bodies: List[ExternBody], info: Info, span: Span) extends Def
 
-  case ExternResource(id: IdDef, tpe: BlockType, _doc: Doc, span: Span)
+  case ExternResource(id: IdDef, tpe: BlockType, info: Info, span: Span)
 
-  case ExternInterface(id: IdDef, tparams: List[Id], _doc: Doc, span: Span)
+  case ExternInterface(id: IdDef, tparams: List[Id], info: Info, span: Span)
 
   /**
    * Namer resolves the path and loads the contents in field [[contents]]
@@ -439,9 +439,10 @@ enum Def extends Definition {
    * @note Storing content and id as user-visible fields is a workaround for the limitation that Enum's cannot
    *   have case specific refinements.
    */
-  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef, _doc: Doc, span: Span)
+  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef, info: Info, span: Span)
 
-  def doc: Doc = ???
+  def info: Info
+  def doc: Doc = info.doc
 }
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude

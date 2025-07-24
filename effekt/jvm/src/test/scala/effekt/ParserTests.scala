@@ -145,7 +145,7 @@ class ParserTests extends munit.FunSuite {
     parse(input, _.externDef())
 
   def parseInfo(input: String, positions: Positions = new Positions())(using munit.Location): Info =
-    parse(input, _.info())
+    parse(input, _.info(parseCaptures = true))
 
   // Custom asserts
   //
@@ -1000,7 +1000,8 @@ class ParserTests extends munit.FunSuite {
           IdDef("foo", Span(source, pos(0), pos(1))),
           None,
           Var(IdRef(Nil, "f", Span(source, pos(2), pos(3))), Span(source, pos(2), pos(3))),
-          None, Span(source, 0, pos.last)))
+          Info.empty(Span(source, 0, 0)),
+          Span(source, 0, pos.last)))
     }
 
     parseDefinition(
@@ -1080,6 +1081,17 @@ class ParserTests extends munit.FunSuite {
     }
     assertEquals(funDef.bparams.span, Span(source, pos(0), pos(1)))
     assertEquals(funDef.ret.span, Span(source, pos(1), pos(1)))
+  }
+
+  test("Function definition with comment") {
+    val (source, pos) =
+      raw"""/// Calculate the answer to the ultimate question of life, the universe, and everything
+           |def calculate() = 42
+           |""".sourceAndPositions
+
+    val definition = parseDefinition(source.content)
+
+    assertEquals(definition.doc, Some(" Calculate the answer to the ultimate question of life, the universe, and everything"))
   }
 
   test("Function definition with whitespaces instead of return type") {

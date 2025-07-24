@@ -27,7 +27,6 @@ object Parser extends Phase[Source, Parsed] {
   def run(source: Source)(implicit C: Context): Option[PhaseResult.Parsed] = source match {
     case VirtualSource(decl, _) => Some(decl)
     case source =>
-      //println(s"parsing ${source.name}")
       Context.timed(phaseName, source.name) {
         val tokens = effekt.lexer.Lexer.lex(source)
         val parser = new Parser(C.positions, tokens, source)
@@ -359,7 +358,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       spaces()
 
       // potential documentation for the file / module
-      documented { info =>
+      documented(parseCaptures = true) { info =>
         val (name, moduleInfo, unusedInfo) = peek.kind match {
           case `module` =>
             consume(`module`)
@@ -385,7 +384,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
           }
         }
 
-        ModuleDecl(name, imports, definitions, moduleInfo.onlyDoc(), span())
+        ModuleDecl(name, imports, definitions, moduleInfo.onlyDoc().doc, span())
       }
 
   @tailrec
@@ -409,23 +408,22 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     some(ident, `/`).mkString("/") labelled "module name"
 
   def isToplevel: Boolean = peek.kind match {
-    case `val` | `fun` | `def` | `type` | `effect` | `namespace` |
-         `extern` | `interface` | `type` | `record` | `var` => true
+    case `val` | `fun` | `def` | `type` | `effect` | `namespace` | `interface` | `type` | `record` | `var` | `include` | `extern` => true
     case _ => false
   }
 
   def toplevel(): Def =
-    documented: doc =>
+    documented(parseCaptures = true): doc =>
       toplevelDef(doc)
 
   private def toplevelDef(info: Info): Def =
       peek.kind match {
+        case _ if info.isExtern.nonEmpty => externDef(info)
         case `val`       => valDef(info)
         case `def`       => defDef(info)
         case `interface` => interfaceDef(info)
         case `type`      => typeOrAliasDef(info)
         case `record`    => recordDef(info)
-        case `extern`    => externDef(info)
         case `effect`    => effectOrOperationDef(info)
         case `namespace` => namespaceDef(info)
         case `var`       => backtrack {
@@ -437,7 +435,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       }
 
   private def toplevelDefs(): List[Def] =
-    documented: info =>
+    documented(parseCaptures = true): info =>
       toplevelDefs(info)
 
   private def toplevelDefs(info: Info): List[Def] =
@@ -450,36 +448,32 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
             case `{` =>
               val defs = braces(toplevelDefs())
               val df = toplevelDefs()
-              NamespaceDef(id, defs, info.onlyDoc(), span()) :: df
+              NamespaceDef(id, defs, info, span()) :: df
             case _   =>
               val defs = toplevelDefs()
-              List(NamespaceDef(id, defs, info.onlyDoc(), span()))
+              List(NamespaceDef(id, defs, info, span()))
           }
-        case _ =>
-          if (isToplevel) nonterminal { toplevelDef(info) } :: toplevelDefs()
-          else Nil
+        case _ if info.isExtern.nonEmpty || isToplevel =>
+          nonterminal { toplevelDef(info) } :: toplevelDefs()
+        case _ => Nil
       }
 
   def isDefinition: Boolean = peek.kind match {
     case `val` | `def` | `type` | `effect` | `namespace` => true
-    case `extern` | `interface` | `type` | `record` =>
+    case `interface` | `type` | `record` =>
       val kw = peek.kind
       fail(s"Only supported on the toplevel: ${kw.toString} declaration.")
     case _ => false
   }
 
   def definition(): Def =
-    documented: info =>
+    documented(parseCaptures = true): info =>
       peek.kind match {
         case `val`       => valDef(info)
         case `def`       => defDef(info)
         case `type`      => typeOrAliasDef(info)
         case `effect`    => effectDef(info)
         case `namespace` => namespaceDef(info)
-        // TODO
-        //     (`extern` | `effect` | `interface` | `type` | `record`).into { (kw: String) =>
-        //        failure(s"Only supported on the toplevel: ${kw} declaration.")
-        //      }
         case _ => fail("Expected definition")
       }
 
@@ -497,7 +491,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
    *   i.e. val (l, r) = point(); ...
    */
   def valStmt(inBraces: Boolean): Stmt =
-    documented: info =>
+    documented(parseCaptures = false): info =>
       val startPos = pos()
       val startMarker = nonterminal { new {} }
       def simpleLhs() = backtrack {
@@ -545,7 +539,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
     if isBlockDef then
       // (: <VALUETYPE>)? `=` <EXPR>
-      DefDef(id, maybeBlockTypeAnnotation(), `=` ~> expr(), info.onlyDoc(), span())
+      DefDef(id, maybeBlockTypeAnnotation(), `=` ~> expr(), info, span())
     else
       // [...](<PARAM>...) {...} `=` <STMT>>
       val (tps, vps, bps) = params()
@@ -557,16 +551,16 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     val id ~ tps = (`type` ~> idDef()) ~ maybeTypeParams()
 
     peek.kind match {
-      case `=` => `=` ~> TypeDef(id, tps.unspan, valueType(), info.onlyDoc(), span())
-      case _ => DataDef(id, tps, braces { manyUntil({ constructor() <~ semi() }, `}`) }, info.onlyDoc(), span())
+      case `=` => `=` ~> TypeDef(id, tps.unspan, valueType(), info, span())
+      case _ => DataDef(id, tps, braces { manyUntil({ constructor() <~ semi() }, `}`) }, info, span())
     }
 
   def recordDef(info: Info): Def =
-    RecordDef(`record` ~> idDef(), maybeTypeParams(), valueParams(), info.onlyDoc(), span())
+    RecordDef(`record` ~> idDef(), maybeTypeParams(), valueParams(), info, span())
 
   def constructor(): Constructor =
-    documented: info =>
-      Constructor(idDef(), maybeTypeParams(), valueParams(), info.onlyDoc(), span()) labelled "constructor"
+    documented(parseCaptures = false): info =>
+      Constructor(idDef(), maybeTypeParams(), valueParams(), info.onlyDoc().doc, span()) labelled "constructor"
 
   // On the top-level both
   //    effect Foo = {}
@@ -591,7 +585,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   def effectDef(info: Info): Def =
     // effect <NAME> = <EFFECTS>
-    EffectDef(`effect` ~> idDef(), maybeTypeParams().unspan, `=` ~> effects(), info.onlyDoc(), span())
+    EffectDef(`effect` ~> idDef(), maybeTypeParams().unspan, `=` ~> effects(), info, span())
 
   // effect <NAME>[...](...): ...
   def operationDef(info: Info): Def =
@@ -601,19 +595,19 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
           IdDef(id.name, id.span) withPositionOf op,
           tps,
           List(Operation(id, Many.empty(tps.span.synthesized), vps, bps, ret, opDoc, opSpan) withPositionOf op),
-          info.onlyDoc(),
+          info,
           span())
     }
 
   def operation(info: Info): Operation =
     nonterminal:
       idDef() ~ params() ~ returnAnnotation() match {
-        case id ~ (tps, vps, bps) ~ ret => Operation(id, tps, vps.unspan, bps.unspan, ret, info.onlyDoc(), span())
+        case id ~ (tps, vps, bps) ~ ret => Operation(id, tps, vps.unspan, bps.unspan, ret, info.onlyDoc().doc, span())
       }
 
   def interfaceDef(info: Info, keyword: TokenKind = `interface`): InterfaceDef =
     InterfaceDef(keyword ~> idDef(), maybeTypeParams(),
-      `{` ~> manyUntil(documented { opInfo => { `def` ~> operation(opInfo) } labelled "} or another operation declaration" }, `}`) <~ `}`, info.onlyDoc(), span())
+      `{` ~> manyUntil(documented(parseCaptures = false) { opInfo => { `def` ~> operation(opInfo) } labelled "} or another operation declaration" }, `}`) <~ `}`, info, span())
 
   def namespaceDef(info: Info): Def =
     consume(`namespace`)
@@ -625,25 +619,29 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     else { semi(); NamespaceDef(id, definitions(), info.onlyDoc(), span()) }
 
   def externDef(): Def =
-    documented: info =>
+    documented(parseCaptures = true): info =>
       externDef(info)
 
   def externDef(info: Info): Def =
-    { peek(`extern`); peek(1).kind } match {
+    info.assertExtern()
+    peek.kind match {
       case `type`      => externType(info)
       case `interface` => externInterface(info)
       case `resource`  => externResource(info)
       case `include`   => externInclude(info)
       // extern """..."""
       case s: Str      => externString(info)
-      case Ident(_) | `pure` =>
-        // extern IDENT def ...
-        if (peek(2, `def`)) externFun(info)
-        // extern IDENT """..."""
-        else externString(info)
-      // extern {...} def ...
-      case _ => externFun(info)
+      case `def`       => externFun(info)
+      case _           => fail("Expected an extern definition")
     }
+
+  // reinterpret a parsed capture as a feature flag
+  def featureFlagFromCapture(capt: Option[CaptureSet]): FeatureFlag = capt match {
+    case Some(CaptureSet(IdRef(Nil, "default", span) :: Nil, _)) => FeatureFlag.Default(span)
+    case Some(CaptureSet(IdRef(Nil, flag, span) :: Nil, _)) => FeatureFlag.NamedFeatureFlag(flag, span)
+    case None => FeatureFlag.Default(span())
+    case _ => fail(s"Not a valid feature flag: ${capt}")
+  }
 
   def featureFlag(): FeatureFlag =
     expect("feature flag identifier") {
@@ -656,34 +654,31 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       backtrack(featureFlag()).getOrElse(FeatureFlag.Default(span()))
 
   def externType(info: Info): Def =
-    ExternType(`extern` ~> `type` ~> idDef(), maybeTypeParams(), info.onlyDoc(), span())
+    ExternType(`type` ~> idDef(), maybeTypeParams(), info, span())
   def externInterface(info: Info): Def =
-    ExternInterface(`extern` ~> `interface` ~> idDef(), maybeTypeParams().unspan, info.onlyDoc(), span())
+    ExternInterface(`interface` ~> idDef(), maybeTypeParams().unspan, info, span())
   def externResource(info: Info): Def =
-    ExternResource(`extern` ~> `resource` ~> idDef(), blockTypeAnnotation(), info.onlyDoc(), span())
+    ExternResource(`resource` ~> idDef(), blockTypeAnnotation(), info, span())
   def externInclude(info: Info): Def =
-    consume(`extern`)
     consume(`include`)
     val posAfterInclude = pos()
-    ExternInclude(maybeFeatureFlag(), path().stripPrefix("\"").stripSuffix("\""), None, IdDef("", Span(source, posAfterInclude, posAfterInclude, Synthesized)), _doc=info.onlyDoc(), span=span())
+    val ff = maybeFeatureFlag()
+    ExternInclude(ff, path().stripPrefix("\"").stripSuffix("\""), None, IdDef("", Span(source, posAfterInclude, posAfterInclude, Synthesized)), info=info, span=span())
 
   def externString(info: Info): Def =
-    nonterminal:
-      consume(`extern`)
-      val posAfterExtern = pos()
-      val ff = maybeFeatureFlag()
-      expect("string literal") {
-        case Str(contents, _) => ExternInclude(ff, "", Some(contents), IdDef("", Span(source, posAfterExtern, posAfterExtern, Synthesized)), info.onlyDoc(), span())
-      }
+    val posAfterExtern = pos()
+    val ff = featureFlagFromCapture(info.externCapture)
+    expect("string literal") {
+      case Str(contents, _) => ExternInclude(ff, "", Some(contents), IdDef("", Span(source, posAfterExtern, posAfterExtern, Synthesized)), info, span())
+    }
 
   def externFun(info: Info): Def =
-    nonterminal:
-      ((`extern` ~> pos()) ~ maybeExternCapture() ~ (`def` ~> idDef()) ~ params() ~ (returnAnnotation() <~ `=`)) match {
-        case posn ~ capt ~ id ~ (tps, vps, bps) ~ ret =>
-          val bodies = manyWhile(externBody(), isExternBodyStart)
-          val capture = capt.getOrElse(defaultCapture(Span(source, posn, posn, Synthesized)))
-          ExternDef(capture, id, tps, vps, bps, ret, bodies, info, span())
-      }
+    ((pos() <~ `def`) ~ idDef() ~ params() ~ (returnAnnotation() <~ `=`)) match {
+      case posn ~ id ~ (tps, vps, bps) ~ ret =>
+        val bodies = manyWhile(externBody(), isExternBodyStart)
+        val capture = info.externCapture.getOrElse(defaultCapture(Span(source, posn, posn, Synthesized)))
+        ExternDef(capture, id, tps, vps, bps, ret, bodies, info, span())
+    }
 
   def externBody(): ExternBody =
     nonterminal:
@@ -709,12 +704,12 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       val (exprs, strs) = manyWhile((`${` ~> expr() <~ `}$`, string()), `${`).unzip
       Template(first :: strs, exprs)
 
-  def documented[T](p: Info => T): T =
+  def documented[T](parseCaptures: Boolean)(p: Info => T): T =
     nonterminal:
-      p(info())
+      p(info(parseCaptures))
 
   private def maybeDocumentation(): Doc =
-    peek.kind match
+    peek.kind match {
       case DocComment(_) =>
         val docComments = manyWhile({
           val msg = peek.kind match {
@@ -728,22 +723,13 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         if (docComments.isEmpty) None
         else Some(docComments.mkString("\\n"))
       case _ => None
-
-  //  def modifiers(): List[Modifier] =
-  //    manyWhile(modifier(), isModifier)
-  //
-  //  def modifier(): Modifier =
-  //    expect("modifier") {
-  //      case `private` => Modifier.Private(span())
-  //    }
-  //
-  //  def isModifier = peek(`private`)
+    }
 
   // /// some documentation
   // private
   // extern
   // {io}
-  def info(): Info =
+  def info(parseCaptures: Boolean): Info =
     nonterminal {
       val doc = maybeDocumentation()
       val isPrivate = nonterminal {
@@ -752,19 +738,25 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       val isExtern = nonterminal {
         when(`extern`) { Maybe.Some((), span()) } { Maybe.None(span()) }
       }
-      val externCapture = maybeExternCapture()
+      val externCapture = if (parseCaptures) maybeExternCapture() else None
+
       Info(doc, isPrivate, isExtern, externCapture)
     }
 
   def noInfo(): Info = Info.empty(Span(source, pos(), pos(), Synthesized))
 
   extension (info: Info) {
-    def onlyDoc(): Doc =
-      if (info.isExtern.nonEmpty) softFail("Modifier `extern` is not allowed", info.isExtern.span.from, info.isExtern.span.to)
-      if (info.isPrivate.nonEmpty) softFail("Modifier `private` is not allowed", info.isExtern.span.from, info.isExtern.span.to)
-      info.externCapture.foreach { captures => softFail("Specifying captures is not allowed", captures.span.from, captures.span.to) }
+    def assertExtern(): Unit = info.isExtern match {
+      case Maybe(None, span) => softFail("Extern definitions require `extern` modifier", position, position) // info.isExtern.span.from, info.isExtern.span.to)
+      case _ => ()
+    }
 
-      info.doc
+    def onlyDoc(): Info =
+      if (info.isExtern.nonEmpty) softFail("Modifier `extern` is not allowed", position, position) // , info.isExtern.span.from, info.isExtern.span.to)
+      if (info.isPrivate.nonEmpty) softFail("Modifier `private` is not allowed", position, position) // , info.isExtern.span.from, info.isExtern.span.to)
+      info.externCapture.foreach { captures => softFail("Specifying captures is not allowed", position, position) } // , captures.span.from, captures.span.to) }
+
+      info
   }
 
   def maybeExternCapture(): Option[CaptureSet] =

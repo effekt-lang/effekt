@@ -168,97 +168,97 @@ trait DocumentationGenerator {
       "span" -> generate(span),
     ))
 
-    case Def.ValDef(id, annot, binding, doc, span) => obj(HashMap(
+    case Def.ValDef(id, annot, binding, info, span) => obj(HashMap(
       "kind" -> str("ValDef"),
       "id" -> generate(id),
       "annot" -> annot.map(generate).getOrElse(empty),
-      "doc" -> generate(doc),
+      "doc" -> generate(info.doc),
       "span" -> generate(span),
     ))
 
-    case Def.RegDef(id, annot, region, binding, doc, span) => obj(HashMap(
+    case Def.RegDef(id, annot, region, binding, info, span) => obj(HashMap(
       "kind" -> str("RegDef"),
       "id" -> generate(id),
       "annot" -> annot.map(generate).getOrElse(empty),
       "region" -> generate(region),
-      "doc" -> generate(doc),
+      "doc" -> generate(info.doc),
       "span" -> generate(span),
     ))
 
-    case Def.VarDef(id, annot, binding, doc, span) => obj(HashMap(
+    case Def.VarDef(id, annot, binding, info, span) => obj(HashMap(
       "kind" -> str("VarDef"),
       "id" -> generate(id),
       "annot" -> annot.map(generate).getOrElse(empty),
-      "doc" -> generate(doc),
+      "doc" -> generate(info.doc),
       "span" -> generate(span),
     ))
 
-    case Def.DefDef(id, annot, block, doc, span) => obj(HashMap(
+    case Def.DefDef(id, annot, block, info, span) => obj(HashMap(
       "kind" -> str("DefDef"),
       "id" -> generate(id),
       "annot" -> annot.map(generate).getOrElse(empty),
-      "doc" -> generate(doc),
+      "doc" -> generate(info.doc),
       "span" -> generate(span),
     ))
 
-    case Def.NamespaceDef(id, definitions, doc, span) => obj(HashMap(
+    case Def.NamespaceDef(id, definitions, info, span) => obj(HashMap(
       "kind" -> str("NamespaceDef"),
       "id" -> generate(id),
       "definitions" -> arr(definitions.map(generate)),
-      "doc" -> generate(doc),
+      "doc" -> generate(info.doc),
       "span" -> generate(span),
     ))
 
-    case Def.InterfaceDef(id, tparams, ops, doc, span) => obj(HashMap(
+    case Def.InterfaceDef(id, tparams, ops, info, span) => obj(HashMap(
       "kind" -> str("InterfaceDef"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams.unspan),
       "ops" -> arr(ops.map(generate)),
-      "doc" -> generate(doc),
+      "doc" -> generate(info.doc),
       "span" -> generate(span),
     ))
 
-    case Def.DataDef(id, tparams, ctors, doc, span) => obj(HashMap(
+    case Def.DataDef(id, tparams, ctors, info, span) => obj(HashMap(
       "kind" -> str("DataDef"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams.unspan),
       "ctors" -> arr(ctors.map(generate)),
-      "doc" -> generate(doc),
+      "doc" -> generate(info.doc),
       "span" -> generate(span),
     ))
 
-    case Def.RecordDef(id, tparams, fields, doc, span) => obj(HashMap(
+    case Def.RecordDef(id, tparams, fields, info, span) => obj(HashMap(
       "kind" -> str("RecordDef"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams.unspan),
       "vparams" -> generateVparams(fields.unspan),
-      "doc" -> generate(doc),
+      "doc" -> generate(info.doc),
       "span" -> generate(span),
     ))
 
-    case Def.TypeDef(id, tparams, tpe, doc, span) => obj(HashMap(
+    case Def.TypeDef(id, tparams, tpe, info, span) => obj(HashMap(
       "kind" -> str("TypeDef"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams),
       "tpe" -> generate(tpe),
-      "doc" -> generate(doc),
+      "doc" -> generate(info.doc),
       "span" -> generate(span),
     ))
 
-    case Def.EffectDef(id, tparams, effs, doc, span) => obj(HashMap(
+    case Def.EffectDef(id, tparams, effs, info, span) => obj(HashMap(
       "kind" -> str("EffectDef"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams),
       "effs" -> generate(effs),
-      "doc" -> generate(doc),
+      "doc" -> generate(info.doc),
       "span" -> generate(span),
     ))
 
-    case Def.ExternType(id, tparams, doc, span) => obj(HashMap(
+    case Def.ExternType(id, tparams, info, span) => obj(HashMap(
       "kind" -> str("ExternType"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams.unspan),
-      "doc" -> generate(doc),
+      "doc" -> generate(info.doc),
       "span" -> generate(span),
     ))
 
@@ -273,28 +273,28 @@ trait DocumentationGenerator {
       "span" -> generate(span),
     ))
 
-    case Def.ExternResource(id, tpe, doc, span) => obj(HashMap(
+    case Def.ExternResource(id, tpe, info, span) => obj(HashMap(
       "kind" -> str("ExternResource"),
       "id" -> generate(id),
       "tpe" -> generate(tpe),
-      "doc" -> generate(doc),
+      "doc" -> generate(info.doc),
       "span" -> generate(span),
     ))
 
-    case Def.ExternInterface(id, tparams, doc, span) => obj(HashMap(
+    case Def.ExternInterface(id, tparams, info, span) => obj(HashMap(
       "kind" -> str("ExternInterface"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams),
-      "doc" -> generate(doc),
+      "doc" -> generate(info.doc),
       "span" -> generate(span),
     ))
 
-    case Def.ExternInclude(featureFlag, path, contents, id, doc, span) => obj(HashMap(
+    case Def.ExternInclude(featureFlag, path, contents, id, info, span) => obj(HashMap(
       "kind" -> str("ExternInclude"),
       "featureFlag" -> str(featureFlag.toString),
       "path" -> str(path),
       "id" -> generate(id),
-      "doc" -> generate(doc),
+      "doc" -> generate(info.doc),
       "span" -> generate(span),
     ))
   }

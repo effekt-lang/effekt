@@ -125,6 +125,7 @@ trait Intelligence {
         p.productElementNames.zip(p.productIterator)
           .collectFirst {
             case ("doc", Some(s: String)) => s
+            case ("info", source.Info(Some(s: String), _, _, _)) => s
           }
       case _ => None
   }
