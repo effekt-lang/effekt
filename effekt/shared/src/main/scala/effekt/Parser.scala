@@ -359,8 +359,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       spaces()
 
       // potential documentation for the file / module
-      documented: doc =>
-
+      documented { doc =>
         val (name, moduleDoc, unusedDoc) = peek.kind match {
           case `module` =>
             consume(`module`)
@@ -388,6 +387,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         }
 
         ModuleDecl(name, imports, definitions, moduleDoc, span())
+      }
 
   @tailrec
   private def shebang(): Unit =
