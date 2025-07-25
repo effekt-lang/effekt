@@ -15,7 +15,9 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
         core match {
           case ModuleDecl(path, includes, declarations, externs, definitions, exports) => {
             // Find constraints in the definitions
-            val constraints = findConstraints(definitions)(using new MonoFindContext)
+            val monoFindContext = MonoFindContext()
+            val constraints = findConstraints(definitions)(using monoFindContext)
+            val declConstraints = declarations map (findConstraints(_)(using monoFindContext))
             // println("Constraints")
             // constraints.foreach(c => println(c))
             // println()
@@ -34,9 +36,12 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
               )
             )
 
-            val monoDefs = monomorphize(definitions)(using MonoContext(solution, monoNames))
+            var monoContext = MonoContext(solution, monoNames)
+            val monoDecls = declarations flatMap (monomorphize(_)(using monoContext))
+            val monoDefs = monomorphize(definitions)(using monoContext)
+            // monoDecls.foreach(decl => println(util.show(decl)))
             // monoDefs.foreach(defn => println(util.show(defn)))
-            val newModuleDecl = ModuleDecl(path, includes, declarations, externs, monoDefs, exports)
+            val newModuleDecl = ModuleDecl(path, includes, monoDecls, externs, monoDefs, exports)
             return Some(CoreTransformed(source, tree, mod, newModuleDecl))
           }
         }
@@ -82,11 +87,27 @@ def findConstraints(definition: Toplevel)(using ctx: MonoFindContext): Constrain
   case Toplevel.Def(id, block) => ???
   case Toplevel.Val(id, tpe, binding) => ???
 
+def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): Constraints = declaration match
+  case Data(id, List(), constructors) => List.empty
+  case Data(id, tparams, constructors) =>
+    tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
+    constructors.map((constr => 
+      Constraint(((constr.fields map (_.tpe)) map findId).toVector, constr.id)))
+  case Interface(id, List(), properties) => List.empty
+  case Interface(id, tparams, properties) => 
+    tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
+    List.empty
+
 def findConstraints(block: Block)(using ctx: MonoFindContext): Constraints = block match
   case BlockVar(id, annotatedTpe, annotatedCapt) => ???
   case BlockLit(tparams, cparams, vparams, bparams, body) => ???
   case Unbox(pure) => ???
   case New(impl) => ???
+
+def findConstraints(constructor: Constructor)(using ctx: MonoFindContext): Constraints = constructor match
+  case Constructor(id, List()) => List.empty
+  case Constructor(id, fields) =>
+    List(Constraint(((fields map (_.tpe)) map findId).toVector, id))
 
 def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt match
   case Let(id, annotatedTpe, binding, body) => findConstraints(binding) ++ findConstraints(body)
@@ -100,6 +121,7 @@ def findConstraints(expr: Expr)(using ctx: MonoFindContext): Constraints = expr 
   case DirectApp(b, List(), vargs, bargs) => List.empty
   case ValueVar(id, annotatedType) => List.empty
   case Literal(value, annotatedType) => List.empty
+  case Make(data, tag, targs, vargs) => List(Constraint(data.targs.map(findId).toVector, data.name))
   case o => println(o); ???
 
 def findId(vt: ValueType)(using ctx: MonoFindContext): TypeArg = vt match
@@ -115,10 +137,10 @@ def solveConstraints(constraints: Constraints): Solution =
 
   while (true) {
     val previousSolved = solved
-  vecConstraints.foreach((sym, tas) => 
-    val sol = solveConstraints(sym).map(bs => bs.toVector)
-      solved += (sym -> sol)
-    )
+    vecConstraints.foreach((sym, tas) => 
+      val sol = solveConstraints(sym).map(bs => bs.toVector)
+        solved += (sym -> sol)
+      )
     if (previousSolved == solved) return solved
   }
 
@@ -162,9 +184,34 @@ def monomorphize(toplevel: Toplevel)(using ctx: MonoContext): List[Toplevel] = t
   case Toplevel.Def(id, block) => ???
   case Toplevel.Val(id, tpe, binding) => ???
 
+def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] = decl match
+  case Data(id, List(), constructors) => List(decl)
+  case Data(id, tparams, constructors) => 
+    val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
+    monoTypes.map(baseTypes =>
+      val replacementTparams = tparams.zip(baseTypes).toMap
+      ctx.replacementTparams ++= replacementTparams
+      val newConstructors = constructors map {
+        case Constructor(id, List()) => Constructor(id, List.empty)
+        case Constructor(id, fields) => Constructor(id, fields map monomorphize)
+      }
+      Declaration.Data(ctx.names(id, baseTypes), List.empty, newConstructors)
+    )
+  case Interface(id, List(), properties) => List(decl)
+  case Interface(id, tparams, properties) =>
+    val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
+    monoTypes.map(baseTypes =>
+      val replacementTparams = tparams.zip(baseTypes).toMap
+      ctx.replacementTparams ++= replacementTparams
+      Declaration.Interface(ctx.names(id, baseTypes), List.empty, properties)
+    )
+
 def monomorphize(block: Block)(using ctx: MonoContext): Block = block match
   case b: BlockVar => monomorphize(b)
   case o => println(o); ???
+
+def monomorphize(field: Field)(using ctx: MonoContext): Field = field match
+  case Field(id, tpe) => Field(id, monomorphize(tpe))
 
 def monomorphize(blockVar: BlockVar, replacementId: FunctionId)(using ctx: MonoContext): BlockVar = blockVar match
   case BlockVar(id, BlockType.Function(List(), cparams, vparams, bparams, result), annotatedCapt) => blockVar
@@ -176,26 +223,30 @@ def monomorphize(blockVar: BlockVar, replacementId: FunctionId)(using ctx: MonoC
 
 def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
   case Return(expr) => Return(monomorphize(expr))
-  case Val(id, annotatedTpe, binding, body) => Val(id, monomorphize(annotatedTpe), monomorphize(binding), monomorphize(body))
+  case Val(id, annotatedTpe, binding, body) => 
+    Val(id, monomorphize(annotatedTpe), monomorphize(binding), monomorphize(body))
   case App(callee: BlockVar, targs, vargs, bargs) => 
-    val replacementId = replacementIdFromTargs(callee.id, targs)
-    App(monomorphize(callee, replacementId), List.empty, vargs map monomorphize, bargs map monomorphize)
+    val replacementData = replacementDataFromTargs(callee.id, targs)
+    App(monomorphize(callee, replacementData.name), List.empty, vargs map monomorphize, bargs map monomorphize)
   case Let(id, annotatedTpe, binding, body) => Let(id, monomorphize(annotatedTpe), monomorphize(binding), monomorphize(body))
   case If(cond, thn, els) => If(monomorphize(cond), monomorphize(thn), monomorphize(els))
   case o => println(o); ???
 
 def monomorphize(expr: Expr)(using ctx: MonoContext): Expr = expr match
   case DirectApp(b, targs, vargs, bargs) => 
-    val replacementId = replacementIdFromTargs(b.id, targs)
-    DirectApp(monomorphize(b, replacementId), List.empty, vargs map monomorphize, bargs map monomorphize)
+    val replacementData = replacementDataFromTargs(b.id, targs)
+    DirectApp(monomorphize(b, replacementData.name), List.empty, vargs map monomorphize, bargs map monomorphize)
   case o => println(o); ???
 
 def monomorphize(pure: Pure)(using ctx: MonoContext): Pure = pure match
   case ValueVar(id, annotatedType) => ValueVar(id, monomorphize(annotatedType))
   case PureApp(b, targs, vargs) => 
-    val replacementId = replacementIdFromTargs(b.id, targs)
-    PureApp(monomorphize(b, replacementId), List.empty, vargs map monomorphize)
+    val replacementData = replacementDataFromTargs(b.id, targs)
+    PureApp(monomorphize(b, replacementData.name), List.empty, vargs map monomorphize)
   case Literal(value, annotatedType) => Literal(value, monomorphize(annotatedType))
+  case Make(data, tag, targs, vargs) => 
+    val replacementData = replacementDataFromTargs(data.name, data.targs)
+    Make(replacementData, tag, List.empty, vargs map monomorphize)
   case o => println(o); ???
 
 def monomorphize(valueParam: ValueParam)(using ctx: MonoContext): ValueParam = valueParam match 
@@ -212,7 +263,7 @@ def monomorphize(blockType: BlockType)(using ctx: MonoContext): BlockType = bloc
 
 def monomorphize(valueType: ValueType)(using ctx: MonoContext): ValueType = valueType match
   case ValueType.Var(name) => ValueType.Var(ctx.replacementTparams(name).tpe)
-  case ValueType.Data(name, targs) => ValueType.Data(name, targs)
+  case ValueType.Data(name, targs) => replacementDataFromTargs(name, targs)
   case o => println(o); ???
 
 var monoCounter = 0
@@ -227,131 +278,12 @@ def freshMonoName(baseId: Id, tpes: Vector[TypeArg.Base]): Id =
   val tpesString = tpes.map(tpe => tpe.tpe.name.name).mkString
   Id(baseId.name.name + tpesString + monoCounter)
 
-def replacementIdFromTargs(id: FunctionId, targs: List[ValueType])(using ctx: MonoContext): FunctionId =
-  if (targs.isEmpty) return id
+def replacementDataFromTargs(id: FunctionId, targs: List[ValueType])(using ctx: MonoContext): ValueType.Data =
+  if (targs.isEmpty) return ValueType.Data(id, targs)
   var baseTypes: List[TypeArg.Base] = List.empty
   targs.foreach({
     case ValueType.Data(name, targs) => baseTypes :+= TypeArg.Base(name)
     case ValueType.Var(name) => baseTypes :+= ctx.replacementTparams(name)
     case ValueType.Boxed(tpe, capt) => 
   })
-  ctx.names((id, baseTypes.toVector))
-
-// Old stuff
-
-// type PolyConstraints = Map[Id, Set[PolyType]]
-// type PolyConstraintsSolved = Map[Id, Set[PolyType.Base]]
-// type PolyConstraintSingle = Map[Id, PolyType.Base]
-
-// class MonoContext(val solvedConstraints: PolyConstraintsSolved, var monoDefs: Map[Id, Map[List[PolyType.Base], (Id, Block)]] = Map.empty)
-
-
-
-// // TODO: The following two are awful and surely doing redundant work.
-// def generator(xs: List[Set[PolyConstraintSingle]]): List[Set[PolyConstraintSingle]] = xs.foldRight(List(Set.empty)) { (next, combinations) =>
-//   (for (a <- next; as <- combinations) yield as + a).toList
-// }
-
-// def gen(xs: PolyConstraintsSolved) = {
-//   (for ((id, constrs) <- xs) yield (for (c <- constrs) yield Map((id -> c)))).toList
-// }
-
-// def monoVparams(vparams: List[ValueType]): List[PolyType.Base] = vparams map monoVparam
-
-// def monoVparams(vparams: List[ValueParam]): List[PolyType.Base] = vparams.map(vp => monoVparam(vp.tpe))
-
-// def monoVparam(valueType: ValueType): PolyType.Base = valueType match {
-//   case ValueType.Boxed(tpe, capt) => ???
-//   case ValueType.Data(name, targs) => PolyType.Base(name)
-//   case ValueType.Var(name) => ???
-// }
-
-// def monomorphize(decl: ModuleDecl)(using ctx: MonoContext): ModuleDecl = decl match
-//   case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-//     ModuleDecl(path, includes, declarations, externs, definitions flatMap monomorphize, exports)
-
-// def monomorphize(definition: Toplevel)(using ctx: MonoContext): List[Toplevel] = definition match {
-//   case Toplevel.Def(id, block) => monomorphize(block, id).map((newId, newBlock) => Toplevel.Def(newId, newBlock)).toList
-//   case Toplevel.Val(id, tpe, binding) => ???
-// }
-
-// def monomorphize(block: Block, baseId: Id)(using ctx: MonoContext): List[(Id, Block)] = block match {
-//   case BlockLit(List(), cparams, vparams, bparams, body) => {
-//     val monoBody = monomorphize(body, Map.empty)
-//     val monoBlock = BlockLit(List.empty, cparams, vparams, bparams, monoBody)
-
-//     List((baseId, monoBlock))
-//   }
-//   case BlockLit(tparams, cparams, vparams, bparams, body) => {
-//     // TODO: There is some redundancy here, but it works for now
-//     val relevantConstraints = tparams.map(tp => Map(tp -> ctx.solvedConstraints.getOrElse(tp, Set.empty)).filter((_, s) => !s.isEmpty))
-//     val splitConstraints = relevantConstraints.flatMap(gen)
-//     val combinations = generator(splitConstraints)
-//     val flattened = combinations.map(c => c.flatten.toMap)
-//     val res = flattened.map(f => {
-//       ctx.monoDefs.getOrElse(baseId, {
-//         // TODO: Not really happy with this
-//         val baseTypes = monoVparams(vparams)
-        
-//         val newId = freshMonoName(baseId, f.values.toList)
-//         val newVparams = vparams.map(monomorphize(_, f))
-//         val newBlock = BlockLit(List(), cparams, newVparams, bparams, monomorphize(body, f))
-//         ctx.monoDefs += (baseId -> Map(baseTypes -> (newId, newBlock)))
-//         (newId, newBlock)
-//       })
-//     })
-//     // res
-//     ???
-//   }
-//   case BlockVar(id, annotatedTpe, annotatedCapt) => ???
-//   case New(impl) => ???
-//   case Unbox(pure) => ???
-// }
-
-// def monomorphize(stmt: Stmt, replacementTparam: Map[Id, PolyType.Base])(using ctx: MonoContext): Stmt = stmt match {
-//   case Return(expr) => Return(monomorphize(expr, replacementTparam))
-//   case Val(id, annotatedTpe, binding, body) => Val(id, annotatedTpe, monomorphize(binding, replacementTparam), monomorphize(body, replacementTparam))
-//   case App(callee, List(), vargs, bargs) => App(callee, List(), vargs, bargs)
-//   case App(callee, targs, vargs, bargs) => {
-//     // TODO: This does not seem correct, but I need the base id of the BlockVar to monomorphize
-//     //       Not sure if doing everything in one go is possible to do correctly
-//     callee match {
-//       case BlockVar(id, annotatedTpe, annotatedCapt) => {
-//         // TODO: What if the block has not been generated yet?
-//         //       We don't use names of blocks but pass entire blocks
-//         val baseTypes = targs map monoVparam
-//         val genCallee = ctx.monoDefs.getOrElse((id, baseTypes), ???)
-//         val f = App(genCallee._2, List(), vargs, bargs)
-//         println(f)
-//         f
-//       }
-//       case _ => ???
-//     }
-//   }
-//   case Let(id, annotatedTpe, binding, body) => Let(id, annotatedTpe, monomorphize(binding, replacementTparam), monomorphize(body, replacementTparam))
-//   case If(cond, thn, els) => If(monomorphize(cond, replacementTparam), monomorphize(thn, replacementTparam), monomorphize(els, replacementTparam))
-//   case o => println(o); ???
-// }
-
-// def monomorphize(expr: Expr, replacementTparam: Map[Id, PolyType.Base]): Expr = expr match {
-//   case DirectApp(b, List(), vargs, bargs) => DirectApp(b, List(), vargs, bargs)
-//   case o => println(o); ???
-// }
-
-// def monomorphize(pure: Pure, replacementTparam: Map[Id, PolyType.Base]): Pure = pure match
-//   case ValueVar(id, annotatedType) => ValueVar(id, monomorphize(annotatedType, replacementTparam))
-//   case Literal(value, annotatedType) => pure
-//   case o => println(o); ???
-
-// def monomorphize(vparam: ValueParam, replacementTparam: Map[Id, PolyType.Base]): ValueParam = vparam match {
-//   case ValueParam(id, tpe) => ValueParam(id, monomorphize(tpe, replacementTparam))
-// }
-
-// def monomorphize(valueType: ValueType, replacementTparam: Map[Id, PolyType.Base]): ValueType = valueType match
-//   case ValueType.Var(name) => replacementTparam.get(name).get.toValueType
-//   case ValueType.Data(name, targs) => valueType
-//   case ValueType.Boxed(tpe, capt) => ???
-
-// TODO: After solving the constraints it would be helpful to know
-//       which functions have which tparams
-//       so we can generate the required monomorphic functions
+  ValueType.Data(ctx.names((id, baseTypes.toVector)), List.empty)
