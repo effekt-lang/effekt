@@ -129,7 +129,7 @@ object Transformer {
       Resume(cont.id, Block.BlockLit(Nil, Nil, ks2, k2, transform(body, ks2, Continuation.Dynamic(k2))),
         MetaCont(ks), k.reifyAt(stmt.tpe))
 
-    case core.Stmt.Hole() => Hole()
+    case core.Stmt.Hole(span) => Hole(span)
 
     case core.Stmt.Region(core.Block.BlockLit(_, _, _, List(region), body)) =>
       cps.Region(region.id, MetaCont(ks),
