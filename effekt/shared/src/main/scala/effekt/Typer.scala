@@ -896,7 +896,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       case d @ source.NamespaceDef(name, defs, doc, span) =>
         defs.map(synthDef).reduceLeft {
-          case (Result(t, effs), Result(_, acc)) => Result(t, effs ++ acc)
+          case (Result(_, effs), Result(_, acc)) => Result((), effs ++ acc)
         }
 
       // all other definitions have already been prechecked
