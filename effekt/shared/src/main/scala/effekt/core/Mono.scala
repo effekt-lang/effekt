@@ -39,8 +39,9 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             var monoContext = MonoContext(solution, monoNames)
             val monoDecls = declarations flatMap (monomorphize(_)(using monoContext))
             val monoDefs = monomorphize(definitions)(using monoContext)
-            // monoDecls.foreach(decl => println(util.show(decl)))
-            // monoDefs.foreach(defn => println(util.show(defn)))
+            // println(util.show(monoDecls))
+            // println()
+            // println(util.show(monoDefs))
             val newModuleDecl = ModuleDecl(path, includes, monoDecls, externs, monoDefs, exports)
             return Some(CoreTransformed(source, tree, mod, newModuleDecl))
           }
@@ -99,10 +100,24 @@ def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): Const
     List.empty
 
 def findConstraints(block: Block)(using ctx: MonoFindContext): Constraints = block match
-  case BlockVar(id, annotatedTpe, annotatedCapt) => ???
-  case BlockLit(tparams, cparams, vparams, bparams, body) => ???
+  case BlockVar(id, annotatedTpe, annotatedCapt) => findConstraints(annotatedTpe)
+  case BlockLit(tparams, cparams, vparams, bparams, body) => findConstraints(body)
   case Unbox(pure) => ???
-  case New(impl) => ???
+  case New(impl) => findConstraints(impl)
+
+def findConstraints(blockType: BlockType)(using ctx: MonoFindContext): Constraints = blockType match
+  case BlockType.Interface(name, targs) => List(Constraint(targs.map(findId).toVector, name))
+  case o => println(o); ???
+
+def findConstraints(impl: Implementation)(using ctx: MonoFindContext): Constraints = impl match 
+  case Implementation(interface, operations) => 
+    findConstraints(interface) ++
+    (operations flatMap findConstraints)
+
+def findConstraints(operation: Operation)(using ctx: MonoFindContext): Constraints = operation match
+  case Operation(name, tparams, cparams, vparams, bparams, body) => 
+    tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, name))
+    findConstraints(body)
 
 def findConstraints(constructor: Constructor)(using ctx: MonoFindContext): Constraints = constructor match
   case Constructor(id, List()) => List.empty
@@ -114,11 +129,22 @@ def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt 
   case Return(expr) => findConstraints(expr)
   case Val(id, annotatedTpe, binding, body) => findConstraints(binding) ++ findConstraints(body)
   case App(callee: BlockVar, targs, vargs, bargs) => List(Constraint(targs.map(findId).toVector, callee.id))
+  case Invoke(callee: BlockVar, method, methodTpe, targs, vargs, bargs) => List(Constraint(targs.map(findId).toVector, callee.id))
+  case Reset(body) => findConstraints(body)
   case If(cond, thn, els) => findConstraints(cond) ++ findConstraints(thn) ++ findConstraints(els)
+  case Def(id, block, body) => findConstraints(block) ++ findConstraints(body)
+  case Shift(prompt, body) => findConstraints(prompt) ++ findConstraints(body)
+  case Match(scrutinee, clauses, default) => clauses.map(_._2).flatMap(findConstraints) ++ findConstraints(default)
+  case Resume(k, body) => findConstraints(k) ++ findConstraints(body)
   case o => println(o); ???
+
+def findConstraints(opt: Option[Stmt])(using ctx: MonoFindContext): Constraints = opt match 
+  case None => List.empty
+  case Some(stmt) => findConstraints(stmt)
 
 def findConstraints(expr: Expr)(using ctx: MonoFindContext): Constraints = expr match
   case DirectApp(b, List(), vargs, bargs) => List.empty
+  case PureApp(b, List(), vargs) => List.empty
   case ValueVar(id, annotatedType) => List.empty
   case Literal(value, annotatedType) => List.empty
   case Make(data, tag, targs, vargs) => List(Constraint(data.targs.map(findId).toVector, data.name))
@@ -207,8 +233,29 @@ def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] =
     )
 
 def monomorphize(block: Block)(using ctx: MonoContext): Block = block match
+  case b: BlockLit => monomorphize(b)
   case b: BlockVar => monomorphize(b)
-  case o => println(o); ???
+  case New(impl) => New(monomorphize(impl)) 
+  case o => println(o); ??? 
+
+def monomorphize(impl: Implementation)(using ctx: MonoContext): Implementation = impl match
+  case Implementation(interface, operations) => Implementation(monomorphize(interface), operations.map(monomorphize))
+
+def monomorphize(interface: BlockType.Interface)(using ctx: MonoContext): BlockType.Interface = interface match
+  case BlockType.Interface(name, targs) => 
+    val replacementData = replacementDataFromTargs(name, targs)
+    BlockType.Interface(replacementData.name, replacementData.targs)
+
+def monomorphize(operation: Operation)(using ctx: MonoContext): Operation = operation match
+  case Operation(name, tparams, cparams, vparams, bparams, body) => 
+    Operation(name, List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
+
+def monomorphize(block: BlockLit)(using ctx: MonoContext): BlockLit = block match
+  case BlockLit(tparams, cparams, vparams, bparams, body) => 
+    BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
+
+def monomorphize(block: BlockVar)(using ctx: MonoContext): BlockVar = block match
+  case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(id, monomorphize(annotatedTpe), annotatedCapt)
 
 def monomorphize(field: Field)(using ctx: MonoContext): Field = field match
   case Field(id, tpe) => Field(id, monomorphize(tpe))
@@ -219,7 +266,7 @@ def monomorphize(blockVar: BlockVar, replacementId: FunctionId)(using ctx: MonoC
   case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) => 
     val monoAnnotatedTpe = BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
     BlockVar(replacementId, monoAnnotatedTpe, annotatedCapt)
-  case o => ???
+  case o => println(o); ???
 
 def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
   case Return(expr) => Return(monomorphize(expr))
@@ -230,7 +277,21 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
     App(monomorphize(callee, replacementData.name), List.empty, vargs map monomorphize, bargs map monomorphize)
   case Let(id, annotatedTpe, binding, body) => Let(id, monomorphize(annotatedTpe), monomorphize(binding), monomorphize(body))
   case If(cond, thn, els) => If(monomorphize(cond), monomorphize(thn), monomorphize(els))
+  case Invoke(BlockVar(id, annotatedTpe, annotatedCapt), method, methodTpe, targs, vargs, bargs) => 
+    Invoke(BlockVar(id, monomorphize(annotatedTpe), annotatedCapt), method, methodTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
+  // TODO: Monomorphizing here throws an error complaining about a missing implementation
+  //       Not sure what is missing, altough it does works like this
+  case Reset(body) => Reset(body)
+  case Def(id, block, body) => Def(id, monomorphize(block), monomorphize(body))
+  case Shift(prompt, body) => Shift(monomorphize(prompt), monomorphize(body))
+  case Match(scrutinee, clauses, default) =>
+    val monoClauses = clauses.map((id, blockLit) => (id, monomorphize(blockLit)))
+    Match(monomorphize(scrutinee), monoClauses, monomorphize(default))
   case o => println(o); ???
+
+def monomorphize(opt: Option[Stmt])(using ctx: MonoContext): Option[Stmt] = opt match
+  case None => None
+  case Some(stmt) => Some(monomorphize(stmt))
 
 def monomorphize(expr: Expr)(using ctx: MonoContext): Expr = expr match
   case DirectApp(b, targs, vargs, bargs) => 
@@ -259,7 +320,7 @@ def monomorphize(blockParam: BlockParam)(using ctx: MonoContext): BlockParam = b
 def monomorphize(blockType: BlockType)(using ctx: MonoContext): BlockType = blockType match 
   case BlockType.Function(tparams, cparams, vparams, bparams, result) => 
     BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
-  case o => println(o); ???
+  case b: BlockType.Interface => monomorphize(b)
 
 def monomorphize(valueType: ValueType)(using ctx: MonoContext): ValueType = valueType match
   case ValueType.Var(name) => ValueType.Var(ctx.replacementTparams(name).tpe)
@@ -280,6 +341,10 @@ def freshMonoName(baseId: Id, tpes: Vector[TypeArg.Base]): Id =
 
 def replacementDataFromTargs(id: FunctionId, targs: List[ValueType])(using ctx: MonoContext): ValueType.Data =
   if (targs.isEmpty) return ValueType.Data(id, targs)
+  // TODO: Incredibly hacky, resume did not seem to appear when finding constraints
+  //       it does show up while monomorphizing which caused an error
+  //       this seems to work for now
+  if (id.name.name == "Resume") return ValueType.Data(id, targs)
   var baseTypes: List[TypeArg.Base] = List.empty
   targs.foreach({
     case ValueType.Data(name, targs) => baseTypes :+= TypeArg.Base(name)
