@@ -477,6 +477,10 @@ namespace internal {
   extern pure def backend(): String =
     jsNode { "js-node" }
     jsWeb { "js-web" }
+
+  extern pure def ifNode[R]{ thnNode: => R }{ thnWeb: => R }: R =
+    jsNode { thnNode() }
+    jsWeb { thnWeb() }
 }
 
 /// Make a HTTP(S) request on the backend-specific implementation,
@@ -484,12 +488,8 @@ namespace internal {
 ///
 /// The Request body is buffered, the response is streaming (as far
 /// as the backend implementation allows).
-def request[R]{ body: => Unit / RequestBuilder }{ res: {ResponseReader} => R }: R / Exception[RequestError] = internal::backend() match {
-  // TODO use a proper dispatch after #448 is resolved
-  case "js-node" => jsNode::request{body}{res}
-  case "js-web" => jsWeb::request{body}{res}
-  case _ => <>
-}
+def request[R]{ body: => Unit / RequestBuilder }{ res: {ResponseReader} => R }: R / Exception[RequestError] =
+  internal::ifNode{ jsNode::request{body}{res} }{ jsWeb::request{body}{res} }
 
 // Simple API
 // ----------
