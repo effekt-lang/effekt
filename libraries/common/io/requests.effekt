@@ -392,6 +392,7 @@ namespace plain {
     case _ => false
   }
 
+  // TODO line continuations
   def parseHeaderLine(): (String, String) / { Scan[Char], Exception[WrongFormat] } = {
     with returning::expect("HTTP Header line")
     val k = collectString { readWhile { c => c.isHTTPTokenChar() } }
