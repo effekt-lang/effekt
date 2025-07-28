@@ -318,8 +318,8 @@ namespace jsWeb {
 namespace plain {
   def constructRequest{ body: => Unit / RequestBuilder }: Unit / emit[Byte] = {
     def crlf() = {
-      do emit('\n'.toInt.toByte)
       do emit('\r'.toInt.toByte)
+      do emit('\n'.toInt.toByte)
     }
 
     with encodeUTF8
@@ -397,9 +397,47 @@ namespace plain {
     val k = collectString { readWhile { c => c.isHTTPTokenChar() } }
     readIf(':')
     skipWhile { c => c == ' ' || c == '\t' }
-    val v = collectString { readWhile { c => c != '\n' } }
+    val v = collectString { readWhile { c => c != '\r' } }
     skipWhile { c => c == ' ' || c == '\t' }
     (k, v)
+  }
+
+  /// Decode a chunked transfer coding as per RFC 2616.
+  /// Emits the contents as bytes, and headers from the trailer.
+  def unchunk(): Int / { emit[Byte], emit[(String, String)], read[Byte], Exception[WrongFormat] } = {
+    with decodeUTF8
+    with returning::scanner[Char, Int]
+    var length = 0
+    loop { {l} =>
+      // chunk header
+      val size = returning::expect("chunk header"){
+        val size = collectString{ readWhile{ c => c.isHexDigit } }.toInt(16)
+        val extensions = collectString{ readWhile{ c => c != '\r' } } // ignored
+        if(size == 0){ l.break() }
+        readIf('\r')
+        readIf('\n')
+        size
+      }
+      // chunk body
+      length = length + size
+      repeat(size){
+        try {
+          do emit(do read[Byte]())
+        } with stop { () => do raise(WrongFormat(), "Premature end of chunk in chunked encoding") }
+      }
+    }
+    // trailer headers
+    expect("Trailers or end of response"){
+      while(do peek[Char]() != '\r') {
+        do emit(parseHeaderLine())
+        readIf('\r')
+        readIf('\n')
+      }
+      readIf('\r')
+      readIf('\n')
+    }
+    // return total length
+    length
   }
 
   def parseResponse[R]{ body: {ResponseReader} => R }: R / { read[Byte], Exception[WrongFormat] } = {
@@ -414,18 +452,18 @@ namespace plain {
       statusCode = readInteger()
       if (statusCode > 599 || statusCode < 100) { do raise(WrongFormat(), "Invalid status code") }
       readIf(' ')
-      val reason = collectString{ readWhile{ c => c != '\n' } }
-      readIf('\n')
+      val reason = collectString{ readWhile{ c => c != '\r' } }
       readIf('\r')
+      readIf('\n')
       headers = collectList {
-        while(do peek[Char]() != '\n') {
+        while(do peek[Char]() != '\r') {
           do emit(parseHeaderLine())
-          readIf('\n')
           readIf('\r')
+          readIf('\n')
         }
       }
-      readIf('\n')
       readIf('\r')
+      readIf('\n')
     }
 
     try body{res} with res: ResponseReader {
@@ -633,8 +671,8 @@ namespace example {
     })
     with source[Byte]{
       def crlf() = {
-        do emit('\n'.toInt.toByte)
         do emit('\r'.toInt.toByte)
+        do emit('\n'.toInt.toByte)
       }
       with encodeUTF8;
       "HTTP/1.1 200 OK".each;
