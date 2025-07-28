@@ -467,7 +467,9 @@ def uri(uri: String): Unit / { RequestBuilder, Exception[WrongFormat] } = {
 }
 
 def defaultHeaders(): Unit / RequestBuilder = {
-  if(internal::backend() != "js-web"){
+  internal::ifJSWeb{
+    () // do not set a user agent
+  }{
     do header("User-Agent", "Effekt-io-requests/0.1.0")
   }
   // TODO should we add more?
