@@ -424,7 +424,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         case core.Type.TInt     => Pure.Literal(1337L, core.Type.TInt)
         case core.Type.TDouble  => Pure.Literal(13.37, core.Type.TDouble)
         case core.Type.TByte    => Pure.Literal(1337, core.Type.TByte)
-        case core.Type.TChar    => Pure.Literal('a', core.Type.TChar)
+        case core.Type.TChar    => Pure.Literal(1337, core.Type.TChar)
         case t if boxer.isDefinedAt(t) => sys error s"No default value defined for ${t}"
         case _ => sys error s"Trying to unbox Nothing to ${t}"
       }
