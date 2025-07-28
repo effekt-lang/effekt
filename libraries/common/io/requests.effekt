@@ -391,15 +391,28 @@ namespace plain {
     case d and d.isAlphanumeric => true
     case _ => false
   }
+  def isLWS(c: Char): Bool = c match {
+    case '\t' => true
+    case ' ' => true
+    case _ => false
+  }
 
-  // TODO line continuations
   def parseHeaderLine(): (String, String) / { Scan[Char], Exception[WrongFormat] } = {
     with returning::expect("HTTP Header line")
     val k = collectString { readWhile { c => c.isHTTPTokenChar() } }
     readIf(':')
-    skipWhile { c => c == ' ' || c == '\t' }
-    val v = collectString { readWhile { c => c != '\r' } }
-    skipWhile { c => c == ' ' || c == '\t' }
+    skipWhile { c => c.isLWS }
+    val v = collectString {
+      readWhile { c => c != '\r' }
+      readIf('\r'); readIf('\n')
+      while(do peek[Char]().isLWS) {
+        // continuation line
+        skipWhile { c => c.isLWS }
+        do emit('\n')
+        readWhile { c => c != '\r'}
+        readIf('\r'); readIf('\n')
+      }
+    }
     (k, v)
   }
 
@@ -431,8 +444,6 @@ namespace plain {
     expect("Trailers or end of response"){
       while(do peek[Char]() != '\r') {
         do emit(parseHeaderLine())
-        readIf('\r')
-        readIf('\n')
       }
       readIf('\r')
       readIf('\n')
@@ -459,8 +470,6 @@ namespace plain {
       headers = collectList {
         while(do peek[Char]() != '\r') {
           do emit(parseHeaderLine())
-          readIf('\r')
-          readIf('\n')
         }
       }
       readIf('\r')
@@ -680,12 +689,18 @@ namespace example {
       crlf()
       "content-type: text/plain".each;
       crlf()
+      "x-multiline-test-header: This is the first line".each
+      crlf()
+      " and this is the second line".each
+      crlf()
       crlf()
       "Hello!".each
     }
     with def res = plain::parseResponse
     println(res.status())
     println(res.getHeader("content-type").show{ x => x })
+    println("X-Multiline-Test-Header:")
+    println(res.getHeader("x-multiline-test-header").show{ x => x })
     with source[Byte]{ res.body() }
     with decodeUTF8
     with stringBuffer
