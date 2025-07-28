@@ -79,8 +79,20 @@ def isASCII(c: Char): Bool = { c.toInt < 128 }
 /// Checks if a given character is an ASCII lower alphabetic character
 def isLower(c: Char): Bool = { c >= 'a' && c <= 'z' }
 
+/// Lower-cases the given ASCII character
+def toLower(c: Char): Char =
+  if (c >= 'A' && c <= 'Z') {
+    ('a'.toInt + (c.toInt - 'A'.toInt)).toChar
+  } else { c }
+
 /// Checks if a given character is an ASCII upper alphabetic character
 def isUpper(c: Char): Bool = { c >= 'A' && c <= 'Z' }
+
+/// Upper-cases the given ASCII character
+def toUpper(c: Char): Char =
+  if (c >= 'a' && c <= 'z') {
+    ('A'.toInt + (c.toInt - 'a'.toInt)).toChar
+  } else { c }
 
 /// Checks if a given character is an ASCII alphabetic or numeric character
 def isAlphanumeric(c: Char): Bool = isDigit(c) || isLower(c) || isUpper(c)
