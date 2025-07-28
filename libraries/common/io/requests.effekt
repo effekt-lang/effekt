@@ -478,9 +478,13 @@ namespace internal {
     jsNode { "js-node" }
     jsWeb { "js-web" }
 
-  extern pure def ifNode[R]{ thnNode: => R }{ thnWeb: => R }: R =
+  extern pure def ifJSNode[R]{ thnNode: => R }{ els: => R }: R =
     jsNode { thnNode() }
+    default { els() }
+  extern pure def ifJSWeb[R]{ thnWeb: => R }{ els: => R }: R =
     jsWeb { thnWeb() }
+    default { els() }
+  extern pure def unsupported[R](): R =
 }
 
 /// Make a HTTP(S) request on the backend-specific implementation,
@@ -489,7 +493,9 @@ namespace internal {
 /// The Request body is buffered, the response is streaming (as far
 /// as the backend implementation allows).
 def request[R]{ body: => Unit / RequestBuilder }{ res: {ResponseReader} => R }: R / Exception[RequestError] =
-  internal::ifNode{ jsNode::request{body}{res} }{ jsWeb::request{body}{res} }
+  with internal::ifJSNode{ jsNode::request{body}{res} }
+  with internal::ifJSWeb{ jsWeb::request{body}{res} }
+  internal::unsupported[R]()
 
 // Simple API
 // ----------
