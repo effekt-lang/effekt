@@ -237,7 +237,7 @@ namespace jsNode {
       def path(p) = resume(options.js::set("path", p))
       def port(p) = resume(options.js::set("port", p))
       def header(k, v) = resume(options.js::set("headers", k, v))
-      def protocol(p) = resume(protocol = p)
+      def protocol(p) = { protocol = p; resume(()) }
       def body() = resume{ {wr} => reqBody = collectBytes{ wr } }
     }
     if(not(options.js::isSet("port"))) { options.js::set("port", protocol.defaultPort()) }
@@ -293,12 +293,12 @@ namespace jsWeb {
     var port = None()
     try body() with RequestBuilder {
       def method(m) = resume(options.js::set("method", m.show))
-      def auth(a) = resume(auth = Some(a))
-      def hostname(n) = resume(hostname = n)
-      def path(p) = resume(path = p)
-      def port(p) = resume(port = Some(p))
+      def auth(a) = resume((auth = Some(a)))
+      def hostname(n) = resume((hostname = n))
+      def path(p) = resume((path = p))
+      def port(p) = resume((port = Some(p)))
       def header(k,  v) = resume(options.js::set("headers", k, v))
-      def protocol(p) = resume(protocol = p)
+      def protocol(p) = resume((protocol = p))
       def body() = resume{ {wr} => options.js::set("body", collectBytes{wr}) }
     }
     val authStr = auth.map{ a => a ++ "@" }.getOrElse{ "" }
@@ -333,12 +333,12 @@ namespace plain {
         case HTTP() => ()
         case _ => panic("Only HTTP is supported by constructRequest")
       }
-      def method(m) = resume(method = m)
+      def method(m) = resume((method = m))
       def hostname(n) = <>
       def auth(a) = <>
-      def port(p) = resume(port = p)
-      def path(p) = resume(path = p)
-      def header(k, v) = resume(headers = Cons((k, v), headers))
+      def port(p) = resume((port = p))
+      def path(p) = resume((path = p))
+      def header(k, v) = resume((headers = Cons((k, v), headers)))
       def body() = resume{ {b} => reqBody = collectBytes{ b() } }
     }
     // start line
