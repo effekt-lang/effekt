@@ -440,6 +440,10 @@ namespace plain {
           do emit(do read[Byte]())
         } with stop { () => do raise(WrongFormat(), "Premature end of chunk in chunked encoding") }
       }
+      expect("CRLF at end of chunk"){
+        readIf('\r')
+        readIf('\n')
+      }
     }
     // trailer headers
     expect("Trailers or end of response"){
@@ -454,7 +458,7 @@ namespace plain {
   }
 
   /// Parse a HTTP response from its byte representation.
-  /// Does not decode transfer encodings, will return everything as the body until eof (unless stopped first)
+  /// Decodes chunked encoding and stops after Content-Length, if provided.
   def parseResponse[R]{ body: {ResponseReader} => R }: R / { read[Byte], Exception[WrongFormat] } = {
     with decodeUTF8
     with returning::scanner[Char, R]
@@ -479,19 +483,54 @@ namespace plain {
       readIf('\n')
     }
 
+    def lower(s: String) = collectString{ for{ s.each }{ c => do emit(c.toLower) } }
+
     def getHeader(key: String) = {
       var r = None()
       headers.foreach {
-        case (k, v) and k == key => r = Some(v)
+        case (k, v) and k.lower == key => r = Some(v)
         case _ => ()
       }
       r
     }
 
-    try body{res} with res: ResponseReader {
-      def status() = resume(statusCode)
-      def getHeader(key) = resume(getHeader(key))
-      def body() = resume { exhaustively{ do emit(do read[Byte]()) } }
+    val transferEnc = getHeader("transfer-encoding")
+    val contentLength = getHeader("content-length")
+
+    (transferEnc, contentLength) match {
+      case (_, Some(l)) and l.toInt is len => // use provided content-length
+        try body{res} with res: ResponseReader {
+          def status() = resume(statusCode)
+          def getHeader(key) = resume(getHeader(key.lower))
+          def body() = resume { limit[Byte](len){ exhaustively{ do emit(do read[Byte]()) } } }
+        }
+      case (Some(enc), _) and enc == "chunked" => // decode chunked encoding // TODO support multiple and remove
+        var finalLength = None()
+        try body{res} with res: ResponseReader {
+          def status() = resume(statusCode)
+          def getHeader(key) = {
+            if(key.lower == "content-length") {
+              resume(finalLength)
+            } else if(key.lower == "transfer-encoding") {
+              resume(None())
+            } else {
+              resume(getHeader(key.lower))
+            }
+          }
+          def body() = {
+            resume {
+              headers = headers.append(collectList[(String, String)]{
+                finalLength = Some(unchunk().show)
+              })
+            }
+          }
+        }
+      case (_, _) => // read until end of input
+        try body{res} with res: ResponseReader {
+          def status() = resume(statusCode)
+          def getHeader(key) = resume(getHeader(key.lower))
+          def body() = resume { exhaustively{ do emit(do read[Byte]()) } }
+        }
     }
   }
 }
@@ -694,12 +733,19 @@ namespace example {
       crlf()
       "content-type: text/plain".each;
       crlf()
+      "Transfer-Encoding: chunked".each
+      crlf()
       "x-multiline-test-header: This is the first line".each
       crlf()
       " and this is the second line".each
       crlf()
       crlf()
+      "6".each
+      crlf()
       "Hello!".each
+      crlf()
+      "0".each
+      crlf()
     }
     with def res = plain::parseResponse
     println(res.status())
