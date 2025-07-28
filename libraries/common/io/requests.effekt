@@ -316,6 +316,7 @@ namespace jsWeb {
 }
 
 namespace plain {
+  /// Encode a request into its byte representation, will always use HTTP/1.1
   def constructRequest{ body: => Unit / RequestBuilder }: Unit / emit[Byte] = {
     def crlf() = {
       do emit('\r'.toInt.toByte)
@@ -452,6 +453,8 @@ namespace plain {
     length
   }
 
+  /// Parse a HTTP response from its byte representation.
+  /// Does not decode transfer encodings, will return everything as the body until eof (unless stopped first)
   def parseResponse[R]{ body: {ResponseReader} => R }: R / { read[Byte], Exception[WrongFormat] } = {
     with decodeUTF8
     with returning::scanner[Char, R]
@@ -476,16 +479,18 @@ namespace plain {
       readIf('\n')
     }
 
+    def getHeader(key: String) = {
+      var r = None()
+      headers.foreach {
+        case (k, v) and k == key => r = Some(v)
+        case _ => ()
+      }
+      r
+    }
+
     try body{res} with res: ResponseReader {
       def status() = resume(statusCode)
-      def getHeader(key) = { // TODO should be case-insensitive
-        var r = None()
-        headers.foreach {
-          case (k, v) and k == key => r = Some(v)
-          case _ => ()
-        }
-        resume(r)
-      }
+      def getHeader(key) = resume(getHeader(key))
       def body() = resume { exhaustively{ do emit(do read[Byte]()) } }
     }
   }
