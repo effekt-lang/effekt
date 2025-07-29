@@ -1,0 +1,37 @@
+module io/signal
+
+// Signals
+// -------
+
+/// Must be sent exactly once and waited for exactly once
+extern type Signal[T]
+
+namespace signal {
+  extern global def allocate[T](): Signal[T] =
+    llvm """
+      %signal = call %Pos @c_signal_make()
+      ret %Pos %signal
+    """
+}
+
+extern global def send[T](signal: Signal[T], value: T): Unit =
+  llvm """
+    call void @c_signal_send(%Pos ${signal}, %Pos ${value})
+    ret %Pos zeroinitializer
+  """
+
+extern async def wait[T](signal: Signal[T]): T =
+  llvm """
+    call void @c_signal_wait(%Pos ${signal}, %Stack %stack)
+    ret void
+  """
+
+extern llvm """
+  declare %Pos @c_signal_make()
+  declare void @c_signal_send(%Pos, %Pos)
+  declare void @c_signal_wait(%Pos, %Stack)
+"""
+
+
+
+

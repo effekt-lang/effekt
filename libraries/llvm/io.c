@@ -572,95 +572,95 @@ void c_yield(Stack stack) {
     c_timer_start(0, stack);
 }
 
-// Channels
+// Signals
 // --------
 
-typedef enum { EMPTY, SENDED, WAITED } channel_state_t;
+typedef enum { EMPTY, SENDED, WAITED } signal_state_t;
 
 typedef struct {
     uint64_t rc;
     void* eraser;
-    channel_state_t state;
+    signal_state_t state;
     union {
         struct Pos value;
         Stack stack;
     } payload;
-} Channel;
+} Signal;
 
-void c_channel_erase(void *envPtr) {
-    // envPtr points to a Channel _after_ the eraser, so let's adjust it to point to the beginning.
-    Channel *channel = (Channel*) (envPtr - offsetof(Channel, state));
-    channel_state_t state = channel->state;
+void c_signal_erase(void *envPtr) {
+    // envPtr points to a Signal _after_ the eraser, so let's adjust it to point to the beginning.
+    Signal *signal = (Signal*) (envPtr - offsetof(Signal, state));
+    signal_state_t state = signal->state;
     switch (state) {
     case EMPTY:
         break;
     case SENDED:
-        erasePositive(channel->payload.value);
+        erasePositive(signal->payload.value);
         break;
     case WAITED:
-        eraseStack(channel->payload.stack);
+        eraseStack(signal->payload.stack);
         break;
     }
 }
 
-struct Pos c_channel_make() {
-    Channel* channel = (Channel*)malloc(sizeof(Channel));
+struct Pos c_signal_make() {
+    Signal* signal = (Signal*)malloc(sizeof(Signal));
 
-    channel->rc = 0;
-    channel->eraser = c_channel_erase;
-    channel->state = EMPTY;
+    signal->rc = 0;
+    signal->eraser = c_signal_erase;
+    signal->state = EMPTY;
 
-    return (struct Pos) { .tag = 0, .obj = channel, };
+    return (struct Pos) { .tag = 0, .obj = signal, };
 }
 
-void c_channel_send(struct Pos channel, struct Pos value) {
-    Channel* f = (Channel*)channel.obj;
+void c_signal_send(struct Pos signal, struct Pos value) {
+    Signal* f = (Signal*)signal.obj;
     switch (f->state) {
         case EMPTY: {
             f->state = SENDED;
             f->payload.value = value;
-            erasePositive(channel);
+            erasePositive(signal);
             break;
         }
         case SENDED: {
-            erasePositive(channel);
+            erasePositive(signal);
             erasePositive(value);
             // TODO more graceful panic
-            fprintf(stderr, "ERROR: Channel already used for sending\n");
+            fprintf(stderr, "ERROR: Signal already used for sending\n");
             exit(1);
             break;
         }
         case WAITED: {
             Stack stack = f->payload.stack;
             f->state = EMPTY;
-            erasePositive(channel);
+            erasePositive(signal);
             resume_Pos(stack, value);
             break;
         }
     }
 }
 
-void c_channel_wait(struct Pos channel, Stack stack) {
-    Channel* f = (Channel*)channel.obj;
+void c_signal_wait(struct Pos signal, Stack stack) {
+    Signal* f = (Signal*)signal.obj;
     switch (f->state) {
         case EMPTY: {
             f->state = WAITED;
             f->payload.stack = stack;
-            erasePositive(channel);
+            erasePositive(signal);
             break;
         }
         case SENDED: {
             struct Pos value = f->payload.value;
             f->state = EMPTY;
-            erasePositive(channel);
+            erasePositive(signal);
             resume_Pos(stack, value);
             break;
         }
         case WAITED: {
-            erasePositive(channel);
+            erasePositive(signal);
             eraseStack(stack);
             // TODO more graceful panic
-            fprintf(stderr, "ERROR: Channel already used for waiting\n");
+            fprintf(stderr, "ERROR: Signal already used for waiting\n");
             exit(1);
             break;
         }
