@@ -317,7 +317,7 @@ void c_tcp_close(Int handle, Stack stack) {
     uv_close(uv_handle, c_tcp_close_cb);
 }
 
-void c_tcp_listen(String host, Int port, Int backlog, Stack stack) {
+void c_tcp_listen(String host, Int port, Stack stack) {
     // TODO make non-async
     char* host_str = c_bytearray_into_nullterminated_string(host);
     erasePositive(host);
@@ -343,13 +343,6 @@ void c_tcp_listen(String host, Int port, Int backlog, Stack stack) {
     }
 
     result = uv_tcp_bind(tcp_handle, (const struct sockaddr*)&addr, 0);
-    if (result < 0) {
-        uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
-        resume_Int(stack, result);
-        return;
-    }
-
-    result = uv_listen((uv_stream_t*)tcp_handle, backlog, NULL);
     if (result < 0) {
         uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
         resume_Int(stack, result);
