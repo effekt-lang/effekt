@@ -1,14 +1,14 @@
 module io/promise
 
 import io
-import io/channel
+import io/signal
 
 // Promises
 // --------
 
 type State[T] {
   Resolved(value: T)
-  Pending(channels: List[Channel[T]])
+  Pending(signals: List[Signal[T]])
 }
 
 extern type Promise[T]
@@ -45,11 +45,11 @@ extern {async, global} def await[T](promise: Promise[T]): T =
     get(reference) match {
       case Resolved(value) =>
         return value
-      case Pending(channels) =>
-        val channel = channel::allocate()
-        // TODO use reference.set and channel.wait
-        set(reference, Pending(Cons(channel, channels)))
-        wait(channel)
+      case Pending(signals) =>
+        val signal = signal::allocate()
+        // TODO use reference.set and signal.wait
+        set(reference, Pending(Cons(signal, signals)))
+        wait(signal)
     }
   }
 
@@ -61,11 +61,11 @@ extern {io, global} def resolve[T](promise: Promise[T], value: T): Unit =
     get(reference) match {
       case Resolved(value) =>
         panic("ERROR: Promise already resolved")
-      case Pending(channels) =>
+      case Pending(signals) =>
         // TODO use reference.set
         set(reference, Resolved(value))
-        // TODO use channels.reverse.foreach
-        foreach(reverse(channels)) { channel => send(channel, value) }
+        // TODO use signals.reverse.foreach
+        foreach(reverse(signals)) { signal => send(signal, value) }
     }
   }
 
