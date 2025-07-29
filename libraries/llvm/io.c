@@ -421,13 +421,6 @@ void c_tcp_accept(Int listener, struct Pos handler, Stack stack) {
     }
 }
 
-void c_tcp_shutdown_cb(uv_handle_t* handle) {
-    Stack stack = (Stack)handle->data;
-    free(handle);
-    // TODO resume_Pos Unit
-    resume_Int(stack, 0);
-}
-
 void c_tcp_shutdown(Int handle, Stack stack) {
     uv_handle_t* uv_handle = (uv_handle_t*)handle;
 
@@ -439,7 +432,7 @@ void c_tcp_shutdown(Int handle, Stack stack) {
     }
 
     uv_handle->data = stack;
-    uv_close(uv_handle, c_tcp_shutdown_cb);
+    uv_close(uv_handle, c_tcp_close_cb);
 }
 
 
