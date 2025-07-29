@@ -24,8 +24,8 @@ def close(handle: Connection): Unit / Exception[IOError] = {
 /// A tcp listener. Should not be inspected.
 type Listener = Int
 
-def listen(host: String, port: Int, backlog: Int): Listener / Exception[IOError] =
-  internal::checkResult(internal::listen(host, port, backlog))
+def listen(host: String, port: Int): Listener / Exception[IOError] =
+  internal::checkResult(internal::listen(host, port))
 
 def accept(listener: Listener, handler: Connection => Unit at {io, async, global}): Unit / Exception[IOError] = {
   internal::checkResult(internal::accept(listener, handler)); ()
@@ -73,9 +73,9 @@ namespace internal {
       ret void
     """
 
-  extern async def listen(host: String, port: Int, backlog: Int): Int =
+  extern async def listen(host: String, port: Int): Int =
     llvm """
-      call void @c_tcp_listen(%Pos ${host}, %Int ${port}, %Int ${backlog}, %Stack %stack)
+      call void @c_tcp_listen(%Pos ${host}, %Int ${port}, %Stack %stack)
       ret void
     """
 
