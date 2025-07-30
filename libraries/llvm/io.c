@@ -358,13 +358,14 @@ typedef struct {
 
 void c_tcp_listen_cb(uv_stream_t* server, int status) {
     tcp_listen_closure_t* listen_closure = (tcp_listen_closure_t*)server->data;
+    Stack closure_stack = listen_closure->stack;
+    struct Pos closure_handler = listen_closure->handler;
 
     if (status < 0) {
-        // TODO resume last
-        erasePositive(listen_closure->handler);
-        resume_Int(listen_closure->stack, status);
-        free(listen_closure);
         server->data = NULL;
+        free(listen_closure);
+        erasePositive(closure_handler);
+        resume_Int(closure_stack, status);
         return;
     }
 
@@ -372,28 +373,26 @@ void c_tcp_listen_cb(uv_stream_t* server, int status) {
     int result = uv_tcp_init(uv_default_loop(), client);
 
     if (result < 0) {
-        // TODO resume last
         free(client);
-        erasePositive(listen_closure->handler);
-        resume_Int(listen_closure->stack, result);
-        free(listen_closure);
         server->data = NULL;
+        free(listen_closure);
+        erasePositive(closure_handler);
+        resume_Int(closure_stack, result);
         return;
     }
 
     result = uv_accept(server, (uv_stream_t*)client);
     if (result < 0) {
-        // TODO resume last
         uv_close((uv_handle_t*)client, (uv_close_cb)free);
-        erasePositive(listen_closure->handler);
-        resume_Int(listen_closure->stack, result);
-        free(listen_closure);
         server->data = NULL;
+        free(listen_closure);
+        erasePositive(closure_handler);
+        resume_Int(closure_stack, result);
         return;
     }
 
-    sharePositive(listen_closure->handler);
-    run_Int(listen_closure->handler, (int64_t)client);
+    sharePositive(closure_handler);
+    run_Int(closure_handler, (int64_t)client);
 }
 
 void c_tcp_listen(Int listener, struct Pos handler, Stack stack) {
