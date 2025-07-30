@@ -307,8 +307,7 @@ void c_tcp_write(Int handle, struct Pos buffer, Int offset, Int size, Stack stac
 void c_tcp_close_cb(uv_handle_t* handle) {
     Stack stack = (Stack)handle->data;
     free(handle);
-    // TODO resume_Pos Unit
-    resume_Int(stack, 0);
+    resume_Pos(stack, Unit);
 }
 
 void c_tcp_close(Int handle, Stack stack) {

@@ -17,9 +17,8 @@ def read(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / E
 def write(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / Exception[IOError] =
   internal::checkResult(internal::write(handle, buffer, offset, size))
 
-def close(handle: Connection): Unit / Exception[IOError] = {
-  internal::checkResult(internal::close(handle)); ()
-}
+def close(handle: Connection): Unit =
+  internal::close(handle)
 
 /// A tcp listener. Should not be inspected.
 type Listener = Int
@@ -31,9 +30,8 @@ def listen(listener: Listener, handler: Connection => Unit at {io, async, global
   internal::checkResult(internal::listen(listener, handler)); ()
 }
 
-def shutdown(listener: Listener): Unit / Exception[IOError] = {
-  internal::checkResult(internal::shutdown(listener)); ()
-}
+def shutdown(listener: Listener): Unit =
+  internal::shutdown(listener)
 
 namespace internal {
 
@@ -67,7 +65,7 @@ namespace internal {
       ret void
     """
 
-  extern async def close(handle: Int): Int =
+  extern async def close(handle: Int): Unit =
     llvm """
       call void @c_tcp_close(%Int ${handle}, %Stack %stack)
       ret void
@@ -85,7 +83,7 @@ namespace internal {
       ret void
     """
 
-  extern async def shutdown(handle: Int): Int =
+  extern async def shutdown(handle: Int): Unit =
     llvm """
       call void @c_tcp_shutdown(%Int ${handle}, %Stack %stack)
       ret void
