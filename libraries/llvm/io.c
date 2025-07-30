@@ -419,7 +419,9 @@ void c_tcp_shutdown(Int handle, Stack stack) {
 
     tcp_accept_closure_t* accept_closure = (tcp_accept_closure_t*)uv_handle->data;
     if (accept_closure) {
-        eraseStack(accept_closure->stack);
+        // TODO what to resume with
+        // TODO resume last
+        resume_Int(accept_closure->stack, 0);
         erasePositive(accept_closure->handler);
         free(accept_closure);
     }

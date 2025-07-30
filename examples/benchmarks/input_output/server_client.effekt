@@ -6,41 +6,32 @@ import bytearray
 
 def main() = {
   with on[IOError].panic
-  val listener = listen("127.0.0.1", 8080, 1000);
+  val listener = listen("127.0.0.1", 8080);
   spawn(box {
     with on[IOError].panic
     accept(listener, box { connection =>
       with on[IOError].panic
-      println("accepted")
       val message = "hello world"
       var buffer = bytearray::fromString(message)
       write(connection, buffer, 0, buffer.size())
       close(connection)
   })});
 
-  println("started")
-
   val results = array::build(10) { i =>
     promise(box {
       with on[IOError].result
       wait(1000)
       val connection = connect("127.0.0.1", 8080)
-      println("connected")
       var buffer = bytearray::allocate(4096)
       val number = read(connection, buffer, 0, 4096)
       close(connection)
-      println("closed " ++ number.show)
       number
     })
   };
 
-  println("spawned")
-
   var total = 0;
   results.foreach { number =>
-    println("awaiting")
     total = total + number.await.value
-    println("awaited")
   };
 
   shutdown(listener)
