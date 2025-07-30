@@ -1,15 +1,17 @@
+import examples/benchmarks/runner
+
 import io
 import io/error
 import io/network
-import io/time
 import bytearray
 
-def main() = {
+def run(n: Int) = {
   with on[IOError].panic
-  val listener = listen("127.0.0.1", 8080);
+
+  val listener = bind("127.0.0.1", 8080);
   spawn(box {
     with on[IOError].panic
-    accept(listener, box { connection =>
+    listen(listener, box { connection =>
       with on[IOError].panic
       val message = "hello world"
       var buffer = bytearray::fromString(message)
@@ -17,10 +19,9 @@ def main() = {
       close(connection)
   })});
 
-  val results = array::build(10) { i =>
+  val results = array::build(n) { i =>
     promise(box {
       with on[IOError].result
-      wait(1000)
       val connection = connect("127.0.0.1", 8080)
       var buffer = bytearray::allocate(4096)
       val number = read(connection, buffer, 0, 4096)
@@ -36,5 +37,7 @@ def main() = {
 
   shutdown(listener)
   
-  println(total)
+  return total
 }
+
+def main() = benchmark(5){run}
