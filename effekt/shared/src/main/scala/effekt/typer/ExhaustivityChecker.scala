@@ -110,7 +110,7 @@ object ExhaustivityChecker {
   def preprocessPattern(p: source.MatchPattern)(using Context): Pattern = p match {
     case AnyPattern(id, _)  => Pattern.Any()
     case IgnorePattern(_) => Pattern.Any()
-    case p @ TagPattern(id, patterns, _) => Pattern.Tag(p.definition, patterns.map(preprocessPattern))
+    case p @ TagPattern(id, patterns, _) => Pattern.Tag(p.definition.asInstanceOf[Constructor], patterns.map(preprocessPattern))
     case LiteralPattern(lit, _) => Pattern.Literal(lit.value, lit.tpe)
     case MultiPattern(patterns, _) =>
       Context.panic("Multi-pattern should have been split in preprocess already / nested MultiPattern")
