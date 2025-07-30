@@ -317,7 +317,7 @@ void c_tcp_close(Int handle, Stack stack) {
     uv_close(uv_handle, c_tcp_close_cb);
 }
 
-void c_tcp_listen(String host, Int port, Stack stack) {
+void c_tcp_bind(String host, Int port, Stack stack) {
     // TODO make non-async
     char* host_str = c_bytearray_into_nullterminated_string(host);
     erasePositive(host);
@@ -355,16 +355,16 @@ void c_tcp_listen(String host, Int port, Stack stack) {
 typedef struct {
     Stack stack;
     struct Pos handler;
-} tcp_accept_closure_t;
+} tcp_listen_closure_t;
 
-void c_tcp_accept_cb(uv_stream_t* server, int status) {
-    tcp_accept_closure_t* accept_closure = (tcp_accept_closure_t*)server->data;
+void c_tcp_listen_cb(uv_stream_t* server, int status) {
+    tcp_listen_closure_t* listen_closure = (tcp_listen_closure_t*)server->data;
 
     if (status < 0) {
         // TODO resume last
-        erasePositive(accept_closure->handler);
-        resume_Int(accept_closure->stack, status);
-        free(accept_closure);
+        erasePositive(listen_closure->handler);
+        resume_Int(listen_closure->stack, status);
+        free(listen_closure);
         server->data = NULL;
         return;
     }
@@ -375,9 +375,9 @@ void c_tcp_accept_cb(uv_stream_t* server, int status) {
     if (result < 0) {
         // TODO resume last
         free(client);
-        erasePositive(accept_closure->handler);
-        resume_Int(accept_closure->stack, result);
-        free(accept_closure);
+        erasePositive(listen_closure->handler);
+        resume_Int(listen_closure->stack, result);
+        free(listen_closure);
         server->data = NULL;
         return;
     }
@@ -386,28 +386,28 @@ void c_tcp_accept_cb(uv_stream_t* server, int status) {
     if (result < 0) {
         // TODO resume last
         uv_close((uv_handle_t*)client, (uv_close_cb)free);
-        erasePositive(accept_closure->handler);
-        resume_Int(accept_closure->stack, result);
-        free(accept_closure);
+        erasePositive(listen_closure->handler);
+        resume_Int(listen_closure->stack, result);
+        free(listen_closure);
         server->data = NULL;
         return;
     }
 
-    sharePositive(accept_closure->handler);
-    run_Int(accept_closure->handler, (int64_t)client);
+    sharePositive(listen_closure->handler);
+    run_Int(listen_closure->handler, (int64_t)client);
 }
 
-void c_tcp_accept(Int listener, struct Pos handler, Stack stack) {
+void c_tcp_listen(Int listener, struct Pos handler, Stack stack) {
     uv_stream_t* server = (uv_stream_t*)listener;
 
-    tcp_accept_closure_t* accept_closure = malloc(sizeof(tcp_accept_closure_t));
-    accept_closure->stack = stack;
-    accept_closure->handler = handler;
-    server->data = accept_closure;
+    tcp_listen_closure_t* listen_closure = malloc(sizeof(tcp_listen_closure_t));
+    listen_closure->stack = stack;
+    listen_closure->handler = handler;
+    server->data = listen_closure;
 
-    int result = uv_listen(server, SOMAXCONN, c_tcp_accept_cb);
+    int result = uv_listen(server, SOMAXCONN, c_tcp_listen_cb);
     if (result < 0) {
-        free(accept_closure);
+        free(listen_closure);
         erasePositive(handler);
         resume_Int(stack, result);
         return;
@@ -417,13 +417,13 @@ void c_tcp_accept(Int listener, struct Pos handler, Stack stack) {
 void c_tcp_shutdown(Int handle, Stack stack) {
     uv_handle_t* uv_handle = (uv_handle_t*)handle;
 
-    tcp_accept_closure_t* accept_closure = (tcp_accept_closure_t*)uv_handle->data;
-    if (accept_closure) {
+    tcp_listen_closure_t* listen_closure = (tcp_listen_closure_t*)uv_handle->data;
+    if (listen_closure) {
         // TODO what to resume with
         // TODO resume last
-        resume_Int(accept_closure->stack, 0);
-        erasePositive(accept_closure->handler);
-        free(accept_closure);
+        resume_Int(listen_closure->stack, 0);
+        erasePositive(listen_closure->handler);
+        free(listen_closure);
     }
 
     uv_handle->data = stack;
