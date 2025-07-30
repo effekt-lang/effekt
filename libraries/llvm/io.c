@@ -415,18 +415,18 @@ void c_tcp_listen(Int listener, struct Pos handler, Stack stack) {
 
 void c_tcp_shutdown(Int handle, Stack stack) {
     uv_handle_t* uv_handle = (uv_handle_t*)handle;
-
     tcp_listen_closure_t* listen_closure = (tcp_listen_closure_t*)uv_handle->data;
-    if (listen_closure) {
-        // TODO what to resume with
-        // TODO resume last
-        resume_Int(listen_closure->stack, 0);
-        erasePositive(listen_closure->handler);
-        free(listen_closure);
-    }
 
     uv_handle->data = stack;
     uv_close(uv_handle, c_tcp_close_cb);
+
+    if (listen_closure) {
+        Stack closure_stack = listen_closure->stack;
+        struct Pos closure_handler = listen_closure->handler;
+        free(listen_closure);
+        erasePositive(closure_handler);
+        resume_Int(closure_stack, 0);
+    }
 }
 
 
