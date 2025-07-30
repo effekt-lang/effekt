@@ -24,11 +24,11 @@ def close(handle: Connection): Unit / Exception[IOError] = {
 /// A tcp listener. Should not be inspected.
 type Listener = Int
 
-def listen(host: String, port: Int): Listener / Exception[IOError] =
-  internal::checkResult(internal::listen(host, port))
+def bind(host: String, port: Int): Listener / Exception[IOError] =
+  internal::checkResult(internal::bind(host, port))
 
-def accept(listener: Listener, handler: Connection => Unit at {io, async, global}): Unit / Exception[IOError] = {
-  internal::checkResult(internal::accept(listener, handler)); ()
+def listen(listener: Listener, handler: Connection => Unit at {io, async, global}): Unit / Exception[IOError] = {
+  internal::checkResult(internal::listen(listener, handler)); ()
 }
 
 def shutdown(listener: Listener): Unit / Exception[IOError] = {
@@ -42,8 +42,8 @@ namespace internal {
     declare void @c_tcp_read(%Int, %Pos, %Int, %Int, %Stack)
     declare void @c_tcp_write(%Int, %Pos, %Int, %Int, %Stack)
     declare void @c_tcp_close(%Int, %Stack)
-    declare void @c_tcp_listen(%Pos, %Int, %Int, %Stack)
-    declare void @c_tcp_accept(%Int, %Pos, %Stack)
+    declare void @c_tcp_bind(%Pos, %Int, %Int, %Stack)
+    declare void @c_tcp_listen(%Int, %Pos, %Stack)
     declare void @c_tcp_shutdown(%Int, %Stack)
   """
 
@@ -73,15 +73,15 @@ namespace internal {
       ret void
     """
 
-  extern async def listen(host: String, port: Int): Int =
+  extern async def bind(host: String, port: Int): Int =
     llvm """
-      call void @c_tcp_listen(%Pos ${host}, %Int ${port}, %Stack %stack)
+      call void @c_tcp_bind(%Pos ${host}, %Int ${port}, %Stack %stack)
       ret void
     """
 
-  extern async def accept(listener: Int, handler: Int => Unit at {io, async, global}): Int =
+  extern async def listen(listener: Int, handler: Int => Unit at {io, async, global}): Int =
     llvm """
-      call void @c_tcp_accept(%Int ${listener}, %Pos ${handler}, %Stack %stack)
+      call void @c_tcp_listen(%Int ${listener}, %Pos ${handler}, %Stack %stack)
       ret void
     """
 
