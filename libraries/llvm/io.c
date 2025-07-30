@@ -316,8 +316,7 @@ void c_tcp_close(Int handle, Stack stack) {
     uv_close(uv_handle, c_tcp_close_cb);
 }
 
-void c_tcp_bind(String host, Int port, Stack stack) {
-    // TODO make non-async
+Int c_tcp_bind(String host, Int port) {
     char* host_str = c_bytearray_into_nullterminated_string(host);
     erasePositive(host);
 
@@ -327,8 +326,7 @@ void c_tcp_bind(String host, Int port, Stack stack) {
     if (result < 0) {
         free(tcp_handle);
         free(host_str);
-        resume_Int(stack, result);
-        return;
+        return result;
     }
 
     struct sockaddr_in addr;
@@ -337,18 +335,16 @@ void c_tcp_bind(String host, Int port, Stack stack) {
 
     if (result < 0) {
         uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
-        resume_Int(stack, result);
-        return;
+        return result;
     }
 
     result = uv_tcp_bind(tcp_handle, (const struct sockaddr*)&addr, 0);
     if (result < 0) {
         uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
-        resume_Int(stack, result);
-        return;
+        return result;
     }
 
-    resume_Int(stack, (int64_t)tcp_handle);
+    return (int64_t)tcp_handle;
 }
 
 typedef struct {
