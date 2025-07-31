@@ -125,11 +125,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case e @ source.ExternInclude(ff, path, contents, _, doc, span) =>
       List(Extern.Include(ff, contents.get))
 
+    case d @ source.NamespaceDef(name, defs, doc, span) =>
+      defs.flatMap(transformToplevel)
+
     // For now we forget about all of the following definitions in core:
     case d: source.Def.Extern => Nil
     case d: source.Def.Alias => Nil
-
-    case d: source.Def.NamespaceDef => Context.panic("Should have been removed by BoxUnboxInference")
   }
 
   /**
@@ -201,11 +202,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       case d: source.Def.Extern => Context.panic("Only allowed on the toplevel")
       case d: source.Def.Declaration => Context.panic("Only allowed on the toplevel")
+      case d: source.Def.NamespaceDef => Context.panic("Only allowed on the toplevel")
 
       // For now we forget about all of the following definitions in core:
       case d: source.Def.Alias => transform(rest)
-
-      case d: source.Def.NamespaceDef => Context.panic("Should have been removed by BoxUnboxInference")
     }
   }
 

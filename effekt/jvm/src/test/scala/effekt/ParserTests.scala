@@ -928,65 +928,6 @@ class ParserTests extends munit.FunSuite {
         |""".stripMargin)
   }
 
-  test("Namespaces") {
-    parseDefinitions(
-      """val x = 4
-        |val y = 5
-        |""".stripMargin)
-
-    val nested = parseDefinitions(
-      """namespace list {
-        |  val x = 4
-        |  val y = 5
-        |}
-        |""".stripMargin)
-
-    val semi = parseDefinitions(
-      """namespace list;
-        |val x = 4
-        |val y = 5
-        |""".stripMargin)
-
-    assertEqualModuloSpans(nested, semi)
-
-    val nested2 = parseDefinitions(
-      """namespace list {
-        |  namespace internal {
-        |
-        |    val x = 4
-        |    val y = 5
-        |  }
-        |}
-        |""".stripMargin)
-
-    val semi2 = parseDefinitions(
-      """namespace list;
-        |namespace internal;
-        |
-        |val x = 4
-        |val y = 5
-        |""".stripMargin)
-
-    val semiInsertion = parseDefinitions(
-      """namespace list
-        |namespace internal
-        |
-        |val x = 4
-        |val y = 5
-        |""".stripMargin)
-
-    assertEqualModuloSpans(nested2, semi2)
-    assertEqualModuloSpans(nested2, semiInsertion)
-
-    parseDefinitions(
-      """val x = {
-        |  namespace foo;
-        |  val y = 4;
-        |  foo::y
-        |}
-        |""".stripMargin)
-  }
-
   test("Definitions") {
     {
       val (source, pos) =
@@ -1236,24 +1177,6 @@ class ParserTests extends munit.FunSuite {
     }
 
     assertEquals(varDef.span, span)
-  }
-
-  test("Namespace definition parses with correct span") {
-    val (source, span) =
-      raw"""namespace Foo {
-           |↑
-           |}
-           |↑""".sourceAndSpan
-
-    val definition = parseDefinition(source.content)
-
-    val nsDef = definition match {
-      case nd@NamespaceDef(id, defs, doc, span) => nd
-      case other =>
-        throw new IllegalArgumentException(s"Expected NamespaceDef but got ${other.getClass.getSimpleName}")
-    }
-
-    assertEquals(nsDef.span, span)
   }
 
   test("Interface definition parses with correct span") {

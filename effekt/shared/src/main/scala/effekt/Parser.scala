@@ -459,7 +459,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       }
 
   def isDefinition: Boolean = peek.kind match {
-    case `val` | `def` | `type` | `effect` | `namespace` => true
+    case `val` | `def` | `type` | `effect` => true
     case `interface` | `type` | `record` =>
       val kw = peek.kind
       fail(s"Only supported on the toplevel: ${kw.toString} declaration.")
@@ -473,7 +473,6 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         case `def`       => defDef(info)
         case `type`      => typeOrAliasDef(info)
         case `effect`    => effectDef(info)
-        case `namespace` => namespaceDef(info)
         case _ => fail("Expected definition")
       }
 
