@@ -318,7 +318,7 @@ class ParserTests extends munit.FunSuite {
     parseExpr("resume(42)")
     parseExpr("in(42)")
 
-    parseExpr("fun() { foo(()) }")
+    parseExpr("box { foo(()) }")
 
     parseExpr("10.seconds")
 
@@ -531,7 +531,7 @@ class ParserTests extends munit.FunSuite {
       """return x;
         |""".stripMargin)
 
-    parseStmts("fun() { x = x + 1; x }")
+    parseStmts("box { x = x + 1; x }")
   }
 
   test("Definition statements") {
@@ -543,7 +543,7 @@ class ParserTests extends munit.FunSuite {
 
     parseStmts("val (left, right) = list; return left")
 
-    parseStmts("val g: () => Unit / Exc at {exc} = fun() { closure() }; ()")
+    parseStmts("val g: () => Unit / Exc at {exc} = box { closure() }; ()")
   }
 
   test("Pattern-matching val parses with correct span") {
