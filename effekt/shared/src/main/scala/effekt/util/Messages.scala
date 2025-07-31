@@ -158,6 +158,9 @@ object messages {
       at(t) { f(t) }
 
     def rangeOf(t: Tree): Option[Range] = {
+      if (t == null) {
+        return None
+      }
       val s = t.span
       if (s.origin == Origin.Missing) {
         None
