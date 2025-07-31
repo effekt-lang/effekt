@@ -20,6 +20,15 @@ case class Template[+T](strings: List[String], args: List[T]) {
   def map[R](f: T => R): Template[R] = Template(strings, args.map(f))
 }
 
+case class SpannedTemplate[T](strings: List[Spanned[String]], args: List[Spanned[T]]) {
+  def map[R](f: T => R): SpannedTemplate[R] = SpannedTemplate(strings, args.map(_.map(f)))
+  def unspan: Template[T] = Template(strings.map(_.unspan), args.map(_.unspan))
+}
+
+case class Spanned[T](unspan: T, span: Span) {
+  def map[R](f: T => R): Spanned[R] = Spanned(f(unspan), span)
+}
+
 object Parser extends Phase[Source, Parsed] {
 
   val phaseName = "parser"
@@ -686,9 +695,9 @@ class Parser(tokens: Seq[Token], source: Source) {
       peek.kind match {
         case _: Ident => (peek(1).kind match {
           case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> stmts(inBraces = true) <~ `}`, span())
-          case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template(), span())
+          case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template().unspan, span())
         }) labelled "extern body (string or block)"
-        case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template(), span())
+        case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template().unspan, span())
       }
 
   private def isExternBodyStart: Boolean =
@@ -697,13 +706,17 @@ class Parser(tokens: Seq[Token], source: Source) {
       case _                          => false
     }
 
-  def template(): Template[Term] =
+  def template(): SpannedTemplate[Term] =
     nonterminal:
       // TODO handle case where the body is not a string, e.g.
       // Expected an extern definition, which can either be a single-line string (e.g., "x + y") or a multi-line string (e.g., """...""")
-      val first = string()
-      val (exprs, strs) = manyWhile((`${` ~> expr() <~ `}$`, string()), `${`).unzip
-      Template(first :: strs, exprs)
+      val first = spanned(string())
+      val (exprs, strs) = manyWhile((`${` ~> spanned(expr()) <~ `}$`, spanned(string())), `${`).unzip
+      SpannedTemplate(first :: strs, exprs)
+
+  def spanned[T](p: => T): Spanned[T] =
+    nonterminal:
+      Spanned(p, span())
 
   def documented[T](parseCaptures: Boolean)(p: Info => T): T =
     nonterminal:
@@ -1283,20 +1296,36 @@ class Parser(tokens: Seq[Token], source: Source) {
     nonterminal:
       backtrack(idRef()) ~ template() match {
         // We do not need to apply any transformation if there are no splices _and_ no custom handler id is given
-        case Maybe(None, _) ~ Template(str :: Nil, Nil) => StringLit(str, Span.missing(source))
+        case Maybe(None, _) ~ SpannedTemplate(str :: Nil, Nil) => StringLit(str.unspan, str.span)
         // s"a${x}b${y}" ~> s { do literal("a"); do splice(x); do literal("b"); do splice(y); return () }
-        case id ~ Template(strs, args) =>
+        case id ~ SpannedTemplate(strs, args) =>
           val target = id.getOrElse(IdRef(Nil, "s", id.span.synthesized))
           val doLits = strs.map { s =>
-            Do(None, IdRef(Nil, "literal", Span.missing(source)), Nil, List(ValueArg.Unnamed(StringLit(s, Span.missing(source)))), Nil, Span.missing(source))
+            Do(
+              None,
+              IdRef(Nil, "literal", s.span.synthesized),
+              Nil,
+              List(ValueArg.Unnamed(StringLit(s.unspan, s.span))),
+              Nil,
+              s.span.synthesized
+            )
           }
           val doSplices = args.map { arg =>
-            Do(None, IdRef(Nil, "splice", Span.missing(source)), Nil, List(ValueArg.Unnamed(arg)), Nil, Span.missing(source))
+            Do(
+              None,
+              IdRef(Nil, "splice", arg.span.synthesized),
+              Nil,
+              List(ValueArg.Unnamed(arg.unspan)),
+              Nil,
+              arg.span.synthesized
+            )
           }
           val body = interleave(doLits, doSplices)
-            .foldRight(Return(UnitLit(Span.missing(source)), Span.missing(source))) { (term, acc) => ExprStmt(term, acc, Span.missing(source)) }
-          val blk = BlockLiteral(Nil, Nil, Nil, body, Span.missing(source))
-          Call(IdTarget(target), Nil, Nil, List(blk), Span.missing(source))
+            .foldRight(
+              Return(UnitLit(span().synthesized), span().synthesized)
+            ) { (term, acc) => ExprStmt(term, acc, term.span.synthesized) }
+          val blk = BlockLiteral(Nil, Nil, Nil, body, span().synthesized)
+          Call(IdTarget(target), Nil, Nil, List(blk), span().synthesized)
       }
 
   // TODO: This should use `expect` as it follows the same pattern.
