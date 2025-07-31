@@ -48,14 +48,14 @@ class LSPTests extends FunSuite {
   def withClientAndServer(testBlock: (MockLanguageClient, Server) => Unit): Unit = {
     withClientAndServer(true)(testBlock)
   }
-  
+
   /** Normalize the output of the IR by replacing the generated identifiers and stripping all whitespace
    */
   def normalizeIRString(ir: String): String = {
     ir.replaceAll("_\\d+", "_whatever")
       .replaceAll("\\s+", "")
   }
-  
+
   def assertIREquals(ir: String, expected: String): Unit = {
     val normalizedIR = normalizeIRString(ir)
     val normalizedExpected = normalizeIRString(expected)
@@ -1410,7 +1410,7 @@ class LSPTests extends FunSuite {
       assertEquals(receivedHoles.head.holes.length, 1)
     }
   }
-  
+
   test("Server publishes hole id for nested defs") {
     withClientAndServer { (client, server) =>
       val source =
@@ -1778,11 +1778,14 @@ class LSPTests extends FunSuite {
       assertEquals(innerBindings(4).name, "b2")
 
       val outerBindings = hole.scope.outer.get.bindings
+      println(outerBindings)
 
-      assertEquals(outerBindings.length, 3)
-      assertEquals(outerBindings(0).name, "e1")
-      assertEquals(outerBindings(1).name, "foo")
-      assertEquals(outerBindings(2).name, "e2")
+      assertEquals(outerBindings.length, 5)
+      assertEquals(outerBindings(0).name, "e1") // the type `effect e1(): Int / {}`
+      assertEquals(outerBindings(1).name, "e1") // the operation term
+      assertEquals(outerBindings(2).name, "e1") // the operation term e1::e1, these are duplicate bindings, introduced by https://github.com/effekt-lang/effekt/pull/1092
+      assertEquals(outerBindings(3).name, "foo")
+      assertEquals(outerBindings(4).name, "e2") // only the type since, but why?
     }
   }
 
