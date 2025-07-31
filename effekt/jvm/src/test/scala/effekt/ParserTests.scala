@@ -144,6 +144,9 @@ class ParserTests extends munit.FunSuite {
   def parseExternDef(input: String, positions: Positions = new Positions())(using munit.Location): Def =
     parse(input, _.externDef())
 
+  def parseInfo(input: String, positions: Positions = new Positions())(using munit.Location): Info =
+    parse(input, _.info(parseCaptures = true))
+
   // Custom asserts
   //
   //
@@ -997,7 +1000,8 @@ class ParserTests extends munit.FunSuite {
           IdDef("foo", Span(source, pos(0), pos(1))),
           None,
           Var(IdRef(Nil, "f", Span(source, pos(2), pos(3))), Span(source, pos(2), pos(3))),
-          None, Span(source, 0, pos.last)))
+          Info.empty(Span(source, 0, 0)),
+          Span(source, 0, pos.last)))
     }
 
     parseDefinition(
@@ -1079,6 +1083,17 @@ class ParserTests extends munit.FunSuite {
     assertEquals(funDef.ret.span, Span(source, pos(1), pos(1)))
   }
 
+  test("Function definition with comment") {
+    val (source, pos) =
+      raw"""/// Calculate the answer to the ultimate question of life, the universe, and everything
+           |def calculate() = 42
+           |""".sourceAndPositions
+
+    val definition = parseDefinition(source.content)
+
+    assertEquals(definition.doc, Some(" Calculate the answer to the ultimate question of life, the universe, and everything"))
+  }
+
   test("Function definition with whitespaces instead of return type") {
     val (source, pos) =
       raw"""def foo{b: => Unit / bar}      = <>
@@ -1132,6 +1147,62 @@ class ParserTests extends munit.FunSuite {
     assertEquals(valDef.span, span)
   }
 
+  test("Declaration info with capture set") {
+    val (source, pos) =
+      raw"""/// Some doc comment
+           |private extern {a, b, c}
+           |↑      ↑↑     ↑↑        ↑
+           |""".sourceAndPositions
+
+    parseInfo(source.content) match {
+      case Info(
+          Some(doc),
+          isPrivate,
+          isExtern,
+          Some(CaptureSet(captures, Span(_, captFrom, captTo, _)))) =>
+
+        assertEquals(doc, " Some doc comment")
+        assertEquals(isPrivate, Maybe(Some(()), Span(source, pos(0), pos(1))))
+        assertEquals(isExtern, Maybe(Some(()), Span(source, pos(2), pos(3))))
+        assertEquals(captures.map(_.name), List("a", "b", "c"))
+        assertEquals(captFrom, pos(4))
+        assertEquals(captTo, pos(5))
+
+      case info => fail(s"Wrong info: ${info}")
+    }
+  }
+
+  test("Only private") {
+    val (source, pos) =
+      raw"""/// Some doc comment
+           |private
+           |↑      ↑
+           |""".sourceAndPositions
+
+    parseInfo(source.content) match {
+      case Info(doc, isPrivate, isExtern, externCapture) =>
+
+        assertEquals(doc, Some(" Some doc comment"))
+        assertEquals(isPrivate, Maybe(Some(()), Span(source, pos(0), pos(1))))
+        assertEquals(isExtern, Maybe(None, Span(source, pos(1), pos(1))))
+        assertEquals(externCapture, None)
+    }
+  }
+
+  test("Only doc comment") {
+    val (source, pos) =
+      raw"""/// Some doc comment
+           |                    ↑
+           |""".sourceAndPositions
+
+    parseInfo(source.content) match {
+      case Info(doc, isPrivate, isExtern, externCapture) =>
+        assertEquals(doc, Some(" Some doc comment"))
+        assertEquals(isPrivate, Maybe(None, Span(source, pos(0), pos(0))))
+        assertEquals(isExtern, Maybe(None, Span(source, pos(0), pos(0))))
+        assertEquals(externCapture, None)
+    }
+  }
 
   test("Region definition parses with correct span") {
     val (source, span) =
