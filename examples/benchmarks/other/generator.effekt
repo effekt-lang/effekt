@@ -30,7 +30,7 @@ def generator { prog: => Unit / Yield } {r: Region}: Generator at {prog, r} = {
       cont = box { resume(()) }
     }
   }
-  new Generator {
+  box new Generator {
     def value() = v
     def next() = cont()
   }

@@ -875,7 +875,7 @@ def map[A, B](seq: Seq[A]) { f: (A) {Control} => B }: Seq[B] = {
 
 // def iterate[A, R](seq: Seq[A]) { prog: {Iterator[A]} => R }: R = {
 
-//   var k: Unit => Unit at {} = fun(unit: Unit) { () }
+//   var k: Unit => Unit at {} = box { () => () }
 //   var v: Option[A] = None()
 
 //   try { seq.each { el => do yield(el) } } with Generator[A] {

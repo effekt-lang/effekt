@@ -6,7 +6,7 @@ def main() = {
   def myref =
     region r1 { // ERROR r1
       var x in r1 = "hoho";
-      new Ref[String] {
+      box new Ref[String] {
         def get() = x
       }
     }

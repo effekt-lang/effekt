@@ -7,5 +7,5 @@ def main() = {
   val cap = try {
     foo {arr}
   } with arr: Exc { def op() = resume(println("hey")) }
-  (unbox cap)()
+  cap()
 }
