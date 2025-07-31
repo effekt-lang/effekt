@@ -1,17 +1,17 @@
 package effekt
 
+import effekt.context.Context
 import effekt.lexer.*
 import effekt.lexer.TokenKind.{`::` as PathSep, *}
 import effekt.source.*
-import effekt.context.Context
 import effekt.source.Origin.Synthesized
 import effekt.util.VirtualSource
 import kiama.parsing.{Input, ParseResult}
-import kiama.util.{Position, Positions, Range, Source}
+import kiama.util.{Position, Range, Source}
 
 import scala.annotation.{tailrec, targetName}
-import scala.language.implicitConversions
 import scala.collection.mutable.ListBuffer
+import scala.language.implicitConversions
 
 /**
  * String templates containing unquotes `${... : T}`
@@ -29,7 +29,7 @@ object Parser extends Phase[Source, Parsed] {
     case source =>
       Context.timed(phaseName, source.name) {
         val tokens = effekt.lexer.Lexer.lex(source)
-        val parser = new Parser(C.positions, tokens, source)
+        val parser = new Parser(tokens, source)
         parser.parse(Input(source, 0))
       }
   } map { tree =>
@@ -45,7 +45,7 @@ object Fail {
 }
 case class SoftFail(message: String, positionStart: Int, positionEnd: Int)
 
-class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
+class Parser(tokens: Seq[Token], source: Source) {
 
   var softFails: ListBuffer[SoftFail] = ListBuffer[SoftFail]()
 
@@ -501,7 +501,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
           val tpe = maybeValueTypeAnnotation() <~ `=`
           val binding = stmt()
           val endPos = pos()
-          val valDef = ValDef(id, tpe, binding, info.onlyDoc(), Span(source, startPos, endPos)).withRangeOf(startMarker, binding)
+          val valDef = ValDef(id, tpe, binding, info.onlyDoc(), Span(source, startPos, endPos))
           DefStmt(valDef, { semi(); stmts(inBraces) }, span())
       }
       def matchLhs() =
@@ -509,7 +509,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
           case AnyPattern(id, _) ~ Nil =>
             val binding = stmt()
             val endPos = pos()
-            val valDef = ValDef(id, None, binding, info.onlyDoc(), Span(source, startPos, endPos)).withRangeOf(startMarker, binding)
+            val valDef = ValDef(id, None, binding, info.onlyDoc(), Span(source, startPos, endPos))
             DefStmt(valDef, { semi(); stmts(inBraces) }, span())
           case p ~ guards =>
             // matches do not support doc comments, so we ignore `info`
@@ -517,8 +517,8 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
             val endPos = pos()
             val default = when(`else`) { Some(stmt()) } { None }
             val body = semi() ~> stmts(inBraces)
-            val clause = MatchClause(p, guards, body, Span(source, p.span.from, sc.span.to)).withRangeOf(p, sc)
-            val matching = Match(List(sc), List(clause), default, Span(source, startPos, endPos, Synthesized)).withRangeOf(startMarker, sc)
+            val clause = MatchClause(p, guards, body, Span(source, p.span.from, sc.span.to))
+            val matching = Match(List(sc), List(clause), default, Span(source, startPos, endPos, Synthesized))
             Return(matching, span().synthesized)
         }
 
@@ -591,9 +591,9 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     `effect` ~> operation(info) match {
       case op @ Operation(id, tps, vps, bps, ret, opDoc, opSpan) =>
         InterfaceDef(
-          IdDef(id.name, id.span) withPositionOf op,
+          IdDef(id.name, id.span),
           tps,
-          List(Operation(id, Many.empty(tps.span.synthesized), vps, bps, ret, opDoc, opSpan) withPositionOf op),
+          List(Operation(id, Many.empty(tps.span.synthesized), vps, bps, ret, opDoc, opSpan)),
           info,
           span())
     }
@@ -902,9 +902,9 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       // Interface[...] { case ... => ... }
       def operationImplementation() = idRef() ~ maybeTypeArgs() ~ implicitResume ~ functionArg() match {
         case (id ~ tps ~ k ~ BlockLiteral(_, vps, bps, body, _)) =>
-          val synthesizedId = IdRef(Nil, id.name, id.span.synthesized).withPositionOf(id)
-          val interface = TypeRef(id, tps, id.span.synthesized).withPositionOf(id)
-          val operation = OpClause(synthesizedId, Nil, vps, bps, None, body, k, Span(source, id.span.from, body.span.to, Synthesized)).withRangeOf(id, body)
+          val synthesizedId = IdRef(Nil, id.name, id.span.synthesized)
+          val interface = TypeRef(id, tps, id.span.synthesized)
+          val operation = OpClause(synthesizedId, Nil, vps, bps, None, body, k, Span(source, id.span.from, body.span.to, Synthesized))
           Implementation(interface, List(operation), span())
       }
 
@@ -1010,7 +1010,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       while (ops.contains(peek.kind)) {
          val op = next()
          val right = nonTerminal()
-         left = binaryOp(left, op, right).withRangeOf(left, right)
+         left = binaryOp(left, op, right)
       }
       left
 
@@ -1789,73 +1789,6 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   // the handler for the "span" effect.
   private val _start: scala.util.DynamicVariable[Int] = scala.util.DynamicVariable(0)
   inline def nonterminal[T](inline p: => T): T = _start.withValue(peek.start) {
-    val startToken = peek
-    val start = startToken.start
-    val res = p
-    val end = pos()
-
-    //    val sc: Any = res
-    //    if sc.isInstanceOf[Implementation] then sc match {
-    //      case Implementation(_, List(op)) =>
-    //        println(op)
-    //        println(positions.getStart(op))
-    //        println(positions.getFinish(op))
-    //
-    //        //        println(s"start: ${startToken.kind} (${source.offsetToPosition(start)})")
-    //        //        println(s"end: ${endToken} (${source.offsetToPosition(end)})")
-    //        //        println(s"peek: ${peek}")
-    //
-    //      case _ => ()
-    //    }
-
-    val startPos = getPosition(start)
-    val endPos = getPosition(end)
-
-    // recursively add positions to subtrees that are not yet annotated
-    // this is better than nothing and means we have positions for desugared stuff
-    def annotatePositions(res: Any): Unit = res match {
-      case l: List[_] =>
-        if (positions.getRange(l).isEmpty) {
-          positions.setStart(l, startPos)
-          positions.setFinish(l, endPos)
-          l.foreach(annotatePositions)
-        }
-      case t: Tree =>
-        val recurse = positions.getRange(t).isEmpty
-        if(positions.getStart(t).isEmpty) positions.setStart(t, startPos)
-        if(positions.getFinish(t).isEmpty) positions.setFinish(t, endPos)
-        t match {
-          case p: Product if recurse =>
-            p.productIterator.foreach { c =>
-              annotatePositions(c)
-            }
-          case _ => ()
-        }
-      case _ => ()
-    }
-    annotatePositions(res)
-
-    // still annotate, in case it is not Tree
-    positions.setStart(res, startPos)
-    positions.setFinish(res, endPos)
-
-    res
-  }
-
-  extension [T](self: T) {
-    inline def withPositionOf(other: Any): self.type = { positions.dupPos(other, self); self }
-    inline def withRangeOf(first: Any, last: Any): self.type = { positions.dupRangePos(first, last, self); self }
-
-    // Why did we need those?
-    private def dupIfEmpty(from: Any, to: Any): Unit =
-      if (positions.getStart(to).isEmpty) { positions.dupPos(from, to) }
-
-    private def dupAll(from: Any, to: Any): Unit = to match {
-      case t: Tree =>
-        dupIfEmpty(from, t)
-        t.productIterator.foreach { dupAll(from, _) }
-      case t: Iterable[t] => t.foreach { dupAll(from, _) }
-      case _ => ()
-    }
+    p
   }
 }

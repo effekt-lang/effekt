@@ -1,10 +1,10 @@
 package effekt
 
 import effekt.lexer.TokenKind.*
-import effekt.lexer.{Lexer, Token, TokenKind}
+import effekt.lexer.{Token, TokenKind}
 import effekt.source.*
 import effekt.source.Origin.Synthesized
-import kiama.util.{Positions, Source, StringSource}
+import kiama.util.{Source, StringSource}
 import munit.Location
 
 // DSL for creating code snippets with span annotations
@@ -69,16 +69,16 @@ object SpanSyntax {
 
 class ParserTests extends munit.FunSuite {
 
-  def parser(input: String, positions: Positions)(using munit.Location): Parser = {
+  def parser(input: String)(using munit.Location): Parser = {
     val source = StringSource(input, "")
     val tokens = effekt.lexer.Lexer.lex(source)
     // TODO catch LexerError exception?
-    new Parser(positions, tokens, source)
+    new Parser(tokens, source)
   }
 
-  def parse[R](input: String, f: Parser => R, positions: Positions = new Positions())(using munit.Location): R =
+  def parse[R](input: String, f: Parser => R)(using munit.Location): R =
     try {
-      val p = parser(input, positions)
+      val p = parser(input)
       val result = f(p)
       assert(p.peek(TokenKind.EOF), s"Did not consume everything: ${p.peek}")
       result
@@ -87,61 +87,61 @@ class ParserTests extends munit.FunSuite {
         fail(s"Unexpected parse error (token index ${pos}): ${msg}")
     }
 
-  def parseExpr(input: String, positions: Positions = new Positions())(using munit.Location): Term =
+  def parseExpr(input: String)(using munit.Location): Term =
     parse(input, _.expr())
 
-  def parseStmt(input: String, positions: Positions = new Positions())(using munit.Location): Stmt =
+  def parseStmt(input: String)(using munit.Location): Stmt =
     parse(input, _.stmt())
 
-  def parseStmts(input: String, positions: Positions = new Positions())(using munit.Location): Stmt =
+  def parseStmts(input: String)(using munit.Location): Stmt =
     parse(input, _.stmts(inBraces = true))
 
-  def parseMatchPattern(input: String, positions: Positions = new Positions())(using munit.Location): MatchPattern =
+  def parseMatchPattern(input: String)(using munit.Location): MatchPattern =
     parse(input, _.matchPattern())
 
-  def parseMatchClause(input: String, positions: Positions = new Positions())(using munit.Location): MatchClause =
+  def parseMatchClause(input: String)(using munit.Location): MatchClause =
     parse(input, _.matchClause())
 
-  def parseValueTypeAnnotation(input: String, positions: Positions = new Positions())(using munit.Location): ValueType =
+  def parseValueTypeAnnotation(input: String)(using munit.Location): ValueType =
     parse(input, _.valueTypeAnnotation())
 
-  def parseReturnAnnotation(input: String, positions: Positions = new Positions())(using munit.Location): Effectful =
+  def parseReturnAnnotation(input: String)(using munit.Location): Effectful =
     parse(input, _.returnAnnotation())
 
-  def parseValueType(input: String, positions: Positions = new Positions())(using munit.Location): ValueType =
+  def parseValueType(input: String)(using munit.Location): ValueType =
     parse(input, _.valueType())
 
-  def parseBlockType(input: String, positions: Positions = new Positions())(using munit.Location): BlockType =
+  def parseBlockType(input: String)(using munit.Location): BlockType =
     parse(input, _.blockType())
 
-  def parseOpClause(input: String, positions: Positions = new Positions())(using munit.Location): OpClause =
+  def parseOpClause(input: String)(using munit.Location): OpClause =
     parse(input, _.opClause())
 
-  def parseImplementation(input: String, positions: Positions = new Positions())(using munit.Location): Implementation =
+  def parseImplementation(input: String)(using munit.Location): Implementation =
     parse(input, _.implementation())
 
-  def parseTry(input: String, positions: Positions = new Positions())(using munit.Location): Term =
+  def parseTry(input: String)(using munit.Location): Term =
     parse(input, _.tryExpr())
 
-  def parseParams(input: String, positions: Positions = new Positions())(using munit.Location): (Many[Id], Many[ValueParam], Many[BlockParam]) =
+  def parseParams(input: String)(using munit.Location): (Many[Id], Many[ValueParam], Many[BlockParam]) =
     parse(input, _.params())
 
-  def parseLambdaParams(input: String, positions: Positions = new Positions())(using munit.Location): (List[Id], List[ValueParam], List[BlockParam]) =
+  def parseLambdaParams(input: String)(using munit.Location): (List[Id], List[ValueParam], List[BlockParam]) =
     parse(input, _.lambdaParams())
 
-  def parseDefinition(input: String, positions: Positions = new Positions())(using munit.Location): Def =
+  def parseDefinition(input: String)(using munit.Location): Def =
     parse(input, _.definition())
 
-  def parseDefinitions(input: String, positions: Positions = new Positions())(using munit.Location): List[Def] =
+  def parseDefinitions(input: String)(using munit.Location): List[Def] =
     parse(input, _.definitions())
 
-  def parseToplevel(input: String, positions: Positions = new Positions())(using munit.Location): Def =
+  def parseToplevel(input: String)(using munit.Location): Def =
     parse(input, _.toplevel())
 
-  def parseProgram(input: String, positions: Positions = new Positions())(using munit.Location): ModuleDecl =
+  def parseProgram(input: String)(using munit.Location): ModuleDecl =
     parse(input, _.program())
 
-  def parseExternDef(input: String, positions: Positions = new Positions())(using munit.Location): Def =
+  def parseExternDef(input: String)(using munit.Location): Def =
     parse(input, _.externDef())
 
   def parseInfo(input: String, positions: Positions = new Positions())(using munit.Location): Info =
@@ -251,7 +251,7 @@ class ParserTests extends munit.FunSuite {
   test("Peeking") {
     implicit def toToken(t: TokenKind): Token = Token(0, 0, t)
     def peek(tokens: Seq[Token], offset: Int): Token =
-      new Parser(new Positions, tokens, StringSource("", "test")).peek(offset)
+      new Parser(tokens, StringSource("", "test")).peek(offset)
 
     val tokens = List[Token](`(`, Space, Newline, `)`, Space, `=>`, EOF)
     assertEquals(peek(tokens, 0).kind, `(`)
