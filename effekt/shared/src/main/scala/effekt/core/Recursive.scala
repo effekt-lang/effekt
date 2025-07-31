@@ -83,7 +83,7 @@ class Recursive(
     case Stmt.Shift(prompt, body) => process(prompt); process(body)
     case Stmt.Resume(k, body) => process(k); process(body)
     case Stmt.Region(body) => process(body)
-    case Stmt.Hole() => ()
+    case Stmt.Hole(span) => ()
   }
 
   def process(e: Expr): Unit = e match {
