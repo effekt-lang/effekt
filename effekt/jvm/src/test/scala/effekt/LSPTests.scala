@@ -1329,7 +1329,8 @@ class LSPTests extends FunSuite {
           origin = BindingOrigin.Defined,
           `type` = Some(
             "Int"
-          )
+          ),
+          typeHtml = Some("<span class=\"effekt-ident pascal-case\">Int</span>")
         )
       )
 
@@ -1340,7 +1341,8 @@ class LSPTests extends FunSuite {
           origin = BindingOrigin.Defined,
           `type` = Some(
             "String => Int"
-          )
+          ),
+          typeHtml = Some("<span class=\"effekt-ident pascal-case\">String</span> =&gt; <span class=\"effekt-ident pascal-case\">Int</span>"),
         ),
         TermBinding(
           qualifier = List(),
@@ -1348,13 +1350,15 @@ class LSPTests extends FunSuite {
           origin = BindingOrigin.Defined,
           `type` = Some(
             "Int => Bool"
-          )
+          ),
+          typeHtml = Some("<span class=\"effekt-ident pascal-case\">Int</span> =&gt; <span class=\"effekt-ident pascal-case\">Bool</span>"),
         ),
         TypeBinding(
           qualifier = Nil,
           name = "MyInt",
           origin = BindingOrigin.Defined,
-          definition = "type MyInt = Int"
+          definition = "type MyInt = Int",
+          definitionHtml = "<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">MyInt</span> = <span class=\"effekt-ident pascal-case\">Int</span>",
         )
       )
 
@@ -1476,7 +1480,8 @@ class LSPTests extends FunSuite {
           qualifier = List(),
           name = "bar",
           origin = BindingOrigin.Defined,
-          `type` = Some("() => Nothing")
+          `type` = Some("() => Nothing"),
+          typeHtml = Some("() =&gt; <span class=\"effekt-ident pascal-case\">Nothing</span>")
         )
       )
 
@@ -1505,7 +1510,8 @@ class LSPTests extends FunSuite {
             qualifier = List(),
             name = "x",
             origin = BindingOrigin.Defined,
-            `type` = Some("Int")
+            `type` = Some("Int"),
+            typeHtml = Some("Int"),
           )
         ),
         outer = Some(ScopeInfo(
@@ -1520,7 +1526,8 @@ class LSPTests extends FunSuite {
                 qualifier = List(),
                 name = "MyInt",
                 origin = BindingOrigin.Defined,
-                definition = "type MyInt = Int"
+                definition = "type MyInt = Int",
+                definitionHtml = "type MyInt = Int"
               )),
             outer = None
           ))
@@ -1554,6 +1561,7 @@ class LSPTests extends FunSuite {
         |        "name": "x",
         |        "origin": "Defined",
         |        "type": "Int",
+        |        "typeHtml": "Int",
         |        "kind": "Term"
         |      }
         |    ],
@@ -1569,6 +1577,7 @@ class LSPTests extends FunSuite {
         |            "name": "MyInt",
         |            "origin": "Defined",
         |            "definition": "type MyInt = Int",
+        |            "definitionHtml": "type MyInt = Int",
         |            "kind": "Type"
         |          }
         |        ]
@@ -1829,6 +1838,9 @@ class LSPTests extends FunSuite {
           definition = """type Foo1 {
   def Foo1(theField: String): Foo1 / {}
 }""",
+          definitionHtml = """<span class="effekt-keyword">type</span> <span class="effekt-ident pascal-case">Foo1</span> {
+  <span class="effekt-keyword">def</span> <span class="effekt-ident pascal-case">Foo1</span>(<span class="effekt-ident camel-case">theField</span>: <span class="effekt-ident pascal-case">String</span>): <span class="effekt-ident pascal-case">Foo1</span> / {}
+}""",
           kind = "Type"
         ),
         TermBinding(
@@ -1838,7 +1850,8 @@ class LSPTests extends FunSuite {
           `type` = Some(
             value = "String => Foo1"
           ),
-          kind = "Term"
+          typeHtml = Some("<span class=\"effekt-ident pascal-case\">String</span> =&gt; <span class=\"effekt-ident pascal-case\">Foo1</span>"),
+          kind = "Term",
         ),
         TermBinding(
           qualifier = Nil,
@@ -1847,7 +1860,8 @@ class LSPTests extends FunSuite {
           `type` = Some(
             value = "Foo1 => String"
           ),
-          kind = "Term"
+          typeHtml = Some("<span class=\"effekt-ident pascal-case\">Foo1</span> =&gt; <span class=\"effekt-ident pascal-case\">String</span>"),
+          kind = "Term",
         ),
         TypeBinding(
           qualifier = Nil,
@@ -1855,6 +1869,9 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           definition = """type Foo2 {
   def Foo2(theField: String): Foo2 / {}
+}""",
+          definitionHtml = """<span class="effekt-keyword">type</span> <span class="effekt-ident pascal-case">Foo2</span> {
+  <span class="effekt-keyword">def</span> <span class="effekt-ident pascal-case">Foo2</span>(<span class="effekt-ident camel-case">theField</span>: <span class="effekt-ident pascal-case">String</span>): <span class="effekt-ident pascal-case">Foo2</span> / {}
 }""",
           kind = "Type"
         ),
@@ -1865,7 +1882,8 @@ class LSPTests extends FunSuite {
           `type` = Some(
             value = "String => Foo2"
           ),
-          kind = "Term"
+          typeHtml = Some("<span class=\"effekt-ident pascal-case\">String</span> =&gt; <span class=\"effekt-ident pascal-case\">Foo2</span>"),
+          kind = "Term",
         ),
         TermBinding(
           qualifier = Nil,
@@ -1874,7 +1892,8 @@ class LSPTests extends FunSuite {
           `type` = Some(
             value = "Foo2 => String"
           ),
-          kind = "Term"
+          typeHtml = Some("<span class=\"effekt-ident pascal-case\">Foo2</span> =&gt; <span class=\"effekt-ident pascal-case\">String</span>"),
+          kind = "Term",
         ),
         TypeBinding(
           qualifier = Nil,
@@ -1882,6 +1901,9 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           definition = """type Bar {
   def Bar(theField: Int): Bar / {}
+}""",
+          definitionHtml = """<span class="effekt-keyword">type</span> <span class="effekt-ident pascal-case">Bar</span> {
+  <span class="effekt-keyword">def</span> <span class="effekt-ident pascal-case">Bar</span>(<span class="effekt-ident camel-case">theField</span>: <span class="effekt-ident pascal-case">Int</span>): <span class="effekt-ident pascal-case">Bar</span> / {}
 }""",
           kind = "Type"
         ),
@@ -1892,7 +1914,8 @@ class LSPTests extends FunSuite {
           `type` = Some(
             value = "Int => Bar"
           ),
-          kind = "Term"
+          typeHtml = Some("<span class=\"effekt-ident pascal-case\">Int</span> =&gt; <span class=\"effekt-ident pascal-case\">Bar</span>"),
+          kind = "Term",
         ),
         TermBinding(
           qualifier = Nil,
@@ -1901,7 +1924,8 @@ class LSPTests extends FunSuite {
           `type` = Some(
             value = "() => Nothing"
           ),
-          kind = "Term"
+          typeHtml = Some("() =&gt; <span class=\"effekt-ident pascal-case\">Nothing</span>"),
+          kind = "Term",
         )
       )
 
