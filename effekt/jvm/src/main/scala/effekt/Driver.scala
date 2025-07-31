@@ -25,7 +25,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
   // Compiler context
   // ================
   // We always only have one global instance of the compiler
-  object context extends Context(positions) with IOModuleDB { val messaging = outer.messaging }
+  object context extends Context with IOModuleDB { val messaging = outer.messaging }
 
   override def createConfig(args: Seq[String]) =
     new EffektConfig(args)

@@ -8,9 +8,9 @@ import effekt.source.{AnnotateCaptures, ExplicitCapabilities, ModuleDecl, Resolv
 import effekt.symbols.Module
 import effekt.typer.{BoxUnboxInference, Typer, Wellformedness}
 import effekt.util.messages.{CompilerPanic, FatalPhaseError}
-import effekt.util.{SourceTask, Task, VirtualSource, paths}
+import effekt.util.paths
 import kiama.output.PrettyPrinterTypes.Document
-import kiama.util.{Positions, Source}
+import kiama.util.Source
 
 import scala.language.postfixOps
 
@@ -313,7 +313,6 @@ trait Compiler[Executable] {
 
   // Helpers
   // -------
-  import effekt.util.paths.file
 
   /**
    * Path relative to the output folder
