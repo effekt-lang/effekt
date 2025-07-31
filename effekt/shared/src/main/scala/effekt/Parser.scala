@@ -500,8 +500,7 @@ class Parser(tokens: Seq[Token], source: Source) {
    */
   def valStmt(inBraces: Boolean): Stmt =
     documented(parseCaptures = false): info =>
-      val startPos = pos()
-      val startMarker = nonterminal { new {} }
+      val startPos = peek.start
       def simpleLhs() = backtrack {
         // Make sure there's either a `:` or `=` next, otherwise goto `matchLhs`
         def canCut: Boolean = peek(`:`) || peek(`=`)
