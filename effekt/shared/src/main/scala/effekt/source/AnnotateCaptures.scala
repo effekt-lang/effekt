@@ -51,7 +51,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       }
       query(term) ++ capt
 
-    case t @ source.Do(effect, op, targs, vargs, bargs, _) =>
+    case t @ source.Do(op, targs, vargs, bargs, _) =>
       val cap = Context.annotation(Annotations.CapabilityReceiver, t)
       combineAll(vargs.map(query)) ++ combineAll(bargs.map(query)) ++ CaptureSet(cap.capture)
 

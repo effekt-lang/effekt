@@ -1789,11 +1789,14 @@ class LSPTests extends FunSuite {
       assertEquals(innerBindings(4).name, "b2")
 
       val outerBindings = hole.scope.outer.get.bindings
+      println(outerBindings)
 
-      assertEquals(outerBindings.length, 3)
-      assertEquals(outerBindings(0).name, "e1")
-      assertEquals(outerBindings(1).name, "foo")
-      assertEquals(outerBindings(2).name, "e2")
+      assertEquals(outerBindings.length, 5)
+      assertEquals(outerBindings(0).name, "e1") // the type `effect e1(): Int / {}`
+      assertEquals(outerBindings(1).name, "e1") // the operation term
+      assertEquals(outerBindings(2).name, "e1") // the operation term e1::e1, these are duplicate bindings, introduced by https://github.com/effekt-lang/effekt/pull/1092
+      assertEquals(outerBindings(3).name, "foo")
+      assertEquals(outerBindings(4).name, "e2") // only the type since, but why?
     }
   }
 
@@ -1887,6 +1890,15 @@ class LSPTests extends FunSuite {
         ),
         TermBinding(
           qualifier = Nil,
+          name = "Bar",
+          origin = "Defined",
+          `type` = Some(
+            value = "Int => Bar"
+          ),
+          kind = "Term"
+        ),
+        TermBinding(
+          qualifier = List("Bar"),
           name = "Bar",
           origin = "Defined",
           `type` = Some(
