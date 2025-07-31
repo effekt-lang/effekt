@@ -1,17 +1,10 @@
 package effekt
 package core
 
-import effekt.context.Context
-import effekt.core.ValueParam
-import effekt.util.VirtualSource
 import effekt.source.{FeatureFlag, Span}
-import effekt.util.messages.{DebugMessaging, ErrorReporter, ParseError}
-import kiama.parsing.{Failure, Input, NoSuccess, ParseResult, Success, Parsers}
-
+import effekt.util.messages.{ErrorReporter, ParseError}
+import kiama.parsing.{NoSuccess, ParseResult, Parsers, Success}
 import kiama.util.{Position, Positions, Range, Source, StringSource}
-import effekt.util.messages.ParseError
-
-import scala.util.matching.Regex
 
 class Names(var knownNames: Map[String, Id]) {
   def idFor(name: String): Id = knownNames.getOrElse(name, {
@@ -165,26 +158,6 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
       p.flatMap(_ => error(errorMessage))
   }
 
-  implicit class PositionOps[T](val self: T) {
-    def withPositionOf(other: Any): self.type = { dupAll(other, self); self }
-
-    private def dupIfEmpty(from: Any, to: Any): Unit =
-      if (positions.getStart(to).isEmpty) { positions.dupPos(from, to) }
-
-    private def dupAll(from: Any, to: Any): Unit = to match {
-      case t: Tree =>
-        dupIfEmpty(from, t)
-        t.productIterator.foreach { dupAll(from, _) }
-      case t: Iterable[t] => t.foreach { dupAll(from, _) }
-      case _ => ()
-    }
-
-    def range: Option[Range] = for {
-      from <- positions.getStart(self)
-      to <- positions.getFinish(self)
-    } yield SourceRange(from, to)
-  }
-
   trait Range {
     def ++(other: Range): Range
   }
@@ -202,30 +175,8 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
     }
   }
 
-  /**
-   * Check positions of all subtrees, stopping at trees that already have positions
-   */
-  def checkPosition(t: Tree): Range = t.range.getOrElse {
-    t.productIterator.map(checkPositions).fold(EmptyRange)(_ ++ _) match {
-      case EmptyRange => sys error s"Missing position for ${ t }. Cannot guess the source position from its children."
-      case rng @ SourceRange(from, to) =>
-        positions.setStart(t, from)
-        positions.setFinish(t, to)
-        rng
-    }
-  }
-
-  def checkPositions(t: Any): Range = t match {
-    case t: Tree => checkPosition(t)
-    case t: Iterable[t] => t.map(checkPositions).fold(EmptyRange)(_ ++ _)
-    case _ => EmptyRange
-  }
-
   override implicit def memo[T](parser: => Parser[T]): PackratParser[T] =
-    new PackratParser[T](parser.map { t =>
-      checkPositions(t)
-      t
-    })
+    new PackratParser[T](parser)
 
   def parseAll[T](p: Parser[T], input: String): ParseResult[T] =
     parseAll(p, StringSource(input, "input-string"))
