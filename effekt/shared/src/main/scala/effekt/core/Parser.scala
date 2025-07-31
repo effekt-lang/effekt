@@ -1,17 +1,10 @@
 package effekt
 package core
 
-import effekt.context.Context
-import effekt.core.ValueParam
-import effekt.util.VirtualSource
 import effekt.source.{FeatureFlag, Span}
-import effekt.util.messages.{DebugMessaging, ErrorReporter, ParseError}
-import kiama.parsing.{Failure, Input, NoSuccess, ParseResult, Success, Parsers}
-
+import effekt.util.messages.{ErrorReporter, ParseError}
+import kiama.parsing.{NoSuccess, ParseResult, Parsers, Success}
 import kiama.util.{Position, Positions, Range, Source, StringSource}
-import effekt.util.messages.ParseError
-
-import scala.util.matching.Regex
 
 class Names(var knownNames: Map[String, Id]) {
   def idFor(name: String): Id = knownNames.getOrElse(name, {
