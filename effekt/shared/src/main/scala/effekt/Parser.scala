@@ -1236,13 +1236,19 @@ class Parser(tokens: Seq[Token], source: Source) {
   }
   def listLiteral(): Term =
     nonterminal:
-      manyTrailing(expr, `[`, `,`, `]`).foldRight(NilTree) { ConsTree }
+      manyTrailing(() => spanned(expr()), `[`, `,`, `]`).foldRight(NilTree) { ConsTree }
 
   private def NilTree: Term =
-    Call(IdTarget(IdRef(List(), "Nil", Span.missing(source))), Nil, Nil, Nil, Span.missing(source))
+    Call(IdTarget(IdRef(List(), "Nil", span())), Nil, Nil, Nil, span())
 
-  private def ConsTree(el: Term, rest: Term): Term =
-    Call(IdTarget(IdRef(List(), "Cons", Span.missing(source))), Nil, List(ValueArg.Unnamed(el), ValueArg.Unnamed(rest)), Nil, Span.missing(source))
+  private def ConsTree(el: Spanned[Term], rest: Term): Term =
+    Call(
+      IdTarget(IdRef(List(), "Cons", el.span.synthesized)),
+      Nil,
+      List(ValueArg.Unnamed(el.unspan), ValueArg.Unnamed(rest)),
+      Nil,
+      el.span.synthesized
+    )
 
   def isTupleOrGroup: Boolean = peek(`(`)
   def tupleOrGroup(): Term =
