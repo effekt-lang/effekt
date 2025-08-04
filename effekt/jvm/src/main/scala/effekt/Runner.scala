@@ -6,6 +6,8 @@ import effekt.util.paths.{File, file}
 import effekt.util.{getOrElseAborting, escape, OS, os}
 import kiama.util.IO
 
+import scala.util.Properties
+
 /**
  * Interface used by [[Driver]] and [[EffektTests]] to run a compiled program.
  *
@@ -33,6 +35,11 @@ trait Runner[Executable] {
    * @param stdlibPath is the path to the standard library
    */
   def includes(stdlibPath: File): List[File] = Nil
+
+  /**
+   * Additional flags to the backend process.
+   */
+  def flags: Seq[String]
 
   /**
    * Modules this backend loads by default.
@@ -94,6 +101,8 @@ trait Runner[Executable] {
    */
   def eval(executable: Executable)(using C: Context): Unit = build(executable).foreach { execFile =>
     val valgrindArgs = Seq("--leak-check=full", "--undef-value-errors=no", "--quiet", "--log-file=valgrind.log", "--error-exitcode=1")
+     ++ Properties.envOrElse("VALGRIND_FLAGS", "").split(" ").toSeq
+
     val process = if (C.config.valgrind())
       Process("valgrind", valgrindArgs ++ (execFile +: Context.config.runArgs()))
     else
@@ -160,6 +169,8 @@ object JSNodeRunner extends Runner[String] {
 
   def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
+  val flags = Properties.envOrElse("NODE_FLAGS", "").split(" ").toSeq
+
   override def includes(path: File): List[File] = List(path / ".." / "js")
 
   def checkSetup(): Either[String, Unit] =
@@ -186,7 +197,7 @@ object JSNodeRunner extends Runner[String] {
 
     os match {
       case OS.POSIX =>
-        val shebang = "#!/usr/bin/env node"
+        val shebang = s"#!/usr/bin/env -S node ${flags.mkString(" ")}"
         val jsScriptFilePath = jsFilePath.stripSuffix(s".$extension")
         IO.createFile(jsScriptFilePath, s"$shebang\n$jsScript", true)
         Some(jsScriptFilePath)
@@ -195,8 +206,9 @@ object JSNodeRunner extends Runner[String] {
         val jsMainFilePath = jsFilePath.stripSuffix(s".$extension") + "__main.js"
         val jsMainFileName = jsFileName.stripSuffix(s".$extension") + "__main.js"
         val exePath = jsFilePath.stripSuffix(s".$extension")
+        val jsArgs = Seq("node", "$SCRIPT_DIR/" + jsMainFileName) ++ flags
         IO.createFile(jsMainFilePath, jsScript)
-        Some(createScript(exePath, "node", "$SCRIPT_DIR/" + jsMainFileName))
+        Some(createScript(exePath, jsArgs: _*))
     }
 }
 object JSWebRunner extends Runner[String] {
@@ -204,6 +216,8 @@ object JSWebRunner extends Runner[String] {
   val extension = "js"
 
   def standardLibraryPath(root: File): File = root / "libraries" / "common"
+
+  val flags = List()
 
   override def includes(path: File): List[File] = List(path / ".." / "js")
 
@@ -243,6 +257,8 @@ trait ChezRunner extends Runner[String] {
 
   def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
+  val flags = Properties.envOrElse("CHEZ_FLAGS", "").split(" ").toSeq
+
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("scheme", "--help") then Right(())
     else Left("Cannot find scheme. This is required to use the ChezScheme backend.")
@@ -256,7 +272,8 @@ trait ChezRunner extends Runner[String] {
     val schemeFilePath = (out / path).canonicalPath.escape
     val exeScriptPath = schemeFilePath.stripSuffix(s".$extension")
     val schemeFileName = ("./" + (path.unixPath.split('/').last)).escape
-    Some(createScript(exeScriptPath, "scheme", "--script", "$SCRIPT_DIR/" + schemeFileName))
+    val schemeArgs = Seq("scheme", "--script", "$SCRIPT_DIR/" + schemeFileName) ++ flags
+    Some(createScript(exeScriptPath, schemeArgs: _*))
 }
 
 object ChezMonadicRunner extends ChezRunner {
@@ -276,6 +293,8 @@ object LLVMRunner extends Runner[String] {
   val extension = "ll"
 
   def standardLibraryPath(root: File): File = root / "libraries" / "common"
+
+  val flags = Properties.envOrElse("CFLAGS", "").split(" ").toSeq
 
   override def includes(path: File): List[File] = List(path / ".." / "llvm")
 
@@ -357,6 +376,7 @@ object LLVMRunner extends Runner[String] {
         clangArgs :+= "-march=native"
       }
 
+      clangArgs ++= flags
       exec(clangArgs: _*)
     } else {
       exec(opt, llPath, "-O2", "-o", bcPath)
@@ -367,6 +387,7 @@ object LLVMRunner extends Runner[String] {
       if (C.config.valgrind()) clangArgs ++= Seq("-O0", "-g")
       else if (C.config.debug()) clangArgs ++= Seq("-fsanitize=address,undefined", "-fstack-protector-all")
 
+      clangArgs ++= flags
       exec(clangArgs: _*)
     }
 
