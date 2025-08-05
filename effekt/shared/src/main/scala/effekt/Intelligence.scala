@@ -265,7 +265,7 @@ trait Intelligence {
       } yield CaptureInfo(t.annot.span.range.from, c)
       case (source.Box(Maybe(None, span), block, _), _) if C.inferredCaptureOption(block).isDefined => for {
         capt <- C.inferredCaptureOption(block)
-      } yield CaptureInfo(span.range.from, capt, true)
+      } yield CaptureInfo(span.range.from, capt)
     }.flatten
 
   def getInfoOf(sym: Symbol)(using C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
@@ -491,9 +491,5 @@ object Intelligence {
   case class CaptureInfo(
     position: Position,
     captures: CaptureSet,
-    /**
-     * Whether this capture set could be written into the source code at `position` using the `at { captures }` syntax
-     */
-    atSyntax: Boolean = false,
   )
 }
