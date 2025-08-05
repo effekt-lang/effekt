@@ -685,7 +685,7 @@ class LSPTests extends FunSuite {
              |
              |↑
              |def foo() = { do raise(); 5 }
-             |↑        ↑
+             |         ↑
              |
              |↑
              |""".textDocumentAndPositions
@@ -693,19 +693,19 @@ class LSPTests extends FunSuite {
       val captureHint = new InlayHint()
       captureHint.setKind(InlayHintKind.Type)
       captureHint.setPosition(positions(1))
-      captureHint.setLabel("{}")
+      captureHint.setLabel("at {}")
       captureHint.setData("capture")
       captureHint.setTooltip(new MarkupContent("markdown", "captures: `{}`"))
-      captureHint.setPaddingRight(true)
+      captureHint.setPaddingLeft(true)
 
       val omittedHint = new InlayHint()
       omittedHint.setKind(InlayHintKind.Type)
-      omittedHint.setPosition(positions(2))
+      omittedHint.setPosition(positions(1))
       omittedHint.setLabel(": Int / { raise }")
       omittedHint.setData("return-type-annotation")
       omittedHint.setTextEdits(List(
         new TextEdit(
-          new Range(positions(2), positions(2)),
+          new Range(positions(1), positions(1)),
           ": Int / { raise }"
         )
       ).asJava)
@@ -720,7 +720,7 @@ class LSPTests extends FunSuite {
 
       val params = new InlayHintParams()
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
-      params.setRange(new Range(positions(0), positions(3)))
+      params.setRange(new Range(positions(0), positions(2)))
 
       val inlayHints = server.getTextDocumentService().inlayHint(params).get()
       assertEquals(expectedInlayHints.asJava, inlayHints)
@@ -733,7 +733,7 @@ class LSPTests extends FunSuite {
         raw"""
              |↑
              |def main(): Unit = {
-             |↑
+             |          ↑
              |  println("Hello, world!")
              |}
              |↑
@@ -742,12 +742,12 @@ class LSPTests extends FunSuite {
       val inlayHint = new InlayHint()
       inlayHint.setKind(InlayHintKind.Type)
       inlayHint.setPosition(positions(1))
-      inlayHint.setLabel("{io}")
+      inlayHint.setLabel("at {io}")
       val markup = new MarkupContent()
       markup.setKind("markdown")
       markup.setValue("captures: `{io}`")
       inlayHint.setTooltip(markup)
-      inlayHint.setPaddingRight(true)
+      inlayHint.setPaddingLeft(true)
       inlayHint.setData("capture")
 
       val expectedInlayHints = List(inlayHint)
@@ -818,7 +818,7 @@ class LSPTests extends FunSuite {
         raw"""
              |↑
              |def main(): Unit = {
-             |↑
+             |          ↑
              |  println("Hello, world!")
              |}
              |↑
@@ -827,12 +827,12 @@ class LSPTests extends FunSuite {
       val inlayHint = new InlayHint()
       inlayHint.setKind(InlayHintKind.Type)
       inlayHint.setPosition(positions(1))
-      inlayHint.setLabel("{io}")
+      inlayHint.setLabel("at {io}")
       val markup = new MarkupContent()
       markup.setKind("markdown")
       markup.setValue("captures: `{io}`")
       inlayHint.setTooltip(markup)
-      inlayHint.setPaddingRight(true)
+      inlayHint.setPaddingLeft(true)
       inlayHint.setData("capture")
 
       val expectedInlayHints = List(inlayHint)
