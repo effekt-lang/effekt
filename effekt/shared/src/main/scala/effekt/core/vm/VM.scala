@@ -104,7 +104,7 @@ enum VMError extends Throwable {
   case MissingBuiltin(name: String)
   case RuntimeTypeError(msg: String)
   case NonExhaustive(missingCase: Id)
-  case Hole()
+  case Hole(span: effekt.source.Span)
   case NoMain()
 
   override def getMessage: String = this match {
@@ -113,7 +113,7 @@ enum VMError extends Throwable {
     case VMError.MissingBuiltin(name) => s"Missing builtin: ${name}"
     case VMError.RuntimeTypeError(msg) => s"Runtime type error: ${msg}"
     case VMError.NonExhaustive(missingCase) => s"Non exhaustive: ${missingCase}"
-    case VMError.Hole() => s"Reached hole"
+    case VMError.Hole(span) => s"Reached hole @ ${span.range.from.format}"
     case VMError.NoMain() => s"No main"
   }
 }
@@ -436,7 +436,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           }
           State.Step(body, env, rewind(cont, stack), heap)
 
-        case Stmt.Hole() => throw VMError.Hole()
+        case Stmt.Hole(span) => throw VMError.Hole(span)
       }
     }
 

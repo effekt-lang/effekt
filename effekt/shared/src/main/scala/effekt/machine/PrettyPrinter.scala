@@ -110,7 +110,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Coerce(name, value, rest) =>
       "let" <+> name <+> ":" <+> toDoc(name.tpe) <+> "=" <+> "coerce" <+> value <+> ":" <+> toDoc(value.tpe) <> ";" <> line <> toDocStmts(rest)
 
-    case Hole => "<>"
+    case Hole(span) => "<>" <+> s"// @ ${span.range.from.format}"
   }
 
   def nested(content: Doc): Doc = group(nest(line <> content))
