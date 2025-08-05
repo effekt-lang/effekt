@@ -8,7 +8,6 @@ import effekt.source.Tree
 import effekt.util.messages.{EffektMessages, ErrorReporter}
 import effekt.util.Timers
 import effekt.symbols.Module
-import kiama.util.Positions
 
 /**
  * Phases like Typer can add operations to the context by extending this trait
@@ -39,7 +38,7 @@ trait ContextOps
  * - types (mutable database)
  * - error reporting (mutable focus)
  */
-abstract class Context(val positions: Positions)
+abstract class Context
     extends NamerOps
     with TyperOps
     with ModuleDB

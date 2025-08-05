@@ -3,7 +3,7 @@ def foo[A, B, C](a: A, b: B){ fn: (A, B) => C }: C = {
 }
 
 def main() = {
-  foo(1, false){ // ERROR Non-exhaustive
-    case _, true => ()
+  foo(1, false){
+    case _, true => () // ERROR Non-exhaustive
   }
 }
