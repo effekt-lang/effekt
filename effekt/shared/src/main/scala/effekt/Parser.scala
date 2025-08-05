@@ -792,9 +792,9 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     nonterminal:
       if peek(`:`) then Some(valueTypeAnnotation()) else None
 
-  def maybeBlockTypeAnnotation(): Option[BlockType] =
+  def maybeBlockTypeAnnotation(): Maybe[BlockType] =
     nonterminal:
-      if peek(`:`) then Some(blockTypeAnnotation()) else None
+      if peek(`:`) then Maybe.Some(blockTypeAnnotation(), span()) else Maybe.None(span())
 
   def maybeReturnAnnotation(): Maybe[Effectful] =
     nonterminal:

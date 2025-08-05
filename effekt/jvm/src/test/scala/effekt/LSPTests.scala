@@ -609,7 +609,7 @@ class LSPTests extends FunSuite {
       val (textDoc, positions) = raw"""
                                 |↑
                                 |def main(): Unit = {
-                                |↑
+                                |          ↑
                                 |  println("Hello, world!")
                                 |}
                                 |↑
@@ -618,12 +618,12 @@ class LSPTests extends FunSuite {
       val inlayHint = new InlayHint()
       inlayHint.setKind(InlayHintKind.Type)
       inlayHint.setPosition(positions(1))
-      inlayHint.setLabel("{io}")
+      inlayHint.setLabel("at {io}")
       val markup = new MarkupContent()
       markup.setKind("markdown")
       markup.setValue("captures: `{io}`")
       inlayHint.setTooltip(markup)
-      inlayHint.setPaddingRight(true)
+      inlayHint.setPaddingLeft(true)
       inlayHint.setData("capture")
 
       val expectedInlayHints = List(inlayHint)

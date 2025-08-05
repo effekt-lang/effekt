@@ -320,7 +320,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.DefDef(id, annot, binding, doc, span) =>
       val tpe = annot.map(resolveBlockType)
       resolve(binding)
-      Context.define(id, DefBinder(Context.nameFor(id), tpe, d))
+      Context.define(id, DefBinder(Context.nameFor(id), tpe.unspan, d))
 
     // FunDef and InterfaceDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, bparams, ret, body, doc, span) =>
