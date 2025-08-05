@@ -1,0 +1,20 @@
+type Foo {
+  Bar()
+}
+
+type Boo {
+  Bar()
+}
+type Bars {
+  Foo(f: Foo)
+  Boo(b: Boo)
+}
+
+def consume(b: Bars) = b match {
+  case Foo(Foo::Bar()) => 1
+  case Boo(Boo::Bar()) => 2
+}
+
+def main() = {
+  println(consume(Bars::Foo(Foo::Bar())))
+}
