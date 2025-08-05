@@ -4,7 +4,7 @@ package core
 import effekt.source.{FeatureFlag, Span}
 import effekt.util.messages.{ErrorReporter, ParseError}
 import kiama.parsing.{NoSuccess, ParseResult, Parsers, Success}
-import kiama.util.{Position, Positions, Range, Source, StringSource}
+import kiama.util.{Position, Range, Source, StringSource}
 
 class Names(var knownNames: Map[String, Id]) {
   def idFor(name: String): Id = knownNames.getOrElse(name, {
@@ -15,7 +15,7 @@ class Names(var knownNames: Map[String, Id]) {
 }
 
 
-class EffektLexers(positions: Positions) extends Parsers(positions) {
+class EffektLexers extends Parsers {
 
   type P[T] = PackratParser[T]
 
@@ -188,7 +188,7 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
 }
 
 
-class CoreParsers(positions: Positions, names: Names) extends EffektLexers(positions) {
+class CoreParsers(names: Names) extends EffektLexers {
 
   def parse(source: Source)(using C: ErrorReporter): Option[ModuleDecl] =
     parseAll(program, source) match {
@@ -492,8 +492,7 @@ object CoreParsers {
   def apply(names: Map[String, Id]): CoreParsers = apply(Names(names))
 
   def apply(names: Names): CoreParsers =
-    object pos extends Positions
-    object parsers extends CoreParsers(pos, names)
+    object parsers extends CoreParsers(names)
     parsers
 
   // Some alternative main entry points for most common usages
