@@ -1162,35 +1162,37 @@ class Parser(tokens: Seq[Token], source: Source) {
         peek.kind match {
           // { case ... => ... }
           case `case` => someWhile(matchClause(), `case`) match { case cs =>
-            val argSpans = cs match {
-              case Many(MatchClause(MultiPattern(ps, _), _, _, _) :: _, _) => ps.map(_.span)
-              case p => List(p.span)
-            }
-            // TODO fresh names should be generated for the scrutinee
-            // also mark the temp name as synthesized to prevent it from being listed in VSCode
-            val names = List.tabulate(argSpans.length){ n => s"__arg${n}" }
-            BlockLiteral(
-              Nil,
-              names.zip(argSpans).map { (name, span) => ValueParam(IdDef(name, span.synthesized), None, span.synthesized) },
-              Nil,
-              Return(
-                Match(
-                  names.zip(argSpans).map{ (name, span) => Var(IdRef(Nil, name, span.synthesized), span.synthesized) },
-                  cs.unspan,
-                  None,
-                  span().synthesized
-                ), span().synthesized),
-              span().synthesized
-            )
+            nonterminal:
+              val argSpans = cs match {
+                case Many(MatchClause(MultiPattern(ps, _), _, _, _) :: _, _) => ps.map(_.span)
+                case p => List(p.span)
+              }
+              // TODO fresh names should be generated for the scrutinee
+              // also mark the temp name as synthesized to prevent it from being listed in VSCode
+              val names = List.tabulate(argSpans.length){ n => s"__arg${n}" }
+              BlockLiteral(
+                Nil,
+                names.zip(argSpans).map { (name, span) => ValueParam(IdDef(name, span.synthesized), None, span.synthesized) },
+                Nil,
+                Return(
+                  Match(
+                    names.zip(argSpans).map{ (name, span) => Var(IdRef(Nil, name, span.synthesized), span.synthesized) },
+                    cs.unspan,
+                    None,
+                    span().synthesized
+                  ), span().synthesized),
+                span().synthesized
+              )
           }
           case _ =>
             // { (x: Int) => ... }
-            backtrack { lambdaParams() <~ `=>` } map {
-              case (tps, vps, bps) => BlockLiteral(tps, vps, bps, stmts(inBraces = true), span()) : BlockLiteral
-            } getOrElse {
-              // { <STMTS> }
-              BlockLiteral(Nil, Nil, Nil, stmts(inBraces = true), span()) : BlockLiteral
-            }
+            nonterminal:
+              backtrack { lambdaParams() <~ `=>` } map {
+                case (tps, vps, bps) => BlockLiteral(tps, vps, bps, stmts(inBraces = true), span()) : BlockLiteral
+              } getOrElse {
+                // { <STMTS> }
+                BlockLiteral(Nil, Nil, Nil, stmts(inBraces = true), span()) : BlockLiteral
+              }
         }
       }
 
