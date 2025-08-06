@@ -111,8 +111,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 C.abort(pp"Main must return Unit, please use `exit(n)` to return an error code.")
               case symbols.builtins.TUnit =>
                 ()
-              case other =>
-                C.abort(pp"Main must return Unit, but returns ${other}.")
+              case tpe =>
+                // def main() = <>
+                // has return type Nothing which should still be permissible since Nothing <: Unit
+                matchExpected(symbols.builtins.TUnit, tpe)
             }
         }
       }
