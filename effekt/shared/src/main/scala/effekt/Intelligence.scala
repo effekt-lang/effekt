@@ -198,12 +198,26 @@ trait Intelligence {
       })
     }
 
-    sorted.flatMap((name, path, sym) => sym match {
+    def symbolToBindingInfos(name: String, path: List[String], sym: TypeSymbol | TermSymbol)(using C: Context): List[BindingInfo] =
       // TODO this is extremely hacky, printing is not defined for all types at the moment
-      case sym: TypeSymbol => try { Some(TypeBinding(path, name, origin, DeclPrinter(sym))) } catch { case e => None }
-      case sym: ValueSymbol => Some(TermBinding(path, name, origin, C.valueTypeOption(sym).map(t => pp"${t}")))
-      case sym: BlockSymbol => Some(TermBinding(path, name, origin, C.blockTypeOption(sym).map(t => pp"${t}")))
-    }).toList
+      val signature = try { Some(SignaturePrinter(sym)) } catch { case e: Throwable => None }
+      val out = sym match {
+        case sym: TypeSymbol => List(TypeBinding(path, name, origin, signature))
+        case sym: ValueSymbol => List(TermBinding(path, name, origin, signature))
+        case sym: BlockSymbol => List(TermBinding(path, name, origin, signature))
+      }
+      sym match {
+        case Interface(name, tparams, ops, decl) if ops.length > 1 => {
+          val opsInfos = ops.map { op =>
+            val sig = Some(SignaturePrinter(op))
+            TermBinding(path, op.name.name, origin, sig)
+          }
+          out ++ opsInfos
+        }
+        case _ => out
+      }
+
+    sorted.flatMap(symbolToBindingInfos).toList
 
   def allSymbols(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): Array[(String, List[String], TypeSymbol | TermSymbol)] = {
     bindings.types.toArray.map((name, sym) => (name, path, sym))
@@ -452,11 +466,12 @@ object Intelligence {
     val qualifier: List[String]
     val name: String
     val origin: String
+    val signature: Option[String]
     val kind: String
   }
 
-  case class TermBinding(qualifier: List[String], name: String, origin: String, `type`: Option[String], kind: String = BindingKind.Term) extends BindingInfo
-  case class TypeBinding(qualifier: List[String], name: String, origin: String, definition: String, kind: String = BindingKind.Type) extends BindingInfo
+  case class TermBinding(qualifier: List[String], name: String, origin: String, signature: Option[String] = None, kind: String = BindingKind.Term) extends BindingInfo
+  case class TypeBinding(qualifier: List[String], name: String, origin: String, signature: Option[String] = None, kind: String = BindingKind.Type) extends BindingInfo
 
   // These need to be strings (rather than cases of an enum) so that they get serialized correctly
   object ScopeKind {

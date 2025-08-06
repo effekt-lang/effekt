@@ -1427,8 +1427,8 @@ class LSPTests extends FunSuite {
           qualifier = List(),
           name = "x",
           origin = BindingOrigin.Defined,
-          `type` = Some(
-            "Int"
+          signature = Some(
+            "x: Int"
           )
         )
       )
@@ -1438,23 +1438,23 @@ class LSPTests extends FunSuite {
           qualifier = List(),
           name = "bar",
           origin = BindingOrigin.Defined,
-          `type` = Some(
-            "String => Int"
+          signature = Some(
+            "def bar(x: String): Int / {}"
           )
         ),
         TermBinding(
           qualifier = List(),
           name = "foo",
           origin = BindingOrigin.Defined,
-          `type` = Some(
-            "Int => Bool"
+          signature = Some(
+            "def foo(x: Int): Bool / {}"
           )
         ),
         TypeBinding(
           qualifier = Nil,
           name = "MyInt",
           origin = BindingOrigin.Defined,
-          definition = "type MyInt = Int"
+          signature = Some("type MyInt")
         )
       )
 
@@ -1576,7 +1576,7 @@ class LSPTests extends FunSuite {
           qualifier = List(),
           name = "bar",
           origin = BindingOrigin.Defined,
-          `type` = Some("() => Nothing")
+          signature = Some("def bar(): Nothing / {}")
         )
       )
 
@@ -1605,7 +1605,7 @@ class LSPTests extends FunSuite {
             qualifier = List(),
             name = "x",
             origin = BindingOrigin.Defined,
-            `type` = Some("Int")
+            signature = Some("x: Int")
           )
         ),
         outer = Some(ScopeInfo(
@@ -1620,7 +1620,7 @@ class LSPTests extends FunSuite {
                 qualifier = List(),
                 name = "MyInt",
                 origin = BindingOrigin.Defined,
-                definition = "type MyInt = Int"
+                signature = Some("type MyInt")
               )),
             outer = None
           ))
@@ -1653,7 +1653,7 @@ class LSPTests extends FunSuite {
         |        "qualifier": [],
         |        "name": "x",
         |        "origin": "Defined",
-        |        "type": "Int",
+        |        "signature": "x: Int",
         |        "kind": "Term"
         |      }
         |    ],
@@ -1668,7 +1668,7 @@ class LSPTests extends FunSuite {
         |            "qualifier": [],
         |            "name": "MyInt",
         |            "origin": "Defined",
-        |            "definition": "type MyInt = Int",
+        |            "signature": "type MyInt",
         |            "kind": "Type"
         |          }
         |        ]
@@ -1926,17 +1926,15 @@ class LSPTests extends FunSuite {
           qualifier = Nil,
           name = "Foo1",
           origin = "Defined",
-          definition = """type Foo1 {
-  def Foo1(theField: String): Foo1 / {}
-}""",
+          signature = Some("type Foo1"),
           kind = "Type"
         ),
         TermBinding(
           qualifier = Nil,
           name = "Foo1",
           origin = "Defined",
-          `type` = Some(
-            value = "String => Foo1"
+          signature = Some(
+            "def Foo1(theField: String): Foo1 / {}"
           ),
           kind = "Term"
         ),
@@ -1944,8 +1942,8 @@ class LSPTests extends FunSuite {
           qualifier = Nil,
           name = "theField",
           origin = "Defined",
-          `type` = Some(
-            value = "Foo1 => String"
+          signature = Some(
+            "def theField(test::N::Foo1: Foo1): String / {}"
           ),
           kind = "Term"
         ),
@@ -1953,54 +1951,42 @@ class LSPTests extends FunSuite {
           qualifier = Nil,
           name = "Foo2",
           origin = "Defined",
-          definition = """type Foo2 {
-  def Foo2(theField: String): Foo2 / {}
-}""",
+          signature = Some("type Foo2"),
           kind = "Type"
         ),
         TermBinding(
           qualifier = Nil,
           name = "Foo2",
           origin = "Defined",
-          `type` = Some(
-            value = "String => Foo2"
-          ),
+          signature = Some("def Foo2(theField: String): Foo2 / {}"),
           kind = "Term"
         ),
         TermBinding(
           qualifier = Nil,
           name = "theField",
           origin = "Defined",
-          `type` = Some(
-            value = "Foo2 => String"
-          ),
+          signature = Some("def theField(test::N::Foo2: Foo2): String / {}"),
           kind = "Term"
         ),
         TypeBinding(
           qualifier = Nil,
           name = "Bar",
           origin = "Defined",
-          definition = """type Bar {
-  def Bar(theField: Int): Bar / {}
-}""",
+          signature = Some("type Bar"),
           kind = "Type"
         ),
         TermBinding(
           qualifier = Nil,
           name = "Bar",
           origin = "Defined",
-          `type` = Some(
-            value = "Int => Bar"
-          ),
+          signature = Some("def Bar(theField: Int): Bar / {}"),
           kind = "Term"
         ),
         TermBinding(
           qualifier = Nil,
           name = "main",
           origin = "Defined",
-          `type` = Some(
-            value = "() => Nothing"
-          ),
+          signature = Some("def main(): Nothing / {}"),
           kind = "Term"
         )
       )
