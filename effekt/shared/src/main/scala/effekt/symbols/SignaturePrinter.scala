@@ -34,6 +34,14 @@ object SignaturePrinter extends ParenPrettyPrinter {
       val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
       pp"val ${name}: ${tpe}"
 
+    case p @ ValueParam(name, t, _) =>
+      val tpe = context.valueTypeOption(p).getOrElse { t.get }
+      pp"${name}: ${tpe}"
+
+    case p @ BlockParam(name, t, _) =>
+      val tpe = context.blockTypeOption(p).getOrElse { t.get }
+      pp"{ ${name}: ${tpe} }"
+
     case b: VarBinder =>
       val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
       pp"var ${b.name}: ${tpe}"

@@ -209,7 +209,7 @@ trait Intelligence {
         case sym: BlockSymbol => List(TermBinding(path, name, origin, signature))
       }
       sym match {
-        case Interface(name, tparams, ops, decl) if ops.nonEmpty => {
+        case Interface(name, tparams, ops, decl) if ops.length > 1 => {
           val opsInfos = ops.map { op =>
             val sig = Some(SignaturePrinter(op))
             TermBinding(path, op.name.name, origin, sig)
@@ -466,6 +466,7 @@ object Intelligence {
     val qualifier: List[String]
     val name: String
     val origin: String
+    val signature: Option[String]
     val kind: String
   }
 
