@@ -114,7 +114,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               case tpe =>
                 // def main() = <>
                 // has return type Nothing which should still be permissible since Nothing <: Unit
-                matchExpected(symbols.builtins.TUnit, tpe)
+                matchExpected(tpe, symbols.builtins.TUnit)
             }
         }
       }
