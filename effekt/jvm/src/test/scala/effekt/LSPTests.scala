@@ -122,6 +122,106 @@ class LSPTests extends FunSuite {
     }
   }
 
+  // Diagnostics
+  //
+  //
+
+  test("main function return type") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, range) = raw"""
+                                |def main() = 1
+                                |↑            ↑
+                                |""".stripMargin.textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(range)
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt")
+      diagnostic.setMessage("Main must return Unit, please use `exit(n)` to return an error code.")
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      val diagnostics = client.receivedDiagnostics()
+      assertEquals(diagnostics, expected)
+    }
+  }
+
+  test("exactly one main function") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, range) = raw"""
+                                |def main() = println("hello")
+                                |↑
+                                |def main() = 42
+                                |              ↑
+                                |""".stripMargin.textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(range)
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt")
+      diagnostic.setMessage("Multiple main functions defined: test::main, test::main")
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      val diagnostics = client.receivedDiagnostics()
+      assertEquals(diagnostics, expected)
+    }
+  }
+
+  test("no unhandled effects in main function") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, range) = raw"""
+                                |effect Eff(): Unit
+                                |def main() = {
+                                |↑
+                                |  do Eff()
+                                |}
+                                |↑
+                                |""".stripMargin.textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(range)
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt")
+      diagnostic.setMessage("Main cannot have effects, but includes effects: { Eff }")
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      val diagnostics = client.receivedDiagnostics()
+      assertEquals(diagnostics, expected)
+    }
+  }
+
   test("setTrace is implemented") {
     withClientAndServer { (client, server) =>
       val didOpenParams = new DidOpenTextDocumentParams()

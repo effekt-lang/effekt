@@ -79,9 +79,47 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // Store the backtrackable annotations into the global DB
       // This is done regardless of errors, since
       Context.commitTypeAnnotations()
+      checkMain(input.mod)
     }
   }
 
+  /**
+   * Ensures there are <= 1 main functions, that the potential main function has no unhandled effects and returns Unit.
+   */
+  def checkMain(mod: Module)(using C: Context) = {
+    val mains = Context.findMain(mod)
+    if (mains.size > 1) {
+      val names = mains.toList.map(sym => pp"${sym.name}").mkString(", ")
+      C.abort(pp"Multiple main functions defined: ${names}")
+    }
+    mains.headOption.foreach { main =>
+      val mainFn = main.asUserFunction
+      Context.at(mainFn.decl) {
+        // If type checking failed before reaching main, there is no type
+        C.functionTypeOption(mainFn).foreach {
+          case FunctionType(tparams, cparams, vparams, bparams, result, effects) => 
+            if (vparams.nonEmpty || bparams.nonEmpty) {
+              C.abort("Main does not take arguments")
+            }
+
+            if (effects.nonEmpty) {
+              C.abort(pp"Main cannot have effects, but includes effects: ${effects}")
+            }
+
+            result match {
+              case symbols.builtins.TInt =>
+                C.abort(pp"Main must return Unit, please use `exit(n)` to return an error code.")
+              case symbols.builtins.TUnit =>
+                ()
+              case tpe =>
+                // def main() = <>
+                // has return type Nothing which should still be permissible since Nothing <: Unit
+                matchExpected(tpe, symbols.builtins.TUnit)
+            }
+        }
+      }
+    }
+  }
 
   //<editor-fold desc="expressions">
 
