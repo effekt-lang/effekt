@@ -93,27 +93,27 @@ object Typer extends Phase[NameResolved, Typechecked] {
       C.abort(pp"Multiple main functions defined: ${names}")
     }
     mains.headOption.foreach { main =>
-      val fn = main.asUserFunction
-      Context.at(fn.decl) {
-        val fnValueParams = C.functionTypeOf(fn).vparams
-        val fnBlockParams = C.functionTypeOf(fn).bparams
-        if (fnValueParams.nonEmpty || fnBlockParams.nonEmpty) {
-          C.abort("Main does not take arguments")
-        }
+      val mainFn = main.asUserFunction
+      Context.at(mainFn.decl) {
+        // If type checking failed before reaching main, there is no type
+        C.functionTypeOption(mainFn).foreach {
+          case FunctionType(tparams, cparams, vparams, bparams, result, effects) => 
+            if (vparams.nonEmpty || bparams.nonEmpty) {
+              C.abort("Main does not take arguments")
+            }
 
-        val tpe = C.functionTypeOf(fn)
-        val controlEffects = tpe.effects
-        if (controlEffects.nonEmpty) {
-          C.abort(pp"Main cannot have effects, but includes effects: ${controlEffects}")
-        }
+            if (effects.nonEmpty) {
+              C.abort(pp"Main cannot have effects, but includes effects: ${effects}")
+            }
 
-        tpe.result match {
-          case symbols.builtins.TInt =>
-            C.abort(pp"Main must return Unit, please use `exit(n)` to return an error code.")
-          case symbols.builtins.TUnit =>
-            ()
-          case other =>
-            C.abort(pp"Main must return Unit, but returns ${other}.")
+            result match {
+              case symbols.builtins.TInt =>
+                C.abort(pp"Main must return Unit, please use `exit(n)` to return an error code.")
+              case symbols.builtins.TUnit =>
+                ()
+              case other =>
+                C.abort(pp"Main must return Unit, but returns ${other}.")
+            }
         }
       }
     }
