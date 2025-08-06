@@ -122,6 +122,10 @@ class LSPTests extends FunSuite {
     }
   }
 
+  // Diagnostics
+  //
+  //
+
   test("main function return type") {
     withClientAndServer { (client, server) =>
       val (textDoc, range) = raw"""
