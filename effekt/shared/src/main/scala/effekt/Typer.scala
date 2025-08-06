@@ -79,9 +79,45 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // Store the backtrackable annotations into the global DB
       // This is done regardless of errors, since
       Context.commitTypeAnnotations()
+      checkMain(input.mod)
     }
   }
 
+  /**
+   * Ensures there are <= 1 main functions, that the potential main function has no unhandled effects and returns Unit.
+   */
+  def checkMain(mod: Module)(using C: Context) = {
+    val mains = Context.findMain(mod)
+    if (mains.size > 1) {
+      val names = mains.toList.map(sym => pp"${sym.name}").mkString(", ")
+      C.abort(pp"Multiple main functions defined: ${names}")
+    }
+    mains.headOption.foreach { main =>
+      val fn = main.asUserFunction
+      Context.at(fn.decl) {
+        val fnValueParams = C.functionTypeOf(fn).vparams
+        val fnBlockParams = C.functionTypeOf(fn).bparams
+        if (fnValueParams.nonEmpty || fnBlockParams.nonEmpty) {
+          C.abort("Main does not take arguments")
+        }
+
+        val tpe = C.functionTypeOf(fn)
+        val controlEffects = tpe.effects
+        if (controlEffects.nonEmpty) {
+          C.abort(pp"Main cannot have effects, but includes effects: ${controlEffects}")
+        }
+
+        tpe.result match {
+          case symbols.builtins.TInt =>
+            C.abort(pp"Main must return Unit, please use `exit(n)` to return an error code.")
+          case symbols.builtins.TUnit =>
+            ()
+          case other =>
+            C.abort(pp"Main must return Unit, but returns ${other}.")
+        }
+      }
+    }
+  }
 
   //<editor-fold desc="expressions">
 
