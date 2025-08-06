@@ -1,0 +1,87 @@
+module dictionary
+
+import array
+import bytearray
+import stream
+
+
+type Dictionary[A] {
+  Empty()
+  Leaf(value: A)
+  Branch(children: Array[Dictionary[A]])
+  Node(value: A, children: Array[Dictionary[A]])
+}
+
+def insert[A](trie: Dictionary[A], key: String, value: A): Dictionary[A] =
+  insert(trie, key.fromString, value)
+
+def insert[A](trie: Dictionary[A], key: ByteArray, value: A): Dictionary[A] = {
+  def go(trie: Dictionary[A], i: Int): Dictionary[A] =
+    if (i < key.size) {
+      trie match {
+        case Empty() =>
+          val child = go(Empty(), i + 1)
+          val children = array(256, Empty())
+          children.unsafeSet(key.unsafeGet(i).toInt, child)
+          Branch(children)
+        case Leaf(existing) =>
+          val child = go(Empty(), i + 1)
+          val children = array(256, Empty())
+          children.unsafeSet(key.unsafeGet(i).toInt, child)
+          Node(existing, children)
+        case Branch(children) =>
+          val child = go(children.unsafeGet(key.unsafeGet(i).toInt), i + 1)
+          children.unsafeSet(key.unsafeGet(i).toInt, child)
+          Branch(children)
+        case Node(existing, children) =>
+          val child = go(children.unsafeGet(key.unsafeGet(i).toInt), i + 1)
+          children.unsafeSet(key.unsafeGet(i).toInt, child)
+          Node(existing, children)
+      }
+    } else {
+      trie match {
+        case Empty() => Leaf(value)
+        case Leaf(_) => Leaf(value)
+        case Node(_, children) => Node(value, children)
+        case Branch(children) => Node(value, children)
+      }
+    }
+  go(trie, 0)
+}
+
+def lookup[A](trie: Dictionary[A], key: String): Option[A] =
+  lookup(trie, key.fromString)
+
+def lookup[A](trie: Dictionary[A], key: ByteArray): Option[A] = {
+  def go(trie: Dictionary[A], i: Int): Option[A] =
+    if (i < key.size) {
+      trie match {
+        case Empty() => None()
+        case Leaf(_) => None()
+        case Branch(children) => go(children.unsafeGet(key.unsafeGet(i).toInt), i + 1)
+        case Node(_, children) => go(children.unsafeGet(key.unsafeGet(i).toInt), i + 1)
+      }
+    } else {
+      trie match {
+        case Empty() => None()
+        case Leaf(value) => Some(value)
+        case Branch(_) => None()
+        case Node(value, _) => Some(value)
+      }
+    }
+  go(trie, 0)
+}
+
+
+record Tagged[A](key: ByteArray, value: A)
+
+def collectTrie[A] { stream: () => Unit / emit[Tagged[A]] }: Dictionary[A] = {
+  var trie = Empty()
+  for[Tagged[A]] { stream() } { case Tagged(bytes, value) =>
+    trie = trie.insert(bytes, value)
+  }
+  return trie
+}
+
+
+
