@@ -5,7 +5,7 @@ import effekt.Intelligence.CaptureInfo
 import effekt.context.Context
 import effekt.source.Def.FunDef
 import effekt.source.Term.Hole
-import effekt.source.{Span, Tree}
+import effekt.source.{Origin, Span, Tree}
 import effekt.symbols.Binder.{ValBinder, VarBinder}
 import effekt.symbols.BlockTypeConstructor.{ExternInterface, Interface}
 import effekt.symbols.TypeConstructor.{DataType, ExternType}
@@ -289,10 +289,10 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
       decl <- getSourceTreeFor(sym)
       kind <- getSymbolKind(sym)
       detail <- getInfoOf(sym)(using context)
+      if decl.span.origin != Origin.Missing
       declRange = convertRange(decl.span.range)
       idRange = convertRange(id.span.range)
     } yield new DocumentSymbol(sym.name.name, kind, declRange, idRange, detail.header)
-
     val result = Collections.seqToJavaList(
       documentSymbols.map(sym => messages.Either.forRight[SymbolInformation, DocumentSymbol](sym))
     )
