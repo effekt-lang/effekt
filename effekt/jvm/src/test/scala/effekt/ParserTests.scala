@@ -998,7 +998,7 @@ class ParserTests extends munit.FunSuite {
         parseDefinition(source.content),
         DefDef(
           IdDef("foo", Span(source, pos(0), pos(1))),
-          None,
+          Maybe.None(Span(source, pos(1), pos(1))),
           Var(IdRef(Nil, "f", Span(source, pos(2), pos(3))), Span(source, pos(2), pos(3))),
           Info.empty(Span(source, 0, 0)),
           Span(source, 0, pos.last)))

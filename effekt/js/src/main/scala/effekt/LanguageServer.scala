@@ -117,7 +117,7 @@ class LanguageServer extends Intelligence {
     val source = VirtualFileSource(path)
     val range = kiama.util.Range(source.offsetToPosition(0), source.offsetToPosition(source.charCount))
     getInferredCaptures(range).map {
-      case CaptureInfo(p, c, _) => new lsp.CaptureInfo(toLSPPosition(p), c.toString)
+      case CaptureInfo(p, c) => new lsp.CaptureInfo(toLSPPosition(p), c.toString)
     }.toJSArray
   }
 
