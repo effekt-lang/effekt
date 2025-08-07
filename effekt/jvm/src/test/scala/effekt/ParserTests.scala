@@ -928,6 +928,58 @@ class ParserTests extends munit.FunSuite {
         |""".stripMargin)
   }
 
+  test("Namespaces") {
+    parseDefinitions(
+      """val x = 4
+        |val y = 5
+        |""".stripMargin)
+
+    val nested = parseToplevel(
+      """namespace list {
+        |  val x = 4
+        |  val y = 5
+        |}
+        |""".stripMargin)
+
+    val semi = parseToplevel(
+      """namespace list;
+        |val x = 4
+        |val y = 5
+        |""".stripMargin)
+
+    assertEqualModuloSpans(nested, semi)
+
+    val nested2 = parseProgram(
+      """namespace list {
+        |  namespace internal {
+        |
+        |    val x = 4
+        |    val y = 5
+        |  }
+        |}
+        |""".stripMargin)
+
+    val semi2 = parseProgram(
+      """namespace list;
+        |namespace internal;
+        |
+        |val x = 4
+        |val y = 5
+        |""".stripMargin)
+
+    val semiInsertion = parseProgram(
+      """namespace list
+        |namespace internal
+        |
+        |val x = 4
+        |val y = 5
+        |""".stripMargin)
+
+    // TODO: how to do equality on Programs?
+    // assertEqualModuloSpans(nested2, semi2)
+    // assertEqualModuloSpans(nested2, semiInsertion)
+  }
+
   test("Definitions") {
     {
       val (source, pos) =
