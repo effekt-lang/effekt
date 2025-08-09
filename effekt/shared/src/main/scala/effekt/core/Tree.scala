@@ -123,7 +123,7 @@ enum Declaration extends Tree {
 }
 export Declaration.*
 
-case class Constructor(id: Id, fields: List[Field]) extends Tree
+case class Constructor(id: Id, fields: List[Field], tparams: List[Id]) extends Tree
 case class Field(id: Id, tpe: ValueType) extends Tree
 case class Property(id: Id, tpe: BlockType) extends Tree
 
