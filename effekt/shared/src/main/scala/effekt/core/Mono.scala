@@ -16,17 +16,17 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
           case ModuleDecl(path, includes, declarations, externs, definitions, exports) => {
             // Find constraints in the definitions
             val monoFindContext = MonoFindContext()
-            val constraints = findConstraints(definitions)(using monoFindContext)
-            val declConstraints = declarations map (findConstraints(_)(using monoFindContext))
-            // println("Constraints")
-            // constraints.foreach(c => println(c))
-            // println()
+            var constraints = findConstraints(definitions)(using monoFindContext)
+            constraints = constraints ++ declarations.flatMap(findConstraints(_)(using monoFindContext))
+            println("Constraints")
+            constraints.foreach(c => println(c))
+            println()
 
             // Solve collected constraints
             val solution = solveConstraints(constraints)
-            // println("Solved")
-            // solution.foreach(println)
-            // println()
+            println("Solved")
+            solution.foreach(println)
+            println()
 
             // Monomorphize existing definitions
             var monoNames: MonoNames = Map.empty
@@ -39,9 +39,9 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             var monoContext = MonoContext(solution, monoNames)
             val monoDecls = declarations flatMap (monomorphize(_)(using monoContext))
             val monoDefs = monomorphize(definitions)(using monoContext)
-            // println(util.show(monoDecls))
-            // println()
-            // println(util.show(monoDefs))
+            monoDecls.foreach(decl => println(util.show(decl)))
+            println()
+            monoDefs.foreach(defn => println(util.show(defn)))
             val newModuleDecl = ModuleDecl(path, includes, monoDecls, externs, monoDefs, exports)
             return Some(CoreTransformed(source, tree, mod, newModuleDecl))
           }
@@ -60,7 +60,7 @@ type Solution = Map[FunctionId, Set[Vector[TypeArg.Base]]]
 type MonoNames = Map[(FunctionId, Vector[TypeArg.Base]), FunctionId]
 
 enum TypeArg {
-  case Base(val tpe: Id)
+  case Base(val tpe: Id, targs: List[TypeArg])
   case Var(funId: FunctionId, pos: Int)
 }
 
@@ -89,14 +89,19 @@ def findConstraints(definition: Toplevel)(using ctx: MonoFindContext): Constrain
   case Toplevel.Val(id, tpe, binding) => ???
 
 def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): Constraints = declaration match
-  case Data(id, List(), constructors) => List.empty
+  // Maybe[T] { Just[](x: T) }
   case Data(id, tparams, constructors) =>
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
-    constructors.map((constr => 
-      Constraint(((constr.fields map (_.tpe)) map findId).toVector, constr.id)))
+    constructors.map{ constr =>
+      val arity = tparams.size // + constr.tparams.size
+      val constructorArgs = (0 until arity).map(index =>
+        TypeArg.Var(constr.id, index) // Just.0  
+      ).toVector // < Just.0 >
+      Constraint(constructorArgs, id) // < Just.0 > <: Maybe
+    }
   case Interface(id, List(), properties) => List.empty
   case Interface(id, tparams, properties) => 
-    tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
+    // tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
     List.empty
 
 def findConstraints(block: Block)(using ctx: MonoFindContext): Constraints = block match
@@ -147,12 +152,13 @@ def findConstraints(expr: Expr)(using ctx: MonoFindContext): Constraints = expr 
   case PureApp(b, List(), vargs) => List.empty
   case ValueVar(id, annotatedType) => List.empty
   case Literal(value, annotatedType) => List.empty
-  case Make(data, tag, targs, vargs) => List(Constraint(data.targs.map(findId).toVector, data.name))
+  case Make(data, tag, targs, vargs) => 
+    List(Constraint(data.targs.map(findId).toVector, tag)) // <Int> <: Just
   case o => println(o); ???
 
 def findId(vt: ValueType)(using ctx: MonoFindContext): TypeArg = vt match
   case ValueType.Boxed(tpe, capt) => ???
-  case ValueType.Data(name, targs) => TypeArg.Base(name)
+  case ValueType.Data(name, targs) => TypeArg.Base(name, targs map findId)
   case ValueType.Var(name) => ctx.typingContext(name)
 
 def solveConstraints(constraints: Constraints): Solution =
