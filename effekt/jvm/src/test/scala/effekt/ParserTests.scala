@@ -960,24 +960,14 @@ class ParserTests extends munit.FunSuite {
         |""".stripMargin)
 
     val semi2 = parseProgram(
-      """namespace list;
-        |namespace internal;
-        |
-        |val x = 4
-        |val y = 5
-        |""".stripMargin)
-
-    val semiInsertion = parseProgram(
       """namespace list
         |namespace internal
         |
         |val x = 4
-        |val y = 5
+        |val y = 5;
         |""".stripMargin)
 
-    // TODO: how to do equality on Programs?
-    // assertEqualModuloSpans(nested2, semi2)
-    // assertEqualModuloSpans(nested2, semiInsertion)
+    (nested2.defs zip semi2.defs).foreach(assertEqualModuloSpans)
   }
 
   test("Definitions") {
