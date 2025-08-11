@@ -150,6 +150,9 @@ lazy val integers: Builtins = Map(
   builtin("effekt::bitwiseXor(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x ^ y)
   },
+  builtin("effekt::bitwiseNot(Int)") {
+    case As.Int(x) :: Nil => Value.Int(~x)
+  },
 
   // Comparison
   // ----------

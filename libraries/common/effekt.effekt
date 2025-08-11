@@ -111,7 +111,7 @@ extern pure def show(value: Char): String =
 
 extern pure def show(value: Byte): String =
   js "'' + ${value}"
-  chez "(string ${value})"
+  chez "(show-number ${value})"
   llvm """
     %z = call %Pos @c_bytearray_show_Byte(i8 ${value})
     ret %Pos %z
@@ -254,6 +254,10 @@ extern pure def infixNeq(x: Int, y: Int): Bool =
     ret %Pos %adt_boolean
   """
   vm "effekt::infixNeq(Int, Int)"
+
+def infixEq(x: Byte, y: Byte): Bool = {
+  x.toInt == y.toInt
+}
 
 extern pure def infixEq(x: Char, y: Char): Bool =
   js "${x} === ${y}"
@@ -438,6 +442,22 @@ def pow(base: Double, exponent: Int): Double = {
   } else {
     loop(base, exponent, 1.0)
   }
+}
+
+/// Computes n^exp for integers.
+/// 
+/// Precondition: exp >= 0
+def pow(n: Int, exp: Int): Int = {
+  def go(n: Int, exp: Int, acc: Int): Int = {
+    if (exp == 0) {
+      acc 
+    } else if (mod(exp, 2) == 0) {
+      go(n * n, exp / 2, acc)
+    } else {
+      go(n * n, exp / 2, acc * n)
+    }
+  }
+  go(n, exp, 1)
 }
 
 extern pure def pow(base: Double, exponent: Double): Double =
@@ -669,6 +689,12 @@ extern pure def bitwiseXor(x: Int, y: Int): Int =
   chez "(logxor ${x} ${y})"
   llvm "%z = xor %Int ${x}, ${y} ret %Int %z"
   vm "effekt::bitwiseXor(Int, Int)"
+
+extern pure def bitwiseNot(x: Int): Int =
+  js "(~${x})"
+  chez "(lognot ${x})"
+  llvm "%z = xor %Int ${x}, -1 ret %Int %z"
+  vm "effekt::bitwiseNot(Int)"
 
 
 // Byte operations

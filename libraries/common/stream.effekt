@@ -550,6 +550,61 @@ def tee[A]{ cons1: { => Unit / emit[A] } => Unit }{ cons2: { => Unit / emit[A] }
   }
 }
 
+// Counting and padding
+// --------------------
+
+/// get current position in stream
+effect getPos(): Int
+
+/// Track position in stream, starting with init
+/// Handles getPos
+def tracking[A](init: Int){ body: => Unit / { emit[A], getPos } }: Unit / emit[A] = {
+  var n = init
+  try body()
+  with emit[A] { b => n = n + 1; resume(do emit[A](b)) }
+  with getPos{ resume(n) }
+}
+
+/// Pad to a multiple of fac emitted values, by emitting gen repeatedly
+def pad[A](fac: Int){ gen: => A }: Unit  / {getPos, emit[A]} = {
+  while(mod(do getPos(), fac) != 0) {
+    do emit[A](gen())
+  }
+}
+
+/// Track how many bytes were emitted (in the body)
+/// Handles getPos
+def tracking[A]{ body: => Unit / { emit[A], getPos } }: Unit / emit[A] =
+  tracking[A](0){body}
+
+/// Return just the nth element of the given stream.
+/// Raises MissingValue if not enough elements are emitted
+def nth[A](n: Int){ body: => Unit / emit[A] }: A / Exception[MissingValue] = {
+  var m = n
+  try {
+    body()
+    val r: A = do raise[MissingValue](MissingValue(), "code in first did not emit any values")
+    r
+  } with emit[A] { a =>
+    if (m == 0) {
+      a
+    } else {
+      m = m - 1
+      resume(())
+    }
+  }
+}
+
+/// Return just the first element of the given stream.
+/// Raises MissingValue if no elements are emitted
+def first[A]{ body: => Unit / emit[A] }: A / Exception[MissingValue] = {
+  try {
+    body()
+    val r: A = do raise[MissingValue](MissingValue(), "code in first did not emit any values")
+    r
+  } with emit[A] { a => a }
+}
+
 namespace returning {
 
 /// Canonical handler of push streams that performs `action` for every

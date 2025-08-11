@@ -1,0 +1,336 @@
+import option
+import stringbuffer
+import stream
+import char
+import io/error
+import bytearray
+
+// assumes by default:
+// BE byteorder, BE bitorder, unsigned
+
+// Wrappers
+// --------
+/// A with explicit big-endian order
+record BE[A](raw: A)
+/// A with explicit little-endian order
+record LE[A](raw: A)
+/// A with explicit width in current unit
+/// (bits for bitstreams, bytes for bytestreams)
+record OfWidth[A](raw: A, width: Int)
+/// explicitly signed A
+record Signed[A](raw: A)
+
+/// Bits
+type Bit { B0(); B1() }
+
+/// not on Bits
+def not(b: Bit): Bit = b match {
+  case B0() => B1()
+  case B1() => B0()
+}
+
+/// Splices allowed in hex/byte stream literals
+effect HexSplices = {
+  splice[Char], splice[String], 
+  splice[Unit], 
+  splice[Int],
+  splice[Byte],
+  splice[BE[Int]], splice[LE[Int]],
+  splice[LE[Signed[Int]]], splice[OfWidth[LE[Int]]], splice[OfWidth[LE[Signed[Int]]]],
+  splice[BE[Signed[Int]]], splice[OfWidth[BE[Int]]], splice[OfWidth[BE[Signed[Int]]]],
+  splice[ByteArray]
+}
+
+// Splitting
+// ---------
+
+/// emit bytes of the given int as a w bytes in little-endian byte order
+def bytesLE(int: Int, w: Int): Unit / emit[Byte] = {
+  var c = int
+  repeat(w){
+    do emit(mod(c, 256).toByte)
+    c = c / 256
+  }
+}
+
+/// emit bytes of the given int as a 4 bytes in little-endian byte order
+def bytesLE(int: Int): Unit / emit[Byte] = bytesLE(int, 4)
+
+/// emit bytes of the given int as a w bytes in big-endian byte order
+def bytesBE(n: Int, width: Int): Unit / emit[Byte] = {
+  var pos = pow(256, width - 1)
+  repeat(width){
+    do emit((bitwiseAnd(n, pos * 255) / pos).toByte)
+    pos = pos / 256
+  }
+}
+
+/// emit bytes of the given int as a 4 bytes in big-endian byte order
+def bytesBE(n: Int): Unit / emit[Byte] = bytesBE(n, 4)
+
+/// emit bytes of the given int as width bytes (in 2s-complement) in little-endian byte order
+def signedBytesLE(int: Int, width: Int): Unit / emit[Byte] =
+  if (int < 0) {
+    bytesLE(bitwiseNot(neg(int)) + 1, width)
+  } else {
+    bytesLE(int, width)
+  }
+/// emit bytes of the given int as width bytes (in 2s-complement) in big-endian byte order
+def signedBytesBE(int: Int, width: Int): Unit / emit[Byte] = {
+  if (int < 0) {
+    bytesBE(bitwiseNot(neg(int)) + 1, width)
+  } else {
+    bytesBE(int, width)
+  }
+}
+
+/// emit bytes of the given int as 4 bytes (in 2s-complement) in little-endian byte order
+def signedBytesLE(int: Int): Unit / emit[Byte] = signedBytesLE(int, 4)
+
+/// emit bytes of the given int as 4 bytes (in 2s-complement) in big-endian byte order
+def signedBytesBE(int: Int): Unit / emit[Byte] = signedBytesBE(int, 4)
+
+
+
+// Splicers
+// --------
+
+/// Splicer to emit the bytes in hex notation given, plus eventual splices
+/// Ignores whitespace
+def hex{ body: => Unit / { literal, HexSplices } }: Unit / emit[Byte] = {
+  try {
+    try {
+      body()
+    }
+    with splice[String] { s =>
+      feed(s){ exhaustively{ do splice[Char](do read[Char]()) } }
+      resume(())
+    }
+    with splice[ByteArray] { ba =>
+      ba.foreach{ b => do splice[Byte](b) }
+      resume(())
+    }
+  }
+  with literal { s =>
+      feed(s){
+        exhaustively {
+          with on[MissingValue].default{ () }
+          val upper: Int = hexDigitValue(do read[Char]()).value
+          val lower: Int = hexDigitValue(do read[Char]()).value
+          do emit[Byte]((16 * upper + lower).toByte)
+        }
+      }
+      resume(())
+    }
+  with splice[Char] { c => do emit[Byte](c.toInt.toByte); resume(()) }
+  with splice[Byte] { b => do emit(b); resume(()) }
+  with splice[Unit] { u => resume(()) }
+  with splice[Int] { n => bytesBE(n); resume(()) }
+  with splice[LE[Int]] { w => bytesLE(w.raw); resume(()) }
+  with splice[BE[Int]] { v => bytesBE(v.raw); resume(()) }
+  with splice[LE[Signed[Int]]] { w => signedBytesLE(w.raw.raw); resume(()) }
+  with splice[OfWidth[LE[Int]]] { w => bytesLE(w.raw.raw, w.width); resume(()) }
+  with splice[OfWidth[LE[Signed[Int]]]] { w => signedBytesLE(w.raw.raw.raw, w.width); resume(()) }
+  with splice[BE[Signed[Int]]] { w => signedBytesBE(w.raw.raw); resume(()) }
+  with splice[OfWidth[BE[Int]]] { w => bytesBE(w.raw.raw, w.width); resume(()) }
+  with splice[OfWidth[BE[Signed[Int]]]] { w => signedBytesBE(w.raw.raw.raw, w.width); resume(()) }
+}
+
+/// convert the given hex notation to an integer (big-endian)
+def x{ body: => Unit / { literal, HexSplices } }: Int = {
+  var res = 0
+  for[Byte]{ hex{body} }{ v => res = res * 256 + v.toInt }
+  res
+}
+
+
+// Sub-Byte
+// ========
+
+// From/to Bytes
+// -------------
+/// emit bits of the given Byte as 8 Bits in little-endian bit order
+def bitsLE(byte: Byte): Unit / emit[Bit] = {
+  val v = byte.toInt
+  var mask = 1
+  repeat(8){
+    bitwiseAnd(v, mask) match {
+      case 0 => do emit(B0())  
+      case _ => do emit(B1())
+    }
+    mask = mask * 2
+  }
+}
+
+/// emit bits of the given Byte as 8 Bits in big-endian bit order
+def bitsBE(byte: Byte): Unit / emit[Bit] = {
+  val v = byte.toInt
+  var mask = 128
+  repeat(8){
+    bitwiseAnd(v, mask) match {
+      case 0 => do emit(B0())  
+      case _ => do emit(B1())
+    }
+    mask = mask / 2
+  }
+}
+
+/// emit bits of the given Byte as width Bits in little-endian bit order
+def bitsLE(v: Int, width: Int): Unit / emit[Bit] = {
+  var mask = 1
+  repeat(width){
+    bitwiseAnd(v, mask) match {
+      case 0 => do emit(B0())  
+      case _ => do emit(B1())
+    }
+    mask = mask * 2
+  }
+}
+
+/// emit bits of the given int as width Bits in big-endian bit order
+def bitsBE(v: Int, width: Int): Unit / emit[Bit] = {
+  var mask = pow(2, width - 1)
+  repeat(width){
+    bitwiseAnd(v, mask) match {
+      case 0 => do emit(B0())  
+      case _ => do emit(B1())
+    }
+    mask = mask / 2
+  }
+}
+
+/// emit bits of the given int as 32 Bits in big-endian bit order
+def bitsBE(int: Int): Unit / emit[Bit] = bitsBE(int, 32)
+
+/// collect bits in big-endian bit order into an Int
+def collectBitsBE{ body: => Unit / emit[Bit] }: Int = {
+  var res = 0
+  try body() with emit[Bit] { b =>
+    res = b match {
+      case B0() => res * 2
+      case B1() => res * 2 + 1
+    }
+    resume(())
+  }
+  res
+}
+
+/// split emitted bytes and emit the individual bits in big-endian bit order
+def ungroupBytesBE{ body: => Unit / emit[Byte] }: Unit / emit[Bit] =
+  for[Byte]{body}{ b => bitsBE(b) }
+
+/// streaming negation in 2s-complement for little-endian bitstreams
+def twoscomplementLE{ body: => Unit / emit[Bit] }: Unit / emit[Bit] = {
+  var carry = true
+  try body()
+  with emit[Bit] {
+    case B0() => if(carry) { do emit(B0()) } else { do emit(B1()) }; resume(())
+    case B1() => if(carry) { do emit(B1()); carry = false } else { do emit(B0()) }; resume(())
+  }
+}  
+
+/// group 8 bits into a byte each, big-endian bit order.
+/// NOTE: The remainder is dropped.
+def groupBytesBE{ body: => Unit / emit[Bit] }: Unit / emit[Byte] = {
+  var next = 0
+  var p = 128
+  for[Bit]{body}{ b =>
+    b match {
+      case B0() => ()
+      case B1() => next = next + p
+    }
+    p = p / 2
+    if(p == 0) {
+      do emit(next.toByte)
+      next = 0
+      p = 128
+    }
+  }
+}
+
+/// group 8 bits into a byte each, little-endian bit order.
+/// NOTE: The remainder is dropped.
+def groupBytesLE{ body: => Unit / emit[Bit] }: Unit / emit[Byte] = {
+  var next = 0
+  var p = 1
+  for[Bit]{body}{ b =>
+    b match {
+      case B0() => ()
+      case B1() => next = next + p
+    }
+    p = p * 2
+    if(p == 256) {
+      do emit(next.toByte)
+      next = 0
+      p = 1
+    }
+  }
+}
+
+// Literals/splices
+// ----------------
+/// Splices allowed in bit stream literals
+effect BitSplices = {
+  splice[Unit], splice[Bit],
+  splice[Byte],
+  splice[LE[Int]], splice[BE[Int]],
+  splice[LE[Signed[Int]]], splice[BE[Signed[Int]]],
+  splice[OfWidth[LE[Int]]], splice[OfWidth[BE[Int]]],
+  splice[OfWidth[LE[Signed[Int]]]], splice[OfWidth[BE[Signed[Int]]]]
+}
+/// Splicer to emit the bits in binary notation given, plus evenutal splices
+/// Ignores whitespace
+def bit{ body: => Unit / { literal, BitSplices } }: Unit / emit[Bit] = {
+  try {
+    ungroupBytesBE{
+      try {
+        body()
+      }
+      with splice[LE[Int]] { i => bytesLE(i.raw); resume(()) }
+      with splice[BE[Int]] { i => bytesBE(i.raw); resume(()) }
+      with splice[LE[Signed[Int]]] { i => signedBytesLE(i.raw.raw); resume(()) }
+      with splice[BE[Signed[Int]]] { i => signedBytesBE(i.raw.raw); resume(()) }
+    }
+  }
+  with literal { s =>
+    feed(s){
+      exhaustively {
+        do read[Char]() match {
+          case '0' => do emit(B0())
+          case '1' => do emit(B1())
+          case _ => ()
+        }
+      }
+    }
+    resume(())
+  }
+  with splice[Unit] { _ => resume(()) }
+  with splice[Bit] { b => do emit(b); resume(()) }
+  with splice[Byte] { b => bitsBE(b); resume(()) }
+  with splice[OfWidth[LE[Int]]] { i =>
+    bitsLE(i.raw.raw, i.width)
+    resume(())
+  }
+  with splice[OfWidth[LE[Signed[Int]]]] { i =>
+    if(i.raw.raw.raw < 0){
+      twoscomplementLE{ bitsLE(0 - i.raw.raw.raw, i.width) }
+    } else {
+      bitsLE(i.raw.raw.raw, i.width)
+    }
+    resume(())
+  }
+  with splice[OfWidth[BE[Int]]] { i =>
+    bitsBE(i.raw.raw, i.width)
+    resume(())
+  }
+  with splice[OfWidth[BE[Signed[Int]]]] { i =>
+    collectList[Bit]{
+      if(i.raw.raw.raw < 0){
+        twoscomplementLE{ bitsLE(0 - i.raw.raw.raw, i.width) }
+      } else {
+        bitsLE(i.raw.raw.raw, i.width)
+      }
+    }.reverse.each
+    resume(())
+  }
+}

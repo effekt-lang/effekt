@@ -1,0 +1,17 @@
+Test test suite on Exceptions
+✓ Test test assertNotThrown pass
+✕ Test test assertNotThrown fail
+  Unexpected Exception
+✕ Test test assertThrown fail
+  Expected Exception, but exited normally
+✓ Test test assertThrows pass
+✓ Test test assertNoThrow pass
+✕ Test test assertNoThrow fail
+  Unexpected Exception
+✕ Test test assertThrows fail
+  Expected Exception, but exited normally
+✓ Test test assertThrows pass
+
+ 4 pass
+ 4 fail
+ 8 tests total
