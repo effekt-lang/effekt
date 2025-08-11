@@ -214,6 +214,9 @@ object scopes {
         else syms.head
       }}
 
+    def lookupTerms(id: IdRef)(using E: ErrorReporter): List[Set[TermSymbol]] =
+      all(id.path, scope) { _.terms.getOrElse(id.name, Set.empty) }
+
     def lookupType(id: IdRef)(using E: ErrorReporter): TypeSymbol =
       lookupTypeOption(id.path, id.name) getOrElse { E.abort(pp"Could not resolve type ${id}") }
 
