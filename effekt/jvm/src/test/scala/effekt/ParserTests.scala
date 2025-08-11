@@ -934,14 +934,14 @@ class ParserTests extends munit.FunSuite {
         |val y = 5
         |""".stripMargin)
 
-    val nested = parseDefinitions(
+    val nested = parseToplevel(
       """namespace list {
         |  val x = 4
         |  val y = 5
         |}
         |""".stripMargin)
 
-    val semi = parseDefinitions(
+    val semi = parseToplevel(
       """namespace list;
         |val x = 4
         |val y = 5
@@ -949,7 +949,7 @@ class ParserTests extends munit.FunSuite {
 
     assertEqualModuloSpans(nested, semi)
 
-    val nested2 = parseDefinitions(
+    val nested2 = parseProgram(
       """namespace list {
         |  namespace internal {
         |
@@ -959,32 +959,15 @@ class ParserTests extends munit.FunSuite {
         |}
         |""".stripMargin)
 
-    val semi2 = parseDefinitions(
-      """namespace list;
-        |namespace internal;
-        |
-        |val x = 4
-        |val y = 5
-        |""".stripMargin)
-
-    val semiInsertion = parseDefinitions(
+    val semi2 = parseProgram(
       """namespace list
         |namespace internal
         |
         |val x = 4
-        |val y = 5
+        |val y = 5;
         |""".stripMargin)
 
-    assertEqualModuloSpans(nested2, semi2)
-    assertEqualModuloSpans(nested2, semiInsertion)
-
-    parseDefinitions(
-      """val x = {
-        |  namespace foo;
-        |  val y = 4;
-        |  foo::y
-        |}
-        |""".stripMargin)
+    (nested2.defs zip semi2.defs).foreach(assertEqualModuloSpans)
   }
 
   test("Definitions") {
@@ -1236,24 +1219,6 @@ class ParserTests extends munit.FunSuite {
     }
 
     assertEquals(varDef.span, span)
-  }
-
-  test("Namespace definition parses with correct span") {
-    val (source, span) =
-      raw"""namespace Foo {
-           |↑
-           |}
-           |↑""".sourceAndSpan
-
-    val definition = parseDefinition(source.content)
-
-    val nsDef = definition match {
-      case nd@NamespaceDef(id, defs, doc, span) => nd
-      case other =>
-        throw new IllegalArgumentException(s"Expected NamespaceDef but got ${other.getClass.getSimpleName}")
-    }
-
-    assertEquals(nsDef.span, span)
   }
 
   test("Interface definition parses with correct span") {
