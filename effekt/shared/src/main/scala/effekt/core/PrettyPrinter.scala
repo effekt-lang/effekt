@@ -145,7 +145,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(c: Constructor): Doc = c match {
-    case Constructor(id, fields) => toDoc(id) <> parens(fields.map(toDoc))
+    case Constructor(id, fields, tparams) => toDoc(id) <> brackets(tparams.map(toDoc)) <> parens(fields.map(toDoc))
   }
   def toDoc(f: Field): Doc = f match {
     case Field(name, tpe) => toDoc(name) <> ":" <+> toDoc(tpe)
