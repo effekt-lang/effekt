@@ -127,8 +127,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
 
   def rewrite(t: Def)(using C: Context): Def = visit(t) {
 
-    case FunDef(id, tparams, vparams, bparams, ret, body, doc, span) =>
-      FunDef(id, tparams, vparams, bparams, ret, rewrite(body), doc, span)
+    case FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) =>
+      FunDef(id, tparams, vparams, bparams, captures, ret, rewrite(body), doc, span)
 
     case ValDef(id, annot, binding, doc, span) =>
       ValDef(id, annot, rewrite(binding), doc, span)

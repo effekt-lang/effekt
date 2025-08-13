@@ -542,7 +542,8 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     else
       // [...](<PARAM>...) {...} `=` <STMT>>
       val (tps, vps, bps) = params()
-      FunDef(id, tps, vps, bps, maybeReturnAnnotation(), `=` ~> stmts(), info, span())
+      val captures = maybeCaptureSet()
+      FunDef(id, tps, vps, bps, captures, maybeReturnAnnotation(), `=` ~> stmts(), info, span())
 
 
   // right now: data type definitions (should be renamed to `data`) and type aliases
@@ -630,10 +631,8 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       case `include`   => externInclude(info)
       case `def`       => externFun(info)
       // extern """..."""
-      case s: Str      => externString(info)
+      case _           => externString(info)
       // extern js """..."""
-      case t if info.externCapture.nonEmpty => fail(s"Expected string literal but got ${explain(t)}")
-      case _           => fail("Expected an extern definition")
     }
 
   // reinterpret a parsed capture as a feature flag
@@ -668,17 +667,17 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   def externString(info: Info): Def =
     val posAfterExtern = pos()
-    val ff = featureFlagFromCapture(info.externCapture)
+    val ff = maybeFeatureFlag()
     expect("string literal") {
       case Str(contents, _) => ExternInclude(ff, "", Some(contents), IdDef("", Span(source, posAfterExtern, posAfterExtern, Synthesized)), info, span())
     }
 
   def externFun(info: Info): Def =
-    ((pos() <~ `def`) ~ idDef() ~ params() ~ (returnAnnotation() <~ `=`)) match {
-      case posn ~ id ~ (tps, vps, bps) ~ ret =>
+    (`def` ~> idDef() ~ params() ~ (pos() ~ maybeExternCapture()) ~ (returnAnnotation() <~ `=`)) match {
+      case id ~ (tps, vps, bps) ~ (posn ~ cpt) ~ ret =>
         val bodies = manyWhile(externBody(), isExternBodyStart)
-        val capture = info.externCapture.getOrElse(defaultCapture(Span(source, posn, posn, Synthesized)))
-        ExternDef(capture, id, tps, vps, bps, ret, bodies, info, span())
+        val captures = cpt.getOrElse(defaultCapture(Span(source, posn, posn, Synthesized)))
+        ExternDef(id, tps, vps, bps, captures, ret, bodies, info, span())
     }
 
   def externBody(): ExternBody =
@@ -729,7 +728,6 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   // /// some documentation
   // private
   // extern
-  // {io}
   def info(parseCaptures: Boolean): Info =
     nonterminal {
       val doc = maybeDocumentation()
@@ -739,9 +737,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       val isExtern = nonterminal {
         when(`extern`) { Maybe.Some((), span()) } { Maybe.None(span()) }
       }
-      val externCapture = if (parseCaptures) maybeExternCapture() else None
-
-      Info(doc, isPrivate, isExtern, externCapture)
+      Info(doc, isPrivate, isExtern)
     }
 
   def noInfo(): Info = Info.empty(Span(source, pos(), pos(), Synthesized))
@@ -755,16 +751,13 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     def onlyDoc(): Info =
       if (info.isExtern.nonEmpty) softFail("Modifier `extern` is not allowed", position, position) // , info.isExtern.span.from, info.isExtern.span.to)
       if (info.isPrivate.nonEmpty) softFail("Modifier `private` is not allowed", position, position) // , info.isExtern.span.from, info.isExtern.span.to)
-      info.externCapture.foreach { captures => softFail("Specifying captures is not allowed", position, position) } // , captures.span.from, captures.span.to) }
 
       info
   }
 
   def maybeExternCapture(): Option[CaptureSet] =
     nonterminal:
-      val posn = pos()
-      if peek(`{`) || peek(`pure`) || isVariable then Some(externCapture())
-      else None
+      when(`at`) { Some(externCapture()) } { None }
 
   def defaultCapture(span: Span): CaptureSet =
     CaptureSet(List(IdRef(List("effekt"), "io", span)), span)
@@ -786,6 +779,10 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       expect("string literal") {
         case Str(s, _) => s
       }
+
+  def maybeCaptureSet(): Maybe[CaptureSet] =
+    nonterminal:
+      when(`at`) { Maybe.Some(captureSet(), span()) } { Maybe.None(span()) }
 
   def maybeValueTypeAnnotation(): Option[ValueType] =
     nonterminal:

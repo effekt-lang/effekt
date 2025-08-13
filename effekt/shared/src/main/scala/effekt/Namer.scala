@@ -143,7 +143,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.DefDef(id, annot, block, doc, span) =>
       ()
 
-    case f @ source.FunDef(id, tparams, vparams, bparams, annot, body, doc, span) =>
+    case f @ source.FunDef(id, tparams, vparams, bparams, captures, annot, body, doc, span) =>
       val uniqueId = Context.nameFor(id)
 
       // we create a new scope, since resolving type params introduces them in this scope
@@ -219,9 +219,9 @@ object Namer extends Phase[Parsed, NameResolved] {
         ExternInterface(Context.nameFor(id), tps, decl)
       })
 
-    case d @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) => {
+    case d @ source.ExternDef(id, tparams, vparams, bparams, captures, ret, bodies, doc, span) => {
       val name = Context.nameFor(id)
-      val capt = resolve(capture)
+      val capt = resolve(captures)
       Context.define(id, Context scoped {
         val tps = tparams map resolve
         val vps = vparams map resolve
@@ -323,7 +323,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, DefBinder(Context.nameFor(id), tpe.unspan, d))
 
     // FunDef and InterfaceDef have already been resolved as part of the module declaration
-    case f @ source.FunDef(id, tparams, vparams, bparams, ret, body, doc, span) =>
+    case f @ source.FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) =>
       val sym = f.symbol
       Context.scopedWithName(id.name) {
         sym.tparams.foreach { p => Context.bind(p) }
@@ -333,7 +333,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolve(body)
       }
 
-    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) =>
+    case f @ source.ExternDef(id, tparams, vparams, bparams, captures, ret, bodies, doc, span) =>
       val sym = f.symbol
       Context.scopedWithName(id.name) {
         sym.tparams.foreach { p => Context.bind(p) }
