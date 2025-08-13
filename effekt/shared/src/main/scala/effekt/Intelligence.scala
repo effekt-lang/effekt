@@ -257,7 +257,7 @@ trait Intelligence {
       case (t, c) => t.span.origin != Missing && t.span.range.from.between(range.from, range.to)
     }.collect {
       case (t: source.FunDef, c) => for {
-        pos <- if t.span.origin != Missing then Some(t.span.range.from) else None
+        pos <- if t.span.origin != Missing then Some(t.ret.span.range.from) else None
       } yield CaptureInfo(pos, c)
       case (t: source.DefDef, c) => for {
         pos <- if t.span.origin != Missing then Some(t.annot.span.range.from) else None
