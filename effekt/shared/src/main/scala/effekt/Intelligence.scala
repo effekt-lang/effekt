@@ -203,16 +203,17 @@ trait Intelligence {
     def symbolToBindingInfos(name: String, path: List[String], sym: TypeSymbol | TermSymbol)(using C: Context): List[BindingInfo] =
       // TODO this is extremely hacky, printing is not defined for all types at the moment
       val signature = try { Some(SignaturePrinter(sym)) } catch { case e: Throwable => None }
+      val signatureHtml = signature.map(sig => HtmlHighlight(sig))
       val out = sym match {
-        case sym: TypeSymbol => List(TypeBinding(path, name, origin, signature))
-        case sym: ValueSymbol => List(TermBinding(path, name, origin, signature))
-        case sym: BlockSymbol => List(TermBinding(path, name, origin, signature))
+        case sym: TypeSymbol => List(TypeBinding(path, name, origin, signature, signatureHtml))
+        case sym: ValueSymbol => List(TermBinding(path, name, origin, signature, signatureHtml))
+        case sym: BlockSymbol => List(TermBinding(path, name, origin, signature, signatureHtml))
       }
       sym match {
         case Interface(name, tparams, ops, decl) if ops.length > 1 => {
           val opsInfos = ops.map { op =>
             val sig = Some(SignaturePrinter(op))
-            TermBinding(path, op.name.name, origin, sig)
+            TermBinding(path, op.name.name, origin, sig, signatureHtml)
           }
           out ++ opsInfos
         }
@@ -467,11 +468,26 @@ object Intelligence {
     val name: String
     val origin: String
     val signature: Option[String]
+    val signatureHtml: Option[String]
     val kind: String
   }
 
-  case class TermBinding(qualifier: List[String], name: String, origin: String, signature: Option[String] = None, kind: String = BindingKind.Term) extends BindingInfo
-  case class TypeBinding(qualifier: List[String], name: String, origin: String, signature: Option[String] = None, kind: String = BindingKind.Type) extends BindingInfo
+  case class TermBinding(
+    qualifier: List[String],
+    name: String,
+    origin: String,
+    signature: Option[String] = None,
+    signatureHtml: Option[String],
+    kind: String = BindingKind.Term
+  ) extends BindingInfo
+  case class TypeBinding(
+    qualifier: List[String],
+    name: String,
+    origin: String,
+    signature: Option[String] = None,
+    signatureHtml: Option[String],
+    kind: String = BindingKind.Type
+  ) extends BindingInfo
 
   // These need to be strings (rather than cases of an enum) so that they get serialized correctly
   object ScopeKind {
