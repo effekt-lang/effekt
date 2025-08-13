@@ -14,15 +14,6 @@ import kiama.util.{Source, StringSource}
  *   HtmlHighlight("val x = 3; return x + 1")
  */
 object HtmlHighlight {
-  private def htmlEscape(text: String): String = {
-    text
-      .replace("&", "&amp;")
-      .replace("<", "&lt;")
-      .replace(">", "&gt;")
-      .replace("\"", "&quot;")
-      .replace("'", "&#39;")
-  }
-
   private def htmlSpan(cls: String, text: String): String =
     s"<span class=\"$cls\">$text</span>"
 
@@ -30,7 +21,7 @@ object HtmlHighlight {
   // ------------
 
   private def highlight(kind: TokenKind, raw: String): String = {
-    val text = htmlEscape(raw)
+    val text = scala.xml.Utility.escape(raw)
     kind match {
       case EOF               => ""
       case Error(_)          => htmlSpan("effekt-error", text)
