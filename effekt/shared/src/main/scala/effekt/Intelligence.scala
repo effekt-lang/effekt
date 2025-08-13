@@ -7,6 +7,7 @@ import effekt.symbols.{CaptureSet, Hole}
 import kiama.util.{Position, Source}
 import effekt.symbols.scopes.Scope
 import effekt.source.sourceOf
+import effekt.util.HtmlHighlight
 import effekt.source.Spans
 
 trait Intelligence {
@@ -201,9 +202,21 @@ trait Intelligence {
 
     sorted.flatMap((name, path, sym) => sym match {
       // TODO this is extremely hacky, printing is not defined for all types at the moment
-      case sym: TypeSymbol => try { Some(TypeBinding(path, name, origin, DeclPrinter(sym))) } catch { case e => None }
-      case sym: ValueSymbol => Some(TermBinding(path, name, origin, C.valueTypeOption(sym).map(t => pp"${t}")))
-      case sym: BlockSymbol => Some(TermBinding(path, name, origin, C.blockTypeOption(sym).map(t => pp"${t}")))
+      case sym: TypeSymbol => try {
+        val definition = DeclPrinter(sym)
+        val definitionHtml = HtmlHighlight(definition)
+        Some(TypeBinding(path, name, origin, definition, definitionHtml))
+      } catch { case e => None }
+      case sym: ValueSymbol => {
+        val `type` = C.valueTypeOption(sym).map(t => pp"${t}")
+        val typeHtml = `type`.map(HtmlHighlight(_))
+        Some(TermBinding(path, name, origin, `type`, typeHtml))
+      }
+      case sym: BlockSymbol => {
+        val `type` = C.blockTypeOption(sym).map(t => pp"${t}")
+        val typeHtml = `type`.map(HtmlHighlight(_))
+        Some(TermBinding(path, name, origin, `type`, typeHtml))
+      }
     }).toList
 
   def allSymbols(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): Array[(String, List[String], TypeSymbol | TermSymbol)] = {
@@ -454,8 +467,22 @@ object Intelligence {
     val kind: String
   }
 
-  case class TermBinding(qualifier: List[String], name: String, origin: String, `type`: Option[String], kind: String = BindingKind.Term) extends BindingInfo
-  case class TypeBinding(qualifier: List[String], name: String, origin: String, definition: String, kind: String = BindingKind.Type) extends BindingInfo
+  case class TermBinding(
+    qualifier: List[String],
+    name: String,
+    origin: String,
+    `type`: Option[String],
+    typeHtml: Option[String],
+    kind: String = BindingKind.Term
+  ) extends BindingInfo
+  case class TypeBinding(
+    qualifier: List[String],
+    name: String,
+    origin: String,
+    definition: String,
+    definitionHtml: String,
+    kind: String = BindingKind.Type
+  ) extends BindingInfo
 
   // These need to be strings (rather than cases of an enum) so that they get serialized correctly
   object ScopeKind {
