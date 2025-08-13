@@ -625,14 +625,8 @@ class LSPTests extends FunSuite {
 
       val params = new DocumentSymbolParams()
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
-
-      val documentSymbols = server.getTextDocumentService().documentSymbol(params).get()
-      // FIXME: The server currently returns spurious symbols at position (0, 0) that we need to filter out.
-      val filtered = server.getTextDocumentService().documentSymbol(params).get().asScala.filter {
-        symbol => symbol.getRight.getRange.getStart != new Position(0, 0) && symbol.getRight.getRange.getEnd != new Position(0, 0)
-      }.asJava
-
-      assertEquals(filtered, expectedSymbols.asJava)
+      val actualSymbols = server.getTextDocumentService().documentSymbol(params).get()
+      assertEquals(actualSymbols, expectedSymbols.asJava)
     }
   }
 
