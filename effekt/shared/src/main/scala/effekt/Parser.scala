@@ -1552,7 +1552,12 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   def captureSet(): CaptureSet =
     nonterminal:
-      CaptureSet(many(idRef, `{`, `,` , `}`).unspan, span())
+      peek.kind match {
+        case `{` =>
+          CaptureSet(many(idRef, `{`, `,` , `}`).unspan, span())
+        case _ =>
+          CaptureSet(List(idRef()), span())
+      }
 
   // Generic utility functions
   // -------------------------

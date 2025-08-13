@@ -1013,6 +1013,12 @@ class ParserTests extends munit.FunSuite {
     )
   }
 
+  test("Function definition with capture set") {
+    parseDefinition("def foo(v: Int) at {}: Unit = <>")
+    parseDefinition("def foo(v: Int) at io: Unit = <>")
+    parseDefinition("def foo(v: Int) at {async, io}: Unit = <>")
+  }
+
   test("Function definition"){
     val (source, pos) =
       raw"""def foo[T1, T2](x: T1, y: T2){b: => Unit}: Unit = <>
@@ -1130,7 +1136,7 @@ class ParserTests extends munit.FunSuite {
     assertEquals(valDef.span, span)
   }
 
-  test("Declaration info with capture set") {
+  test("Declaration info") {
     val (source, pos) =
       raw"""/// Some doc comment
            |private extern
