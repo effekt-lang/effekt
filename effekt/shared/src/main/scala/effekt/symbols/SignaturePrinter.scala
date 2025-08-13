@@ -32,15 +32,15 @@ object SignaturePrinter extends ParenPrettyPrinter {
 
     case b @ ValBinder(name, tps, decl) =>
       val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
-      pp"val ${name}: ${tpe}"
+      pp"val ${name.name}: ${tpe}"
 
     case p @ ValueParam(name, t, _) =>
       val tpe = context.valueTypeOption(p).getOrElse { t.get }
-      pp"${name}: ${tpe}"
+      pp"${name.name}: ${tpe}"
 
     case p @ BlockParam(name, t, _) =>
       val tpe = context.blockTypeOption(p).getOrElse { t.get }
-      pp"{ ${name}: ${tpe} }"
+      pp"{ ${name.name}: ${tpe} }"
 
     case b: VarBinder =>
       val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
@@ -67,13 +67,13 @@ object SignaturePrinter extends ParenPrettyPrinter {
 
     case ExternType(name, tparams, _) =>
       val tps = show(tparams)
-      pp"extern type ${name}$tps"
+      pp"extern type ${name.name}$tps"
 
     case ExternInterface(name, tparams, _) =>
-      pp"extern interface ${name}${show(tparams)}"
+      pp"extern interface ${name.name}${show(tparams)}"
 
     case ExternResource(name, tpe, _) =>
-      pp"extern resource ${name}: ${tpe}"
+      pp"extern resource ${name.name}: ${tpe}"
 
     case c: Callable =>
       val tpe = context.functionTypeOption(c)
