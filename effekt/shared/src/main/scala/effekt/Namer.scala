@@ -145,7 +145,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case f @ source.FunDef(id, tparams, vparams, bparams, captures, annot, body, doc, span) =>
       val uniqueId = Context.nameFor(id)
-
+      val cpts = captures.map { resolve }.unspan
       // we create a new scope, since resolving type params introduces them in this scope
       val sym = Context scoped {
         val tps = tparams map resolve
@@ -158,7 +158,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.bindBlocks(bps)
           annot map resolve
         }
-        UserFunction(uniqueId, tps.unspan, vps.unspan, bps.unspan, ret.unspan.map { _._1 }, ret.unspan.map { _._2 }, f)
+        UserFunction(uniqueId, tps.unspan, vps.unspan, bps.unspan, cpts, ret.unspan.map { _._1 }, ret.unspan.map { _._2 }, f)
       }
       Context.define(id, sym)
 

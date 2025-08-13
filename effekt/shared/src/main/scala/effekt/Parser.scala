@@ -358,7 +358,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       spaces()
 
       // potential documentation for the file / module
-      documented(parseCaptures = true) { info =>
+      documented() { info =>
         val (name, moduleInfo, unusedInfo) = peek.kind match {
           case `module` =>
             consume(`module`)
@@ -413,7 +413,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   }
 
   def toplevel(): Def =
-    documented(parseCaptures = true): doc =>
+    documented(): doc =>
       toplevelDef(doc)
 
   private def toplevelDef(info: Info): Def =
@@ -435,7 +435,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       }
 
   private def toplevelDefs(): List[Def] =
-    documented(parseCaptures = true): info =>
+    documented(): info =>
       toplevelDefs(info)
 
   private def toplevelDefs(info: Info): List[Def] =
@@ -467,7 +467,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   }
 
   def definition(): Def =
-    documented(parseCaptures = true): info =>
+    documented(): info =>
       peek.kind match {
         case `val`       => valDef(info)
         case `def`       => defDef(info)
@@ -490,7 +490,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
    *   i.e. val (l, r) = point(); ...
    */
   def valStmt(inBraces: Boolean): Stmt =
-    documented(parseCaptures = false): info =>
+    documented(): info =>
       val startPos = pos()
       val startMarker = nonterminal { new {} }
       def simpleLhs() = backtrack {
@@ -559,7 +559,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     RecordDef(`record` ~> idDef(), maybeTypeParams(), valueParams(), info, span())
 
   def constructor(): Constructor =
-    documented(parseCaptures = false): info =>
+    documented(): info =>
       Constructor(idDef(), maybeTypeParams(), valueParams(), info.onlyDoc().doc, span()) labelled "constructor"
 
   // On the top-level both
@@ -607,7 +607,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
 
   def interfaceDef(info: Info, keyword: TokenKind = `interface`): InterfaceDef =
     InterfaceDef(keyword ~> idDef(), maybeTypeParams(),
-      `{` ~> manyUntil(documented(parseCaptures = false) { opInfo => { `def` ~> operation(opInfo) } labelled "} or another operation declaration" }, `}`) <~ `}`, info, span())
+      `{` ~> manyUntil(documented() { opInfo => { `def` ~> operation(opInfo) } labelled "} or another operation declaration" }, `}`) <~ `}`, info, span())
 
   def namespaceDef(info: Info): Def =
     consume(`namespace`)
@@ -619,7 +619,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     else { semi(); NamespaceDef(id, definitions(), info.onlyDoc(), span()) }
 
   def externDef(): Def =
-    documented(parseCaptures = true): info =>
+    documented(): info =>
       externDef(info)
 
   def externDef(info: Info): Def =
@@ -704,9 +704,9 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       val (exprs, strs) = manyWhile((`${` ~> expr() <~ `}$`, string()), `${`).unzip
       Template(first :: strs, exprs)
 
-  def documented[T](parseCaptures: Boolean)(p: Info => T): T =
+  def documented[T]()(p: Info => T): T =
     nonterminal:
-      p(info(parseCaptures))
+      p(info())
 
   private def maybeDocumentation(): Doc =
     peek.kind match {
@@ -728,7 +728,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   // /// some documentation
   // private
   // extern
-  def info(parseCaptures: Boolean): Info =
+  def info(): Info =
     nonterminal {
       val doc = maybeDocumentation()
       val isPrivate = nonterminal {

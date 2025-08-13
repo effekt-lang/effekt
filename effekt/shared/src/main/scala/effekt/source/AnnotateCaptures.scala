@@ -85,7 +85,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
   }
 
   override def defn(using Context, Unit) = {
-    case tree @ source.FunDef(id, tps, vps, bps, cpt, ret, body, doc, span) =>
+    case tree @ source.FunDef(id, tps, vps, bps, cpts, ret, body, doc, span) =>
       val cpt = query(body) -- boundCapabilities(tree) -- CaptureSet(bps.unspan.map(_.symbol.capture))
       // TODO Why do we need to update the annotation on the symbol here? Is the inferred capture for recursive functions
       //   wrong? Problematic example: examples/benchmarks/tree.effekt (chooseHandler has the empty set, but should have {this})
