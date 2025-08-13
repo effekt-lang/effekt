@@ -1611,7 +1611,7 @@ class LSPTests extends FunSuite {
             name = "x",
             origin = BindingOrigin.Defined,
             `type` = Some("Int"),
-            typeHtml = Some("Int"),
+            typeHtml = Some("<span class=\"effekt-ident pascal-case\">Int</span>")
           )
         ),
         outer = Some(ScopeInfo(
@@ -1627,7 +1627,7 @@ class LSPTests extends FunSuite {
                 name = "MyInt",
                 origin = BindingOrigin.Defined,
                 definition = "type MyInt = Int",
-                definitionHtml = "type MyInt = Int"
+                definitionHtml = "<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">MyInt</span> = <span class=\"effekt-ident pascal-case\">Int</span>"
               )),
             outer = None
           ))
@@ -1661,7 +1661,7 @@ class LSPTests extends FunSuite {
         |        "name": "x",
         |        "origin": "Defined",
         |        "type": "Int",
-        |        "typeHtml": "Int",
+        |        "typeHtml": "<span class=\"effekt-ident pascal-case\">Int</span>",
         |        "kind": "Term"
         |      }
         |    ],
@@ -1677,7 +1677,7 @@ class LSPTests extends FunSuite {
         |            "name": "MyInt",
         |            "origin": "Defined",
         |            "definition": "type MyInt = Int",
-        |            "definitionHtml": "type MyInt = Int",
+        |            "definitionHtml": "<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">MyInt</span> = <span class=\"effekt-ident pascal-case\">Int</span>",
         |            "kind": "Type"
         |          }
         |        ]
