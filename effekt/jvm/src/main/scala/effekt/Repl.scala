@@ -55,7 +55,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
    */
   override def parse(source: Source): ParseResult[Tree] = {
     val tokens = effekt.lexer.Lexer.lex(source)
-    val parser = new Parser(context.positions, tokens, source)
+    val parser = new Parser(tokens, source)
     parser.parseRepl(Input(source, 0))
   }
 

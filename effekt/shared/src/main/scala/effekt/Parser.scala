@@ -1,23 +1,32 @@
 package effekt
 
+import effekt.context.Context
 import effekt.lexer.*
 import effekt.lexer.TokenKind.{`::` as PathSep, *}
 import effekt.source.*
-import effekt.context.Context
 import effekt.source.Origin.Synthesized
 import effekt.util.VirtualSource
 import kiama.parsing.{Input, ParseResult}
-import kiama.util.{Position, Positions, Range, Source}
+import kiama.util.{Position, Range, Source}
 
 import scala.annotation.{tailrec, targetName}
-import scala.language.implicitConversions
 import scala.collection.mutable.ListBuffer
+import scala.language.implicitConversions
 
 /**
  * String templates containing unquotes `${... : T}`
  */
 case class Template[+T](strings: List[String], args: List[T]) {
   def map[R](f: T => R): Template[R] = Template(strings, args.map(f))
+}
+
+case class SpannedTemplate[T](strings: List[Spanned[String]], args: List[Spanned[T]]) {
+  def map[R](f: T => R): SpannedTemplate[R] = SpannedTemplate(strings, args.map(_.map(f)))
+  def unspan: Template[T] = Template(strings.map(_.unspan), args.map(_.unspan))
+}
+
+case class Spanned[T](unspan: T, span: Span) {
+  def map[R](f: T => R): Spanned[R] = Spanned(f(unspan), span)
 }
 
 object Parser extends Phase[Source, Parsed] {
@@ -29,7 +38,7 @@ object Parser extends Phase[Source, Parsed] {
     case source =>
       Context.timed(phaseName, source.name) {
         val tokens = effekt.lexer.Lexer.lex(source)
-        val parser = new Parser(C.positions, tokens, source)
+        val parser = new Parser(tokens, source)
         parser.parse(Input(source, 0))
       }
   } map { tree =>
@@ -45,7 +54,7 @@ object Fail {
 }
 case class SoftFail(message: String, positionStart: Int, positionEnd: Int)
 
-class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
+class Parser(tokens: Seq[Token], source: Source) {
 
   var softFails: ListBuffer[SoftFail] = ListBuffer[SoftFail]()
 
@@ -491,8 +500,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
    */
   def valStmt(inBraces: Boolean): Stmt =
     documented(parseCaptures = false): info =>
-      val startPos = pos()
-      val startMarker = nonterminal { new {} }
+      val startPos = peek.start
       def simpleLhs() = backtrack {
         // Make sure there's either a `:` or `=` next, otherwise goto `matchLhs`
         def canCut: Boolean = peek(`:`) || peek(`=`)
@@ -501,7 +509,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
           val tpe = maybeValueTypeAnnotation() <~ `=`
           val binding = stmt()
           val endPos = pos()
-          val valDef = ValDef(id, tpe, binding, info.onlyDoc(), Span(source, startPos, endPos)).withRangeOf(startMarker, binding)
+          val valDef = ValDef(id, tpe, binding, info.onlyDoc(), Span(source, startPos, endPos))
           DefStmt(valDef, { semi(); stmts(inBraces) }, span())
       }
       def matchLhs() =
@@ -509,7 +517,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
           case AnyPattern(id, _) ~ Nil =>
             val binding = stmt()
             val endPos = pos()
-            val valDef = ValDef(id, None, binding, info.onlyDoc(), Span(source, startPos, endPos)).withRangeOf(startMarker, binding)
+            val valDef = ValDef(id, None, binding, info.onlyDoc(), Span(source, startPos, endPos))
             DefStmt(valDef, { semi(); stmts(inBraces) }, span())
           case p ~ guards =>
             // matches do not support doc comments, so we ignore `info`
@@ -517,8 +525,8 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
             val endPos = pos()
             val default = when(`else`) { Some(stmt()) } { None }
             val body = semi() ~> stmts(inBraces)
-            val clause = MatchClause(p, guards, body, Span(source, p.span.from, sc.span.to)).withRangeOf(p, sc)
-            val matching = Match(List(sc), List(clause), default, Span(source, startPos, endPos, Synthesized)).withRangeOf(startMarker, sc)
+            val clause = MatchClause(p, guards, body, Span(source, p.span.from, sc.span.to))
+            val matching = Match(List(sc), List(clause), default, Span(source, startPos, endPos, Synthesized))
             Return(matching, span().synthesized)
         }
 
@@ -591,9 +599,9 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     `effect` ~> operation(info) match {
       case op @ Operation(id, tps, vps, bps, ret, opDoc, opSpan) =>
         InterfaceDef(
-          IdDef(id.name, id.span) withPositionOf op,
+          IdDef(id.name, id.span),
           tps,
-          List(Operation(id, Many.empty(tps.span.synthesized), vps, bps, ret, opDoc, opSpan) withPositionOf op),
+          List(Operation(id, Many.empty(tps.span.synthesized), vps, bps, ret, opDoc, opSpan)),
           info,
           span())
     }
@@ -686,9 +694,9 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       peek.kind match {
         case _: Ident => (peek(1).kind match {
           case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> stmts(inBraces = true) <~ `}`, span())
-          case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template(), span())
+          case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template().unspan, span())
         }) labelled "extern body (string or block)"
-        case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template(), span())
+        case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template().unspan, span())
       }
 
   private def isExternBodyStart: Boolean =
@@ -697,13 +705,17 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       case _                          => false
     }
 
-  def template(): Template[Term] =
+  def template(): SpannedTemplate[Term] =
     nonterminal:
       // TODO handle case where the body is not a string, e.g.
       // Expected an extern definition, which can either be a single-line string (e.g., "x + y") or a multi-line string (e.g., """...""")
-      val first = string()
-      val (exprs, strs) = manyWhile((`${` ~> expr() <~ `}$`, string()), `${`).unzip
-      Template(first :: strs, exprs)
+      val first = spanned(string())
+      val (exprs, strs) = manyWhile((`${` ~> spanned(expr()) <~ `}$`, spanned(string())), `${`).unzip
+      SpannedTemplate(first :: strs, exprs)
+
+  def spanned[T](p: => T): Spanned[T] =
+    nonterminal:
+      Spanned(p, span())
 
   def documented[T](parseCaptures: Boolean)(p: Info => T): T =
     nonterminal:
@@ -902,9 +914,9 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       // Interface[...] { case ... => ... }
       def operationImplementation() = idRef() ~ maybeTypeArgs() ~ implicitResume ~ functionArg() match {
         case (id ~ tps ~ k ~ BlockLiteral(_, vps, bps, body, _)) =>
-          val synthesizedId = IdRef(Nil, id.name, id.span.synthesized).withPositionOf(id)
-          val interface = TypeRef(id, tps, id.span.synthesized).withPositionOf(id)
-          val operation = OpClause(synthesizedId, Nil, vps, bps, None, body, k, Span(source, id.span.from, body.span.to, Synthesized)).withRangeOf(id, body)
+          val synthesizedId = IdRef(Nil, id.name, id.span.synthesized)
+          val interface = TypeRef(id, tps, id.span.synthesized)
+          val operation = OpClause(synthesizedId, Nil, vps, bps, None, body, k, Span(source, id.span.from, body.span.to, Synthesized))
           Implementation(interface, List(operation), span())
       }
 
@@ -1010,7 +1022,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       while (ops.contains(peek.kind)) {
          val op = next()
          val right = nonTerminal()
-         left = binaryOp(left, op, right).withRangeOf(left, right)
+         left = binaryOp(left, op, right)
       }
       left
 
@@ -1150,29 +1162,37 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
         peek.kind match {
           // { case ... => ... }
           case `case` => someWhile(matchClause(), `case`) match { case cs =>
-            val arity = cs match {
-              case Many(MatchClause(MultiPattern(ps, _), _, _, _) :: _, _) => ps.length
-              case _ => 1
-            }
-            // TODO fresh names should be generated for the scrutinee
-            // also mark the temp name as synthesized to prevent it from being listed in VSCode
-            val names = List.tabulate(arity){ n => s"__arg${n}" }
-            BlockLiteral(
-              Nil,
-              names.map { name => ValueParam(IdDef(name, Span.missing(source)), None, Span.missing(source)) },
-              Nil,
-              Return(Match(names.map{ name => Var(IdRef(Nil, name, Span.missing(source)), Span.missing(source)) }, cs.unspan, None, Span.missing(source)), Span.missing(source)),
-              Span.missing(source)
-            )
+            nonterminal:
+              val argSpans = cs match {
+                case Many(MatchClause(MultiPattern(ps, _), _, _, _) :: _, _) => ps.map(_.span)
+                case p => List(p.span)
+              }
+              // TODO fresh names should be generated for the scrutinee
+              // also mark the temp name as synthesized to prevent it from being listed in VSCode
+              val names = List.tabulate(argSpans.length){ n => s"__arg${n}" }
+              BlockLiteral(
+                Nil,
+                names.zip(argSpans).map { (name, span) => ValueParam(IdDef(name, span.synthesized), None, span.synthesized) },
+                Nil,
+                Return(
+                  Match(
+                    names.zip(argSpans).map{ (name, span) => Var(IdRef(Nil, name, span.synthesized), span.synthesized) },
+                    cs.unspan,
+                    None,
+                    span().synthesized
+                  ), span().synthesized),
+                span().synthesized
+              )
           }
           case _ =>
             // { (x: Int) => ... }
-            backtrack { lambdaParams() <~ `=>` } map {
-              case (tps, vps, bps) => BlockLiteral(tps, vps, bps, stmts(inBraces = true), Span.missing(source)) : BlockLiteral
-            } getOrElse {
-              // { <STMTS> }
-              BlockLiteral(Nil, Nil, Nil, stmts(inBraces = true), Span.missing(source)) : BlockLiteral
-            }
+            nonterminal:
+              backtrack { lambdaParams() <~ `=>` } map {
+                case (tps, vps, bps) => BlockLiteral(tps, vps, bps, stmts(inBraces = true), span()) : BlockLiteral
+              } getOrElse {
+                // { <STMTS> }
+                BlockLiteral(Nil, Nil, Nil, stmts(inBraces = true), span()) : BlockLiteral
+              }
         }
       }
 
@@ -1217,13 +1237,19 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   }
   def listLiteral(): Term =
     nonterminal:
-      manyTrailing(expr, `[`, `,`, `]`).foldRight(NilTree) { ConsTree }
+      manyTrailing(() => spanned(expr()), `[`, `,`, `]`).foldRight(NilTree) { ConsTree }
 
   private def NilTree: Term =
-    Call(IdTarget(IdRef(List(), "Nil", Span.missing(source))), Nil, Nil, Nil, Span.missing(source))
+    Call(IdTarget(IdRef(List(), "Nil", span())), Nil, Nil, Nil, span())
 
-  private def ConsTree(el: Term, rest: Term): Term =
-    Call(IdTarget(IdRef(List(), "Cons", Span.missing(source))), Nil, List(ValueArg.Unnamed(el), ValueArg.Unnamed(rest)), Nil, Span.missing(source))
+  private def ConsTree(el: Spanned[Term], rest: Term): Term =
+    Call(
+      IdTarget(IdRef(List(), "Cons", el.span.synthesized)),
+      Nil,
+      List(ValueArg.Unnamed(el.unspan), ValueArg.Unnamed(rest)),
+      Nil,
+      el.span.synthesized
+    )
 
   def isTupleOrGroup: Boolean = peek(`(`)
   def tupleOrGroup(): Term =
@@ -1283,20 +1309,36 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
     nonterminal:
       backtrack(idRef()) ~ template() match {
         // We do not need to apply any transformation if there are no splices _and_ no custom handler id is given
-        case Maybe(None, _) ~ Template(str :: Nil, Nil) => StringLit(str, Span.missing(source))
+        case Maybe(None, _) ~ SpannedTemplate(str :: Nil, Nil) => StringLit(str.unspan, str.span)
         // s"a${x}b${y}" ~> s { do literal("a"); do splice(x); do literal("b"); do splice(y); return () }
-        case id ~ Template(strs, args) =>
+        case id ~ SpannedTemplate(strs, args) =>
           val target = id.getOrElse(IdRef(Nil, "s", id.span.synthesized))
           val doLits = strs.map { s =>
-            Do(None, IdRef(Nil, "literal", Span.missing(source)), Nil, List(ValueArg.Unnamed(StringLit(s, Span.missing(source)))), Nil, Span.missing(source))
+            Do(
+              None,
+              IdRef(Nil, "literal", s.span.synthesized),
+              Nil,
+              List(ValueArg.Unnamed(StringLit(s.unspan, s.span))),
+              Nil,
+              s.span.synthesized
+            )
           }
           val doSplices = args.map { arg =>
-            Do(None, IdRef(Nil, "splice", Span.missing(source)), Nil, List(ValueArg.Unnamed(arg)), Nil, Span.missing(source))
+            Do(
+              None,
+              IdRef(Nil, "splice", arg.span.synthesized),
+              Nil,
+              List(ValueArg.Unnamed(arg.unspan)),
+              Nil,
+              arg.span.synthesized
+            )
           }
           val body = interleave(doLits, doSplices)
-            .foldRight(Return(UnitLit(Span.missing(source)), Span.missing(source))) { (term, acc) => ExprStmt(term, acc, Span.missing(source)) }
-          val blk = BlockLiteral(Nil, Nil, Nil, body, Span.missing(source))
-          Call(IdTarget(target), Nil, Nil, List(blk), Span.missing(source))
+            .foldRight(
+              Return(UnitLit(span().synthesized), span().synthesized)
+            ) { (term, acc) => ExprStmt(term, acc, term.span.synthesized) }
+          val blk = BlockLiteral(Nil, Nil, Nil, body, span().synthesized)
+          Call(IdTarget(target), Nil, Nil, List(blk), span().synthesized)
       }
 
   // TODO: This should use `expect` as it follows the same pattern.
@@ -1789,73 +1831,6 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   // the handler for the "span" effect.
   private val _start: scala.util.DynamicVariable[Int] = scala.util.DynamicVariable(0)
   inline def nonterminal[T](inline p: => T): T = _start.withValue(peek.start) {
-    val startToken = peek
-    val start = startToken.start
-    val res = p
-    val end = pos()
-
-    //    val sc: Any = res
-    //    if sc.isInstanceOf[Implementation] then sc match {
-    //      case Implementation(_, List(op)) =>
-    //        println(op)
-    //        println(positions.getStart(op))
-    //        println(positions.getFinish(op))
-    //
-    //        //        println(s"start: ${startToken.kind} (${source.offsetToPosition(start)})")
-    //        //        println(s"end: ${endToken} (${source.offsetToPosition(end)})")
-    //        //        println(s"peek: ${peek}")
-    //
-    //      case _ => ()
-    //    }
-
-    val startPos = getPosition(start)
-    val endPos = getPosition(end)
-
-    // recursively add positions to subtrees that are not yet annotated
-    // this is better than nothing and means we have positions for desugared stuff
-    def annotatePositions(res: Any): Unit = res match {
-      case l: List[_] =>
-        if (positions.getRange(l).isEmpty) {
-          positions.setStart(l, startPos)
-          positions.setFinish(l, endPos)
-          l.foreach(annotatePositions)
-        }
-      case t: Tree =>
-        val recurse = positions.getRange(t).isEmpty
-        if(positions.getStart(t).isEmpty) positions.setStart(t, startPos)
-        if(positions.getFinish(t).isEmpty) positions.setFinish(t, endPos)
-        t match {
-          case p: Product if recurse =>
-            p.productIterator.foreach { c =>
-              annotatePositions(c)
-            }
-          case _ => ()
-        }
-      case _ => ()
-    }
-    annotatePositions(res)
-
-    // still annotate, in case it is not Tree
-    positions.setStart(res, startPos)
-    positions.setFinish(res, endPos)
-
-    res
-  }
-
-  extension [T](self: T) {
-    inline def withPositionOf(other: Any): self.type = { positions.dupPos(other, self); self }
-    inline def withRangeOf(first: Any, last: Any): self.type = { positions.dupRangePos(first, last, self); self }
-
-    // Why did we need those?
-    private def dupIfEmpty(from: Any, to: Any): Unit =
-      if (positions.getStart(to).isEmpty) { positions.dupPos(from, to) }
-
-    private def dupAll(from: Any, to: Any): Unit = to match {
-      case t: Tree =>
-        dupIfEmpty(from, t)
-        t.productIterator.foreach { dupAll(from, _) }
-      case t: Iterable[t] => t.foreach { dupAll(from, _) }
-      case _ => ()
-    }
+    p
   }
 }

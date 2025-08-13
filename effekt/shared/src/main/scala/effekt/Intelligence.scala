@@ -1,11 +1,13 @@
 package effekt
 
 import effekt.context.{Annotations, Context}
-import effekt.source.{FunDef, Include, Maybe, ModuleDecl, Span, Tree, Doc}
+import effekt.source.Origin.Missing
+import effekt.source.{Doc, FunDef, Include, Maybe, ModuleDecl, Span, Tree}
 import effekt.symbols.{CaptureSet, Hole}
 import kiama.util.{Position, Source}
 import effekt.symbols.scopes.Scope
 import effekt.source.sourceOf
+import effekt.source.Spans
 
 trait Intelligence {
 
@@ -49,15 +51,14 @@ trait Intelligence {
       .replace("\\n", "\n")
 
   private def sortByPosition(trees: Vector[Tree])(using C: Context): Vector[Tree] =
-    val pos = C.positions
     trees.sortWith {
       (t1, t2) =>
-        val p1s = pos.getStart(t1).get
-        val p2s = pos.getStart(t2).get
+        val p1s = t1.span.from
+        val p2s = t2.span.from
 
         if (p2s == p1s) {
-          val p1e = pos.getFinish(t1).get
-          val p2e = pos.getFinish(t2).get
+          val p1e = t1.span.to
+          val p2e = t1.span.to
           p1e < p2e
         } else {
           p2s < p1s
@@ -68,7 +69,7 @@ trait Intelligence {
     decl <- C.compiler.getAST(position.source)
     tree = new EffektTree(decl)
     allTrees = tree.nodes.collect { case t: Tree => t }
-    trees = C.positions.findNodesContaining(allTrees, position)
+    trees = Spans.findNodesContaining(allTrees, position)
     nodes = sortByPosition(trees)
   } yield nodes
 
@@ -76,7 +77,7 @@ trait Intelligence {
     decl <- C.compiler.getAST(range.from.source)
     tree = new EffektTree(decl)
     allTrees = tree.nodes.collect { case t: Tree => t }
-    trees = C.positions.findNodesInRange(allTrees, range)
+    trees = Spans.findNodesInRange(allTrees, range)
     nodes = sortByPosition(trees)
   } yield nodes
 
@@ -253,16 +254,14 @@ trait Intelligence {
     val src = range.from.source
     allCaptures(src).filter {
       // keep only captures in the current range
-      case (t, c) => C.positions.getStart(t) match
-        case Some(p) => p.between(range.from, range.to)
-        case None => false
+      case (t, c) => t.span.origin != Missing && t.span.range.from.between(range.from, range.to)
     }.collect {
       case (t: source.FunDef, c) => for {
-        pos <- C.positions.getStart(t)
-      } yield CaptureInfo(t.ret.span.range.from, c)
+        pos <- if t.span.origin != Missing then Some(t.ret.span.range.from) else None
+      } yield CaptureInfo(pos, c)
       case (t: source.DefDef, c) => for {
-        pos <- C.positions.getStart(t)
-      } yield CaptureInfo(t.annot.span.range.from, c)
+        pos <- if t.span.origin != Missing then Some(t.annot.span.range.from) else None
+      } yield CaptureInfo(pos, c)
       case (source.Box(Maybe(None, span), block, _), _) if C.inferredCaptureOption(block).isDefined => for {
         capt <- C.inferredCaptureOption(block)
       } yield CaptureInfo(span.range.from, capt)
