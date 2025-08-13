@@ -28,18 +28,18 @@ namespace js {
 
   extern type JSConsole
 
-  extern io def newConsole(): JSConsole =
+  extern def newConsole() at io: JSConsole =
     jsNode """readline.createInterface({
         input: process.stdin,
         output: process.stdout,
       })"""
 
-  extern io def close(console: JSConsole): Unit =
+  extern def close(console: JSConsole) at io: Unit =
     jsNode "${console}.close()"
 
-  extern async def readLine(console: JSConsole): String =
+  extern def readLine(console: JSConsole) at async: String =
     jsNode "$effekt.capture(k => ${console}.once('line', k))"
-  extern io def writeLine(console: JSConsole, message: String): Unit =
+  extern def writeLine(console: JSConsole, message: String) at io: Unit =
     jsNode "${console}.output.write(${message} + '\\n')"
 }
 

@@ -96,7 +96,7 @@ Since Effekt doesn't know anything about externs, you should manually annotate t
 For example, the following function gets the current timestamp via the JavaScript FFI, which is an operation that is not pure (it has a side effect):
 
 ```
-extern io def now(): Int =
+extern def now() at io: Int =
   js "Date.now()"
 ```
 
@@ -115,7 +115,7 @@ Effekt has a lot of different backends. One `extern def` can support multiple ba
 Here's how to `mul`tiply two numbers on different backends:
 
 ```
-extern pure def mul(x: Int, y: Int): Int =
+extern def mul(x: Int, y: Int) at pure: Int =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
   llvm "%z = mul %Int ${x}, ${y} ret %Int %z"
@@ -127,7 +127,7 @@ You can also use multiline strings if you need to splice in a lot of code and `d
 // used as a fallback impl for `not`
 def primNot(b: Bool) = if (b) false else true
 
-extern pure def not(b: Bool): Bool =
+extern def not(b: Bool) at pure: Bool =
   js "!${b}"
   llvm """
     %p = extractvalue %Pos ${b}, 0

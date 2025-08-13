@@ -51,7 +51,7 @@ def main() = {
   }
 }
 
-extern pure def platform(): String =
+extern def platform() at pure: String =
   chez { "chez" }
   llvm { "llvm" }
   js { "js" }

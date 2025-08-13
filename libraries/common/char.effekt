@@ -86,7 +86,7 @@ def isAlphabetic(c: Char): Bool = isLower(c) || isUpper(c)
 //   Chez: ?
 //   LLVM: i64 representing utf-8 (varying length 1-4 bytes)
 
-extern pure def toString(ch: Char): String =
+extern def toString(ch: Char) at pure: String =
   js "String.fromCodePoint(${ch})"
   chez "(string (integer->char ${ch}))"
   llvm """
@@ -95,20 +95,20 @@ extern pure def toString(ch: Char): String =
   """
 
 // Since we currently represent Char by integers in all backends, we could reuse comparison
-extern pure def toInt(ch: Char): Int =
+extern def toInt(ch: Char) at pure: Int =
   js "${ch}"
   chez "${ch}"
   llvm "ret %Int ${ch}"
   vm "string::toInt(Char)"
 
-extern pure def toChar(codepoint: Int): Char =
+extern def toChar(codepoint: Int) at pure: Char =
   js "${codepoint}"
   chez "${codepoint}"
   llvm "ret %Int ${codepoint}"
   vm "string::toChar(Int)"
 
 
-extern pure def infixLt(x: Char, y: Char): Bool =
+extern def infixLt(x: Char, y: Char) at pure: Bool =
   js "(${x} < ${y})"
   chez "(< ${x} ${y})"
   llvm """
@@ -119,7 +119,7 @@ extern pure def infixLt(x: Char, y: Char): Bool =
   """
   vm "string::infixLt(Char, Char)"
 
-extern pure def infixLte(x: Char, y: Char): Bool =
+extern def infixLte(x: Char, y: Char) at pure: Bool =
   js "(${x} <= ${y})"
   chez "(<= ${x} ${y})"
   llvm """
@@ -130,7 +130,7 @@ extern pure def infixLte(x: Char, y: Char): Bool =
   """
   vm "string::infixLte(Char, Char)"
 
-extern pure def infixGt(x: Char, y: Char): Bool =
+extern def infixGt(x: Char, y: Char) at pure: Bool =
   js "(${x} > ${y})"
   chez "(> ${x} ${y})"
   llvm """
@@ -141,7 +141,7 @@ extern pure def infixGt(x: Char, y: Char): Bool =
   """
   vm "string::infixGt(Char, Char)"
 
-extern pure def infixGte(x: Char, y: Char): Bool =
+extern def infixGte(x: Char, y: Char) at pure: Bool =
   js "(${x} >= ${y})"
   chez "(>= ${x} ${y})"
   llvm """
@@ -172,6 +172,6 @@ def utf16UnitCount(codepoint: Char): Int = codepoint match {
   case c => panic("Not a valid code point")
 }
 
-extern pure def charWidth(c: Char): Int =
+extern def charWidth(c: Char) at pure: Int =
   // JavaScript strings are UTF-16 where every unicode character after 0xffff takes two units
   js "(${c} > 0xffff) ? 2 : 1"

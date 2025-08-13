@@ -1,5 +1,5 @@
-extern io def foo(): Unit = none "" // WARN not supported
-extern io def foo2(): Unit = none "" // unused
+extern def foo() at io: Unit = none "" // WARN not supported
+extern def foo2() at io: Unit = none "" // unused
 
 def bar(): Unit = foo()
 def bar2(): Unit = foo2()

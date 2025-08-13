@@ -3,40 +3,40 @@ module web/dom
 extern type Node
 
 // can be null
-extern pure def getElementById(id: String): Node =
+extern def getElementById(id: String) at pure: Node =
   js "document.getElementById(${id})"
 
-extern pure def createElement(tag: String): Node =
+extern def createElement(tag: String) at pure: Node =
   js "document.createElement(${tag})"
 
-extern pure def createTextNode(text: String): Node =
+extern def createTextNode(text: String) at pure: Node =
   js "document.createTextNode(${text})"
 
-extern pure def setAttribute(node: Node, key: String, value: String): Node =
+extern def setAttribute(node: Node, key: String, value: String) at pure: Node =
   js "${node}.setAttribute(${key}, ${value})"
 
 // the string return type is wrong here...
-extern pure def getAttribute(node: Node, key: String): String =
+extern def getAttribute(node: Node, key: String) at pure: String =
   js "${node}.getAttribute(${key})"
 
-extern pure def appendChild(node: Node, child: Node): Node =
+extern def appendChild(node: Node, child: Node) at pure: Node =
   js "${node}.appendChild(${child})"
 
-extern pure def innerHTML(node: Node, contents: String): Node =
+extern def innerHTML(node: Node, contents: String) at pure: Node =
   js "(function() { ${node}.innerHTML = ${contents}; return ${node} })()"
 
 extern type IdleDeadline
 
-extern pure def requestIdleCallback(callback: (IdleDeadline) => Unit at {io}): Unit =
+extern def requestIdleCallback(callback: (IdleDeadline) => Unit at {io}) at pure: Unit =
   js "window.requestIdleCallback(deadline => ${callback}(deadline).run())"
 
-extern pure def didDimeout(deadline: IdleDeadline): Bool =
+extern def didDimeout(deadline: IdleDeadline) at pure: Bool =
   js "${deadline}.didTimeout"
 
-extern pure def timeRemaining(deadline: IdleDeadline): Double =
+extern def timeRemaining(deadline: IdleDeadline) at pure: Double =
   js "${deadline}.timeRemaining()"
 
-extern pure def onClick(node: Node, handler: () => Unit at {io}): Node =
+extern def onClick(node: Node, handler: () => Unit at {io}) at pure: Node =
   js "(function() { ${node}.onclick = () => ${handler}().run(); return ${node} })()"
 
 extern def sleep(n: Int): Unit =
