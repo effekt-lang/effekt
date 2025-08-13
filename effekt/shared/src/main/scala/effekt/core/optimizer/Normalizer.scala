@@ -213,6 +213,9 @@ object Normalizer { normal =>
           Stmt.Invoke(normalized.shared, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
       }
 
+    case Stmt.Match(scrutinee, clauses, default) if scrutinee.tpe == Type.TBottom =>
+      Stmt.Return(normalize(scrutinee))
+
     case Stmt.Match(scrutinee, clauses, default) => active(scrutinee) match {
       case Pure.Make(data, tag, targs, vargs) if clauses.exists { case (id, _) => id == tag } =>
         val clause: BlockLit = clauses.collectFirst { case (id, cl) if id == tag => cl }.get
