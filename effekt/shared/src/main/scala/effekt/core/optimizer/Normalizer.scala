@@ -36,7 +36,6 @@ object Normalizer { normal =>
     decls: DeclarationContext,     // for field selection
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
     maxInlineSize: Int,            // to control inlining and avoid code bloat
-    preserveBoxing: Boolean        // for LLVM, prevents some optimizations
   ) {
     def bind(id: Id, expr: Expr): Context = copy(exprs = exprs + (id -> expr))
     def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
@@ -69,14 +68,14 @@ object Normalizer { normal =>
   private def isUnused(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id).forall { u => u == Usage.Never }
 
-  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int, preserveBoxing: Boolean): ModuleDecl = {
+  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int): ModuleDecl = {
     // usage information is used to detect recursive functions (and not inline them)
     val usage = Reachable(entrypoints, m)
 
     val defs = m.definitions.collect {
       case Toplevel.Def(id, block) => id -> block
     }.toMap
-    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize, preserveBoxing)
+    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize)
 
     val (normalizedDefs, _) = normalizeToplevel(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
@@ -175,7 +174,7 @@ object Normalizer { normal =>
     case Stmt.Let(id, tpe, expr, body) =>
       active(expr) match {
         // [[ val x = ABORT; body ]] = ABORT
-        case abort if !C.preserveBoxing && abort.tpe == Type.TBottom =>
+        case abort if abort.tpe == Type.TBottom =>
           Stmt.Let(id, tpe, abort, Return(ValueVar(id, tpe)))
 
         case normalized =>
@@ -241,12 +240,17 @@ object Normalizer { normal =>
       def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt = normalize(binding) match {
 
         // [[ val x = ABORT; body ]] = ABORT
-        case abort if !C.preserveBoxing && abort.tpe == Type.TBottom  =>
+        case abort if abort.tpe == Type.TBottom  =>
           abort
 
-        case abort @ Stmt.Shift(p, BlockLit(tparams, cparams, vparams, List(k), body))
-            if !C.preserveBoxing && !Variables.free(body).containsBlock(k.id) =>
-          abort
+        // [[ val x: A = shift(p) { {k: A => R} => body2 }; body: B ]] = shift(p) { {k: >>>B<<< => R} => body2 }
+        case abort @ Stmt.Shift(p, BlockLit(tparams, cparams, vparams,
+          BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeA, answer)), captures) :: Nil, body2))
+              if !Variables.free(body2).containsBlock(k) =>
+            val tpeB = body.tpe
+            Stmt.Shift(p,
+              BlockLit(tparams, cparams, vparams, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeB, answer)), captures) :: Nil,
+                normalize(body2)))
 
         // [[ val x = sc match { case id(ps) => body2 }; body ]] = sc match { case id(ps) => val x = body2; body }
         case Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
