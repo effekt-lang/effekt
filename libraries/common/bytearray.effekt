@@ -20,7 +20,7 @@ extern type ByteArray
   // = chez "bytevector"
 
 /// Allocates a new bytearray with the given `size`, its values are undefined.
-extern global def allocate(size: Int): ByteArray =
+extern def allocate(size: Int) at global: ByteArray =
   js "(new Uint8Array(${size}))"
   llvm """
     %object_size = add i64 ${size}, 16
@@ -34,7 +34,7 @@ extern global def allocate(size: Int): ByteArray =
   """
   chez "(make-bytevector ${size})"
 
-extern pure def size(arr: ByteArray): Int =
+extern def size(arr: ByteArray) at pure: Int =
   js "${arr}.length"
   llvm """
     %size = extractvalue %Pos ${arr}, 0
@@ -43,7 +43,7 @@ extern pure def size(arr: ByteArray): Int =
   """
   chez "(bytevector-length ${arr})"
 
-extern global def unsafeGet(arr: ByteArray, index: Int): Byte =
+extern def unsafeGet(arr: ByteArray, index: Int) at global: Byte =
   js "(${arr})[${index}]"
   llvm """
     %arr_ptr = extractvalue %Pos ${arr}, 1
@@ -55,7 +55,7 @@ extern global def unsafeGet(arr: ByteArray, index: Int): Byte =
   """
   chez "(bytevector-u8-ref ${arr} ${index})"
 
-extern global def unsafeSet(arr: ByteArray, index: Int, value: Byte): Unit =
+extern def unsafeSet(arr: ByteArray, index: Int, value: Byte) at global: Unit =
   js "bytearray$set(${arr}, ${index}, ${value})"
   llvm """
     %arr_ptr = extractvalue %Pos ${arr}, 1
@@ -109,14 +109,14 @@ def foreachIndex(arr: ByteArray){ action: (Int, Byte) {Control} => Unit }: Unit 
     action(i, arr.unsafeGet(i)) {label}
   }
 
-extern pure def fromString(str: String): ByteArray =
+extern def fromString(str: String) at pure: ByteArray =
   js "(new TextEncoder().encode(${str}))"
   llvm """
     ret %Pos ${str}
   """
   chez "(string->utf8 ${str})"
 
-extern pure def toString(arr: ByteArray): String =
+extern def toString(arr: ByteArray) at pure: String =
   js "(new TextDecoder('utf-8').decode(${arr}))"
   // assuming the buffer is already in UTF-8
   llvm """
@@ -169,7 +169,7 @@ extern chez """
           [else (loop (+ i 1))]))))
 """
 
-extern pure def compareByteArrayImpl(b1: ByteArray, b2: ByteArray): Int =
+extern def compareByteArrayImpl(b1: ByteArray, b2: ByteArray) at pure: Int =
   js "bytearray$compare(${b1}, ${b2})"
   llvm """
     %x = call %Int @c_bytearray_compare(%Pos ${b1}, %Pos ${b2})

@@ -8,7 +8,7 @@ extern type Regex
 
 record Match(matched: String, index: Int)
 
-extern pure def regex(str: String): Regex =
+extern def regex(str: String) at pure: Regex =
   js "new RegExp(${str})"
   chez "(pregexp ${str})"
   vm "regex::regex(String)"
@@ -29,12 +29,12 @@ namespace internal {
     // js: { matched: String, index: Int } | undefined
     // vm: scala.util.matching.Regex.Match | null
 
-  extern pure def matched(r: RegexMatch): String =
+  extern def matched(r: RegexMatch) at pure: String =
     js "${r}.matched"
     chez "(vector-ref ${r} 0)"
     vm "regex::matched(RegexMatch)"
 
-  extern pure def index(r: RegexMatch): Int =
+  extern def index(r: RegexMatch) at pure: Int =
     js "${r}.index"
     chez "(vector-ref ${r} 1)"
     vm "regex::index(RegexMatch)"
@@ -57,7 +57,7 @@ namespace internal {
         #f))))
   """
 
-  extern io def exec(reg: Regex, str: String): RegexMatch =
+  extern def exec(reg: Regex, str: String) at io: RegexMatch =
     js "regex$exec(${reg}, ${str})"
     chez "(regex-exec ${reg} ${str})"
     vm "regex::exec(Regex, String)"
