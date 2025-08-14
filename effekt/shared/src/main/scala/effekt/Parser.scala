@@ -776,9 +776,8 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def externCapture(): CaptureSet =
     nonterminal:
-      if peek(`{`) then captureSet()
-      else if peek(`pure`) then `pure` ~> CaptureSet(Nil, span())
-      else CaptureSet(List(idRef()), span())
+      if peek(`pure`) then `pure` ~> CaptureSet(Nil, span())
+      else captureSet()
 
   def path(): String =
     nonterminal:
@@ -1594,7 +1593,11 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def captureSet(): CaptureSet =
     nonterminal:
-      CaptureSet(many(idRef, `{`, `,` , `}`).unspan, span())
+      peek.kind match {
+        case `{` => CaptureSet(many(idRef, `{`, `,` , `}`).unspan, span())
+        case _ if isIdRef => CaptureSet(List(idRef()), span())
+        case t => fail("Expected a capture set.", t)
+        }
 
   // Generic utility functions
   // -------------------------

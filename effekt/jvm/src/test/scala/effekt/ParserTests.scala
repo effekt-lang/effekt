@@ -544,7 +544,8 @@ class ParserTests extends munit.FunSuite {
 
     parseStmts("val (left, right) = list; return left")
 
-    parseStmts("val g: () => Unit / Exc at {exc} = fun() { closure() }; ()")
+    parseStmts("val g: () => Unit / Exc at {exc} = fun() { closure() }; ()")    
+    parseStmts("val g: () => Unit / Exc at exc = fun() { closure() }; ()")    
   }
 
   test("Pattern-matching val parses with correct span") {
