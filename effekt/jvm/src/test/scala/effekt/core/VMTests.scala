@@ -9,12 +9,11 @@ class VMTests extends munit.FunSuite {
   import effekt.context.{ Context, IOModuleDB }
   import effekt.util.PlainMessaging
   import effekt.generator.vm.VM
-  import kiama.util.{ Positions, StringSource, FileSource }
+  import kiama.util.{StringSource, FileSource }
 
 
-  val positions = new Positions
   object plainMessaging extends PlainMessaging
-  object context extends Context(positions) with IOModuleDB {
+  object context extends Context with IOModuleDB {
     val messaging = plainMessaging
     object frontend extends generator.vm.VM
     override lazy val compiler = frontend.asInstanceOf

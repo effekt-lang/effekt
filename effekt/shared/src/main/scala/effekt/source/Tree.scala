@@ -93,7 +93,6 @@ sealed trait Tree extends Product {
   val span: Span
 
   def inheritPosition(from: Tree)(implicit C: Context): this.type = {
-    C.positions.dupPos(from, this);
     this
   }
 }
@@ -168,6 +167,11 @@ case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = 
 
   def range: kiama.util.Range = kiama.util.Range(source.offsetToPosition(from), source.offsetToPosition(to))
 
+  def text: Option[String] = {
+    val r = range
+    Spans.substring(r.from, r.to)
+  }
+  
   override def compare(that: Span): Int = {
     val nameCmp = this.source.name compareTo that.source.name
     if (nameCmp != 0) nameCmp
@@ -251,16 +255,12 @@ sealed trait Id extends Tree {
 }
 case class IdDef(name: String, span: Span) extends Id {
   def clone(using C: Context): IdDef = {
-    val copy = IdDef(name, span)
-    C.positions.dupPos(this, copy)
-    copy
+    IdDef(name, span)
   }
 }
 case class IdRef(path: List[String], name: String, span: Span) extends Id {
   def clone(using C: Context): IdRef = {
-    val copy = IdRef(path, name, span)
-    C.positions.dupPos(this, copy)
-    copy
+    IdRef(path, name, span)
   }
 }
 
@@ -859,18 +859,13 @@ export Resolvable.*
 extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] = {
   positioned match {
     case m: Many[_] if m.span.origin != Origin.Missing =>
-      C.positions.substring(m.span.range.from, m.span.range.to)
+      Spans.substring(m.span.range.from, m.span.range.to)
 
     case m: Maybe[_] if m.span.origin != Origin.Missing =>
-      C.positions.substring(m.span.range.from, m.span.range.to)
+      Spans.substring(m.span.range.from, m.span.range.to)
 
     case t: Tree if t.span.origin != Origin.Missing =>
-      C.positions.substring(t.span.range.from, t.span.range.to)
-
-    case _ =>
-      C.positions.getRange(positioned).flatMap { range =>
-        C.positions.substring(range.from, range.to)
-      }
+      Spans.substring(t.span.range.from, t.span.range.to)
   }
 }
 

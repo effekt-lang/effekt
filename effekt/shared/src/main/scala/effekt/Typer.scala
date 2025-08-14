@@ -1595,7 +1595,6 @@ trait TyperOps extends ContextOps { self: Context =>
   private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit =
     val capabilities = caps map { cap =>
       assertConcreteEffect(cap.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType)
-      positions.dupPos(binder, cap)
       cap
     }
     annotations.update(Annotations.BoundCapabilities, binder, capabilities)
