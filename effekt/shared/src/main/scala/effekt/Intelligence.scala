@@ -210,10 +210,11 @@ trait Intelligence {
         case sym: BlockSymbol => List(TermBinding(path, name, origin, signature, signatureHtml))
       }
       sym match {
-        case Interface(name, tparams, ops, decl) if ops.length > 1 => {
+        case Interface(name, tparams, ops, decl) if !(ops.length == 1 && ops.head.name.name == name.name) => {
           val opsInfos = ops.map { op =>
-            val sig = Some(SignaturePrinter(op))
-            TermBinding(path, op.name.name, origin, sig, signatureHtml)
+            val signature = Some(SignaturePrinter(op))
+            val signatureHtml = signature.map(sig => HtmlHighlight(sig))
+            TermBinding(path, op.name.name, origin, signature, signatureHtml)
           }
           out ++ opsInfos
         }
