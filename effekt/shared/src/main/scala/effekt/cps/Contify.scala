@@ -152,7 +152,7 @@ object Contify {
     case Stmt.Resume(r, body, ks, k) =>
       Stmt.Resume(r, rewrite(body), ks, rewrite(k))
 
-    case Stmt.Hole() => Stmt.Hole()
+    case Stmt.Hole(span) => Stmt.Hole(span)
   }
 
   def rewrite(clause: Clause): Clause = clause match {
@@ -223,7 +223,7 @@ object Contify {
       returnsTo(id, body) ++ returnsTo(id, k)
     case Stmt.Jump(_, vargs, _) =>
       all(vargs, returnsTo(id, _))
-    case Stmt.Hole() => Set.empty
+    case Stmt.Hole(_) => Set.empty
   }
 
   def returnsTo(id: Id, b: Block): Set[Cont] = b match {
