@@ -24,8 +24,8 @@ object SignaturePrinter extends ParenPrettyPrinter {
 
     case o @ Operation(name, tparams, vparams, bparams, resultType, effects, interface, decl) =>
       val tps = show(tparams)
-      val vps = vparams.map { p => pp"${p.name}: ${p.tpe.get}" }.mkString(", ")
-      val bps = bparams.map { b => pp"{ ${b.name}: ${b.tpe.get} }" }.mkString("")
+      val vps = vparams.map { p => pp"${p.name.name}: ${p.tpe.get}" }.mkString(", ")
+      val bps = bparams.map { b => pp"{ ${b.name.name}: ${b.tpe.get} }" }.mkString("")
       val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"($vps$bps)"
       val returnType = pp": ${resultType} / ${effects}"
       pp"effect ${name.name}$tps$ps$returnType"
@@ -44,23 +44,23 @@ object SignaturePrinter extends ParenPrettyPrinter {
 
     case b: VarBinder =>
       val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
-      pp"var ${b.name}: ${tpe}"
+      pp"var ${b.name.name}: ${tpe}"
 
     case TypeAlias(name, tparams, tpe, _) =>
       val tps = show(tparams)
-      "type" <+> name.toString <> tps
+      "type" <+> name.name <> tps
 
     case EffectAlias(name, tparams, eff, _) =>
       val tps = show(tparams)
-      "effect" <+> name.toString <> tps
+      "effect" <+> name.name <> tps
 
     case DataType(name, tparams, ctors, _) =>
       val tps = show(tparams)
-      "type" <+> name.toString <> tps
+      "type" <+> name.name <> tps
 
     case Record(name, tparams, ctor, _) =>
       val tps = show(tparams)
-      "type" <+> name.toString <> tps
+      "type" <+> name.name <> tps
 
     case f: ExternFunction =>
       format("extern def", f, f.annotatedResult, f.annotatedEffects)
@@ -81,15 +81,15 @@ object SignaturePrinter extends ParenPrettyPrinter {
 
     case d: DefBinder =>
       val tpe = context.blockTypeOption(d).getOrElse { d.tpe.get }
-      pp"def ${ d.name }: ${ tpe }"
+      pp"def ${ d.name.name }: ${ tpe }"
   }
 
   def format(kw: String, f: Callable, result: Option[ValueType], effects: Option[Effects]): Doc = {
     val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.mkString(", ")}]"
 
-    val valueParams = f.vparams.map { p => pp"${p.name}: ${p.tpe.get}" }.mkString(", ")
+    val valueParams = f.vparams.map { p => pp"${p.name.name}: ${p.tpe.get}" }.mkString(", ")
     val vps = if valueParams.isEmpty then "" else s"($valueParams)"
-    val bps = f.bparams.map { b => pp"{ ${b.name}: ${b.tpe.get} }" }.mkString("")
+    val bps = f.bparams.map { b => pp"{ ${b.name.name}: ${b.tpe.get} }" }.mkString("")
 
     val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"$vps$bps"
 
@@ -98,6 +98,6 @@ object SignaturePrinter extends ParenPrettyPrinter {
       eff <- effects
     } yield pp": $tpe / $eff"
 
-    s"$kw ${f.name}$tps$ps${returnType.getOrElse("")}"
+    s"$kw ${f.name.name}$tps$ps${returnType.getOrElse("")}"
   }
 }
