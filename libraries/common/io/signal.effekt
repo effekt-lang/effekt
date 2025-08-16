@@ -14,13 +14,13 @@ namespace signal {
     """
 }
 
-extern global def send[T](signal: Signal[T], value: T): Unit =
+extern global def unsafeSend[T](signal: Signal[T], value: T): Unit =
   llvm """
     call void @c_signal_send(%Pos ${signal}, %Pos ${value})
     ret %Pos zeroinitializer
   """
 
-extern async def wait[T](signal: Signal[T]): T =
+extern async def unsafeWait[T](signal: Signal[T]): T =
   llvm """
     call void @c_signal_wait(%Pos ${signal}, %Stack %stack)
     ret void

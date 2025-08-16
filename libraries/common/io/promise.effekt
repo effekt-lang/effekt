@@ -49,7 +49,7 @@ extern {async, global} def await[T](promise: Promise[T]): T =
         val signal = signal::allocate()
         // TODO use reference.set and signal.wait
         set(reference, Pending(Cons(signal, signals)))
-        wait(signal)
+        unsafeWait(signal)
     }
   }
 
@@ -65,7 +65,7 @@ extern {io, global} def resolve[T](promise: Promise[T], value: T): Unit =
         // TODO use reference.set
         set(reference, Resolved(value))
         // TODO use signals.reverse.foreach
-        foreach(reverse(signals)) { signal => send(signal, value) }
+        foreach(reverse(signals)) { signal => unsafeSend(signal, value) }
     }
   }
 
