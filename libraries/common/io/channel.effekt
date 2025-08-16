@@ -1,0 +1,38 @@
+module io/channel
+
+import io/signal
+
+// Based on:
+// Dependent Session Protocols in Separation Logic from First Principles
+
+record River[A](value: A, river: Signal[River[A]])
+
+type Sender[A] = Ref[Signal[River[A]]]
+
+type Receiver[A] = Ref[Signal[River[A]]]
+
+namespace channel {
+  def allocate[A](): (Sender[A], Receiver[A]) = {
+    val river = signal::allocate()
+    (ref(river), ref(river))
+  }
+}
+
+def send[A](sender: Sender[A], value: A): Unit = {
+  val rest = signal::allocate()
+  // TODO swap reference!
+  val signal = sender.get()
+  sender.set(rest)
+  signal.unsafeSend(River(value, rest))
+}
+
+def receive[A](receiver: Receiver[A]): A = {
+  // TODO this can crash when multiple tasks call receive
+  val signal = receiver.get()
+  val River(value, rest) = signal.unsafeWait()
+  receiver.set(rest)
+  return value
+}
+
+// TODO streaming
+

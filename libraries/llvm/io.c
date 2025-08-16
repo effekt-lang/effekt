@@ -357,6 +357,7 @@ void c_signal_send(struct Pos signal, struct Pos value) {
             Stack stack = f->payload.stack;
             f->state = AFTER;
             erasePositive(signal);
+            // TODO this overflows the C stack
             resume_Pos(stack, value);
             break;
         }
