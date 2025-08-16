@@ -2,36 +2,48 @@ module io/channel
 
 import io/signal
 
-// Based on:
-// Dependent Session Protocols in Separation Logic from First Principles
+record Rendezvous[A, B](value: A, other: Signal[B])
 
-record River[A](value: A, river: Signal[River[A]])
+record Node[A, B](this: Signal[Rendezvous[A, B]], rest: Ref[Option[Node[A, B]]])
 
-type Sender[A] = Ref[Signal[River[A]]]
-
-type Receiver[A] = Ref[Signal[River[A]]]
+type Sender[A, B] = Ref[Node[A, B]]
+type Receiver[A, B] = Ref[Node[A, B]]
 
 namespace channel {
-  def allocate[A](): (Sender[A], Receiver[A]) = {
-    val river = signal::allocate()
-    (ref(river), ref(river))
+  def allocate[A, B](): (Sender[A, B], Receiver[A, B]) = {
+    val node = Node(signal::allocate(), ref(None()))
+    (ref(node), ref(node))
   }
 }
 
-def send[A](sender: Sender[A], value: A): Unit = {
-  val rest = signal::allocate()
-  // TODO swap reference!
-  val signal = sender.get()
-  sender.set(rest)
-  signal.unsafeSend(River(value, rest))
+def send[A, B](sender: Sender[A, B], value: A): B = {
+  val Node(this, rest) = sender.get()
+  rest.get() match {
+    case None() =>
+      val node = Node(signal::allocate(), ref(None()))
+      rest.set(Some(node))
+      sender.set(node)
+    case Some(node) =>
+      sender.set(node)
+  }
+  val other = signal::allocate()
+  this.unsafeSend(Rendezvous(value, other))
+  other.unsafeWait()
 }
 
-def receive[A](receiver: Receiver[A]): A = {
-  // TODO this can crash when multiple tasks call receive
-  val signal = receiver.get()
-  val River(value, rest) = signal.unsafeWait()
-  receiver.set(rest)
-  return value
+def receive[A, B](receiver: Receiver[A, B], value: B): A = {
+  val Node(this, rest) = receiver.get()
+  rest.get() match {
+    case None() =>
+      val node = Node(signal::allocate(), ref(None()))
+      rest.set(Some(node))
+      receiver.set(node)
+    case Some(node) =>
+      receiver.set(node)
+  }
+  val Rendezvous(result, other) = this.unsafeWait()
+  other.unsafeSend(value)
+  return result
 }
 
 // TODO streaming
