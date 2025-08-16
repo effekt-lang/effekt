@@ -615,13 +615,15 @@ struct Pos c_signal_make() {
     return (struct Pos) { .tag = 0, .obj = signal, };
 }
 
-void c_signal_send(struct Pos signal, struct Pos value) {
+void c_signal_send(struct Pos signal, struct Pos value, Stack stack) {
     Signal* f = (Signal*)signal.obj;
     switch (f->state) {
         case BEFORE: {
             f->state = SENDING;
             f->payload.value = value;
             erasePositive(signal);
+            // TODO avoid stack overflow without yielding
+            c_yield(stack);
             break;
         }
         case SENDING: {
@@ -631,11 +633,12 @@ void c_signal_send(struct Pos signal, struct Pos value) {
             break;
         }
         case WAITING: {
-            Stack stack = f->payload.stack;
+            Stack other = f->payload.stack;
             f->state = AFTER;
             erasePositive(signal);
-            // TODO this overflows the C stack
-            resume_Pos(stack, value);
+            // TODO avoid stack overflow without yielding
+            c_yield(stack);
+            resume_Pos(other, value);
             break;
         }
         case AFTER: {
