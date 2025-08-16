@@ -15,7 +15,7 @@ def run(n: Int) = {
   })
 
   var s = 0
-  while (receiver.receive() is Some(v)) {
+  while (receiver.receive(()) is Some(v)) {
     s = s + v
   }
   return s
