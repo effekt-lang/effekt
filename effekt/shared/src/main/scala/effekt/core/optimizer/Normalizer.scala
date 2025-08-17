@@ -161,6 +161,14 @@ object Normalizer { normal =>
       case other => other // stuck
     }
 
+  def isAbortive(s: Stmt)(using C: Context): Boolean =
+    s.tpe == Type.TBottom || (s match {
+      case Stmt.Match(scrutinee, clauses, default) => clauses.isEmpty && default.isEmpty
+      case Stmt.Shift(p, BlockLit(tparams, cparams, vparams, BlockParam(k, _,_) :: Nil, body2)) =>
+        !Variables.free(body2).containsBlock(k)
+      case _ => false
+    })
+
   def normalize(s: Stmt)(using C: Context): Stmt = s match {
 
     // see #798 for context (led to stack overflow)
@@ -256,6 +264,13 @@ object Normalizer { normal =>
         case Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
           Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2,
             normalizeVal(id, tpe, body2, body)))), None)
+
+        // if continuation is used linearly, push down
+        case norm @ Stmt.If(cond, thn, els) if isAbortive(thn) =>
+          Stmt.If(cond, thn, normalizeVal(id, tpe, els, body))
+
+        case norm @ Stmt.If(cond, thn, els) if isAbortive(els) =>
+          Stmt.If(cond, normalizeVal(id, tpe, thn, body), els)
 
         // These rewrites do not seem to contribute a lot given their complexity...
         // vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
