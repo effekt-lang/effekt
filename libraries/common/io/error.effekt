@@ -456,7 +456,7 @@ namespace internal {
     }
   """
 
-  extern def errorNumber(errno: Int) at pure: Int =
+  extern def errorNumber(errno: Int) at {}: Int =
     jsNode "errorNumber(${errno})"
     llvm """
       %z = call %Int @c_error_number(%Int ${errno})

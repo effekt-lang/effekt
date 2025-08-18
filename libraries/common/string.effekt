@@ -111,7 +111,7 @@ def join(strings: List[String], sep: String): String = {
   }
 }
 
-extern def trim(str: String) at pure: String =
+extern def trim(str: String) at {}: String =
   js "${str}.trim()"
 
 // Parsing
@@ -169,7 +169,7 @@ def toInt(str: String, base: Int): Int / Exception[WrongFormat] = {
 }
 
 /// Native versions of toInt (unused right now)
-extern def unsafeToInt(str: String) at pure: Int =
+extern def unsafeToInt(str: String) at {}: Int =
   js "(Number.isNaN(parseInt(${str})) ? undefined : parseInt(${str}))"
   chez "(string->number ${str})"
 
@@ -221,7 +221,7 @@ def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
   else
     unsafeCharAt(str, index)
 
-extern def unsafeCharAt(str: String, n: Int) at pure: Char =
+extern def unsafeCharAt(str: String, n: Int) at {}: Char =
   js "${str}.codePointAt(${n})"
   chez "(char->integer (string-ref ${str} ${n}))"
   llvm """

@@ -1,8 +1,8 @@
-extern def ifJS[R]{ thn: => R }{ els: => R} at pure: R =
+extern def ifJS[R]{ thn: => R }{ els: => R} at {}: R =
   js { thn() }
   default { els() }
 
-extern def jsOnly() at pure: String =
+extern def jsOnly() at {}: String =
   js """ "Hallo" """
 
 def main() = {

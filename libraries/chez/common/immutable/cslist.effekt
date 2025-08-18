@@ -5,21 +5,21 @@ import array
 
 // a chez scheme cons list
 extern type CSList[A]
-extern def cons[A](el: A, rest: CSList[A]) at pure: CSList[A] =
+extern def cons[A](el: A, rest: CSList[A]) at {}: CSList[A] =
   chez "(cons ${el} ${rest})"
 
-extern def nil[A]() at pure: CSList[A] =
+extern def nil[A]() at {}: CSList[A] =
   chez "(list)"
 
-extern def isEmpty[A](l: CSList[A]) at pure: Bool =
+extern def isEmpty[A](l: CSList[A]) at {}: Bool =
   chez "(null? ${l})"
 
 // unsafe!
-extern def head[A](l: CSList[A]) at pure: A =
+extern def head[A](l: CSList[A]) at {}: A =
   chez "(car ${l})"
 
 // unsafe!
-extern def tail[A](l: CSList[A]) at pure: CSList[A] =
+extern def tail[A](l: CSList[A]) at {}: CSList[A] =
   chez "(cdr ${l})"
 
 
@@ -33,5 +33,5 @@ def fromChez[A](l: CSList[A]): List[A] =
 
 // Old From Chez
 // -------------
-extern def toArray[A](l: CSList[A]) at pure: Array[A] =
+extern def toArray[A](l: CSList[A]) at {}: Array[A] =
   chez "(list->vector ${l})"

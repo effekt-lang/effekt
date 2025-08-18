@@ -769,15 +769,10 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def maybeExternCapture(): Option[CaptureSet] =
     nonterminal:
-      when(`at`) { Some(externCapture()) } { None }
+      when(`at`) { Some(captureSet()) } { None }
 
   def defaultCapture(span: Span): CaptureSet =
     CaptureSet(List(IdRef(List("effekt"), "io", span)), span)
-
-  def externCapture(): CaptureSet =
-    nonterminal:
-      if peek(`pure`) then `pure` ~> CaptureSet(Nil, span())
-      else captureSet()
 
   def path(): String =
     nonterminal:

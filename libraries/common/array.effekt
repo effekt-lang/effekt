@@ -85,7 +85,7 @@ def fromList[T](list: List[T]): Array[T] = {
 }
 
 /// Gets the length of the array in constant time.
-extern def size[T](arr: Array[T]) at pure: Int =
+extern def size[T](arr: Array[T]) at {}: Int =
   js "${arr}.length"
   chez "(vector-length ${arr})"
   llvm """

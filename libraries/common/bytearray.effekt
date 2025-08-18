@@ -34,7 +34,7 @@ extern def allocate(size: Int) at global: ByteArray =
   """
   chez "(make-bytevector ${size})"
 
-extern def size(arr: ByteArray) at pure: Int =
+extern def size(arr: ByteArray) at {}: Int =
   js "${arr}.length"
   llvm """
     %size = extractvalue %Pos ${arr}, 0
@@ -109,14 +109,14 @@ def foreachIndex(arr: ByteArray){ action: (Int, Byte) {Control} => Unit }: Unit 
     action(i, arr.unsafeGet(i)) {label}
   }
 
-extern def fromString(str: String) at pure: ByteArray =
+extern def fromString(str: String) at {}: ByteArray =
   js "(new TextEncoder().encode(${str}))"
   llvm """
     ret %Pos ${str}
   """
   chez "(string->utf8 ${str})"
 
-extern def toString(arr: ByteArray) at pure: String =
+extern def toString(arr: ByteArray) at {}: String =
   js "(new TextDecoder('utf-8').decode(${arr}))"
   // assuming the buffer is already in UTF-8
   llvm """
@@ -169,7 +169,7 @@ extern chez """
           [else (loop (+ i 1))]))))
 """
 
-extern def compareByteArrayImpl(b1: ByteArray, b2: ByteArray) at pure: Int =
+extern def compareByteArrayImpl(b1: ByteArray, b2: ByteArray) at {}: Int =
   js "bytearray$compare(${b1}, ${b2})"
   llvm """
     %x = call %Int @c_bytearray_compare(%Pos ${b1}, %Pos ${b2})

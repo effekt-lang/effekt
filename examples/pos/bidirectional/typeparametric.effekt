@@ -1,6 +1,6 @@
 extern interface Cap[U, V]
 
-extern def cap[U, V]() at pure: Cap[U, V] at {} =
+extern def cap[U, V]() at {}: Cap[U, V] at {} =
   js   "42"
   chez "42"
   llvm "ret %Pos zeroinitializer"

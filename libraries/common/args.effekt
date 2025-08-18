@@ -31,13 +31,13 @@ namespace chez {
   extern def nativeArgs() at io: Args =
     chez "(cdr (command-line))"
 
-  extern def isEmpty(l: Args) at pure: Bool =
+  extern def isEmpty(l: Args) at {}: Bool =
     chez "(null? ${l})"
 
-  extern def head(l: Args) at pure: String =
+  extern def head(l: Args) at {}: String =
     chez "(car ${l})"
 
-  extern def tail(l: Args) at pure: Args =
+  extern def tail(l: Args) at {}: Args =
     chez "(cdr ${l})"
 
   def toList(l: Args): List[String] =

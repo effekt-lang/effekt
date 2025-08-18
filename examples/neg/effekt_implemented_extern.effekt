@@ -1,6 +1,6 @@
 extern def test() at io: Unit = default { () }
 
-extern def foo() at pure: Unit =
+extern def foo() at {}: Unit =
   js { test() }
   default { () }
 

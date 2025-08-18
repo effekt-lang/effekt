@@ -74,7 +74,7 @@ def println(value: Double): Unit = println(value.show)
 def println(value: Bool): Unit = println(value.show)
 def println(value: Byte): Unit = println(value.show)
 
-extern def show(value: Int) at pure: String =
+extern def show(value: Int) at {}: String =
   js "'' + ${value}"
   chez "(show-number ${value})"
   llvm """
@@ -85,7 +85,7 @@ extern def show(value: Int) at pure: String =
 
 def show(value: Unit): String = "()"
 
-extern def show(value: Double) at pure: String =
+extern def show(value: Double) at {}: String =
   js "'' + ${value}"
   chez "(show-number ${value})"
   llvm """
@@ -100,7 +100,7 @@ def show(value: String): String =
 def show(value: Bool): String =
   if (value) "true" else "false"
 
-extern def show(value: Char) at pure: String =
+extern def show(value: Char) at {}: String =
   js "String.fromCodePoint(${value})"
   chez "(string (integer->char ${value}))"
   llvm """
@@ -109,7 +109,7 @@ extern def show(value: Char) at pure: String =
   """
   vm "effekt::show(Char)"
 
-extern def show(value: Byte) at pure: String =
+extern def show(value: Byte) at {}: String =
   js "'' + ${value}"
   chez "(string ${value})"
   llvm """
@@ -118,7 +118,7 @@ extern def show(value: Byte) at pure: String =
   """
   vm "effekt::show(Byte)"
 
-extern def genericShow[R](value: R) at pure: String =
+extern def genericShow[R](value: R) at {}: String =
   js "$effekt.show(${value})"
   chez "(show_impl ${value})"
 
@@ -130,7 +130,7 @@ extern def inspect[R](value: R) at io: Unit =
 
 // Strings
 // =======
-extern def infixConcat(s1: String, s2: String) at pure: String =
+extern def infixConcat(s1: String, s2: String) at {}: String =
   js "${s1} + ${s2}"
   chez "(string-append ${s1} ${s2})"
   llvm """
@@ -139,7 +139,7 @@ extern def infixConcat(s1: String, s2: String) at pure: String =
   """
   vm "effekt::infixConcat(String, String)"
 
-extern def length(str: String) at pure: Int =
+extern def length(str: String) at {}: Int =
   js "${str}.length"
   chez "(string-length ${str})"
   llvm """
@@ -148,7 +148,7 @@ extern def length(str: String) at pure: Int =
   """
   vm "effekt::length(String)"
 
-extern def unsafeSubstring(str: String, from: Int, to: Int) at pure: String =
+extern def unsafeSubstring(str: String, from: Int, to: Int) at {}: String =
   js "${str}.substring(${from}, ${to})"
   chez "(substring ${str} ${from} ${to})" // potentially raises: "Exception in substring: ..."
   llvm """
@@ -193,7 +193,7 @@ def compareInt(n: Int, m: Int) =
   else if (n < m) Less()
   else Greater()
 
-extern def genericCompareImpl[R](x: R, y: R) at pure: Int =
+extern def genericCompareImpl[R](x: R, y: R) at {}: Int =
   js "$effekt.compare(${x}, ${y})"
 
 /// Compares two values of the same type, returning an `Ordering`.
@@ -222,7 +222,7 @@ def println(o: Ordering): Unit = println(o.show)
 // ==============
 
 /// Structural equality: Not available in the LLVM backend
-extern def equals[R](x: R, y: R) at pure: Bool =
+extern def equals[R](x: R, y: R) at {}: Bool =
   js "$effekt.equals(${x}, ${y})"
   chez "(equal_impl ${x} ${y})"
 
@@ -230,10 +230,10 @@ def differsFrom[R](x: R, y: R): Bool =
   not(equals(x, y))
 
 // TODO fix this in the pattern matching compiler
-extern def infixEq(x: Unit, y: Unit) at pure: Bool =
+extern def infixEq(x: Unit, y: Unit) at {}: Bool =
   default { true }
 
-extern def infixEq(x: Int, y: Int) at pure: Bool =
+extern def infixEq(x: Int, y: Int) at {}: Bool =
   js "${x} === ${y}"
   chez "(equal? ${x} ${y})"
   llvm """
@@ -244,7 +244,7 @@ extern def infixEq(x: Int, y: Int) at pure: Bool =
   """
   vm "effekt::infixEq(Int, Int)"
 
-extern def infixNeq(x: Int, y: Int) at pure: Bool =
+extern def infixNeq(x: Int, y: Int) at {}: Bool =
   js "${x} !== ${y}"
   chez "(not (equal? ${x} ${y}))"
   llvm """
@@ -255,7 +255,7 @@ extern def infixNeq(x: Int, y: Int) at pure: Bool =
   """
   vm "effekt::infixNeq(Int, Int)"
 
-extern def infixEq(x: Char, y: Char) at pure: Bool =
+extern def infixEq(x: Char, y: Char) at {}: Bool =
   js "${x} === ${y}"
   chez "(equal? ${x} ${y})"
   llvm """
@@ -266,7 +266,7 @@ extern def infixEq(x: Char, y: Char) at pure: Bool =
   """
   vm "effekt::infixEq(Char, Char)"
 
-extern def infixNeq(x: Char, y: Char) at pure: Bool =
+extern def infixNeq(x: Char, y: Char) at {}: Bool =
   js "${x} !== ${y}"
   chez "(not (equal? ${x} ${y}))"
   llvm """
@@ -276,7 +276,7 @@ extern def infixNeq(x: Char, y: Char) at pure: Bool =
     ret %Pos %adt_boolean
   """
 
-extern def infixEq(x: String, y: String) at pure: Bool =
+extern def infixEq(x: String, y: String) at {}: Bool =
   js "${x} === ${y}"
   chez "(equal? ${x} ${y})"
   llvm """
@@ -287,7 +287,7 @@ extern def infixEq(x: String, y: String) at pure: Bool =
 
 def infixNeq(x: String, y: String): Bool = not(x == y)
 
-extern def infixEq(x: Bool, y: Bool) at pure: Bool =
+extern def infixEq(x: Bool, y: Bool) at {}: Bool =
   js "${x} === ${y}"
   chez "(equal? ${x} ${y})"
   llvm """
@@ -300,7 +300,7 @@ extern def infixEq(x: Bool, y: Bool) at pure: Bool =
   """
   vm "effekt::infixEq(Bool, Bool)"
 
-extern def infixNeq(x: Bool, y: Bool) at pure: Bool =
+extern def infixNeq(x: Bool, y: Bool) at {}: Bool =
   js "${x} !== ${y}"
   chez "(not (equal? ${x} ${y}))"
   llvm """
@@ -315,85 +315,85 @@ extern def infixNeq(x: Bool, y: Bool) at pure: Bool =
 
 // Math ops
 // ========
-extern def infixAdd(x: Int, y: Int) at pure: Int =
+extern def infixAdd(x: Int, y: Int) at {}: Int =
   js "(${x} + ${y})"
   chez "(+ ${x} ${y})"
   llvm "%z = add  %Int ${x}, ${y} ret %Int %z"
   vm "effekt::infixAdd(Int, Int)"
 
-extern def infixMul(x: Int, y: Int) at pure: Int =
+extern def infixMul(x: Int, y: Int) at {}: Int =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
   llvm "%z = mul  %Int ${x}, ${y} ret %Int %z"
   vm "effekt::infixMul(Int, Int)"
 
-extern def infixDiv(x: Int, y: Int) at pure: Int =
+extern def infixDiv(x: Int, y: Int) at {}: Int =
   js "Math.floor(${x} / ${y})"
   chez "(floor (/ ${x} ${y}))"
   llvm "%z = sdiv %Int ${x}, ${y} ret %Int %z"
   vm "effekt::infixDiv(Int, Int)"
 
-extern def infixSub(x: Int, y: Int) at pure: Int =
+extern def infixSub(x: Int, y: Int) at {}: Int =
   js "(${x} - ${y})"
   chez "(- ${x} ${y})"
   llvm "%z = sub  %Int ${x}, ${y} ret %Int %z"
   vm "effekt::infixSub(Int, Int)"
 
-extern def mod(x: Int, y: Int) at pure: Int =
+extern def mod(x: Int, y: Int) at {}: Int =
   js "(${x} % ${y})"
   chez "(modulo ${x} ${y})"
   llvm "%z = srem %Int ${x}, ${y} ret %Int %z"
   vm "effekt::mod(Int, Int)"
 
-extern def infixAdd(x: Double, y: Double) at pure: Double =
+extern def infixAdd(x: Double, y: Double) at {}: Double =
   js "(${x} + ${y})"
   chez "(+ ${x} ${y})"
   llvm "%z = fadd %Double ${x}, ${y} ret %Double %z"
   vm "effekt::infixAdd(Double, Double)"
 
-extern def infixMul(x: Double, y: Double) at pure: Double =
+extern def infixMul(x: Double, y: Double) at {}: Double =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
   llvm "%z = fmul %Double ${x}, ${y} ret %Double %z"
   vm "effekt::infixMul(Double, Double)"
 
-extern def infixSub(x: Double, y: Double) at pure: Double =
+extern def infixSub(x: Double, y: Double) at {}: Double =
   js "(${x} - ${y})"
   chez "(- ${x} ${y})"
   llvm "%z = fsub %Double ${x}, ${y} ret %Double %z"
   vm "effekt::infixSub(Double, Double)"
 
-extern def infixDiv(x: Double, y: Double) at pure: Double =
+extern def infixDiv(x: Double, y: Double) at {}: Double =
   js "(${x} / ${y})"
   chez "(fl/ ${x} ${y})"
   llvm "%z = fdiv %Double ${x}, ${y} ret %Double %z"
   vm "effekt::infixDiv(Double, Double)"
 
-extern def cos(x: Double) at pure: Double =
+extern def cos(x: Double) at {}: Double =
   js "Math.cos(${x})"
   chez "(cos ${x})"
   vm "effekt::cos(Double)"
   llvm "%z = call %Double @llvm.cos.f64(double ${x}) ret %Double %z"
 
-extern def sin(x: Double) at pure: Double =
+extern def sin(x: Double) at {}: Double =
   js "Math.sin(${x})"
   chez "(sin ${x})"
   vm "effekt::sin(Double)"
   llvm "%z = call %Double @llvm.sin.f64(double ${x}) ret %Double %z"
 
-extern def atan(x: Double) at pure: Double =
+extern def atan(x: Double) at {}: Double =
   js "Math.atan(${x})"
   chez "(atan ${x})"
   vm "effekt::atan(Double)"
   llvm "%z = call %Double @atan(double ${x}) ret %Double %z"
 
-extern def tan(x: Double) at pure: Double =
+extern def tan(x: Double) at {}: Double =
   js "Math.tan(${x})"
   chez "(tan ${x})"
   vm "effekt::tan(Double)"
   llvm "%z = call %Double @tan(double ${x}) ret %Double %z"
 
-extern def sqrt(x: Double) at pure: Double =
+extern def sqrt(x: Double) at {}: Double =
   js "Math.sqrt(${x})"
   chez "(sqrt ${x})"
   llvm "%z = call %Double @llvm.sqrt.f64(double ${x}) ret %Double %z"
@@ -410,18 +410,18 @@ def max(n: Double, m: Double): Double =
 def abs(n: Double): Double =
   max(n, neg(n))
 
-extern def log(x: Double) at pure: Double =
+extern def log(x: Double) at {}: Double =
   js "Math.log(${x})"
   chez "(log ${x})"
   vm "effekt::log(Double)"
   llvm "%z = call %Double @llvm.log.f64(double ${x}) ret %Double %z"
 
-extern def log1p(x: Double) at pure: Double =
+extern def log1p(x: Double) at {}: Double =
   js "Math.log1p(${x})"
   chez "(log (+ ${x} 1))"
   llvm "%z = call %Double @log1p(double ${x}) ret %Double %z"
 
-extern def exp(x: Double) at pure: Double =
+extern def exp(x: Double) at {}: Double =
   js "Math.exp(${x})"
   chez "(exp ${x})"
   vm "effekt::exp(Double)"
@@ -440,14 +440,14 @@ def pow(base: Double, exponent: Int): Double = {
   }
 }
 
-extern def pow(base: Double, exponent: Double) at pure: Double =
+extern def pow(base: Double, exponent: Double) at {}: Double =
   js "Math.pow(${base}, ${exponent})"
   chez "(expt ${base} ${exponent})"
   vm "effekt::pow(Double, Double)"
   llvm "%z = call %Double @llvm.pow.f64(double ${base}, double ${exponent}) ret %Double %z"
 
 // since we do not have "extern val", yet
-extern def _pi() at pure: Double =
+extern def _pi() at {}: Double =
   js "Math.PI"
   chez "(* 4 (atan 1))"
   vm "effekt::pi()"
@@ -455,20 +455,20 @@ extern def _pi() at pure: Double =
 
 val PI: Double = _pi()
 
-extern def toInt(d: Double) at pure: Int =
+extern def toInt(d: Double) at {}: Int =
   js "Math.trunc(${d})"
   chez "(flonum->fixnum ${d})"
   llvm "%z = fptosi double ${d} to %Int ret %Int %z"
   vm "effekt::toInt(Double)"
 
-extern def toDouble(d: Int) at pure: Double =
+extern def toDouble(d: Int) at {}: Double =
   js "${d}"
   chez "(fixnum->flonum ${d})"
   llvm "%z = sitofp i64 ${d} to double ret double %z"
   vm "effekt::toDouble(Int)"
 
 
-extern def round(d: Double) at pure: Int =
+extern def round(d: Double) at {}: Int =
   js "Math.round(${d})"
   chez "(flonum->fixnum (round ${d}))"
   llvm """
@@ -482,7 +482,7 @@ def round(d: Double, digits: Int): Double = {
   round(d * factor).toDouble / factor
 }
 
-extern def floor(d: Double) at pure: Int =
+extern def floor(d: Double) at {}: Int =
   js "Math.floor(${d})"
   chez "(flonum->fixnum (floor ${d}))"
   llvm """
@@ -490,7 +490,7 @@ extern def floor(d: Double) at pure: Int =
     %z = fptosi double %i to %Int ret %Int %z
   """
 
-extern def ceil(d: Double) at pure: Int =
+extern def ceil(d: Double) at {}: Int =
   js "Math.ceil(${d})"
   chez "(flonum->fixnum (ceiling ${d}))"
   llvm """
@@ -511,7 +511,7 @@ def abs(n: Int): Int =
     max(n, neg(n))
 
 
-extern def infixLt(x: Int, y: Int) at pure: Bool =
+extern def infixLt(x: Int, y: Int) at {}: Bool =
   js "(${x} < ${y})"
   chez "(< ${x} ${y})"
   llvm """
@@ -522,7 +522,7 @@ extern def infixLt(x: Int, y: Int) at pure: Bool =
   """
   vm "effekt::infixLt(Int, Int)"
 
-extern def infixLte(x: Int, y: Int) at pure: Bool =
+extern def infixLte(x: Int, y: Int) at {}: Bool =
   js "(${x} <= ${y})"
   chez "(<= ${x} ${y})"
   llvm """
@@ -533,7 +533,7 @@ extern def infixLte(x: Int, y: Int) at pure: Bool =
   """
   vm "effekt::infixLte(Int, Int)"
 
-extern def infixGt(x: Int, y: Int) at pure: Bool =
+extern def infixGt(x: Int, y: Int) at {}: Bool =
   js "(${x} > ${y})"
   chez "(> ${x} ${y})"
   llvm """
@@ -544,7 +544,7 @@ extern def infixGt(x: Int, y: Int) at pure: Bool =
   """
   vm "effekt::infixGt(Int, Int)"
 
-extern def infixGte(x: Int, y: Int) at pure: Bool =
+extern def infixGte(x: Int, y: Int) at {}: Bool =
   js "(${x} >= ${y})"
   chez "(>= ${x} ${y})"
   llvm """
@@ -555,17 +555,17 @@ extern def infixGte(x: Int, y: Int) at pure: Bool =
   """
   vm "effekt::infixGte(Int, Int)"
 
-extern def infixEq(x: Double, y: Double) at pure: Bool =
+extern def infixEq(x: Double, y: Double) at {}: Bool =
   js "${x} === ${y}"
   chez "(= ${x} ${y})"
   vm "effekt::infixEq(Double, Double)"
 
-extern def infixNeq(x: Double, y: Double) at pure: Bool =
+extern def infixNeq(x: Double, y: Double) at {}: Bool =
   js "${x} !== ${y}"
   chez "(not (= ${x} ${y}))"
   vm "effekt::infixNeq(Double, Double)"
 
-extern def infixLt(x: Double, y: Double) at pure: Bool =
+extern def infixLt(x: Double, y: Double) at {}: Bool =
   js "(${x} < ${y})"
   chez "(< ${x} ${y})"
   llvm """
@@ -576,12 +576,12 @@ extern def infixLt(x: Double, y: Double) at pure: Bool =
   """
   vm "effekt::infixLt(Double, Double)"
 
-extern def infixLte(x: Double, y: Double) at pure: Bool =
+extern def infixLte(x: Double, y: Double) at {}: Bool =
   js "(${x} <= ${y})"
   chez "(<= ${x} ${y})"
   vm "effekt::infixLte(Double, Double)"
 
-extern def infixGt(x: Double, y: Double) at pure: Bool =
+extern def infixGt(x: Double, y: Double) at {}: Bool =
   js "(${x} > ${y})"
   chez "(> ${x} ${y})"
   llvm """
@@ -592,32 +592,32 @@ extern def infixGt(x: Double, y: Double) at pure: Bool =
   """
   vm "effekt::infixGt(Double, Double)"
 
-extern def infixGte(x: Double, y: Double) at pure: Bool =
+extern def infixGte(x: Double, y: Double) at {}: Bool =
   js "(${x} >= ${y})"
   chez "(>= ${x} ${y})"
   vm "effekt::infixGte(Double, Double)"
 
 // TODO do we really need those? if yes, move to string.effekt
-extern def infixLt(x: String, y: String) at pure: Bool =
+extern def infixLt(x: String, y: String) at {}: Bool =
   js "(${x} < ${y})"
   chez "(string<? ${x} ${y})"
 
-extern def infixLte(x: String, y: String) at pure: Bool =
+extern def infixLte(x: String, y: String) at {}: Bool =
   js "(${x} <= ${y})"
   chez "(string<=? ${x} ${y})"
 
-extern def infixGt(x: String, y: String) at pure: Bool =
+extern def infixGt(x: String, y: String) at {}: Bool =
   js "(${x} > ${y})"
   chez "(string>? ${x} ${y})"
 
-extern def infixGte(x: String, y: String) at pure: Bool =
+extern def infixGte(x: String, y: String) at {}: Bool =
   js "(${x} >= ${y})"
   chez "(string>=? ${x} ${y})"
 
 
 // Boolean operations
 // ==================
-extern def not(b: Bool) at pure: Bool =
+extern def not(b: Bool) at {}: Bool =
   js "!${b}"
   chez "(not ${b})"
   llvm """
@@ -639,32 +639,32 @@ def infixAnd { first: => Bool } { second: => Bool }: Bool =
 // ==================
 
 /// Arithmetic left shift
-extern def bitwiseShl(x: Int, y: Int) at pure: Int =
+extern def bitwiseShl(x: Int, y: Int) at {}: Int =
   js "(${x} << ${y})"
   chez "(ash ${x} ${y})"
   llvm "%z = shl %Int ${x}, ${y} ret %Int %z"
   vm "effekt::bitwiseShl(Int, Int)"
 
 /// Arithmetic right shift
-extern def bitwiseShr(x: Int, y: Int) at pure: Int =
+extern def bitwiseShr(x: Int, y: Int) at {}: Int =
   js "(${x} >> ${y})"
   chez "(ash ${x} (- ${y}))"
   llvm "%z = ashr %Int ${x}, ${y} ret %Int %z"
   vm "effekt::bitwiseShr(Int, Int)"
 
-extern def bitwiseAnd(x: Int, y: Int) at pure: Int =
+extern def bitwiseAnd(x: Int, y: Int) at {}: Int =
   js "(${x} & ${y})"
   chez "(logand ${x} ${y})"
   llvm "%z = and %Int ${x}, ${y} ret %Int %z"
   vm "effekt::bitwiseAnd(Int, Int)"
 
-extern def bitwiseOr(x: Int, y: Int) at pure: Int =
+extern def bitwiseOr(x: Int, y: Int) at {}: Int =
   js "(${x} | ${y})"
   chez "(logior ${x} ${y})"
   llvm "%z = or %Int ${x}, ${y} ret %Int %z"
   vm "effekt::bitwiseOr(Int, Int)"
 
-extern def bitwiseXor(x: Int, y: Int) at pure: Int =
+extern def bitwiseXor(x: Int, y: Int) at {}: Int =
   js "(${x} ^ ${y})"
   chez "(logxor ${x} ${y})"
   llvm "%z = xor %Int ${x}, ${y} ret %Int %z"
@@ -673,12 +673,12 @@ extern def bitwiseXor(x: Int, y: Int) at pure: Int =
 
 // Byte operations
 // ===============
-extern def toByte(n: Int) at pure: Byte =
+extern def toByte(n: Int) at {}: Byte =
   js "${n}"
   llvm "%z = trunc %Int ${n} to %Byte ret %Byte %z"
   chez "${n}"
 
-extern def toInt(n: Byte) at pure: Int =
+extern def toInt(n: Byte) at {}: Int =
   js "${n}"
   llvm "%z = zext %Byte ${n} to %Int ret %Int %z"
   vm "effekt::toInt(Byte)"
@@ -695,13 +695,13 @@ extern def toInt(n: Byte) at pure: Int =
 //   llvm: null?
 
 /// The value used by the FFI to represent undefined values
-extern def undefined[A]() at pure: A =
+extern def undefined[A]() at {}: A =
   js "undefined"
   chez "#f"
   vm "effekt::undefined()"
 
 /// Is an FFI value undefined?
-extern def isUndefined[A](value: A) at pure: Bool =
+extern def isUndefined[A](value: A) at {}: Bool =
   js "(${value} === undefined || ${value} === null)"
   chez "(eq? ${value} #f)"
   vm "effekt::isUndefined[A](A)"
