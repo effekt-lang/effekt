@@ -203,7 +203,7 @@ def lastIndexOf(str: String, sub: String, from: Int): Option[Int] = {
 
 // TODO more efficient (native) implementations could be integrated as follows
 
-// extern pure def indexOf(str: String, sub: String): Option[Int] =
+// extern def indexOf(str: String, sub: String) at {}: Option[Int] =
 //   //js { nativeIndexOf(str, sub) }
 //   default { indexOf(str, sub, 0) }
 
@@ -212,7 +212,7 @@ def lastIndexOf(str: String, sub: String, from: Int): Option[Int] = {
 //   if (index < 0) { None() } else { Some(index) }
 // }
 
-// extern pure def unsafeIndexOf(str: String, sub: String): Int =
+// extern def unsafeIndexOf(str: String, sub: String) at {}: Int =
 //   js "${str}.indexOf(${sub})"
 
 def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
