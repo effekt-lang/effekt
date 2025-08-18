@@ -1598,7 +1598,7 @@ class ParserTests extends munit.FunSuite {
     parseExternDef("extern resource withFile: [A](String) { () => A } => A")
     parseExternDef("extern include \"path/to/file\"")
     parseExternDef("extern js \"\"\"console.log(42)\"\"\"")
-    parseExternDef("extern def read(s: String) at pure: String = default { s }")
+    parseExternDef("extern def read(s: String) at {}: String = default { s }")
     parseExternDef("extern def read(s: String): String = \"${s}\"")
     parseProgram(
       "extern def println(value: String): Unit =" +
