@@ -170,8 +170,8 @@ extern def random() at io: Double =
 // ====================
 // the following type is defined in builtins.scala
 // interface Ref[T] { def get(): T; def put(t: T): Unit }
-// extern io def freshIn[T](t: T) {r: Region}: Ref[T] at {r} = js "r.fresh(${t})"
-// extern io def freshGlobal[T](t: T): Ref[T] at {global} = js "$effekt.fresh(${t})"
+// extern io def freshIn[T](t: T) {r: Region}: Ref[T] at r = js "r.fresh(${t})"
+// extern io def freshGlobal[T](t: T): Ref[T] at global = js "$effekt.fresh(${t})"
 
 
 // Equality

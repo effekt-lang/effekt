@@ -27,7 +27,7 @@ extern def innerHTML(node: Node, contents: String) at {}: Node =
 
 extern type IdleDeadline
 
-extern def requestIdleCallback(callback: (IdleDeadline) => Unit at {io}) at {}: Unit =
+extern def requestIdleCallback(callback: (IdleDeadline) => Unit at io) at {}: Unit =
   js "window.requestIdleCallback(deadline => ${callback}(deadline).run())"
 
 extern def didDimeout(deadline: IdleDeadline) at {}: Bool =
@@ -36,7 +36,7 @@ extern def didDimeout(deadline: IdleDeadline) at {}: Bool =
 extern def timeRemaining(deadline: IdleDeadline) at {}: Double =
   js "${deadline}.timeRemaining()"
 
-extern def onClick(node: Node, handler: () => Unit at {io}) at {}: Node =
+extern def onClick(node: Node, handler: () => Unit at io) at {}: Node =
   js "(function() { ${node}.onclick = () => ${handler}().run(); return ${node} })()"
 
 extern def sleep(n: Int): Unit =

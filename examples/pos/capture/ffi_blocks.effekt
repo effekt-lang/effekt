@@ -2,7 +2,7 @@ interface Foo {}
 extern def something {f: Foo} at io: Int = 
   js   "${box f}"
   chez "${box f}"
-extern def createFoo() at io: Foo at {global} = 
+extern def createFoo() at io: Foo at global = 
   js   "42"
   chez "42"
 

@@ -20,10 +20,10 @@ interface Queue[T] {
 }
 
 
-def emptyQueue[T](): Queue[T] at {global} =
+def emptyQueue[T](): Queue[T] at global =
   emptyQueue[T](64)
 
-def emptyQueue[T](initialCapacity: Int): Queue[T] at {global} = {
+def emptyQueue[T](initialCapacity: Int): Queue[T] at global = {
 
   val contents = ref(array[Option[T]](initialCapacity, None()))
   val head = ref(0)
