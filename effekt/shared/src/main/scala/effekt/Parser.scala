@@ -681,7 +681,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     }
 
   def externFun(info: Info): Def =
-    (`def` ~> idDef() ~ params() ~ (pos() ~ maybeExternCapture()) ~ (returnAnnotation() <~ `=`)) match {
+    (`def` ~> idDef() ~ params() ~ (pos() ~ maybeCaptureSet()) ~ (returnAnnotation() <~ `=`)) match {
       case id ~ (tps, vps, bps) ~ (posn ~ cpt) ~ ret =>
         val bodies = manyWhile(externBody(), isExternBodyStart)
         val captures = cpt.getOrElse(defaultCapture(Span(source, posn, posn, Synthesized)))
@@ -766,10 +766,6 @@ class Parser(tokens: Seq[Token], source: Source) {
 
       info
   }
-
-  def maybeExternCapture(): Option[CaptureSet] =
-    nonterminal:
-      when(`at`) { Some(captureSet()) } { None }
 
   def defaultCapture(span: Span): CaptureSet =
     CaptureSet(List(IdRef(List("effekt"), "io", span)), span)
