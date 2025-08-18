@@ -1,0 +1,9 @@
+// <inferred captures> <: <annotated captures>
+def f() at {async, io} = println("hello")
+
+def g() at io = println("world")
+
+def main() = {
+  f()
+  g()
+}
