@@ -1952,9 +1952,9 @@ class LSPTests extends FunSuite {
           name = "theField",
           origin = "Defined",
           signature = Some(
-            "def theField(test::N::Foo1: Foo1): String / {}"
+            "def theField(Foo1: Foo1): String / {}"
           ),
-          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">theField</span>(<span class=\"effekt-ident camel-case\">test</span>::<span class=\"effekt-ident pascal-case\">N</span>::<span class=\"effekt-ident pascal-case\">Foo1</span>: <span class=\"effekt-ident pascal-case\">Foo1</span>): <span class=\"effekt-ident pascal-case\">String</span> / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">theField</span>(<span class=\"effekt-ident pascal-case\">Foo1</span>: <span class=\"effekt-ident pascal-case\">Foo1</span>): <span class=\"effekt-ident pascal-case\">String</span> / {}"),
           kind = "Term",
         ),
         TypeBinding(
@@ -1977,8 +1977,8 @@ class LSPTests extends FunSuite {
           qualifier = Nil,
           name = "theField",
           origin = "Defined",
-          signature = Some("def theField(test::N::Foo2: Foo2): String / {}"),
-          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">theField</span>(<span class=\"effekt-ident camel-case\">test</span>::<span class=\"effekt-ident pascal-case\">N</span>::<span class=\"effekt-ident pascal-case\">Foo2</span>: <span class=\"effekt-ident pascal-case\">Foo2</span>): <span class=\"effekt-ident pascal-case\">String</span> / {}"),
+          signature = Some("def theField(Foo2: Foo2): String / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">theField</span>(<span class=\"effekt-ident pascal-case\">Foo2</span>: <span class=\"effekt-ident pascal-case\">Foo2</span>): <span class=\"effekt-ident pascal-case\">String</span> / {}"),
           kind = "Term"
         ),
         TypeBinding(
