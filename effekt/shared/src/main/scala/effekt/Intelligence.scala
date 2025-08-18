@@ -189,7 +189,7 @@ trait Intelligence {
     }
 
   def allBindings(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): List[BindingInfo] =
-    val symbols = allSymbols(origin, bindings, path)
+    val symbols = allSymbols(origin, bindings, path).distinctBy(s => s._3)
 
     val sorted = if (origin == BindingOrigin.Imported) {
       symbols.sortBy(_._1.toLowerCase())
