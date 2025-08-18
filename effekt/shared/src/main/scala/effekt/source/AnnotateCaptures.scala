@@ -86,13 +86,10 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
 
   override def defn(using Context, Unit) = {
     case tree @ source.FunDef(id, tps, vps, bps, cpts, ret, body, doc, span) =>
-      val cpt = query(body) -- boundCapabilities(tree) -- CaptureSet(bps.unspan.map(_.symbol.capture))
-      val annotatedCpts = Context.symbolOf(id).asFun.annotatedCaptures.foreach { c =>
-        if (!cpt.captures.subsetOf(c.captures)) {
-          val diff = cpt.captures.diff(c.captures)
-          Context.error(s"Function captures {${diff.mkString(", ")}} but the signature only mentions {${c.captures.mkString(", ")}}.")
-        }
-      }
+      val sym = Context.symbolOf(id).asFun
+      val cpt = sym.annotatedCaptures.getOrElse(
+        query(body) -- boundCapabilities(tree) -- CaptureSet(bps.unspan.map(_.symbol.capture))
+      )
       // TODO Why do we need to update the annotation on the symbol here? Is the inferred capture for recursive functions
       //   wrong? Problematic example: examples/benchmarks/tree.effekt (chooseHandler has the empty set, but should have {this})
       Context.annotate(Annotations.Captures, tree.symbol, cpt)
@@ -124,7 +121,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
     Context.annotate(Annotations.CaptureForFile, src, allCaptures)
 
   override def visit[T <: Tree](t: T)(visitor: T => CaptureSet)(using Context, Unit): CaptureSet =
-    val capt = Context.at(t) { visitor(t) }
+    val capt = visitor(t)
     Context.annotate(Annotations.InferredCapture, t, capt)
     allCaptures = (t, capt) :: allCaptures
     capt

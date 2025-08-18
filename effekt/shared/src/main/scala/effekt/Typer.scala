@@ -711,7 +711,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val fun = d.symbol
 
       // (1) make up a fresh capture unification variable and annotate on function symbol
-      val cap = Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d))
+      val cap = fun.annotatedCaptures.getOrElse(Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d)))
       Context.bind(fun, cap)
 
       // (2) Store the annotated type (important for (mutually) recursive and out-of-order definitions)
