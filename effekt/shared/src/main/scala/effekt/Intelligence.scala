@@ -189,7 +189,7 @@ trait Intelligence {
     }
 
   def allBindings(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): List[BindingInfo] =
-    val symbols = allSymbols(origin, bindings, path)
+    val symbols = allSymbols(origin, bindings, path).distinctBy(s => s._3)
 
     val sorted = if (origin == BindingOrigin.Imported) {
       symbols.sortBy(_._1.toLowerCase())
@@ -200,24 +200,28 @@ trait Intelligence {
       })
     }
 
-    sorted.flatMap((name, path, sym) => sym match {
+    def symbolToBindingInfos(name: String, path: List[String], sym: TypeSymbol | TermSymbol)(using C: Context): List[BindingInfo] =
       // TODO this is extremely hacky, printing is not defined for all types at the moment
-      case sym: TypeSymbol => try {
-        val definition = DeclPrinter(sym)
-        val definitionHtml = HtmlHighlight(definition)
-        Some(TypeBinding(path, name, origin, definition, definitionHtml))
-      } catch { case e => None }
-      case sym: ValueSymbol => {
-        val `type` = C.valueTypeOption(sym).map(t => pp"${t}")
-        val typeHtml = `type`.map(HtmlHighlight(_))
-        Some(TermBinding(path, name, origin, `type`, typeHtml))
+      val signature = try { Some(SignaturePrinter(sym)) } catch { case e: Throwable => None }
+      val signatureHtml = signature.map(sig => HtmlHighlight(sig))
+      val out = sym match {
+        case sym: TypeSymbol => List(TypeBinding(path, name, origin, signature, signatureHtml))
+        case sym: ValueSymbol => List(TermBinding(path, name, origin, signature, signatureHtml))
+        case sym: BlockSymbol => List(TermBinding(path, name, origin, signature, signatureHtml))
       }
-      case sym: BlockSymbol => {
-        val `type` = C.blockTypeOption(sym).map(t => pp"${t}")
-        val typeHtml = `type`.map(HtmlHighlight(_))
-        Some(TermBinding(path, name, origin, `type`, typeHtml))
+      sym match {
+        case Interface(name, tparams, ops, decl) if !(ops.length == 1 && ops.head.name.name == name.name) => {
+          val opsInfos = ops.map { op =>
+            val signature = Some(SignaturePrinter(op))
+            val signatureHtml = signature.map(sig => HtmlHighlight(sig))
+            TermBinding(path, op.name.name, origin, signature, signatureHtml)
+          }
+          out ++ opsInfos
+        }
+        case _ => out
       }
-    }).toList
+
+    sorted.flatMap(symbolToBindingInfos).toList
 
   def allSymbols(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): Array[(String, List[String], TypeSymbol | TermSymbol)] = {
     bindings.types.toArray.map((name, sym) => (name, path, sym))
@@ -464,6 +468,8 @@ object Intelligence {
     val qualifier: List[String]
     val name: String
     val origin: String
+    val signature: Option[String]
+    val signatureHtml: Option[String]
     val kind: String
   }
 
@@ -471,16 +477,16 @@ object Intelligence {
     qualifier: List[String],
     name: String,
     origin: String,
-    `type`: Option[String],
-    typeHtml: Option[String],
+    signature: Option[String] = None,
+    signatureHtml: Option[String],
     kind: String = BindingKind.Term
   ) extends BindingInfo
   case class TypeBinding(
     qualifier: List[String],
     name: String,
     origin: String,
-    definition: String,
-    definitionHtml: String,
+    signature: Option[String] = None,
+    signatureHtml: Option[String],
     kind: String = BindingKind.Type
   ) extends BindingInfo
 
