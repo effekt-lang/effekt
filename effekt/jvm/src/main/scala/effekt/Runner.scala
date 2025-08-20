@@ -280,11 +280,9 @@ object LLVMRunner extends Runner[String] {
   override def includes(path: File): List[File] = List(path / ".." / "llvm")
 
   lazy val clangCmd = discoverExecutable(List("clang-20", "clang-19", "clang-18", "clang"), List("--version"))
-  lazy val optCmd = discoverExecutable(List("opt-20", "opt-19", "opt-18", "opt"), List("--version"))
 
   def checkSetup(): Either[String, Unit] =
     clangCmd.getOrElseAborting { return Left("Cannot find clang. This is required to use the LLVM backend.") }
-    optCmd.getOrElseAborting { return Left("Cannot find opt. This is required to use the LLVM backend.") }
     Right(())
 
   def libuvArgs(using C: Context): Seq[String] =
@@ -333,27 +331,22 @@ object LLVMRunner extends Runner[String] {
 
     def missing(cmd: String) = C.abort(s"Cannot find ${cmd}. This is required to use the LLVM backend.")
     val clang = clangCmd.getOrElse(missing("clang"))
-    val opt = optCmd.getOrElse(missing("opt"))
 
     val clangMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
     val executableFile = basePath
 
-    var llArgs = Seq(opt, llPath, "-o", bcPath)
-    var clangArgs = Seq(clang, clangMainFile, "-Wno-override-module", "-o", executableFile, bcPath)
+    var clangArgs = Seq(clang, llPath, clangMainFile, "-Wno-override-module", "-o", executableFile)
       ++ linkedLibraries
 
     if (C.config.native()) {
-      llArgs ++= Seq("-march=native", "-mcpu=native")
       clangArgs ++= Seq("-march=native")
     }
 
     if (C.config.debug()) {
-      llArgs ++= Seq("--fatal-warnings")
       clangArgs ++= Seq("-g", "-Wall", "-Wextra", "-Werror")
     }
 
     if (C.config.valgrind()) {
-      llArgs ++= Seq("-O0")
       clangArgs ++= Seq("-Og", "-g")
     } else if (C.config.debug()) {
       // these can only be used without valgrind
@@ -361,11 +354,9 @@ object LLVMRunner extends Runner[String] {
     }
 
     if (useLTO) {
-      llArgs ++= Seq("-O3") // WARNING: opt/llc crashes when -O# flags overlap!
       clangArgs ++= Seq("-O3", "-flto=full")
     }
 
-    exec(llArgs: _*)
     exec(clangArgs: _*)
 
     Some(executableFile)
