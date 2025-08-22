@@ -8,7 +8,7 @@ import io/signal
 
 type State[T] {
   Resolved(value: T)
-  Pending(signals: List[Signal[T]])
+  Pending(signals: List[Signal[T, Unit]])
 }
 
 extern type Promise[T]
@@ -49,11 +49,12 @@ extern {async, global} def await[T](promise: Promise[T]): T =
         val signal = signal::allocate()
         // TODO use reference.set and signal.wait
         set(reference, Pending(Cons(signal, signals)))
-        unsafeWait(signal)
+        // TODO perhaps yield to avoid stack overflow
+        unsafeNotifyB(signal, ())
     }
   }
 
-extern {io, global} def resolve[T](promise: Promise[T], value: T): Unit =
+extern {io, async, global} def resolve[T](promise: Promise[T], value: T): Unit =
   js "promise$resolve(${promise}, ${value})"
   llvm {
     val reference = toRefState(promise)
@@ -64,8 +65,9 @@ extern {io, global} def resolve[T](promise: Promise[T], value: T): Unit =
       case Pending(signals) =>
         // TODO use reference.set
         set(reference, Resolved(value))
+        // TODO perhaps yield to avoid stack overflow
         // TODO use signals.reverse.foreach
-        foreach(reverse(signals)) { signal => unsafeSend(signal, value) }
+        foreach(reverse(signals)) { signal => unsafeNotifyA(signal, value) }
     }
   }
 
