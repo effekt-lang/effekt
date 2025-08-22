@@ -575,7 +575,7 @@ void c_yield(Stack stack) {
 // Signals
 // --------
 
-typedef enum { BEFORE, NOTIFIED, AFTER } signal_state_t;
+typedef enum { INITIAL, NOTIFIED } signal_state_t;
 
 typedef struct {
     uint64_t rc;
@@ -588,34 +588,26 @@ typedef struct {
 void c_signal_erase(void *envPtr) {
     // envPtr points to a Signal _after_ the eraser, so let's adjust it to point to the beginning.
     Signal *signal = (Signal*) (envPtr - offsetof(Signal, state));
-    // TODO exploit value and stack being NULL
-    signal_state_t state = signal->state;
-    switch (state) {
-    case BEFORE:
-        break;
-    case NOTIFIED:
-        erasePositive(signal->value);
-        eraseStack(signal->stack);
-        break;
-    case AFTER:
-        break;
-    }
+    erasePositive(signal->value);
+    if (signal->stack != NULL) { eraseStack(signal->stack); }
 }
 
 struct Pos c_signal_make() {
-    Signal* signal = (Signal*)malloc(sizeof(Signal));
+    Signal* f = (Signal*)malloc(sizeof(Signal));
 
-    signal->rc = 0;
-    signal->eraser = c_signal_erase;
-    signal->state = BEFORE;
+    f->rc = 0;
+    f->eraser = c_signal_erase;
+    f->state = INITIAL;
+    f->value = (struct Pos) { .tag = 0, .obj = NULL, };
+    f->stack = NULL;
 
-    return (struct Pos) { .tag = 0, .obj = signal, };
+    return (struct Pos) { .tag = 0, .obj = f, };
 }
 
 void c_signal_notify(struct Pos signal, struct Pos value, Stack stack) {
     Signal* f = (Signal*)signal.obj;
     switch (f->state) {
-        case BEFORE: {
+        case INITIAL: {
             f->state = NOTIFIED;
             f->value = value;
             f->stack = stack;
@@ -624,17 +616,12 @@ void c_signal_notify(struct Pos signal, struct Pos value, Stack stack) {
         }
         case NOTIFIED: {
             struct Pos other_value = f->value;
+            f->value = (struct Pos) { .tag = 0, .obj = NULL, };
             Stack other_stack = f->stack;
-            f->state = AFTER;
+            f->stack = NULL;
             erasePositive(signal);
             resume_Pos(other_stack, value);
             resume_Pos(stack, other_value);
-            break;
-        }
-        case AFTER: {
-            // TODO more graceful panic
-            fprintf(stderr, "ERROR: Sending after signal happened\n");
-            exit(1);
             break;
         }
     }
