@@ -1,10 +1,9 @@
 module io/channel
 
+import io
 import io/signal
 
-record Rendezvous[A, B](value: A, other: Signal[B])
-
-record Node[A, B](this: Signal[Rendezvous[A, B]], rest: Ref[Option[Node[A, B]]])
+record Node[A, B](this: Signal[A, B], rest: Ref[Option[Node[A, B]]])
 
 type Sender[A, B] = Ref[Node[A, B]]
 type Receiver[A, B] = Ref[Node[A, B]]
@@ -26,9 +25,9 @@ def send[A, B](sender: Sender[A, B], value: A): B = {
     case Some(node) =>
       sender.set(node)
   }
-  val other = signal::allocate()
-  this.unsafeSend(Rendezvous(value, other))
-  other.unsafeWait()
+  // TODO avoid yield
+  yield()
+  this.unsafeNotifyA(value)
 }
 
 def receive[A, B](receiver: Receiver[A, B], value: B): A = {
@@ -41,9 +40,9 @@ def receive[A, B](receiver: Receiver[A, B], value: B): A = {
     case Some(node) =>
       receiver.set(node)
   }
-  val Rendezvous(result, other) = this.unsafeWait()
-  other.unsafeSend(value)
-  return result
+  // TODO avoid yield
+  yield()
+  this.unsafeNotifyB(value)
 }
 
 // TODO streaming
