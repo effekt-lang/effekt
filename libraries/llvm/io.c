@@ -575,30 +575,27 @@ void c_yield(Stack stack) {
 // Signals
 // --------
 
-typedef enum { BEFORE, SENDING, WAITING, AFTER } signal_state_t;
+typedef enum { BEFORE, NOTIFIED, AFTER } signal_state_t;
 
 typedef struct {
     uint64_t rc;
     void* eraser;
     signal_state_t state;
-    union {
-        struct Pos value;
-        Stack stack;
-    } payload;
+    struct Pos value;
+    Stack stack;
 } Signal;
 
 void c_signal_erase(void *envPtr) {
     // envPtr points to a Signal _after_ the eraser, so let's adjust it to point to the beginning.
     Signal *signal = (Signal*) (envPtr - offsetof(Signal, state));
+    // TODO exploit value and stack being NULL
     signal_state_t state = signal->state;
     switch (state) {
     case BEFORE:
         break;
-    case SENDING:
-        erasePositive(signal->payload.value);
-        break;
-    case WAITING:
-        eraseStack(signal->payload.stack);
+    case NOTIFIED:
+        erasePositive(signal->value);
+        eraseStack(signal->stack);
         break;
     case AFTER:
         break;
@@ -615,66 +612,28 @@ struct Pos c_signal_make() {
     return (struct Pos) { .tag = 0, .obj = signal, };
 }
 
-void c_signal_send(struct Pos signal, struct Pos value, Stack stack) {
+void c_signal_notify(struct Pos signal, struct Pos value, Stack stack) {
     Signal* f = (Signal*)signal.obj;
     switch (f->state) {
         case BEFORE: {
-            f->state = SENDING;
-            f->payload.value = value;
+            f->state = NOTIFIED;
+            f->value = value;
+            f->stack = stack;
             erasePositive(signal);
-            // TODO avoid stack overflow without yielding
-            c_yield(stack);
             break;
         }
-        case SENDING: {
-            // TODO more graceful panic
-            fprintf(stderr, "ERROR: Signal already used for sending\n");
-            exit(1);
-            break;
-        }
-        case WAITING: {
-            Stack other = f->payload.stack;
+        case NOTIFIED: {
+            struct Pos other_value = f->value;
+            Stack other_stack = f->stack;
             f->state = AFTER;
             erasePositive(signal);
-            // TODO avoid stack overflow without yielding
-            c_yield(stack);
-            resume_Pos(other, value);
+            resume_Pos(other_stack, value);
+            resume_Pos(stack, other_value);
             break;
         }
         case AFTER: {
             // TODO more graceful panic
             fprintf(stderr, "ERROR: Sending after signal happened\n");
-            exit(1);
-            break;
-        }
-    }
-}
-
-void c_signal_wait(struct Pos signal, Stack stack) {
-    Signal* f = (Signal*)signal.obj;
-    switch (f->state) {
-        case BEFORE: {
-            f->state = WAITING;
-            f->payload.stack = stack;
-            erasePositive(signal);
-            break;
-        }
-        case SENDING: {
-            struct Pos value = f->payload.value;
-            f->state = AFTER;
-            erasePositive(signal);
-            resume_Pos(stack, value);
-            break;
-        }
-        case WAITING: {
-            // TODO more graceful panic
-            fprintf(stderr, "ERROR: Signal already used for waiting\n");
-            exit(1);
-            break;
-        }
-        case AFTER: {
-            // TODO more graceful panic
-            fprintf(stderr, "ERROR: Waiting after signal happened\n");
             exit(1);
             break;
         }
