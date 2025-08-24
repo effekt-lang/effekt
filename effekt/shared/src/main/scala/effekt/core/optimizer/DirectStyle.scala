@@ -28,7 +28,7 @@ object DirectStyle extends Tree.Rewrite {
 
   private def canBeDirect(s: Stmt): Boolean = s match {
     case Return(expr) => true
-    case Hole() => true
+    case Hole(_) => true
 
     // non-tail calls
     case App(_, _, _, _) => false
@@ -56,7 +56,7 @@ object DirectStyle extends Tree.Rewrite {
 
   private def toDirectStyle(stmt: Stmt, label: Block.BlockVar): Stmt = stmt match {
     case Return(expr) => App(label, Nil, List(expr), Nil)
-    case Hole() => stmt
+    case Hole(_) => stmt
 
     // non-tail calls
     case App(_, _, _, _) => stmt

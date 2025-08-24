@@ -400,8 +400,8 @@ object TransformerCps extends Transformer {
     case cps.Stmt.Resume(r, b, ks2, k2) =>
       pure(js.Return(js.Call(RESUME, nameRef(r), toJS(b)(using nonrecursive(b)), toJS(ks2), requiringThunk { toJS(k2) })) :: Nil)
 
-    case cps.Stmt.Hole() =>
-      pure(js.Return($effekt.call("hole")) :: Nil)
+    case cps.Stmt.Hole(span) =>
+      pure(js.Return($effekt.call("hole", JsString(span.range.from.format))) :: Nil)
   }
 
   def toJS(scrutinee: js.Expr, variant: Id, clause: cps.Clause)(using C: TransformerContext): (js.Expr, Binding[List[js.Stmt]]) =
@@ -526,7 +526,7 @@ object TransformerCps extends Transformer {
       case Stmt.Reset(prog, ks, k) => notIn(stmt)
       case Stmt.Shift(prompt, body, ks, k) => notIn(stmt)
       case Stmt.Resume(resumption, body, ks, k) => notIn(stmt)
-      case Stmt.Hole() => true
+      case Stmt.Hole(span) => true
     }
 
 

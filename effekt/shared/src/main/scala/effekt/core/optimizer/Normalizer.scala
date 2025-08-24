@@ -333,7 +333,7 @@ object Normalizer { normal =>
     case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, normalize(init), capture, normalize(body))
     case Stmt.Get(id, tpe, ref, capt, body) => Stmt.Get(id, tpe, ref, capt, normalize(body))
     case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, normalize(value), normalize(body))
-    case Stmt.Hole() => s
+    case Stmt.Hole(span) => s
   }
   def normalize(b: BlockLit)(using Context): BlockLit =
     b match {

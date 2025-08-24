@@ -235,8 +235,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       val d = default.map { body => space <> "else" <+> braces(nest(line <> toDocStmts(body))) }.getOrElse { emptyDoc }
       toDoc(sc) <+> "match" <+> cs <> d
 
-    case Hole() =>
-      "<>"
+    case Hole(span) =>
+      "<>" <+> s"// @ ${span.range.from.format}"
   }
 
   def toDoc(tpe: core.BlockType): Doc = tpe match {

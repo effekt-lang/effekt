@@ -160,7 +160,7 @@ object StaticArguments {
     case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, rewrite(init), capture, rewrite(body))
     case Stmt.Get(id, tpe, ref, capt, body) => Stmt.Get(id, tpe, ref, capt, rewrite(body))
     case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, rewrite(value), rewrite(body))
-    case Stmt.Hole() => Stmt.Hole()
+    case Stmt.Hole(span) => Stmt.Hole(span)
   }
   def rewrite(b: BlockLit)(using StaticArgumentsContext): BlockLit =
     b match {

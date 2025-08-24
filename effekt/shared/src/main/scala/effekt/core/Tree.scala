@@ -303,7 +303,7 @@ enum Stmt extends Tree {
   case Resume(k: BlockVar, body: Stmt)
 
   // Others
-  case Hole()
+  case Hole(span: effekt.source.Span)
 
   val tpe: ValueType = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
@@ -637,7 +637,7 @@ object Variables {
     case Stmt.Reset(body) => free(body)
     case Stmt.Shift(prompt, body) => free(prompt) ++ free(body)
     case Stmt.Resume(k, body) => free(k) ++ free(body)
-    case Stmt.Hole() => Variables.empty
+    case Stmt.Hole(span) => Variables.empty
   }
 
   def bound(t: ValueParam): Variables = Variables.value(t.id, t.tpe)
