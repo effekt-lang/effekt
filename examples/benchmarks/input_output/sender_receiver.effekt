@@ -6,17 +6,18 @@ import io/channel
 
 def run(n: Int) = {
   val (sender, receiver) = channel::allocate()
+  val closed = ref(false)
 
   spawn(box {
     each(0, n) { i =>
-      sender.send(Some(i))
+      sender.send(i)
     }
-    sender.send(None())
+    closed.set(true)
   })
 
   var s = 0
-  while (receiver.receive(()) is Some(v)) {
-    s = s + v
+  while (not(closed.get())) {
+    s = s + receiver.receive(())
   }
   return s
 }
