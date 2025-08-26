@@ -144,7 +144,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }.toList ++ exports.namespaces.values.flatMap(transform)
 
   def transform(c: symbols.Constructor)(using Context): core.Constructor =
-    core.Constructor(c, c.fields.map(f => core.Field(f, transform(f.returnType))))
+    core.Constructor(c, c.tparams, c.fields.map(f => core.Field(f, transform(f.returnType))))
 
   def transform(tree: source.Stmt)(using Context): Stmt = tree match {
     // { e; stmt } --> { let _ = e; stmt }

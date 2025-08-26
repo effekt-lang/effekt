@@ -267,7 +267,7 @@ class CoreParsers(names: Names) extends EffektLexers {
     `interface` ~> id ~ maybeTypeParams ~ (`{` ~/> many(property) <~ `}`) ^^ Declaration.Interface.apply
 
   lazy val constructor: P[Constructor] =
-    id ~ valueParams ^^ { case id ~ params => Constructor(id, params.map(p => Field(p.id, p.tpe))) }
+    id ~ maybeTypeParams ~ valueParams ^^ { case id ~ tparams ~ params => Constructor(id, tparams, params.map(p => Field(p.id, p.tpe))) }
 
   lazy val property: P[Property] =
     id ~ (`:` ~> blockType) ^^ Property.apply
