@@ -232,8 +232,10 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       Stmt.If(transform(cond), transform(thn), transform(els))
     case Stmt.Match(scrutinee, clauses, default) =>
       scrutinee.tpe match {
-        case ValueType.Data(symbol, targs) =>
-          val Declaration.Data(tpeId, tparams, constructors) = DeclarationContext.getData(symbol)
+        // if the scrutinee has type Nothing, then there shouldn't be any clauses...
+        case Type.TBottom => Stmt.Match(transform(scrutinee), Nil, None)
+        case ValueType.Data(tpeId, targs) =>
+          val Declaration.Data(_, tparams, constructors) = DeclarationContext.getData(tpeId)
           Stmt.Match(transform(scrutinee), clauses.map {
             case (id, clause: Block.BlockLit) =>
               val constructor = constructors.find(_.id == id).get
@@ -267,7 +269,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
           val boxedResult = transformArg(originalResult)
           coerce(Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, coerce(body, boxedResult))), originalResult)
       }
-    case Stmt.Hole() => Stmt.Hole()
+    case Stmt.Hole(span) => Stmt.Hole(span)
   }
 
   def transform(expr: Expr)(using Context, DeclarationContext): Bind[Expr] = expr match {

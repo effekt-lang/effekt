@@ -225,7 +225,7 @@ object Type {
     }
     case Stmt.Region(body) => body.returnType
 
-    case Stmt.Hole() => TBottom
+    case Stmt.Hole(span) => TBottom
   }
 
   def inferCapt(stmt: Stmt): Captures = stmt match {
@@ -245,7 +245,7 @@ object Type {
     case Stmt.Shift(prompt, body) => prompt.capt ++ body.capt
     case Stmt.Resume(k, body) => k.capt ++ body.capt
     case Stmt.Region(body) => body.capt
-    case Stmt.Hole() => Set.empty
+    case Stmt.Hole(span) => Set.empty
   }
 
   def inferType(expr: Expr): ValueType = expr match {

@@ -47,7 +47,7 @@ class PatternMatchingTests extends CoreTests {
   }
 
   test("Sanity check: compiling empty list of clauses") {
-    assertEquals(compile(Nil), core.Hole())
+    assertEquals(compile(Nil), core.Hole(effekt.source.Span.missing))
   }
 
   test("Simple guard") {

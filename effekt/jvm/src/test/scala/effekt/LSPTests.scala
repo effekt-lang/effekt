@@ -625,14 +625,8 @@ class LSPTests extends FunSuite {
 
       val params = new DocumentSymbolParams()
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
-
-      val documentSymbols = server.getTextDocumentService().documentSymbol(params).get()
-      // FIXME: The server currently returns spurious symbols at position (0, 0) that we need to filter out.
-      val filtered = server.getTextDocumentService().documentSymbol(params).get().asScala.filter {
-        symbol => symbol.getRight.getRange.getStart != new Position(0, 0) && symbol.getRight.getRange.getEnd != new Position(0, 0)
-      }.asJava
-
-      assertEquals(filtered, expectedSymbols.asJava)
+      val actualSymbols = server.getTextDocumentService().documentSymbol(params).get()
+      assertEquals(actualSymbols, expectedSymbols.asJava)
     }
   }
 
@@ -1427,9 +1421,10 @@ class LSPTests extends FunSuite {
           qualifier = List(),
           name = "x",
           origin = BindingOrigin.Defined,
-          `type` = Some(
-            "Int"
-          )
+          signature = Some(
+            "x: Int"
+          ),
+          signatureHtml = Some("<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">Int</span>"),
         )
       )
 
@@ -1438,23 +1433,32 @@ class LSPTests extends FunSuite {
           qualifier = List(),
           name = "bar",
           origin = BindingOrigin.Defined,
-          `type` = Some(
-            "String => Int"
+          signature = Some(
+            "def bar(x: String): Int / {}"
+          ),
+          signatureHtml = Some(
+            "<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">bar</span>(<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Int</span> / {}"
           )
         ),
         TermBinding(
           qualifier = List(),
           name = "foo",
           origin = BindingOrigin.Defined,
-          `type` = Some(
-            "Int => Bool"
-          )
+          signature = Some(
+            "def foo(x: Int): Bool / {}"
+          ),
+          signatureHtml = Some(
+            "<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">foo</span>(<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">Int</span>): <span class=\"effekt-ident pascal-case\">Bool</span> / {}"
+          ),
         ),
         TypeBinding(
           qualifier = Nil,
           name = "MyInt",
           origin = BindingOrigin.Defined,
-          definition = "type MyInt = Int"
+          signature = Some("type MyInt"),
+          signatureHtml = Some(
+            "<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">MyInt</span>"
+          ),
         )
       )
 
@@ -1576,7 +1580,8 @@ class LSPTests extends FunSuite {
           qualifier = List(),
           name = "bar",
           origin = BindingOrigin.Defined,
-          `type` = Some("() => Nothing")
+          signature = Some("def bar(): Nothing / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">bar</span>(): <span class=\"effekt-ident pascal-case\">Nothing</span> / {}"),
         )
       )
 
@@ -1605,7 +1610,8 @@ class LSPTests extends FunSuite {
             qualifier = List(),
             name = "x",
             origin = BindingOrigin.Defined,
-            `type` = Some("Int")
+            signature = Some("x: Int"),
+            signatureHtml = None,
           )
         ),
         outer = Some(ScopeInfo(
@@ -1620,7 +1626,8 @@ class LSPTests extends FunSuite {
                 qualifier = List(),
                 name = "MyInt",
                 origin = BindingOrigin.Defined,
-                definition = "type MyInt = Int"
+                signature = Some("type MyInt"),
+                signatureHtml = None,
               )),
             outer = None
           ))
@@ -1653,7 +1660,7 @@ class LSPTests extends FunSuite {
         |        "qualifier": [],
         |        "name": "x",
         |        "origin": "Defined",
-        |        "type": "Int",
+        |        "signature": "x: Int",
         |        "kind": "Term"
         |      }
         |    ],
@@ -1668,7 +1675,7 @@ class LSPTests extends FunSuite {
         |            "qualifier": [],
         |            "name": "MyInt",
         |            "origin": "Defined",
-        |            "definition": "type MyInt = Int",
+        |            "signature": "type MyInt",
         |            "kind": "Type"
         |          }
         |        ]
@@ -1926,81 +1933,76 @@ class LSPTests extends FunSuite {
           qualifier = Nil,
           name = "Foo1",
           origin = "Defined",
-          definition = """type Foo1 {
-  def Foo1(theField: String): Foo1 / {}
-}""",
+          signature = Some("type Foo1"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">Foo1</span>"),
           kind = "Type"
         ),
         TermBinding(
           qualifier = Nil,
           name = "Foo1",
           origin = "Defined",
-          `type` = Some(
-            value = "String => Foo1"
+          signature = Some(
+            "def Foo1(theField: String): Foo1 / {}"
           ),
-          kind = "Term"
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident pascal-case\">Foo1</span>(<span class=\"effekt-ident camel-case\">theField</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Foo1</span> / {}"),
+          kind = "Term",
         ),
         TermBinding(
           qualifier = Nil,
           name = "theField",
           origin = "Defined",
-          `type` = Some(
-            value = "Foo1 => String"
+          signature = Some(
+            "def theField(Foo1: Foo1): String / {}"
           ),
-          kind = "Term"
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">theField</span>(<span class=\"effekt-ident pascal-case\">Foo1</span>: <span class=\"effekt-ident pascal-case\">Foo1</span>): <span class=\"effekt-ident pascal-case\">String</span> / {}"),
+          kind = "Term",
         ),
         TypeBinding(
           qualifier = Nil,
           name = "Foo2",
           origin = "Defined",
-          definition = """type Foo2 {
-  def Foo2(theField: String): Foo2 / {}
-}""",
+          signature = Some("type Foo2"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">Foo2</span>"),
           kind = "Type"
         ),
         TermBinding(
           qualifier = Nil,
           name = "Foo2",
           origin = "Defined",
-          `type` = Some(
-            value = "String => Foo2"
-          ),
+          signature = Some("def Foo2(theField: String): Foo2 / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident pascal-case\">Foo2</span>(<span class=\"effekt-ident camel-case\">theField</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Foo2</span> / {}"),
           kind = "Term"
         ),
         TermBinding(
           qualifier = Nil,
           name = "theField",
           origin = "Defined",
-          `type` = Some(
-            value = "Foo2 => String"
-          ),
+          signature = Some("def theField(Foo2: Foo2): String / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">theField</span>(<span class=\"effekt-ident pascal-case\">Foo2</span>: <span class=\"effekt-ident pascal-case\">Foo2</span>): <span class=\"effekt-ident pascal-case\">String</span> / {}"),
           kind = "Term"
         ),
         TypeBinding(
           qualifier = Nil,
           name = "Bar",
           origin = "Defined",
-          definition = """type Bar {
-  def Bar(theField: Int): Bar / {}
-}""",
+          signature = Some("type Bar"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">Bar</span>"),
           kind = "Type"
         ),
         TermBinding(
           qualifier = Nil,
           name = "Bar",
           origin = "Defined",
-          `type` = Some(
-            value = "Int => Bar"
-          ),
+          signature = Some("def Bar(theField: Int): Bar / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident pascal-case\">Bar</span>(<span class=\"effekt-ident camel-case\">theField</span>: <span class=\"effekt-ident pascal-case\">Int</span>): <span class=\"effekt-ident pascal-case\">Bar</span> / {}"),
           kind = "Term"
         ),
         TermBinding(
           qualifier = Nil,
           name = "main",
           origin = "Defined",
-          `type` = Some(
-            value = "() => Nothing"
-          ),
+          signature = Some("def main(): Nothing / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">main</span>(): <span class=\"effekt-ident pascal-case\">Nothing</span> / {}"),
           kind = "Term"
         )
       )

@@ -6,7 +6,7 @@ import effekt.util.{PlainMessaging, getOrElseAborting}
 import effekt.util.messages.{BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError}
 import effekt.util.paths.*
 import effekt.generator.js.JavaScriptWeb
-import kiama.util.{Messaging, Position, Positions, Severities, Source, StringSource}
+import kiama.util.{Messaging, Position, Severities, Source, StringSource}
 
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -58,12 +58,9 @@ object lsp {
  * A language server to be run in a webworker
  */
 class LanguageServer extends Intelligence {
-
-  val positions: Positions = new Positions
-
   object config extends EffektConfig
 
-  implicit object context extends Context(positions) with VirtualModuleDB {
+  implicit object context extends Context with VirtualModuleDB {
     object messaging extends PlainMessaging
   }
 

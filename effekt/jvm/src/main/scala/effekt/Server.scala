@@ -5,7 +5,7 @@ import effekt.Intelligence.CaptureInfo
 import effekt.context.Context
 import effekt.source.Def.FunDef
 import effekt.source.Term.Hole
-import effekt.source.{Span, Tree}
+import effekt.source.{Origin, Span, Tree}
 import effekt.symbols.Binder.{ValBinder, VarBinder}
 import effekt.symbols.BlockTypeConstructor.{ExternInterface, Interface}
 import effekt.symbols.TypeConstructor.{DataType, ExternType}
@@ -289,10 +289,10 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
       decl <- getSourceTreeFor(sym)
       kind <- getSymbolKind(sym)
       detail <- getInfoOf(sym)(using context)
-      declRange = convertRange(positions.getStart(decl), positions.getFinish(decl))
-      idRange = convertRange(positions.getStart(id), positions.getFinish(id))
+      if decl.span.origin != Origin.Missing
+      declRange = convertRange(decl.span.range)
+      idRange = convertRange(id.span.range)
     } yield new DocumentSymbol(sym.name.name, kind, declRange, idRange, detail.header)
-
     val result = Collections.seqToJavaList(
       documentSymbols.map(sym => messages.Either.forRight[SymbolInformation, DocumentSymbol](sym))
     )
@@ -332,7 +332,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
         fromLSPPosition(params.getPosition, source)
       };
       definition <- getDefinitionAt(position)(using context);
-      location = locationOfNode(positions, definition)
+      location = rangeToLocation(definition.span.range)
     } yield location
 
     val result = location.map(l => messages.Either.forLeft[util.List[_ <: Location], util.List[_ <: LocationLink]](Collections.seqToJavaList(List(l))))
@@ -358,7 +358,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
       // getContext may be null!
       includeDeclaration = Option(params.getContext).exists(_.isIncludeDeclaration)
       allRefs = if (includeDeclaration) tree :: refs else refs
-      locations = allRefs.map(ref => locationOfNode(positions, ref))
+      locations = allRefs.map(ref => rangeToLocation(ref.span.range))
     } yield locations
 
     CompletableFuture.completedFuture(Collections.seqToJavaList(locations.getOrElse(Seq[Location]())))
@@ -479,12 +479,12 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
       if holeTpe == contentTpe
       res <- stmt match {
         case source.Return(exp, _) => for {
-          text <- positions.textOf(exp)
+          text <- exp.span.text
         } yield EffektCodeAction("Close hole", hole.span, text)
 
         // <{ ${s1 ; s2; ...} }>
         case _ => for {
-          text <- positions.textOf(stmt)
+          text <- stmt.span.text
         } yield EffektCodeAction("Close hole", hole.span, s"locally { ${text} }")
       }
     } yield res

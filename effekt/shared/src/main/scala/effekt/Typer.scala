@@ -767,6 +767,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.bind(field, tpe, CaptureSet())
       }
 
+    case d @ source.NamespaceDef(name, defs, doc, span) =>
+      defs.map(precheckDef)
+
     case d: source.TypeDef => wellformed(d.symbol.tpe)
     case d: source.EffectDef => wellformed(d.symbol.effs)
 
@@ -928,6 +931,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result((), Pure)
       }
+
+      case d @ source.NamespaceDef(name, defs, doc, span) =>
+        defs.map(synthDef).reduceLeft {
+          case (Result(_, effs), Result(_, acc)) => Result((), effs ++ acc)
+        }
 
       // all other definitions have already been prechecked
       case d =>
@@ -1587,7 +1595,6 @@ trait TyperOps extends ContextOps { self: Context =>
   private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit =
     val capabilities = caps map { cap =>
       assertConcreteEffect(cap.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType)
-      positions.dupPos(binder, cap)
       cap
     }
     annotations.update(Annotations.BoundCapabilities, binder, capabilities)

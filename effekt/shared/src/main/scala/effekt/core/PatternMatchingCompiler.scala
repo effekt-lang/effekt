@@ -86,7 +86,7 @@ object PatternMatchingCompiler {
    */
   def compile(clauses: List[Clause]): core.Stmt = {
     // This shouldn't be reachable anymore since we specialize matching on void before calling compile
-    if (clauses.isEmpty) return core.Hole()
+    if (clauses.isEmpty) return core.Hole(effekt.source.Span.missing)
 
     // (0) normalize clauses
     val normalized @ (headClause :: remainingClauses) = clauses.map(normalize) : @unchecked

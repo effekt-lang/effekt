@@ -391,10 +391,17 @@ object Transformer {
         }
         transform(rest)
 
-      case machine.Statement.Hole =>
-        emit(Comment("Hole"))
-        emit(Call("_", Ccc(), VoidType(), ConstantGlobal("hole"), List.empty))
-        RetVoid()
+     case machine.Statement.Hole(span) =>
+       val posfmt = span.range.from.format
+       emit(Comment(s"Hole @ $posfmt"))
+
+       // Reused from LiteralUTF8String
+       val utf8 = (posfmt + "\u0000").getBytes("UTF-8") // null-terminated
+       val litName = freshName("hole_pos")
+       emit(GlobalConstant(s"$litName.lit", ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
+
+       emit(Call("_", Ccc(), VoidType(), ConstantGlobal("hole"), List(ConstantGlobal(s"$litName.lit"))))
+       RetVoid()
     }
 
   def transform(label: machine.Label): ConstantGlobal =

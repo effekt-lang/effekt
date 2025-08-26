@@ -150,8 +150,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Stmt.Resume(r, body, ks, k) =>
       "resume" <> parens(toDoc(r)) <+> toDoc(body) <+> "@" <+> toDoc(ks) <> "," <+> toDoc(k)
 
-    case Stmt.Hole() =>
-      "<>"
+    case Stmt.Hole(span) =>
+      "<>" <+> s"// @ ${span.range.from.format}"
   }
 
   def toDoc(clause: Clause): Doc = clause match {

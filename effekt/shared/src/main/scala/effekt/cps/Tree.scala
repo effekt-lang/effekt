@@ -133,7 +133,7 @@ enum Stmt extends Tree {
   case Resume(resumption: Id, body: BlockLit, ks: MetaCont, k: Cont)
 
   // Others
-  case Hole()
+  case Hole(span: effekt.source.Span)
 }
 export Stmt.*
 
@@ -213,7 +213,7 @@ object Variables {
     case Stmt.Reset(prog, ks, k) => free(prog) ++ free(ks) ++ free(k)
     case Stmt.Shift(prompt, body, ks, k) => block(prompt) ++ free(body) ++ free(ks) ++ free(k)
     case Stmt.Resume(r, body, ks, k) => block(r) ++ free(body) ++ free(ks) ++ free(k)
-    case Stmt.Hole() => empty
+    case Stmt.Hole(span) => empty
   }
 
   def free(cl: (Id, Clause)): Variables = cl match {
