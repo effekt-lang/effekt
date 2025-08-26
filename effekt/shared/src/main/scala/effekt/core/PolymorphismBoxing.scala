@@ -94,7 +94,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   def transform(constructor: Constructor)(using Context, DeclarationContext): Constructor = constructor match {
-    case Constructor(id, fields, tparams) => Constructor(id, fields map transform, tparams)
+    case Constructor(id, tparams, fields) => Constructor(id, tparams, fields map transform)
   }
 
   def transform(property: Property)(using Context, DeclarationContext): Property = property match {
