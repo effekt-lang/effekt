@@ -83,26 +83,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(decl: ModuleDecl)(using Context, DeclarationContext): ModuleDecl = decl match {
     case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-      ModuleDecl(path, includes, declarations map transform, externs map transform, definitions map transform, exports)
-  }
-
-  def transform(declaration: Declaration)(using Context, DeclarationContext): Declaration = declaration match {
-    case Declaration.Data(id, tparams, constructors) =>
-      Declaration.Data(id, tparams, constructors map transform)
-    case Declaration.Interface(id, tparams, properties) =>
-      Declaration.Interface(id, tparams, properties map transform)
-  }
-
-  def transform(constructor: Constructor)(using Context, DeclarationContext): Constructor = constructor match {
-    case Constructor(id, tparams, fields) => Constructor(id, tparams, fields map transform)
-  }
-
-  def transform(property: Property)(using Context, DeclarationContext): Property = property match {
-    case Property(id, tpe) => Property(id, transform(tpe))
-  }
-
-  def transform(field: Field)(using Context, DeclarationContext): Field = field match {
-    case Field(id, tpe) => Field(id, transform(tpe))
+      ModuleDecl(path, includes, declarations, externs map transform, definitions map transform, exports)
   }
 
   def transform(extern: Extern)(using Context, DeclarationContext): Extern = extern match {
