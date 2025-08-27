@@ -1,0 +1,34 @@
+module io/signal
+
+// Signals
+// -------
+
+/// Must be notified exactly once by A and exactly once by B.
+/// Must yield before notifying or risking stack overflow.
+extern type Signal[A, B]
+
+namespace signal {
+  extern global def allocate[A, B](): Signal[A, B] =
+    llvm """
+      %signal = call %Pos @c_signal_make()
+      ret %Pos %signal
+    """
+}
+
+extern async def unsafeNotifyA[A, B](signal: Signal[A, B], value: A): B =
+  llvm """
+    call void @c_signal_notify(%Pos ${signal}, %Pos ${value}, %Stack %stack)
+    ret void
+  """
+
+extern async def unsafeNotifyB[A, B](signal: Signal[A, B], value: B): A =
+  llvm """
+    call void @c_signal_notify(%Pos ${signal}, %Pos ${value}, %Stack %stack)
+    ret void
+  """
+
+extern llvm """
+  declare %Pos @c_signal_make()
+  declare void @c_signal_notify(%Pos, %Pos, %Stack)
+"""
+

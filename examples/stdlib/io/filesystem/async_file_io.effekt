@@ -1,6 +1,7 @@
 import io
 import io/error
 import io/filesystem
+import io/promise
 
 def program(path1: String, path2: String) =  {
   val f1 = promise(box {
