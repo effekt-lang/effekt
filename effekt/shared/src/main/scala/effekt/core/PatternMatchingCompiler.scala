@@ -63,7 +63,7 @@ object PatternMatchingCompiler {
     case Predicate(pred: Pure)
     // a predicate trivially met by running and binding the statement
     case Val(x: Id, tpe: core.ValueType, binding: Stmt)
-    case Let(x: Id, tpe: core.ValueType, binding: Expr)
+    case Let(x: Id, tpe: core.ValueType, binding: Pure)
   }
 
   enum Pattern {

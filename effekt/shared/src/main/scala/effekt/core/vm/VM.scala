@@ -240,6 +240,18 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
 
         case Stmt.Let(id, tpe, binding, body) => State.Step(body, env.bind(id, eval(binding, env)), stack, heap)
 
+        case Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) =>
+          val result = env.lookupBuiltin(callee.id) match {
+            case Builtin(name, impl) =>
+              val arguments = vargs.map(a => eval(a, env))
+              instrumentation.builtin(name)
+              try { impl(runtime)(arguments) } catch { case e => sys error s"Cannot call ${b} with arguments ${arguments.map {
+                case Value.Literal(l) => s"${l}: ${l.getClass.getName}\n${e.getMessage}"
+                case other => other.toString
+              }.mkString(", ")}" }
+            }
+          State.Step(body, env.bind(id, result), stack, heap)
+
         case Stmt.Return(expr) =>
           val v = eval(expr, env)
           returnWith(v, env, stack, heap)
@@ -480,17 +492,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
       }.toMap, env)
   }
 
-  def eval(e: Expr, env: Env): Value = e match {
-    case DirectApp(b, targs, vargs, Nil) => env.lookupBuiltin(b.id) match {
-      case Builtin(name, impl) =>
-        val arguments = vargs.map(a => eval(a, env))
-        instrumentation.builtin(name)
-        try { impl(runtime)(arguments) } catch { case e => sys error s"Cannot call ${b} with arguments ${arguments.map {
-          case Value.Literal(l) => s"${l}: ${l.getClass.getName}\n${e.getMessage}"
-          case other => other.toString
-        }.mkString(", ")}" }
-    }
-    case DirectApp(b, targs, vargs, bargs) => ???
+  def eval(e: Pure, env: Env): Value = e match {
     case Pure.ValueVar(id, annotatedType) => env.lookupValue(id)
     case Pure.Literal(value, annotatedType) => Value.Literal(value)
     case Pure.PureApp(x, targs, vargs) => env.lookupBuiltin(x.id) match {

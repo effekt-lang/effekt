@@ -51,6 +51,10 @@ object BindSubexpressions {
         Binding(bindings, Stmt.Let(id, tpe, other, transform(body)))
     }
 
+    case Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) =>
+      // TODO this is too hard for me!
+      ???
+
     case Stmt.App(callee, targs, vargs, bargs) => delimit {
       for {
         c <- transform(callee)
@@ -122,18 +126,13 @@ object BindSubexpressions {
 
   def transform(id: Id)(using env: Env): Id = env.getOrElse(id, id)
 
-  def transform(e: Expr)(using Env): Bind[ValueVar | Literal] = e match {
+  def transform(e: Pure)(using Env): Bind[ValueVar | Literal] = e match {
     case Pure.ValueVar(id, tpe) => pure(ValueVar(transform(id), transform(tpe)))
     case Pure.Literal(value, tpe) => pure(Pure.Literal(value, transform(tpe)))
 
     case Pure.Make(data, tag, targs, vargs) => transformExprs(vargs) { vs =>
       bind(Pure.Make(data, tag, targs, vs))
     }
-    case DirectApp(f, targs, vargs, bargs) => for {
-      vs <- transformExprs(vargs);
-      bs <- transformBlocks(bargs);
-      res <- bind(DirectApp(f, targs.map(transform), vs, bs))
-    } yield res
     case Pure.PureApp(f, targs, vargs) => for {
       vs <- transformExprs(vargs);
       res <- bind(Pure.PureApp(f, targs.map(transform), vs))

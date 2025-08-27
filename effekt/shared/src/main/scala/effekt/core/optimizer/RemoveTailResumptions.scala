@@ -17,26 +17,27 @@ object RemoveTailResumptions {
   // A simple syntactic check whether this stmt is tailresumptive in k
   def tailResumptive(k: Id, stmt: Stmt): Boolean =
     def freeInStmt(stmt: Stmt): Boolean = Variables.free(stmt).containsBlock(k)
-    def freeInExpr(expr: Expr): Boolean = Variables.free(expr).containsBlock(k)
+    def freeInPure(expr: Pure): Boolean = Variables.free(expr).containsBlock(k)
     def freeInBlock(block: Block): Boolean = Variables.free(block).containsBlock(k)
 
     stmt match {
       case Stmt.Def(id, block, body) => !freeInBlock(block) && tailResumptive(k, body)
-      case Stmt.Let(id, tpe, binding, body) => !freeInExpr(binding) && tailResumptive(k, body)
+      case Stmt.Let(id, tpe, binding, body) => !freeInPure(binding) && tailResumptive(k, body)
+      case Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) => tailResumptive(k, body) // TODO check free in callee and args
       case Stmt.Return(expr) => false
       case Stmt.Val(id, tpe, binding, body) => tailResumptive(k, body) && !freeInStmt(binding)
       case Stmt.App(callee, targs, vargs, bargs) => false
       case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => false
-      case Stmt.If(cond, thn, els) => !freeInExpr(cond) && tailResumptive(k, thn) && tailResumptive(k, els)
+      case Stmt.If(cond, thn, els) => !freeInPure(cond) && tailResumptive(k, thn) && tailResumptive(k, els)
       // Interestingly, we introduce a join point making this more difficult to implement properly
-      case Stmt.Match(scrutinee, clauses, default) => !freeInExpr(scrutinee) && clauses.forall {
+      case Stmt.Match(scrutinee, clauses, default) => !freeInPure(scrutinee) && clauses.forall {
         case (_, BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body)
       } && default.forall { stmt => tailResumptive(k, stmt) }
       case Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body)
-      case Stmt.Alloc(id, init, region, body) => tailResumptive(k, body) && !freeInExpr(init)
-      case Stmt.Var(ref, init, capture, body) => tailResumptive(k, body) && !freeInExpr(init)
+      case Stmt.Alloc(id, init, region, body) => tailResumptive(k, body) && !freeInPure(init)
+      case Stmt.Var(ref, init, capture, body) => tailResumptive(k, body) && !freeInPure(init)
       case Stmt.Get(ref, annotatedCapt, tpe, id, body) => tailResumptive(k, body)
-      case Stmt.Put(ref, annotatedCapt, value, body) => tailResumptive(k, body) && !freeInExpr(value)
+      case Stmt.Put(ref, annotatedCapt, value, body) => tailResumptive(k, body) && !freeInPure(value)
       case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) => false
       case Stmt.Shift(prompt, body) => stmt.tpe == Type.TBottom
       case Stmt.Resume(k2, body) => k2.id == k // what if k is free in body?

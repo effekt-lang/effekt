@@ -31,9 +31,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(t: Block): String =
     pretty(toDoc(t), 60).layout
 
-  def format(e: Expr): String =
-    pretty(toDoc(e), 60).layout
-
   val show: PartialFunction[Any, String] = {
     case m: ModuleDecl => format(m).layout
     case d: Toplevel   => format(List(d))
@@ -41,7 +38,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case t: ValueType  => format(t)
     case t: BlockType  => format(t)
     case b: Block      => format(b)
-    case e: Expr       => format(e)
     case x: Id         => x.show
   }
 
@@ -93,7 +89,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(s: symbols.Symbol): Doc = s.show
 
-  def toDoc(e: Expr): Doc = e match {
+  def toDoc(e: Pure): Doc = e match {
     case Literal((), _)            => "()"
     case Literal(s: String, _)     => "\"" + s + "\""
     case Literal(value, _)         => value.toString
@@ -101,7 +97,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case PureApp(b, targs, vargs)  => toDoc(b) <> argsToDoc(targs, vargs, Nil)
     case Make(data, tag, targs, vargs)    => "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
-    case DirectApp(b, targs, vargs, bargs) => toDoc(b) <> argsToDoc(targs, vargs, bargs)
 
     case Box(b, capt) => parens("box" <+> toDoc(b))
   }
@@ -180,6 +175,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case Let(id, _, binding, rest) =>
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
+        toDocStmts(rest)
+
+    case LetDirectApp(id, _, callee, targs, vargs, bargs, rest) =>
+      "let" <+> toDoc(id) <+> "=" <+> toDoc(callee) <> argsToDoc(targs, vargs, bargs) <> line <>
         toDocStmts(rest)
 
     case Return(e) =>

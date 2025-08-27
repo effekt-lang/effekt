@@ -14,12 +14,12 @@ class Reachable(
 ) {
 
   // TODO we could use [[Binding]] here.
-  type Definitions = Map[Id, Block | Expr | Stmt]
+  type Definitions = Map[Id, Block | Pure | Stmt]
 
   private def update(id: Id, u: Usage): Unit = reachable = reachable.updated(id, u)
   private def usage(id: Id): Usage = reachable.getOrElse(id, Usage.Never)
 
-  def processDefinition(id: Id, d: Block | Expr | Stmt)(using defs: Definitions): Unit = {
+  def processDefinition(id: Id, d: Block | Pure | Stmt)(using defs: Definitions): Unit = {
     if stack.contains(id) then { update(id, Usage.Recursive); return }
 
     seen = seen + id
@@ -33,7 +33,6 @@ class Reachable(
         process(block)
         stack = before
 
-      case binding: Expr => process(binding)
       case binding: Stmt => process(binding)
     }
   }
@@ -69,6 +68,12 @@ class Reachable(
       // for its side effects
       if (binding.capt.nonEmpty) { processDefinition(id, binding) }
       process(body)(using defs + (id -> binding))
+    case Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) =>
+      process(callee)
+      vargs.foreach(process)
+      bargs.foreach(process)
+      if (binding.capt.nonEmpty) { processDefinition(id, binding) }
+      process(body)(using defs + (id -> binding))
     case Stmt.Return(expr) => process(expr)
     case Stmt.Val(id, tpe, binding, body) => process(binding); process(body)
     case Stmt.App(callee, targs, vargs, bargs) =>
@@ -101,11 +106,7 @@ class Reachable(
     case Stmt.Hole(span) => ()
   }
 
-  def process(e: Expr)(using defs: Definitions): Unit = e match {
-    case DirectApp(b, targs, vargs, bargs) =>
-      process(b)
-      vargs.foreach(process)
-      bargs.foreach(process)
+  def process(e: Pure)(using defs: Definitions): Unit = e match {
     case Pure.ValueVar(id, annotatedType) => process(id)
     case Pure.Literal(value, annotatedType) => ()
     case Pure.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
@@ -119,7 +120,7 @@ class Reachable(
 
 object Reachable {
   def apply(entrypoints: Set[Id], m: ModuleDecl): Map[Id, Usage] = {
-    val definitions: Map[Id, Block | Expr | Stmt] = m.definitions.map {
+    val definitions: Map[Id, Block | Pure | Stmt] = m.definitions.map {
       case Toplevel.Def(id, block) => id -> block
       case Toplevel.Val(id, tpe, binding) => id -> binding
     }.toMap

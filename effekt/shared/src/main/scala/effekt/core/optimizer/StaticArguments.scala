@@ -128,6 +128,9 @@ object StaticArguments {
 
     case Stmt.Let(id, tpe, binding, body) => Stmt.Let(id, tpe, rewrite(binding), rewrite(body))
 
+    case Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) =>
+      Stmt.LetDirectApp(id, tpe, callee, targs, vargs.map(rewrite), bargs.map(rewrite), rewrite(body))
+
     case Stmt.App(b, targs, vargs, bargs) =>
       b match {
         // if arguments are static && recursive call: call worker with reduced arguments
@@ -192,13 +195,6 @@ object StaticArguments {
     // congruences
     case Pure.Literal(value, annotatedType) => p
     case Pure.Box(b, annotatedCapture) => Pure.Box(rewrite(b), annotatedCapture)
-  }
-
-  def rewrite(e: Expr)(using StaticArgumentsContext): Expr = e match {
-    case DirectApp(b, targs, vargs, bargs) => DirectApp(b, targs, vargs.map(rewrite), bargs.map(rewrite))
-
-    // congruences
-    case pure: Pure => rewrite(pure)
   }
 
   def transform(entrypoint: Id, m: ModuleDecl): ModuleDecl =

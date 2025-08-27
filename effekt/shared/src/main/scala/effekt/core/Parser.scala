@@ -303,9 +303,10 @@ class CoreParsers(names: Names) extends EffektLexers {
     )
 
   lazy val stmts: P[Stmt] =
-    ( `let` ~/> id ~ maybeTypeAnnotation ~ (`=` ~/> expr) ~ stmts ^^ {
+    ( `let` ~/> id ~ maybeTypeAnnotation ~ (`=` ~/> pure) ~ stmts ^^ {
         case (name ~ tpe ~ binding ~ body) => Let(name, tpe.getOrElse(binding.tpe), binding, body)
       }
+       // TODO parse direct app
     | `def` ~> id ~ (`=` ~/> block) ~ stmts ^^ Stmt.Def.apply
     | `def` ~> id ~ parameters ~ (`=` ~/> stmt) ~ stmts ^^ {
         case name ~ (tparams, cparams, vparams, bparams) ~ body ~ rest =>
@@ -354,14 +355,6 @@ class CoreParsers(names: Names) extends EffektLexers {
 
   lazy val blockArgs: P[List[Block]] =
     many(blockLit | `{` ~> block <~ `}`)
-
-
-  // Expressions
-  // -----------
-  lazy val expr: P[Expr] =
-    ( pure
-    | (`!` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ DirectApp.apply
-    )
 
   def maybeParens[T](p: P[T]): P[T] = (p | `(` ~> p <~ `)`)
 

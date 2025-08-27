@@ -32,19 +32,19 @@ object Normalizer { normal =>
 
   case class Context(
     blocks: Map[Id, Block],
-    exprs: Map[Id, Expr],
+    exprs: Map[Id, Pure],
     decls: DeclarationContext,     // for field selection
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
     maxInlineSize: Int,            // to control inlining and avoid code bloat
   ) {
-    def bind(id: Id, expr: Expr): Context = copy(exprs = exprs + (id -> expr))
+    def bind(id: Id, expr: Pure): Context = copy(exprs = exprs + (id -> expr))
     def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
   }
 
   private def blockFor(id: Id)(using ctx: Context): Option[Block] =
     ctx.blocks.get(id)
 
-  private def exprFor(id: Id)(using ctx: Context): Option[Expr] =
+  private def exprFor(id: Id)(using ctx: Context): Option[Pure] =
     ctx.exprs.get(id)
 
   private def isRecursive(id: Id)(using ctx: Context): Boolean =
@@ -148,7 +148,7 @@ object Normalizer { normal =>
     case _ => blockArgs.exists { b => b.isInstanceOf[BlockLit] } // higher-order function with known arg
   }
 
-  private def active(e: Expr)(using Context): Expr =
+  private def active(e: Pure)(using Context): Pure =
     normalize(e) match {
       case x @ Pure.ValueVar(id, annotatedType) => exprFor(id) match {
         case Some(p: Pure.Make)    => p
@@ -389,7 +389,7 @@ object Normalizer { normal =>
     case Pure.Literal(value, annotatedType) => p
   }
 
-  def normalize(e: Expr)(using Context): Expr = e match {
+  def normalize(e: Pure)(using Context): Pure = e match {
     case DirectApp(b, targs, vargs, bargs) => DirectApp(b, targs, vargs.map(normalize), bargs.map(normalize))
     case pure: Pure => normalize(pure)
   }

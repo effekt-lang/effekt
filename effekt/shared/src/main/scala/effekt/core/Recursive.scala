@@ -44,6 +44,11 @@ class Recursive(
   def process(s: Stmt): Unit = s match {
     case Stmt.Def(id, block, body) =>  process(id, block); process(body)
     case Stmt.Let(id, tpe, binding, body) => process(binding); process(body)
+    case Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) =>
+      process(callee)
+      vargs.foreach(process)
+      bargs.foreach(process)
+      process(body)
     case Stmt.Return(expr) => process(expr)
     case Stmt.Val(id, tpe, binding, body) => process(binding); process(body)
     case a @ Stmt.App(callee, targs, vargs, bargs) =>
@@ -86,11 +91,7 @@ class Recursive(
     case Stmt.Hole(span) => ()
   }
 
-  def process(e: Expr): Unit = e match {
-    case DirectApp(b, targs, vargs, bargs) =>
-      process(b)
-      vargs.foreach(process)
-      bargs.foreach(process)
+  def process(e: Pure): Unit = e match {
     case Pure.ValueVar(id, annotatedType) => ()
     case Pure.Literal(value, annotatedType) => ()
     case Pure.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
