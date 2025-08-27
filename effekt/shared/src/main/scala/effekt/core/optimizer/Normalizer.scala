@@ -235,9 +235,17 @@ object Normalizer { normal =>
 
     case Stmt.Val(id, tpe, binding, body) =>
 
-      // def barendregt(stmt: Stmt): Stmt = new Renamer().apply(stmt)
+      def joinpoint(id: Id, tpe: ValueType, body: Stmt)(f: BlockVar => Context ?=> Stmt)(using C: Context): Stmt = body match {
+        // do not eta-expand variables
+        case Stmt.App(k: BlockVar, Nil, ValueVar(x, tpe) :: Nil, Nil) if x == id || tpe == Type.TUnit => f(k)
+        case _ =>
+          val k = Id("k")
+          C.usage.put(k, Usage.Many)
+          val kDef = Block.BlockLit(Nil, Nil, ValueParam(id, tpe) :: Nil, Nil, body)
+          Stmt.Def(k, kDef, f(Block.BlockVar(k, kDef.tpe, kDef.capt))(using C.bind(k, kDef)))
+      }
 
-      def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt = normalize(binding) match {
+      def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt)(using C: Context): Stmt = normalize(binding) match {
 
         // [[ val x = ABORT; body ]] = ABORT
         case abort if abort.tpe == Type.TBottom  =>
@@ -252,34 +260,36 @@ object Normalizer { normal =>
               BlockLit(tparams, cparams, vparams, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeB, answer)), captures) :: Nil,
                 normalize(body2)))
 
-        // [[ val x = sc match { case id(ps) => body2 }; body ]] = sc match { case id(ps) => val x = body2; body }
         case Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
           Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2,
             normalizeVal(id, tpe, body2, body)))), None)
 
-        // These rewrites do not seem to contribute a lot given their complexity...
-        // vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+        // Introduce joinpoints that are potentially later inlined or garbage collected
+        // [[ val x = if (cond) { thn } else { els }; body ]] =
+        //   def k(x) = [[ body ]]
+        //   if (cond) { [[ val x1 = thn; k(x1) ]] } else { [[ val x2 = els; k(x2) ]] }
+        case Stmt.If(cond, thn, els) =>
+          joinpoint(id, tpe, normalize(body)) { k =>
+            val x1 = Id(id.name)
+            val x2 = Id(id.name)
+            Stmt.If(cond,
+              normalizeVal(x1, tpe, thn, Stmt.App(k, Nil, List(ValueVar(x1, tpe)), Nil)),
+              normalizeVal(x2, tpe, els, Stmt.App(k, Nil, List(ValueVar(x2, tpe)), Nil)))
+          }
 
-        // [[ val x = if (cond) { thn } else { els }; body ]] = if (cond) { [[ val x = thn; body ]] } else { [[ val x = els; body ]] }
-//        case normalized @ Stmt.If(cond, thn, els) if body.size <= 2 =>
-//            // since we duplicate the body, we need to freshen the names
-//            val normalizedThn = barendregt(normalizeVal(id, tpe, thn, body))
-//            val normalizedEls = barendregt(normalizeVal(id, tpe, els, body))
-//
-//            Stmt.If(cond, normalizedThn, normalizedEls)
-//
-//        case Stmt.Match(sc, clauses, default)
-//            //             necessary since otherwise we loose Nothing-boxing
-//            //                   vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-//            if body.size <= 2 && (clauses.size + default.size) >= 1 =>
-//          val normalizedClauses = clauses map {
-//            case (id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2)) =>
-//              (id2, BlockLit(tparams2, cparams2, vparams2, bparams2, barendregt(normalizeVal(id, tpe, body2, body))): BlockLit)
-//          }
-//          val normalizedDefault = default map { stmt => barendregt(normalizeVal(id, tpe, stmt, body)) }
-//          Stmt.Match(sc, normalizedClauses, normalizedDefault)
 
-        // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        case Stmt.Match(sc, clauses, default) =>
+          joinpoint(id, tpe, normalize(body)) { k =>
+            Stmt.Match(sc, clauses.map {
+              case (tag, BlockLit(tparams, cparams, vparams, bparams, body)) =>
+                val x = Id(id.name)
+                (tag, BlockLit(tparams, cparams, vparams, bparams,
+                  normalizeVal(x, tpe, body, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))))
+            }, default.map { stmt =>
+              val x = Id(id.name)
+              normalizeVal(x, tpe, stmt, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))
+            })
+          }
 
         // [[ val x = return e; s ]] = let x = [[ e ]]; [[ s ]]
         case Stmt.Return(expr2) =>
@@ -312,9 +322,12 @@ object Normalizer { normal =>
         case Stmt.Put(ref2, capt2, value2, body2) =>
           Stmt.Put(ref2, capt2, value2, normalizeVal(id, tpe, body2, body))
 
-        // [[ val x = stmt; return x ]]   =   [[ stmt ]]
         case other => normalize(body) match {
+          // [[ val x = stmt; return x ]]   =   [[ stmt ]]
           case Stmt.Return(x: ValueVar) if x.id == id => other
+          // [[ val x: Unit = stmt; return () ]]   =   [[ stmt ]]
+          case Stmt.Return(x) if x.tpe == Type.TUnit && other.tpe == Type.TUnit => other
+          // [[ val x = stmt; body ]]   =   val x = [[ stmt ]]; [[ body ]]
           case normalizedBody => Stmt.Val(id, tpe, other, normalizedBody)
         }
       }
