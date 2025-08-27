@@ -52,8 +52,12 @@ object BindSubexpressions {
     }
 
     case Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) =>
-      // TODO this is too hard for me!
-      ???
+      delimit {
+        for {
+          vs <- transformExprs(vargs)
+          bs <- transformBlocks(bargs)
+        } yield Stmt.LetDirectApp(id, tpe, transform(callee), targs.map(transform), vs, bs, transform(body))
+      }
 
     case Stmt.App(callee, targs, vargs, bargs) => delimit {
       for {
