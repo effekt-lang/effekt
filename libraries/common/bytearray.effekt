@@ -238,11 +238,11 @@ def feed[R](bytes: ByteArray) { reader: () => R / read[Byte] }: R = {
   }
 }
 
-def collectBytes { stream: () => Unit / emit[Byte] }: ByteArray =
-  returning::collectBytes[Unit]{stream}.second
+def collect { stream: () => Unit / emit[Byte] }: ByteArray =
+  returning::collect[Unit]{stream}.second
 
 namespace returning {
-  def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
+  def collect[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
     var i = 0
     var a = allocate(1)
     try {

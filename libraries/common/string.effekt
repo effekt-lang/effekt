@@ -250,12 +250,12 @@ def each(string: String): Unit / emit[Char] =
     }
   }
 
-def collectString { stream: () => Unit / emit[Char] }: String =
-  returning::collectString[Unit]{stream}.second
+def collect { stream: () => Unit / emit[Char] }: String =
+  returning::collect[Unit]{stream}.second
 
 namespace returning {
-  def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
-    val (result, bytes) = bytearray::returning::collectBytes[R] { encodeUTF8 { stream } }
+  def collect[R] { stream: () => R / emit[Char] }: (R, String) = {
+    val (result, bytes) = bytearray::returning::collect[R] { encodeUTF8 { stream } }
     (result, bytes.toString)
   }
 }

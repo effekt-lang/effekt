@@ -1012,11 +1012,11 @@ def eachKey[K, V](map: Map[K, V]): Unit / emit[K] =
 def eachValue[K, V](map: Map[K, V]): Unit / emit[V] =
   map.foreach { (_k, v) => do emit(v) }
 
-def collectMap[K, V](compare: (K, K) => Ordering at {}) { stream: () => Unit / emit[(K, V)] }: Map[K, V] =
-  returning::collectMap[K, V, Unit](compare){stream}.second
+def collect[K, V](compare: (K, K) => Ordering at {}) { stream: () => Unit / emit[(K, V)] }: Map[K, V] =
+  returning::collect[K, V, Unit](compare){stream}.second
 
 namespace returning {
-  def collectMap[K, V, R](compare: (K, K) => Ordering at {}) { stream: () => R / emit[(K, V)] }: (R, Map[K, V]) =
+  def collect[K, V, R](compare: (K, K) => Ordering at {}) { stream: () => R / emit[(K, V)] }: (R, Map[K, V]) =
     try {
       (stream(), empty(compare))
     } with emit[(K, V)] { case (k, v) =>

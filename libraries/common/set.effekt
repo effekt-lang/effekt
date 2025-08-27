@@ -243,11 +243,11 @@ def intersection[A](s1: Set[A], s2: Set[A]): Set[A] =
 def each[A](set: Set[A]): Unit / emit[A] =
   set.foreach { x => do emit(x) }
 
-def collectSet[A](compare: (A, A) => Ordering at {}) { stream: () => Unit / emit[A] }: Set[A] =
-  returning::collectSet[A, Unit](compare){stream}.second
+def collect[A](compare: (A, A) => Ordering at {}) { stream: () => Unit / emit[A] }: Set[A] =
+  returning::collect[A, Unit](compare){stream}.second
 
 namespace returning {
-  def collectSet[A, R](compare: (A, A) => Ordering at {}) { stream: () => R / emit[A] }: (R, Set[A]) =
+  def collect[A, R](compare: (A, A) => Ordering at {}) { stream: () => R / emit[A] }: (R, Set[A]) =
     try {
       (stream(), set::empty(compare))
     } with emit[A] { (v) =>
