@@ -2,10 +2,12 @@ module string
 
 import effekt
 import option
+import stream
 import list
 import exception
 import result
 import char
+import bytearray
 
 // TODO
 // - [ ] handle unicode codepoints (that can span two indices) correctly
@@ -229,3 +231,31 @@ extern def unsafeCharAt(str: String, n: Int) at {}: Char =
     ret %Int %x
   """
   vm "string::unsafeCharAt(String, Int)"
+
+
+// Streaming
+// ---------
+
+def feed[R](string: String) { reader: () => R / read[Char] } =
+  feed(string.fromString) {
+    decodeUTF8 {
+      reader()
+    }
+  }
+
+def each(string: String): Unit / emit[Char] =
+  feed(string) {
+    exhaustively {
+      do emit[Char](do read[Char]())
+    }
+  }
+
+def collectString { stream: () => Unit / emit[Char] }: String =
+  returning::collectString[Unit]{stream}.second
+
+namespace returning {
+  def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
+    val (result, bytes) = bytearray::returning::collectBytes[R] { encodeUTF8 { stream } }
+    (result, bytes.toString)
+  }
+}

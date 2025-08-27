@@ -1,5 +1,8 @@
 module bytearray
 
+import effekt
+import stream
+
 /**
  * A memory managed, mutable, fixed-length array of bytes.
  *
@@ -199,4 +202,56 @@ def compareStringBytes(left: String, right: String): Ordering = {
   val l = left.fromString
   val r = right.fromString
   compareByteArray(l, r)
+}
+
+
+// Streaming
+// ---------
+
+/// Turns `bytes` into a producer of a push stream
+/// by emitting each contained value from 0 to length - 1.
+def each(bytes: ByteArray): Unit / emit[Byte] = {
+  val n = bytes.size
+  def go(i: Int): Unit = {
+    if (i < n) {
+      do emit(bytes.unsafeGet(i))
+      go(i + 1)
+    }
+  }
+  go(0)
+}
+
+def feed[R](bytes: ByteArray) { reader: () => R / read[Byte] }: R = {
+  var i = 0
+  try {
+    reader()
+  } with read[Byte] {
+    resume {
+      if (i < bytes.size) {
+        val c = i
+        i = c + 1
+        bytes.unsafeGet(c)
+      } else {
+        do stop()
+      }
+    }
+  }
+}
+
+def collectBytes { stream: () => Unit / emit[Byte] }: ByteArray =
+  returning::collectBytes[Unit]{stream}.second
+
+namespace returning {
+  def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
+    var i = 0
+    var a = allocate(1)
+    try {
+      (stream(), a.resize(i))
+    } with emit[Byte] { (v) =>
+      if (i >= a.size) { a = a.resize(2 * a.size) }
+      a.unsafeSet(i, v)
+      i = i + 1
+      resume(())
+    }
+  }
 }
