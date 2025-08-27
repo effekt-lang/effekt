@@ -544,8 +544,8 @@ class ParserTests extends munit.FunSuite {
 
     parseStmts("val (left, right) = list; return left")
 
-    parseStmts("val g: () => Unit / Exc at {exc} = fun() { closure() }; ()")    
-    parseStmts("val g: () => Unit / Exc at exc = fun() { closure() }; ()")    
+    parseStmts("val g: () => Unit / Exc at {exc} = fun() { closure() }; ()")
+    parseStmts("val g: () => Unit / Exc at exc = fun() { closure() }; ()")
   }
 
   test("Pattern-matching val parses with correct span") {
@@ -1137,7 +1137,7 @@ class ParserTests extends munit.FunSuite {
     assertEquals(valDef.span, span)
   }
 
-  test("Declaration info") {
+  test("Declaration info with comment and extern") {
     val (source, pos) =
       raw"""/// Some doc comment
            |private extern
@@ -1159,7 +1159,7 @@ class ParserTests extends munit.FunSuite {
     }
   }
 
-  test("Only private") {
+  test("Only comment and private") {
     val (source, pos) =
       raw"""/// Some doc comment
            |private
