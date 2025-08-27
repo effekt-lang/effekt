@@ -179,7 +179,7 @@ def map[A, B](l: List[A]) { f: A => B } : List[B] = {
 /// discarding the elements for which the function returned `None()`.
 ///
 /// O(N)
-def collect[A, B](l: List[A]) { f : A => Option[B] }: List[B] = {
+def collectSome[A, B](l: List[A]) { f : A => Option[B] }: List[B] = {
   var acc = Nil[B]()
   l.foreach { a =>
     val optB = f(a)
@@ -868,11 +868,11 @@ def feed[T, R](list: List[T]) { reader: () => R / read[T] }: R = {
   }
 }
 
-def collectList[A] { stream: () => Unit / emit[A] }: List[A] =
-  returning::collectList[A, Unit]{stream}.second
+def collect[A] { stream: () => Unit / emit[A] }: List[A] =
+  returning::collect[A, Unit]{stream}.second
 
 namespace returning {
-  def collectList[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
+  def collect[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
     try {
       (stream(), Nil())
     } with emit[A] { (v) =>
