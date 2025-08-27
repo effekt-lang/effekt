@@ -277,7 +277,6 @@ object Normalizer { normal =>
               normalizeVal(x2, tpe, els, Stmt.App(k, Nil, List(ValueVar(x2, tpe)), Nil)))
           }
 
-
         case Stmt.Match(sc, clauses, default) =>
           joinpoint(id, tpe, normalize(body)) { k =>
             Stmt.Match(sc, clauses.map {
@@ -308,7 +307,7 @@ object Normalizer { normal =>
         // Flatten vals. This should be non-leaking since we use garbage free refcounting.
         // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]
         case Stmt.Val(id2, tpe2, binding2, body2) =>
-          normalizeVal(id2, tpe2, binding2, Stmt.Val(id, tpe, body2, body))
+          normalizeVal(id2, tpe2, binding2, normalizeVal(id, tpe, body2, body))
 
         // [[ val x = { var y in r = e; stmt2 }; stmt1 ]] = var y in r = e; [[ val x = stmt2; stmt1 ]]
         case Stmt.Alloc(id2, init2, region2, body2) =>
