@@ -7,7 +7,7 @@ type Nanos = Int
 /// The actual precision varies across the different backends.
 /// - js: Milliseconds
 /// - chez: Microseconds
-extern io def timestamp(): Nanos =
+extern def timestamp() at io: Nanos =
   js "Date.now() * 1000000"
   chez "(timestamp)"
   llvm """
@@ -34,7 +34,7 @@ extern jsNode """
 ///
 /// This timestamp should only be used for **relative** measurements,
 /// as gives no guarantees on the absolute time (unlike a UNIX timestamp).
-extern io def relativeTimestamp(): Nanos =
+extern def relativeTimestamp() at io: Nanos =
   js "Math.round(performance.now() * 1000000)"
   default { timestamp() }
 

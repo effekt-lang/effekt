@@ -1,6 +1,6 @@
 module process
 
-extern io def exit(errorCode: Int): Nothing =
+extern def exit(errorCode: Int) at io: Nothing =
   js   "(function() { process.exit(${errorCode}) })()"
   llvm """
     call void @exit(i64 ${errorCode})

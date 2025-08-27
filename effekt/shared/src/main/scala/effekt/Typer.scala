@@ -707,11 +707,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
   def precheckDef(d: Def)(using Context): Unit = Context.focusing(d) {
-    case d @ source.FunDef(id, tps, vps, bps, ret, body, doc, span) =>
+    case d @ source.FunDef(id, tps, vps, bps, cpt, ret, body, doc, span) =>
       val fun = d.symbol
 
       // (1) make up a fresh capture unification variable and annotate on function symbol
-      val cap = Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d))
+      val cap = fun.annotatedCaptures.getOrElse(Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d)))
       Context.bind(fun, cap)
 
       // (2) Store the annotated type (important for (mutually) recursive and out-of-order definitions)
@@ -778,7 +778,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def synthDef(d: Def)(using Context, Captures): Result[Unit] = Context.at(d) {
     d match {
-      case d @ source.FunDef(id, tps, vps, bps, ret, body, doc, span) =>
+      case d @ source.FunDef(id, tps, vps, bps, cpt, ret, body, doc, span) =>
         val sym = d.symbol
         // was assigned by precheck
         val functionCapture = Context.lookupCapture(sym)

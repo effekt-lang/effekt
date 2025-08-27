@@ -1300,6 +1300,10 @@ class LSPTests extends FunSuite {
              |        None(),
              |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
              |      ),
+             |      Maybe(
+             |        None(),
+             |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
+             |      ),
              |      Return(
              |        Hole(
              |          IdDef(
@@ -1325,8 +1329,7 @@ class LSPTests extends FunSuite {
              |        Maybe(
              |          None(),
              |          Span(StringSource(def main() = <>, file://test.effekt), 0, 0, Real())
-             |        ),
-             |        None()
+             |        )
              |      ),
              |      Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
              |    )

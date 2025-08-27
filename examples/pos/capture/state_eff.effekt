@@ -4,10 +4,10 @@ interface State[S] {
 }
 
 def handleState[S, R](init: S) { prog: {State[S]} => R }: R = {
-  val stateFun: S => R at {prog} =
+  val stateFun: S => R at prog =
     try {
       val res = prog {state}
-      box { (s: S) => res } at {prog}
+      box { (s: S) => res } at prog
     } with state: State[S] {
       def get() = box { (s: S) => (unbox resume(s))(s) }
       def set(x) = box { (s: S) => (unbox resume(()))(x) }

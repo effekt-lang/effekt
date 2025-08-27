@@ -9,11 +9,11 @@ interface Console { def println(msg: String): Unit }
 interface Time { def now(): Int }
 
 def myModule {console: Console} {time: Time}: Unit = {
-  def myFun { f: (Yield at {console}) => Unit }: Unit = ();
+  def myFun { f: (Yield at console) => Unit }: Unit = ();
   //myFun { (x: Yield at {}) => () }; // ERROR
-  myFun { (x: Yield at {console}) => () }; // OK
+  myFun { (x: Yield at console) => () }; // OK
   myFun { (x: Yield at {time, console}) => () }; // OK
-  myFun { (x: Yield at {time}) => () }; // ERROR
+  myFun { (x: Yield at time) => () }; // ERROR
   ()
 }
 

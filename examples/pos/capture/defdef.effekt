@@ -9,7 +9,7 @@ def myModule { eff : Eff } = region this {
   def test1() = x();
   def test1b = x;
 
-  val f: () => Unit at {eff} = test1b;
+  val f: () => Unit at eff = test1b;
 
   def test2() = {
     test1();
