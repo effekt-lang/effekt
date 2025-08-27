@@ -33,6 +33,7 @@ class Reachable(
         process(block)
         stack = before
 
+      case expr: Pure => process(expr)
       case binding: Stmt => process(binding)
     }
   }

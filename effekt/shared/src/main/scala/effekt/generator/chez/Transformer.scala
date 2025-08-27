@@ -109,7 +109,7 @@ trait Transformer {
 
     case Region(body) => chez.Builtin("with-region", toChez(body))
 
-    case stmt: (Def | Let | Get | Put) =>
+    case stmt: (Def | Let | LetDirectApp | Get | Put) =>
       chez.Let(Nil, toChez(stmt))
   }
 

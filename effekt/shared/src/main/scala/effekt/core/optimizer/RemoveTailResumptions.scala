@@ -47,6 +47,7 @@ object RemoveTailResumptions {
   def removeTailResumption(k: Id, stmt: Stmt): Stmt = stmt match {
     case Stmt.Def(id, block, body) => Stmt.Def(id, block, removeTailResumption(k, body))
     case Stmt.Let(id, tpe, binding, body) => Stmt.Let(id, tpe, binding, removeTailResumption(k, body))
+    case Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) => Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, removeTailResumption(k, body))
     case Stmt.Val(id, tpe, binding, body) => Stmt.Val(id, tpe, binding, removeTailResumption(k, body))
     case Stmt.If(cond, thn, els) => Stmt.If(cond, removeTailResumption(k, thn), removeTailResumption(k, els))
     case Stmt.Match(scrutinee, clauses, default) => Stmt.Match(scrutinee, clauses.map {
