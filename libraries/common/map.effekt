@@ -1,5 +1,7 @@
 module map
 
+import stream
+
 /// Ordered finite immutable map, backed by balanced binary trees of logarithmic depth.
 record Map[K, V](tree: internal::Tree[K, V], compare: (K, K) => Ordering at {})
 
@@ -989,4 +991,36 @@ namespace internal {
 
     "[" ++ res ++ "]"
   }
+}
+
+
+// Streaming
+// ---------
+
+/// Turns a `map` into a producer of a push stream
+/// of `(key, value)` pairs by emitting each contained *in order*.
+def each[K, V](map: Map[K, V]): Unit / emit[(K, V)] =
+  map.foreach { (k, v) => do emit((k, v)) }
+
+/// Turns a `map` into a producer of a push stream
+/// of its keys by emitting each contained *in order*.
+def eachKey[K, V](map: Map[K, V]): Unit / emit[K] =
+  map.foreach { (k, _v) => do emit(k) }
+
+/// Turns a `map` into a producer of a push stream
+/// of its values by emitting each contained.
+def eachValue[K, V](map: Map[K, V]): Unit / emit[V] =
+  map.foreach { (_k, v) => do emit(v) }
+
+def collectMap[K, V](compare: (K, K) => Ordering at {}) { stream: () => Unit / emit[(K, V)] }: Map[K, V] =
+  returning::collectMap[K, V, Unit](compare){stream}.second
+
+namespace returning {
+  def collectMap[K, V, R](compare: (K, K) => Ordering at {}) { stream: () => R / emit[(K, V)] }: (R, Map[K, V]) =
+    try {
+      (stream(), empty(compare))
+    } with emit[(K, V)] { case (k, v) =>
+      val (r, map) = resume(());
+      (r, map.put(k, v))
+    }
 }
