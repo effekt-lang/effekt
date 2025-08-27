@@ -161,34 +161,6 @@ object Normalizer { normal =>
       case other => other // stuck
     }
 
-  def isAbortive(s: Stmt)(using C: Context): Boolean =
-    s.tpe == Type.TBottom || (s match {
-
-      case Stmt.Hole(_) => true
-      case Stmt.Let(_, _, binding, body) if binding.tpe == Type.TBottom => true
-      case Stmt.Match(scrutinee, clauses, default) => clauses.isEmpty && default.isEmpty
-      case Stmt.Shift(p, BlockLit(tparams, cparams, vparams, BlockParam(k, _,_) :: Nil, body2)) =>
-        !Variables.free(body2).containsBlock(k)
-
-      case Stmt.Val(_, _, binding, body) => isAbortive(binding)
-      case Stmt.If(_, thn, els) => isAbortive(thn) && isAbortive(els)
-      case Stmt.Alloc(_, _, _, body) => isAbortive(body)
-      case Stmt.Var(_, _, _, body) => isAbortive(body)
-      case Stmt.Get(_, _, _, _, body) => isAbortive(body)
-      case Stmt.Put(_, _, _, body) => isAbortive(body)
-      case Stmt.Let(_, _, _, body) => isAbortive(body)
-      case Stmt.Def(_, _, body) => isAbortive(body)
-      case Stmt.Region(BlockLit(_, _, _, _, body)) => isAbortive(body)
-
-
-      case Stmt.Shift(p, body) => false
-      case Stmt.Return(_) => false
-      case Stmt.App(_, _, _, _) => false
-      case Stmt.Invoke(_, _, _, _, _, _) => false
-      case Stmt.Reset(_) => false // conservative
-      case Stmt.Resume(_, _) => false
-    })
-
   def normalize(s: Stmt)(using C: Context): Stmt = s match {
 
     // see #798 for context (led to stack overflow)
@@ -263,9 +235,17 @@ object Normalizer { normal =>
 
     case Stmt.Val(id, tpe, binding, body) =>
 
-      // def barendregt(stmt: Stmt): Stmt = new Renamer().apply(stmt)
+      def joinpoint(id: Id, tpe: ValueType, body: Stmt)(f: BlockVar => Context ?=> Stmt)(using C: Context): Stmt = body match {
+        // do not eta-expand variables
+        case Stmt.App(k: BlockVar, Nil, ValueVar(x, tpe) :: Nil, Nil) if x == id || tpe == Type.TUnit => f(k)
+        case _ =>
+          val k = Id("k")
+          C.usage.put(k, Usage.Many)
+          val kDef = Block.BlockLit(Nil, Nil, ValueParam(id, tpe) :: Nil, Nil, body)
+          Stmt.Def(k, kDef, f(Block.BlockVar(k, kDef.tpe, kDef.capt))(using C.bind(k, kDef)))
+      }
 
-      def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt = normalize(binding) match {
+      def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt)(using C: Context): Stmt = normalize(binding) match {
 
         // [[ val x = ABORT; body ]] = ABORT
         case abort if abort.tpe == Type.TBottom  =>
@@ -280,41 +260,35 @@ object Normalizer { normal =>
               BlockLit(tparams, cparams, vparams, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeB, answer)), captures) :: Nil,
                 normalize(body2)))
 
-        // [[ val x = sc match { case id(ps) => body2 }; body ]] = sc match { case id(ps) => val x = body2; body }
         case Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
           Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2,
             normalizeVal(id, tpe, body2, body)))), None)
 
-        // if continuation is used linearly, push down
-        case norm @ Stmt.If(cond, thn, els) if isAbortive(thn) =>
-          Stmt.If(cond, thn, normalizeVal(id, tpe, els, body))
+        // [[ val x = if (cond) { thn } else { els }; body ]] =
+        //   def k(x) = [[ body ]]
+        //   if (cond) { [[ val x1 = thn; k(x1) ]] } else { [[ val x2 = els; k(x2) ]] }
+        case Stmt.If(cond, thn, els) =>
+          joinpoint(id, tpe, normalize(body)) { k =>
+            val x1 = Id(id.name)
+            val x2 = Id(id.name)
+            Stmt.If(cond,
+              normalizeVal(x1, tpe, thn, Stmt.App(k, Nil, List(ValueVar(x1, tpe)), Nil)),
+              normalizeVal(x2, tpe, els, Stmt.App(k, Nil, List(ValueVar(x2, tpe)), Nil)))
+          }
 
-        case norm @ Stmt.If(cond, thn, els) if isAbortive(els) =>
-          Stmt.If(cond, normalizeVal(id, tpe, thn, body), els)
 
-        // These rewrites do not seem to contribute a lot given their complexity...
-        // vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-
-        // [[ val x = if (cond) { thn } else { els }; body ]] = if (cond) { [[ val x = thn; body ]] } else { [[ val x = els; body ]] }
-//        case normalized @ Stmt.If(cond, thn, els) if body.size <= 2 =>
-//            // since we duplicate the body, we need to freshen the names
-//            val normalizedThn = barendregt(normalizeVal(id, tpe, thn, body))
-//            val normalizedEls = barendregt(normalizeVal(id, tpe, els, body))
-//
-//            Stmt.If(cond, normalizedThn, normalizedEls)
-//
-//        case Stmt.Match(sc, clauses, default)
-//            //             necessary since otherwise we loose Nothing-boxing
-//            //                   vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-//            if body.size <= 2 && (clauses.size + default.size) >= 1 =>
-//          val normalizedClauses = clauses map {
-//            case (id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2)) =>
-//              (id2, BlockLit(tparams2, cparams2, vparams2, bparams2, barendregt(normalizeVal(id, tpe, body2, body))): BlockLit)
-//          }
-//          val normalizedDefault = default map { stmt => barendregt(normalizeVal(id, tpe, stmt, body)) }
-//          Stmt.Match(sc, normalizedClauses, normalizedDefault)
-
-        // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        case Stmt.Match(sc, clauses, default) =>
+          joinpoint(id, tpe, normalize(body)) { k =>
+            Stmt.Match(sc, clauses.map {
+              case (tag, BlockLit(tparams, cparams, vparams, bparams, body)) =>
+                val x = Id(id.name)
+                (tag, BlockLit(tparams, cparams, vparams, bparams,
+                  normalizeVal(x, tpe, body, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))))
+            }, default.map { stmt =>
+              val x = Id(id.name)
+              normalizeVal(x, tpe, stmt, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))
+            })
+          }
 
         // [[ val x = return e; s ]] = let x = [[ e ]]; [[ s ]]
         case Stmt.Return(expr2) =>

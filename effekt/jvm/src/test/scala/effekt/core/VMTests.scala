@@ -300,10 +300,10 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "benchmarks" / "are_we_fast_yet" / "queens.effekt" -> Some(Summary(
-      staticDispatches = 2898,
+      staticDispatches = 2022,
       dynamicDispatches = 0,
       patternMatches = 0,
-      branches = 3887,
+      branches = 3347,
       pushedFrames = 1106,
       poppedFrames = 1090,
       allocations = 0,
@@ -320,8 +320,8 @@ class VMTests extends munit.FunSuite {
       dynamicDispatches = 0,
       patternMatches = 0,
       branches = 26736,
-      pushedFrames = 5000,
-      poppedFrames = 5000,
+      pushedFrames = 671,
+      poppedFrames = 671,
       allocations = 0,
       closures = 0,
       variableReads = 34546,
@@ -332,7 +332,7 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "benchmarks" / "are_we_fast_yet" / "towers.effekt" -> Some(Summary(
-      staticDispatches = 24606,
+      staticDispatches = 16401,
       dynamicDispatches = 0,
       patternMatches = 16396,
       branches = 16287,
@@ -592,7 +592,7 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "benchmarks" / "effect_handlers_bench" / "tree_explore.effekt" -> Some(Summary(
-      staticDispatches = 3317,
+      staticDispatches = 2697,
       dynamicDispatches = 0,
       patternMatches = 2380,
       branches = 3167,
@@ -674,12 +674,12 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "casestudies" / "lexer.effekt.md" -> Some(Summary(
-      staticDispatches = 343,
+      staticDispatches = 302,
       dynamicDispatches = 18,
       patternMatches = 205,
       branches = 405,
-      pushedFrames = 195,
-      poppedFrames = 195,
+      pushedFrames = 187,
+      poppedFrames = 187,
       allocations = 109,
       closures = 27,
       variableReads = 164,
@@ -690,12 +690,12 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "casestudies" / "parser.effekt.md" -> Some(Summary(
-      staticDispatches = 12887,
+      staticDispatches = 11375,
       dynamicDispatches = 783,
       patternMatches = 9427,
-      branches = 14696,
-      pushedFrames = 7485,
-      poppedFrames = 7473,
+      branches = 14892,
+      pushedFrames = 7172,
+      poppedFrames = 7160,
       allocations = 3848,
       closures = 521,
       variableReads = 6742,
@@ -706,12 +706,12 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "casestudies" / "anf.effekt.md" -> Some(Summary(
-      staticDispatches = 6925,
+      staticDispatches = 6140,
       dynamicDispatches = 443,
       patternMatches = 5098,
-      branches = 8018,
-      pushedFrames = 4252,
-      poppedFrames = 4240,
+      branches = 8110,
+      pushedFrames = 4086,
+      poppedFrames = 4074,
       allocations = 2143,
       closures = 358,
       variableReads = 4080,
@@ -722,12 +722,12 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "casestudies" / "inference.effekt.md" -> Some(Summary(
-      staticDispatches = 1482058,
+      staticDispatches = 1482048,
       dynamicDispatches = 3224955,
       patternMatches = 1497935,
       branches = 304502,
-      pushedFrames = 2643305,
-      poppedFrames = 2066040,
+      pushedFrames = 2643292,
+      poppedFrames = 2066027,
       allocations = 4654126,
       closures = 867068,
       variableReads = 2955965,
@@ -738,13 +738,13 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "pos" / "raytracer.effekt" -> Some(Summary(
-      staticDispatches = 91784,
+      staticDispatches = 85740,
       dynamicDispatches = 0,
-      patternMatches = 771652,
+      patternMatches = 763548,
       branches = 65951,
-      pushedFrames = 51235,
-      poppedFrames = 51235,
-      allocations = 78909,
+      pushedFrames = 43131,
+      poppedFrames = 43131,
+      allocations = 70805,
       closures = 0,
       variableReads = 77886,
       variableWrites = 26904,
