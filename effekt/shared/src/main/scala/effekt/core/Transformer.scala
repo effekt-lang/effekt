@@ -104,7 +104,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       List(core.Interface(interface, interface.tparams,
         interface.operations.map { op => core.Property(op, operationAtDeclaration(interface.tparams, op)) }))
 
-    case f @ source.ExternDef(id, _, vps, bps, pure, _, bodies, doc, span) =>
+    case f @ source.ExternDef(id, _, vps, bps, _, _, bodies, doc, span) =>
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _, _) = f.symbol
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.capture)
