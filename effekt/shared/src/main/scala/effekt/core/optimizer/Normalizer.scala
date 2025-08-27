@@ -327,9 +327,12 @@ object Normalizer { normal =>
         case Stmt.Put(ref2, capt2, value2, body2) =>
           Stmt.Put(ref2, capt2, value2, normalizeVal(id, tpe, body2, body))
 
-        // [[ val x = stmt; return x ]]   =   [[ stmt ]]
         case other => normalize(body) match {
+          // [[ val x = stmt; return x ]]   =   [[ stmt ]]
           case Stmt.Return(x: ValueVar) if x.id == id => other
+          // [[ val x: Unit = stmt; return () ]]   =   [[ stmt ]]
+          case Stmt.Return(x) if x.tpe == Type.TUnit && other.tpe == Type.TUnit => other
+          // [[ val x = stmt; body ]]   =   val x = [[ stmt ]]; [[ body ]]
           case normalizedBody => Stmt.Val(id, tpe, other, normalizedBody)
         }
       }
