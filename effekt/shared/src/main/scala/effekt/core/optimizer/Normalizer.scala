@@ -163,10 +163,30 @@ object Normalizer { normal =>
 
   def isAbortive(s: Stmt)(using C: Context): Boolean =
     s.tpe == Type.TBottom || (s match {
+
+      case Stmt.Hole(_) => true
+      case Stmt.Let(_, _, binding, body) if binding.tpe == Type.TBottom => true
       case Stmt.Match(scrutinee, clauses, default) => clauses.isEmpty && default.isEmpty
       case Stmt.Shift(p, BlockLit(tparams, cparams, vparams, BlockParam(k, _,_) :: Nil, body2)) =>
         !Variables.free(body2).containsBlock(k)
-      case _ => false
+
+      case Stmt.Val(_, _, binding, body) => isAbortive(binding)
+      case Stmt.If(_, thn, els) => isAbortive(thn) && isAbortive(els)
+      case Stmt.Alloc(_, _, _, body) => isAbortive(body)
+      case Stmt.Var(_, _, _, body) => isAbortive(body)
+      case Stmt.Get(_, _, _, _, body) => isAbortive(body)
+      case Stmt.Put(_, _, _, body) => isAbortive(body)
+      case Stmt.Let(_, _, _, body) => isAbortive(body)
+      case Stmt.Def(_, _, body) => isAbortive(body)
+      case Stmt.Region(BlockLit(_, _, _, _, body)) => isAbortive(body)
+
+
+      case Stmt.Shift(p, body) => false
+      case Stmt.Return(_) => false
+      case Stmt.App(_, _, _, _) => false
+      case Stmt.Invoke(_, _, _, _, _, _) => false
+      case Stmt.Reset(_) => false // conservative
+      case Stmt.Resume(_, _) => false
     })
 
   def normalize(s: Stmt)(using C: Context): Stmt = s match {
