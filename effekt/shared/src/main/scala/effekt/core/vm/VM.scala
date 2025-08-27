@@ -245,7 +245,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
             case Builtin(name, impl) =>
               val arguments = vargs.map(a => eval(a, env))
               instrumentation.builtin(name)
-              try { impl(runtime)(arguments) } catch { case e => sys error s"Cannot call ${b} with arguments ${arguments.map {
+              try { impl(runtime)(arguments) } catch { case e => sys error s"Cannot call ${callee} with arguments ${arguments.map {
                 case Value.Literal(l) => s"${l}: ${l.getClass.getName}\n${e.getMessage}"
                 case other => other.toString
               }.mkString(", ")}" }

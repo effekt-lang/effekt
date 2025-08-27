@@ -72,8 +72,9 @@ class Reachable(
       process(callee)
       vargs.foreach(process)
       bargs.foreach(process)
-      if (binding.capt.nonEmpty) { processDefinition(id, binding) }
-      process(body)(using defs + (id -> binding))
+      // TODO what to do here?
+      // process(body)(using defs + (id -> binding))
+      process(body)
     case Stmt.Return(expr) => process(expr)
     case Stmt.Val(id, tpe, binding, body) => process(binding); process(body)
     case Stmt.App(callee, targs, vargs, bargs) =>

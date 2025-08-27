@@ -150,6 +150,14 @@ object Transformer {
           Substitute(List(Variable(transform(id), transform(binding.tpe)) -> value), transform(rest))
         }
 
+      case core.LetDirectApp(id, tpe, core.BlockVar(blockName: symbols.ExternFunction, _, capt), targs, vargs, bargs, rest) =>
+        if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+
+        val variable = Variable(freshName("directApp"), transform(tpe))
+        transform(vargs, bargs).run { (values, blocks) =>
+          ForeignCall(variable, transform(blockName), values ++ blocks, transform(rest))
+        }
+
       case core.Return(expr) =>
         transform(expr).run { value => Return(List(value)) }
 
@@ -360,7 +368,7 @@ object Transformer {
       transform(pure)
   }
 
-  def transform(expr: core.Expr)(using BC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = expr match {
+  def transform(expr: core.Pure)(using BC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = expr match {
 
     case core.ValueVar(id, tpe) if BC.globals contains id =>
       val variable = Variable(freshName("run"), transform(tpe))
@@ -423,16 +431,6 @@ object Transformer {
 
       val variable = Variable(freshName("pureApp"), transform(tpe.result))
       transform(vargs, Nil).flatMap { (values, blocks) =>
-        shift { k =>
-          ForeignCall(variable, transform(blockName), values ++ blocks, k(variable))
-        }
-      }
-
-    case core.DirectApp(core.BlockVar(blockName: symbols.ExternFunction, tpe: core.BlockType.Function, capt), targs, vargs, bargs) =>
-      if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
-
-      val variable = Variable(freshName("pureApp"), transform(tpe.result))
-      transform(vargs, bargs).flatMap { (values, blocks) =>
         shift { k =>
           ForeignCall(variable, transform(blockName), values ++ blocks, k(variable))
         }

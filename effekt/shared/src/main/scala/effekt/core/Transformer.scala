@@ -110,11 +110,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val cps = bps.map(b => b.symbol.capture)
       val tBody = bodies match {
         case source.ExternBody.StringExternBody(ff, body, span) :: Nil =>
-          val args = body.args.map(transformAsExpr).map {
-            case p: Pure => p: Pure
-            case _ => Context.abort("Spliced arguments need to be pure expressions.")
-          }
-          ExternBody.StringExternBody(ff, Template(body.strings, args))
+          ExternBody.StringExternBody(ff, Template(body.strings, body.args.map(transformAsPure)))
         case source.ExternBody.Unsupported(err) :: Nil =>
           ExternBody.Unsupported(err)
         case _ =>
@@ -148,12 +144,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transform(tree: source.Stmt)(using Context): Stmt = tree match {
     // { e; stmt } --> { let _ = e; stmt }
-    case source.ExprStmt(e, rest, span) if pureOrIO(e) =>
-      val (expr, bs) = Context.withBindings { transformAsExpr(e) }
+    case source.ExprStmt(e, rest, span) if isPure(e) =>
+      val (expr, bs) = Context.withBindings { transformAsPure(e) }
       val let = Let(Wildcard(), expr.tpe, expr, transform(rest))
       Binding(bs, let)
 
-    // { e; stmt } --> { val _ = e; stmt }
+   // TODO LetDirectApp when f is pureOrIO
+
+   // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest, span) =>
       val binding = insertBindings { Return(transformAsPure(e)) }
       Val(Wildcard(), binding.tpe, binding, transform(rest))
@@ -319,12 +317,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case _ => transformUnbox(tree)
   }
 
-  def transformAsPure(tree: source.Term)(using Context): Pure = transformAsExpr(tree) match {
-    case p: Pure => p
-    case e: Expr => Context.bind(e)
-  }
-
-  def transformAsExpr(tree: source.Term)(using Context): Expr = tree match {
+  def transformAsPure(tree: source.Term)(using Context): Pure = tree match {
     case v: source.Var => v.definition match {
       case sym: RefBinder =>
         val stateType = Context.blockTypeOf(sym)
@@ -895,7 +888,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   // we can conservatively approximate to false, in order to disable the optimizations
-  def pureOrIO(t: source.Tree)(using Context): Boolean =
+  def isPureOrIO(t: source.Tree)(using Context): Boolean =
     Context.inferredCaptureOption(t) match {
       case Some(capt) => asConcreteCaptureSet(capt).pureOrIO
       case _         => false
@@ -938,7 +931,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
     ValueVar(x, s.tpe)
   }
 
-  private[core] def bind(e: Expr): ValueVar = e match {
+  private[core] def bind(e: Pure): ValueVar = e match {
     case x: ValueVar => x
     case e =>
       // create a fresh symbol and assign the type

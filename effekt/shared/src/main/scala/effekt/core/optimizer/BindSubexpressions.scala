@@ -140,7 +140,7 @@ object BindSubexpressions {
     case Pure.Box(block, capt) => transform(block) { b => bind(Pure.Box(b, transform(capt))) }
   }
 
-  def transformExprs(es: List[Expr])(using Env): Bind[List[ValueVar | Literal]] = traverse(es)(transform)
+  def transformExprs(es: List[Pure])(using Env): Bind[List[ValueVar | Literal]] = traverse(es)(transform)
   def transformBlocks(es: List[Block])(using Env): Bind[List[Block]] = traverse(es)(transform)
 
   // Types

@@ -181,6 +181,7 @@ enum Pure {
   case Box(b: Block, annotatedCapture: Captures)
 
   def tpe: ValueType = Type.inferType(this)
+  def capt: Captures = Type.inferCapt(this)
 }
 export Pure.*
 

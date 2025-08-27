@@ -59,7 +59,7 @@ object Transformer {
     case core.Stmt.Let(id, tpe, core.Pure.ValueVar(x, _), body) =>
       binding(id, C.lookupValue(x)) { transform(body, ks, k) }
 
-    case core.Stmt.Let(id, tpe, core.DirectApp(b, targs, vargs, bargs), body) =>
+    case core.Stmt.LetDirectApp(id, tpe, b, targs, vargs, bargs, body) =>
       transform(b) match {
         case Block.BlockVar(f) =>
           LetExpr(id, DirectApp(f, vargs.map(transform), bargs.map(transform)),

@@ -181,6 +181,9 @@ object Normalizer { normal =>
           Stmt.Let(id, tpe, normalized, normalize(body)(using C.bind(id, normalized)))
       }
 
+    case Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) =>
+      Stmt.LetDirectApp(id, tpe, callee, targs, vargs.map(normalize), bargs.map(normalize), normalize(body))
+
     // Redexes
     // -------
     case Stmt.App(b, targs, vargs, bargs) =>
@@ -387,11 +390,6 @@ object Normalizer { normal =>
     case Pure.Make(data, tag, targs, vargs) => Pure.Make(data, tag, targs, vargs.map(normalize))
     case Pure.ValueVar(id, annotatedType) => p
     case Pure.Literal(value, annotatedType) => p
-  }
-
-  def normalize(e: Pure)(using Context): Pure = e match {
-    case DirectApp(b, targs, vargs, bargs) => DirectApp(b, targs, vargs.map(normalize), bargs.map(normalize))
-    case pure: Pure => normalize(pure)
   }
 
   // Helpers for beta-reduction

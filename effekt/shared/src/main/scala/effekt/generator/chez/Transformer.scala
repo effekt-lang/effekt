@@ -138,7 +138,7 @@ trait Transformer {
       RawDef(contents)
   }
 
-  def toChez(t: Template[core.Expr]): chez.Expr =
+  def toChez(t: Template[core.Pure]): chez.Expr =
     chez.RawExpr(t.strings, t.args.map(e => toChez(e)))
 
   def toChez(defn: Toplevel): chez.Def = defn match {
@@ -167,6 +167,10 @@ trait Transformer {
     case Stmt.Let(id, tpe, binding, body) =>
       val chez.Block(defs, exprs, result) = toChez(body)
       chez.Block(chez.Constant(nameDef(id), toChez(binding)) :: defs, exprs, result)
+
+    case Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) =>
+      val chez.Block(defs, exprs, result) = toChez(body)
+      chez.Block(chez.Constant(nameDef(id), chez.Call(toChez(callee), vargs.map(toChez) ++ bargs.map(toChez))) :: defs, exprs, result)
 
     case Stmt.Get(id, tpe, ref, capt, body) =>
       val reading = chez.Constant(nameDef(id), chez.Call(chez.Call(nameRef(symbols.builtins.TState.get), nameRef(ref))))
@@ -209,7 +213,7 @@ trait Transformer {
       chez.Lambda(vps.map(toChez) ++ bps.map(toChez), toChez(body))
   }
 
-  def toChez(expr: Expr): chez.Expr = expr match {
+  def toChez(expr: Pure): chez.Expr = expr match {
     case Literal((), _)         => chez.RawValue("(void)")
 
     case Literal(s: String, _)  => escape(s)
@@ -217,7 +221,6 @@ trait Transformer {
     case l: Literal             => chez.RawValue(l.value.toString)
     case ValueVar(id, _)        => chez.Variable(nameRef(id))
 
-    case DirectApp(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
     case Make(data, tag, targs, args) => chez.Call(chez.Variable(nameRef(tag)), args map toChez)
 
