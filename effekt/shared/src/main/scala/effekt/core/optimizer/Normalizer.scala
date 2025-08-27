@@ -264,6 +264,7 @@ object Normalizer { normal =>
           Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2,
             normalizeVal(id, tpe, body2, body)))), None)
 
+        // Introduce joinpoints that are potentially later inlined or garbage collected
         // [[ val x = if (cond) { thn } else { els }; body ]] =
         //   def k(x) = [[ body ]]
         //   if (cond) { [[ val x1 = thn; k(x1) ]] } else { [[ val x2 = els; k(x2) ]] }
