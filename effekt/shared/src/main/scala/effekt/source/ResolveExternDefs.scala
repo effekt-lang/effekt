@@ -51,7 +51,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
             Context.copyAnnotations(defn, d)
             Some(d)
           case ExternBody.EffektExternBody(featureFlag, body, span) =>
-            val d = Def.FunDef(id, tparams, vparams, bparams, Some(capture).spanned(capture.span), Some(ret).spanned(ret.span), body, doc, span)
+            val d = Def.FunDef(id, tparams, vparams, bparams, Maybe.Some(capture, capture.span), Maybe.Some(ret, ret.span), body, doc, span)
             Context.copyAnnotations(defn, d)
             Context.annotate(Annotations.BoundCapabilities, d, Nil) // TODO ??
             Some(d)
