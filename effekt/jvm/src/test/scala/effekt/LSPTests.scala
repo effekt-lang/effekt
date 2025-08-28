@@ -1425,6 +1425,7 @@ class LSPTests extends FunSuite {
             "x: Int"
           ),
           signatureHtml = Some("<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">Int</span>"),
+          uri = Some("file://test.effekt")
         )
       )
 
@@ -1438,7 +1439,8 @@ class LSPTests extends FunSuite {
           ),
           signatureHtml = Some(
             "<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">bar</span>(<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Int</span> / {}"
-          )
+          ),
+          uri = Some("file://test.effekt")
         ),
         TermBinding(
           qualifier = List(),
@@ -1450,6 +1452,7 @@ class LSPTests extends FunSuite {
           signatureHtml = Some(
             "<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">foo</span>(<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">Int</span>): <span class=\"effekt-ident pascal-case\">Bool</span> / {}"
           ),
+          uri = Some("file://test.effekt")
         ),
         TypeBinding(
           qualifier = Nil,
@@ -1459,6 +1462,7 @@ class LSPTests extends FunSuite {
           signatureHtml = Some(
             "<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">MyInt</span>"
           ),
+          uri = Some("file://test.effekt")
         )
       )
 
@@ -1582,6 +1586,7 @@ class LSPTests extends FunSuite {
           origin = BindingOrigin.Defined,
           signature = Some("def bar(): Nothing / {}"),
           signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">bar</span>(): <span class=\"effekt-ident pascal-case\">Nothing</span> / {}"),
+          uri = Some("file://test.effekt")
         )
       )
 
@@ -1937,6 +1942,7 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           signature = Some("type Foo1"),
           signatureHtml = Some("<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">Foo1</span>"),
+          uri = Some("file://test.effekt"),
           kind = "Type"
         ),
         TermBinding(
@@ -1947,6 +1953,7 @@ class LSPTests extends FunSuite {
             "def Foo1(theField: String): Foo1 / {}"
           ),
           signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident pascal-case\">Foo1</span>(<span class=\"effekt-ident camel-case\">theField</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Foo1</span> / {}"),
+          uri = Some("file://test.effekt"),
           kind = "Term",
         ),
         TermBinding(
@@ -1957,6 +1964,7 @@ class LSPTests extends FunSuite {
             "def theField(Foo1: Foo1): String / {}"
           ),
           signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">theField</span>(<span class=\"effekt-ident pascal-case\">Foo1</span>: <span class=\"effekt-ident pascal-case\">Foo1</span>): <span class=\"effekt-ident pascal-case\">String</span> / {}"),
+          uri = Some("file://test.effekt"),
           kind = "Term",
         ),
         TypeBinding(
@@ -1965,6 +1973,7 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           signature = Some("type Foo2"),
           signatureHtml = Some("<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">Foo2</span>"),
+          uri = Some("file://test.effekt"),
           kind = "Type"
         ),
         TermBinding(
@@ -1973,6 +1982,7 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           signature = Some("def Foo2(theField: String): Foo2 / {}"),
           signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident pascal-case\">Foo2</span>(<span class=\"effekt-ident camel-case\">theField</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Foo2</span> / {}"),
+          uri = Some("file://test.effekt"),
           kind = "Term"
         ),
         TermBinding(
@@ -1981,6 +1991,7 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           signature = Some("def theField(Foo2: Foo2): String / {}"),
           signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">theField</span>(<span class=\"effekt-ident pascal-case\">Foo2</span>: <span class=\"effekt-ident pascal-case\">Foo2</span>): <span class=\"effekt-ident pascal-case\">String</span> / {}"),
+          uri = Some("file://test.effekt"),
           kind = "Term"
         ),
         TypeBinding(
@@ -1989,6 +2000,7 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           signature = Some("type Bar"),
           signatureHtml = Some("<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">Bar</span>"),
+          uri = Some("file://test.effekt"),
           kind = "Type"
         ),
         TermBinding(
@@ -1997,6 +2009,7 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           signature = Some("def Bar(theField: Int): Bar / {}"),
           signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident pascal-case\">Bar</span>(<span class=\"effekt-ident camel-case\">theField</span>: <span class=\"effekt-ident pascal-case\">Int</span>): <span class=\"effekt-ident pascal-case\">Bar</span> / {}"),
+          uri = Some("file://test.effekt"),
           kind = "Term"
         ),
         TermBinding(
@@ -2005,6 +2018,7 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           signature = Some("def main(): Nothing / {}"),
           signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">main</span>(): <span class=\"effekt-ident pascal-case\">Nothing</span> / {}"),
+          uri = Some("file://test.effekt"),
           kind = "Term"
         )
       )
