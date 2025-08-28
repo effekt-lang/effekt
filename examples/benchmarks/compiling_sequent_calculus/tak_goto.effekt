@@ -1,0 +1,23 @@
+import examples/benchmarks/runner
+
+effect goto(i: Int): Int
+
+def tak(x: Int, y: Int, z: Int): Int / goto =
+  if (y < x) {
+    tak(
+      (try { tak(x - 1, y, z) } with goto { i => i }),
+      (try { tak(y - 1, z, x) } with goto { i => i }),
+      (try { tak(z - 1, x, y) } with goto { i => i })
+    )
+  } else {
+    do goto(z)
+  }
+
+def run(x: Int): Int = {
+  // only one argument
+  val y = x - 2
+  val z = x - 6
+  try { tak(x, y, z) } with goto { i => i }
+}
+
+def main() = benchmark(14){run}

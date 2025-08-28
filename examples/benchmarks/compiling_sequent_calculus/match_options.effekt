@@ -1,0 +1,19 @@
+import examples/benchmarks/runner
+
+def attempt(i: Int): Option[Int] =
+  if (i == 0) {
+    Some(i)
+  } else {
+    attempt(i - 1) match {
+      case None() => None()
+      case Some(x) => Some(x + 1)
+    }
+  }
+
+def run(n: Int): Int =
+  attempt(n) match {
+    case None() => -1
+    case Some(x) => x
+  }
+
+def main() = benchmark(10){run}

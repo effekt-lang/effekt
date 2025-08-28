@@ -1,0 +1,28 @@
+import examples/benchmarks/runner
+
+def sum(start: Int, stop: Int) { f: Int => Int }: Int = {
+  def sum_loop(i: Int, tot: Int, stop: Int): Int = {
+    if (stop < i) {
+      tot
+    } else {
+      sum_loop(i + 1, f(i) + tot, stop)
+    }
+  }
+  sum_loop(start, 0, stop)
+}
+
+def motz(n: Int): Int = {
+  if (n <= 1) {
+    1
+  } else {
+    val limit = n - 2
+    def product(i: Int): Int = {
+      motz(i) * motz(limit - i)
+    }
+    motz(n - 1) + sum(0, limit) { product }
+  }
+}
+
+def run(n: Int): Int = motz(n)
+
+def main() = benchmark(10){run}

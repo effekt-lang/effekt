@@ -1,0 +1,50 @@
+import examples/benchmarks/runner
+
+def length[A](l: List[A]): Int =
+  l match {
+    case Nil() => 0
+    case Cons(_, as) => 1 + length(as)
+  }
+
+def append(l1: List[List[Int]], l2: List[List[Int]]): List[List[Int]] =
+  l1 match {
+    case Nil() => l2
+    case Cons(hd, tail) => Cons(hd, append(tail, l2))
+  }
+
+def safe(x: Int, d: Int, l: List[Int]): Bool =
+  l match {
+    case Nil() => true
+    case Cons(q, l) => (x != q) && (x != (q + d)) && (x != (q - d)) && safe(x, d + 1, l)
+  }
+
+def check(l: List[List[Int]], acc: List[List[Int]], q: Int): List[List[Int]] =
+  l match {
+    case Nil() => acc
+    case Cons(b, bs) => if (safe(q, 1, b)) {
+      check(bs, Cons(Cons(q, b), acc), q)
+    } else {
+      check(bs, acc, q)
+    }
+  }
+
+def enumerate(q: Int, acc: List[List[Int]], bs: List[List[Int]]): List[List[Int]] =
+  if (q == 0) {
+    acc
+  } else {
+    val res = check(bs, Nil(), q)
+    enumerate(q - 1, append(res, acc), bs)
+  }
+
+def gen(n: Int, nq: Int): List[List[Int]] =
+  if (n == 0) {
+    Cons(Nil(), Nil())
+  } else {
+    val bs = gen(n - 1, nq)
+    enumerate(nq, Nil(), bs)
+  }
+
+def run(n: Int): Int =
+  length(gen(n, n))
+
+def main() = benchmark(5){run}
