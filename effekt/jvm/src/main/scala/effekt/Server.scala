@@ -625,17 +625,23 @@ case class EffektPublishHolesParams(uri: String, holes: List[EffektHoleInfo])
 case class EffektHoleInfo(
   id: String,
   range: LSPRange,
+  uri: String,
   innerType: Option[String],
   expectedType: Option[String],
   scope: Intelligence.ScopeInfo,
   body: List[Intelligence.HoleItem],
- )
+)
 
 object EffektHoleInfo {
   def fromHoleInfo(info: Intelligence.HoleInfo): EffektHoleInfo = {
+    val uri = info.span.origin match {
+      case Origin.File(name) => Convert.toURI(name)
+      case _ => ""
+    }
     EffektHoleInfo(
       info.id,
       convertRange(info.span.range),
+      uri,
       info.innerType,
       info.expectedType,
       info.scope,
