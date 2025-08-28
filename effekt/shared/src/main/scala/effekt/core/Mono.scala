@@ -125,8 +125,8 @@ def findConstraints(operation: Operation)(using ctx: MonoFindContext): Constrain
     findConstraints(body)
 
 def findConstraints(constructor: Constructor)(using ctx: MonoFindContext): Constraints = constructor match
-  case Constructor(id, List()) => List.empty
-  case Constructor(id, fields) =>
+  case Constructor(id, tparams, List()) => List.empty
+  case Constructor(id, tparams, fields) =>
     List(Constraint(((fields map (_.tpe)) map findId).toVector, id))
 
 def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt match
@@ -183,7 +183,7 @@ def solveConstraints(constraints: Constraints): Solution =
       var l: List[List[TypeArg.Base]] = List(List.empty)
       def listFromIndex(ind: Int) = if (ind >= l.length) List.empty else l(ind)
       b.foreach({
-        case TypeArg.Base(tpe) => l = productAppend(l, List(TypeArg.Base(tpe)))
+        case TypeArg.Base(tpe, targs) => l = productAppend(l, List(TypeArg.Base(tpe, targs)))
         case TypeArg.Var(funId, pos) => 
           val funSolved = solved.getOrElse(funId, Set.empty)
           val posArgs = funSolved.map(v => v(pos))
@@ -224,8 +224,7 @@ def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] =
       val replacementTparams = tparams.zip(baseTypes).toMap
       ctx.replacementTparams ++= replacementTparams
       val newConstructors = constructors map {
-        case Constructor(id, List()) => Constructor(id, List.empty)
-        case Constructor(id, fields) => Constructor(id, fields map monomorphize)
+        case Constructor(id, tparams, fields) => Constructor(id, tparams, fields map monomorphize)
       }
       Declaration.Data(ctx.names(id, baseTypes), List.empty, newConstructors)
     )
@@ -351,10 +350,11 @@ def replacementDataFromTargs(id: FunctionId, targs: List[ValueType])(using ctx: 
   //       it does show up while monomorphizing which caused an error
   //       this seems to work for now
   if (id.name.name == "Resume") return ValueType.Data(id, targs)
-  var baseTypes: List[TypeArg.Base] = List.empty
-  targs.foreach({
-    case ValueType.Data(name, targs) => baseTypes :+= TypeArg.Base(name)
-    case ValueType.Var(name) => baseTypes :+= ctx.replacementTparams(name)
-    case ValueType.Boxed(tpe, capt) => 
-  })
+
+  def toTypeArg(vt: ValueType): TypeArg.Base = vt match 
+    case ValueType.Data(name, targs) => TypeArg.Base(name, targs map toTypeArg)
+    case ValueType.Var(name) => ctx.replacementTparams(name)
+    case ValueType.Boxed(tpe, capt) => ???
+
+  val baseTypes: List[TypeArg.Base] = targs map toTypeArg
   ValueType.Data(ctx.names((id, baseTypes.toVector)), List.empty)
