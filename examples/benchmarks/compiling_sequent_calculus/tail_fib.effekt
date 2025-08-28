@@ -1,0 +1,14 @@
+import examples/benchmarks/runner
+
+def tfib(n: Int, a: Int, b: Int): Int =
+  if (n == 0) {
+    a
+  } else {
+    tfib(n - 1, a + b, a)
+  }
+
+def fib(n: Int): Int = tfib(n, 0, 1)
+
+def run(n: Int): Int = fib(n)
+
+def main() = benchmark(10){run}

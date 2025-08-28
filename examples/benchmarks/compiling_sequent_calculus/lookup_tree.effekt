@@ -1,0 +1,24 @@
+import examples/benchmarks/runner
+
+type Tree[A] {
+  Leaf(x: A)
+  Node(left: Tree[A], right: Tree[A])
+}
+
+def create(i: Int, n: Int): Tree[Int] =
+  if (i < n) {
+    val t = create(i + 1, n)
+    Node(t, t)
+  } else {
+    Leaf(n)
+  }
+
+def lookup(t: Tree[Int]): Int =
+  t match {
+    case Leaf(v) => v
+    case Node(left, _) => lookup(left)
+  }
+
+def run(n: Int): Int = lookup(create(0, n))
+
+def main() = benchmark(10){run}

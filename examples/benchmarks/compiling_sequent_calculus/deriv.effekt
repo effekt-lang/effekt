@@ -1,0 +1,118 @@
+import examples/benchmarks/runner
+
+type Expr {
+  Add(sums: List[Expr])
+  Sub(subs: List[Expr])
+  Mul(muls: List[Expr])
+  Div(divs: List[Expr])
+  Num(i: Int)
+  X()
+}
+
+def map_list[A, B](l: List[A]) { f: A => B }: List[B] = l match {
+  case Nil() => Nil()
+  case Cons(a, as) => Cons(f(a), as.map_list {f})
+}
+
+def equal_list(ls1: List[Expr], ls2: List[Expr]): Bool =
+  (ls1, ls2) match {
+    case (Nil(), Nil()) => true
+    case (Cons(e1, es1), Cons(e2, es2)) => equal(e1, e2) && equal_list(es1, es2)
+    case _ => false
+  }
+
+def equal(a: Expr, b: Expr): Bool =
+  (a, b) match {
+    case (Add(sums1), Add(sums2)) => equal_list(sums1, sums2)
+    case (Sub(subs1), Sub(subs2)) => equal_list(subs1, subs2)
+    case (Mul(muls1), Mul(muls2)) => equal_list(muls1, muls2)
+    case (Div(divs1), Div(divs2)) => equal_list(divs1, divs2)
+    case (Num(i), Num(j)) => i == j
+    case (X(), X()) => true
+    case _ => false
+  }
+
+
+def deriv(e: Expr): Expr =
+  e match {
+    case Add(sums) => Add(sums.map_list { deriv })
+    case Sub(subs) => Sub(subs.map_list { deriv })
+    case Mul(muls) =>
+      Mul(Cons(
+        e,
+        Cons(
+          Add(muls.map_list { x => Div(Cons(deriv(x), Cons(x, Nil()))) }),
+          Nil())))
+    case Div(Cons(x, Cons(y, Nil()))) =>
+      Sub(
+        Cons(
+          Div(Cons(deriv(x), Cons(y, Nil()))),
+          Cons(
+            Div(
+              Cons(x,
+              Cons(
+                Mul(Cons(y, Cons(y, Cons(deriv(y), Nil())))), Nil()))),
+                Nil())))
+    case Num(_) => Num(0)
+    case X() => Num(1)
+    case _ => X() // panic("Bad Expression")
+  }
+
+def mk_exp(a: Expr, b: Expr): Expr =
+  Add(
+    Cons(
+      Mul(Cons(Num(3), Cons(X(), Cons(X(), Nil())))),
+      Cons(
+        Mul(Cons(a, Cons(X(), Cons(X(), Nil())))),
+        Cons(
+          Mul(Cons(b, Cons(X(), Nil()))),
+          Cons(Num(5), Nil())))))
+
+def mk_ans(a: Expr, b: Expr): Expr =
+  Add(
+    Cons(
+      Mul(
+        Cons(
+          Mul(Cons(Num(3), Cons(X(), Cons(X(), Nil())))),
+          Cons(
+            Add(
+              Cons(
+                Div(Cons(Num(0), Cons(Num(3), Nil()))),
+                Cons(
+                  Div(Cons(Num(1), Cons(X(), Nil()))),
+                  Cons(Div(Cons(Num(1), Cons(X(), Nil()))), Nil())))),
+            Nil()))),
+      Cons(
+        Mul(
+          Cons(
+            Mul(Cons(a, Cons(X(), Cons(X(), Nil())))),
+            Cons(
+              Add(
+                Cons(
+                  Div(Cons(Num(0), Cons(a, Nil()))),
+                  Cons(
+                    Div(Cons(Num(1), Cons(X(), Nil()))),
+                    Cons(Div(Cons(Num(1), Cons(X(), Nil()))), Nil())))),
+              Nil()))),
+        Cons(
+          Mul(
+            Cons(
+              Mul(Cons(b, Cons(X(), Nil()))),
+              Cons(
+                Add(
+                  Cons(
+                    Div(Cons(Num(0), Cons(b, Nil()))),
+                    Cons(Div(Cons(Num(1), Cons(X(), Nil()))), Nil()))),
+                Nil()))),
+          Cons(Num(0), Nil())))))
+
+def run(n: Int): Int = {
+  // only one argument
+  val m = n + 2
+  val res = deriv(mk_exp(Num(n), Num(m)))
+  val expected = mk_ans(Num(n), Num(m))
+
+  if (equal(expected, res)) { 1 } else { 0 }
+}
+
+def main() = benchmark(5){run}
