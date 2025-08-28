@@ -11,7 +11,7 @@ object DeadCodeElimination extends Phase[CoreTransformed, CoreTransformed] {
     def run(input: CoreTransformed)(using Context): Option[CoreTransformed] =
         input match {
             case CoreTransformed(source, tree, mod, core) => 
-                val term = Context.checkMain(mod)
+                val term = Context.ensureMainExists(mod)
                 val dce = Context.timed("deadcode-elimination", source.name) {
                     Deadcode.remove(term, core)
                 }
