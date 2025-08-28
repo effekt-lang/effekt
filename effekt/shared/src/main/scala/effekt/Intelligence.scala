@@ -199,22 +199,49 @@ trait Intelligence {
         case s: TermSymbol => s.decl.span
       })
     }
+    // based on //effekt/kiama/jvm/src/main/scala/kiama/util/Convert.scala toUri, which cannot be accessed in this module
+    def getSymbolUri(sym: TypeSymbol | TermSymbol): Option[String] = {
+      try {
+        val sourceName = sym match {
+          case s: TypeSymbol if s.decl != null => s.decl.span.source.name
+          case s: TermSymbol if s.decl != null => s.decl.span.source.name
+          case _ => return None
+        }
+        
+        // Simple URI conversion compatible with shared module
+        if (sourceName.startsWith("file:") || sourceName.startsWith("vscode-notebook-cell:")) {
+          Some(sourceName)
+        } else if (sourceName.startsWith("./") || sourceName.startsWith(".\\")) {
+          // Remove the "./" or ".\\" prefix and make absolute
+          val relativePath = sourceName.substring(2)
+          Some(s"file://$relativePath")
+        } else {
+          Some(s"file://$sourceName")
+        }
+      } catch {
+        case _: Throwable => None
+      }
+    }
 
     def symbolToBindingInfos(name: String, path: List[String], sym: TypeSymbol | TermSymbol)(using C: Context): List[BindingInfo] =
       // TODO this is extremely hacky, printing is not defined for all types at the moment
       val signature = try { Some(SignaturePrinter(sym)) } catch { case e: Throwable => None }
       val signatureHtml = signature.map(sig => HtmlHighlight(sig))
+      
+      val uri = getSymbolUri(sym)
+      
       val out = sym match {
-        case sym: TypeSymbol => List(TypeBinding(path, name, origin, signature, signatureHtml))
-        case sym: ValueSymbol => List(TermBinding(path, name, origin, signature, signatureHtml))
-        case sym: BlockSymbol => List(TermBinding(path, name, origin, signature, signatureHtml))
+        case sym: TypeSymbol => List(TypeBinding(path, name, origin, signature, signatureHtml, uri))
+        case sym: ValueSymbol => List(TermBinding(path, name, origin, signature, signatureHtml, uri))
+        case sym: BlockSymbol => List(TermBinding(path, name, origin, signature, signatureHtml, uri))
       }
       sym match {
         case Interface(name, tparams, ops, decl) if !(ops.length == 1 && ops.head.name.name == name.name) => {
           val opsInfos = ops.map { op =>
             val signature = Some(SignaturePrinter(op))
             val signatureHtml = signature.map(sig => HtmlHighlight(sig))
-            TermBinding(path, op.name.name, origin, signature, signatureHtml)
+            val opUri = getSymbolUri(op)
+            TermBinding(path, op.name.name, origin, signature, signatureHtml, opUri)
           }
           out ++ opsInfos
         }
@@ -479,6 +506,7 @@ object Intelligence {
     origin: String,
     signature: Option[String] = None,
     signatureHtml: Option[String],
+    uri: Option[String] = None,
     kind: String = BindingKind.Term
   ) extends BindingInfo
   case class TypeBinding(
@@ -487,6 +515,7 @@ object Intelligence {
     origin: String,
     signature: Option[String] = None,
     signatureHtml: Option[String],
+    uri: Option[String] = None,
     kind: String = BindingKind.Type
   ) extends BindingInfo
 
