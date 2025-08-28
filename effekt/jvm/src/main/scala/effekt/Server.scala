@@ -634,14 +634,10 @@ case class EffektHoleInfo(
 
 object EffektHoleInfo {
   def fromHoleInfo(info: Intelligence.HoleInfo): EffektHoleInfo = {
-    val uri = info.span.origin match {
-      case Origin.File(name) => Convert.toURI(name)
-      case _ => ""
-    }
     EffektHoleInfo(
       info.id,
       convertRange(info.span.range),
-      uri,
+      Convert.toURI(info.span.source.name),
       info.innerType,
       info.expectedType,
       info.scope,
