@@ -803,6 +803,22 @@ class VMTests extends munit.FunSuite {
       resumes = 0
     )),
 
+    examplesDir / "benchmarks" / "other" / "unify.effekt" -> Some(Summary(
+      staticDispatches = 2519232,
+      dynamicDispatches = 1460350,
+      patternMatches = 3969252,
+      branches = 2791752,
+      pushedFrames = 1970337,
+      poppedFrames = 1970337,
+      allocations = 2138279,
+      closures = 90125,
+      variableReads = 569362,
+      variableWrites = 380936,
+      resets = 2,
+      shifts = 0,
+      resumes = 0
+    )),
+
     examplesDir / "stdlib" / "stream" / "fix.effekt" -> Some(Summary(
       staticDispatches = 38,
       dynamicDispatches = 52,
@@ -818,6 +834,8 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
+
+
     examplesDir / "pos" / "diy_binder.effekt" -> Some(Summary(
       staticDispatches = 28,
       dynamicDispatches = 0,
