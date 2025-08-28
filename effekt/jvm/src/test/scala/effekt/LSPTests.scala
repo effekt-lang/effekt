@@ -1600,6 +1600,7 @@ class LSPTests extends FunSuite {
         new Position(0, 0),
         new Position(0, 0)
       ),
+      uri = "file://test.effekt",
       innerType = None,
       expectedType = Some("Bool"),
       scope = ScopeInfo(
@@ -1652,6 +1653,7 @@ class LSPTests extends FunSuite {
         |      "character": 0
         |    }
         |  },
+        |  "uri": "file://test.effekt",
         |  "expectedType": "Bool",
         |  "scope": {
         |    "kind": "Local",
@@ -2066,6 +2068,57 @@ class LSPTests extends FunSuite {
       server.getTextDocumentService().didOpen(didOpenParams)
       val receivedHoles = client.receivedHoles()
       assertEquals(receivedHoles.length, 1)
+    }
+  }
+
+  // Tests for hole URI feature (for "Jump to definition" support)
+  //
+  //
+
+  test("Hole info includes correct file URI") {
+    withClientAndServer { (client, server) =>
+      val source = """
+                    |def foo(x: Int): Bool = <>
+                    |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+
+      val hole = receivedHoles.head.holes.head
+      assertEquals(hole.uri, "file://test.effekt")
+    }
+  }
+
+  test("Hole info with custom file URI includes correct URI") {
+    withClientAndServer { (client, server) =>
+      val source = new TextDocumentItem("file://custom/path/example.effekt", "effekt", 0,
+        """def bar(): String = <>""")
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+
+      val hole = receivedHoles.head.holes.head
+      assertEquals(hole.uri, "file://custom/path/example.effekt")
     }
   }
 
