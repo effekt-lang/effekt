@@ -151,17 +151,32 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       Stmt.Def(id, transform(block), transform(rest))
     case Stmt.Let(id, tpe, binding, rest) =>
       Stmt.Let(id, transform(tpe), transform(binding), transform(rest))
-    case Stmt.LetDirectApp(id, b, targs, vargs, bargs, rest) =>
+    case s @ Stmt.LetDirectApp(id, b, targs, vargs, bargs, rest) =>
       val callee = transform(b)
+      // [S](S) => S            [Int]
       val tpe: BlockType.Function = callee.tpe match {
         case tpe: BlockType.Function => tpe
         case _ => sys error "Callee does not have function type"
       }
+      // (Int) => Int
       val itpe = Type.instantiate(tpe, targs, tpe.cparams.map(Set(_)))
       val vCoerced = (vargs zip tpe.vparams).map { case (a, tpe) => coerce(transform(a), tpe) } // this was "a.tpe -> itpe -> tpe"
       val bCoerced = (bargs zip tpe.bparams).map { case (a, tpe) => coerce(transform(a), tpe) }
 
-      Stmt.LetDirectApp(id, callee, targs, vCoerced, bCoerced, transform(rest))
+      // we might need to coerce the result of this application
+      val body = transform(rest)
+      val stmt: Stmt.LetDirectApp = Stmt.LetDirectApp(id, callee, targs, vCoerced, bCoerced, body)
+      val from = Type.bindingType(stmt)
+      val to = itpe.result
+      val coercer = ValueCoercer(from, to)
+      if (coercer.isIdentity) { stmt }
+      else {
+        val fresh = TmpValue("coe")
+        Stmt.LetDirectApp(fresh, callee, targs, vCoerced, bCoerced,
+          Stmt.Let(id, to, coercer(Pure.ValueVar(fresh, from)),
+            body))
+      }
+
     case Stmt.Return(expr) =>
       Stmt.Return(transform(expr))
     case Stmt.Val(id, tpe, binding, body) =>

@@ -307,6 +307,9 @@ object Normalizer { normal =>
         case Stmt.Let(id2, tpe2, binding2, body2) =>
           Stmt.Let(id2, tpe2, binding2, normalizeVal(id, tpe, body2, body))
 
+        case Stmt.LetDirectApp(id2, callee2, targs2, vargs2, bargs2, body2) =>
+          Stmt.LetDirectApp(id2, callee2, targs2, vargs2, bargs2, normalizeVal(id, tpe, body2, body))
+
         // Flatten vals. This should be non-leaking since we use garbage free refcounting.
         // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]
         case Stmt.Val(id2, tpe2, binding2, body2) =>

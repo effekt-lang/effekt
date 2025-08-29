@@ -144,6 +144,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transform(tree: source.Stmt)(using Context): Stmt = tree match {
     // { e; stmt } --> { let _ = e; stmt }
+    // TODO this doesn't preserve termination
     case source.ExprStmt(e, rest, span) if isPure(e) =>
       transform(rest)
 
