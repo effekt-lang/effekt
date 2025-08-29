@@ -65,9 +65,8 @@ class Reachable(
       // Do NOT process `block` here, since this would mean the definition is used
       process(body)(using defs + (id -> block))
     case Stmt.Let(id, tpe, binding, body) =>
-      // DO only process if impure, since we need to keep it in this case
-      // for its side effects
-      if (binding.capt.nonEmpty) { processDefinition(id, binding) }
+      // We would need to process the binding if it was impure,
+      // to keep it for its side effects; however, the binding is guaranteed to be pure
       process(body)(using defs + (id -> binding))
     case Stmt.LetDirectApp(id, callee, targs, vargs, bargs, body) =>
       process(callee)

@@ -173,11 +173,11 @@ trait Transformer {
         case BlockVar(x, tpe, capt) if publicDependencySymbols.isDefinedAt(x) =>
           register(publicDependencySymbols(x), x)
         // TODO unreachable cases
-        // case ValueVar(x, tpe) if publicDependencySymbols.isDefinedAt(x) =>
-        //   register(publicDependencySymbols(x), x)
-        // case Make(tpe, id, targs, args) if publicDependencySymbols.isDefinedAt(id) =>
-        //   register(publicDependencySymbols(id), id)
-        //   args.foreach(go)
+        case ValueVar(x, tpe) if publicDependencySymbols.isDefinedAt(x) =>
+          register(publicDependencySymbols(x), x)
+        case Make(tpe, id, targs, args) if publicDependencySymbols.isDefinedAt(id) =>
+          register(publicDependencySymbols(id), id)
+          args.foreach(go)
       }
       go(t)
 

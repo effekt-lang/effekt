@@ -23,7 +23,7 @@ object RemoveTailResumptions {
     stmt match {
       case Stmt.Def(id, block, body) => !freeInBlock(block) && tailResumptive(k, body)
       case Stmt.Let(id, tpe, binding, body) => !freeInPure(binding) && tailResumptive(k, body)
-      case Stmt.LetDirectApp(id, callee, targs, vargs, bargs, body) => tailResumptive(k, body) // TODO check free in callee and args
+      case Stmt.LetDirectApp(id, callee, targs, vargs, bargs, body) => tailResumptive(k, body) && !freeInBlock(callee) && !vargs.exists(freeInPure) && !bargs.exists(freeInBlock)
       case Stmt.Return(expr) => false
       case Stmt.Val(id, tpe, binding, body) => tailResumptive(k, body) && !freeInStmt(binding)
       case Stmt.App(callee, targs, vargs, bargs) => false
