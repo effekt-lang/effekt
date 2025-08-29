@@ -160,7 +160,7 @@ enum Toplevel {
  *
  * -------------------------------------------
  */
-enum Pure {
+enum Pure extends Tree {
 
   case ValueVar(id: Id, annotatedType: ValueType)
 
