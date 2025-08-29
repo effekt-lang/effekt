@@ -151,7 +151,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       Stmt.Def(id, transform(block), transform(rest))
     case Stmt.Let(id, tpe, binding, rest) =>
       Stmt.Let(id, transform(tpe), transform(binding), transform(rest))
-    case Stmt.LetDirectApp(id, tpe, b, targs, vargs, bargs, rest) =>
+    case Stmt.LetDirectApp(id, b, targs, vargs, bargs, rest) =>
       val callee = transform(b)
       val tpe: BlockType.Function = callee.tpe match {
         case tpe: BlockType.Function => tpe
@@ -161,7 +161,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val vCoerced = (vargs zip tpe.vparams).map { case (a, tpe) => coerce(transform(a), tpe) } // this was "a.tpe -> itpe -> tpe"
       val bCoerced = (bargs zip tpe.bparams).map { case (a, tpe) => coerce(transform(a), tpe) }
 
-      Stmt.LetDirectApp(id, itpe.result, callee, targs,  vCoerced, bCoerced, transform(rest))
+      Stmt.LetDirectApp(id, callee, targs, vCoerced, bCoerced, transform(rest))
     case Stmt.Return(expr) =>
       Stmt.Return(transform(expr))
     case Stmt.Val(id, tpe, binding, body) =>

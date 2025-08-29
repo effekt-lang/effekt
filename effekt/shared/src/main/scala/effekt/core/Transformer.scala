@@ -291,7 +291,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             val callee = BlockVar(f)
             val tpe = Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, Nil).result
             BlockLit(tparams, bparams.map(_.id), vparams, bparams,
-              core.LetDirectApp(result, tpe, callee, targs, vargs, bargs,
+              core.LetDirectApp(result, callee, targs, vargs, bargs,
                 Stmt.Return(Pure.ValueVar(result, transform(restpe)))))
           }
 
@@ -737,7 +737,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       bindings.toList.map {
         case Binding.Val(name, tpe, binding) => Condition.Val(name, tpe, binding)
         case Binding.Let(name, tpe, binding) => Condition.Let(name, tpe, binding)
-        case Binding.LetDirectApp(name, tpe, callee, targs, vargs, bargs) => Condition.LetDirectApp(name, tpe, callee, targs, vargs, bargs)
+        case Binding.LetDirectApp(name, callee, targs, vargs, bargs) => Condition.LetDirectApp(name, callee, targs, vargs, bargs)
         case Binding.Def(name, binding) => Context.panic("Should not happen")
       } :+ cond
 
@@ -948,9 +948,10 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def bind(callee: Block.BlockVar, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block]): ValueVar = {
       // create a fresh symbol and assign the type
       val x = TmpValue("r")
-      val tpe = Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, Nil).result
+      // TODO this is EXACTLY Type.bindingType, but we cannot use it due to intrusive lists
+      val tpe = Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
 
-      val binding = Binding.LetDirectApp(x, tpe, callee, targs, vargs, bargs)
+      val binding = Binding.LetDirectApp(x, callee, targs, vargs, bargs)
       bindings += binding
 
       ValueVar(x, tpe)

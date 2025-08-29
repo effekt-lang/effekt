@@ -150,9 +150,9 @@ object Transformer {
           Substitute(List(Variable(transform(id), transform(binding.tpe)) -> value), transform(rest))
         }
 
-      case core.LetDirectApp(id, tpe, core.BlockVar(blockName: symbols.ExternFunction, _, capt), targs, vargs, bargs, rest) =>
+      case s @ core.LetDirectApp(id, core.BlockVar(blockName: symbols.ExternFunction, _, capt), targs, vargs, bargs, rest) =>
         if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
-
+        val tpe = core.Type.bindingType(s)
         val variable = Variable(freshName("directApp"), transform(tpe))
         transform(vargs, bargs).run { (values, blocks) =>
           ForeignCall(variable, transform(blockName), values ++ blocks, transform(rest))

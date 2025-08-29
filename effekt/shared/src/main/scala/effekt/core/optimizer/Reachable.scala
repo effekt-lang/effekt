@@ -69,7 +69,7 @@ class Reachable(
       // for its side effects
       if (binding.capt.nonEmpty) { processDefinition(id, binding) }
       process(body)(using defs + (id -> binding))
-    case Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) =>
+    case Stmt.LetDirectApp(id, callee, targs, vargs, bargs, body) =>
       process(callee)
       vargs.foreach(process)
       bargs.foreach(process)

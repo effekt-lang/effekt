@@ -192,10 +192,15 @@ object Type {
     case Block.New(impl) => impl.capt
   }
 
+  def bindingType(stmt: Stmt.LetDirectApp): ValueType = stmt match {
+    case Stmt.LetDirectApp(id, callee, targs, vargs, bargs, body) =>
+      Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
+  }
+
   def inferType(stmt: Stmt): ValueType = stmt match {
     case Stmt.Def(id, block, body) => body.tpe
     case Stmt.Let(id, tpe, binding, body) => body.tpe
-    case Stmt.LetDirectApp(id, tpe, calle, targs, vargs, bargs, body) => body.tpe
+    case Stmt.LetDirectApp(id, calle, targs, vargs, bargs, body) => body.tpe
     case Stmt.Return(expr) => expr.tpe
     case Stmt.Val(id, tpe, binding, body) => body.tpe
     case Stmt.App(callee, targs, vargs, bargs) =>
@@ -232,7 +237,7 @@ object Type {
   def inferCapt(stmt: Stmt): Captures = stmt match {
     case Stmt.Def(id, block, body) => block.capt ++ body.capt
     case Stmt.Let(id, tpe, binding, body) => body.capt
-    case Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) => callee.capt ++ bargs.flatMap(_.capt).toSet ++ body.capt
+    case Stmt.LetDirectApp(id, callee, targs, vargs, bargs, body) => callee.capt ++ bargs.flatMap(_.capt).toSet ++ body.capt
     case Stmt.Return(expr) => Set.empty
     case Stmt.Val(id, tpe, binding, body) => binding.capt ++ body.capt
     case Stmt.App(callee, targs, vargs, bargs) => callee.capt ++ bargs.flatMap(_.capt).toSet

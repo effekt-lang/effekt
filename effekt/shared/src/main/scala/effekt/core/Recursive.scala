@@ -44,7 +44,7 @@ class Recursive(
   def process(s: Stmt): Unit = s match {
     case Stmt.Def(id, block, body) =>  process(id, block); process(body)
     case Stmt.Let(id, tpe, binding, body) => process(binding); process(body)
-    case Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) =>
+    case Stmt.LetDirectApp(id, callee, targs, vargs, bargs, body) =>
       process(callee)
       vargs.foreach(process)
       bargs.foreach(process)

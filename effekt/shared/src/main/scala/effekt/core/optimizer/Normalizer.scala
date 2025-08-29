@@ -181,8 +181,8 @@ object Normalizer { normal =>
           Stmt.Let(id, tpe, normalized, normalize(body)(using C.bind(id, normalized)))
       }
 
-    case Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) =>
-      Stmt.LetDirectApp(id, tpe, callee, targs, vargs.map(normalize), bargs.map(normalize), normalize(body))
+    case Stmt.LetDirectApp(id, callee, targs, vargs, bargs, body) =>
+      Stmt.LetDirectApp(id, callee, targs, vargs.map(normalize), bargs.map(normalize), normalize(body))
 
     // Redexes
     // -------

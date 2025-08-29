@@ -246,7 +246,7 @@ enum Stmt extends Tree {
   // Definitions
   case Def(id: Id, block: Block, body: Stmt)
   case Let(id: Id, annotatedTpe: ValueType, binding: Pure, body: Stmt)
-  case LetDirectApp(id: Id, annotatedTpe: ValueType, b: Block.BlockVar, targs: List[ValueType], vargs: List[Pure], bargs: List[Block], body: Stmt)
+  case LetDirectApp(id: Id, b: Block.BlockVar, targs: List[ValueType], vargs: List[Pure], bargs: List[Block], body: Stmt)
 
   // Fine-grain CBV
   case Return(expr: Pure)
@@ -322,7 +322,7 @@ case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: Li
 private[core] enum Binding {
   case Val(id: Id, tpe: ValueType, binding: Stmt)
   case Let(id: Id, tpe: ValueType, binding: Pure)
-  case LetDirectApp(id: Id, tpe: ValueType, b: Block.BlockVar, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
+  case LetDirectApp(id: Id, b: Block.BlockVar, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
   case Def(id: Id, binding: Block)
 
   def id: Id
@@ -332,14 +332,14 @@ private[core] object Binding {
     case Nil => body
     case Binding.Val(name, tpe, binding) :: rest => Stmt.Val(name, tpe, binding, Binding(rest, body))
     case Binding.Let(name, tpe, binding) :: rest => Stmt.Let(name, tpe, binding, Binding(rest, body))
-    case Binding.LetDirectApp(name, tpe, callee, targs, vargs, bargs) :: rest => Stmt.LetDirectApp(name, tpe, callee, targs, vargs, bargs, Binding(rest, body))
+    case Binding.LetDirectApp(name, callee, targs, vargs, bargs) :: rest => Stmt.LetDirectApp(name, callee, targs, vargs, bargs, Binding(rest, body))
     case Binding.Def(name, binding) :: rest => Stmt.Def(name, binding, Binding(rest, body))
   }
 
   def toToplevel(b: Binding): Toplevel = b match {
     case Binding.Val(name, tpe, binding) => Toplevel.Val(name, tpe, binding)
     case Binding.Let(name, tpe, binding) => ??? //Toplevel.Val(name, tpe, Stmt.Return(binding))
-    case Binding.LetDirectApp(name, tpe, callee, targs, vargs, bargs) => ??? //Toplevel.Val(name, tpe, ???)
+    case Binding.LetDirectApp(name, callee, targs, vargs, bargs) => ??? //Toplevel.Val(name, tpe, ???)
     case Binding.Def(name, binding) => Toplevel.Def(name, binding)
   }
 }
@@ -364,7 +364,7 @@ object Bind {
     val id = Id("tmp")
     // TODO is this asInstanceOf ok?
     val tpe = Type.instantiate(b.tpe.asInstanceOf, targs, bargs.map(_.capt)).result
-    Bind(ValueVar(id, tpe), List(Binding.LetDirectApp(id, tpe, b, targs, vargs, bargs)))
+    Bind(ValueVar(id, tpe), List(Binding.LetDirectApp(id, b, targs, vargs, bargs)))
 
   def bind[A](block: Block): Bind[BlockVar] =
     val id = Id("tmp")
@@ -603,7 +603,8 @@ object Variables {
   def free(s: Stmt): Variables = s match {
     case Stmt.Def(id, block, body) => (free(block) ++ free(body)) -- Variables.block(id, block.tpe, block.capt)
     case Stmt.Let(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
-    case Stmt.LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) => free(callee) ++ all(vargs, free) ++ all(bargs, free) ++ (free(body) -- Variables.value(id, tpe))
+    case s @ Stmt.LetDirectApp(id, callee, targs, vargs, bargs, body) =>
+      free(callee) ++ all(vargs, free) ++ all(bargs, free) ++ (free(body) -- Variables.value(id, Type.bindingType(s)))
     case Stmt.Return(expr) => free(expr)
     case Stmt.Val(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
     case Stmt.App(callee, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
@@ -675,10 +676,10 @@ object substitutions {
         Let(id, substitute(tpe), substitute(binding),
           substitute(body)(using subst shadowValues List(id)))
 
-      case LetDirectApp(id, tpe, callee, targs, vargs, bargs, body) =>
+      case LetDirectApp(id, callee, targs, vargs, bargs, body) =>
         substitute(callee) match {
           case g : Block.BlockVar =>
-            LetDirectApp(id, substitute(tpe), g, targs.map(substitute), vargs.map(substitute), bargs.map(substitute),
+            LetDirectApp(id, g, targs.map(substitute), vargs.map(substitute), bargs.map(substitute),
               substitute(body)(using subst shadowValues List(id)))
           case _ => INTERNAL_ERROR("Should never substitute a concrete block for an FFI function.")
         }

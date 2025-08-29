@@ -303,10 +303,14 @@ class CoreParsers(names: Names) extends EffektLexers {
     )
 
   lazy val stmts: P[Stmt] =
-    ( `let` ~/> id ~ maybeTypeAnnotation ~ (`=` ~/> pure) ~ stmts ^^ {
-        case (name ~ tpe ~ binding ~ body) => Let(name, tpe.getOrElse(binding.tpe), binding, body)
+    ( (`let` ~ `!` ~/> id) ~ (`=` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ~ stmts ^^ {
+        case (name ~ callee ~ targs ~ vargs ~ bargs ~ body) =>
+          LetDirectApp(name, callee, targs, vargs, bargs, body)
       }
-       // TODO parse direct app
+    | `let` ~/> id ~ maybeTypeAnnotation ~ (`=` ~/> pure) ~ stmts ^^ {
+        case (name ~ tpe ~ binding ~ body) =>
+          Let(name, tpe.getOrElse(binding.tpe), binding, body)
+      }
     | `def` ~> id ~ (`=` ~/> block) ~ stmts ^^ Stmt.Def.apply
     | `def` ~> id ~ parameters ~ (`=` ~/> stmt) ~ stmts ^^ {
         case name ~ (tparams, cparams, vparams, bparams) ~ body ~ rest =>
