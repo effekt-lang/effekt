@@ -145,11 +145,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transform(tree: source.Stmt)(using Context): Stmt = tree match {
     // { e; stmt } --> { let _ = e; stmt }
     case source.ExprStmt(e, rest, span) if isPure(e) =>
-      val (expr, bs) = Context.withBindings { transformAsPure(e) }
-      val let = Let(Wildcard(), expr.tpe, expr, transform(rest))
-      Binding(bs, let)
-
-   // TODO LetDirectApp when f is pureOrIO
+      transform(rest)
 
    // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest, span) =>
@@ -289,7 +285,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             }
             val result = TmpValue("etaBinding")
             val callee = BlockVar(f)
-            val tpe = Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, Nil).result
             BlockLit(tparams, bparams.map(_.id), vparams, bparams,
               core.LetDirectApp(result, callee, targs, vargs, bargs,
                 Stmt.Return(Pure.ValueVar(result, transform(restpe)))))
@@ -948,13 +943,10 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def bind(callee: Block.BlockVar, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block]): ValueVar = {
       // create a fresh symbol and assign the type
       val x = TmpValue("r")
-      // TODO this is EXACTLY Type.bindingType, but we cannot use it due to intrusive lists
-      val tpe = Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
-
-      val binding = Binding.LetDirectApp(x, callee, targs, vargs, bargs)
+      val binding: Binding.LetDirectApp = Binding.LetDirectApp(x, callee, targs, vargs, bargs)
       bindings += binding
 
-      ValueVar(x, tpe)
+      ValueVar(x, Type.bindingType(binding))
   }
 
   private[core] def bind(name: BlockSymbol, b: Block): BlockVar = {

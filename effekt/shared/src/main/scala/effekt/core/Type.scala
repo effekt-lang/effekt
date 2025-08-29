@@ -197,6 +197,11 @@ object Type {
       Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
   }
 
+  def bindingType(bind: Binding.LetDirectApp): ValueType = bind match {
+    case Binding.LetDirectApp(id, callee, targs, vargs, bargs) =>
+      Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
+  }
+
   def inferType(stmt: Stmt): ValueType = stmt match {
     case Stmt.Def(id, block, body) => body.tpe
     case Stmt.Let(id, tpe, binding, body) => body.tpe

@@ -31,6 +31,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(t: Block): String =
     pretty(toDoc(t), 60).layout
 
+  def format(p: Pure): String =
+    pretty(toDoc(p), 60).layout
+
   val show: PartialFunction[Any, String] = {
     case m: ModuleDecl => format(m).layout
     case d: Toplevel   => format(List(d))

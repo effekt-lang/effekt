@@ -362,9 +362,8 @@ object Bind {
 
   def bind[A](b: Block.BlockVar, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Bind[ValueVar] =
     val id = Id("tmp")
-    // TODO is this asInstanceOf ok?
-    val tpe = Type.instantiate(b.tpe.asInstanceOf, targs, bargs.map(_.capt)).result
-    Bind(ValueVar(id, tpe), List(Binding.LetDirectApp(id, b, targs, vargs, bargs)))
+    val binding: Binding.LetDirectApp = Binding.LetDirectApp(id, b, targs, vargs, bargs)
+    Bind(ValueVar(id, Type.bindingType(binding)), List(Binding.LetDirectApp(id, b, targs, vargs, bargs)))
 
   def bind[A](block: Block): Bind[BlockVar] =
     val id = Id("tmp")
