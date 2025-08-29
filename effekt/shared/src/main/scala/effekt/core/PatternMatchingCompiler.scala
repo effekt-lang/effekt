@@ -346,27 +346,25 @@ object PatternMatchingCompiler {
   // For development and debugging
   // -----------------------------
 
-  // TODO maintain dead code
+   def show(cl: Clause): String = cl match {
+     case Clause(conditions, label, targs, args) =>
+       s"case ${conditions.map(show).mkString("; ")} => ${util.show(label.id)}${targs.map(x => util.show(x))}${args.map(x => util.show(x)).mkString("(", ", ", ")")}"
+   }
 
-  // def show(cl: Clause): String = cl match {
-  //   case Clause(conditions, label, targs, args) =>
-  //     s"case ${conditions.map(show).mkString("; ")} => ${util.show(label.id)}${targs.map(x => util.show(x))}${args.map(x => util.show(x)).mkString("(", ", ", ")")}"
-  // }
+   def show(c: Condition): String = c match {
+     case Condition.Patterns(patterns) => patterns.map { case (v, p) => s"${util.show(v)} is ${show(p)}" }.mkString(", ")
+     case Condition.Predicate(pred) => util.show(pred) + "?"
+     case Condition.Val(x, tpe,  binding) => s"val ${util.show(x)} = ${util.show(binding)}"
+     case Condition.Let(x, tpe, binding) => s"let ${util.show(x)} = ${util.show(binding)}"
+     case Condition.LetDirectApp(x, tpe, callee, targs, vargs, bargs) => s"let ${util.show(x)} = ${util.show(callee)}(${vargs.map(util.show).mkString(", ")})"
+   }
 
-  // def show(c: Condition): String = c match {
-  //   case Condition.Patterns(patterns) => patterns.map { case (v, p) => s"${util.show(v)} is ${show(p)}" }.mkString(", ")
-  //   case Condition.Predicate(pred) => util.show(pred) + "?"
-  //   case Condition.Val(x, tpe,  binding) => s"val ${util.show(x)} = ${util.show(binding)}"
-  //   case Condition.Let(x, tpe, binding) => s"let ${util.show(x)} = ${util.show(binding)}"
-  // }
-
-  // def show(p: Pattern): String = p match {
-  //   case Pattern.Tag(id, tparams, variants, patterns) =>
-  //     util.show(id) + tparams.map(util.show).mkString("[", ",", "]") + patterns.map { case (p, tpe) => show(p) }.mkString("(", ", ", ")")
-  //   case Pattern.Ignore() => "_"
-  //   case Pattern.Any(id) => util.show(id)
-  //   case Pattern.Or(patterns) => patterns.map(show).mkString(" | ")
-  //   case Pattern.Literal(lit, equals) => util.show(lit.value)
-  // }
-
+   def show(p: Pattern): String = p match {
+     case Pattern.Tag(id, tparams, variants, patterns) =>
+       util.show(id) + tparams.map(util.show).mkString("[", ",", "]") + patterns.map { case (p, tpe) => show(p) }.mkString("(", ", ", ")")
+     case Pattern.Ignore() => "_"
+     case Pattern.Any(id) => util.show(id)
+     case Pattern.Or(patterns) => patterns.map(show).mkString(" | ")
+     case Pattern.Literal(lit, equals) => util.show(lit.value)
+   }
 }
