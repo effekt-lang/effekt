@@ -1,0 +1,454 @@
+import examples/benchmarks/runner
+
+record Assign(level: Int, value: Int)
+
+record CSP(vars: Int, vals: Int, rel: (Assign, Assign) => Bool at {})
+
+record Node[A](label: A, children: List[Node[A]])
+
+type ConflictSet {
+  Known(vs:List[Int])
+  Unknown()
+}
+
+// list standard library
+
+def map_list[A, B](l: List[A]) { f: A => B }: List[B] = l match {
+  case Nil() => Nil()
+  case Cons(a, as) => Cons(f(a), as.map_list {f})
+}
+
+def all[A](list: List[A]) { predicate: A => Bool }: Bool =
+  list match {
+    case Cons(x, xs) => if (predicate(x)) all(xs) { predicate } else false
+    case Nil() => true
+  }
+
+def filter[A](ls: List[A]) { f: A => Bool }: List[A] =
+  ls match {
+    case Nil() => Nil()
+    case Cons(a, as) =>
+      if (f(a)) {
+        Cons(a, as.filter {f})
+      } else {
+        as.filter {f}
+      }
+  }
+
+def is_empty[A](l: List[A]): Bool = l match {
+  case Nil() => true
+  case Cons(_, _) => false
+}
+
+def enum_from_to(from: Int, to: Int): List[Int] =
+  if (from <= to) {
+    Cons(from, enum_from_to(from + 1, to))
+  } else {
+    Nil()
+  }
+
+def len[A](ls: List[A]): Int =
+  ls match {
+    case Nil() => 0
+    case Cons(_, xs) => 1 + len(xs)
+  }
+
+def head[A](ls: List[A]): A =
+  ls match {
+    case Nil() => panic("Empty List")
+    case Cons(a, _) => a
+  }
+
+def tail[A](ls: List[A]): List[A] =
+  ls match {
+    case Nil() => panic("Empty List")
+    case Cons(_, as) => as
+  }
+
+def at_index[A](ind: Int, ls: List[A]): A =
+  ls match {
+    case Nil() => panic("Empty List")
+    case Cons(c, cs) =>
+      if (ind == 0) { c }
+      else { at_index(ind - 1, cs) }
+  }
+
+def rev_loop[A](ls: List[A], acc: List[A]): List[A] =
+  ls match {
+    case Nil() => acc
+    case Cons(p, ps) => rev_loop(ps, Cons(p, acc))
+  }
+
+def reverse[A](ls: List[A]): List[A] = rev_loop(ls, Nil())
+
+def concat[A](lss: List[List[A]]): List[A] = {
+  def concat_loop[A](ls: List[List[A]], acc: List[A]): List[A] =
+    ls match {
+      case Nil() => rev_loop(acc, Nil())
+      case Cons(l, ls) => concat_loop(ls, rev_loop(l, acc))
+    }
+  concat_loop(lss, Nil())
+}
+
+def append[A](l1: List[A], l2: List[A]): List[A] = l1 match {
+  case Nil() => l2
+  case Cons(a, as) => Cons(a, as.append(l2))
+}
+
+def foldl[A](xs: List[A], acc: List[A]) { f: (List[A], A) => List[A] }: List[A] =
+  xs match {
+    case Nil() => acc
+    case Cons(h, t) => t.foldl(f(acc, h)) {f}
+  }
+
+def in_list(i: Int, ls: List[Int]): Bool =
+  ls match {
+    case Nil() => false
+    case Cons(j, js) => if (i == j) { true } else { in_list(i, js) }
+  }
+
+def not_elem(a: Int, ls: List[Int]): Bool =
+  not(in_list(a, ls))
+
+def map_tree[A, B](t: Node[A]) { f: A => B }: Node[B] =
+  t match {
+    case Node(l, ls) => Node(f(l), ls.map_list { x => x.map_tree {f} })
+  }
+
+def fold_tree[A, B](t: Node[A]) { f: (A, List[Node[B]]) => Node[B] }: Node[B] =
+  t match {
+    case Node(l, c) => f(l, c.map_list { x => x.fold_tree {f} })
+  }
+
+def filter_tree[A](n: Node[A]) { p: A => Bool }: Node[A] =
+  n.fold_tree { (a, cs) => Node(a, cs.filter { x => p(x.label) }) }
+
+def leaves[A](n: Node[A]): List[A] =
+  n match {
+    case Node(leaf, Nil()) => Cons(leaf, Nil())
+    case Node(leaf, Cons(c, cs)) => concat(map_list(Cons(c, cs)) { x => leaves(x) })
+  }
+
+def prune[A](n: Node[A]) { f: A => Bool }: Node[A] =
+  n.filter_tree { x => not(f(x)) }
+
+
+def max_level(ls: List[Assign]): Int =
+  ls match {
+    case Nil() => 0
+    case Cons(Assign(v, _), _) => v
+  }
+
+def complete(csp: CSP, s: List[Assign]): Bool =
+  max_level(s) == csp.vars
+
+def combine(ls: List[(List[Assign], ConflictSet)], acc: List[Int]): List[Int] =
+  ls match {
+    case Nil() => acc
+    case Cons((s, Known(cs)), css) =>
+      if (not_elem(max_level(s), cs)) {
+        cs
+      } else {
+        combine(css, union(cs, acc))
+      }
+    case Cons((s, Unknown()), css) => acc
+  }
+
+def nub_by(ls: List[Int]) { f: (Int, Int) => Bool }: List[Int] =
+  ls match {
+    case Nil() => Nil()
+    case Cons(h, t) =>
+      Cons(h, nub_by(t.filter { y => not(f(h, y)) }) {f})
+  }
+
+def delete_by(x: Int, ys: List[Int]) { f: (Int, Int) => Bool }: List[Int] =
+  ys match {
+    case Nil() => Nil()
+    case Cons(y, ys) =>
+      if (f(x, y)) {
+        ys
+      } else {
+        Cons(y, delete_by(x, ys) {f})
+      }
+  }
+
+def union_by(l1: List[Int], l2: List[Int]) { f: (Int, Int) => Bool }: List[Int] =
+  append(
+    l1,
+    nub_by(l2){f}.foldl(l1) { (acc, y) => delete_by(y, acc){f} }
+  )
+
+def union(l1:List[Int], l2:List[Int]): List[Int] =
+  union_by(l1, l2) { (x, y) => x == y }
+
+def init_tree(x:List[Assign]) { f:List[Assign] => List[List[Assign]] }: Node[List[Assign]] =
+  Node(x, f(x).map_list { y => init_tree(y) {f} })
+
+def to_assign(ls: List[Int], ss: List[Assign]): List[List[Assign]] =
+  ls match {
+    case Nil() => Nil()
+    case Cons(j, t1) => Cons(Cons(Assign(max_level(ss) + 1, j), ss), to_assign(t1, ss))
+  }
+
+def mk_tree(csp: CSP): Node[List[Assign]] =
+  csp match {
+    case CSP(vars, vals, rel) =>
+      init_tree(Nil()) { ss =>
+        if (max_level(ss) < vars) {
+          to_assign(enum_from_to(1, vals), ss)
+        } else {
+          Nil()
+        }
+      }
+  }
+
+def collect(ls: List[ConflictSet]): List[Int] =
+  ls match {
+    case Nil() => Nil()
+    case Cons(Known(cs),css) => union(cs, collect(css))
+    case Cons(Unknown(),css) => Nil()
+  }
+
+def filter_known(ls: List[List[ConflictSet]]): List[List[ConflictSet]] =
+  ls match {
+    case Nil() => Nil()
+    case Cons(vs, t1) => if (all(vs) { known_conflict }) Cons(vs, filter_known(t1)) else filter_known(t1)
+  }
+
+def domain_wipeout(csp: CSP, t: Node[((List[Assign], ConflictSet), List[List[ConflictSet]])]): Node[(List[Assign], ConflictSet)] = {
+  csp match {
+    case CSP(vars, vals, rel) =>
+      t.map_tree { case ((as_, cs), tbl) =>
+
+          val wiped_domains = filter_known(tbl) // filter(tbl) { x => all(x) { known_conflict } }
+
+          val cs_ = if (is_empty(wiped_domains)) {
+            cs
+          } else {
+            Known(collect(head(wiped_domains)))
+          }
+          (as_,cs_)
+      }
+  }
+}
+
+def check_complete(csp:CSP,s:List[Assign]): ConflictSet =
+  if (complete(csp, s)) {
+    Known(Nil())
+  } else {
+    Unknown()
+  }
+
+def earliest_inconsistency(csp: CSP, aas: List[Assign]): Option[(Int, Int)] =
+  (csp, aas) match {
+    case (_, Nil()) => None()
+    case (CSP(vars, vals, rel), Cons(a, as)) =>
+      reverse(as).filter { x => not(rel(a, x)) } match  {
+        case Nil() => None()
+        case Cons(b, _) => Some((level(a), level(b)))
+      }
+  }
+
+def lookup_cache(
+  csp: CSP,
+  t: Node[(List[Assign], List[List[ConflictSet]])]
+): Node[((List[Assign], ConflictSet), List[List[ConflictSet]])] =
+    t.map_tree { tp =>
+      tp match {
+        case (Nil(), tbl) => ((Nil(), Unknown()), tbl)
+        case (Cons(a, as), tbl) =>
+          val table_entry = at_index(a.value - 1, tbl.head)
+          val cs = table_entry match {
+            case Unknown() => check_complete(csp, Cons(a, as))
+            case Known(_) => table_entry
+          }
+          ((Cons(a, as), cs), tbl)
+    }
+  }
+
+def cache_checks(csp: CSP, tbl: List[List[ConflictSet]], n: Node[List[Assign]]): Node[(List[Assign], List[List[ConflictSet]])] =
+  n match {
+    case Node(s, cs) =>
+      Node((s, tbl), cs.map_list { x => cache_checks(csp, fill_table(s, csp, tbl.tail), x) })
+  }
+
+def known_solution(c: ConflictSet): Bool =
+  c match {
+    case Known(Nil()) => true
+    case Known(Cons(_, _)) => false
+    case Unknown() => false
+  }
+
+def known_conflict(c:ConflictSet): Bool =
+  c match {
+    case Known(Nil()) => false
+    case Known(Cons(_, _)) => true
+    case Unknown() => false
+  }
+
+def to_pairs(ls:List[Int],varrr:Int) : List[(Int,Int)] =
+  ls match {
+    case Nil() => Nil()
+    case Cons(valll, t2) => Cons((varrr, valll), to_pairs(t2, varrr))
+  }
+
+def n_pairs(ls: List[Int], n: Int) : List[List[(Int, Int)]] =
+  ls match {
+    case Nil() => Nil()
+    case Cons(varrr, t1) => Cons(to_pairs(enum_from_to(1, n), varrr), n_pairs(t1, n))
+  }
+
+def fill_zip_with(x: List[ConflictSet], y: List[(Int, Int)]) { f: (ConflictSet, (Int, Int)) => ConflictSet }: List[ConflictSet] =
+  x match {
+    case Nil() => Nil()
+    case Cons(c, cs) => y match {
+      case Nil() => Nil()
+      case Cons(p, ps) => Cons(f(c, p), fill_zip_with(cs, ps) {f})
+    }
+  }
+
+def fill_zip_with2(tbl: List[List[ConflictSet]], ls: List[List[(Int, Int)]]) {
+  f: (List[ConflictSet], List[(Int, Int)]) => List[ConflictSet]
+}: List[List[ConflictSet]] =
+    tbl match {
+      case Nil() => Nil()
+      case Cons(cs, css) => ls match {
+        case Nil() => Nil()
+        case Cons(ps, pss) =>
+          Cons(f(cs, ps), fill_zip_with2(css, pss) {f})
+      }
+    }
+
+def fill_table(s: List[Assign], csp: CSP, tbl: List[List[ConflictSet]]): List[List[ConflictSet]] =
+  s match {
+    case Nil() => tbl
+    case Cons(Assign(var_, val_), as_) =>
+      csp match {
+        case CSP(vars, vals, rel) =>
+          def f4(cs: ConflictSet, varval: (Int, Int)): ConflictSet =
+            varval match {
+              case (varr, vall) => cs match {
+                case Known(vs) => cs
+                case Unknown() =>
+                  if (not(rel(Assign(var_, val_), Assign(varr, vall)))) {
+                    Known(Cons(var_, Cons(varr, Nil())))
+                  } else {
+                    cs
+                  }
+              }
+            }
+          fill_zip_with2(tbl, n_pairs(enum_from_to(var_ + 1, vars), vals)) {
+            (x, y) => fill_zip_with(x, y) {f4}
+          }
+    }
+  }
+
+def to_unknown(ls:List[Int]) : List[ConflictSet] =
+  ls match {
+    case Nil() => Nil()
+    case Cons(m, t2) => Cons(Unknown(), to_unknown(t2))
+  }
+
+def n_unknown(ls: List[Int], n: Int): List[List[ConflictSet]] =
+  ls match {
+    case Nil() => Nil()
+    case Cons(_, t1) => Cons(to_unknown(enum_from_to(1, n)), n_unknown(t1, n))
+  }
+
+
+def empty_table(csp: CSP): List[List[ConflictSet]] =
+  csp match {
+    case CSP(vars, vals, rel) => Cons(Nil(), n_unknown(enum_from_to(1, vars), vals))
+  }
+
+def search(csp: CSP) { labeler: (CSP, Node[List[Assign]]) => Node[(List[Assign], ConflictSet)] }: List[List[Assign]] =
+  labeler(csp, mk_tree(csp))
+    .prune { x => known_conflict(x.second) }
+    .leaves
+    .filter { x => known_solution(x.second) }
+    .map_list { x => x.first }
+
+def safe(as1: Assign, as2: Assign): Bool =
+  as1 match {
+    case Assign(i, m) => as2 match {
+      case Assign(j, n) => if (not(m == n)) { not(abs(i - j) == abs(m - n)) } else { false }
+    }
+  }
+
+def queens(n: Int): CSP =
+  CSP(n, n, box safe)
+
+def bt_map(
+  l: List[Node[List[Assign]]]
+) { f: Node[List[Assign]] => Node[(List[Assign], ConflictSet)] }: List[Node[(List[Assign], ConflictSet)]] =
+  l match {
+    case Nil() => Nil()
+    case Cons(p, ps) => Cons(f(p), ps.bt_map {f})
+  }
+
+def bt_map_tree(n: Node[List[Assign]]) { f: List[Assign] => (List[Assign], ConflictSet) }: Node[(List[Assign], ConflictSet)] =
+  n match {
+    case Node(l, ls) => Node(f(l),
+      ls.bt_map { x => x.bt_map_tree {f} })
+  }
+
+def bt(csp: CSP, t: Node[List[Assign]]): Node[(List[Assign], ConflictSet)] = {
+  def f3(s: List[Assign]): (List[Assign], ConflictSet) =
+    earliest_inconsistency(csp, s) match {
+      case Some((a, b)) => (s, Known(Cons(a, Cons(b, Nil()))))
+      case None() => (s, check_complete(csp, s))
+    }
+
+  t.map_tree { x => f3(x) }
+}
+
+def bm(csp: CSP, t: Node[List[Assign]]): Node[(List[Assign], ConflictSet)] =
+  csp.lookup_cache(csp.cache_checks(csp.empty_table, t)).map_tree { x => x.first }
+
+def bj(csp: CSP, t: Node[(List[Assign], ConflictSet)]): Node[(List[Assign], ConflictSet)] =
+  t.fold_tree { (acs, chs) => acs match {
+    case (a, Known(cs)) => Node((a, Known(cs)), chs)
+    case (a, Unknown()) => Node((a, Known(combine(chs.map_list { x => x.label }, Nil()))), chs)
+  }}
+
+def bjbt(csp: CSP, t: Node[List[Assign]]): Node[(List[Assign], ConflictSet)] =
+  bj(csp, bt(csp, t))
+
+
+def bj_(csp: CSP, t: Node[(List[Assign], ConflictSet)]): Node[(List[Assign], ConflictSet)] =
+  t.fold_tree { (acs, chs) =>
+    acs match {
+      case (a, Known(cs)) => Node((a, Known(cs)), chs)
+      case (a, Unknown()) =>
+        val cs_ = Known(combine(chs.map_list { x => x.label }, Nil()))
+        if (known_conflict(cs_)) {
+          Node((a, cs_), Nil())
+        } else {
+          Node((a, cs_), chs)
+        }
+    }
+  }
+
+def bjbt_(csp: CSP,t: Node[List[Assign]]): Node[(List[Assign], ConflictSet)] =
+  bj_(csp, bt(csp, t))
+
+def fc(csp: CSP, t: Node[List[Assign]]): Node[(List[Assign], ConflictSet)] =
+  csp.domain_wipeout(csp.lookup_cache(csp.cache_checks(csp.empty_table, t)))
+
+def try_(n: Int) { algorithm: (CSP, Node[List[Assign]]) => Node[(List[Assign], ConflictSet)] }: Int =
+  len(search(queens(n)){algorithm})
+
+def test_constraints_nofib(n: Int): List[Int] = [
+  try_(n){bt},
+  try_(n){bm},
+  try_(n){bjbt},
+  try_(n){bjbt_},
+  try_(n){fc}
+]
+
+def run(n: Int): Int = {
+  val res = test_constraints_nofib(n)
+  headOption(res).getOrElse { -1 }
+}
+
+def main() = benchmark(5){run}

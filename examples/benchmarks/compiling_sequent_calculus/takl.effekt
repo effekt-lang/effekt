@@ -1,0 +1,58 @@
+import examples/benchmarks/runner
+
+def null(x: List[Int]): Bool =
+  x match {
+    case Nil() => true
+    case Cons(x, xs) => false
+  }
+
+def tail(x: List[Int]): List[Int] =
+  x match {
+    case Nil() => panic("Empty List")
+    case Cons(_, xs) => xs
+  }
+
+def len(l: List[Int]): Int =
+  l match {
+    case Nil() => 0
+    case Cons(_, xs) => 1 + len(xs)
+  }
+
+def list_n(n: Int): List[Int] =
+  if (n == 0) {
+    Nil()
+  } else {
+    Cons(n, list_n(n - 1))
+  }
+
+def shorterp(x: List[Int], y: List[Int]): Bool =
+  if (null(y)) {
+    false
+  } else {
+    if (null(x)) {
+      true
+    } else {
+      shorterp(tail(x), tail(y))
+    }
+  }
+
+def mas(x: List[Int], y: List[Int], z: List[Int]): List[Int] =
+  if (not(shorterp(y, x))) {
+    z
+  } else {
+    mas(
+      mas(tail(x), y, z),
+      mas(tail(y), z, x),
+      mas(tail(z), x, y)
+    )
+  }
+
+def run(x: Int): Int = {
+  // only one argument
+  val y = x - 2
+  val z = x - 6
+  len(mas(list_n(x), list_n(y), list_n(z)))
+}
+
+
+def main() = benchmark(14){run}
