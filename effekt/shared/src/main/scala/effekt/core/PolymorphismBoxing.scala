@@ -76,7 +76,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       implicit val pctx: DeclarationContext = new DeclarationContext(core.declarations, core.externs)
       Context.module = mod
       val transformed = Context.timed(phaseName, source.name) { transform(core) }
-
       Some(CoreTransformed(source, tree, mod, transformed))
     }
   }
@@ -164,17 +163,17 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val bCoerced = (bargs zip tpe.bparams).map { case (a, tpe) => coerce(transform(a), tpe) }
 
       // we might need to coerce the result of this application
-      val body = transform(rest)
-      val stmt: Stmt.LetDirectApp = Stmt.LetDirectApp(id, callee, targs, vCoerced, bCoerced, body)
+      val stmt: Stmt.LetDirectApp = Stmt.LetDirectApp(id, callee, targs.map(transformArg), vCoerced, bCoerced, transform(rest))
       val from = Type.bindingType(stmt)
       val to = itpe.result
       val coercer = ValueCoercer(from, to)
+
       if (coercer.isIdentity) { stmt }
       else {
         val fresh = TmpValue("coe")
-        Stmt.LetDirectApp(fresh, callee, targs, vCoerced, bCoerced,
-          Stmt.Let(id, to, coercer(Pure.ValueVar(fresh, from)),
-            body))
+        stmt.copy(
+          id = fresh,
+          body = Stmt.Let(id, to, coercer(Pure.ValueVar(fresh, from)), stmt.body))
       }
 
     case Stmt.Return(expr) =>

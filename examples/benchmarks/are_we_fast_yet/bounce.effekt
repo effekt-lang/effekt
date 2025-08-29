@@ -11,7 +11,7 @@ interface Random {
   def next(): Int
 }
 
-def randomBall { rand: Random }: Ball at {global, io} = {
+def randomBall { rand: Random }: Ball at {global} = {
   val x = ref(toDouble(rand.next().mod(500)));
   val y = ref(toDouble(rand.next().mod(500)));
   val xVel = ref(toDouble(rand.next().mod(300) - 150));
@@ -21,44 +21,30 @@ def randomBall { rand: Random }: Ball at {global, io} = {
       val xLimit = 500.0;
       val yLimit = 500.0;
       var bounced = false;
-
-      println("Starting bounce - position: " ++ show(x.get) ++ ", " ++ show(y.get))
-
       x.set(x.get + xVel.get);
       y.set(y.get + yVel.get);
 
-      println("After position update: " ++ show(x.get) ++ ", " ++ show(y.get))
-
       if (x.get > xLimit) {
-        println("Hit right wall!")
         x.set(xLimit);
         xVel.set(neg(abs(xVel.get)));
         bounced = true;
       }
       if (x.get < 0.0) {
-        println("Hit left wall!")
         x.set(0.0);
         xVel.set(abs(xVel.get))
         bounced = true;
       }
       if (y.get > yLimit) {
-        println("Hit top wall!")
         y.set(yLimit);
         yVel.set(neg(abs(yVel.get)));
         bounced = true;
       }
       if (y.get < 0.0) {
-        println("Hit bottom wall!")
         y.set(0.0);
         yVel.set(abs(yVel.get));
         bounced = true;
       }
 
-      println("Before final check, bounced = " ++ show(bounced))
-
-      if (bounced) { println("YA!") }
-
-      println("Returning: " ++ show(bounced))
       bounced
     }
   }
@@ -77,20 +63,16 @@ def withRandom[R] { program: { Random } => R }: R = {
 
 def run(n: Int) = {
   withRandom { {rand: Random} =>
-    val ballCount = 1;
+    val ballCount = 100;
     var bounces = 0;
     val balls = array::build(ballCount) { _ => randomBall(){rand} }
 
     each(0, n) { i =>
       each(0, ballCount) { i =>
         val ball = balls.unsafeGet(i);
-        println("About to call bounce on ball " ++ show(i))
         val didBounce = ball.bounce();
-        println("Ball " ++ show(i) ++ " returned: " ++ show(didBounce))
-        if (didBounce) {
-          println("boing")
+        if (didBounce)
           bounces = bounces + 1;
-        }
       }
     }
 
