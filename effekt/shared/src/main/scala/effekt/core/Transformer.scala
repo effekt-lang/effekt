@@ -148,7 +148,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.ExprStmt(e, rest, span) if isPure(e) =>
       transform(rest)
 
-   // { e; stmt } --> { val _ = e; stmt }
+    // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest, span) =>
       val binding = insertBindings { Return(transformAsPure(e)) }
       Val(Wildcard(), binding.tpe, binding, transform(rest))

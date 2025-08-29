@@ -101,7 +101,7 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |def id = { ['A](a: 'A) => return a: 'A }
         |def idInt = { (x: Int) =>
         |    {
-        |        let res = !(id: ['A]('A) => 'A @ {})[Int](x: Int)
+        |        let ! res = (id: ['A]('A) => 'A @ {})[Int](x: Int)
         |        return res: Int
         |    }
         |}
@@ -111,7 +111,7 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |
         |def id = { ['A](a: 'A) => return a: 'A }
         |def idInt = { (x: Int) =>
-        |  let boxed = !(id: ['A]('A) => 'A @ {})[BoxedInt]((coerceIntPos: (Int) => BoxedInt @ {})(x: Int))
+        |  let ! boxed = (id: ['A]('A) => 'A @ {})[BoxedInt]((coerceIntPos: (Int) => BoxedInt @ {})(x: Int))
         |  let unboxed = (coercePosInt: (BoxedInt) => Int @ {})(boxed:BoxedInt)
         |  return unboxed: Int
         |}
