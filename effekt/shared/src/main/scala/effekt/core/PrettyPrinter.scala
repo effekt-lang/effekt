@@ -38,6 +38,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case t: ValueType  => format(t)
     case t: BlockType  => format(t)
     case b: Block      => format(b)
+    case p: Pure       => format(p)
     case x: Id         => x.show
   }
 
@@ -178,7 +179,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
         toDocStmts(rest)
 
     case LetDirectApp(id, callee, targs, vargs, bargs, rest) =>
-      "let" <+> toDoc(id) <+> "=" <+> toDoc(callee) <> argsToDoc(targs, vargs, bargs) <> line <>
+      "let" <+> "!" <+> toDoc(id) <+> "=" <+> toDoc(callee) <> argsToDoc(targs, vargs, bargs) <> line <>
         toDocStmts(rest)
 
     case Return(e) =>
