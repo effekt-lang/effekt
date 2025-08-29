@@ -180,8 +180,11 @@ enum Pure extends Tree {
 
   case Box(b: Block, annotatedCapture: Captures)
 
-  def tpe: ValueType = Type.inferType(this)
-  def capt: Captures = Type.inferCapt(this)
+  val tpe: ValueType = Type.inferType(this)
+  val capt: Captures = Type.inferCapt(this)
+
+  // This is to register custom type renderers in IntelliJ -- yes, it has to be a method!
+  def show: String = util.show(this)
 }
 export Pure.*
 
