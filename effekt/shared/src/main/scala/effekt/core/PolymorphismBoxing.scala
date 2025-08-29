@@ -76,7 +76,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       implicit val pctx: DeclarationContext = new DeclarationContext(core.declarations, core.externs)
       Context.module = mod
       val transformed = Context.timed(phaseName, source.name) { transform(core) }
-
       Some(CoreTransformed(source, tree, mod, transformed))
     }
   }
@@ -150,9 +149,33 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.Def(id, block, rest) =>
       Stmt.Def(id, transform(block), transform(rest))
     case Stmt.Let(id, tpe, binding, rest) =>
-      transform(binding).flatMap { e => coerce(e, transform(tpe)) }.run { e =>
-        Stmt.Let(id, transform(tpe), e, transform(rest))
+      Stmt.Let(id, transform(tpe), transform(binding), transform(rest))
+    case s @ Stmt.LetDirectApp(id, b, targs, vargs, bargs, rest) =>
+      val callee = transform(b)
+      // [S](S) => S            [Int]
+      val tpe: BlockType.Function = callee.tpe match {
+        case tpe: BlockType.Function => tpe
+        case _ => sys error "Callee does not have function type"
       }
+      // (Int) => Int
+      val itpe = Type.instantiate(tpe, targs, tpe.cparams.map(Set(_)))
+      val vCoerced = (vargs zip tpe.vparams).map { case (a, tpe) => coerce(transform(a), tpe) } // this was "a.tpe -> itpe -> tpe"
+      val bCoerced = (bargs zip tpe.bparams).map { case (a, tpe) => coerce(transform(a), tpe) }
+
+      // we might need to coerce the result of this application
+      val stmt: Stmt.LetDirectApp = Stmt.LetDirectApp(id, callee, targs.map(transformArg), vCoerced, bCoerced, transform(rest))
+      val from = Type.bindingType(stmt)
+      val to = itpe.result
+      val coercer = ValueCoercer(from, to)
+
+      if (coercer.isIdentity) { stmt }
+      else {
+        val fresh = TmpValue("coe")
+        stmt.copy(
+          id = fresh,
+          body = Stmt.Let(id, to, coercer(Pure.ValueVar(fresh, from)), stmt.body))
+      }
+
     case Stmt.Return(expr) =>
       Stmt.Return(transform(expr))
     case Stmt.Val(id, tpe, binding, body) =>
@@ -253,22 +276,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.Hole(span) => Stmt.Hole(span)
   }
 
-  def transform(expr: Expr)(using Context, DeclarationContext): Bind[Expr] = expr match {
-    case DirectApp(b, targs, vargs, bargs) =>
-      val callee = transform(b)
-      val tpe: BlockType.Function = callee.tpe match {
-        case tpe: BlockType.Function => tpe
-        case _ => sys error "Callee does not have function type"
-      }
-      val itpe = Type.instantiate(tpe, targs, tpe.cparams.map(Set(_)))
-      val vCoerced = (vargs zip tpe.vparams).map { case (a, tpe) => coerce(transform(a), tpe) } // this was "a.tpe -> itpe -> tpe"
-      val bCoerced = (bargs zip tpe.bparams).map { case (a, tpe) => coerce(transform(a), tpe) }
-
-      coerce(DirectApp(callee, targs.map(transformArg), vCoerced, bCoerced), itpe.result)
-
-    case pure: Pure => Bind.pure(transform(pure))
-  }
-
   def transform(pure: Pure)(using Context, DeclarationContext): Pure = pure match {
     case Pure.ValueVar(id, annotatedType) => Pure.ValueVar(id, transform(annotatedType))
     case Pure.Literal(value, annotatedType) => Pure.Literal(value, transform(annotatedType))
@@ -336,12 +343,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val orig = TmpValue("coe")
       Stmt.Val(orig, coerce.from, stmt, Stmt.Return(coerce(ValueVar(orig, coerce.from))))
     }
-
-  def coerce(expr: Expr, to: ValueType)(using Context, DeclarationContext): Bind[Expr] =
-    val from = expr.tpe
-    val coerce = ValueCoercer(from, to)
-    if (coerce.isIdentity) { Bind.pure(expr) }
-    else { Bind.bind(expr).map { x => coerce(x) } }
 
   def coerce(pure: Pure, to: ValueType)(using Context, DeclarationContext): Pure = ValueCoercer(pure.tpe, to)(pure)
 

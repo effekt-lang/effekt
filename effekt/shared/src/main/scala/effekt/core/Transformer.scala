@@ -77,7 +77,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val rec = d.symbol
       List(Data(rec, rec.tparams, List(transform(rec.constructor))))
 
-    case v @ source.ValDef(id, tpe, binding, doc, span) if pureOrIO(binding) =>
+    case v @ source.ValDef(id, tpe, binding, doc, span) if isPureOrIO(binding) =>
       val transformed = transform(binding)
       val transformedTpe = v.symbol.tpe match {
         case Some(tpe) => transform(tpe)
@@ -110,11 +110,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val cps = bps.map(b => b.symbol.capture)
       val tBody = bodies match {
         case source.ExternBody.StringExternBody(ff, body, span) :: Nil =>
-          val args = body.args.map(transformAsExpr).map {
-            case p: Pure => p: Pure
-            case _ => Context.abort("Spliced arguments need to be pure expressions.")
-          }
-          ExternBody.StringExternBody(ff, Template(body.strings, args))
+          ExternBody.StringExternBody(ff, Template(body.strings, body.args.map(transformAsPure)))
         case source.ExternBody.Unsupported(err) :: Nil =>
           ExternBody.Unsupported(err)
         case _ =>
@@ -148,10 +144,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transform(tree: source.Stmt)(using Context): Stmt = tree match {
     // { e; stmt } --> { let _ = e; stmt }
-    case source.ExprStmt(e, rest, span) if pureOrIO(e) =>
-      val (expr, bs) = Context.withBindings { transformAsExpr(e) }
-      val let = Let(Wildcard(), expr.tpe, expr, transform(rest))
-      Binding(bs, let)
+    // TODO this doesn't preserve termination
+    case source.ExprStmt(e, rest, span) if isPure(e) =>
+      transform(rest)
 
     // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest, span) =>
@@ -290,9 +285,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
               case core.BlockParam(id, tpe, capt) => Block.BlockVar(id, tpe, capt)
             }
             val result = TmpValue("etaBinding")
-            val resultBinding = DirectApp(BlockVar(f), targs, vargs, bargs)
+            val callee = BlockVar(f)
             BlockLit(tparams, bparams.map(_.id), vparams, bparams,
-              core.Let(result, resultBinding.tpe, resultBinding,
+              core.LetDirectApp(result, callee, targs, vargs, bargs,
                 Stmt.Return(Pure.ValueVar(result, transform(restpe)))))
           }
 
@@ -319,12 +314,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case _ => transformUnbox(tree)
   }
 
-  def transformAsPure(tree: source.Term)(using Context): Pure = transformAsExpr(tree) match {
-    case p: Pure => p
-    case e: Expr => Context.bind(e)
-  }
-
-  def transformAsExpr(tree: source.Term)(using Context): Expr = tree match {
+  def transformAsPure(tree: source.Term)(using Context): Pure = tree match {
     case v: source.Var => v.definition match {
       case sym: RefBinder =>
         val stateType = Context.blockTypeOf(sym)
@@ -743,6 +733,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       bindings.toList.map {
         case Binding.Val(name, tpe, binding) => Condition.Val(name, tpe, binding)
         case Binding.Let(name, tpe, binding) => Condition.Let(name, tpe, binding)
+        case Binding.LetDirectApp(name, callee, targs, vargs, bargs) => Condition.LetDirectApp(name, callee, targs, vargs, bargs)
         case Binding.Def(name, binding) => Context.panic("Should not happen")
       } :+ cond
 
@@ -804,7 +795,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       core.BlockType.Function(tparams, cparams, vparams, bparams, transform(resultType))
     }
 
-  def makeFunctionCall(call: source.CallLike, sym: TermSymbol, vargs: List[source.ValueArg], bargs: List[source.Term])(using Context): Expr = {
+  def makeFunctionCall(call: source.CallLike, sym: TermSymbol, vargs: List[source.ValueArg], bargs: List[source.Term])(using Context): Pure = {
     // the type arguments, inferred by typer
     val targs = Context.typeArguments(call).map(transform)
     // val cargs = bargs.map(b => transform(Context.inferredCapture(b)))
@@ -816,7 +807,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case f: Callable if callingConvention(f) == CallingConvention.Pure =>
         PureApp(BlockVar(f), targs, vargsT)
       case f: Callable if callingConvention(f) == CallingConvention.Direct =>
-        DirectApp(BlockVar(f), targs, vargsT, bargsT)
+        Context.bind(BlockVar(f), targs, vargsT, bargsT)
       case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")
         val universals = targs.take(r.tpe.tparams.length)
@@ -895,7 +886,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   // we can conservatively approximate to false, in order to disable the optimizations
-  def pureOrIO(t: source.Tree)(using Context): Boolean =
+  def isPureOrIO(t: source.Tree)(using Context): Boolean =
     Context.inferredCaptureOption(t) match {
       case Some(capt) => asConcreteCaptureSet(capt).pureOrIO
       case _         => false
@@ -938,7 +929,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
     ValueVar(x, s.tpe)
   }
 
-  private[core] def bind(e: Expr): ValueVar = e match {
+  private[core] def bind(e: Pure): ValueVar = e match {
     case x: ValueVar => x
     case e =>
       // create a fresh symbol and assign the type
@@ -948,6 +939,15 @@ trait TransformerOps extends ContextOps { Context: Context =>
       bindings += binding
 
       ValueVar(x, e.tpe)
+  }
+
+  private[core] def bind(callee: Block.BlockVar, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block]): ValueVar = {
+      // create a fresh symbol and assign the type
+      val x = TmpValue("r")
+      val binding: Binding.LetDirectApp = Binding.LetDirectApp(x, callee, targs, vargs, bargs)
+      bindings += binding
+
+      ValueVar(x, Type.bindingType(binding))
   }
 
   private[core] def bind(name: BlockSymbol, b: Block): BlockVar = {

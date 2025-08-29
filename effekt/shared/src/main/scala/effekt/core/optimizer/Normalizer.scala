@@ -32,19 +32,19 @@ object Normalizer { normal =>
 
   case class Context(
     blocks: Map[Id, Block],
-    exprs: Map[Id, Expr],
+    exprs: Map[Id, Pure],
     decls: DeclarationContext,     // for field selection
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
     maxInlineSize: Int,            // to control inlining and avoid code bloat
   ) {
-    def bind(id: Id, expr: Expr): Context = copy(exprs = exprs + (id -> expr))
+    def bind(id: Id, expr: Pure): Context = copy(exprs = exprs + (id -> expr))
     def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
   }
 
   private def blockFor(id: Id)(using ctx: Context): Option[Block] =
     ctx.blocks.get(id)
 
-  private def exprFor(id: Id)(using ctx: Context): Option[Expr] =
+  private def exprFor(id: Id)(using ctx: Context): Option[Pure] =
     ctx.exprs.get(id)
 
   private def isRecursive(id: Id)(using ctx: Context): Boolean =
@@ -148,7 +148,7 @@ object Normalizer { normal =>
     case _ => blockArgs.exists { b => b.isInstanceOf[BlockLit] } // higher-order function with known arg
   }
 
-  private def active(e: Expr)(using Context): Expr =
+  private def active(e: Pure)(using Context): Pure =
     normalize(e) match {
       case x @ Pure.ValueVar(id, annotatedType) => exprFor(id) match {
         case Some(p: Pure.Make)    => p
@@ -180,6 +180,9 @@ object Normalizer { normal =>
         case normalized =>
           Stmt.Let(id, tpe, normalized, normalize(body)(using C.bind(id, normalized)))
       }
+
+    case Stmt.LetDirectApp(id, callee, targs, vargs, bargs, body) =>
+      Stmt.LetDirectApp(id, callee, targs, vargs.map(normalize), bargs.map(normalize), normalize(body))
 
     // Redexes
     // -------
@@ -304,6 +307,9 @@ object Normalizer { normal =>
         case Stmt.Let(id2, tpe2, binding2, body2) =>
           Stmt.Let(id2, tpe2, binding2, normalizeVal(id, tpe, body2, body))
 
+        case Stmt.LetDirectApp(id2, callee2, targs2, vargs2, bargs2, body2) =>
+          Stmt.LetDirectApp(id2, callee2, targs2, vargs2, bargs2, normalizeVal(id, tpe, body2, body))
+
         // Flatten vals. This should be non-leaking since we use garbage free refcounting.
         // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]
         case Stmt.Val(id2, tpe2, binding2, body2) =>
@@ -387,11 +393,6 @@ object Normalizer { normal =>
     case Pure.Make(data, tag, targs, vargs) => Pure.Make(data, tag, targs, vargs.map(normalize))
     case Pure.ValueVar(id, annotatedType) => p
     case Pure.Literal(value, annotatedType) => p
-  }
-
-  def normalize(e: Expr)(using Context): Expr = e match {
-    case DirectApp(b, targs, vargs, bargs) => DirectApp(b, targs, vargs.map(normalize), bargs.map(normalize))
-    case pure: Pure => normalize(pure)
   }
 
   // Helpers for beta-reduction

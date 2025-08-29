@@ -51,6 +51,13 @@ object BindSubexpressions {
         Binding(bindings, Stmt.Let(id, tpe, other, transform(body)))
     }
 
+    case Stmt.LetDirectApp(id, callee, targs, vargs, bargs, body) => delimit {
+      for {
+        vs <- transformExprs(vargs)
+        bs <- transformBlocks(bargs)
+      } yield Stmt.LetDirectApp(id, transform(callee), targs.map(transform), vs, bs, transform(body))
+    }
+
     case Stmt.App(callee, targs, vargs, bargs) => delimit {
       for {
         c <- transform(callee)
@@ -122,18 +129,13 @@ object BindSubexpressions {
 
   def transform(id: Id)(using env: Env): Id = env.getOrElse(id, id)
 
-  def transform(e: Expr)(using Env): Bind[ValueVar | Literal] = e match {
+  def transform(e: Pure)(using Env): Bind[ValueVar | Literal] = e match {
     case Pure.ValueVar(id, tpe) => pure(ValueVar(transform(id), transform(tpe)))
     case Pure.Literal(value, tpe) => pure(Pure.Literal(value, transform(tpe)))
 
     case Pure.Make(data, tag, targs, vargs) => transformExprs(vargs) { vs =>
       bind(Pure.Make(data, tag, targs, vs))
     }
-    case DirectApp(f, targs, vargs, bargs) => for {
-      vs <- transformExprs(vargs);
-      bs <- transformBlocks(bargs);
-      res <- bind(DirectApp(f, targs.map(transform), vs, bs))
-    } yield res
     case Pure.PureApp(f, targs, vargs) => for {
       vs <- transformExprs(vargs);
       res <- bind(Pure.PureApp(f, targs.map(transform), vs))
@@ -141,7 +143,7 @@ object BindSubexpressions {
     case Pure.Box(block, capt) => transform(block) { b => bind(Pure.Box(b, transform(capt))) }
   }
 
-  def transformExprs(es: List[Expr])(using Env): Bind[List[ValueVar | Literal]] = traverse(es)(transform)
+  def transformExprs(es: List[Pure])(using Env): Bind[List[ValueVar | Literal]] = traverse(es)(transform)
   def transformBlocks(es: List[Block])(using Env): Bind[List[Block]] = traverse(es)(transform)
 
   // Types

@@ -642,14 +642,14 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "casestudies" / "buildsystem.effekt.md" -> Some(Summary(
-      staticDispatches = 43,
-      dynamicDispatches = 57,
+      staticDispatches = 32,
+      dynamicDispatches = 51,
       patternMatches = 31,
       branches = 40,
       pushedFrames = 24,
       poppedFrames = 21,
       allocations = 15,
-      closures = 36,
+      closures = 34,
       variableReads = 7,
       variableWrites = 3,
       resets = 9,
@@ -674,19 +674,19 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "casestudies" / "lexer.effekt.md" -> Some(Summary(
-      staticDispatches = 302,
-      dynamicDispatches = 18,
+      staticDispatches = 301,
+      dynamicDispatches = 15,
       patternMatches = 205,
       branches = 405,
-      pushedFrames = 187,
-      poppedFrames = 187,
+      pushedFrames = 184,
+      poppedFrames = 184,
       allocations = 109,
-      closures = 27,
+      closures = 23,
       variableReads = 164,
       variableWrites = 51,
-      resets = 31,
-      shifts = 11,
-      resumes = 11
+      resets = 30,
+      shifts = 8,
+      resumes = 8
     )),
 
     examplesDir / "casestudies" / "parser.effekt.md" -> Some(Summary(
