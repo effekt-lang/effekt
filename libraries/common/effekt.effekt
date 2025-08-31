@@ -137,6 +137,10 @@ extern def panic(msg: String) at io: Nothing =
     ret %Pos zeroinitializer ; Unit
   """
 
+extern pure def myshow[R](value: R): String =
+  js "$effekt.show(${value})"
+  chez "(show_impl ${value})"
+  llvm "; Dummy"
 
 // Strings
 // =======
