@@ -1,0 +1,88 @@
+import examples/benchmarks/runner
+
+def expand(a: Int, b: Int, c: Int, d: Int, e: Int, f: Int): Int =
+  f + (e * 10) + (d * 100) + (c * 1000) + (b * 10000) + (a * 100000)
+
+def enum_from_to(from: Int, to: Int): List[Int] =
+  if (to >= from) {
+    Cons(from, enum_from_to(from + 1, to))
+  } else {
+    Nil()
+  }
+
+def condition(thirywelvn: List[Int]): Bool =
+  thirywelvn match {
+    case Cons(t, Cons(h, Cons(i, Cons(r, Cons(y, Cons(w, Cons(e, Cons(l, Cons(v, Cons(n, Nil())))))))))) =>
+      (expand(t, h, i, r, t, y) + (5 * expand(t, w, e, l, v, e))) == expand(n, i, n, e, t, y)
+    case _ => false
+  }
+
+def push_k(p1: List[List[Int]], k:Int): List[List[Int]] =
+  p1 match {
+    case Nil() => Nil()
+    case Cons(h1, t1) => Cons(Cons(k, h1), push_k(t1, k))
+  }
+
+def addj(j: Int, ls: List[Int]): List[List[Int]] =
+  ls match {
+    case Nil() => Cons(Cons(j, Nil()), Nil())
+    case Cons(k, ks) => Cons(Cons(j, Cons(k, ks)), push_k(addj(j, ks), k))
+  }
+
+def append[A](l1: List[A], l2: List[A]): List[A] = l1 match {
+  case Nil() => l2
+  case Cons(a, as) => Cons(a, as.append(l2))
+}
+
+def addj_ls(p1: List[List[Int]], j: Int): List[List[Int]] =
+  p1 match {
+    case Nil() => Nil()
+    case Cons(pjs, t1) => append(addj(j, pjs), addj_ls(t1, j))
+  }
+
+def permutations(ls: List[Int]): List[List[Int]] =
+  ls match {
+    case Nil() => Cons(Nil(), Nil())
+    case Cons(j, js) => addj_ls(permutations(js), j)
+  }
+
+def take(n: Int, l: List[Int]): List[Int] =
+  l match {
+    case Nil() => Nil()
+    case Cons(i, iss) => if (n <= 0) { Nil() } else { Cons(i, take(n - 1, iss)) }
+  }
+
+def filter[A](ls: List[A]) { f: A => Bool }: List[A] =
+  ls match {
+    case Nil() => Nil()
+    case Cons(a, as) =>
+      if (f(a)) {
+        Cons(a, as.filter {f})
+      } else {
+        as.filter {f}
+      }
+  }
+
+def map[A, B](l: List[A]) { f: A => B }: List[B] = l match {
+  case Nil() => Nil()
+  case Cons(a, as) => Cons(f(a), as.map {f})
+}
+
+def test_cryptarithm_nofib(n: Int): List[List[List[Int]]] =
+  enum_from_to(1, n).map { i =>
+    enum_from_to(0, 9 + i)
+      .take(10)
+      .permutations
+      .filter { l => condition(l) }
+  }
+
+def first(l: List[List[List[Int]]]): Int =
+  l match {
+    case Cons(Cons(Cons(i, _), _), _) => i
+    case _ => -1
+  }
+
+def run(n: Int): Int =
+  test_cryptarithm_nofib(n).first
+
+def main() = benchmark(1){run}

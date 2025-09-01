@@ -1,0 +1,21 @@
+import examples/benchmarks/runner
+
+effect goto(i: Int): Int
+
+def ack(m: Int, n: Int): Int / goto = {
+  if (m == 0) {
+    do goto(n + 1)
+  } else if (n == 0) {
+    ack(m - 1, 1)
+  } else {
+    ack(m - 1,
+      try { ack(m, n - 1) } with goto { i => i }
+    )
+  }
+}
+
+def run(n: Int): Int =
+  // we only have one input to the benchmark program
+  try { ack(n / 2, n) } with goto { i => i }
+
+def main() = benchmark(4){run}

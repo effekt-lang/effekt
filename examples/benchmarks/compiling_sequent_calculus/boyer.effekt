@@ -1,0 +1,488 @@
+import examples/benchmarks/runner
+
+type Id {
+  A()
+  B()
+  C()
+  D()
+  X()
+  Y()
+  Z()
+  U()
+  W()
+  ADD1()
+  AND()
+  APPEND()
+  CONS()
+  DIFFERENCE()
+  EQUAL()
+  EVEN()
+  EXP()
+  F()
+  FALSE()
+  FOUR()
+  IF()
+  IMPLIES()
+  LENGTH()
+  LESSP()
+  MEMBER()
+  NIL()
+  NOT()
+  ONE()
+  OR()
+  PLUS()
+  QUOTIENT()
+  REMAINDER()
+  REVERSE()
+  TIMES()
+  TRUE()
+  TWO()
+  ZERO()
+  ZEROP()
+}
+
+type Term {
+  Var(v: Id)
+  Func(f: Id, args: List[Term], lemmas: () => List[(Term, Term)] at {})
+  ERROR()
+}
+
+def id_equal(id1: Id, id2: Id): Bool =
+  (id1, id2) match {
+    case (A(), A()) => true
+    case (B(), B()) => true
+    case (C(), C()) => true
+    case (D(), D()) => true
+    case (X(), X()) => true
+    case (Y(), Y()) => true
+    case (Z(), Z()) => true
+    case (U(), U()) => true
+    case (W(), W()) => true
+    case (ADD1(), ADD1()) => true
+    case (AND(), AND()) => true
+    case (APPEND(), APPEND()) => true
+    case (CONS(), CONS()) => true
+    case (DIFFERENCE(), DIFFERENCE()) => true
+    case (EQUAL(), EQUAL()) => true
+    case (EVEN(), EVEN()) => true
+    case (EXP(), EXP()) => true
+    case (F(), F()) => true
+    case (FALSE(), FALSE()) => true
+    case (FOUR(), FOUR()) => true
+    case (IF(), IF()) => true
+    case (IMPLIES(), IMPLIES()) => true
+    case (LENGTH(), LENGTH()) => true
+    case (LESSP(), LESSP()) => true
+    case (MEMBER(), MEMBER()) => true
+    case (NIL(), NIL()) => true
+    case (NOT(), NOT()) => true
+    case (ONE(), ONE()) => true
+    case (OR(), OR()) => true
+    case (PLUS(), PLUS()) => true
+    case (QUOTIENT(), QUOTIENT()) => true
+    case (REMAINDER(), REMAINDER()) => true
+    case (REVERSE(), REVERSE()) => true
+    case (TIMES(), TIMES()) => true
+    case (TRUE(), TRUE()) => true
+    case (TWO(), TWO()) => true
+    case (ZERO(), ZERO()) => true
+    case (ZEROP(), ZEROP()) => true
+    case _ => false
+  }
+
+def term_ls_eq(l1: List[Term], l2: List[Term]): Bool =
+  (l1, l2) match {
+    case (Nil(), _) => true
+    case (Cons(t1, ts1), Cons(t2, ts2)) => term_eq(t1, t2) && term_ls_eq(ts1, ts2)
+    case _ => false
+  }
+
+def term_eq(t1: Term, t2: Term): Bool =
+  (t1, t2) match {
+    case (Var(id1), Var(id2)) => id_equal(id1, id2)
+    case (Func(f1, args1, _), Func(f2, args2, _)) => id_equal(f1, f2) && term_ls_eq(args1, args2)
+    case _ => false
+  }
+
+def term_in_list(term: Term, ht: List[Term]): Bool =
+  ht match {
+    case Nil() => false
+    case Cons(t, ts) => term_eq(t, term) || term_in_list(term, ts)
+  }
+
+def all_term(ls: List[Term]) { f: Term => Bool }: Bool =
+  ls match {
+    case Nil() => true
+    case Cons(t, ts) => f(t) && all_term(ts) {f}
+  }
+
+def replicate_term(n: Int, t: Term): List[Term] =
+  if (n == 0) {
+    Nil()
+  } else {
+    Cons(t, replicate_term(n - 1, t))
+  }
+
+def find(vid: Id, ls: List[(Id, Term)]): (Bool, Term) =
+  ls match {
+    case Nil() => (false, ERROR())
+    case Cons((vid2, val2), bs) =>
+      if (id_equal(vid, vid2)) {
+        (true, val2)
+      } else {
+        find(vid, bs)
+      }
+  }
+
+def map(l: List[Term]) { f: Term => Term }: List[Term] =
+  l match {
+    case Nil() => Nil()
+    case Cons(x, xs) => Cons(f(x), xs.map {f})
+  }
+
+def boyer_add1(a: Term): Term = Func(ADD1(), [a], box { () => [] })
+def boyer_zero(): Term = Func(ZERO(), [], box { () => [] })
+def boyer_zerop(a: Term): Term =
+  Func(ZEROP(), [a], box { () => [
+    (boyer_zerop(boyer_x()),
+      boyer_equal(boyer_x(), boyer_zero()))
+  ]})
+
+
+def boyer_one(): Term =
+  Func(ONE(), [], box { () => [ (boyer_one(), boyer_add1(boyer_zero())) ]})
+
+def boyer_two(): Term =
+  Func(TWO(), [], box { () => [ (boyer_two(), boyer_add1(boyer_one())) ]})
+
+def boyer_four(): Term =
+  Func(FOUR(), [], box { () => [ (boyer_four(), boyer_add1(boyer_add1(boyer_one()))) ]})
+
+def boyer_if_(a: Term, b: Term, c: Term): Term =
+  Func(IF(), [a, b, c], box { () => [
+    (boyer_if_(boyer_if_(boyer_x(), boyer_y(), boyer_z()), boyer_u(), boyer_w()),
+      boyer_if_(boyer_x(),
+        boyer_if_(boyer_y(), boyer_u(), boyer_w()),
+        boyer_if_(boyer_z(), boyer_u(), boyer_w())))
+  ]})
+
+def boyer_not_(a: Term): Term =
+  Func(NOT(), [a], box { () => [
+    (boyer_not_(boyer_x()), boyer_if_(boyer_x(), boyer_false(), boyer_true()))
+  ]})
+
+def boyer_and_(a: Term, b: Term): Term =
+  Func(AND(), [a, b], box { () => [
+    (boyer_and_(boyer_x(), boyer_y()),
+      boyer_if_(boyer_x(), boyer_if_(boyer_y(), boyer_true(), boyer_false()), boyer_false()))
+  ]})
+
+def boyer_equal(a: Term, b: Term): Term =
+  Func(EQUAL(), [a, b], box { () => [
+    (boyer_equal(boyer_plus(boyer_x(), boyer_y()), boyer_zero()),
+      boyer_and_(boyer_zerop(boyer_x()), boyer_zerop(boyer_y()))),
+    (boyer_equal(boyer_plus(boyer_x(), boyer_y()), boyer_plus(boyer_x(), boyer_z())),
+      boyer_equal(boyer_y(), boyer_z())),
+    (boyer_equal(boyer_zero(), boyer_difference(boyer_x(), boyer_y())),
+      boyer_not_(boyer_lessp(boyer_y(), boyer_x()))),
+    (boyer_equal(boyer_x(), boyer_difference(boyer_x(), boyer_y())),
+      boyer_or_(boyer_equal(boyer_x(), boyer_zero()), boyer_zerop(boyer_y()))),
+    (boyer_equal(boyer_times(boyer_x(), boyer_y()), boyer_zero()),
+      boyer_or_(boyer_zerop(boyer_x()), boyer_zerop(boyer_y()))),
+    (boyer_equal(boyer_append_(boyer_x(), boyer_y()), boyer_append_(boyer_x(), boyer_z())),
+      boyer_equal(boyer_y(), boyer_z())),
+    (boyer_equal(boyer_y(), boyer_times(boyer_x(), boyer_y())),
+      boyer_or_(boyer_equal(boyer_y(), boyer_zero()), boyer_equal(boyer_x(), boyer_one()))),
+    (boyer_equal(boyer_x(), boyer_times(boyer_x(), boyer_y())),
+      boyer_or_(boyer_equal(boyer_x(), boyer_zero()), boyer_equal(boyer_y(), boyer_one()))),
+    (boyer_equal(boyer_times(boyer_x(), boyer_y()), boyer_one()),
+      boyer_and_(boyer_equal(boyer_x(), boyer_one()), boyer_equal(boyer_y(), boyer_one()))),
+    (boyer_equal(boyer_difference(boyer_x(), boyer_y()), boyer_difference(boyer_z(), boyer_y())),
+      boyer_if_(boyer_lessp(boyer_x(), boyer_y()),
+        boyer_not_(boyer_lessp(boyer_y(), boyer_z())),
+        boyer_if_(boyer_lessp(boyer_z(), boyer_y()),
+          boyer_not_(boyer_lessp(boyer_y(), boyer_x())), boyer_equal(boyer_x(), boyer_z())))),
+    (boyer_equal(boyer_lessp(boyer_x(), boyer_y()), boyer_z()),
+      boyer_if_(boyer_lessp(boyer_x(), boyer_y()),
+        boyer_equal(boyer_true(), boyer_z()),
+        boyer_equal(boyer_false(), boyer_z())))
+  ]})
+
+def boyer_append_(a: Term, b: Term): Term =
+  Func(APPEND(), [a, b], box { () => [
+    (boyer_append_(boyer_append_(boyer_x(), boyer_y()), boyer_z()),
+      boyer_append_(boyer_x(), boyer_append_(boyer_y(), boyer_z())))
+  ]})
+
+def boyer_x(): Term = Var(X())
+def boyer_y(): Term = Var(Y())
+def boyer_z(): Term = Var(Z())
+def boyer_u(): Term = Var(U())
+def boyer_w(): Term = Var(W())
+def boyer_a(): Term = Var(A())
+def boyer_b(): Term = Var(B())
+def boyer_c(): Term = Var(C())
+def boyer_d(): Term = Var(D())
+
+def boyer_false(): Term = Func(FALSE(), [], box { () => [] })
+def boyer_true(): Term = Func(TRUE(), [], box { () => [] })
+
+def boyer_or_(a: Term, b: Term): Term =
+  Func(OR(), [a, b], box { () => [
+    (boyer_or_(boyer_x(), boyer_y()),
+      boyer_if_(boyer_x(), boyer_true(), boyer_if_(boyer_y(), boyer_true(), boyer_false())))
+  ]})
+
+def boyer_lessp(a: Term, b: Term): Term =
+  Func(LESSP(), [a, b], box { () => [
+    (boyer_lessp(boyer_remainder(boyer_x(), boyer_y()), boyer_y()),
+      boyer_not_(boyer_zerop(boyer_y()))),
+    (boyer_lessp(boyer_quotient(boyer_x(), boyer_y()), boyer_x()),
+      boyer_and_(boyer_not_(boyer_zerop(boyer_x())), boyer_lessp(boyer_one(), boyer_y()))),
+    (boyer_lessp(boyer_plus(boyer_x(), boyer_y()), boyer_plus(boyer_x(), boyer_z())),
+      boyer_lessp(boyer_y(), boyer_z())),
+    (boyer_lessp(boyer_times(boyer_x(), boyer_z()), boyer_times(boyer_y(), boyer_z())),
+      boyer_and_(boyer_not_(boyer_zerop(boyer_z())), boyer_lessp(boyer_x(), boyer_y()))),
+    (boyer_lessp(boyer_y(), boyer_plus(boyer_x(), boyer_y())),
+      boyer_not_(boyer_zerop(boyer_x())))
+  ]})
+
+
+def boyer_cons(a: Term, b: Term): Term =
+  Func(CONS(), Cons(a, Cons(b, Nil())), box { () => Nil() })
+
+def boyer_remainder(a: Term, b: Term): Term =
+  Func(REMAINDER(), [a, b], box { () => [
+    (boyer_remainder(boyer_x(), boyer_one()),
+      boyer_zero()),
+    (boyer_remainder(boyer_x(), boyer_x()),
+      boyer_zero()),
+    (boyer_remainder(boyer_times(boyer_x(), boyer_y()), boyer_x()),
+      boyer_zero()),
+    (boyer_remainder(boyer_times(boyer_x(), boyer_y()), boyer_y()),
+      boyer_zero())
+  ]})
+
+def boyer_quotient(a: Term, b: Term): Term =
+  Func(QUOTIENT(), [a, b], box { () => [
+    (boyer_quotient(boyer_plus(boyer_x(), boyer_plus(boyer_x(), boyer_y())), boyer_two()),
+      boyer_plus(boyer_x(), boyer_quotient(boyer_y(), boyer_two()))),
+    (boyer_quotient(boyer_times(boyer_y(), boyer_x()), boyer_y()),
+      boyer_if_(boyer_zerop(boyer_y()), boyer_zero(), boyer_x()))
+  ]})
+
+def boyer_times(a: Term, b: Term): Term =
+  Func(TIMES(), [a, b], box { () => [
+    (boyer_times(boyer_x(), boyer_plus(boyer_y(), boyer_z())),
+      boyer_plus(boyer_times(boyer_x(), boyer_y()), boyer_times(boyer_x(), boyer_z()))),
+    (boyer_times(boyer_times(boyer_x(), boyer_y()), boyer_z()),
+      boyer_times(boyer_x(), boyer_times(boyer_y(), boyer_z()))),
+    (boyer_times(boyer_x(), boyer_difference(boyer_y(), boyer_z())),
+      boyer_difference(boyer_times(boyer_y(), boyer_x()), boyer_times(boyer_z(), boyer_x()))),
+    (boyer_times(boyer_x(), boyer_add1(boyer_y())),
+      boyer_plus(boyer_x(), boyer_times(boyer_x(), boyer_y())))
+  ]})
+
+def boyer_difference(a: Term, b: Term): Term =
+  Func(DIFFERENCE(), [a, b], box { () => [
+    (boyer_difference(boyer_x(), boyer_x()),
+      boyer_zero()),
+    (boyer_difference(boyer_plus(boyer_x(), boyer_y()), boyer_x()),
+      boyer_y()),
+    (boyer_difference(boyer_plus(boyer_y(), boyer_x()), boyer_x()),
+      boyer_y()),
+    (boyer_difference(boyer_plus(boyer_x(), boyer_y()), boyer_plus(boyer_x(), boyer_z())),
+      boyer_difference(boyer_y(), boyer_z())),
+    (boyer_difference(boyer_plus(boyer_y(), boyer_plus(boyer_x(), boyer_z())), boyer_x()),
+      boyer_plus(boyer_y(), boyer_z())),
+    (boyer_difference(boyer_add1(boyer_plus(boyer_y(), boyer_z())), boyer_z()),
+      boyer_add1(boyer_y())),
+    (boyer_difference(boyer_add1(boyer_add1(boyer_x())), boyer_two()),
+      boyer_x())
+  ]})
+
+def boyer_exp_(a: Term, b: Term): Term =
+  Func(EXP(), [a, b], box { () => [
+      (boyer_exp_(boyer_x(), boyer_plus(boyer_y(), boyer_z())),
+        boyer_times(boyer_exp_(boyer_x(), boyer_y()), boyer_exp_(boyer_x(), boyer_z()))),
+      (boyer_exp_(boyer_x(), boyer_times(boyer_y(), boyer_z())),
+        boyer_exp_(boyer_exp_(boyer_x(), boyer_y()), boyer_z()))
+  ]})
+
+def boyer_implies(a: Term, b: Term): Term =
+  Func(IMPLIES(), [a, b], box { () => [
+    (boyer_implies(boyer_x(), boyer_y()),
+      boyer_if_(boyer_x(), boyer_if_(boyer_y(), boyer_true(), boyer_false()), boyer_true()))
+  ]})
+
+def boyer_length_(a: Term): Term =
+  Func(LENGTH(), [a], box { () => [
+    (boyer_length_(boyer_reverse_(boyer_x())),
+      boyer_length_(boyer_x())),
+    (boyer_length_(boyer_cons(boyer_x(), boyer_cons(boyer_y(), boyer_cons(boyer_z(), boyer_cons(boyer_u(), boyer_w()))))),
+        boyer_plus(boyer_four(), boyer_length_(boyer_w())))
+  ]})
+
+def boyer_reverse_(a: Term): Term =
+  Func(REVERSE(), [a], box { () => [
+    (boyer_reverse_(boyer_append_(boyer_x(), boyer_y())),
+      boyer_append_(boyer_reverse_(boyer_y()), boyer_reverse_(boyer_x())))
+  ]})
+
+def boyer_nil(): Term = Func(NIL(), [], box { () => [] })
+
+def boyer_member(a: Term, b: Term): Term =
+  Func(MEMBER(), [a, b], box { () => [
+    (boyer_member(boyer_x(), boyer_append_(boyer_y(), boyer_z())),
+      boyer_or_(boyer_member(boyer_x(), boyer_y()), boyer_member(boyer_x(), boyer_z()))),
+    (boyer_member(boyer_x(), boyer_reverse_(boyer_y())),
+      boyer_member(boyer_x(), boyer_y()))
+  ]})
+
+def boyer_plus(a: Term, b: Term): Term =
+  Func(PLUS(), [a, b], box { () => [
+    (boyer_plus(boyer_plus(boyer_x(), boyer_y()), boyer_z()),
+      boyer_plus(boyer_x(), boyer_plus(boyer_y(), boyer_z()))),
+    (boyer_plus(boyer_remainder(boyer_x(), boyer_y()), boyer_times(boyer_y(), boyer_quotient(boyer_x(), boyer_y()))),
+      boyer_x()),
+    (boyer_plus(boyer_x(), boyer_add1(boyer_y())),
+      boyer_add1(boyer_plus(boyer_x(), boyer_y())))
+  ]})
+
+def boyer_f(a: Term): Term = Func(F(), [a], box { () => [] })
+
+def one_way_unify1(term1: Term, term2: Term, subst: List[(Id, Term)]): (Bool, List[(Id, Term)]) =
+  term2 match {
+    case Var(vid2) =>
+      val (found, v2) = find(vid2, subst)
+      if (found) {
+        (term_eq(term1, v2), subst)
+      } else {
+        (true, Cons((vid2, term1), subst))
+      }
+
+    case Func(f2, as2, l2) => term1 match {
+      case Var(_) => (false, Nil())
+      case Func(f1, as1, l1) =>
+        if (id_equal(f1, f2)) {
+          one_way_unify1_lst(as1, as2, subst)
+        } else {
+          (false, Nil())
+        }
+      case ERROR() => (false, Nil())
+    }
+    case ERROR() => (false, Nil())
+  }
+
+def one_way_unify1_lst(tts1: List[Term], tts2: List[Term], subst: List[(Id, Term)]): (Bool, List[(Id, Term)]) =
+  (tts1, tts2) match {
+    case (Nil(), Nil()) => (true, subst)
+    case (Nil(), _) => (false, Nil())
+    case (_, Nil()) => (false, Nil())
+    case (Cons(t1, ts1), Cons(t2, ts2)) =>
+      val (hd_ok, subst_) = one_way_unify1(t1, t2, subst)
+      val (tl_ok, subst__) = one_way_unify1_lst(ts1, ts2, subst_)
+      (hd_ok && tl_ok, subst__)
+  }
+
+def one_way_unify(term1: Term, term2: Term): (Bool, List[(Id, Term)]) =
+  one_way_unify1(term1, term2, Nil())
+
+def rewrite_with_lemmas(term: Term, lss: List[(Term, Term)]): Term =
+  lss match {
+    case Nil() => term
+    case Cons((lhs, rhs), ls) =>
+      val (unified, subst) = one_way_unify(term, lhs)
+      if (unified) {
+        rewrite(apply_subst(subst, rhs))
+      } else {
+        rewrite_with_lemmas(term, ls)
+      }
+  }
+
+def rewrite(t: Term): Term =
+  t match {
+    case Var(v) => Var(v)
+    case Func(f, args, lemmas) =>
+      rewrite_with_lemmas(Func(f, args.map {rewrite}, lemmas), lemmas())
+    case ERROR() => ERROR()
+  }
+
+def truep(x: Term, l: List[Term]): Bool =
+  x match {
+    case Var(v) => term_in_list(x, l)
+    case Func(t, args, lemmas) => id_equal(t, TRUE()) || term_in_list(x, l)
+    case ERROR() => term_in_list(x, l)
+  }
+
+def falsep(x: Term, l: List[Term]): Bool =
+  x match {
+    case Var(v) => term_in_list(x, l)
+    case Func(t, args, lemmas) => id_equal(t, FALSE()) || term_in_list(x, l)
+    case ERROR() => term_in_list(x, l)
+  }
+
+def tautologyp(x: Term, true_lst: List[Term], false_lst: List[Term]): Bool =
+  if (truep(x, true_lst)) { true }
+  else if (falsep(x, false_lst)) { false }
+  else x match {
+    case Var(v) => false
+    case Func(IF(), Cons(cond, Cons(t, Cons(e, Nil()))), lemmas) =>
+      if (truep(cond, true_lst)) {
+        tautologyp(t, true_lst, false_lst)
+      } else if (falsep(cond, false_lst)) {
+        tautologyp(e, true_lst, false_lst)
+      } else {
+        tautologyp(t, Cons(cond, true_lst), false_lst) && tautologyp(e, true_lst, Cons(cond, false_lst))
+      }
+    case Func(_, _, _) => false
+    case ERROR() => false
+  }
+
+def tautp(x: Term): Bool =
+  tautologyp(rewrite(x), Nil(), Nil())
+
+def apply_subst(subst: List[(Id, Term)], t: Term): Term =
+  t match {
+    case Var(vid) =>
+      val (found, value) = find(vid, subst)
+      if (found) { value }
+      else { Var(vid) }
+    case Func(f, args, ls) => Func(f, map(args) { x => apply_subst(subst, x) }, ls)
+    case ERROR() => ERROR()
+  }
+
+def boyer_subst0(): List[(Id, Term)] = [
+  (X(), boyer_f(boyer_plus(boyer_plus(boyer_a(), boyer_b()), boyer_plus(boyer_c(), boyer_zero())))),
+  (Y(), boyer_f(boyer_times(boyer_times(boyer_a(), boyer_b()), boyer_plus(boyer_c(), boyer_d())))),
+  (Z(), boyer_f(boyer_reverse_(boyer_append_(boyer_append_(boyer_a(), boyer_b()), boyer_nil())))),
+  (U(), boyer_equal(boyer_plus(boyer_a(), boyer_b()), boyer_difference(boyer_x(), boyer_y()))),
+  (W(), boyer_lessp(boyer_remainder(boyer_a(), boyer_b()), boyer_member(boyer_a(), boyer_length_(boyer_b()))))
+]
+
+def boyer_theorem(xxxx: Term): Term =
+  boyer_implies(
+    boyer_and_(
+      boyer_implies(xxxx, boyer_y()),
+      boyer_and_(
+        boyer_implies(boyer_y(), boyer_z()),
+        boyer_and_(
+          boyer_implies(boyer_z(), boyer_u()),
+          boyer_implies(boyer_u(), boyer_w()))
+      )
+    ),
+    boyer_implies(boyer_x(), boyer_w())
+  )
+
+def test0(xxxx: Term): Bool =
+  tautp(apply_subst(boyer_subst0(), boyer_theorem(xxxx)))
+
+def test_boyer_nofib(n: Int): Bool =
+  replicate_term(n, Var(X())).all_term {test0}
+
+def run(n: Int): Int = {
+  val res = test_boyer_nofib(n)
+  if (res) { 1 } else { 0 }
+}
+
+def main() = benchmark(9){run}

@@ -1,0 +1,21 @@
+import examples/benchmarks/runner
+
+def sudan(n: Int, x: Int, y: Int): Int = {
+  if (n == 0) {
+    x + y
+  } else if (y == 0) {
+    x
+  } else {
+    val inner = sudan(n, x, y - 1)
+    sudan(n - 1, inner, inner + y)
+  }
+}
+
+def run(n: Int): Int = {
+  // only one argument
+  val x = n * 2
+  val y = n * 2
+  sudan(n, x, y)
+}
+
+def main() = benchmark(1){run}

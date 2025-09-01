@@ -1,0 +1,197 @@
+import examples/benchmarks/runner
+
+record Vec(x: Int, y: Int)
+
+record Vec4(x: Int, y: Int, z: Int, w: Int)
+
+def vec_add(a: Vec, b: Vec): Vec =
+  (a, b) match {
+    case (Vec(x1, y1), Vec(x2, y2)) => Vec(x1 + x2, y1 + y2)
+  }
+
+def vec_sub(a: Vec, b: Vec): Vec =
+  (a, b) match {
+    case (Vec(x1, y1), Vec(x2, y2)) => Vec(x1 - x2, y1 - y2)
+  }
+
+def scale_vec2(a: Vec, m: Int, n: Int): Vec =
+  a match {
+    case Vec(x, y) => Vec((x * m) / n, (y * m) / n)
+  }
+
+
+def p_tile(): List[Vec4] = {
+  val p5: List[Vec4] = Cons(Vec4(10, 4, 13, 5), Cons(Vec4(13, 5, 16, 4), Cons(Vec4(11, 0, 14, 2), Cons(Vec4(14, 2, 16, 2), Nil()))));
+  val p4: List[Vec4] = Cons(Vec4(8, 12, 16, 10), Cons(Vec4(8, 8, 12, 9), Cons(Vec4(12, 9, 16, 8), Cons(Vec4(9, 6, 12, 7), Cons(Vec4(12, 7, 16, 6), p5)))));
+  val p3: List[Vec4] = Cons(Vec4(10, 16, 12, 14), Cons(Vec4(12, 14, 16, 13), Cons(Vec4(12, 16, 13, 15), Cons(Vec4(13, 15, 16, 14), Cons(Vec4(14, 16, 16, 15), p4)))));
+  val p2: List[Vec4] = Cons(Vec4(4, 13, 0, 16), Cons(Vec4(0, 16, 6, 15), Cons(Vec4(6, 15, 8, 16), Cons(Vec4(8, 16, 12, 12), Cons(Vec4(12, 12, 16, 12), p3)))));
+  val p1: List[Vec4] = Cons(Vec4(4, 10, 7, 6), Cons(Vec4(7, 6, 4, 5), Cons(Vec4(11, 0, 10, 4), Cons(Vec4(10, 4, 9, 6), Cons(Vec4(9, 6, 8, 8), Cons(Vec4(8, 8, 4, 13), p2))))));
+  val p: List[Vec4] = Cons(Vec4(0, 3, 3, 4), Cons(Vec4(3, 4, 0, 8), Cons(Vec4(0, 8, 0, 3), Cons(Vec4(6, 0, 4, 4), Cons(Vec4(4, 5, 4, 10), p1)))));
+  p
+}
+
+def q_tile(): List[Vec4] = {
+  val q7: List[Vec4] = Cons(Vec4(0, 0, 0, 8), Cons(Vec4(0, 12, 0, 16), Nil()));
+  val q6: List[Vec4] = Cons(Vec4(13, 0, 16, 6), Cons(Vec4(14, 0, 16, 4), Cons(Vec4(15, 0, 16, 2), Cons(Vec4(0, 0, 8, 0), Cons(Vec4(12, 0, 16, 0), q7)))));
+  val q5: List[Vec4] = Cons(Vec4(10, 0, 14, 11), Cons(Vec4(12, 0, 13, 4), Cons(Vec4(13, 4, 16, 8), Cons(Vec4(16, 8, 15, 10), Cons(Vec4(15, 10, 16, 16), q6)))));
+  val q4: List[Vec4] = Cons(Vec4(4, 5, 4, 7), Cons(Vec4(4, 0, 6, 5), Cons(Vec4(6, 5, 6, 7), Cons(Vec4(6, 0, 8, 5), Cons(Vec4(8, 5, 8, 8), q5)))));
+  val q3: List[Vec4] = Cons(Vec4(11, 15, 9, 13), Cons(Vec4(10, 10, 8, 12), Cons(Vec4(8, 12, 12, 12), Cons(Vec4(12, 12, 10, 10), Cons(Vec4(2, 0, 4, 5), q4)))));
+  val q2: List[Vec4] = Cons(Vec4(4, 16, 5, 14), Cons(Vec4(6, 16, 7, 15), Cons(Vec4(0, 10, 7, 11), Cons(Vec4(9, 13, 8, 15), Cons(Vec4(8, 15, 11, 15), q3)))));
+  val q1: List[Vec4] = Cons(Vec4(0, 12, 3, 13), Cons(Vec4(3, 13, 5, 14), Cons(Vec4(5, 14, 7, 15), Cons(Vec4(7, 15, 8, 16), Cons(Vec4(2, 16, 3, 13), q2)))));
+  val q: List[Vec4] = Cons(Vec4(0, 8, 4, 7), Cons(Vec4(4, 7, 6, 7), Cons(Vec4(6, 7, 8, 8), Cons(Vec4(8, 8, 12, 10), Cons(Vec4(12, 10, 16, 16), q1)))));
+  q
+}
+
+def r_tile(): List[Vec4] = {
+  val r4: List[Vec4] = Cons(Vec4(11, 16, 12, 12), Cons(Vec4(12, 12, 16, 8), Cons(Vec4(13, 13, 16, 10), Cons(Vec4(14, 14, 16, 12), Cons(Vec4(15, 15, 16, 14), Nil())))));
+  val r3: List[Vec4] = Cons(Vec4(2, 2, 8, 0), Cons(Vec4(3, 3, 8, 2), Cons(Vec4(8, 2, 12, 0), Cons(Vec4(5, 5, 12, 3), Cons(Vec4(12, 3, 16, 0), r4)))));
+  val r2: List[Vec4] = Cons(Vec4(5, 10, 2, 12), Cons(Vec4(2, 12, 0, 16), Cons(Vec4(16, 8, 12, 12), Cons(Vec4(12, 12, 11, 16), Cons(Vec4(1, 1, 4, 0), r3)))));
+  val r1: List[Vec4] = Cons(Vec4(16, 6, 11, 10), Cons(Vec4(11, 10, 6, 16), Cons(Vec4(16, 4, 14, 6), Cons(Vec4(14, 6, 8, 8), Cons(Vec4(8, 8, 5, 10), r2)))));
+  val r: List[Vec4] =  Cons(Vec4(0, 0, 8, 8), Cons(Vec4(12, 12, 16, 16), Cons(Vec4(0, 4, 5, 10), Cons(Vec4(0, 8, 2, 12), Cons(Vec4(0, 12, 1, 14), r1)))));
+  r
+}
+
+def s_tile(): List[Vec4] = {
+  val s5: List[Vec4] = Cons(Vec4(15, 5, 13, 7), Cons(Vec4(13, 7, 15, 8), Cons(Vec4(15, 8, 15, 5), Nil())));
+  val s4: List[Vec4] = Cons(Vec4(15, 9, 16, 8), Cons(Vec4(10, 16, 11, 10), Cons(Vec4(12, 4, 10, 6), Cons(Vec4(10, 6, 12, 7), Cons(Vec4(12, 7, 12, 4), s5)))));
+  val s3: List[Vec4] = Cons(Vec4(7, 8, 7, 13), Cons(Vec4(7, 13, 8, 16), Cons(Vec4(12, 16, 13, 13), Cons(Vec4(13, 13, 14, 11), Cons(Vec4(14, 11, 15, 9), s4)))));
+  val s2: List[Vec4] = Cons(Vec4(14, 11, 16, 12), Cons(Vec4(15, 9, 16, 10), Cons(Vec4(16, 0, 10, 4), Cons(Vec4(10, 4, 8, 6), Cons(Vec4(8, 6, 7, 8), s3)))));
+  val s1: List[Vec4] = Cons(Vec4(0, 8, 8, 6), Cons(Vec4(0, 10, 7, 8), Cons(Vec4(0, 12, 7, 10), Cons(Vec4(0, 14, 7, 13), Cons(Vec4(13, 13, 16, 14), s2)))));
+  val s: List[Vec4] = Cons(Vec4(0, 0, 4, 2), Cons(Vec4(4, 2, 8, 2), Cons(Vec4(8, 2, 16, 0), Cons(Vec4(0, 4, 2, 1), Cons(Vec4(0, 6, 7, 4), s1)))));
+  s
+}
+
+def nil(a: Vec, b: Vec, c: Vec): List[Vec4] = Nil()
+
+def tup2(ab: Vec, cd: Vec): Vec4 =
+  (ab, cd) match {
+    case (Vec(a, b), Vec(c, d)) => Vec4(a, b, c, d)
+  }
+
+def grid(m: Int, n: Int, segments: List[Vec4], a: Vec, b: Vec, c: Vec): List[Vec4] =
+  segments match {
+    case Nil() => Nil()
+    case Cons(Vec4(x0, y0, x1, y1), t) =>
+      Cons(
+        tup2(
+          vec_add(vec_add(a, scale_vec2(b, x0, m)), scale_vec2(c, y0, n)),
+          vec_add(vec_add(a, scale_vec2(b, x1, m)), scale_vec2(c, y1, n))),
+      grid(m, n, t, a, b, c))
+  }
+
+def rot(a: Vec, b: Vec, c: Vec) { p: (Vec, Vec, Vec) => List[Vec4] }: List[Vec4] =
+  p(vec_add(a, b), c, vec_sub(Vec(0, 0), b))
+
+def appendRev(l1: List[Vec4], l2: List[Vec4]): List[Vec4] =
+  l1 match {
+    case Nil() => l2
+    case Cons(v, vs) => appendRev(vs, Cons(v, l2))
+  }
+
+def rev(l: List[Vec4]): List[Vec4] =
+  appendRev(l, Nil())
+
+def append(l1: List[Vec4], l2: List[Vec4]): List[Vec4] =
+  l2 match {
+    case Nil() => l1
+    case Cons(v, vs) => appendRev(rev(l1), Cons(v, vs))
+  }
+
+def beside(m: Int, n: Int, a: Vec, b: Vec, c: Vec) { p: (Vec, Vec, Vec) => List[Vec4] } { q: (Vec, Vec, Vec) => List[Vec4] } =
+  append(
+    p(a, scale_vec2(b, m, m + n), c),
+    q(vec_add(a, scale_vec2(b, m, m + n)), scale_vec2(b, n, n + m), c))
+
+def above(m: Int, n: Int, a: Vec, b: Vec, c: Vec) { p: (Vec, Vec, Vec) => List[Vec4] } { q: (Vec, Vec, Vec) => List[Vec4] }: List[Vec4] =
+  append(
+    p(vec_add(a, scale_vec2(c, n, m + n)), b, scale_vec2(c, m, n + m)),
+    q(a, b, scale_vec2(c, n, m + n)))
+
+def tile_to_grid(arg: List[Vec4], arg2: Vec, arg3: Vec, arg4: Vec): List[Vec4] =
+  grid(16, 16, arg, arg2, arg3, arg4)
+
+def p(arg: Vec, q6: Vec, q7: Vec): List[Vec4] =
+  tile_to_grid(p_tile(), arg, q6, q7)
+
+def q(arg: Vec, q6: Vec, q7: Vec): List[Vec4] =
+  tile_to_grid(q_tile(), arg, q6, q7)
+
+def r(arg: Vec, q6: Vec, q7: Vec): List[Vec4] =
+  tile_to_grid(r_tile(), arg, q6, q7)
+
+def s(arg: Vec, q6: Vec, q7: Vec): List[Vec4] =
+  tile_to_grid(s_tile(), arg, q6, q7)
+
+
+def quartet(arg: Vec, a6: Vec, a7: Vec) { a: (Vec, Vec, Vec) => List[Vec4] } { b: (Vec, Vec, Vec) => List[Vec4] } { c: (Vec, Vec, Vec) => List[Vec4] } { d: (Vec, Vec, Vec) => List[Vec4] }: List[Vec4] =
+  above(1, 1, arg, a6, a7)
+    { (p5, p6, p7) => beside(1, 1, p5, p6, p7) { a } { b } }
+    { (p5, p6, p7) => beside(1, 1, p5, p6, p7) { c } { d } }
+
+def t(arg: Vec, q6: Vec, q7: Vec): List[Vec4] =
+  quartet(arg, q6, q7) { p } { q } { r } { s }
+
+def cycle_(arg: Vec, p3: Vec, p4: Vec) { p1: (Vec, Vec, Vec) => List[Vec4] }: List[Vec4] =
+  quartet(arg, p3, p4) { p1 }
+    { (a, b, c) => rot(a, b, c) { (a, b, c) => rot(a, b, c) { p1 } } }
+    { (a, b, c) => rot(a, b, c) { p1 } }
+    { (a, b, c) => rot(a, b, c) { (a, b, c) => rot(a, b, c) { p1 } } }
+
+def u(arg: Vec, p2: Vec, p3: Vec): List[Vec4] =
+  cycle_(arg, p2, p3) { (a, b, c) => rot(a, b, c) { q } }
+
+def side1(arg: Vec, q6: Vec, q7: Vec): List[Vec4] =
+  quartet(arg, q6, q7) { nil } { nil } { (a, b, c) => rot(a, b, c) { t } } { t }
+
+def side2(arg: Vec, q6: Vec, q7: Vec): List[Vec4] =
+  quartet(arg, q6, q7) { side1 } { side1 } { (a, b, c) => rot(a, b, c) { t } } { t }
+
+def corner1(arg: Vec, q6: Vec, q7: Vec): List[Vec4] =
+  quartet(arg, q6, q7) { nil } { nil } { nil } { u }
+
+def corner2(arg: Vec, q6: Vec, q7: Vec): List[Vec4] =
+  quartet(arg, q6, q7) { corner1 } { side1 } { (a, b, c) => rot(a, b, c) { side1 } } { u }
+
+def pseudocorner(arg: Vec, q6: Vec, q7: Vec): List[Vec4] =
+  quartet(arg, q6, q7) { corner2 } { side2 } { (a, b, c) => rot(a, b, c) { side2 } } { (a, b, c) => rot(a, b, c) { t } }
+
+def pseudolimit(arg: Vec, p2: Vec, p3: Vec): List[Vec4] =
+  cycle_(arg, p2, p3) { pseudocorner }
+
+def enum_from_to(from: Int, to: Int): List[Int] =
+  if (from <= to) {
+    Cons(from, enum_from_to(from + 1, to))
+  } else {
+    Nil()
+  }
+
+def min(i1: Int, i2: Int): Int =
+  if (i1 < i2) i1 else i2
+
+def map[A, B](l: List[A]) { f: A => B }: List[B] = l match {
+  case Nil() => Nil()
+  case Cons(a, as) => Cons(f(a), as.map {f})
+}
+
+def test_fish_nofib(n: Int): List[List[Vec4]] =
+  enum_from_to(1, n).map { i =>
+    val n = min(0, i)
+    pseudolimit(Vec(0, 0), Vec(640 + n, 0), Vec(0, 640 + n))
+  }
+
+def length[A](l: List[A]): Int =
+  l match {
+    case Nil() => 0
+    case Cons(_, as) => 1 + length(as)
+  }
+
+def head(l: List[List[Vec4]]): List[Vec4] =
+  l match {
+    case Nil() => Nil()
+    case Cons(l, ls) => l
+  }
+
+def run(n: Int): Int =
+  test_fish_nofib(n).head.length
+
+def main() = benchmark(10){run}
