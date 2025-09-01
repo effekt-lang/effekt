@@ -223,17 +223,42 @@ trait Intelligence {
       }
     }
 
+    def getDefinitionLocation(sym: TypeSymbol | TermSymbol): Option[DefinitionLocation] = {
+      try {
+        val span = sym match {
+          case s: TypeSymbol if s.decl != null => s.decl.span
+          case s: TermSymbol if s.decl != null => s.decl.span
+          case _ => return None
+        }
+        
+        for {
+          uri <- getSymbolUri(sym)
+        } yield DefinitionLocation(
+          uri = uri,
+          range = DefinitionRange(
+            startLine = span.range.from.line - 1, // LSP is 0-indexed
+            startCharacter = span.range.from.column - 1, // LSP is 0-indexed  
+            endLine = span.range.to.line - 1,
+            endCharacter = span.range.to.column - 1
+          )
+        )
+      } catch {
+        case _: Throwable => None
+      }
+    }
+
     def symbolToBindingInfos(name: String, path: List[String], sym: TypeSymbol | TermSymbol)(using C: Context): List[BindingInfo] =
       // TODO this is extremely hacky, printing is not defined for all types at the moment
       val signature = try { Some(SignaturePrinter(sym)) } catch { case e: Throwable => None }
       val signatureHtml = signature.map(sig => HtmlHighlight(sig))
       
       val uri = getSymbolUri(sym)
+      val definitionLocation = getDefinitionLocation(sym)
       
       val out = sym match {
-        case sym: TypeSymbol => List(TypeBinding(path, name, origin, signature, signatureHtml, uri))
-        case sym: ValueSymbol => List(TermBinding(path, name, origin, signature, signatureHtml, uri))
-        case sym: BlockSymbol => List(TermBinding(path, name, origin, signature, signatureHtml, uri))
+        case sym: TypeSymbol => List(TypeBinding(path, name, origin, signature, signatureHtml, uri, definitionLocation = definitionLocation))
+        case sym: ValueSymbol => List(TermBinding(path, name, origin, signature, signatureHtml, uri, definitionLocation = definitionLocation))
+        case sym: BlockSymbol => List(TermBinding(path, name, origin, signature, signatureHtml, uri, definitionLocation = definitionLocation))
       }
       sym match {
         case Interface(name, tparams, ops, decl) if !(ops.length == 1 && ops.head.name.name == name.name) => {
@@ -241,7 +266,8 @@ trait Intelligence {
             val signature = Some(SignaturePrinter(op))
             val signatureHtml = signature.map(sig => HtmlHighlight(sig))
             val opUri = getSymbolUri(op)
-            TermBinding(path, op.name.name, origin, signature, signatureHtml, opUri)
+            val opDefinitionLocation = getDefinitionLocation(op)
+            TermBinding(path, op.name.name, origin, signature, signatureHtml, opUri, definitionLocation = opDefinitionLocation)
           }
           out ++ opsInfos
         }
@@ -498,7 +524,20 @@ object Intelligence {
     val signature: Option[String]
     val signatureHtml: Option[String]
     val kind: String
+    val definitionLocation: Option[DefinitionLocation]
   }
+
+  case class DefinitionLocation(
+    uri: String,
+    range: DefinitionRange
+  )
+
+  case class DefinitionRange(
+    startLine: Int,
+    startCharacter: Int,
+    endLine: Int,
+    endCharacter: Int
+  )
 
   case class TermBinding(
     qualifier: List[String],
@@ -507,7 +546,8 @@ object Intelligence {
     signature: Option[String] = None,
     signatureHtml: Option[String],
     uri: Option[String] = None,
-    kind: String = BindingKind.Term
+    kind: String = BindingKind.Term,
+    definitionLocation: Option[DefinitionLocation] = None
   ) extends BindingInfo
   case class TypeBinding(
     qualifier: List[String],
@@ -516,7 +556,8 @@ object Intelligence {
     signature: Option[String] = None,
     signatureHtml: Option[String],
     uri: Option[String] = None,
-    kind: String = BindingKind.Type
+    kind: String = BindingKind.Type,
+    definitionLocation: Option[DefinitionLocation] = None
   ) extends BindingInfo
 
   // These need to be strings (rather than cases of an enum) so that they get serialized correctly
