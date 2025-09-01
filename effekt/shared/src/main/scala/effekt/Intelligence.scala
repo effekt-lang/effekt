@@ -235,11 +235,9 @@ trait Intelligence {
           uri <- getSymbolUri(sym)
         } yield DefinitionLocation(
           uri = uri,
-          range = DefinitionRange(
-            startLine = span.range.from.line - 1, // LSP is 0-indexed
-            startCharacter = span.range.from.column - 1, // LSP is 0-indexed  
-            endLine = span.range.to.line - 1,
-            endCharacter = span.range.to.column - 1
+          range = LSPRange(
+            start = LSPPosition(line = span.range.from.line - 1, character = span.range.from.column - 1), // LSP is 0-indexed
+            end = LSPPosition(line = span.range.to.line - 1, character = span.range.to.column - 1)  // LSP is 0-indexed
           )
         )
       } catch {
@@ -529,14 +527,17 @@ object Intelligence {
 
   case class DefinitionLocation(
     uri: String,
-    range: DefinitionRange
+    range: LSPRange
   )
 
-  case class DefinitionRange(
-    startLine: Int,
-    startCharacter: Int,
-    endLine: Int,
-    endCharacter: Int
+  case class LSPPosition(
+    line: Int,
+    character: Int
+  )
+
+  case class LSPRange(
+    start: LSPPosition,
+    end: LSPPosition
   )
 
   case class TermBinding(
