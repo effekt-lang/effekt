@@ -1,7 +1,7 @@
 package effekt
 
 import com.google.gson.{Gson, GsonBuilder, JsonElement, JsonParser}
-import effekt.Intelligence.{BindingInfo, BindingOrigin, Code, HoleItemKind, NaturalLanguage, ScopeInfo, ScopeKind, TermBinding, TypeBinding}
+import effekt.Intelligence.{BindingInfo, BindingKind, BindingOrigin, Code, DefinitionLocation, HoleItemKind, LSPPosition, LSPRange, NaturalLanguage, ScopeInfo, ScopeKind, TermBinding, TypeBinding}
 import munit.FunSuite
 import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit}
 import org.eclipse.lsp4j.jsonrpc.messages
@@ -1447,7 +1447,9 @@ class LSPTests extends FunSuite {
           signatureHtml = Some(
             "<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">bar</span>(<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Int</span> / {}"
           ),
-          uri = Some("file://test.effekt")
+          uri = Some("file://test.effekt"),
+          kind = BindingKind.Term,
+          definitionLocation = Some(DefinitionLocation("file://test.effekt", LSPRange(LSPPosition(3, 0), LSPPosition(3, 39))))
         ),
         TermBinding(
           qualifier = List(),
@@ -1459,7 +1461,9 @@ class LSPTests extends FunSuite {
           signatureHtml = Some(
             "<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">foo</span>(<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">Int</span>): <span class=\"effekt-ident pascal-case\">Bool</span> / {}"
           ),
-          uri = Some("file://test.effekt")
+          uri = Some("file://test.effekt"),
+          kind = BindingKind.Term,
+          definitionLocation = Some(DefinitionLocation("file://test.effekt", LSPRange(LSPPosition(2, 0), LSPPosition(2, 36))))
         ),
         TypeBinding(
           qualifier = Nil,
@@ -1469,7 +1473,9 @@ class LSPTests extends FunSuite {
           signatureHtml = Some(
             "<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">MyInt</span>"
           ),
-          uri = Some("file://test.effekt")
+          uri = Some("file://test.effekt"),
+          kind = BindingKind.Type,
+          definitionLocation = Some(DefinitionLocation("file://test.effekt", LSPRange(LSPPosition(1, 0), LSPPosition(1, 16))))
         )
       )
 
@@ -2061,8 +2067,8 @@ class LSPTests extends FunSuite {
           definitionLocation = Some(Intelligence.DefinitionLocation(
             uri = "file://test.effekt",
             range = Intelligence.LSPRange(
-              start = Intelligence.LSPPosition(line = 5, character = 2),
-              end = Intelligence.LSPPosition(line = 5, character = 32)
+              start = Intelligence.LSPPosition(line = 6, character = 2),
+              end = Intelligence.LSPPosition(line = 6, character = 33)
             )
           ))
         ),
@@ -2077,8 +2083,8 @@ class LSPTests extends FunSuite {
           definitionLocation = Some(Intelligence.DefinitionLocation(
             uri = "file://test.effekt",
             range = Intelligence.LSPRange(
-              start = Intelligence.LSPPosition(line = 5, character = 2),
-              end = Intelligence.LSPPosition(line = 5, character = 32)
+              start = Intelligence.LSPPosition(line = 6, character = 13),
+              end = Intelligence.LSPPosition(line = 6, character = 31)
             )
           ))
         ),
@@ -2093,8 +2099,8 @@ class LSPTests extends FunSuite {
           definitionLocation = Some(Intelligence.DefinitionLocation(
             uri = "file://test.effekt",
             range = Intelligence.LSPRange(
-              start = Intelligence.LSPPosition(line = 7, character = 2),
-              end = Intelligence.LSPPosition(line = 7, character = 16)
+              start = Intelligence.LSPPosition(line = 8, character = 2),
+              end = Intelligence.LSPPosition(line = 8, character = 17)
             )
           ))
         )
