@@ -83,13 +83,13 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Download JAR artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: effekt
           path: distribution/
 
       - name: Download npm package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: effekt-npm-package
           path: distribution/
@@ -112,7 +112,7 @@ jobs:
     needs: [build-jar, release]
     steps:
       - name: Download npm package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: effekt-npm-package
 
