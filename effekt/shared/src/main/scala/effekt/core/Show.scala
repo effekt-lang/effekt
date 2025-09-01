@@ -43,7 +43,6 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         case _ => List()
       )
       .filter(defn => defn.id.name.name == "myshow")
-      println(myshow)
 
       val blockVars: List[Block.BlockVar] = extShowDefns.map(defn => 
         Block.BlockVar(defn.id, BlockType.Function(defn.tparams, defn.cparams, defn.vparams map (_.tpe), defn.bparams map (_.tpe), defn.ret), Set.empty))
@@ -89,8 +88,14 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     case ModuleDecl(path, includes, declarations, externs, definitions, exports) => 
       val transformedDefns = definitions map transform
       val additionalDefns = generateShowInstances(declarations)
-      additionalDefns.foreach(d => println(util.show(d)))
-      ModuleDecl(path, includes, declarations, externs, transformedDefns ++ additionalDefns, exports)
+      // Remove myshow extern
+      // because it only has a dummy implementation which will fail when run
+      val filteredExterns = decl.externs.flatMap(ext => ext match
+        case e: Extern.Def => List(e)
+        case _ => List()
+      )
+      .filter(defn => defn.id.name.name != "myshow")
+      ModuleDecl(path, includes, declarations, filteredExterns, transformedDefns ++ additionalDefns, exports)
   }
 
   // Q: May externs have show instances on any type
@@ -112,7 +117,15 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     case Unbox(pure) => ???
   }
 
-  def transform(stmt: Stmt)(using ShowContext): Stmt = stmt match {
+  def transform(stmt: Stmt)(using ShowContext): Stmt = 
+  stmt match {
+    case Let(id, annotatedTpe, PureApp(BlockVar(bid, bannotatedTpe, bannotatedCapt), targs, vargs), body) if bid.name.name == "myshow" => 
+      if (targs.length != 1) sys error "expected targs to only have one argument"
+      val targ = targs(0)
+      if (isGroundType(targ))
+        val bvar = getOrAddShow(targ)
+        return Stmt.Val(id, annotatedTpe, Stmt.App(bvar, List.empty, vargs, List.empty), transform(body))
+      sys error "targ was not ground type in PureApp"
     case Let(id, annotatedTpe, binding, body) => Let(id, annotatedTpe, transform(binding), transform(body))
     case Return(expr) => Return(transform(expr))
     case o => println(o); ???
@@ -217,7 +230,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     case Field(id, tpe) => ValueVar(id, tpe)
 
   def fieldPure(field: Field)(using ctx: ShowContext): Pure = field match
-    case Field(id, tpe) => PureApp(ctx.showDefnsMap(List(tpe)), List.empty, List(ValueVar(id, tpe)))
+      case Field(id, tpe) => PureApp(ctx.showDefnsMap(List(tpe)), List.empty, List(ValueVar(id, tpe)))
 
   def getOrAddShow(vt: ValueType)(using ctx: ShowContext): BlockVar = vt match
     case ValueType.Boxed(tpe, capt) => ???
