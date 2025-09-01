@@ -23,7 +23,7 @@ def skipNewlines(): Nothing / {read[Char], emit[Char], stop} = {
 
 def main() = {
   with feed("ab\n\nc\nde")
-  println(collectString {
+  println(string::collect {
     with exhaustively
     fuseNewlines()
   })
