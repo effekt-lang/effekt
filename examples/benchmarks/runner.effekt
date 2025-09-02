@@ -23,7 +23,7 @@ def benchmark(testSize: Int) { run: Int => Int } = commandLineArgs() match {
  * for benchmarking. Since externs are opaque to the optimizer, just wrap the
  * result of the computation to benchmark in `relevant`.
  */
-extern io def relevant(value: Int): Unit =
+extern def relevant(value: Int) at io: Unit =
   default { () }
 
 def main() = ()

@@ -111,7 +111,7 @@ def join(strings: List[String], sep: String): String = {
   }
 }
 
-extern pure def trim(str: String): String =
+extern def trim(str: String) at {}: String =
   js "${str}.trim()"
 
 // Parsing
@@ -169,7 +169,7 @@ def toInt(str: String, base: Int): Int / Exception[WrongFormat] = {
 }
 
 /// Native versions of toInt (unused right now)
-extern pure def unsafeToInt(str: String): Int =
+extern def unsafeToInt(str: String) at {}: Int =
   js "(Number.isNaN(parseInt(${str})) ? undefined : parseInt(${str}))"
   chez "(string->number ${str})"
 
@@ -203,7 +203,7 @@ def lastIndexOf(str: String, sub: String, from: Int): Option[Int] = {
 
 // TODO more efficient (native) implementations could be integrated as follows
 
-// extern pure def indexOf(str: String, sub: String): Option[Int] =
+// extern def indexOf(str: String, sub: String) at {}: Option[Int] =
 //   //js { nativeIndexOf(str, sub) }
 //   default { indexOf(str, sub, 0) }
 
@@ -212,7 +212,7 @@ def lastIndexOf(str: String, sub: String, from: Int): Option[Int] = {
 //   if (index < 0) { None() } else { Some(index) }
 // }
 
-// extern pure def unsafeIndexOf(str: String, sub: String): Int =
+// extern def unsafeIndexOf(str: String, sub: String) at {}: Int =
 //   js "${str}.indexOf(${sub})"
 
 def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
@@ -221,7 +221,7 @@ def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
   else
     unsafeCharAt(str, index)
 
-extern pure def unsafeCharAt(str: String, n: Int): Char =
+extern def unsafeCharAt(str: String, n: Int) at {}: Char =
   js "${str}.codePointAt(${n})"
   chez "(char->integer (string-ref ${str} ${n}))"
   llvm """

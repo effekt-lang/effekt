@@ -42,7 +42,7 @@ exit:
 
 /// Allocates a new array of size `size`, keeping its values _undefined_.
 /// Prefer using `array` constructor instead to ensure that values are defined.
-extern global def allocate[T](size: Int): Array[T] =
+extern def allocate[T](size: Int) at global: Array[T] =
   js "(new Array(${size}))"
   chez "(make-vector ${size})" // creates an array filled with 0s on CS
   llvm """
@@ -85,7 +85,7 @@ def fromList[T](list: List[T]): Array[T] = {
 }
 
 /// Gets the length of the array in constant time.
-extern pure def size[T](arr: Array[T]): Int =
+extern def size[T](arr: Array[T]) at {}: Int =
   js "${arr}.length"
   chez "(vector-length ${arr})"
   llvm """
@@ -102,7 +102,7 @@ extern pure def size[T](arr: Array[T]): Int =
 /// Unchecked Precondition: `index` is in bounds (0 ≤ index < arr.size)
 ///
 /// Prefer using `get` instead.
-extern global def unsafeGet[T](arr: Array[T], index: Int): T =
+extern def unsafeGet[T](arr: Array[T], index: Int) at global: T =
   js "${arr}[${index}]"
   chez "(vector-ref ${arr} ${index})"
   llvm """
@@ -129,7 +129,7 @@ extern js """
 /// Unchecked Precondition: `index` is in bounds (0 ≤ index < arr.size)
 ///
 /// Prefer using `set` instead.
-extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
+extern def unsafeSet[T](arr: Array[T], index: Int, value: T) at global: Unit =
   js "array$set(${arr}, ${index}, ${value})"
   chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
   llvm """

@@ -1,0 +1,18 @@
+// <inferred captures> <: <annotated captures>
+def f() at {async, io} = println("hello")
+
+def g() at io = println("world")
+
+def h() = region r {
+  def inner() at r = {
+    var x in r = 42
+    box { x }
+  }
+  val _ = inner()
+}
+
+def main() = {
+  f()
+  g()
+  h()
+}

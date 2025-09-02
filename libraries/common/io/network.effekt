@@ -15,18 +15,18 @@ namespace js {
 
   extern type JSServer // = net.Server
   extern type JSSocket // = net.Socket
-  extern io def server(): JSServer =
+  extern def server() at io: JSServer =
     jsNode "net.createServer()"
-  extern io def listen(server: JSServer, port: Int, host: String, listener: JSSocket => Unit at {io, async, global}): Unit =
+  extern def listen(server: JSServer, port: Int, host: String, listener: JSSocket => Unit at {io, async, global}) at io: Unit =
     jsNode "listen(${server}, ${port}, ${host}, (socket) => $effekt.runToplevel((ks, k) => (${listener})(socket, ks, k)))"
 
-  extern async def send(socket: JSSocket, data: ByteArray): Unit =
+  extern def send(socket: JSSocket, data: ByteArray) at async: Unit =
     jsNode "$effekt.capture(callback => ${socket}.write(${data}, callback))"
 
-  extern async def receive(socket: JSSocket): ByteArray =
+  extern def receive(socket: JSSocket) at async: ByteArray =
     jsNode "$effekt.capture(callback => ${socket}.once('data', callback))"
 
-  extern async def end(socket: JSSocket): Unit =
+  extern def end(socket: JSSocket) at async: Unit =
     jsNode "$effekt.capture(k => ${socket}.end(k))"
 }
 
