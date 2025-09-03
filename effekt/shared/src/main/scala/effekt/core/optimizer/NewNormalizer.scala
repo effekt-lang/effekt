@@ -156,8 +156,12 @@ object semantics {
     // scrutinee is unknown
     case Match(scrutinee: Addr, clauses: List[(Id, Block)], default: Option[BasicBlock])
 
+    // what's actually unknown here?
     case Reset(prompt: BlockParam, body: BasicBlock)
-    case Shift(prompt: Prompt, body: Block)
+    // prompt / context is unknown
+    case Shift(prompt: Prompt, kCapt: Capture, k: BlockParam, body: BasicBlock)
+    // continuation is unknown
+    case Resume(k: Id, body: BasicBlock)
 
     // aborts at runtime
     case Hole(span: Span)
@@ -169,7 +173,8 @@ object semantics {
       case NeutralStmt.Match(scrutinee, clauses, default) => Set(scrutinee) ++ clauses.flatMap(_._2.free).toSet ++ default.map(_.free).getOrElse(Set.empty)
       case NeutralStmt.Return(result) => Set(result)
       case NeutralStmt.Reset(prompt, body) => body.free
-      case NeutralStmt.Shift(prompt, body) => body.free
+      case NeutralStmt.Shift(prompt, capt, k, body) => body.free
+      case NeutralStmt.Resume(k, body) => body.free
       case NeutralStmt.Hole(span) => Set.empty
     }
   }
@@ -201,8 +206,11 @@ object semantics {
       case NeutralStmt.Reset(prompt, body) =>
         "reset" <+> braces(toDoc(prompt) <+> "=>" <+> nest(line <> toDoc(body.bindings) <> toDoc(body.body)) <> line)
 
-      case NeutralStmt.Shift(prompt, body) =>
-        "shift" <> parens(toDoc(prompt)) <+> toDoc(body)
+      case NeutralStmt.Shift(prompt, capt, k, body) =>
+        "shift" <> parens(toDoc(prompt)) <+> braces(toDoc(k) <+> "=>" <+> nest(line <> toDoc(body.bindings) <> toDoc(body.body)) <> line)
+
+      case NeutralStmt.Resume(k, body) =>
+        "resume" <> parens(toDoc(k)) <+> toDoc(body)
 
       case NeutralStmt.Hole(span) => "hole()"
     }
@@ -400,10 +408,31 @@ object NewNormalizer { normal =>
       Computation.Def(scope.define("f", evaluate(b)))
     case core.Block.Unbox(pure) =>
       ???
+
     case core.Block.New(Implementation(interface, operations)) =>
       val ops = operations.map {
         case Operation(name, tparams, cparams, vparams, bparams, body) =>
-          val label = scope.define(name.name.name, evaluate(core.Block.BlockLit(tparams, cparams, vparams, bparams, body): core.Block.BlockLit))
+          // Check whether the operation is already "just" an eta expansion and then use the identifier...
+          //   no need to create a fresh block literal
+          val eta: Option[Label] =
+            body match {
+              case Stmt.App(BlockVar(id, _, _), targs, vargs, bargs) =>
+                def sameTargs = targs == tparams.map(t => ValueType.Var(t))
+                def sameVargs = vargs == vparams.map(p => ValueVar(p.id, p.tpe))
+                def sameBargs = bargs == bparams.map(p => BlockVar(p.id, p.tpe, p.capt))
+                def isEta = sameTargs && sameVargs && sameBargs
+
+                env.lookupComputation(id) match {
+                  case Computation.Def(label) if isEta => Some(label)
+                  case _ => None
+                }
+              case _ => None
+            }
+
+          val label = eta.getOrElse {
+            scope.define(name.name.name,
+              evaluate(core.Block.BlockLit(tparams, cparams, vparams, bparams, body): core.Block.BlockLit))
+          }
           (name, label)
       }
       Computation.New(interface, ops)
@@ -531,26 +560,42 @@ object NewNormalizer { normal =>
 
     case Stmt.Hole(span) => NeutralStmt.Hole(span)
 
+    // State
+    case Stmt.Region(body) => ???
     case Stmt.Alloc(id, init, region, body) => ???
     case Stmt.Var(ref, init, capture, body) => ???
     case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => ???
     case Stmt.Put(ref, annotatedCapt, value, body) => ???
 
-    // scoping constructs
-    case Stmt.Region(body) => ???
-    case Stmt.Shift(prompt, body) =>
+    // Control Effects
+    case Stmt.Shift(prompt, BlockLit(Nil, cparam :: Nil, Nil, k :: Nil, body)) =>
       // TODO implement correctly...
-      reify(stack, NeutralStmt.Shift(prompt.id, evaluate(body)))
+      val neutralBody = {
+        given Env = env.bindComputation(k.id -> Computation.Var(k.id) :: Nil)
+        nested {
+          evaluate(body, Stack.Empty)
+        }
+      }
+      assert(Set(cparam) == k.capt, "At least for now these need to be the same")
+      reify(stack, NeutralStmt.Shift(prompt.id, cparam, k, neutralBody))
+    case Stmt.Shift(_, _) => ???
     case Stmt.Reset(BlockLit(Nil, cparams, Nil, prompt :: Nil, body)) =>
       // TODO is Var correct here?? Probably needs to be a new computation value...
       //   but shouldn't it be a fresh prompt each time?
-      given Env = env.bindComputation(prompt.id -> Computation.Var(prompt.id) :: Nil)
-      // TODO implement properly
-      reify(stack, NeutralStmt.Reset(prompt, nested {
+      val neutralBody = {
+        given Env = env.bindComputation(prompt.id -> Computation.Var(prompt.id) :: Nil)
+        nested {
           evaluate(body, Stack.Empty)
-      }))
+        }
+      }
+      // TODO implement properly
+      reify(stack, NeutralStmt.Reset(prompt, neutralBody))
     case Stmt.Reset(_) => ???
-    case Stmt.Resume(k, body) => ???
+    case Stmt.Resume(k, body) =>
+      // TODO implement properly
+      reify(stack, NeutralStmt.Resume(k.id, nested {
+        evaluate(body, Stack.Empty)
+      }))
   }
 
   def run(mod: ModuleDecl): ModuleDecl = {
@@ -616,8 +661,10 @@ object NewNormalizer { normal =>
         case _ => sys error "Prompt needs to have a single capture"
       }
       Stmt.Reset(core.BlockLit(Nil, capture :: Nil, Nil, prompt :: Nil, embedStmt(body)(using G.bindComputations(prompt :: Nil))))
-    case NeutralStmt.Shift(prompt, body) =>
-      Stmt.Shift(embedBlockVar(prompt), embedBlockLit(body))
+    case NeutralStmt.Shift(prompt, capt, k, body) =>
+      Stmt.Shift(embedBlockVar(prompt), core.BlockLit(Nil, capt :: Nil, Nil, k :: Nil, embedStmt(body)(using G.bindComputations(k :: Nil))))
+    case NeutralStmt.Resume(k, body) =>
+      Stmt.Resume(embedBlockVar(k), embedStmt(body))
     case NeutralStmt.Hole(span) =>
       Stmt.Hole(span)
   }

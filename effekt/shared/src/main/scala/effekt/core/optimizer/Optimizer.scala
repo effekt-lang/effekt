@@ -42,11 +42,14 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     //
     //    tree = Context.timed("new-normalizer-3", source.name) { NewNormalizer.run(tree) }
     //    Normalizer.assertNormal(tree)
-    //
-    //    // (2) lift static arguments
-    //    tree = Context.timed("static-argument-transformation", source.name) {
-    //      StaticArguments.transform(mainSymbol, tree)
-    //    }
+
+    // (2) lift static arguments
+    tree = Context.timed("static-argument-transformation", source.name) {
+      StaticArguments.transform(mainSymbol, tree)
+    }
+
+    tree = Context.timed("new-normalizer-3", source.name) { NewNormalizer.run(tree) }
+    Normalizer.assertNormal(tree)
     //
     //    def normalize(m: ModuleDecl) = {
     //      val anfed = BindSubexpressions.transform(m)
