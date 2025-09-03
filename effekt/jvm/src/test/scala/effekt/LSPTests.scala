@@ -1,7 +1,7 @@
 package effekt
 
 import com.google.gson.{Gson, GsonBuilder, JsonElement, JsonParser}
-import effekt.Intelligence.{BindingInfo, BindingOrigin, Code, HoleItemKind, NaturalLanguage, ScopeInfo, ScopeKind, TermBinding, TypeBinding}
+import effekt.Intelligence.{BindingInfo, BindingKind, BindingOrigin, Code, LSPLocation, HoleItemKind, LSPPosition, LSPRange, NaturalLanguage, ScopeInfo, ScopeKind, TermBinding, TypeBinding}
 import munit.FunSuite
 import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit}
 import org.eclipse.lsp4j.jsonrpc.messages
@@ -1425,6 +1425,13 @@ class LSPTests extends FunSuite {
             "x: Int"
           ),
           signatureHtml = Some("<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">Int</span>"),
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 2, character = 8),
+              end = Intelligence.LSPPosition(line = 2, character = 14)
+            )
+          ))
         )
       )
 
@@ -1438,7 +1445,9 @@ class LSPTests extends FunSuite {
           ),
           signatureHtml = Some(
             "<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">bar</span>(<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Int</span> / {}"
-          )
+          ),
+          kind = BindingKind.Term,
+          definitionLocation = Some(LSPLocation("file://test.effekt", LSPRange(LSPPosition(3, 0), LSPPosition(3, 39))))
         ),
         TermBinding(
           qualifier = List(),
@@ -1450,6 +1459,8 @@ class LSPTests extends FunSuite {
           signatureHtml = Some(
             "<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">foo</span>(<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">Int</span>): <span class=\"effekt-ident pascal-case\">Bool</span> / {}"
           ),
+          kind = BindingKind.Term,
+          definitionLocation = Some(LSPLocation("file://test.effekt", LSPRange(LSPPosition(2, 0), LSPPosition(2, 36))))
         ),
         TypeBinding(
           qualifier = Nil,
@@ -1459,6 +1470,8 @@ class LSPTests extends FunSuite {
           signatureHtml = Some(
             "<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">MyInt</span>"
           ),
+          kind = BindingKind.Type,
+          definitionLocation = Some(LSPLocation("file://test.effekt", LSPRange(LSPPosition(1, 0), LSPPosition(1, 16))))
         )
       )
 
@@ -1582,6 +1595,13 @@ class LSPTests extends FunSuite {
           origin = BindingOrigin.Defined,
           signature = Some("def bar(): Nothing / {}"),
           signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">bar</span>(): <span class=\"effekt-ident pascal-case\">Nothing</span> / {}"),
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 2, character = 2),
+              end = Intelligence.LSPPosition(line = 2, character = 16)
+            )
+          ))
         )
       )
 
@@ -1600,6 +1620,7 @@ class LSPTests extends FunSuite {
         new Position(0, 0),
         new Position(0, 0)
       ),
+      uri = "file://test.effekt",
       innerType = None,
       expectedType = Some("Bool"),
       scope = ScopeInfo(
@@ -1652,6 +1673,7 @@ class LSPTests extends FunSuite {
         |      "character": 0
         |    }
         |  },
+        |  "uri": "file://test.effekt",
         |  "expectedType": "Bool",
         |  "scope": {
         |    "kind": "Local",
@@ -1935,7 +1957,14 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           signature = Some("type Foo1"),
           signatureHtml = Some("<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">Foo1</span>"),
-          kind = "Type"
+          kind = "Type",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 2, character = 2),
+              end = Intelligence.LSPPosition(line = 2, character = 31)
+            )
+          ))
         ),
         TermBinding(
           qualifier = Nil,
@@ -1946,6 +1975,13 @@ class LSPTests extends FunSuite {
           ),
           signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident pascal-case\">Foo1</span>(<span class=\"effekt-ident camel-case\">theField</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Foo1</span> / {}"),
           kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 2, character = 2),
+              end = Intelligence.LSPPosition(line = 2, character = 31)
+            )
+          ))
         ),
         TermBinding(
           qualifier = Nil,
@@ -1956,6 +1992,13 @@ class LSPTests extends FunSuite {
           ),
           signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">theField</span>(<span class=\"effekt-ident pascal-case\">Foo1</span>: <span class=\"effekt-ident pascal-case\">Foo1</span>): <span class=\"effekt-ident pascal-case\">String</span> / {}"),
           kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 2, character = 14),
+              end = Intelligence.LSPPosition(line = 2, character = 30)
+            )
+          ))
         ),
         TypeBinding(
           qualifier = Nil,
@@ -1963,7 +2006,14 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           signature = Some("type Foo2"),
           signatureHtml = Some("<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">Foo2</span>"),
-          kind = "Type"
+          kind = "Type",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 3, character = 2),
+              end = Intelligence.LSPPosition(line = 3, character = 31)
+            )
+          ))
         ),
         TermBinding(
           qualifier = Nil,
@@ -1971,7 +2021,14 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           signature = Some("def Foo2(theField: String): Foo2 / {}"),
           signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident pascal-case\">Foo2</span>(<span class=\"effekt-ident camel-case\">theField</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Foo2</span> / {}"),
-          kind = "Term"
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 3, character = 2),
+              end = Intelligence.LSPPosition(line = 3, character = 31)
+            )
+          ))
         ),
         TermBinding(
           qualifier = Nil,
@@ -1979,7 +2036,14 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           signature = Some("def theField(Foo2: Foo2): String / {}"),
           signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">theField</span>(<span class=\"effekt-ident pascal-case\">Foo2</span>: <span class=\"effekt-ident pascal-case\">Foo2</span>): <span class=\"effekt-ident pascal-case\">String</span> / {}"),
-          kind = "Term"
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 3, character = 14),
+              end = Intelligence.LSPPosition(line = 3, character = 30)
+            )
+          ))
         ),
         TypeBinding(
           qualifier = Nil,
@@ -1987,7 +2051,14 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           signature = Some("type Bar"),
           signatureHtml = Some("<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">Bar</span>"),
-          kind = "Type"
+          kind = "Type",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 6, character = 2),
+              end = Intelligence.LSPPosition(line = 6, character = 33)
+            )
+          ))
         ),
         TermBinding(
           qualifier = Nil,
@@ -1995,7 +2066,14 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           signature = Some("def Bar(theField: Int): Bar / {}"),
           signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident pascal-case\">Bar</span>(<span class=\"effekt-ident camel-case\">theField</span>: <span class=\"effekt-ident pascal-case\">Int</span>): <span class=\"effekt-ident pascal-case\">Bar</span> / {}"),
-          kind = "Term"
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 6, character = 13),
+              end = Intelligence.LSPPosition(line = 6, character = 31)
+            )
+          ))
         ),
         TermBinding(
           qualifier = Nil,
@@ -2003,7 +2081,14 @@ class LSPTests extends FunSuite {
           origin = "Defined",
           signature = Some("def main(): Nothing / {}"),
           signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">main</span>(): <span class=\"effekt-ident pascal-case\">Nothing</span> / {}"),
-          kind = "Term"
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 8, character = 2),
+              end = Intelligence.LSPPosition(line = 8, character = 17)
+            )
+          ))
         )
       )
 
@@ -2066,6 +2151,33 @@ class LSPTests extends FunSuite {
       server.getTextDocumentService().didOpen(didOpenParams)
       val receivedHoles = client.receivedHoles()
       assertEquals(receivedHoles.length, 1)
+    }
+  }
+
+  // Tests for hole URI feature (for "Jump to definition" support)
+  //
+  //
+
+  test("Hole info includes correct file URI") {
+    withClientAndServer { (client, server) =>
+      val source = new TextDocumentItem("file://custom/path/example.effekt", "effekt", 0,
+        """def bar(): String = <>""")
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+
+      val hole = receivedHoles.head.holes.head
+      assertEquals(hole.uri, "file://custom/path/example.effekt")
     }
   }
 
