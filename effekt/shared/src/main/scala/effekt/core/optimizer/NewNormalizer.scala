@@ -125,7 +125,7 @@ object semantics {
     def empty: Scope = new Scope(ListMap.empty, Map.empty, None)
   }
 
-  case class Block(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: BasicBlock) {
+  case class Block(tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: BasicBlock) {
     def free: Set[Addr] = body.free -- vparams.map(_.id)
   }
 
@@ -226,7 +226,7 @@ object semantics {
     }
 
     def toDoc(block: Block): Doc = block match {
-      case Block(tparams, vparams, bparams, body) =>
+      case Block(tparams, cparams, vparams, bparams, body) =>
         (if (tparams.isEmpty) emptyDoc else brackets(hsep(tparams.map(toDoc), comma))) <>
         parens(hsep(vparams.map(toDoc), comma)) <> hsep(bparams.map(toDoc)) <+> toDoc(body)
     }
@@ -382,7 +382,7 @@ object NewNormalizer { normal =>
         //   }
         case BasicBlock(Nil, _: (NeutralStmt.Return | NeutralStmt.App)) => f(stack)
         case body =>
-          val k = scope.define("k", Block(Nil, ValueParam(x, tpe) :: Nil, Nil, body))
+          val k = scope.define("k", Block(Nil, Nil, ValueParam(x, tpe) :: Nil, Nil, body))
           f(Stack.Dynamic(k))
       }
     case Stack.Empty => f(stack)
@@ -416,7 +416,7 @@ object NewNormalizer { normal =>
         given localEnv: Env = env
           .bindValue(vparams.map(p => p.id -> p.id))
           .bindComputation(bparams.map(p => p.id -> Computation.Var(p.id)))
-        Block(tparams, vparams, bparams, nested {
+        Block(tparams, cparams, vparams, bparams, nested {
           evaluate(body, Stack.Empty)
         })
     }
@@ -434,6 +434,7 @@ object NewNormalizer { normal =>
 
     // TODO fix once this is a statement
     case DirectApp(f, targs, vargs, bargs) =>
+      assert(bargs.isEmpty)
       scope.run("x", f, targs, vargs.map(evaluate))
 
     case Pure.Make(data, tag, targs, vargs) =>
@@ -520,7 +521,7 @@ object NewNormalizer { normal =>
               // This is ALMOST like evaluate(BlockLit), but keeps the current continuation
               clauses.map { case (id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
                 given localEnv: Env = env.bindValue(vparams.map(p => p.id -> p.id))
-                val block = Block(tparams, vparams, bparams, nested {
+                val block = Block(tparams, cparams, vparams, bparams, nested {
                   evaluate(body, k)
                 })
                 (id, block)
@@ -557,8 +558,7 @@ object NewNormalizer { normal =>
     val toplevelEnv = Env.empty.bindComputation(mod.definitions.map(defn => defn.id -> Computation.Def(defn.id)))
 
     val typingContext = TypingContext(Map.empty, mod.definitions.collect {
-      case Toplevel.Def(id, b) => id -> (b.tpe, b.capt)
-    }.toMap)
+      case Toplevel.Def(id, b) => id -> (b.tpe, b.capt) }.toMap)
 
     val newDefinitions = mod.definitions.map(d => run(d)(using toplevelEnv, typingContext))
     mod.copy(definitions = newDefinitions)
@@ -579,7 +579,7 @@ object NewNormalizer { normal =>
       val result = evaluate(body, Stack.Empty)
 
       debug(s"---------------------")
-      val block = Block(tparams, vparams, bparams, reify(scope, result))
+      val block = Block(tparams, cparams, vparams, bparams, reify(scope, result))
       debug(PrettyPrinter.show(block))
 
       debug(s"---------------------")
@@ -674,8 +674,8 @@ object NewNormalizer { normal =>
   }
 
   def embedBlockLit(block: Block)(using G: TypingContext): core.BlockLit = block match {
-    case Block(tparams, vparams, bparams, body) =>
-      core.Block.BlockLit(tparams, Nil, vparams, bparams,
+    case Block(tparams, cparams, vparams, bparams, body) =>
+      core.Block.BlockLit(tparams, cparams, vparams, bparams,
         embedStmt(body)(using G.bindValues(vparams).bindComputations(bparams)))
   }
   def embedBlockVar(label: Label)(using G: TypingContext): core.BlockVar =
