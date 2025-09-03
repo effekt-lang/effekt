@@ -5,6 +5,7 @@ package optimizer
 import effekt.source.Span
 import effekt.core.optimizer.semantics.NeutralStmt
 import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR }
+import effekt.symbols.builtins.AsyncCapability
 import kiama.output.ParenPrettyPrinter
 
 import scala.annotation.tailrec
@@ -472,6 +473,7 @@ object NewNormalizer { normal =>
       ???
   }
 
+  // TODO make evaluate(stmt) return BasicBlock (won't work for shift or reset, though)
   def evaluate(stmt: Stmt, stack: Stack)(using env: Env, scope: Scope): NeutralStmt = stmt match {
 
     case Stmt.Return(expr) =>
@@ -511,7 +513,7 @@ object NewNormalizer { normal =>
       evaluate(callee) match {
         case Computation.Var(id) =>
           reify(stack, NeutralStmt.Invoke(id, method, methodTpe, targs, vargs.map(evaluate), bargs.map(evaluate)))
-        case Computation.Def(label) => sys error "Should not happen: invoke on def"
+        case Computation.Def(label) => sys error s"Should not happen: invoke on def ${label}"
         case Computation.New(interface, operations) =>
           val op = operations.collectFirst { case (id, label) if id == method => label }.get
           reify(stack, NeutralStmt.App(op, targs, vargs.map(evaluate), bargs.map(evaluate)))
@@ -563,12 +565,17 @@ object NewNormalizer { normal =>
     // State
     case Stmt.Region(body) => ???
     case Stmt.Alloc(id, init, region, body) => ???
+
     case Stmt.Var(ref, init, capture, body) => ???
     case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => ???
     case Stmt.Put(ref, annotatedCapt, value, body) => ???
 
     // Control Effects
     case Stmt.Shift(prompt, BlockLit(Nil, cparam :: Nil, Nil, k :: Nil, body)) =>
+      val p = env.lookupComputation(prompt.id) match {
+        case Computation.Var(id) => id
+        case _ => ???
+      }
       // TODO implement correctly...
       val neutralBody = {
         given Env = env.bindComputation(k.id -> Computation.Var(k.id) :: Nil)
@@ -577,38 +584,51 @@ object NewNormalizer { normal =>
         }
       }
       assert(Set(cparam) == k.capt, "At least for now these need to be the same")
-      reify(stack, NeutralStmt.Shift(prompt.id, cparam, k, neutralBody))
+      reify(stack, NeutralStmt.Shift(p, cparam, k, neutralBody))
     case Stmt.Shift(_, _) => ???
     case Stmt.Reset(BlockLit(Nil, cparams, Nil, prompt :: Nil, body)) =>
       // TODO is Var correct here?? Probably needs to be a new computation value...
       //   but shouldn't it be a fresh prompt each time?
+      val p = Id(prompt.id)
       val neutralBody = {
-        given Env = env.bindComputation(prompt.id -> Computation.Var(prompt.id) :: Nil)
+        given Env = env.bindComputation(prompt.id -> Computation.Var(p) :: Nil)
         nested {
           evaluate(body, Stack.Empty)
         }
       }
       // TODO implement properly
-      reify(stack, NeutralStmt.Reset(prompt, neutralBody))
+      reify(stack, NeutralStmt.Reset(BlockParam(p, prompt.tpe, prompt.capt), neutralBody))
     case Stmt.Reset(_) => ???
     case Stmt.Resume(k, body) =>
+      val r = env.lookupComputation(k.id) match {
+        case Computation.Var(id) => id
+        case _ => ???
+      }
       // TODO implement properly
-      reify(stack, NeutralStmt.Resume(k.id, nested {
+      reify(stack, NeutralStmt.Resume(r, nested {
         evaluate(body, Stack.Empty)
       }))
   }
 
   def run(mod: ModuleDecl): ModuleDecl = {
-    val toplevelEnv = Env.empty.bindComputation(mod.definitions.map(defn => defn.id -> Computation.Def(defn.id)))
+
+    // TODO deal with async externs properly (see examples/benchmarks/input_output/dyck_one.effekt)
+    val asyncExterns = mod.externs.collect { case defn: Extern.Def if defn.annotatedCapture.contains(AsyncCapability.capture) => defn }
+    val toplevelEnv = Env.empty
+      // user defined functions
+      .bindComputation(mod.definitions.map(defn => defn.id -> Computation.Def(defn.id)))
+      // async extern functions
+      .bindComputation(asyncExterns.map(defn => defn.id -> Computation.Def(defn.id)))
 
     val typingContext = TypingContext(Map.empty, mod.definitions.collect {
-      case Toplevel.Def(id, b) => id -> (b.tpe, b.capt) }.toMap)
+      case Toplevel.Def(id, b) => id -> (b.tpe, b.capt)
+    }.toMap) // ++ asyncExterns.map { d => d.id -> null })
 
     val newDefinitions = mod.definitions.map(d => run(d)(using toplevelEnv, typingContext))
     mod.copy(definitions = newDefinitions)
   }
 
-  inline def debug(inline msg: => Any) = () // println(msg)
+  inline def debug(inline msg: => Any) = println(msg)
 
   def run(defn: Toplevel)(using env: Env, G: TypingContext): Toplevel = defn match {
     case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
