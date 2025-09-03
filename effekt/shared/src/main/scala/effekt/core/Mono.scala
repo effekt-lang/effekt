@@ -18,15 +18,15 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             val monoFindContext = MonoFindContext()
             var constraints = findConstraints(definitions)(using monoFindContext)
             constraints = constraints ++ declarations.flatMap(findConstraints(_)(using monoFindContext))
-            println("Constraints")
-            constraints.foreach(c => println(c))
-            println()
+            // println("Constraints")
+            // constraints.foreach(c => println(c))
+            // println()
 
             // Solve collected constraints
             val solution = solveConstraints(constraints)
-            println("Solved")
-            solution.foreach(println)
-            println()
+            // println("Solved")
+            // solution.foreach(println)
+            // println()
 
             // Monomorphize existing definitions
             var monoNames: MonoNames = Map.empty
@@ -39,9 +39,9 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             var monoContext = MonoContext(solution, monoNames)
             val monoDecls = declarations flatMap (monomorphize(_)(using monoContext))
             val monoDefs = monomorphize(definitions)(using monoContext)
-            monoDecls.foreach(decl => println(util.show(decl)))
-            println()
-            monoDefs.foreach(defn => println(util.show(defn)))
+            // monoDecls.foreach(decl => println(util.show(decl)))
+            // println()
+            // monoDefs.foreach(defn => println(util.show(defn)))
             val newModuleDecl = ModuleDecl(path, includes, monoDecls, externs, monoDefs, exports)
             return Some(CoreTransformed(source, tree, mod, newModuleDecl))
           }
@@ -133,7 +133,12 @@ def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt 
   case Let(id, annotatedTpe, binding, body) => findConstraints(binding) ++ findConstraints(body)
   case Return(expr) => findConstraints(expr)
   case Val(id, annotatedTpe, binding, body) => findConstraints(binding) ++ findConstraints(body)
+  case Var(ref, init, capture, body) => findConstraints(body)
   case App(callee: BlockVar, targs, vargs, bargs) => List(Constraint(targs.map(findId).toVector, callee.id))
+  // TODO: Very specialized, but otherwise passing an id that matches in monomorphize is hard
+  //       although I'm not certain any other case can even happen 
+  // TODO: part 2, also update the implementation in monomorphize if changing this
+  case App(Unbox(ValueVar(id, annotatedType)), targs, vargs, bargs) => List(Constraint(targs.map(findId).toVector, id))
   case Invoke(callee: BlockVar, method, methodTpe, targs, vargs, bargs) => List(Constraint(targs.map(findId).toVector, callee.id))
   case Reset(body) => findConstraints(body)
   case If(cond, thn, els) => findConstraints(cond) ++ findConstraints(thn) ++ findConstraints(els)
@@ -141,6 +146,11 @@ def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt 
   case Shift(prompt, body) => findConstraints(prompt) ++ findConstraints(body)
   case Match(scrutinee, clauses, default) => clauses.map(_._2).flatMap(findConstraints) ++ findConstraints(default)
   case Resume(k, body) => findConstraints(k) ++ findConstraints(body)
+  case Get(id, annotatedTpe, ref, annotatedCapt, body) => findConstraints(body)
+  case Put(ref, annotatedCapt, value, body) => findConstraints(value) ++ findConstraints(body)
+  case Alloc(id, init, region, body) => findConstraints(init) ++ findConstraints(body)
+  case Region(body) => findConstraints(body)
+  case Hole(span) => List.empty
   case o => println(o); ???
 
 def findConstraints(opt: Option[Stmt])(using ctx: MonoFindContext): Constraints = opt match 
@@ -148,15 +158,20 @@ def findConstraints(opt: Option[Stmt])(using ctx: MonoFindContext): Constraints 
   case Some(stmt) => findConstraints(stmt)
 
 def findConstraints(expr: Expr)(using ctx: MonoFindContext): Constraints = expr match
-  case DirectApp(b, List(), vargs, bargs) => List.empty
+  // TODO:
+  // Technically targs should still flow
+  // Just don't monomorphize
+  case DirectApp(b, targs, vargs, bargs) => List.empty
   case PureApp(b, List(), vargs) => List.empty
   case ValueVar(id, annotatedType) => List.empty
   case Literal(value, annotatedType) => List.empty
   case Make(data, tag, targs, vargs) => 
     List(Constraint(data.targs.map(findId).toVector, tag)) // <Int> <: Just
+  case Box(b, annotatedCapture) => List.empty
   case o => println(o); ???
 
 def findId(vt: ValueType)(using ctx: MonoFindContext): TypeArg = vt match
+  // TODO: What is the correct TypeArg for Boxed
   case ValueType.Boxed(tpe, capt) => ???
   case ValueType.Data(name, targs) => TypeArg.Base(name, targs map findId)
   case ValueType.Var(name) => ctx.typingContext(name)
@@ -277,9 +292,16 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
   case Return(expr) => Return(monomorphize(expr))
   case Val(id, annotatedTpe, binding, body) => 
     Val(id, monomorphize(annotatedTpe), monomorphize(binding), monomorphize(body))
+  case Var(ref, init, capture, body) => 
+    Var(ref, monomorphize(init), capture, monomorphize(body))
   case App(callee: BlockVar, targs, vargs, bargs) => 
     val replacementData = replacementDataFromTargs(callee.id, targs)
     App(monomorphize(callee, replacementData.name), List.empty, vargs map monomorphize, bargs map monomorphize)
+  // TODO: Highly specialized, see todo in findConstraints for info
+  //       change at the same time as findConstraints
+  case App(Unbox(ValueVar(id, annotatedTpe)), targs, vargs, bargs) =>
+    val replacementData = replacementDataFromTargs(id, targs)
+    App(Unbox(ValueVar(id, monomorphize(annotatedTpe))), List.empty, vargs map monomorphize, bargs map monomorphize)
   case Let(id, annotatedTpe, binding, body) => Let(id, monomorphize(annotatedTpe), monomorphize(binding), monomorphize(body))
   case If(cond, thn, els) => If(monomorphize(cond), monomorphize(thn), monomorphize(els))
   case Invoke(BlockVar(id, annotatedTpe, annotatedCapt), method, methodTpe, targs, vargs, bargs) => 
@@ -292,6 +314,14 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
   case Match(scrutinee, clauses, default) =>
     val monoClauses = clauses.map((id, blockLit) => (id, monomorphize(blockLit)))
     Match(monomorphize(scrutinee), monoClauses, monomorphize(default))
+  case Get(id, annotatedTpe, ref, annotatedCapt, body) =>
+    Get(id, monomorphize(annotatedTpe), ref, annotatedCapt, monomorphize(body))
+  case Put(ref, annotatedCapt, value, body) =>
+    Put(ref, annotatedCapt, monomorphize(value), monomorphize(body))
+  case Alloc(id, init, region, body) =>
+    Alloc(id, monomorphize(init), region, monomorphize(body))
+  case Region(body) => Region(monomorphize(body))
+  case Hole(span) => Hole(span)
   case o => println(o); ???
 
 def monomorphize(opt: Option[Stmt])(using ctx: MonoContext): Option[Stmt] = opt match
@@ -302,6 +332,16 @@ def monomorphize(expr: Expr)(using ctx: MonoContext): Expr = expr match
   case DirectApp(b, targs, vargs, bargs) => 
     val replacementData = replacementDataFromTargs(b.id, targs)
     DirectApp(monomorphize(b, replacementData.name), List.empty, vargs map monomorphize, bargs map monomorphize)
+  case Literal(value, annotatedType) =>
+    Literal(value, monomorphize(annotatedType))
+  case PureApp(b, targs, vargs) =>
+    val replacementData = replacementDataFromTargs(b.id, targs)
+    PureApp(monomorphize(b, replacementData.name), List.empty, vargs map monomorphize)
+  case Make(data, tag, targs, vargs) =>
+    Make(replacementDataFromTargs(data.name, data.targs), tag, List.empty, vargs map monomorphize)
+  case Box(b, annotatedCapture) => 
+    // TODO: Does this need other handling?
+    Box(b, annotatedCapture)
   case o => println(o); ???
 
 def monomorphize(pure: Pure)(using ctx: MonoContext): Pure = pure match
