@@ -96,10 +96,11 @@ object Normalizer { normal =>
     val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize)
 
     val (normalizedDefs, _) = normalizeToplevel(m.definitions)(using context)
+
     m.copy(definitions = normalizedDefs)
   }
 
-  def normalizeToplevel(definitions: List[Toplevel])(using ctx: Context): (List[Toplevel], Context) =
+  private def normalizeToplevel(definitions: List[Toplevel])(using ctx: Context): (List[Toplevel], Context) =
     var contextSoFar = ctx
     val defs = definitions.map {
       case Toplevel.Def(id, block) =>
