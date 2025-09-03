@@ -5,7 +5,7 @@ package core
 abstract class AbstractMonoTests extends CorePhaseTests(Mono) {
     import TypeArg.*
 
-    implicit def stringBaseT(name: String): Base = Base(Id(name))
+    implicit def stringBaseT(name: String): Base = Base(Id(name), List())
 
     val BaseTInt: Base = "Int"
     val BaseTString: Base = "String"
