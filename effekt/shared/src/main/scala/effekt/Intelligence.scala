@@ -239,23 +239,20 @@ trait Intelligence {
       // TODO this is extremely hacky, printing is not defined for all types at the moment
       val signature = try { Some(SignaturePrinter(sym)) } catch { case e: Throwable => None }
       val signatureHtml = signature.map(sig => HtmlHighlight(sig))
-      
-      val uri = getSymbolUri(sym)
       val definitionLocation = getDefinitionLocation(sym)
       
       val out = sym match {
-        case sym: TypeSymbol => List(TypeBinding(path, name, origin, signature, signatureHtml, uri, definitionLocation = definitionLocation))
-        case sym: ValueSymbol => List(TermBinding(path, name, origin, signature, signatureHtml, uri, definitionLocation = definitionLocation))
-        case sym: BlockSymbol => List(TermBinding(path, name, origin, signature, signatureHtml, uri, definitionLocation = definitionLocation))
+        case sym: TypeSymbol => List(TypeBinding(path, name, origin, signature, signatureHtml, definitionLocation = definitionLocation))
+        case sym: ValueSymbol => List(TermBinding(path, name, origin, signature, signatureHtml, definitionLocation = definitionLocation))
+        case sym: BlockSymbol => List(TermBinding(path, name, origin, signature, signatureHtml, definitionLocation = definitionLocation))
       }
       sym match {
         case Interface(name, tparams, ops, decl) if !(ops.length == 1 && ops.head.name.name == name.name) => {
           val opsInfos = ops.map { op =>
             val signature = Some(SignaturePrinter(op))
             val signatureHtml = signature.map(sig => HtmlHighlight(sig))
-            val opUri = getSymbolUri(op)
             val opDefinitionLocation = getDefinitionLocation(op)
-            TermBinding(path, op.name.name, origin, signature, signatureHtml, opUri, definitionLocation = opDefinitionLocation)
+            TermBinding(path, op.name.name, origin, signature, signatureHtml, definitionLocation = opDefinitionLocation)
           }
           out ++ opsInfos
         }
@@ -536,7 +533,6 @@ object Intelligence {
     origin: String,
     signature: Option[String] = None,
     signatureHtml: Option[String],
-    uri: Option[String] = None,
     kind: String = BindingKind.Term,
     definitionLocation: Option[LSPLocation] = None
   ) extends BindingInfo
@@ -546,7 +542,6 @@ object Intelligence {
     origin: String,
     signature: Option[String] = None,
     signatureHtml: Option[String],
-    uri: Option[String] = None,
     kind: String = BindingKind.Type,
     definitionLocation: Option[LSPLocation] = None
   ) extends BindingInfo
