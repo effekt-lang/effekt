@@ -213,7 +213,7 @@ trait Intelligence {
       }
     }
 
-    def getDefinitionLocation(sym: TypeSymbol | TermSymbol): Option[DefinitionLocation] = {
+    def getDefinitionLocation(sym: TypeSymbol | TermSymbol): Option[LSPLocation] = {
       try {
         val span = sym match {
           case s: TypeSymbol if s.decl != null => s.decl.span
@@ -223,7 +223,7 @@ trait Intelligence {
         
         for {
           uri <- getSymbolUri(sym)
-        } yield DefinitionLocation(
+        } yield LSPLocation(
           uri = uri,
           range = LSPRange(
             start = LSPPosition(line = span.range.from.line - 1, character = span.range.from.column - 1), // LSP is 0-indexed
@@ -512,10 +512,10 @@ object Intelligence {
     val signature: Option[String]
     val signatureHtml: Option[String]
     val kind: String
-    val definitionLocation: Option[DefinitionLocation]
+    val definitionLocation: Option[LSPLocation]
   }
 
-  case class DefinitionLocation(
+  case class LSPLocation(
     uri: String,
     range: LSPRange
   )
@@ -538,7 +538,7 @@ object Intelligence {
     signatureHtml: Option[String],
     uri: Option[String] = None,
     kind: String = BindingKind.Term,
-    definitionLocation: Option[DefinitionLocation] = None
+    definitionLocation: Option[LSPLocation] = None
   ) extends BindingInfo
   case class TypeBinding(
     qualifier: List[String],
@@ -548,7 +548,7 @@ object Intelligence {
     signatureHtml: Option[String],
     uri: Option[String] = None,
     kind: String = BindingKind.Type,
-    definitionLocation: Option[DefinitionLocation] = None
+    definitionLocation: Option[LSPLocation] = None
   ) extends BindingInfo
 
   // These need to be strings (rather than cases of an enum) so that they get serialized correctly
