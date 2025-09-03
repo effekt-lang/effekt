@@ -4,7 +4,7 @@ import effekt.context.{Annotations, Context}
 import effekt.source.Origin.Missing
 import effekt.source.{Doc, FunDef, Include, Maybe, ModuleDecl, Span, Tree}
 import effekt.symbols.{CaptureSet, Hole}
-import kiama.util.{Convert, Position, Source}
+import kiama.util.{Position, Source}
 import effekt.symbols.scopes.Scope
 import effekt.source.sourceOf
 import effekt.util.HtmlHighlight
@@ -199,7 +199,7 @@ trait Intelligence {
         case s: TermSymbol => s.decl.span
       })
     }
-
+    // based on //effekt/kiama/jvm/src/main/scala/kiama/util/Convert.scala toUri, which cannot be accessed in this module
     def getSymbolUri(sym: TypeSymbol | TermSymbol): Option[String] = {
       try {
         val sourceName = sym match {
@@ -207,7 +207,17 @@ trait Intelligence {
           case s: TermSymbol if s.decl != null => s.decl.span.source.name
           case _ => return None
         }
-        Some(Convert.toURI(sourceName))
+        
+        // Simple URI conversion compatible with shared module
+        if (sourceName.startsWith("file:") || sourceName.startsWith("vscode-notebook-cell:")) {
+          Some(sourceName)
+        } else if (sourceName.startsWith("./") || sourceName.startsWith(".\\")) {
+          // Remove the "./" or ".\\" prefix and make absolute
+          val relativePath = sourceName.substring(2)
+          Some(s"file://$relativePath")
+        } else {
+          Some(s"file://$sourceName")
+        }
       } catch {
         case _: Throwable => None
       }
