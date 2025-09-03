@@ -23,6 +23,7 @@ object semantics {
 
   type Addr = Id
   type Label = Id
+  type Prompt = Id
 
   enum Value {
     // Stuck
@@ -45,12 +46,14 @@ object semantics {
   enum Binding {
     case Let(value: Value)
     case Def(block: Block)
+    case Rec(block: Block, tpe: BlockType, capt: Captures)
     case Val(stmt: NeutralStmt)
     case Run(f: BlockVar, targs: List[ValueType], vargs: List[Addr])
 
     val free: Set[Addr] = this match {
       case Binding.Let(value) => value.free
       case Binding.Def(block) => block.free
+      case Binding.Rec(block, tpe, capt) => block.free
       case Binding.Val(stmt) => stmt.free
       case Binding.Run(f, targs, vargs) => vargs.toSet
     }
@@ -111,6 +114,10 @@ object semantics {
       bindings = bindings.updated(label, Binding.Def(block))
       label
 
+    def defineRecursive(label: Label, block: Block, tpe: BlockType, capt: Captures): Label =
+      bindings = bindings.updated(label, Binding.Rec(block, tpe, capt))
+      label
+
     def push(id: Id, stmt: NeutralStmt): Unit =
       bindings = bindings.updated(id, Binding.Val(stmt))
   }
@@ -149,6 +156,9 @@ object semantics {
     // scrutinee is unknown
     case Match(scrutinee: Addr, clauses: List[(Id, Block)], default: Option[BasicBlock])
 
+    case Reset(prompt: BlockParam, body: BasicBlock)
+    case Shift(prompt: Prompt, body: Block)
+
     // aborts at runtime
     case Hole(span: Span)
 
@@ -158,6 +168,8 @@ object semantics {
       case NeutralStmt.If(cond, thn, els) => Set(cond) ++ thn.free ++ els.free
       case NeutralStmt.Match(scrutinee, clauses, default) => Set(scrutinee) ++ clauses.flatMap(_._2.free).toSet ++ default.map(_.free).getOrElse(Set.empty)
       case NeutralStmt.Return(result) => Set(result)
+      case NeutralStmt.Reset(prompt, body) => body.free
+      case NeutralStmt.Shift(prompt, body) => body.free
       case NeutralStmt.Hole(span) => Set.empty
     }
   }
@@ -172,7 +184,8 @@ object semantics {
       case NeutralStmt.If(cond, thn, els) =>
         "if" <+> parens(toDoc(cond)) <+> toDoc(thn) <+> "else" <+> toDoc(els)
       case NeutralStmt.Match(scrutinee, clauses, default) =>
-        "match" <+> parens(toDoc(scrutinee)) // <+> braces(hcat(clauses.map {}))
+        "match" <+> parens(toDoc(scrutinee)) <+> braces(hcat(clauses.map { case (id, block) => toDoc(id) <> ":" <+> toDoc(block) })) <>
+          (if (default.isDefined) "else" <+> toDoc(default.get) else emptyDoc)
       case NeutralStmt.App(label, targs, vargs, bargs) =>
         // Format as: l1[T1, T2](r1, r2)
         toDoc(label) <>
@@ -184,6 +197,12 @@ object semantics {
         toDoc(label) <> "." <> toDoc(method) <>
           (if (targs.isEmpty) emptyDoc else brackets(hsep(targs.map(toDoc), comma))) <>
           parens(hsep(vargs.map(toDoc), comma)) <> hsep(bargs.map(b => braces(toDoc(b))))
+
+      case NeutralStmt.Reset(prompt, body) =>
+        "reset" <+> braces(toDoc(prompt) <+> "=>" <+> nest(line <> toDoc(body.bindings) <> toDoc(body.body)) <> line)
+
+      case NeutralStmt.Shift(prompt, body) =>
+        "shift" <> parens(toDoc(prompt)) <+> toDoc(body)
 
       case NeutralStmt.Hole(span) => "hole()"
     }
@@ -224,6 +243,7 @@ object semantics {
       hcat(bindings.map {
         case (addr, Binding.Let(value)) => "let" <+> toDoc(addr) <+> "=" <+> toDoc(value) <> line
         case (addr, Binding.Def(block)) => "def" <+> toDoc(addr) <+> "=" <+> toDoc(block) <> line
+        case (addr, Binding.Rec(block, tpe, capt)) => "def" <+> toDoc(addr) <+> "=" <+> toDoc(block) <> line
         case (addr, Binding.Val(stmt))  => "val" <+> toDoc(addr) <+> "=" <+> toDoc(stmt) <> line
         case (addr, Binding.Run(callee, tparams, vparams)) => "let !" <+> toDoc(addr) <+> "=" <+> toDoc(callee.id) <>
           (if (tparams.isEmpty) emptyDoc else brackets(hsep(tparams.map(toDoc), comma))) <>
@@ -275,6 +295,9 @@ object NewNormalizer { normal =>
     scope.bindings.toSeq.reverse.foreach {
       // TODO for now we keep ALL definitions
       case (addr, b: Binding.Def) =>
+        used = used ++ b.free
+        filtered = (addr, b) :: filtered
+      case (addr, b: Binding.Rec) =>
         used = used ++ b.free
         filtered = (addr, b) :: filtered
       case (addr, s: Binding.Val) =>
@@ -434,6 +457,14 @@ object NewNormalizer { normal =>
     case Stmt.Let(id, annotatedTpe, binding, body) =>
       bind(id, evaluate(binding)) { evaluate(body, stack) }
 
+    // can be recursive
+    case Stmt.Def(id, block: core.BlockLit, body) =>
+      given Env = env.bindComputation(id, Computation.Def(id))
+      scope.defineRecursive(id, evaluate(block), block.tpe, block.capt)
+      bind(id, Computation.Def(id)) {
+        evaluate(body, stack)
+      }
+
     case Stmt.Def(id, block, body) =>
       bind(id, evaluate(block)) { evaluate(body, stack) }
 
@@ -507,8 +538,18 @@ object NewNormalizer { normal =>
 
     // scoping constructs
     case Stmt.Region(body) => ???
-    case Stmt.Shift(prompt, body) => ???
-    case Stmt.Reset(body) => ???
+    case Stmt.Shift(prompt, body) =>
+      // TODO implement correctly...
+      reify(stack, NeutralStmt.Shift(prompt.id, evaluate(body)))
+    case Stmt.Reset(BlockLit(Nil, cparams, Nil, prompt :: Nil, body)) =>
+      // TODO is Var correct here?? Probably needs to be a new computation value...
+      //   but shouldn't it be a fresh prompt each time?
+      given Env = env.bindComputation(prompt.id -> Computation.Var(prompt.id) :: Nil)
+      // TODO implement properly
+      reify(stack, NeutralStmt.Reset(prompt, nested {
+          evaluate(body, Stack.Empty)
+      }))
+    case Stmt.Reset(_) => ???
     case Stmt.Resume(k, body) => ???
   }
 
@@ -543,6 +584,8 @@ object NewNormalizer { normal =>
 
       debug(s"---------------------")
       val embedded = embedBlockLit(block)
+      debug(util.show(embedded))
+
       Toplevel.Def(id, embedded)
     case other => other
   }
@@ -555,7 +598,7 @@ object NewNormalizer { normal =>
     def lookupValue(id: Id): ValueType = values.getOrElse(id, sys.error(s"Unknown value: ${util.show(id)}"))
   }
 
-  def embedStmt(neutral: NeutralStmt)(using TypingContext): core.Stmt = neutral match {
+  def embedStmt(neutral: NeutralStmt)(using G: TypingContext): core.Stmt = neutral match {
     case NeutralStmt.Return(result) =>
       Stmt.Return(embedPure(result))
     case NeutralStmt.App(label, targs, vargs, bargs) =>
@@ -568,6 +611,14 @@ object NewNormalizer { normal =>
       Stmt.Match(embedPure(scrutinee),
         clauses.map { case (id, block) => id -> embedBlockLit(block) },
         default.map(embedStmt))
+    case NeutralStmt.Reset(prompt, body) =>
+      val capture = prompt.capt match {
+        case set if set.size == 1 => set.head
+        case _ => sys error "Prompt needs to have a single capture"
+      }
+      Stmt.Reset(core.BlockLit(Nil, capture :: Nil, Nil, prompt :: Nil, embedStmt(body)(using G.bindComputations(prompt :: Nil))))
+    case NeutralStmt.Shift(prompt, body) =>
+      Stmt.Shift(embedBlockVar(prompt), embedBlockLit(body))
     case NeutralStmt.Hole(span) =>
       Stmt.Hole(span)
   }
@@ -582,6 +633,9 @@ object NewNormalizer { normal =>
         case ((id, Binding.Def(block)), rest) => G =>
           val coreBlock = embedBlockLit(block)(using G)
           Stmt.Def(id, coreBlock, rest(G.bind(id, coreBlock.tpe, coreBlock.capt)))
+        case ((id, Binding.Rec(block, tpe, capt)), rest) => G =>
+          val coreBlock = embedBlockLit(block)(using G.bind(id, tpe, capt))
+          Stmt.Def(id, coreBlock, rest(G.bind(id, tpe, capt)))
         case ((id, Binding.Val(stmt)), rest) => G =>
           val coreStmt = embedStmt(stmt)(using G)
           Stmt.Val(id, coreStmt.tpe, coreStmt, rest(G.bind(id, coreStmt.tpe)))
@@ -598,10 +652,25 @@ object NewNormalizer { normal =>
   }
   def embedPure(addr: Addr)(using G: TypingContext): core.Pure = Pure.ValueVar(addr, G.lookupValue(addr))
 
-  def embedBlock(comp: Computation)(using TypingContext): core.Block = comp match {
+  def embedBlock(comp: Computation)(using G: TypingContext): core.Block = comp match {
     case Computation.Var(id) => embedBlockVar(id)
     case Computation.Def(label) => embedBlockVar(label)
-    case Computation.New(interface, operations) => ??? // TODO eta-expand...
+    case Computation.New(interface, operations) =>
+      val ops = operations.map { case (id, label) =>
+        G.blocks(label) match {
+          case (BlockType.Function(tparams, cparams, vparams, bparams, result), captures) =>
+            val tparams2 = tparams.map(t => Id(t))
+            // TODO if we freshen cparams, then we also need to substitute them in the result AND
+            val cparams2 = cparams //.map(c => Id(c))
+            val vparams2 = vparams.map(t => ValueParam(Id("x"), t))
+            val bparams2 = (bparams zip cparams).map { case (t, c) => BlockParam(Id("f"), t, Set(c)) }
+
+            core.Operation(id, tparams2, cparams, vparams2, bparams2,
+              Stmt.App(embedBlockVar(label), tparams2.map(ValueType.Var.apply), vparams2.map(p => ValueVar(p.id, p.tpe)), bparams2.map(p => BlockVar(p.id, p.tpe, p.capt))))
+          case _ => sys error "Unexpected block type"
+        }
+      }
+      core.Block.New(Implementation(interface, ops))
   }
 
   def embedBlockLit(block: Block)(using G: TypingContext): core.BlockLit = block match {
@@ -610,6 +679,6 @@ object NewNormalizer { normal =>
         embedStmt(body)(using G.bindValues(vparams).bindComputations(bparams)))
   }
   def embedBlockVar(label: Label)(using G: TypingContext): core.BlockVar =
-    val (tpe, capt) = G.blocks(label)
+    val (tpe, capt) = G.blocks.getOrElse(label, sys error s"Unknown block: ${util.show(label)}. ${G.blocks.keys.map(util.show).mkString(", ")}")
     core.BlockVar(label, tpe, capt)
 }
