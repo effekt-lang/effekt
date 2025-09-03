@@ -2,7 +2,7 @@ package effekt
 package core
 package optimizer
 
-import effekt.util.messages.INTERNAL_ERROR
+import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR }
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -29,6 +29,24 @@ import scala.collection.mutable
  * If the function is called _exactly once_, it is inlined regardless of the maxInlineSize.
  */
 object Normalizer { normal =>
+
+  def assertNormal(t: Tree)(using E: ErrorReporter): Unit = Tree.visit(t) {
+    // The only allowed forms are the following.
+    // In the future, Stmt.Shift should also be performed statically.
+    case Stmt.Val(_, _, binding: (Stmt.Reset | Stmt.Var | Stmt.App | Stmt.Invoke | Stmt.Region | Stmt.Shift | Stmt.Resume), body) =>
+      assertNormal(binding); assertNormal(body)
+    case t @ Stmt.Val(_, _, binding, body) =>
+      E.warning(s"Not allowed as binding of Val: ${util.show(t)}")
+    case t @ Stmt.App(b: BlockLit, targs, vargs, bargs) =>
+      E.warning(s"Unreduced beta-redex: ${util.show(t)}")
+    case t @ Stmt.Invoke(b: New, method, tpe, targs, vargs, bargs) =>
+      E.warning(s"Unreduced beta-redex: ${util.show(t)}")
+    case t @ Stmt.If(cond: Literal, thn, els) =>
+      E.warning(s"Unreduced if: ${util.show(t)}")
+    case t @ Stmt.Match(sc: Make, clauses, default) =>
+      E.warning(s"Unreduced match: ${util.show(t)}")
+  }
+
 
   case class Context(
     blocks: Map[Id, Block],
