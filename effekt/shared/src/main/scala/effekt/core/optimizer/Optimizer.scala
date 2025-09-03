@@ -35,10 +35,13 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     // println(util.show(tree))
     tree = Context.timed("new-normalizer-2", source.name) { NewNormalizer.run(tree) }
     Normalizer.assertNormal(tree)
-    tree = Context.timed("new-normalizer-3", source.name) { NewNormalizer.run(tree) }
-    Normalizer.assertNormal(tree)
     //tree = Normalizer.normalize(Set(mainSymbol), tree, Context.config.maxInlineSize().toInt)
 
+    //    tree = Context.timed("old-normalizer-1", source.name) { Normalizer.normalize(Set(mainSymbol), tree, 0) }
+    //    tree = Context.timed("old-normalizer-2", source.name) { Normalizer.normalize(Set(mainSymbol), tree, 0) }
+    //
+    //    tree = Context.timed("new-normalizer-3", source.name) { NewNormalizer.run(tree) }
+    //    Normalizer.assertNormal(tree)
     //
     //    // (2) lift static arguments
     //    tree = Context.timed("static-argument-transformation", source.name) {
