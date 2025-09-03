@@ -28,9 +28,17 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
       Deadcode.remove(mainSymbol, tree)
     }
 
-    tree = NewNormalizer.run(tree)
-    //
-    //    if !Context.config.optimize() then return tree;
+    if !Context.config.optimize() then return tree;
+
+    tree = Context.timed("new-normalizer-1", source.name) { NewNormalizer.run(tree) }
+    Normalizer.assertNormal(tree)
+    // println(util.show(tree))
+    tree = Context.timed("new-normalizer-2", source.name) { NewNormalizer.run(tree) }
+    Normalizer.assertNormal(tree)
+    tree = Context.timed("new-normalizer-3", source.name) { NewNormalizer.run(tree) }
+    Normalizer.assertNormal(tree)
+    //tree = Normalizer.normalize(Set(mainSymbol), tree, Context.config.maxInlineSize().toInt)
+
     //
     //    // (2) lift static arguments
     //    tree = Context.timed("static-argument-transformation", source.name) {
