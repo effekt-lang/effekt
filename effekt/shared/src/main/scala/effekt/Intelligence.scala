@@ -199,7 +199,7 @@ trait Intelligence {
         case s: TermSymbol => s.decl.span
       })
     }
-    // based on //effekt/kiama/jvm/src/main/scala/kiama/util/Convert.scala toUri, which cannot be accessed in this module
+
     def getSymbolUri(sym: TypeSymbol | TermSymbol): Option[String] = {
       try {
         val sourceName = sym match {
@@ -208,7 +208,6 @@ trait Intelligence {
           case _ => return None
         }
         
-        // Simple URI conversion compatible with shared module
         if (sourceName.startsWith("file:") || sourceName.startsWith("vscode-notebook-cell:")) {
           Some(sourceName)
         } else if (sourceName.startsWith("./") || sourceName.startsWith(".\\")) {
