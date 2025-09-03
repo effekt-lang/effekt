@@ -48,14 +48,14 @@ object semantics {
     case Def(block: Block)
     case Rec(block: Block, tpe: BlockType, capt: Captures)
     case Val(stmt: NeutralStmt)
-    case Run(f: BlockVar, targs: List[ValueType], vargs: List[Addr])
+    case Run(f: BlockVar, targs: List[ValueType], vargs: List[Addr], bargs: List[Computation])
 
     val free: Set[Addr] = this match {
       case Binding.Let(value) => value.free
       case Binding.Def(block) => block.free
       case Binding.Rec(block, tpe, capt) => block.free
       case Binding.Val(stmt) => stmt.free
-      case Binding.Run(f, targs, vargs) => vargs.toSet
+      case Binding.Run(f, targs, vargs, bargs) => vargs.toSet
     }
   }
 
@@ -97,9 +97,9 @@ object semantics {
           addr
       }
 
-    def run(hint: String, callee: BlockVar, targs: List[ValueType], vargs: List[Addr]): Addr = {
+    def run(hint: String, callee: BlockVar, targs: List[ValueType], vargs: List[Addr], bargs: List[Computation]): Addr = {
       val addr = Id(hint)
-      bindings = bindings.updated(addr, Binding.Run(callee, targs, vargs))
+      bindings = bindings.updated(addr, Binding.Run(callee, targs, vargs, bargs))
       addr
     }
 
@@ -245,9 +245,9 @@ object semantics {
         case (addr, Binding.Def(block)) => "def" <+> toDoc(addr) <+> "=" <+> toDoc(block) <> line
         case (addr, Binding.Rec(block, tpe, capt)) => "def" <+> toDoc(addr) <+> "=" <+> toDoc(block) <> line
         case (addr, Binding.Val(stmt))  => "val" <+> toDoc(addr) <+> "=" <+> toDoc(stmt) <> line
-        case (addr, Binding.Run(callee, tparams, vparams)) => "let !" <+> toDoc(addr) <+> "=" <+> toDoc(callee.id) <>
-          (if (tparams.isEmpty) emptyDoc else brackets(hsep(tparams.map(toDoc), comma))) <>
-          parens(hsep(vparams.map(toDoc), comma)) <> line
+        case (addr, Binding.Run(callee, targs, vargs, bargs)) => "let !" <+> toDoc(addr) <+> "=" <+> toDoc(callee.id) <>
+          (if (targs.isEmpty) emptyDoc else brackets(hsep(targs.map(toDoc), comma))) <>
+          parens(hsep(vargs.map(toDoc), comma)) <> hcat(bargs.map(b => braces { toDoc(b) })) <> line
       })
 
     def toDoc(block: BasicBlock): Doc =
@@ -432,10 +432,9 @@ object NewNormalizer { normal =>
     case Pure.PureApp(f, targs, vargs) =>
       scope.allocate("x", Value.Extern(f, targs, vargs.map(evaluate)))
 
-    // TODO fix once this is a statement
     case DirectApp(f, targs, vargs, bargs) =>
       assert(bargs.isEmpty)
-      scope.run("x", f, targs, vargs.map(evaluate))
+      scope.run("x", f, targs, vargs.map(evaluate), bargs.map(evaluate))
 
     case Pure.Make(data, tag, targs, vargs) =>
       scope.allocate("x", Value.Make(data, tag, targs, vargs.map(evaluate)))
@@ -564,7 +563,7 @@ object NewNormalizer { normal =>
     mod.copy(definitions = newDefinitions)
   }
 
-  inline def debug(inline msg: => Any) = println(msg)
+  inline def debug(inline msg: => Any) = () // println(msg)
 
   def run(defn: Toplevel)(using env: Env, G: TypingContext): Toplevel = defn match {
     case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
@@ -639,8 +638,8 @@ object NewNormalizer { normal =>
         case ((id, Binding.Val(stmt)), rest) => G =>
           val coreStmt = embedStmt(stmt)(using G)
           Stmt.Val(id, coreStmt.tpe, coreStmt, rest(G.bind(id, coreStmt.tpe)))
-        case ((id, Binding.Run(callee, targs, vargs)), rest) => G =>
-          val coreExpr = DirectApp(callee, targs, vargs.map(arg => embedPure(arg)(using G)), Nil)
+        case ((id, Binding.Run(callee, targs, vargs, bargs)), rest) => G =>
+          val coreExpr = DirectApp(callee, targs, vargs.map(arg => embedPure(arg)(using G)), bargs.map(arg => embedBlock(arg)(using G)))
           Stmt.Let(id, coreExpr.tpe, coreExpr, rest(G.bind(id, coreExpr.tpe)))
       }(G)
   }
