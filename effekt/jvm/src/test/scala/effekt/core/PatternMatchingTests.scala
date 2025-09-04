@@ -19,7 +19,7 @@ class PatternMatchingTests extends CoreTests {
   def block(name: String, args: ValueType*): core.BlockVar =
     core.BlockVar(Id(name), core.BlockType.Function(Nil, Nil, args.toList, Nil, TUnit), Set.empty)
 
-  def jump(label: BlockVar, args: Pure*) =
+  def jump(label: BlockVar, args: Expr*) =
     App(label, Nil, args.toList, Nil)
 
   def variable(name: String, tpe: ValueType): core.ValueVar =
