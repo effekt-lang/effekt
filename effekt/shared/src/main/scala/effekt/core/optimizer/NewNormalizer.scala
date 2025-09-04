@@ -362,45 +362,57 @@ object NewNormalizer { normal =>
     case Static(tpe: ValueType, apply: Env => Scope => Addr => NeutralStmt)
     case Dynamic(label: Label)
   }
+  enum MetaStack {
+    case Last(stack: Stack)
+    // case Segment(prompt: Prompt, stack: Stack, next: MetaStack)
 
-  def returnTo(stack: Stack, arg: Addr)(using env: Env, scope: Scope): NeutralStmt = stack match {
-    case Stack.Empty => NeutralStmt.Return(arg)
-    case Stack.Static(tpe, apply) => apply(env)(scope)(arg)
-    case Stack.Dynamic(label) => NeutralStmt.App(label, List.empty, List(arg), Nil)
-  }
-
-  def reify(stack: Stack, stmt: NeutralStmt)(using env: Env, scope: Scope): NeutralStmt = stack match {
-    case Stack.Empty => stmt
-    // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]
-    case Stack.Static(tpe, apply) =>
-      val tmp = Id("tmp")
-      scope.push(tmp, stmt)
-      apply(env)(scope)(tmp)
-    // stack is already reified
-    case Stack.Dynamic(label) =>
-      stmt
-  }
-
-  def join(stack: Stack)(f: Stack => NeutralStmt)(using env: Env, scope: Scope): NeutralStmt = stack match {
-    case Stack.Static(tpe, apply) =>
-      val x = Id("x")
-      nested { scope ?=> apply(env)(scope)(x) } match {
-        // Avoid trivial continuations like
-        //   def k_6268 = (x_6267: Int_3) {
-        //     return x_6267
-        //   }
-        case BasicBlock(Nil, _: (NeutralStmt.Return | NeutralStmt.App)) => f(stack)
-        case body =>
-          val k = scope.define("k", Block(Nil, Nil, ValueParam(x, tpe) :: Nil, Nil, body))
-          f(Stack.Dynamic(k))
+    def ret(arg: Addr)(using env: Env, scope: Scope): NeutralStmt = this match {
+      case MetaStack.Last(stack) => stack match {
+        case Stack.Empty => NeutralStmt.Return(arg)
+        case Stack.Static(tpe, apply) => apply(env)(scope)(arg)
+        case Stack.Dynamic(label) => NeutralStmt.App(label, List.empty, List(arg), Nil)
       }
-    case Stack.Empty => f(stack)
-    case Stack.Dynamic(label) => f(stack)
+    }
+    def push(tpe: ValueType)(f: Env ?=> Scope ?=> Addr => MetaStack => NeutralStmt): MetaStack = this match {
+      case MetaStack.Last(stack) => MetaStack.Last(Stack.Static(tpe,
+        env => scope => arg => f(using env)(using scope)(arg)(this)
+      ))
+    }
+    def reify(stmt: NeutralStmt)(using env: Env, scope: Scope): NeutralStmt = this match {
+      case MetaStack.Last(stack) => stack match {
+        case Stack.Empty => stmt
+        // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]
+        case Stack.Static(tpe, apply) =>
+          val tmp = Id("tmp")
+          scope.push(tmp, stmt)
+          apply(env)(scope)(tmp)
+        // stack is already reified
+        case Stack.Dynamic(label) =>
+          stmt
+      }
+    }
+    def joinpoint(f: MetaStack => NeutralStmt)(using env: Env, scope: Scope): NeutralStmt = this match {
+      case MetaStack.Last(stack) => stack match {
+        case Stack.Static(tpe, apply) =>
+          val x = Id("x")
+          nested { scope ?=> apply(env)(scope)(x) } match {
+            // Avoid trivial continuations like
+            //   def k_6268 = (x_6267: Int_3) {
+            //     return x_6267
+            //   }
+            case BasicBlock(Nil, _: (NeutralStmt.Return | NeutralStmt.App)) => f(this)
+            case body =>
+              val k = scope.define("k", Block(Nil, Nil, ValueParam(x, tpe) :: Nil, Nil, body))
+              f(MetaStack.Last(Stack.Dynamic(k)))
+          }
+        case Stack.Empty => f(this)
+        case Stack.Dynamic(label) => f(this)
+      }
+    }
   }
-
-  def push(tpe: ValueType)(f: Env ?=> Scope ?=> Addr => NeutralStmt): Stack = Stack.Static(tpe,
-    env => scope => arg => f(using env)(using scope)(arg)
-  )
+  object MetaStack {
+    def empty: MetaStack = MetaStack.Last(Stack.Empty)
+  }
 
   def evaluate(block: core.Block)(using env: Env, scope: Scope): Computation = block match {
     case core.Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
@@ -447,7 +459,7 @@ object NewNormalizer { normal =>
           .bindValue(vparams.map(p => p.id -> p.id))
           .bindComputation(bparams.map(p => p.id -> Computation.Var(p.id)))
         Block(tparams, cparams, vparams, bparams, nested {
-          evaluate(body, Stack.Empty)
+          evaluate(body, MetaStack.empty)
         })
     }
 
@@ -474,58 +486,58 @@ object NewNormalizer { normal =>
   }
 
   // TODO make evaluate(stmt) return BasicBlock (won't work for shift or reset, though)
-  def evaluate(stmt: Stmt, stack: Stack)(using env: Env, scope: Scope): NeutralStmt = stmt match {
+  def evaluate(stmt: Stmt, k: MetaStack)(using env: Env, scope: Scope): NeutralStmt = stmt match {
 
     case Stmt.Return(expr) =>
-      returnTo(stack, evaluate(expr))
+      k.ret(evaluate(expr))
 
     case Stmt.Val(id, annotatedTpe, binding, body) =>
       // This push can lead to an eta-redex (a superfluous push...)
-      evaluate(binding, push(annotatedTpe) { res =>
-        bind(id, res) { evaluate(body, stack) }
+      evaluate(binding, k.push(annotatedTpe) { res => k =>
+        bind(id, res) { evaluate(body, k) }
       })
 
     case Stmt.Let(id, annotatedTpe, binding, body) =>
-      bind(id, evaluate(binding)) { evaluate(body, stack) }
+      bind(id, evaluate(binding)) { evaluate(body, k) }
 
     // can be recursive
     case Stmt.Def(id, block: core.BlockLit, body) =>
       given Env = env.bindComputation(id, Computation.Def(id))
       scope.defineRecursive(id, evaluate(block), block.tpe, block.capt)
       bind(id, Computation.Def(id)) {
-        evaluate(body, stack)
+        evaluate(body, k)
       }
 
     case Stmt.Def(id, block, body) =>
-      bind(id, evaluate(block)) { evaluate(body, stack) }
+      bind(id, evaluate(block)) { evaluate(body, k) }
 
     case Stmt.App(callee, targs, vargs, bargs) =>
       evaluate(callee) match {
         case Computation.Var(id) =>
-          reify(stack, NeutralStmt.App(id, targs, vargs.map(evaluate), bargs.map(evaluate)))
+          k.reify(NeutralStmt.App(id, targs, vargs.map(evaluate), bargs.map(evaluate)))
         case Computation.Def(label) =>
           // TODO this should be "jump"
-          reify(stack, NeutralStmt.App(label, targs, vargs.map(evaluate), bargs.map(evaluate)))
+          k.reify(NeutralStmt.App(label, targs, vargs.map(evaluate), bargs.map(evaluate)))
         case Computation.New(interface, operations) => sys error "Should not happen: app on new"
       }
 
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
       evaluate(callee) match {
         case Computation.Var(id) =>
-          reify(stack, NeutralStmt.Invoke(id, method, methodTpe, targs, vargs.map(evaluate), bargs.map(evaluate)))
+          k.reify(NeutralStmt.Invoke(id, method, methodTpe, targs, vargs.map(evaluate), bargs.map(evaluate)))
         case Computation.Def(label) => sys error s"Should not happen: invoke on def ${label}"
         case Computation.New(interface, operations) =>
           val op = operations.collectFirst { case (id, label) if id == method => label }.get
-          reify(stack, NeutralStmt.App(op, targs, vargs.map(evaluate), bargs.map(evaluate)))
+          k.reify(NeutralStmt.App(op, targs, vargs.map(evaluate), bargs.map(evaluate)))
       }
 
     case Stmt.If(cond, thn, els) =>
       val sc = evaluate(cond)
       scope.lookupValue(sc) match {
-        case Some(Value.Literal(true, _)) => evaluate(thn, stack)
-        case Some(Value.Literal(false, _)) => evaluate(els, stack)
+        case Some(Value.Literal(true, _)) => evaluate(thn, k)
+        case Some(Value.Literal(false, _)) => evaluate(els, k)
         case _ =>
-          join(stack) { k =>
+          k.joinpoint { k =>
             NeutralStmt.If(sc, nested {
               evaluate(thn, k)
             }, nested {
@@ -541,12 +553,12 @@ object NewNormalizer { normal =>
           // TODO substitute types (or bind them in the env)!
           clauses.collectFirst {
             case (tpe, BlockLit(tparams, cparams, vparams, bparams, body)) if tpe == tag =>
-              bind(vparams.map(_.id).zip(vargs)) { evaluate(body, stack) }
+              bind(vparams.map(_.id).zip(vargs)) { evaluate(body, k) }
           }.getOrElse {
-            evaluate(default.getOrElse { sys.error("Non-exhaustive pattern match.") }, stack)
+            evaluate(default.getOrElse { sys.error("Non-exhaustive pattern match.") }, k)
           }
         case _ =>
-          join(stack) { k =>
+          k.joinpoint { k =>
             NeutralStmt.Match(sc,
               // This is ALMOST like evaluate(BlockLit), but keeps the current continuation
               clauses.map { case (id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
@@ -571,20 +583,20 @@ object NewNormalizer { normal =>
     case Stmt.Put(ref, annotatedCapt, value, body) => ???
 
     // Control Effects
-    case Stmt.Shift(prompt, BlockLit(Nil, cparam :: Nil, Nil, k :: Nil, body)) =>
+    case Stmt.Shift(prompt, BlockLit(Nil, cparam :: Nil, Nil, k2 :: Nil, body)) =>
       val p = env.lookupComputation(prompt.id) match {
         case Computation.Var(id) => id
         case _ => ???
       }
       // TODO implement correctly...
       val neutralBody = {
-        given Env = env.bindComputation(k.id -> Computation.Var(k.id) :: Nil)
+        given Env = env.bindComputation(k2.id -> Computation.Var(k2.id) :: Nil)
         nested {
-          evaluate(body, Stack.Empty)
+          evaluate(body, MetaStack.empty)
         }
       }
-      assert(Set(cparam) == k.capt, "At least for now these need to be the same")
-      reify(stack, NeutralStmt.Shift(p, cparam, k, neutralBody))
+      assert(Set(cparam) == k2.capt, "At least for now these need to be the same")
+      k.reify(NeutralStmt.Shift(p, cparam, k2, neutralBody))
     case Stmt.Shift(_, _) => ???
     case Stmt.Reset(BlockLit(Nil, cparams, Nil, prompt :: Nil, body)) =>
       // TODO is Var correct here?? Probably needs to be a new computation value...
@@ -593,20 +605,20 @@ object NewNormalizer { normal =>
       val neutralBody = {
         given Env = env.bindComputation(prompt.id -> Computation.Var(p) :: Nil)
         nested {
-          evaluate(body, Stack.Empty)
+          evaluate(body, MetaStack.empty)
         }
       }
       // TODO implement properly
-      reify(stack, NeutralStmt.Reset(BlockParam(p, prompt.tpe, prompt.capt), neutralBody))
+      k.reify(NeutralStmt.Reset(BlockParam(p, prompt.tpe, prompt.capt), neutralBody))
     case Stmt.Reset(_) => ???
-    case Stmt.Resume(k, body) =>
-      val r = env.lookupComputation(k.id) match {
+    case Stmt.Resume(k2, body) =>
+      val r = env.lookupComputation(k2.id) match {
         case Computation.Var(id) => id
         case _ => ???
       }
       // TODO implement properly
-      reify(stack, NeutralStmt.Resume(r, nested {
-        evaluate(body, Stack.Empty)
+      k.reify(NeutralStmt.Resume(r, nested {
+        evaluate(body, MetaStack.empty)
       }))
   }
 
@@ -640,7 +652,7 @@ object NewNormalizer { normal =>
         .bindComputation(bparams.map(p => p.id -> Computation.Var(p.id)))
 
       given scope: Scope = Scope.empty
-      val result = evaluate(body, Stack.Empty)
+      val result = evaluate(body, MetaStack.empty)
 
       debug(s"---------------------")
       val block = Block(tparams, cparams, vparams, bparams, reify(scope, result))
