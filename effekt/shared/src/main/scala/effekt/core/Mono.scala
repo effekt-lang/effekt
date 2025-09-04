@@ -99,7 +99,6 @@ def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): Const
       ).toVector // < Just.0 >
       Constraint(constructorArgs, id) // < Just.0 > <: Maybe
     }
-  case Interface(id, List(), properties) => List.empty
   case Interface(id, tparams, properties) => 
     // tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
     List.empty
