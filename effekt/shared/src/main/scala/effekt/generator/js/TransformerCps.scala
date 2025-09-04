@@ -124,7 +124,7 @@ object TransformerCps extends Transformer {
       js.RawStmt(contents)
   }
 
-  def toJS(t: Template[Pure])(using TransformerContext): js.Expr =
+  def toJS(t: Template[Expr])(using TransformerContext): js.Expr =
     js.RawExpr(t.strings, t.args.map(toJS))
 
   def toJS(d: core.Declaration): List[js.Stmt] = d match {
@@ -186,14 +186,14 @@ object TransformerCps extends Transformer {
     case Cont.Abort => js.Undefined
   }
 
-  def toJS(e: cps.Pure)(using D: TransformerContext): js.Expr = e match {
-    case Pure.ValueVar(id)           => nameRef(id)
-    case Pure.Literal(())            => $effekt.field("unit")
-    case Pure.Literal(s: String)     => JsString(escape(s))
-    case literal: Pure.Literal       => js.RawExpr(literal.value.toString)
-    case Pure.PureApp(id, vargs)     => inlineExtern(id, vargs)
-    case Pure.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
-    case Pure.Box(b)                 => argumentToJS(b)
+  def toJS(e: cps.Expr)(using D: TransformerContext): js.Expr = e match {
+    case Expr.ValueVar(id)           => nameRef(id)
+    case Expr.Literal(())            => $effekt.field("unit")
+    case Expr.Literal(s: String)     => JsString(escape(s))
+    case literal: Expr.Literal       => js.RawExpr(literal.value.toString)
+    case Expr.PureApp(id, vargs)     => inlineExtern(id, vargs)
+    case Expr.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
+    case Expr.Box(b)                 => argumentToJS(b)
   }
 
   def toJS(s: cps.Stmt)(using D: TransformerContext): Binding[List[js.Stmt]] = s match {
@@ -322,7 +322,7 @@ object TransformerCps extends Transformer {
 
         // Prepare the substitution
         val subst = Substitution(
-          values = paramTmps.map { case (p, t) => p -> Pure.ValueVar(t) },
+          values = paramTmps.map { case (p, t) => p -> Expr.ValueVar(t) },
           blocks = Map.empty,
           conts = tmp_k.map(t => k1 -> Cont.ContVar(t)).toMap,
           metaconts = tmp_ks.map(t => ks1 -> MetaCont(t)).toMap
@@ -437,7 +437,7 @@ object TransformerCps extends Transformer {
   // Inlining Externs
   // ----------------
 
-  private def inlineExtern(id: Id, args: List[cps.Pure])(using T: TransformerContext): js.Expr =
+  private def inlineExtern(id: Id, args: List[cps.Expr])(using T: TransformerContext): js.Expr =
     T.externs.get(id) match {
       case Some(cps.Extern.Def(id, params, Nil, async,
         ExternBody.StringExternBody(featureFlag, Template(strings, templateArgs)))) if !async =>
@@ -500,11 +500,11 @@ object TransformerCps extends Transformer {
   }
 
   private def canBeDirect(k: Id, stmt: Stmt)(using T: TransformerContext): Boolean =
-    def notIn(term: Stmt | Block | Pure | (Id, Clause) | Cont) =
+    def notIn(term: Stmt | Block | Expr | (Id, Clause) | Cont) =
       val freeVars = term match {
         case s: Stmt => free(s)
         case b: Block => free(b)
-        case p: Pure => free(p)
+        case p: Expr => free(p)
         case (id, Clause(_, body)) => free(body)
         case c: Cont => free(c)
       }

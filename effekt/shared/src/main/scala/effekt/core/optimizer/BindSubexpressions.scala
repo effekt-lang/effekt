@@ -45,7 +45,7 @@ object BindSubexpressions {
     }
 
     case Stmt.Let(id, tpe, binding, body) => transform(binding) match {
-      case Bind(Pure.ValueVar(x, _), bindings) =>
+      case Bind(Expr.ValueVar(x, _), bindings) =>
         Binding(bindings, transform(body)(using alias(id, x, env)))
       case Bind(other, bindings) =>
         Binding(bindings, Stmt.Let(id, tpe, other, transform(body)))
@@ -129,21 +129,21 @@ object BindSubexpressions {
 
   def transform(id: Id)(using env: Env): Id = env.getOrElse(id, id)
 
-  def transform(e: Pure)(using Env): Bind[ValueVar | Literal] = e match {
-    case Pure.ValueVar(id, tpe) => pure(ValueVar(transform(id), transform(tpe)))
-    case Pure.Literal(value, tpe) => pure(Pure.Literal(value, transform(tpe)))
+  def transform(e: Expr)(using Env): Bind[ValueVar | Literal] = e match {
+    case Expr.ValueVar(id, tpe) => pure(ValueVar(transform(id), transform(tpe)))
+    case Expr.Literal(value, tpe) => pure(Expr.Literal(value, transform(tpe)))
 
-    case Pure.Make(data, tag, targs, vargs) => transformExprs(vargs) { vs =>
-      bind(Pure.Make(data, tag, targs, vs))
+    case Expr.Make(data, tag, targs, vargs) => transformExprs(vargs) { vs =>
+      bind(Expr.Make(data, tag, targs, vs))
     }
-    case Pure.PureApp(f, targs, vargs) => for {
+    case Expr.PureApp(f, targs, vargs) => for {
       vs <- transformExprs(vargs);
-      res <- bind(Pure.PureApp(f, targs.map(transform), vs))
+      res <- bind(Expr.PureApp(f, targs.map(transform), vs))
     } yield res
-    case Pure.Box(block, capt) => transform(block) { b => bind(Pure.Box(b, transform(capt))) }
+    case Expr.Box(block, capt) => transform(block) { b => bind(Expr.Box(b, transform(capt))) }
   }
 
-  def transformExprs(es: List[Pure])(using Env): Bind[List[ValueVar | Literal]] = traverse(es)(transform)
+  def transformExprs(es: List[Expr])(using Env): Bind[List[ValueVar | Literal]] = traverse(es)(transform)
   def transformBlocks(es: List[Block])(using Env): Bind[List[Block]] = traverse(es)(transform)
 
   // Types

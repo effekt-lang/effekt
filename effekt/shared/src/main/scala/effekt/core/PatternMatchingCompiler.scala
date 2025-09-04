@@ -60,11 +60,11 @@ object PatternMatchingCompiler {
     // all of the patterns need to match for this condition to be met
     case Patterns(patterns: Map[ValueVar, Pattern])
     // a boolean predicate that needs to be branched on at runtime
-    case Predicate(pred: Pure)
+    case Predicate(pred: Expr)
     // a predicate trivially met by running and binding the statement
     case Val(x: Id, tpe: core.ValueType, binding: Stmt)
-    case Let(x: Id, tpe: core.ValueType, binding: Pure)
-    case DirectApp(x: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
+    case Let(x: Id, tpe: core.ValueType, binding: Expr)
+    case DirectApp(x: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
   }
 
   enum Pattern {
@@ -77,7 +77,7 @@ object PatternMatchingCompiler {
     case Ignore()
     case Any(id: Id)
     case Or(patterns: List[Pattern])
-    case Literal(l: core.Literal, equals: (core.Pure, core.Pure) => core.Pure)
+    case Literal(l: core.Literal, equals: (core.Expr, core.Expr) => core.Expr)
   }
 
   /**
@@ -128,7 +128,7 @@ object PatternMatchingCompiler {
     }
 
     // (3a) Match on a literal
-    def splitOnLiteral(lit: Literal, equals: (Pure, Pure) => Pure): core.Stmt = {
+    def splitOnLiteral(lit: Literal, equals: (Expr, Expr) => Expr): core.Stmt = {
       // the different literal values that we match on
       val variants: List[core.Literal] = normalized.collect {
         case Clause(Split(Pattern.Literal(lit, _), _, _), _, _, _) => lit

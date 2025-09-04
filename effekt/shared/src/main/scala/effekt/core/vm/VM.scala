@@ -492,10 +492,10 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
       }.toMap, env)
   }
 
-  def eval(e: Pure, env: Env): Value = e match {
-    case Pure.ValueVar(id, annotatedType) => env.lookupValue(id)
-    case Pure.Literal(value, annotatedType) => Value.Literal(value)
-    case Pure.PureApp(x, targs, vargs) => env.lookupBuiltin(x.id) match {
+  def eval(e: Expr, env: Env): Value = e match {
+    case Expr.ValueVar(id, annotatedType) => env.lookupValue(id)
+    case Expr.Literal(value, annotatedType) => Value.Literal(value)
+    case Expr.PureApp(x, targs, vargs) => env.lookupBuiltin(x.id) match {
       case Builtin(name, impl) =>
         val arguments = vargs.map(a => eval(a, env))
         instrumentation.builtin(name)
@@ -504,12 +504,12 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           case other => other.toString
         }.mkString(", ")}" }
     }
-    case Pure.Make(data, tag, targs, vargs) =>
+    case Expr.Make(data, tag, targs, vargs) =>
       val result: Value.Data = Value.Data(data, tag, vargs.map(a => eval(a, env)))
       instrumentation.allocate(result)
       result
 
-    case Pure.Box(b, annotatedCapture) => Value.Boxed(eval(b, env))
+    case Expr.Box(b, annotatedCapture) => Value.Boxed(eval(b, env))
   }
 
   def run(main: Id, m: ModuleDecl): Unit = {

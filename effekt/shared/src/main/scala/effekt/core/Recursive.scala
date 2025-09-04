@@ -8,7 +8,7 @@ import scala.collection.mutable
 case class RecursiveFunction(
   definition: BlockLit,
   targs: mutable.Set[List[ValueType]] = mutable.Set.empty,
-  vargs: mutable.Set[List[Pure]] = mutable.Set.empty,
+  vargs: mutable.Set[List[Expr]] = mutable.Set.empty,
   bargs: mutable.Set[List[Block]] = mutable.Set.empty
 )
 
@@ -91,12 +91,12 @@ class Recursive(
     case Stmt.Hole(span) => ()
   }
 
-  def process(e: Pure): Unit = e match {
-    case Pure.ValueVar(id, annotatedType) => ()
-    case Pure.Literal(value, annotatedType) => ()
-    case Pure.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
-    case Pure.Make(data, tag, targs, vargs) => vargs.foreach(process)
-    case Pure.Box(b, annotatedCapture) => process(b)
+  def process(e: Expr): Unit = e match {
+    case Expr.ValueVar(id, annotatedType) => ()
+    case Expr.Literal(value, annotatedType) => ()
+    case Expr.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
+    case Expr.Make(data, tag, targs, vargs) => vargs.foreach(process)
+    case Expr.Box(b, annotatedCapture) => process(b)
   }
 
   def process(i: Implementation): Unit =

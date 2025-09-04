@@ -31,7 +31,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(t: Block): String =
     pretty(toDoc(t), 60).layout
 
-  def format(p: Pure): String =
+  def format(p: Expr): String =
     pretty(toDoc(p), 60).layout
 
   val show: PartialFunction[Any, String] = {
@@ -41,7 +41,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case t: ValueType  => format(t)
     case t: BlockType  => format(t)
     case b: Block      => format(b)
-    case p: Pure       => format(p)
+    case p: Expr       => format(p)
     case x: Id         => x.show
   }
 
@@ -73,7 +73,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case FeatureFlag.Default(span) => "default"
   }
 
-  def toDoc(t: Template[Pure]): Doc =
+  def toDoc(t: Template[Expr]): Doc =
     /// TODO
     hsep(t.args.map(toDoc), comma)
 
@@ -93,7 +93,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(s: symbols.Symbol): Doc = s.show
 
-  def toDoc(e: Pure): Doc = e match {
+  def toDoc(e: Expr): Doc = e match {
     case Literal((), _)            => "()"
     case Literal(s: String, _)     => "\"" + s + "\""
     case Literal(value, _)         => value.toString
@@ -105,7 +105,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Box(b, capt) => parens("box" <+> toDoc(b))
   }
 
-  def argsToDoc(targs: List[core.ValueType], vargs: List[core.Pure], bargs: List[core.Block]): Doc =
+  def argsToDoc(targs: List[core.ValueType], vargs: List[core.Expr], bargs: List[core.Block]): Doc =
     val targsDoc = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))
     //val cargsDoc = if cargs.isEmpty then emptyDoc else brackets(cargs.map(toDoc))
     val vargsDoc = if vargs.isEmpty && !bargs.isEmpty then emptyDoc else parens(vargs.map(toDoc))

@@ -323,7 +323,7 @@ object Transformer {
     }
 
   // Merely sequences the transformation of the arguments monadically
-  def transform(vargs: List[core.Pure], bargs: List[core.Block])(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[(List[Variable], List[Variable])] =
+  def transform(vargs: List[core.Expr], bargs: List[core.Block])(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[(List[Variable], List[Variable])] =
     for {
       values <- traverse(vargs)(transform)
       blocks <- traverse(bargs)(transformBlockArg)
@@ -368,7 +368,7 @@ object Transformer {
       transform(pure)
   }
 
-  def transform(expr: core.Pure)(using BC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = expr match {
+  def transform(expr: core.Expr)(using BC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = expr match {
 
     case core.ValueVar(id, tpe) if BC.globals contains id =>
       val variable = Variable(freshName("run"), transform(tpe))

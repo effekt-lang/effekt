@@ -176,7 +176,7 @@ object StaticArguments {
 
     // congruences
     case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) => rewrite(b)
-    case Block.Unbox(pure) => Block.Unbox(rewrite(pure))
+    case Block.Unbox(expr) => Block.Unbox(rewrite(expr))
     case Block.New(impl) => Block.New(rewrite(impl))
   }
 
@@ -187,14 +187,14 @@ object StaticArguments {
       })
     }
 
-  def rewrite(p: Pure)(using StaticArgumentsContext): Pure = p match {
-    case Pure.PureApp(f, targs, vargs) => Pure.PureApp(f, targs, vargs.map(rewrite))
-    case Pure.Make(data, tag, targs, vargs) => Pure.Make(data, tag, targs, vargs.map(rewrite))
-    case x @ Pure.ValueVar(id, annotatedType) => x
+  def rewrite(p: Expr)(using StaticArgumentsContext): Expr = p match {
+    case Expr.PureApp(f, targs, vargs) => Expr.PureApp(f, targs, vargs.map(rewrite))
+    case Expr.Make(data, tag, targs, vargs) => Expr.Make(data, tag, targs, vargs.map(rewrite))
+    case x @ Expr.ValueVar(id, annotatedType) => x
 
     // congruences
-    case Pure.Literal(value, annotatedType) => p
-    case Pure.Box(b, annotatedCapture) => Pure.Box(rewrite(b), annotatedCapture)
+    case Expr.Literal(value, annotatedType) => p
+    case Expr.Box(b, annotatedCapture) => Expr.Box(rewrite(b), annotatedCapture)
   }
 
   def transform(entrypoint: Id, m: ModuleDecl): ModuleDecl =

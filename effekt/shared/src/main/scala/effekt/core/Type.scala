@@ -260,19 +260,19 @@ object Type {
     case Stmt.Hole(span) => Set.empty
   }
 
-  def inferType(expr: Pure): ValueType = expr match {
-    case Pure.ValueVar(id, tpe) => tpe
-    case Pure.Literal(value, tpe) => tpe
-    case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, targs, Nil).result
-    case Pure.Make(tpe, tag, targs, args) => tpe // TODO instantiate?
-    case Pure.Box(block, capt) => ValueType.Boxed(block.tpe, capt)
+  def inferType(expr: Expr): ValueType = expr match {
+    case Expr.ValueVar(id, tpe) => tpe
+    case Expr.Literal(value, tpe) => tpe
+    case Expr.PureApp(callee, targs, args) => instantiate(callee.functionType, targs, Nil).result
+    case Expr.Make(tpe, tag, targs, args) => tpe // TODO instantiate?
+    case Expr.Box(block, capt) => ValueType.Boxed(block.tpe, capt)
   }
 
   /**
    * Invariant: can only be {} or {io}
    */
-  def inferCapt(expr: Pure): Captures = expr match {
-    case pure: Pure => Set.empty
+  def inferCapt(expr: Expr): Captures = expr match {
+    case pure: Expr => Set.empty
   }
 
   extension (block: Block) {

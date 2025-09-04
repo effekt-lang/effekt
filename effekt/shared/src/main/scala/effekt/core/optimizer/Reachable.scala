@@ -14,12 +14,12 @@ class Reachable(
 ) {
 
   // TODO we could use [[Binding]] here.
-  type Definitions = Map[Id, Block | Pure | Stmt]
+  type Definitions = Map[Id, Block | Expr | Stmt]
 
   private def update(id: Id, u: Usage): Unit = reachable = reachable.updated(id, u)
   private def usage(id: Id): Usage = reachable.getOrElse(id, Usage.Never)
 
-  def processDefinition(id: Id, d: Block | Pure | Stmt)(using defs: Definitions): Unit = {
+  def processDefinition(id: Id, d: Block | Expr | Stmt)(using defs: Definitions): Unit = {
     if stack.contains(id) then { update(id, Usage.Recursive); return }
 
     seen = seen + id
@@ -33,7 +33,7 @@ class Reachable(
         process(block)
         stack = before
 
-      case expr: Pure => process(expr)
+      case expr: Expr => process(expr)
       case binding: Stmt => process(binding)
     }
   }
@@ -56,7 +56,7 @@ class Reachable(
     b match {
       case Block.BlockVar(id, annotatedTpe, annotatedCapt) => process(id)
       case Block.BlockLit(tparams, cparams, vparams, bparams, body) => process(body)
-      case Block.Unbox(pure) => process(pure)
+      case Block.Unbox(expr) => process(expr)
       case Block.New(impl) => process(impl)
     }
 
@@ -107,12 +107,12 @@ class Reachable(
     case Stmt.Hole(span) => ()
   }
 
-  def process(e: Pure)(using defs: Definitions): Unit = e match {
-    case Pure.ValueVar(id, annotatedType) => process(id)
-    case Pure.Literal(value, annotatedType) => ()
-    case Pure.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
-    case Pure.Make(data, tag, targs, vargs) => process(tag); vargs.foreach(process)
-    case Pure.Box(b, annotatedCapture) => process(b)
+  def process(e: Expr)(using defs: Definitions): Unit = e match {
+    case Expr.ValueVar(id, annotatedType) => process(id)
+    case Expr.Literal(value, annotatedType) => ()
+    case Expr.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
+    case Expr.Make(data, tag, targs, vargs) => process(tag); vargs.foreach(process)
+    case Expr.Box(b, annotatedCapture) => process(b)
   }
 
   def process(i: Implementation)(using defs: Definitions): Unit =
@@ -121,7 +121,7 @@ class Reachable(
 
 object Reachable {
   def apply(entrypoints: Set[Id], m: ModuleDecl): Map[Id, Usage] = {
-    val definitions: Map[Id, Block | Pure | Stmt] = m.definitions.map {
+    val definitions: Map[Id, Block | Expr | Stmt] = m.definitions.map {
       case Toplevel.Def(id, block) => id -> block
       case Toplevel.Val(id, tpe, binding) => id -> binding
     }.toMap

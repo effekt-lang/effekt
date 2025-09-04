@@ -138,7 +138,7 @@ trait Transformer {
       RawDef(contents)
   }
 
-  def toChez(t: Template[core.Pure]): chez.Expr =
+  def toChez(t: Template[core.Expr]): chez.Expr =
     chez.RawExpr(t.strings, t.args.map(e => toChez(e)))
 
   def toChez(defn: Toplevel): chez.Def = defn match {
@@ -213,7 +213,7 @@ trait Transformer {
       chez.Lambda(vps.map(toChez) ++ bps.map(toChez), toChez(body))
   }
 
-  def toChez(expr: Pure): chez.Expr = expr match {
+  def toChez(expr: Expr): chez.Expr = expr match {
     case Literal((), _)         => chez.RawValue("(void)")
 
     case Literal(s: String, _)  => escape(s)
