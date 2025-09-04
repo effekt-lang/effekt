@@ -186,13 +186,11 @@ object TransformerCps extends Transformer {
     case Cont.Abort => js.Undefined
   }
 
-  def toJS(e: cps.Expr)(using D: TransformerContext): js.Expr = e match {
+  def toJS(e: cps.Pure)(using D: TransformerContext): js.Expr = e match {
     case Pure.ValueVar(id)           => nameRef(id)
     case Pure.Literal(())            => $effekt.field("unit")
     case Pure.Literal(s: String)     => JsString(escape(s))
     case literal: Pure.Literal       => js.RawExpr(literal.value.toString)
-    case DirectApp(id, vargs, Nil)   => inlineExtern(id, vargs)
-    case DirectApp(id, vargs, bargs) => js.Call(nameRef(id), vargs.map(toJS) ++ bargs.map(argumentToJS))
     case Pure.PureApp(id, vargs)     => inlineExtern(id, vargs)
     case Pure.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
     case Pure.Box(b)                 => argumentToJS(b)
@@ -225,6 +223,16 @@ object TransformerCps extends Transformer {
     case cps.Stmt.LetCont(id, binding @ Cont.ContLam(result2, ks2, body2), body) =>
       Binding { k =>
         js.Const(nameDef(id), toJS(binding)(using nonrecursive(ks2))) :: requiringThunk { toJS(body) }.run(k)
+      }
+
+    case cps.Stmt.DirectApp(id, callee, vargs, Nil, body) =>
+      Binding { k =>
+        js.Const(nameDef(id), inlineExtern(id, vargs)) :: toJS(body).run(k)
+      }
+
+    case cps.Stmt.DirectApp(id, callee, vargs, bargs, body) =>
+      Binding { k =>
+        js.Const(nameDef(id), js.Call(nameRef(id), vargs.map(toJS) ++ bargs.map(argumentToJS))) :: toJS(body).run(k)
       }
 
     case cps.Stmt.Match(sc, Nil, None) =>
@@ -492,11 +500,11 @@ object TransformerCps extends Transformer {
   }
 
   private def canBeDirect(k: Id, stmt: Stmt)(using T: TransformerContext): Boolean =
-    def notIn(term: Stmt | Block | Expr | (Id, Clause) | Cont) =
+    def notIn(term: Stmt | Block | Pure | (Id, Clause) | Cont) =
       val freeVars = term match {
         case s: Stmt => free(s)
         case b: Block => free(b)
-        case p: Expr => free(p)
+        case p: Pure => free(p)
         case (id, Clause(_, body)) => free(body)
         case c: Cont => free(c)
       }
@@ -513,6 +521,7 @@ object TransformerCps extends Transformer {
       } && default.forall(body => canBeDirect(k, body))
       case Stmt.LetDef(id, binding, body) => notIn(binding) && canBeDirect(k, body)
       case Stmt.LetExpr(id, binding, body) => notIn(binding) && canBeDirect(k, body)
+      case Stmt.DirectApp(id, callee, vargs, bargs, body) => vargs.forall(notIn) && bargs.forall(notIn) && canBeDirect(k, body)
       case Stmt.LetCont(id, Cont.ContLam(result, ks2, body), body2) =>
         def willBeDirectItself = canBeDirect(id, body2) && canBeDirect(k, maintainDirectStyle(ks2, body))
         def notFreeinContinuation = notIn(body) && canBeDirect(k, body2)

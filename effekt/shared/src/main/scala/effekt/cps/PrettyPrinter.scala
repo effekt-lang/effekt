@@ -24,7 +24,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(t: Block): String =
     pretty(toDoc(t), 60).layout
 
-  def format(e: Expr): String =
+  def format(e: Pure): String =
     pretty(toDoc(e), 60).layout
 
   val show: PartialFunction[Any, String] = {
@@ -32,7 +32,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case d: ToplevelDefinition => format(List(d))
     case s: Stmt => format(s)
     case b: Block => format(b)
-    case e: Expr => format(e)
+    case e: Pure => format(e)
     case x: Id => x.show
   }
 
@@ -55,9 +55,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding)
   }
 
-  def toDoc(e: Expr): Doc = e match {
-    case DirectApp(id, vargs, bargs) =>
-      toDoc(id) <> argsToDoc(vargs, bargs)
+  def toDoc(e: Pure): Doc = e match {
     case Pure.ValueVar(id) => toDoc(id)
     case Pure.Literal(()) => "()"
     case Pure.Literal(s: String) => "\"" + s + "\""
@@ -116,6 +114,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case Stmt.LetCont(id, binding, body) =>
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
+        toDoc(body)
+
+    case Stmt.DirectApp(id, callee, vargs, bargs, body) =>
+      "let!" <+> toDoc(id) <+> "=" <+> toDoc(callee) <> argsToDoc(vargs, bargs) <> line <>
         toDoc(body)
 
     case Stmt.Region(id, ks, body) =>

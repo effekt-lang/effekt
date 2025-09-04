@@ -62,7 +62,7 @@ object Transformer {
     case core.Stmt.DirectApp(id, b, targs, vargs, bargs, body) =>
       transform(b) match {
         case Block.BlockVar(f) =>
-          LetExpr(id, DirectApp(f, vargs.map(transform), bargs.map(transform)),
+          DirectApp(id, f, vargs.map(transform), bargs.map(transform),
             transform(body, ks, k))
         case _ => sys error "Should not happen"
       }

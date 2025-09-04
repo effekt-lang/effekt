@@ -61,14 +61,7 @@ object ExternBody {
 
 case class Def(id: Id, block: Block) extends Tree
 
-sealed trait Expr extends Tree
-
-/**
- * Impure FFI calls.
- */
-case class DirectApp(id: Id, vargs: List[Pure], bargs: List[Block]) extends Expr
-
-enum Pure extends Expr {
+enum Pure extends Tree {
 
   case ValueVar(id: Id)
 
@@ -104,8 +97,9 @@ enum Stmt extends Tree {
   case Match(scrutinee: Pure, clauses: List[(Id, Clause)], default: Option[Stmt])
 
   case LetDef(id: Id, binding: Block, body: Stmt)
-  case LetExpr(id: Id, binding: Expr, body: Stmt)
+  case LetExpr(id: Id, binding: Pure, body: Stmt)
   case LetCont(id: Id, binding: Cont.ContLam, body: Stmt)
+  case DirectApp(id: Id, callee: Id, vargs: List[Pure], bargs: List[Block], body: Stmt)
 
   // Regions
   case Region(id: Id, ks: MetaCont, body: Stmt)
@@ -169,8 +163,7 @@ object Variables {
     t.iterator.foldLeft(Variables.empty) { case (xs, t) => f(t) ++ xs }
 
 
-  def free(e: Expr): Variables = e match {
-    case DirectApp(id, vargs, bargs) => block(id) ++ all(vargs, free) ++ all(bargs, free)
+  def free(e: Pure): Variables = e match {
     case Pure.ValueVar(id) => value(id)
     case Pure.Literal(value) => empty
     case Pure.PureApp(id, vargs) => block(id) ++ all(vargs, free)
@@ -201,6 +194,7 @@ object Variables {
     case Stmt.LetDef(id, binding, body)  => (free(binding) ++ free(body)) -- block(id)
     case Stmt.LetExpr(id, binding, body) => free(binding) ++ (free(body) -- value(id))
     case Stmt.LetCont(id, binding, body) => free(binding) ++ (free(body) -- cont(id))
+    case Stmt.DirectApp(id, callee, vargs, bargs, body) => block(callee) ++ all(vargs, free) ++ all(bargs, free) ++ (free(body) -- value(id))
 
     case Stmt.Region(id, ks, body) => free(ks) ++ (free(body) -- block(id))
     case Stmt.Alloc(id, init, region, body) => free(init) ++ block(region) ++ (free(body) -- block(id))
@@ -248,12 +242,6 @@ object substitutions {
 
     def shadowParams(vparams: Seq[Id], bparams: Seq[Id]): Substitution =
       copy(values = values -- vparams, blocks = blocks -- bparams)
-  }
-
-  def substitute(expression: Expr)(using Substitution): Expr = expression match {
-    case DirectApp(id, vargs, bargs) =>
-      DirectApp(id, vargs.map(substitute), bargs.map(substitute))
-    case p: Pure => substitute(p)
   }
 
   def substitute(pure: Pure)(using subst: Substitution): Pure = pure match {
@@ -325,6 +313,10 @@ object substitutions {
 
     case LetCont(id, binding, body) =>
       LetCont(id, substitute(binding),
+        substitute(body)(using subst.shadowConts(List(id))))
+
+    case DirectApp(id, callee, vargs, bargs, body) =>
+      DirectApp(id, callee, vargs.map(substitute), bargs.map(substitute),
         substitute(body)(using subst.shadowConts(List(id))))
 
     case Region(id, ks, body) =>

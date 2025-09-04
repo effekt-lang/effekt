@@ -30,11 +30,6 @@ object Contify {
     case unsupported: ExternBody.Unsupported => unsupported
   }
 
-  def rewrite(expr: Expr): Expr = expr match {
-    case DirectApp(id, vargs, bargs) => DirectApp(id, vargs.map(rewrite), bargs.map(rewrite))
-    case p: Pure => rewrite(p)
-  }
-
   def rewrite(pure: Pure): Pure = pure match {
     case Pure.ValueVar(id) => Pure.ValueVar(id)
     case Pure.Literal(value) => Pure.Literal(value)
@@ -125,6 +120,9 @@ object Contify {
     case Stmt.LetCont(id, binding, body) =>
       Stmt.LetCont(id, rewrite(binding), rewrite(body))
 
+    case Stmt.DirectApp(id, callee, vargs, bargs, body) =>
+      Stmt.DirectApp(id, callee, vargs.map(rewrite), bargs.map(rewrite), rewrite(body))
+
     case Stmt.Region(id, ks, body) =>
       Stmt.Region(id, ks, rewrite(body))
 
@@ -206,6 +204,8 @@ object Contify {
       returnsTo(id, binding) ++ returnsTo(id, body)
     case Stmt.LetCont(_, binding, body) =>
       returnsTo(id, binding) ++ returnsTo(id, body)
+    case Stmt.DirectApp(_, callee, vargs, bargs, body) =>
+      all(vargs, returnsTo(id, _)) ++ all(bargs, returnsTo(id, _)) ++ returnsTo(id, body)
     case Stmt.Region(_, _, body) => returnsTo(id, body)
     case Stmt.Alloc(_, init, _, body) =>
       returnsTo(id, init) ++ returnsTo(id, body)
@@ -233,9 +233,7 @@ object Contify {
     case Block.New(impl) => all(impl.operations, op => returnsTo(id, op.body))
   }
 
-  def returnsTo(id: Id, e: Expr): Set[Cont] = e match {
-    case DirectApp(_, vargs, bargs) =>
-      all(vargs, returnsTo(id, _)) ++ all(bargs, returnsTo(id, _))
+  def returnsTo(id: Id, e: Pure): Set[Cont] = e match {
     case Pure.ValueVar(_) => Set.empty
     case Pure.Literal(_) => Set.empty
     case Pure.PureApp(_, vargs) => all(vargs, returnsTo(id, _))
@@ -279,6 +277,9 @@ object Contify {
     case Stmt.LetCont(id2, binding, body) =>
       Stmt.LetCont(id2, contify(id, binding), contify(id, body))
 
+    case Stmt.DirectApp(id2, callee, vargs, bargs, body) =>
+      Stmt.DirectApp(id2, callee, vargs.map(contify(id, _)), bargs.map(contify(id, _)), contify(id, body))
+
     case Stmt.Region(id2, ks, body) =>
       Stmt.Region(id2, ks, contify(id, body))
 
@@ -314,12 +315,6 @@ object Contify {
     case b: Block.BlockLit => Block.BlockLit(b.vparams, b.bparams, b.ks, b.k, contify(id, b.body))
     case Block.Unbox(p) => Block.Unbox(contify(id, p))
     case Block.New(impl) => Block.New(contify(id, impl))
-  }
-
-  def contify(id: Id, e: Expr): Expr = e match {
-    case DirectApp(id2, vargs, bargs) =>
-      DirectApp(id2, vargs.map(contify(id, _)), bargs.map(contify(id, _)))
-    case p: Pure => contify(id, p)
   }
 
   def contify(id: Id, p: Pure): Pure = p match {
