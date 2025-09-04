@@ -317,7 +317,7 @@ object substitutions {
 
     case DirectApp(id, callee, vargs, bargs, body) =>
       DirectApp(id, callee, vargs.map(substitute), bargs.map(substitute),
-        substitute(body)(using subst.shadowConts(List(id))))
+        substitute(body)(using subst.shadowValues(List(id))))
 
     case Region(id, ks, body) =>
       Region(id, substitute(ks),

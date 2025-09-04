@@ -227,12 +227,12 @@ object TransformerCps extends Transformer {
 
     case cps.Stmt.DirectApp(id, callee, vargs, Nil, body) =>
       Binding { k =>
-        js.Const(nameDef(id), inlineExtern(id, vargs)) :: toJS(body).run(k)
+        js.Const(nameDef(id), inlineExtern(callee, vargs)) :: toJS(body).run(k)
       }
 
     case cps.Stmt.DirectApp(id, callee, vargs, bargs, body) =>
       Binding { k =>
-        js.Const(nameDef(id), js.Call(nameRef(id), vargs.map(toJS) ++ bargs.map(argumentToJS))) :: toJS(body).run(k)
+        js.Const(nameDef(id), js.Call(nameRef(callee), vargs.map(toJS) ++ bargs.map(argumentToJS))) :: toJS(body).run(k)
       }
 
     case cps.Stmt.Match(sc, Nil, None) =>
