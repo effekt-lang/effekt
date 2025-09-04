@@ -64,7 +64,7 @@ object PatternMatchingCompiler {
     // a predicate trivially met by running and binding the statement
     case Val(x: Id, tpe: core.ValueType, binding: Stmt)
     case Let(x: Id, tpe: core.ValueType, binding: Pure)
-    case LetDirectApp(x: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
+    case DirectApp(x: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
   }
 
   enum Pattern {
@@ -103,8 +103,8 @@ object PatternMatchingCompiler {
       // - We need to perform a computation
       case Clause(Condition.Let(x, tpe, binding) :: rest, target, targs, args) =>
         return core.Let(x, tpe, binding, compile(Clause(rest, target, targs, args) :: remainingClauses))
-      case Clause(Condition.LetDirectApp(x, callee, targs_, vargs_, bargs_) :: rest, target, targs, args) =>
-        return core.LetDirectApp(x, callee, targs_, vargs_, bargs_, compile(Clause(rest, target, targs, args) :: remainingClauses))
+      case Clause(Condition.DirectApp(x, callee, targs_, vargs_, bargs_) :: rest, target, targs, args) =>
+        return core.DirectApp(x, callee, targs_, vargs_, bargs_, compile(Clause(rest, target, targs, args) :: remainingClauses))
       // - We need to check a predicate
       case Clause(Condition.Predicate(pred) :: rest, target, targs, args) =>
         return core.If(pred,
@@ -325,13 +325,13 @@ object PatternMatchingCompiler {
         val (resCond, resSubst) = normalize(Map.empty, rest, substitution)
         (prefix(patterns, Condition.Let(x, tpe, substitutedBinding) :: resCond), resSubst)
 
-      case Condition.LetDirectApp(x, callee, targs, vargs, bargs) :: rest =>
+      case Condition.DirectApp(x, callee, targs, vargs, bargs) :: rest =>
         val (resCond, resSubst) = normalize(Map.empty, rest, substitution)
         val calleeT = core.substitutions.substitute(callee)(using subst)
         val targsT = targs.map(core.substitutions.substitute(_)(using subst))
         val vargsT = vargs.map(core.substitutions.substitute(_)(using subst))
         val bargsT = bargs.map(core.substitutions.substitute(_)(using subst))
-        (prefix(patterns, Condition.LetDirectApp(x, calleeT.asInstanceOf[Block.BlockVar], targsT, vargsT, bargsT) :: resCond), resSubst)
+        (prefix(patterns, Condition.DirectApp(x, calleeT.asInstanceOf[Block.BlockVar], targsT, vargsT, bargsT) :: resCond), resSubst)
 
       case Condition.Predicate(p) :: rest =>
         val substitutedPredicate = core.substitutions.substitute(p)(using subst)
@@ -356,7 +356,7 @@ object PatternMatchingCompiler {
     case Condition.Predicate(pred) => util.show(pred) + "?"
     case Condition.Val(x, tpe,  binding) => s"val ${util.show(x)} = ${util.show(binding)}"
     case Condition.Let(x, tpe, binding) => s"let ${util.show(x)} = ${util.show(binding)}"
-    case Condition.LetDirectApp(x, callee, targs, vargs, bargs) => s"let ${util.show(x)} = ${util.show(callee)}(${vargs.map(util.show).mkString(", ")})"
+    case Condition.DirectApp(x, callee, targs, vargs, bargs) => s"let ${util.show(x)} = ${util.show(callee)}(${vargs.map(util.show).mkString(", ")})"
   }
 
   def show(p: Pattern): String = p match {

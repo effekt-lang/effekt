@@ -128,8 +128,8 @@ object StaticArguments {
 
     case Stmt.Let(id, tpe, binding, body) => Stmt.Let(id, tpe, rewrite(binding), rewrite(body))
 
-    case Stmt.LetDirectApp(id, callee, targs, vargs, bargs, body) =>
-      Stmt.LetDirectApp(id, callee, targs, vargs.map(rewrite), bargs.map(rewrite), rewrite(body))
+    case Stmt.DirectApp(id, callee, targs, vargs, bargs, body) =>
+      Stmt.DirectApp(id, callee, targs, vargs.map(rewrite), bargs.map(rewrite), rewrite(body))
 
     case Stmt.App(b, targs, vargs, bargs) =>
       b match {

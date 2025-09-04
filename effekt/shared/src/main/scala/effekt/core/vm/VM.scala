@@ -240,7 +240,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
 
         case Stmt.Let(id, tpe, binding, body) => State.Step(body, env.bind(id, eval(binding, env)), stack, heap)
 
-        case Stmt.LetDirectApp(id, callee, targs, vargs, bargs, body) =>
+        case Stmt.DirectApp(id, callee, targs, vargs, bargs, body) =>
           val result = env.lookupBuiltin(callee.id) match {
             case Builtin(name, impl) =>
               val arguments = vargs.map(a => eval(a, env))

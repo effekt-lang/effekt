@@ -109,7 +109,7 @@ trait Transformer {
 
     case Region(body) => chez.Builtin("with-region", toChez(body))
 
-    case stmt: (Def | Let | LetDirectApp | Get | Put) =>
+    case stmt: (Def | Let | DirectApp | Get | Put) =>
       chez.Let(Nil, toChez(stmt))
   }
 
@@ -168,7 +168,7 @@ trait Transformer {
       val chez.Block(defs, exprs, result) = toChez(body)
       chez.Block(chez.Constant(nameDef(id), toChez(binding)) :: defs, exprs, result)
 
-    case Stmt.LetDirectApp(id, callee, targs, vargs, bargs, body) =>
+    case Stmt.DirectApp(id, callee, targs, vargs, bargs, body) =>
       val chez.Block(defs, exprs, result) = toChez(body)
       chez.Block(chez.Constant(nameDef(id), chez.Call(toChez(callee), vargs.map(toChez) ++ bargs.map(toChez))) :: defs, exprs, result)
 

@@ -51,11 +51,11 @@ object BindSubexpressions {
         Binding(bindings, Stmt.Let(id, tpe, other, transform(body)))
     }
 
-    case Stmt.LetDirectApp(id, callee, targs, vargs, bargs, body) => delimit {
+    case Stmt.DirectApp(id, callee, targs, vargs, bargs, body) => delimit {
       for {
         vs <- transformExprs(vargs)
         bs <- transformBlocks(bargs)
-      } yield Stmt.LetDirectApp(id, transform(callee), targs.map(transform), vs, bs, transform(body))
+      } yield Stmt.DirectApp(id, transform(callee), targs.map(transform), vs, bs, transform(body))
     }
 
     case Stmt.App(callee, targs, vargs, bargs) => delimit {

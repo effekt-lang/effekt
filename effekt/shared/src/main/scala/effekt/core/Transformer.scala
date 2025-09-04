@@ -287,7 +287,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             val result = TmpValue("etaBinding")
             val callee = BlockVar(f)
             BlockLit(tparams, bparams.map(_.id), vparams, bparams,
-              core.LetDirectApp(result, callee, targs, vargs, bargs,
+              core.DirectApp(result, callee, targs, vargs, bargs,
                 Stmt.Return(Pure.ValueVar(result, transform(restpe)))))
           }
 
@@ -733,7 +733,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       bindings.toList.map {
         case Binding.Val(name, tpe, binding) => Condition.Val(name, tpe, binding)
         case Binding.Let(name, tpe, binding) => Condition.Let(name, tpe, binding)
-        case Binding.LetDirectApp(name, callee, targs, vargs, bargs) => Condition.LetDirectApp(name, callee, targs, vargs, bargs)
+        case Binding.DirectApp(name, callee, targs, vargs, bargs) => Condition.DirectApp(name, callee, targs, vargs, bargs)
         case Binding.Def(name, binding) => Context.panic("Should not happen")
       } :+ cond
 
@@ -944,7 +944,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def bind(callee: Block.BlockVar, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block]): ValueVar = {
       // create a fresh symbol and assign the type
       val x = TmpValue("r")
-      val binding: Binding.LetDirectApp = Binding.LetDirectApp(x, callee, targs, vargs, bargs)
+      val binding: Binding.DirectApp = Binding.DirectApp(x, callee, targs, vargs, bargs)
       bindings += binding
 
       ValueVar(x, Type.bindingType(binding))

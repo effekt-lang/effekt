@@ -57,12 +57,12 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "") extends 
       val resolvedBinding = rewrite(binding)
       withBinding(id) { core.Let(rewrite(id), rewrite(tpe), resolvedBinding, rewrite(body)) }
 
-    case core.LetDirectApp(id, callee, targs, vargs, bargs, body) =>
+    case core.DirectApp(id, callee, targs, vargs, bargs, body) =>
       val resolvedCallee = rewrite(callee)
       val resolvedTargs = targs map rewrite
       val resolvedVargs = vargs map rewrite
       val resolvedBargs = bargs map rewrite
-      withBinding(id) { core.LetDirectApp(rewrite(id), resolvedCallee, resolvedTargs, resolvedVargs, resolvedBargs, rewrite(body)) }
+      withBinding(id) { core.DirectApp(rewrite(id), resolvedCallee, resolvedTargs, resolvedVargs, resolvedBargs, rewrite(body)) }
 
     case core.Val(id, tpe, binding, body) =>
       val resolvedBinding = rewrite(binding)
