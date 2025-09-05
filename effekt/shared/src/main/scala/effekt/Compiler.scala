@@ -37,7 +37,7 @@ enum PhaseResult {
   /**
    * The result of [[Typer]] type checking a given syntax tree.
    *
-   * We can notice that [[NameResolved]] and [[Typechecked]] haave the same fields.
+   * We can notice that [[NameResolved]] and [[Typechecked]] have the same fields.
    * Like, [[Namer]], [[Typer]] writes to the types of each tree into the DB, using [[effekt.context.Annotations]].
    * This might change in the future, when we switch to elaboration.
    */
