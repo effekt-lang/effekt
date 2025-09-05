@@ -2,6 +2,7 @@ package effekt
 package core
 package optimizer
 
+import effekt.core.optimizer.NewNormalizer.MetaStack
 import effekt.source.Span
 import effekt.core.optimizer.semantics.NeutralStmt
 import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR }
@@ -17,6 +18,21 @@ import scala.collection.immutable.ListMap
 //   this way deadcode can be eliminated on the way up.
 //
 // plan: don't inline... this is a separate pass after normalization
+//
+// plan: only introduce parameters for free things inside a block that are bound in the **stack**
+// that is in
+//
+// only abstract over p, but not n:
+//
+//   def outer(n: Int) =
+//     def foo(p) = shift(p) { ... n ... }
+//     reset { p =>
+//       ...
+//     }
+//
+// Same actually for stack allocated mutable state, we should abstract over those (but only those)
+// and keep the function in its original location.
+// This means we only need to abstract over blocks, no values, no types.
 object semantics {
 
   // Values
@@ -25,6 +41,9 @@ object semantics {
   type Addr = Id
   type Label = Id
   type Prompt = Id
+
+  type Variables = Set[Id]
+  def all[A](ts: List[A], f: A => Variables): Variables = ts.flatMap(f).toSet
 
   enum Value {
     // Stuck
@@ -35,8 +54,8 @@ object semantics {
     case Literal(value: Any, annotatedType: ValueType)
     case Make(data: ValueType.Data, tag: Id, targs: List[ValueType], vargs: List[Addr])
 
-    val free: Set[Addr] = this match {
-      // case Value.Var(id, annotatedType) => Set.empty
+    val free: Variables = this match {
+      // case Value.Var(id, annotatedType) => Variables.empty
       case Value.Extern(id, targs, vargs) => vargs.toSet
       case Value.Literal(value, annotatedType) => Set.empty
       case Value.Make(data, tag, targs, vargs) => vargs.toSet
@@ -51,25 +70,18 @@ object semantics {
     case Val(stmt: NeutralStmt)
     case Run(f: BlockVar, targs: List[ValueType], vargs: List[Addr], bargs: List[Computation])
 
-    val free: Set[Addr] = this match {
+    val free: Variables = this match {
       case Binding.Let(value) => value.free
       case Binding.Def(block) => block.free
       case Binding.Rec(block, tpe, capt) => block.free
       case Binding.Val(stmt) => stmt.free
-      case Binding.Run(f, targs, vargs, bargs) => vargs.toSet
+      case Binding.Run(f, targs, vargs, bargs) => vargs.toSet ++ all(bargs, _.free)
     }
   }
 
   type Bindings = List[(Id, Binding)]
   object Bindings {
     def empty: Bindings = Nil
-  }
-  extension (bindings: Bindings) {
-    def free: Set[Id] = {
-      val bound = bindings.map(_._1).toSet
-      val free = bindings.flatMap { b => b._2.free }.toSet
-      free -- bound
-    }
   }
 
   /**
@@ -126,12 +138,97 @@ object semantics {
     def empty: Scope = new Scope(ListMap.empty, Map.empty, None)
   }
 
-  case class Block(tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: BasicBlock) {
-    def free: Set[Addr] = body.free -- vparams.map(_.id)
+  def reify(scope: Scope, body: NeutralStmt): BasicBlock = {
+    var used = body.free
+    var filtered = Bindings.empty
+    // TODO implement properly
+    scope.bindings.toSeq.reverse.foreach {
+      // TODO for now we keep ALL definitions
+      case (addr, b: Binding.Def) =>
+        used = used ++ b.free
+        filtered = (addr, b) :: filtered
+      case (addr, b: Binding.Rec) =>
+        used = used ++ b.free
+        filtered = (addr, b) :: filtered
+      case (addr, s: Binding.Val) =>
+        used = used ++ s.free
+        filtered = (addr, s) :: filtered
+      case (addr, v: Binding.Run) =>
+        used = used ++ v.free
+        filtered = (addr, v) :: filtered
+
+      // TODO if type is unit like, we can potentially drop this binding (but then we need to make up a "fresh" unit at use site)
+      case (addr, v: Binding.Let) if used.contains(addr) =>
+        used = used ++ v.free
+        filtered = (addr, v) :: filtered
+      case (addr, v: Binding.Let) => ()
+    }
+
+    // we want to avoid turning tailcalls into non tail calls like
+    //
+    //   val x = app(x)
+    //   return x
+    //
+    // so we eta-reduce here. Can we achieve this by construction?
+    // TODO lastOption will go through the list AGAIN, let's see whether this causes performance problems
+    (filtered.lastOption, body) match {
+      case (Some((id1, Binding.Val(stmt))), NeutralStmt.Return(id2)) if id1 == id2 =>
+        BasicBlock(filtered.init, stmt)
+      case (_, _) =>
+        BasicBlock(filtered, body)
+    }
+  }
+
+  def nested(prog: Scope ?=> NeutralStmt)(using scope: Scope): BasicBlock = {
+    // TODO parent code and parent store
+    val local = Scope(ListMap.empty, Map.empty, Some(scope))
+    val result = prog(using local)
+    reify(local, result)
+  }
+
+  case class Env(values: Map[Id, Addr], computations: Map[Id, Computation]) {
+    def lookupValue(id: Id): Addr = values(id)
+    def bindValue(id: Id, value: Addr): Env = Env(values + (id -> value), computations)
+    def bindValue(newValues: List[(Id, Addr)]): Env = Env(values ++ newValues, computations)
+
+    def lookupComputation(id: Id): Computation = computations(id)
+    def bindComputation(id: Id, computation: Computation): Env = Env(values, computations + (id -> computation))
+    def bindComputation(newComputations: List[(Id, Computation)]): Env = Env(values, computations ++ newComputations)
+  }
+  object Env {
+    def empty: Env = Env(Map.empty, Map.empty)
+  }
+
+  case class Block(tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam],
+      // impl: List[Addr] => List[Computation] => Env => Scope => MetaStack => NeutralStmt,
+      body: BasicBlock) {
+
+    val free: Variables = body.free -- vparams.map(_.id) -- bparams.map(_.id)
+  }
+
+  // TODO how do we detect mutually recursive toplevel functions???
+  object Block {
+    def apply(tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam])(impl: List[Addr] => List[Computation] => Env => Scope => MetaStack => NeutralStmt)(using env: Env, scope: Scope): Block = {
+      // TODO also substitute type params...
+      val reified: BasicBlock = nested {
+        impl(vparams.map(p => p.id))(bparams.map(p => Computation.Var(p.id)))(env)(scope)(MetaStack.empty)
+      }
+      ???
+    }
   }
 
   case class BasicBlock(bindings: Bindings, body: NeutralStmt) {
-    def free: Set[Addr] = bindings.free ++ body.free
+    val free: Variables = {
+      var free = body.free
+      bindings.reverse.foreach {
+        case (id, b: Binding.Let) => free = (free - id) ++ b.free
+        case (id, b: Binding.Def) => free = (free - id) ++ b.free
+        case (id, b: Binding.Rec) => free = (free - id) ++ (b.free - id)
+        case (id, b: Binding.Val) => free = (free - id) ++ b.free
+        case (id, b: Binding.Run) => free = (free - id) ++ b.free
+      }
+      free
+    }
   }
 
   enum Computation {
@@ -141,21 +238,29 @@ object semantics {
     case Def(label: Label)
     // Known object
     case New(interface: BlockType.Interface, operations: List[(Id, Label)])
+
+    val free: Variables = this match {
+      case Computation.Var(id) => Set(id)
+      case Computation.Def(label) => Set(label)
+      case Computation.New(interface, operations) => operations.map(_._2).toSet
+    }
   }
 
   // Statements
   // ----------
   enum NeutralStmt {
     // continuation is unknown
-    case Return(result: Addr)
-    // callee is unknown or we do not want to inline (TODO no block arguments for now)
-    case App(label: Label, targs: List[ValueType], vargs: List[Addr], bargs: List[Computation])
+    case Return(result: Id)
+    // callee is unknown or we do not want to inline
+    case App(callee: Id, targs: List[ValueType], vargs: List[Id], bargs: List[Computation])
+    // Known jump, but we do not want to inline
+    case Jump(label: Id, targs: List[ValueType], vargs: List[Id], bargs: List[Computation])
     // callee is unknown
-    case Invoke(id: Id, method: Id, methodTpe: BlockType, targs: List[ValueType], vargs: List[Addr], bargs: List[Computation])
+    case Invoke(id: Id, method: Id, methodTpe: BlockType, targs: List[ValueType], vargs: List[Id], bargs: List[Computation])
     // cond is unknown
-    case If(cond: Addr, thn: BasicBlock, els: BasicBlock)
+    case If(cond: Id, thn: BasicBlock, els: BasicBlock)
     // scrutinee is unknown
-    case Match(scrutinee: Addr, clauses: List[(Id, Block)], default: Option[BasicBlock])
+    case Match(scrutinee: Id, clauses: List[(Id, Block)], default: Option[BasicBlock])
 
     // what's actually unknown here?
     case Reset(prompt: BlockParam, body: BasicBlock)
@@ -167,15 +272,16 @@ object semantics {
     // aborts at runtime
     case Hole(span: Span)
 
-    val free: Set[Addr] = this match {
-      case NeutralStmt.App(label, targs, vargs, bargs) => vargs.toSet
-      case NeutralStmt.Invoke(label, method, tpe, targs, vargs, bargs) => vargs.toSet
+    val free: Variables = this match {
+      case NeutralStmt.Jump(label, targs, vargs, bargs) => Set(label) ++ vargs.toSet ++ all(bargs, _.free)
+      case NeutralStmt.App(label, targs, vargs, bargs) => Set(label) ++ vargs.toSet ++ all(bargs, _.free)
+      case NeutralStmt.Invoke(label, method, tpe, targs, vargs, bargs) => Set(label) ++ vargs.toSet ++ all(bargs, _.free)
       case NeutralStmt.If(cond, thn, els) => Set(cond) ++ thn.free ++ els.free
       case NeutralStmt.Match(scrutinee, clauses, default) => Set(scrutinee) ++ clauses.flatMap(_._2.free).toSet ++ default.map(_.free).getOrElse(Set.empty)
       case NeutralStmt.Return(result) => Set(result)
-      case NeutralStmt.Reset(prompt, body) => body.free
-      case NeutralStmt.Shift(prompt, capt, k, body) => body.free
-      case NeutralStmt.Resume(k, body) => body.free
+      case NeutralStmt.Reset(prompt, body) => body.free - prompt.id
+      case NeutralStmt.Shift(prompt, capt, k, body) => (body.free - k.id) + prompt
+      case NeutralStmt.Resume(k, body) => Set(k) ++ body.free
       case NeutralStmt.Hole(span) => Set.empty
     }
   }
@@ -192,6 +298,11 @@ object semantics {
       case NeutralStmt.Match(scrutinee, clauses, default) =>
         "match" <+> parens(toDoc(scrutinee)) <+> braces(hcat(clauses.map { case (id, block) => toDoc(id) <> ":" <+> toDoc(block) })) <>
           (if (default.isDefined) "else" <+> toDoc(default.get) else emptyDoc)
+      case NeutralStmt.Jump(label, targs, vargs, bargs) =>
+        // Format as: l1[T1, T2](r1, r2)
+        "jump" <+> toDoc(label) <>
+          (if (targs.isEmpty) emptyDoc else brackets(hsep(targs.map(toDoc), comma))) <>
+          parens(hsep(vargs.map(toDoc), comma)) <> hsep(bargs.map(b => braces(toDoc(b))))
       case NeutralStmt.App(label, targs, vargs, bargs) =>
         // Format as: l1[T1, T2](r1, r2)
         toDoc(label) <>
@@ -283,68 +394,6 @@ object NewNormalizer { normal =>
 
   import semantics.*
 
-  // "effects"
-  case class Env(values: Map[Id, Addr], computations: Map[Id, Computation]) {
-    def lookupValue(id: Id): Addr = values(id)
-    def bindValue(id: Id, value: Addr): Env = Env(values + (id -> value), computations)
-    def bindValue(newValues: List[(Id, Addr)]): Env = Env(values ++ newValues, computations)
-
-    def lookupComputation(id: Id): Computation = computations(id)
-    def bindComputation(id: Id, computation: Computation): Env = Env(values, computations + (id -> computation))
-    def bindComputation(newComputations: List[(Id, Computation)]): Env = Env(values, computations ++ newComputations)
-  }
-  object Env {
-    def empty: Env = Env(Map.empty, Map.empty)
-  }
-
-  def reify(scope: Scope, body: NeutralStmt): BasicBlock = {
-    var used = body.free
-    var filtered = Bindings.empty
-    // TODO implement properly
-    scope.bindings.toSeq.reverse.foreach {
-      // TODO for now we keep ALL definitions
-      case (addr, b: Binding.Def) =>
-        used = used ++ b.free
-        filtered = (addr, b) :: filtered
-      case (addr, b: Binding.Rec) =>
-        used = used ++ b.free
-        filtered = (addr, b) :: filtered
-      case (addr, s: Binding.Val) =>
-        used = used ++ s.free
-        filtered = (addr, s) :: filtered
-      case (addr, v: Binding.Run) =>
-        used = used ++ v.free
-        filtered = (addr, v) :: filtered
-
-      // TODO if type is unit like, we can potentially drop this binding (but then we need to make up a "fresh" unit at use site)
-      case (addr, v: Binding.Let) if used.contains(addr) =>
-        used = used ++ v.free
-        filtered = (addr, v) :: filtered
-      case (addr, v: Binding.Let) => ()
-    }
-
-    // we want to avoid turning tailcalls into non tail calls like
-    //
-    //   val x = app(x)
-    //   return x
-    //
-    // so we eta-reduce here. Can we achieve this by construction?
-    // TODO lastOption will go through the list AGAIN, let's see whether this causes performance problems
-    (filtered.lastOption, body) match {
-      case (Some((id1, Binding.Val(stmt))), NeutralStmt.Return(id2)) if id1 == id2 =>
-        BasicBlock(filtered.init, stmt)
-      case (_, _) =>
-        BasicBlock(filtered, body)
-    }
-  }
-
-  def nested(prog: Scope ?=> NeutralStmt)(using scope: Scope): BasicBlock = {
-    // TODO parent code and parent store
-    val local = Scope(ListMap.empty, Map.empty, Some(scope))
-    val result = prog(using local)
-    reify(local, result)
-  }
-
   // "handlers"
   def bind[R](id: Id, addr: Addr)(prog: Env ?=> R)(using env: Env): R =
     prog(using env.bindValue(id, addr))
@@ -370,7 +419,7 @@ object NewNormalizer { normal =>
       case MetaStack.Last(stack) => stack match {
         case Stack.Empty => NeutralStmt.Return(arg)
         case Stack.Static(tpe, apply) => apply(env)(scope)(arg)
-        case Stack.Dynamic(label) => NeutralStmt.App(label, List.empty, List(arg), Nil)
+        case Stack.Dynamic(label) => NeutralStmt.Jump(label, List.empty, List(arg), Nil)
       }
     }
     def push(tpe: ValueType)(f: Env ?=> Scope ?=> Addr => MetaStack => NeutralStmt): MetaStack = this match {
@@ -400,7 +449,7 @@ object NewNormalizer { normal =>
             //   def k_6268 = (x_6267: Int_3) {
             //     return x_6267
             //   }
-            case BasicBlock(Nil, _: (NeutralStmt.Return | NeutralStmt.App)) => f(this)
+            case BasicBlock(Nil, _: (NeutralStmt.Return | NeutralStmt.App | NeutralStmt.Jump)) => f(this)
             case body =>
               val k = scope.define("k", Block(Nil, Nil, ValueParam(x, tpe) :: Nil, Nil, body))
               f(MetaStack.Last(Stack.Dynamic(k)))
@@ -503,6 +552,8 @@ object NewNormalizer { normal =>
     // can be recursive
     case Stmt.Def(id, block: core.BlockLit, body) =>
       given Env = env.bindComputation(id, Computation.Def(id))
+
+      // TODO mark block as potentially recursive...
       scope.defineRecursive(id, evaluate(block), block.tpe, block.capt)
       bind(id, Computation.Def(id)) {
         evaluate(body, k)
@@ -516,8 +567,7 @@ object NewNormalizer { normal =>
         case Computation.Var(id) =>
           k.reify(NeutralStmt.App(id, targs, vargs.map(evaluate), bargs.map(evaluate)))
         case Computation.Def(label) =>
-          // TODO this should be "jump"
-          k.reify(NeutralStmt.App(label, targs, vargs.map(evaluate), bargs.map(evaluate)))
+          k.reify(NeutralStmt.Jump(label, targs, vargs.map(evaluate), bargs.map(evaluate)))
         case Computation.New(interface, operations) => sys error "Should not happen: app on new"
       }
 
@@ -528,7 +578,7 @@ object NewNormalizer { normal =>
         case Computation.Def(label) => sys error s"Should not happen: invoke on def ${label}"
         case Computation.New(interface, operations) =>
           val op = operations.collectFirst { case (id, label) if id == method => label }.get
-          k.reify(NeutralStmt.App(op, targs, vargs.map(evaluate), bargs.map(evaluate)))
+          k.reify(NeutralStmt.Jump(op, targs, vargs.map(evaluate), bargs.map(evaluate)))
       }
 
     case Stmt.If(cond, thn, els) =>
@@ -677,6 +727,8 @@ object NewNormalizer { normal =>
   def embedStmt(neutral: NeutralStmt)(using G: TypingContext): core.Stmt = neutral match {
     case NeutralStmt.Return(result) =>
       Stmt.Return(embedPure(result))
+    case NeutralStmt.Jump(label, targs, vargs, bargs) =>
+      Stmt.App(embedBlockVar(label), targs, vargs.map(embedPure), bargs.map(embedBlock))
     case NeutralStmt.App(label, targs, vargs, bargs) =>
       Stmt.App(embedBlockVar(label), targs, vargs.map(embedPure), bargs.map(embedBlock))
     case NeutralStmt.Invoke(label, method, tpe, targs, vargs, bargs) =>
