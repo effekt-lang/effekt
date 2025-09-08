@@ -54,6 +54,7 @@ object semantics {
     case Literal(value: Any, annotatedType: ValueType)
     case Make(data: ValueType.Data, tag: Id, targs: List[ValueType], vargs: List[Addr])
 
+    // this could not only compute free variables, but also usage information to guide the inliner (see "secrets of the ghc inliner")
     val free: Variables = this match {
       // case Value.Var(id, annotatedType) => Variables.empty
       case Value.Extern(id, targs, vargs) => vargs.toSet
@@ -135,7 +136,7 @@ object semantics {
     def empty: Scope = new Scope(ListMap.empty, Map.empty, None)
   }
 
-  def reify(scope: Scope, body: NeutralStmt): BasicBlock = {
+  def reifyBindings(scope: Scope, body: NeutralStmt): BasicBlock = {
     var used = body.free
     var filtered = Bindings.empty
     // TODO implement properly
@@ -180,7 +181,7 @@ object semantics {
     // TODO parent code and parent store
     val local = Scope(ListMap.empty, Map.empty, Some(scope))
     val result = prog(using local)
-    reify(local, result)
+    reifyBindings(local, result)
   }
 
   case class Env(values: Map[Id, Addr], computations: Map[Id, Computation]) {
@@ -249,7 +250,7 @@ object semantics {
     // scrutinee is unknown
     case Match(scrutinee: Id, clauses: List[(Id, Block)], default: Option[BasicBlock])
 
-    // what's actually unknown here?
+    // body is stuck
     case Reset(prompt: BlockParam, body: BasicBlock)
     // prompt / context is unknown
     case Shift(prompt: Prompt, kCapt: Capture, k: BlockParam, body: BasicBlock)
@@ -398,95 +399,61 @@ object NewNormalizer { normal =>
   // ------
   enum Frame {
     case Return
-    case Static(tpe: ValueType, apply: Env => Scope => Addr => Stack => NeutralStmt)
+    case Static(apply: Env => Scope => Addr => Stack => NeutralStmt)
     case Dynamic(label: Label)
 
-    def push(tpe: ValueType)(f: Env => Scope => Addr => Stack => NeutralStmt): Frame = this match {
-      case Frame.Return =>
-        Frame.Static(tpe,
-          env => scope => arg => k => f(env)(scope)(arg)(k)
-        )
-      case Frame.Static(tpe2, f2) =>
-        Frame.Static(tpe,
-          env => scope => arg => k => f(env)(scope)(arg)(k.push(tpe2)(f2))
-        )
-      case Frame.Dynamic(label) => ???
-    }
-
-    // maybe, for once it is simpler to decompose stacks like
-    //
-    //  f, (p, f) :: (p, f) :: Nil
-    //
-    // where the frame on the reset is the one AFTER the prompt NOT BEFORE!
-
-
-  }
-  enum Stack {
-    case Last(frame: Frame)
-    case Reset(prompt: BlockParam, frame: Frame, next: Stack)
-
-    val bound: List[BlockParam] = this match {
-      case Stack.Last(stack) => Nil
-      case Stack.Reset(prompt, stack, next) => prompt :: next.bound
-    }
-
-    def ret(arg: Addr)(using env: Env, scope: Scope): NeutralStmt = this match {
-      case Stack.Last(Frame.Return) => NeutralStmt.Return(arg)
-      case Stack.Last(Frame.Static(tpe, apply)) => apply(env)(scope)(arg)(Stack.Last(Frame.Return))
-      case Stack.Last(Frame.Dynamic(label)) => NeutralStmt.Jump(label, Nil, List(arg), Nil)
-
-      case Stack.Reset(prompt, Frame.Return, next) => next.ret(arg)
-      case Stack.Reset(prompt, Frame.Static(tpe, apply), next) => ??? // apply(env)(scope)(arg)(MetaStack.Segment(prompt, Stack.Empty, next))
-      case Stack.Reset(prompt, Frame.Dynamic(label), next) => ??? // MetaStack.Segment(prompt, Stack.Empty, next).reify(NeutralStmt.Jump(label, Nil, List(arg), Nil))
-    }
-    def push(tpe: ValueType)(f: Env => Scope => Addr => Stack => NeutralStmt): Stack = this match {
-      case Stack.Last(frame) => Stack.Last(frame.push(tpe)(f))
-      case Stack.Reset(prompt, frame, next) => Stack.Reset(prompt, frame, next.push(tpe)(f))
-    }
-    def reify(stmt: NeutralStmt)(using env: Env, scope: Scope): NeutralStmt = this match {
-      case Stack.Last(frame) => frame match {
-        case Frame.Return => stmt
-        // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]
-        case Frame.Static(tpe, apply) =>
-          val tmp = Id("tmp")
-          scope.push(tmp, stmt)
-          apply(env)(scope)(tmp)(Stack.Last(Frame.Return))
-        // stack is already reified
-        case Frame.Dynamic(label) =>
-          stmt
+    def ret(ks: Stack, arg: Addr)(using env: Env, scope: Scope): NeutralStmt = this match {
+      case Frame.Return => ks match {
+        case Stack.Empty => NeutralStmt.Return(arg)
+        case Stack.Reset(p, k, ks) => k.ret(ks, arg)
       }
-      case Stack.Reset(prompt, Frame.Return, rest) =>
-        NeutralStmt.Reset(prompt, nested { rest.reify(stmt) })
-      case Stack.Reset(prompt, Frame.Static(tpe, apply), rest) =>
+      case Frame.Static(apply) => apply(env)(scope)(arg)(ks)
+      case Frame.Dynamic(label) => reify(ks) { NeutralStmt.Jump(label, Nil, List(arg), Nil) }
+    }
+
+    def push(f: Env => Scope => Addr => Frame => Stack => NeutralStmt): Frame =
+      Frame.Static(
+        env => scope => arg => ks => f(env)(scope)(arg)(this)(ks)
+      )
+
+    def joinpoint(ks: Stack)(f: Frame => Stack => NeutralStmt)(using env: Env, scope: Scope): NeutralStmt = ???
+  }
+
+  def reify(k: Frame, ks: Stack)(stmt: (Env, Scope) ?=> NeutralStmt)(using Env, Scope): NeutralStmt =
+    reify(ks) { reify(k) { stmt } }
+
+  def reify(k: Frame)(stmt: (Env, Scope) ?=> NeutralStmt)(using env: Env, scope: Scope): NeutralStmt =
+    k match {
+      case Frame.Return => stmt
+      case Frame.Static(apply) =>
         val tmp = Id("tmp")
         scope.push(tmp, stmt)
-        apply(env)(scope)(tmp)(Stack.Reset(prompt, Frame.Return, rest))
-      case Stack.Reset(prompt, Frame.Dynamic(label), rest) => ???
+        apply(env)(scope)(tmp)(Stack.Empty)
+      case Frame.Dynamic(label) => stmt
     }
-    def joinpoint(f: Stack => NeutralStmt)(using env: Env, scope: Scope): NeutralStmt = this match {
-      case Stack.Last(stack) => stack match {
-        case Frame.Static(tpe, apply) =>
-          val x = Id("x")
-          nested { scope ?=> apply(env)(scope)(x)(Stack.Last(Frame.Return)) } match {
-            // Avoid trivial continuations like
-            //   def k_6268 = (x_6267: Int_3) {
-            //     return x_6267
-            //   }
-            case BasicBlock(Nil, _: (NeutralStmt.Return | NeutralStmt.App | NeutralStmt.Jump)) => f(this)
-            case body =>
-              val k = Id("k")
-              scope.define(k, Block(Nil, ValueParam(x, tpe) :: Nil, Nil, body))
-              f(Stack.Last(Frame.Dynamic(k)))
-          }
-        case Frame.Return => f(this)
-        case Frame.Dynamic(label) => f(this)
-      }
-      case Stack.Reset(prompt, stack, rest) =>
-        ???
+
+  @tailrec
+  def reify(ks: Stack)(stmt: (Env, Scope) ?=> NeutralStmt)(using env: Env, scope: Scope): NeutralStmt =
+    ks match {
+      case Stack.Empty => stmt
+      case Stack.Reset(prompt, frame, next) =>
+        reify(next) { reify(frame) { NeutralStmt.Reset(prompt, nested { stmt }) }}
     }
-  }
-  object Stack {
-    def empty: Stack = Stack.Last(Frame.Return)
+
+
+  // maybe, for once it is simpler to decompose stacks like
+  //
+  //  f, (p, f) :: (p, f) :: Nil
+  //
+  // where the frame on the reset is the one AFTER the prompt NOT BEFORE!
+  enum Stack {
+    case Empty
+    case Reset(prompt: BlockParam, frame: Frame, next: Stack)
+
+    lazy val bound: List[BlockParam] = this match {
+      case Stack.Empty => Nil
+      case Stack.Reset(prompt, stack, next) => prompt :: next.bound
+    }
   }
 
   // used for potentially recursive definitions
@@ -502,7 +469,7 @@ object NewNormalizer { normal =>
           .bindComputation(id, Computation.Var(freshened))
 
         val normalizedBlock = Block(tparams, vparams, bparams, nested {
-          evaluate(body, Stack.empty)
+          evaluate(body, Frame.Return, Stack.Empty)
         })
 
         val closureParams = escaping.bound.filter { p => normalizedBlock.free contains p.id }
@@ -522,7 +489,7 @@ object NewNormalizer { normal =>
         .bindComputation(bparams.map(p => p.id -> Computation.Var(p.id)))
 
       val normalizedBlock = Block(tparams, vparams, bparams, nested {
-        evaluate(body, Stack.empty)
+        evaluate(body, Frame.Return, Stack.Empty)
       })
 
       val closureParams = escaping.bound.filter { p => normalizedBlock.free contains p.id }
@@ -579,7 +546,7 @@ object NewNormalizer { normal =>
 
     case DirectApp(f, targs, vargs, bargs) =>
       assert(bargs.isEmpty)
-      scope.run("x", f, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", Stack.empty)))
+      scope.run("x", f, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", Stack.Empty)))
 
     case Pure.Make(data, tag, targs, vargs) =>
       scope.allocate("x", Value.Make(data, tag, targs, vargs.map(evaluate)))
@@ -589,64 +556,77 @@ object NewNormalizer { normal =>
   }
 
   // TODO make evaluate(stmt) return BasicBlock (won't work for shift or reset, though)
-  def evaluate(stmt: Stmt, k: Stack)(using env: Env, scope: Scope): NeutralStmt = stmt match {
+  def evaluate(stmt: Stmt, k: Frame, ks: Stack)(using env: Env, scope: Scope): NeutralStmt = stmt match {
 
     case Stmt.Return(expr) =>
-      k.ret(evaluate(expr))
+      k.ret(ks, evaluate(expr))
 
     case Stmt.Val(id, annotatedTpe, binding, body) =>
       // This push can lead to an eta-redex (a superfluous push...)
-      evaluate(binding, k.push(annotatedTpe) { env => scope => res => k =>
+      evaluate(binding, k.push { env => scope => res => k => ks =>
         // TODO not sure this is necessary
         given Env = env
         given Scope = scope
-        bind(id, res) { evaluate(body, k) }
-      })
+        bind(id, res) { evaluate(body, k, ks) }
+      }, ks)
 
     case Stmt.Let(id, annotatedTpe, binding, body) =>
-      bind(id, evaluate(binding)) { evaluate(body, k) }
+      bind(id, evaluate(binding)) { evaluate(body, k, ks) }
 
     // can be recursive
     case Stmt.Def(id, block: core.BlockLit, body) =>
-      bind(id, evaluateRecursive(id, block, k)) { evaluate(body, k) }
+      bind(id, evaluateRecursive(id, block, ks)) { evaluate(body, k, ks) }
 
     case Stmt.Def(id, block, body) =>
-      bind(id, evaluate(block, id.name.name, k)) { evaluate(body, k) }
+      bind(id, evaluate(block, id.name.name, ks)) { evaluate(body, k, ks) }
+
+    // TODO actually remove a cut instead of binding the block argument
+    //   alternatively, we could keep some information about linearity.
+    //   For example, here we are in an active position.
+    case Stmt.App(BlockLit(tparams, cparams, vparams, bparams, body), targs, vargs, bargs) =>
+      // TODO also bind type arguments in environment
+      // TODO substitute cparams???
+      val newEnv = env
+        .bindValue(vparams.zip(vargs).map { case (p, a) => p.id -> evaluate(a) })
+        .bindComputation(bparams.zip(bargs).map { case (p, a) => p.id -> evaluate(a, "f", ks) })
+
+      evaluate(body, k, ks)(using newEnv, scope)
 
     // TODO here the stack passed to the blocks could be an empty one since we reify it anyways...
     case Stmt.App(callee, targs, vargs, bargs) =>
-      val escapingStack = Stack.empty
+      val escapingStack = Stack.Empty
       evaluate(callee, "f", escapingStack) match {
         case Computation.Var(id) =>
-          k.reify(NeutralStmt.App(id, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack))))
+          reify(k, ks) { NeutralStmt.App(id, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack))) }
         case Computation.Def(Closure(label, environment)) =>
-          k.reify(NeutralStmt.Jump(label, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack)) ++ environment))
+          val args = vargs.map(evaluate)
+          reify(k, ks) { NeutralStmt.Jump(label, targs, args, bargs.map(evaluate(_, "f", escapingStack)) ++ environment) }
         case Computation.New(interface, operations) => sys error "Should not happen: app on new"
       }
 
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
-      val escapingStack = Stack.empty
+      val escapingStack = Stack.Empty
       evaluate(callee, "o", escapingStack) match {
         case Computation.Var(id) =>
-          k.reify(NeutralStmt.Invoke(id, method, methodTpe, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack))))
+          reify(k, ks) { NeutralStmt.Invoke(id, method, methodTpe, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack))) }
         case Computation.Def(label) => sys error s"Should not happen: invoke on def ${label}"
         case Computation.New(interface, operations) =>
           operations.collectFirst { case (id, Closure(label, environment)) if id == method =>
-            k.reify(NeutralStmt.Jump(label, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack)) ++ environment))
+            reify(k, ks) { NeutralStmt.Jump(label, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack)) ++ environment) }
           }.get
       }
 
     case Stmt.If(cond, thn, els) =>
       val sc = evaluate(cond)
       scope.lookupValue(sc) match {
-        case Some(Value.Literal(true, _)) => evaluate(thn, k)
-        case Some(Value.Literal(false, _)) => evaluate(els, k)
+        case Some(Value.Literal(true, _)) => evaluate(thn, k, ks)
+        case Some(Value.Literal(false, _)) => evaluate(els, k, ks)
         case _ =>
-          k.joinpoint { k =>
+          k.joinpoint(ks) { k => ks =>
             NeutralStmt.If(sc, nested {
-              evaluate(thn, k)
+              evaluate(thn, k, ks)
             }, nested {
-              evaluate(els, k)
+              evaluate(els, k, ks)
             })
           }
       }
@@ -658,22 +638,22 @@ object NewNormalizer { normal =>
           // TODO substitute types (or bind them in the env)!
           clauses.collectFirst {
             case (tpe, BlockLit(tparams, cparams, vparams, bparams, body)) if tpe == tag =>
-              bind(vparams.map(_.id).zip(vargs)) { evaluate(body, k) }
+              bind(vparams.map(_.id).zip(vargs)) { evaluate(body, k, ks) }
           }.getOrElse {
-            evaluate(default.getOrElse { sys.error("Non-exhaustive pattern match.") }, k)
+            evaluate(default.getOrElse { sys.error("Non-exhaustive pattern match.") }, k, ks)
           }
         case _ =>
-          k.joinpoint { k =>
+          k.joinpoint(ks) { k => ks =>
             NeutralStmt.Match(sc,
               // This is ALMOST like evaluate(BlockLit), but keeps the current continuation
               clauses.map { case (id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
                 given localEnv: Env = env.bindValue(vparams.map(p => p.id -> p.id))
                 val block = Block(tparams, vparams, bparams, nested {
-                  evaluate(body, k)
+                  evaluate(body, k, ks)
                 })
                 (id, block)
               },
-              default.map { stmt => nested { evaluate(stmt, k) } })
+              default.map { stmt => nested { evaluate(stmt, k, ks) } })
           }
       }
 
@@ -697,11 +677,11 @@ object NewNormalizer { normal =>
       val neutralBody = {
         given Env = env.bindComputation(k2.id -> Computation.Var(k2.id) :: Nil)
         nested {
-          evaluate(body, Stack.empty)
+          evaluate(body, Frame.Return, Stack.Empty)
         }
       }
       assert(Set(cparam) == k2.capt, "At least for now these need to be the same")
-      k.reify(NeutralStmt.Shift(p, cparam, k2, neutralBody))
+      reify(k, ks) { NeutralStmt.Shift(p, cparam, k2, neutralBody) }
     case Stmt.Shift(_, _) => ???
     //case Stmt.Reset(BlockLit(Nil, cparams, Nil, prompt :: Nil, body)) =>
     //      // TODO is Var correct here?? Probably needs to be a new computation value...
@@ -710,7 +690,7 @@ object NewNormalizer { normal =>
     //      val neutralBody = {
     //        given Env = env.bindComputation(prompt.id -> Computation.Var(p) :: Nil)
     //        nested {
-    //          evaluate(body, MetaStack.empty)
+    //          evaluate(body, MetaStack.Empty)
     //        }
     //      }
     //      // TODO implement properly
@@ -721,7 +701,7 @@ object NewNormalizer { normal =>
       val p = Id(prompt.id)
       // TODO is Var correct here?? Probably needs to be a new computation value...
       given Env = env.bindComputation(prompt.id -> Computation.Var(p) :: Nil)
-      evaluate(body, Stack.Reset(BlockParam(p, prompt.tpe, prompt.capt), Frame.Return, k))
+      evaluate(body, Frame.Return, Stack.Reset(BlockParam(p, prompt.tpe, prompt.capt), k, ks))
 
     case Stmt.Reset(_) => ???
     case Stmt.Resume(k2, body) =>
@@ -730,9 +710,11 @@ object NewNormalizer { normal =>
         case _ => ???
       }
       // TODO implement properly
-      k.reify(NeutralStmt.Resume(r, nested {
-        evaluate(body, Stack.empty)
-      }))
+      reify(k, ks) {
+        NeutralStmt.Resume(r, nested {
+          evaluate(body, Frame.Return, Stack.Empty)
+        })
+      }
   }
 
   def run(mod: ModuleDecl): ModuleDecl = {
@@ -765,10 +747,10 @@ object NewNormalizer { normal =>
         .bindComputation(bparams.map(p => p.id -> Computation.Var(p.id)))
 
       given scope: Scope = Scope.empty
-      val result = evaluate(body, Stack.empty)
+      val result = evaluate(body, Frame.Return, Stack.Empty)
 
       debug(s"---------------------")
-      val block = Block(tparams, vparams, bparams, reify(scope, result))
+      val block = Block(tparams, vparams, bparams, reifyBindings(scope, result))
       debug(PrettyPrinter.show(block))
 
       debug(s"---------------------")
