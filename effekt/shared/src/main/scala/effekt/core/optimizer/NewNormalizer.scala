@@ -42,6 +42,7 @@ object semantics {
   type Label = Id
   type Prompt = Id
 
+  // this could not only compute free variables, but also usage information to guide the inliner (see "secrets of the ghc inliner")
   type Variables = Set[Id]
   def all[A](ts: List[A], f: A => Variables): Variables = ts.flatMap(f).toSet
 
@@ -54,7 +55,6 @@ object semantics {
     case Literal(value: Any, annotatedType: ValueType)
     case Make(data: ValueType.Data, tag: Id, targs: List[ValueType], vargs: List[Addr])
 
-    // this could not only compute free variables, but also usage information to guide the inliner (see "secrets of the ghc inliner")
     val free: Variables = this match {
       // case Value.Var(id, annotatedType) => Variables.empty
       case Value.Extern(id, targs, vargs) => vargs.toSet
@@ -90,7 +90,7 @@ object semantics {
    */
   class Scope(
     var bindings: ListMap[Id, Binding],
-    var inverse: Map[Value, Id],
+    var inverse: Map[Value, Addr],
     outer: Option[Scope]
   ) {
     // floating values to the top is not always beneficial. For example
@@ -220,6 +220,9 @@ object semantics {
     case Var(id: Id)
     // Known function
     case Def(closure: Closure)
+
+    // case Inline(body: core.BlockLit, closure: Env)
+
     // Known object
     case New(interface: BlockType.Interface, operations: List[(Id, Closure)])
 
@@ -237,9 +240,9 @@ object semantics {
   // Statements
   // ----------
   enum NeutralStmt {
-    // continuation is unknown
+    // context (continuation) is unknown
     case Return(result: Id)
-    // callee is unknown or we do not want to inline
+    // callee is unknown
     case App(callee: Id, targs: List[ValueType], vargs: List[Id], bargs: List[Computation])
     // Known jump, but we do not want to inline
     case Jump(label: Id, targs: List[ValueType], vargs: List[Id], bargs: List[Computation])
@@ -381,7 +384,8 @@ object semantics {
 /**
  * A new normalizer that is conservative (avoids code bloat)
  */
-object NewNormalizer { normal =>
+object NewNormalizer {
+
 
   import semantics.*
 
@@ -603,6 +607,8 @@ object NewNormalizer { normal =>
           reify(k, ks) { NeutralStmt.Jump(label, targs, args, bargs.map(evaluate(_, "f", escapingStack)) ++ environment) }
         case Computation.New(interface, operations) => sys error "Should not happen: app on new"
       }
+
+    // case Stmt.Invoke(New)
 
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
       val escapingStack = Stack.Empty
