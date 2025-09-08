@@ -211,6 +211,13 @@ enum Block extends Tree {
   val capt: Captures = Type.inferCapt(this)
 
   def show: String = util.show(this)
+
+  this match {
+    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => ()
+    case Block.BlockLit(tparams, cparams, vparams, bparams, body) => assert(cparams.size == bparams.size)
+    case Block.Unbox(pure) => ()
+    case Block.New(impl) => ()
+  }
 }
 export Block.*
 
