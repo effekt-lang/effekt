@@ -143,6 +143,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }
   }.toList ++ exports.namespaces.values.flatMap(transform)
 
+  // Add tparams separately
   def transform(c: symbols.Constructor)(using Context): core.Constructor =
     core.Constructor(c, c.tparams, c.fields.map(f => core.Field(f, transform(f.returnType))))
 
