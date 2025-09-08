@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: 'true'
           fetch-depth: 0  # Need full history for tags
@@ -98,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         submodules: 'true'
 
@@ -121,7 +121,7 @@ jobs:
       new_version: ${{ steps.set-version.outputs.VERSION }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: 'true'
 
@@ -168,7 +168,7 @@ jobs:
           private-key: ${{ secrets.EFFEKT_UPDATER_GH_CREDENTIALS_TOKEN }}
 
       - name: Checkout code with token
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: 'true'
           token: ${{ steps.app-token.outputs.token }}
