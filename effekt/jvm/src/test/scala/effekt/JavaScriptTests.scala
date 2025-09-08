@@ -37,6 +37,8 @@ class JavaScriptTests extends EffektTests {
   override def ignored: Set[File] = super.ignored ++ Set(
     // unsafe cont
     examplesDir / "pos" / "propagators.effekt",
+    // tcp server and client
+    examplesDir / "benchmarks" / "input_output" / "server_client.effekt",
   )
 }
 
