@@ -62,8 +62,8 @@ def main() = {
 
   def testBits(n: Int) = {
     println(n)
-    println(collectList[Bool] {n.eachLSB}.prettyBits)
-    println(collectList[Bool] {n.eachMSB}.prettyBits)
+    println(list::collect[Bool] {n.eachLSB}.prettyBits)
+    println(list::collect[Bool] {n.eachMSB}.prettyBits)
   }
 
   testBits(0)
