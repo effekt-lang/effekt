@@ -68,7 +68,7 @@ class Reachable(
       // We would need to process the binding if it was impure,
       // to keep it for its side effects; however, the binding is guaranteed to be pure
       process(body)(using defs + (id -> binding))
-    case Stmt.DirectApp(id, callee, targs, vargs, bargs, body) =>
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
       process(callee)
       vargs.foreach(process)
       bargs.foreach(process)

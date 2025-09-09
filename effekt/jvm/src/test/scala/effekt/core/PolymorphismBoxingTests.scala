@@ -94,7 +94,7 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
     assertTransformsTo(from, to)
   }
 
-  test("DirectApp with [Int] gets wrapped correctly"){
+  test("ImpureApp with [Int] gets wrapped correctly"){
     val from =
       """module main
         |

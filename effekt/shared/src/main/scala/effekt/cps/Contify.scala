@@ -120,8 +120,8 @@ object Contify {
     case Stmt.LetCont(id, binding, body) =>
       Stmt.LetCont(id, rewrite(binding), rewrite(body))
 
-    case Stmt.DirectApp(id, callee, vargs, bargs, body) =>
-      Stmt.DirectApp(id, callee, vargs.map(rewrite), bargs.map(rewrite), rewrite(body))
+    case Stmt.ImpureApp(id, callee, vargs, bargs, body) =>
+      Stmt.ImpureApp(id, callee, vargs.map(rewrite), bargs.map(rewrite), rewrite(body))
 
     case Stmt.Region(id, ks, body) =>
       Stmt.Region(id, ks, rewrite(body))
@@ -204,7 +204,7 @@ object Contify {
       returnsTo(id, binding) ++ returnsTo(id, body)
     case Stmt.LetCont(_, binding, body) =>
       returnsTo(id, binding) ++ returnsTo(id, body)
-    case Stmt.DirectApp(_, callee, vargs, bargs, body) =>
+    case Stmt.ImpureApp(_, callee, vargs, bargs, body) =>
       all(vargs, returnsTo(id, _)) ++ all(bargs, returnsTo(id, _)) ++ returnsTo(id, body)
     case Stmt.Region(_, _, body) => returnsTo(id, body)
     case Stmt.Alloc(_, init, _, body) =>
@@ -277,8 +277,8 @@ object Contify {
     case Stmt.LetCont(id2, binding, body) =>
       Stmt.LetCont(id2, contify(id, binding), contify(id, body))
 
-    case Stmt.DirectApp(id2, callee, vargs, bargs, body) =>
-      Stmt.DirectApp(id2, callee, vargs.map(contify(id, _)), bargs.map(contify(id, _)), contify(id, body))
+    case Stmt.ImpureApp(id2, callee, vargs, bargs, body) =>
+      Stmt.ImpureApp(id2, callee, vargs.map(contify(id, _)), bargs.map(contify(id, _)), contify(id, body))
 
     case Stmt.Region(id2, ks, body) =>
       Stmt.Region(id2, ks, contify(id, body))

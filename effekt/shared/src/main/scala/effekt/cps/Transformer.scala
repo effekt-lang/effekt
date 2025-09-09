@@ -59,10 +59,10 @@ object Transformer {
     case core.Stmt.Let(id, tpe, core.Expr.ValueVar(x, _), body) =>
       binding(id, C.lookupValue(x)) { transform(body, ks, k) }
 
-    case core.Stmt.DirectApp(id, b, targs, vargs, bargs, body) =>
+    case core.Stmt.ImpureApp(id, b, targs, vargs, bargs, body) =>
       transform(b) match {
         case Block.BlockVar(f) =>
-          DirectApp(id, f, vargs.map(transform), bargs.map(transform),
+          ImpureApp(id, f, vargs.map(transform), bargs.map(transform),
             transform(body, ks, k))
         case _ => sys error "Should not happen"
       }

@@ -181,7 +181,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
         toDocStmts(rest)
 
-    case DirectApp(id, callee, targs, vargs, bargs, rest) =>
+    case ImpureApp(id, callee, targs, vargs, bargs, rest) =>
       "let" <+> "!" <+> toDoc(id) <+> "=" <+> toDoc(callee) <> argsToDoc(targs, vargs, bargs) <> line <>
         toDocStmts(rest)
 

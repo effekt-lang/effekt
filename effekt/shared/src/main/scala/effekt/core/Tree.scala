@@ -249,7 +249,7 @@ enum Stmt extends Tree {
   // Definitions
   case Def(id: Id, block: Block, body: Stmt)
   case Let(id: Id, annotatedTpe: ValueType, binding: Expr, body: Stmt)
-  case DirectApp(id: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block], body: Stmt)
+  case ImpureApp(id: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block], body: Stmt)
 
   // Fine-grain CBV
   case Return(expr: Expr)
@@ -325,7 +325,7 @@ case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: Li
 private[core] enum Binding {
   case Val(id: Id, tpe: ValueType, binding: Stmt)
   case Let(id: Id, tpe: ValueType, binding: Expr)
-  case DirectApp(id: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
+  case ImpureApp(id: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
   case Def(id: Id, binding: Block)
 
   def id: Id
@@ -335,14 +335,14 @@ private[core] object Binding {
     case Nil => body
     case Binding.Val(name, tpe, binding) :: rest => Stmt.Val(name, tpe, binding, Binding(rest, body))
     case Binding.Let(name, tpe, binding) :: rest => Stmt.Let(name, tpe, binding, Binding(rest, body))
-    case Binding.DirectApp(name, callee, targs, vargs, bargs) :: rest => Stmt.DirectApp(name, callee, targs, vargs, bargs, Binding(rest, body))
+    case Binding.ImpureApp(name, callee, targs, vargs, bargs) :: rest => Stmt.ImpureApp(name, callee, targs, vargs, bargs, Binding(rest, body))
     case Binding.Def(name, binding) :: rest => Stmt.Def(name, binding, Binding(rest, body))
   }
 
   def toToplevel(b: Binding): Toplevel = b match {
     case Binding.Val(name, tpe, binding) => Toplevel.Val(name, tpe, binding)
     case Binding.Let(name, tpe, binding) => ??? //Toplevel.Val(name, tpe, Stmt.Return(binding))
-    case Binding.DirectApp(name, callee, targs, vargs, bargs) => ??? //Toplevel.Val(name, tpe, ???)
+    case Binding.ImpureApp(name, callee, targs, vargs, bargs) => ??? //Toplevel.Val(name, tpe, ???)
     case Binding.Def(name, binding) => Toplevel.Def(name, binding)
   }
 }
@@ -365,8 +365,8 @@ object Bind {
 
   def bind[A](b: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block]): Bind[ValueVar] =
     val id = Id("tmp")
-    val binding: Binding.DirectApp = Binding.DirectApp(id, b, targs, vargs, bargs)
-    Bind(ValueVar(id, Type.bindingType(binding)), List(Binding.DirectApp(id, b, targs, vargs, bargs)))
+    val binding: Binding.ImpureApp = Binding.ImpureApp(id, b, targs, vargs, bargs)
+    Bind(ValueVar(id, Type.bindingType(binding)), List(Binding.ImpureApp(id, b, targs, vargs, bargs)))
 
   def bind[A](block: Block): Bind[BlockVar] =
     val id = Id("tmp")
@@ -605,7 +605,7 @@ object Variables {
   def free(s: Stmt): Variables = s match {
     case Stmt.Def(id, block, body) => (free(block) ++ free(body)) -- Variables.block(id, block.tpe, block.capt)
     case Stmt.Let(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
-    case s @ Stmt.DirectApp(id, callee, targs, vargs, bargs, body) =>
+    case s @ Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
       free(callee) ++ all(vargs, free) ++ all(bargs, free) ++ (free(body) -- Variables.value(id, Type.bindingType(s)))
     case Stmt.Return(expr) => free(expr)
     case Stmt.Val(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
@@ -678,10 +678,10 @@ object substitutions {
         Let(id, substitute(tpe), substitute(binding),
           substitute(body)(using subst shadowValues List(id)))
 
-      case DirectApp(id, callee, targs, vargs, bargs, body) =>
+      case ImpureApp(id, callee, targs, vargs, bargs, body) =>
         substitute(callee) match {
           case g : Block.BlockVar =>
-            DirectApp(id, g, targs.map(substitute), vargs.map(substitute), bargs.map(substitute),
+            ImpureApp(id, g, targs.map(substitute), vargs.map(substitute), bargs.map(substitute),
               substitute(body)(using subst shadowValues List(id)))
           case _ => INTERNAL_ERROR("Should never substitute a concrete block for an FFI function.")
         }

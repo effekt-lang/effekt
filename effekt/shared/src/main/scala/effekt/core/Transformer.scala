@@ -253,7 +253,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val tpe = Context.blockTypeOf(sym)
       tpe match {
         case BlockType.FunctionType(tparams, cparams, vparamtps, bparamtps, restpe, effects) =>
-          // if this block argument expects to be called using PureApp or DirectApp, make sure it is
+          // if this block argument expects to be called using PureApp or ImpureApp, make sure it is
           // by wrapping it in a BlockLit
           val targs = tparams.map(core.ValueType.Var.apply)
           val vparams = vparamtps.map { t => core.ValueParam(TmpValue("valueParam"), transform(t))}
@@ -287,7 +287,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             val result = TmpValue("etaBinding")
             val callee = BlockVar(f)
             BlockLit(tparams, bparams.map(_.id), vparams, bparams,
-              core.DirectApp(result, callee, targs, vargs, bargs,
+              core.ImpureApp(result, callee, targs, vargs, bargs,
                 Stmt.Return(Expr.ValueVar(result, transform(restpe)))))
           }
 
@@ -733,7 +733,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       bindings.toList.map {
         case Binding.Val(name, tpe, binding) => Condition.Val(name, tpe, binding)
         case Binding.Let(name, tpe, binding) => Condition.Let(name, tpe, binding)
-        case Binding.DirectApp(name, callee, targs, vargs, bargs) => Condition.DirectApp(name, callee, targs, vargs, bargs)
+        case Binding.ImpureApp(name, callee, targs, vargs, bargs) => Condition.ImpureApp(name, callee, targs, vargs, bargs)
         case Binding.Def(name, binding) => Context.panic("Should not happen")
       } :+ cond
 
@@ -944,7 +944,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def bind(callee: Block.BlockVar, targs: List[core.ValueType], vargs: List[Expr], bargs: List[Block]): ValueVar = {
       // create a fresh symbol and assign the type
       val x = TmpValue("r")
-      val binding: Binding.DirectApp = Binding.DirectApp(x, callee, targs, vargs, bargs)
+      val binding: Binding.ImpureApp = Binding.ImpureApp(x, callee, targs, vargs, bargs)
       bindings += binding
 
       ValueVar(x, Type.bindingType(binding))

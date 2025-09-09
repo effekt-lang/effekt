@@ -150,7 +150,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       Stmt.Def(id, transform(block), transform(rest))
     case Stmt.Let(id, tpe, binding, rest) =>
       Stmt.Let(id, transform(tpe), transform(binding), transform(rest))
-    case s @ Stmt.DirectApp(id, b, targs, vargs, bargs, rest) =>
+    case s @ Stmt.ImpureApp(id, b, targs, vargs, bargs, rest) =>
       val callee = transform(b)
       // [S](S) => S            [Int]
       val tpe: BlockType.Function = callee.tpe match {
@@ -163,7 +163,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val bCoerced = (bargs zip tpe.bparams).map { case (a, tpe) => coerce(transform(a), tpe) }
 
       // we might need to coerce the result of this application
-      val stmt: Stmt.DirectApp = Stmt.DirectApp(id, callee, targs.map(transformArg), vCoerced, bCoerced, transform(rest))
+      val stmt: Stmt.ImpureApp = Stmt.ImpureApp(id, callee, targs.map(transformArg), vCoerced, bCoerced, transform(rest))
       val from = Type.bindingType(stmt)
       val to = itpe.result
       val coercer = ValueCoercer(from, to)

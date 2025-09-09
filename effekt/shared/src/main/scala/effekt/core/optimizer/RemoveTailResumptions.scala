@@ -23,7 +23,7 @@ object RemoveTailResumptions {
     stmt match {
       case Stmt.Def(id, block, body) => !freeInBlock(block) && tailResumptive(k, body)
       case Stmt.Let(id, tpe, binding, body) => !freeInExpr(binding) && tailResumptive(k, body)
-      case Stmt.DirectApp(id, callee, targs, vargs, bargs, body) => tailResumptive(k, body) && !freeInBlock(callee) && !vargs.exists(freeInExpr) && !bargs.exists(freeInBlock)
+      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => tailResumptive(k, body) && !freeInBlock(callee) && !vargs.exists(freeInExpr) && !bargs.exists(freeInBlock)
       case Stmt.Return(expr) => false
       case Stmt.Val(id, tpe, binding, body) => tailResumptive(k, body) && !freeInStmt(binding)
       case Stmt.App(callee, targs, vargs, bargs) => false
@@ -47,7 +47,7 @@ object RemoveTailResumptions {
   def removeTailResumption(k: Id, stmt: Stmt): Stmt = stmt match {
     case Stmt.Def(id, block, body) => Stmt.Def(id, block, removeTailResumption(k, body))
     case Stmt.Let(id, tpe, binding, body) => Stmt.Let(id, tpe, binding, removeTailResumption(k, body))
-    case Stmt.DirectApp(id, callee, targs, vargs, bargs, body) => Stmt.DirectApp(id, callee, targs, vargs, bargs, removeTailResumption(k, body))
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => Stmt.ImpureApp(id, callee, targs, vargs, bargs, removeTailResumption(k, body))
     case Stmt.Val(id, tpe, binding, body) => Stmt.Val(id, tpe, binding, removeTailResumption(k, body))
     case Stmt.If(cond, thn, els) => Stmt.If(cond, removeTailResumption(k, thn), removeTailResumption(k, els))
     case Stmt.Match(scrutinee, clauses, default) => Stmt.Match(scrutinee, clauses.map {

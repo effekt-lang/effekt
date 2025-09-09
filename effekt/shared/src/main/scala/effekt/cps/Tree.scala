@@ -99,7 +99,7 @@ enum Stmt extends Tree {
   case LetDef(id: Id, binding: Block, body: Stmt)
   case LetExpr(id: Id, binding: Expr, body: Stmt)
   case LetCont(id: Id, binding: Cont.ContLam, body: Stmt)
-  case DirectApp(id: Id, callee: Id, vargs: List[Expr], bargs: List[Block], body: Stmt)
+  case ImpureApp(id: Id, callee: Id, vargs: List[Expr], bargs: List[Block], body: Stmt)
 
   // Regions
   case Region(id: Id, ks: MetaCont, body: Stmt)
@@ -194,7 +194,7 @@ object Variables {
     case Stmt.LetDef(id, binding, body)  => (free(binding) ++ free(body)) -- block(id)
     case Stmt.LetExpr(id, binding, body) => free(binding) ++ (free(body) -- value(id))
     case Stmt.LetCont(id, binding, body) => free(binding) ++ (free(body) -- cont(id))
-    case Stmt.DirectApp(id, callee, vargs, bargs, body) => block(callee) ++ all(vargs, free) ++ all(bargs, free) ++ (free(body) -- value(id))
+    case Stmt.ImpureApp(id, callee, vargs, bargs, body) => block(callee) ++ all(vargs, free) ++ all(bargs, free) ++ (free(body) -- value(id))
 
     case Stmt.Region(id, ks, body) => free(ks) ++ (free(body) -- block(id))
     case Stmt.Alloc(id, init, region, body) => free(init) ++ block(region) ++ (free(body) -- block(id))
@@ -315,8 +315,8 @@ object substitutions {
       LetCont(id, substitute(binding),
         substitute(body)(using subst.shadowConts(List(id))))
 
-    case DirectApp(id, callee, vargs, bargs, body) =>
-      DirectApp(id, callee, vargs.map(substitute), bargs.map(substitute),
+    case ImpureApp(id, callee, vargs, bargs, body) =>
+      ImpureApp(id, callee, vargs.map(substitute), bargs.map(substitute),
         substitute(body)(using subst.shadowValues(List(id))))
 
     case Region(id, ks, body) =>

@@ -181,8 +181,8 @@ object Normalizer { normal =>
           Stmt.Let(id, tpe, normalized, normalize(body)(using C.bind(id, normalized)))
       }
 
-    case Stmt.DirectApp(id, callee, targs, vargs, bargs, body) =>
-      Stmt.DirectApp(id, callee, targs, vargs.map(normalize), bargs.map(normalize), normalize(body))
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      Stmt.ImpureApp(id, callee, targs, vargs.map(normalize), bargs.map(normalize), normalize(body))
 
     // Redexes
     // -------
@@ -307,8 +307,8 @@ object Normalizer { normal =>
         case Stmt.Let(id2, tpe2, binding2, body2) =>
           Stmt.Let(id2, tpe2, binding2, normalizeVal(id, tpe, body2, body))
 
-        case Stmt.DirectApp(id2, callee2, targs2, vargs2, bargs2, body2) =>
-          Stmt.DirectApp(id2, callee2, targs2, vargs2, bargs2, normalizeVal(id, tpe, body2, body))
+        case Stmt.ImpureApp(id2, callee2, targs2, vargs2, bargs2, body2) =>
+          Stmt.ImpureApp(id2, callee2, targs2, vargs2, bargs2, normalizeVal(id, tpe, body2, body))
 
         // Flatten vals. This should be non-leaking since we use garbage free refcounting.
         // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]

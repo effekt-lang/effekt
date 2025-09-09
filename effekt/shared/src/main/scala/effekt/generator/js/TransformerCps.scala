@@ -225,12 +225,12 @@ object TransformerCps extends Transformer {
         js.Const(nameDef(id), toJS(binding)(using nonrecursive(ks2))) :: requiringThunk { toJS(body) }.run(k)
       }
 
-    case cps.Stmt.DirectApp(id, callee, vargs, Nil, body) =>
+    case cps.Stmt.ImpureApp(id, callee, vargs, Nil, body) =>
       Binding { k =>
         js.Const(nameDef(id), inlineExtern(callee, vargs)) :: toJS(body).run(k)
       }
 
-    case cps.Stmt.DirectApp(id, callee, vargs, bargs, body) =>
+    case cps.Stmt.ImpureApp(id, callee, vargs, bargs, body) =>
       Binding { k =>
         js.Const(nameDef(id), js.Call(nameRef(callee), vargs.map(toJS) ++ bargs.map(argumentToJS))) :: toJS(body).run(k)
       }
@@ -521,7 +521,7 @@ object TransformerCps extends Transformer {
       } && default.forall(body => canBeDirect(k, body))
       case Stmt.LetDef(id, binding, body) => notIn(binding) && canBeDirect(k, body)
       case Stmt.LetExpr(id, binding, body) => notIn(binding) && canBeDirect(k, body)
-      case Stmt.DirectApp(id, callee, vargs, bargs, body) => vargs.forall(notIn) && bargs.forall(notIn) && canBeDirect(k, body)
+      case Stmt.ImpureApp(id, callee, vargs, bargs, body) => vargs.forall(notIn) && bargs.forall(notIn) && canBeDirect(k, body)
       case Stmt.LetCont(id, Cont.ContLam(result, ks2, body), body2) =>
         def willBeDirectItself = canBeDirect(id, body2) && canBeDirect(k, maintainDirectStyle(ks2, body))
         def notFreeinContinuation = notIn(body) && canBeDirect(k, body2)
