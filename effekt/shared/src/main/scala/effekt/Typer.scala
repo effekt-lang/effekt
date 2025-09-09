@@ -15,6 +15,7 @@ import effekt.util.messages.*
 import effekt.util.foreachAborting
 
 import scala.language.implicitConversions
+import effekt.source.Implementation
 
 /**
  * Typechecking
@@ -723,8 +724,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // (1) make up a fresh capture unification variable or use the annotated captures
       val cap = obj.caps.getOrElse(Context.freshCaptVar(CaptUnificationVar.BlockRegion(d)))
 
-      // (2) annotate capture variable
-      Context.bind(obj, cap)
+      // (2) annotate capture variable (and type)
+      body match {
+        case source.New(source.Implementation(tpe, _, _), _) =>
+          Context.bind(obj, Context.resolvedType(tpe).asInterfaceType, cap)
+        case _ =>
+          Context.bind(obj, cap)
+      }
 
     case d @ source.ExternDef(cap, id, tps, vps, bps, tpe, body, doc, span) =>
       val fun = d.symbol

@@ -16,20 +16,20 @@ interface Counter {
   def inc(): Unit
 }
 
-def makeCounter(start: Int) at {global}: Counter at {global,io} = {
-  val x = ref(0)
-  var y = 0
-  def counter at {global,io}: Counter = new Counter {
+def makeCounter(start: Int) at {global}: Counter at {global} = {
+  val x = ref(start)
+  def counter at {global}: Counter = new Counter {
     def get() = x.get()
     def inc() = x.set(x.get() + 1)
   }
   counter
 }
 
-
 def main() = {
   f()
   g()
   h()
-  println(makeCounter(1).inc())
+  val c = makeCounter(1)
+  c.inc()
+  println((unbox c).get())
 }
