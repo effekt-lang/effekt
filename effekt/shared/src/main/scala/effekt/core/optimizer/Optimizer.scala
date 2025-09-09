@@ -33,7 +33,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     tree = Context.timed("new-normalizer-1", source.name) { NewNormalizer(_ => true).run(tree) }
     Normalizer.assertNormal(tree)
     // println(util.show(tree))
-    tree = Context.timed("new-normalizer-2", source.name) { NewNormalizer(_ => true).run(tree) }
+    tree = Context.timed("new-normalizer-2", source.name) { NewNormalizer(_ => false).run(tree) }
     //    Normalizer.assertNormal(tree)
     //tree = Normalizer.normalize(Set(mainSymbol), tree, Context.config.maxInlineSize().toInt)
 
