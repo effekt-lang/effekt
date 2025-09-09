@@ -62,7 +62,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def transformToplevel(d: source.Def)(using Context): List[Toplevel | Declaration | Extern] = d match {
-    case f @ source.FunDef(id, tps, vps, bps, ret, body, doc, span) =>
+    case f @ source.FunDef(id, tps, vps, bps, cpt, ret, body, doc, span) =>
       val tparams = tps.map { p => p.symbol }
       val cparams = bps.map { b => b.symbol.capture }
       val vparams = vps map transform
@@ -88,7 +88,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v @ source.ValDef(id, _, binding, doc, span) =>
       Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
 
-    case v @ source.DefDef(id, annot, binding, doc, span) =>
+    case v @ source.DefDef(id, captures, annot, binding, doc, span) =>
       val sym = v.symbol
       val (definition, bindings) = Context.withBindings {
         Toplevel.Def(sym, transformAsBlock(binding))
@@ -104,7 +104,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       List(core.Interface(interface, interface.tparams,
         interface.operations.map { op => core.Property(op, operationAtDeclaration(interface.tparams, op)) }))
 
-    case f @ source.ExternDef(pure, id, _, vps, bps, _, bodies, doc, span) =>
+    case f @ source.ExternDef(id, _, vps, bps, _, _, bodies, doc, span) =>
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _, _) = f.symbol
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.capture)
@@ -167,7 +167,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       transform(b)
 
     case source.DefStmt(d, rest, span) => d match {
-      case f @ source.FunDef(id, tps, vps, bps, ret, body, doc, span) =>
+      case f @ source.FunDef(id, tps, vps, bps, cpt, ret, body, doc, span) =>
         val tparams = tps.map { p => p.symbol }
         val cparams = bps.map { b => b.symbol.capture }
         val vparams = vps map transform
@@ -182,7 +182,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         }
         Val(v.symbol, transformedTpe, transformed, transform(rest))
 
-      case v @ source.DefDef(id, annot, binding, doc, span) =>
+      case v @ source.DefDef(id, captures, annot, binding, doc, span) =>
         val sym = v.symbol
         insertBindings {
           Def(sym, transformAsBlock(binding), transform(rest))

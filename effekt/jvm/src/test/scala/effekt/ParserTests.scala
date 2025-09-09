@@ -145,7 +145,7 @@ class ParserTests extends munit.FunSuite {
     parse(input, _.externDef())
 
   def parseInfo(input: String)(using munit.Location): Info =
-    parse(input, _.info(parseCaptures = true))
+    parse(input, _.info())
 
   // Custom asserts
   //
@@ -545,6 +545,7 @@ class ParserTests extends munit.FunSuite {
     parseStmts("val (left, right) = list; return left")
 
     parseStmts("val g: () => Unit / Exc at {exc} = fun() { closure() }; ()")
+    parseStmts("val g: () => Unit / Exc at exc = fun() { closure() }; ()")
   }
 
   test("Pattern-matching val parses with correct span") {
@@ -982,6 +983,7 @@ class ParserTests extends munit.FunSuite {
         DefDef(
           IdDef("foo", Span(source, pos(0), pos(1))),
           Maybe.None(Span(source, pos(1), pos(1))),
+          Maybe.None(Span(source, pos(1), pos(1))),
           Var(IdRef(Nil, "f", Span(source, pos(2), pos(3))), Span(source, pos(2), pos(3))),
           Info.empty(Span(source, 0, 0)),
           Span(source, 0, pos.last)))
@@ -1013,6 +1015,12 @@ class ParserTests extends munit.FunSuite {
     )
   }
 
+  test("Function definition with capture set") {
+    parseDefinition("def foo(v: Int) at {}: Unit = <>")
+    parseDefinition("def foo(v: Int) at io: Unit = <>")
+    parseDefinition("def foo(v: Int) at {async, io}: Unit = <>")
+  }
+
   test("Function definition"){
     val (source, pos) =
       raw"""def foo[T1, T2](x: T1, y: T2){b: => Unit}: Unit = <>
@@ -1022,7 +1030,7 @@ class ParserTests extends munit.FunSuite {
     val definition = parseDefinition(source.content)
 
     val funDef = definition match {
-      case fd@FunDef(id, tparams, vparams, bparams, ret, body, doc, span) => fd
+      case fd@FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) => fd
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
@@ -1041,7 +1049,7 @@ class ParserTests extends munit.FunSuite {
     val definition = parseDefinition(source.content)
 
     val funDef = definition match {
-      case fd@FunDef(id, tparams, vparams, bparams, ret, body, doc, span) => fd
+      case fd@FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) => fd
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
@@ -1058,7 +1066,7 @@ class ParserTests extends munit.FunSuite {
     val definition = parseDefinition(source.content)
 
     val funDef = definition match {
-      case fd@FunDef(id, tparams, vparams, bparams, ret, body, doc, span) => fd
+      case fd@FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) => fd
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
@@ -1086,7 +1094,7 @@ class ParserTests extends munit.FunSuite {
     val definition = parseDefinition(source.content)
 
     val funDef = definition match {
-      case fd@FunDef(id, tparams, vparams, bparams, ret, body, doc, span) => fd
+      case fd@FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) => fd
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
@@ -1130,11 +1138,11 @@ class ParserTests extends munit.FunSuite {
     assertEquals(valDef.span, span)
   }
 
-  test("Declaration info with capture set") {
+  test("Declaration info with comment and extern") {
     val (source, pos) =
       raw"""/// Some doc comment
-           |private extern {a, b, c}
-           |↑      ↑↑     ↑↑        ↑
+           |private extern
+           |↑      ↑↑     ↑
            |""".sourceAndPositions
 
     parseInfo(source.content) match {
@@ -1142,20 +1150,17 @@ class ParserTests extends munit.FunSuite {
           Some(doc),
           isPrivate,
           isExtern,
-          Some(CaptureSet(captures, Span(_, captFrom, captTo, _)))) =>
+        ) =>
 
         assertEquals(doc, " Some doc comment")
         assertEquals(isPrivate, Maybe(Some(()), Span(source, pos(0), pos(1))))
         assertEquals(isExtern, Maybe(Some(()), Span(source, pos(2), pos(3))))
-        assertEquals(captures.map(_.name), List("a", "b", "c"))
-        assertEquals(captFrom, pos(4))
-        assertEquals(captTo, pos(5))
 
       case info => fail(s"Wrong info: ${info}")
     }
   }
 
-  test("Only private") {
+  test("Only comment and private") {
     val (source, pos) =
       raw"""/// Some doc comment
            |private
@@ -1163,12 +1168,11 @@ class ParserTests extends munit.FunSuite {
            |""".sourceAndPositions
 
     parseInfo(source.content) match {
-      case Info(doc, isPrivate, isExtern, externCapture) =>
+      case Info(doc, isPrivate, isExtern) =>
 
         assertEquals(doc, Some(" Some doc comment"))
         assertEquals(isPrivate, Maybe(Some(()), Span(source, pos(0), pos(1))))
         assertEquals(isExtern, Maybe(None, Span(source, pos(1), pos(1))))
-        assertEquals(externCapture, None)
     }
   }
 
@@ -1179,11 +1183,10 @@ class ParserTests extends munit.FunSuite {
            |""".sourceAndPositions
 
     parseInfo(source.content) match {
-      case Info(doc, isPrivate, isExtern, externCapture) =>
+      case Info(doc, isPrivate, isExtern) =>
         assertEquals(doc, Some(" Some doc comment"))
         assertEquals(isPrivate, Maybe(None, Span(source, pos(0), pos(0))))
         assertEquals(isExtern, Maybe(None, Span(source, pos(0), pos(0))))
-        assertEquals(externCapture, None)
     }
   }
 
@@ -1587,7 +1590,7 @@ class ParserTests extends munit.FunSuite {
   }
 
   test("Extern definition") {
-    parseExternDef("extern {io} def read(s: String): Int = default { 42 } js { 1 + 1 } chez { 42 }")
+    parseExternDef("extern def read(s: String) at {io}: Int = default { 42 } js { 1 + 1 } chez { 42 }")
     parseExternDef("extern \"console.log(42)\"")
     parseExternDef("extern \"\"\"console.log(42)\"\"\"")
     parseExternDef("extern type Complex")
@@ -1596,7 +1599,7 @@ class ParserTests extends munit.FunSuite {
     parseExternDef("extern resource withFile: [A](String) { () => A } => A")
     parseExternDef("extern include \"path/to/file\"")
     parseExternDef("extern js \"\"\"console.log(42)\"\"\"")
-    parseExternDef("extern pure def read(s: String): String = default { s }")
+    parseExternDef("extern def read(s: String) at {}: String = default { s }")
     parseExternDef("extern def read(s: String): String = \"${s}\"")
     parseProgram(
       "extern def println(value: String): Unit =" +

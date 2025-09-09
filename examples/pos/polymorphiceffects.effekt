@@ -6,7 +6,7 @@ interface Forall[E] {
   def forallOp(): E
 }
 
-def handle[E](f: () => Unit / {Exists, Forall[E]} at {io}): Unit = try {
+def handle[E](f: () => Unit / {Exists, Forall[E]} at io): Unit = try {
   f()
 } with Exists {
   def existsOp[E]() = ()

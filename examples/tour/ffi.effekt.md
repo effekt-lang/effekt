@@ -49,7 +49,7 @@ Sometimes, you want to include a whole JavaScript file containing your favorite 
 so that you can write bindings for it later.
 You can do that in Effekt with the following code:
 
-```effekt:sketch
+```effekt:ignore
 extern include js "./mycoollibrary.js"
 ```
 
@@ -85,18 +85,18 @@ example()
 ## Captures
 
 Not all extern definitions are pure.
-Since Effekt doesn't know anything about externs, you should manually annotate the [capture](./captures) of your extern function as `extern <capture> def ...`
+Since Effekt doesn't know anything about externs, you should manually annotate the [capture](./captures) of your extern function as `extern def ... at <capture> ...`
 
-- no capture, usually denoted as `pure`, also writable as `{}`. If an extern definition is annotated as `pure`, it will be considered for inlining by the compiler.
+- no capture, denoted as `{}`. If an extern definition is annotated as `{}`, it will be considered for inlining by the compiler.
 - if you want to allocate into the [global region](./regions) (e.g. the JavaScript heap), use `global`
 - if your function performs I/O (like `println`), use `io` (this is the default capture)
 - if your function captures the continuation, [use `async`](./io) (in the JS backend, control definitions should return a monadic value of type `async`)
-- of course, you can mix and match: `extern def {global, io, control} ...`
+- of course, you can mix and match: `extern def {global, io, async} ...`
 
 For example, the following function gets the current timestamp via the JavaScript FFI, which is an operation that is not pure (it has a side effect):
 
 ```
-extern io def now(): Int =
+extern def now() at io: Int =
   js "Date.now()"
 ```
 
@@ -115,7 +115,7 @@ Effekt has a lot of different backends. One `extern def` can support multiple ba
 Here's how to `mul`tiply two numbers on different backends:
 
 ```
-extern pure def mul(x: Int, y: Int): Int =
+extern def mul(x: Int, y: Int) at {}: Int =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
   llvm "%z = mul %Int ${x}, ${y} ret %Int %z"
@@ -127,7 +127,7 @@ You can also use multiline strings if you need to splice in a lot of code and `d
 // used as a fallback impl for `not`
 def primNot(b: Bool) = if (b) false else true
 
-extern pure def not(b: Bool): Bool =
+extern def not(b: Bool) at {}: Bool =
   js "!${b}"
   llvm """
     %p = extractvalue %Pos ${b}, 0

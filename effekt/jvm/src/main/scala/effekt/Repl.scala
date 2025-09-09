@@ -321,7 +321,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
       val fakeSpan = Span(source, 0, 0, origin = Origin.Synthesized)
       val fullSpan = Span(source, 0, source.content.length, origin = Origin.Synthesized)
       ModuleDecl("interactive", includes,
-        definitions :+ FunDef(IdDef(defName, fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Maybe.None(fakeSpan),
+        definitions :+ FunDef(IdDef(defName, fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Maybe.None(fakeSpan), Maybe.None(fakeSpan),
           body, Info.empty(fakeSpan), fullSpan), None, fullSpan)
     }
 

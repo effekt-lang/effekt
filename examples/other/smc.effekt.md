@@ -205,19 +205,19 @@ def importance[R](n: Int) { p : => R / SMC } = {
 ### Running the Examples
 
 ```effekt:hide
-extern async def sleep(n: Int): Unit =
+extern def sleep(n: Int) at async: Unit =
   jsWeb "$effekt.capture(k => window.setTimeout(() => k(null), n))"
 
 // here we set a time out to allow rerendering
-extern async def reportMeasurementJS[R](w: Double, d: R): Unit =
+extern def reportMeasurementJS[R](w: Double, d: R) at async: Unit =
   jsWeb "$effekt.capture(k => { showPoint(w, d); window.setTimeout(() => k(null), 0)})"
 
-extern async def reportDiscreteMeasurementJS[R](w: Double, d: R): Unit =
+extern def reportDiscreteMeasurementJS[R](w: Double, d: R) at async: Unit =
   jsWeb "$effekt.capture(k => { showPoint(w, d, { discrete: true }); window.setTimeout(() => k(null), 0)})"
 
 
 // here we set a time out to allow rerendering
-extern io def setupGraphJS(): Unit =
+extern def setupGraphJS() at io: Unit =
   jsWeb "setup()"
 ```
 To visualize the results, we define the following helper function `report` that

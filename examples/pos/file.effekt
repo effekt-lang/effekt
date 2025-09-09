@@ -7,7 +7,7 @@ def withFile[T](path: String) { prog: {FileHandle} => T }: T =
 
 def fileExample() = {
   withFile("A.txt") { {fileA: FileHandle} =>
-    val offsetReader : Int => Int at {fileA} =
+    val offsetReader : Int => Int at fileA =
       withFile("B.txt") { {fileB: FileHandle} =>
         val offset = fileB.readByte(0);
         box { (pos: Int) => fileA.readByte(pos + offset) }
