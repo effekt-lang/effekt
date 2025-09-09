@@ -754,8 +754,8 @@ class VMTests extends munit.FunSuite {
     )),
   )
 
-  val compiling_sequent_calculus: Seq[(File, Option[Summary])] = Seq(
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "ack.effekt" -> Some(Summary(
+  val folklore_to_fact: Seq[(File, Option[Summary])] = Seq(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "ack.effekt" -> Some(Summary(
       staticDispatches = 65,
       dynamicDispatches = 0,
       patternMatches = 0,
@@ -770,7 +770,7 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "ack_goto.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "ack_goto.effekt" -> Some(Summary(
       staticDispatches = 65,
       dynamicDispatches = 30,
       patternMatches = 0,
@@ -785,37 +785,7 @@ class VMTests extends munit.FunSuite {
       shifts = 30,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "boyer.effekt" -> Some(Summary(
-      staticDispatches = 14378303,
-      dynamicDispatches = 717624,
-      patternMatches = 23083633,
-      branches = 4865861,
-      pushedFrames = 12561050,
-      poppedFrames = 12561050,
-      allocations = 38231904,
-      closures = 3041208,
-      variableReads = 0,
-      variableWrites = 0,
-      resets = 0,
-      shifts = 0,
-      resumes = 0
-    )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "constraints.effekt" -> Some(Summary(
-      staticDispatches = 894047,
-      dynamicDispatches = 60355,
-      patternMatches = 1388933,
-      branches = 432810,
-      pushedFrames = 797579,
-      poppedFrames = 797579,
-      allocations = 1003044,
-      closures = 10,
-      variableReads = 0,
-      variableWrites = 0,
-      resets = 0,
-      shifts = 0,
-      resumes = 0
-    )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "cps_tak.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "cps_tak.effekt" -> Some(Summary(
       staticDispatches = 469,
       dynamicDispatches = 352,
       patternMatches = 0,
@@ -830,22 +800,7 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
-    //    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "cryptarithm1.effekt" -> Some(Summary(
-    //      staticDispatches = 44977545,
-    //      dynamicDispatches = 0,
-    //      patternMatches = 74007933,
-    //      branches = 3628825,
-    //      pushedFrames = 40939622,
-    //      poppedFrames = 40939622,
-    //      allocations = 56068493,
-    //      closures = 0,
-    //      variableReads = 0,
-    //      variableWrites = 0,
-    //      resets = 0,
-    //      shifts = 0,
-    //      resumes = 0
-    //    )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "deriv.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "deriv.effekt" -> Some(Summary(
       staticDispatches = 132,
       dynamicDispatches = 0,
       patternMatches = 235,
@@ -860,7 +815,22 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "even_odd.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "divrec.effekt" -> Some(Summary(
+      staticDispatches = 23,
+      dynamicDispatches = 0,
+      patternMatches = 17,
+      branches = 11,
+      pushedFrames = 23,
+      poppedFrames = 23,
+      allocations = 17,
+      closures = 0,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+    examplesDir / "benchmarks" / "folklore_to_fact" / "even_odd.effekt" -> Some(Summary(
       staticDispatches = 12,
       dynamicDispatches = 0,
       patternMatches = 0,
@@ -875,7 +845,7 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "even_odd_goto.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "even_odd_goto.effekt" -> Some(Summary(
       staticDispatches = 12,
       dynamicDispatches = 0,
       patternMatches = 0,
@@ -890,67 +860,7 @@ class VMTests extends munit.FunSuite {
       shifts = 11,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "fish.effekt" -> Some(Summary(
-      staticDispatches = 989577,
-      dynamicDispatches = 4840,
-      patternMatches = 1657577,
-      branches = 21,
-      pushedFrames = 113427,
-      poppedFrames = 113427,
-      allocations = 1269842,
-      closures = 4840,
-      variableReads = 0,
-      variableWrites = 0,
-      resets = 0,
-      shifts = 0,
-      resumes = 0
-    )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "gcd.effekt" -> Some(Summary(
-      staticDispatches = 20658,
-      dynamicDispatches = 0,
-      patternMatches = 39341,
-      branches = 17169,
-      pushedFrames = 8575,
-      poppedFrames = 8575,
-      allocations = 37661,
-      closures = 0,
-      variableReads = 0,
-      variableWrites = 0,
-      resets = 0,
-      shifts = 0,
-      resumes = 0
-    )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "integer.effekt" -> Some(Summary(
-      staticDispatches = 4026,
-      dynamicDispatches = 792,
-      patternMatches = 2928,
-      branches = 1079,
-      pushedFrames = 3080,
-      poppedFrames = 3080,
-      allocations = 4532,
-      closures = 22,
-      variableReads = 924,
-      variableWrites = 792,
-      resets = 0,
-      shifts = 0,
-      resumes = 0
-    )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "lcss.effekt" -> Some(Summary(
-      staticDispatches = 100605,
-      dynamicDispatches = 215,
-      patternMatches = 187066,
-      branches = 164286,
-      pushedFrames = 92874,
-      poppedFrames = 92874,
-      allocations = 181263,
-      closures = 215,
-      variableReads = 0,
-      variableWrites = 0,
-      resets = 0,
-      shifts = 0,
-      resumes = 0
-    )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "life.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "life.effekt" -> Some(Summary(
       staticDispatches = 950575,
       dynamicDispatches = 0,
       patternMatches = 2554143,
@@ -965,7 +875,7 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "merge.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "merge.effekt" -> Some(Summary(
       staticDispatches = 66,
       dynamicDispatches = 20,
       patternMatches = 62,
@@ -980,7 +890,7 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
-//    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "minimax.effekt" -> Some(Summary(
+//    examplesDir / "benchmarks" / "folklore_to_fact" / "minimax.effekt" -> Some(Summary(
 //      staticDispatches = 114835627,
 //      dynamicDispatches = 0,
 //      patternMatches = 161274589,
@@ -995,7 +905,7 @@ class VMTests extends munit.FunSuite {
 //      shifts = 0,
 //      resumes = 0
 //    )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "motzkin.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "motzkin.effekt" -> Some(Summary(
       staticDispatches = 7014,
       dynamicDispatches = 0,
       patternMatches = 0,
@@ -1010,7 +920,7 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "motzkin_goto.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "motzkin_goto.effekt" -> Some(Summary(
       staticDispatches = 7014,
       dynamicDispatches = 4348,
       patternMatches = 0,
@@ -1025,7 +935,7 @@ class VMTests extends munit.FunSuite {
       shifts = 5333,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "nqueens.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "nqueens.effekt" -> Some(Summary(
       staticDispatches = 770,
       dynamicDispatches = 0,
       patternMatches = 734,
@@ -1040,7 +950,7 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "perm.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "perm.effekt" -> Some(Summary(
       staticDispatches = 29231,
       dynamicDispatches = 0,
       patternMatches = 25494,
@@ -1055,7 +965,7 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "primes.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "primes.effekt" -> Some(Summary(
       staticDispatches = 36,
       dynamicDispatches = 0,
       patternMatches = 26,
@@ -1070,7 +980,7 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "sudan.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "sudan.effekt" -> Some(Summary(
       staticDispatches = 5,
       dynamicDispatches = 0,
       patternMatches = 0,
@@ -1085,7 +995,7 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "sudan_goto.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "sudan_goto.effekt" -> Some(Summary(
       staticDispatches = 5,
       dynamicDispatches = 3,
       patternMatches = 0,
@@ -1100,7 +1010,7 @@ class VMTests extends munit.FunSuite {
       shifts = 3,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "tail_fib.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "tail_fib.effekt" -> Some(Summary(
       staticDispatches = 11,
       dynamicDispatches = 0,
       patternMatches = 0,
@@ -1115,7 +1025,7 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "tak.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "tak.effekt" -> Some(Summary(
       staticDispatches = 469,
       dynamicDispatches = 0,
       patternMatches = 0,
@@ -1130,7 +1040,7 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "tak_goto.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "tak_goto.effekt" -> Some(Summary(
       staticDispatches = 469,
       dynamicDispatches = 352,
       patternMatches = 0,
@@ -1145,7 +1055,7 @@ class VMTests extends munit.FunSuite {
       shifts = 352,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "takl.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "takl.effekt" -> Some(Summary(
       staticDispatches = 4955,
       dynamicDispatches = 0,
       patternMatches = 16827,
@@ -1154,6 +1064,114 @@ class VMTests extends munit.FunSuite {
       poppedFrames = 868,
       allocations = 37,
       closures = 0,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+  )
+
+  val nofib: Seq[(File, Option[Summary])] = Seq(
+    examplesDir / "benchmarks" / "nofib" / "boyer.effekt" -> Some(Summary(
+      staticDispatches = 14378303,
+      dynamicDispatches = 717624,
+      patternMatches = 23083633,
+      branches = 4865861,
+      pushedFrames = 12561050,
+      poppedFrames = 12561050,
+      allocations = 38231904,
+      closures = 3041208,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+    examplesDir / "benchmarks" / "nofib" / "constraints.effekt" -> Some(Summary(
+      staticDispatches = 894047,
+      dynamicDispatches = 60355,
+      patternMatches = 1388933,
+      branches = 432810,
+      pushedFrames = 797579,
+      poppedFrames = 797579,
+      allocations = 1003044,
+      closures = 10,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+    //    examplesDir / "benchmarks" / "nofib" / "cryptarithm1.effekt" -> Some(Summary(
+    //      staticDispatches = 44977545,
+    //      dynamicDispatches = 0,
+    //      patternMatches = 74007933,
+    //      branches = 3628825,
+    //      pushedFrames = 40939622,
+    //      poppedFrames = 40939622,
+    //      allocations = 56068493,
+    //      closures = 0,
+    //      variableReads = 0,
+    //      variableWrites = 0,
+    //      resets = 0,
+    //      shifts = 0,
+    //      resumes = 0
+    //    )),
+    examplesDir / "benchmarks" / "nofib" / "fish.effekt" -> Some(Summary(
+      staticDispatches = 989577,
+      dynamicDispatches = 4840,
+      patternMatches = 1657577,
+      branches = 21,
+      pushedFrames = 113427,
+      poppedFrames = 113427,
+      allocations = 1269842,
+      closures = 4840,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+    examplesDir / "benchmarks" / "nofib" / "gcd.effekt" -> Some(Summary(
+      staticDispatches = 20658,
+      dynamicDispatches = 0,
+      patternMatches = 39341,
+      branches = 17169,
+      pushedFrames = 8575,
+      poppedFrames = 8575,
+      allocations = 37661,
+      closures = 0,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+    examplesDir / "benchmarks" / "nofib" / "integer.effekt" -> Some(Summary(
+      staticDispatches = 4026,
+      dynamicDispatches = 792,
+      patternMatches = 2928,
+      branches = 1079,
+      pushedFrames = 3080,
+      poppedFrames = 3080,
+      allocations = 4532,
+      closures = 22,
+      variableReads = 924,
+      variableWrites = 792,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+    examplesDir / "benchmarks" / "nofib" / "lcss.effekt" -> Some(Summary(
+      staticDispatches = 100605,
+      dynamicDispatches = 215,
+      patternMatches = 187066,
+      branches = 164286,
+      pushedFrames = 92874,
+      poppedFrames = 92874,
+      allocations = 181263,
+      closures = 215,
       variableReads = 0,
       variableWrites = 0,
       resets = 0,
@@ -1266,7 +1284,8 @@ class VMTests extends munit.FunSuite {
     duality_of_compilation ++
     effect_handlers_bench ++
     casestudies ++
-    compiling_sequent_calculus ++
+    folklore_to_fact ++
+    nofib ++
     other
 
   def runTest(f: File, expectedSummary: Option[Summary]): Unit =
