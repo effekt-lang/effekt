@@ -400,7 +400,7 @@ enum Def extends Definition {
   case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, info: Info, span: Span)
   case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, info: Info, span: Span)
   case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, info: Info, span: Span)
-  case DefDef(id: IdDef, annot: Maybe[BlockType], block: Term, info: Info, span: Span)
+  case DefDef(id: IdDef, captures: Maybe[CaptureSet], annot: Maybe[BlockType], block: Term, info: Info, span: Span)
 
   case NamespaceDef(id: IdDef, definitions: List[Def], info: Info, span: Span)
 

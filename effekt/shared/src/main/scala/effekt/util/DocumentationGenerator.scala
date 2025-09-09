@@ -194,9 +194,10 @@ trait DocumentationGenerator {
       "span" -> generate(span),
     ))
 
-    case Def.DefDef(id, annot, block, info, span) => obj(HashMap(
+    case Def.DefDef(id, captures, annot, block, info, span) => obj(HashMap(
       "kind" -> str("DefDef"),
       "id" -> generate(id),
+      "captures" -> captures.map(generate).getOrElse(empty),
       "annot" -> annot.map(generate).getOrElse(empty),
       "doc" -> generate(info.doc),
       "span" -> generate(span),

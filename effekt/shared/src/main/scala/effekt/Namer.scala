@@ -135,12 +135,13 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     // allow recursive definitions of objects
-    case d @ source.DefDef(id, annot, source.New(source.Implementation(interface, clauses, _), _), doc, span) =>
+    case d @ source.DefDef(id, captures, annot, source.New(source.Implementation(interface, clauses, _), _), doc, span) =>
       val tpe = Context.at(interface) { resolveBlockRef(interface) }
-      val sym = Binder.DefBinder(Context.nameFor(id), Some(tpe), d)
+      val cpts = captures.unspan.map { resolve }
+      val sym = Binder.DefBinder(Context.nameFor(id), cpts, Some(tpe), d)
       Context.define(id, sym)
 
-    case d @ source.DefDef(id, annot, block, doc, span) =>
+    case d @ source.DefDef(id, captures, annot, block, doc, span) =>
       ()
 
     case f @ source.FunDef(id, tparams, vparams, bparams, captures, annot, body, doc, span) =>
@@ -314,13 +315,14 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, sym)
 
     // already has been preresolved (to enable recursive definitions)
-    case d @ source.DefDef(id, annot, source.New(impl, _), doc, span) =>
+    case d @ source.DefDef(id, captures, annot, source.New(impl, _), doc, span) =>
       resolve(impl)
 
-    case d @ source.DefDef(id, annot, binding, doc, span) =>
+    case d @ source.DefDef(id, captures, annot, binding, doc, span) =>
       val tpe = annot.map(resolveBlockType)
       resolve(binding)
-      Context.define(id, DefBinder(Context.nameFor(id), tpe.unspan, d))
+      val cpts = captures.unspan.map { resolve }
+      Context.define(id, DefBinder(Context.nameFor(id), cpts, tpe.unspan, d))
 
     // FunDef and InterfaceDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) =>

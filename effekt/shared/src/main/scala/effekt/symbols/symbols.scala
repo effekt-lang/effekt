@@ -203,7 +203,7 @@ enum Binder extends TermSymbol {
   case ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder, ValueSymbol
   case RegBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: RegDef) extends Binder, RefBinder
   case VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder, RefBinder, TrackedParam
-  case DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
+  case DefBinder(name: Name, caps: Option[CaptureSet], tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
 }
 export Binder.*
 

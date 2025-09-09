@@ -91,9 +91,14 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       val annotated = sym.annotatedCaptures.getOrElse(inferred)
       // TODO Why do we need to update the annotation on the symbol here? Is the inferred capture for recursive functions
       //   wrong? Problematic example: examples/benchmarks/tree.effekt (chooseHandler has the empty set, but should have {this})
-      Context.annotate(Annotations.Captures, tree.symbol, annotated)
+      Context.annotate(Annotations.Captures, sym, annotated)
       annotated
-
+    case tree @ DefDef(id, captures, annot, block, info, span) =>
+      val sym = tree.symbol      
+      val inferred = query(block)
+      val annotated = sym.caps.getOrElse(inferred)
+      Context.annotate(Annotations.Captures, sym, annotated)
+      annotated
     // regions
     case tree @ RegDef(id, annot, region, binding, doc, span) =>
       val regSymbol = region.symbol.asBlockSymbol

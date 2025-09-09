@@ -88,7 +88,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v @ source.ValDef(id, _, binding, doc, span) =>
       Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
 
-    case v @ source.DefDef(id, annot, binding, doc, span) =>
+    case v @ source.DefDef(id, captures, annot, binding, doc, span) =>
       val sym = v.symbol
       val (definition, bindings) = Context.withBindings {
         Toplevel.Def(sym, transformAsBlock(binding))
@@ -182,7 +182,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         }
         Val(v.symbol, transformedTpe, transformed, transform(rest))
 
-      case v @ source.DefDef(id, annot, binding, doc, span) =>
+      case v @ source.DefDef(id, captures, annot, binding, doc, span) =>
         val sym = v.symbol
         insertBindings {
           Def(sym, transformAsBlock(binding), transform(rest))

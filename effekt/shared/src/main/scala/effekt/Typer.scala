@@ -569,7 +569,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Result(btpe, eff1)
           case _ =>
             Context.annotationOption(Annotations.UnboxParentDef, u) match {
-              case Some(source.DefDef(id, annot, block, doc, span)) =>
+              case Some(source.DefDef(id, captures, annot, block, doc, span)) =>
                 // Since this `unbox` was synthesized by the compiler from `def foo = E`,
                 // it's possible that the user simply doesn't know that they should have used the `val` keyword to specify a value
                 // instead of using `def`; see [issue #130](https://github.com/effekt-lang/effekt/issues/130) for more details
@@ -710,18 +710,18 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case d @ source.FunDef(id, tps, vps, bps, cpt, ret, body, doc, span) =>
       val fun = d.symbol
 
-      // (1) make up a fresh capture unification variable and annotate on function symbol
+      // (1) make up a fresh capture unification variable or use the annotated captures and annotate on function symbol
       val cap = fun.annotatedCaptures.getOrElse(Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d)))
       Context.bind(fun, cap)
 
       // (2) Store the annotated type (important for (mutually) recursive and out-of-order definitions)
       fun.annotatedType.foreach { tpe => Context.bind(fun, tpe) }
 
-    case d @ source.DefDef(id, annot, source.New(source.Implementation(tpe, clauses, _), _), doc, span) =>
+    case d @ source.DefDef(id, cpt, annot, source.New(source.Implementation(tpe, clauses, _), _), doc, span) =>
       val obj = d.symbol
 
-      // (1) make up a fresh capture unification variable
-      val cap = Context.freshCaptVar(CaptUnificationVar.BlockRegion(d))
+      // (1) make up a fresh capture unification variable or use the annotated captures
+      val cap = obj.caps.getOrElse(Context.freshCaptVar(CaptUnificationVar.BlockRegion(d)))
 
       // (2) annotate capture variable and implemented blocktype
       Context.bind(obj, Context.resolvedType(tpe).asInterfaceType, cap)
@@ -894,14 +894,21 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result((), effBind)
 
-      case d @ source.DefDef(id, annot, binding, doc, span) =>
-        given inferredCapture: CaptUnificationVar = Context.freshCaptVar(CaptUnificationVar.BlockRegion(d))
+      case d @ source.DefDef(id, captures, annot, binding, doc, span) =>
+        // this can either be the annotated captures or a fresh capture unification variable
+        val symbolCaptures = Context.lookupCapture(d.symbol)
+        val captVars = symbolCaptures match {
+          case x: CaptUnificationVar => List(x)
+          case _ => Nil
+        }
 
-        // we require inferred Capture to be solved after checking this block.
-        Context.withUnificationScope(List(inferredCapture)) {
-          val Result(t, effBinding) = checkExprAsBlock(binding, d.symbol.tpe)
-          Context.bind(d.symbol, t, inferredCapture)
-          Result((), effBinding)
+        // we require the potential capture variable to be solved after checking this block.
+        Context.withUnificationScope(captVars) {
+          flowingInto(symbolCaptures) {
+            val Result(t, effBinding) = checkExprAsBlock(binding, d.symbol.tpe)
+            Context.bind(d.symbol, t, symbolCaptures)
+            Result((), effBinding)
+          }
         }
 
       case d @ source.ExternDef(captures, id, tps, vps, bps, tpe, bodies, doc, span) => Context.withUnificationScope {
@@ -1755,8 +1762,6 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def commitTypeAnnotations(): Unit = {
     val subst = this.substitution
-
-    var capturesForLSP: List[(Tree, CaptureSet)] = Nil
 
     // Since (in comparison to System C) we now have type directed overload resolution again,
     // we need to make sure the typing context and all the annotations are backtrackable.

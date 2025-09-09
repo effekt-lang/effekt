@@ -542,11 +542,11 @@ class Parser(tokens: Seq[Token], source: Source) {
   def defDef(info: Info): Def =
     val id = consume(`def`) ~> idDef()
 
-    def isBlockDef: Boolean = peek(`:`) || peek(`=`)
+    def isBlockDef: Boolean = peek(`:`) || peek(`=`) || peek(`at`)
 
     if isBlockDef then
       // (: <VALUETYPE>)? `=` <EXPR>
-      DefDef(id, maybeBlockTypeAnnotation(), `=` ~> expr(), info, span())
+      DefDef(id, maybeCaptureSet(), maybeBlockTypeAnnotation(), `=` ~> expr(), info, span())
     else
       // [...](<PARAM>...) {...} `=` <STMT>>
       val (tps, vps, bps) = params()
