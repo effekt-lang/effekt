@@ -240,6 +240,18 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
 
         case Stmt.Let(id, tpe, binding, body) => State.Step(body, env.bind(id, eval(binding, env)), stack, heap)
 
+        case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+          val result = env.lookupBuiltin(callee.id) match {
+            case Builtin(name, impl) =>
+              val arguments = vargs.map(a => eval(a, env))
+              instrumentation.builtin(name)
+              try { impl(runtime)(arguments) } catch { case e => sys error s"Cannot call ${callee} with arguments ${arguments.map {
+                case Value.Literal(l) => s"${l}: ${l.getClass.getName}\n${e.getMessage}"
+                case other => other.toString
+              }.mkString(", ")}" }
+            }
+          State.Step(body, env.bind(id, result), stack, heap)
+
         case Stmt.Return(expr) =>
           val v = eval(expr, env)
           returnWith(v, env, stack, heap)
@@ -481,19 +493,9 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
   }
 
   def eval(e: Expr, env: Env): Value = e match {
-    case DirectApp(b, targs, vargs, Nil) => env.lookupBuiltin(b.id) match {
-      case Builtin(name, impl) =>
-        val arguments = vargs.map(a => eval(a, env))
-        instrumentation.builtin(name)
-        try { impl(runtime)(arguments) } catch { case e => sys error s"Cannot call ${b} with arguments ${arguments.map {
-          case Value.Literal(l) => s"${l}: ${l.getClass.getName}\n${e.getMessage}"
-          case other => other.toString
-        }.mkString(", ")}" }
-    }
-    case DirectApp(b, targs, vargs, bargs) => ???
-    case Pure.ValueVar(id, annotatedType) => env.lookupValue(id)
-    case Pure.Literal(value, annotatedType) => Value.Literal(value)
-    case Pure.PureApp(x, targs, vargs) => env.lookupBuiltin(x.id) match {
+    case Expr.ValueVar(id, annotatedType) => env.lookupValue(id)
+    case Expr.Literal(value, annotatedType) => Value.Literal(value)
+    case Expr.PureApp(x, targs, vargs) => env.lookupBuiltin(x.id) match {
       case Builtin(name, impl) =>
         val arguments = vargs.map(a => eval(a, env))
         instrumentation.builtin(name)
@@ -502,12 +504,12 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           case other => other.toString
         }.mkString(", ")}" }
     }
-    case Pure.Make(data, tag, targs, vargs) =>
+    case Expr.Make(data, tag, targs, vargs) =>
       val result: Value.Data = Value.Data(data, tag, vargs.map(a => eval(a, env)))
       instrumentation.allocate(result)
       result
 
-    case Pure.Box(b, annotatedCapture) => Value.Boxed(eval(b, env))
+    case Expr.Box(b, annotatedCapture) => Value.Boxed(eval(b, env))
   }
 
   def run(main: Id, m: ModuleDecl): Unit = {
