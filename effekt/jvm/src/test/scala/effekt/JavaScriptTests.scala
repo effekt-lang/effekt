@@ -38,7 +38,7 @@ class JavaScriptTests extends EffektTests {
     // unsafe cont
     examplesDir / "pos" / "propagators.effekt",
     // stack overflow
-    examplesDir / "benchmarks" / "compiling_sequent_calculus" / "cps_tak.effekt"
+    examplesDir / "benchmarks" / "folklore_to_fact" / "cps_tak.effekt"
   )
 }
 
