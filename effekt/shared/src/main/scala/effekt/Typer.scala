@@ -896,8 +896,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       case d @ source.DefDef(id, captures, annot, binding, doc, span) =>
         // this can either be the annotated captures or a fresh capture unification variable
-        // println("synthDef")
-        // println(id.name)
         val symbolCaptures = Context.lookupCapture(d.symbol)
         val captVars = symbolCaptures match {
           case x: CaptUnificationVar => List(x)
