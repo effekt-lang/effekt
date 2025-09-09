@@ -241,8 +241,8 @@ object semantics {
     lazy val free: Variables = this match {
       case Computation.Var(id) => Set(id)
       case Computation.Def(closure) => closure.free
-      case Computation.Inline(body, closure) => ???
-      case Computation.Continuation(k) => ???
+      case Computation.Inline(body, closure) => Set.empty // TODO ???
+      case Computation.Continuation(k) => Set.empty // TODO ???
       case Computation.New(interface, operations) => operations.flatMap(_._2.free).toSet
     }
   }
@@ -636,6 +636,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       bind(id, evaluate(binding)) { evaluate(body, k, ks) }
 
     case Stmt.Def(id, block: core.BlockLit, body) if shouldInline(id, block) =>
+      println(s"Marking ${util.show(id)} as inlinable")
       bind(id, Computation.Inline(block, env)) { evaluate(body, k, ks) }
 
     // can be recursive
@@ -715,6 +716,17 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           }.getOrElse {
             evaluate(default.getOrElse { sys.error("Non-exhaustive pattern match.") }, k, ks)
           }
+        // linear usage of the continuation
+        //        case _ if (clauses.size + default.size) <= 1 =>
+        //          NeutralStmt.Match(sc,
+        //            clauses.map { case (id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
+        //              given localEnv: Env = env.bindValue(vparams.map(p => p.id -> p.id))
+        //              val block = Block(tparams, vparams, bparams, nested {
+        //                evaluate(body, k, ks)
+        //              })
+        //              (id, block)
+        //            },
+        //            default.map { stmt => nested { evaluate(stmt, k, ks) } })
         case _ =>
           joinpoint(k, ks) { k => ks =>
             NeutralStmt.Match(sc,
