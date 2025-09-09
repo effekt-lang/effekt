@@ -426,14 +426,19 @@ class NewNormalizer(shouldInline: Id => Boolean) {
     def reifyFrame(k: Frame, escaping: Stack)(using scope: Scope): Frame = k match {
       case Frame.Static(tpe, apply) =>
         val x = Id("x")
-        val body = nested { scope ?=> apply(scope)(x)(Stack.Empty) }
-
-        val k = Id("k")
-        val closureParams = escaping.bound.collect { case p if body.free contains p.id => p }
-        scope.define(k, Block(Nil, ValueParam(x, tpe) :: Nil, closureParams, body))
-
-
-        Frame.Dynamic(Closure(k, closureParams.map { p => Computation.Var(p.id) }))
+        nested { scope ?=> apply(scope)(x)(Stack.Empty) } match {
+          // Avoid trivial continuations like
+          //   def k_6268 = (x_6267: Int_3) {
+          //     return x_6267
+          //   }
+          case BasicBlock(Nil, _: (NeutralStmt.Return | NeutralStmt.App | NeutralStmt.Jump)) =>
+            k
+          case body =>
+            val k = Id("k")
+            val closureParams = escaping.bound.collect { case p if body.free contains p.id => p }
+            scope.define(k, Block(Nil, ValueParam(x, tpe) :: Nil, closureParams, body))
+            Frame.Dynamic(Closure(k, closureParams.map { p => Computation.Var(p.id) }))
+        }
       case Frame.Return => k
       case Frame.Dynamic(label) => k
     }
