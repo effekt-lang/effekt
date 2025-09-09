@@ -4,7 +4,7 @@ package optimizer
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
-import effekt.core.optimizer.Usage.Recursive
+import effekt.core.optimizer.Usage.{ Once, Recursive }
 import kiama.util.Source
 
 object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
@@ -30,18 +30,18 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     if !Context.config.optimize() then return tree;
 
-    val usage = Reachable(Set(mainSymbol), tree)
-
-    val inlineSmall = NewNormalizer { (id, b) =>
-      !usage.get(id).contains(Recursive) && b.size < 20
+    def inlineSmall(usage: Map[Id, Usage]) = NewNormalizer { (id, b) =>
+      usage.get(id).contains(Once) || (!usage.get(id).contains(Recursive) && b.size < 40)
     }
     val dontInline = NewNormalizer { (id, b) => false }
-    val inlineAll = NewNormalizer { (id, b) => !usage.get(id).contains(Recursive) }
+    def inlineUnique(usage: Map[Id, Usage]) = NewNormalizer { (id, b) => usage.get(id).contains(Once) }
+    def inlineAll(usage: Map[Id, Usage]) = NewNormalizer { (id, b) => !usage.get(id).contains(Recursive) }
 
-    tree = Context.timed("new-normalizer-1", source.name) { inlineSmall.run(tree) }
+    tree = Context.timed("new-normalizer-1", source.name) { inlineSmall(Reachable(Set(mainSymbol), tree)).run(tree) }
     Normalizer.assertNormal(tree)
+    tree = StaticArguments.transform(mainSymbol, tree)
     // println(util.show(tree))
-    tree = Context.timed("new-normalizer-2", source.name) { inlineSmall.run(tree) }
+    tree = Context.timed("new-normalizer-2", source.name) { inlineSmall(Reachable(Set(mainSymbol), tree)).run(tree) }
     //    Normalizer.assertNormal(tree)
     //tree = Normalizer.normalize(Set(mainSymbol), tree, Context.config.maxInlineSize().toInt)
 
