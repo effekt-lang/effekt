@@ -386,7 +386,7 @@ object semantics {
 /**
  * A new normalizer that is conservative (avoids code bloat)
  */
-class NewNormalizer(shouldInline: Id => Boolean) {
+class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
 
   import semantics.*
 
@@ -611,7 +611,7 @@ class NewNormalizer(shouldInline: Id => Boolean) {
     case Stmt.Let(id, annotatedTpe, binding, body) =>
       bind(id, evaluate(binding)) { evaluate(body, k, ks) }
 
-    case Stmt.Def(id, block: core.BlockLit, body) if shouldInline(id) =>
+    case Stmt.Def(id, block: core.BlockLit, body) if shouldInline(id, block) =>
       bind(id, Computation.Inline(block, env)) { evaluate(body, k, ks) }
 
     // can be recursive
