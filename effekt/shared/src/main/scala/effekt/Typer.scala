@@ -717,14 +717,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // (2) Store the annotated type (important for (mutually) recursive and out-of-order definitions)
       fun.annotatedType.foreach { tpe => Context.bind(fun, tpe) }
 
-    case d @ source.DefDef(id, cpt, annot, source.New(source.Implementation(tpe, clauses, _), _), doc, span) =>
+    case d @ source.DefDef(id, cpt, annot, body, doc, span) =>
       val obj = d.symbol
 
       // (1) make up a fresh capture unification variable or use the annotated captures
       val cap = obj.caps.getOrElse(Context.freshCaptVar(CaptUnificationVar.BlockRegion(d)))
 
-      // (2) annotate capture variable and implemented blocktype
-      Context.bind(obj, Context.resolvedType(tpe).asInterfaceType, cap)
+      // (2) annotate capture variable
+      Context.bind(obj, cap)
 
     case d @ source.ExternDef(cap, id, tps, vps, bps, tpe, body, doc, span) =>
       val fun = d.symbol
@@ -896,6 +896,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       case d @ source.DefDef(id, captures, annot, binding, doc, span) =>
         // this can either be the annotated captures or a fresh capture unification variable
+        // println("synthDef")
+        // println(id.name)
         val symbolCaptures = Context.lookupCapture(d.symbol)
         val captVars = symbolCaptures match {
           case x: CaptUnificationVar => List(x)
