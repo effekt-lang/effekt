@@ -33,6 +33,7 @@ extern def allocate(size: Int) at global: ByteArray =
     ret %Pos %ret_object2
   """
   chez "(make-bytevector ${size})"
+  vm "bytearray::allocate(Int)"
 
 extern def size(arr: ByteArray) at {}: Int =
   js "${arr}.length"
@@ -42,6 +43,7 @@ extern def size(arr: ByteArray) at {}: Int =
     ret i64 %size
   """
   chez "(bytevector-length ${arr})"
+  vm "bytearray::size(ByteArray)"
 
 extern def unsafeGet(arr: ByteArray, index: Int) at global: Byte =
   js "(${arr})[${index}]"
@@ -54,6 +56,7 @@ extern def unsafeGet(arr: ByteArray, index: Int) at global: Byte =
     ret i8 %element
   """
   chez "(bytevector-u8-ref ${arr} ${index})"
+  vm "bytearray::unsafeGet(ByteArray, Int)"
 
 extern def unsafeSet(arr: ByteArray, index: Int, value: Byte) at global: Unit =
   js "bytearray$set(${arr}, ${index}, ${value})"
@@ -66,6 +69,7 @@ extern def unsafeSet(arr: ByteArray, index: Int, value: Byte) at global: Unit =
     ret %Pos zeroinitializer
   """
   chez "(bytevector-u8-set! ${arr} ${index} ${value})"
+  vm "bytearray::unsafeSet(ByteArray, Int, Byte)"
 
 /// Creates a new ByteArray of size `size` filled with the value `init`
 def bytearray(size: Int, init: Byte): ByteArray = {
@@ -115,6 +119,7 @@ extern def fromString(str: String) at {}: ByteArray =
     ret %Pos ${str}
   """
   chez "(string->utf8 ${str})"
+  vm "bytearray::fromString(String)"
 
 extern def toString(arr: ByteArray) at {}: String =
   js "(new TextDecoder('utf-8').decode(${arr}))"
@@ -123,6 +128,7 @@ extern def toString(arr: ByteArray) at {}: String =
     ret %Pos ${arr}
   """
   chez "(utf8->string ${arr})"
+  vm "bytearray::toString(ByteArray)"
 
 extern js """
   function bytearray$set(bytes, index, value) {
@@ -176,6 +182,7 @@ extern def compareByteArrayImpl(b1: ByteArray, b2: ByteArray) at {}: Int =
     ret %Int %x
   """
   chez "(bytearray$compare ${b1} ${b2})"
+  vm "bytearray::compare(ByteArray, ByteArray)"
 
 def compareByteArray(b1: ByteArray, b2: ByteArray): Ordering = {
   val ret = compareByteArrayImpl(b1, b2)
