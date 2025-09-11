@@ -13,10 +13,9 @@ import scala.collection.mutable
 import scala.collection.immutable.ListMap
 
 // TODO
-//   while linearity is difficult to track bottom up, variable usage is possible
-//   this way deadcode can be eliminated on the way up.
+// - change story of how inlining is implemented. We need to also support toplevel functions that potentially
+//   inline each other. Do we need to sort them topologically? How do we deal with (mutually) recursive definitions?
 //
-// plan: don't inline... this is a separate pass after normalization
 //
 // plan: only introduce parameters for free things inside a block that are bound in the **stack**
 // that is in
@@ -626,7 +625,6 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       k.ret(ks, evaluate(expr))
 
     case Stmt.Val(id, annotatedTpe, binding, body) =>
-      // This push can lead to an eta-redex (a superfluous push...)
       evaluate(binding, k.push(annotatedTpe) { scope => res => k => ks =>
         given Scope = scope
         bind(id, res) { evaluate(body, k, ks) }
@@ -646,9 +644,6 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     case Stmt.Def(id, block, body) =>
       bind(id, evaluate(block, id.name.name, ks)) { evaluate(body, k, ks) }
 
-    // TODO actually remove a cut instead of binding the block argument
-    //   alternatively, we could keep some information about linearity.
-    //   For example, here we are in an active position.
     case Stmt.App(BlockLit(tparams, cparams, vparams, bparams, body), targs, vargs, bargs) =>
       // TODO also bind type arguments in environment
       // TODO substitute cparams???
@@ -658,8 +653,8 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
 
       evaluate(body, k, ks)(using newEnv, scope)
 
-    // TODO here the stack passed to the blocks could be an empty one since we reify it anyways...
     case Stmt.App(callee, targs, vargs, bargs) =>
+      // Here the stack passed to the blocks is an empty one since we reify it anyways...
       val escapingStack = Stack.Empty
       evaluate(callee, "f", escapingStack) match {
         case Computation.Inline(BlockLit(tparams, cparams, vparams, bparams, body), closureEnv) =>
