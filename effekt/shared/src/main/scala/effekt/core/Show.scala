@@ -15,79 +15,80 @@ import scala.annotation.targetName
 import effekt.core.Type.TString
 import effekt.source.FeatureFlag
 import effekt.generator.llvm.Transformer.llvmFeatureFlags
+import effekt.core.ExternBody.StringExternBody
+import effekt.core.ExternBody.Unsupported
 
 object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   override val phaseName: String = "show"
 
-  case class ShowContext(showDefnsMap: Map[List[ValueType], Block.BlockVar], groundTypes: List[ValueType], var defnsToGenerate: collection.mutable.Map[ValueType, Id], infixConcatFn: Block.BlockVar) 
+  case class ShowContext(showDefns: collection.mutable.Map[ValueType, Id], backend: String, externFns: Map[String, Extern.Def]) {
+    def getShowBlockVar(vt: ValueType): Block.BlockVar =
+      val showId = showDefns(vt)
+      Block.BlockVar(showId, BlockType.Function(List.empty, List.empty, List(vt), List.empty, TString), Set.empty)
+
+    def externBlockVar(name: String): Block.BlockVar =
+      val fn = externFns(name)
+      Block.BlockVar(fn.id, BlockType.Function(fn.tparams, fn.cparams, fn.vparams map (_.tpe), fn.bparams map (_.tpe), fn.ret), fn.annotatedCapture)
+  }
 
   override def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = input match {
     case CoreTransformed(source, tree, mod, core) => {
-
-      // Collect all extern definitions that are named "show"
-      // Record what type of values these functions take as arguments
-      // Store these in a Map so we know our ground types
-      // Map[Int -> show#1, Char -> show#2, ...] 
-      val extShowDefns: List[Extern.Def] = core.externs.flatMap(ext => ext match
-        case e: Extern.Def => List(e)
-        case _ => List()
+      // 1. Find ids of relevant extern functions by name
+      val externFnNames = List(
+        "myshow",
+        "infixConcat",
+        "c_bytearray_show_Int",
+        "c_bytearray_show_Byte",
+        "c_bytearray_show_Double",
       )
-      // TODO: Could be more specific in filtering here
-      //       for example only allow functions with one argument
-      //       which return Strings
-      .filter(defn => defn.id.name.name == "show")
+      val externFns = findRelevantExterns(core.externs, externFnNames)
 
-      val myshow = core.externs.flatMap(ext => ext match
-        case e: Extern.Def => List(e)
-        case _ => List()
+      // 2. Define list of base types to synthesize definitions for
+      // 2.1 actual base types (Int, Char, ...)
+      var builtinTypes = Type.Builtins
+      // 2.2 data types without tparams
+      val declarationTypes = core.declarations.flatMap(decl => decl match
+        case Data(id, List(), constructors) => Some(decl)
+        case _ => None
       )
-      .filter(defn => defn.id.name.name == "myshow")
+      // 2.3 data types with targs (later fixed by Mono)
+      // 2.4 externs (hard, if not impossible)
+      // 2.5 Types with user defined show definitions (skip for now, unclear if we even want this)
 
-      val blockVars: List[Block.BlockVar] = extShowDefns.map(defn => 
-        Block.BlockVar(defn.id, BlockType.Function(defn.tparams, defn.cparams, defn.vparams map (_.tpe), defn.bparams map (_.tpe), defn.ret), Set.empty))
-      val showDefnsMap: Map[List[ValueType], Block.BlockVar] = extShowDefns.zip(blockVars).map((defn, bv) => 
-        (defn.vparams.map(_.tpe), bv)).toMap
-
-
-      // TODO: This already assumes there is only one vparam
-      val extGroundTypes = extShowDefns.map(defn => defn.vparams.map(_.tpe)(0))
-
-      // TODO: We also want to include declarations with targs
-      //       if those are called with ground types or types we already have generated a show instance for 
-      val declGroundTypes = core.declarations.flatMap(decl => decl match {
-        case Data(id, List(), constructors) =>
-          List(ValueType.Data(id, List.empty))
-        case _ => List()
-      })
-      val groundTypes = extGroundTypes ++ declGroundTypes
-
-      // TODO: There has to be a better way... right?
-      val infixConcatDef = core.externs.find(ext => ext match {
-        case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) if id.name.name == "infixConcat" => 
-          true
-        case _ => false
-      }).get
-      var infixConcatFn: Block.BlockVar = infixConcatDef match {
-        case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => 
-          BlockVar(id, BlockType.Function(tparams, cparams, vparams map (_.tpe), bparams map (_.tpe), ret), Set())
-        case _ => sys error "Does not happen"
+      // 3. Synthesize `show` definitions, create (ValueType -> (show) Id) map for context
+      // 3.1 figure out which backend we are generating for
+      val backend: String = externFns("myshow").body match {
+        case StringExternBody(featureFlag: FeatureFlag.NamedFeatureFlag, contents) => featureFlag.id
+        case _ => sys error "Should never happen"
       }
+      implicit val ctx: ShowContext = ShowContext(collection.mutable.Map.empty, backend, externFns)
 
-      implicit val ctx: ShowContext = ShowContext(showDefnsMap, groundTypes, collection.mutable.Map.empty, infixConcatFn)
+      // 3.2 generate show instances for base types in that backend
+      val baseShowInstances = generateShowInstancesBases(builtinTypes)
+      // 3.3 generate show instances for declarations
+      val declShowInstances = generateShowInstancesDecls(declarationTypes)
 
-      var transformed = transform(core)
+      // var transformed = transform(core)
+      // println(util.show(transformed))
+      // Some(CoreTransformed(source, tree, mod, transformed))
 
-      println(util.show(transformed))
-
-      Some(CoreTransformed(source, tree, mod, transformed))
+      None
     }
   }
+
+  def findRelevantExterns(externs: List[Extern], names: List[String]): Map[String, Extern.Def] = 
+    var retMap = Map[String, Extern.Def]()
+    externs.foreach({
+      case defn@Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) if names.contains(id.name.name) => 
+        retMap += (id.name.name -> defn)
+      case _ => ()
+    })
+    retMap
 
   def transform(decl: ModuleDecl)(using ctx: ShowContext): ModuleDecl = decl match {
     case ModuleDecl(path, includes, declarations, externs, definitions, exports) => 
       val transformedDefns = definitions map transform
-      val additionalDefns = generateShowInstances(declarations)
       // Remove myshow extern
       // because it only has a dummy implementation which will fail when run
       val filteredExterns = decl.externs.flatMap(ext => ext match
@@ -95,15 +96,8 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         case _ => List()
       )
       .filter(defn => defn.id.name.name != "myshow")
-      ModuleDecl(path, includes, declarations, filteredExterns, transformedDefns ++ additionalDefns, exports)
+      ModuleDecl(path, includes, declarations, filteredExterns, transformedDefns, exports)
   }
-
-  // Q: May externs have show instances on any type
-  //    Ignoring these for now 
-  // def transform(extern: Extern)(using ShowContext): Extern = extern match {
-  //   case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => ???
-  //   case Extern.Include(featureFlag, contents) => Extern.Include(featureFlag, contents)
-  // }
 
   def transform(toplevel: Toplevel)(using ShowContext): Toplevel = toplevel match {
     case Toplevel.Def(id, block) => Toplevel.Def(id, transform(block))
@@ -117,15 +111,11 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     case Unbox(pure) => ???
   }
 
-  def transform(stmt: Stmt)(using ShowContext): Stmt = 
+  def transform(stmt: Stmt)(using ctx: ShowContext): Stmt = 
   stmt match {
     case Let(id, annotatedTpe, PureApp(BlockVar(bid, bannotatedTpe, bannotatedCapt), targs, vargs), body) if bid.name.name == "myshow" => 
       if (targs.length != 1) sys error "expected targs to only have one argument"
-      val targ = targs(0)
-      if (isGroundType(targ))
-        val bvar = getOrAddShow(targ)
-        return Stmt.Val(id, annotatedTpe, Stmt.App(bvar, List.empty, vargs, List.empty), transform(body))
-      sys error "targ was not ground type in PureApp"
+      Stmt.Val(id, annotatedTpe, Stmt.App(ctx.getShowBlockVar(targs(0)), List.empty, vargs, List.empty), transform(body))
     case Let(id, annotatedTpe, binding, body) => Let(id, annotatedTpe, transform(binding), transform(body))
     case Return(expr) => Return(transform(expr))
     // TODO: We might need to do the same thing as in PureApp if we want to allow show(something) instead of something.show
@@ -137,19 +127,100 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     case Make(data, tag, targs, vargs) => Make(data, tag, targs, vargs)
     case PureApp(BlockVar(id, annotatedTpe, annotatedCapt), targs, vargs) if id.name.name == "myshow" => 
       if (targs.length != 1) sys error "expected targs to only have one argument"
-      val targ = targs(0)
-      if (isGroundType(targ))
-        val bvar = getOrAddShow(targ)
-        return Expr.PureApp(bvar, List.empty, vargs)
-      sys error "targ was not ground type in PureApp"
+      Expr.PureApp(ctx.getShowBlockVar(targs(0)), List.empty, vargs)
     case PureApp(b, targs, vargs) => PureApp(b, targs, vargs)
     case o => println(o); ???
   }
 
-  def generateShowInstances(declarations: List[Declaration])(using ctx: ShowContext): List[Toplevel] = 
-    ctx.defnsToGenerate.map((vt, id) => generateShowInstance(declarations, vt, id)).toList
+  def generateShowInstancesBases(baseTypes: List[ValueType])(using ShowContext): List[Toplevel.Def] =
+    baseTypes flatMap generateShowInstance
 
-  def generateShowInstance(declarations: List[Declaration], vt: ValueType, id: Id)(using ctx: ShowContext): Toplevel =
+  // The cases here should match the list effekt.core.Type.Builtins
+  def generateShowInstance(vt: ValueType)(using ctx: ShowContext): Option[Toplevel.Def] = 
+    ctx.backend match {
+      case "llvm" => generateShowInstanceLLVM(vt) 
+    }
+
+  def generateShowInstanceLLVM(vt: ValueType)(using ctx: ShowContext): Option[Toplevel.Def] =
+    val showId = freshShowId
+    val paramId = Id("value")
+    val vparam = ValueParam(paramId, vt)
+    val valueVar = Expr.ValueVar(paramId, vt)
+
+    def generateBlockLit(stmt: Stmt) = BlockLit(List.empty, List.empty, List(vparam), List.empty, stmt)
+    def generateDef(stmt: Stmt): Toplevel.Def = 
+      ctx.showDefns += (vt -> showId)
+      val block = generateBlockLit(stmt)
+      Toplevel.Def(showId, block)
+
+    vt match {
+      case Type.TString =>
+        // (value: String) { return value }
+        val stmt = Stmt.Return(valueVar)
+        Some(generateDef(stmt))
+      case Type.TUnit =>
+        /* 
+        (value: Unit) {
+          "()"
+        }
+        */
+        val stmt = Stmt.Return(Expr.Literal("()", TString))
+        Some(generateDef(stmt))
+      case Type.TInt | Type.TChar =>
+        /* 
+        (value: Int) {
+          %z = call %Pos @c_bytearray_show_Int(%Int ${value})
+          ret %Pos %z
+        }
+        */
+        val blockVar = ctx.externBlockVar("c_bytearray_show_Int")
+        val call = Expr.PureApp(blockVar, List.empty, List(valueVar))
+        val stmt = Stmt.Return(call)
+        Some(generateDef(stmt))
+      case Type.TByte =>
+        /* 
+        (value: Byte) {
+          %z = call %Pos @c_bytearray_show_Byte(%Byte ${value})
+          ret %Pos %z
+        }
+        */
+        val blockVar = ctx.externBlockVar("c_bytearray_show_Byte")
+        val call = Expr.PureApp(blockVar, List.empty, List(valueVar))
+        val stmt = Stmt.Return(call)
+        Some(generateDef(stmt))
+      case Type.TDouble =>
+        /* 
+        (value: Double) {
+          %z = call %Pos @c_bytearray_show_Double(%Double ${value})
+          ret %Pos %z
+        }
+        */
+        val blockVar = ctx.externBlockVar("c_bytearray_show_Double")
+        val call = Expr.PureApp(blockVar, List.empty, List(valueVar))
+        val stmt = Stmt.Return(call)
+        Some(generateDef(stmt))
+      case Type.TBoolean =>
+        // if (value) "true" else "false"
+        val stmt = Stmt.If(valueVar, Stmt.Return(Expr.Literal("true", TString)), Stmt.Return(Expr.Literal("false", TString)))
+        Some(generateDef(stmt))
+
+      case _ => println(s"Missing case for vt: ${vt}"); None
+
+    }
+
+  def generateShowInstancesDecls(declarations: List[Declaration])(using ShowContext): List[Toplevel.Def] = 
+    declarations flatMap generateShowInstance
+
+  def generateShowInstance(decl: Declaration)(using ctx: ShowContext): Option[Toplevel.Def] = decl match {
+    case dataDecl: Declaration.Data => 
+      val freshId = freshShowId
+      val toplevel = generateShowInstance(dataDecl, freshId)
+      ctx.showDefns += (ValueType.Data(dataDecl.id, List.empty) -> freshId)
+      Some(toplevel)
+    case _ => None
+  }
+
+  def generateShowInstance(declarations: List[Declaration], vt: ValueType, id: Id)(using ctx: ShowContext): Toplevel.Def =
     vt match {
       case ValueType.Data(name, targs) => 
         declarations.find(decl => decl.id == name).get match {
@@ -160,7 +231,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     }
     ???
 
-  def generateShowInstance(decl: Declaration.Data, id: Id)(using ShowContext): Toplevel =
+  def generateShowInstance(decl: Declaration.Data, id: Id)(using ShowContext): Toplevel.Def =
     val defnId = id
     val valueId = Id("value")
     val valueTpe = ValueType.Data(decl.id, List.empty)
@@ -187,8 +258,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     val defns = constructorStmts.zip(constructorIdVparams)
     val stmt = nestDefns(defns, returnVal)
 
-    val finalDefn = Toplevel.Def(defnId, Block.BlockLit(List.empty, List.empty, List(vparam), List.empty, stmt))
-    finalDefn
+    Toplevel.Def(defnId, Block.BlockLit(List.empty, List.empty, List(vparam), List.empty, stmt))
 
   def nestDefns(defns: List[(Stmt, (Id, List[ValueParam]))], default: Stmt): Stmt = defns match 
     case (head, (id, vparams)) :: rest => 
@@ -207,9 +277,9 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   def constructorStmt(constr: Constructor)(using ctx: ShowContext): Stmt = constr match
     case Constructor(id, tparams, List()) => Return(Literal(id.name.name, TString))
     case Constructor(id, tparams, fields) => 
-      val infixConcatBlockVar: Block.BlockVar = ctx.infixConcatFn
+      val infixConcatBlockVar: Block.BlockVar = ctx.externBlockVar("infixConcat")
       val pureFields = fields map fieldPure
-      val concatenated = PureApp(ctx.infixConcatFn, List.empty, List(Literal(id.name.name ++ "(", TString), concatPure(pureFields)))
+      val concatenated = PureApp(infixConcatBlockVar, List.empty, List(Literal(id.name.name ++ "(", TString), concatPure(pureFields)))
       Return(concatenated)
 
   // Convert a list of pure statements to comma-separated concatenated version
@@ -217,27 +287,19 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   //  =>
   // PureApp(concat, List(Literal("Just("), PureApp(concat, List(PureApp(show, x), PureApp(concat, List(Literal(", "), ...))))
   def concatPure(pures: List[Expr])(using ctx: ShowContext): Expr = pures match 
-    case head :: next :: rest => PureApp(ctx.infixConcatFn, List.empty, List(head, PureApp(ctx.infixConcatFn, List.empty, List(Literal(", ", TString), concatPure(next :: rest)))))
-    case head :: Nil => PureApp(ctx.infixConcatFn, List.empty, List(head, Literal(")", TString)))
+    case head :: next :: rest => PureApp(ctx.externBlockVar("infixConcat"), List.empty, List(head, PureApp(ctx.externBlockVar("infixConcat"), List.empty, List(Literal(", ", TString), concatPure(next :: rest)))))
+    case head :: Nil => PureApp(ctx.externBlockVar("infixConcat"), List.empty, List(head, Literal(")", TString)))
     case Nil => Literal(")", TString)
 
   def fieldValueVar(field: Field): Expr = field match
     case Field(id, tpe) => ValueVar(id, tpe)
 
   def fieldPure(field: Field)(using ctx: ShowContext): Expr.PureApp = field match
-      case Field(id, tpe) => PureApp(ctx.showDefnsMap(List(tpe)), List.empty, List(ValueVar(id, tpe)))
+      case Field(id, tpe) => PureApp(ctx.getShowBlockVar(tpe), List.empty, List(ValueVar(id, tpe)))
 
-  def getOrAddShow(vt: ValueType)(using ctx: ShowContext): BlockVar = vt match
-    case ValueType.Boxed(tpe, capt) => ???
-    case ValueType.Data(name, targs) => 
-      val id = ctx.defnsToGenerate.getOrElse(vt, {
-        val freshShowId = Id("myshow")
-        ctx.defnsToGenerate += (vt -> freshShowId)
-        freshShowId
-      })
-      val freshBlockType = BlockType.Function(List.empty, List.empty, List(vt), List.empty, TString)
-      BlockVar(id, freshBlockType, Set.empty)
-    case ValueType.Var(name) => ???
-
-  def isGroundType(vt: ValueType)(using ctx: ShowContext): Boolean = ctx.groundTypes.contains(vt)
+  var freshShowCounter = 0
+  def freshShowId: Id = 
+    val freshId = Id("show" ++ freshShowCounter.toString())
+    freshShowCounter += 1
+    freshId
 }
