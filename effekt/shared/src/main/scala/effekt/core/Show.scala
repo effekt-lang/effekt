@@ -128,11 +128,8 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       sys error "targ was not ground type in PureApp"
     case Let(id, annotatedTpe, binding, body) => Let(id, annotatedTpe, transform(binding), transform(body))
     case Return(expr) => Return(transform(expr))
-    case o => println(o); ???
-  }
-
-  def transform(pure: Pure)(using ShowContext): Pure = pure match {
-    case ValueVar(id, annotatedType) => ValueVar(id, annotatedType)
+    // TODO: We might need to do the same thing as in PureApp if we want to allow show(something) instead of something.show
+    case ImpureApp(id, callee, targs, vargs, bargs, body) => ImpureApp(id, callee, targs, vargs, bargs, body)
     case o => println(o); ???
   }
 
@@ -143,11 +140,9 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       val targ = targs(0)
       if (isGroundType(targ))
         val bvar = getOrAddShow(targ)
-        return Pure.PureApp(bvar, List.empty, vargs)
+        return Expr.PureApp(bvar, List.empty, vargs)
       sys error "targ was not ground type in PureApp"
     case PureApp(b, targs, vargs) => PureApp(b, targs, vargs)
-    // TODO: We might need to do the same thing as in PureApp if we want to allow show(something) instead of something.show
-    case DirectApp(b, targs, vargs, bargs) => DirectApp(b, targs, vargs, bargs)
     case o => println(o); ???
   }
 
@@ -221,15 +216,15 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   // Literal("Just("), PureApp(show, x), Literal(", "), PureApp(show, y), Literal(")")
   //  =>
   // PureApp(concat, List(Literal("Just("), PureApp(concat, List(PureApp(show, x), PureApp(concat, List(Literal(", "), ...))))
-  def concatPure(pures: List[Pure])(using ctx: ShowContext): Pure = pures match 
+  def concatPure(pures: List[Expr])(using ctx: ShowContext): Expr = pures match 
     case head :: next :: rest => PureApp(ctx.infixConcatFn, List.empty, List(head, PureApp(ctx.infixConcatFn, List.empty, List(Literal(", ", TString), concatPure(next :: rest)))))
     case head :: Nil => PureApp(ctx.infixConcatFn, List.empty, List(head, Literal(")", TString)))
     case Nil => Literal(")", TString)
 
-  def fieldValueVar(field: Field): Pure = field match
+  def fieldValueVar(field: Field): Expr = field match
     case Field(id, tpe) => ValueVar(id, tpe)
 
-  def fieldPure(field: Field)(using ctx: ShowContext): Pure = field match
+  def fieldPure(field: Field)(using ctx: ShowContext): Expr.PureApp = field match
       case Field(id, tpe) => PureApp(ctx.showDefnsMap(List(tpe)), List.empty, List(ValueVar(id, tpe)))
 
   def getOrAddShow(vt: ValueType)(using ctx: ShowContext): BlockVar = vt match
