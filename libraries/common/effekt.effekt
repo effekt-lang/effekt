@@ -127,7 +127,7 @@ extern def inspect[R](value: R) at io: Unit =
   chez { println(genericShow(value)) }
   vm "effekt::inspect(Any)"
 
-extern pure def myshow[R](value: R): String =
+extern def myshow[R](value: R): String =
   js "$effekt.show(${value})"
   chez "(show_impl ${value})"
   llvm "; Dummy"
