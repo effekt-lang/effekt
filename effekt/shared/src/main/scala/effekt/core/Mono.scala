@@ -133,12 +133,15 @@ def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt 
   case Return(expr) => findConstraints(expr)
   case Val(id, annotatedTpe, binding, body) => findConstraints(binding) ++ findConstraints(body)
   case Var(ref, init, capture, body) => findConstraints(body)
-  case App(callee: BlockVar, targs, vargs, bargs) => List(Constraint(targs.map(findId).toVector, callee.id))
+  case App(callee: BlockVar, targs, vargs, bargs) => 
+    List(Constraint(targs.map(findId).toVector, callee.id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
   // TODO: Very specialized, but otherwise passing an id that matches in monomorphize is hard
   //       although I'm not certain any other case can even happen 
   // TODO: part 2, also update the implementation in monomorphize if changing this
-  case App(Unbox(ValueVar(id, annotatedType)), targs, vargs, bargs) => List(Constraint(targs.map(findId).toVector, id))
-  case Invoke(callee: BlockVar, method, methodTpe, targs, vargs, bargs) => List(Constraint(targs.map(findId).toVector, callee.id))
+  case App(Unbox(ValueVar(id, annotatedType)), targs, vargs, bargs) => 
+    List(Constraint(targs.map(findId).toVector, id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
+  case Invoke(callee: BlockVar, method, methodTpe, targs, vargs, bargs) => 
+    List(Constraint(targs.map(findId).toVector, callee.id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
   case Reset(body) => findConstraints(body)
   case If(cond, thn, els) => findConstraints(cond) ++ findConstraints(thn) ++ findConstraints(els)
   case Def(id, block, body) => findConstraints(block) ++ findConstraints(body)
@@ -161,13 +164,12 @@ def findConstraints(expr: Expr)(using ctx: MonoFindContext): Constraints = expr 
   // Technically targs should still flow
   // Just don't monomorphize
   case DirectApp(b, targs, vargs, bargs) => List.empty
-  case PureApp(b, List(), vargs) => List.empty
+  case PureApp(b, targs, vargs) => List.empty
   case ValueVar(id, annotatedType) => List.empty
   case Literal(value, annotatedType) => List.empty
   case Make(data, tag, targs, vargs) => 
     List(Constraint(data.targs.map(findId).toVector, tag)) // <Int> <: Just
   case Box(b, annotatedCapture) => List.empty
-  case o => println(o); ???
 
 def findId(vt: ValueType)(using ctx: MonoFindContext): TypeArg = vt match
   // TODO: What is the correct TypeArg for Boxed
