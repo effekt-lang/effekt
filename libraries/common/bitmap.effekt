@@ -1,0 +1,65 @@
+import binstream
+import color
+import array
+import stream
+import io/error
+
+record RGBBitmap(width: Int, height: Int, data: Array[RGB])
+
+def bitmap(width: Int, height: Int): RGBBitmap = {
+  RGBBitmap(width, height, array(width * height, ColorNames::white))
+}
+def bitmap(width: Int, height: Int, background: RGB): RGBBitmap = {
+  RGBBitmap(width, height, array(width * height, background))
+}
+def setColor(bmp: RGBBitmap, x: Int, y: Int, color: RGB): Unit / Exception[OutOfBounds] =
+  bmp.data.set(x + y * bmp.width, color)
+def getColor(bmp: RGBBitmap, x: Int, y: Int): RGB / Exception[OutOfBounds] =
+  bmp.data.get(x + y * bmp.width)
+
+def save(bmp: RGBBitmap, filename: String): Unit / Exception[IOError] = {
+  with on[OutOfBounds].panic
+  val headerSize = 54
+  val padSize = mod(bmp.height, 4)
+  val columnSize = bmp.height * 3 + padSize
+  val totalSize = headerSize + columnSize * bmp.width
+  val pixelDataStart = headerSize
+  writeFile(filename){
+    // File header
+    hex"${"BM"} ${totalSize.LE} ${0.LE} ${pixelDataStart.LE}"
+    // DIB header (BITMAPINFOHEADER)
+    hex"${40.LE}"
+    hex"${bmp.width.Signed.LE}${bmp.height.Signed.LE}" // w x h
+    hex"${1.LE.OfWidth(2)}" // 1 color plane
+    hex"${24.LE.OfWidth(2)}" // bpp
+    hex"${0.LE}" // no compression (BI_RGB)
+    hex"${(columnSize * bmp.width).LE}" // raw size of bitmap data
+    hex"${2835.Signed.LE}${2835.Signed.LE}" // resolution (px/m)
+    hex"${0.LE}${0.LE}"
+    // Image data
+    tracking[Byte]{
+      each(0, bmp.width){ x =>
+        each(0, bmp.height){ y =>
+          val c = bmp.getColor(x, y)
+          hex"${toInt(c.b * 255.0).toByte}${toInt(c.g * 255.0).toByte}${toInt(c.r * 255.0).toByte}"
+        }
+        do pad[Byte](4){ 0.toByte }
+      }
+    }
+  }
+}
+
+namespace examples {
+  def main() = {
+    with on[OutOfBounds].panic
+    with on[IOError].panic
+    val size = 600
+    val bmp = bitmap(size, size, ColorNames::white)
+    each(0, size){ x =>
+      each(0, size){ y =>
+        bmp.setColor(x, y, HSV(x.toDouble / size.toDouble, 1.0, y.toDouble / size.toDouble).asRGB)
+      }
+    }
+    bmp.save("./test.bmp")
+  }
+}
