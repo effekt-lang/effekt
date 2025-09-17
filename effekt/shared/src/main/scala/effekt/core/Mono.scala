@@ -107,7 +107,7 @@ def findConstraints(block: Block)(using ctx: MonoFindContext): Constraints = blo
   case BlockVar(id, annotatedTpe: BlockType.Interface, annotatedCapt) => findConstraints(annotatedTpe)
   case BlockVar(id, annotatedTpe: BlockType.Function, annotatedCapt) => findConstraints(annotatedTpe, id)
   case BlockLit(tparams, cparams, vparams, bparams, body) => findConstraints(body)
-  case Unbox(pure) => ???
+  case Unbox(pure) => findConstraints(pure)
   case New(impl) => findConstraints(impl)
 
 def findConstraints(blockType: BlockType.Interface)(using ctx: MonoFindContext): Constraints = blockType match
@@ -263,7 +263,7 @@ def monomorphize(block: Block)(using ctx: MonoContext): Block = block match
   case b: BlockLit => monomorphize(b)
   case b: BlockVar => monomorphize(b)
   case New(impl) => New(monomorphize(impl)) 
-  case o => println(o); ??? 
+  case Unbox(pure) => Unbox(monomorphize(pure))
 
 def monomorphize(impl: Implementation)(using ctx: MonoContext): Implementation = impl match
   case Implementation(interface, operations) => Implementation(monomorphize(interface), operations.map(monomorphize))
@@ -311,6 +311,8 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
     App(Unbox(ValueVar(id, monomorphize(annotatedTpe))), List.empty, vargs map monomorphize, bargs map monomorphize)
   case Let(id, annotatedTpe, binding, body) => Let(id, monomorphize(annotatedTpe), monomorphize(binding), monomorphize(body))
   case If(cond, thn, els) => If(monomorphize(cond), monomorphize(thn), monomorphize(els))
+  case Invoke(Unbox(pure), method, methodTpe, targs, vargs, bargs) =>
+    Invoke(Unbox(monomorphize(pure)), method, methodTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
   case Invoke(BlockVar(id, annotatedTpe, annotatedCapt), method, methodTpe, targs, vargs, bargs) => 
     Invoke(BlockVar(id, monomorphize(annotatedTpe), annotatedCapt), method, methodTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
   // TODO: Monomorphizing here throws an error complaining about a missing implementation
