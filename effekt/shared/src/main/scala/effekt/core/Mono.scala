@@ -100,18 +100,24 @@ def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): Const
       Constraint(constructorArgs, id) // < Just.0 > <: Maybe
     }
   case Interface(id, tparams, properties) => 
-    // tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
+    tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
     List.empty
 
 def findConstraints(block: Block)(using ctx: MonoFindContext): Constraints = block match
-  case BlockVar(id, annotatedTpe, annotatedCapt) => findConstraints(annotatedTpe)
+  case BlockVar(id, annotatedTpe: BlockType.Interface, annotatedCapt) => findConstraints(annotatedTpe)
+  case BlockVar(id, annotatedTpe: BlockType.Function, annotatedCapt) => findConstraints(annotatedTpe, id)
   case BlockLit(tparams, cparams, vparams, bparams, body) => findConstraints(body)
   case Unbox(pure) => ???
   case New(impl) => findConstraints(impl)
 
-def findConstraints(blockType: BlockType)(using ctx: MonoFindContext): Constraints = blockType match
-  case BlockType.Interface(name, targs) => List(Constraint(targs.map(findId).toVector, name))
-  case o => println(o); ???
+def findConstraints(blockType: BlockType.Interface)(using ctx: MonoFindContext): Constraints = blockType match
+  case BlockType.Interface(name, targs) => 
+    List(Constraint(targs.map(findId).toVector, name))
+
+def findConstraints(blockType: BlockType.Function, fnId: Id)(using ctx: MonoFindContext): Constraints = blockType match
+  case BlockType.Function(tparams, cparams, vparams, bparams, result) => 
+    tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, fnId))
+    List()
 
 def findConstraints(impl: Implementation)(using ctx: MonoFindContext): Constraints = impl match 
   case Implementation(interface, operations) => 
