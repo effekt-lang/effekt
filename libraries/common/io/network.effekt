@@ -1,8 +1,61 @@
 module io/network
 
+import stream
 import bytearray
 
 import io/error
+
+
+def client[R](host: String, port: Int) { stream: () => R / {read[Byte], emit[Byte]} }: R / Exception[IOError] = {
+
+  val connection = connect(host, port);
+  with on[IOError].finalize { close(connection) }
+
+  val writeBuffer = bytearray::allocate(4096)
+  var writeBufferOffset = 0
+
+  val readBuffer = bytearray::allocate(4096)
+  var readBufferOffset = 0
+  var readBufferFilled = 0
+
+  def push(i: Int, n: Int): Unit = {
+    val r = write(connection, writeBuffer, i, n)
+    if (r < n) {
+      push(i + r, n - r)
+    }
+  }
+
+  def pull(): Int = {
+    read(connection, readBuffer, 0, readBuffer.size) match {
+      case 0 => pull()
+      case n => n
+    }
+  }
+
+  try {
+    val r = stream()
+    push(0, writeBufferOffset)
+    return r
+  } with emit[Byte] { (byte) =>
+    if (writeBufferOffset >= writeBuffer.size) {
+      push(0, writeBuffer.size)
+      writeBufferOffset = 0
+    }
+    writeBuffer.unsafeSet(writeBufferOffset, byte)
+    writeBufferOffset = writeBufferOffset + 1
+    resume(())
+  } with read[Byte] { () =>
+    if (readBufferOffset >= readBufferFilled) {
+      val n = pull()
+      readBufferOffset = 0
+      readBufferFilled = n
+    }
+    val byte = unsafeGet(readBuffer, readBufferOffset)
+    readBufferOffset = readBufferOffset + 1
+    resume { return byte }
+  }
+}
+
 
 
 /// A TCP handle. Should not be inspected.
