@@ -249,7 +249,7 @@ def collect[A](compare: (A, A) => Ordering at {}) { stream: () => Unit / emit[A]
 namespace returning {
   def collect[A, R](compare: (A, A) => Ordering at {}) { stream: () => R / emit[A] }: (R, Set[A]) =
     try {
-      (stream(), set::empty(compare))
+      (stream(), empty(compare))
     } with emit[A] { (v) =>
       val (r, set) = resume(());
       (r, set.insert(v))
