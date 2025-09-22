@@ -205,6 +205,8 @@ object Type {
   val TString = ValueType.Data(builtins.StringSymbol, Nil)
   val TDouble = ValueType.Data(builtins.DoubleSymbol, Nil)
 
+  val Builtins = List(TUnit, TInt, TChar, TByte, TBoolean, TString, TDouble)
+
   val TRegion = BlockType.Interface(builtins.RegionSymbol, Nil)
 
   val PromptSymbol = Id("Prompt")
