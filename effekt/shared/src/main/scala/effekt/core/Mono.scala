@@ -43,6 +43,9 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             // println()
             // monoDefs.foreach(defn => println(util.show(defn)))
             val newModuleDecl = ModuleDecl(path, includes, monoDecls, externs, monoDefs, exports)
+
+            // println(util.show(newModuleDecl))
+
             return Some(CoreTransformed(source, tree, mod, newModuleDecl))
           }
         }
@@ -56,12 +59,14 @@ type FunctionId = Id
 case class Constraint(lower: Vector[TypeArg], upper: FunctionId)
 type Constraints = List[Constraint]
 
-type Solution = Map[FunctionId, Set[Vector[TypeArg.Base]]]
-type MonoNames = Map[(FunctionId, Vector[TypeArg.Base]), FunctionId]
+type Ground = TypeArg.Base | TypeArg.Boxed
+type Solution = Map[FunctionId, Set[Vector[Ground]]]
+type MonoNames = Map[(FunctionId, Vector[Ground]), FunctionId]
 
 enum TypeArg {
   case Base(val tpe: Id, targs: List[TypeArg])
   case Var(funId: FunctionId, pos: Int)
+  case Boxed(tpe: BlockType, capt: Captures)
 }
 
 // Type Id -> Var
@@ -75,7 +80,7 @@ class MonoFindContext {
 }
 
 case class MonoContext(solution: Solution, names: MonoNames) {
-  var replacementTparams: Map[Id, TypeArg.Base] = Map.empty
+  var replacementTparams: Map[Id, Ground] = Map.empty
 }
 
 def findConstraints(definitions: List[Toplevel])(using MonoFindContext): Constraints =
@@ -85,7 +90,7 @@ def findConstraints(definition: Toplevel)(using ctx: MonoFindContext): Constrain
   case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
     findConstraints(body)
-  case Toplevel.Def(id, block) => ???
+  case Toplevel.Def(id, block) => println(definition); ???
   case Toplevel.Val(id, tpe, binding) => ???
 
 def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): Constraints = declaration match
@@ -178,8 +183,8 @@ def findConstraints(expr: Expr)(using ctx: MonoFindContext): Constraints = expr 
   case Box(b, annotatedCapture) => List.empty
 
 def findId(vt: ValueType)(using ctx: MonoFindContext): TypeArg = vt match
-  // TODO: What is the correct TypeArg for Boxed
-  case ValueType.Boxed(tpe, capt) => ???
+  // TODO: Perhaps recurse into tpe
+  case ValueType.Boxed(tpe, capt) => TypeArg.Boxed(tpe, capt)
   case ValueType.Data(name, targs) => TypeArg.Base(name, targs map findId)
   case ValueType.Var(name) => ctx.typingContext(name)
 
@@ -198,11 +203,11 @@ def solveConstraints(constraints: Constraints): Solution =
     if (previousSolved == solved) return solved
   }
 
-  def solveConstraints(funId: FunctionId): Set[List[TypeArg.Base]] =
+  def solveConstraints(funId: FunctionId): Set[List[Ground]] =
     val filteredConstraints = vecConstraints(funId)
-    var nbs: Set[List[TypeArg.Base]] = Set.empty
+    var nbs: Set[List[Ground]] = Set.empty
     filteredConstraints.foreach(b => 
-      var l: List[List[TypeArg.Base]] = List(List.empty)
+      var l: List[List[Ground]] = List(List.empty)
       def listFromIndex(ind: Int) = if (ind >= l.length) List.empty else l(ind)
       b.foreach({
         case TypeArg.Base(tpe, targs) => l = productAppend(l, List(TypeArg.Base(tpe, targs)))
@@ -210,6 +215,7 @@ def solveConstraints(constraints: Constraints): Solution =
           val funSolved = solved.getOrElse(funId, Set.empty)
           val posArgs = funSolved.map(v => v(pos))
           l = posArgs.zipWithIndex.map((base, ind) => listFromIndex(ind) :+ base).toList
+        case TypeArg.Boxed(tpe, capt) => l = productAppend(l, List(TypeArg.Boxed(tpe, capt)))
       })
       nbs ++= l
     )
@@ -279,6 +285,7 @@ def monomorphize(operation: Operation)(using ctx: MonoContext): Operation = oper
 
 def monomorphize(block: BlockLit)(using ctx: MonoContext): BlockLit = block match
   case BlockLit(tparams, cparams, vparams, bparams, body) => 
+    // TODO: Add the tparams to context here
     BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
 
 def monomorphize(block: BlockVar)(using ctx: MonoContext): BlockVar = block match
@@ -362,7 +369,7 @@ def monomorphize(pure: Pure)(using ctx: MonoContext): Pure = pure match
   case Make(data, tag, targs, vargs) => 
     val replacementData = replacementDataFromTargs(data.name, data.targs)
     Make(replacementData, tag, List.empty, vargs map monomorphize)
-  case o => println(o); ???
+  case Box(b, annotatedCapture) => Box(monomorphize(b), annotatedCapture)
 
 def monomorphize(valueParam: ValueParam)(using ctx: MonoContext): ValueParam = valueParam match 
   case ValueParam(id, tpe) => ValueParam(id, monomorphize(tpe))
@@ -377,20 +384,33 @@ def monomorphize(blockType: BlockType)(using ctx: MonoContext): BlockType = bloc
   case b: BlockType.Interface => monomorphize(b)
 
 def monomorphize(valueType: ValueType)(using ctx: MonoContext): ValueType = valueType match
-  case ValueType.Var(name) => ValueType.Var(ctx.replacementTparams(name).tpe)
+  case ValueType.Var(name) => ctx.replacementTparams(name) match {
+    case TypeArg.Base(tpe, targs) => ValueType.Var(tpe)
+    case TypeArg.Boxed(tpe, capt) => ValueType.Boxed(tpe, capt)
+  }
   case ValueType.Data(name, targs) => replacementDataFromTargs(name, targs)
-  case o => println(o); ???
+  case ValueType.Boxed(tpe, capt) => ValueType.Boxed(monomorphize(tpe), capt)
 
 var monoCounter = 0
-def freshMonoName(baseId: Id, tpe: TypeArg.Base): Id =
+def freshMonoName(baseId: Id, tpe: Ground): Id =
   monoCounter += 1
-  Id(baseId.name.name + tpe.tpe.name.name + monoCounter)
+  tpe match {
+    case TypeArg.Base(tpe, targs) => 
+      Id(baseId.name.name + tpe.name.name + monoCounter)
+    case TypeArg.Boxed(tpe, capt) =>
+      // TODO: Fix naming 
+      Id(baseId.name.name + "BOXED" + monoCounter)
+  }
 
-def freshMonoName(baseId: Id, tpes: Vector[TypeArg.Base]): Id =
+def freshMonoName(baseId: Id, tpes: Vector[Ground]): Id =
   if (tpes.length == 0) return baseId
 
   monoCounter += 1
-  val tpesString = tpes.map(tpe => tpe.tpe.name.name).mkString
+  val tpesString = tpes.map({
+    case TypeArg.Base(tpe, targs) => tpe.name.name
+    // TODO: Fix naming
+    case TypeArg.Boxed(tpe, capt) => "BOXED"
+  }).mkString
   Id(baseId.name.name + tpesString + monoCounter)
 
 def replacementDataFromTargs(id: FunctionId, targs: List[ValueType])(using ctx: MonoContext): ValueType.Data =
@@ -400,10 +420,10 @@ def replacementDataFromTargs(id: FunctionId, targs: List[ValueType])(using ctx: 
   //       this seems to work for now
   if (id.name.name == "Resume") return ValueType.Data(id, targs)
 
-  def toTypeArg(vt: ValueType): TypeArg.Base = vt match 
+  def toTypeArg(vt: ValueType): Ground = vt match 
     case ValueType.Data(name, targs) => TypeArg.Base(name, targs map toTypeArg)
     case ValueType.Var(name) => ctx.replacementTparams(name)
-    case ValueType.Boxed(tpe, capt) => ???
+    case ValueType.Boxed(tpe, capt) => TypeArg.Boxed(tpe, capt)
 
-  val baseTypes: List[TypeArg.Base] = targs map toTypeArg
+  val baseTypes: List[Ground] = targs map toTypeArg
   ValueType.Data(ctx.names((id, baseTypes.toVector)), List.empty)
