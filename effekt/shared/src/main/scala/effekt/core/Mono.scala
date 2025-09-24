@@ -90,8 +90,10 @@ def findConstraints(definition: Toplevel)(using ctx: MonoFindContext): Constrain
   case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
     findConstraints(body)
-  case Toplevel.Def(id, block) => println(definition); ???
-  case Toplevel.Val(id, tpe, binding) => ???
+  case Toplevel.Def(id, block) => 
+    findConstraints(block)
+  case Toplevel.Val(id, tpe, binding) => 
+    findConstraints(binding)
 
 def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): Constraints = declaration match
   // Maybe[T] { Just[](x: T) }
@@ -247,8 +249,10 @@ def monomorphize(toplevel: Toplevel)(using ctx: MonoContext): List[Toplevel] = t
       ctx.replacementTparams ++= replacementTparams
       Toplevel.Def(ctx.names(id, baseTypes), BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body)))
     )
-  case Toplevel.Def(id, block) => ???
-  case Toplevel.Val(id, tpe, binding) => ???
+  case Toplevel.Def(id, block) => 
+    List(Toplevel.Def(id, monomorphize(block)))
+  case Toplevel.Val(id, tpe, binding) => 
+    List(Toplevel.Val(id, monomorphize(tpe), monomorphize(binding)))
 
 def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] = decl match
   case Data(id, List(), constructors) => List(decl)
