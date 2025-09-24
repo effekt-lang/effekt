@@ -155,7 +155,11 @@ def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt 
     List(Constraint(targs.map(findId).toVector, callee.id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
   case Reset(body) => findConstraints(body)
   case If(cond, thn, els) => findConstraints(cond) ++ findConstraints(thn) ++ findConstraints(els)
-  case Def(id, block, body) => findConstraints(block) ++ findConstraints(body)
+  case Def(id, BlockLit(tparams, cparams, vparams, bparams, bbody), body) => 
+    tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
+    findConstraints(bbody) ++ findConstraints(body)
+  case Def(id, block, body) => 
+    findConstraints(block) ++ findConstraints(body)
   case Shift(prompt, body) => findConstraints(prompt) ++ findConstraints(body)
   case Match(scrutinee, clauses, default) => clauses.map(_._2).flatMap(findConstraints) ++ findConstraints(default)
   case Resume(k, body) => findConstraints(k) ++ findConstraints(body)
@@ -327,6 +331,18 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
   // TODO: Monomorphizing here throws an error complaining about a missing implementation
   //       Not sure what is missing, altough it does works like this
   case Reset(body) => Reset(body)
+  case Def(id, BlockLit(tparams, cparams, vparams, bparams, bbody), body) =>
+    val monoTypes = ctx.solution(id).toList
+    // Monomorphizing inner functions may yield multiple definitions
+    // which then need to be nested
+    def nestDefs(defnTypes: List[Vector[Ground]]): Stmt = defnTypes match {
+      case head :: next => 
+        val replacementTparams = tparams.zip(head).toMap
+        ctx.replacementTparams ++= replacementTparams
+        Stmt.Def(ctx.names(id, head), BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(bbody)), nestDefs(next))
+      case Nil => monomorphize(body)
+    }
+    nestDefs(monoTypes)
   case Def(id, block, body) => Def(id, monomorphize(block), monomorphize(body))
   case Shift(prompt, body) => Shift(monomorphize(prompt), monomorphize(body))
   case Match(scrutinee, clauses, default) =>
