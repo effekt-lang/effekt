@@ -153,8 +153,15 @@ def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt 
   // TODO: part 2, also update the implementation in monomorphize if changing this
   case App(Unbox(ValueVar(id, annotatedType)), targs, vargs, bargs) => 
     List(Constraint(targs.map(findId).toVector, id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
+  case App(callee, targs, vargs, bargs) =>
+    findConstraints(callee) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
+  // TODO: Maybe need to do something with methodTpe
   case Invoke(callee: BlockVar, method, methodTpe, targs, vargs, bargs) => 
     List(Constraint(targs.map(findId).toVector, callee.id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
+  case Invoke(Unbox(ValueVar(id, annotatedType)), method, methodTpe, targs, vargs, bargs) =>
+    List(Constraint(targs.map(findId).toVector, id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
+  case Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
+    findConstraints(callee) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
   case Reset(body) => findConstraints(body)
   case If(cond, thn, els) => findConstraints(cond) ++ findConstraints(thn) ++ findConstraints(els)
   case Def(id, BlockLit(tparams, cparams, vparams, bparams, bbody), body) => 
@@ -170,7 +177,6 @@ def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt 
   case Alloc(id, init, region, body) => findConstraints(init) ++ findConstraints(body)
   case Region(body) => findConstraints(body)
   case Hole(span) => List.empty
-  case o => println(o); ???
 
 def findConstraints(opt: Option[Stmt])(using ctx: MonoFindContext): Constraints = opt match 
   case None => List.empty
@@ -310,7 +316,8 @@ def monomorphize(blockVar: BlockVar, replacementId: FunctionId)(using ctx: MonoC
   case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) => 
     val monoAnnotatedTpe = BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
     BlockVar(replacementId, monoAnnotatedTpe, annotatedCapt)
-  case o => println(o); ???
+  case BlockVar(id, annotatedTpe: BlockType.Interface, annotatedCapt) =>
+    BlockVar(id, monomorphize(annotatedTpe), annotatedCapt)
 
 def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
   case Return(expr) => Return(monomorphize(expr))
@@ -326,12 +333,18 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
   case App(Unbox(ValueVar(id, annotatedTpe)), targs, vargs, bargs) =>
     val replacementData = replacementDataFromTargs(id, targs)
     App(Unbox(ValueVar(id, monomorphize(annotatedTpe))), List.empty, vargs map monomorphize, bargs map monomorphize)
+  case App(callee, targs, vargs, bargs) =>
+    App(monomorphize(callee), List.empty, vargs map monomorphize, bargs map monomorphize)
   case Let(id, annotatedTpe, binding, body) => Let(id, monomorphize(annotatedTpe), monomorphize(binding), monomorphize(body))
   case If(cond, thn, els) => If(monomorphize(cond), monomorphize(thn), monomorphize(els))
   case Invoke(Unbox(pure), method, methodTpe, targs, vargs, bargs) =>
     Invoke(Unbox(monomorphize(pure)), method, methodTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
   case Invoke(BlockVar(id, annotatedTpe, annotatedCapt), method, methodTpe, targs, vargs, bargs) => 
     Invoke(BlockVar(id, monomorphize(annotatedTpe), annotatedCapt), method, methodTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
+  case Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
+    Invoke(monomorphize(callee), method, methodTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
+  case Resume(k, body) =>
+    Resume(monomorphize(k), monomorphize(body))
   // TODO: Monomorphizing here throws an error complaining about a missing implementation
   //       Not sure what is missing, altough it does works like this
   case Reset(body) => Reset(body)
@@ -360,7 +373,6 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
     Alloc(id, monomorphize(init), region, monomorphize(body))
   case Region(body) => Region(monomorphize(body))
   case Hole(span) => Hole(span)
-  case o => println(o); ???
 
 def monomorphize(opt: Option[Stmt])(using ctx: MonoContext): Option[Stmt] = opt match
   case None => None
@@ -380,7 +392,8 @@ def monomorphize(expr: Expr)(using ctx: MonoContext): Expr = expr match
   case Box(b, annotatedCapture) => 
     // TODO: Does this need other handling?
     Box(b, annotatedCapture)
-  case o => println(o); ???
+  case ValueVar(id, annotatedType) =>
+    ValueVar(id, monomorphize(annotatedType))
 
 def monomorphize(pure: Pure)(using ctx: MonoContext): Pure = pure match
   case ValueVar(id, annotatedType) => ValueVar(id, monomorphize(annotatedType))
