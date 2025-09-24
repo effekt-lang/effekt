@@ -136,10 +136,30 @@ define private %Prompt @freshPrompt() {
 
 ; Garbage collection
 
+
+@freeList = global ptr null
+
+define private %Object @myMalloc(i64 %size) {
+    %freeList = load ptr, ptr @freeList
+    %nextFree = getelementptr i8, ptr %freeList, i64 %size
+    store ptr %nextFree, ptr @freeList
+    ret ptr %freeList
+}
+
+define private void @myFree(ptr %object) {
+    ret void
+}
+
+define private void @initializeMemory() {
+    %freeList = call ptr @malloc(i64 4294967296)
+    store ptr %freeList, ptr @freeList
+    ret void
+}
+
 define private %Object @newObject(%Eraser %eraser, i64 %environmentSize) alwaysinline {
     %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
     %size = add i64 %environmentSize, %headerSize
-    %object = call ptr @malloc(i64 %size)
+    %object = call ptr @myMalloc(i64 %size)
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
     store %ReferenceCount 0, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
@@ -199,7 +219,7 @@ define private void @eraseObject(%Object %object) alwaysinline {
     %eraser = load %Eraser, ptr %objectEraser, !alias.scope !14, !noalias !24
     %environment = call %Environment @objectEnvironment(%Object %object)
     call void %eraser(%Environment %environment)
-    call void @free(%Object %object)
+    call void @myFree(%Object %object)
     br label %done
 
     done:
