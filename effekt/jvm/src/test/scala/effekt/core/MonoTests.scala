@@ -109,4 +109,21 @@ class MonoTests extends AbstractMonoTests {
 
         assertEquals(solveConstraints(constraints), expectedSolved)
     }
+
+    test("correct product of vars") {
+        val constraints = List(
+            Constraint(Vector(BaseTInt), fnId("a")),
+            Constraint(Vector(BaseTString), fnId("a")),
+            Constraint(Vector(BaseTBool), fnId("b")),
+            Constraint(Vector(Var(fnId("a"), 0), Var(fnId("b"), 0)), fnId("c")),
+        )
+
+        val expectedSolved: Solution = Map(
+            fnId("a") -> Set(Vector(BaseTInt), Vector(BaseTString)),
+            fnId("b") -> Set(Vector(BaseTBool)),
+            fnId("c") -> Set(Vector(BaseTInt, BaseTBool), Vector(BaseTString, BaseTBool)),
+        )
+
+        assertEquals(solveConstraints(constraints), expectedSolved)
+    }
 }
