@@ -43,11 +43,9 @@ def shutdown(listener: Listener): Unit =
   internal::shutdown(listener)
 
 
-def streaming[R](connection: Connection) { stream: () => R / {read[ByteArray], emit[ByteArray]} }: R / Exception[IOError] =
+def streaming[R](connection: Connection) { program: () => R / {read[ByteArray], emit[ByteArray]} }: R / Exception[IOError] =
   try {
-    val r = stream()
-    close(connection)
-    return r
+    program()
   } with emit[ByteArray] { bytes =>
     write(connection, bytes, 0, bytes.size)
     resume(())
@@ -58,7 +56,6 @@ def streaming[R](connection: Connection) { stream: () => R / {read[ByteArray], e
       case r => resume { bytes.resize(r) }
     }
   }
-
 
 namespace internal {
 
