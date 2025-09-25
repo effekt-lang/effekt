@@ -4,7 +4,6 @@ package optimizer
 
 import effekt.source.Span
 import effekt.core.optimizer.semantics.{ Computation, NeutralStmt }
-import effekt.core.Pure
 import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR }
 import effekt.symbols.builtins.AsyncCapability
 import kiama.output.ParenPrettyPrinter
@@ -620,24 +619,24 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
   }
 
   def evaluate(expr: Expr)(using env: Env, scope: Scope): Addr = expr match {
-    case Pure.ValueVar(id, annotatedType) =>
+    case core.Pure.ValueVar(id, annotatedType) =>
       env.lookupValue(id)
 
-    case Pure.Literal(value, annotatedType) =>
+    case core.Pure.Literal(value, annotatedType) =>
       scope.allocate("x", Value.Literal(value, annotatedType))
 
     // right now everything is stuck... no constant folding ...
-    case Pure.PureApp(f, targs, vargs) =>
+    case core.Pure.PureApp(f, targs, vargs) =>
       scope.allocate("x", Value.Extern(f, targs, vargs.map(evaluate)))
 
     case DirectApp(f, targs, vargs, bargs) =>
       assert(bargs.isEmpty)
       scope.run("x", f, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", Stack.Empty)))
 
-    case Pure.Make(data, tag, targs, vargs) =>
+    case core.Pure.Make(data, tag, targs, vargs) =>
       scope.allocate("x", Value.Make(data, tag, targs, vargs.map(evaluate)))
 
-    case Pure.Box(b, annotatedCapture) =>
+    case core.Pure.Box(b, annotatedCapture) =>
       val comp = evaluate(b, "x", Stack.Empty)
       scope.allocate("x", Value.Box(comp, annotatedCapture))
   }
