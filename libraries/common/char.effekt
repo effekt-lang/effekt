@@ -5,6 +5,7 @@ import effekt
 import exception
 import option
 import result
+import stream
 
 
 /// Checks if the given character is an ASCII whitespace
@@ -175,3 +176,89 @@ def utf16UnitCount(codepoint: Char): Int = codepoint match {
 extern def charWidth(c: Char) at {}: Int =
   // JavaScript strings are UTF-16 where every unicode character after 0xffff takes two units
   js "(${c} > 0xffff) ? 2 : 1"
+
+
+def writeLine { body: () => Unit / emit[Char] }: Unit / emit[Char] =
+  returning::writeLine[Unit]{body}
+
+def readLine { body: () => Unit / read[Char] }: Unit / {read[Char], stop} =
+  returning::readLine[Unit]{body}
+
+namespace returning {
+  def writeLine[R] { body: () => R / emit[Char] }: R / emit[Char] = {
+    val result = body()
+    do emit('\n')
+    return result
+  }
+
+  def readLine[R] { body: () => R / read[Char] }: R / {read[Char], stop} = {
+    var stopped = false
+    try {
+      body()
+    } with read[Char] {
+      if(stopped){
+        resume { do stop() }
+      } else {
+        do read[Char] match {
+          case '\n' => stopped = true; resume { do stop() }
+          case char => resume { return char }
+        }
+      }
+    }
+  }
+}
+
+def decodeChar(): Char / {read[Byte], stop} = {
+  val b = do read().toInt
+  if (b < 128) {
+    b.toChar
+  } else if (b < 224) {
+    val part1 = bitwiseShl(bitwiseAnd(b, 31), 6)
+    val part2 = bitwiseAnd(do read().toInt, 63)
+    bitwiseOr(part1, part2).toChar
+  } else if (b < 240) {
+    val part1 = bitwiseShl(bitwiseAnd(b, 15), 12)
+    val part2 = bitwiseShl(bitwiseAnd(do read().toInt, 63), 6)
+    val part3 = bitwiseAnd(do read().toInt, 63)
+    bitwiseOr(bitwiseOr(part1, part2), part3).toChar
+  } else {
+    val part1 = bitwiseShl(bitwiseAnd(b, 7), 18)
+    val part2 = bitwiseShl(bitwiseAnd(do read().toInt, 63), 12)
+    val part3 = bitwiseShl(bitwiseAnd(do read().toInt, 63), 6)
+    val part4 = bitwiseAnd(do read().toInt, 63)
+    bitwiseOr(bitwiseOr(bitwiseOr(part1, part2), part3), part4).toChar
+  }
+}
+
+def encodeChar(char: Char): Unit / emit[Byte] = {
+  val code = char.toInt
+  if (code < 128) {
+    do emit(code.toByte)
+  } else if (code < 2048) {
+    do emit(bitwiseOr(192, bitwiseShr(code, 6)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
+  } else if (code < 65536) {
+    do emit(bitwiseOr(224, bitwiseShr(code, 12)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 6), 63)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
+  } else {
+    do emit(bitwiseOr(240, bitwiseShr(code, 18)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 12), 63)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 6), 63)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
+  }
+}
+
+def decodeUTF8[R] { reader: () => R / read[Char] }: R / read[Byte] =
+  try {
+    reader()
+  } with read[Char] {
+    resume { decodeChar() }
+  }
+
+def encodeUTF8[R] { stream: () => R / emit[Char] }: R / emit[Byte] =
+  try {
+    stream()
+  } with emit[Char] { char =>
+    resume(encodeChar(char))
+  }
