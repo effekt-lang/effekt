@@ -167,9 +167,52 @@ def foreachIndex[A](list: List[A]){ f: (Int, A) {Control} => Unit }: Unit = {
 /// Map a function `f` over elements in a given list.
 ///
 /// O(N)
-def map[A, B](l: List[A]) { f: A => B } : List[B] = {
-  var acc = Nil[B]()
-  l.foreach { el => acc = Cons(f(el), acc) }
+def map[A, B](l: List[A]) { f: A => B }: List[B] = {
+  var acc: List[B] = Nil()
+  l.foreach { el =>
+    acc = Cons(f(el), acc)
+  }
+  acc.reverse
+}
+
+/// Map a function `f` over elements and their indices in a given list.
+///
+/// O(N)
+def mapWithIndex[A, B](l: List[A]) { f: (Int, A) => B }: List[B] = {
+  var acc: List[B] = Nil()
+  l.foreachIndex { (i, el) =>
+    acc = Cons(f(i, el), acc)
+  }
+  acc.reverse
+}
+
+/// Map a function `f` over elements in a given list,
+/// keeping only the elements for which the function returned `true`,
+/// discarding the elements for which the function returned `false`.
+///
+/// O(N)
+def filter[A](l: List[A]) { shouldKeep: A => Bool }: List[A] = {
+  var acc: List[A] = Nil()
+  l.foreach { a =>
+    if (shouldKeep(a)) {
+      acc = Cons(a, acc)
+    }
+  }
+  acc.reverse
+}
+
+/// Map a function `f` over elements and their indices in a given list,
+/// keeping only the elements for which the function returned `true`,
+/// discarding the elements for which the function returned `false`.
+///
+/// O(N)
+def filterWithIndex[A](l: List[A]) { shouldKeep: (Int, A) => Bool }: List[A] = {
+  var acc: List[A] = Nil()
+  l.foreachIndex { (i, a) =>
+    if (shouldKeep(i, a)) {
+      acc = Cons(a, acc)
+    }
+  }
   acc.reverse
 }
 
@@ -179,12 +222,27 @@ def map[A, B](l: List[A]) { f: A => B } : List[B] = {
 ///
 /// O(N)
 def collect[A, B](l: List[A]) { f : A => Option[B] }: List[B] = {
-  var acc = Nil[B]()
+  var acc: List[B] = Nil()
   l.foreach { a =>
-    val optB = f(a)
-    optB match {
-      case None() => ();
-      case Some(b) => acc = Cons(b, acc);
+    f(a) match {
+      case None() => ()
+      case Some(b) => acc = Cons(b, acc)
+    }
+  }
+  acc.reverse
+}
+
+/// Map a function `f` over elements and their indices in a given list,
+/// keeping only the elements for which the function returned `Some(...)`,
+/// discarding the elements for which the function returned `None()`.
+///
+/// O(N)
+def collectWithIndex[A, B](l: List[A]) { f: (Int, A) => Option[B] }: List[B] = {
+  var acc: List[B] = Nil()
+  l.foreachIndex { (i, a) =>
+    f(i, a) match {
+      case None() => ()
+      case Some(b) => acc = Cons(b, acc)
     }
   }
   acc.reverse
@@ -205,21 +263,55 @@ def flatMap[A, B](l: List[A]) { f : A => List[B] }: List[B] = {
 /// Check if predicate is true for all elements of the given list.
 ///
 /// O(N)
-def all[A](list: List[A]) { predicate: A => Bool }: Bool = {
+def all[A](list: List[A]) { predicate: A => Bool }: Bool =
   list match {
     case Cons(x, xs) => predicate(x) && all(xs) { predicate }
     case Nil() => true
   }
-}
 
 /// Check if predicate is true for at least one element of the given list.
 ///
 /// O(N)
-def any[A](list: List[A]) { predicate: A => Bool }: Bool = {
+def any[A](list: List[A]) { predicate: A => Bool }: Bool =
   list match {
     case Cons(x, xs) => predicate(x) || any(xs) { predicate }
     case Nil() => false
   }
+
+/// Check if the list contains the given `element`,
+/// comparing for equality with the given `eq` function.
+///
+/// O(N)
+def contains[A](list: List[A], element: A) { eq: (A, A) => Bool }: Bool =
+  list.any { x => x.eq(element) }
+
+/// Find the first index of the given `element`,
+/// comparing for equality with the given `eq` function.
+///
+/// O(N)
+def indexOf[A](list: List[A], element: A) { eq: (A, A) => Bool }: Option[Int] = {
+  var result = None()
+  list.foreachIndex { (i, a) {label} =>
+    if (element.eq(a)) {
+      result = Some(i)
+      label.break()
+    }
+  }
+  result
+}
+
+/// Find the last index of the given `element`,
+/// comparing for equality with the given `eq` function.
+///
+/// O(N)
+def lastIndexOf[A](list: List[A], element: A) { eq: (A, A) => Bool }: Option[Int] = {
+  var result = None()
+  list.foreachIndex { (i, a) {label} =>
+    if (element.eq(a)) {
+      result = Some(i)
+    }
+  }
+  result
 }
 
 /// Count how many elements of a list satisfy the given predicate.
@@ -261,6 +353,27 @@ def foldRight[A, B](l: List[A], init: B) { f: (A, B) => B }: B = {
   acc
 }
 
+/// Fold and map a list with a delimiter, a prefix, a suffix,
+/// concatenating the result given the `combine` function.
+///
+/// Example:
+/// ```
+/// > [1, 2, 3].foldMapDelimited("[", ", ", "]") { n => show(n) } { (s1, s2) => s1 ++ s2 }
+/// "[1, 2, 3]"
+/// ```
+///
+/// O(N)
+def foldMapDelimited[A, B](list: List[A], prefix: B, delimiter: B, suffix: B) { convert: A => B } { combine: (B, B) => B }: B = {
+  def go(acc: B, as: List[A]): B = as match {
+    case Nil() => acc
+    case Cons(head, Nil()) => combine(acc, convert(head))
+    case Cons(head, tail) =>
+      val res = combine(combine(acc, convert(head)), delimiter)
+      go(res, tail)
+  }
+  combine(go(prefix, list), suffix)
+}
+
 /// Sum the elements of the list.
 ///
 /// O(N)
@@ -297,10 +410,11 @@ def reverse[A](l: List[A]): List[A] = {
 /// ```
 ///
 /// O(|l|)
-def reverseOnto[A](l: List[A], other: List[A]): List[A] = l match {
-  case Nil() => other
-  case Cons(a, rest) => rest.reverseOnto(Cons(a, other))
-}
+def reverseOnto[A](l: List[A], other: List[A]): List[A] =
+  l match {
+    case Nil() => other
+    case Cons(a, rest) => rest.reverseOnto(Cons(a, other))
+  }
 
 /// Concatenate list `l` with list `other`:
 ///
@@ -347,7 +461,7 @@ def join[A](lists: List[List[A]]): List[A] = {
 /// ```
 ///
 /// O(N)
-def join[A](lists: List[List[A]], between: List[A]): List[A] = {
+def join[A](lists: List[List[A]], between: List[A]): List[A] =
   lists match {
     case Nil() => Nil()
     case Cons(firstList, restOfLists) =>
@@ -355,7 +469,6 @@ def join[A](lists: List[List[A]], between: List[A]): List[A] = {
         restOfLists.flatMap { list => between.append(list)}
       )
   }
-}
 
 /// Take the first `n` elements of a given list.
 ///
