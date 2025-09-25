@@ -4,6 +4,7 @@ package optimizer
 
 import effekt.source.Span
 import effekt.core.optimizer.semantics.{ Computation, NeutralStmt }
+import effekt.core.Pure
 import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR }
 import effekt.symbols.builtins.AsyncCapability
 import kiama.output.ParenPrettyPrinter
