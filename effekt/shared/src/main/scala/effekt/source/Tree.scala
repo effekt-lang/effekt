@@ -813,7 +813,7 @@ object Named {
     case Handler => symbols.BlockTypeConstructor.Interface
     case OpClause => symbols.Operation
     case Implementation => symbols.BlockTypeConstructor.Interface
-    case TagPattern => symbols.Constructor
+    case TagPattern => symbols.Constructor | symbols.MatchTarget
   }
 
   extension [T <: Definitions](t: T & Definition) {
