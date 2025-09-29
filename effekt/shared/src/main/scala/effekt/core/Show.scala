@@ -103,6 +103,8 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       if (targs.length != 1) sys error "expected targs to only have one argument"
       Expr.PureApp(ctx.getShowBlockVar(targs(0)), List.empty, vargs)
     case PureApp(b, targs, vargs) => PureApp(b, targs, vargs)
+    case Literal(value, annotatedType) => Literal(value, annotatedType)
+    case ValueVar(id, annotatedType) => ValueVar(id, annotatedType)
     case o => println(o); ???
   }
 
