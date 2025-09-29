@@ -141,7 +141,7 @@ extern pure def myshow[R](value: R): String =
 extern def myshow[R](value: R): String =
   js "$effekt.show(${value})"
   chez "(show_impl ${value})"
-  llvm "; Dummy"
+  llvm "ret %Pos poison"
 
 // Strings
 // =======
