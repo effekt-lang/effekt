@@ -17,6 +17,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(t: ModuleDecl): Document =
     pretty(toDoc(t), 4)
 
+  def format(t: Toplevel): Document =
+    pretty(toDoc(t), 4)
+
   def format(defs: List[Toplevel]): String =
     pretty(toDoc(defs), 60).layout
 
