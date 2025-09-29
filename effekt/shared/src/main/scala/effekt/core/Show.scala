@@ -69,14 +69,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       val declShowInstances = generateShowInstancesDecls(declarationTypes)
 
       val transformedDefns = definitions map transform
-      // Remove myshow extern
-      // because it only has a dummy implementation which will fail when run
-      val filteredExterns = decl.externs.flatMap(ext => ext match
-        case e: Extern.Def => List(e)
-        case _ => List()
-      )
-      .filter(defn => defn.id.name.name != "myshow")
-      ModuleDecl(path, includes, declarations, filteredExterns, transformedDefns ++ baseShowInstances ++ declShowInstances, exports)
+      ModuleDecl(path, includes, declarations, externs, transformedDefns ++ baseShowInstances ++ declShowInstances, exports)
   }
 
   def transform(toplevel: Toplevel)(using ShowContext): Toplevel = toplevel match {
