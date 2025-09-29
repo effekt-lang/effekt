@@ -92,8 +92,13 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       case Let(id, annotatedTpe, binding, body) => 
         Let(id, annotatedTpe, transform(binding), transform(body))
       case Return(expr) => Return(transform(expr))
-      // TODO: We might need to do the same thing as in PureApp if we want to allow show(something) instead of something.show
-      case ImpureApp(id, callee, targs, vargs, bargs, body) => ImpureApp(id, callee, targs, vargs, bargs, body)
+      case ImpureApp(id, BlockVar(bid, annotatedTpe, annotatedCapt), targs, vargs, bargs, body) if bid.name.name == "myshow" =>
+        if (targs.length != 1) sys error "expected targs to only have one argument"
+        ctx.getShowBlockVar(targs(0)) match {
+          case BlockVar(bid, annotatedTpe, annotatedCapt) => 
+            Stmt.Val(id, TString, Stmt.App(BlockVar(bid, annotatedTpe, annotatedCapt), List.empty, vargs map transform, bargs map transform), transform(body))
+        }
+      case ImpureApp(id, callee, targs, vargs, bargs, body) => ImpureApp(id, callee, targs, vargs, bargs, transform(body))
       case o => println(o); ???
     }
 
