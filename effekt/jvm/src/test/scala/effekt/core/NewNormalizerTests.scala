@@ -161,10 +161,7 @@ class NewNormalizerTests extends CoreTests {
 }
 
 /**
- * A "backend" that simply outputs the aggregated core module.
- * This is called IR and note Core to avoid name clashes with package `effekt.core`
- *
- * This is, for example, used by the interpreter.
+ * A "backend" that simply outputs the normalized core module.
  */
 class NormalizeOnly extends Compiler[(Id, symbols.Module, ModuleDecl)] {
 
