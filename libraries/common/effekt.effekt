@@ -130,7 +130,7 @@ extern def inspect[R](value: R) at io: Unit =
 extern def myshow[R](value: R): String =
   js "$effekt.show(${value})"
   chez "(show_impl ${value})"
-  llvm "; Dummy"
+  llvm "ret %Pos poison"
 
 // Strings
 // =======
