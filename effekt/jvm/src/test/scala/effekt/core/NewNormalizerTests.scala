@@ -116,7 +116,8 @@ class NewNormalizerTests extends CoreTests {
     assertAlphaEquivalentToplevels(actual, expected, List("run"), List("foo"))
   }
 
-  // This example shows a box that cannot be normalized away
+  // This example shows a box that cannot be normalized away.
+  // This is because the box is passed to an extern definition.
   test("box passed to extern") {
     val input =
       """
@@ -150,6 +151,41 @@ class NewNormalizerTests extends CoreTests {
               |      ! (foo: (=> Int at {}) => Int @ {io})(f_box: => Int at {})
               |
               |    return x: Int
+              |}
+              |""".stripMargin
+      )
+
+    val (mainId, actual) = normalize(input)
+
+    assertAlphaEquivalentToplevels(actual, expected, List("run"), List("foo"))
+  }
+
+  // This example shows an unbox that cannot be normalized away.
+  // This is because the box is retrieved from an extern definition.
+  test("unbox blocked by extern") {
+    val input =
+      """
+        |extern {} def foo(): => Int at {} = vm"42"
+        |
+        |def run(): Int = {
+        |    val x = foo()()
+        |    return x
+        |}
+        |
+        |def main() = println(run())
+        |""".stripMargin
+
+    val expected =
+      parse("""
+              |module input
+              |
+              |extern {} def foo(): => Int at {} = vm"42"
+              |
+              |def run() = {
+              |    let f: => Int at {} =
+              |      (foo: => (=> Int at {}) @ {})()
+              |    def f_unbox = unbox f: => Int at {}
+              |    (f_unbox: => Int @ {})()
               |}
               |""".stripMargin
       )
