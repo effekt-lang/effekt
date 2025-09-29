@@ -201,7 +201,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     declarations flatMap generateShowInstance
 
   def generateShowInstance(decl: Declaration)(using ctx: ShowContext)(using DeclarationContext): Option[Toplevel.Def] = decl match {
-    case dataDecl: Declaration.Data => 
+    case dataDecl: Declaration.Data if dataDecl.constructors.size > 0 => 
       val freshId = freshShowId
       val toplevel = generateShowInstance(dataDecl, freshId)
       ctx.showDefns += (ValueType.Data(dataDecl.id, List.empty) -> freshId)
