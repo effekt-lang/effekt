@@ -1,0 +1,14 @@
+def f[A](x: A) = {
+  def g[B](y: B): (A,B) =
+    (x,y)
+  def h[B](y: B): (A,B) =
+    (x,y)
+  g("String")
+  h(123)
+}
+
+def main(): Unit = {
+  println(f[String]("abc").first)
+  println(f(false).second)
+  ()
+}

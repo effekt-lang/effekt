@@ -1,0 +1,13 @@
+type Maybe[A] {
+  Nothing()
+  Just[B](x: A)
+}
+
+def f[T](a: T): Maybe[T] = Just[T, Bool](a)
+
+def main() = {
+  val a = Just[Int, Char](5)
+  val b = Nothing[Char]()
+  f(5)
+  ()
+}
