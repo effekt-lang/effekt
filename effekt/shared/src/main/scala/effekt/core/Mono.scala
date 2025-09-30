@@ -263,16 +263,14 @@ def monomorphize(toplevel: Toplevel)(using ctx: MonoContext): List[Toplevel] = t
     List(Toplevel.Val(id, monomorphize(tpe), monomorphize(binding)))
 
 def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] = decl match
-  case Data(id, List(), constructors) => List(decl)
+  case Data(id, List(), constructors) => 
+    List(Declaration.Data(id, List.empty, constructors.flatMap(monomorphize(_, 0))))
   case Data(id, tparams, constructors) => 
     val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
     monoTypes.map(baseTypes =>
       val replacementTparams = tparams.zip(baseTypes).toMap
       ctx.replacementTparams ++= replacementTparams
-      val newConstructors = constructors map {
-        case Constructor(id, tparams, fields) => Constructor(id, tparams, fields map monomorphize)
-      }
-      Declaration.Data(ctx.names(id, baseTypes), List.empty, newConstructors)
+      Declaration.Data(ctx.names(id, baseTypes), List.empty, constructors.flatMap(monomorphize(_, tparams.size)))
     )
   case Interface(id, List(), properties) => List(decl)
   case Interface(id, tparams, properties) =>
@@ -281,6 +279,15 @@ def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] =
       val replacementTparams = tparams.zip(baseTypes).toMap
       ctx.replacementTparams ++= replacementTparams
       Declaration.Interface(ctx.names(id, baseTypes), List.empty, properties)
+    )
+
+def monomorphize(constructor: Constructor, tparamCount: Int)(using ctx: MonoContext): List[Constructor] = constructor match
+  case Constructor(id, tparams, fields) => 
+    val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
+    monoTypes.map(baseTypes =>
+      val replacementTparams = tparams.drop(tparamCount).zip(baseTypes).toMap
+      ctx.replacementTparams ++= replacementTparams
+      Constructor(ctx.names(id, baseTypes), List.empty, fields map monomorphize) 
     )
 
 def monomorphize(block: Block)(using ctx: MonoContext): Block = block match
@@ -408,19 +415,16 @@ def monomorphize(opt: Option[Stmt])(using ctx: MonoContext): Option[Stmt] = opt 
   case Some(stmt) => Some(monomorphize(stmt))
 
 def monomorphize(expr: Expr)(using ctx: MonoContext): Expr = expr match
-  case DirectApp(b, targs, vargs, bargs) => 
-    val replacementData = replacementDataFromTargs(b.id, targs)
-    DirectApp(monomorphize(b, replacementData.name), List.empty, vargs map monomorphize, bargs map monomorphize)
   case Literal(value, annotatedType) =>
     Literal(value, monomorphize(annotatedType))
   case PureApp(b, targs, vargs) =>
     val replacementData = replacementDataFromTargs(b.id, targs)
     PureApp(monomorphize(b, replacementData.name), List.empty, vargs map monomorphize)
   case Make(data, tag, targs, vargs) =>
-    Make(replacementDataFromTargs(data.name, data.targs), tag, List.empty, vargs map monomorphize)
+    val replacementTag = ctx.names.getOrElse((tag, (targs map toTypeArg).toVector), tag)
+    Make(replacementDataFromTargs(data.name, data.targs), replacementTag, List.empty, vargs map monomorphize)
   case Box(b, annotatedCapture) => 
-    // TODO: Does this need other handling?
-    Box(b, annotatedCapture)
+    Box(monomorphize(b), annotatedCapture)
   case ValueVar(id, annotatedType) =>
     ValueVar(id, monomorphize(annotatedType))
 
