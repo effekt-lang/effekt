@@ -1,0 +1,20 @@
+effect yield[A](x: A): Unit
+
+def f() = {
+  do yield[Int](123)
+  do yield[String]("test")
+}
+
+def main() = {
+  try {
+    f()
+  } with yield[Int] {
+    x => println(x)
+      resume(())
+      resume(())
+  } with yield[String] {
+    x => println(x)
+    resume(())
+  }
+  ()
+}
