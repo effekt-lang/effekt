@@ -146,6 +146,8 @@ def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt 
   case Return(expr) => findConstraints(expr)
   case Val(id, annotatedTpe, binding, body) => findConstraints(binding) ++ findConstraints(body)
   case Var(ref, init, capture, body) => findConstraints(body)
+  case ImpureApp(id, callee, targs, vargs, bargs, body) =>
+    List(Constraint(targs.map(findId).toVector, callee.id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ findConstraints(body)
   case App(callee: BlockVar, targs, vargs, bargs) => 
     List(Constraint(targs.map(findId).toVector, callee.id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
   // TODO: Very specialized, but otherwise passing an id that matches in monomorphize is hard
@@ -183,8 +185,6 @@ def findConstraints(opt: Option[Stmt])(using ctx: MonoFindContext): Constraints 
   case Some(stmt) => findConstraints(stmt)
 
 def findConstraints(expr: Expr)(using ctx: MonoFindContext): Constraints = expr match
-  case DirectApp(b, targs, vargs, bargs) => 
-    List(Constraint(targs.map(findId).toVector, b.id))
   case PureApp(b, targs, vargs) => 
     List(Constraint(targs.map(findId).toVector, b.id))
   case ValueVar(id, annotatedType) => List.empty
@@ -332,6 +332,9 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
     Val(id, monomorphize(annotatedTpe), monomorphize(binding), monomorphize(body))
   case Var(ref, init, capture, body) => 
     Var(ref, monomorphize(init), capture, monomorphize(body))
+  case ImpureApp(id, callee, targs, vargs, bargs, body) =>
+    val replacementData = replacementDataFromTargs(callee.id, targs)
+    ImpureApp(id, monomorphize(callee, replacementData.name), List.empty, vargs map monomorphize, bargs map monomorphize, monomorphize(body))
   case App(callee: BlockVar, targs, vargs, bargs) => 
     val replacementData = replacementDataFromTargs(callee.id, targs)
     App(monomorphize(callee, replacementData.name), List.empty, vargs map monomorphize, bargs map monomorphize)
@@ -421,16 +424,6 @@ def monomorphize(expr: Expr)(using ctx: MonoContext): Expr = expr match
   case ValueVar(id, annotatedType) =>
     ValueVar(id, monomorphize(annotatedType))
 
-def monomorphize(pure: Pure)(using ctx: MonoContext): Pure = pure match
-  case ValueVar(id, annotatedType) => ValueVar(id, monomorphize(annotatedType))
-  case PureApp(b, targs, vargs) => 
-    val replacementData = replacementDataFromTargs(b.id, targs)
-    PureApp(monomorphize(b, replacementData.name), List.empty, vargs map monomorphize)
-  case Literal(value, annotatedType) => Literal(value, monomorphize(annotatedType))
-  case Make(data, tag, targs, vargs) => 
-    val replacementData = replacementDataFromTargs(data.name, data.targs)
-    Make(replacementData, tag, List.empty, vargs map monomorphize)
-  case Box(b, annotatedCapture) => Box(monomorphize(b), annotatedCapture)
 
 def monomorphize(valueParam: ValueParam)(using ctx: MonoContext): ValueParam = valueParam match 
   case ValueParam(id, tpe) => ValueParam(id, monomorphize(tpe))
