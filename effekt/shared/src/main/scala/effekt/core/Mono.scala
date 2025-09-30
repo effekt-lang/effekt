@@ -172,7 +172,23 @@ def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt 
   case Def(id, block, body) => 
     findConstraints(block) ++ findConstraints(body)
   case Shift(prompt, body) => findConstraints(prompt) ++ findConstraints(body)
-  case Match(scrutinee, clauses, default) => clauses.map(_._2).flatMap(findConstraints) ++ findConstraints(default)
+  case Match(scrutinee, clauses, default) => 
+    // TODO: This is probably not technically correct, but allows for fun stuff like
+    // type Foo[A] {
+    //   Bar[B](x: B)
+    // }
+    // to be monomorphized (in special cases (?))
+    var additionalConstraint: Constraints = List()
+    clauses.foreach((id, bl) => { bl match {
+        case BlockLit(tparams, cparams, vparams, bparams, App(callee: BlockVar, targs, vargs, bargs)) => 
+          if (targs.size == tparams.size) {
+            additionalConstraint +:= Constraint(tparams.zipWithIndex.map((_, paramIndex) => TypeArg.Var(id, paramIndex)).toVector, callee.id)
+          }
+        case _ => ()
+      }
+    })
+
+    additionalConstraint ++ clauses.map(_._2).flatMap(findConstraints) ++ findConstraints(default)
   case Resume(k, body) => findConstraints(k) ++ findConstraints(body)
   case Get(id, annotatedTpe, ref, annotatedCapt, body) => findConstraints(body)
   case Put(ref, annotatedCapt, value, body) => findConstraints(value) ++ findConstraints(body)
