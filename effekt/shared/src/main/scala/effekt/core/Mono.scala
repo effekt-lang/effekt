@@ -157,9 +157,9 @@ def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt 
     findConstraints(callee) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
   // TODO: Maybe need to do something with methodTpe
   case Invoke(callee: BlockVar, method, methodTpe, targs, vargs, bargs) => 
-    List(Constraint(targs.map(findId).toVector, callee.id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
+    List(Constraint(targs.map(findId).toVector, method)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
   case Invoke(Unbox(ValueVar(id, annotatedType)), method, methodTpe, targs, vargs, bargs) =>
-    List(Constraint(targs.map(findId).toVector, id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
+    List(Constraint(targs.map(findId).toVector, method)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
   case Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
     findConstraints(callee) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
   case Reset(body) => findConstraints(body)
