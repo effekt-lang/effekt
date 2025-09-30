@@ -183,16 +183,17 @@ def findConstraints(opt: Option[Stmt])(using ctx: MonoFindContext): Constraints 
   case Some(stmt) => findConstraints(stmt)
 
 def findConstraints(expr: Expr)(using ctx: MonoFindContext): Constraints = expr match
-  // TODO:
-  // Technically targs should still flow
-  // Just don't monomorphize
-  case DirectApp(b, targs, vargs, bargs) => List.empty
-  case PureApp(b, targs, vargs) => List.empty
+  case DirectApp(b, targs, vargs, bargs) => 
+    List(Constraint(targs.map(findId).toVector, b.id))
+  case PureApp(b, targs, vargs) => 
+    List(Constraint(targs.map(findId).toVector, b.id))
   case ValueVar(id, annotatedType) => List.empty
   case Literal(value, annotatedType) => List.empty
   case Make(data, tag, targs, vargs) => 
+    List(Constraint(targs.map(findId).toVector, tag)) ++
     List(Constraint(data.targs.map(findId).toVector, tag)) // <Int> <: Just
-  case Box(b, annotatedCapture) => List.empty
+  case Box(b, annotatedCapture) => 
+    findConstraints(b)
 
 def findId(vt: ValueType)(using ctx: MonoFindContext): TypeArg = vt match
   // TODO: Perhaps recurse into tpe
@@ -203,8 +204,9 @@ def findId(vt: ValueType)(using ctx: MonoFindContext): TypeArg = vt match
 def solveConstraints(constraints: Constraints): Solution =
   var solved: Solution = Map()
 
-  val groupedConstraints = constraints.groupBy(c => c.upper)
-  val vecConstraints = groupedConstraints.map((sym, constraints) => (sym -> constraints.map(c => c.lower)))
+  val filteredConstraints = constraints.filterNot(c => c.lower.isEmpty)
+  val groupedConstraints = filteredConstraints.groupBy(c => c.upper)
+  val vecConstraints = groupedConstraints.map((sym, constraints) => (sym -> filteredConstraints.map(c => c.lower)))
 
   while (true) {
     val previousSolved = solved
@@ -288,20 +290,25 @@ def monomorphize(block: Block)(using ctx: MonoContext): Block = block match
   case Unbox(pure) => Unbox(monomorphize(pure))
 
 def monomorphize(impl: Implementation)(using ctx: MonoContext): Implementation = impl match
-  case Implementation(interface, operations) => Implementation(monomorphize(interface), operations.map(monomorphize))
+  case Implementation(interface, operations) => Implementation(monomorphize(interface), operations.flatMap(monomorphize))
 
 def monomorphize(interface: BlockType.Interface)(using ctx: MonoContext): BlockType.Interface = interface match
   case BlockType.Interface(name, targs) => 
     val replacementData = replacementDataFromTargs(name, targs)
     BlockType.Interface(replacementData.name, replacementData.targs)
 
-def monomorphize(operation: Operation)(using ctx: MonoContext): Operation = operation match
+def monomorphize(operation: Operation)(using ctx: MonoContext): List[Operation] = operation match
   case Operation(name, tparams, cparams, vparams, bparams, body) => 
-    Operation(name, List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
+    val monoTypes = ctx.solution.getOrElse(name, Set.empty).toList
+    monoTypes.map(baseTypes =>
+      val replacementTparams = tparams.zip(baseTypes).toMap
+      ctx.replacementTparams ++= replacementTparams
+      Operation(ctx.names(name, baseTypes), List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
+    )
+    
 
 def monomorphize(block: BlockLit)(using ctx: MonoContext): BlockLit = block match
   case BlockLit(tparams, cparams, vparams, bparams, body) => 
-    // TODO: Add the tparams to context here
     BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
 
 def monomorphize(block: BlockVar)(using ctx: MonoContext): BlockVar = block match
@@ -339,8 +346,13 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
   case If(cond, thn, els) => If(monomorphize(cond), monomorphize(thn), monomorphize(els))
   case Invoke(Unbox(pure), method, methodTpe, targs, vargs, bargs) =>
     Invoke(Unbox(monomorphize(pure)), method, methodTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
-  case Invoke(BlockVar(id, annotatedTpe, annotatedCapt), method, methodTpe, targs, vargs, bargs) => 
-    Invoke(BlockVar(id, monomorphize(annotatedTpe), annotatedCapt), method, methodTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
+  case Invoke(BlockVar(id, annotatedTpe, annotatedCapt), method, BlockType.Function(tparams, cparams, vparams, bparams, result), targs, vargs, bargs) => 
+    val replacementData = replacementDataFromTargs(method, targs)
+    val replacementTparams = tparams.zip(targs map toTypeArg).toMap
+    ctx.replacementTparams ++= replacementTparams
+
+    val monoAnnotatedTpe = BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
+    Invoke(BlockVar(id, monomorphize(annotatedTpe), annotatedCapt), replacementData.name, monoAnnotatedTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
   case Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
     Invoke(monomorphize(callee), method, methodTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
   case Resume(k, body) =>
@@ -348,6 +360,8 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
   // TODO: Monomorphizing here throws an error complaining about a missing implementation
   //       Not sure what is missing, altough it does works like this
   case Reset(body) => Reset(body)
+  case Def(id, BlockLit(List(), cparams, vparams, bparams, bbody), body) => 
+    Stmt.Def(id, BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(bbody)), monomorphize(body))
   case Def(id, BlockLit(tparams, cparams, vparams, bparams, bbody), body) =>
     val monoTypes = ctx.solution(id).toList
     // Monomorphizing inner functions may yield multiple definitions
@@ -363,7 +377,7 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
   case Def(id, block, body) => Def(id, monomorphize(block), monomorphize(body))
   case Shift(prompt, body) => Shift(monomorphize(prompt), monomorphize(body))
   case Match(scrutinee, clauses, default) =>
-    val monoClauses = clauses.map((id, blockLit) => (id, monomorphize(blockLit)))
+    val monoClauses = clauses flatMap monomorphize
     Match(monomorphize(scrutinee), monoClauses, monomorphize(default))
   case Get(id, annotatedTpe, ref, annotatedCapt, body) =>
     Get(id, monomorphize(annotatedTpe), ref, annotatedCapt, monomorphize(body))
@@ -373,6 +387,18 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
     Alloc(id, monomorphize(init), region, monomorphize(body))
   case Region(body) => Region(monomorphize(body))
   case Hole(span) => Hole(span)
+
+def monomorphize(clause: (Id, BlockLit))(using ctx: MonoContext): List[(Id, BlockLit)] = clause match
+  case (id, BlockLit(List(), cparams, vparams, bparams, body)) => 
+    List((id, BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))))
+  case (id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
+    val newClauseNameMap = ctx.names.view.filterKeys((tid, groundTypes) => tid == id)
+    newClauseNameMap.map((clauseKey, monoId) => 
+      val replacementTparams = tparams.zip(clauseKey._2).toMap
+      ctx.replacementTparams ++= replacementTparams
+      val monoBlockLit: Block.BlockLit = BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
+      (monoId, monoBlockLit)
+    ).toList
 
 def monomorphize(opt: Option[Stmt])(using ctx: MonoContext): Option[Stmt] = opt match
   case None => None
@@ -455,10 +481,10 @@ def replacementDataFromTargs(id: FunctionId, targs: List[ValueType])(using ctx: 
   //       this seems to work for now
   if (id.name.name == "Resume") return ValueType.Data(id, targs)
 
-  def toTypeArg(vt: ValueType): Ground = vt match 
-    case ValueType.Data(name, targs) => TypeArg.Base(name, targs map toTypeArg)
-    case ValueType.Var(name) => ctx.replacementTparams(name)
-    case ValueType.Boxed(tpe, capt) => TypeArg.Boxed(tpe, capt)
-
   val baseTypes: List[Ground] = targs map toTypeArg
   ValueType.Data(ctx.names((id, baseTypes.toVector)), List.empty)
+
+def toTypeArg(vt: ValueType)(using ctx: MonoContext): Ground = vt match 
+  case ValueType.Data(name, targs) => TypeArg.Base(name, targs map toTypeArg)
+  case ValueType.Var(name) => ctx.replacementTparams(name)
+  case ValueType.Boxed(tpe, capt) => TypeArg.Boxed(tpe, capt)
