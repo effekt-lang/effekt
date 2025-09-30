@@ -473,10 +473,6 @@ def freshMonoName(baseId: Id, tpes: Vector[Ground]): Id =
 
 def replacementDataFromTargs(id: FunctionId, targs: List[ValueType])(using ctx: MonoContext): ValueType.Data =
   if (targs.isEmpty) return ValueType.Data(id, targs)
-  // TODO: Incredibly hacky, resume did not seem to appear when finding constraints
-  //       it does show up while monomorphizing which caused an error
-  //       this seems to work for now
-  if (id.name.name == "Resume") return ValueType.Data(id, targs)
 
   val baseTypes: List[Ground] = targs map toTypeArg
   ValueType.Data(ctx.names((id, baseTypes.toVector)), List.empty)
