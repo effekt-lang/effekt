@@ -8,10 +8,10 @@ def main() = {
     println(show(k) ++ ": " ++ show(v) ++ " (" ++ show(v.toInt) ++ ")")
   }
 
-  val newMap = collectMap[Int, Char](compareInt) { each(m) }
+  val newMap = map::collect[Int, Char](compareInt) { each(m) }
   println(map::internal::prettyPairs(newMap.toList) { n => show(n) } { c => show(c) })
 
-  val hello: String = collectString { eachValue(m) }
+  val hello: String = string::collect { eachValue(m) }
   println(hello)
 }
 

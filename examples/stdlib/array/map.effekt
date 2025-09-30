@@ -3,7 +3,7 @@ def main() = {
   arr.map { x => x * 2 }
   println(arr)
 
-  val arr1 = allocate(0)
+  val arr1 = array::allocate(0)
   arr1.map { x => x * 2 }
   println(arr1)
 }
