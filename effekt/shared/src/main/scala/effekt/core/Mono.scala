@@ -206,7 +206,7 @@ def solveConstraints(constraints: Constraints): Solution =
 
   val filteredConstraints = constraints.filterNot(c => c.lower.isEmpty)
   val groupedConstraints = filteredConstraints.groupBy(c => c.upper)
-  val vecConstraints = groupedConstraints.map((sym, constraints) => (sym -> filteredConstraints.map(c => c.lower)))
+  val vecConstraints = groupedConstraints.map((sym, constraints) => (sym -> constraints.map(c => c.lower)))
 
   while (true) {
     val previousSolved = solved
