@@ -89,6 +89,7 @@ enum Stage { case Core; case Machine; case Target; }
  *
  * - [[generator.js.JavaScript]]
  * - [[generator.chez.ChezScheme]] (in three variants)
+ * - [[generator.chez.ChezSchemeCPS]]
  * - [[generator.llvm.LLVM]]
  *
  * @tparam Executable information of this compilation run, which is passed to

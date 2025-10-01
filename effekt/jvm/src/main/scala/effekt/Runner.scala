@@ -259,6 +259,13 @@ trait ChezRunner extends Runner[String] {
     Some(createScript(exeScriptPath, "scheme", "--script", "$SCRIPT_DIR/" + schemeFileName))
 }
 
+object ChezCPSRunner extends ChezRunner {
+  override def includes(path: File): List[File] = List(
+    path / ".." / "chez" / "common",
+    path / ".." / "chez" / "cps"
+  )
+}
+
 object ChezMonadicRunner extends ChezRunner {
   override def includes(path: File): List[File] = List(
     path / ".." / "chez" / "common",
