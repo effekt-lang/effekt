@@ -721,5 +721,62 @@ struct Pos c_promise_make() {
     return (struct Pos) { .tag = 0, .obj = promise, };
 }
 
+// Subprocesses
+// ------------
+
+struct Pos c_spawn_options_default() {
+    uv_process_options_t* options = (uv_process_options_t*)malloc(sizeof(uv_process_options_t));
+    memset(options, 0, sizeof(uv_process_options_t));
+    uv_stdio_container_t* stdio = (uv_stdio_container_t*)malloc(3*sizeof(uv_stdio_container_t));
+    stdio[0].flags = UV_INHERIT_FD;
+    stdio[0].data.fd = 0;
+    stdio[1].flags = UV_INHERIT_FD;
+    stdio[1].data.fd = 1;
+    stdio[2].flags = UV_INHERIT_FD;
+    stdio[2].data.fd = 2;
+    options->stdio = stdio;
+    options->stdio_count = 3;
+    return (struct Pos) { .tag = 0, .obj = options, };
+}
+
+void on_close(uv_handle_t* handle) {
+    free(handle);
+}
+void on_exit(uv_process_t* proc, int64_t exit_status, int term_signal) {
+  char** _args = (char**)proc->data;
+  if (_args) {
+    for(int i = 0; _args[i] != NULL; i++) {
+      free(_args[i]);
+    }
+    free(_args);
+  }
+  uv_close((uv_handle_t*)proc, on_close);
+}
+
+struct Pos c_spawn(struct Pos cmd, struct Pos args, struct Pos options) {
+    uv_process_options_t* opts = (uv_process_options_t*)options.obj;
+    uv_process_t* proc = (uv_process_t*)malloc(sizeof(uv_process_t));
+    opts->file = (char*)c_bytearray_data(cmd);
+    int _argc = (int)((uint64_t*)args.obj)[2];
+    char** _args = (char**)malloc((2 + _argc) * sizeof(char*));
+    struct Pos* _argv = (struct Pos*)(((uint64_t*)args.obj) + 3);
+    _args[0] = strdup(opts->file);
+    for(int i = 0; i < _argc; i++) {
+        _args[i + 1] = strdup((char*)c_bytearray_data(_argv[i]));
+    }
+    _args[_argc + 1] = NULL;
+    opts->args = _args;
+    opts->exit_cb = on_exit;
+    proc->data = _args;
+    int err = uv_spawn(uv_default_loop(), proc, opts);
+    erasePositive(options);
+    erasePositive(args);
+    if(err) {
+        printf("%s\n", uv_strerror(err));
+        free(_args);
+        free(proc);
+    }
+    return (struct Pos) { .tag = (int64_t)proc, .obj = 0, };
+}
 
 #endif
