@@ -33,7 +33,9 @@ class StdlibJavaScriptTests extends StdlibTests {
     examplesDir / "stdlib" / "char" / "ascii_iswhitespace.effekt",
   )
 
-  override def ignored: Set[File] = Set()
+  override def ignored: Set[File] = Set(
+    examplesDir / "stdlib" / "network" / "streaming.effekt",
+  )
 }
 
 abstract class StdlibChezTests extends StdlibTests {
@@ -42,6 +44,7 @@ abstract class StdlibChezTests extends StdlibTests {
     examplesDir / "stdlib" / "io",
     examplesDir / "stdlib" / "stream" / "characters.effekt",
     examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt"
+    examplesDir / "stdlib" / "network" / "streaming.effekt",
   )
 }
 class StdlibChezSchemeMonadicTests extends StdlibChezTests {
