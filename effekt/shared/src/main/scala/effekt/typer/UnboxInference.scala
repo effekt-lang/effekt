@@ -53,16 +53,16 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
       // TODO maybe we should synthesize a call to get here already?
       case sym: (ValueSymbol | symbols.RefBinder) => v
       case sym: BlockSymbol =>
-        C.error(pp"Computation ${sym} is used in an expression position, which requires boxing (e.g. `box ${sym}`")
+        C.error(pp"Computation ${sym} is used in an expression position, which requires boxing (e.g. `box ${sym}`)")
         v
     }
 
     case n: New =>
-      C.error(pp"Creating an instance in an expression requires boxing (e.g. `box new ${n.impl.id}[...] { ... }`")
+      C.error(pp"Creating an instance in an expression requires boxing (e.g. `box new ${n.impl.id}[...] { ... }`)")
       rewriteAsBlock(n)
 
     case b: BlockLiteral =>
-      C.error(pp"Function literals in expression position require boxing (e.g. `box { (${b.vparams.map(_.id).mkString(", ")}) => ... `")
+      C.error(pp"Function literals in expression position require boxing (e.g. `box { (${b.vparams.map(_.id).mkString(", ")}) => ... `)")
       rewriteAsBlock(b)
 
     case l: Literal => l
