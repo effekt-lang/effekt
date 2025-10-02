@@ -136,6 +136,10 @@ trait Driver { outer =>
 
   def writeDocumentation(ast: ModuleDecl, source: Source, output: String)(using C: Context): Unit =
     val name = source.name.split("/").last + ".json"
+    val out = C.config.outputPath()
+    if (!out.exists) {
+      out.mkdirs
+    }
     IO.createFile((output / name).unixPath, generateDocumentation(ast, source))
 
   def documenter(source: Source, config: EffektConfig)(implicit C: Context): Unit =
