@@ -1,5 +1,8 @@
 module bytearray
 
+import effekt
+import stream
+
 /**
  * A memory managed, mutable, fixed-length array of bytes.
  *
@@ -20,7 +23,7 @@ extern type ByteArray
   // = chez "bytevector"
 
 /// Allocates a new bytearray with the given `size`, its values are undefined.
-extern global def allocate(size: Int): ByteArray =
+extern def allocate(size: Int) at global: ByteArray =
   js "(new Uint8Array(${size}))"
   llvm """
     %object_size = add i64 ${size}, 16
@@ -33,8 +36,9 @@ extern global def allocate(size: Int): ByteArray =
     ret %Pos %ret_object2
   """
   chez "(make-bytevector ${size})"
+  vm "bytearray::allocate(Int)"
 
-extern pure def size(arr: ByteArray): Int =
+extern def size(arr: ByteArray) at {}: Int =
   js "${arr}.length"
   llvm """
     %size = extractvalue %Pos ${arr}, 0
@@ -42,8 +46,9 @@ extern pure def size(arr: ByteArray): Int =
     ret i64 %size
   """
   chez "(bytevector-length ${arr})"
+  vm "bytearray::size(ByteArray)"
 
-extern global def unsafeGet(arr: ByteArray, index: Int): Byte =
+extern def unsafeGet(arr: ByteArray, index: Int) at global: Byte =
   js "(${arr})[${index}]"
   llvm """
     %arr_ptr = extractvalue %Pos ${arr}, 1
@@ -54,8 +59,9 @@ extern global def unsafeGet(arr: ByteArray, index: Int): Byte =
     ret i8 %element
   """
   chez "(bytevector-u8-ref ${arr} ${index})"
+  vm "bytearray::unsafeGet(ByteArray, Int)"
 
-extern global def unsafeSet(arr: ByteArray, index: Int, value: Byte): Unit =
+extern def unsafeSet(arr: ByteArray, index: Int, value: Byte) at global: Unit =
   js "bytearray$set(${arr}, ${index}, ${value})"
   llvm """
     %arr_ptr = extractvalue %Pos ${arr}, 1
@@ -66,6 +72,7 @@ extern global def unsafeSet(arr: ByteArray, index: Int, value: Byte): Unit =
     ret %Pos zeroinitializer
   """
   chez "(bytevector-u8-set! ${arr} ${index} ${value})"
+  vm "bytearray::unsafeSet(ByteArray, Int, Byte)"
 
 /// Creates a new ByteArray of size `size` filled with the value `init`
 def bytearray(size: Int, init: Byte): ByteArray = {
@@ -109,20 +116,22 @@ def foreachIndex(arr: ByteArray){ action: (Int, Byte) {Control} => Unit }: Unit 
     action(i, arr.unsafeGet(i)) {label}
   }
 
-extern pure def fromString(str: String): ByteArray =
+extern def fromString(str: String) at {}: ByteArray =
   js "(new TextEncoder().encode(${str}))"
   llvm """
     ret %Pos ${str}
   """
   chez "(string->utf8 ${str})"
+  vm "bytearray::fromString(String)"
 
-extern pure def toString(arr: ByteArray): String =
+extern def toString(arr: ByteArray) at {}: String =
   js "(new TextDecoder('utf-8').decode(${arr}))"
   // assuming the buffer is already in UTF-8
   llvm """
     ret %Pos ${arr}
   """
   chez "(utf8->string ${arr})"
+  vm "bytearray::toString(ByteArray)"
 
 extern js """
   function bytearray$set(bytes, index, value) {
@@ -169,13 +178,14 @@ extern chez """
           [else (loop (+ i 1))]))))
 """
 
-extern pure def compareByteArrayImpl(b1: ByteArray, b2: ByteArray): Int =
+extern def compareByteArrayImpl(b1: ByteArray, b2: ByteArray) at {}: Int =
   js "bytearray$compare(${b1}, ${b2})"
   llvm """
     %x = call %Int @c_bytearray_compare(%Pos ${b1}, %Pos ${b2})
     ret %Int %x
   """
   chez "(bytearray$compare ${b1} ${b2})"
+  vm "bytearray::compare(ByteArray, ByteArray)"
 
 def compareByteArray(b1: ByteArray, b2: ByteArray): Ordering = {
   val ret = compareByteArrayImpl(b1, b2)
@@ -192,4 +202,56 @@ def compareStringBytes(left: String, right: String): Ordering = {
   val l = left.fromString
   val r = right.fromString
   compareByteArray(l, r)
+}
+
+
+// Streaming
+// ---------
+
+/// Turns `bytes` into a producer of a push stream
+/// by emitting each contained value from 0 to length - 1.
+def each(bytes: ByteArray): Unit / emit[Byte] = {
+  val n = bytes.size
+  def go(i: Int): Unit = {
+    if (i < n) {
+      do emit(bytes.unsafeGet(i))
+      go(i + 1)
+    }
+  }
+  go(0)
+}
+
+def feed[R](bytes: ByteArray) { reader: () => R / read[Byte] }: R = {
+  var i = 0
+  try {
+    reader()
+  } with read[Byte] {
+    resume {
+      if (i < bytes.size) {
+        val c = i
+        i = c + 1
+        bytes.unsafeGet(c)
+      } else {
+        do stop()
+      }
+    }
+  }
+}
+
+def collect { stream: () => Unit / emit[Byte] }: ByteArray =
+  returning::collect[Unit]{stream}.second
+
+namespace returning {
+  def collect[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
+    var i = 0
+    var a = allocate(1)
+    try {
+      (stream(), a.resize(i))
+    } with emit[Byte] { (v) =>
+      if (i >= a.size) { a = a.resize(2 * a.size) }
+      a.unsafeSet(i, v)
+      i = i + 1
+      resume(())
+    }
+  }
 }

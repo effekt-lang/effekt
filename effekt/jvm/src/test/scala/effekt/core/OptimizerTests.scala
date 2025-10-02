@@ -108,7 +108,7 @@ class OptimizerTests extends CoreTests {
     val input =
       """ def main = { () =>
         |   let x = (add : (Int, Int) => Int @ {})(1, 2)
-        |   let y = !(println: (String) => Unit @ {io})("hello")
+        |   let ! y = (println: (String) => Unit @ {io})("hello")
         |   let z = 7
         |   return z:Int
         | }
@@ -116,7 +116,7 @@ class OptimizerTests extends CoreTests {
 
     val expected =
       """ def main = { () =>
-        |   let y = !(println: (String) => Unit @ {io})("hello")
+        |   let ! y = (println: (String) => Unit @ {io})("hello")
         |   let z = 7
         |   return z:Int
         | }

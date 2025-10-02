@@ -137,6 +137,7 @@ trait Callable extends BlockSymbol {
   def tparams: List[TypeParam]
   def vparams: List[ValueParam]
   def bparams: List[BlockParam]
+  def annotatedCaptures: Option[CaptureSet]
   def annotatedResult: Option[ValueType]
   def annotatedEffects: Option[Effects]
 
@@ -166,6 +167,7 @@ case class UserFunction(
   tparams: List[TypeParam],
   vparams: List[ValueParam],
   bparams: List[BlockParam],
+  annotatedCaptures: Option[CaptureSet],
   annotatedResult: Option[ValueType],
   annotatedEffects: Option[Effects],
   decl: FunDef
@@ -180,6 +182,7 @@ sealed trait Anon extends TermSymbol {
 
 case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: source.Tree) extends Callable, Anon {
   // Lambdas currently do not have an annotated return type
+  def annotatedCaptures = None
   def annotatedResult = None
   def annotatedEffects = None
 
@@ -200,7 +203,7 @@ enum Binder extends TermSymbol {
   case ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder, ValueSymbol
   case RegBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: RegDef) extends Binder, RefBinder
   case VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder, RefBinder, TrackedParam
-  case DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
+  case DefBinder(name: Name, caps: Option[CaptureSet], tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
 }
 export Binder.*
 
@@ -297,6 +300,7 @@ case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Fi
   val bparams: List[BlockParam] = Nil
 
   val appliedDatatype: ValueType = ValueTypeApp(tpe, tpe.tparams map ValueTypeRef.apply)
+  def annotatedCaptures = None
   def annotatedResult: Option[ValueType] = Some(appliedDatatype)
   def annotatedEffects: Option[Effects] = Some(Effects.Pure)
 }
@@ -308,6 +312,7 @@ case class Field(name: Name, param: ValueParam, constructor: Constructor, decl: 
   val bparams = List.empty[BlockParam]
 
   val returnType = param.tpe.get
+  def annotatedCaptures = None
   def annotatedResult = Some(returnType)
   def annotatedEffects = Some(Effects.Pure)
 }
@@ -324,6 +329,7 @@ export BlockTypeConstructor.*
 
 
 case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], bparams: List[BlockParam], resultType: ValueType, effects: Effects, interface: BlockTypeConstructor.Interface, decl: source.Tree) extends Callable {
+  def annotatedCaptures = None
   def annotatedResult: Option[ValueType] = Some(resultType)
   def annotatedEffects: Option[Effects] = Some(Effects(effects.toList))
   def appliedInterface: InterfaceType = InterfaceType(interface, interface.tparams map ValueTypeRef.apply)
@@ -439,6 +445,7 @@ case class ExternFunction(
   bodies: List[source.ExternBody],
   decl: source.Tree
 ) extends Callable {
+  def annotatedCaptures = Some(capture)
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)
 }

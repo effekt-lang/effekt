@@ -30,17 +30,12 @@ object Contify {
     case unsupported: ExternBody.Unsupported => unsupported
   }
 
-  def rewrite(expr: Expr): Expr = expr match {
-    case DirectApp(id, vargs, bargs) => DirectApp(id, vargs.map(rewrite), bargs.map(rewrite))
-    case p: Pure => rewrite(p)
-  }
-
-  def rewrite(pure: Pure): Pure = pure match {
-    case Pure.ValueVar(id) => Pure.ValueVar(id)
-    case Pure.Literal(value) => Pure.Literal(value)
-    case Pure.PureApp(id, vargs) => Pure.PureApp(id, vargs.map(rewrite))
-    case Pure.Make(data, tag, vargs) => Pure.Make(data, tag, vargs.map(rewrite))
-    case Pure.Box(b) => Pure.Box(rewrite(b))
+  def rewrite(pure: Expr): Expr = pure match {
+    case Expr.ValueVar(id) => Expr.ValueVar(id)
+    case Expr.Literal(value) => Expr.Literal(value)
+    case Expr.PureApp(id, vargs) => Expr.PureApp(id, vargs.map(rewrite))
+    case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(rewrite))
+    case Expr.Box(b) => Expr.Box(rewrite(b))
   }
 
   def rewrite(block: Block): Block = block match {
@@ -125,6 +120,9 @@ object Contify {
     case Stmt.LetCont(id, binding, body) =>
       Stmt.LetCont(id, rewrite(binding), rewrite(body))
 
+    case Stmt.ImpureApp(id, callee, vargs, bargs, body) =>
+      Stmt.ImpureApp(id, callee, vargs.map(rewrite), bargs.map(rewrite), rewrite(body))
+
     case Stmt.Region(id, ks, body) =>
       Stmt.Region(id, ks, rewrite(body))
 
@@ -206,6 +204,8 @@ object Contify {
       returnsTo(id, binding) ++ returnsTo(id, body)
     case Stmt.LetCont(_, binding, body) =>
       returnsTo(id, binding) ++ returnsTo(id, body)
+    case Stmt.ImpureApp(_, callee, vargs, bargs, body) =>
+      all(vargs, returnsTo(id, _)) ++ all(bargs, returnsTo(id, _)) ++ returnsTo(id, body)
     case Stmt.Region(_, _, body) => returnsTo(id, body)
     case Stmt.Alloc(_, init, _, body) =>
       returnsTo(id, init) ++ returnsTo(id, body)
@@ -234,13 +234,11 @@ object Contify {
   }
 
   def returnsTo(id: Id, e: Expr): Set[Cont] = e match {
-    case DirectApp(_, vargs, bargs) =>
-      all(vargs, returnsTo(id, _)) ++ all(bargs, returnsTo(id, _))
-    case Pure.ValueVar(_) => Set.empty
-    case Pure.Literal(_) => Set.empty
-    case Pure.PureApp(_, vargs) => all(vargs, returnsTo(id, _))
-    case Pure.Make(_, _, vargs) => all(vargs, returnsTo(id, _))
-    case Pure.Box(b) => returnsTo(id, b)
+    case Expr.ValueVar(_) => Set.empty
+    case Expr.Literal(_) => Set.empty
+    case Expr.PureApp(_, vargs) => all(vargs, returnsTo(id, _))
+    case Expr.Make(_, _, vargs) => all(vargs, returnsTo(id, _))
+    case Expr.Box(b) => returnsTo(id, b)
   }
 
   def returnsTo(id: Id, k: Cont): Set[Cont] = k match {
@@ -279,6 +277,9 @@ object Contify {
     case Stmt.LetCont(id2, binding, body) =>
       Stmt.LetCont(id2, contify(id, binding), contify(id, body))
 
+    case Stmt.ImpureApp(id2, callee, vargs, bargs, body) =>
+      Stmt.ImpureApp(id2, callee, vargs.map(contify(id, _)), bargs.map(contify(id, _)), contify(id, body))
+
     case Stmt.Region(id2, ks, body) =>
       Stmt.Region(id2, ks, contify(id, body))
 
@@ -316,18 +317,12 @@ object Contify {
     case Block.New(impl) => Block.New(contify(id, impl))
   }
 
-  def contify(id: Id, e: Expr): Expr = e match {
-    case DirectApp(id2, vargs, bargs) =>
-      DirectApp(id2, vargs.map(contify(id, _)), bargs.map(contify(id, _)))
-    case p: Pure => contify(id, p)
-  }
-
-  def contify(id: Id, p: Pure): Pure = p match {
-    case Pure.ValueVar(_) => p
-    case Pure.Literal(_) => p
-    case Pure.PureApp(id2, vargs) => Pure.PureApp(id2, vargs.map(contify(id, _)))
-    case Pure.Make(data, tag, vargs) => Pure.Make(data, tag, vargs.map(contify(id, _)))
-    case Pure.Box(b) => Pure.Box(contify(id, b))
+  def contify(id: Id, p: Expr): Expr = p match {
+    case Expr.ValueVar(_) => p
+    case Expr.Literal(_) => p
+    case Expr.PureApp(id2, vargs) => Expr.PureApp(id2, vargs.map(contify(id, _)))
+    case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(contify(id, _)))
+    case Expr.Box(b) => Expr.Box(contify(id, b))
   }
 
   def contify(id: Id, k: Cont): Cont = k match {

@@ -30,7 +30,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
     Some(input.copy(tree = rewritten))
 
   override def defn(using Context) = {
-    case f @ FunDef(id, tps, vps, bps, ret, body, doc, span) =>
+    case f @ FunDef(id, tps, vps, bps, ret, cpt, body, doc, span) =>
       val capabilities = Context.annotation(Annotations.BoundCapabilities, f)
       val capParams = capabilities.map(definitionFor)
       f.copy(bparams = (bps.unspan ++ capParams).spanned(bps.span), body = rewrite(body))

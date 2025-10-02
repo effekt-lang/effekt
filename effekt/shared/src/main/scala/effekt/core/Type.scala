@@ -192,9 +192,20 @@ object Type {
     case Block.New(impl) => impl.capt
   }
 
+  def bindingType(stmt: Stmt.ImpureApp): ValueType = stmt match {
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
+  }
+
+  def bindingType(bind: Binding.ImpureApp): ValueType = bind match {
+    case Binding.ImpureApp(id, callee, targs, vargs, bargs) =>
+      Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
+  }
+
   def inferType(stmt: Stmt): ValueType = stmt match {
     case Stmt.Def(id, block, body) => body.tpe
     case Stmt.Let(id, tpe, binding, body) => body.tpe
+    case Stmt.ImpureApp(id, calle, targs, vargs, bargs, body) => body.tpe
     case Stmt.Return(expr) => expr.tpe
     case Stmt.Val(id, tpe, binding, body) => body.tpe
     case Stmt.App(callee, targs, vargs, bargs) =>
@@ -230,7 +241,8 @@ object Type {
 
   def inferCapt(stmt: Stmt): Captures = stmt match {
     case Stmt.Def(id, block, body) => block.capt ++ body.capt
-    case Stmt.Let(id, tpe, binding, body) => binding.capt ++ body.capt
+    case Stmt.Let(id, tpe, binding, body) => body.capt
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => callee.capt ++ bargs.flatMap(_.capt).toSet ++ body.capt
     case Stmt.Return(expr) => Set.empty
     case Stmt.Val(id, tpe, binding, body) => binding.capt ++ body.capt
     case Stmt.App(callee, targs, vargs, bargs) => callee.capt ++ bargs.flatMap(_.capt).toSet
@@ -249,22 +261,18 @@ object Type {
   }
 
   def inferType(expr: Expr): ValueType = expr match {
-    case DirectApp(callee, targs, vargs, bargs) =>
-      instantiate(callee.functionType, targs, bargs.map(_.capt)).result
-    case Pure.ValueVar(id, tpe) => tpe
-    case Pure.Literal(value, tpe) => tpe
-    case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, targs, Nil).result
-    case Pure.Make(tpe, tag, targs, args) => tpe // TODO instantiate?
-    case Pure.Box(block, capt) => ValueType.Boxed(block.tpe, capt)
+    case Expr.ValueVar(id, tpe) => tpe
+    case Expr.Literal(value, tpe) => tpe
+    case Expr.PureApp(callee, targs, args) => instantiate(callee.functionType, targs, Nil).result
+    case Expr.Make(tpe, tag, targs, args) => tpe // TODO instantiate?
+    case Expr.Box(block, capt) => ValueType.Boxed(block.tpe, capt)
   }
 
   /**
    * Invariant: can only be {} or {io}
    */
   def inferCapt(expr: Expr): Captures = expr match {
-    case DirectApp(callee, targs, vargs, bargs) =>
-       callee.capt ++ bargs.flatMap(_.capt).toSet
-    case pure: Pure => Set.empty
+    case pure: Expr => Set.empty
   }
 
   extension (block: Block) {

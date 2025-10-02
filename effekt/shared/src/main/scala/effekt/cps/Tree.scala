@@ -41,7 +41,7 @@ case class ModuleDecl(
 enum ToplevelDefinition {
   case Def(id: Id, block: Block)
   case Val(id: Id, ks: Id, k: Id, binding: Stmt) // this is a let-run
-  case Let(id: Id, binding: Pure)
+  case Let(id: Id, binding: Expr)
 }
 
 /**
@@ -53,7 +53,7 @@ enum Extern extends Tree {
 }
 sealed trait ExternBody extends Tree
 object ExternBody {
-  case class StringExternBody(featureFlag: FeatureFlag, contents: Template[Pure]) extends ExternBody
+  case class StringExternBody(featureFlag: FeatureFlag, contents: Template[Expr]) extends ExternBody
   case class Unsupported(err: util.messages.EffektError) extends ExternBody {
     def report(using E: ErrorReporter): Unit = E.report(err)
   }
@@ -61,14 +61,7 @@ object ExternBody {
 
 case class Def(id: Id, block: Block) extends Tree
 
-sealed trait Expr extends Tree
-
-/**
- * Impure FFI calls.
- */
-case class DirectApp(id: Id, vargs: List[Pure], bargs: List[Block]) extends Expr
-
-enum Pure extends Expr {
+enum Expr extends Tree {
 
   case ValueVar(id: Id)
 
@@ -77,51 +70,52 @@ enum Pure extends Expr {
   /**
    * Pure FFI calls. Invariant, block b is pure.
    */
-  case PureApp(id: Id, vargs: List[Pure])
+  case PureApp(id: Id, vargs: List[Expr])
 
-  case Make(data: ValueType.Data, tag: Id, vargs: List[Pure])
+  case Make(data: ValueType.Data, tag: Id, vargs: List[Expr])
 
   case Box(b: Block)
 }
-export Pure.*
+export Expr.*
 
 
 enum Block extends Tree {
   case BlockVar(id: Id)
   case BlockLit(vparams: List[Id], bparams: List[Id], ks: Id, k: Id, body: Stmt)
-  case Unbox(pure: Pure)
+  case Unbox(pure: Expr)
   case New(impl: Implementation)
 }
 export Block.*
 
 enum Stmt extends Tree {
-  case Jump(k: Id, vargs: List[Pure], ks: MetaCont)
-  case App(callee: Block, vargs: List[Pure], bargs: List[Block], ks: MetaCont, k: Cont)
-  case Invoke(callee: Block, method: Id, vargs: List[Pure], bargs: List[Block], ks: MetaCont, k: Cont)
+  case Jump(k: Id, vargs: List[Expr], ks: MetaCont)
+  case App(callee: Block, vargs: List[Expr], bargs: List[Block], ks: MetaCont, k: Cont)
+  case Invoke(callee: Block, method: Id, vargs: List[Expr], bargs: List[Block], ks: MetaCont, k: Cont)
 
   // Local Control Flow
-  case If(cond: Pure, thn: Stmt, els: Stmt)
-  case Match(scrutinee: Pure, clauses: List[(Id, Clause)], default: Option[Stmt])
+  case If(cond: Expr, thn: Stmt, els: Stmt)
+  case Match(scrutinee: Expr, clauses: List[(Id, Clause)], default: Option[Stmt])
 
   case LetDef(id: Id, binding: Block, body: Stmt)
   case LetExpr(id: Id, binding: Expr, body: Stmt)
   case LetCont(id: Id, binding: Cont.ContLam, body: Stmt)
+  case ImpureApp(id: Id, callee: Id, vargs: List[Expr], bargs: List[Block], body: Stmt)
 
   // Regions
   case Region(id: Id, ks: MetaCont, body: Stmt)
-  case Alloc(id: Id, init: Pure, region: Id, body: Stmt)
+  case Alloc(id: Id, init: Expr, region: Id, body: Stmt)
 
   // creates a fresh state handler to model local (backtrackable) state.
   // [[capture]] is a binding occurence.
   // val id = ks.fresh(init); body
-  case Var(id: Id, init: Pure, ks: MetaCont, body: Stmt)
+  case Var(id: Id, init: Expr, ks: MetaCont, body: Stmt)
   // dealloc(ref); body
   case Dealloc(ref: Id, body: Stmt)
 
   // val id = !ref; body
   case Get(ref: Id, id: Id, body: Stmt)
 
-  case Put(ref: Id, value: Pure, body: Stmt)
+  case Put(ref: Id, value: Expr, body: Stmt)
 
   // reset( { (p, ks, k) => STMT }, ks, k)
   case Reset(prog: BlockLit, ks: MetaCont, k: Cont)
@@ -170,12 +164,11 @@ object Variables {
 
 
   def free(e: Expr): Variables = e match {
-    case DirectApp(id, vargs, bargs) => block(id) ++ all(vargs, free) ++ all(bargs, free)
-    case Pure.ValueVar(id) => value(id)
-    case Pure.Literal(value) => empty
-    case Pure.PureApp(id, vargs) => block(id) ++ all(vargs, free)
-    case Pure.Make(data, tag, vargs) => all(vargs, free)
-    case Pure.Box(b) => free(b)
+    case Expr.ValueVar(id) => value(id)
+    case Expr.Literal(value) => empty
+    case Expr.PureApp(id, vargs) => block(id) ++ all(vargs, free)
+    case Expr.Make(data, tag, vargs) => all(vargs, free)
+    case Expr.Box(b) => free(b)
   }
 
   def free(b: Block): Variables = b match {
@@ -201,6 +194,7 @@ object Variables {
     case Stmt.LetDef(id, binding, body)  => (free(binding) ++ free(body)) -- block(id)
     case Stmt.LetExpr(id, binding, body) => free(binding) ++ (free(body) -- value(id))
     case Stmt.LetCont(id, binding, body) => free(binding) ++ (free(body) -- cont(id))
+    case Stmt.ImpureApp(id, callee, vargs, bargs, body) => block(callee) ++ all(vargs, free) ++ all(bargs, free) ++ (free(body) -- value(id))
 
     case Stmt.Region(id, ks, body) => free(ks) ++ (free(body) -- block(id))
     case Stmt.Alloc(id, init, region, body) => free(init) ++ block(region) ++ (free(body) -- block(id))
@@ -236,7 +230,7 @@ object Variables {
 object substitutions {
 
   case class Substitution(
-    values: Map[Id, Pure] = Map.empty,
+    values: Map[Id, Expr] = Map.empty,
     blocks: Map[Id, Block] = Map.empty,
     conts: Map[Id, Cont] = Map.empty,
     metaconts: Map[Id, MetaCont] = Map.empty
@@ -250,13 +244,7 @@ object substitutions {
       copy(values = values -- vparams, blocks = blocks -- bparams)
   }
 
-  def substitute(expression: Expr)(using Substitution): Expr = expression match {
-    case DirectApp(id, vargs, bargs) =>
-      DirectApp(id, vargs.map(substitute), bargs.map(substitute))
-    case p: Pure => substitute(p)
-  }
-
-  def substitute(pure: Pure)(using subst: Substitution): Pure = pure match {
+  def substitute(pure: Expr)(using subst: Substitution): Expr = pure match {
     case ValueVar(id) if subst.values.isDefinedAt(id) => subst.values(id)
     case ValueVar(id) => ValueVar(id)
     case Literal(value) => Literal(value)
@@ -326,6 +314,10 @@ object substitutions {
     case LetCont(id, binding, body) =>
       LetCont(id, substitute(binding),
         substitute(body)(using subst.shadowConts(List(id))))
+
+    case ImpureApp(id, callee, vargs, bargs, body) =>
+      ImpureApp(id, callee, vargs.map(substitute), bargs.map(substitute),
+        substitute(body)(using subst.shadowValues(List(id))))
 
     case Region(id, ks, body) =>
       Region(id, substitute(ks),

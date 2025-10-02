@@ -1,5 +1,5 @@
 interface Eff {
-    def op(f: Int => Int at {}) {greeter: Greet}: Int => Int at {greeter} / Greet
+    def op(f: Int => Int at {}) {greeter: Greet}: Int => Int at greeter / Greet
 }
 
 interface Greet {

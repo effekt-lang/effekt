@@ -71,6 +71,77 @@ def appendFile(path: String, contents: String): Unit / Exception[IOError] = {
   go()
 }
 
+def writeFileUTF8[R](path: String) { stream: () => R / emit[Char] }: R / Exception[IOError] =
+  writeFile(path) { encodeUTF8 { stream() } }
+
+def readFileUTF8[R](path: String) { reader: () => R / read[Char] }: R / Exception[IOError] =
+  readFile(path) { decodeUTF8 { reader() } }
+
+def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[IOError] = {
+
+  val file = openForWriting(path);
+  with on[IOError].finalize { close(file) }
+
+  val chunkSize = 1048576 // 1MB
+  val buffer = bytearray::allocate(chunkSize)
+  var offset = 0
+
+  def push(i: Int, n: Int): Unit = {
+    val r = write(file, buffer, i, n, -1)
+    if (r < n) {
+      push(i + r, n - r)
+    }
+  }
+
+  try {
+    val r = stream()
+    push(0, offset)
+    return r
+  } with emit[Byte] { (byte) =>
+    if (offset >= buffer.size) {
+      push(0, buffer.size)
+      offset = 0
+    }
+    buffer.unsafeSet(offset, byte)
+    offset = offset + 1
+    resume(())
+  }
+}
+
+def readFile[R](path: String) { reader: () => R / read[Byte] }: R / Exception[IOError] = {
+
+  val file = openForReading(path);
+  with on[IOError].finalize { close(file) }
+
+  val chunkSize = 1048576 // 1MB
+  val buffer = bytearray::allocate(chunkSize)
+  var offset = 0
+  var length = 0
+
+  def pull(): Unit / stop = {
+    read(file, buffer, 0, chunkSize, -1) match {
+      case 0 =>
+        do stop()
+      case n =>
+        length = n
+    }
+  }
+
+  try {
+    reader()
+  } with read[Byte] {
+    resume {
+      if (offset >= length) {
+        pull()
+        offset = 0
+      }
+      val byte = buffer.unsafeGet(offset)
+      offset = offset + 1
+      return byte
+    }
+  }
+}
+
 /// An abstract interface applications can program against.
 ///
 /// Can be interpreted with the `filesystem` handler, or virtualized etc.
@@ -171,21 +242,21 @@ namespace internal {
     declare void @c_fs_mkdir(%Pos, %Stack)
   """
 
-  extern async def openForReading(path: String): Int =
+  extern def openForReading(path: String) at async: Int =
     jsNode "$effekt.capture(callback => open(${path}, 'r', callback))"
     llvm """
       call void @c_fs_open_reading(%Pos ${path}, %Stack %stack)
       ret void
     """
 
-  extern async def openForWriting(path: String): Int =
+  extern def openForWriting(path: String) at async: Int =
     jsNode "$effekt.capture(callback => open(${path}, 'w', callback))"
     llvm """
       call void @c_fs_open_writing(%Pos ${path}, %Stack %stack)
       ret void
     """
 
-  extern async def openForAppending(path: String): Int =
+  extern def openForAppending(path: String) at async: Int =
     jsNode "$effekt.capture(callback => open(${path}, 'a', callback))"
     llvm """
       call void @c_fs_open_appending(%Pos ${path}, %Stack %stack)
@@ -193,7 +264,7 @@ namespace internal {
     """
 
   /// The buffer must be kept alive by using it after the call
-  extern async def read(file: Int, buffer: ByteArray, offset: Int, size: Int, position: Int): Int =
+  extern def read(file: Int, buffer: ByteArray, offset: Int, size: Int, position: Int) at async: Int =
     jsNode "$effekt.capture(callback => read(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
     llvm """
       call void @c_fs_read(%Int ${file}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Int ${position}, %Stack %stack)
@@ -201,21 +272,21 @@ namespace internal {
     """
 
   /// The buffer must be kept alive by using it after the call
-  extern async def write(file: Int, buffer: ByteArray, offset: Int, size: Int, position: Int): Int =
+  extern def write(file: Int, buffer: ByteArray, offset: Int, size: Int, position: Int) at async: Int =
     jsNode "$effekt.capture(callback => write(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
     llvm """
       call void @c_fs_write(%Int ${file}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Int ${position}, %Stack %stack)
       ret void
     """
 
-  extern async def close(file: Int): Int =
+  extern def close(file: Int) at async: Int =
     jsNode "$effekt.capture(callback => close(${file}, callback))"
     llvm """
       call void @c_fs_close(%Int ${file}, %Stack %stack)
       ret void
     """
 
-  extern async def mkdir(path: String): Int =
+  extern def mkdir(path: String) at async: Int =
     jsNode "$effekt.capture(callback => mkdir(${path}, callback))"
     llvm """
       call void @c_fs_mkdir(%Pos ${path}, %Stack %stack)

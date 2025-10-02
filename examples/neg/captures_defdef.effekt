@@ -1,0 +1,13 @@
+interface Counter {
+  def get(): Int
+  def inc(): Unit
+}
+
+def makeCounter(start: Int) at {global}: Counter at {global} = {
+  val x = ref(start)
+  def counter at {io}: Counter = new Counter {
+    def get() = x.get() // ERROR Cannot typecheck call.
+    def inc() = x.set(x.get() + 1)
+  }
+  counter
+}

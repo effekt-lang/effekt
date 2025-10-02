@@ -1,0 +1,25 @@
+import examples/benchmarks/runner
+
+def cps_tak(x: Int, y: Int, z: Int) { k: Int => Int }: Int =
+  if (x <= y)
+    k(z)
+  else
+    cps_tak(x - 1, y, z) { v1 =>
+      cps_tak(y - 1, z, x) { v2 =>
+        cps_tak(z - 1, x, y) { v3 =>
+          cps_tak(v1, v2, v3) {k}
+        }
+      }
+    }
+
+def tak(x: Int, y: Int, z: Int): Int =
+  cps_tak(x, y, z) { a => a }
+
+def run(x: Int): Int = {
+  // since there is only argument
+  val y = x - 2
+  val z = x - 6
+  tak(x, y, z)
+}
+
+def main() = benchmark(14){run}
