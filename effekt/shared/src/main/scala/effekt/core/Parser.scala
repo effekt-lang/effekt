@@ -73,7 +73,6 @@ class EffektLexers extends Parsers {
   lazy val `with` = keyword("with")
   lazy val `case` = keyword("case")
   lazy val `do` = keyword("do")
-  lazy val `fun` = keyword("fun")
   lazy val `resume` = keyword("resume")
   lazy val `match` = keyword("match")
   lazy val `def` = keyword("def")
@@ -86,7 +85,6 @@ class EffektLexers extends Parsers {
   lazy val `at` = keyword("at")
   lazy val `in` = keyword("in")
   lazy val `box` = keyword("box")
-  lazy val `unbox` = keyword("unbox")
   lazy val `return` = keyword("return")
   lazy val `region` = keyword("region")
   lazy val `resource` = keyword("resource")
@@ -99,7 +97,7 @@ class EffektLexers extends Parsers {
     "def", "let", "val", "var", "true", "false", "else", "type",
     "effect", "interface", "try", "with", "case", "do", "if", "while",
     "match", "module", "import", "extern", "fun",
-    "at", "box", "unbox", "return", "region", "new", "resource", "and", "is", "namespace"
+    "at", "box", "return", "region", "new", "resource", "and", "is", "namespace"
   )
 
   def keyword(kw: String): Parser[String] =
@@ -367,7 +365,6 @@ class CoreParsers(names: Names) extends EffektLexers {
   // ------
   lazy val block: P[Block] =
     ( blockVar
-    | `unbox` ~> expr ^^ Block.Unbox.apply
     | `new` ~> implementation ^^ Block.New.apply
     | blockLit
     // TODO check left associative nesting (also for select)

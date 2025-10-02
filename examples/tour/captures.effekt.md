@@ -38,7 +38,7 @@ For the same reason, we must not return a function that closes over such a capab
 
 To prevent capabilities from escaping their scope, Effekt tracks captures.
 In the case of the previous example, the return type of the handler is `Exception at {exc}`.
-This is called a boxed computation. A boxed computation may only be used after unboxing it, which is only permitted when all its captures are in scope. In fact, the example above does not typecheck, since the type `Exception at {exc}` would not be well-formed outside of the handler that introduces (and binds!) the capability `exc`.
+This is called a boxed computation. A boxed computation may only be used after unboxing it, which happens automatically and is only permitted when all its captures are in scope. In fact, the example above does not typecheck, since the type `Exception at {exc}` would not be well-formed outside of the handler that introduces (and binds!) the capability `exc`.
 
 ## Boxing
 
@@ -83,7 +83,7 @@ Thus, we need to enforce that both `f` and `g` are pure, that is, do not capture
 ```
 def parallel (f: () => Unit at {}, g: () => Unit at {}): Unit = <>
 ```
-The type-checker will reject calls, where we try to pass functions that to close over capabilities (or builtin resources):
+The type-checker will reject calls, where we try to pass functions that close over capabilities (or builtin resources):
 ```effekt:repl
 parallel(
   box { () => println("Hello, ") },

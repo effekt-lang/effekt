@@ -19,7 +19,7 @@ def parameter[T] {a: Array[T]} = {
 }
 
 def main() = {
-  val f: () => Int at foo = user;
+  val f: () => Int at foo = box user;
   val arr = makeArray[Int](10);
   inspect(arr);
   ()

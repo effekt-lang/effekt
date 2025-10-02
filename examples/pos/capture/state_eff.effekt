@@ -9,14 +9,14 @@ def handleState[S, R](init: S) { prog: {State[S]} => R }: R = {
       val res = prog {state}
       box { (s: S) => res } at prog
     } with state: State[S] {
-      def get() = box { (s: S) => (unbox resume(s))(s) }
-      def set(x) = box { (s: S) => (unbox resume(()))(x) }
+      def get() = box { (s: S) => (resume(s))(s) }
+      def set(x) = box { (s: S) => (resume(()))(x) }
     }
-  (unbox stateFun)(init)
+  stateFun(init)
 }
 
 def main() =
-  handleState(0) { {s: State[Int]} => 
+  handleState(0) { {s: State[Int]} =>
     println(s.get[Int]())
     s.set(2)
     println(s.get[Int]())

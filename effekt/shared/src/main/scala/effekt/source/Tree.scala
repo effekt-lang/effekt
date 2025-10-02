@@ -531,7 +531,7 @@ enum Term extends Tree {
   case Do(effect: Option[TypeRef], id: IdRef, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span) extends Term, Reference
 
   /**
-   * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
+   * A call to either an expression, i.e., `(box { () => ... })()`; or a named function, i.e., `foo()`
    */
   case Call(target: CallTarget, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span)
 

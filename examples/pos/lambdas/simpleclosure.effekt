@@ -14,14 +14,14 @@ def main() = {
       // since `block` closes over `Raise` we have to make sure that
       // it cannot leave the outer `try`.
       if (do Flip()) {
-        fun() { block("first") }
+        box { block("first") }
       } else {
-        fun() { block("second") }
+        box { block("second") }
       }
     } with Flip {
       // the continuation itself transitively closes over `block` and `Raise`.
       // it also must not leave the scope of Raise.
-      val h: () => Unit at raise = fun() { (resume(true))(); (resume(false))() }
+      val h: () => Unit at raise = box { (resume(true))(); (resume(false))() }
       h
     }
 

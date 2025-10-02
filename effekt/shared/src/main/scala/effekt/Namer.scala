@@ -433,7 +433,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         args.foreach(resolve)
       }
 
-    case source.Unbox(term, _) => resolve(term)
+    case source.Unbox(term, _) => resolve(term) // shouldn't occur since unbox is not part of the source
 
     case source.New(impl, _) => resolve(impl)
 
@@ -515,10 +515,6 @@ object Namer extends Phase[Parsed, NameResolved] {
               if !Context.resolveOverloadedOperation(target)
               then Context.abort(pp"Cannot resolve operation ${target}, called on a receiver that is a computation.")
           }
-          // (unbox term).bar(args)  = Invoke(Unbox(term), bar, args)
-          case source.Unbox(term, _) =>
-            if !Context.resolveOverloadedOperation(target)
-            then Context.abort(pp"Cannot resolve operation ${target}, called on an unboxed computation.")
 
           // expr.bar(args) = Call(bar, expr :: args)
           case term =>
