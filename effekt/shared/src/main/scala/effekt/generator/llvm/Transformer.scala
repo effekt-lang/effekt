@@ -401,7 +401,7 @@ object Transformer {
     }
 
   def transform(value: machine.Variable)(using FunctionContext): Operand =
-    substitute(value) match {
+    value match {
       case machine.Variable(name, tpe) => LocalReference(transform(tpe), name)
     }
 
@@ -662,10 +662,10 @@ object Transformer {
       values match {
         case Nil => ()
         case value :: values =>
-        if values.map(substitute).contains(substitute(value)) then {
+        if values.contains(value) then {
           shareValue(value);
           loop(values)
-        } else if freeInBody.map(substitute).contains(substitute(value)) then {
+        } else if freeInBody.contains(value) then {
           shareValue(value);
           loop(values)
         } else {
@@ -678,7 +678,7 @@ object Transformer {
 
   def eraseValues(environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Unit =
     environment.foreach { value =>
-      if !freeInBody.map(substitute).contains(substitute(value)) then eraseValue(value)
+      if !freeInBody.contains(value) then eraseValue(value)
     }
 
   def shareValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
@@ -758,24 +758,11 @@ object Transformer {
   }
 
   class FunctionContext() {
-    // TODO delete substitution
-    var substitution: Map[machine.Variable, machine.Variable] = Map();
     var basicBlocks: List[BasicBlock] = List();
   }
 
   def emit(basicBlock: BasicBlock)(using C: FunctionContext) =
     C.basicBlocks = C.basicBlocks :+ basicBlock
-
-  def withBindings[R](bindings: List[(machine.Variable, machine.Variable)])(prog: () => R)(using C: FunctionContext): R = {
-    val substitution = C.substitution;
-    C.substitution = substitution ++ bindings.map { case (variable -> value) => (variable -> substitution.getOrElse(value, value) ) }.toMap;
-    val result = prog();
-    C.substitution = substitution
-    result
-  }
-
-  def substitute(value: machine.Variable)(using C: FunctionContext): machine.Variable =
-    C.substitution.toMap.getOrElse(value, value)
 
   class BlockContext() {
     var stack: Operand = LocalReference(stackType, "stack");

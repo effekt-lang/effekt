@@ -549,7 +549,7 @@ object Transformer {
     var info: Map[Symbol, BlockInfo] = Map()
     var globals: Map[Id, Label] = Map()
     var definitions: List[Definition] = List.empty
-  } // TODO rename to MachineTransformerContext
+  }
 
   enum BlockInfo {
     case Definition(free: Environment, params: Environment)
