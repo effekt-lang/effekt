@@ -76,8 +76,6 @@ translate the examples to Effekt.
 We start by describing the language (DSL) of nominal phrases as the following datatype:
 
 ```
-module examples/casestudies/naturalisticdsls
-
 record Person(name: String)
 ```
 
@@ -110,8 +108,8 @@ We can now construct sentences like
 
 as:
 
-```
-val s1 = Say(John, Mary.loves(John))
+```effekt:repl
+Say(John, Mary.loves(John))
 ```
 
 ### The Speaker Effect
@@ -193,12 +191,7 @@ def every(who: Predicate) = do quantify(who)
 We can use it as follows:
 ```
 def s2(): Sentence = scoped { John.said { every(Woman()).loves(me()) } }
-```
-The effect operation `every` takes a predicate (&ie;, `Woman`)
-and introduces a universal quantification at the position of the handler `scoped`.
 
-The quantification effect is handled by `scoped`:
-```
 def scoped { s: => Sentence / Quantification }: Sentence = {
   var tmp = 0;
   def fresh(): Person = { val x = Person("x" ++ show(tmp)); tmp = tmp + 1; x }
@@ -210,12 +203,16 @@ def scoped { s: => Sentence / Quantification }: Sentence = {
   }
 }
 ```
+The effect operation `every` takes a predicate (i.e. `Woman`)
+and introduces a universal quantification at the position of the handler `scoped`.
+
+The quantification effect is handled by `scoped`.
 This is already a more involved handler. It generates a fresh person name and
 then systematically rewrites the syntax tree, moving the introduced
 binder and the predicate up to the handler:
-```
-//> ForAll(Person(x0), Implies(Is(Person(x0), Woman()),
-//    Say(Person(John), Is(Person(x0), InLoveWith(Person(John))))))
+```raw
+ForAll(Person(x0), Implies(Is(Person(x0), Woman()),
+  Say(Person(John), Is(Person(x0), InLoveWith(Person(John))))))
 ```
 Every invocation of the effect operation `every` introduces an additional
 quantifier.
@@ -225,13 +222,10 @@ similar to let-insertion ([Yallop, 2017][@yallop2017staged]).
 
 ### Running the Examples
 Finally, we can run our examples to inspect the generated sentences.
-```
-def main() = {
-  inspect(s1)
-  inspect(s1a())
-  inspect(s1c())
-  inspect(s2())
-}
+```effekt:repl
+inspect(s1a())
+inspect(s1c())
+inspect(s2())
 ```
 
 [@hudak96building]: https://doi.org/10.1145/242224.242477

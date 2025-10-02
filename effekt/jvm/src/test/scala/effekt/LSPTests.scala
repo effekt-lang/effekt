@@ -1,8 +1,9 @@
 package effekt
 
-import com.google.gson.{JsonElement, JsonParser}
+import com.google.gson.{Gson, GsonBuilder, JsonElement, JsonParser}
+import effekt.Intelligence.{BindingInfo, BindingKind, BindingOrigin, Code, LSPLocation, HoleItemKind, LSPPosition, LSPRange, NaturalLanguage, ScopeInfo, ScopeKind, TermBinding, TypeBinding}
 import munit.FunSuite
-import org.eclipse.lsp4j.{DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, VersionedTextDocumentIdentifier}
+import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit}
 import org.eclipse.lsp4j.jsonrpc.messages
 
 import java.io.{PipedInputStream, PipedOutputStream}
@@ -39,7 +40,7 @@ class LSPTests extends FunSuite {
     val mockClient = new MockLanguageClient()
     server.connect(mockClient)
 
-    val launcher = server.launch(mockClient, serverIn, serverOut)
+    val launcher = server.launch(_ => mockClient, serverIn, serverOut)
 
     testBlock(mockClient, server)
   }
@@ -47,14 +48,14 @@ class LSPTests extends FunSuite {
   def withClientAndServer(testBlock: (MockLanguageClient, Server) => Unit): Unit = {
     withClientAndServer(true)(testBlock)
   }
-  
+
   /** Normalize the output of the IR by replacing the generated identifiers and stripping all whitespace
    */
   def normalizeIRString(ir: String): String = {
     ir.replaceAll("_\\d+", "_whatever")
       .replaceAll("\\s+", "")
   }
-  
+
   def assertIREquals(ir: String, expected: String): Unit = {
     val normalizedIR = normalizeIRString(ir)
     val normalizedExpected = normalizeIRString(expected)
@@ -101,6 +102,15 @@ class LSPTests extends FunSuite {
     }
   }
 
+  // Regression test: https://github.com/effekt-lang/effekt/issues/1041
+  test("Initialization with initializationOptions set to null does not crash") {
+    withClientAndServer { (client, server) =>
+      val params = new InitializeParams()
+      params.setInitializationOptions(JsonParser.parseString("null"))
+      server.initialize(params).get()
+    }
+  }
+
   test("didOpen yields empty diagnostics") {
     withClientAndServer { (client, server) =>
       val didOpenParams = new DidOpenTextDocumentParams()
@@ -109,6 +119,106 @@ class LSPTests extends FunSuite {
 
       val diagnostics = client.receivedDiagnostics()
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(helloWorld.getUri, new util.ArrayList())))
+    }
+  }
+
+  // Diagnostics
+  //
+  //
+
+  test("main function return type") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, range) = raw"""
+                                |def main() = 1
+                                |↑            ↑
+                                |""".stripMargin.textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(range)
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt")
+      diagnostic.setMessage("Main must return Unit, please use `exit(n)` to return an error code.")
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      val diagnostics = client.receivedDiagnostics()
+      assertEquals(diagnostics, expected)
+    }
+  }
+
+  test("exactly one main function") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, range) = raw"""
+                                |def main() = println("hello")
+                                |↑
+                                |def main() = 42
+                                |              ↑
+                                |""".stripMargin.textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(range)
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt")
+      diagnostic.setMessage("Multiple main functions defined: test::main, test::main")
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      val diagnostics = client.receivedDiagnostics()
+      assertEquals(diagnostics, expected)
+    }
+  }
+
+  test("no unhandled effects in main function") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, range) = raw"""
+                                |effect Eff(): Unit
+                                |def main() = {
+                                |↑
+                                |  do Eff()
+                                |}
+                                |↑
+                                |""".stripMargin.textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(range)
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt")
+      diagnostic.setMessage("Main cannot have effects, but includes effects: { Eff }")
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      val diagnostics = client.receivedDiagnostics()
+      assertEquals(diagnostics, expected)
     }
   }
 
@@ -266,15 +376,68 @@ class LSPTests extends FunSuite {
     }
   }
 
-  // FIXME: Hovering over holes does not work at the moment.
-  // https://github.com/effekt-lang/effekt/issues/549
-  test("Hovering over hole shows nothing") {
+  test("Hovering over documented symbol shows doc comment") {
     withClientAndServer { (client, server) =>
       val (textDoc, cursor) = raw"""
-                                |def foo(x: Int) = <>
-                                |                  ↑
+                                |/// Calculate the answer to the ultimate question of life, the universe, and everything
+                                |def calculate() = 42
+                                |
+                                |def main() = println(calculate())
+                                |                     ↑
                                 |""".textDocumentAndPosition
-      val hoverContents = ""
+      val hoverContents =
+        raw"""#### Function
+             |```effekt
+             |def calculate(): Int / {}
+             |```
+             | Calculate the answer to the ultimate question of life, the universe, and everything
+             |""".stripMargin
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
+      val hover = server.getTextDocumentService().hover(hoverParams).get()
+
+      val expectedHover = new Hover()
+      expectedHover.setRange(new Range(cursor, cursor))
+      expectedHover.setContents(new MarkupContent("markdown", hoverContents))
+      assertEquals(hover, expectedHover)
+    }
+  }
+
+  test("Hovering over hole shows inside and outside types") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, cursor) = raw"""
+                                |def foo(x: Int): Bool = <{ x }>
+                                |                          ↑
+                                |""".textDocumentAndPosition
+      val hoverContents = "Hole of type `Bool`"
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
+      val hover = server.getTextDocumentService().hover(hoverParams).get()
+
+      val expectedHover = new Hover()
+      expectedHover.setRange(new Range(cursor, cursor))
+      expectedHover.setContents(new MarkupContent("markdown", hoverContents))
+      assertEquals(hover, expectedHover)
+    }
+  }
+
+  // TODO: Hovering over a hole should show effects as well!
+  test("Hovering over hole doesn't show effects") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, cursor) = raw"""
+                                |effect raise(): Unit
+                                |def foo(x: Int): Int / { raise } = <{ do raise(); 42 }>
+                                |                                     ↑
+                                |""".textDocumentAndPosition
+      val hoverContents = "Hole of type `Int`"
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
@@ -348,7 +511,7 @@ class LSPTests extends FunSuite {
       server.getTextDocumentService().didOpen(didOpenParams)
 
       val configParams = new DidChangeConfigurationParams()
-      val settings: JsonElement = JsonParser.parseString("""{"showExplanations": true}""")
+      val settings: JsonElement = JsonParser.parseString("""{"effekt": {"showExplanations": true}}""")
       configParams.setSettings(settings)
       server.getWorkspaceService().didChangeConfiguration(configParams)
 
@@ -462,14 +625,8 @@ class LSPTests extends FunSuite {
 
       val params = new DocumentSymbolParams()
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
-
-      val documentSymbols = server.getTextDocumentService().documentSymbol(params).get()
-      // FIXME: The server currently returns spurious symbols at position (0, 0) that we need to filter out.
-      val filtered = server.getTextDocumentService().documentSymbol(params).get().asScala.filter {
-        symbol => symbol.getRight.getRange.getStart != new Position(0, 0) && symbol.getRight.getRange.getEnd != new Position(0, 0)
-      }.asJava
-
-      assertEquals(filtered, expectedSymbols.asJava)
+      val actualSymbols = server.getTextDocumentService().documentSymbol(params).get()
+      assertEquals(actualSymbols, expectedSymbols.asJava)
     }
   }
 
@@ -541,12 +698,12 @@ class LSPTests extends FunSuite {
   //
   //
 
-  test("inlayHints should show the io effect") {
+  test("inlayHint shows the io capture on a def") {
     withClientAndServer { (client, server) =>
       val (textDoc, positions) = raw"""
                                 |↑
-                                |def main() = {
-                                |↑
+                                |def main(): Unit = {
+                                |          ↑
                                 |  println("Hello, world!")
                                 |}
                                 |↑
@@ -555,13 +712,19 @@ class LSPTests extends FunSuite {
       val inlayHint = new InlayHint()
       inlayHint.setKind(InlayHintKind.Type)
       inlayHint.setPosition(positions(1))
-      inlayHint.setLabel("{io}")
+      inlayHint.setLabel("at {io}")
       val markup = new MarkupContent()
       markup.setKind("markdown")
       markup.setValue("captures: `{io}`")
       inlayHint.setTooltip(markup)
-      inlayHint.setPaddingRight(true)
+      inlayHint.setPaddingLeft(true)
       inlayHint.setData("capture")
+      inlayHint.setTextEdits(
+        List(
+          new TextEdit(new Range(positions(1), positions(1)), " at {io}")
+        ).asJava
+      )
+
 
       val expectedInlayHints = List(inlayHint)
 
@@ -578,13 +741,108 @@ class LSPTests extends FunSuite {
     }
   }
 
-  test("inlayHints work after editing") {
+  test("inlayHint shows the io capture in explicit box syntax") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, positions) = raw"""def foo(): Unit = { println("foo") }
+                                |
+                                |↑
+                                |val bar = box { () => foo() }
+                                |                             ↑
+                                |
+                                |↑
+                                |""".textDocumentAndPositions
+
+      val inlayHint = new InlayHint()
+      inlayHint.setKind(InlayHintKind.Type)
+      inlayHint.setPosition(positions(1))
+      inlayHint.setLabel("at {io}")
+      val markup = new MarkupContent()
+      markup.setKind("markdown")
+      markup.setValue("captures: `{io}`")
+      inlayHint.setTooltip(markup)
+      inlayHint.setPaddingLeft(true)
+      inlayHint.setData("capture")
+      inlayHint.setTextEdits(
+        List(
+          new TextEdit(new Range(positions(1), positions(1)), " at {io}")
+        ).asJava
+      )
+      val expectedInlayHints = List(inlayHint)
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val params = new InlayHintParams()
+      params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      params.setRange(new Range(positions(0), positions(2)))
+
+      val inlayHints = server.getTextDocumentService().inlayHint(params).get()
+      assertEquals(inlayHints, expectedInlayHints.asJava)
+    }
+  }
+
+  test("inlayHint shows omitted return type and effect") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, positions) =
+        raw"""effect raise(): Unit
+             |
+             |↑
+             |def foo() = { do raise(); 5 }
+             |         ↑
+             |
+             |↑
+             |""".textDocumentAndPositions
+
+      val captureHint = new InlayHint()
+      captureHint.setKind(InlayHintKind.Type)
+      captureHint.setPosition(positions(1))
+      captureHint.setLabel("at {}")
+      captureHint.setData("capture")
+      captureHint.setTooltip(new MarkupContent("markdown", "captures: `{}`"))
+      captureHint.setPaddingLeft(true)
+      captureHint.setTextEdits(
+        List(
+          new TextEdit(new Range(positions(1), positions(1)), " at {}")
+        ).asJava
+      )
+
+      val omittedHint = new InlayHint()
+      omittedHint.setKind(InlayHintKind.Type)
+      omittedHint.setPosition(positions(1))
+      omittedHint.setLabel(": Int / { raise }")
+      omittedHint.setData("return-type-annotation")
+      omittedHint.setTextEdits(List(
+        new TextEdit(
+          new Range(positions(1), positions(1)),
+          ": Int / { raise }"
+        )
+      ).asJava)
+      omittedHint.setTooltip(new MarkupContent("markdown", "return type: Int / { raise }"))
+      omittedHint.setPaddingLeft(true)
+
+      val expectedInlayHints = List(captureHint, omittedHint)
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val params = new InlayHintParams()
+      params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      params.setRange(new Range(positions(0), positions(2)))
+
+      val inlayHints = server.getTextDocumentService().inlayHint(params).get()
+      assertEquals(inlayHints, expectedInlayHints.asJava)
+    }
+  }
+
+  test("inlayHint works after editing") {
     withClientAndServer { (client, server) =>
       val (textDoc, positions) =
         raw"""
              |↑
-             |def main() = {
-             |↑
+             |def main(): Unit = {
+             |          ↑
              |  println("Hello, world!")
              |}
              |↑
@@ -593,13 +851,18 @@ class LSPTests extends FunSuite {
       val inlayHint = new InlayHint()
       inlayHint.setKind(InlayHintKind.Type)
       inlayHint.setPosition(positions(1))
-      inlayHint.setLabel("{io}")
+      inlayHint.setLabel("at {io}")
       val markup = new MarkupContent()
       markup.setKind("markdown")
       markup.setValue("captures: `{io}`")
       inlayHint.setTooltip(markup)
-      inlayHint.setPaddingRight(true)
+      inlayHint.setPaddingLeft(true)
       inlayHint.setData("capture")
+      inlayHint.setTextEdits(
+        List(
+          new TextEdit(new Range(positions(1), positions(1)), " at {io}")
+        ).asJava
+      )
 
       val expectedInlayHints = List(inlayHint)
 
@@ -621,7 +884,7 @@ class LSPTests extends FunSuite {
       val (newTextDoc, changeEvent) = textDoc.changeTo(
         raw"""
              |
-             |def main() = {
+             |def main(): Unit = {
              |  println("Hello, world!")
              |}
              |""".stripMargin
@@ -638,6 +901,11 @@ class LSPTests extends FunSuite {
       paramsAfterChange.setRange(new Range(positions(0), new Position(positions(2).getLine + 1, positions(2).getCharacter)))
 
       inlayHint.setPosition(newPos)
+      inlayHint.setTextEdits(
+        List(
+          new TextEdit(new Range(newPos, newPos), " at {io}")
+        ).asJava
+      )
       val inlayHintsAfterChange = server.getTextDocumentService().inlayHint(paramsAfterChange).get()
       assertEquals(inlayHintsAfterChange, expectedInlayHints.asJava)
 
@@ -657,19 +925,24 @@ class LSPTests extends FunSuite {
       paramsAfterRevert.setTextDocument(revertedTextDoc.versionedTextDocumentIdentifier)
       paramsAfterRevert.setRange(new Range(positions(0), positions(2)))
 
+      inlayHint.setTextEdits(
+        List(
+          new TextEdit(new Range(positions(1), positions(1)), " at {io}")
+        ).asJava
+      )
       val inlayHintsAfterRevert = server.getTextDocumentService().inlayHint(paramsAfterRevert).get()
       assertEquals(inlayHintsAfterRevert, expectedInlayHints.asJava)
     }
 
   }
 
-  test("inlayHints work after invalid edits") {
+  test("inlayHint works after invalid edits") {
     withClientAndServer(false) { (client, server) =>
       val (textDoc, positions) =
         raw"""
              |↑
-             |def main() = {
-             |↑
+             |def main(): Unit = {
+             |          ↑
              |  println("Hello, world!")
              |}
              |↑
@@ -678,13 +951,18 @@ class LSPTests extends FunSuite {
       val inlayHint = new InlayHint()
       inlayHint.setKind(InlayHintKind.Type)
       inlayHint.setPosition(positions(1))
-      inlayHint.setLabel("{io}")
+      inlayHint.setLabel("at {io}")
       val markup = new MarkupContent()
       markup.setKind("markdown")
       markup.setValue("captures: `{io}`")
       inlayHint.setTooltip(markup)
-      inlayHint.setPaddingRight(true)
+      inlayHint.setPaddingLeft(true)
       inlayHint.setData("capture")
+      inlayHint.setTextEdits(
+        List(
+          new TextEdit(new Range(positions(1), positions(1)), " at {io}")
+        ).asJava
+      )
 
       val expectedInlayHints = List(inlayHint)
 
@@ -705,7 +983,7 @@ class LSPTests extends FunSuite {
 
       val (newTextDoc, changeEvent) = textDoc.changeTo(
         raw"""
-             |def main() = {
+             |def main(): Unit = {
              |  println("Hello, world!")
              |}
              |invalid syntax
@@ -728,6 +1006,290 @@ class LSPTests extends FunSuite {
     }
   }
 
+  // LSP: Code Actions
+  //
+  //
+
+  test("codeAction infers return type and effects") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, positions) =
+        raw"""
+             |effect bar(): Unit
+             |def foo(x: Int) = { do bar(); x }
+             |    ↑          ↑
+             |""".textDocumentAndPositions
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val codeActionParams = new CodeActionParams()
+      codeActionParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      codeActionParams.setRange(new Range(positions(0), positions(0)))
+
+      val expected: Seq[messages.Either[Command, CodeAction]] = Seq(
+        messages.Either.forRight[Command, CodeAction]({
+          val action = new CodeAction()
+          action.setTitle("Update return type with inferred effects")
+          action.setKind(CodeActionKind.Refactor)
+
+          val edit = new WorkspaceEdit()
+
+          val textEdit = new TextEdit()
+          textEdit.setRange(Range(positions(1), positions(1)))
+          textEdit.setNewText(": Int / { bar }")
+
+          val changes = new util.HashMap[String, util.List[TextEdit]]()
+          val textEdits = new util.ArrayList[TextEdit]()
+          textEdits.add(textEdit)
+          changes.put("file://test.effekt", textEdits)
+
+          edit.setChanges(changes)
+
+          action.setEdit(edit)
+
+          action
+        })
+      )
+
+      val response = server.codeAction(codeActionParams).get()
+      assertEquals(response, expected.asJava)
+    }
+  }
+
+  test("codeAction doesn't show empty effects list") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, positions) =
+        raw"""
+             |def foo(x: Int) = x
+             |    ↑          ↑
+             |""".textDocumentAndPositions
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val codeActionParams = new CodeActionParams()
+      codeActionParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      codeActionParams.setRange(new Range(positions(0), positions(0)))
+
+      val expected: Seq[messages.Either[Command, CodeAction]] = Seq(
+        messages.Either.forRight[Command, CodeAction]({
+          val action = new CodeAction()
+          action.setTitle("Update return type with inferred effects")
+          action.setKind(CodeActionKind.Refactor)
+
+          val edit = new WorkspaceEdit()
+
+          val textEdit = new TextEdit()
+          textEdit.setRange(Range(positions(1), positions(1)))
+          // Rather than `: Int / {}`, we just show `: Int`
+          textEdit.setNewText(": Int")
+
+          val changes = new util.HashMap[String, util.List[TextEdit]]()
+          val textEdits = new util.ArrayList[TextEdit]()
+          textEdits.add(textEdit)
+          changes.put("file://test.effekt", textEdits)
+
+          edit.setChanges(changes)
+
+          action.setEdit(edit)
+
+          action
+        })
+      )
+
+      val response = server.codeAction(codeActionParams).get()
+      assertEquals(response, expected.asJava)
+    }
+  }
+
+  // Regression test: we had codeActions targeting the wrong file
+  test("codeAction response targets correct file") {
+    withClientAndServer { (client, server) =>
+      val (textDoc1, positions1) =
+        raw"""
+             |def foo(x: Int) = <{ x }>
+             |    ↑          ↑
+             |""".textDocumentAndPositions
+
+      textDoc1.setUri("file://foo.effekt")
+
+      val (textDoc2, positions2) =
+        raw"""
+             |def bar(x: Int) = <{ x }>
+             |     ↑         ↑
+             |""".textDocumentAndPositions
+
+      textDoc2.setUri("file://bar.effekt")
+
+      val didOpenParams1 = new DidOpenTextDocumentParams()
+      didOpenParams1.setTextDocument(textDoc1)
+      server.getTextDocumentService().didOpen(didOpenParams1)
+
+      val didOpenParams2 = new DidOpenTextDocumentParams()
+      didOpenParams2.setTextDocument(textDoc2)
+      server.getTextDocumentService().didOpen(didOpenParams2)
+
+      val codeActionParams1 = new CodeActionParams()
+      codeActionParams1.setTextDocument(textDoc1.versionedTextDocumentIdentifier)
+      codeActionParams1.setRange(new Range(positions1(0), positions1(0)))
+
+      val codeActionParams2 = new CodeActionParams()
+      codeActionParams2.setTextDocument(textDoc2.versionedTextDocumentIdentifier)
+      codeActionParams2.setRange(new Range(positions2(0), positions2(0)))
+
+      val expected1: Seq[messages.Either[Command, CodeAction]] = Seq(
+        messages.Either.forRight[Command, CodeAction]({
+          val action = new CodeAction()
+          action.setTitle("Update return type with inferred effects")
+          action.setKind(CodeActionKind.Refactor)
+
+          val edit = new WorkspaceEdit()
+
+          val textEdit = new TextEdit()
+          textEdit.setRange(Range(positions1(1), positions1(1)))
+          textEdit.setNewText(": Nothing")
+
+          val changes = new util.HashMap[String, util.List[TextEdit]]()
+          val textEdits = new util.ArrayList[TextEdit]()
+          textEdits.add(textEdit)
+          changes.put("file://foo.effekt", textEdits)
+
+          edit.setChanges(changes)
+
+          action.setEdit(edit)
+
+          action
+        })
+      )
+
+      val expected2: Seq[messages.Either[Command, CodeAction]] = Seq(
+        messages.Either.forRight[Command, CodeAction]({
+          val action = new CodeAction()
+          action.setTitle("Update return type with inferred effects")
+          action.setKind(CodeActionKind.Refactor)
+
+          val edit = new WorkspaceEdit()
+
+          val textEdit = new TextEdit()
+          val range = new Range(positions2(1), positions2(1))
+          textEdit.setRange(range)
+          textEdit.setNewText(": Nothing")
+
+          val changes = new util.HashMap[String, util.List[TextEdit]]()
+          val textEdits = new util.ArrayList[TextEdit]()
+          textEdits.add(textEdit)
+          changes.put("file://bar.effekt", textEdits)
+
+          edit.setChanges(changes)
+
+          action.setEdit(edit)
+
+          action
+        })
+      )
+
+      val response1 = server.codeAction(codeActionParams1).get()
+      val response2 = server.codeAction(codeActionParams2).get()
+
+      assertEquals(response1, expected1.asJava)
+      assertEquals(response2, expected2.asJava)
+    }
+  }
+
+  test("codeAction can close hole with an expression") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, range) =
+        """
+             |def foo(x: Int): Int = <" ${ x } ">
+             |                       ↑          ↑
+             |""".textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val codeActionParams = new CodeActionParams()
+      codeActionParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      codeActionParams.setRange(range)
+
+      val expected: Seq[messages.Either[Command, CodeAction]] = Seq(
+        messages.Either.forRight[Command, CodeAction]({
+          val action = new CodeAction()
+          action.setTitle("Close hole")
+          action.setKind(CodeActionKind.Refactor)
+
+          val edit = new WorkspaceEdit()
+
+          val textEdit = new TextEdit()
+          textEdit.setRange(range)
+          textEdit.setNewText("x")
+
+          val changes = new util.HashMap[String, util.List[TextEdit]]()
+          val textEdits = new util.ArrayList[TextEdit]()
+          textEdits.add(textEdit)
+          changes.put("file://test.effekt", textEdits)
+
+          edit.setChanges(changes)
+
+          action.setEdit(edit)
+
+          action
+        })
+      )
+
+      val response = server.codeAction(codeActionParams).get()
+      assertEquals(response, expected.asJava)
+    }
+  }
+
+  test("codeAction can close hole with statements") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, range) =
+           """
+             |def foo[T](x: T): Unit = <" ${ println("1"); println("2") } ">
+             |                         ↑                                   ↑
+             |""".textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val codeActionParams = new CodeActionParams()
+      codeActionParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      codeActionParams.setRange(range)
+
+      val expected: Seq[messages.Either[Command, CodeAction]] = Seq(
+        messages.Either.forRight[Command, CodeAction]({
+          val action = new CodeAction()
+          action.setTitle("Close hole")
+          action.setKind(CodeActionKind.Refactor)
+
+          val edit = new WorkspaceEdit()
+
+          val textEdit = new TextEdit()
+          textEdit.setRange(range)
+          textEdit.setNewText("locally { println(\"1\"); println(\"2\") }")
+
+          val changes = new util.HashMap[String, util.List[TextEdit]]()
+          val textEdits = new util.ArrayList[TextEdit]()
+          textEdits.add(textEdit)
+          changes.put("file://test.effekt", textEdits)
+
+          edit.setChanges(changes)
+
+          action.setEdit(edit)
+
+          action
+        })
+      )
+
+      val response = server.codeAction(codeActionParams).get()
+      assertEquals(response, expected.asJava)
+    }
+  }
+
   // Effekt: Publish IR
   //
   //
@@ -738,13 +1300,14 @@ class LSPTests extends FunSuite {
         raw"""def main() = <>""".textDocument
       val textDoc = new TextDocumentItem("file://path/to/test.effekt", "effekt", 0, source.getText)
       val initializeParams = new InitializeParams()
-      val initializationOptions = """{"showIR": "source"}"""
+      val initializationOptions = """{"effekt": {"showIR": "source"}}"""
       initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
       server.initialize(initializeParams).get()
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(source)
       server.getTextDocumentService().didOpen(didOpenParams)
+
 
       val expectedIRContents =
         raw"""ModuleDecl(
@@ -772,12 +1335,44 @@ class LSPTests extends FunSuite {
              |        None(),
              |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
              |      ),
-             |      Return(Hole(Return(Literal((), ValueTypeApp(Unit_whatever, Nil))))),
+             |      Maybe(
+             |        None(),
+             |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
+             |      ),
+             |      Return(
+             |        Hole(
+             |          IdDef(
+             |            hole,
+             |            Span(
+             |              StringSource(def main() = <>, file://test.effekt),
+             |              13,
+             |              15,
+             |              Synthesized()
+             |            )
+             |          ),
+             |          Template(Nil, Nil),
+             |          Span(StringSource(def main() = <>, file://test.effekt), 13, 15, Real())
+             |        ),
+             |        Span(StringSource(def main() = <>, file://test.effekt), 13, 15, Real())
+             |      ),
+             |      Info(
+             |        None(),
+             |        Maybe(
+             |          None(),
+             |          Span(StringSource(def main() = <>, file://test.effekt), 0, 0, Real())
+             |        ),
+             |        Maybe(
+             |          None(),
+             |          Span(StringSource(def main() = <>, file://test.effekt), 0, 0, Real())
+             |        )
+             |      ),
              |      Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
              |    )
              |  ),
+             |  None(),
              |  Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
-             |)""".stripMargin
+             |)
+             |""".stripMargin
 
       val receivedIRContent = client.receivedIR()
       assertEquals(receivedIRContent.length, 1)
@@ -793,7 +1388,7 @@ class LSPTests extends FunSuite {
              |"""
       val textDoc = new TextDocumentItem("file://path/to/test.effekt", "effekt", 0, source.stripMargin)
       val initializeParams = new InitializeParams()
-      val initializationOptions = """{"showIR": "source"}"""
+      val initializationOptions = """{"effekt": {"showIR": "source"}}"""
       initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
       server.initialize(initializeParams).get()
 
@@ -820,7 +1415,7 @@ class LSPTests extends FunSuite {
       val expectedIRContents =
         raw"""ModuleDecl(
              |  test,
-             |  List(effekt, option, list, result, exception, array, string, ref),
+             |  List(effekt, option, stream, list, result, exception, array, char, bytearray, stringbuffer, string, ref),
              |  Nil,
              |  Nil,
              |  List(
@@ -829,9 +1424,798 @@ class LSPTests extends FunSuite {
              |  List(foo_whatever)
              |)""".stripMargin
 
+
       val receivedIRContent = client.receivedIR()
       assertEquals(receivedIRContent.length, 1)
       assertIREquals(receivedIRContent.head.content, expectedIRContents)
+    }
+  }
+
+  // Effekt: Publish holes
+  //
+  //
+
+  test("Server publishes list of holes in file") {
+    withClientAndServer { (client, server) =>
+      val source =
+           """
+             |type MyInt = Int
+             |def foo(x: Int): Bool = <" ${ x } ">
+             |def bar(x: String): Int = <" ${ <> } "> // a hole within a hole
+             |""".textDocument
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val expectedHoles = List()
+
+      val innerScopeBindings = List(
+        TermBinding(
+          qualifier = List(),
+          name = "x",
+          origin = BindingOrigin.Defined,
+          signature = Some(
+            "x: Int"
+          ),
+          signatureHtml = Some("<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">Int</span>"),
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 2, character = 8),
+              end = Intelligence.LSPPosition(line = 2, character = 14)
+            )
+          ))
+        )
+      )
+
+      val globalScopeBindings = List(
+        TermBinding(
+          qualifier = List(),
+          name = "bar",
+          origin = BindingOrigin.Defined,
+          signature = Some(
+            "def bar(x: String): Int / {}"
+          ),
+          signatureHtml = Some(
+            "<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">bar</span>(<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Int</span> / {}"
+          ),
+          kind = BindingKind.Term,
+          definitionLocation = Some(LSPLocation("file://test.effekt", LSPRange(LSPPosition(3, 0), LSPPosition(3, 39))))
+        ),
+        TermBinding(
+          qualifier = List(),
+          name = "foo",
+          origin = BindingOrigin.Defined,
+          signature = Some(
+            "def foo(x: Int): Bool / {}"
+          ),
+          signatureHtml = Some(
+            "<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">foo</span>(<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">Int</span>): <span class=\"effekt-ident pascal-case\">Bool</span> / {}"
+          ),
+          kind = BindingKind.Term,
+          definitionLocation = Some(LSPLocation("file://test.effekt", LSPRange(LSPPosition(2, 0), LSPPosition(2, 36))))
+        ),
+        TypeBinding(
+          qualifier = Nil,
+          name = "MyInt",
+          origin = BindingOrigin.Defined,
+          signature = Some("type MyInt"),
+          signatureHtml = Some(
+            "<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">MyInt</span>"
+          ),
+          kind = BindingKind.Type,
+          definitionLocation = Some(LSPLocation("file://test.effekt", LSPRange(LSPPosition(1, 0), LSPPosition(1, 16))))
+        )
+      )
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+
+      val hole0 = receivedHoles.head.holes(0)
+
+      assertEquals(receivedHoles.head.holes.length, 3)
+      assertEquals(hole0.id, "foo0")
+      assertEquals(hole0.innerType, Some("Int"))
+      assertEquals(hole0.expectedType, Some("Bool"))
+      assertEquals(hole0.scope.name, Some("foo"))
+      assertEquals(hole0.scope.kind, ScopeKind.Local)
+      assertEquals(hole0.scope.bindings, innerScopeBindings)
+      val globalScope = hole0.scope.outer.get
+      assertEquals(globalScope.kind, ScopeKind.Global)
+
+      assert(globalScopeBindings.forall(globalScope.bindings.contains),
+        s"Expected global scope to contain: $globalScopeBindings, but was: ${globalScope.bindings}")
+
+      // ... the remaining bindings come from the prelude
+      val importedBindings = globalScope.bindings.filterNot(globalScopeBindings.contains)
+      importedBindings.foreach { b =>
+        assertEquals(
+          BindingOrigin.Imported,
+          b.origin,
+          s"Expected imported binding for $b, but origin was ${b.origin}"
+        )
+      }
+
+      val hole1 = receivedHoles.head.holes(1)
+      assertEquals(hole1.id, "bar0")
+      assertEquals(hole1.innerType, Some("Nothing"))
+      assertEquals(hole1.expectedType, Some("Int"))
+
+      val hole2 = receivedHoles.head.holes(2)
+      assertEquals(hole2.id, "bar1")
+      assertEquals(hole2.innerType, None)
+      assertEquals(hole2.expectedType, None)
+    }
+  }
+
+  test("Server publishes holes for literate Effekt") {
+    withClientAndServer { (client, server) =>
+      val source = new TextDocumentItem("file://path/to/test.effekt.md", "literate effekt", 0,
+        raw"""# Some title
+             |```effekt
+             |def foo(x: Int): Bool = <>
+             |```
+             |""".stripMargin)
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+    }
+  }
+
+  test("Server publishes hole id for nested defs") {
+    withClientAndServer { (client, server) =>
+      val source =
+        raw"""
+             |def foo(): Unit = {
+             |  def bar() = <>
+             |  bar()
+             |}
+             |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+      assertEquals(receivedHoles.head.holes.head.id, "foo_bar0")
+    }
+  }
+
+  test("Server does not publish binders outside of the hole scope") {
+    withClientAndServer { (client, server) =>
+      val source =
+        raw"""
+             |def foo(): Unit = {
+             |  def bar() = <>
+             |  val baz = 42
+             |}
+             |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+
+      val expectedBindings = List(
+        TermBinding(
+          qualifier = List(),
+          name = "bar",
+          origin = BindingOrigin.Defined,
+          signature = Some("def bar(): Nothing / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">bar</span>(): <span class=\"effekt-ident pascal-case\">Nothing</span> / {}"),
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 2, character = 2),
+              end = Intelligence.LSPPosition(line = 2, character = 16)
+            )
+          ))
+        )
+      )
+
+      assertEquals(receivedHoles.head.holes.head.scope.outer.get.bindings, expectedBindings)
+    }
+  }
+
+  /**
+   * By default, Scala types such as List and Option show pathological (de)serialization behavior with Gson.
+   * We use a custom extension method `withScalaSupport` which adds support for Scala collections, fixing serialization.
+   */
+  test("Hole info serializes to expected JSON") {
+    val holeInfo = EffektHoleInfo(
+      id = "foo_bar0",
+      range = new Range(
+        new Position(0, 0),
+        new Position(0, 0)
+      ),
+      uri = "file://test.effekt",
+      innerType = None,
+      expectedType = Some("Bool"),
+      scope = ScopeInfo(
+        name = None,
+        kind = ScopeKind.Local,
+        bindings = List(
+          TermBinding(
+            qualifier = List(),
+            name = "x",
+            origin = BindingOrigin.Defined,
+            signature = Some("x: Int"),
+            signatureHtml = None,
+          )
+        ),
+        outer = Some(ScopeInfo(
+          name = Some("something"),
+          kind = ScopeKind.Namespace,
+          bindings = List(),
+          outer = Some(ScopeInfo(
+            name = None,
+            kind = ScopeKind.Global,
+            bindings = List(
+              TypeBinding(
+                qualifier = List(),
+                name = "MyInt",
+                origin = BindingOrigin.Defined,
+                signature = Some("type MyInt"),
+                signatureHtml = None,
+              )),
+            outer = None
+          ))
+        ))
+      ),
+      body = List(
+        NaturalLanguage(text = "This is some natural language text."),
+        Code(text = "do foo()", `type` = Some("String"))
+      )
+    )
+
+    val expectedJsonStr =
+      """{
+        |  "id": "foo_bar0",
+        |  "range": {
+        |    "start": {
+        |      "line": 0,
+        |      "character": 0
+        |    },
+        |    "end": {
+        |      "line": 0,
+        |      "character": 0
+        |    }
+        |  },
+        |  "uri": "file://test.effekt",
+        |  "expectedType": "Bool",
+        |  "scope": {
+        |    "kind": "Local",
+        |    "bindings": [
+        |      {
+        |        "qualifier": [],
+        |        "name": "x",
+        |        "origin": "Defined",
+        |        "signature": "x: Int",
+        |        "kind": "Term"
+        |      }
+        |    ],
+        |    "outer": {
+        |      "name": "something",
+        |      "kind": "Namespace",
+        |      "bindings": [],
+        |      "outer": {
+        |        "kind": "Global",
+        |        "bindings": [
+        |          {
+        |            "qualifier": [],
+        |            "name": "MyInt",
+        |            "origin": "Defined",
+        |            "signature": "type MyInt",
+        |            "kind": "Type"
+        |          }
+        |        ]
+        |      }
+        |    }
+        |  },
+        |  "body": [
+        |    {
+        |      "kind": "NaturalLanguage",
+        |      "text": "This is some natural language text."
+        |    },
+        |    {
+        |      "kind": "Code",
+        |      "text": "do foo()",
+        |      "type": "String"
+        |    }
+        |  ]
+        |}""".stripMargin
+
+    val expectedJson: JsonElement = JsonParser.parseString(expectedJsonStr)
+
+    val gson: Gson = new GsonBuilder().withScalaSupport.create()
+
+    val actualJson: JsonElement = gson.toJsonTree(holeInfo)
+
+    assertEquals(actualJson, expectedJson)
+  }
+
+  test("Empty holes list is sent when there are no holes") {
+    withClientAndServer { (client, server) =>
+      val source =
+        raw"""
+             |def foo(x: Int): Int = x + 1
+             |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assert(receivedHoles.head.holes.isEmpty)
+    }
+  }
+
+  test("Server publishes single-expression hole body") {
+    withClientAndServer { (client, server) =>
+      val source =
+        """
+          |def foo(x: Int): Int = <{ x + 1 }>
+          |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val expectedBody = List(
+        Code(
+          text = "x + 1",
+          `type` = Some("Int")
+        )
+      )
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+      val hole = receivedHoles.head.holes.head
+      assertEquals(hole.body, expectedBody)
+    }
+  }
+
+  test("Server publishes hole body if program typechecks") {
+    withClientAndServer { (client, server) =>
+      val source =
+             """
+             |effect foo(): Int
+             |effect bar(): String
+             |def baz(x: Int): Int / {foo, bar} = <"
+             |  This is some natural language text.
+             |  ${ do foo() }
+             |  Some more text.
+             |  ${ do bar() }
+             |">
+             |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val expectedBody = List(
+        NaturalLanguage(
+          text = "\n  This is some natural language text.\n  "
+        ),
+        Code(
+          text = "do foo()",
+          `type` = Some("Int")
+        ),
+        NaturalLanguage(
+          text = "\n  Some more text.\n  "
+        ),
+        Code(
+          text = "do bar()",
+          `type` = Some("String")
+        ),
+        NaturalLanguage(
+          text = "\n"
+        )
+      )
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+      val hole = receivedHoles.head.holes.head
+      assertEquals(hole.body, expectedBody)
+    }
+  }
+
+  test("Server publishes hole body if program doesn't typecheck") {
+    withClientAndServer { (client, server) =>
+      val source =
+        """
+          |effect foo(): Int
+          |effect bar(): String
+          |// Missing effect annotations in the return type, so this doesn't typecheck
+          |def baz(x: Int): Int = <"
+          |  This is some natural language text.
+          |  ${ do foo() }
+          |  Some more text.
+          |  ${ do bar() }
+          |">
+          |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val expectedBody = List(
+        NaturalLanguage(
+          text = "\n  This is some natural language text.\n  "
+        ),
+        Code(
+          text = "do foo()",
+          `type` = None
+        ),
+        NaturalLanguage(
+          text = "\n  Some more text.\n  "
+        ),
+        Code(
+          text = "do bar()",
+          `type` = None
+        ),
+        NaturalLanguage(
+          text = "\n"
+        )
+      )
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+      val hole = receivedHoles.head.holes.head
+      assertEquals(hole.body, expectedBody)
+    }
+  }
+
+  test("Server publishes term names in the correct order") {
+    withClientAndServer { (client, server) =>
+      val source =
+        raw"""namespace Foo {
+             |  effect e1: Int
+             |  def foo(z: Int, y: Int, x: Int){b1: => Int}{b2: => Bool}: Int = <>
+             |  effect e2: Int
+             |}
+             |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+
+      // Check that the scope bindings are in the correct order
+      val hole = receivedHoles.head.holes.head
+
+      val innerBindings = hole.scope.bindings
+
+      assertEquals(innerBindings.length, 5)
+      assertEquals(innerBindings(0).name, "z")
+      assertEquals(innerBindings(1).name, "y")
+      assertEquals(innerBindings(2).name, "x")
+      assertEquals(innerBindings(3).name, "b1")
+      assertEquals(innerBindings(4).name, "b2")
+
+      val outerBindings = hole.scope.outer.get.bindings
+
+      assertEquals(outerBindings.length, 3)
+      assertEquals(outerBindings(0).name, "e1")
+      assertEquals(outerBindings(1).name, "foo")
+      assertEquals(outerBindings(2).name, "e2")
+    }
+  }
+
+  test("Server correctly publishes overloaded field accessors") {
+    withClientAndServer { (client, server) =>
+      val source =
+        raw"""namespace N {
+             |  // Accessor functions are generated for all record fields
+             |  record Foo1(theField: String)
+             |  record Foo2(theField: String)
+             |
+             |  // There are no accessor functions for data type constructor fields
+             |  type Bar { Bar(theField: Int) }
+             |
+             |  def main() = <>
+             |}
+             |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val expectedBindings = List(
+        TypeBinding(
+          qualifier = Nil,
+          name = "Foo1",
+          origin = "Defined",
+          signature = Some("type Foo1"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">Foo1</span>"),
+          kind = "Type",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 2, character = 2),
+              end = Intelligence.LSPPosition(line = 2, character = 31)
+            )
+          ))
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "Foo1",
+          origin = "Defined",
+          signature = Some(
+            "def Foo1(theField: String): Foo1 / {}"
+          ),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident pascal-case\">Foo1</span>(<span class=\"effekt-ident camel-case\">theField</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Foo1</span> / {}"),
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 2, character = 2),
+              end = Intelligence.LSPPosition(line = 2, character = 31)
+            )
+          ))
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "theField",
+          origin = "Defined",
+          signature = Some(
+            "def theField(Foo1: Foo1): String / {}"
+          ),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">theField</span>(<span class=\"effekt-ident pascal-case\">Foo1</span>: <span class=\"effekt-ident pascal-case\">Foo1</span>): <span class=\"effekt-ident pascal-case\">String</span> / {}"),
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 2, character = 14),
+              end = Intelligence.LSPPosition(line = 2, character = 30)
+            )
+          ))
+        ),
+        TypeBinding(
+          qualifier = Nil,
+          name = "Foo2",
+          origin = "Defined",
+          signature = Some("type Foo2"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">Foo2</span>"),
+          kind = "Type",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 3, character = 2),
+              end = Intelligence.LSPPosition(line = 3, character = 31)
+            )
+          ))
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "Foo2",
+          origin = "Defined",
+          signature = Some("def Foo2(theField: String): Foo2 / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident pascal-case\">Foo2</span>(<span class=\"effekt-ident camel-case\">theField</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Foo2</span> / {}"),
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 3, character = 2),
+              end = Intelligence.LSPPosition(line = 3, character = 31)
+            )
+          ))
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "theField",
+          origin = "Defined",
+          signature = Some("def theField(Foo2: Foo2): String / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">theField</span>(<span class=\"effekt-ident pascal-case\">Foo2</span>: <span class=\"effekt-ident pascal-case\">Foo2</span>): <span class=\"effekt-ident pascal-case\">String</span> / {}"),
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 3, character = 14),
+              end = Intelligence.LSPPosition(line = 3, character = 30)
+            )
+          ))
+        ),
+        TypeBinding(
+          qualifier = Nil,
+          name = "Bar",
+          origin = "Defined",
+          signature = Some("type Bar"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">Bar</span>"),
+          kind = "Type",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 6, character = 2),
+              end = Intelligence.LSPPosition(line = 6, character = 33)
+            )
+          ))
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "Bar",
+          origin = "Defined",
+          signature = Some("def Bar(theField: Int): Bar / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident pascal-case\">Bar</span>(<span class=\"effekt-ident camel-case\">theField</span>: <span class=\"effekt-ident pascal-case\">Int</span>): <span class=\"effekt-ident pascal-case\">Bar</span> / {}"),
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 6, character = 13),
+              end = Intelligence.LSPPosition(line = 6, character = 31)
+            )
+          ))
+        ),
+        TermBinding(
+          qualifier = Nil,
+          name = "main",
+          origin = "Defined",
+          signature = Some("def main(): Nothing / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">main</span>(): <span class=\"effekt-ident pascal-case\">Nothing</span> / {}"),
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 8, character = 2),
+              end = Intelligence.LSPPosition(line = 8, character = 17)
+            )
+          ))
+        )
+      )
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+
+      val hole = receivedHoles.head.holes.head
+      val outerScope = hole.scope.outer.get
+
+      assertEquals(outerScope.bindings, expectedBindings)
+    }
+  }
+
+  test("Server publishes qualifiers for symbols") {
+    withClientAndServer { (client, server) =>
+      val source =
+        """
+          |namespace N {
+          |  namespace A {
+          |    namespace B {
+          |      def foo(): Int = 42
+          |    }
+          |  }
+          |  def bar() = <>
+          |}
+          |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+      val hole = receivedHoles.head.holes.head
+      val bindings = hole.scope.outer.get.bindings
+      assertEquals(bindings(0).name, "foo")
+      assertEquals(bindings(0).qualifier, List("A", "B"))
+      assertEquals(bindings(1).name, "bar")
+      assertEquals(bindings(1).qualifier, Nil)
+    }
+  }
+
+  test("Server does not crash on file with type variables") {
+    withClientAndServer { (client, server) =>
+      val source =
+        raw"""def foo[T]() = <>
+             |""".textDocument
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+    }
+  }
+
+  // Tests for hole URI feature (for "Jump to definition" support)
+  //
+  //
+
+  test("Hole info includes correct file URI") {
+    withClientAndServer { (client, server) =>
+      val source = new TextDocumentItem("file://custom/path/example.effekt", "effekt", 0,
+        """def bar(): String = <>""")
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+
+      val hole = receivedHoles.head.holes.head
+      assertEquals(hole.uri, "file://custom/path/example.effekt")
     }
   }
 
@@ -877,6 +2261,7 @@ class LSPTests extends FunSuite {
 class MockLanguageClient extends EffektLanguageClient {
   private val diagnosticQueue: mutable.Queue[PublishDiagnosticsParams] = mutable.Queue.empty
   private val publishIRQueue: mutable.Queue[EffektPublishIRParams] = mutable.Queue.empty
+  private val publishHolesQueue: mutable.Queue[EffektPublishHolesParams] = mutable.Queue.empty
 
   /**
    * Pops all diagnostics received since the last call to this method.
@@ -894,6 +2279,12 @@ class MockLanguageClient extends EffektLanguageClient {
     val irs = publishIRQueue.toSeq
     publishIRQueue.clear()
     irs
+  }
+
+  def receivedHoles(): Seq[EffektPublishHolesParams] = {
+    val holes = publishHolesQueue.toSeq
+    publishHolesQueue.clear()
+    holes
   }
 
   override def telemetryEvent(`object`: Any): Unit = {
@@ -919,6 +2310,10 @@ class MockLanguageClient extends EffektLanguageClient {
 
   override def publishIR(params: EffektPublishIRParams): Unit = {
     publishIRQueue.enqueue(params)
+  }
+
+  override def publishHoles(params: EffektPublishHolesParams): Unit = {
+    publishHolesQueue.enqueue(params)
   }
 }
 

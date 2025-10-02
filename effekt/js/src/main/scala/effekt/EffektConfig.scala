@@ -20,10 +20,14 @@ trait EffektConfig {
   def prelude(): List[String] = List(
     "effekt",
     "option",
+    "stream",
     "list",
     "result",
     "exception",
     "array",
+    "char",
+    "bytearray",
+    "stringbuffer",
     "string",
     "ref"
   )

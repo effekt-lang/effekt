@@ -54,9 +54,8 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
    * and everything else that can occur on the top-level.
    */
   override def parse(source: Source): ParseResult[Tree] = {
-    val lexer = effekt.lexer.Lexer(source)
-    val tokens = lexer.lex()
-    val parser = RecursiveDescent(context.positions, tokens, source)
+    val tokens = effekt.lexer.Lexer.lex(source)
+    val parser = new Parser(tokens, source)
     parser.parseRepl(Input(source, 0))
   }
 
@@ -108,7 +107,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
       }
       output.emitln("")
 
-      runFrontend(StringSource(""), module.make(StringSource(""), UnitLit()), config) { cu =>
+      runFrontend(StringSource(""), module.make(StringSource(""), UnitLit(Span.missing)), config) { cu =>
         module.definitions.foreach {
           case u: Def =>
             outputCode(DeclPrinter(context.symbolOf(u)), config)
@@ -122,11 +121,11 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
     def typecheck(source: Source, config: EffektConfig): Unit =
       parse(source) match {
         case Success(e: Term, _) =>
-          runFrontend(source, module.make(source, e), config) { mod =>
-            // TODO this is a bit ad-hoc
-            val mainSym = mod.exports.terms("main").head
-            val mainTpe = context.functionTypeOf(mainSym)
-            output.emitln(pp"${mainTpe.result}")
+          // TODO this is a bit ad-hoc!!!
+          runFrontend(source, module.make(source, e, "repl"), config) { mod =>
+            val replSym = mod.exports.terms("repl").head
+            val replTpe = context.functionTypeOf(replSym)
+            output.emitln(pp"${replTpe.result}")
           }
 
         case Success(other, _) =>
@@ -217,7 +216,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
     case d: Def =>
       val extendedDefs = module + d
-      val decl = extendedDefs.make(source, UnitLit())
+      val decl = extendedDefs.make(source, UnitLit(Span.missing))
 
       runFrontend(source, decl, config) { cu =>
         module = extendedDefs
@@ -307,21 +306,28 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
     def contains(im: Include) = includes.exists { other => im.path == other.path }
 
     /**
-     * Create a module declaration using the given expression as body of main
+     * Create a module declaration using the given expression as body of `defName`
+     * 
+     * def <defName>() = {
+     *   return <expr>
+     * }
+     * 
+     * By default `defName` is "main", however, when type checking a main function the result must be unit.
+     * When querying the type of an expression using :t, this is not desirable.
+     * Hence, the caller can choose some different name such that these restrictions don't exist. 
      */
-    def make(source: Source, expr: Term): ModuleDecl = {
-
-      val body = Return(expr)
+    def make(source: Source, expr: Term, defName: String = "main"): ModuleDecl = {
+      val body = Return(expr, expr.span.synthesized)
       val fakeSpan = Span(source, 0, 0, origin = Origin.Synthesized)
       val fullSpan = Span(source, 0, source.content.length, origin = Origin.Synthesized)
       ModuleDecl("interactive", includes,
-        definitions :+ FunDef(IdDef("main", fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Maybe.None(fakeSpan),
-          body, fullSpan), fullSpan)
+        definitions :+ FunDef(IdDef(defName, fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Maybe.None(fakeSpan), Maybe.None(fakeSpan),
+          body, Info.empty(fakeSpan), fullSpan), None, fullSpan)
     }
 
     def makeEval(source: Source, expr: Term): ModuleDecl = {
       val fakeSpan = Span(source, 0, 0, origin = Origin.Synthesized)
-      make(source, Call(IdTarget(IdRef(List(), "println", fakeSpan)), Nil, List(expr), Nil))
+      make(source, Call(IdTarget(IdRef(List(), "println", fakeSpan)), Nil, List(ValueArg.Unnamed(expr)), Nil, fakeSpan))
     }
   }
   lazy val emptyModule = ReplModule(Nil, Nil)

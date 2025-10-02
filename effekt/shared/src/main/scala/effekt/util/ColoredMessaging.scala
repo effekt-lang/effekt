@@ -1,10 +1,10 @@
 package effekt
 package util
 
-import effekt.symbols.{ Capture, Captures, Effects, ErrorMessageInterpolator, LocalName, Name, NoName, QualifiedName, TypePrinter }
+import effekt.symbols.{Capture, Captures, Effects, ErrorMessageInterpolator, Name, QualifiedName, TypePrinter}
 import effekt.util.messages.*
-import kiama.util.{ Messaging, Position, Positions, Severities }
-import kiama.util.Severities._
+import kiama.util.Severities.*
+import kiama.util.{Position, Severities}
 
 trait ColoredMessaging extends EffektMessaging {
 
@@ -38,17 +38,14 @@ trait ColoredMessaging extends EffektMessaging {
         s"[$severity] ${formatContent(message)}\n"
     }
 
-  def formatMessage(message: EffektError, from: Position): String = {
-    val severity = severityToWord(message.severity)
-    val context = util.AnsiHighlight(from.optContext.getOrElse(""))
-    s"[$severity] ${homogenizePath(from.format)} ${formatContent(message)}\n$context\n"
-  }
+  def formatMessage(message: EffektError, from: Position): String =
+    formatMessage(message, from, from.copy(column = from.column + 1))
 
   def formatMessage(message: EffektError, from: Position, to: Position): String = {
     val severity = severityToWord(message.severity)
-    val context = util.AnsiHighlight(from.source.optLineContents(from.line).map { src =>
-      src + "\n" + (" " * (from.column - 1)) + ("^" * (to.column - from.column))
-    }.getOrElse(""))
+    val context = from.source.optLineContents(from.line).map { src =>
+      util.AnsiHighlight(src) + "\n" + (" " * (from.column - 1)) + ("^" * (to.column - from.column))
+    }.getOrElse("")
     s"[$severity] ${homogenizePath(from.format)} ${formatContent(message)}\n$context\n"
   }
 

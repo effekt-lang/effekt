@@ -3,6 +3,7 @@ package util
 
 import scala.deriving.*
 import scala.compiletime.*
+import scala.annotation.nowarn
 
 
 // TODO we need to get rid of spurious pipes:
@@ -21,6 +22,7 @@ import scala.compiletime.*
 //      |
 trait Docs[A] { def show(indentation: String, depth: Int): String }
 
+@nowarn("msg=New anonymous class definition will be duplicated at each inline")
 object Docs {
 
   inline def summonAll[T <: Tuple]: List[Docs[_]] =

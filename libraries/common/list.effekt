@@ -3,6 +3,7 @@ module list
 import effekt
 import option
 import exception
+import stream
 
 /// Immutable linked list for finite sequences of elements.
 type List[A] {
@@ -221,7 +222,7 @@ def filterWithIndex[A](l: List[A]) { shouldKeep: (Int, A) => Bool }: List[A] = {
 /// discarding the elements for which the function returned `None()`.
 ///
 /// O(N)
-def collect[A, B](l: List[A]) { f : A => Option[B] }: List[B] = {
+def collectSome[A, B](l: List[A]) { f : A => Option[B] }: List[B] = {
   var acc: List[B] = Nil()
   l.foreach { a =>
     f(a) match {
@@ -714,6 +715,40 @@ def zip[A, B](left: List[A], right: List[B]): List[(A, B)] = {
   go(Nil(), left, right)
 }
 
+/// Produce a list of OneOrBoth from two lists.
+/// The length is the maximum of lenghts of the two lists.
+///
+/// Examples:
+/// ```
+/// > zipLongest([1, 2, 3], [100, 200, 300])
+/// [Both(1, 100), Both(2, 200), Both(3, 300)]
+///
+/// > zipLongest([1, 2, 3], Nil[Int]())
+/// [This(1), This(2), This(3)]
+///
+/// > zipLongest(Nil[Int](), [1, 2, 3])
+/// [That(1), That(2), That(3)]
+///
+/// > zipLongest([1, 2, 3], [42])
+/// [These(1, 42), This(2), This(3)]
+/// ```
+///
+/// O(N)
+def zipLongest[A, B](left: List[A], right: List[B]): List[OneOrBoth[A, B]] = {
+  def go(acc: List[OneOrBoth[A, B]], left: List[A], right: List[B]): List[OneOrBoth[A,B]] = {
+    (left, right) match {
+      case (Cons(a, as), Cons(b, bs)) =>
+        go(Cons(Both(a, b), acc), as, bs)
+      case (Cons(a, as), Nil()) =>
+        go(Cons(This(a), acc), as, Nil())
+      case (Nil(), Cons(b, bs)) =>
+        go(Cons(That(b), acc), Nil(), bs)
+      case _ => acc.reverse
+    }
+  }
+  go(Nil(), left, right)
+}
+
 /// Combine two lists with the given function.
 /// The length of the result is the minimum of lengths of the two lists.
 ///
@@ -915,3 +950,46 @@ def println(l: List[Int]): Unit = println(show(l))
 def println(l: List[Double]): Unit = println(show(l))
 def println(l: List[Bool]): Unit = println(show(l))
 def println(l: List[String]): Unit = println(show(l))
+
+
+// Streaming
+// ---------
+
+/// Turns a `list` into a producer of a push stream
+/// by emitting each contained value left-to-right.
+def each[A](list: List[A]): Unit / emit[A] =
+  list match {
+    case Nil() => ()
+    case Cons(head, tail) =>
+      do emit(head)
+      each(tail)
+  }
+
+def feed[T, R](list: List[T]) { reader: () => R / read[T] }: R = {
+  var l = list
+  try {
+    reader()
+  } with read[T] {
+    resume {
+      l match {
+        case Nil() => do stop()
+        case Cons(value, rest) =>
+          l = rest
+          return value
+      }
+    }
+  }
+}
+
+def collect[A] { stream: () => Unit / emit[A] }: List[A] =
+  returning::collect[A, Unit]{stream}.second
+
+namespace returning {
+  def collect[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
+    try {
+      (stream(), Nil())
+    } with emit[A] { (v) =>
+      val (r, vs) = resume(());
+      (r, Cons(v, vs))
+    }
+}

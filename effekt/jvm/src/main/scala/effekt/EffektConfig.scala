@@ -74,17 +74,24 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
     group = advanced
   )
 
-  val gccIncludes: ScallopOption[File] = opt[File](
-    "gcc-includes",
-    descr = "Additional include path for gcc (necessary for libuv on the llvm backend)",
+  val clangIncludes: ScallopOption[File] = opt[File](
+    "clang-includes",
+    descr = "Additional include path for clang (necessary for libuv on the llvm backend)",
     noshort = true,
     group = advanced
   )
 
-  val gccLibraries: ScallopOption[File] = opt[File](
-    "gcc-libraries",
-    descr = "Additional library path for gcc (necessary for libuv on the llvm backend)",
+  val clangLibraries: ScallopOption[File] = opt[File](
+    "clang-libraries",
+    descr = "Additional library path for clang (necessary for libuv on the llvm backend)",
     noshort = true,
+    group = advanced
+  )
+
+  val native: ScallopOption[Boolean] = toggle(
+    "native",
+    descrYes = "Optimize the executable for the native CPU. May break executable on other Devices. Only works for the LLVM backend",
+    default = Some(false),
     group = advanced
   )
 
@@ -128,6 +135,15 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
   // ---------
   private val debugging = group("Compiler Development")
 
+  val showPrelude: ScallopOption[Boolean] = toggle(
+    "show-prelude",
+    descrYes = "Print modules to be automatically imported in every file",
+    default = Some(false),
+    noshort = true,
+    prefix = "no-",
+    group = debugging
+  )
+
   val showIR: ScallopOption[Option[Stage]] = choice(
     choices = List("none", "core", "machine", "target"),
     name = "ir-show",
@@ -142,6 +158,24 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
   val writeIRs: ScallopOption[Boolean] = toggle(
     "ir-write-all",
     descrYes = "Write all IRs to files in the output directory",
+    default = Some(false),
+    noshort = true,
+    prefix = "no-",
+    group = debugging
+  )
+
+  val showDocumentation: ScallopOption[Boolean] = toggle(
+    "show-documentation",
+    descrYes = "Show all documented statements as a JSON",
+    default = Some(false),
+    noshort = true,
+    prefix = "no-",
+    group = debugging
+  )
+
+  val writeDocumentation: ScallopOption[Boolean] = toggle(
+    "write-documentation",
+    descrYes = "Write all documented statements to a JSON in the output directory",
     default = Some(false),
     noshort = true,
     prefix = "no-",
@@ -224,6 +258,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
   def interpret(): Boolean = !server() && !compile() && !build()
 
   def repl(): Boolean = filenames().isEmpty && !server() && !compile()
+
+  def documenter(): Boolean = showDocumentation() || writeDocumentation()
 
   def timed(): Boolean = time.isSupplied && !server()
 

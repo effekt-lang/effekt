@@ -1,0 +1,7 @@
+/// main function
+def main() = {
+  /// cool number
+  val x = 42
+
+  println(x)
+}

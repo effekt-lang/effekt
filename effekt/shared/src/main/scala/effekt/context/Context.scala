@@ -2,14 +2,12 @@ package effekt
 package context
 
 import effekt.namer.NamerOps
-import effekt.typer.TyperOps
+import effekt.typer.{TyperOps, Unification}
 import effekt.core.TransformerOps
 import effekt.source.Tree
-import effekt.util.messages.{ ErrorReporter, EffektMessages }
+import effekt.util.messages.{EffektMessages, ErrorReporter}
 import effekt.util.Timers
 import effekt.symbols.Module
-
-import kiama.util.Positions
 
 /**
  * Phases like Typer can add operations to the context by extending this trait
@@ -20,7 +18,8 @@ trait ContextOps
     extends ErrorReporter
     with TreeAnnotations
     with SourceAnnotations 
-    with SymbolAnnotations { self: Context =>
+    with SymbolAnnotations
+    with Unification { self: Context =>
 
   /**
    * Used throughout the compiler to create a new "scope"
@@ -39,7 +38,7 @@ trait ContextOps
  * - types (mutable database)
  * - error reporting (mutable focus)
  */
-abstract class Context(val positions: Positions)
+abstract class Context
     extends NamerOps
     with TyperOps
     with ModuleDB

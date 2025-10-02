@@ -1,13 +1,20 @@
 package effekt
 
-import effekt.context.{ Annotations, Context }
-import effekt.source.{ FunDef, ModuleDecl, Tree, Include }
-import kiama.util.{ Position, Source }
+import effekt.context.{Annotations, Context}
+import effekt.source.Origin.Missing
+import effekt.source.{Doc, FunDef, Include, Maybe, ModuleDecl, Span, Tree}
+import effekt.symbols.{CaptureSet, Hole}
+import kiama.util.{Position, Source}
+import effekt.symbols.scopes.Scope
+import effekt.source.sourceOf
+import effekt.util.HtmlHighlight
+import effekt.source.Spans
 
 trait Intelligence {
 
   import effekt.symbols._
   import builtins.TState
+  import Intelligence._
 
   type EffektTree = kiama.relation.Tree[AnyRef & Product, ModuleDecl]
 
@@ -15,37 +22,44 @@ trait Intelligence {
     symbol: Symbol,
     header: String,
     signature: Option[String],
-    description: Option[String]
+    description: Option[String],
+    documentation: Doc
   ) {
     def fullDescription: String = {
       val sig = signature.map(sig => s"```effekt\n$sig\n```").getOrElse { "" }
       val desc = description.getOrElse("")
+      val doc = showDocumentation(documentation)
 
       s"""|#### $header
           |$sig
-          |$desc
+          |$desc$doc
           |""".stripMargin
     }
 
     def shortDescription: String = {
       val sig = signature.map(sig => s"```effekt\n$sig\n```").getOrElse { "" }
+      val doc = showDocumentation(documentation)
 
       s"""|#### $header
-          |$sig
+          |$sig$doc
           |""".stripMargin
     }
   }
 
+  def showDocumentation(documentation: Doc): String =
+    documentation.map('\n' +: _)
+      .getOrElse("")
+      .replace("\\n", "\n")
+
   private def sortByPosition(trees: Vector[Tree])(using C: Context): Vector[Tree] =
-    val pos = C.positions
     trees.sortWith {
       (t1, t2) =>
-        val p1s = pos.getStart(t1).get
-        val p2s = pos.getStart(t2).get
+        val p1s = t1.span.from
+        val p2s = t2.span.from
 
         if (p2s == p1s) {
-          val p1e = pos.getFinish(t1).get
-          val p2e = pos.getFinish(t2).get
+          val p1e = t1.span.to
+          val p2e = t1.span.to
           p1e < p2e
         } else {
           p2s < p1s
@@ -56,7 +70,7 @@ trait Intelligence {
     decl <- C.compiler.getAST(position.source)
     tree = new EffektTree(decl)
     allTrees = tree.nodes.collect { case t: Tree => t }
-    trees = C.positions.findNodesContaining(allTrees, position)
+    trees = Spans.findNodesContaining(allTrees, position)
     nodes = sortByPosition(trees)
   } yield nodes
 
@@ -64,7 +78,7 @@ trait Intelligence {
     decl <- C.compiler.getAST(range.from.source)
     tree = new EffektTree(decl)
     allTrees = tree.nodes.collect { case t: Tree => t }
-    trees = C.positions.findNodesInRange(allTrees, range)
+    trees = Spans.findNodesInRange(allTrees, range)
     nodes = sortByPosition(trees)
   } yield nodes
 
@@ -89,7 +103,7 @@ trait Intelligence {
 
   def getSymbolOf(tree: Tree)(using C: Context): Option[Symbol] =
     tree match {
-      case i @ Include(path) => C.annotationOption(Annotations.IncludedSymbols, i)
+      case i @ Include(path, span) => C.annotationOption(Annotations.IncludedSymbols, i)
       case _ => None
     }
 
@@ -107,53 +121,232 @@ trait Intelligence {
     case u => C.definitionTreeOption(u)
   }
 
+  def getDocumentationOf(s: Symbol)(using C: Context): Doc =
+    getDefinitionOf(s).asInstanceOf[Option[Any]] match {
+      case Some(p: Product) =>
+        p.productElementNames.zip(p.productIterator)
+          .collectFirst {
+            case ("doc", Some(s: String)) => s
+            case ("info", source.Info(Some(s: String), _, _)) => s
+          }
+      case _ => None
+  }
+
   // For now, only show the first call target
   def resolveCallTarget(sym: Symbol): Symbol = sym match {
     case t: CallTarget => t.symbols.flatten.headOption.getOrElse(sym)
     case s             => s
   }
 
+  def getSymbolHover(position: Position, fullDescription: Boolean = true)(using C: Context): Option[String] = for {
+    (tree, sym) <- getSymbolAt(position)
+    info <- getInfoOf(sym)
+  } yield if (fullDescription) info.fullDescription else info.shortDescription
+
+  def getHoleHover(position: Position)(using C: Context): Option[String] = for {
+    trees <- getTreesAt(position)
+    tree <- trees.collectFirst { case h: source.Hole => h }
+    info <- getHoleInfo(tree)
+  } yield info
+
   def getHoleInfo(hole: source.Hole)(using C: Context): Option[String] = for {
     (outerTpe, outerEff) <- C.inferredTypeAndEffectOption(hole)
-    (innerTpe, innerEff) <- C.inferredTypeAndEffectOption(hole.stmts)
-  } yield pp"""| | Outside       | Inside        |
-               | |:------------- |:------------- |
-               | | `${outerTpe}` | `${innerTpe}` |
-               |""".stripMargin
+  } yield pp"Hole of type `${outerTpe}`".stripMargin
+
+  def getHoles(src: Source)(using C: Context): List[HoleInfo] = for {
+    (hole, scope) <- C.annotationOption(Annotations.HolesForFile, src).getOrElse(Nil)
+  } yield {
+    val innerType = hole.argTypes match {
+      case Some(t) :: Nil => Some(pp"${t}")
+      case _ => None
+    };
+    val expectedType = hole.expectedType.map { t => pp"${t}" }
+    val scopeInfo = allBindings(scope)
+    val body = holeBody(hole.decl.body, hole.argTypes)
+    HoleInfo(
+      hole.name.name,
+      hole.decl.span,
+      innerType,
+      expectedType,
+      scopeInfo,
+      body
+    )
+  }
+
+  def allBindings(scope: Scope)(using C: Context): ScopeInfo =
+    scope match {
+      case Scope.Global(imports, bindings) =>
+        val bindingsOut = allBindings(BindingOrigin.Imported, imports)
+          ++ allBindings(BindingOrigin.Defined, bindings)
+        ScopeInfo(None, ScopeKind.Global, bindingsOut, None)
+      case Scope.Named(name, bindings, outer) =>
+        val bindingsOut = allBindings(BindingOrigin.Defined, bindings)
+        ScopeInfo(Some(name), ScopeKind.Namespace, bindingsOut, Some(allBindings(outer)))
+      case Scope.Local(name, imports, bindings, outer) =>
+        val bindingsOut = allBindings(BindingOrigin.Imported, imports)
+          ++ allBindings(BindingOrigin.Defined, bindings)
+        ScopeInfo(name, ScopeKind.Local, bindingsOut, Some(allBindings(outer)))
+    }
+
+  def allBindings(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): List[BindingInfo] =
+    val symbols = allSymbols(origin, bindings, path).distinctBy(s => s._3)
+
+    val sorted = if (origin == BindingOrigin.Imported) {
+      symbols.sortBy(_._1.toLowerCase())
+    } else {
+      symbols.sortBy((name, path, sym) => sym match {
+        case s: TypeSymbol => s.decl.span
+        case s: TermSymbol => s.decl.span
+      })
+    }
+
+    def getSymbolUri(sym: TypeSymbol | TermSymbol): Option[String] = {
+      try {
+        val sourceName = sym match {
+          case s: TypeSymbol if s.decl != null => s.decl.span.source.name
+          case s: TermSymbol if s.decl != null => s.decl.span.source.name
+          case _ => return None
+        }
+        
+        if (sourceName.startsWith("file:") || sourceName.startsWith("vscode-notebook-cell:")) {
+          Some(sourceName)
+        } else if (sourceName.startsWith("./") || sourceName.startsWith(".\\")) {
+          // Remove the "./" or ".\\" prefix and make absolute
+          val relativePath = sourceName.substring(2)
+          Some(s"file://$relativePath")
+        } else {
+          Some(s"file://$sourceName")
+        }
+      } catch {
+        case _: Throwable => None
+      }
+    }
+
+    def getDefinitionLocation(sym: TypeSymbol | TermSymbol): Option[LSPLocation] = {
+      try {
+        val span = sym match {
+          case s: TypeSymbol if s.decl != null => s.decl.span
+          case s: TermSymbol if s.decl != null => s.decl.span
+          case _ => return None
+        }
+        
+        for {
+          uri <- getSymbolUri(sym)
+        } yield LSPLocation(
+          uri = uri,
+          range = LSPRange(
+            start = LSPPosition(line = span.range.from.line - 1, character = span.range.from.column - 1), // LSP is 0-indexed
+            end = LSPPosition(line = span.range.to.line - 1, character = span.range.to.column - 1)  // LSP is 0-indexed
+          )
+        )
+      } catch {
+        case _: Throwable => None
+      }
+    }
+
+    def symbolToBindingInfos(name: String, path: List[String], sym: TypeSymbol | TermSymbol)(using C: Context): List[BindingInfo] =
+      // TODO this is extremely hacky, printing is not defined for all types at the moment
+      val signature = try { Some(SignaturePrinter(sym)) } catch { case e: Throwable => None }
+      val signatureHtml = signature.map(sig => HtmlHighlight(sig))
+      val definitionLocation = getDefinitionLocation(sym)
+      
+      val out = sym match {
+        case sym: TypeSymbol => List(TypeBinding(path, name, origin, signature, signatureHtml, definitionLocation = definitionLocation))
+        case sym: ValueSymbol => List(TermBinding(path, name, origin, signature, signatureHtml, definitionLocation = definitionLocation))
+        case sym: BlockSymbol => List(TermBinding(path, name, origin, signature, signatureHtml, definitionLocation = definitionLocation))
+      }
+      sym match {
+        case Interface(name, tparams, ops, decl) if !(ops.length == 1 && ops.head.name.name == name.name) => {
+          val opsInfos = ops.map { op =>
+            val signature = Some(SignaturePrinter(op))
+            val signatureHtml = signature.map(sig => HtmlHighlight(sig))
+            val opDefinitionLocation = getDefinitionLocation(op)
+            TermBinding(path, op.name.name, origin, signature, signatureHtml, definitionLocation = opDefinitionLocation)
+          }
+          out ++ opsInfos
+        }
+        case _ => out
+      }
+
+    sorted.flatMap(symbolToBindingInfos).toList
+
+  def allSymbols(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): Array[(String, List[String], TypeSymbol | TermSymbol)] = {
+    bindings.types.toArray.map((name, sym) => (name, path, sym))
+      ++ bindings.terms.toArray.flatMap((name, syms) => syms.map((name, path, _)))
+      ++ bindings.namespaces.toArray.flatMap {
+      case (name, namespace) => allSymbols(origin, namespace, path :+ name)
+    }
+  }
+
+  def holeBody(template: Template[source.Stmt], argTypes: List[Option[ValueType]])(using C: Context): List[HoleItem] = {
+    val Template(strings, args) = template
+    val argsAndTypes = if (argTypes.isEmpty) {
+      args.map((_, None))
+    } else {
+      args.zip(argTypes)
+    }
+    val buf = List.newBuilder[HoleItem]
+    val strIt = strings.iterator
+    val argIt = argsAndTypes.iterator
+
+    // Case 1: there is a single argument and no strings
+    // This happens when the hole is defined as a single statement/expression using the `<{ stmt }>` syntax
+    if (strIt.isEmpty && argIt.hasNext) {
+      val (stmt, tpeOpt) = argIt.next()
+      buf += Code(stmt.sourceOf, tpeOpt.map(t => pp"${t}"))
+      return buf.result()
+    }
+
+    // Case 2: starting with a string, it alternates between strings and arguments
+    // This happens when the hole is defined as a template using the `<"text ${ arg } text ${arg} ...">` syntax
+    while (strIt.hasNext) {
+      buf += NaturalLanguage(strIt.next())
+      if (argIt.hasNext) {
+        val (stmt, tpeOpt) = argIt.next()
+        buf += Code(stmt.sourceOf, tpeOpt.map(t => pp"${t}"))
+      }
+    }
+
+    buf.result()
+  }
 
   def allCaptures(src: Source)(using C: Context): List[(Tree, CaptureSet)] =
     C.annotationOption(Annotations.CaptureForFile, src).getOrElse(Nil)
 
   // For now, we only show captures of function definitions and calls to box
-  def getInferredCaptures(range: kiama.util.Range)(using C: Context): List[(Position, CaptureSet)] =
+  def getInferredCaptures(range: kiama.util.Range)(using C: Context): List[CaptureInfo] =
     val src = range.from.source
     allCaptures(src).filter {
       // keep only captures in the current range
-      case (t, c) => C.positions.getStart(t) match
-        case Some(p) => p.between(range.from, range.to)
-        case None => false
+      case (t, c) => t.span.origin != Missing && t.span.range.from.between(range.from, range.to)
     }.collect {
-      case (t: source.FunDef, c) => for {
-        pos <- C.positions.getStart(t)
-      } yield (pos, c)
+      case (t: source.FunDef, c) if t.captures.isEmpty => for {
+        pos <- if t.span.origin != Missing then Some(t.ret.span.range.from) else None
+      } yield CaptureInfo(pos, c)
       case (t: source.DefDef, c) => for {
-        pos <- C.positions.getStart(t)
-      } yield (pos, c)
-      case (source.Box(None, block), _) if C.inferredCaptureOption(block).isDefined => for {
-        pos <- C.positions.getStart(block)
+        pos <- if t.span.origin != Missing then Some(t.annot.span.range.from) else None
+      } yield CaptureInfo(pos, c)
+      // only show it if it is the default capture inserted by the parser
+      case (t @ source.ExternDef(_, _, _, _, source.CaptureSet(_, Span(_, _, _, source.Origin.Synthesized)), _, _, _, _), c) => for {
+        pos <- if t.span.origin != Missing then Some(t.captures.span.range.from) else None
+      } yield CaptureInfo(pos, c)
+      case (source.Box(Maybe(None, span), block, _), _) if C.inferredCaptureOption(block).isDefined => for {
         capt <- C.inferredCaptureOption(block)
-      } yield (pos, capt)
+      } yield CaptureInfo(span.range.from, capt)
     }.flatten
 
   def getInfoOf(sym: Symbol)(using C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
 
     case b: ExternFunction =>
-      SymbolInfo(b, "External function definition", Some(DeclPrinter(b)), None)
+      val doc = getDocumentationOf(b)
+      SymbolInfo(b, "External function definition", Some(DeclPrinter(b)), None, doc)
 
     case f: UserFunction if C.functionTypeOption(f).isDefined =>
-      SymbolInfo(f, "Function", Some(DeclPrinter(f)), None)
+      val doc = getDocumentationOf(f)
+      SymbolInfo(f, "Function", Some(DeclPrinter(f)), None, doc)
 
     case f: Operation =>
+      val doc = getDocumentationOf(f)
       val ex =
         pp"""|Effect operations, like `${f.name}` allow to express non-local control flow.
              |
@@ -173,32 +366,39 @@ trait Intelligence {
              |handled by the handler. This is important when considering higher-order functions.
              |""".stripMargin
 
-      SymbolInfo(f, "Effect operation", Some(DeclPrinter(f)), Some(ex))
+      SymbolInfo(f, "Effect operation", Some(DeclPrinter(f)), Some(ex), doc)
 
     case f: EffectAlias =>
-      SymbolInfo(f, "Effect alias", Some(DeclPrinter(f)), None)
+      val doc = getDocumentationOf(f)
+      SymbolInfo(f, "Effect alias", Some(DeclPrinter(f)), None, doc)
 
     case t: TypeAlias =>
-      SymbolInfo(t, "Type alias", Some(DeclPrinter(t)), None)
+      val doc = getDocumentationOf(t)
+      SymbolInfo(t, "Type alias", Some(DeclPrinter(t)), None, doc)
 
     case t: ExternType =>
-      SymbolInfo(t, "External type definition", Some(DeclPrinter(t)), None)
+      val doc = getDocumentationOf(t)
+      SymbolInfo(t, "External type definition", Some(DeclPrinter(t)), None, doc)
 
     case t: ExternInterface =>
-      SymbolInfo(t, "External interface definition", Some(DeclPrinter(t)), None)
+      val doc = getDocumentationOf(t)
+      SymbolInfo(t, "External interface definition", Some(DeclPrinter(t)), None, doc)
 
     case t: ExternResource =>
-      SymbolInfo(t, "External resource definition", Some(DeclPrinter(t)), None)
+      val doc = getDocumentationOf(t)
+      SymbolInfo(t, "External resource definition", Some(DeclPrinter(t)), None, doc)
 
     case c: Constructor =>
+      val doc = getDocumentationOf(c)
       val ex = pp"""|Instances of data types like `${c.tpe}` can only store
                     |_values_, not _blocks_. Hence, constructors like `${c.name}` only have
                     |value parameter lists, not block parameters.
                     |""".stripMargin
 
-      SymbolInfo(c, s"Constructor of data type `${c.tpe}`", Some(DeclPrinter(c)), Some(ex))
+      SymbolInfo(c, s"Constructor of data type `${c.tpe}`", Some(DeclPrinter(c)), Some(ex), doc)
 
     case c: BlockParam =>
+      val doc = getDocumentationOf(c)
       val signature = C.functionTypeOption(c).map { tpe => pp"{ ${c.name}: ${tpe} }" }
 
       val ex =
@@ -211,9 +411,10 @@ trait Intelligence {
             |yielded to.
             |""".stripMargin
 
-      SymbolInfo(c, "Block parameter", signature, Some(ex))
+      SymbolInfo(c, "Block parameter", signature, Some(ex), doc)
 
     case c: ResumeParam =>
+      val doc = getDocumentationOf(c)
       val tpe = C.functionTypeOption(c)
       val signature = tpe.map { tpe => pp"{ ${c.name}: ${tpe} }" }
       val hint = tpe.map { tpe => pp"(i.e., `${tpe.result}`)" }.getOrElse { " " }
@@ -228,9 +429,10 @@ trait Intelligence {
             |- the return type of the resumption.
             |""".stripMargin
 
-      SymbolInfo(c, "Resumption", signature, Some(ex))
+      SymbolInfo(c, "Resumption", signature, Some(ex), doc)
 
     case c: VarBinder =>
+      val doc = getDocumentationOf(c)
       val signature = C.blockTypeOption(c).map(TState.extractType).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
 
       val ex =
@@ -243,28 +445,152 @@ trait Intelligence {
             |combination with effect handlers.
          """.stripMargin
 
-      SymbolInfo(c, "Mutable variable binder", signature, Some(ex))
+      SymbolInfo(c, "Mutable variable binder", signature, Some(ex), doc)
 
     case s: RegBinder =>
+      val doc = getDocumentationOf(s)
+      val signature = C.blockTypeOption(s).map(TState.extractType).orElse(s.tpe).map { tpe => pp"${s.name}: ${tpe}" }
 
       val ex =
-        pp"""|The region a variable is allocated into (${s.region}) not only affects its lifetime, but
-             |also its backtracking behavior in combination with continuation capture and
-             |resumption.
-             |""".stripMargin
+        s"""|The region `${s.region.name}` the variable `${s.name}` is allocated into
+            |not only affects its lifetime, but also its backtracking behavior
+            |in combination with continuation capture and resumption.
+            |""".stripMargin
 
-      SymbolInfo(s, "Variable in region", None, Some(ex))
+      SymbolInfo(s, "Variable in region", signature, Some(ex), doc)
 
     case c: ValueParam =>
+      val doc = getDocumentationOf(c)
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
-      SymbolInfo(c, "Value parameter", signature, None)
+      SymbolInfo(c, "Value parameter", signature, None, doc)
 
     case c: ValBinder =>
+      val doc = getDocumentationOf(c)
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
-      SymbolInfo(c, "Value binder", signature, None)
+      SymbolInfo(c, "Value binder", signature, None, doc)
 
     case c: DefBinder =>
+      val doc = getDocumentationOf(c)
       val signature = C.blockTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
-      SymbolInfo(c, "Block binder", signature, None)
+      SymbolInfo(c, "Block binder", signature, None, doc)
   }
+}
+
+object Intelligence {
+  case class HoleInfo(
+     id: String,
+     span: Span,
+     /**
+      * If the hole contains a single expression, this is the type of that expression.
+      */
+     innerType: Option[String],
+     /**
+      * The expected type of the hole, if available.
+      */
+     expectedType: Option[String],
+     /**
+      * The scope in which the hole is defined, including all bindings.
+      */
+     scope: ScopeInfo,
+     /**
+      * The body of the hole: a list of natural language and code.
+      */
+     body: List[HoleItem]
+  )
+
+  // These need to be strings (rather than cases of an enum) so that they get serialized correctly
+  object BindingOrigin {
+    /**
+     * The binding was defined in this scope
+     */
+    final val Defined = "Defined"
+    /**
+     * The binding was imported in this scope
+     */
+    final val Imported = "Imported"
+  }
+
+  object BindingKind {
+    final val Term = "Term"
+    final val Type = "Type"
+  }
+
+  sealed trait BindingInfo {
+    val qualifier: List[String]
+    val name: String
+    val origin: String
+    val signature: Option[String]
+    val signatureHtml: Option[String]
+    val kind: String
+    val definitionLocation: Option[LSPLocation]
+  }
+
+  case class LSPLocation(
+    uri: String,
+    range: LSPRange
+  )
+
+  case class LSPPosition(
+    line: Int,
+    character: Int
+  )
+
+  case class LSPRange(
+    start: LSPPosition,
+    end: LSPPosition
+  )
+
+  case class TermBinding(
+    qualifier: List[String],
+    name: String,
+    origin: String,
+    signature: Option[String] = None,
+    signatureHtml: Option[String],
+    kind: String = BindingKind.Term,
+    definitionLocation: Option[LSPLocation] = None
+  ) extends BindingInfo
+  case class TypeBinding(
+    qualifier: List[String],
+    name: String,
+    origin: String,
+    signature: Option[String] = None,
+    signatureHtml: Option[String],
+    kind: String = BindingKind.Type,
+    definitionLocation: Option[LSPLocation] = None
+  ) extends BindingInfo
+
+  // These need to be strings (rather than cases of an enum) so that they get serialized correctly
+  object ScopeKind {
+    final val Namespace: String = "Namespace"
+    final val Local: String = "Local"
+    final val Global: String = "Global"
+  }
+
+  case class ScopeInfo(
+      name: Option[String],
+      kind: String,
+      bindings: List[BindingInfo],
+      outer: Option[ScopeInfo]
+  )
+
+  sealed trait HoleItem {
+    val kind: String
+  }
+
+  object HoleItemKind {
+    final val NaturalLanguage = "NaturalLanguage"
+    final val Code = "Code"
+  }
+
+  case class NaturalLanguage(text: String) extends HoleItem {
+    val kind = HoleItemKind.NaturalLanguage
+  }
+  case class Code(text: String, `type`: Option[String]) extends HoleItem {
+    val kind = HoleItemKind.Code
+  }
+
+  case class CaptureInfo(
+    position: Position,
+    captures: CaptureSet,
+  )
 }

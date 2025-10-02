@@ -27,11 +27,11 @@ interface Buffer[T] {
   def write(el: T): Unit / Exception[BufferOverflow]
 }
 
-def emptyBuffer[T](capacity: Int): Buffer[T] at {global} = {
+def emptyBuffer[T](capacity: Int): Buffer[T] at global = {
   if (capacity == 1) refBuffer()
   else arrayBuffer(capacity)
 }
-def arrayBuffer[T](initialCapacity: Int): Buffer[T] at {global} = {
+def arrayBuffer[T](initialCapacity: Int): Buffer[T] at global = {
   // TODO allocate buffer (and array) into a region r.
   val contents = array::allocate[T](initialCapacity)
   val head = ref(0)
@@ -62,11 +62,11 @@ def arrayBuffer[T](initialCapacity: Int): Buffer[T] at {global} = {
       tail.set(mod(tail.get + 1, initialCapacity))
     }
   }
-  buffer
+  box buffer
 }
-def refBuffer[T](): Buffer[T] at {global} = {
+def refBuffer[T](): Buffer[T] at global = {
   val content = ref(None())
-  new Buffer[T] {
+  box new Buffer[T] {
     def capacity() = if (content.get.isEmpty) 1 else 0
     def full?() = content.get.isDefined
     def empty?() = isEmpty(content.get)

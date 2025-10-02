@@ -16,7 +16,7 @@ case object Invariant extends Polarity { def flip = Invariant }
 /**
  * The state of the unification scope, used for backtracking on overload resolution
  *
- * See [[Unification.backup]] and [[Unification.restore]]
+ * See [[Unification.backupUnification]] and [[Unification.restoreUnification]]
  */
 case class UnificationState(
   scope: Scope,
@@ -39,7 +39,11 @@ case class LocalScope(
  * TODO
  *   - [ ] All incoming types need to be "normalized": substituted and dealiased.
  */
-class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeInstantiator { self =>
+trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator, ErrorReporter {
+
+  // bring into scope
+  given ErrorReporter = this
+
 
   // State of the unification engine
   // -------------------------------
@@ -69,25 +73,25 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   // ------------
   def substitution = constraints.subst
 
-  def apply(e: Effects): Effects =
+  def unification(e: Effects): Effects =
     substitution.substitute(e)
 
-  def apply(e: InterfaceType): InterfaceType =
+  def unification(e: InterfaceType): InterfaceType =
     substitution.substitute(e)
 
-  def apply(tpe: BlockType): BlockType =
+  def unification(tpe: BlockType): BlockType =
     substitution.substitute(tpe)
 
-  def apply(tpe: FunctionType): FunctionType =
+  def unification(tpe: FunctionType): FunctionType =
     substitution.substitute(tpe)
 
-  def apply(tpe: ValueType): ValueType =
+  def unification(tpe: ValueType): ValueType =
     substitution.substitute(tpe)
 
   // Lifecycle management
   // --------------------
-  def backup(): UnificationState = UnificationState(scope, constraints.clone())
-  def restore(state: UnificationState): Unit =
+  def backupUnification(): UnificationState = UnificationState(scope, constraints.clone())
+  def restoreUnification(state: UnificationState): Unit =
     scope = state.scope
     constraints = state.constraints.clone()
 
@@ -149,7 +153,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
    */
   def join(tpes: ValueType*): ValueType =
     tpes.foldLeft[ValueType](TBottom) { (t1, t2) =>
-      mergeValueTypes(t1, t2, ErrorContext.MergeTypes(apply(t1), apply(t2)))
+      mergeValueTypes(t1, t2, ErrorContext.MergeTypes(unification(t1), unification(t2)))
     }
 
   def requireSubregionWithout(lower: Captures, upper: Captures, filter: List[Capture])(using C: Context): Unit =
@@ -189,7 +193,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
    * Instantiate a typescheme with provided type and capture arguments.
    */
   def instantiate(tpe: FunctionType, targs: List[ValueType], cargs: List[Captures]): (List[ValueType], List[BlockType], ValueType, List[InterfaceType]) = {
-    val position = C.focus
+    val position = this.focus
     val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
     assert(targs.size == tparams.size,
@@ -216,7 +220,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
    * i.e. `[T1, T2, C] (T1, T1) {sigma} => T2` becomes `(?T1, ?T1){} => ?T2[C !-> ?C]`
    */
   def instantiateFresh(tpe: FunctionType): (List[ValueType], List[Captures], (List[ValueType], List[BlockType], ValueType, List[InterfaceType])) = {
-    val position = C.focus
+    val position = this.focus
     val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
     val typeRigids = tparams map { t => ValueTypeRef(freshTypeVar(t, position)) }
@@ -229,12 +233,9 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   // Implementation Details
   // ----------------------
 
-  def abort(msg: String) = C.abort(msg)
-  def abort(msg: String, ctx: ErrorContext) = C.abort(ErrorContext.explainInContext(msg, ctx))
-
-  def error(msg: String) = C.error(msg)
-  def error(msg: String, ctx: ErrorContext) = C.error(ErrorContext.explainInContext(msg, ctx))
-  def error(left: symbols.Type, right: symbols.Type, ctx: ErrorContext) = C.error(ErrorContext.explainMismatch(left, right, ctx))
+  def abort(msg: String, ctx: ErrorContext) = this.abort(ErrorContext.explainInContext(msg, ctx))
+  def error(msg: String, ctx: ErrorContext) = this.error(ErrorContext.explainInContext(msg, ctx))
+  def error(left: symbols.Type, right: symbols.Type, ctx: ErrorContext) = this.error(ErrorContext.explainMismatch(left, right, ctx))
 
   def requireEqual(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit =
     requireLowerBound(x, tpe, ctx)

@@ -1,0 +1,6 @@
+[error] examples/neg/singleline_string_containing_newline.effekt:1:22: Unterminated single-line string; expected closing `"` on the end of the line
+def main() = println("a
+                     ^^
+[error] examples/neg/singleline_string_containing_newline.effekt:2:1: Expected ) but got identifier b
+b")
+^

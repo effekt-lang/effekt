@@ -14,14 +14,12 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
   def run(input: CoreTransformed)(using Context): Option[CoreTransformed] =
     input match {
       case CoreTransformed(source, tree, mod, core) =>
-        val term = Context.checkMain(mod)
+        val term = Context.ensureMainExists(mod)
         val optimized = Context.timed("optimize", source.name) { optimize(source, term, core) }
         Some(CoreTransformed(source, tree, mod, optimized))
     }
 
   def optimize(source: Source, mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context): ModuleDecl =
-
-    val isLLVM = Context.config.backend().name == "llvm"
 
     var tree = core
 
@@ -39,7 +37,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     def normalize(m: ModuleDecl) = {
       val anfed = BindSubexpressions.transform(m)
-      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt, isLLVM)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt)
       val live = Deadcode.remove(mainSymbol, normalized)
       val tailRemoved = RemoveTailResumptions(live)
       val contified = DirectStyle.rewrite(tailRemoved)

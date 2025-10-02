@@ -2,6 +2,7 @@
 layout: docs
 title: Pretty Printer
 permalink: docs/casestudies/prettyprinter
+redirect_to: docs/casestudies/frontend#prettyprinter
 ---
 
 # Pretty Printer
@@ -17,44 +18,37 @@ Furthermore, the library presented here is neither linear
 (it uses simple backtracking), bounded (backtracking is arbitrary), nor functional (combinators are imperative style).
 
 ```
-module examples/casestudies/prettyprinter
-
 import examples/casestudies/parser // just needed for the example (Tree)
-import string
 ```
 
 Similar to the [parser case study](parser), the pretty printing library is based
 on a non-deterministic description of layouts. In particular, to fill the horizontal
-space as best as possible, we first try to  pretty print _horizontally_ and fall
+space as best as possible, we first try to pretty print _horizontally_ and fall
 back to _vertical_ mode, if not enough space is available. For example, the
 following text overflows when trying to layout horizontally:
 
-```
-// -------
-// hello world
+```raw
+hello world
 ```
 
 Treating the space as a potential line break, we can try again, this time vertically.
-```
-// -------
-// hello
-// world
+```raw
+hello
+world
 ```
 
 Pretty printing also often includes ways to _group_ parts of a document. If a group does not
 fit horizontally, all of its elements will be layouted vertically:
 
-```
-// --------------
-// hello (this (is too) long)
+```raw
+hello (this (is too) long)
 ```
 Even though the first two words of the group would fit, the document will be pretty printed as
 
-```
-// -------------
-// hello (this
-// is too
-// long)
+```raw
+hello (this
+is too
+long)
 ```
 
 ## Layout as Effects
@@ -210,11 +204,11 @@ def example1(l: List[Int]) = {
 This layouts a list by potentially adding a linebreak after each comma. Pretty printing the
 list `[1, 2, 3, 4]` at width `5` gives:
 
-```
-// -----
-// [1,
-// 2, 3,
-// 4, ]
+```raw
+-----
+[1,
+2, 3,
+4, ]
 ```
 For simplicity, we keep the trailing comma.
 
@@ -226,10 +220,10 @@ def example2() = {
 }
 ```
 which pretty printed at width `6` yields:
-```
-// ------
-// Hi
-// you!!!
+```raw
+------
+Hi
+you!!!
 ```
 
 The next example illustrates that revising the layout decision for the parent group can also lead to a
@@ -249,12 +243,12 @@ def example3() = {
 ```
 Pretty printing results in:
 
-```
-// ---------------
-// this
-//          takes
-//          four
-// lines
+```raw
+---------------
+this
+         takes
+         four
+lines
 ```
 
 
@@ -299,11 +293,6 @@ def printer(width: Int, defaultIndent: Int) { prog: => Unit / { Emit, Layout } }
   with Indent { () => resume(0) }
   // simply handle the default indentation with a constant
   with DefaultIndent { () => resume(defaultIndent) }
-```
-Maybe most interestingly, here we update the current position and invoke the effect operation `fail`, if
-the document exceeds the width. This will potentially cause backtracking and revision of a preceeding layout decision.
-If the current text still fits the line, we simply re-emit it.
-```
   with Emit {
     def emitText(t) = {
       pos = pos + t.length;
@@ -315,7 +304,13 @@ If the current text still fits the line, we simply re-emit it.
 }
 ```
 
+Maybe most interestingly, we update the current position and invoke the effect operation `fail`, if
+the document exceeds the width.
+This will potentially cause backtracking and revision of a preceeding layout decision.
+If the current text still fits the line, we simply re-emit it.
+
 Finally, we can compose the different handlers to a single pretty printing handler:
+
 ```
 def pretty(width: Int) { doc: => Unit / Pretty }: String = {
   val result = searchLayout { writer { printer(width, 2) { doc() } } };
@@ -372,8 +367,8 @@ a parse tree, which we then pretty print:
 ```
 def parseAndPrint(text: String, width: Int): String =
   parse(text) { parseExpr() } match {
-    case parser::Success(tree) => pretty(width) { toDoc(tree) }
-    case parser::Failure(text) => text
+    case ParseSuccess(tree) => pretty(width) { toDoc(tree) }
+    case ParseFailure(text) => text
   }
 ```
 
@@ -390,97 +385,93 @@ def example4() = parseAndPrint("let x = (let y = 2 in 1) in 42", 10)
 
 ## Additional Examples
 
-```
-def main() = {
+```effekt:repl
+println("-----");
+println(pretty(5) { example1([1,2,3,4]) });
 
-  println("-----");
-  println(pretty(5) { example1([1,2,3,4]) });
+println("----------");
+println(pretty(10) { example1([1,2,3,4,5,6,7,8,9,1,2,3,4]) });
 
-  println("----------");
-  println(pretty(10) { example1([1,2,3,4,5,6,7,8,9,1,2,3,4]) });
+println("----------")
+println(example4())
 
-  println("----------")
-  println(example4())
-
-  def example4b() = {
-    text("def"); space(); text("foo"); parens {
-      group {
-        nest(2) {
-          linebreak();
-          group { text("x"); text(":"); space(); text("Int"); text(",") };
-          line();
-          group { text("y"); text(":"); space(); text("String") }
-        };
-        linebreak()
-      }
-    }
-  }
-  def example3b() = {
-    example4b();
-    space();
-    braces {
-      group {
-        nest(2) {
-          line();
-          text("var"); space(); text("z"); space(); text("="); space(); text("42"); text(";")
-        };
-        line()
-      }
-    }
-  }
-
-  def example6() = {
+def example4b() = {
+  text("def"); space(); text("foo"); parens {
     group {
-      text("this");
-      nest(9) {
+      nest(2) {
+        linebreak();
+        group { text("x"); text(":"); space(); text("Int"); text(",") };
         line();
-        group { text("takes"); line(); text("many"); line(); text("f") }
+        group { text("y"); text(":"); space(); text("String") }
       };
-      line();
-      text("l")
+      linebreak()
     }
   }
-
-  def example7() = {
+}
+def example3b() = {
+  example4b();
+  space();
+  braces {
     group {
-      text("this");
-      line();
-      text("will");
-      nest(9) {
+      nest(2) {
         line();
-        group { text("take"); line(); text("many") }
+        text("var"); space(); text("z"); space(); text("="); space(); text("42"); text(";")
       };
-      line();
-      text("lines")
+      line()
     }
   }
-
-  def helloWorld() = {
-    text("hello")
-    line()
-    text("world")
-  }
-
-  println("------------------------------");
-  println(pretty(30) { example4b() });
-  println("--------------------");
-  println(pretty(20) { example4b() });
-
-  println("----------");
-  println(pretty(50) { example3b() });
-  println(pretty(15) { example3b() });
-
-  println("------");
-  println(pretty(6) { example2() });
-
-  println("---------------");
-  println(pretty(15) { example3() });
-
-  println("--------------");
-  println(pretty(14) { example6() });
-
-  println("--------------");
-  println(pretty(14) { example7() })
 }
 
+def example6() = {
+  group {
+    text("this");
+    nest(9) {
+      line();
+      group { text("takes"); line(); text("many"); line(); text("f") }
+    };
+    line();
+    text("l")
+  }
+}
+
+def example7() = {
+  group {
+    text("this");
+    line();
+    text("will");
+    nest(9) {
+      line();
+      group { text("take"); line(); text("many") }
+    };
+    line();
+    text("lines")
+  }
+}
+
+def helloWorld() = {
+  text("hello")
+  line()
+  text("world")
+}
+
+println("------------------------------");
+println(pretty(30) { example4b() });
+println("--------------------");
+println(pretty(20) { example4b() });
+
+println("----------");
+println(pretty(50) { example3b() });
+println(pretty(15) { example3b() });
+
+println("------");
+println(pretty(6) { example2() });
+
+println("---------------");
+println(pretty(15) { example3() });
+
+println("--------------");
+println(pretty(14) { example6() });
+
+println("--------------");
+println(pretty(14) { example7() })
 ```

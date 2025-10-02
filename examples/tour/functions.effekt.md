@@ -28,6 +28,7 @@ Perhaps unusual, you can also call `fib` using Effekt's implementation of [Unifo
 ```effekt:repl
 5.fib()
 ```
+
 Here, the receiver (before the `.`) is simply passed as the first argument to the function `fib`. If there are no additional arguments, you can also omit the parenthesis:
 
 ```effekt:repl
@@ -68,3 +69,7 @@ def odd(n: Int): Bool = if (n <= 0) false else even(n - 1)
 ```effekt:repl
 7.even
 ```
+
+Of course, it is also possible to implement higher-order functions in Effekt.
+However, we distinguish between first-class values and second-class computations.
+You can read more about this in the section about [computations](computation).

@@ -1,0 +1,52 @@
+import examples/benchmarks/runner
+
+def rev_loop(l: List[Int], acc: List[Int]): List[Int] =
+  l match {
+    case Nil() => acc
+    case Cons(p, ps) => rev_loop(ps, Cons(p, acc))
+  }
+
+def rev(l: List[Int]): List[Int] =
+  rev_loop(l, Nil())
+
+def tabulate_loop(n: Int, len: Int, acc: List[Int]) { f: Int => Int }: List[Int] =
+  if (n < len) {
+    tabulate_loop(n + 1, len, Cons(f(n), acc)) { f }
+  } else {
+    reverse(acc)
+  }
+
+def tabulate(n: Int) { f: Int => Int }: List[Int] =
+  if (n < 0) {
+    Nil()
+  } else {
+    tabulate_loop(0, n, Nil()) { f }
+  }
+
+def merge(l1: List[Int], l2: List[Int]): List[Int] =
+  l1 match {
+    case Nil() => l2
+    case Cons(x1, xs1) => l2 match {
+      case Nil() => l1
+      case Cons(x2, xs2) =>
+        if (x1 <= x2) {
+          Cons(x1, merge(xs1, l2))
+        } else {
+          Cons(x2, merge(l1, xs2))
+        }
+    }
+  }
+
+def head(l: List[Int]): Int =
+  l match {
+    case Nil() => -1
+    case Cons(x, xs) => x
+  }
+
+def run(n: Int): Int = {
+  val l1 = tabulate(n) { x => 2 * x }
+  val l2 = tabulate(n) { x => (2 * x) + 1 }
+  merge(l1, l2).head
+}
+
+def main() = benchmark(10){run}

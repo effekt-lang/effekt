@@ -28,7 +28,7 @@ object DirectStyle extends Tree.Rewrite {
 
   private def canBeDirect(s: Stmt): Boolean = s match {
     case Return(expr) => true
-    case Hole() => true
+    case Hole(_) => true
 
     // non-tail calls
     case App(_, _, _, _) => false
@@ -43,6 +43,7 @@ object DirectStyle extends Tree.Rewrite {
     // Congruences
     case Def(id, block, body) => canBeDirect(body)
     case Let(id, tpe, binding, body) => canBeDirect(body)
+    case ImpureApp(id, callee, targs, vargs, bargs, body) => canBeDirect(body)
     case Val(id, tpe, binding, body) => canBeDirect(body)
     case If(cond, thn, els) => canBeDirect(thn) && canBeDirect(els)
     case Match(scrutinee, clauses, default) =>
@@ -56,7 +57,7 @@ object DirectStyle extends Tree.Rewrite {
 
   private def toDirectStyle(stmt: Stmt, label: Block.BlockVar): Stmt = stmt match {
     case Return(expr) => App(label, Nil, List(expr), Nil)
-    case Hole() => stmt
+    case Hole(_) => stmt
 
     // non-tail calls
     case App(_, _, _, _) => stmt
@@ -74,6 +75,9 @@ object DirectStyle extends Tree.Rewrite {
 
     case Let(id, tpe, binding, body) =>
       Let(id, tpe, binding, toDirectStyle(body, label))
+
+    case ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      ImpureApp(id, callee, targs, vargs, bargs, toDirectStyle(body, label))
 
     case Val(id, tpe, binding, body) =>
       Val(id, tpe, binding, toDirectStyle(body, label))

@@ -8,9 +8,9 @@ def ints(): Unit / emit[Int] = {
 
 /// Take the `n` first elements of a `stream`, put them in a list.
 def take[A](n: Int) { stream: () => Unit / emit[A] }: List[A] = {
-  with collectList[A]
+  with collect[A]
   with boundary
-  with limit[A](n + 1)
+  with limit[A](n)
   stream()
 }
 

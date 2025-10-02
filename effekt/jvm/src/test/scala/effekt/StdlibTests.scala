@@ -7,19 +7,19 @@ import sbt.io.syntax.*
 import scala.language.implicitConversions
 
 abstract class StdlibTests extends EffektTests {
-  override def positives: List[File] = List(
+  override def positives: Set[File] = Set(
     examplesDir / "stdlib",
   )
 
-  override def ignored: List[File] = List()
+  override def ignored: Set[File] = Set()
 
-  override def withoutOptimizations: List[File] = List()
+  override def withoutOptimizations: Set[File] = Set()
 }
 
 class StdlibJavaScriptTests extends StdlibTests {
   def backendName: String = "js"
 
-  override def withoutOptimizations: List[File] = List(
+  override def withoutOptimizations: Set[File] = Set(
     examplesDir / "stdlib" / "acme.effekt",
     examplesDir / "stdlib" / "json.effekt",
     examplesDir / "stdlib" / "exception" / "combinators.effekt",
@@ -33,15 +33,18 @@ class StdlibJavaScriptTests extends StdlibTests {
     examplesDir / "stdlib" / "char" / "ascii_iswhitespace.effekt",
   )
 
-  override def ignored: List[File] = List()
+  override def ignored: Set[File] = Set(
+    examplesDir / "stdlib" / "network" / "streaming.effekt",
+  )
 }
 
 abstract class StdlibChezTests extends StdlibTests {
-  override def ignored: List[File] = List(
+  override def ignored: Set[File] = Set(
     // Not implemented yet
     examplesDir / "stdlib" / "io",
     examplesDir / "stdlib" / "stream" / "characters.effekt",
-    examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt"
+    examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt",
+    examplesDir / "stdlib" / "network" / "streaming.effekt",
   )
 }
 class StdlibChezSchemeMonadicTests extends StdlibChezTests {
@@ -56,11 +59,11 @@ class StdlibLLVMTests extends StdlibTests {
   override def valgrind = sys.env.get("EFFEKT_VALGRIND").nonEmpty
   override def debug = sys.env.get("EFFEKT_DEBUG").nonEmpty
 
-  override def withoutOptimizations: List[File] = List(
+  override def withoutOptimizations: Set[File] = Set(
     examplesDir / "stdlib" / "acme.effekt",
   )
 
-  override def ignored: List[File] = List(
+  override def ignored: Set[File] = Set(
     // String comparison using `<`, `<=`, `>`, `>=` is not implemented yet on LLVM
     examplesDir / "stdlib" / "string" / "compare.effekt",
 

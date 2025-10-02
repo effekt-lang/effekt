@@ -35,3 +35,9 @@ def toOption[A, E](r: Result[A, E]): Option[A] = r match {
   case Success(a) => Some(a)
   case Error(exc, msg) => None()
 }
+
+def isError[A, E](r: Result[A, E]): Bool =
+  if (r is Error(_, _)) true else false
+
+def isSuccess[A, E](r: Result[A, E]): Bool =
+  if (r is Success(_)) true else false

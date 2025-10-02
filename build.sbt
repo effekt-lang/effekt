@@ -20,7 +20,7 @@ lazy val noPublishSettings = Seq(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "3.3.1",
+  scalaVersion := "3.3.6",
   semanticdbEnabled := true,
   scalacOptions ++= Seq(
     "-encoding", "utf8",
@@ -36,6 +36,9 @@ lazy val commonSettings = Seq(
     "-language:existentials",
     "-language:higherKinds",
     "-language:implicitConversions"
+  ),
+  libraryDependencies ++= Seq(
+    "org.scala-lang.modules" %%% "scala-xml" % "2.3.0"
   )
 )
 

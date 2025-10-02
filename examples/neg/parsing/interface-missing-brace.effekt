@@ -1,0 +1,1 @@
+interface Greet { def hello(): Unit

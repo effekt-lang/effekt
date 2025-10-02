@@ -90,8 +90,9 @@ import scala.annotation.tailrec
  * We extend product to allow reflective access by Kiama.
  */
 sealed trait Tree extends Product {
+  val span: Span
+
   def inheritPosition(from: Tree)(implicit C: Context): this.type = {
-    C.positions.dupPos(from, this);
     this
   }
 }
@@ -99,10 +100,41 @@ sealed trait Tree extends Product {
 /**
  * Used for builtin and synthesized trees
  */
-case object NoSource extends Tree
+case object NoSource extends Tree {
+  val span: Span = Span.missing
+}
 
 // only used by the lexer
-case class Comment() extends Tree
+case class Comment() extends Tree {
+  val span: Span = Span.missing
+}
+
+type Doc = Option[String]
+
+/**
+ * The meta-data of a definition / declaration, consisting of everything up
+ * until, but not including the introducing keyword (such as `def`, or `interface`).
+ * For example:
+ *
+ *     /// documentation
+ *     private
+ *     extern
+ *     pure
+ *     def
+ */
+case class Info(
+  doc: Doc,
+  // we use Maybe[Unit] instead of Boolean to have position info for validation errors
+  isPrivate: Maybe[Unit],
+  isExtern: Maybe[Unit],
+) {
+  def isEmpty = doc.isEmpty && isPrivate.isEmpty && isExtern.isEmpty
+  def nonEmpty = !isEmpty
+}
+
+object Info {
+  def empty(span: Span) = Info(None, Maybe.None(span), Maybe.None(span))
+}
 
 /**
  * The origin of the span
@@ -119,7 +151,7 @@ enum Origin {
   case Real, Synthesized, Missing
 }
 
-case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = Origin.Real) {
+case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = Origin.Real) extends Ordered[Span] {
   /**
    * creates a fake empty Span immediately after this one
    * Example:
@@ -132,6 +164,23 @@ case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = 
    * creates a fake copy of this span
    */
   def synthesized: Span = Span(source, from, to, origin = Origin.Synthesized)
+
+  def range: kiama.util.Range = kiama.util.Range(source.offsetToPosition(from), source.offsetToPosition(to))
+
+  def text: Option[String] = {
+    val r = range
+    Spans.substring(r.from, r.to)
+  }
+  
+  override def compare(that: Span): Int = {
+    val nameCmp = this.source.name compareTo that.source.name
+    if (nameCmp != 0) nameCmp
+    else {
+      val startCmp = this.from compareTo that.from
+      if (startCmp != 0) startCmp
+      else this.to compareTo that.to
+    }
+  }
 }
 
 object Span {
@@ -143,25 +192,28 @@ object Span {
  * Used to mark externs for different backends
  */
 enum FeatureFlag extends Tree {
-  case NamedFeatureFlag(id: String)
-  case Default
+  case NamedFeatureFlag(id: String, span: Span)
+  case Default(span: Span)
 
   def matches(name: String, matchDefault: Boolean = true): Boolean = this match {
-    case NamedFeatureFlag(n) if n == name => true
-    case Default => matchDefault
+    case NamedFeatureFlag(n, span) if n == name => true
+    case Default(span) => matchDefault
     case _ => false
   }
-  def isDefault: Boolean = this == Default
+  def isDefault: Boolean = this match {
+    case Default(_) => true
+    case _          => false
+  }
 
   def matches(names: List[String]): Boolean = this match {
-    case NamedFeatureFlag(n) if names.contains(n) => true
-    case Default => true
+    case NamedFeatureFlag(n, span) if names.contains(n) => true
+    case Default(span) => true
     case _ => false
   }
 
   override def toString: String = this match {
-    case FeatureFlag.NamedFeatureFlag(id) => id
-    case FeatureFlag.Default => "else"
+    case FeatureFlag.NamedFeatureFlag(id, span) => id
+    case FeatureFlag.Default(span) => "else"
   }
 }
 object FeatureFlag {
@@ -171,8 +223,8 @@ object FeatureFlag {
       case Nil => false
       case name :: other =>
         self.collectFirst {
-          case ExternBody.StringExternBody(flag, a) if flag.matches(name) => ()
-          case ExternBody.EffektExternBody(flag, a) if flag.matches(name) => ()
+          case ExternBody.StringExternBody(flag, a, span) if flag.matches(name) => ()
+          case ExternBody.EffektExternBody(flag, a, span) if flag.matches(name) => ()
         }.isDefined || (self.supportedByFeatureFlags(other))
     }
   }
@@ -182,13 +234,13 @@ sealed trait ExternBody extends Tree {
   def featureFlag: FeatureFlag
 }
 object ExternBody {
-  case class StringExternBody(featureFlag: FeatureFlag, template: Template[source.Term]) extends ExternBody
-  case class EffektExternBody(featureFlag: FeatureFlag, body: source.Stmt) extends ExternBody
+  case class StringExternBody(featureFlag: FeatureFlag, template: Template[source.Term], span: Span) extends ExternBody
+  case class EffektExternBody(featureFlag: FeatureFlag, body: source.Stmt, span: Span) extends ExternBody
   case class Unsupported(message: util.messages.EffektError) extends ExternBody {
-    override def featureFlag: FeatureFlag = FeatureFlag.Default
+    val span: Span = Span.missing
+    override def featureFlag: FeatureFlag = FeatureFlag.Default(Span.missing)
   }
 }
-
 
 /**
  * We distinguish between identifiers corresponding to
@@ -203,16 +255,12 @@ sealed trait Id extends Tree {
 }
 case class IdDef(name: String, span: Span) extends Id {
   def clone(using C: Context): IdDef = {
-    val copy = IdDef(name, span)
-    C.positions.dupPos(this, copy)
-    copy
+    IdDef(name, span)
   }
 }
 case class IdRef(path: List[String], name: String, span: Span) extends Id {
   def clone(using C: Context): IdRef = {
-    val copy = IdRef(path, name, span)
-    C.positions.dupPos(this, copy)
-    copy
+    IdRef(path, name, span)
   }
 }
 
@@ -236,17 +284,24 @@ sealed trait Reference extends Named {
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  *
  */
-case class ModuleDecl(path: String, includes: List[Include], defs: List[Def], span: Span) extends Tree
-case class Include(path: String) extends Tree
+case class ModuleDecl(path: String, includes: List[Include], defs: List[Def], doc: Doc, span: Span) extends Tree
+case class Include(path: String, span: Span) extends Tree
 
 /**
  * Parameters and arguments
  */
 enum Param extends Definition {
-  case ValueParam(id: IdDef, tpe: Option[ValueType])
-  case BlockParam(id: IdDef, tpe: Option[BlockType])
+  case ValueParam(id: IdDef, tpe: Option[ValueType], span: Span)
+  case BlockParam(id: IdDef, tpe: Option[BlockType], span: Span)
 }
 export Param.*
+
+case class ValueArg(name: Option[String], value: Term, span: Span) extends Tree
+
+object ValueArg {
+  def Named(name: String, value: Term, span: Span): ValueArg = ValueArg(Some(name), value, span)
+  def Unnamed(value: Term): ValueArg = ValueArg(None, value, value.span)
+}
 
 /**
  * A `List` (usually of `Tree`s) with a `span` that spans all elements of the list
@@ -281,7 +336,7 @@ object Many {
  * If the `Option` is `Some`, the `span` is the span of the value.
  * If the `Option` is `None`, the `span` is an empty span pointing to where the optional value would be expected.
  */
-case class Maybe[T](unspan: Option[T], span: Span) {
+case class Maybe[+T](unspan: Option[T], span: Span) {
   def map[B](f: T => B): Maybe[B] = Maybe(unspan.map(f), span)
   def flatMap[B](f: T => Maybe[B]): Maybe[B] = unspan match {
     case None => Maybe(None, span)
@@ -294,7 +349,7 @@ case class Maybe[T](unspan: Option[T], span: Span) {
       case None => alternative
     }
 
-  export unspan.{foreach, get, getOrElse}
+  export unspan.{foreach, get, getOrElse, isEmpty, nonEmpty}
 }
 
 object Maybe {
@@ -341,40 +396,40 @@ export SpannedOps._
  */
 enum Def extends Definition {
 
-  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, span: Span)
-  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
-  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt)
-  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
-  case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
+  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], captures: Maybe[CaptureSet], ret: Maybe[Effectful], body: Stmt, info: Info, span: Span)
+  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, info: Info, span: Span)
+  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, info: Info, span: Span)
+  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, info: Info, span: Span)
+  case DefDef(id: IdDef, captures: Maybe[CaptureSet], annot: Maybe[BlockType], block: Term, info: Info, span: Span)
 
-  case NamespaceDef(id: IdDef, definitions: List[Def])
+  case NamespaceDef(id: IdDef, definitions: List[Def], info: Info, span: Span)
 
-  case InterfaceDef(id: IdDef, tparams: Many[Id], ops: List[Operation])
-  case DataDef(id: IdDef, tparams: Many[Id], ctors: List[Constructor])
-  case RecordDef(id: IdDef, tparams: Many[Id], fields: Many[ValueParam])
+  case InterfaceDef(id: IdDef, tparams: Many[Id], ops: List[Operation], info: Info, span: Span)
+  case DataDef(id: IdDef, tparams: Many[Id], ctors: List[Constructor], info: Info, span: Span)
+  case RecordDef(id: IdDef, tparams: Many[Id], fields: Many[ValueParam], info: Info, span: Span)
 
   /**
    * Type aliases like `type Matrix[T] = List[List[T]]`
    */
-  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType)
+  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType, info: Info, span: Span)
 
   /**
    * Effect aliases like `effect Set = { Get, Put }`
    */
-  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects)
+  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects, info: Info, span: Span)
 
   /**
    * Only valid on the toplevel!
    */
-  case ExternType(id: IdDef, tparams: Many[Id])
+  case ExternType(id: IdDef, tparams: Many[Id], info: Info, span: Span)
 
-  case ExternDef(capture: CaptureSet, id: IdDef,
-                 tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Effectful,
-                 bodies: List[ExternBody], span: Span) extends Def
+  case ExternDef(id: IdDef,
+                 tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], captures: CaptureSet, ret: Effectful,
+                 bodies: List[ExternBody], info: Info, span: Span) extends Def
 
-  case ExternResource(id: IdDef, tpe: BlockType)
+  case ExternResource(id: IdDef, tpe: BlockType, info: Info, span: Span)
 
-  case ExternInterface(id: IdDef, tparams: List[Id])
+  case ExternInterface(id: IdDef, tparams: List[Id], info: Info, span: Span)
 
   /**
    * Namer resolves the path and loads the contents in field [[contents]]
@@ -382,7 +437,10 @@ enum Def extends Definition {
    * @note Storing content and id as user-visible fields is a workaround for the limitation that Enum's cannot
    *   have case specific refinements.
    */
-  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef)
+  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef, info: Info, span: Span)
+
+  def info: Info
+  def doc: Doc = info.doc
 }
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude
@@ -407,10 +465,10 @@ export Def.*
  *
  */
 enum Stmt extends Tree {
-  case DefStmt(d: Def, rest: Stmt)
-  case ExprStmt(d: Term, rest: Stmt)
-  case Return(d: Term)
-  case BlockStmt(stmts: Stmt)
+  case DefStmt(d: Def, rest: Stmt, span: Span)
+  case ExprStmt(d: Term, rest: Stmt, span: Span)
+  case Return(d: Term, span: Span)
+  case BlockStmt(stmts: Stmt, span: Span)
 }
 export Stmt.*
 
@@ -445,15 +503,15 @@ export Stmt.*
 enum Term extends Tree {
 
   // Variable / Value use (can now also stand for blocks)
-  case Var(id: IdRef) extends Term, Reference
-  case Assign(id: IdRef, expr: Term) extends Term, Reference
+  case Var(id: IdRef, span: Span) extends Term, Reference
+  case Assign(id: IdRef, expr: Term, span: Span) extends Term, Reference
 
-  case Literal(value: Any, tpe: symbols.ValueType)
-  case Hole(stmts: Stmt)
+  case Literal(value: Any, tpe: symbols.ValueType, span: Span)
+  case Hole(id: IdDef, body: Template[Stmt], span: Span)
 
   // Boxing and unboxing to represent first-class values
-  case Box(capt: Option[CaptureSet], block: Term)
-  case Unbox(term: Term)
+  case Box(capt: Maybe[CaptureSet], block: Term, span: Span)
+  case Unbox(term: Term, span: Span)
 
   /**
    * Models:
@@ -462,7 +520,7 @@ enum Term extends Tree {
    *
    * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
    */
-  case Select(receiver: Term, id: IdRef) extends Term, Reference
+  case Select(receiver: Term, id: IdRef, span: Span) extends Term, Reference
 
   /**
    * A call to an effect operation, i.e., `do raise()`.
@@ -470,12 +528,12 @@ enum Term extends Tree {
    * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
    * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
    */
-  case Do(effect: Option[TypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
+  case Do(effect: Option[TypeRef], id: IdRef, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span) extends Term, Reference
 
   /**
-   * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
+   * A call to either an expression, i.e., `(box { () => ... })()`; or a named function, i.e., `foo()`
    */
-  case Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[Term])
+  case Call(target: CallTarget, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span)
 
   /**
    * Models:
@@ -484,12 +542,12 @@ enum Term extends Tree {
    *
    * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
    */
-  case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
+  case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span) extends Term, Reference
 
   // Control Flow
-  case If(guards: List[MatchGuard], thn: Stmt, els: Stmt)
-  case While(guards: List[MatchGuard], block: Stmt, default: Option[Stmt])
-  case Match(scrutinees: List[Term], clauses: List[MatchClause], default: Option[Stmt])
+  case If(guards: List[MatchGuard], thn: Stmt, els: Stmt, span: Span)
+  case While(guards: List[MatchGuard], block: Stmt, default: Option[Stmt], span: Span)
+  case Match(scrutinees: List[Term], clauses: List[MatchClause], default: Option[Stmt], span: Span)
 
   /**
    * Handling effects
@@ -500,25 +558,25 @@ enum Term extends Tree {
    *
    * Each with-clause is modeled as an instance of type [[Handler]].
    */
-  case TryHandle(prog: Stmt, handlers: List[Handler])
-  case Region(id: IdDef, body: Stmt) extends Term, Definition
+  case TryHandle(prog: Stmt, handlers: List[Handler], span: Span)
+  case Region(id: IdDef, body: Stmt, span: Span) extends Term, Definition
 
   /**
    * Lambdas / function literals (e.g., { x => x + 1 })
    */
-  case BlockLiteral(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends Term
-  case New(impl: Implementation)
+  case BlockLiteral(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt, span: Span) extends Term
+  case New(impl: Implementation, span: Span)
 }
 export Term.*
 
 // Smart Constructors for literals
 // -------------------------------
-def UnitLit(): Literal = Literal((), symbols.builtins.TUnit)
-def IntLit(value: Long): Literal = Literal(value, symbols.builtins.TInt)
-def BooleanLit(value: Boolean): Literal = Literal(value, symbols.builtins.TBoolean)
-def DoubleLit(value: Double): Literal = Literal(value, symbols.builtins.TDouble)
-def StringLit(value: String): Literal = Literal(value, symbols.builtins.TString)
-def CharLit(value: Int): Literal = Literal(value, symbols.builtins.TChar)
+def UnitLit(span: Span): Literal = Literal((), symbols.builtins.TUnit, span)
+def IntLit(value: Long, span: Span): Literal = Literal(value, symbols.builtins.TInt, span)
+def BooleanLit(value: Boolean, span: Span): Literal = Literal(value, symbols.builtins.TBoolean, span)
+def DoubleLit(value: Double, span: Span): Literal = Literal(value, symbols.builtins.TDouble, span)
+def StringLit(value: String, span: Span): Literal = Literal(value, symbols.builtins.TString, span)
+def CharLit(value: Int, span: Span): Literal = Literal(value, symbols.builtins.TChar, span)
 
 type CallLike = Call | Do | Select | MethodCall
 
@@ -530,14 +588,20 @@ enum CallTarget extends Tree {
 
   // not overloaded
   case ExprTarget(receiver: Term)
+
+  val span: Span = this match {
+    case IdTarget(id) => id.span
+    case ExprTarget(receiver) => receiver.span
+  }
 }
 export CallTarget.*
 
 
 // Declarations
 // ------------
-case class Constructor(id: IdDef, tparams: Many[Id], params: Many[ValueParam]) extends Definition
-case class Operation(id: IdDef, tparams: Many[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful) extends Definition
+case class Constructor(id: IdDef, tparams: Many[Id], params: Many[ValueParam], doc: Doc, span: Span) extends Definition
+
+case class Operation(id: IdDef, tparams: Many[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, doc: Doc, span: Span) extends Definition
 
 // Implementations
 // ---------------
@@ -551,14 +615,14 @@ case class Operation(id: IdDef, tparams: Many[Id], vparams: List[ValueParam], bp
  *
  * Called "template" or "class" in other languages.
  */
-case class Implementation(interface: TypeRef, clauses: List[OpClause]) extends Reference {
+case class Implementation(interface: TypeRef, clauses: List[OpClause], span: Span) extends Reference {
   def id = interface.id
 }
 
 /**
  * A handler is a pair of an optionally named capability and the handler [[Implementation]]
  */
-case class Handler(capability: Option[BlockParam] = None, impl: Implementation) extends Reference {
+case class Handler(capability: Option[BlockParam] = None, impl: Implementation, span: Span) extends Reference {
   def effect = impl.interface
   def clauses = impl.clauses
   def id = impl.id
@@ -566,21 +630,21 @@ case class Handler(capability: Option[BlockParam] = None, impl: Implementation) 
 
 // `ret` is an optional user-provided type annotation for the return type
 // currently the annotation is rejected by [[Typer]] -- after that phase, `ret` should always be `None`
-case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt, resume: IdDef) extends Reference
+case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt, resume: IdDef, span: Span) extends Reference
 
 // Pattern Matching
 // ----------------
 
-case class MatchClause(pattern: MatchPattern, guards: List[MatchGuard], body: Stmt) extends Tree
+case class MatchClause(pattern: MatchPattern, guards: List[MatchGuard], body: Stmt, span: Span) extends Tree
 
 enum MatchGuard extends Tree {
 
-  case BooleanGuard(condition: Term)
+  case BooleanGuard(condition: Term, span: Span)
 
   /**
    * i.e. <EXPR> is <PATTERN>
    */
-  case PatternGuard(scrutinee: Term, pattern: MatchPattern)
+  case PatternGuard(scrutinee: Term, pattern: MatchPattern, span: Span)
 }
 export MatchGuard.*
 
@@ -591,26 +655,26 @@ enum MatchPattern extends Tree {
    *
    *   case a => ...
    */
-  case AnyPattern(id: IdDef) extends MatchPattern, Definition
+  case AnyPattern(id: IdDef, span: Span) extends MatchPattern, Definition
 
   /**
    * Pattern matching on a constructor
    *
    *   case Cons(a, as) => ...
    */
-  case TagPattern(id: IdRef, patterns: List[MatchPattern]) extends MatchPattern, Reference
+  case TagPattern(id: IdRef, patterns: List[MatchPattern], span: Span) extends MatchPattern, Reference
 
   /**
    * A wildcard pattern ignoring the matched value
    *
    *   case _ => ...
    */
-  case IgnorePattern()
+  case IgnorePattern(span: Span)
 
   /**
    * A pattern that matches a single literal value
    */
-  case LiteralPattern(l: Literal)
+  case LiteralPattern(l: Literal, span: Span)
 
   /**
    * A pattern for multiple values
@@ -619,7 +683,7 @@ enum MatchPattern extends Tree {
    *
    * Currently should *only* occur in lambda-cases during Parsing
    */
-  case MultiPattern(patterns: List[MatchPattern]) extends MatchPattern
+  case MultiPattern(patterns: List[MatchPattern], span: Span) extends MatchPattern
 }
 export MatchPattern.*
 
@@ -646,27 +710,27 @@ sealed trait Type extends Tree
 /**
  * Trees that represent inferred or synthesized *value* types (not present in the source = not parsed)
  */
-case class ValueTypeTree(tpe: symbols.ValueType) extends Type
+case class ValueTypeTree(tpe: symbols.ValueType, span: Span) extends Type
 
 /**
  * Trees that represent inferred or synthesized *block* types (not present in the source = not parsed)
  */
-case class BlockTypeTree(eff: symbols.BlockType) extends Type
+case class BlockTypeTree(eff: symbols.BlockType, span: Span) extends Type
 
 /*
  * Reference to a type, potentially with bound occurences in `args`
  */
-case class TypeRef(id: IdRef, args: Many[ValueType]) extends Type, Reference
+case class TypeRef(id: IdRef, args: Many[ValueType], span: Span) extends Type, Reference
 
 /**
  * Types of first-class computations
  */
-case class BoxedType(tpe: BlockType, capt: CaptureSet) extends Type
+case class BoxedType(tpe: BlockType, capt: CaptureSet, span: Span) extends Type
 
 /**
  * Types of (second-class) functions
  */
-case class FunctionType(tparams: Many[Id], vparams: Many[ValueType], bparams: Many[(Maybe[IdDef], BlockType)], result: ValueType, effects: Effects) extends Type
+case class FunctionType(tparams: Many[Id], vparams: Many[ValueType], bparams: Many[(Maybe[IdDef], BlockType)], result: ValueType, effects: Effects, span: Span) extends Type
 
 
 /**
@@ -682,14 +746,12 @@ type ValueType = Type
  * Represents an annotated set of effects. Before name resolution, we cannot know
  * the concrete nature of its elements (so it is generic [[TypeRef]]).
  */
-case class Effects(effs: List[TypeRef]) extends Tree
+case class Effects(effs: List[TypeRef], span: Span) extends Tree
 object Effects {
-  val Pure: Effects = Effects()
-  def apply(effs: TypeRef*): Effects = Effects(effs.toSet)
-  def apply(effs: Set[TypeRef]): Effects = Effects(effs.toList)
+  def Pure(span: Span): Effects = Effects(List(), span)
 }
 
-case class CaptureSet(captures: List[IdRef]) extends Tree
+case class CaptureSet(captures: List[IdRef], span: Span) extends Tree
 
 
 object Named {
@@ -731,6 +793,7 @@ object Named {
     case Constructor => symbols.Constructor
     case Region      => symbols.TrackedParam
     case AnyPattern  => symbols.ValueParam
+    case Hole        => symbols.Hole
   }
 
   type ResolvedReferences[T <: References] = T match {
@@ -793,10 +856,18 @@ object Resolvable {
 }
 export Resolvable.*
 
-extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] =
-  C.positions.getRange(positioned).flatMap { range =>
-    C.positions.substring(range.from, range.to)
+extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] = {
+  positioned match {
+    case m: Many[_] if m.span.origin != Origin.Missing =>
+      Spans.substring(m.span.range.from, m.span.range.to)
+
+    case m: Maybe[_] if m.span.origin != Origin.Missing =>
+      Spans.substring(m.span.range.from, m.span.range.to)
+
+    case t: Tree if t.span.origin != Origin.Missing =>
+      Spans.substring(t.span.range.from, t.span.range.to)
   }
+}
 
 extension [T](positioned: T) def sourceOf(using C: Context): String =
   positioned.sourceOfOpt.getOrElse { s"${positioned}" }
@@ -837,6 +908,7 @@ object Tree {
     def rewrite(c: MatchGuard)(using Context): MatchGuard = structuralVisit(c)
     def rewrite(t: source.CallTarget)(using Context): source.CallTarget = structuralVisit(t)
     def rewrite(b: ExternBody)(using Context): source.ExternBody = structuralVisit(b)
+    def rewrite(a: ValueArg)(using Context): ValueArg = structuralVisit(a)
 
     /**
      * Hook that can be overridden to perform an action at every node in the tree
@@ -900,6 +972,7 @@ object Tree {
     def query(c: MatchClause)(using Context, Ctx): Res = structuralQuery(c)
     def query(c: MatchGuard)(using Context, Ctx): Res = structuralQuery(c)
     def query(b: ExternBody)(using Context, Ctx): Res = structuralQuery(b)
+    def query(a: ValueArg)(using Context, Ctx): Res = structuralQuery(a)
 
     def query(t: Template[Term])(using Context, Ctx): Res =
       combineAll(t.args.map(query))

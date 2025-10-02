@@ -2,6 +2,7 @@
 layout: docs
 title: Parser
 permalink: docs/casestudies/parser
+redirect_to: docs/casestudies/frontend#parsing
 ---
 
 # Parsing
@@ -10,12 +11,8 @@ In this case study, we show how to implement a parser, using the lexer from the
 
 ---
 
-Again, we require some imports -- in particular, we reuse the lexer implementation.
 ```
-module examples/casestudies/parser
-
 import examples/casestudies/lexer
-import string
 ```
 
 Parsers can be expressed by using the lexer effect and process the token stream. To model different alternatives in the grammar, we use the following effect for non-determinism:
@@ -112,6 +109,7 @@ semantics of effects.
 
 Similarly, we can write parsers for let bindings, by sequentially composing
 our existing parsers:
+
 ```
 def parseLet(): Tree / Parser = {
   kw("let");
@@ -122,14 +120,7 @@ def parseLet(): Tree / Parser = {
   val body = parseExpr();
   Let(name, binding, body)
 }
-```
-Again, note how naturally the result can be composed from the individual results, much like
-manually writing a recursive descent parser. Compared to handcrafted parsers, the imperative
-parser combinators presented here offer a similar flexibility. At the same time, the semantics
-of `alt` and `fail` is still left open, offering flexibility in the implementation of the actual underlying parsing algorithm.
 
-We proceed to implement the remaining parsers for our expression language:
-```
 def parseGroup() = or { parseAtom() } {
   punct("(");
   val res = parseExpr();
@@ -147,7 +138,13 @@ def parseApp(): Tree / Parser = {
 
 def parseExpr(): Tree / Parser =
   or { parseLet() } { or { parseApp() } { parseGroup() } }
+
 ```
+
+Again, note how naturally the result can be composed from the individual results, much like
+manually writing a recursive descent parser. Compared to handcrafted parsers, the imperative
+parser combinators presented here offer a similar flexibility. At the same time, the semantics
+of `alt` and `fail` is still left open, offering flexibility in the implementation of the actual underlying parsing algorithm.
 
 ## Example: Combining Parsers and Local Mutable State
 It is possible to combine the imperative parser combinators with
@@ -157,8 +154,8 @@ This is important for use cases like the parser example where the continuation i
 potentially called multiple times.
 
 The following example implements an example
-```
-// <EXPR> ::= <NUMBER> | <IDENT> `(` <EXPR> (`,` <EXPR>)*  `)`
+```raw
+<EXPR> ::= <NUMBER> | <IDENT> `(` <EXPR> (`,` <EXPR>)*  `)`
 ```
 It uses local (mutable) variables to count the number of leafs as semantic action.
 ```
@@ -187,27 +184,25 @@ ambiguities, we have the choice whether we want to recognize only the first resu
 or compute all possible alternative ways to recognize the input.
 
 For this case study, we implement a depth-first parser, computing the first
-successful result. Results are represented by the following datatype:
-```
-type ParseResult[R] {
-  Success(t: R);
-  Failure(msg: String)
-}
-```
-
+successful result. Results are represented by the `ParseResult` datatype.
 The parsing algorithm is simply implemented as a handler for `Parser`.
 
 ```
+type ParseResult[R] {
+  ParseSuccess(t: R);
+  ParseFailure(msg: String)
+}
+
 def parse[R](input: String) { p: => R / Parser }: ParseResult[R] = try {
-  lexer(input) { skipWhitespace { Success(p()) } }
+  lexer(input) { skipWhitespace { ParseSuccess(p()) } }
 } with Nondet {
   def alt() = resume(true) match {
-    case Failure(msg) => resume(false)
-    case Success(res) => Success(res)
+    case ParseFailure(msg) => resume(false)
+    case ParseSuccess(res) => ParseSuccess(res)
   }
-  def fail(msg) = Failure(msg)
+  def fail(msg) = ParseFailure(msg)
 } with LexerError { (msg, pos) =>
-  Failure(msg)
+  ParseFailure(msg)
 }
 ```
 The handler reuses the lexer implementation of the [Lexer case study](lexer). The lexer
@@ -221,21 +216,19 @@ the lexer positions will be restored when calling the continuation a second time
 ## Running the Examples
 Having implemented a handler for the `Parser` effect, we can run our example "grammars" on some inputs.
 
-```
-def main() = {
-  inspect(parse("42") { parseCalls() })
-  inspect(parse("foo(1)") { parseCalls() })
-  inspect(parse("foo(1, 2)") { parseCalls() })
-  inspect(parse("foo(1, 2, 3, 4)") { parseCalls() })
-  inspect(parse("foo(1, 2, bar(4, 5))") { parseCalls() })
-  inspect(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() })
+```effekt:repl
+inspect(parse("42") { parseCalls() })
+inspect(parse("foo(1)") { parseCalls() })
+inspect(parse("foo(1, 2)") { parseCalls() })
+inspect(parse("foo(1, 2, 3, 4)") { parseCalls() })
+inspect(parse("foo(1, 2, bar(4, 5))") { parseCalls() })
+inspect(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() })
 
-  inspect(parse("}42") { parseExpr() })
-  inspect(parse("42") { parseExpr() })
-  inspect(parse("let x = 4 in 42") { parseExpr() })
-  inspect(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
-  inspect(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
-  inspect(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
-  inspect(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
-}
+inspect(parse("}42") { parseExpr() })
+inspect(parse("42") { parseExpr() })
+inspect(parse("let x = 4 in 42") { parseExpr() })
+inspect(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
+inspect(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
+inspect(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
+inspect(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
 ```

@@ -204,9 +204,14 @@ enum Statement {
   case LiteralUTF8String(name: Variable, utf8: Array[Byte], rest: Statement)
 
   /**
+    * let x2 : t2 = coerce x1 : t1; s
+    */
+  case Coerce(name: Variable, value: Variable, rest: Statement)
+
+  /**
    * Statement that is executed when a Hole is encountered.
    */
-  case Hole
+  case Hole(span: effekt.source.Span)
 }
 export Statement.*
 

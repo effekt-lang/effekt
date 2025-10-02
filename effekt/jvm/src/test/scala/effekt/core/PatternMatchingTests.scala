@@ -19,7 +19,7 @@ class PatternMatchingTests extends CoreTests {
   def block(name: String, args: ValueType*): core.BlockVar =
     core.BlockVar(Id(name), core.BlockType.Function(Nil, Nil, args.toList, Nil, TUnit), Set.empty)
 
-  def jump(label: BlockVar, args: Pure*) =
+  def jump(label: BlockVar, args: Expr*) =
     App(label, Nil, args.toList, Nil)
 
   def variable(name: String, tpe: ValueType): core.ValueVar =
@@ -47,7 +47,7 @@ class PatternMatchingTests extends CoreTests {
   }
 
   test("Sanity check: compiling empty list of clauses") {
-    assertEquals(compile(Nil), core.Hole())
+    assertEquals(compile(Nil), core.Hole(effekt.source.Span.missing))
   }
 
   test("Simple guard") {
@@ -124,7 +124,7 @@ class PatternMatchingTests extends CoreTests {
     val result = compile(List(
       Clause(
         List(
-          Condition.Patterns(Map(opt -> Pattern.Tag(SomeC, List(), List(Pattern.Any(v.id) -> TInt)))),
+          Condition.Patterns(Map(opt -> Pattern.Tag(SomeC, List(), List(SomeC, NoneC), List(Pattern.Any(v.id) -> TInt)))),
           Condition.Val(p.id, TBoolean, trivalPredicate),
           Condition.Predicate(p)),
         b1, Nil, List(v)),

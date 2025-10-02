@@ -1,30 +1,32 @@
 package effekt
 
 import com.google.gson.JsonElement
-import kiama.util.Convert.*
+import effekt.Intelligence.CaptureInfo
 import effekt.context.Context
 import effekt.source.Def.FunDef
 import effekt.source.Term.Hole
-import effekt.source.Tree
+import effekt.source.{Origin, Span, Tree}
 import effekt.symbols.Binder.{ValBinder, VarBinder}
 import effekt.symbols.BlockTypeConstructor.{ExternInterface, Interface}
 import effekt.symbols.TypeConstructor.{DataType, ExternType}
-import effekt.symbols.{Anon, Binder, Callable, Effects, Module, Param, Symbol, TypeAlias, TypePrinter, UserFunction, ValueType, isSynthetic}
-import effekt.util.{PlainMessaging, PrettyPrinter}
+import effekt.symbols.{Anon, Binder, Callable, Effects, ErrorMessageInterpolator, Module, Param, Symbol, TypeAlias, TypePrinter, UserFunction, ValueType, isSynthetic}
 import effekt.util.messages.EffektError
+import effekt.util.{PlainMessaging, PrettyPrinter}
 import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
+import kiama.util.Convert.*
 import kiama.util.{Collections, Convert, Position, Source}
 import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
 import org.eclipse.lsp4j.jsonrpc.{Launcher, messages}
 import org.eclipse.lsp4j.launch.LSPLauncher
 import org.eclipse.lsp4j.services.*
-import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, MessageParams, MessageType, PublishDiagnosticsParams, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, SymbolInformation, SymbolKind, TextDocumentSaveRegistrationOptions, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, WorkspaceEdit, Range as LSPRange}
+import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, MessageParams, MessageType, PublishDiagnosticsParams, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, SymbolInformation, SymbolKind, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, WorkspaceEdit, Range as LSPRange}
 
 import java.io.{InputStream, OutputStream, PrintWriter}
 import java.net.ServerSocket
 import java.nio.file.Paths
 import java.util
 import java.util.concurrent.{CompletableFuture, ExecutorService, Executors}
+import kiama.util.Range
 
 /**
  * Effekt Language Server
@@ -175,6 +177,15 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     }
   }
 
+  /**
+   * Publish holes in the given source file
+   */
+  def publishHoles(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
+    if (!workspaceService.settingBool("showHoles")) return
+    val holes = getHoles(source)
+    client.publishHoles(EffektPublishHolesParams(source.name, holes.map(EffektHoleInfo.fromHoleInfo)))
+  }
+
   // Driver methods
   //
   //
@@ -188,6 +199,11 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     }
     try {
       publishIR(source, config)
+    } catch {
+      case e => client.logMessage(new MessageParams(MessageType.Error, e.toString + ":" + e.getMessage))
+    }
+    try {
+      publishHoles(source, config)
     } catch {
       case e => client.logMessage(new MessageParams(MessageType.Error, e.toString + ":" + e.getMessage))
     }
@@ -205,25 +221,6 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
 
   def connect(client: EffektLanguageClient): Unit = {
     this.client = client
-  }
-
-  /**
-   * Launch a language server using provided input/output streams.
-   * This allows tests to connect via in-memory pipes.
-   */
-  def launch(client: EffektLanguageClient, in: InputStream, out: OutputStream): Launcher[EffektLanguageClient] = {
-    val executor = Executors.newSingleThreadExecutor()
-    val launcher =
-      new LSPLauncher.Builder()
-        .setLocalService(this)
-        .setRemoteInterface(classOf[EffektLanguageClient])
-        .setInput(in)
-        .setOutput(out)
-        .setExecutorService(executor)
-        .create()
-    this.connect(client)
-    launcher.startListening()
-    launcher
   }
 
   // LSP Document Lifecycle
@@ -268,24 +265,13 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     }
     position match
       case Some(position) => {
-        val hover = getSymbolHover(position) orElse getHoleHover(position)
+        val hover = getSymbolHover(position, settingBool("showExplanations"))(using context) orElse getHoleHover(position)(using context)
         val markup = new MarkupContent("markdown", hover.getOrElse(""))
         val result = new Hover(markup, new LSPRange(params.getPosition, params.getPosition))
         CompletableFuture.completedFuture(result)
       }
       case None => CompletableFuture.completedFuture(new Hover())
   }
-
-  def getSymbolHover(position: Position): Option[String] = for {
-    (tree, sym) <- getSymbolAt(position)(using context)
-    info <- getInfoOf(sym)(using context)
-  } yield if (settingBool("showExplanations")) info.fullDescription else info.shortDescription
-
-  def getHoleHover(position: Position): Option[String] = for {
-    trees <- getTreesAt(position)(using context)
-    tree <- trees.collectFirst { case h: source.Hole => h }
-    info <- getHoleInfo(tree)(using context)
-  } yield info
 
   // LSP Document Symbols
   //
@@ -304,10 +290,10 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
       decl <- getSourceTreeFor(sym)
       kind <- getSymbolKind(sym)
       detail <- getInfoOf(sym)(using context)
-      declRange = convertRange(positions.getStart(decl), positions.getFinish(decl))
-      idRange = convertRange(positions.getStart(id), positions.getFinish(id))
+      if decl.span.origin != Origin.Missing
+      declRange = convertRange(decl.span.range)
+      idRange = convertRange(id.span.range)
     } yield new DocumentSymbol(sym.name.name, kind, declRange, idRange, detail.header)
-
     val result = Collections.seqToJavaList(
       documentSymbols.map(sym => messages.Either.forRight[SymbolInformation, DocumentSymbol](sym))
     )
@@ -347,7 +333,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
         fromLSPPosition(params.getPosition, source)
       };
       definition <- getDefinitionAt(position)(using context);
-      location = locationOfNode(positions, definition)
+      location = rangeToLocation(definition.span.range)
     } yield location
 
     val result = location.map(l => messages.Either.forLeft[util.List[_ <: Location], util.List[_ <: LocationLink]](Collections.seqToJavaList(List(l))))
@@ -373,7 +359,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
       // getContext may be null!
       includeDeclaration = Option(params.getContext).exists(_.isIncludeDeclaration)
       allRefs = if (includeDeclaration) tree :: refs else refs
-      locations = allRefs.map(ref => locationOfNode(positions, ref))
+      locations = allRefs.map(ref => rangeToLocation(ref.span.range))
     } yield locations
 
     CompletableFuture.completedFuture(Collections.seqToJavaList(locations.getOrElse(Seq[Location]())))
@@ -388,19 +374,48 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
       source <- sources.get(params.getTextDocument.getUri)
       hints = {
         val range = fromLSPRange(params.getRange, source)
-        getInferredCaptures(range)(using context).map {
-          case (p, c) =>
+        val captures = getInferredCaptures(range)(using context).map {
+          case CaptureInfo(p, c) =>
             val prettyCaptures = TypePrinter.show(c)
-            val inlayHint = new InlayHint(convertPosition(p), messages.Either.forLeft(prettyCaptures))
+            val codeEdit = s"at ${prettyCaptures}"
+            val inlayHint = new InlayHint(convertPosition(p), messages.Either.forLeft(codeEdit))
             inlayHint.setKind(InlayHintKind.Type)
             val markup = new MarkupContent()
             markup.setValue(s"captures: `${prettyCaptures}`")
             markup.setKind("markdown")
             inlayHint.setTooltip(markup)
-            inlayHint.setPaddingRight(true)
+            inlayHint.setPaddingLeft(true)
             inlayHint.setData("capture")
+            val textEdit = new TextEdit(convertRange(Range(p, p)), s" $codeEdit")
+            inlayHint.setTextEdits(Collections.seqToJavaList(List(textEdit)))
             inlayHint
         }.toVector
+
+        val unannotated = getTreesInRange(range)(using context).map { trees =>
+          trees.collect {
+            // Functions without an annotated type:
+            case fun: FunDef if fun.ret.isEmpty => for {
+              sym <- context.symbolOption(fun.id)
+              tpe <- context.functionTypeOption(sym)
+              pos = fun.ret.span.range.from
+            } yield {
+              val prettyType = pp": ${tpe.result} / ${tpe.effects}"
+              val inlayHint = new InlayHint(convertPosition(pos), messages.Either.forLeft(prettyType))
+              inlayHint.setKind(InlayHintKind.Type)
+              val markup = new MarkupContent()
+              markup.setValue(s"return type${prettyType}")
+              markup.setKind("markdown")
+              inlayHint.setTooltip(markup)
+              inlayHint.setPaddingLeft(true)
+              inlayHint.setData("return-type-annotation")
+              val textEdit = new TextEdit(convertRange(fun.ret.span.range), prettyType)
+              inlayHint.setTextEdits(Collections.seqToJavaList(List(textEdit)))
+              inlayHint
+            }
+          }.flatten
+        }.getOrElse(Vector())
+
+        captures ++ unannotated
       }
     } yield hints
 
@@ -411,8 +426,6 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
   //
 
-  // FIXME: This is the code actions code from the previous language server implementation.
-  // It doesn't even work in the previous implementation.
   override def codeAction(params: CodeActionParams): CompletableFuture[util.List[messages.Either[Command, CodeAction]]] = {
     val codeActions = for {
       position <- sources.get(params.getTextDocument.getUri).map { source =>
@@ -434,62 +447,51 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     case _ => None
   }
 
-  def EffektCodeAction(description: String, oldNode: Any, newText: String): Option[CodeAction] = {
-    for {
-      posFrom <- positions.getStart(oldNode)
-      posTo <- positions.getFinish(oldNode)
-    } yield {
-      val textEdit = new TextEdit(convertRange(Some(posFrom), Some(posTo)), newText)
-      val changes = Map(posFrom.source.name -> seqToJavaList(List(textEdit)))
-      val workspaceEdit = new WorkspaceEdit(mapToJavaMap(changes))
-      val action = new CodeAction(description)
-      action.setKind(CodeActionKind.Refactor)
-      action.setEdit(workspaceEdit)
-      action
-    }
+  def EffektCodeAction(description: String, span: Span, newText: String): CodeAction = {
+    val textEdit = new TextEdit(convertRange(span.range), newText)
+    val changes = Map(span.source.name -> seqToJavaList(List(textEdit)))
+    val workspaceEdit = new WorkspaceEdit(mapToJavaMap(changes))
+    val action = new CodeAction(description)
+    action.setKind(CodeActionKind.Refactor)
+    action.setEdit(workspaceEdit)
+    action
   }
 
-  /**
-   * FIXME: The following comment was left on the previous Kiama-based implementation and can now be addressed:
-   *
-   * TODO it would be great, if Kiama would allow setting the position of the code action separately
-   * from the node to replace. Here, we replace the annotated return type, but would need the
-   * action on the function (since the return type might not exist in the original program).
-   *
-   * Also, it is necessary to be able to manually set the code action kind (and register them on startup).
-   * This way, we can use custom kinds like `refactor.closehole` that can be mapped to keys.
-   */
   def inferEffectsAction(fun: FunDef)(using C: Context): Option[CodeAction] = for {
-    // the inferred type
     (tpe, eff) <- C.inferredTypeAndEffectOption(fun)
-    // the annotated type
     ann = for {
       result <- fun.symbol.annotatedResult
       effects <- fun.symbol.annotatedEffects
     } yield (result, effects)
-    if ann.map {
-      needsUpdate(_, (tpe, eff))
-    }.getOrElse(true)
-    res <- EffektCodeAction("Update return type with inferred effects", fun.ret, s": $tpe / $eff")
-  } yield res
+    if ann.map(needsUpdate(_, (tpe, eff))).getOrElse(true)
+  } yield {
+    val newText = if (eff.effects.nonEmpty)
+      s": ${TypePrinter.show(tpe)} / ${TypePrinter.show(eff)}"
+    else
+      s": ${TypePrinter.show(tpe)}"
+    EffektCodeAction("Update return type with inferred effects", fun.ret.span, newText)
+  }
 
-  def closeHoleAction(hole: Hole)(using C: Context): Option[CodeAction] = for {
-    holeTpe <- C.inferredTypeOption(hole)
-    contentTpe <- C.inferredTypeOption(hole.stmts)
-    if holeTpe == contentTpe
-    res <- hole match {
-      case Hole(source.Return(exp)) => for {
-        text <- positions.textOf(exp)
-        res <- EffektCodeAction("Close hole", hole, text)
-      } yield res
+  def closeHoleAction(hole: Hole)(using C: Context): Option[CodeAction] = {
+    val Template(strings, stmts) = hole.body
+    if (stmts.length != 1) return None
+    val stmt = stmts.head
+    for {
+      holeTpe <- C.inferredTypeOption(hole)
+      contentTpe <- C.inferredTypeOption(stmt)
+      if holeTpe == contentTpe
+      res <- stmt match {
+        case source.Return(exp, _) => for {
+          text <- exp.span.text
+        } yield EffektCodeAction("Close hole", hole.span, text)
 
-      // <{ s1 ; s2; ... }>
-      case Hole(stmts) => for {
-        text <- positions.textOf(stmts)
-        res <- EffektCodeAction("Close hole", hole, s"locally { ${text} }")
-      } yield res
-    }
-  } yield res
+        // <{ ${s1 ; s2; ...} }>
+        case _ => for {
+          text <- stmt.span.text
+        } yield EffektCodeAction("Close hole", hole.span, s"locally { ${text} }")
+      }
+    } yield res
+  }
 
   def needsUpdate(annotated: (ValueType, Effects), inferred: (ValueType, Effects))(using Context): Boolean = {
     val (tpe1, effs1) = annotated
@@ -502,14 +504,16 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
 
   def didChangeConfiguration(params: DidChangeConfigurationParams): Unit = {
-    // The configuration can be sent as a flat JSON object `{ "showIR": "core", ... }` or
-    // nested under an "effekt" key `{ "effekt": { "showIR": "core", ... } }`
-    // The former is sent by the VSCode extension for `initializationOptions`,
-    // the latter by newer extension versions for `workspace/didChangeConfiguration`.
-    val newSettings = params.getSettings.asInstanceOf[JsonElement].getAsJsonObject
-    this.settings = newSettings;
-    if (newSettings == null) return
-    val effektSection = newSettings.get("effekt")
+    // The configuration arrives as a JSON object nested under the "effekt" key
+    // `{ "effekt": { "showIR": "core", ... } }`
+    val newSettings = params.getSettings.asInstanceOf[JsonElement]
+    // When the settings come via `initializationOptions`, they can be null as per the LSP spec.
+    if (newSettings.isJsonNull) {
+      this.settings = null;
+      return;
+    }
+    val newSettingsObj = newSettings.getAsJsonObject
+    val effektSection = newSettingsObj.get("effekt")
     if (effektSection != null) {
       this.settings = effektSection
     }
@@ -522,21 +526,47 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
 
   def settingBool(name: String): Boolean = {
-    if (settings == null) return false
+    if (settings == null || settings.isJsonNull) return false
     val obj = settings.getAsJsonObject
-    if (obj == null) return false
     val value = obj.get(name)
     if (value == null) return false
     value.getAsBoolean
   }
 
   def settingString(name: String): Option[String] = {
-    if (settings == null) return None
+    if (settings == null || settings.isJsonNull) return None
     val obj = settings.getAsJsonObject
-    if (obj == null) return None
     val value = obj.get(name)
     if (value == null) return None
     Some(value.getAsString)
+  }
+
+  /**
+   * Launch a language server using provided input/output streams.
+   * This allows tests to connect via in-memory pipes.
+   */
+  def launch(getClient: Launcher[EffektLanguageClient] => EffektLanguageClient, in: InputStream, out: OutputStream, trace: Boolean = false): Launcher[EffektLanguageClient] = {
+    // Create a single-threaded executor to serialize all requests.
+    val executor: ExecutorService = Executors.newSingleThreadExecutor()
+
+    val builder =
+      new LSPLauncher.Builder()
+        .setLocalService(this)
+        .setRemoteInterface(classOf[EffektLanguageClient])
+        .setInput(in)
+        .setOutput(out)
+        .setExecutorService(executor)
+        // This line makes sure that the List and Option Scala types serialize correctly
+        .configureGson(_.withScalaSupport)
+
+    if (trace) {
+      builder.traceMessages(new PrintWriter(System.err, true))
+    }
+
+    val launcher = builder.create()
+    this.connect(getClient(launcher))
+    launcher.startListening()
+    launcher
   }
 
   /**
@@ -550,32 +580,9 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
       val serverSocket = new ServerSocket(config.debugPort)
       System.err.println(s"Starting language server in debug mode on port ${config.debugPort}")
       val socket = serverSocket.accept()
-
-      val launcher =
-        new LSPLauncher.Builder()
-          .setLocalService(this)
-          .setRemoteInterface(classOf[EffektLanguageClient])
-          .setInput(socket.getInputStream)
-          .setOutput(socket.getOutputStream)
-          .setExecutorService(executor)
-          .traceMessages(new PrintWriter(System.err, true))
-          .create()
-      val client = launcher.getRemoteProxy
-      this.connect(client)
-      launcher.startListening()
+      launch(_.getRemoteProxy, socket.getInputStream, socket.getOutputStream, trace = true)
     } else {
-      val launcher =
-        new LSPLauncher.Builder()
-          .setLocalService(this)
-          .setRemoteInterface(classOf[EffektLanguageClient])
-          .setInput(System.in)
-          .setOutput(System.out)
-          .setExecutorService(executor)
-          .create()
-
-      val client = launcher.getRemoteProxy
-      this.connect(client)
-      launcher.startListening()
+      launch(_.getRemoteProxy, System.in, System.out)
     }
   }
 }
@@ -590,6 +597,9 @@ trait EffektLanguageClient extends LanguageClient {
    */
   @JsonNotification("$/effekt/publishIR")
   def publishIR(params: EffektPublishIRParams): Unit
+
+  @JsonNotification("$/effekt/publishHoles")
+  def publishHoles(params: EffektPublishHolesParams): Unit
 }
 
 /**
@@ -601,3 +611,40 @@ trait EffektLanguageClient extends LanguageClient {
 case class EffektPublishIRParams(filename: String,
                                  content: String
 )
+
+/**
+ * Custom LSP notification to publish Effekt holes
+ *
+ * @param uri The URI of the source file
+ * @param holes The holes in the source file
+ */
+case class EffektPublishHolesParams(uri: String, holes: List[EffektHoleInfo])
+
+/**
+ * Information about a typed hole
+ *
+ * The difference to Intelligence.HoleInfo is that it uses the appropriate LSP type for the range
+ */
+case class EffektHoleInfo(
+  id: String,
+  range: LSPRange,
+  uri: String,
+  innerType: Option[String],
+  expectedType: Option[String],
+  scope: Intelligence.ScopeInfo,
+  body: List[Intelligence.HoleItem],
+)
+
+object EffektHoleInfo {
+  def fromHoleInfo(info: Intelligence.HoleInfo): EffektHoleInfo = {
+    EffektHoleInfo(
+      info.id,
+      convertRange(info.span.range),
+      Convert.toURI(info.span.source.name),
+      info.innerType,
+      info.expectedType,
+      info.scope,
+      info.body
+    )
+  }
+}

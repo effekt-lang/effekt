@@ -1,7 +1,7 @@
 type NumberThunk = () => Int at {}
 def force(t: NumberThunk): Int = t()
-def init(n: Int): NumberThunk = fun() { n }
-def test(): NumberThunk = fun() {
+def init(n: Int): NumberThunk = box { n }
+def test(): NumberThunk = box {
   val num: Int = (init(42))()
   num
 }

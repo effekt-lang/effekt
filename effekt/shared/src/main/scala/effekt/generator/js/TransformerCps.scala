@@ -124,7 +124,7 @@ object TransformerCps extends Transformer {
       js.RawStmt(contents)
   }
 
-  def toJS(t: Template[Pure])(using TransformerContext): js.Expr =
+  def toJS(t: Template[Expr])(using TransformerContext): js.Expr =
     js.RawExpr(t.strings, t.args.map(toJS))
 
   def toJS(d: core.Declaration): List[js.Stmt] = d match {
@@ -187,15 +187,13 @@ object TransformerCps extends Transformer {
   }
 
   def toJS(e: cps.Expr)(using D: TransformerContext): js.Expr = e match {
-    case Pure.ValueVar(id)           => nameRef(id)
-    case Pure.Literal(())            => $effekt.field("unit")
-    case Pure.Literal(s: String)     => JsString(escape(s))
-    case literal: Pure.Literal       => js.RawExpr(literal.value.toString)
-    case DirectApp(id, vargs, Nil)   => inlineExtern(id, vargs)
-    case DirectApp(id, vargs, bargs) => js.Call(nameRef(id), vargs.map(toJS) ++ bargs.map(argumentToJS))
-    case Pure.PureApp(id, vargs)     => inlineExtern(id, vargs)
-    case Pure.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
-    case Pure.Box(b)                 => argumentToJS(b)
+    case Expr.ValueVar(id)           => nameRef(id)
+    case Expr.Literal(())            => $effekt.field("unit")
+    case Expr.Literal(s: String)     => JsString(escape(s))
+    case literal: Expr.Literal       => js.RawExpr(literal.value.toString)
+    case Expr.PureApp(id, vargs)     => inlineExtern(id, vargs)
+    case Expr.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
+    case Expr.Box(b)                 => argumentToJS(b)
   }
 
   def toJS(s: cps.Stmt)(using D: TransformerContext): Binding[List[js.Stmt]] = s match {
@@ -225,6 +223,16 @@ object TransformerCps extends Transformer {
     case cps.Stmt.LetCont(id, binding @ Cont.ContLam(result2, ks2, body2), body) =>
       Binding { k =>
         js.Const(nameDef(id), toJS(binding)(using nonrecursive(ks2))) :: requiringThunk { toJS(body) }.run(k)
+      }
+
+    case cps.Stmt.ImpureApp(id, callee, vargs, Nil, body) =>
+      Binding { k =>
+        js.Const(nameDef(id), inlineExtern(callee, vargs)) :: toJS(body).run(k)
+      }
+
+    case cps.Stmt.ImpureApp(id, callee, vargs, bargs, body) =>
+      Binding { k =>
+        js.Const(nameDef(id), js.Call(nameRef(callee), vargs.map(toJS) ++ bargs.map(argumentToJS))) :: toJS(body).run(k)
       }
 
     case cps.Stmt.Match(sc, Nil, None) =>
@@ -314,7 +322,7 @@ object TransformerCps extends Transformer {
 
         // Prepare the substitution
         val subst = Substitution(
-          values = paramTmps.map { case (p, t) => p -> Pure.ValueVar(t) },
+          values = paramTmps.map { case (p, t) => p -> Expr.ValueVar(t) },
           blocks = Map.empty,
           conts = tmp_k.map(t => k1 -> Cont.ContVar(t)).toMap,
           metaconts = tmp_ks.map(t => ks1 -> MetaCont(t)).toMap
@@ -400,8 +408,8 @@ object TransformerCps extends Transformer {
     case cps.Stmt.Resume(r, b, ks2, k2) =>
       pure(js.Return(js.Call(RESUME, nameRef(r), toJS(b)(using nonrecursive(b)), toJS(ks2), requiringThunk { toJS(k2) })) :: Nil)
 
-    case cps.Stmt.Hole() =>
-      pure(js.Return($effekt.call("hole")) :: Nil)
+    case cps.Stmt.Hole(span) =>
+      pure(js.Return($effekt.call("hole", JsString(span.range.from.format))) :: Nil)
   }
 
   def toJS(scrutinee: js.Expr, variant: Id, clause: cps.Clause)(using C: TransformerContext): (js.Expr, Binding[List[js.Stmt]]) =
@@ -429,7 +437,7 @@ object TransformerCps extends Transformer {
   // Inlining Externs
   // ----------------
 
-  private def inlineExtern(id: Id, args: List[cps.Pure])(using T: TransformerContext): js.Expr =
+  private def inlineExtern(id: Id, args: List[cps.Expr])(using T: TransformerContext): js.Expr =
     T.externs.get(id) match {
       case Some(cps.Extern.Def(id, params, Nil, async,
         ExternBody.StringExternBody(featureFlag, Template(strings, templateArgs)))) if !async =>
@@ -513,6 +521,7 @@ object TransformerCps extends Transformer {
       } && default.forall(body => canBeDirect(k, body))
       case Stmt.LetDef(id, binding, body) => notIn(binding) && canBeDirect(k, body)
       case Stmt.LetExpr(id, binding, body) => notIn(binding) && canBeDirect(k, body)
+      case Stmt.ImpureApp(id, callee, vargs, bargs, body) => vargs.forall(notIn) && bargs.forall(notIn) && canBeDirect(k, body)
       case Stmt.LetCont(id, Cont.ContLam(result, ks2, body), body2) =>
         def willBeDirectItself = canBeDirect(id, body2) && canBeDirect(k, maintainDirectStyle(ks2, body))
         def notFreeinContinuation = notIn(body) && canBeDirect(k, body2)
@@ -526,7 +535,7 @@ object TransformerCps extends Transformer {
       case Stmt.Reset(prog, ks, k) => notIn(stmt)
       case Stmt.Shift(prompt, body, ks, k) => notIn(stmt)
       case Stmt.Resume(resumption, body, ks, k) => notIn(stmt)
-      case Stmt.Hole() => true
+      case Stmt.Hole(span) => true
     }
 
 

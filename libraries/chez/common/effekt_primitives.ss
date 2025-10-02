@@ -11,6 +11,7 @@
     ;     (string-append name))]
     [(list? obj) (map show_impl obj)]
     [(record? obj) (show-record obj)]
+    [(eqv? obj (void)) "()"]
     [else (generic-show obj)]))
 
 (define (generic-show obj)
@@ -129,8 +130,8 @@
     (run warmup)
     (run iterations)))
 
-(define (hole)
+(define (hole pos)
   (raise
     (condition
       (make-error)
-      (make-message-condition "not implemented"))))
+      (make-message-condition (string-append pos " not implemented yet" )))))

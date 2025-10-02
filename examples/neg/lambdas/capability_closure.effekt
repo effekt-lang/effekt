@@ -4,7 +4,7 @@ interface Get {
 
 def outer() = {
   def inner(): Int / {} = do get()
-  fun() { inner() }
+  box { inner() }
 }
 
 def main() = {
@@ -13,5 +13,6 @@ def main() = {
   } with Get {
     def get() = resume(42)
   }
-  (unbox f)()
+  f()
+  ()
 }

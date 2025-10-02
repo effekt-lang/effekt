@@ -1,7 +1,5 @@
 ; Run-Time System
 
-%Evidence = type i64
-
 ; Basic types
 
 %Environment = type ptr
@@ -118,26 +116,6 @@ declare double @tan(double)
 declare void @print(i64)
 declare void @exit(i64)
 declare void @llvm.assume(i1)
-
-
-; Boxing (externs functions, hence ccc)
-define ccc %Pos @box(%Neg %input) {
-    %vtable = extractvalue %Neg %input, 0
-    %heap_obj = extractvalue %Neg %input, 1
-    %vtable_as_int = ptrtoint ptr %vtable to i64
-    %pos_result = insertvalue %Pos undef, i64 %vtable_as_int, 0
-    %pos_result_with_heap = insertvalue %Pos %pos_result, ptr %heap_obj, 1
-    ret %Pos %pos_result_with_heap
-}
-
-define ccc %Neg @unbox(%Pos %input) {
-    %tag = extractvalue %Pos %input, 0
-    %heap_obj = extractvalue %Pos %input, 1
-    %vtable = inttoptr i64 %tag to ptr
-    %neg_result = insertvalue %Neg undef, ptr %vtable, 0
-    %neg_result_with_heap = insertvalue %Neg %neg_result, ptr %heap_obj, 1
-    ret %Neg %neg_result_with_heap
-}
 
 
 ; Prompts
@@ -728,7 +706,10 @@ define void @resume_Pos(%Stack %stack, %Pos %argument) {
     ret void
 }
 
-define void @run(%Neg %f) {
+define void @run(%Pos %boxed) {
+    ; unbox
+    %f = call %Neg @coercePosNeg(%Pos %boxed)
+
     ; fresh stack
     %stack = call %Stack @withEmptyStack()
 
@@ -743,7 +724,10 @@ define void @run(%Neg %f) {
     ret void
 }
 
-define void @run_Int(%Neg %f, i64 %argument) {
+define void @run_Int(%Pos %boxed, i64 %argument) {
+    ; unbox
+    %f = call %Neg @coercePosNeg(%Pos %boxed)
+
     ; fresh stack
     %stack = call %Stack @withEmptyStack()
 
@@ -754,11 +738,14 @@ define void @run_Int(%Neg %f, i64 %argument) {
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
     ; call
-    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, i64 %argument, %Stack %stack)
+    tail call tailcc %Pos %functionPointer(%Object %object, i64 %argument, %Stack %stack)
     ret void
 }
 
-define void @run_Pos(%Neg %f, %Pos %argument) {
+define void @run_Pos(%Pos %boxed, %Pos %argument) {
+    ; unbox
+    %f = call %Neg @coercePosNeg(%Pos %boxed)
+
     ; fresh stack
     %stack = call %Stack @withEmptyStack()
 
@@ -769,8 +756,64 @@ define void @run_Pos(%Neg %f, %Pos %argument) {
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
     ; call
-    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Pos %argument, %Stack %stack)
+    tail call tailcc %Pos %functionPointer(%Object %object, %Pos %argument, %Stack %stack)
     ret void
+}
+
+
+define ccc %Pos @coerceNegPos(%Neg %neg) {
+    %arrayPointer = extractvalue %Neg %neg, 0
+    %object = extractvalue %Neg %neg, 1
+    %tagValue = ptrtoint ptr %arrayPointer to i64
+    %boxed1 = insertvalue %Pos undef, i64 %tagValue, 0
+    %boxed2 = insertvalue %Pos %boxed1, ptr %object, 1
+    ret %Pos %boxed2
+}
+
+define ccc %Neg @coercePosNeg(%Pos %pos) {
+    %tagValue = extractvalue %Pos %pos, 0
+    %object = extractvalue %Pos %pos, 1
+    %arrayPointer = inttoptr i64 %tagValue to ptr
+    %unboxed1 = insertvalue %Neg undef, ptr %arrayPointer, 0
+    %unboxed2 = insertvalue %Neg %unboxed1, ptr %object, 1
+    ret %Neg %unboxed2
+}
+
+define ccc %Pos @coerceIntPos(%Int %input) {
+    %boxed1 = insertvalue %Pos zeroinitializer, i64 %input, 0
+    %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
+    ret %Pos %boxed2
+}
+
+define ccc %Int @coercePosInt(%Pos %input) {
+    %unboxed = extractvalue %Pos %input, 0
+    ret %Int %unboxed
+}
+
+define ccc %Pos @coerceBytePos(%Byte %input) {
+    %extended = sext i8 %input to i64
+    %boxed1 = insertvalue %Pos zeroinitializer, i64 %extended, 0
+    %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
+    ret %Pos %boxed2
+}
+
+define ccc %Byte @coercePosByte(%Pos %input) {
+    %unboxed = extractvalue %Pos %input, 0
+    %truncated = trunc i64 %unboxed to i8
+    ret i8 %truncated
+}
+
+define ccc %Pos @coerceDoublePos(%Double %input) {
+    %number = bitcast double %input to i64
+    %boxed1 = insertvalue %Pos zeroinitializer, i64 %number, 0
+    %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
+    ret %Pos %boxed2
+}
+
+define ccc %Double @coercePosDouble(%Pos %input) {
+    %unboxed = extractvalue %Pos %input, 0
+    %d = bitcast i64 %unboxed to double
+    ret %Double %d
 }
 
 

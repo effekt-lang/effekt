@@ -1,0 +1,22 @@
+import examples/benchmarks/runner
+
+def create_n(n: Int): List[Unit] =
+  if (n == 0) Nil()
+  else Cons((), create_n(n - 1))
+
+def len(l: List[Unit]): Int =
+  l match {
+    case Nil() => 0
+    case Cons(_, xs) => 1 + len(xs)
+  }
+
+def rec_div2(l: List[Unit]): List[Unit] =
+  l match {
+    case Nil() => Nil()
+    case Cons(x, Cons(y, ys)) => Cons(x, rec_div2(ys))
+    case _ => Nil() // panic("Odd length List")
+  }
+
+def run(n: Int): Int = len(rec_div2(create_n(n)))
+
+def main() = benchmark(10){run}

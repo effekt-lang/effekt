@@ -13,10 +13,6 @@ In this case study we reimplement automatic differentiation as presented in
 Instead of using the control operators `shift` and `reset`, we are using effects and
 handlers.
 
-```effekt:sketch:hide
-module examples/casestudies/ad
-```
-
 ```effekt:prelude:hide
 import ref
 ```
@@ -136,50 +132,44 @@ def backwards(in: Double) { prog: NumB => NumB / AD[NumB] }: Double = {
 ## Example Usages
 We can use forwards and backwards propagation to compute derivatives of a few
 examples.
-```
-def main() = {
-  println(forwards(2.0) { x => prog(x) })
-  println(backwards(2.0) { x => prog(x) })
-
-  println(forwards(3.0) { x => prog(x) })
-  println(backwards(3.0) { x => prog(x) })
-
-  println(forwards(0.0) { x => prog(x) })
-  println(backwards(0.0) { x => prog(x) })
-
-
-  println(forwards(1.0) { x => progExp(x) })
-  println(backwards(1.0) { x => progExp(x) })
-
-  println(forwards(0.0) { x => progExp(x) })
-  println(backwards(0.0) { x => progExp(x) })
-
-  println(showString { x => forwardsHigher(x) { x => forwardsHigher(x) { y => forwardsHigher(y) { z => prog(z) } }} })
-
-  // we have the same pertubation confusion as in Lantern
-  val result = forwards(1.0) { x =>
-    val shouldBeOne = forwards(1.0) { y => do add(x, y) }
-    val z = do num[NumF](shouldBeOne)
-    do mul(x, z)
-  }
-  println(result)
-
-  val result2 = backwards(1.0) { x =>
-    val shouldBeOne = backwards(1.0) { y => do add(x, y) }
-    val z = do num[NumB](shouldBeOne)
-    do mul(x, z)
-  }
-  println(result2)
-
-  // this is proposed by Wang et al. as a solution to pertubation confusion
-  val result3 = backwards(1.0) { x =>
-    val shouldBeOne = forwards(1.0) { y => do add(do num(x.value), y) }
-    do mul(x, do num(shouldBeOne))
-  }
-  println(result3)
-}
-```
-
-In the following REPL you can run the examples (try entering `main()`):
 ```effekt:repl
+println(forwards(2.0) { x => prog(x) })
+println(backwards(2.0) { x => prog(x) })
+
+println(forwards(3.0) { x => prog(x) })
+println(backwards(3.0) { x => prog(x) })
+
+println(forwards(0.0) { x => prog(x) })
+println(backwards(0.0) { x => prog(x) })
+
+
+println(forwards(1.0) { x => progExp(x) })
+println(backwards(1.0) { x => progExp(x) })
+
+println(forwards(0.0) { x => progExp(x) })
+println(backwards(0.0) { x => progExp(x) })
+
+println(showString { x => forwardsHigher(x) { x => forwardsHigher(x) { y => forwardsHigher(y) { z => prog(z) } }} })
+
+// we have the same pertubation confusion as in Lantern
+val result = forwards(1.0) { x =>
+  val shouldBeOne = forwards(1.0) { y => do add(x, y) }
+  val z = do num[NumF](shouldBeOne)
+  do mul(x, z)
+}
+println(result)
+
+val result2 = backwards(1.0) { x =>
+  val shouldBeOne = backwards(1.0) { y => do add(x, y) }
+  val z = do num[NumB](shouldBeOne)
+  do mul(x, z)
+}
+println(result2)
+
+// this is proposed by Wang et al. as a solution to pertubation confusion
+val result3 = backwards(1.0) { x =>
+  val shouldBeOne = forwards(1.0) { y => do add(do num(x.value), y) }
+  do mul(x, do num(shouldBeOne))
+}
+println(result3)
 ```

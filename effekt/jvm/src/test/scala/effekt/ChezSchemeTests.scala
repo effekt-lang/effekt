@@ -9,7 +9,7 @@ import scala.language.implicitConversions
 
 abstract class ChezSchemeTests extends EffektTests {
 
-  override def positives: List[File] = List(
+  override def positives: Set[File] = Set(
     examplesDir / "pos",
     examplesDir / "casestudies",
     examplesDir / "chez",
@@ -17,7 +17,7 @@ abstract class ChezSchemeTests extends EffektTests {
   )
 
   // Test files which are to be ignored (since features are missing or known bugs exist)
-  override def ignored: List[File] = List(
+  override def ignored: Set[File] = super.ignored ++ Set(
 
     examplesDir / "llvm",
 
@@ -37,6 +37,7 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "benchmarks" / "input_output" / "small_files.effekt",
     examplesDir / "benchmarks" / "input_output" / "interleave_promises.effekt",
     examplesDir / "benchmarks" / "input_output" / "financial_format.effekt",
+    examplesDir / "benchmarks" / "input_output" / "server_client.effekt",
 
     // unsafe continuations are not yet supported in our Chez backend
     examplesDir / "pos" / "unsafe_cont.effekt",
@@ -49,6 +50,7 @@ abstract class ChezSchemeTests extends EffektTests {
     // in the CallCC variant, we cannot have toplevel vals at the moment (their bindings need to be wrapped in `(run (thunk ...))`
     // see comment on commit 61492d9
     examplesDir / "casestudies" / "anf.effekt.md",
+    examplesDir / "casestudies" / "frontend.effekt.md",
 
     // we do not need to run the negative tests for the other backends
     examplesDir / "neg",

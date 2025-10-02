@@ -4,7 +4,9 @@ type List[A] {
   Nil();
   Cons(head: A, tail: List[A])
 }
-
+namespace lists {
+  type List[A] = List[A]
+}
 
 def map[A, B](l: List[A]) { f: A => B } : List[B] =
   l match {

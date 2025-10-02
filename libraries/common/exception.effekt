@@ -50,11 +50,11 @@ def wrongFormat(msg: String): Nothing / Exception[WrongFormat] =
 /**
  * A fatal runtime error that cannot be caught
  */
-extern io def panic(msg: String): Nothing =
+extern def panic(msg: String) at io: Nothing =
   js "(function() { throw ${msg} })()"
   chez "(raise ${msg})"
   llvm """
-    call void @c_io_println_String(%Pos ${msg})
+    call void @c_io_println(%Pos ${msg})
     call void @exit(i32 1)
     ret %Pos zeroinitializer ; Unit
   """

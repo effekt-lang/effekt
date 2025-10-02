@@ -1,0 +1,35 @@
+// <inferred captures> <: <annotated captures>
+def f() at {async, io} = println("hello")
+
+def g() at {io} = println("world")
+
+def h() = region r {
+  def inner() at r = {
+    var x in r = 42
+    box { x }
+  }
+  val _ = inner()
+}
+
+interface Counter {
+  def get(): Int
+  def inc(): Unit
+}
+
+def makeCounter(start: Int) at {global}: Counter at {global} = {
+  val x = ref(start)
+  def counter at {global}: Counter = new Counter {
+    def get() = x.get()
+    def inc() = x.set(x.get() + 1)
+  }
+  box counter
+}
+
+def main() = {
+  f()
+  g()
+  h()
+  def c = makeCounter(1)
+  c.inc()
+  println(c.get())
+}

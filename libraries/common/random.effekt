@@ -1,6 +1,7 @@
 module random
 
 import stream
+import io/filesystem
 import io/error
 
 /// Infinite pull stream of random bytes.

@@ -1,0 +1,14 @@
+effect hurl(n: String): Unit
+
+def result(): String / {} = {
+  try {
+    do hurl("OK")
+    <{"No return?" }> // <-- Replace '"No return?"' with '<>' and nothing gets printed
+  } with hurl {
+    def hurl(r) = r
+  }
+}
+
+def main() = {
+  println(result())
+}

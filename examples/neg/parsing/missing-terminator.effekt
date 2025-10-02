@@ -1,0 +1,4 @@
+def helloWorld() = {
+  def foo() = println("hello") def bar() = println("goodbye")
+  foo(); bar()
+}

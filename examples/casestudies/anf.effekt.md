@@ -2,6 +2,7 @@
 layout: docs
 title: ANF Transformation
 permalink: docs/casestudies/anf
+redirect_to: docs/casestudies/frontend#anf
 ---
 
 # ANF Transformation
@@ -14,8 +15,6 @@ The source language of our transformation is the `Tree` data type from the
 [parser case study](parser).
 
 ```
-module examples/casestudies/anf
-
 import examples/casestudies/parser // for the Tree datatype
 import examples/casestudies/prettyprinter // for the combined example
 ```
@@ -78,10 +77,7 @@ def traverse(e: Tree): Stmt / { Bind, Fresh } = e match {
     // should be inserted.
     CLet(x, bindHere { traverse(b) }, bindHere { traverse(body) })
 }
-```
-The handler `bindHere` handles `Bind` by generating a fresh name and
-inserting a let binding:
-```
+
 def bindHere { prog: => Stmt / Bind } : Stmt / Fresh =
   try { prog() }
   with Bind { (e) =>
@@ -89,6 +85,7 @@ def bindHere { prog: => Stmt / Bind } : Stmt / Fresh =
     CLet(id, e, resume(CVar(id)))
   }
 ```
+The handler `bindHere` handles `Bind` by generating a fresh name and inserting a let binding.
 Note, that the let binding will _enclose_ the overall result of `prog`. It is inserted on the outside.
 
 The overall ANF transformation is simply a matter of composing the two handlers and calling `traverse`:
@@ -159,30 +156,29 @@ our input:
 ```
 def pipeline(input: String): String =
   parse(input) { parseExpr() } match {
-    case parser::Success(tree) => pretty(translate(tree))
-    case parser::Failure(msg) => msg
+    case ParseSuccess(tree) => pretty(translate(tree))
+    case ParseFailure(msg) => msg
   }
 ```
 
 Here we use `pipeline` to translate some examples:
-```
-def main() = {
-  inspect(exampleResult)
-  println(examplePretty)
 
-  println("----")
-  println(pipeline("42"))
+```effekt:repl
+inspect(exampleResult)
+println(examplePretty)
 
-  println("----")
-  println(pipeline("let x = 4 in 42"))
+println("----")
+println(pipeline("42"))
 
-  println("----")
-  println(pipeline("let x = let y = 2 in 1 in 42"))
+println("----")
+println(pipeline("let x = 4 in 42"))
 
-  println("----")
-  println(pipeline("let x = (let y = 2 in 1) in 42"))
+println("----")
+println(pipeline("let x = let y = 2 in 1 in 42"))
 
-  println("----")
-  println(pipeline("let x = (let y = f(42) in 1) in 42"))
-}
+println("----")
+println(pipeline("let x = (let y = 2 in 1) in 42"))
+
+println("----")
+println(pipeline("let x = (let y = f(42) in 1) in 42"))
 ```

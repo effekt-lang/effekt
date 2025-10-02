@@ -1,5 +1,6 @@
 module stringbuffer
 
+import effekt
 import bytearray
 
 interface StringBuffer {
