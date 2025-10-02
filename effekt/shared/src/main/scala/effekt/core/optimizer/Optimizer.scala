@@ -37,11 +37,12 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     def inlineUnique(usage: Map[Id, Usage]) = NewNormalizer { (id, b) => usage.get(id).contains(Once) }
     def inlineAll(usage: Map[Id, Usage]) = NewNormalizer { (id, b) => !usage.get(id).contains(Recursive) }
 
-    tree = Context.timed("new-normalizer-1", source.name) { inlineSmall(Reachable(Set(mainSymbol), tree)).run(tree) }
+    // tree = Context.timed("new-normalizer-1", source.name) { inlineSmall(Reachable(Set(mainSymbol), tree)).run(tree) }
+    tree = Context.timed("new-normalizer-1", source.name) { dontInline.run(tree) }
     Normalizer.assertNormal(tree)
     tree = StaticArguments.transform(mainSymbol, tree)
     // println(util.show(tree))
-    tree = Context.timed("new-normalizer-2", source.name) { inlineSmall(Reachable(Set(mainSymbol), tree)).run(tree) }
+    // tree = Context.timed("new-normalizer-2", source.name) { inlineSmall(Reachable(Set(mainSymbol), tree)).run(tree) }
     //    Normalizer.assertNormal(tree)
     //tree = Normalizer.normalize(Set(mainSymbol), tree, Context.config.maxInlineSize().toInt)
 

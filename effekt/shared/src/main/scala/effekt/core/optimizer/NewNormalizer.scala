@@ -249,6 +249,8 @@ object semantics {
 
     case Continuation(k: Cont)
 
+    //case Region(prompt: Id) ???
+
     // Known object
     case New(interface: BlockType.Interface, operations: List[(Id, Closure)])
 
@@ -261,6 +263,7 @@ object semantics {
     }
   }
 
+  // TODO add escaping mutable variables
   case class Closure(label: Label, environment: List[Computation]) {
     val free: Variables = Set(label) ++ environment.flatMap(_.free).toSet
   }
@@ -287,6 +290,10 @@ object semantics {
     case Shift(prompt: Prompt, kCapt: Capture, k: BlockParam, body: BasicBlock)
     // continuation is unknown
     case Resume(k: Id, body: BasicBlock)
+
+    // case Var(id: Id, init: Id, body: BasicBlock)
+    // case Get
+    // case Put
 
     // aborts at runtime
     case Hole(span: Span)
@@ -326,6 +333,16 @@ object semantics {
       Frame.Static(tpe, scope => arg => ks => f(scope)(arg)(this)(ks))
   }
 
+  // case class Store(var vars: Map[Addr, Value]) {
+  //   def get(addr: Addr): Value = {
+  //     vars(addr)
+  //   }
+  //   def set(addr: Addr, v: Value): Unit = {
+  //     vars = vars.updated(addr, v)
+  //   }
+  // }
+  type Store = Map[Id, Addr]
+
   // maybe, for once it is simpler to decompose stacks like
   //
   //  f, (p, f) :: (p, f) :: Nil
@@ -334,6 +351,10 @@ object semantics {
   enum Stack {
     case Empty
     case Reset(prompt: BlockParam, frame: Frame, next: Stack)
+    // case Var(id: Id, addr: Addr, next: Stack) TODO
+    //case Region(bindings: ???)
+
+    var store = Map.empty[Id, Addr]
 
     lazy val bound: List[BlockParam] = this match {
       case Stack.Empty => Nil
@@ -343,23 +364,25 @@ object semantics {
 
   enum Cont {
     case Empty
-    case Reset(frame: Frame, prompt: BlockParam, rest: Cont)
+    case Reset(frame: Frame, prompt: BlockParam, store: Store, rest: Cont)
   }
 
   def shift(p: Id, k: Frame, ks: Stack): (Cont, Frame, Stack) = ks match {
     case Stack.Empty => sys error s"Should not happen: cannot find prompt ${util.show(p)}"
     case Stack.Reset(prompt, frame, next) if prompt.id == p =>
-      (Cont.Reset(k, prompt, Cont.Empty), frame, next)
+      (Cont.Reset(k, prompt, ks.store, Cont.Empty), frame, next)
     case Stack.Reset(prompt, frame, next) =>
       val (c, frame2, stack) = shift(p, frame, next)
-      (Cont.Reset(k, prompt, c), frame2, stack)
+      (Cont.Reset(k, prompt, ks.store, c), frame2, stack)
   }
 
   def resume(c: Cont, k: Frame, ks: Stack): (Frame, Stack) = c match {
     case Cont.Empty => (k, ks)
-    case Cont.Reset(frame, prompt, rest) =>
+    case Cont.Reset(frame, prompt, store, rest) =>
       val (k1, ks1) = resume(rest, frame, ks)
-      (frame, Stack.Reset(prompt, k1, ks1))
+      val stack = Stack.Reset(prompt, k1, ks1)
+      stack.store = store
+      (frame, stack)
   }
 
   def joinpoint(k: Frame, ks: Stack)(f: Frame => Stack => NeutralStmt)(using scope: Scope): NeutralStmt = {
@@ -414,7 +437,7 @@ object semantics {
       case Stack.Empty => stmt
       // only reify reset if p is free in body
       case Stack.Reset(prompt, frame, next) =>
-        reify(next) { reify(frame) {
+        reify(next) { reify(frame) { // reify(next) { reify(store) { reify(frame) { ... }}} ??? ORDER? TODO
           val body = nested { stmt }
           if (body.free contains prompt.id) NeutralStmt.Reset(prompt, body)
           else stmt // TODO this runs normalization a second time in the outer scope!
@@ -774,9 +797,16 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     case Stmt.Region(body) => ???
     case Stmt.Alloc(id, init, region, body) => ???
 
-    case Stmt.Var(ref, init, capture, body) => ???
-    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => ???
-    case Stmt.Put(ref, annotatedCapt, value, body) => ???
+    // TODO
+    case Stmt.Var(ref, init, capture, body) =>
+      val addr = evaluate(init)
+      ks.store = ks.store.updated(ref, addr)
+      evaluate(body, k, ks)
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
+      bind(id, ks.store(ref)) { evaluate(body, k, ks) }
+    case Stmt.Put(ref, annotatedCapt, value, body) =>
+      ks.store = ks.store.updated(ref, evaluate(value))
+      evaluate(body, k, ks)
 
     // Control Effects
     case Stmt.Shift(prompt, core.Block.BlockLit(Nil, cparam :: Nil, Nil, k2 :: Nil, body)) =>
@@ -867,12 +897,12 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       given scope: Scope = Scope.empty
       val result = evaluate(body, Frame.Return, Stack.Empty)
 
-      debug(s"---------------------")
+      debug(s"----------normalized-----------")
       val block = Block(tparams, vparams, bparams, reifyBindings(scope, result))
       debug(PrettyPrinter.show(block))
 
-      debug(s"---------------------")
-      val embedded = embedBlock(block)
+      debug(s"----------embedded-----------")
+      val embedded = embedBlockLit(block)
       debug(util.show(embedded))
 
       Toplevel.Def(id, embedded)
