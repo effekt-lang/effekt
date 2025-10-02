@@ -1,4 +1,6 @@
 module process
+import array
+import stringbuffer
 
 extern def exit(errorCode: Int) at io: Nothing =
   js   "(function() { process.exit(${errorCode}) })()"
@@ -7,3 +9,24 @@ extern def exit(errorCode: Int) at io: Nothing =
     ret %Pos zeroinitializer
   """
   chez "(exit ${errorCode})"
+
+extern jsNode """
+const { spawn } = require('node:child_process');
+"""
+
+extern type SpawnOptions
+extern def default() at {}: SpawnOptions =
+  jsNode """{ stdio: [0,1,2] }"""
+extern def pipeStdout(opts: SpawnOptions) at {}: SpawnOptions =
+  jsNode """(function() { let old = ${opts}; old.stdio[1] = 'pipe'; old })()"""
+extern def pipeStderr(opts: SpawnOptions) at {}: SpawnOptions =
+  jsNode """(function() { let old = ${opts}; old.stdio[2] = 'pipe'; old })()"""
+
+extern type PID
+extern def spawn(cmd: String, args: Array[String], options: SpawnOptions): PID =
+  jsNode """spawn(${cmd}, ${args}, ${options})"""
+
+extern def onStdout(pid: PID, callback: String => Unit at {io, global}): PID =
+  jsNode """${pid}.stdout.on('data', (chunk) => { $effekt.runToplevel((ks, k) => (${callback})(chunk, ks, k)) })"""
+extern def onStderr(pid: PID, callback: String => Unit at {io, global}): PID =
+  jsNode """${pid}.stderr.on('data', (chunk) => { $effekt.runToplevel((ks, k) => (${callback})(chunk, ks, k)) })"""
