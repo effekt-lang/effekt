@@ -296,7 +296,6 @@ void c_tcp_read(Int handle, struct Pos buffer, Int offset, Int size, Stack stack
         free(read_closure);
         stream->data = NULL;
         resume_Int(stack, result);
-	free(read_closure);
     }
 }
 
