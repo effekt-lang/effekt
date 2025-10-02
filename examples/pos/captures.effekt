@@ -31,5 +31,5 @@ def main() = {
   h()
   val c = makeCounter(1)
   c.inc()
-  println((unbox c).get())
+  println(c.get())
 }

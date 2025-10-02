@@ -9,5 +9,5 @@ def makeCounter(start: Int) at {global}: Counter at {global} = {
     def get() = x.get() // ERROR Cannot typecheck call.
     def inc() = x.set(x.get() + 1)
   }
-  counter
+  box counter
 }
