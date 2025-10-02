@@ -67,6 +67,10 @@ extern def writableStdin(opts: SpawnOptions) at {}: SpawnOptions =
     old.stdio[0] = 'pipe'
     return old;
   })()"""
+  llvm """
+    %opts = call %Pos @c_spawn_options_pipe_stdin(%Pos ${opts})
+    ret %Pos %opts
+  """
 extern type ProcessHandle
 extern def onSpawn(opts: SpawnOptions, callback: ProcessHandle => Unit at {io, global}) at {}: SpawnOptions =
   jsNode """(function () {
