@@ -219,11 +219,7 @@ object semantics {
   def bind[R](values: List[(Id, Addr)])(prog: Env ?=> R)(using env: Env): R =
     prog(using env.bindValue(values))
 
-  sealed trait Block {
-    val free: Variables
-  }
-
-  case class BlockLit(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: BasicBlock) extends Block {
+  case class Block(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: BasicBlock) {
     val free: Variables = body.free -- vparams.map(_.id) -- bparams.map(_.id)
   }
 
@@ -283,7 +279,7 @@ object semantics {
     // cond is unknown
     case If(cond: Id, thn: BasicBlock, els: BasicBlock)
     // scrutinee is unknown
-    case Match(scrutinee: Id, clauses: List[(Id, BlockLit)], default: Option[BasicBlock])
+    case Match(scrutinee: Id, clauses: List[(Id, Block)], default: Option[BasicBlock])
 
     // body is stuck
     case Reset(prompt: BlockParam, body: BasicBlock)
@@ -381,7 +377,7 @@ object semantics {
           case body =>
             val k = Id("k")
             val closureParams = escaping.bound.collect { case p if body.free contains p.id => p }
-            scope.define(k, BlockLit(Nil, ValueParam(x, tpe) :: Nil, closureParams, body))
+            scope.define(k, Block(Nil, ValueParam(x, tpe) :: Nil, closureParams, body))
             Frame.Dynamic(Closure(k, closureParams.map { p => Computation.Var(p.id) }))
         }
       case Frame.Return => k
@@ -488,7 +484,7 @@ object semantics {
     }
 
     def toDoc(block: Block): Doc = block match {
-      case BlockLit(tparams, vparams, bparams, body) =>
+      case Block(tparams, vparams, bparams, body) =>
         (if (tparams.isEmpty) emptyDoc else brackets(hsep(tparams.map(toDoc), comma))) <>
           parens(hsep(vparams.map(toDoc), comma)) <> hsep(bparams.map(toDoc)) <+> toDoc(body)
     }
@@ -554,7 +550,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           .bindComputation(bparams.map(p => p.id -> Computation.Var(p.id)))
           .bindComputation(id, Computation.Var(freshened))
 
-        val normalizedBlock = BlockLit(tparams, vparams, bparams, nested {
+        val normalizedBlock = Block(tparams, vparams, bparams, nested {
           evaluate(body, Frame.Return, Stack.Empty)
         })
 
@@ -574,7 +570,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         .bindValue(vparams.map(p => p.id -> p.id))
         .bindComputation(bparams.map(p => p.id -> Computation.Var(p.id)))
 
-      val normalizedBlock = BlockLit(tparams, vparams, bparams, nested {
+      val normalizedBlock = Block(tparams, vparams, bparams, nested {
         evaluate(body, Frame.Return, Stack.Empty)
       })
 
@@ -763,7 +759,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
               // This is ALMOST like evaluate(BlockLit), but keeps the current continuation
               clauses.map { case (id, core.Block.BlockLit(tparams, cparams, vparams, bparams, body)) =>
                 given localEnv: Env = env.bindValue(vparams.map(p => p.id -> p.id))
-                val block = BlockLit(tparams, vparams, bparams, nested {
+                val block = Block(tparams, vparams, bparams, nested {
                   evaluate(body, k, ks)
                 })
                 (id, block)
@@ -872,7 +868,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       val result = evaluate(body, Frame.Return, Stack.Empty)
 
       debug(s"---------------------")
-      val block = BlockLit(tparams, vparams, bparams, reifyBindings(scope, result))
+      val block = Block(tparams, vparams, bparams, reifyBindings(scope, result))
       debug(PrettyPrinter.show(block))
 
       debug(s"---------------------")
@@ -941,7 +937,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           Stmt.Let(id, coreExpr.tpe, coreExpr, rest(G.bind(id, coreExpr.tpe)))
         case ((id, Binding.Unbox(addr, tpe, capt)), rest) => G =>
           val pureValue = embedPure(addr)(using G)
-          Stmt.Def(id, Block.Unbox(pureValue), rest(G.bind(id, tpe, capt)))
+          Stmt.Def(id, core.Block.Unbox(pureValue), rest(G.bind(id, tpe, capt)))
       }(G)
   }
 
@@ -979,7 +975,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
   }
 
   def embedBlock(block: Block)(using G: TypingContext): core.Block = block match {
-    case BlockLit(tparams, vparams, bparams, b) =>
+    case Block(tparams, vparams, bparams, b) =>
       val cparams = bparams.map {
         case BlockParam(id, tpe, captures) =>
           assert(captures.size == 1)
@@ -988,8 +984,8 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       core.Block.BlockLit(tparams, cparams, vparams, bparams,
         embedStmt(b)(using G.bindValues(vparams).bindComputations(bparams)))
   }
-  def embedBlockLit(block: BlockLit)(using G: TypingContext): core.BlockLit = block match {
-    case BlockLit(tparams, vparams, bparams, body) =>
+  def embedBlockLit(block: Block)(using G: TypingContext): core.BlockLit = block match {
+    case Block(tparams, vparams, bparams, body) =>
       val cparams = bparams.map {
         case BlockParam(id, tpe, captures) =>
           assert(captures.size == 1)
