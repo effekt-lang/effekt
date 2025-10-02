@@ -786,6 +786,7 @@ struct Pos c_spawn_options_on_stderr(struct Pos opts, struct Pos callback) {
 
 typedef struct {
   char** args;
+  Stack k;
 } subproc_proc_data_t;
 void subproc_on_close(uv_handle_t* handle) {
     free(handle);
@@ -799,11 +800,13 @@ void subproc_on_exit(uv_process_t* proc, int64_t exit_status, int term_signal) {
         }
         free(pd->args);
     }
+    Stack k = pd->k;
     free(pd);
     uv_close((uv_handle_t*)proc, subproc_on_close);
+    resume_Int(k, exit_status);
 }
 
-struct Pos c_spawn(struct Pos cmd, struct Pos args, struct Pos options) {
+void c_spawn(struct Pos cmd, struct Pos args, struct Pos options, Stack stack) {
     uv_process_options_t* opts = (uv_process_options_t*)options.obj;
     uv_process_t* proc = (uv_process_t*)malloc(sizeof(uv_process_t));
 
@@ -826,6 +829,7 @@ struct Pos c_spawn(struct Pos cmd, struct Pos args, struct Pos options) {
     opts->exit_cb = subproc_on_exit;
     subproc_proc_data_t* pd = (subproc_proc_data_t*)malloc(sizeof(subproc_proc_data_t));
     pd->args = _args;
+    pd->k = stack;
     proc->data = pd;
 
     // spawn process
@@ -842,7 +846,6 @@ struct Pos c_spawn(struct Pos cmd, struct Pos args, struct Pos options) {
         free(_args);
         free(proc);
     }
-    return (struct Pos) { .tag = (int64_t)proc, .obj = 0, };
 }
 
 #endif
