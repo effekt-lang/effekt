@@ -2,9 +2,10 @@ package effekt
 package core
 package optimizer
 
+import effekt.core.ValueType.Boxed
 import effekt.source.Span
-import effekt.core.optimizer.semantics.{ Computation, NeutralStmt }
-import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR }
+import effekt.core.optimizer.semantics.{Computation, NeutralStmt}
+import effekt.util.messages.{ErrorReporter, INTERNAL_ERROR}
 import effekt.symbols.builtins.AsyncCapability
 import kiama.output.ParenPrettyPrinter
 
@@ -71,6 +72,7 @@ object semantics {
     case Rec(block: Block, tpe: BlockType, capt: Captures)
     case Val(stmt: NeutralStmt)
     case Run(f: BlockVar, targs: List[ValueType], vargs: List[Addr], bargs: List[Computation])
+    case Unbox(addr: Addr, tpe: BlockType, capt: Captures)
 
     val free: Variables = this match {
       case Binding.Let(value) => value.free
@@ -78,6 +80,7 @@ object semantics {
       case Binding.Rec(block, tpe, capt) => block.free
       case Binding.Val(stmt) => stmt.free
       case Binding.Run(f, targs, vargs, bargs) => vargs.toSet ++ all(bargs, _.free)
+      case Binding.Unbox(addr: Addr, tpe: BlockType, capt: Captures) => Set(addr)
     }
   }
 
@@ -116,6 +119,12 @@ object semantics {
       val addr = Id(hint)
       bindings = bindings.updated(addr, Binding.Run(callee, targs, vargs, bargs))
       addr
+    }
+
+    def unbox(innerAddr: Addr, tpe: BlockType, capt: Captures): Addr = {
+      val unboxAddr = Id("unbox")
+      bindings = bindings.updated(unboxAddr, Binding.Unbox(innerAddr, tpe, capt))
+      unboxAddr
     }
 
     // TODO Option[Value] or Var(id) in Value?
@@ -161,6 +170,9 @@ object semantics {
         used = used ++ v.free
         filtered = (addr, v) :: filtered
       case (addr, v: Binding.Let) => ()
+      case (addr, b: Binding.Unbox) =>
+        used = used ++ b.free
+        filtered = (addr, b):: filtered
     }
 
     // we want to avoid turning tailcalls into non tail calls like
@@ -215,10 +227,6 @@ object semantics {
     val free: Variables = body.free -- vparams.map(_.id) -- bparams.map(_.id)
   }
 
-  case class NeutralUnbox(addr: Id) extends Block {
-    val free: Variables = Set(addr)
-  }
-
   case class BasicBlock(bindings: Bindings, body: NeutralStmt) {
     val free: Variables = {
       var free = body.free
@@ -228,6 +236,7 @@ object semantics {
         case (id, b: Binding.Rec) => free = (free - id) ++ (b.free - id)
         case (id, b: Binding.Val) => free = (free - id) ++ b.free
         case (id, b: Binding.Run) => free = (free - id) ++ b.free
+        case (id, b: Binding.Unbox) => free = (free - id) ++ b.free
       }
       free
     }
@@ -247,15 +256,12 @@ object semantics {
     // Known object
     case New(interface: BlockType.Interface, operations: List[(Id, Closure)])
 
-    case Unbox(addr: Addr)
-
     lazy val free: Variables = this match {
       case Computation.Var(id) => Set(id)
       case Computation.Def(closure) => closure.free
       case Computation.Inline(body, closure) => Set.empty // TODO ???
       case Computation.Continuation(k) => Set.empty // TODO ???
       case Computation.New(interface, operations) => operations.flatMap(_._2.free).toSet
-      case Computation.Unbox(addr) => Set(addr)
     }
   }
 
@@ -485,7 +491,6 @@ object semantics {
       case BlockLit(tparams, vparams, bparams, body) =>
         (if (tparams.isEmpty) emptyDoc else brackets(hsep(tparams.map(toDoc), comma))) <>
           parens(hsep(vparams.map(toDoc), comma)) <> hsep(bparams.map(toDoc)) <+> toDoc(body)
-      case NeutralUnbox(addr) => "unbox" <> parens(toDoc(addr))
     }
 
     def toDoc(comp: Computation): Doc = comp match {
@@ -496,7 +501,6 @@ object semantics {
       case Computation.New(interface, operations) => "new" <+> toDoc(interface) <+> braces {
         hsep(operations.map { case (id, impl) => toDoc(id) <> ":" <+> toDoc(impl) }, ",")
       }
-      case Computation.Unbox(addr) => "unbox" <> parens(toDoc(addr))
     }
     def toDoc(closure: Closure): Doc = closure match {
       case Closure(label, env) => toDoc(label) <> brackets(hsep(env.map(toDoc), comma))
@@ -511,6 +515,7 @@ object semantics {
         case (addr, Binding.Run(callee, targs, vargs, bargs)) => "let !" <+> toDoc(addr) <+> "=" <+> toDoc(callee.id) <>
           (if (targs.isEmpty) emptyDoc else brackets(hsep(targs.map(toDoc), comma))) <>
           parens(hsep(vargs.map(toDoc), comma)) <> hcat(bargs.map(b => braces { toDoc(b) })) <> line
+        case (addr, Binding.Unbox(innerAddr, tpe, capt)) => "def" <+> toDoc(addr) <+> "=" <+> "unbox" <+> toDoc(innerAddr) <> line
       })
 
     def toDoc(block: BasicBlock): Doc =
@@ -583,7 +588,14 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       val addr = evaluate(pure)(using env, scope)
       scope.lookupValue(addr) match {
         case Some(Value.Box(body, _)) => body
-        case Some(_) | None => Computation.Unbox(addr)
+        case Some(_) | None => {
+          val (tpe, capt) = pure.tpe match {
+            case Boxed(tpe, capt) => (tpe, capt)
+            case _ => sys error "should not happen"
+          }
+          val unboxAddr = scope.unbox(addr, tpe, capt)
+          Computation.Var(unboxAddr)
+        }
       }
 
     case core.Block.New(Implementation(interface, operations)) =>
@@ -691,10 +703,6 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         case Computation.Def(Closure(label, environment)) =>
           val args = vargs.map(evaluate)
           reify(k, ks) { NeutralStmt.Jump(label, targs, args, bargs.map(evaluate(_, "f", escapingStack)) ++ environment) }
-        case Computation.Unbox(addr) =>
-          val tmp = Id("unbox")
-          scope.define(tmp, NeutralUnbox(addr))
-          reify(k, ks) { NeutralStmt.App(tmp, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack))) }
         case _: (Computation.New | Computation.Continuation) => sys error "Should not happen"
       }
 
@@ -709,10 +717,6 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           operations.collectFirst { case (id, Closure(label, environment)) if id == method =>
             reify(k, ks) { NeutralStmt.Jump(label, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack)) ++ environment) }
           }.get
-        case Computation.Unbox(addr) =>
-          val tmp = Id("unbox")
-          scope.define(tmp, NeutralUnbox(tmp))
-          reify(k, ks) { NeutralStmt.Invoke(tmp, method, methodTpe, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack))) }
         case _: (Computation.Inline | Computation.Def | Computation.Continuation) => sys error s"Should not happen"
       }
 
@@ -837,7 +841,6 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
   }
 
   def run(mod: ModuleDecl): ModuleDecl = {
-
     // TODO deal with async externs properly (see examples/benchmarks/input_output/dyck_one.effekt)
     val asyncExterns = mod.externs.collect { case defn: Extern.Def if defn.annotatedCapture.contains(AsyncCapability.capture) => defn }
     val toplevelEnv = Env.empty
@@ -936,6 +939,9 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         case ((id, Binding.Run(callee, targs, vargs, bargs)), rest) => G =>
           val coreExpr = DirectApp(callee, targs, vargs.map(arg => embedPure(arg)(using G)), bargs.map(arg => embedBlock(arg)(using G)))
           Stmt.Let(id, coreExpr.tpe, coreExpr, rest(G.bind(id, coreExpr.tpe)))
+        case ((id, Binding.Unbox(addr, tpe, capt)), rest) => G =>
+          val pureValue = embedPure(addr)(using G)
+          Stmt.Def(id, Block.Unbox(pureValue), rest(G.bind(id, tpe, capt)))
       }(G)
   }
 
@@ -970,8 +976,6 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         }
       }
       core.Block.New(Implementation(interface, ops))
-    case Computation.Unbox(addr) =>
-      core.Block.Unbox(embedPure(addr))
   }
 
   def embedBlock(block: Block)(using G: TypingContext): core.Block = block match {
@@ -983,7 +987,6 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       }
       core.Block.BlockLit(tparams, cparams, vparams, bparams,
         embedStmt(b)(using G.bindValues(vparams).bindComputations(bparams)))
-    case NeutralUnbox(addr) => core.Block.Unbox(embedPure(addr)(using G))
   }
   def embedBlockLit(block: BlockLit)(using G: TypingContext): core.BlockLit = block match {
     case BlockLit(tparams, vparams, bparams, body) =>

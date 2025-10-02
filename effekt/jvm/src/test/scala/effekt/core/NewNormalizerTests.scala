@@ -2,7 +2,7 @@ package effekt.core
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.{Context, IOModuleDB}
-import effekt.core.optimizer.{NewNormalizer, Normalizer}
+import effekt.core.optimizer.{Deadcode, NewNormalizer, Normalizer, Optimizer}
 import effekt.util.PlainMessaging
 import effekt.*
 import kiama.output.PrettyPrinterTypes.Document
@@ -83,7 +83,7 @@ class NewNormalizerTests extends CoreTests {
   // The normalizer is able to unbox this indirection away.
   test("extern in box") {
     val input =
-      """
+    """
         |extern def foo: Int = vm"42"
         |
         |def run(): Int = {
@@ -91,25 +91,34 @@ class NewNormalizerTests extends CoreTests {
         |      foo
         |    } at { io }
         |
-        |    val x = f()()
+        |    val x = unbox f()()
         |    return x
         |}
         |
         |def main() = println(run())
         |""".stripMargin
 
-    val expected =
-      parse("""
+    val expected = parse(
+      """
         |module input
         |
         |extern {io} def foo(): Int = vm"42"
         |
         |def run() = {
-        |  let x = !(foo : () => Int @ {io})()
-        |  return x: Int
+        |  def f1() = {
+        |    def f2() = {
+        |      let x = !(foo: () => Int @ {io})()
+        |      return x: Int
+        |    }
+        |    let y = box {io} f2: () => Int @ {io}
+        |    return y: () => Int at {io}
+        |  }
+        |  val z: () => Int at {io} = (f1: () => (() => Int at {io}) @ {io})();
+        |  def r = unbox z: () => Int at {io}
+        |  (r: () => Int @ {io})()
         |}
-        |""".stripMargin
-      )
+        |
+        |""".stripMargin)
 
     val (mainId, actual) = normalize(input)
 
@@ -216,12 +225,13 @@ class NormalizeOnly extends Compiler[(Id, symbols.Module, ModuleDecl)] {
     Frontend andThen Middleend
   }
 
-  lazy val Optimized = allToCore(Core) andThen Aggregate andThen core.optimizer.Optimizer map {
+  lazy val Optimized = allToCore(Core) andThen Aggregate map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
-      val dontInline = NewNormalizer { (id, b) => false }
-      val normalTree = dontInline.run(core)
-      Normalizer.assertNormal(normalTree)
-      (mainSymbol, mod, normalTree)
+      var tree = Deadcode.remove(mainSymbol, core)
+      val normalizer = NewNormalizer { (id, b) => false }
+      tree = normalizer.run(tree)
+      Normalizer.assertNormal(tree)
+      (mainSymbol, mod, tree)
   }
 }
