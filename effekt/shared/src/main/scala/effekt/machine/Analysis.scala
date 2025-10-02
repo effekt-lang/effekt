@@ -15,10 +15,8 @@ def freeVariables(taggedClause: (Int, Clause)): Set[Variable] = freeVariables(ta
 
 def freeVariables(statement: Statement): Set[Variable] =
   statement match {
-    case Jump(Label(_, environment)) =>
-      environment.toSet
-    case Substitute(bindings, rest) =>
-      freeVariables(rest).map { variable => bindings.toMap.getOrElse(variable, variable) }
+    case Jump(_, arguments) =>
+      arguments.toSet
     case Construct(name, tag, values, rest) =>
       Set.from(values) ++ (freeVariables(rest) -- Set(name))
     case Switch(value, clauses, default: Option[Clause]) =>

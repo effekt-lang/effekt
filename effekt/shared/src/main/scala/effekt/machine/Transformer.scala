@@ -130,11 +130,12 @@ object Transformer {
         getBlockInfo(other) match {
           case BlockInfo.Definition(free, params) =>
             noteDefinition(id, free, params)
-            emitDefinition(transformLabel(id), Jump(transformLabel(other)))
+            val label = transformLabel(id)
+            emitDefinition(label, Jump(transformLabel(other), label.environment))
             transform(rest)
           case BlockInfo.Parameter(_) =>
             noteParameter(id, tpe)
-            Substitute(List(Variable(transform(id), transform(tpe)) -> Variable(transform(other), transform(tpe))), transform(rest))
+            withBindings(List(Variable(transform(id), transform(tpe)) -> Variable(transform(other), transform(tpe)))){ () => transform(rest) }
         }
 
       case core.Def(id, block @ core.Unbox(pure), rest) =>
@@ -145,9 +146,8 @@ object Transformer {
 
       case core.Let(id, tpe, binding, rest) =>
         transform(binding).run { value =>
-          // TODO consider passing the environment to [[transform]] instead of explicit substitutions here.
           // TODO it is important that we use the inferred [[binding.tpe]] and not the annotated type [[tpe]], but why?
-          Substitute(List(Variable(transform(id), transform(binding.tpe)) -> value), transform(rest))
+          withBindings(List(Variable(transform(id), transform(binding.tpe)) -> value)){ () => transform(rest) }
         }
 
       case s @ core.ImpureApp(id, core.BlockVar(blockName: symbols.ExternFunction, _, capt), targs, vargs, bargs, rest) =>
@@ -179,8 +179,7 @@ object Transformer {
 
                 // Known Jump
                 case BlockInfo.Definition(freeParams, blockParams) =>
-                  val label = machine.Label(transform(id), blockParams ++ freeParams)
-                  Substitute(label.environment.zip(values ++ blocks), Jump(label))
+                  Jump(Label(transform(id), blockParams ++ freeParams), values ++ blocks)
 
                 case _ => ErrorReporter.panic("Applying an object")
               }
@@ -190,7 +189,7 @@ object Transformer {
               noteParameters(bparams)
               val valueNames = vparams.map(transform).zip(values)
               val blockNames = bparams.map(transform).zip(blocks)
-              Substitute(valueNames ++ blockNames, transform(body))
+              withBindings(valueNames ++ blockNames){ () => transform(body) }
 
             case Block.Unbox(pure) =>
               transform(pure).run { boxedCallee =>
@@ -212,8 +211,9 @@ object Transformer {
         transform(vargs, bargs).run { (values, blocks) =>
           callee match {
             case Block.BlockVar(id, tpe, capt) if BPC.globals contains id =>
+              val label = BPC.globals(id)
               val variable = Variable(freshName("receiver"), transform(tpe))
-              PushFrame(Clause(List(variable), Invoke(variable, opTag, values ++ blocks)), Jump(BPC.globals(id)))
+              PushFrame(Clause(List(variable), Invoke(variable, opTag, values ++ blocks)), Jump(label, label.environment))
 
             case Block.BlockVar(id, tpe, capt) =>
               Invoke(Variable(transform(id), transform(tpe)), opTag, values ++ blocks)
@@ -331,19 +331,20 @@ object Transformer {
 
   def transformBlockArg(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
     case core.BlockVar(id, tpe, _) if BPC.globals contains id =>
+      val label = BPC.globals(id)
       val variable = Variable(transform(id), transform(tpe))
       shift { k =>
-        PushFrame(Clause(List(variable), k(variable)), Jump(BPC.globals(id)))
+        PushFrame(Clause(List(variable), k(variable)), Jump(label, label.environment))
       }
     case core.BlockVar(id, tpe, capt) => getBlockInfo(id) match {
       case BlockInfo.Definition(_, parameters) =>
         // Passing a top-level function directly, so we need to eta-expand turning it into a closure
         // TODO cache the closure somehow to prevent it from being created on every call
+        val label = transformLabel(id)
         val variable = Variable(freshName(id.name.name ++ "$closure"), Negative())
         shift { k =>
           New(variable, List(Clause(parameters,
-            // conceptually: Substitute(parameters zip parameters, Jump(...)) but the Substitute is a no-op here
-            Jump(transformLabel(id))
+            Jump(label, label.environment)
           )), k(variable))
         }
       case BlockInfo.Parameter(tpe) =>
@@ -371,11 +372,12 @@ object Transformer {
   def transform(expr: core.Expr)(using BC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = expr match {
 
     case core.ValueVar(id, tpe) if BC.globals contains id =>
+      val label = BC.globals(id)
       val variable = Variable(freshName("run"), transform(tpe))
       shift { k =>
         // TODO this might introduce too many pushes.
         PushFrame(Clause(List(variable), k(variable)),
-          Substitute(Nil, Jump(BC.globals(id))))
+          Jump(label, label.environment))
       }
 
     case core.ValueVar(id, tpe) =>
@@ -543,12 +545,12 @@ object Transformer {
   /**
    * Extra info in context
    */
-
   class BlocksParamsContext() {
     var info: Map[Symbol, BlockInfo] = Map.empty
     var globals: Map[Id, Label] = Map.empty
     var definitions: List[Definition] = List.empty
-  }
+    var substitution: Map[Variable, Variable] = Map.empty
+  } // TODO rename to MachineTransformerContext
 
   enum BlockInfo {
     case Definition(free: Environment, params: Environment)
@@ -578,6 +580,17 @@ object Transformer {
 
   def getBlockInfo(id: Id)(using BPC: BlocksParamsContext): BlockInfo =
     BPC.info.getOrElse(id, sys error s"No block info for ${util.show(id)}")
+
+  def withBindings[R](bindings: Substitution)(program: () => R)(using BPC: BlocksParamsContext): R = {
+    val substitution = BPC.substitution
+    BPC.substitution = substitution ++ bindings.map { case (variable -> value) => (variable -> substitution.getOrElse(value, value) ) }.toMap;
+    val result = program()
+    BPC.substitution = substitution
+    result
+  }
+
+  def substitute(value: Variable)(using BPC: BlocksParamsContext): Variable =
+    BPC.substitution.toMap.getOrElse(value, value)
 
   def shift[A](body: (A => Statement) => Statement): Binding[A] =
     Binding { k => Trampoline.Done(body { x => trampoline(k(x)) }) }
