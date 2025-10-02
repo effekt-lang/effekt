@@ -211,9 +211,11 @@ object TransformerCps extends Transformer {
         js.Const(nameDef(id), toJS(binding)) :: toJS(body).run(k)
       }
 
+    // Note: currently we only perform this translation if there isn't already a direct-style continuation
+    //
     // [[ let k(x, ks) = ...; if (...) jump k(42, ks2) else jump k(10, ks3) ]] =
     //    let x; if (...) { x = 42; ks = ks2 } else { x = 10; ks = ks3 } ...
-    case cps.Stmt.LetCont(id, Cont.ContLam(params, ks, body), body2) if canBeDirect(id, body2) =>
+    case cps.Stmt.LetCont(id, Cont.ContLam(params, ks, body), body2) if D.directStyle.isEmpty && canBeDirect(id, body2) =>
       Binding { k =>
         params.map { p => js.Let(nameDef(p), js.Undefined)  } :::
           toJS(body2)(using markDirectStyle(id, params, ks)).stmts ++

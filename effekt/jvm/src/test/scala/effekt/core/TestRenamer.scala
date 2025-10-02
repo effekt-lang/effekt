@@ -14,13 +14,10 @@ import effekt.context.Context
  *
  * @param C the context is used to copy annotations from old symbols to fresh symbols
  */
-class TestRenamer(names: Names = Names(Map.empty), prefix: String = "") extends core.Tree.Rewrite {
+class TestRenamer(names: Names = Names(Map.empty), prefix: String = "", defaultScopes: List[Map[Id, Id]] = List.empty) extends core.Tree.Rewrite {
 
   // list of scopes that map bound symbols to their renamed variants.
-  private var scopes: List[Map[Id, Id]] = List.empty
-
-  // Here we track ALL renamings
-  var renamed: Map[Id, Id] = Map.empty
+  private var scopes: List[Map[Id, Id]] = defaultScopes
 
   private var suffix: Int = 0
 
@@ -34,7 +31,6 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "") extends 
     try {
       val newScope = ids.map { x => x -> freshIdFor(x) }.toMap
       scopes = newScope :: scopes
-      renamed = renamed ++ newScope
       f
     } finally { scopes = before }
 
@@ -103,6 +99,11 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "") extends 
           bparams map rewrite,
           rewrite(body))
       }
+  }
+
+  def apply(m: core.Toplevel): core.Toplevel = {
+    suffix = 0
+    rewrite(m)
   }
 
   def apply(m: core.ModuleDecl): core.ModuleDecl =
