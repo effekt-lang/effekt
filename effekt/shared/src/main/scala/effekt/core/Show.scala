@@ -131,10 +131,8 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     def generateBlockLit(stmt: Stmt) = BlockLit(List.empty, List.empty, List(vparam), List.empty, stmt)
     def generateValAppRet(valueType: ValueType): Stmt =
       val blockVar = findExternShowDef(valueType)
-      val call = Stmt.App(blockVar, List.empty, List(paramValueVar), List.empty)
       val retId = Id("ret")
-      val callVal = Stmt.Val(retId, TString, call, Stmt.Return(Expr.ValueVar(retId, TString)))
-      callVal
+      Stmt.ImpureApp(retId, blockVar, List.empty, List(paramValueVar), List.empty, Stmt.Return(Expr.ValueVar(retId, TString)))
     def generateDef(stmt: Stmt): Toplevel.Def = 
       ctx.showDefns += (vt -> showId)
       val block = generateBlockLit(stmt)
