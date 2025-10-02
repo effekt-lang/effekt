@@ -25,15 +25,6 @@ type Environment = List[Variable]
  */
 case class Label(name: String, environment: Environment) // TODO delete environment
 
-/**
- * Applying a substitution
- *
- *    List(x -> y)
- *
- * will replace all occurrences of x by y. Here x is a binding occurrence
- * and y is a bound occurrence.
- */
-type Substitution = List[(Variable, Variable)]
 
 type Tag = Int
 
