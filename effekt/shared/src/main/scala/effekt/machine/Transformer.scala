@@ -370,22 +370,24 @@ object Transformer {
   }
 
   def transform(expr: core.Expr)(using BC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = expr match {
-    case core.ValueVar(id, tpe) => pure(Variable(transform(id), transform(tpe)))
-    case _ => transformNamed(Variable(freshName("x"), transform(expr.tpe)), expr)
+    case core.ValueVar(id, tpe) if BC.globals contains id =>
+      val label = BC.globals(id)
+      val variable = Variable(freshName("x"), transform(expr.tpe))
+      shift { k =>
+        // TODO this might introduce too many pushes.
+        PushFrame(Clause(List(variable), k(variable)),
+          Jump(label, label.environment))
+      }
+    case core.ValueVar(id, tpe) =>
+      pure(Variable(transform(id), transform(tpe)))
+    case _ =>
+      transformNamed(Variable(freshName("x"), transform(expr.tpe)), expr)
   }
 
   /**
     Must not be called on an expression that is a variable.
   */
   def transformNamed(variable: Variable, expr: core.Expr)(using BC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = expr match {
-
-    case core.ValueVar(id, tpe) if BC.globals contains id =>
-      val label = BC.globals(id)
-      shift { k =>
-        // TODO this might introduce too many pushes.
-        PushFrame(Clause(List(variable), k(variable)),
-          Jump(label, label.environment))
-      }
 
     case core.ValueVar(id, tpe) =>
       ErrorReporter.panic(s"Must not be called on an expression that is a variable $expr.")
