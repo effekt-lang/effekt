@@ -107,7 +107,7 @@ class NewNormalizerTests extends CoreTests {
         |def run() = {
         |  def f1() = {
         |    def f2() = {
-        |      let x = !(foo: () => Int @ {io})()
+        |      let ! x = (foo: () => Int @ {io})()
         |      return x: Int
         |    }
         |    let y = box {io} f2: () => Int @ {io}
@@ -119,6 +119,7 @@ class NewNormalizerTests extends CoreTests {
         |}
         |
         |""".stripMargin)
+
 
     val (mainId, actual) = normalize(input)
 
