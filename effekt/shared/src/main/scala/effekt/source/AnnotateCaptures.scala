@@ -102,6 +102,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
     case tree @ ExternDef(id, tparams, vparams, bparams, captures, ret, bodies, info, span) =>
       val sym = tree.symbol
       val capts = sym.capture
+      bodies.foreach { query }
       Context.annotate(Annotations.Captures, sym, capts)
       capts
     // regions
