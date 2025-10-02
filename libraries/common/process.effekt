@@ -62,7 +62,6 @@ extern def onStderr(opts: SpawnOptions, callback: String => Unit at {io, global}
     ret %Pos %opts
   """
 
-extern type PID
 extern def spawn(cmd: String, args: Array[String], options: SpawnOptions) at async: Int  =
   jsNode """$effekt.capture(k => {
     let p = spawn(${cmd}, ${args}, ${options});
