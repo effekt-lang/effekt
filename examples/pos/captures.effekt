@@ -22,14 +22,14 @@ def makeCounter(start: Int) at {global}: Counter at {global} = {
     def get() = x.get()
     def inc() = x.set(x.get() + 1)
   }
-  counter
+  box counter
 }
 
 def main() = {
   f()
   g()
   h()
-  val c = makeCounter(1)
+  def c = makeCounter(1)
   c.inc()
   println(c.get())
 }
