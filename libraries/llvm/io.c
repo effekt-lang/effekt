@@ -783,19 +783,24 @@ struct Pos c_spawn_options_on_stderr(struct Pos opts, struct Pos callback) {
     return subproc_options_on_stream(opts, 2, callback);
 }
 
-void on_close(uv_handle_t* handle) {
+
+typedef struct {
+  char** args;
+} subproc_proc_data_t;
+void subproc_on_close(uv_handle_t* handle) {
     free(handle);
 }
-void on_exit(uv_process_t* proc, int64_t exit_status, int term_signal) {
+void subproc_on_exit(uv_process_t* proc, int64_t exit_status, int term_signal) {
     (void)term_signal; (void)exit_status;
-    char** _args = (char**)proc->data;
-    if (_args) {
-        for(int i = 0; _args[i] != NULL; i++) {
-            free(_args[i]);
+    subproc_proc_data_t* pd = (subproc_proc_data_t*)proc->data;
+    if (pd->args) {
+        for(int i = 0; pd->args[i] != NULL; i++) {
+            free(pd->args[i]);
         }
-        free(_args);
+        free(pd->args);
     }
-    uv_close((uv_handle_t*)proc, on_close);
+    free(pd);
+    uv_close((uv_handle_t*)proc, subproc_on_close);
 }
 
 struct Pos c_spawn(struct Pos cmd, struct Pos args, struct Pos options) {
@@ -818,8 +823,10 @@ struct Pos c_spawn(struct Pos cmd, struct Pos args, struct Pos options) {
     _args[_argc + 1] = NULL;
     opts->args = _args;
     // callback to free _args
-    opts->exit_cb = on_exit;
-    proc->data = _args;
+    opts->exit_cb = subproc_on_exit;
+    subproc_proc_data_t* pd = (subproc_proc_data_t*)malloc(sizeof(subproc_proc_data_t));
+    pd->args = _args;
+    proc->data = pd;
 
     // spawn process
     int err = uv_spawn(uv_default_loop(), proc, opts);
