@@ -761,10 +761,10 @@ void subproc_stream_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) 
     free(clos);
   }
 }
-struct Pos subproc_options_on_stream(struct Pos opts, size_t id, struct Pos callback) {
+struct Pos subproc_options_on_stream(struct Pos opts, size_t id, uv_stdio_flags flags, struct Pos callback) {
     uv_process_options_t* options = (uv_process_options_t*)opts.obj;
 
-    options->stdio[id].flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
+    options->stdio[id].flags = UV_CREATE_PIPE | flags;
     uv_pipe_t* pipe = (uv_pipe_t*)malloc(sizeof(uv_pipe_t));
 
     uv_pipe_init(uv_default_loop(), pipe, 1);
@@ -777,10 +777,13 @@ struct Pos subproc_options_on_stream(struct Pos opts, size_t id, struct Pos call
     return opts;
 }
 struct Pos c_spawn_options_on_stdout(struct Pos opts, struct Pos callback) {
-    return subproc_options_on_stream(opts, 1, callback);
+  return subproc_options_on_stream(opts, 1, UV_WRITABLE_PIPE, callback);
 }
 struct Pos c_spawn_options_on_stderr(struct Pos opts, struct Pos callback) {
-    return subproc_options_on_stream(opts, 2, callback);
+  return subproc_options_on_stream(opts, 2, UV_WRITABLE_PIPE, callback);
+}
+struct Pos c_spawn_options_pipe_stdin(struct Pos opts, struct Pos callback) {
+  return subproc_options_on_stream(opts, 0, UV_READABLE_PIPE, callback);
 }
 
 
