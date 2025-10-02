@@ -327,15 +327,18 @@ namespace test {
       def k = new JsonObjectBuilder {
         def field(k){v} = { println(k); ignore{v} }
       }
-      def d = new JsonBuilder {
-        def number(n) = println(n)
-        def bool(b) = ()
-        def null() = println("NULL")
-        def string(s) = ()
-        def list(){e} = handleJsonBuilder{d}{e}
-        def dict(){e} = handleJsonObjectBuilder{k}{e}
+      def jsonBuilder[R] {e: => R / JsonBuilder}: R = {
+        def d = new JsonBuilder {
+          def number(n) = println(n)
+          def bool(b) = ()
+          def null() = println("NULL")
+          def string(s) = ()
+          def list(){e} = jsonBuilder{e}
+          def dict(){e} = handleJsonObjectBuilder{k}{e}
+        }
+        handleJsonBuilder{d}{e}
       }
-      handleJsonBuilder{d}{ decodeJson() }
+      jsonBuilder { decodeJson() }
     }
 
     println("")
