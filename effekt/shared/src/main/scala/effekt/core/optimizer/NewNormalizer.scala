@@ -650,24 +650,20 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
   }
 
   def evaluate(expr: Expr)(using env: Env, scope: Scope): Addr = expr match {
-    case core.Pure.ValueVar(id, annotatedType) =>
+    case Expr.ValueVar(id, annotatedType) =>
       env.lookupValue(id)
 
-    case core.Pure.Literal(value, annotatedType) =>
+    case core.Expr.Literal(value, annotatedType) =>
       scope.allocate("x", Value.Literal(value, annotatedType))
 
     // right now everything is stuck... no constant folding ...
-    case core.Pure.PureApp(f, targs, vargs) =>
+    case core.Expr.PureApp(f, targs, vargs) =>
       scope.allocate("x", Value.Extern(f, targs, vargs.map(evaluate)))
 
-    case DirectApp(f, targs, vargs, bargs) =>
-      assert(bargs.isEmpty)
-      scope.run("x", f, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", Stack.Empty)))
-
-    case core.Pure.Make(data, tag, targs, vargs) =>
+    case core.Expr.Make(data, tag, targs, vargs) =>
       scope.allocate("x", Value.Make(data, tag, targs, vargs.map(evaluate)))
 
-    case core.Pure.Box(b, annotatedCapture) =>
+    case core.Expr.Box(b, annotatedCapture) =>
       val comp = evaluate(b, "x", Stack.Empty)
       scope.allocate("x", Value.Box(comp, annotatedCapture))
   }
@@ -683,6 +679,11 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         given Scope = scope
         bind(id, res) { evaluate(body, k, ks) }
       }, ks)
+
+    case Stmt.ImpureApp(id, f, targs, vargs, bargs, body) =>
+      assert(bargs.isEmpty)
+      val addr = scope.run("x", f, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", Stack.Empty)))
+      evaluate(body, k, ks)(using env.bindValue(id, addr), scope)
 
     case Stmt.Let(id, annotatedTpe, binding, body) =>
       bind(id, evaluate(binding)) { evaluate(body, k, ks) }
@@ -963,21 +964,23 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           val coreStmt = embedStmt(stmt)(using G)
           Stmt.Val(id, coreStmt.tpe, coreStmt, rest(G.bind(id, coreStmt.tpe)))
         case ((id, Binding.Run(callee, targs, vargs, bargs)), rest) => G =>
-          val coreExpr = DirectApp(callee, targs, vargs.map(arg => embedPure(arg)(using G)), bargs.map(arg => embedBlock(arg)(using G)))
-          Stmt.Let(id, coreExpr.tpe, coreExpr, rest(G.bind(id, coreExpr.tpe)))
+          val vargs1 = vargs.map(arg => embedPure(arg)(using G))
+          val bargs1 = bargs.map(arg => embedBlock(arg)(using G))
+          val tpe = Type.bindingType(callee, targs, vargs1, bargs1)
+          core.ImpureApp(id, callee, targs, vargs1, bargs1, rest(G.bind(id, tpe)))
         case ((id, Binding.Unbox(addr, tpe, capt)), rest) => G =>
           val pureValue = embedPure(addr)(using G)
           Stmt.Def(id, core.Block.Unbox(pureValue), rest(G.bind(id, tpe, capt)))
       }(G)
   }
 
-  def embedPure(value: Value)(using TypingContext): core.Pure = value match {
-    case Value.Extern(callee, targs, vargs) => Pure.PureApp(callee, targs, vargs.map(embedPure))
-    case Value.Literal(value, annotatedType) => Pure.Literal(value, annotatedType)
-    case Value.Make(data, tag, targs, vargs) => Pure.Make(data, tag, targs, vargs.map(embedPure))
-    case Value.Box(body, annotatedCapture) => Pure.Box(embedBlock(body), annotatedCapture)
+  def embedPure(value: Value)(using TypingContext): core.Expr = value match {
+    case Value.Extern(callee, targs, vargs) => Expr.PureApp(callee, targs, vargs.map(embedPure))
+    case Value.Literal(value, annotatedType) => Expr.Literal(value, annotatedType)
+    case Value.Make(data, tag, targs, vargs) => Expr.Make(data, tag, targs, vargs.map(embedPure))
+    case Value.Box(body, annotatedCapture) => Expr.Box(embedBlock(body), annotatedCapture)
   }
-  def embedPure(addr: Addr)(using G: TypingContext): core.Pure = Pure.ValueVar(addr, G.lookupValue(addr))
+  def embedPure(addr: Addr)(using G: TypingContext): core.Expr = Expr.ValueVar(addr, G.lookupValue(addr))
 
   def embedBlock(comp: Computation)(using G: TypingContext): core.Block = comp match {
     case Computation.Var(id) => embedBlockVar(id)
