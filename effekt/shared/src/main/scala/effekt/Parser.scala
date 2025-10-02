@@ -551,8 +551,11 @@ class Parser(tokens: Seq[Token], source: Source) {
       // [...](<PARAM>...) {...} `=` <STMT>>
       val (tps, vps, bps) = params()
       val captures = maybeCaptureSet()
-      FunDef(id, tps, vps, bps, captures, maybeReturnAnnotation(), `=` ~> stmts(), info, span())
 
+      val (ret, eff) = maybeTypeAndMaybeEffect()
+      FunDef(id, tps, vps, bps, captures, ret, eff, `=` ~> stmts(), info, span())
+
+  def maybeTypeAndMaybeEffect(): (Maybe[ValueType], Maybe[Effects]) = ???
 
   // right now: data type definitions (should be renamed to `data`) and type aliases
   def typeOrAliasDef(info: Info): Def =
@@ -797,6 +800,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   def maybeReturnAnnotation(): Maybe[Effectful] =
     nonterminal:
       when(`:`) { Maybe.Some(effectful(), span()) } { Maybe.None(span()) }
+
 
   def returnAnnotation(): Effectful =
     if peek(`:`) then  `:` ~> effectful()

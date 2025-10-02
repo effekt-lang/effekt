@@ -144,7 +144,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.DefDef(id, captures, annot, block, doc, span) =>
       ()
 
-    case f @ source.FunDef(id, tparams, vparams, bparams, captures, annot, body, doc, span) =>
+    case f @ source.FunDef(id, tparams, vparams, bparams, captures, annotRet, annotEff, body, doc, span) =>
       val uniqueId = Context.nameFor(id)
       val cpts = captures.map { resolve }.unspan
       // we create a new scope, since resolving type params introduces them in this scope
@@ -154,12 +154,12 @@ object Namer extends Phase[Parsed, NameResolved] {
         //   we should refactor!
         val vps = vparams map resolve
         val bps = bparams map resolve
-        val ret = Context scoped {
+        val (ret, eff) = Context scoped {
           Context.bindValues(vps)
           Context.bindBlocks(bps)
-          annot map resolve
+          (annotRet map resolveValueType, annotEff map resolve)
         }
-        UserFunction(uniqueId, tps.unspan, vps.unspan, bps.unspan, cpts, ret.unspan.map { _._1 }, ret.unspan.map { _._2 }, f)
+        UserFunction(uniqueId, tps.unspan, vps.unspan, bps.unspan, cpts, ret.unspan, eff.unspan, f)
       }
       Context.define(id, sym)
 
@@ -325,7 +325,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, DefBinder(Context.nameFor(id), cpts, tpe.unspan, d))
 
     // FunDef and InterfaceDef have already been resolved as part of the module declaration
-    case f @ source.FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) =>
+    case f @ source.FunDef(id, tparams, vparams, bparams, captures, ret, eff, body, doc, span) =>
       val sym = f.symbol
       Context.scopedWithName(id.name) {
         sym.tparams.foreach { p => Context.bind(p) }

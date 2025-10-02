@@ -171,7 +171,7 @@ case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = 
     val r = range
     Spans.substring(r.from, r.to)
   }
-  
+
   override def compare(that: Span): Int = {
     val nameCmp = this.source.name compareTo that.source.name
     if (nameCmp != 0) nameCmp
@@ -396,7 +396,7 @@ export SpannedOps._
  */
 enum Def extends Definition {
 
-  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], captures: Maybe[CaptureSet], ret: Maybe[Effectful], body: Stmt, info: Info, span: Span)
+  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], captures: Maybe[CaptureSet], ret: Maybe[ValueType], eff: Maybe[Effects], body: Stmt, info: Info, span: Span)
   case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, info: Info, span: Span)
   case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, info: Info, span: Span)
   case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, info: Info, span: Span)

@@ -98,7 +98,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.at(mainFn.decl) {
         // If type checking failed before reaching main, there is no type
         C.functionTypeOption(mainFn).foreach {
-          case FunctionType(tparams, cparams, vparams, bparams, result, effects) => 
+          case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
             if (vparams.nonEmpty || bparams.nonEmpty) {
               C.abort("Main does not take arguments")
             }
@@ -708,7 +708,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
   def precheckDef(d: Def)(using Context): Unit = Context.focusing(d) {
-    case d @ source.FunDef(id, tps, vps, bps, cpt, ret, body, doc, span) =>
+    case d @ source.FunDef(id, tps, vps, bps, cpt, ret, eff, body, doc, span) =>
       val fun = d.symbol
 
       // (1) make up a fresh capture unification variable or use the annotated captures and annotate on function symbol
@@ -784,7 +784,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def synthDef(d: Def)(using Context, Captures): Result[Unit] = Context.at(d) {
     d match {
-      case d @ source.FunDef(id, tps, vps, bps, cpt, ret, body, doc, span) =>
+      case d @ source.FunDef(id, tps, vps, bps, cpt, ret, eff, body, doc, span) =>
         val sym = d.symbol
         // was assigned by precheck
         val functionCapture = Context.lookupCapture(sym)
@@ -805,7 +805,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
           flowingInto(inferredCapture) {
 
-            (sym.annotatedType: @unchecked) match {
+            (sym.annotatedType, sym.annotatedEffects) match {
               case Some(annotated) =>
                 // the declared effects are considered as bound
                 val bound: ConcreteEffects = annotated.effects
