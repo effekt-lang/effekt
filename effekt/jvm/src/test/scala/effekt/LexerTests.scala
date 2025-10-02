@@ -79,13 +79,18 @@ class LexerTests extends munit.FunSuite {
   }
 
   test("numbers") {
-    val num = "12.34 100 200 123.345 1 -12.34 -100 -123.345 -1"
+    val num = "12.34 100 200 123.345 1 -12.34 -100 -123.345 -1 0x42"
     assertTokensEq(
       num,
       Float(12.34), Integer(100), Integer(200), Float(123.345), Integer(1),
-      Float(-12.34), Integer(-100), Float(-123.345), Integer(-1),
+      Float(-12.34), Integer(-100), Float(-123.345), Integer(-1), Byt(66.toByte),
       EOF
     )
+  }
+
+  test("illegal byte notation") {
+    assertFailure("0x4")
+    assertFailure("0x444")
   }
 
   test("big numbers") {
