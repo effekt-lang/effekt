@@ -182,7 +182,7 @@ object Transformer {
 
                 // Known Jump
                 case BlockInfo.Definition(freeParams, blockParams) =>
-                  Jump(Label(transform(id), blockParams ++ freeParams), values ++ blocks)
+                  Jump(Label(transform(id), blockParams ++ freeParams), values ++ blocks ++ freeParams)
 
                 case _ => ErrorReporter.panic("Applying an object")
               }
