@@ -61,6 +61,29 @@ extern def onStderr(opts: SpawnOptions, callback: String => Unit at {io, global}
     %opts = call %Pos @c_spawn_options_on_stderr(%Pos ${opts}, %Pos ${callback})
     ret %Pos %opts
   """
+extern def writableStdin(opts: SpawnOptions) at {}: SpawnOptions =
+  jsNode """(function() {
+    let old = ${opts};
+    old.stdio[0] = 'pipe'
+    return old;
+  })()"""
+extern type ProcessHandle
+extern def onSpawn(opts: SpawnOptions, callback: ProcessHandle => Unit at {io, global}) at {}: SpawnOptions =
+  jsNode """(function () {
+    let old = ${opts};
+    let oldSpawn = old.onSpawn;
+    old.onSpawn = function(p) {
+      oldSpawn(p);
+      p.on('spawn', () => {
+        $effekt.runToplevel((ks, k) => (${callback})(p, ks, k));
+      });
+    };
+    return old;
+  })()"""
+extern def writeStdin(to: ProcessHandle, s: String) at io: Unit =
+  jsNode """${to}.stdin.write(${s})"""
+extern def closeStdin(to: ProcessHandle) at io: Unit =
+  jsNode """${to}.stdin.end()"""
 
 extern def spawn(cmd: String, args: Array[String], options: SpawnOptions) at async: Int  =
   jsNode """$effekt.capture(k => {
