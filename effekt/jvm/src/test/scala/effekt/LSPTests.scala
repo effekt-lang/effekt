@@ -719,6 +719,12 @@ class LSPTests extends FunSuite {
       inlayHint.setTooltip(markup)
       inlayHint.setPaddingLeft(true)
       inlayHint.setData("capture")
+      inlayHint.setTextEdits(
+        List(
+          new TextEdit(new Range(positions(1), positions(1)), " at {io}")
+        ).asJava
+      )
+
 
       val expectedInlayHints = List(inlayHint)
 
@@ -756,7 +762,11 @@ class LSPTests extends FunSuite {
       inlayHint.setTooltip(markup)
       inlayHint.setPaddingLeft(true)
       inlayHint.setData("capture")
-
+      inlayHint.setTextEdits(
+        List(
+          new TextEdit(new Range(positions(1), positions(1)), " at {io}")
+        ).asJava
+      )
       val expectedInlayHints = List(inlayHint)
 
       val didOpenParams = new DidOpenTextDocumentParams()
@@ -791,6 +801,11 @@ class LSPTests extends FunSuite {
       captureHint.setData("capture")
       captureHint.setTooltip(new MarkupContent("markdown", "captures: `{}`"))
       captureHint.setPaddingLeft(true)
+      captureHint.setTextEdits(
+        List(
+          new TextEdit(new Range(positions(1), positions(1)), " at {}")
+        ).asJava
+      )
 
       val omittedHint = new InlayHint()
       omittedHint.setKind(InlayHintKind.Type)
@@ -817,7 +832,7 @@ class LSPTests extends FunSuite {
       params.setRange(new Range(positions(0), positions(2)))
 
       val inlayHints = server.getTextDocumentService().inlayHint(params).get()
-      assertEquals(expectedInlayHints.asJava, inlayHints)
+      assertEquals(inlayHints, expectedInlayHints.asJava)
     }
   }
 
@@ -843,6 +858,11 @@ class LSPTests extends FunSuite {
       inlayHint.setTooltip(markup)
       inlayHint.setPaddingLeft(true)
       inlayHint.setData("capture")
+      inlayHint.setTextEdits(
+        List(
+          new TextEdit(new Range(positions(1), positions(1)), " at {io}")
+        ).asJava
+      )
 
       val expectedInlayHints = List(inlayHint)
 
@@ -881,6 +901,11 @@ class LSPTests extends FunSuite {
       paramsAfterChange.setRange(new Range(positions(0), new Position(positions(2).getLine + 1, positions(2).getCharacter)))
 
       inlayHint.setPosition(newPos)
+      inlayHint.setTextEdits(
+        List(
+          new TextEdit(new Range(newPos, newPos), " at {io}")
+        ).asJava
+      )
       val inlayHintsAfterChange = server.getTextDocumentService().inlayHint(paramsAfterChange).get()
       assertEquals(inlayHintsAfterChange, expectedInlayHints.asJava)
 
@@ -900,6 +925,11 @@ class LSPTests extends FunSuite {
       paramsAfterRevert.setTextDocument(revertedTextDoc.versionedTextDocumentIdentifier)
       paramsAfterRevert.setRange(new Range(positions(0), positions(2)))
 
+      inlayHint.setTextEdits(
+        List(
+          new TextEdit(new Range(positions(1), positions(1)), " at {io}")
+        ).asJava
+      )
       val inlayHintsAfterRevert = server.getTextDocumentService().inlayHint(paramsAfterRevert).get()
       assertEquals(inlayHintsAfterRevert, expectedInlayHints.asJava)
     }
@@ -928,6 +958,11 @@ class LSPTests extends FunSuite {
       inlayHint.setTooltip(markup)
       inlayHint.setPaddingLeft(true)
       inlayHint.setData("capture")
+      inlayHint.setTextEdits(
+        List(
+          new TextEdit(new Range(positions(1), positions(1)), " at {io}")
+        ).asJava
+      )
 
       val expectedInlayHints = List(inlayHint)
 

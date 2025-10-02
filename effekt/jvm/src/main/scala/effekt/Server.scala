@@ -26,6 +26,7 @@ import java.net.ServerSocket
 import java.nio.file.Paths
 import java.util
 import java.util.concurrent.{CompletableFuture, ExecutorService, Executors}
+import kiama.util.Range
 
 /**
  * Effekt Language Server
@@ -385,6 +386,8 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
             inlayHint.setTooltip(markup)
             inlayHint.setPaddingLeft(true)
             inlayHint.setData("capture")
+            val textEdit = new TextEdit(convertRange(Range(p, p)), s" $codeEdit")
+            inlayHint.setTextEdits(Collections.seqToJavaList(List(textEdit)))
             inlayHint
         }.toVector
 
