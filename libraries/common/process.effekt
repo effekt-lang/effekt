@@ -18,6 +18,7 @@ const { spawn } = require('node:child_process');
 extern llvm """
   declare %Pos @c_spawn_options_default()
   declare %Pos @c_spawn_options_on_stdout(%Pos, %Pos)
+  declare %Pos @c_spawn_options_on_stderr(%Pos, %Pos)
   declare %Pos @c_spawn(%Pos, %Pos, %Pos)
 """
 
@@ -42,6 +43,22 @@ extern def onStdout(opts: SpawnOptions, callback: String => Unit at {io, global}
     return old; })()"""
   llvm """
     %opts = call %Pos @c_spawn_options_on_stdout(%Pos ${opts}, %Pos ${callback})
+    ret %Pos %opts
+  """
+extern def onStderr(opts: SpawnOptions, callback: String => Unit at {io, global}) at {}: SpawnOptions =
+  jsNode """(function() {
+    let old = ${opts};
+    old.stdio[2] = 'pipe';
+    let oldSpawn = old.onSpawn;
+    old.onSpawn = function(p) {
+      oldSpawn(p);
+      p.stderr.on('data', (chunk) => {
+        $effekt.runToplevel((ks, k) => (${callback})(chunk, ks, k));
+      });
+    };
+    return old; })()"""
+  llvm """
+    %opts = call %Pos @c_spawn_options_on_stderr(%Pos ${opts}, %Pos ${callback})
     ret %Pos %opts
   """
 
