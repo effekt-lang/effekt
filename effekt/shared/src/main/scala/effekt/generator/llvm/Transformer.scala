@@ -76,20 +76,11 @@ object Transformer {
   def transform(statement: machine.Statement)(using ModuleContext, FunctionContext, BlockContext): Terminator =
     statement match {
 
-     case machine.Jump(label) =>
+     case machine.Jump(label, arguments) =>
         emit(Comment(s"jump ${label.name}"))
-        shareValues(label.environment, Set())
-
-        val arguments = label.environment.map(transform)
-        emit(callLabel(transform(label), arguments))
+        shareValues(arguments, Set())
+        emit(callLabel(transform(label), arguments.map(transform)))
         RetVoid()
-
-      case machine.Substitute(bindings, rest) =>
-        emit(Comment("substitution"))
-        bindings.foreach { (from, to) => emit(Comment(s"substitution [${from.name} !-> ${to.name}]")) }
-        withBindings(bindings) { () =>
-          transform(rest)
-        }
 
       case machine.Construct(variable, tag, values, rest) =>
         emit(Comment(s"construct ${variable.name}, tag ${tag}, ${values.length} values"))
@@ -767,6 +758,7 @@ object Transformer {
   }
 
   class FunctionContext() {
+    // TODO delete substitution
     var substitution: Map[machine.Variable, machine.Variable] = Map();
     var basicBlocks: List[BasicBlock] = List();
   }
