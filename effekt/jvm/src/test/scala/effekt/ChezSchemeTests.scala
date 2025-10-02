@@ -37,6 +37,7 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "benchmarks" / "input_output" / "small_files.effekt",
     examplesDir / "benchmarks" / "input_output" / "interleave_promises.effekt",
     examplesDir / "benchmarks" / "input_output" / "financial_format.effekt",
+    examplesDir / "benchmarks" / "input_output" / "server_client.effekt",
 
     // unsafe continuations are not yet supported in our Chez backend
     examplesDir / "pos" / "unsafe_cont.effekt",

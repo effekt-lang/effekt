@@ -263,7 +263,6 @@ namespace internal {
       ret void
     """
 
-  /// The buffer must be kept alive by using it after the call
   extern def read(file: Int, buffer: ByteArray, offset: Int, size: Int, position: Int) at async: Int =
     jsNode "$effekt.capture(callback => read(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
     llvm """
@@ -271,7 +270,6 @@ namespace internal {
       ret void
     """
 
-  /// The buffer must be kept alive by using it after the call
   extern def write(file: Int, buffer: ByteArray, offset: Int, size: Int, position: Int) at async: Int =
     jsNode "$effekt.capture(callback => write(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
     llvm """
@@ -293,13 +291,6 @@ namespace internal {
       ret void
     """
 
-  def checkResult(result: Int): Int / Exception[IOError] =
-    if (result < 0) {
-      val ioError = fromNumber(internal::errorNumber(result));
-      do raise[IOError](ioError, message(ioError))
-    } else {
-      result
-    }
 }
 
 namespace examples {

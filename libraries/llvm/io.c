@@ -58,6 +58,11 @@ String c_io_readln() {
 // TODO
 // - pooling of request objects (benchmark first!)
 
+typedef struct {
+    Stack stack;
+    struct Pos buffer;
+    size_t offset;
+} io_closure_t;
 
 void c_resume_int_fs(uv_fs_t* request) {
     int64_t result = (int64_t)request->result;
@@ -81,6 +86,7 @@ void c_fs_open(String path, int flags, Stack stack) {
     int result = uv_fs_open(uv_default_loop(), request, path_str, flags, 0777, c_resume_int_fs);
 
     if (result < 0) {
+        // TODO free path_str?
         uv_fs_req_cleanup(request);
         free(request);
         resume_Int(stack, result);
@@ -104,39 +110,60 @@ void c_fs_open_appending(String path, Stack stack) {
     c_fs_open(path, UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND, stack);
 }
 
+void c_fs_cb(uv_fs_t* request) {
+    io_closure_t* closure = (io_closure_t*)request->data;
+    Stack stack = closure->stack;
+    int64_t result = (int64_t)request->result;
+
+    uv_fs_req_cleanup(request);
+    free(request);
+    erasePositive(closure->buffer);
+    free(closure);
+    resume_Int(stack, result);
+}
+
 void c_fs_read(Int file, struct Pos buffer, Int offset, Int size, Int position, Stack stack) {
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
-    erasePositive(buffer);
-    // TODO panic if this was the last reference
+
+    io_closure_t* read_closure = malloc(sizeof(io_closure_t));
+    read_closure->stack = stack;
+    read_closure->buffer = buffer;
+    read_closure->offset = offset;
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
-    request->data = stack;
+    request->data = read_closure;
 
-    int result = uv_fs_read(uv_default_loop(), request, file, &buf, 1, position, c_resume_int_fs);
+    int result = uv_fs_read(uv_default_loop(), request, file, &buf, 1, position, c_fs_cb);
 
     if (result < 0) {
         uv_fs_req_cleanup(request);
         free(request);
         resume_Int(stack, result);
+	free(read_closure);
     }
 }
 
 void c_fs_write(Int file, struct Pos buffer, Int offset, Int size, Int position, Stack stack) {
+    (void)size;
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
-    erasePositive(buffer);
-    // TODO panic if this was the last reference
+
+    io_closure_t* write_closure = malloc(sizeof(io_closure_t));
+    write_closure->stack = stack;
+    write_closure->buffer = buffer;
+    write_closure->offset = offset;
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
-    request->data = stack;
+    request->data = write_closure;
 
-    int result = uv_fs_write(uv_default_loop(), request, file, &buf, 1, position, c_resume_int_fs);
+    int result = uv_fs_write(uv_default_loop(), request, file, &buf, 1, position, c_fs_cb);
 
     if (result < 0) {
         uv_fs_req_cleanup(request);
         free(request);
         resume_Int(stack, result);
+	free(write_closure);
     }
 }
 
@@ -177,6 +204,252 @@ void c_fs_mkdir(String path, Stack stack) {
 
     return;
 }
+
+// Network
+// -------
+
+void c_tcp_connect_cb(uv_connect_t* request, int status) {
+    Stack stack = (Stack)request->data;
+
+    if (status < 0) {
+        uv_close((uv_handle_t*)request->handle, (uv_close_cb)free);
+        free(request);
+        resume_Int(stack, status);
+    } else {
+        int64_t handle = (int64_t)request->handle;
+        free(request);
+        resume_Int(stack, handle);
+    }
+}
+
+void c_tcp_connect(String host, Int port, Stack stack) {
+    char* host_str = c_bytearray_into_nullterminated_string(host);
+    erasePositive(host);
+
+    uv_tcp_t* tcp_handle = malloc(sizeof(uv_tcp_t));
+    int result = uv_tcp_init(uv_default_loop(), tcp_handle);
+
+    if (result < 0) {
+        free(tcp_handle);
+        free(host_str);
+        resume_Int(stack, result);
+        return;
+    }
+
+    uv_connect_t* connect_req = malloc(sizeof(uv_connect_t));
+    connect_req->data = stack;
+
+    struct sockaddr_in addr;
+    result = uv_ip4_addr(host_str, port, &addr);
+    free(host_str);
+
+    if (result < 0) {
+        free(tcp_handle);
+        free(connect_req);
+        resume_Int(stack, result);
+        return;
+    }
+
+    result = uv_tcp_connect(connect_req, tcp_handle, (const struct sockaddr*)&addr, c_tcp_connect_cb);
+
+    if (result < 0) {
+        free(tcp_handle);
+        free(connect_req);
+        resume_Int(stack, result);
+        return;
+    }
+}
+
+void c_tcp_read_cb(uv_stream_t* stream, ssize_t bytes_read, const uv_buf_t* buf) {
+    (void)(buf);
+    io_closure_t* read_closure = (io_closure_t*)stream->data;
+    Stack stack = read_closure->stack;
+
+    uv_read_stop(stream);
+    erasePositive(read_closure->buffer);
+    free(read_closure);
+
+    resume_Int(stack, (int64_t)bytes_read);
+}
+
+void c_tcp_read_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
+    (void)(suggested_size);
+    io_closure_t* read_closure = (io_closure_t*)handle->data;
+    buf->base = (char*)c_bytearray_data(read_closure->buffer) + read_closure->offset;
+    // TODO c_bytearray_size also erases
+    buf->len = read_closure->buffer.tag;
+}
+
+void c_tcp_read(Int handle, struct Pos buffer, Int offset, Int size, Stack stack) {
+    (void)size;
+    uv_stream_t* stream = (uv_stream_t*)handle;
+
+    io_closure_t* read_closure = malloc(sizeof(io_closure_t));
+    read_closure->stack = stack;
+    read_closure->buffer = buffer;
+    read_closure->offset = offset;
+    stream->data = read_closure;
+
+    int result = uv_read_start(stream, c_tcp_read_alloc_cb, c_tcp_read_cb);
+
+    if (result < 0) {
+        free(read_closure);
+        stream->data = NULL;
+        resume_Int(stack, result);
+    }
+}
+
+void c_tcp_write_cb(uv_write_t* request, int status) {
+    io_closure_t* write_closure = (io_closure_t*)request->data;
+    free(request);
+    erasePositive(write_closure->buffer);
+    Stack stack = write_closure->stack;
+    free(write_closure);
+    resume_Int(stack, (int64_t)status);
+}
+
+void c_tcp_write(Int handle, struct Pos buffer, Int offset, Int size, Stack stack) {
+    uv_stream_t* stream = (uv_stream_t*)handle;
+
+    uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
+
+    io_closure_t* write_closure = malloc(sizeof(io_closure_t));
+    write_closure->stack = stack;
+    write_closure->buffer = buffer;
+    write_closure->offset = offset;
+
+    uv_write_t* request = malloc(sizeof(uv_write_t));
+    request->data = write_closure;
+
+    int result = uv_write(request, stream, &buf, 1, c_tcp_write_cb);
+
+    if (result < 0) {
+        free(request);
+        resume_Int(stack, result);
+	free(write_closure);
+    }
+}
+
+void c_tcp_close_cb(uv_handle_t* handle) {
+    Stack stack = (Stack)handle->data;
+    free(handle);
+    resume_Pos(stack, Unit);
+}
+
+void c_tcp_close(Int handle, Stack stack) {
+    uv_handle_t* uv_handle = (uv_handle_t*)handle;
+    uv_handle->data = stack;
+    uv_close(uv_handle, c_tcp_close_cb);
+}
+
+Int c_tcp_bind(String host, Int port) {
+    char* host_str = c_bytearray_into_nullterminated_string(host);
+    erasePositive(host);
+
+    uv_tcp_t* tcp_handle = malloc(sizeof(uv_tcp_t));
+    int result = uv_tcp_init(uv_default_loop(), tcp_handle);
+
+    if (result < 0) {
+        free(tcp_handle);
+        free(host_str);
+        return result;
+    }
+
+    struct sockaddr_in addr;
+    result = uv_ip4_addr(host_str, port, &addr);
+    free(host_str);
+
+    if (result < 0) {
+        uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
+        return result;
+    }
+
+    result = uv_tcp_bind(tcp_handle, (const struct sockaddr*)&addr, 0);
+    if (result < 0) {
+        uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
+        return result;
+    }
+
+    return (int64_t)tcp_handle;
+}
+
+typedef struct {
+    Stack stack;
+    struct Pos handler;
+} tcp_listen_closure_t;
+
+void c_tcp_listen_cb(uv_stream_t* server, int status) {
+    tcp_listen_closure_t* listen_closure = (tcp_listen_closure_t*)server->data;
+    Stack closure_stack = listen_closure->stack;
+    struct Pos closure_handler = listen_closure->handler;
+
+    if (status < 0) {
+        server->data = NULL;
+        free(listen_closure);
+        erasePositive(closure_handler);
+        resume_Int(closure_stack, status);
+        return;
+    }
+
+    uv_tcp_t* client = malloc(sizeof(uv_tcp_t));
+    int result = uv_tcp_init(uv_default_loop(), client);
+
+    if (result < 0) {
+        free(client);
+        server->data = NULL;
+        free(listen_closure);
+        erasePositive(closure_handler);
+        resume_Int(closure_stack, result);
+        return;
+    }
+
+    result = uv_accept(server, (uv_stream_t*)client);
+    if (result < 0) {
+        uv_close((uv_handle_t*)client, (uv_close_cb)free);
+        server->data = NULL;
+        free(listen_closure);
+        erasePositive(closure_handler);
+        resume_Int(closure_stack, result);
+        return;
+    }
+
+    sharePositive(closure_handler);
+    run_Int(closure_handler, (int64_t)client);
+}
+
+void c_tcp_listen(Int listener, struct Pos handler, Stack stack) {
+    uv_stream_t* server = (uv_stream_t*)listener;
+
+    tcp_listen_closure_t* listen_closure = malloc(sizeof(tcp_listen_closure_t));
+    listen_closure->stack = stack;
+    listen_closure->handler = handler;
+    server->data = listen_closure;
+
+    int result = uv_listen(server, SOMAXCONN, c_tcp_listen_cb);
+    if (result < 0) {
+        free(listen_closure);
+        erasePositive(handler);
+        resume_Int(stack, result);
+        return;
+    }
+}
+
+void c_tcp_shutdown(Int handle, Stack stack) {
+    uv_handle_t* uv_handle = (uv_handle_t*)handle;
+    tcp_listen_closure_t* listen_closure = (tcp_listen_closure_t*)uv_handle->data;
+
+    uv_handle->data = stack;
+    uv_close(uv_handle, c_tcp_close_cb);
+
+    if (listen_closure) {
+        Stack closure_stack = listen_closure->stack;
+        struct Pos closure_handler = listen_closure->handler;
+        free(listen_closure);
+        erasePositive(closure_handler);
+        resume_Int(closure_stack, 0);
+    }
+}
+
 
 /**
  * Maps the libuv error code to a stable (platform independent) numeric value.
