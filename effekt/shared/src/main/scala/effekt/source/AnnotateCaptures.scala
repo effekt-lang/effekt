@@ -99,6 +99,11 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       val annotated = sym.caps.getOrElse(inferred)
       Context.annotate(Annotations.Captures, sym, annotated)
       annotated
+    case tree @ ExternDef(id, tparams, vparams, bparams, captures, ret, bodies, info, span) =>
+      val sym = tree.symbol
+      val capts = sym.capture
+      Context.annotate(Annotations.Captures, sym, capts)
+      capts
     // regions
     case tree @ RegDef(id, annot, region, binding, doc, span) =>
       val regSymbol = region.symbol.asBlockSymbol
