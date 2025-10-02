@@ -27,6 +27,7 @@ trait EffektConfig {
     "array",
     "char",
     "bytearray",
+    "stringbuffer",
     "string",
     "ref"
   )
