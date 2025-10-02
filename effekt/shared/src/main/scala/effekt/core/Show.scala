@@ -56,7 +56,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       var builtinTypes = Type.Builtins
       // 2.2 data types without tparams
       val declarationTypes = declarations.flatMap(decl => decl match
-        case Data(id, List(), constructors) => Some(decl)
+        case Data(id, targs, constructors) => Some(decl)
         case _ => None
       )
       // 2.3 data types with targs (later fixed by Mono)
@@ -86,13 +86,13 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(stmt: Stmt)(using ctx: ShowContext): Stmt = 
     stmt match {
-      case Let(id, annotatedTpe, PureApp(BlockVar(bid, bannotatedTpe, bannotatedCapt), targs, vargs), body) if bid.name.name == "myshow" => 
+      case Let(id, annotatedTpe, PureApp(BlockVar(bid, bannotatedTpe, bannotatedCapt), targs, vargs), body) if bid.name.name == "show" => 
         if (targs.length != 1) sys error "expected targs to only have one argument"
         Stmt.Val(id, annotatedTpe, Stmt.App(ctx.getShowBlockVar(targs(0)), List.empty, vargs, List.empty), transform(body))
       case Let(id, annotatedTpe, binding, body) => 
         Let(id, annotatedTpe, transform(binding), transform(body))
       case Return(expr) => Return(transform(expr))
-      case ImpureApp(id, BlockVar(bid, annotatedTpe, annotatedCapt), targs, vargs, bargs, body) if bid.name.name == "myshow" =>
+      case ImpureApp(id, BlockVar(bid, annotatedTpe, annotatedCapt), targs, vargs, bargs, body) if bid.name.name == "show" =>
         if (targs.length != 1) sys error "expected targs to only have one argument"
         ctx.getShowBlockVar(targs(0)) match {
           case BlockVar(bid, annotatedTpe, annotatedCapt) => 
@@ -104,7 +104,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(expr: Expr)(using ctx: ShowContext): Expr = expr match {
     case Make(data, tag, targs, vargs) => Make(data, tag, targs, vargs)
-    case PureApp(BlockVar(id, annotatedTpe, annotatedCapt), targs, vargs) if id.name.name == "myshow" => 
+    case PureApp(BlockVar(id, annotatedTpe, annotatedCapt), targs, vargs) if id.name.name == "show" => 
       if (targs.length != 1) sys error "expected targs to only have one argument"
       Expr.PureApp(ctx.getShowBlockVar(targs(0)), List.empty, vargs)
     case PureApp(b, targs, vargs) => PureApp(b, targs, vargs)
@@ -187,7 +187,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     }
 
   def findExternShowDef(valueType: ValueType)(using dctx: DeclarationContext): Block.BlockVar = 
-    findExternDef("show", List(valueType))
+    findExternDef("showBuiltin", List(valueType))
   
   def findExternDef(name: String, vts: List[ValueType])(using dctx: DeclarationContext): Block.BlockVar =
     dctx.findExternDef(name, vts) match
