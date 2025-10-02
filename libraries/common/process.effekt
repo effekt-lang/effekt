@@ -63,13 +63,14 @@ extern def onStderr(opts: SpawnOptions, callback: String => Unit at {io, global}
   """
 
 extern type PID
-extern def spawn(cmd: String, args: Array[String], options: SpawnOptions): PID =
-  jsNode """(function() {
-      let p = spawn(${cmd}, ${args}, ${options});
-      ${options}.onSpawn(p);
-      return p;
-    })()"""
+extern def spawn(cmd: String, args: Array[String], options: SpawnOptions) at async: Int  =
+  jsNode """$effekt.capture(k => {
+    let p = spawn(${cmd}, ${args}, ${options});
+    ${options}.onSpawn(p);
+    p.on('close', (exitcode, sig) => { k(exitcode) });
+    return p;
+    })"""
   llvm """
-    %proc = call %Pos @c_spawn(%Pos ${cmd}, %Pos ${args}, %Pos ${options})
-    ret %Pos %proc
+    call void @c_spawn(%Pos ${cmd}, %Pos ${args}, %Pos ${options}, %Stack %stack)
+    ret void
   """
