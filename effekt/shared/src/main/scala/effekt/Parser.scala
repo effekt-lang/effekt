@@ -1281,7 +1281,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
 
   def isLiteral: Boolean = peek.kind match {
-    case _: (Integer | Float | Str | Chr) => true
+    case _: (Integer | Float | Str | Chr | Byt) => true
     case `true` => true
     case `false` => true
     case _ => isUnitLiteral
@@ -1337,6 +1337,7 @@ class Parser(tokens: Seq[Token], source: Source) {
         case Float(v)           => skip(); DoubleLit(v, span())
         case Str(s, multiline)  => skip(); StringLit(s, span())
         case Chr(c)             => skip(); CharLit(c, span())
+        case Byt(b)             => skip(); ByteLit(b, span())
         case `true`             => skip(); BooleanLit(true, span())
         case `false`            => skip(); BooleanLit(false, span())
         case t if isUnitLiteral => skip(); skip(); UnitLit(span())
