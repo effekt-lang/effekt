@@ -354,27 +354,6 @@ def foldRight[A, B](l: List[A], init: B) { f: (A, B) => B }: B = {
   acc
 }
 
-/// Fold and map a list with a delimiter, a prefix, a suffix,
-/// concatenating the result given the `combine` function.
-///
-/// Example:
-/// ```
-/// > [1, 2, 3].foldMapDelimited("[", ", ", "]") { n => show(n) } { (s1, s2) => s1 ++ s2 }
-/// "[1, 2, 3]"
-/// ```
-///
-/// O(N)
-def foldMapDelimited[A, B](list: List[A], prefix: B, delimiter: B, suffix: B) { convert: A => B } { combine: (B, B) => B }: B = {
-  def go(acc: B, as: List[A]): B = as match {
-    case Nil() => acc
-    case Cons(head, Nil()) => combine(acc, convert(head))
-    case Cons(head, tail) =>
-      val res = combine(combine(acc, convert(head)), delimiter)
-      go(res, tail)
-  }
-  combine(go(prefix, list), suffix)
-}
-
 /// Sum the elements of the list.
 ///
 /// O(N)
