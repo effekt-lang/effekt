@@ -96,7 +96,7 @@ object Transformer {
           case core.Variable.Block(id, core.Type.TRegion, capt) =>
             Set(Variable(transform(id), Type.Prompt()))
 
-          // Coercsions are blocks and can be free, but do not have info.
+          // Coercions are blocks and can be free, but do not have info.
           case core.Variable.Block(id, _, _) if id.name.name.startsWith("@coerce") =>
             Set.empty
 
@@ -189,7 +189,6 @@ object Transformer {
               }
 
             case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-              noteParameters(bparams)
               transform(substitute(Block.BlockLit(tparams, cparams, vparams, bparams, body), targs, vargs, bargs))
 
             case Block.Unbox(pure) =>
