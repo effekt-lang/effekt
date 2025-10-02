@@ -58,6 +58,11 @@ String c_io_readln() {
 // TODO
 // - pooling of request objects (benchmark first!)
 
+typedef struct {
+    Stack stack;
+    struct Pos buffer;
+    size_t offset;
+} io_closure_t;
 
 void c_resume_int_fs(uv_fs_t* request) {
     int64_t result = (int64_t)request->result;
@@ -105,37 +110,60 @@ void c_fs_open_appending(String path, Stack stack) {
     c_fs_open(path, UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND, stack);
 }
 
+void c_fs_cb(uv_fs_t* request) {
+    io_closure_t* closure = (io_closure_t*)request->data;
+    Stack stack = closure->stack;
+    int64_t result = (int64_t)request->result;
+
+    uv_fs_req_cleanup(request);
+    free(request);
+    erasePositive(closure->buffer);
+    free(closure);
+    resume_Int(stack, result);
+}
+
 void c_fs_read(Int file, struct Pos buffer, Int offset, Int size, Int position, Stack stack) {
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
-    erasePositive(buffer);
+
+    io_closure_t* read_closure = malloc(sizeof(io_closure_t));
+    read_closure->stack = stack;
+    read_closure->buffer = buffer;
+    read_closure->offset = offset;
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
-    request->data = stack;
+    request->data = read_closure;
 
-    int result = uv_fs_read(uv_default_loop(), request, file, &buf, 1, position, c_resume_int_fs);
+    int result = uv_fs_read(uv_default_loop(), request, file, &buf, 1, position, c_fs_cb);
 
     if (result < 0) {
         uv_fs_req_cleanup(request);
         free(request);
         resume_Int(stack, result);
+	free(read_closure);
     }
 }
 
 void c_fs_write(Int file, struct Pos buffer, Int offset, Int size, Int position, Stack stack) {
+    (void)size;
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
-    erasePositive(buffer);
+
+    io_closure_t* write_closure = malloc(sizeof(io_closure_t));
+    write_closure->stack = stack;
+    write_closure->buffer = buffer;
+    write_closure->offset = offset;
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
-    request->data = stack;
+    request->data = write_closure;
 
-    int result = uv_fs_write(uv_default_loop(), request, file, &buf, 1, position, c_resume_int_fs);
+    int result = uv_fs_write(uv_default_loop(), request, file, &buf, 1, position, c_fs_cb);
 
     if (result < 0) {
         uv_fs_req_cleanup(request);
         free(request);
         resume_Int(stack, result);
+	free(write_closure);
     }
 }
 
@@ -232,15 +260,9 @@ void c_tcp_connect(String host, Int port, Stack stack) {
     }
 }
 
-typedef struct {
-    Stack stack;
-    struct Pos buffer;
-    size_t offset;
-} tcp_closure_t;
-
 void c_tcp_read_cb(uv_stream_t* stream, ssize_t bytes_read, const uv_buf_t* buf) {
     (void)(buf);
-    tcp_closure_t* read_closure = (tcp_closure_t*)stream->data;
+    io_closure_t* read_closure = (io_closure_t*)stream->data;
     Stack stack = read_closure->stack;
 
     uv_read_stop(stream);
@@ -252,7 +274,7 @@ void c_tcp_read_cb(uv_stream_t* stream, ssize_t bytes_read, const uv_buf_t* buf)
 
 void c_tcp_read_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
     (void)(suggested_size);
-    tcp_closure_t* read_closure = (tcp_closure_t*)handle->data;
+    io_closure_t* read_closure = (io_closure_t*)handle->data;
     buf->base = (char*)c_bytearray_data(read_closure->buffer) + read_closure->offset;
     // TODO c_bytearray_size also erases
     buf->len = read_closure->buffer.tag;
@@ -262,7 +284,7 @@ void c_tcp_read(Int handle, struct Pos buffer, Int offset, Int size, Stack stack
     (void)size;
     uv_stream_t* stream = (uv_stream_t*)handle;
 
-    tcp_closure_t* read_closure = malloc(sizeof(tcp_closure_t));
+    io_closure_t* read_closure = malloc(sizeof(io_closure_t));
     read_closure->stack = stack;
     read_closure->buffer = buffer;
     read_closure->offset = offset;
@@ -274,11 +296,12 @@ void c_tcp_read(Int handle, struct Pos buffer, Int offset, Int size, Stack stack
         free(read_closure);
         stream->data = NULL;
         resume_Int(stack, result);
+	free(read_closure);
     }
 }
 
 void c_tcp_write_cb(uv_write_t* request, int status) {
-    tcp_closure_t* write_closure = (tcp_closure_t*)request->data;
+    io_closure_t* write_closure = (io_closure_t*)request->data;
     free(request);
     erasePositive(write_closure->buffer);
     Stack stack = write_closure->stack;
@@ -291,7 +314,7 @@ void c_tcp_write(Int handle, struct Pos buffer, Int offset, Int size, Stack stac
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
 
-    tcp_closure_t* write_closure = malloc(sizeof(tcp_closure_t));
+    io_closure_t* write_closure = malloc(sizeof(io_closure_t));
     write_closure->stack = stack;
     write_closure->buffer = buffer;
     write_closure->offset = offset;
@@ -304,6 +327,7 @@ void c_tcp_write(Int handle, struct Pos buffer, Int offset, Int size, Stack stac
     if (result < 0) {
         free(request);
         resume_Int(stack, result);
+	free(write_closure);
     }
 }
 
