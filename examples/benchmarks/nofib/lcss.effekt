@@ -1,0 +1,152 @@
+import examples/benchmarks/runner
+
+def enum_from_then_to(from: Int, then: Int, to: Int): List[Int] =
+  if (from <= to) {
+    Cons(from, enum_from_then_to(then, (2 * then) - from, to))
+  } else {
+    Nil()
+  }
+
+def algb2(x: Int, k0j1: Int, k1j1: Int, yss: List[(Int, Int)]): List[(Int, Int)] =
+  yss match {
+    case Nil() => Nil()
+    case Cons((y, k0j), ys) =>
+      val kjcurr = if (x == y) k0j1 + 1 else max(k1j1, k0j)
+      Cons((y, kjcurr), algb2(x, k0j, kjcurr, ys))
+  }
+
+def snd(x: (Int, Int)): Int =
+  x match {
+    case (_, b) => b
+  }
+
+def rev_loop(l1: List[Int], l2: List[Int]): List[Int] =
+  l1 match {
+    case Nil() => l2
+    case Cons(i, iss) => rev_loop(iss, Cons(i, l2))
+  }
+
+def rev(l: List[Int]): List[Int] =
+  rev_loop(l, Nil())
+
+def map[A, B](l: List[A]) { f: A => B }: List[B] = l match {
+  case Nil() => Nil()
+  case Cons(a, as) => Cons(f(a), as.map {f})
+}
+
+def algb1(xss: List[Int], yss: List[(Int, Int)]): List[Int] =
+  xss match {
+    case Nil() => yss.map { snd }
+    case Cons(x, xs) => algb1(xs, algb2(x, 0, 0, yss))
+  }
+
+def add_zero(ls: List[Int]): List[(Int, Int)] =
+  ls match {
+    case Nil() => Nil()
+    case Cons(h, t) =>
+      Cons((h, 0), add_zero(t))
+  }
+
+def algb(xss: List[Int], ys: List[Int]): List[Int] =
+  Cons(0, algb1(xss, add_zero(ys)))
+
+def findk(k: Int, km: Int, m: Int, ls: List[(Int, Int)]): Int =
+  ls match {
+    case Nil() => km
+    case Cons((x, y), xys) =>
+      if (m <= (x + y)) {
+        findk(k + 1, k, x + y, xys)
+      } else {
+        findk(k + 1, km, m, xys)
+      }
+  }
+
+def is_singleton[A](ls: List[A]): Option[A] =
+  ls match {
+    case Cons(x, Nil()) => Some(x)
+    case _ => None()
+  }
+
+def take(n: Int, ls: List[Int]): List[Int] =
+  ls match {
+    case Nil() => Nil()
+    case Cons(i, iss) => if (n == 0) { Nil() } else { Cons(i, take(n - 1, iss)) }
+  }
+
+def drop(n: Int, ls: List[Int]): List[Int] =
+  if (n == 0) {
+    ls
+  } else {
+    ls match {
+      case Nil() => Nil()
+      case Cons(i, iss) => drop(n - 1, iss)
+    }
+  }
+
+def zip(l1: List[Int], l2: List[Int]): List[(Int, Int)] =
+  l1 match {
+    case Nil() => Nil()
+    case Cons(i1, is1) => l2 match {
+      case Nil() => Nil()
+      case Cons(i2, is2) => Cons((i1, i2), zip(is1, is2))
+    }
+  }
+
+def in_list(a: Int, ls: List[Int]): Bool =
+  ls match {
+    case Nil() => false
+    case Cons(a_, as) => if (a == a_) true else in_list(a, as)
+  }
+
+def algc(m: Int, n: Int, xs: List[Int], ys: List[Int]): List[Int] => List[Int] at {} =
+  ys match {
+    case Nil() => box { x => x }
+    case _ => is_singleton(xs) match {
+      case Some(x) =>
+        if (in_list(x, ys)) {
+          box { t => Cons(x, t) }
+        } else {
+          box { x => x }
+        }
+      case None() =>
+        val m2 = m / 2
+        val xs1 = xs.take(m2)
+        val xs2 = xs.drop(m2)
+        val l1 = algb(xs1, ys)
+        val l2 = algb(xs2.rev, ys.rev).rev
+        val k = findk(0, 0, -1, zip(l1, l2))
+        box { x =>
+          val f1 = algc(m - m2, n - k, xs2, ys.drop(k))
+          val f2 = algc(m2, k, xs1, ys.take(k))
+          f2(f1(x))
+        }
+    }
+  }
+
+def list_len[A](ls: List[A]): Int =
+  ls match {
+    case Nil() => 0
+    case Cons(_, as) => 1 + list_len(as)
+  }
+
+def lcss(xs: List[Int], ys: List[Int]): List[Int] =
+  algc(list_len(xs), list_len(ys), xs, ys)(Nil())
+
+def lcss_main(a: Int, b: Int, c: Int, d: Int, e: Int, f: Int): List[Int] =
+  lcss(enum_from_then_to(a, b, c), enum_from_then_to(d, e, f))
+
+def test_lcss_nofib(c: Int, f: Int): List[Int] =
+  lcss_main(1, 2, c, 100, 101, f)
+
+def head(l: List[Int]): Int =
+  l match {
+    case Nil() => -1
+    case Cons(hd, tl) => hd
+  }
+
+def run(c: Int): Int = {
+  val f = c + 100
+  test_lcss_nofib(c, f).head
+}
+
+def main() = benchmark(200){run}

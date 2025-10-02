@@ -93,7 +93,6 @@ sealed trait Tree extends Product {
   val span: Span
 
   def inheritPosition(from: Tree)(implicit C: Context): this.type = {
-    C.positions.dupPos(from, this);
     this
   }
 }
@@ -128,15 +127,13 @@ case class Info(
   // we use Maybe[Unit] instead of Boolean to have position info for validation errors
   isPrivate: Maybe[Unit],
   isExtern: Maybe[Unit],
-  // TODO this should be moved from the Info to extern functions, once we changed the syntax
-  externCapture: Option[CaptureSet]
 ) {
-  def isEmpty = doc.isEmpty && isPrivate.isEmpty && isExtern.isEmpty && externCapture.isEmpty
+  def isEmpty = doc.isEmpty && isPrivate.isEmpty && isExtern.isEmpty
   def nonEmpty = !isEmpty
 }
 
 object Info {
-  def empty(span: Span) = Info(None, Maybe.None(span), Maybe.None(span), None)
+  def empty(span: Span) = Info(None, Maybe.None(span), Maybe.None(span))
 }
 
 /**
@@ -170,6 +167,11 @@ case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = 
 
   def range: kiama.util.Range = kiama.util.Range(source.offsetToPosition(from), source.offsetToPosition(to))
 
+  def text: Option[String] = {
+    val r = range
+    Spans.substring(r.from, r.to)
+  }
+  
   override def compare(that: Span): Int = {
     val nameCmp = this.source.name compareTo that.source.name
     if (nameCmp != 0) nameCmp
@@ -253,16 +255,12 @@ sealed trait Id extends Tree {
 }
 case class IdDef(name: String, span: Span) extends Id {
   def clone(using C: Context): IdDef = {
-    val copy = IdDef(name, span)
-    C.positions.dupPos(this, copy)
-    copy
+    IdDef(name, span)
   }
 }
 case class IdRef(path: List[String], name: String, span: Span) extends Id {
   def clone(using C: Context): IdRef = {
-    val copy = IdRef(path, name, span)
-    C.positions.dupPos(this, copy)
-    copy
+    IdRef(path, name, span)
   }
 }
 
@@ -398,11 +396,11 @@ export SpannedOps._
  */
 enum Def extends Definition {
 
-  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, info: Info, span: Span)
+  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], captures: Maybe[CaptureSet], ret: Maybe[Effectful], body: Stmt, info: Info, span: Span)
   case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, info: Info, span: Span)
   case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, info: Info, span: Span)
   case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, info: Info, span: Span)
-  case DefDef(id: IdDef, annot: Option[BlockType], block: Term, info: Info, span: Span)
+  case DefDef(id: IdDef, captures: Maybe[CaptureSet], annot: Maybe[BlockType], block: Term, info: Info, span: Span)
 
   case NamespaceDef(id: IdDef, definitions: List[Def], info: Info, span: Span)
 
@@ -425,8 +423,8 @@ enum Def extends Definition {
    */
   case ExternType(id: IdDef, tparams: Many[Id], info: Info, span: Span)
 
-  case ExternDef(capture: CaptureSet, id: IdDef,
-                 tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Effectful,
+  case ExternDef(id: IdDef,
+                 tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], captures: CaptureSet, ret: Effectful,
                  bodies: List[ExternBody], info: Info, span: Span) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType, info: Info, span: Span)
@@ -861,18 +859,13 @@ export Resolvable.*
 extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] = {
   positioned match {
     case m: Many[_] if m.span.origin != Origin.Missing =>
-      C.positions.substring(m.span.range.from, m.span.range.to)
+      Spans.substring(m.span.range.from, m.span.range.to)
 
     case m: Maybe[_] if m.span.origin != Origin.Missing =>
-      C.positions.substring(m.span.range.from, m.span.range.to)
+      Spans.substring(m.span.range.from, m.span.range.to)
 
     case t: Tree if t.span.origin != Origin.Missing =>
-      C.positions.substring(t.span.range.from, t.span.range.to)
-
-    case _ =>
-      C.positions.getRange(positioned).flatMap { range =>
-        C.positions.substring(range.from, range.to)
-      }
+      Spans.substring(t.span.range.from, t.span.range.to)
   }
 }
 

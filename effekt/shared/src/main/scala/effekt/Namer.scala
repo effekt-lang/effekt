@@ -135,17 +135,18 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     // allow recursive definitions of objects
-    case d @ source.DefDef(id, annot, source.New(source.Implementation(interface, clauses, _), _), doc, span) =>
+    case d @ source.DefDef(id, captures, annot, source.New(source.Implementation(interface, clauses, _), _), doc, span) =>
       val tpe = Context.at(interface) { resolveBlockRef(interface) }
-      val sym = Binder.DefBinder(Context.nameFor(id), Some(tpe), d)
+      val cpts = captures.unspan.map { resolve }
+      val sym = Binder.DefBinder(Context.nameFor(id), cpts, Some(tpe), d)
       Context.define(id, sym)
 
-    case d @ source.DefDef(id, annot, block, doc, span) =>
+    case d @ source.DefDef(id, captures, annot, block, doc, span) =>
       ()
 
-    case f @ source.FunDef(id, tparams, vparams, bparams, annot, body, doc, span) =>
+    case f @ source.FunDef(id, tparams, vparams, bparams, captures, annot, body, doc, span) =>
       val uniqueId = Context.nameFor(id)
-
+      val cpts = captures.map { resolve }.unspan
       // we create a new scope, since resolving type params introduces them in this scope
       val sym = Context scoped {
         val tps = tparams map resolve
@@ -158,7 +159,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.bindBlocks(bps)
           annot map resolve
         }
-        UserFunction(uniqueId, tps.unspan, vps.unspan, bps.unspan, ret.unspan.map { _._1 }, ret.unspan.map { _._2 }, f)
+        UserFunction(uniqueId, tps.unspan, vps.unspan, bps.unspan, cpts, ret.unspan.map { _._1 }, ret.unspan.map { _._2 }, f)
       }
       Context.define(id, sym)
 
@@ -219,9 +220,9 @@ object Namer extends Phase[Parsed, NameResolved] {
         ExternInterface(Context.nameFor(id), tps, decl)
       })
 
-    case d @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) => {
+    case d @ source.ExternDef(id, tparams, vparams, bparams, captures, ret, bodies, doc, span) => {
       val name = Context.nameFor(id)
-      val capt = resolve(capture)
+      val capt = resolve(captures)
       Context.define(id, Context scoped {
         val tps = tparams map resolve
         val vps = vparams map resolve
@@ -314,16 +315,17 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, sym)
 
     // already has been preresolved (to enable recursive definitions)
-    case d @ source.DefDef(id, annot, source.New(impl, _), doc, span) =>
+    case d @ source.DefDef(id, captures, annot, source.New(impl, _), doc, span) =>
       resolve(impl)
 
-    case d @ source.DefDef(id, annot, binding, doc, span) =>
+    case d @ source.DefDef(id, captures, annot, binding, doc, span) =>
       val tpe = annot.map(resolveBlockType)
       resolve(binding)
-      Context.define(id, DefBinder(Context.nameFor(id), tpe, d))
+      val cpts = captures.unspan.map { resolve }
+      Context.define(id, DefBinder(Context.nameFor(id), cpts, tpe.unspan, d))
 
     // FunDef and InterfaceDef have already been resolved as part of the module declaration
-    case f @ source.FunDef(id, tparams, vparams, bparams, ret, body, doc, span) =>
+    case f @ source.FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) =>
       val sym = f.symbol
       Context.scopedWithName(id.name) {
         sym.tparams.foreach { p => Context.bind(p) }
@@ -333,7 +335,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolve(body)
       }
 
-    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) =>
+    case f @ source.ExternDef(id, tparams, vparams, bparams, captures, ret, bodies, doc, span) =>
       val sym = f.symbol
       Context.scopedWithName(id.name) {
         sym.tparams.foreach { p => Context.bind(p) }

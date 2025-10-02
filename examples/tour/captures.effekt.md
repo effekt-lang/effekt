@@ -129,6 +129,23 @@ Capture sets can contain (at least) three different kinds of elements:
 
 An example of a builtin resource is `io`, which is handled by the runtime. Other builtin resources include `global` (for global mutable state) and `async` (for asynchronicity).
 
+## Annotating Captures
+
+Consider a function using the built-in function `println`:
+
+```
+def helloWorld() = println("hello, world")
+```
+
+The function `helloWorld` captures the resource `io` since `println` requires/captures the `io` resource.
+Captures are always inferred but can also be manually annotated:
+
+```
+def helloWorld() at {io} = println("hello, world")
+```
+
+You may also specify the [captures of extern definitions](./ffi) when using the FFI of Effekt.
+
 ## References
 
 - [Effects, capabilities, and boxes: from scope-based reasoning to type-based reasoning and back](https://doi.org/10.1145/3527320)

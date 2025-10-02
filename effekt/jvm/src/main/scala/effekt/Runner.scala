@@ -43,7 +43,7 @@ trait Runner[Executable] {
    * if module A depends on module B, then B should come before A.
    * - Furthermore, each module mentioned here must import the `effekt` module as its first import.
    */
-  def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "char", "string", "ref")
+  def prelude: List[String] = List("effekt", "option", "stream", "list", "result", "exception", "array", "char", "bytearray", "string", "ref")
 
   /**
    * Creates a OS-specific script file that will execute the command when executed,
@@ -279,14 +279,10 @@ object LLVMRunner extends Runner[String] {
 
   override def includes(path: File): List[File] = List(path / ".." / "llvm")
 
-  lazy val clangCmd = discoverExecutable(List("clang-18", "clang"), List("--version"))
-  lazy val llcCmd = discoverExecutable(List("llc-18", "llc"), List("--version"))
-  lazy val optCmd = discoverExecutable(List("opt-18", "opt"), List("--version"))
+  lazy val clangCmd = discoverExecutable(List("clang-20", "clang-19", "clang-18", "clang"), List("--version"))
 
   def checkSetup(): Either[String, Unit] =
     clangCmd.getOrElseAborting { return Left("Cannot find clang. This is required to use the LLVM backend.") }
-    llcCmd.getOrElseAborting { return Left("Cannot find llc. This is required to use the LLVM backend.") }
-    optCmd.getOrElseAborting { return Left("Cannot find opt. This is required to use the LLVM backend.") }
     Right(())
 
   def libuvArgs(using C: Context): Seq[String] =
@@ -335,40 +331,33 @@ object LLVMRunner extends Runner[String] {
 
     def missing(cmd: String) = C.abort(s"Cannot find ${cmd}. This is required to use the LLVM backend.")
     val clang = clangCmd.getOrElse(missing("clang"))
-    val llc = llcCmd.getOrElse(missing("llc"))
-    val opt = optCmd.getOrElse(missing("opt"))
 
     val clangMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
     val executableFile = basePath
 
-    if (useLTO) {
-      // Convert to bitcode with aggressive optimizations
-      exec(opt, llPath, "-O3", "-o", bcPath)
+    var clangArgs = Seq(clang, llPath, clangMainFile, "-Wno-override-module", "-o", executableFile)
+      ++ linkedLibraries
 
-      var clangArgs = Seq(clang, clangMainFile, bcPath, "-o", executableFile) ++ linkedLibraries
-
-      clangArgs ++= Seq(
-        "-O3",
-        "-flto=full",
-        "-Wno-override-module"
-      )
-
-      if (C.config.native()) {
-        clangArgs :+= "-march=native"
-      }
-
-      exec(clangArgs: _*)
-    } else {
-      exec(opt, llPath, "-O2", "-o", bcPath)
-
-      var clangArgs = Seq(clang, clangMainFile, "-o", executableFile, bcPath, "-Wno-override-module") ++ linkedLibraries
-
-      if (C.config.debug()) clangArgs ++= Seq("-g", "-Wall", "-Wextra", "-Werror")
-      if (C.config.valgrind()) clangArgs ++= Seq("-O0", "-g")
-      else if (C.config.debug()) clangArgs ++= Seq("-fsanitize=address,undefined", "-fstack-protector-all")
-
-      exec(clangArgs: _*)
+    if (C.config.native()) {
+      clangArgs ++= Seq("-march=native")
     }
+
+    if (C.config.debug()) {
+      clangArgs ++= Seq("-g", "-Wall", "-Wextra", "-Werror")
+    }
+
+    if (C.config.valgrind()) {
+      clangArgs ++= Seq("-Og", "-g")
+    } else if (C.config.debug()) {
+      // these can only be used without valgrind
+      clangArgs ++= Seq("-fsanitize=address,undefined", "-fstack-protector-all")
+    }
+
+    if (useLTO) {
+      clangArgs ++= Seq("-O3", "-flto=full")
+    }
+
+    exec(clangArgs: _*)
 
     Some(executableFile)
 }

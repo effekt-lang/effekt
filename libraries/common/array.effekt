@@ -4,6 +4,7 @@ import effekt
 import exception
 import list
 import option
+import stream
 
 /// A mutable 0-indexed fixed-sized array.
 extern type Array[T]
@@ -42,7 +43,7 @@ exit:
 
 /// Allocates a new array of size `size`, keeping its values _undefined_.
 /// Prefer using `array` constructor instead to ensure that values are defined.
-extern global def allocate[T](size: Int): Array[T] =
+extern def allocate[T](size: Int) at global: Array[T] =
   js "(new Array(${size}))"
   chez "(make-vector ${size})" // creates an array filled with 0s on CS
   llvm """
@@ -85,7 +86,7 @@ def fromList[T](list: List[T]): Array[T] = {
 }
 
 /// Gets the length of the array in constant time.
-extern pure def size[T](arr: Array[T]): Int =
+extern def size[T](arr: Array[T]) at {}: Int =
   js "${arr}.length"
   chez "(vector-length ${arr})"
   llvm """
@@ -102,7 +103,7 @@ extern pure def size[T](arr: Array[T]): Int =
 /// Unchecked Precondition: `index` is in bounds (0 ≤ index < arr.size)
 ///
 /// Prefer using `get` instead.
-extern global def unsafeGet[T](arr: Array[T], index: Int): T =
+extern def unsafeGet[T](arr: Array[T], index: Int) at global: T =
   js "${arr}[${index}]"
   chez "(vector-ref ${arr} ${index})"
   llvm """
@@ -129,7 +130,7 @@ extern js """
 /// Unchecked Precondition: `index` is in bounds (0 ≤ index < arr.size)
 ///
 /// Prefer using `set` instead.
-extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
+extern def unsafeSet[T](arr: Array[T], index: Int, value: T) at global: Unit =
   js "array$set(${arr}, ${index}, ${value})"
   chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
   llvm """
@@ -641,3 +642,55 @@ def println(l: Array[Int]): Unit = println(show(l))
 def println(l: Array[Double]): Unit = println(show(l))
 def println(l: Array[Bool]): Unit = println(show(l))
 def println(l: Array[String]): Unit = println(show(l))
+
+
+// Streaming
+// ---------
+
+/// Turns an `array` into a producer of a push stream
+/// by emitting each contained value from 0 to length - 1.
+def each[T](array: Array[T]): Unit / emit[T] = {
+  val n = array.size
+  def go(i: Int): Unit = {
+    if (i < n) {
+      do emit(array.unsafeGet(i))
+      go(i + 1)
+    }
+  }
+  go(0)
+}
+
+def feed[T, R](array: Array[T]) { reader: () => R / read[T] }: R = {
+  var i = 0
+  try {
+    reader()
+  } with read[T] {
+    resume {
+      if (i < array.size) {
+        val c = i
+        i = c + 1
+        array.unsafeGet(c)
+      } else {
+        do stop()
+      }
+    }
+  }
+}
+
+def collect[A] { stream: () => Unit / emit[A] }: Array[A] =
+  returning::collect[A, Unit]{stream}.second
+
+namespace returning {
+  def collect[A, R] { stream: () => R / emit[A] }: (R, Array[A]) = {
+    var i = 0
+    var a = allocate(1)
+    try {
+      (stream(), a.resize(i))
+    } with emit[A] { (v) =>
+      if (i >= a.size) { a = a.resize(2 * a.size) }
+      a.unsafeSet(i, v)
+      i = i + 1
+      resume(())
+    }
+  }
+}

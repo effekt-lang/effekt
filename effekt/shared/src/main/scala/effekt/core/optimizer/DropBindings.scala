@@ -25,7 +25,7 @@ object DropBindings extends Phase[CoreTransformed, CoreTransformed] {
   def run(input: CoreTransformed)(using C: Context): Option[CoreTransformed] =
     input match {
       case CoreTransformed(source, tree, mod, core) =>
-        val main = C.checkMain(mod)
+        val main = C.ensureMainExists(mod)
         Some(CoreTransformed(source, tree, mod, apply(Set(main), core)))
     }
 
@@ -34,24 +34,24 @@ object DropBindings extends Phase[CoreTransformed, CoreTransformed] {
 
   private case class DropContext(
     usage: Map[Id, Usage],
-    definitions: Map[Id, Pure]
+    definitions: Map[Id, Expr]
   ) {
-    def updated(id: Id, p: Pure): DropContext = this.copy(definitions = definitions.updated(id, p))
+    def updated(id: Id, p: Expr): DropContext = this.copy(definitions = definitions.updated(id, p))
   }
 
   private def hasDefinition(id: Id)(using C: DropContext) = C.definitions.isDefinedAt(id)
-  private def definitionOf(id: Id)(using C: DropContext): Pure = C.definitions(id)
+  private def definitionOf(id: Id)(using C: DropContext): Expr = C.definitions(id)
   private def usedOnce(id: Id)(using C: DropContext) = C.usage.get(id).contains(Usage.Once)
   private def currentContext(using C: DropContext): C.type = C
 
   private object dropping extends Tree.RewriteWithContext[DropContext] {
 
-    override def pure(using DropContext) = {
-      case Pure.ValueVar(id, tpe) if usedOnce(id) && hasDefinition(id) => definitionOf(id)
+    override def expr(using DropContext) = {
+      case Expr.ValueVar(id, tpe) if usedOnce(id) && hasDefinition(id) => definitionOf(id)
     }
 
     override def stmt(using C: DropContext) = {
-      case Stmt.Let(id, tpe, p: Pure, body) if usedOnce(id) =>
+      case Stmt.Let(id, tpe, p: Expr, body) if usedOnce(id) =>
         val transformed = rewrite(p)
         rewrite(body)(using C.updated(id, transformed))
     }

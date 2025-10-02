@@ -15,6 +15,7 @@ import effekt.util.messages.*
 import effekt.util.foreachAborting
 
 import scala.language.implicitConversions
+import effekt.source.Implementation
 
 /**
  * Typechecking
@@ -79,9 +80,47 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // Store the backtrackable annotations into the global DB
       // This is done regardless of errors, since
       Context.commitTypeAnnotations()
+      checkMain(input.mod)
     }
   }
 
+  /**
+   * Ensures there are <= 1 main functions, that the potential main function has no unhandled effects and returns Unit.
+   */
+  def checkMain(mod: Module)(using C: Context) = {
+    val mains = Context.findMain(mod)
+    if (mains.size > 1) {
+      val names = mains.toList.map(sym => pp"${sym.name}").mkString(", ")
+      C.abort(pp"Multiple main functions defined: ${names}")
+    }
+    mains.headOption.foreach { main =>
+      val mainFn = main.asUserFunction
+      Context.at(mainFn.decl) {
+        // If type checking failed before reaching main, there is no type
+        C.functionTypeOption(mainFn).foreach {
+          case FunctionType(tparams, cparams, vparams, bparams, result, effects) => 
+            if (vparams.nonEmpty || bparams.nonEmpty) {
+              C.abort("Main does not take arguments")
+            }
+
+            if (effects.nonEmpty) {
+              C.abort(pp"Main cannot have effects, but includes effects: ${effects}")
+            }
+
+            result match {
+              case symbols.builtins.TInt =>
+                C.abort(pp"Main must return Unit, please use `exit(n)` to return an error code.")
+              case symbols.builtins.TUnit =>
+                ()
+              case tpe =>
+                // def main() = <>
+                // has return type Nothing which should still be permissible since Nothing <: Unit
+                matchExpected(tpe, symbols.builtins.TUnit)
+            }
+        }
+      }
+    }
+  }
 
   //<editor-fold desc="expressions">
 
@@ -531,7 +570,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Result(btpe, eff1)
           case _ =>
             Context.annotationOption(Annotations.UnboxParentDef, u) match {
-              case Some(source.DefDef(id, annot, block, doc, span)) =>
+              case Some(source.DefDef(id, captures, annot, block, doc, span)) =>
                 // Since this `unbox` was synthesized by the compiler from `def foo = E`,
                 // it's possible that the user simply doesn't know that they should have used the `val` keyword to specify a value
                 // instead of using `def`; see [issue #130](https://github.com/effekt-lang/effekt/issues/130) for more details
@@ -669,24 +708,29 @@ object Typer extends Phase[NameResolved, Typechecked] {
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
   def precheckDef(d: Def)(using Context): Unit = Context.focusing(d) {
-    case d @ source.FunDef(id, tps, vps, bps, ret, body, doc, span) =>
+    case d @ source.FunDef(id, tps, vps, bps, cpt, ret, body, doc, span) =>
       val fun = d.symbol
 
-      // (1) make up a fresh capture unification variable and annotate on function symbol
-      val cap = Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d))
+      // (1) make up a fresh capture unification variable or use the annotated captures and annotate on function symbol
+      val cap = fun.annotatedCaptures.getOrElse(Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d)))
       Context.bind(fun, cap)
 
       // (2) Store the annotated type (important for (mutually) recursive and out-of-order definitions)
       fun.annotatedType.foreach { tpe => Context.bind(fun, tpe) }
 
-    case d @ source.DefDef(id, annot, source.New(source.Implementation(tpe, clauses, _), _), doc, span) =>
+    case d @ source.DefDef(id, cpt, annot, body, doc, span) =>
       val obj = d.symbol
 
-      // (1) make up a fresh capture unification variable
-      val cap = Context.freshCaptVar(CaptUnificationVar.BlockRegion(d))
+      // (1) make up a fresh capture unification variable or use the annotated captures
+      val cap = obj.caps.getOrElse(Context.freshCaptVar(CaptUnificationVar.BlockRegion(d)))
 
-      // (2) annotate capture variable and implemented blocktype
-      Context.bind(obj, Context.resolvedType(tpe).asInterfaceType, cap)
+      // (2) annotate capture variable (and type)
+      body match {
+        case source.New(source.Implementation(tpe, _, _), _) =>
+          Context.bind(obj, Context.resolvedType(tpe).asInterfaceType, cap)
+        case _ =>
+          Context.bind(obj, cap)
+      }
 
     case d @ source.ExternDef(cap, id, tps, vps, bps, tpe, body, doc, span) =>
       val fun = d.symbol
@@ -729,6 +773,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.bind(field, tpe, CaptureSet())
       }
 
+    case d @ source.NamespaceDef(name, defs, doc, span) =>
+      defs.map(precheckDef)
+
     case d: source.TypeDef => wellformed(d.symbol.tpe)
     case d: source.EffectDef => wellformed(d.symbol.effs)
 
@@ -737,7 +784,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def synthDef(d: Def)(using Context, Captures): Result[Unit] = Context.at(d) {
     d match {
-      case d @ source.FunDef(id, tps, vps, bps, ret, body, doc, span) =>
+      case d @ source.FunDef(id, tps, vps, bps, cpt, ret, body, doc, span) =>
         val sym = d.symbol
         // was assigned by precheck
         val functionCapture = Context.lookupCapture(sym)
@@ -853,14 +900,21 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result((), effBind)
 
-      case d @ source.DefDef(id, annot, binding, doc, span) =>
-        given inferredCapture: CaptUnificationVar = Context.freshCaptVar(CaptUnificationVar.BlockRegion(d))
+      case d @ source.DefDef(id, captures, annot, binding, doc, span) =>
+        // this can either be the annotated captures or a fresh capture unification variable
+        val symbolCaptures = Context.lookupCapture(d.symbol)
+        val captVars = symbolCaptures match {
+          case x: CaptUnificationVar => List(x)
+          case _ => Nil
+        }
 
-        // we require inferred Capture to be solved after checking this block.
-        Context.withUnificationScope(List(inferredCapture)) {
-          val Result(t, effBinding) = checkExprAsBlock(binding, d.symbol.tpe)
-          Context.bind(d.symbol, t, inferredCapture)
-          Result((), effBinding)
+        // we require the potential capture variable to be solved after checking this block.
+        Context.withUnificationScope(captVars) {
+          flowingInto(symbolCaptures) {
+            val Result(t, effBinding) = checkExprAsBlock(binding, d.symbol.tpe)
+            Context.bind(d.symbol, t, symbolCaptures)
+            Result((), effBinding)
+          }
         }
 
       case d @ source.ExternDef(captures, id, tps, vps, bps, tpe, bodies, doc, span) => Context.withUnificationScope {
@@ -890,6 +944,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result((), Pure)
       }
+
+      case d @ source.NamespaceDef(name, defs, doc, span) =>
+        defs.map(synthDef).reduceLeft {
+          case (Result(_, effs), Result(_, acc)) => Result((), effs ++ acc)
+        }
 
       // all other definitions have already been prechecked
       case d =>
@@ -1549,7 +1608,6 @@ trait TyperOps extends ContextOps { self: Context =>
   private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit =
     val capabilities = caps map { cap =>
       assertConcreteEffect(cap.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType)
-      positions.dupPos(binder, cap)
       cap
     }
     annotations.update(Annotations.BoundCapabilities, binder, capabilities)
@@ -1710,8 +1768,6 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def commitTypeAnnotations(): Unit = {
     val subst = this.substitution
-
-    var capturesForLSP: List[(Tree, CaptureSet)] = Nil
 
     // Since (in comparison to System C) we now have type directed overload resolution again,
     // we need to make sure the typing context and all the annotations are backtrackable.

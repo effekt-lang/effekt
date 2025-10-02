@@ -22,19 +22,19 @@ def makeCounter {r: Region} = {
 def twoCounters() = {
   region outer {
     region inner {
-      val c1: Counter at {inner} = makeCounter {inner}
-      val c2: Counter at {outer} = makeCounter {outer}
+      val c1: Counter at inner = makeCounter {inner}
+      val c2: Counter at outer = makeCounter {outer}
       val l = Cons[Counter at {inner, outer}](c1, Cons(c2, Nil())); // works
 
       // Doesnt work since we implement "SimplerSub"
-      // We check ?A <: Counter at {inner}
-      // this immediately creates the substitution {?A !-> Counter at {inner}}
-      // Hence, later the check ?A <: Counter at {outer} fails.
+      // We check ?A <: Counter at inner
+      // this immediately creates the substitution {?A !-> Counter at inner}
+      // Hence, later the check ?A <: Counter at outer fails.
       // val l2 = Cons(c1, Cons(c2, Nil()));
 
       val _ = {
         val c1 = makeCounter {inner} // infers now {inner,outer} on c1
-        val c2: Counter at {outer} = makeCounter {outer}
+        val c2: Counter at outer = makeCounter {outer}
         val l = Cons(c1, Cons(c2, Nil())); // works
         ()
       };

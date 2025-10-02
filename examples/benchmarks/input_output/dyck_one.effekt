@@ -28,7 +28,7 @@ type Tree {
 
 def readTree(): Tree / { Scan[Byte], stop } = {
   readIf[Byte] { b => b.toInt == 40 }
-  val children = collectList[Tree] { many { readTree() } }
+  val children = list::collect[Tree] { many { readTree() } }
   skipIf[Byte] { b => b.toInt == 41 }
   Node(children)
 }

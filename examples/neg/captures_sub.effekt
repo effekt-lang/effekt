@@ -1,0 +1,1 @@
+def fn() at {async, global} = println("hello") // ERROR Not allowed {io}

@@ -20,7 +20,7 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
 
   def rewrite(e: ModuleDecl)(using C: Context): ModuleDecl = visit(e) {
     case ModuleDecl(path, imports, defs, doc, span) =>
-      ModuleDecl(path, imports, defs.flatMap(flattenNamespaces), doc, span)
+      ModuleDecl(path, imports, defs.map(rewrite), doc, span)
   }
 
   /**
@@ -131,15 +131,10 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
     }
   }
 
-  def flattenNamespaces(t: Def)(using C: Context): List[Def] = t match {
-    case Def.NamespaceDef(name, defs, doc, span) => defs.flatMap(flattenNamespaces)
-    case d => List(rewrite(d))
-  }
-
   def rewrite(t: Def)(using C: Context): Def = visit(t) {
 
-    case FunDef(id, tparams, vparams, bparams, ret, body, doc, span) =>
-      FunDef(id, tparams, vparams, bparams, ret, rewrite(body), doc, span)
+    case FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) =>
+      FunDef(id, tparams, vparams, bparams, captures, ret, rewrite(body), doc, span)
 
     case ValDef(id, annot, binding, doc, span) =>
       ValDef(id, annot, rewrite(binding), doc, span)
@@ -150,7 +145,7 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
     case VarDef(id, annot, binding, doc, span) =>
       VarDef(id, annot, rewrite(binding), doc, span)
 
-    case DefDef(id, annot, binding, doc, span) =>
+    case DefDef(id, captures, annot, binding, doc, span) =>
       val block = rewriteAsBlock(binding)
       (binding, block) match {
         case (Unbox(_, _), _) => ()
@@ -160,7 +155,10 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
         case (_, u @ Unbox(_, _)) => C.annotate(Annotations.UnboxParentDef, u, t)
         case (_, _) => ()
       }
-      DefDef(id, annot, block, doc, span)
+      DefDef(id, captures, annot, block, doc, span)
+
+    case NamespaceDef(name, defs, doc, span) =>
+      NamespaceDef(name, defs.map(rewrite), doc, span)
 
     case d: InterfaceDef   => d
     case d: DataDef        => d
@@ -173,13 +171,11 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
     case d: ExternResource => d
     case d: ExternInterface => d
     case d: ExternInclude  => d
-
-    case d: NamespaceDef => Context.panic("Should have been removed by flattenNamespaces")
   }
 
   def rewrite(t: Stmt)(using C: Context): Stmt = visit(t) {
     case DefStmt(d, rest, span) =>
-      flattenNamespaces(d).foldRight(rewrite(rest)) { case (d, rest) => DefStmt(d, rest, span) }
+      DefStmt(rewrite(d), rewrite(rest), span)
 
     case ExprStmt(e, rest, span) =>
       ExprStmt(rewriteAsExpr(e), rewrite(rest), span)

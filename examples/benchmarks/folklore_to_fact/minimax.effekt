@@ -1,0 +1,248 @@
+import examples/benchmarks/runner
+
+type Player {
+  X()
+  O()
+}
+
+record RoseTree[A](a: A, as: List[RoseTree[A]])
+
+// Tree functions
+
+def mk_leaf[A](a: A): RoseTree[A] =
+  RoseTree(a, Nil())
+
+def top[A](t: RoseTree[A]): A =
+  t match {
+    case RoseTree(p, _) => p
+  }
+
+// Tuple functions
+
+def snd[A, B](x: (A, B)): B =
+  x match {
+    case (_, b) => b
+  }
+
+// Player functions
+
+def player_equal(p1: Player, p2: Player): Bool =
+  (p1, p2) match {
+    case (X(), X()) => true
+    case (O(), O()) => true
+    case _ => false
+  }
+
+def other(p: Player): Player =
+  p match {
+    case X() => O()
+    case O() => X()
+  }
+
+
+// Option functions
+
+def is_some(p: Option[Player]): Bool =
+  p match {
+    case None() => false
+    case Some(p) => true
+  }
+
+// List functions
+
+def head[A](l: List[A]): A =
+  l match {
+    case Nil() => panic("Empty List")
+    case Cons(a, _) => a
+  }
+
+def tail[A](l: List[A]): List[A] =
+  l match {
+    case Nil() => panic("Empty List")
+    case Cons(_, as) => as
+  }
+
+def rev_acc(l: List[Int], acc: List[Int]): List[Int] =
+  l match {
+    case Nil() => acc
+    case Cons(x, xs) => rev_acc(xs, Cons(x, acc))
+  }
+
+def rev(l: List[Int]): List[Int] =
+  rev_acc(l, Nil())
+
+def map[A, B](l: List[A]) { f: A => B }: List[B] = l match {
+  case Nil() => Nil()
+  case Cons(a, as) => Cons(f(a), as.map {f})
+}
+
+def tabulate_loop(n: Int, len: Int) { f: () => Option[Player] }: List[Option[Player]] =
+  if (n == len) {
+    Nil()
+  } else {
+    Cons(f(), tabulate_loop(n + 1, len) { f })
+  }
+
+def tabulate(len: Int) { f: () => Option[Player] }: List[Option[Player]] =
+  if (len < 0) {
+    Nil()
+  } else {
+    tabulate_loop(0, len) { f }
+  }
+
+def nth[A](l: List[A], n: Int): A =
+  l match {
+    case Nil() => panic("Empty List")
+    case Cons(a, as) => if (n == 0) a else nth(as, n - 1)
+  }
+
+def find(l: List[Option[Player]], i: Int): Option[Player] =
+  l match {
+    case Nil() => None()
+    case Cons(p, ps) => if (i == 0) p else find(ps, i - 1)
+  }
+
+def exists[A](l: List[A]) { f: A => Bool }: Bool =
+  l match {
+    case Nil() => false
+    case Cons(a, as) => if (f(a)) true else exists(as) { f }
+  }
+
+def all[A](list: List[A]) { predicate: A => Bool }: Bool = {
+  list match {
+    case Cons(x, xs) => predicate(x) && all(xs) { predicate }
+    case Nil() => true
+  }
+}
+
+
+// Actual functions
+
+def emptyBoard(): List[Option[Player]] =
+  tabulate(9) { () => None() }
+
+def is_full(board: List[Option[Player]]): Bool =
+  all(board) { p => is_some(p) }
+
+def is_cat(board: List[Option[Player]]): Bool =
+  is_full(board) && not(is_win_for(board, X())) && not(is_win_for(board, O()))
+
+def fold[A, R](xs: List[A], acc: R) { f: (R, A) => R }: R =
+  xs match {
+    case Nil() => acc
+    case Cons(h, t) => t.fold(f(acc, h)) {f}
+  }
+
+def list_extreme(l: List[Int]) { f: (Int, Int) => Int }: Int =
+  l match {
+    case Nil() => panic("Empty List")
+    case Cons(i, is_) => fold(is_, i) { f }
+  }
+
+def listmax(l: List[Int]): Int =
+  list_extreme(l) { (a, b) => if (b < a) a else b }
+
+def listmin(l: List[Int]): Int =
+  list_extreme(l) { (a, b) => if (a < b) a else b }
+
+def rows(): List[List[Int]] =
+  Cons(Cons(0, Cons(1, Cons(2, Nil()))),
+    Cons(Cons(3, Cons(4, Cons(5, Nil()))),
+      Cons(Cons(6, Cons(7, Cons(8, Nil()))),
+        Nil())))
+
+def cols(): List[List[Int]] =
+  Cons(Cons(0, Cons(3, Cons(6, Nil()))),
+    Cons(Cons(1, Cons(4, Cons(7, Nil()))),
+      Cons(Cons(2, Cons(5, Cons(8, Nil()))),
+        Nil())))
+
+def diags(): List[List[Int]] =
+  Cons(Cons(0, Cons(4, Cons(8, Nil()))),
+    Cons(Cons(2, Cons(4, Cons(6, Nil()))),
+      Nil()))
+
+def is_occupied(board: List[Option[Player]], i: Int): Bool =
+  is_some(nth(board, i))
+
+def player_occupies(p: Player, board: List[Option[Player]], i: Int): Bool =
+  find(board, i) match {
+    case Some(p0) => player_equal(p, p0)
+    case None() => false
+  }
+
+def has_trip(board: List[Option[Player]], p: Player, l: List[Int]): Bool =
+  all(l) { i => player_occupies(p, board, i) }
+
+def has_row(board: List[Option[Player]], p: Player): Bool =
+  exists(rows()) { l => has_trip(board, p, l) }
+
+def has_col(board: List[Option[Player]], p: Player): Bool =
+  exists(cols()) { l => has_trip(board, p, l) }
+
+def has_diag(board: List[Option[Player]], p: Player): Bool =
+  exists(diags()) { l => has_trip(board, p, l) }
+
+def is_win_for(board: List[Option[Player]], p: Player): Bool =
+  has_row(board, p) || has_col(board, p) || has_diag(board, p)
+
+def is_win(board: List[Option[Player]]): Bool =
+  is_win_for(board, X()) || is_win_for(board, O())
+
+def game_over(board: List[Option[Player]]): Bool =
+  is_win(board) || is_cat(board)
+
+def score(board: List[Option[Player]]): Int =
+  if (is_win_for(board, X())) {
+    1
+  } else if (is_win_for(board, O())) {
+    -1
+  } else {
+    0
+  }
+
+def put_at(x: Option[Player], xs: List[Option[Player]], i: Int): List[Option[Player]] =
+  if (i == 0) {
+    Cons(x, tail(xs))
+  } else if (i > 0) {
+    Cons(head(xs), put_at(x, tail(xs), i - 1))
+  } else {
+    Nil()
+  }
+
+def move_to(board: List[Option[Player]], p: Player, i: Int): List[Option[Player]] =
+  if (is_occupied(board, i)) {
+    Nil()
+  } else {
+    put_at(Some(p), board, i)
+  }
+
+def all_moves_rec(n: Int, board: List[Option[Player]], acc: List[Int]): List[Int] =
+  board match {
+    case Nil() => rev(acc)
+    case Cons(Some(p), more) => all_moves_rec(n + 1, more, acc)
+    case Cons(None(), more) => all_moves_rec(n + 1, more, Cons(n, acc))
+  }
+
+def all_moves(board: List[Option[Player]]): List[Int] =
+  all_moves_rec(0, board, Nil())
+
+def successors(board: List[Option[Player]], p: Player): List[List[Option[Player]]] =
+  map(all_moves(board)) { i => move_to(board, p, i) }
+
+def minimax(p: Player, board: List[Option[Player]]): RoseTree[(List[Option[Player]], Int)] =
+  if (game_over(board)) {
+    mk_leaf((board, score(board)))
+  } else {
+    val trees = map(successors(board, p)) { b => minimax(other(p), b) }
+    val scores = map(trees) { t => snd(top(t)) }
+    p match {
+      case X() => RoseTree((board, listmax(scores)), trees)
+      case O() => RoseTree((board, listmin(scores)), trees)
+    }
+  }
+
+def run(n: Int): Int =
+  minimax(X(), emptyBoard()).top.snd
+
+def main() = benchmark(1){run}

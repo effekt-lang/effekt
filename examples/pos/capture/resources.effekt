@@ -1,6 +1,6 @@
 extern interface MyResource
 extern resource foo: MyResource
-extern {foo} def bar(): Int = default { 42 }
+extern def bar() at foo: Int = default { 42 }
 def user() = bar()
 
 extern interface StackLocal
@@ -9,17 +9,17 @@ extern resource stack: StackLocal
 // this does not really implement arrays, but tests whether `makeArray`
 // will be in direct style.
 extern interface Array[T]
-extern {stack} def makeArray[T](size: Int): Array[T] at {stack} =
+extern def makeArray[T](size: Int) at stack: Array[T] at stack =
   js   "${size}"
   chez "${size}"
 
 def parameter[T] {a: Array[T]} = {
-  val f: Array[T] at {a} = box a;
+  val f: Array[T] at a = box a;
   ()
 }
 
 def main() = {
-  val f: () => Int at {foo} = box user;
+  val f: () => Int at foo = box user;
   val arr = makeArray[Int](10);
   inspect(arr);
   ()

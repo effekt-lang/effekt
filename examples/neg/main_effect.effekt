@@ -1,0 +1,3 @@
+effect Eff(): Unit
+
+def main() = do Eff()

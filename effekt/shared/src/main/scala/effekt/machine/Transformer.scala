@@ -150,6 +150,14 @@ object Transformer {
           Substitute(List(Variable(transform(id), transform(binding.tpe)) -> value), transform(rest))
         }
 
+      case s @ core.ImpureApp(id, core.BlockVar(blockName: symbols.ExternFunction, _, capt), targs, vargs, bargs, rest) =>
+        if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+        val tpe = core.Type.bindingType(s)
+        val variable = Variable(transform(id), transform(tpe))
+        transform(vargs, bargs).run { (values, blocks) =>
+          ForeignCall(variable, transform(blockName), values ++ blocks, transform(rest))
+        }
+
       case core.Return(expr) =>
         transform(expr).run { value => Return(List(value)) }
 
@@ -308,14 +316,14 @@ object Transformer {
           StoreVar(reference, value, transform(body))
         }
 
-      case core.Hole() => machine.Statement.Hole
+      case core.Hole(span) => machine.Statement.Hole(span)
 
       case _ =>
         ErrorReporter.abort(s"Unsupported statement: $stmt")
     }
 
   // Merely sequences the transformation of the arguments monadically
-  def transform(vargs: List[core.Pure], bargs: List[core.Block])(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[(List[Variable], List[Variable])] =
+  def transform(vargs: List[core.Expr], bargs: List[core.Block])(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[(List[Variable], List[Variable])] =
     for {
       values <- traverse(vargs)(transform)
       blocks <- traverse(bargs)(transformBlockArg)
@@ -423,16 +431,6 @@ object Transformer {
 
       val variable = Variable(freshName("pureApp"), transform(tpe.result))
       transform(vargs, Nil).flatMap { (values, blocks) =>
-        shift { k =>
-          ForeignCall(variable, transform(blockName), values ++ blocks, k(variable))
-        }
-      }
-
-    case core.DirectApp(core.BlockVar(blockName: symbols.ExternFunction, tpe: core.BlockType.Function, capt), targs, vargs, bargs) =>
-      if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
-
-      val variable = Variable(freshName("pureApp"), transform(tpe.result))
-      transform(vargs, bargs).flatMap { (values, blocks) =>
         shift { k =>
           ForeignCall(variable, transform(blockName), values ++ blocks, k(variable))
         }

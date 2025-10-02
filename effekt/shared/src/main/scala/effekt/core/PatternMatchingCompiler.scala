@@ -60,10 +60,11 @@ object PatternMatchingCompiler {
     // all of the patterns need to match for this condition to be met
     case Patterns(patterns: Map[ValueVar, Pattern])
     // a boolean predicate that needs to be branched on at runtime
-    case Predicate(pred: Pure)
+    case Predicate(pred: Expr)
     // a predicate trivially met by running and binding the statement
     case Val(x: Id, tpe: core.ValueType, binding: Stmt)
     case Let(x: Id, tpe: core.ValueType, binding: Expr)
+    case ImpureApp(x: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
   }
 
   enum Pattern {
@@ -76,7 +77,7 @@ object PatternMatchingCompiler {
     case Ignore()
     case Any(id: Id)
     case Or(patterns: List[Pattern])
-    case Literal(l: core.Literal, equals: (core.Pure, core.Pure) => core.Pure)
+    case Literal(l: core.Literal, equals: (core.Expr, core.Expr) => core.Expr)
   }
 
   /**
@@ -86,7 +87,7 @@ object PatternMatchingCompiler {
    */
   def compile(clauses: List[Clause]): core.Stmt = {
     // This shouldn't be reachable anymore since we specialize matching on void before calling compile
-    if (clauses.isEmpty) return core.Hole()
+    if (clauses.isEmpty) return core.Hole(effekt.source.Span.missing)
 
     // (0) normalize clauses
     val normalized @ (headClause :: remainingClauses) = clauses.map(normalize) : @unchecked
@@ -102,6 +103,8 @@ object PatternMatchingCompiler {
       // - We need to perform a computation
       case Clause(Condition.Let(x, tpe, binding) :: rest, target, targs, args) =>
         return core.Let(x, tpe, binding, compile(Clause(rest, target, targs, args) :: remainingClauses))
+      case Clause(Condition.ImpureApp(x, callee, targs_, vargs_, bargs_) :: rest, target, targs, args) =>
+        return core.ImpureApp(x, callee, targs_, vargs_, bargs_, compile(Clause(rest, target, targs, args) :: remainingClauses))
       // - We need to check a predicate
       case Clause(Condition.Predicate(pred) :: rest, target, targs, args) =>
         return core.If(pred,
@@ -125,7 +128,7 @@ object PatternMatchingCompiler {
     }
 
     // (3a) Match on a literal
-    def splitOnLiteral(lit: Literal, equals: (Pure, Pure) => Pure): core.Stmt = {
+    def splitOnLiteral(lit: Literal, equals: (Expr, Expr) => Expr): core.Stmt = {
       // the different literal values that we match on
       val variants: List[core.Literal] = normalized.collect {
         case Clause(Split(Pattern.Literal(lit, _), _, _), _, _, _) => lit
@@ -322,6 +325,14 @@ object PatternMatchingCompiler {
         val (resCond, resSubst) = normalize(Map.empty, rest, substitution)
         (prefix(patterns, Condition.Let(x, tpe, substitutedBinding) :: resCond), resSubst)
 
+      case Condition.ImpureApp(x, callee, targs, vargs, bargs) :: rest =>
+        val (resCond, resSubst) = normalize(Map.empty, rest, substitution)
+        val calleeT = core.substitutions.substitute(callee)(using subst)
+        val targsT = targs.map(core.substitutions.substitute(_)(using subst))
+        val vargsT = vargs.map(core.substitutions.substitute(_)(using subst))
+        val bargsT = bargs.map(core.substitutions.substitute(_)(using subst))
+        (prefix(patterns, Condition.ImpureApp(x, calleeT.asInstanceOf[Block.BlockVar], targsT, vargsT, bargsT) :: resCond), resSubst)
+
       case Condition.Predicate(p) :: rest =>
         val substitutedPredicate = core.substitutions.substitute(p)(using subst)
         val (resCond, resSubst) = normalize(Map.empty, rest, substitution)
@@ -331,7 +342,6 @@ object PatternMatchingCompiler {
         (prefix(patterns, Nil), substitution)
     }
   }
-
 
   // For development and debugging
   // -----------------------------
@@ -346,6 +356,7 @@ object PatternMatchingCompiler {
     case Condition.Predicate(pred) => util.show(pred) + "?"
     case Condition.Val(x, tpe,  binding) => s"val ${util.show(x)} = ${util.show(binding)}"
     case Condition.Let(x, tpe, binding) => s"let ${util.show(x)} = ${util.show(binding)}"
+    case Condition.ImpureApp(x, callee, targs, vargs, bargs) => s"let ${util.show(x)} = ${util.show(callee)}(${vargs.map(util.show).mkString(", ")})"
   }
 
   def show(p: Pattern): String = p match {

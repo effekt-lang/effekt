@@ -8,7 +8,7 @@ import scala.collection.mutable
 case class RecursiveFunction(
   definition: BlockLit,
   targs: mutable.Set[List[ValueType]] = mutable.Set.empty,
-  vargs: mutable.Set[List[Pure]] = mutable.Set.empty,
+  vargs: mutable.Set[List[Expr]] = mutable.Set.empty,
   bargs: mutable.Set[List[Block]] = mutable.Set.empty
 )
 
@@ -44,6 +44,11 @@ class Recursive(
   def process(s: Stmt): Unit = s match {
     case Stmt.Def(id, block, body) =>  process(id, block); process(body)
     case Stmt.Let(id, tpe, binding, body) => process(binding); process(body)
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      process(callee)
+      vargs.foreach(process)
+      bargs.foreach(process)
+      process(body)
     case Stmt.Return(expr) => process(expr)
     case Stmt.Val(id, tpe, binding, body) => process(binding); process(body)
     case a @ Stmt.App(callee, targs, vargs, bargs) =>
@@ -83,19 +88,15 @@ class Recursive(
     case Stmt.Shift(prompt, body) => process(prompt); process(body)
     case Stmt.Resume(k, body) => process(k); process(body)
     case Stmt.Region(body) => process(body)
-    case Stmt.Hole() => ()
+    case Stmt.Hole(span) => ()
   }
 
   def process(e: Expr): Unit = e match {
-    case DirectApp(b, targs, vargs, bargs) =>
-      process(b)
-      vargs.foreach(process)
-      bargs.foreach(process)
-    case Pure.ValueVar(id, annotatedType) => ()
-    case Pure.Literal(value, annotatedType) => ()
-    case Pure.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
-    case Pure.Make(data, tag, targs, vargs) => vargs.foreach(process)
-    case Pure.Box(b, annotatedCapture) => process(b)
+    case Expr.ValueVar(id, annotatedType) => ()
+    case Expr.Literal(value, annotatedType) => ()
+    case Expr.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
+    case Expr.Make(data, tag, targs, vargs) => vargs.foreach(process)
+    case Expr.Box(b, annotatedCapture) => process(b)
   }
 
   def process(i: Implementation): Unit =

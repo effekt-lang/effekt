@@ -1,7 +1,7 @@
 package effekt
 
 import com.google.gson.{Gson, GsonBuilder, JsonElement, JsonParser}
-import effekt.Intelligence.{BindingInfo, BindingOrigin, Code, HoleItemKind, NaturalLanguage, ScopeInfo, ScopeKind, TermBinding, TypeBinding}
+import effekt.Intelligence.{BindingInfo, BindingKind, BindingOrigin, Code, LSPLocation, HoleItemKind, LSPPosition, LSPRange, NaturalLanguage, ScopeInfo, ScopeKind, TermBinding, TypeBinding}
 import munit.FunSuite
 import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit}
 import org.eclipse.lsp4j.jsonrpc.messages
@@ -119,6 +119,106 @@ class LSPTests extends FunSuite {
 
       val diagnostics = client.receivedDiagnostics()
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(helloWorld.getUri, new util.ArrayList())))
+    }
+  }
+
+  // Diagnostics
+  //
+  //
+
+  test("main function return type") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, range) = raw"""
+                                |def main() = 1
+                                |↑            ↑
+                                |""".stripMargin.textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(range)
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt")
+      diagnostic.setMessage("Main must return Unit, please use `exit(n)` to return an error code.")
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      val diagnostics = client.receivedDiagnostics()
+      assertEquals(diagnostics, expected)
+    }
+  }
+
+  test("exactly one main function") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, range) = raw"""
+                                |def main() = println("hello")
+                                |↑
+                                |def main() = 42
+                                |              ↑
+                                |""".stripMargin.textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(range)
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt")
+      diagnostic.setMessage("Multiple main functions defined: test::main, test::main")
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      val diagnostics = client.receivedDiagnostics()
+      assertEquals(diagnostics, expected)
+    }
+  }
+
+  test("no unhandled effects in main function") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, range) = raw"""
+                                |effect Eff(): Unit
+                                |def main() = {
+                                |↑
+                                |  do Eff()
+                                |}
+                                |↑
+                                |""".stripMargin.textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(range)
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt")
+      diagnostic.setMessage("Main cannot have effects, but includes effects: { Eff }")
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      val diagnostics = client.receivedDiagnostics()
+      assertEquals(diagnostics, expected)
     }
   }
 
@@ -525,14 +625,8 @@ class LSPTests extends FunSuite {
 
       val params = new DocumentSymbolParams()
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
-
-      val documentSymbols = server.getTextDocumentService().documentSymbol(params).get()
-      // FIXME: The server currently returns spurious symbols at position (0, 0) that we need to filter out.
-      val filtered = server.getTextDocumentService().documentSymbol(params).get().asScala.filter {
-        symbol => symbol.getRight.getRange.getStart != new Position(0, 0) && symbol.getRight.getRange.getEnd != new Position(0, 0)
-      }.asJava
-
-      assertEquals(filtered, expectedSymbols.asJava)
+      val actualSymbols = server.getTextDocumentService().documentSymbol(params).get()
+      assertEquals(actualSymbols, expectedSymbols.asJava)
     }
   }
 
@@ -609,7 +703,7 @@ class LSPTests extends FunSuite {
       val (textDoc, positions) = raw"""
                                 |↑
                                 |def main(): Unit = {
-                                |↑
+                                |          ↑
                                 |  println("Hello, world!")
                                 |}
                                 |↑
@@ -618,12 +712,12 @@ class LSPTests extends FunSuite {
       val inlayHint = new InlayHint()
       inlayHint.setKind(InlayHintKind.Type)
       inlayHint.setPosition(positions(1))
-      inlayHint.setLabel("{io}")
+      inlayHint.setLabel("at {io}")
       val markup = new MarkupContent()
       markup.setKind("markdown")
       markup.setValue("captures: `{io}`")
       inlayHint.setTooltip(markup)
-      inlayHint.setPaddingRight(true)
+      inlayHint.setPaddingLeft(true)
       inlayHint.setData("capture")
 
       val expectedInlayHints = List(inlayHint)
@@ -685,7 +779,7 @@ class LSPTests extends FunSuite {
              |
              |↑
              |def foo() = { do raise(); 5 }
-             |↑        ↑
+             |         ↑
              |
              |↑
              |""".textDocumentAndPositions
@@ -693,19 +787,19 @@ class LSPTests extends FunSuite {
       val captureHint = new InlayHint()
       captureHint.setKind(InlayHintKind.Type)
       captureHint.setPosition(positions(1))
-      captureHint.setLabel("{}")
+      captureHint.setLabel("at {}")
       captureHint.setData("capture")
       captureHint.setTooltip(new MarkupContent("markdown", "captures: `{}`"))
-      captureHint.setPaddingRight(true)
+      captureHint.setPaddingLeft(true)
 
       val omittedHint = new InlayHint()
       omittedHint.setKind(InlayHintKind.Type)
-      omittedHint.setPosition(positions(2))
+      omittedHint.setPosition(positions(1))
       omittedHint.setLabel(": Int / { raise }")
       omittedHint.setData("return-type-annotation")
       omittedHint.setTextEdits(List(
         new TextEdit(
-          new Range(positions(2), positions(2)),
+          new Range(positions(1), positions(1)),
           ": Int / { raise }"
         )
       ).asJava)
@@ -720,7 +814,7 @@ class LSPTests extends FunSuite {
 
       val params = new InlayHintParams()
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
-      params.setRange(new Range(positions(0), positions(3)))
+      params.setRange(new Range(positions(0), positions(2)))
 
       val inlayHints = server.getTextDocumentService().inlayHint(params).get()
       assertEquals(expectedInlayHints.asJava, inlayHints)
@@ -733,7 +827,7 @@ class LSPTests extends FunSuite {
         raw"""
              |↑
              |def main(): Unit = {
-             |↑
+             |          ↑
              |  println("Hello, world!")
              |}
              |↑
@@ -742,12 +836,12 @@ class LSPTests extends FunSuite {
       val inlayHint = new InlayHint()
       inlayHint.setKind(InlayHintKind.Type)
       inlayHint.setPosition(positions(1))
-      inlayHint.setLabel("{io}")
+      inlayHint.setLabel("at {io}")
       val markup = new MarkupContent()
       markup.setKind("markdown")
       markup.setValue("captures: `{io}`")
       inlayHint.setTooltip(markup)
-      inlayHint.setPaddingRight(true)
+      inlayHint.setPaddingLeft(true)
       inlayHint.setData("capture")
 
       val expectedInlayHints = List(inlayHint)
@@ -818,7 +912,7 @@ class LSPTests extends FunSuite {
         raw"""
              |↑
              |def main(): Unit = {
-             |↑
+             |          ↑
              |  println("Hello, world!")
              |}
              |↑
@@ -827,12 +921,12 @@ class LSPTests extends FunSuite {
       val inlayHint = new InlayHint()
       inlayHint.setKind(InlayHintKind.Type)
       inlayHint.setPosition(positions(1))
-      inlayHint.setLabel("{io}")
+      inlayHint.setLabel("at {io}")
       val markup = new MarkupContent()
       markup.setKind("markdown")
       markup.setValue("captures: `{io}`")
       inlayHint.setTooltip(markup)
-      inlayHint.setPaddingRight(true)
+      inlayHint.setPaddingLeft(true)
       inlayHint.setData("capture")
 
       val expectedInlayHints = List(inlayHint)
@@ -1206,6 +1300,10 @@ class LSPTests extends FunSuite {
              |        None(),
              |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
              |      ),
+             |      Maybe(
+             |        None(),
+             |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
+             |      ),
              |      Return(
              |        Hole(
              |          IdDef(
@@ -1231,8 +1329,7 @@ class LSPTests extends FunSuite {
              |        Maybe(
              |          None(),
              |          Span(StringSource(def main() = <>, file://test.effekt), 0, 0, Real())
-             |        ),
-             |        None()
+             |        )
              |      ),
              |      Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
              |    )
@@ -1283,7 +1380,7 @@ class LSPTests extends FunSuite {
       val expectedIRContents =
         raw"""ModuleDecl(
              |  test,
-             |  List(effekt, option, list, result, exception, array, char, string, ref),
+             |  List(effekt, option, stream, list, result, exception, array, char, bytearray, string, ref),
              |  Nil,
              |  Nil,
              |  List(
@@ -1327,9 +1424,17 @@ class LSPTests extends FunSuite {
           qualifier = List(),
           name = "x",
           origin = BindingOrigin.Defined,
-          `type` = Some(
-            "Int"
-          )
+          signature = Some(
+            "x: Int"
+          ),
+          signatureHtml = Some("<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">Int</span>"),
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 2, character = 8),
+              end = Intelligence.LSPPosition(line = 2, character = 14)
+            )
+          ))
         )
       )
 
@@ -1338,23 +1443,38 @@ class LSPTests extends FunSuite {
           qualifier = List(),
           name = "bar",
           origin = BindingOrigin.Defined,
-          `type` = Some(
-            "String => Int"
-          )
+          signature = Some(
+            "def bar(x: String): Int / {}"
+          ),
+          signatureHtml = Some(
+            "<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">bar</span>(<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Int</span> / {}"
+          ),
+          kind = BindingKind.Term,
+          definitionLocation = Some(LSPLocation("file://test.effekt", LSPRange(LSPPosition(3, 0), LSPPosition(3, 39))))
         ),
         TermBinding(
           qualifier = List(),
           name = "foo",
           origin = BindingOrigin.Defined,
-          `type` = Some(
-            "Int => Bool"
-          )
+          signature = Some(
+            "def foo(x: Int): Bool / {}"
+          ),
+          signatureHtml = Some(
+            "<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">foo</span>(<span class=\"effekt-ident camel-case\">x</span>: <span class=\"effekt-ident pascal-case\">Int</span>): <span class=\"effekt-ident pascal-case\">Bool</span> / {}"
+          ),
+          kind = BindingKind.Term,
+          definitionLocation = Some(LSPLocation("file://test.effekt", LSPRange(LSPPosition(2, 0), LSPPosition(2, 36))))
         ),
         TypeBinding(
           qualifier = Nil,
           name = "MyInt",
           origin = BindingOrigin.Defined,
-          definition = "type MyInt = Int"
+          signature = Some("type MyInt"),
+          signatureHtml = Some(
+            "<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">MyInt</span>"
+          ),
+          kind = BindingKind.Type,
+          definitionLocation = Some(LSPLocation("file://test.effekt", LSPRange(LSPPosition(1, 0), LSPPosition(1, 16))))
         )
       )
 
@@ -1476,7 +1596,15 @@ class LSPTests extends FunSuite {
           qualifier = List(),
           name = "bar",
           origin = BindingOrigin.Defined,
-          `type` = Some("() => Nothing")
+          signature = Some("def bar(): Nothing / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">bar</span>(): <span class=\"effekt-ident pascal-case\">Nothing</span> / {}"),
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 2, character = 2),
+              end = Intelligence.LSPPosition(line = 2, character = 16)
+            )
+          ))
         )
       )
 
@@ -1495,6 +1623,7 @@ class LSPTests extends FunSuite {
         new Position(0, 0),
         new Position(0, 0)
       ),
+      uri = "file://test.effekt",
       innerType = None,
       expectedType = Some("Bool"),
       scope = ScopeInfo(
@@ -1505,7 +1634,8 @@ class LSPTests extends FunSuite {
             qualifier = List(),
             name = "x",
             origin = BindingOrigin.Defined,
-            `type` = Some("Int")
+            signature = Some("x: Int"),
+            signatureHtml = None,
           )
         ),
         outer = Some(ScopeInfo(
@@ -1520,7 +1650,8 @@ class LSPTests extends FunSuite {
                 qualifier = List(),
                 name = "MyInt",
                 origin = BindingOrigin.Defined,
-                definition = "type MyInt = Int"
+                signature = Some("type MyInt"),
+                signatureHtml = None,
               )),
             outer = None
           ))
@@ -1545,6 +1676,7 @@ class LSPTests extends FunSuite {
         |      "character": 0
         |    }
         |  },
+        |  "uri": "file://test.effekt",
         |  "expectedType": "Bool",
         |  "scope": {
         |    "kind": "Local",
@@ -1553,7 +1685,7 @@ class LSPTests extends FunSuite {
         |        "qualifier": [],
         |        "name": "x",
         |        "origin": "Defined",
-        |        "type": "Int",
+        |        "signature": "x: Int",
         |        "kind": "Term"
         |      }
         |    ],
@@ -1568,7 +1700,7 @@ class LSPTests extends FunSuite {
         |            "qualifier": [],
         |            "name": "MyInt",
         |            "origin": "Defined",
-        |            "definition": "type MyInt = Int",
+        |            "signature": "type MyInt",
         |            "kind": "Type"
         |          }
         |        ]
@@ -1826,82 +1958,140 @@ class LSPTests extends FunSuite {
           qualifier = Nil,
           name = "Foo1",
           origin = "Defined",
-          definition = """type Foo1 {
-  def Foo1(theField: String): Foo1 / {}
-}""",
-          kind = "Type"
+          signature = Some("type Foo1"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">Foo1</span>"),
+          kind = "Type",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 2, character = 2),
+              end = Intelligence.LSPPosition(line = 2, character = 31)
+            )
+          ))
         ),
         TermBinding(
           qualifier = Nil,
           name = "Foo1",
           origin = "Defined",
-          `type` = Some(
-            value = "String => Foo1"
+          signature = Some(
+            "def Foo1(theField: String): Foo1 / {}"
           ),
-          kind = "Term"
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident pascal-case\">Foo1</span>(<span class=\"effekt-ident camel-case\">theField</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Foo1</span> / {}"),
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 2, character = 2),
+              end = Intelligence.LSPPosition(line = 2, character = 31)
+            )
+          ))
         ),
         TermBinding(
           qualifier = Nil,
           name = "theField",
           origin = "Defined",
-          `type` = Some(
-            value = "Foo1 => String"
+          signature = Some(
+            "def theField(Foo1: Foo1): String / {}"
           ),
-          kind = "Term"
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">theField</span>(<span class=\"effekt-ident pascal-case\">Foo1</span>: <span class=\"effekt-ident pascal-case\">Foo1</span>): <span class=\"effekt-ident pascal-case\">String</span> / {}"),
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 2, character = 14),
+              end = Intelligence.LSPPosition(line = 2, character = 30)
+            )
+          ))
         ),
         TypeBinding(
           qualifier = Nil,
           name = "Foo2",
           origin = "Defined",
-          definition = """type Foo2 {
-  def Foo2(theField: String): Foo2 / {}
-}""",
-          kind = "Type"
+          signature = Some("type Foo2"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">Foo2</span>"),
+          kind = "Type",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 3, character = 2),
+              end = Intelligence.LSPPosition(line = 3, character = 31)
+            )
+          ))
         ),
         TermBinding(
           qualifier = Nil,
           name = "Foo2",
           origin = "Defined",
-          `type` = Some(
-            value = "String => Foo2"
-          ),
-          kind = "Term"
+          signature = Some("def Foo2(theField: String): Foo2 / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident pascal-case\">Foo2</span>(<span class=\"effekt-ident camel-case\">theField</span>: <span class=\"effekt-ident pascal-case\">String</span>): <span class=\"effekt-ident pascal-case\">Foo2</span> / {}"),
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 3, character = 2),
+              end = Intelligence.LSPPosition(line = 3, character = 31)
+            )
+          ))
         ),
         TermBinding(
           qualifier = Nil,
           name = "theField",
           origin = "Defined",
-          `type` = Some(
-            value = "Foo2 => String"
-          ),
-          kind = "Term"
+          signature = Some("def theField(Foo2: Foo2): String / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">theField</span>(<span class=\"effekt-ident pascal-case\">Foo2</span>: <span class=\"effekt-ident pascal-case\">Foo2</span>): <span class=\"effekt-ident pascal-case\">String</span> / {}"),
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 3, character = 14),
+              end = Intelligence.LSPPosition(line = 3, character = 30)
+            )
+          ))
         ),
         TypeBinding(
           qualifier = Nil,
           name = "Bar",
           origin = "Defined",
-          definition = """type Bar {
-  def Bar(theField: Int): Bar / {}
-}""",
-          kind = "Type"
+          signature = Some("type Bar"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">type</span> <span class=\"effekt-ident pascal-case\">Bar</span>"),
+          kind = "Type",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 6, character = 2),
+              end = Intelligence.LSPPosition(line = 6, character = 33)
+            )
+          ))
         ),
         TermBinding(
           qualifier = Nil,
           name = "Bar",
           origin = "Defined",
-          `type` = Some(
-            value = "Int => Bar"
-          ),
-          kind = "Term"
+          signature = Some("def Bar(theField: Int): Bar / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident pascal-case\">Bar</span>(<span class=\"effekt-ident camel-case\">theField</span>: <span class=\"effekt-ident pascal-case\">Int</span>): <span class=\"effekt-ident pascal-case\">Bar</span> / {}"),
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 6, character = 13),
+              end = Intelligence.LSPPosition(line = 6, character = 31)
+            )
+          ))
         ),
         TermBinding(
           qualifier = Nil,
           name = "main",
           origin = "Defined",
-          `type` = Some(
-            value = "() => Nothing"
-          ),
-          kind = "Term"
+          signature = Some("def main(): Nothing / {}"),
+          signatureHtml = Some("<span class=\"effekt-keyword\">def</span> <span class=\"effekt-ident camel-case\">main</span>(): <span class=\"effekt-ident pascal-case\">Nothing</span> / {}"),
+          kind = "Term",
+          definitionLocation = Some(Intelligence.LSPLocation(
+            uri = "file://test.effekt",
+            range = Intelligence.LSPRange(
+              start = Intelligence.LSPPosition(line = 8, character = 2),
+              end = Intelligence.LSPPosition(line = 8, character = 17)
+            )
+          ))
         )
       )
 
@@ -1964,6 +2154,33 @@ class LSPTests extends FunSuite {
       server.getTextDocumentService().didOpen(didOpenParams)
       val receivedHoles = client.receivedHoles()
       assertEquals(receivedHoles.length, 1)
+    }
+  }
+
+  // Tests for hole URI feature (for "Jump to definition" support)
+  //
+  //
+
+  test("Hole info includes correct file URI") {
+    withClientAndServer { (client, server) =>
+      val source = new TextDocumentItem("file://custom/path/example.effekt", "effekt", 0,
+        """def bar(): String = <>""")
+
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"effekt": {"showHoles": true}}"""
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val receivedHoles = client.receivedHoles()
+      assertEquals(receivedHoles.length, 1)
+      assertEquals(receivedHoles.head.holes.length, 1)
+
+      val hole = receivedHoles.head.holes.head
+      assertEquals(hole.uri, "file://custom/path/example.effekt")
     }
   }
 

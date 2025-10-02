@@ -1,10 +1,10 @@
 package effekt
 package util
 
-import effekt.symbols.{ Capture, Captures, Effects, ErrorMessageInterpolator, LocalName, Name, NoName, QualifiedName, TypePrinter }
+import effekt.symbols.{Capture, Captures, Effects, ErrorMessageInterpolator, Name, QualifiedName, TypePrinter}
 import effekt.util.messages.*
-import kiama.util.{ Messaging, Position, Positions, Severities }
-import kiama.util.Severities._
+import kiama.util.Severities.*
+import kiama.util.{Position, Severities}
 
 trait ColoredMessaging extends EffektMessaging {
 

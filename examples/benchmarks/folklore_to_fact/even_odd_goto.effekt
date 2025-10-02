@@ -1,0 +1,36 @@
+import examples/benchmarks/runner
+
+effect goto(i: Bool): Bool
+
+def not(b: Bool): Bool =
+  if (b) false else true
+
+def abs_i(n: Int): Int =
+  if (n < 0) -1 * n else n
+
+def even_abs(i: Int): Bool =
+  if (i == 0) {
+    true
+  } else {
+    try { odd_abs(i - 1) } with goto { b => b }
+  }
+
+def odd_abs(i: Int): Bool / goto =
+  if (i == 0) {
+    do goto(false)
+  } else {
+    do goto (even_abs(i - 1))
+  }
+
+def even(i: Int): Bool =
+  even_abs(abs_i(i))
+
+def odd(i: Int): Bool =
+  try { odd_abs(abs_i(i)) } with goto { b => b }
+
+def run(n: Int): Int = {
+  val res = even(n) && not(odd(n))
+  if (res) { 1 } else { 0 }
+}
+
+def main() = benchmark(10){run}

@@ -2,6 +2,6 @@ module examples/pos/imports/importing_resources
 
 import examples/pos/imports/resources
 
-extern { r } def doNothing(): Unit = default { () }
+extern def doNothing() at { r }: Unit = default { () }
 
 def main() = println("worked")

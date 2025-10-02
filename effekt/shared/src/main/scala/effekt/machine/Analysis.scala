@@ -53,5 +53,5 @@ def freeVariables(statement: Statement): Set[Variable] =
       arguments.toSet ++ (freeVariables(rest) - name)
     case Coerce(name, value, rest) =>
       Set(value) ++ (freeVariables(rest) - name)
-    case Hole => Set.empty
+    case Hole(_) => Set.empty
   }

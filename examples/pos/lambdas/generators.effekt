@@ -13,7 +13,7 @@ def numbers() = {
 
 def main() = region this {
 
-  var generator: () => Result at {this} in this = box { Done() }
+  var generator: () => Result at this in this = box { Done() }
 
   try {
     numbers()

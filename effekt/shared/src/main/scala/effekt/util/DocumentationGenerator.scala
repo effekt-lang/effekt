@@ -157,12 +157,13 @@ trait DocumentationGenerator {
   }
 
   def generate(definition: Def)(using C: Context): DocValue = definition match {
-    case Def.FunDef(id, tparams, vparams, bparams, ret, body, info, span) => obj(HashMap(
+    case Def.FunDef(id, tparams, vparams, bparams, captures, ret, body, info, span) => obj(HashMap(
       "kind" -> str("FunDef"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams.unspan),
       "vparams" -> generateVparams(vparams.unspan),
       "bparams" -> generateBparams(bparams.unspan),
+      "captures" -> captures.map(generate).getOrElse(empty),
       "ret" -> ret.map(generate).getOrElse(empty),
       "doc" -> generate(info.doc),
       "span" -> generate(span),
@@ -193,9 +194,10 @@ trait DocumentationGenerator {
       "span" -> generate(span),
     ))
 
-    case Def.DefDef(id, annot, block, info, span) => obj(HashMap(
+    case Def.DefDef(id, captures, annot, block, info, span) => obj(HashMap(
       "kind" -> str("DefDef"),
       "id" -> generate(id),
+      "captures" -> captures.map(generate).getOrElse(empty),
       "annot" -> annot.map(generate).getOrElse(empty),
       "doc" -> generate(info.doc),
       "span" -> generate(span),
@@ -262,12 +264,13 @@ trait DocumentationGenerator {
       "span" -> generate(span),
     ))
 
-    case Def.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, info, span) => obj(HashMap(
+    case Def.ExternDef(id, tparams, vparams, bparams, captures, ret, bodies, info, span) => obj(HashMap(
       "kind" -> str("ExternDef"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams.unspan),
       "vparams" -> generateVparams(vparams.unspan),
       "bparams" -> generateBparams(bparams.unspan),
+      "captures" -> generate(captures),
       "ret" -> generate(ret),
       "doc" -> generate(info.doc),
       "span" -> generate(span),

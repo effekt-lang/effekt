@@ -3,7 +3,7 @@ package core
 
 import effekt.{core, source, symbols}
 import effekt.context.Context
-import effekt.core.{Block, DirectApp, PolymorphismBoxing, Pure, Stmt}
+import effekt.core.{Block, PolymorphismBoxing, Expr, Stmt}
 import effekt.source.{IdDef, Include, Span}
 import effekt.util.messages
 import effekt.util.messages.DebugMessaging
@@ -94,14 +94,14 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
     assertTransformsTo(from, to)
   }
 
-  test("DirectApp with [Int] gets wrapped correctly"){
+  test("ImpureApp with [Int] gets wrapped correctly"){
     val from =
       """module main
         |
         |def id = { ['A](a: 'A) => return a: 'A }
         |def idInt = { (x: Int) =>
         |    {
-        |        let res = !(id: ['A]('A) => 'A @ {})[Int](x: Int)
+        |        let ! res = (id: ['A]('A) => 'A @ {})[Int](x: Int)
         |        return res: Int
         |    }
         |}
@@ -111,7 +111,7 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |
         |def id = { ['A](a: 'A) => return a: 'A }
         |def idInt = { (x: Int) =>
-        |  let boxed = !(id: ['A]('A) => 'A @ {})[BoxedInt]((coerceIntPos: (Int) => BoxedInt @ {})(x: Int))
+        |  let ! boxed = (id: ['A]('A) => 'A @ {})[BoxedInt]((coerceIntPos: (Int) => BoxedInt @ {})(x: Int))
         |  let unboxed = (coercePosInt: (BoxedInt) => Int @ {})(boxed:BoxedInt)
         |  return unboxed: Int
         |}

@@ -10,7 +10,7 @@ def withTime[A] { prog: { Time } => A }: A =
   }
 
 def main() = {
-  def b { t: Time }: Time at {t} = box t;  // this is fine
+  def b { t: Time }: Time at t = box t;  // this is fine
   val cap = withTime {b} // ERROR escape
   def t2: Time = cap
   t2.now();

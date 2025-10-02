@@ -62,8 +62,8 @@ object AnsiHighlight {
       `type` | `effect` | `interface` | `do` | `case` | `with` | `try` |
       `true` | `false` |
       `match` | `def` | `module`| `import`| `export`| `extern`| `include`|
-      `record`| `box`| `return`| `region`|
-      `resource`| `new`| `and`| `is`| `namespace`| `pure` => keyword(text)
+      `record` | `box` | `return` | `region` |
+      `resource` | `new` | `and` | `is` | `namespace` => keyword(text)
 
     case _ => text
   }

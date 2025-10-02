@@ -1,11 +1,14 @@
 package effekt
 
 import effekt.context.{Annotations, Context}
-import effekt.source.{FunDef, Include, Maybe, ModuleDecl, Span, Tree, Doc}
+import effekt.source.Origin.Missing
+import effekt.source.{Doc, FunDef, Include, Maybe, ModuleDecl, Span, Tree}
 import effekt.symbols.{CaptureSet, Hole}
 import kiama.util.{Position, Source}
 import effekt.symbols.scopes.Scope
 import effekt.source.sourceOf
+import effekt.util.HtmlHighlight
+import effekt.source.Spans
 
 trait Intelligence {
 
@@ -49,15 +52,14 @@ trait Intelligence {
       .replace("\\n", "\n")
 
   private def sortByPosition(trees: Vector[Tree])(using C: Context): Vector[Tree] =
-    val pos = C.positions
     trees.sortWith {
       (t1, t2) =>
-        val p1s = pos.getStart(t1).get
-        val p2s = pos.getStart(t2).get
+        val p1s = t1.span.from
+        val p2s = t2.span.from
 
         if (p2s == p1s) {
-          val p1e = pos.getFinish(t1).get
-          val p2e = pos.getFinish(t2).get
+          val p1e = t1.span.to
+          val p2e = t1.span.to
           p1e < p2e
         } else {
           p2s < p1s
@@ -68,7 +70,7 @@ trait Intelligence {
     decl <- C.compiler.getAST(position.source)
     tree = new EffektTree(decl)
     allTrees = tree.nodes.collect { case t: Tree => t }
-    trees = C.positions.findNodesContaining(allTrees, position)
+    trees = Spans.findNodesContaining(allTrees, position)
     nodes = sortByPosition(trees)
   } yield nodes
 
@@ -76,7 +78,7 @@ trait Intelligence {
     decl <- C.compiler.getAST(range.from.source)
     tree = new EffektTree(decl)
     allTrees = tree.nodes.collect { case t: Tree => t }
-    trees = C.positions.findNodesInRange(allTrees, range)
+    trees = Spans.findNodesInRange(allTrees, range)
     nodes = sortByPosition(trees)
   } yield nodes
 
@@ -125,7 +127,7 @@ trait Intelligence {
         p.productElementNames.zip(p.productIterator)
           .collectFirst {
             case ("doc", Some(s: String)) => s
-            case ("info", source.Info(Some(s: String), _, _, _)) => s
+            case ("info", source.Info(Some(s: String), _, _)) => s
           }
       case _ => None
   }
@@ -187,7 +189,7 @@ trait Intelligence {
     }
 
   def allBindings(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): List[BindingInfo] =
-    val symbols = allSymbols(origin, bindings, path)
+    val symbols = allSymbols(origin, bindings, path).distinctBy(s => s._3)
 
     val sorted = if (origin == BindingOrigin.Imported) {
       symbols.sortBy(_._1.toLowerCase())
@@ -198,12 +200,75 @@ trait Intelligence {
       })
     }
 
-    sorted.flatMap((name, path, sym) => sym match {
+    def getSymbolUri(sym: TypeSymbol | TermSymbol): Option[String] = {
+      try {
+        val sourceName = sym match {
+          case s: TypeSymbol if s.decl != null => s.decl.span.source.name
+          case s: TermSymbol if s.decl != null => s.decl.span.source.name
+          case _ => return None
+        }
+        
+        if (sourceName.startsWith("file:") || sourceName.startsWith("vscode-notebook-cell:")) {
+          Some(sourceName)
+        } else if (sourceName.startsWith("./") || sourceName.startsWith(".\\")) {
+          // Remove the "./" or ".\\" prefix and make absolute
+          val relativePath = sourceName.substring(2)
+          Some(s"file://$relativePath")
+        } else {
+          Some(s"file://$sourceName")
+        }
+      } catch {
+        case _: Throwable => None
+      }
+    }
+
+    def getDefinitionLocation(sym: TypeSymbol | TermSymbol): Option[LSPLocation] = {
+      try {
+        val span = sym match {
+          case s: TypeSymbol if s.decl != null => s.decl.span
+          case s: TermSymbol if s.decl != null => s.decl.span
+          case _ => return None
+        }
+        
+        for {
+          uri <- getSymbolUri(sym)
+        } yield LSPLocation(
+          uri = uri,
+          range = LSPRange(
+            start = LSPPosition(line = span.range.from.line - 1, character = span.range.from.column - 1), // LSP is 0-indexed
+            end = LSPPosition(line = span.range.to.line - 1, character = span.range.to.column - 1)  // LSP is 0-indexed
+          )
+        )
+      } catch {
+        case _: Throwable => None
+      }
+    }
+
+    def symbolToBindingInfos(name: String, path: List[String], sym: TypeSymbol | TermSymbol)(using C: Context): List[BindingInfo] =
       // TODO this is extremely hacky, printing is not defined for all types at the moment
-      case sym: TypeSymbol => try { Some(TypeBinding(path, name, origin, DeclPrinter(sym))) } catch { case e => None }
-      case sym: ValueSymbol => Some(TermBinding(path, name, origin, C.valueTypeOption(sym).map(t => pp"${t}")))
-      case sym: BlockSymbol => Some(TermBinding(path, name, origin, C.blockTypeOption(sym).map(t => pp"${t}")))
-    }).toList
+      val signature = try { Some(SignaturePrinter(sym)) } catch { case e: Throwable => None }
+      val signatureHtml = signature.map(sig => HtmlHighlight(sig))
+      val definitionLocation = getDefinitionLocation(sym)
+      
+      val out = sym match {
+        case sym: TypeSymbol => List(TypeBinding(path, name, origin, signature, signatureHtml, definitionLocation = definitionLocation))
+        case sym: ValueSymbol => List(TermBinding(path, name, origin, signature, signatureHtml, definitionLocation = definitionLocation))
+        case sym: BlockSymbol => List(TermBinding(path, name, origin, signature, signatureHtml, definitionLocation = definitionLocation))
+      }
+      sym match {
+        case Interface(name, tparams, ops, decl) if !(ops.length == 1 && ops.head.name.name == name.name) => {
+          val opsInfos = ops.map { op =>
+            val signature = Some(SignaturePrinter(op))
+            val signatureHtml = signature.map(sig => HtmlHighlight(sig))
+            val opDefinitionLocation = getDefinitionLocation(op)
+            TermBinding(path, op.name.name, origin, signature, signatureHtml, definitionLocation = opDefinitionLocation)
+          }
+          out ++ opsInfos
+        }
+        case _ => out
+      }
+
+    sorted.flatMap(symbolToBindingInfos).toList
 
   def allSymbols(origin: String, bindings: Bindings, path: List[String] = Nil)(using C: Context): Array[(String, List[String], TypeSymbol | TermSymbol)] = {
     bindings.types.toArray.map((name, sym) => (name, path, sym))
@@ -253,19 +318,17 @@ trait Intelligence {
     val src = range.from.source
     allCaptures(src).filter {
       // keep only captures in the current range
-      case (t, c) => C.positions.getStart(t) match
-        case Some(p) => p.between(range.from, range.to)
-        case None => false
+      case (t, c) => t.span.origin != Missing && t.span.range.from.between(range.from, range.to)
     }.collect {
       case (t: source.FunDef, c) => for {
-        pos <- C.positions.getStart(t)
+        pos <- if t.span.origin != Missing then Some(t.ret.span.range.from) else None
       } yield CaptureInfo(pos, c)
       case (t: source.DefDef, c) => for {
-        pos <- C.positions.getStart(t)
+        pos <- if t.span.origin != Missing then Some(t.annot.span.range.from) else None
       } yield CaptureInfo(pos, c)
       case (source.Box(Maybe(None, span), block, _), _) if C.inferredCaptureOption(block).isDefined => for {
         capt <- C.inferredCaptureOption(block)
-      } yield CaptureInfo(span.range.from, capt, true)
+      } yield CaptureInfo(span.range.from, capt)
     }.flatten
 
   def getInfoOf(sym: Symbol)(using C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
@@ -452,11 +515,45 @@ object Intelligence {
     val qualifier: List[String]
     val name: String
     val origin: String
+    val signature: Option[String]
+    val signatureHtml: Option[String]
     val kind: String
+    val definitionLocation: Option[LSPLocation]
   }
 
-  case class TermBinding(qualifier: List[String], name: String, origin: String, `type`: Option[String], kind: String = BindingKind.Term) extends BindingInfo
-  case class TypeBinding(qualifier: List[String], name: String, origin: String, definition: String, kind: String = BindingKind.Type) extends BindingInfo
+  case class LSPLocation(
+    uri: String,
+    range: LSPRange
+  )
+
+  case class LSPPosition(
+    line: Int,
+    character: Int
+  )
+
+  case class LSPRange(
+    start: LSPPosition,
+    end: LSPPosition
+  )
+
+  case class TermBinding(
+    qualifier: List[String],
+    name: String,
+    origin: String,
+    signature: Option[String] = None,
+    signatureHtml: Option[String],
+    kind: String = BindingKind.Term,
+    definitionLocation: Option[LSPLocation] = None
+  ) extends BindingInfo
+  case class TypeBinding(
+    qualifier: List[String],
+    name: String,
+    origin: String,
+    signature: Option[String] = None,
+    signatureHtml: Option[String],
+    kind: String = BindingKind.Type,
+    definitionLocation: Option[LSPLocation] = None
+  ) extends BindingInfo
 
   // These need to be strings (rather than cases of an enum) so that they get serialized correctly
   object ScopeKind {
@@ -491,9 +588,5 @@ object Intelligence {
   case class CaptureInfo(
     position: Position,
     captures: CaptureSet,
-    /**
-     * Whether this capture set could be written into the source code at `position` using the `at { captures }` syntax
-     */
-    atSyntax: Boolean = false,
   )
 }

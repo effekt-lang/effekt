@@ -3,6 +3,7 @@ module list
 import effekt
 import option
 import exception
+import stream
 
 /// Immutable linked list for finite sequences of elements.
 type List[A] {
@@ -178,7 +179,7 @@ def map[A, B](l: List[A]) { f: A => B } : List[B] = {
 /// discarding the elements for which the function returned `None()`.
 ///
 /// O(N)
-def collect[A, B](l: List[A]) { f : A => Option[B] }: List[B] = {
+def collectSome[A, B](l: List[A]) { f : A => Option[B] }: List[B] = {
   var acc = Nil[B]()
   l.foreach { a =>
     val optB = f(a)
@@ -836,3 +837,46 @@ def println(l: List[Int]): Unit = println(show(l))
 def println(l: List[Double]): Unit = println(show(l))
 def println(l: List[Bool]): Unit = println(show(l))
 def println(l: List[String]): Unit = println(show(l))
+
+
+// Streaming
+// ---------
+
+/// Turns a `list` into a producer of a push stream
+/// by emitting each contained value left-to-right.
+def each[A](list: List[A]): Unit / emit[A] =
+  list match {
+    case Nil() => ()
+    case Cons(head, tail) =>
+      do emit(head)
+      each(tail)
+  }
+
+def feed[T, R](list: List[T]) { reader: () => R / read[T] }: R = {
+  var l = list
+  try {
+    reader()
+  } with read[T] {
+    resume {
+      l match {
+        case Nil() => do stop()
+        case Cons(value, rest) =>
+          l = rest
+          return value
+      }
+    }
+  }
+}
+
+def collect[A] { stream: () => Unit / emit[A] }: List[A] =
+  returning::collect[A, Unit]{stream}.second
+
+namespace returning {
+  def collect[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
+    try {
+      (stream(), Nil())
+    } with emit[A] { (v) =>
+      val (r, vs) = resume(());
+      (r, Cons(v, vs))
+    }
+}

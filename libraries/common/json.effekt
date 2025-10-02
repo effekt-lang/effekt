@@ -165,7 +165,7 @@ def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
       case 'f' => expectString("false"); do bool(false)
       case '-' => do number(readDouble())
       case d and d.isDigit => do number(readDouble())
-      case '"' => do string(collectString { readQuotedString() })
+      case '"' => do string(collect { readQuotedString() })
       case '{' => do dict{ decodeJsonObject() }
       case '[' => do list{ decodeJsonList() }
       case _ => println("Unexpected " ++ c.toString); <>
@@ -179,7 +179,7 @@ def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[WrongFo
   skipWhitespace()
   while(do peek[Char]() is c and (c != '}')) {
     if (not(first)) { expectString(",") }
-    val k: String = collectString { readQuotedString() }
+    val k = string::collect { readQuotedString() }
     skipWhitespace()
     expectString(":")
     do field(k){
@@ -277,7 +277,7 @@ def build[R](){ body: => R / JsonBuilder }: (R, JsonValue) = {
   }
   (x, r)
 }
-def buildList[R](){ body: => R / JsonBuilder }: (R, List[JsonValue]) = returning::collectList[JsonValue, R] {
+def buildList[R](){ body: => R / JsonBuilder }: (R, List[JsonValue]) = list::returning::collect[JsonValue, R] {
   try body() with JsonBuilder {
     def number(n) = { do emit(Number(n)); resume(()) }
     def bool(b) = { do emit(Bool(b)); resume(()) }
@@ -295,7 +295,7 @@ def buildList[R](){ body: => R / JsonBuilder }: (R, List[JsonValue]) = returning
     }
   }
 }
-def buildDict[R](){ body: => R / JsonObjectBuilder }: (R, List[(String, JsonValue)]) = returning::collectList[(String, JsonValue), R] {
+def buildDict[R](){ body: => R / JsonObjectBuilder }: (R, List[(String, JsonValue)]) = list::returning::collect[(String, JsonValue), R] {
   try body() with JsonObjectBuilder {
     def field(k) = resume { {v} =>
       val x = build{v}
@@ -315,7 +315,7 @@ namespace test {
     // Read quoted string
     feed("\"\ta\n\ra\"") {
       with scanner[Char]
-      println(collectString { readQuotedString() })
+      println(string::collect { readQuotedString() })
     }
 
     println("")
