@@ -149,7 +149,8 @@ object Transformer {
         transform(substitute(rest)(using Substitution(Map(), Map(), Map(id -> core.ValueVar(otherId, otherTpe)), Map())))
 
       case core.Let(id, tpe, expr, rest) =>
-        transformNamed(Variable(transform(id), transform(tpe)), expr).run { _ =>
+        // TODO this needs to be expr.tpe and not tpe, but why?
+        transformNamed(Variable(transform(id), transform(expr.tpe)), expr).run { _ =>
           transform(rest)
         }
 
