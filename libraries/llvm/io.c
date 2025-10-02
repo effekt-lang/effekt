@@ -743,20 +743,24 @@ void on_close(uv_handle_t* handle) {
     free(handle);
 }
 void on_exit(uv_process_t* proc, int64_t exit_status, int term_signal) {
-  char** _args = (char**)proc->data;
-  if (_args) {
-    for(int i = 0; _args[i] != NULL; i++) {
-      free(_args[i]);
-    }
-    free(_args);
-  }
-  uv_close((uv_handle_t*)proc, on_close);
+	char** _args = (char**)proc->data;
+	if (_args) {
+		for(int i = 0; _args[i] != NULL; i++) {
+			free(_args[i]);
+		}
+		free(_args);
+	}
+	uv_close((uv_handle_t*)proc, on_close);
 }
 
 struct Pos c_spawn(struct Pos cmd, struct Pos args, struct Pos options) {
     uv_process_options_t* opts = (uv_process_options_t*)options.obj;
     uv_process_t* proc = (uv_process_t*)malloc(sizeof(uv_process_t));
+
+    // command
     opts->file = (char*)c_bytearray_data(cmd);
+
+    // args
     int _argc = (int)((uint64_t*)args.obj)[2];
     char** _args = (char**)malloc((2 + _argc) * sizeof(char*));
     struct Pos* _argv = (struct Pos*)(((uint64_t*)args.obj) + 3);
@@ -764,13 +768,16 @@ struct Pos c_spawn(struct Pos cmd, struct Pos args, struct Pos options) {
     for(int i = 0; i < _argc; i++) {
         _args[i + 1] = strdup((char*)c_bytearray_data(_argv[i]));
     }
+    erasePositive(args);
     _args[_argc + 1] = NULL;
     opts->args = _args;
+    // callback to free _args
     opts->exit_cb = on_exit;
     proc->data = _args;
+
+    // spawn process
     int err = uv_spawn(uv_default_loop(), proc, opts);
     erasePositive(options);
-    erasePositive(args);
     if(err) {
         printf("%s\n", uv_strerror(err));
         free(_args);
