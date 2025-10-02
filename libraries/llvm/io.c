@@ -109,7 +109,6 @@ void c_fs_read(Int file, struct Pos buffer, Int offset, Int size, Int position, 
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
     erasePositive(buffer);
-    // TODO panic if this was the last reference
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
@@ -127,7 +126,6 @@ void c_fs_write(Int file, struct Pos buffer, Int offset, Int size, Int position,
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
     erasePositive(buffer);
-    // TODO panic if this was the last reference
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
@@ -236,16 +234,17 @@ void c_tcp_connect(String host, Int port, Stack stack) {
 
 typedef struct {
     Stack stack;
-    size_t size;
-    char* data;
-} tcp_read_closure_t;
+    struct Pos buffer;
+    size_t offset;
+} tcp_closure_t;
 
 void c_tcp_read_cb(uv_stream_t* stream, ssize_t bytes_read, const uv_buf_t* buf) {
     (void)(buf);
-    tcp_read_closure_t* read_closure = (tcp_read_closure_t*)stream->data;
+    tcp_closure_t* read_closure = (tcp_closure_t*)stream->data;
     Stack stack = read_closure->stack;
 
     uv_read_stop(stream);
+    erasePositive(read_closure->buffer);
     free(read_closure);
 
     resume_Int(stack, (int64_t)bytes_read);
@@ -253,22 +252,20 @@ void c_tcp_read_cb(uv_stream_t* stream, ssize_t bytes_read, const uv_buf_t* buf)
 
 void c_tcp_read_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
     (void)(suggested_size);
-    tcp_read_closure_t* read_closure = (tcp_read_closure_t*)handle->data;
-    buf->base = read_closure->data;
-    buf->len = read_closure->size;
+    tcp_closure_t* read_closure = (tcp_closure_t*)handle->data;
+    buf->base = (char*)c_bytearray_data(read_closure->buffer) + read_closure->offset;
+    // TODO c_bytearray_size also erases
+    buf->len = read_closure->buffer.tag;
 }
 
 void c_tcp_read(Int handle, struct Pos buffer, Int offset, Int size, Stack stack) {
+    (void)size;
     uv_stream_t* stream = (uv_stream_t*)handle;
 
-    char* buffer_ptr = (char*)(c_bytearray_data(buffer) + offset);
-    erasePositive(buffer);
-    // TODO panic if this was the last reference
-
-    tcp_read_closure_t* read_closure = malloc(sizeof(tcp_read_closure_t));
+    tcp_closure_t* read_closure = malloc(sizeof(tcp_closure_t));
     read_closure->stack = stack;
-    read_closure->size = size;
-    read_closure->data = buffer_ptr;
+    read_closure->buffer = buffer;
+    read_closure->offset = offset;
     stream->data = read_closure;
 
     int result = uv_read_start(stream, c_tcp_read_alloc_cb, c_tcp_read_cb);
@@ -281,8 +278,11 @@ void c_tcp_read(Int handle, struct Pos buffer, Int offset, Int size, Stack stack
 }
 
 void c_tcp_write_cb(uv_write_t* request, int status) {
-    Stack stack = (Stack)request->data;
+    tcp_closure_t* write_closure = (tcp_closure_t*)request->data;
     free(request);
+    erasePositive(write_closure->buffer);
+    Stack stack = write_closure->stack;
+    free(write_closure);
     resume_Int(stack, (int64_t)status);
 }
 
@@ -290,11 +290,14 @@ void c_tcp_write(Int handle, struct Pos buffer, Int offset, Int size, Stack stac
     uv_stream_t* stream = (uv_stream_t*)handle;
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
-    erasePositive(buffer);
-    // TODO panic if this was the last reference
+
+    tcp_closure_t* write_closure = malloc(sizeof(tcp_closure_t));
+    write_closure->stack = stack;
+    write_closure->buffer = buffer;
+    write_closure->offset = offset;
 
     uv_write_t* request = malloc(sizeof(uv_write_t));
-    request->data = stack;
+    request->data = write_closure;
 
     int result = uv_write(request, stream, &buf, 1, c_tcp_write_cb);
 
