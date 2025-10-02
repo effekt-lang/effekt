@@ -19,25 +19,32 @@ extern llvm """
 
 extern type SpawnOptions
 extern def default() at {}: SpawnOptions =
-  jsNode """{ stdio: [0,1,2] }"""
+  jsNode """{ stdio: [0,1,2], onSpawn: (p) => {} }"""
   llvm """
     %opts = call %Pos @c_spawn_options_default()
     ret %Pos %opts
   """
-extern def pipeStdout(opts: SpawnOptions) at {}: SpawnOptions =
-  jsNode """(function() { let old = ${opts}; old.stdio[1] = 'pipe'; old })()"""
-extern def pipeStderr(opts: SpawnOptions) at {}: SpawnOptions =
-  jsNode """(function() { let old = ${opts}; old.stdio[2] = 'pipe'; old })()"""
+extern def onStdout(opts: SpawnOptions, callback: String => Unit at {io, global}) at {}: SpawnOptions =
+  jsNode """(function() {
+    let old = ${opts};
+    old.stdio[1] = 'pipe';
+    let oldSpawn = old.onSpawn;
+    old.onSpawn = function(p) {
+      oldSpawn(p);
+      p.stdout.on('data', (chunk) => {
+        $effekt.runToplevel((ks, k) => (${callback})(chunk, ks, k));
+      });
+    };
+    return old; })()"""
 
 extern type PID
 extern def spawn(cmd: String, args: Array[String], options: SpawnOptions): PID =
-  jsNode """spawn(${cmd}, ${args}, ${options})"""
+  jsNode """(function() {
+    let p = spawn(${cmd}, ${args}, ${options});
+    ${options}.onSpawn(p);
+    return p;
+  })()"""
   llvm """
     %proc = call %Pos @c_spawn(%Pos ${cmd}, %Pos ${args}, %Pos ${options})
     ret %Pos %proc
   """
-
-extern def onStdout(pid: PID, callback: String => Unit at {io, global}): PID =
-  jsNode """${pid}.stdout.on('data', (chunk) => { $effekt.runToplevel((ks, k) => (${callback})(chunk, ks, k)) })"""
-extern def onStderr(pid: PID, callback: String => Unit at {io, global}): PID =
-  jsNode """${pid}.stderr.on('data', (chunk) => { $effekt.runToplevel((ks, k) => (${callback})(chunk, ks, k)) })"""
