@@ -9,11 +9,15 @@ extern def exit(errorCode: Int) at io: Nothing =
   """
   chez "(exit ${errorCode})"
 
+// Subprocesses
+// ------------
+
 extern jsNode """
 const { spawn } = require('node:child_process');
 """
 extern llvm """
   declare %Pos @c_spawn_options_default()
+  declare %Pos @c_spawn_options_on_stdout(%Pos, %Pos)
   declare %Pos @c_spawn(%Pos, %Pos, %Pos)
 """
 
@@ -36,14 +40,18 @@ extern def onStdout(opts: SpawnOptions, callback: String => Unit at {io, global}
       });
     };
     return old; })()"""
+  llvm """
+    %opts = call %Pos @c_spawn_options_on_stdout(%Pos ${opts}, %Pos ${callback})
+    ret %Pos %opts
+  """
 
 extern type PID
 extern def spawn(cmd: String, args: Array[String], options: SpawnOptions): PID =
   jsNode """(function() {
-    let p = spawn(${cmd}, ${args}, ${options});
-    ${options}.onSpawn(p);
-    return p;
-  })()"""
+      let p = spawn(${cmd}, ${args}, ${options});
+      ${options}.onSpawn(p);
+      return p;
+    })()"""
   llvm """
     %proc = call %Pos @c_spawn(%Pos ${cmd}, %Pos ${args}, %Pos ${options})
     ret %Pos %proc

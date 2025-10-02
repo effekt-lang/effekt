@@ -739,10 +739,45 @@ struct Pos c_spawn_options_default() {
     return (struct Pos) { .tag = 0, .obj = options, };
 }
 
+static void my_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
+    (void)handle;
+    buf->base = malloc(suggested_size);
+    buf->len = suggested_size;
+}
+
+typedef struct {
+    struct Pos handler;
+} stdout_cb_closure_t;
+void stdout_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
+  stdout_cb_closure_t* clos = (stdout_cb_closure_t*)(stream->data);
+  if(nread >= 0) {
+    struct Pos chunk = c_bytearray_construct(nread, (uint8_t*)(buf->base));
+    sharePositive(clos->handler);
+    sharePositive(chunk);
+    run_Pos(clos->handler, chunk);
+  } else {
+    uv_read_stop(stream);
+    erasePositive(clos->handler);
+    free(clos);
+  }
+}
+struct Pos c_spawn_options_on_stdout(struct Pos opts, struct Pos callback) {
+    uv_process_options_t* options = (uv_process_options_t*)opts.obj;
+    options->stdio[1].flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
+    uv_pipe_t* pipe = (uv_pipe_t*)malloc(sizeof(uv_pipe_t));
+    uv_pipe_init(uv_default_loop(), pipe, 1);
+    options->stdio[1].data.stream = (uv_stream_t*)pipe;
+    stdout_cb_closure_t* clos = (stdout_cb_closure_t*)malloc(sizeof(stdout_cb_closure_t));
+    clos->handler = callback;
+    pipe->data = clos;
+    return opts;
+}
+
 void on_close(uv_handle_t* handle) {
     free(handle);
 }
 void on_exit(uv_process_t* proc, int64_t exit_status, int term_signal) {
+  (void)term_signal; (void)exit_status;
 	char** _args = (char**)proc->data;
 	if (_args) {
 		for(int i = 0; _args[i] != NULL; i++) {
@@ -758,15 +793,16 @@ struct Pos c_spawn(struct Pos cmd, struct Pos args, struct Pos options) {
     uv_process_t* proc = (uv_process_t*)malloc(sizeof(uv_process_t));
 
     // command
-    opts->file = (char*)c_bytearray_data(cmd);
+    char* cmd_s = c_bytearray_into_nullterminated_string(cmd);
+    opts->file = cmd_s;
 
     // args
     int _argc = (int)((uint64_t*)args.obj)[2];
     char** _args = (char**)malloc((2 + _argc) * sizeof(char*));
     struct Pos* _argv = (struct Pos*)(((uint64_t*)args.obj) + 3);
-    _args[0] = strdup(opts->file);
+    _args[0] = cmd_s;
     for(int i = 0; i < _argc; i++) {
-        _args[i + 1] = strdup((char*)c_bytearray_data(_argv[i]));
+        _args[i + 1] = c_bytearray_into_nullterminated_string(_argv[i]);
     }
     erasePositive(args);
     _args[_argc + 1] = NULL;
@@ -777,6 +813,10 @@ struct Pos c_spawn(struct Pos cmd, struct Pos args, struct Pos options) {
 
     // spawn process
     int err = uv_spawn(uv_default_loop(), proc, opts);
+
+    if(opts->stdio[1].data.stream)
+      uv_read_start((uv_stream_t*)(opts->stdio[1].data.stream), my_alloc_cb, stdout_cb);
+
     erasePositive(options);
     if(err) {
         printf("%s\n", uv_strerror(err));
