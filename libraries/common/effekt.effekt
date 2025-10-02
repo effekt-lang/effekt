@@ -100,6 +100,9 @@ def show(value: String): String =
 def show(value: Bool): String =
   if (value) "true" else "false"
 
+def show(value: Byte): String =
+  "0x" ++ byteToHex(value)
+
 extern def show(value: Char) at {}: String =
   js "String.fromCodePoint(${value})"
   chez "(string (integer->char ${value}))"
@@ -108,15 +111,6 @@ extern def show(value: Char) at {}: String =
     ret %Pos %z
   """
   vm "effekt::show(Char)"
-
-extern def show(value: Byte) at {}: String =
-  js "'' + ${value}"
-  chez "(string ${value})"
-  llvm """
-    %z = call %Pos @c_bytearray_show_Byte(i8 ${value})
-    ret %Pos %z
-  """
-  vm "effekt::show(Byte)"
 
 extern def genericShow[R](value: R) at {}: String =
   js "$effekt.show(${value})"
@@ -467,6 +461,15 @@ extern def toDouble(d: Int) at {}: Double =
   llvm "%z = sitofp i64 ${d} to double ret double %z"
   vm "effekt::toDouble(Int)"
 
+// TODO: There are problems with that
+def byteToHex(b: Byte): String =
+  val hexDigits = "0123456789abcdef"
+  val unsigned : Int = b.toInt.bitwiseAnd(0xff.toInt)
+  val high : Int = unsigned.bitwiseShr(4) 
+  val low : Int = unsigned.bitwiseAnd(0x0f.toInt) 
+  val hexhigh : Char = hexDigits.unsafeCharAt(high)
+  val hexlow : Char = hexDigits.unsafeCharAt(low)
+  hexhigh.show ++ hexlow.show
 
 extern def round(d: Double) at {}: Int =
   js "Math.round(${d})"
