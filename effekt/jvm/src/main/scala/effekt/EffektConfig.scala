@@ -145,7 +145,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
   )
 
   val showIR: ScallopOption[Option[Stage]] = choice(
-    choices = List("none", "cps", "core", "machine", "target"),
+    choices = List("none", "core", "cps", "machine", "target"),
     name = "ir-show",
     descr = "The intermediate presentation that should be printed.",
     default = Some("none"),
