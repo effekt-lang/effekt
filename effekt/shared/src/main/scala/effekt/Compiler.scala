@@ -60,7 +60,7 @@ enum PhaseResult {
 }
 export PhaseResult.*
 
-enum Stage { case Core; case Machine; case Target; }
+enum Stage { case CPS; case Core; case Machine; case Target; }
 
 /**
  * The compiler for the Effekt language.
