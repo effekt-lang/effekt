@@ -1,0 +1,1 @@
+def fn() at {} = println("hello") // ERROR Not allowed {io}

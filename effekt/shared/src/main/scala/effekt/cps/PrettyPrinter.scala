@@ -56,15 +56,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(e: Expr): Doc = e match {
-    case DirectApp(id, vargs, bargs) =>
-      toDoc(id) <> argsToDoc(vargs, bargs)
-    case Pure.ValueVar(id) => toDoc(id)
-    case Pure.Literal(()) => "()"
-    case Pure.Literal(s: String) => "\"" + s + "\""
-    case Pure.Literal(value) => value.toString
-    case Pure.PureApp(id, vargs) => toDoc(id) <> argsToDoc(vargs, Nil)
-    case Pure.Make(data, tag, vargs) => "make" <+> toDoc(data.name) <+> toDoc(tag) <> argsToDoc(vargs, Nil)
-    case Pure.Box(b) => parens("box" <+> toDoc(b))
+    case Expr.ValueVar(id) => toDoc(id)
+    case Expr.Literal(()) => "()"
+    case Expr.Literal(s: String) => "\"" + s + "\""
+    case Expr.Literal(value) => value.toString
+    case Expr.PureApp(id, vargs) => toDoc(id) <> argsToDoc(vargs, Nil)
+    case Expr.Make(data, tag, vargs) => "make" <+> toDoc(data.name) <+> toDoc(tag) <> argsToDoc(vargs, Nil)
+    case Expr.Box(b) => parens("box" <+> toDoc(b))
   }
 
   def toDoc(b: Block): Doc = b match {
@@ -116,6 +114,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case Stmt.LetCont(id, binding, body) =>
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
+        toDoc(body)
+
+    case Stmt.ImpureApp(id, callee, vargs, bargs, body) =>
+      "let!" <+> toDoc(id) <+> "=" <+> toDoc(callee) <> argsToDoc(vargs, bargs) <> line <>
         toDoc(body)
 
     case Stmt.Region(id, ks, body) =>
@@ -182,7 +184,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(s: symbols.Symbol): Doc = s.show
 
-  def argsToDoc(vargs: List[Pure], bargs: List[Block]): Doc = {
+  def argsToDoc(vargs: List[Expr], bargs: List[Block]): Doc = {
     val vargsDoc = if (vargs.isEmpty && !bargs.isEmpty) emptyDoc else parens(vargs.map(toDoc))
     val bargsDoc = if (bargs.isEmpty) emptyDoc else hcat(bargs.map { b => braces(toDoc(b)) })
     vargsDoc <> bargsDoc

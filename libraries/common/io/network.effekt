@@ -1,84 +1,116 @@
 module io/network
 
+import stream
 import bytearray
-import io
 
-namespace js {
-  extern jsNode """
-    const net = require('node:net');
+import io/error
 
-    function listen(server, port, host, listener) {
-      server.listen(port, host);
-      server.on('connection', listener);
+
+/// A TCP handle. Should not be inspected.
+type Connection = Int
+
+/// Reads data from a TCP connection into a buffer at the given offset.
+def read(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / Exception[IOError] =
+  internal::checkResult(internal::read(handle, buffer, offset, size))
+
+/// Writes data from a buffer at the given offset to a TCP connection.
+def write(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / Exception[IOError] =
+  internal::checkResult(internal::write(handle, buffer, offset, size))
+
+/// Establishes a TCP connection to the specified host and port.
+def connect(host: String, port: Int): Connection / Exception[IOError] =
+  internal::checkResult(internal::connect(host, port))
+
+/// Closes a TCP connection and releases associated resources.
+def close(handle: Connection): Unit =
+  internal::close(handle)
+
+/// A TCP listener. Should not be inspected.
+type Listener = Int
+
+/// Creates a TCP listener bound to the specified host and port.
+def bind(host: String, port: Int): Listener / Exception[IOError] =
+  internal::checkResult(internal::bind(host, port))
+
+/// Starts listening for incoming connections and handles them with the provided handler function.
+/// Runs until `shutdown` is called on this `Listener`.
+def listen(listener: Listener, handler: Connection => Unit at {io, async, global}): Unit / Exception[IOError] = {
+  internal::checkResult(internal::listen(listener, handler)); ()
+}
+
+/// Stops a TCP listener and releases associated resources.
+def shutdown(listener: Listener): Unit =
+  internal::shutdown(listener)
+
+
+def streaming[R](connection: Connection) { program: () => R / {read[ByteArray], emit[ByteArray]} }: R / Exception[IOError] =
+  try {
+    program()
+  } with emit[ByteArray] { bytes =>
+    write(connection, bytes, 0, bytes.size)
+    resume(())
+  } with read[ByteArray] { () =>
+    val bytes = bytearray::allocate(4096)
+    read(connection, bytes, 0, bytes.size) match {
+      case r and r == bytes.size => resume { return bytes }
+      case r => resume { bytes.resize(r) }
     }
+  }
+
+namespace internal {
+
+  extern llvm """
+    declare void @c_tcp_connect(%Pos, %Int, %Stack)
+    declare void @c_tcp_read(%Int, %Pos, %Int, %Int, %Stack)
+    declare void @c_tcp_write(%Int, %Pos, %Int, %Int, %Stack)
+    declare void @c_tcp_close(%Int, %Stack)
+    declare void @c_tcp_bind(%Pos, %Int, %Int, %Stack)
+    declare void @c_tcp_listen(%Int, %Pos, %Stack)
+    declare void @c_tcp_shutdown(%Int, %Stack)
   """
 
-  extern type JSServer // = net.Server
-  extern type JSSocket // = net.Socket
-  extern io def server(): JSServer =
-    jsNode "net.createServer()"
-  extern io def listen(server: JSServer, port: Int, host: String, listener: JSSocket => Unit at {io, async, global}): Unit =
-    jsNode "listen(${server}, ${port}, ${host}, (socket) => $effekt.runToplevel((ks, k) => (${listener})(socket, ks, k)))"
+  extern def connect(host: String, port: Int) at async: Int =
+    llvm """
+      call void @c_tcp_connect(%Pos ${host}, %Int ${port}, %Stack %stack)
+      ret void
+    """
 
-  extern async def send(socket: JSSocket, data: ByteArray): Unit =
-    jsNode "$effekt.capture(callback => ${socket}.write(${data}, callback))"
+  extern def read(handle: Int, buffer: ByteArray, offset: Int, size: Int) at async: Int =
+    llvm """
+      call void @c_tcp_read(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
+      ret void
+    """
 
-  extern async def receive(socket: JSSocket): ByteArray =
-    jsNode "$effekt.capture(callback => ${socket}.once('data', callback))"
+  extern def write(handle: Int, buffer: ByteArray, offset: Int, size: Int) at async: Int =
+    llvm """
+      call void @c_tcp_write(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
+      ret void
+    """
 
-  extern async def end(socket: JSSocket): Unit =
-    jsNode "$effekt.capture(k => ${socket}.end(k))"
+  extern def close(handle: Int) at async: Unit =
+    llvm """
+      call void @c_tcp_close(%Int ${handle}, %Stack %stack)
+      ret void
+    """
+
+  extern def bind(host: String, port: Int) at io: Int =
+    llvm """
+      %result = call %Int @c_tcp_bind(%Pos ${host}, %Int ${port})
+      ret %Int %result
+    """
+
+  extern def listen(listener: Int, handler: Int => Unit at {io, async, global}) at async: Int =
+    llvm """
+      call void @c_tcp_listen(%Int ${listener}, %Pos ${handler}, %Stack %stack)
+      ret void
+    """
+
+  extern def shutdown(handle: Int) at async: Unit =
+    llvm """
+      call void @c_tcp_shutdown(%Int ${handle}, %Stack %stack)
+      ret void
+    """
+
 }
 
-interface Socket {
-  def send(message: ByteArray): Unit
-  def receive(): ByteArray
-  def end(): Unit
-}
 
-def server(host: String, port: Int, handler: () => Unit / Socket at {io, async, global}): Unit = {
-  val server = js::server();
-  js::listen(server, port, host, box { socket =>
-    println("New connection")
-    spawn(box {
-      try handler()
-      with Socket {
-        def send(message) =
-          resume(js::send(socket, message))
-        def receive() =
-          resume(js::receive(socket))
-        def end() =
-          resume(js::end(socket))
-      }
-    })
-  })
-}
-
-
-namespace examples {
-  def helloWorldApp(): Unit / Socket = {
-    val request = do receive().toString;
-
-    println("Received a request: " ++ request)
-
-    def respond(s: String): Unit / Socket =
-      do send(s.fromString)
-
-    if (request.startsWith("GET /")) {
-      respond("HTTP/1.1 200 OK\r\n\r\nHello from Effekt!")
-    } else {
-      respond("HTTP/1.1 400 Bad Request\r\n\r\n")
-    }
-    do end()
-  }
-
-  // A server that just shows "Hello from Effekt!" on localhost:8080
-  def main() = {
-    val port = 8080
-    println("Starting server on http://localhost:" ++ port.show)
-
-    server("localhost", port, box {
-      helloWorldApp()
-    })
-  }
-}

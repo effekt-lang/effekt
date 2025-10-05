@@ -30,7 +30,7 @@ extern type Ref[T]
 
 /// Allocates a new reference, keeping its value _undefined_.
 /// Prefer using `ref` constructor instead to ensure that the value is defined.
-extern global def allocate[T](): Ref[T] =
+extern def allocate[T]() at global: Ref[T] =
   js "{ value: undefined }"
   chez "(box #f)"
   llvm """
@@ -50,7 +50,7 @@ extern global def allocate[T](): Ref[T] =
   """
 
 /// Creates a new reference with the initial value `init`.
-extern global def ref[T](init: T): Ref[T] =
+extern def ref[T](init: T) at global: Ref[T] =
   js "{ value: ${init} }"
   chez "(box ${init})"
   llvm """
@@ -72,7 +72,7 @@ extern global def ref[T](init: T): Ref[T] =
   vm "ref::ref[T](T)"
 
 /// Gets the referenced element of the `ref` in constant time.
-extern global def get[T](ref: Ref[T]): T =
+extern def get[T](ref: Ref[T]) at global: T =
   js "${ref}.value"
   chez "(unbox ${ref})"
 llvm """
@@ -88,7 +88,7 @@ llvm """
   vm "ref::get[T](Ref[T])"
 
 /// Sets the referenced element of the `ref` to `value` in constant time.
-extern global def set[T](ref: Ref[T], value: T): Unit =
+extern def set[T](ref: Ref[T], value: T) at global: Unit =
   js "set$impl(${ref}, ${value})"
   chez "(set-box! ${ref} ${value})"
   llvm """
@@ -104,3 +104,7 @@ extern global def set[T](ref: Ref[T], value: T): Unit =
     ret %Pos zeroinitializer
   """
   vm "ref::set[T](Ref[T], T)"
+
+/// Modifies the inner contents of the `ref` with a function `f`
+def map[T](ref: Ref[T]) { f: T => T }: Unit =
+  ref.set(f(ref.get))

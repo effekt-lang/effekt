@@ -46,11 +46,11 @@ object HtmlHighlight {
       // keywords
       case
         `let`  | `val` | `var` | `if` | `else` | `while` |
-        `type` | `effect` | `interface` | `fun` | `do` | `case` | `with` | `try` |
+        `type` | `effect` | `interface` | `do` | `case` | `with` | `try` |
         `true` | `false` |
         `match` | `def` | `module`| `import`| `export`| `extern`| `include`|
-        `record`| `box`| `unbox`| `return`| `region`|
-        `resource`| `new`| `and`| `is`| `namespace`| `pure`
+        `record` | `box` | `return` | `region` |
+        `resource`| `new` | `and` | `is` | `namespace`
       => htmlSpan("effekt-keyword", text)
 
       case _                 => text

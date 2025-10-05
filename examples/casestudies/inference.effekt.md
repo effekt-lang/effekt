@@ -29,9 +29,6 @@ effect sample(dist: Distribution): Double
 effect observe(value: Double, dist: Distribution): Unit
 effect random(): Double
 effect weight(prob: Probability): Unit
-interface Emit[A] {
-  def emit(element: A): Unit
-}
 ```
 
 With the effect `sample`, we can sample from a given distribution, and with the effect `observe` we can determine how probable it is to observe a given value under a given distribution (probability density function (PDF)).
@@ -77,7 +74,7 @@ def gamma(z0: Double): Double = {
     -0.13857109526572012,
     9.9843695780195716 * pow(10.0, 0.0 - 6.0),
     1.5056327351493116 * pow(10.0, 0.0 - 7.0)]
-  
+
   // lanczos approximation
   if (z < 0.5) {
     val y = PI / (sin(PI * z) * gamma(1.0 - z))
@@ -169,22 +166,11 @@ def linearCongruentialGenerator[R](seed: Int) { prog: => R / random } : R = {
 With the effect `emit` it is also possible to limit infinite loops. This allows for flexible numbers of steps to be performed with any algorithm that uses the effect `emit`.
 
 ```
-def onEmit[A] { handler: A => Unit } { program: => Any / Emit[A] }: Unit =
+def onEmit[A] { handler: A => Unit } { program: => Any / emit[A] }: Unit =
   try { program(); () }
-  with Emit[A] {
+  with emit[A] {
     def emit(element) = { handler(element); resume(()) }
   }
-def limit[A](n: Int) { program: => Any / Emit[A] }: Unit / Emit[A] = {
-  var steps = n
-  try { program(); () }
-  with Emit[A] {
-    def emit(element) = {
-      do emit(element);
-      steps = steps - 1;
-      if (steps > 0) { resume(()) }
-    }
-  }
-}
 ```
 
 ## Rejection Sampling
@@ -219,8 +205,8 @@ region _ {
 For easier usage, we define a wrapper to be used for rejection sampling:
 
 ```
-def rejectionSampling[R] { program: () => R / { sample, observe } }: Unit / { random, Emit[R] } = {
-  def loop(): Unit / Emit[R] = {
+def rejectionSampling[R] { program: () => R / { sample, observe } }: Unit / { random, emit[R] } = {
+  def loop(): Unit / emit[R] = {
     with handleSample
     with handleRejection
     with handleObserve
@@ -245,7 +231,7 @@ def sliceSamplingAlgo[R]() { program: () => R / weight } = {
     if (prob1 < prob0) { do weight(prob1 / prob0) }
     (result1, prob1)
   }
-  def loop(result: R, prob: Probability): Unit / Emit[R] = {
+  def loop(result: R, prob: Probability): Unit / emit[R] = {
     do emit(result)
     val (result1, prob1) = step(result, prob)
     loop(result1, prob1)
@@ -330,9 +316,9 @@ def metropolisHastingsAlgo[A] { program: () => A / { sample, weight } } = {
   val ((result0, trace0), prob0) = handleWeight {
     with handleSample
     with handleTracing
-    program()  
+    program()
   }
-  def loop(result: A, trace: Trace, prob: Probability): Unit / Emit[A] = {
+  def loop(result: A, trace: Trace, prob: Probability): Unit / emit[A] = {
     do emit(result)
     val ((result1, trace1), prob1) =
     handleSample {
@@ -392,11 +378,11 @@ def metropolisHastingsSingleSiteAlgo[A] {program: () => A / { sample, weight } }
     with handleTracing
     program()
   }
-  def loop(result: A, trace: Trace, prob: Probability): Unit / Emit[A] = {
+  def loop(result: A, trace: Trace, prob: Probability): Unit / emit[A] = {
     do emit(result)
     val ((result1, trace1), prob1) = handleSample {
       with handleRejection
-      metropolisStepSingleSite(prob, trace) { trace => 
+      metropolisStepSingleSite(prob, trace) { trace =>
         with handleWeight
         with handleReusingTrace(trace)
         program()
@@ -413,18 +399,18 @@ def metropolisHastingsSingleSiteAlgo[A] {program: () => A / { sample, weight } }
 In order to make it easier to use these algorithms without having to call the various effect handlers, we constructed wrappers for the algorithms implemented previously.
 
 ```
-def sliceSampling[R](n: Int) { program: () => R / { sample, observe } }: Unit / { random, Emit[R] } = {
+def sliceSampling[R](n: Int) { program: () => R / { sample, observe } }: Unit / { random, emit[R] } = {
   with handleSample
   with sliceSamplingAlgo[R]
   with handleObserve
   program()
 }
-def metropolisHastings[R](n: Int) { program: () => R / { sample, observe } }: Unit / { random, Emit[R] } = {
+def metropolisHastings[R](n: Int) { program: () => R / { sample, observe } }: Unit / { random, emit[R] } = {
   with metropolisHastingsAlgo[R]
   with handleObserve
   program()
 }
-def metropolisHastingsSingleSite[R](n: Int) { program: () => R / { sample, observe } }: Unit / { random, Emit[R] } = {
+def metropolisHastingsSingleSite[R](n: Int) { program: () => R / { sample, observe } }: Unit / { random, emit[R] } = {
   with metropolisHastingsSingleSiteAlgo[R]
   with handleObserve
   program()
@@ -620,7 +606,7 @@ def progression(p: Population): Population / sample = {
 }
 ```
 
-Next, given a population and a positive-rate of COVID-like test, we gauge how likely it is that the positive-rate was observed assuming the test result is distributed according to a Beta distribution. 
+Next, given a population and a positive-rate of COVID-like test, we gauge how likely it is that the positive-rate was observed assuming the test result is distributed according to a Beta distribution.
 Formally, we compute $\text{Beta}(pr \mid I, 100)$ where $I$ is the number of infected individuals in the predicted population.
 If it is unlikely, the predicted population will be rejected and another one will be proposed.
 

@@ -33,7 +33,7 @@ class Reachable(
         process(block)
         stack = before
 
-      case binding: Expr => process(binding)
+      case expr: Expr => process(expr)
       case binding: Stmt => process(binding)
     }
   }
@@ -56,7 +56,7 @@ class Reachable(
     b match {
       case Block.BlockVar(id, annotatedTpe, annotatedCapt) => process(id)
       case Block.BlockLit(tparams, cparams, vparams, bparams, body) => process(body)
-      case Block.Unbox(pure) => process(pure)
+      case Block.Unbox(expr) => process(expr)
       case Block.New(impl) => process(impl)
     }
 
@@ -65,10 +65,16 @@ class Reachable(
       // Do NOT process `block` here, since this would mean the definition is used
       process(body)(using defs + (id -> block))
     case Stmt.Let(id, tpe, binding, body) =>
-      // DO only process if impure, since we need to keep it in this case
-      // for its side effects
-      if (binding.capt.nonEmpty) { processDefinition(id, binding) }
+      // We would need to process the binding if it was impure,
+      // to keep it for its side effects; however, the binding is guaranteed to be pure
       process(body)(using defs + (id -> binding))
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      process(callee)
+      vargs.foreach(process)
+      bargs.foreach(process)
+      // TODO what to do here?
+      // process(body)(using defs + (id -> binding))
+      process(body)
     case Stmt.Return(expr) => process(expr)
     case Stmt.Val(id, tpe, binding, body) => process(binding); process(body)
     case Stmt.App(callee, targs, vargs, bargs) =>
@@ -102,15 +108,11 @@ class Reachable(
   }
 
   def process(e: Expr)(using defs: Definitions): Unit = e match {
-    case DirectApp(b, targs, vargs, bargs) =>
-      process(b)
-      vargs.foreach(process)
-      bargs.foreach(process)
-    case Pure.ValueVar(id, annotatedType) => process(id)
-    case Pure.Literal(value, annotatedType) => ()
-    case Pure.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
-    case Pure.Make(data, tag, targs, vargs) => process(tag); vargs.foreach(process)
-    case Pure.Box(b, annotatedCapture) => process(b)
+    case Expr.ValueVar(id, annotatedType) => process(id)
+    case Expr.Literal(value, annotatedType) => ()
+    case Expr.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
+    case Expr.Make(data, tag, targs, vargs) => process(tag); vargs.foreach(process)
+    case Expr.Box(b, annotatedCapture) => process(b)
   }
 
   def process(i: Implementation)(using defs: Definitions): Unit =

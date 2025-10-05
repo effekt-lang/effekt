@@ -2,7 +2,6 @@ package effekt
 package core
 package vm
 
-import effekt.core.vm.Computation.Reference
 import effekt.source.FeatureFlag
 
 import scala.annotation.tailrec
@@ -24,11 +23,13 @@ enum Value {
   // TODO this could also be Pointer(Array | Ref)
   case Array(array: scala.Array[Value])
   case Ref(ref: Reference)
+  case ByteArray(array: scala.Array[Byte])
   case Data(data: ValueType.Data, tag: Id, fields: List[Value])
   case Boxed(block: Computation)
 }
 object Value {
   def Int(v: Long): Value = Value.Literal(v)
+  def Byte(v: Byte): Value = Value.Literal(v)
   def Bool(b: Boolean): Value = Value.Literal(b)
   def Unit(): Value = Value.Literal(())
   def Double(d: scala.Double): Value = Value.Literal(d)
@@ -42,6 +43,7 @@ def inspect(v: Value): String = v match {
   case Value.Boxed(block) => block.toString
   case Value.Array(arr) => ???
   case Value.Ref(ref) => ???
+  case Value.ByteArray(arr) => ???
 }
 
 enum Computation {
@@ -239,6 +241,18 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
         case Stmt.Def(id, block, body) => State.Step(body, env.bind(id, eval(block, env)), stack, heap)
 
         case Stmt.Let(id, tpe, binding, body) => State.Step(body, env.bind(id, eval(binding, env)), stack, heap)
+
+        case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+          val result = env.lookupBuiltin(callee.id) match {
+            case Builtin(name, impl) =>
+              val arguments = vargs.map(a => eval(a, env))
+              instrumentation.builtin(name)
+              try { impl(runtime)(arguments) } catch { case e => sys error s"Cannot call ${callee} with arguments ${arguments.map {
+                case Value.Literal(l) => s"${l}: ${l.getClass.getName}\n${e.getMessage}"
+                case other => other.toString
+              }.mkString(", ")}" }
+            }
+          State.Step(body, env.bind(id, result), stack, heap)
 
         case Stmt.Return(expr) =>
           val v = eval(expr, env)
@@ -481,19 +495,9 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
   }
 
   def eval(e: Expr, env: Env): Value = e match {
-    case DirectApp(b, targs, vargs, Nil) => env.lookupBuiltin(b.id) match {
-      case Builtin(name, impl) =>
-        val arguments = vargs.map(a => eval(a, env))
-        instrumentation.builtin(name)
-        try { impl(runtime)(arguments) } catch { case e => sys error s"Cannot call ${b} with arguments ${arguments.map {
-          case Value.Literal(l) => s"${l}: ${l.getClass.getName}\n${e.getMessage}"
-          case other => other.toString
-        }.mkString(", ")}" }
-    }
-    case DirectApp(b, targs, vargs, bargs) => ???
-    case Pure.ValueVar(id, annotatedType) => env.lookupValue(id)
-    case Pure.Literal(value, annotatedType) => Value.Literal(value)
-    case Pure.PureApp(x, targs, vargs) => env.lookupBuiltin(x.id) match {
+    case Expr.ValueVar(id, annotatedType) => env.lookupValue(id)
+    case Expr.Literal(value, annotatedType) => Value.Literal(value)
+    case Expr.PureApp(x, targs, vargs) => env.lookupBuiltin(x.id) match {
       case Builtin(name, impl) =>
         val arguments = vargs.map(a => eval(a, env))
         instrumentation.builtin(name)
@@ -502,12 +506,12 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           case other => other.toString
         }.mkString(", ")}" }
     }
-    case Pure.Make(data, tag, targs, vargs) =>
+    case Expr.Make(data, tag, targs, vargs) =>
       val result: Value.Data = Value.Data(data, tag, vargs.map(a => eval(a, env)))
       instrumentation.allocate(result)
       result
 
-    case Pure.Box(b, annotatedCapture) => Value.Boxed(eval(b, env))
+    case Expr.Box(b, annotatedCapture) => Value.Boxed(eval(b, env))
   }
 
   def run(main: Id, m: ModuleDecl): Unit = {

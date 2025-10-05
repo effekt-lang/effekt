@@ -12,23 +12,22 @@ extern llvm """
   declare void @c_yield(%Stack)
 """
 
-extern async def spawn(task: Task[Unit]): Unit =
+extern def spawn(task: Task[Unit]) at async: Unit =
   js "$effekt.capture(k => { setTimeout(() => k($effekt.unit), 0); return $effekt.run(${task}) })"
   llvm """
     call void @c_yield(%Stack %stack)
-    %unboxed = call ccc %Neg @coercePosNeg(%Pos ${task})
-    call void @run(%Neg %unboxed)
+    call void @run(%Pos ${task})
     ret void
   """
 
-extern async def yield(): Unit =
+extern def yield() at async: Unit =
   js "$effekt.capture(k => setTimeout(() => k($effekt.unit), 0))"
   llvm """
     call void @c_yield(%Stack %stack)
     ret void
   """
 
-extern async def abort(): Nothing =
+extern def abort() at async: Nothing =
   js "$effekt.capture(k => undefined)"
   llvm """
     call void @eraseStack(%Stack %stack)
@@ -55,14 +54,14 @@ extern llvm """
   declare void @c_promise_await(%Pos, %Neg)
 """
 
-extern async def await[T](promise: Promise[T]): T =
+extern def await[T](promise: Promise[T]) at async: T =
   js "$effekt.capture(k => ${promise}.promise.then(k))"
   llvm """
     call void @c_promise_await(%Pos ${promise}, %Stack %stack)
     ret void
   """
 
-extern async def resolve[T](promise: Promise[T], value: T): Unit =
+extern def resolve[T](promise: Promise[T], value: T) at async: Unit =
   js "$effekt.capture(k => { ${promise}.resolve(${value}); return k($effekt.unit) })"
   llvm """
     call void @c_promise_resolve(%Pos ${promise}, %Pos ${value}, %Stack %stack)
@@ -80,7 +79,7 @@ namespace promise {
     }
   """
 
-  extern io def make[T](): Promise[T] =
+  extern def make[T]() at io: Promise[T] =
     js "promise$make()"
     llvm """
       %promise = call %Pos @c_promise_make()

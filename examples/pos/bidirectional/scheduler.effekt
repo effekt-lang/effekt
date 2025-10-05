@@ -18,12 +18,12 @@ def scheduler { prog: => Unit / Process } = region this {
   }
   try { prog() } with Process {
     def yield() = {
-      queue = queue.pushFront(fun() { resume(()) })
+      queue = queue.pushFront(box { resume(()) })
     }
     def fork() /* {{() => Unit} => Unit} => Unit */ = {
       queue = queue
-        .pushFront(fun() { resume { {prog: () => Unit} => prog() /* FIX do abort() */ } })
-        .pushFront(fun() { resume { {prog: () => Unit} => () } })
+        .pushFront(box { resume { {prog: () => Unit} => prog() /* FIX do abort() */ } })
+        .pushFront(box { resume { {prog: () => Unit} => () } })
     }
     def exit() /* Nothing => Unit */ = ()
   }

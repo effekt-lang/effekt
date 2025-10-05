@@ -127,15 +127,13 @@ case class Info(
   // we use Maybe[Unit] instead of Boolean to have position info for validation errors
   isPrivate: Maybe[Unit],
   isExtern: Maybe[Unit],
-  // TODO this should be moved from the Info to extern functions, once we changed the syntax
-  externCapture: Option[CaptureSet]
 ) {
-  def isEmpty = doc.isEmpty && isPrivate.isEmpty && isExtern.isEmpty && externCapture.isEmpty
+  def isEmpty = doc.isEmpty && isPrivate.isEmpty && isExtern.isEmpty
   def nonEmpty = !isEmpty
 }
 
 object Info {
-  def empty(span: Span) = Info(None, Maybe.None(span), Maybe.None(span), None)
+  def empty(span: Span) = Info(None, Maybe.None(span), Maybe.None(span))
 }
 
 /**
@@ -398,11 +396,11 @@ export SpannedOps._
  */
 enum Def extends Definition {
 
-  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, info: Info, span: Span)
+  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], captures: Maybe[CaptureSet], ret: Maybe[Effectful], body: Stmt, info: Info, span: Span)
   case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, info: Info, span: Span)
   case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, info: Info, span: Span)
   case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, info: Info, span: Span)
-  case DefDef(id: IdDef, annot: Maybe[BlockType], block: Term, info: Info, span: Span)
+  case DefDef(id: IdDef, captures: Maybe[CaptureSet], annot: Maybe[BlockType], block: Term, info: Info, span: Span)
 
   case NamespaceDef(id: IdDef, definitions: List[Def], info: Info, span: Span)
 
@@ -425,8 +423,8 @@ enum Def extends Definition {
    */
   case ExternType(id: IdDef, tparams: Many[Id], info: Info, span: Span)
 
-  case ExternDef(capture: CaptureSet, id: IdDef,
-                 tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Effectful,
+  case ExternDef(id: IdDef,
+                 tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], captures: CaptureSet, ret: Effectful,
                  bodies: List[ExternBody], info: Info, span: Span) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType, info: Info, span: Span)
@@ -533,7 +531,7 @@ enum Term extends Tree {
   case Do(effect: Option[TypeRef], id: IdRef, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span) extends Term, Reference
 
   /**
-   * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
+   * A call to either an expression, i.e., `(box { () => ... })()`; or a named function, i.e., `foo()`
    */
   case Call(target: CallTarget, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span)
 

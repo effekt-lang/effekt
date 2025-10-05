@@ -45,10 +45,17 @@ object BindSubexpressions {
     }
 
     case Stmt.Let(id, tpe, binding, body) => transform(binding) match {
-      case Bind(Pure.ValueVar(x, _), bindings) =>
+      case Bind(Expr.ValueVar(x, _), bindings) =>
         Binding(bindings, transform(body)(using alias(id, x, env)))
       case Bind(other, bindings) =>
         Binding(bindings, Stmt.Let(id, tpe, other, transform(body)))
+    }
+
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => delimit {
+      for {
+        vs <- transformExprs(vargs)
+        bs <- transformBlocks(bargs)
+      } yield Stmt.ImpureApp(id, transform(callee), targs.map(transform), vs, bs, transform(body))
     }
 
     case Stmt.App(callee, targs, vargs, bargs) => delimit {
@@ -123,22 +130,17 @@ object BindSubexpressions {
   def transform(id: Id)(using env: Env): Id = env.getOrElse(id, id)
 
   def transform(e: Expr)(using Env): Bind[ValueVar | Literal] = e match {
-    case Pure.ValueVar(id, tpe) => pure(ValueVar(transform(id), transform(tpe)))
-    case Pure.Literal(value, tpe) => pure(Pure.Literal(value, transform(tpe)))
+    case Expr.ValueVar(id, tpe) => pure(ValueVar(transform(id), transform(tpe)))
+    case Expr.Literal(value, tpe) => pure(Expr.Literal(value, transform(tpe)))
 
-    case Pure.Make(data, tag, targs, vargs) => transformExprs(vargs) { vs =>
-      bind(Pure.Make(data, tag, targs, vs))
+    case Expr.Make(data, tag, targs, vargs) => transformExprs(vargs) { vs =>
+      bind(Expr.Make(data, tag, targs, vs))
     }
-    case DirectApp(f, targs, vargs, bargs) => for {
+    case Expr.PureApp(f, targs, vargs) => for {
       vs <- transformExprs(vargs);
-      bs <- transformBlocks(bargs);
-      res <- bind(DirectApp(f, targs.map(transform), vs, bs))
+      res <- bind(Expr.PureApp(f, targs.map(transform), vs))
     } yield res
-    case Pure.PureApp(f, targs, vargs) => for {
-      vs <- transformExprs(vargs);
-      res <- bind(Pure.PureApp(f, targs.map(transform), vs))
-    } yield res
-    case Pure.Box(block, capt) => transform(block) { b => bind(Pure.Box(b, transform(capt))) }
+    case Expr.Box(block, capt) => transform(block) { b => bind(Expr.Box(b, transform(capt))) }
   }
 
   def transformExprs(es: List[Expr])(using Env): Bind[List[ValueVar | Literal]] = traverse(es)(transform)

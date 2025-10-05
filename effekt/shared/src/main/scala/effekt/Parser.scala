@@ -367,7 +367,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       spaces()
 
       // potential documentation for the file / module
-      documented(parseCaptures = true) { info =>
+      documented { info =>
         val (name, moduleInfo, unusedInfo) = peek.kind match {
           case `module` =>
             consume(`module`)
@@ -417,12 +417,12 @@ class Parser(tokens: Seq[Token], source: Source) {
     some(ident, `/`).mkString("/") labelled "module name"
 
   def isToplevel: Boolean = peek.kind match {
-    case `val` | `fun` | `def` | `type` | `effect` | `namespace` | `interface` | `type` | `record` | `var` | `include` | `extern` => true
+    case `val` | `def` | `type` | `effect` | `namespace` | `interface` | `type` | `record` | `var` | `include` | `extern` => true
     case _ => false
   }
 
   def toplevel(): Def =
-    documented(parseCaptures = true): doc =>
+    documented: doc =>
       toplevelDef(doc)
 
   private def toplevelDef(info: Info): Def =
@@ -444,7 +444,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
 
   private def toplevelDefs(): List[Def] =
-    documented(parseCaptures = true): info =>
+    documented: info =>
       toplevelDefs(info)
 
   private def toplevelDefs(info: Info): List[Def] =
@@ -476,7 +476,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   }
 
   def definition(): Def =
-    documented(parseCaptures = true): info =>
+    documented: info =>
       peek.kind match {
         case `val`       => valDef(info)
         case `def`       => defDef(info)
@@ -499,7 +499,7 @@ class Parser(tokens: Seq[Token], source: Source) {
    *   i.e. val (l, r) = point(); ...
    */
   def valStmt(inBraces: Boolean): Stmt =
-    documented(parseCaptures = false): info =>
+    documented: info =>
       val startPos = peek.start
       def simpleLhs() = backtrack {
         // Make sure there's either a `:` or `=` next, otherwise goto `matchLhs`
@@ -542,15 +542,16 @@ class Parser(tokens: Seq[Token], source: Source) {
   def defDef(info: Info): Def =
     val id = consume(`def`) ~> idDef()
 
-    def isBlockDef: Boolean = peek(`:`) || peek(`=`)
+    def isBlockDef: Boolean = peek(`:`) || peek(`=`) || peek(`at`)
 
     if isBlockDef then
       // (: <VALUETYPE>)? `=` <EXPR>
-      DefDef(id, maybeBlockTypeAnnotation(), `=` ~> expr(), info, span())
+      DefDef(id, maybeCaptureSet(), maybeBlockTypeAnnotation(), `=` ~> expr(), info, span())
     else
       // [...](<PARAM>...) {...} `=` <STMT>>
       val (tps, vps, bps) = params()
-      FunDef(id, tps, vps, bps, maybeReturnAnnotation(), `=` ~> stmts(), info, span())
+      val captures = maybeCaptureSet()
+      FunDef(id, tps, vps, bps, captures, maybeReturnAnnotation(), `=` ~> stmts(), info, span())
 
 
   // right now: data type definitions (should be renamed to `data`) and type aliases
@@ -566,7 +567,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     RecordDef(`record` ~> idDef(), maybeTypeParams(), valueParams(), info, span())
 
   def constructor(): Constructor =
-    documented(parseCaptures = false): info =>
+    documented: info =>
       Constructor(idDef(), maybeTypeParams(), valueParams(), info.onlyDoc().doc, span()) labelled "constructor"
 
   // On the top-level both
@@ -614,7 +615,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def interfaceDef(info: Info, keyword: TokenKind = `interface`): InterfaceDef =
     InterfaceDef(keyword ~> idDef(), maybeTypeParams(),
-      `{` ~> manyUntil(documented(parseCaptures = false) { opInfo => { `def` ~> operation(opInfo) } labelled "} or another operation declaration" }, `}`) <~ `}`, info, span())
+      `{` ~> manyUntil(documented { opInfo => { `def` ~> operation(opInfo) } labelled "} or another operation declaration" }, `}`) <~ `}`, info, span())
 
   def namespaceDef(info: Info): Def =
     consume(`namespace`)
@@ -626,7 +627,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     else { semi(); NamespaceDef(id, definitions(), info.onlyDoc(), span()) }
 
   def externDef(): Def =
-    documented(parseCaptures = true): info =>
+    documented: info =>
       externDef(info)
 
   def externDef(info: Info): Def =
@@ -638,10 +639,8 @@ class Parser(tokens: Seq[Token], source: Source) {
       case `include`   => externInclude(info)
       case `def`       => externFun(info)
       // extern """..."""
-      case s: Str      => externString(info)
+      case _           => externString(info)
       // extern js """..."""
-      case t if info.externCapture.nonEmpty => fail(s"Expected string literal but got ${explain(t)}")
-      case _           => fail("Expected an extern definition")
     }
 
   // reinterpret a parsed capture as a feature flag
@@ -676,17 +675,17 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def externString(info: Info): Def =
     val posAfterExtern = pos()
-    val ff = featureFlagFromCapture(info.externCapture)
+    val ff = maybeFeatureFlag()
     expect("string literal") {
       case Str(contents, _) => ExternInclude(ff, "", Some(contents), IdDef("", Span(source, posAfterExtern, posAfterExtern, Synthesized)), info, span())
     }
 
   def externFun(info: Info): Def =
-    ((pos() <~ `def`) ~ idDef() ~ params() ~ (returnAnnotation() <~ `=`)) match {
-      case posn ~ id ~ (tps, vps, bps) ~ ret =>
+    (`def` ~> idDef() ~ params() ~ maybeCaptureSet() ~ (returnAnnotation() <~ `=`)) match {
+      case id ~ (tps, vps, bps) ~ cpt ~ ret =>
         val bodies = manyWhile(externBody(), isExternBodyStart)
-        val capture = info.externCapture.getOrElse(defaultCapture(Span(source, posn, posn, Synthesized)))
-        ExternDef(capture, id, tps, vps, bps, ret, bodies, info, span())
+        val captures = cpt.getOrElse(defaultCapture(cpt.span.synthesized))
+        ExternDef(id, tps, vps, bps, captures, ret, bodies, info, span())
     }
 
   def externBody(): ExternBody =
@@ -717,9 +716,9 @@ class Parser(tokens: Seq[Token], source: Source) {
     nonterminal:
       Spanned(p, span())
 
-  def documented[T](parseCaptures: Boolean)(p: Info => T): T =
+  def documented[T](p: Info => T): T =
     nonterminal:
-      p(info(parseCaptures))
+      p(info())
 
   private def maybeDocumentation(): Doc =
     peek.kind match {
@@ -741,8 +740,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   // /// some documentation
   // private
   // extern
-  // {io}
-  def info(parseCaptures: Boolean): Info =
+  def info(): Info =
     nonterminal {
       val doc = maybeDocumentation()
       val isPrivate = nonterminal {
@@ -751,9 +749,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       val isExtern = nonterminal {
         when(`extern`) { Maybe.Some((), span()) } { Maybe.None(span()) }
       }
-      val externCapture = if (parseCaptures) maybeExternCapture() else None
-
-      Info(doc, isPrivate, isExtern, externCapture)
+      Info(doc, isPrivate, isExtern)
     }
 
   def noInfo(): Info = Info.empty(Span(source, pos(), pos(), Synthesized))
@@ -767,25 +763,12 @@ class Parser(tokens: Seq[Token], source: Source) {
     def onlyDoc(): Info =
       if (info.isExtern.nonEmpty) softFail("Modifier `extern` is not allowed", position, position) // , info.isExtern.span.from, info.isExtern.span.to)
       if (info.isPrivate.nonEmpty) softFail("Modifier `private` is not allowed", position, position) // , info.isExtern.span.from, info.isExtern.span.to)
-      info.externCapture.foreach { captures => softFail("Specifying captures is not allowed", position, position) } // , captures.span.from, captures.span.to) }
 
       info
   }
 
-  def maybeExternCapture(): Option[CaptureSet] =
-    nonterminal:
-      val posn = pos()
-      if peek(`{`) || peek(`pure`) || isVariable then Some(externCapture())
-      else None
-
   def defaultCapture(span: Span): CaptureSet =
     CaptureSet(List(IdRef(List("effekt"), "io", span)), span)
-
-  def externCapture(): CaptureSet =
-    nonterminal:
-      if peek(`{`) then captureSet()
-      else if peek(`pure`) then `pure` ~> CaptureSet(Nil, span())
-      else CaptureSet(List(idRef()), span())
 
   def path(): String =
     nonterminal:
@@ -798,6 +781,10 @@ class Parser(tokens: Seq[Token], source: Source) {
       expect("string literal") {
         case Str(s, _) => s
       }
+
+  def maybeCaptureSet(): Maybe[CaptureSet] =
+    nonterminal:
+      when(`at`) { Maybe.Some(captureSet(), span()) } { Maybe.None(span()) }
 
   def maybeValueTypeAnnotation(): Option[ValueType] =
     nonterminal:
@@ -871,16 +858,6 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
       Box(captures, expr, span())
   }
-
-  // TODO deprecate
-  def funExpr(): Term =
-    nonterminal:
-      val blockLiteral = `fun` ~> BlockLiteral(Nil, valueParams().unspan, Nil, braces { stmts(inBraces = true) }, span())
-      Box(Maybe.None(Span(source, pos(), pos(), Synthesized)), blockLiteral, blockLiteral.span.synthesized)
-
-  def unboxExpr(): Term =
-    nonterminal:
-      Unbox(`unbox` ~> expr(), span())
 
   def newExpr(): Term =
     nonterminal:
@@ -1202,8 +1179,6 @@ class Parser(tokens: Seq[Token], source: Source) {
     case `try`    => tryExpr()
     case `region` => regionExpr()
     case `box`    => boxExpr()
-    case `unbox`  => unboxExpr()
-    case `fun`    => funExpr()
     case `new`    => newExpr()
     case `do`                => doExpr()
     case _ if isString       => templateString()
@@ -1597,7 +1572,11 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def captureSet(): CaptureSet =
     nonterminal:
-      CaptureSet(many(idRef, `{`, `,` , `}`).unspan, span())
+      peek.kind match {
+        case `{` => CaptureSet(many(idRef, `{`, `,` , `}`).unspan, span())
+        case _ if isIdRef => CaptureSet(List(idRef()), span())
+        case t => fail("Expected a capture set.", t)
+        }
 
   // Generic utility functions
   // -------------------------
