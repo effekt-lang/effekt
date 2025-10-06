@@ -3,6 +3,7 @@ package core.frontend
 
 import core.frontend
 import core.Type.*
+import effekt.source.Span
 
 
 object typer {
@@ -50,17 +51,18 @@ object typer {
       Typed(core.Return(expr2), exprTpe, exprCapt)
 
     case frontend.Stmt.Hole() =>
-      Typed(core.Hole(), TBottom, Set.empty)
+      // TODO: Supply a reasonable span here
+      Typed(core.Hole(Span.missing), TBottom, Set.empty)
   }
 
   def typecheck(block: frontend.Block)(using Context): Typed[core.Block, core.BlockType] = ???
 
-  def typecheck(expr: frontend.Pure)(using Context): Typed[core.Pure, core.ValueType] = expr match {
+  def typecheck(expr: frontend.Pure)(using Context): Typed[core.Expr, core.ValueType] = expr match {
     case frontend.Pure.ValueVar(id) =>
       val tpe = valueTypeOf(id)
-      Typed(core.Pure.ValueVar(resolveTerm(id), tpe), tpe, Set.empty)
+      Typed(core.Expr.ValueVar(resolveTerm(id), tpe), tpe, Set.empty)
     case frontend.Pure.Literal(value, annotatedType) =>
-      Typed(core.Pure.Literal(value, annotatedType), annotatedType, Set.empty)
+      Typed(core.Expr.Literal(value, annotatedType), annotatedType, Set.empty)
     case frontend.Pure.Make(tag, targs, vargs) => ???
     case frontend.Pure.PureApp(b, targs, vargs) => ???
     case frontend.Pure.Box(block) =>

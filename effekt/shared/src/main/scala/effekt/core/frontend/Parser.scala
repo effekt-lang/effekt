@@ -23,7 +23,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   var position: Int = 0
 
   extension(token: Token) def failOnErrorToken: Token = token.kind match {
-    case TokenKind.Error(err) => fail(err.msg)
+    case TokenKind.Error(err) => fail(err.message)
     case _ => token
   }
 
@@ -273,7 +273,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     case _ => pureExpr()
   }
 
-  def isPure: Boolean = isLiteral || peek(`make`) || peek(`pure`) || peek(`box`) || isVariable
+  def isPure: Boolean = isLiteral || peek(`make`) || peek(`box`) || isVariable
 
 
   // Pure Expressions
@@ -284,9 +284,6 @@ class Parser(tokens: Seq[Token], source: Source) {
       // TODO throw error if bargs are not empty
       case `make` => (skip() ~> ident() ~ arguments()) match {
         case id ~ (targs, vargs, bargs) => Make(id, targs, vargs)
-      }
-      case `pure` => (skip() ~> ident() ~ arguments()) match {
-        case id ~ (targs, vargs, bargs) => PureApp(id, targs, vargs)
       }
       case `box` => skip() ~> Box(block())
       case _ if isVariable => variable()
@@ -370,7 +367,8 @@ class Parser(tokens: Seq[Token], source: Source) {
   // ------
 
   def block(): Block = peek.kind match {
-    case `unbox` => Block.Unbox(`unbox` ~> pureExpr())
+    // TODO: What do we do with tokens not defined in the main Effekt lexer?
+    // case `unbox` => Block.Unbox(`unbox` ~> pureExpr())
     case `new` => Block.New(`new` ~> implementation())
     case `{` => blocklit()
     case Ident(id) => Block.BlockVar(ident())
@@ -603,8 +601,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
 def shouldParse(input: String)(tpe: Type): Unit =
   val source = StringSource(input)
-  val lexer = effekt.lexer.Lexer(source)
-  val tokens = lexer.run()
+  val tokens = effekt.lexer.Lexer.lex(source)
   val parser = new core.frontend.Parser(tokens, source)
   try {
     val result = parser.valueType()
@@ -617,8 +614,7 @@ def shouldParse(input: String)(tpe: Type): Unit =
 
 def shouldParse(input: String)(decl: Declaration): Unit =
   val source = StringSource(input)
-  val lexer = effekt.lexer.Lexer(source)
-  val tokens = lexer.run()
+  val tokens = effekt.lexer.Lexer.lex(source)
   val parser = new core.frontend.Parser(tokens, source)
   try {
     val result = parser.declaration()
@@ -631,8 +627,7 @@ def shouldParse(input: String)(decl: Declaration): Unit =
 
 def shouldParseProgram(input: String): Unit =
   val source = StringSource(input)
-  val lexer = effekt.lexer.Lexer(source)
-  val tokens = lexer.run()
+  val tokens = effekt.lexer.Lexer.lex(source)
   val parser = new core.frontend.Parser(tokens, source)
   try {
     val result = parser.program()
@@ -716,8 +711,7 @@ def testParser2 =
 //      |c
 //      |""".stripMargin)
 
-  val lexer = effekt.lexer.Lexer(source)
-  val tokens = lexer.run()
+  val tokens = effekt.lexer.Lexer.lex(source)
   val parser = new core.frontend.Parser(tokens, source)
   try {
     val result = parser.stmts()
