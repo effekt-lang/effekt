@@ -978,7 +978,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     case NeutralStmt.Var(id, init, body) =>
       val capt = id.capt match {
         case cs if cs.size == 1 => cs.head
-        case _ => ??? // TODO
+        case _ => sys error "Variable needs to have a single capture"
       }
       Stmt.Var(id.id, embedExpr(init), capt, embedStmt(body))
     case NeutralStmt.Hole(span) =>
