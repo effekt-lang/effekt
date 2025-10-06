@@ -987,10 +987,13 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
 
   def orExpr(): Term = infix(andExpr, `||`)
-  def andExpr(): Term = infix(eqExpr, `&&`)
-  def eqExpr(): Term = infix(relExpr, `===`, `!==`)
-  def relExpr(): Term = infix(addExpr, `<=`, `>=`, `<`, `>`)
-  def addExpr(): Term = infix(mulExpr, `++`, `+`, `-`)
+  def andExpr(): Term = infix(pipeExpr, `&&`)
+  def pipeExpr(): Term = infix(bitOrExpr, `<|`, `|>`)
+  def bitOrExpr(): Term = infix(bitAndExpr, TokenKind.`|`)
+  def bitAndExpr(): Term = infix(eqExpr, `&`)
+  def eqExpr(): Term = infix(rangeExpr, `===`, `!==`, `<=`, `>=`, `<`, `>`)
+  def rangeExpr(): Term = infix(addExpr, `..`, `...`, TokenKind.`~`, TokenKind.`~>`, TokenKind.`<~`)
+  def addExpr(): Term = infix(mulExpr, `++`, `--`, `+`, `-`, `<<`, `>>`, `^`, `^^`)
   def mulExpr(): Term = infix(callExpr, `*`, `/`)
 
   inline def infix(nonTerminal: () => Term, ops: TokenKind*): Term =
@@ -1034,15 +1037,36 @@ class Parser(tokens: Seq[Token], source: Source) {
     case `&&` => "infixAnd"
     case `===` => "infixEq"
     case `!==` => "infixNeq"
-    case `<` => "infixLt"
-    case `>` => "infixGt"
+    case `<`  => "infixLt"
+    case `>`  => "infixGt"
     case `<=` => "infixLte"
     case `>=` => "infixGte"
-    case `+` => "infixAdd"
-    case `-` => "infixSub"
-    case `*` => "infixMul"
-    case `/` => "infixDiv"
+    case `+`  => "infixAdd"
+    case `+=` => "infixAdd"
+    case `-`  => "infixSub"
+    case `-=` => "infixSub"
+    case `*`  => "infixMul"
+    case `*=` => "infixMul"
+    case `/`  => "infixDiv"
+    case `/=` => "infixDiv"
     case `++` => "infixConcat"
+    case `>>` => "infixShr"
+    case `<<` => "infixShl"
+    case `--` => "infixRemove"
+
+    case TokenKind.`~`  => "infixTilde"
+    case TokenKind.`~>` => "infixTildeRight"
+    case TokenKind.`<~` => "infixTildeLeft"
+    case TokenKind.`|`  => "infixPipe"
+    case TokenKind.`&`  => "infixAmp"
+
+    case `<|`  => "infixPipeLeft"
+    case `|>`  => "infixPipeRight"
+    case `..`  => "infixDotDot"
+    case `...` => "infixDotDotDot"
+    case `^^`  => "infixHatHat"
+    case `^`   => "infixHat"
+
     case _ => sys.error(s"Internal compiler error: not a valid operator ${op}")
   }
 
@@ -1064,18 +1088,32 @@ class Parser(tokens: Seq[Token], source: Source) {
 
       while (peek(`.`) || isArguments)
         peek.kind match {
-          // member selection (or method call)
+          // member selection, postfix acess, or method call
           //   <EXPR>.<NAME>
           // | <EXPR>.<NAME>( ... )
           case `.` =>
+            val dot = peek
             consume(`.`)
-            val member = idRef()
-            // method call
-            if (isArguments) {
-              val (targs, vargs, bargs) = arguments()
-              e = Term.MethodCall(e, member, targs, vargs, bargs, span())
-            } else {
-              e = Term.MethodCall(e, member, Nil, Nil, Nil, span())
+            peek.kind match {
+              // <EXPR>.[<EXPR>, ...]
+              case `[` =>
+                val bracket = peek
+                val arguments = some(expr, `[`, `,`, `]`)
+                e = MethodCall(e,
+                  IdRef(Nil, "postfixAccess", Span(source, dot.start, bracket.end, Synthesized)),
+                  Nil, arguments.unspan.map(a => ValueArg.Unnamed(a)), Nil,
+                  Span(source, e.span.from, arguments.span.to, Synthesized)
+                )
+
+              case _ =>
+                val member = idRef()
+                // method call
+                if (isArguments) {
+                  val (targs, vargs, bargs) = arguments()
+                  e = Term.MethodCall(e, member, targs, vargs, bargs, span())
+                } else {
+                  e = Term.MethodCall(e, member, Nil, Nil, Nil, span())
+                }
             }
 
           // function call
@@ -1186,7 +1224,20 @@ class Parser(tokens: Seq[Token], source: Source) {
     case _ if isVariable     =>
       peek(1).kind match {
         case _: Str => templateString()
-        case _ => variable()
+        case _ =>
+          val lhs = variable()
+          peek.kind match {
+            case `+=` | `-=` | `*=` | `/=` =>
+              val op = next()
+              val operand = expr()
+              val rhs = Call(
+                IdTarget(IdRef(Nil, opName(op.kind), op.span(source).synthesized)),
+                Nil, List(ValueArg.Unnamed(lhs), ValueArg.Unnamed(operand)), Nil,
+                Span(source, lhs.span.from, operand.span.to, Synthesized)
+              )
+              Assign(lhs.id, rhs, span())
+            case _ => lhs
+          }
       }
     case _ if isHole         => hole()
     case _ if isTupleOrGroup => tupleOrGroup()
@@ -1335,7 +1386,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   private def isUnitLiteral: Boolean = peek(`(`) && peek(1, `)`)
 
   def isVariable: Boolean = isIdRef
-  def variable(): Term =
+  def variable(): Term.Var =
     nonterminal:
       Var(idRef(), span())
 
