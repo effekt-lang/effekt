@@ -5,6 +5,9 @@
 #include <stdint.h>
 #include <inttypes.h>
 
+extern void* cMalloc(uint8_t size);
+
+
 /** We represent bytearrays like positive types.
  *
  *  - The field `tag` contains the size
@@ -21,7 +24,8 @@
 void c_bytearray_erase_noop(void *envPtr) { (void)envPtr; }
 
 struct Pos c_bytearray_new(const Int size) {
-  void *objPtr = malloc(sizeof(struct Header) + size);
+  int object_size = sizeof(struct Header) + size;
+  void *objPtr = cMalloc(object_size);
   struct Header *headerPtr = objPtr;
   *headerPtr = (struct Header) { .rc = 0, .eraser = c_bytearray_erase_noop, };
   return (struct Pos) {
