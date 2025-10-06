@@ -717,5 +717,134 @@ struct Pos c_promise_make() {
     return (struct Pos) { .tag = 0, .obj = promise, };
 }
 
+// Subprocesses
+// ------------
+
+struct Pos c_spawn_options_default() {
+    uv_process_options_t* options = (uv_process_options_t*)malloc(sizeof(uv_process_options_t));
+    memset(options, 0, sizeof(uv_process_options_t));
+    uv_stdio_container_t* stdio = (uv_stdio_container_t*)malloc(3*sizeof(uv_stdio_container_t));
+    stdio[0].flags = UV_INHERIT_FD;
+    stdio[0].data.fd = 0;
+    stdio[1].flags = UV_INHERIT_FD;
+    stdio[1].data.fd = 1;
+    stdio[2].flags = UV_INHERIT_FD;
+    stdio[2].data.fd = 2;
+    options->stdio = stdio;
+    options->stdio_count = 3;
+    return (struct Pos) { .tag = 0, .obj = options, };
+}
+
+static void subproc_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
+    (void)handle;
+    buf->base = malloc(suggested_size);
+    buf->len = suggested_size;
+}
+
+typedef struct {
+  struct Pos handler;
+} subproc_stream_cb_closure_t;
+void subproc_stream_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
+  subproc_stream_cb_closure_t* clos = (subproc_stream_cb_closure_t*)(stream->data);
+  if(nread >= 0) {
+    struct Pos chunk = c_bytearray_construct(nread, (uint8_t*)(buf->base));
+    sharePositive(clos->handler);
+    sharePositive(chunk);
+    run_Pos(clos->handler, chunk);
+  } else {
+    uv_read_stop(stream);
+    erasePositive(clos->handler);
+    free(clos);
+  }
+}
+struct Pos subproc_options_on_stream(struct Pos opts, size_t id, uv_stdio_flags flags, struct Pos callback) {
+    uv_process_options_t* options = (uv_process_options_t*)opts.obj;
+
+    options->stdio[id].flags = UV_CREATE_PIPE | flags;
+    uv_pipe_t* pipe = (uv_pipe_t*)malloc(sizeof(uv_pipe_t));
+
+    uv_pipe_init(uv_default_loop(), pipe, 1);
+    options->stdio[id].data.stream = (uv_stream_t*)pipe;
+
+    subproc_stream_cb_closure_t* clos = (subproc_stream_cb_closure_t*)malloc(sizeof(subproc_stream_cb_closure_t));
+    clos->handler = callback;
+    pipe->data = clos;
+
+    return opts;
+}
+struct Pos c_spawn_options_on_stdout(struct Pos opts, struct Pos callback) {
+  return subproc_options_on_stream(opts, 1, UV_WRITABLE_PIPE, callback);
+}
+struct Pos c_spawn_options_on_stderr(struct Pos opts, struct Pos callback) {
+  return subproc_options_on_stream(opts, 2, UV_WRITABLE_PIPE, callback);
+}
+struct Pos c_spawn_options_pipe_stdin(struct Pos opts, struct Pos callback) {
+  return subproc_options_on_stream(opts, 0, UV_READABLE_PIPE, callback);
+}
+
+
+typedef struct {
+  char** args;
+  Stack k;
+} subproc_proc_data_t;
+void subproc_on_close(uv_handle_t* handle) {
+    free(handle);
+}
+void subproc_on_exit(uv_process_t* proc, int64_t exit_status, int term_signal) {
+    (void)term_signal; (void)exit_status;
+    subproc_proc_data_t* pd = (subproc_proc_data_t*)proc->data;
+    if (pd->args) {
+        for(int i = 0; pd->args[i] != NULL; i++) {
+            free(pd->args[i]);
+        }
+        free(pd->args);
+    }
+    Stack k = pd->k;
+    free(pd);
+    uv_close((uv_handle_t*)proc, subproc_on_close);
+    resume_Int(k, exit_status);
+}
+
+void c_spawn(struct Pos cmd, struct Pos args, struct Pos options, Stack stack) {
+    uv_process_options_t* opts = (uv_process_options_t*)options.obj;
+    uv_process_t* proc = (uv_process_t*)malloc(sizeof(uv_process_t));
+
+    // command
+    char* cmd_s = c_bytearray_into_nullterminated_string(cmd);
+    opts->file = cmd_s;
+
+    // args
+    int _argc = (int)((uint64_t*)args.obj)[2];
+    char** _args = (char**)malloc((2 + _argc) * sizeof(char*));
+    struct Pos* _argv = (struct Pos*)(((uint64_t*)args.obj) + 3);
+    _args[0] = cmd_s;
+    for(int i = 0; i < _argc; i++) {
+        _args[i + 1] = c_bytearray_into_nullterminated_string(_argv[i]);
+    }
+    erasePositive(args);
+    _args[_argc + 1] = NULL;
+    opts->args = _args;
+    // callback to free _args
+    opts->exit_cb = subproc_on_exit;
+    subproc_proc_data_t* pd = (subproc_proc_data_t*)malloc(sizeof(subproc_proc_data_t));
+    pd->args = _args;
+    pd->k = stack;
+    proc->data = pd;
+
+    // spawn process
+    int err = uv_spawn(uv_default_loop(), proc, opts);
+
+    if(opts->stdio[1].flags & UV_CREATE_PIPE)
+      uv_read_start((uv_stream_t*)(opts->stdio[1].data.stream), subproc_alloc_cb, subproc_stream_cb);
+    if(opts->stdio[2].flags & UV_CREATE_PIPE)
+      uv_read_start((uv_stream_t*)(opts->stdio[2].data.stream), subproc_alloc_cb, subproc_stream_cb);
+
+    erasePositive(options);
+    if(err) {
+        printf("%s\n", uv_strerror(err));
+        free(_args);
+        free(proc);
+    }
+}
 
 #endif
