@@ -365,14 +365,14 @@ object semantics {
   }
 
   def get(id: Id, ks: Stack): Addr = ks match {
-    case Stack.Empty => ??? // TODO
+    case Stack.Empty => sys error s"Should not happen: trying to lookup ${util.show(id)} in empty stack"
     case Stack.Reset(prompt, frame, next) => get(id, next)
     case Stack.Var(id1, curr, init, frame, next) if id == id1.id => curr
     case Stack.Var(id1, curr, init, frame, next) => get(id, next)
   }
   
   def put(id: Id, value: Addr, ks: Stack): Stack = ks match {
-    case Stack.Empty => ??? // TODO
+    case Stack.Empty => sys error s"Should not happen: trying to put ${util.show(id)} in empty stack"
     case Stack.Reset(prompt, frame, next) => Stack.Reset(prompt, frame, put(id, value, next))
     case Stack.Var(id1, curr, init, frame, next) if id == id1.id => Stack.Var(id1, value, init, frame, next)
     case Stack.Var(id1, curr, init, frame, next) => Stack.Var(id1, curr, init, frame, put(id, value, next))
