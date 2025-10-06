@@ -716,7 +716,7 @@ object Transformer {
     emit(Load(returnAddressName, returnAddressType, returnAddressPointer, StackPointer));
   }
 
-  val initializeMemory = ConstantGlobal("initializeMemory");
+  val initializeMemory = ConstantGlobal("cInitializeMemory");
   val newObject = ConstantGlobal("newObject");
   val objectEnvironment = ConstantGlobal("objectEnvironment");
 
