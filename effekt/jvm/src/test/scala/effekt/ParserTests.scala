@@ -266,6 +266,7 @@ class ParserTests extends munit.FunSuite {
 
   test("Simple expressions") {
     parseExpr("42")
+    parseExpr("0x42")
     parseExpr("f")
     parseExpr("f(a)")
     parseExpr("f(a, 42)")
