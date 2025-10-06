@@ -204,6 +204,38 @@ class NewNormalizerTests extends CoreTests {
 
     assertAlphaEquivalentToplevels(actual, expected, List("run"), List("foo"))
   }
+
+  test("Mutable variable use that could be constant folded") {
+    val input =
+      """
+        |def run(): Int = {
+        |    var x = 41
+        |    x = x + 1
+        |    return x
+        |}
+        |
+        |def main() = println(run())
+        |""".stripMargin
+
+    val expected =
+      parse("""
+              |module input
+              |
+              |extern {} def infixAdd(x: Int, y: Int): Int = vm ""
+              |
+              |def run() = {
+              |   let x1 = 41
+              |   let x2 = 1
+              |   let x3 = (infixAdd: (Int, Int) => Int @ {})(x1: Int, x2: Int)
+              |   return x3: Int
+              |}
+              |""".stripMargin
+      )
+
+    val (mainId, actual) = normalize(input)
+
+    assertAlphaEquivalentToplevels(actual, expected, List("run"), List("infixAdd"))
+  }
 }
 
 /**
