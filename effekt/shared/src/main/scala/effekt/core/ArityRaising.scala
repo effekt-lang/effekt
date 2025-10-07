@@ -40,17 +40,15 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
           Make(ValueType.Data(name, targs), test, List(), List(ValueVar(x, tpe1), ValueVar(y, tpe2))), transform(body))
           Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, transformedBody)) 
 
-        case s => 
-          println("broken")
-          println(s)
+        case _ => 
           toplevel
       }
       
     case Toplevel.Def(id, block) => 
-      // println("\n\nid:")
-      // println(doIndentation(id.toString))
-      // println("block:")
-      // println(doIndentation(block.toString))
+      println("\n\nid:")
+      println(doIndentation(id.toString))
+      println("block:")
+      println(doIndentation(block.toString))
       Toplevel.Def(id, transform(block))
     case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, tpe, transform(binding))
   }
@@ -67,10 +65,10 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
     case Block.New(impl) => block
   }
 
-  def transform(stmt: Stmt)(using Context, DeclarationContext): Stmt = stmt match {
+  def transform(stmt: Stmt)(using C: Context, DC: DeclarationContext): Stmt = stmt match {
     case Stmt.Def(id, block, rest) =>
       // here too
-      Stmt.Def(id, transform(block), transform(rest))
+     Stmt.Def(id, transform(block), transform(rest))
     case Stmt.Let(id, tpe, binding, rest) =>
       Stmt.Let(id, tpe, transform(binding), transform(rest))
     case Stmt.Return(expr) =>
@@ -78,9 +76,30 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.Val(id, tpe, binding, body) =>
       Stmt.Val(id, tpe, transform(binding), transform(body))
     case Stmt.App(callee, targs, vargs, bargs) =>
-      println(doIndentation(stmt.toString()))
-      print(doIndentation(vargs.head.tpe.toString()))
-      Stmt.App(transform(callee), targs, vargs map transform, bargs map transform) // possible args
+      callee match {
+        case BlockVar(id, BlockType.Function(List(), List(), List(ValueType.Data(name, List())), List(), returnTpe), annotatedCapt) => 
+          println("id")
+          println(id)
+          println("tpe")
+
+          println("capt")
+          println(annotatedCapt)
+          DC.findData(name) match {
+            case Some(Data(_, List(), List(Constructor(test, List(), List(Field(x, tpe1), Field(y, tpe2)))))) => 
+              val transformedVargs = List(ValueVar(x, tpe1), ValueVar(y, tpe2))
+              val res = Stmt.App(BlockVar(id, BlockType.Function(List(), List(), List(tpe1, tpe2), List(), returnTpe), annotatedCapt), targs, transformedVargs, bargs)
+              println("res $$$$###")
+              println(res)
+              println(vargs)
+              res
+            
+            case _ => 
+              stmt
+
+          }
+
+        case _ => stmt
+      }
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
       Stmt.Invoke(transform(callee), method, methodTpe, targs, vargs map transform, bargs map transform) // possible args
     case Stmt.If(cond, thn, els) =>
@@ -113,25 +132,44 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
     while (i < input.length) {
       input(i) match {
         case '(' =>
-          sb.append("(\n")
-          indent += 1
-          sb.append("  " * indent)
+          // Look ahead to see if it's a short List(...) with no commas
+          val closing = input.indexOf(')', i)
+          val inside = if (closing > i) input.substring(i + 1, closing) else ""
+          if (inside.contains(',') || inside.contains('(') || inside.contains(')')) {
+            sb.append("(\n")
+            indent += 1
+            sb.append("  " * indent)
+          } else {
+            sb.append('(')
+          }
+
         case ')' =>
-          sb.append("\n")
-          indent -= 1
-          sb.append("  " * indent)
-          sb.append(")")
+          val prev = if (i > 0) input(i - 1) else ' '
+          if (prev == '(' || prev.isLetterOrDigit) {
+            sb.append(')')
+          } else {
+            sb.append("\n")
+            indent -= 1
+            sb.append("  " * indent)
+            sb.append(")")
+          }
+
         case ',' =>
           sb.append(",\n")
           sb.append("  " * indent)
+
         case c if c.isWhitespace =>
-          // skip extra whitespace
+          // skip
+
         case c =>
           sb.append(c)
       }
       i += 1
     }
+
     sb.toString
   }
+
+
 
 }
