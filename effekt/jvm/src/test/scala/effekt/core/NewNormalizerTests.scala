@@ -39,18 +39,30 @@ class NewNormalizerTests extends CoreTests {
                                       actual: ModuleDecl,
                                       expected: ModuleDecl,
                                       defNames: List[String],
-                                      externNames: List[String]
+                                      externNames: List[String] = List(),
+                                      declNames: List[String] = List(),
+                                      ctorNames: List[(String, String)] = List()
                                     )(using Location): Unit = {
 
     def findDef(mod: ModuleDecl, name: String) =
       mod.definitions.find(_.id.name.name == name)
         .getOrElse(throw new NoSuchElementException(s"Definition '$name' not found"))
 
+    def findDecl(mod: ModuleDecl, name: String)=
+      mod.declarations.find(_.id.name.name == name)
+        .getOrElse(throw new NoSuchElementException(s"Declaration '$name' not found"))
+
+    def findCtor(data: Data, name: String) =
+      data.constructors.find(_.id.name.name == name)
+        .getOrElse(throw new NoSuchElementException(
+          s"Constructor '$name' not found in data '${data.id.name.name}'"
+        ))
+
     def findExternDef(mod: ModuleDecl, name: String) =
       mod.externs.collect { case d@Extern.Def(_, _, _, _, _, _, _, _) => d }
         .find(_.id.name.name == name)
         .getOrElse(throw new NoSuchElementException(s"Extern def '$name' not found"))
-
+    
     val externPairs: List[(Id, Id)] =
       externNames.flatMap { name =>
         val canon = Id(name)
@@ -60,13 +72,43 @@ class NewNormalizerTests extends CoreTests {
         )
       }
 
+    val declPairs: List[(Id, Id)] =
+      declNames.flatMap { name =>
+        val canon = Id(name)
+        List(
+          findDecl(actual, name).id -> canon,
+          findDecl(expected, name).id -> canon
+        )
+      }
+
+    val ctorPairs: List[(Id, Id)] =
+      ctorNames.flatMap { case (dataName, ctorName) =>
+        val canon = Id(ctorName)
+        val actualData = findDecl(actual, dataName) match {
+          case d: Data => d
+          case _: Interface => throw new IllegalArgumentException(
+            s"Expected data declaration for '$dataName', found interface"
+          )
+        }
+        val expectedData = findDecl(expected, dataName) match {
+          case d: Data => d
+          case _: Interface => throw new IllegalArgumentException(
+            s"Expected data declaration for '$dataName', found interface"
+          )
+        }
+        List(
+          findCtor(actualData, ctorName).id -> canon,
+          findCtor(expectedData, ctorName).id -> canon
+        )
+      }
+
     def compareOneDef(name: String): Unit = {
       val aDef = findDef(actual, name)
       val eDef = findDef(expected, name)
 
       val canon = Id(name)
       val pairs: Map[Id, Id] =
-        (List(aDef.id -> canon, eDef.id -> canon) ++ externPairs).toMap
+        (List(aDef.id -> canon, eDef.id -> canon) ++ externPairs ++ declPairs ++ ctorPairs).toMap
 
       val renamer = TestRenamer(Names(defaultNames), "$", List(pairs))
       shouldBeEqual(
@@ -131,7 +173,7 @@ class NewNormalizerTests extends CoreTests {
   test("box passed to extern") {
     val input =
       """
-        |extern {io} def foo(f: => Int at {}): Int = vm"42"
+        |extern def foo(f: => Int at {}) at {io}: Int = vm"42"
         |
         |def run(): Int = {
         |    val f = box {
@@ -157,8 +199,7 @@ class NewNormalizerTests extends CoreTests {
               |        return x: Int
               |    }
               |    let f_box: => Int at {} = box {} (f: => Int @ {})
-              |    let x: Int =
-              |      ! (foo: (=> Int at {}) => Int @ {io})(f_box: => Int at {})
+              |    let ! x = (foo: (=> Int at {}) => Int @ {io})(f_box: => Int at {})
               |
               |    return x: Int
               |}
@@ -175,7 +216,7 @@ class NewNormalizerTests extends CoreTests {
   test("unbox blocked by extern") {
     val input =
       """
-        |extern {} def foo(): => Int at {} = vm"42"
+        |extern def foo() at {}: => Int at {} = vm"42"
         |
         |def run(): Int = {
         |    val x = foo()()
@@ -205,7 +246,9 @@ class NewNormalizerTests extends CoreTests {
     assertAlphaEquivalentToplevels(actual, expected, List("run"), List("foo"))
   }
 
-  test("Mutable variable use that could be constant folded") {
+  // One might expect the following example to constant fold.
+  // However, extern definitions such as infixAdd are currently always neutral.
+  test("Extern infixAdd blocks constant folding of mutable variable") {
     val input =
       """
         |def run(): Int = {
@@ -235,6 +278,50 @@ class NewNormalizerTests extends CoreTests {
     val (mainId, actual) = normalize(input)
 
     assertAlphaEquivalentToplevels(actual, expected, List("run"), List("infixAdd"))
+  }
+
+  test("Mutable Peano Nats turn into let-bindings") {
+    val input =
+      """
+        |type Nat {
+        |  Z()
+        |  S(pred: Nat)
+        |}
+        |
+        |def toInt(n: Nat): Int = n match {
+        |  case Z() => 0
+        |  case S(pred) => 1 + toInt(pred)
+        |}
+        |
+        |def run(): Nat = {
+        |    var x = Z()
+        |    x = S(x)
+        |    return x
+        |}
+        |
+        |def main() = println(run().toInt())
+        |""".stripMargin
+
+    val expected =
+      parse("""
+              |module input
+              |
+              |type Nat {
+              |  Z()
+              |  S(pred: Nat)
+              |}
+              |
+              |def run() = {
+              |   let x1 = make Nat Z()
+              |   let x2 = make Nat S(x1: Nat)
+              |   return x2: Nat
+              |}
+              |""".stripMargin
+      )
+
+    val (mainId, actual) = normalize(input)
+
+    assertAlphaEquivalentToplevels(actual, expected, List("run"), List(), List("Nat"), List(("Nat", "Z"), ("Nat", "S")))
   }
 }
 
