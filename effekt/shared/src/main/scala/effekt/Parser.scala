@@ -300,8 +300,8 @@ class Parser(tokens: Seq[Token], source: Source) {
      case Var(id, varSpan) =>
        val tgt = IdTarget(id)
        Return(Call(tgt, Nil, Nil, (BlockLiteral(Nil, vparams, bparams, body, body.span.synthesized)) :: Nil, varSpan), withSpan.synthesized)
-     case Do(effect, id, targs, vargs, bargs, doSpan) =>
-      Return(Do(effect, id, targs, vargs, bargs :+ BlockLiteral(Nil, vparams, bparams, body, body.span.synthesized), doSpan), withSpan.synthesized)
+     case Do(id, targs, vargs, bargs, doSpan) =>
+      Return(Do(id, targs, vargs, bargs :+ BlockLiteral(Nil, vparams, bparams, body, body.span.synthesized), doSpan), withSpan.synthesized)
      case term =>
        Return(Call(ExprTarget(term), Nil, Nil, (BlockLiteral(Nil, vparams, bparams, body, body.span.synthesized)) :: Nil, term.span.synthesized), withSpan.synthesized)
   }
@@ -830,7 +830,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   def doExpr(): Term =
     nonterminal:
       (`do` ~> idRef()) ~ arguments() match {
-        case id ~ (targs, vargs, bargs) => Do(None, id, targs, vargs, bargs, span())
+        case id ~ (targs, vargs, bargs) => Do(id, targs, vargs, bargs, span())
       }
 
   /*
@@ -1290,7 +1290,6 @@ class Parser(tokens: Seq[Token], source: Source) {
           val target = id.getOrElse(IdRef(Nil, "s", id.span.synthesized))
           val doLits = strs.map { s =>
             Do(
-              None,
               IdRef(Nil, "literal", s.span.synthesized),
               Nil,
               List(ValueArg.Unnamed(StringLit(s.unspan, s.span))),
@@ -1300,7 +1299,6 @@ class Parser(tokens: Seq[Token], source: Source) {
           }
           val doSplices = args.map { arg =>
             Do(
-              None,
               IdRef(Nil, "splice", arg.span.synthesized),
               Nil,
               List(ValueArg.Unnamed(arg.unspan)),

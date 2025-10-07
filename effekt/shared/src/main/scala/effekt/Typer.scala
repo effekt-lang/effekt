@@ -187,7 +187,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case c @ source.Select(receiver, field, _) =>
         checkOverloadedFunctionCall(c, field, Nil, List(source.ValueArg.Unnamed(receiver)), Nil, expected)
 
-      case c @ source.Do(effect, op, targs, vargs, bargs, _) =>
+      case c @ source.Do(op, targs, vargs, bargs, _) =>
         // (1) first check the call
         val Result(tpe, effs) = checkOverloadedFunctionCall(c, op, targs map { _.resolveValueType }, vargs, bargs, expected)
         // (2) now we need to find a capability as the receiver of this effect operation
