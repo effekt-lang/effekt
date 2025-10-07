@@ -127,17 +127,11 @@ enum TokenKind {
   case `with`
   case `case`
   case `do`
-  case `fun`
   case `match`
   case `def`
-  case `module`
-  case `import`
-  case `export`
   case `extern`
-  case `include`
   case `record`
   case `box`
-  case `unbox`
   case `return`
   case `region`
   case `resource`
@@ -145,7 +139,12 @@ enum TokenKind {
   case `and`
   case `is`
   case `namespace`
-  case `pure`
+
+  case `module`
+  case `import`
+  case `export`
+  case `include`
+  case `private`
 }
 
 object TokenKind {
@@ -176,9 +175,9 @@ object TokenKind {
 
   val keywords = Vector(
     `let`, `true`, `false`, `val`, `var`, `if`, `else`, `while`, `type`, `effect`, `interface`,
-    `try`, `with`, `case`, `do`, `fun`, `match`, `def`, `module`, `import`, `export`, `extern`,
-    `include`, `record`, `box`, `unbox`, `return`, `region`, `resource`, `new`, `and`, `is`,
-    `namespace`, `pure`
+    `try`, `with`, `case`, `do`, `match`, `def`, `module`, `import`, `export`, `extern`,
+    `include`, `record`, `box`, `return`, `region`, `resource`, `new`, `and`, `is`,
+    `namespace`, `private`
   )
 
   val keywordMap: immutable.HashMap[String, TokenKind] =
@@ -441,12 +440,12 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('$', _) =>
         advanceWith(TokenKind.Error(LexerError.UnknownChar('$')))
 
+      case ('}', '>') => advance2With(TokenKind.`}>`)
       case ('}', _) if isAtInterpolationBoundary =>
         interpolationDepths.pop()
         depthTracker.braces -= 1
         resumeStringNext = true // remember to resume with a string next!
         advanceWith(TokenKind.`}$`)
-      case ('}', '>') => advance2With(TokenKind.`}>`)
       case ('}', _) =>
         depthTracker.braces -= 1
         advanceWith(TokenKind.`}`)

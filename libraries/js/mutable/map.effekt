@@ -5,13 +5,13 @@ import array
 // A mutable map, backed by a JavaScript Map.
 extern type Map[K, V]
 
-extern pure def emptyMap[K, V](): Map[K, V] =
+extern def emptyMap[K, V]() at {}: Map[K, V] =
   js "new Map()"
 
 def get[K, V](m: Map[K, V], key: K): Option[V] =
   undefinedToOption(m.unsafeGet(key))
 
-extern pure def unsafeGet[K, V](m: Map[K, V], key: K): V =
+extern def unsafeGet[K, V](m: Map[K, V], key: K) at {}: V =
   js "${m}.get(${key})"
 
 extern js """
@@ -21,11 +21,11 @@ function map$update(m, key, value) {
 }
 """
 
-extern io def update[K, V](m: Map[K, V], key: K, value: V): Unit =
+extern def update[K, V](m: Map[K, V], key: K, value: V) at io: Unit =
   js "map$update(${m}, ${key}, ${value})"
 
-extern pure def values[K, V](map: Map[K, V]): Array[V] =
+extern def values[K, V](map: Map[K, V]) at {}: Array[V] =
   js "Array.from(${map}.values())"
 
-extern pure def keys[K, V](map: Map[K, V]): Array[K] =
+extern def keys[K, V](map: Map[K, V]) at {}: Array[K] =
   js "Array.from(${map}.keys())"

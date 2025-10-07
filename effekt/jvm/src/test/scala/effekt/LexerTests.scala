@@ -60,6 +60,8 @@ class LexerTests extends munit.FunSuite {
     assertSuccess("\"${}}}}\"")
     assertSuccess("\"}\"")
     assertSuccess("\" before ${ \"${ 42 }\" } after\"")
+
+    assertSuccess("<\"${ <{ 5 }> }\">")
   }
 
   test("numbers") {

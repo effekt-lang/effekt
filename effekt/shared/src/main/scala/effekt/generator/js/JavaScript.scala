@@ -19,6 +19,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
 
   override def prettyIR(source: Source, stage: Stage)(using C: Context): Option[Document] = stage match {
     case Stage.Core if C.config.optimize() => Optimized(source).map { (_, _, res) => core.PrettyPrinter.format(res) }
+    case Stage.CPS => CPSTransformed(source).map { (_, _, _, res) => cps.PrettyPrinter.format(res) }
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
     case Stage.Machine => None
     case Stage.Target => CompileLSP(source).map { pretty }
@@ -26,6 +27,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
 
   override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
     case Stage.Core => Core(source).map { res => res.core }
+    case Stage.CPS => None
     case Stage.Machine => None
     case Stage.Target => CompileLSP(source)
   }
@@ -44,7 +46,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
 
   lazy val Optimized = allToCore(Core) andThen Aggregate andThen Optimizer andThen DropBindings map {
     case input @ CoreTransformed(source, tree, mod, core) =>
-      val mainSymbol = Context.checkMain(mod)
+      val mainSymbol = Context.ensureMainExists(mod)
       val mainFile = path(mod)
       (mainSymbol, mainFile, core)
   }

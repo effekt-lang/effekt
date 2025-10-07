@@ -1,0 +1,35 @@
+
+import io
+import io/error
+import io/network
+import stream
+import bytearray
+
+def main() = {
+  with on[IOError].panic
+
+  val listener = bind("127.0.0.1", 8080);
+  spawn(box {
+    with on[IOError].panic
+    listen(listener, box { connection =>
+      with on[IOError].panic
+      shutdown(listener)
+      streaming(connection) {
+        with boundary
+        val request = do read[ByteArray]()
+        do emit[ByteArray](request)
+      }
+      close(connection)
+  })});
+
+  val connection = connect("127.0.0.1", 8080)
+  streaming(connection) {
+    with boundary
+    val request = "abcd".fromString
+    do emit[ByteArray](request)
+    val response = do read[ByteArray]()
+    println(response.toString)
+  }
+  close(connection)
+}
+

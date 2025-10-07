@@ -31,8 +31,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(t: Block): String =
     pretty(toDoc(t), 60).layout
 
-  def format(e: Expr): String =
-    pretty(toDoc(e), 60).layout
+  def format(p: Expr): String =
+    pretty(toDoc(p), 60).layout
 
   val show: PartialFunction[Any, String] = {
     case m: ModuleDecl => format(m).layout
@@ -41,7 +41,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case t: ValueType  => format(t)
     case t: BlockType  => format(t)
     case b: Block      => format(b)
-    case e: Expr       => format(e)
+    case p: Expr       => format(p)
     case x: Id         => x.show
   }
 
@@ -73,7 +73,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case FeatureFlag.Default(span) => "default"
   }
 
-  def toDoc(t: Template[Pure]): Doc =
+  def toDoc(t: Template[Expr]): Doc =
     /// TODO
     hsep(t.args.map(toDoc), comma)
 
@@ -101,12 +101,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case PureApp(b, targs, vargs)  => toDoc(b) <> argsToDoc(targs, vargs, Nil)
     case Make(data, tag, targs, vargs)    => "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
-    case DirectApp(b, targs, vargs, bargs) => toDoc(b) <> argsToDoc(targs, vargs, bargs)
 
     case Box(b, capt) => parens("box" <+> toDoc(b))
   }
 
-  def argsToDoc(targs: List[core.ValueType], vargs: List[core.Pure], bargs: List[core.Block]): Doc =
+  def argsToDoc(targs: List[core.ValueType], vargs: List[core.Expr], bargs: List[core.Block]): Doc =
     val targsDoc = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))
     //val cargsDoc = if cargs.isEmpty then emptyDoc else brackets(cargs.map(toDoc))
     val vargsDoc = if vargs.isEmpty && !bargs.isEmpty then emptyDoc else parens(vargs.map(toDoc))
@@ -145,7 +144,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(c: Constructor): Doc = c match {
-    case Constructor(id, fields) => toDoc(id) <> parens(fields.map(toDoc))
+    case Constructor(id, tparams, fields) => toDoc(id) <> brackets(tparams.map(toDoc)) <> parens(fields.map(toDoc))
   }
   def toDoc(f: Field): Doc = f match {
     case Field(name, tpe) => toDoc(name) <> ":" <+> toDoc(tpe)
@@ -180,6 +179,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case Let(id, _, binding, rest) =>
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
+        toDocStmts(rest)
+
+    case ImpureApp(id, callee, targs, vargs, bargs, rest) =>
+      "let" <+> "!" <+> toDoc(id) <+> "=" <+> toDoc(callee) <> argsToDoc(targs, vargs, bargs) <> line <>
         toDocStmts(rest)
 
     case Return(e) =>
@@ -235,8 +238,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       val d = default.map { body => space <> "else" <+> braces(nest(line <> toDocStmts(body))) }.getOrElse { emptyDoc }
       toDoc(sc) <+> "match" <+> cs <> d
 
-    case Hole() =>
-      "<>"
+    case Hole(span) =>
+      "<>" <+> s"// @ ${span.range.from.format}"
   }
 
   def toDoc(tpe: core.BlockType): Doc = tpe match {

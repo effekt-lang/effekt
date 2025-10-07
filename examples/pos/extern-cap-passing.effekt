@@ -1,5 +1,5 @@
 effect IOException(msg: String): Nothing
-extern io def three: Nothing =
+extern def three at io: Nothing =
   js "${box { (msg: String) => do IOException(msg) }}('oops')}"
 
 def main() = {

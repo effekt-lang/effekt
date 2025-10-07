@@ -1,6 +1,7 @@
 module set
 
 import map
+import stream
 
 /// Ordered finite immutable set, backed by balanced binary trees of logarithmic depth.
 record Set[A](tree: internal::Tree[A, Unit], compare: (A, A) => Ordering at {})
@@ -232,3 +233,25 @@ def intersection[A](s1: Set[A], s2: Set[A], compare: (A, A) => Ordering at {}): 
 /// O(???)
 def intersection[A](s1: Set[A], s2: Set[A]): Set[A] =
   s1.intersection(s2, s1.compare)
+
+
+// Streaming
+// ---------
+
+/// Turns a `set` into a producer of a push stream
+/// by emitting each contained *in order*.
+def each[A](set: Set[A]): Unit / emit[A] =
+  set.foreach { x => do emit(x) }
+
+def collect[A](compare: (A, A) => Ordering at {}) { stream: () => Unit / emit[A] }: Set[A] =
+  returning::collect[A, Unit](compare){stream}.second
+
+namespace returning {
+  def collect[A, R](compare: (A, A) => Ordering at {}) { stream: () => R / emit[A] }: (R, Set[A]) =
+    try {
+      (stream(), empty(compare))
+    } with emit[A] { (v) =>
+      val (r, set) = resume(());
+      (r, set.insert(v))
+    }
+}

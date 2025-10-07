@@ -1,0 +1,211 @@
+import examples/benchmarks/runner
+
+record Gen(coordslist: List[(Int, Int)])
+
+def int_to_string(i: Int): String = {
+  if (i < 0) {
+    "-" ++ int_to_string(abs(i))
+  } else {
+    i match {
+      case 0 => "0"
+      case 1 => "1"
+      case 2 => "2"
+      case 3 => "3"
+      case 4 => "4"
+      case 5 => "5"
+      case 6 => "6"
+      case 7 => "7"
+      case 8 => "8"
+      case 9 => "9"
+      case _ => int_to_string(i / 10) ++ int_to_string(mod(i, 10))
+    }
+  }
+}
+
+def pair_eq(p1: (Int, Int), p2: (Int, Int)): Bool = {
+  (p1, p2) match {
+    case ((fst1, fst2), (snd1, snd2)) => (fst1 == snd1) && (fst2 == snd2)
+  }
+}
+
+
+
+// List Functions
+
+def fold[A](xs: List[A], acc: List[A]) { f: (List[A], A) => List[A] }: List[A] =
+  xs match {
+    case Nil() => acc
+    case Cons(h, t) => t.fold(f(acc, h)) {f}
+  }
+
+def revonto(x: List[(Int, Int)], y: List[(Int, Int)]): List[(Int, Int)] =
+  fold(x, y) { (t, h) => Cons(h, t) }
+
+def collect_accum(sofar: List[(Int, Int)], xs: List[(Int, Int)]) { f: ((Int, Int)) => List[(Int, Int)] }: List[(Int, Int)] = {
+  xs match {
+    case Nil() => sofar
+    case Cons(p, xs) => collect_accum(revonto(sofar, f(p)), xs) { f }
+  }
+}
+
+def collect(l: List[(Int, Int)]) { f: Tuple2[Int, Int] => List[(Int, Int)] }: List[(Int, Int)] = collect_accum(Nil(), l) { f }
+
+def append[A](l1: List[A], l2: List[A]): List[A] =
+  l1 match {
+    case Nil() => l2
+    case Cons(hd, tl) => Cons(hd, append(tl, l2))
+  }
+
+def map[A, B](l: List[A]) { f: A => B }: List[B] = l match {
+  case Nil() => Nil()
+  case Cons(a, as) => Cons(f(a), as.map {f})
+}
+
+def exists[A](l: List[A]) { f: A => Bool }: Bool =
+  l match {
+    case Nil() => false
+    case Cons(a, as) => if (f(a)) {
+      true
+    } else {
+      exists(as) { f }
+    }
+  }
+
+def length[A](l: List[A]): Int = {
+  l match {
+    case Nil() => 0
+    case Cons(_, as) => 1 + length(as)
+  }
+}
+
+def member(l: List[(Int, Int)], p: (Int, Int)): Bool =
+  exists(l) { x => pair_eq(p, x) }
+
+def filter[A](l: List[A]) { f: A => Bool }: List[A] =
+  l match {
+    case Nil() => Nil()
+    case Cons(a, as) => if (f(a)) {
+      Cons(a, filter(as) { f })
+    } else {
+      filter(as) { f }
+    }
+  }
+
+def diff(x: List[(Int, Int)], y: List[(Int, Int)]): List[(Int, Int)] =
+  filter(x) { p => not(member(y, p)) }
+
+// Gen Functions
+
+def alive(g: Gen): List[(Int, Int)] =
+  g match { case Gen(livecoords) => livecoords }
+
+def neighbours(p: (Int, Int)): List[(Int, Int)] =
+  p match {
+    case (fst, snd) =>
+      Cons((fst - 1, snd - 1),
+        Cons((fst - 1, snd),
+          Cons((fst - 1, snd + 1),
+            Cons((fst, snd - 1),
+              Cons((fst, snd + 1),
+                Cons((fst + 1, snd - 1),
+                  Cons((fst + 1, snd),
+                    Cons((fst + 1, snd + 1),
+                      Nil()))))))))
+  }
+
+def twoorthree(n: Int): Bool =
+  (n == 2) || (n == 3)
+
+def collect_neighbours(xover: List[(Int, Int)], x3: List[(Int, Int)], x2: List[(Int, Int)], x1: List[(Int, Int)], xs: List[(Int, Int)]): List[(Int, Int)] =
+  xs match {
+    case Nil() => diff(x3, xover)
+    case Cons(a, x) => if (member(xover, a)) {
+      collect_neighbours(xover, x3, x2, x1, x)
+    } else if (member(x3, a)) {
+      collect_neighbours(Cons(a, xover), x3, x2, x1, x)
+    } else if (member(x2, a)) {
+      collect_neighbours(xover, Cons(a, x3), x2, x1, x)
+    } else if (member(x1, a)) {
+      collect_neighbours(xover, x3, Cons(a, x2), x1, x)
+    } else {
+      collect_neighbours(xover, x3, x2, Cons(a, x1), x)
+    }
+  }
+
+def occurs3(l: List[(Int, Int)]): List[(Int, Int)] =
+  collect_neighbours(Nil(), Nil(), Nil(), Nil(), l)
+
+def nextgen(gen: Gen): Gen = {
+  val living = alive(gen)
+  def isalive(p: Tuple2[Int, Int]): Bool = member(living, p)
+  def liveneighbours(p: Tuple2[Int, Int]): Int = length(filter(neighbours(p)) { isalive })
+  val survivors = filter(living) { p => twoorthree(liveneighbours(p)) }
+  val newbrnlist = collect(living) { p => filter(neighbours(p)) { n => not(isalive(n)) } }
+  val newborn = occurs3(newbrnlist)
+  Gen(append(survivors, newborn))
+}
+
+def nthgen(g: Gen, i: Int): Gen =
+  if (i == 0) { g } else { nthgen(nextgen(g), i - 1) }
+
+def gun(): Gen = {
+  val r9 = Cons((9, 29), Cons((9, 30), Cons((9, 31), Cons((9, 32), Nil()))))
+  val r8 = Cons((8, 20), Cons((8, 28), Cons((8, 29), Cons((8, 30),
+    Cons((8, 31), Cons((8, 40), Cons((8, 41), r9)))))))
+  val r7 = Cons((7, 19), Cons((7, 21), Cons((7, 28), Cons((7, 31),
+    Cons((7, 40), Cons((7, 41), r8))))))
+  val r6 = Cons((6, 7), Cons((6, 8), Cons((6, 18), Cons((6, 22),
+    Cons((6, 23), Cons((6, 28), Cons((6, 29), Cons((6, 30),
+      Cons((6, 31), Cons((6, 36), r7))))))))))
+  val r5 = Cons((5, 7), Cons((5, 8), Cons((5, 18), Cons((5, 22),
+    Cons((5, 23), Cons((5, 29), Cons((5, 30), Cons((5, 31),
+      Cons((5, 32), Cons((5, 36), r6))))))))))
+  val r4 = Cons((4, 18), Cons((4, 22), Cons((4, 23), Cons((4, 32), r5))))
+  val r3 = Cons((3, 19), Cons((3, 21), r4))
+  val r2 = Cons((2, 20), r3)
+  Gen(r2)
+}
+
+def at_pos(coordlist: List[(Int, Int)], p: (Int, Int)): List[(Int, Int)] =
+  map(coordlist) { p1 => (p1, p) match {
+    case ((fst1, snd1), (fst2, snd2)) =>
+      (fst1 + fst2, snd1 + snd2)
+    }
+  }
+
+def center_line(): Int = 5
+
+def bail(): List[(Int, Int)] =
+  Cons((0, 0), Cons((0, 1), Cons((1, 0), Cons((1, 1), Nil()))))
+
+def shuttle(): List[(Int, Int)] = {
+  val r4 = Cons((4, 1), Cons((4, 0), Cons((4, 5), Cons((4, 6), Nil()))))
+  val r3 = Cons((3, 2), Cons((3, 3), Cons((3, 4), r4)))
+  val r2 = Cons((2, 1), Cons((2, 5), r3))
+  val r1 = Cons((1, 2), Cons((1, 4), r2))
+  Cons((0, 3), r1)
+}
+
+def non_steady(): Gen =
+  Gen(
+    append(append(
+      at_pos(bail(), (1, center_line())),
+      at_pos(bail(), (21, center_line()))),
+      at_pos(shuttle(), (6, center_line() - 2))))
+
+def go_gun(steps: Int): Gen =
+  nthgen(gun(), steps)
+
+def go_shuttle(steps: Int): Gen =
+  nthgen(non_steady(), steps)
+
+def go_loop(steps: Int) { go: Int => Gen }: Int =
+  alive(go(steps)).length
+
+def run(n: Int): Int = {
+  val gun_res = go_loop(n) { go_gun }
+  val shuttle_res = go_loop(n) { go_shuttle }
+  gun_res + shuttle_res
+}
+
+def main() = benchmark(13){run}

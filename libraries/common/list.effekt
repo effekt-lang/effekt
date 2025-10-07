@@ -3,6 +3,7 @@ module list
 import effekt
 import option
 import exception
+import stream
 
 /// Immutable linked list for finite sequences of elements.
 type List[A] {
@@ -167,9 +168,52 @@ def foreachIndex[A](list: List[A]){ f: (Int, A) {Control} => Unit }: Unit = {
 /// Map a function `f` over elements in a given list.
 ///
 /// O(N)
-def map[A, B](l: List[A]) { f: A => B } : List[B] = {
-  var acc = Nil[B]()
-  l.foreach { el => acc = Cons(f(el), acc) }
+def map[A, B](l: List[A]) { f: A => B }: List[B] = {
+  var acc: List[B] = Nil()
+  l.foreach { el =>
+    acc = Cons(f(el), acc)
+  }
+  acc.reverse
+}
+
+/// Map a function `f` over elements and their indices in a given list.
+///
+/// O(N)
+def mapWithIndex[A, B](l: List[A]) { f: (Int, A) => B }: List[B] = {
+  var acc: List[B] = Nil()
+  l.foreachIndex { (i, el) =>
+    acc = Cons(f(i, el), acc)
+  }
+  acc.reverse
+}
+
+/// Map a function `f` over elements in a given list,
+/// keeping only the elements for which the function returned `true`,
+/// discarding the elements for which the function returned `false`.
+///
+/// O(N)
+def filter[A](l: List[A]) { shouldKeep: A => Bool }: List[A] = {
+  var acc: List[A] = Nil()
+  l.foreach { a =>
+    if (shouldKeep(a)) {
+      acc = Cons(a, acc)
+    }
+  }
+  acc.reverse
+}
+
+/// Map a function `f` over elements and their indices in a given list,
+/// keeping only the elements for which the function returned `true`,
+/// discarding the elements for which the function returned `false`.
+///
+/// O(N)
+def filterWithIndex[A](l: List[A]) { shouldKeep: (Int, A) => Bool }: List[A] = {
+  var acc: List[A] = Nil()
+  l.foreachIndex { (i, a) =>
+    if (shouldKeep(i, a)) {
+      acc = Cons(a, acc)
+    }
+  }
   acc.reverse
 }
 
@@ -178,13 +222,28 @@ def map[A, B](l: List[A]) { f: A => B } : List[B] = {
 /// discarding the elements for which the function returned `None()`.
 ///
 /// O(N)
-def collect[A, B](l: List[A]) { f : A => Option[B] }: List[B] = {
-  var acc = Nil[B]()
+def collectSome[A, B](l: List[A]) { f : A => Option[B] }: List[B] = {
+  var acc: List[B] = Nil()
   l.foreach { a =>
-    val optB = f(a)
-    optB match {
-      case None() => ();
-      case Some(b) => acc = Cons(b, acc);
+    f(a) match {
+      case None() => ()
+      case Some(b) => acc = Cons(b, acc)
+    }
+  }
+  acc.reverse
+}
+
+/// Map a function `f` over elements and their indices in a given list,
+/// keeping only the elements for which the function returned `Some(...)`,
+/// discarding the elements for which the function returned `None()`.
+///
+/// O(N)
+def collectWithIndex[A, B](l: List[A]) { f: (Int, A) => Option[B] }: List[B] = {
+  var acc: List[B] = Nil()
+  l.foreachIndex { (i, a) =>
+    f(i, a) match {
+      case None() => ()
+      case Some(b) => acc = Cons(b, acc)
     }
   }
   acc.reverse
@@ -205,21 +264,55 @@ def flatMap[A, B](l: List[A]) { f : A => List[B] }: List[B] = {
 /// Check if predicate is true for all elements of the given list.
 ///
 /// O(N)
-def all[A](list: List[A]) { predicate: A => Bool }: Bool = {
+def all[A](list: List[A]) { predicate: A => Bool }: Bool =
   list match {
     case Cons(x, xs) => predicate(x) && all(xs) { predicate }
     case Nil() => true
   }
-}
 
 /// Check if predicate is true for at least one element of the given list.
 ///
 /// O(N)
-def any[A](list: List[A]) { predicate: A => Bool }: Bool = {
+def any[A](list: List[A]) { predicate: A => Bool }: Bool =
   list match {
     case Cons(x, xs) => predicate(x) || any(xs) { predicate }
     case Nil() => false
   }
+
+/// Check if the list contains the given `element`,
+/// comparing for equality with the given `eq` function.
+///
+/// O(N)
+def contains[A](list: List[A], element: A) { eq: (A, A) => Bool }: Bool =
+  list.any { x => x.eq(element) }
+
+/// Find the first index of the given `element`,
+/// comparing for equality with the given `eq` function.
+///
+/// O(N)
+def indexOf[A](list: List[A], element: A) { eq: (A, A) => Bool }: Option[Int] = {
+  var result = None()
+  list.foreachIndex { (i, a) {label} =>
+    if (element.eq(a)) {
+      result = Some(i)
+      label.break()
+    }
+  }
+  result
+}
+
+/// Find the last index of the given `element`,
+/// comparing for equality with the given `eq` function.
+///
+/// O(N)
+def lastIndexOf[A](list: List[A], element: A) { eq: (A, A) => Bool }: Option[Int] = {
+  var result = None()
+  list.foreachIndex { (i, a) {label} =>
+    if (element.eq(a)) {
+      result = Some(i)
+    }
+  }
+  result
 }
 
 /// Count how many elements of a list satisfy the given predicate.
@@ -297,10 +390,11 @@ def reverse[A](l: List[A]): List[A] = {
 /// ```
 ///
 /// O(|l|)
-def reverseOnto[A](l: List[A], other: List[A]): List[A] = l match {
-  case Nil() => other
-  case Cons(a, rest) => rest.reverseOnto(Cons(a, other))
-}
+def reverseOnto[A](l: List[A], other: List[A]): List[A] =
+  l match {
+    case Nil() => other
+    case Cons(a, rest) => rest.reverseOnto(Cons(a, other))
+  }
 
 /// Concatenate list `l` with list `other`:
 ///
@@ -347,7 +441,7 @@ def join[A](lists: List[List[A]]): List[A] = {
 /// ```
 ///
 /// O(N)
-def join[A](lists: List[List[A]], between: List[A]): List[A] = {
+def join[A](lists: List[List[A]], between: List[A]): List[A] =
   lists match {
     case Nil() => Nil()
     case Cons(firstList, restOfLists) =>
@@ -355,7 +449,6 @@ def join[A](lists: List[List[A]], between: List[A]): List[A] = {
         restOfLists.flatMap { list => between.append(list)}
       )
   }
-}
 
 /// Take the first `n` elements of a given list.
 ///
@@ -601,6 +694,40 @@ def zip[A, B](left: List[A], right: List[B]): List[(A, B)] = {
   go(Nil(), left, right)
 }
 
+/// Produce a list of OneOrBoth from two lists.
+/// The length is the maximum of lenghts of the two lists.
+///
+/// Examples:
+/// ```
+/// > zipLongest([1, 2, 3], [100, 200, 300])
+/// [Both(1, 100), Both(2, 200), Both(3, 300)]
+///
+/// > zipLongest([1, 2, 3], Nil[Int]())
+/// [This(1), This(2), This(3)]
+///
+/// > zipLongest(Nil[Int](), [1, 2, 3])
+/// [That(1), That(2), That(3)]
+///
+/// > zipLongest([1, 2, 3], [42])
+/// [These(1, 42), This(2), This(3)]
+/// ```
+///
+/// O(N)
+def zipLongest[A, B](left: List[A], right: List[B]): List[OneOrBoth[A, B]] = {
+  def go(acc: List[OneOrBoth[A, B]], left: List[A], right: List[B]): List[OneOrBoth[A,B]] = {
+    (left, right) match {
+      case (Cons(a, as), Cons(b, bs)) =>
+        go(Cons(Both(a, b), acc), as, bs)
+      case (Cons(a, as), Nil()) =>
+        go(Cons(This(a), acc), as, Nil())
+      case (Nil(), Cons(b, bs)) =>
+        go(Cons(That(b), acc), Nil(), bs)
+      case _ => acc.reverse
+    }
+  }
+  go(Nil(), left, right)
+}
+
 /// Combine two lists with the given function.
 /// The length of the result is the minimum of lengths of the two lists.
 ///
@@ -802,3 +929,46 @@ def println(l: List[Int]): Unit = println(show(l))
 def println(l: List[Double]): Unit = println(show(l))
 def println(l: List[Bool]): Unit = println(show(l))
 def println(l: List[String]): Unit = println(show(l))
+
+
+// Streaming
+// ---------
+
+/// Turns a `list` into a producer of a push stream
+/// by emitting each contained value left-to-right.
+def each[A](list: List[A]): Unit / emit[A] =
+  list match {
+    case Nil() => ()
+    case Cons(head, tail) =>
+      do emit(head)
+      each(tail)
+  }
+
+def feed[T, R](list: List[T]) { reader: () => R / read[T] }: R = {
+  var l = list
+  try {
+    reader()
+  } with read[T] {
+    resume {
+      l match {
+        case Nil() => do stop()
+        case Cons(value, rest) =>
+          l = rest
+          return value
+      }
+    }
+  }
+}
+
+def collect[A] { stream: () => Unit / emit[A] }: List[A] =
+  returning::collect[A, Unit]{stream}.second
+
+namespace returning {
+  def collect[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
+    try {
+      (stream(), Nil())
+    } with emit[A] { (v) =>
+      val (r, vs) = resume(());
+      (r, Cons(v, vs))
+    }
+}

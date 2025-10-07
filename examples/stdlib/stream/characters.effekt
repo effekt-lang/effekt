@@ -5,7 +5,7 @@ def main() = {
     println(show(c) ++ " (" ++ show(c.toInt) ++ ")")
   }
 
-  val list = collectList[Char] { each("Hello") }
+  val list = list::collect[Char] { each("Hello") }
   println(list.map { c => c.show })
 }
 

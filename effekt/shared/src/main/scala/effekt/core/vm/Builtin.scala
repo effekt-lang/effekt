@@ -262,6 +262,30 @@ lazy val arrays: Builtins = Map(
   },
 )
 
+lazy val bytearrays: Builtins = Map(
+  builtin("bytearray::allocate(Int)") {
+    case As.Int(x) :: Nil => Value.ByteArray(scala.Array.ofDim(x.toInt))
+  },
+  builtin("bytearray::size(ByteArray)") {
+    case As.ByteArray(arr) :: Nil => Value.Int(arr.length.toLong)
+  },
+  builtin("bytearray::unsafeGet(ByteArray, Int)") {
+    case As.ByteArray(arr) :: As.Int(index) :: Nil => Value.Byte(arr(index.toInt))
+  },
+  builtin("bytearray::unsafeSet(ByteArray, Int, Byte)") {
+    case As.ByteArray(arr) :: As.Int(index) :: As.Byte(value) :: Nil => arr.update(index.toInt, value); Value.Unit()
+  },
+  builtin("bytearray::compare(ByteArray, ByteArray)") {
+    case As.ByteArray(arr1) :: As.ByteArray(arr2) :: Nil => Value.Int(java.util.Arrays.compare(arr1, arr2))
+  },
+  builtin("bytearray::fromString(String)") {
+    case As.String(str) :: Nil => Value.ByteArray(str.getBytes("UTF-8"))
+  },
+  builtin("bytearray::toString(ByteArray)") {
+    case As.ByteArray(arr) :: Nil => Value.String(new String(arr, "UTF-8"))
+  },
+)
+
 lazy val undefined: Builtins = Map(
   builtin("effekt::isUndefined[A](A)") {
     case Value.Literal(m) :: Nil => Value.Bool(m == null)
@@ -295,7 +319,7 @@ lazy val regexes: Builtins = Map(
   },
 )
 
-lazy val builtins: Builtins = printing ++ integers ++ doubles ++ booleans ++ strings ++ arrays ++ refs ++ chars ++ regexes ++ undefined
+lazy val builtins: Builtins = printing ++ integers ++ doubles ++ booleans ++ strings ++ arrays ++ bytearrays ++ refs ++ chars ++ regexes ++ undefined
 
 protected object As {
   object String {
@@ -309,6 +333,12 @@ protected object As {
       case Value.Literal(value: scala.Long) => Some(value)
       case Value.Literal(value: scala.Int) => Some(value.toLong)
       case Value.Literal(value: java.lang.Integer) => Some(value.toLong)
+      case _ => None
+    }
+  }
+  object Byte {
+    def unapply(v: Value): Option[scala.Byte] = v match {
+      case Value.Literal(value: scala.Byte) => Some(value)
       case _ => None
     }
   }
@@ -327,6 +357,12 @@ protected object As {
   object Array {
     def unapply(v: Value): Option[scala.Array[Value]] = v match {
       case Value.Array(array) => Some(array)
+      case _ => None
+    }
+  }
+  object ByteArray {
+    def unapply(v: Value): Option[scala.Array[Byte]] = v match {
+      case Value.ByteArray(array) => Some(array)
       case _ => None
     }
   }

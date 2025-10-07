@@ -36,7 +36,6 @@ object Normalizer { normal =>
     decls: DeclarationContext,     // for field selection
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
     maxInlineSize: Int,            // to control inlining and avoid code bloat
-    preserveBoxing: Boolean        // for LLVM, prevents some optimizations
   ) {
     def bind(id: Id, expr: Expr): Context = copy(exprs = exprs + (id -> expr))
     def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
@@ -69,14 +68,14 @@ object Normalizer { normal =>
   private def isUnused(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id).forall { u => u == Usage.Never }
 
-  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int, preserveBoxing: Boolean): ModuleDecl = {
+  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int): ModuleDecl = {
     // usage information is used to detect recursive functions (and not inline them)
     val usage = Reachable(entrypoints, m)
 
     val defs = m.definitions.collect {
       case Toplevel.Def(id, block) => id -> block
     }.toMap
-    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize, preserveBoxing)
+    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize)
 
     val (normalizedDefs, _) = normalizeToplevel(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
@@ -135,9 +134,9 @@ object Normalizer { normal =>
         case Some(b: (BlockLit | New | Unbox)) => NormalizedBlock.Known(b, Some(x))
         case _ => NormalizedBlock.Unknown(x)
       }
-      case Block.Unbox(pure) => active(pure) match {
-        case Pure.Box(b, annotatedCapture) => active(b)
-        case other => NormalizedBlock.Known(Block.Unbox(pure), None)
+      case Block.Unbox(expr) => active(expr) match {
+        case Expr.Box(b, annotatedCapture) => active(b)
+        case other => NormalizedBlock.Known(Block.Unbox(expr), None)
       }
     }
 
@@ -151,10 +150,10 @@ object Normalizer { normal =>
 
   private def active(e: Expr)(using Context): Expr =
     normalize(e) match {
-      case x @ Pure.ValueVar(id, annotatedType) => exprFor(id) match {
-        case Some(p: Pure.Make)    => p
-        case Some(p: Pure.Literal) => p
-        case Some(p: Pure.Box)     => p
+      case x @ Expr.ValueVar(id, annotatedType) => exprFor(id) match {
+        case Some(p: Expr.Make)    => p
+        case Some(p: Expr.Literal) => p
+        case Some(p: Expr.Box)     => p
         // We only inline non side-effecting expressions
         case Some(other) if other.capt.isEmpty  => other
         case _ => x // stuck
@@ -175,12 +174,15 @@ object Normalizer { normal =>
     case Stmt.Let(id, tpe, expr, body) =>
       active(expr) match {
         // [[ val x = ABORT; body ]] = ABORT
-        case abort if !C.preserveBoxing && abort.tpe == Type.TBottom =>
+        case abort if abort.tpe == Type.TBottom =>
           Stmt.Let(id, tpe, abort, Return(ValueVar(id, tpe)))
 
         case normalized =>
           Stmt.Let(id, tpe, normalized, normalize(body)(using C.bind(id, normalized)))
       }
+
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      Stmt.ImpureApp(id, callee, targs, vargs.map(normalize), bargs.map(normalize), normalize(body))
 
     // Redexes
     // -------
@@ -213,11 +215,14 @@ object Normalizer { normal =>
           Stmt.Invoke(normalized.shared, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
       }
 
+    case Stmt.Match(scrutinee, clauses, default) if scrutinee.tpe == Type.TBottom =>
+      Stmt.Return(normalize(scrutinee))
+
     case Stmt.Match(scrutinee, clauses, default) => active(scrutinee) match {
-      case Pure.Make(data, tag, targs, vargs) if clauses.exists { case (id, _) => id == tag } =>
+      case Expr.Make(data, tag, targs, vargs) if clauses.exists { case (id, _) => id == tag } =>
         val clause: BlockLit = clauses.collectFirst { case (id, cl) if id == tag => cl }.get
         normalize(reduce(clause, targs, vargs.map(normalize), Nil))
-      case Pure.Make(data, tag, targs, vargs) if default.isDefined =>
+      case Expr.Make(data, tag, targs, vargs) if default.isDefined =>
         normalize(default.get)
       case _ =>
         val normalized = normalize(scrutinee)
@@ -226,53 +231,67 @@ object Normalizer { normal =>
 
     // [[ if (true) stmt1 else stmt2 ]] = [[ stmt1 ]]
     case Stmt.If(cond, thn, els) => active(cond) match {
-      case Pure.Literal(true, annotatedType) => normalize(thn)
-      case Pure.Literal(false, annotatedType) => normalize(els)
+      case Expr.Literal(true, annotatedType) => normalize(thn)
+      case Expr.Literal(false, annotatedType) => normalize(els)
       case _ => If(normalize(cond), normalize(thn), normalize(els))
     }
 
     case Stmt.Val(id, tpe, binding, body) =>
 
-      // def barendregt(stmt: Stmt): Stmt = new Renamer().apply(stmt)
+      def joinpoint(id: Id, tpe: ValueType, body: Stmt)(f: BlockVar => Context ?=> Stmt)(using C: Context): Stmt = body match {
+        // do not eta-expand variables
+        case Stmt.App(k: BlockVar, Nil, ValueVar(x, tpe) :: Nil, Nil) if x == id || tpe == Type.TUnit => f(k)
+        case _ =>
+          val k = Id("k")
+          C.usage.put(k, Usage.Many)
+          val kDef = Block.BlockLit(Nil, Nil, ValueParam(id, tpe) :: Nil, Nil, body)
+          Stmt.Def(k, kDef, f(Block.BlockVar(k, kDef.tpe, kDef.capt))(using C.bind(k, kDef)))
+      }
 
-      def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt = normalize(binding) match {
+      def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt)(using C: Context): Stmt = normalize(binding) match {
 
         // [[ val x = ABORT; body ]] = ABORT
-        case abort if !C.preserveBoxing && abort.tpe == Type.TBottom  =>
+        case abort if abort.tpe == Type.TBottom  =>
           abort
 
-        case abort @ Stmt.Shift(p, BlockLit(tparams, cparams, vparams, List(k), body))
-            if !C.preserveBoxing && !Variables.free(body).containsBlock(k.id) =>
-          abort
+        // [[ val x: A = shift(p) { {k: A => R} => body2 }; body: B ]] = shift(p) { {k: >>>B<<< => R} => body2 }
+        case abort @ Stmt.Shift(p, BlockLit(tparams, cparams, vparams,
+          BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeA, answer)), captures) :: Nil, body2))
+              if !Variables.free(body2).containsBlock(k) =>
+            val tpeB = body.tpe
+            Stmt.Shift(p,
+              BlockLit(tparams, cparams, vparams, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeB, answer)), captures) :: Nil,
+                normalize(body2)))
 
-        // [[ val x = sc match { case id(ps) => body2 }; body ]] = sc match { case id(ps) => val x = body2; body }
         case Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
           Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2,
             normalizeVal(id, tpe, body2, body)))), None)
 
-        // These rewrites do not seem to contribute a lot given their complexity...
-        // vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+        // Introduce joinpoints that are potentially later inlined or garbage collected
+        // [[ val x = if (cond) { thn } else { els }; body ]] =
+        //   def k(x) = [[ body ]]
+        //   if (cond) { [[ val x1 = thn; k(x1) ]] } else { [[ val x2 = els; k(x2) ]] }
+        case Stmt.If(cond, thn, els) =>
+          joinpoint(id, tpe, normalize(body)) { k =>
+            val x1 = Id(id.name)
+            val x2 = Id(id.name)
+            Stmt.If(cond,
+              normalizeVal(x1, tpe, thn, Stmt.App(k, Nil, List(ValueVar(x1, tpe)), Nil)),
+              normalizeVal(x2, tpe, els, Stmt.App(k, Nil, List(ValueVar(x2, tpe)), Nil)))
+          }
 
-        // [[ val x = if (cond) { thn } else { els }; body ]] = if (cond) { [[ val x = thn; body ]] } else { [[ val x = els; body ]] }
-//        case normalized @ Stmt.If(cond, thn, els) if body.size <= 2 =>
-//            // since we duplicate the body, we need to freshen the names
-//            val normalizedThn = barendregt(normalizeVal(id, tpe, thn, body))
-//            val normalizedEls = barendregt(normalizeVal(id, tpe, els, body))
-//
-//            Stmt.If(cond, normalizedThn, normalizedEls)
-//
-//        case Stmt.Match(sc, clauses, default)
-//            //             necessary since otherwise we loose Nothing-boxing
-//            //                   vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-//            if body.size <= 2 && (clauses.size + default.size) >= 1 =>
-//          val normalizedClauses = clauses map {
-//            case (id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2)) =>
-//              (id2, BlockLit(tparams2, cparams2, vparams2, bparams2, barendregt(normalizeVal(id, tpe, body2, body))): BlockLit)
-//          }
-//          val normalizedDefault = default map { stmt => barendregt(normalizeVal(id, tpe, stmt, body)) }
-//          Stmt.Match(sc, normalizedClauses, normalizedDefault)
-
-        // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        case Stmt.Match(sc, clauses, default) =>
+          joinpoint(id, tpe, normalize(body)) { k =>
+            Stmt.Match(sc, clauses.map {
+              case (tag, BlockLit(tparams, cparams, vparams, bparams, body)) =>
+                val x = Id(id.name)
+                (tag, BlockLit(tparams, cparams, vparams, bparams,
+                  normalizeVal(x, tpe, body, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))))
+            }, default.map { stmt =>
+              val x = Id(id.name)
+              normalizeVal(x, tpe, stmt, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))
+            })
+          }
 
         // [[ val x = return e; s ]] = let x = [[ e ]]; [[ s ]]
         case Stmt.Return(expr2) =>
@@ -288,10 +307,13 @@ object Normalizer { normal =>
         case Stmt.Let(id2, tpe2, binding2, body2) =>
           Stmt.Let(id2, tpe2, binding2, normalizeVal(id, tpe, body2, body))
 
+        case Stmt.ImpureApp(id2, callee2, targs2, vargs2, bargs2, body2) =>
+          Stmt.ImpureApp(id2, callee2, targs2, vargs2, bargs2, normalizeVal(id, tpe, body2, body))
+
         // Flatten vals. This should be non-leaking since we use garbage free refcounting.
         // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]
         case Stmt.Val(id2, tpe2, binding2, body2) =>
-          normalizeVal(id2, tpe2, binding2, Stmt.Val(id, tpe, body2, body))
+          normalizeVal(id2, tpe2, binding2, normalizeVal(id, tpe, body2, body))
 
         // [[ val x = { var y in r = e; stmt2 }; stmt1 ]] = var y in r = e; [[ val x = stmt2; stmt1 ]]
         case Stmt.Alloc(id2, init2, region2, body2) =>
@@ -305,9 +327,12 @@ object Normalizer { normal =>
         case Stmt.Put(ref2, capt2, value2, body2) =>
           Stmt.Put(ref2, capt2, value2, normalizeVal(id, tpe, body2, body))
 
-        // [[ val x = stmt; return x ]]   =   [[ stmt ]]
         case other => normalize(body) match {
+          // [[ val x = stmt; return x ]]   =   [[ stmt ]]
           case Stmt.Return(x: ValueVar) if x.id == id => other
+          // [[ val x: Unit = stmt; return () ]]   =   [[ stmt ]]
+          case Stmt.Return(x) if x.tpe == Type.TUnit && other.tpe == Type.TUnit => other
+          // [[ val x = stmt; body ]]   =   val x = [[ stmt ]]; [[ body ]]
           case normalizedBody => Stmt.Val(id, tpe, other, normalizedBody)
         }
       }
@@ -326,7 +351,7 @@ object Normalizer { normal =>
     case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, normalize(init), capture, normalize(body))
     case Stmt.Get(id, tpe, ref, capt, body) => Stmt.Get(id, tpe, ref, capt, normalize(body))
     case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, normalize(value), normalize(body))
-    case Stmt.Hole() => s
+    case Stmt.Hole(span) => s
   }
   def normalize(b: BlockLit)(using Context): BlockLit =
     b match {
@@ -339,8 +364,8 @@ object Normalizer { normal =>
     case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) => normalize(b)
 
     // [[ unbox (box b) ]] = [[ b ]]
-    case Block.Unbox(pure) => normalize(pure) match {
-      case Pure.Box(b, _) => b
+    case Block.Unbox(expr) => normalize(expr) match {
+      case Expr.Box(b, _) => b
       case p => Block.Unbox(p)
     }
     case Block.New(impl) => New(normalize(impl))
@@ -353,32 +378,27 @@ object Normalizer { normal =>
       })
     }
 
-  def normalize(p: Pure)(using ctx: Context): Pure = p match {
+  def normalize(p: Expr)(using ctx: Context): Expr = p match {
     // [[ box (unbox e) ]] = [[ e ]]
-    case Pure.Box(b, annotatedCapture) => active(b) match {
+    case Expr.Box(b, annotatedCapture) => active(b) match {
       case NormalizedBlock.Known(Unbox(p), boundBy) => p
       case _ => normalize(b) match {
-        case Block.Unbox(pure) => pure
-        case b => Pure.Box(b, annotatedCapture)
+        case Block.Unbox(expr) => expr
+        case b => Expr.Box(b, annotatedCapture)
       }
     }
 
     // congruences
-    case Pure.PureApp(f, targs, vargs) => Pure.PureApp(f, targs, vargs.map(normalize))
-    case Pure.Make(data, tag, targs, vargs) => Pure.Make(data, tag, targs, vargs.map(normalize))
-    case Pure.ValueVar(id, annotatedType) => p
-    case Pure.Literal(value, annotatedType) => p
-  }
-
-  def normalize(e: Expr)(using Context): Expr = e match {
-    case DirectApp(b, targs, vargs, bargs) => DirectApp(b, targs, vargs.map(normalize), bargs.map(normalize))
-    case pure: Pure => normalize(pure)
+    case Expr.PureApp(f, targs, vargs) => Expr.PureApp(f, targs, vargs.map(normalize))
+    case Expr.Make(data, tag, targs, vargs) => Expr.Make(data, tag, targs, vargs.map(normalize))
+    case Expr.ValueVar(id, annotatedType) => p
+    case Expr.Literal(value, annotatedType) => p
   }
 
   // Helpers for beta-reduction
   // --------------------------
 
-  private def reduce(b: BlockLit, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])(using C: Context): Stmt = {
+  private def reduce(b: BlockLit, targs: List[core.ValueType], vargs: List[Expr], bargs: List[Block])(using C: Context): Stmt = {
     // To update usage information
     val usage = C.usage
     def copyUsage(from: Id, to: Id) = usage.get(from) match {

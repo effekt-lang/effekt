@@ -39,7 +39,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
   }
 
   def rewrite(defn: Def)(using Context): Option[Def] = Context.focusing(defn) {
-      case Def.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) =>
+      case Def.ExternDef(id, tparams, vparams, bparams, capture, ret, bodies, doc, span) =>
         findPreferred(bodies) match {
           case body@ExternBody.StringExternBody(featureFlag, template, span) =>
             if (featureFlag.isDefault) {
@@ -47,16 +47,16 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
                 + s"please annotate it with a feature flag (Supported by the current backend: ${Context.compiler.supportedFeatureFlags.mkString(", ")})")
             }
 
-            val d = Def.ExternDef(capture, id, tparams, vparams, bparams, ret, List(body), doc, span)
+            val d = Def.ExternDef(id, tparams, vparams, bparams, capture, ret, List(body), doc, span)
             Context.copyAnnotations(defn, d)
             Some(d)
           case ExternBody.EffektExternBody(featureFlag, body, span) =>
-            val d = Def.FunDef(id, tparams, vparams, bparams, Some(ret).spanned(ret.span), body, doc, span)
+            val d = Def.FunDef(id, tparams, vparams, bparams, Maybe.Some(capture, capture.span), Maybe.Some(ret, ret.span), body, doc, span)
             Context.copyAnnotations(defn, d)
             Context.annotate(Annotations.BoundCapabilities, d, Nil) // TODO ??
             Some(d)
           case u: ExternBody.Unsupported =>
-            val d = Def.ExternDef(capture, id, tparams, vparams, bparams, ret, List(u), doc, span)
+            val d = Def.ExternDef(id, tparams, vparams, bparams, capture, ret, List(u), doc, span)
             Context.copyAnnotations(defn, d)
             Some(d)
         }

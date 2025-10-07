@@ -3,31 +3,31 @@ package effekt
 // Adapted from
 //   https://github.com/inkytonik/kiama/blob/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
-import effekt.source.{ ModuleDecl, Tree }
-import effekt.symbols.Module
-import effekt.context.{ Context, IOModuleDB }
-import kiama.output.PrettyPrinterTypes.Document
-import kiama.parsing.ParseResult
-import kiama.util.{ IO, Source }
-import effekt.util.messages.{ BufferedMessaging, CompilerPanic, EffektError, EffektMessaging, FatalPhaseError }
+import effekt.context.{Context, IOModuleDB}
+import effekt.source.ModuleDecl
+import effekt.util.messages.{CompilerPanic, FatalPhaseError}
 import effekt.util.paths.file
-import effekt.util.{ JSONDocumentationGenerator, AnsiColoredMessaging, MarkdownSource, getOrElseAborting }
+import effekt.util.{AnsiColoredMessaging, JSONDocumentationGenerator, MarkdownSource}
+import kiama.output.PrettyPrinterTypes.Document
+import kiama.util.{FileSource, IO, Source, StringSource}
 
-import scala.sys.process.Process
+import scala.collection.mutable
 
 /**
- * effekt.Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.util.Compiler
+ * effekt.Compiler <----- compiles code with  ------ Driver
  */
-trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
+trait Driver { outer =>
 
   object messaging extends AnsiColoredMessaging
+
+  val sources = mutable.Map[String, Source]()
 
   // Compiler context
   // ================
   // We always only have one global instance of the compiler
-  object context extends Context(positions) with IOModuleDB { val messaging = outer.messaging }
+  object context extends Context with IOModuleDB { val messaging = outer.messaging }
 
-  override def createConfig(args: Seq[String]) =
+  def createConfig(args: Seq[String]) =
     new EffektConfig(args)
 
   /**
@@ -35,7 +35,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
    *
    * In LSP mode: invoked for each file opened in an editor
    */
-  override def compileSource(source: Source, config: EffektConfig): Unit = {
+  def compileSource(source: Source, config: EffektConfig): Unit = {
       val src = if (source.name.endsWith(".md")) { MarkdownSource(source) } else { source }
       try {
         // remember that we have seen this source, this is used by LSP (kiama.util.Server)
@@ -136,6 +136,8 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
 
   def writeDocumentation(ast: ModuleDecl, source: Source, output: String)(using C: Context): Unit =
     val name = source.name.split("/").last + ".json"
+    val out = C.config.outputPath()
+    out.mkdirs
     IO.createFile((output / name).unixPath, generateDocumentation(ast, source))
 
   def documenter(source: Source, config: EffektConfig)(implicit C: Context): Unit =
@@ -157,5 +159,22 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     // exit with non-zero code if not in repl/server mode and messaging buffer contains errors
     if (config.exitOnError() && C.messaging.hasErrors)
       sys.exit(1)
+  }
+
+  def report(source: Source, messages: messaging.Messages, config: EffektConfig): Unit = {
+    messaging.report(source, messages, config.output())
+  }
+
+  def compileString(name: String, input: String, config: EffektConfig): Unit = {
+    compileSource(StringSource(input, name), config)
+  }
+
+  def compileFile(filename: String, config: EffektConfig, encoding: String = "UTF-8"): Unit = {
+    try {
+      compileSource(FileSource(filename, encoding), config)
+    } catch {
+      case e: java.io.FileNotFoundException =>
+        config.output().emitln(e.getMessage)
+    }
   }
 }

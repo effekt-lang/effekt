@@ -37,9 +37,9 @@ typedef struct StackValue* Stack;
 extern void resume_Int(Stack, Int);
 extern void resume_Pos(Stack, struct Pos);
 
-extern void run(struct Neg);
-extern void run_Int(struct Neg, Int);
-extern void run_Pos(struct Neg, struct Pos);
+extern void run(struct Pos);
+extern void run_Int(struct Pos, Int);
+extern void run_Pos(struct Pos, struct Pos);
 
 // Reference counting primitives defined in LLVM
 extern void eraseNegative(struct Neg);

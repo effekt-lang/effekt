@@ -6,7 +6,6 @@ import io
 import map
 import stream
 import process
-import stringbuffer
 
 type Name = Int
 
@@ -62,7 +61,7 @@ def reify(v: Value): Term / fresh = v match {
 /// strong normalization of the term
 def normalize(t: Term): Term = {
   var i = 0
-  try reify(eval(empty[Name, Value](compareInt), t))
+  try reify(eval(empty[Name, Value](box compareInt), t))
   with fresh { i = i + 1; resume(i) }
 }
 

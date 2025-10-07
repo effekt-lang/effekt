@@ -23,7 +23,7 @@ jobs:
       version: ${{ steps.get_version.outputs.VERSION }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         fetch-depth: 0
         submodules: 'true'
@@ -77,19 +77,19 @@ jobs:
           private-key: ${{ secrets.EFFEKT_UPDATER_GH_CREDENTIALS_TOKEN }}
 
       - name: Checkout code with token
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: 'true'
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Download JAR artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: effekt
           path: distribution/
 
       - name: Download npm package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: effekt-npm-package
           path: distribution/
@@ -112,12 +112,12 @@ jobs:
     needs: [build-jar, release]
     steps:
       - name: Download npm package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: effekt-npm-package
 
       - name: Set up NodeJS ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: 'https://registry.npmjs.org'

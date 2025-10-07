@@ -1,5 +1,3 @@
-import stringbuffer
-
 def find(arr: Array[Int], elem: Int): Unit = {
   val optIdx = arr.binarySearch(elem) { compareInt }
   optIdx match {

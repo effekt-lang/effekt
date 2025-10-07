@@ -23,6 +23,7 @@ object RemoveTailResumptions {
     stmt match {
       case Stmt.Def(id, block, body) => !freeInBlock(block) && tailResumptive(k, body)
       case Stmt.Let(id, tpe, binding, body) => !freeInExpr(binding) && tailResumptive(k, body)
+      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => tailResumptive(k, body) && !freeInBlock(callee) && !vargs.exists(freeInExpr) && !bargs.exists(freeInBlock)
       case Stmt.Return(expr) => false
       case Stmt.Val(id, tpe, binding, body) => tailResumptive(k, body) && !freeInStmt(binding)
       case Stmt.App(callee, targs, vargs, bargs) => false
@@ -40,12 +41,13 @@ object RemoveTailResumptions {
       case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) => false
       case Stmt.Shift(prompt, body) => stmt.tpe == Type.TBottom
       case Stmt.Resume(k2, body) => k2.id == k // what if k is free in body?
-      case Stmt.Hole() => true
+      case Stmt.Hole(span) => true
     }
 
   def removeTailResumption(k: Id, stmt: Stmt): Stmt = stmt match {
     case Stmt.Def(id, block, body) => Stmt.Def(id, block, removeTailResumption(k, body))
     case Stmt.Let(id, tpe, binding, body) => Stmt.Let(id, tpe, binding, removeTailResumption(k, body))
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => Stmt.ImpureApp(id, callee, targs, vargs, bargs, removeTailResumption(k, body))
     case Stmt.Val(id, tpe, binding, body) => Stmt.Val(id, tpe, binding, removeTailResumption(k, body))
     case Stmt.If(cond, thn, els) => Stmt.If(cond, removeTailResumption(k, thn), removeTailResumption(k, els))
     case Stmt.Match(scrutinee, clauses, default) => Stmt.Match(scrutinee, clauses.map {
@@ -60,7 +62,7 @@ object RemoveTailResumptions {
 
     case Stmt.Resume(k, body) => stmt
     case Stmt.Shift(prompt, body) => stmt
-    case Stmt.Hole() => stmt
+    case Stmt.Hole(span) => stmt
     case Stmt.Return(expr) => stmt
     case Stmt.App(callee, targs, vargs, bargs) => stmt
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => stmt

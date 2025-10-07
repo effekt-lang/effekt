@@ -11,12 +11,12 @@ interface Random {
   def next(): Int
 }
 
-def randomBall { rand: Random }: Ball at {global} = {
+def randomBall { rand: Random }: Ball at global = {
   val x = ref(toDouble(rand.next().mod(500)));
   val y = ref(toDouble(rand.next().mod(500)));
   val xVel = ref(toDouble(rand.next().mod(300) - 150));
   val yVel = ref(toDouble(rand.next().mod(300) - 150));
-  new Ball {
+  box new Ball {
     def bounce() = {
       val xLimit = 500.0;
       val yLimit = 500.0;

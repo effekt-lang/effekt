@@ -1,10 +1,10 @@
 package effekt
 
 import effekt.lexer.TokenKind.*
-import effekt.lexer.{Lexer, Token, TokenKind}
+import effekt.lexer.{Token, TokenKind}
 import effekt.source.*
 import effekt.source.Origin.Synthesized
-import kiama.util.{Positions, Source, StringSource}
+import kiama.util.{Source, StringSource}
 import munit.Location
 
 // DSL for creating code snippets with span annotations
@@ -69,16 +69,16 @@ object SpanSyntax {
 
 class ParserTests extends munit.FunSuite {
 
-  def parser(input: String, positions: Positions)(using munit.Location): Parser = {
+  def parser(input: String)(using munit.Location): Parser = {
     val source = StringSource(input, "")
     val tokens = effekt.lexer.Lexer.lex(source)
     // TODO catch LexerError exception?
-    new Parser(positions, tokens, source)
+    new Parser(tokens, source)
   }
 
-  def parse[R](input: String, f: Parser => R, positions: Positions = new Positions())(using munit.Location): R =
+  def parse[R](input: String, f: Parser => R)(using munit.Location): R =
     try {
-      val p = parser(input, positions)
+      val p = parser(input)
       val result = f(p)
       assert(p.peek(TokenKind.EOF), s"Did not consume everything: ${p.peek}")
       result
@@ -87,62 +87,65 @@ class ParserTests extends munit.FunSuite {
         fail(s"Unexpected parse error (token index ${pos}): ${msg}")
     }
 
-  def parseExpr(input: String, positions: Positions = new Positions())(using munit.Location): Term =
+  def parseExpr(input: String)(using munit.Location): Term =
     parse(input, _.expr())
 
-  def parseStmt(input: String, positions: Positions = new Positions())(using munit.Location): Stmt =
+  def parseStmt(input: String)(using munit.Location): Stmt =
     parse(input, _.stmt())
 
-  def parseStmts(input: String, positions: Positions = new Positions())(using munit.Location): Stmt =
+  def parseStmts(input: String)(using munit.Location): Stmt =
     parse(input, _.stmts(inBraces = true))
 
-  def parseMatchPattern(input: String, positions: Positions = new Positions())(using munit.Location): MatchPattern =
+  def parseMatchPattern(input: String)(using munit.Location): MatchPattern =
     parse(input, _.matchPattern())
 
-  def parseMatchClause(input: String, positions: Positions = new Positions())(using munit.Location): MatchClause =
+  def parseMatchClause(input: String)(using munit.Location): MatchClause =
     parse(input, _.matchClause())
 
-  def parseValueTypeAnnotation(input: String, positions: Positions = new Positions())(using munit.Location): ValueType =
+  def parseValueTypeAnnotation(input: String)(using munit.Location): ValueType =
     parse(input, _.valueTypeAnnotation())
 
-  def parseReturnAnnotation(input: String, positions: Positions = new Positions())(using munit.Location): Effectful =
+  def parseReturnAnnotation(input: String)(using munit.Location): Effectful =
     parse(input, _.returnAnnotation())
 
-  def parseValueType(input: String, positions: Positions = new Positions())(using munit.Location): ValueType =
+  def parseValueType(input: String)(using munit.Location): ValueType =
     parse(input, _.valueType())
 
-  def parseBlockType(input: String, positions: Positions = new Positions())(using munit.Location): BlockType =
+  def parseBlockType(input: String)(using munit.Location): BlockType =
     parse(input, _.blockType())
 
-  def parseOpClause(input: String, positions: Positions = new Positions())(using munit.Location): OpClause =
+  def parseOpClause(input: String)(using munit.Location): OpClause =
     parse(input, _.opClause())
 
-  def parseImplementation(input: String, positions: Positions = new Positions())(using munit.Location): Implementation =
+  def parseImplementation(input: String)(using munit.Location): Implementation =
     parse(input, _.implementation())
 
-  def parseTry(input: String, positions: Positions = new Positions())(using munit.Location): Term =
+  def parseTry(input: String)(using munit.Location): Term =
     parse(input, _.tryExpr())
 
-  def parseParams(input: String, positions: Positions = new Positions())(using munit.Location): (Many[Id], Many[ValueParam], Many[BlockParam]) =
+  def parseParams(input: String)(using munit.Location): (Many[Id], Many[ValueParam], Many[BlockParam]) =
     parse(input, _.params())
 
-  def parseLambdaParams(input: String, positions: Positions = new Positions())(using munit.Location): (List[Id], List[ValueParam], List[BlockParam]) =
+  def parseLambdaParams(input: String)(using munit.Location): (List[Id], List[ValueParam], List[BlockParam]) =
     parse(input, _.lambdaParams())
 
-  def parseDefinition(input: String, positions: Positions = new Positions())(using munit.Location): Def =
+  def parseDefinition(input: String)(using munit.Location): Def =
     parse(input, _.definition())
 
-  def parseDefinitions(input: String, positions: Positions = new Positions())(using munit.Location): List[Def] =
+  def parseDefinitions(input: String)(using munit.Location): List[Def] =
     parse(input, _.definitions())
 
-  def parseToplevel(input: String, positions: Positions = new Positions())(using munit.Location): Def =
+  def parseToplevel(input: String)(using munit.Location): Def =
     parse(input, _.toplevel())
 
-  def parseProgram(input: String, positions: Positions = new Positions())(using munit.Location): ModuleDecl =
+  def parseProgram(input: String)(using munit.Location): ModuleDecl =
     parse(input, _.program())
 
-  def parseExternDef(input: String, positions: Positions = new Positions())(using munit.Location): Def =
+  def parseExternDef(input: String)(using munit.Location): Def =
     parse(input, _.externDef())
+
+  def parseInfo(input: String)(using munit.Location): Info =
+    parse(input, _.info())
 
   // Custom asserts
   //
@@ -248,7 +251,7 @@ class ParserTests extends munit.FunSuite {
   test("Peeking") {
     implicit def toToken(t: TokenKind): Token = Token(0, 0, t)
     def peek(tokens: Seq[Token], offset: Int): Token =
-      new Parser(new Positions, tokens, StringSource("", "test")).peek(offset)
+      new Parser(tokens, StringSource("", "test")).peek(offset)
 
     val tokens = List[Token](`(`, Space, Newline, `)`, Space, `=>`, EOF)
     assertEquals(peek(tokens, 0).kind, `(`)
@@ -315,7 +318,7 @@ class ParserTests extends munit.FunSuite {
     parseExpr("resume(42)")
     parseExpr("in(42)")
 
-    parseExpr("fun() { foo(()) }")
+    parseExpr("box { foo(()) }")
 
     parseExpr("10.seconds")
 
@@ -335,10 +338,9 @@ class ParserTests extends munit.FunSuite {
 
   test("Boxing") {
     parseExpr("box f")
-    parseExpr("unbox f")
     assertEqualModuloSpans(
-      parseExpr("unbox box f"),
-      parseExpr("unbox (box f)")
+      parseExpr("box f"),
+      parseExpr("(box f)")
     )
     assertNotEqualModuloSpans(
       parseExpr("box { 42 }"),
@@ -529,7 +531,7 @@ class ParserTests extends munit.FunSuite {
       """return x;
         |""".stripMargin)
 
-    parseStmts("fun() { x = x + 1; x }")
+    parseStmts("box { x = x + 1; x }")
   }
 
   test("Definition statements") {
@@ -541,7 +543,8 @@ class ParserTests extends munit.FunSuite {
 
     parseStmts("val (left, right) = list; return left")
 
-    parseStmts("val g: () => Unit / Exc at {exc} = fun() { closure() }; ()")
+    parseStmts("val g: () => Unit / Exc at {exc} = box { closure() }; ()")
+    parseStmts("val g: () => Unit / Exc at exc = box { closure() }; ()")
   }
 
   test("Pattern-matching val parses with correct span") {
@@ -931,14 +934,14 @@ class ParserTests extends munit.FunSuite {
         |val y = 5
         |""".stripMargin)
 
-    val nested = parseDefinitions(
+    val nested = parseToplevel(
       """namespace list {
         |  val x = 4
         |  val y = 5
         |}
         |""".stripMargin)
 
-    val semi = parseDefinitions(
+    val semi = parseToplevel(
       """namespace list;
         |val x = 4
         |val y = 5
@@ -946,7 +949,7 @@ class ParserTests extends munit.FunSuite {
 
     assertEqualModuloSpans(nested, semi)
 
-    val nested2 = parseDefinitions(
+    val nested2 = parseProgram(
       """namespace list {
         |  namespace internal {
         |
@@ -956,32 +959,15 @@ class ParserTests extends munit.FunSuite {
         |}
         |""".stripMargin)
 
-    val semi2 = parseDefinitions(
-      """namespace list;
-        |namespace internal;
-        |
-        |val x = 4
-        |val y = 5
-        |""".stripMargin)
-
-    val semiInsertion = parseDefinitions(
+    val semi2 = parseProgram(
       """namespace list
         |namespace internal
         |
         |val x = 4
-        |val y = 5
+        |val y = 5;
         |""".stripMargin)
 
-    assertEqualModuloSpans(nested2, semi2)
-    assertEqualModuloSpans(nested2, semiInsertion)
-
-    parseDefinitions(
-      """val x = {
-        |  namespace foo;
-        |  val y = 4;
-        |  foo::y
-        |}
-        |""".stripMargin)
+    (nested2.defs zip semi2.defs).foreach(assertEqualModuloSpans)
   }
 
   test("Definitions") {
@@ -995,9 +981,11 @@ class ParserTests extends munit.FunSuite {
         parseDefinition(source.content),
         DefDef(
           IdDef("foo", Span(source, pos(0), pos(1))),
-          None,
+          Maybe.None(Span(source, pos(1), pos(1))),
+          Maybe.None(Span(source, pos(1), pos(1))),
           Var(IdRef(Nil, "f", Span(source, pos(2), pos(3))), Span(source, pos(2), pos(3))),
-          None, Span(source, 0, pos.last)))
+          Info.empty(Span(source, 0, 0)),
+          Span(source, 0, pos.last)))
     }
 
     parseDefinition(
@@ -1026,6 +1014,12 @@ class ParserTests extends munit.FunSuite {
     )
   }
 
+  test("Function definition with capture set") {
+    parseDefinition("def foo(v: Int) at {}: Unit = <>")
+    parseDefinition("def foo(v: Int) at io: Unit = <>")
+    parseDefinition("def foo(v: Int) at {async, io}: Unit = <>")
+  }
+
   test("Function definition"){
     val (source, pos) =
       raw"""def foo[T1, T2](x: T1, y: T2){b: => Unit}: Unit = <>
@@ -1035,7 +1029,7 @@ class ParserTests extends munit.FunSuite {
     val definition = parseDefinition(source.content)
 
     val funDef = definition match {
-      case fd@FunDef(id, tparams, vparams, bparams, ret, body, doc, span) => fd
+      case fd@FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) => fd
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
@@ -1054,7 +1048,7 @@ class ParserTests extends munit.FunSuite {
     val definition = parseDefinition(source.content)
 
     val funDef = definition match {
-      case fd@FunDef(id, tparams, vparams, bparams, ret, body, doc, span) => fd
+      case fd@FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) => fd
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
@@ -1071,12 +1065,23 @@ class ParserTests extends munit.FunSuite {
     val definition = parseDefinition(source.content)
 
     val funDef = definition match {
-      case fd@FunDef(id, tparams, vparams, bparams, ret, body, doc, span) => fd
+      case fd@FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) => fd
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
     assertEquals(funDef.bparams.span, Span(source, pos(0), pos(1)))
     assertEquals(funDef.ret.span, Span(source, pos(1), pos(1)))
+  }
+
+  test("Function definition with comment") {
+    val (source, pos) =
+      raw"""/// Calculate the answer to the ultimate question of life, the universe, and everything
+           |def calculate() = 42
+           |""".sourceAndPositions
+
+    val definition = parseDefinition(source.content)
+
+    assertEquals(definition.doc, Some(" Calculate the answer to the ultimate question of life, the universe, and everything"))
   }
 
   test("Function definition with whitespaces instead of return type") {
@@ -1088,7 +1093,7 @@ class ParserTests extends munit.FunSuite {
     val definition = parseDefinition(source.content)
 
     val funDef = definition match {
-      case fd@FunDef(id, tparams, vparams, bparams, ret, body, doc, span) => fd
+      case fd@FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) => fd
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
@@ -1132,6 +1137,57 @@ class ParserTests extends munit.FunSuite {
     assertEquals(valDef.span, span)
   }
 
+  test("Declaration info with comment and extern") {
+    val (source, pos) =
+      raw"""/// Some doc comment
+           |private extern
+           |↑      ↑↑     ↑
+           |""".sourceAndPositions
+
+    parseInfo(source.content) match {
+      case Info(
+          Some(doc),
+          isPrivate,
+          isExtern,
+        ) =>
+
+        assertEquals(doc, " Some doc comment")
+        assertEquals(isPrivate, Maybe(Some(()), Span(source, pos(0), pos(1))))
+        assertEquals(isExtern, Maybe(Some(()), Span(source, pos(2), pos(3))))
+
+      case info => fail(s"Wrong info: ${info}")
+    }
+  }
+
+  test("Only comment and private") {
+    val (source, pos) =
+      raw"""/// Some doc comment
+           |private
+           |↑      ↑
+           |""".sourceAndPositions
+
+    parseInfo(source.content) match {
+      case Info(doc, isPrivate, isExtern) =>
+
+        assertEquals(doc, Some(" Some doc comment"))
+        assertEquals(isPrivate, Maybe(Some(()), Span(source, pos(0), pos(1))))
+        assertEquals(isExtern, Maybe(None, Span(source, pos(1), pos(1))))
+    }
+  }
+
+  test("Only doc comment") {
+    val (source, pos) =
+      raw"""/// Some doc comment
+           |                    ↑
+           |""".sourceAndPositions
+
+    parseInfo(source.content) match {
+      case Info(doc, isPrivate, isExtern) =>
+        assertEquals(doc, Some(" Some doc comment"))
+        assertEquals(isPrivate, Maybe(None, Span(source, pos(0), pos(0))))
+        assertEquals(isExtern, Maybe(None, Span(source, pos(0), pos(0))))
+    }
+  }
 
   test("Region definition parses with correct span") {
     val (source, span) =
@@ -1165,24 +1221,6 @@ class ParserTests extends munit.FunSuite {
     }
 
     assertEquals(varDef.span, span)
-  }
-
-  test("Namespace definition parses with correct span") {
-    val (source, span) =
-      raw"""namespace Foo {
-           |↑
-           |}
-           |↑""".sourceAndSpan
-
-    val definition = parseDefinition(source.content)
-
-    val nsDef = definition match {
-      case nd@NamespaceDef(id, defs, doc, span) => nd
-      case other =>
-        throw new IllegalArgumentException(s"Expected NamespaceDef but got ${other.getClass.getSimpleName}")
-    }
-
-    assertEquals(nsDef.span, span)
   }
 
   test("Interface definition parses with correct span") {
@@ -1551,7 +1589,7 @@ class ParserTests extends munit.FunSuite {
   }
 
   test("Extern definition") {
-    parseExternDef("extern {io} def read(s: String): Int = default { 42 } js { 1 + 1 } chez { 42 }")
+    parseExternDef("extern def read(s: String) at {io}: Int = default { 42 } js { 1 + 1 } chez { 42 }")
     parseExternDef("extern \"console.log(42)\"")
     parseExternDef("extern \"\"\"console.log(42)\"\"\"")
     parseExternDef("extern type Complex")
@@ -1560,7 +1598,7 @@ class ParserTests extends munit.FunSuite {
     parseExternDef("extern resource withFile: [A](String) { () => A } => A")
     parseExternDef("extern include \"path/to/file\"")
     parseExternDef("extern js \"\"\"console.log(42)\"\"\"")
-    parseExternDef("extern pure def read(s: String): String = default { s }")
+    parseExternDef("extern def read(s: String) at {}: String = default { s }")
     parseExternDef("extern def read(s: String): String = \"${s}\"")
     parseProgram(
       "extern def println(value: String): Unit =" +

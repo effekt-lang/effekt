@@ -37,12 +37,14 @@ trait ChezScheme extends Compiler[String] {
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
+    case Stage.CPS => None
     case Stage.Machine => None
     case Stage.Target => Separate(source).map { res => pretty(res) }
   }
 
   override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
     case Stage.Core => Core(source).map { res => res.core }
+    case Stage.CPS => None
     case Stage.Machine => None
     case Stage.Target => Separate(source)
   }
@@ -63,7 +65,7 @@ trait ChezScheme extends Compiler[String] {
 
   lazy val Chez = Phase("chez") {
     case CoreTransformed(source, tree, mod, core) =>
-      val mainSymbol = Context.checkMain(mod)
+      val mainSymbol = Context.ensureMainExists(mod)
       val mainFile = path(mod)
       mainFile -> chez.Let(Nil, compilationUnit(mainSymbol, mod, core))
   }
