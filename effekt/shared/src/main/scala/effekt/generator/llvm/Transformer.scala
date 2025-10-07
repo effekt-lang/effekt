@@ -24,6 +24,7 @@ object Transformer {
 
       val entryInstructions = List(
         Call("stack", Ccc(), stackType, withEmptyStack, List()),
+        Call("", Ccc(), VoidType(), initializeMemory, List()), 
         Call("_", Tailcc(false), VoidType(), transform(entry), List(LocalReference(stackType, "stack"))))
       val entryBlock = BasicBlock("entry", entryInstructions, RetVoid())
       val entryFunction = Function(External(), Ccc(), VoidType(), "effektMain", List(), List(entryBlock))
@@ -719,6 +720,7 @@ object Transformer {
     emit(Load(returnAddressName, returnAddressType, returnAddressPointer, StackPointer));
   }
 
+  val initializeMemory = ConstantGlobal("initializeMemory");
   val newObject = ConstantGlobal("newObject");
   val objectEnvironment = ConstantGlobal("objectEnvironment");
 
