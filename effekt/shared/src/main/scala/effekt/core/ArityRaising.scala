@@ -16,6 +16,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       val res = Deadcode.remove(main, core)
       val transformed = Context.timed(phaseName, source.name) { transform(res) }
       println(PrettyPrinter.format(transformed))
+      println("\n\n\nparts\n\n")
       Some(CoreTransformed(source, tree, mod, transformed))
     }
   }
@@ -25,8 +26,29 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       ModuleDecl(path, includes, declarations, externs, definitions map transform, exports)
   }
 
-  def transform(toplevel: Toplevel)(using Context, DeclarationContext): Toplevel = toplevel match {
-    case Toplevel.Def(id, block) => Toplevel.Def(id, transform(block))
+  def transform(toplevel: Toplevel)(using C: Context, DC: DeclarationContext): Toplevel = toplevel match {
+    case Toplevel.Def(id, BlockLit(tparams, cparams, List(ValueParam(param, ValueType.Data(name, targs))), bparams, body)) => 
+      println("### id : ")
+      println(param)
+      println(name)
+      println(targs)
+      DC.findData(name) match {
+        case Some(Data(_, List(), List(Constructor(test, List(Field(x, tpe1), Field(y, tpe2)))))) => 
+          println(test)
+          val vparams = List(ValueParam(x, tpe1), ValueParam(y, tpe2))
+          val transformedBody = Let(param, ValueType.Data(name, targs), 
+          Make(ValueType.Data(name, targs), test, List(), List(ValueVar(x, tpe1), ValueVar(y, tpe2))), transform(body))
+          Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, transformedBody)) 
+
+        case _ => toplevel
+      }
+      
+    case Toplevel.Def(id, block) => 
+      println("\n\nid:")
+      println(doIndentation(id.toString))
+      println("block:")
+      println(doIndentation(block.toString))
+      Toplevel.Def(id, transform(block))
     case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, tpe, transform(binding))
   }
 
@@ -44,6 +66,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(stmt: Stmt)(using Context, DeclarationContext): Stmt = stmt match {
     case Stmt.Def(id, block, rest) =>
+      // here too
       Stmt.Def(id, transform(block), transform(rest))
     case Stmt.Let(id, tpe, binding, rest) =>
       Stmt.Let(id, tpe, transform(binding), transform(rest))
@@ -52,6 +75,8 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.Val(id, tpe, binding, body) =>
       Stmt.Val(id, tpe, transform(binding), transform(body))
     case Stmt.App(callee, targs, vargs, bargs) =>
+      println(doIndentation(stmt.toString()))
+      print(doIndentation(vargs.head.tpe.toString()))
       Stmt.App(transform(callee), targs, vargs map transform, bargs map transform) // possible args
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
       Stmt.Invoke(transform(callee), method, methodTpe, targs, vargs map transform, bargs map transform) // possible args
@@ -82,6 +107,36 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(valueType: ValueType.Data)(using Context, DeclarationContext): ValueType.Data = valueType match {
     case ValueType.Data(symbol, targs) => valueType // trainsform
+  }
+
+
+  def doIndentation(input: String): String = {
+    val sb = new StringBuilder
+    var indent = 0
+    var i = 0
+
+    while (i < input.length) {
+      input(i) match {
+        case '(' =>
+          sb.append("(\n")
+          indent += 1
+          sb.append("  " * indent)
+        case ')' =>
+          sb.append("\n")
+          indent -= 1
+          sb.append("  " * indent)
+          sb.append(")")
+        case ',' =>
+          sb.append(",\n")
+          sb.append("  " * indent)
+        case c if c.isWhitespace =>
+          // skip extra whitespace
+        case c =>
+          sb.append(c)
+      }
+      i += 1
+    }
+    sb.toString
   }
 
 }
