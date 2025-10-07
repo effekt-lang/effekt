@@ -33,7 +33,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       println(name)
       println(targs)
       DC.findData(name) match {
-        case Some(Data(_, List(), List(Constructor(test, List(Field(x, tpe1), Field(y, tpe2)))))) => 
+        case Some(Data(_, List(), List(Constructor(test, List(Field(x, tpe1)), List(Field(y, tpe2)))))) => 
           println(test)
           val vparams = List(ValueParam(x, tpe1), ValueParam(y, tpe2))
           val transformedBody = Let(param, ValueType.Data(name, targs), 
@@ -87,22 +87,14 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
     case _ => stmt
   }
 
-  def transform(expr: Expr)(using Context, DeclarationContext): Expr = expr match {
-    case DirectApp(b, targs, vargs, bargs) =>
-      DirectApp(b, targs, vargs map transform, bargs map transform) // possible args
-    case pure: Pure =>
-      transform(pure)
-  }
-
-  def transform(pure: Pure)(using Context, DeclarationContext): Pure = pure match {
-    case Pure.ValueVar(id, annotatedType) => pure
-    case Pure.Literal(value, annotatedType) => pure
-    case Pure.Box(b, annotatedCapture) => pure
-    case Pure.PureApp(b, targs, vargs) =>
-      Pure.PureApp(b, targs, vargs map transform) // possible args
-    case Pure.Make(data, tag, targs, vargs) =>
-      Pure.Make(data, tag, targs, vargs map transform) // possibe args
-      
+  def transform(pure: Expr)(using Context, DeclarationContext): Expr = pure match {
+    case Expr.ValueVar(id, annotatedType) => pure
+    case Expr.Literal(value, annotatedType) => pure
+    case Expr.Box(b, annotatedCapture) => pure
+    case Expr.PureApp(b, targs, vargs) =>
+      Expr.PureApp(b, targs, vargs map transform) // possible args
+    case Expr.Make(data, tag, targs, vargs) =>
+      Expr.Make(data, tag, targs, vargs map transform) // possibe args
   }
 
   def transform(valueType: ValueType.Data)(using Context, DeclarationContext): ValueType.Data = valueType match {
