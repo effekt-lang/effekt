@@ -69,6 +69,10 @@ abstract class ChezSchemeTests extends EffektTests {
   )
 }
 
+class ChezSchemeCPSTests extends ChezSchemeTests {
+  def backendName = "chez-cps"
+}
+
 class ChezSchemeMonadicTests extends ChezSchemeTests {
   def backendName = "chez-monadic"
 }

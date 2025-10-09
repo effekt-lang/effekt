@@ -61,7 +61,7 @@ class ChezSchemeCPS extends Compiler[String] {
   // TODO: Only show generated code
   lazy val LSP = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val compiled = TransformerCPS.compile(cps, mainSymbol)
+      val compiled = TransformerCPS.compileLSP(cps, mainSymbol)
       pretty(chez.Let(Nil, compiled))
   }
 
