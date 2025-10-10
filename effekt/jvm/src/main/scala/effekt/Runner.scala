@@ -287,9 +287,15 @@ object LLVMRunner extends Runner[String] {
 
   def libuvArgs(using C: Context): Seq[String] =
     val OS = System.getProperty("os.name").toLowerCase
+    
+    // only relevant for macOS
+    val arch: String = System.getProperty("os.arch")
+    assert(!OS.contains("mac") || List("aarch64", "x86_64").contains(arch), "If you have a macbook -> It should have either an aarch64 or x86_64 architecture.")
+    
     val libraries = C.config.clangLibraries.toOption.map(file).orElse {
       OS match {
-        case os if os.contains("mac")  => Some(file("/opt/homebrew/lib"))
+        case os if os.contains("mac") && arch.equals("aarch64")  => Some(file("/opt/homebrew/lib"))
+        case os if os.contains("mac")  => Some(file("/usr/local/lib"))
         case os if os.contains("win") => None
         case os if os.contains("linux") => Some(file("/usr/local/lib"))
         case os => None
@@ -297,7 +303,8 @@ object LLVMRunner extends Runner[String] {
     }
     val includes = C.config.clangIncludes.toOption.map(file).orElse {
       OS match {
-        case os if os.contains("mac")  => Some(file("/opt/homebrew/include"))
+        case os if os.contains("mac") && arch.equals("aarch64") => Some(file("/opt/homebrew/include"))
+        case os if os.contains("mac") => Some(file("/usr/local/include"))
         case os if os.contains("win") => None
         case os if os.contains("linux") => Some(file("/usr/local/include"))
         case os => None
