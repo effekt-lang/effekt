@@ -422,6 +422,44 @@ class NewNormalizerTests extends CoreTests {
 
     assertAlphaEquivalentToplevels(actual, expected, List("run"))
   }
+
+  // This test shows that when the value of a mutable variable is known, we can directly pass the let-bound value.
+  test("Mutate mutable variable before passing it to identity function") {
+    val input =
+      """
+        |def run(): Int = {
+        |    def f(x: Int) = x
+        |    var x = 42
+        |    x = 43
+        |    f(x)
+        |}
+        |
+        |def main() = println(run())
+        |
+        |""".stripMargin
+
+    val (mainId, actual) = normalize(input)
+
+    val expected =
+      parse(
+        """
+          |module input
+          |
+          |def run() = {
+          |    def f(x: Int) = {
+          |        return x: Int
+          |    }
+          |
+          |    let y = 42
+          |    let w = 43
+          |    var x @ z = y: Int;
+          |    (f : (Int) => Int @ {})(w: Int)
+          |}
+          |""".stripMargin
+      )
+
+    assertAlphaEquivalentToplevels(actual, expected, List("run"))
+  }
 }
 
 /**
