@@ -62,7 +62,7 @@ class NewNormalizerTests extends CoreTests {
       mod.externs.collect { case d@Extern.Def(_, _, _, _, _, _, _, _) => d }
         .find(_.id.name.name == name)
         .getOrElse(throw new NoSuchElementException(s"Extern def '$name' not found"))
-    
+
     val externPairs: List[(Id, Id)] =
       externNames.flatMap { name =>
         val canon = Id(name)
@@ -280,6 +280,7 @@ class NewNormalizerTests extends CoreTests {
     assertAlphaEquivalentToplevels(actual, expected, List("run"), List("infixAdd"))
   }
 
+  // This test case shows mutable variable assignments turning into static let-bindings
   test("Mutable Peano Nats turn into let-bindings") {
     val input =
       """
@@ -322,6 +323,66 @@ class NewNormalizerTests extends CoreTests {
     val (mainId, actual) = normalize(input)
 
     assertAlphaEquivalentToplevels(actual, expected, List("run"), List(), List("Nat"), List(("Nat", "Z"), ("Nat", "S")))
+  }
+
+  // This test case shows a mutable variable that is captured in an effect handler.
+  // The resulting core code shows how the reference is passed to the handler block.
+  // Even though the variable is not mutated, the normalizer currently cannot eliminate the reference.
+  // This is because the stack used to normalize the handler is currently treated as "unknown".
+  test("Mutable variable read in handler") {
+    val input =
+      """
+        |effect bar: Unit
+        |
+        |extern def foo(x: Int) at {io}: Unit = vm""
+        |
+        |def run() = {
+        |    var x = 1
+        |    try {
+        |        do bar()
+        |    } with bar {
+        |        foo(x)
+        |    }
+        |}
+        |
+        |def main() = println(run())
+        |
+        |""".stripMargin
+
+    val (mainId, actual) = normalize(input)
+
+    val expected =
+      parse("""
+              |module input
+              |
+              |interface bar {
+              |  bar: => Unit
+              |}
+              |
+              |extern {io} def foo(x: Int): Unit = vm""
+              |
+              |def run() = {
+              |  let y = 1
+              |
+              |  def handle(){q @ p: Prompt[Unit]}{s @ r: Ref[Int]} =
+              |    shift (q: Prompt[Unit] @ {p}) {
+              |      () { k @ p: Resume[Unit, Unit]} => {
+              |        get z: Int = !s @ r;
+              |        let ! o = (foo: (Int) => Unit @ {io})(z: Int)
+              |        return o: Unit
+              |      }
+              |    }
+              |
+              |  var z @ x = y: Int;
+              |  reset {
+              |    () { q @ p: Prompt[Unit] } =>
+              |      (handle: { p: Prompt[Unit] }{ x: Ref[Int] } => Unit @ {})() { q: Prompt[Unit] @ { p } } { z: Ref[Int] @ { x } }
+              |  }
+              |}
+              |""".stripMargin
+      )
+
+    assertAlphaEquivalentToplevels(actual, expected, List("run"), declNames=List("bar"), externNames=List("foo"))
   }
 }
 

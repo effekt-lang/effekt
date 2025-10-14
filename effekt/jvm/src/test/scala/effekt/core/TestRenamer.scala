@@ -27,15 +27,17 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "", defaultS
     names.idFor(uniqueName)
 
   def withBindings[R](ids: List[Id])(f: => R): R =
-    val before = scopes
-    try {
-      val newScope = ids.map { x => x -> freshIdFor(x) }.toMap
-      scopes = newScope :: scopes
-      f
-    } finally { scopes = before }
+    withMapping(ids.map { x => x -> freshIdFor(x) }.toMap)(f)
 
   /** Alias for withBindings(List(id)){...} */
   def withBinding[R](id: Id)(f: => R): R = withBindings(List(id))(f)
+
+  def withMapping[R](ids: Map[Id, Id])(f: => R): R =
+    val before = scopes
+    try {
+      scopes = ids :: scopes
+      f
+    } finally { scopes = before }
 
   // free variables are left untouched
   override def id: PartialFunction[core.Id, core.Id] = {
@@ -71,8 +73,9 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "", defaultS
 
     case core.Var(ref, init, capt, body) =>
       val resolvedInit = rewrite(init)
-      val resolvedCapt = rewrite(capt)
-      withBinding(ref) { core.Var(rewrite(ref), resolvedInit, resolvedCapt, rewrite(body)) }
+      // TODO: is this how we want to treat captures here?
+      val resolvedCapt = freshIdFor(capt)
+      withBinding(ref){ withMapping(Map(capt -> resolvedCapt)) { core.Var(rewrite(ref), resolvedInit, resolvedCapt, rewrite(body)) }}
 
     case core.Get(id, tpe, ref, capt, body) =>
       val resolvedRef = rewrite(ref)

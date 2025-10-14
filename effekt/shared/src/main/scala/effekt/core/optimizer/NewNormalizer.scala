@@ -4,7 +4,8 @@ package optimizer
 
 import effekt.core.ValueType.Boxed
 import effekt.source.Span
-import effekt.core.optimizer.semantics.{Computation, NeutralStmt}
+import effekt.core.optimizer.semantics.{Computation, NeutralStmt, Value}
+import effekt.symbols.builtins
 import effekt.util.messages.{ErrorReporter, INTERNAL_ERROR}
 import effekt.symbols.builtins.AsyncCapability
 import kiama.output.ParenPrettyPrinter
@@ -47,7 +48,7 @@ object semantics {
 
   enum Value {
     // Stuck
-    //case Var(id: Id, annotatedType: ValueType)
+    case Var(id: Id, annotatedType: ValueType)
     case Extern(f: BlockVar, targs: List[ValueType], vargs: List[Addr])
 
     // Actual Values
@@ -57,7 +58,7 @@ object semantics {
     case Box(body: Computation, annotatedCaptures: Set[effekt.symbols.Symbol])
 
     val free: Variables = this match {
-      // case Value.Var(id, annotatedType) => Variables.empty
+      case Value.Var(id, annotatedType) => Set.empty
       case Value.Extern(id, targs, vargs) => vargs.toSet
       case Value.Literal(value, annotatedType) => Set.empty
       case Value.Make(data, tag, targs, vargs) => vargs.toSet
@@ -73,6 +74,7 @@ object semantics {
     case Val(stmt: NeutralStmt)
     case Run(f: BlockVar, targs: List[ValueType], vargs: List[Addr], bargs: List[Computation])
     case Unbox(addr: Addr, tpe: BlockType, capt: Captures)
+    case Get(ref: Id, tpe: ValueType, cap: Captures)
 
     val free: Variables = this match {
       case Binding.Let(value) => value.free
@@ -81,6 +83,7 @@ object semantics {
       case Binding.Val(stmt) => stmt.free
       case Binding.Run(f, targs, vargs, bargs) => vargs.toSet ++ all(bargs, _.free)
       case Binding.Unbox(addr: Addr, tpe: BlockType, capt: Captures) => Set(addr)
+      case Binding.Get(ref, tpe, cap) => Set(ref)
     }
   }
 
@@ -114,6 +117,12 @@ object semantics {
           inverse = inverse.updated(value, addr)
           addr
       }
+
+    def allocateGet(ref: Id, tpe: ValueType, cap: Captures): Addr = {
+      val addr = Id("get")
+      bindings = bindings.updated(addr, Binding.Get(ref, tpe, cap))
+      addr
+    }
 
     def run(hint: String, callee: BlockVar, targs: List[ValueType], vargs: List[Addr], bargs: List[Computation]): Addr = {
       val addr = Id(hint)
@@ -173,6 +182,9 @@ object semantics {
       case (addr, b: Binding.Unbox) =>
         used = used ++ b.free
         filtered = (addr, b):: filtered
+      case (addr, g: Binding.Get) =>
+        used = used ++ g.free
+        filtered = (addr, g) :: filtered
     }
 
     // we want to avoid turning tailcalls into non tail calls like
@@ -233,6 +245,7 @@ object semantics {
         case (id, b: Binding.Val) => free = (free - id) ++ b.free
         case (id, b: Binding.Run) => free = (free - id) ++ b.free
         case (id, b: Binding.Unbox) => free = (free - id) ++ b.free
+        case (id, b: Binding.Get) => free = (free - id) ++ b.free
       }
       free
     }
@@ -292,7 +305,6 @@ object semantics {
     case Resume(k: Id, body: BasicBlock)
 
     case Var(id: BlockParam, init: Addr, body: BasicBlock)
-    // case Get
     // case Put
 
     // aborts at runtime
@@ -320,9 +332,12 @@ object semantics {
     case Static(tpe: ValueType, apply: Scope => Addr => Stack => NeutralStmt)
     case Dynamic(closure: Closure)
 
+    /* Return an argument `arg` through this frame and the rest of the stack `ks`
+     */
     def ret(ks: Stack, arg: Addr)(using scope: Scope): NeutralStmt = this match {
       case Frame.Return => ks match {
         case Stack.Empty => NeutralStmt.Return(arg)
+        case Stack.Unknown => NeutralStmt.Return(arg)
         case Stack.Reset(p, k, ks) => k.ret(ks, arg)
         case Stack.Var(id, curr, init, k, ks) => k.ret(ks, arg)
       }
@@ -351,7 +366,15 @@ object semantics {
   //
   // where the frame on the reset is the one AFTER the prompt NOT BEFORE!
   enum Stack {
+    /**
+     * Statically known to be empty
+     * This only occurs at the entrypoint of normalization.
+     * In other cases, where the stack is not known, you should use Unknown instead.
+     */
     case Empty
+    /** Dynamic tail (we do not know the shape of the remaining stack)
+     */
+    case Unknown
     case Reset(prompt: BlockParam, frame: Frame, next: Stack)
     case Var(id: BlockParam, curr: Addr, init: Addr, frame: Frame, next: Stack)
     // TODO desugar regions into var?
@@ -359,20 +382,24 @@ object semantics {
 
     lazy val bound: List[BlockParam] = this match {
       case Stack.Empty => Nil
+      case Stack.Unknown => Nil
       case Stack.Reset(prompt, frame, next) => prompt :: next.bound
       case Stack.Var(id, curr, init, frame, next) => id :: next.bound
     }
   }
 
-  def get(id: Id, ks: Stack): Addr = ks match {
-    case Stack.Empty => sys error s"Should not happen: trying to lookup ${util.show(id)} in empty stack"
-    case Stack.Reset(prompt, frame, next) => get(id, next)
-    case Stack.Var(id1, curr, init, frame, next) if id == id1.id => curr
-    case Stack.Var(id1, curr, init, frame, next) => get(id, next)
+  def get(ref: Id, ks: Stack): Option[Addr] = ks match {
+    case Stack.Empty => sys error s"Should not happen: trying to lookup ${util.show(ref)} in empty stack"
+    // We have reached the end of the known stack, so the variable must be in the unknown part.
+    case Stack.Unknown => None
+    case Stack.Reset(prompt, frame, next) => get(ref, next)
+    case Stack.Var(id1, curr, init, frame, next) if ref == id1.id => Some(curr)
+    case Stack.Var(id1, curr, init, frame, next) => get(ref, next)
   }
   
   def put(id: Id, value: Addr, ks: Stack): Stack = ks match {
     case Stack.Empty => sys error s"Should not happen: trying to put ${util.show(id)} in empty stack"
+    case Stack.Unknown => sys error s"Cannot put ${util.show(id)} in unknown stack"
     case Stack.Reset(prompt, frame, next) => Stack.Reset(prompt, frame, put(id, value, next))
     case Stack.Var(id1, curr, init, frame, next) if id == id1.id => Stack.Var(id1, value, init, frame, next)
     case Stack.Var(id1, curr, init, frame, next) => Stack.Var(id1, curr, init, frame, put(id, value, next))
@@ -386,6 +413,7 @@ object semantics {
 
   def shift(p: Id, k: Frame, ks: Stack): (Cont, Frame, Stack) = ks match {
     case Stack.Empty => sys error s"Should not happen: cannot find prompt ${util.show(p)}"
+    case Stack.Unknown => sys error s"Cannot find prompt ${util.show(p)} in unknown stack"
     case Stack.Reset(prompt, frame, next) if prompt.id == p =>
       (Cont.Reset(k, prompt, Cont.Empty), frame, next)
     case Stack.Reset(prompt, frame, next) =>
@@ -407,12 +435,11 @@ object semantics {
       (frame, Stack.Var(id, curr, init, k1, ks1))
   }
 
-  def joinpoint(k: Frame, ks: Stack)(f: Frame => Stack => NeutralStmt)(using scope: Scope): NeutralStmt = {
-
+  def joinpoint(k: Frame, ks: Stack)(f: (Frame, Stack) => NeutralStmt)(using scope: Scope): NeutralStmt = {
     def reifyFrame(k: Frame, escaping: Stack)(using scope: Scope): Frame = k match {
       case Frame.Static(tpe, apply) =>
         val x = Id("x")
-        nested { scope ?=> apply(scope)(x)(Stack.Empty) } match {
+        nested { scope ?=> apply(scope)(x)(Stack.Unknown) } match {
           // Avoid trivial continuations like
           //   def k_6268 = (x_6267: Int_3) {
           //     return x_6267
@@ -431,12 +458,13 @@ object semantics {
 
     def reifyStack(ks: Stack): Stack = ks match {
       case Stack.Empty => Stack.Empty
+      case Stack.Unknown => Stack.Unknown
       case Stack.Reset(prompt, frame, next) =>
         Stack.Reset(prompt, reifyFrame(frame, next), reifyStack(next))
       case Stack.Var(id, curr, init, frame, next) =>
         Stack.Var(id, curr, init, reifyFrame(frame, next), reifyStack(next))
     }
-    f(reifyFrame(k, ks))(reifyStack(ks))
+    f(reifyFrame(k, ks), reifyStack(ks))
   }
 
   def reify(k: Frame, ks: Stack)(stmt: Scope ?=> NeutralStmt)(using Scope): NeutralStmt =
@@ -448,7 +476,7 @@ object semantics {
       case Frame.Static(tpe, apply) =>
         val tmp = Id("tmp")
         scope.push(tmp, stmt)
-        apply(scope)(tmp)(Stack.Empty)
+        apply(scope)(tmp)(Stack.Unknown)
       case Frame.Dynamic(Closure(label, closure)) =>
         val tmp = Id("tmp")
         scope.push(tmp, stmt)
@@ -459,6 +487,7 @@ object semantics {
   final def reify(ks: Stack)(stmt: Scope ?=> NeutralStmt)(using scope: Scope): NeutralStmt =
     ks match {
       case Stack.Empty => stmt
+      case Stack.Unknown => stmt
       // only reify reset if p is free in body
       case Stack.Reset(prompt, frame, next) =>
         reify(next) { reify(frame) { // reify(next) { reify(store) { reify(frame) { ... }}} ??? ORDER? TODO
@@ -536,6 +565,8 @@ object semantics {
 
       case Value.Box(body, tpe) =>
         "box" <+> braces(nest(line <> toDoc(body) <> line))
+
+      case Value.Var(id, tpe) => toDoc(id)
     }
 
     def toDoc(block: Block): Doc = block match {
@@ -567,6 +598,7 @@ object semantics {
           (if (targs.isEmpty) emptyDoc else brackets(hsep(targs.map(toDoc), comma))) <>
           parens(hsep(vargs.map(toDoc), comma)) <> hcat(bargs.map(b => braces { toDoc(b) })) <> line
         case (addr, Binding.Unbox(innerAddr, tpe, capt)) => "def" <+> toDoc(addr) <+> "=" <+> "unbox" <+> toDoc(innerAddr) <> line
+        case (addr, Binding.Get(ref, tpe, cap)) => "let" <+> toDoc(addr) <+> "=" <+> "!" <> toDoc(ref) <> line
       })
 
     def toDoc(block: BasicBlock): Doc =
@@ -606,7 +638,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           .bindComputation(id, Computation.Var(freshened))
 
         val normalizedBlock = Block(tparams, vparams, bparams, nested {
-          evaluate(body, Frame.Return, Stack.Empty)
+          evaluate(body, Frame.Return, Stack.Unknown)
         })
 
         val closureParams = escaping.bound.filter { p => normalizedBlock.free contains p.id }
@@ -626,7 +658,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         .bindComputation(bparams.map(p => p.id -> Computation.Var(p.id)))
 
       val normalizedBlock = Block(tparams, vparams, bparams, nested {
-        evaluate(body, Frame.Return, Stack.Empty)
+        evaluate(body, Frame.Return, Stack.Unknown)
       })
 
       val closureParams = escaping.bound.filter { p => normalizedBlock.free contains p.id }
@@ -696,7 +728,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       scope.allocate("x", Value.Make(data, tag, targs, vargs.map(evaluate)))
 
     case core.Expr.Box(b, annotatedCapture) =>
-      val comp = evaluate(b, "x", Stack.Empty)
+      val comp = evaluate(b, "x", Stack.Unknown)
       scope.allocate("x", Value.Box(comp, annotatedCapture))
   }
 
@@ -714,7 +746,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
 
     case Stmt.ImpureApp(id, f, targs, vargs, bargs, body) =>
       assert(bargs.isEmpty)
-      val addr = scope.run("x", f, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", Stack.Empty)))
+      val addr = scope.run("x", f, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", Stack.Unknown)))
       evaluate(body, k, ks)(using env.bindValue(id, addr), scope)
 
     case Stmt.Let(id, annotatedTpe, binding, body) =>
@@ -742,7 +774,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
 
     case Stmt.App(callee, targs, vargs, bargs) =>
       // Here the stack passed to the blocks is an empty one since we reify it anyways...
-      val escapingStack = Stack.Empty
+      val escapingStack = Stack.Unknown
       evaluate(callee, "f", escapingStack) match {
         case Computation.Inline(core.Block.BlockLit(tparams, cparams, vparams, bparams, body), closureEnv) =>
           val newEnv = closureEnv
@@ -761,7 +793,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     // case Stmt.Invoke(New)
 
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
-      val escapingStack = Stack.Empty
+      val escapingStack = Stack.Unknown
       evaluate(callee, "o", escapingStack) match {
         case Computation.Var(id) =>
           reify(k, ks) { NeutralStmt.Invoke(id, method, methodTpe, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack))) }
@@ -778,7 +810,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         case Some(Value.Literal(true, _)) => evaluate(thn, k, ks)
         case Some(Value.Literal(false, _)) => evaluate(els, k, ks)
         case _ =>
-          joinpoint(k, ks) { k => ks =>
+          joinpoint(k, ks) { (k, ks) =>
             NeutralStmt.If(sc, nested {
               evaluate(thn, k, ks)
             }, nested {
@@ -810,7 +842,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         //            },
         //            default.map { stmt => nested { evaluate(stmt, k, ks) } })
         case _ =>
-          joinpoint(k, ks) { k => ks =>
+          joinpoint(k, ks) { (k, ks) =>
             NeutralStmt.Match(sc,
               // This is ALMOST like evaluate(BlockLit), but keeps the current continuation
               clauses.map { case (id, core.Block.BlockLit(tparams, cparams, vparams, bparams, body)) =>
@@ -835,8 +867,10 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       val addr = evaluate(init)
       evaluate(body, Frame.Return, Stack.Var(BlockParam(ref, Type.TState(init.tpe), Set(capture)), addr, addr, k, ks))
     case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
-      util.trace(ks)
-      bind(id, get(ref, ks)) { evaluate(body, k, ks) }
+      get(ref, ks) match {
+        case Some(addr) => bind(id, addr) { evaluate(body, k, ks) }
+        case None => bind(id, scope.allocateGet(ref, annotatedTpe, annotatedCapt)) { evaluate(body, k, ks) }
+      }
     case Stmt.Put(ref, annotatedCapt, value, body) =>
       evaluate(body, k, put(ref, evaluate(value), ks))
 
@@ -855,7 +889,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         val neutralBody = {
           given Env = env.bindComputation(k2.id -> Computation.Var(k2.id) :: Nil)
           nested {
-            evaluate(body, Frame.Return, Stack.Empty)
+            evaluate(body, Frame.Return, Stack.Unknown)
           }
         }
         assert(Set(cparam) == k2.capt, "At least for now these need to be the same")
@@ -888,7 +922,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         case Computation.Var(r) =>
           reify(k, ks) {
             NeutralStmt.Resume(r, nested {
-              evaluate(body, Frame.Return, Stack.Empty)
+              evaluate(body, Frame.Return, Stack.Unknown)
             })
           }
         case Computation.Continuation(k3) =>
@@ -975,12 +1009,12 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       Stmt.Shift(embedBlockVar(prompt), core.BlockLit(Nil, capt :: Nil, Nil, k :: Nil, embedStmt(body)(using G.bindComputations(k :: Nil))))
     case NeutralStmt.Resume(k, body) =>
       Stmt.Resume(embedBlockVar(k), embedStmt(body))
-    case NeutralStmt.Var(id, init, body) =>
-      val capt = id.capt match {
+    case NeutralStmt.Var(blockParam, init, body) =>
+      val capt = blockParam.capt match {
         case cs if cs.size == 1 => cs.head
         case _ => sys error "Variable needs to have a single capture"
       }
-      Stmt.Var(id.id, embedExpr(init), capt, embedStmt(body))
+      Stmt.Var(blockParam.id, embedExpr(init), capt, embedStmt(body)(using G.bind(blockParam.id, blockParam.tpe, blockParam.capt)))
     case NeutralStmt.Hole(span) =>
       Stmt.Hole(span)
   }
@@ -1009,6 +1043,8 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         case ((id, Binding.Unbox(addr, tpe, capt)), rest) => G =>
           val pureValue = embedExpr(addr)(using G)
           Stmt.Def(id, core.Block.Unbox(pureValue), rest(G.bind(id, tpe, capt)))
+        case ((id, Binding.Get(ref, tpe, cap)), rest) => G =>
+          Stmt.Get(id, tpe, ref, cap, rest(G.bind(id, tpe)) )
       }(G)
   }
 
@@ -1017,6 +1053,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     case Value.Literal(value, annotatedType) => Expr.Literal(value, annotatedType)
     case Value.Make(data, tag, targs, vargs) => Expr.Make(data, tag, targs, vargs.map(embedExpr))
     case Value.Box(body, annotatedCapture) => Expr.Box(embedBlock(body), annotatedCapture)
+    case Value.Var(id, annotatedType) => Expr.ValueVar(id, annotatedType)
   }
   def embedExpr(addr: Addr)(using G: TypingContext): core.Expr = Expr.ValueVar(addr, G.lookupValue(addr))
 
