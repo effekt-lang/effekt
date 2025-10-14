@@ -384,6 +384,44 @@ class NewNormalizerTests extends CoreTests {
 
     assertAlphaEquivalentToplevels(actual, expected, List("run"), declNames=List("bar"), externNames=List("foo"))
   }
+
+  // This test case shows a mutable variable passed to the identity function.
+  // Currently, the normalizer is not able to see through the identity function,
+  // but it does ignore the mutable variable and just passes the initial value.
+  test("Pass mutable variable to identity function uses let binding") {
+    val input =
+      """
+        |def run(): Int = {
+        |    def f(x: Int) = x
+        |    var x = 42
+        |    f(x)
+        |}
+        |
+        |def main() = println(run())
+        |
+        |""".stripMargin
+
+    val (mainId, actual) = normalize(input)
+
+    val expected =
+      parse(
+        """
+          |module input
+          |
+          |def run() = {
+          |    def f(x: Int) = {
+          |        return x: Int
+          |    }
+          |
+          |    let y = 42
+          |    var x @ z = y: Int;
+          |    (f : (Int) => Int @ {})(y: Int)
+          |}
+          |""".stripMargin
+      )
+
+    assertAlphaEquivalentToplevels(actual, expected, List("run"))
+  }
 }
 
 /**
