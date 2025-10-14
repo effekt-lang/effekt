@@ -18,6 +18,9 @@ object TransformerCPS {
   val RESET = "reset"
   val RESUME = "resume"
   val SHIFT = "shift"
+  val VAR = "var"
+  val GET = "get"
+  val PUT = "put"
 
   def compile(input: cps.ModuleDecl, mainSymbol: symbols.TermSymbol)(using ErrorReporter): chez.Block = {
     val externs = input.externs.map(toChez)
@@ -93,6 +96,19 @@ object TransformerCPS {
     case LetCont(id, binding, body) => resolveLet(id, toChez(binding), body)
     case LetDef(id, binding, body) => resolveLet(id, toChez(binding), body)
     case LetExpr(id, binding, body) => resolveLet(id, toChez(binding), body)
+    case Region(id, ks, body) => ???
+    case Alloc(id, init, region, body) => ???
+    case Get(ref, id, body) =>
+      val binding = Builtin(GET, toChez(ref))
+      resolveLet(id, binding, body)
+    case Put(ref, value, body) =>
+      val call = Builtin(PUT, toChez(ref), toChez(value))
+      chez.Block(Nil, List(call), toChezExpr(body))
+    // TODO: Deallocate
+    case Dealloc(ref, body) => toChez(body)
+    case Var(id, init, ks, body) =>
+      val binding = Builtin(VAR, toChez(init), toChez(ks))
+      resolveLet(id, binding, body)
     case _ => chez.Block(Nil, Nil, toChezExpr(stmt))
   }
 
@@ -126,13 +142,8 @@ object TransformerCPS {
               ++ List(toChez(ks), toChez(k))
       chez.Call(methodLam, args)
     // TODO: Local mutable state
-    case Region(id, ks, body) => ???
-    case Alloc(id, init, region, body) => ???
-    case Get(ref, id, body) => ???
-    case Put(ref, value, body) => ???
-    case Dealloc(ref, body) => ???
-    case Var(id, init, ks, body) => ???
-    case let: (LetCont | LetDef | LetExpr | ImpureApp) =>
+    case let: (LetCont | LetDef | LetExpr | ImpureApp
+             | Region | Alloc | Get | Put | Dealloc | Var) =>
       chez.Let(Nil, toChez(stmt))
   }
 
