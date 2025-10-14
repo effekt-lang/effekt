@@ -6,7 +6,7 @@
 ; Program a b = a, Cont, MetaCont -> b
 
 ; StackCell
-(define-record-type stack-cell (fields prompt cont state))
+(define-record-type stack-cell (fields prompt state cont))
 
 ; MetaCont
 ; Holds the prompt and state of k in addition to the Metastack
@@ -34,7 +34,7 @@
 
 ; a, MetaCont -> #
 (define (return x ks)
-    (let* ([stacks (meta-cont-rest ks)]
+    (let* ([stacks (meta-cont-stacks ks)]
            [current-stack-cell (car stacks)]
            [other-stack-cells (cdr stacks)]
            [k (stack-cell-cont current-stack-cell)]
@@ -49,8 +49,8 @@
     (let* ([prompt (new-prompt)]
            [k-prompt (meta-cont-prompt ks)]
            [k-state (meta-cont-state ks)]
-           [k-cell (make-stack-cell k-prompt k)]
-           [rest-cells (meta-cont-rest ks)]
+           [k-cell (make-stack-cell k-prompt k-state k)]
+           [rest-cells (meta-cont-stacks ks)]
            [ks (make-meta-cont prompt '() (cons k-cell rest-cells))])
         (prog prompt ks return)))
 
@@ -68,7 +68,7 @@
 ; Prompt, Program [StackCell] b, MetaCont, Cont b -> #
 (define (shift p prog ks k)
     (let* ([k-cell (make-stack-cell (meta-cont-prompt ks) (meta-cont-state ks) k)]
-           [cells (cons k-cell (meta-cont-rest ks))]
+           [cells (cons k-cell (meta-cont-stacks ks))]
            [splitted (split-stack cells p)]
            [c (car splitted)]
            [underC (cdr splitted)]
@@ -87,7 +87,7 @@
 
 ; [StackCell], Program, MetaCont, Cont -> #
 (define (resume cont block ks k)
-    (let* ([cells (cons (make-stack-cell (meta-cont-prompt ks) (meta-cont-state ks) k) (meta-cont-rest ks))]
+    (let* ([cells (cons (make-stack-cell (meta-cont-prompt ks) (meta-cont-state ks) k) (meta-cont-stacks ks))]
            [rewinded (rewind cont cells)]
            [k-cell (car rewinded)]
            [k (stack-cell-cont k-cell)]

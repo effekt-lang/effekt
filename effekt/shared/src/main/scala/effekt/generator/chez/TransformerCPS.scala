@@ -104,7 +104,6 @@ object TransformerCPS {
     case Put(ref, value, body) =>
       val call = Builtin(PUT, toChez(ref), toChez(value))
       chez.Block(Nil, List(call), toChezExpr(body))
-    // TODO: Deallocate
     case Dealloc(ref, body) => toChez(body)
     case Var(id, init, ks, body) =>
       val binding = Builtin(VAR, toChez(init), toChez(ks))
@@ -129,7 +128,15 @@ object TransformerCPS {
     case If(cond, thn, els) =>
       val chezCond = toChez(cond)
       chez.If(chezCond, toChezExpr(thn), toChezExpr(els))
-    case Match(scrutinee, clauses, default) => ???
+    case Match(scrutinee, clauses, default) =>
+      val sc = toChez(scrutinee)
+      val cls = clauses.map { case (constr, branch) =>
+        val names = RecordNames(constr)
+        val pred = chez.Call(chez.Variable(names.predicate), sc)
+        val matcher = chez.Call(chez.Variable(names.matcher), sc, toChez(branch))
+        (pred, matcher)
+      }
+      chez.Cond(cls, default.map(toChezExpr))
     case Reset(prog, ks, k) =>
       chez.Builtin(RESET, toChez(prog), toChez(ks), toChez(k))
     case Resume(resumption, body, ks, k) =>
@@ -153,7 +160,8 @@ object TransformerCPS {
     case Literal(v: String) => chez.RawValue(s"\"$v\"")
     case Literal(value) => chez.RawValue(value.toString())
     case PureApp(id, vargs) => chez.Call(toChez(id), vargs.map(toChez))
-    case Make(_, tag, vargs) => ???
+    case Make(_, tag, vargs) =>
+      chez.Call(nameRef(tag), vargs.map(toChez))
     case Box(id) => toChez(id)
   }
 
@@ -163,6 +171,11 @@ object TransformerCPS {
       val params = (results :+ ks).map(nameDef)
       chez.Lambda(params, toChez(body))
     case Cont.Abort => chez.RawExpr("(void)")
+  }
+
+  def toChez(clause: cps.Clause): chez.Expr = clause match {
+    case Clause(vparams, body) =>
+      chez.Lambda(vparams.map(nameDef), toChez(body))
   }
 
   def toChez(id: Symbol): chez.Variable = Variable(nameRef(id))
