@@ -30,6 +30,15 @@
 ; Box, Value -> ()
 (define (put ref value) (set-box! ref value))
 
+; TODO
+(define (create-region ks) (void))
+
+; TODO
+(define (allocate init region) (box init))
+
+; TODO
+(define (deallocate ref) (void))
+
 (define _prompt 1)
 (define (new-prompt)
     (let ([prompt _prompt])

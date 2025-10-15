@@ -13,7 +13,6 @@ object TransformerCPS {
   val HOLE = "hole"
 
   // Defined in chez/cps/effekt.ss
-  val TOP_LEVEL_K = "top-level-k"
   val RUN_TOP_LEVEL = "run-top-level"
   val RESET = "reset"
   val RESUME = "resume"
@@ -21,6 +20,9 @@ object TransformerCPS {
   val VAR = "var"
   val GET = "get"
   val PUT = "put"
+  val CREATE_REGION = "create-region"
+  val ALLOCATE = "allocate"
+  val DEALLOCATE = "deallocate"
 
   def compile(input: cps.ModuleDecl, mainSymbol: symbols.TermSymbol)(using ErrorReporter): chez.Block = {
     val externs = input.externs.map(toChez)
@@ -47,7 +49,8 @@ object TransformerCPS {
     case ToplevelDefinition.Def(id, block) => chez.Constant(nameDef(id), toChez(block))
     case ToplevelDefinition.Let(id, expr) => chez.Constant(nameDef(id), toChez(expr))
     case ToplevelDefinition.Val(id, ks, k, binding) =>
-      chez.Function(nameDef(id), List(ks, k).map(nameDef), toChez(binding))
+      val lambda = chez.Lambda(List(ks, k).map(nameDef), toChez(binding))
+      chez.Constant(nameDef(id), Builtin(RUN_TOP_LEVEL, lambda))
   }
 
   def toChez(declaration: core.Declaration): List[chez.Def] = declaration match {
@@ -96,15 +99,22 @@ object TransformerCPS {
     case LetCont(id, binding, body) => resolveLet(id, toChez(binding), body)
     case LetDef(id, binding, body) => resolveLet(id, toChez(binding), body)
     case LetExpr(id, binding, body) => resolveLet(id, toChez(binding), body)
-    case Region(id, ks, body) => ???
-    case Alloc(id, init, region, body) => ???
+    // TODO: regions
+    case Region(id, ks, body) =>
+      val binding = Builtin(CREATE_REGION, toChez(ks))
+      resolveLet(id, binding, body)
+    case Alloc(id, init, region, body) =>
+      val binding = Builtin(ALLOCATE, toChez(init), toChez(region))
+      resolveLet(id, binding, body)
     case Get(ref, id, body) =>
       val binding = Builtin(GET, toChez(ref))
       resolveLet(id, binding, body)
     case Put(ref, value, body) =>
       val call = Builtin(PUT, toChez(ref), toChez(value))
       chez.Block(Nil, List(call), toChezExpr(body))
-    case Dealloc(ref, body) => toChez(body)
+    case Dealloc(ref, body) =>
+      val dealloc = Builtin(DEALLOCATE, toChez(ref))
+      chez.Block(Nil, List(dealloc), toChezExpr(body))
     case Var(id, init, ks, body) =>
       val binding = Builtin(VAR, toChez(init), toChez(ks))
       resolveLet(id, binding, body)
@@ -148,7 +158,6 @@ object TransformerCPS {
       val args = vargs.map(toChez) ++ bargs.map(toChez)
               ++ List(toChez(ks), toChez(k))
       chez.Call(methodLam, args)
-    // TODO: Local mutable state
     case let: (LetCont | LetDef | LetExpr | ImpureApp
              | Region | Alloc | Get | Put | Dealloc | Var) =>
       chez.Let(Nil, toChez(stmt))
@@ -157,7 +166,9 @@ object TransformerCPS {
   def toChez(expr: cps.Expr): chez.Expr = expr match {
     case ValueVar(id) => toChez(id)
     case Literal(()) => chez.RawValue("(void)")
-    case Literal(v: String) => chez.RawValue(s"\"$v\"")
+    //TODO: Copy paste escape procedure to this transformer?
+    case Literal(v: String) =>
+      effekt.generator.chez.TransformerMonadic.escape(v)
     case Literal(value) => chez.RawValue(value.toString())
     case PureApp(id, vargs) => chez.Call(toChez(id), vargs.map(toChez))
     case Make(_, tag, vargs) =>
