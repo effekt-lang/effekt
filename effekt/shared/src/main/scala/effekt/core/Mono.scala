@@ -36,7 +36,15 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
               )
             )
 
-            var monoContext = MonoContext(solution, monoNames)
+            // Collect polymorphic extern definitions
+            var polyExternDefs: List[Id] = List.empty 
+            externs.foreach {
+              case Extern.Include(featureFlag, contents) => ()
+              case Extern.Def(id, List(), cparams, vparams, bparams, ret, annotatedCapture, body) => ()
+              case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => polyExternDefs :+= id
+            }
+
+            var monoContext = MonoContext(solution, monoNames, polyExternDefs)
             val monoDecls = declarations flatMap (monomorphize(_)(using monoContext))
             val monoDefs = monomorphize(definitions)(using monoContext)
             // monoDecls.foreach(decl => println(util.show(decl)))
@@ -79,8 +87,9 @@ class MonoFindContext {
     typingContext += (tparam -> TypeArg.Var(functionId, index))
 }
 
-case class MonoContext(solution: Solution, names: MonoNames) {
+case class MonoContext(solution: Solution, names: MonoNames, polyExternDefs: List[Id]) {
   var replacementTparams: Map[Id, Ground] = Map.empty
+  def isPolyExtern(id: Id) = polyExternDefs.contains(id)
 }
 
 def findConstraints(definitions: List[Toplevel])(using MonoFindContext): Constraints =
@@ -298,13 +307,22 @@ def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] =
     )
 
 def monomorphize(constructor: Constructor, tparamCount: Int)(using ctx: MonoContext): List[Constructor] = constructor match
+  case Constructor(id, List(), fields) => 
+    List(Constructor(id, List.empty, fields map monomorphize))
   case Constructor(id, tparams, fields) => 
     val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
+    if (monoTypes.isEmpty) {
+      // FIXME?: Assuming here tparams is empty, or at least tparams.drop(tparamCount) is
+      //         This case can happen if there is no flow into a specific constructor,
+      //         in which case we should still emit the Constructor, but without the tparams
+      List(Constructor(id, List.empty, fields map monomorphize))
+    } else {
     monoTypes.map(baseTypes =>
       val replacementTparams = tparams.drop(tparamCount).zip(baseTypes).toMap
       ctx.replacementTparams ++= replacementTparams
       Constructor(ctx.names(id, baseTypes), List.empty, fields map monomorphize) 
     )
+    }
 
 def monomorphize(block: Block)(using ctx: MonoContext): Block = block match
   case b: BlockLit => monomorphize(b)
@@ -321,6 +339,8 @@ def monomorphize(interface: BlockType.Interface)(using ctx: MonoContext): BlockT
     BlockType.Interface(replacementData.name, replacementData.targs)
 
 def monomorphize(operation: Operation)(using ctx: MonoContext): List[Operation] = operation match
+  case Operation(name, List(), cparams, vparams, bparams, body) =>
+    List(Operation(name, List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body)))
   case Operation(name, tparams, cparams, vparams, bparams, body) => 
     val monoTypes = ctx.solution.getOrElse(name, Set.empty).toList
     monoTypes.map(baseTypes =>
@@ -332,7 +352,8 @@ def monomorphize(operation: Operation)(using ctx: MonoContext): List[Operation] 
 
 def monomorphize(block: BlockLit)(using ctx: MonoContext): BlockLit = block match
   case BlockLit(tparams, cparams, vparams, bparams, body) => 
-    BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
+    // FIXME: Is passing tparams directly here without any change correct?
+    BlockLit(tparams, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
 
 def monomorphize(block: BlockVar)(using ctx: MonoContext): BlockVar = block match
   case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(id, monomorphize(annotatedTpe), annotatedCapt)
@@ -342,7 +363,7 @@ def monomorphize(field: Field)(using ctx: MonoContext): Field = field match
 
 def monomorphize(blockVar: BlockVar, replacementId: FunctionId)(using ctx: MonoContext): BlockVar = blockVar match
   case BlockVar(id, BlockType.Function(List(), cparams, vparams, bparams, result), annotatedCapt) => blockVar
-  // TODO: What is in annotated captures. Does it need to be handled?
+  case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) if ctx.isPolyExtern(id) => blockVar
   case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) => 
     val monoAnnotatedTpe = BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
     BlockVar(replacementId, monoAnnotatedTpe, annotatedCapt)
@@ -356,8 +377,7 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
   case Var(ref, init, capture, body) => 
     Var(ref, monomorphize(init), capture, monomorphize(body))
   case ImpureApp(id, callee, targs, vargs, bargs, body) =>
-    val replacementData = replacementDataFromTargs(callee.id, targs)
-    ImpureApp(id, monomorphize(callee, replacementData.name), List.empty, vargs map monomorphize, bargs map monomorphize, monomorphize(body))
+    ImpureApp(id, callee, targs, vargs map monomorphize, bargs map monomorphize, monomorphize(body))
   case App(callee: BlockVar, targs, vargs, bargs) => 
     val replacementData = replacementDataFromTargs(callee.id, targs)
     App(monomorphize(callee, replacementData.name), List.empty, vargs map monomorphize, bargs map monomorphize)
@@ -385,7 +405,8 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
     Resume(monomorphize(k), monomorphize(body))
   // TODO: Monomorphizing here throws an error complaining about a missing implementation
   //       Not sure what is missing, altough it does works like this
-  case Reset(body) => Reset(body)
+  case Reset(body) =>
+    Reset(body)
   case Def(id, BlockLit(List(), cparams, vparams, bparams, bbody), body) => 
     Stmt.Def(id, BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(bbody)), monomorphize(body))
   case Def(id, BlockLit(tparams, cparams, vparams, bparams, bbody), body) =>
@@ -403,7 +424,17 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
   case Def(id, block, body) => Def(id, monomorphize(block), monomorphize(body))
   case Shift(prompt, body) => Shift(monomorphize(prompt), monomorphize(body))
   case Match(scrutinee, clauses, default) =>
-    val monoClauses = clauses flatMap monomorphize
+    val monoScrutinee = monomorphize(scrutinee)
+
+    // FIXME: Not correct in all cases. Have to figure out where this is needed
+    // We need the type of the scrutinee, to give each clause the correct monomorphized name based on said type
+    val monoScrutineeType = exprType(scrutinee) match {
+      case ValueType.Data(name, targs) => 
+        targs map monomorphize
+      case _ => sys error "scrutinee type was not data"
+    }
+
+    val monoClauses = clauses.flatMap(monomorphize(_, monoScrutineeType.toVector))
     Match(monomorphize(scrutinee), monoClauses, monomorphize(default))
   case Get(id, annotatedTpe, ref, annotatedCapt, body) =>
     Get(id, monomorphize(annotatedTpe), ref, annotatedCapt, monomorphize(body))
@@ -414,9 +445,34 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
   case Region(body) => Region(monomorphize(body))
   case Hole(span) => Hole(span)
 
-def monomorphize(clause: (Id, BlockLit))(using ctx: MonoContext): List[(Id, BlockLit)] = clause match
+def exprType(expr: Expr): ValueType = expr match {
+  case Box(b, annotatedCapture) => ValueType.Boxed(b.tpe, annotatedCapture)
+  case Literal(value, annotatedType) => annotatedType
+  case Make(data, tag, targs, vargs) => data
+  case PureApp(b, targs, vargs) => b.annotatedTpe match {
+    case effekt.core.BlockType.Function(tparams, cparams, vparams, bparams, result) => result
+    case effekt.core.BlockType.Interface(name, targs) => ValueType.Data(name, targs)
+  }
+  case ValueVar(id, annotatedType) => annotatedType
+}
+
+def monomorphize(clause: (Id, BlockLit), scrutineeTypes: Vector[ValueType])(using ctx: MonoContext): List[(Id, BlockLit)] = clause match
   case (id, BlockLit(List(), cparams, vparams, bparams, body)) => 
+    val monoName = if (scrutineeTypes.isEmpty) {
+      Some(id) 
+    } else {
+      ctx.names.get((id, scrutineeTypes map toTypeArg))
+    }
+
+    monoName match {
+      case Some(name) => List((name, BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))))
+      case None => 
+        // WARN: There is no mono name for some clause in the match
+        //       This will happen for example in List[T] ( Cons(head: T, rest: List[T]), Nil() )
+        //       if one of the constructors is never initialized and therefore there is no Constraint flowing into it
+        //       in that case we can just reuse the original name, as it is never initialized
     List((id, BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))))
+    }
   case (id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
     val newClauseNameMap = ctx.names.view.filterKeys((tid, groundTypes) => tid == id)
     newClauseNameMap.map((clauseKey, monoId) => 
@@ -433,11 +489,17 @@ def monomorphize(opt: Option[Stmt])(using ctx: MonoContext): Option[Stmt] = opt 
 def monomorphize(expr: Expr)(using ctx: MonoContext): Expr = expr match
   case Literal(value, annotatedType) =>
     Literal(value, monomorphize(annotatedType))
+  // FIXME: Check these two cases below. Is the first one the only one we need?
   case PureApp(b, targs, vargs) =>
-    val replacementData = replacementDataFromTargs(b.id, targs)
-    PureApp(monomorphize(b, replacementData.name), List.empty, vargs map monomorphize)
+    PureApp(b, targs, vargs)
+  // case PureApp(b, targs, vargs) =>
+  //   val replacementData = replacementDataFromTargs(b.id, targs)
+  //   val replaceBVar = monomorphize(b, replacementData.name)
+  //   println(s"data: ${replacementData}, bvar: ${replaceBVar}, targs: ${targs}")
+  //   PureApp(replaceBVar, List.empty, vargs map monomorphize)
   case Make(data, tag, targs, vargs) =>
-    val replacementTag = ctx.names.getOrElse((tag, (targs map toTypeArg).toVector), tag)
+    // TODO: When are targs relevant and not data.targs
+    val replacementTag = ctx.names.getOrElse((tag, (data.targs map toTypeArg).toVector), tag)
     Make(replacementDataFromTargs(data.name, data.targs), replacementTag, List.empty, vargs map monomorphize)
   case Box(b, annotatedCapture) => 
     Box(monomorphize(b), annotatedCapture)
@@ -449,17 +511,19 @@ def monomorphize(valueParam: ValueParam)(using ctx: MonoContext): ValueParam = v
   case ValueParam(id, tpe) => ValueParam(id, monomorphize(tpe))
 
 def monomorphize(blockParam: BlockParam)(using ctx: MonoContext): BlockParam = blockParam match
-  // TODO: Same question as in block
   case BlockParam(id, tpe, capt) => BlockParam(id, monomorphize(tpe), capt) 
 
 def monomorphize(blockType: BlockType)(using ctx: MonoContext): BlockType = blockType match 
   case BlockType.Function(tparams, cparams, vparams, bparams, result) => 
     BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
-  case b: BlockType.Interface => monomorphize(b)
+  // FIXME: Is this correct? 
+  case BlockType.Interface(name, targs) => BlockType.Interface(name, targs map monomorphize)
 
 def monomorphize(valueType: ValueType)(using ctx: MonoContext): ValueType = valueType match
   case ValueType.Var(name) => ctx.replacementTparams(name) match {
-    case TypeArg.Base(tpe, targs) => ValueType.Var(tpe)
+    case TypeArg.Base(tpe, targs) => 
+      // FIXME: Why was this ever ValueType.Var?
+      ValueType.Data(tpe, targs map toValueType)
     case TypeArg.Boxed(tpe, capt) => ValueType.Boxed(tpe, capt)
   }
   case ValueType.Data(name, targs) => replacementDataFromTargs(name, targs)
@@ -491,9 +555,22 @@ def replacementDataFromTargs(id: FunctionId, targs: List[ValueType])(using ctx: 
   if (targs.isEmpty) return ValueType.Data(id, targs)
 
   val baseTypes: List[Ground] = targs map toTypeArg
-  ValueType.Data(ctx.names((id, baseTypes.toVector)), List.empty)
+
+  val nameOpt = ctx.names.get((id, baseTypes.toVector))
+  nameOpt match {
+    // If we have a monomorphized name stored, then this Type can be replaced with that
+    case Some(name) => ValueType.Data(name, List.empty)
+    // If there is a polymorphic type with no name stored, then it HAS to be an extern type
+    // We can't really do anything about those and have to leave them
+    case None => ValueType.Data(id, targs)
+  }
 
 def toTypeArg(vt: ValueType)(using ctx: MonoContext): Ground = vt match 
   case ValueType.Data(name, targs) => TypeArg.Base(name, targs map toTypeArg)
   case ValueType.Var(name) => ctx.replacementTparams(name)
   case ValueType.Boxed(tpe, capt) => TypeArg.Boxed(tpe, capt)
+
+def toValueType(ta: TypeArg)(using ctx: MonoContext): ValueType = ta match 
+  case TypeArg.Base(tpe, targs) => ValueType.Data(tpe, targs map toValueType)
+  case TypeArg.Var(funId, pos) => ???
+  case TypeArg.Boxed(tpe, capt) => ValueType.Boxed(tpe, capt) 
