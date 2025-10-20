@@ -464,7 +464,7 @@ class NewNormalizerTests extends CoreTests {
   // During normalization, this block parameter gets lifted to a `def`.
   // One might hope for this mutable variable to be eliminated entirely,
   // but currently the normalizer does not inline definitions.
-  test("Mutable reference can be lifted") {
+  test("Block param capturing mutable reference can be lifted") {
     val input =
       """
         |def run(): Int = {
