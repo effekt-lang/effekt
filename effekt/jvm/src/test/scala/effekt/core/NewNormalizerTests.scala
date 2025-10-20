@@ -460,6 +460,57 @@ class NewNormalizerTests extends CoreTests {
 
     assertAlphaEquivalentToplevels(actual, expected, List("run"))
   }
+
+  // This test shows a mutable reference captured by a block parameter.
+  // During normalization, this block parameter gets lifted to a `def`.
+  // One might hope for this mutable variable to be eliminated entirely,
+  // but currently the normalizer does not inline definitions.
+  test("Mutable reference can be lifted") {
+    val input =
+      """
+        |def run(): Int = {
+        |  def modifyProg { setter: Int => Unit }: Unit = {
+        |    setter(2)
+        |    ()
+        |  }
+        |  var x = 1
+        |  modifyProg { y => x = y }
+        |  x
+        |}
+        |
+        |def main() = println(run())
+        |""".stripMargin
+
+    val (mainId, actual) = normalize(input)
+
+    val expected =
+      parse(
+        """
+          |module input
+          |
+          |def run() = {
+          |  def modifyProg(){setter: (Int) => Unit} = {
+          |    let x = 2
+          |    val tmp: Unit = (setter: (Int) => Unit @ {setter})(x: Int);
+          |    let y = ()
+          |    return y: Unit
+          |  }
+          |  let y = 1
+          |  var x @ c = y: Int;
+          |  def f(y: Int) = {
+          |    put x @ c = y: Int;
+          |    let z = ()
+          |    return z: Unit
+          |  }
+          |  val tmp: Unit = (modifyProg: (){setter : (Int) => Unit} => Unit @ {})(){f: (Int) => Unit @ {c}};
+          |  get o: Int = !x @ c;
+          |  return o: Int
+          |}
+          |""".stripMargin
+      )
+
+    assertAlphaEquivalentToplevels(actual, expected, List("run"))
+  }
 }
 
 /**

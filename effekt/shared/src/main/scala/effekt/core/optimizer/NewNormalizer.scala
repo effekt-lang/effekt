@@ -305,7 +305,7 @@ object semantics {
     case Resume(k: Id, body: BasicBlock)
 
     case Var(id: BlockParam, init: Addr, body: BasicBlock)
-    // case Put
+    case Put(ref: Id, tpe: ValueType, cap: Captures, value: Addr, body: BasicBlock)
 
     // aborts at runtime
     case Hole(span: Span)
@@ -322,6 +322,7 @@ object semantics {
       case NeutralStmt.Resume(k, body) => Set(k) ++ body.free
       case NeutralStmt.Var(id, init, body) => Set(init) ++ body.free - id.id
       case NeutralStmt.Hole(span) => Set.empty
+      case NeutralStmt.Put(ref, tpe, cap, value, body) => Set(ref, value) ++ body.free
     }
   }
 
@@ -396,13 +397,14 @@ object semantics {
     case Stack.Var(id1, curr, init, frame, next) if ref == id1.id => Some(curr)
     case Stack.Var(id1, curr, init, frame, next) => get(ref, next)
   }
-  
-  def put(id: Id, value: Addr, ks: Stack): Stack = ks match {
+
+  def put(id: Id, value: Addr, ks: Stack): Option[Stack] = ks match {
     case Stack.Empty => sys error s"Should not happen: trying to put ${util.show(id)} in empty stack"
-    case Stack.Unknown => sys error s"Cannot put ${util.show(id)} in unknown stack"
-    case Stack.Reset(prompt, frame, next) => Stack.Reset(prompt, frame, put(id, value, next))
-    case Stack.Var(id1, curr, init, frame, next) if id == id1.id => Stack.Var(id1, value, init, frame, next)
-    case Stack.Var(id1, curr, init, frame, next) => Stack.Var(id1, curr, init, frame, put(id, value, next))
+    // We have reached the end of the known stack, so the variable must be in the unknown part.
+    case Stack.Unknown => None
+    case Stack.Reset(prompt, frame, next) => put(id, value, next).map(Stack.Reset(prompt, frame, _))
+    case Stack.Var(id1, curr, init, frame, next) if id == id1.id => Some(Stack.Var(id1, value, init, frame, next))
+    case Stack.Var(id1, curr, init, frame, next) => put(id, value, next).map(Stack.Var(id1, curr, init, frame, _))
   }
 
   enum Cont {
@@ -544,6 +546,9 @@ object semantics {
         "var" <+> toDoc(id) <+> "=" <+> toDoc(init) <> line <> toDoc(body)
 
       case NeutralStmt.Hole(span) => "hole()"
+
+      case NeutralStmt.Put(ref, tpe, cap, value, body) =>
+        "put" <+> toDoc(ref) <+> "=" <+> toDoc(value) <> line <> toDoc(body)
     }
 
     def toDoc(id: Id): Doc = id.show
@@ -598,7 +603,7 @@ object semantics {
           (if (targs.isEmpty) emptyDoc else brackets(hsep(targs.map(toDoc), comma))) <>
           parens(hsep(vargs.map(toDoc), comma)) <> hcat(bargs.map(b => braces { toDoc(b) })) <> line
         case (addr, Binding.Unbox(innerAddr, tpe, capt)) => "def" <+> toDoc(addr) <+> "=" <+> "unbox" <+> toDoc(innerAddr) <> line
-        case (addr, Binding.Get(ref, tpe, cap)) => "let" <+> toDoc(addr) <+> "=" <+> "!" <> toDoc(ref) <> line
+        case (addr, Binding.Get(ref, tpe, cap)) => "get" <+> toDoc(addr) <+> "=" <+> "!" <> toDoc(ref) <> line
       })
 
     def toDoc(block: BasicBlock): Doc =
@@ -872,7 +877,11 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         case None => bind(id, scope.allocateGet(ref, annotatedTpe, annotatedCapt)) { evaluate(body, k, ks) }
       }
     case Stmt.Put(ref, annotatedCapt, value, body) =>
-      evaluate(body, k, put(ref, evaluate(value), ks))
+      put(ref, evaluate(value), ks) match {
+        case Some(stack) => evaluate(body, k, stack)
+        case None =>
+          NeutralStmt.Put(ref, value.tpe, annotatedCapt, evaluate(value), nested { evaluate(body, k, ks) })
+      }
 
     // Control Effects
     case Stmt.Shift(prompt, core.Block.BlockLit(Nil, cparam :: Nil, Nil, k2 :: Nil, body)) =>
@@ -1017,6 +1026,8 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       Stmt.Var(blockParam.id, embedExpr(init), capt, embedStmt(body)(using G.bind(blockParam.id, blockParam.tpe, blockParam.capt)))
     case NeutralStmt.Hole(span) =>
       Stmt.Hole(span)
+    case NeutralStmt.Put(ref, annotatedTpe, annotatedCapt, value, body) =>
+      Stmt.Put(ref, annotatedCapt, embedExpr(value), embedStmt(body))
   }
 
   def embedStmt(basicBlock: BasicBlock)(using G: TypingContext): core.Stmt = basicBlock match {
