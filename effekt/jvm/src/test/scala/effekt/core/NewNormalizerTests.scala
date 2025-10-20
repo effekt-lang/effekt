@@ -124,16 +124,15 @@ class NewNormalizerTests extends CoreTests {
   // This example shows a box that contains an extern reference.
   // The normalizer is able to unbox this indirection away.
   test("extern in box") {
-    val input =
-    """
+    val input = """
         |extern def foo: Int = vm"42"
         |
         |def run(): Int = {
         |    val f = box {
-        |      foo
+        |      box foo
         |    } at { io }
         |
-        |    val x = unbox f()()
+        |    val x = /* unbox */ f()()
         |    return x
         |}
         |
