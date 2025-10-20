@@ -61,6 +61,7 @@ class EffektLexers extends Parsers {
   lazy val `|` = literal("|")
 
   lazy val `get` = keyword("get")
+  lazy val `put` = keyword("put")
   lazy val `let` = keyword("let")
   lazy val `true` = keyword("true")
   lazy val `false` = keyword("false")
@@ -320,6 +321,9 @@ class CoreParsers(names: Names) extends EffektLexers {
       }
     | `get` ~> id ~ (`:` ~> valueType) ~ (`=` ~> `!` ~> id) ~ (`@` ~> id) ~ (`;` ~> stmts) ^^ {
       case name ~ tpe ~ ref ~ cap ~ body => Get(name, tpe, ref, Set(cap), body)
+    }
+    | `put` ~> id ~ (`@` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ {
+      case ref ~ capt ~ value ~ body => Put(ref, Set(capt), value, body)
     }
     | `def` ~> id ~ (`=` ~/> block) ~ stmts ^^ Stmt.Def.apply
     | `def` ~> id ~ parameters ~ (`=` ~/> stmt) ~ stmts ^^ {
