@@ -510,6 +510,22 @@ class NewNormalizerTests extends CoreTests {
 
     assertAlphaEquivalentToplevels(actual, expected, List("run"))
   }
+
+  // TODO: Currently fails
+  test("todo") {
+    val input =
+      """
+        |def run() = {
+        |  var k = 2;
+        |  while (k <= 1) {}
+        |  0
+        |}
+        |
+        |def main() = println(run())
+        |""".stripMargin
+
+    val (mainId, actual) = normalize(input)
+  }
 }
 
 /**
