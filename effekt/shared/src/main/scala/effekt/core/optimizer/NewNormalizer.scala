@@ -1042,7 +1042,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           Stmt.Def(id, coreBlock, rest(G.bind(id, coreBlock.tpe, coreBlock.capt)))
         case ((id, Binding.Rec(block, tpe, capt)), rest) => G =>
           val coreBlock = embedBlock(block)(using G.bind(id, tpe, capt))
-          Stmt.Def(id, coreBlock, rest(G.bind(id, tpe, capt)))
+          Stmt.Def(id, coreBlock, rest(G.bind(id, coreBlock.tpe, coreBlock.capt)))
         case ((id, Binding.Val(stmt)), rest) => G =>
           val coreStmt = embedStmt(stmt)(using G)
           Stmt.Val(id, coreStmt.tpe, coreStmt, rest(G.bind(id, coreStmt.tpe)))

@@ -511,20 +511,23 @@ class NewNormalizerTests extends CoreTests {
     assertAlphaEquivalentToplevels(actual, expected, List("run"))
   }
 
-  // TODO: Currently fails
-  test("todo") {
+  // This test case shows that we can normalize a potentially recursive block that never actually recurses.
+  // The while loop in the surface language is translated to a recursive block in core.
+  // Note that the variable `v` and its capture need to be correctly passed around.
+  test("Can normalize while loop with non-satisfiable condition") {
     val input =
       """
         |def run() = {
-        |  var k = 2;
-        |  while (k <= 1) {}
+        |  var v = 2;
+        |  while (v <= 1) {}
         |  0
         |}
         |
         |def main() = println(run())
         |""".stripMargin
 
-    val (mainId, actual) = normalize(input)
+    // Does not throw
+    normalize(input)
   }
 }
 
