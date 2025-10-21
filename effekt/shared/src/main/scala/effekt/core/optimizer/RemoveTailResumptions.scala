@@ -36,7 +36,8 @@ object RemoveTailResumptions {
       case Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body)
       case Stmt.Alloc(id, init, region, body) => tailResumptive(k, body) && !freeInExpr(init)
       // Conceptually, a mutable variable definition can be seen as a handler for get and put operations.
-      // Treating this as tail-resumptive leads to a failure of semantics preservation
+      // Treating this as tail-resumptive leads to a failure of semantics preservation.
+      // See https://github.com/effekt-lang/effekt/issues/1153 for an example.
       case Stmt.Var(ref, init, capture, body) => false
       case Stmt.Get(ref, annotatedCapt, tpe, id, body) => tailResumptive(k, body)
       case Stmt.Put(ref, annotatedCapt, value, body) => tailResumptive(k, body) && !freeInExpr(value)
