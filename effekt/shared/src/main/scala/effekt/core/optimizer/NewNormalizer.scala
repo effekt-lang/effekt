@@ -13,6 +13,7 @@ import kiama.output.ParenPrettyPrinter
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.immutable.ListMap
+import effekt.core.Type.resultType
 
 // TODO
 // - change story of how inlining is implemented. We need to also support toplevel functions that potentially
@@ -640,7 +641,8 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         given localEnv: Env = env
           .bindValue(vparams.map(p => p.id -> p.id))
           .bindComputation(bparams.map(p => p.id -> Computation.Var(p.id)))
-          .bindComputation(id, Computation.Var(freshened))
+          // TODO is this really correct? Pessimistically, we assume all bound variables of the escaping stack are captured
+          .bindComputation(id, Computation.Def(Closure(freshened, escaping.bound.map { p => Computation.Var(p.id) })))
 
         val normalizedBlock = Block(tparams, vparams, bparams, nested {
           evaluate(body, Frame.Return, Stack.Unknown)
@@ -791,7 +793,8 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           reify(k, ks) { NeutralStmt.App(id, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack))) }
         case Computation.Def(Closure(label, environment)) =>
           val args = vargs.map(evaluate)
-          reify(k, ks) { NeutralStmt.Jump(label, targs, args, bargs.map(evaluate(_, "f", escapingStack)) ++ environment) }
+          val blockargs = bargs.map(evaluate(_, "f", escapingStack))
+          reify(k, ks) { NeutralStmt.Jump(label, targs, args, blockargs ++ environment) }
         case _: (Computation.New | Computation.Continuation) => sys error "Should not happen"
       }
 
@@ -1066,6 +1069,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     case Value.Box(body, annotatedCapture) => Expr.Box(embedBlock(body), annotatedCapture)
     case Value.Var(id, annotatedType) => Expr.ValueVar(id, annotatedType)
   }
+
   def embedExpr(addr: Addr)(using G: TypingContext): core.Expr = Expr.ValueVar(addr, G.lookupValue(addr))
 
   def embedBlock(comp: Computation)(using G: TypingContext): core.Block = comp match {
@@ -1103,16 +1107,9 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       core.Block.BlockLit(tparams, cparams, vparams, bparams,
         embedStmt(b)(using G.bindValues(vparams).bindComputations(bparams)))
   }
-  def embedBlockLit(block: Block)(using G: TypingContext): core.BlockLit = block match {
-    case Block(tparams, vparams, bparams, body) =>
-      val cparams = bparams.map {
-        case BlockParam(id, tpe, captures) =>
-          assert(captures.size == 1)
-          captures.head
-      }
-      core.Block.BlockLit(tparams, cparams, vparams, bparams,
-        embedStmt(body)(using G.bindValues(vparams).bindComputations(bparams)))
-  }
+
+  def embedBlockLit(block: Block)(using G: TypingContext): core.BlockLit = embedBlock(block).asInstanceOf[core.BlockLit]
+
   def embedBlockVar(label: Label)(using G: TypingContext): core.BlockVar =
     val (tpe, capt) = G.blocks.getOrElse(label, sys error s"Unknown block: ${util.show(label)}. ${G.blocks.keys.map(util.show).mkString(", ")}")
     core.BlockVar(label, tpe, capt)
