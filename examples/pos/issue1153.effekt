@@ -1,0 +1,49 @@
+effect flip(): Bool
+
+def all{prog: => Unit / {flip}} = {
+  try {
+    prog()
+  } with flip {
+    resume(true)
+    resume(false)
+  }
+}
+
+interface State[T] {
+  def get(): T
+  def set(x: T): Unit
+}
+
+interface allocate {
+  def fresh[T, R](init: T){k: {State[T]} => R}: R
+}
+
+def newRegion[T]{prog: {r: allocate} => T}: T = {
+  try {
+    prog{r}
+  } with r: allocate {
+    def fresh[T, R](init) = {
+      var x = init
+      def s = new State[T] {
+        def get() = x
+        def set(y) = {
+          x = y
+        }
+      }
+      resume{{k} => k{s}}
+    }
+  }
+}
+
+def main() = {
+  newRegion { {r} =>
+    all {
+      with def x = r.fresh(0)
+      if (do flip()) {
+        x.set(3)
+      } else {
+      }
+      println(x.get())
+    }
+  }
+}
