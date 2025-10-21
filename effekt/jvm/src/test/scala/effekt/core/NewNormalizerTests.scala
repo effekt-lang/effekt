@@ -529,6 +529,57 @@ class NewNormalizerTests extends CoreTests {
     // Does not throw
     normalize(input)
   }
+
+  test("Mutable variables are added as an extra parameter") {
+    val input =
+      """
+      |def main() = {
+      |  var x = 1
+      |  def update() = { x = 2 }
+      |  update()
+      |  println(x)
+      |}
+      """.stripMargin
+    
+    normalize(input)
+  }
+
+  test("Reset/Shift with mutable variable") {
+    val input =
+      """
+      |effect Eff(): Unit
+      |def main() = {
+      |  var x = 0
+      |  try { 
+      |    x = 1
+      |    do Eff()
+      |  } with Eff { resume(()) }
+      |  println(x)
+      |}
+      """.stripMargin
+    
+    normalize(input)
+  }
+
+  test("Mutable variable and recursive function") {
+    val input =
+      """
+      |def main() = {
+      |  var x = 0
+      |  def loop(n: Int): Unit = {
+      |    if (n == 0) ()
+      |    else {
+      |      x = x + 1
+      |      loop(n - 1)
+      |    }
+      |  }
+      |  loop(5)
+      |  println(x)
+      |}
+      """
+
+    normalize(input)
+  }
 }
 
 /**
