@@ -576,7 +576,7 @@ class NewNormalizerTests extends CoreTests {
       |  loop(5)
       |  println(x)
       |}
-      """
+      """.stripMargin
 
     normalize(input)
   }

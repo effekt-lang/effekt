@@ -13,7 +13,6 @@ import kiama.output.ParenPrettyPrinter
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.immutable.ListMap
-import effekt.core.Type.resultType
 
 // TODO
 // - change story of how inlining is implemented. We need to also support toplevel functions that potentially
@@ -99,8 +98,17 @@ object semantics {
   class Scope(
     var bindings: ListMap[Id, Binding],
     var inverse: Map[Value, Addr],
-    outer: Option[Scope]
+    val outer: Option[Scope]
   ) {
+    // Backtrack the internal state of Scope after running `prog`
+    def local[A](prog: => A): A = {
+      val scopeBefore = Scope(this.bindings, this.inverse, this.outer)
+      val res = prog
+      this.bindings = scopeBefore.bindings
+      this.inverse = scopeBefore.inverse
+      res
+    }
+
     // floating values to the top is not always beneficial. For example
     //   def foo() = COMPUTATION
     // vs
@@ -641,17 +649,36 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         given localEnv: Env = env
           .bindValue(vparams.map(p => p.id -> p.id))
           .bindComputation(bparams.map(p => p.id -> Computation.Var(p.id)))
-          // TODO is this really correct? Pessimistically, we assume all bound variables of the escaping stack are captured
-          .bindComputation(id, Computation.Def(Closure(freshened, escaping.bound.map { p => Computation.Var(p.id) })))
+          // Assume that we capture nothing
+          .bindComputation(id, Computation.Def(Closure(freshened, Nil)))
 
-        val normalizedBlock = Block(tparams, vparams, bparams, nested {
-          evaluate(body, Frame.Return, Stack.Unknown)
-        })
+        val normalizedBlock = scope.local {
+          Block(tparams, vparams, bparams, nested {
+            evaluate(body, Frame.Return, Stack.Unknown)(using localEnv)
+          })
+        }
 
         val closureParams = escaping.bound.filter { p => normalizedBlock.free contains p.id }
+        
+        // Only normalize again if we actually we wrong in our assumption that we capture nothing
+        if (closureParams.isEmpty) {
+          scope.defineRecursive(freshened, normalizedBlock.copy(bparams = normalizedBlock.bparams), block.tpe, block.capt)
+          Computation.Def(Closure(freshened, Nil))
+        } else {
+          val captures = closureParams.map { p => Computation.Var(p.id) }
+          given localEnv1: Env = env
+            .bindValue(vparams.map(p => p.id -> p.id))
+            .bindComputation(bparams.map(p => p.id -> Computation.Var(p.id)))
+            .bindComputation(id, Computation.Def(Closure(freshened, captures)))
 
-        scope.defineRecursive(freshened, normalizedBlock.copy(bparams = normalizedBlock.bparams ++ closureParams), block.tpe, block.capt)
-        Computation.Def(Closure(freshened, closureParams.map(p => Computation.Var(p.id))))
+          val normalizedBlock1 = Block(tparams, vparams, bparams, nested {
+            evaluate(body, Frame.Return, Stack.Unknown)(using localEnv1)
+          })
+
+          scope.defineRecursive(freshened, normalizedBlock1.copy(bparams = normalizedBlock1.bparams ++ closureParams), block.tpe, block.capt)
+          Computation.Def(Closure(freshened, captures))
+        }
+
     }
 
   // the stack here is not the one this is run in, but the one the definition potentially escapes
