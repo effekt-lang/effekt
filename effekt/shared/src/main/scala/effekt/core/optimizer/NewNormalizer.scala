@@ -2,6 +2,7 @@ package effekt
 package core
 package optimizer
 
+import effekt.core.BlockType
 import effekt.core.ValueType.Boxed
 import effekt.source.Span
 import effekt.core.optimizer.semantics.{Computation, NeutralStmt, Value}
@@ -659,8 +660,9 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         }
 
         val closureParams = escaping.bound.filter { p => normalizedBlock.free contains p.id }
-        
+
         // Only normalize again if we actually we wrong in our assumption that we capture nothing
+        // We might run into exponential complexity for nested recursives functions
         if (closureParams.isEmpty) {
           scope.defineRecursive(freshened, normalizedBlock.copy(bparams = normalizedBlock.bparams), block.tpe, block.capt)
           Computation.Def(Closure(freshened, Nil))
@@ -675,7 +677,16 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
             evaluate(body, Frame.Return, Stack.Unknown)(using localEnv1)
           })
 
-          scope.defineRecursive(freshened, normalizedBlock1.copy(bparams = normalizedBlock1.bparams ++ closureParams), block.tpe, block.capt)
+          val tpe: BlockType.Function = block.tpe match {
+            case _: BlockType.Interface => ???
+            case ftpe: BlockType.Function => ftpe
+          }
+          scope.defineRecursive(
+            freshened,
+            normalizedBlock1.copy(bparams = normalizedBlock1.bparams ++ closureParams),
+            tpe.copy(cparams = tpe.cparams ++ closureParams.map { p => p.id }),
+            block.capt
+          )
           Computation.Def(Closure(freshened, captures))
         }
 
