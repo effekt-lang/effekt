@@ -553,12 +553,12 @@ object semantics {
         "resume" <> parens(toDoc(k)) <+> toDoc(body)
 
       case NeutralStmt.Var(id, init, body) =>
-        "var" <+> toDoc(id) <+> "=" <+> toDoc(init) <> line <> toDoc(body)
+        "var" <+> toDoc(id) <+> "=" <+> toDoc(init) <> line <> toDoc(body.bindings) <> toDoc(body.body)
 
       case NeutralStmt.Hole(span) => "hole()"
 
       case NeutralStmt.Put(ref, tpe, cap, value, body) =>
-        "put" <+> toDoc(ref) <+> "=" <+> toDoc(value) <> line <> toDoc(body)
+        toDoc(ref) <+> ":=" <+> toDoc(value) <> line <> toDoc(body.bindings) <>  toDoc(body.body)
     }
 
     def toDoc(id: Id): Doc = id.show
@@ -613,7 +613,7 @@ object semantics {
           (if (targs.isEmpty) emptyDoc else brackets(hsep(targs.map(toDoc), comma))) <>
           parens(hsep(vargs.map(toDoc), comma)) <> hcat(bargs.map(b => braces { toDoc(b) })) <> line
         case (addr, Binding.Unbox(innerAddr, tpe, capt)) => "def" <+> toDoc(addr) <+> "=" <+> "unbox" <+> toDoc(innerAddr) <> line
-        case (addr, Binding.Get(ref, tpe, cap)) => "get" <+> toDoc(addr) <+> "=" <+> "!" <> toDoc(ref) <> line
+        case (addr, Binding.Get(ref, tpe, cap)) => "let" <+> toDoc(addr) <+> "=" <+> "!" <> toDoc(ref) <> line
       })
 
     def toDoc(block: BasicBlock): Doc =
