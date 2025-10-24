@@ -1,0 +1,26 @@
+// a simple program that creates a more complex object
+// parent -> child1
+// where child1 is OneSlotPerson
+
+record OneSlotPerson(
+  field1: Int,
+  field2: Int,
+  field3: Int,
+  field4: Int,
+  field5: Int,
+  field6: Int
+)
+
+record Person(
+    child1: OneSlotPerson
+)
+
+def main() = {
+  var iters = 1
+  while(iters <= 65) {
+    var x = Person(
+        OneSlotPerson(iters, iters + 1, iters + 2, iters + 3, iters + 4, iters + 5)
+        )
+    iters = iters + 1
+  }
+}

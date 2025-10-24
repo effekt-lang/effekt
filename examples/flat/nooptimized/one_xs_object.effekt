@@ -1,0 +1,11 @@
+// xs = Person fits easily in 1 saving slot
+record Person(
+  field1: Int,
+  field2: Int,
+  field3: Int
+  )
+
+def main() = {
+  val p = Person(1, 2, 3)
+  println(p.field3)
+}

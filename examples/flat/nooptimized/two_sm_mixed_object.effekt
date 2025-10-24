@@ -1,0 +1,15 @@
+// sm = Person fills 1 saving slot completely
+// contains strings and integers
+record Person(
+  field1: String,
+  field2: Int,
+  field3: String,
+  field4: Int
+  )
+
+def main() = {
+  val p1 = Person("P1Field1", 2, "P1Field3", 4)
+  val p2 = Person("P2Field1", 6, "P2Field3", 8)
+  println(p1.field1)
+  println(p2.field4)
+}

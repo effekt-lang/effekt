@@ -1,0 +1,33 @@
+import list
+
+record TwoSlotPerson(
+  field1: Int,
+  field2: Int,
+  field3: Int,
+  field4: Int,
+  field5: Int,
+  field6: Int,
+  field7: Int
+  )
+
+record SuperPerson(
+  field1: TwoSlotPerson,
+  field2: TwoSlotPerson
+)
+
+def main() = {
+  // Creates a list with one element
+  val person1 = TwoSlotPerson(1, 2, 3, 4, 5, 6, 7)
+  val person2 = TwoSlotPerson(8, 9, 10, 11, 12, 13, 14)
+  val y = TwoSlotPerson(25, 2, 3, 4, 5, 6, 7)
+  val superPerson = SuperPerson(person1, person2)
+
+
+  // prints 9. If -1 is printed, there is a bug
+  superPerson match {
+    case SuperPerson(x, z) => println(x.field1 + z.field1)
+  }
+
+  // prints 25
+  println(y.field1)
+}

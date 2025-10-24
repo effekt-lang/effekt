@@ -1,0 +1,16 @@
+record Person1(
+    field3: Int,
+    field4: Int
+)
+
+record Person(
+  field1: Int,
+  field2: Int,
+  person1: Person1
+  )
+
+def main() = {
+  val p1 = Person1(3, 4)
+  val p = Person(1, 2, p1)
+  println(p.person1.field3)
+}

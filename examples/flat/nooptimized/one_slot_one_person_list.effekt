@@ -1,0 +1,27 @@
+import list
+
+record OneSlotPerson(
+  field1: Int,
+  field2: Int,
+  field3: Int,
+  field4: Int,
+  field5: Int,
+  field6: Int
+)
+
+def main() = {
+  val person1 = OneSlotPerson(1, 2, 3, 4, 5, 6)
+  var myList = [person1]
+  //myList = drop(myList, 1)
+  //val myList = Nil[OneSlotPerson]()
+
+  // prints 6. If -1 is printed, there is a bug
+  myList match {
+    case Nil() => println(-1)
+    case Cons(x, _) => println(x.field6)
+    //case Cons(x, _) => println(-2)
+  }
+
+  //myList = drop(myList, 1)
+  //val person3 = person1
+}

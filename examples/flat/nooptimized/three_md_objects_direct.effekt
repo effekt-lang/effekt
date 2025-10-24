@@ -1,0 +1,20 @@
+// md = Person requires 2 saving slots
+// direct = create person and print field directly
+record Person(
+  field1: Int,
+  field2: Int,
+  field3: Int,
+  field4: Int,
+  field5: Int,
+  field6: Int,
+  field7: Int
+  )
+
+def main() = {
+  val p1 = Person(1, 2, 3, 4, 5, 6, 7)
+  println(p1.field7)
+  val p2 = Person(8, 9, 10, 11, 12, 13, 14)
+  val p3 = Person(15, 16, 17, 18, 19, 20, 21)
+  println(p2.field3)
+  println(p3.field4)
+}

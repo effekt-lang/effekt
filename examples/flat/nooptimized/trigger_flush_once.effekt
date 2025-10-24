@@ -1,0 +1,17 @@
+// a simple program that triggers flush to-do-list once
+record OneSlotPerson(
+  field1: Int,
+  field2: Int,
+  field3: Int,
+  field4: Int,
+  field5: Int,
+  field6: Int
+)
+
+def main() = {
+  var iters = 1
+  while(iters <= 65) {
+    var x = OneSlotPerson(iters, iters + 1, iters + 2, iters + 3, iters + 4, iters + 5)
+    iters = iters + 1
+  }
+}

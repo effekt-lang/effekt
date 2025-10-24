@@ -1,0 +1,15 @@
+import list
+//import exception
+
+
+def main() = {
+  // Creates a list with one element
+  val myList = [24]
+
+  // print 24. If -1 is printed, there is a bug
+  myList match {
+    case Nil() => println(-1)
+    case Cons(x, Nil()) => println(x)
+    case Cons(x, xs) => println(-1)
+  }
+}

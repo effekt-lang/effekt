@@ -1,0 +1,308 @@
+// xxl: Person has 100 fields -> need x slots
+record Person(
+  field1: Int,
+  field2: Int,
+  field3: Int,
+  field4: Int,
+  field5: Int,
+  field6: Int,
+  field7: Int,
+  field8: Int,
+  field9: Int,
+  field10: Int,
+  field11: Int,
+  field12: Int,
+  field13: Int,
+  field14: Int,
+  field15: Int,
+  field16: Int,
+  field17: Int,
+  field18: Int,
+  field19: Int,
+  field20: Int,
+  field21: Int,
+  field22: Int,
+  field23: Int,
+  field24: Int,
+  field25: Int,
+  field26: Int,
+  field27: Int,
+  field28: Int,
+  field29: Int,
+  field30: Int,
+  field31: Int,
+  field32: Int,
+  field33: Int,
+  field34: Int,
+  field35: Int,
+  field36: Int,
+  field37: Int,
+  field38: Int,
+  field39: Int,
+  field40: Int,
+  field41: Int,
+  field42: Int,
+  field43: Int,
+  field44: Int,
+  field45: Int,
+  field46: Int,
+  field47: Int,
+  field48: Int,
+  field49: Int,
+  field50: Int,
+  field51: Int,
+  field52: Int,
+  field53: Int,
+  field54: Int,
+  field55: Int,
+  field56: Int,
+  field57: Int,
+  field58: Int,
+  field59: Int,
+  field60: Int,
+  field61: Int,
+  field62: Int,
+  field63: Int,
+  field64: Int,
+  field65: Int,
+  field66: Int,
+  field67: Int,
+  field68: Int,
+  field69: Int,
+  field70: Int,
+  field71: Int,
+  field72: Int,
+  field73: Int,
+  field74: Int,
+  field75: Int,
+  field76: Int,
+  field77: Int,
+  field78: Int,
+  field79: Int,
+  field80: Int,
+  field81: Int,
+  field82: Int,
+  field83: Int,
+  field84: Int,
+  field85: Int,
+  field86: Int,
+  field87: Int,
+  field88: Int,
+  field89: Int,
+  field90: Int,
+  field91: Int,
+  field92: Int,
+  field93: Int,
+  field94: Int,
+  field95: Int,
+  field96: Int,
+  field97: Int,
+  field98: Int,
+  field99: Int,
+  field100: Int
+)
+
+def main() = {
+  val p1 = Person(
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    80,
+    81,
+    82,
+    83,
+    84,
+    85,
+    86,
+    87,
+    88,
+    89,
+    90,
+    91,
+    92,
+    93,
+    94,
+    95,
+    96,
+    97,
+    98,
+    99,
+    100  
+)
+    println(p1.field1)
+  println(p1.field2)
+  println(p1.field3)
+  println(p1.field4)
+  println(p1.field5)
+  println(p1.field6)
+  println(p1.field7)
+  println(p1.field8)
+  println(p1.field9)
+  println(p1.field10)
+  println(p1.field11)
+  println(p1.field12)
+  println(p1.field13)
+  println(p1.field14)
+  println(p1.field15)
+  println(p1.field16)
+  println(p1.field17)
+  println(p1.field18)
+  println(p1.field19)
+  println(p1.field20)
+  println(p1.field21)
+  println(p1.field22)
+  println(p1.field23)
+  println(p1.field24)
+  println(p1.field25)
+  println(p1.field26)
+  println(p1.field27)
+  println(p1.field28)
+  println(p1.field29)
+  println(p1.field30)
+  println(p1.field31)
+  println(p1.field32)
+  println(p1.field33)
+  println(p1.field34)
+  println(p1.field35)
+  println(p1.field36)
+  println(p1.field37)
+  println(p1.field38)
+  println(p1.field39)
+  println(p1.field40)
+  println(p1.field41)
+  println(p1.field42)
+  println(p1.field43)
+  println(p1.field44)
+  println(p1.field45)
+  println(p1.field46)
+  println(p1.field47)
+  println(p1.field48)
+  println(p1.field49)
+  println(p1.field50)
+  println(p1.field51)
+  println(p1.field52)
+  println(p1.field53)
+  println(p1.field54)
+  println(p1.field55)
+  println(p1.field56)
+  println(p1.field57)
+  println(p1.field58)
+  println(p1.field59)
+  println(p1.field60)
+  println(p1.field61)
+  println(p1.field62)
+  println(p1.field63)
+  println(p1.field64)
+  println(p1.field65)
+  println(p1.field66)
+  println(p1.field67)
+  println(p1.field68)
+  println(p1.field69)
+  println(p1.field70)
+  println(p1.field71)
+  println(p1.field72)
+  println(p1.field73)
+  println(p1.field74)
+  println(p1.field75)
+  println(p1.field76)
+  println(p1.field77)
+  println(p1.field78)
+  println(p1.field79)
+  println(p1.field80)
+  println(p1.field81)
+  println(p1.field82)
+  println(p1.field83)
+  println(p1.field84)
+  println(p1.field85)
+  println(p1.field86)
+  println(p1.field87)
+  println(p1.field88)
+  println(p1.field89)
+  println(p1.field90)
+  println(p1.field91)
+  println(p1.field92)
+  println(p1.field93)
+  println(p1.field94)
+  println(p1.field95)
+  println(p1.field96)
+  println(p1.field97)
+  println(p1.field98)
+  println(p1.field99)
+  println(p1.field100)
+}
