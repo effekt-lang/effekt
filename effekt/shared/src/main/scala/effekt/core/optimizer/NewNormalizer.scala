@@ -1231,9 +1231,37 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
   def embedExpr(addr: Addr)(using G: TypingContext): core.Expr = Expr.ValueVar(addr, G.lookupValue(addr))
 
   def embedBlock(comp: Computation)(using G: TypingContext): core.Block = comp match {
-    case Computation.Var(id) => embedBlockVar(id)
-    case Computation.Def(Closure(label, Nil)) => embedBlockVar(label)
-    case Computation.Def(Closure(label, environment)) => ??? // TODO eta expand
+    case Computation.Var(id) =>
+      embedBlockVar(id)
+    case Computation.Def(Closure(label, Nil)) =>
+      embedBlockVar(label)
+    // TODO fix eta-expansion, this is ~~bogus~~ work-in-progress
+    case Computation.Def(Closure(label, environment)) =>
+      val blockvar = embedBlockVar(label)
+      G.blocks(label) match {
+        case (BlockType.Function(tparams, cparams, vparams, bparams, result), captures) =>
+          val vpIds = vparams.map { p => Id("x") }
+          val bpIds = bparams.map { p => Id(p.show) }
+          val vp = vpIds.zip(vparams).map { (id, p) => core.ValueParam(id, p) }
+          val bp = bpIds.zip(bparams).map { (id, p) => core.BlockParam(id, p, Set()) }
+          core.Block.BlockLit(
+            tparams,
+            Nil,
+            vp,
+            Nil,
+            Stmt.App(
+              blockvar,
+              Nil,
+              vpIds.zip(vparams).map { (id, p) => core.Expr.ValueVar(id, p) },
+              bparams.zip(environment).map { case (bp, c) => c match {
+                  case Computation.Var(id) => BlockVar(id, bp, Set())
+                  case _ => ??? // cannot occur
+                }
+              }
+            )
+          )
+        case _ => ???
+      }
     case Computation.Inline(blocklit, env) => ???
     case Computation.Continuation(k) => ???
     case Computation.New(interface, operations) =>
