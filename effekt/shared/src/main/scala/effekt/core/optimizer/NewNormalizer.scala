@@ -515,6 +515,16 @@ object semantics {
       case Frame.Static(tpe, apply) =>
         val tmp = Id("tmp")
         scope.push(tmp, stmt)
+        // TODO Over-approximation
+        // Don't pass Stack.Unkown but rather the stack until the next reset?
+        /*
+          |----------|               |----------|               |---------|
+          |          | ---> ... ---> |          | ---> ... ---> |         | ---> ...
+          |----------|               |----------|               |---------|
+              r1                          r2                       prompt
+
+        Pass r1 :: ... :: r2 :: ... :: prompt :: UNKOWN
+         */
         apply(scope)(tmp)(Stack.Unknown)
       case Frame.Dynamic(Closure(label, closure)) =>
         val tmp = Id("tmp")
