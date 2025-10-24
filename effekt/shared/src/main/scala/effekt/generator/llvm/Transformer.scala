@@ -3,6 +3,7 @@ package generator
 package llvm
 
 import effekt.machine
+import effekt.machine.Variable
 import effekt.util.intercalate
 import effekt.util.messages.ErrorReporter
 import effekt.machine.analysis.*
@@ -521,12 +522,17 @@ object Transformer {
       kind match {
         case ObjectEraser =>
           val eraser = ConstantGlobal(freshName("eraser"));
-          defineFunction(eraser.name, List(Parameter(environmentType, "environment"))) {
+          defineFunction(eraser.name, List(Parameter(objectType, "object"))) {
             emit(Comment(s"${kind} eraser, ${freshEnvironment.length} free variables"))
 
+            // Use call @objectEnvironment to get environment pointer
+            emit(Call("environment", Ccc(), environmentType, ConstantGlobal("objectEnvironment"), List(LocalReference(objectType, "object"))));
+            
             // TODO avoid unnecessary loads
             loadEnvironmentAt(LocalReference(environmentType, "environment"), freshEnvironment, Object);
             eraseValues(freshEnvironment, Set());
+            
+            emit(Call("", Ccc(), VoidType(), ConstantGlobal("cFree"), List(LocalReference(objectType, "object"))));
             RetVoid()
           };
           eraser
