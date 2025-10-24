@@ -580,6 +580,41 @@ class NewNormalizerTests extends CoreTests {
 
     normalize(input)
   }
+  
+  test("basic region usage") {
+    val input =
+      """
+        |def main() = {
+        |  val y = region r {
+        |    var x in r = 42
+        |    x = x + 1
+        |    x
+        |  }
+        |  println(y)
+        |}
+        |""".stripMargin
+
+    normalize(input)
+  }
+  
+  test("region parameter") {
+    val input =
+      """
+        |def main() = {
+        |  val y = region reg {
+        |    def foo(init: Int) {r: Region} = {
+        |      var x in r = init
+        |      x = x + 1
+        |      x
+        |    }
+        |    foo(42) {reg}
+        |  }
+        | println(y)
+        |}
+        |""".stripMargin
+        
+    normalize(input)
+  }
 }
 
 /**
