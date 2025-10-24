@@ -19,10 +19,10 @@ extern type Array[T]
 extern llvm """
 declare noalias ptr @calloc(i64, i64)
 
-define void @array_erase_fields(ptr %array_pointer) {
+define void @array_erase_fields(%Object %object) {
 entry:
-    %data_pointer = getelementptr inbounds i64, ptr %array_pointer, i64 1
-    %size = load i64, ptr %array_pointer, align 8
+    %data_pointer = getelementptr inbounds i64, ptr %object, i64 1
+    %size = load i64, ptr %object, align 8
     %size_eq_0 = icmp eq i64 %size, 0
     br i1 %size_eq_0, label %exit, label %loop
 loop:
@@ -36,6 +36,7 @@ loop:
     %cmp = icmp ult i64 %inc, %size
     br i1 %cmp, label %loop, label %exit
 exit:
+    call void @free(%Object %object)
     ret void
 }
 """
