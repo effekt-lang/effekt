@@ -34,6 +34,33 @@ import scala.collection.immutable.ListMap
 // Same actually for stack allocated mutable state, we should abstract over those (but only those)
 // and keep the function in its original location.
 // This means we only need to abstract over blocks, no values, no types.
+//
+// TODO Region desugaring
+// region r {
+//   reset { p =>
+//    var x in r = 42
+//    x = !x + 1
+//    println(!x)
+//   }
+// }
+//
+// reset { r =>
+//   reset { p =>
+//    //var x in r = 42
+//    shift(r) { k =>
+//      var x = 42
+//      resume(k) {
+//        x = !x + 1
+//        println(!x)
+//      }
+//    }
+//   }
+// }
+//
+// - Typeability preservation: {r: Region} becomes {r: Prompt[T]}
+//    [[ def f() {r: Region} = s ]] = def f[T]() {r: Prompt[T]} = ...
+// - Continuation capture is _not_ constant time in JS backend, so we expect a (drastic) slowdown when desugaring
+
 object semantics {
 
   // Values
