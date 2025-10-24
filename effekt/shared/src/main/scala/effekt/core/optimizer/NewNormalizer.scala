@@ -1145,8 +1145,9 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     def bind(id: Id, tpe: ValueType): TypingContext = this.copy(values = values + (id -> tpe))
     def bind(id: Id, tpe: BlockType, capt: Captures): TypingContext = this.copy(blocks = blocks + (id -> (tpe, capt)))
     def bindValues(vparams: List[ValueParam]): TypingContext = this.copy(values = values ++ vparams.map(p => p.id -> p.tpe))
-    def bindComputations(bparams: List[BlockParam]): TypingContext = this.copy(blocks = blocks ++ bparams.map(p => p.id -> (p.tpe, p.capt)))
     def lookupValue(id: Id): ValueType = values.getOrElse(id, sys.error(s"Unknown value: ${util.show(id)}"))
+    def bindComputations(bparams: List[BlockParam]): TypingContext = this.copy(blocks = blocks ++ bparams.map(p => p.id -> (p.tpe, p.capt)))
+    def bindComputation(bparam: BlockParam): TypingContext = this.copy(blocks = blocks + (bparam.id -> (bparam.tpe, bparam.capt)))
   }
 
   def embedStmt(neutral: NeutralStmt)(using G: TypingContext): core.Stmt = neutral match {
@@ -1169,9 +1170,9 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         case set if set.size == 1 => set.head
         case _ => sys error "Prompt needs to have a single capture"
       }
-      Stmt.Reset(core.BlockLit(Nil, capture :: Nil, Nil, prompt :: Nil, embedStmt(body)(using G.bindComputations(prompt :: Nil))))
+      Stmt.Reset(core.BlockLit(Nil, capture :: Nil, Nil, prompt :: Nil, embedStmt(body)(using G.bindComputation(prompt))))
     case NeutralStmt.Shift(prompt, capt, k, body) =>
-      Stmt.Shift(embedBlockVar(prompt), core.BlockLit(Nil, capt :: Nil, Nil, k :: Nil, embedStmt(body)(using G.bindComputations(k :: Nil))))
+      Stmt.Shift(embedBlockVar(prompt), core.BlockLit(Nil, capt :: Nil, Nil, k :: Nil, embedStmt(body)(using G.bindComputation(k))))
     case NeutralStmt.Resume(k, body) =>
       Stmt.Resume(embedBlockVar(k), embedStmt(body))
     case NeutralStmt.Var(blockParam, init, body) =>
@@ -1183,7 +1184,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     case NeutralStmt.Put(ref, annotatedTpe, annotatedCapt, value, body) =>
       Stmt.Put(ref, annotatedCapt, embedExpr(value), embedStmt(body))
     case NeutralStmt.Region(id, body) =>
-      Stmt.Region(BlockLit(Nil, List(id.id), Nil, List(id), embedStmt(body)(using G.bindComputations(List(id)))))
+      Stmt.Region(BlockLit(Nil, List(id.id), Nil, List(id), embedStmt(body)(using G.bindComputation(id))))
     case NeutralStmt.Alloc(id, init, region, body) =>
       Stmt.Alloc(id, embedExpr(init), region, embedStmt(body))
     case NeutralStmt.Hole(span) =>
