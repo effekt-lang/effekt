@@ -344,6 +344,9 @@ object semantics {
     case Var(id: BlockParam, init: Addr, body: BasicBlock)
     case Put(ref: Id, tpe: ValueType, cap: Captures, value: Addr, body: BasicBlock)
 
+    case Region(id: BlockParam, body: BasicBlock)
+    case Alloc(id: Id, init: Addr, region: Id, body: BasicBlock)
+
     // aborts at runtime
     case Hole(span: Span)
 
@@ -358,8 +361,10 @@ object semantics {
       case NeutralStmt.Shift(prompt, capt, k, body) => (body.free - k.id) + prompt
       case NeutralStmt.Resume(k, body) => Set(k) ++ body.free
       case NeutralStmt.Var(id, init, body) => Set(init) ++ body.free - id.id
-      case NeutralStmt.Hole(span) => Set.empty
       case NeutralStmt.Put(ref, tpe, cap, value, body) => Set(ref, value) ++ body.free
+      case NeutralStmt.Region(id, body) => body.free - id.id
+      case NeutralStmt.Alloc(id, init, region, body) => Set(init, region) ++ body.free - id
+      case NeutralStmt.Hole(span) => Set.empty
     }
   }
 
@@ -378,6 +383,7 @@ object semantics {
         case Stack.Unknown => NeutralStmt.Return(arg)
         case Stack.Reset(p, k, ks) => k.ret(ks, arg)
         case Stack.Var(id, curr, init, k, ks) => k.ret(ks, arg)
+        case Stack.Region(id, bindings, k, ks) => k.ret(ks, arg)
       }
       case Frame.Static(tpe, apply) => apply(scope)(arg)(ks)
       case Frame.Dynamic(Closure(label, environment)) => reify(ks) { NeutralStmt.Jump(label, Nil, List(arg), environment) }
@@ -416,13 +422,14 @@ object semantics {
     case Reset(prompt: BlockParam, frame: Frame, next: Stack)
     case Var(id: BlockParam, curr: Addr, init: Addr, frame: Frame, next: Stack)
     // TODO desugar regions into var?
-    // case Region(bindings: Map[Id, Addr])
+    case Region(id: BlockParam, bindings: Map[Id, (Addr, Addr)], frame: Frame, next: Stack)
 
     lazy val bound: List[BlockParam] = this match {
       case Stack.Empty => Nil
       case Stack.Unknown => Nil
       case Stack.Reset(prompt, frame, next) => prompt :: next.bound
       case Stack.Var(id, curr, init, frame, next) => id :: next.bound
+      case Stack.Region(id, bindings, frame, next) => id :: next.bound
     }
   }
 
@@ -433,21 +440,50 @@ object semantics {
     case Stack.Reset(prompt, frame, next) => get(ref, next)
     case Stack.Var(id1, curr, init, frame, next) if ref == id1.id => Some(curr)
     case Stack.Var(id1, curr, init, frame, next) => get(ref, next)
+    case Stack.Region(id, bindings, frame, next) =>
+      if (bindings.contains(ref)) {
+        Some(bindings(ref)._1)
+      } else {
+        get(ref, next)
+      }
   }
 
-  def put(id: Id, value: Addr, ks: Stack): Option[Stack] = ks match {
-    case Stack.Empty => sys error s"Should not happen: trying to put ${util.show(id)} in empty stack"
+  def put(ref: Id, value: Addr, ks: Stack): Option[Stack] = ks match {
+    case Stack.Empty => sys error s"Should not happen: trying to put ${util.show(ref)} in empty stack"
     // We have reached the end of the known stack, so the variable must be in the unknown part.
     case Stack.Unknown => None
-    case Stack.Reset(prompt, frame, next) => put(id, value, next).map(Stack.Reset(prompt, frame, _))
-    case Stack.Var(id1, curr, init, frame, next) if id == id1.id => Some(Stack.Var(id1, value, init, frame, next))
-    case Stack.Var(id1, curr, init, frame, next) => put(id, value, next).map(Stack.Var(id1, curr, init, frame, _))
+    case Stack.Reset(prompt, frame, next) => put(ref, value, next).map(Stack.Reset(prompt, frame, _))
+    case Stack.Var(id, curr, init, frame, next) if ref == id.id => Some(Stack.Var(id, value, init, frame, next))
+    case Stack.Var(id, curr, init, frame, next) => put(ref, value, next).map(Stack.Var(id, curr, init, frame, _))
+    case Stack.Region(id, bindings, frame, next) =>
+      if (bindings.contains(ref)){
+        Some(Stack.Region(id, bindings.updated(ref, (value, bindings(ref)._2)), frame, next))
+      } else {
+        put(ref, value, next).map(Stack.Region(id, bindings, frame, _))
+      }
+  }
+
+  def alloc(ref: Id, reg: Id, value: Addr, ks: Stack): Option[Stack] = ks match {
+    case Stack.Empty => sys error s"Should not happen: trying to put ${util.show(ref)} in empty stack"
+    // We have reached the end of the known stack, so the variable must be in the unknown part.
+    case Stack.Unknown => None
+    case Stack.Reset(prompt, frame, next) =>
+      alloc(ref, reg, value, next).map(Stack.Reset(prompt, frame, _))
+    case Stack.Var(id, curr, init, frame, next) =>
+      alloc(ref, reg, value, next).map(Stack.Var(id, curr, init, frame, _))
+    case Stack.Region(id, bindings, frame, next) =>
+      if (reg == id.id){
+        Some(Stack.Region(id, bindings.updated(ref, (value, value)), frame, next))
+      } else {
+        alloc(ref, reg, value, next).map(Stack.Region(id, bindings, frame, _))
+      }
   }
 
   enum Cont {
     case Empty
     case Reset(frame: Frame, prompt: BlockParam, rest: Cont)
     case Var(frame: Frame, id: BlockParam, curr: Addr, init: Addr, rest: Cont)
+    case Region(frame: Frame, id: BlockParam, bindings: Map[Id, (Addr, Addr)], rest: Cont)
   }
 
   def shift(p: Id, k: Frame, ks: Stack): (Cont, Frame, Stack) = ks match {
@@ -461,6 +497,9 @@ object semantics {
     case Stack.Var(id, curr, init, frame, next) =>
       val (c, frame2, stack) = shift(p, frame, next)
       (Cont.Var(k, id, curr, init, c), frame2, stack)
+    case Stack.Region(id, bindings, frame, next) =>
+      val (c, frame2, stack) = shift(p, frame, next)
+      (Cont.Region(k, id, bindings, c), frame2, stack)
   }
 
   def resume(c: Cont, k: Frame, ks: Stack): (Frame, Stack) = c match {
@@ -472,6 +511,9 @@ object semantics {
     case Cont.Var(frame, id, curr, init, rest) =>
       val (k1, ks1) = resume(rest, frame, ks)
       (frame, Stack.Var(id, curr, init, k1, ks1))
+    case Cont.Region(frame, id, bindings, rest) =>
+      val (k1, ks1) = resume(rest, frame, ks)
+      (frame, Stack.Region(id, bindings, k1, ks1))
   }
 
   def joinpoint(k: Frame, ks: Stack)(f: (Frame, Stack) => NeutralStmt)(using scope: Scope): NeutralStmt = {
@@ -502,6 +544,8 @@ object semantics {
         Stack.Reset(prompt, reifyFrame(frame, next), reifyStack(next))
       case Stack.Var(id, curr, init, frame, next) =>
         Stack.Var(id, curr, init, reifyFrame(frame, next), reifyStack(next))
+      case Stack.Region(id, bindings, frame, next) =>
+        Stack.Region(id, bindings, reifyFrame(frame, next), reifyStack(next))
     }
     f(reifyFrame(k, ks), reifyStack(ks))
   }
@@ -533,7 +577,7 @@ object semantics {
     }
 
   @tailrec
-  final def reify(ks: Stack)(stmt: Scope ?=> NeutralStmt)(using scope: Scope): NeutralStmt =
+  final def reify(ks: Stack)(stmt: Scope ?=> NeutralStmt)(using scope: Scope): NeutralStmt = {
     ks match {
       case Stack.Empty => stmt
       case Stack.Unknown => stmt
@@ -549,7 +593,13 @@ object semantics {
           val body = nested { stmt }
           NeutralStmt.Var(id, init, body)
         }}
+      case Stack.Region(id, bindings, frame, next) =>
+        reify(next) { reify(frame) {
+          val body = nested { stmt }
+          NeutralStmt.Region(id, body)
+        }}
     }
+  }
 
   object PrettyPrinter extends ParenPrettyPrinter {
 
@@ -592,10 +642,16 @@ object semantics {
       case NeutralStmt.Var(id, init, body) =>
         "var" <+> toDoc(id) <+> "=" <+> toDoc(init) <> line <> toDoc(body.bindings) <> toDoc(body.body)
 
-      case NeutralStmt.Hole(span) => "hole()"
-
       case NeutralStmt.Put(ref, tpe, cap, value, body) =>
         toDoc(ref) <+> ":=" <+> toDoc(value) <> line <> toDoc(body.bindings) <>  toDoc(body.body)
+
+      case NeutralStmt.Region(id, body) =>
+        "region" <+> toDoc(id) <+> toDoc(body)
+
+      case NeutralStmt.Alloc(id, init, region, body) =>
+        "var" <+> toDoc(id) <+> "in" <+> toDoc(region) <+> "=" <+> toDoc(init) <> line <> toDoc(body.bindings) <> toDoc(body.body)
+
+      case NeutralStmt.Hole(span) => "hole()"
     }
 
     def toDoc(id: Id): Doc = id.show
@@ -942,8 +998,16 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     case Stmt.Hole(span) => NeutralStmt.Hole(span)
 
     // State
-    case Stmt.Region(body) => ???
-    case Stmt.Alloc(id, init, region, body) => ???
+    case Stmt.Region(BlockLit(Nil, List(capture), Nil, List(cap), body)) =>
+      given Env = env.bindComputation(cap.id, Computation.Var(cap.id))
+      evaluate(body, Frame.Return, Stack.Region(cap, Map.empty, k, ks))
+    case Stmt.Region(_) => ???
+    case Stmt.Alloc(id, init, region, body) =>
+      val addr = evaluate(init)
+      alloc(id, region, addr, ks) match {
+        case Some(ks1) => evaluate(body, k, ks1)
+        case None => NeutralStmt.Alloc(id, addr, region, nested { evaluate(body, k, ks) })
+      }
 
     // TODO
     case Stmt.Var(ref, init, capture, body) =>
@@ -1020,7 +1084,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
   }
 
   def run(mod: ModuleDecl): ModuleDecl = {
-    util.trace(mod)
+    //util.trace(mod)
     // TODO deal with async externs properly (see examples/benchmarks/input_output/dyck_one.effekt)
     val asyncExterns = mod.externs.collect { case defn: Extern.Def if defn.annotatedCapture.contains(AsyncCapability.capture) => defn }
     val toplevelEnv = Env.empty
@@ -1037,7 +1101,8 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     mod.copy(definitions = newDefinitions)
   }
 
-  inline def debug(inline msg: => Any) = println(msg)
+  val showDebugInfo = false
+  inline def debug(inline msg: => Any) = if (showDebugInfo) println(msg) else ()
 
   def run(defn: Toplevel)(using env: Env, G: TypingContext): Toplevel = defn match {
     case Toplevel.Def(id, core.Block.BlockLit(tparams, cparams, vparams, bparams, body)) =>
@@ -1102,10 +1167,14 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         case _ => sys error "Variable needs to have a single capture"
       }
       Stmt.Var(blockParam.id, embedExpr(init), capt, embedStmt(body)(using G.bind(blockParam.id, blockParam.tpe, blockParam.capt)))
-    case NeutralStmt.Hole(span) =>
-      Stmt.Hole(span)
     case NeutralStmt.Put(ref, annotatedTpe, annotatedCapt, value, body) =>
       Stmt.Put(ref, annotatedCapt, embedExpr(value), embedStmt(body))
+    case NeutralStmt.Region(id, body) =>
+      Stmt.Region(BlockLit(Nil, List(id.id), Nil, List(id), embedStmt(body)(using G.bindComputations(List(id)))))
+    case NeutralStmt.Alloc(id, init, region, body) =>
+      Stmt.Alloc(id, embedExpr(init), region, embedStmt(body))
+    case NeutralStmt.Hole(span) =>
+      Stmt.Hole(span)
   }
 
   def embedStmt(basicBlock: BasicBlock)(using G: TypingContext): core.Stmt = basicBlock match {
