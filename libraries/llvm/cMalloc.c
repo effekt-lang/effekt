@@ -22,7 +22,7 @@ typedef struct Block {
 static Block* freeList = NULL;            // Kopf der Freelist
 static uint8_t* nextUnusedBlock = NULL;   // Zeiger auf nächsten unbenutzten Block
 static uint8_t* endOfChunk = NULL;        // Ende des allokierten Speichers
-static const int blockSize = 1024;     // Größe jedes Blocks (1KB)
+static const int blockSize = 128;     // Größe jedes Blocks (1KB)
 
 // -----------------------------
 // Initialisierung
@@ -41,7 +41,7 @@ void cInitializeMemory(void) {
 
     nextUnusedBlock = mem;
     endOfChunk = mem + chunkSize;
-    printf("[init] Memory initialized: %p - %p\n", (void*)mem, (void*)endOfChunk);
+//    printf("[init] Memory initialized: %p - %p\n", (void*)mem, (void*)endOfChunk);
 }
 
 // -----------------------------
@@ -67,7 +67,7 @@ void* cMalloc(uint8_t size) {
 
         void* block = nextUnusedBlock;
         nextUnusedBlock += blockSize;
-        printf("[malloc] New block: %p\n", block);
+//        printf("[malloc] New block: %p\n", block);
         return block;
     }
 
@@ -75,8 +75,8 @@ void* cMalloc(uint8_t size) {
     // 2. Falls Freelist nicht leer ist → wiederverwenden
     Block* block = freeList;
     freeList = block->next;
-    printf("[malloc] Reusing block: %p\n", (void*)block);
-    printf("[malloc] freeList: %p\n", (void*)freeList);
+//    printf("[malloc] Reusing block: %p\n", (void*)block);
+//    printf("[malloc] freeList: %p\n", (void*)freeList);
     return (void*)block;
 //    return malloc(size);
 }
@@ -97,7 +97,7 @@ void cFree(void* ptr) {
     block->next = freeList;
     freeList = block;
 
-    printf("[free] Freed block: %p\n", ptr);
+//    printf("[free] Freed block: %p\n", ptr);
 //    free(ptr);
 }
 
