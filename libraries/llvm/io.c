@@ -810,6 +810,9 @@ void subproc_on_exit(uv_process_t* proc, int64_t exit_status, int term_signal) {
 }
 
 void c_close_stream_callback(uv_shutdown_t* req, int status) {
+    if(status != 0){
+        // TODO error handling
+    }
     free(req);
 }
 void c_close_stream(struct Pos stream) {
@@ -823,6 +826,9 @@ typedef struct {
     uv_buf_t* buf;
 } subproc_write_req_data_t;
 void c_write_stream_callback(uv_write_t* req, int status) {
+    if(status != 0){
+        // TODO error handling
+    }
     subproc_write_req_data_t* data = (subproc_write_req_data_t*)(req->data);
     erasePositive(data->buffer);
     free(data->buf);
