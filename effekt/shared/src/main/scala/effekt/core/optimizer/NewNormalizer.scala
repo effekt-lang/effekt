@@ -641,7 +641,7 @@ object semantics {
         "resume" <> parens(toDoc(k)) <+> toDoc(body)
 
       case NeutralStmt.Var(id, init, body) =>
-        "var" <+> toDoc(id) <+> "=" <+> toDoc(init) <> line <> toDoc(body.bindings) <> toDoc(body.body)
+        "var" <+> toDoc(id.id) <+> "=" <+> toDoc(init) <> line <> toDoc(body.bindings) <> toDoc(body.body)
 
       case NeutralStmt.Put(ref, tpe, cap, value, body) =>
         toDoc(ref) <+> ":=" <+> toDoc(value) <> line <> toDoc(body.bindings) <>  toDoc(body.body)
