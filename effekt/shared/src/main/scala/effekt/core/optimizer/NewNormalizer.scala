@@ -596,7 +596,8 @@ object semantics {
       case Stack.Region(id, bindings, frame, next) =>
         reify(next) { reify(frame) {
           val body = nested { stmt }
-          NeutralStmt.Region(id, body)
+          if (body.free contains id.id) NeutralStmt.Region(id, body)
+          else stmt
         }}
     }
   }
