@@ -809,6 +809,37 @@ void subproc_on_exit(uv_process_t* proc, int64_t exit_status, int term_signal) {
     resume_Int(k, exit_status);
 }
 
+void c_close_stream_callback(uv_shutdown_t* req, int status) {
+    free(req);
+}
+void c_close_stream(struct Pos stream) {
+    uv_stream_t* str = (uv_stream_t*)stream.obj;
+    uv_shutdown_t* req = (uv_shutdown_t*)malloc(sizeof(uv_shutdown_t));
+    uv_shutdown(req, str, c_close_stream_callback);
+}
+
+typedef struct {
+    struct Pos buffer;
+    uv_buf_t* buf;
+} subproc_write_req_data_t;
+void c_write_stream_callback(uv_write_t* req, int status) {
+    subproc_write_req_data_t* data = (subproc_write_req_data_t*)(req->data);
+    erasePositive(data->buffer);
+    free(data->buf);
+    free(data);
+}
+void c_write_stream(struct Pos stream, struct Pos buffer) {
+    uv_stream_t* str = (uv_stream_t*)stream.obj;
+    uv_write_t* req = (uv_write_t*)malloc(sizeof(uv_write_t));
+    memset(req, 0, sizeof(uv_write_t));
+    subproc_write_req_data_t* data = (subproc_write_req_data_t*)malloc(sizeof(subproc_write_req_data_t));
+    data->buffer = buffer;
+    uv_buf_t* buf = (uv_buf_t*)malloc(sizeof(uv_buf_t));
+    *buf = uv_buf_init((char*)(c_bytearray_data(buffer)), buffer.tag);
+    req->data = data;
+    uv_write(req, str, buf, 1, c_write_stream_callback);
+}
+
 void c_spawn(struct Pos cmd, struct Pos args, struct Pos options, Stack stack) {
     uv_process_options_t* opts = (uv_process_options_t*)options.obj;
     uv_process_t* proc = (uv_process_t*)malloc(sizeof(uv_process_t));
@@ -838,6 +869,12 @@ void c_spawn(struct Pos cmd, struct Pos args, struct Pos options, Stack stack) {
     // spawn process
     int err = uv_spawn(uv_default_loop(), proc, opts);
 
+    if(opts->stdio[0].flags & UV_CREATE_PIPE) {
+        uv_stream_t* stream = (uv_stream_t*)(opts->stdio[0].data.stream);
+        subproc_stream_cb_closure_t* clos = (subproc_stream_cb_closure_t*)(stream->data);
+        struct Pos str = (struct Pos) { .tag = 0, .obj = stream, };
+        run_Pos(clos->handler, str);
+    }
     if(opts->stdio[1].flags & UV_CREATE_PIPE)
       uv_read_start((uv_stream_t*)(opts->stdio[1].data.stream), subproc_alloc_cb, subproc_stream_cb);
     if(opts->stdio[2].flags & UV_CREATE_PIPE)
