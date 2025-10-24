@@ -64,8 +64,8 @@ extern def onStderr(opts: SpawnOptions, callback: String => Unit at {io, global}
     %opts = call %Pos @c_spawn_options_on_stderr(%Pos ${opts}, %Pos ${callback})
     ret %Pos %opts
   """
-extern type InputStream
-extern def withStdin(opts: SpawnOptions, callback: InputStream => Unit at {io, global}) at {}: SpawnOptions =
+extern type WritableStream
+extern def withStdin(opts: SpawnOptions, callback: WritableStream => Unit at {io, global}) at {}: SpawnOptions =
   jsNode """(function () {
     let old = ${opts};
     old.stdio[0] = 'pipe'
@@ -82,13 +82,13 @@ extern def withStdin(opts: SpawnOptions, callback: InputStream => Unit at {io, g
     %opts = call %Pos @c_spawn_options_pipe_stdin(%Pos ${opts}, %Pos ${callback})
     ret %Pos %opts
   """
-extern def writeStdin(to: InputStream, s: String) at io: Unit =
+extern def write(to: WritableStream, s: String) at io: Unit =
   jsNode """${to}.write(${s})"""
   llvm """
     call void @c_write_stream(%Pos ${to}, %Pos ${s})
     ret %Pos zeroinitializer
   """
-extern def closeStdin(to: InputStream) at io: Unit =
+extern def close(to: WritableStream) at io: Unit =
   jsNode """${to}.end()"""
   llvm """
     call void @c_close_stream(%Pos ${to})
