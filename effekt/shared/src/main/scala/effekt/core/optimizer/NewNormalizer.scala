@@ -912,6 +912,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       evaluate(body, k, ks)(using newEnv, scope)
 
     case Stmt.App(callee, targs, vargs, bargs) =>
+      // TODO Why? Should it really be Stack.Unkown?
       // Here the stack passed to the blocks is an empty one since we reify it anyways...
       val escapingStack = Stack.Unknown
       evaluate(callee, "f", escapingStack) match {
@@ -925,7 +926,18 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           reify(k, ks) { NeutralStmt.App(id, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack))) }
         case Computation.Def(Closure(label, environment)) =>
           val args = vargs.map(evaluate)
-          val blockargs = bargs.map(evaluate(_, "f", escapingStack))
+          // TODO ks or Stack.Unkown?
+          /*
+          try {
+            prog {
+              do Eff()
+            }
+          } with Eff { ... }
+          ---
+          val captures = stack.bound.filter { block.free }
+          is incorrect as the result is always the empty capture set since Stack.Unkown.bound = Set()
+           */
+          val blockargs = bargs.map(evaluate(_, "f", ks))
           reify(k, ks) { NeutralStmt.Jump(label, targs, args, blockargs ++ environment) }
         case _: (Computation.New | Computation.Continuation) => sys error "Should not happen"
       }
