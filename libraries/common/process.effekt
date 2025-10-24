@@ -19,6 +19,9 @@ extern llvm """
   declare %Pos @c_spawn_options_default()
   declare %Pos @c_spawn_options_on_stdout(%Pos, %Pos)
   declare %Pos @c_spawn_options_on_stderr(%Pos, %Pos)
+  declare %Pos @c_spawn_options_pipe_stdin(%Pos, %Pos)
+  declare %Pos @c_write_stream(%Pos, %Pos)
+  declare %Pos @c_close_stream(%Pos)
   declare %Pos @c_spawn(%Pos, %Pos, %Pos)
 """
 
@@ -61,33 +64,36 @@ extern def onStderr(opts: SpawnOptions, callback: String => Unit at {io, global}
     %opts = call %Pos @c_spawn_options_on_stderr(%Pos ${opts}, %Pos ${callback})
     ret %Pos %opts
   """
-extern def writableStdin(opts: SpawnOptions) at {}: SpawnOptions =
-  jsNode """(function() {
-    let old = ${opts};
-    old.stdio[0] = 'pipe'
-    return old;
-  })()"""
-  llvm """
-    %opts = call %Pos @c_spawn_options_pipe_stdin(%Pos ${opts})
-    ret %Pos %opts
-  """
-extern type ProcessHandle
-extern def onSpawn(opts: SpawnOptions, callback: ProcessHandle => Unit at {io, global}) at {}: SpawnOptions =
+extern type InputStream
+extern def withStdin(opts: SpawnOptions, callback: InputStream => Unit at {io, global}) at {}: SpawnOptions =
   jsNode """(function () {
     let old = ${opts};
+    old.stdio[0] = 'pipe'
     let oldSpawn = old.onSpawn;
     old.onSpawn = function(p) {
       oldSpawn(p);
       p.on('spawn', () => {
-        $effekt.runToplevel((ks, k) => (${callback})(p, ks, k));
+        $effekt.runToplevel((ks, k) => (${callback})(p.stdin, ks, k));
       });
     };
     return old;
   })()"""
-extern def writeStdin(to: ProcessHandle, s: String) at io: Unit =
-  jsNode """${to}.stdin.write(${s})"""
-extern def closeStdin(to: ProcessHandle) at io: Unit =
-  jsNode """${to}.stdin.end()"""
+  llvm """
+    %opts = call %Pos @c_spawn_options_pipe_stdin(%Pos ${opts}, %Pos ${callback})
+    ret %Pos %opts
+  """
+extern def writeStdin(to: InputStream, s: String) at io: Unit =
+  jsNode """${to}.write(${s})"""
+  llvm """
+    call void @c_write_stream(%Pos ${to}, %Pos ${s})
+    ret %Pos zeroinitializer
+  """
+extern def closeStdin(to: InputStream) at io: Unit =
+  jsNode """${to}.end()"""
+  llvm """
+    call void @c_close_stream(%Pos ${to})
+    ret %Pos zeroinitializer
+  """
 
 extern def spawn(cmd: String, args: Array[String], options: SpawnOptions) at async: Int  =
   jsNode """$effekt.capture(k => {
