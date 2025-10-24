@@ -1,0 +1,17 @@
+// md = Person requires 2 saving slots
+record Person(
+  field1: Int,
+  field2: Int,
+  field3: Int,
+  field4: Int,
+  field5: Int,
+  field6: Int,
+  field7: Int
+  )
+
+def main() = {
+  val p1 = Person(1, 2, 3, 4, 5, 6, 7)
+  val p2 = Person(8, 9, 10, 11, 12, 13, 14)
+  println(p1.field7)
+  println(p2.field2)
+}

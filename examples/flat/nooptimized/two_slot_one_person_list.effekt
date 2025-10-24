@@ -1,0 +1,23 @@
+import list
+
+record TwoSlotPerson(
+  field1: Int,
+  field2: Int,
+  field3: Int,
+  field4: Int,
+  field5: Int,
+  field6: Int,
+  field7: Int
+  )
+
+def main() = {
+  // Creates a list with one element
+  val person1 = TwoSlotPerson(1, 2, 3, 4, 5, 6, 7)
+  var myList = [person1]
+
+  // prints 7. If -1 is printed, there is a bug
+  myList match {
+    case Nil() => println(-1)
+    case Cons(x, _) => println(x.field7)
+  }
+}

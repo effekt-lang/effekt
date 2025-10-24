@@ -1,0 +1,17 @@
+// md = Person needs 2 slots
+// contains strings and integers.
+// First slot contains field1, second slot contains field2, field3, field4, field5.
+record Person(
+  field1: Int,
+  field2: String,
+  field3: String,
+  field4: String,
+  field5: Int
+  )
+
+def main() = {
+  val p1 = Person(1, "P1Field2", "P1Field3", "P1Field4", 5)
+  val p2 = Person(6, "P2Field2", "P2Field3", "P2Field4", 10)
+  println(p1.field2)
+  println(p2.field5)
+}
