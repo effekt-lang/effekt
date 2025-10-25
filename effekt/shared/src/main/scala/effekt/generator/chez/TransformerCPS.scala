@@ -99,7 +99,6 @@ object TransformerCPS {
     case LetCont(id, binding, body) => resolveLet(id, toChez(binding), body)
     case LetDef(id, binding, body) => resolveLet(id, toChez(binding), body)
     case LetExpr(id, binding, body) => resolveLet(id, toChez(binding), body)
-    // TODO: regions
     case Region(id, ks, body) =>
       val binding = Builtin(CREATE_REGION, toChez(ks))
       resolveLet(id, binding, body)

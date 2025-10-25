@@ -1,33 +1,30 @@
 ; Cont a = (a, MetaCont -> #)
 ; State = [box]
 ; Backup = [(box value)]
-; StackCell = (Prompt {State | Backup} Cont)
-; MetaCont = (Prompt State [StackCell])
+; MetaCont = (Cont Prompt {State | Backup} rest)
 ; Prompt = Int
+; Block b = Cont b, MetaCont -> #
 ; Program a b = a, Cont b, MetaCont -> #
 
 ;BackupCell
 (define-record-type backup-cell (fields box value))
 
-; StackCell
-(define-record-type stack-cell (fields prompt (mutable state) cont))
-
 ; MetaCont
-; Holds the prompt and state of k in addition to the Metastack
+; Holds a "copy" of k, as well as its prompt and state
 (define-record-type meta-cont 
-    (fields prompt (mutable state) stacks))
+    (fields (mutable cont) prompt (mutable state) (mutable rest)))
 
 ; Value, MetaCont -> Box
 (define (var init ks)
     (let* ([state (meta-cont-state ks)]
            [var (box init)])
-        (meta-cont-state-set! ks (cons var state))
-        var))
+          (meta-cont-state-set! ks (cons var state))
+          var))
 
 ; Box -> Value
 (define (get ref) (unbox ref))
 
-; Box, Value -> ()
+; Box, Value -> void
 (define (put ref value) (set-box! ref value))
 
 ; TODO
@@ -42,96 +39,72 @@
 (define _prompt 1)
 (define (new-prompt)
     (let ([prompt _prompt])
-        (set! _prompt (+ prompt 1))
-        prompt))
+         (set! _prompt (+ prompt 1))
+         prompt))
 
-(define top-level-ks (make-meta-cont 0 '() '()))
 (define (top-level-k x _) x)
+(define top-level-ks (make-meta-cont top-level-k 0 '() '()))
 
 ; a, MetaCont -> #
 (define (return x ks)
-    (let* ([stacks (meta-cont-stacks ks)]
-           [current-stack-cell (car stacks)]
-           [other-stack-cells (cdr stacks)]
-           [k (stack-cell-cont current-stack-cell)]
-           [ks (make-meta-cont (stack-cell-prompt current-stack-cell) 
-                               (stack-cell-state current-stack-cell)
-                               other-stack-cells)])
-    (k x ks)))
-    
+    (let* ([new-ks (meta-cont-rest ks)]
+           [k (meta-cont-cont new-ks)])
+    (k x new-ks)))
 
 ; Program Prompt b, MetaCont, Cont b -> #
 (define (reset prog ks k)
-    (let* ([prompt (new-prompt)]
-           [k-prompt (meta-cont-prompt ks)]
-           [k-state (meta-cont-state ks)]
-           [k-cell (make-stack-cell k-prompt k-state k)]
-           [rest-cells (meta-cont-stacks ks)]
-           [ks (make-meta-cont prompt '() (cons k-cell rest-cells))])
-        (prog prompt ks return)))
+    (let ([prompt (new-prompt)])
+         (meta-cont-cont-set! ks k)
+         (prog prompt (make-meta-cont return prompt '() ks) return)))
 
-; StackCell -> ()
-(define (create-backup cell)
-    (let* ([state (stack-cell-state cell)]
+; MetaCont -> void
+(define (create-backup ks)
+    (let* ([state (meta-cont-state ks)]
            [construct-cell (lambda (r) (make-backup-cell r (unbox r)))]
            [backup (map construct-cell state)])
-        (stack-cell-state-set! cell backup)))
+        (meta-cont-state-set! ks backup)))
 
-; [StackCell], Prompt -> ([StackCell] [StackCell])
-(define (split-stack cs p)
+; MetaCont, Prompt -> (MetaCont MetaCont)
+(define (split-stack ks p)
     (define (worker above below)
-        (let* ([current-cell (car below)]
-               [_ (create-backup current-cell)]
-               [new-above (cons current-cell above)]
-               [new-below (cdr below)])
-            (if (= (stack-cell-prompt current-cell) p)
-                (cons new-above new-below)
-                (worker new-above new-below))))
-    (worker '() cs))
+        (let ([new-below (meta-cont-rest below)])
+             (create-backup below)
+             (meta-cont-rest-set! below above)
+             (if (= (meta-cont-prompt below) p)
+                 (values below new-below)
+                 (worker below new-below))))
+    (worker '() ks))
 
-; Prompt, Program [StackCell] b, MetaCont, Cont b -> #
+; Prompt, Program MetaCont b, MetaCont, Cont b -> #
 (define (shift p prog ks k)
-    (let* ([k-cell (make-stack-cell (meta-cont-prompt ks) (meta-cont-state ks) k)]
-           [cells (cons k-cell (meta-cont-stacks ks))]
-           [splitted (split-stack cells p)]
-           [c (car splitted)]
-           [underC (cdr splitted)]
-           [new-k-cell (car underC)]
-           [new-k-state (stack-cell-state new-k-cell)]
-           [new-k-prompt (stack-cell-prompt new-k-cell)]
-           [k (stack-cell-cont new-k-cell)]
-           [ks (make-meta-cont new-k-prompt new-k-state (cdr underC))])
-        (prog c ks k)))
+    (meta-cont-cont-set! ks k)
+    (let-values ([(c underC) (split-stack ks p)])
+                (prog c underC (meta-cont-cont underC))))
 
-; StackCell -> StackCell
-(define (restore cell)
-    (let ([backup (stack-cell-state cell)]
+; MetaCont, MetaCont -> MetaCont
+(define (restore cont rest)
+    (let ([backup (meta-cont-state cont)]
           [restore-cell (lambda (c) (let ([v-box (backup-cell-box c)])
-                                          (set-box! v-box (backup-cell-value c))
-                                          v-box))])
-        ;Copy stack-cell here because one could resume multiple times
-        (make-stack-cell (stack-cell-prompt cell) 
+                                         (set-box! v-box (backup-cell-value c))
+                                         v-box))])
+         ;Copy here because one could resume multiple times
+         (make-meta-cont (meta-cont-cont cont)
+                         (meta-cont-prompt cont) 
                          (map restore-cell backup) 
-                         (stack-cell-cont cell))))
+                         rest)))
 
-; [StackCell], [StackCell] -> [StackCell]
-(define (rewind cont cells)
+; MetaCont, MetaCont -> MetaCont
+(define (rewind cont ks)
     (if (null? cont)
-        cells
-        (let ([first-cell (restore (car cont))])
-             (rewind (cdr cont) (cons first-cell cells)))))
+        ks
+        (rewind (meta-cont-rest cont) (restore cont ks))))
 
-; [StackCell], Program [StackCell] b, MetaCont, Cont b -> #
+; MetaCont, Block, MetaCont, Cont -> #
 (define (resume cont block ks k)
-    (let* ([cells (cons (make-stack-cell (meta-cont-prompt ks) (meta-cont-state ks) k) (meta-cont-stacks ks))]
-           [rewinded (rewind cont cells)]
-           [k-cell (car rewinded)]
-           [k (stack-cell-cont k-cell)]
-           [k-prompt (stack-cell-prompt k-cell)]
-           [k-state (stack-cell-state k-cell)]
-           [ks (make-meta-cont k-prompt k-state (cdr rewinded))])
-        (block ks k)))
+    (meta-cont-cont-set! ks k)
+    (let ([rewinded (rewind cont ks)])
+         (block rewinded (meta-cont-cont rewinded))))
 
-; Program a -> a
+; Block b -> b
 (define (run-top-level p)
     (p top-level-ks top-level-k))
