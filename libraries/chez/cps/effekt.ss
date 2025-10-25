@@ -27,12 +27,15 @@
 ; Box, Value -> void
 (define (put ref value) (set-box! ref value))
 
+; TODO
 ; MetaCont -> MetaCont
 (define (create-region ks) ks)
 
+; TODO
 ; Value, MetaCont -> Box
 (define allocate var)
 
+; TODO
 ; Ref -> void
 (define (deallocate _) (void))
 

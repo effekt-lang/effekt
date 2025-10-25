@@ -15,8 +15,8 @@ class ChezSchemeCPS extends Compiler[String] {
 
   override def prettyIR(source: Source, stage: Stage)(using C: Context): Option[Document] = stage match {
     case Stage.Core if C.config.optimize() => Optimized(source).map { (_, _, res) => core.PrettyPrinter.format(res) }
-    case Stage.CPS => CPSTransformed(source).map { (_, _, _, res) => cps.PrettyPrinter.format(res) }
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
+    case Stage.CPS => CPSTransformed(source).map { (_, _, _, res) => cps.PrettyPrinter.format(res) }
     case Stage.Machine => None
     case Stage.Target => LSP(source)
   }
@@ -25,7 +25,7 @@ class ChezSchemeCPS extends Compiler[String] {
     case Stage.Core => Core(source).map { res => res.core }
     case Stage.CPS => CPSTransformed(source).map { (_, _, _, res) => res }
     case Stage.Machine => None
-    case Stage.Target => Chez(source)
+    case Stage.Target => LSP(source)
   }
 
   override def compile(source: Source)(using C: Context) = Chez(source)

@@ -37,7 +37,7 @@ object TransformerCPS {
       val lspModule = cps.ModuleDecl(
         path,
         Nil,
-        declarations,
+        Nil,
         externs.collect{case d: Extern.Def => d},
         definitions,
         exports
