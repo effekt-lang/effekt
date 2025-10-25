@@ -69,7 +69,46 @@ abstract class ChezSchemeTests extends EffektTests {
   )
 }
 
-class ChezSchemeCPSTests extends ChezSchemeTests {
+class ChezSchemeCPSTests extends EffektTests {
+
+  override def positives: Set[File] = Set(
+    examplesDir / "pos",
+    examplesDir / "casestudies",
+    examplesDir / "chez",
+    examplesDir / "benchmarks"
+  )
+
+  override def negatives: Set[File] = Set(
+    examplesDir / "neg"
+  )
+
+  // Test files which are to be ignored (since features are missing or known bugs exist)
+  override def ignored: Set[File] = Set(
+    // mutable maps not implemented for chez
+    examplesDir / "pos" / "maps.effekt",
+
+    // unsafe continuations are not yet supported in chez
+    examplesDir / "pos" / "propagators.effekt",
+
+    // filesystem operations and bytearrays are not yet supported in our Chez backend
+    examplesDir / "benchmarks" / "input_output" / "word_count_ascii.effekt",
+    examplesDir / "benchmarks" / "input_output" / "word_count_utf8.effekt",
+    examplesDir / "benchmarks" / "input_output" / "dyck_one.effekt",
+    examplesDir / "benchmarks" / "input_output" / "number_matrix.effekt",
+    examplesDir / "benchmarks" / "input_output" / "large_file.effekt",
+    examplesDir / "benchmarks" / "input_output" / "small_files.effekt",
+    examplesDir / "benchmarks" / "input_output" / "interleave_promises.effekt",
+    examplesDir / "benchmarks" / "input_output" / "financial_format.effekt",
+    examplesDir / "benchmarks" / "input_output" / "server_client.effekt",
+
+    // the test is specific to JS
+    examplesDir / "pos" / "multiline_extern_definition.effekt",
+
+    // Generic comparison
+    examplesDir / "pos" / "genericcompare.effekt",
+    examplesDir / "pos" / "issue733.effekt"
+  )
+
   def backendName = "chez-cps"
 }
 

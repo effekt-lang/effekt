@@ -27,14 +27,14 @@
 ; Box, Value -> void
 (define (put ref value) (set-box! ref value))
 
-; TODO
-(define (create-region ks) (void))
+; MetaCont -> void
+(define (create-region _) (void))
 
-; TODO
-(define (allocate init region) (box init))
+; Value, Region -> Box
+(define (allocate init _) (box init))
 
-; TODO
-(define (deallocate ref) (void))
+; Ref -> void
+(define (deallocate _) (void))
 
 (define _prompt 1)
 (define (new-prompt)
