@@ -1,6 +1,6 @@
-[info] examples/neg/boolean_wrong_name.effekt:3:19: Did you mean `Bool`?
+[info] examples/neg/boolean_wrong_name.effekt:3:19: Did you mean Bool?
 def alwaysTrue(): Boolean = true
                   ^^^^^^^
-[error] examples/neg/boolean_wrong_name.effekt:3:19: Could not resolve type `Boolean`
+[error] examples/neg/boolean_wrong_name.effekt:3:19: Could not resolve type Boolean
 def alwaysTrue(): Boolean = true
                   ^^^^^^^
