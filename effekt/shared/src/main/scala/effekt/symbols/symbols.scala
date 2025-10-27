@@ -141,7 +141,7 @@ trait Callable extends BlockSymbol {
   def annotatedResult: Option[ValueType]
   def annotatedEffects: Option[Effects]
 
-   // invariant: only works if ret is defined!
+   // invariant: only works if ret and eff are defined!
   def toType: FunctionType = annotatedType.get
 
   def toType(ret: ValueType, effects: Effects, capabilityParams: List[Capture]): FunctionType =

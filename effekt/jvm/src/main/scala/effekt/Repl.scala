@@ -307,21 +307,21 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
     /**
      * Create a module declaration using the given expression as body of `defName`
-     * 
+     *
      * def <defName>() = {
      *   return <expr>
      * }
-     * 
+     *
      * By default `defName` is "main", however, when type checking a main function the result must be unit.
      * When querying the type of an expression using :t, this is not desirable.
-     * Hence, the caller can choose some different name such that these restrictions don't exist. 
+     * Hence, the caller can choose some different name such that these restrictions don't exist.
      */
     def make(source: Source, expr: Term, defName: String = "main"): ModuleDecl = {
       val body = Return(expr, expr.span.synthesized)
       val fakeSpan = Span(source, 0, 0, origin = Origin.Synthesized)
       val fullSpan = Span(source, 0, source.content.length, origin = Origin.Synthesized)
       ModuleDecl("interactive", includes,
-        definitions :+ FunDef(IdDef(defName, fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Maybe.None(fakeSpan), Maybe.None(fakeSpan),
+        definitions :+ FunDef(IdDef(defName, fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Maybe.None(fakeSpan), Maybe.None(fakeSpan), Maybe.None(fakeSpan),
           body, Info.empty(fakeSpan), fullSpan), None, fullSpan)
     }
 
