@@ -236,18 +236,18 @@ object scopes {
 
     // NOTE: Most of these should be covered by the edit distance anyway...
     private def didYouMeanTypeHeuristic(name: String): Option[String] = name match {
-      case "Boolean" | "boolean" => Some(pp"Did you mean `Bool`?")
-      case "Str" | "str" => Some(pp"Did you mean `String`?")
+      case "Boolean" | "boolean" => Some(pp"Did you mean Bool?")
+      case "Str" | "str" => Some(pp"Did you mean String?")
       case "Integer" | "Int32" | "Int64" | "I32" | "I64" | "i32" | "i64" =>
-        Some(pp"Did you mean `Int`?")
+        Some(pp"Did you mean Int?")
       case "UInt32" | "UInt64" | "UInt" | "U32" | "U64" | "u32" | "u64" =>
-        Some(pp"Effekt only supports signed integers, did you mean `Int`?")
+        Some(pp"Effekt only supports signed integers, did you mean Int?")
       case "Int8" | "UInt8" | "I8" | "U8" | "i8" | "u8" =>
-        Some(pp"Did you mean `Byte` (8 bits) or `Char` (32 bits)?")
+        Some(pp"Did you mean Byte (8 bits) or Char (32 bits)?")
       case "Float" | "float" | "F64" | "F32" | "f64" | "f32" =>
-        Some(pp"Did you mean `Double`?")
-      case "Maybe" | "maybe" => Some(pp"Did you mean `Option`?")
-      case "Void" | "void" => Some(pp"Did you mean `Unit`?")
+        Some(pp"Effekt only supports 64bit floating numbers, did you mean Double?")
+      case "Maybe" | "maybe" => Some(pp"Did you mean Option?")
+      case "Void" | "void" => Some(pp"Did you mean Unit?")
       case _ => None
     }
 
