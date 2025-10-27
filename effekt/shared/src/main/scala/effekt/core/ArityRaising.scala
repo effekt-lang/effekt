@@ -14,6 +14,8 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       Context.module = mod
       val main = C.ensureMainExists(mod)
       val res = Deadcode.remove(main, core)
+      println("Before")
+      println(PrettyPrinter.format(res))
       val transformed = Context.timed(phaseName, source.name) { transform(res) }
       println(PrettyPrinter.format(transformed))
       println("\n\n\nparts\n\n")
@@ -28,10 +30,6 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(toplevel: Toplevel)(using C: Context, DC: DeclarationContext): Toplevel = toplevel match {
     case Toplevel.Def(id, BlockLit(tparams, cparams, List(ValueParam(param, ValueType.Data(name, targs))), bparams, body)) => 
-      println("### id : ")
-      println(param)
-      println(name)
-      println(targs)
       DC.findData(name) match {
         case Some(Data(_, List(), List(Constructor(test, List(), List(Field(x, tpe1), Field(y, tpe2)))))) => 
           println(test)
@@ -45,11 +43,11 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       }
       
     case Toplevel.Def(id, block) => 
-      println("\n\nid:")
-      println(doIndentation(id.toString))
-      println("block:")
-      println(doIndentation(block.toString))
-      Toplevel.Def(id, transform(block))
+      val res = Toplevel.Def(id, transform(block))
+      println("\n\nres:")
+      println(doIndentation(res.toString))
+      res
+ 
     case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, tpe, transform(binding))
   }
 
@@ -88,10 +86,15 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
             case Some(Data(_, List(), List(Constructor(test, List(), List(Field(x, tpe1), Field(y, tpe2)))))) => 
               val transformedVargs = List(ValueVar(x, tpe1), ValueVar(y, tpe2))
               val res = Stmt.App(BlockVar(id, BlockType.Function(List(), List(), List(tpe1, tpe2), List(), returnTpe), annotatedCapt), targs, transformedVargs, bargs)
+              val latermatch: BlockLit = Block.BlockLit(List(), List(), List(ValueParam(x,tpe1), ValueParam(y, tpe2)), List(), res)
+              val newMatch = Stmt.Match(vargs.head, List((test,  latermatch)), None)
               println("res $$$$###")
-              println(res)
-              println(vargs)
-              res
+              println(stmt)
+              println(name)
+              println(test)
+              println(vargs.head)
+              println(newMatch)
+              newMatch
             
             case _ => 
               stmt
@@ -106,6 +109,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       Stmt.If(transform(cond), transform(thn), transform(els))
     case Stmt.Match(scrutinee, clauses, default) =>
       Stmt.Match(transform(scrutinee), clauses.map { case (id, clause) => (id, transform(clause)) }, default map transform)
+
     case _ => stmt
   }
 
