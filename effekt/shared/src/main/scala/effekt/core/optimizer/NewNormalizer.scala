@@ -473,6 +473,7 @@ object semantics {
       alloc(ref, reg, value, next).map(Stack.Var(id, curr, init, frame, _))
     case Stack.Region(id, bindings, frame, next) =>
       if (reg == id.id){
+        // TODO
         Some(Stack.Region(id, bindings.updated(ref, (value, value)), frame, next))
       } else {
         alloc(ref, reg, value, next).map(Stack.Region(id, bindings, frame, _))
@@ -565,7 +566,7 @@ object semantics {
           |----------|               |----------|               |---------|
           |          | ---> ... ---> |          | ---> ... ---> |         | ---> ...
           |----------|               |----------|               |---------|
-              r1                          r2                       prompt
+              r1                          r2                 first next prompt
 
         Pass r1 :: ... :: r2 :: ... :: prompt :: UNKOWN
          */
@@ -694,7 +695,7 @@ object semantics {
       }
     }
     def toDoc(closure: Closure): Doc = closure match {
-      case Closure(label, env) => toDoc(label) <> brackets(hsep(env.map(toDoc), comma))
+      case Closure(label, env) => toDoc(label) <+> "@" <+> brackets(hsep(env.map(toDoc), comma))
     }
 
     def toDoc(bindings: Bindings): Doc =
@@ -1235,29 +1236,34 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       embedBlockVar(id)
     case Computation.Def(Closure(label, Nil)) =>
       embedBlockVar(label)
-    // TODO fix eta-expansion, this is ~~bogus~~ work-in-progress
     case Computation.Def(Closure(label, environment)) =>
       val blockvar = embedBlockVar(label)
       G.blocks(label) match {
         case (BlockType.Function(tparams, cparams, vparams, bparams, result), captures) =>
+          // TODO this uses the invariant that we _append_ all environment captures to the bparams
+          val (origBparams, synthBparams) = bparams.splitAt(bparams.length - environment.length)
           val vpIds = vparams.map { p => Id("x") }
-          val bpIds = bparams.map { p => Id(p.show) }
-          val vp = vpIds.zip(vparams).map { (id, p) => core.ValueParam(id, p) }
-          val bp = bpIds.zip(bparams).map { (id, p) => core.BlockParam(id, p, Set()) }
+          val bpIds = origBparams.map { p => Id("f") }
+          val vps = vpIds.zip(vparams).map { (id, p) => core.ValueParam(id, p) }
+          val bps = bpIds.zip(origBparams).map { (id, p) => core.BlockParam(id, p, Set()) }
+          val vargs = vpIds.zip(vparams).map { (id, p) => core.Expr.ValueVar(id, p) }
+          // TODO don't use empty capture set for synthesised BlockVars
+          val bargs =
+            bpIds.zip(origBparams).map { case (id, bp) => BlockVar(id, bp, Set()) } ++
+            synthBparams.zip(environment).map {
+              case (bp, Computation.Var(id)) => BlockVar(id, bp, Set())
+              case _ => ???
+            }
           core.Block.BlockLit(
             tparams,
-            Nil,
-            vp,
-            Nil,
+            cparams.take(cparams.length - environment.length),
+            vps,
+            bps,
             Stmt.App(
               blockvar,
               Nil,
-              vpIds.zip(vparams).map { (id, p) => core.Expr.ValueVar(id, p) },
-              bparams.zip(environment).map { case (bp, c) => c match {
-                  case Computation.Var(id) => BlockVar(id, bp, Set())
-                  case _ => ??? // cannot occur
-                }
-              }
+              vargs,
+              bargs
             )
           )
         case _ => ???
