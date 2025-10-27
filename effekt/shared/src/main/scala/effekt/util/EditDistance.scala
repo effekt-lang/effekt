@@ -11,11 +11,11 @@ def editDistance(a: String, b: String, limit: Int): Option[Int] = {
   if (minDist > limit) return None
 
   // Strip common prefix
-  val prefixLen = a.view.zip(b).takeWhile { case (a, b) => a == b }.size
+  val prefixLen = a.view.zip(b.view).takeWhile { case (a, b) => a == b }.size
 
   // Strip common suffix (but don't overlap with prefix)
   val suffixLen = a.view.drop(prefixLen).reverse
-    .zip(b.drop(prefixLen).reverse)
+    .zip(b.view.drop(prefixLen).reverse)
     .takeWhile { case (a, b) => a == b }
     .size
 
