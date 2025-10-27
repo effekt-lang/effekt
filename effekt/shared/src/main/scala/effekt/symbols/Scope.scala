@@ -209,7 +209,29 @@ object scopes {
       }}
 
     def lookupType(id: IdRef)(using E: ErrorReporter): TypeSymbol =
-      lookupTypeOption(id.path, id.name) getOrElse { E.abort(pp"Could not resolve type ${id}") }
+      lookupTypeOption(id.path, id.name) getOrElse {
+        // NOTE: This is run only when we do _not_ find the type in question.
+
+        // Heuristic 1: Some types are named differently in Effekt than in other languages
+        id.name match {
+          case "Boolean" | "bool" => E.info(pp"Did you mean `Bool`?")
+          case "Str" | "str" => E.info(pp"Did you mean `String`?")
+          case "Integer" | "Int32" | "Int64" | "I32" | "I64" | "i32" | "i64" => E.info(pp"Did you mean `Int`?")
+          case "UInt32" | "UInt64" | "UInt" | "U32" | "U64" | "u32" | "u64" => E.info(pp"Effekt only supports signed integers, did you mean `Int`?")
+          case "Int8" | "UInt8" | "I8" | "U8" | "i8" | "u8" => E.info(pp"Did you mean `Byte` (8 bits) or `Char` (32 bits)?")
+          case _ => ()
+        }
+
+        // Heuristic 2: Case-insensitive comparison
+        // TODO: In an ideal world, here's where some similarity checking would take place.
+        val ignoreCase = all(id.path, scope) { _.types.map { case (k, v) => (k.toLowerCase, v) }.get(id.name.toLowerCase) }
+        ignoreCase.foreach {
+          case Some(sym) => E.info(s"Did you mean `${sym}`?")
+          case None      => ()
+        }
+
+        E.abort(pp"Could not resolve type `${id}`")
+      }
 
     def lookupTypeOption(path: List[String], name: String)(using E: ErrorReporter): Option[TypeSymbol] =
       first(path, scope) { _.types.get(name) }

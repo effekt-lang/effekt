@@ -1,0 +1,6 @@
+[info] examples/neg/case_insensitive_type_hint2.effekt:5:12: Did you mean `Mytype`?
+def fun(): MyType = Mytype()
+           ^^^^^^
+[error] examples/neg/case_insensitive_type_hint2.effekt:5:12: Could not resolve type `MyType`
+def fun(): MyType = Mytype()
+           ^^^^^^
