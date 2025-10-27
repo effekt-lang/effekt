@@ -7,3 +7,5 @@ module boolean_custom_type_no_error
 record Boolean(b: Bool)
 
 def alwaysTrue(): Boolean = Boolean(true)
+
+def main() = ()
