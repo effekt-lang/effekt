@@ -22,21 +22,25 @@ def editDistance(a: String, b: String, limit: Int): Option[Int] = {
   val s1 = a.substring(prefixLen, n - suffixLen)
   val s2 = b.substring(prefixLen, m - suffixLen)
 
-  // Levenshtein
-  val N = s1.length
-  val M = s2.length
-
   // After stripping, if one is empty, distance is just the other's length
-  if (s1.isEmpty) return Some(M)
-  if (s2.isEmpty) return Some(N)
+  if (s1.isEmpty) return Some(s2.length)
+  if (s2.isEmpty) return Some(s1.length)
 
-  val d = Array.ofDim[Int](N + 1, M + 1)
-  for (i <- 0 to N) { d(i)(0) = i }
-  for (j <- 0 to M) { d(0)(j) = j }
+  val distance = levenshtein(s1, s2)
+  if (distance <= limit) Some(distance) else None
+}
+
+inline def levenshtein(s1: String, s2: String): Int = {
+  val n = s1.length
+  val m = s2.length
+
+  val d = Array.ofDim[Int](n + 1, m + 1)
+  for (i <- 0 to n) { d(i)(0) = i }
+  for (j <- 0 to m) { d(0)(j) = j }
 
   for {
-    i <- 1 to N; s1_i = s1(i - 1)
-    j <- 1 to M; s2_j = s2(j - 1)
+    i <- 1 to n; s1_i = s1(i - 1)
+    j <- 1 to m; s2_j = s2(j - 1)
   } do {
     val costDelete     = d(i - 1)(j) + 1
     val costInsert     = d(i)(j - 1) + 1
@@ -50,6 +54,5 @@ def editDistance(a: String, b: String, limit: Int): Option[Int] = {
     }
   }
 
-  val distance = d(N)(M)
-  if (distance <= limit) Some(distance) else None
+  d(n)(m)
 }
