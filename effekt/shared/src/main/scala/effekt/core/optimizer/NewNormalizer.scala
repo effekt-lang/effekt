@@ -869,6 +869,17 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       scope.allocate("x", Value.Make(data, tag, targs, vargs.map(evaluate)))
 
     case core.Expr.Box(b, annotatedCapture) =>
+      // TODO this wrong
+      /*
+      var counter = 22;
+      val p : Borrowed[Int] at counter = box new Borrowed[Int] {
+        def dereference() = counter
+       };
+       counter = counter + 1;
+       println(p.dereference)
+       */
+      // should capture `counter` but does not since the stack is Stack.Unknown
+      // (effekt.JavaScriptTests.examples/pos/capture/borrows.effekt (js))
       val comp = evaluate(b, "x", Stack.Unknown)
       scope.allocate("x", Value.Box(comp, annotatedCapture))
   }
