@@ -314,7 +314,7 @@ object semantics {
   }
 
   // TODO add escaping mutable variables
-  case class Closure(label: Label, environment: List[Computation]) {
+  case class Closure(label: Label, environment: List[Computation.Var]) {
     val free: Variables = Set(label) ++ environment.flatMap(_.free).toSet
   }
 
@@ -763,7 +763,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           scope.defineRecursive(freshened, normalizedBlock.copy(bparams = normalizedBlock.bparams), block.tpe, block.capt)
           Computation.Def(Closure(freshened, Nil))
         } else {
-          val captures = closureParams.map { p => Computation.Var(p.id) }
+          val captures = closureParams.map { p => Computation.Var(p.id): Computation.Var }
           given localEnv1: Env = env
             .bindValue(vparams.map(p => p.id -> p.id))
             .bindComputation(bparams.map(p => p.id -> Computation.Var(p.id)))
@@ -1294,7 +1294,6 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
                 synthBparams.zip(environment).map {
                   // TODO: Fix captures
                   case (bp, Computation.Var(id)) => BlockVar(id, bp.tpe, Set())
-                  case _ => sys error "should not happen"
                 }
 
             core.Operation(
@@ -1335,7 +1334,6 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           namedBparams.map { case ((id, bp), c) => core.BlockVar(id, bp, Set(c)) } ++
             environment.zip(synthBparams).zip(synthCapts).map {
               case ((Computation.Var(id), bp), c) => core.BlockVar(id, bp, Set(c))
-              case _ => ???
             }
         core.Block.BlockLit(
           tparams,
