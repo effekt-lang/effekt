@@ -53,7 +53,7 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
       // TODO maybe we should synthesize a call to get here already?
       case sym: (ValueSymbol | symbols.RefBinder) => v
       case sym: BlockSymbol =>
-        C.error(pp"Computation ${sym} is used in an expression position, which requires boxing (e.g. `box ${sym}`)")
+        C.error(pp"Computation ${sym.name.name} is used in an expression position, which requires boxing (e.g. `box ${sym.name.name}`)")
         v
     }
 
