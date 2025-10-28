@@ -646,7 +646,7 @@ class NewNormalizerTests extends CoreTests {
     normalize(input)
   }
 
-  // This effect tests a subtle aspect of normalizing with block parameters.
+  // This case tests a subtle aspect of normalizing with block parameters.
   // Consider the provided input program.
   // The normalized program looks as follows, with irrelevant details elided:
   // ```scala
