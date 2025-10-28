@@ -692,7 +692,7 @@ object semantics {
       case Computation.Inline(block, env) => ???
       case Computation.Continuation(k) => ???
       case Computation.New(interface, operations) => "new" <+> toDoc(interface) <+> braces {
-        hsep(operations.map { case (id, impl) => toDoc(id) <> ":" <+> toDoc(impl) }, ",")
+        hsep(operations.map { case (id, impl) => "def" <+> toDoc(id) <+> "=" <+> toDoc(impl) }, ",")
       }
     }
     def toDoc(closure: Closure): Doc = closure match {
@@ -1124,7 +1124,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     mod.copy(definitions = newDefinitions)
   }
 
-  val showDebugInfo = false
+  val showDebugInfo = true
   inline def debug(inline msg: => Any) = if (showDebugInfo) println(msg) else ()
 
   def run(defn: Toplevel)(using env: Env, G: TypingContext): Toplevel = defn match {
@@ -1259,9 +1259,57 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
             val cparams2 = cparams //.map(c => Id(c))
             val vparams2 = vparams.map(t => ValueParam(Id("x"), t))
             val bparams2 = (bparams zip cparams).map { case (t, c) => BlockParam(Id("f"), t, Set(c)) }
+            // In the following section, we create a new instance of the interface.
+            // All operation bodies were lifted to block literals in an earlier stage.
+            // While doing so, their block parameters (bparams) were concatenated with their capture parameters (cparams).
+            // When we embed back to core, we need to "eta-expand" the operation body to supply the correct captures from the environment.
+            // To see why this "eta-expansion" is necessary to achieve this, consider the following example:
+            // ```scala
+            // effect Eff(): Unit
+            // def use = { do Eff() }
+            // def main() = {
+            //     val r = try {
+            //         use()
+            //     } with Eff {
+            //         resume(())
+            //     }
+            // }
+            // ```
+            // the handler body normalizes to the following:
+            // ```scala
+            // reset {{p} =>
+            //     jump use(){new Eff {def Eff = Eff @ [p]}}
+            // }
+            // ```
+            // where
+            // ```
+            //  def Eff = (){p} { ... }
+            // ```
+            // In particular, the prompt `p` needs to be passed to the lifted operation body.
+            // ```
+            val (origBparams, synthBparams) = bparams2.splitAt(bparams2.length - environment.length)
+            val bargs =
+              // TODO: Fix captures
+              origBparams.map { case bp => BlockVar(bp.id, bp.tpe, Set()) } ++
+                synthBparams.zip(environment).map {
+                  // TODO: Fix captures
+                  case (bp, Computation.Var(id)) => BlockVar(id, bp.tpe, Set())
+                  case _ => sys error "should not happen"
+                }
 
-            core.Operation(id, tparams2, cparams, vparams2, bparams2,
-              Stmt.App(embedBlockVar(label), tparams2.map(ValueType.Var.apply), vparams2.map(p => ValueVar(p.id, p.tpe)), bparams2.map(p => BlockVar(p.id, p.tpe, p.capt))))
+            core.Operation(
+              id,
+              tparams2,
+              cparams.take(cparams.length - environment.length),
+              vparams2,
+              origBparams,
+              Stmt.App(
+                embedBlockVar(label),
+                tparams2.map(ValueType.Var.apply),
+                vparams2.map(p => ValueVar(p.id, p.tpe)),
+                bargs
+              )
+            )
           case _ => sys error "Unexpected block type"
         }
       }
