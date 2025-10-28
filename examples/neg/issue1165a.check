@@ -1,1 +1,3 @@
-[error] Computation toString_5560 is used in an expression position, which requires boxing (e.g. `box toString_5560`)
+[error] examples/neg/issue1165a.effekt:5:11: Computation toString is used in an expression position, which requires boxing (e.g. `box toString`)
+  println(toString)
+          ^^^^^^^^
