@@ -645,6 +645,66 @@ class NewNormalizerTests extends CoreTests {
     // Does not throw
     normalize(input)
   }
+
+  // This effect tests a subtle aspect of normalizing with block parameters.
+  // Consider the provided input program.
+  // The normalized program looks as follows, with irrelevant details elided:
+  // ```scala
+  // () {
+  //  def break = ...
+  //  def run = ...
+  //  let x = 1
+  //  def f = (v: Int){f} {y} {p} {
+  //    let x = 2
+  //    y := x
+  //    jump break(){p}
+  //  }
+  //  val o = reset {{p} =>
+  //    var y = x
+  //    val tmp = jump run(){f @ [y, p]}
+  //    let z = ()
+  //    return z
+  //  }
+  //  jump println(o)
+  // }
+  // ```
+  // As you can see, the block argument supplied to block parameter `prog` of `run` is lifted to a `def f`.
+  // This definition needs to abstract over all free captures and variables in the body.
+  // In particular, the call side of `f` needs to supply the correct closure.
+  // Therefore, it is not possible to simply call `run` as follows:
+  // ```scala
+  // jump run(){f}
+  // ```
+  // where `f` would be passed as a block variable.
+  // Instead, we need to "eta-expand" this parameter to a block that calls f with the correct captures:
+  // ```scala
+  // jump run(){f @ [y, p]}
+  // ```
+  // where `y` and `p` are the correct captures from the reset body.
+  test("Block parameters get lifted and captures are passed correctly") {
+    val input: String =
+      """
+        |effect break(): Unit
+        |
+        |def main() = {
+        |    val x = try {
+        |      def run { prog: (Int) {() => Unit} => Unit }: Unit = prog(42) { () => () }
+        |      var y = 1
+        |      run { (v) { f } =>
+        |        y = 2
+        |        do break()
+        |      }
+        |      ()
+        |    } with break {
+        |        ()
+        |    }
+        |    println(x)
+        |}
+        |""".stripMargin
+
+    // Does not throw
+    normalize(input)
+  }
 }
 
 /**
