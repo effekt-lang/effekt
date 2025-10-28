@@ -615,6 +615,36 @@ class NewNormalizerTests extends CoreTests {
         
     normalize(input)
   }
+
+  test("Can lookup top-level def") {
+    val input =
+      """
+        |def top(): Int = 43
+        |
+        |def main() = {
+        |  val x = top() + top()
+        |  println(x.show)
+        |}
+        |""".stripMargin
+
+    // Does not throw
+    normalize(input)
+  }
+
+  test("Can lookup top-level val") {
+    val input =
+      """
+        |val top: Int = 43
+        |
+        |def main() = {
+        |  val x = top + top
+        |  println(x.show)
+        |}
+        |""".stripMargin
+
+    // Does not throw
+    normalize(input)
+  }
 }
 
 /**

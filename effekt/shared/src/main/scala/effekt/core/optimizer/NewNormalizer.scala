@@ -2,7 +2,7 @@ package effekt
 package core
 package optimizer
 
-import effekt.core.BlockType
+import effekt.core.{BlockType, Toplevel}
 import effekt.core.ValueType.Boxed
 import effekt.source.Span
 import effekt.core.optimizer.semantics.{Computation, NeutralStmt, Value}
@@ -1102,12 +1102,20 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     // TODO deal with async externs properly (see examples/benchmarks/input_output/dyck_one.effekt)
     val asyncExterns = mod.externs.collect { case defn: Extern.Def if defn.annotatedCapture.contains(AsyncCapability.capture) => defn }
     val toplevelEnv = Env.empty
-      // user defined functions
-      .bindComputation(mod.definitions.map(defn => defn.id -> Computation.Def(Closure(defn.id, Nil))))
+      // user-defined functions
+      .bindComputation(mod.definitions.collect {
+        case Toplevel.Def(id, b) => id -> Computation.Def(Closure(id, Nil))
+      })
+      // user-defined values
+      .bindValue(mod.definitions.collect {
+        case Toplevel.Val(id, _, _) => id -> id
+      })
       // async extern functions
       .bindComputation(asyncExterns.map(defn => defn.id -> Computation.Def(Closure(defn.id, Nil))))
 
-    val typingContext = TypingContext(Map.empty, mod.definitions.collect {
+    val typingContext = TypingContext(mod.definitions.collect {
+      case Toplevel.Val(id, tpe, _) => id -> tpe
+    }.toMap, mod.definitions.collect {
       case Toplevel.Def(id, b) => id -> (b.tpe, b.capt)
     }.toMap) // ++ asyncExterns.map { d => d.id -> null })
 
