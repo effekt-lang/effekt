@@ -1252,16 +1252,18 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         case (BlockType.Function(tparams, cparams, vparams, bparams, result), captures) =>
           // TODO this uses the invariant that we _append_ all environment captures to the bparams
           val (origBparams, synthBparams) = bparams.splitAt(bparams.length - environment.length)
+          val (origCapts, synthCapts) = cparams.splitAt(bparams.length - environment.length)
+
           val vpIds = vparams.map { p => Id("x") }
           val bpIds = origBparams.map { p => Id("f") }
           val vps = vpIds.zip(vparams).map { (id, p) => core.ValueParam(id, p) }
-          val bps = bpIds.zip(origBparams).map { (id, p) => core.BlockParam(id, p, Set()) }
           val vargs = vpIds.zip(vparams).map { (id, p) => core.Expr.ValueVar(id, p) }
-          // TODO don't use empty capture set for synthesised BlockVars
+          val namedBparams = bpIds.zip(origBparams).zip(origCapts)
+          val bps = namedBparams.map { case ((id, p), c) => core.BlockParam(id, p, Set(c)) }
           val bargs =
-            bpIds.zip(origBparams).map { case (id, bp) => BlockVar(id, bp, Set()) } ++
-            synthBparams.zip(environment).map {
-              case (bp, Computation.Var(id)) => BlockVar(id, bp, Set())
+            namedBparams.map { case ((id, bp), c) => core.BlockVar(id, bp, Set(c)) } ++
+            environment.zip(synthBparams).zip(synthCapts).map {
+              case ((Computation.Var(id), bp), c) => core.BlockVar(id, bp, Set(c))
               case _ => ???
             }
           core.Block.BlockLit(
