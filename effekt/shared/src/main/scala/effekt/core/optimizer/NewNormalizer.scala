@@ -1246,7 +1246,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     case Computation.Def(Closure(label, Nil)) =>
       embedBlockVar(label)
     case Computation.Def(closure) =>
-      etaExpand(closure)
+      etaExpandToBlockLit(closure)
     case Computation.Inline(blocklit, env) => ???
     case Computation.Continuation(k) => ???
     case Computation.New(interface, operations) =>
@@ -1315,7 +1315,12 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       core.Block.New(Implementation(interface, ops))
   }
 
-  def etaExpand(closure: Closure)(using G: TypingContext): core.BlockLit = {
+  /**
+   * Embed `Computation.Def` to a `core.BlockLit`
+   * This eta-expands the block var that stands for the `Computation.Def` to a full block literal
+   * so that we can supply the correct capture arguments from the environment.
+   */
+  def etaExpandToBlockLit(closure: Closure)(using G: TypingContext): core.BlockLit = {
     val Closure(label, environment) = closure
     val blockvar = embedBlockVar(label)
     G.blocks(label) match {
