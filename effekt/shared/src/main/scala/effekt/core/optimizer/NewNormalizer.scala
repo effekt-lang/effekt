@@ -1124,7 +1124,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     mod.copy(definitions = newDefinitions)
   }
 
-  val showDebugInfo = true
+  val showDebugInfo = false
   inline def debug(inline msg: => Any) = if (showDebugInfo) println(msg) else ()
 
   def run(defn: Toplevel)(using env: Env, G: TypingContext): Toplevel = defn match {
@@ -1344,7 +1344,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           bps,
           Stmt.App(
             blockvar,
-            Nil,
+            tparams.map { core.ValueType.Var.apply },
             vargs,
             bargs
           )
