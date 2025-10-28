@@ -422,7 +422,7 @@ object semantics {
     case Reset(prompt: BlockParam, frame: Frame, next: Stack)
     case Var(id: BlockParam, curr: Addr, init: Addr, frame: Frame, next: Stack)
     // TODO desugar regions into var?
-    case Region(id: BlockParam, bindings: Map[Id, (Addr, Addr)], frame: Frame, next: Stack)
+    case Region(id: BlockParam, bindings: Map[Id, Addr], frame: Frame, next: Stack)
 
     lazy val bound: List[BlockParam] = this match {
       case Stack.Empty => Nil
@@ -442,7 +442,7 @@ object semantics {
     case Stack.Var(id1, curr, init, frame, next) => get(ref, next)
     case Stack.Region(id, bindings, frame, next) =>
       if (bindings.contains(ref)) {
-        Some(bindings(ref)._1)
+        Some(bindings(ref))
       } else {
         get(ref, next)
       }
@@ -457,7 +457,7 @@ object semantics {
     case Stack.Var(id, curr, init, frame, next) => put(ref, value, next).map(Stack.Var(id, curr, init, frame, _))
     case Stack.Region(id, bindings, frame, next) =>
       if (bindings.contains(ref)){
-        Some(Stack.Region(id, bindings.updated(ref, (value, bindings(ref)._2)), frame, next))
+        Some(Stack.Region(id, bindings.updated(ref, value), frame, next))
       } else {
         put(ref, value, next).map(Stack.Region(id, bindings, frame, _))
       }
@@ -475,8 +475,7 @@ object semantics {
       alloc(ref, reg, value, next).map(Stack.Var(id, curr, init, frame, _))
     case Stack.Region(id, bindings, frame, next) =>
       if (reg == id.id){
-        // TODO
-        Some(Stack.Region(id, bindings.updated(ref, (value, value)), frame, next))
+        Some(Stack.Region(id, bindings.updated(ref, value), frame, next))
       } else {
         alloc(ref, reg, value, next).map(Stack.Region(id, bindings, frame, _))
       }
@@ -486,7 +485,7 @@ object semantics {
     case Empty
     case Reset(frame: Frame, prompt: BlockParam, rest: Cont)
     case Var(frame: Frame, id: BlockParam, curr: Addr, init: Addr, rest: Cont)
-    case Region(frame: Frame, id: BlockParam, bindings: Map[Id, (Addr, Addr)], rest: Cont)
+    case Region(frame: Frame, id: BlockParam, bindings: Map[Id, Addr], rest: Cont)
   }
 
   def shift(p: Id, k: Frame, ks: Stack): (Cont, Frame, Stack) = ks match {
