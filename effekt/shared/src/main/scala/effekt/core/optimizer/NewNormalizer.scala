@@ -464,7 +464,9 @@ object semantics {
   }
 
   def alloc(ref: Id, reg: Id, value: Addr, ks: Stack): Option[Stack] = ks match {
-    case Stack.Empty => sys error s"Should not happen: trying to put ${util.show(ref)} in empty stack"
+    // This case can occur if we normalize a function that abstracts over a region as a parameter
+    // We return None and force the reification of the allocation
+    case Stack.Empty => None
     // We have reached the end of the known stack, so the variable must be in the unknown part.
     case Stack.Unknown => None
     case Stack.Reset(prompt, frame, next) =>
