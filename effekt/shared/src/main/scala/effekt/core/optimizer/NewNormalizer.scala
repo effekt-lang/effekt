@@ -1317,7 +1317,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     G.blocks(label) match {
       case (BlockType.Function(tparams, cparams, vparams, bparams, result), captures) =>
         val tparams2 = tparams.map(t => Id(t))
-        // TODO if we freshen cparams, then we also need to substitute them in the result AND
+        // TODO if we freshen cparams, then we also need to substitute them in the result AND the parameters
         val cparams2 = cparams //.map(c => Id(c))
         val vparams2 = vparams.map(t => ValueParam(Id("x"), t))
         val bparams2 = (bparams zip cparams).map { case (t, c) => BlockParam(Id("f"), t, Set(c)) }
