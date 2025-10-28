@@ -1245,40 +1245,8 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       embedBlockVar(id)
     case Computation.Def(Closure(label, Nil)) =>
       embedBlockVar(label)
-    case Computation.Def(Closure(label, environment)) =>
-      val blockvar = embedBlockVar(label)
-      G.blocks(label) match {
-        case (BlockType.Function(tparams, cparams, vparams, bparams, result), captures) =>
-          // TODO this uses the invariant that we _append_ all environment captures to the bparams
-          val (origBparams, synthBparams) = bparams.splitAt(bparams.length - environment.length)
-          val (origCapts, synthCapts) = cparams.splitAt(bparams.length - environment.length)
-
-          val vpIds = vparams.map { p => Id("x") }
-          val bpIds = origBparams.map { p => Id("f") }
-          val vps = vpIds.zip(vparams).map { (id, p) => core.ValueParam(id, p) }
-          val vargs = vpIds.zip(vparams).map { (id, p) => core.Expr.ValueVar(id, p) }
-          val namedBparams = bpIds.zip(origBparams).zip(origCapts)
-          val bps = namedBparams.map { case ((id, p), c) => core.BlockParam(id, p, Set(c)) }
-          val bargs =
-            namedBparams.map { case ((id, bp), c) => core.BlockVar(id, bp, Set(c)) } ++
-            environment.zip(synthBparams).zip(synthCapts).map {
-              case ((Computation.Var(id), bp), c) => core.BlockVar(id, bp, Set(c))
-              case _ => ???
-            }
-          core.Block.BlockLit(
-            tparams,
-            cparams.take(cparams.length - environment.length),
-            vps,
-            bps,
-            Stmt.App(
-              blockvar,
-              Nil,
-              vargs,
-              bargs
-            )
-          )
-        case _ => ???
-      }
+    case Computation.Def(closure) =>
+      etaExpand(closure)
     case Computation.Inline(blocklit, env) => ???
     case Computation.Continuation(k) => ???
     case Computation.New(interface, operations) =>
@@ -1298,6 +1266,43 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         }
       }
       core.Block.New(Implementation(interface, ops))
+  }
+  
+  def etaExpand(closure: Closure)(using G: TypingContext): core.BlockLit = {
+    val Closure(label, environment) = closure
+    val blockvar = embedBlockVar(label)
+    G.blocks(label) match {
+      case (BlockType.Function(tparams, cparams, vparams, bparams, result), captures) =>
+        // TODO this uses the invariant that we _append_ all environment captures to the bparams
+        val (origBparams, synthBparams) = bparams.splitAt(bparams.length - environment.length)
+        val (origCapts, synthCapts) = cparams.splitAt(bparams.length - environment.length)
+
+        val vpIds = vparams.map { p => Id("x") }
+        val bpIds = origBparams.map { p => Id("f") }
+        val vps = vpIds.zip(vparams).map { (id, p) => core.ValueParam(id, p) }
+        val vargs = vpIds.zip(vparams).map { (id, p) => core.Expr.ValueVar(id, p) }
+        val namedBparams = bpIds.zip(origBparams).zip(origCapts)
+        val bps = namedBparams.map { case ((id, p), c) => core.BlockParam(id, p, Set(c)) }
+        val bargs =
+          namedBparams.map { case ((id, bp), c) => core.BlockVar(id, bp, Set(c)) } ++
+            environment.zip(synthBparams).zip(synthCapts).map {
+              case ((Computation.Var(id), bp), c) => core.BlockVar(id, bp, Set(c))
+              case _ => ???
+            }
+        core.Block.BlockLit(
+          tparams,
+          cparams.take(cparams.length - environment.length),
+          vps,
+          bps,
+          Stmt.App(
+            blockvar,
+            Nil,
+            vargs,
+            bargs
+          )
+        )
+      case _ => ???
+    }
   }
 
   def embedBlock(block: Block)(using G: TypingContext): core.Block = block match {
