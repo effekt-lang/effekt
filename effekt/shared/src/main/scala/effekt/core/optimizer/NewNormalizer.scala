@@ -1116,7 +1116,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     val toplevelEnv = Env.empty
       // user-defined functions
       .bindComputation(mod.definitions.collect {
-        case Toplevel.Def(id, b) => id -> Computation.Def(Closure(id, Nil))
+        case Toplevel.Def(id, b) => id -> Computation.Var(id)
       })
       // user-defined values
       .bindValue(mod.definitions.collect {
