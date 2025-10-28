@@ -1314,40 +1314,41 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       }
       core.Block.New(Implementation(interface, ops))
   }
-  
+
   def etaExpand(closure: Closure)(using G: TypingContext): core.BlockLit = {
     val Closure(label, environment) = closure
     val blockvar = embedBlockVar(label)
     G.blocks(label) match {
+      // TODO why is `captures` unused?
       case (BlockType.Function(tparams, cparams, vparams, bparams, result), captures) =>
-        // TODO this uses the invariant that we _append_ all environment captures to the bparams
-        val (origBparams, synthBparams) = bparams.splitAt(bparams.length - environment.length)
-        val (origCapts, synthCapts) = cparams.splitAt(bparams.length - environment.length)
+        val vps = vparams.map { p => core.ValueParam(Id("x"), p) }
+        val vargs = vps.map { vp => core.Expr.ValueVar(vp.id, vp.tpe) }
 
-        val vpIds = vparams.map { p => Id("x") }
-        val bpIds = origBparams.map { p => Id("f") }
-        val vps = vpIds.zip(vparams).map { (id, p) => core.ValueParam(id, p) }
-        val vargs = vpIds.zip(vparams).map { (id, p) => core.Expr.ValueVar(id, p) }
-        val namedBparams = bpIds.zip(origBparams).zip(origCapts)
-        val bps = namedBparams.map { case ((id, p), c) => core.BlockParam(id, p, Set(c)) }
-        val bargs =
-          namedBparams.map { case ((id, bp), c) => core.BlockVar(id, bp, Set(c)) } ++
-            environment.zip(synthBparams).zip(synthCapts).map {
-              case ((Computation.Var(id), bp), c) => core.BlockVar(id, bp, Set(c))
-            }
+        // this uses the invariant that we _append_ all environment captures to the bparams
+        val (origCapts, synthCapts) = cparams.splitAt(bparams.length - environment.length)
+        val (origBparams, synthBparams) = bparams.splitAt(bparams.length - environment.length)
+        val origBps = origBparams.zip(origCapts).map { case (bp, c) => core.BlockParam(Id("f"), bp, Set(c)) }
+        val origBargs = origBps.map { bp => core.BlockVar(bp.id, bp.tpe, bp.capt) }
+        val synthBargs = environment.zip(synthBparams).zip(synthCapts).map {
+          case ((Computation.Var(id), bp), c) => core.BlockVar(id, bp, Set(c))
+        }
+        val bargs = origBargs ++ synthBargs
+
+        val targs = tparams.map { core.ValueType.Var.apply }
+
         core.Block.BlockLit(
           tparams,
-          cparams.take(cparams.length - environment.length),
+          origCapts,
           vps,
-          bps,
+          origBps,
           Stmt.App(
             blockvar,
-            tparams.map { core.ValueType.Var.apply },
+            targs,
             vargs,
             bargs
           )
         )
-      case _ => ???
+      case _ => sys.error("Unexpected block type for a closure")
     }
   }
 
