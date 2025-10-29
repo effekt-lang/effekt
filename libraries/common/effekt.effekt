@@ -22,7 +22,7 @@ namespace chez {
 
   // CPS implementation
   // ------------------
-  extern include chezLift "../chez/lift/effekt.ss"
+  extern include chezCPS "../chez/cps/effekt.ss"
 
   // Monadic implementation
   // ----------------------
