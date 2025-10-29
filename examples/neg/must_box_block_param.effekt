@@ -1,0 +1,3 @@
+module must_box_block_param
+
+def foo { block: () => Unit } = block
