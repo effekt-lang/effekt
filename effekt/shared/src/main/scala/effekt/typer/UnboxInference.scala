@@ -53,6 +53,16 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
       // TODO maybe we should synthesize a call to get here already?
       case sym: (ValueSymbol | symbols.RefBinder) => v
       case sym: BlockSymbol =>
+        // Heuristic for a specific misunderstanding: Scala sometimes allows calling nullary fns without args, we do not
+        sym match {
+          case UserFunction(_, _, Nil, Nil, _, _, _, _)
+             | TrackedParam.BlockParam(_, Some(BlockType.FunctionType(_, _, Nil, Nil, _, _)), _)
+            => C.info(s"Did you mean to call the function using `${sym.name.name}()`?")
+          case TrackedParam.ResumeParam(_) // NOTE: we don't know the type of `resume` here, so this is not _great_ advice...
+            => C.info(s"Did you mean to resume using `resume(...)`?")
+          case _ => ()
+        }
+
         C.error(pp"Expected a value, but ${sym.name.name} is a computation. Use `box ${sym.name.name}` to pass it as a value instead")
         v
     }

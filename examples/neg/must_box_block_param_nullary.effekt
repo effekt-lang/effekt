@@ -1,0 +1,3 @@
+module must_box_block_param_nullary
+
+def foo { block: (Int) => Unit } = block
