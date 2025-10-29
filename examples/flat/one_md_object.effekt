@@ -1,3 +1,4 @@
+// md = Person requires 2 saving slots
 record Person(
   field1: Int,
   field2: Int,
@@ -5,12 +6,10 @@ record Person(
   field4: Int,
   field5: Int,
   field6: Int,
-  field7: Int,
-  field8: Int,
-  field9: Int
+  field7: Int
   )
 
 def main() = {
-  val p = Person(1, 2, 3, 4, 5, 6, 7, 8, 9)
-  println(p.field9)
+  val p = Person(1, 2, 3, 4, 5, 6, 7)
+  println(p.field7)
 }
