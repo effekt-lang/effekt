@@ -406,7 +406,7 @@ define private void @invalidate(%Stack %stack, %Stack %end) {
     br i1 %isNull, label %error, label %check
 
 error:
-    call cold void @duplicated_prompt()
+    call void @duplicated_prompt()
     unreachable
 
 check:
