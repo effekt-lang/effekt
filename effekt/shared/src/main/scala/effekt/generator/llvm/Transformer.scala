@@ -532,7 +532,7 @@ object Transformer {
             loadEnvironmentAt(LocalReference(environmentType, "environment"), freshEnvironment, Object);
             eraseValues(freshEnvironment, Set());
             
-            emit(Call("", Ccc(), VoidType(), ConstantGlobal("cFree"), List(LocalReference(objectType, "object"))));
+            emit(Call("", Ccc(), VoidType(), ConstantGlobal("release"), List(LocalReference(objectType, "object"))));
             RetVoid()
           };
           eraser
