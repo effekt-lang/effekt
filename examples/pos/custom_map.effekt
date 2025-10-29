@@ -1,0 +1,20 @@
+module testing
+
+def main() = {
+  println("testing")
+  println([1,7,8,4].testMap{fibonacci})
+}
+
+def fibonacci(n: Int): Int = n match {
+  case 0 => 0
+  case 1 => 1
+  case _ => fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+//type testList[A]{Cons(head: A, tail: testList[A])}
+
+def testMap[A, B](list: List[A]){ fun: A => B}: List[B] =
+  list match{
+  case Nil() => Nil()
+  case Cons(x, xs) => Cons(fun(x), testMap(xs){fun})
+}
