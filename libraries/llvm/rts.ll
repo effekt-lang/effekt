@@ -95,8 +95,8 @@
 ; Foreign imports
 
 declare void @cInitializeMemory()
-declare ptr @cMalloc(i64)
-declare void @cFree(ptr)
+declare ptr @acquire(i64)
+declare void @release(ptr)
 declare ptr @cRealloc(ptr, i64)
 
 declare ptr @malloc(i64)
@@ -215,7 +215,7 @@ define private void @myFree(%Object %object) {
 define private %Object @newObject(%Eraser %eraser, i64 %environmentSize) alwaysinline {
     %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
     %size = add i64 %environmentSize, %headerSize
-    %object = call ptr @cMalloc(i64 %size)
+    %object = call ptr @acquire(i64 %size)
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
     store %ReferenceCount 0, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
