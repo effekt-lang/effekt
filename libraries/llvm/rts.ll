@@ -406,8 +406,8 @@ define private void @invalidate(%Stack %stack, %Stack %end) {
     br i1 %isNull, label %error, label %check
 
 error:
-    call void @duplicated_prompt()
-    ret void
+    call cold void @duplicated_prompt()
+    unreachable
 
 check:
     %isEnd = icmp eq %Stack %next, %end
