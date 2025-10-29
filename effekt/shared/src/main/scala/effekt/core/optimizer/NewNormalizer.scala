@@ -1129,7 +1129,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       case Toplevel.Val(id, tpe, _) => id -> tpe
     }.toMap, mod.definitions.collect {
       case Toplevel.Def(id, b) => id -> (b.tpe, b.capt)
-    }.toMap) // ++ asyncExterns.map { d => d.id -> null })
+    }.toMap ++ asyncExterns.map { d => d.id -> (BlockType.Function(d.tparams, d.cparams, d.vparams.map(_.tpe), d.bparams.map(_.tpe), d.ret), d.annotatedCapture) })
 
     val newDefinitions = mod.definitions.map(d => run(d)(using toplevelEnv, typingContext))
     mod.copy(definitions = newDefinitions)
