@@ -1,3 +1,4 @@
+// xs = Person fits easily in 1 saving slot
 record Person(
   field1: Int,
   field2: Int,
