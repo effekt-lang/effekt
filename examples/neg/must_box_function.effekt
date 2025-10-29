@@ -1,4 +1,4 @@
-module issue1165a
+module must_box_function
 
 def toString(): String = ""
 def main() = {

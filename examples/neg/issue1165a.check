@@ -1,3 +1,0 @@
-[error] examples/neg/issue1165a.effekt:5:11: Expected a value, but toString is a computation. Use `box toString` to pass it as a value instead
-  println(toString)
-          ^^^^^^^^

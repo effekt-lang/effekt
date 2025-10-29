@@ -1,3 +1,0 @@
-[error] examples/neg/issue1165b.effekt:5:3: Expected a value, but e is a computation. Use `box e` to pass it as a value instead
-  e
-  ^
