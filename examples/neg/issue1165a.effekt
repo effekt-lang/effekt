@@ -1,0 +1,6 @@
+module issue1165a
+
+def toString(): String = ""
+def main() = {
+  println(toString)
+}
