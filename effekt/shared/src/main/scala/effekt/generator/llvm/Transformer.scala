@@ -2,11 +2,12 @@ package effekt
 package generator
 package llvm
 
+import effekt.generator.llvm.Instruction.Call
 import effekt.machine
 import effekt.machine.Variable
+import effekt.machine.analysis.*
 import effekt.util.intercalate
 import effekt.util.messages.ErrorReporter
-import effekt.machine.analysis.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -25,8 +26,10 @@ object Transformer {
 
       val entryInstructions = List(
         Call("stack", Ccc(), stackType, withEmptyStack, List()),
-        Call("", Ccc(), VoidType(), initializeMemory, List()), 
-        Call("_", Tailcc(false), VoidType(), transform(entry), List(LocalReference(stackType, "stack"))))
+        Call("", Ccc(), VoidType(), initializeMemory, List()),
+        Call("_", Tailcc(false), VoidType(), transform(entry), List(LocalReference(stackType, "stack"))),
+        Call("", Ccc(), VoidType(), testIfAllBlocksAreFreed, List()),
+      )
       val entryBlock = BasicBlock("entry", entryInstructions, RetVoid())
       val entryFunction = Function(External(), Ccc(), VoidType(), "effektMain", List(), List(entryBlock))
 
@@ -105,6 +108,7 @@ object Transformer {
         emit(ExtractValue(objectName, transform(value), 1))
 
         val stack = getStack()
+
         def labelClause(clause: machine.Clause, isDefault: Boolean): String = {
           implicit val BC = BlockContext()
           BC.stack = stack
@@ -356,7 +360,7 @@ object Transformer {
         eraseValues(List(v), freeVariables(rest));
         transform(rest)
 
-      case machine.ForeignCall(variable @ machine.Variable(resultName, resultType), foreign, values, rest) =>
+      case machine.ForeignCall(variable@machine.Variable(resultName, resultType), foreign, values, rest) =>
         emit(Comment(s"foreignCall $resultName : $resultType, foreign $foreign, ${values.length} values"))
         shareValues(values, freeVariables(rest));
         emit(Call(resultName, Ccc(), transform(resultType), ConstantGlobal(foreign), values.map(transform)));
@@ -579,6 +583,17 @@ object Transformer {
   def produceObject(role: String, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Operand = {
     if (environment.isEmpty) {
       ConstantNull(objectType)
+    } else if (environmentSize(environment) > 48) { // if the object does not fit in a single LLVM-Block
+      val objectReference = LocalReference(objectType, freshName(role));
+      val environmentReference = LocalReference(environmentType, freshName("environment"));
+      val size = ConstantInt(environmentSize(environment));
+      val eraser = getEraser(environment, ObjectEraser)
+
+      emit(Call(objectReference.name, Ccc(), objectType, newObject, List(eraser, size)));
+      emit(Call(environmentReference.name, Ccc(), environmentType, objectEnvironment, List(objectReference)));
+      shareValues(environment, freeInBody);
+      storeEnvironment(environmentReference, environment, Object);
+      objectReference
     } else {
       val objectReference = LocalReference(objectType, freshName(role));
       val environmentReference = LocalReference(environmentType, freshName("environment"));
@@ -723,6 +738,7 @@ object Transformer {
   }
 
   val initializeMemory = ConstantGlobal("cInitializeMemory");
+  val testIfAllBlocksAreFreed = ConstantGlobal("testIfAllBlocksAreFreed");
   val newObject = ConstantGlobal("newObject");
   val objectEnvironment = ConstantGlobal("objectEnvironment");
 
