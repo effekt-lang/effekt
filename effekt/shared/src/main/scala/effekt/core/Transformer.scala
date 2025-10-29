@@ -11,6 +11,7 @@ import effekt.source.{Many, MatchGuard, MatchPattern, ResolveExternDefs}
 import effekt.symbols.Binder.{RegBinder, VarBinder}
 import effekt.typer.Substitutions
 import effekt.util.messages.{ErrorReporter, INTERNAL_ERROR}
+import effekt.util.PrettyPrinter.format
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
@@ -24,6 +25,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       None
     } else {
       val transformed = Context.timed(phaseName, source.name) { transform(mod, tree) }
+      println(format(transformed))
       Some(CoreTransformed(source, tree, mod, transformed))
     }
 
