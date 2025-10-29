@@ -12,7 +12,7 @@ class LLVMTests extends EffektTests {
 
   override def valgrind = sys.env.get("EFFEKT_VALGRIND").nonEmpty
   override def debug = sys.env.get("EFFEKT_DEBUG").nonEmpty
-
+  
   override lazy val positives: Set[File] = Set(
     examplesDir / "llvm",
     examplesDir / "pos",
