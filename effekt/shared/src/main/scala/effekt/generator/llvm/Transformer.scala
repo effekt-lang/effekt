@@ -2,11 +2,12 @@ package effekt
 package generator
 package llvm
 
+import effekt.generator.llvm.Instruction.Call
 import effekt.machine
 import effekt.machine.Variable
+import effekt.machine.analysis.*
 import effekt.util.intercalate
 import effekt.util.messages.ErrorReporter
-import effekt.machine.analysis.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -21,12 +22,15 @@ object Transformer {
       given MC: ModuleContext = ModuleContext();
       definitions.foreach(transform);
 
-      val globals = MC.definitions; MC.definitions = null;
+      val globals = MC.definitions;
+      MC.definitions = null;
 
       val entryInstructions = List(
         Call("stack", Ccc(), stackType, withEmptyStack, List()),
-        Call("", Ccc(), VoidType(), initializeMemory, List()), 
-        Call("_", Tailcc(false), VoidType(), transform(entry), List(LocalReference(stackType, "stack"))))
+        Call("", Ccc(), VoidType(), initializeMemory, List()),
+        Call("_", Tailcc(false), VoidType(), transform(entry), List(LocalReference(stackType, "stack"))),
+        Call("", Ccc(), VoidType(), testIfAllBlocksAreFreed, List()),
+      )
       val entryBlock = BasicBlock("entry", entryInstructions, RetVoid())
       val entryFunction = Function(External(), Ccc(), VoidType(), "effektMain", List(), List(entryBlock))
 
@@ -35,7 +39,9 @@ object Transformer {
 
   // context getters
   private def MC(using MC: ModuleContext): ModuleContext = MC
+
   private def FC(using FC: FunctionContext): FunctionContext = FC
+
   private def BC(using BC: BlockContext): BlockContext = BC
 
   def transform(declaration: machine.Declaration)(using ErrorReporter): Definition =
@@ -59,26 +65,26 @@ object Transformer {
       """call void @hole()
         |unreachable
         |""".stripMargin
-    }
+  }
 
   def transform(template: Template[machine.Variable]): String = "; variable\n    " ++ intercalate(template.strings, template.args.map {
     case machine.Variable(name, tpe) => PrettyPrinter.localName(name)
   }).mkString
 
   def transform(definition: machine.Definition)(using ModuleContext): Unit = definition match {
-   case machine.Definition(machine.Label(name, environment), body) =>
-        val parameters = environment.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
-        defineLabel(name, parameters) {
-          emit(Comment(s"definition $name, environment length ${environment.length}"))
-          eraseValues(environment, freeVariables(body))
-          transform(body)
-        }
+    case machine.Definition(machine.Label(name, environment), body) =>
+      val parameters = environment.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
+      defineLabel(name, parameters) {
+        emit(Comment(s"definition $name, environment length ${environment.length}"))
+        eraseValues(environment, freeVariables(body))
+        transform(body)
+      }
   }
 
   def transform(statement: machine.Statement)(using ModuleContext, FunctionContext, BlockContext): Terminator =
     statement match {
 
-     case machine.Jump(label) =>
+      case machine.Jump(label) =>
         emit(Comment(s"jump ${label.name}"))
         shareValues(label.environment, Set())
 
@@ -114,6 +120,7 @@ object Transformer {
         emit(ExtractValue(objectName, transform(value), 1))
 
         val stack = getStack()
+
         def labelClause(clause: machine.Clause, isDefault: Boolean): String = {
           implicit val BC = BlockContext()
           BC.stack = stack
@@ -190,7 +197,7 @@ object Transformer {
         emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
         RetVoid()
 
-      case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, retType, rest) =>
+      case machine.Var(ref@machine.Variable(name, machine.Type.Reference(tpe)), init, retType, rest) =>
         val environment = List(init)
         val returnAddressName = freshName("returnAddress")
         val returnType = transform(retType)
@@ -360,7 +367,7 @@ object Transformer {
         eraseValues(List(v), freeVariables(rest));
         transform(rest)
 
-      case machine.ForeignCall(variable @ machine.Variable(resultName, resultType), foreign, values, rest) =>
+      case machine.ForeignCall(variable@machine.Variable(resultName, resultType), foreign, values, rest) =>
         emit(Comment(s"foreignCall $resultName : $resultType, foreign $foreign, ${values.length} values"))
         shareValues(values, freeVariables(rest));
         emit(Call(resultName, Ccc(), transform(resultType), ConstantGlobal(foreign), values.map(transform)));
@@ -393,17 +400,17 @@ object Transformer {
         }
         transform(rest)
 
-     case machine.Statement.Hole(span) =>
-       val posfmt = span.range.from.format
-       emit(Comment(s"Hole @ $posfmt"))
+      case machine.Statement.Hole(span) =>
+        val posfmt = span.range.from.format
+        emit(Comment(s"Hole @ $posfmt"))
 
-       // Reused from LiteralUTF8String
-       val utf8 = (posfmt + "\u0000").getBytes("UTF-8") // null-terminated
-       val litName = freshName("hole_pos")
-       emit(GlobalConstant(s"$litName.lit", ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
+        // Reused from LiteralUTF8String
+        val utf8 = (posfmt + "\u0000").getBytes("UTF-8") // null-terminated
+        val litName = freshName("hole_pos")
+        emit(GlobalConstant(s"$litName.lit", ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
 
-       emit(Call("_", Ccc(), VoidType(), ConstantGlobal("hole"), List(ConstantGlobal(s"$litName.lit"))))
-       RetVoid()
+        emit(Call("_", Ccc(), VoidType(), ConstantGlobal("hole"), List(ConstantGlobal(s"$litName.lit"))))
+        RetVoid()
     }
 
   def transform(label: machine.Label): ConstantGlobal =
@@ -433,13 +440,13 @@ object Transformer {
   val referenceType = NamedType("Reference");
 
   def transform(tpe: machine.Type): Type = tpe match {
-    case machine.Positive()          => positiveType
-    case machine.Negative()          => negativeType
-    case machine.Type.Prompt()       => promptType
-    case machine.Type.Stack()        => resumptionType
-    case machine.Type.Int()          => IntegerType64()
-    case machine.Type.Byte()         => IntegerType8()
-    case machine.Type.Double()       => DoubleType()
+    case machine.Positive() => positiveType
+    case machine.Negative() => negativeType
+    case machine.Type.Prompt() => promptType
+    case machine.Type.Stack() => resumptionType
+    case machine.Type.Int() => IntegerType64()
+    case machine.Type.Byte() => IntegerType8()
+    case machine.Type.Double() => DoubleType()
     case machine.Type.Reference(tpe) => referenceType
   }
 
@@ -448,13 +455,13 @@ object Transformer {
 
   def typeSize(tpe: machine.Type): Int =
     tpe match {
-      case machine.Positive()        => 16
-      case machine.Negative()        => 16
-      case machine.Type.Prompt()     => 8 // TODO Make fat?
-      case machine.Type.Stack()      => 8 // TODO Make fat?
-      case machine.Type.Int()        => 8 // TODO Make fat?
-      case machine.Type.Byte()       => 1
-      case machine.Type.Double()     => 8 // TODO Make fat?
+      case machine.Positive() => 16
+      case machine.Negative() => 16
+      case machine.Type.Prompt() => 8 // TODO Make fat?
+      case machine.Type.Stack() => 8 // TODO Make fat?
+      case machine.Type.Int() => 8 // TODO Make fat?
+      case machine.Type.Byte() => 1
+      case machine.Type.Double() => 8 // TODO Make fat?
       case machine.Type.Reference(_) => 16
     }
 
@@ -464,8 +471,10 @@ object Transformer {
 
     val terminator = prog;
 
-    val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
-    val instructions = BC.instructions; BC.instructions = null;
+    val basicBlocks = FC.basicBlocks;
+    FC.basicBlocks = null;
+    val instructions = BC.instructions;
+    BC.instructions = null;
 
     val entryBlock = BasicBlock("entry", instructions, terminator);
     val function = Function(Private(), Ccc(), VoidType(), name, parameters, entryBlock :: basicBlocks);
@@ -479,8 +488,10 @@ object Transformer {
 
     val terminator = prog;
 
-    val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
-    val instructions = BC.instructions; BC.instructions = null;
+    val basicBlocks = FC.basicBlocks;
+    FC.basicBlocks = null;
+    val instructions = BC.instructions;
+    BC.instructions = null;
 
     val entryBlock = BasicBlock("entry", instructions, terminator);
     val function = Function(Private(), Tailcc(true), VoidType(), name, parameters :+ Parameter(stackType, "stack"), entryBlock :: basicBlocks);
@@ -513,8 +524,10 @@ object Transformer {
   }
 
   def getEraser(environment: machine.Environment, kind: EraserKind)(using C: ModuleContext): Operand = {
-    val types = environment.map{ _.tpe };
-    val freshEnvironment = environment.map{
+    val types = environment.map {
+      _.tpe
+    };
+    val freshEnvironment = environment.map {
       case machine.Variable(name, tpe) => machine.Variable(freshName(name), tpe)
     };
 
@@ -527,11 +540,11 @@ object Transformer {
 
             // Use call @objectEnvironment to get environment pointer
             emit(Call("environment", Ccc(), environmentType, ConstantGlobal("objectEnvironment"), List(LocalReference(objectType, "object"))));
-            
+
             // TODO avoid unnecessary loads
             loadEnvironmentAt(LocalReference(environmentType, "environment"), freshEnvironment, Object);
             eraseValues(freshEnvironment, Set());
-            
+
             emit(Call("", Ccc(), VoidType(), ConstantGlobal("release"), List(LocalReference(objectType, "object"))));
             RetVoid()
           };
@@ -556,8 +569,10 @@ object Transformer {
   }
 
   def getSharer(environment: machine.Environment, kind: SharerKind)(using C: ModuleContext): Operand = {
-    val types = environment.map{ _.tpe };
-    val freshEnvironment = environment.map{
+    val types = environment.map {
+      _.tpe
+    };
+    val freshEnvironment = environment.map {
       case machine.Variable(name, tpe) => machine.Variable(freshName(name), tpe)
     };
 
@@ -583,6 +598,17 @@ object Transformer {
   def produceObject(role: String, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Operand = {
     if (environment.isEmpty) {
       ConstantNull(objectType)
+    } else if (environmentSize(environment) > 48) { // if the object does not fit in a single LLVM-Block
+      val objectReference = LocalReference(objectType, freshName(role));
+      val environmentReference = LocalReference(environmentType, freshName("environment"));
+      val size = ConstantInt(environmentSize(environment));
+      val eraser = getEraser(environment, ObjectEraser)
+
+      emit(Call(objectReference.name, Ccc(), objectType, newObject, List(eraser, size)));
+      emit(Call(environmentReference.name, Ccc(), environmentType, objectEnvironment, List(objectReference)));
+      shareValues(environment, freeInBody);
+      storeEnvironment(environmentReference, environment, Object);
+      objectReference
     } else {
       val objectReference = LocalReference(objectType, freshName(role));
       val environmentReference = LocalReference(environmentType, freshName("environment"));
@@ -678,15 +704,15 @@ object Transformer {
       values match {
         case Nil => ()
         case value :: values =>
-        if values.map(substitute).contains(substitute(value)) then {
-          shareValue(value);
-          loop(values)
-        } else if freeInBody.map(substitute).contains(substitute(value)) then {
-          shareValue(value);
-          loop(values)
-        } else {
-          loop(values)
-        }
+          if values.map(substitute).contains(substitute(value)) then {
+            shareValue(value);
+            loop(values)
+          } else if freeInBody.map(substitute).contains(substitute(value)) then {
+            shareValue(value);
+            loop(values)
+          } else {
+            loop(values)
+          }
       }
     };
     loop(values)
@@ -699,17 +725,17 @@ object Transformer {
 
   def shareValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     Option(value.tpe).collect {
-      case machine.Positive()    => Call("_", Ccc(), VoidType(), sharePositive, List(transform(value)))
-      case machine.Negative()    => Call("_", Ccc(), VoidType(), shareNegative, List(transform(value)))
-      case machine.Type.Stack()  => Call("_", Ccc(), VoidType(), shareResumption, List(transform(value)))
+      case machine.Positive() => Call("_", Ccc(), VoidType(), sharePositive, List(transform(value)))
+      case machine.Negative() => Call("_", Ccc(), VoidType(), shareNegative, List(transform(value)))
+      case machine.Type.Stack() => Call("_", Ccc(), VoidType(), shareResumption, List(transform(value)))
     }.map(emit)
   }
 
   def eraseValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     Option(value.tpe).collect {
-      case machine.Positive()    => Call("_", Ccc(), VoidType(), erasePositive, List(transform(value)))
-      case machine.Negative()    => Call("_", Ccc(), VoidType(), eraseNegative, List(transform(value)))
-      case machine.Type.Stack()  => Call("_", Ccc(), VoidType(), eraseResumption, List(transform(value)))
+      case machine.Positive() => Call("_", Ccc(), VoidType(), erasePositive, List(transform(value)))
+      case machine.Negative() => Call("_", Ccc(), VoidType(), eraseNegative, List(transform(value)))
+      case machine.Type.Stack() => Call("_", Ccc(), VoidType(), eraseResumption, List(transform(value)))
     }.map(emit)
   }
 
@@ -727,6 +753,7 @@ object Transformer {
   }
 
   val initializeMemory = ConstantGlobal("cInitializeMemory");
+  val testIfAllBlocksAreFreed = ConstantGlobal("testIfAllBlocksAreFreed");
   val newObject = ConstantGlobal("newObject");
   val objectEnvironment = ConstantGlobal("objectEnvironment");
 
@@ -784,7 +811,7 @@ object Transformer {
 
   def withBindings[R](bindings: List[(machine.Variable, machine.Variable)])(prog: () => R)(using C: FunctionContext): R = {
     val substitution = C.substitution;
-    C.substitution = substitution ++ bindings.map { case (variable -> value) => (variable -> substitution.getOrElse(value, value) ) }.toMap;
+    C.substitution = substitution ++ bindings.map { case (variable -> value) => (variable -> substitution.getOrElse(value, value)) }.toMap;
     val result = prog();
     C.substitution = substitution
     result
@@ -807,7 +834,7 @@ object Transformer {
   def setStack(stack: Operand)(using C: BlockContext) =
     C.stack = stack;
 
-  val escapeSeqs: Map[Char, String] = Map('\'' -> raw"'", '\"' -> raw"\"", '\\' -> raw"\\", '\n' -> raw"\n", '\t' -> raw"\t", '\r' -> raw"\r")
+  val escapeSeqs: Map[Char, String] = Map('\'' -> raw"'", '\"' -> raw"\"", '\\' -> raw" \\ ", '\n' -> raw" \ n", '\t' -> raw" \ t", '\r' -> raw" \ r")
 
   def escape(scalaString: String): String =
     scalaString.foldLeft(StringBuilder()) { (acc, c) =>
