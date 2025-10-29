@@ -97,7 +97,7 @@
 declare void @cInitializeMemory()
 declare ptr @acquire(i64)
 declare void @release(ptr)
-declare ptr @cRealloc(ptr, i64)
+declare void @testIfAllBlocksAreFreed()
 
 declare ptr @malloc(i64)
 declare void @free(ptr)
