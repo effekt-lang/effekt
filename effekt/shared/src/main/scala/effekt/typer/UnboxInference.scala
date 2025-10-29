@@ -53,16 +53,16 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
       // TODO maybe we should synthesize a call to get here already?
       case sym: (ValueSymbol | symbols.RefBinder) => v
       case sym: BlockSymbol =>
-        C.error(pp"Computation ${sym.name.name} is used in an expression position, which requires boxing (e.g. `box ${sym.name.name}`)")
+        C.error(pp"Expected a value, but ${sym.name.name} is a computation. Use `box ${sym.name.name}` to pass it as a value instead")
         v
     }
 
     case n: New =>
-      C.error(pp"Creating an instance in an expression requires boxing (e.g. `box new ${n.impl.id}[...] { ... }`)")
+      C.error(pp"Expected a value, but `new` creates a computation (an object instance). Use `box new ${n.impl.id}[...] { ... }` to pass it as a value instead")
       rewriteAsBlock(n)
 
     case b: BlockLiteral =>
-      C.error(pp"Function literals in expression position require boxing (e.g. `box { (${b.vparams.map(_.id).mkString(", ")}) => ... `)")
+      C.error(pp"Expected a value, but block (function) literals are computations. Use `box { (${b.vparams.map(_.id).mkString(", ")}) => ... }` to pass it as a value instead")
       rewriteAsBlock(b)
 
     case l: Literal => l
