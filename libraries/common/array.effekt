@@ -20,7 +20,7 @@ extern type Array[T]
 extern llvm """
 declare noalias ptr @calloc(i64, i64)
 
-define void @array_erase_fields(%Object %object) {
+define void @array_erase(%Object %object) {
 entry:
     %data_pointer = getelementptr inbounds i64, ptr %object, i64 1
     %size = load i64, ptr %object, align 8
@@ -54,7 +54,7 @@ extern def allocate[T](size: Int) at global: Array[T] =
     %eraser_pointer = getelementptr ptr, ptr %calloc, i64 1
     %size_pointer = getelementptr ptr, ptr %calloc, i64 2
     store i64 0, ptr %calloc
-    store ptr @array_erase_fields, ptr %eraser_pointer
+    store ptr @array_erase, ptr %eraser_pointer
     store i64 ${size}, ptr %size_pointer
     %ret_pos = insertvalue %Pos { i64 0, ptr poison }, ptr %calloc, 1
     ret %Pos %ret_pos
