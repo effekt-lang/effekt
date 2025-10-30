@@ -161,7 +161,6 @@ def toHexCharBytes(b: Byte): Unit / emit[Byte] = {
 
   val high = unsigned.bitwiseShr(4).bitwiseAnd(0xFF.toInt)
   val low = unsigned.bitwiseAnd(0x0F.toInt)
-  println(b.toInt.show ++ " (U" ++ unsigned.show ++ ") := " ++ high.show ++ "; " ++ low.show)
 
   def toHexDigit(n: Int): Byte =
     if (n < 10) {
