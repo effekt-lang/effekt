@@ -338,9 +338,14 @@ class ParserTests extends munit.FunSuite {
 
   test("Boxing") {
     parseExpr("box f")
+    parseExpr("unbox f")
     assertEqualModuloSpans(
       parseExpr("box f"),
       parseExpr("(box f)")
+    )
+    assertEqualModuloSpans(
+      parseExpr("unbox box f"),
+      parseExpr("unbox (box f)")
     )
     assertNotEqualModuloSpans(
       parseExpr("box { 42 }"),
