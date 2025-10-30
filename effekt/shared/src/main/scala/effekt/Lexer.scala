@@ -65,7 +65,7 @@ enum TokenKind {
   case Str(s: String, multiline: Boolean)
   case HoleStr(s: String)
   case Chr(c: Int)
-  case Byt(b: Byte)
+  case Byt(b: Int) // assuming 0-255 range, `Byte` in Scala is signed!
 
   // identifiers
   case Ident(id: String)
@@ -530,7 +530,8 @@ class Lexer(source: Source) extends Iterator[Token] {
       return TokenKind.Error(LexerError.InvalidByteFormat)
     
     try {
-      val byte = java.lang.Integer.parseInt(hexString, 16).toByte
+      val byte = java.lang.Integer.parseInt(hexString, 16)
+      assert(byte >= 0 && byte <= 255)
       TokenKind.Byt(byte)
     } catch {
       case e: NumberFormatException => TokenKind.Error(LexerError.InvalidByteFormat)
