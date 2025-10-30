@@ -1,4 +1,4 @@
-name: CI Pull Request
+name: PR CI
 
 on:
   pull_request:
@@ -68,7 +68,7 @@ jobs:
 
   js-tests:
     name: "JS Backend"
-    needs: [internal-tests, windows-tests]
+    needs: build-and-compile
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -84,7 +84,7 @@ jobs:
 
   chez-tests:
     name: "Chez Backend"
-    needs: [internal-tests, windows-tests]
+    needs: build-and-compile
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -102,7 +102,7 @@ jobs:
 
   llvm-tests:
     name: "LLVM Backend"
-    needs: [internal-tests, windows-tests]
+    needs: build-and-compile
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -121,7 +121,7 @@ jobs:
 
   verify-binary:
     name: "Verify Binary"
-    needs: [js-tests, chez-tests, llvm-tests]
+    needs: build-and-compile
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
