@@ -1,4 +1,4 @@
-name: PR CI
+name: CI
 
 on:
   pull_request:
@@ -34,7 +34,7 @@ jobs:
           key: effekt-build-${{ github.sha }}
 
   internal-tests:
-    name: "Internal Tests"
+    name: "Internal Tests & Verify Binary"
     needs: build-and-compile
     runs-on: ubuntu-latest
     steps:
@@ -48,6 +48,15 @@ jobs:
 
       - name: Run internal tests
         run: sbt effektJVM/testRemaining
+
+      - name: Assemble fully optimized JS file
+        run: sbt effektJS/fullOptJS
+
+      - name: Install effekt binary
+        run: sbt install
+
+      - name: Test effekt binary
+        run: effekt.sh --help
 
   windows-tests:
     name: "Windows Smoke Test"
@@ -118,25 +127,3 @@ jobs:
 
       - name: Run LLVM backend tests
         run: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt effektJVM/testBackendLLVM
-
-  verify-binary:
-    name: "Verify Binary"
-    needs: build-and-compile
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: 'true'
-
-      - uses: ./.github/actions/setup-effekt
-
-      - uses: ./.github/actions/restore-build-cache
-
-      - name: Assemble fully optimized JS file
-        run: sbt effektJS/fullOptJS
-
-      - name: Install effekt binary
-        run: sbt install
-
-      - name: Test effekt binary
-        run: effekt.sh --help
