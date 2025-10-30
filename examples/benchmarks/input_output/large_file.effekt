@@ -15,8 +15,8 @@ def run(n: Int) = {
     if (file < 0) {
       panic("failed open for writing")
     }
-    val outputBuffer = bytearray(size, 33.toByte)
-    outputBuffer.set(999, 10.toByte)
+    val outputBuffer = bytearray(size, 0x21)
+    outputBuffer.set(999, 0x0A)
     repeat(n) {
       val m = internal::write(file, outputBuffer, 0, size, -1)
       if (m < outputBuffer.size) {

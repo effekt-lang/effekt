@@ -83,7 +83,7 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq(
       num,
       Float(12.34), Integer(100), Integer(200), Float(123.345), Integer(1),
-      Float(-12.34), Integer(-100), Float(-123.345), Integer(-1), Byt(66.toByte),
+      Float(-12.34), Integer(-100), Float(-123.345), Integer(-1), Byt(0x42),
       EOF
     )
   }
