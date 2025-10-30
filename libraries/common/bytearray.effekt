@@ -173,9 +173,10 @@ def toHexCharBytes(b: Byte): Unit / emit[Byte] = {
   do emit(low.toHexDigit)
 }
 
-/// Converts a byte like `0xAB` into a bytearray `bytearray.['A', 'B']"`
-/// _without a `0x`_ prefix
+/// Converts a byte like `0xAB` into a bytearray `bytearray.['0', 'x', 'A', 'B']"`
 def toHexCharBytes(b: Byte): ByteArray = collect {
+  do emit(0x30) // '0'
+  do emit(0x78) // 'x'
   b.toHexCharBytes
 }
 
