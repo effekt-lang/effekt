@@ -156,6 +156,40 @@ extern def toString(arr: ByteArray) at {}: String =
   chez "(utf8->string ${arr})"
   vm "bytearray::toString(ByteArray)"
 
+def toHexCharBytes(b: Byte): Unit / emit[Byte] = {
+  val unsigned: Int = b.toInt.bitwiseAnd(0xFF.toInt)
+
+  val high = unsigned.bitwiseShr(4).bitwiseAnd(0xFF.toInt)
+  val low = unsigned.bitwiseAnd(0x0F.toInt)
+  println(b.toInt.show ++ " (U" ++ unsigned.show ++ ") := " ++ high.show ++ "; " ++ low.show)
+
+  def toHexDigit(n: Int): Byte =
+    if (n < 10) {
+      (n + 48)       // '0' = 48
+    } else {
+      (n - 10 + 65)  // 'A' = 65
+    }.toByte
+
+  do emit(high.toHexDigit)
+  do emit(low.toHexDigit)
+}
+
+/// Converts a byte like `0xAB` into a bytearray `bytearray.['A', 'B']"`
+/// _without a `0x`_ prefix
+def toHexCharBytes(b: Byte): ByteArray = collect {
+  b.toHexCharBytes
+}
+
+/// Converts a bytearray like `bytearray.[0xAB, 0xFF]` into a bytearray `bytearray.['A', 'B', 'F', 'F']"`
+def toHexCharBytes(arr: ByteArray): ByteArray = collect {
+  for[Byte] {arr.each} { b => b.toHexCharBytes }
+}
+
+// NOTE: It seems like these cannot really be defined earlier... Oh well.
+
+def show(b: Byte): String = b.toHexCharBytes.toString
+def println(b: Byte): Unit = println(show(b))
+
 extern js """
   function bytearray$set(bytes, index, value) {
     bytes[index] = value;
