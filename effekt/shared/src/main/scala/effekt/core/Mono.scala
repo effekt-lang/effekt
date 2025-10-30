@@ -521,14 +521,18 @@ def monomorphize(blockType: BlockType)(using ctx: MonoContext): BlockType = bloc
   case BlockType.Interface(name, targs) => BlockType.Interface(name, targs map monomorphize)
 
 def monomorphize(valueType: ValueType)(using ctx: MonoContext): ValueType = valueType match
-  case ValueType.Var(name) => ctx.replacementTparams(name) match {
-    case TypeArg.Base(tpe, targs) => 
-      // FIXME: Why was this ever ValueType.Var?
-      ValueType.Data(tpe, targs map toValueType)
-    case TypeArg.Boxed(tpe, capt) => ValueType.Boxed(tpe, capt)
-  }
+  case ValueType.Var(name) => monomorphize(ctx.replacementTparams(name))
   case ValueType.Data(name, targs) => replacementDataFromTargs(name, targs)
   case ValueType.Boxed(tpe, capt) => ValueType.Boxed(monomorphize(tpe), capt)
+
+def monomorphize(typeArg: TypeArg)(using ctx: MonoContext): ValueType = typeArg match {
+  case TypeArg.Base(tpe, targs) => ValueType.Data(tpe, targs map monomorphize)
+  case TypeArg.Boxed(tpe, capt) => ValueType.Boxed(tpe, capt)
+  case TypeArg.Var(funId, pos) => 
+    // FIXME: Do we want to reflect this unreachability in the Data structure used for monomorphizing?
+    //        we would need another version of TypeArg that disallows targs in Base to be anything other than Ground
+    throw new RuntimeException(s"All the vars should have been removed in the solving stage, still got '${typeArg}'")
+}
 
 var monoCounter = 0
 def freshMonoName(baseId: Id, tpe: Ground): Id =
@@ -571,7 +575,3 @@ def toTypeArg(vt: ValueType)(using ctx: MonoContext): Ground = vt match
   case ValueType.Var(name) => ctx.replacementTparams(name)
   case ValueType.Boxed(tpe, capt) => TypeArg.Boxed(tpe, capt)
 
-def toValueType(ta: TypeArg)(using ctx: MonoContext): ValueType = ta match 
-  case TypeArg.Base(tpe, targs) => ValueType.Data(tpe, targs map toValueType)
-  case TypeArg.Var(funId, pos) => ???
-  case TypeArg.Boxed(tpe, capt) => ValueType.Boxed(tpe, capt) 
