@@ -1113,6 +1113,10 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     //util.trace(mod)
     // TODO deal with async externs properly (see examples/benchmarks/input_output/dyck_one.effekt)
     val asyncExterns = mod.externs.collect { case defn: Extern.Def if defn.annotatedCapture.contains(AsyncCapability.capture) => defn }
+    val asyncTypes = asyncExterns.map { d =>
+      d.id -> (BlockType.Function(d.tparams, d.cparams, d.vparams.map { _.tpe }, d.bparams.map { bp => bp.tpe }, d.ret), d.annotatedCapture)
+    }
+
     val toplevelEnv = Env.empty
       // user-defined functions
       .bindComputation(mod.definitions.collect {
@@ -1123,13 +1127,16 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         case Toplevel.Val(id, _, _) => id -> id
       })
       // async extern functions
-      .bindComputation(asyncExterns.map(defn => defn.id -> Computation.Def(Closure(defn.id, Nil))))
-
-    val typingContext = TypingContext(mod.definitions.collect {
-      case Toplevel.Val(id, tpe, _) => id -> tpe
-    }.toMap, mod.definitions.collect {
-      case Toplevel.Def(id, b) => id -> (b.tpe, b.capt)
-    }.toMap ++ asyncExterns.map { d => d.id -> (BlockType.Function(d.tparams, d.cparams, d.vparams.map(_.tpe), d.bparams.map(_.tpe), d.ret), d.annotatedCapture) })
+      .bindComputation(asyncExterns.map(defn => defn.id -> Computation.Var(defn.id)))
+    
+    val typingContext = TypingContext(
+      mod.definitions.collect {
+        case Toplevel.Val(id, tpe, _) => id -> tpe
+      }.toMap,
+      mod.definitions.collect {
+        case Toplevel.Def(id, b) => id -> (b.tpe, b.capt)
+      }.toMap ++ asyncTypes
+    )
 
     val newDefinitions = mod.definitions.map(d => run(d)(using toplevelEnv, typingContext))
     mod.copy(definitions = newDefinitions)
