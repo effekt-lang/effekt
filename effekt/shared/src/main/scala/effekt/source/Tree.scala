@@ -569,7 +569,7 @@ export Term.*
 // Smart Constructors for literals
 // -------------------------------
 def UnitLit(span: Span): Literal = Literal((), symbols.builtins.TUnit, span)
-def ByteLit(value: Byte, span: Span) : Literal = Literal(value, symbols.builtins.TByte, span)
+def ByteLit(value: Int, span: Span) : Literal = Literal(value, symbols.builtins.TByte, span) // assuming 0-255; `Byte` in Scala is signed
 def IntLit(value: Long, span: Span): Literal = Literal(value, symbols.builtins.TInt, span)
 def BooleanLit(value: Boolean, span: Span): Literal = Literal(value, symbols.builtins.TBoolean, span)
 def DoubleLit(value: Double, span: Span): Literal = Literal(value, symbols.builtins.TDouble, span)
