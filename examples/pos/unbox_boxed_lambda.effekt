@@ -1,0 +1,6 @@
+module unbox_boxed_lambda
+
+def main() = {
+  def callback = unbox box { (x: String) => println(x) }
+  callback("Hello, world!")
+}
