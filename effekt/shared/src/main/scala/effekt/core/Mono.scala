@@ -248,16 +248,17 @@ def solveConstraints(constraints: Constraints): Solution =
     filteredConstraints.foreach(b => 
       var l: List[List[Ground]] = List(List.empty)
       def listFromIndex(ind: Int) = if (ind >= l.length) List.empty else l(ind)
-      b.foreach({
-        case TypeArg.Base(tpe, targs) => 
-          l = productAppend(l, List(TypeArg.Base(tpe, targs)))
-        case TypeArg.Var(fnId, pos) => 
-          val funSolved = solved.getOrElse(fnId, Set.empty)
+
+      def solveTypeArg(typeArg: TypeArg): List[Ground] = typeArg match {
+        case TypeArg.Base(tpe, targs) => List(TypeArg.Base(tpe, targs flatMap solveTypeArg))
+        case TypeArg.Boxed(tpe, capt) => List(TypeArg.Boxed(tpe, capt))
+        case TypeArg.Var(funId, pos) => 
+          val funSolved = solved.getOrElse(funId, Set.empty)
           val posArgs = funSolved.map(v => v(pos)).toList
-          l = productAppend(l, posArgs)
-        case TypeArg.Boxed(tpe, capt) => 
-          l = productAppend(l, List(TypeArg.Boxed(tpe, capt)))
-      })
+          posArgs
+      }
+
+      b.foreach(typeArg => l = productAppend(l, solveTypeArg(typeArg)))
       nbs ++= l
     )
     nbs
