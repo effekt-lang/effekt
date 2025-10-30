@@ -1,3 +1,6 @@
+# If you change this file in any major way, please bump the cache key version
+# (grep for '!BUMP HERE!')
+
 name: 'Setup Effekt Environment'
 description: 'Sets up Java, Node, SBT, and system dependencies for Effekt'
 
@@ -41,28 +44,43 @@ runs:
       with:
         node-version: ${{ inputs.node-version }}
 
-    # Only run the following on Linux-based runners
-    - name: Update apt database
+    # Cache system dependencies to avoid reinstalling them every time
+    - name: Cache System Dependencies
       if: ${{ inputs.install-dependencies == 'true' && runner.os == 'Linux' }}
+      id: cache-deps
+      uses: actions/cache@v4
+      with:
+        path: |
+          /usr/bin/chez*
+          /usr/bin/scheme
+          /usr/lib/llvm-${{ inputs.llvm-version }}
+          /usr/bin/llvm*${{ inputs.llvm-version }}
+          /usr/lib/x86_64-linux-gnu/libuv*
+          /usr/include/uv*
+        key: ${{ runner.os }}-${{ runner.arch }}-deps-llvm${{ inputs.llvm-version }}-v1 # !BUMP HERE!
+
+    # Only run the following on Linux-based runners & if there's no cache miss
+    - name: Update apt database
+      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'Linux' && steps.cache-deps.outputs.cache-hit != 'true' }}
       run: sudo apt-get update
       shell: bash
 
     - name: Install Chez Scheme
-      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'Linux' }}
+      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'Linux' && steps.cache-deps.outputs.cache-hit != 'true' }}
       run: sudo apt-get install -y chezscheme
       shell: bash
 
     - name: Install LLVM ${{ inputs.llvm-version }}
-      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'Linux' }}
+      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'Linux' && steps.cache-deps.outputs.cache-hit != 'true' }}
       run: sudo apt-get install -y llvm-${{ inputs.llvm-version }}
+      shell: bash
+
+    - name: Install libuv
+      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'Linux' && steps.cache-deps.outputs.cache-hit != 'true' }}
+      run: sudo apt-get install -y libuv1-dev
       shell: bash
 
     - name: Install Valgrind
       if: ${{ inputs.install-valgrind == 'true' && runner.os == 'Linux' }}
       run: sudo apt-get install -y valgrind
-      shell: bash
-
-    - name: Install libuv
-      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'Linux' }}
-      run: sudo apt-get install -y libuv1-dev
       shell: bash
