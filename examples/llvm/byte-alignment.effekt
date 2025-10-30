@@ -1,29 +1,29 @@
 def oneByte { action: (Byte) => Unit }: Unit =
-  action(42.toByte)
+  action(0x2A)
 
 def twoByte { action: (Byte, Byte) => Unit }: Unit =
-  action(42.toByte, 42.toByte)
+  action(0x2A, 0x2A)
 
 def threeByte { action: (Byte, Byte, Byte) => Unit }: Unit =
-  action(42.toByte, 42.toByte, 42.toByte)
+  action(0x2A, 0x2A, 0x2A)
 
 def fourByte { action: (Byte, Byte, Byte, Byte) => Unit }: Unit =
-  action(42.toByte, 42.toByte, 42.toByte, 42.toByte)
+  action(0x2A, 0x2A, 0x2A, 0x2A)
 
 def fiveByte { action: (Byte, Byte, Byte, Byte, Byte) => Unit }: Unit =
-  action(42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte)
+  action(0x2A, 0x2A, 0x2A, 0x2A, 0x2A)
 
 def sixByte { action: (Byte, Byte, Byte, Byte, Byte, Byte) => Unit }: Unit =
-  action(42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte)
+  action(0x2A, 0x2A, 0x2A, 0x2A, 0x2A, 0x2A)
 
 def sevenByte { action: (Byte, Byte, Byte, Byte, Byte, Byte, Byte) => Unit }: Unit =
-  action(42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte)
+  action(0x2A, 0x2A, 0x2A, 0x2A, 0x2A, 0x2A, 0x2A)
 
 def eightByte { action: (Byte, Byte, Byte, Byte, Byte, Byte, Byte, Byte) => Unit }: Unit =
-  action(42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte)
+  action(0x2A, 0x2A, 0x2A, 0x2A, 0x2A, 0x2A, 0x2A, 0x2A)
 
 def nineByte { action: (Byte, Byte, Byte, Byte, Byte, Byte, Byte, Byte, Byte) => Unit }: Unit =
-  action(42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte)
+  action(0x2A, 0x2A, 0x2A, 0x2A, 0x2A, 0x2A, 0x2A, 0x2A, 0x2A)
 
 def main() = {
   oneByte { (b0) =>
