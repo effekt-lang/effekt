@@ -98,7 +98,7 @@ class EffektLexers extends Parsers {
     "def", "let", "val", "var", "true", "false", "else", "type",
     "effect", "interface", "try", "with", "case", "do", "if", "while",
     "match", "module", "import", "extern", "fun",
-    "at", "box", "unbox", return", "region", "new", "resource", "and", "is", "namespace"
+    "at", "box", "unbox", "return", "region", "new", "resource", "and", "is", "namespace"
   )
 
   def keyword(kw: String): Parser[String] =
