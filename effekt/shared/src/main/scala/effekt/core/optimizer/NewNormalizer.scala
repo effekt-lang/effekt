@@ -809,7 +809,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       Computation.Def(Closure(f, closureParams.map(p => Computation.Var(p.id))))
 
     case core.Block.Unbox(pure) =>
-      val addr = evaluate(pure)(using env, scope)
+      val addr = evaluate(pure, escaping)
       scope.lookupValue(addr) match {
         case Some(Value.Box(body, _)) => body
         case Some(_) | None => {
@@ -854,7 +854,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       Computation.New(interface, ops)
   }
 
-  def evaluate(expr: Expr)(using env: Env, scope: Scope): Addr = expr match {
+  def evaluate(expr: Expr, escaping: Stack)(using env: Env, scope: Scope): Addr = expr match {
     case Expr.ValueVar(id, annotatedType) =>
       env.lookupValue(id)
 
@@ -863,13 +863,12 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
 
     // right now everything is stuck... no constant folding ...
     case core.Expr.PureApp(f, targs, vargs) =>
-      scope.allocate("x", Value.Extern(f, targs, vargs.map(evaluate)))
+      scope.allocate("x", Value.Extern(f, targs, vargs.map(evaluate(_, escaping))))
 
     case core.Expr.Make(data, tag, targs, vargs) =>
-      scope.allocate("x", Value.Make(data, tag, targs, vargs.map(evaluate)))
+      scope.allocate("x", Value.Make(data, tag, targs, vargs.map(evaluate(_, escaping))))
 
     case core.Expr.Box(b, annotatedCapture) =>
-      // TODO this wrong
       /*
       var counter = 22;
       val p : Borrowed[Int] at counter = box new Borrowed[Int] {
@@ -880,7 +879,8 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
        */
       // should capture `counter` but does not since the stack is Stack.Unknown
       // (effekt.JavaScriptTests.examples/pos/capture/borrows.effekt (js))
-      val comp = evaluate(b, "x", Stack.Unknown)
+      // TLDR we need to pass an escaping stack to do a proper escape analysis. Stack.Unkown is insufficient
+      val comp = evaluate(b, "x", escaping)
       scope.allocate("x", Value.Box(comp, annotatedCapture))
   }
 
@@ -888,7 +888,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
   def evaluate(stmt: Stmt, k: Frame, ks: Stack)(using env: Env, scope: Scope): NeutralStmt = stmt match {
 
     case Stmt.Return(expr) =>
-      k.ret(ks, evaluate(expr))
+      k.ret(ks, evaluate(expr, ks))
 
     case Stmt.Val(id, annotatedTpe, binding, body) =>
       evaluate(binding, k.push(annotatedTpe) { scope => res => k => ks =>
@@ -898,11 +898,11 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
 
     case Stmt.ImpureApp(id, f, targs, vargs, bargs, body) =>
       assert(bargs.isEmpty)
-      val addr = scope.run("x", f, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", Stack.Unknown)))
+      val addr = scope.run("x", f, targs, vargs.map(evaluate(_, ks)), bargs.map(evaluate(_, "f", Stack.Unknown)))
       evaluate(body, k, ks)(using env.bindValue(id, addr), scope)
 
     case Stmt.Let(id, annotatedTpe, binding, body) =>
-      bind(id, evaluate(binding)) { evaluate(body, k, ks) }
+      bind(id, evaluate(binding, ks)) { evaluate(body, k, ks) }
 
     case Stmt.Def(id, block: core.BlockLit, body) if shouldInline(id, block) =>
       println(s"Marking ${util.show(id)} as inlinable")
@@ -919,7 +919,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       // TODO also bind type arguments in environment
       // TODO substitute cparams???
       val newEnv = env
-        .bindValue(vparams.zip(vargs).map { case (p, a) => p.id -> evaluate(a) })
+        .bindValue(vparams.zip(vargs).map { case (p, a) => p.id -> evaluate(a, ks) })
         .bindComputation(bparams.zip(bargs).map { case (p, a) => p.id -> evaluate(a, "f", ks) })
 
       evaluate(body, k, ks)(using newEnv, scope)
@@ -931,14 +931,14 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       evaluate(callee, "f", escapingStack) match {
         case Computation.Inline(core.Block.BlockLit(tparams, cparams, vparams, bparams, body), closureEnv) =>
           val newEnv = closureEnv
-            .bindValue(vparams.zip(vargs).map { case (p, a) => p.id -> evaluate(a) })
+            .bindValue(vparams.zip(vargs).map { case (p, a) => p.id -> evaluate(a, ks) })
             .bindComputation(bparams.zip(bargs).map { case (p, a) => p.id -> evaluate(a, "f", ks) })
 
           evaluate(body, k, ks)(using newEnv, scope)
         case Computation.Var(id) =>
-          reify(k, ks) { NeutralStmt.App(id, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack))) }
+          reify(k, ks) { NeutralStmt.App(id, targs, vargs.map(evaluate(_, ks)), bargs.map(evaluate(_, "f", escapingStack))) }
         case Computation.Def(Closure(label, environment)) =>
-          val args = vargs.map(evaluate)
+          val args = vargs.map(evaluate(_, ks))
           // TODO ks or Stack.Unkown?
           /*
           try {
@@ -961,16 +961,16 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       val escapingStack = Stack.Unknown
       evaluate(callee, "o", escapingStack) match {
         case Computation.Var(id) =>
-          reify(k, ks) { NeutralStmt.Invoke(id, method, methodTpe, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack))) }
+          reify(k, ks) { NeutralStmt.Invoke(id, method, methodTpe, targs, vargs.map(evaluate(_, ks)), bargs.map(evaluate(_, "f", escapingStack))) }
         case Computation.New(interface, operations) =>
           operations.collectFirst { case (id, Closure(label, environment)) if id == method =>
-            reify(k, ks) { NeutralStmt.Jump(label, targs, vargs.map(evaluate), bargs.map(evaluate(_, "f", escapingStack)) ++ environment) }
+            reify(k, ks) { NeutralStmt.Jump(label, targs, vargs.map(evaluate(_, ks)), bargs.map(evaluate(_, "f", escapingStack)) ++ environment) }
           }.get
         case _: (Computation.Inline | Computation.Def | Computation.Continuation) => sys error s"Should not happen"
       }
 
     case Stmt.If(cond, thn, els) =>
-      val sc = evaluate(cond)
+      val sc = evaluate(cond, ks)
       scope.lookupValue(sc) match {
         case Some(Value.Literal(true, _)) => evaluate(thn, k, ks)
         case Some(Value.Literal(false, _)) => evaluate(els, k, ks)
@@ -985,7 +985,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       }
 
     case Stmt.Match(scrutinee, clauses, default) =>
-      val sc = evaluate(scrutinee)
+      val sc = evaluate(scrutinee, ks)
       scope.lookupValue(sc) match {
         case Some(Value.Make(data, tag, targs, vargs)) =>
           // TODO substitute types (or bind them in the env)!
@@ -1029,7 +1029,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       evaluate(body, Frame.Return, Stack.Region(cap, Map.empty, k, ks))
     case Stmt.Region(_) => ???
     case Stmt.Alloc(id, init, region, body) =>
-      val addr = evaluate(init)
+      val addr = evaluate(init, ks)
       alloc(id, region, addr, ks) match {
         case Some(ks1) => evaluate(body, k, ks1)
         case None => NeutralStmt.Alloc(id, addr, region, nested { evaluate(body, k, ks) })
@@ -1037,7 +1037,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
 
     // TODO
     case Stmt.Var(ref, init, capture, body) =>
-      val addr = evaluate(init)
+      val addr = evaluate(init, ks)
       evaluate(body, Frame.Return, Stack.Var(BlockParam(ref, Type.TState(init.tpe), Set(capture)), addr, addr, k, ks))
     case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
       get(ref, ks) match {
@@ -1045,10 +1045,11 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         case None => bind(id, scope.allocateGet(ref, annotatedTpe, annotatedCapt)) { evaluate(body, k, ks) }
       }
     case Stmt.Put(ref, annotatedCapt, value, body) =>
-      put(ref, evaluate(value), ks) match {
+      val addr = evaluate(value, ks)
+      put(ref, addr, ks) match {
         case Some(stack) => evaluate(body, k, stack)
         case None =>
-          NeutralStmt.Put(ref, value.tpe, annotatedCapt, evaluate(value), nested { evaluate(body, k, ks) })
+          NeutralStmt.Put(ref, value.tpe, annotatedCapt, addr, nested { evaluate(body, k, ks) })
       }
 
     // Control Effects
