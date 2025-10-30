@@ -208,8 +208,61 @@ object scopes {
         else syms.head
       }}
 
+    // TODO: Use this for more than just types?
+    //
+    // NOTE: We might also want to generalize to return more possible candidates than one
+    //       (1 works fine for types, but maybe not for fields/methods/functions/...)
+    private def didYouMean(nameNotFound: String, candidates: => Set[String], specificHeuristic: String => Option[String] = _ => None)(using E: ErrorReporter): Unit =
+      // Priority 1: A specific heuristic
+      specificHeuristic(nameNotFound) orElse {
+        // Priority 2: Exact case-insensitive match
+        candidates
+          .find { name => name.toUpperCase == nameNotFound.toUpperCase }
+          .map { exactMatch => pp"Did you mean $exactMatch?" }
+          .orElse {
+            // Priority 3: Edit distance
+            val threshold = ((nameNotFound.length + 2) max 3) / 3
+
+            candidates
+              .toSeq
+              .flatMap { candidate =>
+                effekt.util.editDistance(nameNotFound, candidate, threshold).map((_, candidate))
+              }
+              .sorted
+              .headOption
+              .map { case (_, name) => pp"Did you mean $name?" }
+          }
+      } foreach { msg => E.info(msg) }
+
+    // NOTE: Most of these should be covered by the edit distance anyway...
+    private def didYouMeanTypeHeuristic(name: String): Option[String] = name match {
+      case "Boolean" | "boolean" => Some(pp"Did you mean Bool?")
+      case "Str" | "str" => Some(pp"Did you mean String?")
+      case "Integer" | "Int32" | "Int64" | "I32" | "I64" | "i32" | "i64" =>
+        Some(pp"Did you mean Int?")
+      case "UInt32" | "UInt64" | "UInt" | "U32" | "U64" | "u32" | "u64" =>
+        Some(pp"Effekt only supports signed integers, did you mean Int?")
+      case "Int8" | "UInt8" | "I8" | "U8" | "i8" | "u8" =>
+        Some(pp"Did you mean Byte (8 bits) or Char (32 bits)?")
+      case "Float" | "float" | "F64" | "F32" | "f64" | "f32" =>
+        Some(pp"Effekt only supports 64bit floating numbers, did you mean Double?")
+      case "Maybe" | "maybe" => Some(pp"Did you mean Option?")
+      case "Void" | "void" => Some(pp"Did you mean Unit?")
+      case _ => None
+    }
+
     def lookupType(id: IdRef)(using E: ErrorReporter): TypeSymbol =
-      lookupTypeOption(id.path, id.name) getOrElse { E.abort(pp"Could not resolve type ${id}") }
+      lookupTypeOption(id.path, id.name) getOrElse {
+        // If we got here, we could not find an exact match.
+        // But let's try and find a close one!
+        def availableTypes = all(id.path, scope) {
+          _.types.keys.toList
+        }.flatten.toSet
+
+        didYouMean(id.name, availableTypes, didYouMeanTypeHeuristic)
+
+        E.abort(pp"Could not resolve type $id")
+      }
 
     def lookupTypeOption(path: List[String], name: String)(using E: ErrorReporter): Option[TypeSymbol] =
       first(path, scope) { _.types.get(name) }
