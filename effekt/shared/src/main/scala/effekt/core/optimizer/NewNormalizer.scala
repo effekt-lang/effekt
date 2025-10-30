@@ -593,7 +593,8 @@ object semantics {
       case Stack.Var(id, curr, init, frame, next) =>
         reify(next) { reify(frame) {
           val body = nested { stmt }
-          NeutralStmt.Var(id, init, body)
+          if (body.free contains id.id) NeutralStmt.Var(id, curr, body)
+          else stmt
         }}
       case Stack.Region(id, bindings, frame, next) =>
         reify(next) { reify(frame) {
