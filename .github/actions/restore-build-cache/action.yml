@@ -1,0 +1,22 @@
+name: 'Restore Build Cache'
+description: 'Restores cached build artifacts'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Restore cached build
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          target
+          project/target
+          project/project/target
+          kiama/jvm/target
+          kiama/js/target
+          effekt/jvm/target
+          effekt/js/target
+          ~/.ivy2/cache
+          ~/.sbt
+          ~/.cache/coursier
+        key: effekt-build-${{ github.sha }}
+        fail-on-cache-miss: true
