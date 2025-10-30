@@ -1,0 +1,142 @@
+name: CI Pull Request
+
+on:
+  pull_request:
+
+jobs:
+  build-and-compile:
+    name: "Build & Compile"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+
+      - name: Compile project
+        run: sbt compile Test/compile
+
+      - name: Cache compiled artifacts
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            target
+            project/target
+            project/project/target
+            kiama/jvm/target
+            kiama/js/target
+            effekt/jvm/target
+            effekt/js/target
+            ~/.ivy2/cache
+            ~/.sbt
+            ~/.cache/coursier
+          key: effekt-build-${{ github.sha }}
+
+  internal-tests:
+    name: "Internal Tests"
+    needs: build-and-compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+
+      - uses: ./.github/actions/restore-build-cache
+
+      - name: Run internal tests
+        run: sbt effektJVM/testRemaining
+
+  windows-tests:
+    name: "Windows Smoke Test"
+    needs: build-and-compile
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+
+      - name: Compile project
+        run: sbt Test/compile
+
+      - name: Run Windows smoke test
+        run: sbt "effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*pos[\\/]*sideeffects.*"
+
+  js-tests:
+    name: "JS Backend"
+    needs: [internal-tests, windows-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+
+      - uses: ./.github/actions/restore-build-cache
+
+      - name: Run JavaScript backend tests
+        run: sbt effektJVM/testBackendJS
+
+  chez-tests:
+    name: "Chez Backend"
+    needs: [internal-tests, windows-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+        with:
+          install-dependencies: 'true'
+
+      - uses: ./.github/actions/restore-build-cache
+
+      - name: Run Chez Scheme backend tests
+        run: sbt effektJVM/testBackendChez
+
+  llvm-tests:
+    name: "LLVM Backend"
+    needs: [internal-tests, windows-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+        with:
+          install-dependencies: 'true'
+          install-valgrind: 'true'
+
+      - uses: ./.github/actions/restore-build-cache
+
+      - name: Run LLVM backend tests
+        run: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt effektJVM/testBackendLLVM
+
+  verify-binary:
+    name: "Verify Binary"
+    needs: [js-tests, chez-tests, llvm-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+
+      - uses: ./.github/actions/restore-build-cache
+
+      - name: Assemble fully optimized JS file
+        run: sbt effektJS/fullOptJS
+
+      - name: Install effekt binary
+        run: sbt install
+
+      - name: Test effekt binary
+        run: effekt.sh --help

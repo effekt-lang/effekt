@@ -1,48 +1,39 @@
-name: CI
+name: CI Master
 
 on:
   push:
     branches:
       - master
-  pull_request:
 
 jobs:
-  run-hello-world:
-    strategy:
-      matrix:
-        os: [windows-latest]
-
-    name: Build Effekt compiler and run one test
-    runs-on: ${{ matrix.os }}
+  full-test-suite:
+    name: Full Test Suite
+    runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
-      with:
-        submodules: 'true'
+      - uses: actions/checkout@v5
+        with:
+          submodules: 'true'
 
-    - uses: ./.github/actions/setup-effekt
+      - uses: ./.github/actions/setup-effekt
+        with:
+          install-dependencies: 'true'
+          install-valgrind: 'true'
 
-    - uses: ./.github/actions/run-effekt-tests
-      with:
-        full-test: 'false'
+      - uses: ./.github/actions/run-effekt-tests
+        with:
+          full-test: 'true'
+          use-retry: 'true'
 
-  build-jar:
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-
-    name: Build Effekt compiler and run tests
-    runs-on: ${{ matrix.os }}
+  windows-smoke-test:
+    name: Windows Smoke Test
+    runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v5
-      with:
-        submodules: 'true'
+      - uses: actions/checkout@v5
+        with:
+          submodules: 'true'
 
-    - uses: ./.github/actions/setup-effekt
-      with:
-        install-dependencies: 'true'
-        install-valgrind: 'true'
+      - uses: ./.github/actions/setup-effekt
 
-    - uses: ./.github/actions/run-effekt-tests
-      with:
-        full-test: 'true'
-        use-retry: 'false'
+      - uses: ./.github/actions/run-effekt-tests
+        with:
+          full-test: 'false'
