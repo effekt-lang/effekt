@@ -47,7 +47,10 @@ jobs:
       - uses: ./.github/actions/restore-build-cache
 
       - name: Run internal tests
-        run: sbt effektJVM/testRemaining
+        run: |
+          sbt kiamaJVM/test
+          sbt effektJVM/testRemaining
+          sbt effektJS/test
 
       - name: Assemble fully optimized JS file
         run: sbt effektJS/fullOptJS

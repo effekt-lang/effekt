@@ -17,7 +17,7 @@ lazy val bumpMinorVersion = taskKey[Unit]("Bumps the minor version number (used 
 lazy val testBackendJS = taskKey[Unit]("Run JavaScript backend tests")
 lazy val testBackendChez = taskKey[Unit]("Run Chez Scheme backend tests")
 lazy val testBackendLLVM = taskKey[Unit]("Run LLVM backend tests")
-lazy val testRemaining = taskKey[Unit]("Run all non-backend tests (internal tests)")
+lazy val testRemaining = taskKey[Unit]("Run all non-backend tests (internal tests) on effektJVM")
 
 lazy val noPublishSettings = Seq(
   publish := {},
@@ -232,9 +232,10 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     testRemaining := Def.taskDyn {
       val log = streams.value.log
+
       val allTests = (Test / definedTestNames).value.toSet
 
-      // Only backend tests are explicit
+      // Explicit list of backend tests (union of all testBackend targets)
       val backendTests = Set(
         "effekt.JavaScriptTests",
         "effekt.StdlibJavaScriptTests",
