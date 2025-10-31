@@ -1,0 +1,6 @@
+module must_box_resume
+
+effect exc(): Nothing
+def foo() = try {
+  <>
+} with e: exc { resume }

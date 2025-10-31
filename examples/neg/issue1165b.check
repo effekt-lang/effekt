@@ -1,3 +1,0 @@
-[error] examples/neg/issue1165b.effekt:5:3: Computation e is used in an expression position, which requires boxing (e.g. `box e`)
-  e
-  ^

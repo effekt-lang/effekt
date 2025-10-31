@@ -1,0 +1,5 @@
+module must_box_region
+
+def foo() = region r {
+  r
+}
