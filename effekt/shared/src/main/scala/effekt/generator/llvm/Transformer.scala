@@ -2,6 +2,7 @@ package effekt
 package generator
 package llvm
 
+import effekt.generator.llvm.{Type => LLVMType}
 import effekt.generator.llvm.Instruction.Call
 import effekt.machine
 import effekt.machine.Variable
@@ -595,31 +596,16 @@ object Transformer {
     })
   }
 
+  /**
+   * Produces an Object. It is always 64 bytes long
+   */
   def produceObject(role: String, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Operand = {
     if (environment.isEmpty) {
       ConstantNull(objectType)
-    } else if (environmentSize(environment) > 48) { // if the object does not fit in a single LLVM-Block
-      val objectReference = LocalReference(objectType, freshName(role));
-      val environmentReference = LocalReference(environmentType, freshName("environment"));
-      val size = ConstantInt(environmentSize(environment));
-      val eraser = getEraser(environment, ObjectEraser)
-
-      emit(Call(objectReference.name, Ccc(), objectType, newObject, List(eraser, size)));
-      emit(Call(environmentReference.name, Ccc(), environmentType, objectEnvironment, List(objectReference)));
-      shareValues(environment, freeInBody);
-      storeEnvironment(environmentReference, environment, Object);
-      objectReference
+    } else if (fitsInOneSavingSlot(environment)) {
+      produceSingleObject(role, environment, freeInBody)
     } else {
-      val objectReference = LocalReference(objectType, freshName(role));
-      val environmentReference = LocalReference(environmentType, freshName("environment"));
-      val size = ConstantInt(environmentSize(environment));
-      val eraser = getEraser(environment, ObjectEraser)
-
-      emit(Call(objectReference.name, Ccc(), objectType, newObject, List(eraser, size)));
-      emit(Call(environmentReference.name, Ccc(), environmentType, objectEnvironment, List(objectReference)));
-      shareValues(environment, freeInBody);
-      storeEnvironment(environmentReference, environment, Object);
-      objectReference
+      produceShardedObject(role, environment, freeInBody)
     }
   }
 
@@ -689,12 +675,58 @@ object Transformer {
   }
 
   def loadEnvironmentAt(pointer: Operand, environment: machine.Environment, alias: AliasInfo)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    val `type` = environmentType(environment)
-    environment.zipWithIndex.foreach {
-      case (machine.Variable(name, tpe), i) =>
-        val field = LocalReference(PointerType(), freshName(name + "_pointer"));
-        emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
-        emit(Load(name, transform(tpe), field, alias))
+    alias match {
+      // if we have a sharded object
+      case Object if !fitsInOneSavingSlot(environment) =>
+        // Follow chained 64-byte blocks created in produceObject
+        val chunkedEnvironments = splitEnvironment(environment)
+        var currentPtr: Operand = pointer
+
+        chunkedEnvironments.zipWithIndex.foreach { case (chunk, idx) =>
+          val isLast = idx == chunkedEnvironments.length - 1
+          if (isLast) {
+            val tpe = environmentType(chunk)
+            chunk.zipWithIndex.foreach {
+              case (machine.Variable(name, tpe0), i) =>
+                val field = LocalReference(PointerType(), freshName(name + "_pointer"))
+                emit(GetElementPtr(field.name, tpe, currentPtr, List(0, i)))
+                emit(Load(name, transform(tpe0), field, alias))
+            }
+          } else {
+            // For non-last chunkedEnvironments, layout is chunk ++ [Pos link]
+            val tpe = StructureType(chunk.map { case machine.Variable(_, t) => transform(t) } :+ positiveType)
+
+            // Load actual chunk fields
+            chunk.zipWithIndex.foreach {
+              case (machine.Variable(name, tpe0), i) =>
+                val field = LocalReference(PointerType(), freshName(name + "_pointer"))
+                emit(GetElementPtr(field.name, tpe, currentPtr, List(0, i)))
+                emit(Load(name, transform(tpe0), field, alias))
+            }
+
+            // Follow link to next block
+            val linkPtr = LocalReference(PointerType(), freshName("link_pointer"))
+            emit(GetElementPtr(linkPtr.name, tpe, currentPtr, List(0, chunk.length)))
+
+            val linkVal = LocalReference(positiveType, freshName("link"))
+            emit(Load(linkVal.name, positiveType, linkPtr, alias))
+
+            val nextObj = LocalReference(objectType, freshName("next_object"))
+            emit(ExtractValue(nextObj.name, linkVal, 1))
+
+            val nextEnv = LocalReference(environmentType, freshName("environment"))
+            emit(Call(nextEnv.name, Ccc(), environmentType, objectEnvironment, List(nextObj)))
+            currentPtr = nextEnv
+          }
+        }
+      case _: effekt.generator.llvm.AliasInfo =>
+        val `type` = environmentType(environment)
+        environment.zipWithIndex.foreach {
+          case (machine.Variable(name, tpe), i) =>
+            val field = LocalReference(PointerType(), freshName(name + "_pointer"));
+            emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
+            emit(Load(name, transform(tpe), field, alias))
+        }
     }
   }
 
@@ -843,4 +875,98 @@ object Transformer {
         case None => acc += c
       }
     }.toString()
+
+  /**
+   * if we can fit our object in one single saving block -> Easiest case
+   * Else we have to split our environment into multiple saving slots and reference in a linked list fashion
+   */
+  private def fitsInOneSavingSlot(environment: machine.Environment): Boolean = {
+    environmentSize(environment) > 0 && environmentSize(environment) <= 48
+  }
+
+  /**
+   * Splits the environment into multiple environment such that you can store one object in multiple saving slots.
+   * Is required to do fixed-sized-allocation.
+   */
+  private def splitEnvironment(environment: machine.Environment): List[machine.Environment] = {
+    val slotSize = 64 // we want to use 64 bytes for each saving slot
+    var headerSize = 16 // we use 16 byte for the last saving block only, the others are 32 bytes
+    var currentEnvironment = List[machine.Variable]()
+    var result = List[machine.Environment]()
+    var isLast = true
+    for (variable <- environment.reverse) {
+      val variableSize = typeSize(variable.tpe)
+
+      if (headerSize + (environmentSize(currentEnvironment) + variableSize) <= slotSize) {
+        currentEnvironment = currentEnvironment :+ variable
+      }
+      else {
+        result = result :+ currentEnvironment.reverse
+        currentEnvironment = List(variable)
+        isLast = false
+        headerSize = 32 // normal header size + size of the positive type which is the reference to the next object
+      }
+    }
+    result = result :+ currentEnvironment.reverse
+
+    result.reverse
+  }
+
+  /**
+   * When you have a big object to produce, you shard it into multiple slots instead of one single big slot.
+   * The end of each slot references to the next one.
+   * Each slot is 64 byte long
+   */
+  private def produceShardedObject(role: String, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Operand = {
+    // Split into multiple 64-byte blocks and chain them via a boxed link (%Pos with tag 0 pointing to next %Object)
+    val shardedEnvironments = splitEnvironment(environment)
+
+    // Allocate the last block first.
+    val lastEnvironment = shardedEnvironments.last
+    val lastObjectReference = LocalReference(objectType, freshName(role))
+    val lastEnvPtr = LocalReference(environmentType, freshName("environment"))
+    val lastSize = ConstantInt(environmentSize(lastEnvironment))
+    val lastEraser = getEraser(lastEnvironment, ObjectEraser)
+
+    emit(Call(lastObjectReference.name, Ccc(), objectType, newObject, List(lastEraser, lastSize)))
+    emit(Call(lastEnvPtr.name, Ccc(), environmentType, objectEnvironment, List(lastObjectReference)))
+    shareValues(lastEnvironment, freeInBody)
+    storeEnvironment(lastEnvPtr, lastEnvironment, Object)
+
+    // Chain preceding blocks, each storing a boxed link to the next object
+    var headObject: LocalReference = lastObjectReference
+
+    // loop through all shardedEnvironments except the last one in reversed order
+    shardedEnvironments.init.reverse.foreach { envChunk =>
+      val temporaryName = freshName("link_temporary")
+      val linkValName = freshName("link")
+
+      // we create a new Positive Object with tag 0... 
+      emit(InsertValue(temporaryName, ConstantAggregateZero(positiveType), ConstantInt(0), 0)) // we create a fake Link Tag 0 that we just use for store a tag in the Pos
+      emit(InsertValue(linkValName, LocalReference(positiveType, temporaryName), headObject, 1))
+      
+      // ... and inject it into our environment...
+      val extendedEnv = envChunk :+ machine.Variable(linkValName, machine.Positive())
+
+      // ...finally, we do the usual behavior when we produce an object
+      headObject = produceSingleObject(role, extendedEnv, freeInBody).asInstanceOf[LocalReference]
+    }
+    headObject
+  }
+
+  /**
+   * Creates a new object and stores its environment in it 
+   */
+  private def produceSingleObject(role: String, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Operand = {
+    val objectReference = LocalReference(objectType, freshName(role))
+    val environmentReference = LocalReference(environmentType, freshName("environment"))
+    val size = ConstantInt(environmentSize(environment));
+    val eraser = getEraser(environment, ObjectEraser)
+
+    emit(Call(objectReference.name, Ccc(), objectType, newObject, List(eraser, size)));
+    emit(Call(environmentReference.name, Ccc(), environmentType, objectEnvironment, List(objectReference)));
+    shareValues(environment, freeInBody);
+    storeEnvironment(environmentReference, environment, Object);
+    objectReference
+  }
 }
