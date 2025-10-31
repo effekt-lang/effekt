@@ -19,7 +19,7 @@ static const bool DEBUG = false;
 static Block* freeList = NULL; // Head of the Freelist
 static uint8_t* nextUnusedBlock = NULL; // Pointer to the next unused Block
 static uint8_t* endOfChunk = NULL; // End of the allocated Storage
-static const int blockSize = 128; // The size of each block (128B)
+static const int blockSize = 64; // The size of each block (128B)
 
 // How much storage do we allocate at the beginning of a program? =4GB
 static const size_t chunkSize = (size_t)4294967296ULL;
