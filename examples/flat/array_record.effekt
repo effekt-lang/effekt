@@ -1,0 +1,10 @@
+record Person(
+  field1: Int,
+  field2: Array[Int]
+  )
+
+def main() = {
+  val myArray: Array[Int] = build(3) { i => i + 1 } // Array(1, 2, 3)
+  val p = Person(1, myArray)
+  println(myArray)
+}
