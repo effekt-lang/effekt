@@ -2,10 +2,10 @@ package effekt
 package generator
 package llvm
 
-import effekt.generator.llvm.{Type => LLVMType}
+import effekt.generator.llvm.Type as LLVMType
 import effekt.generator.llvm.Instruction.Call
 import effekt.machine
-import effekt.machine.Variable
+import effekt.machine.{Environment, Variable}
 import effekt.machine.analysis.*
 import effekt.util.intercalate
 import effekt.util.messages.ErrorReporter
@@ -659,39 +659,30 @@ object Transformer {
     }
   }
 
-  def loadEnvironmentAt(pointer: Operand, environment: machine.Environment, alias: AliasInfo)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+  def loadEnvironmentAt(elementPointer: Operand, environment: machine.Environment, alias: AliasInfo)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     alias match {
       // if we have a sharded object
       case Object if !fitsInOneSavingSlot(environment) =>
         // Follow chained 64-byte blocks created in produceObject
         val chunkedEnvironments = splitEnvironment(environment)
-        var currentPtr: Operand = pointer
+        var currentEnvironmentPtr: Operand = elementPointer
 
+        // here we loop over all environments *in* order 
         chunkedEnvironments.zipWithIndex.foreach { case (chunk, idx) =>
           val isLast = idx == chunkedEnvironments.length - 1
           if (isLast) {
             val tpe = environmentType(chunk)
-            chunk.zipWithIndex.foreach {
-              case (machine.Variable(name, tpe0), i) =>
-                val field = LocalReference(PointerType(), freshName(name + "_pointer"))
-                emit(GetElementPtr(field.name, tpe, currentPtr, List(0, i)))
-                emit(Load(name, transform(tpe0), field, alias))
-            }
+            loadAllVariables(currentEnvironmentPtr, chunk, alias, tpe)
           } else {
+            // Here we do the same as for the normal slot plus some extra stuff 
+            
             // For non-last chunkedEnvironments, layout is chunk ++ [Pos link]
-            val tpe = StructureType(chunk.map { case machine.Variable(_, t) => transform(t) } :+ positiveType)
-
-            // Load actual chunk fields
-            chunk.zipWithIndex.foreach {
-              case (machine.Variable(name, tpe0), i) =>
-                val field = LocalReference(PointerType(), freshName(name + "_pointer"))
-                emit(GetElementPtr(field.name, tpe, currentPtr, List(0, i)))
-                emit(Load(name, transform(tpe0), field, alias))
-            }
-
-            // Follow link to next block
+            val tpe = StructureType(chunk.map { case machine.Variable(_, t) => transform(t) } :+ positiveType)  // the same as for the normal case + positive Type for the link
+            loadAllVariables(currentEnvironmentPtr, chunk, alias, tpe)
+            
+            // Follow link to next block. The Link pointer is the last element of the chunk
             val linkPtr = LocalReference(PointerType(), freshName("link_pointer"))
-            emit(GetElementPtr(linkPtr.name, tpe, currentPtr, List(0, chunk.length)))
+            emit(GetElementPtr(linkPtr.name, tpe, currentEnvironmentPtr, List(0, chunk.length)))
 
             val linkVal = LocalReference(positiveType, freshName("link"))
             emit(Load(linkVal.name, positiveType, linkPtr, alias))
@@ -701,17 +692,12 @@ object Transformer {
 
             val nextEnv = LocalReference(environmentType, freshName("environment"))
             emit(Call(nextEnv.name, Ccc(), environmentType, objectEnvironment, List(nextObj)))
-            currentPtr = nextEnv
+            currentEnvironmentPtr = nextEnv
           }
         }
-      case _: effekt.generator.llvm.AliasInfo =>
-        val `type` = environmentType(environment)
-        environment.zipWithIndex.foreach {
-          case (machine.Variable(name, tpe), i) =>
-            val field = LocalReference(PointerType(), freshName(name + "_pointer"));
-            emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
-            emit(Load(name, transform(tpe), field, alias))
-        }
+      case _: AliasInfo =>
+        val tpe = environmentType(environment)
+        loadAllVariables(elementPointer, environment, alias, tpe)
     }
   }
 
@@ -941,5 +927,14 @@ object Transformer {
     shareValues(environment, freeInBody);
     storeEnvironment(environmentReference, environment, Object);
     objectReference
+  }
+
+  private def loadAllVariables(pointer: Operand, environment: machine.Environment, alias: AliasInfo, typ: Type)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+    environment.zipWithIndex.foreach {
+      case (machine.Variable(name, tpe), i) =>
+        val field = LocalReference(PointerType(), freshName(name + "_pointer"))
+        emit(GetElementPtr(field.name, typ, pointer, List(0, i)))
+        emit(Load(name, transform(tpe), field, alias))
+    }
   }
 }
