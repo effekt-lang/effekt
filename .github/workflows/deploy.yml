@@ -52,13 +52,13 @@ jobs:
       run: mv $(npm pack) effekt.tgz
 
     - name: Upload Effekt binary
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: effekt
         path: bin/effekt
 
     - name: Upload the npm package
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: effekt-npm-package
         path: effekt.tgz
