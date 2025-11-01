@@ -12,13 +12,13 @@ def emitTree(n: Int): Unit / emit[Byte] =
   if (n <= 0) {
     ()
   } else {
-    do emit(40.toByte)
+    do emit(0x28)
     repeat(n) {
-      do emit(40.toByte)
-      do emit(41.toByte)
+      do emit(0x28)
+      do emit(0x29)
     }
     emitTree(n - 1)
-    do emit(41.toByte)
+    do emit(0x29)
   }
 
 type Tree {
