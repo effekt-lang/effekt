@@ -1,0 +1,26 @@
+module unbox_boxed_obj
+
+interface Counter {
+  def inc(): Unit
+  def get(): Int
+}
+
+def makeCounter(): Counter at global = {
+  val data = ref(0)
+  box new Counter {
+    def inc() = { data.map { x => x + 1} }
+    def get() = data.get
+  }
+}
+
+def useCounter(boxed: Counter at global) = {
+  def ctr = unbox boxed
+  println(ctr.get())
+  ctr.inc(); ctr.inc();
+  println(ctr.get())
+}
+
+def main() = {
+  def ctr = unbox makeCounter()
+  useCounter(box ctr)
+}

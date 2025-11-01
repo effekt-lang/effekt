@@ -132,6 +132,7 @@ enum TokenKind {
   case `extern`
   case `record`
   case `box`
+  case `unbox`
   case `return`
   case `region`
   case `resource`
@@ -176,7 +177,7 @@ object TokenKind {
   val keywords = Vector(
     `let`, `true`, `false`, `val`, `var`, `if`, `else`, `while`, `type`, `effect`, `interface`,
     `try`, `with`, `case`, `do`, `match`, `def`, `module`, `import`, `export`, `extern`,
-    `include`, `record`, `box`, `return`, `region`, `resource`, `new`, `and`, `is`,
+    `include`, `record`, `box`, `unbox`, `return`, `region`, `resource`, `new`, `and`, `is`,
     `namespace`, `private`
   )
 
