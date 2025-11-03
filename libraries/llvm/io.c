@@ -831,7 +831,6 @@ void c_write_stream_callback(uv_write_t* req, int status) {
     }
     subproc_write_req_data_t* data = (subproc_write_req_data_t*)(req->data);
     erasePositive(data->buffer);
-    free(data->buf);
     free(data);
 }
 void c_write_stream(struct Pos stream, struct Pos buffer) {
