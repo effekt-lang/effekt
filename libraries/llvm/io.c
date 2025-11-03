@@ -823,7 +823,7 @@ void c_close_stream(struct Pos stream) {
 
 typedef struct {
     struct Pos buffer;
-    uv_buf_t* buf;
+    uv_buf_t buf;
 } subproc_write_req_data_t;
 void c_write_stream_callback(uv_write_t* req, int status) {
     if(status != 0){
@@ -839,10 +839,10 @@ void c_write_stream(struct Pos stream, struct Pos buffer) {
     memset(req, 0, sizeof(uv_write_t));
     subproc_write_req_data_t* data = (subproc_write_req_data_t*)malloc(sizeof(subproc_write_req_data_t));
     data->buffer = buffer;
-    uv_buf_t* buf = (uv_buf_t*)malloc(sizeof(uv_buf_t));
-    *buf = uv_buf_init((char*)(c_bytearray_data(buffer)), buffer.tag);
+    uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer)), buffer.tag);
     req->data = data;
-    uv_write(req, str, buf, 1, c_write_stream_callback);
+    data->buf = buf;
+    uv_write(req, str, &(data->buf), 1, c_write_stream_callback);
 }
 
 void c_spawn(struct Pos cmd, struct Pos args, struct Pos options, Stack stack) {
