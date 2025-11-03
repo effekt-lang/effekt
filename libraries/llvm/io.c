@@ -819,7 +819,13 @@ void subproc_on_exit(uv_process_t* proc, int64_t exit_status, int term_signal) {
         req->data = (opts->stdio[1].data.stream);
         uv_shutdown(req, (uv_stream_t*)req->data, c_close_stream_callback_exit);
     }
+    if(opts->stdio[2].flags & UV_CREATE_PIPE){
+        uv_shutdown_t* req = (uv_shutdown_t*)malloc(sizeof(uv_shutdown_t));
+        req->data = (opts->stdio[2].data.stream);
+        uv_shutdown(req, (uv_stream_t*)req->data, c_close_stream_callback_exit);
+    }
     // TODO shutdown pipes for stdio
+    free(opts->stdio);
     free(opts);
     free(pd);
     resume_Int(k, exit_status);
