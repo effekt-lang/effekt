@@ -753,12 +753,12 @@ void subproc_stream_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) 
   if(nread >= 0) {
     struct Pos chunk = c_bytearray_construct(nread, (uint8_t*)(buf->base));
     sharePositive(clos->handler);
-    sharePositive(chunk);
     run_Pos(clos->handler, chunk);
   } else {
     uv_read_stop(stream);
     erasePositive(clos->handler);
     free(clos);
+    if (buf) free(buf);
   }
 }
 struct Pos subproc_options_on_stream(struct Pos opts, size_t id, uv_stdio_flags flags, struct Pos callback) {
