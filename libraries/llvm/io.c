@@ -752,7 +752,6 @@ void subproc_stream_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) 
   subproc_stream_cb_closure_t* clos = (subproc_stream_cb_closure_t*)(stream->data);
   if(nread >= 0) {
     struct Pos chunk = c_bytearray_construct(nread, (uint8_t*)(buf->base));
-    sharePositive(clos->handler);
     run_Pos(clos->handler, chunk);
   } else {
     uv_read_stop(stream);
