@@ -758,7 +758,7 @@ void subproc_stream_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) 
     uv_read_stop(stream);
     erasePositive(clos->handler);
     free(clos);
-    if (buf) free(buf);
+    if (buf->base) free(buf->base);
   }
 }
 struct Pos subproc_options_on_stream(struct Pos opts, size_t id, uv_stdio_flags flags, struct Pos callback) {
