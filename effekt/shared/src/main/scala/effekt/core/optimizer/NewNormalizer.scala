@@ -972,9 +972,10 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           val blockargs = bargs.map(evaluate(_, "f", ks))
           // TODO isPureApp(Closure(label, environment), stmt.capt, blockargs) is more precise
           // if stmt doesn't capture anything, it can not make any changes to the stack (ks) and we don't have to pretend it is unknown as an over-approximation
-          if (stmt.capt.isEmpty) {
+          // TODO examples/pos/lambdas/localstate.effekt fails if we only check stmt.capt
+          if (stmt.capt.isEmpty && environment.isEmpty) {
             reifyKnown(k, ks) {
-              NeutralStmt.Jump(label, targs, args, blockargs)
+              NeutralStmt.Jump(label, targs, args, blockargs ++ environment)
             }
           } else {
             reify(k, ks) {
