@@ -298,7 +298,10 @@ object semantics {
 
     case Continuation(k: Cont)
 
+    // TODO ? distinguish?
     //case Region(prompt: Id) ???
+    //case Prompt(prompt: Id) ???
+    //case Reference(prompt: Id) ???
 
     // Known object
     case New(interface: BlockType.Interface, operations: List[(Id, Closure)])
@@ -582,6 +585,20 @@ object semantics {
         val tmp = Id("tmp")
         scope.push(tmp, stmt)
         NeutralStmt.Jump(label, Nil, List(tmp), closure)
+    }
+
+  def reifyKnown(k: Frame, ks: Stack)(stmt: Scope ?=> NeutralStmt)(using scope: Scope): NeutralStmt =
+    k match {
+      case Frame.Return => reify(ks) { stmt }
+      case Frame.Static(tpe, apply) =>
+        val tmp = Id("tmp")
+        scope.push(tmp, stmt)
+        apply(scope)(tmp)(ks)
+      case Frame.Dynamic(Closure(label, closure)) => reify(ks) { scope ?=>
+        val tmp = Id("tmp")
+        scope.push(tmp, stmt)
+        NeutralStmt.Jump(label, Nil, List(tmp), closure)
+      }
     }
 
   @tailrec
@@ -965,7 +982,17 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           is incorrect as the result is always the empty capture set since Stack.Unkown.bound = Set()
            */
           val blockargs = bargs.map(evaluate(_, "f", ks))
-          reify(k, ks) { NeutralStmt.Jump(label, targs, args, blockargs ++ environment) }
+          // TODO isPureApp(Closure(label, environment), stmt.capt, blockargs) is more precise
+          // if stmt doesn't capture anything, it can not make any changes to the stack (ks) and we don't have to pretend it is unknown as an over-approximation
+          if (stmt.capt.isEmpty) {
+            reifyKnown(k, ks) {
+              NeutralStmt.Jump(label, targs, args, blockargs)
+            }
+          } else {
+            reify(k, ks) {
+              NeutralStmt.Jump(label, targs, args, blockargs ++ environment)
+            }
+          }
         case _: (Computation.New | Computation.Continuation) => sys error "Should not happen"
       }
 
