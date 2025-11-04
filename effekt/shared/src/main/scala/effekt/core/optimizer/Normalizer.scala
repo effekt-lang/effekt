@@ -35,6 +35,12 @@ object Normalizer { normal =>
     // In the future, Stmt.Shift should also be performed statically.
     case Stmt.Val(_, _, binding: (Stmt.Reset | Stmt.Var | Stmt.App | Stmt.Invoke | Stmt.Region | Stmt.Shift | Stmt.Resume), body) =>
       assertNormal(binding); assertNormal(body)
+    /*
+    val x = if (...) { return 1 } else { return 2 }; s
+    is always normalized to
+    def joinpoint(x: Int) = s
+    if (...) { joinpoint(1) } else { joinpoint(2) }
+     */
     case t @ Stmt.Val(_, _, binding, body) =>
       E.warning(s"Not allowed as binding of Val: ${util.show(t)}")
     case t @ Stmt.App(b: BlockLit, targs, vargs, bargs) =>
