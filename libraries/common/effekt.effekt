@@ -164,6 +164,10 @@ extern def unsafeSubstring(str: String, from: Int, to: Int) at {}: String =
 extern def random() at io: Double =
   js "Math.random()"
   chez "(random 1.0)"
+  llvm """
+    %r = call double @c_io_random()
+    ret double %r
+  """
   vm "effekt::random()"
 
 // References and state

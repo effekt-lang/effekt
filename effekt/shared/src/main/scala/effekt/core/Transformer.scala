@@ -508,7 +508,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case c @ source.Call(s: source.ExprTarget, targs, vargs, bargs, _) =>
       Context.panic("Should not happen. Unbox should have been inferred.")
 
-    case source.Do(effect, id, targs, vargs, bargs, _) =>
+    case source.Do(id, targs, vargs, bargs, _) =>
       Context.panic("Should have been translated away (to explicit selection `@CAP.op()`) by capability passing.")
   }
 

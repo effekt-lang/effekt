@@ -1,0 +1,6 @@
+module must_box_capability
+
+effect exc(): Nothing
+def foo() = try {
+  e
+} with e: exc { <> }

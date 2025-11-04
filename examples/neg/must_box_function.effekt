@@ -1,0 +1,6 @@
+module must_box_function
+
+def toString(): String = ""
+def main() = {
+  println(toString)
+}
