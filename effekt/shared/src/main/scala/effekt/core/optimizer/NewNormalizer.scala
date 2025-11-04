@@ -1144,7 +1144,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       })
       // async extern functions
       .bindComputation(asyncExterns.map(defn => defn.id -> Computation.Var(defn.id)))
-    
+
     val typingContext = TypingContext(
       mod.definitions.collect {
         case Toplevel.Val(id, tpe, _) => id -> tpe
