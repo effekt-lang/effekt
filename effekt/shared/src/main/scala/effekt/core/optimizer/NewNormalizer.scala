@@ -345,7 +345,7 @@ object semantics {
     case Put(ref: Id, tpe: ValueType, cap: Captures, value: Addr, body: BasicBlock)
 
     case Region(id: BlockParam, body: BasicBlock)
-    case Alloc(id: Id, init: Addr, region: Id, body: BasicBlock)
+    case Alloc(id: BlockParam, init: Addr, region: Id, body: BasicBlock)
 
     // aborts at runtime
     case Hole(span: Span)
@@ -363,7 +363,7 @@ object semantics {
       case NeutralStmt.Var(id, init, body) => Set(init) ++ body.free - id.id
       case NeutralStmt.Put(ref, tpe, cap, value, body) => Set(ref, value) ++ body.free
       case NeutralStmt.Region(id, body) => body.free - id.id
-      case NeutralStmt.Alloc(id, init, region, body) => Set(init, region) ++ body.free - id
+      case NeutralStmt.Alloc(id, init, region, body) => Set(init, region) ++ body.free - id.id
       case NeutralStmt.Hole(span) => Set.empty
     }
   }
@@ -422,14 +422,14 @@ object semantics {
     case Reset(prompt: BlockParam, frame: Frame, next: Stack)
     case Var(id: BlockParam, curr: Addr, frame: Frame, next: Stack)
     // TODO desugar regions into var?
-    case Region(id: BlockParam, bindings: Map[Id, Addr], frame: Frame, next: Stack)
+    case Region(id: BlockParam, bindings: Map[BlockParam, Addr], frame: Frame, next: Stack)
 
     lazy val bound: List[BlockParam] = this match {
       case Stack.Empty => Nil
       case Stack.Unknown => Nil
       case Stack.Reset(prompt, frame, next) => prompt :: next.bound
       case Stack.Var(id, curr, frame, next) => id :: next.bound
-      case Stack.Region(id, bindings, frame, next) => id :: next.bound
+      case Stack.Region(id, bindings, frame, next) => id :: next.bound ++ bindings.keys
     }
   }
 
@@ -441,8 +441,9 @@ object semantics {
     case Stack.Var(id1, curr, frame, next) if ref == id1.id => Some(curr)
     case Stack.Var(id1, curr, frame, next) => get(ref, next)
     case Stack.Region(id, bindings, frame, next) =>
-      if (bindings.contains(ref)) {
-        Some(bindings(ref))
+      val containsRef = bindings.keys.map { b => b._1.id }.toSet.contains(ref)
+      if (containsRef) {
+        Some(bindings(id))
       } else {
         get(ref, next)
       }
@@ -456,14 +457,15 @@ object semantics {
     case Stack.Var(id, curr, frame, next) if ref == id.id => Some(Stack.Var(id, value, frame, next))
     case Stack.Var(id, curr, frame, next) => put(ref, value, next).map(Stack.Var(id, curr, frame, _))
     case Stack.Region(id, bindings, frame, next) =>
-      if (bindings.contains(ref)){
-        Some(Stack.Region(id, bindings.updated(ref, value), frame, next))
+      val containsRef = bindings.keys.map { b => b._1.id }.toSet.contains(ref)
+      if (containsRef){
+        Some(Stack.Region(id, bindings.updated(id, value), frame, next))
       } else {
         put(ref, value, next).map(Stack.Region(id, bindings, frame, _))
       }
   }
 
-  def alloc(ref: Id, reg: Id, value: Addr, ks: Stack): Option[Stack] = ks match {
+  def alloc(ref: BlockParam, reg: Id, value: Addr, ks: Stack): Option[Stack] = ks match {
     // This case can occur if we normalize a function that abstracts over a region as a parameter
     // We return None and force the reification of the allocation
     case Stack.Empty => None
@@ -484,8 +486,13 @@ object semantics {
   enum Cont {
     case Empty
     case Reset(frame: Frame, prompt: BlockParam, rest: Cont)
+<<<<<<< HEAD
     case Var(frame: Frame, id: BlockParam, curr: Addr, rest: Cont)
     case Region(frame: Frame, id: BlockParam, bindings: Map[Id, Addr], rest: Cont)
+=======
+    case Var(frame: Frame, id: BlockParam, curr: Addr, init: Addr, rest: Cont)
+    case Region(frame: Frame, id: BlockParam, bindings: Map[BlockParam, Addr], rest: Cont)
+>>>>>>> 9039d884 (fix region reification)
   }
 
   def shift(p: Id, k: Frame, ks: Stack): (Cont, Frame, Stack) = ks match {
@@ -599,7 +606,14 @@ object semantics {
       case Stack.Region(id, bindings, frame, next) =>
         reify(next) { reify(frame) {
           val body = nested { stmt }
-          if (body.free contains id.id) NeutralStmt.Region(id, body)
+          val bodyUsesBinding = body.free.exists(bindings.map { b => b._1.id }.toSet.contains(_))
+          if (body.free.contains(id.id) || bodyUsesBinding) {
+            // we need to reify all bindings in this region as allocs using their current value
+            val reifiedAllocs = bindings.foldLeft(body) { case (acc, (bp, addr)) =>
+              nested { NeutralStmt.Alloc(bp, addr, id.id, acc) }
+            }
+            NeutralStmt.Region(id, reifiedAllocs)
+          }
           else stmt
         }}
     }
@@ -759,7 +773,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
         val closureParams = escaping.bound.filter { p => normalizedBlock.free contains p.id }
 
         // Only normalize again if we actually we wrong in our assumption that we capture nothing
-        // We might run into exponential complexity for nested recursives functions
+        // We might run into exponential complexity for nested recursive functions
         if (closureParams.isEmpty) {
           scope.defineRecursive(freshened, normalizedBlock.copy(bparams = normalizedBlock.bparams), block.tpe, block.capt)
           Computation.Def(Closure(freshened, Nil))
@@ -1031,12 +1045,12 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     case Stmt.Region(_) => ???
     case Stmt.Alloc(id, init, region, body) =>
       val addr = evaluate(init, ks)
-      alloc(id, region, addr, ks) match {
+      val bp = BlockParam(id, Type.TState(init.tpe), Set(region))
+      alloc(bp, region, addr, ks) match {
         case Some(ks1) => evaluate(body, k, ks1)
-        case None => NeutralStmt.Alloc(id, addr, region, nested { evaluate(body, k, ks) })
+        case None => NeutralStmt.Alloc(bp, addr, region, nested { evaluate(body, k, ks) })
       }
 
-    // TODO
     case Stmt.Var(ref, init, capture, body) =>
       val addr = evaluate(init, ks)
       evaluate(body, Frame.Return, Stack.Var(BlockParam(ref, Type.TState(init.tpe), Set(capture)), addr, k, ks))
@@ -1215,8 +1229,8 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       Stmt.Put(ref, annotatedCapt, embedExpr(value), embedStmt(body))
     case NeutralStmt.Region(id, body) =>
       Stmt.Region(BlockLit(Nil, List(id.id), Nil, List(id), embedStmt(body)(using G.bindComputation(id))))
-    case NeutralStmt.Alloc(id, init, region, body) =>
-      Stmt.Alloc(id, embedExpr(init), region, embedStmt(body))
+    case NeutralStmt.Alloc(blockparam, init, region, body) =>
+      Stmt.Alloc(blockparam.id, embedExpr(init), region, embedStmt(body)(using G.bind(blockparam.id, blockparam.tpe, blockparam.capt)))
     case NeutralStmt.Hole(span) =>
       Stmt.Hole(span)
   }
