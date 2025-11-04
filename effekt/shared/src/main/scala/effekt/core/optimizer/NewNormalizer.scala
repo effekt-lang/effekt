@@ -382,7 +382,7 @@ object semantics {
         case Stack.Empty => NeutralStmt.Return(arg)
         case Stack.Unknown => NeutralStmt.Return(arg)
         case Stack.Reset(p, k, ks) => k.ret(ks, arg)
-        case Stack.Var(id, curr, init, k, ks) => k.ret(ks, arg)
+        case Stack.Var(id, curr, k, ks) => k.ret(ks, arg)
         case Stack.Region(id, bindings, k, ks) => k.ret(ks, arg)
       }
       case Frame.Static(tpe, apply) => apply(scope)(arg)(ks)
@@ -420,7 +420,7 @@ object semantics {
      */
     case Unknown
     case Reset(prompt: BlockParam, frame: Frame, next: Stack)
-    case Var(id: BlockParam, curr: Addr, init: Addr, frame: Frame, next: Stack)
+    case Var(id: BlockParam, curr: Addr, frame: Frame, next: Stack)
     // TODO desugar regions into var?
     case Region(id: BlockParam, bindings: Map[Id, Addr], frame: Frame, next: Stack)
 
@@ -428,7 +428,7 @@ object semantics {
       case Stack.Empty => Nil
       case Stack.Unknown => Nil
       case Stack.Reset(prompt, frame, next) => prompt :: next.bound
-      case Stack.Var(id, curr, init, frame, next) => id :: next.bound
+      case Stack.Var(id, curr, frame, next) => id :: next.bound
       case Stack.Region(id, bindings, frame, next) => id :: next.bound
     }
   }
@@ -438,8 +438,8 @@ object semantics {
     // We have reached the end of the known stack, so the variable must be in the unknown part.
     case Stack.Unknown => None
     case Stack.Reset(prompt, frame, next) => get(ref, next)
-    case Stack.Var(id1, curr, init, frame, next) if ref == id1.id => Some(curr)
-    case Stack.Var(id1, curr, init, frame, next) => get(ref, next)
+    case Stack.Var(id1, curr, frame, next) if ref == id1.id => Some(curr)
+    case Stack.Var(id1, curr, frame, next) => get(ref, next)
     case Stack.Region(id, bindings, frame, next) =>
       if (bindings.contains(ref)) {
         Some(bindings(ref))
@@ -453,8 +453,8 @@ object semantics {
     // We have reached the end of the known stack, so the variable must be in the unknown part.
     case Stack.Unknown => None
     case Stack.Reset(prompt, frame, next) => put(ref, value, next).map(Stack.Reset(prompt, frame, _))
-    case Stack.Var(id, curr, init, frame, next) if ref == id.id => Some(Stack.Var(id, value, init, frame, next))
-    case Stack.Var(id, curr, init, frame, next) => put(ref, value, next).map(Stack.Var(id, curr, init, frame, _))
+    case Stack.Var(id, curr, frame, next) if ref == id.id => Some(Stack.Var(id, value, frame, next))
+    case Stack.Var(id, curr, frame, next) => put(ref, value, next).map(Stack.Var(id, curr, frame, _))
     case Stack.Region(id, bindings, frame, next) =>
       if (bindings.contains(ref)){
         Some(Stack.Region(id, bindings.updated(ref, value), frame, next))
@@ -471,8 +471,8 @@ object semantics {
     case Stack.Unknown => None
     case Stack.Reset(prompt, frame, next) =>
       alloc(ref, reg, value, next).map(Stack.Reset(prompt, frame, _))
-    case Stack.Var(id, curr, init, frame, next) =>
-      alloc(ref, reg, value, next).map(Stack.Var(id, curr, init, frame, _))
+    case Stack.Var(id, curr, frame, next) =>
+      alloc(ref, reg, value, next).map(Stack.Var(id, curr, frame, _))
     case Stack.Region(id, bindings, frame, next) =>
       if (reg == id.id){
         Some(Stack.Region(id, bindings.updated(ref, value), frame, next))
@@ -484,7 +484,7 @@ object semantics {
   enum Cont {
     case Empty
     case Reset(frame: Frame, prompt: BlockParam, rest: Cont)
-    case Var(frame: Frame, id: BlockParam, curr: Addr, init: Addr, rest: Cont)
+    case Var(frame: Frame, id: BlockParam, curr: Addr, rest: Cont)
     case Region(frame: Frame, id: BlockParam, bindings: Map[Id, Addr], rest: Cont)
   }
 
@@ -496,9 +496,9 @@ object semantics {
     case Stack.Reset(prompt, frame, next) =>
       val (c, frame2, stack) = shift(p, frame, next)
       (Cont.Reset(k, prompt, c), frame2, stack)
-    case Stack.Var(id, curr, init, frame, next) =>
+    case Stack.Var(id, curr, frame, next) =>
       val (c, frame2, stack) = shift(p, frame, next)
-      (Cont.Var(k, id, curr, init, c), frame2, stack)
+      (Cont.Var(k, id, curr, c), frame2, stack)
     case Stack.Region(id, bindings, frame, next) =>
       val (c, frame2, stack) = shift(p, frame, next)
       (Cont.Region(k, id, bindings, c), frame2, stack)
@@ -510,9 +510,9 @@ object semantics {
       val (k1, ks1) = resume(rest, frame, ks)
       val stack = Stack.Reset(prompt, k1, ks1)
       (frame, stack)
-    case Cont.Var(frame, id, curr, init, rest) =>
+    case Cont.Var(frame, id, curr, rest) =>
       val (k1, ks1) = resume(rest, frame, ks)
-      (frame, Stack.Var(id, curr, init, k1, ks1))
+      (frame, Stack.Var(id, curr, k1, ks1))
     case Cont.Region(frame, id, bindings, rest) =>
       val (k1, ks1) = resume(rest, frame, ks)
       (frame, Stack.Region(id, bindings, k1, ks1))
@@ -544,8 +544,8 @@ object semantics {
       case Stack.Unknown => Stack.Unknown
       case Stack.Reset(prompt, frame, next) =>
         Stack.Reset(prompt, reifyFrame(frame, next), reifyStack(next))
-      case Stack.Var(id, curr, init, frame, next) =>
-        Stack.Var(id, curr, init, reifyFrame(frame, next), reifyStack(next))
+      case Stack.Var(id, curr, frame, next) =>
+        Stack.Var(id, curr, reifyFrame(frame, next), reifyStack(next))
       case Stack.Region(id, bindings, frame, next) =>
         Stack.Region(id, bindings, reifyFrame(frame, next), reifyStack(next))
     }
@@ -590,7 +590,7 @@ object semantics {
           if (body.free contains prompt.id) NeutralStmt.Reset(prompt, body)
           else stmt // TODO this runs normalization a second time in the outer scope!
         }}
-      case Stack.Var(id, curr, init, frame, next) =>
+      case Stack.Var(id, curr, frame, next) =>
         reify(next) { reify(frame) {
           val body = nested { stmt }
           if (body.free contains id.id) NeutralStmt.Var(id, curr, body)
@@ -1039,7 +1039,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     // TODO
     case Stmt.Var(ref, init, capture, body) =>
       val addr = evaluate(init, ks)
-      evaluate(body, Frame.Return, Stack.Var(BlockParam(ref, Type.TState(init.tpe), Set(capture)), addr, addr, k, ks))
+      evaluate(body, Frame.Return, Stack.Var(BlockParam(ref, Type.TState(init.tpe), Set(capture)), addr, k, ks))
     case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
       get(ref, ks) match {
         case Some(addr) => bind(id, addr) { evaluate(body, k, ks) }
