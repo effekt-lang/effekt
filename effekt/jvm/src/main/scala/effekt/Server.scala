@@ -375,50 +375,60 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
 
   override def inlayHint(params: InlayHintParams): CompletableFuture[util.List[InlayHint]] = {
+
+    // Inlay Hint Setting Json Object
+    val inlayHintSetting = settingObject("inlayHints")
+
+    val showCaptureHints = inlayHintSetting.flatMap(ref => settingBool(ref, "captures"))
+      .getOrElse(true) // Default to true (as specified in the VSCode extension)
+    val showReturnTypeHints = inlayHintSetting.flatMap(ref => settingBool(ref, "returnTypes"))
+      .getOrElse(true) // Default to true (as specified in the VSCode extension)
+
+
     val hints = for {
       source <- sources.get(params.getTextDocument.getUri)
       hints = {
         val range = fromLSPRange(params.getRange, source)
-        val captures = getInferredCaptures(range)(using context).map {
-          case CaptureInfo(p, c) =>
-            val prettyCaptures = TypePrinter.show(c)
-            val codeEdit = s"at ${prettyCaptures}"
-            val inlayHint = new InlayHint(convertPosition(p), messages.Either.forLeft(codeEdit))
-            inlayHint.setKind(InlayHintKind.Type)
-            val markup = new MarkupContent()
-            markup.setValue(s"captures: `${prettyCaptures}`")
-            markup.setKind("markdown")
-            inlayHint.setTooltip(markup)
-            inlayHint.setPaddingLeft(true)
-            inlayHint.setData("capture")
-            val textEdit = new TextEdit(convertRange(Range(p, p)), s" $codeEdit")
-            inlayHint.setTextEdits(Collections.seqToJavaList(List(textEdit)))
-            inlayHint
-        }.toVector
-
-        val unannotated = getTreesInRange(range)(using context).map { trees =>
-          trees.collect {
-            // Functions without an annotated type:
-            case fun: FunDef if fun.ret.isEmpty => for {
-              sym <- context.symbolOption(fun.id)
-              tpe <- context.functionTypeOption(sym)
-              pos = fun.ret.span.range.from
-            } yield {
-              val prettyType = pp": ${tpe.result} / ${tpe.effects}"
-              val inlayHint = new InlayHint(convertPosition(pos), messages.Either.forLeft(prettyType))
+        val captures = if !showCaptureHints then List() else
+          getInferredCaptures(range)(using context).map {
+            case CaptureInfo(p, c) =>
+              val prettyCaptures = TypePrinter.show(c)
+              val codeEdit = s"at ${prettyCaptures}"
+              val inlayHint = new InlayHint(convertPosition(p), messages.Either.forLeft(codeEdit))
               inlayHint.setKind(InlayHintKind.Type)
               val markup = new MarkupContent()
-              markup.setValue(s"return type${prettyType}")
+              markup.setValue(s"captures: `${prettyCaptures}`")
               markup.setKind("markdown")
               inlayHint.setTooltip(markup)
               inlayHint.setPaddingLeft(true)
-              inlayHint.setData("return-type-annotation")
-              val textEdit = new TextEdit(convertRange(fun.ret.span.range), prettyType)
+              val textEdit = new TextEdit(convertRange(Range(p, p)), s" $codeEdit")
               inlayHint.setTextEdits(Collections.seqToJavaList(List(textEdit)))
               inlayHint
-            }
-          }.flatten
-        }.getOrElse(Vector())
+          }.toVector
+
+        val unannotated = if !showReturnTypeHints then Vector() else
+          getTreesInRange(range)(using context).map { trees =>
+            trees.collect {
+              // Functions without an annotated type:
+              case fun: FunDef if fun.ret.isEmpty => for {
+                sym <- context.symbolOption(fun.id)
+                tpe <- context.functionTypeOption(sym)
+                pos = fun.ret.span.range.from
+              } yield {
+                val prettyType = pp": ${tpe.result} / ${tpe.effects}"
+                val inlayHint = new InlayHint(convertPosition(pos), messages.Either.forLeft(prettyType))
+                inlayHint.setKind(InlayHintKind.Type)
+                val markup = new MarkupContent()
+                markup.setValue(s"return type${prettyType}")
+                markup.setKind("markdown")
+                inlayHint.setTooltip(markup)
+                inlayHint.setPaddingLeft(true)
+                val textEdit = new TextEdit(convertRange(fun.ret.span.range), prettyType)
+                inlayHint.setTextEdits(Collections.seqToJavaList(List(textEdit)))
+                inlayHint
+              }
+            }.flatten
+          }.getOrElse(Vector())
 
         captures ++ unannotated
       }
