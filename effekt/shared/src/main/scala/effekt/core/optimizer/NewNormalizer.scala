@@ -2,7 +2,6 @@ package effekt
 package core
 package optimizer
 
-import effekt.core.{BlockType, Toplevel}
 import effekt.core.ValueType.Boxed
 import effekt.source.Span
 import effekt.core.optimizer.semantics.{Computation, NeutralStmt, Value}
@@ -954,7 +953,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           reify(k, ks) { NeutralStmt.App(id, targs, vargs.map(evaluate(_, ks)), bargs.map(evaluate(_, "f", escapingStack))) }
         case Computation.Def(Closure(label, environment)) =>
           val args = vargs.map(evaluate(_, ks))
-          // TODO ks or Stack.Unkown?
+          // TODO ks or Stack.Unknown?
           /*
           try {
             prog {
@@ -1136,7 +1135,12 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     val toplevelEnv = Env.empty
       // user-defined functions
       .bindComputation(mod.definitions.collect {
-        case Toplevel.Def(id, b) => id -> Computation.Var(id)
+        case Toplevel.Def(id, b) => id -> (b match {
+          case core.Block.BlockLit(tparams, cparams, vparams, bparams, body) => Computation.Def(Closure(id, Nil))
+          case core.Block.BlockVar(idd, annotatedTpe, annotatedCapt) => Computation.Var(id)
+          case core.Block.Unbox(pure) => Computation.Var(id)
+          case core.Block.New(impl) => Computation.Var(id)
+        })
       })
       // user-defined values
       .bindValue(mod.definitions.collect {
