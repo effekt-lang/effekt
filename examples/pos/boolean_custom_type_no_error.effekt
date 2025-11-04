@@ -1,0 +1,11 @@
+module boolean_custom_type_no_error
+
+// see neg/boolean_wrong_name
+// Here we define our own 'Boolean' type,
+// so that the error "please try 'Bool' instead" never pops up
+
+record Boolean(b: Bool)
+
+def alwaysTrue(): Boolean = Boolean(true)
+
+def main() = ()

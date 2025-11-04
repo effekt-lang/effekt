@@ -4,8 +4,8 @@
 #include <uv.h>
 #include <string.h> // to compare flag names
 
-// Println and Readln
-// ------------------
+// Println and Readln and Random
+// -----------------------------
 
 void c_io_println(String text) {
     for (uint64_t j = 0; j < text.tag; ++j) {
@@ -32,6 +32,10 @@ String c_io_readln() {
     String result = c_bytearray_construct(length, (const uint8_t*)buffer);
     free(buffer);
     return result;
+}
+
+double c_io_random(void) {
+    return (double)rand() / (double)RAND_MAX;
 }
 
 // Lib UV Bindings

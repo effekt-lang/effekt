@@ -859,6 +859,10 @@ class Parser(tokens: Seq[Token], source: Source) {
       Box(captures, expr, span())
   }
 
+  def unboxExpr(): Term =
+    nonterminal:
+      Unbox(`unbox` ~> expr(), span())
+
   def newExpr(): Term =
     nonterminal:
       New(`new` ~> implementation(), span())
@@ -1179,6 +1183,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     case `try`    => tryExpr()
     case `region` => regionExpr()
     case `box`    => boxExpr()
+    case `unbox`  => unboxExpr()
     case `new`    => newExpr()
     case `do`                => doExpr()
     case _ if isString       => templateString()

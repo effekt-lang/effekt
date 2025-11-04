@@ -1,0 +1,5 @@
+module case_insensitive_type_hint
+
+record MyType()
+
+def fun(): Mytype = MyType()

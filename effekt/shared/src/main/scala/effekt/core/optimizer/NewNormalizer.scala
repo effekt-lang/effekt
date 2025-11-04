@@ -486,13 +486,8 @@ object semantics {
   enum Cont {
     case Empty
     case Reset(frame: Frame, prompt: BlockParam, rest: Cont)
-<<<<<<< HEAD
     case Var(frame: Frame, id: BlockParam, curr: Addr, rest: Cont)
-    case Region(frame: Frame, id: BlockParam, bindings: Map[Id, Addr], rest: Cont)
-=======
-    case Var(frame: Frame, id: BlockParam, curr: Addr, init: Addr, rest: Cont)
     case Region(frame: Frame, id: BlockParam, bindings: Map[BlockParam, Addr], rest: Cont)
->>>>>>> 9039d884 (fix region reification)
   }
 
   def shift(p: Id, k: Frame, ks: Stack): (Cont, Frame, Stack) = ks match {

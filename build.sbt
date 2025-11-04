@@ -13,6 +13,11 @@ lazy val assembleJS = taskKey[Unit]("Assemble the JS file in out/effekt.js")
 lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
 lazy val generateDocumentation = taskKey[Unit]("Generates some documentation.")
 lazy val bumpMinorVersion = taskKey[Unit]("Bumps the minor version number (used in CI).")
+// custom test tasks for CI
+lazy val testBackendJS = taskKey[Unit]("Run JavaScript backend tests")
+lazy val testBackendChez = taskKey[Unit]("Run Chez Scheme backend tests")
+lazy val testBackendLLVM = taskKey[Unit]("Run LLVM backend tests")
+lazy val testRemaining = taskKey[Unit]("Run all non-backend tests (internal tests) on effektJVM")
 
 lazy val noPublishSettings = Seq(
   publish := {},
@@ -206,6 +211,55 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
       println(newVersion)
     },
+    testBackendJS := {
+      (Test / testOnly).toTask(
+        " effekt.JavaScriptTests effekt.StdlibJavaScriptTests"
+      ).value
+    },
+
+    testBackendChez := {
+      (Test / testOnly).toTask(
+        " effekt.ChezSchemeMonadicTests effekt.ChezSchemeCallCCTests" +
+        " effekt.StdlibChezSchemeMonadicTests effekt.StdlibChezSchemeCallCCTests"
+      ).value
+    },
+
+    testBackendLLVM := {
+      (Test / testOnly).toTask(
+        " effekt.LLVMTests effekt.LLVMNoValgrindTests effekt.StdlibLLVMTests"
+      ).value
+    },
+
+    testRemaining := Def.taskDyn {
+      val log = streams.value.log
+
+      val allTests = (Test / definedTestNames).value.toSet
+
+      // Explicit list of backend tests (union of all testBackend targets)
+      val backendTests = Set(
+        "effekt.JavaScriptTests",
+        "effekt.StdlibJavaScriptTests",
+        "effekt.ChezSchemeMonadicTests",
+        "effekt.ChezSchemeCallCCTests",
+        "effekt.StdlibChezSchemeMonadicTests",
+        "effekt.StdlibChezSchemeCallCCTests",
+        "effekt.LLVMTests",
+        "effekt.LLVMNoValgrindTests",
+        "effekt.StdlibLLVMTests"
+      )
+
+      val remaining = allTests -- backendTests
+
+      if (remaining.isEmpty) {
+        log.info("No remaining tests")
+        Def.task { () }
+      } else {
+        log.info(s"Running ${remaining.size} internal test(s):")
+        remaining.toSeq.sorted.foreach(t => log.info(s"  - $t"))
+        (Test / testOnly).toTask(s" ${remaining.mkString(" ")}")
+      }
+    }.value,
+
 
     generateDocumentation := TreeDocs.replacer.value,
     Compile / sourceGenerators += versionGenerator.taskValue,

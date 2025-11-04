@@ -1,0 +1,3 @@
+module boolean_wrong_name
+
+def alwaysTrue(): Boolean = true

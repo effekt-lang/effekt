@@ -1,0 +1,6 @@
+[info] examples/neg/must_box_resume.effekt:6:17: Did you mean to resume using `resume(...)`?
+} with e: exc { resume }
+                ^^^^^^
+[error] examples/neg/must_box_resume.effekt:6:17: Expected a value, but resume is a computation. Use `box resume` to pass it as a value instead
+} with e: exc { resume }
+                ^^^^^^
