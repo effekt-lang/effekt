@@ -396,16 +396,6 @@ object semantics {
       Frame.Static(tpe, scope => arg => ks => f(scope)(arg)(this)(ks))
   }
 
-  // case class Store(var vars: Map[Addr, Value]) {
-  //   def get(addr: Addr): Value = {
-  //     vars(addr)
-  //   }
-  //   def set(addr: Addr, v: Value): Unit = {
-  //     vars = vars.updated(addr, v)
-  //   }
-  // }
-  type Store = Map[Id, Addr]
-
   // maybe, for once it is simpler to decompose stacks like
   //
   //  f, (p, f) :: (p, f) :: Nil
@@ -443,11 +433,10 @@ object semantics {
     case Stack.Var(id1, curr, frame, next) if ref == id1.id => Some(curr)
     case Stack.Var(id1, curr, frame, next) => get(ref, next)
     case Stack.Region(id, bindings, frame, next) =>
-      val containsRef = bindings.keys.map { b => b._1.id }.toSet.contains(ref)
-      if (containsRef) {
-        Some(bindings(id))
-      } else {
-        get(ref, next)
+      val containsRef = bindings.keys.find(bp => bp.id == ref)
+      containsRef match {
+        case Some(bparam) => Some(bindings(bparam))
+        case None => get(ref, next)
       }
   }
 
@@ -459,11 +448,10 @@ object semantics {
     case Stack.Var(id, curr, frame, next) if ref == id.id => Some(Stack.Var(id, value, frame, next))
     case Stack.Var(id, curr, frame, next) => put(ref, value, next).map(Stack.Var(id, curr, frame, _))
     case Stack.Region(id, bindings, frame, next) =>
-      val containsRef = bindings.keys.map { b => b._1.id }.toSet.contains(ref)
-      if (containsRef){
-        Some(Stack.Region(id, bindings.updated(id, value), frame, next))
-      } else {
-        put(ref, value, next).map(Stack.Region(id, bindings, frame, _))
+      val containsRef = bindings.keys.find(bp => bp.id == ref)
+      containsRef match {
+        case Some(bparam) => Some(Stack.Region(id, bindings.updated(bparam, value), frame, next))
+        case None => put(ref, value, next).map(Stack.Region(id, bindings, frame, _))
       }
   }
 
@@ -571,14 +559,14 @@ object semantics {
         val tmp = Id("tmp")
         scope.push(tmp, stmt)
         // TODO Over-approximation
-        // Don't pass Stack.Unkown but rather the stack until the next reset?
+        // Don't pass Stack.Unknown but rather the stack until the next reset?
         /*
           |----------|               |----------|               |---------|
           |          | ---> ... ---> |          | ---> ... ---> |         | ---> ...
           |----------|               |----------|               |---------|
               r1                          r2                 first next prompt
 
-        Pass r1 :: ... :: r2 :: ... :: prompt :: UNKOWN
+        Pass r1 :: ... :: r2 :: ... :: prompt :: UNKNOWN
          */
         apply(scope)(tmp)(Stack.Unknown)
       case Frame.Dynamic(Closure(label, closure)) =>
