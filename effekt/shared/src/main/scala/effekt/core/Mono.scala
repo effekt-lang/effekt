@@ -472,7 +472,7 @@ def monomorphize(clause: (Id, BlockLit), scrutineeTypes: Vector[ValueType])(usin
         //       This will happen for example in List[T] ( Cons(head: T, rest: List[T]), Nil() )
         //       if one of the constructors is never initialized and therefore there is no Constraint flowing into it
         //       in that case we can just reuse the original name, as it is never initialized
-    List((id, BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))))
+        List((id, BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))))
     }
   case (id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
     val newClauseNameMap = ctx.names.view.filterKeys((tid, groundTypes) => tid == id)
