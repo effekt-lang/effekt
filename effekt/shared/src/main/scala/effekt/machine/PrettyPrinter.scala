@@ -50,11 +50,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDocStmts(stmt: Statement): Doc = stmt match {
 
-    case Jump(label) =>
-      "jump" <+> label
-
-    case Substitute(bindings, rest) =>
-      hsep(bindings map { case (left, right) => left <+> ":=" <+> right }, comma) <> ";" <> line <> toDocStmts(rest)
+    case Jump(label, arguments) =>
+      "jump" <+> label <> parens(arguments map toDoc)
 
     case Construct(name, tag, arguments, rest) =>
       "let" <+> name <+> "=" <+> tag.toString <> parens(arguments map toDoc) <> ";" <> line <> toDocStmts(rest)
@@ -100,6 +97,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case LiteralInt(name, value, rest) =>
       "let" <+> name <+> "=" <+> value.toString <> ";" <> line <> toDocStmts(rest)
+
+    case LiteralByte(name, value, rest) =>
+      "let" <+> name <+> "=" <+> "0x" <> value.toHexString.toUpperCase <> ";" <> line <> toDocStmts(rest)
 
     case LiteralDouble(name, value, rest) =>
       "let" <+> name <+> "=" <+> value.toString <> ";" <> line <> toDocStmts(rest)

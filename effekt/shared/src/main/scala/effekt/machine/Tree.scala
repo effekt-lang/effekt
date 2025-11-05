@@ -23,17 +23,8 @@ type Environment = List[Variable]
  * Here l is the label and [[environment]] is the list of free variables of s1.
  * It thus can be understood as the type of the label.
  */
-case class Label(name: String, environment: Environment)
+case class Label(name: String, environment: Environment) // TODO delete environment
 
-/**
- * Applying a substitution
- *
- *    List(x -> y)
- *
- * will replace all occurrences of x by y. Here x is a binding occurrence
- * and y is a bound occurrence.
- */
-type Substitution = List[(Variable, Variable)]
 
 type Tag = Int
 
@@ -114,14 +105,9 @@ case class Definition(label: Label, body: Statement)
 enum Statement {
 
   /**
-   * e.g. jump l
+   * e.g. jump l (v1, ...)
    */
-  case Jump(label: Label)
-
-  /**
-   * e.g. s[x1 -> v1, ...]
-   */
-  case Substitute(bindings: Substitution, rest: Statement)
+  case Jump(label: Label, arguments: Environment)
 
   /**
    * e.g. let x = make C(v1, ...); s
@@ -192,6 +178,11 @@ enum Statement {
    * let x = 42; s
    */
   case LiteralInt(name: Variable, value: Long, rest: Statement)
+
+  /**
+   * let x = 0xFA; s
+   */
+  case LiteralByte(name: Variable, value: Int, rest: Statement)
 
   /**
    * let x = 42.2; s
