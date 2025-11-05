@@ -1,0 +1,2 @@
+#!/usr/bin/env node
+require('./custom_map_trmc.js').main()
