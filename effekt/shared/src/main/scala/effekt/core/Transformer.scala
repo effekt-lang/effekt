@@ -25,7 +25,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       None
     } else {
       val transformed = Context.timed(phaseName, source.name) { transform(mod, tree) }
-      println(format(transformed))
       Some(CoreTransformed(source, tree, mod, transformed))
     }
 
