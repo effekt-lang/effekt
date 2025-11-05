@@ -128,7 +128,8 @@ def findConstraints(block: Block)(using ctx: MonoFindContext): Constraints = blo
 
 def findConstraints(blockType: BlockType.Interface)(using ctx: MonoFindContext): Constraints = blockType match
   case BlockType.Interface(name, targs) => 
-    List(Constraint(targs.map(findId).toVector, name))
+    val (newTargs, constraints) = findConstraints(targs)
+    List(Constraint(newTargs.toVector, name)) ++ constraints
 
 def findConstraints(blockType: BlockType.Function, fnId: Id)(using ctx: MonoFindContext): Constraints = blockType match
   case BlockType.Function(tparams, cparams, vparams, bparams, result) => 
@@ -148,7 +149,8 @@ def findConstraints(operation: Operation)(using ctx: MonoFindContext): Constrain
 def findConstraints(constructor: Constructor)(using ctx: MonoFindContext): Constraints = constructor match
   case Constructor(id, tparams, List()) => List.empty
   case Constructor(id, tparams, fields) =>
-    List(Constraint(((fields map (_.tpe)) map findId).toVector, id))
+    val (newTargs, constraints) = findConstraints(fields map (_.tpe))
+    List(Constraint(newTargs.toVector, id)) ++ constraints
 
 def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt match
   case Let(id, annotatedTpe, binding, body) => findConstraints(binding) ++ findConstraints(body)
@@ -156,21 +158,26 @@ def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt 
   case Val(id, annotatedTpe, binding, body) => findConstraints(binding) ++ findConstraints(body)
   case Var(ref, init, capture, body) => findConstraints(body)
   case ImpureApp(id, callee, targs, vargs, bargs, body) =>
-    List(Constraint(targs.map(findId).toVector, callee.id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ findConstraints(body)
+    val (newTargs, constraints) = findConstraints(targs)
+    List(Constraint(newTargs.toVector, callee.id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ findConstraints(body) ++ constraints
   case App(callee: BlockVar, targs, vargs, bargs) => 
-    List(Constraint(targs.map(findId).toVector, callee.id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
+    val (newTargs, constraints) = findConstraints(targs)
+    List(Constraint(newTargs.toVector, callee.id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ constraints
   // TODO: Very specialized, but otherwise passing an id that matches in monomorphize is hard
   //       although I'm not certain any other case can even happen 
   // TODO: part 2, also update the implementation in monomorphize if changing this
   case App(Unbox(ValueVar(id, annotatedType)), targs, vargs, bargs) => 
-    List(Constraint(targs.map(findId).toVector, id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
+    val (newTargs, constraints) = findConstraints(targs)
+    List(Constraint(newTargs.toVector, id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ constraints
   case App(callee, targs, vargs, bargs) =>
     findConstraints(callee) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
   // TODO: Maybe need to do something with methodTpe
   case Invoke(callee: BlockVar, method, methodTpe, targs, vargs, bargs) => 
-    List(Constraint(targs.map(findId).toVector, method)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
+    val (newTargs, constraints) = findConstraints(targs)
+    List(Constraint(newTargs.toVector, method)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ constraints
   case Invoke(Unbox(ValueVar(id, annotatedType)), method, methodTpe, targs, vargs, bargs) =>
-    List(Constraint(targs.map(findId).toVector, method)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
+    val (newTargs, constraints) = findConstraints(targs)
+    List(Constraint(newTargs.toVector, method)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ constraints
   case Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
     findConstraints(callee) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
   case Reset(body) => findConstraints(body)
@@ -211,20 +218,42 @@ def findConstraints(opt: Option[Stmt])(using ctx: MonoFindContext): Constraints 
 
 def findConstraints(expr: Expr)(using ctx: MonoFindContext): Constraints = expr match
   case PureApp(b, targs, vargs) => 
-    List(Constraint(targs.map(findId).toVector, b.id))
+    val (newTargs, constraints) = findConstraints(targs)
+    Constraint(newTargs.toVector, b.id) :: constraints
   case ValueVar(id, annotatedType) => List.empty
   case Literal(value, annotatedType) => List.empty
   case Make(data, tag, targs, vargs) => 
-    List(Constraint(targs.map(findId).toVector, tag)) ++
-    List(Constraint(data.targs.map(findId).toVector, tag)) // <Int> <: Just
+    // TODO: Is this the correct order?
+    val combinedTargs = data.targs ++ targs
+    val (newTargs, constraints) = findConstraints(combinedTargs)
+    List(Constraint(newTargs.toVector, tag)) ++ // <Int> <: Just
+    constraints
   case Box(b, annotatedCapture) => 
     findConstraints(b)
 
-def findId(vt: ValueType)(using ctx: MonoFindContext): TypeArg = vt match
-  // TODO: Perhaps recurse into tpe
-  case ValueType.Boxed(tpe, capt) => TypeArg.Boxed(tpe, capt)
-  case ValueType.Data(name, targs) => TypeArg.Base(name, targs map findId)
-  case ValueType.Var(name) => ctx.typingContext(name)
+def findConstraints(vts: List[ValueType])(using ctx: MonoFindContext): (List[TypeArg], Constraints) = {
+  val vtFindConstraints = vts map findConstraints
+  val targs = vtFindConstraints.map(_._1)
+  val constraints = vtFindConstraints.flatMap(_._2)
+  (targs, constraints)
+}
+
+def findConstraints(vt: ValueType)(using ctx: MonoFindContext): (TypeArg, Constraints) = vt match {
+  case ValueType.Boxed(tpe, capt) => {
+    // TODO: Perhaps recurse into tpe
+    (TypeArg.Boxed(tpe, capt), List.empty)
+  }
+  case ValueType.Data(name, targs) => {
+    val (newTargs, constraints) = findConstraints(targs)
+    val additionalConstraints = if (!newTargs.isEmpty) {
+      List(Constraint(newTargs.toVector, name))
+    } else {
+      List.empty
+    }
+    (TypeArg.Base(name, newTargs), constraints ++ additionalConstraints)
+  }
+  case ValueType.Var(name) => (ctx.typingContext(name), List.empty)
+}
 
 def solveConstraints(constraints: Constraints): Solution =
   var solved: Solution = Map()
@@ -236,7 +265,7 @@ def solveConstraints(constraints: Constraints): Solution =
   while (true) {
     val previousSolved = solved
     vecConstraints.foreach((sym, tas) => 
-      val sol = solveConstraints(sym).map(bs => bs.toVector)
+        val sol = solveConstraints(sym).map(bs => bs.toVector)
         solved += (sym -> sol)
       )
     if (previousSolved == solved) return solved
@@ -250,7 +279,9 @@ def solveConstraints(constraints: Constraints): Solution =
       def listFromIndex(ind: Int) = if (ind >= l.length) List.empty else l(ind)
 
       def solveTypeArg(typeArg: TypeArg): List[Ground] = typeArg match {
-        case TypeArg.Base(tpe, targs) => List(TypeArg.Base(tpe, targs flatMap solveTypeArg))
+        case TypeArg.Base(tpe, targs) => 
+          val solvedTargs = targs flatMap solveTypeArg
+          List(TypeArg.Base(tpe, solvedTargs))
         case TypeArg.Boxed(tpe, capt) => List(TypeArg.Boxed(tpe, capt))
         case TypeArg.Var(funId, pos) => 
           val funSolved = solved.getOrElse(funId, Set.empty)
@@ -275,7 +306,7 @@ def monomorphize(definitions: List[Toplevel])(using ctx: MonoContext): List[Topl
 
 def monomorphize(toplevel: Toplevel)(using ctx: MonoContext): List[Toplevel] = toplevel match
   case Toplevel.Def(id, BlockLit(List(), cparams, vparams, bparams, body)) => 
-    List(Toplevel.Def(id, BlockLit(List.empty, cparams, vparams, bparams, monomorphize(body))))
+    List(Toplevel.Def(id, BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))))
   case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
     val monoTypes = ctx.solution(id).toList
     monoTypes.map(baseTypes => 
@@ -490,18 +521,14 @@ def monomorphize(opt: Option[Stmt])(using ctx: MonoContext): Option[Stmt] = opt 
 def monomorphize(expr: Expr)(using ctx: MonoContext): Expr = expr match
   case Literal(value, annotatedType) =>
     Literal(value, monomorphize(annotatedType))
-  // FIXME: Check these two cases below. Is the first one the only one we need?
   case PureApp(b, targs, vargs) =>
     PureApp(b, targs, vargs)
-  // case PureApp(b, targs, vargs) =>
-  //   val replacementData = replacementDataFromTargs(b.id, targs)
-  //   val replaceBVar = monomorphize(b, replacementData.name)
-  //   println(s"data: ${replacementData}, bvar: ${replaceBVar}, targs: ${targs}")
-  //   PureApp(replaceBVar, List.empty, vargs map monomorphize)
   case Make(data, tag, targs, vargs) =>
-    // TODO: When are targs relevant and not data.targs
-    val replacementTag = ctx.names.getOrElse((tag, (data.targs map toTypeArg).toVector), tag)
-    Make(replacementDataFromTargs(data.name, data.targs), replacementTag, List.empty, vargs map monomorphize)
+    // TODO: Is this the correct order to combine the two type args or the other way around
+    val combinedTargs = data.targs ++ targs
+    val typeArgs = combinedTargs map toTypeArg
+    val replacementTag = ctx.names.getOrElse((tag, typeArgs.toVector), tag)
+    Make(replacementDataFromTargs(data.name, combinedTargs), replacementTag, List.empty, vargs map monomorphize)
   case Box(b, annotatedCapture) => 
     Box(monomorphize(b), annotatedCapture)
   case ValueVar(id, annotatedType) =>
@@ -565,9 +592,12 @@ def replacementDataFromTargs(id: FunctionId, targs: List[ValueType])(using ctx: 
   nameOpt match {
     // If we have a monomorphized name stored, then this Type can be replaced with that
     case Some(name) => ValueType.Data(name, List.empty)
-    // If there is a polymorphic type with no name stored, then it HAS to be an extern type
+    // If there is a polymorphic type with no name stored, then it SHOULD be an extern type
     // We can't really do anything about those and have to leave them
-    case None => ValueType.Data(id, targs)
+    // FIXME: Currently these might also be types that are not extern but something like the `Exists` type in `exists.effekt`
+    case None => 
+      // println(s"expecting extern type for '${id}', '${baseTypes.toVector}'")
+      ValueType.Data(id, targs)
   }
 
 def toTypeArg(vt: ValueType)(using ctx: MonoContext): Ground = vt match 
