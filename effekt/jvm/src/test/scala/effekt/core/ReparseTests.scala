@@ -52,10 +52,14 @@ class ReparseTests extends CoreTests {
       val errors = plainMessaging.formatMessages(context.messaging.buffer)
       sys error errors
     }
-    val printed = core.PrettyPrinter.format(coreMod).toString
-    println(printed)
+    val printed = core.PrettyPrinter.format(coreMod).layout
     val reparsed: ModuleDecl = parse(printed)(using Location.empty)
-    assertAlphaEquivalent(reparsed, coreMod, s"Reparsing the pretty-printed core module of ${input.getPath} did not yield an alpha-equivalent module.")
+    val renamer = TestRenamer(Names(Map.empty), "$")
+    val lhs = renamer(reparsed)
+    val rhs = renamer(coreMod)
+    val lhsPrinted = core.PrettyPrinter.format(lhs).layout
+    val rhsPrinted = core.PrettyPrinter.format(rhs).layout
+    assertEquals(lhsPrinted, rhsPrinted)
   }
 
   def foreachFileIn(file: File)(test: File => Unit): Unit =
@@ -76,7 +80,8 @@ class ReparseTests extends CoreTests {
 class CompileToCore extends Compiler[(Id, symbols.Module, ModuleDecl)] {
   def extension = ".effekt-core.ir"
 
-  override def supportedFeatureFlags: List[String] = List("vm")
+  // Support all the feature flags so that we can test all extern declarations
+  override def supportedFeatureFlags: List[String] = List("vm", "js", "jsNode", "chez", "llvm")
 
   override def prettyIR(source: Source, stage: Stage)(using C: Context): Option[Document] = None
 
