@@ -421,6 +421,7 @@ object semantics {
     }
   }
 
+  @tailrec
   def get(ref: Id, ks: Stack): Option[Addr] = ks match {
     case Stack.Empty => sys error s"Should not happen: trying to lookup ${util.show(ref)} in empty stack"
     // We have reached the end of the known stack, so the variable must be in the unknown part.
@@ -578,9 +579,9 @@ object semantics {
         val tmp = Id("tmp")
         scope.push(tmp, stmt)
         apply(scope)(tmp)(ks)
-      case Frame.Dynamic(Closure(label, closure)) => reify(ks) { scope ?=>
+      case Frame.Dynamic(Closure(label, closure)) => reify(ks) { sc ?=>
         val tmp = Id("tmp")
-        scope.push(tmp, stmt)
+        sc.push(tmp, stmt)
         NeutralStmt.Jump(label, Nil, List(tmp), closure)
       }
     }
@@ -590,9 +591,8 @@ object semantics {
     ks match {
       case Stack.Empty => stmt
       case Stack.Unknown => stmt
-      // only reify reset if p is free in body
       case Stack.Reset(prompt, frame, next) =>
-        reify(next) { reify(frame) { // reify(next) { reify(store) { reify(frame) { ... }}} ??? ORDER? TODO
+        reify(next) { reify(frame) {
           val body = nested { stmt }
           if (body.free contains prompt.id) NeutralStmt.Reset(prompt, body)
           else stmt // TODO this runs normalization a second time in the outer scope!
@@ -935,15 +935,11 @@ class NewNormalizer {
       evaluate(body, k, ks)(using newEnv, scope)
 
     case Stmt.App(callee, targs, vargs, bargs) =>
-      // TODO Why? Should it really be Stack.Unkown?
-      // Here the stack passed to the blocks is an empty one since we reify it anyways...
-      val escapingStack = Stack.Unknown
-      evaluate(callee, "f", escapingStack) match {
+      evaluate(callee, "f", ks) match {
         case Computation.Var(id) =>
-          reify(k, ks) { NeutralStmt.App(id, targs, vargs.map(evaluate(_, ks)), bargs.map(evaluate(_, "f", escapingStack))) }
+          reify(k, ks) { NeutralStmt.App(id, targs, vargs.map(evaluate(_, ks)), bargs.map(evaluate(_, "f", ks))) }
         case Computation.Def(Closure(label, environment)) =>
           val args = vargs.map(evaluate(_, ks))
-          // TODO ks or Stack.Unknown?
           /*
           try {
             prog {
@@ -955,12 +951,12 @@ class NewNormalizer {
           is incorrect as the result is always the empty capture set since Stack.Unkown.bound = Set()
            */
           val blockargs = bargs.map(evaluate(_, "f", ks))
-          // TODO isPureApp(Closure(label, environment), stmt.capt, blockargs) is more precise
           // if stmt doesn't capture anything, it can not make any changes to the stack (ks) and we don't have to pretend it is unknown as an over-approximation
           // TODO examples/pos/lambdas/localstate.effekt fails if we only check stmt.capt
+          // TODO capture {io, global} is also fine
           if (stmt.capt.isEmpty && environment.isEmpty) {
             reifyKnown(k, ks) {
-              NeutralStmt.Jump(label, targs, args, blockargs ++ environment)
+              NeutralStmt.Jump(label, targs, args, blockargs)
             }
           } else {
             reify(k, ks) {
