@@ -407,7 +407,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       override def apply(t: Expr): Expr = to match {
         case core.Type.TInt     => Expr.Literal(1337L, core.Type.TInt)
         case core.Type.TDouble  => Expr.Literal(13.37, core.Type.TDouble)
-        case core.Type.TByte    => Expr.Literal(1337, core.Type.TByte)
+        case core.Type.TByte    => Expr.Literal(137, core.Type.TByte)
         case core.Type.TChar    => Expr.Literal(1337, core.Type.TChar)
         case t if boxer.isDefinedAt(t) => sys error s"No default value defined for ${t}"
         case _ => sys error s"Trying to unbox Nothing to ${t}"

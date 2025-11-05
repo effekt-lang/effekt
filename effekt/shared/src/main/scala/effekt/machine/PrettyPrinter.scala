@@ -98,6 +98,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case LiteralInt(name, value, rest) =>
       "let" <+> name <+> "=" <+> value.toString <> ";" <> line <> toDocStmts(rest)
 
+    case LiteralByte(name, value, rest) =>
+      "let" <+> name <+> "=" <+> "0x" <> value.toHexString.toUpperCase <> ";" <> line <> toDocStmts(rest)
+
     case LiteralDouble(name, value, rest) =>
       "let" <+> name <+> "=" <+> value.toString <> ";" <> line <> toDocStmts(rest)
 

@@ -180,6 +180,11 @@ enum Statement {
   case LiteralInt(name: Variable, value: Long, rest: Statement)
 
   /**
+   * let x = 0xFA; s
+   */
+  case LiteralByte(name: Variable, value: Int, rest: Statement)
+
+  /**
    * let x = 42.2; s
    */
   case LiteralDouble(name: Variable, value: Double, rest: Statement)

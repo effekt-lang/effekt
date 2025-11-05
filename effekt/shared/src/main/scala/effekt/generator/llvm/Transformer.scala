@@ -332,6 +332,11 @@ object Transformer {
         emit(Add(name, ConstantInt(n), ConstantInt(0)));
         transform(rest)
 
+      case machine.LiteralByte(machine.Variable(name, _), n, rest) =>
+        emit(Comment(s"literalByte $name, n=$n"))
+        emit(Add(name, ConstantByte(n), ConstantByte(0)));
+        transform(rest)
+
       case machine.LiteralDouble(machine.Variable(name, _), x, rest) =>
         emit(Comment(s"literalDouble $name, x=$x"))
         emit(FAdd(name, ConstantDouble(x), ConstantDouble(0)));

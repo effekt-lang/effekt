@@ -93,6 +93,8 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 
     case Add(result, operand0, ConstantInt(n)) =>
       s"${localName(result)} = add ${show(operand0)}, $n"
+    case Add(result, operand0, ConstantByte(n)) =>
+      s"${localName(result)} = add ${show(operand0)}, $n"
     case Add(result, LocalReference(t1, n1), LocalReference(t2, n2)) =>
       assert(t1 == t2)
       s"${localName(result)} = add ${show(t1)} ${localName(n1)}, ${localName(n2)}"
@@ -131,6 +133,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case LocalReference(tpe, name)          => s"${show(tpe)} ${localName(name)}"
     case ConstantGlobal(name)               => s"ptr ${globalName(name)}"
     case ConstantInt(n)                     => s"i64 $n"
+    case ConstantByte(n)                    => s"i8 $n"
     case ConstantDouble(n)                  => s"double $n"
     case ConstantAggregateZero(tpe)         => s"${show(tpe)} zeroinitializer"
     case ConstantNull(tpe)                  => s"${show(tpe)} null"

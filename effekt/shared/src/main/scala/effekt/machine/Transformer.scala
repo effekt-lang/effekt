@@ -392,33 +392,37 @@ object Transformer {
     case core.ValueVar(id, tpe) =>
       ErrorReporter.panic(s"Must not be called on an expression that is a variable $expr.")
 
-    case core.Literal((), _) =>
+    case core.Literal((), core.Type.TUnit) =>
       shift { k =>
         Construct(variable, builtins.Unit, List(), k(variable))
       }
 
-    case core.Literal(value: Long, _) =>
+    case core.Literal(value: Long, core.Type.TInt) =>
       shift { k =>
         LiteralInt(variable, value, k(variable))
       }
 
-    // for characters
-    case core.Literal(value: Int, _) =>
+    case core.Literal(value: Int, core.Type.TChar) =>
       shift { k =>
         LiteralInt(variable, value, k(variable))
       }
 
-    case core.Literal(value: Boolean, _) =>
+    case core.Literal(value: Int, core.Type.TByte) =>
+      shift { k =>
+        LiteralByte(variable, value, k(variable))
+      }
+
+    case core.Literal(value: Boolean, core.Type.TBoolean) =>
       shift { k =>
         Construct(variable, if (value) builtins.True else builtins.False, List(), k(variable))
       }
 
-    case core.Literal(v: Double, _) =>
+    case core.Literal(v: Double, core.Type.TDouble) =>
       shift { k =>
         LiteralDouble(variable, v, k(variable))
       }
 
-    case core.Literal(javastring: String, _) =>
+    case core.Literal(javastring: String, core.Type.TString) =>
       shift { k =>
         LiteralUTF8String(variable, javastring.getBytes("utf-8"), k(variable))
       }
