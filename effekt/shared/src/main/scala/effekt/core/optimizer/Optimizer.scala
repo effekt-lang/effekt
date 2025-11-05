@@ -28,7 +28,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     tree = Context.timed("deadcode-elimination", source.name) {
       Deadcode.remove(mainSymbol, tree)
     }
-
+    println(util.show(tree))
     if !Context.config.optimize() then return tree;
 
     // (2) lift static arguments

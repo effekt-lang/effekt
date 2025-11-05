@@ -1,0 +1,24 @@
+module custom_map
+
+
+type testList[A]{
+  Nil()
+  Cons(head: A, tail: testList[A])
+  }
+def main() = {
+  inspect(Cons(1,Cons(7,Cons(8,Cons(4,Nil())))).testMap{fibonacci})
+}
+
+def fibonacci(n: Int): Int = n match {
+  case 0 => 0
+  case 1 => 1
+  case _ => fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+
+
+def testMap[A, B](list: testList[A]){ fun: A => B}: testList[B] =
+  list match{
+  case Nil() => Nil()
+  case Cons(x, xs) => Cons(fun(x), testMap(xs){fun})
+}
