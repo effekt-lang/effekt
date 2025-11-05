@@ -731,7 +731,7 @@ class NormalizeOnly extends Compiler[(Id, symbols.Module, ModuleDecl)] {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
       var tree = Deadcode.remove(mainSymbol, core)
-      val normalizer = NewNormalizer { (id, b) => false }
+      val normalizer = NewNormalizer()
       tree = normalizer.run(tree)
       Normalizer.assertNormal(tree)
       (mainSymbol, mod, tree)

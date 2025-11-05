@@ -293,9 +293,6 @@ object semantics {
     // Known function
     case Def(closure: Closure)
 
-    // TODO it looks like this was not a good idea... Many operations (like embed) are not supported on Inline
-    case Inline(body: core.BlockLit, closure: Env)
-
     case Continuation(k: Cont)
 
     // TODO ? distinguish?
@@ -309,7 +306,6 @@ object semantics {
     lazy val free: Variables = this match {
       case Computation.Var(id) => Set(id)
       case Computation.Def(closure) => closure.free
-      case Computation.Inline(body, closure) => Set.empty // TODO ???
       case Computation.Continuation(k) => Set.empty // TODO ???
       case Computation.New(interface, operations) => operations.flatMap(_._2.free).toSet
     }
@@ -708,7 +704,6 @@ object semantics {
     def toDoc(comp: Computation): Doc = comp match {
       case Computation.Var(id) => toDoc(id)
       case Computation.Def(closure) => toDoc(closure)
-      case Computation.Inline(block, env) => ???
       case Computation.Continuation(k) => ???
       case Computation.New(interface, operations) => "new" <+> toDoc(interface) <+> braces {
         hsep(operations.map { case (id, impl) => "def" <+> toDoc(id) <+> "=" <+> toDoc(impl) }, ",")
@@ -751,7 +746,7 @@ object semantics {
 /**
  * A new normalizer that is conservative (avoids code bloat)
  */
-class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
+class NewNormalizer {
 
   import semantics.*
 
@@ -923,10 +918,6 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
     case Stmt.Let(id, annotatedTpe, binding, body) =>
       bind(id, evaluate(binding, ks)) { evaluate(body, k, ks) }
 
-    case Stmt.Def(id, block: core.BlockLit, body) if shouldInline(id, block) =>
-      println(s"Marking ${util.show(id)} as inlinable")
-      bind(id, Computation.Inline(block, env)) { evaluate(body, k, ks) }
-
     // can be recursive
     case Stmt.Def(id, block: core.BlockLit, body) =>
       bind(id, evaluateRecursive(id, block, ks)) { evaluate(body, k, ks) }
@@ -948,12 +939,6 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       // Here the stack passed to the blocks is an empty one since we reify it anyways...
       val escapingStack = Stack.Unknown
       evaluate(callee, "f", escapingStack) match {
-        case Computation.Inline(core.Block.BlockLit(tparams, cparams, vparams, bparams, body), closureEnv) =>
-          val newEnv = closureEnv
-            .bindValue(vparams.zip(vargs).map { case (p, a) => p.id -> evaluate(a, ks) })
-            .bindComputation(bparams.zip(bargs).map { case (p, a) => p.id -> evaluate(a, "f", ks) })
-
-          evaluate(body, k, ks)(using newEnv, scope)
         case Computation.Var(id) =>
           reify(k, ks) { NeutralStmt.App(id, targs, vargs.map(evaluate(_, ks)), bargs.map(evaluate(_, "f", escapingStack))) }
         case Computation.Def(Closure(label, environment)) =>
@@ -996,7 +981,7 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
           operations.collectFirst { case (id, Closure(label, environment)) if id == method =>
             reify(k, ks) { NeutralStmt.Jump(label, targs, vargs.map(evaluate(_, ks)), bargs.map(evaluate(_, "f", escapingStack)) ++ environment) }
           }.get
-        case _: (Computation.Inline | Computation.Def | Computation.Continuation) => sys error s"Should not happen"
+        case _: (Computation.Def | Computation.Continuation) => sys error s"Should not happen"
       }
 
     case Stmt.If(cond, thn, els) =>
@@ -1301,7 +1286,6 @@ class NewNormalizer(shouldInline: (Id, BlockLit) => Boolean) {
       embedBlockVar(label)
     case Computation.Def(closure) =>
       etaExpandToBlockLit(closure)
-    case Computation.Inline(blocklit, env) => ???
     case Computation.Continuation(k) => ???
     case Computation.New(interface, operations) =>
       val ops = operations.map { etaExpandToOperation.tupled }
