@@ -935,7 +935,7 @@ object Transformer {
       val extendedEnv = envChunk :+ machine.Variable(linkValName, machine.Positive())
 
       // ...finally, we do the usual behavior when we produce an object
-      headObject = produceSingleObject(role, extendedEnv, freeInBody).asInstanceOf[LocalReference]
+      headObject = produceSingleObject(role, extendedEnv, freeInBody)
     }
     headObject
   }
@@ -943,7 +943,7 @@ object Transformer {
   /**
    * Creates a new object and stores its environment in it 
    */
-  private def produceSingleObject(role: String, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Operand = {
+  private def produceSingleObject(role: String, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): LocalReference = {
     val objectReference = LocalReference(objectType, freshName(role))
     val environmentReference = LocalReference(environmentType, freshName("environment"))
     val size = ConstantInt(environmentSize(environment));
