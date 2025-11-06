@@ -1,6 +1,6 @@
 package effekt
 
-import com.google.gson.JsonElement
+import com.google.gson.{JsonElement, JsonObject}
 import effekt.Intelligence.CaptureInfo
 import effekt.context.Context
 import effekt.source.Def.FunDef
@@ -43,7 +43,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   // Track whether shutdown has been requested
   private var shutdownRequested: Boolean = false
   // Configuration sent by the language client
-  var settings: JsonElement = null
+  var settings: Option[JsonObject] = None
 
   val getDriver: Driver = this
   val getConfig: EffektConfig = config
@@ -133,7 +133,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   def publishIR(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
     // Publish Effekt IR
     val showIR = workspaceService.settingString("showIR").getOrElse("none")
-    val showTree = workspaceService.settingBool("showTree")
+    val showTree = workspaceService.settingBool("showTree").getOrElse(false)
 
     if (showIR == "none") {
       return;
@@ -181,7 +181,11 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
    * Publish holes in the given source file
    */
   def publishHoles(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
-    if (!workspaceService.settingBool("showHoles")) return
+    val showHoles = workspaceService.settingBool("showHoles").getOrElse(false)
+    if (!showHoles) {
+      return
+    }
+
     val holes = getHoles(source)
     client.publishHoles(EffektPublishHolesParams(source.name, holes.map(EffektHoleInfo.fromHoleInfo)))
   }
@@ -263,9 +267,10 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     val position = sources.get(params.getTextDocument.getUri).map { source =>
       Convert.fromLSPPosition(params.getPosition, source)
     }
+    val showExplanations = settingBool("showExplanations").getOrElse(false)
     position match
       case Some(position) => {
-        val hover = getSymbolHover(position, settingBool("showExplanations"))(using context) orElse getHoleHover(position)(using context)
+        val hover = getSymbolHover(position, showExplanations)(using context) orElse getHoleHover(position)(using context)
         val markup = new MarkupContent("markdown", hover.getOrElse(""))
         val result = new Hover(markup, new LSPRange(params.getPosition, params.getPosition))
         CompletableFuture.completedFuture(result)
@@ -370,50 +375,60 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
 
   override def inlayHint(params: InlayHintParams): CompletableFuture[util.List[InlayHint]] = {
+
+    // Inlay Hint Setting Json Object
+    val inlayHintSetting = settingObject("inlayHints")
+
+    val showCaptureHints = inlayHintSetting.flatMap(ref => settingBool(ref, "captures"))
+      .getOrElse(true) // Default to true (as specified in the VSCode extension)
+    val showReturnTypeHints = inlayHintSetting.flatMap(ref => settingBool(ref, "returnTypes"))
+      .getOrElse(true) // Default to true (as specified in the VSCode extension)
+
+
     val hints = for {
       source <- sources.get(params.getTextDocument.getUri)
       hints = {
         val range = fromLSPRange(params.getRange, source)
-        val captures = getInferredCaptures(range)(using context).map {
-          case CaptureInfo(p, c) =>
-            val prettyCaptures = TypePrinter.show(c)
-            val codeEdit = s"at ${prettyCaptures}"
-            val inlayHint = new InlayHint(convertPosition(p), messages.Either.forLeft(codeEdit))
-            inlayHint.setKind(InlayHintKind.Type)
-            val markup = new MarkupContent()
-            markup.setValue(s"captures: `${prettyCaptures}`")
-            markup.setKind("markdown")
-            inlayHint.setTooltip(markup)
-            inlayHint.setPaddingLeft(true)
-            inlayHint.setData("capture")
-            val textEdit = new TextEdit(convertRange(Range(p, p)), s" $codeEdit")
-            inlayHint.setTextEdits(Collections.seqToJavaList(List(textEdit)))
-            inlayHint
-        }.toVector
-
-        val unannotated = getTreesInRange(range)(using context).map { trees =>
-          trees.collect {
-            // Functions without an annotated type:
-            case fun: FunDef if fun.ret.isEmpty => for {
-              sym <- context.symbolOption(fun.id)
-              tpe <- context.functionTypeOption(sym)
-              pos = fun.ret.span.range.from
-            } yield {
-              val prettyType = pp": ${tpe.result} / ${tpe.effects}"
-              val inlayHint = new InlayHint(convertPosition(pos), messages.Either.forLeft(prettyType))
+        val captures = if !showCaptureHints then List() else
+          getInferredCaptures(range)(using context).map {
+            case CaptureInfo(p, c) =>
+              val prettyCaptures = TypePrinter.show(c)
+              val codeEdit = s"at ${prettyCaptures}"
+              val inlayHint = new InlayHint(convertPosition(p), messages.Either.forLeft(codeEdit))
               inlayHint.setKind(InlayHintKind.Type)
               val markup = new MarkupContent()
-              markup.setValue(s"return type${prettyType}")
+              markup.setValue(s"captures: `${prettyCaptures}`")
               markup.setKind("markdown")
               inlayHint.setTooltip(markup)
               inlayHint.setPaddingLeft(true)
-              inlayHint.setData("return-type-annotation")
-              val textEdit = new TextEdit(convertRange(fun.ret.span.range), prettyType)
+              val textEdit = new TextEdit(convertRange(Range(p, p)), s" $codeEdit")
               inlayHint.setTextEdits(Collections.seqToJavaList(List(textEdit)))
               inlayHint
-            }
-          }.flatten
-        }.getOrElse(Vector())
+          }.toVector
+
+        val unannotated = if !showReturnTypeHints then Vector() else
+          getTreesInRange(range)(using context).map { trees =>
+            trees.collect {
+              // Functions without an annotated type:
+              case fun: FunDef if fun.ret.isEmpty => for {
+                sym <- context.symbolOption(fun.id)
+                tpe <- context.functionTypeOption(sym)
+                pos = fun.ret.span.range.from
+              } yield {
+                val prettyType = pp": ${tpe.result} / ${tpe.effects}"
+                val inlayHint = new InlayHint(convertPosition(pos), messages.Either.forLeft(prettyType))
+                inlayHint.setKind(InlayHintKind.Type)
+                val markup = new MarkupContent()
+                markup.setValue(s"return type${prettyType}")
+                markup.setKind("markdown")
+                inlayHint.setTooltip(markup)
+                inlayHint.setPaddingLeft(true)
+                val textEdit = new TextEdit(convertRange(fun.ret.span.range), prettyType)
+                inlayHint.setTextEdits(Collections.seqToJavaList(List(textEdit)))
+                inlayHint
+              }
+            }.flatten
+          }.getOrElse(Vector())
 
         captures ++ unannotated
       }
@@ -509,13 +524,16 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     val newSettings = params.getSettings.asInstanceOf[JsonElement]
     // When the settings come via `initializationOptions`, they can be null as per the LSP spec.
     if (newSettings.isJsonNull) {
-      this.settings = null;
-      return;
+      this.settings = None
+      return
     }
+
     val newSettingsObj = newSettings.getAsJsonObject
     val effektSection = newSettingsObj.get("effekt")
     if (effektSection != null) {
-      this.settings = effektSection
+      this.settings = if effektSection.isJsonObject
+      then Some(effektSection.getAsJsonObject)
+      else None
     }
   }
 
@@ -525,20 +543,33 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
   //
 
-  def settingBool(name: String): Boolean = {
-    if (settings == null || settings.isJsonNull) return false
-    val obj = settings.getAsJsonObject
-    val value = obj.get(name)
-    if (value == null) return false
-    value.getAsBoolean
+  private def settingObject(name: String): Option[JsonObject] = {
+    settings.flatMap(s => {
+      val value = s.get(name)
+      if value != null
+      then Some(value.getAsJsonObject)
+      else None
+    })
   }
 
-  def settingString(name: String): Option[String] = {
-    if (settings == null || settings.isJsonNull) return None
-    val obj = settings.getAsJsonObject
-    val value = obj.get(name)
-    if (value == null) return None
-    Some(value.getAsString)
+  private def settingBool(jsonObject: JsonObject, name: String): Option[Boolean] = {
+    val value = jsonObject.get(name)
+    if value != null
+    then Some(value.getAsBoolean)
+    else None
+  }
+
+  private def settingBool(name: String): Option[Boolean] = {
+    settings.flatMap(s => settingBool(s, name))
+  }
+
+  private def settingString(name: String): Option[String] = {
+    settings.flatMap(s => {
+      val value = s.get(name)
+      if value != null
+      then Some(value.getAsString)
+      else None
+    })
   }
 
   /**
