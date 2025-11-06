@@ -133,7 +133,7 @@ object TransformerCPS {
     case Jump(k, vargs, ks) =>
       val args = vargs.map(toChez) :+ toChez(ks)
       chez.Call(toChez(k), args)
-    case Hole(span) => chez.Builtin(HOLE)
+    case Hole(span) => chez.Builtin(HOLE, chez.ChezString(span.range.from.format))
     case If(cond, thn, els) =>
       val chezCond = toChez(cond)
       chez.If(chezCond, toChezExpr(thn), toChezExpr(els))
