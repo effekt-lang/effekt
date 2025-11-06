@@ -274,7 +274,7 @@ def solveConstraints(constraints: Constraints): Solution =
   while (true) {
     val previousSolved = solved
     vecConstraints.foreach((sym, tas) => 
-        val sol = solveConstraints(sym).map(bs => bs.toVector)
+        val sol = solveConstraints(sym).map(bs => bs.toVector).filter(v => !v.isEmpty)
         solved += (sym -> sol)
       )
     if (previousSolved == solved) return solved
@@ -289,8 +289,12 @@ def solveConstraints(constraints: Constraints): Solution =
 
       def solveTypeArg(typeArg: TypeArg): List[Ground] = typeArg match {
         case TypeArg.Base(tpe, targs) => 
-          val solvedTargs = targs flatMap solveTypeArg
-          List(TypeArg.Base(tpe, solvedTargs))
+          val solvedTargs = targs map solveTypeArg
+          var crossTargs: List[List[TypeArg]] = List(List.empty)
+          solvedTargs.foreach(targ => {
+            crossTargs = productAppend(crossTargs, targ)
+          })
+          crossTargs.map(tas => TypeArg.Base(tpe, tas))
         case TypeArg.Boxed(tpe, capt) => List(TypeArg.Boxed(tpe, capt))
         case TypeArg.Var(funId, pos) => 
           val funSolved = solved.getOrElse(funId, Set.empty)
