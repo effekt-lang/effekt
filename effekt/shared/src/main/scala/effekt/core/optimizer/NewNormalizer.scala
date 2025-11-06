@@ -82,6 +82,7 @@ object semantics {
     case Literal(value: Any, annotatedType: ValueType)
     case Make(data: ValueType.Data, tag: Id, targs: List[ValueType], vargs: List[Addr])
 
+    // TODO use dynamic captures
     case Box(body: Computation, annotatedCaptures: Set[effekt.symbols.Symbol])
 
     val free: Variables = this match {
@@ -831,6 +832,7 @@ class NewNormalizer {
             case Boxed(tpe, capt) => (tpe, capt)
             case _ => sys error "should not happen"
           }
+          // TODO translate static capture set capt to a dynamic capture set (e.g. {exc} -> {@p_17})
           val unboxAddr = scope.unbox(addr, tpe, capt)
           Computation.Var(unboxAddr)
         }
@@ -890,7 +892,7 @@ class NewNormalizer {
        };
        counter = counter + 1;
        println(p.dereference)
-       */
+      */
       // should capture `counter` but does not since the stack is Stack.Unknown
       // (effekt.JavaScriptTests.examples/pos/capture/borrows.effekt (js))
       // TLDR we need to pass an escaping stack to do a proper escape analysis. Stack.Unkown is insufficient
