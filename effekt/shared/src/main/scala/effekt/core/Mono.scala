@@ -54,6 +54,12 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 
             // println(util.show(newModuleDecl))
 
+            // for examples/pos/probabilistic.effekt
+            // This 
+            //  Vector(Base(Weighted,List(Base(Bool,List()), Base(Var,List()))))
+            // Should be
+            //  Vector(Base(Weighted,List(Base(Bool,List())), Base(Weighted,List(Base(Bool,List())))))
+
             return Some(CoreTransformed(source, tree, mod, newModuleDecl))
           }
         }
@@ -90,6 +96,9 @@ class MonoFindContext {
 case class MonoContext(solution: Solution, names: MonoNames, polyExternDefs: List[Id]) {
   var replacementTparams: Map[Id, Ground] = Map.empty
   def isPolyExtern(id: Id) = polyExternDefs.contains(id)
+
+  def allNames(id: Id) =
+    names.filter((key, _) => key._1 == id)
 }
 
 def findConstraints(definitions: List[Toplevel])(using MonoFindContext): Constraints =
@@ -260,7 +269,7 @@ def solveConstraints(constraints: Constraints): Solution =
 
   val filteredConstraints = constraints.filterNot(c => c.lower.isEmpty)
   val groupedConstraints = filteredConstraints.groupBy(c => c.upper)
-  val vecConstraints = groupedConstraints.map((sym, constraints) => (sym -> constraints.map(c => c.lower)))
+  val vecConstraints = groupedConstraints.map((sym, constraints) => (sym -> constraints.map(c => c.lower).toSet))
 
   while (true) {
     val previousSolved = solved
@@ -527,7 +536,18 @@ def monomorphize(expr: Expr)(using ctx: MonoContext): Expr = expr match
     // TODO: Is this the correct order to combine the two type args or the other way around
     val combinedTargs = data.targs ++ targs
     val typeArgs = combinedTargs map toTypeArg
-    val replacementTag = ctx.names.getOrElse((tag, typeArgs.toVector), tag)
+    val replacementTag = ctx.names.get((tag, typeArgs.toVector)) match {
+      case Some(value) => value
+      case None => {
+        // TODO: This is for debugging, can ideally be removed later because it doesn't happen :^)
+        //       (for non-empty typeArgs)
+        if (typeArgs.length > 0) {
+          println(s"Could not find name for ${tag} with types ${typeArgs.toVector}")
+          println(s"all names: ${ctx.allNames(tag)}")
+        }
+        tag
+      }
+    }
     Make(replacementDataFromTargs(data.name, combinedTargs), replacementTag, List.empty, vargs map monomorphize)
   case Box(b, annotatedCapture) => 
     Box(monomorphize(b), annotatedCapture)
