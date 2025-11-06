@@ -23,6 +23,42 @@ abstract class AbstractMonoTests extends CorePhaseTests(Mono) {
     )
 }
 
+class MonoProductAppendTests extends AbstractMonoTests {
+
+    test("product append start empty append empty") {
+        val start = List(List.empty)
+        val append1 = List.empty
+
+        val res = productAppend(start, append1)
+        val expected = List(List.empty)
+
+        assertEquals(res, expected)
+    }
+
+    test("product append start with empty list") {
+        val start = List(List.empty)
+        val append1 = List(1, 2)
+        val append2 = List(3, 4)
+
+        var res = productAppend(start, append1)
+        res = productAppend(res, append2)
+
+        val expected = List(List(1, 3), List(1, 4), List(2, 3), List(2, 4))
+        assertEquals(res, expected)
+    }
+
+    test("product append unequal number of added values") {
+        val start = List(List(1)) 
+        val append1 = List(2,3)
+        val append2 = List(4)
+
+        var res = productAppend(start, append1)
+        res = productAppend(res, append2)
+        val expected = List(List(1,2,4), List(1,3,4))
+    }
+
+}
+
 class MonoTests extends AbstractMonoTests {
 
     import TypeArg.*

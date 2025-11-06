@@ -306,7 +306,8 @@ def solveConstraints(constraints: Constraints): Solution =
   solved
 
 def productAppend[A](ls: List[List[A]], rs: List[A]): List[List[A]] =
-  rs.flatMap(r => ls.map(l => l :+ r))
+  if (rs.isEmpty) return ls
+  for { l <- ls; r <- rs } yield l :+ r
 
 def monomorphize(definitions: List[Toplevel])(using ctx: MonoContext): List[Toplevel] =
   var newDefinitions: List[Toplevel] = List.empty
