@@ -29,10 +29,21 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     }
 
     if !Context.config.optimize() then return tree;
-
+    
+    /*
+    def inlineSmall(usage: Map[Id, Usage]) = NewNormalizer { (id, b) =>
+      usage.get(id).contains(Once) || (!usage.get(id).contains(Recursive) && b.size < 40)
+    }
+    val dontInline = NewNormalizer { (id, b) => false }
+    def inlineUnique(usage: Map[Id, Usage]) = NewNormalizer { (id, b) => usage.get(id).contains(Once) }
+    def inlineAll(usage: Map[Id, Usage]) = NewNormalizer { (id, b) => !usage.get(id).contains(Recursive) }
+    */
     // tree = Context.timed("new-normalizer-1", source.name) { inlineSmall(Reachable(Set(mainSymbol), tree)).run(tree) }
     tree = Context.timed("new-normalizer-1", source.name) { NewNormalizer().run(tree) }
-    //Normalizer.assertNormal(tree)
+    val usages = Reachable(Set(mainSymbol), tree)
+    util.trace(usages)
+    tree = Inliner(Unique(usages)).run(tree)
+    util.trace(util.show(tree))
     tree = StaticArguments.transform(mainSymbol, tree)
     // println(util.show(tree))
     // tree = Context.timed("new-normalizer-2", source.name) { inlineSmall(Reachable(Set(mainSymbol), tree)).run(tree) }
