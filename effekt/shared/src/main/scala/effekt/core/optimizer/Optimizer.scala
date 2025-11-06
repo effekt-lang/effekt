@@ -40,10 +40,10 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     */
     // tree = Context.timed("new-normalizer-1", source.name) { inlineSmall(Reachable(Set(mainSymbol), tree)).run(tree) }
     tree = Context.timed("new-normalizer-1", source.name) { NewNormalizer().run(tree) }
-    val usages = Reachable(Set(mainSymbol), tree)
-    util.trace(usages)
-    tree = Inliner(Unique(usages)).run(tree)
-    util.trace(util.show(tree))
+    //util.trace(util.show(tree))
+    tree = Inliner(Unique(Reachable(Set(mainSymbol), tree))).run(tree)
+    tree = Context.timed("new-normalizer-1", source.name) { NewNormalizer().run(tree) }
+    //util.trace(util.show(tree))
     tree = StaticArguments.transform(mainSymbol, tree)
     // println(util.show(tree))
     // tree = Context.timed("new-normalizer-2", source.name) { inlineSmall(Reachable(Set(mainSymbol), tree)).run(tree) }
