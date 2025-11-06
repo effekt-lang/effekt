@@ -126,4 +126,18 @@ class MonoTests extends AbstractMonoTests {
 
         assertEquals(solveConstraints(constraints), expectedSolved)
     }
+
+    test("nested constraints") {
+        val constraints = List(
+            Constraint(Vector(Base(fnId("Weighted"), List(Var(fnId("b"), 0)))), fnId("a")),
+            Constraint(Vector(BaseTInt), fnId("b"))
+        )
+
+        val expectedSolved: Solution = Map(
+            fnId("b") -> Set(Vector(BaseTInt)),
+            fnId("a") -> Set(Vector(Base(fnId("Weighted"), List(BaseTInt))))
+        )
+
+        assertEquals(solveConstraints(constraints), expectedSolved)
+    }
 }
