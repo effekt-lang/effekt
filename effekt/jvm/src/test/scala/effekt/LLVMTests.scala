@@ -54,6 +54,10 @@ class LLVMTests extends EffektTests {
 
     // Generic comparison
     examplesDir / "pos" / "issue733.effekt",
+
+    // Normalizer crash include again when fixed
+    examplesDir / "pos" / "raytracer.effekt",
+    examplesDir / "benchmarks" / "nofib" / "constraints.effekt",
   )
 
   override lazy val withoutOptimizations: Set[File] = Set(
