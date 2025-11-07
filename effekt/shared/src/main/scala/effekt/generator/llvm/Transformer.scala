@@ -919,7 +919,7 @@ object Transformer {
   private def produceSingleObject(role: String, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): LocalReference = {
     val objectReference = LocalReference(objectType, freshName(role))
     val environmentReference = LocalReference(environmentType, freshName("environment"))
-    val size = ConstantInt(environmentSize(environment));
+    val size = ConstantInt(environmentSize(environment))
     val eraser = getEraser(environment, ObjectEraser)
 
     emit(Call(objectReference.name, Ccc(), objectType, newObject, List(eraser, size)));
