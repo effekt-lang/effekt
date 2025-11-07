@@ -126,7 +126,12 @@ def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): Const
     }
   case Interface(id, tparams, properties) => 
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
-    List.empty
+    properties flatMap findConstraints
+
+def findConstraints(property: Property)(using ctx: MonoFindContext): Constraints = property match {
+  case Property(id, tpe@BlockType.Function(tparams, cparams, vparams, bparams, result)) => findConstraints(tpe, id)
+  case Property(id, tpe@BlockType.Interface(name, targs)) => findConstraints(tpe)
+}
 
 def findConstraints(block: Block)(using ctx: MonoFindContext): Constraints = block match
   case BlockVar(id, annotatedTpe: BlockType.Interface, annotatedCapt) => findConstraints(annotatedTpe)
@@ -348,14 +353,37 @@ def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] =
       ctx.replacementTparams ++= replacementTparams
       Declaration.Data(ctx.names(id, baseTypes), List.empty, constructors.flatMap(monomorphize(_, tparams.size)))
     )
-  case Interface(id, List(), properties) => List(decl)
+  case Interface(id, List(), properties) => {
+    val monoProp = properties flatMap monomorphize
+    List(Declaration.Interface(id, List.empty, monoProp))
+  }
   case Interface(id, tparams, properties) =>
     val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
     monoTypes.map(baseTypes =>
       val replacementTparams = tparams.zip(baseTypes).toMap
       ctx.replacementTparams ++= replacementTparams
-      Declaration.Interface(ctx.names(id, baseTypes), List.empty, properties)
+      val monoProp = properties flatMap monomorphize
+      Declaration.Interface(ctx.names(id, baseTypes), List.empty, monoProp)
     )
+
+def monomorphize(property: Property)(using ctx: MonoContext): List[Property] = property match {
+  case Property(id, tpe@BlockType.Function(tparams, cparams, vparams, bparams, result)) => {
+    val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
+    if (monoTypes.isEmpty) {
+      // FIXME?: Assuming here tparams is empty, or at least tparams.drop(tparamCount) is
+      //         This case can happen if there is no flow into a specific property,
+      //         in which case we should still emit the Property, but without the tparams
+      List(Property(id, monomorphize(tpe)))
+    } else {
+      monoTypes.map(baseTypes => 
+        val replacementTparams = tparams.zip(baseTypes).toMap
+        ctx.replacementTparams ++= replacementTparams
+        Property(ctx.names((id, baseTypes)), monomorphize(tpe)) 
+      )
+    }
+  }
+  case Property(id, tpe) => List(Property(id, monomorphize(tpe)))
+}
 
 def monomorphize(constructor: Constructor, tparamCount: Int)(using ctx: MonoContext): List[Constructor] = constructor match
   case Constructor(id, List(), fields) => 
