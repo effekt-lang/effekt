@@ -12,9 +12,13 @@ class FlatTests extends EffektTests {
 
   def backendName = "llvm"
   
-  override lazy val positives: Set[File] = Set()
+  override def valgrind = false // works on linux only
+  
+  override lazy val positives: Set[File] = Set(
+    examplesDir / "flat" / "optimized"
+  )
   
   override lazy val withoutOptimizations: Set[File] = Set(
-    examplesDir / "flat",
+    examplesDir / "flat" / "nooptimized",
   )
 }
