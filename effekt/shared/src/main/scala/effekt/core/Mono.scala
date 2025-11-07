@@ -410,7 +410,8 @@ def monomorphize(block: Block)(using ctx: MonoContext): Block = block match
   case Unbox(pure) => Unbox(monomorphize(pure))
 
 def monomorphize(impl: Implementation)(using ctx: MonoContext): Implementation = impl match
-  case Implementation(interface, operations) => Implementation(monomorphize(interface), operations.flatMap(monomorphize))
+  case Implementation(interface, operations) =>
+    Implementation(monomorphize(interface), operations.flatMap(monomorphize))
 
 def monomorphize(interface: BlockType.Interface)(using ctx: MonoContext): BlockType.Interface = interface match
   case BlockType.Interface(name, targs) => 
@@ -419,7 +420,29 @@ def monomorphize(interface: BlockType.Interface)(using ctx: MonoContext): BlockT
 
 def monomorphize(operation: Operation)(using ctx: MonoContext): List[Operation] = operation match
   case Operation(name, List(), cparams, vparams, bparams, body) =>
-    List(Operation(name, List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body)))
+    val optMonoTypes = ctx.solution.get(name)
+    // TODO: Not for here but in general. Why is the type omission not just syntactic sugar and we re-add the tparams.
+    //       What we have to do here seems much more complicated and is probably not the only location where we need to do something like this
+    // We need to differentiate cases here, because tparams may be omitted
+    // if they were omitted we can see if they still need to be there if we have a solution for these types
+    optMonoTypes match {
+      case None => {
+        List(Operation(name, List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body)))
+      }
+      case Some(monoTypes) => {
+        // TODO: I'm assuming that all value params have a Var type if we get into this case. Is that correct?
+        val tparams = vparams.map(vp => vp.tpe match {
+          case ValueType.Boxed(tpe, capt) => ???
+          case ValueType.Data(name, targs) => ???
+          case ValueType.Var(name) => name
+        })
+        monoTypes.toList.map(baseTypes =>
+          val replacementTparams = tparams.zip(baseTypes).toMap
+          ctx.replacementTparams ++= replacementTparams
+          Operation(ctx.names(name, baseTypes), List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))  
+        )
+      }
+    }
   case Operation(name, tparams, cparams, vparams, bparams, body) => 
     val monoTypes = ctx.solution.getOrElse(name, Set.empty).toList
     monoTypes.map(baseTypes =>
@@ -440,10 +463,13 @@ def monomorphize(block: BlockVar)(using ctx: MonoContext): BlockVar = block matc
 def monomorphize(field: Field)(using ctx: MonoContext): Field = field match
   case Field(id, tpe) => Field(id, monomorphize(tpe))
 
-def monomorphize(blockVar: BlockVar, replacementId: FunctionId)(using ctx: MonoContext): BlockVar = blockVar match
+// FIXME: Not a big fan of this function needing so many extra parameters
+def monomorphize(blockVar: BlockVar, replacementId: FunctionId, targs: List[ValueType])(using ctx: MonoContext): BlockVar = blockVar match
   case BlockVar(id, BlockType.Function(List(), cparams, vparams, bparams, result), annotatedCapt) => blockVar
   case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) if ctx.isPolyExtern(id) => blockVar
   case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) => 
+    val replacementTparams = tparams.zip(targs map toTypeArg).toMap
+    ctx.replacementTparams ++= replacementTparams
     val monoAnnotatedTpe = BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
     BlockVar(replacementId, monoAnnotatedTpe, annotatedCapt)
   case BlockVar(id, annotatedTpe: BlockType.Interface, annotatedCapt) =>
@@ -459,7 +485,7 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
     ImpureApp(id, callee, targs, vargs map monomorphize, bargs map monomorphize, monomorphize(body))
   case App(callee: BlockVar, targs, vargs, bargs) => 
     val replacementData = replacementDataFromTargs(callee.id, targs)
-    App(monomorphize(callee, replacementData.name), List.empty, vargs map monomorphize, bargs map monomorphize)
+    App(monomorphize(callee, replacementData.name, targs), List.empty, vargs map monomorphize, bargs map monomorphize)
   // TODO: Highly specialized, see todo in findConstraints for info
   //       change at the same time as findConstraints
   case App(Unbox(ValueVar(id, annotatedTpe)), targs, vargs, bargs) =>
