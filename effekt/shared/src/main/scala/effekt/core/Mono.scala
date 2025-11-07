@@ -248,9 +248,14 @@ def findConstraints(vts: List[ValueType])(using ctx: MonoFindContext): (List[Typ
 }
 
 def findConstraints(vt: ValueType)(using ctx: MonoFindContext): (TypeArg, Constraints) = vt match {
-  case ValueType.Boxed(tpe, capt) => {
+  case ValueType.Boxed(tpe@BlockType.Function(tparams, cparams, vparams, bparams, result), capt) => {
     // TODO: Perhaps recurse into tpe
+    // TODO: What do I do with a function type here? It does not have a name which does not work for my current findConstraints
     (TypeArg.Boxed(tpe, capt), List.empty)
+  }
+  case ValueType.Boxed(tpe@BlockType.Interface(name, targs), capt) => {
+    val constraints = findConstraints(tpe)
+    (TypeArg.Boxed(tpe, capt), constraints)
   }
   case ValueType.Data(name, targs) => {
     val (newTargs, constraints) = findConstraints(targs)
@@ -579,7 +584,7 @@ def monomorphize(valueType: ValueType)(using ctx: MonoContext): ValueType = valu
 
 def monomorphize(typeArg: TypeArg)(using ctx: MonoContext): ValueType = typeArg match {
   case TypeArg.Base(tpe, targs) => ValueType.Data(tpe, targs map monomorphize)
-  case TypeArg.Boxed(tpe, capt) => ValueType.Boxed(tpe, capt)
+  case TypeArg.Boxed(tpe, capt) => ValueType.Boxed(monomorphize(tpe), capt)
   case TypeArg.Var(funId, pos) => 
     // FIXME: Do we want to reflect this unreachability in the Data structure used for monomorphizing?
     //        we would need another version of TypeArg that disallows targs in Base to be anything other than Ground
