@@ -457,7 +457,7 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
   // TODO: Monomorphizing here throws an error complaining about a missing implementation
   //       Not sure what is missing, altough it does works like this
   case Reset(body) =>
-    Reset(body)
+    Reset(monomorphize(body))
   case Def(id, BlockLit(List(), cparams, vparams, bparams, bbody), body) => 
     Stmt.Def(id, BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(bbody)), monomorphize(body))
   case Def(id, BlockLit(tparams, cparams, vparams, bparams, bbody), body) =>
@@ -551,10 +551,10 @@ def monomorphize(expr: Expr)(using ctx: MonoContext): Expr = expr match
       case None => {
         // TODO: This is for debugging, can ideally be removed later because it doesn't happen :^)
         //       (for non-empty typeArgs)
-        if (typeArgs.length > 0) {
-          println(s"Could not find name for ${tag} with types ${typeArgs.toVector}")
-          println(s"all names: ${ctx.allNames(tag)}")
-        }
+        // if (typeArgs.length > 0) {
+        //   println(s"Could not find name for ${tag} with types ${typeArgs.toVector}")
+        //   println(s"all names: ${ctx.allNames(tag)}")
+        // }
         tag
       }
     }
