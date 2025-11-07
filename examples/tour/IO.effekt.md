@@ -22,7 +22,7 @@ import io/error
 
 def readFile(path: String): String / Exception[IOError] =
   if (internal::existsFile(path)) internal::readFile(path)
-  else do raise[IOError](ENOENT(), message(ENOENT()))
+  else do raise(ENOENT(), message(ENOENT()))
 
 def writeFile(path: String, contents: String): Unit / Exception[IOError] =
   internal::writeFile(path, contents)

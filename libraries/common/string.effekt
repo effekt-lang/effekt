@@ -246,7 +246,7 @@ def feed[R](string: String) { reader: () => R / read[Char] } =
 def each(string: String): Unit / emit[Char] =
   feed(string) {
     exhaustively {
-      do emit[Char](do read[Char]())
+      do emit(do read())
     }
   }
 
