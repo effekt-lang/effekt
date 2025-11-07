@@ -204,7 +204,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         usingCapture(CaptureSet(capability.capture))
 
         // (3) add effect to used effects
-        Result(tpe, effs ++ ConcreteEffects(List(effect)))
+        Result(tpe, effs ++ ConcreteEffects(List(Context.unification(effect))))
 
       case c @ source.Call(t: source.IdTarget, targs, vargs, bargs, _) =>
         checkOverloadedFunctionCall(c, t.id, targs map { _.resolveValueType }, vargs, bargs, expected)
@@ -1624,8 +1624,8 @@ trait TyperOps extends ContextOps { self: Context =>
    * Has the potential side-effect of creating a fresh capability. Also see [[BindAll.capabilityFor()]]
    */
   private [typer] def capabilityFor(tpe: InterfaceType): symbols.BlockParam =
-    assertConcreteEffect(tpe)
     val cap = capabilityScope.capabilityFor(tpe)
+    assertConcreteEffect(unification(tpe))
     annotations.update(Annotations.Captures, cap, CaptureSet(cap.capture))
     cap
 
