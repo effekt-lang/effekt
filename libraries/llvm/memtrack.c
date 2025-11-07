@@ -94,11 +94,11 @@ void cFree(void* ptr)
 {
     if (ptr == NULL)
         return;
-    removeAllocation(ptr);
-    free(ptr);
     if (debug) {
         printf("[cFree] Freed block: %p\n", ptr);
     }
+    removeAllocation(ptr);
+    free(ptr);
 }
 
 // If there are any remaining allocations (potential leaks), we report all of them and terminate the program
