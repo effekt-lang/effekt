@@ -585,11 +585,18 @@ object Namer extends Phase[Parsed, NameResolved] {
         val fieldId = paramTree.id.clone
         val name = Context.nameFor(fieldId)
         val fieldSym = Field(name, paramSym, constructor, paramTree)
-        if (defineAccessors) {
-          Context.define(fieldId, fieldSym)
-        } else {
-          Context.assignSymbol(fieldId, fieldSym)
+
+        // Constructor::field
+        Context.namespace(constructor.name.name) {
+          if (defineAccessors) {
+            Context.define(fieldId, fieldSym)
+          } else {
+            Context.assignSymbol(fieldId, fieldSym)
+          }
         }
+
+        // export Constructor::fieldName
+        Context.bind(fieldSym)
         fieldSym
     }
   }
