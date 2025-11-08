@@ -24,7 +24,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   private final val FUNCTION_NAME: String = "show"
 
-  case class ShowContext(showDefns: collection.mutable.Map[ValueType, Toplevel.Def], backend: String) {
+  case class ShowContext(showNames: collection.mutable.Map[ValueType, Id], showDefns: collection.mutable.Map[ValueType, Toplevel.Def], tparamLookup: collection.mutable.Map[Id, ValueType], backend: String) {
 
     def getAllShowDef(using ShowContext)(using DeclarationContext): List[Toplevel.Def] =
       showDefns.map(_._2).toList
@@ -32,12 +32,16 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   // This will check if we have already generated a Show instance for the given type and generate it if we didn't
   def getShowBlockVar(vt: ValueType)(using ctx: ShowContext)(using DeclarationContext): Block.BlockVar =
-    val showId = ctx.showDefns.getOrElse(vt, {
+    
+    val showId = ctx.showNames.getOrElse(vt, {
       println(s"DEBUG: Generating show for '${vt}'")
-      generateShowInstance(vt).getOrElse({
-        sys error s"Could not generate show instance for '${vt}'"
-      })
-    }).id
+      generateShowInstance(vt) match {
+        case None => ctx.showNames.getOrElse(vt, {
+          sys error s"Could not generate show instance for '${vt}'"
+        })
+        case Some(value) => value.id
+      }
+    })
     Block.BlockVar(showId, BlockType.Function(List.empty, List.empty, List(vt), List.empty, TString), Set.empty)
   
 
@@ -46,17 +50,15 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       // 3. Synthesize `show` definitions, create (ValueType -> (show) Id) map for context
       // 3.1 figure out which backend we are generating for
       val backend: String = core.externs.collect {
-        case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => 
-          body match {
-            case StringExternBody(featureFlag: FeatureFlag.NamedFeatureFlag, contents) => featureFlag.id
-            case _ => sys error "Should never happen"
-          }
+        case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, 
+          StringExternBody(featureFlag: FeatureFlag.NamedFeatureFlag, contents)) => featureFlag.id
       }(0)
 
-      implicit val ctx: ShowContext = ShowContext(collection.mutable.Map.empty, backend)
+      implicit val ctx: ShowContext = ShowContext(collection.mutable.Map.empty, collection.mutable.Map.empty, collection.mutable.Map.empty, backend)
       implicit val dctx: DeclarationContext = DeclarationContext(core.declarations, core.externs)
 
       var transformed = transform(core)
+      println()
       // println(util.show(transformed))
       Some(CoreTransformed(source, tree, mod, transformed))
     }
@@ -117,6 +119,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def generateShowInstanceLLVM(vt: ValueType)(using ctx: ShowContext)(using dctx: DeclarationContext): Option[Toplevel.Def] =
     val showId = freshShowId
+    ctx.showNames += (vt -> showId)
     val paramId = Id("value")
     val vparam = ValueParam(paramId, vt)
     val paramValueVar = Expr.ValueVar(paramId, vt)
@@ -147,7 +150,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         */
         val stmt = Stmt.Return(Expr.Literal("()", TString))
         Some(generateDef(stmt))
-      case Type.TInt | Type.TChar =>
+      case Type.TInt =>
         /* 
         (value: Int) {
           %z = call %Pos @c_bytearray_show_Int(%Int ${value})
@@ -155,6 +158,8 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         }
         */
         Some(generateShow(Type.TInt))
+      case Type.TChar =>
+        Some(generateShow(Type.TChar))
       case Type.TByte =>
         /* 
         (value: Byte) {
@@ -177,11 +182,15 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         Some(generateDef(stmt))
       case ValueType.Data(name, targs) => 
         val data = dctx.datas(name)
-        generateShowInstance(data)
+        generateShowInstance(data, targs)
       // FIXME: Placeholder case so we don't just crash
       case ValueType.Var(name) => 
-        val stmt = Stmt.Return(Expr.Literal("Var(" + name + ")", TString))
-        Some(generateDef(stmt))
+        val lookup = ctx.tparamLookup(name)
+        val showName = ctx.showNames.get(lookup)
+        showName match {
+          case None => generateShowInstance(lookup)
+          case Some(value) => None
+        }
       case _ => println(s"Missing case for vt: ${vt}"); None
 
     }
@@ -195,72 +204,48 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       case Some(Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body)) => 
         Block.BlockVar(id, BlockType.Function(tparams, cparams, vparams map (_.tpe), bparams map (_.tpe), ret), annotatedCapture)
 
-  def generateShowInstancesDecls(declarations: List[Declaration])(using ShowContext)(using DeclarationContext): List[Toplevel.Def] = 
-    declarations flatMap generateShowInstance
-
-  def generateShowInstance(decl: Declaration)(using ctx: ShowContext)(using DeclarationContext): Option[Toplevel.Def] = decl match {
+  def generateShowInstance(decl: Declaration, targs: List[ValueType])(using ctx: ShowContext)(using dctx: DeclarationContext): Option[Toplevel.Def] = decl match {
     case dataDecl: Declaration.Data if dataDecl.constructors.size > 0 => 
       val freshId = freshShowId
-      val defn = generateShowInstance(dataDecl, freshId)
-      val dataType = ValueType.Data(dataDecl.id, List.empty)
+      val dataType = ValueType.Data(decl.id, List.empty)
+      ctx.showNames += (dataType -> freshId)
+      val defn = generateShowInstance(dataDecl, freshId, targs)
       ctx.showDefns += (dataType -> defn)
       Some(defn)
     case _ => None
   }
 
-  def generateShowInstance(declarations: List[Declaration], vt: ValueType, id: Id)(using ctx: ShowContext)(using DeclarationContext): Toplevel.Def =
-    vt match {
-      case ValueType.Data(name, targs) => 
-        declarations.find(decl => decl.id == name).get match {
-          case d: Data => return generateShowInstance(d, id)
-          case i: Interface => ???
-        }
-      case _ => ???
-    }
-    ???
-
-  def generateShowInstance(decl: Declaration.Data, id: Id)(using ShowContext)(using DeclarationContext): Toplevel.Def =
-    val defnId = id
+  def generateShowInstance(decl: Declaration.Data, id: Id, targs: List[ValueType])(using ctx: ShowContext)(using DeclarationContext): Toplevel.Def =
     val valueId = Id("value")
-    val valueTpe = ValueType.Data(decl.id, List.empty)
-    val vparam = ValueParam(valueId, valueTpe)
     
-    val constructorIds = decl.constructors.zipWithIndex.map((constr, index) => Id(s"b_k$index"))
+    val tparamLookup = decl.tparams.zip(targs).toMap
+    ctx.tparamLookup ++= tparamLookup
+
+    val valueTpe = ValueType.Data(decl.id, targs)
+    val vparam = ValueParam(valueId, valueTpe)
+
     val constructorVparams = decl.constructors.map(constructorVparam)
-    val constructorIdVparams = constructorIds.zip(constructorVparams)
-    val v_r = Id("v_r")
-    val clauses = decl.constructors.zip(constructorIdVparams).map(constructorClauses)
+    
+    val clauses = decl.constructors.zip(constructorVparams).map(constructorClauses)
     val matchStmt = Stmt.Match(
       ValueVar(valueId, valueTpe),
       clauses,
       None
     )
-    val returnVal = Stmt.Val(
-      v_r,
-      TString,
-      matchStmt,
-      Return(ValueVar(v_r, TString))
-    )
 
-    val constructorStmts = decl.constructors.map(constructorStmt)
-    val defns = constructorStmts.zip(constructorIdVparams)
-    val stmt = nestDefns(defns, returnVal)
+    Toplevel.Def(id, Block.BlockLit(List.empty, List.empty, List(vparam), List.empty, matchStmt))
 
-    Toplevel.Def(defnId, Block.BlockLit(List.empty, List.empty, List(vparam), List.empty, stmt))
+  def constructorClauses(constructor: Constructor, vparams: List[ValueParam])(using ShowContext)(using DeclarationContext): (Id, BlockLit) =
+    (constructor.id, BlockLit(List.empty, List.empty, vparams, List.empty, constructorStmt(constructor)))
 
-  def nestDefns(defns: List[(Stmt, (Id, List[ValueParam]))], default: Stmt): Stmt = defns match 
-    case (head, (id, vparams)) :: rest => 
-      val recur = nestDefns(rest, default)
-      Stmt.Def(id, BlockLit(List.empty, List.empty, vparams, List.empty, head), recur)
-    case Nil => default
-
-  def constructorClauses(constridvparams: (Constructor, (Id, List[ValueParam])))(using ShowContext): (Id, BlockLit) = constridvparams match
-    case (Constructor(id, tparams, fields), (fnId, vparams)) => 
-      (id, BlockLit(List.empty, List.empty, vparams, List.empty, 
-        Stmt.App(BlockVar(fnId, BlockType.Function(List.empty, List.empty, vparams.map(_.tpe), List.empty, TString), Set.empty), List.empty, fields map fieldValueVar, List.empty)))
-
-  def constructorVparam(constr: Constructor)(using ShowContext): List[ValueParam] = constr match 
-    case Constructor(id, tparams, fields) => fields.map(f => ValueParam(f.id, f.tpe))
+  def constructorVparam(constr: Constructor)(using ctx: ShowContext): List[ValueParam] = constr match 
+    case Constructor(id, tparams, fields) => fields.map({
+      case Field(id, tpe) => tpe match {
+        case ValueType.Data(name, targs) => ValueParam(id, tpe)
+        case ValueType.Var(name) => ValueParam(id, ctx.tparamLookup(name))
+        case ValueType.Boxed(tpe, capt) => ???
+      }
+    })
 
   def constructorStmt(constr: Constructor)(using ctx: ShowContext)(using dctx: DeclarationContext): Stmt = constr match
     case Constructor(id, tparams, List()) => Return(Literal(id.name.name, TString))
@@ -292,9 +277,15 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     case Field(id, tpe) => ValueVar(id, tpe)
 
   def fieldPure(field: Field)(using ctx: ShowContext)(using DeclarationContext): (Id, Stmt.App) = field match
-    case Field(id, tpe) => 
+    case Field(id, tpe: ValueType.Data) => 
       val app: Stmt.App = App(getShowBlockVar(tpe), List.empty, List(ValueVar(id, tpe)), List.empty)
       (Id("field"), app)
+    case Field(id, tpe: ValueType.Var) =>
+      val paramTpe = ctx.tparamLookup(tpe.name) 
+      val app: Stmt.App = App(getShowBlockVar(paramTpe), List.empty, List(ValueVar(id, paramTpe)), List.empty)
+      (Id("field"), app)
+    case Field(id, tpe: ValueType.Boxed) =>
+      ???
 
   var freshShowCounter = 0
   def freshShowId: Id = 
