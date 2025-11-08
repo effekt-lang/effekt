@@ -22,6 +22,8 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   override val phaseName: String = "show"
 
+  private final val FUNCTION_NAME: String = "show"
+
   case class ShowContext(showDefns: collection.mutable.Map[ValueType, Id], backend: String) {
     def getShowBlockVar(vt: ValueType): Block.BlockVar =
       val showId = showDefns(vt)
@@ -53,7 +55,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     case ModuleDecl(path, includes, declarations, externs, definitions, exports) => 
       // 2. Define list of base types to synthesize definitions for
       // 2.1 actual base types (Int, Char, ...)
-      var builtinTypes = Type.Builtins
+      var builtinTypes = Type.builtins
       // 2.2 data types without tparams
       val declarationTypes = declarations.flatMap(decl => decl match
         case Data(id, targs, constructors) => Some(decl)
@@ -86,26 +88,23 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(stmt: Stmt)(using ctx: ShowContext): Stmt = 
     stmt match {
-      case Let(id, annotatedTpe, PureApp(BlockVar(bid, bannotatedTpe, bannotatedCapt), targs, vargs), body) if bid.name.name == "show" => 
-        if (targs.length != 1) sys error "expected targs to only have one argument"
+      case Let(id, annotatedTpe, PureApp(BlockVar(bid, bannotatedTpe, bannotatedCapt), targs, vargs), body) if bid.name.name == FUNCTION_NAME => 
+        if (targs.length != 1) sys error "expected targs to have exactly one argument"
         Stmt.Val(id, annotatedTpe, Stmt.App(ctx.getShowBlockVar(targs(0)), List.empty, vargs, List.empty), transform(body))
       case Let(id, annotatedTpe, binding, body) => 
         Let(id, annotatedTpe, transform(binding), transform(body))
       case Return(expr) => Return(transform(expr))
-      case ImpureApp(id, BlockVar(bid, annotatedTpe, annotatedCapt), targs, vargs, bargs, body) if bid.name.name == "show" =>
-        if (targs.length != 1) sys error "expected targs to only have one argument"
-        ctx.getShowBlockVar(targs(0)) match {
-          case BlockVar(bid, annotatedTpe, annotatedCapt) => 
-            Stmt.Val(id, TString, Stmt.App(BlockVar(bid, annotatedTpe, annotatedCapt), List.empty, vargs map transform, bargs map transform), transform(body))
-        }
+      case ImpureApp(id, BlockVar(bid, annotatedTpe, annotatedCapt), targs, vargs, bargs, body) if bid.name.name == FUNCTION_NAME =>
+        if (targs.length != 1) sys error "expected targs to have exactly one argument"
+        Stmt.Val(id, TString, Stmt.App(ctx.getShowBlockVar(targs(0)), List.empty, vargs map transform, bargs map transform), transform(body))
       case ImpureApp(id, callee, targs, vargs, bargs, body) => ImpureApp(id, callee, targs, vargs, bargs, transform(body))
       case o => println(o); ???
     }
 
   def transform(expr: Expr)(using ctx: ShowContext): Expr = expr match {
     case Make(data, tag, targs, vargs) => Make(data, tag, targs, vargs)
-    case PureApp(BlockVar(id, annotatedTpe, annotatedCapt), targs, vargs) if id.name.name == "show" => 
-      if (targs.length != 1) sys error "expected targs to only have one argument"
+    case PureApp(BlockVar(id, annotatedTpe, annotatedCapt), targs, vargs) if id.name.name == FUNCTION_NAME => 
+      if (targs.length != 1) sys error "expected targs to have exactly one argument"
       Expr.PureApp(ctx.getShowBlockVar(targs(0)), List.empty, vargs)
     case PureApp(b, targs, vargs) => PureApp(b, targs, vargs)
     case Literal(value, annotatedType) => Literal(value, annotatedType)
@@ -297,7 +296,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   var freshShowCounter = 0
   def freshShowId: Id = 
-    val freshId = Id("show" ++ freshShowCounter.toString())
+    val freshId = Id(FUNCTION_NAME ++ freshShowCounter.toString())
     freshShowCounter += 1
     freshId
 }
