@@ -674,7 +674,7 @@ void c_promise_resolve(struct Pos promise, struct Pos value, Stack stack) {
     }
     // TODO stack overflow?
     // We need to erase the promise now, since we consume it.
-    erasePositive(promise);
+    // erasePositive(promise);
 }
 
 void c_promise_await(struct Pos promise, Stack stack) {
@@ -706,7 +706,7 @@ void c_promise_await(struct Pos promise, Stack stack) {
             break;
     };
     // TODO hmm, stack overflow?
-    erasePositive(promise);
+    erasePositive(promise);   // df: Otherwise, interleave_promises.effekt fails.
 }
 
 struct Pos c_promise_make() {
