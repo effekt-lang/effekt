@@ -29,7 +29,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     }
 
     if !Context.config.optimize() then return tree;
-    
+
     /*
     def inlineSmall(usage: Map[Id, Usage]) = NewNormalizer { (id, b) =>
       usage.get(id).contains(Once) || (!usage.get(id).contains(Recursive) && b.size < 40)
@@ -40,10 +40,11 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     */
     // tree = Context.timed("new-normalizer-1", source.name) { inlineSmall(Reachable(Set(mainSymbol), tree)).run(tree) }
     tree = Context.timed("new-normalizer-1", source.name) { NewNormalizer().run(tree) }
-    //util.trace(util.show(tree))
-    tree = Inliner(Unique(Reachable(Set(mainSymbol), tree))).run(tree)
+    util.trace(util.show(tree))
+    tree = Inliner(UniqueJumpSimple(Reachable(Set(mainSymbol), tree))).run(tree)
+    util.trace(util.show(tree))
     tree = Context.timed("new-normalizer-1", source.name) { NewNormalizer().run(tree) }
-    //util.trace(util.show(tree))
+    util.trace(util.show(tree))
     tree = StaticArguments.transform(mainSymbol, tree)
     // println(util.show(tree))
     // tree = Context.timed("new-normalizer-2", source.name) { inlineSmall(Reachable(Set(mainSymbol), tree)).run(tree) }
