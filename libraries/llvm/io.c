@@ -898,6 +898,8 @@ void c_spawn(struct Pos cmd, struct Pos args, struct Pos options, Stack stack) {
         subproc_stream_cb_closure_t* clos = (subproc_stream_cb_closure_t*)(stream->data);
         struct Pos str = (struct Pos) { .tag = 0, .obj = stream, };
         run_Pos(clos->handler, str);
+        erasePositive(clos->handler);
+        free(clos);
     }
     if(opts->stdio[1].flags & UV_CREATE_PIPE)
       uv_read_start((uv_stream_t*)(opts->stdio[1].data.stream), subproc_alloc_cb, subproc_stream_cb);
