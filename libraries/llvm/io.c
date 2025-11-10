@@ -791,15 +791,23 @@ typedef struct {
   Stack k;
   uv_process_options_t* opts;
 } subproc_proc_data_t;
-void subproc_on_close(uv_handle_t* handle) {
-    free(handle);
-}
-void c_close_stream_callback_exit(uv_shutdown_t* req, int status) {
-    if(status != 0){
-        // TODO
-    }
-    free(req->data);
+void c_close_stream_callback_exit(uv_handle_t* req) {
     free(req);
+}
+void subproc_on_close(uv_handle_t* handle) {
+    subproc_proc_data_t* pd = (subproc_proc_data_t*)((uv_process_t*)handle)->data;
+    uv_process_options_t* opts = (uv_process_options_t*)(pd->opts);
+    if(opts->stdio[1].flags & UV_CREATE_PIPE){
+        uv_close((uv_handle_t*)(opts->stdio[1].data.stream), c_close_stream_callback_exit);
+    }
+    if(opts->stdio[2].flags & UV_CREATE_PIPE){
+        uv_close((uv_handle_t*)(opts->stdio[2].data.stream), c_close_stream_callback_exit);
+    }
+    // TODO shutdown pipes for stdio
+    free(opts->stdio);
+    free(opts);
+    free(pd);
+    free(handle);
 }
 void subproc_on_exit(uv_process_t* proc, int64_t exit_status, int term_signal) {
     (void)term_signal; (void)exit_status;
@@ -811,22 +819,7 @@ void subproc_on_exit(uv_process_t* proc, int64_t exit_status, int term_signal) {
         free(pd->args);
     }
     Stack k = pd->k;
-    uv_process_options_t* opts = (uv_process_options_t*)(pd->opts);
     uv_close((uv_handle_t*)proc, subproc_on_close);
-    if(opts->stdio[1].flags & UV_CREATE_PIPE){
-        uv_shutdown_t* req = (uv_shutdown_t*)malloc(sizeof(uv_shutdown_t));
-        req->data = (opts->stdio[1].data.stream);
-        uv_shutdown(req, (uv_stream_t*)req->data, c_close_stream_callback_exit);
-    }
-    if(opts->stdio[2].flags & UV_CREATE_PIPE){
-        uv_shutdown_t* req = (uv_shutdown_t*)malloc(sizeof(uv_shutdown_t));
-        req->data = (opts->stdio[2].data.stream);
-        uv_shutdown(req, (uv_stream_t*)req->data, c_close_stream_callback_exit);
-    }
-    // TODO shutdown pipes for stdio
-    free(opts->stdio);
-    free(opts);
-    free(pd);
     resume_Int(k, exit_status);
 }
 
