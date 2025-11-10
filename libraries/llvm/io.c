@@ -870,6 +870,7 @@ void c_spawn(struct Pos cmd, struct Pos args, struct Pos options, Stack stack) {
 
     // command
     char* cmd_s = c_bytearray_into_nullterminated_string(cmd);
+    erasePositive(cmd);
     opts->file = cmd_s;
 
     // args
