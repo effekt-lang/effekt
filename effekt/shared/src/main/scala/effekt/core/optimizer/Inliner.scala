@@ -14,6 +14,20 @@ class Unique(usage: Map[Id, Usage]) extends InliningPolicy {
       ctx.blocks.get(id).exists(_.size <= ctx.maxInlineSize)
 }
 
+class UniqueJumpSimple(usage: Map[Id, Usage]) extends InliningPolicy {
+  override def apply(id: Id)(using ctx: Context): Boolean = {
+    val use = usage.get(id)
+    val block = ctx.blocks.get(id)
+    var doInline = !usage.get(id).contains(Usage.Recursive)
+    doInline &&= use.contains(Usage.Once) || block.collect {
+      case effekt.core.Block.BlockLit(_, _, _, _, _: Stmt.Return) => true
+      case effekt.core.Block.BlockLit(_, _, _, _, _: Stmt.App) => true
+    }.isDefined
+    doInline &&= block.exists(_.size <= ctx.maxInlineSize)
+    doInline
+  }
+}
+
 case class Context(
   blocks: Map[Id, Block],
   exprs: Map[Id, Expr],
@@ -47,21 +61,17 @@ class Inliner(shouldInline: InliningPolicy) extends Tree.RewriteWithContext[Cont
     Stmt.Def(bparam.id, barg, body)
 
   def bindBlocks(body: Stmt, blocks: List[(BlockParam, Block)]): Stmt =
-    blocks.headOption.map { (bp, barg) =>
-      blocks.tail.foldRight(bindBlock(body, bp, barg)) { case ((bp, barg), acc) =>
-        bindBlock(acc, bp, barg)
-      }
-    }.getOrElse(body)
+    blocks.foldRight(body) { case ((bp, barg), acc) =>
+      bindBlock(acc, bp, barg)
+    }
 
   def bindValue(body: Stmt, vparam: ValueParam, varg: Expr): Stmt =
     Stmt.Let(vparam.id, vparam.tpe, varg, body)
 
   def bindValues(body: Stmt, values: List[(ValueParam, Expr)]): Stmt =
-    values.headOption.map { (vp, varg) =>
-      values.tail.foldRight(Stmt.Let(vp.id, vp.tpe, varg, body)) { case ((vp, varg), acc) =>
-        bindValue(acc, vp, varg)
-      }
-    }.getOrElse(body)
+    values.foldRight(body) { case ((vp, varg), acc) =>
+      bindValue(acc, vp, varg)
+    }
 
   override def stmt(using ctx: Context): PartialFunction[Stmt, Stmt] = {
     case app @ Stmt.App(bvar: BlockVar, targs, vargs, bargs) if shouldInline(bvar.id) =>
