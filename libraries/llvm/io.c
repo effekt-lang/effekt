@@ -797,6 +797,9 @@ void c_close_stream_callback_exit(uv_handle_t* req) {
 void subproc_on_close(uv_handle_t* handle) {
     subproc_proc_data_t* pd = (subproc_proc_data_t*)((uv_process_t*)handle)->data;
     uv_process_options_t* opts = (uv_process_options_t*)(pd->opts);
+    if(opts->stdio[0].flags & UV_CREATE_PIPE){
+        uv_close((uv_handle_t*)(opts->stdio[0].data.stream), c_close_stream_callback_exit);
+    }
     if(opts->stdio[1].flags & UV_CREATE_PIPE){
         uv_close((uv_handle_t*)(opts->stdio[1].data.stream), c_close_stream_callback_exit);
     }
