@@ -3,7 +3,7 @@ package generator
 package llvm
 
 import effekt.generator.llvm.Type as LLVMType
-import effekt.generator.llvm.Instruction.Call
+import effekt.generator.llvm.Instruction.{Call, Load}
 import effekt.machine
 import effekt.machine.{Environment, Variable}
 import effekt.machine.analysis.*
@@ -12,6 +12,7 @@ import effekt.util.messages.ErrorReporter
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 object Transformer {
 
@@ -40,7 +41,9 @@ object Transformer {
 
   // context getters
   private def MC(using MC: ModuleContext): ModuleContext = MC
+
   private def FC(using FC: FunctionContext): FunctionContext = FC
+
   private def BC(using BC: BlockContext): BlockContext = BC
 
   def transform(declaration: machine.Declaration)(using ErrorReporter): Definition =
@@ -64,26 +67,26 @@ object Transformer {
       """call void @hole()
         |unreachable
         |""".stripMargin
-    }
+  }
 
   def transform(template: Template[machine.Variable]): String = "; variable\n    " ++ intercalate(template.strings, template.args.map {
     case machine.Variable(name, tpe) => PrettyPrinter.localName(name)
   }).mkString
 
   def transform(definition: machine.Definition)(using ModuleContext): Unit = definition match {
-   case machine.Definition(machine.Label(name, environment), body) =>
-        val parameters = environment.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
-        defineLabel(name, parameters) {
-          emit(Comment(s"definition $name, environment length ${environment.length}"))
-          eraseValues(environment, freeVariables(body))
-          transform(body)
-        }
+    case machine.Definition(machine.Label(name, environment), body) =>
+      val parameters = environment.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
+      defineLabel(name, parameters) {
+        emit(Comment(s"definition $name, environment length ${environment.length}"))
+        eraseValues(environment, freeVariables(body))
+        transform(body)
+      }
   }
 
   def transform(statement: machine.Statement)(using ModuleContext, FunctionContext, BlockContext): Terminator =
     statement match {
 
-     case machine.Jump(label, arguments) =>
+      case machine.Jump(label, arguments) =>
         emit(Comment(s"jump ${label.name}"))
         shareValues(arguments, Set())
         emit(callLabel(transform(label), arguments.map(transform)))
@@ -186,7 +189,7 @@ object Transformer {
         emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
         RetVoid()
 
-      case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, retType, rest) =>
+      case machine.Var(ref@machine.Variable(name, machine.Type.Reference(tpe)), init, retType, rest) =>
         val environment = List(init)
         val returnAddressName = freshName("returnAddress")
         val returnType = transform(retType)
@@ -394,17 +397,17 @@ object Transformer {
         }
         transform(rest)
 
-     case machine.Statement.Hole(span) =>
-       val posfmt = span.range.from.format
-       emit(Comment(s"Hole @ $posfmt"))
+      case machine.Statement.Hole(span) =>
+        val posfmt = span.range.from.format
+        emit(Comment(s"Hole @ $posfmt"))
 
-       // Reused from LiteralUTF8String
-       val utf8 = (posfmt + "\u0000").getBytes("UTF-8") // null-terminated
-       val litName = freshName("hole_pos")
-       emit(GlobalConstant(s"$litName.lit", ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
+        // Reused from LiteralUTF8String
+        val utf8 = (posfmt + "\u0000").getBytes("UTF-8") // null-terminated
+        val litName = freshName("hole_pos")
+        emit(GlobalConstant(s"$litName.lit", ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
 
-       emit(Call("_", Ccc(), VoidType(), ConstantGlobal("hole"), List(ConstantGlobal(s"$litName.lit"))))
-       RetVoid()
+        emit(Call("_", Ccc(), VoidType(), ConstantGlobal("hole"), List(ConstantGlobal(s"$litName.lit"))))
+        RetVoid()
     }
 
   def transform(label: machine.Label): ConstantGlobal =
@@ -432,15 +435,17 @@ object Transformer {
   val resumptionType = NamedType("Resumption");
   val promptType = NamedType("Prompt");
   val referenceType = NamedType("Reference");
+  val headerType = NamedType("Header");
+  val referenceCountType = NamedType("ReferenceCount");
 
   def transform(tpe: machine.Type): Type = tpe match {
-    case machine.Positive()          => positiveType
-    case machine.Negative()          => negativeType
-    case machine.Type.Prompt()       => promptType
-    case machine.Type.Stack()        => resumptionType
-    case machine.Type.Int()          => IntegerType64()
-    case machine.Type.Byte()         => IntegerType8()
-    case machine.Type.Double()       => DoubleType()
+    case machine.Positive() => positiveType
+    case machine.Negative() => negativeType
+    case machine.Type.Prompt() => promptType
+    case machine.Type.Stack() => resumptionType
+    case machine.Type.Int() => IntegerType64()
+    case machine.Type.Byte() => IntegerType8()
+    case machine.Type.Double() => DoubleType()
     case machine.Type.Reference(tpe) => referenceType
   }
 
@@ -449,13 +454,13 @@ object Transformer {
 
   def typeSize(tpe: machine.Type): Int =
     tpe match {
-      case machine.Positive()        => 16
-      case machine.Negative()        => 16
-      case machine.Type.Prompt()     => 8 // TODO Make fat?
-      case machine.Type.Stack()      => 8 // TODO Make fat?
-      case machine.Type.Int()        => 8 // TODO Make fat?
-      case machine.Type.Byte()       => 1
-      case machine.Type.Double()     => 8 // TODO Make fat?
+      case machine.Positive() => 16
+      case machine.Negative() => 16
+      case machine.Type.Prompt() => 8 // TODO Make fat?
+      case machine.Type.Stack() => 8 // TODO Make fat?
+      case machine.Type.Int() => 8 // TODO Make fat?
+      case machine.Type.Byte() => 1
+      case machine.Type.Double() => 8 // TODO Make fat?
       case machine.Type.Reference(_) => 16
     }
 
@@ -465,8 +470,10 @@ object Transformer {
 
     val terminator = prog;
 
-    val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
-    val instructions = BC.instructions; BC.instructions = null;
+    val basicBlocks = FC.basicBlocks;
+    FC.basicBlocks = null;
+    val instructions = BC.instructions;
+    BC.instructions = null;
 
     val entryBlock = BasicBlock("entry", instructions, terminator);
     val function = Function(Private(), Ccc(), VoidType(), name, parameters, entryBlock :: basicBlocks);
@@ -480,8 +487,10 @@ object Transformer {
 
     val terminator = prog;
 
-    val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
-    val instructions = BC.instructions; BC.instructions = null;
+    val basicBlocks = FC.basicBlocks;
+    FC.basicBlocks = null;
+    val instructions = BC.instructions;
+    BC.instructions = null;
 
     val entryBlock = BasicBlock("entry", instructions, terminator);
     val function = Function(Private(), Tailcc(true), VoidType(), name, parameters :+ Parameter(stackType, "stack"), entryBlock :: basicBlocks);
@@ -514,29 +523,17 @@ object Transformer {
   }
 
   def getEraser(environment: machine.Environment, kind: EraserKind)(using C: ModuleContext): Operand = {
-    val types = environment.map{ _.tpe };
-    val freshEnvironment = environment.map{
+    val types = environment.map {
+      _.tpe
+    };
+    val freshEnvironment = environment.map {
       case machine.Variable(name, tpe) => machine.Variable(freshName(name), tpe)
     };
 
     C.erasers.getOrElseUpdate((types, kind), {
       kind match {
         case ObjectEraser =>
-          val eraser = ConstantGlobal(freshName("eraser"));
-          defineFunction(eraser.name, List(Parameter(objectType, "object"))) {
-            emit(Comment(s"${kind} eraser, ${freshEnvironment.length} free variables"))
-
-            // Use call @objectEnvironment to get environment pointer
-            emit(Call("environment", Ccc(), environmentType, ConstantGlobal("objectEnvironment"), List(LocalReference(objectType, "object"))));
-            
-            // TODO avoid unnecessary loads
-            loadEnvironmentAt(LocalReference(environmentType, "environment"), freshEnvironment, Object);
-            eraseValues(freshEnvironment, Set());
-            
-            emit(Call("", Ccc(), VoidType(), ConstantGlobal("release"), List(LocalReference(objectType, "object"))));
-            RetVoid()
-          };
-          eraser
+          createEraserForNormalObjects(freshEnvironment)
         case StackEraser | StackFrameEraser =>
           val eraser = ConstantGlobal(freshName("eraser"));
           defineFunction(eraser.name, List(Parameter(stackPointerType, "stackPointer"))) {
@@ -557,8 +554,10 @@ object Transformer {
   }
 
   def getSharer(environment: machine.Environment, kind: SharerKind)(using C: ModuleContext): Operand = {
-    val types = environment.map{ _.tpe };
-    val freshEnvironment = environment.map{
+    val types = environment.map {
+      _.tpe
+    };
+    val freshEnvironment = environment.map {
       case machine.Variable(name, tpe) => machine.Variable(freshName(name), tpe)
     };
 
@@ -675,11 +674,11 @@ object Transformer {
             loadAllVariables(currentEnvironmentPtr, chunk, alias, tpe)
           } else {
             // Here we do the same as for the normal slot plus some extra stuff 
-            
+
             // For non-last chunkedEnvironments, layout is chunk ++ [Pos link]
-            val tpe = StructureType(chunk.map { case machine.Variable(_, t) => transform(t) } :+ positiveType)  // the same as for the normal case + positive Type for the link
+            val tpe = StructureType(chunk.map { case machine.Variable(_, t) => transform(t) } :+ positiveType) // the same as for the normal case + positive Type for the link
             loadAllVariables(currentEnvironmentPtr, chunk, alias, tpe)
-            
+
             // Follow link to next block. The Link pointer is the last element of the chunk
             val linkPtr = LocalReference(PointerType(), freshName("link_pointer"))
             emit(GetElementPtr(linkPtr.name, tpe, currentEnvironmentPtr, List(0, chunk.length)))
@@ -707,15 +706,15 @@ object Transformer {
       values match {
         case Nil => ()
         case value :: values =>
-        if values.contains(value) then {
-          shareValue(value);
-          loop(values)
-        } else if freeInBody.contains(value) then {
-          shareValue(value);
-          loop(values)
-        } else {
-          loop(values)
-        }
+          if values.contains(value) then {
+            shareValue(value);
+            loop(values)
+          } else if freeInBody.contains(value) then {
+            shareValue(value);
+            loop(values)
+          } else {
+            loop(values)
+          }
       }
     };
     loop(values)
@@ -728,17 +727,17 @@ object Transformer {
 
   def shareValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     Option(value.tpe).collect {
-      case machine.Positive()    => Call("_", Ccc(), VoidType(), sharePositive, List(transform(value)))
-      case machine.Negative()    => Call("_", Ccc(), VoidType(), shareNegative, List(transform(value)))
-      case machine.Type.Stack()  => Call("_", Ccc(), VoidType(), shareResumption, List(transform(value)))
+      case machine.Positive() => Call("_", Ccc(), VoidType(), sharePositive, List(transform(value)))
+      case machine.Negative() => Call("_", Ccc(), VoidType(), shareNegative, List(transform(value)))
+      case machine.Type.Stack() => Call("_", Ccc(), VoidType(), shareResumption, List(transform(value)))
     }.map(emit)
   }
 
   def eraseValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     Option(value.tpe).collect {
-      case machine.Positive()    => Call("_", Ccc(), VoidType(), erasePositive, List(transform(value)))
-      case machine.Negative()    => Call("_", Ccc(), VoidType(), eraseNegative, List(transform(value)))
-      case machine.Type.Stack()  => Call("_", Ccc(), VoidType(), eraseResumption, List(transform(value)))
+      case machine.Positive() => Call("_", Ccc(), VoidType(), erasePositive, List(transform(value)))
+      case machine.Negative() => Call("_", Ccc(), VoidType(), eraseNegative, List(transform(value)))
+      case machine.Type.Stack() => Call("_", Ccc(), VoidType(), eraseResumption, List(transform(value)))
     }.map(emit)
   }
 
@@ -825,7 +824,7 @@ object Transformer {
   def setStack(stack: Operand)(using C: BlockContext) =
     C.stack = stack;
 
-  val escapeSeqs: Map[Char, String] = Map('\'' -> raw"'", '\"' -> raw"\"", '\\' -> raw"\\", '\n' -> raw"\n", '\t' -> raw"\t", '\r' -> raw"\r")
+  val escapeSeqs: Map[Char, String] = Map('\'' -> raw"'", '\"' -> raw"\"", '\\' -> raw" \\ ", '\n' -> raw" \ n", '\t' -> raw" \ t", '\r' -> raw" \ r")
 
   def escape(scalaString: String): String =
     scalaString.foldLeft(StringBuilder()) { (acc, c) =>
@@ -903,7 +902,7 @@ object Transformer {
       // we create a new Positive Object with tag 0... 
       emit(InsertValue(temporaryName, ConstantAggregateZero(positiveType), ConstantInt(0), 0)) // we create a fake Link Tag 0 that we just use for store a tag in the Pos
       emit(InsertValue(linkValName, LocalReference(positiveType, temporaryName), headObject, 1))
-      
+
       // ... and inject it into our environment...
       val extendedEnv = envChunk :+ machine.Variable(linkValName, machine.Positive())
 
@@ -936,5 +935,81 @@ object Transformer {
         emit(GetElementPtr(field.name, typ, pointer, List(0, i)))
         emit(Load(name, transform(tpe), field, alias))
     }
+  }
+
+  /**
+   * Creates an eraser for normal objects (e.g. Pos and Neg).
+   * When @eraseObject is called, we also call the eraser. And for Pos and Neg objects, that is the eraser.
+   * The object is called 2 times.
+   * 1. Phase: When call @eraseObject -> We call release to prepend the object to our to-do-list.
+   * 2. Phase: When call acquire -> We call %erase on each children, so the object can be reused again.  
+   * 
+   * @param freshEnvironment the variables of the object
+   * @return the eraser
+   */
+  private def createEraserForNormalObjects(freshEnvironment: machine.Environment)(using C: ModuleContext): Operand = {
+    val eraser = ConstantGlobal(freshName("eraser"))
+    defineFunction(eraser.name, List(Parameter(objectType, "object"))) {
+      val objectRefCountPtr = LocalReference(PointerType(), freshName("objectReferenceCount"))
+      val referenceCount = LocalReference(referenceCountType, freshName("referenceCount"))
+      val releaseLabel = freshName("release")
+      val eraseChildrenLabel = freshName("eraseChildren")
+
+      // Entry block: Check reference count to determine phase
+      // Switch: if refCount == 0, go to "release" (first phase), else "eraseChildren" (second phase)
+      // Note: When refCount == 0, this is the first call from eraseObject -> just release
+      //       When refCount != 0, this is the second call from acquire -> erase children
+      emit(GetElementPtr(objectRefCountPtr.name, headerType, LocalReference(objectType, "object"), List(0, 0)))
+      emit(Load(referenceCount.name, referenceCountType, objectRefCountPtr, Object))
+
+      createAndEmitReleaseBasicBlock(releaseLabel)
+      createAndEmitEraseChildrenBasicBlock(freshEnvironment, eraseChildrenLabel)
+
+      // Return switch terminator from entry block
+      Switch(referenceCount, eraseChildrenLabel, List((0, releaseLabel)))
+    }
+    
+    eraser
+  }
+
+  private def createAndEmitReleaseBasicBlock(releaseLabel: String)(using ModuleContext, FunctionContext): Unit = {
+    emit(BasicBlock(releaseLabel, List(
+      Call("", Ccc(), VoidType(), ConstantGlobal("release"), List(LocalReference(objectType, "object")))
+    ), RetVoid()))
+  }
+
+  private def createAndEmitEraseChildrenBasicBlock(freshEnvironment: Environment, eraseChildrenLabel: String)(using ModuleContext, FunctionContext): Unit = {
+    val environmentRef = LocalReference(environmentType, freshName("environment"))
+    val eraseChildrenInstructions = mutable.ListBuffer[Instruction]()
+
+    // Get environment pointer
+    eraseChildrenInstructions += Call(environmentRef.name, Ccc(), environmentType, ConstantGlobal("objectEnvironment"), List(LocalReference(objectType, "object")))
+
+    // Load environment variables and erase them
+    val envType = environmentType(freshEnvironment)
+    freshEnvironment.zipWithIndex.foreach { case (machine.Variable(varName, tpe), i) =>
+      val fieldPtr = LocalReference(PointerType(), freshName(varName + "_pointer"))
+      val loadedVarName = freshName(varName)
+      // Erase the value based on its type
+      tpe match {
+        case machine.Positive() =>
+          emitElementPtrAndLoadOfEnvironmentVariable(environmentRef, eraseChildrenInstructions, envType, tpe, i, fieldPtr, loadedVarName)
+          eraseChildrenInstructions += Call("_", Ccc(), VoidType(), erasePositive, List(LocalReference(transform(tpe), loadedVarName)))
+        case machine.Negative() =>
+          emitElementPtrAndLoadOfEnvironmentVariable(environmentRef, eraseChildrenInstructions, envType, tpe, i, fieldPtr, loadedVarName)
+          eraseChildrenInstructions += Call("_", Ccc(), VoidType(), eraseNegative, List(LocalReference(transform(tpe), loadedVarName)))
+        case machine.Type.Stack() =>
+          emitElementPtrAndLoadOfEnvironmentVariable(environmentRef, eraseChildrenInstructions, envType, tpe, i, fieldPtr, loadedVarName)
+          eraseChildrenInstructions += Call("_", Ccc(), VoidType(), eraseResumption, List(LocalReference(transform(tpe), loadedVarName)))
+        case _ => // Int, Byte, Double, Reference, etc. don't need erasing
+      }
+    }
+
+    emit(BasicBlock(eraseChildrenLabel, eraseChildrenInstructions.toList, RetVoid()))
+  }
+
+  private def emitElementPtrAndLoadOfEnvironmentVariable(environmentRef: LocalReference, eraseChildrenInstructions: ListBuffer[Instruction], envType: LLVMType, tpe: machine.Type, i: Int, fieldPtr: LocalReference, loadedVarName: String) = {
+    eraseChildrenInstructions += GetElementPtr(fieldPtr.name, envType, environmentRef, List(0, i))
+    eraseChildrenInstructions += Load(loadedVarName, transform(tpe), fieldPtr, Object)
   }
 }
