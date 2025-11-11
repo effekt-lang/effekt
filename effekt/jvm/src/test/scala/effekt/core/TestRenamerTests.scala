@@ -12,7 +12,7 @@ class TestRenamerTests extends CoreTests {
                       names: Names = Names(defaultNames))(using munit.Location) = {
     val pInput = parse(input, "input", names)
     val pExpected = parse(renamed, "expected", names)
-    val renamer = new TestRenamer(names, "renamed") // use "renamed" as prefix so we can refer to it
+    val renamer = new TestRenamer(names)
     val obtained = renamer(pInput)
     shouldBeEqual(obtained, pExpected, clue)
   }
@@ -41,8 +41,8 @@ class TestRenamerTests extends CoreTests {
       """module main
         |
         |def foo = { () =>
-        |  val renamed1 = (foo:(Int)=>Int@{})(4);
-        |  return renamed1:Int
+        |  val $1 = (foo:(Int)=>Int@{})(4);
+        |  return $1:Int
         |}
         |""".stripMargin
     assertRenamedTo(input, expected)
@@ -61,8 +61,8 @@ class TestRenamerTests extends CoreTests {
       """module main
         |
         |def foo = { () =>
-        |  var renamed1 @ global = (foo:(Int)=>Int@{})(4);
-        |  return renamed1:Int
+        |  var $1 @ global = (foo:(Int)=>Int@{})(4);
+        |  return $1:Int
         |}
         |""".stripMargin
     assertRenamedTo(input, expected)
@@ -79,8 +79,8 @@ class TestRenamerTests extends CoreTests {
     val expected =
       """module main
         |
-        |def foo = { (renamed1:Int) =>
-        |  return renamed1:Int
+        |def foo = { ($1:Int) =>
+        |  return $1:Int
         |}
         |""".stripMargin
     assertRenamedTo(input, expected)
@@ -103,7 +103,7 @@ class TestRenamerTests extends CoreTests {
           |type Data { X(a:Int, b:Int) }
           |def foo = { () =>
           |  12 match {
-          |    X : {(renamed1:Int, renamed2:Int) => return renamed1:Int }
+          |    X : {($1:Int, $2:Int) => return $1:Int }
           |  }
           |}
           |""".stripMargin
@@ -121,8 +121,8 @@ class TestRenamerTests extends CoreTests {
     val expected =
       """module main
         |
-        |def foo = { ['renamed1](renamed2: renamed1) =>
-        |  return renamed2:Identity[renamed1]
+        |def foo = { ['$1]($2: $1) =>
+        |  return $2:Identity[$1]
         |}
         |""".stripMargin
     assertRenamedTo(input, expected)
@@ -145,9 +145,9 @@ class TestRenamerTests extends CoreTests {
         |
         | def bar = { () => return 1 }
         | def main = { () =>
-        |   def renamed1 = { () => (bar : () => Unit @ {})() }
-        |   def renamed2 = { () => return 2 }
-        |   (renamed1 : () => Unit @ {})()
+        |   def $1 = { () => (bar : () => Unit @ {})() }
+        |   def $2 = { () => return 2 }
+        |   ($1 : () => Unit @ {})()
         | }
         |""".stripMargin
 
@@ -168,9 +168,9 @@ class TestRenamerTests extends CoreTests {
       """ module main
         |
         | def main = { () =>
-        |   let renamed1 = 1
-        |   let renamed2 = 2
-        |   return renamed2:Int
+        |   let $1 = 1
+        |   let $2 = 2
+        |   return $2:Int
         | }
         |""".stripMargin
 
