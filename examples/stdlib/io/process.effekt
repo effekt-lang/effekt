@@ -6,12 +6,12 @@ def main() = {
   }).onStderr(box { c =>
     println(s"Err '${c}'")
   }).withStdin(box { h =>
-    h.write("Hallo");
-    h.close();
+    h.write("Hello written to stdin");
+    h.close()
   })
   )
   println(p)
-  val p2 = spawn("echo", ["Hallo"].fromList, default())
+  val p2 = spawn("echo", ["Hello argument"].fromList, default())
   println(p2)
   ()
 }
