@@ -13,6 +13,7 @@ void c_io_println(String text) {
     };
     erasePositive(text);
     putchar('\n');
+    fflush(stdout);
 }
 
 String c_io_readln() {
