@@ -1,41 +1,105 @@
 ; Cont a = (a, MetaCont -> #)
-; State = [box]
+; Node = box MEM | box Diff
+; Store = (Node Int)
+; Snapshot = (Store Node Int)
 ; Backup = [(box value)]
-; MetaCont = (Cont Prompt {State | Backup} rest)
+; MetaCont = (Cont Prompt {Store | Snapshot} rest)
 ; Prompt = Int
 ; Block b = Cont b, MetaCont -> #
 ; Program a b = a, Cont b, MetaCont -> #
 
-;BackupCell
-(define-record-type backup-cell (fields box value))
+; Ref
+(define-record-type ref (fields store (mutable value) (mutable generation)))
+
+; Store
+(define-record-type store (fields (mutable root) (mutable generation)))
+
+; Snapshot
+(define-record-type snap (fields store root generation))
+
+; Mem
+(define-record-type mem (fields))
+
+; Diff
+(define-record-type diff (fields ref value generation root))
+
+; -> Store
+(define (create-store) (make-store (box (make-mem)) 0))
+
+; Store -> Snapshot
+(define (snapshot store)
+    (let* ([sGen (store-generation store)]
+           [snap (make-snap store (store-root store) sGen)])
+        (store-generation-set! store (+ sGen 1))
+        snap))
+
+; Node, [box Diff] -> [box Diff]
+(define (collectDiffs n acc)
+    (cond
+        [(mem? (unbox n)) acc]
+        [else (collectDiffs (diff-root (unbox n)) (cons n acc))]))
+
+; Node, [Diff] -> (void)
+(define (applyDiffs n diffs)
+    (cond
+        [(null? diffs) (set-box! n (make-mem))]
+        [else
+            (let* ([currentDiff (car diffs)]
+                   [realDiff (unbox currentDiff)]
+                   [r (diff-ref realDiff)]
+                   [oldValue (ref-value r)])
+                (ref-value-set! r (diff-value realDiff))
+                (set-box! n (make-diff r oldValue (ref-generation r) currentDiff))
+                (applyDiffs currentDiff (cdr diffs)))]))
+
+; Node, Node -> (void)
+(define (reroot newRoot oldRoot)
+    (applyDiffs oldRoot (collectDiffs newRoot '())))
+
+; Store, Snapshot -> (void)
+(define (restore snap)
+    (let* ([snapRoot (snap-root snap)]
+           [store (snap-store snap)]
+           [storeRoot (store-root store)])
+        (reroot snapRoot storeRoot)
+        (store-root-set! store snapRoot)))
 
 ; MetaCont
-; Holds a "copy" of k, as well as its prompt and state
+; Holds a "copy" of k, as well as its prompt and store
 (define-record-type meta-cont 
-    (fields (mutable cont) prompt (mutable state) (mutable rest)))
+    (fields (mutable cont) prompt (mutable store) (mutable rest)))
 
-; Value, MetaCont -> Box
+; Value, MetaCont -> Ref
 (define (var init ks)
-    (let* ([state (meta-cont-state ks)]
-           [var (box init)])
-          (meta-cont-state-set! ks (cons var state))
-          var))
+    (let ([store (meta-cont-store ks)])
+        (make-ref store init (store-generation store))))
 
 ; Box -> Value
-(define (get ref) (unbox ref))
+(define (get ref) (ref-value ref))
 
 ; Box, Value -> void
-(define (put ref value) (set-box! ref value))
+(define (put ref value)
+    (let* ([rGen (ref-generation ref)]
+           [store (ref-store ref)]
+           [sGen (store-generation store)])
+        (if (= rGen sGen)
+            (ref-value-set! ref value)
+            (let ([oldVal (ref-value ref)]
+                  [newRoot (box (make-mem))]
+                  [oldRoot (store-root store)])
+                (ref-value-set! ref value)
+                (ref-generation-set! ref sGen)
+                (set-box! oldRoot (make-diff ref oldVal rGen newRoot))
+                (store-root-set! store newRoot)))))
 
-; TODO
+; TODO: Regions behave correctly,
+; TODO: but continue to live after deallocating
 ; MetaCont -> MetaCont
 (define (create-region ks) ks)
 
-; TODO
 ; Value, MetaCont -> Box
 (define allocate var)
 
-; TODO
 ; Ref -> void
 (define (deallocate _) (void))
 
@@ -46,7 +110,7 @@
          prompt))
 
 (define (top-level-k x _) x)
-(define top-level-ks (make-meta-cont top-level-k 0 '() '()))
+(define top-level-ks (make-meta-cont top-level-k 0 (create-store) '()))
 
 ; a, MetaCont -> #
 (define (return x ks)
@@ -58,20 +122,14 @@
 (define (reset prog ks k)
     (let ([prompt (new-prompt)])
          (meta-cont-cont-set! ks k)
-         (prog prompt (make-meta-cont return prompt '() ks) return)))
-
-; MetaCont -> void
-(define (create-backup ks)
-    (let* ([state (meta-cont-state ks)]
-           [construct-cell (lambda (r) (make-backup-cell r (unbox r)))]
-           [backup (map construct-cell state)])
-        (meta-cont-state-set! ks backup)))
+         (prog prompt (make-meta-cont return prompt (create-store) ks) return)))
 
 ; MetaCont, Prompt -> (MetaCont MetaCont)
 (define (split-stack ks p)
     (define (worker above below)
-        (let ([new-below (meta-cont-rest below)])
-             (create-backup below)
+        (let ([new-below (meta-cont-rest below)]
+              [snap (snapshot (meta-cont-store below))])
+             (meta-cont-store-set! below snap)
              (meta-cont-rest-set! below above)
              (if (= (meta-cont-prompt below) p)
                  (values below new-below)
@@ -85,22 +143,17 @@
                 (prog c underC (meta-cont-cont underC))))
 
 ; MetaCont, MetaCont -> MetaCont
-(define (restore cont rest)
-    (let ([backup (meta-cont-state cont)]
-          [restore-cell (lambda (c) (let ([v-box (backup-cell-box c)])
-                                         (set-box! v-box (backup-cell-value c))
-                                         v-box))])
-         ;Copy here because one could resume multiple times
-         (make-meta-cont (meta-cont-cont cont)
-                         (meta-cont-prompt cont) 
-                         (map restore-cell backup) 
-                         rest)))
-
-; MetaCont, MetaCont -> MetaCont
 (define (rewind cont ks)
     (if (null? cont)
         ks
-        (rewind (meta-cont-rest cont) (restore cont ks))))
+        (let* ([snap (meta-cont-store cont)]
+               [next (meta-cont-rest cont)]
+               [newKs (make-meta-cont (meta-cont-cont cont)
+                                      (meta-cont-prompt cont)
+                                      (snap-store snap)
+                                      ks)])
+            (restore snap)
+            (rewind next newKs))))
 
 ; MetaCont, Block, MetaCont, Cont -> #
 (define (resume cont block ks k)
