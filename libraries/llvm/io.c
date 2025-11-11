@@ -19,7 +19,7 @@ void c_io_println(String text) {
 String c_io_readln() {
     uint64_t capacity = 64;
     uint64_t length = 0;
-    char* buffer = cMalloc(capacity * sizeof(char));
+    char* buffer = malloc(capacity * sizeof(char));
 
     for (int c = getchar(); c != '\n' && c != EOF; c = getchar()) {
         if (length >= capacity) {
@@ -31,7 +31,7 @@ String c_io_readln() {
     }
 
     String result = c_bytearray_construct(length, (const uint8_t*)buffer);
-    cFree(buffer);
+    free(buffer);
     return result;
 }
 
@@ -74,7 +74,7 @@ void c_resume_int_fs(uv_fs_t* request) {
     Stack stack = (Stack)request->data;
 
     uv_fs_req_cleanup(request);
-    cFree(request);
+    free(request);
 
     resume_Int(stack, result);
 }
@@ -85,7 +85,7 @@ void c_fs_open(String path, int flags, Stack stack) {
     char* path_str = c_bytearray_into_nullterminated_string(path);
     erasePositive((struct Pos) path);
 
-    uv_fs_t* request = cMalloc(sizeof(uv_fs_t));
+    uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
     int result = uv_fs_open(uv_default_loop(), request, path_str, flags, 0777, c_resume_int_fs);
@@ -93,12 +93,12 @@ void c_fs_open(String path, int flags, Stack stack) {
     if (result < 0) {
         // TODO free path_str?
         uv_fs_req_cleanup(request);
-        cFree(request);
+        free(request);
         resume_Int(stack, result);
     }
 
     // Free the string since libuv copies it into the request
-    cFree(path_str);
+    free(path_str);
 
     return;
 }
@@ -121,9 +121,9 @@ void c_fs_cb(uv_fs_t* request) {
     int64_t result = (int64_t)request->result;
 
     uv_fs_req_cleanup(request);
-    cFree(request);
+    free(request);
     erasePositive(closure->buffer);
-    cFree(closure);
+    free(closure);
     resume_Int(stack, result);
 }
 
@@ -131,21 +131,21 @@ void c_fs_read(Int file, struct Pos buffer, Int offset, Int size, Int position, 
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
 
-    io_closure_t* read_closure = cMalloc(sizeof(io_closure_t));
+    io_closure_t* read_closure = malloc(sizeof(io_closure_t));
     read_closure->stack = stack;
     read_closure->buffer = buffer;
     read_closure->offset = offset;
 
-    uv_fs_t* request = cMalloc(sizeof(uv_fs_t));
+    uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = read_closure;
 
     int result = uv_fs_read(uv_default_loop(), request, file, &buf, 1, position, c_fs_cb);
 
     if (result < 0) {
         uv_fs_req_cleanup(request);
-        cFree(request);
+        free(request);
         resume_Int(stack, result);
-	cFree(read_closure);
+	free(read_closure);
     }
 }
 
@@ -154,34 +154,34 @@ void c_fs_write(Int file, struct Pos buffer, Int offset, Int size, Int position,
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
 
-    io_closure_t* write_closure = cMalloc(sizeof(io_closure_t));
+    io_closure_t* write_closure = malloc(sizeof(io_closure_t));
     write_closure->stack = stack;
     write_closure->buffer = buffer;
     write_closure->offset = offset;
 
-    uv_fs_t* request = cMalloc(sizeof(uv_fs_t));
+    uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = write_closure;
 
     int result = uv_fs_write(uv_default_loop(), request, file, &buf, 1, position, c_fs_cb);
 
     if (result < 0) {
         uv_fs_req_cleanup(request);
-        cFree(request);
+        free(request);
         resume_Int(stack, result);
-	cFree(write_closure);
+	free(write_closure);
     }
 }
 
 void c_fs_close(Int file, Stack stack) {
 
-    uv_fs_t* request = cMalloc(sizeof(uv_fs_t));
+    uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
     int result = uv_fs_close(uv_default_loop(), request, file, c_resume_int_fs);
 
     if (result < 0) {
         uv_fs_req_cleanup(request);
-        cFree(request);
+        free(request);
         resume_Int(stack, result);
     }
 }
@@ -192,7 +192,7 @@ void c_fs_mkdir(String path, Stack stack) {
     char* path_str = c_bytearray_into_nullterminated_string(path);
     erasePositive((struct Pos) path);
 
-    uv_fs_t* request = cMalloc(sizeof(uv_fs_t));
+    uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
     // Perform the mkdir operation
@@ -200,12 +200,12 @@ void c_fs_mkdir(String path, Stack stack) {
 
     if (result < 0) {
         uv_fs_req_cleanup(request);
-        cFree(request);
+        free(request);
         resume_Int(stack, result);
     }
 
     // Free the string since libuv copies it into the request
-    cFree(path_str);
+    free(path_str);
 
     return;
 }
@@ -217,12 +217,12 @@ void c_tcp_connect_cb(uv_connect_t* request, int status) {
     Stack stack = (Stack)request->data;
 
     if (status < 0) {
-        uv_close((uv_handle_t*)request->handle, (uv_close_cb)cFree);
-        cFree(request);
+        uv_close((uv_handle_t*)request->handle, (uv_close_cb)free);
+        free(request);
         resume_Int(stack, status);
     } else {
         int64_t handle = (int64_t)request->handle;
-        cFree(request);
+        free(request);
         resume_Int(stack, handle);
     }
 }
@@ -231,26 +231,26 @@ void c_tcp_connect(String host, Int port, Stack stack) {
     char* host_str = c_bytearray_into_nullterminated_string(host);
     erasePositive(host);
 
-    uv_tcp_t* tcp_handle = cMalloc(sizeof(uv_tcp_t));
+    uv_tcp_t* tcp_handle = malloc(sizeof(uv_tcp_t));
     int result = uv_tcp_init(uv_default_loop(), tcp_handle);
 
     if (result < 0) {
-        cFree(tcp_handle);
-        cFree(host_str);
+        free(tcp_handle);
+        free(host_str);
         resume_Int(stack, result);
         return;
     }
 
-    uv_connect_t* connect_req = cMalloc(sizeof(uv_connect_t));
+    uv_connect_t* connect_req = malloc(sizeof(uv_connect_t));
     connect_req->data = stack;
 
     struct sockaddr_in addr;
     result = uv_ip4_addr(host_str, port, &addr);
-    cFree(host_str);
+    free(host_str);
 
     if (result < 0) {
-        cFree(tcp_handle);
-        cFree(connect_req);
+        free(tcp_handle);
+        free(connect_req);
         resume_Int(stack, result);
         return;
     }
@@ -258,8 +258,8 @@ void c_tcp_connect(String host, Int port, Stack stack) {
     result = uv_tcp_connect(connect_req, tcp_handle, (const struct sockaddr*)&addr, c_tcp_connect_cb);
 
     if (result < 0) {
-        cFree(tcp_handle);
-        cFree(connect_req);
+        free(tcp_handle);
+        free(connect_req);
         resume_Int(stack, result);
         return;
     }
@@ -272,7 +272,7 @@ void c_tcp_read_cb(uv_stream_t* stream, ssize_t bytes_read, const uv_buf_t* buf)
 
     uv_read_stop(stream);
     erasePositive(read_closure->buffer);
-    cFree(read_closure);
+    free(read_closure);
 
     resume_Int(stack, (int64_t)bytes_read);
 }
@@ -289,7 +289,7 @@ void c_tcp_read(Int handle, struct Pos buffer, Int offset, Int size, Stack stack
     (void)size;
     uv_stream_t* stream = (uv_stream_t*)handle;
 
-    io_closure_t* read_closure = cMalloc(sizeof(io_closure_t));
+    io_closure_t* read_closure = malloc(sizeof(io_closure_t));
     read_closure->stack = stack;
     read_closure->buffer = buffer;
     read_closure->offset = offset;
@@ -298,7 +298,7 @@ void c_tcp_read(Int handle, struct Pos buffer, Int offset, Int size, Stack stack
     int result = uv_read_start(stream, c_tcp_read_alloc_cb, c_tcp_read_cb);
 
     if (result < 0) {
-        cFree(read_closure);
+        free(read_closure);
         stream->data = NULL;
         resume_Int(stack, result);
     }
@@ -306,10 +306,10 @@ void c_tcp_read(Int handle, struct Pos buffer, Int offset, Int size, Stack stack
 
 void c_tcp_write_cb(uv_write_t* request, int status) {
     io_closure_t* write_closure = (io_closure_t*)request->data;
-    cFree(request);
+    free(request);
     erasePositive(write_closure->buffer);
     Stack stack = write_closure->stack;
-    cFree(write_closure);
+    free(write_closure);
     resume_Int(stack, (int64_t)status);
 }
 
@@ -318,26 +318,26 @@ void c_tcp_write(Int handle, struct Pos buffer, Int offset, Int size, Stack stac
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
 
-    io_closure_t* write_closure = cMalloc(sizeof(io_closure_t));
+    io_closure_t* write_closure = malloc(sizeof(io_closure_t));
     write_closure->stack = stack;
     write_closure->buffer = buffer;
     write_closure->offset = offset;
 
-    uv_write_t* request = cMalloc(sizeof(uv_write_t));
+    uv_write_t* request = malloc(sizeof(uv_write_t));
     request->data = write_closure;
 
     int result = uv_write(request, stream, &buf, 1, c_tcp_write_cb);
 
     if (result < 0) {
-        cFree(request);
+        free(request);
         resume_Int(stack, result);
-	cFree(write_closure);
+	free(write_closure);
     }
 }
 
 void c_tcp_close_cb(uv_handle_t* handle) {
     Stack stack = (Stack)handle->data;
-    cFree(handle);
+    free(handle);
     resume_Pos(stack, Unit);
 }
 
@@ -351,27 +351,27 @@ Int c_tcp_bind(String host, Int port) {
     char* host_str = c_bytearray_into_nullterminated_string(host);
     erasePositive(host);
 
-    uv_tcp_t* tcp_handle = cMalloc(sizeof(uv_tcp_t));
+    uv_tcp_t* tcp_handle = malloc(sizeof(uv_tcp_t));
     int result = uv_tcp_init(uv_default_loop(), tcp_handle);
 
     if (result < 0) {
-        cFree(tcp_handle);
-        cFree(host_str);
+        free(tcp_handle);
+        free(host_str);
         return result;
     }
 
     struct sockaddr_in addr;
     result = uv_ip4_addr(host_str, port, &addr);
-    cFree(host_str);
+    free(host_str);
 
     if (result < 0) {
-        uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)cFree);
+        uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
         return result;
     }
 
     result = uv_tcp_bind(tcp_handle, (const struct sockaddr*)&addr, 0);
     if (result < 0) {
-        uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)cFree);
+        uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
         return result;
     }
 
@@ -390,19 +390,19 @@ void c_tcp_listen_cb(uv_stream_t* server, int status) {
 
     if (status < 0) {
         server->data = NULL;
-        cFree(listen_closure);
+        free(listen_closure);
         erasePositive(closure_handler);
         resume_Int(closure_stack, status);
         return;
     }
 
-    uv_tcp_t* client = cMalloc(sizeof(uv_tcp_t));
+    uv_tcp_t* client = malloc(sizeof(uv_tcp_t));
     int result = uv_tcp_init(uv_default_loop(), client);
 
     if (result < 0) {
-        cFree(client);
+        free(client);
         server->data = NULL;
-        cFree(listen_closure);
+        free(listen_closure);
         erasePositive(closure_handler);
         resume_Int(closure_stack, result);
         return;
@@ -410,9 +410,9 @@ void c_tcp_listen_cb(uv_stream_t* server, int status) {
 
     result = uv_accept(server, (uv_stream_t*)client);
     if (result < 0) {
-        uv_close((uv_handle_t*)client, (uv_close_cb)cFree);
+        uv_close((uv_handle_t*)client, (uv_close_cb)free);
         server->data = NULL;
-        cFree(listen_closure);
+        free(listen_closure);
         erasePositive(closure_handler);
         resume_Int(closure_stack, result);
         return;
@@ -425,14 +425,14 @@ void c_tcp_listen_cb(uv_stream_t* server, int status) {
 void c_tcp_listen(Int listener, struct Pos handler, Stack stack) {
     uv_stream_t* server = (uv_stream_t*)listener;
 
-    tcp_listen_closure_t* listen_closure = cMalloc(sizeof(tcp_listen_closure_t));
+    tcp_listen_closure_t* listen_closure = malloc(sizeof(tcp_listen_closure_t));
     listen_closure->stack = stack;
     listen_closure->handler = handler;
     server->data = listen_closure;
 
     int result = uv_listen(server, SOMAXCONN, c_tcp_listen_cb);
     if (result < 0) {
-        cFree(listen_closure);
+        free(listen_closure);
         erasePositive(handler);
         resume_Int(stack, result);
         return;
@@ -449,7 +449,7 @@ void c_tcp_shutdown(Int handle, Stack stack) {
     if (listen_closure) {
         Stack closure_stack = listen_closure->stack;
         struct Pos closure_handler = listen_closure->handler;
-        cFree(listen_closure);
+        free(listen_closure);
         erasePositive(closure_handler);
         resume_Int(closure_stack, 0);
     }
@@ -555,13 +555,13 @@ void c_resume_unit_timer(uv_timer_t* handle) {
     Stack stack = handle->data;
 
     uv_timer_stop(handle);
-    uv_close((uv_handle_t*)handle, (uv_close_cb)cFree);
+    uv_close((uv_handle_t*)handle, (uv_close_cb)free);
 
     resume_Pos(stack, Unit);
 }
 
 void c_timer_start(Int millis, Stack stack) {
-    uv_timer_t* timer = cMalloc(sizeof(uv_timer_t));
+    uv_timer_t* timer = malloc(sizeof(uv_timer_t));
     timer->data = stack;
 
     uv_timer_init(uv_default_loop(), timer);
@@ -620,7 +620,7 @@ void c_promise_erase_listeners(void *object) {
                 while (current != NULL) {
                     head = current->head;
                     tail = current->tail;
-                    cFree(current);
+                    free(current);
                     eraseStack(head);
                     current = tail;
                 };
@@ -630,14 +630,14 @@ void c_promise_erase_listeners(void *object) {
             erasePositive(promise->payload.value);
             break;
     }
-    cFree(promise); // Free the promise object itself
+    free(promise); // Free the promise object itself
 }
 
 void c_promise_resume_listeners(Listeners* listeners, struct Pos value) {
     if (listeners != NULL) {
         Stack head = listeners->head;
         Listeners* tail = listeners->tail;
-        cFree(listeners);
+        free(listeners);
         c_promise_resume_listeners(tail, value);
         sharePositive(value);
         resume_Pos(head, value);
@@ -693,7 +693,7 @@ void c_promise_await(struct Pos promise, Stack stack) {
             head = p->payload.listeners.head;
             tail = p->payload.listeners.tail;
             if (head != NULL) {
-                node = (Listeners*)cMalloc(sizeof(Listeners));
+                node = (Listeners*)malloc(sizeof(Listeners));
                 node->head = head;
                 node->tail = tail;
                 p->payload.listeners.head = stack;
@@ -713,7 +713,7 @@ void c_promise_await(struct Pos promise, Stack stack) {
 }
 
 struct Pos c_promise_make() {
-    Promise* promise = (Promise*)cMalloc(sizeof(Promise));
+    Promise* promise = (Promise*)malloc(sizeof(Promise));
 
     promise->rc = 0;
     promise->eraser = c_promise_erase_listeners;

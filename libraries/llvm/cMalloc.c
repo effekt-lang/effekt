@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <uv.h>
+#include "memtrack.c"
 
 /**
  * @brief Block-Struktur für die Freelist & To-Do-List.
@@ -193,9 +194,8 @@ void assertThatAllAsynchronousOperationsAreFinished() {
 void testIfAllBlocksAreFreed()
 {
     assertThatAllAsynchronousOperationsAreFinished();   // closing all open handles
-//    assertLeakFree();                  // testing malloc & calloc & free
+    assertLeakFree();                  // testing malloc & calloc & free
 //    assertNumberLeakedBlocks(0);    // testing aquire & release
-
 }
 
 // small testprogram to test the allocator
