@@ -34,6 +34,7 @@ uint64_t c_get_argc() {
 int main(int argc, char *argv[]) {
     program_argc = argc;
     program_argv = argv;
+    setvbuf(stdout, NULL, _IOLBF, BUFSIZ);
     effektMain();
     uv_loop_t *loop = uv_default_loop();
     uv_run(loop, UV_RUN_DEFAULT);
