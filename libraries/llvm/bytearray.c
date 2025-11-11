@@ -4,8 +4,6 @@
 #include <string.h> // For memcopy
 #include <stdlib.h>
 
-#include "memtrack.c"
-
 /** We represent bytearrays like positive types.
  *
  *  - The field `tag` contains the size
@@ -20,12 +18,12 @@
 
 
 void c_bytearray_erase_noop(void* object) {
-    cFree(object);
+    free(object);
 }
 
 struct Pos c_bytearray_new(const Int size) {
   int object_size = sizeof(struct Header) + size;
-  void *objPtr = cMalloc(object_size);
+  void *objPtr = malloc(object_size);
   struct Header *headerPtr = objPtr;
   *headerPtr = (struct Header) { .rc = 0, .eraser = c_bytearray_erase_noop, };
   return (struct Pos) {

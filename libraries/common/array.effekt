@@ -18,7 +18,7 @@ extern type Array[T]
  */
 
 extern llvm """
-declare noalias ptr @cCalloc(i64, i64)
+declare noalias ptr @calloc(i64, i64)
 
 define void @array_erase(%Object %object) {
 entry:
@@ -43,7 +43,7 @@ loop:
     %cmp = icmp ult i64 %inc, %size
     br i1 %cmp, label %loop, label %exit
 exit:
-    call void @cFree(%Object %object)   ; we delete the array
+    call void @free(%Object %object)   ; we delete the array
     ret void
 }
 """
@@ -56,7 +56,7 @@ extern def allocate[T](size: Int) at global: Array[T] =
   llvm """
     %size0 = shl i64 ${size}, 4
     %size1 = add i64 %size0, 24
-    %calloc = tail call noalias ptr @cCalloc(i64 %size1, i64 1)
+    %calloc = tail call noalias ptr @calloc(i64 %size1, i64 1)
     %eraser_pointer = getelementptr ptr, ptr %calloc, i64 1
     %size_pointer = getelementptr ptr, ptr %calloc, i64 2
     store i64 0, ptr %calloc

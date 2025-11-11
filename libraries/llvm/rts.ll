@@ -99,8 +99,6 @@ declare ptr @acquire(i64)
 declare void @release(ptr)
 declare void @testIfAllBlocksAreFreed()
 
-declare ptr @cMalloc(i64)
-declare void @cFree(ptr)
 
 declare ptr @malloc(i64)
 declare void @free(ptr)
@@ -534,7 +532,7 @@ decrement:
     ret void
 
 free:
-    call void @cFree(%Prompt %prompt)  ;df: wird gecalled, obwohl es nie allocated wurde -> gibt warning
+    call void @free(%Prompt %prompt)  ;df: wird gecalled, obwohl es nie allocated wurde -> gibt warning
     ret void
 }
 
@@ -557,7 +555,7 @@ define private %Stack @underflowStack(%Stack %stack) {
     store %Stack null, ptr %promptStack_pointer, !alias.scope !13, !noalias !23
 
     call void @erasePrompt(%Prompt %prompt)
-    call void @cFree(%Stack %stack)    ;df: wird gecalled, obwohl es nie allocated wurde -> gibt warning
+    call void @free(%Stack %stack)    ;df: wird gecalled, obwohl es nie allocated wurde -> gibt warning
 
     ret %Stack %rest
 }
@@ -727,7 +725,7 @@ define private void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
 
 define private void @freeStack(%StackPointer %stackPointer) alwaysinline {
     %base = getelementptr %StackValue, %StackPointer %stackPointer, i64 -1
-    call void @cFree(%Base %base)
+    call void @free(%Base %base)
     ret void
 }
 
