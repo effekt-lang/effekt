@@ -34,7 +34,6 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   def getShowBlockVar(vt: ValueType)(using ctx: ShowContext)(using DeclarationContext): Block.BlockVar =
     
     val showId = ctx.showNames.getOrElse(vt, {
-      println(s"DEBUG: Generating show for '${vt}'")
       generateShowInstance(vt) match {
         case None => ctx.showNames.getOrElse(vt, {
           sys error s"Could not generate show instance for '${vt}'"
@@ -70,14 +69,36 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(toplevel: Toplevel)(using ShowContext)(using DeclarationContext): Toplevel = toplevel match {
     case Toplevel.Def(id, block) => Toplevel.Def(id, transform(block))
-    case Toplevel.Val(id, tpe, binding) => ???
+    case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, tpe, transform(binding))
   }
 
   def transform(block: Block)(using ShowContext)(using DeclarationContext): Block = block match {
+    case b: BlockLit => transform(b)
+    case b: BlockVar => transform(b)
+    case New(impl) => New(transform(impl))
+    case Unbox(pure) => Unbox(transform(pure))
+  }
+
+  def transform(implementation: Implementation)(using ShowContext)(using DeclarationContext): Implementation = implementation match {
+    case Implementation(interface, operations) => Implementation(interface, operations map transform)
+  }
+
+  def transform(operation: Operation)(using ShowContext)(using DeclarationContext): Operation = operation match {
+    // Maybe need to pass tparams here to be able to lookup while transforming body
+    case Operation(name, tparams, cparams, vparams, bparams, body) => Operation(name, tparams, cparams, vparams, bparams, transform(body))
+  }
+
+  def transform(blockLit: BlockLit)(using ShowContext)(using DeclarationContext): BlockLit = blockLit match {
     case BlockLit(tparams, cparams, vparams, bparams, body) => BlockLit(tparams, cparams, vparams, bparams, transform(body))
+  } 
+
+  def transform(blockLit: BlockVar)(using ShowContext)(using DeclarationContext): BlockVar = blockLit match {
     case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(id, annotatedTpe, annotatedCapt)
-    case New(impl) => ???
-    case Unbox(pure) => ???
+  } 
+
+  def transform(default: Option[Stmt])(using ShowContext)(using DeclarationContext): Option[Stmt] = default match {
+    case None => None
+    case Some(value) => Some(transform(value))
   }
 
   def transform(stmt: Stmt)(using ctx: ShowContext)(using DeclarationContext): Stmt = 
@@ -92,7 +113,21 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         if (targs.length != 1) sys error "expected targs to have exactly one argument"
         Stmt.Val(id, TString, Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs map transform, bargs map transform), transform(body))
       case ImpureApp(id, callee, targs, vargs, bargs, body) => ImpureApp(id, callee, targs, vargs, bargs, transform(body))
-      case o => println(o); ???
+      case Def(id, block, body) => Def(id, transform(block), transform(body))
+      case Val(id, annotatedTpe, binding, body) => Val(id, annotatedTpe, transform(binding), transform(body))
+      case App(callee, targs, vargs, bargs) => App(transform(callee), targs, vargs map transform, bargs map transform)
+      case Invoke(callee, method, methodTpe, targs, vargs, bargs) => Invoke(transform(callee), method, methodTpe, targs, vargs map transform, bargs map transform)
+      case If(cond, thn, els) => If(transform(cond), transform(thn), transform(els))
+      case Match(scrutinee, clauses, default) => Match(transform(scrutinee), clauses map ((id, blockLit) => (id, transform(blockLit))), transform(default))
+      case Region(body) => Region(transform(body))
+      case Alloc(id, init, region, body) => Alloc(id, transform(init), region, transform(body))
+      case Var(ref, init, capture, body) => Var(ref, transform(init), capture, transform(body))
+      case Get(id, annotatedTpe, ref, annotatedCapt, body) => Get(id, annotatedTpe, ref, annotatedCapt, transform(body))
+      case Put(ref, annotatedCapt, value, body) => Put(ref, annotatedCapt, transform(value), transform(body))
+      case Reset(body) => Reset(transform(body))
+      case Shift(prompt, body) => Shift(transform(prompt), transform(body))
+      case Resume(k, body) => Resume(transform(k), transform(body))
+      case Hole(span) => Hole(span)
     }
 
   def transform(expr: Expr)(using ctx: ShowContext)(using DeclarationContext): Expr = expr match {
@@ -100,10 +135,10 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     case PureApp(BlockVar(id, annotatedTpe, annotatedCapt), targs, vargs) if id.name.name == FUNCTION_NAME => 
       if (targs.length != 1) sys error "expected targs to have exactly one argument"
       Expr.PureApp(getShowBlockVar(targs(0)), List.empty, vargs)
-    case PureApp(b, targs, vargs) => PureApp(b, targs, vargs)
+    case PureApp(b, targs, vargs) => PureApp(transform(b), targs, vargs)
     case Literal(value, annotatedType) => Literal(value, annotatedType)
     case ValueVar(id, annotatedType) => ValueVar(id, annotatedType)
-    case o => println(o); ???
+    case Box(b, annotatedCapture) => Box(transform(b), annotatedCapture)
   }
 
   def generateShowInstancesBases(baseTypes: List[ValueType])(using ShowContext)(using DeclarationContext): List[Toplevel.Def] =
@@ -249,14 +284,14 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
           case ValueType.Var(name) => 
             println(s"Warn: wasn't able to lookup var: ${name}")
             ValueParam(id, ctx.tparamLookup(name))
-          case ValueType.Boxed(tpe, capt) => ???
+          case ValueType.Boxed(tpe, capt) => ValueParam(id, lookup)
         }
     })
 
   def lookupType(vt: ValueType)(using ctx: ShowContext): ValueType = vt match {
     case ValueType.Data(name, targs) => ValueType.Data(name, targs map lookupType)
     case ValueType.Var(name) => ctx.tparamLookup(name)
-    case ValueType.Boxed(tpe, capt) => ???
+    case ValueType.Boxed(tpe, capt) => vt
   }
 
   def constructorStmt(constr: Constructor)(using ctx: ShowContext)(using dctx: DeclarationContext): Stmt = constr match
