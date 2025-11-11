@@ -11,15 +11,20 @@ class Names(var knownNames: Map[String, Id]) {
   def idFor(name: String): Id = {
     // When the name ends with a `$` symbol followed by an integer,
     // we assume that the latter part is the Barendregt id of this name.
-    knownNames.getOrElse(name, {
+    val (strippedName, suffix) = {
       val i = name.lastIndexOf('$')
-      val prefix =
         if (i >= 0 && i < name.length - 1) {
           val suf = name.substring(i + 1)
-          if (suf.toIntOption.isDefined) name.substring(0, i) else name
-        } else name
-
-      val id = Id(prefix)
+          if (suf.toIntOption.isDefined)
+            (name.substring(0, i), Some(suf.toInt))
+          else (name, None)
+        } else (name, None)
+    }
+    knownNames.getOrElse(name, {
+      val id = suffix match {
+        case Some(i) => Id(strippedName, i)
+        case None    => Id(strippedName)
+      }
       knownNames = knownNames.updated(name, id)
       id
     })
@@ -514,7 +519,7 @@ class CoreParsers(names: Names) extends EffektLexers {
   // { f : S }
   // abbreviation { S } .= { _: S }
   lazy val blockTypeParam: P[(Id, BlockType)] =
-    `{` ~> (id <~ `:` | wildcard) ~ blockType <~ `}` ^^ { case id ~ tpe => id -> tpe }
+    `{` ~> ((id | wildcard) <~ `:`) ~ blockType <~ `}` ^^ { case id ~ tpe => id -> tpe }
 
   lazy val interfaceType: P[BlockType.Interface] =
     (

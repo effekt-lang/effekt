@@ -1,6 +1,7 @@
 package effekt
 package core
 
+import effekt.core.Type.{PromptSymbol, ResumeSymbol}
 import effekt.source.FeatureFlag
 import kiama.output.ParenPrettyPrinter
 
@@ -72,7 +73,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(e: Extern): Doc = e match {
     case Extern.Def(id, tps, cps, vps, bps, ret, capt, bodies) =>
-      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> (bodies match {
+      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <> paramsToDoc(tps, cps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> (bodies match {
         case ExternBody.StringExternBody(ff, body) => toDoc(ff) <+> toDoc(body)
         // The unsupported case is not currently supported by the core parser
         case ExternBody.Unsupported(err) => ???
@@ -98,7 +99,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case BlockVar(id, tpe, capt) =>
       toDoc(id) <> ":" <+> toDoc(tpe) <+> "@" <+> toDoc(capt)
     case BlockLit(tps, cps, vps, bps, body) =>
-      val doc = space <> paramsToDoc(tps, vps, bps) <+> "=>" <+> nest(line <> toDocStmts(body)) <> line
+      val doc = space <> paramsToDoc(tps, cps, vps, bps) <+> "=>" <+> nest(line <> toDocStmts(body)) <> line
       if preventBraces then doc else braces { doc }
     case Unbox(e)         => "unbox" <+> toDoc(e)
     case New(handler)     => "new" <+> toDoc(handler)
@@ -106,10 +107,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(p: ValueParam): Doc = toDoc(p.id) <> ":" <+> toDoc(p.tpe)
   def toDoc(p: BlockParam): Doc = braces(toDoc(p.id) <> ":" <+> toDoc(p.tpe))
+  def toDoc(cparam: Id, bparam: BlockParam): Doc = braces(toDoc(bparam.id) <+> "@" <+> toDoc(cparam) <> ":" <+> toDoc(bparam.tpe))
 
   //def toDoc(n: Name): Doc = n.toString
 
-  def toDoc(s: symbols.Symbol): Doc = s.name.name ++ "$" ++ s.id.toString
+  def toDoc(s: symbols.Symbol): Doc = {
+    if isBuiltin(s)
+    then s.name.name
+    else s.name.name ++ "$" ++ s.id.toString
+  }
 
   def toDoc(e: Expr): Doc = e match {
     case Literal((), _)            => "()"
@@ -136,10 +142,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
   private def typeParamsDoc(tps: List[symbols.Symbol]): Doc =
     if tps.isEmpty then emptyDoc else brackets(tps.map(tp => string("'") <> toDoc(tp)))
 
-  def paramsToDoc(tps: List[symbols.Symbol], vps: List[ValueParam], bps: List[BlockParam]): Doc = {
+  def paramsToDoc(tps: List[symbols.Symbol], cps: List[Id], vps: List[ValueParam], bps: List[BlockParam]): Doc = {
     val tpsDoc = typeParamsDoc(tps)
     val vpsDoc = parens(vps.map(toDoc))
-    val bpsDoc = if bps.isEmpty then emptyDoc else hsep(bps.map(toDoc))
+    val bpsDoc = if bps.isEmpty then emptyDoc else hsep(cps.zip(bps).map(toDoc(_, _)))
     tpsDoc <> vpsDoc <> bpsDoc
   }
 
@@ -147,7 +153,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     val handlerName = toDoc(instance.interface)
     val clauses = instance.operations.map {
       case Operation(id, tps, cps, vps, bps, body) =>
-        "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <+> "=" <+> nested(toDoc(body))
+        "def" <+> toDoc(id) <> paramsToDoc(tps, cps, vps, bps) <+> "=" <+> nested(toDoc(body))
     }
     handlerName <+> block(vsep(clauses))
   }
@@ -177,7 +183,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(d: Toplevel): Doc = d match {
     case Toplevel.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
-      "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <+> "=" <+> block(toDocStmts(body))
+      "def" <+> toDoc(id) <> paramsToDoc(tps, cps, vps, bps) <+> "=" <+> block(toDocStmts(body))
     case Toplevel.Def(id, blockv) =>
       "def" <+> toDoc(id) <+> "=" <+> toDoc(blockv)
     case Toplevel.Val(id, tpe, binding) =>
@@ -199,7 +205,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDocStmts(s: Stmt): Doc = s match {
     case Def(id, BlockLit(tps, cps, vps, bps, body), rest) =>
       // RHS must be a single `stmt`, so we have to wrap it in a block.
-      "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <+> "=" <+> block(toDocStmts(body)) <> line <>
+      "def" <+> toDoc(id) <> paramsToDoc(tps, cps, vps, bps) <+> "=" <+> block(toDocStmts(body)) <> line <>
         toDocStmts(rest)
 
     case Def(id, block, rest) =>
@@ -324,3 +330,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
     multi <> string(s) <> multi
   }
 }
+
+def isBuiltin(s: symbols.Symbol): Boolean =
+  val builtins = {
+    symbols.builtins.rootTypes
+      ++ symbols.builtins.rootCaptures
+      + ("Resume" -> ResumeSymbol)
+      + ("Prompt" -> PromptSymbol)
+      + ("Ref" -> effekt.symbols.builtins.TState.interface.name)
+  }
+  builtins.contains(s.name.name) && builtins(s.name.name) == s
