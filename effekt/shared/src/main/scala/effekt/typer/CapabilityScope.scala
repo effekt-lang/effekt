@@ -13,6 +13,7 @@ sealed trait CapabilityScope {
   def copy: CapabilityScope
   def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam
   def parent: CapabilityScope
+  def relevantInScopeFor(tpe: symbols.InterfaceType)(using C: Context): Set[symbols.InterfaceType]
 }
 case object GlobalCapabilityScope extends CapabilityScope {
   def copy: CapabilityScope = this
@@ -72,6 +73,9 @@ class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, sym
         }
       }
     }.getOrElse(parent.capabilityFor(tpe))
+
+  def relevantInScopeFor(tpe: BlockType.InterfaceType)(using C: Context): Set[BlockType.InterfaceType] =
+    capabilities.collect { case (handlerTpe, _) if handlerTpe.typeConstructor == tpe.typeConstructor && unknowns(handlerTpe).isEmpty => handlerTpe }.toSet ++ parent.relevantInScopeFor(tpe)
   override def toString: String = s"BindSome(${binder.getClass.getSimpleName}, ${capabilities}, ${parent})"
 }
 class BindAll(binder: source.Tree, var capabilities: Map[symbols.InterfaceType, symbols.BlockParam], val parent: CapabilityScope) extends CapabilityScope {
@@ -82,5 +86,7 @@ class BindAll(binder: source.Tree, var capabilities: Map[symbols.InterfaceType, 
       capabilities = capabilities.updated(tpe, freshCapability)
       freshCapability
     })
+  def relevantInScopeFor(tpe: BlockType.InterfaceType)(using C: Context): Set[BlockType.InterfaceType] =
+    capabilities.collect { case (handlerTpe, _) if handlerTpe.typeConstructor == tpe.typeConstructor && unknowns(handlerTpe).isEmpty => handlerTpe }.toSet ++ parent.relevantInScopeFor(tpe)
   override def toString: String = s"BindAll(${binder.getClass.getSimpleName}, ${capabilities}, ${parent})"
 }

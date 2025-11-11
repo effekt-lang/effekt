@@ -1625,7 +1625,7 @@ trait TyperOps extends ContextOps { self: Context =>
    */
   private [typer] def capabilityFor(tpe: InterfaceType): symbols.BlockParam =
     val cap = capabilityScope.capabilityFor(tpe)
-    assertConcreteEffect(unification(tpe))
+    assertConcreteEffect(unification(tpe), hints = capabilityScope.relevantInScopeFor(tpe))
     annotations.update(Annotations.Captures, cap, CaptureSet(cap.capture))
     cap
 
