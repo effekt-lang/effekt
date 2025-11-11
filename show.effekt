@@ -1,0 +1,30 @@
+// Already replaced with monomorphized version
+type MaybeInt {
+  Nothing()
+  Just(x: Int, y: String)
+}
+
+type OtherMaybe[A] {
+  ONothing()
+  OJust(x: A)
+}
+
+def main() = {
+  val a = Nothing()
+  val b = Just(42, "45")
+  val c: OtherMaybe[Int] = ONothing()
+  val d = OJust[Int](123)
+  println(a.show) // Should be "Nothing"
+  println(b.show) // Should be "Just(42)"
+  println(2.show)
+  println("test".show)
+  val t = (3.0).show
+  println(t)
+  println(d.show)
+  val e = [1,2,3]
+  println(e.show)
+  val f = OJust(e)
+  println(f.show)
+  val g = [[1,2,3], [4,5,6]]
+  println(g.show)
+}

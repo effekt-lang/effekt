@@ -58,8 +58,6 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       implicit val dctx: DeclarationContext = DeclarationContext(core.declarations, core.externs)
 
       var transformed = transform(core)
-      println()
-      // println(util.show(transformed))
       Some(CoreTransformed(source, tree, mod, transformed))
     }
   }
@@ -111,7 +109,6 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   def generateShowInstancesBases(baseTypes: List[ValueType])(using ShowContext)(using DeclarationContext): List[Toplevel.Def] =
     baseTypes flatMap generateShowInstance
 
-  // The cases here should match the list effekt.core.Type.Builtins
   def generateShowInstance(vt: ValueType)(using ctx: ShowContext)(using DeclarationContext): Option[Toplevel.Def] = 
     ctx.backend match {
       case "llvm" => generateShowInstanceLLVM(vt) 
@@ -183,12 +180,17 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       case ValueType.Data(name, targs) => 
         val data = dctx.datas(name)
         generateShowInstance(data, targs)
-      // FIXME: Placeholder case so we don't just crash
       case ValueType.Var(name) => 
         val lookup = ctx.tparamLookup(name)
         val showName = ctx.showNames.get(lookup)
         showName match {
-          case None => generateShowInstance(lookup)
+          case None => 
+            val varShowInstance = generateShowInstance(lookup)
+            varShowInstance match {
+              case None => ()
+              case Some(value) => ctx.showDefns += (vt -> value)
+            }
+            varShowInstance
           case Some(value) => None
         }
       case _ => println(s"Missing case for vt: ${vt}"); None
@@ -207,7 +209,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   def generateShowInstance(decl: Declaration, targs: List[ValueType])(using ctx: ShowContext)(using dctx: DeclarationContext): Option[Toplevel.Def] = decl match {
     case dataDecl: Declaration.Data if dataDecl.constructors.size > 0 => 
       val freshId = freshShowId
-      val dataType = ValueType.Data(decl.id, List.empty)
+      val dataType = ValueType.Data(decl.id, targs)
       ctx.showNames += (dataType -> freshId)
       val defn = generateShowInstance(dataDecl, freshId, targs)
       ctx.showDefns += (dataType -> defn)
@@ -218,10 +220,10 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   def generateShowInstance(decl: Declaration.Data, id: Id, targs: List[ValueType])(using ctx: ShowContext)(using DeclarationContext): Toplevel.Def =
     val valueId = Id("value")
     
-    val tparamLookup = decl.tparams.zip(targs).toMap
+    val tparamLookup = decl.tparams.zip(targs map lookupType).toMap
     ctx.tparamLookup ++= tparamLookup
 
-    val valueTpe = ValueType.Data(decl.id, targs)
+    val valueTpe = ValueType.Data(decl.id, targs map lookupType)
     val vparam = ValueParam(valueId, valueTpe)
 
     val constructorVparams = decl.constructors.map(constructorVparam)
@@ -240,12 +242,22 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def constructorVparam(constr: Constructor)(using ctx: ShowContext): List[ValueParam] = constr match 
     case Constructor(id, tparams, fields) => fields.map({
-      case Field(id, tpe) => tpe match {
-        case ValueType.Data(name, targs) => ValueParam(id, tpe)
-        case ValueType.Var(name) => ValueParam(id, ctx.tparamLookup(name))
-        case ValueType.Boxed(tpe, capt) => ???
-      }
+      case Field(id, tpe) => 
+        val lookup = lookupType(tpe)
+        lookup match {
+          case ValueType.Data(name, targs) => ValueParam(id, lookup)
+          case ValueType.Var(name) => 
+            println(s"Warn: wasn't able to lookup var: ${name}")
+            ValueParam(id, ctx.tparamLookup(name))
+          case ValueType.Boxed(tpe, capt) => ???
+        }
     })
+
+  def lookupType(vt: ValueType)(using ctx: ShowContext): ValueType = vt match {
+    case ValueType.Data(name, targs) => ValueType.Data(name, targs map lookupType)
+    case ValueType.Var(name) => ctx.tparamLookup(name)
+    case ValueType.Boxed(tpe, capt) => ???
+  }
 
   def constructorStmt(constr: Constructor)(using ctx: ShowContext)(using dctx: DeclarationContext): Stmt = constr match
     case Constructor(id, tparams, List()) => Return(Literal(id.name.name, TString))
@@ -277,15 +289,10 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     case Field(id, tpe) => ValueVar(id, tpe)
 
   def fieldPure(field: Field)(using ctx: ShowContext)(using DeclarationContext): (Id, Stmt.App) = field match
-    case Field(id, tpe: ValueType.Data) => 
-      val app: Stmt.App = App(getShowBlockVar(tpe), List.empty, List(ValueVar(id, tpe)), List.empty)
-      (Id("field"), app)
-    case Field(id, tpe: ValueType.Var) =>
-      val paramTpe = ctx.tparamLookup(tpe.name) 
+    case Field(id, tpe) =>
+      val paramTpe = lookupType(tpe)
       val app: Stmt.App = App(getShowBlockVar(paramTpe), List.empty, List(ValueVar(id, paramTpe)), List.empty)
       (Id("field"), app)
-    case Field(id, tpe: ValueType.Boxed) =>
-      ???
 
   var freshShowCounter = 0
   def freshShowId: Id = 
