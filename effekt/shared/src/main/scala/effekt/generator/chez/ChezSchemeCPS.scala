@@ -47,8 +47,10 @@ class ChezSchemeCPS extends Compiler[String] {
   lazy val CPSTransformed = Optimized map {
     case (mainSymbol, mainFile, core) =>
       val cpsTransformed = effekt.cps.Transformer.transform(core)
-      val contified = cps.Contify.rewrite(cpsTransformed)
-      (mainSymbol, mainFile, core, contified)
+      // (11.11.25) Makes the code actually slower
+      // can be turned back on when improved
+      //val contified = cps.Contify.rewrite(cpsTransformed)
+      (mainSymbol, mainFile, core, cpsTransformed)
   }
 
   lazy val Chez = CPSTransformed map {
