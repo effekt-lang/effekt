@@ -85,11 +85,14 @@ object semantics {
     // TODO use dynamic captures
     case Box(body: Computation, annotatedCaptures: Set[effekt.symbols.Symbol])
 
+    val dynamicCapture: Variables = Set.empty
+
     val free: Variables = this match {
-      case Value.Var(id, annotatedType) => Set.empty
+      case Value.Var(id, annotatedType) => Set(id)
       case Value.Extern(id, targs, vargs) => vargs.toSet
       case Value.Literal(value, annotatedType) => Set.empty
       case Value.Make(data, tag, targs, vargs) => vargs.toSet
+      // Box abstracts over all free computation variables, only when unboxing, they occur free again
       case Value.Box(body, tpe) => body.free
     }
   }
@@ -109,8 +112,20 @@ object semantics {
       case Binding.Def(block) => block.free
       case Binding.Rec(block, tpe, capt) => block.free
       case Binding.Val(stmt) => stmt.free
-      case Binding.Run(f, targs, vargs, bargs) => vargs.toSet ++ all(bargs, _.free)
+      // TODO block args for externs are not supported (for now?)
+      case Binding.Run(f, targs, vargs, bargs) => vargs.toSet
       case Binding.Unbox(addr: Addr, tpe: BlockType, capt: Captures) => Set(addr)
+      case Binding.Get(ref, tpe, cap) => Set(ref)
+    }
+
+    val dynamicCapture: Variables = this match {
+      case Binding.Let(value) => value.dynamicCapture
+      case Binding.Def(block) => block.dynamicCapture
+      case Binding.Rec(block, tpe, capt) => block.dynamicCapture
+      case Binding.Val(stmt) => stmt.dynamicCapture
+      // TODO block args for externs are not supported (for now?)
+      case Binding.Run(f, targs, vargs, bargs) => Set.empty
+      case Binding.Unbox(addr: Addr, tpe: BlockType, capt: Captures) => Set.empty // TODO
       case Binding.Get(ref, tpe, cap) => Set(ref)
     }
   }
@@ -270,6 +285,7 @@ object semantics {
 
   case class Block(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: BasicBlock) {
     val free: Variables = body.free -- vparams.map(_.id) -- bparams.map(_.id)
+    val dynamicCapture: Variables = body.dynamicCapture -- bparams.map(_.id)
   }
 
   case class BasicBlock(bindings: Bindings, body: NeutralStmt) {
@@ -286,6 +302,17 @@ object semantics {
       }
       free
     }
+
+    val dynamicCapture: Variables = {
+      bindings.foldLeft(body.dynamicCapture) { (captures, b) =>
+        b match {
+          case (id, b: Binding.Def) => (captures - id) ++ b.dynamicCapture
+          case (id, b: Binding.Rec) => (captures - id) ++ (b.dynamicCapture - id)
+          case (id, b) => captures ++ b.dynamicCapture
+        }
+      }
+      body.dynamicCapture ++ bindings.flatMap(_._2.dynamicCapture)
+    }
   }
 
   enum Computation {
@@ -296,25 +323,28 @@ object semantics {
 
     case Continuation(k: Cont)
 
-    // TODO ? distinguish?
-    //case Region(prompt: Id) ???
-    //case Prompt(prompt: Id) ???
-    //case Reference(prompt: Id) ???
-
     // Known object
     case New(interface: BlockType.Interface, operations: List[(Id, Closure)])
 
-    lazy val free: Variables = this match {
+    val free: Variables = this match {
       case Computation.Var(id) => Set(id)
       case Computation.Def(closure) => closure.free
       case Computation.Continuation(k) => Set.empty // TODO ???
       case Computation.New(interface, operations) => operations.flatMap(_._2.free).toSet
+    }
+
+    val dynamicCapture: Variables = this match {
+      case Computation.Var(id) => Set(id)
+      case Computation.Def(closure) => closure.dynamicCapture
+      case Computation.Continuation(k) => Set.empty // TODO ???
+      case Computation.New(interface, operations) => operations.flatMap(_._2.dynamicCapture).toSet
     }
   }
 
   // TODO add escaping mutable variables
   case class Closure(label: Label, environment: List[Computation.Var]) {
     val free: Variables = Set(label) ++ environment.flatMap(_.free).toSet
+    val dynamicCapture: Variables = environment.map(_.id).toSet
   }
 
   // Statements
@@ -364,6 +394,24 @@ object semantics {
       case NeutralStmt.Region(id, body) => body.free - id.id
       case NeutralStmt.Alloc(id, init, region, body) => Set(init, region) ++ body.free - id.id
       case NeutralStmt.Hole(span) => Set.empty
+    }
+
+    val dynamicCapture: Variables = this match {
+      case NeutralStmt.Return(result) => Set.empty
+      case NeutralStmt.Hole(span) => Set.empty
+
+      case NeutralStmt.Jump(label, targs, vargs, bargs) => Set(label) ++ all(bargs, _.dynamicCapture)
+      case NeutralStmt.App(label, targs, vargs, bargs) => Set(label) ++ all(bargs, _.dynamicCapture)
+      case NeutralStmt.Invoke(label, method, tpe, targs, vargs, bargs) => Set(label) ++ all(bargs, _.dynamicCapture)
+      case NeutralStmt.If(cond, thn, els) => thn.dynamicCapture ++ els.dynamicCapture
+      case NeutralStmt.Match(scrutinee, clauses, default) => clauses.flatMap(_._2.dynamicCapture).toSet ++ default.map(_.dynamicCapture).getOrElse(Set.empty)
+      case NeutralStmt.Reset(prompt, body) => body.dynamicCapture - prompt.id
+      case NeutralStmt.Shift(prompt, capt, k, body) => (body.dynamicCapture - k.id) + prompt
+      case NeutralStmt.Resume(k, body) => Set(k) ++ body.dynamicCapture
+      case NeutralStmt.Var(id, init, body) => body.dynamicCapture - id.id
+      case NeutralStmt.Put(ref, tpe, cap, value, body) => Set(ref) ++ body.dynamicCapture
+      case NeutralStmt.Region(id, body) => body.dynamicCapture - id.id
+      case NeutralStmt.Alloc(id, init, region, body) => Set(region) ++ body.dynamicCapture - id.id
     }
   }
 
@@ -526,7 +574,7 @@ object semantics {
             k
           case body =>
             val k = Id("k")
-            val closureParams = escaping.bound.collect { case p if body.free contains p.id => p }
+            val closureParams = escaping.bound.collect { case p if body.dynamicCapture contains p.id => p }
             scope.define(k, Block(Nil, ValueParam(x, tpe) :: Nil, closureParams, body))
             Frame.Dynamic(Closure(k, closureParams.map { p => Computation.Var(p.id) }))
         }
@@ -595,20 +643,20 @@ object semantics {
       case Stack.Reset(prompt, frame, next) =>
         reify(next) { reify(frame) {
           val body = nested { stmt }
-          if (body.free contains prompt.id) NeutralStmt.Reset(prompt, body)
+          if (body.dynamicCapture contains prompt.id) NeutralStmt.Reset(prompt, body)
           else stmt // TODO this runs normalization a second time in the outer scope!
         }}
       case Stack.Var(id, curr, frame, next) =>
         reify(next) { reify(frame) {
           val body = nested { stmt }
-          if (body.free contains id.id) NeutralStmt.Var(id, curr, body)
+          if (body.dynamicCapture contains id.id) NeutralStmt.Var(id, curr, body)
           else stmt
         }}
       case Stack.Region(id, bindings, frame, next) =>
         reify(next) { reify(frame) {
           val body = nested { stmt }
-          val bodyUsesBinding = body.free.exists(bindings.map { b => b._1.id }.toSet.contains(_))
-          if (body.free.contains(id.id) || bodyUsesBinding) {
+          val bodyUsesBinding = body.dynamicCapture.exists(bindings.map { b => b._1.id }.toSet.contains(_))
+          if (body.dynamicCapture.contains(id.id) || bodyUsesBinding) {
             // we need to reify all bindings in this region as allocs using their current value
             val reifiedAllocs = bindings.foldLeft(body) { case (acc, (bp, addr)) =>
               nested { NeutralStmt.Alloc(bp, addr, id.id, acc) }
@@ -770,7 +818,7 @@ class NewNormalizer {
           })
         }
 
-        val closureParams = escaping.bound.filter { p => normalizedBlock.free contains p.id }
+        val closureParams = escaping.bound.filter { p => normalizedBlock.dynamicCapture contains p.id }
 
         // Only normalize again if we actually we wrong in our assumption that we capture nothing
         // We might run into exponential complexity for nested recursive functions
@@ -817,7 +865,7 @@ class NewNormalizer {
         evaluate(body, Frame.Return, Stack.Unknown)
       })
 
-      val closureParams = escaping.bound.filter { p => normalizedBlock.free contains p.id }
+      val closureParams = escaping.bound.filter { p => normalizedBlock.dynamicCapture contains p.id }
 
       val f = Id(hint)
       scope.define(f, normalizedBlock.copy(bparams = normalizedBlock.bparams ++ closureParams))
