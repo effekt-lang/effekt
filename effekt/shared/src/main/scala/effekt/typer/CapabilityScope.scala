@@ -26,16 +26,16 @@ case object GlobalCapabilityScope extends CapabilityScope {
 }
 
 object DummyUnifier extends TypeUnifier {
-  // XXX(HACK): Side-channeling the output of `unifyValueTypes` via this variable
-  var success = true
+  private case object UnificationFailed extends Exception with scala.util.control.NoStackTrace
 
-  def checkSubtype(t1: effekt.symbols.ValueType, t2: effekt.symbols.ValueType)(using C: Context): Boolean = {
-    success = true
+  def checkSubtype(t1: effekt.symbols.ValueType, t2: effekt.symbols.ValueType)(using C: Context): Boolean = try {
     unifyValueTypes(
       C.substitution.substitute(t1),
       C.substitution.substitute(t2),
       ErrorContext.MergeTypes(t1, t2))
-    success
+    true
+  } catch {
+    case UnificationFailed => false
   }
 
   override def requireLowerBound(x: TypeVar.UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit = ()
@@ -43,10 +43,12 @@ object DummyUnifier extends TypeUnifier {
   override def requireEqual(x: TypeVar.UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit = ()
   override def requireSubregion(lower: Captures, upper: Captures, ctx: ErrorContext): Unit = ()
 
-  override def abort(msg: String, ctx: ErrorContext): Nothing = sys error "Unexpected abort in DummyUnifier!" // NOTE(jiribenes, 2025-11-11): shouldn't ever be triggered!
+  // NOTE(jiribenes, 2025-11-12): I think the 'abort' should never be triggered here.
+  override def abort(msg: String, ctx: ErrorContext): Nothing = sys error "Unexpected abort in DummyUnifier!"
 
-  override def error(msg: String, ctx: ErrorContext): Unit = { success = false }
-  override def error(left: Type, right: Type, ctx: ErrorContext): Unit = { success = false }
+  override def error(msg: String, ctx: ErrorContext): Unit = throw UnificationFailed
+  override def error(left: Type, right: Type, ctx: ErrorContext): Unit = throw UnificationFailed
+}
 }
 
 class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, symbols.BlockParam],val parent: CapabilityScope) extends CapabilityScope {
