@@ -17,6 +17,8 @@ class TestRenamer(names: Names = Names(Map.empty)) extends core.Tree.Rewrite {
 
   // list of scopes that map bound symbols to their renamed variants.
   private var scopes: List[Map[Id, Id]] = List.empty
+  // Top-level items in the current module. Collected to check for free variables.
+  private var toplevelScope: Map[Id, Id] = Map.empty
 
   // Here we track ALL renamings
   var renamed: Map[Id, Id] = Map.empty
@@ -39,27 +41,25 @@ class TestRenamer(names: Names = Names(Map.empty)) extends core.Tree.Rewrite {
   /** Alias for withBindings(List(id)){...} */
   def withBinding[R](id: Id)(f: => R): R = withBindings(List(id))(f)
 
-  // free variables cannot be left untouched, because top-level items may be mutually recursive.
-  // This means that a bound occurrence may precede its binding.
+  // Top-level items may be mutually recursive. This means that a bound occurrence may precede its binding.
+  // We use a separate pass to collect all top-level ids, so that we can distinguish them from free variables.
   override def id: PartialFunction[core.Id, core.Id] = {
-    case id => {
+    case id =>
       if (isBuiltin(id)) {
+        // builtin, do not rename
         id
+      } else if (toplevelScope.contains(id)) {
+        // id references a top-level item
+        toplevelScope(id)
       } else {
         scopes.collectFirst {
+          // locally bound variable
           case bnds if bnds.contains(id) => bnds(id)
         }.getOrElse {
-          scopes match {
-            case Nil => id
-            case _ =>
-              val freshId = freshIdFor(id)
-              val updatedLast = scopes.last + (id -> freshId)
-              scopes = scopes.init :+ updatedLast
-              freshId
-          }
+          // free variable, do not rename
+          id
         }
       }
-    }
   }
 
   override def stmt: PartialFunction[Stmt, Stmt] = {
@@ -229,13 +229,31 @@ class TestRenamer(names: Names = Names(Map.empty)) extends core.Tree.Rewrite {
 
   def apply(m: core.ModuleDecl): core.ModuleDecl =
     suffix = 0
+    scopes = List.empty
     m match {
       case core.ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+        // Collect toplevel ids, so that we can distinguish a top-level definition bound later
+        // from a free variable when deciding on whether to freshen an id or not.
+        toplevelScope = collectToplevelIds(m).map(id => id -> freshIdFor(id)).toMap
         core.ModuleDecl(path, includes, declarations map rewrite, externs map rewrite, definitions map rewrite, exports map rewrite)
     }
 
   def apply(s: Stmt): Stmt = {
     suffix = 0
+    toplevelScope = Map.empty
+    scopes = List.empty
     rewrite(s)
   }
+
+  def collectToplevelIds(m: core.ModuleDecl): Iterable[Id] =
+    m match {
+    case core.ModuleDecl (path, includes, declarations, externs, definitions, exports) =>
+      declarations.flatMap {
+        case Declaration.Data(id, tparams, constructors) => constructors.map(_.id) :+ id
+        case Interface(id, tparams, properties) => properties.map(_.id) :+ id
+      } ++ definitions.map(_.id) ++ externs.flatMap {
+        case Extern.Def(id, _, _, _, _, _, _, _) => Some(id)
+        case Extern.Include(_, _) => None
+      }
+    }
 }
