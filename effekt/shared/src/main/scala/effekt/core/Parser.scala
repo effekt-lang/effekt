@@ -3,6 +3,7 @@ package core
 
 import effekt.core.Type.{PromptSymbol, ResumeSymbol}
 import effekt.source.{FeatureFlag, Span}
+import effekt.symbols.builtins
 import effekt.util.messages.{ErrorReporter, ParseError}
 import kiama.parsing.{NoSuccess, ParseResult, Parsers, Success}
 import kiama.util.{Position, Range, Source, StringSource}
@@ -11,7 +12,7 @@ class Names(private var knownNames: Map[String, Id]) {
   private val Suffix = """^(.*)\$(\d+)$""".r
 
   def idFor(name: String): Id =
-    builtinSymbolFromString(name).getOrElse {
+    builtins.coreBuiltinSymbolFromString(name).getOrElse {
       knownNames.getOrElse(name, {
         val id = name match {
           case Suffix(base, n) => Id(base, n.toInt)
