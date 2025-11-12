@@ -54,26 +54,32 @@ class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, sym
   def copy: CapabilityScope = BindSome(binder, capabilities, parent.copy)
   def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
     capabilities.get(tpe).orElse {
-      // If the requested type has unbound type parameters, try lexical resolution (see PR #1194)
-      unknowns(tpe).toList match {
-        case Nil => None
-        case _ => {
-          def isValidFit(handlerTpe: symbols.InterfaceType): Boolean =
-            handlerTpe.typeConstructor == tpe.typeConstructor &&
-              (tpe.args zip handlerTpe.args).forall { case (inferred, concrete) => DummyUnifier.checkSubtype(inferred, concrete) }
-
-          capabilities.collect { case (handlerTpe, cap) if isValidFit(handlerTpe) => (handlerTpe, cap) }.toList match {
-            case List((handlerTpe, cap)) =>
-              (tpe.args zip handlerTpe.args).foreach { case (inferred, concrete) =>
-                C.requireSubtype(inferred, concrete, ErrorContext.MergeTypes(inferred, concrete))
-              }
-              Some(cap)
-            case Nil => None
-            case caps => None
-          }
-        }
-      }
+      tryLexicalCapabilityFor(tpe)
     }.getOrElse(parent.capabilityFor(tpe))
+
+  // If the requested type has unbound type parameters, try lexical resolution (see PR #1194)
+  private def tryLexicalCapabilityFor(tpe: symbols.InterfaceType)(using C: Context): Option[symbols.BlockParam] = {
+    if (unknowns(tpe).isEmpty) return None
+
+    // Is `handlerTpe` a valid concrete interface for the `tpe` at hand?
+    def isCompatible(handlerTpe: symbols.InterfaceType): Boolean =
+      tpe.typeConstructor == handlerTpe.typeConstructor &&
+        (tpe.args zip handlerTpe.args).forall { case (inferred, concrete) =>
+          DummyUnifier.checkSubtype(inferred, concrete)
+        }
+
+    val compatible = capabilities.filter { case (handlerTpe, cap) => isCompatible(handlerTpe) }.toList
+    compatible match {
+      case List((handlerTpe, cap)) =>
+        (tpe.args zip handlerTpe.args).foreach { case (inferred, concrete) =>
+          // Enforce subtype constraints for the type params of the chosen handler
+          C.requireSubtype(inferred, concrete, ErrorContext.MergeTypes(inferred, concrete))
+        }
+        Some(cap)
+      case _ => None // no compatible match or multiple (ambiguous)
+    }
+  }
+
 
   def relevantInScopeFor(tpe: BlockType.InterfaceType)(using C: Context): Set[BlockType.InterfaceType] =
     capabilities.collect { case (handlerTpe, _) if handlerTpe.typeConstructor == tpe.typeConstructor && unknowns(handlerTpe).isEmpty => handlerTpe }.toSet ++ parent.relevantInScopeFor(tpe)
