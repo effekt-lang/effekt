@@ -1,4 +1,0 @@
-Hello, world!
-[warning] examples/neg/lexical_capability_selection_proxy.effekt:9:20: Handling effect Greet[String, String], which seems not to be used by the program.
-def helloWorld() = try {
-                   ^
