@@ -1,8 +1,6 @@
 package effekt.core
 
 import effekt.{Template, core, symbols}
-import effekt.context.Context
-import effekt.core.Type.{PromptSymbol, ResumeSymbol}
 
 /**
  * Freshens bound names in a given term for tests.
@@ -52,13 +50,12 @@ class TestRenamer(names: Names = Names(Map.empty)) extends core.Tree.Rewrite {
           case bnds if bnds.contains(id) => bnds(id)
         }.getOrElse {
           scopes match {
-            case Nil =>
-              id
-            case head :: tail => {
+            case Nil => id
+            case _ =>
               val freshId = freshIdFor(id)
-              scopes = (head + (id -> freshId)) :: tail
+              val updatedLast = scopes.last + (id -> freshId)
+              scopes = scopes.init :+ updatedLast
               freshId
-            }
           }
         }
       }
@@ -188,17 +185,11 @@ class TestRenamer(names: Names = Names(Map.empty)) extends core.Tree.Rewrite {
   }
 
   override def rewrite(p: Property) = p match {
-    case Property(id: Id, tpe: BlockType) =>
-      withBinding(id) {
-        Property(rewrite(id), rewrite(tpe))
-      }
+    case Property(id: Id, tpe: BlockType) => Property(rewrite(id), rewrite(tpe))
   }
 
   override def rewrite(f: Field) = f match {
-    case Field(id, tpe) =>
-      withBinding(id) {
-        Field(rewrite(id), rewrite(tpe))
-      }
+    case Field(id, tpe) => Field(rewrite(id), rewrite(tpe))
   }
 
   override def rewrite(b: BlockType): BlockType = b match {
@@ -229,15 +220,11 @@ class TestRenamer(names: Names = Names(Map.empty)) extends core.Tree.Rewrite {
   }
 
   override def rewrite(b: BlockParam): BlockParam = b match {
-    case BlockParam(id, tpe, capt) => withBinding(id) {
-      BlockParam(rewrite(id), rewrite(tpe), rewrite(capt))
-    }
+    case BlockParam(id, tpe, capt) => BlockParam(rewrite(id), rewrite(tpe), rewrite(capt))
   }
 
   override def rewrite(v: ValueParam): ValueParam = v match {
-    case ValueParam(id, tpe) => withBinding(id) {
-      ValueParam(rewrite(id), rewrite(tpe))
-    }
+    case ValueParam(id, tpe) => ValueParam(rewrite(id), rewrite(tpe))
   }
 
   def apply(m: core.ModuleDecl): core.ModuleDecl =
