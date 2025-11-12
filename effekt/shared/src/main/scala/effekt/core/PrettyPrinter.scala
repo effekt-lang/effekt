@@ -112,7 +112,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   //def toDoc(n: Name): Doc = n.toString
 
   def toDoc(s: symbols.Symbol): Doc = {
-    builtinSymbolToString(s).getOrElse(s.name.name ++ "$" ++ s.id.toString)
+    builtins.coreBuiltinSymbolToString(s).getOrElse(s.name.name ++ "$" ++ s.id.toString)
   }
 
   def toDoc(e: Expr): Doc = e match {
@@ -323,19 +323,3 @@ object PrettyPrinter extends ParenPrettyPrinter {
     multi <> string(s) <> multi
   }
 }
-
-val builtins: Map[String, symbols.Symbol] = {
-  symbols.builtins.rootTypes
-    ++ symbols.builtins.rootCaptures
-    + ("Resume" -> ResumeSymbol)
-    + ("Prompt" -> PromptSymbol)
-    + ("Ref" -> effekt.symbols.builtins.TState.interface)
-}
-
-def isBuiltin(s: symbols.Symbol): Boolean =
-  builtins.contains(s.name.name) && builtins(s.name.name) == s
-
-def builtinSymbolToString(s: symbols.Symbol): Option[String] =
-  if isBuiltin(s) then Some(s.name.name) else None
-
-def builtinSymbolFromString(s: String): Option[symbols.Symbol] = builtins.get(s)

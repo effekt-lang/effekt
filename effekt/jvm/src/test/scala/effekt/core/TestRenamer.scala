@@ -1,6 +1,7 @@
 package effekt.core
 
 import effekt.{Template, core, symbols}
+import effekt.symbols.builtins
 
 /**
  * Freshens bound names in a given term for tests.
@@ -45,7 +46,7 @@ class TestRenamer(names: Names = Names(Map.empty)) extends core.Tree.Rewrite {
   // We use a separate pass to collect all top-level ids, so that we can distinguish them from free variables.
   override def id: PartialFunction[core.Id, core.Id] = {
     case id =>
-      if (isBuiltin(id)) {
+      if (builtins.isCoreBuiltin(id)) {
         // builtin, do not rename
         id
       } else if (toplevelScope.contains(id)) {
