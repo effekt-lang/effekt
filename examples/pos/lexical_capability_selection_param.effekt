@@ -8,3 +8,5 @@ def helloWorld() = try {
 } with Greet[Int] {
   def sayHello(x) = { println("Hello!"); resume(()) }
 }
+
+def main() = helloWorld()
