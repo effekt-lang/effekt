@@ -1,7 +1,9 @@
 package effekt
 package core
 
+import effekt.core.Type.{PromptSymbol, ResumeSymbol}
 import effekt.source.{FeatureFlag, Span}
+import effekt.symbols.Capture.LexicalRegion
 import effekt.util.messages.{ErrorReporter, ParseError}
 import kiama.parsing.{NoSuccess, ParseResult, Parsers, Success}
 import kiama.util.{Position, Range, Source, StringSource}
@@ -58,6 +60,8 @@ class EffektLexers extends Parsers {
   lazy val `!` = literal("!")
   lazy val `|` = literal("|")
 
+  lazy val `get` = keyword("get")
+  lazy val `put` = keyword("put")
   lazy val `let` = keyword("let")
   lazy val `true` = keyword("true")
   lazy val `false` = keyword("false")
@@ -74,6 +78,8 @@ class EffektLexers extends Parsers {
   lazy val `case` = keyword("case")
   lazy val `do` = keyword("do")
   lazy val `resume` = keyword("resume")
+  lazy val `reset` = keyword("reset")
+  lazy val `shift` = keyword("shift")
   lazy val `match` = keyword("match")
   lazy val `def` = keyword("def")
   lazy val `module` = keyword("module")
@@ -98,7 +104,8 @@ class EffektLexers extends Parsers {
     "def", "let", "val", "var", "true", "false", "else", "type",
     "effect", "interface", "try", "with", "case", "do", "if", "while",
     "match", "module", "import", "extern", "fun",
-    "at", "box", "unbox", "return", "region", "new", "resource", "and", "is", "namespace"
+    "at", "box", "unbox", "return", "region", "new", "resource", "and", "is", "namespace",
+    "reset", "shift"
   )
 
   def keyword(kw: String): Parser[String] =
@@ -291,6 +298,9 @@ class CoreParsers(names: Names) extends EffektLexers {
   lazy val stmt: P[Stmt] =
     ( `{` ~/> stmts <~ `}`
     | `return` ~> expr ^^ Stmt.Return.apply
+    | `reset` ~> blockLit ^^ Stmt.Reset.apply
+    | `shift` ~> maybeParens(blockVar) ~ blockLit ^^ Stmt.Shift.apply
+    | `resume` ~> maybeParens(blockVar) ~ stmt ^^ Stmt.Resume.apply
     | block ~ (`.` ~> id ~ (`:` ~> blockType)).? ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ {
         case (recv ~ Some(method ~ tpe) ~ targs ~ vargs ~ bargs) => Invoke(recv, method, tpe, targs, vargs, bargs)
         case (recv ~ None ~ targs ~ vargs ~ bargs) => App(recv, targs, vargs, bargs)
@@ -310,6 +320,12 @@ class CoreParsers(names: Names) extends EffektLexers {
         case (name ~ tpe ~ binding ~ body) =>
           Let(name, tpe.getOrElse(binding.tpe), binding, body)
       }
+    | `get` ~> id ~ (`:` ~> valueType) ~ (`=` ~> `!` ~> id) ~ (`@` ~> id) ~ (`;` ~> stmts) ^^ {
+      case name ~ tpe ~ ref ~ cap ~ body => Get(name, tpe, ref, Set(cap), body)
+    }
+    | `put` ~> id ~ (`@` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ {
+      case ref ~ capt ~ value ~ body => Put(ref, Set(capt), value, body)
+    }
     | `def` ~> id ~ (`=` ~/> block) ~ stmts ^^ Stmt.Def.apply
     | `def` ~> id ~ parameters ~ (`=` ~/> stmt) ~ stmts ^^ {
         case name ~ (tparams, cparams, vparams, bparams) ~ body ~ rest =>
@@ -472,9 +488,21 @@ class CoreParsers(names: Names) extends EffektLexers {
     `{` ~> (id <~ `:` | wildcard) ~ blockType <~ `}` ^^ { case id ~ tpe => id -> tpe }
 
   lazy val interfaceType: P[BlockType.Interface] =
-    ( id ~ maybeTypeArgs ^^ { case id ~ tpe => BlockType.Interface(id, tpe) : BlockType.Interface }
-    | failure("Expected an interface")
-    )
+    (
+      id ~ maybeTypeArgs ^^ {
+        case id ~ targs =>
+          // Special-case Resume[result, answer] to use the canonical ResumeSymbol
+          if (id.name.toString == "Resume")
+            BlockType.Interface(ResumeSymbol, targs): BlockType.Interface
+          else if (id.name.toString == "Prompt")
+            BlockType.Interface(PromptSymbol, targs): BlockType.Interface
+          else if (id.name.toString == "Ref")
+            BlockType.Interface(effekt.symbols.builtins.TState.interface, targs): BlockType.Interface
+          else
+            BlockType.Interface(id, targs): BlockType.Interface
+      }
+        | failure("Expected an interface")
+      )
 
   lazy val typeArgs: P[List[ValueType]] =
     `[` ~/> manySep(valueType, `,`) <~ `]`
