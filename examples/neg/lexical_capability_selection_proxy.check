@@ -1,5 +1,4 @@
-[error] examples/neg/lexical_capability_selection_proxy.effekt:10:3: Effects need to be fully known, but effect Greet[Int, U]'s type parameter(s) U could not be inferred.
-
-Maybe try annotating them?
-  Proxy[Int].greet()
-  ^^^^^^^^^^^^^^^^^^
+Hello, world!
+[warning] examples/neg/lexical_capability_selection_proxy.effekt:9:20: Handling effect Greet[String, String], which seems not to be used by the program.
+def helloWorld() = try {
+                   ^

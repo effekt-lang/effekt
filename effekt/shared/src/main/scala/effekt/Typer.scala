@@ -98,7 +98,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.at(mainFn.decl) {
         // If type checking failed before reaching main, there is no type
         C.functionTypeOption(mainFn).foreach {
-          case FunctionType(tparams, cparams, vparams, bparams, result, effects) => 
+          case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
             if (vparams.nonEmpty || bparams.nonEmpty) {
               C.abort("Main does not take arguments")
             }
@@ -1307,7 +1307,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // (2) check return type
     expected.foreach { expected => matchExpected(ret, expected) }
 
-    var effs: ConcreteEffects = Pure
+    // Here the effects still can refer to unification variables (e.g., Scan[?T])
+    // Keeping them unknown until the call to `provideCapabilities` enables the latter
+    // to disambiguate based on the capabilities in scope.
+    var effs: Effects = Effects()
 
     (vpnames.map(Some.apply).zipAll(vargs, None, source.ValueArg.Unnamed(source.UnitLit(source.Span.missing)))) foreach {
       case (Some(expName), source.ValueArg(Some(gotName), _, _)) if expName != gotName =>
@@ -1324,7 +1327,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     (vps zip vargs) foreach { case (tpe, expr) =>
       val Result(t, eff) = checkExpr(expr.value, Some(tpe))
-      effs = effs ++ eff
+      effs = effs ++ eff.toEffects
     }
 
     // To improve inference, we first type check block arguments that DO NOT subtract effects,
@@ -1341,7 +1344,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // capture of block <: ?C
       flowingInto(capt) {
         val Result(t, eff) = checkExprAsBlock(expr, Some(tpe))
-        effs = effs ++ eff
+        effs = effs ++ eff.toEffects
       }
     }
 

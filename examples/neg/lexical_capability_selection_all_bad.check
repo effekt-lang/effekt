@@ -1,5 +1,11 @@
+[info] examples/neg/lexical_capability_selection_all_bad.effekt:10:3: Did you mean to use an operation of the concrete interface Greet[String, String]?
+  Proxy[Int].greet()
+  ^^^^^^^^^^^^^^^^^^
 [error] examples/neg/lexical_capability_selection_all_bad.effekt:10:3: Effects need to be fully known, but effect Greet[Int, U]'s type parameter(s) U could not be inferred.
 
 Maybe try annotating them?
+  Proxy[Int].greet()
+  ^^^^^^^^^^^^^^^^^^
+[info] examples/neg/lexical_capability_selection_all_bad.effekt:10:3: Did you mean to use an operation of the concrete interface Greet[String, Int]?
   Proxy[Int].greet()
   ^^^^^^^^^^^^^^^^^^
