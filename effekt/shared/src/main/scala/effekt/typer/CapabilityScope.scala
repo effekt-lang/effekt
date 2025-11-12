@@ -2,8 +2,7 @@ package effekt
 package typer
 
 import effekt.context.Context
-import effekt.symbols.{BlockType, Captures, Type, TypeVar, ValueType}
-import effekt.{source, symbols}
+import effekt.{ source, symbols }
 import effekt.util.messages.ErrorMessageReifier
 
 /**
@@ -22,7 +21,7 @@ case object GlobalCapabilityScope extends CapabilityScope {
   // potentially handle it, then we raise an error.
   def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
     C.abort(pretty"Effect ${tpe} is not allowed in this context.")
-  def relevantInScopeFor(tpe: BlockType.InterfaceType)(using C: Context): Set[BlockType.InterfaceType] = Set.empty
+  def relevantInScopeFor(tpe: symbols.InterfaceType)(using C: Context): Set[symbols.InterfaceType] = Set.empty
 }
 
 object DummyUnifier extends TypeUnifier {
@@ -38,16 +37,16 @@ object DummyUnifier extends TypeUnifier {
     case UnificationFailed => false
   }
 
-  override def requireLowerBound(x: TypeVar.UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit = ()
-  override def requireUpperBound(x: TypeVar.UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit = ()
-  override def requireEqual(x: TypeVar.UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit = ()
-  override def requireSubregion(lower: Captures, upper: Captures, ctx: ErrorContext): Unit = ()
+  override def requireLowerBound(x: symbols.UnificationVar, tpe: symbols.ValueType, ctx: ErrorContext): Unit = ()
+  override def requireUpperBound(x: symbols.UnificationVar, tpe: symbols.ValueType, ctx: ErrorContext): Unit = ()
+  override def requireEqual(x: symbols.UnificationVar, tpe: symbols.ValueType, ctx: ErrorContext): Unit = ()
+  override def requireSubregion(lower: symbols.Captures, upper: symbols.Captures, ctx: ErrorContext): Unit = ()
 
   // NOTE(jiribenes, 2025-11-12): I think the 'abort' should never be triggered here.
   override def abort(msg: String, ctx: ErrorContext): Nothing = sys error "Unexpected abort in DummyUnifier!"
 
   override def error(msg: String, ctx: ErrorContext): Unit = throw UnificationFailed
-  override def error(left: Type, right: Type, ctx: ErrorContext): Unit = throw UnificationFailed
+  override def error(left: symbols.Type, right: symbols.Type, ctx: ErrorContext): Unit = throw UnificationFailed
 }
 
 class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, symbols.BlockParam],val parent: CapabilityScope) extends CapabilityScope {
@@ -81,7 +80,7 @@ class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, sym
   }
 
 
-  def relevantInScopeFor(tpe: BlockType.InterfaceType)(using C: Context): Set[BlockType.InterfaceType] =
+  def relevantInScopeFor(tpe: symbols.InterfaceType)(using C: Context): Set[symbols.InterfaceType] =
     capabilities.collect { case (handlerTpe, _) if handlerTpe.typeConstructor == tpe.typeConstructor && unknowns(handlerTpe).isEmpty => handlerTpe }.toSet ++ parent.relevantInScopeFor(tpe)
   override def toString: String = s"BindSome(${binder.getClass.getSimpleName}, ${capabilities}, ${parent})"
 }
@@ -93,7 +92,7 @@ class BindAll(binder: source.Tree, var capabilities: Map[symbols.InterfaceType, 
       capabilities = capabilities.updated(tpe, freshCapability)
       freshCapability
     })
-  def relevantInScopeFor(tpe: BlockType.InterfaceType)(using C: Context): Set[BlockType.InterfaceType] =
+  def relevantInScopeFor(tpe: symbols.InterfaceType)(using C: Context): Set[symbols.InterfaceType] =
     capabilities.collect { case (handlerTpe, _) if handlerTpe.typeConstructor == tpe.typeConstructor && unknowns(handlerTpe).isEmpty => handlerTpe }.toSet ++ parent.relevantInScopeFor(tpe)
   override def toString: String = s"BindAll(${binder.getClass.getSimpleName}, ${capabilities}, ${parent})"
 }
