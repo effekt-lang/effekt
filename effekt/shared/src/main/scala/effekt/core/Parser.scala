@@ -7,28 +7,22 @@ import effekt.util.messages.{ErrorReporter, ParseError}
 import kiama.parsing.{NoSuccess, ParseResult, Parsers, Success}
 import kiama.util.{Position, Range, Source, StringSource}
 
-class Names(var knownNames: Map[String, Id]) {
-  def idFor(name: String): Id = {
-    // When the name ends with a `$` symbol followed by an integer,
-    // we assume that the latter part is the Barendregt id of this name.
-    val (strippedName, suffix) = {
-      val i = name.lastIndexOf('$')
-        if (i >= 0 && i < name.length - 1) {
-          val suf = name.substring(i + 1)
-          if (suf.toIntOption.isDefined)
-            (name.substring(0, i), Some(suf.toInt))
-          else (name, None)
-        } else (name, None)
+class Names(private var knownNames: Map[String, Id]) {
+  private val Suffix = """^(.*)\$(\d+)$""".r
+
+  def idFor(name: String): Id =
+    builtinSymbolFromString(name).getOrElse {
+      knownNames.getOrElse(name, {
+        val id = name match {
+          case Suffix(base, n) => Id(base, n.toInt)
+          case _ =>
+            // Only pre-known and builtin names can be written without Barendregt ids.
+            sys error s"Name $name not known and has no id suffix. Did you mean to write ${name}$$<number> instead?"
+        }
+        knownNames = knownNames.updated(name, id)
+        id
+      })
     }
-    knownNames.getOrElse(name, {
-      val id = suffix match {
-        case Some(i) => Id(strippedName, i)
-        case None    => Id(strippedName)
-      }
-      knownNames = knownNames.updated(name, id)
-      id
-    })
-  }
 }
 
 
@@ -242,7 +236,6 @@ class CoreParsers(names: Names) extends EffektLexers {
    * Names
    */
   lazy val id = ident ^^ { name => names.idFor(name) }
-  lazy val wildcard = success(names.idFor("_"))
 
   /**
    * Main Entry
@@ -391,9 +384,9 @@ class CoreParsers(names: Names) extends EffektLexers {
   // ----------------
   lazy val expr: P[Expr] =
     ( literal
-    | id ~ (`:` ~> valueType) ^^ Expr.ValueVar.apply
     | `box` ~> captures ~ block ^^ { case capt ~ block => Expr.Box(block, capt) }
     | `make` ~> dataType ~ id ~ maybeTypeArgs ~ valueArgs ^^ Expr.Make.apply
+    | id ~ (`:` ~> valueType) ^^ Expr.ValueVar.apply
     | maybeParens(blockVar) ~ maybeTypeArgs ~ valueArgs ^^ Expr.PureApp.apply
     | failure("Expected a pure expression.")
     )
@@ -519,21 +512,12 @@ class CoreParsers(names: Names) extends EffektLexers {
   // { f : S }
   // abbreviation { S } .= { _: S }
   lazy val blockTypeParam: P[(Id, BlockType)] =
-    `{` ~> ((id | wildcard) <~ `:`) ~ blockType <~ `}` ^^ { case id ~ tpe => id -> tpe }
+    `{` ~> (id <~ `:`) ~ blockType <~ `}` ^^ { case id ~ tpe => id -> tpe }
 
   lazy val interfaceType: P[BlockType.Interface] =
     (
       id ~ maybeTypeArgs ^^ {
-        case id ~ targs =>
-          // Special-case Resume[result, answer] to use the canonical ResumeSymbol
-          if (id.name.toString.startsWith("Resume"))
-            BlockType.Interface(ResumeSymbol, targs): BlockType.Interface
-          else if (id.name.toString.startsWith("Prompt"))
-            BlockType.Interface(PromptSymbol, targs): BlockType.Interface
-          else if (id.name.toString.startsWith("Ref"))
-            BlockType.Interface(effekt.symbols.builtins.TState.interface, targs): BlockType.Interface
-          else
-            BlockType.Interface(id, targs): BlockType.Interface
+        case id ~ targs => BlockType.Interface(id, targs): BlockType.Interface
       }
         | failure("Expected an interface")
       )

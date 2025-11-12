@@ -112,9 +112,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   //def toDoc(n: Name): Doc = n.toString
 
   def toDoc(s: symbols.Symbol): Doc = {
-    if isBuiltin(s)
-    then s.name.name
-    else s.name.name ++ "$" ++ s.id.toString
+    builtinSymbolToString(s).getOrElse(s.name.name ++ "$" ++ s.id.toString)
   }
 
   def toDoc(e: Expr): Doc = e match {
@@ -223,11 +221,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(e) =>
       "return" <+> toDoc(e)
 
-    case Val(Wildcard(), tpe, binding, body) =>
-      // RHS must be a single `stmt`, so we have to wrap it in a block.
-      "val" <+> "_" <> ":" <+> toDoc(tpe) <+> "=" <+> block(toDocStmts(binding)) <> ";" <> line <>
-        toDocStmts(body)
-
     case Val(id, tpe, binding, body) =>
       // RHS must be a single `stmt`, so we have to wrap it in a block.
       "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> block(toDocStmts(binding)) <> ";" <> line <>
@@ -331,12 +324,18 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 }
 
+val builtins: Map[String, symbols.Symbol] = {
+  symbols.builtins.rootTypes
+    ++ symbols.builtins.rootCaptures
+    + ("Resume" -> ResumeSymbol)
+    + ("Prompt" -> PromptSymbol)
+    + ("Ref" -> effekt.symbols.builtins.TState.interface)
+}
+
 def isBuiltin(s: symbols.Symbol): Boolean =
-  val builtins = {
-    symbols.builtins.rootTypes
-      ++ symbols.builtins.rootCaptures
-      + ("Resume" -> ResumeSymbol)
-      + ("Prompt" -> PromptSymbol)
-      + ("Ref" -> effekt.symbols.builtins.TState.interface.name)
-  }
   builtins.contains(s.name.name) && builtins(s.name.name) == s
+
+def builtinSymbolToString(s: symbols.Symbol): Option[String] =
+  if isBuiltin(s) then Some(s.name.name) else None
+
+def builtinSymbolFromString(s: String): Option[symbols.Symbol] = builtins.get(s)
