@@ -39,15 +39,19 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     def inlineAll(usage: Map[Id, Usage]) = NewNormalizer { (id, b) => !usage.get(id).contains(Recursive) }
     */
     // tree = Context.timed("new-normalizer-1", source.name) { inlineSmall(Reachable(Set(mainSymbol), tree)).run(tree) }
-    tree = Context.timed("new-normalizer-1", source.name) { NewNormalizer().run(tree) }
-    util.trace(util.show(tree))
-    tree = Inliner(UniqueJumpSimple(Reachable(Set(mainSymbol), tree))).run(tree)
-    util.trace(util.show(tree))
-    tree = Context.timed("new-normalizer-1", source.name) { NewNormalizer().run(tree) }
-    util.trace(util.show(tree))
     tree = StaticArguments.transform(mainSymbol, tree)
-    // println(util.show(tree))
-    // tree = Context.timed("new-normalizer-2", source.name) { inlineSmall(Reachable(Set(mainSymbol), tree)).run(tree) }
+    tree = Context.timed("new-normalizer-1", source.name) { NewNormalizer().run(tree) }
+    //util.trace(util.show(tree))
+    val inliningPolicy = UniqueJumpSimple(
+      maxInlineSize = 150
+    )
+    val reachability = Reachable(Set(mainSymbol), tree)
+    tree = Inliner(inliningPolicy, reachability).run(tree)
+    //tree = Context.timed("new-normalizer-1", source.name) { NewNormalizer().run(tree) }
+    //util.trace(util.show(tree))
+    tree = Deadcode.remove(mainSymbol, tree)
+    //util.trace(util.show(tree))
+
     //    Normalizer.assertNormal(tree)
     //tree = Normalizer.normalize(Set(mainSymbol), tree, Context.config.maxInlineSize().toInt)
 
