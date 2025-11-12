@@ -49,7 +49,6 @@ object DummyUnifier extends TypeUnifier {
   override def error(msg: String, ctx: ErrorContext): Unit = throw UnificationFailed
   override def error(left: Type, right: Type, ctx: ErrorContext): Unit = throw UnificationFailed
 }
-}
 
 class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, symbols.BlockParam],val parent: CapabilityScope) extends CapabilityScope {
   def copy: CapabilityScope = BindSome(binder, capabilities, parent.copy)
