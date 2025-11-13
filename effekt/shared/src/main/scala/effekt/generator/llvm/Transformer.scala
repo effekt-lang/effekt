@@ -943,7 +943,7 @@ object Transformer {
    * The object is called 2 times.
    * 1. Phase: When call @eraseObject -> We call release to prepend the object to our to-do-list.
    * 2. Phase: When call acquire -> We call %erase on each children, so the object can be reused again.  
-   * 
+   *
    * @param freshEnvironment the variables of the object
    * @return the eraser
    */
@@ -968,7 +968,7 @@ object Transformer {
       // Return switch terminator from entry block
       Switch(referenceCount, eraseChildrenLabel, List((0, releaseLabel)))
     }
-    
+
     eraser
   }
 
@@ -982,30 +982,44 @@ object Transformer {
     val environmentRef = LocalReference(environmentType, freshName("environment"))
     val eraseChildrenInstructions = mutable.ListBuffer[Instruction]()
 
-    // Get environment pointer
-    eraseChildrenInstructions += Call(environmentRef.name, Ccc(), environmentType, ConstantGlobal("objectEnvironment"), List(LocalReference(objectType, "object")))
-
     // Load environment variables and erase them
     val envType = environmentType(freshEnvironment)
-    freshEnvironment.zipWithIndex.foreach { case (machine.Variable(varName, tpe), i) =>
-      val fieldPtr = LocalReference(PointerType(), freshName(varName + "_pointer"))
-      val loadedVarName = freshName(varName)
-      // Erase the value based on its type
-      tpe match {
-        case machine.Positive() =>
-          emitElementPtrAndLoadOfEnvironmentVariable(environmentRef, eraseChildrenInstructions, envType, tpe, i, fieldPtr, loadedVarName)
-          eraseChildrenInstructions += Call("_", Ccc(), VoidType(), erasePositive, List(LocalReference(transform(tpe), loadedVarName)))
-        case machine.Negative() =>
-          emitElementPtrAndLoadOfEnvironmentVariable(environmentRef, eraseChildrenInstructions, envType, tpe, i, fieldPtr, loadedVarName)
-          eraseChildrenInstructions += Call("_", Ccc(), VoidType(), eraseNegative, List(LocalReference(transform(tpe), loadedVarName)))
-        case machine.Type.Stack() =>
-          emitElementPtrAndLoadOfEnvironmentVariable(environmentRef, eraseChildrenInstructions, envType, tpe, i, fieldPtr, loadedVarName)
-          eraseChildrenInstructions += Call("_", Ccc(), VoidType(), eraseResumption, List(LocalReference(transform(tpe), loadedVarName)))
-        case _ => // Int, Byte, Double, Reference, etc. don't need erasing
+    
+    val isAtLeastOneObjectToRelease: Boolean =
+      freshEnvironment.exists {
+        case machine.Variable(_, tpe) =>
+          tpe match {
+            case machine.Positive() | machine.Negative() | machine.Type.Stack() => true
+            case _ => false
+          }
       }
-    }
+    
+    if (isAtLeastOneObjectToRelease) {
+      // Get environment pointer
+      eraseChildrenInstructions += Call(environmentRef.name, Ccc(), environmentType, ConstantGlobal("objectEnvironment"), List(LocalReference(objectType, "object")))
 
-    emit(BasicBlock(eraseChildrenLabel, eraseChildrenInstructions.toList, RetVoid()))
+      freshEnvironment.zipWithIndex.foreach { case (machine.Variable(varName, tpe), i) =>
+        val fieldPtr = LocalReference(PointerType(), freshName(varName + "_pointer"))
+        val loadedVarName = freshName(varName)
+        // Erase the value based on its type
+        tpe match {
+          case machine.Positive() =>
+            emitElementPtrAndLoadOfEnvironmentVariable(environmentRef, eraseChildrenInstructions, envType, tpe, i, fieldPtr, loadedVarName)
+            eraseChildrenInstructions += Call("_", Ccc(), VoidType(), erasePositive, List(LocalReference(transform(tpe), loadedVarName)))
+          case machine.Negative() =>
+            emitElementPtrAndLoadOfEnvironmentVariable(environmentRef, eraseChildrenInstructions, envType, tpe, i, fieldPtr, loadedVarName)
+            eraseChildrenInstructions += Call("_", Ccc(), VoidType(), eraseNegative, List(LocalReference(transform(tpe), loadedVarName)))
+          case machine.Type.Stack() =>
+            emitElementPtrAndLoadOfEnvironmentVariable(environmentRef, eraseChildrenInstructions, envType, tpe, i, fieldPtr, loadedVarName)
+            eraseChildrenInstructions += Call("_", Ccc(), VoidType(), eraseResumption, List(LocalReference(transform(tpe), loadedVarName)))
+          case _ => // Int, Byte, Double, Reference, etc. don't need erasing
+        }
+      }
+      emit(BasicBlock(eraseChildrenLabel, eraseChildrenInstructions.toList, RetVoid()))
+    } else {
+      // If not: we can return immediately, since we don't need to erase anything
+      emit(BasicBlock(eraseChildrenLabel, eraseChildrenInstructions.toList, RetVoid()))
+    }
   }
 
   private def emitElementPtrAndLoadOfEnvironmentVariable(environmentRef: LocalReference, eraseChildrenInstructions: ListBuffer[Instruction], envType: LLVMType, tpe: machine.Type, i: Int, fieldPtr: LocalReference, loadedVarName: String) = {
