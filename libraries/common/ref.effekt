@@ -11,12 +11,22 @@ extern js """
 
 extern llvm """
 define void @c_ref_erase(%Object %object) {
-  %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
-  %environment = getelementptr i8, ptr %object, i64 %headerSize
-  %field = load %Pos, ptr %environment, align 8
-  call void @free(%Object %object)
-  call void @erasePositive(%Pos %field)
-  ret void
+
+  entry:
+    %objectReferenceCount = getelementptr %Header, %Object %object, i64 0, i32 0
+    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !noalias !24, !alias.scope !14
+    switch %ReferenceCount %referenceCount, label %eraseChildren [i64 0, label %release]
+
+  release:
+    call ccc void @release(%Object %object)
+    ret void
+
+  eraseChildren:
+    %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
+    %environment = getelementptr i8, ptr %object, i64 %headerSize
+    %field = load %Pos, ptr %environment, align 8
+    call void @erasePositive(%Pos %field)
+    ret void
 }
 """
 
@@ -38,7 +48,8 @@ extern def allocate[T]() at global: Ref[T] =
   chez "(box #f)"
   llvm """
     ; sizeof Header + sizeof Pos = 32
-    %ref = tail call noalias ptr @malloc(i64 noundef 32)
+    %ref = tail call noalias ptr @acquire(i64 noundef 32)
+
     %refEraser = getelementptr ptr, ptr %ref, i64 1
     %fieldTag = getelementptr ptr, ptr %ref, i64 2
     %fieldData_pointer = getelementptr ptr, ptr %ref, i64 3
@@ -60,7 +71,7 @@ extern def ref[T](init: T) at global: Ref[T] =
     %initTag = extractvalue %Pos ${init}, 0
     %initObject_pointer = extractvalue %Pos ${init}, 1
     ; sizeof Header + sizeof Pos = 32
-    %ref = tail call noalias ptr @malloc(i64 noundef 32)
+    %ref = tail call noalias ptr @acquire(i64 noundef 32)
     %refEraser = getelementptr ptr, ptr %ref, i64 1
     %refField = getelementptr ptr, ptr %ref, i64 2
 
