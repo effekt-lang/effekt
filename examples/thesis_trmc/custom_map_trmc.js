@@ -402,7 +402,7 @@ function testMap_0(list_0, fun_0) {
 function testMapk(list, fun, cont){
     switch(list.__tag) {
         case 0:
-            return cont.apply(17);
+            return cont(new Nil_0());
         case 1:
             let y = fun(list.head_0)
             return testMapk(list.tail_0, fun, (holeValue) => cont(new Cons_0(y,holeValue)))
