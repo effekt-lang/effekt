@@ -382,8 +382,17 @@ function inspect_0(value_0, ks_0, k_0) {
 }
 
 function main_0(ks_1, k_1) {
-   let list = testMap_0(new Cons_0(1, new Cons_0(7, new Cons_0(8, new Cons_0(4, new Nil_0())))), fibonacci_0);
+   let list = testMap_1(new Cons_0(1, new Cons_0(7, new Cons_0(8, new Cons_0(4, new Nil_0())))), fibonacci_0);
     inspect_0(list, ks_1, k_1)
+    let hole = { outer: null }
+    let list2 = { head: 42, tail: hole }
+    hole.outer = list2
+
+    console.log(list2)
+
+// plug
+    hole.outer.tail = {head: 3, tail: null}
+    console.log(list2)
 }
 
 function fibonacci_0(n_0) {
@@ -399,6 +408,13 @@ function fibonacci_0(n_0) {
 function testMap_0(list_0, fun_0) {
   return testMapk(list_0,fun_0,(n) => n);
 }
+function testMap_1(list_0, fun_0){
+    let hole1 = { outer: null }
+    let cont = {head:42, tail: null, hole:hole1}
+    cont.hole.outer = cont
+    console.log(cont)
+    return testMapk2(list_0, fun_0, cont)
+}
 function testMapk(list, fun, cont){
     switch(list.__tag) {
         case 0:
@@ -408,6 +424,19 @@ function testMapk(list, fun, cont){
             return testMapk(list.tail_0, fun, (holeValue) => cont(new Cons_0(y,holeValue)))
     }
 }
+
+function testMapk2(list, fun, cont){
+    switch(list.__tag) {
+        case 0:
+            cont.hole = null
+            return cont;
+        case 1:
+            let y = fun(list.head_0)
+            cont.hole = {head: y, tail: cont}
+            return testMapk2(list.tail_0, fun, cont)
+    }
+}
+
 
 (typeof module != "undefined" && module !== null ? module : {}).exports = $custom_map = {
   main: () => main_0()
