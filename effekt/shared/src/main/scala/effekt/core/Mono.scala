@@ -54,12 +54,6 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 
             // println(util.show(newModuleDecl))
 
-            // for examples/pos/probabilistic.effekt
-            // This 
-            //  Vector(Base(Weighted,List(Base(Bool,List()), Base(Var,List()))))
-            // Should be
-            //  Vector(Base(Weighted,List(Base(Bool,List())), Base(Weighted,List(Base(Bool,List())))))
-
             return Some(CoreTransformed(source, tree, mod, newModuleDecl))
           }
         }
@@ -465,8 +459,9 @@ def monomorphize(field: Field)(using ctx: MonoContext): Field = field match
 
 // FIXME: Not a big fan of this function needing so many extra parameters
 def monomorphize(blockVar: BlockVar, replacementId: FunctionId, targs: List[ValueType])(using ctx: MonoContext): BlockVar = blockVar match
-  case BlockVar(id, BlockType.Function(List(), cparams, vparams, bparams, result), annotatedCapt) => blockVar
-  case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) if ctx.isPolyExtern(id) => blockVar
+  case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) if ctx.isPolyExtern(id) => 
+    val annotatedTpe = BlockType.Function(tparams, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
+    BlockVar(id, annotatedTpe, annotatedCapt)
   case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) => 
     val replacementTparams = tparams.zip(targs map toTypeArg).toMap
     ctx.replacementTparams ++= replacementTparams
