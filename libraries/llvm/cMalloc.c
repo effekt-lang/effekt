@@ -5,7 +5,7 @@
 #include "memtrack.c"
 
 /**
- * @brief Block-Struktur für die Freelist & To-Do-List.
+ * @brief Block-Struktur für die To-Do-List & Used-List.
  *
  * Jeder freie Block zeigt auf den nächsten freien Block.
  */
@@ -15,11 +15,22 @@ typedef struct Block
     void (*eraser)(void *object);
 } Block;
 
+
+/**
+ * Sentinel-Wert: Ein Pointer, der garantiert niemals ein echter Heap-Pointer ist.
+ *
+ * Wir nutzen (Block*)1, weil:
+ * - echte Heap-Pointer immer mindestens 8-Byte aligned sind
+ * - 1 also niemals kollidiert
+ * - ReferenceCount != 0 bleibt (wenn Header überlagert ist)
+ */
+#define SENTINEL_BLOCK ((Block*)1)
+
 // Globale Variablen
 
 const bool DEBUG = false;
-static Block* freeList = NULL; // Head of the Freelist
-static Block* todoList = NULL; // Head of the To-Do-List
+static Block* todoList = SENTINEL_BLOCK; // Head of the To-Do-List
+static Block* usedList = SENTINEL_BLOCK; // Head of the Used-List
 static uint8_t* nextUnusedBlock = NULL; // Pointer to the next unused Block
 static uint8_t* endOfChunk = NULL; // End of the allocated Storage
 static const int blockSize = 64; // The size of each block (64B)
@@ -71,7 +82,7 @@ void cInitializeMemory()
 void* acquire(uint8_t size)
 {
     // 1. Falls Todolist leer ist → neuer Block
-    if (todoList == NULL)
+    if (todoList == SENTINEL_BLOCK)
     {
         if (nextUnusedBlock + blockSize > endOfChunk)
         {
@@ -89,21 +100,14 @@ void* acquire(uint8_t size)
 
     // 2. Falls Todolist nicht leer ist → wiederverwenden
     Block* block = todoList;
-    todoList = block->next;
-
-//    block->eraser((void*)block);
-
-//    // Zweiter Eraser-Aufruf: Children löschen
-//    // Der Eraser wurde beim ersten Aufruf (in eraseObject) nicht aufgerufen,
-//    // sondern nur das Objekt wurde zur todoList hinzugefügt.
-//    // Jetzt, beim Wiederverwenden, rufen wir den Eraser auf, um die Children zu löschen.
-//    if (block->eraser != NULL) {
-//        block->eraser((void*)block);
-//    }
 
     if (DEBUG) {
         printf("[acquire] Reusing block: %p\n", (void*)block);
     }
+
+    todoList = block->next;
+    block->eraser((void*)block);
+
     return (void*)block;
 }
 
@@ -117,15 +121,16 @@ void release(void* ptr)
 {
     if (!ptr) return;
 
-    Block* block = (Block*)ptr;
-
-    // Block zur todoList hinzufügen (von vorne)
-    block->next = todoList;
-    todoList = block;
-
     if (DEBUG) {
         printf("[release] Freed block: %p\n", ptr);
+//        printf("[release] todo head: %p\n", todoList);
+//        printTodoList(todoList);
     }
+
+    // Block zur todoList hinzufügen (von vorne)
+    Block* block = (Block*)ptr;
+    block->next = todoList;
+    todoList = block;
 }
 
 /**
@@ -134,7 +139,7 @@ void release(void* ptr)
 void assertNumberLeakedBlocks(int expected) {
     // Calculate the number of leaked blocks
     size_t numberOfElementsInTodoList = 0;
-    for (const Block* b = todoList; b != NULL; b = b->next) {
+    for (const Block* b = todoList; b != SENTINEL_BLOCK; b = b->next) {
         numberOfElementsInTodoList++;
     }
 
@@ -146,26 +151,27 @@ void assertNumberLeakedBlocks(int expected) {
     const size_t numberOfLeakedBlocks = totalAllocated - numberOfElementsInTodoList;
 
     // if there leakes slots...
-    if (numberOfLeakedBlocks != expected) {
-        // we traverse each slot of the to-do-list and add it to the to-do list if missing
-        size_t numberOfSlotsToFlush = numberOfLeakedBlocks;
-        uint8_t* slotToAnalyze = (endOfChunk - chunkSize); // the start of the chunk
-        while(numberOfSlotsToFlush != expected) {
-            Block* blockToFlush = (Block*) slotToAnalyze;
-            bool isMissing = true;
-            for (const Block* b = todoList; b != NULL; b = b->next) {
-                if ((void*)b == (void*)blockToFlush) {
-                    isMissing = false;
-                    break;
-                }
-            }
-            if (isMissing) {
-                release(blockToFlush);
-                numberOfSlotsToFlush--;
-            }
-            slotToAnalyze = slotToAnalyze + blockSize;
-        }
-    }
+//    if (numberOfLeakedBlocks != expected) {
+//        exit(1);
+////        // we traverse each slot of the to-do-list and add it to the to-do list if missing
+////        size_t numberOfSlotsToFlush = numberOfLeakedBlocks;
+////        uint8_t* slotToAnalyze = (endOfChunk - chunkSize); // the start of the chunk
+////        while(numberOfSlotsToFlush != expected) {
+////            Block* blockToFlush = (Block*) slotToAnalyze;
+////            bool isMissing = true;
+////            for (const Block* b = todoList; b != NULL; b = b->next) {
+////                if ((void*)b == (void*)blockToFlush) {
+////                    isMissing = false;
+////                    break;
+////                }
+////            }
+////            if (isMissing) {
+////                release(blockToFlush);
+////                numberOfSlotsToFlush--;
+////            }
+////            slotToAnalyze = slotToAnalyze + blockSize;
+////        }
+//    }
 }
 
 // If there are any open libuv handles or requests, this function will block until they are closed.
@@ -190,9 +196,9 @@ void assertThatAllAsynchronousOperationsAreFinished() {
 */
 void testIfAllBlocksAreFreed()
 {
-//    assertThatAllAsynchronousOperationsAreFinished();   // closing all open handles
-//    assertLeakFree();                  // testing malloc & calloc & free
-//    assertNumberLeakedBlocks(0);    // testing aquire & release
+    assertThatAllAsynchronousOperationsAreFinished();   // closing all open handles
+    assertLeakFree();                  // testing malloc & calloc & free
+    assertNumberLeakedBlocks(0);    // testing aquire & release
 }
 
 // small testprogram to test the allocator
