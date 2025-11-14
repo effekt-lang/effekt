@@ -11,24 +11,11 @@ type State[T] {
   Pending(signals: List[Signal[T, Unit]])
 }
 
-extern type Promise[T]
-  // = js "{resolve: ƒ, promise: Promise}"
-  // = llvm "Ref[State[T]]"
-
-extern def toPromise[T](promise: Ref[State[T]]) at {}: Promise[T] =
-  llvm """
-    ret %Pos ${promise}
-  """
-
-extern def toRefState[T](promise: Promise[T]) at {}: Ref[State[T]] =
-  llvm """
-    ret %Pos ${promise}
-  """
+type Promise[T] = Ref[State[T]]
 
 namespace promise {
-  extern def make[T]() at global: Promise[T] =
-    js "promise$make()"
-    llvm { toPromise(ref(Pending(Nil()))) }
+  def make[T](): Promise[T] =
+    ref(Pending(Nil()))
 }
 
 def promise[T](task: Task[T]): Promise[T] = {
@@ -37,52 +24,26 @@ def promise[T](task: Task[T]): Promise[T] = {
   return p
 }
 
-extern def await[T](promise: Promise[T]) at {async, global}: T =
-  js "$effekt.capture(k => ${promise}.promise.then(k))"
-  llvm {
-    val reference = toRefState(promise)
-    // TODO use reference.get
-    get(reference) match {
-      case Resolved(value) =>
-        return value
-      case Pending(signals) =>
-        val signal = signal::allocate()
-        // TODO use reference.set and signal.wait
-        set(reference, Pending(Cons(signal, signals)))
-        // TODO perhaps yield to avoid stack overflow
-        unsafeWait(signal, ())
-    }
+def await[T](promise: Promise[T]): T = {
+  promise.get match {
+    case Resolved(value) =>
+      return value
+    case Pending(signals) =>
+      val signal = signal::allocate()
+      promise.set(Pending(Cons(signal, signals)))
+      // TODO perhaps yield to avoid stack overflow
+      signal.unsafeWait(())
   }
+}
 
-extern def resolve[T](promise: Promise[T], value: T) at {io, async, global}: Unit =
-  js "promise$resolve(${promise}, ${value})"
-  llvm {
-    val reference = toRefState(promise)
-    // TODO use reference.get
-    get(reference) match {
-      case Resolved(value) =>
-        panic("ERROR: Promise already resolved")
-      case Pending(signals) =>
-        // TODO use reference.set
-        set(reference, Resolved(value))
-        // TODO perhaps yield to avoid stack overflow
-        // TODO use signals.reverse.foreach
-        foreach(reverse(signals)) { signal => unsafeFire(signal, value) }
-    }
+def resolve[T](promise: Promise[T], value: T): Unit = {
+  promise.get match {
+    case Resolved(value) =>
+      panic("ERROR: Promise already resolved")
+    case Pending(signals) =>
+      promise.set(Resolved(value))
+      // TODO perhaps yield to avoid stack overflow
+      signals.reverse.foreach { signal => unsafeFire(signal, value) }
   }
+}
 
-
-extern js """
-  function promise$make() {
-    let resolve;
-    const promise = new Promise((res, rej) => {
-      resolve = res;
-    });
-    return { resolve: resolve, promise: promise };
-  }
-
-  function promise$resolve(promise, value) {
-    promise.resolve(value);
-    return $effekt.unit
-  }
-"""

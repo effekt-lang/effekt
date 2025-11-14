@@ -17,14 +17,14 @@ namespace signal {
 }
 
 extern def unsafeFire[A, B](signal: Signal[A, B], value: A) at async: B =
-  js "signal$notify(${signal}, ${value})"
+  js "$effekt.capture(callback => signal$notify(${signal}, ${value}, callback))"
   llvm """
     call void @c_signal_notify(%Pos ${signal}, %Pos ${value}, %Stack %stack)
     ret void
   """
 
 extern def unsafeWait[A, B](signal: Signal[A, B], value: B) at async: A =
-  js "signal$notify(${signal}, ${value})"
+  js "$effekt.capture(callback => signal$notify(${signal}, ${value}, callback))"
   llvm """
     call void @c_signal_notify(%Pos ${signal}, %Pos ${value}, %Stack %stack)
     ret void
@@ -39,20 +39,19 @@ extern js """
   function signal$make() {
     return { state: 0, value: null, stack: null };
   }
-  function signal$notify(signal, value) {
-    $effekt.capture(stack => {
-      if (signal.state === 0) {
-        signal.state = 1;
-        signal.value = value;
-        signal.stack = stack;
-      } else {
-        const otherValue = signal.value;
-        const otherStack = signal.stack;
-        signal.value = null;
-        signal.stack = null;
-        otherStack(value);
-        stack(otherValue);
-      }
-    });
+  function signal$notify(signal, value, stack) {
+    if (signal.state === 0) {
+      signal.state = 1;
+      signal.value = value;
+      signal.stack  = stack;
+    } else {
+      const otherValue = signal.value;
+      const otherStack = signal.stack;
+      signal.value = null;
+      signal.stack = null;
+
+      otherStack(value);
+      stack(otherValue);
+    }
   }
 """
