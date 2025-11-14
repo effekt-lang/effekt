@@ -975,7 +975,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val bt @ FunctionType(tps, cps, vps, bps, tpe1, effs) = expected
 
       // (2) Check wellformedness (that type, value, block params and args align)
-      checkAllArgs("function", tparams.size, vparams.size, bparams.size, tps.size, vps.size, bps.size)
+      assertArgsParamsAlign("function", tparams.size, vparams.size, bparams.size, tps.size, vps.size, bps.size)
 
       // (3) Substitute type parameters
       val typeParams = tparams.map { p => p.symbol.asTypeParam }
@@ -1268,28 +1268,29 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
   }
 
-  private def checkAllArgs(
+  /**
+   * Asserts that number of {type, value, block} arguments is the same as
+   *          the number of {type, value, block} parameters.
+   * If not, aborts the context with a nice error message.
+   */
+  private def assertArgsParamsAlign(
     name: String,
-    gotTypes: Int,
-    gotValues: Int,
-    gotBlocks: Int,
-    expectedTypes: Int,
-    expectedValues: Int,
-    expectedBlocks: Int
+    gotTypes: Int, gotValues: Int, gotBlocks: Int,
+    expectedTypes: Int, expectedValues: Int, expectedBlocks: Int
   )(using Context): Unit = {
 
     val targsOk = gotTypes == 0 || gotTypes == expectedTypes
     val vargsOk = gotValues == expectedValues
     val bargsOk = gotBlocks == expectedBlocks
 
-    def pluralize(n: Int, singular: String): String =
+    def pluralized(n: Int, singular: String): String =
       if (n == 1) s"$n $singular" else s"$n ${singular}s"
 
     def formatArgs(types: Option[Int], values: Option[Int], blocks: Option[Int]): String = {
       val parts = List(
-        types.map { pluralize(_, "type argument") },
-        values.map { pluralize(_, "value argument") },
-        blocks.map { pluralize(_, "block argument") }
+        types.map { pluralized(_, "type argument") },
+        values.map { pluralized(_, "value argument") },
+        blocks.map { pluralized(_, "block argument") }
       ).flatten
 
       parts match {
@@ -1311,14 +1312,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Option.when(!bargsOk) { gotBlocks }
     )
 
-    if (!vargsOk && !bargsOk) {
-      // 1. Block given, value expected (and no block expected)
-      if (expectedValues > 0 && gotValues == 0 && expectedBlocks == 0 && gotBlocks > 0) {
-        Context.info(pretty"Did you mean to box the computation into a value?")
-      }
-      // 2. Value given, block expected (and no value expected)
-      else if (expectedBlocks > 0 && gotBlocks == 0 && expectedValues == 0 && gotValues > 0) {
-        Context.info(pretty"Did you mean to pass a computation (a block) instead?")
+    if (!vargsOk && !bargsOk && gotValues + gotBlocks == expectedValues + expectedBlocks) {
+      // If total counts match, but individual do not, it's likely a value vs computation issue
+      if (gotBlocks > expectedBlocks) {
+        val diff = gotBlocks - expectedBlocks
+        Context.info(pretty"Did you mean to pass ${pluralized(diff, "block argument")} as a value? e.g. `(..., box { ... })")
+      } else if (gotValues > expectedValues) {
+        val diff = gotValues - expectedValues
+        Context.info(pretty"Did you mean to pass ${pluralized(diff, "value argument")} as a block (computation)?")
       }
     }
 
@@ -1337,10 +1338,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
     bargs: List[source.Term],
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
-    // (0) Check that arg & param counts align
-    checkAllArgs(name, targs.size, vargs.size, bargs.size, funTpe.tparams.size, funTpe.vparams.size, funTpe.bparams.size)
-
     val callsite = currentCapture
+
+    // (0) Check that arg & param counts align
+    assertArgsParamsAlign(name, targs.size, vargs.size, bargs.size, funTpe.tparams.size, funTpe.vparams.size, funTpe.bparams.size)
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
