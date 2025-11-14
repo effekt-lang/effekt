@@ -9,6 +9,7 @@ extern type Signal[A, B]
 
 namespace signal {
   extern def allocate[A, B]() at global: Signal[A, B] =
+    js "signal$make()"
     llvm """
       %signal = call %Pos @c_signal_make()
       ret %Pos %signal
@@ -16,12 +17,14 @@ namespace signal {
 }
 
 extern def unsafeFire[A, B](signal: Signal[A, B], value: A) at async: B =
+  js "signal$notify(${signal}, ${value})"
   llvm """
     call void @c_signal_notify(%Pos ${signal}, %Pos ${value}, %Stack %stack)
     ret void
   """
 
 extern def unsafeWait[A, B](signal: Signal[A, B], value: B) at async: A =
+  js "signal$notify(${signal}, ${value})"
   llvm """
     call void @c_signal_notify(%Pos ${signal}, %Pos ${value}, %Stack %stack)
     ret void
@@ -32,3 +35,24 @@ extern llvm """
   declare void @c_signal_notify(%Pos, %Pos, %Stack)
 """
 
+extern js """
+  function signal$make() {
+    return { state: 0, value: null, stack: null };
+  }
+  function signal$notify(signal, value) {
+    $effekt.capture(stack => {
+      if (signal.state === 0) {
+        signal.state = 1;
+        signal.value = value;
+        signal.stack = stack;
+      } else {
+        const otherValue = signal.value;
+        const otherStack = signal.stack;
+        signal.value = null;
+        signal.stack = null;
+        otherStack(value);
+        stack(otherValue);
+      }
+    });
+  }
+"""
