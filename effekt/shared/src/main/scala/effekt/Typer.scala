@@ -1316,7 +1316,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // If total counts match, but individual do not, it's likely a value vs computation issue
       if (gotBlocks > expectedBlocks) {
         val diff = gotBlocks - expectedBlocks
-        Context.info(pretty"Did you mean to pass ${pluralized(diff, "block argument")} as a value? e.g. `(..., box { ... })")
+        Context.info(pretty"Did you mean to pass ${pluralized(diff, "block argument")} as a value? e.g. box it using `box { ... }`")
       } else if (gotValues > expectedValues) {
         val diff = gotValues - expectedValues
         Context.info(pretty"Did you mean to pass ${pluralized(diff, "value argument")} as a block (computation)?")
