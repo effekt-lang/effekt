@@ -1269,43 +1269,61 @@ object Typer extends Phase[NameResolved, Typechecked] {
   }
 
   private def checkAllArgs(
-      name: String,
-      givenTypes: Int,
-      givenValues: Int,
-      givenBlocks: Int,
-      expectedTypes: Int,
-      expectedValues: Int,
-      expectedBlocks: Int
-    )(using Context): Unit = {
+    name: String,
+    gotTypes: Int,
+    gotValues: Int,
+    gotBlocks: Int,
+    expectedTypes: Int,
+    expectedValues: Int,
+    expectedBlocks: Int
+  )(using Context): Unit = {
 
-    val targsOk = givenTypes == 0 || givenTypes == expectedTypes
-    val vargsOk = givenValues == expectedValues
-    val bargsOk = givenBlocks == expectedBlocks
+    val targsOk = gotTypes == 0 || gotTypes == expectedTypes
+    val vargsOk = gotValues == expectedValues
+    val bargsOk = gotBlocks == expectedBlocks
 
-    val parts = List(
-      Option.when(!targsOk)(s"  type arguments (given ${givenTypes}, but ${name} expected ${expectedTypes})"),
-      Option.when(!vargsOk)(s"  value arguments (given ${givenValues}, but ${name} expected ${expectedValues})"),
-      Option.when(!bargsOk)(s"  block arguments (given ${givenBlocks}, but ${name} expected ${expectedBlocks})")
-    ).flatten
+    def pluralize(n: Int, singular: String): String =
+      if (n == 1) s"$n $singular" else s"$n ${singular}s"
 
-    // Hints for common value/block confusions
-    if (!vargsOk && !bargsOk) {
-      // 1. Exact swap: counts match in opposite positions
-      if (givenValues == expectedBlocks && givenBlocks == expectedValues) {
-        Context.info(pretty"Did you mean to swap value and block arguments?")
-      }
-      // 2. Block given, value expected (and no block expected)
-      else if (expectedValues > 0 && givenValues == 0 && expectedBlocks == 0 && givenBlocks > 0) {
-        Context.info(pretty"Did you mean to box the computation into a value?")
-      }
-      // 3. Value given, block expected (and no value expected)
-      else if (expectedBlocks > 0 && givenBlocks == 0 && expectedValues == 0 && givenValues > 0) {
-        Context.info(pretty"Did you mean to pass a block (computation) instead?")
+    def formatArgs(types: Option[Int], values: Option[Int], blocks: Option[Int]): String = {
+      val parts = List(
+        types.map { pluralize(_, "type argument") },
+        values.map { pluralize(_, "value argument") },
+        blocks.map { pluralize(_, "block argument") }
+      ).flatten
+
+      parts match {
+        case Nil => "no arguments"
+        case single :: Nil => single
+        case init :+ last => init.mkString(", ") + " and " + last
+        case _ => parts.mkString(", ")
       }
     }
 
-    if (parts.nonEmpty) {
-      Context.abort(s"Wrong number of arguments to ${name}:\n${parts.mkString("\n")}")
+    val expected = formatArgs(
+      Option.when(!targsOk) { expectedTypes },
+      Option.when(!vargsOk) { expectedValues },
+      Option.when(!bargsOk) { expectedBlocks }
+    )
+    val got = formatArgs(
+      Option.when(!targsOk) { gotTypes },
+      Option.when(!vargsOk) { gotValues },
+      Option.when(!bargsOk) { gotBlocks }
+    )
+
+    if (!vargsOk && !bargsOk) {
+      // 1. Block given, value expected (and no block expected)
+      if (expectedValues > 0 && gotValues == 0 && expectedBlocks == 0 && gotBlocks > 0) {
+        Context.info(pretty"Did you mean to box the computation into a value?")
+      }
+      // 2. Value given, block expected (and no value expected)
+      else if (expectedBlocks > 0 && gotBlocks == 0 && expectedValues == 0 && gotValues > 0) {
+        Context.info(pretty"Did you mean to pass a computation (a block) instead?")
+      }
+    }
+
+    if (!targsOk || !vargsOk || !bargsOk) {
+      Context.abort(s"Wrong number of arguments to ${name}: expected ${expected}, but got ${got}")
     }
   }
 
