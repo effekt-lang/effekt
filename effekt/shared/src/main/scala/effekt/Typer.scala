@@ -974,15 +974,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // (1) Apply what we already know.
       val bt @ FunctionType(tps, cps, vps, bps, tpe1, effs) = expected
 
-      // (2) Check wellformedness
-      if (tps.size != tparams.size)
-        Context.abort(s"Wrong number of type arguments, given ${tparams.size}, but function expects ${tps.size}.")
-
-      if (vps.size != vparams.size)
-        Context.abort(s"Wrong number of value arguments, given ${vparams.size}, but function expects ${vps.size}.")
-
-      if (bps.size != bparams.size)
-        Context.abort(s"Wrong number of block arguments, given ${bparams.size}, but function expects ${bps.size}.")
+      // (2) Check wellformedness (that type, value, block params and args align)
+      checkAllArgs("function", tparams.size, vparams.size, bparams.size, tps.size, vps.size, bps.size)
 
       // (3) Substitute type parameters
       val typeParams = tparams.map { p => p.symbol.asTypeParam }
@@ -1275,6 +1268,47 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
   }
 
+  private def checkAllArgs(
+      name: String,
+      givenTypes: Int,
+      givenValues: Int,
+      givenBlocks: Int,
+      expectedTypes: Int,
+      expectedValues: Int,
+      expectedBlocks: Int
+    )(using Context): Unit = {
+
+    val targsOk = givenTypes == 0 || givenTypes == expectedTypes
+    val vargsOk = givenValues == expectedValues
+    val bargsOk = givenBlocks == expectedBlocks
+
+    val parts = List(
+      Option.when(!targsOk)(s"  type arguments (given ${givenTypes}, but ${name} expected ${expectedTypes})"),
+      Option.when(!vargsOk)(s"  value arguments (given ${givenValues}, but ${name} expected ${expectedValues})"),
+      Option.when(!bargsOk)(s"  block arguments (given ${givenBlocks}, but ${name} expected ${expectedBlocks})")
+    ).flatten
+
+    // Hints for common value/block confusions
+    if (!vargsOk && !bargsOk) {
+      // 1. Exact swap: counts match in opposite positions
+      if (givenValues == expectedBlocks && givenBlocks == expectedValues) {
+        Context.info(pretty"Did you mean to swap value and block arguments?")
+      }
+      // 2. Block given, value expected (and no block expected)
+      else if (expectedValues > 0 && givenValues == 0 && expectedBlocks == 0 && givenBlocks > 0) {
+        Context.info(pretty"Did you mean to box the computation into a value?")
+      }
+      // 3. Value given, block expected (and no value expected)
+      else if (expectedBlocks > 0 && givenBlocks == 0 && expectedValues == 0 && givenValues > 0) {
+        Context.info(pretty"Did you mean to pass a block (computation) instead?")
+      }
+    }
+
+    if (parts.nonEmpty) {
+      Context.abort(s"Wrong number of arguments to ${name}:\n${parts.mkString("\n")}")
+    }
+  }
+
   def checkCallTo(
     call: source.CallLike,
     name: String,
@@ -1285,15 +1319,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     bargs: List[source.Term],
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
-
-    if (targs.nonEmpty && targs.size != funTpe.tparams.size)
-      Context.abort(s"Wrong number of type arguments, given ${targs.size}, but ${name} expects ${funTpe.tparams.size}.")
-
-    if (vargs.size != funTpe.vparams.size)
-      Context.abort(s"Wrong number of value arguments, given ${vargs.size}, but ${name} expects ${funTpe.vparams.size}.")
-
-    if (bargs.size != funTpe.bparams.size)
-      Context.abort(s"Wrong number of block arguments, given ${bargs.size}, but ${name} expects ${funTpe.bparams.size}.")
+    // (0) Check that arg & param counts align
+    checkAllArgs(name, targs.size, vargs.size, bargs.size, funTpe.tparams.size, funTpe.vparams.size, funTpe.bparams.size)
 
     val callsite = currentCapture
 
