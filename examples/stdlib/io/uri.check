@@ -1,0 +1,35 @@
+/  !
+Hallo Welt!/&^$@^*(&$)(*!_!_+")
+Hallo%20Welt%21%2F%26^%24%40^%2A%28%26%24%29%28%2A%21_%21_%2B"%29
+Hallo Welt!/&^$@^*(&$)(*!_!_+")
+Hallo%20Welt%21%2F%26%5E%24%40%5E%2A%28%26%24%29%28%2A%21_%21_%2B%22%29
+ftp://ftp.is.co.za/rfc/rfc1808.txt
+  Scheme: ftp
+  Host: ftp.is.co.za
+  Path: /rfc/rfc1808.txt
+http://www.ietf.org/rfc/rfc2396.txt
+  Scheme: http
+  Host: www.ietf.org
+  Path: /rfc/rfc2396.txt
+ldap://[2001:db8::7]/c=GB?objectClass?one
+  Scheme: ldap
+  Host: [2001:db8::7]
+  Path: /c=GB
+  Query: objectClass?one
+mailto:John.Doe@example.com
+  Scheme: mailto
+  Path: John.Doe@example.com
+news:comp.infosystems.www.servers.unix
+  Scheme: news
+  Path: comp.infosystems.www.servers.unix
+tel:+1-816-555-1212
+  Scheme: tel
+  Path: +1-816-555-1212
+telnet://192.0.2.16:80/
+  Scheme: telnet
+  Host: 192.0.2.16
+  Port: 80
+  Path: /
+urn:oasis:names:specification:docbook:dtd:xml:4.1
+  Scheme: urn
+  Path: oasis:names:specification:docbook:dtd:xml:4.1

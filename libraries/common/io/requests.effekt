@@ -1,0 +1,775 @@
+import stream
+import io
+import io/error
+import stringbuffer
+import bytearray
+import io/uri
+import scanner
+import char
+
+// Async iterables
+// ---------------
+
+record EffektAsyncIterator[T](next: => Promise[Option[T]] at {io, async, global})
+def getNext[T](it: EffektAsyncIterator[T]): Option[T] =
+  (it.next)().await()
+def each[T](it: EffektAsyncIterator[T]): Unit / emit[T] = {
+  while(it.getNext() is Some(x)) { do emit(x) }
+}
+
+// Types
+// -----
+
+/// HTTP-style Protocol for requests to send.
+type Protocol { HTTP(); HTTPS() }
+def show(p: Protocol): String = p match {
+  case HTTP() => "http"
+  case HTTPS() => "https"
+}
+def defaultPort(p: Protocol): Int = p match {
+  case HTTP() => 80
+  case HTTPS() => 443
+}
+
+/// HTTP request method
+type Method { GET(); POST() }
+def show(m: Method): String = m match {
+  case GET() => "GET"
+  case POST() => "POST"
+}
+/// Interface to build HTTP requests.
+///
+/// Each of method, hostname, path, and protocol must be called at least once!
+/// See `uri` for a simple way to fill those.
+interface RequestBuilder {
+  /// HTTP request method to use
+  def method(method: Method): Unit
+  /// (optional) user authentication to use, e.g. user:letmein
+  def auth(authStr: String): Unit
+  /// hostname of the request, e.g. effekt-lang.org
+  def hostname(host: String): Unit
+  /// path of the request, e.g. /index.html
+  def path(path: String): Unit
+  /// port to use, defaults to the standard port of the protocol
+  def port(port: Int): Unit
+  /// Protocol to use, e.g. HTTP(), HTTPS()
+  def protocol(proto: Protocol): Unit
+  /// Add the given request header
+  def header(key: String, value: String): Unit
+  /// Write to the body of the request. May only be called once.
+  def body{ writer: => Unit / emit[Byte] }: Unit
+}
+/// Interface returned by HTTP requests.
+interface ResponseReader {
+  /// Gets the response HTTP status code
+  def status(): Int
+
+  /// Returns the body of the response by emitting Bytes
+  /// May be called at most once.
+  def body(): Unit / emit[Byte]
+
+  /// Get the specified HTTP header, key should be lower-case
+  def getHeader(key: String): Option[String]
+
+  //def headers(): Unit / emit[(String, String)]
+}
+
+record RequestError()
+// Backend-specific implementations
+// --------------------------------
+
+namespace js {
+  // Async iterators in JS
+  // ---------------------
+  extern type AsyncIterator[T]
+  extern type IterableResult[T]
+  extern io def nextPromise[T](it: AsyncIterator[T]): Promise[IterableResult[T]] =
+    js "{ promise: ${it}.next() }"
+  extern def done[T](r: IterableResult[T]): Bool =
+    js "${r}.done"
+  extern io def unsafeValue[T](r: IterableResult[T]): T =
+    js "${r}.value"
+  extern def fromValue[T](v: T): IterableResult[T] =
+    js "{ value: ${v}, done: false }"
+  extern def done[T](): IterableResult[T] =
+    js "{ value: undefined, done: true }"
+
+  def next[T](it: AsyncIterator[T]): IterableResult[T] =
+    it.nextPromise().await()
+
+  def each[T](it: AsyncIterator[T]): Unit / emit[T] = {
+    while(it.next() is r and not(r.done)) {
+      do emit(r.unsafeValue())
+    }
+  }
+  // broken if we resolve a promise inside, see issue #1016
+  // extern def makeAsyncIterator[T](next: => Promise[IterableResult[T]] at {io, async, global}): AsyncIterator[T] =
+  //   js """{ next: () => $effekt.runToplevel((ks,k) => ${next}(ks, k)) }"""
+
+  // Native Byte Buffers
+  // -------------------
+  extern type NativeBytes
+  // jsNode "Buffer"
+  extern pure def length(n: NativeBytes): Int =
+    js "${n}.length"
+  extern pure def get(n: NativeBytes, x: Int): Byte =
+    js "${n}[${x}]"
+  def each(n: NativeBytes): Unit / emit[Byte] = {
+    each(0, n.length){ i =>
+      do emit(n.get(i))
+    }
+  }
+
+  // Event emitters
+  // --------------
+  extern type Undefined
+  extern type EventEmitter
+  record Event[T](name: String)
+  namespace ev {
+    def data(): Event[js::NativeBytes] = Event("data")
+    def end(): Event[Undefined] = Event("end")
+  }
+
+  extern io def unsafeOn[T](em: EventEmitter, ev: String, handler: T => Unit at {io, async, global}): Unit =
+    js "${em}.on(${ev}, (param) => $effekt.runToplevel((ks,k) => ${handler}(param, ks, k)))"
+  def on[T](em: EventEmitter, ev: Event[T], handler: T => Unit at {io, async, global}): Unit =
+    em.unsafeOn(ev.name, handler)
+  extern async def unsafeWait[T](em: EventEmitter, ev: String): T =
+    js "$effekt.capture(k => ${em}.on(${ev}, k))"
+  def wait[T](em: EventEmitter, ev: Event[T]): T =
+    em.unsafeWait(ev.name)
+
+  /// Returns the data emitted via dataEv as an async stream until endEv
+  def asyncStreamOf[D, E](em: EventEmitter, dataEv: Event[D], endEv: Event[E]): (EffektAsyncIterator[D], Promise[E]) = {
+    val waitingNexts = ref(Nil[Promise[Option[D]]]())
+    val nextWasCalled = ref(promise::make())
+    val done = ref(false)
+    val endPromise = promise::make()
+    em.on(dataEv, box { chunk =>
+      loop { {l} =>
+        nextWasCalled.get().await()
+        waitingNexts.get() match {
+          case Cons(hd, tl) =>
+            waitingNexts.set(tl)
+            hd.resolve(Some(chunk))
+            l.break()
+          case Nil() =>
+            nextWasCalled.set(promise::make())
+        }
+      }
+    })
+    em.on(endEv, box { e =>
+      done.set(true)
+      waitingNexts.get().foreach{ p => p.resolve(None()) }
+      endPromise.resolve(e)
+    })
+    (EffektAsyncIterator(box {
+      val res = promise::make()
+      if (done.get()) {
+        res.resolve(None())
+      } else {
+        waitingNexts.set(waitingNexts.get().append([res]))
+        nextWasCalled.get().resolve(())
+      }
+      res
+    }), endPromise)
+  }
+
+  // Dict-like JS objects
+  // --------------------
+  extern type JsObj
+  extern def empty(): JsObj =
+    js "{}"
+    
+  extern io def set(obj: JsObj, key: String, value: Any): Unit =
+    js "${obj}[${key}] = ${value};"
+  extern io def set(obj: JsObj, key1: String, key2: String, value: Any): Unit =
+    js "${obj}[${key1}][${key2}] = ${value};"
+  extern io def isSet(obj: JsObj, key: String): Bool =
+    js "${obj}[${key}] !== undefined"
+}
+
+namespace jsNode {
+  extern jsNode """
+    const http = require('node:http')
+    const https = require('node:https')
+  """
+ 
+  extern type NativeResponse
+  extern async def runHTTP(obj: js::JsObj, body: ByteArray): NativeResponse =
+    jsNode """$effekt.capture(callback => {
+      let req = http.request(${obj}, callback).on('error', callback);
+      req.write(${body})
+      req.end()
+    })"""
+  extern async def runHTTPS(obj: js::JsObj, body: ByteArray): NativeResponse =
+    jsNode """$effekt.capture(callback => {
+      let req = https.request(${obj}, callback).on('error', callback);
+      req.write(${body})
+      req.end();
+    })"""
+
+  extern io def statusCode(r: NativeResponse): Int =
+    jsNode "${r}.statusCode"
+  extern pure def getHeader(r: NativeResponse, h: String): String =
+    jsNode "${r}.headers[${h}]"
+
+  extern pure def events(r: NativeResponse): js::EventEmitter = jsNode "${r}"
+  
+  def getBody(r: NativeResponse): EffektAsyncIterator[js::NativeBytes] = {
+    val (res, _) = js::asyncStreamOf(r.events, js::ev::data(), js::ev::end())
+    res
+  }
+
+  extern io def isError(r: NativeResponse): Bool =
+    jsNode "(${r} instanceof Error)"
+
+  // outside interface
+  def request[R]{ body: => Unit / RequestBuilder }{ k: {ResponseReader} => R }: R / Exception[RequestError] = {
+    val options = js::empty()
+    options.js::set("headers", js::empty())
+    var protocol = HTTPS()
+    var reqBody: ByteArray = allocate(0)
+    try body() with RequestBuilder {
+      def method(m) = resume(options.js::set("method", m.show))
+      def auth(a) = resume(options.js::set("auth", a))
+      def hostname(n) = resume(options.js::set("hostname", n))
+      def path(p) = resume(options.js::set("path", p))
+      def port(p) = resume(options.js::set("port", p))
+      def header(k, v) = resume(options.js::set("headers", k, v))
+      def protocol(p) = { protocol = p; resume(()) }
+      def body() = resume{ {wr} => reqBody = collectBytes{ wr } }
+    }
+    if(not(options.js::isSet("port"))) { options.js::set("port", protocol.defaultPort()) }
+    val res = protocol match {
+      case HTTP() => runHTTP(options, reqBody)
+      case HTTPS() => runHTTPS(options, reqBody)
+    }
+    if(res.isError) { println(res.genericShow); do raise(RequestError(), "Request failed") }
+    
+    val resbody = res.getBody
+    def rr = new ResponseReader{
+      def status() = res.statusCode
+      def body() = {
+        for[js::NativeBytes]{ resbody.each }{ b => b.js::each }
+      }
+      def getHeader(k) = undefinedToOption(res.getHeader(k))
+      //def headers() = <>
+    }
+    k{rr}
+  }
+}
+
+namespace jsWeb {
+  extern type RequestInit
+  extern type NativeResponse
+  extern async def run(url: String, obj: js::JsObj): NativeResponse =
+    jsWeb """$effekt.capture(k => fetch(${url}, ${obj}).then(k).catch(k))"""
+  extern pure def isError(r: NativeResponse): Bool =
+    jsWeb """(${r} instanceof Error)"""
+
+  extern pure def statusCode(r: NativeResponse): Int =
+    jsWeb """${r}.status"""
+  extern pure def getHeader(r: NativeResponse, name: String): String =
+    jsWeb """${r}.headers.get(${name})"""
+  extern type Reader
+  extern io def getBody(r: NativeResponse): Reader =
+    jsWeb """${r}.body.getReader()"""
+  extern io def read(r: Reader): Promise[js::IterableResult[ByteArray]] =
+    jsWeb """{ promise: ${r}.read() }"""
+  def each(r: Reader): Unit / emit[ByteArray] = {
+    while(r.read().await() is r and not(r.js::done)) {
+      do emit(r.js::unsafeValue())
+    }
+  }
+
+  def request[R]{ body: => Unit / RequestBuilder }{ k: {ResponseReader} => R }: R / Exception[RequestError] = {
+    val options = js::empty()
+    options.js::set("headers", js::empty())
+    var protocol = HTTPS()
+    var auth = None()
+    var hostname = ""
+    var path = "/"
+    var port = None()
+    try body() with RequestBuilder {
+      def method(m) = resume(options.js::set("method", m.show))
+      def auth(a) = resume((auth = Some(a)))
+      def hostname(n) = resume((hostname = n))
+      def path(p) = resume((path = p))
+      def port(p) = resume((port = Some(p)))
+      def header(k,  v) = resume(options.js::set("headers", k, v))
+      def protocol(p) = resume((protocol = p))
+      def body() = resume{ {wr} => options.js::set("body", collectBytes{wr}) }
+    }
+    val authStr = auth.map{ a => a ++ "@" }.getOrElse{ "" }
+    val url = s"${protocol.show}://${authStr}${hostname}:${port.getOrElse{ protocol.defaultPort }.show}${path}"
+    val res = run(url, options)
+    if(res.isError) { println(res.genericShow); do raise(RequestError(), "Request failed") }
+
+    def rr = new ResponseReader {
+      def status() = res.statusCode
+      def body() = for[ByteArray]{ res.getBody().each() }{ b => b.each }
+      def getHeader(k) = undefinedToOption(res.getHeader(k))
+    }
+    k{rr}
+  }
+}
+
+namespace plain {
+  /// Encode a request into its byte representation, will always use HTTP/1.1
+  def constructRequest{ body: => Unit / RequestBuilder }: Unit / emit[Byte] = {
+    def crlf() = {
+      do emit('\r'.toInt.toByte)
+      do emit('\n'.toInt.toByte)
+    }
+
+    with encodeUTF8
+    var method = GET()
+    var port = 80
+    var path = "/"
+    var headers = Nil[(String, String)]()
+    var reqBody: ByteArray = allocate(0)
+    try body() with RequestBuilder {
+      def protocol(p) = p match {
+        case HTTP() => ()
+        case _ => panic("Only HTTP is supported by constructRequest")
+      }
+      def method(m) = resume((method = m))
+      def hostname(n) = <>
+      def auth(a) = <>
+      def port(p) = resume((port = p))
+      def path(p) = resume((path = p))
+      def header(k, v) = resume((headers = Cons((k, v), headers)))
+      def body() = resume{ {b} => reqBody = collectBytes{ b() } }
+    }
+    // start line
+    method.show.each
+    do emit(' ')
+    path.each
+    do emit(' ')
+    "HTTP/1.1".each
+    crlf()
+    // field-line's
+    headers.reverse.foreach{ case (k,v) =>
+      k.each
+      do emit(':')
+      do emit(' ')
+      v.each
+      crlf()
+    }
+    crlf()
+    // body
+    reqBody.each
+  }
+
+  def parseHTTPVersion(): (Int, Int) / { Scan[Char], Exception[WrongFormat] } = {
+    returning::expect("HTTP version"){
+      readIf('H'); readIf('T'); readIf('T'); readIf('P')
+      readIf('/')
+      val maj = tryRead{ c => digitValue(c) }
+      readIf('.')
+      val min = tryRead{ c => digitValue(c) }
+      (maj, min)
+    }
+  }
+
+  def isHTTPTokenChar(c: Char): Bool = c match {
+    case '!' => true
+    case '#' => true
+    case '$' => true
+    case '%' => true
+    case '&' => true
+    case '\'' => true
+    case '*' => true
+    case '+' => true
+    case '-' => true
+    case '.' => true
+    case '^' => true
+    case '_' => true
+    case '`' => true
+    case '|' => true
+    case '~' => true
+    case d and d.isAlphanumeric => true
+    case _ => false
+  }
+  def isLWS(c: Char): Bool = c match {
+    case '\t' => true
+    case ' ' => true
+    case _ => false
+  }
+
+  def parseHeaderLine(): (String, String) / { Scan[Char], Exception[WrongFormat] } = {
+    with returning::expect("HTTP Header line")
+    val k = collectString { readWhile { c => c.isHTTPTokenChar() } }
+    readIf(':')
+    skipWhile { c => c.isLWS }
+    val v = collectString {
+      readWhile { c => c != '\r' }
+      readIf('\r'); readIf('\n')
+      while(do peek[Char]().isLWS) {
+        // continuation line
+        skipWhile { c => c.isLWS }
+        do emit('\n')
+        readWhile { c => c != '\r'}
+        readIf('\r'); readIf('\n')
+      }
+    }
+    (k, v)
+  }
+
+  /// Decode a chunked transfer coding as per RFC 2616.
+  /// Emits the contents as bytes, and headers from the trailer.
+  def unchunk(): Int / { emit[Byte], emit[(String, String)], read[Byte], Exception[WrongFormat] } = {
+    with decodeUTF8
+    with returning::scanner[Char, Int]
+    var length = 0
+    loop { {l} =>
+      // chunk header
+      val size = returning::expect("chunk header"){
+        val size = collectString{ readWhile{ c => c.isHexDigit } }.toInt(16)
+        val extensions = collectString{ readWhile{ c => c != '\r' } } // ignored
+        if(size == 0){ l.break() }
+        readIf('\r')
+        readIf('\n')
+        size
+      }
+      // chunk body
+      length = length + size
+      repeat(size){
+        try {
+          do emit(do read[Byte]())
+        } with stop { () => do raise(WrongFormat(), "Premature end of chunk in chunked encoding") }
+      }
+      expect("CRLF at end of chunk"){
+        readIf('\r')
+        readIf('\n')
+      }
+    }
+    // trailer headers
+    expect("Trailers or end of response"){
+      while(do peek[Char]() != '\r') {
+        do emit(parseHeaderLine())
+      }
+      readIf('\r')
+      readIf('\n')
+    }
+    // return total length
+    length
+  }
+
+  /// Parse a HTTP response from its byte representation.
+  /// Decodes chunked encoding and stops after Content-Length, if provided.
+  def parseResponse[R]{ body: {ResponseReader} => R }: R / { read[Byte], Exception[WrongFormat] } = {
+    with decodeUTF8
+    with returning::scanner[Char, R]
+
+    var statusCode = -1
+    var headers: List[(String, String)] = Nil()
+    expect("HTTP response"){
+      val version = parseHTTPVersion()
+      readIf(' ')
+      statusCode = readInteger()
+      if (statusCode > 599 || statusCode < 100) { do raise(WrongFormat(), "Invalid status code") }
+      readIf(' ')
+      val reason = collectString{ readWhile{ c => c != '\r' } }
+      readIf('\r')
+      readIf('\n')
+      headers = collectList {
+        while(do peek[Char]() != '\r') {
+          do emit(parseHeaderLine())
+        }
+      }
+      readIf('\r')
+      readIf('\n')
+    }
+
+    def lower(s: String) = collectString{ for{ s.each }{ c => do emit(c.toLower) } }
+
+    def getHeader(key: String) = {
+      var r = None()
+      headers.foreach {
+        case (k, v) and k.lower == key => r = Some(v)
+        case _ => ()
+      }
+      r
+    }
+
+    val transferEnc = getHeader("transfer-encoding")
+    val contentLength = getHeader("content-length")
+
+    (transferEnc, contentLength) match {
+      case (_, Some(l)) and l.toInt is len => // use provided content-length
+        try body{res} with res: ResponseReader {
+          def status() = resume(statusCode)
+          def getHeader(key) = resume(getHeader(key.lower))
+          def body() = resume { limit[Byte](len){ exhaustively{ do emit(do read[Byte]()) } } }
+        }
+      case (Some(enc), _) and enc == "chunked" => // decode chunked encoding // TODO support multiple and remove
+        var finalLength = None()
+        try body{res} with res: ResponseReader {
+          def status() = resume(statusCode)
+          def getHeader(key) = {
+            if(key.lower == "content-length") {
+              resume(finalLength)
+            } else if(key.lower == "transfer-encoding") {
+              resume(None())
+            } else {
+              resume(getHeader(key.lower))
+            }
+          }
+          def body() = {
+            resume {
+              headers = headers.append(collectList[(String, String)]{
+                finalLength = Some(unchunk().show)
+              })
+            }
+          }
+        }
+      case (_, _) => // read until end of input
+        try body{res} with res: ResponseReader {
+          def status() = resume(statusCode)
+          def getHeader(key) = resume(getHeader(key.lower))
+          def body() = resume { exhaustively{ do emit(do read[Byte]()) } }
+        }
+    }
+  }
+}
+
+
+/// Sets the values in the `RequestBuilder` from a given URI string.
+def uri(uri: String): Unit / { RequestBuilder, Exception[WrongFormat] } = {
+  stringBuffer{
+    try parseURI(uri) with URIBuilder {
+      def scheme(sc) = resume(sc match {
+        case "http" => do protocol(HTTP())
+        case "HTTP" => do protocol(HTTP())
+        case "https" => do protocol(HTTPS())
+        case "HTTPS" => do protocol(HTTPS())
+        case _ => do raise(WrongFormat(), "Unsupported protocol " ++ sc)
+      })
+      def userinfo(u) = resume(do auth(u))
+      def host(h) = resume(do hostname(h))
+      def port(p) = resume(do port(p))
+      def path(p) = resume(do write(p))
+      def query(q) = { do write("?"); do write(q); resume(()) }
+      def fragment(f) = { do write("#"); do write(f); resume(()) }
+    }
+    do path(do flush())
+  }
+}
+
+def defaultHeaders(): Unit / RequestBuilder = {
+  internal::ifJSWeb{
+    () // do not set a user agent
+  }{
+    do header("User-Agent", "Effekt-io-requests/0.1.0")
+  }
+  // TODO should we add more?
+}
+
+namespace internal {
+  extern pure def backend(): String =
+    jsNode { "js-node" }
+    jsWeb { "js-web" }
+
+  extern pure def ifJSNode[R]{ thnNode: => R }{ els: => R }: R =
+    jsNode { thnNode() }
+    default { els() }
+  extern pure def ifJSWeb[R]{ thnWeb: => R }{ els: => R }: R =
+    jsWeb { thnWeb() }
+    default { els() }
+  extern pure def unsupported[R](): R =
+}
+
+/// Make a HTTP(S) request on the backend-specific implementation,
+/// then pass the response to the second block parameter to process.
+///
+/// The Request body is buffered, the response is streaming (as far
+/// as the backend implementation allows).
+def request[R]{ body: => Unit / RequestBuilder }{ res: {ResponseReader} => R }: R / Exception[RequestError] =
+  with internal::ifJSNode{ jsNode::request{body}{res} }
+  with internal::ifJSWeb{ jsWeb::request{body}{res} }
+  internal::unsupported[R]()
+
+// Simple API
+// ----------
+interface HttpClient {
+  def get[R](url: String, body: Option[String], headers: List[(String, String)]){ r: {ResponseReader} => R }: R / Exception[RequestError]
+  def post[R](url: String, body: Option[String], headers: List[(String, String)]){ r: {ResponseReader} => R }: R / Exception[RequestError]
+}
+
+def httpClient[R]{ body: => R / HttpClient }: R = {
+  try body() with HttpClient {
+    def get[R](url, body, headers) = resume { {k} =>
+      with on[WrongFormat].default{ do raise(RequestError(), "Malformed URL") }
+      request{
+        do method(GET())
+        uri(url)
+        defaultHeaders()
+        body.foreach { data =>
+          do body{
+            with encodeUTF8
+            data.each
+          }
+        }
+        headers.foreach { case (k, v) =>
+          do header(k, v)
+        }
+      }{k}
+    }
+    def post[R](url, body, headers) = resume { {k} =>
+      with on[WrongFormat].default{ do raise(RequestError(), "Malformed URL") }
+      request{
+        do method(POST())
+        uri(url)
+        defaultHeaders()
+        body.foreach { data =>
+          do body{
+            with encodeUTF8
+            data.each
+          }
+        }
+        headers.foreach { case (k, v) =>
+          do header(k, v)
+        }
+      }{k}
+    }
+  }
+}
+
+/// GET the given URL with the given body and headers, emitting the response characters.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def getStreaming(url: String, body: Option[String], headers: List[(String, String)]): Unit / { emit[Char], Exception[RequestError], HttpClient } =
+  do get(url, body, headers){ {r} =>
+    if(r.status() != 200) { do raise(RequestError(), "Non-200 response") }
+    with source[Byte]{ r.body() }
+    with decodeUTF8
+    exhaustively{ do emit(do read[Char]()) }
+  }
+/// GET the given URL with the given body and headers, returning the response body.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def get(url: String, body: Option[String], headers: List[(String, String)]): String / { Exception[RequestError], HttpClient } =
+  collectString{ getStreaming(url, body, headers) }
+/// GET the given URL, returning the response body.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def get(url: String): String / { Exception[RequestError], HttpClient } = get(url, None(), Nil())
+/// GET the given URL, emitting the response characters.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def getStreaming(url: String): Unit / { emit[Char], Exception[RequestError], HttpClient } = getStreaming(url, None(), Nil())
+
+/// POST to the given URL with the given body and headers, emitting the response characters.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def postStreaming(url: String, body: Option[String], headers: List[(String, String)]): Unit / { emit[Char], Exception[RequestError], HttpClient } =
+  do post(url, body, headers){ {r} =>
+    if(r.status() != 200) { do raise(RequestError(), "Non-200 response") }
+    with source[Byte]{ r.body() }
+    with decodeUTF8
+    exhaustively{ do emit(do read[Char]()) }
+  }
+/// POST to the given URL with the given body and headers, returning the response body.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def post(url: String, body: Option[String], headers: List[(String, String)]): String / { Exception[RequestError], HttpClient } =
+  collectString{ postStreaming(url, body, headers) }
+/// POST to the given URL, returning the response body.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def post(url: String): String / { Exception[RequestError], HttpClient } = post(url, None(), Nil())
+/// POST to the given URL, emitting the response characters.
+/// Raises an exception if anything goes wrong, including non-200 responses.
+def post(url: String): Unit / { emit[Char], Exception[RequestError], HttpClient } = postStreaming(url, None(), Nil())
+
+namespace example {
+
+  def lowLevelApi() = {
+    with on[RequestError].panic
+    with on[WrongFormat].panic
+    with def res = request{
+      do method(GET())
+      uri("https://effekt-lang.org/")
+      defaultHeaders()
+    }
+    if(res.status() == 200){
+      println("OK")
+      println(res.getHeader("content-type").show{ x => x })
+      with source[Byte]{ res.body() }
+      with decodeUTF8
+      with stringBuffer
+      exhaustively{
+        do read[Char]() match {
+          case '\n' => println(do flush())
+          case c =>
+          do write(c.show)
+        }
+      }
+      println(do flush())
+    } else {
+      println(res.status().show)
+    }
+  }
+  def simpleApi() = {
+    with on[RequestError].panic
+    with httpClient
+    println(get("https://effekt-lang.org"))
+  }
+  def plainApi(): Unit = {
+    with on[WrongFormat].panic
+    println(collectString{
+      with source[Byte]{
+        plain::constructRequest{
+          do method(GET())
+          uri("http://effekt-lang.org")
+          defaultHeaders()
+        }
+      }
+      with decodeUTF8
+      exhaustively{ do emit(do read[Char]()) }
+    })
+    with source[Byte]{
+      def crlf() = {
+        do emit('\r'.toInt.toByte)
+        do emit('\n'.toInt.toByte)
+      }
+      with encodeUTF8;
+      "HTTP/1.1 200 OK".each;
+      crlf()
+      "content-type: text/plain".each;
+      crlf()
+      "Transfer-Encoding: chunked".each
+      crlf()
+      "x-multiline-test-header: This is the first line".each
+      crlf()
+      " and this is the second line".each
+      crlf()
+      crlf()
+      "6".each
+      crlf()
+      "Hello!".each
+      crlf()
+      "0".each
+      crlf()
+    }
+    with def res = plain::parseResponse
+    println(res.status())
+    println(res.getHeader("content-type").show{ x => x })
+    println("X-Multiline-Test-Header:")
+    println(res.getHeader("x-multiline-test-header").show{ x => x })
+    with source[Byte]{ res.body() }
+    with decodeUTF8
+    with stringBuffer
+    exhaustively{
+      do read[Char]() match {
+        case '\n' => println(do flush())
+        case c =>
+        do write(c.show)
+      }
+    }
+    println(do flush())
+  }
+  def main() = {
+    println("Low-level: ")
+    lowLevelApi()
+    println("Simple: ")
+    simpleApi()
+    println("Plain: ")
+    plainApi()
+  }
+}
