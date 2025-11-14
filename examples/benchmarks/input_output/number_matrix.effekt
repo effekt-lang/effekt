@@ -17,10 +17,10 @@ def emitDigit(d: Int) =
   do emit((d + 48).toByte)
 
 def emitSpace() = 
-  do emit(32.toByte)
+  do emit(0x20)
 
 def emitNewline() = 
-  do emit(10.toByte)
+  do emit(0x0A)
 
 def emitDigits(n: Int): Unit / emit[Byte] = {
   def go(n: Int): Unit = {
