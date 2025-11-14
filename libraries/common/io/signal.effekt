@@ -8,20 +8,20 @@ module io/signal
 extern type Signal[A, B]
 
 namespace signal {
-  extern global def allocate[A, B](): Signal[A, B] =
+  extern def allocate[A, B]() at global: Signal[A, B] =
     llvm """
       %signal = call %Pos @c_signal_make()
       ret %Pos %signal
     """
 }
 
-extern async def unsafeNotifyA[A, B](signal: Signal[A, B], value: A): B =
+extern def unsafeFire[A, B](signal: Signal[A, B], value: A) at async: B =
   llvm """
     call void @c_signal_notify(%Pos ${signal}, %Pos ${value}, %Stack %stack)
     ret void
   """
 
-extern async def unsafeNotifyB[A, B](signal: Signal[A, B], value: B): A =
+extern def unsafeWait[A, B](signal: Signal[A, B], value: B) at async: A =
   llvm """
     call void @c_signal_notify(%Pos ${signal}, %Pos ${value}, %Stack %stack)
     ret void
