@@ -47,7 +47,7 @@ class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.Rewrite {
         exports)
   }
 
-  def rewrite(d: Declaration): Declaration = d match {
+  override def rewrite(d: Declaration): Declaration = d match {
     case Declaration.Data(id, tparams, constructors) =>
       Declaration.Data(id, tparams, constructors.collect {
         case c if used(c.id) => c

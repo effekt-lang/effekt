@@ -1,17 +1,29 @@
 package effekt
 package core
 
+import effekt.core.Type.{PromptSymbol, ResumeSymbol}
 import effekt.source.{FeatureFlag, Span}
+import effekt.symbols.builtins
 import effekt.util.messages.{ErrorReporter, ParseError}
 import kiama.parsing.{NoSuccess, ParseResult, Parsers, Success}
 import kiama.util.{Position, Range, Source, StringSource}
 
-class Names(var knownNames: Map[String, Id]) {
-  def idFor(name: String): Id = knownNames.getOrElse(name, {
-    val id = Id(name)
-    knownNames = knownNames.updated(name, id)
-    id
-  })
+class Names(private var knownNames: Map[String, Id]) {
+  private val Suffix = """^(.*)\$(\d+)$""".r
+
+  def idFor(name: String): Id =
+    builtins.coreBuiltinSymbolFromString(name).getOrElse {
+      knownNames.getOrElse(name, {
+        val id = name match {
+          case Suffix(base, n) => Id(base, n.toInt)
+          case _ =>
+            // Only pre-known and builtin names can be written without Barendregt ids.
+            sys error s"Name $name not known and has no id suffix. Did you mean to write ${name}$$<number> instead?"
+        }
+        knownNames = knownNames.updated(name, id)
+        id
+      })
+    }
 }
 
 
@@ -30,17 +42,18 @@ class EffektLexers extends Parsers {
 
   lazy val ident =
     (not(anyKeyword) ~> name
-    | failure("Expected an identifier")
-    )
+      | failure("Expected an identifier")
+      )
 
   lazy val identRef =
     (not(anyKeyword) ~> qualifiedName
-    | failure("Expected an identifier")
-    )
+      | failure("Expected an identifier")
+      )
 
   lazy val `=` = literal("=")
   lazy val `:` = literal(":")
   lazy val `@` = literal("@")
+  lazy val `${` = literal("${")
   lazy val `{` = literal("{")
   lazy val `}` = literal("}")
   lazy val `(` = literal("(")
@@ -57,7 +70,10 @@ class EffektLexers extends Parsers {
   lazy val `}>` = literal("}>")
   lazy val `!` = literal("!")
   lazy val `|` = literal("|")
+  lazy val `++` = literal("++")
 
+  lazy val `get` = keyword("get")
+  lazy val `put` = keyword("put")
   lazy val `let` = keyword("let")
   lazy val `true` = keyword("true")
   lazy val `false` = keyword("false")
@@ -74,6 +90,8 @@ class EffektLexers extends Parsers {
   lazy val `case` = keyword("case")
   lazy val `do` = keyword("do")
   lazy val `resume` = keyword("resume")
+  lazy val `reset` = keyword("reset")
+  lazy val `shift` = keyword("shift")
   lazy val `match` = keyword("match")
   lazy val `def` = keyword("def")
   lazy val `module` = keyword("module")
@@ -98,7 +116,8 @@ class EffektLexers extends Parsers {
     "def", "let", "val", "var", "true", "false", "else", "type",
     "effect", "interface", "try", "with", "case", "do", "if", "while",
     "match", "module", "import", "extern", "fun",
-    "at", "box", "unbox", "return", "region", "new", "resource", "and", "is", "namespace"
+    "at", "box", "unbox", "return", "region", "new", "resource", "and", "is", "namespace",
+    "reset", "shift"
   )
 
   def keyword(kw: String): Parser[String] =
@@ -123,6 +142,7 @@ class EffektLexers extends Parsers {
   lazy val integerLiteral  = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
   lazy val doubleLiteral   = regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r, "Double literal")
   lazy val stringLiteral   = regex("""\"(\\.|\\[\r?\n]|[^\r\n\"])*+\"""".r, "String literal")
+    ^^ { s => s.substring(1, s.size - 1)}
   lazy val charLiteral   = regex("""'.'""".r, "Character literal") ^^ { s => s.codePointAt(1) }
   lazy val unicodeChar   = regex("""\\u\{[0-9A-Fa-f]{1,6}\}""".r, "Unicode character literal") ^^ {
     case contents =>  Integer.parseInt(contents.stripPrefix("\\u{").stripSuffix("}"), 16)
@@ -211,13 +231,12 @@ class CoreParsers(names: Names) extends EffektLexers {
   lazy val bool   = `true` ^^^ Literal(true, Type.TBoolean) | `false` ^^^ Literal(false, Type.TBoolean)
   lazy val unit   = literal("()") ^^^ Literal((), Type.TUnit)
   lazy val double = doubleLiteral ^^ { n => Literal(n.toDouble, Type.TDouble) }
-  lazy val string = stringLiteral ^^ { s => Literal(s.substring(1, s.size - 1), Type.TString) }
+  lazy val string = stringLiteral ^^ { s => Literal(s, Type.TString) }
 
   /**
    * Names
    */
   lazy val id = ident ^^ { name => names.idFor(name) }
-  lazy val wildcard = success(names.idFor("_"))
 
   /**
    * Main Entry
@@ -238,21 +257,37 @@ class CoreParsers(names: Names) extends EffektLexers {
   // -------
   lazy val externDecl: P[Extern] =
     ( `extern` ~> featureFlag ~ externBody ^^ Extern.Include.apply
-    | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> (featureFlag ~ externBody)) ^^ {
-      case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ body =>
-        Extern.Def(id, tparams, cparams, vparams, bparams, result, captures, body match {
-          case ff ~ (body: String) =>
-            ExternBody.StringExternBody(ff, Template(List(body), Nil))
-        })
+      | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> (featureFlag ~ externBodyTemplate)) ^^ {
+      case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ (ff ~ templ) =>
+        Extern.Def(
+          id, tparams, cparams, vparams, bparams, result, captures,
+          ExternBody.StringExternBody(ff, templ)
+        )
     })
+
+  lazy val externBodyTemplate: P[Template[Expr]] =
+    (
+      (multilineString | stringLiteral) ~
+        rep((`++` ~> expr) ~ (`++` ~> (multilineString | stringLiteral)))
+      ) ^^ {
+      case firstStr ~ pairs =>
+        val strings = List.newBuilder[String]
+        val args = List.newBuilder[Expr]
+        strings += firstStr
+        pairs.foreach { case e ~ s =>
+          args += e
+          strings += s
+        }
+        Template(strings.result(), args.result())
+    }
 
   lazy val featureFlag: P[FeatureFlag] =
     ("else" ^^ { _ => FeatureFlag.Default(Span.missing) }
-    | ident ^^ (id => FeatureFlag.NamedFeatureFlag(id, Span.missing))
-    )
+      | ident ^^ (id => FeatureFlag.NamedFeatureFlag(id, Span.missing))
+      )
 
 
-  lazy val externBody = stringLiteral | multilineString
+  lazy val externBody = multilineString | stringLiteral
 
 
   // Declarations
@@ -274,32 +309,35 @@ class CoreParsers(names: Names) extends EffektLexers {
   // Definitions
   // -----------
   lazy val toplevel: P[Toplevel] =
-  ( `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~/> stmt) ^^ {
-    case (name ~ tpe ~ binding) => Toplevel.Val(name, tpe.getOrElse(binding.tpe), binding)
-  }
-  | `def` ~> id ~ (`=` ~/> block) ^^ Toplevel.Def.apply
-  | `def` ~> id ~ parameters ~ (`=` ~> stmt) ^^ {
+    ( `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~/> stmt) ^^ {
+      case (name ~ tpe ~ binding) => Toplevel.Val(name, tpe.getOrElse(binding.tpe), binding)
+    }
+      | `def` ~> id ~ (`=` ~/> block) ^^ Toplevel.Def.apply
+      | `def` ~> id ~ parameters ~ (`=` ~> stmt) ^^ {
       case name ~ (tparams, cparams, vparams, bparams) ~ body =>
         Toplevel.Def(name, BlockLit(tparams, cparams, vparams, bparams, body))
     }
-  | failure("Expected a definition.")
-  )
+      | failure("Expected a definition.")
+      )
 
 
   // Statements
   // ----------
   lazy val stmt: P[Stmt] =
     ( `{` ~/> stmts <~ `}`
-    | `return` ~> expr ^^ Stmt.Return.apply
-    | block ~ (`.` ~> id ~ (`:` ~> blockType)).? ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ {
-        case (recv ~ Some(method ~ tpe) ~ targs ~ vargs ~ bargs) => Invoke(recv, method, tpe, targs, vargs, bargs)
-        case (recv ~ None ~ targs ~ vargs ~ bargs) => App(recv, targs, vargs, bargs)
-      }
-    | (`if` ~> `(` ~/> expr <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
-    | `region` ~> blockLit ^^ Stmt.Region.apply
-    | `<>` ^^^ Hole(effekt.source.Span.missing)
-    | (expr <~ `match`) ~/ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
-    )
+      | `return` ~> expr ^^ Stmt.Return.apply
+      | `reset` ~> blockLit ^^ Stmt.Reset.apply
+      | `shift` ~> maybeParens(blockVar) ~ blockLit ^^ Stmt.Shift.apply
+      | `resume` ~> maybeParens(blockVar) ~ stmt ^^ Stmt.Resume.apply
+      | block ~ (`.` ~> id ~ (`:` ~> blockType)).? ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ {
+      case (recv ~ Some(method ~ tpe) ~ targs ~ vargs ~ bargs) => Invoke(recv, method, tpe, targs, vargs, bargs)
+      case (recv ~ None ~ targs ~ vargs ~ bargs) => App(recv, targs, vargs, bargs)
+    }
+      | (`if` ~> `(` ~/> expr <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
+      | `region` ~> blockLit ^^ Stmt.Region.apply
+      | `<>` ^^^ Hole(effekt.source.Span.missing)
+      | (expr <~ `match`) ~/ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
+      )
 
   lazy val stmts: P[Stmt] =
     ( (`let` ~ `!` ~/> id) ~ (`=` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ~ stmts ^^ {
@@ -307,21 +345,27 @@ class CoreParsers(names: Names) extends EffektLexers {
           ImpureApp(name, callee, targs, vargs, bargs, body)
       }
     | `let` ~/> id ~ maybeTypeAnnotation ~ (`=` ~/> expr) ~ stmts ^^ {
-        case (name ~ tpe ~ binding ~ body) =>
-          Let(name, tpe.getOrElse(binding.tpe), binding, body)
-      }
-    | `def` ~> id ~ (`=` ~/> block) ~ stmts ^^ Stmt.Def.apply
-    | `def` ~> id ~ parameters ~ (`=` ~/> stmt) ~ stmts ^^ {
-        case name ~ (tparams, cparams, vparams, bparams) ~ body ~ rest =>
-          Stmt.Def(name, BlockLit(tparams, cparams, vparams, bparams, body), rest)
-      }
-    | `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~> stmt) ~ (`;` ~> stmts) ^^ {
-        case id ~ tpe ~ binding ~ body => Val(id, tpe.getOrElse(binding.tpe), binding, body)
-      }
-    | `var` ~> id ~ (`in` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ { case id ~ region ~ init ~ body => Alloc(id, init, region, body) }
-    | `var` ~> id ~ (`@` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ { case id ~ cap ~ init ~ body => Var(id, init, cap, body) }
-    | stmt
-    )
+      case (name ~ tpe ~ binding ~ body) =>
+        Let(name, tpe.getOrElse(binding.tpe), binding, body)
+    }
+      | `get` ~> id ~ (`:` ~> valueType) ~ (`=` ~> `!` ~> id) ~ (`@` ~> id) ~ (`;` ~> stmts) ^^ {
+      case name ~ tpe ~ ref ~ cap ~ body => Get(name, tpe, ref, Set(cap), body)
+    }
+      | `put` ~> id ~ (`@` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ {
+      case ref ~ capt ~ value ~ body => Put(ref, Set(capt), value, body)
+    }
+      | `def` ~> id ~ (`=` ~/> block) ~ stmts ^^ Stmt.Def.apply
+      | `def` ~> id ~ parameters ~ (`=` ~/> stmt) ~ stmts ^^ {
+      case name ~ (tparams, cparams, vparams, bparams) ~ body ~ rest =>
+        Stmt.Def(name, BlockLit(tparams, cparams, vparams, bparams, body), rest)
+    }
+      | `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~> stmt) ~ (`;` ~> stmts) ^^ {
+      case id ~ tpe ~ binding ~ body => Val(id, tpe.getOrElse(binding.tpe), binding, body)
+    }
+      | `var` ~> id ~ (`in` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ { case id ~ region ~ init ~ body => Alloc(id, init, region, body) }
+      | `var` ~> id ~ (`@` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ { case id ~ cap ~ init ~ body => Var(id, init, cap, body) }
+      | stmt
+      )
 
   lazy val clause: P[(Id, BlockLit)] = (id <~ `:`) ~ blockLit ^^ { case id ~ cl => id -> cl }
 
@@ -341,14 +385,14 @@ class CoreParsers(names: Names) extends EffektLexers {
   // ----------------
   lazy val expr: P[Expr] =
     ( literal
-    | id ~ (`:` ~> valueType) ^^ Expr.ValueVar.apply
     | `box` ~> captures ~ block ^^ { case capt ~ block => Expr.Box(block, capt) }
     | `make` ~> dataType ~ id ~ maybeTypeArgs ~ valueArgs ^^ Expr.Make.apply
+    | id ~ (`:` ~> valueType) ^^ Expr.ValueVar.apply
     | maybeParens(blockVar) ~ maybeTypeArgs ~ valueArgs ^^ Expr.PureApp.apply
     | failure("Expected a pure expression.")
     )
 
-  lazy val literal: P[Expr] = int | bool | string | unit | double
+  lazy val literal: P[Expr] = double | int | bool | string | unit
 
 
   // Calls
@@ -469,12 +513,15 @@ class CoreParsers(names: Names) extends EffektLexers {
   // { f : S }
   // abbreviation { S } .= { _: S }
   lazy val blockTypeParam: P[(Id, BlockType)] =
-    `{` ~> (id <~ `:` | wildcard) ~ blockType <~ `}` ^^ { case id ~ tpe => id -> tpe }
+    `{` ~> (id <~ `:`) ~ blockType <~ `}` ^^ { case id ~ tpe => id -> tpe }
 
   lazy val interfaceType: P[BlockType.Interface] =
-    ( id ~ maybeTypeArgs ^^ { case id ~ tpe => BlockType.Interface(id, tpe) : BlockType.Interface }
-    | failure("Expected an interface")
-    )
+    (
+      id ~ maybeTypeArgs ^^ {
+        case id ~ targs => BlockType.Interface(id, targs): BlockType.Interface
+      }
+        | failure("Expected an interface")
+      )
 
   lazy val typeArgs: P[List[ValueType]] =
     `[` ~/> manySep(valueType, `,`) <~ `]`

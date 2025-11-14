@@ -47,14 +47,14 @@ trait CoreTests extends munit.FunSuite {
                             expected: ModuleDecl,
                             clue: => Any = "values are not alpha-equivalent",
                             names: Names = Names(defaultNames))(using Location): Unit = {
-    val renamer = TestRenamer(names, "$")
+    val renamer = TestRenamer(names)
     shouldBeEqual(renamer(obtained), renamer(expected), clue)
   }
   def assertAlphaEquivalentStatements(obtained: Stmt,
                             expected: Stmt,
                             clue: => Any = "values are not alpha-equivalent",
                             names: Names = Names(defaultNames))(using Location): Unit = {
-    val renamer = TestRenamer(names, "$")
+    val renamer = TestRenamer(names)
     shouldBeEqual(renamer(obtained), renamer(expected), clue)
   }
   def parse(input: String,
