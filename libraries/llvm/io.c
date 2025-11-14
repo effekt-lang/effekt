@@ -3,6 +3,7 @@
 
 #include <uv.h>
 #include <string.h> // to compare flag names
+#include "cMalloc.h"
 
 // Println and Readln and Random
 // -----------------------------
@@ -597,9 +598,10 @@ typedef struct {
     } payload;
 } Promise;
 
-void c_promise_erase_listeners(void *envPtr) {
-    // envPtr points to a Promise _after_ the eraser, so let's adjust it to point to the promise.
-    Promise *promise = (Promise*) (envPtr - offsetof(Promise, state));
+void c_promise_erase_listeners(void *object) {
+    // object points to the Promise object (at rc)
+    // The environment starts at state (after rc and eraser)
+    Promise *promise = (Promise*) object;
     promise_state_t state = promise->state;
 
     Stack head;
@@ -628,6 +630,7 @@ void c_promise_erase_listeners(void *envPtr) {
             erasePositive(promise->payload.value);
             break;
     }
+    free(promise); // Free the promise object itself
 }
 
 void c_promise_resume_listeners(Listeners* listeners, struct Pos value) {
