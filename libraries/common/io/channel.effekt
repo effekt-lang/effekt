@@ -27,7 +27,7 @@ def send[A, B](sender: Sender[A, B], value: A): B = {
   }
   // TODO avoid yield
   yield()
-  this.unsafeNotifyA(value)
+  this.unsafeFire(value)
 }
 
 def receive[A, B](receiver: Receiver[A, B], value: B): A = {
@@ -42,7 +42,7 @@ def receive[A, B](receiver: Receiver[A, B], value: B): A = {
   }
   // TODO avoid yield
   yield()
-  this.unsafeNotifyB(value)
+  this.unsafeWait(value)
 }
 
 // TODO streaming

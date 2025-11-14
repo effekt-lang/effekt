@@ -3,6 +3,7 @@ import examples/benchmarks/runner
 import io
 import io/error
 import io/network
+import io/promise
 import bytearray
 
 def run(n: Int) = {
