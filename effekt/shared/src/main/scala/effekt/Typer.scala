@@ -974,15 +974,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // (1) Apply what we already know.
       val bt @ FunctionType(tps, cps, vps, bps, tpe1, effs) = expected
 
-      // (2) Check wellformedness
-      if (tps.size != tparams.size)
-        Context.abort(s"Wrong number of type arguments, given ${tparams.size}, but function expects ${tps.size}.")
-
-      if (vps.size != vparams.size)
-        Context.abort(s"Wrong number of value arguments, given ${vparams.size}, but function expects ${vps.size}.")
-
-      if (bps.size != bparams.size)
-        Context.abort(s"Wrong number of block arguments, given ${bparams.size}, but function expects ${bps.size}.")
+      // (2) Check wellformedness (that type, value, block params and args align)
+      assertArgsParamsAlign("function", tparams.size, vparams.size, bparams.size, tps.size, vps.size, bps.size)
 
       // (3) Substitute type parameters
       val typeParams = tparams.map { p => p.symbol.asTypeParam }
@@ -1275,6 +1268,66 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
   }
 
+  /**
+   * Asserts that number of {type, value, block} arguments is the same as
+   *          the number of {type, value, block} parameters.
+   * If not, aborts the context with a nice error message.
+   */
+  private def assertArgsParamsAlign(
+    name: String,
+    gotTypes: Int, gotValues: Int, gotBlocks: Int,
+    expectedTypes: Int, expectedValues: Int, expectedBlocks: Int
+  )(using Context): Unit = {
+
+    val targsOk = gotTypes == 0 || gotTypes == expectedTypes
+    val vargsOk = gotValues == expectedValues
+    val bargsOk = gotBlocks == expectedBlocks
+
+    def pluralized(n: Int, singular: String): String =
+      if (n == 1) s"$n $singular" else s"$n ${singular}s"
+
+    def formatArgs(types: Option[Int], values: Option[Int], blocks: Option[Int]): String = {
+      val parts = List(
+        types.map { pluralized(_, "type argument") },
+        values.map { pluralized(_, "value argument") },
+        blocks.map { pluralized(_, "block argument") }
+      ).flatten
+
+      parts match {
+        case Nil => "no arguments"
+        case single :: Nil => single
+        case init :+ last => init.mkString(", ") + " and " + last
+        case _ => parts.mkString(", ")
+      }
+    }
+
+    val expected = formatArgs(
+      Option.when(!targsOk) { expectedTypes },
+      Option.when(!vargsOk) { expectedValues },
+      Option.when(!bargsOk) { expectedBlocks }
+    )
+    val got = formatArgs(
+      Option.when(!targsOk) { gotTypes },
+      Option.when(!vargsOk) { gotValues },
+      Option.when(!bargsOk) { gotBlocks }
+    )
+
+    if (!vargsOk && !bargsOk && gotValues + gotBlocks == expectedValues + expectedBlocks) {
+      // If total counts match, but individual do not, it's likely a value vs computation issue
+      if (gotBlocks > expectedBlocks) {
+        val diff = gotBlocks - expectedBlocks
+        Context.info(pretty"Did you mean to pass ${pluralized(diff, "block argument")} as a value? e.g. box it using `box { ... }`")
+      } else if (gotValues > expectedValues) {
+        val diff = gotValues - expectedValues
+        Context.info(pretty"Did you mean to pass ${pluralized(diff, "value argument")} as a block (computation)?")
+      }
+    }
+
+    if (!targsOk || !vargsOk || !bargsOk) {
+      Context.abort(s"Wrong number of arguments to ${name}: expected ${expected}, but got ${got}")
+    }
+  }
+
   def checkCallTo(
     call: source.CallLike,
     name: String,
@@ -1285,17 +1338,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
     bargs: List[source.Term],
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
-
-    if (targs.nonEmpty && targs.size != funTpe.tparams.size)
-      Context.abort(s"Wrong number of type arguments, given ${targs.size}, but ${name} expects ${funTpe.tparams.size}.")
-
-    if (vargs.size != funTpe.vparams.size)
-      Context.abort(s"Wrong number of value arguments, given ${vargs.size}, but ${name} expects ${funTpe.vparams.size}.")
-
-    if (bargs.size != funTpe.bparams.size)
-      Context.abort(s"Wrong number of block arguments, given ${bargs.size}, but ${name} expects ${funTpe.bparams.size}.")
-
     val callsite = currentCapture
+
+    // (0) Check that arg & param counts align
+    assertArgsParamsAlign(name, targs.size, vargs.size, bargs.size, funTpe.tparams.size, funTpe.vparams.size, funTpe.bparams.size)
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`

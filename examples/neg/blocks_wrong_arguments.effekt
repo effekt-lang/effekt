@@ -4,7 +4,7 @@ def foo { f : Int => Int } =
   f(2)
 
 def bar { f : (Int, Bool) => Unit } =
-  f(2, true, 4) // ERROR Wrong number of value arguments
+  f(2, true, 4) // ERROR Wrong number of arguments to f: expected 2 value arguments, but got 3 value arguments
 
 def main() = {
   val r = foo { (x: Int, y: Bool) =>
