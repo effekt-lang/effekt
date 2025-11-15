@@ -40,7 +40,7 @@ record Job()
 
 ```
 def worker() = loop { {l} =>
-  val packet = do receive[Job]()
+  val packet: Option[Job] = do receive()
   packet match {
     case Some(p) => println("processing request")
     case None() => l.break()

@@ -12,8 +12,8 @@ interface Scan[A] {
 
 /// Advance the Scanner to the next character, returning it.
 def read[A](): A / { Scan[A], stop } = {
-  val t = do peek[A]()
-  do skip[A]()
+  val t = do peek()
+  do skip()
   return t
 }
 
@@ -26,9 +26,9 @@ def expect(message: String) { scanner: () => Unit / stop }: Unit / Exception[Wro
 
 /// Check that the next token satisfies the predicate and skip and return it when it does.
 def readIf[A] { predicate: A => Bool }: A / { Scan[A], stop } = {
-  val t = do peek[A]()
+  val t = do peek()
   if (predicate(t)) {
-    do skip[A]()
+    do skip()
     return t
   } else {
     do stop()
@@ -42,7 +42,7 @@ def skipIf[A] { predicate: A => Bool }: Unit / { Scan[A], stop } = {
 
 def readSome[A, B] { convert: A => Option[B] }: B / { Scan[A], stop } =
   if (convert(do peek()) is Some(t)) {
-    do skip[A]()
+    do skip()
     return t
   } else {
     do stop()
@@ -53,7 +53,7 @@ def tryRead[A, B] { convert: A => B / Exception[WrongFormat] }: B / { Scan[A], s
   with on[WrongFormat].default { do stop() }
 
   val t = convert(do peek())
-  do skip[A]()
+  do skip()
   return t
 }
 
@@ -130,7 +130,7 @@ def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
     def peek() = resume {
       last match {
         case None() =>
-          val t = do read[A]()
+          val t = do read()
           last = Some(t)
           return t
         case Some(t) =>
@@ -140,7 +140,7 @@ def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
     def skip() = resume {
       last match {
         case None() =>
-          val _ = do read[A]()
+          val _ = do read()
           return ()
         case Some(t) =>
           last = None()

@@ -158,7 +158,7 @@ def readQuotedString(): Unit / { Scan[Char], emit[Char], Exception[WrongFormat] 
 def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
   with boundary
   skipWhitespace()
-  if(do peek[Char]() is c) {
+  if(do peek() is c) {
     c match {
       case 'n' => expectString("null"); do null()
       case 't' => expectString("true"); do bool(true)
@@ -177,7 +177,7 @@ def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[WrongFo
   expectString("{")
   with boundary
   skipWhitespace()
-  while(do peek[Char]() is c and (c != '}')) {
+  while(do peek() is c and (c != '}')) {
     if (not(first)) { expectString(",") }
     val k = string::collect { readQuotedString() }
     skipWhitespace()
@@ -188,20 +188,20 @@ def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[WrongFo
     skipWhitespace()
     first = false
   }
-  do skip[Char]()
+  do skip()
 }
 def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
   var first = true
   expectString("[")
   with boundary
   skipWhitespace()
-  while(do peek[Char]() is c and (c != ']')) {
+  while(do peek() is c and (c != ']')) {
     if (not(first)) { expectString(",") }
     decodeJson()
     skipWhitespace()
     first = false
   }
-  do skip[Char]()
+  do skip()
 }
 
 // --------------------------------------------------------------------------------

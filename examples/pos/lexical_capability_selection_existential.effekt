@@ -1,0 +1,10 @@
+module lexical_capability_selection_existential
+
+interface Greet[T] { def sayHello[R](): R }
+
+def helloWorld() = try {
+  do sayHello()
+} with Greet[Int] {
+  def sayHello() = { println("Hello world!") }
+}
+def main() = helloWorld()
