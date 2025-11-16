@@ -68,7 +68,7 @@ def normalize(t: Term): Term = {
 /// parse named term from BLC stream (de Bruijn)
 def parse(): Term / { read[Bool], stop } = {
   def go(): Term / { fresh, lookup } =
-    (do read[Bool](), do read[Bool]) match {
+    (do read(), do read()) match {
       case (false, false) => {
         val n = do fresh()
         Abs(n, try go() with lookup { i =>
@@ -79,7 +79,7 @@ def parse(): Term / { read[Bool], stop } = {
       case (true , false) => Var(do lookup(0))
       case (true , true ) => {
         var i = 1
-        while (do read[Bool]()) i = i + 1
+        while (do read()) i = i + 1
         Var(do lookup(i))
       }
     }
@@ -114,7 +114,7 @@ def bits { p: () => Unit / { read[Bool], stop } }: Unit / read[Char] =
   try exhaustively { p() }
   with read[Bool] {
     with exhaustively
-    val c = do read[Char]()
+    val c = do read()
     if (c == '0') resume { false }
     if (c == '1') resume { true  }
   }

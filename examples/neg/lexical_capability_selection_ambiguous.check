@@ -1,0 +1,11 @@
+[info] examples/neg/lexical_capability_selection_ambiguous.effekt:6:3: Did you mean to use an operation of the concrete interface Greet[Int]?
+  do sayHello()
+  ^^^^^^^^^^^^^
+[info] examples/neg/lexical_capability_selection_ambiguous.effekt:6:3: Did you mean to use an operation of the concrete interface Greet[String]?
+  do sayHello()
+  ^^^^^^^^^^^^^
+[error] examples/neg/lexical_capability_selection_ambiguous.effekt:6:3: Effects need to be fully known, but effect Greet[T]'s type parameter(s) T could not be inferred.
+
+Maybe try annotating them?
+  do sayHello()
+  ^^^^^^^^^^^^^
