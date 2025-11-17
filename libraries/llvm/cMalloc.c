@@ -28,13 +28,15 @@ typedef struct Block
 
 // Globale Variablen
 const bool DEBUG = false;
+
+static Block* freeList = SENTINEL_BLOCK; // Head of the free-List
 static Block* todoList = SENTINEL_BLOCK; // Head of the To-Do-List
+
 static uint8_t* nextUnusedBlock = NULL; // Pointer to the next unused Block
 static uint8_t* endOfChunk = NULL; // End of the allocated Storage
-static const int chunkSize = 64; // The size of each chunk (64B)
 
-// How much storage do we allocate at the beginning of a program? =4GB
-static const size_t totalAllocationSize = (size_t)4294967296ULL;
+static const int chunkSize = 64; // The size of each chunk (64B)
+static const size_t totalAllocationSize = (size_t)4294967296ULL;    // How much storage do we allocate at the beginning of a program? =4GB
 
 void printTodoList(const Block *todoList) {
     printf("All Elements in Todo List:\n");
@@ -49,7 +51,7 @@ void printTodoList(const Block *todoList) {
 }
 
 /**
- * Initialisiert den großen Speicherbereich (4GB).
+ * Initialisiert den großen Speicherbereich für den Allokator.
  */
 void cInitializeMemory()
 {
@@ -68,6 +70,23 @@ void cInitializeMemory()
     }
 }
 
+static inline void flushTodoList(void) {
+
+    const int BATCH_SIZE = 64;
+
+    for (int i = 0; i < BATCH_SIZE && todoList != SENTINEL_BLOCK; i++) {
+        Block* block = todoList;
+        todoList = block->next;
+
+        void (*fn)(void*) = block->eraser;
+        fn(block);
+
+        block->next = freeList;
+        freeList = block;
+    }
+}
+
+
 // -----------------------------
 // Allokator
 // -----------------------------
@@ -80,36 +99,42 @@ void cInitializeMemory()
  */
 void* acquire(uint8_t size)
 {
-    // 1. Falls Todolist leer ist → neuer Block
-    if (todoList == SENTINEL_BLOCK)
+    // 1. Fast Path - Falls Todolist was hat → reuse Block
+    if (freeList != SENTINEL_BLOCK)
     {
-        if (nextUnusedBlock + chunkSize > endOfChunk)
-        {
-            printf("Error: Out of memory!\n");
-            exit(1);
-        }
+        Block* block = freeList;
+        freeList = block->next;
 
-        void* block = nextUnusedBlock;
-        nextUnusedBlock += chunkSize;
-        if (DEBUG) {
-            printf("[acquire] New block: %p\n", block);
-        }
-
+        if (DEBUG) printf("[acquire] FAST → %p\n", (void*)block);
         return block;
     }
+    // 2. Slow Path - free-List leer -> Sweep & try free list again
+    if (todoList != SENTINEL_BLOCK) {
 
-    // 2. Falls Todolist nicht leer ist → wiederverwenden
-    Block* block = todoList;
-    todoList = block->next;
+        flushTodoList();
 
-    if (DEBUG) {
-        printf("[acquire] Reusing block: %p\n", (void*)block);
+        // Nach Sweep ist freeList höchstwahrscheinlich gefüllt
+        if (freeList != SENTINEL_BLOCK) {
+
+            Block* block = freeList;
+            freeList = block->next;
+
+            if (DEBUG) printf("[acquire] SWEEP → %p\n", (void*)block);
+            return block;
+        }
     }
 
-    // 3. Wir müssen die Children von dem Block erasen, um den Block neu befüllen zu können.
-    block->eraser((void*)block);
+    // 3. Fallbäck - wir allokieren einen neuen Block
+    if (nextUnusedBlock + chunkSize > endOfChunk) {
+        fprintf(stderr, "Arena exhausted – out of memory.\n");
+        exit(1);
+    }
 
-    return (void*)block;
+    Block* fresh = (Block*)nextUnusedBlock;
+    nextUnusedBlock += chunkSize;
+
+    if (DEBUG) printf("[acquire] NEW → %p\n", (void*)fresh);
+    return fresh;
 }
 
 
