@@ -140,7 +140,8 @@ class EffektLexers extends Parsers {
    * Literals
    */
   lazy val integerLiteral  = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
-  lazy val doubleLiteral   = regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r, "Double literal")
+  lazy val doubleLiteral =
+    regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)([eE][+-]?[0-9]+)?".r, "Double literal")
   lazy val stringLiteral =
     regex("""\"(\\.|\\[\r?\n]|[^\r\n\"])*+\"""".r, "String literal") ^^ { s =>
       val contents = s.substring(1, s.length - 1)
