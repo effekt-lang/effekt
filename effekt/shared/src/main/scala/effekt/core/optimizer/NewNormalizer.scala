@@ -1001,9 +1001,9 @@ class NewNormalizer {
            */
           val blockargs = bargs.map(evaluate(_, "f", ks))
           // if stmt doesn't capture anything, it can not make any changes to the stack (ks) and we don't have to pretend it is unknown as an over-approximation
-          // TODO examples/pos/lambdas/localstate.effekt fails if we only check stmt.capt
-          // TODO capture {io, global} is also fine
-          if (stmt.capt.isEmpty && environment.isEmpty) {
+          // compute dynamic captures of the whole statement (App node)
+          val dynCaptures = blockargs.flatMap(_.dynamicCapture) ++ environment
+          if (dynCaptures.isEmpty) {
             reifyKnown(k, ks) {
               NeutralStmt.Jump(label, targs, args, blockargs)
             }
