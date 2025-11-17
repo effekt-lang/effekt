@@ -321,10 +321,20 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def block(docs: List[Doc]): Doc = block(vsep(docs, line))
 
-  // TODO: Escaping?
-  def stringLiteral(s: String): Doc = {
+  private def escapeString(s: String): String = {
+    // TODO: Unicode escapes?
+    s.flatMap {
+      case '\\' => "\\\\"
+      case '"'  => "\\\""
+      case '\r' => "\\r"
+      case '\t' => "\\t"
+      case c    => c.toString
+    }
+  }
+
+  def stringLiteral(s: String): Doc =
     if s.contains("\n") then multilineStringLiteral(s)
-    else "\"" <> s <> "\"" }
+    else "\"" <> escapeString(s) <> "\""
 
   def multilineStringLiteral(s: String): Doc = {
     val multi = "\"\"\""

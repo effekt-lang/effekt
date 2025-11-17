@@ -141,11 +141,40 @@ class EffektLexers extends Parsers {
    */
   lazy val integerLiteral  = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
   lazy val doubleLiteral   = regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r, "Double literal")
-  lazy val stringLiteral   = regex("""\"(\\.|\\[\r?\n]|[^\r\n\"])*+\"""".r, "String literal")
-    ^^ { s => s.substring(1, s.size - 1)}
+  lazy val stringLiteral =
+    regex("""\"(\\.|\\[\r?\n]|[^\r\n\"])*+\"""".r, "String literal") ^^ { s =>
+      val contents = s.substring(1, s.length - 1)
+      unescapeString(contents)
+    }
   lazy val charLiteral   = regex("""'.'""".r, "Character literal") ^^ { s => s.codePointAt(1) }
   lazy val unicodeChar   = regex("""\\u\{[0-9A-Fa-f]{1,6}\}""".r, "Unicode character literal") ^^ {
     case contents =>  Integer.parseInt(contents.stripPrefix("\\u{").stripSuffix("}"), 16)
+  }
+
+  /** Inverse of PrettyPrinter.escapeString */
+  private def unescapeString(s: String): String = {
+    val sb = new StringBuilder
+    var i  = 0
+
+    while (i < s.length) {
+      val c = s.charAt(i)
+      if (c == '\\' && i + 1 < s.length) {
+        s.charAt(i + 1) match {
+          case '\\' => sb.append('\\'); i += 2
+          case '"'  => sb.append('"');  i += 2
+          case 'r'  => sb.append('\r'); i += 2
+          case 't'  => sb.append('\t'); i += 2
+          case other =>
+            sb.append(other)
+            i += 2
+        }
+      } else {
+        sb.append(c)
+        i += 1
+      }
+    }
+
+    sb.toString
   }
 
   // Delimiter for multiline strings
