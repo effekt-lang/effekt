@@ -307,7 +307,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     if (targs.isEmpty) then toDoc(tpeConstructor)
     else toDoc(tpeConstructor) <> brackets(targs.map(toDoc))
 
-  def toDoc(capt: core.Captures): Doc = braces(hsep(capt.toList.map(toDoc), comma))
+  def toDoc(capt: core.Captures): Doc = braces(hsep(capt.toList.sortBy(_.name.name).map(toDoc), comma))
 
   def nested(content: Doc): Doc = group(nest(line <> content))
 
