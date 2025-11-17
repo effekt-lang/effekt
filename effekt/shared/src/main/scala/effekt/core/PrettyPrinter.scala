@@ -269,7 +269,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
       toDoc(sc) <+> "match" <+> cs <> d
 
     case Hole(span) =>
-      "<>" <+> s"// @ ${span.range.from.format}"
+      val from = span.from
+      val to = span.to
+      val name = span.source.name
+      val scheme = span.source match {
+        case _: kiama.util.FileSource   => "file"
+        case _: kiama.util.StringSource => "string"
+        case _                          => "source"
+      }
+      "<>" <+> s"@ \"$scheme://$name\":$from:$to"
   }
 
   def toDoc(tpe: core.BlockType): Doc = tpe match {
