@@ -124,7 +124,7 @@ class EffektLexers extends Parsers {
     regex((s"$kw(?!$nameRest)").r, kw)
 
   lazy val anyKeyword =
-    keywords("[^a-zA-Z0-9]".r, keywordStrings)
+    keywords("[^a-zA-Z0-9_!?$]".r, keywordStrings)
 
   /**
    * Whitespace Handling
