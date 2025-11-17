@@ -231,7 +231,7 @@ class CoreParsers(names: Names) extends EffektLexers {
   lazy val bool   = `true` ^^^ Literal(true, Type.TBoolean) | `false` ^^^ Literal(false, Type.TBoolean)
   lazy val unit   = literal("()") ^^^ Literal((), Type.TUnit)
   lazy val double = doubleLiteral ^^ { n => Literal(n.toDouble, Type.TDouble) }
-  lazy val string = stringLiteral ^^ { s => Literal(s, Type.TString) }
+  lazy val string: P[Expr] = (multilineString | stringLiteral) ^^ { s => Literal(s, Type.TString) }
 
   /**
    * Names

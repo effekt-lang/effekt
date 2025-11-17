@@ -117,7 +117,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(e: Expr): Doc = e match {
     case Literal((), _)            => "()"
-    case Literal(s: String, _)     => "\"" + s + "\""
+    case Literal(s: String, _)     => stringLiteral(s)
     case Literal(value, _)         => value.toString
     case ValueVar(id, tpe)         => toDoc(id) <> ":" <+> toDoc(tpe)
 
@@ -324,10 +324,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
   // TODO: Escaping?
   def stringLiteral(s: String): Doc = {
     if s.contains("\n") then multilineStringLiteral(s)
-    else "\"" <> string(s) <> "\"" }
+    else "\"" <> s <> "\"" }
 
   def multilineStringLiteral(s: String): Doc = {
     val multi = "\"\"\""
-    multi <> string(s) <> multi
+    multi <> s <> multi
   }
 }
