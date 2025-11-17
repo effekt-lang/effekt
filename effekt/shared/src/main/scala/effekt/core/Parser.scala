@@ -227,7 +227,7 @@ class CoreParsers(names: Names) extends EffektLexers {
   /**
    * Literals
    */
-  lazy val int    = integerLiteral ^^ { n => Literal(n.toInt, Type.TInt) }
+  lazy val int    = integerLiteral ^^ { n => Literal(n.toLong, Type.TInt) }
   lazy val bool   = `true` ^^^ Literal(true, Type.TBoolean) | `false` ^^^ Literal(false, Type.TBoolean)
   lazy val unit   = literal("()") ^^^ Literal((), Type.TUnit)
   lazy val double = doubleLiteral ^^ { n => Literal(n.toDouble, Type.TDouble) }
