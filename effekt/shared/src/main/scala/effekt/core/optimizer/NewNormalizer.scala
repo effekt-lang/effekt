@@ -4,9 +4,7 @@ package optimizer
 
 import effekt.core.ValueType.Boxed
 import effekt.source.Span
-import effekt.core.optimizer.semantics.{Computation, NeutralStmt, Value}
 import effekt.symbols.builtins
-import effekt.util.messages.{ErrorReporter, INTERNAL_ERROR}
 import effekt.symbols.builtins.AsyncCapability
 import kiama.output.ParenPrettyPrinter
 
@@ -119,7 +117,7 @@ object semantics {
     }
 
     val dynamicCapture: Variables = this match {
-      case Binding.Let(value) => value.dynamicCapture
+      case Binding.Let(value) => Set.empty
       case Binding.Def(block) => block.dynamicCapture
       case Binding.Rec(block, tpe, capt) => block.dynamicCapture
       case Binding.Val(stmt) => stmt.dynamicCapture
@@ -548,16 +546,16 @@ object semantics {
   }
 
   def resume(c: Cont, k: Frame, ks: Stack): (Frame, Stack) = c match {
-    case Cont.Empty => (k, ks)
+    case Cont.Empty =>
+      (k, ks)
     case Cont.Reset(frame, prompt, rest) =>
-      val (k1, ks1) = resume(rest, frame, ks)
-      val stack = Stack.Reset(prompt, k1, ks1)
-      (frame, stack)
+      val (k1, ks1) = resume(rest, k, ks)
+      (frame, Stack.Reset(prompt, k1, ks1))
     case Cont.Var(frame, id, curr, rest) =>
-      val (k1, ks1) = resume(rest, frame, ks)
+      val (k1, ks1) = resume(rest, k, ks)
       (frame, Stack.Var(id, curr, k1, ks1))
     case Cont.Region(frame, id, bindings, rest) =>
-      val (k1, ks1) = resume(rest, frame, ks)
+      val (k1, ks1) = resume(rest, k, ks)
       (frame, Stack.Region(id, bindings, k1, ks1))
   }
 
@@ -886,6 +884,7 @@ class NewNormalizer {
         }
       }
 
+    // TODO this does not work for recursive objects currently
     case core.Block.New(Implementation(interface, operations)) =>
       val ops = operations.map {
         case Operation(name, tparams, cparams, vparams, bparams, body) =>
@@ -1135,19 +1134,6 @@ class NewNormalizer {
         reify(k, ks) { NeutralStmt.Shift(p, cparam, k2, neutralBody) }
       }
     case Stmt.Shift(_, _) => ???
-    //case Stmt.Reset(BlockLit(Nil, cparams, Nil, prompt :: Nil, body)) =>
-    //      // TODO is Var correct here?? Probably needs to be a new computation value...
-    //      //   but shouldn't it be a fresh prompt each time?
-    //      val p = Id(prompt.id)
-    //      val neutralBody = {
-    //        given Env = env.bindComputation(prompt.id -> Computation.Var(p) :: Nil)
-    //        nested {
-    //          evaluate(body, MetaStack.Empty)
-    //        }
-    //      }
-    //      // TODO implement properly
-    //      k.reify(NeutralStmt.Reset(BlockParam(p, prompt.tpe, prompt.capt), neutralBody))
-
 
     case Stmt.Reset(core.Block.BlockLit(Nil, cparams, Nil, prompt :: Nil, body)) =>
       val p = Id(prompt.id)
