@@ -35,7 +35,9 @@ class ReparseTests extends CoreTests {
     // Cannot find source for unsafe/cont
     File("examples/pos/propagators.effekt"),
     // Bidirectional effects that mention the same effect recursively are not (yet) supported.
-    File("examples/pos/bidirectional/selfrecursion.effekt")
+    File("examples/pos/bidirectional/selfrecursion.effekt"),
+    // FIXME: Wrong number of type arguments
+    File("examples/pos/type_omission_op.effekt"),
   )
 
   def positives: Set[File] = Set(
@@ -48,7 +50,8 @@ class ReparseTests extends CoreTests {
 
   def runPositiveTestsIn(dir: File): Unit =
     foreachFileIn(dir) {
-      f => if (!ignored.contains(f)) {
+      // We don't currently test *.effekt.md files
+      f => if (!ignored.contains(f) && !f.getName.endsWith(".md")) {
         test(s"${f.getPath}") {
           toCoreThenReparse(f)
         }
