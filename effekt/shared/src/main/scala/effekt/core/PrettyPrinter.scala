@@ -151,7 +151,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     val handlerName = toDoc(instance.interface)
     val clauses = instance.operations.map {
       case Operation(id, tps, cps, vps, bps, body) =>
-        "def" <+> toDoc(id) <> paramsToDoc(tps, cps, vps, bps) <+> "=" <+> nested(toDoc(body))
+        "def" <+> toDoc(id) <> paramsToDoc(tps, cps, vps, bps) <+> "=" <+> block(toDocStmts(body))
     }
     handlerName <+> block(vsep(clauses))
   }
