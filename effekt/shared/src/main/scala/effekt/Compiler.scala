@@ -3,6 +3,7 @@ package effekt
 import effekt.PhaseResult.{AllTransformed, CoreTransformed}
 import effekt.context.Context
 import effekt.core.Transformer
+import effekt.core.optimizer.BindSubexpressions
 import effekt.namer.Namer
 import effekt.source.{AnnotateCaptures, ExplicitCapabilities, ModuleDecl, ResolveExternDefs}
 import effekt.symbols.Module
@@ -307,7 +308,8 @@ trait Compiler[Executable] {
   lazy val Machine = Phase("machine") {
     case CoreTransformed(source, tree, mod, core) =>
       val main = Context.ensureMainExists(mod)
-      val program = machine.Transformer.transform(main, core)
+      val anfed = BindSubexpressions.transform(core)
+      val program = machine.Transformer.transform(main, anfed)
       (mod, main, program)
   }
 
