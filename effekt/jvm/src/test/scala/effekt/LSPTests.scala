@@ -718,7 +718,6 @@ class LSPTests extends FunSuite {
       markup.setValue("captures: `{io}`")
       inlayHint.setTooltip(markup)
       inlayHint.setPaddingLeft(true)
-      inlayHint.setData("capture")
       inlayHint.setTextEdits(
         List(
           new TextEdit(new Range(positions(1), positions(1)), " at {io}")
@@ -761,7 +760,6 @@ class LSPTests extends FunSuite {
       markup.setValue("captures: `{io}`")
       inlayHint.setTooltip(markup)
       inlayHint.setPaddingLeft(true)
-      inlayHint.setData("capture")
       inlayHint.setTextEdits(
         List(
           new TextEdit(new Range(positions(1), positions(1)), " at {io}")
@@ -798,7 +796,6 @@ class LSPTests extends FunSuite {
       captureHint.setKind(InlayHintKind.Type)
       captureHint.setPosition(positions(1))
       captureHint.setLabel("at {}")
-      captureHint.setData("capture")
       captureHint.setTooltip(new MarkupContent("markdown", "captures: `{}`"))
       captureHint.setPaddingLeft(true)
       captureHint.setTextEdits(
@@ -811,7 +808,6 @@ class LSPTests extends FunSuite {
       omittedHint.setKind(InlayHintKind.Type)
       omittedHint.setPosition(positions(1))
       omittedHint.setLabel(": Int / { raise }")
-      omittedHint.setData("return-type-annotation")
       omittedHint.setTextEdits(List(
         new TextEdit(
           new Range(positions(1), positions(1)),
@@ -857,7 +853,6 @@ class LSPTests extends FunSuite {
       markup.setValue("captures: `{io}`")
       inlayHint.setTooltip(markup)
       inlayHint.setPaddingLeft(true)
-      inlayHint.setData("capture")
       inlayHint.setTextEdits(
         List(
           new TextEdit(new Range(positions(1), positions(1)), " at {io}")
@@ -957,7 +952,6 @@ class LSPTests extends FunSuite {
       markup.setValue("captures: `{io}`")
       inlayHint.setTooltip(markup)
       inlayHint.setPaddingLeft(true)
-      inlayHint.setData("capture")
       inlayHint.setTextEdits(
         List(
           new TextEdit(new Range(positions(1), positions(1)), " at {io}")
