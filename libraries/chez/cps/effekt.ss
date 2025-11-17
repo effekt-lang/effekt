@@ -1,27 +1,24 @@
-; Cont a = (a, MetaCont -> #)
-; Node = box MEM | box Diff
-; Store = (Node Int)
-; Snapshot = (Store Node Int)
-; Backup = [(box value)]
-; MetaCont = (Cont Prompt {Store | Snapshot} rest)
-; Prompt = Int
-; Block b = Cont b, MetaCont -> #
-; Program a b = a, Cont b, MetaCont -> #
+; Value = Any
+; Generation = Int
 
-; Ref
+; Ref = Store * Value * Generation 
 (define-record-type ref (fields store (mutable value) (mutable generation)))
 
-; Store
-(define-record-type store (fields (mutable root) (mutable generation)))
+; Node = box MEM | box Diff
 
-; Snapshot
-(define-record-type snap (fields store root generation))
-
-; Mem
+; MEM
+; Means the correct values are in MEMory
 (define-record-type mem (fields))
 
-; Diff
+; Diff = Ref * Value * Generation * Node
+; Notes the DIFFerences between root and the current state in MEMory
 (define-record-type diff (fields ref value generation root))
+
+; Store = Node * Generation
+(define-record-type store (fields (mutable root) (mutable generation)))
+
+; Snapshot = Store * Node * Generation
+(define-record-type snap (fields store root generation))
 
 ; -> Store
 (define (create-store) (make-store (box (make-mem)) 0))
@@ -35,11 +32,12 @@
 
 ; Node, [box Diff] -> [box Diff]
 (define (collectDiffs n acc)
-    (cond
-        [(mem? (unbox n)) acc]
-        [else (collectDiffs (diff-root (unbox n)) (cons n acc))]))
+    (let ([unboxedN (unbox n)])
+        (cond
+            [(mem? unboxedN) acc]
+            [else (collectDiffs (diff-root unboxedN) (cons n acc))])))
 
-; Node, [Diff] -> (void)
+; Node, [Diff] -> void
 (define (applyDiffs n diffs)
     (cond
         [(null? diffs) (set-box! n (make-mem))]
@@ -52,11 +50,11 @@
                 (set-box! n (make-diff r oldValue (ref-generation r) currentDiff))
                 (applyDiffs currentDiff (cdr diffs)))]))
 
-; Node, Node -> (void)
+; Node, Node -> void
 (define (reroot newRoot oldRoot)
     (applyDiffs oldRoot (collectDiffs newRoot '())))
 
-; Store, Snapshot -> (void)
+; Store, Snapshot -> void
 (define (restore snap)
     (let* ([snapRoot (snap-root snap)]
            [store (snap-store snap)]
@@ -64,7 +62,10 @@
         (reroot snapRoot storeRoot)
         (store-root-set! store snapRoot)))
 
-; MetaCont
+; Cont a = a, MetaCont -> #
+; Prompt = Int
+
+; MetaCont = Cont * Prompt * Store | Snapshot * MetaCont?
 ; Holds a "copy" of k, as well as its prompt and store
 (define-record-type meta-cont 
     (fields (mutable cont) prompt (mutable store) (mutable rest)))
@@ -92,15 +93,13 @@
                 (set-box! oldRoot (make-diff ref oldVal rGen newRoot))
                 (store-root-set! store newRoot)))))
 
-; TODO: Regions behave correctly,
-; TODO: but continue to live after deallocating
 ; MetaCont -> MetaCont
 (define (create-region ks) ks)
 
 ; Value, MetaCont -> Box
 (define allocate var)
 
-; Ref -> void
+; Ref | MetaCont -> void
 (define (deallocate _) (void))
 
 (define _prompt 1)
@@ -118,13 +117,15 @@
            [k (meta-cont-cont new-ks)])
     (k x new-ks)))
 
+; Program a b = a, Cont b, MetaCont -> #
+
 ; Program Prompt b, MetaCont, Cont b -> #
 (define (reset prog ks k)
     (let ([prompt (new-prompt)])
          (meta-cont-cont-set! ks k)
          (prog prompt (make-meta-cont return prompt (create-store) ks) return)))
 
-; MetaCont, Prompt -> (MetaCont MetaCont)
+; MetaCont, Prompt -> MetaCont * MetaCont
 (define (split-stack ks p)
     (define (worker above below)
         (let ([new-below (meta-cont-rest below)]
@@ -154,6 +155,8 @@
                                       ks)])
             (restore snap)
             (rewind next newKs))))
+
+; Block b = Cont b, MetaCont -> #
 
 ; MetaCont, Block, MetaCont, Cont -> #
 (define (resume cont block ks k)
