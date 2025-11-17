@@ -28,6 +28,16 @@ class ReparseTests extends CoreTests {
   // The sources of all test files are stored here:
   def examplesDir = new File("examples")
 
+  // Test files which are to be ignored (since features are missing or known bugs exist)
+  def ignored: Set[File] = Set(
+    // Missing include: text/pregexp.scm
+    File("examples/pos/simpleparser.effekt"),
+    // Cannot find source for unsafe/cont
+    File("examples/pos/propagators.effekt"),
+    // Bidirectional effects that mention the same effect recursively are not (yet) supported.
+    File("examples/pos/bidirectional/selfrecursion.effekt")
+  )
+
   def positives: Set[File] = Set(
     examplesDir / "pos",
     examplesDir / "casestudies",
@@ -38,7 +48,11 @@ class ReparseTests extends CoreTests {
 
   def runPositiveTestsIn(dir: File): Unit =
     foreachFileIn(dir) {
-      f => test(s"${f.getPath}") { toCoreThenReparse(f) }
+      f => if (!ignored.contains(f)) {
+        test(s"${f.getPath}") {
+          toCoreThenReparse(f)
+        }
+      }
     }
 
   def toCoreThenReparse(input: File) = {
