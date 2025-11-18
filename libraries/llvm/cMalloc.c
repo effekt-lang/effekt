@@ -32,6 +32,9 @@ const bool DEBUG = false;
 static Block* freeList = SENTINEL_BLOCK; // Head of the free-List
 static Block* todoList = SENTINEL_BLOCK; // Head of the To-Do-List
 
+static size_t todoCount = 0;       // Anzahl dirty Blöcke
+static const size_t TODO_LIMIT = 64;
+
 static uint8_t* nextUnusedBlock = NULL; // Pointer to the next unused Block
 static uint8_t* endOfChunk = NULL; // End of the allocated Storage
 
@@ -71,19 +74,24 @@ void cInitializeMemory()
 }
 
 static inline void flushTodoList(void) {
+    size_t toClean = todoCount < TODO_LIMIT ? todoCount : TODO_LIMIT;   // Limit the number of blocks to clean
 
-    const int BATCH_SIZE = 64;
-
-    for (int i = 0; i < BATCH_SIZE && todoList != SENTINEL_BLOCK; i++) {
+    for (int i = 0; i < toClean; i++) {
         Block* block = todoList;
         todoList = block->next;
 
-        void (*fn)(void*) = block->eraser;
-        fn(block);
+        if (DEBUG) {
+            printf("[flushTodoList] Freeing block: %p\n", (void*)block);
+        }
+
+        // Call the eraser function
+        block->eraser(block);
 
         block->next = freeList;
         freeList = block;
     }
+
+    todoCount -= toClean;
 }
 
 
@@ -99,6 +107,7 @@ static inline void flushTodoList(void) {
  */
 void* acquire(uint8_t size)
 {
+    if (DEBUG) printf("[acquire] todoCount: %zu\n", todoCount);
     // 1. Fast Path - Falls Todolist was hat → reuse Block
     if (freeList != SENTINEL_BLOCK)
     {
@@ -109,7 +118,7 @@ void* acquire(uint8_t size)
         return block;
     }
     // 2. Slow Path - free-List leer -> Sweep & try free list again
-    if (todoList != SENTINEL_BLOCK) {
+    if (todoCount >= TODO_LIMIT) {
 
         flushTodoList();
 
@@ -155,6 +164,8 @@ void release(void* ptr)
     Block* block = (Block*)ptr;
     block->next = todoList;
     todoList = block;
+
+    todoCount++;
 }
 
 /**
