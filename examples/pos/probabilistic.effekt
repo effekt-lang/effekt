@@ -24,11 +24,6 @@ type Var {
   Observed(value: Bool)
 }
 
-def show(x: Var) = x match {
-  case Unobserved() => "Unobserved()"
-  case Observed(value) => "Observed(" ++ value.show ++ ")"
-}
-
 type Ref { MkRef(n: Int) }
 
 interface Heap {
@@ -170,7 +165,7 @@ def main() = {
   val res = handleProb {
     test()
   };
-  println(show(res) { e => show(e) })
+  println(show(res))
 
   catch {
     heapTest()
@@ -182,7 +177,7 @@ def main() = {
         do disj(do flip(0.2), r)
       }
     };
-    println(show(res) { e => show(e) })
+    println(show(res))
   }
 
 }
