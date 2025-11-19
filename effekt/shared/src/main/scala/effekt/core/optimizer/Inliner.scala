@@ -107,15 +107,24 @@ class Inliner(shouldInline: InliningPolicy, usages: Map[Id, Usage]) extends Tree
   }
 
   override def stmt(using ctx: Context): PartialFunction[Stmt, Stmt] = {
-    case app @ Stmt.App(bvar: BlockVar, targs, vargs, bargs) if shouldInline(bvar.id) =>
+    case app @ Stmt.App(v: BlockVar, targs, vargs, bargs) if shouldInline(v.id) =>
       val vas = vargs.map(rewrite)
       val bas = bargs.map(rewrite)
-      blockFor(bvar.id).map {
+      blockFor(v.id).map {
         case block: Block.BlockLit =>
           inlineApp(block, targs, vargs, bargs)
         case b =>
           Stmt.App(b, targs, vargs, bargs)
-      }.getOrElse(Stmt.App(bvar, targs, vas, bas))
+      }.getOrElse(Stmt.App(v, targs, vas, bas))
+    case Stmt.Invoke(v: BlockVar, method, methodTpe, targs, vargs, bargs) if shouldInline(v.id) =>
+      val vas = vargs.map(rewrite)
+      val bas = bargs.map(rewrite)
+      blockFor(v.id).collect {
+        case b@Block.New(Implementation(interface, operations)) =>
+          val op = operations.find { op => op.name == method }.get
+          val b: Block.BlockLit = Block.BlockLit(op.tparams, op.cparams, op.vparams, op.bparams, op.body)
+          inlineApp(b, targs, vas, bas)
+      }.getOrElse(Stmt.Invoke(v, method, methodTpe, targs, vas, bas))
     case Stmt.Def(id, block, body) =>
       val b = rewrite(block)(using ctx)
       given Context = ctx.bind(id, b)
