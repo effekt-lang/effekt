@@ -28,8 +28,8 @@ $effekt.equals = function(obj1, obj2) {
 }
 
 /**
- * @param {number} n1
- * @param {number} n2
+ * @param {*} n1
+ * @param {*} n2
  */
 function compare$prim(n1, n2) {
   if (n1 == n2) { return 0; }
