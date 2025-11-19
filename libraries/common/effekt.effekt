@@ -125,7 +125,7 @@ extern def panic(msg: String) at io: Nothing =
     ret %Pos zeroinitializer ; Unit
   """
 
-extern def show[R](value: R): String =
+extern def show[R](value: R) at {}: String =
   js "$effekt.show(${value})"
   chez "(show_impl ${value})"
   llvm "ret %Pos poison"
