@@ -381,8 +381,32 @@ function inspect_0(value_0, ks_0, k_0) {
   return () => k_0(v_r_0, ks_0);
 }
 
+class ListContext{
+    constructor(head) {
+        if (head === undefined){
+            this.hole = { outer: null }
+            let result = {tail_0: this.hole}
+            this.hole.outer = result
+            this.data = result
+        } else {
+            this.hole = { outer: null }
+            let last = new Cons_0(head,this.hole)
+            this.hole.outer = last
+            this.data = {tail_0: last}
+        }
+
+    }
+    apply_context(value){
+        this.hole.outer.tail_0 = value
+    }
+    compose_context(cont){
+        this.hole.outer.tail_0 = cont.data.tail_0
+        this.hole = cont.hole
+    }
+}
+
 function main_0(ks_1, k_1) {
-   let list = testMap_3(new Cons_0(1, new Cons_0(7, new Cons_0(8, new Cons_0(4, new Nil_0())))), fibonacci_0);
+   let list = testMap_inPlace(new Cons_0(1, new Cons_0(7, new Cons_0(8, new Cons_0(4, new Nil_0())))), fibonacci_0);
     inspect_0(list, ks_1, k_1)
     /*let hole = { outer: null }
     let list2 = { head: 42, tail: hole }
@@ -406,54 +430,49 @@ function fibonacci_0(n_0) {
 }
 
 function testMap_0(list_0, fun_0) {
-  return testMapk(list_0,fun_0,(n) => n);
+  return testMapk_cps(list_0,fun_0,(n) => n);
 }
+//in-place
+function testMap_inPlace(list_0, fun_0){
+    //construct empty context for testList[B]
+    let cont = new ListContext()
 
-function testMap_3(list_0, fun_0){
-    let hole = { outer: null }
-    let result = {tail_0: hole}
-    hole.outer = result
-    let cont = {data:result, hole:hole}
-    testMapk3(list_0, fun_0, cont)
-    return result.tail_0
+    testMapk_inPlace(list_0, fun_0, cont)
+    return cont.data.tail_0 //result.tail_0
 }
-function testMapk(list, fun, cont){
+//pure continuation passing style
+//cont is a function testList[B] => testList[B]
+function testMapk_cps(list, fun, cont){
     switch(list.__tag) {
         case 0:
             return cont(new Nil_0());
         case 1:
             let y = fun(list.head_0)
-            return testMapk(list.tail_0, fun, (holeValue) => cont(new Cons_0(y,holeValue)))
+            return testMapk_cps(list.tail_0, fun, (holeValue) => cont(new Cons_0(y,holeValue)))
     }
 }
-//cont is a function testList[B] => testList[B]
+//in-place
+//cont is a context
 //context: {data: testList[B], hole: }
-function testMapk3(list, fun, cont){
+function testMapk_inPlace(list, fun, cont){
     switch(list.__tag) {
         case 0:
-            let hole = cont.hole
-            hole.outer.tail_0 = new Nil_0()
+            //apply
+            cont.apply_context(new Nil_0())
+
             return cont.data;
         case 1:
             let y = fun(list.head_0)
-            let newHole = {outer:null}
+            //compose
+            let innerCont = new ListContext(y)
+            cont.compose_context(innerCont)
+            /*let newHole = {outer:null}
             let newTail = new Cons_0(y,newHole)
             newHole.outer = newTail
             cont.hole.outer.tail_0 = newTail
-            cont.hole = newHole
-            return testMapk3(list.tail_0, fun, cont)
-    }
-}
+            cont.hole = newHole*/
 
-function testMapk2(list, fun, cont){
-    switch(list.__tag) {
-        case 0:
-            cont.hole = null
-            return cont;
-        case 1:
-            let y = fun(list.head_0)
-            cont.outer.hole = {head: y, tail: cont}
-            return testMapk2(list.tail_0, fun, cont)
+            return testMapk_inPlace(list.tail_0, fun, cont)
     }
 }
 
