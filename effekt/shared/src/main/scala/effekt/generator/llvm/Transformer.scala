@@ -32,7 +32,6 @@ object Transformer {
         Call("stack", Ccc(), stackType, withEmptyStack, List()),
         Call("", Ccc(), VoidType(), initializeMemory, List()),
         Call("_", Tailcc(false), VoidType(), transform(entry), List(LocalReference(stackType, "stack"))),
-        Call("", Ccc(), VoidType(), testIfAllBlocksAreFreed, List()),
       )
       val entryBlock = BasicBlock("entry", entryInstructions, RetVoid())
       val entryFunction = Function(External(), Ccc(), VoidType(), "effektMain", List(), List(entryBlock))
@@ -755,8 +754,7 @@ object Transformer {
     emit(Load(returnAddressName, returnAddressType, returnAddressPointer, StackPointer));
   }
 
-  val initializeMemory = ConstantGlobal("cInitializeMemory");
-  val testIfAllBlocksAreFreed = ConstantGlobal("testIfAllBlocksAreFreed");
+  val initializeMemory = ConstantGlobal("initializeMemory");
   val newObject = ConstantGlobal("newObject");
   val objectEnvironment = ConstantGlobal("objectEnvironment");
 
@@ -951,7 +949,7 @@ object Transformer {
    * When @eraseObject is called, we also call the eraser. And for Pos and Neg objects, that is the eraser.
    * The object is called 2 times.
    * 1. Phase: When call @eraseObject -> We call release to prepend the object to our to-do-list.
-   * 2. Phase: When call acquire -> We call %erase on each children, so the object can be reused again.  
+   * 2. Phase: When call acquire -> We call %erase on each child, so the object can be reused again.
    *
    * @param freshEnvironment the variables of the object
    * @return the eraser

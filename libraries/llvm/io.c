@@ -3,7 +3,6 @@
 
 #include <uv.h>
 #include <string.h> // to compare flag names
-#include "cMalloc.h"
 
 // Println and Readln and Random
 // -----------------------------
