@@ -1,27 +1,5 @@
 /**
- * @typedef {Object} Unit
- * @property {true} __unit
- */
-
-/**
- * Unit singleton value representing void/no value
- * @type {Unit}
- */
-$effekt.unit = { __unit: true };
-
-/**
- * Print a line to console
- * @param {string} str - String to print
- * @returns {Unit}
- */
-$effekt.println = function(str) {
-  console.log(str);
-  return $effekt.unit;
-};
-
-/**
- * Convert value to display string
- * @param {*} obj - Object to show
+ * @param {*} obj
  * @returns {string}
  */
 $effekt.show = function(obj) {
@@ -37,9 +15,8 @@ $effekt.show = function(obj) {
 }
 
 /**
- * Check equality between two values
- * @param {*} obj1 - First value
- * @param {*} obj2 - Second value
+ * @param {*} obj1
+ * @param {*} obj2
  * @returns {boolean}
  */
 $effekt.equals = function(obj1, obj2) {
@@ -51,10 +28,19 @@ $effekt.equals = function(obj1, obj2) {
 }
 
 /**
- * Compare two values
- * @param {*} obj1 - First value
- * @param {*} obj2 - Second value
- * @returns {number} - -1 if obj1 < obj2, 0 if equal, 1 if obj1 > obj2
+ * @param {number} n1
+ * @param {number} n2
+ */
+function compare$prim(n1, n2) {
+  if (n1 == n2) { return 0; }
+  else if (n1 > n2) { return 1; }
+  else { return -1; }
+}
+
+/**
+ * @param {*} obj1
+ * @param {*} obj2
+ * @returns {-1 | 0 | 1} - -1 if obj1 < obj2, 0 if equal, 1 if obj1 > obj2
  */
 $effekt.compare = function(obj1, obj2) {
   if ($effekt.equals(obj1, obj2)) { return 0; }
@@ -83,9 +69,28 @@ $effekt.compare = function(obj1, obj2) {
 }
 
 /**
+ * @typedef {Object} Unit
+ * @property {true} __unit
+ */
+
+/**
+ * Unit singleton value (Effekt's `()`)
+ * @type {Unit}
+ */
+$effekt.unit = { __unit: true };
+
+/**
+ * @param {string} str
+ * @returns {Unit}
+ */
+$effekt.println = function(str) {
+  console.log(str);
+  return $effekt.unit;
+};
+
+/**
  * Throws an error for incomplete pattern matches
  * @throws {Error}
- * @returns {never}
  */
 $effekt.emptyMatch = function() {
   throw "empty match"
@@ -93,23 +98,9 @@ $effekt.emptyMatch = function() {
 
 /**
  * Placeholder for unimplemented code
- * @param {string} pos - Source position
+ * @param {string} pos - Source position (already formatted)
  * @throws {Error}
- * @returns {never}
  */
 $effekt.hole = function(pos) {
   throw pos + " not implemented yet"
-}
-
-/**
- * Internal primitive comparison
- * @param {number} n1
- * @param {number} n2
- * @returns {number}
- * @private
- */
-function compare$prim(n1, n2) {
-  if (n1 == n2) { return 0; }
-  else if (n1 > n2) { return 1; }
-  else { return -1; }
 }

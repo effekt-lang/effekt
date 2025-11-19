@@ -1,3 +1,6 @@
+// Type Definitions
+// ----------------
+
 /**
  * @typedef {Object} MetaContinuation
  * @property {number} prompt - Continuation prompt ID
@@ -34,11 +37,20 @@
  * @property {DiffNode|null} value
  */
 
+// State Management
+// ----------------
+
+// Complexity of state:
+//
+//  get: O(1)
+//  set: O(1)
+//  capture: O(1)
+//  restore: O(|write operations since capture|)
+
 // Memory sentinel
 const Mem = null;
 
 /**
- * Create a new memory arena for isolated state
  * @returns {{root: MemNode, generation: number, fresh: function(*): Reference, newRegion: function(): *}}
  */
 function Arena() {
@@ -88,17 +100,6 @@ function snapshot(s) {
 }
 
 /**
- * @param {Object} store
- * @param {{store: Object, root: MemNode, generation: number}} snap
- * @returns {void}
- */
-function restore(store, snap) {
-  reroot(snap.root)
-  store.root = snap.root
-  store.generation = snap.generation + 1
-}
-
-/**
  * @param {MemNode} n - Node to reroot
  * @private
  */
@@ -118,9 +119,31 @@ function reroot(n) {
 }
 
 /**
- * Wrap a thunk for lazy evaluation
+ * @param {Object} store
+ * @param {{store: Object, root: MemNode, generation: number}} snap
+ * @returns {void}
+ */
+function restore(store, snap) {
+  // linear in the number of modifications...
+  reroot(snap.root)
+  store.root = snap.root
+  store.generation = snap.generation + 1
+}
+
+// Common Runtime
+// --------------
+
+let _prompt = 1;
+
+/** @type {Continuation} */
+const TOPLEVEL_K = (x, ks) => { throw { computationIsDone: true, result: x } }
+
+/** @type {MetaContinuation} */
+const TOPLEVEL_KS = { prompt: 0, arena: Arena(), rest: null }
+
+/**
  * @template T
- * @param {function(): T} f - Thunk function
+ * @param {function(): T} f
  * @returns {function(): T}
  */
 function THUNK(f) {
@@ -275,17 +298,6 @@ function RUN(task) {
 function ABORT(value) {
   throw { computationIsDone: true, result: value }
 }
-
-// Internal constants
-let _prompt = 1;
-
-/** @type {Continuation} */
-const TOPLEVEL_K = (x, ks) => {
-  throw { computationIsDone: true, result: x };
-};
-
-/** @type {MetaContinuation} */
-const TOPLEVEL_KS = { prompt: 0, arena: Arena(), rest: null };
 
 // "Public API" used in FFI
 // ------------------------
