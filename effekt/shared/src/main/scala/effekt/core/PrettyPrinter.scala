@@ -193,7 +193,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(s: Stmt): Doc = s match {
     // requires a block to be readable:
-    case _ : (Stmt.Def | Stmt.Let | Stmt.Val | Stmt.Alloc | Stmt.Var | Stmt.Get | Stmt.Put) => block(toDocStmts(s))
+    case _ : (Stmt.Def | Stmt.Let | Stmt.ImpureApp | Stmt.Val | Stmt.Alloc | Stmt.Var | Stmt.Get | Stmt.Put) => block(toDocStmts(s))
     case other => toDocStmts(s)
   }
 
