@@ -38,6 +38,10 @@ class ReparseTests extends CoreTests {
     File("examples/pos/bidirectional/selfrecursion.effekt"),
     // FIXME: Wrong number of type arguments
     File("examples/pos/type_omission_op.effekt"),
+    // FIXME: There is currently a limitation in TestRenamer in that it does not rename captures.
+    // This means, that in this example, captures for State[Int] and State[String] are both printed as "State",
+    // leading to a collapse of the capture set {State_1, State_2} to just {State}.
+    File("examples/pos/parametrized.effekt")
   )
 
   def positives: Set[File] = Set(
