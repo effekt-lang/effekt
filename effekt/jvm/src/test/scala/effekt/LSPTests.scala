@@ -659,6 +659,31 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("right edge of definition returns expected range") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, positions) =
+        raw"""
+             |def foo() = <>
+             |↑             ↑
+             |def bar() = foo()
+             |               ↑
+             """.textDocumentAndPositions
+
+      val expectedRange = new Range(positions(0), positions(1))
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val params = new DefinitionParams()
+      params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      params.setPosition(positions(2))
+
+      val definition = server.getTextDocumentService().definition(params).get().getLeft.get(0)
+      assertEquals(definition.getRange, expectedRange)
+    }
+  }
+
   // LSP References
   //
   //
