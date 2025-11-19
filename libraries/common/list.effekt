@@ -914,7 +914,7 @@ def isSortedBy[A](list: List[A]) { lessOrEqual: (A, A) => Bool }: Bool = {
 // Show Instances
 // --------------
 
-
+def println[A](l: List[A]) = println(show(l))
 
 // Streaming
 // ---------

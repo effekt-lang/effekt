@@ -622,10 +622,7 @@ def sorted[A](arr: Array[A]) { ord: (A, A) => Ordering }: Array[A] = {
 }
 
 
-def println(l: Array[Int]): Unit = println(show(l))
-def println(l: Array[Double]): Unit = println(show(l))
-def println(l: Array[Bool]): Unit = println(show(l))
-def println(l: Array[String]): Unit = println(show(l))
+def println[A](l: Array[A]): Unit = println(show(l))
 
 
 // Streaming

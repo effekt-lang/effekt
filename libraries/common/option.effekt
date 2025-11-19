@@ -57,6 +57,4 @@ def undefinedToOption[A](value: A): Option[A] =
 
 
 
-def println(o: Option[Int]): Unit = println(show(o))
-def println(o: Option[Double]): Unit = println(show(o))
-def println(o: Option[Bool]): Unit = println(show(o))
+def println[A](o: Option[A]): Unit = println(show(o))
