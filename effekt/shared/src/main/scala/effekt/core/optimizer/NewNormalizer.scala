@@ -1072,7 +1072,15 @@ class NewNormalizer {
               // This is ALMOST like evaluate(BlockLit), but keeps the current continuation
               clauses.map { case (id, core.Block.BlockLit(tparams, cparams, vparams, bparams, body)) =>
                 given localEnv: Env = env.bindValue(vparams.map(p => p.id -> p.id))
-                val block = Block(tparams, vparams, bparams, nested {
+                val block = Block(tparams, vparams, bparams, nested { scope ?=>
+                  // here we now know that our scrutinee sc has the shape id(vparams, ...)
+
+                  val datatype = scrutinee.tpe match {
+                    case tpe @ ValueType.Data(name, targs) => tpe
+                    case tpe => sys error s"Should not happen: pattern matching on a non-datatype: ${tpe}"
+                  }
+                  val eta = Value.Make(datatype, id, tparams.map(t => ValueType.Var(t)), vparams.map(p => p.id))
+                  scope.bindings = scope.bindings.updated(sc, Binding.Let(eta))
                   evaluate(body, k, ks)
                 })
                 (id, block)
