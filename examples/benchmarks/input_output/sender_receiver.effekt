@@ -5,7 +5,7 @@ import io/channel
 
 
 def run(n: Int) = {
-  val (sender, receiver) = channel::allocate()
+  val (sender, receiver) = channel()
   val closed = ref(false)
 
   spawn(box {
