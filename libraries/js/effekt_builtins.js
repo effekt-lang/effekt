@@ -26,15 +26,15 @@ $effekt.println = function(str) {
  */
 $effekt.show = function(obj) {
   if (!!obj && !!obj.__reflect) {
-    const meta = obj.__reflect();
-    return meta.__name + "(" + meta.__data.map($effekt.show).join(", ") + ")";
+    const meta = obj.__reflect()
+    return meta.__name + "(" + meta.__data.map($effekt.show).join(", ") + ")"
   }
   else if (!!obj && obj.__unit) {
     return "()";
   } else {
     return "" + obj;
   }
-};
+}
 
 /**
  * Check equality between two values
@@ -44,11 +44,11 @@ $effekt.show = function(obj) {
  */
 $effekt.equals = function(obj1, obj2) {
   if (!!obj1.__equals) {
-    return obj1.__equals(obj2);
+    return obj1.__equals(obj2)
   } else {
     return (obj1.__unit && obj2.__unit) || (obj1 === obj2);
   }
-};
+}
 
 /**
  * Compare two values
@@ -61,17 +61,17 @@ $effekt.compare = function(obj1, obj2) {
 
   if (!!obj1 && !!obj2) {
     if (!!obj1.__reflect && !!obj2.__reflect) {
-      const tagOrdering = compare$prim(obj1.__tag, obj2.__tag);
+      const tagOrdering = compare$prim(obj1.__tag, obj2.__tag)
       if (tagOrdering != 0) { return tagOrdering; }
 
-      const meta1 = obj1.__reflect().__data;
-      const meta2 = obj2.__reflect().__data;
+      const meta1 = obj1.__reflect().__data
+      const meta2 = obj2.__reflect().__data
 
-      const lengthOrdering = compare$prim(meta1.length, meta2.length);
+      const lengthOrdering = compare$prim(meta1.length, meta2.length)
       if (lengthOrdering != 0) { return lengthOrdering; }
 
       for (let i = 0; i < meta1.length; i++) {
-        const contentOrdering = $effekt.compare(meta1[i], meta2[i]);
+        const contentOrdering = $effekt.compare(meta1[i], meta2[i])
         if (contentOrdering != 0) { return contentOrdering; }
       }
 
@@ -80,7 +80,7 @@ $effekt.compare = function(obj1, obj2) {
   }
 
   return compare$prim(obj1, obj2);
-};
+}
 
 /**
  * Throws an error for incomplete pattern matches
@@ -88,8 +88,8 @@ $effekt.compare = function(obj1, obj2) {
  * @returns {never}
  */
 $effekt.emptyMatch = function() {
-  throw "empty match";
-};
+  throw "empty match"
+}
 
 /**
  * Placeholder for unimplemented code
@@ -98,8 +98,8 @@ $effekt.emptyMatch = function() {
  * @returns {never}
  */
 $effekt.hole = function(pos) {
-  throw pos + " not implemented yet";
-};
+  throw pos + " not implemented yet"
+}
 
 /**
  * Internal primitive comparison
