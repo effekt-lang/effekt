@@ -45,13 +45,13 @@ class EffektLexers extends Parsers {
 
   lazy val ident =
     (not(anyKeyword) ~> name
-      | failure("Expected an identifier")
-      )
+    | failure("Expected an identifier")
+    )
 
   lazy val identRef =
     (not(anyKeyword) ~> qualifiedName
-      | failure("Expected an identifier")
-      )
+    | failure("Expected an identifier")
+    )
 
   lazy val `=` = literal("=")
   lazy val `:` = literal(":")
@@ -290,7 +290,7 @@ class CoreParsers(names: Names) extends EffektLexers {
   // -------
   lazy val externDecl: P[Extern] =
     ( `extern` ~> featureFlag ~ externBody ^^ Extern.Include.apply
-      | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> (featureFlag ~ externBodyTemplate)) ^^ {
+    | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> (featureFlag ~ externBodyTemplate)) ^^ {
       case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ (ff ~ templ) =>
         Extern.Def(
           id, tparams, cparams, vparams, bparams, result, captures,
@@ -316,8 +316,8 @@ class CoreParsers(names: Names) extends EffektLexers {
 
   lazy val featureFlag: P[FeatureFlag] =
     ("else" ^^ { _ => FeatureFlag.Default(Span.missing) }
-      | ident ^^ (id => FeatureFlag.NamedFeatureFlag(id, Span.missing))
-      )
+    | ident ^^ (id => FeatureFlag.NamedFeatureFlag(id, Span.missing))
+    )
 
 
   lazy val externBody = multilineString | stringLiteral
@@ -342,33 +342,33 @@ class CoreParsers(names: Names) extends EffektLexers {
   // Definitions
   // -----------
   lazy val toplevel: P[Toplevel] =
-    ( `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~/> stmt) ^^ {
-      case (name ~ tpe ~ binding) => Toplevel.Val(name, tpe.getOrElse(binding.tpe), binding)
-    }
-      | `def` ~> id ~ (`=` ~/> block) ^^ Toplevel.Def.apply
-      | `def` ~> id ~ parameters ~ (`=` ~> stmt) ^^ {
+  ( `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~/> stmt) ^^ {
+    case (name ~ tpe ~ binding) => Toplevel.Val(name, tpe.getOrElse(binding.tpe), binding)
+  }
+  | `def` ~> id ~ (`=` ~/> block) ^^ Toplevel.Def.apply
+  | `def` ~> id ~ parameters ~ (`=` ~> stmt) ^^ {
       case name ~ (tparams, cparams, vparams, bparams) ~ body =>
         Toplevel.Def(name, BlockLit(tparams, cparams, vparams, bparams, body))
     }
-      | failure("Expected a definition.")
-      )
+  | failure("Expected a definition.")
+  )
 
 
   // Statements
   // ----------
   lazy val stmt: P[Stmt] =
     ( `{` ~/> stmts <~ `}`
-      | `return` ~> expr ^^ Stmt.Return.apply
-      | `reset` ~> blockLit ^^ Stmt.Reset.apply
-      | `shift` ~> maybeParens(blockVar) ~ blockLit ^^ Stmt.Shift.apply
-      | `resume` ~> maybeParens(blockVar) ~ stmt ^^ Stmt.Resume.apply
-      | block ~ (`.` ~> id ~ (`:` ~> blockType)).? ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ {
+    | `return` ~> expr ^^ Stmt.Return.apply
+    | `reset` ~> blockLit ^^ Stmt.Reset.apply
+    | `shift` ~> maybeParens(blockVar) ~ blockLit ^^ Stmt.Shift.apply
+    | `resume` ~> maybeParens(blockVar) ~ stmt ^^ Stmt.Resume.apply
+    | block ~ (`.` ~> id ~ (`:` ~> blockType)).? ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ {
       case (recv ~ Some(method ~ tpe) ~ targs ~ vargs ~ bargs) => Invoke(recv, method, tpe, targs, vargs, bargs)
       case (recv ~ None ~ targs ~ vargs ~ bargs) => App(recv, targs, vargs, bargs)
     }
-      | (`if` ~> `(` ~/> expr <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
-      | `region` ~> blockLit ^^ Stmt.Region.apply
-      | `<>` ~> `@` ~> (stringLiteral <~ `:`) ~ (integerLiteral <~ `:`) ~ integerLiteral ^^ {
+    | (`if` ~> `(` ~/> expr <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
+    | `region` ~> blockLit ^^ Stmt.Region.apply
+    | `<>` ~> `@` ~> (stringLiteral <~ `:`) ~ (integerLiteral <~ `:`) ~ integerLiteral ^^ {
       case (name ~ from ~ to) =>
         val source = if (name.startsWith("file://")) {
           kiama.util.FileSource(name.stripPrefix("file://"))
@@ -379,9 +379,9 @@ class CoreParsers(names: Names) extends EffektLexers {
         }
         Hole(effekt.source.Span(source, from.toInt, to.toInt))
       }
-      | `<>` ^^^ Hole(effekt.source.Span.missing)
-      | (expr <~ `match`) ~/ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
-      )
+    | `<>` ^^^ Hole(effekt.source.Span.missing)
+    | (expr <~ `match`) ~/ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
+    )
 
   lazy val stmts: P[Stmt] =
     ( (`let` ~ `!` ~/> id) ~ (`=` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ~ stmts ^^ {
