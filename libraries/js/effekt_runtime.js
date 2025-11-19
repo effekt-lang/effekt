@@ -113,7 +113,7 @@ function reroot(n) {
   const n2 = diff.root
   reroot(n2)
   n.value = Mem
-  n2.value = { ref: r, value: r.value, generation: r.generation, root: n }
+  n2.value = { ref: r, value: r.value, generation: r.generation, root: n}
   r.value = v
   r.generation = g
 }
@@ -132,7 +132,6 @@ function restore(store, snap) {
 
 // Common Runtime
 // --------------
-
 let _prompt = 1;
 
 /** @type {Continuation} */
@@ -158,9 +157,9 @@ function THUNK(f) {
  */
 function CAPTURE(body) {
   return (ks, k) => {
-    const res = body(x => TRAMPOLINE(() => k(x, ks)));
-    if (res instanceof Function) return res;
-    else throw { computationIsDone: true, result: $effekt.unit };
+    const res = body(x => TRAMPOLINE(() => k(x, ks)))
+    if (res instanceof Function) return res
+    else throw { computationIsDone: true, result: $effekt.unit }
   }
 }
 
@@ -210,7 +209,7 @@ function SHIFT(p, body, ks, k) {
   }
   if (!meta) { throw `Prompt not found ${p}` }
 
-  // Package the prompt itself
+  // package the prompt itself
   let store = meta.arena
   cont = { stack: meta.stack, prompt: meta.prompt, arena: store, backup: snapshot(store), rest: cont }
   /** @type {any} */
@@ -241,7 +240,7 @@ function RESUME(cont, c, ks, k) {
     toRewind = toRewind.rest
   }
 
-  const k1 = meta.stack; // TODO instead copy `meta` here, like elsewhere?
+  const k1 = meta.stack // TODO instead copy `meta` here, like elsewhere?
   // @ts-ignore - Setting to null is intentional
   meta.stack = null
   return () => c(meta, k1)
@@ -299,6 +298,7 @@ function ABORT(value) {
   throw { computationIsDone: true, result: value }
 }
 
+
 // "Public API" used in FFI
 // ------------------------
 
@@ -327,15 +327,14 @@ function ABORT(value) {
  *
  * - another value (like `undefined`): the Effekt runtime will terminate.
  */
-$effekt.capture = CAPTURE;
-
+$effekt.capture = CAPTURE
 
 /**
  * Used to call Effekt function arguments in the JS FFI, like in `io::spawn`.
  *
  * Requires an active Effekt runtime (trampoline).
  */
-$effekt.run = RUN;
+$effekt.run = RUN
 
 /**
  * Used to call Effekt function arguments in the JS FFI, like in `network::listen`.
@@ -345,4 +344,4 @@ $effekt.run = RUN;
  *
  * If a runtime is available, use `$effekt.run`, instead.
  */
-$effekt.runToplevel = RUN_TOPLEVEL;
+$effekt.runToplevel = RUN_TOPLEVEL
