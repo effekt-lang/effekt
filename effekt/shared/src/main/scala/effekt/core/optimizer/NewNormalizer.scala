@@ -314,6 +314,8 @@ object semantics {
 
     case Continuation(k: Cont)
 
+    case BuiltinExtern(id: Id, builtinName: String)
+
     // Known object
     case New(interface: BlockType.Interface, operations: List[(Id, Closure)])
 
@@ -322,6 +324,7 @@ object semantics {
       case Computation.Def(closure) => closure.free
       case Computation.Continuation(k) => Set.empty // TODO ???
       case Computation.New(interface, operations) => operations.flatMap(_._2.free).toSet
+      case Computation.BuiltinExtern(id, vmSymbol) => Set.empty
     }
 
     val dynamicCapture: Variables = this match {
@@ -329,6 +332,7 @@ object semantics {
       case Computation.Def(closure) => closure.dynamicCapture
       case Computation.Continuation(k) => Set.empty // TODO ???
       case Computation.New(interface, operations) => operations.flatMap(_._2.dynamicCapture).toSet
+      case Computation.BuiltinExtern(id, vmSymbol) => Set.empty
     }
   }
 
@@ -748,6 +752,7 @@ object semantics {
       case Computation.New(interface, operations) => "new" <+> toDoc(interface) <+> braces {
         hsep(operations.map { case (id, impl) => "def" <+> toDoc(id) <+> "=" <+> toDoc(impl) }, ",")
       }
+      case Computation.BuiltinExtern(id, vmSymbol) => "extern" <+> toDoc(id) <+> "=" <+> vmSymbol
     }
     def toDoc(closure: Closure): Doc = closure match {
       case Closure(label, env) => toDoc(label) <+> "@" <+> brackets(hsep(env.map(toDoc), comma))
@@ -917,9 +922,23 @@ class NewNormalizer {
     case core.Expr.Literal(value, annotatedType) =>
       scope.allocate("x", Value.Literal(value, annotatedType))
 
-    // right now everything is stuck... no constant folding ...
     case core.Expr.PureApp(f, targs, vargs) =>
-      scope.allocate("x", Value.Extern(f, targs, vargs.map(evaluate(_, escaping))))
+      val externDef = env.lookupComputation(f.id)
+      val vargsEvaluated = vargs.map(evaluate(_, escaping))
+      val valuesOpt: Option[List[semantics.Value]] =
+        vargsEvaluated.foldLeft(Option(List.empty[semantics.Value])) { (acc, addr) =>
+          for {
+            xs <- acc
+            x <- scope.lookupValue(addr)
+          } yield x :: xs
+        }.map(_.reverse)
+      (valuesOpt, externDef) match {
+        case (Some(values), Computation.BuiltinExtern(id, name)) if supportedBuiltins(name).isDefinedAt(values) =>
+          val impl = supportedBuiltins(name)
+          val res = impl(values)
+          scope.allocate("x", res)
+        case _ => scope.allocate("x", Value.Extern(f, targs, vargs.map(evaluate(_, escaping))))
+      }
 
     case core.Expr.Make(data, tag, targs, vargs) =>
       scope.allocate("x", Value.Make(data, tag, targs, vargs.map(evaluate(_, escaping))))
@@ -1005,7 +1024,7 @@ class NewNormalizer {
               NeutralStmt.Jump(label, targs, args, blockargs ++ environment)
             }
           }
-        case _: (Computation.New | Computation.Continuation) => sys error "Should not happen"
+        case _: (Computation.New | Computation.Continuation | Computation.BuiltinExtern) => sys error "Should not happen"
       }
 
     // case Stmt.Invoke(New)
@@ -1019,7 +1038,7 @@ class NewNormalizer {
           operations.collectFirst { case (id, Closure(label, environment)) if id == method =>
             reify(k, ks) { NeutralStmt.Jump(label, targs, vargs.map(evaluate(_, ks)), bargs.map(evaluate(_, "f", escapingStack)) ++ environment) }
           }.get
-        case _: (Computation.Def | Computation.Continuation) => sys error s"Should not happen"
+        case _: (Computation.Def | Computation.Continuation | Computation.BuiltinExtern) => sys error s"Should not happen"
       }
 
     case Stmt.If(cond, thn, els) =>
@@ -1164,9 +1183,15 @@ class NewNormalizer {
   def run(mod: ModuleDecl): ModuleDecl = {
     //util.trace(mod)
     // TODO deal with async externs properly (see examples/benchmarks/input_output/dyck_one.effekt)
-    val asyncExterns = mod.externs.collect { case defn: Extern.Def if defn.annotatedCapture.contains(AsyncCapability.capture) => defn }
-    val asyncTypes = asyncExterns.map { d =>
+    val externTypes = mod.externs.collect { case d: Extern.Def =>
       d.id -> (BlockType.Function(d.tparams, d.cparams, d.vparams.map { _.tpe }, d.bparams.map { bp => bp.tpe }, d.ret), d.annotatedCapture)
+    }
+
+    val (builtinExterns, otherExterns) = mod.externs.collect { case d: Extern.Def => d }.partition {
+      case Extern.Def(id, tps, cps, vps, bps, ret, capt, targetBody, Some(vmBody)) =>
+        val builtinName = vmBody.contents.strings.head
+        supportedBuiltins.contains(builtinName)
+      case _ => false
     }
 
     val toplevelEnv = Env.empty
@@ -1184,7 +1209,9 @@ class NewNormalizer {
         case Toplevel.Val(id, _, _) => id -> id
       })
       // async extern functions
-      .bindComputation(asyncExterns.map(defn => defn.id -> Computation.Var(defn.id)))
+      .bindComputation(otherExterns.map(defn => defn.id -> Computation.Var(defn.id)))
+      // pure extern functions
+      .bindComputation(builtinExterns.flatMap(defn => defn.vmBody.map(vmBody => defn.id -> Computation.BuiltinExtern(defn.id, vmBody.contents.strings.head))))
 
     val typingContext = TypingContext(
       mod.definitions.collect {
@@ -1192,14 +1219,14 @@ class NewNormalizer {
       }.toMap,
       mod.definitions.collect {
         case Toplevel.Def(id, b) => id -> (b.tpe, b.capt)
-      }.toMap ++ asyncTypes
+      }.toMap ++ externTypes
     )
 
     val newDefinitions = mod.definitions.map(d => run(d)(using toplevelEnv, typingContext))
     mod.copy(definitions = newDefinitions)
   }
 
-  val showDebugInfo = false
+  val showDebugInfo = true
   inline def debug(inline msg: => Any) = if (showDebugInfo) println(msg) else ()
 
   def run(defn: Toplevel)(using env: Env, G: TypingContext): Toplevel = defn match {
@@ -1323,6 +1350,7 @@ class NewNormalizer {
     case Computation.Def(closure) =>
       etaExpandToBlockLit(closure)
     case Computation.Continuation(k) => ???
+    case Computation.BuiltinExtern(_, _) => ???
     case Computation.New(interface, operations) =>
       val ops = operations.map { etaExpandToOperation.tupled }
       core.Block.New(Implementation(interface, ops))
@@ -1454,4 +1482,33 @@ class NewNormalizer {
   def embedBlockVar(label: Label)(using G: TypingContext): core.BlockVar =
     val (tpe, capt) = G.blocks.getOrElse(label, sys error s"Unknown block: ${util.show(label)}. ${G.blocks.keys.map(util.show).mkString(", ")}")
     core.BlockVar(label, tpe, capt)
+}
+
+type ~>[-A, +B] = PartialFunction[A, B]
+
+type BuiltinImpl = List[semantics.Value] ~> semantics.Value
+
+def builtin(name: String)(impl: List[semantics.Value] ~> semantics.Value): (String, BuiltinImpl) = name -> impl
+
+type Builtins = Map[String, BuiltinImpl]
+
+lazy val integers: Builtins = Map(
+  // Arithmetic
+  // ----------
+  builtin("effekt::infixAdd(Int, Int)") {
+    case As.Int(x) :: As.Int(y) :: Nil => semantics.Value.Literal(x + y, Type.TInt)
+  },
+)
+
+lazy val supportedBuiltins: Builtins = integers
+
+protected object As {
+  object Int {
+    def unapply(v: semantics.Value): Option[scala.Long] = v match {
+      case semantics.Value.Literal(value: scala.Long, _) => Some(value)
+      case semantics.Value.Literal(value: scala.Int, _) => Some(value.toLong)
+      case semantics.Value.Literal(value: java.lang.Integer, _) => Some(value.toLong)
+      case _ => None
+    }
+  }
 }
