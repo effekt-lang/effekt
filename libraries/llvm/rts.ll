@@ -93,12 +93,6 @@
 %String = type %Pos
 
 ; Foreign imports
-
-declare void @initializeMemory()
-declare ptr @acquire()
-declare void @release(ptr)
-
-
 declare ptr @malloc(i64)
 declare void @free(ptr)
 declare ptr @realloc(ptr, i64)
@@ -121,6 +115,101 @@ declare double @tan(double)
 declare void @print(i64)
 declare void @exit(i64)
 declare void @llvm.assume(i1)
+
+
+; typedef struct Slot
+; {
+;     struct Slot* next;
+;     void (*eraser)(void *object);
+; } Slot;
+%struct.Slot = type { %struct.Slot*, void (i8*)* }
+
+; initializes the todoList with a sentinel slot.
+; Sentinel Slot: Fakes a block with a RC=1. It is used to mark the end of the To-Do-List.
+; But it is not a real heap-object, because it is not 8-byte aligned.
+@todoList = global %struct.Slot* inttoptr (i64 1 to %struct.Slot*)
+
+
+@nextUnusedSlot = global i8* null   ; Pointer to the next unused Slot
+@slotSize = constant i32 64         ; The size of each chunk (64 bytes)
+@totalAllocationSize = constant i64 4294967296  ; How much storage do we allocate at the beginning of a program? =4GB
+
+; Initializes the memory for our effekt-objects that are created by newObject and deleted by eraseObject.
+define void @initializeMemory() {
+entry:
+  ; we use mmap to allocate memory from the OS.
+  %size = load i64, i64* @totalAllocationSize
+
+
+  %startAddress = call ptr @malloc(i64 %size)
+
+  store i8* %startAddress, i8** @nextUnusedSlot
+  ret void
+}
+
+
+define %Object* @acquire() {
+entry:
+  ; Load todoList head
+  %head = load %struct.Slot*, %struct.Slot** @todoList, align 8
+
+  %isSentinel = icmp eq %struct.Slot* %head, inttoptr (i64 1 to %struct.Slot*)
+  br i1 %isSentinel, label %bump_alloc, label %reuse
+
+reuse:
+  ; Pop from todoList
+  ; Slot* reusedSlot = todoList;
+  ; todoList = reusedSlot->next;
+  %next = getelementptr %struct.Slot, %struct.Slot* %head, i32 0, i32 0
+  %nextVal = load %struct.Slot*, %struct.Slot** %next
+  store %struct.Slot* %nextVal, %struct.Slot** @todoList
+
+  ; Call eraser
+  ; reusedSlot->eraser(reusedSlot);
+  %eraserPtr = getelementptr %struct.Slot, %struct.Slot* %head, i32 0, i32 1
+  %eraser = load void (%struct.Slot*)*, void (%struct.Slot*)** %eraserPtr
+  call void %eraser(%struct.Slot* %head)
+
+  ; return reusedSlot;
+  ret %struct.Slot* %head
+
+bump_alloc:
+  ; Load raw pointer
+  %rawBump = load i8*, i8** @nextUnusedSlot
+
+  ; Treat it as Object*
+  %objectBump = bitcast i8* %rawBump to %Object*
+
+  ; Load object size
+  %sizeBump = load i64, i64* @slotSize
+
+  ; Move bump pointer forward by object size
+  %nextBump = getelementptr i8, i8* %rawBump, i64 %sizeBump
+  store i8* %nextBump, i8** @nextUnusedSlot
+
+  ; Return the typed pointer
+  ret %Object* %objectBump
+}
+
+; Pushes a slot on the top of the To-Do-List.
+define void @release(%Object* %object) {
+entry:
+  ; Cast Object to Slot
+  ;%slot = bitcast %Object* %object to %struct.Slot*
+
+  ; oldHead = todoList
+  ;%oldHead = load %struct.Slot*, %struct.Slot** @todoList
+
+  ; ptr->next = oldHead
+  ;%nextPtr = getelementptr %struct.Slot, %struct.Slot* %slot, i32 0, i32 0
+  ;store %struct.Slot* %oldHead, %struct.Slot** %nextPtr
+
+  ; todoList = ptr
+  ;store %struct.Slot* %slot, %struct.Slot** @todoList
+
+  ret void
+}
+
 
 
 ; Prompts
