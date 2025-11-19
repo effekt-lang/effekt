@@ -63,8 +63,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     vsep(definitions map toDoc, semi)
 
   def toDoc(e: Extern): Doc = e match {
-    case Extern.Def(id, tps, cps, vps, bps, ret, capt, bodies) =>
-      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> (bodies match {
+    case Extern.Def(id, tps, cps, vps, bps, ret, capt, targetBody, vmBody) =>
+      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> (targetBody match {
         case ExternBody.StringExternBody(ff, body) => toDoc(ff) <+> toDoc(body)
         case ExternBody.Unsupported(err) => s"unsupported(${err.toString})"
       })

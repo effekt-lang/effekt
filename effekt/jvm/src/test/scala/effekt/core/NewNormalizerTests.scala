@@ -59,7 +59,7 @@ class NewNormalizerTests extends CoreTests {
         ))
 
     def findExternDef(mod: ModuleDecl, name: String) =
-      mod.externs.collect { case d@Extern.Def(_, _, _, _, _, _, _, _) => d }
+      mod.externs.collect { case d: Extern.Def => d }
         .find(_.id.name.name == name)
         .getOrElse(throw new NoSuchElementException(s"Extern def '$name' not found"))
 

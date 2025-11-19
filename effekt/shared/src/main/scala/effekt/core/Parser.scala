@@ -250,7 +250,7 @@ class CoreParsers(names: Names) extends EffektLexers {
         Extern.Def(id, tparams, cparams, vparams, bparams, result, captures, body match {
           case ff ~ (body: String) =>
             ExternBody.StringExternBody(ff, Template(List(body), Nil))
-        })
+        }, None)
     })
 
   lazy val featureFlag: P[FeatureFlag] =
