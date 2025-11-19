@@ -43,4 +43,4 @@ def handledTriple(n : Int, s : Int) =
     with fail { () => Nil[Triple]() }
   } with flip { () => append(resume(true), resume(false)) }
 
-def main() = println(show(handledTriple(10, 15)) { e => show(e) })
+def main() = println(show(handledTriple(10, 15)))

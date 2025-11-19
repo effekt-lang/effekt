@@ -35,7 +35,7 @@ input stream and fails, if it does not match.
 def accept { p: Token => Bool } : Token / Parser = {
   val got = do next();
   if (p(got)) got
-  else do fail("Unexpected token " ++ got.show)
+  else do fail("Unexpected token " ++ lexer::show(got))
 }
 ```
 
