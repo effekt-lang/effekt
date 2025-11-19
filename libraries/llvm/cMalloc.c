@@ -27,7 +27,7 @@ typedef struct Block
 #define SENTINEL_BLOCK ((Block*)1)
 
 // Globale Variablen
-const bool DEBUG = true;
+const bool DEBUG = false;
 
 static Block* freeList = SENTINEL_BLOCK; // Head of the free-List
 static Block* todoList = SENTINEL_BLOCK; // Head of the To-Do-List
