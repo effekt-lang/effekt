@@ -302,13 +302,6 @@ object semantics {
     }
 
     val dynamicCapture: Variables = {
-      bindings.foldLeft(body.dynamicCapture) { (captures, b) =>
-        b match {
-          case (id, b: Binding.Def) => (captures - id) ++ b.dynamicCapture
-          case (id, b: Binding.Rec) => (captures - id) ++ (b.dynamicCapture - id)
-          case (id, b) => captures ++ b.dynamicCapture
-        }
-      }
       body.dynamicCapture ++ bindings.flatMap(_._2.dynamicCapture)
     }
   }
@@ -1106,7 +1099,10 @@ class NewNormalizer {
 
     case Stmt.Var(ref, init, capture, body) =>
       val addr = evaluate(init, ks)
-      evaluate(body, Frame.Return, Stack.Var(BlockParam(ref, Type.TState(init.tpe), Set(capture)), addr, k, ks))
+      // TODO Var means unknown. Here we have contrary: it is a statically (!) known variable
+      bind(ref, Computation.Var(ref)) {
+        evaluate(body, Frame.Return, Stack.Var(BlockParam(ref, Type.TState(init.tpe), Set(capture)), addr, k, ks))
+      }
     case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
       get(ref, ks) match {
         case Some(addr) => bind(id, addr) { evaluate(body, k, ks) }
