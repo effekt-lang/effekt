@@ -27,7 +27,7 @@ typedef struct Block
 #define SENTINEL_BLOCK ((Block*)1)
 
 // Globale Variablen
-const bool DEBUG = false;
+const bool DEBUG = true;
 
 static Block* freeList = SENTINEL_BLOCK; // Head of the free-List
 static Block* todoList = SENTINEL_BLOCK; // Head of the To-Do-List
@@ -38,7 +38,7 @@ static const size_t TODO_LIMIT = 64;
 static uint8_t* nextUnusedBlock = NULL; // Pointer to the next unused Block
 static uint8_t* endOfChunk = NULL; // End of the allocated Storage
 
-static const int chunkSize = 64; // The size of each chunk (64B)
+static const int slotSize = 128; // The size of each chunk (128B)
 static const size_t totalAllocationSize = (size_t)4294967296ULL;    // How much storage do we allocate at the beginning of a program? =4GB
 
 void printTodoList(const Block *todoList) {
@@ -134,13 +134,13 @@ void* acquire(uint8_t size)
     }
 
     // 3. Fallbäck - wir allokieren einen neuen Block
-    if (nextUnusedBlock + chunkSize > endOfChunk) {
+    if (nextUnusedBlock + slotSize > endOfChunk) {
         fprintf(stderr, "Arena exhausted – out of memory.\n");
         exit(1);
     }
 
     Block* fresh = (Block*)nextUnusedBlock;
-    nextUnusedBlock += chunkSize;
+    nextUnusedBlock += slotSize;
 
     if (DEBUG) printf("[acquire] NEW → %p\n", (void*)fresh);
     return fresh;
@@ -175,7 +175,7 @@ void release(void* ptr)
 void assertNumberLeakedBlocks(int expected) {
     // Total number of blocks that were ever allocated
     uint8_t* firstSlot = (endOfChunk - totalAllocationSize); // the start of the chunk
-    const size_t totalAllocated = (nextUnusedBlock - firstSlot) / chunkSize;
+    const size_t totalAllocated = (nextUnusedBlock - firstSlot) / slotSize;
 
     size_t numberOfElementsInTodoList = 0;
     for (const Block* b = todoList; b != SENTINEL_BLOCK; b = b->next) {
@@ -190,7 +190,7 @@ void assertNumberLeakedBlocks(int expected) {
 ////    printf("requiredBytesForRepresentingEachSlot: %zu\n", bitsetSize);
 //
 //    // Flush: turn all "used" (bit=1) blocks into todoList
-//    for (uint8_t* ptr = (uint8_t*)firstSlot; ptr < nextUnusedBlock; ptr+= chunkSize) {
+//    for (uint8_t* ptr = (uint8_t*)firstSlot; ptr < nextUnusedBlock; ptr+= slotSize) {
 ////        printf("block: %p\n", ptr);
 //        size_t idx = blockIndexFromPtr(ptr);
 ////        printf("idx: %zu\n", idx);

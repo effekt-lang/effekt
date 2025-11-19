@@ -17,6 +17,7 @@ import scala.collection.mutable.ListBuffer
 object Transformer {
 
   val llvmFeatureFlags: List[String] = List("llvm")
+  val slotSize: Int = 128 // the size of a heap slot in bytes 
 
   def transform(program: machine.Program)(using ErrorReporter): List[Definition] = program match {
     case machine.Program(declarations, definitions, entry) =>
@@ -582,7 +583,7 @@ object Transformer {
   }
 
   /**
-   * Produces an Object. It is always 64 bytes long
+   * Produces an Object. It is always ${slotSize} bytes long
    */
   def produceObject(role: String, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Operand = {
     if (environment.isEmpty) {
@@ -663,7 +664,7 @@ object Transformer {
     alias match {
       // if we have a sharded object
       case Object if !fitsInOneSavingSlot(environment) =>
-        // Follow chained 64-byte blocks created in produceObject
+        // Follow chained ${slotSize}-byte blocks created in produceObject
         val chunkedEnvironments = splitEnvironment(environment)
         var currentEnvironmentPtr: Operand = elementPointer
 
@@ -848,22 +849,30 @@ object Transformer {
    * Is required to do fixed-sized-allocation.
    */
   private def splitEnvironment(environment: machine.Environment): List[machine.Environment] = {
-    val slotSize = 64 // we want to use 64 bytes for each saving slot
-    var headerSize = 16 // we use 16 byte for the last saving block only, the others are 32 bytes
+    val headerSize = 16 // we use 16 byte for the last saving block only, the others are 32 bytes
+    val linkSize = 16 // how much bytes we need to store the link to the next block (%Pos object)
+    
+    // How much bytes do we need to reserve to save a slot? 
+    // The last block only needs 16 bytes, because here we only need to store the header.
+    // For all other blocks we need 32 bytes, because we need to store the header and the link to the next block.
+    var reservedSpaceForSlot = headerSize
+    
     var currentEnvironment = List[machine.Variable]()
     var result = List[machine.Environment]()
     var isLast = true
     for (variable <- environment.reverse) {
       val variableSize = typeSize(variable.tpe)
 
-      if (headerSize + (environmentSize(currentEnvironment) + variableSize) <= slotSize) {
+      if (reservedSpaceForSlot + (environmentSize(currentEnvironment) + variableSize) <= slotSize) {
         currentEnvironment = currentEnvironment :+ variable
       }
       else {
+        if (isLast) {
+          reservedSpaceForSlot = headerSize + linkSize // normal header size + size of the positive type which is the reference to the next object
+          isLast = false
+        }
         result = result :+ currentEnvironment.reverse
         currentEnvironment = List(variable)
-        isLast = false
-        headerSize = 32 // normal header size + size of the positive type which is the reference to the next object
       }
     }
     result = result :+ currentEnvironment.reverse
