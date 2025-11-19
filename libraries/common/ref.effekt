@@ -48,7 +48,7 @@ extern def allocate[T]() at global: Ref[T] =
   chez "(box #f)"
   llvm """
     ; sizeof Header + sizeof Pos = 32
-    %ref = tail call noalias ptr @acquire(i64 noundef 32)
+    %ref = tail call noalias ptr @acquire()
 
     %refEraser = getelementptr ptr, ptr %ref, i64 1
     %fieldTag = getelementptr ptr, ptr %ref, i64 2
@@ -71,7 +71,7 @@ extern def ref[T](init: T) at global: Ref[T] =
     %initTag = extractvalue %Pos ${init}, 0
     %initObject_pointer = extractvalue %Pos ${init}, 1
     ; sizeof Header + sizeof Pos = 32
-    %ref = tail call noalias ptr @acquire(i64 noundef 32)
+    %ref = tail call noalias ptr @acquire()
     %refEraser = getelementptr ptr, ptr %ref, i64 1
     %refField = getelementptr ptr, ptr %ref, i64 2
 

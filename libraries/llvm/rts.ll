@@ -94,10 +94,9 @@
 
 ; Foreign imports
 
-declare void @cInitializeMemory()
-declare ptr @acquire(i64)
+declare void @initializeMemory()
+declare ptr @acquire()
 declare void @release(ptr)
-declare void @testIfAllBlocksAreFreed()
 
 
 declare ptr @malloc(i64)
@@ -139,84 +138,8 @@ define private %Prompt @freshPrompt() {
     ret %Prompt %prompt
 }
 
-; Garbage collection
-
-; A type for the free list
-%struct.Block = type { %struct.Block* }
-
-@freeList = global %struct.Block* null
-@nextUnusedBlock = global i8* null
-@endOfChunk = global i8* null
-@blockSize = global i64 1024    ; each Block is 1KB
-
-define private void @initializeMemory() {
-    ; Step 01: mem = malloc(4294967296)
-    %mem = call i8* @malloc(i64 4294967296)
-
-    ; Step 02: nextUnusedBlock = mem
-    store i8* %mem, i8** @nextUnusedBlock
-
-    ; Step 03: endOfChunk = mem + 4294967296
-    %endPtr = getelementptr i8, i8* %mem, i64 4294967296
-    store i8* %endPtr, i8** @endOfChunk
-
-    ret void
-}
-
-define private %Object @myMalloc(i64 %size) {
-entry:
-    ; Step 01: Check if the free list pointer is not null
-    %freeList = load %struct.Block*, %struct.Block** @freeList
-    %isNull = icmp eq %struct.Block* %freeList, null
-    br i1 %isNull, label %newAllocate, label %reuse
-
-; In case we can recycle a block from the free list, we do so and jump to the reuse label.
-reuse:
-    ; Step 01: block = freeList
-    %block = load %struct.Block*, %struct.Block** @freeList
-
-    ; Step 02: freeList = freeList.next
-    %nextPtr = getelementptr %struct.Block, %struct.Block* %block, i32 0, i32 0
-    %nextBlock = load %struct.Block*, %struct.Block** %nextPtr
-    store %struct.Block* %nextBlock, %struct.Block** @freeList
-
-    ; Step 03: Return
-    %ret = bitcast %struct.Block* %block to %Object
-    ret %Object %ret
-
-; In case we do not have a block to reuse
-newAllocate:
-    %nu = load i8*, i8** @nextUnusedBlock
-    %end = load i8*, i8** @endOfChunk
-    %blockSize = load i64, i64* @blockSize
-
-    ; block = next_unused
-    %next_plus = getelementptr i8, i8* %nu, i64 %blockSize
-    store i8* %next_plus, i8** @nextUnusedBlock
-
-    %ret2 = bitcast i8* %nu to %Object
-    ret %Object %ret2
-
-}
-
-define private void @myFree(%Object %object) {
-    ; block = (Block*)object
-    %block = bitcast %Object %object to %struct.Block*
-
-    ; block.next = freeList
-    %nextField = getelementptr %struct.Block, %struct.Block* %block, i32 0, i32 0
-    %freeList = load %struct.Block*, %struct.Block** @freeList
-    store %struct.Block* %freeList, %struct.Block** %nextField
-
-    ; freeList = block
-    store %struct.Block* %block, %struct.Block** @freeList ; <- fails
-    ret void
-}
-
 define private %Object @newObject(%Eraser %eraser, i64 %environmentSize) alwaysinline {
-    %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
-    %size = add i64 %environmentSize, %headerSize
-    %object = call ptr @acquire(i64 %size)
+    %object = call ptr @acquire()
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
     store %ReferenceCount 0, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
