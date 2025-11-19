@@ -69,14 +69,14 @@ class ReparseTests extends CoreTests {
       val errors = plainMessaging.formatMessages(context.messaging.buffer)
       sys error errors
     }
-    val printed = core.PrettyPrinter.format(coreMod).layout
-    val reparsed: ModuleDecl = parse(printed)(using Location.empty)
     val renamer = TestRenamer(Names(defaultNames))
-    val lhs = renamer(reparsed)
-    val rhs = renamer(coreMod)
-    val lhsPrinted = core.PrettyPrinter.format(lhs).layout
-    val rhsPrinted = core.PrettyPrinter.format(rhs).layout
-    assertEquals(lhsPrinted, rhsPrinted)
+    val expectedRenamed = renamer(coreMod)
+    val printed = core.PrettyPrinter.format(expectedRenamed).layout
+    val reparsed: ModuleDecl = parse(printed)(using Location.empty)
+    val reparsedRenamed = renamer(reparsed)
+    val reparsedPrinted = core.PrettyPrinter.format(reparsedRenamed).layout
+    val expectedPrinted = core.PrettyPrinter.format(expectedRenamed).layout
+    assertEquals(reparsedPrinted, expectedPrinted)
   }
 
   def foreachFileIn(file: File)(test: File => Unit): Unit =
