@@ -382,9 +382,9 @@ function inspect_0(value_0, ks_0, k_0) {
 }
 
 function main_0(ks_1, k_1) {
-   let list = testMap_1(new Cons_0(1, new Cons_0(7, new Cons_0(8, new Cons_0(4, new Nil_0())))), fibonacci_0);
+   let list = testMap_3(new Cons_0(1, new Cons_0(7, new Cons_0(8, new Cons_0(4, new Nil_0())))), fibonacci_0);
     inspect_0(list, ks_1, k_1)
-    let hole = { outer: null }
+    /*let hole = { outer: null }
     let list2 = { head: 42, tail: hole }
     hole.outer = list2
 
@@ -392,7 +392,7 @@ function main_0(ks_1, k_1) {
 
 // plug
     hole.outer.tail = {head: 3, tail: null}
-    console.log(list2)
+    console.log(list2)*/
 }
 
 function fibonacci_0(n_0) {
@@ -408,12 +408,14 @@ function fibonacci_0(n_0) {
 function testMap_0(list_0, fun_0) {
   return testMapk(list_0,fun_0,(n) => n);
 }
-function testMap_1(list_0, fun_0){
-    let hole1 = { outer: null }
-    let cont = {head:42, tail: null, hole:hole1}
-    cont.hole.outer = cont
-    console.log(cont)
-    return testMapk2(list_0, fun_0, cont)
+
+function testMap_3(list_0, fun_0){
+    let hole = { outer: null }
+    let result = {tail_0: hole}
+    hole.outer = result
+    let cont = {data:result, hole:hole}
+    testMapk3(list_0, fun_0, cont)
+    return result.tail_0
 }
 function testMapk(list, fun, cont){
     switch(list.__tag) {
@@ -424,6 +426,24 @@ function testMapk(list, fun, cont){
             return testMapk(list.tail_0, fun, (holeValue) => cont(new Cons_0(y,holeValue)))
     }
 }
+//cont is a function testList[B] => testList[B]
+//context: {data: testList[B], hole: }
+function testMapk3(list, fun, cont){
+    switch(list.__tag) {
+        case 0:
+            let hole = cont.hole
+            hole.outer.tail_0 = new Nil_0()
+            return cont.data;
+        case 1:
+            let y = fun(list.head_0)
+            let newHole = {outer:null}
+            let newTail = new Cons_0(y,newHole)
+            newHole.outer = newTail
+            cont.hole.outer.tail_0 = newTail
+            cont.hole = newHole
+            return testMapk3(list.tail_0, fun, cont)
+    }
+}
 
 function testMapk2(list, fun, cont){
     switch(list.__tag) {
@@ -432,7 +452,7 @@ function testMapk2(list, fun, cont){
             return cont;
         case 1:
             let y = fun(list.head_0)
-            cont.hole = {head: y, tail: cont}
+            cont.outer.hole = {head: y, tail: cont}
             return testMapk2(list.tail_0, fun, cont)
     }
 }
