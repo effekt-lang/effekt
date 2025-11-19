@@ -147,6 +147,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   def generateShowInstance(vt: ValueType)(using ctx: ShowContext)(using DeclarationContext): Option[Toplevel.Def] = 
     ctx.backend match {
       case "llvm" => generateShowInstanceLLVM(vt) 
+      case "vm" => generateShowInstanceLLVM(vt)
     }
 
   def generateShowInstanceLLVM(vt: ValueType)(using ctx: ShowContext)(using dctx: DeclarationContext): Option[Toplevel.Def] =
