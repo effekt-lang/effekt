@@ -83,24 +83,19 @@ $effekt.unit = { __unit: true };
  * @param {string} str
  * @returns {Unit}
  */
-$effekt.println = function(str) {
-  console.log(str);
-  return $effekt.unit;
-};
+$effekt.println = function println$impl(str) {
+  console.log(str); return $effekt.unit;
+}
 
 /**
  * Throws an error for incomplete pattern matches
  * @throws {Error}
  */
-$effekt.emptyMatch = function() {
-  throw "empty match"
-}
+$effekt.emptyMatch = function() { throw "empty match" }
 
 /**
  * Placeholder for unimplemented code
  * @param {string} pos - Source position (already formatted)
  * @throws {Error}
  */
-$effekt.hole = function(pos) {
-  throw pos + " not implemented yet"
-}
+$effekt.hole = function(pos) { throw pos + " not implemented yet" }
