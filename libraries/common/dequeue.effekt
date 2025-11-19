@@ -77,7 +77,4 @@ def popBack[R](dq: Dequeue[R]): Option[(R, Dequeue[R])] = dq match {
 
 
 
-def println(l: Dequeue[Int]): Unit = println(show(l))
-def println(l: Dequeue[Double]): Unit = println(show(l))
-def println(l: Dequeue[Bool]): Unit = println(show(l))
-def println(l: Dequeue[String]): Unit = println(show(l))
+def println[A](l: Dequeue[A]): Unit = println(show(l))
