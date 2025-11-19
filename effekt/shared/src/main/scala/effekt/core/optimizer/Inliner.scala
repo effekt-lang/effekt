@@ -47,10 +47,17 @@ object Context {
 class Inliner(shouldInline: InliningPolicy, usages: Map[Id, Usage]) extends Tree.RewriteWithContext[Context] {
 
   def run(mod: ModuleDecl): ModuleDecl = {
-    given Context = Context.empty(usages)
     mod match {
       case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-        ModuleDecl(path, includes, declarations, externs, definitions.map(rewrite), exports)
+        var ctx = Context.empty(usages)
+        val d = definitions.map {
+          case Toplevel.Def(id, block) =>
+            val b = rewrite(block)(using ctx)
+            ctx = ctx.bind(id, b)
+            Toplevel.Def(id, b)
+          case v@Toplevel.Val(id, tpe, binding) => v
+        }
+        ModuleDecl(path, includes, declarations, externs, d, exports)
     }
   }
 
