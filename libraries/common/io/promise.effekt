@@ -7,8 +7,8 @@ import io/signal
 // --------
 
 type State[T] {
-  Resolved(value: T)
   Pending(signals: List[Signal[T, Unit]])
+  Resolved(value: T)
 }
 
 type Promise[T] = Ref[State[T]]
@@ -29,7 +29,7 @@ def await[T](promise: Promise[T]): T = {
     case Resolved(value) =>
       return value
     case Pending(signals) =>
-      val signal = signal::allocate()
+      val signal = signal()
       promise.set(Pending(Cons(signal, signals)))
       // TODO perhaps yield to avoid stack overflow
       signal.unsafeWait(())

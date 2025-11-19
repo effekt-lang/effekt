@@ -8,18 +8,16 @@ record Node[A, B](this: Signal[A, B], rest: Ref[Option[Node[A, B]]])
 type Sender[A, B] = Ref[Node[A, B]]
 type Receiver[A, B] = Ref[Node[A, B]]
 
-namespace channel {
-  def allocate[A, B](): (Sender[A, B], Receiver[A, B]) = {
-    val node = Node(signal::allocate(), ref(None()))
-    (ref(node), ref(node))
-  }
+def channel[A, B](): (Sender[A, B], Receiver[A, B]) = {
+  val node = Node(signal(), ref(None()))
+  (ref(node), ref(node))
 }
 
 def send[A, B](sender: Sender[A, B], value: A): B = {
   val Node(this, rest) = sender.get()
   rest.get() match {
     case None() =>
-      val node = Node(signal::allocate(), ref(None()))
+      val node = Node(signal(), ref(None()))
       rest.set(Some(node))
       sender.set(node)
     case Some(node) =>
@@ -34,7 +32,7 @@ def receive[A, B](receiver: Receiver[A, B], value: B): A = {
   val Node(this, rest) = receiver.get()
   rest.get() match {
     case None() =>
-      val node = Node(signal::allocate(), ref(None()))
+      val node = Node(signal(), ref(None()))
       rest.set(Some(node))
       receiver.set(node)
     case Some(node) =>

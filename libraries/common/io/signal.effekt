@@ -7,14 +7,12 @@ module io/signal
 /// Must yield before notifying or risking stack overflow.
 extern type Signal[A, B]
 
-namespace signal {
-  extern def allocate[A, B]() at global: Signal[A, B] =
-    js "signal$make()"
-    llvm """
-      %signal = call %Pos @c_signal_make()
-      ret %Pos %signal
-    """
-}
+extern def signal[A, B]() at global: Signal[A, B] =
+  js "signal$make()"
+  llvm """
+    %signal = call %Pos @c_signal_make()
+    ret %Pos %signal
+  """
 
 extern def unsafeFire[A, B](signal: Signal[A, B], value: A) at async: B =
   js "$effekt.capture(callback => signal$notify(${signal}, ${value}, callback))"
