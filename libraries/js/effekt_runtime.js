@@ -2,39 +2,75 @@
 // ----------------
 
 /**
+ * @typedef {function(): *} Thunk
+ */
+
+/**
+ * Prompt ID type for better type on hover
+ * @typedef {number} Prompt
+ */
+
+/**
+ * @typedef {Object} Arena
+ * @property {MemNode<*>} root
+ * @property {number} generation
+ * @property {<T>(t: T) => Reference<T>} fresh
+ * @property {function(): Arena} newRegion
+ */
+
+/**
  * @typedef {Object} MetaContinuation
- * @property {number} prompt - Continuation prompt ID
- * @property {Object} arena - Memory arena for mutable state
+ * @property {Prompt} prompt - Continuation prompt ID
+ * @property {Arena} arena - Memory arena for mutable state
  * @property {MetaContinuation|null} rest - Parent continuation stack
- * @property {Continuation} [stack] - Stack continuation (optional)
+ * @property {Continuation|null} [stack] - Stack continuation (optional, can be null)
+ */
+
+/**
+ * @typedef {Object} CapturedContinuation
+ * @property {Prompt} prompt - Prompt ID
+ * @property {Arena} arena - Memory arena
+ * @property {CapturedContinuation|null} rest - Nested captured continuation
+ * @property {Continuation|null} [stack] - Stack continuation (optional, can be null)
+ * @property {Snapshot} backup - Arena backup snapshot
  */
 
 /**
  * @callback Continuation
  * @param {*} value - Return value
  * @param {MetaContinuation} ks - Metacontinuation
+ * @returns {Thunk}
+ */
+
+/**
+ * Resume function passed to CAPTURE body - call with a value to resume the continuation
+ * @callback ResumeFn
+ * @param {*} value - Value to pass to the continuation
  * @returns {*}
  */
 
 /**
+ * @template T
  * @typedef {Object} Reference
- * @property {*} value - Current value
+ * @property {T} value - Current value
  * @property {number} generation - Version number
- * @property {Object} store - Memory store
- * @property {function(*): void} set - Update the reference
+ * @property {Arena} store - Memory store
+ * @property {function(T): void} set - Update the reference
  */
 
 /**
+ * @template T
  * @typedef {Object} DiffNode
- * @property {Reference} ref
- * @property {*} value
+ * @property {Reference<T>} ref
+ * @property {T} value
  * @property {number} generation
- * @property {MemNode} root
+ * @property {MemNode<T>} root
  */
 
 /**
+ * @template T
  * @typedef {Object} MemNode
- * @property {DiffNode|null} value
+ * @property {DiffNode<T>|null} value
  */
 
 // State Management
@@ -50,10 +86,8 @@
 // Memory sentinel
 const Mem = null;
 
-/**
- * @returns {{root: MemNode, generation: number, fresh: function(*): Reference, newRegion: function(): *}}
- */
 function Arena() {
+  /** @type {Arena} */
   const s = {
     root: { value: Mem },
     generation: 0,
@@ -72,8 +106,6 @@ function Arena() {
           } else {
             const root = { value: Mem }
             // update store
-
-            // @ts-ignore - Setting up diff node
             s.root.value = { ref: r, value: r.value, generation: r_gen, root: root }
             s.root = root
             r.value = v
@@ -90,18 +122,25 @@ function Arena() {
 }
 
 /**
- * @param {Object} s - Store to snapshot
- * @returns {{store: Object, root: MemNode, generation: number}}
+ * @typedef {Object} Snapshot
+ * @property {Arena} store
+ * @property {MemNode<*>} root
+ * @property {number} generation
+ */
+
+/**
+ * @param {Arena} s - Store to snapshot
  */
 function snapshot(s) {
+  /** @type {Snapshot} */
   const snap = { store: s, root: s.root, generation: s.generation }
   s.generation = s.generation + 1
   return snap
 }
 
 /**
- * @param {MemNode} n - Node to reroot
- * @private
+ * @template T
+ * @param {MemNode<T>} n - Node to reroot
  */
 function reroot(n) {
   if (n.value === Mem) return;
@@ -119,8 +158,8 @@ function reroot(n) {
 }
 
 /**
- * @param {Object} store
- * @param {{store: Object, root: MemNode, generation: number}} snap
+ * @param {Arena} store
+ * @param {Snapshot} snap
  * @returns {void}
  */
 function restore(store, snap) {
@@ -143,16 +182,16 @@ const TOPLEVEL_KS = { prompt: 0, arena: Arena(), rest: null }
 /**
  * @template T
  * @param {function(): T} f
- * @returns {function(): T}
  */
 function THUNK(f) {
-  // @ts-ignore - Adding thunk marker property to function
-  f.thunk = true
+  // Add thunk marker property - cast to any for property assignment
+  /** @type {*} */(f).thunk = true
   return f
 }
 
 /**
- * @param {function(function(*): *): (*|function(): *)} body
+ * Captures the current continuation and passes it to body.
+ * @param {function(ResumeFn): (*|Thunk)} body - Takes a resume function, returns a value or thunk
  * @returns {function(MetaContinuation, Continuation): *}
  */
 function CAPTURE(body) {
@@ -166,44 +205,46 @@ function CAPTURE(body) {
 /**
  * @param {*} x
  * @param {MetaContinuation} ks
- * @returns {*}
+ * @returns {Thunk}
  */
 const RETURN = (x, ks) => {
-  // @ts-ignore - ks.rest guaranteed non-null in RESET context [?]
-  return ks.rest.stack(x, ks.rest)
+  // ks.rest and ks.rest.stack are guaranteed non-null in RESET context
+  const rest = /** @type {MetaContinuation & {stack: Continuation}} */(ks.rest)
+  return rest.stack(x, rest)
 }
 
 /**
- * @param {function(number, MetaContinuation, Continuation): *} prog
+ * @param {function(Prompt, MetaContinuation, Continuation): Thunk} prog
  * @param {MetaContinuation} ks
  * @param {Continuation} k
- * @returns {*}
+ * @returns {Thunk}
  */
 function RESET(prog, ks, k) {
-  const prompt = _prompt++;
+  const prompt = /** @type {Prompt} */(_prompt++);
   /** @type {MetaContinuation} */
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
   return prog(prompt, { prompt, arena: Arena(), rest }, RETURN)
 }
 
 /**
- * @param {number} p - prompt ID
- * @param {function(Object, MetaContinuation, Continuation): *} body
+ * @template T
+ * @param {Prompt} p - prompt ID
+ * @param {function(CapturedContinuation, MetaContinuation, Continuation): T} body
  * @param {MetaContinuation} ks
- * @param {Continuation|undefined} k
- * @returns {*}
+ * @param {Continuation} [k] - can be undefined
+ * @returns {T}
  */
 function SHIFT(p, body, ks, k) {
   // TODO avoid constructing this `meta` object
-  /** @type {{stack: Continuation, prompt: number, arena: Object, rest: MetaContinuation|null}} */
-  let meta = { stack: /** @type {Continuation} */(k), prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  /** @type {Object|null} */
+  /** @type {MetaContinuation|null} */
+  let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
+  /** @type {CapturedContinuation|null} */
   let cont = null
 
   while (!!meta && meta.prompt !== p) {
     let store = meta.arena
     cont = { stack: meta.stack, prompt: meta.prompt, arena: store, backup: snapshot(store), rest: cont }
-    /** @type {any} */
+    /** @type {MetaContinuation|null} */
     const nextMeta = meta.rest
     meta = nextMeta
   }
@@ -212,27 +253,26 @@ function SHIFT(p, body, ks, k) {
   // package the prompt itself
   let store = meta.arena
   cont = { stack: meta.stack, prompt: meta.prompt, arena: store, backup: snapshot(store), rest: cont }
-  /** @type {any} */
-  const nextMeta = meta.rest
-  meta = nextMeta
+  // meta.rest is non-null because RESET creates prompts with non-null rest
+  const parentMeta = /** @type {MetaContinuation} */(meta.rest)
 
-  const k1 = meta.stack
-  // @ts-ignore - Setting to null is intentional
-  meta.stack = null
-  return body(cont, meta, k1)
+  const k1 = /** @type {Continuation} */(parentMeta.stack)
+  // Setting stack to null (it's been captured in cont)
+  parentMeta.stack = null
+  return body(/** @type {CapturedContinuation} */(cont), parentMeta, k1)
 }
 
 /**
- * @param {Object} cont
- * @param {*} c
+ * @param {CapturedContinuation} cont
+ * @param {function(MetaContinuation, Continuation): *} c
  * @param {MetaContinuation} ks
  * @param {Continuation} k
- * @returns {function(): *}
+ * @returns {Thunk}
  */
 function RESUME(cont, c, ks, k) {
-  /** @type {any} */
+  /** @type {MetaContinuation} */
   let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  /** @type {any} */
+  /** @type {CapturedContinuation|null} */
   let toRewind = cont
   while (!!toRewind) {
     restore(toRewind.arena, toRewind.backup)
@@ -240,21 +280,23 @@ function RESUME(cont, c, ks, k) {
     toRewind = toRewind.rest
   }
 
-  const k1 = meta.stack // TODO instead copy `meta` here, like elsewhere?
-  // @ts-ignore - Setting to null is intentional
+  const k1 = /** @type {Continuation} */(meta.stack)
+  // Setting stack to null (it's been captured/restored)
   meta.stack = null
   return () => c(meta, k1)
 }
 
 /**
  * @template T
- * @param {function(MetaContinuation, Continuation): (function(): *)} comp
+ * @param {function(MetaContinuation, Continuation): *} comp
  * @returns {T}
  */
 function RUN_TOPLEVEL(comp) {
   try {
     let a = comp(TOPLEVEL_KS, TOPLEVEL_K)
-    while (true) { a = a() }
+    while (true) {
+      a = a()
+    }
   } catch (e) {
     if (e.computationIsDone) return e.result
     else throw e
@@ -263,14 +305,13 @@ function RUN_TOPLEVEL(comp) {
 
 /**
  * @template T
- * @param {function(): (T|function(): *)} comp
+ * @param {Thunk} comp
  * @returns {T}
  */
 function TRAMPOLINE(comp) {
   let a = comp;
   try {
     while (true) {
-      // @ts-ignore - Dynamic trampolining
       a = a()
     }
   } catch (e) {
@@ -282,7 +323,7 @@ function TRAMPOLINE(comp) {
 /**
  * Keep the current trampoline going and dispatch task on current trampoline
  * @param {function(MetaContinuation, Continuation): *} task
- * @returns {function(): *}
+ * @returns {Thunk}
  */
 function RUN(task) {
   return () => task(TOPLEVEL_KS, TOPLEVEL_K)
