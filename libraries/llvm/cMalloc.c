@@ -38,7 +38,7 @@ static const size_t TODO_LIMIT = 64;
 static uint8_t* nextUnusedBlock = NULL; // Pointer to the next unused Block
 static uint8_t* endOfChunk = NULL; // End of the allocated Storage
 
-static const int slotSize = 128; // The size of each chunk (128B)
+static const int slotSize = 64; // The size of each chunk (128B)
 static const size_t totalAllocationSize = (size_t)4294967296ULL;    // How much storage do we allocate at the beginning of a program? =4GB
 
 void printTodoList(const Block *todoList) {

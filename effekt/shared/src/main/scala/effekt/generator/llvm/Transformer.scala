@@ -17,7 +17,7 @@ import scala.collection.mutable.ListBuffer
 object Transformer {
 
   val llvmFeatureFlags: List[String] = List("llvm")
-  val slotSize: Int = 128 // the size of a heap slot in bytes 
+  val slotSize: Int = 64 // the size of a heap slot in bytes
 
   def transform(program: machine.Program)(using ErrorReporter): List[Definition] = program match {
     case machine.Program(declarations, definitions, entry) =>
