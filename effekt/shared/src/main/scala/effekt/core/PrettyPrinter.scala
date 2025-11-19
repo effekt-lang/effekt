@@ -112,7 +112,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   //def toDoc(n: Name): Doc = n.toString
 
   def toDoc(s: symbols.Symbol): Doc = {
-    builtins.coreBuiltinSymbolToString(s).getOrElse(s.name.name ++ "$" ++ s.id.toString)
+    builtins.coreBuiltinSymbolToString(s).getOrElse(s.name.name)
   }
 
   def toDoc(e: Expr): Doc = e match {

@@ -14,7 +14,7 @@ import effekt.symbols.builtins
  *
  * @param C the context is used to copy annotations from old symbols to fresh symbols
  */
-class TestRenamer(names: Names = Names(Map.empty)) extends core.Tree.Rewrite {
+class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends core.Tree.Rewrite {
 
   // list of scopes that map bound symbols to their renamed variants.
   private var scopes: List[Map[Id, Id]] = List.empty
@@ -27,8 +27,20 @@ class TestRenamer(names: Names = Names(Map.empty)) extends core.Tree.Rewrite {
   private var suffix: Int = 0
 
   def freshIdFor(id: Id): Id =
+    // For pre-registered names, like `main` in certain test cases, we use the registered symbol.
+    if (names.isKnown(id)) {
+      return names.getKnown(id).get
+    }
+    // HACK: This is an unfortunate hack.
+    // TestRenamer is often used to check for alpha-equivalence by renaming both sides of a comparison.
+    // However, Effekt requires globally unique Barendregt indices for all symbols, so just creating fresh
+    // Ids is not sufficient. We also need to cache these fresh Ids, so that both sides of an alpha-equivalence
+    // comparison get the same fresh Id for a given original Id.
+    // This is achieved by generating a deterministic string `uniqueName` on both sides, and looking it up in `names`,
+    // which generates a unique Id for it once and reuses it on subsequent lookups.
+    val uniqueName = prefix + suffix.toString
     suffix = suffix + 1
-    Id(id.name.name, suffix)
+    names.idFor(uniqueName)
 
   def withBindings[R](ids: List[Id])(f: => R): R =
     val before = scopes
@@ -49,16 +61,18 @@ class TestRenamer(names: Names = Names(Map.empty)) extends core.Tree.Rewrite {
       if (builtins.isCoreBuiltin(id)) {
         // builtin, do not rename
         id
-      } else if (toplevelScope.contains(id)) {
-        // id references a top-level item
-        toplevelScope(id)
       } else {
         scopes.collectFirst {
           // locally bound variable
           case bnds if bnds.contains(id) => bnds(id)
         }.getOrElse {
-          // free variable, do not rename
-          id
+          if (toplevelScope.contains(id)) {
+            // id references a top-level item
+            toplevelScope(id)
+          } else {
+            // free variable, do not rename
+            id
+          }
         }
       }
   }
@@ -111,7 +125,7 @@ class TestRenamer(names: Names = Names(Map.empty)) extends core.Tree.Rewrite {
   override def rewrite(o: Operation): Operation = o match {
     case Operation(name, tparams, cparams, vparams, bparams, body) =>
       withBindings(tparams ++ cparams ++ vparams.map(_.id) ++ bparams.map(_.id)) {
-        Operation(name,
+        Operation(rewrite(name),
           tparams map rewrite,
           cparams map rewrite,
           vparams map rewrite,
@@ -122,27 +136,25 @@ class TestRenamer(names: Names = Names(Map.empty)) extends core.Tree.Rewrite {
 
   override def rewrite(toplevel: Toplevel): Toplevel = toplevel match {
     case Toplevel.Def(id, block) =>
-      withBinding(id) {
-        Toplevel.Def(rewrite(id), rewrite(block))
-      }
+      // We don't use withBinding here, because top-level ids are pre-collected.
+      Toplevel.Def(rewrite(id), rewrite(block))
     case Toplevel.Val(id, tpe, binding) =>
       val resolvedBinding = rewrite(binding)
-      withBinding(id) {
-        Toplevel.Val(rewrite(id), rewrite(tpe), resolvedBinding)
-      }
+      // We don't use withBinding here, because top-level ids are pre-collected.
+      Toplevel.Val(rewrite(id), rewrite(tpe), resolvedBinding)
   }
 
   override def rewrite(d: Declaration): Declaration = d match {
     case Declaration.Data(id: Id, tparams: List[Id], constructors: List[Constructor]) =>
-      withBinding(id) {
+      // We don't use withBinding(id) here, because top-level ids are pre-collected.
       withBindings(tparams) {
         Declaration.Data(rewrite(id), tparams map rewrite, constructors map rewrite)
-      }}
+      }
     case Declaration.Interface(id: Id, tparams: List[Id], properties: List[Property]) =>
-      withBinding(id) {
+      // We don't use withBinding(id) here, because top-level ids are pre-collected.
       withBindings(tparams) {
         Declaration.Interface(rewrite(id), tparams map rewrite, properties map rewrite)
-      }}
+      }
   }
 
   override def rewrite(e: ExternBody) = e match {
@@ -157,8 +169,8 @@ class TestRenamer(names: Names = Names(Map.empty)) extends core.Tree.Rewrite {
 
   override def rewrite(e: Extern) = e match {
     case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => {
-      withBinding(id) {
-        withBindings(tparams ++ cparams ++ vparams.map(_.id) ++ bparams.map(_.id)) {
+      // We don't use withBinding(id) here, because top-level ids are pre-collected.
+      withBindings(tparams ++ cparams ++ vparams.map(_.id) ++ bparams.map(_.id)) {
           Extern.Def(
             rewrite(id),
             tparams map rewrite,
@@ -170,7 +182,6 @@ class TestRenamer(names: Names = Names(Map.empty)) extends core.Tree.Rewrite {
             rewrite(body)
           )
         }
-      }
     }
     case Extern.Include(featureFlag, contents) => {
         Extern.Include(featureFlag, contents)
@@ -179,17 +190,19 @@ class TestRenamer(names: Names = Names(Map.empty)) extends core.Tree.Rewrite {
 
   override def rewrite(c: Constructor) = c match {
     case Constructor(id, tparams, fields) =>
-      withBinding(id) {
+      // We don't use withBinding(id) here, because top-level ids are pre-collected.
       withBindings(tparams) {
         Constructor(rewrite(id), tparams map rewrite, fields map rewrite)
-      }}
+      }
   }
 
   override def rewrite(p: Property) = p match {
+    // We don't use withBinding here, because top-level ids are pre-collected.
     case Property(id: Id, tpe: BlockType) => Property(rewrite(id), rewrite(tpe))
   }
 
   override def rewrite(f: Field) = f match {
+    // We don't use withBinding here, because top-level ids are pre-collected.
     case Field(id, tpe) => Field(rewrite(id), rewrite(tpe))
   }
 

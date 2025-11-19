@@ -10,20 +10,23 @@ import kiama.util.{Position, Range, Source, StringSource}
 
 class Names(private var knownNames: Map[String, Id]) {
   private val Suffix = """^(.*)\$(\d+)$""".r
+  private var renamed = knownNames
 
-  def idFor(name: String): Id =
-    builtins.coreBuiltinSymbolFromString(name).getOrElse {
-      knownNames.getOrElse(name, {
-        val id = name match {
-          case Suffix(base, n) => Id(base, n.toInt)
-          case _ =>
-            // Only pre-known and builtin names can be written without Barendregt ids.
-            sys error s"Name $name not known and has no id suffix. Did you mean to write ${name}$$<number> instead?"
-        }
-        knownNames = knownNames.updated(name, id)
+  def isKnown(id: Id): Boolean =
+    builtins.coreBuiltinSymbolFromString(id.name.name).isDefined || knownNames.contains(id.name.name)
+
+  def getKnown(id: Id): Option[Id] =
+    builtins.coreBuiltinSymbolFromString(id.name.name).orElse(knownNames.get(id.name.name))
+
+  def idFor(name: String): Id = {
+    builtins.coreBuiltinSymbolFromString(name).getOrElse(
+      renamed.getOrElse(name, {
+        val id = Id(name)
+        renamed = renamed.updated(name, id)
         id
       })
-    }
+    )
+  }
 }
 
 

@@ -91,10 +91,6 @@ object Id {
     val name = n
   }
   def apply(n: String): Id = apply(symbols.Name.local(n))
-  def apply(n: String, theId: Int): Id = new symbols.Symbol {
-    val name = symbols.Name.local(n)
-    override lazy val id = theId
-  }
   def apply(n: Id): Id = apply(n.name)
 }
 
