@@ -113,14 +113,14 @@ class TestRenamerTests extends CoreTests {
     val expected =
       """module main
         |
-        |type renamed3 {
-        |  renamed4(a: Int, b: Int)
+        |type renamed1 {
+        |  renamed0(a: Int, b: Int)
         |}
         |
         |def renamed2() = {
         |  12 match {
-        |    X : { (renamed5: Int, renamed6: Int) =>
-        |      return renamed5: Int
+        |    X : { (renamed3: Int, renamed4: Int) =>
+        |      return renamed3: Int
         |    }
         |  }
         |}
