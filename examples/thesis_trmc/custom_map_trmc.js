@@ -404,10 +404,38 @@ class ListContext{
         this.hole = cont.hole
     }
 }
+class TreeContext{
+    constructor(value, left) {
+        if (value === undefined && left ===undefined){
+            this.hole = {outer: null}
+            let result = {rightChild: this.hole}
+            this.hole.outer = result
+            this.data = result
+        } else {
+            if(left === undefined){
+                left = null
+            }
+            this.hole = {outer: null}
+            let root = {value: value, leftChild:left, rightChild: this.hole}
+            this.hole.outer = root
+            this.data = {rightChild: root}
+        }
+
+    }
+    apply_context(value){
+        this.hole.outer.rightChild = value
+    }
+    compose_context(cont){
+        this.hole.outer.rightChild = cont.data.rightChild
+        this.hole = cont.hole
+    }
+}
 
 function main_0(ks_1, k_1) {
    let list = testMap_inPlace(new Cons_0(1, new Cons_0(7, new Cons_0(8, new Cons_0(4, new Nil_0())))), fibonacci_0);
     inspect_0(list, ks_1, k_1)
+
+
     /*let hole = { outer: null }
     let list2 = { head: 42, tail: hole }
     hole.outer = list2
@@ -458,6 +486,8 @@ function testMapk_inPlace(list, fun, cont){
     switch(list.__tag) {
         case 0:
             //apply
+            /*let hole = cont.hole
+            hole.outer.tail_0 = new Nil_0()*/
             cont.apply_context(new Nil_0())
 
             return cont.data;
