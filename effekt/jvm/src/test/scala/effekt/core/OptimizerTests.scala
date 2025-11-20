@@ -22,7 +22,8 @@ class OptimizerTests extends CoreTests {
     val pExpected = parse(moduleHeader + transformed, "expected", names)
 
     // the parser is not assigning symbols correctly, so we need to run renamer first
-    val renamed = TestRenamer(names).rewrite(pInput)
+    val renamer = TestRenamer(names)
+    val renamed = renamer(pInput)
 
     val obtained = transform(renamed)
     assertAlphaEquivalent(obtained, pExpected, "Not transformed to")

@@ -61,6 +61,24 @@ jobs:
       - name: Test effekt binary
         run: effekt.sh --help
 
+  # These are currently separated as they take a long time to run.
+  core-reparse-tests:
+    name: "Core Reparse Tests"
+    needs: build-and-compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+
+      - uses: ./.github/actions/restore-build-cache
+
+      - name: Run core reparse tests
+        run: |
+          sbt effektJVM/testCoreReparsing
+
   windows-tests:
     name: "Windows Smoke Test"
     needs: build-and-compile
