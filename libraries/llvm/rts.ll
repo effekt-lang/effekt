@@ -93,7 +93,6 @@
 %String = type %Pos
 
 ; Foreign imports
-
 declare ptr @malloc(i64)
 declare void @free(ptr)
 declare ptr @realloc(ptr, i64)
@@ -118,6 +117,93 @@ declare void @exit(i64)
 declare void @llvm.assume(i1)
 
 
+; typedef struct Slot
+; {
+;     struct Slot* next;
+;     void (*eraser)(void *object);
+; } Slot;
+%struct.Slot = type { %struct.Slot*, %Eraser }
+
+; initializes the todoList with a sentinel slot.
+; Sentinel Slot: Fakes a block with a RC=1. It is used to mark the end of the To-Do-List.
+; But it is not a real heap-object, because it is not 8-byte aligned.
+@todoList = dso_local unnamed_addr global %struct.Slot* inttoptr (i64 1 to %struct.Slot*), align 8
+@nextUnusedSlot = dso_local unnamed_addr global i8* null, align 8   ; Pointer to the next unused Slot
+
+@slotSize = constant i8 64, align 8         ; The size of each chunk (64 bytes)
+@totalAllocationSize = constant i64 4294967296, align 8  ; How much storage do we allocate at the beginning of a program? =4GB
+
+; Initializes the memory for our effekt-objects that are created by newObject and deleted by eraseObject.
+define private void @initializeMemory() nounwind {
+entry:
+  ; we use mmap to allocate memory from the OS.
+  %size = load i64, i64* @totalAllocationSize, align 8
+
+  %startAddress = call noalias ptr @malloc(i64 %size)
+
+  store i8* %startAddress, i8** @nextUnusedSlot
+  ret void
+}
+
+
+define private %struct.Slot* @acquire() nounwind {
+entry:
+  ; Load todoList head
+  %head = load %struct.Slot*, %struct.Slot** @todoList, align 8
+
+  %isSentinel = icmp eq %struct.Slot* %head, inttoptr (i64 1 to %struct.Slot*)
+  br i1 %isSentinel, label %bump_alloc, label %reuse
+
+reuse:
+  ; Pop from todoList
+  ; Slot* reusedSlot = todoList;
+  ; todoList = reusedSlot->next;
+  %nextptr = getelementptr inbounds %struct.Slot, %struct.Slot* %head, i32 0, i32 0
+  %next = load %struct.Slot*, %struct.Slot** %nextptr, align 8
+  store %struct.Slot* %next, %struct.Slot** @todoList, align 8
+
+  ; Call eraser
+  ; reusedSlot->eraser(reusedSlot);
+  %eraserptr = getelementptr inbounds %struct.Slot, %struct.Slot* %head, i32 0, i32 1
+  %eraser = load %Eraser, void (%struct.Slot*)** %eraserptr, align 8, !alias.scope !14, !noalias !24
+  tail call void %eraser(%struct.Slot* %head)
+
+  ; return reusedSlot;
+  ret %struct.Slot* %head
+
+bump_alloc:
+  ; Load raw pointer
+  %rawBump = load i8*, i8** @nextUnusedSlot, align 8
+
+  ; Treat it as Object*
+  %slot = bitcast i8* %rawBump to %struct.Slot*
+
+  ; Move bump pointer forward by object size
+  %sizeBump = load i8, i8* @slotSize, align 8
+  %nextBump = getelementptr i8, i8* %rawBump, i8 %sizeBump
+  store i8* %nextBump, i8** @nextUnusedSlot, align 8
+
+  ret %struct.Slot* %slot
+}
+
+; Pushes a slot on the top of the To-Do-List.
+define private void @release(%struct.Slot* %slot) nounwind {
+entry:
+  ; oldHead = todoList
+  %oldHead = load %struct.Slot*, %struct.Slot** @todoList, align 8
+
+  ; ptr->next = oldHead
+  %nextPtr = getelementptr %struct.Slot, %struct.Slot* %slot, i32 0, i32 0
+  store %struct.Slot* %oldHead, %struct.Slot** %nextPtr, align 8
+
+  ; todoList = ptr
+  store %struct.Slot* %slot, %struct.Slot** @todoList, align 8
+
+  ret void
+}
+
+
+
 ; Prompts
 
 define private %Prompt @currentPrompt(%Stack %stack) {
@@ -133,12 +219,8 @@ define private %Prompt @freshPrompt() {
     ret %Prompt %prompt
 }
 
-; Garbage collection
-
 define private %Object @newObject(%Eraser %eraser, i64 %environmentSize) alwaysinline {
-    %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
-    %size = add i64 %environmentSize, %headerSize
-    %object = call ptr @malloc(i64 %size)
+    %object = call ptr @acquire()
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
     store %ReferenceCount 0, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
@@ -196,9 +278,7 @@ define private void @eraseObject(%Object %object) alwaysinline {
     free:
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
     %eraser = load %Eraser, ptr %objectEraser, !alias.scope !14, !noalias !24
-    %environment = call %Environment @objectEnvironment(%Object %object)
-    call void %eraser(%Environment %environment)
-    call void @free(%Object %object)
+    call void %eraser(%Object %object)
     br label %done
 
     done:
@@ -456,7 +536,7 @@ decrement:
     ret void
 
 free:
-    call void @free(%Prompt %prompt)
+    call void @free(%Prompt %prompt)  ;df: wird gecalled, obwohl es nie allocated wurde -> gibt warning
     ret void
 }
 
@@ -479,7 +559,7 @@ define private %Stack @underflowStack(%Stack %stack) {
     store %Stack null, ptr %promptStack_pointer, !alias.scope !13, !noalias !23
 
     call void @erasePrompt(%Prompt %prompt)
-    call void @free(%Stack %stack)
+    call void @free(%Stack %stack)    ;df: wird gecalled, obwohl es nie allocated wurde -> gibt warning
 
     ret %Stack %rest
 }

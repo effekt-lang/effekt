@@ -1,0 +1,9 @@
+import ref
+
+def main() = {
+  val x = 5
+  val y = 6
+  val z = ref(x)
+  z.set(y)
+  println(z.get())
+}

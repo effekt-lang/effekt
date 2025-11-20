@@ -1,0 +1,14 @@
+// sm = Person fills 1 saving slot completely
+record Person(
+  field1: Int,
+  field2: Int,
+  field3: Int,
+  field4: Int,
+  field5: Int,
+  field6: Int
+  )
+
+def main() = {
+  val p = Person(1, 2, 3, 4, 5, 6)
+  println(p.field6)
+}
