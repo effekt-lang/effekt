@@ -122,33 +122,31 @@ declare void @llvm.assume(i1)
 ;     struct Slot* next;
 ;     void (*eraser)(void *object);
 ; } Slot;
-%struct.Slot = type { %struct.Slot*, void (i8*)* }
+%struct.Slot = type { %struct.Slot*, %Eraser }
 
 ; initializes the todoList with a sentinel slot.
 ; Sentinel Slot: Fakes a block with a RC=1. It is used to mark the end of the To-Do-List.
 ; But it is not a real heap-object, because it is not 8-byte aligned.
-@todoList = global %struct.Slot* inttoptr (i64 1 to %struct.Slot*)
+@todoList = dso_local unnamed_addr global %struct.Slot* inttoptr (i64 1 to %struct.Slot*), align 8
+@nextUnusedSlot = dso_local unnamed_addr global i8* null, align 8   ; Pointer to the next unused Slot
 
-
-@nextUnusedSlot = global i8* null   ; Pointer to the next unused Slot
-@slotSize = constant i32 64         ; The size of each chunk (64 bytes)
-@totalAllocationSize = constant i64 4294967296  ; How much storage do we allocate at the beginning of a program? =4GB
+@slotSize = constant i8 64, align 8         ; The size of each chunk (64 bytes)
+@totalAllocationSize = constant i64 4294967296, align 8  ; How much storage do we allocate at the beginning of a program? =4GB
 
 ; Initializes the memory for our effekt-objects that are created by newObject and deleted by eraseObject.
-define void @initializeMemory() {
+define private void @initializeMemory() nounwind {
 entry:
   ; we use mmap to allocate memory from the OS.
-  %size = load i64, i64* @totalAllocationSize
+  %size = load i64, i64* @totalAllocationSize, align 8
 
-
-  %startAddress = call ptr @malloc(i64 %size)
+  %startAddress = call noalias ptr @malloc(i64 %size)
 
   store i8* %startAddress, i8** @nextUnusedSlot
   ret void
 }
 
 
-define %Object* @acquire() {
+define private %struct.Slot* @acquire() nounwind {
 entry:
   ; Load todoList head
   %head = load %struct.Slot*, %struct.Slot** @todoList, align 8
@@ -160,52 +158,46 @@ reuse:
   ; Pop from todoList
   ; Slot* reusedSlot = todoList;
   ; todoList = reusedSlot->next;
-  %next = getelementptr %struct.Slot, %struct.Slot* %head, i32 0, i32 0
-  %nextVal = load %struct.Slot*, %struct.Slot** %next
-  store %struct.Slot* %nextVal, %struct.Slot** @todoList
+  %nextptr = getelementptr inbounds %struct.Slot, %struct.Slot* %head, i32 0, i32 0
+  %next = load %struct.Slot*, %struct.Slot** %nextptr, align 8
+  store %struct.Slot* %next, %struct.Slot** @todoList, align 8
 
   ; Call eraser
   ; reusedSlot->eraser(reusedSlot);
-  %eraserPtr = getelementptr %struct.Slot, %struct.Slot* %head, i32 0, i32 1
-  %eraser = load void (%struct.Slot*)*, void (%struct.Slot*)** %eraserPtr
-  call void %eraser(%struct.Slot* %head)
+  %eraserptr = getelementptr inbounds %struct.Slot, %struct.Slot* %head, i32 0, i32 1
+  %eraser = load %Eraser, void (%struct.Slot*)** %eraserptr, align 8, !alias.scope !14, !noalias !24
+  tail call void %eraser(%struct.Slot* %head)
 
   ; return reusedSlot;
   ret %struct.Slot* %head
 
 bump_alloc:
   ; Load raw pointer
-  %rawBump = load i8*, i8** @nextUnusedSlot
+  %rawBump = load i8*, i8** @nextUnusedSlot, align 8
 
   ; Treat it as Object*
-  %objectBump = bitcast i8* %rawBump to %Object*
-
-  ; Load object size
-  %sizeBump = load i64, i64* @slotSize
+  %slot = bitcast i8* %rawBump to %struct.Slot*
 
   ; Move bump pointer forward by object size
-  %nextBump = getelementptr i8, i8* %rawBump, i64 %sizeBump
-  store i8* %nextBump, i8** @nextUnusedSlot
+  %sizeBump = load i8, i8* @slotSize, align 8
+  %nextBump = getelementptr i8, i8* %rawBump, i8 %sizeBump
+  store i8* %nextBump, i8** @nextUnusedSlot, align 8
 
-  ; Return the typed pointer
-  ret %Object* %objectBump
+  ret %struct.Slot* %slot
 }
 
 ; Pushes a slot on the top of the To-Do-List.
-define void @release(%Object* %object) {
+define private void @release(%struct.Slot* %slot) nounwind {
 entry:
-  ; Cast Object to Slot
-  ;%slot = bitcast %Object* %object to %struct.Slot*
-
   ; oldHead = todoList
-  ;%oldHead = load %struct.Slot*, %struct.Slot** @todoList
+  %oldHead = load %struct.Slot*, %struct.Slot** @todoList, align 8
 
   ; ptr->next = oldHead
-  ;%nextPtr = getelementptr %struct.Slot, %struct.Slot* %slot, i32 0, i32 0
-  ;store %struct.Slot* %oldHead, %struct.Slot** %nextPtr
+  %nextPtr = getelementptr %struct.Slot, %struct.Slot* %slot, i32 0, i32 0
+  store %struct.Slot* %oldHead, %struct.Slot** %nextPtr, align 8
 
   ; todoList = ptr
-  ;store %struct.Slot* %slot, %struct.Slot** @todoList
+  store %struct.Slot* %slot, %struct.Slot** @todoList, align 8
 
   ret void
 }
