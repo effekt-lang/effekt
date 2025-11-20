@@ -25,7 +25,7 @@ trait Symbol {
   /**
    * The unique id of this symbol
    */
-  lazy val id: Int = Symbol.fresh.next()
+  val id: Int = Symbol.fresh.next()
 
   /**
    * Is this symbol synthesized? (e.g. a constructor or field access)
