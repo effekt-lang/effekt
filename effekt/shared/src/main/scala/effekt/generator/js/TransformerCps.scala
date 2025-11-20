@@ -36,6 +36,8 @@ object TransformerCps extends Transformer {
     directStyle: Option[ContinuationInfo],
     // the current direct-style metacontinuation
     metacont: Option[Id],
+    // the main symbol (entrypoint)
+    mainSymbol: symbols.TermSymbol,
     // the original declaration context (used to compile pattern matching)
     declarations: DeclarationContext,
     // the usual compiler context
@@ -52,9 +54,9 @@ object TransformerCps extends Transformer {
       js.Return(Call(RUN_TOPLEVEL, nameRef(mainSymbol))))))
 
     given DeclarationContext = new DeclarationContext(coreModule.declarations, coreModule.externs)
-    toJS(input, exports)
+    toJS(input, exports, mainSymbol)
 
-  def toJS(module: cps.ModuleDecl, exports: List[js.Export])(using D: DeclarationContext, C: Context): js.Module =
+  def toJS(module: cps.ModuleDecl, exports: List[js.Export], mainSymbol: symbols.TermSymbol)(using D: DeclarationContext, C: Context): js.Module =
     module match {
       case cps.ModuleDecl(path, includes, declarations, externs, definitions, _) =>
         given TransformerContext(
@@ -63,6 +65,7 @@ object TransformerCps extends Transformer {
           None,
           None,
           None,
+          mainSymbol,
           D, C)
 
         val name      = JSName(jsModuleName(module.path))
@@ -73,7 +76,7 @@ object TransformerCps extends Transformer {
         js.Module(name, Nil, exports, jsDecls ++ jsExterns ++ stmts)
     }
 
-  def compileLSP(input: cps.ModuleDecl, coreModule: core.ModuleDecl)(using C: Context): List[js.Stmt] =
+  def compileLSP(input: cps.ModuleDecl, coreModule: core.ModuleDecl, mainSymbol: symbols.TermSymbol)(using C: Context): List[js.Stmt] =
     val D = new DeclarationContext(coreModule.declarations, coreModule.externs)
     given TransformerContext(
           false,
@@ -81,14 +84,15 @@ object TransformerCps extends Transformer {
           None,
           None,
           None,
+          mainSymbol,
           D, C)
 
     input.definitions.map(toJS)
 
 
-  def toJS(d: cps.ToplevelDefinition)(using TransformerContext): js.Stmt = d match {
+  def toJS(d: cps.ToplevelDefinition)(using C: TransformerContext): js.Stmt = d match {
     case cps.ToplevelDefinition.Def(id, block) =>
-      js.Const(nameDef(id), requiringThunk { toJS(id, block) })
+      js.Const(nameDef(id), requiringThunk { toJS(id, block) }, isMainSymbol = C.mainSymbol == id)
     case cps.ToplevelDefinition.Val(id, ks, k, binding) =>
       js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding).stmts)))
     case cps.ToplevelDefinition.Let(id, binding) =>

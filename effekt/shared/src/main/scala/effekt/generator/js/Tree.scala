@@ -31,6 +31,7 @@ case class Module(name: JSName, imports: List[Import], exports: List[Export], st
    * Generates the Javascript module skeleton for whole program compilation
    */
   def commonjs: List[Stmt] = {
+    val typecheckAnnotation = js.LineComment("@ts-check")
     val effekt = js.Const(JSName("$effekt"), js.Object())
 
     val importStmts = imports.map {
@@ -43,11 +44,12 @@ case class Module(name: JSName, imports: List[Import], exports: List[Export], st
         js.Destruct(names, js.Call(Variable(JSName("require")), List(JsString(s"./${ file }"))))
     }
 
+    val ignoreTypesOfExport = js.LineComment("@ts-ignore - Universal module pattern for Node/Browser compatibility")
     val exportStatement = js.Assign(RawExpr(s"(typeof module != \"undefined\" && module !== null ? module : {}).exports = ${name.name}"),
       js.Object(exports.map { e => e.name -> e.expr })
     )
 
-    List(effekt) ++ importStmts ++ stmts ++ List(exportStatement)
+    List(typecheckAnnotation, effekt) ++ importStmts ++ stmts ++ List(ignoreTypesOfExport, exportStatement)
   }
 
   /**
@@ -62,6 +64,7 @@ case class Module(name: JSName, imports: List[Import], exports: List[Export], st
    * }}}
    */
   def virtual : List[Stmt] = {
+    val typecheckAnnotation = js.LineComment("@ts-check")
     val effekt = js.Const(JSName("$effekt"), js.Object())
 
     val importStmts = imports.map {
@@ -78,7 +81,7 @@ case class Module(name: JSName, imports: List[Import], exports: List[Export], st
 
     // module.exports = { EXPORTS }
     val exportStatement = js.Assign(RawExpr("module.exports"), js.Object(exports.map { e => e.name -> e.expr }))
-    List(effekt) ++ importStmts ++ List(declaration) ++ stmts ++ List(exportStatement)
+    List(typecheckAnnotation, effekt) ++ importStmts ++ List(declaration) ++ stmts ++ List(exportStatement)
   }
 }
 
@@ -160,8 +163,14 @@ enum Stmt {
   // e.g. switch (sc) { case <EXPR>: <STMT>; ...; default: <STMT> }
   case Switch(scrutinee: Expr, branches: List[(Expr, List[Stmt])], default: Option[List[Stmt]]) // TODO maybe flatten?
 
-  // e.g. function <NAME>(x, y) { <STMT>* }
-  case Function(name: JSName, params: List[JSName], stmts: List[Stmt])
+  // e.g.
+  // ```js
+  // /**
+  //   * My doc comment
+  //   */
+  // function <NAME>(x, y) { <STMT>* }
+  // ```
+  case Function(name: JSName, params: List[JSName], stmts: List[Stmt], docComment: Option[Stmt.DocComment] = None)
 
   // e.g. class <NAME> {
   //        <NAME>(x, y) { <STMT>* }...
@@ -188,6 +197,17 @@ enum Stmt {
 
   // e.g. <EXPR>;
   case ExprStmt(expr: Expr)
+
+  // e.g. `// This is my comment`
+  case LineComment(contents: String)
+
+  // e.g.
+  //
+  // /**
+  //  * This is my
+  //  * comment
+  //  */
+  case DocComment(lines: List[String])
 }
 export Stmt.*
 
@@ -195,10 +215,19 @@ export Stmt.*
 // Smart constructors
 // ------------------
 
-def Const(name: JSName, binding: Expr): Stmt = binding match {
-  case Expr.Lambda(params, Block(stmts)) => js.Function(name, params, stmts)
-  case Expr.Lambda(params, stmt) => js.Function(name, params, List(stmt))
-  case _ => js.Const(Pattern.Variable(name), binding)
+def Const(name: JSName, binding: Expr, isMainSymbol: Boolean = false): Stmt = {
+  def docCommentFor(params: List[JSName]): Option[DocComment] = Option.when(isMainSymbol) {
+    params match {
+      case ks :: k :: Nil => DocComment(List(s"@param {MetaContinuation} ${ks.name}", s"@param {Continuation} ${k.name}"))
+      case _ => sys error s"Assumed that the JS entrypoint has exactly two params, but found ${params.length} instead"
+    }
+  }
+
+  binding match {
+    case Expr.Lambda(params, Block(stmts)) => js.Function(name, params, stmts, docCommentFor(params))
+    case Expr.Lambda(params, stmt) => js.Function(name, params, List(stmt), docCommentFor(params))
+    case _ => js.Const(Pattern.Variable(name), binding)
+  }
 }
 
 def Let(name: JSName, binding: Expr): Stmt = js.Let(Pattern.Variable(name), binding)
