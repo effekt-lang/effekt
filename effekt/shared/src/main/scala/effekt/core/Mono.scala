@@ -167,7 +167,7 @@ def preprocess(definitions: List[Toplevel])(using PreprocessContext): List[Tople
   definitions.map({
     case Toplevel.Def(id, block: Block.BlockLit) => Toplevel.Def(id, preprocess(block, id))
     case Toplevel.Def(id, block) => Toplevel.Def(id, block)
-    case Toplevel.Val(id, tpe, binding) => ???
+    case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, tpe, preprocess(binding))
   })
 
 def preprocess(block: Block.BlockLit, funId: Id)(using ctx: PreprocessContext): Block.BlockLit = 
