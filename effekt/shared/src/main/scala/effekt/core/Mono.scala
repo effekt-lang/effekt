@@ -174,8 +174,12 @@ def preprocess(block: Block.BlockLit, funId: Id)(using ctx: PreprocessContext): 
   val processedBparams = block.bparams.zipWithIndex.map((blockParam, index) => {
     blockParam.tpe match {
       case b: BlockType.Function => 
-        val interface = ctx.emit(funId, index, blockParam.id, b, block)
-        BlockParam(blockParam.id, interface, blockParam.capt)
+        if(b.tparams.length > 0) {
+          val interface = ctx.emit(funId, index, blockParam.id, b, block)
+          BlockParam(blockParam.id, interface, blockParam.capt)
+        } else {
+          blockParam
+        }
       case BlockType.Interface(name, targs) => 
         blockParam
     }
