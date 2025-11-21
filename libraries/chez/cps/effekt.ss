@@ -75,10 +75,10 @@
     (let ([store (meta-cont-store ks)])
         (make-ref store init (store-generation store))))
 
-; Box -> Value
+; Ref -> Value
 (define (get ref) (ref-value ref))
 
-; Box, Value -> void
+; Ref, Value -> void
 (define (put ref value)
     (let* ([rGen (ref-generation ref)]
            [store (ref-store ref)]
@@ -96,7 +96,7 @@
 ; MetaCont -> MetaCont
 (define (create-region ks) ks)
 
-; Value, MetaCont -> Box
+; Value, MetaCont -> Ref
 (define allocate var)
 
 ; Ref | MetaCont -> void

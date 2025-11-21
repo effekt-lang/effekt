@@ -101,6 +101,7 @@ class ChezSchemeCPSTests extends EffektTests {
     examplesDir / "benchmarks" / "input_output" / "interleave_promises.effekt",
     examplesDir / "benchmarks" / "input_output" / "financial_format.effekt",
     examplesDir / "benchmarks" / "input_output" / "server_client.effekt",
+    examplesDir / "pos" / "issue1087.effekt",
 
     // the test is specific to JS
     examplesDir / "pos" / "multiline_extern_definition.effekt",
