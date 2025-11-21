@@ -554,7 +554,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
    * We defer checking whether something is first-class or second-class to Typer now.
    */
   def checkExprAsBlock(expr: Term, expected: Option[BlockType])(using Context, Captures): Result[BlockType] =
-    checkBlockAgainst(expr, expected) {
+    checkWellformedness(expr) {
       case u @ source.Unbox(expr, _) =>
         val expectedTpe = expected map {
           tpe =>
@@ -590,7 +590,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Context.abort(pretty"Expected a block variable, but ${id} is a value. Maybe use explicit syntax: { () => ${id} }")
       }
 
-      case source.New(impl, _) => checkImplementation(impl, None)
+      case source.New(impl, _) =>
+        val r @ Result(got, eff) = checkImplementation(impl, None)
+        expected foreach { matchExpected(got, _) }
+        r
 
       case s : source.MethodCall => sys error "Nested capability selection not yet supported"
 
@@ -1635,12 +1638,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Result(got, effs)
     }
 
-  def checkBlockAgainst[T <: Tree](t: T, expected: Option[BlockType])(f: T => Result[BlockType])(using Context, Captures): Result[BlockType] =
+  def checkWellformedness[T <: Tree](t: T)(f: T => Result[BlockType])(using Context, Captures): Result[BlockType] =
     Context.at(t) {
       val Result(got, effs) = f(t)
       wellformed(got)
       wellformed(effs.toEffects)
-      // expected foreach { matchExpected(got, _) }
       Context.annotateInferredType(t, got)
       Context.annotateInferredEffects(t, effs.toEffects)
       Result(got, effs)
