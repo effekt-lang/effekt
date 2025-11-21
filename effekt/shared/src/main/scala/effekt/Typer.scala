@@ -1640,7 +1640,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val Result(got, effs) = f(t)
       wellformed(got)
       wellformed(effs.toEffects)
-      expected foreach { matchExpected(got, _) }
+      // expected foreach { matchExpected(got, _) }
       Context.annotateInferredType(t, got)
       Context.annotateInferredEffects(t, effs.toEffects)
       Result(got, effs)

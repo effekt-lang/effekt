@@ -34,10 +34,10 @@ object ErrorContext {
   case class MergeInvariant(outer: ErrorContext) extends InvariantContext
   case class TypeConstructor(outer: ErrorContext) extends InvariantContext
   case class TypeConstructorArgument(outer: ErrorContext) extends InvariantContext
-  case class BoxedTypeBlock(left: symbols.BoxedType, right: symbols.BoxedType, outer: ErrorContext) extends ErrorContext { def polarity = outer.polarity }
+  case class BoxedTypeBlock(left: symbols.BoxedType, right: symbols.BoxedType, outer: ErrorContext) extends InvariantContext
   case class BoxedTypeCapture(left: symbols.BoxedType, right: symbols.BoxedType, outer: ErrorContext) extends InvariantContext
-  case class FunctionArgument(left: symbols.FunctionType, right: symbols.FunctionType, outer: ErrorContext) extends ErrorContext { def polarity = outer.polarity.flip }
-  case class FunctionReturn(outer: ErrorContext) extends ErrorContext { def polarity = outer.polarity }
+  case class FunctionArgument(left: symbols.FunctionType, right: symbols.FunctionType, outer: ErrorContext) extends InvariantContext
+  case class FunctionReturn(outer: ErrorContext) extends InvariantContext
   case class FunctionEffects(outer: ErrorContext) extends InvariantContext
 
   // TODO defer rendering of error messages to Context
