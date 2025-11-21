@@ -35,7 +35,7 @@ object ErrorContext {
   case class TypeConstructor(outer: ErrorContext) extends InvariantContext
   case class TypeConstructorArgument(outer: ErrorContext) extends InvariantContext
   case class BoxedTypeBlock(left: symbols.BoxedType, right: symbols.BoxedType, outer: ErrorContext) extends ErrorContext { def polarity = outer.polarity }
-  case class BoxedTypeCapture(left: symbols.BoxedType, right: symbols.BoxedType, outer: ErrorContext) extends ErrorContext { def polarity = outer.polarity }
+  case class BoxedTypeCapture(left: symbols.BoxedType, right: symbols.BoxedType, outer: ErrorContext) extends InvariantContext
   case class FunctionArgument(left: symbols.FunctionType, right: symbols.FunctionType, outer: ErrorContext) extends ErrorContext { def polarity = outer.polarity.flip }
   case class FunctionReturn(outer: ErrorContext) extends ErrorContext { def polarity = outer.polarity }
   case class FunctionEffects(outer: ErrorContext) extends InvariantContext
