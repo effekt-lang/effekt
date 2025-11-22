@@ -17,16 +17,38 @@ class Unique(maxInlineSize: Int) extends InliningPolicy {
 }
 
 class UniqueJumpSimple(maxInlineSize: Int) extends InliningPolicy {
+  def isSimple(s: Stmt): Boolean = s match {
+    case Stmt.Def(id, block, body) => isSimple(body)
+    case Stmt.Let(id, annotatedTpe, binding, body) => isSimple(body)
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => isSimple(body)
+
+    case Stmt.Alloc(id, init, region, body) => true
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => true
+    case Stmt.Put(ref, annotatedCapt, value, body) => true
+    case Stmt.Var(ref, init, capture, body) => true
+
+    case Stmt.Return(expr) => true
+    case Stmt.App(callee, targs, vargs, bargs) => true
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => true
+
+    case Stmt.Val(id, annotatedTpe, binding, body) => false
+    case Stmt.If(cond, thn, els) => false
+    case Stmt.Match(scrutinee, clauses, default) => false
+    case Stmt.Region(body) => false
+    case Stmt.Reset(body) => false
+    case Stmt.Shift(prompt, body) => false
+    case Stmt.Resume(k, body) => false
+    case Stmt.Hole(span) => false
+  }
   override def apply(id: Id)(using ctx: Context): Boolean = {
     val use = ctx.usages.get(id)
     val block = ctx.blocks.get(id)
     var doInline = !ctx.usages.get(id).contains(Usage.Recursive)
-    doInline &&= use.contains(Usage.Once) || block.collect {
-      case Block.BlockLit(_, _, _, _, _: Stmt.Return) => true
-      case Block.BlockLit(_, _, _, _, _: Stmt.App) => true
+    doInline &&= use.contains(Usage.Once) || (block.collect {
+      case Block.BlockLit(_, _, _, _, stmt) => isSimple(stmt)
+      case Block.New(_) => true
       case Block.BlockVar(_, _, _) => true
-    }.getOrElse(false)
-    doInline &&= block.exists(_.size <= maxInlineSize)
+    }.getOrElse(false) && block.exists(_.size <= maxInlineSize))
     doInline
   }
 }
