@@ -48,9 +48,30 @@ extern def size(arr: ByteArray) at {}: Int =
   chez "(bytevector-length ${arr})"
   vm "bytearray::size(ByteArray)"
 
-extern def unsafeGet(arr: ByteArray, index: Int) at global: Byte =
-  js "(${arr})[${index}]"
+extern js """
+  function bytearray$get(arr, index) {
+    if (index < 0 || index >= arr.length) throw 'Index out of bounds';
+    return arr[index];
+  }
+"""
+
+extern llvm """
+define void @assertInboundsByteArray(i64 %index, %Pos %arr) alwaysinline {
+  %size = extractvalue %Pos %arr, 0
+  %in_bounds = icmp ult i64 %index, %size
+  br i1 %in_bounds, label %ok, label %out
+out:
+  call void @exit(i64 1)
+  unreachable
+ok:
+  ret void
+}
+"""
+
+extern def get(arr: ByteArray, index: Int) at global: Byte =
+  js "bytearray$get(${arr}, ${index})"
   llvm """
+    call void @assertInboundsByteArray(i64 ${index}, %Pos ${arr})
     %arr_ptr = extractvalue %Pos ${arr}, 1
     %arr_data_ptr = getelementptr inbounds i8, ptr %arr_ptr, i64 16
     %element_ptr = getelementptr inbounds i8, ptr %arr_data_ptr, i64 ${index}
@@ -60,10 +81,12 @@ extern def unsafeGet(arr: ByteArray, index: Int) at global: Byte =
   """
   chez "(bytevector-u8-ref ${arr} ${index})"
   vm "bytearray::unsafeGet(ByteArray, Int)"
+  // TODO rename vm primitive
 
-extern def unsafeSet(arr: ByteArray, index: Int, value: Byte) at global: Unit =
+extern def set(arr: ByteArray, index: Int, value: Byte) at global: Unit =
   js "bytearray$set(${arr}, ${index}, ${value})"
   llvm """
+    call void @assertInboundsByteArray(i64 ${index}, %Pos ${arr})
     %arr_ptr = extractvalue %Pos ${arr}, 1
     %arr_data_ptr = getelementptr inbounds i8, ptr %arr_ptr, i64 16
     %element_ptr = getelementptr inbounds i8, ptr %arr_data_ptr, i64 ${index}
@@ -73,12 +96,13 @@ extern def unsafeSet(arr: ByteArray, index: Int, value: Byte) at global: Unit =
   """
   chez "(bytevector-u8-set! ${arr} ${index} ${value})"
   vm "bytearray::unsafeSet(ByteArray, Int, Byte)"
+  // TODO rename vm primitive
 
 /// Creates a new ByteArray of size `size` filled with the value `init`
 def bytearray(size: Int, init: Byte): ByteArray = {
   val arr = allocate(size);
   each(0, size) { i =>
-    unsafeSet(arr, i, init)
+    set(arr, i, init)
   };
   arr
 }
@@ -88,7 +112,7 @@ def resize(source: ByteArray, size: Int): ByteArray = {
   val n = min(source.size, target.size)
   def go(i: Int): ByteArray =
     if (i < n) {
-      target.unsafeSet(i, source.unsafeGet(i))
+      target.set(i, source.get(i))
       go(i + 1)
     } else {
       target
@@ -98,22 +122,22 @@ def resize(source: ByteArray, size: Int): ByteArray = {
 
 def foreach(arr: ByteArray){ action: Byte => Unit }: Unit =
   each(0, arr.size) { i =>
-    action(arr.unsafeGet(i))
+    action(arr.get(i))
   }
 
 def foreach(arr: ByteArray){ action: (Byte) {Control} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
-    action(arr.unsafeGet(i)) {label}
+    action(arr.get(i)) {label}
   }
 
 def foreachIndex(arr: ByteArray){ action: (Int, Byte) => Unit }: Unit =
   each(0, arr.size) { i =>
-    action(i, arr.unsafeGet(i))
+    action(i, arr.get(i))
   }
 
 def foreachIndex(arr: ByteArray){ action: (Int, Byte) {Control} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
-    action(i, arr.unsafeGet(i)) {label}
+    action(i, arr.get(i)) {label}
   }
 
 extern def fromString(str: String) at {}: ByteArray =
@@ -214,7 +238,7 @@ def each(bytes: ByteArray): Unit / emit[Byte] = {
   val n = bytes.size
   def go(i: Int): Unit = {
     if (i < n) {
-      do emit(bytes.unsafeGet(i))
+      do emit(bytes.get(i))
       go(i + 1)
     }
   }
@@ -230,7 +254,7 @@ def feed[R](bytes: ByteArray) { reader: () => R / read[Byte] }: R = {
       if (i < bytes.size) {
         val c = i
         i = c + 1
-        bytes.unsafeGet(c)
+        bytes.get(c)
       } else {
         do stop()
       }
@@ -249,7 +273,7 @@ namespace returning {
       (stream(), a.resize(i))
     } with emit[Byte] { (v) =>
       if (i >= a.size) { a = a.resize(2 * a.size) }
-      a.unsafeSet(i, v)
+      a.set(i, v)
       i = i + 1
       resume(())
     }
