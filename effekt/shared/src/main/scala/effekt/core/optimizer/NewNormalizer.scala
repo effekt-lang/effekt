@@ -117,13 +117,13 @@ object semantics {
     }
 
     val dynamicCapture: Variables = this match {
-      case Binding.Let(value) => Set.empty
+      case Binding.Let(value) => value.dynamicCapture
       case Binding.Def(block) => block.dynamicCapture
       case Binding.Rec(block, tpe, capt) => block.dynamicCapture
       case Binding.Val(stmt) => stmt.dynamicCapture
       // TODO block args for externs are not supported (for now?)
       case Binding.Run(f, targs, vargs, bargs) => Set.empty
-      case Binding.Unbox(addr: Addr, tpe: BlockType, capt: Captures) => Set.empty // TODO
+      case Binding.Unbox(addr: Addr, tpe: BlockType, capt: Captures) => capt // TODO these are the static not dynamic captures
       case Binding.Get(ref, tpe, cap) => Set(ref)
     }
   }
@@ -1047,6 +1047,7 @@ class NewNormalizer {
         case Some(Value.Literal(true, _)) => evaluate(thn, k, ks)
         case Some(Value.Literal(false, _)) => evaluate(els, k, ks)
         case _ =>
+          // joinpoint(k, ks, List(thn, els)) { (A, Frame, Stack) => (NeutralStmt, Variables) } { case thn1 :: els1 :: Nil => NeutralStmt.If(sc, thn1, els1) }
           joinpoint(k, ks) { (k, ks) =>
             NeutralStmt.If(sc, nested {
               evaluate(thn, k, ks)
@@ -1055,7 +1056,6 @@ class NewNormalizer {
             })
           }
       }
-
     case Stmt.Match(scrutinee, clauses, default) =>
       val sc = evaluate(scrutinee, ks)
       scope.lookupValue(sc) match {
@@ -1067,7 +1067,6 @@ class NewNormalizer {
           }.getOrElse {
             evaluate(default.getOrElse { sys.error("Non-exhaustive pattern match.") }, k, ks)
           }
-        // linear usage of the continuation
         //        case _ if (clauses.size + default.size) <= 1 =>
         //          NeutralStmt.Match(sc,
         //            clauses.map { case (id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
@@ -1079,7 +1078,7 @@ class NewNormalizer {
         //            },
         //            default.map { stmt => nested { evaluate(stmt, k, ks) } })
         case _ =>
-          joinpoint(k, ks) { (k, ks) =>
+          def neutralMatch(k: Frame, ks: Stack) =
             NeutralStmt.Match(sc,
               // This is ALMOST like evaluate(BlockLit), but keeps the current continuation
               clauses.map { case (id, core.Block.BlockLit(tparams, cparams, vparams, bparams, body)) =>
@@ -1098,6 +1097,12 @@ class NewNormalizer {
                 (id, block)
               },
               default.map { stmt => nested { evaluate(stmt, k, ks) } })
+          // linear usage of the continuation: do not create a joinpoint.
+          // This is a simple optimization for record access since r.x is always desugared into a match
+          if (default.size + clauses.size > 1) {
+            joinpoint(k, ks) { (k, ks) => neutralMatch(k, ks) }
+          } else {
+            neutralMatch(k, ks)
           }
       }
 
