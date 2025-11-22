@@ -99,14 +99,36 @@ extern def size[T](arr: Array[T]) at {}: Int =
   """
   vm "array::size[T](Array[T])"
 
+extern llvm """
+define void @assertInbounds(i64 %index, %Pos %arr) alwaysinline {
+  %pos_data = extractvalue %Pos %arr, 1
+  %size_pointer = getelementptr inbounds i64, ptr %pos_data, i64 2
+  %size = load i64, ptr %size_pointer
+  %in_bounds = icmp ult i64 %index, %size
+  br i1 %in_bounds, label %ok, label %out
+out:
+  call void @exit(i64 1)
+  unreachable
+ok:
+  ret void
+}
+"""
+
+extern js """
+  function array$get(arr, index) {
+    if (index < 0 || index >= arr.length) throw 'Index out of bounds';
+    return arr[index];
+  }
+"""
+
+
 /// Gets the element of the `arr` at given `index` in constant time.
-/// Unchecked Precondition: `index` is in bounds (0 ≤ index < arr.size)
-///
-/// Prefer using `get` instead.
-extern def unsafeGet[T](arr: Array[T], index: Int) at global: T =
-  js "${arr}[${index}]"
+/// Aborts the program when the index is out of bounds.
+extern def get[T](arr: Array[T], index: Int) at global: T =
+  js "array$get(${arr}, ${index})"
   chez "(vector-ref ${arr} ${index})"
   llvm """
+    call void @assertInbounds(i64 ${index}, %Pos ${arr})
     %pos_data = extractvalue %Pos ${arr}, 1
 
     %data_pointer = getelementptr inbounds ptr, ptr %pos_data, i64 3
@@ -121,19 +143,19 @@ extern def unsafeGet[T](arr: Array[T], index: Int) at global: T =
 
 extern js """
   function array$set(arr, index, value) {
+    if (index < 0 || index >= arr.length) throw 'Index out of bounds';
     arr[index] = value;
     return $effekt.unit
   }
 """
 
 /// Sets the element of the `arr` at given `index` to `value` in constant time.
-/// Unchecked Precondition: `index` is in bounds (0 ≤ index < arr.size)
-///
-/// Prefer using `set` instead.
-extern def unsafeSet[T](arr: Array[T], index: Int, value: T) at global: Unit =
+/// Aborts the program when the index is out of bounds.
+extern def set[T](arr: Array[T], index: Int, value: T) at global: Unit =
   js "array$set(${arr}, ${index}, ${value})"
   chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
   llvm """
+    call void @assertInbounds(i64 ${index}, %Pos ${arr})
     %array_data = extractvalue %Pos ${arr}, 1
 
     %data_pointer = getelementptr inbounds i64, ptr %array_data, i64 3
@@ -146,19 +168,10 @@ extern def unsafeSet[T](arr: Array[T], index: Int, value: T) at global: Unit =
   """
   vm "array::unsafeSet[T](Array[T], Int, T)"
 
+def unsafeGet[T](arr: Array[T], index: Int): T = get(arr, index)
+def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit = set(arr, index, value)
+
 // Derived operations:
-
-/// Gets the element of the `arr` at given `index` in constant time,
-/// throwing an `Exception[OutOfBounds]` unless `0 ≤ index < arr.size`.
-def get[T](arr: Array[T], index: Int): T / Exception[OutOfBounds] =
-  if (index >= 0 && index < arr.size) arr.unsafeGet(index)
-  else do raise(OutOfBounds(), "Array index out of bounds: " ++ show(index))
-
-/// Sets the element of the `arr` at given `index` to `value` in constant time,
-/// throwing an `Exception[OutOfBounds]` unless `0 ≤ index < arr.size`.
-def set[T](arr: Array[T], index: Int, value: T): Unit / Exception[OutOfBounds] =
-  if (index >= 0 && index < arr.size) unsafeSet(arr, index, value)
-  else do raise(OutOfBounds(), "Array index out of bounds: " ++ show(index))
 
 /// Builds a new Array of size `size` from a computation `index` which gets an index
 /// and returns a value that will be on that position in the resulting array
