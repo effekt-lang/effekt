@@ -33,7 +33,7 @@ def emptyBuffer[T](capacity: Int): Buffer[T] at global = {
 }
 def arrayBuffer[T](initialCapacity: Int): Buffer[T] at global = {
   // TODO allocate buffer (and array) into a region r.
-  val contents = array::allocate[T](initialCapacity)
+  val contents = array::unsafeAllocate[T](initialCapacity)
   val head = ref(0)
   val tail = ref(0)
 
