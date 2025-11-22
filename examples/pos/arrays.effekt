@@ -5,10 +5,10 @@ import array
 def main() = {
     val arr = array::allocate[String](5);
 
-    arr.unsafeSet(0, "hello");
-    arr.unsafeSet(2, "world");
-    println(arr.unsafeGet(0));
-    println(arr.unsafeGet(2));
+    arr.set(0, "hello");
+    arr.set(2, "world");
+    println(arr.get(0));
+    println(arr.get(2));
 
     val arrWithVals: Array[String] = array(4, "Hello World");
     println(arrWithVals)

@@ -50,7 +50,7 @@ def arrayBuffer[T](initialCapacity: Int): Buffer[T] at global = {
     def read() = {
       if (size() <= 0) None()
       else {
-        val result: T = contents.unsafeGet(head.get)
+        val result: T = contents.get(head.get)
         head.set(mod(head.get + 1, initialCapacity))
         Some(result)
       }
@@ -58,7 +58,7 @@ def arrayBuffer[T](initialCapacity: Int): Buffer[T] at global = {
     def write(el: T) = {
       if (capacity() <= 0) <> // raise(BufferOverflow())
 
-      contents.unsafeSet(tail.get, el)
+      contents.set(tail.get, el)
       tail.set(mod(tail.get + 1, initialCapacity))
     }
   }
