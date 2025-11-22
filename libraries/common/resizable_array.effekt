@@ -21,16 +21,16 @@ def size[T](arr: ResizableArray[T]) = arr.rawSizePtr.get
 
 /// Allocate a new, empty dynamic array with given initial capacity
 def resizableArray[T](capacity: Int): ResizableArray[T] = {
-  ResizableArray(ref(0), ref(allocate(capacity)))
+  ResizableArray(ref(0), ref(unsafeAllocate(capacity)))
 }
 
-/// Allocate a new, empty dynamic array
+/// Aallocatellocate a new, empty dynamic array
 def resizableArray[T](): ResizableArray[T] = resizableArray(8)
 
 /// Throw an OutOfBounds exception if index is not a valid index into arr
 def boundsCheck[T](arr: ResizableArray[T], index: Int): Unit = {
   if (index < 0 || index >= arr.size) {
-    panic(OutOfBounds(), "Array index out of bounds: " ++ show(index))
+    panic("Array index out of bounds")
   }
 }
 
@@ -68,7 +68,7 @@ def unsafeSetCapacity[T](arr: ResizableArray[T], capacity: Int): Unit = {
   with on[OutOfBounds].panic
   val oldRaw = arr.rawContentPtr.get
   if (oldRaw.size != capacity) { 
-    val newRaw = array::allocate(capacity)
+    val newRaw = array::unsafeAllocate(capacity)
     oldRaw.copy(0, newRaw, 0, arr.size)
     arr.rawContentPtr.set(newRaw)
   }

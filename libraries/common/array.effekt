@@ -43,7 +43,7 @@ exit:
 
 /// Allocates a new array of size `size`, keeping its values _undefined_.
 /// Prefer using `array` constructor instead to ensure that values are defined.
-extern def allocate[T](size: Int) at global: Array[T] =
+extern def unsafeAllocate[T](size: Int) at global: Array[T] =
   js "(new Array(${size}))"
   chez "(make-vector ${size})" // creates an array filled with 0s on CS
   llvm """
@@ -59,6 +59,7 @@ extern def allocate[T](size: Int) at global: Array[T] =
     ret %Pos %ret_pos
   """
   vm "array::allocate(Int)"
+  // TODO rename vm primitive
 
 /// Fills a given array in-place.
 def fill[T](arr: Array[T], filler: T): Unit = {
@@ -69,7 +70,7 @@ def fill[T](arr: Array[T], filler: T): Unit = {
 
 /// Creates a new Array of size `size` filled with the value `init`
 def array[T](size: Int, init: T): Array[T] = {
-  val arr = allocate[T](size);
+  val arr = unsafeAllocate[T](size);
   arr.fill(init)
   arr
 }
@@ -77,7 +78,7 @@ def array[T](size: Int, init: T): Array[T] = {
 /// Converts a List `list` to an Array
 def fromList[T](list: List[T]): Array[T] = {
   val listSize = list.size();
-  val arr = allocate(listSize);
+  val arr = unsafeAllocate(listSize);
 
   foreachIndex(list) { (i, head) =>
     arr.set(i, head)
@@ -175,7 +176,7 @@ extern def set[T](arr: Array[T], index: Int, value: T) at global: Unit =
 /// Builds a new Array of size `size` from a computation `index` which gets an index
 /// and returns a value that will be on that position in the resulting array
 def build[T](size: Int) { index: Int => T }: Array[T] = {
-  val arr = allocate[T](size);
+  val arr = unsafeAllocate[T](size);
   each(0, size) { i =>
     set(arr, i, index(i))
   };
@@ -186,7 +187,7 @@ def build[T](size: Int) { index: Int => T }: Array[T] = {
 ///
 /// O(N + M)
 def resize[T](source: Array[T], size: Int): Array[T] = {
-  val target = allocate(size)
+  val target = unsafeAllocate(size)
   val n = min(source.size, target.size)
   def go(i: Int): Array[T] =
     if (i < n) {
@@ -331,7 +332,7 @@ def map[A](arr: Array[A]) { f: A => A }: Unit = {
 ///
 /// O(N)
 def mapped[A, B](arr: Array[A]) { f: A => B }: Array[B] = {
-  val res = allocate(arr.size)
+  val res = unsafeAllocate(arr.size)
   arr.foreachIndex { (idx, elem) =>
     res.set(idx, f(arr.get(idx)))
   }
@@ -359,7 +360,7 @@ def reverse[A](arr: Array[A]): Unit = {
 /// O(N)
 def reversed[A](arr: Array[A]): Array[A] = {
   val size = arr.size()
-  val result = allocate[A](size)
+  val result = unsafeAllocate[A](size)
   
   // Copy elements in reverse order to new array
   each(0, size) { i =>
@@ -442,7 +443,7 @@ def count[A](arr: Array[A]) { predicate: A => Bool }: Int = {
 /// O(N)
 def take[A](arr: Array[A], n: Int): Array[A] = {
   val len = min(max(0, n), arr.size)
-  val result = allocate[A](len)
+  val result = unsafeAllocate[A](len)
   each(0, len) { i => 
     result.set(i, arr.get(i))
   }
@@ -456,7 +457,7 @@ def take[A](arr: Array[A], n: Int): Array[A] = {
 def drop[A](arr: Array[A], n: Int): Array[A] = {
   val start = min(max(0, n), arr.size)
   val len = arr.size - start
-  val result = allocate[A](len)
+  val result = unsafeAllocate[A](len)
   each(0, len) { i =>
     result.set(i, arr.get(i + start))
   }
@@ -471,7 +472,7 @@ def sliced[A](arr: Array[A], start: Int, end: Int): Array[A] = {
   val validStart = min(max(0, start), arr.size)
   val validEnd = min(max(validStart, end), arr.size)
   val len = validEnd - validStart
-  val result = allocate[A](len)
+  val result = unsafeAllocate[A](len)
   each(0, len) { i =>
     result.set(i, arr.get(i + validStart))
   }
@@ -484,7 +485,7 @@ def sliced[A](arr: Array[A], start: Int, end: Int): Array[A] = {
 /// O(min(N, M))
 def zipped[A, B](this: Array[A], other: Array[B]): Array[(A, B)] = {
   val len = min(this.size, other.size)
-  val result = allocate[(A, B)](len)
+  val result = unsafeAllocate[(A, B)](len)
   each(0, len) { i =>
     result.set(i, (this.get(i), other.get(i)))
   }
@@ -497,7 +498,7 @@ def zipped[A, B](this: Array[A], other: Array[B]): Array[(A, B)] = {
 /// O(min(N, M))
 def zippedWith[A, B, C](this: Array[A], other: Array[B]) { f: (A, B) => C }: Array[C] = {
   val len = min(this.size, other.size)
-  val result = allocate[C](len)
+  val result = unsafeAllocate[C](len)
   each(0, len) { i =>
     result.set(i, f(this.get(i), other.get(i)))
   }
@@ -509,8 +510,8 @@ def zippedWith[A, B, C](this: Array[A], other: Array[B]) { f: (A, B) => C }: Arr
 ///
 /// O(N)
 def unzipped[A, B](arr: Array[(A, B)]): (Array[A], Array[B]) = {
-  val arr1 = allocate(arr.size)
-  val arr2 = allocate(arr.size)
+  val arr1 = unsafeAllocate(arr.size)
+  val arr2 = unsafeAllocate(arr.size)
   arr.foreachIndex { (idx, tpl) =>
     val (x, y) = tpl
     arr1.set(idx, x)
@@ -695,7 +696,7 @@ def collect[A] { stream: () => Unit / emit[A] }: Array[A] =
 namespace returning {
   def collect[A, R] { stream: () => R / emit[A] }: (R, Array[A]) = {
     var i = 0
-    var a = allocate(1)
+    var a = unsafeAllocate(1)
     try {
       (stream(), a.resize(i))
     } with emit[A] { (v) =>

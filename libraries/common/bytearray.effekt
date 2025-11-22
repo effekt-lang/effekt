@@ -22,12 +22,12 @@ extern type ByteArray
   // = js "Uint8Array"
   // = chez "bytevector"
 
-/// Allocates a new bytearray with the given `size`, its values are undefined.
+/// Allocates a new bytearray with the given `size`, its values are zero bytes.
 extern def allocate(size: Int) at global: ByteArray =
   js "(new Uint8Array(${size}))"
   llvm """
     %object_size = add i64 ${size}, 16
-    %object_alloc = tail call noalias ptr @malloc(i64 noundef %object_size)
+    %object_alloc = tail call noalias ptr @calloc(i64 %object_size, i64 1)
     store i64 0, ptr %object_alloc, align 8
     %object_data_ptr = getelementptr inbounds i8, ptr %object_alloc, i64 8
     store ptr @bytearray_erase_noop, ptr %object_data_ptr, align 8
