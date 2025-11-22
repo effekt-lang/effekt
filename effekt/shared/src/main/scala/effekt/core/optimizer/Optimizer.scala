@@ -30,23 +30,24 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     if !Context.config.optimize() then return tree;
 
-    // (2) lift static arguments
-    tree = StaticArguments.transform(mainSymbol, tree)
-
     val inliningPolicy = UniqueJumpSimple(
-      maxInlineSize = 150
+      maxInlineSize = 15
     )
-    def normalize(m: ModuleDecl) = {
-      val anfed = BindSubexpressions.transform(m)
-      val normalized = NewNormalizer().run(anfed)
-      val inlined = Inliner(inliningPolicy, Reachable(Set(mainSymbol), normalized)).run(normalized)
+    def normalize(m: ModuleDecl) = Context.timed("new-normalizer", source.name) {
+      val staticArgs = StaticArguments.transform(mainSymbol, m)
+      val normalized = NewNormalizer().run(staticArgs)
+      val reachability = Reachable(Set(mainSymbol), normalized)
+      val inlined = Inliner(inliningPolicy, reachability).run(normalized)
       val live = Deadcode.remove(mainSymbol, inlined)
       val tailRemoved = RemoveTailResumptions(live)
-      val contified = DirectStyle.rewrite(tailRemoved)
-      contified
+      //val contified = DirectStyle.rewrite(tailRemoved)
+      tailRemoved
     }
 
-    tree = Context.timed("new-normalizer-1", source.name) { normalize(tree) }
-    tree = Context.timed("new-normalizer-2", source.name) { normalize(tree) }
+    tree = normalize(tree)
+    tree = normalize(tree)
+    tree = normalize(tree)
+    tree = normalize(tree)
+    //util.trace(tree)
     tree
 }
