@@ -3,7 +3,7 @@ module examples/pos/arrays
 import array
 
 def main() = {
-    val arr = array::allocate[String](5);
+    val arr = array[String](5, "");
 
     arr.set(0, "hello");
     arr.set(2, "world");

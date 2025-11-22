@@ -255,14 +255,14 @@ def bench() = {
   val scene = exampleScene();
 
   measure(5, 10) {
-    val buffer: Buffer = array::allocate(scene.width * scene.height * 4);
+    val buffer: Buffer = array::unsafeAllocate(scene.width * scene.height * 4);
     render(scene, buffer)
   }
 }
 
 def main() = {
   val scene = exampleScene();
-  val buffer: Buffer = array::allocate(scene.width * scene.height * 4);
+  val buffer: Buffer = array::unsafeAllocate(scene.width * scene.height * 4);
   render(scene, buffer);
 
   var i = 0;

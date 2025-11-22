@@ -71,7 +71,7 @@ def run(n: Int) = {
   val sun = makeBody(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
 
   def createBodies(): Array[Body] = {
-    val bodies = allocate[Body](5)
+    val bodies = unsafeAllocate[Body](5)
 
     bodies.set(0, sun);
     bodies.set(1, jupiter);
