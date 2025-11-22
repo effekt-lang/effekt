@@ -16,6 +16,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(t: ModuleDecl): Document =
     pretty(toDoc(t), 4)
 
+  def format(t: Toplevel): Document =
+    pretty(toDoc(t), 4)
+
   def format(defs: List[Toplevel]): String =
     pretty(toDoc(defs), 60).layout
 
@@ -60,8 +63,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     vsep(definitions map toDoc, semi)
 
   def toDoc(e: Extern): Doc = e match {
-    case Extern.Def(id, tps, cps, vps, bps, ret, capt, bodies) =>
-      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> (bodies match {
+    case Extern.Def(id, tps, cps, vps, bps, ret, capt, targetBody, vmBody) =>
+      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> (targetBody match {
         case ExternBody.StringExternBody(ff, body) => toDoc(ff) <+> toDoc(body)
         case ExternBody.Unsupported(err) => s"unsupported(${err.toString})"
       })
@@ -164,7 +167,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(s: Stmt): Doc = s match {
     // requires a block to be readable:
-    case _ : (Stmt.Def | Stmt.Let | Stmt.Val | Stmt.Alloc | Stmt.Var | Stmt.Get | Stmt.Put) => block(toDocStmts(s))
+    case _ : (Stmt.Def | Stmt.Let | Stmt.ImpureApp | Stmt.Val | Stmt.Alloc | Stmt.Var | Stmt.Get | Stmt.Put) => block(toDocStmts(s))
     case other => toDocStmts(s)
   }
 

@@ -28,6 +28,21 @@ trait CoreTests extends munit.FunSuite {
         |""".stripMargin
     })
 
+  def shouldBeEqual(obtained: Toplevel, expected: Toplevel, clue: => Any)(using Location) =
+    assertEquals(obtained, expected, {
+      s"""${clue}
+         |=====================
+         |Got:
+         |----
+         |${effekt.core.PrettyPrinter.format(obtained).layout}
+         |
+         |Expected:
+         |---------
+         |${effekt.core.PrettyPrinter.format(expected).layout}
+         |
+         |""".stripMargin
+    })
+
   def shouldBeEqual(obtained: Stmt, expected: Stmt, clue: => Any)(using Location) =
     assertEquals(obtained, expected, {
       s"""${clue}
@@ -50,6 +65,7 @@ trait CoreTests extends munit.FunSuite {
     val renamer = TestRenamer(names, "$")
     shouldBeEqual(renamer(obtained), renamer(expected), clue)
   }
+
   def assertAlphaEquivalentStatements(obtained: Stmt,
                             expected: Stmt,
                             clue: => Any = "values are not alpha-equivalent",

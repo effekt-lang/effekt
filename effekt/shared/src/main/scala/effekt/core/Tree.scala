@@ -1,6 +1,7 @@
 package effekt
 package core
 
+import effekt.core.ExternBody.StringExternBody
 import effekt.source.FeatureFlag
 import effekt.util.Structural
 import effekt.util.messages.INTERNAL_ERROR
@@ -127,7 +128,19 @@ case class Property(id: Id, tpe: BlockType) extends Tree
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody)
+  case Def(
+    id: Id,
+    tparams: List[Id],
+    cparams: List[Id],
+    vparams: List[ValueParam],
+    bparams: List[BlockParam],
+    ret: ValueType,
+    annotatedCapture: Captures,
+    /* Extern body for the chosen compilation target */
+    targetBody: ExternBody,
+    /* Extern body for the vm target, if any */
+    vmBody: Option[StringExternBody]
+  )
   case Include(featureFlag: FeatureFlag, contents: String)
 }
 sealed trait ExternBody extends Tree
@@ -211,6 +224,13 @@ enum Block extends Tree {
   val capt: Captures = Type.inferCapt(this)
 
   def show: String = util.show(this)
+
+  this match {
+    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => ()
+    case Block.BlockLit(tparams, cparams, vparams, bparams, body) => assert(cparams.size == bparams.size)
+    case Block.Unbox(pure) => ()
+    case Block.New(impl) => ()
+  }
 }
 export Block.*
 

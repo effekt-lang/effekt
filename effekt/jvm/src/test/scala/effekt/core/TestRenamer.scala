@@ -14,13 +14,10 @@ import effekt.context.Context
  *
  * @param C the context is used to copy annotations from old symbols to fresh symbols
  */
-class TestRenamer(names: Names = Names(Map.empty), prefix: String = "") extends core.Tree.Rewrite {
+class TestRenamer(names: Names = Names(Map.empty), prefix: String = "", defaultScopes: List[Map[Id, Id]] = List.empty) extends core.Tree.Rewrite {
 
   // list of scopes that map bound symbols to their renamed variants.
-  private var scopes: List[Map[Id, Id]] = List.empty
-
-  // Here we track ALL renamings
-  var renamed: Map[Id, Id] = Map.empty
+  private var scopes: List[Map[Id, Id]] = defaultScopes
 
   private var suffix: Int = 0
 
@@ -30,16 +27,17 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "") extends 
     names.idFor(uniqueName)
 
   def withBindings[R](ids: List[Id])(f: => R): R =
-    val before = scopes
-    try {
-      val newScope = ids.map { x => x -> freshIdFor(x) }.toMap
-      scopes = newScope :: scopes
-      renamed = renamed ++ newScope
-      f
-    } finally { scopes = before }
+    withMapping(ids.map { x => x -> freshIdFor(x) }.toMap)(f)
 
   /** Alias for withBindings(List(id)){...} */
   def withBinding[R](id: Id)(f: => R): R = withBindings(List(id))(f)
+
+  def withMapping[R](ids: Map[Id, Id])(f: => R): R =
+    val before = scopes
+    try {
+      scopes = ids :: scopes
+      f
+    } finally { scopes = before }
 
   // free variables are left untouched
   override def id: PartialFunction[core.Id, core.Id] = {
@@ -75,14 +73,21 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "") extends 
 
     case core.Var(ref, init, capt, body) =>
       val resolvedInit = rewrite(init)
-      val resolvedCapt = rewrite(capt)
-      withBinding(ref) { core.Var(rewrite(ref), resolvedInit, resolvedCapt, rewrite(body)) }
+      // TODO: is this how we want to treat captures here?
+      val resolvedCapt = freshIdFor(capt)
+      withBinding(ref){ withMapping(Map(capt -> resolvedCapt)) { core.Var(rewrite(ref), resolvedInit, resolvedCapt, rewrite(body)) }}
 
     case core.Get(id, tpe, ref, capt, body) =>
       val resolvedRef = rewrite(ref)
       val resolvedCapt = rewrite(capt)
       withBinding(id) { core.Get(rewrite(id), rewrite(tpe), resolvedRef, resolvedCapt, rewrite(body)) }
 
+    case core.App(callee, targs, vargs, bargs) =>
+      val resolvedCallee = rewrite(callee)
+      val resolvedTargs = targs map rewrite
+      val resolvedVargs = vargs map rewrite
+      val resolvedBargs = bargs map rewrite
+      core.App(resolvedCallee, resolvedTargs, resolvedVargs, resolvedBargs)
   }
 
   override def block: PartialFunction[Block, Block] = {
@@ -91,6 +96,32 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "") extends 
         Block.BlockLit(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite,
           rewrite(body))
       }
+    case Block.BlockVar(id: Id, annotatedTpe: BlockType, annotatedCapt: Captures) => {
+      withBinding(id) {
+        val idOut = rewrite(id)
+        val annotatedTpeOut = rewrite(annotatedTpe)
+        val annotatedCaptOut = rewrite(annotatedCapt)
+        Block.BlockVar(rewrite(id), rewrite(annotatedTpe), rewrite(annotatedCapt))
+      }
+    }
+  }
+
+  override def rewrite(t: BlockType): BlockType = t match {
+    case BlockType.Function(tparams, cparams, vparams, bparams, result: ValueType) =>
+      // TODO: is this how we want to treat captures here?
+      val resolvedCapt = cparams.map(id => Map(id -> freshIdFor(id))).reduceOption(_ ++ _).getOrElse(Map())
+      withBindings(tparams) {
+        withMapping(resolvedCapt) {
+          BlockType.Function(
+            tparams.map(rewrite),
+            resolvedCapt.values.toList.map(rewrite),
+            vparams.map(rewrite),
+            bparams.map(rewrite),
+            rewrite(result)
+          )
+      }}
+    case BlockType.Interface(name, targs) =>
+      BlockType.Interface(name, targs map rewrite)
   }
 
   override def rewrite(o: Operation): Operation = o match {
@@ -103,6 +134,11 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "") extends 
           bparams map rewrite,
           rewrite(body))
       }
+  }
+
+  def apply(m: core.Toplevel): core.Toplevel = {
+    suffix = 0
+    rewrite(m)
   }
 
   def apply(m: core.ModuleDecl): core.ModuleDecl =
