@@ -56,22 +56,10 @@ def set[T](arr: ResizableArray[T], index: Int, value: T): Unit = {
 /// O(1)
 def swap[T](arr: ResizableArray[T], index1: Int, index2: Int): Unit = {
   arr.boundsCheck(max(index1, index2))
-  arr.unsafeSwap(index1, index2)
-}
-
-/// Change the dynamic to have exactly the given capacity
-///
-/// precondition: given capacity is at least the size of the array
-///
-/// O(n)
-def unsafeSetCapacity[T](arr: ResizableArray[T], capacity: Int): Unit = {
-  with on[OutOfBounds].panic
-  val oldRaw = arr.rawContentPtr.get
-  if (oldRaw.size != capacity) { 
-    val newRaw = array::unsafeAllocate(capacity)
-    oldRaw.copy(0, newRaw, 0, arr.size)
-    arr.rawContentPtr.set(newRaw)
-  }
+  val raw = arr.rawContentPtr.get
+  val tmp = raw.get(index1)
+  raw.set(index1, raw.get(index2))
+  raw.set(index2, tmp)
 }
 
 /// Change the resizable array to have exactly the given capacity.
@@ -80,9 +68,14 @@ def unsafeSetCapacity[T](arr: ResizableArray[T], capacity: Int): Unit = {
 /// O(n)
 def setCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / Exception[OutOfBounds] = {
   if (arr.size > capacity) {
-    do raise(OutOfBounds(), "Cannot change capacity of ResizableArray to " ++ capacity.show ++ " below size " ++ arr.size.show)
+    panic("Cannot change capacity of ResizableArray.")
   }
-  arr.unsafeSetCapacity(capacity)
+  val oldRaw = arr.rawContentPtr.get
+  if (oldRaw.size != capacity) { 
+    val newRaw = array::unsafeAllocate(capacity)
+    oldRaw.copy(0, newRaw, 0, arr.size)
+    arr.rawContentPtr.set(newRaw)
+  }
 }
 
 /// If the shrinkThreshold is reached, shrink by growFactor, otherwise do nothing
@@ -91,7 +84,7 @@ def setCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / Exception[OutO
 def maybeShrink[T](arr: ResizableArray[T]): Unit = {
   if(arr.size.toDouble < arr.rawContentPtr.get.size.toDouble * shrinkThreshold) {
     val newCap = max(arr.size, (arr.rawContentPtr.get.size.toDouble / growFactor).ceil)
-    arr.unsafeSetCapacity(newCap)
+    arr.setCapacity(newCap)
   }
 }
 
