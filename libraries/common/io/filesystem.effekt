@@ -102,7 +102,7 @@ def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[I
       push(0, buffer.size)
       offset = 0
     }
-    buffer.unsafeSet(offset, byte)
+    buffer.set(offset, byte)
     offset = offset + 1
     resume(())
   }
@@ -135,7 +135,7 @@ def readFile[R](path: String) { reader: () => R / read[Byte] }: R / Exception[IO
         pull()
         offset = 0
       }
-      val byte = buffer.unsafeGet(offset)
+      val byte = buffer.get(offset)
       offset = offset + 1
       return byte
     }
