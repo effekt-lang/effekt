@@ -31,7 +31,7 @@ def run(n: Int) = {
   def buildTreeDepth(depth: Int) { rand: Random }: Tree = {
     count.set(count.get + 1);
     if (depth == 1) {
-      Leaf(array(mod(rand.next, 10) + 1, 0))
+      Leaf(array::allocateZeros(mod(rand.next, 10) + 1))
     } else {
       Node(
         buildTreeDepth(depth - 1){ rand },
