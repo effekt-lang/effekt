@@ -90,10 +90,16 @@ def findMin[T](heap: Heap[T]): T = {
 ///
 /// O(log n)
 def deleteMin[T](heap: Heap[T]): T = {
-  val res = heap.rawContents.get(0)
-  heap.rawContents.set(0, heap.rawContents.popRight())
-  internal::sinkDown(heap, 0)
-  res
+  val arr = heap.rawContents
+  val res = arr.get(0)
+  if (arr.size == 1) {
+    arr.popRight()
+    res
+  } else {
+    arr.set(0, arr.popRight())
+    internal::sinkDown(heap, 0)
+    res
+  }
 }
 
 /// Number of elements in the heap
