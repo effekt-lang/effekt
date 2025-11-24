@@ -11,13 +11,8 @@ typedef struct Slot
     void (*eraser)(void *object);
 } Slot;
 
-/**
- * Sentinel-Slot: Fakes a block with a RC=1. It is used to mark the end of the To-Do-List.
- * But it is not a real heap-object, because it is not 8-byte aligned.
- */
-#define SENTINEL_SLOT ((Slot*)1)
-
-static Slot* todoList = SENTINEL_SLOT; // Head of the To-Do-List
+static bool DEBUG = true;
+static Slot* todoList = NULL; // Head of the To-Do-List
 
 static uint8_t* nextUnusedSlot = NULL; // Pointer to the next unused Slot
 
@@ -38,6 +33,11 @@ void initializeMemory() {
         -1,                            // No file descriptor
         0                              // Offset
     );
+
+    if (DEBUG) {
+        size_t* endOfChunk = nextUnusedSlot + totalAllocationSize;
+        printf("[init] Memory initialized: %p - %p\n", (void*)nextUnusedSlot, (void*)endOfChunk);
+    }
 }
 
 /**
@@ -47,14 +47,17 @@ void initializeMemory() {
  */
 void* acquire() {
     // 1. If there a slot to reuse...
-    if (todoList != SENTINEL_SLOT) {
+    if (todoList != NULL) {
 
         // ...pop it from to-do-list
         Slot* reusedSlot = todoList;
         todoList = reusedSlot->next;
 
         // Call the eraser function on it. After that, it is safe to reuse it again.
-        reusedSlot->eraser(reusedSlot);
+//        reusedSlot->eraser(reusedSlot);
+
+
+        if (DEBUG) printf("[acquire] Reusing block: %p\n", (void*)reusedSlot);
 
         return reusedSlot;
     }
@@ -62,6 +65,8 @@ void* acquire() {
     // 2. Fallback - we bump-allocate a new slot
     Slot* fresh = (Slot*)nextUnusedSlot;
     nextUnusedSlot += slotSize;
+
+    if (DEBUG) printf("[acquire] New block: %p\n", (void*)fresh);
     return fresh;
 }
 
@@ -70,6 +75,10 @@ void* acquire() {
  * Pushes a slot on the top of the To-Do-List.
  */
 void release(void* ptr) {
+    if (DEBUG) {
+        printf("[release] Freed block: %p\n", ptr);
+    }
+
     Slot* slot = (Slot*)ptr;
     slot->next = todoList;
     todoList = slot;

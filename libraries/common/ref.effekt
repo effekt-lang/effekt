@@ -11,22 +11,12 @@ extern js """
 
 extern llvm """
 define void @c_ref_erase(%Object %object) {
-
-  entry:
-    %objectReferenceCount = getelementptr %Header, %Object %object, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !noalias !24, !alias.scope !14
-    switch %ReferenceCount %referenceCount, label %eraseChildren [i64 0, label %release]
-
-  release:
-    call ccc void @release(%Object %object)
-    ret void
-
-  eraseChildren:
-    %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
-    %environment = getelementptr i8, ptr %object, i64 %headerSize
-    %field = load %Pos, ptr %environment, align 8
-    call void @erasePositive(%Pos %field)
-    ret void
+  %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
+  %environment = getelementptr i8, ptr %object, i64 %headerSize
+  %field = load %Pos, ptr %environment, align 8
+  call void @release(%Object %object)
+  call void @erasePositive(%Pos %field)
+  ret void
 }
 """
 
