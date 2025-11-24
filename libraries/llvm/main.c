@@ -11,7 +11,6 @@
 
 #include "types.c"
 #include "bytearray.c"
-#include "cMalloc.c"
 #include "io.c"
 #include "panic.c"
 
