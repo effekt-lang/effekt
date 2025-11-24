@@ -18,8 +18,6 @@ extern type Array[T]
  */
 
 extern llvm """
-declare noalias ptr @calloc(i64, i64)
-
 define void @array_erase_fields(ptr %array_pointer) {
 entry:
     %data_pointer = getelementptr inbounds i64, ptr %array_pointer, i64 1
