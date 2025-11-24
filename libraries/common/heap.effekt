@@ -24,7 +24,7 @@ namespace internal {
 
     def go(idx: Int): Unit = {
       if (idx > 0 and (heap.cmp)(arr.get(parent(idx)), arr.get(idx)) is Greater()) {
-        arr.unsafeSwap(parent(idx), idx)
+        arr.swap(parent(idx), idx)
         go(parent(idx))
       }
     }
@@ -45,22 +45,22 @@ namespace internal {
         if (l < v && r < v) {
           // swap with the smaller one
           if (l < r) {
-            arr.unsafeSwap(left(idx), idx)
+            arr.swap(left(idx), idx)
             go(left(idx))
           } else {
-            arr.unsafeSwap(right(idx), idx)
+            arr.swap(right(idx), idx)
             go(right(idx))
           }
         } else if (l < v) {
-          arr.unsafeSwap(left(idx), idx)
+          arr.swap(left(idx), idx)
           go(left(idx))
         } else if (r < v) {
-          arr.unsafeSwap(right(idx), idx)
+          arr.swap(right(idx), idx)
           go(right(idx))
         }
       } else if (left(idx) < arr.size) {
         if (arr.get(left(idx)) < arr.get(idx)) {
-          arr.unsafeSwap(left(idx), idx)
+          arr.swap(left(idx), idx)
           go(left(idx))
         }
       } // else: we are at the bottom
@@ -73,22 +73,23 @@ namespace internal {
 ///
 /// O(log n) worst case if capacity suffices, O(1) average
 def insert[T](heap: Heap[T], value: T): Unit = {
-  with on[OutOfBounds].panic();
   val idx = heap.rawContents.add(value)
   internal::bubbleUp(heap, idx)
 }
 
 /// find and return (but not remove) the minimal element in this heap
+/// panics when heap is empty
 ///
 /// O(1)
-def findMin[T](heap: Heap[T]): T / Exception[OutOfBounds] = {
+def findMin[T](heap: Heap[T]): T = {
   heap.rawContents.get(0)
 }
 
 /// find and remove the minimal element in this heap
+/// panics when heap is empty
 ///
 /// O(log n)
-def deleteMin[T](heap: Heap[T]): T / Exception[OutOfBounds] = {
+def deleteMin[T](heap: Heap[T]): T = {
   val res = heap.rawContents.get(0)
   heap.rawContents.set(0, heap.rawContents.popRight())
   internal::sinkDown(heap, 0)
