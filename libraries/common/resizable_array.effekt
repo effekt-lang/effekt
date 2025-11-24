@@ -27,7 +27,7 @@ def resizableArray[T](capacity: Int): ResizableArray[T] = {
 /// Aallocatellocate a new, empty dynamic array
 def resizableArray[T](): ResizableArray[T] = resizableArray(8)
 
-/// Throw an OutOfBounds exception if index is not a valid index into arr
+/// Panics if index is not a valid index into arr
 def boundsCheck[T](arr: ResizableArray[T], index: Int): Unit = {
   if (index < 0 || index >= arr.size) {
     panic("Array index out of bounds")
@@ -66,7 +66,7 @@ def swap[T](arr: ResizableArray[T], index1: Int, index2: Int): Unit = {
 /// This only changes the size of the backing array, not the `size`.
 ///
 /// O(n)
-def setCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / Exception[OutOfBounds] = {
+def setCapacity[T](arr: ResizableArray[T], capacity: Int): Unit = {
   if (arr.size > capacity) {
     panic("Cannot change capacity of ResizableArray.")
   }
