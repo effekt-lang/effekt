@@ -29,14 +29,37 @@ trait TypeUnifier {
   }
   def unify(c1: Capture, c2: Capture, ctx: ErrorContext): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)), ctx)
 
+  def isZeroLike(tpe: ValueType): Boolean = tpe match {
+    case ValueType.ValueTypeApp(constructor, args) => constructor match {
+      case TypeConstructor.DataType(name, tparams, constructors, decl) => constructors.isEmpty
+      case TypeConstructor.Record(name, tparams, constructor, decl) => false
+      case TypeConstructor.ExternType(name, tparams, decl) => false
+      case TypeConstructor.ErrorValueType(name, tparams, decl) => false
+    }
+    case ValueType.BoxedType(tpe, capture) => false
+    case ValueType.ValueTypeRef(tvar) => false
+  }
+
+  def isOneLike(tpe: ValueType): Boolean = tpe match {
+    case ValueType.ValueTypeApp(constructor, args) => constructor match {
+      case TypeConstructor.DataType(name, tparams, constructors, decl) => constructors match {
+        case head :: Nil => head.fields.isEmpty && tparams.isEmpty && head.tparams.isEmpty
+        case _ => false
+      }
+      case TypeConstructor.Record(name, tparams, constructor, decl) => constructor.fields.isEmpty && constructor.tparams.isEmpty && tparams.isEmpty
+      case TypeConstructor.ExternType(name, tparams, decl) => false
+      case TypeConstructor.ErrorValueType(name, tparams, decl) => false
+    }
+    case ValueType.BoxedType(tpe, capture) => false
+    case ValueType.ValueTypeRef(tvar) => false
+  }
+
   def unifyValueTypes(tpe1: ValueType, tpe2: ValueType, ctx: ErrorContext): Unit = (tpe1, tpe2, ctx.polarity) match {
     case (t, s, _) if t == s => ()
 
+    // TODO move to stdlib and drop these
     case (_, TTop, Covariant) => ()
     case (TBottom, _, Covariant) => ()
-
-    case (TTop, _, Contravariant) => ()
-    case (_, TBottom, Contravariant) => ()
 
     case (ValueTypeRef(s: UnificationVar), t: ValueType, Covariant) => requireUpperBound(s, t, ctx)
     case (s: ValueType, ValueTypeRef(t: UnificationVar), Covariant) => requireLowerBound(t, s, ctx)
@@ -46,6 +69,13 @@ trait TypeUnifier {
 
     case (ValueTypeRef(s: UnificationVar), t: ValueType, Invariant) => requireEqual(s, t, ctx)
     case (s: ValueType, ValueTypeRef(t: UnificationVar), Invariant) => requireEqual(t, s, ctx)
+
+    case (_, top, Covariant) if isOneLike(top) => ()
+    case (bot, _, Covariant) if isZeroLike(bot) => ()
+
+    // coercions can only be applied in covariant contexts
+    //    case (top, _, Contravariant) if isOneLike(top) => ()
+    //    case (_, bot, Contravariant) if isZeroLike(bot) => ()
 
     // For now, we treat all type constructors as invariant.
     case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _) =>
