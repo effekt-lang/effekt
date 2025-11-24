@@ -17,7 +17,7 @@ typedef struct Slot
  */
 #define SENTINEL_SLOT ((Slot*)1)
 
-static bool DEBUG = true;
+static bool DEBUG = false;
 static Slot* todoList = SENTINEL_SLOT; // Head of the To-Do-List
 
 static uint8_t* nextUnusedSlot = NULL; // Pointer to the next unused Slot
