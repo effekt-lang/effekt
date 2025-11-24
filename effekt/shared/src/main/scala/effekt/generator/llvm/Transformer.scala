@@ -533,7 +533,21 @@ object Transformer {
     C.erasers.getOrElseUpdate((types, kind), {
       kind match {
         case ObjectEraser =>
-          createEraserForNormalObjects(freshEnvironment)
+          val eraser = ConstantGlobal(freshName("eraser"));
+          defineFunction(eraser.name, List(Parameter(objectType, "object"))) {
+            emit(Comment(s"${kind} eraser, ${freshEnvironment.length} free variables"))
+
+            // Use call @objectEnvironment to get environment pointer
+            emit(Call("environment", Ccc(), environmentType, ConstantGlobal("objectEnvironment"), List(LocalReference(objectType, "object"))));
+
+            // TODO avoid unnecessary loads
+            loadEnvironmentAt(LocalReference(environmentType, "environment"), freshEnvironment, Object);
+            eraseValues(freshEnvironment, Set());
+
+            emit(Call("", Ccc(), VoidType(), ConstantGlobal("release"), List(LocalReference(objectType, "object"))));
+            RetVoid()
+          };
+          eraser
         case StackEraser | StackFrameEraser =>
           val eraser = ConstantGlobal(freshName("eraser"));
           defineFunction(eraser.name, List(Parameter(stackPointerType, "stackPointer"))) {
