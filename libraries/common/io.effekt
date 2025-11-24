@@ -4,13 +4,11 @@ module io
 // Event Loop
 // ----------
 
-type Task[T] = () => T at {io, async, global}
-
 extern llvm """
   declare void @c_yield(%Stack)
 """
 
-extern def spawn(task: Task[Unit]) at async: Unit =
+extern def spawn[T](task: () => T at {io, async, global}) at async: Unit =
   js "$effekt.capture(k => { setTimeout(() => k($effekt.unit), 0); return $effekt.run(${task}) })"
   llvm """
     call void @c_yield(%Stack %stack)
