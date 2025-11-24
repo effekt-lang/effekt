@@ -22,8 +22,13 @@ declare noalias ptr @calloc(i64, i64)
 
 define void @array_erase(%Object %object) {
 entry:
-    %data_pointer = getelementptr inbounds i64, ptr %object, i64 1
-    %size = load i64, ptr %object, align 8
+    ; header of arrays looks like that: rc (0), eraser (1), size (2), data (3)
+    %size_pointer = getelementptr inbounds i64, ptr %object, i64 2
+    %size = load i64, ptr %size_pointer, align 8
+
+    ; data starts after 3 entries in our object
+    %data_pointer = getelementptr inbounds ptr, ptr %object, i64 3
+
     %size_eq_0 = icmp eq i64 %size, 0
     br i1 %size_eq_0, label %exit, label %loop
 loop:
@@ -32,12 +37,13 @@ loop:
     %element_pointer = getelementptr inbounds %Pos, ptr %data_pointer, i64 %loop_phi
     %element = load %Pos, ptr %element_pointer
 
-    call void @erasePositive(%Pos %element)
+    call void @erasePositive(%Pos %element) ; we erase each child of the array
+
     %inc = add nuw i64 %loop_phi, 1
     %cmp = icmp ult i64 %inc, %size
     br i1 %cmp, label %loop, label %exit
 exit:
-    call void @free(%Object %object)
+    call void @free(%Object %object)   ; we delete the array
     ret void
 }
 """

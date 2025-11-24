@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-
+#include <uv.h>
 
 /**
  * @brief Block-Struktur für die Freelist.
@@ -105,7 +105,7 @@ void release(void* ptr)
 *
 */
 void assertNumberLeakedBlocks(int expected) {
-    // Count how many blocks are in the freelist
+    // Count how many blocks are in the todoList
     size_t numberOfElementsInFreeList = 0;
     for (const Block* b = freeList; b != NULL; b = b->next) {
         numberOfElementsInFreeList++;
@@ -128,38 +128,29 @@ void assertNumberLeakedBlocks(int expected) {
     }
 }
 
+// If there are any open libuv handles or requests, this function will block until they are closed.
+// This might happen if the program has asynchronous operations (e.g. read, write file) that are not finished.
+// This is necessary to ensure that all memory is freed.
+void assertThatAllAsynchronousOperationsAreFinished() {
+    // 1. Complete all open libuv operations. This blocks until there are no more active handles or requests open.
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+
+    // 2. Now the loop can be closed.
+    int close_result = uv_loop_close(uv_default_loop());
+    if (close_result != 0) {
+        printf("Error: uv_loop_close still detected some active handles\n");
+        exit(1);
+    }
+}
+
+
 /**
 * Works as a Unit-Test, if all used blocks are freed at the end of the program.
 * If not, we print an error message, making test fail.
 */
 void testIfAllBlocksAreFreed()
 {
-//    assertNumberLeakedBlocks(0);
+//    assertThatAllAsynchronousOperationsAreFinished();   // closing all open handles
+//    assertLeakFree();                  // testing malloc & calloc & free
+//    assertNumberLeakedBlocks(0);    // testing aquire & release
 }
-
-// small testprogram to test the allocator
-//int main(void)
-//{
-//    cInitializeMemory();
-//    assertNumberLeakedBlocks(0);
-//
-//    void* a = acquire((uint8_t)1024);
-//    assertNumberLeakedBlocks(1);
-//
-//    void* b = acquire((uint8_t)1024);
-//    assertNumberLeakedBlocks(2);
-//
-//    release(a);
-//    assertNumberLeakedBlocks(1);
-//
-//    release(b);
-//    assertNumberLeakedBlocks(0);
-//
-//    void* c = acquire((uint8_t)1024); // should reuse a
-//    assertNumberLeakedBlocks(1);
-//
-//    release(c);
-//    testIfAllBlocksAreFreed();
-//
-//    return 0;
-//}
