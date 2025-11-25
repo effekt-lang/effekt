@@ -24,7 +24,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   private final val FUNCTION_NAME: String = "show"
 
-  case class ShowContext(showNames: collection.mutable.Map[ValueType, Id], showDefns: collection.mutable.Map[ValueType, Toplevel.Def], tparamLookup: collection.mutable.Map[Id, ValueType], backend: String) {
+  case class ShowContext(showNames: collection.mutable.Map[ValueType, Id], showDefns: collection.mutable.Map[ValueType, Toplevel.Def], tparamLookup: collection.mutable.Map[Id, ValueType]) {
 
     def getAllShowDef(using ShowContext)(using DeclarationContext): List[Toplevel.Def] =
       showDefns.map(_._2).toList
@@ -47,13 +47,8 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   override def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = input match {
     case CoreTransformed(source, tree, mod, core) => {
       // 3. Synthesize `show` definitions, create (ValueType -> (show) Id) map for context
-      // 3.1 figure out which backend we are generating for
-      val backend: String = core.externs.collect {
-        case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, 
-          StringExternBody(featureFlag: FeatureFlag.NamedFeatureFlag, contents)) => featureFlag.id
-      }(0)
 
-      implicit val ctx: ShowContext = ShowContext(collection.mutable.Map.empty, collection.mutable.Map.empty, collection.mutable.Map.empty, backend)
+      implicit val ctx: ShowContext = ShowContext(collection.mutable.Map.empty, collection.mutable.Map.empty, collection.mutable.Map.empty)
       implicit val dctx: DeclarationContext = DeclarationContext(core.declarations, core.externs)
 
       var transformed = transform(core)
@@ -144,13 +139,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   def generateShowInstancesBases(baseTypes: List[ValueType])(using ShowContext)(using DeclarationContext): List[Toplevel.Def] =
     baseTypes flatMap generateShowInstance
 
-  def generateShowInstance(vt: ValueType)(using ctx: ShowContext)(using DeclarationContext): Option[Toplevel.Def] = 
-    ctx.backend match {
-      case "llvm" => generateShowInstanceLLVM(vt) 
-      case "vm" => generateShowInstanceLLVM(vt)
-    }
-
-  def generateShowInstanceLLVM(vt: ValueType)(using ctx: ShowContext)(using dctx: DeclarationContext): Option[Toplevel.Def] =
+  def generateShowInstance(vt: ValueType)(using ctx: ShowContext)(using dctx: DeclarationContext): Option[Toplevel.Def] =
     val showId = freshShowId
     ctx.showNames += (vt -> showId)
     val paramId = Id("value")
