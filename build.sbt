@@ -219,8 +219,8 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     testBackendChez := {
       (Test / testOnly).toTask(
-        " effekt.ChezSchemeMonadicTests effekt.ChezSchemeCallCCTests" +
-        " effekt.StdlibChezSchemeMonadicTests effekt.StdlibChezSchemeCallCCTests"
+        " effekt.ChezSchemeMonadicTests effekt.ChezSchemeCallCCTests effekt.ChezSchemeCPSTests" +
+        " effekt.StdlibChezSchemeMonadicTests effekt.StdlibChezSchemeCallCCTests effekt.StdlibChezSchemeCPSTests"
       ).value
     },
 
@@ -241,8 +241,10 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
         "effekt.StdlibJavaScriptTests",
         "effekt.ChezSchemeMonadicTests",
         "effekt.ChezSchemeCallCCTests",
+        "effekt.ChezSchemeCPSTests",
         "effekt.StdlibChezSchemeMonadicTests",
         "effekt.StdlibChezSchemeCallCCTests",
+        "effekt.StdlibChezCPSTests",
         "effekt.LLVMTests",
         "effekt.LLVMNoValgrindTests",
         "effekt.StdlibLLVMTests"

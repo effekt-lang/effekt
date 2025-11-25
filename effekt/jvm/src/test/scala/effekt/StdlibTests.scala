@@ -47,6 +47,9 @@ abstract class StdlibChezTests extends StdlibTests {
     examplesDir / "stdlib" / "network" / "streaming.effekt",
   )
 }
+class StdlibChezSchemeCPSTests extends StdlibChezTests {
+  def backendName: String = "chez-cps"
+}
 class StdlibChezSchemeMonadicTests extends StdlibChezTests {
   def backendName: String = "chez-monadic"
 }
