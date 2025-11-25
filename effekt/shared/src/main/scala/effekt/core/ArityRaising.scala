@@ -33,6 +33,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       DC.findData(name) match {
         case Some(Data(_, List(), List(Constructor(test, List(), List(Field(x, tpe1), Field(y, tpe2)))))) => 
           println(test)
+          //new names
           val vparams = List(ValueParam(x, tpe1), ValueParam(y, tpe2))
           val transformedBody = Let(param, ValueType.Data(name, targs), 
           Make(ValueType.Data(name, targs), test, List(), List(ValueVar(x, tpe1), ValueVar(y, tpe2))), transform(body))
@@ -84,9 +85,10 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
           println(annotatedCapt)
           DC.findData(name) match {
             case Some(Data(_, List(), List(Constructor(test, List(), List(Field(x, tpe1), Field(y, tpe2)))))) => 
-              val transformedVargs = List(ValueVar(x, tpe1), ValueVar(y, tpe2))
+              val xfresh = Id(x.name)
+              val transformedVargs = List(ValueVar(xfresh, tpe1), ValueVar(y, tpe2))
               val res = Stmt.App(BlockVar(id, BlockType.Function(List(), List(), List(tpe1, tpe2), List(), returnTpe), annotatedCapt), targs, transformedVargs, bargs)
-              val latermatch: BlockLit = Block.BlockLit(List(), List(), List(ValueParam(x,tpe1), ValueParam(y, tpe2)), List(), res)
+              val latermatch: BlockLit = Block.BlockLit(List(), List(), List(ValueParam(xfresh,tpe1), ValueParam(y, tpe2)), List(), res)
               val newMatch = Stmt.Match(vargs.head, List((test,  latermatch)), None)
               println("res $$$$###")
               println(stmt)
