@@ -296,7 +296,6 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   def constructorStmt(constr: Constructor)(using ctx: ShowContext)(using dctx: DeclarationContext): Stmt = constr match
-    case Constructor(id, tparams, List()) => Return(Literal(id.name.name, TString))
     case Constructor(id, tparams, fields) => 
       val infixConcatBlockVar: Block.BlockVar = findExternDef("infixConcat", List(TString, TString))
       val pureFields = fields map fieldPure
