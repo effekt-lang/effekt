@@ -1,0 +1,225 @@
+package effekt
+package core
+import effekt.context.Context
+import effekt.core.optimizer.Deadcode
+import effekt.typer.Typer.checkMain
+import effekt.symbols.Symbol.fresh
+import effekt.lexer.TokenKind
+
+object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
+  override val phaseName: String = "arity raising"
+
+  override def run(input: CoreTransformed)(using C: Context): Option[CoreTransformed] = input match {
+    case CoreTransformed(source, tree, mod, core) => {
+      implicit val pctx: DeclarationContext = new DeclarationContext(core.declarations, core.externs)
+      Context.module = mod
+      val main = C.ensureMainExists(mod)
+      val res = Deadcode.remove(main, core)
+      // println("Before")
+      // println(PrettyPrinter.format(res))
+      val transformed = Context.timed(phaseName, source.name) { transform(res) }
+      println(PrettyPrinter.format(transformed))
+      Some(CoreTransformed(source, tree, mod, transformed))
+    }
+  }
+
+  def transform(decl: ModuleDecl)(using Context, DeclarationContext): ModuleDecl = decl match {
+    case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+      ModuleDecl(path, includes, declarations, externs, definitions map transform, exports)
+  }
+
+  def transform(toplevel: Toplevel)(using C: Context, DC: DeclarationContext): Toplevel = toplevel match {
+
+    case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
+      // does this for all params, so id should be able to handle def myFun(a: Record, b: Record)
+      // we return the param and the necesarry information to recreate the record later on
+      val (newParams, rec) = vparams.map { param => 
+        param match{
+          case ValueParam(paramId, tpe @ ValueType.Data(name, targs)) =>
+            // finding the constructor
+            DC.findData(name) match {
+              case Some(Data(_, List(), List(Constructor(ctor, List(), fields)))) =>
+                // handling all fields, so it handles Record(a, b, c, ...)
+                // still TODO nested records
+                val newFields = fields.map { case Field(fieldName, fieldType) => 
+                  val freshId = Id(fieldName.name)
+                  (ValueParam(freshId, fieldType), ValueVar(freshId, fieldType))
+                  }
+
+                val (params, args) = newFields.unzip
+
+                val make = Make(tpe, ctor, List(), args)
+                // giving back params and how to recreate the record in the body
+                (params, Some((paramId, tpe, make)))
+              case _ =>
+                (List(param), None)
+            }
+          case _ =>
+            (List(param), None)
+        }
+      }.unzip
+
+      val allNewParams = newParams.flatten
+      val bindings = rec.flatten
+
+      // this is needed since we can only do a single stmt, so we nest the Let statments
+      val newBody = bindings.foldRight(transform(body)) {
+        case ((originalId, originalType, expr), currentbody) =>
+          Let(originalId, originalType, expr, currentbody)
+      } 
+
+      Toplevel.Def(id, BlockLit(tparams, cparams, allNewParams, bparams, newBody))
+     
+    case Toplevel.Def(id, block) => 
+      val res = Toplevel.Def(id, transform(block))
+      res
+ 
+    case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, tpe, transform(binding))
+  }
+
+  def transform(block: Block.BlockLit)(using Context, DeclarationContext): Block.BlockLit = block match {
+    case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+      Block.BlockLit(tparams, cparams, vparams, bparams, transform(body))
+  }
+  
+  def transform(block: Block)(using Context, DeclarationContext): Block = block match {
+    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => block
+    case b: Block.BlockLit => transform(b)
+    case Block.Unbox(pure) => Block.Unbox(transform(pure))
+    case Block.New(impl) => block
+  }
+
+  def transform(stmt: Stmt)(using C: Context, DC: DeclarationContext): Stmt = stmt match {
+
+    case Stmt.App(callee, targs, vargs, bargs) =>
+      callee match {
+        case BlockVar(id, BlockType.Function(List(), List(), vparamsTypes, List(), returnTpe), annotatedCapt) => 
+          val (newVargs, types, preparedMatches ) = (vargs zip vparamsTypes).map { case (arg, argType) => 
+              argType match{
+                case ValueType.Data(name, targs) => 
+                  // finding the constructor
+                  DC.findData(name) match { 
+                    case Some(Data(_, List(), List(Constructor(ctor, List(), fields)))) =>
+                      val fieldInf = fields.map { case Field(fieldName, fieldType) =>
+                        val freshId = Id(fieldName.name)
+
+                        (ValueVar(freshId, fieldType), ValueParam(freshId, fieldType), fieldType)
+                        }
+                      
+                      val (newVars, newParams, types) = fieldInf.unzip3
+
+                      // preparing the match statement so we only have to fill the body later
+                      val preparedmatch = (innerBody: Stmt) => {
+                        val matchBlock: BlockLit = BlockLit(List(), List(), newParams, List(), innerBody)
+                        Stmt.Match(arg, List((ctor, matchBlock)), None)
+                      }
+
+                      (newVars, types, preparedmatch)
+                    
+                    // this makes sure that we just return the argument as it is.
+                    case _ => (List(arg), List(argType), (s:Stmt) => s )
+
+                  }
+
+                case _ => (List(arg), List(argType), (s: Stmt) => s)
+              }
+          }.unzip3
+
+          val finalArgs = newVargs.flatten
+          val finalArgTypes = types.flatten
+
+          val newCalleeType = BlockType.Function(List(), List(), finalArgTypes, List(), returnTpe)
+          val newCallee = BlockVar(id, newCalleeType, annotatedCapt)
+          
+          val innerApp = Stmt.App(newCallee, targs, finalArgs, bargs)
+
+          // wrapping the inner app with all prepared matches
+          val finalStmt = preparedMatches.foldRight(innerApp) { (wrapper, acc) => 
+            wrapper(acc) 
+          }
+          
+          finalStmt
+
+        case _ => stmt
+        
+      } 
+
+    case Stmt.Def(id, block, rest) =>
+     Stmt.Def(id, transform(block), transform(rest))
+    case Stmt.Let(id, tpe, binding, rest) =>
+      Stmt.Let(id, tpe, transform(binding), transform(rest))
+    case Stmt.Return(expr) =>
+      Stmt.Return(transform(expr))
+    case Stmt.Val(id, tpe, binding, body) =>
+      Stmt.Val(id, tpe, transform(binding), transform(body))
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
+      Stmt.Invoke(transform(callee), method, methodTpe, targs, vargs map transform, bargs map transform)
+    case Stmt.If(cond, thn, els) =>
+      Stmt.If(transform(cond), transform(thn), transform(els))
+    case Stmt.Match(scrutinee, clauses, default) =>
+      Stmt.Match(transform(scrutinee), clauses.map { case (id, clause) => (id, transform(clause)) }, default map transform)
+
+    case _ => stmt
+  }
+
+  def transform(pure: Expr)(using Context, DeclarationContext): Expr = pure match {
+    case Expr.ValueVar(id, annotatedType) => pure
+    case Expr.Literal(value, annotatedType) => pure
+    case Expr.Box(b, annotatedCapture) => pure
+    case Expr.PureApp(b, targs, vargs) =>
+      Expr.PureApp(b, targs, vargs map transform) 
+    case Expr.Make(data, tag, targs, vargs) =>
+      Expr.Make(data, tag, targs, vargs map transform) 
+  }
+
+  def transform(valueType: ValueType.Data)(using Context, DeclarationContext): ValueType.Data = valueType match {
+    case ValueType.Data(symbol, targs) => valueType // trainsform
+  }
+
+  def doIndentation(input: String): String = {
+    val sb = new StringBuilder
+    var indent = 0
+    var i = 0
+
+    while (i < input.length) {
+      input(i) match {
+        case '(' =>
+          // Look ahead to see if it's a short List(...) with no commas
+          val closing = input.indexOf(')', i)
+          val inside = if (closing > i) input.substring(i + 1, closing) else ""
+          if (inside.contains(',') || inside.contains('(') || inside.contains(')')) {
+            sb.append("(\n")
+            indent += 1
+            sb.append("  " * indent)
+          } else {
+            sb.append('(')
+          }
+
+        case ')' =>
+          val prev = if (i > 0) input(i - 1) else ' '
+          if (prev == '(' || prev.isLetterOrDigit) {
+            sb.append(')')
+          } else {
+            sb.append("\n")
+            indent -= 1
+            sb.append("  " * indent)
+            sb.append(")")
+          }
+
+        case ',' =>
+          sb.append(",\n")
+          sb.append("  " * indent)
+
+        case c if c.isWhitespace =>
+          // skip
+
+        case c =>
+          sb.append(c)
+      }
+      i += 1
+    }
+
+    sb.toString
+  }
+
+}
