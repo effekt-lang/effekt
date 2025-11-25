@@ -93,6 +93,7 @@
 %String = type %Pos
 
 ; Foreign imports
+declare ptr @initializeArena()
 declare ptr @malloc(i64)
 declare void @free(ptr)
 declare ptr @realloc(ptr, i64)
@@ -127,20 +128,15 @@ declare void @llvm.assume(i1)
 ; initializes the todoList with a sentinel slot.
 ; Sentinel Slot: Fakes a block with a RC=1. It is used to mark the end of the To-Do-List.
 ; But it is not a real heap-object, because it is not 8-byte aligned.
-@todoList = dso_local unnamed_addr global %struct.Slot* inttoptr (i64 1 to %struct.Slot*), align 8
-@nextUnusedSlot = dso_local unnamed_addr global i8* null, align 8   ; Pointer to the next unused Slot
+@todoList = private unnamed_addr global %struct.Slot* inttoptr (i64 1 to %struct.Slot*), align 8
+@nextUnusedSlot = private unnamed_addr global i8* null, align 8   ; Pointer to the next unused Slot
+@slotSize = private constant i8 64, align 8         ; The size of each chunk (64 bytes)
 
-@slotSize = constant i8 64, align 8         ; The size of each chunk (64 bytes)
-@totalAllocationSize = constant i64 4294967296, align 8  ; How much storage do we allocate at the beginning of a program? =4GB
 
 ; Initializes the memory for our effekt-objects that are created by newObject and deleted by eraseObject.
 define private void @initializeMemory() nounwind {
 entry:
-  ; we use mmap to allocate memory from the OS.
-  %size = load i64, i64* @totalAllocationSize, align 8
-
-  %startAddress = call noalias ptr @malloc(i64 %size)
-
+  %startAddress = call noalias ptr @initializeArena()  ;How much storage do we allocate at the beginning of a program? =4GB
   store i8* %startAddress, i8** @nextUnusedSlot
   ret void
 }
@@ -172,17 +168,15 @@ reuse:
   ret %struct.Slot* %head
 
 bump_alloc:
-  ; Load raw pointer
+  ; Load nextUnusedBlock
   %rawBump = load i8*, i8** @nextUnusedSlot, align 8
-
-  ; Treat it as Object*
   %slot = bitcast i8* %rawBump to %struct.Slot*
 
   ; Move bump pointer forward by object size
   %sizeBump = load i8, i8* @slotSize, align 8
   %nextBump = getelementptr i8, i8* %rawBump, i8 %sizeBump
-  store i8* %nextBump, i8** @nextUnusedSlot, align 8
 
+  store i8* %nextBump, i8** @nextUnusedSlot, align 8
   ret %struct.Slot* %slot
 }
 
