@@ -72,8 +72,6 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
      
     case Toplevel.Def(id, block) => 
       val res = Toplevel.Def(id, transform(block))
-      //println("\n\nres:")
-      //println(doIndentation(res.toString))
       res
  
     case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, tpe, transform(binding))
@@ -110,6 +108,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
                       
                       val (newVars, newParams, types) = fieldInf.unzip3
 
+                      // preparing the match statement so we only have to fill the body later
                       val preparedmatch = (innerBody: Stmt) => {
                         val matchBlock: BlockLit = BlockLit(List(), List(), newParams, List(), innerBody)
                         Stmt.Match(arg, List((ctor, matchBlock)), None)
@@ -117,6 +116,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
 
                       (newVars, types, preparedmatch)
                     
+                    // this makes sure that we just return the argument as it is.
                     case _ => (List(arg), List(argType), (s:Stmt) => s )
 
                   }
@@ -130,13 +130,10 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
 
           val newCalleeType = BlockType.Function(List(), List(), finalArgTypes, List(), returnTpe)
           val newCallee = BlockVar(id, newCalleeType, annotatedCapt)
-          println("HERE")
-          println(finalArgs)
-          println(finalArgTypes)
-          println(preparedMatches)
           
           val innerApp = Stmt.App(newCallee, targs, finalArgs, bargs)
 
+          // wrapping the inner app with all prepared matches
           val finalStmt = preparedMatches.foldRight(innerApp) { (wrapper, acc) => 
             wrapper(acc) 
           }
