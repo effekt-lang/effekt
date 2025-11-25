@@ -93,12 +93,6 @@
 %String = type %Pos
 
 ; Foreign imports
-
-declare void @initializeMemory()
-declare ptr @acquire()
-declare void @release(ptr)
-
-
 declare ptr @malloc(i64)
 declare void @free(ptr)
 declare ptr @realloc(ptr, i64)
@@ -121,6 +115,83 @@ declare double @tan(double)
 declare void @print(i64)
 declare void @exit(i64)
 declare void @llvm.assume(i1)
+
+
+; typedef struct Slot
+; {
+;     struct Slot* next;
+;     void (*eraser)(void *object);
+; } Slot;
+%struct.Slot = type { %struct.Slot*, %Eraser }
+
+@freeList = dso_local unnamed_addr global %struct.Slot* null, align 8
+@nextUnusedSlot = dso_local unnamed_addr global i8* null, align 8   ; Pointer to the next unused Slot
+
+@slotSize = constant i8 64, align 8         ; The size of each chunk (64 bytes)
+@totalAllocationSize = constant i64 4294967296, align 8  ; How much storage do we allocate at the beginning of a program? =4GB
+
+; Initializes the memory for our effekt-objects that are created by newObject and deleted by eraseObject.
+define private void @initializeMemory() nounwind {
+entry:
+  ; we use mmap to allocate memory from the OS.
+  %size = load i64, i64* @totalAllocationSize, align 8
+
+  %startAddress = call noalias ptr @malloc(i64 %size)
+
+  store i8* %startAddress, i8** @nextUnusedSlot
+  ret void
+}
+
+
+define private %struct.Slot* @acquire() nounwind {
+entry:
+  ; Load freeList head
+  %head = load %struct.Slot*, %struct.Slot** @freeList, align 8
+
+  ; Check if freeList is empty
+  %isEmpty = icmp eq %struct.Slot* %head, null
+  br i1 %isEmpty, label %bump_alloc, label %reuse
+
+; Free list is not empty, so we reuse the first slot on the list.
+reuse:
+  ; Slot* reusedSlot = freeList;
+  ; freeList = reusedSlot->next;
+  %nextptr = getelementptr inbounds %struct.Slot, %struct.Slot* %head, i32 0, i32 0
+  %next = load %struct.Slot*, %struct.Slot** %nextptr, align 8
+  store %struct.Slot* %next, %struct.Slot** @freeList, align 8
+
+  ret %struct.Slot* %head
+
+; Bump pointer allocation
+bump_alloc:
+  ; Load nextUnusedBlock
+  %rawBump = load i8*, i8** @nextUnusedSlot, align 8
+  %slot = bitcast i8* %rawBump to %struct.Slot*
+
+  ; our slot is 64 bytes long, so we need to bump the pointer by 64 bytes
+  ; nextUnusedBlock = nextUnusedBlock + 64
+  %nextBump = getelementptr i8, i8* %rawBump, i8 64
+
+  store i8* %nextBump, i8** @nextUnusedSlot, align 8
+  ret %struct.Slot* %slot
+}
+
+; Pushes a slot on the top of the To-Do-List.
+define private void @release(%struct.Slot* %slot) nounwind {
+entry:
+  ; oldHead = freeList
+  %oldHead = load %struct.Slot*, %struct.Slot** @freeList, align 8
+
+  ; ptr->next = oldHead
+  %nextPtr = getelementptr %struct.Slot, %struct.Slot* %slot, i32 0, i32 0
+  store %struct.Slot* %oldHead, %struct.Slot** %nextPtr, align 8
+
+  ; freeList = ptr
+  store %struct.Slot* %slot, %struct.Slot** @freeList, align 8
+
+  ret void
+}
+
 
 
 ; Prompts
