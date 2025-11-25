@@ -3,6 +3,8 @@ package core
 import effekt.context.Context
 import effekt.core.optimizer.Deadcode
 import effekt.typer.Typer.checkMain
+import effekt.symbols.Symbol.fresh
+import effekt.lexer.TokenKind
 
 object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
   override val phaseName: String = "arity raising"
@@ -16,8 +18,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       // println("Before")
       // println(PrettyPrinter.format(res))
       val transformed = Context.timed(phaseName, source.name) { transform(res) }
-      // println(PrettyPrinter.format(transformed))
-      // println("\n\n\nparts\n\n")
+      println(PrettyPrinter.format(transformed))
       Some(CoreTransformed(source, tree, mod, transformed))
     }
   }
@@ -28,22 +29,47 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   def transform(toplevel: Toplevel)(using C: Context, DC: DeclarationContext): Toplevel = toplevel match {
-    case Toplevel.Def(id, BlockLit(tparams, cparams, List(ValueParam(param, ValueType.Data(name, targs))), bparams, body)) => 
-      DC.findData(name) match {
-        case Some(Data(_, List(), List(Constructor(test, List(), List(Field(x, tpe1), Field(y, tpe2)))))) => 
-          //println(test)
-          //new names
-          val p1 = Id(x.name)
-          val p2 = Id(y.name)
-          val vparams = List(ValueParam(p1, tpe1), ValueParam(p2, tpe2))
-          val transformedBody = Let(param, ValueType.Data(name, targs), 
-          Make(ValueType.Data(name, targs), test, List(), List(ValueVar(p1, tpe1), ValueVar(p2, tpe2))), transform(body))
-          Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, transformedBody)) 
 
-        case _ => 
-          toplevel
-      }
-      
+    case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
+      // does this for all params, so id should be able to handle def myFun(a: Record, b: Record)
+      // we return the param and the necesarry information to recreate the record later on
+      val (newParams, rec) = vparams.map { param => 
+        param match{
+          case ValueParam(paramId, tpe @ ValueType.Data(name, targs)) =>
+            // finding the constructor
+            DC.findData(name) match {
+              case Some(Data(_, List(), List(Constructor(ctor, List(), fields)))) =>
+                // handling all fields, so it handles Record(a, b, c, ...)
+                // still TODO nested records
+                val newFields = fields.map { case Field(fieldName, fieldType) => 
+                  val freshId = Id(fieldName.name)
+                  (ValueParam(freshId, fieldType), ValueVar(freshId, fieldType))
+                  }
+
+                val (params, args) = newFields.unzip
+
+                val make = Make(tpe, ctor, List(), args)
+                // giving back params and how to recreate the record in the body
+                (params, Some((paramId, tpe, make)))
+              case _ =>
+                (List(param), None)
+            }
+          case _ =>
+            (List(param), None)
+        }
+      }.unzip
+
+      val allNewParams = newParams.flatten
+      val bindings = rec.flatten
+
+      // this is needed since we can only do a single stmt, so we nest the Let statments
+      val newBody = bindings.foldRight(transform(body)) {
+        case ((originalId, originalType, expr), currentbody) =>
+          Let(originalId, originalType, expr, currentbody)
+      } 
+
+      Toplevel.Def(id, BlockLit(tparams, cparams, allNewParams, bparams, newBody))
+     
     case Toplevel.Def(id, block) => 
       val res = Toplevel.Def(id, transform(block))
       //println("\n\nres:")
@@ -66,6 +92,61 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   def transform(stmt: Stmt)(using C: Context, DC: DeclarationContext): Stmt = stmt match {
+
+    case Stmt.App(callee, targs, vargs, bargs) =>
+      callee match {
+        case BlockVar(id, BlockType.Function(List(), List(), vparamsTypes, List(), returnTpe), annotatedCapt) => 
+          val (newVargs, types, preparedMatches ) = (vargs zip vparamsTypes).map { case (arg, argType) => 
+              argType match{
+                case ValueType.Data(name, targs) => 
+                  // finding the constructor
+                  DC.findData(name) match { 
+                    case Some(Data(_, List(), List(Constructor(ctor, List(), fields)))) =>
+                      val fieldInf = fields.map { case Field(fieldName, fieldType) =>
+                        val freshId = Id(fieldName.name)
+
+                        (ValueVar(freshId, fieldType), ValueParam(freshId, fieldType), fieldType)
+                        }
+                      
+                      val (newVars, newParams, types) = fieldInf.unzip3
+
+                      val preparedmatch = (innerBody: Stmt) => {
+                        val matchBlock: BlockLit = BlockLit(List(), List(), newParams, List(), innerBody)
+                        Stmt.Match(arg, List((ctor, matchBlock)), None)
+                      }
+
+                      (newVars, types, preparedmatch)
+                    
+                    case _ => (List(arg), List(argType), (s:Stmt) => s )
+
+                  }
+
+                case _ => (List(arg), List(argType), (s: Stmt) => s)
+              }
+          }.unzip3
+
+          val finalArgs = newVargs.flatten
+          val finalArgTypes = types.flatten
+
+          val newCalleeType = BlockType.Function(List(), List(), finalArgTypes, List(), returnTpe)
+          val newCallee = BlockVar(id, newCalleeType, annotatedCapt)
+          println("HERE")
+          println(finalArgs)
+          println(finalArgTypes)
+          println(preparedMatches)
+          
+          val innerApp = Stmt.App(newCallee, targs, finalArgs, bargs)
+
+          val finalStmt = preparedMatches.foldRight(innerApp) { (wrapper, acc) => 
+            wrapper(acc) 
+          }
+          
+          finalStmt
+
+        case _ => stmt
+        
+      } 
+
     case Stmt.Def(id, block, rest) =>
      Stmt.Def(id, transform(block), transform(rest))
     case Stmt.Let(id, tpe, binding, rest) =>
@@ -74,24 +155,6 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       Stmt.Return(transform(expr))
     case Stmt.Val(id, tpe, binding, body) =>
       Stmt.Val(id, tpe, transform(binding), transform(body))
-    case Stmt.App(callee, targs, vargs, bargs) =>
-      callee match {
-        case BlockVar(id, BlockType.Function(List(), List(), List(ValueType.Data(name, List())), List(), returnTpe), annotatedCapt) => 
-          DC.findData(name) match {
-            case Some(Data(_, List(), List(Constructor(test, List(), List(Field(x, tpe1), Field(y, tpe2)))))) => 
-              val p1 = Id(x.name)
-              val p2 = Id(y.name)
-              val transformedVargs = List(ValueVar(p1, tpe1), ValueVar(p2, tpe2))
-              val res = Stmt.App(BlockVar(id, BlockType.Function(List(), List(), List(tpe1, tpe2), List(), returnTpe), annotatedCapt), targs, transformedVargs, bargs)
-              val latermatch: BlockLit = Block.BlockLit(List(), List(), List(ValueParam(p1,tpe1), ValueParam(p2, tpe2)), List(), res)
-              Stmt.Match(vargs.head, List((test,  latermatch)), None)
-            
-            case _ => 
-              stmt
-          }
-
-        case _ => stmt
-      }
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
       Stmt.Invoke(transform(callee), method, methodTpe, targs, vargs map transform, bargs map transform)
     case Stmt.If(cond, thn, els) =>
