@@ -1,0 +1,25 @@
+def higherorder { f : [A] (A) => A } = f[Int](42)
+def higherorder2 { f : [B] (B) => B } = f[Bool](true)
+
+def main() = {
+  println(higherorder { [B] (x) => x })
+  println(higherorder2 { [C] (x) => x })
+}
+
+// interface Poly {
+//   def apply[A](a: A): A
+// }
+// def higherorder { f : Poly } = f.apply[Int](42)
+// def higherorder2 { f : Poly } = f.apply[Bool](true)
+
+// def main() = {
+//   def Poly_defn1 = new Poly {
+//     def apply[B](b: B) = b
+//   }
+//   println(higherorder { Poly_defn1 })
+//   def Poly_defn2 = new Poly {
+//     def apply[C](b: C) = b
+//   }
+//   println(higherorder { Poly_defn2 })
+// }
+
