@@ -17,7 +17,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             var constraints = findConstraints(definitions)(using monoFindContext)
             constraints = constraints ++ declarations.flatMap(findConstraints(_)(using monoFindContext))
             // println("Constraints")
-            // constraints.foreach(c => println(c))
+            // constraints.filter(c => c.lower.nonEmpty).toSet.foreach(c => println(c))
             // println()
 
             // Detect if we have polymorphic recursion in our constraints
