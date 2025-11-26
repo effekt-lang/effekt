@@ -20,17 +20,6 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             // constraints.filter(c => c.lower.nonEmpty).toSet.foreach(c => println(c))
             // println()
 
-            // Detect if we have polymorphic recursion in our constraints
-            // Panic if we do
-            val polyRecursive = gatherPolyRecursive(constraints)
-            if (!polyRecursive.isEmpty) {
-              var sb: StringBuilder = StringBuilder()
-              polyRecursive.foreach((baseId, varId) => {
-                sb ++= s"Detected polymorphic recursion between '${baseId}' and '${varId}' \n"
-              })
-              sys error sb.toString
-            }
-
             // Solve collected constraints
             val solution = solveConstraints(constraints)
             // println("Solved")
@@ -282,50 +271,6 @@ def findConstraints(vt: ValueType)(using ctx: MonoFindContext): (TypeArg, Constr
   case ValueType.Var(name) => (ctx.typingContext(name), List.empty)
 }
 
-// This could just return a boolean, but I want the error message to actually tell me what is recursive
-def gatherPolyRecursive(constraints: Constraints): List[(Id, Id)] =
-  // List of base types with Some Var targs
-  
-  // Base(Option, List(Var(loop, 0))) ⊑ loop
-  // keep track of Base(Option, List(Var(loop, 0)))
-  var baseTargs: List[TypeArg.Base] = List.empty
-  
-  // List of Vars that flow into some Base type
-  
-  // Var(loop, 0) ⊑ Option
-  var varFlow: List[(TypeArg.Var, Id)] = List.empty
-
-  constraints.foreach(c => {
-    c.lower.foreach({
-      case TypeArg.Base(tpe, List()) => ()
-      case base@TypeArg.Base(tpe, targs) => {
-        // TODO: Might need to recurse into targs here
-        val hasVar = targs.count({
-          case TypeArg.Var(_, _) => true
-          case _ => false
-        }) > 0
-        if (hasVar) baseTargs ++= List(base)
-      }
-      case v@TypeArg.Var(funId, pos) => {
-        varFlow +:= (v, c.upper)
-      }
-      case _ => ()
-    })
-  })
-
-  // TODO: Consider runtime here, should not matter much 
-  var result: List[(Id, Id)] = List.empty
-  varFlow.foreach((v, id) => {
-    baseTargs.foreach(base => {
-      if (base.tpe == id && base.targs.contains(v)) {
-        result +:= (id, v.funId)
-      }
-    })
-  })
-
-  result
-
-
 def solveConstraints(constraints: Constraints): Solution =
   var solved: Solution = Map()
 
@@ -336,10 +281,18 @@ def solveConstraints(constraints: Constraints): Solution =
   while (true) {
     val previousSolved = solved
     vecConstraints.foreach((sym, tas) => 
-        val sol = solveConstraints(sym).map(bs => bs.toVector).filter(v => !v.isEmpty)
-        solved += (sym -> sol)
-      )
+      val sol = solveConstraints(sym).map(bs => bs.toVector).filter(v => !v.isEmpty)
+      solved += (sym -> sol)
+    )
     if (previousSolved == solved) return solved
+  }
+
+  def existsInsideTargs(id: Id, targs: List[TypeArg]): Boolean = {
+    targs.exists({
+      case TypeArg.Base(tpe, targs) => tpe == id || existsInsideTargs(id, targs)
+      case TypeArg.Boxed(tpe, capt) => false
+      case TypeArg.Var(funId, pos) => false 
+    })
   }
 
   def solveConstraints(funId: FunctionId): Set[List[Ground]] =
@@ -356,6 +309,12 @@ def solveConstraints(constraints: Constraints): Solution =
           solvedTargs.foreach(targ => {
             crossTargs = productAppend(crossTargs, targ)
           })
+
+          // Detect polymorphic recursion
+          if (crossTargs.exists(tas => { existsInsideTargs(tpe, tas) })) {
+            sys error s"Polymorphic recursion between '${tpe}' and '${funId}'"
+          }
+
           crossTargs.map(tas => TypeArg.Base(tpe, tas))
         case TypeArg.Boxed(tpe, capt) => List(TypeArg.Boxed(tpe, capt))
         case TypeArg.Var(funId, pos) => 
