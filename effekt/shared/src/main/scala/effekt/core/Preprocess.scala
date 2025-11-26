@@ -217,7 +217,7 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
             ctx.replacements.get(debruijnBlockTpe) match {
               case Some(value) => {
                 val defnId = Id(value.interface.name.name ++ "_defn")
-                val freshOp = Operation(value.apply, tparams, cparams, vparams, bparams, body)
+                val freshOp = Operation(value.apply, tparams, cparams, vparams, bparams, preprocess(body))
                 val interfaceTpe: BlockType.Interface = BlockType.Interface(value.interface, targs)
                 val newBlock: Block.New = Block.New(Implementation(interfaceTpe, List(freshOp)))
                 prepend +:= (defnId, newBlock)
