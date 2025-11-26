@@ -3,6 +3,7 @@ package core
 
 import effekt.context.Context
 import effekt.core.DeBruijn.toDeBruijn
+import effekt.core.DeBruijn.addTparams
 
 
 object DeBruijn {
@@ -35,6 +36,12 @@ object DeBruijn {
     )
   }
 
+  def addTparams(tparams: List[Id]) = {
+    tparams.zipWithIndex.foreach((id, index) => {
+      typeToIndex += (id -> Index(0, index))
+    })
+  }
+
   enum ValueType {
     case Var(index: Index)
     case Data(name: Id, targs: List[ValueType])
@@ -65,9 +72,7 @@ object DeBruijn {
       bumpTypeLevels()
 
       // Insert new tparams at level 0
-      tparams.zipWithIndex.foreach((id, index) => {
-        typeToIndex += (id -> Index(0, index))
-      })
+      addTparams(tparams)
 
       // Handle all the types of the lower level, then reset our type -> index map to before we went to this level
       val vparams_ = vparams map toDeBruijn 
@@ -196,6 +201,7 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
           blockParam
         }  
       })
+      addTparams(block.tparams)
       Block.BlockLit(block.tparams, block.cparams, block.vparams, processedBparams, preprocess(block.body))
 
     def preprocess(block: Block.BlockVar)(using PreprocessContext): Block.BlockVar = block
