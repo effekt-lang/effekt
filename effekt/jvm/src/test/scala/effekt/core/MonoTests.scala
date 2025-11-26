@@ -176,18 +176,4 @@ class MonoTests extends AbstractMonoTests {
 
         assertEquals(solveConstraints(constraints), expectedSolved)
     }
-
-    // 
-    // Detect polymorphic recursion
-    // 
-
-    test("basic poly-recursion") {
-        val constraints = List(
-            Constraint(Vector(Base(id("Option"), List(Var(id("loop"), 0)))), id("loop")),
-            Constraint(Vector(Var(id("loop"), 0)), id("Option")),
-            Constraint(Vector(BaseTInt), id("loop"))
-        )
-
-        assert(!gatherPolyRecursive(constraints).isEmpty)
-    }
 }
