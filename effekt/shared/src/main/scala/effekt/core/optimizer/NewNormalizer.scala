@@ -6,6 +6,7 @@ import effekt.core.ValueType.Boxed
 import effekt.source.Span
 import effekt.symbols.builtins
 import effekt.symbols.builtins.AsyncCapability
+import effekt.core.optimizer.theories
 import kiama.output.ParenPrettyPrinter
 
 import scala.annotation.tailrec
@@ -78,6 +79,8 @@ object semantics {
 
     // Actual Values
     case Literal(value: Any, annotatedType: ValueType)
+    case Integer(value: theories.Integers.Integer)
+
     case Make(data: ValueType.Data, tag: Id, targs: List[ValueType], vargs: List[Addr])
 
     // TODO use dynamic captures
@@ -89,6 +92,7 @@ object semantics {
       case Value.Var(id, annotatedType) => Set(id)
       case Value.Extern(id, targs, vargs) => vargs.toSet
       case Value.Literal(value, annotatedType) => Set.empty
+      case Value.Integer(value) => value.free
       case Value.Make(data, tag, targs, vargs) => vargs.toSet
       // Box abstracts over all free computation variables, only when unboxing, they occur free again
       case Value.Box(body, tpe) => body.free
@@ -737,6 +741,8 @@ object semantics {
         "box" <+> braces(nest(line <> toDoc(body) <> line))
 
       case Value.Var(id, tpe) => toDoc(id)
+
+      case Value.Integer(value) => value.show
     }
 
     def toDoc(block: Block): Doc = block match {
@@ -919,8 +925,10 @@ class NewNormalizer {
     case Expr.ValueVar(id, annotatedType) =>
       env.lookupValue(id)
 
-    case core.Expr.Literal(value, annotatedType) =>
-      scope.allocate("x", Value.Literal(value, annotatedType))
+    case core.Expr.Literal(value, annotatedType) => value match {
+      case As.IntExpr(x) => scope.allocate("x", Value.Integer(x))
+      case _ => scope.allocate("x", Value.Literal(value, annotatedType))
+    }
 
     case core.Expr.PureApp(f, targs, vargs) =>
       val externDef = env.lookupComputation(f.id)
@@ -1199,6 +1207,13 @@ class NewNormalizer {
       case _ => false
     }
 
+    val builtinNameToBlockVar: Map[String, BlockVar] = builtinExterns.collect {
+      case Extern.Def(id, tps, cps, vps, bps, ret, capt, targetBody, Some(vmBody)) =>
+        val builtinName = vmBody.contents.strings.head
+        val bv: BlockVar = BlockVar(id, BlockType.Function(tps, cps, vps.map { _.tpe }, bps.map { bp => bp.tpe }, ret), capt)
+        builtinName -> bv
+    }.toMap
+
     val toplevelEnv = Env.empty
       // user-defined functions
       .bindComputation(mod.definitions.collect {
@@ -1224,7 +1239,8 @@ class NewNormalizer {
       }.toMap,
       mod.definitions.collect {
         case Toplevel.Def(id, b) => id -> (b.tpe, b.capt)
-      }.toMap ++ externTypes
+      }.toMap ++ externTypes,
+      builtinNameToBlockVar
     )
 
     val newDefinitions = mod.definitions.map(d => run(d)(using toplevelEnv, typingContext))
@@ -1239,12 +1255,12 @@ class NewNormalizer {
       debug(s"------- ${util.show(id)} -------")
       debug(util.show(body))
 
-      given localEnv: Env = env
-        .bindValue(vparams.map(p => p.id -> p.id))
+      val scope = Scope.empty
+      val localEnv: Env = env
+        .bindValue(vparams.map(p => p.id -> scope.allocate("p", Value.Var(p.id, p.tpe))))
         .bindComputation(bparams.map(p => p.id -> Computation.Var(p.id)))
 
-      given scope: Scope = Scope.empty
-      val result = evaluate(body, Frame.Return, Stack.Empty)
+      val result = evaluate(body, Frame.Return, Stack.Empty)(using localEnv, scope)
 
       debug(s"----------normalized-----------")
       val block = Block(tparams, vparams, bparams, reifyBindings(scope, result))
@@ -1258,7 +1274,7 @@ class NewNormalizer {
     case other => other
   }
 
-  case class TypingContext(values: Map[Addr, ValueType], blocks: Map[Label, (BlockType, Captures)]) {
+  case class TypingContext(values: Map[Addr, ValueType], blocks: Map[Label, (BlockType, Captures)], builtinBlockVars: Map[String, BlockVar]) {
     def bind(id: Id, tpe: ValueType): TypingContext = this.copy(values = values + (id -> tpe))
     def bind(id: Id, tpe: BlockType, capt: Captures): TypingContext = this.copy(blocks = blocks + (id -> (tpe, capt)))
     def bindValues(vparams: List[ValueParam]): TypingContext = this.copy(values = values ++ vparams.map(p => p.id -> p.tpe))
@@ -1337,12 +1353,13 @@ class NewNormalizer {
       }(G)
   }
 
-  def embedExpr(value: Value)(using TypingContext): core.Expr = value match {
+  def embedExpr(value: Value)(using cx: TypingContext): core.Expr = value match {
     case Value.Extern(callee, targs, vargs) => Expr.PureApp(callee, targs, vargs.map(embedExpr))
     case Value.Literal(value, annotatedType) => Expr.Literal(value, annotatedType)
     case Value.Make(data, tag, targs, vargs) => Expr.Make(data, tag, targs, vargs.map(embedExpr))
     case Value.Box(body, annotatedCapture) => Expr.Box(embedBlock(body), annotatedCapture)
     case Value.Var(id, annotatedType) => Expr.ValueVar(id, annotatedType)
+    case Value.Integer(value) => theories.Integers.reify(value, cx.builtinBlockVars)
   }
 
   def embedExpr(addr: Addr)(using G: TypingContext): core.Expr = Expr.ValueVar(addr, G.lookupValue(addr))
@@ -1501,8 +1518,20 @@ lazy val integers: Builtins = Map(
   // Arithmetic
   // ----------
   builtin("effekt::infixAdd(Int, Int)") {
-    case As.Int(x) :: As.Int(y) :: Nil => semantics.Value.Literal(x + y, Type.TInt)
+    case As.IntExpr(x) :: As.IntExpr(y) :: Nil => semantics.Value.Integer(theories.Integers.add(x, y))
   },
+  builtin("effekt::infixSub(Int, Int)") {
+    case As.IntExpr(x) :: As.IntExpr(y) :: Nil => semantics.Value.Integer(theories.Integers.sub(x, y))
+  },
+  builtin("effekt::infixMul(Int, Int)") {
+    case As.IntExpr(x) :: As.IntExpr(y) :: Nil => semantics.Value.Integer(theories.Integers.mul(x, y))
+  },
+  builtin("effekt::infixDiv(Int, Int)") {
+    case As.Int(x) :: As.Int(y) :: Nil if y != 0 => semantics.Value.Integer(theories.Integers.embed(x / y))
+  },
+  builtin("effekt::mod(Int, Int)") {
+    case As.Int(x) :: As.Int(y) :: Nil if y != 0 => semantics.Value.Integer(theories.Integers.embed(x % y))
+  }
 )
 
 lazy val supportedBuiltins: Builtins = integers
@@ -1513,6 +1542,20 @@ protected object As {
       case semantics.Value.Literal(value: scala.Long, _) => Some(value)
       case semantics.Value.Literal(value: scala.Int, _) => Some(value.toLong)
       case semantics.Value.Literal(value: java.lang.Integer, _) => Some(value.toLong)
+      case _ => None
+    }
+  }
+
+  object IntExpr {
+    def unapply(v: semantics.Value): Option[theories.Integers.Integer] = v match {
+      // Integer literals not yet embedded into the theory of integers
+      case semantics.Value.Literal(value: scala.Long, _) => Some(theories.Integers.embed(value))
+      case semantics.Value.Literal(value: scala.Int, _) => Some(theories.Integers.embed(value.toLong))
+      case semantics.Value.Literal(value: java.lang.Integer, _) => Some(theories.Integers.embed(value.toLong))
+      // Variables of type integer
+      case semantics.Value.Var(id, tpe) if tpe == Type.TInt => Some(theories.Integers.embed(id))
+      // Already embedded integers
+      case semantics.Value.Integer(value) => Some(value)
       case _ => None
     }
   }

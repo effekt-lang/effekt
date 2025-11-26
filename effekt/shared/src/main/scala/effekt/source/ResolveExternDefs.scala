@@ -42,6 +42,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
 
   def rewrite(defn: Def)(using Context): Option[Def] = Context.focusing(defn) {
       case Def.ExternDef(id, tparams, vparams, bparams, capture, ret, bodies, doc, span) =>
+        val vmBody = bodies.find(_.featureFlag.matches("vm", matchDefault = false))
         findPreferred(bodies) match {
           case body@ExternBody.StringExternBody(featureFlag, template, span) =>
             if (featureFlag.isDefault) {
@@ -49,7 +50,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
                 + s"please annotate it with a feature flag (Supported by the current backend: ${Context.compiler.supportedFeatureFlags.mkString(", ")})")
             }
 
-            val d = Def.ExternDef(id, tparams, vparams, bparams, capture, ret, List(body), doc, span)
+            val d = Def.ExternDef(id, tparams, vparams, bparams, capture, ret, List(body) ++ vmBody.toList, doc, span)
             Context.copyAnnotations(defn, d)
             Some(d)
           case ExternBody.EffektExternBody(featureFlag, body, span) =>
