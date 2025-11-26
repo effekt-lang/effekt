@@ -365,7 +365,10 @@ def solveConstraints(constraints: Constraints): Solution =
       }
 
       b.foreach(typeArg => l = productAppend(l, solveTypeArg(typeArg)))
-      nbs ++= l
+      
+      // Only add solution vectors which match the size we expect
+      // sometimes we don't have enough information in the current iteration to find a correct solution
+      nbs ++= l.filter(i => i.size == b.size)
     )
     nbs
 
