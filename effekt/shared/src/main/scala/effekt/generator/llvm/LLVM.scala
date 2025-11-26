@@ -54,7 +54,7 @@ class LLVM extends Compiler[String] {
   // -----------------------------------
   object steps {
     // intermediate steps for VSCode
-    val afterCore = allToCore(Core) andThen Aggregate andThen core.DeadCodeElimination andThen core.Mono andThen optimizer.Optimizer
+    val afterCore = allToCore(Core) andThen Aggregate andThen core.DeadCodeElimination andThen core.Preprocess andThen core.Mono andThen optimizer.Optimizer
     val afterMachine = afterCore andThen Machine map { case (mod, main, prog) => prog }
     val afterLLVM = afterMachine map {
       case machine.Program(decls, defns, entry) =>
