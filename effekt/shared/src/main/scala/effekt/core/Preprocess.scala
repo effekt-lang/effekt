@@ -119,6 +119,7 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
       case CoreTransformed(source, tree, mod, core) => core match {
         case ModuleDecl(path, includes, declarations, externs, definitions, exports) => {
           val transformed = preprocess(core)
+          // println(util.show(transformed))
           Some(CoreTransformed(source, tree, mod, transformed))
         }
       }
@@ -131,40 +132,37 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
     var interfaces: List[Declaration.Interface] = List.empty
 
     // Map from function name + block arg index -> (interface + interface operation)
-    var replacements: Map[(Id, Int), FreshNames] = Map.empty
+    var replacements: Map[DeBruijn.BlockType, FreshNames] = Map.empty
 
     // apply ids for block arguments
     var appReplacements: Map[Id, (Id, Block.BlockVar)] = Map.empty
 
-    def getNames(id: Id, index: Int): Either[FreshNames, Id] =
-      replacements.get((id, index)) match {
-      case Some(v) => Left(v)
-      case None => Right(id)
-    }
+    def freshInterfaceNames(): FreshNames =
+      FreshNames(Id("Poly"), Id("apply"))
 
-    var interfaceIndex = 0
-    // TODO: maybe blockArgIndex can be an id instead of index
-    def freshInterfaceNames(id: Id, blockArgIndex: Int): FreshNames =
-      val interface = id.name.name ++ "_interface"
-      interfaceIndex = interfaceIndex + 1
-      FreshNames(Id(interface), Id("apply"))
-
-    def freshInterface(freshNames: FreshNames, blockTpe: BlockType.Function, block: Block.BlockLit): FreshNames =
+    def freshInterface(blockTpe: BlockType.Function, block: Block.BlockLit): FreshNames =
+      val freshNames = freshInterfaceNames()
       // Fresh tparams and subst?
       val extendedBlockTpe = BlockType.Function(blockTpe.tparams, blockTpe.cparams, blockTpe.vparams, blockTpe.bparams, blockTpe.result)
       val property = Property(freshNames.apply, extendedBlockTpe)
       interfaces +:= Declaration.Interface(freshNames.interface, block.tparams, List(property))
       freshNames
 
-    def emit(id: Id, index: Int, blockId: Id, blockTpe: BlockType.Function, block: Block.BlockLit): BlockType.Interface =
-      val freshNames = freshInterfaceNames(id, index)
-      val interface = freshInterface(freshNames, blockTpe, block)
-      replacements += (id, index) -> interface
-
+    def emit(id: Id, blockId: Id, blockTpe: BlockType.Function, block: Block.BlockLit): BlockType.Interface =
+      val debruijnBlockTpe = toDeBruijn(blockTpe)
+      val interface = replacements.get(debruijnBlockTpe) match {
+        case None => {
+          val interface = freshInterface(blockTpe, block)
+          replacements += debruijnBlockTpe -> interface
+          interface
+        }
+        case Some(value) => value
+      }
+      
       val targs = block.tparams.map(id => ValueType.Var(id))
-      val btInterface: BlockType.Interface = BlockType.Interface(freshNames.interface, targs)
+      val btInterface: BlockType.Interface = BlockType.Interface(interface.interface, targs)
       val callee: Block.BlockVar = BlockVar(blockId, btInterface, Set(blockId))
-      appReplacements += blockId -> (freshNames.apply, callee)
+      appReplacements += blockId -> (interface.apply, callee)
 
       btInterface
     }
@@ -189,7 +187,7 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
         blockParam.tpe match {
         case b: BlockType.Function => 
           if(b.tparams.length > 0) {
-            val interface = ctx.emit(funId, index, blockParam.id, b, block)
+            val interface = ctx.emit(funId, blockParam.id, b, block)
             BlockParam(blockParam.id, interface, blockParam.capt)
           } else {
             blockParam
@@ -215,8 +213,9 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
               case BlockType.Function(tparams, cparams, vparams, bparams, result) => tparams
               case BlockType.Interface(name, targs) => List.empty
             }
-            ctx.getNames(fnId, index) match {
-              case Left(value) => {
+            val debruijnBlockTpe = toDeBruijn(block.tpe)
+            ctx.replacements.get(debruijnBlockTpe) match {
+              case Some(value) => {
                 val defnId = Id(value.interface.name.name ++ "_defn")
                 val freshOp = Operation(value.apply, tparams, cparams, vparams, bparams, body)
                 val interfaceTpe: BlockType.Interface = BlockType.Interface(value.interface, targs)
@@ -226,7 +225,7 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
                 // TODO: Is passing callee captures here correct?
                 Block.BlockVar(defnId, interfaceTpe, callee.annotatedCapt)
               }
-              case Right(value) => Block.BlockLit(tparams, cparams, vparams, bparams, preprocess(body))
+              case None => Block.BlockLit(tparams, cparams, vparams, bparams, preprocess(body))
             }
           }
           case _ => block 
