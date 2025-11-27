@@ -93,6 +93,8 @@
 %String = type %Pos
 
 ; Foreign imports
+declare ptr @initializeArena()
+
 declare ptr @malloc(i64)
 declare void @free(ptr)
 declare ptr @realloc(ptr, i64)
@@ -128,16 +130,11 @@ declare void @llvm.assume(i1)
 @nextUnusedSlot = dso_local unnamed_addr global i8* null, align 8   ; Pointer to the next unused Slot
 
 @slotSize = constant i8 64, align 8         ; The size of each chunk (64 bytes)
-@totalAllocationSize = constant i64 4294967296, align 8  ; How much storage do we allocate at the beginning of a program? =4GB
 
 ; Initializes the memory for our effekt-objects that are created by newObject and deleted by eraseObject.
 define private void @initializeMemory() nounwind {
 entry:
-  ; we use mmap to allocate memory from the OS.
-  %size = load i64, i64* @totalAllocationSize, align 8
-
-  %startAddress = call noalias ptr @malloc(i64 %size)
-
+  %startAddress = call noalias ptr @initializeArena()  ;How much storage do we allocate at the beginning of a program? =4GB
   store i8* %startAddress, i8** @nextUnusedSlot
   ret void
 }
