@@ -242,8 +242,8 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
       val allTests = (Test / definedTestNames).value.toSet
 
-      // Explicit list of backend tests (union of all testBackend targets)
-      val backendTests = Set(
+      // Explicit list of tests run separately (union of all testBackend targets)
+      val separatedTests = Set(
         "effekt.JavaScriptTests",
         "effekt.StdlibJavaScriptTests",
         "effekt.ChezSchemeMonadicTests",
@@ -256,7 +256,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
         "effekt.core.ReparseTests",
       )
 
-      val remaining = allTests -- backendTests
+      val remaining = allTests -- separatedTests
 
       if (remaining.isEmpty) {
         log.info("No remaining tests")
