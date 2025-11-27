@@ -17,6 +17,8 @@ typedef struct Slot
  */
 #define SENTINEL_SLOT ((Slot*)1)
 
+static bool DEBUG = false;
+static Slot* freeList = NULL; // Head of the To-Do-List
 static Slot* todoList = SENTINEL_SLOT; // Head of the To-Do-List
 
 static uint8_t* nextUnusedSlot = NULL; // Pointer to the next unused Slot
@@ -38,6 +40,11 @@ void initializeMemory() {
         -1,                            // No file descriptor
         0                              // Offset
     );
+
+    if (DEBUG) {
+        uint8_t* endOfChunk = nextUnusedSlot + totalAllocationSize;
+        printf("[init] Memory initialized: %p - %p\n", (void*)nextUnusedSlot, (void*)endOfChunk);
+    }
 }
 
 /**
@@ -46,12 +53,24 @@ void initializeMemory() {
  * Otherwise, bump allocate a new slot.
  */
 void* acquire() {
-    // 1. If there a slot to reuse...
-    if (todoList != SENTINEL_SLOT) {
+    // 1. If there a slot ...
+    if (freeList != NULL) {
+
+        // ...pop it from free-list
+        Slot* reusedSlot = freeList;
+        freeList = reusedSlot->next;
+        if (DEBUG) printf("[acquire] Free block: %p\n", (void*)reusedSlot);
+
+        return reusedSlot;
+    }
+    // 2. Slow: If there a slot to in the to-do...
+    else if (todoList != SENTINEL_SLOT) {
 
         // ...pop it from to-do-list
         Slot* reusedSlot = todoList;
         todoList = reusedSlot->next;
+
+        if (DEBUG) printf("[acquire] Todo block: %p\n", (void*)reusedSlot);
 
         // Call the eraser function on it. After that, it is safe to reuse it again.
         reusedSlot->eraser(reusedSlot);
@@ -59,18 +78,37 @@ void* acquire() {
         return reusedSlot;
     }
 
-    // 2. Fallback - we bump-allocate a new slot
+    // 3. Fallback - we bump-allocate a new slot
     Slot* fresh = (Slot*)nextUnusedSlot;
+    if (DEBUG) printf("[acquire] New block: %p\n", (void*)fresh);
     nextUnusedSlot += slotSize;
     return fresh;
 }
 
 
 /**
- * Pushes a slot on the top of the To-Do-List.
+ * Pushes a slot on the top of the Free-List.
  */
 void release(void* ptr) {
     Slot* slot = (Slot*)ptr;
+    if (DEBUG) printf("[release] block: %p\n", (void*)slot);
+
+    slot->next = freeList;
+    freeList = slot;
+}
+
+void pushToTodo(void* ptr) {
+    Slot* slot = (Slot*)ptr;
+    if (DEBUG) printf("[pushToTodo] block: %p\n", (void*)slot);
+
     slot->next = todoList;
     todoList = slot;
+}
+
+void test() {
+    printf("test\n");
+}
+
+void myprint(void* ptr) {
+    printf("MYPRINT: %p\n", ptr);
 }

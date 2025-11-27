@@ -78,6 +78,11 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 
     case Load(result, tpe, LocalReference(PointerType(), name), alias) =>
       s"${localName(result)} = load ${show(tpe)}, ${show(LocalReference(PointerType(), name))}, !noalias ${alias.noalias}, !alias.scope ${alias.scope}"
+
+    // df: I had to add this exception here for testing the eraser
+    case Load(result, tpe, ConstantGlobal(name), _) =>
+      s"${localName(result)} = load ${show(tpe)}, ${show(ConstantGlobal(name))}"
+
     case Load(_, _, operand, _) => C.abort(s"WIP: loading anything but local references not yet implemented: $operand")
 
     // TODO [jfrech, 2022-07-26] Why does `Load` explicitly check for a local reference and `Store` does not?

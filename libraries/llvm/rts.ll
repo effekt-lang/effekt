@@ -97,6 +97,9 @@
 declare void @initializeMemory()
 declare ptr @acquire()
 declare void @release(ptr)
+declare void @pushToTodo(ptr)
+declare void @activateTodoMode()
+declare void @deactivateTodoMode()
 
 
 declare ptr @malloc(i64)
@@ -124,6 +127,8 @@ declare void @llvm.assume(i1)
 
 
 ; Prompts
+;@slotSize = private constant i8 64, align 8
+@isTodoMode = private global i64 0
 
 define private %Prompt @currentPrompt(%Stack %stack) {
     %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
@@ -180,6 +185,33 @@ define void @shareNegative(%Neg %val) alwaysinline {
     ret void
 }
 
+; Is called for each children of an object when the object is erased
+define private void @eraseChild(%Object %object) alwaysinline {
+    %isNull = icmp eq %Object %object, null
+    br i1 %isNull, label %done, label %next
+
+    next:
+    %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
+    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
+
+    ;call void @myprint(ptr %object)
+    ;ret void
+
+    switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
+
+    decr:
+    %referenceCount.1 = sub %ReferenceCount %referenceCount, 1
+    store %ReferenceCount %referenceCount.1, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
+    ret void
+
+    free:
+    ;call void @eraser(%Object %object)
+    ret void
+
+    done:
+    ret void
+}
+
 define private void @eraseObject(%Object %object) alwaysinline {
     %isNull = icmp eq %Object %object, null
     br i1 %isNull, label %done, label %next
@@ -201,6 +233,18 @@ define private void @eraseObject(%Object %object) alwaysinline {
     br label %done
 
     done:
+    ret void
+}
+
+define void @erasePositiveChild(%Pos %val) alwaysinline {
+    %object = extractvalue %Pos %val, 1
+    tail call void @eraseChild(%Object %object)
+    ret void
+}
+
+define void @eraseNegativeChild(%Neg %val) alwaysinline {
+    %object = extractvalue %Neg %val, 1
+    tail call void @eraseChild(%Object %object)
     ret void
 }
 

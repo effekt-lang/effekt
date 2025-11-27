@@ -12,21 +12,34 @@ extern js """
 extern llvm """
 define void @c_ref_erase(%Object %object) {
 
-  entry:
-    %objectReferenceCount = getelementptr %Header, %Object %object, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !noalias !24, !alias.scope !14
-    switch %ReferenceCount %referenceCount, label %eraseChildren [i64 0, label %release]
+    entry:
+        %isTodoMode = load i64, ptr @isTodoMode
+        switch i64 %isTodoMode, label %pushToTodo [i64 0, label %erase]
 
-  release:
-    call ccc void @release(%Object %object)
-    ret void
+    erase:
+        store i64 1, ptr @isTodoMode, !noalias !24, !alias.scope !14
 
-  eraseChildren:
-    %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
-    %environment = getelementptr i8, ptr %object, i64 %headerSize
-    %field = load %Pos, ptr %environment, align 8
-    call void @erasePositive(%Pos %field)
-    ret void
+        %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
+        %environment = getelementptr i8, ptr %object, i64 %headerSize
+        %field = load %Pos, ptr %environment, align 8
+        call void @erasePositive(%Pos %field)
+
+        store i64 0, ptr @isTodoMode, !noalias !24, !alias.scope !14
+
+        %objectReferenceCount = getelementptr %Header, %Object %object, i64 0, i32 0
+        %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !noalias !24, !alias.scope !14
+        switch %ReferenceCount %referenceCount, label %done [i64 0, label %release]
+
+    release:
+        call ccc void @release(%Object %object)
+        ret void
+
+    pushToTodo:
+        call ccc void @pushToTodo(%Object %object)
+        ret void
+
+    done:
+        ret void
 }
 """
 
