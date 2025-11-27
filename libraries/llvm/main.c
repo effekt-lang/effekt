@@ -13,7 +13,7 @@
 #include "bytearray.c"
 #include "io.c"
 #include "panic.c"
-
+#include "cMalloc.c"
 
 extern void effektMain();
 
