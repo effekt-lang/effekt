@@ -1,0 +1,5 @@
+def foo { f: (Int, String) => Unit }: Unit = f(42, "hello")
+
+def main() = foo { case (n, s) =>
+  println(n)
+}
