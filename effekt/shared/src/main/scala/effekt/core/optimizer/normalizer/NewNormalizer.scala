@@ -616,7 +616,7 @@ class NewNormalizer {
     case Value.Make(data, tag, targs, vargs) => Expr.Make(data, tag, targs, vargs.map(embedExpr))
     case Value.Box(body, annotatedCapture) => Expr.Box(embedBlock(body), annotatedCapture)
     case Value.Var(id, annotatedType) => Expr.ValueVar(id, annotatedType)
-    case Value.Integer(value) => theories.Integers.reify(value, cx.builtinBlockVars)
+    case Value.Integer(value) => theories.integers.reify(value, cx.builtinBlockVars)
   }
 
   def embedExpr(addr: Addr)(using G: TypingContext): core.Expr = Expr.ValueVar(addr, G.lookupValue(addr))

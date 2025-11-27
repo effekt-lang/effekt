@@ -13,7 +13,7 @@ type Builtins = Map[String, BuiltinImpl]
 
 given Conversion[Long, semantics.Value] with
   def apply(n: Long): semantics.Value =
-    semantics.Value.Integer(theories.Integers.embed(n))
+    semantics.Value.Integer(theories.integers.embed(n))
 
 given Conversion[Boolean, semantics.Value] with
   def apply(b: Boolean): semantics.Value =
@@ -33,13 +33,13 @@ lazy val integers: Builtins = Map(
   // Integer arithmetic operations with symbolic simplification support
   // ----------
   builtin("effekt::infixAdd(Int, Int)") {
-    case As.IntExpr(x) :: As.IntExpr(y) :: Nil => semantics.Value.Integer(theories.Integers.add(x, y))
+    case As.IntExpr(x) :: As.IntExpr(y) :: Nil => semantics.Value.Integer(theories.integers.add(x, y))
   },
   builtin("effekt::infixSub(Int, Int)") {
-    case As.IntExpr(x) :: As.IntExpr(y) :: Nil => semantics.Value.Integer(theories.Integers.sub(x, y))
+    case As.IntExpr(x) :: As.IntExpr(y) :: Nil => semantics.Value.Integer(theories.integers.sub(x, y))
   },
   builtin("effekt::infixMul(Int, Int)") {
-    case As.IntExpr(x) :: As.IntExpr(y) :: Nil => semantics.Value.Integer(theories.Integers.mul(x, y))
+    case As.IntExpr(x) :: As.IntExpr(y) :: Nil => semantics.Value.Integer(theories.integers.mul(x, y))
   },
   // Integer arithmetic operations only evaluated for literals
   // ----------
@@ -251,13 +251,13 @@ protected object As {
   }
 
   object IntExpr {
-    def unapply(v: semantics.Value): Option[theories.Integers.Integer] = v match {
+    def unapply(v: semantics.Value): Option[theories.integers.Integer] = v match {
       // Integer literals not yet embedded into the theory of integers
-      case semantics.Value.Literal(value: scala.Long, _) => Some(theories.Integers.embed(value))
-      case semantics.Value.Literal(value: scala.Int, _) => Some(theories.Integers.embed(value.toLong))
-      case semantics.Value.Literal(value: java.lang.Integer, _) => Some(theories.Integers.embed(value.toLong))
+      case semantics.Value.Literal(value: scala.Long, _) => Some(theories.integers.embed(value))
+      case semantics.Value.Literal(value: scala.Int, _) => Some(theories.integers.embed(value.toLong))
+      case semantics.Value.Literal(value: java.lang.Integer, _) => Some(theories.integers.embed(value.toLong))
       // Variables of type integer
-      case semantics.Value.Var(id, tpe) if tpe == Type.TInt => Some(theories.Integers.embed(id))
+      case semantics.Value.Var(id, tpe) if tpe == Type.TInt => Some(theories.integers.embed(id))
       // Already embedded integers
       case semantics.Value.Integer(value) => Some(value)
       case _ => None

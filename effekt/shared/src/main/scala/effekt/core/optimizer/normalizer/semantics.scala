@@ -30,7 +30,7 @@ object semantics {
     case Extern(f: BlockVar, targs: List[ValueType], vargs: List[Addr])
 
     // Values with specialized representation for algebraic simplification
-    case Integer(value: theories.Integers.Integer)
+    case Integer(value: theories.integers.Integer)
 
     // Fallback literal for other values types without special representation
     case Literal(value: Any, annotatedType: ValueType)

@@ -2,7 +2,8 @@ package effekt.core
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.{Context, IOModuleDB}
-import effekt.core.optimizer.{Deadcode, NewNormalizer, Normalizer, Optimizer}
+import effekt.core.optimizer.{Deadcode, Normalizer, Optimizer}
+import effekt.core.optimizer.normalizer.NewNormalizer
 import effekt.util.PlainMessaging
 import effekt.*
 import kiama.output.PrettyPrinterTypes.Document

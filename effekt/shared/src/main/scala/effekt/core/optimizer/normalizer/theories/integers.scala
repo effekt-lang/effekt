@@ -9,7 +9,7 @@ import effekt.core.{Expr, Id, Type}
  * KNOWN LIMITATION: This implementation assumes 64-bit signed integers.
  * Unfortunately, this is unsound for the JavaScript backend, which uses JavaScript numbers that are IEEE-754 doubles.
  */
-object Integers {
+object integers {
   case class Integer(value: Long, addends: Addends) {
     val free: Set[Id] = addends.flatMap { case (factors, _) => factors.keys }.toSet
 
@@ -36,8 +36,8 @@ object Integers {
   }
   import Operation._
 
-  def embed(value: Long): Integers.Integer = Integer(value, Map.empty)
-  def embed(id: Id): Integers.Integer = Integer(0, Map(Map(id -> 1) -> 1))
+  def embed(value: Long): integers.Integer = Integer(value, Map.empty)
+  def embed(id: Id): integers.Integer = Integer(0, Map(Map(id -> 1) -> 1))
 
   def reify(value: Integer, embedBuiltinName: String => BlockVar): Expr = Reify(embedBuiltinName).reify(value)
 
