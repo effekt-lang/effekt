@@ -1,7 +1,5 @@
 #include <sys/mman.h>
 
-static bool DEBUG = false;
-
 static const uint8_t* freeList = NULL;
 static const size_t totalAllocationSize = (size_t)4294967296ULL;    // How much storage do we allocate at the beginning of a program? =4GB
 
@@ -19,20 +17,13 @@ void initializeMemory() {
         -1,                            // No file descriptor
         0                              // Offset
     );
-
-    if (DEBUG) {
-        const uint8_t* endOfChunk = freeList + totalAllocationSize;
-        printf("[init] Memory initialized: %p - %p\n", (void*)freeList, (void*)endOfChunk);
-    }
 }
 
 void* acquire(int size) {
     void* ptr = (void*)freeList;
-    printf("[acquire]: New Block %p\n", ptr);
     freeList = freeList + size;
     return ptr;
 }
 
 void release(void* ptr) {
-    printf("[Release]: Skipped %p\n", ptr);
 }
