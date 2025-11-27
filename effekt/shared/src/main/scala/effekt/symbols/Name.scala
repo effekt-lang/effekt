@@ -18,7 +18,7 @@ sealed trait Name {
 }
 
 case object NoName extends Name {
-  def name = "<anon>"
+  def name = "__anon"
   def rename(f: String => String): NoName.type = this
 }
 

@@ -453,7 +453,11 @@ object Tree {
     def rewrite(o: Operation): Operation = rewriteStructurally(o)
     def rewrite(p: ValueParam): ValueParam = rewriteStructurally(p)
     def rewrite(p: BlockParam): BlockParam = rewriteStructurally(p)
-    def rewrite(b: ExternBody): ExternBody= rewrite(b)
+    def rewrite(b: ExternBody): ExternBody= rewriteStructurally(b)
+    def rewrite(e: Extern): Extern= rewriteStructurally(e)
+    def rewrite(d: Declaration): Declaration = rewriteStructurally(d)
+    def rewrite(c: Constructor): Constructor = rewriteStructurally(c)
+    def rewrite(f: Field): Field = rewriteStructurally(f)
 
     def rewrite(b: BlockLit): BlockLit = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
       case BlockLit(tparams, cparams, vparams, bparams, body) =>
@@ -469,6 +473,7 @@ object Tree {
     def rewrite(t: BlockType): BlockType = rewriteStructurally(t)
     def rewrite(t: BlockType.Interface): BlockType.Interface = rewriteStructurally(t)
     def rewrite(capt: Captures): Captures = capt.map(rewrite)
+    def rewrite(p: Property): Property = rewriteStructurally(p)
 
     def rewrite(m: ModuleDecl): ModuleDecl =
       m match {

@@ -47,14 +47,19 @@ trait CoreTests extends munit.FunSuite {
                             expected: ModuleDecl,
                             clue: => Any = "values are not alpha-equivalent",
                             names: Names = Names(defaultNames))(using Location): Unit = {
-    val renamer = TestRenamer(names, "$")
-    shouldBeEqual(renamer(obtained), renamer(expected), clue)
+    val renamer = TestRenamer(names)
+    val obtainedRenamed = renamer(obtained)
+    val expectedRenamed = renamer(expected)
+    val obtainedPrinted = effekt.core.PrettyPrinter.format(obtainedRenamed).layout
+    val expectedPrinted = effekt.core.PrettyPrinter.format(expectedRenamed).layout
+    assertEquals(obtainedPrinted, expectedPrinted)
+    shouldBeEqual(obtainedRenamed, expectedRenamed, clue)
   }
   def assertAlphaEquivalentStatements(obtained: Stmt,
                             expected: Stmt,
                             clue: => Any = "values are not alpha-equivalent",
                             names: Names = Names(defaultNames))(using Location): Unit = {
-    val renamer = TestRenamer(names, "$")
+    val renamer = TestRenamer(names)
     shouldBeEqual(renamer(obtained), renamer(expected), clue)
   }
   def parse(input: String,

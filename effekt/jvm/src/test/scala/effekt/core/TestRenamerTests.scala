@@ -14,18 +14,29 @@ class TestRenamerTests extends CoreTests {
     val pExpected = parse(renamed, "expected", names)
     val renamer = new TestRenamer(names, "renamed") // use "renamed" as prefix so we can refer to it
     val obtained = renamer(pInput)
+    val obtainedPrinted = effekt.core.PrettyPrinter.format(obtained).layout
+    val expectedPrinted = effekt.core.PrettyPrinter.format(pExpected).layout
+    assertEquals(obtainedPrinted, expectedPrinted)
     shouldBeEqual(obtained, pExpected, clue)
   }
 
   test("No bound local variables"){
-    val code =
+    val input =
       """module main
         |
         |def foo = { () =>
         |  return (bar: (Int) => Int @ {})(baz:Int)
         |}
         |""".stripMargin
-    assertRenamedTo(code, code)
+    val expected =
+      """module main
+        |
+        |def renamed0() = {
+        |  return (bar: (Int) => Int @ {})(baz: Int)
+        |}
+        |""".stripMargin
+
+    assertRenamedTo(input, expected)
   }
 
   test("val binding"){
@@ -40,9 +51,11 @@ class TestRenamerTests extends CoreTests {
     val expected =
       """module main
         |
-        |def foo = { () =>
-        |  val renamed1 = (foo:(Int)=>Int@{})(4);
-        |  return renamed1:Int
+        |def renamed0() = {
+        |  val renamed1: Int = {
+        |    renamed0: (Int) => Int @ {}(4)
+        |  };
+        |  return renamed1: Int
         |}
         |""".stripMargin
     assertRenamedTo(input, expected)
@@ -60,9 +73,9 @@ class TestRenamerTests extends CoreTests {
     val expected =
       """module main
         |
-        |def foo = { () =>
-        |  var renamed1 @ global = (foo:(Int)=>Int@{})(4);
-        |  return renamed1:Int
+        |def renamed0() = {
+        |  var renamed1 @ global = (renamed0: (Int) => Int @ {})(4);
+        |  return renamed1: Int
         |}
         |""".stripMargin
     assertRenamedTo(input, expected)
@@ -72,15 +85,15 @@ class TestRenamerTests extends CoreTests {
     val input =
       """module main
         |
-        |def foo = { (x:Int) =>
-        |  return x:Int
+        |def renamed0(renamed1: Int) = {
+        |  return renamed1: Int
         |}
         |""".stripMargin
     val expected =
       """module main
         |
-        |def foo = { (renamed1:Int) =>
-        |  return renamed1:Int
+        |def renamed0(renamed1: Int) = {
+        |  return renamed1: Int
         |}
         |""".stripMargin
     assertRenamedTo(input, expected)
@@ -98,15 +111,20 @@ class TestRenamerTests extends CoreTests {
         |}
         |""".stripMargin
     val expected =
-        """module main
-          |
-          |type Data { X(a:Int, b:Int) }
-          |def foo = { () =>
-          |  12 match {
-          |    X : {(renamed1:Int, renamed2:Int) => return renamed1:Int }
-          |  }
-          |}
-          |""".stripMargin
+      """module main
+        |
+        |type renamed1 {
+        |  renamed0(a: Int, b: Int)
+        |}
+        |
+        |def renamed2() = {
+        |  12 match {
+        |    X : { (renamed3: Int, renamed4: Int) =>
+        |      return renamed3: Int
+        |    }
+        |  }
+        |}
+        |""".stripMargin
     assertRenamedTo(input, expected)
   }
 
@@ -121,8 +139,8 @@ class TestRenamerTests extends CoreTests {
     val expected =
       """module main
         |
-        |def foo = { ['renamed1](renamed2: renamed1) =>
-        |  return renamed2:Identity[renamed1]
+        |def renamed0['renamed1](renamed2: renamed1) = {
+        |  return renamed2: Identity[renamed1]
         |}
         |""".stripMargin
     assertRenamedTo(input, expected)
@@ -141,14 +159,20 @@ class TestRenamerTests extends CoreTests {
         |""".stripMargin
 
     val expected =
-      """ module main
+      """module main
         |
-        | def bar = { () => return 1 }
-        | def main = { () =>
-        |   def renamed1 = { () => (bar : () => Unit @ {})() }
-        |   def renamed2 = { () => return 2 }
-        |   (renamed1 : () => Unit @ {})()
-        | }
+        |def renamed0() = {
+        |  return 1
+        |}
+        |def renamed1() = {
+        |  def renamed2() = {
+        |    renamed0: () => Unit @ {}()
+        |  }
+        |  def renamed3() = {
+        |    return 2
+        |  }
+        |  renamed2: () => Unit @ {}()
+        |}
         |""".stripMargin
 
     assertRenamedTo(input, expected)
@@ -165,13 +189,13 @@ class TestRenamerTests extends CoreTests {
         |""".stripMargin
 
     val expected =
-      """ module main
+      """module main
         |
-        | def main = { () =>
-        |   let renamed1 = 1
-        |   let renamed2 = 2
-        |   return renamed2:Int
-        | }
+        |def renamed0() = {
+        |  let renamed1 = 1
+        |  let renamed2 = 2
+        |  return renamed2: Int
+        |}
         |""".stripMargin
 
     assertRenamedTo(input, expected)
