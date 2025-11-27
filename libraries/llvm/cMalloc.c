@@ -54,7 +54,7 @@ void* acquire() {
         todoList = reusedSlot->next;
 
         // Call the eraser function on it. After that, it is safe to reuse it again.
-        reusedSlot->eraser(reusedSlot);
+//        reusedSlot->eraser(reusedSlot);
 
         return reusedSlot;
     }

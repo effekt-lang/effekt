@@ -957,23 +957,25 @@ object Transformer {
   private def createEraserForNormalObjects(freshEnvironment: machine.Environment)(using C: ModuleContext): Operand = {
     val eraser = ConstantGlobal(freshName("eraser"))
     defineFunction(eraser.name, List(Parameter(objectType, "object"))) {
-      val objectRefCountPtr = LocalReference(PointerType(), freshName("objectReferenceCount"))
-      val referenceCount = LocalReference(referenceCountType, freshName("referenceCount"))
-      val releaseLabel = freshName("release")
-      val eraseChildrenLabel = freshName("eraseChildren")
-
-      // Entry block: Check reference count to determine phase
-      // Switch: if refCount == 0, go to "release" (first phase), else "eraseChildren" (second phase)
-      // Note: When refCount == 0, this is the first call from eraseObject -> just release
-      //       When refCount != 0, this is the second call from acquire -> erase children
-      emit(GetElementPtr(objectRefCountPtr.name, headerType, LocalReference(objectType, "object"), List(0, 0)))
-      emit(Load(referenceCount.name, referenceCountType, objectRefCountPtr, Object))
-
-      createAndEmitReleaseBasicBlock(releaseLabel)
-      createAndEmitEraseChildrenBasicBlock(freshEnvironment, eraseChildrenLabel)
-
-      // Return switch terminator from entry block
-      Switch(referenceCount, eraseChildrenLabel, List((0, releaseLabel)))
+      emit(Call("", Ccc(), VoidType(), ConstantGlobal("release"), List(LocalReference(objectType, "object"))))
+      RetVoid()
+//      val objectRefCountPtr = LocalReference(PointerType(), freshName("objectReferenceCount"))
+//      val referenceCount = LocalReference(referenceCountType, freshName("referenceCount"))
+//      val releaseLabel = freshName("release")
+//      val eraseChildrenLabel = freshName("eraseChildren")
+//
+//      // Entry block: Check reference count to determine phase
+//      // Switch: if refCount == 0, go to "release" (first phase), else "eraseChildren" (second phase)
+//      // Note: When refCount == 0, this is the first call from eraseObject -> just release
+//      //       When refCount != 0, this is the second call from acquire -> erase children
+//      emit(GetElementPtr(objectRefCountPtr.name, headerType, LocalReference(objectType, "object"), List(0, 0)))
+//      emit(Load(referenceCount.name, referenceCountType, objectRefCountPtr, Object))
+//
+//      createAndEmitReleaseBasicBlock(releaseLabel)
+//      createAndEmitEraseChildrenBasicBlock(freshEnvironment, eraseChildrenLabel)
+//
+//      // Return switch terminator from entry block
+//      Switch(referenceCount, eraseChildrenLabel, List((0, releaseLabel)))
     }
 
     eraser

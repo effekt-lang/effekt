@@ -3,6 +3,10 @@
 
 // here we allocate the biggest object at first and go to the smallest.
 
+record TinyOneSlotPerson(
+  field1: Int
+)
+
 record OneSlotPerson(
   field1: Int,
   field2: Int,
@@ -37,10 +41,15 @@ record ThreeSlotPerson(
   )
 
 def main() = {
-  val p3 = ThreeSlotPerson(14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)
-  println(p3.field11)
+  //val p3 = ThreeSlotPerson(14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)
+  //println(p3.field11)
   val p2 = TwoSlotPerson(7, 8, 9, 10, 11, 12, 13)
   println(p2.field7)
   val p1 = OneSlotPerson(1, 2, 3, 4, 5, 6)
   println(p1.field6)
+  //val p4 = TinyOneSlotPerson(25)
+  //println(p4.field1)
+  //val p5 = TwoSlotPerson(27, 28, 29, 30, 31, 32, 33)
+  //println(p5.field7)
+
 }
