@@ -1,5 +1,6 @@
-[error] examples/neg/typer/expected_args_got_lambdacase.effekt:4:13: Wrong number of arguments to function: expected 2 value arguments, but got 1 value argument
-  println(n)
-
-[info] examples/neg/typer/expected_args_got_lambdacase.effekt:4:13: Did you mean to use `(x, y) => ...` instead of `case (x, y) => ...`?
-  println(n)
+[error] examples/neg/typer/expected_args_got_lambdacase.effekt:3:20: Wrong number of arguments to function: expected 2 value arguments, but got 1 value argument
+def main() = foo { case (n, s) =>
+                   ^
+[info] examples/neg/typer/expected_args_got_lambdacase.effekt:3:20: Did you mean to use `(x, y) => ...` instead of `case (x, y) => ...`?
+def main() = foo { case (n, s) =>
+                   ^
