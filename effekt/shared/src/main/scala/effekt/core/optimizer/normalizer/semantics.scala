@@ -25,13 +25,15 @@ object semantics {
   def all[A](ts: List[A], f: A => Variables): Variables = ts.flatMap(f).toSet
 
   enum Value {
-    // Stuck
+    // Stuck (neutrals)
     case Var(id: Id, annotatedType: ValueType)
     case Extern(f: BlockVar, targs: List[ValueType], vargs: List[Addr])
 
-    // Actual Values
-    case Literal(value: Any, annotatedType: ValueType)
+    // Values with specialized representation for algebraic simplification
     case Integer(value: theories.Integers.Integer)
+
+    // Fallback literal for other values types without special representation
+    case Literal(value: Any, annotatedType: ValueType)
 
     case Make(data: ValueType.Data, tag: Id, targs: List[ValueType], vargs: List[Addr])
 
