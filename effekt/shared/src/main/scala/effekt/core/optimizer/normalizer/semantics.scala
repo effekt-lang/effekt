@@ -24,13 +24,16 @@ object semantics {
   type Variables = Set[Id]
   def all[A](ts: List[A], f: A => Variables): Variables = ts.flatMap(f).toSet
 
+  type Neutral = Value.Var | Value.Extern
+  
   enum Value {
     // Stuck (neutrals)
     case Var(id: Id, annotatedType: ValueType)
     case Extern(f: BlockVar, targs: List[ValueType], vargs: List[Addr])
 
     // Values with specialized representation for algebraic simplification
-    case Integer(value: theories.integers.Integer)
+    case Integer(value: theories.integers.IntegerRep)
+    case String(value: theories.strings.StringRep)
 
     // Fallback literal for other values types without special representation
     case Literal(value: Any, annotatedType: ValueType)
@@ -47,6 +50,7 @@ object semantics {
       case Value.Extern(id, targs, vargs) => vargs.toSet
       case Value.Literal(value, annotatedType) => Set.empty
       case Value.Integer(value) => value.free
+      case Value.String(value) => value.free
       case Value.Make(data, tag, targs, vargs) => vargs.toSet
       // Box abstracts over all free computation variables, only when unboxing, they occur free again
       case Value.Box(body, tpe) => body.free
@@ -680,6 +684,8 @@ object semantics {
           parens(hsep(vargs.map(toDoc), comma))
 
       case Value.Literal(value, _) => util.show(value)
+      case Value.Integer(value) => value.show
+      case Value.String(value) => value.show
 
       case Value.Make(data, tag, targs, vargs) =>
         "make" <+> toDoc(data) <+> toDoc(tag) <>
@@ -690,8 +696,6 @@ object semantics {
         "box" <+> braces(nest(line <> toDoc(body) <> line))
 
       case Value.Var(id, tpe) => toDoc(id)
-
-      case Value.Integer(value) => value.show
     }
 
     def toDoc(block: Block): Doc = block match {

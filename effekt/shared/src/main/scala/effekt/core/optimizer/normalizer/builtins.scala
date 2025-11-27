@@ -33,13 +33,13 @@ lazy val integers: Builtins = Map(
   // Integer arithmetic operations with symbolic simplification support
   // ----------
   builtin("effekt::infixAdd(Int, Int)") {
-    case As.IntExpr(x) :: As.IntExpr(y) :: Nil => semantics.Value.Integer(theories.integers.add(x, y))
+    case As.IntRep(x) :: As.IntRep(y) :: Nil => semantics.Value.Integer(theories.integers.add(x, y))
   },
   builtin("effekt::infixSub(Int, Int)") {
-    case As.IntExpr(x) :: As.IntExpr(y) :: Nil => semantics.Value.Integer(theories.integers.sub(x, y))
+    case As.IntRep(x) :: As.IntRep(y) :: Nil => semantics.Value.Integer(theories.integers.sub(x, y))
   },
   builtin("effekt::infixMul(Int, Int)") {
-    case As.IntExpr(x) :: As.IntExpr(y) :: Nil => semantics.Value.Integer(theories.integers.mul(x, y))
+    case As.IntRep(x) :: As.IntRep(y) :: Nil => semantics.Value.Integer(theories.integers.mul(x, y))
   },
   // Integer arithmetic operations only evaluated for literals
   // ----------
@@ -190,7 +190,7 @@ lazy val booleans: Builtins = Map(
 
 lazy val strings: Builtins = Map(
   builtin("effekt::infixConcat(String, String)") {
-    case As.String(x) :: As.String(y) :: Nil => x + y
+    case As.StringRep(x) :: As.StringRep(y) :: Nil => semantics.Value.String(theories.strings.concat(x, y))
   },
 
   builtin("effekt::infixEq(String, String)") {
@@ -246,18 +246,19 @@ protected object As {
       case semantics.Value.Literal(value: scala.Long, _) => Some(value)
       case semantics.Value.Literal(value: scala.Int, _) => Some(value.toLong)
       case semantics.Value.Literal(value: java.lang.Integer, _) => Some(value.toLong)
+      case semantics.Value.Integer(value) if value.isLiteral => Some(value.value)
       case _ => None
     }
   }
 
-  object IntExpr {
-    def unapply(v: semantics.Value): Option[theories.integers.Integer] = v match {
+  object IntRep {
+    def unapply(v: semantics.Value): Option[theories.integers.IntegerRep] = v match {
       // Integer literals not yet embedded into the theory of integers
       case semantics.Value.Literal(value: scala.Long, _) => Some(theories.integers.embed(value))
       case semantics.Value.Literal(value: scala.Int, _) => Some(theories.integers.embed(value.toLong))
       case semantics.Value.Literal(value: java.lang.Integer, _) => Some(theories.integers.embed(value.toLong))
-      // Variables of type integer
-      case semantics.Value.Var(id, tpe) if tpe == Type.TInt => Some(theories.integers.embed(id))
+      // Neutrals (e.g. variables or extern calls)
+      case n: semantics.Neutral => Some(theories.integers.embed(n))
       // Already embedded integers
       case semantics.Value.Integer(value) => Some(value)
       case _ => None
@@ -274,6 +275,16 @@ protected object As {
   object String {
     def unapply(v: semantics.Value): Option[java.lang.String] = v match {
       case semantics.Value.Literal(value: java.lang.String, _) => Some(value)
+      case semantics.Value.String(value) if value.isLiteral => Some(value.value.head.asInstanceOf[java.lang.String])
+      case _ => None
+    }
+  }
+
+  object StringRep {
+    def unapply(v: semantics.Value): Option[theories.strings.StringRep] = v match {
+      case semantics.Value.Literal(value: java.lang.String, _) => Some(theories.strings.embed(value))
+      case n: semantics.Neutral => Some(theories.strings.embed(n))
+      case semantics.Value.String(value) => Some(value)
       case _ => None
     }
   }

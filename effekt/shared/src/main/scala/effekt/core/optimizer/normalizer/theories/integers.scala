@@ -2,24 +2,26 @@ package effekt.core.optimizer.normalizer.theories
 
 import effekt.core.Block.BlockVar
 import effekt.core.{Expr, Id, Type}
+import effekt.core.optimizer.normalizer.semantics.Neutral
 
 /**
  * Theory for integers with neutral variables: multivariate Laurent polynomials with 64-bit signed integer coefficients.
+ * Compare https://en.wikipedia.org/wiki/Laurent_polynomial
  *
  * KNOWN LIMITATION: This implementation assumes 64-bit signed integers.
  * Unfortunately, this is unsound for the JavaScript backend, which uses JavaScript numbers that are IEEE-754 doubles.
  */
 object integers {
-  case class Integer(value: Long, addends: Addends) {
-    val free: Set[Id] = addends.flatMap { case (factors, _) => factors.keys }.toSet
-
+  case class IntegerRep(value: Long, addends: Addends) {
+    val free: Set[Id] = addends.flatMap { case (factors, _) => factors.keys.flatMap(_.free) }.toSet
+    def isLiteral: Boolean = addends.isEmpty
     def show: String = {
-      val Integer(v, a) = this
+      val IntegerRep(v, a) = this
       val terms = a.map { case (factors, n) =>
         val factorStr = if (factors.isEmpty) "1" else {
-          factors.map { case (id, exp) =>
-            if (exp == 1) s"${id.name}"
-            else s"${id.name}^$exp"
+          factors.map { case (n, exp) =>
+            if (exp == 1) "<neutral>"
+            else s"<neutral>^$exp"
           }.mkString("*")
         }
         if (n == 1) s"$factorStr"
@@ -36,24 +38,25 @@ object integers {
   }
   import Operation._
 
-  def embed(value: Long): integers.Integer = Integer(value, Map.empty)
-  def embed(id: Id): integers.Integer = Integer(0, Map(Map(id -> 1) -> 1))
+  def embed(value: Long): integers.IntegerRep = IntegerRep(value, Map.empty)
+  def embed(n: Neutral): integers.IntegerRep = IntegerRep(0, Map(Map(n -> 1) -> 1))
 
-  def reify(value: Integer, embedBuiltinName: String => BlockVar): Expr = Reify(embedBuiltinName).reify(value)
+  def reify(value: IntegerRep, embedBuiltinName: String => BlockVar, embedNeutral: Neutral => Expr): Expr =
+    Reify(embedBuiltinName, embedNeutral).reify(value)
 
   // 3 * x * x / y   =  Addend(3, Map(x -> 2, y -> -1))
   type Addends = Map[Factors, Long]
-  type Factors = Map[Id, Int]
+  type Factors = Map[Neutral, Int]
 
-  def normalize(n: Integer): Integer = normalized(n.value, n.addends)
+  def normalize(n: IntegerRep): IntegerRep = normalized(n.value, n.addends)
 
-  def normalized(value: Long, addends: Addends): Integer =
+  def normalized(value: Long, addends: Addends): IntegerRep =
     val (const, norm) = normalizeAddends(addends)
-    Integer(value + const, norm)
+    IntegerRep(value + const, norm)
 
-  def add(l: Integer, r: Integer): Integer = (l, r) match {
+  def add(l: IntegerRep, r: IntegerRep): IntegerRep = (l, r) match {
     // 2 + (3 * x)  +   4 + (5 * y)   =    6 + (3 * x) + (5 * y)
-    case (Integer(x, xs), Integer(y, ys)) =>
+    case (IntegerRep(x, xs), IntegerRep(y, ys)) =>
       normalized(x + y, add(xs, ys))
   }
 
@@ -81,20 +84,20 @@ object integers {
     (constant, filtered)
   }
 
-  def neg(l: Integer): Integer = mul(l, -1)
+  def neg(l: IntegerRep): IntegerRep = mul(l, -1)
 
   // (42 + 3*x + y) - (42 + 3*x + y) =  (42 + 3*x + y) + (-1*42 + -1*3*x + -1*y)
-  def sub(l: Integer, r: Integer): Integer =
+  def sub(l: IntegerRep, r: IntegerRep): IntegerRep =
     add(l, neg(r))
 
-  def mul(l: Integer, factor: Long): Integer = l match {
-    case Integer(value, addends) =>
-      Integer(value * factor, addends.map { case (f, n) => f -> n * factor })
+  def mul(l: IntegerRep, factor: Long): IntegerRep = l match {
+    case IntegerRep(value, addends) =>
+      IntegerRep(value * factor, addends.map { case (f, n) => f -> n * factor })
   }
 
-  def mul(l: Integer, factor: Factors): Integer = l match {
-    case Integer(value, addends) =>
-      Integer(0, Map(factor -> value) ++ addends.map { case (f, n) =>
+  def mul(l: IntegerRep, factor: Factors): IntegerRep = l match {
+    case IntegerRep(value, addends) =>
+      IntegerRep(0, Map(factor -> value) ++ addends.map { case (f, n) =>
         mul(f, factor) -> n
       })
   }
@@ -111,20 +114,20 @@ object integers {
 
   // x1^2 * x2^0 * x3^3   =   x1^2 * x3^3
   def normalizeFactors(f: Factors): Factors =
-    f.filterNot { case (id, exp) => exp == 0 }
+    f.filterNot { case (n, exp) => exp == 0 }
 
   // (42 + 3*x + y) * (42 + 3*x + y)
   //    =
   // (42 + 3*x + y) * 42   +  (42 + 3*x + y) * 3*x   +    (42 + 3*x + y) * y
-  def mul(l: Integer, r: Integer): Integer = r match {
-    case Integer(y, ys) =>
-      var sum: Integer = mul(l, y)
+  def mul(l: IntegerRep, r: IntegerRep): IntegerRep = r match {
+    case IntegerRep(y, ys) =>
+      var sum: IntegerRep = mul(l, y)
       ys.foreach { case (f, n) => sum = add(sum, mul(mul(l, n), f)) }
       normalize(sum)
   }
 
-  case class Reify(embedBuiltinName: String => BlockVar) {
-    def reifyVar(id: Id): Expr = Expr.ValueVar(id, Type.TInt)
+  case class Reify(embedBuiltinName: String => BlockVar, embedNeutral: Neutral => Expr) {
+    def reifyVar(n: Neutral): Expr = embedNeutral(n)
 
     def reifyInt(v: Long): Expr = Expr.Literal(v, Type.TInt)
 
@@ -135,8 +138,8 @@ object integers {
       case Div => Expr.PureApp(embedBuiltinName("effekt::infixDiv(Int, Int)"), List(), List(l, r))
     }
 
-    def reify(v: Integer): Expr =
-      val Integer(const, addends) = normalize(v)
+    def reify(v: IntegerRep): Expr =
+      val IntegerRep(const, addends) = normalize(v)
 
       val adds = addends.toList.map { case (factors, n) =>
         if (n == 1) reifyFactors(factors)
@@ -150,7 +153,7 @@ object integers {
         reifyInt(const)
       }
 
-    def reifyFactor(x: Id, n: Int): Expr =
+    def reifyFactor(x: Neutral, n: Int): Expr =
       if (n <= 0) sys error "Should not happen"
       else if (n == 1) reifyVar(x)
       else reifyOp(reifyVar(x), Mul, reifyFactor(x, n - 1))

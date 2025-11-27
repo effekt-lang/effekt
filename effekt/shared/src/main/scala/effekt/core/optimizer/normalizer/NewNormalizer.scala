@@ -183,7 +183,7 @@ class NewNormalizer {
       env.lookupValue(id)
 
     case core.Expr.Literal(value, annotatedType) => value match {
-      case As.IntExpr(x) => scope.allocate("x", Value.Integer(x))
+      case As.IntRep(x) => scope.allocate("x", Value.Integer(x))
       case _ => scope.allocate("x", Value.Literal(value, annotatedType))
     }
 
@@ -616,7 +616,13 @@ class NewNormalizer {
     case Value.Make(data, tag, targs, vargs) => Expr.Make(data, tag, targs, vargs.map(embedExpr))
     case Value.Box(body, annotatedCapture) => Expr.Box(embedBlock(body), annotatedCapture)
     case Value.Var(id, annotatedType) => Expr.ValueVar(id, annotatedType)
-    case Value.Integer(value) => theories.integers.reify(value, cx.builtinBlockVars)
+    case Value.Integer(value) => theories.integers.reify(value, cx.builtinBlockVars, embedNeutral)
+    case Value.String(value) => theories.strings.reify(value, cx.builtinBlockVars, embedNeutral)
+  }
+  
+  def embedNeutral(neutral: Neutral)(using G: TypingContext): core.Expr = neutral match {
+    case Value.Var(id, annotatedType) => Expr.ValueVar(id, annotatedType)
+    case Value.Extern(callee, targs, vargs) => Expr.PureApp(callee, targs, vargs.map(embedExpr))
   }
 
   def embedExpr(addr: Addr)(using G: TypingContext): core.Expr = Expr.ValueVar(addr, G.lookupValue(addr))
