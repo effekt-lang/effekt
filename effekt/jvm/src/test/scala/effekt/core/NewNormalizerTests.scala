@@ -494,7 +494,7 @@ class NewNormalizerTests extends CoreTests {
           |  }
           |  var x @ x = xv: Int;
           |  val r: Unit = {
-          |    modifyProg: (){setter: (Int) => Unit} => Unit @ {}(){ (v: Int) => 
+          |    modifyProg: (){setter: (Int) => Unit} => Unit @ {}(){ (v: Int) =>
           |      setter: (Int){x: Ref[Int]} => Unit @ {}(v: Int){x: Ref[Int] @ {xc}}
           |    }
           |  };
@@ -700,6 +700,33 @@ class NewNormalizerTests extends CoreTests {
 
     // Does not throw
     normalize(input)
+  }
+
+  test("Compile-time string concatenation with neutral calls in between") {
+    val input =
+      """
+        |extern def foo: String = vm""
+        |
+        |def run(): String = {
+        |    "a" ++ "b" ++ foo() ++ "c" ++ "d"
+        |}
+        |
+        |def main() = println(run())
+        |""".stripMargin
+
+    val expected =
+      """module input
+        |extern {io} def foo(): String = vm"42"
+        |def run() = {
+        |  let ! s2 = foo: () => String @ {io}()
+        |  let s1 = "ab"
+        |  let r = (infixConcat: (String, String) => String @ {})((infixConcat: (String, String) => String @ {})(s1: String, s2: String), "cd")
+        |  return r: String
+        |}
+        |""".stripMargin
+
+    val (mainId, actual) = normalize(input)
+    assertAlphaEquivalentToplevels(actual, parse(expected), List("run"), List("foo"))
   }
 }
 
