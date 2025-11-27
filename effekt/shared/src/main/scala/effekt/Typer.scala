@@ -975,7 +975,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val bt @ FunctionType(tps, cps, vps, bps, tpe1, effs) = expected
 
       // (2) Check wellformedness (that type, value, block params and args align)
-      assertArgsParamsAlign("function", tparams.size, vparams.size, bparams.size, tps.size, vps.size, bps.size)
+      // assertArgsParamsAlign("function", tparams.size, vparams.size, bparams.size, tps.size, vps.size, bps.size)
+      assertArgsParamsAlign("function", tparams, vparams, bparams, tps, vps, bps)
+
 
       // (3) Substitute type parameters
       val typeParams = tparams.map { p => p.symbol.asTypeParam }
@@ -1274,14 +1276,26 @@ object Typer extends Phase[NameResolved, Typechecked] {
    * If not, aborts the context with a nice error message.
    */
   private def assertArgsParamsAlign(
-    name: String,
-    gotTypes: Int, gotValues: Int, gotBlocks: Int,
-    expectedTypes: Int, expectedValues: Int, expectedBlocks: Int
-  )(using Context): Unit = {
+     name: String,
+     gotTypes: List[source.Id] | List[ValueType],
+     gotValues: List[source.ValueParam] | List[source.ValueArg],
+     gotBlocks: List[source.BlockParam] | List[source.Term],
+     expectedTypes: List[TypeParam],
+     expectedValues: List[ValueType],
+     expectedBlocks: List[BlockType]
+   )(using Context): Unit = {
 
-    val targsOk = gotTypes == 0 || gotTypes == expectedTypes
-    val vargsOk = gotValues == expectedValues
-    val bargsOk = gotBlocks == expectedBlocks
+    val gotTypesCount = gotTypes.size
+    val gotValuesCount = gotValues.size
+    val gotBlocksCount = gotBlocks.size
+    val expectedTypesCount = expectedTypes.size
+    val expectedValuesCount = expectedValues.size
+    val expectedBlocksCount = expectedBlocks.size
+
+    // Type args are ok if none provided (inference) or count matches
+    val targsOk = gotTypesCount == 0 || gotTypesCount == expectedTypesCount
+    val vargsOk = gotValuesCount == expectedValuesCount
+    val bargsOk = gotBlocksCount == expectedBlocksCount
 
     def pluralized(n: Int, singular: String): String =
       if (n == 1) s"$n $singular" else s"$n ${singular}s"
@@ -1302,29 +1316,54 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
 
     val expected = formatArgs(
-      Option.when(!targsOk) { expectedTypes },
-      Option.when(!vargsOk) { expectedValues },
-      Option.when(!bargsOk) { expectedBlocks }
+      Option.when(!targsOk) { expectedTypesCount },
+      Option.when(!vargsOk) { expectedValuesCount },
+      Option.when(!bargsOk) { expectedBlocksCount }
     )
     val got = formatArgs(
-      Option.when(!targsOk) { gotTypes },
-      Option.when(!vargsOk) { gotValues },
-      Option.when(!bargsOk) { gotBlocks }
+      Option.when(!targsOk) { gotTypesCount },
+      Option.when(!vargsOk) { gotValuesCount },
+      Option.when(!bargsOk) { gotBlocksCount }
     )
 
-    if (!vargsOk && !bargsOk && gotValues + gotBlocks == expectedValues + expectedBlocks) {
-      // If total counts match, but individual do not, it's likely a value vs computation issue
-      if (gotBlocks > expectedBlocks) {
-        val diff = gotBlocks - expectedBlocks
-        Context.info(pretty"Did you mean to pass ${pluralized(diff, "block argument")} as a value? e.g. box it using `box { ... }`")
-      } else if (gotValues > expectedValues) {
-        val diff = gotValues - expectedValues
-        Context.info(pretty"Did you mean to pass ${pluralized(diff, "value argument")} as a block (computation)?")
+    // Hint: Tuple vs case-lambda confusion
+    if (!vargsOk) {
+      // Case 1: User wrote `case (x, y) => ... ` but function expects multiple arguments
+      val isCaseLambda = gotValues match {
+        case (params: List[source.ValueParam] @unchecked) => params match {
+          case List(source.ValueParam(source.IdDef(paramName, _), _, _)) =>
+            paramName. startsWith("__arg")
+          case _ => false
+        }
+        case _ => false
+      }
+
+      if (isCaseLambda && expectedValuesCount > 1) {
+        Context.info(pretty"Did you mean to use `(x, y) => ... ` instead of `case (x, y) => ... `?")
+      }
+
+      // Case 2: User wrote `(x, y) => ...` but function expects a single tuple
+      expectedValues match {
+        case List(tupleTpe @ ValueTypeApp(TypeConstructor.Record(tupleName, _, _, _), args))
+          if tupleName.name.startsWith("Tuple") && args.size == gotValuesCount =>
+          Context.info(pretty"Did you mean to use `case (x, y) => ... ` to pattern match on the tuple ${tupleTpe}?")
+        case _ => ()
       }
     }
 
-    if (!targsOk || !vargsOk || !bargsOk) {
-      Context.abort(s"Wrong number of arguments to ${name}: expected ${expected}, but got ${got}")
+    // Hint: Value vs block argument confusion
+    if (!vargsOk && !bargsOk && gotValuesCount + gotBlocksCount == expectedValuesCount + expectedBlocksCount) {
+      if (gotBlocksCount > expectedBlocksCount) {
+        val diff = gotBlocksCount - expectedBlocksCount
+        Context.info(pretty"Did you mean to pass ${pluralized(diff, "block argument")} as a value?  e.g.  box it using `box { ... }`")
+      } else if (gotValuesCount > expectedValuesCount) {
+        val diff = gotValuesCount - expectedValuesCount
+        Context.info(pretty"Did you mean to pass ${pluralized(diff, "value argument")} as a block (computation)? ")
+      }
+    }
+
+    if (!targsOk || !vargsOk || ! bargsOk) {
+      Context. abort(s"Wrong number of arguments to ${name}: expected ${expected}, but got ${got}")
     }
   }
 
@@ -1341,7 +1380,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val callsite = currentCapture
 
     // (0) Check that arg & param counts align
-    assertArgsParamsAlign(name, targs.size, vargs.size, bargs.size, funTpe.tparams.size, funTpe.vparams.size, funTpe.bparams.size)
+    // assertArgsParamsAlign(name, targs.size, vargs.size, bargs.size, funTpe.tparams.size, funTpe.vparams.size, funTpe.bparams.size)
+    assertArgsParamsAlign(name, targs, vargs, bargs, funTpe.tparams, funTpe.vparams, funTpe.bparams)
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
