@@ -1288,8 +1288,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
       @scala.annotation.tailrec
       def loop(got: List[A], expected: List[B], matched: List[(A, B)]): Aligned[A, B] =
         (got, expected) match {
-          case (Nil, Nil) => Aligned(matched. reverse, Nil, Nil)
-          case (extras, Nil) => Aligned(matched. reverse, extras, Nil)
+          case (Nil, Nil) => Aligned(matched.reverse, Nil, Nil)
+          case (extra, Nil) => Aligned(matched.reverse, extra, Nil)
           case (Nil, missing) => Aligned(matched.reverse, Nil, missing)
           case (g :: gs, e :: es) => loop(gs, es, (g, e) :: matched)
         }
@@ -1298,8 +1298,16 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
   }
 
+  /**
+   * Asserts that number of {type, value, block} arguments is the same as
+   *          the number of {type, value, block} parameters.
+   * If not, aborts the context with a nice error message.
+   * Also tries to add 'did you mean' context for the user on common errors.
+   *
+   * @param name None if it's a block literal, otherwise the expected name
+   */
   private def assertArgsParamsAlign(
-     name: Option[String], // None if it's a block literal
+     name: Option[String],
      types: Aligned[source.Id | ValueType, TypeParam],
      values: Aligned[source.ValueParam | source.ValueArg, ValueType],
      blocks: Aligned[source.BlockParam | source.Term, BlockType]
@@ -1311,12 +1319,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
     def pluralized(n: Int, singular: String): String =
       if (n == 1) s"$n $singular" else s"$n ${singular}s"
 
-    Context.info(pretty"DEBUG: in assertArgsParamsAlign: Values: ${values.show}, Blocks: ${blocks.show}")
-
-    // Hint: Tuple vs lambda-case confusion
+    // Hint: Tuple vs arg-list confusion (also covers lambda case)
     if (!values.isAligned) {
       // 1. User wrote `case (x, y) => ...` but function expects multiple arguments
-      //  ? Did we match exactly 1 value param with `__arg...` name, and have multiple args missing
+      // => Did we match exactly 1 value param with `__arg... ` name, and have multiple args missing
       // HACK: Hardcoded '__arg' to recognize lambda case
       (values.matched, values.extra, values.missing) match {
         case (List((param: source.ValueParam, _)), Nil, _ :: _)
@@ -1325,15 +1331,30 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case _ => ()
       }
 
-      // 2. User wrote `(x, y) => ... ` but function expects a single tuple
-      //  ? Multiple extra value args, exactly 1 missing that's a tuple matching the count
+      // 2a. User wrote `(x, y) => ... ` but function expects a single tuple
+      // 2b. User wrote `foo(x, y)` but the function expects a single tuple
+      // => Multiple extra value args, exactly 1 missing that's a tuple matching the count
       // HACK: Hardcoded "tuple is a type whose name starts with 'Tuple'"
       (values.matched, values.extra, values.missing) match {
         case (List((_, tupleTpe @ ValueTypeApp(TypeConstructor.Record(tupleName, _, _, _), args))), extras, Nil)
           if tupleName.name.startsWith("Tuple") && args.size == 1 + extras.size =>
           name match {
-            case Some(name) => Context.info(pretty"Did you mean to call ${name} with a single tuple argument?")
-            case None => Context.info(pretty"Did you mean to use `case (x, y) => ...` to pattern match on the tuple ${tupleTpe}?")
+            case None            => Context.info(pretty"Did you mean to use `case (x, y) => ...` to pattern match on the tuple ${tupleTpe}?")
+            case Some(givenName) => Context.info(pretty"Did you mean to call ${givenName} with a single tuple argument instead of separate arguments?")
+          }
+        case _ => ()
+      }
+
+      // 3. User wrote `foo((x, y))` (tuple literal) but function expects multiple arguments
+      // => Single matched arg that's a Call to a Tuple constructor, with some missing params
+      // HACK: Hardcoded "tuple constructor is IdRef to TupleN in effekt namespace"
+      (values.matched, values.extra, values.missing) match {
+        case (List((arg: source.ValueArg, _)), Nil, missing@(_ :: _)) =>
+          (arg.value, name) match {
+            case (source.Call(source.IdTarget(source.IdRef(List("effekt"), tupleName, _)), _, tupleArgs, _, _), givenName)
+              if tupleName.startsWith("Tuple") && tupleArgs.size == 1 + missing.size =>
+              Context.info(pretty"Did you mean to call ${givenName} with ${tupleArgs.size} separate arguments instead of a tuple?")
+            case _ => ()
           }
         case _ => ()
       }
