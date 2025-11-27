@@ -1279,8 +1279,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
     def gotCount: Int = matched.size + extra.size
     def expectedCount: Int = matched.size + missing.size
     def delta: Int = extra.size - missing.size // > 0 => too many
-
-    def show: String = pp"Aligned(matched=${matched}, gotExtra=${extra}, expectedMissing=${missing})"
   }
 
   object Aligned {
@@ -1313,8 +1311,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
      blocks: Aligned[source.BlockParam | source.Term, BlockType]
    )(using Context): Unit = {
 
-    // Type args: truly aligned if nothing provided (inference) or perfectly aligned
-    val targsAligned = (types.matched.isEmpty && types.extra.isEmpty) || types.isAligned
+    // Type args are OK iff nothing provided or perfectly aligned
+    val typesOk = types.gotCount == 0 || types.isAligned
 
     def pluralized(n: Int, singular: String): String =
       if (n == 1) s"$n $singular" else s"$n ${singular}s"
@@ -1361,18 +1359,16 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
 
     // Hint: Value vs block argument confusion
-    if (!values.isAligned && !blocks.isAligned) {
-      if (values.delta + blocks.delta == 0) {
-        // If total counts match, but individual do not, it's likely a value vs computation issue
-        if (blocks.delta > 0) {
-          Context.info(pretty"Did you mean to pass ${pluralized(blocks.delta, "block argument")} as a value? e.g. box it using `box { ... }`")
-        } else if (values.delta > 0) {
-          Context.info(pretty"Did you mean to pass ${pluralized(values.delta, "value argument")} as a block (computation)? ")
-        }
+    if (!values.isAligned && !blocks.isAligned && values.delta + blocks.delta == 0) {
+      // If total counts match, but individual do not, it's likely a value vs computation issue
+      if (blocks.delta > 0) {
+        Context.info(pretty"Did you mean to pass ${pluralized(blocks.delta, "block argument")} as a value? e.g. box it using `box { ... }`")
+      } else if (values.delta > 0) {
+        Context.info(pretty"Did you mean to pass ${pluralized(values.delta, "value argument")} as a block (computation)? ")
       }
     }
 
-    if (!targsAligned || !values.isAligned || !blocks.isAligned) {
+    if (!typesOk || !values.isAligned || !blocks.isAligned) {
       def formatArgs(types: Option[Int], values: Option[Int], blocks: Option[Int]): String = {
         val parts = List(
           types.map { pluralized(_, "type argument") },
@@ -1389,12 +1385,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       val expected = formatArgs(
-        Option.when(!targsAligned) { types.expectedCount },
+        Option.when(!typesOk) { types.expectedCount },
         Option.when(!values.isAligned) { values.expectedCount },
         Option.when(!blocks.isAligned) { blocks.expectedCount }
       )
       val got = formatArgs(
-        Option.when(!targsAligned) { types.gotCount },
+        Option.when(!typesOk) { types.gotCount },
         Option.when(!values.isAligned) { values.gotCount },
         Option.when(!blocks.isAligned) { blocks.gotCount }
       )
