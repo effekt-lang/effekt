@@ -106,17 +106,12 @@ class NewNormalizerTests extends CoreTests {
     def compareOneDef(name: String): Unit = {
       val aDef = findDef(actual, name)
       val eDef = findDef(expected, name)
-
-      val canon = Id(name)
-      val pairs: Map[Id, Id] =
-        (List(aDef.id -> canon, eDef.id -> canon) ++ externPairs ++ declPairs ++ ctorPairs).toMap
-
-      val renamer = TestRenamer(Names(defaultNames), "$", List(pairs))
-      shouldBeEqual(
-        renamer(aDef),
-        renamer(eDef),
-        s"Top-level '$name' is not alpha-equivalent"
-      )
+      val renamer = TestRenamer(Names(defaultNames), "$")
+      val obtainedRenamed = renamer(aDef)
+      val expectedRenamed = renamer(eDef)
+      val obtainedPrinted = effekt.core.PrettyPrinter.format(obtainedRenamed).layout
+      val expectedPrinted = effekt.core.PrettyPrinter.format(expectedRenamed).layout
+      assertEquals(obtainedPrinted, expectedPrinted)
     }
 
     defNames.foreach(compareOneDef)
@@ -149,15 +144,17 @@ class NewNormalizerTests extends CoreTests {
         |def run() = {
         |  def f1() = {
         |    def f2() = {
-        |      let ! x = (foo: () => Int @ {io})()
+        |      let ! x = foo: () => Int @ {io}()
         |      return x: Int
         |    }
         |    let y = box {io} f2: () => Int @ {io}
         |    return y: () => Int at {io}
         |  }
-        |  val z: () => Int at {io} = (f1: () => (() => Int at {io}) @ {io})();
+        |  val z: () => Int at {io} = {
+        |    f1: () => (() => Int at {io}) @ {io}()
+        |  };
         |  def r = unbox z: () => Int at {io}
-        |  (r: () => Int @ {io})()
+        |  r: () => Int @ {io}()
         |}
         |
         |""".stripMargin)
@@ -246,9 +243,7 @@ class NewNormalizerTests extends CoreTests {
     assertAlphaEquivalentToplevels(actual, expected, List("run"), List("foo"))
   }
 
-  // One might expect the following example to constant fold.
-  // However, extern definitions such as infixAdd are currently always neutral.
-  test("Extern infixAdd blocks constant folding of mutable variable") {
+  test("Mutable variable with infixAdd is optimized to a single constant let-binding") {
     val input =
       """
         |def run(): Int = {
@@ -267,10 +262,8 @@ class NewNormalizerTests extends CoreTests {
               |extern {} def infixAdd(x: Int, y: Int): Int = vm ""
               |
               |def run() = {
-              |   let x1 = 41
-              |   let x2 = 1
-              |   let x3 = (infixAdd: (Int, Int) => Int @ {})(x1: Int, x2: Int)
-              |   return x3: Int
+              |  let x = 42
+              |  return x: Int
               |}
               |""".stripMargin
       )
@@ -388,6 +381,7 @@ class NewNormalizerTests extends CoreTests {
   // This test case shows a mutable variable passed to the identity function.
   // Currently, the normalizer is not able to see through the identity function,
   // but it does ignore the mutable variable and just passes the initial value.
+  // Inlining is performed by a separate inlining phase.
   test("Pass mutable variable to identity function uses let binding") {
     val input =
       """
@@ -409,13 +403,11 @@ class NewNormalizerTests extends CoreTests {
           |module input
           |
           |def run() = {
-          |    def f(x: Int) = {
-          |        return x: Int
-          |    }
-          |
-          |    let y = 42
-          |    var x @ z = y: Int;
-          |    (f : (Int) => Int @ {})(y: Int)
+          |  def f(x: Int) = {
+          |    return x: Int
+          |  }
+          |  let y = 42
+          |  f: (Int) => Int @ {}(y: Int)
           |}
           |""".stripMargin
       )
@@ -446,14 +438,11 @@ class NewNormalizerTests extends CoreTests {
           |module input
           |
           |def run() = {
-          |    def f(x: Int) = {
-          |        return x: Int
-          |    }
-          |
-          |    let y = 42
-          |    let w = 43
-          |    var x @ z = y: Int;
-          |    (f : (Int) => Int @ {})(w: Int)
+          |  def f(x: Int) = {
+          |    return x: Int
+          |  }
+          |  let x = 43
+          |  f: (Int) => Int @ {}(x: Int)
           |}
           |""".stripMargin
       )
@@ -489,21 +478,27 @@ class NewNormalizerTests extends CoreTests {
           |module input
           |
           |def run() = {
-          |  def modifyProg(){setter: (Int) => Unit} = {
-          |    let x = 2
-          |    val tmp: Unit = (setter: (Int) => Unit @ {setter})(x: Int);
-          |    let y = ()
-          |    return y: Unit
+          |  def modifyProg(){setter @ sc: (Int) => Unit} = {
+          |    let v = 2
+          |    val o: Unit = {
+          |      setter: (Int) => Unit @ {sc}(v: Int)
+          |    };
+          |    let u = ()
+          |    return u: Unit
           |  }
-          |  let y = 1
-          |  var x @ c = y: Int;
-          |  def f(y: Int) = {
-          |    put x @ c = y: Int;
-          |    let z = ()
-          |    return z: Unit
+          |  let xv = 1
+          |  def setter(v: Int){x @ xc: Ref[Int]} = {
+          |    put x @ xc = v: Int;
+          |    let u = ()
+          |    return u: Unit
           |  }
-          |  val tmp: Unit = (modifyProg: (){setter : (Int) => Unit} => Unit @ {})(){f: (Int) => Unit @ {c}};
-          |  get o: Int = !x @ c;
+          |  var x @ x = xv: Int;
+          |  val r: Unit = {
+          |    modifyProg: (){setter: (Int) => Unit} => Unit @ {}(){ (v: Int) => 
+          |      setter: (Int){x: Ref[Int]} => Unit @ {}(v: Int){x: Ref[Int] @ {xc}}
+          |    }
+          |  };
+          |  get o : Int = ! x @ xc;
           |  return o: Int
           |}
           |""".stripMargin
