@@ -4,7 +4,7 @@ import effekt.core.Block.BlockVar
 import effekt.core.{Expr, Id, Type}
 
 /**
- * Theory for integers with neutral variables: multivariate polynomials with integer coefficients.
+ * Theory for integers with neutral variables: multivariate Laurent polynomials with 64-bit signed integer coefficients.
  *
  * KNOWN LIMITATION: This implementation assumes 64-bit signed integers.
  * Unfortunately, this is unsound for the JavaScript backend, which uses JavaScript numbers that are IEEE-754 doubles.
