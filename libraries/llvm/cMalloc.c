@@ -40,11 +40,6 @@ void initializeMemory() {
         -1,                            // No file descriptor
         0                              // Offset
     );
-
-    if (DEBUG) {
-        uint8_t* endOfChunk = nextUnusedSlot + totalAllocationSize;
-        printf("[init] Memory initialized: %p - %p\n", (void*)nextUnusedSlot, (void*)endOfChunk);
-    }
 }
 
 /**
@@ -59,7 +54,6 @@ void* acquire() {
         // ...pop it from free-list
         Slot* reusedSlot = freeList;
         freeList = reusedSlot->next;
-        if (DEBUG) printf("[acquire] Free block: %p\n", (void*)reusedSlot);
 
         return reusedSlot;
     }
@@ -70,8 +64,6 @@ void* acquire() {
         Slot* reusedSlot = todoList;
         todoList = reusedSlot->next;
 
-        if (DEBUG) printf("[acquire] Todo block: %p\n", (void*)reusedSlot);
-
         // Call the eraser function on it. After that, it is safe to reuse it again.
         reusedSlot->eraser(reusedSlot);
 
@@ -80,7 +72,6 @@ void* acquire() {
 
     // 3. Fallback - we bump-allocate a new slot
     Slot* fresh = (Slot*)nextUnusedSlot;
-    if (DEBUG) printf("[acquire] New block: %p\n", (void*)fresh);
     nextUnusedSlot += slotSize;
     return fresh;
 }
@@ -91,7 +82,6 @@ void* acquire() {
  */
 void release(void* ptr) {
     Slot* slot = (Slot*)ptr;
-    if (DEBUG) printf("[release] block: %p\n", (void*)slot);
 
     slot->next = freeList;
     freeList = slot;
@@ -99,16 +89,7 @@ void release(void* ptr) {
 
 void pushToTodo(void* ptr) {
     Slot* slot = (Slot*)ptr;
-    if (DEBUG) printf("[pushToTodo] block: %p\n", (void*)slot);
 
     slot->next = todoList;
     todoList = slot;
-}
-
-void test() {
-    printf("test\n");
-}
-
-void myprint(void* ptr) {
-    printf("MYPRINT: %p\n", ptr);
 }
