@@ -473,8 +473,9 @@ object Tree {
     def rewrite(o: Operation): Operation = rewriteStructurally(o)
     def rewrite(p: ValueParam): ValueParam = rewriteStructurally(p)
     def rewrite(p: BlockParam): BlockParam = rewriteStructurally(p)
-    def rewrite(b: ExternBody): ExternBody= rewriteStructurally(b)
-    def rewrite(e: Extern): Extern= rewriteStructurally(e)
+    def rewrite(b: ExternBody): ExternBody = rewriteStructurally(b)
+    def rewrite(e: Extern): Extern = rewriteStructurally(e)
+    def rewrite(s: StringExternBody): StringExternBody = s
     def rewrite(d: Declaration): Declaration = rewriteStructurally(d)
     def rewrite(c: Constructor): Constructor = rewriteStructurally(c)
     def rewrite(f: Field): Field = rewriteStructurally(f)

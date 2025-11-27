@@ -136,24 +136,6 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
     }
   }
 
-  override def rewrite(t: BlockType): BlockType = t match {
-    case BlockType.Function(tparams, cparams, vparams, bparams, result: ValueType) =>
-      // TODO: is this how we want to treat captures here?
-      val resolvedCapt = cparams.map(id => Map(id -> freshIdFor(id))).reduceOption(_ ++ _).getOrElse(Map())
-      withBindings(tparams) {
-        withMapping(resolvedCapt) {
-          BlockType.Function(
-            tparams.map(rewrite),
-            resolvedCapt.values.toList.map(rewrite),
-            vparams.map(rewrite),
-            bparams.map(rewrite),
-            rewrite(result)
-          )
-      }}
-    case BlockType.Interface(name, targs) =>
-      BlockType.Interface(name, targs map rewrite)
-  }
-
   override def rewrite(o: Operation): Operation = o match {
     case Operation(name, tparams, cparams, vparams, bparams, body) =>
       withBindings(tparams ++ cparams ++ vparams.map(_.id) ++ bparams.map(_.id)) {
@@ -200,7 +182,7 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
   }
 
   override def rewrite(e: Extern) = e match {
-    case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => {
+    case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body, vmBody) => {
       // We don't use withBinding(id) here, because top-level ids are pre-collected.
       withBindings(tparams ++ cparams ++ vparams.map(_.id) ++ bparams.map(_.id)) {
           Extern.Def(
@@ -211,7 +193,8 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
             bparams map rewrite,
             rewrite(ret),
             rewrite(annotatedCapture),
-            rewrite(body)
+            rewrite(body),
+            vmBody
           )
         }
     }
@@ -284,6 +267,12 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
         core.ModuleDecl(path, includes, declarations map rewrite, externs map rewrite, definitions map rewrite, exports map rewrite)
     }
 
+  def apply(t: core.Toplevel): core.Toplevel =
+    suffix = 0
+    scopes = List.empty
+    toplevelScope = Map.empty
+    rewrite(t)
+
   def apply(s: Stmt): Stmt = {
     suffix = 0
     toplevelScope = Map.empty
@@ -298,7 +287,7 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
         case Declaration.Data(id, tparams, constructors) => constructors.map(_.id) :+ id
         case Interface(id, tparams, properties) => properties.map(_.id) :+ id
       } ++ definitions.map(_.id) ++ externs.flatMap {
-        case Extern.Def(id, _, _, _, _, _, _, _) => Some(id)
+        case Extern.Def(id, _, _, _, _, _, _, _, _) => Some(id)
         case Extern.Include(_, _) => None
       }
     }
