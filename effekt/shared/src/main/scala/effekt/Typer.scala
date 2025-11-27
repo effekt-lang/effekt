@@ -1351,7 +1351,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       (values.matched, values.extra, values.missing) match {
         case (List((arg: source.ValueArg, _)), Nil, missing@(_ :: _)) =>
           (arg.value, name) match {
-            case (source.Call(source.IdTarget(source.IdRef(List("effekt"), tupleName, _)), _, tupleArgs, _, _), givenName)
+            case (source.Call(source.IdTarget(source.IdRef(List("effekt"), tupleName, _)), _, tupleArgs, _, _), Some(givenName))
               if tupleName.startsWith("Tuple") && tupleArgs.size == 1 + missing.size =>
               Context.info(pretty"Did you mean to call ${givenName} with ${tupleArgs.size} separate arguments instead of a tuple?")
             case _ => ()
