@@ -5,6 +5,7 @@ package optimizer
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
 import effekt.core.optimizer.Usage.{ Once, Recursive }
+import effekt.core.optimizer.normalizer.NewNormalizer
 import kiama.util.Source
 
 object Optimizer extends Phase[CoreTransformed, CoreTransformed] {

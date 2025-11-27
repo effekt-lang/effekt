@@ -1,4 +1,4 @@
-package effekt.core.optimizer.theories
+package effekt.core.optimizer.normalizer.theories
 
 import effekt.core.Block.BlockVar
 import effekt.core.{Expr, Id, Type}
