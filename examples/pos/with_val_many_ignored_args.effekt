@@ -1,4 +1,4 @@
-module with_val_two_args
+module with_val_many_ignored_args
 
 def callback { f: (Int, Int, String, Char) => Unit }: Unit = {
   println("before")

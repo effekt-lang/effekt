@@ -1,6 +1,7 @@
-module with_val_two_args
+module with_val_many_args
 
-def callback { f: (Int, Int, String, Char) => Unit }: Unit = f(42, 100, "hello", 'a')
+def callback { f: (Int, Int, String, Char) => Unit }: Unit =
+  f(42, 100, "hello", 'a')
 
 def main() = {
   with val i, j, _, c = callback;
