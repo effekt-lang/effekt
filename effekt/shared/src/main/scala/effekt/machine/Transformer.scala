@@ -239,7 +239,7 @@ object Transformer {
           Switch(value, List(0 -> Clause(List(), transform(elseStmt)), 1 -> Clause(List(), transform(thenStmt))), None)
         }
 
-      case core.Match(scrutinee, clauses, default) =>
+      case core.Match(scrutinee, tpe, clauses, default) =>
         val transformedClauses = clauses.map { case (constr, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
           DeclarationContext.getConstructorTag(constr) -> Clause(vparams.map(transform), transform(body))
         }

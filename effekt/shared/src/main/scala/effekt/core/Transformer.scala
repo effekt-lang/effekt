@@ -356,7 +356,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           val tpe = transform(substitution.substitute(f.returnType))
           core.ValueParam(if f == field then selected else Id("_"), tpe)
       }
-      Context.bind(Stmt.Match(transformAsExpr(receiver),
+      Context.bind(Stmt.Match(transformAsExpr(receiver), tpe,
         List((constructor, BlockLit(Nil, Nil, params, Nil, Stmt.Return(Expr.ValueVar(selected, tpe))))), None))
 
     case source.Box(capt, block, _) =>
@@ -378,7 +378,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.If(guards, thn, els, _) =>
       val thnClause = preprocess("thn", Nil, guards, transform(thn))
       val elsClause = preprocess("els", Nil, Nil, transform(els))
-      Context.bind(PatternMatchingCompiler.compile(List(thnClause, elsClause)))
+      val tpe = transform(Context.inferredTypeOf(tree))
+      Context.bind(PatternMatchingCompiler.compile(List(thnClause, elsClause), tpe))
 
     //    case i @ source.If(guards, thn, els) =>
     //      val compiled = collectClauses(i)
@@ -408,7 +409,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           insertBindings {
             val thenClause = preprocess("guard_thn", Nil, guards, thenBranch)
             val elseClause = preprocess("guard_els", Nil, Nil, elseBranch)
-            PatternMatchingCompiler.compile(List(thenClause, elseClause))
+            PatternMatchingCompiler.compile(List(thenClause, elseClause), thenBranch.tpe)
           }
       }
 
@@ -419,14 +420,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // Empty match (matching on Nothing)
     case source.Match(List(sc), Nil, None, _) =>
       val scrutinee: ValueVar = Context.bind(transformAsExpr(sc))
-      Context.bind(core.Match(scrutinee, Nil, None))
+      val tpe = transform(Context.inferredTypeOf(tree))
+      Context.bind(core.Match(scrutinee, tpe, Nil, None))
 
     case source.Match(scs, cs, default, _) =>
       // (1) Bind scrutinee and all clauses so we do not have to deal with sharing on demand.
       val scrutinees: List[ValueVar] = scs.map{ sc => Context.bind(transformAsExpr(sc)) }
       val clauses = cs.zipWithIndex.map((c, i) => preprocess(s"k${i}", scrutinees, c))
       val defaultClause = default.map(stmt => preprocess("k_els", Nil, Nil, transform(stmt))).toList
-      val compiledMatch = PatternMatchingCompiler.compile(clauses ++ defaultClause)
+      val tpe = transform(Context.inferredTypeOf(tree))
+      val compiledMatch = PatternMatchingCompiler.compile(clauses ++ defaultClause, tpe)
       Context.bind(compiledMatch)
 
     case source.TryHandle(prog, handlers, _) =>
@@ -674,6 +677,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case MatchGuard.PatternGuard(scrutinee, pattern, _) => boundTypesInPattern(pattern)
     }
     def equalsFor(tpe: symbols.ValueType): (Expr, Expr) => Expr =
+      tpe match {
+        case tpe if tpe == TUnit => return (lhs, rhs) => Literal(true, Type.TBoolean)
+        case _ =>
+      }
+
       val prelude = Context.module.findDependency(QualifiedName(Nil, "effekt")).getOrElse {
         Context.panic(pp"${Context.module.name.name}: Cannot find 'effekt' in prelude, which is necessary to compile pattern matching.")
       }

@@ -51,10 +51,9 @@ enum BlockType extends Type {
 object Type {
 
   // The subtyping lattice
-  val TTop = ValueType.Data(builtins.TopSymbol, Nil)
   val TBottom = ValueType.Data(builtins.BottomSymbol, Nil)
-
   val TUnit   = ValueType.Data(builtins.UnitSymbol, Nil)
+
   val TInt = ValueType.Data(builtins.IntSymbol, Nil)
   val TChar = ValueType.Data(builtins.CharSymbol, Nil)
   val TByte = ValueType.Data(builtins.ByteSymbol, Nil)
@@ -94,39 +93,6 @@ object Type {
         case tpe => None
       }
   }
-
-
-  /**
-   * Function types are the only type constructor that we have subtyping on.
-   */
-  def merge(tpe1: ValueType, tpe2: ValueType, covariant: Boolean): ValueType = (tpe1, tpe2, covariant) match {
-    case (tpe1, tpe2, covariant) if tpe1 == tpe2 => tpe1
-    case (ValueType.Boxed(btpe1, capt1), ValueType.Boxed(btpe2, capt2), covariant) =>
-      ValueType.Boxed(merge(btpe1, btpe2, covariant), merge(capt1, capt2, covariant))
-    case (TBottom, tpe2, true) => tpe2
-    case (tpe1, TBottom, true) => tpe1
-    case (TTop, tpe2, true) => TTop
-    case (tpe1, TTop, true) => TTop
-    case (TBottom, tpe2, false) => TBottom
-    case (tpe1, TBottom, false) => TBottom
-    case (TTop, tpe2, false) => tpe2
-    case (tpe1, TTop, false) => tpe1
-    // TODO this swallows a lot of bugs that we NEED to fix
-    case _ => tpe1
-      // sys error s"Cannot compare ${tpe1} ${tpe2} in ${covariant}" // conservative :)
-  }
-
-  def merge(tpe1: BlockType, tpe2: BlockType, covariant: Boolean): BlockType = (tpe1, tpe2) match {
-    case (BlockType.Function(tparams1, cparams1, vparams1, bparams1, result1), tpe2: BlockType.Function) =>
-      val BlockType.Function(_, _, vparams2, bparams2, result2) = instantiate(tpe2, tparams1.map(ValueType.Var.apply), cparams1.map(c => Set(c)))
-      val vparams = (vparams1 zip vparams2).map { case (tpe1, tpe2) => merge(tpe1, tpe2, !covariant) }
-      val bparams = (bparams1 zip bparams2).map { case (tpe1, tpe2) => merge(tpe1, tpe2, !covariant) }
-      BlockType.Function(tparams1, cparams1, vparams, bparams, merge(result1, result2, covariant))
-    case (tpe1, tpe2) => tpe1
-  }
-
-  def merge(capt1: Captures, capt2: Captures, covariant: Boolean): Captures =
-    if covariant then capt1 union capt2 else capt1 intersect capt2
 
   def instantiate(f: BlockType.Function, targs: List[ValueType], cargs: List[Captures]): BlockType.Function = f match {
     case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
@@ -212,10 +178,8 @@ object Type {
       instantiate(callee.functionType, targs, bargs.map(_.capt)).result
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
       instantiate(methodTpe.asInstanceOf, targs, bargs.map(_.capt)).result
-    case Stmt.If(cond, thn, els) => merge(thn.tpe, els.tpe, covariant = true)
-    case Stmt.Match(scrutinee, clauses, default) =>
-      val allTypes = clauses.map { case (_, cl) => cl.returnType } ++ default.map(_.tpe).toList
-      allTypes.fold(TBottom) { case (tpe1, tpe2) => merge(tpe1, tpe2, covariant = true) }
+    case Stmt.If(cond, thn, els) => thn.tpe
+    case Stmt.Match(scrutinee, tpe, clauses, default) => tpe
 
     case Stmt.Alloc(id, init, region, body) => body.tpe
     case Stmt.Var(ref, init, cap, body) => body.tpe
@@ -248,7 +212,7 @@ object Type {
     case Stmt.App(callee, targs, vargs, bargs) => callee.capt ++ bargs.flatMap(_.capt).toSet
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => callee.capt ++ bargs.flatMap(_.capt).toSet
     case Stmt.If(cond, thn, els) => thn.capt ++ els.capt
-    case Stmt.Match(scrutinee, clauses, default) => clauses.flatMap { (_, cl) => cl.capt }.toSet ++ default.toSet.flatMap(s => s.capt)
+    case Stmt.Match(scrutinee, tpe, clauses, default) => clauses.flatMap { (_, cl) => cl.capt }.toSet ++ default.toSet.flatMap(s => s.capt)
     case Stmt.Alloc(id, init, region, body) => Set(region) ++ body.capt
     case Stmt.Var(ref, init, cap, body) => body.capt -- Set(cap)
     case Stmt.Get(id, tpe, ref, capt, body) => capt

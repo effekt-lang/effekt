@@ -30,7 +30,7 @@ object RemoveTailResumptions {
       case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => false
       case Stmt.If(cond, thn, els) => !freeInExpr(cond) && tailResumptive(k, thn) && tailResumptive(k, els)
       // Interestingly, we introduce a join point making this more difficult to implement properly
-      case Stmt.Match(scrutinee, clauses, default) => !freeInExpr(scrutinee) && clauses.forall {
+      case Stmt.Match(scrutinee, tpe, clauses, default) => !freeInExpr(scrutinee) && clauses.forall {
         case (_, BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body)
       } && default.forall { stmt => tailResumptive(k, stmt) }
       case Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, body)) => false
@@ -53,7 +53,7 @@ object RemoveTailResumptions {
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => Stmt.ImpureApp(id, callee, targs, vargs, bargs, removeTailResumption(k, body))
     case Stmt.Val(id, tpe, binding, body) => Stmt.Val(id, tpe, binding, removeTailResumption(k, body))
     case Stmt.If(cond, thn, els) => Stmt.If(cond, removeTailResumption(k, thn), removeTailResumption(k, els))
-    case Stmt.Match(scrutinee, clauses, default) => Stmt.Match(scrutinee, clauses.map {
+    case Stmt.Match(scrutinee, tpe, clauses, default) => Stmt.Match(scrutinee, tpe, clauses.map {
       case (tag, block) => tag -> removeTailResumption(k, block)
     }, default.map(removeTailResumption(k, _)))
     case Stmt.Region(body : BlockLit) =>

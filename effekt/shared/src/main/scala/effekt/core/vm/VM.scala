@@ -316,7 +316,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
             case v => throw VMError.RuntimeTypeError(s"Expected Bool, but got ${v}")
           }
 
-        case Stmt.Match(scrutinee, clauses, default) => eval(scrutinee, env) match {
+        case Stmt.Match(scrutinee, tpe, clauses, default) => eval(scrutinee, env) match {
           case Value.Data(data, tag, fields) =>
             @tailrec
             def search(clauses: List[(Id, BlockLit)], comparisons: Int): State = (clauses, default) match {

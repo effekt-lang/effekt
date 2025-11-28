@@ -234,13 +234,13 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, transform(value), transform(body))
     case Stmt.If(cond, thn, els) =>
       Stmt.If(transform(cond), transform(thn), transform(els))
-    case Stmt.Match(scrutinee, clauses, default) =>
+    case Stmt.Match(scrutinee, tpe, clauses, default) =>
       scrutinee.tpe match {
         // if the scrutinee has type Nothing, then there shouldn't be any clauses...
-        case Type.TBottom => Stmt.Match(transform(scrutinee), Nil, None)
+        case Type.TBottom => Stmt.Match(transform(scrutinee), tpe, Nil, None)
         case ValueType.Data(tpeId, targs) =>
           val Declaration.Data(_, tparams, constructors) = DeclarationContext.getData(tpeId)
-          Stmt.Match(transform(scrutinee), clauses.map {
+          Stmt.Match(transform(scrutinee), tpe, clauses.map {
             case (id, clause: Block.BlockLit) =>
               val constructor = constructors.find(_.id == id).get
               val casetpe: BlockType.Function = BlockType.Function(tparams, List(),
@@ -366,7 +366,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       case (unboxed, _: ValueType.Var) if boxer.isDefinedAt(unboxed) => BoxCoercer(unboxed)
       case (boxed, unboxed) if boxer.isDefinedAt(unboxed) && boxer(unboxed).tpe == boxed => UnboxCoercer(unboxed)
       case (_: ValueType.Var, unboxed) if boxer.isDefinedAt(unboxed) => UnboxCoercer(unboxed)
-      case (unboxed, core.Type.TTop) if boxer.isDefinedAt(unboxed) => BoxCoercer(unboxed)
+      case (unboxed, core.Type.TUnit) if boxer.isDefinedAt(unboxed) => BoxCoercer(unboxed)
       case (core.Type.TBottom, unboxed) if boxer.isDefinedAt(unboxed) => BottomCoercer(unboxed)
 
       // assert(cs1 == cs2) // FIXME this seems to fail, what would be the correct check for subcapturing (or similar) here?

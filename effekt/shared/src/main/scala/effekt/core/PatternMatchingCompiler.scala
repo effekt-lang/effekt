@@ -85,7 +85,7 @@ object PatternMatchingCompiler {
    * - a sequence of clauses that represent alternatives (disjunction)
    * - each sequence contains a list of conditions that all have to match (conjunction).
    */
-  def compile(clauses: List[Clause]): core.Stmt = {
+  def compile(clauses: List[Clause], motif: ValueType): core.Stmt = {
     // This shouldn't be reachable anymore since we specialize matching on void before calling compile
     if (clauses.isEmpty) return core.Hole(effekt.source.Span.missing)
 
@@ -99,17 +99,17 @@ object PatternMatchingCompiler {
         return core.App(target, targs, args, Nil)
       // - We need to perform a computation
       case Clause(Condition.Val(x, tpe, binding) :: rest, target, targs, args) =>
-        return core.Val(x, tpe, binding, compile(Clause(rest, target, targs, args) :: remainingClauses))
+        return core.Val(x, tpe, binding, compile(Clause(rest, target, targs, args) :: remainingClauses, motif))
       // - We need to perform a computation
       case Clause(Condition.Let(x, tpe, binding) :: rest, target, targs, args) =>
-        return core.Let(x, tpe, binding, compile(Clause(rest, target, targs, args) :: remainingClauses))
+        return core.Let(x, tpe, binding, compile(Clause(rest, target, targs, args) :: remainingClauses, motif))
       case Clause(Condition.ImpureApp(x, callee, targs_, vargs_, bargs_) :: rest, target, targs, args) =>
-        return core.ImpureApp(x, callee, targs_, vargs_, bargs_, compile(Clause(rest, target, targs, args) :: remainingClauses))
+        return core.ImpureApp(x, callee, targs_, vargs_, bargs_, compile(Clause(rest, target, targs, args) :: remainingClauses, motif))
       // - We need to check a predicate
       case Clause(Condition.Predicate(pred) :: rest, target, targs, args) =>
         return core.If(pred,
-          compile(Clause(rest, target, targs, args) :: remainingClauses),
-          compile(remainingClauses)
+          compile(Clause(rest, target, targs, args) :: remainingClauses, motif),
+          compile(remainingClauses, motif)
         )
       case Clause(Condition.Patterns(patterns) :: rest, target, targs, args) =>
         patterns
@@ -168,9 +168,9 @@ object PatternMatchingCompiler {
       }
 
       // (4) assemble syntax tree for the pattern match
-      variants.foldRight(compile(defaults)) {
+      variants.foldRight(compile(defaults, motif)) {
         case (lit, elsStmt) =>
-          val thnStmt = compile(clausesFor.getOrElse(lit, Nil))
+          val thnStmt = compile(clausesFor.getOrElse(lit, Nil), motif)
           lit.value match {
             case () => thnStmt
             case true =>
@@ -242,15 +242,15 @@ object PatternMatchingCompiler {
 
       // (4) assemble syntax tree for the pattern match
       val branches = variants.map { v =>
-        val body = compile(clausesFor.getOrElse(v, Nil))
+        val body = compile(clausesFor.getOrElse(v, Nil), motif)
         val tparams = tvarsFor(v)
         val params = varsFor(v).map { case ValueVar(id, tpe) => core.ValueParam(id, tpe): core.ValueParam }
         val blockLit: BlockLit = BlockLit(tparams, Nil, params, Nil, body)
         (v, blockLit)
       }
 
-      val default = if defaults.isEmpty then None else Some(compile(defaults))
-      core.Match(scrutinee, branches, default)
+      val default = if defaults.isEmpty then None else Some(compile(defaults, motif))
+      core.Match(scrutinee, motif, branches, default)
     }
 
     patterns(scrutinee) match {
