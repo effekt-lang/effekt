@@ -113,9 +113,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
               case symbols.builtins.TUnit =>
                 ()
               case tpe =>
-                // def main() = <>
-                // has return type Nothing which should still be permissible since Nothing <: Unit
-                matchExpected(tpe, symbols.builtins.TUnit)
+                // We disable coercions here for now, even though they could be inferred
+                matchExpected(tpe, symbols.builtins.TUnit, None)
             }
         }
       }
@@ -177,7 +176,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         flowingInto(inferredCap) {
           val Result(inferredTpe, inferredEff) = checkExprAsBlock(block, expectedTpe)
           val tpe = Context.unification(BoxedType(inferredTpe, inferredCap))
-          expected.map(Context.unification.apply) foreach { matchExpected(tpe, _) }
+          expected.map(Context.unification.apply) foreach { matchExpected(tpe, _, None) }
           Result(tpe, inferredEff)
         }
 
@@ -1149,7 +1148,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // 2)
       // args present: check prefix against receiver
       (targs zip interface.args).foreach { case (manual, inferred) =>
-        matchExpected(inferred, manual)
+        matchExpected(inferred, manual, None)
       }
 
       // args missing: synthesize args from receiver and unification variables (e.g. [Int, String, ?A, ?B])
@@ -1424,10 +1423,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val (typeArgs, captArgs, (vps, bps, ret, retEffs)) = Context.instantiateFresh(CanonicalOrdering(funTpe))
 
     // provided type arguments flow into the fresh unification variables (i.e., Int <: ?A)
-    if (targs.nonEmpty) (targs zip typeArgs).foreach { case (targ, tvar) => matchExpected(tvar, targ) }
+    if (targs.nonEmpty) (targs zip typeArgs).foreach { case (targ, tvar) => matchExpected(tvar, targ, None) }
 
     // (2) check return type
-    expected.foreach { expected => matchExpected(ret, expected) }
+    expected.foreach { expected => matchExpected(ret, expected, Some(call)) }
 
     // Here the effects still can refer to unification variables (e.g., Scan[?T])
     // Keeping them unknown until the call to `provideCapabilities` enables the latter
@@ -1606,13 +1605,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
   def matchPattern(scrutinee: ValueType, patternTpe: ValueType, pattern: source.MatchPattern)(using Context): Unit =
     Context.requireSubtype(scrutinee, patternTpe, ErrorContext.PatternMatch(pattern))
 
-  def matchExpected(got: ValueType, expected: ValueType)(using Context): Unit =
+  def matchExpected(got: ValueType, expected: ValueType, coercible: Option[source.Tree])(using Context): Unit =
     Context.requireSubtype(got, expected,
-      ErrorContext.Expected(Context.unification(got), Context.unification(expected), Context.focus))
+      ErrorContext.Expected(Context.unification(got), Context.unification(expected), Context.focus, coercible))
 
   def matchExpected(got: BlockType, expected: BlockType)(using Context): Unit =
     Context.requireSubtype(got, expected,
-      ErrorContext.Expected(Context.unification(got), Context.unification(expected), Context.focus))
+      ErrorContext.Expected(Context.unification(got), Context.unification(expected), Context.focus, None))
 
   extension (expr: Term) {
     def checkAgainst(tpe: ValueType)(using Context, Captures): Result[ValueType] =
@@ -1632,7 +1631,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val Result(got, effs) = f(t)
       wellformed(got)
       wellformed(effs.toEffects)
-      expected foreach { matchExpected(got, _) }
+      expected foreach { matchExpected(got, _, Some(t)) }
       Context.annotateInferredType(t, got)
       Context.annotateInferredEffects(t, effs.toEffects)
       Result(got, effs)
