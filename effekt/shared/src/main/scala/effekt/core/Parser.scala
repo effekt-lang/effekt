@@ -294,7 +294,8 @@ class CoreParsers(names: Names) extends EffektLexers {
       case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ (ff ~ templ) =>
         Extern.Def(
           id, tparams, cparams, vparams, bparams, result, captures,
-          ExternBody.StringExternBody(ff, templ)
+          ExternBody.StringExternBody(ff, templ),
+          None
         )
     })
 

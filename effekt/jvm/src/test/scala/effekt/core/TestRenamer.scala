@@ -112,6 +112,12 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
       val resolvedCapt = rewrite(capt)
       withBinding(id) { core.Get(rewrite(id), rewrite(tpe), resolvedRef, resolvedCapt, rewrite(body)) }
 
+    case core.App(callee, targs, vargs, bargs) =>
+      val resolvedCallee = rewrite(callee)
+      val resolvedTargs = targs map rewrite
+      val resolvedVargs = vargs map rewrite
+      val resolvedBargs = bargs map rewrite
+      core.App(resolvedCallee, resolvedTargs, resolvedVargs, resolvedBargs)
   }
 
   override def block: PartialFunction[Block, Block] = {
@@ -120,6 +126,14 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
         Block.BlockLit(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite,
           rewrite(body))
       }
+    case Block.BlockVar(id: Id, annotatedTpe: BlockType, annotatedCapt: Captures) => {
+      withBinding(id) {
+        val idOut = rewrite(id)
+        val annotatedTpeOut = rewrite(annotatedTpe)
+        val annotatedCaptOut = rewrite(annotatedCapt)
+        Block.BlockVar(rewrite(id), rewrite(annotatedTpe), rewrite(annotatedCapt))
+      }
+    }
   }
 
   override def rewrite(o: Operation): Operation = o match {
@@ -168,7 +182,7 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
   }
 
   override def rewrite(e: Extern) = e match {
-    case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => {
+    case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body, vmBody) => {
       // We don't use withBinding(id) here, because top-level ids are pre-collected.
       withBindings(tparams ++ cparams ++ vparams.map(_.id) ++ bparams.map(_.id)) {
           Extern.Def(
@@ -179,7 +193,8 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
             bparams map rewrite,
             rewrite(ret),
             rewrite(annotatedCapture),
-            rewrite(body)
+            rewrite(body),
+            vmBody
           )
         }
     }
@@ -252,6 +267,12 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
         core.ModuleDecl(path, includes, declarations map rewrite, externs map rewrite, definitions map rewrite, exports map rewrite)
     }
 
+  def apply(t: core.Toplevel): core.Toplevel =
+    suffix = 0
+    scopes = List.empty
+    toplevelScope = Map.empty
+    rewrite(t)
+
   def apply(s: Stmt): Stmt = {
     suffix = 0
     toplevelScope = Map.empty
@@ -266,7 +287,7 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
         case Declaration.Data(id, tparams, constructors) => constructors.map(_.id) :+ id
         case Interface(id, tparams, properties) => properties.map(_.id) :+ id
       } ++ definitions.map(_.id) ++ externs.flatMap {
-        case Extern.Def(id, _, _, _, _, _, _, _) => Some(id)
+        case Extern.Def(id, _, _, _, _, _, _, _, _) => Some(id)
         case Extern.Include(_, _) => None
       }
     }
