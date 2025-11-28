@@ -174,8 +174,8 @@ object Normalizer { normal =>
     case Stmt.Let(id, tpe, expr, body) =>
       active(expr) match {
         // [[ val x = ABORT; body ]] = ABORT
-        case abort if abort.tpe == Type.TBottom =>
-          Stmt.Let(id, tpe, abort, Return(ValueVar(id, tpe)))
+        //        case abort if abort.tpe == Type.TBottom =>
+        //          Stmt.Let(id, tpe, abort, Return(ValueVar(id, tpe)))
 
         case normalized =>
           Stmt.Let(id, tpe, normalized, normalize(body)(using C.bind(id, normalized)))
@@ -215,10 +215,10 @@ object Normalizer { normal =>
           Stmt.Invoke(normalized.shared, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
       }
 
-    case Stmt.Match(scrutinee, clauses, default) if scrutinee.tpe == Type.TBottom =>
-      Stmt.Return(normalize(scrutinee))
+    //    case Stmt.Match(scrutinee, tpe, clauses, default) if scrutinee.tpe == Type.TBottom =>
+    //      Stmt.Return(normalize(scrutinee))
 
-    case Stmt.Match(scrutinee, clauses, default) => active(scrutinee) match {
+    case Stmt.Match(scrutinee, tpe, clauses, default) => active(scrutinee) match {
       case Expr.Make(data, tag, targs, vargs) if clauses.exists { case (id, _) => id == tag } =>
         val clause: BlockLit = clauses.collectFirst { case (id, cl) if id == tag => cl }.get
         normalize(reduce(clause, targs, vargs.map(normalize), Nil))
@@ -226,7 +226,7 @@ object Normalizer { normal =>
         normalize(default.get)
       case _ =>
         val normalized = normalize(scrutinee)
-        Stmt.Match(normalized, clauses.map { case (id, value) => id -> normalize(value) }, default.map(normalize))
+        Stmt.Match(normalized, tpe, clauses.map { case (id, value) => id -> normalize(value) }, default.map(normalize))
     }
 
     // [[ if (true) stmt1 else stmt2 ]] = [[ stmt1 ]]
@@ -251,8 +251,8 @@ object Normalizer { normal =>
       def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt)(using C: Context): Stmt = normalize(binding) match {
 
         // [[ val x = ABORT; body ]] = ABORT
-        case abort if abort.tpe == Type.TBottom  =>
-          abort
+        //        case abort if abort.tpe == Type.TBottom  =>
+        //          abort
 
         // [[ val x: A = shift(p) { {k: A => R} => body2 }; body: B ]] = shift(p) { {k: >>>B<<< => R} => body2 }
         case abort @ Stmt.Shift(p, BlockLit(tparams, cparams, vparams,
@@ -263,8 +263,8 @@ object Normalizer { normal =>
               BlockLit(tparams, cparams, vparams, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeB, answer)), captures) :: Nil,
                 normalize(body2)))
 
-        case Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
-          Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2,
+        case Stmt.Match(sc, tpe, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
+          Stmt.Match(sc, tpe, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2,
             normalizeVal(id, tpe, body2, body)))), None)
 
         // Introduce joinpoints that are potentially later inlined or garbage collected
@@ -280,9 +280,9 @@ object Normalizer { normal =>
               normalizeVal(x2, tpe, els, Stmt.App(k, Nil, List(ValueVar(x2, tpe)), Nil)))
           }
 
-        case Stmt.Match(sc, clauses, default) =>
+        case Stmt.Match(sc, tpe, clauses, default) =>
           joinpoint(id, tpe, normalize(body)) { k =>
-            Stmt.Match(sc, clauses.map {
+            Stmt.Match(sc, tpe, clauses.map {
               case (tag, BlockLit(tparams, cparams, vparams, bparams, body)) =>
                 val x = Id(id.name)
                 (tag, BlockLit(tparams, cparams, vparams, bparams,

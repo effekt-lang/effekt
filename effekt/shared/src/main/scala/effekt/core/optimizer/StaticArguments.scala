@@ -155,7 +155,7 @@ object StaticArguments {
     case Stmt.Return(expr) => Return(rewrite(expr))
     case Stmt.Val(id, tpe, binding, body) => Stmt.Val(id, tpe, rewrite(binding), rewrite(body))
     case Stmt.If(cond, thn, els) => If(rewrite(cond), rewrite(thn), rewrite(els))
-    case Stmt.Match(scrutinee, clauses, default) => Stmt.Match(rewrite(scrutinee), clauses.map { case (id, value) => id -> rewrite(value) }, default.map(rewrite))
+    case Stmt.Match(scrutinee, tpe, clauses, default) => Stmt.Match(rewrite(scrutinee), tpe, clauses.map { case (id, value) => id -> rewrite(value) }, default.map(rewrite))
     case Stmt.Alloc(id, init, region, body) => Alloc(id, rewrite(init), region, rewrite(body))
     case Stmt.Shift(prompt, body) => Shift(prompt, rewrite(body))
     case Stmt.Resume(k, body) => Resume(k, rewrite(body))

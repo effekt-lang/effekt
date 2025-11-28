@@ -48,4 +48,4 @@ def run(n: Int) = {
 
 }
 
-def main() = benchmark(8){run}
+def main() = println(run(8)) //benchmark(8){run}

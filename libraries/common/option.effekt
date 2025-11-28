@@ -37,7 +37,7 @@ def foreach[A](self: Option[A]) { f: A => Unit }: Unit = self match {
 }
 
 def value[A](self: Option[A]): A / Exception[MissingValue] = self match {
-  case None() => do raise(MissingValue(), "Trying to get the value of an empty option")
+  case None() => do raise(MissingValue(), "Trying to get the value of an empty option") match {}
   case Some(v) => v
 }
 

@@ -259,7 +259,7 @@ enum Stmt extends Tree {
 
   // Local Control Flow
   case If(cond: Expr, thn: Stmt, els: Stmt)
-  case Match(scrutinee: Expr, clauses: List[(Id, BlockLit)], default: Option[Stmt])
+  case Match(scrutinee: Expr, annotatedTpe: ValueType, clauses: List[(Id, BlockLit)], default: Option[Stmt])
 
   // (Type-monomorphic?) Regions
   case Region(body: BlockLit)
@@ -617,7 +617,7 @@ object Variables {
     case Stmt.App(callee, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
     case Stmt.If(cond, thn, els) => free(cond) ++ free(thn) ++ free(els)
-    case Stmt.Match(scrutinee, clauses, default) => free(scrutinee) ++ all(default, free) ++ all(clauses, {
+    case Stmt.Match(scrutinee, tpe, clauses, default) => free(scrutinee) ++ all(default, free) ++ all(clauses, {
       case (id, lit) => free(lit)
     })
     case Stmt.Region(body) => free(body)
@@ -708,8 +708,8 @@ object substitutions {
       case If(cond, thn, els) =>
         If(substitute(cond), substitute(thn), substitute(els))
 
-      case Match(scrutinee, clauses, default) =>
-        Match(substitute(scrutinee), clauses.map {
+      case Match(scrutinee, tpe, clauses, default) =>
+        Match(substitute(scrutinee), substitute(tpe), clauses.map {
           case (id, b) => (id, substitute(b))
         }, default.map(substitute))
 

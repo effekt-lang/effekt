@@ -46,7 +46,7 @@ object DirectStyle extends Tree.Rewrite {
     case ImpureApp(id, callee, targs, vargs, bargs, body) => canBeDirect(body)
     case Val(id, tpe, binding, body) => canBeDirect(body)
     case If(cond, thn, els) => canBeDirect(thn) && canBeDirect(els)
-    case Match(scrutinee, clauses, default) =>
+    case Match(scrutinee, tpe, clauses, default) =>
       clauses.forall { case (id, bl) => canBeDirect(bl.body) } && default.forall(canBeDirect)
 
     case Alloc(id, init, region, body) => canBeDirect(body)
@@ -85,8 +85,8 @@ object DirectStyle extends Tree.Rewrite {
     case If(cond, thn, els) =>
       If(cond, toDirectStyle(thn, label), toDirectStyle(els, label))
 
-    case Match(scrutinee, clauses, default) =>
-      Match(scrutinee,
+    case Match(scrutinee, tpe, clauses, default) =>
+      Match(scrutinee, tpe,
         clauses.map { case (id, bl) => (id, bl.copy(body = toDirectStyle(bl.body, label))) },
         default.map(body => toDirectStyle(body, label)))
 

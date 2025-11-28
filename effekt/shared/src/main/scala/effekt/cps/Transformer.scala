@@ -89,12 +89,12 @@ object Transformer {
         If(transform(cond), transform(thn, ks, k2), transform(els, ks, k2))
       }
 
-    case core.Stmt.Match(scrutinee, List((id, rhs)), None) =>
+    case core.Stmt.Match(scrutinee, tpe, List((id, rhs)), None) =>
       Match(
         transform(scrutinee),
         List((id, transformClause(rhs, ks, k))), None)
 
-    case core.Stmt.Match(scrutinee, clauses, default) =>
+    case core.Stmt.Match(scrutinee, tpe, clauses, default) =>
       withJoinpoint(k) { k =>
         Match(
           transform(scrutinee),

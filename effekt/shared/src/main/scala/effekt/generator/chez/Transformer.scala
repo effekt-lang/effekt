@@ -79,8 +79,8 @@ trait Transformer {
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
     // empty matches are translated to a hole in chez scheme
-    case Match(scrutinee, Nil, None) => chez.Builtin("hole")
-    case Match(scrutinee, clauses, default) =>
+    case Match(scrutinee, tpe, Nil, None) => chez.Builtin("hole")
+    case Match(scrutinee, tpe, clauses, default) =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
         val names = RecordNames(constr)

@@ -132,7 +132,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val Result(thnTpe, thnEffs) = checkStmt(thn, expected)
         val Result(elsTpe, elsEffs) = checkStmt(els, expected)
 
-        Result(Context.join(thnTpe, elsTpe), guardEffs ++ thnEffs ++ elsEffs)
+        Result(Context.join(expected, List(thnTpe -> Some(thn), elsTpe -> Some(els))), guardEffs ++ thnEffs ++ elsEffs)
 
       case source.While(guards, body, default, _) =>
         val Result((), guardEffs) = checkGuards(guards)
@@ -142,7 +142,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           checkStmt(s, expectedType)
         }.getOrElse(Result(TUnit, ConcreteEffects.empty))
 
-        Result(Context.join(bodyTpe, defaultTpe), defaultEffs ++ bodyEffs ++ guardEffs)
+        Result(Context.join(expected, List(bodyTpe -> Some(body), defaultTpe -> None)), defaultEffs ++ bodyEffs ++ guardEffs)
 
       case source.Var(id, _) => id.symbol match {
         case x: RefBinder => Context.lookup(x) match {
@@ -335,7 +335,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             }
         }
 
-        val tpes = clauses.map {
+        val tpesAndTerms = clauses.map {
           case source.MatchClause(p, guards, body, _) =>
             // (3) infer types for pattern(s)
             p match {
@@ -353,17 +353,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
             val Result(clTpe, clEff) = Context in { checkStmt(body, expected) }
 
             resEff = resEff ++ clEff ++ guardEffs
-            clTpe
+            clTpe -> Some(body)
         } ++ default.map { body =>
           val Result(defaultTpe, defaultEff) = Context in { checkStmt(body, expected) }
           resEff = resEff ++ defaultEff
-          defaultTpe
+          defaultTpe -> Some(body)
         }
 
         // Clauses could in general be empty if there are no constructors
         // In that case the scrutinee couldn't have been constructed and
         // we can unify with everything.
-        Result(Context.join(tpes: _*), resEff)
+        Result(Context.join(expected, tpesAndTerms), resEff)
 
       case source.Hole(id, Template(strings, args), span) =>
         val h = id.symbol.asHole

@@ -83,8 +83,8 @@ object BindSubexpressions {
     case Stmt.If(cond, thn, els) => transform(cond).run { c =>
       Stmt.If(c, transform(thn), transform(els))
     }
-    case Stmt.Match(scrutinee, clauses, default) => transform(scrutinee).run { sc =>
-      Stmt.Match(sc, clauses.map { case (tag, rhs) => (tag, transform(rhs)) }, default.map(transform))
+    case Stmt.Match(scrutinee, tpe, clauses, default) => transform(scrutinee).run { sc =>
+      Stmt.Match(sc, tpe, clauses.map { case (tag, rhs) => (tag, transform(rhs)) }, default.map(transform))
     }
 
     // Congruences

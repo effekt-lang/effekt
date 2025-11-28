@@ -263,10 +263,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Region(body) =>
       "region" <+> toDoc(body)
 
-    case Match(sc, clauses, default) =>
+    case Match(sc, tpe, clauses, default) =>
       val cs = braces(nest(line <> vsep(clauses map { case (p, b) => toDoc(p) <+> ":" <+> toDoc(b) })) <> line)
       val d = default.map { body => space <> "else" <+> braces(nest(line <> toDocStmts(body))) }.getOrElse { emptyDoc }
-      toDoc(sc) <+> "match" <+> cs <> d
+      toDoc(sc) <+> "match" <> brackets(toDoc(tpe)) <+> cs <> d
 
     case Hole(span) =>
       val from = span.from

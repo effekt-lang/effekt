@@ -2,9 +2,8 @@ package effekt
 package core
 import effekt.symbols
 import kiama.util.StringSource
-
 import PatternMatchingCompiler.*
-import core.Type.{TBoolean, TInt, TUnit}
+import core.Type.{ TBoolean, TInt, TString, TUnit }
 
 class PatternMatchingTests extends CoreTests {
 
@@ -47,7 +46,7 @@ class PatternMatchingTests extends CoreTests {
   }
 
   test("Sanity check: compiling empty list of clauses") {
-    assertEquals(compile(Nil), core.Hole(effekt.source.Span.missing))
+    assertEquals(compile(Nil, TUnit), core.Hole(effekt.source.Span.missing))
   }
 
   test("Simple guard") {
@@ -77,7 +76,7 @@ class PatternMatchingTests extends CoreTests {
       Clause(
         List(
           Condition.Patterns(Map(sc -> Pattern.Ignore()))),
-        b2, Nil, List())))
+        b2, Nil, List())), TString)
 
     val expected =
       Val(p.id, TBoolean, trivalPredicate,
@@ -131,13 +130,13 @@ class PatternMatchingTests extends CoreTests {
       Clause(
         List(
           Condition.Patterns(Map(opt -> Pattern.Ignore()))),
-        b2, Nil, List())))
+        b2, Nil, List())), TInt)
 
     // opt match {
     //   case Some(tmp) => val p = return v > 0; if (p) { b1(tmp) } else { b2() }
     //   case _ => b2()
     // }
-    val expected = Match(opt,
+    val expected = Match(opt, TInt,
       List((SomeC, BlockLit(Nil, Nil, List(ValueParam(tmp.id, tmp.tpe)), Nil,
         Val(p.id, TBoolean, trivalPredicate, If(p,
           App(b1, Nil, List(tmp), Nil),

@@ -87,7 +87,7 @@ class Reachable(
       vargs.foreach(process)
       bargs.foreach(process)
     case Stmt.If(cond, thn, els) => process(cond); process(thn); process(els)
-    case Stmt.Match(scrutinee, clauses, default) =>
+    case Stmt.Match(scrutinee, tpe, clauses, default) =>
       process(scrutinee)
       clauses.foreach { case (id, value) => process(value) }
       default.foreach(process)

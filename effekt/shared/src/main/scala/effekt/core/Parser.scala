@@ -380,7 +380,7 @@ class CoreParsers(names: Names) extends EffektLexers {
         Hole(effekt.source.Span(source, from.toInt, to.toInt))
       }
     | `<>` ^^^ Hole(effekt.source.Span.missing)
-    | (expr <~ `match`) ~/ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
+    | (expr <~ `match`) ~/ (`[` ~> valueType <~ `]`) ~ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
     )
 
   lazy val stmts: P[Stmt] =
