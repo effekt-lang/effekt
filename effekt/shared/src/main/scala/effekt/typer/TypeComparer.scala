@@ -58,8 +58,8 @@ trait TypeUnifier {
     case (t, s, _) if t == s => ()
 
     // TODO move to stdlib and drop these
-    case (_, TTop, Covariant) => ()
-    case (TBottom, _, Covariant) => ()
+    case (_, TTop, Covariant) if ctx.coercible.isDefined => ()
+    case (TBottom, _, Covariant) if ctx.coercible.isDefined => ()
 
     case (ValueTypeRef(s: UnificationVar), t: ValueType, Covariant) => requireUpperBound(s, t, ctx)
     case (s: ValueType, ValueTypeRef(t: UnificationVar), Covariant) => requireLowerBound(t, s, ctx)
@@ -70,8 +70,8 @@ trait TypeUnifier {
     case (ValueTypeRef(s: UnificationVar), t: ValueType, Invariant) => requireEqual(s, t, ctx)
     case (s: ValueType, ValueTypeRef(t: UnificationVar), Invariant) => requireEqual(t, s, ctx)
 
-    case (_, top, Covariant) if isOneLike(top) => ()
-    case (bot, _, Covariant) if isZeroLike(bot) => ()
+    case (_, top, Covariant) if ctx.coercible.isDefined && isOneLike(top) => ()
+    case (bot, _, Covariant) if ctx.coercible.isDefined && isZeroLike(bot) => ()
 
     // coercions can only be applied in covariant contexts
     //    case (top, _, Contravariant) if isOneLike(top) => ()

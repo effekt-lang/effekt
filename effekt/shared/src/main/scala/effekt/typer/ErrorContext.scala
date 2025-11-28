@@ -3,33 +3,47 @@ package typer
 
 import effekt.symbols.ErrorMessageInterpolator
 
-sealed trait ErrorContext { def polarity: Polarity }
+sealed trait ErrorContext { def polarity: Polarity; def coercible: Option[source.Tree] }
 sealed trait PositiveContext extends ErrorContext { def polarity = Covariant }
-sealed trait NegativeContext extends ErrorContext { def polarity = Contravariant }
-sealed trait InvariantContext extends ErrorContext { def polarity = Invariant }
+sealed trait NegativeContext extends ErrorContext, NotCoercible { def polarity = Contravariant }
+sealed trait InvariantContext extends ErrorContext, NotCoercible { def polarity = Invariant }
+trait NotCoercible { def coercible: Option[source.Tree] = None }
 
 object ErrorContext {
 
   /**
    * A generic context, checking a type against an expected type at position [[checkedTree]].
+   *
+   * TODO we use this for value types AND blocktypes (which cannot be coerced)
    */
-  case class Expected(got: symbols.Type, exp: symbols.Type, checkedTree: source.Tree) extends PositiveContext
+  case class Expected(got: symbols.Type, exp: symbols.Type, checkedTree: source.Tree, coercible: Option[source.Tree]) extends PositiveContext
 
   /**
    * A pattern matching context, checking a scrutinee against the return type of the match pattern [[pattern]]
+   *
+   * TODO we need to have the scrutinee since this is the one that we would add a coercion on.
    */
-  case class PatternMatch(pattern: source.MatchPattern) extends PositiveContext
+  case class PatternMatch(pattern: source.MatchPattern) extends PositiveContext, NotCoercible
+
+  // TODO this should have a tree where the coercion _could_ be inserted.
+  //  it also raises the question: what if we have several "unit"s? Which one do we coerce into?
+  // This would be easier, if we _only_ add coercions for effekt.Unit and effekt.Nothing
+  case class MergeTypes(left: symbols.Type, right: symbols.Type) extends PositiveContext, NotCoercible
+
+  /**
+   * covariant, but doesn't admit coercions since it is not used on types, but captures.
+   */
+  case class CaptureFlow(from: symbols.Captures, to: symbols.Captures, checkedTree: source.Tree) extends PositiveContext, NotCoercible
+
+  case class MergeCaptures() extends PositiveContext, NotCoercible
 
   /**
    * A context matching a declared type [[declared]] against the type defined at the use site [[defined]].
+   *
+   * Doesn't admit coercions.
    */
   case class Declaration(param: source.Param, declared: symbols.Type, defined: symbols.Type) extends NegativeContext
 
-
-  case class CaptureFlow(from: symbols.Captures, to: symbols.Captures, checkedTree: source.Tree) extends PositiveContext
-
-  case class MergeTypes(left: symbols.Type, right: symbols.Type) extends PositiveContext
-  case class MergeCaptures() extends PositiveContext
 
   case class MergeInvariant(outer: ErrorContext) extends InvariantContext
   case class TypeConstructor(outer: ErrorContext) extends InvariantContext
@@ -45,7 +59,7 @@ object ErrorContext {
 
     def go(ctx: ErrorContext): String = ctx match {
 
-      case Expected(got, exp, tree) =>
+      case Expected(got, exp, tree, coercible) =>
         val expRendered = pp"$exp"
         val gotRendered = pp"$got"
         val msg = if ((expRendered.size + gotRendered.size) < 25) {
