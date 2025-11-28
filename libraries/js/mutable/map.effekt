@@ -5,7 +5,7 @@ import array
 // A mutable map, backed by a JavaScript Map.
 extern type Map[K, V]
 
-extern def emptyMap[K, V]() at {}: Map[K, V] =
+extern def emptyMap[K, V]() at io: Map[K, V] =
   js "new Map()"
 
 def get[K, V](m: Map[K, V], key: K): Option[V] =
