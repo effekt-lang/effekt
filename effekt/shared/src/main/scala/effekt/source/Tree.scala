@@ -678,7 +678,7 @@ enum MatchPattern extends Tree {
    *
    *   case a, b => ...
    *
-   * Currently should *only* occur in lambda-cases during Parsing
+   * Currently should *only* occur in lambda-cases & `with` statements during parsing
    */
   case MultiPattern(patterns: List[MatchPattern], span: Span) extends MatchPattern
 }
