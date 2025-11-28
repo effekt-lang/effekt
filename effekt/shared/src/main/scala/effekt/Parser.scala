@@ -312,6 +312,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       // Desugar to: call { (x, y, _, ...) => body }
       val vparams: List[ValueParam] = patterns.unspan.map {
         case AnyPattern(id, span) => ValueParam(id, None, span)
+        case IgnorePattern(span) => ValueParam(IdDef(s"__ignored", span.synthesized), None, span)
         case _ => sys.error("impossible: checked above")
       }
       BlockLiteral(Nil, vparams, Nil, body, body.span.synthesized)
