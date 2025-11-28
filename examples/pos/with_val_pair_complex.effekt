@@ -1,0 +1,7 @@
+module with_val_pair_complex
+
+record Pos(i: Int, x: Char)
+def main() = {
+  with val (i, Pos(j, x)) = [(1, Pos(1, 'a')), (2, Pos(2, 'b')), (3, Pos(3, 'c'))].foreach;
+  println(show(i) ++ "=" ++ show(j) ++ ": " ++ show(x))
+}
