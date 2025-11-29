@@ -1,0 +1,9 @@
+def push123(): Unit / emit[Int] = [1, 2, 3].each
+def printAll(): Bool / read[Int] = {
+  exhaustively { println(do read()) }
+  true
+}
+
+def main() = {
+  val a = returning::source {push123} {printAll}
+}
