@@ -111,8 +111,7 @@ extern def showBuiltin(value: Byte) at {}: String =
   vm "effekt::show(Byte)"
 
 extern def inspect[R](value: R) at io: Unit =
-  js { println(show(value)) }
-  chez { println(show(value)) }
+  default { println(show(value)) }
   vm "effekt::inspect(Any)"
 
 /// A fatal runtime error that cannot be caught
