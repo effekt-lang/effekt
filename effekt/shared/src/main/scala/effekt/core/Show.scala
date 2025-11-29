@@ -28,6 +28,23 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
     def getAllShowDef(using ShowContext)(using DeclarationContext): List[Toplevel.Def] =
       showDefns.map(_._2).toList
+
+    var wrappings: List[(Id, Stmt)] = List.empty
+
+    def emit(id: Id, stmt: Stmt): Unit =
+      wrappings +:= (id, stmt)
+
+    def wrap(wraps: List[(Id, Stmt)], stmt: Stmt): Stmt = wraps match {
+      case (id, binding) :: next => Stmt.Val(id, TString, binding, wrap(next, stmt)) 
+      case Nil => stmt
+    }
+
+    def getWraps: List[(Id, Stmt)] = {
+      val wraps = wrappings
+      wrappings = List.empty
+      wraps
+    }
+
   }
 
   // This will check if we have already generated a Show instance for the given type and generate it if we didn't
@@ -100,25 +117,76 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     stmt match {
       case Let(id, annotatedTpe, PureApp(BlockVar(bid, bannotatedTpe, bannotatedCapt), targs, vargs), body) if bid.name.name == FUNCTION_NAME => 
         if (targs.length != 1) sys error "expected targs to have exactly one argument"
-        Stmt.Val(id, annotatedTpe, Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs, List.empty), transform(body))
+        // We need to wrap here, because vargs might have been extern show calls that are now not
+        // this might happen everywhere we directly transform an expression, I will not mark any further occurences
+        val vargs_ = vargs map transform
+        val wraps = ctx.getWraps
+        val stmt = Stmt.Val(id, annotatedTpe, Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs_, List.empty), transform(body))
+        ctx.wrap(wraps, stmt)
       case Let(id, annotatedTpe, binding, body) => 
-        Let(id, annotatedTpe, transform(binding), transform(body))
-      case Return(expr) => Return(transform(expr))
+        val binding_ = transform(binding)
+        val wraps = ctx.getWraps
+        val stmt = Let(id, annotatedTpe, binding_, transform(body))
+        ctx.wrap(wraps, stmt)
+      case Return(expr) => 
+        val expr_ = transform(expr)
+        val wraps = ctx.getWraps
+        val stmt = Return(transform(expr))
+        ctx.wrap(wraps, stmt)
       case ImpureApp(id, BlockVar(bid, annotatedTpe, annotatedCapt), targs, vargs, bargs, body) if bid.name.name == FUNCTION_NAME =>
         if (targs.length != 1) sys error "expected targs to have exactly one argument"
-        Stmt.Val(id, TString, Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs map transform, bargs map transform), transform(body))
-      case ImpureApp(id, callee, targs, vargs, bargs, body) => ImpureApp(id, callee, targs, vargs, bargs, transform(body))
+        val vargs_ = vargs map transform
+        val bargs_ = bargs map transform
+        val wraps = ctx.getWraps
+        val stmt = Stmt.Val(id, TString, Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs_, bargs_), transform(body))
+        ctx.wrap(wraps, stmt)
+      case ImpureApp(id, callee, targs, vargs, bargs, body) => 
+        val vargs_ = vargs map transform
+        val bargs_ = bargs map transform
+        val wraps = ctx.getWraps
+        val stmt = ImpureApp(id, callee, targs, vargs_, bargs_, transform(body))
+        ctx.wrap(wraps, stmt)
       case Def(id, block, body) => Def(id, transform(block), transform(body))
       case Val(id, annotatedTpe, binding, body) => Val(id, annotatedTpe, transform(binding), transform(body))
-      case App(callee, targs, vargs, bargs) => App(transform(callee), targs, vargs map transform, bargs map transform)
-      case Invoke(callee, method, methodTpe, targs, vargs, bargs) => Invoke(transform(callee), method, methodTpe, targs, vargs map transform, bargs map transform)
-      case If(cond, thn, els) => If(transform(cond), transform(thn), transform(els))
-      case Match(scrutinee, clauses, default) => Match(transform(scrutinee), clauses map ((id, blockLit) => (id, transform(blockLit))), transform(default))
+      case App(callee, targs, vargs, bargs) => 
+        val vargs_ = vargs map transform
+        val bargs_ = bargs map transform
+        val wraps = ctx.getWraps
+        val stmt = App(transform(callee), targs, vargs_, bargs_)
+        ctx.wrap(wraps, stmt)
+      case Invoke(callee, method, methodTpe, targs, vargs, bargs) => 
+        val vargs_ = vargs map transform
+        val bargs_ = bargs map transform
+        val wraps = ctx.getWraps
+        val stmt = Invoke(transform(callee), method, methodTpe, targs, vargs_, bargs_)
+        ctx.wrap(wraps, stmt)
+      case If(cond, thn, els) => 
+        val cond_ = transform(cond)
+        val wraps = ctx.getWraps
+        val stmt = If(transform(cond), transform(thn), transform(els))
+        ctx.wrap(wraps, stmt)
+      case Match(scrutinee, clauses, default) => 
+        val scrutinee_ = transform(scrutinee)
+        val wraps = ctx.getWraps
+        val stmt = Match(scrutinee_, clauses map ((id, blockLit) => (id, transform(blockLit))), transform(default))
+        ctx.wrap(wraps, stmt)
       case Region(body) => Region(transform(body))
-      case Alloc(id, init, region, body) => Alloc(id, transform(init), region, transform(body))
-      case Var(ref, init, capture, body) => Var(ref, transform(init), capture, transform(body))
+      case Alloc(id, init, region, body) => 
+        val init_ = transform(init)
+        val wraps = ctx.getWraps
+        val stmt = Alloc(id, init_, region, transform(body))
+        ctx.wrap(wraps, stmt)
+      case Var(ref, init, capture, body) => 
+        val init_ = transform(init)
+        val wraps = ctx.getWraps
+        val stmt = Var(ref, init_, capture, transform(body))
+        ctx.wrap(wraps, stmt)
       case Get(id, annotatedTpe, ref, annotatedCapt, body) => Get(id, annotatedTpe, ref, annotatedCapt, transform(body))
-      case Put(ref, annotatedCapt, value, body) => Put(ref, annotatedCapt, transform(value), transform(body))
+      case Put(ref, annotatedCapt, value, body) => 
+        val value_ = transform(value)
+        val wraps = ctx.getWraps
+        val stmt = Put(ref, annotatedCapt, value, transform(body))
+        ctx.wrap(wraps, stmt)
       case Reset(body) => Reset(transform(body))
       case Shift(prompt, body) => Shift(transform(prompt), transform(body))
       case Resume(k, body) => Resume(transform(k), transform(body))
@@ -126,11 +194,17 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     }
 
   def transform(expr: Expr)(using ctx: ShowContext)(using DeclarationContext): Expr = expr match {
-    case Make(data, tag, targs, vargs) => Make(data, tag, targs, vargs)
+    case Make(data, tag, targs, vargs) => Make(data, tag, targs, vargs map transform)
     case PureApp(BlockVar(id, annotatedTpe, annotatedCapt), targs, vargs) if id.name.name == FUNCTION_NAME => 
       if (targs.length != 1) sys error "expected targs to have exactly one argument"
-      Expr.PureApp(getShowBlockVar(targs(0)), List.empty, vargs)
-    case PureApp(b, targs, vargs) => PureApp(transform(b), targs, vargs)
+      // We are switching from Extern call to normal Call, 
+      // so we need to wrap the new call into a Val, store it and finally emit it before the statement that called this
+      // therefore we return the name of the Val that we store this call into
+      val stmt = Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs map transform, List.empty)
+      val letId = Id("showApp")
+      ctx.emit(letId, stmt)
+      Expr.ValueVar(letId, TString)
+    case PureApp(b, targs, vargs) => PureApp(transform(b), targs, vargs map transform)
     case Literal(value, annotatedType) => Literal(value, annotatedType)
     case ValueVar(id, annotatedType) => ValueVar(id, annotatedType)
     case Box(b, annotatedCapture) => Box(transform(b), annotatedCapture)
