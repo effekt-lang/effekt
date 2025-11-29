@@ -292,8 +292,11 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
             varShowInstance
           case Some(value) => None
         }
-      case _ => println(s"Missing case for vt: ${vt}"); None
-
+      case ValueType.Boxed(tpe, capt) => 
+        // TODO: Handle this better, but honestly your fault for using this
+        println("WARN: We are not properly handling Boxed types when generating show instances")
+        val stmt = Stmt.Return(Expr.Literal("BOXED", TString))
+        Some(generateDef(stmt))
     }
 
   def findExternShowDef(valueType: ValueType)(using dctx: DeclarationContext): Block.BlockVar = 
