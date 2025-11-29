@@ -185,7 +185,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       case Put(ref, annotatedCapt, value, body) => 
         val value_ = transform(value)
         val wraps = ctx.getWraps
-        val stmt = Put(ref, annotatedCapt, value, transform(body))
+        val stmt = Put(ref, annotatedCapt, value_, transform(body))
         ctx.wrap(wraps, stmt)
       case Reset(body) => Reset(transform(body))
       case Shift(prompt, body) => Shift(transform(prompt), transform(body))
