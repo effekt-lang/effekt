@@ -131,7 +131,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       case Return(expr) => 
         val expr_ = transform(expr)
         val wraps = ctx.getWraps
-        val stmt = Return(transform(expr))
+        val stmt = Return(expr_)
         ctx.wrap(wraps, stmt)
       case ImpureApp(id, BlockVar(bid, annotatedTpe, annotatedCapt), targs, vargs, bargs, body) if bid.name.name == FUNCTION_NAME =>
         if (targs.length != 1) sys error "expected targs to have exactly one argument"
