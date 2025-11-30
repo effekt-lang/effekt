@@ -287,12 +287,17 @@ def solveConstraints(constraints: Constraints): Solution =
     if (previousSolved == solved) return solved
   }
 
-  def existsInsideTargs(id: Id, targs: List[TypeArg]): Boolean = {
-    targs.exists({
-      case TypeArg.Base(tpe, targs) => tpe == id || existsInsideTargs(id, targs)
-      case TypeArg.Boxed(tpe, capt) => false
-      case TypeArg.Var(funId, pos) => false 
+  def countInsideTargs(id: Id, targs: List[TypeArg]): Int = {
+    var count = 0
+    targs.foreach(targ => { 
+      val innerCount = targ match {
+        case TypeArg.Base(tpe, targs) => (if (tpe == id) 1 else 0) + countInsideTargs(id, targs)
+        case TypeArg.Boxed(tpe, capt) => 0
+        case TypeArg.Var(funId, pos) => 0 
+      }
+      count += innerCount
     })
+    count
   }
 
   def solveConstraints(funId: FunctionId): Set[List[Ground]] =
@@ -311,7 +316,8 @@ def solveConstraints(constraints: Constraints): Solution =
           })
 
           // Detect polymorphic recursion
-          if (crossTargs.exists(tas => { existsInsideTargs(tpe, tas) })) {
+          val count = crossTargs.map { tas => countInsideTargs(tpe, tas) }.sum
+          if (count > 10) {
             sys error s"Polymorphic recursion between '${tpe}' and '${funId}'"
           }
 
