@@ -78,7 +78,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
    */
   lazy val CompileLSP = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      TransformerCps.compileLSP(cps, core)
+      TransformerCps.compileLSP(cps, core, mainSymbol)
   }
 
   private def pretty(stmts: List[js.Stmt]): Document =

@@ -1,3 +1,7 @@
+/**
+ * @param {*} obj
+ * @returns {string}
+ */
 $effekt.show = function(obj) {
   if (!!obj && !!obj.__reflect) {
     const meta = obj.__reflect()
@@ -10,6 +14,11 @@ $effekt.show = function(obj) {
   }
 }
 
+/**
+ * @param {*} obj1
+ * @param {*} obj2
+ * @returns {boolean}
+ */
 $effekt.equals = function(obj1, obj2) {
   if (!!obj1.__equals) {
     return obj1.__equals(obj2)
@@ -18,12 +27,21 @@ $effekt.equals = function(obj1, obj2) {
   }
 }
 
+/**
+ * @param {*} n1
+ * @param {*} n2
+ */
 function compare$prim(n1, n2) {
   if (n1 == n2) { return 0; }
   else if (n1 > n2) { return 1; }
   else { return -1; }
 }
 
+/**
+ * @param {*} obj1
+ * @param {*} obj2
+ * @returns {-1 | 0 | 1} - -1 if obj1 < obj2, 0 if equal, 1 if obj1 > obj2
+ */
 $effekt.compare = function(obj1, obj2) {
   if ($effekt.equals(obj1, obj2)) { return 0; }
 
@@ -50,12 +68,34 @@ $effekt.compare = function(obj1, obj2) {
   return compare$prim(obj1, obj2);
 }
 
+/**
+ * @typedef {Object} Unit
+ * @property {true} __unit
+ */
+
+/**
+ * Unit singleton value (Effekt's `()`)
+ * @type {Unit}
+ */
+$effekt.unit = { __unit: true };
+
+/**
+ * @param {string} str
+ * @returns {Unit}
+ */
 $effekt.println = function println$impl(str) {
   console.log(str); return $effekt.unit;
 }
 
-$effekt.unit = { __unit: true }
-
+/**
+ * Throws an error for incomplete pattern matches
+ * @throws {Error}
+ */
 $effekt.emptyMatch = function() { throw "empty match" }
 
+/**
+ * Placeholder for unimplemented code
+ * @param {string} pos - Source position (already formatted)
+ * @throws {Error}
+ */
 $effekt.hole = function(pos) { throw pos + " not implemented yet" }
