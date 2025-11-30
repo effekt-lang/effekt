@@ -142,32 +142,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transform(c: symbols.Constructor)(using Context): core.Constructor =
     core.Constructor(c, c.tparams, c.fields.map(f => core.Field(f, transform(f.returnType))))
 
-  def coercing[T <: source.Tree](tree: T)(f: T => Stmt)(using Context): Stmt =
-    val result = f(tree)
-    Context.annotationOption(Annotations.ShouldCoerce, tree) match {
-      case Some(Coercion.ToUnit(from)) =>
-        insertBindings {
-          val sc = Context.bind(result)
-          core.Stmt.Return(core.Expr.Literal((), core.Type.TUnit))
-        }
-      case Some(Coercion.FromNothing(to)) =>
-        insertBindings {
-          val sc = Context.bind(result)
-          core.Stmt.Match(sc, transform(to), Nil, None)
-        }
-      case None => result
-    }
-
-  def coercing[T <: source.Tree](tree: T)(f: T => Expr)(using Context): Expr =
-    val result = f(tree)
-    Context.annotationOption(Annotations.ShouldCoerce, tree) match {
-      case Some(Coercion.ToUnit(from)) =>
-        core.Expr.Literal((), core.Type.TUnit)
-      case Some(Coercion.FromNothing(to)) =>
-        Context.bind(core.Stmt.Match(result, transform(to), Nil, None))
-      case None => result
-    }
-
   def transform(tree: source.Stmt)(using Context): Stmt = coercing(tree) {
     // { e; stmt } --> { let _ = e; stmt }
     // TODO this doesn't preserve termination
@@ -931,6 +905,31 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def pureOrIO(t: BlockSymbol)(using Context): Boolean = asConcreteCaptureSet(Context.captureOf(t)).pureOrIO
 
+  def coercing[T <: source.Tree](tree: T)(f: T => Stmt)(using Context): Stmt =
+    val result = f(tree)
+    Context.annotationOption(Annotations.ShouldCoerce, tree) match {
+      case Some(Coercion.ToUnit(from)) =>
+        insertBindings {
+          val sc = Context.bind(result)
+          core.Stmt.Return(core.Expr.Literal((), core.Type.TUnit))
+        }
+      case Some(Coercion.FromNothing(to)) =>
+        insertBindings {
+          val sc = Context.bind(result)
+          core.Stmt.Match(sc, transform(to), Nil, None)
+        }
+      case None => result
+    }
+
+  def coercing[T <: source.Tree](tree: T)(f: T => Expr)(using Context): Expr =
+    val result = f(tree)
+    Context.annotationOption(Annotations.ShouldCoerce, tree) match {
+      case Some(Coercion.ToUnit(from)) =>
+        core.Expr.Literal((), core.Type.TUnit)
+      case Some(Coercion.FromNothing(to)) =>
+        Context.bind(core.Stmt.Match(result, transform(to), Nil, None))
+      case None => result
+    }
 }
 
 trait TransformerOps extends ContextOps { Context: Context =>
