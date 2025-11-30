@@ -4,6 +4,9 @@ package core
 import effekt.context.Context
 import effekt.core.DeBruijn.toDeBruijn
 import effekt.core.DeBruijn.addTparams
+import effekt.core.optimizer.Deadcode
+import effekt.core.optimizer.Normalizer
+import effekt.core.optimizer.BindSubexpressions
 
 
 object DeBruijn {
@@ -120,15 +123,25 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
 
     override val phaseName: String = "preprocess"
 
-    override def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = input match {
-      case CoreTransformed(source, tree, mod, core) => core match {
-        case ModuleDecl(path, includes, declarations, externs, definitions, exports) => {
-          // DeadCodeElimination
-          // Normalize (no blocklits as callees)
-          // BindSubexpressions (no unbox as callees)
-          val transformed = preprocess(core)
-          println(util.show(transformed))
-          Some(CoreTransformed(source, tree, mod, transformed))
+    override def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = {
+      input match {
+        case CoreTransformed(source, tree, mod, core) => core match {
+          case ModuleDecl(path, includes, declarations, externs, definitions, exports) => {
+            val mainSymbol = Context.ensureMainExists(mod)
+            var transformed = core
+            // DeadCodeElimination
+            transformed = Deadcode.remove(mainSymbol, transformed)
+            // Normalize (no blocklits as callees)
+            transformed = Normalizer.normalize(Set(mainSymbol), transformed, 50)
+            // BindSubexpressions (no unbox as callees)
+            transformed = BindSubexpressions.transform(transformed)
+            // DeadCodeElimination
+            transformed = Deadcode.remove(mainSymbol, transformed)
+
+            transformed = preprocess(transformed)
+            // println(util.show(transformed))
+            Some(CoreTransformed(source, tree, mod, transformed))
+          }
         }
       }
     }
