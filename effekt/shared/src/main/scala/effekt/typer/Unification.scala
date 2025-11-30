@@ -236,7 +236,6 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator, ErrorReport
     (typeRigids, captRigids, instantiate(tpe, typeRigids, captRigids))
   }
 
-
   // Implementation Details
   // ----------------------
 

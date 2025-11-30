@@ -40,6 +40,13 @@ import effekt.source.Implementation
  */
 case class Result[+T](tpe: T, effects: ConcreteEffects)
 
+/**
+ * Coercion as inferred by Typer
+ */
+enum Coercion {
+  case ToUnit(from: ValueType)
+  case FromNothing(to: ValueType)
+}
 
 object Typer extends Phase[NameResolved, Typechecked] {
 
@@ -125,7 +132,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def checkExpr(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
     checkAgainst(expr, expected) {
-      case source.Literal(_, tpe, _)     => Result(tpe, Pure)
+      case source.Literal(_, tpe, _) => Result(tpe, Pure)
 
       case source.If(guards, thn, els, _) =>
         val Result((), guardEffs) = checkGuards(guards)
@@ -316,7 +323,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // for example. tpe = List[Int]
         val results = scs.map{ sc => checkExpr(sc, None) }
 
-        var resEff = ConcreteEffects.union(results.map{ case Result(tpe, effs) => effs })
+        var resEff = ConcreteEffects.union(results.map { case Result(tpe, effs) => effs })
 
         // check that number of patterns matches number of scrutinees
         val arity = scs.length
@@ -1607,7 +1614,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def matchExpected(got: ValueType, expected: ValueType, coercible: Option[source.Tree])(using Context): Unit =
     Context.requireSubtype(got, expected,
-      ErrorContext.Expected(Context.unification(got), Context.unification(expected), Context.focus, coercible))
+      ErrorContext.Expected(Context.unification(got), Context.unification(expected), Context.focus, coercible.map(t => c => Context.coerce(t, c))))
 
   def matchExpected(got: BlockType, expected: BlockType)(using Context): Unit =
     Context.requireSubtype(got, expected,
@@ -1681,6 +1688,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * - [[Annotations.CapabilityArguments]]
    * - [[Annotations.BoundCapabilities]]
    * - [[Annotations.TypeArguments]]
+   * - [[Annotations.ShouldCoerce]]
    *
    * (3) Inferred Information for LSP
    * --------------------------------
@@ -1849,6 +1857,13 @@ trait TyperOps extends ContextOps { self: Context =>
 
   //</editor-fold>
 
+  //<editor-fold desc="(4) Coercions">
+
+  private[typer] def coerce(t: Tree, coercion: Coercion): Unit =
+    annotations.update(Annotations.ShouldCoerce, t, coercion)
+
+  //</editor-fold>
+
 
   //<editor-fold desc="(5) Inferred Information for LSP">
 
@@ -1899,6 +1914,7 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.updateAndCommit(Annotations.ValueType) { case (t, tpe) => subst.substitute(tpe) }
     annotations.updateAndCommit(Annotations.BlockType) { case (t, tpe) => subst.substitute(tpe) }
     annotations.updateAndCommit(Annotations.Captures) { case (t, capt) => subst.substitute(capt) }
+    annotations.updateAndCommit(Annotations.ShouldCoerce) { case (t, coercion) => coercion }
 
     // Update and write out all inferred types and captures for LSP support
     // This info is currently also used by Transformer!

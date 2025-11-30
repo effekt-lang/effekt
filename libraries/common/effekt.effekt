@@ -787,5 +787,3 @@ def locally[R] { p: => R } : R = p()
 
 effect literal(s: String): Unit
 effect splice[A](x: A): Unit
-
-

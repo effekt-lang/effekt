@@ -2,15 +2,15 @@ package effekt
 package core
 
 import scala.collection.mutable.ListBuffer
-import effekt.context.{Annotations, Context, ContextOps}
+import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
 import effekt.core.PatternMatchingCompiler.Clause
-import effekt.source.{Many, MatchGuard, MatchPattern, ResolveExternDefs}
-import effekt.symbols.Binder.{RegBinder, VarBinder}
-import effekt.typer.Substitutions
-import effekt.util.messages.{ErrorReporter, INTERNAL_ERROR}
+import effekt.source.{ Many, MatchGuard, MatchPattern, ResolveExternDefs }
+import effekt.symbols.Binder.{ RegBinder, VarBinder }
+import effekt.typer.{ Coercion, Substitutions }
+import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR }
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
@@ -142,7 +142,33 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transform(c: symbols.Constructor)(using Context): core.Constructor =
     core.Constructor(c, c.tparams, c.fields.map(f => core.Field(f, transform(f.returnType))))
 
-  def transform(tree: source.Stmt)(using Context): Stmt = tree match {
+  def coercing[T <: source.Tree](tree: T)(f: T => Stmt)(using Context): Stmt =
+    val result = f(tree)
+    Context.annotationOption(Annotations.ShouldCoerce, tree) match {
+      case Some(Coercion.ToUnit(from)) =>
+        insertBindings {
+          val sc = Context.bind(result)
+          core.Stmt.Return(core.Expr.Literal((), core.Type.TUnit))
+        }
+      case Some(Coercion.FromNothing(to)) =>
+        insertBindings {
+          val sc = Context.bind(result)
+          core.Stmt.Match(sc, transform(to), Nil, None)
+        }
+      case None => result
+    }
+
+  def coercing[T <: source.Tree](tree: T)(f: T => Expr)(using Context): Expr =
+    val result = f(tree)
+    Context.annotationOption(Annotations.ShouldCoerce, tree) match {
+      case Some(Coercion.ToUnit(from)) =>
+        core.Expr.Literal((), core.Type.TUnit)
+      case Some(Coercion.FromNothing(to)) =>
+        Context.bind(core.Stmt.Match(result, transform(to), Nil, None))
+      case None => result
+    }
+
+  def transform(tree: source.Stmt)(using Context): Stmt = coercing(tree) {
     // { e; stmt } --> { let _ = e; stmt }
     // TODO this doesn't preserve termination
     case source.ExprStmt(e, rest, span) if isPure(e) =>
@@ -314,7 +340,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case _ => transformUnbox(tree)
   }
 
-  def transformAsExpr(tree: source.Term)(using Context): Expr = tree match {
+  def transformAsExpr(tree: source.Term)(using Context): Expr = coercing(tree) {
     case v: source.Var => v.definition match {
       case sym: RefBinder =>
         val stateType = Context.blockTypeOf(sym)

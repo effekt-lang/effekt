@@ -3,11 +3,11 @@ package typer
 
 import effekt.symbols.ErrorMessageInterpolator
 
-sealed trait ErrorContext { def polarity: Polarity; def coercible: Option[source.Tree] }
+sealed trait ErrorContext { def polarity: Polarity; def coercible: Option[Coercion => Unit] }
 sealed trait PositiveContext extends ErrorContext { def polarity = Covariant }
 sealed trait NegativeContext extends ErrorContext, NotCoercible { def polarity = Contravariant }
 sealed trait InvariantContext extends ErrorContext, NotCoercible { def polarity = Invariant }
-trait NotCoercible { def coercible: Option[source.Tree] = None }
+trait NotCoercible { def coercible: Option[Coercion => Unit] = None }
 
 object ErrorContext {
 
@@ -16,7 +16,7 @@ object ErrorContext {
    *
    * TODO we use this for value types AND blocktypes (which cannot be coerced)
    */
-  case class Expected(got: symbols.Type, exp: symbols.Type, checkedTree: source.Tree, coercible: Option[source.Tree]) extends PositiveContext
+  case class Expected(got: symbols.Type, exp: symbols.Type, checkedTree: source.Tree, coercible: Option[Coercion => Unit]) extends PositiveContext
 
   /**
    * A pattern matching context, checking a scrutinee against the return type of the match pattern [[pattern]]
