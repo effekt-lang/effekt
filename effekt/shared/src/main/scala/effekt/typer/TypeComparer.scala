@@ -54,24 +54,24 @@ trait TypeUnifier {
     case ValueType.ValueTypeRef(tvar) => false
   }
 
-  def unifyValueTypes(tpe1: ValueType, tpe2: ValueType, ctx: ErrorContext): Unit = (tpe1, tpe2, ctx.polarity) match {
-    case (t, s, _) if t == s => ()
+  def unifyValueTypes(tpe1: ValueType, tpe2: ValueType, ctx: ErrorContext): Unit = (tpe1, tpe2, ctx.polarity, ctx.coercible) match {
+    case (t, s, _, _) if t == s => ()
 
-    case (ValueTypeRef(s: UnificationVar), t: ValueType, Covariant) => requireUpperBound(s, t, ctx)
-    case (s: ValueType, ValueTypeRef(t: UnificationVar), Covariant) => requireLowerBound(t, s, ctx)
+    case (ValueTypeRef(s: UnificationVar), t: ValueType, Covariant, _) => requireUpperBound(s, t, ctx)
+    case (s: ValueType, ValueTypeRef(t: UnificationVar), Covariant, _) => requireLowerBound(t, s, ctx)
 
-    case (ValueTypeRef(s: UnificationVar), t: ValueType, Contravariant) => requireLowerBound(s, t, ctx)
-    case (s: ValueType, ValueTypeRef(t: UnificationVar), Contravariant) => requireUpperBound(t, s, ctx)
+    case (ValueTypeRef(s: UnificationVar), t: ValueType, Contravariant, _) => requireLowerBound(s, t, ctx)
+    case (s: ValueType, ValueTypeRef(t: UnificationVar), Contravariant, _) => requireUpperBound(t, s, ctx)
 
-    case (ValueTypeRef(s: UnificationVar), t: ValueType, Invariant) => requireEqual(s, t, ctx)
-    case (s: ValueType, ValueTypeRef(t: UnificationVar), Invariant) => requireEqual(t, s, ctx)
+    case (ValueTypeRef(s: UnificationVar), t: ValueType, Invariant, _) => requireEqual(s, t, ctx)
+    case (s: ValueType, ValueTypeRef(t: UnificationVar), Invariant, _) => requireEqual(t, s, ctx)
 
     // coercing is the last resort...
-    case (_, TUnit, Covariant) if ctx.coercible.isDefined => () // println(pp"Coercing ${tpe1} to Unit")
-    case (TBottom, _, Covariant) if ctx.coercible.isDefined => () // println(pp"Coercing Nothing to ${tpe2}")
+    case (from, TUnit, Covariant, Some(coerce)) => coerce(Coercion.ToUnit(from))
+    case (TBottom, to, Covariant, Some(coerce)) => coerce(Coercion.FromNothing(to))
 
     // For now, we treat all type constructors as invariant.
-    case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _) =>
+    case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _, _) =>
 
       if (t1 != t2) { error(tpe1, tpe2, ErrorContext.TypeConstructor(ctx)) }
       else if (args1.size != args2.size) {
@@ -81,11 +81,11 @@ trait TypeUnifier {
       // TODO here we assume that the type constructor is covariant
       (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx)) }
 
-    case (t @ BoxedType(tpe1, capt1), s @ BoxedType(tpe2, capt2), p) =>
+    case (t @ BoxedType(tpe1, capt1), s @ BoxedType(tpe2, capt2), p, _) =>
       unifyBlockTypes(tpe1, tpe2, ErrorContext.BoxedTypeBlock(t, s, ctx))
       unifyCaptures(capt1, capt2, ErrorContext.BoxedTypeCapture(t, s, ctx))
 
-    case (t, s, p) =>
+    case (t, s, p, _) =>
       error(t, s, ctx)
   }
 
