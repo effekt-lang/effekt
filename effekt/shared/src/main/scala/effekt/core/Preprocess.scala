@@ -203,56 +203,69 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
         case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, tpe, preprocess(binding))
       })
 
+    def preprocess(block: Block)(using PreprocessContext): Block = block match
+      case b@BlockVar(id, annotatedTpe, annotatedCapt) => preprocess(b)
+      case b@BlockLit(tparams, cparams, vparams, bparams, body) => preprocess(b)
+      case Unbox(pure) => block
+      case New(impl) => block
+    
+
     def preprocess(block: Block.BlockLit)(using ctx: PreprocessContext): Block.BlockLit = 
-      val processedBparams = block.bparams.zipWithIndex.map((blockParam, index) => {
+      val processedBparams = block.bparams.map(blockParam => {
         blockParam.tpe match {
-        case b: BlockType.Function => 
-          if(b.tparams.length > 0) {
-            val interface = ctx.emit(blockParam.id, b, block)
-            BlockParam(blockParam.id, interface, blockParam.capt)
-          } else {
+          case b: BlockType.Function => 
+            if(b.tparams.length > 0) {
+              val interface = ctx.emit(blockParam.id, b, block)
+              BlockParam(blockParam.id, interface, blockParam.capt)
+            } else {
+              blockParam
+            }
+          case BlockType.Interface(name, targs) => 
             blockParam
-          }
-        case BlockType.Interface(name, targs) => 
-          blockParam
         }  
       })
       addTparams(block.tparams)
       Block.BlockLit(block.tparams, block.cparams, block.vparams, processedBparams, preprocess(block.body))
 
-    def preprocess(block: Block.BlockVar)(using PreprocessContext): Block.BlockVar = block
+    def preprocess(block: Block.BlockVar)(using PreprocessContext): Block.BlockVar = block match {
+      case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(id, preprocess(annotatedTpe), annotatedCapt)
+    }
+
+    def preprocessBargs(bargs: List[Block], targs: List[ValueType])(using ctx: PreprocessContext): List[Block] = bargs map {
+      // TODO: add example to each case
+      case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(id, preprocess(annotatedTpe), annotatedCapt)
+      case block@BlockLit(tparams, cparams, vparams, bparams, body) => 
+        val debruijnBlockTpe = toDeBruijn(block.tpe)
+        ctx.replacements.get(debruijnBlockTpe) match {
+          case Some(value) => {
+            val defnId = Id(value.interface.name.name ++ "_defn")
+            val freshOp = Operation(value.apply, tparams, cparams, vparams, bparams, preprocess(body))
+            val interfaceTpe: BlockType.Interface = BlockType.Interface(value.interface, targs)
+            Block.New(Implementation(interfaceTpe, List(freshOp)))
+          }
+          case None => Block.BlockLit(tparams, cparams, vparams, bparams, preprocess(body))
+        }
+      case Unbox(pure) => Unbox(pure)
+      case New(impl) => New(impl)
+    }
     
     def preprocess(stmt: Stmt)(using ctx: PreprocessContext): Stmt = stmt match {
-      case App(callee: Block.BlockVar, targs, vargs, bargs) => {
-        // Move to seperate function
-        // add example to each case
-        val processedBargs = bargs.map {
-          // Only change bargs where the argument is a block literal
-          // and we have a replacement stored, otherwise ignore
-          case block@BlockLit(tparams, cparams, vparams, bparams, body) => {
-            val debruijnBlockTpe = toDeBruijn(block.tpe)
-            ctx.replacements.get(debruijnBlockTpe) match {
-              case Some(value) => {
-                val defnId = Id(value.interface.name.name ++ "_defn")
-                val freshOp = Operation(value.apply, tparams, cparams, vparams, bparams, preprocess(body))
-                val interfaceTpe: BlockType.Interface = BlockType.Interface(value.interface, targs)
-                Block.New(Implementation(interfaceTpe, List(freshOp)))
-              }
-              case None => Block.BlockLit(tparams, cparams, vparams, bparams, preprocess(body))
+      case App(callee, targs, vargs, bargs) => {
+        val processedBargs = preprocessBargs(bargs, targs)
+
+        callee match {
+          case BlockVar(id, annotatedTpe, annotatedCapt) => {
+            ctx.appReplacements.get(id) match {
+              case Some((replacementId, blockVar)) => 
+                Invoke(blockVar, replacementId, annotatedTpe, targs, vargs, processedBargs)
+              case None => 
+                App(callee, targs, vargs, processedBargs)
             }
           }
-          case block => {
-            // TODO: No default, do everything
-            block
-          }
-        }
-
-        // Match on callee here
-        ctx.appReplacements.get(callee.id) match {
-          case Some((replacementId, blockVar)) => 
-            Invoke(blockVar, replacementId, callee.annotatedTpe, targs, vargs, processedBargs)
-          case None => 
-            App(callee, targs, vargs, processedBargs)
+          case New(impl) => App(New(impl), targs, vargs, processedBargs)
+          // TODO: I tought this should not happen, but it does (i.e. in examples/llvm/nosuchelement.effekt and others)
+          case BlockLit(tparams, cparams, vparams, bparams, body) => App(preprocess(callee), targs, vargs, bargs)
+          case Unbox(pure) => sys error "Should not happen, BindSubexpressions ran before"
         }
       }
       case Val(id, annotatedTpe, binding, body) => 
@@ -275,7 +288,6 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
       case Resume(k, body) => Resume(k, preprocess(body))
       case Shift(prompt, body) => stmt
       case Var(ref, init, capture, body) => Var(ref, init, capture, preprocess(body))
-      case App(callee, targs, vargs, bargs) => stmt
     }
 
     def preprocess(blockType: BlockType)(using ctx: PreprocessContext): BlockType = blockType match {
