@@ -407,7 +407,7 @@ define private void @invalidate(%Stack %stack, %Stack %end) {
 
 error:
     call void @duplicated_prompt()
-    ret void
+    unreachable
 
 check:
     %isEnd = icmp eq %Stack %next, %end
