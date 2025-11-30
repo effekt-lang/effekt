@@ -28,7 +28,7 @@ object Transformer {
 
   def transformToplevel(definition: core.Toplevel)(using TransformationContext): ToplevelDefinition = definition match {
     case core.Toplevel.Def(id, block) => ToplevelDefinition.Def(id, transform(block))
-    case core.Toplevel.Val(id, tpe, stmt) =>
+    case core.Toplevel.Val(id, stmt) =>
       val ks = Id("ks")
       val k = Id("k")
       ToplevelDefinition.Val(id, ks, k, transform(stmt, ks, Continuation.Dynamic(k)))
@@ -56,7 +56,7 @@ object Transformer {
       LetDef(id, transform(block), transform(body, ks, k))
 
     // dealiasing
-    case core.Stmt.Let(id, tpe, core.Expr.ValueVar(x, _), body) =>
+    case core.Stmt.Let(id, core.Expr.ValueVar(x, _), body) =>
       binding(id, C.lookupValue(x)) { transform(body, ks, k) }
 
     case core.Stmt.ImpureApp(id, b, targs, vargs, bargs, body) =>
@@ -67,13 +67,13 @@ object Transformer {
         case _ => sys error "Should not happen"
       }
 
-    case core.Stmt.Let(id, tpe, pure: core.Expr, body) =>
+    case core.Stmt.Let(id, pure: core.Expr, body) =>
       LetExpr(id, transform(pure), transform(body, ks, k))
 
     case core.Stmt.Return(value) =>
       k(transform(value), ks)
 
-    case core.Stmt.Val(id, annotatedTpe, rhs, body) =>
+    case core.Stmt.Val(id, rhs, body) =>
       transform(rhs, ks, Continuation.Static(id) { (value, ks) =>
         binding(id, value) { transform(body, ks, k) }
       })

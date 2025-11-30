@@ -89,7 +89,7 @@ object Normalizer { normal =>
         contextSoFar = contextSoFar.bind(id, normalized)
         Toplevel.Def(id, normalized)
 
-      case Toplevel.Val(id, tpe, binding) =>
+      case Toplevel.Val(id, binding) =>
         // TODO commute (similar to normalizeVal)
         // val foo = { val bar = ...; ... }   =   val bar = ...; val foo = ...;
         val normalized = normalize(binding)(using contextSoFar)
@@ -98,7 +98,7 @@ object Normalizer { normal =>
             contextSoFar = contextSoFar.bind(id, expr)
           case normalized => ()
         }
-        Toplevel.Val(id, tpe, normalized)
+        Toplevel.Val(id, normalized)
     }
     (defs, contextSoFar)
 
@@ -171,14 +171,14 @@ object Normalizer { normal =>
       val normalized = active(block).dealiased
       Stmt.Def(id, normalized, normalize(body)(using C.bind(id, normalized)))
 
-    case Stmt.Let(id, tpe, expr, body) =>
+    case Stmt.Let(id, expr, body) =>
       active(expr) match {
         // [[ val x = ABORT; body ]] = ABORT
         //        case abort if abort.tpe == Type.TBottom =>
-        //          Stmt.Let(id, tpe, abort, Return(ValueVar(id, tpe)))
+        //          Stmt.Let(id, abort, Return(ValueVar(id, tpe)))
 
         case normalized =>
-          Stmt.Let(id, tpe, normalized, normalize(body)(using C.bind(id, normalized)))
+          Stmt.Let(id, normalized, normalize(body)(using C.bind(id, normalized)))
       }
 
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
@@ -236,7 +236,7 @@ object Normalizer { normal =>
       case _ => If(normalize(cond), normalize(thn), normalize(els))
     }
 
-    case Stmt.Val(id, tpe, binding, body) =>
+    case Stmt.Val(id, binding, body) =>
 
       def joinpoint(id: Id, tpe: ValueType, body: Stmt)(f: BlockVar => Context ?=> Stmt)(using C: Context): Stmt = body match {
         // do not eta-expand variables
@@ -248,7 +248,7 @@ object Normalizer { normal =>
           Stmt.Def(k, kDef, f(Block.BlockVar(k, kDef.tpe, kDef.capt))(using C.bind(k, kDef)))
       }
 
-      def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt)(using C: Context): Stmt = normalize(binding) match {
+      def normalizeVal(id: Id, binding: Stmt, body: Stmt)(using C: Context): Stmt = normalize(binding) match {
 
         // [[ val x = ABORT; body ]] = ABORT
         //        case abort if abort.tpe == Type.TBottom  =>
@@ -265,67 +265,69 @@ object Normalizer { normal =>
 
         case Stmt.Match(sc, tpe, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
           Stmt.Match(sc, tpe, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2,
-            normalizeVal(id, tpe, body2, body)))), None)
+            normalizeVal(id, body2, body)))), None)
 
         // Introduce joinpoints that are potentially later inlined or garbage collected
         // [[ val x = if (cond) { thn } else { els }; body ]] =
         //   def k(x) = [[ body ]]
         //   if (cond) { [[ val x1 = thn; k(x1) ]] } else { [[ val x2 = els; k(x2) ]] }
         case Stmt.If(cond, thn, els) =>
+          val tpe = binding.tpe
           joinpoint(id, tpe, normalize(body)) { k =>
             val x1 = Id(id.name)
             val x2 = Id(id.name)
             Stmt.If(cond,
-              normalizeVal(x1, tpe, thn, Stmt.App(k, Nil, List(ValueVar(x1, tpe)), Nil)),
-              normalizeVal(x2, tpe, els, Stmt.App(k, Nil, List(ValueVar(x2, tpe)), Nil)))
+              normalizeVal(x1, thn, Stmt.App(k, Nil, List(ValueVar(x1, tpe)), Nil)),
+              normalizeVal(x2, els, Stmt.App(k, Nil, List(ValueVar(x2, tpe)), Nil)))
           }
 
-        case Stmt.Match(sc, tpe, clauses, default) =>
+        case Stmt.Match(sc, _, clauses, default) =>
+          val tpe = binding.tpe
           joinpoint(id, tpe, normalize(body)) { k =>
             Stmt.Match(sc, tpe, clauses.map {
               case (tag, BlockLit(tparams, cparams, vparams, bparams, body)) =>
                 val x = Id(id.name)
                 (tag, BlockLit(tparams, cparams, vparams, bparams,
-                  normalizeVal(x, tpe, body, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))))
+                  normalizeVal(x, body, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))))
             }, default.map { stmt =>
               val x = Id(id.name)
-              normalizeVal(x, tpe, stmt, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))
+              normalizeVal(x, stmt, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))
             })
           }
 
         // [[ val x = return e; s ]] = let x = [[ e ]]; [[ s ]]
         case Stmt.Return(expr2) =>
-          Stmt.Let(id, tpe, expr2, normalize(body)(using C.bind(id, expr2)))
+          Stmt.Let(id, expr2, normalize(body)(using C.bind(id, expr2)))
 
         // Commute val and bindings
         // [[ val x = { def f = ...; STMT }; STMT ]] = def f = ...; val x = STMT; STMT
         case Stmt.Def(id2, block2, body2) =>
-          Stmt.Def(id2, block2, normalizeVal(id, tpe, body2, body))
+          Stmt.Def(id2, block2, normalizeVal(id, body2, body))
 
         // Commute val and bindings
         // [[ val x = { let y = ...; STMT }; STMT ]] = let y = ...; val x = STMT; STMT
-        case Stmt.Let(id2, tpe2, binding2, body2) =>
-          Stmt.Let(id2, tpe2, binding2, normalizeVal(id, tpe, body2, body))
+        case Stmt.Let(id2, binding2, body2) =>
+          Stmt.Let(id2, binding2, normalizeVal(id, body2, body))
 
         case Stmt.ImpureApp(id2, callee2, targs2, vargs2, bargs2, body2) =>
-          Stmt.ImpureApp(id2, callee2, targs2, vargs2, bargs2, normalizeVal(id, tpe, body2, body))
+          Stmt.ImpureApp(id2, callee2, targs2, vargs2, bargs2, normalizeVal(id, body2, body))
 
         // Flatten vals. This should be non-leaking since we use garbage free refcounting.
         // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]
-        case Stmt.Val(id2, tpe2, binding2, body2) =>
-          normalizeVal(id2, tpe2, binding2, normalizeVal(id, tpe, body2, body))
+        case Stmt.Val(id2, binding2, body2) =>
+          normalizeVal(id2, binding2, normalizeVal(id, body2, body))
 
         // [[ val x = { var y in r = e; stmt2 }; stmt1 ]] = var y in r = e; [[ val x = stmt2; stmt1 ]]
         case Stmt.Alloc(id2, init2, region2, body2) =>
-          Stmt.Alloc(id2, init2, region2, normalizeVal(id, tpe, body2, body))
+          Stmt.Alloc(id2, init2, region2, normalizeVal(id, body2, body))
 
         // [[ val x = { let x = !ref; stmt2 }; stmt1 ]] = let x = !ref; [[ val x = stmt2; stmt1 ]]
         case Stmt.Get(id2, tpe2, ref2, capt2, body2) =>
-          Stmt.Get(id2, tpe2, ref2, capt2, normalizeVal(id, tpe, body2, body))
+          Stmt.Get(id2, tpe2, ref2, capt2, normalizeVal(id, body2, body))
 
         // [[ val x = { ref := e; stmt2 }; stmt1 ]] = ref := e; [[ val x = stmt2; stmt1 ]]
         case Stmt.Put(ref2, capt2, value2, body2) =>
-          Stmt.Put(ref2, capt2, value2, normalizeVal(id, tpe, body2, body))
+          Stmt.Put(ref2, capt2, value2, normalizeVal(id, body2, body))
 
         case other => normalize(body) match {
           // [[ val x = stmt; return x ]]   =   [[ stmt ]]
@@ -333,10 +335,10 @@ object Normalizer { normal =>
           // [[ val x: Unit = stmt; return () ]]   =   [[ stmt ]]
           case Stmt.Return(x) if x.tpe == Type.TUnit && other.tpe == Type.TUnit => other
           // [[ val x = stmt; body ]]   =   val x = [[ stmt ]]; [[ body ]]
-          case normalizedBody => Stmt.Val(id, tpe, other, normalizedBody)
+          case normalizedBody => Stmt.Val(id, other, normalizedBody)
         }
       }
-      normalizeVal(id, tpe, binding, body)
+      normalizeVal(id, binding, body)
 
 
     // "Congruences"

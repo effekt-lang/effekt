@@ -7,7 +7,7 @@ import effekt.core.PolymorphismBoxing.ValueCoercer.IdentityCoercer
 import effekt.symbols
 import effekt.symbols.{ TmpBlock, TmpValue }
 import effekt.{ CoreTransformed, Phase }
-import effekt.symbols.builtins.{ TBoolean, TByte, TChar, TDouble, TInt, TState, TUnit }
+import effekt.symbols.builtins.{ TBoolean, TByte, TChar, TDouble, TInt, TState }
 import effekt.symbols.ErrorMessageInterpolator
 
 import scala.util.boundary
@@ -105,7 +105,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(toplevel: Toplevel)(using Context, DeclarationContext): Toplevel = toplevel match {
     case Toplevel.Def(id, block) => Toplevel.Def(id, transform(block))
-    case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, transform(tpe), coerce(transform(binding), transform(tpe)))
+    case Toplevel.Val(id, binding) => Toplevel.Val(id, transform(binding))
   }
 
   def transform(block: Block.BlockLit)(using Context, DeclarationContext): Block.BlockLit = block match {
@@ -148,8 +148,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   def transform(stmt: Stmt)(using Context, DeclarationContext): Stmt = stmt match {
     case Stmt.Def(id, block, rest) =>
       Stmt.Def(id, transform(block), transform(rest))
-    case Stmt.Let(id, tpe, binding, rest) =>
-      Stmt.Let(id, transform(tpe), transform(binding), transform(rest))
+    case Stmt.Let(id, binding, rest) =>
+      Stmt.Let(id, transform(binding), transform(rest))
     case s @ Stmt.ImpureApp(id, b, targs, vargs, bargs, rest) =>
       val callee = transform(b)
       // [S](S) => S            [Int]
@@ -173,13 +173,13 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         val fresh = TmpValue("coe")
         stmt.copy(
           id = fresh,
-          body = Stmt.Let(id, to, coercer(Expr.ValueVar(fresh, from)), stmt.body))
+          body = Stmt.Let(id, coercer(Expr.ValueVar(fresh, from)), stmt.body))
       }
 
     case Stmt.Return(expr) =>
       Stmt.Return(transform(expr))
-    case Stmt.Val(id, tpe, binding, body) =>
-      Stmt.Val(id, transform(tpe), coerce(transform(binding), transform(tpe)), transform(body))
+    case Stmt.Val(id, binding, body) =>
+      Stmt.Val(id, transform(binding), transform(body))
     case Stmt.App(callee, targs, vargs, bargs) =>
       val calleeT = transform(callee)
       val tpe: BlockType.Function = calleeT.tpe match {
@@ -341,7 +341,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     if (coerce.isIdentity) { stmt }
     else {
       val orig = TmpValue("coe")
-      Stmt.Val(orig, coerce.from, stmt, Stmt.Return(coerce(ValueVar(orig, coerce.from))))
+      Stmt.Val(orig, stmt, Stmt.Return(coerce(ValueVar(orig, coerce.from))))
     }
 
   def coerce(expr: Expr, to: ValueType)(using Context, DeclarationContext): Expr = ValueCoercer(expr.tpe, to)(expr)
@@ -366,8 +366,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       case (unboxed, _: ValueType.Var) if boxer.isDefinedAt(unboxed) => BoxCoercer(unboxed)
       case (boxed, unboxed) if boxer.isDefinedAt(unboxed) && boxer(unboxed).tpe == boxed => UnboxCoercer(unboxed)
       case (_: ValueType.Var, unboxed) if boxer.isDefinedAt(unboxed) => UnboxCoercer(unboxed)
-      case (unboxed, core.Type.TUnit) if boxer.isDefinedAt(unboxed) => BoxCoercer(unboxed)
-      case (core.Type.TBottom, unboxed) if boxer.isDefinedAt(unboxed) => BottomCoercer(unboxed)
 
       // assert(cs1 == cs2) // FIXME this seems to fail, what would be the correct check for subcapturing (or similar) here?
       case (f @ core.ValueType.Boxed(bt1, cs1), t @ core.ValueType.Boxed(bt2, cs2)) =>

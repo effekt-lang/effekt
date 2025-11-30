@@ -240,7 +240,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
         // create a closure
         case Stmt.Def(id, block, body) => State.Step(body, env.bind(id, eval(block, env)), stack, heap)
 
-        case Stmt.Let(id, tpe, binding, body) => State.Step(body, env.bind(id, eval(binding, env)), stack, heap)
+        case Stmt.Let(id, binding, body) => State.Step(body, env.bind(id, eval(binding, env)), stack, heap)
 
         case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
           val result = env.lookupBuiltin(callee.id) match {
@@ -258,7 +258,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           val v = eval(expr, env)
           returnWith(v, env, stack, heap)
 
-        case Stmt.Val(id, tpe, binding, body) =>
+        case Stmt.Val(id, binding, body) =>
           instrumentation.pushFrame()
           State.Step(binding, env, push(Frame.Val(id, body, env), stack), heap)
 
@@ -534,7 +534,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
     // This is not ideal...
     // First, we run all the toplevel vals:
     m.definitions.collect {
-      case effekt.core.Toplevel.Val(id, tpe, binding) =>
+      case effekt.core.Toplevel.Val(id, binding) =>
         toplevels = toplevels.updated(id, run(State.Step(binding, env, Stack.Toplevel, Map.empty)))
     }
 

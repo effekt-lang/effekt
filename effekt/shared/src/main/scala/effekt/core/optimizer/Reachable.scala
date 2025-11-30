@@ -64,7 +64,7 @@ class Reachable(
     case Stmt.Def(id, block, body) =>
       // Do NOT process `block` here, since this would mean the definition is used
       process(body)(using defs + (id -> block))
-    case Stmt.Let(id, tpe, binding, body) =>
+    case Stmt.Let(id, binding, body) =>
       // We would need to process the binding if it was impure,
       // to keep it for its side effects; however, the binding is guaranteed to be pure
       process(body)(using defs + (id -> binding))
@@ -76,7 +76,7 @@ class Reachable(
       // process(body)(using defs + (id -> binding))
       process(body)
     case Stmt.Return(expr) => process(expr)
-    case Stmt.Val(id, tpe, binding, body) => process(binding); process(body)
+    case Stmt.Val(id, binding, body) => process(binding); process(body)
     case Stmt.App(callee, targs, vargs, bargs) =>
       process(callee)
       vargs.foreach(process)
@@ -123,7 +123,7 @@ object Reachable {
   def apply(entrypoints: Set[Id], m: ModuleDecl): Map[Id, Usage] = {
     val definitions: Map[Id, Block | Expr | Stmt] = m.definitions.map {
       case Toplevel.Def(id, block) => id -> block
-      case Toplevel.Val(id, tpe, binding) => id -> binding
+      case Toplevel.Val(id, binding) => id -> binding
     }.toMap
     val initialUsage = entrypoints.map { id => id -> Usage.Recursive }.toMap
     val analysis = new Reachable(initialUsage, Nil, Set.empty)

@@ -79,11 +79,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case v @ source.ValDef(id, tpe, binding, doc, span) if isPureOrIO(binding) =>
       val transformed = transform(binding)
-      val transformedTpe = v.symbol.tpe match {
-        case Some(tpe) => transform(tpe)
-        case None => transformed.tpe
-      }
-      List(Toplevel.Val(v.symbol, transformedTpe, transformed))
+      // TODO what to do with the potentially annotated type here?
+      List(Toplevel.Val(v.symbol, transformed))
 
     case v @ source.ValDef(id, _, binding, doc, span) =>
       Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
@@ -151,7 +148,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest, span) =>
       val binding = insertBindings { Return(transformAsExpr(e)) }
-      Val(Wildcard(), binding.tpe, binding, transform(rest))
+      Val(Wildcard(), binding, transform(rest))
 
     // return e
     case source.Return(e, span) =>
@@ -171,11 +168,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       case v @ source.ValDef(id, tpe, binding, doc, span) =>
         val transformed = transform(binding)
-        val transformedTpe = v.symbol.tpe match {
-          case Some(tpe) => transform(tpe)
-          case None => transformed.tpe
-        }
-        Val(v.symbol, transformedTpe, transformed, transform(rest))
+        Val(v.symbol, transformed, transform(rest))
 
       case v @ source.DefDef(id, captures, annot, binding, doc, span) =>
         val sym = v.symbol
@@ -398,8 +391,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val loopCapt = transform(Context.inferredCapture(body))
       val loopCall = Stmt.App(core.BlockVar(loopName, loopType, loopCapt), Nil, Nil, Nil)
 
-      val transformedBody = transform(body)
-      val thenBranch = Stmt.Val(TmpValue("while_thn"), transformedBody.tpe, transformedBody, loopCall)
+      val thenBranch = Stmt.Val(TmpValue("while_thn"), transform(body), loopCall)
       val elseBranch = default.map(transform).getOrElse(Return(Literal((), core.Type.TUnit)))
 
       val loopBody = guards match {
@@ -736,9 +728,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             Condition.Patterns(Map(x -> transformPattern(pattern)))
         }
       }
-      bindings.toList.map {
-        case Binding.Val(name, tpe, binding) => Condition.Val(name, tpe, binding)
-        case Binding.Let(name, tpe, binding) => Condition.Let(name, tpe, binding)
+      bindings.map {
+        case Binding.Val(name, binding) => Condition.Val(name, binding)
+        case Binding.Let(name, binding) => Condition.Let(name, binding)
         case Binding.ImpureApp(name, callee, targs, vargs, bargs) => Condition.ImpureApp(name, callee, targs, vargs, bargs)
         case Binding.Def(name, binding) => Context.panic("Should not happen")
       } :+ cond
@@ -954,7 +946,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
     // create a fresh symbol and assign the type
     val x = TmpValue("r")
 
-    val binding = Binding.Val(x, s.tpe, s)
+    val binding = Binding.Val(x, s)
     bindings += binding
 
     ValueVar(x, s.tpe)
@@ -966,7 +958,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
       // create a fresh symbol and assign the type
       val x = TmpValue("r")
 
-      val binding = Binding.Let(x, e.tpe, e)
+      val binding = Binding.Let(x, e)
       bindings += binding
 
       ValueVar(x, e.tpe)

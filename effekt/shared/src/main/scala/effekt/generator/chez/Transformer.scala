@@ -77,7 +77,7 @@ trait Transformer {
     case Invoke(b, method, methodTpe, targs, vargs, bargs) =>
       chez.Call(chez.Call(chez.Variable(nameRef(method)), List(toChez(b))), vargs.map(toChez) ++ bargs.map(toChez))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
-    case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
+    case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
     // empty matches are translated to a hole in chez scheme
     case Match(scrutinee, tpe, Nil, None) => chez.Builtin("hole")
     case Match(scrutinee, tpe, clauses, default) =>
@@ -143,7 +143,7 @@ trait Transformer {
 
   def toChez(defn: Toplevel): chez.Def = defn match {
     case Toplevel.Def(id, block) => chez.Constant(nameDef(id), toChez(block))
-    case Toplevel.Val(id, tpe, binding) => chez.Constant(nameDef(id), run(toChezExpr(binding)))
+    case Toplevel.Val(id, binding) => chez.Constant(nameDef(id), run(toChezExpr(binding)))
   }
 
   def toChez(stmt: Stmt): chez.Block = stmt match {
@@ -151,7 +151,7 @@ trait Transformer {
       val chez.Block(defs, exprs, result) = toChez(body)
       chez.Block(chez.Constant(nameDef(id), toChez(block)) :: defs, exprs, result)
 
-    case Stmt.Let(Wildcard(), tpe, binding, body) =>
+    case Stmt.Let(Wildcard(), binding, body) =>
       toChez(binding) match {
         // drop the binding altogether, if it is of the form:
         //   let _ = myVariable; BODY
@@ -164,7 +164,7 @@ trait Transformer {
           }
       }
 
-    case Stmt.Let(id, tpe, binding, body) =>
+    case Stmt.Let(id, binding, body) =>
       val chez.Block(defs, exprs, result) = toChez(body)
       chez.Block(chez.Constant(nameDef(id), toChez(binding)) :: defs, exprs, result)
 

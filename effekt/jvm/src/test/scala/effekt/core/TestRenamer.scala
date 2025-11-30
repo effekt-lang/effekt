@@ -82,9 +82,9 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
       // can be recursive
       withBinding(id) { core.Def(rewrite(id), rewrite(block), rewrite(body)) }
 
-    case core.Let(id, tpe, binding, body) =>
+    case core.Let(id, binding, body) =>
       val resolvedBinding = rewrite(binding)
-      withBinding(id) { core.Let(rewrite(id), rewrite(tpe), resolvedBinding, rewrite(body)) }
+      withBinding(id) { core.Let(rewrite(id), resolvedBinding, rewrite(body)) }
 
     case core.ImpureApp(id, callee, targs, vargs, bargs, body) =>
       val resolvedCallee = rewrite(callee)
@@ -93,9 +93,9 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
       val resolvedBargs = bargs map rewrite
       withBinding(id) { core.ImpureApp(rewrite(id), resolvedCallee, resolvedTargs, resolvedVargs, resolvedBargs, rewrite(body)) }
 
-    case core.Val(id, tpe, binding, body) =>
+    case core.Val(id, binding, body) =>
       val resolvedBinding = rewrite(binding)
-      withBinding(id) { core.Val(rewrite(id), rewrite(tpe), resolvedBinding, rewrite(body)) }
+      withBinding(id) { core.Val(rewrite(id), resolvedBinding, rewrite(body)) }
 
     case core.Alloc(id, init, reg, body) =>
       val resolvedInit = rewrite(init)

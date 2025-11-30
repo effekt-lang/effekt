@@ -184,8 +184,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "def" <+> toDoc(id) <> paramsToDoc(tps, cps, vps, bps) <+> "=" <+> block(toDocStmts(body))
     case Toplevel.Def(id, blockv) =>
       "def" <+> toDoc(id) <+> "=" <+> toDoc(blockv)
-    case Toplevel.Val(id, tpe, binding) =>
-      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> toDoc(binding)
+    case Toplevel.Val(id, binding) =>
+      "val" <+> toDoc(id) <+> "=" <+> toDoc(binding)
   }
 
   def toDoc(s: Stmt): Doc = s match {
@@ -210,7 +210,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "def" <+> toDoc(id) <+> "=" <+> toDoc(block) <> line <>
         toDocStmts(rest)
 
-    case Let(id, _, binding, rest) =>
+    case Let(id, binding, rest) =>
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
         toDocStmts(rest)
 
@@ -221,9 +221,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(e) =>
       "return" <+> toDoc(e)
 
-    case Val(id, tpe, binding, body) =>
+    case Val(id, binding, body) =>
       // RHS must be a single `stmt`, so we have to wrap it in a block.
-      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> block(toDocStmts(binding)) <> ";" <> line <>
+      "val" <+> toDoc(id) <+> "=" <+> block(toDocStmts(binding)) <> ";" <> line <>
         toDocStmts(body)
 
     case App(b, targs, vargs, bargs) =>

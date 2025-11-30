@@ -13,16 +13,16 @@ object DirectStyle extends Tree.Rewrite {
     // def l(x) = stmt2;
     // ...
     // l(42)
-    case Val(id, tpe, binding, body) =>
+    case Val(id, binding, body) =>
       val rewrittenBinding = rewrite(binding)
       val rewrittenBody = rewrite(body)
 
       if canBeDirect(rewrittenBinding) then
         val l = Id("l")
-        val joinpoint = BlockLit(Nil, Nil, ValueParam(id, tpe) :: Nil, Nil, rewrittenBody)
+        val joinpoint = BlockLit(Nil, Nil, ValueParam(id, rewrittenBinding.tpe) :: Nil, Nil, rewrittenBody)
         Def(l, joinpoint, toDirectStyle(rewrittenBinding, BlockVar(l, joinpoint.tpe, joinpoint.capt)))
       else
-        Val(id, tpe, rewrittenBinding, rewrittenBody)
+        Val(id, rewrittenBinding, rewrittenBody)
 
   }
 
@@ -42,9 +42,9 @@ object DirectStyle extends Tree.Rewrite {
 
     // Congruences
     case Def(id, block, body) => canBeDirect(body)
-    case Let(id, tpe, binding, body) => canBeDirect(body)
+    case Let(id, binding, body) => canBeDirect(body)
     case ImpureApp(id, callee, targs, vargs, bargs, body) => canBeDirect(body)
-    case Val(id, tpe, binding, body) => canBeDirect(body)
+    case Val(id, binding, body) => canBeDirect(body)
     case If(cond, thn, els) => canBeDirect(thn) && canBeDirect(els)
     case Match(scrutinee, tpe, clauses, default) =>
       clauses.forall { case (id, bl) => canBeDirect(bl.body) } && default.forall(canBeDirect)
@@ -73,14 +73,14 @@ object DirectStyle extends Tree.Rewrite {
     case Def(id, block, body) =>
       Def(id, block, toDirectStyle(body, label))
 
-    case Let(id, tpe, binding, body) =>
-      Let(id, tpe, binding, toDirectStyle(body, label))
+    case Let(id, binding, body) =>
+      Let(id, binding, toDirectStyle(body, label))
 
     case ImpureApp(id, callee, targs, vargs, bargs, body) =>
       ImpureApp(id, callee, targs, vargs, bargs, toDirectStyle(body, label))
 
-    case Val(id, tpe, binding, body) =>
-      Val(id, tpe, binding, toDirectStyle(body, label))
+    case Val(id, binding, body) =>
+      Val(id, binding, toDirectStyle(body, label))
 
     case If(cond, thn, els) =>
       If(cond, toDirectStyle(thn, label), toDirectStyle(els, label))

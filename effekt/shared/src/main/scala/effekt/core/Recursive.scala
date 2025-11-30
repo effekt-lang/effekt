@@ -19,7 +19,7 @@ class Recursive(
   def process(d: Toplevel): Unit =
     d match {
       case Toplevel.Def(id, block) => process(id, block)
-      case Toplevel.Val(id, _, binding) => process(binding)
+      case Toplevel.Val(id, binding) => process(binding)
     }
 
   def process(b: Block): Unit =
@@ -43,14 +43,14 @@ class Recursive(
 
   def process(s: Stmt): Unit = s match {
     case Stmt.Def(id, block, body) =>  process(id, block); process(body)
-    case Stmt.Let(id, tpe, binding, body) => process(binding); process(body)
+    case Stmt.Let(id, binding, body) => process(binding); process(body)
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
       process(callee)
       vargs.foreach(process)
       bargs.foreach(process)
       process(body)
     case Stmt.Return(expr) => process(expr)
-    case Stmt.Val(id, tpe, binding, body) => process(binding); process(body)
+    case Stmt.Val(id, binding, body) => process(binding); process(body)
     case a @ Stmt.App(callee, targs, vargs, bargs) =>
       process(callee)
       vargs.foreach(process)

@@ -118,7 +118,7 @@ object StaticArguments {
   def rewrite(d: Toplevel)(using StaticArgumentsContext): Toplevel = d match {
     case Toplevel.Def(id, block: BlockLit) if hasStatics(id) => Toplevel.Def(id, wrapDefinition(id, block))
     case Toplevel.Def(id, block) => Toplevel.Def(id, rewrite(block))
-    case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, tpe, rewrite(binding))
+    case Toplevel.Val(id, binding) => Toplevel.Val(id, rewrite(binding))
   }
 
   def rewrite(s: Stmt)(using C: StaticArgumentsContext): Stmt = s match {
@@ -126,7 +126,7 @@ object StaticArguments {
     case Stmt.Def(id, block: BlockLit, body) if hasStatics(id) => Stmt.Def(id, wrapDefinition(id, block), rewrite(body))
     case Stmt.Def(id, block, body) => Stmt.Def(id, rewrite(block), rewrite(body))
 
-    case Stmt.Let(id, tpe, binding, body) => Stmt.Let(id, tpe, rewrite(binding), rewrite(body))
+    case Stmt.Let(id, binding, body) => Stmt.Let(id, rewrite(binding), rewrite(body))
 
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
       Stmt.ImpureApp(id, callee, targs, vargs.map(rewrite), bargs.map(rewrite), rewrite(body))
@@ -153,7 +153,7 @@ object StaticArguments {
 
     // congruences
     case Stmt.Return(expr) => Return(rewrite(expr))
-    case Stmt.Val(id, tpe, binding, body) => Stmt.Val(id, tpe, rewrite(binding), rewrite(body))
+    case Stmt.Val(id, binding, body) => Stmt.Val(id, rewrite(binding), rewrite(body))
     case Stmt.If(cond, thn, els) => If(rewrite(cond), rewrite(thn), rewrite(els))
     case Stmt.Match(scrutinee, tpe, clauses, default) => Stmt.Match(rewrite(scrutinee), tpe, clauses.map { case (id, value) => id -> rewrite(value) }, default.map(rewrite))
     case Stmt.Alloc(id, init, region, body) => Alloc(id, rewrite(init), region, rewrite(body))

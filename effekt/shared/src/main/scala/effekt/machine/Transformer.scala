@@ -37,7 +37,7 @@ object Transformer {
     val toplevelDefinitions = definitions.map {
       case core.Toplevel.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
         Definition(Label(transform(id), vparams.map(transform) ++ bparams.map(transform)), transform(body))
-      case core.Toplevel.Val(id, tpe, binding) =>
+      case core.Toplevel.Val(id, binding) =>
         Definition(BC.globals(id), transform(binding))
       case core.Toplevel.Def(id, block @ core.New(impl)) =>
         val variable = Variable(freshName("returned"), transform(block.tpe))
@@ -145,11 +145,10 @@ object Transformer {
           Coerce(Variable(transform(id), Type.Negative()), boxed, transform(rest))
         }
 
-      case core.Let(id, tpe, core.ValueVar(otherId, otherTpe), rest) =>
+      case core.Let(id, core.ValueVar(otherId, otherTpe), rest) =>
         transform(substitute(rest)(using Substitution(Map(), Map(), Map(id -> core.ValueVar(otherId, otherTpe)), Map())))
 
-      case core.Let(id, tpe, expr, rest) =>
-        // TODO this needs to be expr.tpe and not tpe, but why?
+      case core.Let(id, expr, rest) =>
         transformNamed(Variable(transform(id), transform(expr.tpe)), expr).run { _ =>
           transform(rest)
         }
@@ -165,7 +164,7 @@ object Transformer {
       case core.Return(expr) =>
         transform(expr).run { value => Return(List(value)) }
 
-      case core.Val(id, annot, binding, rest) =>
+      case core.Val(id, binding, rest) =>
         PushFrame(
           Clause(List(Variable(transform(id), transform(binding.tpe))), transform(rest)),
             transform(binding)
@@ -536,7 +535,7 @@ object Transformer {
       case Toplevel.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
         noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), Nil)
         noteParameters(bparams)
-      case Toplevel.Val(id, tpe, binding) =>
+      case Toplevel.Val(id, binding) =>
         noteDefinition(id, Nil, Nil)
         noteGlobal(id)
       case Toplevel.Def(id, core.New(impl)) =>

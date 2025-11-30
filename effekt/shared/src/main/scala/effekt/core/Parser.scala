@@ -343,7 +343,7 @@ class CoreParsers(names: Names) extends EffektLexers {
   // -----------
   lazy val toplevel: P[Toplevel] =
   ( `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~/> stmt) ^^ {
-    case (name ~ tpe ~ binding) => Toplevel.Val(name, tpe.getOrElse(binding.tpe), binding)
+    case (name ~ tpe ~ binding) => Toplevel.Val(name, binding)
   }
   | `def` ~> id ~ (`=` ~/> block) ^^ Toplevel.Def.apply
   | `def` ~> id ~ parameters ~ (`=` ~> stmt) ^^ {
@@ -388,9 +388,9 @@ class CoreParsers(names: Names) extends EffektLexers {
         case (name ~ callee ~ targs ~ vargs ~ bargs ~ body) =>
           ImpureApp(name, callee, targs, vargs, bargs, body)
       }
-    | `let` ~/> id ~ maybeTypeAnnotation ~ (`=` ~/> expr) ~ stmts ^^ {
-      case (name ~ tpe ~ binding ~ body) =>
-        Let(name, tpe.getOrElse(binding.tpe), binding, body)
+    | `let` ~/> id ~ (`=` ~/> expr) ~ stmts ^^ {
+      case (name ~ binding ~ body) =>
+        Let(name, binding, body)
     }
       | `get` ~> id ~ (`:` ~> valueType) ~ (`=` ~> `!` ~> id) ~ (`@` ~> id) ~ (`;` ~> stmts) ^^ {
       case name ~ tpe ~ ref ~ cap ~ body => Get(name, tpe, ref, Set(cap), body)
@@ -404,7 +404,7 @@ class CoreParsers(names: Names) extends EffektLexers {
         Stmt.Def(name, BlockLit(tparams, cparams, vparams, bparams, body), rest)
     }
       | `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~> stmt) ~ (`;` ~> stmts) ^^ {
-      case id ~ tpe ~ binding ~ body => Val(id, tpe.getOrElse(binding.tpe), binding, body)
+      case id ~ tpe ~ binding ~ body => Val(id, binding, body)
     }
       | `var` ~> id ~ (`in` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ { case id ~ region ~ init ~ body => Alloc(id, init, region, body) }
       | `var` ~> id ~ (`@` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ { case id ~ cap ~ init ~ body => Var(id, init, cap, body) }

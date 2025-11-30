@@ -62,8 +62,8 @@ object PatternMatchingCompiler {
     // a boolean predicate that needs to be branched on at runtime
     case Predicate(pred: Expr)
     // a predicate trivially met by running and binding the statement
-    case Val(x: Id, tpe: core.ValueType, binding: Stmt)
-    case Let(x: Id, tpe: core.ValueType, binding: Expr)
+    case Val(x: Id, binding: Stmt)
+    case Let(x: Id, binding: Expr)
     case ImpureApp(x: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
   }
 
@@ -98,11 +98,11 @@ object PatternMatchingCompiler {
       case Clause(Nil, target, targs, args) =>
         return core.App(target, targs, args, Nil)
       // - We need to perform a computation
-      case Clause(Condition.Val(x, tpe, binding) :: rest, target, targs, args) =>
-        return core.Val(x, tpe, binding, compile(Clause(rest, target, targs, args) :: remainingClauses, motif))
+      case Clause(Condition.Val(x, binding) :: rest, target, targs, args) =>
+        return core.Val(x, binding, compile(Clause(rest, target, targs, args) :: remainingClauses, motif))
       // - We need to perform a computation
-      case Clause(Condition.Let(x, tpe, binding) :: rest, target, targs, args) =>
-        return core.Let(x, tpe, binding, compile(Clause(rest, target, targs, args) :: remainingClauses, motif))
+      case Clause(Condition.Let(x, binding) :: rest, target, targs, args) =>
+        return core.Let(x, binding, compile(Clause(rest, target, targs, args) :: remainingClauses, motif))
       case Clause(Condition.ImpureApp(x, callee, targs_, vargs_, bargs_) :: rest, target, targs, args) =>
         return core.ImpureApp(x, callee, targs_, vargs_, bargs_, compile(Clause(rest, target, targs, args) :: remainingClauses, motif))
       // - We need to check a predicate
@@ -313,17 +313,16 @@ object PatternMatchingCompiler {
         }
         normalize(patterns ++ filtered, rest, substitution ++ additionalSubst)
 
-      case Condition.Val(x, tpe, binding) :: rest =>
+      case Condition.Val(x, binding) :: rest =>
         val substitutedBinding = core.substitutions.substitute(binding)(using subst)
-        val substitutedType = core.substitutions.substitute(tpe)(using subst)
         val (resCond, resSubst) = normalize(Map.empty, rest, substitution)
-        val substituted = Condition.Val(x, substitutedType, substitutedBinding)
+        val substituted = Condition.Val(x, substitutedBinding)
         (prefix(patterns, substituted :: resCond), resSubst)
 
-      case Condition.Let(x, tpe, binding) :: rest =>
+      case Condition.Let(x, binding) :: rest =>
         val substitutedBinding = core.substitutions.substitute(binding)(using subst)
         val (resCond, resSubst) = normalize(Map.empty, rest, substitution)
-        (prefix(patterns, Condition.Let(x, tpe, substitutedBinding) :: resCond), resSubst)
+        (prefix(patterns, Condition.Let(x, substitutedBinding) :: resCond), resSubst)
 
       case Condition.ImpureApp(x, callee, targs, vargs, bargs) :: rest =>
         val (resCond, resSubst) = normalize(Map.empty, rest, substitution)
@@ -354,8 +353,8 @@ object PatternMatchingCompiler {
   def show(c: Condition): String = c match {
     case Condition.Patterns(patterns) => patterns.map { case (v, p) => s"${util.show(v)} is ${show(p)}" }.mkString(", ")
     case Condition.Predicate(pred) => util.show(pred) + "?"
-    case Condition.Val(x, tpe,  binding) => s"val ${util.show(x)} = ${util.show(binding)}"
-    case Condition.Let(x, tpe, binding) => s"let ${util.show(x)} = ${util.show(binding)}"
+    case Condition.Val(x, binding) => s"val ${util.show(x)} = ${util.show(binding)}"
+    case Condition.Let(x, binding) => s"let ${util.show(x)} = ${util.show(binding)}"
     case Condition.ImpureApp(x, callee, targs, vargs, bargs) => s"let ${util.show(x)} = ${util.show(callee)}(${vargs.map(util.show).mkString(", ")})"
   }
 

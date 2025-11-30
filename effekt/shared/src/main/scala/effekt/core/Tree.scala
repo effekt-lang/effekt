@@ -142,7 +142,7 @@ enum Toplevel {
   def id: Id
 
   case Def(id: Id, block: Block)
-  case Val(id: Id, tpe: ValueType, binding: core.Stmt)
+  case Val(id: Id, binding: core.Stmt)
 }
 
 
@@ -248,12 +248,12 @@ enum Stmt extends Tree {
 
   // Definitions
   case Def(id: Id, block: Block, body: Stmt)
-  case Let(id: Id, annotatedTpe: ValueType, binding: Expr, body: Stmt)
+  case Let(id: Id, binding: Expr, body: Stmt)
   case ImpureApp(id: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block], body: Stmt)
 
   // Fine-grain CBV
   case Return(expr: Expr)
-  case Val(id: Id, annotatedTpe: ValueType, binding: Stmt, body: Stmt)
+  case Val(id: Id, binding: Stmt, body: Stmt)
   case App(callee: Block, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
   case Invoke(callee: Block, method: Id, methodTpe: BlockType, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
 
@@ -323,8 +323,8 @@ case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: Li
  * Bindings are not part of the tree but used in transformations
  */
 private[core] enum Binding {
-  case Val(id: Id, tpe: ValueType, binding: Stmt)
-  case Let(id: Id, tpe: ValueType, binding: Expr)
+  case Val(id: Id, binding: Stmt)
+  case Let(id: Id, binding: Expr)
   case ImpureApp(id: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
   case Def(id: Id, binding: Block)
 
@@ -333,15 +333,15 @@ private[core] enum Binding {
 private[core] object Binding {
   def apply(bindings: List[Binding], body: Stmt): Stmt = bindings match {
     case Nil => body
-    case Binding.Val(name, tpe, binding) :: rest => Stmt.Val(name, tpe, binding, Binding(rest, body))
-    case Binding.Let(name, tpe, binding) :: rest => Stmt.Let(name, tpe, binding, Binding(rest, body))
+    case Binding.Val(name, binding) :: rest => Stmt.Val(name, binding, Binding(rest, body))
+    case Binding.Let(name, binding) :: rest => Stmt.Let(name, binding, Binding(rest, body))
     case Binding.ImpureApp(name, callee, targs, vargs, bargs) :: rest => Stmt.ImpureApp(name, callee, targs, vargs, bargs, Binding(rest, body))
     case Binding.Def(name, binding) :: rest => Stmt.Def(name, binding, Binding(rest, body))
   }
 
   def toToplevel(b: Binding): Toplevel = b match {
-    case Binding.Val(name, tpe, binding) => Toplevel.Val(name, tpe, binding)
-    case Binding.Let(name, tpe, binding) => ??? //Toplevel.Val(name, tpe, Stmt.Return(binding))
+    case Binding.Val(name, binding) => Toplevel.Val(name, binding)
+    case Binding.Let(name, binding) => ??? //Toplevel.Val(name, tpe, Stmt.Return(binding))
     case Binding.ImpureApp(name, callee, targs, vargs, bargs) => ??? //Toplevel.Val(name, tpe, ???)
     case Binding.Def(name, binding) => Toplevel.Def(name, binding)
   }
@@ -361,7 +361,7 @@ object Bind {
   def pure[A](value: A): Bind[A] = Bind(value, Nil)
   def bind[A](expr: Expr): Bind[ValueVar] =
     val id = Id("tmp")
-    Bind(ValueVar(id, expr.tpe), List(Binding.Let(id, expr.tpe, expr)))
+    Bind(ValueVar(id, expr.tpe), List(Binding.Let(id, expr)))
 
   def bind[A](b: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block]): Bind[ValueVar] =
     val id = Id("tmp")
@@ -595,7 +595,7 @@ object Variables {
 
   def free(d: Toplevel): Variables = d match {
     case Toplevel.Def(id, block) => free(block) - id
-    case Toplevel.Val(id, _, binding) => free(binding)
+    case Toplevel.Val(id, binding) => free(binding)
   }
 
   def all[T](t: IterableOnce[T], f: T => Variables): Variables =
@@ -609,11 +609,11 @@ object Variables {
   }
   def free(s: Stmt): Variables = s match {
     case Stmt.Def(id, block, body) => (free(block) ++ free(body)) -- Variables.block(id, block.tpe, block.capt)
-    case Stmt.Let(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
+    case Stmt.Let(id, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
     case s @ Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
       free(callee) ++ all(vargs, free) ++ all(bargs, free) ++ (free(body) -- Variables.value(id, Type.bindingType(s)))
     case Stmt.Return(expr) => free(expr)
-    case Stmt.Val(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
+    case Stmt.Val(id, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
     case Stmt.App(callee, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
     case Stmt.If(cond, thn, els) => free(cond) ++ free(thn) ++ free(els)
@@ -639,7 +639,7 @@ object Variables {
   def bound(t: BlockParam): Variables = Variables.block(t.id, t.tpe, t.capt)
   def bound(t: Toplevel): Variables = t match {
     case Toplevel.Def(id, block) => Variables.block(id, block.tpe, block.capt)
-    case Toplevel.Val(id, tpe, binding) => Variables.value(id, tpe)
+    case Toplevel.Val(id, binding) => Variables.value(id, binding.tpe)
   }
 }
 
@@ -679,8 +679,8 @@ object substitutions {
         Def(id, substitute(block)(using subst shadowBlocks List(id)),
           substitute(body)(using subst shadowBlocks List(id)))
 
-      case Let(id, tpe, binding, body) =>
-        Let(id, substitute(tpe), substitute(binding),
+      case Let(id, binding, body) =>
+        Let(id, substitute(binding),
           substitute(body)(using subst shadowValues List(id)))
 
       case ImpureApp(id, callee, targs, vargs, bargs, body) =>
@@ -695,8 +695,8 @@ object substitutions {
       case Return(expr) =>
         Return(substitute(expr))
 
-      case Val(id, tpe, binding, body) =>
-        Val(id, substitute(tpe), substitute(binding),
+      case Val(id, binding, body) =>
+        Val(id, substitute(binding),
           substitute(body)(using subst shadowValues List(id)))
 
       case App(callee, targs, vargs, bargs) =>
