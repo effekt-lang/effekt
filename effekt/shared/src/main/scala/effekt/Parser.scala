@@ -1142,8 +1142,9 @@ class Parser(tokens: Seq[Token], source: Source) {
       braces {
         peek.kind match {
           // { case ... => ... }
-          case `case` => someWhile(matchClause(), `case`) match { case cs =>
+          case `case` =>
             nonterminal:
+              val cs = someWhile(matchClause(), `case`)
               val argSpans = cs match {
                 case Many(MatchClause(MultiPattern(ps, _), _, _, _) :: _, _) => ps.map(_.span)
                 case p => List(p.span)
@@ -1164,7 +1165,7 @@ class Parser(tokens: Seq[Token], source: Source) {
                   ), span().synthesized),
                 span().synthesized
               )
-          }
+
           case _ =>
             // { (x: Int) => ... }
             nonterminal:

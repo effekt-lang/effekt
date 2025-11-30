@@ -977,7 +977,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val bt @ FunctionType(tps, cps, vps, bps, tpe1, effs) = expected
 
       // (2) Check wellformedness (that type, value, block params and args align)
-      assertArgsParamsAlign("function", tparams.size, vparams.size, bparams.size, tps.size, vps.size, bps.size)
+      assertArgsParamsAlign(name = None, Aligned(tparams, tps), Aligned(vparams, vps), Aligned(bparams, bps))
 
       // (3) Substitute type parameters
       val typeParams = tparams.map { p => p.symbol.asTypeParam }
@@ -1270,63 +1270,134 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
   }
 
+  /** Result of trying to align 'got' and 'expected' with matched pairs and mismatches */
+  case class Aligned[+A, +B](
+    matched: List[(A, B)],  /// got and expected paired up
+    extra: List[A],         /// got but not expected
+    missing: List[B]        /// expected but not got
+  ) {
+    def isAligned: Boolean = extra.isEmpty && missing.isEmpty
+
+    def gotCount: Int = matched.size + extra.size
+    def expectedCount: Int = matched.size + missing.size
+    def delta: Int = extra.size - missing.size // > 0 => too many
+  }
+
+  object Aligned {
+    def apply[A, B](got: List[A], expected: List[B]): Aligned[A, B] = {
+      @scala.annotation.tailrec
+      def loop(got: List[A], expected: List[B], matched: List[(A, B)]): Aligned[A, B] =
+        (got, expected) match {
+          case (Nil, Nil) => Aligned(matched.reverse, Nil, Nil)
+          case (extra, Nil) => Aligned(matched.reverse, extra, Nil)
+          case (Nil, missing) => Aligned(matched.reverse, Nil, missing)
+          case (g :: gs, e :: es) => loop(gs, es, (g, e) :: matched)
+        }
+
+      loop(got, expected, Nil)
+    }
+  }
+
   /**
    * Asserts that number of {type, value, block} arguments is the same as
    *          the number of {type, value, block} parameters.
    * If not, aborts the context with a nice error message.
+   * Also tries to add 'did you mean' context for the user on common errors.
+   *
+   * @param name None if it's a block literal, otherwise the expected name
    */
   private def assertArgsParamsAlign(
-    name: String,
-    gotTypes: Int, gotValues: Int, gotBlocks: Int,
-    expectedTypes: Int, expectedValues: Int, expectedBlocks: Int
-  )(using Context): Unit = {
+     name: Option[String],
+     types: Aligned[source.Id | ValueType, TypeParam],
+     values: Aligned[source.ValueParam | source.ValueArg, ValueType],
+     blocks: Aligned[source.BlockParam | source.Term, BlockType]
+   )(using Context): Unit = {
 
-    val targsOk = gotTypes == 0 || gotTypes == expectedTypes
-    val vargsOk = gotValues == expectedValues
-    val bargsOk = gotBlocks == expectedBlocks
+    // Type args are OK iff nothing provided or perfectly aligned
+    val typesOk = types.gotCount == 0 || types.isAligned
 
     def pluralized(n: Int, singular: String): String =
       if (n == 1) s"$n $singular" else s"$n ${singular}s"
 
-    def formatArgs(types: Option[Int], values: Option[Int], blocks: Option[Int]): String = {
-      val parts = List(
-        types.map { pluralized(_, "type argument") },
-        values.map { pluralized(_, "value argument") },
-        blocks.map { pluralized(_, "block argument") }
-      ).flatten
+    // Hint: Tuple vs arg-list confusion (also covers lambda case)
+    if (!values.isAligned) {
+      // 1. User wrote `case (x, y) => ...` but function expects multiple arguments
+      // => Did we match exactly 1 value param with `__arg... ` name, and have multiple args missing
+      // HACK: Hardcoded '__arg' to recognize lambda case
+      (values.matched, values.extra, values.missing) match {
+        case (List((param: source.ValueParam, _)), Nil, _ :: _)
+          if param.id.name.startsWith("__arg") =>
+          Context.info(pretty"Did you mean to use `(x, y) => ...` instead of `case (x, y) => ...`?")
+        case _ => ()
+      }
 
-      parts match {
-        case Nil => "no arguments"
-        case single :: Nil => single
-        case init :+ last => init.mkString(", ") + " and " + last
-        case _ => parts.mkString(", ")
+      // 2a. User wrote `(x, y) => ... ` but function expects a single tuple
+      // 2b. User wrote `foo(x, y)` but the function expects a single tuple
+      // => Multiple extra value args, exactly 1 missing that's a tuple matching the count
+      // HACK: Hardcoded "tuple is a type whose name starts with 'Tuple'"
+      (values.matched, values.extra, values.missing) match {
+        case (List((_, tupleTpe @ ValueTypeApp(TypeConstructor.Record(tupleName, _, _, _), args))), extras, Nil)
+          if tupleName.name.startsWith("Tuple") && args.size == 1 + extras.size =>
+          name match {
+            case None            => Context.info(pretty"Did you mean to use `case (x, y) => ...` to pattern match on the tuple ${tupleTpe}?")
+            case Some(givenName) => Context.info(pretty"Did you mean to call ${givenName} with a single tuple argument instead of separate arguments?")
+          }
+        case _ => ()
+      }
+
+      // 3. User wrote `foo((x, y))` (tuple literal) but function expects multiple arguments
+      // => Single matched arg that's a Call to a Tuple constructor, with some missing params
+      // HACK: Hardcoded "tuple constructor is IdRef to TupleN in effekt namespace"
+      (values.matched, values.extra, values.missing) match {
+        case (List((arg: source.ValueArg, _)), Nil, missing@(_ :: _)) =>
+          (arg.value, name) match {
+            case (source.Call(source.IdTarget(source.IdRef(List("effekt"), tupleName, _)), _, tupleArgs, _, _), Some(givenName))
+              if tupleName.startsWith("Tuple") && tupleArgs.size == 1 + missing.size =>
+              Context.info(pretty"Did you mean to call ${givenName} with ${tupleArgs.size} separate arguments instead of a tuple?")
+            case _ => ()
+          }
+        case _ => ()
       }
     }
 
-    val expected = formatArgs(
-      Option.when(!targsOk) { expectedTypes },
-      Option.when(!vargsOk) { expectedValues },
-      Option.when(!bargsOk) { expectedBlocks }
-    )
-    val got = formatArgs(
-      Option.when(!targsOk) { gotTypes },
-      Option.when(!vargsOk) { gotValues },
-      Option.when(!bargsOk) { gotBlocks }
-    )
-
-    if (!vargsOk && !bargsOk && gotValues + gotBlocks == expectedValues + expectedBlocks) {
+    // Hint: Value vs block argument confusion
+    if (!values.isAligned && !blocks.isAligned && values.delta + blocks.delta == 0) {
       // If total counts match, but individual do not, it's likely a value vs computation issue
-      if (gotBlocks > expectedBlocks) {
-        val diff = gotBlocks - expectedBlocks
-        Context.info(pretty"Did you mean to pass ${pluralized(diff, "block argument")} as a value? e.g. box it using `box { ... }`")
-      } else if (gotValues > expectedValues) {
-        val diff = gotValues - expectedValues
-        Context.info(pretty"Did you mean to pass ${pluralized(diff, "value argument")} as a block (computation)?")
+      if (blocks.delta > 0) {
+        Context.info(pretty"Did you mean to pass ${pluralized(blocks.delta, "block argument")} as a value? e.g. box it using `box { ... }`")
+      } else if (values.delta > 0) {
+        Context.info(pretty"Did you mean to pass ${pluralized(values.delta, "value argument")} as a block (computation)? ")
       }
     }
 
-    if (!targsOk || !vargsOk || !bargsOk) {
-      Context.abort(s"Wrong number of arguments to ${name}: expected ${expected}, but got ${got}")
+    if (!typesOk || !values.isAligned || !blocks.isAligned) {
+      def formatArgs(types: Option[Int], values: Option[Int], blocks: Option[Int]): String = {
+        val parts = List(
+          types.map { pluralized(_, "type argument") },
+          values.map { pluralized(_, "value argument") },
+          blocks.map { pluralized(_, "block argument") }
+        ).flatten
+
+        parts match {
+          case Nil => "no arguments"
+          case single :: Nil => single
+          case init :+ last => init.mkString(", ") + " and " + last
+          case _ => parts.mkString(", ")
+        }
+      }
+
+      val expected = formatArgs(
+        Option.when(!typesOk) { types.expectedCount },
+        Option.when(!values.isAligned) { values.expectedCount },
+        Option.when(!blocks.isAligned) { blocks.expectedCount }
+      )
+      val got = formatArgs(
+        Option.when(!typesOk) { types.gotCount },
+        Option.when(!values.isAligned) { values.gotCount },
+        Option.when(!blocks.isAligned) { blocks.gotCount }
+      )
+
+      Context.abort(s"Wrong number of arguments to ${name getOrElse "function"}: expected ${expected}, but got ${got}")
     }
   }
 
@@ -1343,7 +1414,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val callsite = currentCapture
 
     // (0) Check that arg & param counts align
-    assertArgsParamsAlign(name, targs.size, vargs.size, bargs.size, funTpe.tparams.size, funTpe.vparams.size, funTpe.bparams.size)
+    assertArgsParamsAlign(name = Some(name), Aligned(targs, funTpe.tparams), Aligned(vargs, funTpe.vparams), Aligned(bargs, funTpe.bparams))
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
