@@ -14,6 +14,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   override val defaultIndent = 2
 
+  def formatHumanReadable(t: ModuleDecl): Document = {
+    val renamer = effekt.core.TestRenamer(Names(builtins.coreBuiltins))
+    format(renamer(t))
+  }
+
   def format(t: ModuleDecl): Document =
     pretty(toDoc(t), 4)
 
