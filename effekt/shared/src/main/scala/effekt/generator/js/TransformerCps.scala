@@ -91,13 +91,13 @@ object TransformerCps extends Transformer {
 
 
   def toJS(d: cps.ToplevelDefinition)(using ctx: TransformerContext): js.Stmt = d match {
-      case cps.ToplevelDefinition.Def(id, block) =>
-        js.Const(nameDef(id), requiringThunk { toJS(id, block) })
-      case cps.ToplevelDefinition.Val(id, ks, k, binding) =>
-        js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding).stmts)))
-      case cps.ToplevelDefinition.Let(id, binding) =>
-        js.Const(nameDef(id), toJS(binding))
-    }
+    case cps.ToplevelDefinition.Def(id, block) =>
+      js.Const(nameDef(id), requiringThunk { toJS(id, block) })
+    case cps.ToplevelDefinition.Val(id, ks, k, binding) =>
+      js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding).stmts))) 
+    case cps.ToplevelDefinition.Let(id, binding) =>
+      js.Const(nameDef(id), toJS(binding))
+  }
 
   def toJSParam(id: Id): JSName = nameDef(id)
 
