@@ -14,8 +14,8 @@ class TestRenamerTests extends CoreTests {
     val pExpected = parse(renamed, "expected", names)
     val renamer = new TestRenamer(names, "_renamed_") // use "renamed" as prefix so we can refer to it
     val obtained = renamer(pInput)
-    val obtainedPrinted = effekt.core.PrettyPrinter.format(obtained).layout
-    val expectedPrinted = effekt.core.PrettyPrinter.format(pExpected).layout
+    val obtainedPrinted = effekt.core.ReparsablePrettyPrinter.format(obtained).layout
+    val expectedPrinted = effekt.core.ReparsablePrettyPrinter.format(pExpected).layout
     assertEquals(obtainedPrinted, expectedPrinted)
     shouldBeEqual(obtained, pExpected, clue)
   }
