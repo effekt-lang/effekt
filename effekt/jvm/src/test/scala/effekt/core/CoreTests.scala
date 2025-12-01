@@ -19,11 +19,11 @@ trait CoreTests extends munit.FunSuite {
         |=====================
         |Got:
         |----
-        |${effekt.core.PrettyPrinter.format(obtained).layout}
+        |${effekt.core.ReparsablePrettyPrinter.format(obtained).layout}
         |
         |Expected:
         |---------
-        |${effekt.core.PrettyPrinter.format(expected).layout}
+        |${effekt.core.ReparsablePrettyPrinter.format(expected).layout}
         |
         |""".stripMargin
     })
@@ -34,11 +34,11 @@ trait CoreTests extends munit.FunSuite {
         |=====================
         |Got:
         |----
-        |${effekt.core.PrettyPrinter.format(obtained)}
+        |${effekt.core.ReparsablePrettyPrinter.format(obtained)}
         |
         |Expected:
         |---------
-        |${effekt.core.PrettyPrinter.format(expected)}
+        |${effekt.core.ReparsablePrettyPrinter.format(expected)}
         |
         |""".stripMargin
     })
@@ -50,8 +50,8 @@ trait CoreTests extends munit.FunSuite {
     val renamer = TestRenamer(names)
     val obtainedRenamed = renamer(obtained)
     val expectedRenamed = renamer(expected)
-    val obtainedPrinted = effekt.core.PrettyPrinter.format(obtainedRenamed).layout
-    val expectedPrinted = effekt.core.PrettyPrinter.format(expectedRenamed).layout
+    val obtainedPrinted = effekt.core.ReparsablePrettyPrinter.format(obtainedRenamed).layout
+    val expectedPrinted = effekt.core.ReparsablePrettyPrinter.format(expectedRenamed).layout
     assertEquals(obtainedPrinted, expectedPrinted)
     shouldBeEqual(obtainedRenamed, expectedRenamed, clue)
   }
