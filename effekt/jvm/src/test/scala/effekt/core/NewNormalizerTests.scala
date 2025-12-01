@@ -789,7 +789,7 @@ class NewNormalizerTests extends CoreTests {
     assertAlphaEquivalentToplevels(actual, parse(expected), List("run"), List("infixEq"))
   }
 
-  test("Reflexivity holds for pure neutral extern defs") {
+  test("Reflexivity holds for pure neutral extern defs that return integers") {
     val input =
       """
         |extern def z at {}: Int = vm"0"
@@ -807,6 +807,34 @@ class NewNormalizerTests extends CoreTests {
     val expected =
       """module input
         |extern {} def infixEq(x: Int, y: Int): Bool = vm ""
+        |def run() = {
+        |  let o = true
+        |  return o: Bool
+        |}
+        |""".stripMargin
+
+    val (mainId, actual) = normalize(input)
+    assertAlphaEquivalentToplevels(actual, parse(expected), List("run"), List("infixEq"))
+  }
+
+  test("infixEq on strings with pure neutral extern defs") {
+    val input =
+      """
+        |extern def s at {}: String = vm"hello"
+        |
+        |def run(): Bool = {
+        |    val x = s()
+        |    ("a" ++ x) ++ "b" == "a" ++ (x ++ "b")
+        |}
+        |
+        |def main() = {
+        |  println(run())
+        |}
+        |""".stripMargin
+
+    val expected =
+      """module input
+        |extern {} def infixEq(x: String, y: String): Bool = vm ""
         |def run() = {
         |  let o = true
         |  return o: Bool

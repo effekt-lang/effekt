@@ -195,6 +195,7 @@ lazy val strings: Builtins = Map(
   },
 
   builtin("effekt::infixEq(String, String)") {
+    case As.StringRep(x) :: As.StringRep(y) :: Nil if x == y => true
     case As.String(x) :: As.String(y) :: Nil => x == y
   },
 
