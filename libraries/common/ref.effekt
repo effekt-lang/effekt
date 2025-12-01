@@ -30,12 +30,12 @@ extern type Ref[T]
 
 /// Allocates a new reference, keeping its value _undefined_.
 /// Prefer using `ref` constructor instead to ensure that the value is defined.
-extern def allocate[T]() at global: Ref[T] =
+extern def unsafeAllocate[T]() at global: Ref[T] =
   js "{ value: undefined }"
   chez "(box #f)"
   llvm """
     ; sizeof Header + sizeof Pos = 32
-    %ref = tail call noalias ptr @malloc(i64 noundef 32)
+    %ref = tail call noalias ptr @calloc(i64 noundef 32, i64 1)
     %refEraser = getelementptr ptr, ptr %ref, i64 1
     %fieldTag = getelementptr ptr, ptr %ref, i64 2
     %fieldData_pointer = getelementptr ptr, ptr %ref, i64 3

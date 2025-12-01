@@ -30,7 +30,7 @@ def stringBuffer[A] { prog: => A / StringBuffer }: A = {
       val bytes = fromString(str)
       ensureCapacity(bytes.size)
       bytes.foreach { b =>
-        buffer.unsafeSet(pos, b)
+        buffer.set(pos, b)
         pos = pos + 1
       }
       resume(())

@@ -6,11 +6,11 @@ def main() = {
   val empty: ByteArray = "".fromString
   val zeros: ByteArray = bytearray::allocate(8)
   each(0, zeros.size) { i =>
-    zeros.unsafeSet(i, 0.toByte)
+    zeros.set(i, 0.toByte)
   }
   val abcs: ByteArray = bytearray::allocate(8)
   each(0, abcs.size) { i =>
-    abcs.unsafeSet(i, (97 + i).toByte)
+    abcs.set(i, (97 + i).toByte)
   }
 
   println(empty.compareByteArray(empty))

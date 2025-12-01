@@ -1,7 +1,6 @@
 ResizableArrayTests
 ✓ usage as stack
-✓ out of bounds check
 
- 2 pass
+ 1 pass
  0 fail
- 2 tests total
+ 1 tests total
