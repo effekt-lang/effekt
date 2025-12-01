@@ -34,6 +34,8 @@ object TransformerCps extends Transformer {
     recursive: Option[RecursiveDefInfo],
     // the direct-style continuation, if available (used in case cps.Stmt.LetCont)
     directStyle: Option[ContinuationInfo],
+    // collected definitions for applying substitutions to when preparing a call 
+    blockDefs: Map[Id, cps.Block],
     // the current direct-style metacontinuation
     metacont: Option[Id],
     // the original declaration context (used to compile pattern matching)
@@ -62,6 +64,7 @@ object TransformerCps extends Transformer {
           externs.collect { case d: Extern.Def => (d.id, d) }.toMap,
           None,
           None,
+          Map.empty,
           None,
           D, C)
 
@@ -80,20 +83,21 @@ object TransformerCps extends Transformer {
           input.externs.collect { case d: Extern.Def => (d.id, d) }.toMap,
           None,
           None,
+          Map.empty,
           None,
           D, C)
 
     input.definitions.map(toJS)
 
 
-  def toJS(d: cps.ToplevelDefinition)(using TransformerContext): js.Stmt = d match {
-    case cps.ToplevelDefinition.Def(id, block) =>
-      js.Const(nameDef(id), requiringThunk { toJS(id, block) })
-    case cps.ToplevelDefinition.Val(id, ks, k, binding) =>
-      js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding).stmts)))
-    case cps.ToplevelDefinition.Let(id, binding) =>
-      js.Const(nameDef(id), toJS(binding))
-  }
+  def toJS(d: cps.ToplevelDefinition)(using ctx: TransformerContext): js.Stmt = d match {
+      case cps.ToplevelDefinition.Def(id, block) =>
+        js.Const(nameDef(id), requiringThunk { toJS(id, block) })
+      case cps.ToplevelDefinition.Val(id, ks, k, binding) =>
+        js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding).stmts)))
+      case cps.ToplevelDefinition.Let(id, binding) =>
+        js.Const(nameDef(id), toJS(binding))
+    }
 
   def toJSParam(id: Id): JSName = nameDef(id)
 
@@ -200,6 +204,7 @@ object TransformerCps extends Transformer {
 
     case cps.Stmt.LetDef(id, block, body) =>
       Binding { k =>
+        given TransformerContext = D.copy(blockDefs = D.blockDefs + (id -> block))
         js.Const(nameDef(id), requiringThunk { toJS(id, block) }) :: toJS(body).run(k)
       }
 
@@ -320,10 +325,20 @@ object TransformerCps extends Transformer {
           } else None
         }
 
+        // Compute which blocks need to be substituted (those that capture overlapping variables)
+        val valueSubst = paramTmps.map { case (p, t) => p -> Expr.ValueVar(t) }
+        val blockSubst: Map[Id, cps.Block] = D.blockDefs.collect {
+          case (blockId, blockDef) if Variables.free(blockDef).intersect(overlapping).nonEmpty =>
+            val substitutedBlock = substitutions.substitute(blockDef)(using Substitution(values = valueSubst))
+            val newId = Id(s"${blockId}_subst")
+            stmts.append(js.Const(nameDef(newId), argumentToJS(substitutedBlock)))
+            blockId -> cps.Block.BlockVar(newId)
+        }
+
         // Prepare the substitution
         val subst = Substitution(
-          values = paramTmps.map { case (p, t) => p -> Expr.ValueVar(t) },
-          blocks = Map.empty,
+          values = valueSubst,
+          blocks = blockSubst,
           conts = tmp_k.map(t => k1 -> Cont.ContVar(t)).toMap,
           metaconts = tmp_ks.map(t => ks1 -> MetaCont(t)).toMap
         )
