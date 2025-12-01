@@ -237,17 +237,20 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.Match(scrutinee, tpe, clauses, default) =>
       scrutinee.tpe match {
         // if the scrutinee has type Nothing, then there shouldn't be any clauses...
-        case Type.TBottom => Stmt.Match(transform(scrutinee), tpe, Nil, None)
         case ValueType.Data(tpeId, targs) =>
           val Declaration.Data(_, tparams, constructors) = DeclarationContext.getData(tpeId)
-          Stmt.Match(transform(scrutinee), tpe, clauses.map {
-            case (id, clause: Block.BlockLit) =>
-              val constructor = constructors.find(_.id == id).get
-              val casetpe: BlockType.Function = BlockType.Function(tparams, List(),
-                constructor.fields.map(_.tpe), List(), Type.inferType(clause.body)
-              )
-              (id, coerce(transform(clause), Type.instantiate(casetpe, targs map transformArg, List())))
-          }, default map transform)
+          constructors match {
+            case Nil => Stmt.Match(transform(scrutinee), tpe, Nil, None)
+            case _ =>
+              Stmt.Match(transform(scrutinee), tpe, clauses.map {
+                case (id, clause: Block.BlockLit) =>
+                  val constructor = constructors.find(_.id == id).get
+                  val casetpe: BlockType.Function = BlockType.Function(tparams, List(),
+                    constructor.fields.map(_.tpe), List(), Type.inferType(clause.body)
+                  )
+                  (id, coerce(transform(clause), Type.instantiate(casetpe, targs map transformArg, List())))
+              }, default map transform)
+          }
         case t => Context.abort(pp"Match on value of type ${t}")
       }
     case Stmt.Alloc(id, init, region, body) =>
@@ -397,19 +400,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       override def from = boxer(tpe).tpe
       override def to = tpe
       override def apply(t: Expr): Expr = boxer(tpe).unbox(t)
-    }
-    case class BottomCoercer(tpe: ValueType)(using Context, DeclarationContext) extends ValueCoercer {
-      override def from = core.Type.TBottom
-      override def to = tpe
-
-      override def apply(t: Expr): Expr = to match {
-        case core.Type.TInt     => Expr.Literal(1337L, core.Type.TInt)
-        case core.Type.TDouble  => Expr.Literal(13.37, core.Type.TDouble)
-        case core.Type.TByte    => Expr.Literal(137, core.Type.TByte)
-        case core.Type.TChar    => Expr.Literal(1337, core.Type.TChar)
-        case t if boxer.isDefinedAt(t) => sys error s"No default value defined for ${t}"
-        case _ => sys error s"Trying to unbox Nothing to ${t}"
-      }
     }
   }
 
