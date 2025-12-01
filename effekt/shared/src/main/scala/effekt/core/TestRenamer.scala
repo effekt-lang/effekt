@@ -14,7 +14,7 @@ import effekt.{Template, core, symbols}
  *
  * @param C the context is used to copy annotations from old symbols to fresh symbols
  */
-class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$") extends core.Tree.Rewrite {
+class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserveUserAnnotatedPrefix: Boolean = true) extends core.Tree.Rewrite {
 
   // list of scopes that map bound symbols to their renamed variants.
   private var scopes: List[Map[Id, Id]] = List.empty
@@ -39,6 +39,10 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$") extends
     } else {
       id.name.name
     }
+    // For many purposes, we would like to include the user-annotated name in the fresh id,
+    // so that printed terms are more readable.
+    // However, we do not want to include it when checking for alpha-equivalence in tests.
+    val userPart = if preserveUserAnnotatedPrefix then userName else ""
     // HACK: This is an unfortunate hack.
     // TestRenamer is often used to check for alpha-equivalence by renaming both sides of a comparison.
     // However, Effekt requires globally unique Barendregt indices for all symbols, so just creating fresh
@@ -46,7 +50,7 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$") extends
     // comparison get the same fresh Id for a given original Id.
     // This is achieved by generating a deterministic string `uniqueName` on both sides, and looking it up in `names`,
     // which generates a unique Id for it once and reuses it on subsequent lookups.
-    val uniqueName = userName + prefix + suffix.toString
+    val uniqueName = userPart + prefix + suffix.toString
     suffix = suffix + 1
     names.idFor(uniqueName)
 
