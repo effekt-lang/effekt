@@ -4,7 +4,7 @@ package optimizer
 
 import effekt.util.messages.INTERNAL_ERROR
 
-import scala.annotation.tailrec
+import scala.annotation.{ tailrec, targetName }
 import scala.collection.mutable
 
 /**
@@ -161,7 +161,7 @@ object Normalizer { normal =>
       case other => other // stuck
     }
 
-  def normalize(s: Stmt)(using C: Context): Stmt = s match {
+  def normalize(s: Stmt)(using C: Context): Stmt = preserveTypes(s) {
 
     // see #798 for context (led to stack overflow)
     case Stmt.Def(id, block, body) if isUnused(id) =>
@@ -263,9 +263,10 @@ object Normalizer { normal =>
               BlockLit(tparams, cparams, vparams, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeB, answer)), captures) :: Nil,
                 normalize(body2)))
 
+        // [[ val x: A = sc match [A] { case ... => body2: A }; body: B ]] == sc match [B] { case ... => [[ val x: A = body2; body: B ]] }
         case Stmt.Match(sc, tpe, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
-          Stmt.Match(sc, tpe, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2,
-            normalizeVal(id, body2, body)))), None)
+          val normalizedBody = normalizeVal(id, body2, body)
+          Stmt.Match(sc, normalizedBody.tpe, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, normalizedBody))), None)
 
         // Introduce joinpoints that are potentially later inlined or garbage collected
         // [[ val x = if (cond) { thn } else { els }; body ]] =
@@ -276,15 +277,25 @@ object Normalizer { normal =>
           joinpoint(id, tpe, normalize(body)) { k =>
             val x1 = Id(id.name)
             val x2 = Id(id.name)
+
+            k match {
+              case BlockVar(id, BlockType.Function(tparams, cparams, List(vtpe), bparams, ret), annotatedCapt) =>
+                if (vtpe != binding.tpe) {
+                  sys.error(s"Mismatch between ${util.show(vtpe)} expected by the cont and ${util.show(binding.tpe)}")
+                }
+              case _ => ???
+            }
             Stmt.If(cond,
               normalizeVal(x1, thn, Stmt.App(k, Nil, List(ValueVar(x1, tpe)), Nil)),
               normalizeVal(x2, els, Stmt.App(k, Nil, List(ValueVar(x2, tpe)), Nil)))
           }
 
-        case Stmt.Match(sc, _, clauses, default) =>
+        case Stmt.Match(sc, annotatedTpe, clauses, default) =>
           val tpe = binding.tpe
-          joinpoint(id, tpe, normalize(body)) { k =>
-            Stmt.Match(sc, tpe, clauses.map {
+          val res = normalize(body)
+          joinpoint(id, tpe, res) { k =>
+            // since we commuted Val and Match, we need to change the type of the match!
+            Stmt.Match(sc, res.tpe, clauses.map {
               case (tag, BlockLit(tparams, cparams, vparams, bparams, body)) =>
                 val x = Id(id.name)
                 (tag, BlockLit(tparams, cparams, vparams, bparams,
@@ -361,7 +372,7 @@ object Normalizer { normal =>
         BlockLit(tparams, cparams, vparams, bparams, normalize(body))
     }
 
-  def normalize(b: Block)(using Context): Block = b match {
+  def normalize(b: Block)(using Context): Block = preserveTypes(b) {
     case b @ Block.BlockVar(id, _, _) => b
     case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) => normalize(b)
 
@@ -380,7 +391,7 @@ object Normalizer { normal =>
       })
     }
 
-  def normalize(p: Expr)(using ctx: Context): Expr = p match {
+  def normalize(p: Expr)(using ctx: Context): Expr = preserveTypes(p) {
     // [[ box (unbox e) ]] = [[ e ]]
     case Expr.Box(b, annotatedCapture) => active(b) match {
       case NormalizedBlock.Known(Unbox(p), boundBy) => p
@@ -443,4 +454,26 @@ object Normalizer { normal =>
     impl.operations.collectFirst {
       case Operation(name, tps, cps, vps, bps, body) if name == method => BlockLit(tps, cps, vps, bps, body): Block.BlockLit
     }.getOrElse { INTERNAL_ERROR("Should not happen") }
+
+
+  @targetName("preserveTypesStmt")
+  private inline def preserveTypes(before: Stmt)(inline f: Stmt => Stmt): Stmt = {
+    val after = f(before)
+    assert(before.tpe == after.tpe, s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    after
+  }
+
+  @targetName("preserveTypesExpr")
+  private inline def preserveTypes(before: Expr)(inline f: Expr => Expr): Expr = {
+    val after = f(before)
+    assert(before.tpe == after.tpe, s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    after
+  }
+
+  @targetName("preserveTypesBlock")
+  private inline def preserveTypes(before: Block)(inline f: Block => Block): Block = {
+    val after = f(before)
+    assert(before.tpe == after.tpe, s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    after
+  }
 }

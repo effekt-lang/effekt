@@ -138,10 +138,10 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
     case Toplevel.Def(id, block) =>
       // We don't use withBinding here, because top-level ids are pre-collected.
       Toplevel.Def(rewrite(id), rewrite(block))
-    case Toplevel.Val(id, tpe, binding) =>
+    case Toplevel.Val(id, binding) =>
       val resolvedBinding = rewrite(binding)
       // We don't use withBinding here, because top-level ids are pre-collected.
-      Toplevel.Val(rewrite(id), rewrite(tpe), resolvedBinding)
+      Toplevel.Val(rewrite(id), resolvedBinding)
   }
 
   override def rewrite(d: Declaration): Declaration = d match {
