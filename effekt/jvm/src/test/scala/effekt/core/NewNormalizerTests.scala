@@ -728,6 +728,95 @@ class NewNormalizerTests extends CoreTests {
     val (mainId, actual) = normalize(input)
     assertAlphaEquivalentToplevels(actual, parse(expected), List("run"), List("foo"))
   }
+
+  // Equality checks on neutral integer expressions where both sides have the same normal form can be evaluated at compile time.
+  test("Compile-time integer equality on certain neutral expressions") {
+    val input =
+      """
+        |extern def z: Int = vm"0"
+        |
+        |def run(x: Int): Bool = {
+        |    42 + 2 * x == x + 42 + x
+        |}
+        |
+        |def main() = {
+        |  val x = z()
+        |  println(run(x))
+        |}
+        |""".stripMargin
+
+    val expected =
+      """module input
+        |extern {} def infixEq(x: Int, y: Int): Bool = vm ""
+        |def run(x: Int) = {
+        |  let r = true
+        |  return r: Bool
+        |}
+        |""".stripMargin
+
+    val (mainId, actual) = normalize(input)
+    assertAlphaEquivalentToplevels(actual, parse(expected), List("run"), List("infixEq"))
+  }
+
+  // Even for "pure" extern calls, we currently do not assume that both calls return the same value.
+  // This should be improved.
+  test("We do not assume different extern calls return the same value") {
+    val input =
+      """
+        |extern def z: Int = vm"0"
+        |
+        |def run(x: Int): Bool = {
+        |    z() == z()
+        |}
+        |
+        |def main() = {
+        |  val x = z()
+        |  println(run(x))
+        |}
+        |""".stripMargin
+
+    val expected =
+      """module input
+        |extern {} def infixEq(x: Int, y: Int): Bool = vm ""
+        |def run(x: Int) = {
+        |  let ! r1 = z: () => Int @ {io}()
+        |  let ! r2 = z: () => Int @ {io}()
+        |  let o = (infixEq: (Int, Int) => Bool @ {})(r1: Int, r2: Int)
+        |  return o: Bool
+        |}
+        |""".stripMargin
+
+    val (mainId, actual) = normalize(input)
+    assertAlphaEquivalentToplevels(actual, parse(expected), List("run"), List("infixEq"))
+  }
+
+  test("Reflexivity holds for pure neutral extern defs") {
+    val input =
+      """
+        |extern def z at {}: Int = vm"0"
+        |
+        |def run(): Bool = {
+        |    val x = z()
+        |    x == x
+        |}
+        |
+        |def main() = {
+        |  println(run())
+        |}
+        |""".stripMargin
+
+    val expected =
+      """module input
+        |extern {} def infixEq(x: Int, y: Int): Bool = vm ""
+        |def run() = {
+        |  let o = true
+        |  return o: Bool
+        |}
+        |""".stripMargin
+
+    val (mainId, actual) = normalize(input)
+    assertAlphaEquivalentToplevels(actual, parse(expected), List("run"), List("infixEq"))
+  }
 }
 
 /**

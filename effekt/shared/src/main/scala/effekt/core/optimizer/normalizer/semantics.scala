@@ -24,12 +24,12 @@ object semantics {
   type Variables = Set[Id]
   def all[A](ts: List[A], f: A => Variables): Variables = ts.flatMap(f).toSet
 
-  type Neutral = Value.Var | Value.Extern
+  type Neutral = Value.Var | Value.PureExtern
   
   enum Value {
     // Stuck (neutrals)
     case Var(id: Id, annotatedType: ValueType)
-    case Extern(f: BlockVar, targs: List[ValueType], vargs: List[Addr])
+    case PureExtern(f: BlockVar, targs: List[ValueType], vargs: List[Addr])
 
     // Values with specialized representation for algebraic simplification
     case Integer(value: theories.integers.IntegerRep)
@@ -47,7 +47,7 @@ object semantics {
 
     val free: Variables = this match {
       case Value.Var(id, annotatedType) => Set(id)
-      case Value.Extern(id, targs, vargs) => vargs.toSet
+      case Value.PureExtern(id, targs, vargs) => vargs.toSet
       case Value.Literal(value, annotatedType) => Set.empty
       case Value.Integer(value) => value.free
       case Value.String(value) => value.free
@@ -678,7 +678,7 @@ object semantics {
     def toDoc(value: Value): Doc = value match {
       // case Value.Var(id, tpe) => toDoc(id)
 
-      case Value.Extern(callee, targs, vargs) =>
+      case Value.PureExtern(callee, targs, vargs) =>
         toDoc(callee.id) <>
           (if (targs.isEmpty) emptyDoc else brackets(hsep(targs.map(toDoc), comma))) <>
           parens(hsep(vargs.map(toDoc), comma))

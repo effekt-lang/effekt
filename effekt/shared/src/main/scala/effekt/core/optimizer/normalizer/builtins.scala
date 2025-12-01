@@ -41,6 +41,10 @@ lazy val integers: Builtins = Map(
   builtin("effekt::infixMul(Int, Int)") {
     case As.IntRep(x) :: As.IntRep(y) :: Nil => semantics.Value.Integer(theories.integers.mul(x, y))
   },
+  builtin("effekt::infixEq(Int, Int)") {
+    case As.IntRep(x) :: As.IntRep(y) :: Nil if x == y => true
+    case As.Int(x) :: As.Int(y) :: Nil => x == y
+  },
   // Integer arithmetic operations only evaluated for literals
   // ----------
   builtin("effekt::infixDiv(Int, Int)") {
@@ -66,9 +70,6 @@ lazy val integers: Builtins = Map(
   },
   // Comparison
   // ----------
-  builtin("effekt::infixEq(Int, Int)") {
-    case As.Int(x) :: As.Int(y) :: Nil => x == y
-  },
   builtin("effekt::infixNeq(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => x != y
   },

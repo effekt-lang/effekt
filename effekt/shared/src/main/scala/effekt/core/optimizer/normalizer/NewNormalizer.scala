@@ -184,6 +184,7 @@ class NewNormalizer {
 
     case core.Expr.Literal(value, annotatedType) => value match {
       case As.IntRep(x) => scope.allocate("x", Value.Integer(x))
+      case As.StringRep(x) => scope.allocate("x", Value.String(x))
       case _ => scope.allocate("x", Value.Literal(value, annotatedType))
     }
 
@@ -202,7 +203,7 @@ class NewNormalizer {
           val impl = supportedBuiltins(name)
           val res = impl(values)
           scope.allocate("x", res)
-        case _ => scope.allocate("x", Value.Extern(f, targs, vargs.map(evaluate(_, escaping))))
+        case _ => scope.allocate("x", Value.PureExtern(f, targs, vargs.map(evaluate(_, escaping))))
       }
 
     case core.Expr.Make(data, tag, targs, vargs) =>
@@ -611,7 +612,7 @@ class NewNormalizer {
   }
 
   def embedExpr(value: Value)(using cx: TypingContext): core.Expr = value match {
-    case Value.Extern(callee, targs, vargs) => Expr.PureApp(callee, targs, vargs.map(embedExpr))
+    case Value.PureExtern(callee, targs, vargs) => Expr.PureApp(callee, targs, vargs.map(embedExpr))
     case Value.Literal(value, annotatedType) => Expr.Literal(value, annotatedType)
     case Value.Make(data, tag, targs, vargs) => Expr.Make(data, tag, targs, vargs.map(embedExpr))
     case Value.Box(body, annotatedCapture) => Expr.Box(embedBlock(body), annotatedCapture)
@@ -622,7 +623,7 @@ class NewNormalizer {
   
   def embedNeutral(neutral: Neutral)(using G: TypingContext): core.Expr = neutral match {
     case Value.Var(id, annotatedType) => Expr.ValueVar(id, annotatedType)
-    case Value.Extern(callee, targs, vargs) => Expr.PureApp(callee, targs, vargs.map(embedExpr))
+    case Value.PureExtern(callee, targs, vargs) => Expr.PureApp(callee, targs, vargs.map(embedExpr))
   }
 
   def embedExpr(addr: Addr)(using G: TypingContext): core.Expr = Expr.ValueVar(addr, G.lookupValue(addr))
