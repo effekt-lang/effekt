@@ -5,8 +5,10 @@ permalink: tour/captures
 
 # Captures
 
-Functions are second-class in Effekt, but for a good reason. Functions closing over capabilities must not be returned, otherwise it can not be guaranteed that these capabilities are still in scope.
-Thus, we have to keep track of these captures and ensure they are in scope upon invoking.
+[Computations](/tour/computation), such as functions and objects, are second-class _by default_ in Effekt, but for a good reason.
+Since computations can capture capabilities, they can only be used where those capabilities remain in scope.
+For statically preventing capabilities from escaping their valid scope, Effekt tracks captured capabilities on the type level and verifies they're still in scope upon usage.
+We call this mechanism _boxing_ and will discuss in greater details in the next [section](/tour/captures#boxing).
 
 Consider the following example where `divide` is being passed an explicit capability:
 
@@ -19,7 +21,9 @@ def divide(n: Int, m: Int) {exc: Exception}: Int =
   if (m == 0) { exc.throw("uhoh") }
   else { n / m }
 ```
+
 Handlers (implicitly or explicitly) introduce capabilities that are then passed to the position where an effect is used.
+
 ```effekt:repl
 try {
   val res = divide(10, 0) {exc} // here we pass it explicitly
@@ -28,11 +32,13 @@ try {
   def throw(msg) = println("ERROR: " ++ show(msg))
 }
 ```
+
 What happens if we try to return the capability?
 
 ```effekt:repl
 try { exc } with exc: Exception { def throw(msg) = panic(msg) }
 ```
+
 By directly returning `exc` from the `try` expression, we break the lexical effect handling reasoning since `exc` is only defined within the `try` body.
 For the same reason, we must not return a function that closes over such a capability.
 
