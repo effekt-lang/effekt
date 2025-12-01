@@ -758,12 +758,11 @@ class NewNormalizerTests extends CoreTests {
     assertAlphaEquivalentToplevels(actual, parse(expected), List("run"), List("infixEq"))
   }
 
-  // Even for "pure" extern calls, we currently do not assume that both calls return the same value.
-  // This should be improved.
-  test("We do not assume different extern calls return the same value") {
+  // Even for impure extern calls, we do not assume that different calls return the same value.
+  test("Reflexivity does not hold for impure neutral extern defs") {
     val input =
       """
-        |extern def z: Int = vm"0"
+        |extern def z at {io}: Int = vm"0"
         |
         |def run(x: Int): Bool = {
         |    z() == z()
@@ -777,7 +776,7 @@ class NewNormalizerTests extends CoreTests {
 
     val expected =
       """module input
-        |extern {} def infixEq(x: Int, y: Int): Bool = vm ""
+        |extern {io} def infixEq(x: Int, y: Int): Bool = vm ""
         |def run(x: Int) = {
         |  let ! r1 = z: () => Int @ {io}()
         |  let ! r2 = z: () => Int @ {io}()
