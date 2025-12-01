@@ -4,20 +4,13 @@ package core
 import effekt.core.Type.{ PromptSymbol, ResumeSymbol, TChar }
 import effekt.source.FeatureFlag
 import kiama.output.ParenPrettyPrinter
+import kiama.output.PrettyPrinterTypes.Document
 
 import scala.language.implicitConversions
 import effekt.symbols.{ Name, Wildcard, builtins }
 
-object PrettyPrinter extends ParenPrettyPrinter {
-
-  import kiama.output.PrettyPrinterTypes.Document
-
+class PrettyPrinter(humanReadable: Boolean) extends ParenPrettyPrinter {
   override val defaultIndent = 2
-
-  def formatHumanReadable(t: ModuleDecl): Document = {
-    val renamer = effekt.core.TestRenamer(Names(builtins.coreBuiltins))
-    format(renamer(t))
-  }
 
   def format(t: ModuleDecl): Document =
     pretty(toDoc(t), 4)
@@ -61,9 +54,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     // The order of toplevel items must match the parser (where the order is currently fixed).
     val includes = vsep(m.includes.map { im => "import" <+> im })
     val decls = vsep(m.declarations.map(toDoc))
-    val externs = vsep(m.externs.map(toDoc))
+    val externs = if humanReadable then emptyDoc else vsep(m.externs.map(toDoc))
     val defs = toDoc(m.definitions)
-    val exports = vsep(m.exports.map { id => "export" <+> toDoc(id) })
+    val exports = if humanReadable then emptyDoc else vsep(m.exports.map { id => "export" <+> toDoc(id) })
 
     "module" <+> m.path <>
       emptyline <>
@@ -106,7 +99,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(b: Block, preventBraces: Boolean = false): Doc = b match {
     case BlockVar(id, tpe, capt) =>
-      toDoc(id) <> ":" <+> toDoc(tpe) <+> "@" <+> toDoc(capt)
+      toDoc(id) <> (if humanReadable then emptyDoc else ":" <+> toDoc(tpe) <+> "@" <+> toDoc(capt))
     case BlockLit(tps, cps, vps, bps, body) =>
       val doc = space <> paramsToDoc(tps, cps, vps, bps) <+> "=>" <+> nest(line <> toDocStmts(body)) <> line
       if preventBraces then doc else braces { doc }
@@ -129,8 +122,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Literal(n, Type.TChar) => s"'\\${n.toString}'"
     case Literal(s: String, _)  => stringLiteral(s)
     case Literal(value, _)      => value.toString
-    case ValueVar(id, tpe)      => toDoc(id) <> ":" <+> toDoc(tpe)
-
+    case ValueVar(id, tpe)         => toDoc(id) <> (if humanReadable then emptyDoc else ":" <+> toDoc(tpe))
     case PureApp(b, targs, vargs)  => parens(toDoc(b)) <> argsToDoc(targs, vargs, Nil)
     case Make(data, tag, targs, vargs)    => "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
 
@@ -349,5 +341,20 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def multilineStringLiteral(s: String): Doc = {
     val multi = "\"\"\""
     multi <> s <> multi
+  }
+}
+
+/**
+ * Instance of PrettyPrinter that produces output that can be parsed back by the core parser.
+ */
+object ReparsablePrettyPrinter extends PrettyPrinter(false) {}
+
+/**
+ * Instance of PrettyPrinter that produces less verbose, more human-readable output.
+ */
+object HumanReadablePrettyPrinter extends PrettyPrinter(true) {
+  def renameAndFormat(t: ModuleDecl): Document = {
+    val renamer = effekt.core.TestRenamer(Names(builtins.coreBuiltins))
+    format(renamer(t))
   }
 }
