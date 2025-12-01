@@ -18,9 +18,9 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
   override def supportedFeatureFlags: List[String] = additionalFeatureFlags ++ TransformerCps.jsFeatureFlags
 
   override def prettyIR(source: Source, stage: Stage)(using C: Context): Option[Document] = stage match {
-    case Stage.Core if C.config.optimize() => Optimized(source).map { (_, _, res) => core.PrettyPrinter.format(res) }
+    case Stage.Core if C.config.optimize() => Optimized(source).map { (_, _, res) => core.PrettyPrinter.formatHumanReadable(res) }
     case Stage.CPS => CPSTransformed(source).map { (_, _, _, res) => cps.PrettyPrinter.format(res) }
-    case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
+    case Stage.Core => Core(source).map { res => core.PrettyPrinter.formatHumanReadable(res.core) }
     case Stage.Machine => None
     case Stage.Target => CompileLSP(source).map { pretty }
   }
