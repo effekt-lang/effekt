@@ -31,12 +31,10 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
   def transform(toplevel: Toplevel)(using C: Context, DC: DeclarationContext): Toplevel = toplevel match {
 
     case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) => { 
-      // Recursively flatten a parameter into (params, bindings to reconstruct records)
       def flattenParam(param: ValueParam): (List[ValueParam], List[(Id, ValueType, Expr)]) = param match {
         case ValueParam(paramId, tpe @ ValueType.Data(name, targs)) =>
           DC.findData(name) match {
             case Some(Data(_, List(), List(Constructor(ctor, List(), fields)))) =>
-              // Recursively flatten each field
               val flattened = fields.map { case Field(fieldName, fieldType) =>
                 val freshId = Id(fieldName.name)
                 flattenParam(ValueParam(freshId, fieldType))
@@ -47,10 +45,12 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
               val allBindings = nestedBindings.flatten
               
               // Create binding to reconstruct this record
-              val vars = flatParams.map(p => ValueVar(p.id, p.tpe))
-              val binding = (paramId, tpe, Make(tpe, ctor, List(), vars))
+              val fieldVars = fields.map { case Field(fieldName, fieldType) =>
+                ValueVar(Id(fieldName.name), fieldType)
+              }
+              val binding = (paramId, tpe, Make(tpe, ctor, List(), fieldVars))
               
-              (flatParams, binding :: allBindings)
+              (flatParams, allBindings :+ binding)
               
             case _ => (List(param), List())
           }
@@ -87,7 +87,6 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
   def transform(stmt: Stmt)(using C: Context, DC: DeclarationContext): Stmt = stmt match {
 
     case Stmt.App(callee @ BlockVar(id, BlockType.Function(List(), List(), vparamsTypes, List(), returnTpe), annotatedCapt), targs, vargs, bargs) =>
-      // Recursively flatten an argument
       def flattenArg(arg: Expr, argType: ValueType): (List[Expr], List[ValueType], List[(Expr, Id, List[ValueParam])]) = argType match {
         case ValueType.Data(name, targs) =>
           DC.findData(name) match {
@@ -97,7 +96,6 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
                 val freshVar = ValueVar(freshId, fieldType)
                 val freshParam = ValueParam(freshId, fieldType)
                 
-                // Recursively flatten if this field is also a record
                 val (nestedVars, nestedTypes, nestedMatches) = flattenArg(freshVar, fieldType)
                 (freshVar, freshParam, fieldType, nestedVars, nestedTypes, nestedMatches)
               }
