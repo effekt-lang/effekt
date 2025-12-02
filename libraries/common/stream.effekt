@@ -44,7 +44,7 @@ def fix[T] { one: T => Unit / emit[T] } { stream: => Unit / emit[T] }: Unit =
   try {
     stream()
   } with emit[T] { value =>
-    fix[T] {one} { one(value) }
+    fix {one} { one(value) }
     resume(())
   }
 
@@ -145,7 +145,7 @@ def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] 
   with source[B] { stream2 }
 
   exhaustively {
-    action(do read[A](), do read[B]())
+    action(do read(), do read())
   }
 }
 

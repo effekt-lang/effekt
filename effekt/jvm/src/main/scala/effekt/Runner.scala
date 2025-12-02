@@ -248,7 +248,16 @@ trait ChezRunner extends Runner[String] {
     else Left("Cannot find scheme. This is required to use the ChezScheme backend.")
 
   /**
-   * Creates an executable bash script besides the given `.ss` file ([[path]])
+   * Optimization level for Chez Scheme.
+   *
+   * Level 3: Maximum optimization, _disables runtime type checks_ in Chez!
+   * Level 0: No optimization, all runtime checks enabled (better for debugging)
+   */
+  def optimizeLevel(using C: Context): Int =
+    if C.config.optimize() && !C.config.debug() then 3 else 0
+
+  /**
+   * Creates an executable bash script besides the given `. ss` file ([[path]])
    * and returns the resulting absolute path.
    */
   def build(path: String)(using C: Context): Option[String] =
@@ -256,7 +265,17 @@ trait ChezRunner extends Runner[String] {
     val schemeFilePath = (out / path).canonicalPath.escape
     val exeScriptPath = schemeFilePath.stripSuffix(s".$extension")
     val schemeFileName = ("./" + (path.unixPath.split('/').last)).escape
-    Some(createScript(exeScriptPath, "scheme", "--script", "$SCRIPT_DIR/" + schemeFileName))
+    Some(createScript(exeScriptPath,
+      "scheme",
+      "--optimize-level", optimizeLevel.toString,
+      "--script", "$SCRIPT_DIR/" + schemeFileName))
+}
+
+object ChezCPSRunner extends ChezRunner {
+  override def includes(path: File): List[File] = List(
+    path / ".." / "chez" / "common",
+    path / ".." / "chez" / "cps"
+  )
 }
 
 object ChezMonadicRunner extends ChezRunner {

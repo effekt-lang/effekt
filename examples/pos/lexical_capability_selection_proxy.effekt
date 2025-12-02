@@ -1,0 +1,16 @@
+module lexical_capability_selection_proxy
+
+interface Greet[T, U] { def sayHello(): Unit }
+
+record Proxy[T]()
+
+def greet[T, U](p: Proxy[T]) = do sayHello[T, U]()
+
+def helloWorld() = try {
+  // conceptually, this is `do greet[Int, _]`
+  Proxy[Int].greet()
+} with Greet[Int, String] {
+  def sayHello() = { println("Hello, world!"); resume(()) }
+}
+
+def main() = helloWorld()

@@ -80,7 +80,15 @@ trait TypeUnifier {
   }
 
   def unifyEffects(eff1: Effects, eff2: Effects, ctx: ErrorContext): Unit =
-    if (eff1.toList.toSet != eff2.toList.toSet) error(pp"${eff2} is not equal to ${eff1}", ctx)
+    val effs1 = eff1.toList.toSet
+    val effs2 = eff2.toList.toSet
+
+    val hasUnknowns = (effs1 ++ effs2).exists { eff => unknowns(eff).nonEmpty }
+
+    // If we're sure that the effect sets are different, throw an error, otherwise defer it for later.
+    if (effs1 != effs2 && !hasUnknowns) {
+      error(pp"${eff2} is not equal to ${eff1}", ctx)
+    }
 
   def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType, ctx: ErrorContext): Unit = (tpe1, tpe2) match {
     case (

@@ -1,0 +1,12 @@
+module lexical_capability_selection_ambiguous
+
+interface Greet[T] { def sayHello(): Unit }
+
+def helloWorld() = try {
+  do sayHello()
+} with Greet[Int] {
+  def sayHello() = { println("Hello, world!"); resume(()) }
+} with Greet[String] {
+  def sayHello() = { println("Hello, world!"); resume(()) }
+}
+def main() = helloWorld()

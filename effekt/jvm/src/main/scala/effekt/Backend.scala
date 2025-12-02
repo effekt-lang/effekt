@@ -29,6 +29,7 @@ object Backend {
   def backend(name: String): Backend[_] = name match {
     case "js"           => Backend("js", js.JavaScriptNode(), JSNodeRunner)
     case "js-web"       => Backend("js-web", js.JavaScriptWeb(), JSWebRunner)
+    case "chez-cps"     => Backend("chez-cps", chez.ChezSchemeCPS(), ChezCPSRunner)
     case "chez-monadic" => Backend("chez-monadic", chez.ChezSchemeMonadic(), ChezMonadicRunner)
     case "chez-callcc"  => Backend("chez-callcc", chez.ChezSchemeCallCC(), ChezCallCCRunner)
     case "llvm"         => Backend("llvm", llvm.LLVM(), LLVMRunner)

@@ -1,18 +1,14 @@
 module io
 
-import ref
-import queue
 
 // Event Loop
 // ----------
-
-type Task[T] = () => T at {io, async, global}
 
 extern llvm """
   declare void @c_yield(%Stack)
 """
 
-extern def spawn(task: Task[Unit]) at async: Unit =
+extern def spawn[T](task: () => T at {io, async, global}) at async: Unit =
   js "$effekt.capture(k => { setTimeout(() => k($effekt.unit), 0); return $effekt.run(${task}) })"
   llvm """
     call void @c_yield(%Stack %stack)
@@ -34,55 +30,3 @@ extern def abort() at async: Nothing =
     ret void
   """
 
-
-// Promises
-// --------
-
-extern type Promise[T]
-  // = js "{resolve: ƒ, promise: Promise}"
-  // = llvm "{tag: 0, obj: Promise*}"
-
-def promise[T](task: Task[T]): Promise[T] = {
-  val p = promise::make[T]();
-  spawn(box { p.resolve(task()) });
-  return p
-}
-
-extern llvm """
-  declare %Pos @c_promise_make()
-  declare void @c_promise_resolve(%Pos, %Pos)
-  declare void @c_promise_await(%Pos, %Neg)
-"""
-
-extern def await[T](promise: Promise[T]) at async: T =
-  js "$effekt.capture(k => ${promise}.promise.then(k))"
-  llvm """
-    call void @c_promise_await(%Pos ${promise}, %Stack %stack)
-    ret void
-  """
-
-extern def resolve[T](promise: Promise[T], value: T) at async: Unit =
-  js "$effekt.capture(k => { ${promise}.resolve(${value}); return k($effekt.unit) })"
-  llvm """
-    call void @c_promise_resolve(%Pos ${promise}, %Pos ${value}, %Stack %stack)
-    ret void
-  """
-
-namespace promise {
-  extern js """
-    function promise$make() {
-      let resolve;
-      const promise = new Promise((res, rej) => {
-        resolve = res;
-      });
-      return { resolve: resolve, promise: promise };
-    }
-  """
-
-  extern def make[T]() at io: Promise[T] =
-    js "promise$make()"
-    llvm """
-      %promise = call %Pos @c_promise_make()
-      ret %Pos %promise
-    """
-}

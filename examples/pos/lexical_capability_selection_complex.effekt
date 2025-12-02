@@ -1,0 +1,11 @@
+module lexical_capability_selection_complex
+// from issue #1189
+
+interface Greet[T] { def sayHello(): Unit }
+
+def helloWorld() = try {
+  do sayHello()
+} with Greet[Option[Int]] {
+  def sayHello() = { println("Hello!"); resume(()) }
+}
+def main() = helloWorld()

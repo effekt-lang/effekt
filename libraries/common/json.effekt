@@ -158,7 +158,7 @@ def readQuotedString(): Unit / { Scan[Char], emit[Char], Exception[WrongFormat] 
 def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
   with boundary
   skipWhitespace()
-  if(do peek[Char]() is c) {
+  if(do peek() is c) {
     c match {
       case 'n' => expectString("null"); do null()
       case 't' => expectString("true"); do bool(true)
@@ -177,7 +177,7 @@ def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[WrongFo
   expectString("{")
   with boundary
   skipWhitespace()
-  while(do peek[Char]() is c and (c != '}')) {
+  while(do peek() is c and (c != '}')) {
     if (not(first)) { expectString(",") }
     val k = string::collect { readQuotedString() }
     skipWhitespace()
@@ -188,20 +188,20 @@ def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[WrongFo
     skipWhitespace()
     first = false
   }
-  do skip[Char]()
+  do skip()
 }
 def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
   var first = true
   expectString("[")
   with boundary
   skipWhitespace()
-  while(do peek[Char]() is c and (c != ']')) {
+  while(do peek() is c and (c != ']')) {
     if (not(first)) { expectString(",") }
     decodeJson()
     skipWhitespace()
     first = false
   }
-  do skip[Char]()
+  do skip()
 }
 
 // --------------------------------------------------------------------------------
@@ -327,15 +327,18 @@ namespace test {
       def k = new JsonObjectBuilder {
         def field(k){v} = { println(k); ignore{v} }
       }
-      def d = new JsonBuilder {
-        def number(n) = println(n)
-        def bool(b) = ()
-        def null() = println("NULL")
-        def string(s) = ()
-        def list(){e} = handleJsonBuilder{d}{e}
-        def dict(){e} = handleJsonObjectBuilder{k}{e}
+      def jsonBuilder[R] {e: => R / JsonBuilder}: R = {
+        def d = new JsonBuilder {
+          def number(n) = println(n)
+          def bool(b) = ()
+          def null() = println("NULL")
+          def string(s) = ()
+          def list(){e} = jsonBuilder{e}
+          def dict(){e} = handleJsonObjectBuilder{k}{e}
+        }
+        handleJsonBuilder{d}{e}
       }
-      handleJsonBuilder{d}{ decodeJson() }
+      jsonBuilder { decodeJson() }
     }
 
     println("")

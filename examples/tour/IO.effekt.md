@@ -22,7 +22,7 @@ import io/error
 
 def readFile(path: String): String / Exception[IOError] =
   if (internal::existsFile(path)) internal::readFile(path)
-  else do raise[IOError](ENOENT(), message(ENOENT()))
+  else do raise(ENOENT(), message(ENOENT()))
 
 def writeFile(path: String, contents: String): Unit / Exception[IOError] =
   internal::writeFile(path, contents)
@@ -45,10 +45,10 @@ namespace internal {
 
   extern def existsFile(path: String): Bool = js "!!filesystem[${path}]"
 
-  extern async def readFile(path: String): String =
+  extern def readFile(path: String) at async: String =
     js "$effekt.capture(k => delayed(() => k(filesystem[${path}])))"
 
-  extern async def writeFile(path: String, contents: String): Unit =
+  extern def writeFile(path: String, contents: String) at async: Unit =
     js "$effekt.capture(k => delayed(() => k(filesystem[${path}] = ${contents})))"
 }
 

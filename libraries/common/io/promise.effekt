@@ -1,0 +1,53 @@
+module io/promise
+
+import io
+import io/signal
+
+// Promises
+// --------
+
+type State[T] {
+  Pending(signals: List[Signal[T, Unit]])
+  Resolved(value: T)
+}
+
+type Promise[T] = Ref[State[T]]
+
+namespace promise {
+  /// Creates a pending promise that must be resolved exactly once
+  /// and can be awaited multiple times.
+  def make[T](): Promise[T] =
+    ref(Pending(Nil()))
+}
+
+/// Spawns a task and immediately returns a promise that upon completion
+/// of the task will resolve to its result.
+def promise[T](task: () => T at {io, async, global}): Promise[T] = {
+  val p = promise::make[T]();
+  spawn(box { p.resolve(task()) });
+  return p
+}
+
+/// Awaits and blocks until the given promise is resolved.
+def await[T](promise: Promise[T]): T =
+  promise.get match {
+    case Resolved(value) =>
+      return value
+    case Pending(signals) =>
+      val signal = signal()
+      promise.set(Pending(Cons(signal, signals)))
+      // TODO perhaps yield to avoid stack overflow
+      signal.unsafeWait(())
+  }
+
+/// Resolves the given promise, unblocking all awaiting tasks.
+def resolve[T](promise: Promise[T], value: T): Unit =
+  promise.get match {
+    case Resolved(value) =>
+      panic("ERROR: Promise already resolved")
+    case Pending(signals) =>
+      promise.set(Resolved(value))
+      // TODO perhaps yield to avoid stack overflow
+      signals.reverse.foreach { signal => unsafeFire(signal, value) }
+  }
+

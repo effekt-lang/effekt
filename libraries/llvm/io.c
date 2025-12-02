@@ -572,153 +572,59 @@ void c_yield(Stack stack) {
     c_timer_start(0, stack);
 }
 
-
-// Promises
+// Signals
 // --------
 
-typedef enum { UNRESOLVED, RESOLVED } promise_state_t;
-
-typedef struct Listeners {
-    Stack head;
-    struct Listeners* tail;
-} Listeners;
+typedef enum { INITIAL, NOTIFIED } signal_state_t;
 
 typedef struct {
     uint64_t rc;
     void* eraser;
-    promise_state_t state;
-    // state of {
-    //   case UNRESOLVED => Possibly empty (head is NULL) list of listeners
-    //   case RESOLVED   => Pos (the result)
-    // }
-    union {
-        struct Pos value;
-        Listeners listeners;
-    } payload;
-} Promise;
-
-void c_promise_erase_listeners(void *envPtr) {
-    // envPtr points to a Promise _after_ the eraser, so let's adjust it to point to the promise.
-    Promise *promise = (Promise*) (envPtr - offsetof(Promise, state));
-    promise_state_t state = promise->state;
-
-    Stack head;
-    Listeners* tail;
-    Listeners* current;
-
-    switch (state) {
-        case UNRESOLVED:
-            head = promise->payload.listeners.head;
-            tail = promise->payload.listeners.tail;
-            if (head != NULL) {
-                // Erase head
-                eraseStack(head);
-                // Erase tail
-                current = tail;
-                while (current != NULL) {
-                    head = current->head;
-                    tail = current->tail;
-                    free(current);
-                    eraseStack(head);
-                    current = tail;
-                };
-            };
-            break;
-        case RESOLVED:
-            erasePositive(promise->payload.value);
-            break;
-    }
-}
-
-void c_promise_resume_listeners(Listeners* listeners, struct Pos value) {
-    if (listeners != NULL) {
-        Stack head = listeners->head;
-        Listeners* tail = listeners->tail;
-        free(listeners);
-        c_promise_resume_listeners(tail, value);
-        sharePositive(value);
-        resume_Pos(head, value);
-    }
-}
-
-void c_promise_resolve(struct Pos promise, struct Pos value, Stack stack) {
-    Promise* p = (Promise*)promise.obj;
-
-    Stack head;
-    Listeners* tail;
-
-    switch (p->state) {
-        case UNRESOLVED:
-            head = p->payload.listeners.head;
-            tail = p->payload.listeners.tail;
-
-            p->state = RESOLVED;
-            p->payload.value = value;
-            resume_Pos(stack, Unit);
-
-            if (head != NULL) {
-                // Execute tail
-                c_promise_resume_listeners(tail, value);
-                // Execute head
-                sharePositive(value);
-                resume_Pos(head, value);
-            };
-            break;
-        case RESOLVED:
-            erasePositive(promise);
-            erasePositive(value);
-            eraseStack(stack);
-            fprintf(stderr, "ERROR: Promise already resolved\n");
-            exit(1);
-            break;
-    }
-    // TODO stack overflow?
-    // We need to erase the promise now, since we consume it.
-    erasePositive(promise);
-}
-
-void c_promise_await(struct Pos promise, Stack stack) {
-    Promise* p = (Promise*)promise.obj;
-
-    Stack head;
-    Listeners* tail;
-    Listeners* node;
+    signal_state_t state;
     struct Pos value;
+    Stack stack;
+} Signal;
 
-    switch (p->state) {
-        case UNRESOLVED:
-            head = p->payload.listeners.head;
-            tail = p->payload.listeners.tail;
-            if (head != NULL) {
-                node = (Listeners*)malloc(sizeof(Listeners));
-                node->head = head;
-                node->tail = tail;
-                p->payload.listeners.head = stack;
-                p->payload.listeners.tail = node;
-            } else {
-                p->payload.listeners.head = stack;
-            };
-            break;
-        case RESOLVED:
-            value = p->payload.value;
-            sharePositive(value);
-            resume_Pos(stack, value);
-            break;
-    };
-    // TODO hmm, stack overflow?
-    erasePositive(promise);
+void c_signal_erase(void *envPtr) {
+    // envPtr points to a Signal _after_ the eraser, so let's adjust it to point to the beginning.
+    Signal *signal = (Signal*) (envPtr - offsetof(Signal, state));
+    erasePositive(signal->value);
+    if (signal->stack != NULL) { eraseStack(signal->stack); }
 }
 
-struct Pos c_promise_make() {
-    Promise* promise = (Promise*)malloc(sizeof(Promise));
+struct Pos c_signal_make() {
+    Signal* f = (Signal*)malloc(sizeof(Signal));
 
-    promise->rc = 0;
-    promise->eraser = c_promise_erase_listeners;
-    promise->state = UNRESOLVED;
-    promise->payload.listeners.head = NULL;
-    promise->payload.listeners.tail = NULL;
+    f->rc = 0;
+    f->eraser = c_signal_erase;
+    f->state = INITIAL;
+    f->value = (struct Pos) { .tag = 0, .obj = NULL, };
+    f->stack = NULL;
 
-    return (struct Pos) { .tag = 0, .obj = promise, };
+    return (struct Pos) { .tag = 0, .obj = f, };
+}
+
+void c_signal_notify(struct Pos signal, struct Pos value, Stack stack) {
+    Signal* f = (Signal*)signal.obj;
+    switch (f->state) {
+        case INITIAL: {
+            f->state = NOTIFIED;
+            f->value = value;
+            f->stack = stack;
+            erasePositive(signal);
+            break;
+        }
+        case NOTIFIED: {
+            struct Pos other_value = f->value;
+            f->value = (struct Pos) { .tag = 0, .obj = NULL, };
+            Stack other_stack = f->stack;
+            f->stack = NULL;
+            erasePositive(signal);
+            resume_Pos(other_stack, value);
+            resume_Pos(stack, other_value);
+            break;
+        }
+    }
 }
 
 // Subprocesses

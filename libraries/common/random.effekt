@@ -73,7 +73,7 @@ def devurandom { randomnessReader: () => Unit / random }: Unit / Exception[IOErr
   try {
     with readFile("/dev/urandom")
     try randomnessReader() with random {
-      resume(do read[Byte]())
+      resume(do read())
     }
   } with stop {
     do raise(io::error::EOF(), "Unexpected EOF when reading /dev/urandom!")

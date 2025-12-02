@@ -47,6 +47,9 @@ abstract class StdlibChezTests extends StdlibTests {
     examplesDir / "stdlib" / "network" / "streaming.effekt",
   )
 }
+class StdlibChezSchemeCPSTests extends StdlibChezTests {
+  def backendName: String = "chez-cps"
+}
 class StdlibChezSchemeMonadicTests extends StdlibChezTests {
   def backendName: String = "chez-monadic"
 }
@@ -66,9 +69,5 @@ class StdlibLLVMTests extends StdlibTests {
   override def ignored: Set[File] = Set(
     // String comparison using `<`, `<=`, `>`, `>=` is not implemented yet on LLVM
     examplesDir / "stdlib" / "string" / "compare.effekt",
-
-    // Wrong codegen for negative types, see #801
-    examplesDir / "stdlib" / "json.effekt",
-    examplesDir / "stdlib" / "buffer.effekt",
   )
 }

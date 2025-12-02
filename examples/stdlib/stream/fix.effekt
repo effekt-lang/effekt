@@ -6,7 +6,7 @@ type Message {
 }
 
 def solveOne(m: Message): Unit / { emit[Int], emit[Message] } = m match {
-  case Primitive(n) => do emit[Int](n)
+  case Primitive(n) => do emit(n)
   case Complex(msgs) => msgs.each
 }
 

@@ -10,7 +10,8 @@ object Spans {
   def findNodesContaining[T <: Tree](nodes: Vector[T], position: Position): Vector[T] = {
     nodes.filter { t =>
       val r = t.span.range
-      position.between(r.from, r.to)
+      // Use inclusive boundaries instead of the half-closed-half-open `position.between`
+      (r.from <= position) && (position <= r.to)
     }
   }
 

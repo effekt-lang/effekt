@@ -17,13 +17,13 @@ def inRange(start: Int, end: Int): Unit / Iterate[Int] = {
 }
 
 def intoList[A](): List[A] / Reduce[A] =
-  do consume[A]() match {
+  do consume() match {
     case Absent() => Nil()
     case Present(a) => Cons(a, intoList())
   }
 
 def mapping[A, B] {f: A => B} : Unit / {Reduce[A], Iterate[B]} =
-  do consume[A]() match {
+  do consume() match {
     case Absent() => ()
     case Present(a) =>
       do emit(f(a))

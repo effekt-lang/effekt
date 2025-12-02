@@ -17,6 +17,7 @@ lazy val bumpMinorVersion = taskKey[Unit]("Bumps the minor version number (used 
 lazy val testBackendJS = taskKey[Unit]("Run JavaScript backend tests")
 lazy val testBackendChez = taskKey[Unit]("Run Chez Scheme backend tests")
 lazy val testBackendLLVM = taskKey[Unit]("Run LLVM backend tests")
+lazy val testCoreReparsing = taskKey[Unit]("Run core reparsing tests")
 lazy val testRemaining = taskKey[Unit]("Run all non-backend tests (internal tests) on effektJVM")
 
 lazy val noPublishSettings = Seq(
@@ -219,8 +220,8 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     testBackendChez := {
       (Test / testOnly).toTask(
-        " effekt.ChezSchemeMonadicTests effekt.ChezSchemeCallCCTests" +
-        " effekt.StdlibChezSchemeMonadicTests effekt.StdlibChezSchemeCallCCTests"
+        " effekt.ChezSchemeMonadicTests effekt.ChezSchemeCallCCTests effekt.ChezSchemeCPSTests" +
+        " effekt.StdlibChezSchemeMonadicTests effekt.StdlibChezSchemeCallCCTests effekt.StdlibChezSchemeCPSTests"
       ).value
     },
 
@@ -230,25 +231,34 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       ).value
     },
 
+    testCoreReparsing := {
+      (Test / testOnly).toTask(
+        " effekt.core.ReparseTests"
+      ).value
+    },
+
     testRemaining := Def.taskDyn {
       val log = streams.value.log
 
       val allTests = (Test / definedTestNames).value.toSet
 
-      // Explicit list of backend tests (union of all testBackend targets)
-      val backendTests = Set(
+      // Explicit list of tests run separately (union of all testBackend targets)
+      val separatedTests = Set(
         "effekt.JavaScriptTests",
         "effekt.StdlibJavaScriptTests",
         "effekt.ChezSchemeMonadicTests",
         "effekt.ChezSchemeCallCCTests",
+        "effekt.ChezSchemeCPSTests",
         "effekt.StdlibChezSchemeMonadicTests",
         "effekt.StdlibChezSchemeCallCCTests",
+        "effekt.StdlibChezCPSTests",
         "effekt.LLVMTests",
         "effekt.LLVMNoValgrindTests",
-        "effekt.StdlibLLVMTests"
+        "effekt.StdlibLLVMTests",
+        "effekt.core.ReparseTests",
       )
 
-      val remaining = allTests -- backendTests
+      val remaining = allTests -- separatedTests
 
       if (remaining.isEmpty) {
         log.info("No remaining tests")
