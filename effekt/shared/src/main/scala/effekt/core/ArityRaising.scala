@@ -30,49 +30,44 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(toplevel: Toplevel)(using C: Context, DC: DeclarationContext): Toplevel = toplevel match {
 
-    case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
-      // does this for all params, so id should be able to handle def myFun(a: Record, b: Record)
-      // we return the param and the necesarry information to recreate the record later on
-      val (newParams, rec) = vparams.map { param => 
-        param match{
-          case ValueParam(paramId, tpe @ ValueType.Data(name, targs)) =>
-            // finding the constructor
-            DC.findData(name) match {
-              case Some(Data(_, List(), List(Constructor(ctor, List(), fields)))) =>
-                // handling all fields, so it handles Record(a, b, c, ...)
-                // still TODO nested records
-                val newFields = fields.map { case Field(fieldName, fieldType) => 
-                  val freshId = Id(fieldName.name)
-                  (ValueParam(freshId, fieldType), ValueVar(freshId, fieldType))
-                  }
+    case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) => { 
+      // Recursively flatten a parameter into (params, bindings to reconstruct records)
+      def flattenParam(param: ValueParam): (List[ValueParam], List[(Id, ValueType, Expr)]) = param match {
+        case ValueParam(paramId, tpe @ ValueType.Data(name, targs)) =>
+          DC.findData(name) match {
+            case Some(Data(_, List(), List(Constructor(ctor, List(), fields)))) =>
+              // Recursively flatten each field
+              val flattened = fields.map { case Field(fieldName, fieldType) =>
+                val freshId = Id(fieldName.name)
+                flattenParam(ValueParam(freshId, fieldType))
+              }
+              
+              val (allParams, nestedBindings) = flattened.unzip
+              val flatParams = allParams.flatten
+              val allBindings = nestedBindings.flatten
+              
+              // Create binding to reconstruct this record
+              val vars = flatParams.map(p => ValueVar(p.id, p.tpe))
+              val binding = (paramId, tpe, Make(tpe, ctor, List(), vars))
+              
+              (flatParams, binding :: allBindings)
+              
+            case _ => (List(param), List())
+          }
+        case _ => (List(param), List())
+      }
 
-                val (params, args) = newFields.unzip
+      val flattened = vparams.map(flattenParam)
+      val (allParams, allBindings) = flattened.unzip
+      
+      val newBody = allBindings.flatten.foldRight(transform(body)) {
+        case ((id, tpe, expr), body) => Let(id, tpe, expr, body)
+      }
 
-                val make = Make(tpe, ctor, List(), args)
-                // giving back params and how to recreate the record in the body
-                (params, Some((paramId, tpe, make)))
-              case _ =>
-                (List(param), None)
-            }
-          case _ =>
-            (List(param), None)
-        }
-      }.unzip
+      Toplevel.Def(id, BlockLit(tparams, cparams, allParams.flatten, bparams, newBody))
+    }
 
-      val allNewParams = newParams.flatten
-      val bindings = rec.flatten
-
-      // this is needed since we can only do a single stmt, so we nest the Let statments
-      val newBody = bindings.foldRight(transform(body)) {
-        case ((originalId, originalType, expr), currentbody) =>
-          Let(originalId, originalType, expr, currentbody)
-      } 
-
-      Toplevel.Def(id, BlockLit(tparams, cparams, allNewParams, bparams, newBody))
-     
-    case Toplevel.Def(id, block) => 
-      val res = Toplevel.Def(id, transform(block))
-      res
+    case Toplevel.Def(id, block) => Toplevel.Def(id, transform(block))
  
     case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, tpe, transform(binding))
   }
@@ -91,58 +86,45 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(stmt: Stmt)(using C: Context, DC: DeclarationContext): Stmt = stmt match {
 
-    case Stmt.App(callee, targs, vargs, bargs) =>
-      callee match {
-        case BlockVar(id, BlockType.Function(List(), List(), vparamsTypes, List(), returnTpe), annotatedCapt) => 
-          val (newVargs, types, preparedMatches ) = (vargs zip vparamsTypes).map { case (arg, argType) => 
-              argType match{
-                case ValueType.Data(name, targs) => 
-                  // finding the constructor
-                  DC.findData(name) match { 
-                    case Some(Data(_, List(), List(Constructor(ctor, List(), fields)))) =>
-                      val fieldInf = fields.map { case Field(fieldName, fieldType) =>
-                        val freshId = Id(fieldName.name)
-
-                        (ValueVar(freshId, fieldType), ValueParam(freshId, fieldType), fieldType)
-                        }
-                      
-                      val (newVars, newParams, types) = fieldInf.unzip3
-
-                      // preparing the match statement so we only have to fill the body later
-                      val preparedmatch = (innerBody: Stmt) => {
-                        val matchBlock: BlockLit = BlockLit(List(), List(), newParams, List(), innerBody)
-                        Stmt.Match(arg, List((ctor, matchBlock)), None)
-                      }
-
-                      (newVars, types, preparedmatch)
-                    
-                    // this makes sure that we just return the argument as it is.
-                    case _ => (List(arg), List(argType), (s:Stmt) => s )
-
-                  }
-
-                case _ => (List(arg), List(argType), (s: Stmt) => s)
+    case Stmt.App(callee @ BlockVar(id, BlockType.Function(List(), List(), vparamsTypes, List(), returnTpe), annotatedCapt), targs, vargs, bargs) =>
+      // Recursively flatten an argument
+      def flattenArg(arg: Expr, argType: ValueType): (List[Expr], List[ValueType], List[(Expr, Id, List[ValueParam])]) = argType match {
+        case ValueType.Data(name, targs) =>
+          DC.findData(name) match {
+            case Some(Data(_, List(), List(Constructor(ctor, List(), fields)))) =>
+              val fieldInfo = fields.map { case Field(fieldName, fieldType) =>
+                val freshId = Id(fieldName.name)
+                val freshVar = ValueVar(freshId, fieldType)
+                val freshParam = ValueParam(freshId, fieldType)
+                
+                // Recursively flatten if this field is also a record
+                val (nestedVars, nestedTypes, nestedMatches) = flattenArg(freshVar, fieldType)
+                (freshVar, freshParam, fieldType, nestedVars, nestedTypes, nestedMatches)
               }
-          }.unzip3
-
-          val finalArgs = newVargs.flatten
-          val finalArgTypes = types.flatten
-
-          val newCalleeType = BlockType.Function(List(), List(), finalArgTypes, List(), returnTpe)
-          val newCallee = BlockVar(id, newCalleeType, annotatedCapt)
-          
-          val innerApp = Stmt.App(newCallee, targs, finalArgs, bargs)
-
-          // wrapping the inner app with all prepared matches
-          val finalStmt = preparedMatches.foldRight(innerApp) { (wrapper, acc) => 
-            wrapper(acc) 
+              
+              val vars = fieldInfo.flatMap(_._4)
+              val types = fieldInfo.flatMap(_._5)
+              val params = fieldInfo.map(_._2)
+              val nestedMatches = fieldInfo.flatMap(_._6)
+              val thisMatch = (arg, ctor, params)
+              
+              (vars, types, thisMatch :: nestedMatches)
+              
+            case _ => (List(arg), List(argType), List())
           }
-          
-          finalStmt
+        case _ => (List(arg), List(argType), List())
+      }
 
-        case _ => stmt
-        
-      } 
+      val flattened = (vargs zip vparamsTypes).map { case (arg, tpe) => flattenArg(arg, tpe) }
+      val (allArgs, allTypes, allMatches) = flattened.unzip3
+      
+      val newCallee = BlockVar(id, BlockType.Function(List(), List(), allTypes.flatten, List(), returnTpe), annotatedCapt)
+      val innerApp = Stmt.App(newCallee, targs, allArgs.flatten, bargs)
+      
+      allMatches.flatten.foldRight(innerApp) {
+        case ((scrutinee, ctor, params), body) =>
+          Stmt.Match(scrutinee, List((ctor, BlockLit(List(), List(), params, List(), body))), None)
+    }
 
     case Stmt.Def(id, block, rest) =>
      Stmt.Def(id, transform(block), transform(rest))
