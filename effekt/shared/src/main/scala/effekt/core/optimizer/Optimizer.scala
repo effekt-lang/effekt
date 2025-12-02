@@ -16,7 +16,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     input match {
       case CoreTransformed(source, tree, mod, core) =>
         val term = Context.ensureMainExists(mod)
-        val optimizer = if (Context.config.newNormalizer()) {
+        val optimizer = if (Context.config.useNewNormalizer()) {
           optimizeWithNewNormalizer
         } else {
           optimize

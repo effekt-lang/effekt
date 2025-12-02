@@ -275,6 +275,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
   def documenter(): Boolean = showDocumentation() || writeDocumentation()
 
   def timed(): Boolean = time.isSupplied && !server()
+  
+  def useNewNormalizer(): Boolean = newNormalizer()
 
   validateFilesIsDirectory(includePath)
 
