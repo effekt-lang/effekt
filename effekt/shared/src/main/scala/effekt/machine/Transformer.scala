@@ -291,6 +291,9 @@ object Transformer {
         }
 
       case core.Var(ref, init, capture, body) =>
+        // TODO: ref should be a BlockParam not Id
+        noteParameter(ref, core.Type.TState(init.tpe))
+
         val stateType = transform(init.tpe)
         val reference = Variable(transform(ref), Type.Reference(stateType))
         val prompt = Variable(freshName("prompt"), Type.Prompt())
@@ -508,8 +511,10 @@ object Transformer {
     case core.Type.TRegion => Type.Prompt()
     case core.Type.TResume(result, answer) => Type.Stack()
     case core.Type.TPrompt(answer) => Type.Prompt()
+    case core.Type.TState(state) => Type.Reference(transform(state))
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => Negative()
     case core.BlockType.Interface(symbol, targs) => Negative()
+
   }
 
   def transformLabel(id: Id)(using BPC: BlocksParamsContext): Label = getBlockInfo(id) match {
@@ -566,7 +571,7 @@ object Transformer {
     BC.info += (id -> BlockInfo.Definition(free, params))
 
   def noteParameter(id: Id, tpe: core.BlockType)(using BC: BlocksParamsContext): Unit =
-    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Parameter)")
+    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Parameter(${tpe})")
     BC.info += (id -> BlockInfo.Parameter(tpe))
 
   def noteParameters(ps: List[core.BlockParam])(using BC: BlocksParamsContext): Unit =
