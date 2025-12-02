@@ -450,7 +450,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           }
           State.Step(body, env, rewind(cont, stack), heap)
 
-        case Stmt.Hole(span) => throw VMError.Hole(span)
+        case Stmt.Hole(tpe, span) => throw VMError.Hole(span)
       }
     }
 

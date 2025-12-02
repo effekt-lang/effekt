@@ -276,7 +276,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
           val boxedResult = transformArg(originalResult)
           coerce(Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, coerce(body, boxedResult))), originalResult)
       }
-    case Stmt.Hole(span) => Stmt.Hole(span)
+    case Stmt.Hole(tpe, span) => Stmt.Hole(tpe, span)
   }
 
   def transform(pure: Expr)(using Context, DeclarationContext): Expr = pure match {

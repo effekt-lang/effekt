@@ -315,7 +315,7 @@ object Transformer {
           StoreVar(reference, value, transform(body))
         }
 
-      case core.Hole(span) => machine.Statement.Hole(span)
+      case core.Hole(tpe, span) => machine.Statement.Hole(span)
 
       case _ =>
         ErrorReporter.abort(s"Unsupported statement: $stmt")

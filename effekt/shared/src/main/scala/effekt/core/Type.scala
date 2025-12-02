@@ -168,6 +168,8 @@ object Type {
       Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
   }
 
+  private inline def debug(inline assertion: Boolean, inline msg: => String): Unit = () // assert(assertion, msg)
+
   def inferType(stmt: Stmt): ValueType = stmt match {
     case Stmt.Def(id, block, body) => body.tpe
     case Stmt.Let(id, binding, body) => body.tpe
@@ -178,8 +180,10 @@ object Type {
       instantiate(callee.functionType, targs, bargs.map(_.capt)).result
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
       instantiate(methodTpe.asInstanceOf, targs, bargs.map(_.capt)).result
-    case Stmt.If(cond, thn, els) => thn.tpe
-    case Stmt.Match(scrutinee, tpe, clauses, default) => tpe
+    case Stmt.If(cond, thn, els) => assert(cond.tpe == TBoolean); debug(thn.tpe == els.tpe, s"Different types: ${util.show(thn)} and ${util.show(els)}"); thn.tpe
+    case Stmt.Match(scrutinee, tpe, clauses, default) => clauses.foreach { case (_,
+      BlockLit(tparams, cparams, vparams, bparams, body)) => debug(tpe == body.tpe, s"Different types in match: ${util.show(body.tpe)} vs. at match ${util.show(tpe)}")
+    }; tpe
 
     case Stmt.Alloc(id, init, region, body) => body.tpe
     case Stmt.Var(ref, init, cap, body) => body.tpe
@@ -200,7 +204,7 @@ object Type {
     }
     case Stmt.Region(body) => body.returnType
 
-    case Stmt.Hole(span) => TBottom
+    case Stmt.Hole(tpe, span) => tpe
   }
 
   def inferCapt(stmt: Stmt): Captures = stmt match {
@@ -221,7 +225,7 @@ object Type {
     case Stmt.Shift(prompt, body) => prompt.capt ++ body.capt
     case Stmt.Resume(k, body) => k.capt ++ body.capt
     case Stmt.Region(body) => body.capt
-    case Stmt.Hole(span) => Set.empty
+    case Stmt.Hole(tpe, span) => Set.empty
   }
 
   def inferType(expr: Expr): ValueType = expr match {

@@ -368,8 +368,8 @@ class CoreParsers(names: Names) extends EffektLexers {
     }
     | (`if` ~> `(` ~/> expr <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
     | `region` ~> blockLit ^^ Stmt.Region.apply
-    | `<>` ~> `@` ~> (stringLiteral <~ `:`) ~ (integerLiteral <~ `:`) ~ integerLiteral ^^ {
-      case (name ~ from ~ to) =>
+    | `<>` ~> (`:` ~> valueType) ~ (`@` ~> (stringLiteral <~ `:`) ~ (integerLiteral <~ `:`) ~ integerLiteral) ^^ {
+      case (tpe ~ (name ~ from ~ to)) =>
         val source = if (name.startsWith("file://")) {
           kiama.util.FileSource(name.stripPrefix("file://"))
         } else if (name.startsWith("string://")) {
@@ -377,9 +377,9 @@ class CoreParsers(names: Names) extends EffektLexers {
         } else {
           sys error s"Unsupported source scheme in hole source name: $name"
         }
-        Hole(effekt.source.Span(source, from.toInt, to.toInt))
+        Hole(tpe, effekt.source.Span(source, from.toInt, to.toInt))
       }
-    | `<>` ^^^ Hole(effekt.source.Span.missing)
+    | `<>` ~> (`:` ~> valueType) ^^ { tpe => Hole(tpe, effekt.source.Span.missing) }
     | (expr <~ `match`) ~/ (`[` ~> valueType <~ `]`) ~ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
     )
 

@@ -101,7 +101,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case BlockLit(tps, cps, vps, bps, body) =>
       val doc = space <> paramsToDoc(tps, cps, vps, bps) <+> "=>" <+> nest(line <> toDocStmts(body)) <> line
       if preventBraces then doc else braces { doc }
-    case Unbox(e)         => "unbox" <+> toDoc(e)
+    case Unbox(e)         => parens("unbox" <+> toDoc(e))
     case New(handler)     => "new" <+> toDoc(handler)
   }
 
@@ -112,7 +112,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   //def toDoc(n: Name): Doc = n.toString
 
   def toDoc(s: symbols.Symbol): Doc = {
-    builtins.coreBuiltinSymbolToString(s).getOrElse(s.name.name)
+    builtins.coreBuiltinSymbolToString(s).getOrElse(s.name.name + "$" + s.id)
   }
 
   def toDoc(e: Expr): Doc = e match {
@@ -268,7 +268,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       val d = default.map { body => space <> "else" <+> braces(nest(line <> toDocStmts(body))) }.getOrElse { emptyDoc }
       toDoc(sc) <+> "match" <> brackets(toDoc(tpe)) <+> cs <> d
 
-    case Hole(span) =>
+    case Hole(tpe, span) =>
       val from = span.from
       val to = span.to
       val name = span.source.name
@@ -277,7 +277,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
         case _: kiama.util.StringSource => "string"
         case _                          => "source"
       }
-      "<>" <+> s"@ \"$scheme://$name\":$from:$to"
+      "<>" <> ":" <+> toDoc(tpe) <+> s"@ \"$scheme://$name\":$from:$to"
   }
 
   def toDoc(tpe: core.BlockType): Doc = tpe match {

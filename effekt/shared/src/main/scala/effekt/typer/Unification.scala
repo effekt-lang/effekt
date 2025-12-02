@@ -148,21 +148,6 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator, ErrorReport
 
   def requireSubregion(c1: Captures, c2: Captures, ctx: ErrorContext): Unit = requireSubregionWithout(c1, c2, Set.empty, ctx)
 
-  /**
-   * Computes the join of all types, only called to merge the different arms of if and match
-   */
-  def join(expected: Option[ValueType], tpesAndTerms: List[(ValueType, Option[source.Tree])]): ValueType =
-    val tpes = tpesAndTerms.map(_._1)
-    val result = tpes match {
-      case Nil => expected.getOrElse(TBottom) // TODO actually this type is arbitrary, not bottom!
-      case first :: rest => rest.foldLeft[ValueType](first) { (t1, t2) =>
-        mergeValueTypes(t1, t2, ErrorContext.MergeTypes(unification(t1), unification(t2)))
-      }
-    }
-    // check again to insert coercions
-    //tpesAndTerms.foreach { case (tpe, term) => requireSubtype(result, tpe, ErrorContext.Expected(tpe, result, term.getOrElse(focus), term)) }
-    result
-
   def requireSubregionWithout(lower: Captures, upper: Captures, filter: List[Capture])(using C: Context): Unit =
     requireSubregionWithout(lower, upper, filter.toSet, ErrorContext.CaptureFlow(lower, upper, C.focus))
 

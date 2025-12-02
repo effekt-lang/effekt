@@ -93,7 +93,7 @@ object BindSubexpressions {
     case Stmt.Reset(body) => Stmt.Reset(transform(body))
     case Stmt.Shift(prompt, body) => Stmt.Shift(transform(prompt), transform(body))
     case Stmt.Resume(k, body) => Stmt.Resume(transform(k), transform(body))
-    case Stmt.Hole(span) => Stmt.Hole(span)
+    case Stmt.Hole(tpe, span) => Stmt.Hole(transform(tpe), span)
   }
 
   def transform(b: Block)(using Env): Bind[Block] = b match {

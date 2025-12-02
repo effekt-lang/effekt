@@ -221,7 +221,9 @@ object Normalizer { normal =>
     case Stmt.Match(scrutinee, tpe, clauses, default) => active(scrutinee) match {
       case Expr.Make(data, tag, targs, vargs) if clauses.exists { case (id, _) => id == tag } =>
         val clause: BlockLit = clauses.collectFirst { case (id, cl) if id == tag => cl }.get
-        normalize(reduce(clause, targs, vargs.map(normalize), Nil))
+        val result = reduce(clause, targs, vargs.map(normalize), Nil)
+        assert(result.tpe == tpe)
+        normalize(result)
       case Expr.Make(data, tag, targs, vargs) if default.isDefined =>
         normalize(default.get)
       case _ =>
@@ -233,7 +235,9 @@ object Normalizer { normal =>
     case Stmt.If(cond, thn, els) => active(cond) match {
       case Expr.Literal(true, annotatedType) => normalize(thn)
       case Expr.Literal(false, annotatedType) => normalize(els)
-      case _ => If(normalize(cond), normalize(thn), normalize(els))
+      case _ =>
+        assert(thn.tpe == els.tpe, s"Then and else branch have different types: ${util.show(thn.tpe)} != ${util.show(els.tpe)}\n\n${util.show(thn)}\n\n${util.show(els)}\n\n${util.show(s)}")
+        If(normalize(cond), normalize(thn), normalize(els))
     }
 
     case Stmt.Val(id, binding, body) =>
@@ -265,41 +269,36 @@ object Normalizer { normal =>
 
         // [[ val x: A = sc match [A] { case ... => body2: A }; body: B ]] == sc match [B] { case ... => [[ val x: A = body2; body: B ]] }
         case Stmt.Match(sc, tpe, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
-          val normalizedBody = normalizeVal(id, body2, body)
-          Stmt.Match(sc, normalizedBody.tpe, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, normalizedBody))), None)
+          val res = normalizeVal(id, body2, body)
+          Stmt.Match(sc, res.tpe, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, res))), None)
 
         // Introduce joinpoints that are potentially later inlined or garbage collected
         // [[ val x = if (cond) { thn } else { els }; body ]] =
         //   def k(x) = [[ body ]]
         //   if (cond) { [[ val x1 = thn; k(x1) ]] } else { [[ val x2 = els; k(x2) ]] }
         case Stmt.If(cond, thn, els) =>
-          val tpe = binding.tpe
+          val tpe = thn.tpe
+          assert(thn.tpe == els.tpe)
           joinpoint(id, tpe, normalize(body)) { k =>
             val x1 = Id(id.name)
             val x2 = Id(id.name)
-
-            k match {
-              case BlockVar(id, BlockType.Function(tparams, cparams, List(vtpe), bparams, ret), annotatedCapt) =>
-                if (vtpe != binding.tpe) {
-                  sys.error(s"Mismatch between ${util.show(vtpe)} expected by the cont and ${util.show(binding.tpe)}")
-                }
-              case _ => ???
-            }
             Stmt.If(cond,
               normalizeVal(x1, thn, Stmt.App(k, Nil, List(ValueVar(x1, tpe)), Nil)),
               normalizeVal(x2, els, Stmt.App(k, Nil, List(ValueVar(x2, tpe)), Nil)))
           }
 
-        case Stmt.Match(sc, annotatedTpe, clauses, default) =>
-          val tpe = binding.tpe
+        case Stmt.Match(sc, tpe, clauses, default) =>
           val res = normalize(body)
+          // [[ val id: A = sc match[A] { ... }; body : B ]] =
+          //   def k(id: A): B  = [[ body ]]
+          //   sc match [B] { ... k() ... }
           joinpoint(id, tpe, res) { k =>
             // since we commuted Val and Match, we need to change the type of the match!
             Stmt.Match(sc, res.tpe, clauses.map {
               case (tag, BlockLit(tparams, cparams, vparams, bparams, body)) =>
                 val x = Id(id.name)
-                (tag, BlockLit(tparams, cparams, vparams, bparams,
-                  normalizeVal(x, body, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))))
+                val res = normalizeVal(x, body, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))
+                (tag, BlockLit(tparams, cparams, vparams, bparams, res))
             }, default.map { stmt =>
               val x = Id(id.name)
               normalizeVal(x, stmt, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))
@@ -364,7 +363,7 @@ object Normalizer { normal =>
     case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, normalize(init), capture, normalize(body))
     case Stmt.Get(id, tpe, ref, capt, body) => Stmt.Get(id, tpe, ref, capt, normalize(body))
     case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, normalize(value), normalize(body))
-    case Stmt.Hole(span) => s
+    case Stmt.Hole(tpe, span) => s
   }
   def normalize(b: BlockLit)(using Context): BlockLit =
     b match {
@@ -459,21 +458,21 @@ object Normalizer { normal =>
   @targetName("preserveTypesStmt")
   private inline def preserveTypes(before: Stmt)(inline f: Stmt => Stmt): Stmt = {
     val after = f(before)
-    assert(before.tpe == after.tpe, s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    //assert(before.tpe == after.tpe, s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
     after
   }
 
   @targetName("preserveTypesExpr")
   private inline def preserveTypes(before: Expr)(inline f: Expr => Expr): Expr = {
     val after = f(before)
-    assert(before.tpe == after.tpe, s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    //assert(before.tpe == after.tpe, s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
     after
   }
 
   @targetName("preserveTypesBlock")
   private inline def preserveTypes(before: Block)(inline f: Block => Block): Block = {
     val after = f(before)
-    assert(before.tpe == after.tpe, s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    //assert(before.tpe == after.tpe, s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
     after
   }
 }

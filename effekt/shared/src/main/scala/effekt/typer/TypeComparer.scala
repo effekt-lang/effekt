@@ -67,8 +67,8 @@ trait TypeUnifier {
     case (s: ValueType, ValueTypeRef(t: UnificationVar), Invariant, _) => requireEqual(t, s, ctx)
 
     // coercing is the last resort...
-    case (from, TUnit, Covariant, Some(coerce)) => coerce(Coercion.ToUnit(from))
     case (TBottom, to, Covariant, Some(coerce)) => coerce(Coercion.FromNothing(to))
+    case (from, TUnit, Covariant, Some(coerce)) => coerce(Coercion.ToUnit(from))
 
     // For now, we treat all type constructors as invariant.
     case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _, _) =>

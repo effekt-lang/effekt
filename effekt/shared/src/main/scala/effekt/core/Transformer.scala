@@ -453,7 +453,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Context.bind(Region(BlockLit(Nil, List(region.capture), Nil, List(cap), transform(body))))
 
     case source.Hole(id, stmts, span) =>
-      Context.bind(core.Hole(span))
+      Context.bind(core.Hole(transform(Context.inferredTypeOf(tree)), span))
 
     case a @ source.Assign(id, expr, _) =>
       val sym = a.definition
