@@ -431,8 +431,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case source.TryHandle(prog, handlers, _) =>
 
-      val transformedProg = transform(prog)
-
       val answerType = transform(Context.inferredTypeOf(prog))
 
       // create a fresh prompt, a variable referring to it, and a parameter binding it
