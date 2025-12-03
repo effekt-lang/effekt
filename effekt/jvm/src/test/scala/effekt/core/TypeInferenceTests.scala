@@ -107,11 +107,11 @@ class TypeInferenceTests extends CoreTests {
     assertEquals(typecheck(input1),
       Typing(TInt, Set.empty, Free.empty))
 
-    val input2 = Stmt.Val(x,
-      Stmt.Return(Expr.Literal(true, TBoolean)),
-      Stmt.Return(Expr.ValueVar(x, TInt)))
-
-    intercept[TypeError] { typecheck(input2) }
+    intercept[TypeError] {
+      val input2 = Stmt.Val(x,
+        Stmt.Return(Expr.Literal(true, TBoolean)),
+        Stmt.Return(Expr.ValueVar(x, TInt)))
+    }
 
     // we can even type check open terms:
     assertEquals(typecheck(Stmt.Return(Expr.ValueVar(x, TInt))),

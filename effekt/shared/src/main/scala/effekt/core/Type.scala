@@ -240,8 +240,6 @@ object Type {
     }
   }
 
-  // TODO the dependency on ErrorReporter is due to the declaration context, which is annoying.
-  //   we could get rid of this by annotating constructors (and potentially patterns?)
   def typecheck(expr: Expr): Typing[ValueType] = expr match {
     case Expr.ValueVar(id, annotatedType) => Typing(annotatedType, Set.empty, Free.value(id, annotatedType))
     case Expr.Literal(value, annotatedType) => Typing(annotatedType, Set.empty, Free.empty)
@@ -298,6 +296,8 @@ object Type {
   def typecheck(blocklit: BlockLit): Typing[BlockType.Function] = ???
 
   def typecheck(impl: Implementation): Typing[BlockType.Interface] = ???
+
+  def typecheck(impl: Operation): Typing[BlockType.Function] = ???
 
   def valuesShouldEqual(tpes1: List[ValueType], tpes2: List[ValueType]): Unit =
     if tpes1.size != tpes2.size then typeError(s"Different number of types: ${tpes1} vs. ${tpes2}")

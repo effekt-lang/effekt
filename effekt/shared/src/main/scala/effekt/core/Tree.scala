@@ -319,7 +319,9 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
  * TODO drop resume here since it is not needed anymore...
  */
 case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) {
-  val capt = body.capt -- cparams.toSet
+  val typing: Typing[BlockType.Function] = ???
+  val tpe: BlockType.Function = typing.tpe
+  val capt: Captures = typing.capt
 }
 
 /**
