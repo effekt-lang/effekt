@@ -238,7 +238,7 @@ class PrettyPrinter(printDetails: Boolean) extends ParenPrettyPrinter {
       toDoc(b) <> argsToDoc(targs, vargs, bargs)
 
     case Invoke(b, method, methodTpe, targs, vargs, bargs) =>
-      val pTpe = if printDetails then toDoc(methodTpe) else ":" <+> emptyDoc
+      val pTpe = if printDetails then ":" <+> toDoc(methodTpe) else emptyDoc
       toDoc(b) <> "." <> toDoc(method) <> pTpe <> argsToDoc(targs, vargs, bargs)
 
     case If(cond, thn, els) =>
