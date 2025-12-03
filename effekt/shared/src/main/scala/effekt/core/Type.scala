@@ -329,6 +329,7 @@ object Type {
   case class Result[T](result: T, capt: Captures, free: Free)
 
   // TODO the dependency on ErrorReporter is due to the declaration context, which is annoying.
+  //   we could get rid of this by annotating constructors (and potentially patterns?)
   def typecheck(expr: Expr)(using D: DeclarationContext, E: ErrorReporter): Result[ValueType] = expr match {
     case Expr.ValueVar(id, annotatedType) => Result(annotatedType, Set.empty, Free.value(id, annotatedType))
     case Expr.Literal(value, annotatedType) => Result(annotatedType, Set.empty, Free.empty)
@@ -336,7 +337,7 @@ object Type {
        val BlockType.Function(tparams, cparams, vparams, bparams, result) = instantiate(callee.functionType, targs, Nil)
        if bparams.nonEmpty then typeError("Pure apps cannot have block params")
        val Result(argTypes, _, argFrees) = all(vargs, e => typecheck(e))
-       if !all(vparams, argTypes, equals) then typeError("Type mismatch between arguments and parameters")
+       valuesShouldEqual(vparams, argTypes)
        Result(result, Set.empty, argFrees ++ Free.block(callee.id, callee.annotatedTpe, callee.annotatedCapt))
 
     // targs here are the existential type arguments
@@ -358,11 +359,21 @@ object Type {
       // TODO factor out callLike things
       shouldEqual(data, retType)
       val Result(argTypes, argCapt, argFree) = all(vargs, typecheck)
-      if !all(paramTypes, argTypes, equals) then typeError("Type mismatch between arguments and parameters")
+      valuesShouldEqual(paramTypes, argTypes)
       Result(retType, argCapt, argFree)
 
-    case Expr.Box(b, annotatedCapture) => ???
+    case Expr.Box(b, annotatedCapture) =>
+      val Result(bTpe, bCapt, bFree) = typecheck(b)
+      // Here we actually allow "subcapturing"
+      if !bCapt.subsetOf(annotatedCapture) then typeError(s"Inferred capture ${bCapt} is not allowed by annotation: ${annotatedCapture}")
+      Result(ValueType.Boxed(bTpe, annotatedCapture), Set.empty, bFree)
   }
+
+  def typecheck(block: Block)(using DeclarationContext, ErrorReporter): Result[BlockType] = ???
+
+  def valuesShouldEqual(tpes1: List[ValueType], tpes2: List[ValueType]): Unit =
+    if tpes1.size != tpes2.size then typeError(s"Different number of types: ${tpes1} vs. ${tpes2}")
+    tpes1.zip(tpes2).foreach(shouldEqual)
 
   def shouldEqual(tpe1: ValueType, tpe2: ValueType): Unit =
     if !Type.equals(tpe1, tpe2) then typeError(s"Type mismatch: ${util.show(tpe1)} vs ${util.show(tpe2)}")
@@ -387,7 +398,13 @@ object Type {
 
     case Stmt.App(callee, targs, vargs, bargs) => ???
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
-    case Stmt.If(cond, thn, els) => ???
+    case Stmt.If(cond, thn, els) =>
+      val Result(condTpe, condCapt, condFree) = typecheck(cond)
+      val Result(thnTpe, thnCapt, thnFree) = typecheck(thn)
+      val Result(elsTpe, elsCapt, elsFree) = typecheck(els)
+      shouldEqual(condTpe, TBoolean)
+      shouldEqual(thnTpe, elsTpe)
+      Result(thnTpe, condCapt ++ thnCapt ++ elsCapt, condFree ++ thnFree ++ elsFree)
     case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => ???
     case Stmt.Region(body) => ???
     case Stmt.Alloc(id, init, region, body) => ???
@@ -397,6 +414,6 @@ object Type {
     case Stmt.Reset(body) => ???
     case Stmt.Shift(prompt, body) => ???
     case Stmt.Resume(k, body) => ???
-    case Stmt.Hole(annotatedTpe, span) => ???
+    case Stmt.Hole(annotatedTpe, span) => Result(annotatedTpe, Set.empty, Free.empty)
   }
 }
