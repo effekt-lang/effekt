@@ -68,7 +68,6 @@ def readWhile[A] { predicate: A => Bool }: Unit / { Scan[A], emit[A] } =
 def skipWhile[A] { predicate: A => Bool }: Unit / { Scan[A] } =
   for[A] { readWhile{predicate} } { _ => () }
 
-
 /// Read the next character if it is the given one.
 def readIf(e: Char): Unit / { Scan[Char], stop } = {
   readIf[Char] { c => c == e }; ()
@@ -77,6 +76,18 @@ def readIf(e: Char): Unit / { Scan[Char], stop } = {
 /// Check that the next token satisfies the predicate and skip it when it does.
 def skipIf(e: Char): Unit / { Scan[Char], stop } =
   skipIf { c => c == e }
+
+/// Read values produced by `action` followed by `separator` until one of them stops.
+def separating[A] { seperator: () => Unit / stop } { action: () => A / stop }: Unit / emit[A] =
+  exhaustively {
+    do emit(action())
+    seperator()
+  }
+
+/// Read a sequence separated by `separator`.
+def separating[A](seperator: Char) { action: () => A / stop }: Unit / { Scan[Char], emit[A] } =
+  separating { skipIf(seperator) } {action}
+
 
 /// Skip until the next character is not a whitespace character
 def skipWhitespace(): Unit / { Scan[Char] } =
