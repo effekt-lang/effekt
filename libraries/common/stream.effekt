@@ -158,7 +158,7 @@ def product { stream: () => Unit / emit[Int] }: Int =
 
 /// Count the number of emitted values that satisfy the given predicate.
 ///
-/// Example:
+/// Examples:
 /// ```
 /// > countIf[Int] { x => x > 0 } { [2, -1, 0, 1, -2].each }
 /// 2
@@ -217,9 +217,9 @@ namespace internal {
 
 /// Use cons to handle prod, but also emit to the outside.
 /// The outside controls iteration, i.e., if cons aborts, the rest of prod will still be emitted.
-/// 
+///
 /// Starts by executing cons. Will stop cons during execution if the outside stops consuming.
-/// 
+///
 /// Example, printing all values consumed by the outside:
 ///
 ///     with teeing{ {s} => for{s}{ e => println(e) } }
@@ -255,9 +255,9 @@ def teeing[A]{ cons: { => Unit / emit[A] } => Unit }{ prod: => Unit / emit[A] }:
 }
 
 /// Binds a `teeing`-like function in the body, stopping the inner producer once all consumers in tees are done consuming.
-/// 
+///
 /// Example of use, equivalent to `tee[A]{cns1}{cns2}{prd}`:
-/// 
+///
 ///     manyTee[A] { {tee} =>
 ///       with tee{cns1}
 ///       with tee{cns2}
