@@ -246,7 +246,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
                 case (id, clause: Block.BlockLit) =>
                   val constructor = constructors.find(_.id == id).get
                   val casetpe: BlockType.Function = BlockType.Function(tparams, List(),
-                    constructor.fields.map(_.tpe), List(), Type.inferType(clause.body)
+                    constructor.fields.map(_.tpe), List(), clause.body.tpe
                   )
                   (id, coerce(transform(clause), Type.instantiate(casetpe, targs map transformArg, List())))
               }, default map transform)

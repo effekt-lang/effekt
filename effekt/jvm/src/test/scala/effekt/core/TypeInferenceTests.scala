@@ -105,7 +105,7 @@ class TypeInferenceTests extends CoreTests {
       Stmt.Return(Expr.ValueVar(x, TInt)))
 
     assertEquals(typecheck(input1),
-      Result(TInt, Set.empty, Free.empty))
+      Typing(TInt, Set.empty, Free.empty))
 
     val input2 = Stmt.Val(x,
       Stmt.Return(Expr.Literal(true, TBoolean)),
@@ -115,7 +115,7 @@ class TypeInferenceTests extends CoreTests {
 
     // we can even type check open terms:
     assertEquals(typecheck(Stmt.Return(Expr.ValueVar(x, TInt))),
-      Result(TInt, Set.empty, Free(Map(x -> TInt), Map.empty)))
+      Typing(TInt, Set.empty, Free(Map(x -> TInt), Map.empty)))
 
     val add: Block.BlockVar = Block.BlockVar(infixAdd, BlockType.Function(Nil, Nil, List(TInt, TInt), Nil, TInt), Set.empty)
 
@@ -124,7 +124,7 @@ class TypeInferenceTests extends CoreTests {
       Stmt.Return(Expr.PureApp(add, Nil, Expr.ValueVar(x, TInt) :: Expr.ValueVar(x, TInt) :: Nil)))
 
     assertEquals(typecheck(input3),
-      Result(TInt, Set.empty, Free.block(add.id, add.annotatedTpe, add.annotatedCapt)))
+      Typing(TInt, Set.empty, Free.block(add.id, add.annotatedTpe, add.annotatedCapt)))
 
     // [A](Option[A], A): A
     val orElse: Block.BlockVar = Block.BlockVar(f, BlockType.Function(A :: Nil, Nil, List(OptionT(ValueType.Var(A)), ValueType.Var(A)), Nil, ValueType.Var(A)), Set.empty)
@@ -149,6 +149,6 @@ class TypeInferenceTests extends CoreTests {
   }
 
   inline def shouldTypeCheckAs(expected: ValueType, expr: Expr)(using DeclarationContext): Unit =
-    val Result(tpe, _, _) = typecheck(expr)
+    val Typing(tpe, _, _) = typecheck(expr)
     assertEquals(Type.equals(tpe, expected), true)
 }

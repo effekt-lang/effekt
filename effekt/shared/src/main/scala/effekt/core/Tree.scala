@@ -180,8 +180,9 @@ enum Expr extends Tree {
 
   case Box(b: Block, annotatedCapture: Captures)
 
-  val tpe: ValueType = Type.inferType(this)
-  val capt: Captures = Type.inferCapt(this)
+  val typing: Typing[ValueType] = Type.typecheck(this)
+  val tpe: ValueType = typing.tpe
+  val capt: Captures = typing.capt
 
   // This is to register custom type renderers in IntelliJ -- yes, it has to be a method!
   def show: String = util.show(this)
@@ -207,8 +208,9 @@ enum Block extends Tree {
   case Unbox(pure: Expr)
   case New(impl: Implementation)
 
-  val tpe: BlockType = Type.inferType(this)
-  val capt: Captures = Type.inferCapt(this)
+  val typing: Typing[BlockType] = Type.typecheck(this)
+  val tpe: BlockType = typing.tpe
+  val capt: Captures = typing.capt
 
   def show: String = util.show(this)
 }
@@ -292,8 +294,9 @@ enum Stmt extends Tree {
   // Others
   case Hole(annotatedTpe: ValueType, span: effekt.source.Span)
 
-  val tpe: ValueType = Type.inferType(this)
-  val capt: Captures = Type.inferCapt(this)
+  val typing: Typing[ValueType] = Type.typecheck(this)
+  val tpe: ValueType = typing.tpe
+  val capt: Captures = typing.capt
 
   def show: String = util.show(this)
 }
