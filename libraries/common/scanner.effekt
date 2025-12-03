@@ -24,6 +24,10 @@ def scanner[A] { scanner: () => Unit / Scan[A] }: Unit / read[A] =
 def expect(message: String) { scanner: () => Unit / stop }: Unit / Exception[WrongFormat] =
   returning::expect[Unit](message){scanner}
 
+def probe { scanner: () => Unit / stop }: Bool =
+  returning::probe[Unit]{scanner}.isDefined
+
+
 /// Check that the next token satisfies the predicate and skip and return it when it does.
 def readIf[A] { predicate: A => Bool }: A / { Scan[A], stop } = {
   val t = do peek()
@@ -48,11 +52,9 @@ def readSome[A, B] { convert: A => Option[B] }: B / { Scan[A], stop } =
     do stop()
   }
 
-/// like `readSome`, but for functions `A => B / Exception[WrongFormat]` such as `char::digitValue`
-def tryRead[A, B] { convert: A => B / Exception[WrongFormat] }: B / { Scan[A], stop } = {
-  with on[WrongFormat].default { do stop() }
-
-  val t = convert(do peek())
+/// like `readSome`, but for partial functions `A => B / fail` such as `char::digitValue`
+def tryRead[A, B] { convert: A => B / fail }: B / { Scan[A], stop } = {
+  val t = attempt { convert(do peek()) } { do stop() }
   do skip()
   return t
 }
@@ -67,7 +69,7 @@ def skipWhile[A] { predicate: A => Bool }: Unit / { Scan[A] } =
   for[A] { readWhile{predicate} } { _ => () }
 
 
-/// Read the next character if it is the given one and return true in this case.
+/// Read the next character if it is the given one.
 def readIf(e: Char): Unit / { Scan[Char], stop } = {
   readIf[Char] { c => c == e }; ()
 }
@@ -77,10 +79,10 @@ def skipIf(e: Char): Unit / { Scan[Char], stop } =
   skipIf { c => c == e }
 
 /// Skip until the next character is not a whitespace character
-def skipWhitespace(): Unit / Scan[Char] =
+def skipWhitespace(): Unit / { Scan[Char] } =
   skipWhile { c => c.isWhitespace }
 
-/// Read as many characters corresponding to the given string as possible.
+/// Read the characters of the given stringing otherwise.
 def readString(string: String): Unit / { Scan[Char], stop } =
   for[Char] { string.each } { char => readIf(char) }
 
@@ -101,7 +103,7 @@ def readDecimal(): Int / Scan[Char] = {
 def readHexDigit(): Int / { Scan[Char], stop } =
   tryRead[Char, Int]{ char => hexDigitValue(char) }
 
-/// Read a hexadecimal number.
+/// Read a hexadecimal number as long as possible.
 def readHexadecimal(): Int / Scan[Char] = {
   var result = 0
   for[Int] { many { readHexDigit() } } { digit =>
@@ -110,9 +112,9 @@ def readHexadecimal(): Int / Scan[Char] = {
   result
 }
 
-/// Read a decimal integer.
+/// Read a decimal integer as long as possible.
 def readInteger(): Int / Scan[Char] =
-  if (optionally { readIf('-') }) {
+  if (returning::probe { readIf('-') } is Some(())) {
     neg(readDecimal())
   } else {
     readDecimal()
@@ -151,7 +153,10 @@ def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
 }
 
 def expect[R](message: String) { scanner: () => R / stop }: R / Exception[WrongFormat] =
-  attempt { scanner() } { wrongFormat(message) }
+  try { scanner() } with stop { wrongFormat(message) }
+
+def probe[R] { scanner: () => R / stop }: Option[R] =
+  try { Some(scanner()) } with stop { None() }
 
 }
 

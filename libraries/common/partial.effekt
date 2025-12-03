@@ -1,0 +1,36 @@
+module partial
+
+import effekt
+import option
+
+
+effect fail(): Nothing
+
+def attempt[R] { program: () => R / fail } { fallback: () => R }: R =
+  try {
+    program()
+  } with fail {
+    fallback()
+  }
+
+def optionally[R] { program: () => R / fail }: Option[R] =
+  try {
+    Some(program())
+  } with fail {
+    None()
+  }
+
+/// Run `program` forever until `fail` is thrown.
+def successfully { program: () => Unit / fail }: Unit =
+  try {
+    def go(): Unit = {
+      program()
+      go()
+    }
+    go()
+  } with fail {
+    ()
+  }
+
+def panicking(message: String) { program: () => Unit / fail }: Unit =
+  attempt { program() } { panic(message) }
