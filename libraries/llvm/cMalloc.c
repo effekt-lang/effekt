@@ -17,6 +17,7 @@ typedef struct Slot
  */
 #define SENTINEL_SLOT ((Slot*)1)
 
+static bool DEBUG = true;
 static Slot* todoList = SENTINEL_SLOT; // Head of the To-Do-List
 
 static uint8_t* nextUnusedSlot = NULL; // Pointer to the next unused Slot
@@ -38,6 +39,11 @@ void initializeMemory() {
         -1,                            // No file descriptor
         0                              // Offset
     );
+
+    if (DEBUG) {
+        uint8_t* endOfChunk = nextUnusedSlot + totalAllocationSize;
+        printf("[init] Memory initialized: %p - %p\n", (void*)nextUnusedSlot, (void*)endOfChunk);
+    }
 }
 
 /**
@@ -56,12 +62,16 @@ void* acquire() {
         // Call the eraser function on it. After that, it is safe to reuse it again.
         reusedSlot->eraser(reusedSlot);
 
+        if (DEBUG) printf("[acquire] Reusing block: %p\n", (void*)reusedSlot);
+
         return reusedSlot;
     }
 
     // 2. Fallback - we bump-allocate a new slot
     Slot* fresh = (Slot*)nextUnusedSlot;
     nextUnusedSlot += slotSize;
+
+    if (DEBUG) printf("[acquire] New block: %p\n", (void*)fresh);
     return fresh;
 }
 
@@ -69,7 +79,11 @@ void* acquire() {
 /**
  * Pushes a slot on the top of the To-Do-List.
  */
-void release(void* ptr) {
+void pushOnFreeList(void* ptr) {
+    if (DEBUG) {
+        printf("[pushOnFreeList] Freed block: %p\n", ptr);
+    }
+
     Slot* slot = (Slot*)ptr;
     slot->next = todoList;
     todoList = slot;
