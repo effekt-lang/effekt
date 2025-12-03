@@ -23,7 +23,7 @@ jobs:
       version: ${{ steps.get_version.outputs.VERSION }}
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
         submodules: 'true'
@@ -77,7 +77,7 @@ jobs:
           private-key: ${{ secrets.EFFEKT_UPDATER_GH_CREDENTIALS_TOKEN }}
 
       - name: Checkout code with token
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           submodules: 'true'
           token: ${{ steps.app-token.outputs.token }}
