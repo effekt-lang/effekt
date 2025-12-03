@@ -9,7 +9,7 @@ import kiama.output.PrettyPrinterTypes.Document
 import scala.language.implicitConversions
 import effekt.symbols.{ Name, Wildcard, builtins }
 
-class PrettyPrinter(humanReadable: Boolean) extends ParenPrettyPrinter {
+class PrettyPrinter(printDetails: Boolean) extends ParenPrettyPrinter {
   override val defaultIndent = 2
 
   def format(t: ModuleDecl): Document =
@@ -54,9 +54,9 @@ class PrettyPrinter(humanReadable: Boolean) extends ParenPrettyPrinter {
     // The order of toplevel items must match the parser (where the order is currently fixed).
     val includes = vsep(m.includes.map { im => "import" <+> im })
     val decls = vsep(m.declarations.map(toDoc))
-    val externs = if humanReadable then emptyDoc else vsep(m.externs.map(toDoc))
+    val externs = if printDetails then vsep(m.externs.map(toDoc)) else emptyDoc
     val defs = toDoc(m.definitions)
-    val exports = if humanReadable then emptyDoc else vsep(m.exports.map { id => "export" <+> toDoc(id) })
+    val exports = if printDetails then vsep(m.exports.map { id => "export" <+> toDoc(id) }) else emptyDoc
 
     "module" <+> m.path <>
       emptyline <>
@@ -99,7 +99,7 @@ class PrettyPrinter(humanReadable: Boolean) extends ParenPrettyPrinter {
 
   def toDoc(b: Block, preventBraces: Boolean = false): Doc = b match {
     case BlockVar(id, tpe, capt) =>
-      toDoc(id) <> (if humanReadable then emptyDoc else ":" <+> toDoc(tpe) <+> "@" <+> toDoc(capt))
+      toDoc(id) <> (if printDetails then ":" <+> toDoc(tpe) <+> "@" <+> toDoc(capt) else emptyDoc)
     case BlockLit(tps, cps, vps, bps, body) =>
       val doc = space <> paramsToDoc(tps, cps, vps, bps) <+> "=>" <+> nest(line <> toDocStmts(body)) <> line
       if preventBraces then doc else braces { doc }
@@ -119,7 +119,7 @@ class PrettyPrinter(humanReadable: Boolean) extends ParenPrettyPrinter {
     // In reparsable mode, we just show the string part, which should be freshened by the TestRenamer before printing.
     // The TestRenamer does not rename the Barendregt id because that would violate the internal invariant of having
     // just a single global Barendregt namespace.
-    builtins.coreBuiltinSymbolToString(s).getOrElse(if humanReadable then s.show else s.name.name)
+    builtins.coreBuiltinSymbolToString(s).getOrElse(if printDetails then s.name.name else s.show)
   }
 
   def toDoc(e: Expr): Doc = e match {
@@ -128,13 +128,13 @@ class PrettyPrinter(humanReadable: Boolean) extends ParenPrettyPrinter {
     case Literal(n, Type.TChar) => s"'\\${n.toString}'"
     case Literal(s: String, _)  => stringLiteral(s)
     case Literal(value, _)      => value.toString
-    case ValueVar(id, tpe)         => toDoc(id) <> (if humanReadable then emptyDoc else ":" <+> toDoc(tpe))
-    case PureApp(b, targs, vargs)  => (if humanReadable then toDoc(b) else parens(toDoc(b))) <> argsToDoc(targs, vargs, Nil)
+    case ValueVar(id, tpe)         => toDoc(id) <> (if printDetails then ":" <+> toDoc(tpe) else emptyDoc)
+    case PureApp(b, targs, vargs)  => (if printDetails then parens(toDoc(b)) else toDoc(b)) <> argsToDoc(targs, vargs, Nil)
     case Make(data, tag, targs, vargs)    =>
-      if humanReadable then
-        "make" <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
-      else
+      if printDetails then
         "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
+      else
+        "make" <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
     case Box(b, capt) => "box" <+> toDoc(capt) <+> toDoc(b)
   }
 
@@ -241,7 +241,7 @@ class PrettyPrinter(humanReadable: Boolean) extends ParenPrettyPrinter {
       toDoc(b) <> argsToDoc(targs, vargs, bargs)
 
     case Invoke(b, method, methodTpe, targs, vargs, bargs) =>
-      val pTpe = if humanReadable then emptyDoc else ":" <+> toDoc(methodTpe)
+      val pTpe = if printDetails then ":" <+> toDoc(methodTpe) else emptyDoc
       toDoc(b) <> "." <> toDoc(method) <> pTpe <> argsToDoc(targs, vargs, bargs)
 
     case If(cond, thn, els) =>
@@ -356,10 +356,12 @@ class PrettyPrinter(humanReadable: Boolean) extends ParenPrettyPrinter {
 
 /**
  * Instance of PrettyPrinter that produces output that can be parsed back by the core parser.
+ * This corresponds to the `--detailed-ir` command line flag.
  */
-object ReparsablePrettyPrinter extends PrettyPrinter(false) {}
+object ReparsablePrettyPrinter extends PrettyPrinter(true) {}
 
 /**
  * Instance of PrettyPrinter that produces less verbose, more human-readable output.
+ * This is the default behavior for the `--ir-write-all` and `--ir-show` command line flags.
  */
-object HumanReadablePrettyPrinter extends PrettyPrinter(true) {}
+object HumanReadablePrettyPrinter extends PrettyPrinter(false) {}

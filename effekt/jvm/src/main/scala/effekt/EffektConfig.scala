@@ -164,6 +164,15 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
     group = debugging
   )
 
+  val detailedIR: ScallopOption[Boolean] = toggle(
+    "detailed-ir",
+    descrYes = "Print detailed IR with all annotations",
+    default = Some(false),
+    noshort = true,
+    prefix = "no-",
+    group = debugging
+  )
+
   val showDocumentation: ScallopOption[Boolean] = toggle(
     "show-documentation",
     descrYes = "Show all documented statements as a JSON",
@@ -262,6 +271,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
   def documenter(): Boolean = showDocumentation() || writeDocumentation()
 
   def timed(): Boolean = time.isSupplied && !server()
+
+  def printDetailedIR(): Boolean = detailedIR()
 
   validateFilesIsDirectory(includePath)
 
