@@ -956,7 +956,7 @@ def each[A](list: List[A]): Unit / emit[A] =
 /// ```
 def tails[A](list: List[A]): Unit / emit[List[A]] =
   list match {
-    case Nil() => ()
+    case Nil()            => do emit(Nil())
     case Cons(head, tail) => do emit(list); tails(tail)
   }
 
