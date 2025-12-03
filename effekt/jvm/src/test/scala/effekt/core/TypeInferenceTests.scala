@@ -2,6 +2,7 @@ package effekt
 package core
 
 import effekt.core.Type.*
+import effekt.util.messages.{ DebugMessaging, ErrorReporter }
 
 class TypeInferenceTests extends CoreTests {
 
@@ -9,6 +10,7 @@ class TypeInferenceTests extends CoreTests {
   val NoneC: Id    = Id("None")
   val OptionId: Id = Id("Option")
   val f: Id        = Id("f")
+  val value: Id    = Id("value")
   val g: Id        = Id("g")
   val x: Id        = Id("x")
   val y: Id        = Id("y")
@@ -21,13 +23,12 @@ class TypeInferenceTests extends CoreTests {
     core.ValueType.Data(OptionId, List(tpe))
 
   test("infer Make type") {
-    val intOptionTy = OptionT(TInt)
 
     // Some[Int](42)
-    val option = Make(intOptionTy, SomeC, List(), List(Literal(42, TInt)))
+    val option = Make(OptionT(TInt), SomeC, List(), List(Literal(42, TInt)))
 
     // Option[Int]
-    val expected = intOptionTy
+    val expected = OptionT(TInt)
 
     assertEquals(option.tpe, expected)
   }
@@ -93,7 +94,11 @@ class TypeInferenceTests extends CoreTests {
 
   test("typechecking") {
 
-    given DeclarationContext(Nil, Nil)
+    given DeclarationContext(List(
+      Declaration.Data(OptionId, A :: Nil,
+        Constructor(SomeC, Nil, Field(value, ValueType.Var(A)) :: Nil) ::
+        Constructor(NoneC, Nil, Nil) :: Nil)
+    ), Nil)
 
     val input1 = Stmt.Val(x,
       Stmt.Return(Expr.Literal(42, TInt)),
@@ -124,8 +129,7 @@ class TypeInferenceTests extends CoreTests {
     // [A](Option[A], A): A
     val orElse: Block.BlockVar = Block.BlockVar(f, BlockType.Function(A :: Nil, Nil, List(OptionT(ValueType.Var(A)), ValueType.Var(A)), Nil, ValueType.Var(A)), Set.empty)
 
-    val Result(tpe, _, _) = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(y, TInt) :: Nil))
-    assertEquals(Type.equals(tpe, TInt), true)
+    shouldTypeCheckAs(TInt, Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(y, TInt) :: Nil))
 
     // swapped arguments
     intercept[TypeError] {
@@ -139,5 +143,12 @@ class TypeInferenceTests extends CoreTests {
     intercept[TypeError] {
       typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(x, TInt) :: Nil))
     }
+
+    shouldTypeCheckAs(OptionT(TInt), Make(OptionT(TInt), SomeC, List(), List(Literal(42, TInt))))
+    shouldTypeCheckAs(OptionT(TInt), Make(OptionT(TInt), NoneC, List(), List()))
   }
+
+  inline def shouldTypeCheckAs(expected: ValueType, expr: Expr)(using DeclarationContext): Unit =
+    val Result(tpe, _, _) = typecheck(expr)
+    assertEquals(Type.equals(tpe, expected), true)
 }

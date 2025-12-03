@@ -2,6 +2,7 @@ package effekt
 package core
 
 import symbols.{ Symbol, builtins }
+import effekt.util.messages.ErrorReporter
 
 /**
  * In core, all names, including those in capture sets are just symbols.
@@ -327,7 +328,8 @@ object Type {
 
   case class Result[T](result: T, capt: Captures, free: Free)
 
-  def typecheck(expr: Expr)(using DeclarationContext): Result[ValueType] = expr match {
+  // TODO the dependency on ErrorReporter is due to the declaration context, which is annoying.
+  def typecheck(expr: Expr)(using D: DeclarationContext, E: ErrorReporter): Result[ValueType] = expr match {
     case Expr.ValueVar(id, annotatedType) => Result(annotatedType, Set.empty, Free.value(id, annotatedType))
     case Expr.Literal(value, annotatedType) => Result(annotatedType, Set.empty, Free.empty)
     case Expr.PureApp(callee, targs, vargs) =>
@@ -338,9 +340,33 @@ object Type {
        Result(result, Set.empty, argFrees ++ Free.block(callee.id, callee.annotatedTpe, callee.annotatedCapt))
 
     // targs here are the existential type arguments
-    case Expr.Make(data, tag, targs, vargs) => ???
+    // Make Coalg[Bool].State[Int](0, box { n => n + 1 }, box { n => n > 0 })
+    case Expr.Make(data, tag, targs, vargs) =>
+      // type Coalg[T] { case State[S](state: S, next: S => S at {}, get: S => T at {}) }
+      val decl = D.getData(data.name)
+      // case State[S](state: S, next: S => S at {}, get: S => T at {})
+      val ctor = D.getConstructor(tag)
+      // [T]
+      val universalParams = decl.tparams
+      // [S]
+      val existentialParams = ctor.tparams
+      // [T, S](S, S => S at {}, S => T at {}) => Coalg[T]
+      val sig: BlockType.Function = BlockType.Function(universalParams ++ existentialParams, Nil, ctor.fields.map(_.tpe), Nil,
+        ValueType.Data(data.name, universalParams.map(ValueType.Var.apply)))
+      // (Int, Int => Int at {}, Int => Bool at {}) => Coalg[Bool]
+      val BlockType.Function(_, _, paramTypes, _, retType) = instantiate(sig, data.targs ++ targs, Nil)
+      // TODO factor out callLike things
+      shouldEqual(data, retType)
+      val Result(argTypes, argCapt, argFree) = all(vargs, typecheck)
+      if !all(paramTypes, argTypes, equals) then typeError("Type mismatch between arguments and parameters")
+      Result(retType, argCapt, argFree)
+
     case Expr.Box(b, annotatedCapture) => ???
   }
+
+  def shouldEqual(tpe1: ValueType, tpe2: ValueType): Unit =
+    if !Type.equals(tpe1, tpe2) then typeError(s"Type mismatch: ${util.show(tpe1)} vs ${util.show(tpe2)}")
+
   def all[T, R](terms: List[T], check: T => Result[R]): Result[List[R]] =
     terms.foldRight(Result[List[R]](Nil, Set.empty, Free.empty)) {
       case (term, Result(tpes, capts, frees)) =>
@@ -348,7 +374,7 @@ object Type {
         Result(tpe :: tpes, capts ++ capt, frees ++ free)
     }
 
-  def typecheck(stmt: Stmt)(using DeclarationContext): Result[ValueType] = stmt match {
+  def typecheck(stmt: Stmt)(using DeclarationContext, ErrorReporter): Result[ValueType] = stmt match {
     case Stmt.Def(id, block, body) => ???
     case Stmt.Let(id, binding, body) => ???
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
