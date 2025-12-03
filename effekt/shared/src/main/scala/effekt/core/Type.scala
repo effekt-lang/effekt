@@ -444,13 +444,21 @@ object Type {
 
     case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => ???
 
-    case Stmt.Region(body) => ???
+    case Stmt.Region(body) =>
+      val Result(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = typecheck(body)
+      // TODO we should check that cparams do not occur in result!
+      Result(result, bodyCapt, bodyFree)
+
     case Stmt.Alloc(id, init, region, body) => ???
     case Stmt.Var(ref, init, capture, body) => ???
     case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => ???
     case Stmt.Put(ref, annotatedCapt, value, body) => ???
 
-    case Stmt.Reset(body) => ???
+    case Stmt.Reset(body) =>
+      val Result(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = typecheck(body)
+      // TODO we should check that cparams do not occur in result!
+      Result(result, bodyCapt, bodyFree)
+
     case Stmt.Shift(prompt, body) => ???
     case Stmt.Resume(k, body) => ???
 
@@ -459,7 +467,6 @@ object Type {
     case Stmt.App(callee, targs, vargs, bargs) => ???
 
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
-
 
     case Stmt.Hole(annotatedTpe, span) => Result(annotatedTpe, Set.empty, Free.empty)
   }
