@@ -11,10 +11,8 @@ typedef struct Slot
     void (*eraser)(void *object);
 } Slot;
 
-static bool DEBUG = true;
-static Slot* todoList = NULL; // Head of the To-Do-List
-
-static uint8_t* nextUnusedSlot = NULL; // Pointer to the next unused Slot
+static bool DEBUG = false;
+static Slot* freeList = NULL; // Head of the free-List
 
 static const int slotSize = 64; // The size of each chunk (128B)
 static const size_t totalAllocationSize = (size_t)4294967296ULL;    // How much storage do we allocate at the beginning of a program? =4GB
@@ -25,7 +23,7 @@ static const size_t totalAllocationSize = (size_t)4294967296ULL;    // How much 
 void initializeMemory() {
 
     // we allocate memory once from the os and use it for all effekt objects
-    nextUnusedSlot = (uint8_t*)mmap(
+    freeList = (Slot*)mmap(
         NULL,                          // Let the kernel pick the address
         totalAllocationSize,           // Size of region
         PROT_READ | PROT_WRITE,        // Access permissions
@@ -35,8 +33,8 @@ void initializeMemory() {
     );
 
     if (DEBUG) {
-        size_t* endOfChunk = nextUnusedSlot + totalAllocationSize;
-        printf("[init] Memory initialized: %p - %p\n", (void*)nextUnusedSlot, (void*)endOfChunk);
+        uint8_t* endOfChunk = (uint8_t*)freeList + totalAllocationSize;
+        printf("[init] Memory initialized: %p - %p\n", (void*)freeList, (void*)endOfChunk);
     }
 }
 
@@ -47,15 +45,11 @@ void initializeMemory() {
  */
 void* acquire() {
     // 1. If there a slot to reuse...
-    if (todoList != NULL) {
+    if (freeList->next != NULL) {
 
         // ...pop it from to-do-list
-        Slot* reusedSlot = todoList;
-        todoList = reusedSlot->next;
-
-        // Call the eraser function on it. After that, it is safe to reuse it again.
-//        reusedSlot->eraser(reusedSlot);
-
+        Slot* reusedSlot = freeList;
+        freeList = reusedSlot->next;
 
         if (DEBUG) printf("[acquire] Reusing block: %p\n", (void*)reusedSlot);
 
@@ -63,23 +57,27 @@ void* acquire() {
     }
 
     // 2. Fallback - we bump-allocate a new slot
-    Slot* fresh = (Slot*)nextUnusedSlot;
-    nextUnusedSlot += slotSize;
+    Slot* fresh = (Slot*)freeList;
+    Slot* next = (Slot*)((uint8_t*)fresh + slotSize);
+    freeList = next;
 
     if (DEBUG) printf("[acquire] New block: %p\n", (void*)fresh);
     return fresh;
 }
 
-
 /**
  * Pushes a slot on the top of the To-Do-List.
  */
-void release(void* ptr) {
+void pushOnFreeList(void* ptr) {
     if (DEBUG) {
-        printf("[release] Freed block: %p\n", ptr);
+        printf("[pushOnFreeList] Freed block: %p\n", ptr);
     }
 
     Slot* slot = (Slot*)ptr;
-    slot->next = todoList;
-    todoList = slot;
+    slot->next = freeList;
+    freeList = slot;
+}
+
+void test(void* ptr) {
+    printf("test: %p\n", ptr);
 }
