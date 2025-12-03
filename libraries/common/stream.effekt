@@ -129,6 +129,26 @@ def iterate[A](initial: A) { step: A => A }: Unit / emit[A] = {
   }
 }
 
+/// Re-emit from the `stream` as long as the `predicate` holds.
+/// Once the predicate fails, the stream ends.
+///
+/// Examples:
+/// ```effekt
+/// > list::collect[Int] { takeWhile[Int] { x => x < 3 } { [1, 2, 3, 4, 1].each } }
+/// [1, 2]
+///
+/// > list::collect[Int] { takeWhile[Int] { x => x < 10 } { [1, 2, 3].each } }
+/// [1, 2, 3]
+///
+/// > list::collect[Int] { takeWhile[Int] { x => x < 0 } { [1, 2, 3].each } }
+/// []
+/// ```
+def takeWhile[T] { predicate: T => Bool } { stream: () => Unit / emit[T] }: Unit / emit[T] =
+  try { stream() } with emit[T] {
+    case value and predicate(value) => do emit(value); resume(())
+    case _                          => () // end the stream
+  }
+
 
 def sum { stream: () => Unit / emit[Int] }: Int =
   returning::sum[Unit]{stream}.second
