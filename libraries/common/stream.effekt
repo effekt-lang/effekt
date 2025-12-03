@@ -2,7 +2,7 @@ module stream
 
 import effekt
 import option
-import exception
+import partial
 
 // Effects
 // -------
@@ -55,16 +55,6 @@ def some[A] { action: () => A / stop }: Unit / { emit[A], stop } = {
   do emit(action())
   many { action() }
 }
-
-def optionally { program: () => Unit / stop }: Bool =
-  returning::optionally[Unit]{program}.isDefined
-
-def attempt[R] { program: () => R / stop } { fallback: () => R }: R =
-  try {
-    program()
-  } with stop {
-    fallback()
-  }
 
 
 /// In Effekt lower bounds are inclusive and upper bounds are exclusive
@@ -365,13 +355,6 @@ def tap[A, R] { action: () => A / stop } { reader: () => R / read[A] }: R =
   }
 
 def boundary[R] { program: () => R / stop }: Option[R] =
-  try {
-    Some(program())
-  } with stop {
-    None()
-  }
-
-def optionally[R] { program: () => R / stop }: Option[R] =
   try {
     Some(program())
   } with stop {
