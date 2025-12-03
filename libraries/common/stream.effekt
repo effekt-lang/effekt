@@ -136,6 +136,25 @@ def sum { stream: () => Unit / emit[Int] }: Int =
 def product { stream: () => Unit / emit[Int] }: Int =
   returning::product[Unit]{stream}.second
 
+/// Count the number of emitted values that satisfy the given predicate.
+///
+/// Example:
+/// ```
+/// > countIf[Int] { x => x > 0 } { [2, -1, 0, 1, -2].each }
+/// 2
+///
+/// > countIf[Bool] { x => x } { [false, false, true, false].each }
+/// 1
+/// ```
+def countIf[T] { shouldCount: T => Bool } { stream: () => Unit / emit[T] }: Int = {
+  var count = 0
+  for {stream} {
+    case x and shouldCount(x) => count = count + 1
+    case _                    => ()
+  }
+  count
+}
+
 def source[A] { stream: () => Unit / emit[A] } { reader: () => Unit / read[A] }: Unit =
   returning::source[A, Unit]{stream}{reader}
 
