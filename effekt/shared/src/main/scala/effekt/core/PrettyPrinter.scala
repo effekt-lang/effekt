@@ -129,9 +129,12 @@ class PrettyPrinter(humanReadable: Boolean) extends ParenPrettyPrinter {
     case Literal(s: String, _)  => stringLiteral(s)
     case Literal(value, _)      => value.toString
     case ValueVar(id, tpe)         => toDoc(id) <> (if humanReadable then emptyDoc else ":" <+> toDoc(tpe))
-    case PureApp(b, targs, vargs)  => parens(toDoc(b)) <> argsToDoc(targs, vargs, Nil)
-    case Make(data, tag, targs, vargs)    => "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
-
+    case PureApp(b, targs, vargs)  => (if humanReadable then toDoc(b) else parens(toDoc(b))) <> argsToDoc(targs, vargs, Nil)
+    case Make(data, tag, targs, vargs)    =>
+      if humanReadable then
+        "make" <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
+      else
+        "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
     case Box(b, capt) => "box" <+> toDoc(capt) <+> toDoc(b)
   }
 
@@ -238,7 +241,8 @@ class PrettyPrinter(humanReadable: Boolean) extends ParenPrettyPrinter {
       toDoc(b) <> argsToDoc(targs, vargs, bargs)
 
     case Invoke(b, method, methodTpe, targs, vargs, bargs) =>
-      toDoc(b) <> "." <> toDoc(method) <> ":" <+> toDoc(methodTpe) <> argsToDoc(targs, vargs, bargs)
+      val pTpe = if humanReadable then emptyDoc else ":" <+> toDoc(methodTpe)
+      toDoc(b) <> "." <> toDoc(method) <> pTpe <> argsToDoc(targs, vargs, bargs)
 
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDocStmts(thn)) <+> "else" <+> block(toDocStmts(els))
@@ -358,9 +362,4 @@ object ReparsablePrettyPrinter extends PrettyPrinter(false) {}
 /**
  * Instance of PrettyPrinter that produces less verbose, more human-readable output.
  */
-object HumanReadablePrettyPrinter extends PrettyPrinter(true) {
-  def renameAndFormat(t: ModuleDecl): Document = {
-    val renamer = effekt.core.TestRenamer(Names(builtins.coreBuiltins))
-    format(renamer(t))
-  }
-}
+object HumanReadablePrettyPrinter extends PrettyPrinter(true) {}
