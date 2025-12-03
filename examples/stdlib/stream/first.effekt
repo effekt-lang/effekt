@@ -1,0 +1,24 @@
+def printResult[T](result: Result[T, MissingValue]) { printSuccess: T => Unit } = result match {
+  case Success(value) => printSuccess(value)
+  case Error(err, msg) => println("MissingValue: " ++ msg)
+}
+
+def main() = {
+  printResult(
+    on[MissingValue].result {
+      stream::first[Int] { [1, 2, 3].each }
+    }
+  ) { x => println(x) }
+
+  printResult(
+    on[MissingValue].result {
+      first[Bool] { do emit(true) }
+    }
+  ) { x => println(x) }
+
+  printResult(
+    on[MissingValue].result {
+      first[String] { () } // empty stream
+    }
+  ) { x => println(x) }
+}
