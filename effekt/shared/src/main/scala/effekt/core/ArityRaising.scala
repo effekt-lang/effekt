@@ -35,12 +35,11 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
         case ValueParam(paramId, tpe @ ValueType.Data(name, targs)) =>
           DC.findData(name) match {
             case Some(Data(_, List(), List(Constructor(ctor, List(), fields)))) =>
-              val flattened = fields.map { case Field(fieldName, fieldType) =>
+              val (allParams, nestedBindings) = fields.map { case Field(fieldName, fieldType) =>
                 val freshId = Id(fieldName.name)
                 flattenParam(ValueParam(freshId, fieldType))
-              }
+              }.unzip
               
-              val (allParams, nestedBindings) = flattened.unzip
               val flatParams = allParams.flatten
               val allBindings = nestedBindings.flatten
               
