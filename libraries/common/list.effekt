@@ -944,6 +944,22 @@ def each[A](list: List[A]): Unit / emit[A] =
       each(tail)
   }
 
+/// Push iterator that emits all the tails (suffixes) of the given `list`.
+///
+/// Examples:
+/// ```effekt
+/// > list::collect[List[Int]] { [1, 2, 3].tails }
+/// [[1, 2, 3], [2, 3], [3], []]
+///
+/// > list::collect[List[Int]] { [].tails }
+/// [[]]
+/// ```
+def tails[A](list: List[A]): Unit / emit[List[A]] =
+  list match {
+    case Nil() => ()
+    case Cons(head, tail) => do emit(list); tails(tail)
+  }
+
 def feed[T, R](list: List[T]) { reader: () => R / read[T] }: R = {
   var l = list
   try {
