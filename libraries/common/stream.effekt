@@ -143,8 +143,8 @@ def iterate[A](initial: A) { step: A => A }: Unit / emit[A] = {
 /// > list::collect[Int] { takeWhile[Int] { x => x < 0 } { [1, 2, 3].each } }
 /// []
 /// ```
-def takeWhile[T] { predicate: T => Bool } { stream: () => Unit / emit[T] }: Unit / emit[T] =
-  try { stream() } with emit[T] {
+def takeWhile[A] { predicate: A => Bool } { stream: () => Unit / emit[A] }: Unit / emit[A] =
+  try { stream() } with emit[A] {
     case value and predicate(value) => do emit(value); resume(())
     case _                          => () // end the stream
   }
@@ -212,7 +212,7 @@ def any[A] { cond: A => Bool } { stream: => Unit / emit[A] }: Bool =
 /// > countIf[Bool] { x => x } { [false, false, true, false].each }
 /// 1
 /// ```
-def countIf[T] { shouldCount: T => Bool } { stream: () => Unit / emit[T] }: Int = {
+def countIf[A] { shouldCount: A => Bool } { stream: () => Unit / emit[A] }: Int = {
   var count = 0
   for {stream} {
     case x and shouldCount(x) => count = count + 1
