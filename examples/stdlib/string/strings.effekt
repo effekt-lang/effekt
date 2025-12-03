@@ -9,10 +9,8 @@ def main() = {
     println(p().show)
   }
 
-  def intOrWrongFormat { p: => Int / Exception[WrongFormat] }: Unit = {
-    with on[WrongFormat].default { println("<WrongFormat>") }
-    println(p().show)
-  }
+  def intOrWrongFormat { p: => Int / fail }: Unit =
+    attempt { println(p().show) } { println("<WrongFormat>") }
 
   charOrOutOfBounds { str.charAt(0) }     // 104
   charOrOutOfBounds { str.charAt(10) }    // 100
