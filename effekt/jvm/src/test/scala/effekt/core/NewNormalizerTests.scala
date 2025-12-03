@@ -796,8 +796,7 @@ class NewNormalizerTests extends CoreTests {
         |extern def z at {}: Int = vm"0"
         |
         |def run(): Bool = {
-        |    val x = z()
-        |    x == x
+        |    z() == z()
         |}
         |
         |def main() = {
