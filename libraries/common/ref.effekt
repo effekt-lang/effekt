@@ -14,7 +14,7 @@ define void @c_ref_erase(%Object %object) {
   %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
   %environment = getelementptr i8, ptr %object, i64 %headerSize
   %field = load %Pos, ptr %environment, align 8
-  call void @release(%Object %object)
+  call void @free(%Object %object)
   call void @erasePositive(%Pos %field)
   ret void
 }
@@ -38,8 +38,7 @@ extern def allocate[T]() at global: Ref[T] =
   chez "(box #f)"
   llvm """
     ; sizeof Header + sizeof Pos = 32
-    %ref = tail call noalias ptr @acquire()
-
+    %ref = tail call noalias ptr @malloc(i64 noundef 32)
     %refEraser = getelementptr ptr, ptr %ref, i64 1
     %fieldTag = getelementptr ptr, ptr %ref, i64 2
     %fieldData_pointer = getelementptr ptr, ptr %ref, i64 3
@@ -47,7 +46,7 @@ extern def allocate[T]() at global: Ref[T] =
     store i64 0, ptr %ref, align 8
     store ptr @c_ref_erase, ptr %refEraser, align 8
     store i64 0, ptr %fieldTag, align 8
-    store ptr null, ptr %fieldData_pointer, align 8 
+    store ptr null, ptr %fieldData_pointer, align 8
 
     %refWrap = insertvalue %Pos { i64 0, ptr poison }, ptr %ref, 1
     ret %Pos %refWrap
@@ -61,7 +60,7 @@ extern def ref[T](init: T) at global: Ref[T] =
     %initTag = extractvalue %Pos ${init}, 0
     %initObject_pointer = extractvalue %Pos ${init}, 1
     ; sizeof Header + sizeof Pos = 32
-    %ref = tail call noalias ptr @acquire()
+    %ref = tail call noalias ptr @malloc(i64 noundef 32)
     %refEraser = getelementptr ptr, ptr %ref, i64 1
     %refField = getelementptr ptr, ptr %ref, i64 2
 
