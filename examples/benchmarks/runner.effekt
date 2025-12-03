@@ -1,13 +1,13 @@
 import args
 import bench
 
-def benchmark(testSize: Int) { run: Int => Int } = commandLineArgs() match {
+def benchmark(testSize: Int) { run: Int => Int }: Unit = commandLineArgs() match {
   // test mode
   case Nil() => println(run(testSize))
 
   // bench mode
   case Cons(problemSize, _) =>
-    with on[WrongFormat].panic;
+    with panicking("input size is not an integer")
 
     val n = problemSize.toInt
 
