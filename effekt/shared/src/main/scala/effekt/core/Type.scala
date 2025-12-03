@@ -298,13 +298,21 @@ object Type {
       if !Free.blocksCompatible(blocks, other.blocks) then typeError("incompatible free variables")
       Free(values ++ other.values, blocks ++ other.blocks)
 
-    def withoutValue(id: Id): Free = Free(values - id, blocks)
-
-    def compatibleValue(id: Id, tpe: ValueType): Unit =
+    def withoutValue(id: Id, tpe: ValueType): Free =
       values.get(id).foreach { otherTpe =>
         if !Type.equals(tpe, otherTpe) then
           typeError(s"free variable ${id} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
       }
+      Free(values - id, blocks)
+
+    def withoutBlock(id: Id, tpe: BlockType, capt: Captures): Free =
+      blocks.get(id).foreach { case (otherTpe, otherCapt) =>
+        if !Type.equals(tpe, otherTpe) then
+          typeError(s"free variable ${id} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
+        if !otherCapt.subsetOf(capt) then
+          typeError(s"free variable assume a wrong capture set (${util.show(capt)} vs. ${util.show(otherCapt)})")
+      }
+      Free(values, blocks - id)
 
     def isEmpty: Boolean = values.isEmpty && blocks.isEmpty
   }
@@ -386,18 +394,31 @@ object Type {
     }
 
   def typecheck(stmt: Stmt)(using DeclarationContext, ErrorReporter): Result[ValueType] = stmt match {
-    case Stmt.Def(id, block, body) => ???
-    case Stmt.Let(id, binding, body) => ???
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
-    case Stmt.Return(expr) => typecheck(expr)
+    case Stmt.Def(id, block, body) =>
+      val canBeRecursive = block match {
+        case Block.BlockLit(tparams, cparams, vparams, bparams, body) => true
+        case Block.New(impl) => true
+        case _ => false
+      }
+      val Result(bodyTpe, bodyCapt, bodyFree) = typecheck(body)
+      val Result(blockTpe, blockCapt, blockFree) = typecheck(block)
+
+      Result(bodyTpe, bodyCapt, bodyFree.withoutBlock(id, blockTpe, blockCapt) ++
+        (if canBeRecursive then blockFree.withoutBlock(id, blockTpe, blockCapt) else blockFree))
+
+    case Stmt.Let(id, binding, body) =>
+      val Result(bodyTpe, bodyCapt, bodyFree) = typecheck(body)
+      val Result(bindTpe, bindCapt, bindFree) = typecheck(binding)
+      Result(bodyTpe, bodyCapt ++ bindCapt, bodyFree.withoutValue(id, bindTpe) ++ bindFree)
+
+    case Stmt.Return(expr) =>
+      typecheck(expr)
+
     case Stmt.Val(id, binding, body) =>
       val Result(bodyTpe, bodyCapt, bodyFree) = typecheck(body)
       val Result(bindTpe, bindCapt, bindFree) = typecheck(binding)
-      bodyFree.compatibleValue(id, bindTpe)
-      Result(bodyTpe, bodyCapt ++ bindCapt, bodyFree.withoutValue(id) ++ bindFree)
+      Result(bodyTpe, bodyCapt ++ bindCapt, bodyFree.withoutValue(id, bindTpe) ++ bindFree)
 
-    case Stmt.App(callee, targs, vargs, bargs) => ???
-    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
     case Stmt.If(cond, thn, els) =>
       val Result(condTpe, condCapt, condFree) = typecheck(cond)
       val Result(thnTpe, thnCapt, thnFree) = typecheck(thn)
@@ -405,15 +426,26 @@ object Type {
       shouldEqual(condTpe, TBoolean)
       shouldEqual(thnTpe, elsTpe)
       Result(thnTpe, condCapt ++ thnCapt ++ elsCapt, condFree ++ thnFree ++ elsFree)
+
     case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => ???
+
     case Stmt.Region(body) => ???
     case Stmt.Alloc(id, init, region, body) => ???
     case Stmt.Var(ref, init, capture, body) => ???
     case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => ???
     case Stmt.Put(ref, annotatedCapt, value, body) => ???
+
     case Stmt.Reset(body) => ???
     case Stmt.Shift(prompt, body) => ???
     case Stmt.Resume(k, body) => ???
+
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
+
+    case Stmt.App(callee, targs, vargs, bargs) => ???
+
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
+
+
     case Stmt.Hole(annotatedTpe, span) => Result(annotatedTpe, Set.empty, Free.empty)
   }
 }
