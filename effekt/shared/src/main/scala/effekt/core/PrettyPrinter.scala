@@ -113,8 +113,14 @@ class PrettyPrinter(humanReadable: Boolean) extends ParenPrettyPrinter {
 
   //def toDoc(n: Name): Doc = n.toString
 
-  def toDoc(s: symbols.Symbol): Doc =
-    builtins.coreBuiltinSymbolToString(s).getOrElse(s.name.name)
+  def toDoc(s: symbols.Symbol): Doc = {
+    // In human-readable mode, we show the name together with the actual Barendregt id.
+    // This allows the user to connect the symbol to the internal representation when debugging.
+    // In reparsable mode, we just show the string part, which should be freshened by the TestRenamer before printing.
+    // The TestRenamer does not rename the Barendregt id because that would violate the internal invariant of having
+    // just a single global Barendregt namespace.
+    builtins.coreBuiltinSymbolToString(s).getOrElse(if humanReadable then s.show else s.name.name)
+  }
 
   def toDoc(e: Expr): Doc = e match {
     case Literal((), _)         => "()"
