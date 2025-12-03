@@ -124,8 +124,12 @@ class PrettyPrinter(humanReadable: Boolean) extends ParenPrettyPrinter {
     case Literal(value, _)         => value.toString
     case ValueVar(id, tpe)         => toDoc(id) <> (if humanReadable then emptyDoc else ":" <+> toDoc(tpe))
 
-    case PureApp(b, targs, vargs)  => parens(toDoc(b)) <> argsToDoc(targs, vargs, Nil)
-    case Make(data, tag, targs, vargs)    => "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
+    case PureApp(b, targs, vargs)  => (if humanReadable then toDoc(b) else parens(toDoc(b))) <> argsToDoc(targs, vargs, Nil)
+    case Make(data, tag, targs, vargs) =>
+      if humanReadable then
+        "make" <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
+      else
+        "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
 
     case Box(b, capt) => "box" <+> toDoc(capt) <+> toDoc(b)
   }
@@ -226,14 +230,16 @@ class PrettyPrinter(humanReadable: Boolean) extends ParenPrettyPrinter {
 
     case Val(id, tpe, binding, body) =>
       // RHS must be a single `stmt`, so we have to wrap it in a block.
-      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> block(toDocStmts(binding)) <> ";" <> line <>
+      val pBinding = if humanReadable then toDocStmts(binding) else block(toDocStmts(binding))
+      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> pBinding <> ";" <> line <>
         toDocStmts(body)
 
     case App(b, targs, vargs, bargs) =>
       toDoc(b) <> argsToDoc(targs, vargs, bargs)
 
     case Invoke(b, method, methodTpe, targs, vargs, bargs) =>
-      toDoc(b) <> "." <> toDoc(method) <> ":" <+> toDoc(methodTpe) <> argsToDoc(targs, vargs, bargs)
+      val pTpe = if humanReadable then emptyDoc else ":" <+> toDoc(methodTpe)
+      toDoc(b) <> "." <> toDoc(method) <> pTpe <> argsToDoc(targs, vargs, bargs)
 
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDocStmts(thn)) <+> "else" <+> block(toDocStmts(els))
