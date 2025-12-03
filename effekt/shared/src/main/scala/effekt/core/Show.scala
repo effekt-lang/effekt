@@ -278,7 +278,9 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         val stmt = Stmt.If(paramValueVar, Stmt.Return(Expr.Literal("true", TString)), Stmt.Return(Expr.Literal("false", TString)))
         Some(generateDef(stmt))
       case ValueType.Data(name, targs) => 
-        val data = dctx.datas(name)
+        val data = dctx.datas.getOrElse(name, {
+          Context.abort(pretty"Extern type '${name}', does not have a manual show implementation")
+        })
         generateShowInstance(data, targs)
       case ValueType.Var(name) => 
         val lookup = ctx.tparamLookup(name)
