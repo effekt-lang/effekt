@@ -4,7 +4,7 @@ package optimizer
 
 import effekt.util.messages.INTERNAL_ERROR
 
-import scala.annotation.{ tailrec, targetName }
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 /**
@@ -453,26 +453,4 @@ object Normalizer { normal =>
     impl.operations.collectFirst {
       case Operation(name, tps, cps, vps, bps, body) if name == method => BlockLit(tps, cps, vps, bps, body): Block.BlockLit
     }.getOrElse { INTERNAL_ERROR("Should not happen") }
-
-
-  @targetName("preserveTypesStmt")
-  private inline def preserveTypes(before: Stmt)(inline f: Stmt => Stmt): Stmt = {
-    val after = f(before)
-    //assert(before.tpe == after.tpe, s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
-    after
-  }
-
-  @targetName("preserveTypesExpr")
-  private inline def preserveTypes(before: Expr)(inline f: Expr => Expr): Expr = {
-    val after = f(before)
-    //assert(before.tpe == after.tpe, s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
-    after
-  }
-
-  @targetName("preserveTypesBlock")
-  private inline def preserveTypes(before: Block)(inline f: Block => Block): Block = {
-    val after = f(before)
-    //assert(before.tpe == after.tpe, s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
-    after
-  }
 }

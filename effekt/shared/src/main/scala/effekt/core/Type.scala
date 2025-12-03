@@ -66,6 +66,36 @@ object Type {
   val PromptSymbol = Id("Prompt")
   val ResumeSymbol = Id("Resume")
 
+  def equals(tpe1: ValueType, tpe2: ValueType): Boolean = (tpe1, tpe2) match {
+    case (ValueType.Var(name1), ValueType.Var(name2)) => name1 == name2
+    case (ValueType.Data(name1, args1), ValueType.Data(name2, args2)) => name1 == name2 && all(args1, args2, equals)
+    case (ValueType.Boxed(btpe1, capt1), ValueType.Boxed(btpe2, capt2)) => equals(btpe1, btpe2) && equals(capt1, capt2)
+    case _ => false
+  }
+
+  private final def all[T](tpes1: List[T], tpes2: List[T], pred: (T, T) => Boolean): Boolean =
+    tpes1.size == tpes2.size && tpes1.zip(tpes2).forall { case (t1, t2) => pred(t1, t2) }
+
+  def equals(tpe1: BlockType, tpe2: BlockType): Boolean = (tpe1, tpe2) match {
+    case (
+      // [A, f](Option[A]) { f: () => A }: () => A at {f, exc}
+      BlockType.Function(tparams1, cparams1, vparams1, bparams1, result1),
+      BlockType.Function(tparams2, cparams2, vparams2, bparams2, result2)
+    ) =>
+      val tparamSubst = tparams1.zip(tparams2).map { case (to, from) => from -> ValueType.Var(to) }.toMap
+      val cparamSubst = cparams1.zip(cparams2).map { case (to, from) => from -> Set(to) }.toMap
+      def typeParamArity = tparams1.size == tparams2.size
+      def equalVparams = all(vparams1, vparams2.map(t => substitute(t, tparamSubst, cparamSubst)), equals)
+      def equalBparams = all(bparams1, bparams2.map(t => substitute(t, tparamSubst, cparamSubst)), equals)
+      def equalResult = equals(result1, substitute(result2, tparamSubst, cparamSubst))
+      typeParamArity && equalVparams && equalBparams && equalResult
+
+    case (BlockType.Interface(name1, args1), BlockType.Interface(name2, args2)) =>
+      name1 == name2 && all(args1, args2, equals)
+    case _ => false
+  }
+
+  def equals(capt1: Captures, capt2: Captures): Boolean = capt1 == capt2
 
 
   object TResume {
@@ -180,9 +210,9 @@ object Type {
       instantiate(callee.functionType, targs, bargs.map(_.capt)).result
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
       instantiate(methodTpe.asInstanceOf, targs, bargs.map(_.capt)).result
-    case Stmt.If(cond, thn, els) => assert(cond.tpe == TBoolean); debug(thn.tpe == els.tpe, s"Different types: ${util.show(thn)} and ${util.show(els)}"); thn.tpe
+    case Stmt.If(cond, thn, els) => assert(Type.equals(cond.tpe, TBoolean)); debug(Type.equals(thn.tpe, els.tpe), s"Different types: ${util.show(thn)} and ${util.show(els)}"); thn.tpe
     case Stmt.Match(scrutinee, tpe, clauses, default) => clauses.foreach { case (_,
-      BlockLit(tparams, cparams, vparams, bparams, body)) => debug(tpe == body.tpe, s"Different types in match: ${util.show(body.tpe)} vs. at match ${util.show(tpe)}")
+      BlockLit(tparams, cparams, vparams, bparams, body)) => debug(Type.equals(tpe, body.tpe), s"Different types in match: ${util.show(body.tpe)} vs. at match ${util.show(tpe)}")
     }; tpe
 
     case Stmt.Alloc(id, init, region, body) => body.tpe

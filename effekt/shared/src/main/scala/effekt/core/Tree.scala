@@ -6,7 +6,7 @@ import effekt.util.Structural
 import effekt.util.messages.INTERNAL_ERROR
 import effekt.util.messages.ErrorReporter
 
-import scala.annotation.tailrec
+import scala.annotation.{ tailrec, targetName }
 
 /**
  * Tree structure of programs in our internal core representation.
@@ -821,4 +821,25 @@ object substitutions {
 
   def substitute(capt: Captures)(using subst: Substitution): Captures =
     Type.substitute(capt, subst.captures)
+}
+
+@targetName("preserveTypesStmt")
+inline def preserveTypes(before: Stmt)(inline f: Stmt => Stmt): Stmt = {
+  val after = f(before)
+  assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+  after
+}
+
+@targetName("preserveTypesExpr")
+inline def preserveTypes(before: Expr)(inline f: Expr => Expr): Expr = {
+  val after = f(before)
+  assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+  after
+}
+
+@targetName("preserveTypesBlock")
+inline def preserveTypes(before: Block)(inline f: Block => Block): Block = {
+  val after = f(before)
+  assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+  after
 }
