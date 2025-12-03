@@ -334,7 +334,7 @@ object Type {
       }
   }
 
-  case class Result[T](result: T, capt: Captures, free: Free)
+  case class Result[+T](result: T, capt: Captures, free: Free)
 
   // TODO the dependency on ErrorReporter is due to the declaration context, which is annoying.
   //   we could get rid of this by annotating constructors (and potentially patterns?)
@@ -377,7 +377,22 @@ object Type {
       Result(ValueType.Boxed(bTpe, annotatedCapture), Set.empty, bFree)
   }
 
-  def typecheck(block: Block)(using DeclarationContext, ErrorReporter): Result[BlockType] = ???
+  def typecheck(block: Block)(using DeclarationContext, ErrorReporter): Result[BlockType] = block match {
+    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Result(annotatedTpe, annotatedCapt, Free.block(id, annotatedTpe, annotatedCapt))
+    case Block.Unbox(pure) =>
+      val Result(tpe, capt, free) = typecheck(pure)
+      tpe match {
+        case ValueType.Boxed(tpe2, capt2) =>
+          Result(tpe2, capt2, free)
+        case other => typeError(s"Expected a boxed type, but got: ${util.show(other)}")
+      }
+    case b : Block.BlockLit => typecheck(b)
+    case Block.New(impl) => typecheck(impl)
+  }
+
+  def typecheck(blocklit: BlockLit)(using DeclarationContext, ErrorReporter): Result[BlockType.Function] = ???
+
+  def typecheck(impl: Implementation)(using DeclarationContext, ErrorReporter): Result[BlockType.Interface] = ???
 
   def valuesShouldEqual(tpes1: List[ValueType], tpes2: List[ValueType]): Unit =
     if tpes1.size != tpes2.size then typeError(s"Different number of types: ${tpes1} vs. ${tpes2}")
