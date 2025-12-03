@@ -262,7 +262,7 @@ object Type {
     case Expr.ValueVar(id, tpe) => tpe
     case Expr.Literal(value, tpe) => tpe
     case Expr.PureApp(callee, targs, args) => instantiate(callee.functionType, targs, Nil).result
-    case Expr.Make(tpe, tag, targs, args) => tpe // TODO instantiate?
+    case Expr.Make(tpe, tag, targs, args) => tpe
     case Expr.Box(block, capt) => ValueType.Boxed(block.tpe, capt)
   }
 
@@ -284,5 +284,93 @@ object Type {
       case BlockType.Interface(name, List(result, answer)) => result
       case _ => ???
     }
+  }
+
+  case class TypeError(msg: String) extends Throwable(msg)
+  def typeError(msg: String) = throw TypeError(msg)
+
+  // only used for type checking
+  case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures)]) {
+    // throws type error if they are not compatible
+    def ++(other: Free): Free =
+      if !Free.valuesCompatible(values, other.values) then typeError("incompatible free variables")
+      if !Free.blocksCompatible(blocks, other.blocks) then typeError("incompatible free variables")
+      Free(values ++ other.values, blocks ++ other.blocks)
+
+    def withoutValue(id: Id): Free = Free(values - id, blocks)
+
+    def compatibleValue(id: Id, tpe: ValueType): Unit =
+      values.get(id).foreach { otherTpe =>
+        if !Type.equals(tpe, otherTpe) then
+          typeError(s"free variable ${id} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
+      }
+
+    def isEmpty: Boolean = values.isEmpty && blocks.isEmpty
+  }
+  object Free {
+    def empty = Free(Map.empty, Map.empty)
+    def value(id: Id, tpe: ValueType) = Free(Map(id -> tpe), Map.empty)
+    def block(id: Id, tpe: BlockType, capt: Captures) = Free(Map.empty, Map(id -> (tpe, capt)))
+
+    def valuesCompatible(free1: Map[Id, ValueType], free2: Map[Id, ValueType]): Boolean =
+      val same = free1.keySet intersect free2.keySet
+      same.forall { id => Type.equals(free1(id), free2(id)) }
+
+    def blocksCompatible(free1: Map[Id, (BlockType, Captures)], free2: Map[Id, (BlockType, Captures)]): Boolean =
+      val same = free1.keySet intersect free2.keySet
+      same.forall { id =>
+        val (tpe1, capt1) = free1(id)
+        val (tpe2, capt2) = free2(id)
+        Type.equals(tpe1, tpe2) && Type.equals(capt1, capt2)
+      }
+  }
+
+  case class Result[T](result: T, capt: Captures, free: Free)
+
+  def typecheck(expr: Expr)(using DeclarationContext): Result[ValueType] = expr match {
+    case Expr.ValueVar(id, annotatedType) => Result(annotatedType, Set.empty, Free.value(id, annotatedType))
+    case Expr.Literal(value, annotatedType) => Result(annotatedType, Set.empty, Free.empty)
+    case Expr.PureApp(callee, targs, vargs) =>
+       val BlockType.Function(tparams, cparams, vparams, bparams, result) = instantiate(callee.functionType, targs, Nil)
+       if bparams.nonEmpty then typeError("Pure apps cannot have block params")
+       val Result(argTypes, _, argFrees) = all(vargs, e => typecheck(e))
+       if !all(vparams, argTypes, equals) then typeError("Type mismatch between arguments and parameters")
+       Result(result, Set.empty, argFrees ++ Free.block(callee.id, callee.annotatedTpe, callee.annotatedCapt))
+
+    // targs here are the existential type arguments
+    case Expr.Make(data, tag, targs, vargs) => ???
+    case Expr.Box(b, annotatedCapture) => ???
+  }
+  def all[T, R](terms: List[T], check: T => Result[R]): Result[List[R]] =
+    terms.foldRight(Result[List[R]](Nil, Set.empty, Free.empty)) {
+      case (term, Result(tpes, capts, frees)) =>
+        val Result(tpe, capt, free) = check(term)
+        Result(tpe :: tpes, capts ++ capt, frees ++ free)
+    }
+
+  def typecheck(stmt: Stmt)(using DeclarationContext): Result[ValueType] = stmt match {
+    case Stmt.Def(id, block, body) => ???
+    case Stmt.Let(id, binding, body) => ???
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
+    case Stmt.Return(expr) => typecheck(expr)
+    case Stmt.Val(id, binding, body) =>
+      val Result(bodyTpe, bodyCapt, bodyFree) = typecheck(body)
+      val Result(bindTpe, bindCapt, bindFree) = typecheck(binding)
+      bodyFree.compatibleValue(id, bindTpe)
+      Result(bodyTpe, bodyCapt ++ bindCapt, bodyFree.withoutValue(id) ++ bindFree)
+
+    case Stmt.App(callee, targs, vargs, bargs) => ???
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
+    case Stmt.If(cond, thn, els) => ???
+    case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => ???
+    case Stmt.Region(body) => ???
+    case Stmt.Alloc(id, init, region, body) => ???
+    case Stmt.Var(ref, init, capture, body) => ???
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => ???
+    case Stmt.Put(ref, annotatedCapt, value, body) => ???
+    case Stmt.Reset(body) => ???
+    case Stmt.Shift(prompt, body) => ???
+    case Stmt.Resume(k, body) => ???
+    case Stmt.Hole(annotatedTpe, span) => ???
   }
 }

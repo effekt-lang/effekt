@@ -10,9 +10,12 @@ class TypeInferenceTests extends CoreTests {
   val OptionId: Id = Id("Option")
   val f: Id        = Id("f")
   val g: Id        = Id("g")
+  val x: Id        = Id("x")
+  val y: Id        = Id("y")
   val A: Id        = Id("A")
   val B: Id        = Id("B")
   val C: Id        = Id("C")
+  val infixAdd      = Id("infixAdd")
 
   def OptionT(tpe: core.ValueType): core.ValueType.Data =
     core.ValueType.Data(OptionId, List(tpe))
@@ -77,5 +80,64 @@ class TypeInferenceTests extends CoreTests {
     assertEquals(Type.equals(polyA, polyB3), false)
 
     assertEquals(Type.equals(polyB3, polyB4), false)
+  }
+
+  test("compatibility") {
+    assertEquals(Free.valuesCompatible(Map.empty, Map.empty), true)
+    assertEquals(Free.valuesCompatible(Map(f -> TInt), Map.empty), true)
+    assertEquals(Free.valuesCompatible(Map(f -> TInt), Map(f -> TInt)), true)
+    assertEquals(Free.valuesCompatible(Map(f -> TInt), Map(f -> TInt, g -> TByte)), true)
+
+    assertEquals(Free.valuesCompatible(Map(f -> TInt), Map(f -> TBoolean, g -> TByte)), false)
+  }
+
+  test("typechecking") {
+
+    given DeclarationContext(Nil, Nil)
+
+    val input1 = Stmt.Val(x,
+      Stmt.Return(Expr.Literal(42, TInt)),
+      Stmt.Return(Expr.ValueVar(x, TInt)))
+
+    assertEquals(typecheck(input1),
+      Result(TInt, Set.empty, Free.empty))
+
+    val input2 = Stmt.Val(x,
+      Stmt.Return(Expr.Literal(true, TBoolean)),
+      Stmt.Return(Expr.ValueVar(x, TInt)))
+
+    intercept[TypeError] { typecheck(input2) }
+
+    // we can even type check open terms:
+    assertEquals(typecheck(Stmt.Return(Expr.ValueVar(x, TInt))),
+      Result(TInt, Set.empty, Free(Map(x -> TInt), Map.empty)))
+
+    val add: Block.BlockVar = Block.BlockVar(infixAdd, BlockType.Function(Nil, Nil, List(TInt, TInt), Nil, TInt), Set.empty)
+
+    val input3 = Stmt.Val(x,
+      Stmt.Return(Expr.Literal(42, TInt)),
+      Stmt.Return(Expr.PureApp(add, Nil, Expr.ValueVar(x, TInt) :: Expr.ValueVar(x, TInt) :: Nil)))
+
+    assertEquals(typecheck(input3),
+      Result(TInt, Set.empty, Free.block(add.id, add.annotatedTpe, add.annotatedCapt)))
+
+    // [A](Option[A], A): A
+    val orElse: Block.BlockVar = Block.BlockVar(f, BlockType.Function(A :: Nil, Nil, List(OptionT(ValueType.Var(A)), ValueType.Var(A)), Nil, ValueType.Var(A)), Set.empty)
+
+    val Result(tpe, _, _) = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(y, TInt) :: Nil))
+    assertEquals(Type.equals(tpe, TInt), true)
+
+    // swapped arguments
+    intercept[TypeError] {
+      typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(y, TInt) :: Expr.ValueVar(x, OptionT(TInt)) :: Nil))
+    }
+    // too few arguments
+    intercept[TypeError] {
+      typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Nil))
+    }
+    // incompatible free variables in arguments
+    intercept[TypeError] {
+      typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(x, TInt) :: Nil))
+    }
   }
 }
