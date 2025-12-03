@@ -112,12 +112,6 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
       val resolvedCapt = rewrite(capt)
       withBinding(id) { core.Get(rewrite(id), rewrite(tpe), resolvedRef, resolvedCapt, rewrite(body)) }
 
-    case core.App(callee, targs, vargs, bargs) =>
-      val resolvedCallee = rewrite(callee)
-      val resolvedTargs = targs map rewrite
-      val resolvedVargs = vargs map rewrite
-      val resolvedBargs = bargs map rewrite
-      core.App(resolvedCallee, resolvedTargs, resolvedVargs, resolvedBargs)
   }
 
   override def block: PartialFunction[Block, Block] = {
@@ -126,14 +120,6 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "_") extends
         Block.BlockLit(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite,
           rewrite(body))
       }
-    case Block.BlockVar(id: Id, annotatedTpe: BlockType, annotatedCapt: Captures) => {
-      withBinding(id) {
-        val idOut = rewrite(id)
-        val annotatedTpeOut = rewrite(annotatedTpe)
-        val annotatedCaptOut = rewrite(annotatedCapt)
-        Block.BlockVar(rewrite(id), rewrite(annotatedTpe), rewrite(annotatedCapt))
-      }
-    }
   }
 
   override def rewrite(o: Operation): Operation = o match {
