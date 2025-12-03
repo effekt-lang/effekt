@@ -156,6 +156,52 @@ def sum { stream: () => Unit / emit[Int] }: Int =
 def product { stream: () => Unit / emit[Int] }: Int =
   returning::product[Unit]{stream}.second
 
+/// Returns true if all elements in the stream satisfy the given predicate,
+/// false otherwise. Short-circuits as soon as a non-matching element is found.
+///
+/// Examples:
+/// ```effekt
+/// > all[Int] { x => x > 0 } { [1, 2, 3].each }
+/// true
+///
+/// > all[Int] { x => x < 3 } { [1, 2, 3, 4].each }
+/// false
+///
+/// > all[Bool] { x => x } { [false, true, true].each }
+/// false
+///
+/// > all[Int] { x => x >= 0 } { () } // empty stream
+/// true
+/// ```
+def all[A] { cond: A => Bool } { stream: => Unit / emit[A] }: Bool =
+  try { stream(); true } with emit[A] {
+    case value and not(cond(value)) => false
+    case _                          => resume(())
+  }
+
+/// Returns true if any element in the stream satisfies the given predicate,
+/// false otherwise. Short-circuits as soon as a matching element is found.
+///
+/// Examples:
+/// ```effekt
+/// > any[Int] { x => x > 0 } { [-2, -1, 0, 1, 2].each }
+/// true
+///
+/// > any[Int] { x => x > 10 } { [1, 2, 3, 4].each }
+/// false
+///
+/// > any[Bool] { x => x } { [false, true, false].each }
+/// true
+///
+/// > any[Int] { x => x == 0 } { () } // empty stream
+/// false
+/// ```
+def any[A] { cond: A => Bool } { stream: => Unit / emit[A] }: Bool =
+  try { stream(); false } with emit[A] {
+    case value and cond(value) => true
+    case _                     => resume(())
+  }
+
 /// Count the number of emitted values that satisfy the given predicate.
 ///
 /// Examples:
