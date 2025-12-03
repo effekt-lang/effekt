@@ -1,8 +1,0 @@
-extern type NoShow
-
-extern def noshow() at {}: NoShow = 
-  js ""
-  chez ""
-  llvm ""
-
-def main() = println(noshow().show)
