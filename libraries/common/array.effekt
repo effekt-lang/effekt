@@ -252,28 +252,12 @@ def foreach[T](arr: Array[T]){ action: T => Unit }: Unit =
     action(arr.unsafeGet(i))
   }
 
-/// Traverse an array, applying the given action on every element.
-///
-/// O(N)
-def foreach[T](arr: Array[T]){ action: (T) {Control} => Unit }: Unit =
-  each(0, arr.size) { (i) {label} =>
-    action(arr.unsafeGet(i)) {label}
-  }
-
 /// Traverse an array, applying the given action on every element and its (zero-based) index.
 ///
 /// O(N)
 def foreachIndex[T](arr: Array[T]){ action: (Int, T) => Unit }: Unit =
   each(0, arr.size) { i =>
     action(i, arr.unsafeGet(i))
-  }
-
-/// Traverse an array, applying the given action on every element and its (zero-based) index.
-///
-/// O(N)
-def foreachIndex[T](arr: Array[T]){ action: (Int, T) {Control} => Unit }: Unit =
-  each(0, arr.size) { (i) {label} =>
-    action(i, arr.unsafeGet(i)) {label}
   }
 
 /// Sum the elements of the array.
@@ -294,10 +278,12 @@ def equals[A](this: Array[A], other: Array[A]) { eq: (A, A) => Bool }: Bool = {
   if (this.size != other.size) false
   else {
     var res = true
-    this.foreachIndex { (idx, elem) {label} =>
-      if (not(eq(elem, other.unsafeGet(idx)))) {
-        res = false
-        label.break()
+    boundary {
+      this.foreachIndex { (idx, elem) =>
+        if (not(eq(elem, other.unsafeGet(idx)))) {
+          res = false
+          do stop()
+        }
       }
     }
     res
@@ -397,10 +383,12 @@ def filtered[A](arr: Array[A]) { shouldKeep: A => Bool }: Array[A] = {
 /// O(N)
 def all[A](arr: Array[A]) { predicate: A => Bool }: Bool = {
   var result = true
-  arr.foreach { (x) {label} =>
-    if (not(predicate(x))) {
-      result = false
-      label.break()
+  boundary {
+    arr.foreach { (x) =>
+      if (not(predicate(x))) {
+        result = false
+        do stop()
+      }
     }
   }
   result
@@ -534,10 +522,12 @@ def partioned[A](arr: Array[A]) { pred: A => Bool }: (Array[A], Array[A]) = {
 /// O(N)
 def indexOf[A](arr: Array[A], toFind: A) { eq: (A, A) => Bool }: Option[Int] = {
   var found = None[Int]()
-  arr.foreachIndex { (idx, elem) {label} =>
-    if (eq(elem, toFind) && found.isEmpty) {
-      found = Some(idx)
-      label.break()
+  boundary {
+    arr.foreachIndex { (idx, elem) =>
+      if (eq(elem, toFind) && found.isEmpty) {
+        found = Some(idx)
+        do stop()
+      }
     }
   }
   found

@@ -15,8 +15,6 @@ effect emit[A](value: A): Unit
 /// The producer can decide to `stop` emitting values.
 effect read[A](): A / stop
 
-/// Signal from a producer to a consumer that there are no further values.
-effect stop(): Nothing
 
 /// Like `for[A, R]`, but ignores the result of the stream, and consequently
 /// works for any type. Use this to annotate the type of stream elements
@@ -50,25 +48,8 @@ def fix[T] { one: T => Unit / emit[T] } { stream: => Unit / emit[T] }: Unit =
   }
 
 
-def boundary { program: () => Unit / stop }: Unit = {
-  returning::boundary[Unit]{program}
-  ()
-}
-
-/// Run `program` forever until `stop` is thrown.
-def exhaustively { program: () => Unit / stop }: Unit =
-  try {
-    def go(): Unit = {
-      program()
-      go()
-    }
-    go()
-  } with stop {
-    ()
-  }
-
 def many[A] { action: () => A / stop }: Unit / emit[A] =
-  exhaustively { do emit(action()) }
+  loop { do emit(action()) }
 
 def some[A] { action: () => A / stop }: Unit / { emit[A], stop } = {
   do emit(action())
@@ -230,7 +211,7 @@ def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] 
   with source[A] { stream1 }
   with source[B] { stream2 }
 
-  exhaustively {
+  loop {
     action(do read(), do read())
   }
 }
@@ -241,7 +222,7 @@ def zipLongest[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / e
   with source[A] { stream1 }
   with source[B] { stream2 }
 
-  exhaustively {
+  loop {
      try {
       val a = do read[A]()
       try {
