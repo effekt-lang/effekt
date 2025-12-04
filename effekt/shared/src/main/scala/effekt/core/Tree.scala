@@ -284,9 +284,7 @@ enum Stmt extends Tree {
   case Reset(body: Block.BlockLit)
 
   // captures the continuation up to the given prompt
-  // Invariant, it always has the shape:
-  //   Shift(p: Prompt[answer], { [cap]{resume: Resume[result, answer] at cap} => stmt: answer }): result
-  case Shift(prompt: BlockVar, body: BlockLit)
+  case Shift(prompt: BlockVar, k: BlockParam, body: Stmt)
 
   // bidirectional resume: runs the given statement in the original context
   //  Resume(k: Resume[result, answer], stmt: result): answer
@@ -638,7 +636,7 @@ object Variables {
       Variables.block(ref, core.Type.TState(value.tpe), annotatedCapt) ++ free(value) ++ free(body)
 
     case Stmt.Reset(body) => free(body)
-    case Stmt.Shift(prompt, body) => free(prompt) ++ free(body)
+    case Stmt.Shift(prompt, k, body) => free(prompt) ++ free(body) -- Variables.bound(k)
     case Stmt.Resume(k, body) => free(k) ++ free(body)
     case Stmt.Hole(tpe, span) => Variables.empty
   }
@@ -738,9 +736,9 @@ object substitutions {
       case Reset(body) =>
         Reset(substitute(body))
 
-      case Shift(prompt, body) =>
-        val after = substitute(body)
-        Shift(substitute(prompt).asInstanceOf[BlockVar], after)
+      case Shift(prompt, k, body) =>
+        val after = substitute(body)(using subst shadowBlocks List(k.id))
+        Shift(substitute(prompt).asInstanceOf[BlockVar], k, after)
 
       case Resume(k, body) =>
         Resume(substitute(k).asInstanceOf[BlockVar], substitute(body))

@@ -100,7 +100,7 @@ trait Transformer {
 
     case Reset(body) => chez.Reset(toChez(body))
 
-    case Shift(p, body) => chez.Shift(nameRef(p.id), toChez(body))
+    case Shift(p, k, body) => chez.Shift(nameRef(p.id), chez.Lambda(toChez(k) :: Nil, toChez(body)))
 
     // currently bidirectional handlers are not supported
     case Resume(k, Return(expr)) => chez.Call(toChez(k), List(toChez(expr)))

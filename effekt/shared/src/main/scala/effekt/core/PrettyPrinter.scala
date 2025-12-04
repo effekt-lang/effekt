@@ -238,8 +238,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Reset(body) =>
       "reset" <+> toDoc(body)
 
-    case Shift(prompt, body) =>
-      "shift" <> parens(toDoc(prompt)) <+> toDoc(body)
+    case Shift(prompt, k, body) =>
+      "shift" <> parens(toDoc(prompt)) <+> toDoc(k) <+> "=>" <+> nest(line <> toDocStmts(body)) <> line
 
     case Resume(k, body) =>
       "resume" <> parens(toDoc(k)) <+> block(toDocStmts(body))

@@ -38,7 +38,7 @@ object DirectStyle extends Tree.Rewrite {
     case Reset(_) => false
     case Region(_) => false
     case Resume(_, _) => false
-    case Shift(_, _) => false
+    case Shift(_, _, _) => false
 
     // Congruences
     case Def(id, block, body) => canBeDirect(body)
@@ -66,7 +66,7 @@ object DirectStyle extends Tree.Rewrite {
     // control effects
     case Reset(_) => stmt
     case Resume(_, _) => stmt
-    case Shift(_, _) => stmt
+    case Shift(_, _, _) => stmt
     case Region(_) => stmt
 
     // Congruences

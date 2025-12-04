@@ -85,7 +85,7 @@ class Recursive(
       process(value)
       process(body)
     case Stmt.Reset(body) => process(body)
-    case Stmt.Shift(prompt, body) => process(prompt); process(body)
+    case Stmt.Shift(prompt, k, body) => process(prompt); process(body)
     case Stmt.Resume(k, body) => process(k); process(body)
     case Stmt.Region(body) => process(body)
     case Stmt.Hole(tpe, span) => ()

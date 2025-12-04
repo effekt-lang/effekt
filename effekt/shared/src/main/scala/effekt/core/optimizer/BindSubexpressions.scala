@@ -91,7 +91,7 @@ object BindSubexpressions {
     case Stmt.Region(body) => Stmt.Region(transform(body))
     case Stmt.Val(id, binding, body) => Stmt.Val(id, transform(binding), transform(body))
     case Stmt.Reset(body) => Stmt.Reset(transform(body))
-    case Stmt.Shift(prompt, body) => Stmt.Shift(transform(prompt), transform(body))
+    case Stmt.Shift(prompt, k, body) => Stmt.Shift(transform(prompt), k, transform(body))
     case Stmt.Resume(k, body) => Stmt.Resume(transform(k), transform(body))
     case Stmt.Hole(tpe, span) => Stmt.Hole(transform(tpe), span)
   }

@@ -418,7 +418,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
 
         case Stmt.Reset(b) => ???
 
-        case Stmt.Shift(prompt, BlockLit(tparams, cparams, vparams, List(resume), body)) =>
+        case Stmt.Shift(prompt, resume, body) =>
           instrumentation.shift()
           val address = findFirst(env) {
             case Env.Dynamic(id, Computation.Prompt(addr), rest) if id == prompt.id => addr
@@ -434,8 +434,6 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           val (cont, rest) = unwind(stack, Stack.Empty)
 
           State.Step(body, env.bind(resume.id, Computation.Resumption(cont)), rest, heap)
-        case Stmt.Shift(_, _) => ???
-
 
         case Stmt.Resume(k, body) =>
           instrumentation.resume()

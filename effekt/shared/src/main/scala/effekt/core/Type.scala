@@ -357,10 +357,6 @@ object Type {
     }
 
   // TODO
-  // - [ ] get rid of `DeclarationContext` AND `ErrorReport` (transitively)
-  // - [ ] Rename `Result` -> `Typing`
-  // - [ ] make `val typing: Typing[ValueType]` a field on `Stmt`
-  // - [ ] define `def tpe = typing.result`, similar for `capt`
   // - [ ] define `def free: Free = typing.free` and use it in the phases that require free variable computation
   // - [ ] delete `core.Variables` (defined in core/Tree.scala) and replace all usages by `stmt.free`
 
@@ -443,8 +439,22 @@ object Type {
       // TODO we should check that cparams do not occur in result!
       Typing(result, bodyCapt, bodyFree)
 
-    case Stmt.Shift(prompt, body) => ???
-    case Stmt.Resume(k, body) => ???
+    // shift(p) { k: Resume[from, to] => body }
+    case Stmt.Shift(prompt, BlockParam(k, tpe@BlockType.Interface(ResumeSymbol, List(from, to)), capt), body) =>
+      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
+      shouldEqual(to, bodyTpe)
+      Typing(from, bodyCapt ++ Set(prompt.id), bodyFree.withoutBlock(k, tpe, capt) ++ Free.block(prompt.id, prompt.annotatedTpe, prompt.capt))
+
+    case Stmt.Shift(prompt, BlockParam(k, tpe, capt), body) =>
+      typeError(s"Block parameter of shift have wrong type: ${k}: ${tpe}")
+
+    // resume(k) { stmt }
+    case Stmt.Resume(BlockVar(id, tpe@BlockType.Interface(ResumeSymbol, List(result, answer)), annotatedCapt), body) =>
+      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
+      shouldEqual(result, bodyTpe)
+      Typing(answer, annotatedCapt ++ bodyCapt, bodyFree ++ Free.block(id, tpe, annotatedCapt))
+
+    case Stmt.Resume(k, body) => typeError(s"Continuation has wrong type: ${k}")
 
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
 

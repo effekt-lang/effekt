@@ -260,8 +260,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.Reset(BlockLit(tps, cps, vps, prompt :: Nil, body)) =>
       Stmt.Reset(BlockLit(tps, cps, vps, prompt :: Nil, coerce(transform(body), stmt.tpe)))
     case Stmt.Reset(body) => ???
-    case Stmt.Shift(prompt, body) =>
-      Stmt.Shift(prompt, transform(body))
+    case Stmt.Shift(prompt, k, body) =>
+      Stmt.Shift(prompt, transform(k), transform(body))
     case Stmt.Resume(k, body) =>
       val expected = k.tpe match {
         case core.Type.TResume(result, answer) => result

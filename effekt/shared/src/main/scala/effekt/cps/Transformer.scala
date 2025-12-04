@@ -112,16 +112,14 @@ object Transformer {
 
     // Only unidirectional, yet
     // core.Block.BlockLit(tparams, cparams, vparams, List(resume), body)
-    case core.Stmt.Shift(prompt, core.Block.BlockLit(tparams, cparams, vparams, List(resume), body)) =>
+    case core.Stmt.Shift(prompt, resume, body) =>
       val ks2 = Id("ks")
       val k2 = Id("k")
 
-      val translatedBody: BlockLit = BlockLit(vparams.map { p => p.id }, List(resume.id), ks2, k2,
+      val translatedBody: BlockLit = BlockLit(Nil, List(resume.id), ks2, k2,
         transform(body, ks2, Continuation.Dynamic(k2)))
 
       Shift(prompt.id, translatedBody, MetaCont(ks), k.reifyAt(stmt.tpe))
-
-    case core.Stmt.Shift(prompt, body) => sys error "Shouldn't happen"
 
     case core.Stmt.Resume(cont, body) =>
       val ks2 = Id("ks")

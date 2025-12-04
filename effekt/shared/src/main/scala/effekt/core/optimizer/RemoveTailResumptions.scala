@@ -8,9 +8,9 @@ object RemoveTailResumptions {
 
   object removal extends Tree.Rewrite {
     override def stmt: PartialFunction[Stmt, Stmt] = {
-      case Stmt.Shift(prompt, BlockLit(tparams, cparams, vparams, List(BlockParam(k, Type.TResume(from, to), capt)), body)) if tailResumptive(k, body) =>
+      case Stmt.Shift(prompt, BlockParam(k, Type.TResume(from, to), capt), body) if tailResumptive(k, body) =>
         removeTailResumption(k, from, body)
-      case Stmt.Shift(prompt, body) => Shift(prompt, rewrite(body))
+      case Stmt.Shift(prompt, k, body) => Shift(prompt, k, rewrite(body))
     }
   }
 
@@ -42,7 +42,7 @@ object RemoveTailResumptions {
       case Stmt.Get(ref, annotatedCapt, tpe, id, body) => tailResumptive(k, body)
       case Stmt.Put(ref, annotatedCapt, value, body) => tailResumptive(k, body) && !freeInExpr(value)
       case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) => false
-      case Stmt.Shift(prompt, body) => stmt.tpe == Type.TBottom
+      case Stmt.Shift(prompt, k, body) => stmt.tpe == Type.TBottom
       case Stmt.Resume(k2, body) => k2.id == k // what if k is free in body?
       case Stmt.Hole(tpe, span) => true
     }
@@ -64,7 +64,7 @@ object RemoveTailResumptions {
     case Stmt.Resume(k2, body) if k2.id == k => body
 
     case Stmt.Resume(k, body) => stmt
-    case Stmt.Shift(prompt, body) => stmt
+    case Stmt.Shift(prompt, k, body) => stmt
     case Stmt.Hole(tpe, span) => stmt
     case Stmt.Return(expr) => stmt
     case Stmt.App(callee, targs, vargs, bargs) => stmt

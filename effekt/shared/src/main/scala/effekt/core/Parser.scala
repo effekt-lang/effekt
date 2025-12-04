@@ -360,11 +360,13 @@ class CoreParsers(names: Names) extends EffektLexers {
     ( `{` ~/> stmts <~ `}`
     | `return` ~> expr ^^ Stmt.Return.apply
     | `reset` ~> blockLit ^^ Stmt.Reset.apply
-    | `shift` ~> maybeParens(blockVar) ~ blockLit ^^ Stmt.Shift.apply
+    | `shift` ~> maybeParens(blockVar) ~ (`{` ~> blockParam) ~ (`=>` ~/> stmts <~ `}`) ^^ {
+        case p ~ k ~ body => Stmt.Shift(p, k, body)
+      }
     | `resume` ~> maybeParens(blockVar) ~ stmt ^^ Stmt.Resume.apply
     | block ~ (`.` ~> id ~ (`:` ~> blockType)).? ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ {
-      case (recv ~ Some(method ~ tpe) ~ targs ~ vargs ~ bargs) => Invoke(recv, method, tpe, targs, vargs, bargs)
-      case (recv ~ None ~ targs ~ vargs ~ bargs) => App(recv, targs, vargs, bargs)
+      case recv ~ Some(method ~ tpe) ~ targs ~ vargs ~ bargs => Invoke(recv, method, tpe, targs, vargs, bargs)
+      case recv ~ None ~ targs ~ vargs ~ bargs => App(recv, targs, vargs, bargs)
     }
     | (`if` ~> `(` ~/> expr <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
     | `region` ~> blockLit ^^ Stmt.Region.apply

@@ -259,13 +259,11 @@ object Normalizer { normal =>
         //          abort
 
         // [[ val x: A = shift(p) { {k: A => R} => body2 }; body: B ]] = shift(p) { {k: >>>B<<< => R} => body2 }
-        case abort @ Stmt.Shift(p, BlockLit(tparams, cparams, vparams,
-          BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeA, answer)), captures) :: Nil, body2))
+        case abort @ Stmt.Shift(p, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeA, answer)), captures), body2)
               if !Variables.free(body2).containsBlock(k) =>
             val tpeB = body.tpe
-            Stmt.Shift(p,
-              BlockLit(tparams, cparams, vparams, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeB, answer)), captures) :: Nil,
-                normalize(body2)))
+            Stmt.Shift(p, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeB, answer)), captures),
+                normalize(body2))
 
         // [[ val x: A = sc match [A] { case ... => body2: A }; body: B ]] == sc match [B] { case ... => [[ val x: A = body2; body: B ]] }
         case Stmt.Match(sc, tpe, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
@@ -355,7 +353,7 @@ object Normalizer { normal =>
     // -------------
 
     case Stmt.Reset(body) => Stmt.Reset(normalize(body))
-    case Stmt.Shift(prompt, body) => Shift(prompt, normalize(body))
+    case Stmt.Shift(prompt, k, body) => Shift(prompt, k, normalize(body))
     case Stmt.Return(expr) => Return(normalize(expr))
     case Stmt.Alloc(id, init, region, body) => Alloc(id, normalize(init), region, normalize(body))
     case Stmt.Resume(k, body) => Resume(k, normalize(body))

@@ -259,7 +259,7 @@ object Transformer {
 
         Reset(Variable(transform(prompt.id), Type.Prompt()), returnClause, transform(body))
 
-      case core.Shift(prompt, core.BlockLit(Nil, cparams, Nil, List(k), body)) =>
+      case core.Shift(prompt, k, body) =>
 
         noteParameter(k.id, core.Type.TResume(core.Type.TUnit, core.Type.TUnit))
 
