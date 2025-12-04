@@ -639,7 +639,7 @@ object substitutions {
       case Region(body) =>
         Region(substitute(body))
 
-      case h : Hole => h
+      case Hole(tpe, span) => Hole(substitute(tpe), span)
     }
 
   def substitute(b: BlockLit)(using subst: Substitution): BlockLit = b match {
