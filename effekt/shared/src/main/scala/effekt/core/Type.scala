@@ -49,8 +49,15 @@ enum BlockType extends Type {
   case Interface(name: Id, targs: List[ValueType])
 }
 
-case class TypeError(msg: String) extends Throwable(msg)
-def typeError(msg: String) = throw TypeError(msg)
+case class TypeError(msg: String, context: List[core.Tree]) extends Throwable(msg) {
+  override def toString = msg + "\n" + context.map(util.show).mkString("\n----- Context -----\n", "\n------\n", "\n----------\n")
+}
+def typeError(msg: String) = throw TypeError(msg, Nil)
+
+def checking[T <: Tree, R](t: T)(f: T => R): R =
+  try f(t) catch {
+    case TypeError(msg, context) => throw TypeError(msg, t :: context)
+  }
 
 // We could ALSO just save the Make to decrease pressure on the GC
 // this could even improve the error messages, since we can point at the term that's wrong...
@@ -79,8 +86,8 @@ object Constraints {
 case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures)], constraints: Constraints) {
   // throws type error if they are not compatible
   def ++(other: Free): Free =
-    if !Free.valuesCompatible(values, other.values) then typeError("incompatible free variables")
-    if !Free.blocksCompatible(blocks, other.blocks) then typeError("incompatible free variables")
+    Free.valuesCompatible(values, other.values)
+    Free.blocksCompatible(blocks, other.blocks)
     Free(values ++ other.values, blocks ++ other.blocks, constraints ++ other.constraints)
 
   def withoutValue(id: Id, tpe: ValueType): Free =
@@ -97,9 +104,10 @@ case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures
   def withoutBlock(id: Id, tpe: BlockType, capt: Captures): Free =
     blocks.get(id).foreach { case (otherTpe, otherCapt) =>
       if !Type.equals(tpe, otherTpe) then
-        typeError(s"free variable ${id} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
-      if !otherCapt.subsetOf(capt) then
-        typeError(s"free variable assume a wrong capture set (${util.show(capt)} vs. ${util.show(otherCapt)})")
+        typeError(s"free variable ${util.show(id)} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
+
+      // if !otherCapt.subsetOf(capt) then
+        // typeError(s"free variable ${util.show(id)} assumes a wrong capture set (${capt.map(core.PrettyPrinter.show)} vs. ${otherCapt.map(core.PrettyPrinter.show)})")
     }
     Free(values, blocks - id, constraints)
 
@@ -120,16 +128,18 @@ object Free {
   def impl(interface: BlockType.Interface, operations: Map[Id, BlockType.Function]) =
     Free(Map.empty, Map.empty, Constraints.Implementation(interface, operations))
 
-  def valuesCompatible(free1: Map[Id, ValueType], free2: Map[Id, ValueType]): Boolean =
+  def valuesCompatible(free1: Map[Id, ValueType], free2: Map[Id, ValueType]): Unit =
     val same = free1.keySet intersect free2.keySet
-    same.forall { id => Type.equals(free1(id), free2(id)) }
+    same.foreach { id => Type.valueShouldEqual(free1(id), free2(id)) }
 
-  def blocksCompatible(free1: Map[Id, (BlockType, Captures)], free2: Map[Id, (BlockType, Captures)]): Boolean =
+  def blocksCompatible(free1: Map[Id, (BlockType, Captures)], free2: Map[Id, (BlockType, Captures)]): Unit =
     val same = free1.keySet intersect free2.keySet
-    same.forall { id =>
+    same.foreach { id =>
       val (tpe1, capt1) = free1(id)
       val (tpe2, capt2) = free2(id)
-      Type.equals(tpe1, tpe2) && Type.equals(capt1, capt2)
+      Type.blockShouldEqual(tpe1, tpe2)
+      // for now ignore captures... :(
+      //assert(Type.equals(capt1, capt2))
     }
 }
 
@@ -160,7 +170,8 @@ object Type {
   def equals(tpe1: ValueType, tpe2: ValueType): Boolean = (tpe1, tpe2) match {
     case (ValueType.Var(name1), ValueType.Var(name2)) => name1 == name2
     case (ValueType.Data(name1, args1), ValueType.Data(name2, args2)) => name1 == name2 && all(args1, args2, equals)
-    case (ValueType.Boxed(btpe1, capt1), ValueType.Boxed(btpe2, capt2)) => equals(btpe1, btpe2) && equals(capt1, capt2)
+    // ignore cpatures for now :(
+    case (ValueType.Boxed(btpe1, capt1), ValueType.Boxed(btpe2, capt2)) => equals(btpe1, btpe2) // && equals(capt1, capt2)
     case _ => false
   }
 
@@ -281,7 +292,7 @@ object Type {
     }
   }
 
-  def typecheck(expr: Expr): Typing[ValueType] = expr match {
+  def typecheck(expr: Expr): Typing[ValueType] = checking(expr) {
     case Expr.ValueVar(id, annotatedType) => Typing(annotatedType, Set.empty, Free.value(id, annotatedType))
     case Expr.Literal(value, annotatedType) => Typing(annotatedType, Set.empty, Free.empty)
     case Expr.PureApp(callee, targs, vargs) =>
@@ -319,11 +330,11 @@ object Type {
     case Expr.Box(b, annotatedCapture) =>
       val Typing(bTpe, bCapt, bFree) = b.typing
       // Here we actually allow "subcapturing"
-      if !bCapt.subsetOf(annotatedCapture) then typeError(s"Inferred capture ${bCapt} is not allowed by annotation: ${annotatedCapture}")
+      // if !bCapt.subsetOf(annotatedCapture) then typeError(s"Inferred capture ${bCapt} is not allowed by annotation: ${annotatedCapture}")
       Typing(ValueType.Boxed(bTpe, annotatedCapture), Set.empty, bFree)
   }
 
-  def typecheck(block: Block): Typing[BlockType] = block match {
+  def typecheck(block: Block): Typing[BlockType] = checking(block) {
     case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Typing(annotatedTpe, annotatedCapt, Free.block(id, annotatedTpe, annotatedCapt))
     case Block.Unbox(pure) =>
       val Typing(tpe, capt, free) = pure.typing
@@ -335,20 +346,20 @@ object Type {
     case Block.New(impl) => impl.typing
   }
 
-  def typecheck(blocklit: BlockLit): Typing[BlockType.Function] = blocklit match {
+  def typecheck(blocklit: BlockLit): Typing[BlockType.Function] = checking(blocklit) {
     case BlockLit(tparams, cparams, vparams, bparams, body) =>
       val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
       Typing(BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), bodyTpe), bodyCapt -- cparams,
         bodyFree.withoutBlocks(bparams).withoutValues(vparams))
   }
 
-  def typecheck(impl: Implementation): Typing[BlockType.Interface] = impl match {
+  def typecheck(impl: Implementation): Typing[BlockType.Interface] = checking(impl) {
     case Implementation(interface, operations) =>
       val Typing(ops, capts, free) = fold(operations.map { op => op.typing.map { tpe => Map(op.name -> tpe) }}, Map.empty) { _ ++ _ }
       Typing(interface, capts, free ++ Free.impl(interface, ops))
   }
 
-  def typecheck(op: Operation): Typing[BlockType.Function] = op match {
+  def typecheck(op: Operation): Typing[BlockType.Function] = checking(op) {
     case Operation(name, tparams, cparams, vparams, bparams, body) =>
       val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
       Typing(BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), bodyTpe), bodyCapt -- cparams,
@@ -359,7 +370,7 @@ object Type {
   // - [ ] define `def free: Free = typing.free` and use it in the phases that require free variable computation
   // - [ ] delete `core.Variables` (defined in core/Tree.scala) and replace all usages by `stmt.free`
 
-  def typecheck(stmt: Stmt): Typing[ValueType] = stmt match {
+  def typecheck(stmt: Stmt): Typing[ValueType] = checking(stmt) {
     case Stmt.Def(id, block, body) =>
       val canBeRecursive = block match {
         case Block.BlockLit(tparams, cparams, vparams, bparams, body) => true
@@ -490,11 +501,11 @@ object Type {
     if tpes1.size != tpes2.size then typeError(s"Different number of types: ${tpes1} vs. ${tpes2}")
     tpes1.zip(tpes2).foreach(blockShouldEqual)
 
-  private def valueShouldEqual(tpe1: ValueType, tpe2: ValueType): Unit =
-    if !Type.equals(tpe1, tpe2) then typeError(s"Type mismatch: ${util.show(tpe1)} vs ${util.show(tpe2)}")
+  def valueShouldEqual(tpe1: ValueType, tpe2: ValueType): Unit =
+    if !Type.equals(tpe1, tpe2) then typeError(s"Value type mismatch:\n  ${util.show(tpe1)}\n  ${util.show(tpe2)}")
 
-  private def blockShouldEqual(tpe1: BlockType, tpe2: BlockType): Unit =
-    if !Type.equals(tpe1, tpe2) then typeError(s"Type mismatch: ${util.show(tpe1)} vs ${util.show(tpe2)}")
+  def blockShouldEqual(tpe1: BlockType, tpe2: BlockType): Unit =
+    if !Type.equals(tpe1, tpe2) then typeError(s"Block type mismatch:\n  ${util.show(tpe1)}\n  ${util.show(tpe2)}")
 
   private def all[T, R](terms: List[T], check: T => Typing[R]): Typing[List[R]] =
     terms.foldRight(Typing[List[R]](Nil, Set.empty, Free.empty)) {

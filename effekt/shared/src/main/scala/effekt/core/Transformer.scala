@@ -594,37 +594,39 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
               //
               // Again the typing is wrong in core now. `g` will be tracked, but resume should subtract it.
               case BlockType.FunctionType(_, _, _, List(argTpe @ BlockType.FunctionType(_, _, _, _, result, _)), answer, _) =>
-                ???
-              //                val resultTpe = transform(result)
-              //                val answerTpe = transform(answer)
-              //
-              //                val resumeArgTpe @ core.BlockType.Function(_, cps, _, bps, _) = transform(argTpe) : @unchecked
-              //
-              //                // (0) compute the block parameters from the type of the continuation (since this is what typer annotates)
-              //                val bparams: List[core.BlockParam] = (cps zip bps) map { case (capt, tpe) =>
-              //                  core.BlockParam(Id("g"), tpe, Set(capt))
-              //                }
-              //                val bvars = bparams.map { b => core.BlockVar(b.id, b.tpe, b.capt) }
-              //
-              //                // (1) bind the continuation (k) itself
-              //                val resumeCapture = Id("resume")
-              //                val resumeId = Id("k")
-              //                val resumeTpe = core.Type.TResume(resultTpe, answerTpe)
-              //                val resumeParam: core.BlockParam = core.BlockParam(resumeId, resumeTpe, Set(resumeCapture))
-              //                val resumeVar: core.BlockVar = core.BlockVar(resumeId, resumeTpe, Set(resumeCapture))
-              //
-              //                // (2) eta-expand and bind continuation as a function
-              //                val resumeArgId = Id("h")
-              //                val resumeArgCapture = Id("h")
-              //                val resumeArgParam: core.BlockParam = core.BlockParam(resumeArgId, resumeArgTpe, Set(resumeArgCapture))
-              //                val resumeArgVar: core.BlockVar = core.BlockVar(resumeArgId, resumeArgTpe, Set(resumeArgCapture))
-              //                val resumeFun: core.BlockLit = core.BlockLit(Nil, List(resumeArgCapture), Nil, List(resumeArgParam),
-              //                  core.Stmt.Resume(resumeVar, core.Stmt.App(resumeArgVar, Nil, Nil, bvars)))
-              //
-              //                core.Operation(op.definition, tps, cps, vps, bparams,
-              //                  core.Shift(prompt, core.BlockLit(Nil, List(resumeCapture), Nil, resumeParam :: Nil,
-              //                    core.Stmt.Def(resumeSymbol, resumeFun,
-              //                      transform(body)))))
+                // IDEA (still not sound, but might be backwards compatible): have
+                //    resume(k)) at {g} { h {g} }
+                // where at {g} annotates the captures that should be _subtracted_ by the resume.
+                val resultTpe = transform(result)
+                val answerTpe = transform(answer)
+
+                val resumeArgTpe @ core.BlockType.Function(_, cps, _, bps, _) = transform(argTpe) : @unchecked
+
+                // (0) compute the block parameters from the type of the continuation (since this is what typer annotates)
+                val bparams: List[core.BlockParam] = (cps zip bps) map { case (capt, tpe) =>
+                  core.BlockParam(Id("g"), tpe, Set(capt))
+                }
+                val bvars = bparams.map { b => core.BlockVar(b.id, b.tpe, b.capt) }
+
+                // (1) bind the continuation (k) itself
+                val resumeCapture = transform(Context.captureOf(resumeSymbol))
+                val resumeId = Id("k")
+                val resumeTpe = core.Type.TResume(resultTpe, answerTpe)
+                val resumeParam: core.BlockParam = core.BlockParam(resumeId, resumeTpe, resumeCapture)
+                val resumeVar: core.BlockVar = core.BlockVar(resumeId, resumeTpe, resumeCapture)
+
+                // (2) eta-expand and bind continuation as a function
+                val resumeArgId = Id("h")
+                val resumeArgCapture = Id("h")
+                val resumeArgParam: core.BlockParam = core.BlockParam(resumeArgId, resumeArgTpe, Set(resumeArgCapture))
+                val resumeArgVar: core.BlockVar = core.BlockVar(resumeArgId, resumeArgTpe, Set(resumeArgCapture))
+                val resumeFun: core.BlockLit = core.BlockLit(Nil, List(resumeArgCapture), Nil, List(resumeArgParam),
+                  core.Stmt.Resume(resumeVar, core.Stmt.App(resumeArgVar, Nil, Nil, bvars)))
+
+                core.Operation(op.definition, tps, cps, vps, bparams,
+                  core.Shift(prompt, resumeParam,
+                    core.Stmt.Def(resumeSymbol, resumeFun,
+                      transform(body))))
 
               case _ => ???
             }
@@ -870,8 +872,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def ValueParam(id: ValueSymbol)(using Context): core.ValueParam =
     core.ValueParam(id, transform(Context.valueTypeOf(id)))
 
-  def BlockParam(id: BlockSymbol)(using Context): core.BlockParam =
-    core.BlockParam(id, transform(Context.blockTypeOf(id)), Set(id))
+  def BlockParam(id: TrackedParam)(using Context): core.BlockParam =
+    core.BlockParam(id, transform(Context.blockTypeOf(id)), Set(id.capture))
 
   def ValueVar(id: ValueSymbol)(using Context): core.ValueVar =
     core.ValueVar(id, transform(Context.valueTypeOf(id)))

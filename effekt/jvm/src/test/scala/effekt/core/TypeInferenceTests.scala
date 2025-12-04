@@ -85,12 +85,14 @@ class TypeInferenceTests extends CoreTests {
   }
 
   test("compatibility") {
-    assertEquals(Free.valuesCompatible(Map.empty, Map.empty), true)
-    assertEquals(Free.valuesCompatible(Map(f -> TInt), Map.empty), true)
-    assertEquals(Free.valuesCompatible(Map(f -> TInt), Map(f -> TInt)), true)
-    assertEquals(Free.valuesCompatible(Map(f -> TInt), Map(f -> TInt, g -> TByte)), true)
+    Free.valuesCompatible(Map.empty, Map.empty)
+    Free.valuesCompatible(Map(f -> TInt), Map.empty)
+    Free.valuesCompatible(Map(f -> TInt), Map(f -> TInt))
+    Free.valuesCompatible(Map(f -> TInt), Map(f -> TInt, g -> TByte))
 
-    assertEquals(Free.valuesCompatible(Map(f -> TInt), Map(f -> TBoolean, g -> TByte)), false)
+    intercept[TypeError] {
+      Free.valuesCompatible(Map(f -> TInt), Map(f -> TBoolean, g -> TByte))
+    }
   }
 
   test("typechecking") {
