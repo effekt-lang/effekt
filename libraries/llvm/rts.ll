@@ -96,7 +96,8 @@
 
 declare void @initializeMemory()
 declare ptr @acquire()
-declare void @pushOnFreeList(ptr)
+declare void @pushOntoFreeList(ptr)
+declare void @test(ptr)
 
 
 declare ptr @malloc(i64)

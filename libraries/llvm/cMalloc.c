@@ -68,9 +68,9 @@ void* acquire() {
 /**
  * Pushes a slot on the top of the To-Do-List.
  */
-void pushOnFreeList(void* ptr) {
+void pushOntoFreeList(void* ptr) {
     if (DEBUG) {
-        printf("[pushOnFreeList] Freed block: %p\n", ptr);
+        printf("[pushOntoFreeList] Freed block: %p\n", ptr);
     }
 
     Slot* slot = (Slot*)ptr;
