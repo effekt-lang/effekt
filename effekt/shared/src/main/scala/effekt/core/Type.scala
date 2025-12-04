@@ -90,6 +90,10 @@ case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures
     }
     Free(values - id, blocks, constraints)
 
+  def withoutValues(bindings: List[ValueParam]): Free = bindings.foldLeft(this) {
+    case (free, ValueParam(id, tpe)) => free.withoutValue(id, tpe)
+  }
+
   def withoutBlock(id: Id, tpe: BlockType, capt: Captures): Free =
     blocks.get(id).foreach { case (otherTpe, otherCapt) =>
       if !Type.equals(tpe, otherTpe) then
@@ -98,6 +102,10 @@ case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures
         typeError(s"free variable assume a wrong capture set (${util.show(capt)} vs. ${util.show(otherCapt)})")
     }
     Free(values, blocks - id, constraints)
+
+  def withoutBlocks(bindings: List[BlockParam]): Free = bindings.foldLeft(this) {
+    case (free, BlockParam(id, tpe, capt)) => free.withoutBlock(id, tpe, capt)
+  }
 
   def isEmpty: Boolean = values.isEmpty && blocks.isEmpty
 }
@@ -319,11 +327,16 @@ object Type {
         case ValueType.Boxed(tpe2, capt2) => Typing(tpe2, capt2, free)
         case other => typeError(s"Expected a boxed type, but got: ${util.show(other)}")
       }
-    case b : Block.BlockLit => b.typing
+    case b : Block.BlockLit => typecheck(b)
     case Block.New(impl) => impl.typing
   }
 
-  def typecheck(blocklit: BlockLit): Typing[BlockType.Function] = ???
+  def typecheck(blocklit: BlockLit): Typing[BlockType.Function] = blocklit match {
+    case BlockLit(tparams, cparams, vparams, bparams, body) =>
+      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
+      Typing(BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), bodyTpe), bodyCapt -- cparams,
+        bodyFree.withoutBlocks(bparams).withoutValues(vparams))
+  }
 
   def typecheck(impl: Implementation): Typing[BlockType.Interface] = ???
 
@@ -387,17 +400,32 @@ object Type {
     case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => ???
 
     case Stmt.Region(body) =>
-      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = body.typing.asInstanceOf
+      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = body.typing.asInstanceOf[Typing[BlockType.Function]]
       // TODO we should check that cparams do not occur in result!
       Typing(result, bodyCapt, bodyFree)
 
-    case Stmt.Alloc(id, init, region, body) => ???
-    case Stmt.Var(ref, init, capture, body) => ???
-    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => ???
-    case Stmt.Put(ref, annotatedCapt, value, body) => ???
+    case Stmt.Alloc(id, init, region, body) =>
+      val Typing(initTpe, initCapt, initFree) = init.typing
+      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
+      Typing(bodyTpe, bodyCapt ++ Set(region),
+        initFree ++ Free.block(region, TRegion, Set(region)) ++ bodyFree.withoutBlock(id, TState(init.tpe), Set(region)))
+
+    case Stmt.Var(ref, init, capture, body) =>
+      val Typing(initTpe, initCapt, initFree) = init.typing
+      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
+      Typing(bodyTpe, bodyCapt -- Set(capture), initFree ++ bodyFree.withoutValue(ref, init.tpe))
+
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
+      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
+      Typing(bodyTpe, bodyCapt ++ annotatedCapt, Free.block(ref, core.Type.TState(annotatedTpe), annotatedCapt) ++ bodyFree.withoutValue(id, annotatedTpe))
+
+    case Stmt.Put(ref, annotatedCapt, value, body) =>
+      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
+      val Typing(valueTpe, valueCapt, valueFree) = value.typing
+      Typing(bodyTpe, bodyCapt ++ annotatedCapt, Free.block(ref, core.Type.TState(valueTpe), annotatedCapt) ++ valueFree ++ bodyFree)
 
     case Stmt.Reset(body) =>
-      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = body.typing.asInstanceOf
+      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = body.typing.asInstanceOf[Typing[BlockType.Function]]
       // TODO we should check that cparams do not occur in result!
       Typing(result, bodyCapt, bodyFree)
 

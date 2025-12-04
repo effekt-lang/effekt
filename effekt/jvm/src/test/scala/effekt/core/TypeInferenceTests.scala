@@ -10,6 +10,7 @@ class TypeInferenceTests extends CoreTests {
   val NoneC: Id    = Id("None")
   val OptionId: Id = Id("Option")
   val f: Id        = Id("f")
+  val r: Id        = Id("r")
   val value: Id    = Id("value")
   val g: Id        = Id("g")
   val x: Id        = Id("x")
@@ -100,13 +101,13 @@ class TypeInferenceTests extends CoreTests {
         Constructor(NoneC, Nil, Nil) :: Nil)
     ), Nil)
 
-    val input1 = Stmt.Val(x,
+    val ex1 = Stmt.Val(x,
       Stmt.Return(Expr.Literal(42, TInt)),
       Stmt.Return(Expr.ValueVar(x, TInt)))
 
-    assertEquals(input1.tpe, TInt)
-    assertEquals(input1.capt, Set.empty)
-    assertEquals(input1.free, Free.empty)
+    assertEquals(ex1.tpe, TInt)
+    assertEquals(ex1.capt, Set.empty)
+    assertEquals(ex1.free, Free.empty)
 
     intercept[TypeError] {
       Stmt.Val(x,
@@ -120,11 +121,11 @@ class TypeInferenceTests extends CoreTests {
 
     val add: Block.BlockVar = Block.BlockVar(infixAdd, BlockType.Function(Nil, Nil, List(TInt, TInt), Nil, TInt), Set.empty)
 
-    val input3 = Stmt.Val(x,
+    val ex3 = Stmt.Val(x,
       Stmt.Return(Expr.Literal(42, TInt)),
       Stmt.Return(Expr.PureApp(add, Nil, Expr.ValueVar(x, TInt) :: Expr.ValueVar(x, TInt) :: Nil)))
 
-    assertEquals(typecheck(input3),
+    assertEquals(typecheck(ex3),
       Typing(TInt, Set.empty, Free.block(add.id, add.annotatedTpe, add.annotatedCapt)), Constraints.empty)
 
     // [A](Option[A], A): A
@@ -145,14 +146,21 @@ class TypeInferenceTests extends CoreTests {
       typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(x, TInt) :: Nil))
     }
 
-    val input4 = Make(OptionT(TInt), SomeC, List(), List(Literal(42, TInt)))
-    assertSameType(input4.tpe, OptionT(TInt))
-    assertEquals(input4.free, Free.make(SomeC, OptionT(TInt), Nil, List(TInt)))
+    val ex4 = Make(OptionT(TInt), SomeC, List(), List(Literal(42, TInt)))
+    assertSameType(ex4.tpe, OptionT(TInt))
+    assertEquals(ex4.free, Free.make(SomeC, OptionT(TInt), Nil, List(TInt)))
 
-    val input5 = Make(OptionT(TInt), NoneC, List(), List())
-    assertSameType(input5.tpe, OptionT(TInt))
-    assertEquals(input5.free, Free.make(NoneC, OptionT(TInt), Nil, Nil))
+    val ex5 = Make(OptionT(TInt), NoneC, List(), List())
+    assertSameType(ex5.tpe, OptionT(TInt))
+    assertEquals(ex5.free, Free.make(NoneC, OptionT(TInt), Nil, Nil))
   }
+
+  val ex6 = Stmt.Region(Block.BlockLit(Nil, r :: Nil, Nil, BlockParam(r, TRegion, Set(r)) :: Nil,
+    Stmt.Alloc(x, Expr.Literal(42, TInt), r,
+      Stmt.Get(y, TInt, x, Set(r),
+        Stmt.Return(Expr.ValueVar(y, TInt))))))
+
+  println(ex6.tpe)
 
   inline def assertSameType(got: ValueType, expected: ValueType)(using DeclarationContext): Unit =
     assertEquals(Type.equals(got, expected), true)
