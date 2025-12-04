@@ -320,14 +320,14 @@ def tee[A]{ cons1: { => Unit / emit[A] } => Unit }{ cons2: { => Unit / emit[A] }
 /// > first[Bool] { do emit(true) }
 /// true
 /// > first[String] { () } // empty stream
-/// <Exception MissingValue: code in first did not emit any values>
+/// <fail>
 /// ```
-def first[A] { body: => Unit / emit[A] }: A / Exception[MissingValue] =
+def first[A] { stream: () => Unit / emit[A] }: A / fail = {
   try {
+    def body(): A = { stream(); do fail() }
     body()
-    val r: A = do raise[MissingValue](MissingValue(), "code in first did not emit any values")
-    r
   } with emit[A] { a => a }
+}
 
 namespace returning {
 
