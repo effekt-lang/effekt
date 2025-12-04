@@ -397,7 +397,21 @@ object Type {
       shouldEqual(thnTpe, elsTpe)
       Typing(thnTpe, condCapt ++ thnCapt ++ elsCapt, condFree ++ thnFree ++ elsFree)
 
-    case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => ???
+    case Stmt.Match(sc, annotatedTpe, clauses, default) =>
+      val Typing(scType, scCapt, scFree) = sc.typing
+      val clauseTypings = clauses.map { case (id, arm) =>
+        val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), armCapt, armFree) = arm.typing.asInstanceOf[Typing[BlockType.Function]]
+        Typing(result, armCapt, armFree ++ Free.make(id, sc.tpe.asInstanceOf[ValueType.Data], tparams.map(id => ValueType.Var(id)), vparams))
+      }
+
+      def join(typings: List[Typing[ValueType]], annotated: ValueType): Typing[ValueType] =
+        typings.foldLeft(Typing(annotated, Set.empty, Free.empty)) {
+          case (Typing(tpe1, capt1, free1), Typing(tpe2, capt2, free2)) =>
+            shouldEqual(tpe1, tpe2)
+            Typing(tpe1, capt1 ++ capt2, free1 ++ free2)
+        }
+
+      join(clauseTypings ++ default.toList.map { stmt => stmt.typing }, annotatedTpe)
 
     case Stmt.Region(body) =>
       val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = body.typing.asInstanceOf[Typing[BlockType.Function]]
