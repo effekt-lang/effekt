@@ -25,7 +25,7 @@ object semantics {
   def all[A](ts: List[A], f: A => Variables): Variables = ts.flatMap(f).toSet
 
   type Neutral = Value.Var | Value.PureExtern
-  
+
   enum Value {
     // Stuck (neutrals)
     case Var(id: Id, annotatedType: ValueType)
@@ -274,6 +274,11 @@ object semantics {
     // Known function
     case Def(closure: Closure)
 
+    // known identifiers introduced by reset, var and region
+    case Prompt(id: Id)
+    case Reference(id: Id)
+    case Region(id: Id)
+
     case Continuation(k: Cont)
 
     case BuiltinExtern(id: Id, builtinName: String)
@@ -283,6 +288,9 @@ object semantics {
 
     val free: Variables = this match {
       case Computation.Var(id) => Set(id)
+      case Computation.Prompt(id) => Set(id)
+      case Computation.Reference(id) => Set(id)
+      case Computation.Region(id) => Set(id)
       case Computation.Def(closure) => closure.free
       case Computation.Continuation(k) => Set.empty // TODO ???
       case Computation.New(interface, operations) => operations.flatMap(_._2.free).toSet
@@ -291,6 +299,9 @@ object semantics {
 
     val dynamicCapture: Variables = this match {
       case Computation.Var(id) => Set(id)
+      case Computation.Prompt(id) => Set(id)
+      case Computation.Reference(id) => Set(id)
+      case Computation.Region(id) => Set(id)
       case Computation.Def(closure) => closure.dynamicCapture
       case Computation.Continuation(k) => Set.empty // TODO ???
       case Computation.New(interface, operations) => operations.flatMap(_._2.dynamicCapture).toSet
@@ -712,6 +723,7 @@ object semantics {
         hsep(operations.map { case (id, impl) => "def" <+> toDoc(id) <+> "=" <+> toDoc(impl) }, ",")
       }
       case Computation.BuiltinExtern(id, vmSymbol) => "extern" <+> toDoc(id) <+> "=" <+> vmSymbol
+      case _ => ???
     }
     def toDoc(closure: Closure): Doc = closure match {
       case Closure(label, env) => toDoc(label) <+> "@" <+> brackets(hsep(env.map(toDoc), comma))

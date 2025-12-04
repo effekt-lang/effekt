@@ -290,7 +290,7 @@ class NewNormalizer {
               NeutralStmt.Jump(label, targs, args, blockargs ++ environment)
             }
           }
-        case _: (Computation.New | Computation.Continuation | Computation.BuiltinExtern) => sys error "Should not happen"
+        case _: (Computation.New | Computation.Prompt | Computation.Reference | Computation.Region | Computation.Continuation | Computation.BuiltinExtern) => sys error "Should not happen"
       }
 
     // case Stmt.Invoke(New)
@@ -304,7 +304,7 @@ class NewNormalizer {
           operations.collectFirst { case (id, Closure(label, environment)) if id == method =>
             reify(k, ks) { NeutralStmt.Jump(label, targs, vargs.map(evaluate(_, ks)), bargs.map(evaluate(_, "f", escapingStack)) ++ environment) }
           }.get
-        case _: (Computation.Def | Computation.Continuation | Computation.BuiltinExtern) => sys error s"Should not happen"
+        case _: (Computation.Def | Computation.Prompt | Computation.Reference | Computation.Region | Computation.Continuation | Computation.BuiltinExtern) => sys error s"Should not happen"
       }
 
     case Stmt.If(cond, thn, els) =>
@@ -376,8 +376,10 @@ class NewNormalizer {
 
     // State
     case Stmt.Region(BlockLit(Nil, List(capture), Nil, List(cap), body)) =>
-      given Env = env.bindComputation(cap.id, Computation.Var(cap.id))
-      evaluate(body, Frame.Return, Stack.Region(cap, Map.empty, k, ks))
+      val reg = Id(cap.id)
+      bind(cap.id, Computation.Region(reg)) {
+        evaluate(body, Frame.Return, Stack.Region(cap, Map.empty, k, ks))
+      }
     case Stmt.Region(_) => ???
     case Stmt.Alloc(id, init, region, body) =>
       val addr = evaluate(init, ks)
@@ -388,9 +390,9 @@ class NewNormalizer {
       }
 
     case Stmt.Var(ref, init, capture, body) =>
+      val r = Id(ref)
       val addr = evaluate(init, ks)
-      // TODO Var means unknown. Here we have contrary: it is a statically (!) known variable
-      bind(ref, Computation.Var(ref)) {
+      bind(ref, Computation.Reference(r)) {
         evaluate(body, Frame.Return, Stack.Var(BlockParam(ref, Type.TState(init.tpe), Set(capture)), addr, k, ks))
       }
     case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
@@ -409,7 +411,7 @@ class NewNormalizer {
     // Control Effects
     case Stmt.Shift(prompt, core.Block.BlockLit(Nil, cparam :: Nil, Nil, k2 :: Nil, body)) =>
       val p = env.lookupComputation(prompt.id) match {
-        case Computation.Var(id) => id
+        case Computation.Prompt(id) => id
         case _ => ???
       }
 
@@ -431,9 +433,9 @@ class NewNormalizer {
 
     case Stmt.Reset(core.Block.BlockLit(Nil, cparams, Nil, prompt :: Nil, body)) =>
       val p = Id(prompt.id)
-      // TODO is Var correct here?? Probably needs to be a new computation value...
-      given Env = env.bindComputation(prompt.id -> Computation.Var(p) :: Nil)
-      evaluate(body, Frame.Return, Stack.Reset(BlockParam(p, prompt.tpe, prompt.capt), k, ks))
+      bind(prompt.id, Computation.Prompt(p)) {
+        evaluate(body, Frame.Return, Stack.Reset(BlockParam(p, prompt.tpe, prompt.capt), k, ks))
+      }
 
     case Stmt.Reset(_) => ???
     case Stmt.Resume(k2, body) =>
@@ -620,7 +622,7 @@ class NewNormalizer {
     case Value.Integer(value) => theories.integers.reify(value, cx.builtinBlockVars, embedNeutral)
     case Value.String(value) => theories.strings.reify(value, cx.builtinBlockVars, embedNeutral)
   }
-  
+
   def embedNeutral(neutral: Neutral)(using G: TypingContext): core.Expr = neutral match {
     case Value.Var(id, annotatedType) => Expr.ValueVar(id, annotatedType)
     case Value.PureExtern(callee, targs, vargs) => Expr.PureApp(callee, targs, vargs.map(embedExpr))
@@ -635,6 +637,9 @@ class NewNormalizer {
       embedBlockVar(label)
     case Computation.Def(closure) =>
       etaExpandToBlockLit(closure)
+    case Computation.Reference(_) => ???
+    case Computation.Region(_) => ???
+    case Computation.Prompt(_) => ???
     case Computation.Continuation(k) => ???
     case Computation.BuiltinExtern(_, _) => ???
     case Computation.New(interface, operations) =>
