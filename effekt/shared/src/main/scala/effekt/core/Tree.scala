@@ -738,7 +738,7 @@ object substitutions {
 
       case Shift(prompt, k, body) =>
         val after = substitute(body)(using subst shadowBlocks List(k.id))
-        Shift(substitute(prompt).asInstanceOf[BlockVar], k, after)
+        Shift(substitute(prompt).asInstanceOf[BlockVar], substitute(k), after)
 
       case Resume(k, body) =>
         Resume(substitute(k).asInstanceOf[BlockVar], substitute(body))

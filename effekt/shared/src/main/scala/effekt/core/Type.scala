@@ -446,10 +446,11 @@ object Type {
       Typing(result, bodyCapt, bodyFree)
 
     // shift(p) { k: Resume[from, to] => body }
-    case Stmt.Shift(prompt, BlockParam(k, tpe@BlockType.Interface(ResumeSymbol, List(from, to)), capt), body) =>
+    case Stmt.Shift(BlockVar(id, ptpe@TPrompt(delimiter), annotatedCapt), BlockParam(k, tpe@BlockType.Interface(ResumeSymbol, List(from, to)), capt), body) =>
       val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
       valueShouldEqual(to, bodyTpe)
-      Typing(from, bodyCapt ++ Set(prompt.id), bodyFree.withoutBlock(k, tpe, capt) ++ Free.block(prompt.id, prompt.annotatedTpe, prompt.capt))
+      valueShouldEqual(to, delimiter)
+      Typing(from, bodyCapt ++ Set(id), bodyFree.withoutBlock(k, tpe, capt) ++ Free.block(id, ptpe, annotatedCapt))
 
     case Stmt.Shift(prompt, BlockParam(k, tpe, capt), body) =>
       typeError(s"Block parameter of shift have wrong type: ${k}: ${tpe}")
