@@ -269,15 +269,13 @@ object semantics {
   }
 
   enum Computation {
-    // Unknown
-    case Var(id: Id)
+    // Unknown identifiers -- stuck
+    case Unknown(id: Id)
     // Known function
     case Def(closure: Closure)
 
     // known identifiers introduced by reset, var and region
-    case Prompt(id: Id)
-    case Reference(id: Id)
-    case Region(id: Id)
+    case Known(inner: Static[Id])
 
     case Continuation(k: Cont)
 
@@ -287,10 +285,8 @@ object semantics {
     case New(interface: BlockType.Interface, operations: List[(Id, Closure)])
 
     val free: Variables = this match {
-      case Computation.Var(id) => Set(id)
-      case Computation.Prompt(id) => Set(id)
-      case Computation.Reference(id) => Set(id)
-      case Computation.Region(id) => Set(id)
+      case Computation.Unknown(id) => Set(id)
+      case Computation.Known(inner) => Set(inner.id)
       case Computation.Def(closure) => closure.free
       case Computation.Continuation(k) => Set.empty // TODO ???
       case Computation.New(interface, operations) => operations.flatMap(_._2.free).toSet
@@ -298,10 +294,8 @@ object semantics {
     }
 
     val dynamicCapture: Variables = this match {
-      case Computation.Var(id) => Set(id)
-      case Computation.Prompt(id) => Set(id)
-      case Computation.Reference(id) => Set(id)
-      case Computation.Region(id) => Set(id)
+      case Computation.Unknown(id) => Set(id)
+      case Computation.Known(inner) => Set(inner.id)
       case Computation.Def(closure) => closure.dynamicCapture
       case Computation.Continuation(k) => Set.empty // TODO ???
       case Computation.New(interface, operations) => operations.flatMap(_._2.dynamicCapture).toSet
@@ -309,10 +303,23 @@ object semantics {
     }
   }
 
+  enum Static[I] {
+    case Prompt(id: I)
+    case Reference(id: I)
+    case Region(id: I)
+    val id: I
+
+    def map[A](f: I => A): Static[A] = this match {
+      case Static.Prompt(id) => Static.Prompt(f(id))
+      case Static.Reference(id) => Static.Reference(f(id))
+      case Static.Region(id) => Static.Region(f(id))
+    }
+  }
+
   // TODO add escaping mutable variables
-  case class Closure(label: Label, environment: List[Computation.Var]) {
+  case class Closure(label: Label, environment: List[Computation.Known]) {
     val free: Variables = Set(label) ++ environment.flatMap(_.free).toSet
-    val dynamicCapture: Variables = environment.map(_.id).toSet
+    val dynamicCapture: Variables = environment.map(_.inner.id).toSet
   }
 
   // Statements
@@ -429,12 +436,12 @@ object semantics {
     // TODO desugar regions into var?
     case Region(id: BlockParam, bindings: Map[BlockParam, Addr], frame: Frame, next: Stack)
 
-    lazy val bound: List[BlockParam] = this match {
-      case Stack.Empty => Nil
-      case Stack.Unknown => Nil
-      case Stack.Reset(prompt, frame, next) => prompt :: next.bound
-      case Stack.Var(id, curr, frame, next) => id :: next.bound
-      case Stack.Region(id, bindings, frame, next) => id :: next.bound ++ bindings.keys
+    lazy val bound: Set[Static[BlockParam]] = this match {
+      case Stack.Empty => Set.empty
+      case Stack.Unknown => Set.empty
+      case Stack.Reset(prompt, frame, next) => next.bound + Static.Prompt(prompt)
+      case Stack.Var(id, curr, frame, next) => next.bound + Static.Reference(id)
+      case Stack.Region(id, bindings, frame, next) => next.bound ++ bindings.keys.map { k => Static.Reference(k) } + Static.Region(id)
     }
   }
 
@@ -537,9 +544,9 @@ object semantics {
             k
           case body =>
             val k = Id("k")
-            val closureParams = escaping.bound.collect { case p if body.dynamicCapture contains p.id => p }
-            scope.define(k, Block(Nil, ValueParam(x, tpe) :: Nil, closureParams, body))
-            Frame.Dynamic(Closure(k, closureParams.map { p => Computation.Var(p.id) }))
+            val closureParams = escaping.bound.collect { case bp if body.dynamicCapture contains bp.id.id => bp }.toList
+            scope.define(k, Block(Nil, ValueParam(x, tpe) :: Nil, closureParams.map(_.id), body))
+            Frame.Dynamic(Closure(k, closureParams.map { bp => Computation.Known(bp.map(_.id)) }))
         }
       case Frame.Return => k
       case Frame.Dynamic(label) => k
@@ -716,14 +723,16 @@ object semantics {
     }
 
     def toDoc(comp: Computation): Doc = comp match {
-      case Computation.Var(id) => toDoc(id)
+      case Computation.Unknown(id) => toDoc(id)
       case Computation.Def(closure) => toDoc(closure)
+      case Computation.Known(Static.Reference(id)) => "ref@" <> toDoc(id)
+      case Computation.Known(Static.Region(id)) => "reg@" <> toDoc(id)
+      case Computation.Known(Static.Prompt(id)) => "p@" <> toDoc(id)
       case Computation.Continuation(k) => ???
       case Computation.New(interface, operations) => "new" <+> toDoc(interface) <+> braces {
         hsep(operations.map { case (id, impl) => "def" <+> toDoc(id) <+> "=" <+> toDoc(impl) }, ",")
       }
       case Computation.BuiltinExtern(id, vmSymbol) => "extern" <+> toDoc(id) <+> "=" <+> vmSymbol
-      case _ => ???
     }
     def toDoc(closure: Closure): Doc = closure match {
       case Closure(label, env) => toDoc(label) <+> "@" <+> brackets(hsep(env.map(toDoc), comma))
