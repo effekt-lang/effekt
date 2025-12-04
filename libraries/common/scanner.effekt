@@ -65,7 +65,7 @@ def readWhile[A] { predicate: A => Bool }: Unit / { Scan[A], emit[A] } =
   many { readIf{predicate} }
 
 /// Skips until the predicate does not hold for the next token.
-def skipWhile[A] { predicate: A => Bool }: Unit / { Scan[A] } =
+def skipWhile[A] { predicate: A => Bool }: Unit / Scan[A] =
   for[A] { readWhile{predicate} } { _ => () }
 
 /// Read the next character if it is the given one.
@@ -90,7 +90,7 @@ def separating[A](seperator: Char) { action: () => A / stop }: Unit / { Scan[Cha
 
 
 /// Skip until the next character is not a whitespace character
-def skipWhitespace(): Unit / { Scan[Char] } =
+def skipWhitespace(): Unit / Scan[Char] =
   skipWhile { c => c.isWhitespace }
 
 /// Read the characters of the given stringing otherwise.

@@ -22,20 +22,18 @@ def emitTree(n: Int): Unit / emit[Byte] =
     do emit(41.toByte)
   }
 
-type Tree {
-  Node(children: List[Tree])
-}
+record Tree(children: List[Tree])
 
 def readTree(): Tree / { Scan[Byte], stop } = {
   skipIf[Byte] { b => b.toInt == 40 }
   val children = list::collect[Tree] { many { readTree() } }
   skipIf[Byte] { b => b.toInt == 41 }
-  Node(children)
+  Tree(children)
 }
 
 def size(tree: Tree): Int =
   tree match {
-    case Node(children) => 1 + sum {
+    case Tree(children) => 1 + sum {
       for[Tree] { children.each } { tree => do emit(size(tree)) }
     }
   }
