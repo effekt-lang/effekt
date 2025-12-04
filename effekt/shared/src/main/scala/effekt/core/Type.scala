@@ -344,9 +344,16 @@ object Type {
 
   def valuesShouldEqual(tpes1: List[ValueType], tpes2: List[ValueType]): Unit =
     if tpes1.size != tpes2.size then typeError(s"Different number of types: ${tpes1} vs. ${tpes2}")
-    tpes1.zip(tpes2).foreach(shouldEqual)
+    tpes1.zip(tpes2).foreach(valueShouldEqual)
 
-  def shouldEqual(tpe1: ValueType, tpe2: ValueType): Unit =
+  def blocksShouldEqual(tpes1: List[BlockType], tpes2: List[BlockType]): Unit =
+    if tpes1.size != tpes2.size then typeError(s"Different number of types: ${tpes1} vs. ${tpes2}")
+    tpes1.zip(tpes2).foreach(blockShouldEqual)
+
+  def valueShouldEqual(tpe1: ValueType, tpe2: ValueType): Unit =
+    if !Type.equals(tpe1, tpe2) then typeError(s"Type mismatch: ${util.show(tpe1)} vs ${util.show(tpe2)}")
+
+  def blockShouldEqual(tpe1: BlockType, tpe2: BlockType): Unit =
     if !Type.equals(tpe1, tpe2) then typeError(s"Type mismatch: ${util.show(tpe1)} vs ${util.show(tpe2)}")
 
   def all[T, R](terms: List[T], check: T => Typing[R]): Typing[List[R]] =
@@ -389,28 +396,28 @@ object Type {
       val Typing(condTpe, condCapt, condFree) = cond.typing
       val Typing(thnTpe, thnCapt, thnFree) = thn.typing
       val Typing(elsTpe, elsCapt, elsFree) = els.typing
-      shouldEqual(condTpe, TBoolean)
-      shouldEqual(thnTpe, elsTpe)
+      valueShouldEqual(condTpe, TBoolean)
+      valueShouldEqual(thnTpe, elsTpe)
       Typing(thnTpe, condCapt ++ thnCapt ++ elsCapt, condFree ++ thnFree ++ elsFree)
 
     case Stmt.Match(sc, annotatedTpe, clauses, default) =>
       val Typing(scType, scCapt, scFree) = sc.typing
       val clauseTypings = clauses.map { case (id, arm) =>
-        val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), armCapt, armFree) = arm.typing.asInstanceOf[Typing[BlockType.Function]]
+        val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), armCapt, armFree) = asFunctionTyping(arm.typing)
         Typing(result, armCapt, armFree ++ Free.make(id, sc.tpe.asInstanceOf[ValueType.Data], tparams.map(id => ValueType.Var(id)), vparams))
       }
 
       def join(typings: List[Typing[ValueType]], annotated: ValueType): Typing[ValueType] =
         typings.foldLeft(Typing(annotated, Set.empty, Free.empty)) {
           case (Typing(tpe1, capt1, free1), Typing(tpe2, capt2, free2)) =>
-            shouldEqual(tpe1, tpe2)
+            valueShouldEqual(tpe1, tpe2)
             Typing(tpe1, capt1 ++ capt2, free1 ++ free2)
         }
 
       join(clauseTypings ++ default.toList.map { stmt => stmt.typing }, annotatedTpe)
 
     case Stmt.Region(body) =>
-      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = body.typing.asInstanceOf[Typing[BlockType.Function]]
+      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = asFunctionTyping(body.typing)
       // TODO we should check that cparams do not occur in result!
       Typing(result, bodyCapt, bodyFree)
 
@@ -435,14 +442,14 @@ object Type {
       Typing(bodyTpe, bodyCapt ++ annotatedCapt, Free.block(ref, core.Type.TState(valueTpe), annotatedCapt) ++ valueFree ++ bodyFree)
 
     case Stmt.Reset(body) =>
-      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = body.typing.asInstanceOf[Typing[BlockType.Function]]
+      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = asFunctionTyping(body.typing)
       // TODO we should check that cparams do not occur in result!
       Typing(result, bodyCapt, bodyFree)
 
     // shift(p) { k: Resume[from, to] => body }
     case Stmt.Shift(prompt, BlockParam(k, tpe@BlockType.Interface(ResumeSymbol, List(from, to)), capt), body) =>
       val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
-      shouldEqual(to, bodyTpe)
+      valueShouldEqual(to, bodyTpe)
       Typing(from, bodyCapt ++ Set(prompt.id), bodyFree.withoutBlock(k, tpe, capt) ++ Free.block(prompt.id, prompt.annotatedTpe, prompt.capt))
 
     case Stmt.Shift(prompt, BlockParam(k, tpe, capt), body) =>
@@ -451,17 +458,42 @@ object Type {
     // resume(k) { stmt }
     case Stmt.Resume(BlockVar(id, tpe@BlockType.Interface(ResumeSymbol, List(result, answer)), annotatedCapt), body) =>
       val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
-      shouldEqual(result, bodyTpe)
+      valueShouldEqual(result, bodyTpe)
       Typing(answer, annotatedCapt ++ bodyCapt, bodyFree ++ Free.block(id, tpe, annotatedCapt))
 
     case Stmt.Resume(k, body) => typeError(s"Continuation has wrong type: ${k}")
 
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
+    case Stmt.ImpureApp(id, BlockVar(f, tpe: BlockType.Function, annotatedCapt), targs, vargs, bargs, body) =>
+      val Typing(retType, callCapts, callFree) = typecheckFunctionLike(Typing(tpe, annotatedCapt, Free.block(f, tpe, annotatedCapt)), targs, vargs, bargs)
+      val Typing(bodyType, bodyCapts, bodyFree) = body.typing
+      Typing(bodyType, callCapts ++ bodyCapts, callFree ++ bodyFree.withoutValue(id, retType))
 
-    case Stmt.App(callee, targs, vargs, bargs) => ???
+    case s: Stmt.ImpureApp => typeError("Impure app should have a function type")
 
-    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
+    case Stmt.App(callee, targs, vargs, bargs) => typecheckFunctionLike(asFunctionTyping(callee.typing), targs, vargs, bargs)
+
+    case Stmt.Invoke(callee, method, methodTpe: BlockType.Function, targs, vargs, bargs) =>
+      val Typing(calleeTpe, calleeCapts, calleeFree) = callee.typing
+      typecheckFunctionLike(Typing(methodTpe, calleeCapts, calleeFree), targs, vargs, bargs)
+
+    case s: Stmt.Invoke => typeError("Method type should be a function")
 
     case Stmt.Hole(annotatedTpe, span) => Typing(annotatedTpe, Set.empty, Free.empty)
   }
+
+  def typecheckFunctionLike(calleeTyping: Typing[BlockType.Function], targs: List[ValueType], vargs: List[Expr], bargs: List[Block]): Typing[ValueType] = {
+    val Typing(calleeTpe, calleeCapt, calleeFree) = calleeTyping
+    val Typing(vargTypes, vargCapt, vargFree) = all(vargs, arg => arg.typing)
+    val Typing(bargTypes, bargCapt, bargFree) = all(bargs, arg => arg.typing)
+
+    val BlockType.Function(_, _, vparams, bparams, retType) = instantiate(calleeTpe, targs, bargs.map(_.capt))
+
+    valuesShouldEqual(vparams, vargTypes)
+    blocksShouldEqual(bparams, bargTypes)
+
+    Typing(retType, calleeCapt ++ vargCapt ++ bargCapt, calleeFree ++ vargFree ++ bargFree)
+  }
+
+
+  def asFunctionTyping(t: Typing[BlockType]): Typing[BlockType.Function] = t.asInstanceOf
 }
