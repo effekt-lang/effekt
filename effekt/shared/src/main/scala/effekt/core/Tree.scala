@@ -183,6 +183,7 @@ enum Expr extends Tree {
   val typing: Typing[ValueType] = Type.typecheck(this)
   val tpe: ValueType = typing.tpe
   val capt: Captures = typing.capt
+  val free: Free = typing.free
 
   // This is to register custom type renderers in IntelliJ -- yes, it has to be a method!
   def show: String = util.show(this)
@@ -297,6 +298,7 @@ enum Stmt extends Tree {
   val typing: Typing[ValueType] = Type.typecheck(this)
   val tpe: ValueType = typing.tpe
   val capt: Captures = typing.capt
+  val free: Free = typing.free
 
   def show: String = util.show(this)
 }
@@ -309,8 +311,9 @@ export Stmt.*
  * Used to represent handlers / capabilities, and objects / modules.
  */
 case class Implementation(interface: BlockType.Interface, operations: List[Operation]) extends Tree {
-  val tpe = interface
-  val capt = operations.flatMap(_.capt).toSet
+  val typing: Typing[BlockType.Interface] = Type.typecheck(this)
+  val tpe: BlockType.Interface = typing.tpe
+  val capt: Captures = typing.capt
 }
 
 /**
@@ -319,7 +322,7 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
  * TODO drop resume here since it is not needed anymore...
  */
 case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) {
-  val typing: Typing[BlockType.Function] = ???
+  val typing: Typing[BlockType.Function] = Type.typecheck(this)
   val tpe: BlockType.Function = typing.tpe
   val capt: Captures = typing.capt
 }

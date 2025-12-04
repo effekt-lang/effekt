@@ -104,18 +104,19 @@ class TypeInferenceTests extends CoreTests {
       Stmt.Return(Expr.Literal(42, TInt)),
       Stmt.Return(Expr.ValueVar(x, TInt)))
 
-    assertEquals(typecheck(input1),
-      Typing(TInt, Set.empty, Free.empty))
+    assertEquals(input1.tpe, TInt)
+    assertEquals(input1.capt, Set.empty)
+    assertEquals(input1.free, Free.empty)
 
     intercept[TypeError] {
-      val input2 = Stmt.Val(x,
+      Stmt.Val(x,
         Stmt.Return(Expr.Literal(true, TBoolean)),
         Stmt.Return(Expr.ValueVar(x, TInt)))
     }
 
     // we can even type check open terms:
     assertEquals(typecheck(Stmt.Return(Expr.ValueVar(x, TInt))),
-      Typing(TInt, Set.empty, Free(Map(x -> TInt), Map.empty)))
+      Typing(TInt, Set.empty, Free(Map(x -> TInt), Map.empty, Constraints.empty)))
 
     val add: Block.BlockVar = Block.BlockVar(infixAdd, BlockType.Function(Nil, Nil, List(TInt, TInt), Nil, TInt), Set.empty)
 
@@ -124,7 +125,7 @@ class TypeInferenceTests extends CoreTests {
       Stmt.Return(Expr.PureApp(add, Nil, Expr.ValueVar(x, TInt) :: Expr.ValueVar(x, TInt) :: Nil)))
 
     assertEquals(typecheck(input3),
-      Typing(TInt, Set.empty, Free.block(add.id, add.annotatedTpe, add.annotatedCapt)))
+      Typing(TInt, Set.empty, Free.block(add.id, add.annotatedTpe, add.annotatedCapt)), Constraints.empty)
 
     // [A](Option[A], A): A
     val orElse: Block.BlockVar = Block.BlockVar(f, BlockType.Function(A :: Nil, Nil, List(OptionT(ValueType.Var(A)), ValueType.Var(A)), Nil, ValueType.Var(A)), Set.empty)
@@ -144,11 +145,18 @@ class TypeInferenceTests extends CoreTests {
       typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(x, TInt) :: Nil))
     }
 
-    shouldTypeCheckAs(OptionT(TInt), Make(OptionT(TInt), SomeC, List(), List(Literal(42, TInt))))
-    shouldTypeCheckAs(OptionT(TInt), Make(OptionT(TInt), NoneC, List(), List()))
+    val input4 = Make(OptionT(TInt), SomeC, List(), List(Literal(42, TInt)))
+    assertSameType(input4.tpe, OptionT(TInt))
+    assertEquals(input4.free, Free.make(SomeC, OptionT(TInt), Nil, List(TInt)))
+
+    val input5 = Make(OptionT(TInt), NoneC, List(), List())
+    assertSameType(input5.tpe, OptionT(TInt))
+    assertEquals(input5.free, Free.make(NoneC, OptionT(TInt), Nil, Nil))
   }
 
+  inline def assertSameType(got: ValueType, expected: ValueType)(using DeclarationContext): Unit =
+    assertEquals(Type.equals(got, expected), true)
+
   inline def shouldTypeCheckAs(expected: ValueType, expr: Expr)(using DeclarationContext): Unit =
-    val Typing(tpe, _, _) = typecheck(expr)
-    assertEquals(Type.equals(tpe, expected), true)
+    assertSameType(expr.tpe, expected)
 }

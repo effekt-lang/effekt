@@ -52,20 +52,43 @@ enum BlockType extends Type {
 case class TypeError(msg: String) extends Throwable(msg)
 def typeError(msg: String) = throw TypeError(msg)
 
+// We could ALSO just save the Make to decrease pressure on the GC
+// this could even improve the error messages, since we can point at the term that's wrong...
+// so `type Later = Expr.Make | Implementation`
+//
+// How do we check the dual method calls and pattern matches then against declarations?
+enum Constraints {
+  case Make(ctor: Id, result: ValueType.Data, existentialTypeArgs: List[ValueType], arguments: List[ValueType])
+  case Implementation(interface: BlockType.Interface, operations: Map[Id, BlockType.Function])
+
+  // These are always never traversed (accept when checking on the module level, so we use the free structure)
+  case Empty
+  case Append(lhs: Constraints, rhs: Constraints)
+
+  def ++(other: Constraints) = (this, other) match {
+    case (Empty, other) => other
+    case (other, Empty) => other
+    case (lhs, rhs) => Constraints.Append(lhs, rhs)
+  }
+}
+object Constraints {
+  def empty: Constraints = Constraints.Empty
+}
+
 // only used for type checking
-case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures)]) {
+case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures)], constraints: Constraints) {
   // throws type error if they are not compatible
   def ++(other: Free): Free =
     if !Free.valuesCompatible(values, other.values) then typeError("incompatible free variables")
     if !Free.blocksCompatible(blocks, other.blocks) then typeError("incompatible free variables")
-    Free(values ++ other.values, blocks ++ other.blocks)
+    Free(values ++ other.values, blocks ++ other.blocks, constraints ++ other.constraints)
 
   def withoutValue(id: Id, tpe: ValueType): Free =
     values.get(id).foreach { otherTpe =>
       if !Type.equals(tpe, otherTpe) then
         typeError(s"free variable ${id} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
     }
-    Free(values - id, blocks)
+    Free(values - id, blocks, constraints)
 
   def withoutBlock(id: Id, tpe: BlockType, capt: Captures): Free =
     blocks.get(id).foreach { case (otherTpe, otherCapt) =>
@@ -74,14 +97,18 @@ case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures
       if !otherCapt.subsetOf(capt) then
         typeError(s"free variable assume a wrong capture set (${util.show(capt)} vs. ${util.show(otherCapt)})")
     }
-    Free(values, blocks - id)
+    Free(values, blocks - id, constraints)
 
   def isEmpty: Boolean = values.isEmpty && blocks.isEmpty
 }
 object Free {
-  def empty = Free(Map.empty, Map.empty)
-  def value(id: Id, tpe: ValueType) = Free(Map(id -> tpe), Map.empty)
-  def block(id: Id, tpe: BlockType, capt: Captures) = Free(Map.empty, Map(id -> (tpe, capt)))
+  def empty = Free(Map.empty, Map.empty, Constraints.empty)
+  def value(id: Id, tpe: ValueType) = Free(Map(id -> tpe), Map.empty, Constraints.empty)
+  def block(id: Id, tpe: BlockType, capt: Captures) = Free(Map.empty, Map(id -> (tpe, capt)), Constraints.empty)
+
+
+  def make(ctor: Id, result: ValueType.Data, existentialTypeArgs: List[ValueType], arguments: List[ValueType]) =
+    Free(Map.empty, Map.empty, Constraints.Make(ctor, result, existentialTypeArgs, arguments))
 
   def valuesCompatible(free1: Map[Id, ValueType], free2: Map[Id, ValueType]): Boolean =
     val same = free1.keySet intersect free2.keySet
@@ -95,6 +122,8 @@ object Free {
       Type.equals(tpe1, tpe2) && Type.equals(capt1, capt2)
     }
 }
+
+
 
 case class Typing[+T](tpe: T, capt: Captures, free: Free)
 
@@ -246,7 +275,7 @@ object Type {
     case Expr.PureApp(callee, targs, vargs) =>
        val BlockType.Function(tparams, cparams, vparams, bparams, result) = instantiate(callee.functionType, targs, Nil)
        if bparams.nonEmpty then typeError("Pure apps cannot have block params")
-       val Typing(argTypes, _, argFrees) = all(vargs, e => typecheck(e))
+       val Typing(argTypes, _, argFrees) = all(vargs, e => e.typing)
        valuesShouldEqual(vparams, argTypes)
        Typing(result, Set.empty, argFrees ++ Free.block(callee.id, callee.annotatedTpe, callee.annotatedCapt))
 
@@ -270,11 +299,13 @@ object Type {
       //      shouldEqual(data, retType)
       //      val Typing(argTypes, argCapt, argFree) = all(vargs, typecheck)
       //      valuesShouldEqual(paramTypes, argTypes)
-      //      Typing(retType, argCapt, argFree)
-      ???
+
+      val Typing(argTypes, argCapt, argFree) = all(vargs, arg => arg.typing)
+      // we assume that the annotated type is correct and check later...
+      Typing(data, argCapt, argFree ++ Free.make(tag, data, targs, argTypes))
 
     case Expr.Box(b, annotatedCapture) =>
-      val Typing(bTpe, bCapt, bFree) = typecheck(b)
+      val Typing(bTpe, bCapt, bFree) = b.typing
       // Here we actually allow "subcapturing"
       if !bCapt.subsetOf(annotatedCapture) then typeError(s"Inferred capture ${bCapt} is not allowed by annotation: ${annotatedCapture}")
       Typing(ValueType.Boxed(bTpe, annotatedCapture), Set.empty, bFree)
@@ -283,14 +314,13 @@ object Type {
   def typecheck(block: Block): Typing[BlockType] = block match {
     case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Typing(annotatedTpe, annotatedCapt, Free.block(id, annotatedTpe, annotatedCapt))
     case Block.Unbox(pure) =>
-      val Typing(tpe, capt, free) = typecheck(pure)
+      val Typing(tpe, capt, free) = pure.typing
       tpe match {
-        case ValueType.Boxed(tpe2, capt2) =>
-          Typing(tpe2, capt2, free)
+        case ValueType.Boxed(tpe2, capt2) => Typing(tpe2, capt2, free)
         case other => typeError(s"Expected a boxed type, but got: ${util.show(other)}")
       }
-    case b : Block.BlockLit => typecheck(b)
-    case Block.New(impl) => typecheck(impl)
+    case b : Block.BlockLit => b.typing
+    case Block.New(impl) => impl.typing
   }
 
   def typecheck(blocklit: BlockLit): Typing[BlockType.Function] = ???
@@ -328,29 +358,28 @@ object Type {
         case Block.New(impl) => true
         case _ => false
       }
-      val Typing(bodyTpe, bodyCapt, bodyFree) = typecheck(body)
-      val Typing(blockTpe, blockCapt, blockFree) = typecheck(block)
+      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
+      val Typing(blockTpe, blockCapt, blockFree) = block.typing
 
       Typing(bodyTpe, bodyCapt, bodyFree.withoutBlock(id, blockTpe, blockCapt) ++
         (if canBeRecursive then blockFree.withoutBlock(id, blockTpe, blockCapt) else blockFree))
 
     case Stmt.Let(id, binding, body) =>
-      val Typing(bodyTpe, bodyCapt, bodyFree) = typecheck(body)
-      val Typing(bindTpe, bindCapt, bindFree) = typecheck(binding)
+      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
+      val Typing(bindTpe, bindCapt, bindFree) = binding.typing
       Typing(bodyTpe, bodyCapt ++ bindCapt, bodyFree.withoutValue(id, bindTpe) ++ bindFree)
 
-    case Stmt.Return(expr) =>
-      typecheck(expr)
+    case Stmt.Return(expr) => expr.typing
 
     case Stmt.Val(id, binding, body) =>
-      val Typing(bodyTpe, bodyCapt, bodyFree) = typecheck(body)
-      val Typing(bindTpe, bindCapt, bindFree) = typecheck(binding)
+      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
+      val Typing(bindTpe, bindCapt, bindFree) = binding.typing
       Typing(bodyTpe, bodyCapt ++ bindCapt, bodyFree.withoutValue(id, bindTpe) ++ bindFree)
 
     case Stmt.If(cond, thn, els) =>
-      val Typing(condTpe, condCapt, condFree) = typecheck(cond)
-      val Typing(thnTpe, thnCapt, thnFree) = typecheck(thn)
-      val Typing(elsTpe, elsCapt, elsFree) = typecheck(els)
+      val Typing(condTpe, condCapt, condFree) = cond.typing
+      val Typing(thnTpe, thnCapt, thnFree) = thn.typing
+      val Typing(elsTpe, elsCapt, elsFree) = els.typing
       shouldEqual(condTpe, TBoolean)
       shouldEqual(thnTpe, elsTpe)
       Typing(thnTpe, condCapt ++ thnCapt ++ elsCapt, condFree ++ thnFree ++ elsFree)
@@ -358,7 +387,7 @@ object Type {
     case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => ???
 
     case Stmt.Region(body) =>
-      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = typecheck(body)
+      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = body.typing.asInstanceOf
       // TODO we should check that cparams do not occur in result!
       Typing(result, bodyCapt, bodyFree)
 
@@ -368,7 +397,7 @@ object Type {
     case Stmt.Put(ref, annotatedCapt, value, body) => ???
 
     case Stmt.Reset(body) =>
-      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = typecheck(body)
+      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = body.typing.asInstanceOf
       // TODO we should check that cparams do not occur in result!
       Typing(result, bodyCapt, bodyFree)
 
