@@ -81,26 +81,22 @@ object Transformer {
         noteParameters(bparams)
 
         // Does not work for mutually recursive local definitions (which are not supported anyway, at the moment)
-        val freeVariables = core.Variables.free(block).toSet
-          .filterNot(x => BPC.globals.contains(x.id)) // globals are NOT free
-
-        val freeParams = freeVariables.flatMap {
-          case core.Variable.Value(id, tpe) =>
-            Set(Variable(transform(id), transform(tpe)))
-
+        val freeValueParams = block.free.values.collect {
+          // globals are NOT free
+          case (id, tpe) if !BPC.globals.contains(id) => Variable(transform(id), transform(tpe))
+        }
+        val freeBlockParams = block.free.blocks.filterNot { case (id, (tpe, capt)) => BPC.globals.contains(id) }.flatMap {
           // Mutable variables are blocks and can be free, but do not have info.
-          case core.Variable.Block(id, core.Type.TState(stTpe), capt) =>
+          case (id, (core.Type.TState(stTpe), capt)) =>
             Set(Variable(transform(id), Type.Reference(transform(stTpe))))
-
           // Regions are blocks and can be free, but do not have info.
-          case core.Variable.Block(id, core.Type.TRegion, capt) =>
+          case (id, (core.Type.TRegion, capt)) =>
             Set(Variable(transform(id), Type.Prompt()))
 
           // Coercions are blocks and can be free, but do not have info.
-          case core.Variable.Block(id, _, _) if id.name.name.startsWith("@coerce") =>
-            Set.empty
-
-          case core.Variable.Block(pid, tpe, capt) if pid != id => BPC.info.get(pid) match {
+          case (id, (_, _)) if id.name.name.startsWith("@coerce") => Set.empty
+          case (pid, (tpe, capt)) if pid != id =>
+            BPC.info.get(pid) match {
               // For each known free block we have to add its free variables to this one (flat closure)
               case Some(BlockInfo.Definition(freeParams, blockParams)) =>
                 freeParams.toSet
@@ -115,6 +111,7 @@ object Transformer {
             }
           case _ => Set.empty
         }
+        val freeParams = freeValueParams ++ freeBlockParams
 
         noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), freeParams.toList)
 

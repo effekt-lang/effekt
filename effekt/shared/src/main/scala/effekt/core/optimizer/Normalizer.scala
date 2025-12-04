@@ -194,8 +194,8 @@ object Normalizer { normal =>
             // This is a conservative approximation:
             // Since the block is used more than once, we will use the free variables multiple times
             // after inlining.
-            Variables.free(b).toSet.foreach { v =>
-              C.usage.put(v.id, C.usage.getOrElse(v.id, Usage.Never) * Usage.Many)
+            b.free.toSet.foreach { v =>
+              C.usage.put(v, C.usage.getOrElse(v, Usage.Never) * Usage.Many)
             }
           }
           reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
@@ -260,7 +260,7 @@ object Normalizer { normal =>
 
         // [[ val x: A = shift(p) { {k: A => R} => body2 }; body: B ]] = shift(p) { {k: >>>B<<< => R} => body2 }
         case abort @ Stmt.Shift(p, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeA, answer)), captures), body2)
-              if !Variables.free(body2).containsBlock(k) =>
+              if !body2.free.toSet.contains(k) =>
             val tpeB = body.tpe
             Stmt.Shift(p, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeB, answer)), captures),
                 normalize(body2))

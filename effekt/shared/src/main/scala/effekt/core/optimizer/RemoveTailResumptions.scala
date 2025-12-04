@@ -16,9 +16,9 @@ object RemoveTailResumptions {
 
   // A simple syntactic check whether this stmt is tailresumptive in k
   def tailResumptive(k: Id, stmt: Stmt): Boolean =
-    def freeInStmt(stmt: Stmt): Boolean = Variables.free(stmt).containsBlock(k)
-    def freeInExpr(expr: Expr): Boolean = Variables.free(expr).containsBlock(k)
-    def freeInBlock(block: Block): Boolean = Variables.free(block).containsBlock(k)
+    def freeInStmt(stmt: Stmt): Boolean = stmt.free.toSet.contains(k)
+    def freeInExpr(expr: Expr): Boolean = expr.free.toSet.contains(k)
+    def freeInBlock(block: Block): Boolean = block.free.toSet.contains(k)
 
     stmt match {
       case Stmt.Def(id, block, body) => !freeInBlock(block) && tailResumptive(k, body)

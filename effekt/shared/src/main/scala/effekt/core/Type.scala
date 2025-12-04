@@ -116,6 +116,8 @@ case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures
   }
 
   def isEmpty: Boolean = values.isEmpty && blocks.isEmpty
+
+  def toSet: Set[Id] = values.keySet ++ blocks.keySet
 }
 object Free {
   def empty = Free(Map.empty, Map.empty, Constraints.empty)
@@ -365,10 +367,6 @@ object Type {
       Typing(BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), bodyTpe), bodyCapt -- cparams,
         bodyFree.withoutBlocks(bparams).withoutValues(vparams))
   }
-
-  // TODO
-  // - [ ] define `def free: Free = typing.free` and use it in the phases that require free variable computation
-  // - [ ] delete `core.Variables` (defined in core/Tree.scala) and replace all usages by `stmt.free`
 
   def typecheck(stmt: Stmt): Typing[ValueType] = checking(stmt) {
     case Stmt.Def(id, block, body) =>
