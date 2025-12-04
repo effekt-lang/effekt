@@ -114,9 +114,11 @@ object Free {
   def value(id: Id, tpe: ValueType) = Free(Map(id -> tpe), Map.empty, Constraints.empty)
   def block(id: Id, tpe: BlockType, capt: Captures) = Free(Map.empty, Map(id -> (tpe, capt)), Constraints.empty)
 
-
   def make(ctor: Id, result: ValueType.Data, existentialTypeArgs: List[ValueType], arguments: List[ValueType]) =
     Free(Map.empty, Map.empty, Constraints.Make(ctor, result, existentialTypeArgs, arguments))
+
+  def impl(interface: BlockType.Interface, operations: Map[Id, BlockType.Function]) =
+    Free(Map.empty, Map.empty, Constraints.Implementation(interface, operations))
 
   def valuesCompatible(free1: Map[Id, ValueType], free2: Map[Id, ValueType]): Boolean =
     val same = free1.keySet intersect free2.keySet
@@ -133,7 +135,9 @@ object Free {
 
 
 
-case class Typing[+T](tpe: T, capt: Captures, free: Free)
+case class Typing[+T](tpe: T, capt: Captures, free: Free) {
+  def map[S](f: T => S): Typing[S] = Typing(f(tpe), capt, free)
+}
 
 object Type {
 
@@ -338,30 +342,18 @@ object Type {
         bodyFree.withoutBlocks(bparams).withoutValues(vparams))
   }
 
-  def typecheck(impl: Implementation): Typing[BlockType.Interface] = ???
+  def typecheck(impl: Implementation): Typing[BlockType.Interface] = impl match {
+    case Implementation(interface, operations) =>
+      val Typing(ops, capts, free) = fold(operations.map { op => op.typing.map { tpe => Map(op.name -> tpe) }}, Map.empty) { _ ++ _ }
+      Typing(interface, capts, free ++ Free.impl(interface, ops))
+  }
 
-  def typecheck(impl: Operation): Typing[BlockType.Function] = ???
-
-  def valuesShouldEqual(tpes1: List[ValueType], tpes2: List[ValueType]): Unit =
-    if tpes1.size != tpes2.size then typeError(s"Different number of types: ${tpes1} vs. ${tpes2}")
-    tpes1.zip(tpes2).foreach(valueShouldEqual)
-
-  def blocksShouldEqual(tpes1: List[BlockType], tpes2: List[BlockType]): Unit =
-    if tpes1.size != tpes2.size then typeError(s"Different number of types: ${tpes1} vs. ${tpes2}")
-    tpes1.zip(tpes2).foreach(blockShouldEqual)
-
-  def valueShouldEqual(tpe1: ValueType, tpe2: ValueType): Unit =
-    if !Type.equals(tpe1, tpe2) then typeError(s"Type mismatch: ${util.show(tpe1)} vs ${util.show(tpe2)}")
-
-  def blockShouldEqual(tpe1: BlockType, tpe2: BlockType): Unit =
-    if !Type.equals(tpe1, tpe2) then typeError(s"Type mismatch: ${util.show(tpe1)} vs ${util.show(tpe2)}")
-
-  def all[T, R](terms: List[T], check: T => Typing[R]): Typing[List[R]] =
-    terms.foldRight(Typing[List[R]](Nil, Set.empty, Free.empty)) {
-      case (term, Typing(tpes, capts, frees)) =>
-        val Typing(tpe, capt, free) = check(term)
-        Typing(tpe :: tpes, capts ++ capt, frees ++ free)
-    }
+  def typecheck(op: Operation): Typing[BlockType.Function] = op match {
+    case Operation(name, tparams, cparams, vparams, bparams, body) =>
+      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
+      Typing(BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), bodyTpe), bodyCapt -- cparams,
+        bodyFree.withoutBlocks(bparams).withoutValues(vparams))
+  }
 
   // TODO
   // - [ ] define `def free: Free = typing.free` and use it in the phases that require free variable computation
@@ -408,11 +400,7 @@ object Type {
       }
 
       def join(typings: List[Typing[ValueType]], annotated: ValueType): Typing[ValueType] =
-        typings.foldLeft(Typing(annotated, Set.empty, Free.empty)) {
-          case (Typing(tpe1, capt1, free1), Typing(tpe2, capt2, free2)) =>
-            valueShouldEqual(tpe1, tpe2)
-            Typing(tpe1, capt1 ++ capt2, free1 ++ free2)
-        }
+        fold(typings, annotated) { (tpe1, tpe2) => valueShouldEqual(tpe1, tpe2); tpe1 }
 
       join(clauseTypings ++ default.toList.map { stmt => stmt.typing }, annotatedTpe)
 
@@ -481,7 +469,7 @@ object Type {
     case Stmt.Hole(annotatedTpe, span) => Typing(annotatedTpe, Set.empty, Free.empty)
   }
 
-  def typecheckFunctionLike(calleeTyping: Typing[BlockType.Function], targs: List[ValueType], vargs: List[Expr], bargs: List[Block]): Typing[ValueType] = {
+  private def typecheckFunctionLike(calleeTyping: Typing[BlockType.Function], targs: List[ValueType], vargs: List[Expr], bargs: List[Block]): Typing[ValueType] = {
     val Typing(calleeTpe, calleeCapt, calleeFree) = calleeTyping
     val Typing(vargTypes, vargCapt, vargFree) = all(vargs, arg => arg.typing)
     val Typing(bargTypes, bargCapt, bargFree) = all(bargs, arg => arg.typing)
@@ -494,6 +482,32 @@ object Type {
     Typing(retType, calleeCapt ++ vargCapt ++ bargCapt, calleeFree ++ vargFree ++ bargFree)
   }
 
+  private def valuesShouldEqual(tpes1: List[ValueType], tpes2: List[ValueType]): Unit =
+    if tpes1.size != tpes2.size then typeError(s"Different number of types: ${tpes1} vs. ${tpes2}")
+    tpes1.zip(tpes2).foreach(valueShouldEqual)
 
-  def asFunctionTyping(t: Typing[BlockType]): Typing[BlockType.Function] = t.asInstanceOf
+  private def blocksShouldEqual(tpes1: List[BlockType], tpes2: List[BlockType]): Unit =
+    if tpes1.size != tpes2.size then typeError(s"Different number of types: ${tpes1} vs. ${tpes2}")
+    tpes1.zip(tpes2).foreach(blockShouldEqual)
+
+  private def valueShouldEqual(tpe1: ValueType, tpe2: ValueType): Unit =
+    if !Type.equals(tpe1, tpe2) then typeError(s"Type mismatch: ${util.show(tpe1)} vs ${util.show(tpe2)}")
+
+  private def blockShouldEqual(tpe1: BlockType, tpe2: BlockType): Unit =
+    if !Type.equals(tpe1, tpe2) then typeError(s"Type mismatch: ${util.show(tpe1)} vs ${util.show(tpe2)}")
+
+  private def all[T, R](terms: List[T], check: T => Typing[R]): Typing[List[R]] =
+    terms.foldRight(Typing[List[R]](Nil, Set.empty, Free.empty)) {
+      case (term, Typing(tpes, capts, frees)) =>
+        val Typing(tpe, capt, free) = check(term)
+        Typing(tpe :: tpes, capts ++ capt, frees ++ free)
+    }
+
+  private def fold[T](typings: List[Typing[T]], empty: T)(combine: (T, T) => T): Typing[T] =
+    typings.foldLeft(Typing(empty, Set.empty, Free.empty)) {
+      case (Typing(tpe1, capt1, free1), Typing(tpe2, capt2, free2)) =>
+        Typing(combine(tpe1, tpe2), capt1 ++ capt2, free1 ++ free2)
+    }
+
+  private def asFunctionTyping(t: Typing[BlockType]): Typing[BlockType.Function] = t.asInstanceOf
 }
