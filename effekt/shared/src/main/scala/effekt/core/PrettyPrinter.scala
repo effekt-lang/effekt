@@ -4,14 +4,12 @@ package core
 import effekt.core.Type.{PromptSymbol, ResumeSymbol}
 import effekt.source.FeatureFlag
 import kiama.output.ParenPrettyPrinter
+import kiama.output.PrettyPrinterTypes.Document
 
 import scala.language.implicitConversions
 import effekt.symbols.{Name, Wildcard, builtins}
 
-object PrettyPrinter extends ParenPrettyPrinter {
-
-  import kiama.output.PrettyPrinterTypes.Document
-
+class PrettyPrinter(printDetails: Boolean) extends ParenPrettyPrinter {
   override val defaultIndent = 2
 
   def format(t: ModuleDecl): Document =
@@ -52,9 +50,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     // The order of toplevel items must match the parser (where the order is currently fixed).
     val includes = vsep(m.includes.map { im => "import" <+> im })
     val decls = vsep(m.declarations.map(toDoc))
-    val externs = vsep(m.externs.map(toDoc))
+    val externs = if printDetails then vsep(m.externs.map(toDoc)) else emptyDoc
     val defs = toDoc(m.definitions)
-    val exports = vsep(m.exports.map { id => "export" <+> toDoc(id) })
+    val exports = if printDetails then vsep(m.exports.map { id => "export" <+> toDoc(id) }) else emptyDoc
 
     "module" <+> m.path <>
       emptyline <>
@@ -97,7 +95,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(b: Block, preventBraces: Boolean = false): Doc = b match {
     case BlockVar(id, tpe, capt) =>
-      toDoc(id) <> ":" <+> toDoc(tpe) <+> "@" <+> toDoc(capt)
+      toDoc(id) <> (if printDetails then ":" <+> toDoc(tpe) <+> "@" <+> toDoc(capt) else emptyDoc)
     case BlockLit(tps, cps, vps, bps, body) =>
       val doc = space <> paramsToDoc(tps, cps, vps, bps) <+> "=>" <+> nest(line <> toDocStmts(body)) <> line
       if preventBraces then doc else braces { doc }
@@ -112,17 +110,26 @@ object PrettyPrinter extends ParenPrettyPrinter {
   //def toDoc(n: Name): Doc = n.toString
 
   def toDoc(s: symbols.Symbol): Doc = {
-    builtins.coreBuiltinSymbolToString(s).getOrElse(s.name.name)
+    // In human-readable mode, we show the name together with the actual Barendregt id.
+    // This allows the user to connect the symbol to the internal representation when debugging.
+    // In reparsable mode, we just show the string part, which should be freshened by the TestRenamer before printing.
+    // The TestRenamer does not rename the Barendregt id because that would violate the internal invariant of having
+    // just a single global Barendregt namespace.
+    builtins.coreBuiltinSymbolToString(s).getOrElse(if printDetails then s.name.name else s.show)
   }
 
   def toDoc(e: Expr): Doc = e match {
     case Literal((), _)            => "()"
     case Literal(s: String, _)     => stringLiteral(s)
     case Literal(value, _)         => value.toString
-    case ValueVar(id, tpe)         => toDoc(id) <> ":" <+> toDoc(tpe)
+    case ValueVar(id, tpe)         => toDoc(id) <> (if printDetails then ":" <+> toDoc(tpe) else emptyDoc)
 
-    case PureApp(b, targs, vargs)  => parens(toDoc(b)) <> argsToDoc(targs, vargs, Nil)
-    case Make(data, tag, targs, vargs)    => "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
+    case PureApp(b, targs, vargs)  => (if printDetails then parens(toDoc(b)) else toDoc(b)) <> argsToDoc(targs, vargs, Nil)
+    case Make(data, tag, targs, vargs) =>
+      if printDetails then 
+        "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
+      else 
+        "make" <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
 
     case Box(b, capt) => "box" <+> toDoc(capt) <+> toDoc(b)
   }
@@ -223,14 +230,16 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case Val(id, tpe, binding, body) =>
       // RHS must be a single `stmt`, so we have to wrap it in a block.
-      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> block(toDocStmts(binding)) <> ";" <> line <>
+      val pBinding = if printDetails then block(toDocStmts(binding)) else toDocStmts(binding)
+      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> pBinding <> ";" <> line <>
         toDocStmts(body)
 
     case App(b, targs, vargs, bargs) =>
       toDoc(b) <> argsToDoc(targs, vargs, bargs)
 
     case Invoke(b, method, methodTpe, targs, vargs, bargs) =>
-      toDoc(b) <> "." <> toDoc(method) <> ":" <+> toDoc(methodTpe) <> argsToDoc(targs, vargs, bargs)
+      val pTpe = if printDetails then ":" <+> toDoc(methodTpe) else emptyDoc
+      toDoc(b) <> "." <> toDoc(method) <> pTpe <> argsToDoc(targs, vargs, bargs)
 
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDocStmts(thn)) <+> "else" <+> block(toDocStmts(els))
@@ -341,3 +350,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
     multi <> s <> multi
   }
 }
+
+/**
+ * Instance of PrettyPrinter that produces output that can be parsed back by the core parser.
+ * This corresponds to the `--detailed-ir` command line flag.
+ */
+object ReparsablePrettyPrinter extends PrettyPrinter(true) {}
+
+/**
+ * Instance of PrettyPrinter that produces less verbose, more human-readable output.
+ * This is the default behavior for the `--ir-write-all` and `--ir-show` command line flags.
+ */
+object HumanReadablePrettyPrinter extends PrettyPrinter(false) {}

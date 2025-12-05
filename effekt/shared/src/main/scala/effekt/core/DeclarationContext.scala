@@ -1,7 +1,7 @@
 package effekt.core
 
 import effekt.util.messages.ErrorReporter
-import PrettyPrinter.*
+import HumanReadablePrettyPrinter.*
 
 /**
  * Context for transformations of a [[core.ModuleDecl]] that provides the declarations for this module.

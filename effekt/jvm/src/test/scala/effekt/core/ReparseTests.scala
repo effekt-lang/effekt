@@ -75,11 +75,11 @@ class ReparseTests extends CoreTests {
     }
     val renamer = TestRenamer(Names(defaultNames))
     val expectedRenamed = renamer(coreMod)
-    val printed = core.PrettyPrinter.format(expectedRenamed).layout
+    val printed = core.ReparsablePrettyPrinter.format(expectedRenamed).layout
     val reparsed: ModuleDecl = parse(printed)(using Location.empty)
     val reparsedRenamed = renamer(reparsed)
-    val reparsedPrinted = core.PrettyPrinter.format(reparsedRenamed).layout
-    val expectedPrinted = core.PrettyPrinter.format(expectedRenamed).layout
+    val reparsedPrinted = core.ReparsablePrettyPrinter.format(reparsedRenamed).layout
+    val expectedPrinted = printed
     assertEquals(reparsedPrinted, expectedPrinted)
   }
 
