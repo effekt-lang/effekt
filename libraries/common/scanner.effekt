@@ -78,6 +78,7 @@ def skipIf(e: Char): Unit / { Scan[Char], stop } =
   skipIf { c => c == e }
 
 /// Read values produced by `action` followed by `separator` until one of them stops.
+/// Will consume a trailing separator.
 def separating[A] { seperator: () => Unit / stop } { action: () => A / stop }: Unit / emit[A] =
   exhaustively {
     do emit(action())
@@ -85,6 +86,7 @@ def separating[A] { seperator: () => Unit / stop } { action: () => A / stop }: U
   }
 
 /// Read a sequence separated by `separator`.
+/// Will consume a trailing separator.
 def separating[A](seperator: Char) { action: () => A / stop }: Unit / { Scan[Char], emit[A] } =
   separating { skipIf(seperator) } {action}
 
@@ -102,8 +104,8 @@ def readDigit(): Int / { Scan[Char], stop } =
   tryRead[Char, Int]{ char => digitValue(char) }
 
 /// Read a positive decimal number.
-def readDecimal(): Int / Scan[Char] = {
-  var result = 0
+def readDecimal(): Int / { Scan[Char], stop } = {
+  var result = readDigit()
   for[Int] { many { readDigit() } } { digit =>
     result = result * 10 + digit
   }
@@ -115,8 +117,8 @@ def readHexDigit(): Int / { Scan[Char], stop } =
   tryRead[Char, Int]{ char => hexDigitValue(char) }
 
 /// Read a hexadecimal number as long as possible.
-def readHexadecimal(): Int / Scan[Char] = {
-  var result = 0
+def readHexadecimal(): Int / { Scan[Char], stop } = {
+  var result = readHexDigit()
   for[Int] { many { readHexDigit() } } { digit =>
     result = result * 16 + digit
   }
@@ -124,13 +126,13 @@ def readHexadecimal(): Int / Scan[Char] = {
 }
 
 /// Read a decimal integer as long as possible.
-def readInteger(): Int / Scan[Char] =
-  if (returning::probe { readIf('-') } is Some(())) {
-    neg(readDecimal())
-  } else {
-    readDecimal()
+/// Will consume a minus sign if it is not followed by a digit.
+def readInteger(): Int / { Scan[Char], stop } =
+  do peek() match {
+    case '-' => neg(readDecimal())
+    case c and isDigit(c) => readDecimal()
+    case _ => do stop()
   }
-
 
 namespace returning {
 
@@ -182,6 +184,7 @@ namespace test {
       A1B2
       """
 
+    with boundary
     with feed(input)
     with scanner[Char]
 
