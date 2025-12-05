@@ -137,6 +137,8 @@ object TransformerCPS {
     case If(cond, thn, els) =>
       val chezCond = toChez(cond)
       chez.If(chezCond, toChezExpr(thn), toChezExpr(els))
+    case Match(scrutinee, Nil, None) =>
+      chez.Builtin("unreachable")
     case Match(scrutinee, clauses, default) =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
