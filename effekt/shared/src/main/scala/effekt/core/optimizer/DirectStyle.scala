@@ -55,9 +55,15 @@ object DirectStyle extends Tree.Rewrite {
     case Put(ref, capt, value, body) => canBeDirect(body)
   }
 
+  // Some rewrites change the answer type (match & hole) to the result of the join point, which is called in return position.
+  private def returnType(label: Block.BlockVar): ValueType =
+    label.tpe match {
+      case BlockType.Function(_, _, _, _, result) => result
+      case BlockType.Interface(_, _) => sys error "Join points need to have a function type"
+    }
+
   private def toDirectStyle(stmt: Stmt, label: Block.BlockVar): Stmt = stmt match {
     case Return(expr) => App(label, Nil, List(expr), Nil)
-    case Hole(_, _) => stmt
 
     // non-tail calls
     case App(_, _, _, _) => stmt
@@ -86,14 +92,11 @@ object DirectStyle extends Tree.Rewrite {
       If(cond, toDirectStyle(thn, label), toDirectStyle(els, label))
 
     case Match(scrutinee, tpe, clauses, default) =>
-      // This changes the answer type of the match to the result of the join point, which is called in return position.
-      val newTpe = label.tpe match {
-        case BlockType.Function(_, _, _, _, result) => result
-        case BlockType.Interface(_, _) => sys error "Join points need to have a function type"
-      }
-      Match(scrutinee, newTpe,
+      Match(scrutinee, returnType(label),
         clauses.map { case (id, bl) => (id, bl.copy(body = toDirectStyle(bl.body, label))) },
         default.map(body => toDirectStyle(body, label)))
+
+    case Hole(tpe, span) => Hole(returnType(label), span)
 
     case Alloc(id, init, region, body) =>
       Alloc(id, init, region, toDirectStyle(body, label))

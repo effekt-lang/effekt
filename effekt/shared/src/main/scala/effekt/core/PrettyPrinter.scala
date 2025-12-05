@@ -35,15 +35,19 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(p: Expr): String =
     pretty(toDoc(p), 60).layout
 
+  def format(p: Implementation): String =
+    pretty(toDoc(p), 60).layout
+
   val show: PartialFunction[Any, String] = {
-    case m: ModuleDecl => format(m).layout
-    case d: Toplevel   => format(List(d))
-    case s: Stmt       => format(s)
-    case t: ValueType  => format(t)
-    case t: BlockType  => format(t)
-    case b: Block      => format(b)
-    case p: Expr       => format(p)
-    case x: Id         => x.show
+    case m: ModuleDecl     => format(m).layout
+    case d: Toplevel       => format(List(d))
+    case s: Stmt           => format(s)
+    case t: ValueType      => format(t)
+    case t: BlockType      => format(t)
+    case b: Block          => format(b)
+    case p: Expr           => format(p)
+    case i: Implementation => format(i)
+    case x: Id             => x.show
   }
 
   val emptyline: Doc = line <> line

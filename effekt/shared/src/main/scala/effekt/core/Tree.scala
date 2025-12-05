@@ -560,10 +560,10 @@ object substitutions {
   def substitute(block: BlockLit, targs: List[ValueType], vargs: List[Expr], bargs: List[Block]): Stmt =
     block match {
       case BlockLit(tparams, cparams, vparams, bparams, body) =>
-        assert(tparams.size == targs.size)
-        assert(cparams.size == bargs.size)
-        assert(bparams.size == bargs.size)
-        assert(vparams.size == vargs.size)
+        assert(tparams.size == targs.size, s"Wrong number of type arguments: ${tparams.map(util.show)} vs ${targs.map(util.show)}")
+        assert(cparams.size == bargs.size, s"Wrong number of capture arguments: ${cparams} vs ${bargs}")
+        assert(bparams.size == bargs.size, s"Wrong number of block arguments: ${bparams} vs ${bargs}")
+        assert(vparams.size == vargs.size, s"Wrong number of value arguments: ${vparams} vs ${vargs}")
         val tSubst = (tparams zip targs).toMap
         val cSubst = (cparams zip bargs.map(_.capt)).toMap
         val vSubst = (vparams.map(_.id) zip vargs).toMap

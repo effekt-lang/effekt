@@ -451,12 +451,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
           val existentialParams: List[TypeVar] = if (tparams.size == declared.tparams.size - targs.size) {
             tparams.map { tparam => tparam.symbol.asTypeParam }
           } else {
-            // using the invariant that the universals are prepended to type parameters of the operation
-            declared.tparams.drop(targs.size).map { tp =>
-              // recreate "fresh" type variables
-              val name = tp.name
-              TypeVar.TypeParam(name)
-            }
+            val missing = declared.tparams.drop(targs.size).map(t => util.show(t)).mkString("[", ", ", "]")
+            Context.abort(pretty"Operation ${op} requires additional parameters: ${missing}")
           }
           val existentials = existentialParams.map(ValueTypeRef.apply)
 
