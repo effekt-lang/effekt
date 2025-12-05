@@ -91,7 +91,7 @@ def encodeJson[R]{ body: => R / JsonBuilder }: R / emit[String] = {
 
 
 /// Read a double value, in the common format (TODO document)
-def readDouble(): Double / Scan[Char] = {
+def readDouble(): Double / { Scan[Char], stop} = {
   def exponent(pre: Double) = {
     try {
       if(do peek() == 'e' || do peek() == 'E') {
