@@ -1,0 +1,14 @@
+import dictionary
+
+def main() = {
+  var trie = Empty()
+
+  trie = trie.insert("hello", 1)
+  trie = trie.insert("world", 2)
+  trie = trie.insert("help", 3)
+
+  println(trie.lookup("hello"))
+  println(trie.lookup("world"))
+  println(trie.lookup("help"))
+  println(trie.lookup("missing"))
+}

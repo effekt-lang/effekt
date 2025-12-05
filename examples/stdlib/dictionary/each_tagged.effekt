@@ -1,0 +1,16 @@
+import dictionary
+import stream
+import bytearray
+
+def main() = {
+  var trie = Empty()
+
+  trie = trie.insert("a", "apple")
+  trie = trie.insert("ab", "amazing")
+  trie = trie.insert("b", "banana")
+
+  for[Tagged[String]] { eachTagged(trie) } { case Tagged(key, value) =>
+    println(bytearray::toString(key))
+    println(value)
+  }
+}

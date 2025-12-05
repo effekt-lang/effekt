@@ -9,6 +9,7 @@ import buffer
 import bytearray
 import char
 import dequeue
+import dictionary
 import effekt
 import exception
 import heap
