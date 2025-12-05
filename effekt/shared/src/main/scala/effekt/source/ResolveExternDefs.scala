@@ -13,7 +13,9 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
     case Typechecked(source, tree, mod) => Some(Typechecked(source, rewrite(tree), mod))
   }
 
-  def supported(using Context): List[String] = Context.compiler.supportedFeatureFlags
+  // The list of supported feature flags for this backend
+  // The "vm" flag is always supported as it is used in the normalizer as part of the compiler pipeline.
+  def supported(using Context): List[String] = Context.compiler.supportedFeatureFlags :+ "vm"
 
   def defaultExternBody(warning: String)(using Context): ExternBody =
     ExternBody.Unsupported(Context.plainMessage(warning, kiama.util.Severities.Warning))
@@ -40,6 +42,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
 
   def rewrite(defn: Def)(using Context): Option[Def] = Context.focusing(defn) {
       case Def.ExternDef(id, tparams, vparams, bparams, capture, ret, bodies, doc, span) =>
+        val vmBody = bodies.find(_.featureFlag.matches("vm", matchDefault = false))
         findPreferred(bodies) match {
           case body@ExternBody.StringExternBody(featureFlag, template, span) =>
             if (featureFlag.isDefault) {
@@ -47,7 +50,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
                 + s"please annotate it with a feature flag (Supported by the current backend: ${Context.compiler.supportedFeatureFlags.mkString(", ")})")
             }
 
-            val d = Def.ExternDef(id, tparams, vparams, bparams, capture, ret, List(body), doc, span)
+            val d = Def.ExternDef(id, tparams, vparams, bparams, capture, ret, List(body) ++ vmBody.toList, doc, span)
             Context.copyAnnotations(defn, d)
             Some(d)
           case ExternBody.EffektExternBody(featureFlag, body, span) =>

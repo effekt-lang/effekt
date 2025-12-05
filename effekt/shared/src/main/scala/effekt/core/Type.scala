@@ -131,7 +131,7 @@ object Type {
   def instantiate(f: BlockType.Function, targs: List[ValueType], cargs: List[Captures]): BlockType.Function = f match {
     case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
       assert(targs.size == tparams.size, "Wrong number of type arguments")
-      assert(cargs.size == cparams.size, "Wrong number of capture arguments")
+      assert(cargs.size == cparams.size, s"Wrong number of capture arguments on ${util.show(f)} (capture arguments != capture parameters): ${util.show(cargs)} != ${util.show(cparams)}")
 
       val tsubst = (tparams zip targs).toMap
       val csubst = (cparams zip cargs).toMap
@@ -194,13 +194,16 @@ object Type {
 
   def bindingType(stmt: Stmt.ImpureApp): ValueType = stmt match {
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-      Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
+      bindingType(callee, targs, vargs, bargs)
   }
 
   def bindingType(bind: Binding.ImpureApp): ValueType = bind match {
     case Binding.ImpureApp(id, callee, targs, vargs, bargs) =>
-      Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
+      bindingType(callee, targs, vargs, bargs)
   }
+
+  def bindingType(callee: BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block]): ValueType =
+    Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
 
   def inferType(stmt: Stmt): ValueType = stmt match {
     case Stmt.Def(id, block, body) => body.tpe
