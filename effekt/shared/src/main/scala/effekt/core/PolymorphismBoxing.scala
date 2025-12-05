@@ -163,17 +163,19 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val bCoerced = (bargs zip tpe.bparams).map { case (a, tpe) => coerce(transform(a), tpe) }
 
       // we might need to coerce the result of this application
-      val stmt: Stmt.ImpureApp = Stmt.ImpureApp(id, callee, targs.map(transformArg), vCoerced, bCoerced, transform(rest))
-      val from = Type.bindingType(stmt)
+      val tCoerced = targs.map(transformArg)
+      val restCoerced = transform(rest)
+
+      val from = Type.instantiate(callee.tpe.asInstanceOf, tCoerced, bCoerced.map(_.capt)).result
       val to = itpe.result
       val coercer = ValueCoercer(from, to)
 
-      if (coercer.isIdentity) { stmt }
+      if (coercer.isIdentity) { Stmt.ImpureApp(id, callee, tCoerced, vCoerced, bCoerced, restCoerced) }
       else {
         val fresh = TmpValue("coe")
-        stmt.copy(
-          id = fresh,
-          body = Stmt.Let(id, coercer(Expr.ValueVar(fresh, from)), stmt.body))
+        Stmt.ImpureApp(id, callee, tCoerced, vCoerced, bCoerced,
+          Stmt.Let(id, coercer(Expr.ValueVar(fresh, from)),
+           restCoerced))
       }
 
     case Stmt.Return(expr) =>
@@ -240,9 +242,10 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         case ValueType.Data(tpeId, targs) =>
           val Declaration.Data(_, tparams, constructors) = DeclarationContext.getData(tpeId)
           constructors match {
-            case Nil => Stmt.Match(transform(scrutinee), tpe, Nil, None)
+            case Nil =>
+              Stmt.Match(transform(scrutinee), transform(tpe), Nil, None)
             case _ =>
-              Stmt.Match(transform(scrutinee), tpe, clauses.map {
+              Stmt.Match(transform(scrutinee), transform(tpe), clauses.map {
                 case (id, clause: Block.BlockLit) =>
                   val constructor = constructors.find(_.id == id).get
                   val casetpe: BlockType.Function = BlockType.Function(tparams, List(),
@@ -258,16 +261,17 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.Var(id, init, cap, body) =>
       Stmt.Var(id, transform(init), cap, transform(body))
     case Stmt.Reset(BlockLit(tps, cps, vps, prompt :: Nil, body)) =>
-      Stmt.Reset(BlockLit(tps, cps, vps, prompt :: Nil, coerce(transform(body), stmt.tpe)))
+      Stmt.Reset(BlockLit(tps, cps, vps, transform(prompt) :: Nil, coerce(transform(body), stmt.tpe)))
     case Stmt.Reset(body) => ???
     case Stmt.Shift(prompt, k, body) =>
-      Stmt.Shift(prompt, transform(k), transform(body))
+      val core.Type.TResume(result, answer) = transform(k.tpe) : @unchecked
+      Stmt.Shift(transform(prompt), transform(k), coerce(transform(body), answer))
     case Stmt.Resume(k, body) =>
-      val expected = k.tpe match {
-        case core.Type.TResume(result, answer) => result
-        case _ => ???
-      }
-      Stmt.Resume(k, coerce(transform(body), expected))
+      val core.Type.TResume(result, answer) = transform(k.tpe) : @unchecked
+      // Also coerce the result of the continuation if necessary
+      // before: Resume[List[Int], List[Int]]
+      // after:  Resume[List[BoxedInt], List[BoxedInt]]
+      coerce(Stmt.Resume(transform(k), coerce(transform(body), result)), answer)
 
     case Stmt.Region(body) =>
       transform(body) match {
@@ -276,7 +280,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
           val boxedResult = transformArg(originalResult)
           coerce(Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, coerce(body, boxedResult))), originalResult)
       }
-    case Stmt.Hole(tpe, span) => Stmt.Hole(tpe, span)
+    case Stmt.Hole(tpe, span) => Stmt.Hole(transform(tpe), span)
   }
 
   def transform(pure: Expr)(using Context, DeclarationContext): Expr = pure match {
@@ -321,9 +325,9 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       BlockType.Function(tparams, cparams, vparams map transform, bparams map transform, transform(result))
 
     // Special case some types to not introduce boxing
-    case i @ BlockType.Interface(TState.interface, _) => i
-    case i @ BlockType.Interface(core.Type.ResumeSymbol, _) => i
-    case i @ BlockType.Interface(core.Type.PromptSymbol, _) => i
+    //    case i @ BlockType.Interface(TState.interface, _) => i
+    //    case i @ BlockType.Interface(core.Type.ResumeSymbol, _) => i
+    //    case i @ BlockType.Interface(core.Type.PromptSymbol, _) => i
 
     case BlockType.Interface(symbol, targs) => BlockType.Interface(symbol, targs map transformArg)
   }

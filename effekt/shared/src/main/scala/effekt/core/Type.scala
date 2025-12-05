@@ -93,7 +93,7 @@ case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures
   def withoutValue(id: Id, tpe: ValueType): Free =
     values.get(id).foreach { otherTpe =>
       if !Type.equals(tpe, otherTpe) then
-        typeError(s"free variable ${id} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
+        typeError(s"free variable ${util.show(id)} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
     }
     Free(values - id, blocks, constraints)
 
