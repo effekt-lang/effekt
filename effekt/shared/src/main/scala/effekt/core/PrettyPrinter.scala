@@ -115,17 +115,16 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   //def toDoc(n: Name): Doc = n.toString
 
-  def toDoc(s: symbols.Symbol): Doc = {
-    builtins.coreBuiltinSymbolToString(s).getOrElse(s.name.name + "$" + s.id)
-  }
+  def toDoc(s: symbols.Symbol): Doc =
+    builtins.coreBuiltinSymbolToString(s).getOrElse(s.name.name)
 
   def toDoc(e: Expr): Doc = e match {
-    case Literal((), _)            => "()"
-    case Literal(n: Int, Type.TInt)     => value.toString
-    case Literal(n: Int, Type.TChar)    => s"'\\${n.toString}'"
-    case Literal(s: String, _)     => stringLiteral(s)
-    case Literal(value, _)         => value.toString
-    case ValueVar(id, tpe)         => toDoc(id) <> ":" <+> toDoc(tpe)
+    case Literal((), _)         => "()"
+    case Literal(n, Type.TInt)  => n.toString
+    case Literal(n, Type.TChar) => s"'\\${n.toString}'"
+    case Literal(s: String, _)  => stringLiteral(s)
+    case Literal(value, _)      => value.toString
+    case ValueVar(id, tpe)      => toDoc(id) <> ":" <+> toDoc(tpe)
 
     case PureApp(b, targs, vargs)  => parens(toDoc(b)) <> argsToDoc(targs, vargs, Nil)
     case Make(data, tag, targs, vargs)    => "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
