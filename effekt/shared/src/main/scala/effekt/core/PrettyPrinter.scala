@@ -1,12 +1,12 @@
 package effekt
 package core
 
-import effekt.core.Type.{PromptSymbol, ResumeSymbol}
+import effekt.core.Type.{ PromptSymbol, ResumeSymbol, TChar }
 import effekt.source.FeatureFlag
 import kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
-import effekt.symbols.{Name, Wildcard, builtins}
+import effekt.symbols.{ Name, Wildcard, builtins }
 
 object PrettyPrinter extends ParenPrettyPrinter {
 
@@ -121,6 +121,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(e: Expr): Doc = e match {
     case Literal((), _)            => "()"
+    case Literal(n: Int, Type.TInt)     => value.toString
+    case Literal(n: Int, Type.TChar)    => s"'\\${n.toString}'"
     case Literal(s: String, _)     => stringLiteral(s)
     case Literal(value, _)         => value.toString
     case ValueVar(id, tpe)         => toDoc(id) <> ":" <+> toDoc(tpe)

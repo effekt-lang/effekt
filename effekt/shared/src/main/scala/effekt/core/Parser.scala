@@ -142,7 +142,7 @@ class EffektLexers extends Parsers {
   /**
    * Literals
    */
-  lazy val integerLiteral  = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
+  lazy val integerLiteral = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
   lazy val doubleLiteral =
     regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)([eE][+-]?[0-9]+)?".r, "Double literal")
   lazy val stringLiteral =
@@ -150,8 +150,10 @@ class EffektLexers extends Parsers {
       val contents = s.substring(1, s.length - 1)
       unescapeString(contents)
     }
-  lazy val charLiteral   = regex("""'.'""".r, "Character literal") ^^ { s => s.codePointAt(1) }
-  lazy val unicodeChar   = regex("""\\u\{[0-9A-Fa-f]{1,6}\}""".r, "Unicode character literal") ^^ {
+  lazy val charLiteral = regex("""'\\\d+'""".r, "Character literal") ^^ {
+    case s => Integer.parseUnsignedInt(s.stripPrefix("'\\").stripSuffix("'"))
+  }
+  lazy val unicodeChar = regex("""\\u\{[0-9A-Fa-f]{1,6}\}""".r, "Unicode character literal") ^^ {
     case contents =>  Integer.parseInt(contents.stripPrefix("\\u{").stripSuffix("}"), 16)
   }
 
@@ -261,6 +263,7 @@ class CoreParsers(names: Names) extends EffektLexers {
    * Literals
    */
   lazy val int    = integerLiteral ^^ { n => Literal(n.toLong, Type.TInt) }
+  lazy val char   = charLiteral ^^ { n => Literal(n.toLong, Type.TChar) }
   lazy val bool   = `true` ^^^ Literal(true, Type.TBoolean) | `false` ^^^ Literal(false, Type.TBoolean)
   lazy val unit   = literal("()") ^^^ Literal((), Type.TUnit)
   lazy val double = doubleLiteral ^^ { n => Literal(n.toDouble, Type.TDouble) }
@@ -438,7 +441,7 @@ class CoreParsers(names: Names) extends EffektLexers {
     | failure("Expected a pure expression.")
     )
 
-  lazy val literal: P[Expr] = double | int | bool | string | unit
+  lazy val literal: P[Expr] = double | int | char | bool | string | unit
 
 
   // Calls
