@@ -79,7 +79,7 @@ trait Transformer {
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
     // empty matches are translated to a hole in chez scheme
-    case Match(scrutinee, tpe, Nil, None) => chez.Builtin("hole")
+    case Match(scrutinee, tpe, Nil, None) => chez.Builtin("unreachable")
     case Match(scrutinee, tpe, clauses, default) =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
@@ -128,7 +128,7 @@ trait Transformer {
         case ExternBody.StringExternBody(featureFlag, contents) => toChez(contents)
         case u: ExternBody.Unsupported =>
           u.report
-          chez.Builtin("hole")
+          chez.Builtin("unreachable")
       }
       chez.Constant(nameDef(id),
         chez.Lambda(vps.map { p => nameDef(p.id) } ++ bps.map { p => nameDef(p.id) },
