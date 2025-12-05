@@ -1624,6 +1624,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
     }
     // check again to insert coercions
+    // TODO this duplicates errors
     tpesAndTerms.foreach { case (tpe, term) =>
       Context.requireSubtype(tpe, result, ErrorContext.Expected(tpe, result, term.getOrElse(Context.focus),
         term.map(t => c => Context.coerce(t, c))))
