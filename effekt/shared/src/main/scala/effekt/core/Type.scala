@@ -427,7 +427,7 @@ object Type {
     case Stmt.Var(ref, init, capture, body) =>
       val Typing(initTpe, initCapt, initFree) = init.typing
       val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
-      Typing(bodyTpe, bodyCapt -- Set(capture), initFree ++ bodyFree.withoutValue(ref, init.tpe))
+      Typing(bodyTpe, bodyCapt -- Set(capture), initFree ++ bodyFree.withoutBlock(ref, TState(init.tpe), Set(capture)))
 
     case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
       val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing

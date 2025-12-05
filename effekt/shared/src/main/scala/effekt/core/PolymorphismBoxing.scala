@@ -173,7 +173,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       if (coercer.isIdentity) { Stmt.ImpureApp(id, callee, tCoerced, vCoerced, bCoerced, restCoerced) }
       else {
         val fresh = TmpValue("coe")
-        Stmt.ImpureApp(id, callee, tCoerced, vCoerced, bCoerced,
+        Stmt.ImpureApp(fresh, callee, tCoerced, vCoerced, bCoerced,
           Stmt.Let(id, coercer(Expr.ValueVar(fresh, from)),
            restCoerced))
       }
@@ -232,8 +232,18 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
 
-    case Stmt.Get(id, tpe, ref, capt, body) => Stmt.Get(id, transform(tpe), ref, capt, transform(body))
-    case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, transform(value), transform(body))
+    case Stmt.Get(id, tpe, ref, capt, body) =>
+      val boxed = transformArg(tpe)
+      val coercer = ValueCoercer(boxed, tpe)
+      if (coercer.isIdentity) { Stmt.Get(id, tpe, ref, capt, transform(body)) }
+      else {
+        val fresh = TmpValue("coe")
+        Stmt.Get(fresh, boxed, ref, capt,
+          Stmt.Let(id, coercer(Expr.ValueVar(fresh, boxed)),
+            transform(body)))
+      }
+
+    case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, coerce(transform(value), transformArg(value.tpe)), transform(body))
     case Stmt.If(cond, thn, els) =>
       Stmt.If(transform(cond), transform(thn), transform(els))
     case Stmt.Match(scrutinee, tpe, clauses, default) =>
@@ -257,21 +267,21 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         case t => Context.abort(pp"Match on value of type ${t}")
       }
     case Stmt.Alloc(id, init, region, body) =>
-      Stmt.Alloc(id, transform(init), region, transform(body))
+      Stmt.Alloc(id, coerce(transform(init), transformArg(init.tpe)), region, transform(body))
     case Stmt.Var(id, init, cap, body) =>
-      Stmt.Var(id, transform(init), cap, transform(body))
+      coerce(Stmt.Var(id, coerce(transform(init), transformArg(init.tpe)), cap, coerce(transform(body), transformArg(body.tpe))), body.tpe)
     case Stmt.Reset(BlockLit(tps, cps, vps, prompt :: Nil, body)) =>
-      Stmt.Reset(BlockLit(tps, cps, vps, transform(prompt) :: Nil, coerce(transform(body), stmt.tpe)))
+      coerce(Stmt.Reset(BlockLit(tps, cps, vps, transform(prompt) :: Nil, coerce(transform(body), transformArg(stmt.tpe)))), stmt.tpe)
     case Stmt.Reset(body) => ???
     case Stmt.Shift(prompt, k, body) =>
-      val core.Type.TResume(result, answer) = transform(k.tpe) : @unchecked
-      Stmt.Shift(transform(prompt), transform(k), coerce(transform(body), answer))
+      val core.Type.TResume(result, answer) = k.tpe : @unchecked
+      coerce(Stmt.Shift(transform(prompt), transform(k), coerce(transform(body), transformArg(answer))), result)
     case Stmt.Resume(k, body) =>
-      val core.Type.TResume(result, answer) = transform(k.tpe) : @unchecked
+      val core.Type.TResume(result, answer) = k.tpe : @unchecked
       // Also coerce the result of the continuation if necessary
       // before: Resume[List[Int], List[Int]]
       // after:  Resume[List[BoxedInt], List[BoxedInt]]
-      coerce(Stmt.Resume(transform(k), coerce(transform(body), result)), answer)
+      coerce(Stmt.Resume(transform(k), coerce(transform(body), transformArg(result))), answer)
 
     case Stmt.Region(body) =>
       transform(body) match {

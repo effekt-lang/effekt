@@ -85,7 +85,10 @@ object Transformer {
           // globals are NOT free
           case (id, tpe) if !BPC.globals.contains(id) => Variable(transform(id), transform(tpe))
         }
-        val freeBlockParams = block.free.blocks.filterNot { case (id, (tpe, capt)) => BPC.globals.contains(id) }.flatMap {
+        val freeBlockParams = block.free.blocks.flatMap {
+          // Globals are not free
+          case (id, (tpe, capt)) if BPC.globals.contains(id) => Set.empty
+
           // Mutable variables are blocks and can be free, but do not have info.
           case (id, (core.Type.TState(stTpe), capt)) =>
             Set(Variable(transform(id), Type.Reference(transform(stTpe))))
@@ -95,7 +98,11 @@ object Transformer {
 
           // Coercions are blocks and can be free, but do not have info.
           case (id, (_, _)) if id.name.name.startsWith("@coerce") => Set.empty
-          case (pid, (tpe, capt)) if pid != id =>
+
+          // Function itself
+          case (pid, (tpe, capt)) if pid == id => Set.empty
+
+          case (pid, (tpe, capt)) =>
             BPC.info.get(pid) match {
               // For each known free block we have to add its free variables to this one (flat closure)
               case Some(BlockInfo.Definition(freeParams, blockParams)) =>
@@ -109,7 +116,6 @@ object Transformer {
               case None =>
                 ErrorReporter.panic(s"Could not find info for free variable $pid")
             }
-          case _ => Set.empty
         }
         val freeParams = freeValueParams ++ freeBlockParams
 
