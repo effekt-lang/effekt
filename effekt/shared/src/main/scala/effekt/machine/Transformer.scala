@@ -37,7 +37,7 @@ object Transformer {
     val toplevelDefinitions = definitions.map {
       case core.Toplevel.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
         Definition(Label(transform(id), vparams.map(transform) ++ bparams.map(transform)), transform(body))
-      case core.Toplevel.Val(id, tpe, binding) =>
+      case core.Toplevel.Val(id, binding) =>
         Definition(BC.globals(id), transform(binding))
       case core.Toplevel.Def(id, block @ core.New(impl)) =>
         val variable = Variable(freshName("returned"), transform(block.tpe))
@@ -81,26 +81,29 @@ object Transformer {
         noteParameters(bparams)
 
         // Does not work for mutually recursive local definitions (which are not supported anyway, at the moment)
-        val freeVariables = core.Variables.free(block).toSet
-          .filterNot(x => BPC.globals.contains(x.id)) // globals are NOT free
-
-        val freeParams = freeVariables.flatMap {
-          case core.Variable.Value(id, tpe) =>
-            Set(Variable(transform(id), transform(tpe)))
+        val freeValueParams = block.free.values.collect {
+          // globals are NOT free
+          case (id, tpe) if !BPC.globals.contains(id) => Variable(transform(id), transform(tpe))
+        }
+        val freeBlockParams = block.free.blocks.flatMap {
+          // Globals are not free
+          case (id, (tpe, capt)) if BPC.globals.contains(id) => Set.empty
 
           // Mutable variables are blocks and can be free, but do not have info.
-          case core.Variable.Block(id, core.Type.TState(stTpe), capt) =>
+          case (id, (core.Type.TState(stTpe), capt)) =>
             Set(Variable(transform(id), Type.Reference(transform(stTpe))))
-
           // Regions are blocks and can be free, but do not have info.
-          case core.Variable.Block(id, core.Type.TRegion, capt) =>
+          case (id, (core.Type.TRegion, capt)) =>
             Set(Variable(transform(id), Type.Prompt()))
 
           // Coercions are blocks and can be free, but do not have info.
-          case core.Variable.Block(id, _, _) if id.name.name.startsWith("@coerce") =>
-            Set.empty
+          case (id, (_, _)) if id.name.name.startsWith("@coerce") => Set.empty
 
-          case core.Variable.Block(pid, tpe, capt) if pid != id => BPC.info.get(pid) match {
+          // Function itself
+          case (pid, (tpe, capt)) if pid == id => Set.empty
+
+          case (pid, (tpe, capt)) =>
+            BPC.info.get(pid) match {
               // For each known free block we have to add its free variables to this one (flat closure)
               case Some(BlockInfo.Definition(freeParams, blockParams)) =>
                 freeParams.toSet
@@ -113,8 +116,8 @@ object Transformer {
               case None =>
                 ErrorReporter.panic(s"Could not find info for free variable $pid")
             }
-          case _ => Set.empty
         }
+        val freeParams = freeValueParams ++ freeBlockParams
 
         noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), freeParams.toList)
 
@@ -145,11 +148,10 @@ object Transformer {
           Coerce(Variable(transform(id), Type.Negative()), boxed, transform(rest))
         }
 
-      case core.Let(id, tpe, core.ValueVar(otherId, otherTpe), rest) =>
+      case core.Let(id, core.ValueVar(otherId, otherTpe), rest) =>
         transform(substitute(rest)(using Substitution(Map(), Map(), Map(id -> core.ValueVar(otherId, otherTpe)), Map())))
 
-      case core.Let(id, tpe, expr, rest) =>
-        // TODO this needs to be expr.tpe and not tpe, but why?
+      case core.Let(id, expr, rest) =>
         transformNamed(Variable(transform(id), transform(expr.tpe)), expr).run { _ =>
           transform(rest)
         }
@@ -165,7 +167,7 @@ object Transformer {
       case core.Return(expr) =>
         transform(expr).run { value => Return(List(value)) }
 
-      case core.Val(id, annot, binding, rest) =>
+      case core.Val(id, binding, rest) =>
         PushFrame(
           Clause(List(Variable(transform(id), transform(binding.tpe))), transform(rest)),
             transform(binding)
@@ -239,7 +241,7 @@ object Transformer {
           Switch(value, List(0 -> Clause(List(), transform(elseStmt)), 1 -> Clause(List(), transform(thenStmt))), None)
         }
 
-      case core.Match(scrutinee, clauses, default) =>
+      case core.Match(scrutinee, tpe, clauses, default) =>
         val transformedClauses = clauses.map { case (constr, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
           DeclarationContext.getConstructorTag(constr) -> Clause(vparams.map(transform), transform(body))
         }
@@ -260,7 +262,7 @@ object Transformer {
 
         Reset(Variable(transform(prompt.id), Type.Prompt()), returnClause, transform(body))
 
-      case core.Shift(prompt, core.BlockLit(Nil, cparams, Nil, List(k), body)) =>
+      case core.Shift(prompt, k, body) =>
 
         noteParameter(k.id, core.Type.TResume(core.Type.TUnit, core.Type.TUnit))
 
@@ -316,7 +318,7 @@ object Transformer {
           StoreVar(reference, value, transform(body))
         }
 
-      case core.Hole(span) => machine.Statement.Hole(span)
+      case core.Hole(tpe, span) => machine.Statement.Hole(span)
 
       case _ =>
         ErrorReporter.abort(s"Unsupported statement: $stmt")
@@ -536,7 +538,7 @@ object Transformer {
       case Toplevel.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
         noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), Nil)
         noteParameters(bparams)
-      case Toplevel.Val(id, tpe, binding) =>
+      case Toplevel.Val(id, binding) =>
         noteDefinition(id, Nil, Nil)
         noteGlobal(id)
       case Toplevel.Def(id, core.New(impl)) =>

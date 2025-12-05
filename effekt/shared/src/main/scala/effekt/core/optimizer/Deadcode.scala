@@ -11,7 +11,7 @@ class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.Rewrite {
   override def stmt = {
     // Remove local unused definitions
     case Stmt.Def(id, block, body) if unused(id) => rewrite(body)
-    case Stmt.Let(id, tpe, binding, body) if binding.capt.isEmpty && unused(id) => rewrite(body)
+    case Stmt.Let(id, binding, body) if binding.capt.isEmpty && unused(id) => rewrite(body)
 
     case Stmt.Reset(body) =>
       rewrite(body) match {
@@ -19,8 +19,8 @@ class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.Rewrite {
         case b => Stmt.Reset(b)
       }
 
-    case Stmt.Match(sc, clauses, default) =>
-      Stmt.Match(rewrite(sc), clauses.collect {
+    case Stmt.Match(sc, tpe, clauses, default) =>
+      Stmt.Match(rewrite(sc), tpe, clauses.collect {
         case (id, clause) if used(id) => (id, rewrite(clause))
       }, default.map(rewrite))
   }

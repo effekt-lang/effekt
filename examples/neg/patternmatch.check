@@ -11,3 +11,8 @@ while another one has type
 Type mismatch between Bool and Int.
 def join(f: Foo) = f match {
                    ^
+[error] examples/neg/patternmatch.effekt:13:20: Expected Box[A] but got Box[A].
+
+Type mismatch between Int and Bool.
+def join(f: Foo) = f match {
+                   ^

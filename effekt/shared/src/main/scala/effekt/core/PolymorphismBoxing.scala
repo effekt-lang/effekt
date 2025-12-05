@@ -7,7 +7,7 @@ import effekt.core.PolymorphismBoxing.ValueCoercer.IdentityCoercer
 import effekt.symbols
 import effekt.symbols.{ TmpBlock, TmpValue }
 import effekt.{ CoreTransformed, Phase }
-import effekt.symbols.builtins.{ TBoolean, TByte, TChar, TDouble, TInt, TState, TUnit }
+import effekt.symbols.builtins.{ TBoolean, TByte, TChar, TDouble, TInt, TState }
 import effekt.symbols.ErrorMessageInterpolator
 
 import scala.util.boundary
@@ -105,7 +105,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(toplevel: Toplevel)(using Context, DeclarationContext): Toplevel = toplevel match {
     case Toplevel.Def(id, block) => Toplevel.Def(id, transform(block))
-    case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, transform(tpe), coerce(transform(binding), transform(tpe)))
+    case Toplevel.Val(id, binding) => Toplevel.Val(id, transform(binding))
   }
 
   def transform(block: Block.BlockLit)(using Context, DeclarationContext): Block.BlockLit = block match {
@@ -148,8 +148,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   def transform(stmt: Stmt)(using Context, DeclarationContext): Stmt = stmt match {
     case Stmt.Def(id, block, rest) =>
       Stmt.Def(id, transform(block), transform(rest))
-    case Stmt.Let(id, tpe, binding, rest) =>
-      Stmt.Let(id, transform(tpe), transform(binding), transform(rest))
+    case Stmt.Let(id, binding, rest) =>
+      Stmt.Let(id, transform(binding), transform(rest))
     case s @ Stmt.ImpureApp(id, b, targs, vargs, bargs, rest) =>
       val callee = transform(b)
       // [S](S) => S            [Int]
@@ -163,23 +163,25 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val bCoerced = (bargs zip tpe.bparams).map { case (a, tpe) => coerce(transform(a), tpe) }
 
       // we might need to coerce the result of this application
-      val stmt: Stmt.ImpureApp = Stmt.ImpureApp(id, callee, targs.map(transformArg), vCoerced, bCoerced, transform(rest))
-      val from = Type.bindingType(stmt)
+      val tCoerced = targs.map(transformArg)
+      val restCoerced = transform(rest)
+
+      val from = Type.instantiate(callee.tpe.asInstanceOf, tCoerced, bCoerced.map(_.capt)).result
       val to = itpe.result
       val coercer = ValueCoercer(from, to)
 
-      if (coercer.isIdentity) { stmt }
+      if (coercer.isIdentity) { Stmt.ImpureApp(id, callee, tCoerced, vCoerced, bCoerced, restCoerced) }
       else {
         val fresh = TmpValue("coe")
-        stmt.copy(
-          id = fresh,
-          body = Stmt.Let(id, to, coercer(Expr.ValueVar(fresh, from)), stmt.body))
+        Stmt.ImpureApp(fresh, callee, tCoerced, vCoerced, bCoerced,
+          Stmt.Let(id, coercer(Expr.ValueVar(fresh, from)),
+           restCoerced))
       }
 
     case Stmt.Return(expr) =>
       Stmt.Return(transform(expr))
-    case Stmt.Val(id, tpe, binding, body) =>
-      Stmt.Val(id, transform(tpe), coerce(transform(binding), transform(tpe)), transform(body))
+    case Stmt.Val(id, binding, body) =>
+      Stmt.Val(id, transform(binding), transform(body))
     case Stmt.App(callee, targs, vargs, bargs) =>
       val calleeT = transform(callee)
       val tpe: BlockType.Function = calleeT.tpe match {
@@ -230,41 +232,56 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
 
-    case Stmt.Get(id, tpe, ref, capt, body) => Stmt.Get(id, transform(tpe), ref, capt, transform(body))
-    case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, transform(value), transform(body))
+    case Stmt.Get(id, tpe, ref, capt, body) =>
+      val boxed = transformArg(tpe)
+      val coercer = ValueCoercer(boxed, tpe)
+      if (coercer.isIdentity) { Stmt.Get(id, tpe, ref, capt, transform(body)) }
+      else {
+        val fresh = TmpValue("coe")
+        Stmt.Get(fresh, boxed, ref, capt,
+          Stmt.Let(id, coercer(Expr.ValueVar(fresh, boxed)),
+            transform(body)))
+      }
+
+    case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, coerce(transform(value), transformArg(value.tpe)), transform(body))
     case Stmt.If(cond, thn, els) =>
       Stmt.If(transform(cond), transform(thn), transform(els))
-    case Stmt.Match(scrutinee, clauses, default) =>
+    case Stmt.Match(scrutinee, tpe, clauses, default) =>
       scrutinee.tpe match {
         // if the scrutinee has type Nothing, then there shouldn't be any clauses...
-        case Type.TBottom => Stmt.Match(transform(scrutinee), Nil, None)
         case ValueType.Data(tpeId, targs) =>
           val Declaration.Data(_, tparams, constructors) = DeclarationContext.getData(tpeId)
-          Stmt.Match(transform(scrutinee), clauses.map {
-            case (id, clause: Block.BlockLit) =>
-              val constructor = constructors.find(_.id == id).get
-              val casetpe: BlockType.Function = BlockType.Function(tparams, List(),
-                constructor.fields.map(_.tpe), List(), Type.inferType(clause.body)
-              )
-              (id, coerce(transform(clause), Type.instantiate(casetpe, targs map transformArg, List())))
-          }, default map transform)
+          constructors match {
+            case Nil =>
+              Stmt.Match(transform(scrutinee), transform(tpe), Nil, None)
+            case _ =>
+              Stmt.Match(transform(scrutinee), transform(tpe), clauses.map {
+                case (id, clause: Block.BlockLit) =>
+                  val constructor = constructors.find(_.id == id).get
+                  val casetpe: BlockType.Function = BlockType.Function(tparams, List(),
+                    constructor.fields.map(_.tpe), List(), clause.body.tpe
+                  )
+                  (id, coerce(transform(clause), Type.instantiate(casetpe, targs map transformArg, List())))
+              }, default map transform)
+          }
         case t => Context.abort(pp"Match on value of type ${t}")
       }
     case Stmt.Alloc(id, init, region, body) =>
-      Stmt.Alloc(id, transform(init), region, transform(body))
+      Stmt.Alloc(id, coerce(transform(init), transformArg(init.tpe)), region, transform(body))
     case Stmt.Var(id, init, cap, body) =>
-      Stmt.Var(id, transform(init), cap, transform(body))
+      coerce(Stmt.Var(id, coerce(transform(init), transformArg(init.tpe)), cap, coerce(transform(body), transformArg(body.tpe))), body.tpe)
     case Stmt.Reset(BlockLit(tps, cps, vps, prompt :: Nil, body)) =>
-      Stmt.Reset(BlockLit(tps, cps, vps, prompt :: Nil, coerce(transform(body), stmt.tpe)))
+      coerce(Stmt.Reset(BlockLit(tps, cps, vps, transform(prompt) :: Nil, coerce(transform(body), transformArg(stmt.tpe)))), stmt.tpe)
     case Stmt.Reset(body) => ???
-    case Stmt.Shift(prompt, body) =>
-      Stmt.Shift(prompt, transform(body))
+    case Stmt.Shift(prompt, k, body) =>
+      val core.Type.TResume(result, answer) = k.tpe : @unchecked
+      coerce(Stmt.Shift(transform(prompt), transform(k), coerce(transform(body), transformArg(answer))), result)
     case Stmt.Resume(k, body) =>
-      val expected = k.tpe match {
-        case core.Type.TResume(result, answer) => result
-        case _ => ???
-      }
-      Stmt.Resume(k, coerce(transform(body), expected))
+      val core.Type.TResume(result, answer) = k.tpe : @unchecked
+      // Also coerce the result of the continuation if necessary
+      // before: Resume[List[Int], List[Int]]
+      // after:  Resume[List[BoxedInt], List[BoxedInt]]
+      coerce(Stmt.Resume(transform(k), coerce(transform(body), transformArg(result))), answer)
 
     case Stmt.Region(body) =>
       transform(body) match {
@@ -273,7 +290,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
           val boxedResult = transformArg(originalResult)
           coerce(Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, coerce(body, boxedResult))), originalResult)
       }
-    case Stmt.Hole(span) => Stmt.Hole(span)
+    case Stmt.Hole(tpe, span) => Stmt.Hole(transform(tpe), span)
   }
 
   def transform(pure: Expr)(using Context, DeclarationContext): Expr = pure match {
@@ -318,9 +335,9 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       BlockType.Function(tparams, cparams, vparams map transform, bparams map transform, transform(result))
 
     // Special case some types to not introduce boxing
-    case i @ BlockType.Interface(TState.interface, _) => i
-    case i @ BlockType.Interface(core.Type.ResumeSymbol, _) => i
-    case i @ BlockType.Interface(core.Type.PromptSymbol, _) => i
+    //    case i @ BlockType.Interface(TState.interface, _) => i
+    //    case i @ BlockType.Interface(core.Type.ResumeSymbol, _) => i
+    //    case i @ BlockType.Interface(core.Type.PromptSymbol, _) => i
 
     case BlockType.Interface(symbol, targs) => BlockType.Interface(symbol, targs map transformArg)
   }
@@ -341,7 +358,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     if (coerce.isIdentity) { stmt }
     else {
       val orig = TmpValue("coe")
-      Stmt.Val(orig, coerce.from, stmt, Stmt.Return(coerce(ValueVar(orig, coerce.from))))
+      Stmt.Val(orig, stmt, Stmt.Return(coerce(ValueVar(orig, coerce.from))))
     }
 
   def coerce(expr: Expr, to: ValueType)(using Context, DeclarationContext): Expr = ValueCoercer(expr.tpe, to)(expr)
@@ -366,8 +383,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       case (unboxed, _: ValueType.Var) if boxer.isDefinedAt(unboxed) => BoxCoercer(unboxed)
       case (boxed, unboxed) if boxer.isDefinedAt(unboxed) && boxer(unboxed).tpe == boxed => UnboxCoercer(unboxed)
       case (_: ValueType.Var, unboxed) if boxer.isDefinedAt(unboxed) => UnboxCoercer(unboxed)
-      case (unboxed, core.Type.TTop) if boxer.isDefinedAt(unboxed) => BoxCoercer(unboxed)
-      case (core.Type.TBottom, unboxed) if boxer.isDefinedAt(unboxed) => BottomCoercer(unboxed)
 
       // assert(cs1 == cs2) // FIXME this seems to fail, what would be the correct check for subcapturing (or similar) here?
       case (f @ core.ValueType.Boxed(bt1, cs1), t @ core.ValueType.Boxed(bt2, cs2)) =>
@@ -399,19 +414,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       override def from = boxer(tpe).tpe
       override def to = tpe
       override def apply(t: Expr): Expr = boxer(tpe).unbox(t)
-    }
-    case class BottomCoercer(tpe: ValueType)(using Context, DeclarationContext) extends ValueCoercer {
-      override def from = core.Type.TBottom
-      override def to = tpe
-
-      override def apply(t: Expr): Expr = to match {
-        case core.Type.TInt     => Expr.Literal(1337L, core.Type.TInt)
-        case core.Type.TDouble  => Expr.Literal(13.37, core.Type.TDouble)
-        case core.Type.TByte    => Expr.Literal(137, core.Type.TByte)
-        case core.Type.TChar    => Expr.Literal(1337, core.Type.TChar)
-        case t if boxer.isDefinedAt(t) => sys error s"No default value defined for ${t}"
-        case _ => sys error s"Trying to unbox Nothing to ${t}"
-      }
     }
   }
 
