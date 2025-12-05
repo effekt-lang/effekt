@@ -92,9 +92,9 @@ def run(n: Int) = {
     def offsetMomentum(body: Body, px: Double, py: Double, pz: Double) =
       Body(
         body.x, body.y, body.z,
-        0.0 -(px / SOLAR_MASS),
-        0.0 -(py / SOLAR_MASS),
-        0.0 -(pz / SOLAR_MASS),
+        0.0 - (px / SOLAR_MASS),
+        0.0 - (py / SOLAR_MASS),
+        0.0 - (pz / SOLAR_MASS),
         body.mass)
 
     bodies.unsafeSet(0, sun.offsetMomentum(px, py, pz))

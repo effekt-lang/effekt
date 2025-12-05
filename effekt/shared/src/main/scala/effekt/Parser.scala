@@ -1001,6 +1001,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     nonterminal:
       var left = nonTerminal()
       while (ops.contains(peek.kind)) {
+         checkBinaryOpWhitespace()
          val op = next()
          val right = nonTerminal()
          left = binaryOp(left, op, right)
@@ -1052,6 +1053,34 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def TypeTuple(tps: Many[Type]): Type =
     TypeRef(IdRef(List("effekt"), s"Tuple${tps.size}", tps.span.synthesized), tps, tps.span.synthesized)
+
+  // Check that the current token is surrounded by whitespace.
+  // If not, soft fail.
+  //
+  // NOTE: Ideally, we'd reintroduce whitespace tokens and then just check here that
+  //       the tokens at `position - 1` and `position + 1` are in fact, `isSpace`.
+  //       But as of writing this, lexer doesn't even report whitespace tokens, so they never reach here.
+  private def checkBinaryOpWhitespace(): Unit = {
+    val opToken = peek
+    val opStart = opToken.start
+    val opEnd = opToken.end
+
+    // Check character immediately before operator
+    val wsBefore = opStart > 0 && {
+      val charBefore = source.content.charAt(opStart - 1)
+      charBefore.isWhitespace
+    }
+
+    // Check character immediately after operator
+    val wsAfter = opEnd + 1 < source.content.length && {
+      val charAfter = source.content.charAt(opEnd + 1)
+      charAfter.isWhitespace
+    }
+
+    if (!wsBefore || !wsAfter) {
+      softFail(s"Missing whitespace around binary operator", position, position)
+    }
+  }
 
   /**
    * This is a compound production for
