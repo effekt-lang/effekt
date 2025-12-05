@@ -1438,7 +1438,7 @@ class LSPTests extends FunSuite {
              |  Nil,
              |  Nil,
              |  List(
-             |    Val(foo_whatever, Data(Int_whatever, Nil), Return(Literal(42, Data(Int_whatever, Nil))))
+             |    Val(foo_whatever, Return(Literal(42, Data(Int_whatever, Nil))))
              |  ),
              |  List(foo_whatever)
              |)""".stripMargin
