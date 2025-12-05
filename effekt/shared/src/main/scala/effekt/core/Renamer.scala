@@ -81,6 +81,9 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
       val resolvedCapt = rewrite(capt)
       withBinding(id) { core.Get(rewrite(id), rewrite(tpe), resolvedRef, resolvedCapt, rewrite(body)) }
 
+    case core.Shift(p, k, body) =>
+      val resolvedPrompt = rewrite(p)
+      withBinding(k.id) { core.Shift(resolvedPrompt, rewrite(k), rewrite(body)) }
   }
 
   override def block: PartialFunction[Block, Block] = {
