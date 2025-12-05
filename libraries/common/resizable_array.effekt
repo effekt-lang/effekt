@@ -179,41 +179,15 @@ def foreachIndex[T](arr: ResizableArray[T]){ body: (Int, T) => Unit }: Unit = {
     body(i, arr.rawContentPtr.get.unsafeGet(i))
   }
 }
-def foreachIndex[T](arr: ResizableArray[T]){ body: (Int, T) {Control} => Unit }: Unit = {
-  each(0, arr.size) { (i){label} =>
-    body(i, arr.rawContentPtr.get.unsafeGet(i)){label}
-  }
-}
 def foreach[T](arr: ResizableArray[T]){ body: T => Unit }: Unit = {
   each(0, arr.size) { i =>
     body(arr.rawContentPtr.get.unsafeGet(i))
-  }
-}
-def foreach[T](arr: ResizableArray[T]){ body: (T) {Control} => Unit }: Unit = {
-  each(0, arr.size) { (i){label} =>
-    body(arr.rawContentPtr.get.unsafeGet(i)){label}
-  }
-}
-def foreachIndexReversed[T](arr: ResizableArray[T]){ body: (Int, T){Control} => Unit }: Unit = {
-  var i = arr.size - 1
-  loop { {l} =>
-    if (i < 0) { l.break() }
-    body(i, arr.rawContentPtr.get.unsafeGet(i)){l}
-    i = i - 1
   }
 }
 def foreachIndexReversed[T](arr: ResizableArray[T]){ body: (Int, T) => Unit }: Unit = {
   var i = arr.size - 1
   while(i >= 0) {
     body(i, arr.rawContentPtr.get.unsafeGet(i))
-    i = i - 1
-  }
-}
-def foreachReversed[T](arr: ResizableArray[T]){ body: (T){Control} => Unit }: Unit = {
-  var i = arr.size - 1
-  loop { {l} =>
-    if (i < 0) { l.break() }
-    body(arr.rawContentPtr.get.unsafeGet(i)){l}
     i = i - 1
   }
 }

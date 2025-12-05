@@ -579,18 +579,6 @@ def each[A](seq: Seq[A]) { consume: (A) => Unit }: Unit = {
   }
 }
 
-def each[A](seq: Seq[A]) { f: (A) {Control} => Unit }: Unit = try {
-  seq.each { (el) =>
-    try { f(el) {inner} } with inner: Control {
-      def break() = outer.break()
-      def continue() = ()
-    }
-  }
-} with outer: Control {
-  def break() = ()
-  def continue() = ()
-}
-
 def eachReverse[A](seq: Seq[A]) { consume: A => Unit }: Unit = {
 
   def go(digit: Digit[A]): Unit = digit match {
@@ -625,18 +613,6 @@ def eachReverse[A](seq: Seq[A]) { consume: A => Unit }: Unit = {
     case Single(v) => consume(v)
     case Deep(_, p, m, s) => go(s); go(m); go(p)
   }
-}
-
-def eachReverse[A](seq: Seq[A]) { f: (A) {Control} => Unit }: Unit = try {
-  seq.eachReverse { (el) =>
-    try { f(el) {inner} } with inner: Control {
-      def break() = outer.break()
-      def continue() = ()
-    }
-  }
-} with outer: Control {
-  def break() = ()
-  def continue() = ()
 }
 
 def toList[A](seq: Seq[A]): List[A] = {
@@ -851,12 +827,6 @@ def toList[A](digit: Digit[A]): List[A] = digit match {
 def map[A, B](seq: Seq[A]) { f: A => B }: Seq[B] = {
   var result: Seq[B] = Empty()
   seq.each { a => result = result.consRight(f(a)) }
-  result
-}
-
-def map[A, B](seq: Seq[A]) { f: (A) {Control} => B }: Seq[B] = {
-  var result: Seq[B] = Empty()
-  seq.each { (a) {label} => result = result.consRight(f(a) {label}) }
   result
 }
 

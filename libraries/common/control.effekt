@@ -1,0 +1,148 @@
+module control
+
+import resizable_array
+import seq
+
+
+interface Control {
+  def break(): Unit
+  def continue(): Unit
+}
+
+def loop { f: {Control} => Unit }: Unit = try {
+  def go(): Unit = { f {label}; go() }
+  go()
+} with label: Control {
+  def break() = ()
+  def continue() = loop { f }
+}
+
+/// Calls provided action repeatedly with support for breaking. `start` is inclusive, `end` is not.
+def each(start: Int, end: Int) { action: (Int) {Control} => Unit } = {
+  var i = start;
+  loop { {l} =>
+    if (i < end) { val el = i; i = i + 1; action(el){l} }
+    else { l.break() }
+  }
+}
+
+def repeat(n: Int) { action: () {Control} => Unit } = each(0, n) { (n) {l} => action() {l} }
+
+/// Traverse a list, applying the given action on every element.
+///
+/// O(N)
+def foreach[A](l: List[A]) { f: (A) {Control} => Unit } : Unit = {
+  var remainder = l
+  loop { {label} =>
+    remainder match {
+      case Nil() => label.break()
+      case Cons(head, tail) =>
+        remainder = tail
+        f(head) {label}
+    }
+  }
+}
+
+/// Traverse a list, applying the given action on every element and its (zero-based) index.
+///
+/// O(N)
+def foreachIndex[A](list: List[A]){ f: (Int, A) {Control} => Unit }: Unit = {
+  var remainder = list
+  var i = -1
+  loop { {label} =>
+      remainder match {
+        case Nil() => label.break()
+        case Cons(head, tail) =>
+          remainder = tail
+          i = i + 1
+          f(i, head) {label}
+      }
+  }
+}
+
+/// Traverse an array, applying the given action on every element.
+///
+/// O(N)
+def foreach[T](arr: Array[T]){ action: (T) {Control} => Unit }: Unit =
+  each(0, arr.size) { (i) {label} =>
+    action(arr.unsafeGet(i)) {label}
+  }
+
+/// Traverse an array, applying the given action on every element and its (zero-based) index.
+///
+/// O(N)
+def foreachIndex[T](arr: Array[T]){ action: (Int, T) {Control} => Unit }: Unit =
+  each(0, arr.size) { (i) {label} =>
+    action(i, arr.unsafeGet(i)) {label}
+  }
+
+def foreach(arr: ByteArray){ action: (Byte) {Control} => Unit }: Unit =
+  each(0, arr.size) { (i) {label} =>
+    action(arr.unsafeGet(i)) {label}
+  }
+
+def foreachIndex(arr: ByteArray){ action: (Int, Byte) {Control} => Unit }: Unit =
+  each(0, arr.size) { (i) {label} =>
+    action(i, arr.unsafeGet(i)) {label}
+  }
+
+def foreachIndex[T](arr: ResizableArray[T]){ body: (Int, T) {Control} => Unit }: Unit = {
+  each(0, arr.size) { (i){label} =>
+    body(i, arr.rawContentPtr.get.unsafeGet(i)){label}
+  }
+}
+
+def foreach[T](arr: ResizableArray[T]){ body: (T) {Control} => Unit }: Unit = {
+  each(0, arr.size) { (i){label} =>
+    body(arr.rawContentPtr.get.unsafeGet(i)){label}
+  }
+}
+
+def foreachIndexReversed[T](arr: ResizableArray[T]){ body: (Int, T){Control} => Unit }: Unit = {
+  var i = arr.size - 1
+  loop { {l} =>
+    if (i < 0) { l.break() }
+    body(i, arr.rawContentPtr.get.unsafeGet(i)){l}
+    i = i - 1
+  }
+}
+
+def foreachReversed[T](arr: ResizableArray[T]){ body: (T){Control} => Unit }: Unit = {
+  var i = arr.size - 1
+  loop { {l} =>
+    if (i < 0) { l.break() }
+    body(arr.rawContentPtr.get.unsafeGet(i)){l}
+    i = i - 1
+  }
+}
+
+def each[A](seq: Seq[A]) { f: (A) {Control} => Unit }: Unit = try {
+  seq.each { (el) =>
+    try { f(el) {inner} } with inner: Control {
+      def break() = outer.break()
+      def continue() = ()
+    }
+  }
+} with outer: Control {
+  def break() = ()
+  def continue() = ()
+}
+
+def eachReverse[A](seq: Seq[A]) { f: (A) {Control} => Unit }: Unit = try {
+  seq.eachReverse { (el) =>
+    try { f(el) {inner} } with inner: Control {
+      def break() = outer.break()
+      def continue() = ()
+    }
+  }
+} with outer: Control {
+  def break() = ()
+  def continue() = ()
+}
+
+def map[A, B](seq: Seq[A]) { f: (A) {Control} => B }: Seq[B] = {
+  var result: Seq[B] = Empty()
+  seq.each { (a) {label} => result = result.consRight(f(a) {label}) }
+  result
+}
+

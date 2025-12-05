@@ -2,8 +2,8 @@ module list
 
 import effekt
 import option
-import exception
 import stream
+import exception
 
 /// Immutable linked list for finite sequences of elements.
 type List[A] {
@@ -120,21 +120,6 @@ def foreach[A](l: List[A]) { f: (A) => Unit } : Unit = l match {
   case Cons(head, tail) => f(head); tail.foreach {f}
 }
 
-/// Traverse a list, applying the given action on every element.
-///
-/// O(N)
-def foreach[A](l: List[A]) { f: (A) {Control} => Unit } : Unit = {
-  var remainder = l
-  loop { {label} =>
-    remainder match {
-      case Nil() => label.break()
-      case Cons(head, tail) =>
-        remainder = tail
-        f(head) {label}
-    }
-  }
-}
-
 /// Traverse a list, applying the given action on every element and its (zero-based) index.
 ///
 /// O(N)
@@ -146,23 +131,6 @@ def foreachIndex[A](list: List[A]){ f: (Int, A) => Unit }: Unit = {
       loop(index + 1, tail)
   }
   loop(0, list)
-}
-
-/// Traverse a list, applying the given action on every element and its (zero-based) index.
-///
-/// O(N)
-def foreachIndex[A](list: List[A]){ f: (Int, A) {Control} => Unit }: Unit = {
-  var remainder = list
-  var i = -1
-  loop { {label} =>
-      remainder match {
-        case Nil() => label.break()
-        case Cons(head, tail) =>
-          remainder = tail
-          i = i + 1
-          f(i, head) {label}
-      }
-  }
 }
 
 /// Map a function `f` over elements in a given list.
@@ -292,10 +260,12 @@ def contains[A](list: List[A], element: A) { eq: (A, A) => Bool }: Bool =
 /// O(N)
 def indexOf[A](list: List[A], element: A) { eq: (A, A) => Bool }: Option[Int] = {
   var result = None()
-  list.foreachIndex { (i, a) {label} =>
-    if (element.eq(a)) {
-      result = Some(i)
-      label.break()
+  boundary {
+    list.foreachIndex { (i, a) =>
+      if (element.eq(a)) {
+        result = Some(i)
+        do stop()
+      }
     }
   }
   result
@@ -307,7 +277,7 @@ def indexOf[A](list: List[A], element: A) { eq: (A, A) => Bool }: Option[Int] = 
 /// O(N)
 def lastIndexOf[A](list: List[A], element: A) { eq: (A, A) => Bool }: Option[Int] = {
   var result = None()
-  list.foreachIndex { (i, a) {label} =>
+  list.foreachIndex { (i, a) =>
     if (element.eq(a)) {
       result = Some(i)
     }

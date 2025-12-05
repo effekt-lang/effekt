@@ -39,7 +39,7 @@ def countWords(): Output / read[Byte] = {
   var lines = 0
   var wasSpace = true
 
-  exhaustively {
+  loop {
     val c = do read()
 
     chars = chars + 1
