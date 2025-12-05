@@ -72,7 +72,6 @@ def lookup[A](trie: Dictionary[A], key: ByteArray): Option[A] = {
   go(trie, 0)
 }
 
-
 record Tagged[A](key: ByteArray, value: A)
 
 def collectTrie[A] { stream: () => Unit / emit[Tagged[A]] }: Dictionary[A] = {
@@ -83,5 +82,42 @@ def collectTrie[A] { stream: () => Unit / emit[Tagged[A]] }: Dictionary[A] = {
   return trie
 }
 
+def each[A](trie: Dictionary[A]): Unit / emit[A] =
+  trie match {
+    case Empty() => ()
+    case Leaf(value) => do emit(value)
+    case Branch(children) =>
+      each(0, children.size) { i =>
+        each(children.unsafeGet(i))
+      }
+    case Node(value, children) =>
+      do emit(value)
+      each(0, children.size) { i =>
+        each(children.unsafeGet(i))
+      }
+  }
+
+def eachTagged[A](trie: Dictionary[A]): Unit / emit[Tagged[A]] = {
+  def fromBytesReverse(bytes: List[Byte], n: Int): ByteArray = {
+    val key = bytearray::allocate(n)
+    foreachIndex(bytes) { (i, b) => key.unsafeSet(n - 1 - i, b) }
+    key
+  }
+  def go(trie: Dictionary[A], key: List[Byte], n: Int): Unit =
+    trie match {
+      case Empty() => ()
+      case Leaf(value) => do emit(Tagged(fromBytesReverse(key, n), value))
+      case Branch(children) =>
+        each(0, children.size) { i =>
+          go(children.unsafeGet(i), Cons(i.toByte, key), n + 1)
+        }
+      case Node(value, children) =>
+        do emit(Tagged(fromBytesReverse(key, n), value))
+        each(0, children.size) { i =>
+          go(children.unsafeGet(i), Cons(i.toByte, key), n + 1)
+        }
+    }
+  go(trie, Nil(), 0)
+}
 
 
