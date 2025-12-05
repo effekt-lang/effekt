@@ -22,6 +22,6 @@ def main() = region r {
         println(g())
         println(h())
     } with GID {
-        def gid() = { n = n+1; resume(n) }
+        def gid() = { n = n + 1; resume(n) }
     }
 }
