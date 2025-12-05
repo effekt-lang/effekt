@@ -130,13 +130,13 @@ class PatternMatchingTests extends CoreTests {
       Clause(
         List(
           Condition.Patterns(Map(opt -> Pattern.Ignore()))),
-        b2, Nil, List())), TInt)
+        b2, Nil, List())), TUnit)
 
     // opt match {
     //   case Some(tmp) => val p = return v > 0; if (p) { b1(tmp) } else { b2() }
     //   case _ => b2()
     // }
-    val expected = Match(opt, TInt,
+    val expected = Match(opt, TUnit,
       List((SomeC, BlockLit(Nil, Nil, List(ValueParam(tmp.id, tmp.tpe)), Nil,
         Val(p.id, trivalPredicate, If(p,
           App(b1, Nil, List(tmp), Nil),
