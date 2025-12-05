@@ -5,6 +5,8 @@ import bytearray
 import stream
 
 
+/// A trie-based dictionary for efficient key-value storage with bytearray keys.
+/// Supports String and ByteArray keys with fast lookup and insertion.
 type Dictionary[A] {
   Empty()
   Leaf(value: A)
@@ -12,9 +14,11 @@ type Dictionary[A] {
   Node(value: A, children: Array[Dictionary[A]])
 }
 
+/// Insert a value with a String key.
 def insert[A](trie: Dictionary[A], key: String, value: A): Dictionary[A] =
   insert(trie, key.fromString, value)
 
+/// Insert a key-value pair into the dictionary with a ByteArray key.
 def insert[A](trie: Dictionary[A], key: ByteArray, value: A): Dictionary[A] = {
   def go(trie: Dictionary[A], i: Int): Dictionary[A] =
     if (i < key.size) {
@@ -49,9 +53,11 @@ def insert[A](trie: Dictionary[A], key: ByteArray, value: A): Dictionary[A] = {
   go(trie, 0)
 }
 
+/// Look up a value in the dictionary by string key.
 def lookup[A](trie: Dictionary[A], key: String): Option[A] =
   lookup(trie, key.fromString)
 
+/// Look up a value in the dictionary by bytearray key.
 def lookup[A](trie: Dictionary[A], key: ByteArray): Option[A] = {
   def go(trie: Dictionary[A], i: Int): Option[A] =
     if (i < key.size) {
@@ -72,8 +78,10 @@ def lookup[A](trie: Dictionary[A], key: ByteArray): Option[A] = {
   go(trie, 0)
 }
 
+/// A record pairing a key with a value for use in streams.
 record Tagged[A](key: ByteArray, value: A)
 
+/// Collect key-value pairs from a stream of Tagged elements into a Dictionary.
 def collectTrie[A] { stream: () => Unit / emit[Tagged[A]] }: Dictionary[A] = {
   var trie = Empty()
   for[Tagged[A]] { stream() } { case Tagged(bytes, value) =>
@@ -82,6 +90,7 @@ def collectTrie[A] { stream: () => Unit / emit[Tagged[A]] }: Dictionary[A] = {
   return trie
 }
 
+/// Emit all values stored in the dictionary as a push stream.
 def each[A](trie: Dictionary[A]): Unit / emit[A] =
   trie match {
     case Empty() => ()
@@ -97,6 +106,7 @@ def each[A](trie: Dictionary[A]): Unit / emit[A] =
       }
   }
 
+/// Emit all key-value pairs stored in the dictionary as a push stream of Tagged elements.
 def eachTagged[A](trie: Dictionary[A]): Unit / emit[Tagged[A]] = {
   def fromBytesReverse(bytes: List[Byte], n: Int): ByteArray = {
     val key = bytearray::allocate(n)
