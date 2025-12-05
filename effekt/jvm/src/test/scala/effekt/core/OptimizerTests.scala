@@ -151,7 +151,7 @@ class OptimizerTests extends CoreTests {
   test("inline toplevel"){
     val input =
       """ def foo = { () => return 42 }
-        | def main = { () => (foo : () => Unit @ {})() }
+        | def main = { () => (foo : () => Int @ {})() }
         |""".stripMargin
 
     val expected =
@@ -164,7 +164,7 @@ class OptimizerTests extends CoreTests {
   test("inline with argument"){
     val input =
       """ def foo = { (n: Int) => return n:Int }
-        | def main = { () => (foo : (Int) => Unit @ {})(42) }
+        | def main = { () => (foo : (Int) => Int @ {})(42) }
         |""".stripMargin
 
     val expected =
@@ -181,7 +181,7 @@ class OptimizerTests extends CoreTests {
         |   (f : (Int) => Int @ {f})(1)
         | }
         | def main = { () =>
-        |   (hof : (){f : (Int) => Int} => Int @ {})(){ (foo : (Int) => Unit @ {}) }
+        |   (hof : (){f : (Int) => Int} => Int @ {})(){ (foo : (Int) => Int @ {}) }
         | }
         |""".stripMargin
 
@@ -199,7 +199,7 @@ class OptimizerTests extends CoreTests {
         |   (f : (Int) => Int @ {f})(1)
         | }
         | def main = { () =>
-        |   (hof : (){f : (Int) => Int} => Int @ {})(){ (foo : (Int) => Unit @ {}) }
+        |   (hof : (){f : (Int) => Int} => Int @ {})(){ (foo : (Int) => Int @ {}) }
         | }
         |""".stripMargin
 
