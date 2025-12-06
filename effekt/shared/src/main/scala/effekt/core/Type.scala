@@ -408,10 +408,13 @@ object Type {
         Typing(result, armCapt, armFree ++ Free.make(id, sc.tpe.asInstanceOf[ValueType.Data], tparams.map(id => ValueType.Var(id)), vparams))
       }
 
+      // TODO assert that scrutinee actually has type being matched on
       def join(typings: List[Typing[ValueType]], annotated: ValueType): Typing[ValueType] =
         fold(typings, annotated) { (tpe1, tpe2) => valueShouldEqual(tpe1, tpe2); tpe1 }
 
-      join(clauseTypings ++ default.toList.map { stmt => stmt.typing }, annotatedTpe)
+      val Typing(tpe, capt, free) = join(clauseTypings ++ default.toList.map { stmt => stmt.typing }, annotatedTpe)
+      Typing(tpe, scCapt ++ capt, scFree ++ free)
+
 
     case Stmt.Region(body) =>
       val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = asFunctionTyping(body.typing)
