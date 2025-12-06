@@ -44,7 +44,7 @@ def skipIf[A] { predicate: A => Bool }: Unit / { Scan[A], stop } = {
   readIf{predicate}; ()
 }
 
-def readSome[A, B] { convert: A => Option[B] }: B / { Scan[A], stop } =
+def readIf[A, B] { convert: A => Option[B] }: B / { Scan[A], stop } =
   if (convert(do peek()) is Some(t)) {
     do skip()
     return t
@@ -52,8 +52,8 @@ def readSome[A, B] { convert: A => Option[B] }: B / { Scan[A], stop } =
     do stop()
   }
 
-/// like `readSome`, but for partial functions `A => B / fail` such as `char::digitValue`
-def tryRead[A, B] { convert: A => B / fail }: B / { Scan[A], stop } = {
+/// like `readIf`, but for partial functions `A => B / fail` such as `char::digitValue`
+def readIf[A, B] { convert: A => B / fail }: B / { Scan[A], stop } = {
   val t = attempt { convert(do peek()) } { do stop() }
   do skip()
   return t
@@ -61,12 +61,17 @@ def tryRead[A, B] { convert: A => B / fail }: B / { Scan[A], stop } = {
 
 /// Reads until the predicate does not hold for the next token.
 /// Emits the tokens read.
-def readWhile[A] { predicate: A => Bool }: Unit / { Scan[A], emit[A] } =
+def readMany[A] { predicate: A => Bool }: Unit / { Scan[A], emit[A] } =
   many { readIf{predicate} }
+
+/// Reads until the predicate does not hold for the next token.
+/// Emits the tokens read.
+def readSome[A] { predicate: A => Bool }: Unit / { Scan[A], emit[A], stop } =
+  some { readIf{predicate} }
 
 /// Skips until the predicate does not hold for the next token.
 def skipWhile[A] { predicate: A => Bool }: Unit / Scan[A] =
-  for[A] { readWhile{predicate} } { _ => () }
+  for[A] { readMany{predicate} } { _ => () }
 
 /// Read the next character if it is the given one.
 def readIf(e: Char): Unit / { Scan[Char], stop } = {
@@ -101,7 +106,7 @@ def readString(string: String): Unit / { Scan[Char], stop } =
 
 /// Check that the next character is a digit in base 10, and if so read and return it.
 def readDigit(): Int / { Scan[Char], stop } =
-  tryRead[Char, Int]{ char => digitValue(char) }
+  readIf[Char, Int]{ char => digitValue(char) }
 
 /// Read a positive decimal number.
 def readDecimal(): Int / { Scan[Char], stop } = {
@@ -114,7 +119,7 @@ def readDecimal(): Int / { Scan[Char], stop } = {
 
 /// Check that the next character is a digit in base 16, and if so read and return it.
 def readHexDigit(): Int / { Scan[Char], stop } =
-  tryRead[Char, Int]{ char => hexDigitValue(char) }
+  readIf[Char, Int]{ char => hexDigitValue(char) }
 
 /// Read a hexadecimal number as long as possible.
 def readHexadecimal(): Int / { Scan[Char], stop } = {
