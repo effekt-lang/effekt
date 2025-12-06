@@ -690,11 +690,12 @@ define private %Stack @withEmptyStack() {
     ret %Stack %stack
 }
 
-define void @resume_Int(%Stack %stack, %Int %argument) {
+define void @resume_Int(%Stack %stack, %Int %integer) {
+    %value = call ccc %Pos @coerceIntPos(%Int %integer)
     %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
-    tail call tailcc void %returnAddress(%Int %argument, %Stack %stack)
+    tail call tailcc void %returnAddress(%Pos %value, %Stack %stack)
     ret void
 }
 
@@ -724,9 +725,10 @@ define void @run(%Pos %boxed) {
     ret void
 }
 
-define void @run_Int(%Pos %boxed, i64 %argument) {
+define void @run_Int(%Pos %boxed, %Int %integer) {
+    %value = call ccc %Pos @coerceIntPos(%Int %integer)
     ; unbox
-    %f = call %Neg @coercePosNeg(%Pos %boxed)
+    %f = call ccc %Neg @coercePosNeg(%Pos %boxed)
 
     ; fresh stack
     %stack = call %Stack @withEmptyStack()
@@ -738,13 +740,13 @@ define void @run_Int(%Pos %boxed, i64 %argument) {
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
     ; call
-    tail call tailcc %Pos %functionPointer(%Object %object, i64 %argument, %Stack %stack)
+    tail call tailcc %Pos %functionPointer(%Object %object, %Pos %value, %Stack %stack)
     ret void
 }
 
 define void @run_Pos(%Pos %boxed, %Pos %argument) {
     ; unbox
-    %f = call %Neg @coercePosNeg(%Pos %boxed)
+    %f = call ccc %Neg @coercePosNeg(%Pos %boxed)
 
     ; fresh stack
     %stack = call %Stack @withEmptyStack()
