@@ -100,15 +100,6 @@ object Transformer {
           case (id, tpe) if !BPC.globals.contains(id) => Variable(transform(id), transform(tpe))
         }
         val freeBlockParams = block.free.blocks.flatMap {
-          // Globals are not free
-          case (id, (tpe, capt)) if BPC.globals.contains(id) => Set.empty
-
-          // Mutable variables are blocks and can be free, but do not have info.
-          case (id, (core.Type.TState(stTpe), capt)) =>
-            Set(Variable(transform(id), Type.Reference(transform(stTpe))))
-          // Regions are blocks and can be free, but do not have info.
-          case (id, (core.Type.TRegion, capt)) =>
-            Set(Variable(transform(id), Type.Prompt()))
 
           // Function itself
           case (pid, (tpe, capt)) if pid == id => Set.empty
@@ -118,17 +109,15 @@ object Transformer {
               // For each known free block we have to add its free variables to this one (flat closure)
               case Some(BlockInfo.Definition(freeParams, blockParams)) =>
                 freeParams.toSet
-
               // Unknown free blocks stay free variables
               case Some(BlockInfo.Parameter(tpe)) =>
                 Set(Variable(transform(pid), transform(tpe)))
-
               // Everything else is considered bound or global
               case None =>
                 ErrorReporter.panic(s"Could not find info for free variable $pid")
             }
         }
-        val freeParams = freeValueParams ++ freeBlockParams
+        val freeParams = (freeValueParams ++ freeBlockParams).toSet
 
         noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), freeParams.toList)
 
@@ -318,8 +307,9 @@ object Transformer {
       case core.Var(ref, init, capture, body) =>
         val stateType = transform(init.tpe)
         val reference = Variable(transform(ref), Type.Reference(stateType))
-        val prompt = Variable(freshName("prompt"), Type.Prompt())
 
+        // TODO ref should be BlockParam
+        noteParameter(ref, core.Type.TState(init.tpe))
         transform(init).run { value =>
           Var(reference, value, transform(body.tpe),
             transform(body))
@@ -335,7 +325,6 @@ object Transformer {
       case core.Put(ref, capt, arg, body) =>
         val stateType = transform(arg.tpe)
         val reference = Variable(transform(ref), Type.Reference(stateType))
-        val variable = Variable(freshName("put"), Positive())
 
         transform(arg).run { value =>
           StoreVar(reference, value, transform(body))
@@ -535,9 +524,10 @@ object Transformer {
     Positive()
 
   def transform(tpe: core.BlockType)(using ErrorReporter): Type = tpe match {
-    case core.Type.TRegion => Type.Prompt()
-    case core.Type.TResume(result, answer) => Type.Stack()
+    case core.Type.TState(stateType) => Type.Reference(transform(stateType))
     case core.Type.TPrompt(answer) => Type.Prompt()
+    case core.Type.TResume(result, answer) => Type.Stack()
+    case core.Type.TRegion => Type.Prompt()
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => Negative()
     case core.BlockType.Interface(symbol, targs) => Negative()
   }
