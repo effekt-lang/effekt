@@ -1,0 +1,11 @@
+
+import scanner
+
+def main() = {
+  with feed("1,2,34,")
+  with scanner[Char]
+  for[Int] {
+    separating(',') { readDecimal() }
+  } { c => println(c) }
+}
+
