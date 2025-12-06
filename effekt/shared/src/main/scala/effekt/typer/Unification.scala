@@ -4,7 +4,7 @@ package typer
 import effekt.context.Context
 import effekt.source.MatchPattern
 import effekt.symbols.*
-import effekt.symbols.builtins.{ TBottom, TTop }
+import effekt.symbols.builtins.TBottom
 import effekt.util.messages.ErrorReporter
 
 
@@ -148,14 +148,6 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator, ErrorReport
 
   def requireSubregion(c1: Captures, c2: Captures, ctx: ErrorContext): Unit = requireSubregionWithout(c1, c2, Set.empty, ctx)
 
-  /**
-   * Computes the join of all types, only called to merge the different arms of if and match
-   */
-  def join(tpes: ValueType*): ValueType =
-    tpes.foldLeft[ValueType](TBottom) { (t1, t2) =>
-      mergeValueTypes(t1, t2, ErrorContext.MergeTypes(unification(t1), unification(t2)))
-    }
-
   def requireSubregionWithout(lower: Captures, upper: Captures, filter: List[Capture])(using C: Context): Unit =
     requireSubregionWithout(lower, upper, filter.toSet, ErrorContext.CaptureFlow(lower, upper, C.focus))
 
@@ -228,7 +220,6 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator, ErrorReport
 
     (typeRigids, captRigids, instantiate(tpe, typeRigids, captRigids))
   }
-
 
   // Implementation Details
   // ----------------------

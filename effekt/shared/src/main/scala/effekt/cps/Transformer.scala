@@ -28,7 +28,7 @@ object Transformer {
 
   def transformToplevel(definition: core.Toplevel)(using TransformationContext): ToplevelDefinition = definition match {
     case core.Toplevel.Def(id, block) => ToplevelDefinition.Def(id, transform(block))
-    case core.Toplevel.Val(id, tpe, stmt) =>
+    case core.Toplevel.Val(id, stmt) =>
       val ks = Id("ks")
       val k = Id("k")
       ToplevelDefinition.Val(id, ks, k, transform(stmt, ks, Continuation.Dynamic(k)))
@@ -56,7 +56,7 @@ object Transformer {
       LetDef(id, transform(block), transform(body, ks, k))
 
     // dealiasing
-    case core.Stmt.Let(id, tpe, core.Expr.ValueVar(x, _), body) =>
+    case core.Stmt.Let(id, core.Expr.ValueVar(x, _), body) =>
       binding(id, C.lookupValue(x)) { transform(body, ks, k) }
 
     case core.Stmt.ImpureApp(id, b, targs, vargs, bargs, body) =>
@@ -67,13 +67,13 @@ object Transformer {
         case _ => sys error "Should not happen"
       }
 
-    case core.Stmt.Let(id, tpe, pure: core.Expr, body) =>
+    case core.Stmt.Let(id, pure: core.Expr, body) =>
       LetExpr(id, transform(pure), transform(body, ks, k))
 
     case core.Stmt.Return(value) =>
       k(transform(value), ks)
 
-    case core.Stmt.Val(id, annotatedTpe, rhs, body) =>
+    case core.Stmt.Val(id, rhs, body) =>
       transform(rhs, ks, Continuation.Static(id) { (value, ks) =>
         binding(id, value) { transform(body, ks, k) }
       })
@@ -89,12 +89,12 @@ object Transformer {
         If(transform(cond), transform(thn, ks, k2), transform(els, ks, k2))
       }
 
-    case core.Stmt.Match(scrutinee, List((id, rhs)), None) =>
+    case core.Stmt.Match(scrutinee, tpe, List((id, rhs)), None) =>
       Match(
         transform(scrutinee),
         List((id, transformClause(rhs, ks, k))), None)
 
-    case core.Stmt.Match(scrutinee, clauses, default) =>
+    case core.Stmt.Match(scrutinee, tpe, clauses, default) =>
       withJoinpoint(k) { k =>
         Match(
           transform(scrutinee),
@@ -112,16 +112,14 @@ object Transformer {
 
     // Only unidirectional, yet
     // core.Block.BlockLit(tparams, cparams, vparams, List(resume), body)
-    case core.Stmt.Shift(prompt, core.Block.BlockLit(tparams, cparams, vparams, List(resume), body)) =>
+    case core.Stmt.Shift(prompt, resume, body) =>
       val ks2 = Id("ks")
       val k2 = Id("k")
 
-      val translatedBody: BlockLit = BlockLit(vparams.map { p => p.id }, List(resume.id), ks2, k2,
+      val translatedBody: BlockLit = BlockLit(Nil, List(resume.id), ks2, k2,
         transform(body, ks2, Continuation.Dynamic(k2)))
 
       Shift(prompt.id, translatedBody, MetaCont(ks), k.reifyAt(stmt.tpe))
-
-    case core.Stmt.Shift(prompt, body) => sys error "Shouldn't happen"
 
     case core.Stmt.Resume(cont, body) =>
       val ks2 = Id("ks")
@@ -129,7 +127,7 @@ object Transformer {
       Resume(cont.id, Block.BlockLit(Nil, Nil, ks2, k2, transform(body, ks2, Continuation.Dynamic(k2))),
         MetaCont(ks), k.reifyAt(stmt.tpe))
 
-    case core.Stmt.Hole(span) => Hole(span)
+    case core.Stmt.Hole(tpe, span) => Hole(span)
 
     case core.Stmt.Region(core.Block.BlockLit(_, _, _, List(region), body)) =>
       cps.Region(region.id, MetaCont(ks),

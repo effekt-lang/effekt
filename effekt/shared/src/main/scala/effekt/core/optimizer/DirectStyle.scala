@@ -13,22 +13,22 @@ object DirectStyle extends Tree.Rewrite {
     // def l(x) = stmt2;
     // ...
     // l(42)
-    case Val(id, tpe, binding, body) =>
+    case Val(id, binding, body) =>
       val rewrittenBinding = rewrite(binding)
       val rewrittenBody = rewrite(body)
 
       if canBeDirect(rewrittenBinding) then
         val l = Id("l")
-        val joinpoint = BlockLit(Nil, Nil, ValueParam(id, tpe) :: Nil, Nil, rewrittenBody)
+        val joinpoint = BlockLit(Nil, Nil, ValueParam(id, rewrittenBinding.tpe) :: Nil, Nil, rewrittenBody)
         Def(l, joinpoint, toDirectStyle(rewrittenBinding, BlockVar(l, joinpoint.tpe, joinpoint.capt)))
       else
-        Val(id, tpe, rewrittenBinding, rewrittenBody)
+        Val(id, rewrittenBinding, rewrittenBody)
 
   }
 
   private def canBeDirect(s: Stmt): Boolean = s match {
     case Return(expr) => true
-    case Hole(_) => true
+    case Hole(_, _) => true
 
     // non-tail calls
     case App(_, _, _, _) => false
@@ -38,15 +38,15 @@ object DirectStyle extends Tree.Rewrite {
     case Reset(_) => false
     case Region(_) => false
     case Resume(_, _) => false
-    case Shift(_, _) => false
+    case Shift(_, _, _) => false
 
     // Congruences
     case Def(id, block, body) => canBeDirect(body)
-    case Let(id, tpe, binding, body) => canBeDirect(body)
+    case Let(id, binding, body) => canBeDirect(body)
     case ImpureApp(id, callee, targs, vargs, bargs, body) => canBeDirect(body)
-    case Val(id, tpe, binding, body) => canBeDirect(body)
+    case Val(id, binding, body) => canBeDirect(body)
     case If(cond, thn, els) => canBeDirect(thn) && canBeDirect(els)
-    case Match(scrutinee, clauses, default) =>
+    case Match(scrutinee, tpe, clauses, default) =>
       clauses.forall { case (id, bl) => canBeDirect(bl.body) } && default.forall(canBeDirect)
 
     case Alloc(id, init, region, body) => canBeDirect(body)
@@ -55,9 +55,15 @@ object DirectStyle extends Tree.Rewrite {
     case Put(ref, capt, value, body) => canBeDirect(body)
   }
 
+  // Some rewrites change the answer type (match & hole) to the result of the join point, which is called in return position.
+  private def returnType(label: Block.BlockVar): ValueType =
+    label.tpe match {
+      case BlockType.Function(_, _, _, _, result) => result
+      case BlockType.Interface(_, _) => sys error "Join points need to have a function type"
+    }
+
   private def toDirectStyle(stmt: Stmt, label: Block.BlockVar): Stmt = stmt match {
     case Return(expr) => App(label, Nil, List(expr), Nil)
-    case Hole(_) => stmt
 
     // non-tail calls
     case App(_, _, _, _) => stmt
@@ -66,29 +72,31 @@ object DirectStyle extends Tree.Rewrite {
     // control effects
     case Reset(_) => stmt
     case Resume(_, _) => stmt
-    case Shift(_, _) => stmt
+    case Shift(_, _, _) => stmt
     case Region(_) => stmt
 
     // Congruences
     case Def(id, block, body) =>
       Def(id, block, toDirectStyle(body, label))
 
-    case Let(id, tpe, binding, body) =>
-      Let(id, tpe, binding, toDirectStyle(body, label))
+    case Let(id, binding, body) =>
+      Let(id, binding, toDirectStyle(body, label))
 
     case ImpureApp(id, callee, targs, vargs, bargs, body) =>
       ImpureApp(id, callee, targs, vargs, bargs, toDirectStyle(body, label))
 
-    case Val(id, tpe, binding, body) =>
-      Val(id, tpe, binding, toDirectStyle(body, label))
+    case Val(id, binding, body) =>
+      Val(id, binding, toDirectStyle(body, label))
 
     case If(cond, thn, els) =>
       If(cond, toDirectStyle(thn, label), toDirectStyle(els, label))
 
-    case Match(scrutinee, clauses, default) =>
-      Match(scrutinee,
+    case Match(scrutinee, tpe, clauses, default) =>
+      Match(scrutinee, returnType(label),
         clauses.map { case (id, bl) => (id, bl.copy(body = toDirectStyle(bl.body, label))) },
         default.map(body => toDirectStyle(body, label)))
+
+    case Hole(tpe, span) => Hole(returnType(label), span)
 
     case Alloc(id, init, region, body) =>
       Alloc(id, init, region, toDirectStyle(body, label))

@@ -17,6 +17,7 @@ val show: PartialFunction[Any, String] =
     core.PrettyPrinter.show orElse
     generator.js.PrettyPrinter.show orElse
     cps.PrettyPrinter.show orElse
+    machine.PrettyPrinter.show orElse
     showGeneric
 
 inline def debug[A](inline value: A): A =

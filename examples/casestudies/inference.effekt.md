@@ -166,7 +166,7 @@ def linearCongruentialGenerator[R](seed: Int) { prog: => R / random } : R = {
 With the effect `emit` it is also possible to limit infinite loops. This allows for flexible numbers of steps to be performed with any algorithm that uses the effect `emit`.
 
 ```
-def onEmit[A] { handler: A => Unit } { program: => Any / emit[A] }: Unit =
+def onEmit[A] { handler: A => Unit } { program: => Unit / emit[A] }: Unit =
   try { program(); () }
   with emit[A] {
     def emit(element) = { handler(element); resume(()) }

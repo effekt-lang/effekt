@@ -64,7 +64,7 @@ class Reachable(
     case Stmt.Def(id, block, body) =>
       // Do NOT process `block` here, since this would mean the definition is used
       process(body)(using defs + (id -> block))
-    case Stmt.Let(id, tpe, binding, body) =>
+    case Stmt.Let(id, binding, body) =>
       // We would need to process the binding if it was impure,
       // to keep it for its side effects; however, the binding is guaranteed to be pure
       process(body)(using defs + (id -> binding))
@@ -76,7 +76,7 @@ class Reachable(
       // process(body)(using defs + (id -> binding))
       process(body)
     case Stmt.Return(expr) => process(expr)
-    case Stmt.Val(id, tpe, binding, body) => process(binding); process(body)
+    case Stmt.Val(id, binding, body) => process(binding); process(body)
     case Stmt.App(callee, targs, vargs, bargs) =>
       process(callee)
       vargs.foreach(process)
@@ -87,7 +87,7 @@ class Reachable(
       vargs.foreach(process)
       bargs.foreach(process)
     case Stmt.If(cond, thn, els) => process(cond); process(thn); process(els)
-    case Stmt.Match(scrutinee, clauses, default) =>
+    case Stmt.Match(scrutinee, tpe, clauses, default) =>
       process(scrutinee)
       clauses.foreach { case (id, value) => process(value) }
       default.foreach(process)
@@ -101,10 +101,10 @@ class Reachable(
     case Stmt.Get(ref, capt, tpe, id, body) => process(ref); process(body)
     case Stmt.Put(ref, tpe, value, body) => process(ref); process(value); process(body)
     case Stmt.Reset(body) => process(body)
-    case Stmt.Shift(prompt, body) => process(prompt); process(body)
+    case Stmt.Shift(prompt, k, body) => process(prompt); process(body)
     case Stmt.Resume(k, body) => process(k); process(body)
     case Stmt.Region(body) => process(body)
-    case Stmt.Hole(span) => ()
+    case Stmt.Hole(tpe, span) => ()
   }
 
   def process(e: Expr)(using defs: Definitions): Unit = e match {
@@ -123,7 +123,7 @@ object Reachable {
   def apply(entrypoints: Set[Id], m: ModuleDecl): Map[Id, Usage] = {
     val definitions: Map[Id, Block | Expr | Stmt] = m.definitions.map {
       case Toplevel.Def(id, block) => id -> block
-      case Toplevel.Val(id, tpe, binding) => id -> binding
+      case Toplevel.Val(id, binding) => id -> binding
     }.toMap
     val initialUsage = entrypoints.map { id => id -> Usage.Recursive }.toMap
     val analysis = new Reachable(initialUsage, Nil, Set.empty)

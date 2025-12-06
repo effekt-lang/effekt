@@ -10,6 +10,5 @@ def id[A](f: ((A) => Unit at {io, global}) => Unit at {io, global}): ((A) => Uni
 def main() = {
   val f = box { (n: Int) => println(n) }
   def h = id(box g);
-  val x = h(f);
-  println(x)
+  h(f)
 }
