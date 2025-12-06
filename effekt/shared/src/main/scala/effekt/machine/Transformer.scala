@@ -285,20 +285,23 @@ object Transformer {
         Resume(Variable(transform(k.id), Type.Stack()), transform(body))
 
       case core.Region(core.BlockLit(tparams, cparams, vparams, List(region), body)) =>
-        noteParameters(List(region))
 
         val variable = Variable(freshName("returned"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val prompt = transform(region)
 
+        noteParameters(List(region))
         Reset(prompt, returnClause, transform(body))
 
-      case core.Alloc(id, init, region, body) =>
-        transform(init).run { value =>
-          val reference = Variable(transform(id), Type.Reference(value.tpe))
-          val prompt = Variable(transform(region), Type.Prompt())
-          val temporary = Variable(freshName("temporaryStack"), Type.Stack())
+      case core.Alloc(ref, init, region, body) =>
+        val stateType = transform(init.tpe)
+        val reference = Variable(transform(ref), Type.Reference(stateType))
+        val prompt = Variable(transform(region), Type.Prompt())
+        val temporary = Variable(freshName("temporaryStack"), Type.Stack())
 
+        // TODO ref should be BlockParam
+        noteParameter(ref, core.Type.TState(init.tpe))
+        transform(init).run { value =>
           Shift(temporary, prompt,
             Var(reference, value, Type.Positive(),
               Resume(temporary, transform(body))))
