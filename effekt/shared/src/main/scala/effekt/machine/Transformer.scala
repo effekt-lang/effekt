@@ -199,7 +199,15 @@ object Transformer {
 
                 // Known Jump
                 case BlockInfo.Definition(freeParams, blockParams) =>
-                  Jump(Label(transform(id), blockParams ++ freeParams), values ++ blocks ++ freeParams)
+                  // TODO properly distinguish between async calls and jumps
+                  (id, annotatedTpe) match {
+                    case (_: symbols.ExternFunction , core.BlockType.Function(_, _, vparamTypes, _, _)) =>
+                      perhapsUnbox(values, vparamTypes).run { unboxeds =>
+                        Jump(Label(transform(id), blockParams ++ freeParams), unboxeds ++ blocks ++ freeParams)
+                      }
+                     case _ =>
+                       Jump(Label(transform(id), blockParams ++ freeParams), values ++ blocks ++ freeParams)
+                  }
 
                 case _ => ErrorReporter.panic("Applying an object")
               }
