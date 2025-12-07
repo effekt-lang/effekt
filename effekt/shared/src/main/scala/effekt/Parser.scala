@@ -1064,7 +1064,11 @@ class Parser(tokens: Seq[Token], source: Source) {
    */
   def callExpr(): Term = nonterminal {
     nonterminal:
-      var e = primExpr()
+      // Allow block literals as receivers for UFCS on blocks
+      var e = peek.kind match {
+        case `{` => blockArg()
+        case _ => primExpr()
+      }
 
       while (peek(`.`) || isArguments)
         peek.kind match {

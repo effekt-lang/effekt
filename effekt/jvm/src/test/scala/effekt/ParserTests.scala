@@ -336,6 +336,14 @@ class ParserTests extends munit.FunSuite {
     parseExpr("\"My name is ${person.lastName}, ${person.firstName} ${person.lastName}\"")
   }
 
+  test("ufcs") {
+    parseExpr("{ l }.foo { x => x + 1}.bar { x => x * 2}")
+    parseExpr("{ 42 }.bar")
+    parseExpr("{ 42 }.bar()")
+    parseExpr("{ x => x }.foo(42)")
+    parseExpr("l.bar { fn }")
+  }
+
   test("Boxing") {
     parseExpr("box f")
     parseExpr("unbox f")
