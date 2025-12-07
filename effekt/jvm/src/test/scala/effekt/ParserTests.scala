@@ -560,6 +560,13 @@ class ParserTests extends munit.FunSuite {
     parseStmts("val g: () => Unit / Exc at exc = box { closure() }; ()")
   }
 
+  test("UFCS on block literals") {
+    parseStmts(
+      """val x = { foo() }.toList
+        |x
+        |""".stripMargin)
+  }
+
   test("Pattern-matching val parses with correct span") {
     val (source, pos) =
       raw"""val (left, right) = list; return left

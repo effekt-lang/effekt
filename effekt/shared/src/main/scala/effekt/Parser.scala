@@ -337,8 +337,20 @@ class Parser(tokens: Seq[Token], source: Source) {
   def stmt(): Stmt =
     nonterminal:
       {
-        if peek(`{`) then BlockStmt(braces { stmts(inBraces = true) }, span())
-        else when(`return`) { Return(expr(), span()) } { Return(expr(), span()) }
+        if (peek(`{`)) {
+          // Ambiguity: `{ ... }` could be a block statement OR a block literal used as UFCS receiver
+          // Disambiguate: if the `}` is followed by `.`, parse as expression (UFCS)
+          backtrack {
+            val blk = functionArg()
+            if (!peek(`.`)) fail("Expected `.` for block UFCS")
+            val e = callExprContinuation(blk)
+            Return(e, span())
+          } getOrElse {
+            BlockStmt(braces { stmts(inBraces = true) }, span())
+          }
+        } else {
+          when(`return`) { Return(expr(), span()) } { Return(expr(), span()) }
+        }
       } labelled "statement"
 
   /**
@@ -1054,6 +1066,45 @@ class Parser(tokens: Seq[Token], source: Source) {
     TypeRef(IdRef(List("effekt"), s"Tuple${tps.size}", tps.span.synthesized), tps, tps.span.synthesized)
 
   /**
+   * Continues parsing a call expression chain given an initial expression.
+   * Handles `.foo`, `.foo(...)`, and `(...)` continuations.
+   */
+  def callExprContinuation(initial: Term): Term = {
+    var e = initial
+
+    while (peek(`.`) || isArguments)
+      peek.kind match {
+        // member selection (or method call)
+        //   <EXPR>.<NAME>
+        // | <EXPR>.<NAME>( ... )
+        case `.` =>
+          consume(`.`)
+          val member = idRef()
+          // method call
+          if (isArguments) {
+            val (targs, vargs, bargs) = arguments()
+            e = Term.MethodCall(e, member, targs, vargs, bargs, span())
+          } else {
+            e = Term.MethodCall(e, member, Nil, Nil, Nil, span())
+          }
+
+        // function call
+        case _ if isArguments =>
+          val callee = e match {
+            case Term.Var(id, _) => IdTarget(id)
+            case other => ExprTarget(other)
+          }
+          val (targs, vargs, bargs) = arguments()
+          e = Term.Call(callee, targs, vargs, bargs, span())
+
+        // nothing to do
+        case _ => ()
+      }
+
+    e
+  }
+
+  /**
    * This is a compound production for
    *  - member selection <EXPR>.<NAME>
    *  - method calls <EXPR>.<NAME>(...)
@@ -1065,41 +1116,12 @@ class Parser(tokens: Seq[Token], source: Source) {
   def callExpr(): Term = nonterminal {
     nonterminal:
       // Allow block literals as receivers for UFCS on blocks
-      var e = peek.kind match {
+      val e = peek.kind match {
         case `{` => blockArg()
         case _ => primExpr()
       }
 
-      while (peek(`.`) || isArguments)
-        peek.kind match {
-          // member selection (or method call)
-          //   <EXPR>.<NAME>
-          // | <EXPR>.<NAME>( ... )
-          case `.` =>
-            consume(`.`)
-            val member = idRef()
-            // method call
-            if (isArguments) {
-              val (targs, vargs, bargs) = arguments()
-              e = Term.MethodCall(e, member, targs, vargs, bargs, span())
-            } else {
-              e = Term.MethodCall(e, member, Nil, Nil, Nil, span())
-            }
-
-          // function call
-          case _ if isArguments =>
-            val callee = e match {
-              case Term.Var(id, _) => IdTarget(id)
-              case other => ExprTarget(other)
-            }
-            val (targs, vargs, bargs) = arguments()
-            e = Term.Call(callee, targs, vargs, bargs, span())
-
-          // nothing to do
-          case _ => ()
-        }
-
-      e
+      callExprContinuation(e)
   }
 
   // argument lists cannot follow a linebreak:
