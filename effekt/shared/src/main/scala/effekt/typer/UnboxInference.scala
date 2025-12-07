@@ -58,7 +58,7 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
           case UserFunction(_, _, Nil, Nil, _, _, _, _)
              | TrackedParam.BlockParam(_, Some(BlockType.FunctionType(_, _, Nil, Nil, _, _)), _)
             => C.info(s"Did you mean to call the function using `${sym.name.name}()`?")
-          case TrackedParam.ResumeParam(_) // NOTE: we don't know the type of `resume` here, so this is not _great_ advice...
+          case TrackedParam.ResumeParam(_, _) // NOTE: we don't know the type of `resume` here, so this is not _great_ advice...
             => C.info(s"Did you mean to resume using `resume(...)`?")
           case _ => ()
         }
@@ -106,16 +106,24 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
       val bargsTransformed = bargs.map(rewriteAsBlock)
 
       val hasMethods = m.definition match {
-        // an overloaded call target
-        case symbols.CallTarget(syms) => syms.flatten.exists(b => b.isInstanceOf[symbols.Operation])
-        case s => false
+        case symbols.CallTarget(syms) => syms.flatten.exists(_.isInstanceOf[symbols.Operation])
+        case _: symbols.Operation => true
+        case _ => false
       }
 
-      // we prefer methods over uniform call syntax
       if (hasMethods) {
+        // True method call on interface - receiver is the object
         MethodCall(rewriteAsBlock(receiver), id, targs, vargsTransformed, bargsTransformed, span)
+      } else if (!isInherentlyBlock(receiver)) {
+        // Value-UFCS: receiver becomes first value argument
+        Call(IdTarget(id).inheritPosition(id), targs,
+          rewriteAsExpr(ValueArg.Unnamed(receiver)) :: vargsTransformed,
+          bargsTransformed, span)
       } else {
-        Call(IdTarget(id).inheritPosition(id), targs, rewriteAsExpr(ValueArg.Unnamed(receiver)) :: vargsTransformed, bargsTransformed, span)
+        // Block-UFCS: receiver becomes first block argument
+        Call(IdTarget(id).inheritPosition(id), targs,
+          vargsTransformed,
+          rewriteAsBlock(receiver) :: bargsTransformed, span)
       }
 
     case TryHandle(prog, handlers, span) =>
@@ -230,5 +238,25 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
     target.inheritPosition(source)
     C.copyAnnotations(source, target)
     target
+  }
+
+  /**
+   * Determines if a term is inherently a block (computation) based on its syntactic form. 
+   *
+   * This mirrors the logic in [[rewriteAsBlock]]: terms that [[rewriteAsBlock]] returns
+   * unchanged are "inherently blocks", while terms it wraps in [[Unbox]] are not.
+   *
+   * This is used for UFCS disambiguation: when the receiver is inherently a block,
+   * we use block-UFCS (receiver becomes first block argument) rather than value-UFCS. 
+   */
+  def isInherentlyBlock(e: Term)(using C: Context): Boolean = e match {
+    case v: Var => v.definition match {
+      case _: symbols.BlockSymbol => true
+      case _ => false
+    }
+    case _: Unbox => true
+    case _: New => true
+    case _: BlockLiteral => true
+    case _ => false
   }
 }
