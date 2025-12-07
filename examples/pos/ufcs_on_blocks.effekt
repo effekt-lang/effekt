@@ -1,0 +1,24 @@
+interface State[T] {
+  def get(): T
+  def set(x: T): Unit
+}
+
+def increment { st: State[Int] }: Unit = {
+  val current = st.get()
+  st.set(current + 1)
+}
+
+def main() = {
+  var value: Int = 0
+  try {
+    println(do get[Int]())
+    st.increment()
+    println(st.get())
+    st.increment()
+    st.increment()
+    println(st.get())
+  } with st: State[Int] {
+    def get() = resume(value)
+    def set(x) = { value = x; resume(()) }
+  }
+}
