@@ -124,12 +124,13 @@ object Namer extends Phase[Parsed, NameResolved] {
       ()
 
     case d @ source.VarDef(id, annot, binding, doc, span) =>
-      ()
+      Context.requireNotToplevel("Variable")
 
     case d @ source.RegDef(id, annot, region, binding, doc, span) =>
       ()
 
     case source.NamespaceDef(id, definitions, doc, span) =>
+      Context.requireTopLevel("Namespace")
       Context.namespace(id.name) {
         definitions.foreach(preresolve)
       }
@@ -982,6 +983,11 @@ trait NamerOps extends ContextOps { Context: Context =>
   private[namer] def requireToplevel(kind: String): Unit =
     if (scope.path.isEmpty) {
       Context.error(s"${kind} declarations are only allowed on the toplevel of a module or in a namespace.")
+    }
+
+  private[namer] def requireNotToplevel(kind: String): Unit =
+    if (scope.path.isDefined) {
+      Context.error(s"${kind} declarations are not allowed on the toplevel of a module or in a namespace.")
     }
 
   // Name Binding and Resolution

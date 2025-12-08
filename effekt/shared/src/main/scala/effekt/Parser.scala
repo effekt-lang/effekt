@@ -435,12 +435,8 @@ class Parser(tokens: Seq[Token], source: Source) {
         case `record`    => recordDef(info)
         case `effect`    => effectOrOperationDef(info)
         case `namespace` => namespaceDef(info)
-        case `var`       => backtrack {
-          softFailWith("Mutable variable declarations are currently not supported on the toplevel.") {
-            varDef(info)
-          }
-        } getOrElse fail("Mutable variable declarations are currently not supported on the toplevel.")
-        case _ => fail("Expected a top-level definition")
+        case `var`       => varDef(info)
+        case _           => fail("Expected a top-level definition")
       }
 
   private def toplevelDefs(): List[Def] =
@@ -467,26 +463,10 @@ class Parser(tokens: Seq[Token], source: Source) {
         case _ => Nil
       }
 
-  def isDefinition: Boolean = peek.kind match {
-    case `val` | `def` | `type` | `effect` | `interface` | `record` => true
-    case _ => false
-  }
-
-  def definition(): Def =
-    documented: info =>
-      peek.kind match {
-        case `val`       => valDef(info)
-        case `def`       => defDef(info)
-        case `type`      => typeOrAliasDef(info)
-        case `effect`    => effectOrOperationDef(info)
-        case `interface` => interfaceDef(info)
-        case `record`    => recordDef(info)
-        case _           => fail("Expected definition")
-      }
-
-  def definitions(): List[Def] =
-    nonterminal:
-      manyWhile(definition(), isDefinition)
+  // Only aliases for toplevel defs as of #1251
+  def isDefinition: Bool = isToplevel
+  def definition(): Def = toplevel()
+  def definitions(): List[Def] = toplevelDefs()
 
   def functionBody: Stmt = stmts() // TODO error context: "the body of a function definition"
 
