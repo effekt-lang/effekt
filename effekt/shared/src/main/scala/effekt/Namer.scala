@@ -127,10 +127,10 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.requireNotToplevel("Variable")
 
     case d @ source.RegDef(id, annot, region, binding, doc, span) =>
-      ()
+      Context.requireNotToplevel("Variable-in-a-region")
 
     case source.NamespaceDef(id, definitions, doc, span) =>
-      Context.requireTopLevel("Namespace")
+      Context.requireToplevel("Namespace")
       Context.namespace(id.name) {
         definitions.foreach(preresolve)
       }
@@ -229,6 +229,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       })
 
     case d @ source.ExternDef(id, tparams, vparams, bparams, captures, ret, bodies, doc, span) =>
+      Context.requireToplevel("Extern definition")
       val name = Context.nameFor(id)
       val capt = resolve(captures)
       Context.define(id, Context scoped {
@@ -245,6 +246,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       })
 
     case d @ source.ExternResource(id, tpe, doc, span) =>
+      Context.requireToplevel("Extern resource")
       val name = Context.nameFor(id)
       val btpe = resolveBlockType(tpe)
       val sym = ExternResource(name, btpe, d)
@@ -252,9 +254,10 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.bindBlock(sym)
 
     case d @ source.ExternInclude(ff, path, Some(contents), _, doc, span) =>
-      ()
+      Context.requireToplevel("Extern include")
 
     case d @ source.ExternInclude(ff, path, None, _, doc, span) =>
+      Context.requireToplevel("Extern include")
       // only load include if it is required by the backend.
       if (ff matches Context.compiler.supportedFeatureFlags) {
         d.contents = Some(Context.contentsOf(path).getOrElse {

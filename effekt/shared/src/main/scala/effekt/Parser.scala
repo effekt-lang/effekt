@@ -436,7 +436,7 @@ class Parser(tokens: Seq[Token], source: Source) {
         case `effect`    => effectOrOperationDef(info)
         case `namespace` => namespaceDef(info)
         case `var`       => varDef(info)
-        case _           => fail("Expected a top-level definition")
+        case _           => fail("Expected a definition")
       }
 
   private def toplevelDefs(): List[Def] =
@@ -464,7 +464,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
 
   // Only aliases for toplevel defs as of #1251
-  def isDefinition: Bool = isToplevel
+  def isDefinition: Boolean = isToplevel
   def definition(): Def = toplevel()
   def definitions(): List[Def] = toplevelDefs()
 
