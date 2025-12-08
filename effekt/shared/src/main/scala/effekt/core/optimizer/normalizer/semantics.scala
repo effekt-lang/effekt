@@ -229,6 +229,12 @@ object semantics {
     def lookupComputation(id: Id): Computation = computations.getOrElse(id, sys error s"Unknown computation: ${util.show(id)} -- env: ${computations.map { case (id, comp) => s"${util.show(id)}: $comp" }.mkString("\n") }")
     def bindComputation(id: Id, computation: Computation): Env = Env(values, computations + (id -> computation))
     def bindComputation(newComputations: List[(Id, Computation)]): Env = Env(values, computations ++ newComputations)
+    def subst(ids: List[Id]): List[Id] = ids.map(subst)
+    def subst(id: Id): Id = computations.get(id) match {
+      case Some(Computation.Known(inner)) => inner.id
+      case Some(Computation.Unknown(id)) => id
+      case _ => id
+    }
   }
   object Env {
     def empty: Env = Env(Map.empty, Map.empty)
@@ -375,9 +381,9 @@ object semantics {
       case NeutralStmt.Return(result) => Set.empty
       case NeutralStmt.Hole(span) => Set.empty
 
-      case NeutralStmt.Jump(label, targs, vargs, bargs) => Set(label) ++ all(bargs, _.dynamicCapture)
-      case NeutralStmt.App(label, targs, vargs, bargs) => Set(label) ++ all(bargs, _.dynamicCapture)
-      case NeutralStmt.Invoke(label, method, tpe, targs, vargs, bargs) => Set(label) ++ all(bargs, _.dynamicCapture)
+      case NeutralStmt.Jump(label, targs, vargs, bargs) => all(bargs, _.dynamicCapture)
+      case NeutralStmt.App(label, targs, vargs, bargs) => all(bargs, _.dynamicCapture)
+      case NeutralStmt.Invoke(label, method, tpe, targs, vargs, bargs) => all(bargs, _.dynamicCapture)
       case NeutralStmt.If(cond, thn, els) => thn.dynamicCapture ++ els.dynamicCapture
       case NeutralStmt.Match(scrutinee, clauses, default) => clauses.flatMap(_._2.dynamicCapture).toSet ++ default.map(_.dynamicCapture).getOrElse(Set.empty)
       case NeutralStmt.Reset(prompt, body) => body.dynamicCapture - prompt.id
@@ -436,12 +442,12 @@ object semantics {
     // TODO desugar regions into var?
     case Region(id: BlockParam, bindings: Map[BlockParam, Addr], frame: Frame, next: Stack)
 
-    lazy val bound: Set[Static[BlockParam]] = this match {
-      case Stack.Empty => Set.empty
-      case Stack.Unknown => Set.empty
-      case Stack.Reset(prompt, frame, next) => next.bound + Static.Prompt(prompt)
-      case Stack.Var(id, curr, frame, next) => next.bound + Static.Reference(id)
-      case Stack.Region(id, bindings, frame, next) => next.bound ++ bindings.keys.map { k => Static.Reference(k) } + Static.Region(id)
+    lazy val bound: List[Static[BlockParam]] = this match {
+      case Stack.Empty => List.empty
+      case Stack.Unknown => List.empty
+      case Stack.Reset(prompt, frame, next) => Static.Prompt(prompt) :: next.bound
+      case Stack.Var(id, curr, frame, next) => Static.Reference(id) :: next.bound
+      case Stack.Region(id, bindings, frame, next) => Static.Region(id) :: (bindings.keys.map { k => Static.Reference(k) }.toList ++ next.bound)
     }
   }
 
