@@ -124,10 +124,10 @@ object Namer extends Phase[Parsed, NameResolved] {
       ()
 
     case d @ source.VarDef(id, annot, binding, doc, span) =>
-      Context.requireNotToplevel("Variable")
+      Context.requireNotToplevel("Mutable variable")
 
     case d @ source.RegDef(id, annot, region, binding, doc, span) =>
-      Context.requireNotToplevel("Variable-in-a-region")
+      Context.requireNotToplevel("Mutable variable in a region")
 
     case source.NamespaceDef(id, definitions, doc, span) =>
       Context.requireToplevel("Namespace")
