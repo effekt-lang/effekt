@@ -1,4 +1,4 @@
-def bar() = {
+def main() = {
   type Foo {
     F(block: () => Foo at {})
   }

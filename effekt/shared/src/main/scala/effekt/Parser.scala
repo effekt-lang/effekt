@@ -468,7 +468,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
 
   def isDefinition: Boolean = peek.kind match {
-    case `val` | `def` | `type` | `effect` | `interface` | `type` | `record` => true
+    case `val` | `def` | `type` | `effect` | `interface` | `record` => true
     case _ => false
   }
 
@@ -478,8 +478,10 @@ class Parser(tokens: Seq[Token], source: Source) {
         case `val`       => valDef(info)
         case `def`       => defDef(info)
         case `type`      => typeOrAliasDef(info)
-        case `effect`    => effectDef(info)
-        case _ => fail("Expected definition")
+        case `effect`    => effectOrOperationDef(info)
+        case `interface` => interfaceDef(info)
+        case `record`    => recordDef(info)
+        case _           => fail("Expected definition")
       }
 
   def definitions(): List[Def] =

@@ -1,0 +1,3 @@
+[error] examples/neg/namer/issue1191.effekt:2:3: Datatype declarations are only allowed on the toplevel of a module or in a namespace.
+  type Foo {
+  ^
