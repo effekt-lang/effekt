@@ -23,12 +23,6 @@ def semiAfterDef(n: Int) = {
   x
 }
 
-def semiAfterType(n: Int) = {
-  type X = Int;
-  val x: X = 3
-  x
-}
-
 def multiLineParen() = {
   val x = 3
   noSemis(
