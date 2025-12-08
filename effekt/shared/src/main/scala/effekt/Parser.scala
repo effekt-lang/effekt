@@ -244,7 +244,22 @@ class Parser(tokens: Seq[Token], source: Source) {
   def stmts(inBraces: Boolean = false): Stmt =
     nonterminal:
       (peek.kind match {
-        case `{` => BlockStmt(braces { stmts(inBraces = true) }, span())
+        case `{` =>
+          // Ambiguity: `{ ... }` could be a block statement OR a block literal (for UFCS)
+          // Disambiguate: if `}` is followed by `.`, parse as expression
+          backtrack {
+            val blk = functionArg()
+            if (!peek(`.`)) fail("Expected `.` for block UFCS")
+            val e = callExprContinuation(blk)
+            e
+          }.unspan match {
+            case Some(e) =>
+              semi()
+              if returnPosition then Return(e, span())
+              else ExprStmt(e, stmts(inBraces), span())
+            case None =>
+              BlockStmt(braces { stmts(inBraces = true) }, span())
+          }
         case `val`  => valStmt(inBraces)
         case _ if isDefinition && inBraces => DefStmt(definition(), semi() ~> stmts(inBraces), span())
         case _ if isDefinition => fail("Definitions are only allowed, when enclosed in braces.")
