@@ -109,10 +109,8 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
           Stmt.Match(scrutinee, resultTpe, List((ctor, BlockLit(List(), List(), params, List(), body))), None)
       }
 
-    // Generic case for all other applications: just recurse into arguments / blocks
     case Stmt.App(callee, targs, vargs, bargs) =>
       Stmt.App(callee, targs, vargs map transform, bargs map transform)
-
     case Stmt.Def(id, block, rest) =>
       Stmt.Def(id, transform(block), transform(rest))
     case Stmt.Let(id, binding, rest) =>
@@ -135,10 +133,10 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       Stmt.Alloc(id, tpe, init, transform(rest))
     case Stmt.Var(id, tpe, init, rest) =>
       Stmt.Var(id, tpe, init, transform(rest))
-    case Stmt.Get(id, tpe, region, slot, rest) =>
-      Stmt.Get(id, tpe, region, slot, transform(rest))
-    case Stmt.Put(region, slot, value, rest) =>
-      Stmt.Put(region, slot, transform(value), transform(rest))
+    case Stmt.Get(id, tpe, region, capt, rest) =>
+      Stmt.Get(id, tpe, region, capt, transform(rest))
+    case Stmt.Put(region, capt, value, rest) =>
+      Stmt.Put(region, capt, transform(value), transform(rest))
     case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) =>
       Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, transform(body)))
     case Stmt.Shift(id, k, body) => 
