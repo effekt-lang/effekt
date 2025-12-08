@@ -246,10 +246,10 @@ class Parser(tokens: Seq[Token], source: Source) {
       (peek.kind match {
         case `{` => BlockStmt(braces { stmts(inBraces = true) }, span())
         case `val`  => valStmt(inBraces)
+        case `var`  => DefStmt(varDef(noInfo()), semi() ~> stmts(inBraces), span())
         case _ if isDefinition && inBraces => DefStmt(definition(), semi() ~> stmts(inBraces), span())
         case _ if isDefinition => fail("Definitions are only allowed, when enclosed in braces.")
         case `with` => withStmt(inBraces)
-        case `var`  => DefStmt(varDef(noInfo()), semi() ~> stmts(inBraces), span())
         case `return` =>
           // trailing semicolon only allowed when in braces
           `return` ~> Return(expr() <~ (if inBraces then maybeSemi()), span())
