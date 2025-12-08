@@ -164,6 +164,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, sym)
 
     case decl @ source.InterfaceDef(id, tparams, ops, doc, span) =>
+      Context.requireToplevel("Interface")
       val effectName = Context.nameFor(id)
       // we use the localName for effects, since they will be bound as capabilities
       val effectSym = Context scoped {
@@ -175,6 +176,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, effectSym)
 
     case d @ source.TypeDef(id, tparams, tpe, doc, span) =>
+      Context.requireToplevel("Type")
       val tps = Context scoped { tparams map resolve }
       val alias = Context scoped {
         tps.foreach { t => Context.bind(t) }
@@ -183,6 +185,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, alias)
 
     case d @ source.EffectDef(id, tparams, effs, doc, span) =>
+      Context.requireToplevel("Effect")
       val tps = Context scoped { tparams map resolve }
       val alias = Context scoped {
         tps.foreach { t => Context.bind(t) }
@@ -191,6 +194,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, alias)
 
     case d @ source.DataDef(id, tparams, ctors, doc, span) =>
+      Context.requireToplevel("Datatype")
       val typ = Context scoped {
         val tps = tparams map resolve
         // we do not resolve the constructors here to allow them to refer to types that are defined
@@ -200,6 +204,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, typ)
 
     case d @ source.RecordDef(id, tparams, fields, doc, span) =>
+      Context.requireToplevel("Record")
       lazy val sym: Record = {
         val tps = Context scoped { tparams map resolve }
         // we do not resolve the fields here to allow them to refer to types that are defined
@@ -209,12 +214,14 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, sym)
 
     case d @source.ExternType(id, tparams, doc, span) =>
+      Context.requireToplevel("Extern type")
       Context.define(id, Context scoped {
         val tps = tparams map resolve
         ExternType(Context.nameFor(id), tps.unspan, d)
       })
 
     case decl @ source.ExternInterface(id, tparams, doc, span) =>
+      Context.requireToplevel("Extern interface")
       Context.define(id, Context scoped {
         val tps = tparams map resolve
         ExternInterface(Context.nameFor(id), tps, decl)
@@ -971,6 +978,11 @@ trait NamerOps extends ContextOps { Context: Context =>
     case Some(path) => QualifiedName(path, id.name)
     case None => LocalName(id.name)
   }
+
+  private[namer] def requireToplevel(kind: String): Unit =
+    if (scope.path.isEmpty) {
+      Context.error(s"${kind} declarations are only allowed on the toplevel of a module or in a namespace.")
+    }
 
   // Name Binding and Resolution
   // ===========================

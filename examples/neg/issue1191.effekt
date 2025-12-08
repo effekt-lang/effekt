@@ -1,0 +1,5 @@
+def bar() = {
+  type Foo {
+    F(block: () => Foo at {})
+  }
+}

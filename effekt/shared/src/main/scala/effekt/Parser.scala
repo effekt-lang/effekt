@@ -468,10 +468,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
 
   def isDefinition: Boolean = peek.kind match {
-    case `val` | `def` | `type` | `effect` => true
-    case `interface` | `type` | `record` =>
-      val kw = peek.kind
-      fail(s"Only supported on the toplevel: ${kw.toString} declaration.")
+    case `val` | `def` | `type` | `effect` | `interface` | `type` | `record` => true
     case _ => false
   }
 

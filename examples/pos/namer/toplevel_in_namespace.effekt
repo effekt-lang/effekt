@@ -1,0 +1,24 @@
+// testing that toplevel declarations in a namespace work
+namespace bread {
+  type Bread = String
+  record Loaf(size: Int)
+  type Bakery {
+    B(makeLoaf: (Int) => Loaf at {})
+    B2(makeBread: (Int) => Bread at {})
+  }
+}
+
+def main() = {
+  val b: bread::Bakery = bread::Bakery::B(box { (n) => bread::Loaf(n + 1) })
+  val b2: bread::Bakery = bread::Bakery::B2(box { (n) => "Bread of size " ++ n.show })
+
+  val bakeries: List[bread::Bakery] = [b, b2]
+  bakeries.foreach {
+    case bread::Bakery::B(makeLoaf) =>
+      val bread::Loaf(size) = makeLoaf(5)
+      println("Loaf size: " ++ size.show)
+    case bread::Bakery::B2(makeBread) =>
+      val bread: bread::Bread = makeBread(5)
+      println("Bread: " ++ bread)
+  }
+}
