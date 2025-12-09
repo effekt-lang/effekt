@@ -611,6 +611,9 @@ object Transformer {
 
       // Step 03: we call the release function
       emit(Call("_", Ccc(), VoidType(), release, List(`object`)));
+
+//      shareValues(environment, freeInBody);
+//      emit(Call("_", Ccc(), VoidType(), eraseObject, List(`object`)));
     }
   }
 

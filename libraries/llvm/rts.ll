@@ -94,6 +94,13 @@
 
 ; Foreign imports
 declare ptr @initializeArena()
+declare ptr @reuseFreePrint(ptr)
+declare ptr @reuseTodoPrint(ptr)
+declare ptr @bumpNewPrint(ptr)
+declare ptr @pushOntoFreeListPrint(ptr)
+declare ptr @pushOntoTodoListPrint(ptr)
+
+
 declare ptr @malloc(i64)
 declare void @free(ptr)
 declare ptr @realloc(ptr, i64)
@@ -128,9 +135,9 @@ declare void @llvm.assume(i1)
 ; initializes the todoList with a sentinel slot.
 ; Sentinel Slot: Fakes a block with a RC=1. It is used to mark the end of the To-Do-List.
 ; But it is not a real heap-object, because it is not 8-byte aligned.
+@freeList = private unnamed_addr global %struct.Slot* null, align 8
 @todoList = private unnamed_addr global %struct.Slot* inttoptr (i64 1 to %struct.Slot*), align 8
 @nextUnusedSlot = private unnamed_addr global i8* null, align 8   ; Pointer to the next unused Slot
-@slotSize = private constant i8 64, align 8         ; The size of each chunk (64 bytes)
 
 
 ; Initializes the memory for our effekt-objects that are created by newObject and deleted by eraseObject.
@@ -144,45 +151,85 @@ entry:
 
 define private %struct.Slot* @acquire() nounwind {
 entry:
-  ; Load todoList head
-  %head = load %struct.Slot*, %struct.Slot** @todoList, align 8
+  %freeHead = load %struct.Slot*, %struct.Slot** @freeList
+  %isEmpty = icmp eq %struct.Slot* %freeHead, null
+  br i1 %isEmpty, label %checkTodo, label %freeReuse
 
-  %isSentinel = icmp eq %struct.Slot* %head, inttoptr (i64 1 to %struct.Slot*)
-  br i1 %isSentinel, label %bump_alloc, label %reuse
+; 1. Fast Path: Reuse block from freeList
+freeReuse:
+  %freeNextPtr = getelementptr %struct.Slot, %struct.Slot* %freeHead, i32 0, i32 0
+  %freeNext = load %struct.Slot*, %struct.Slot** %freeNextPtr, align 8
+  store %struct.Slot* %freeNext, %struct.Slot** @freeList, align 8
 
-reuse:
-  ; Pop from todoList
-  ; Slot* reusedSlot = todoList;
-  ; todoList = reusedSlot->next;
-  %nextptr = getelementptr inbounds %struct.Slot, %struct.Slot* %head, i32 0, i32 0
-  %next = load %struct.Slot*, %struct.Slot** %nextptr, align 8
-  store %struct.Slot* %next, %struct.Slot** @todoList, align 8
+  ; TODO: DELETE
+  call void @reuseFreePrint(ptr %freeHead)
+
+  ret %struct.Slot* %freeHead
+
+checkTodo:
+  %todoHead = load %struct.Slot*, %struct.Slot** @todoList
+  %isSentinel = icmp eq %struct.Slot* %todoHead, inttoptr (i64 1 to %struct.Slot*)
+  br i1 %isSentinel, label %bumpAlloc, label %todoReuse
+
+; 2. Slot Path: Reuse block from To-Do-List. Here, we have to extra call the eraser to ensure that we can reuse it.
+todoReuse:
+  %todoNextPtr = getelementptr inbounds %struct.Slot, %struct.Slot* %todoHead, i32 0, i32 0
+  %todoNext = load %struct.Slot*, %struct.Slot** %todoNextPtr, align 8
+  store %struct.Slot* %todoNext, %struct.Slot** @todoList, align 8
 
   ; Call eraser
   ; reusedSlot->eraser(reusedSlot);
-  %eraserptr = getelementptr inbounds %struct.Slot, %struct.Slot* %head, i32 0, i32 1
+  %eraserptr = getelementptr inbounds %struct.Slot, %struct.Slot* %todoHead, i32 0, i32 1
   %eraser = load %Eraser, void (%struct.Slot*)** %eraserptr, align 8, !alias.scope !14, !noalias !24
-  tail call void %eraser(%struct.Slot* %head)
+  tail call void %eraser(%struct.Slot* %todoHead)
 
-  ; return reusedSlot;
-  ret %struct.Slot* %head
+  ; TODO: DELETE
+  call void @reuseTodoPrint(ptr %todoHead)
 
-bump_alloc:
+  ret %struct.Slot* %todoHead
+
+; 3. Fallback - Bump Path: We have to allocate a new block.
+bumpAlloc:
   ; Load nextUnusedBlock
-  %rawBump = load i8*, i8** @nextUnusedSlot, align 8
-  %slot = bitcast i8* %rawBump to %struct.Slot*
+  %fresh = load ptr, i8** @nextUnusedSlot, align 8
 
   ; Move bump pointer forward by object size
-  %sizeBump = load i8, i8* @slotSize, align 8
-  %nextBump = getelementptr i8, i8* %rawBump, i8 %sizeBump
+  %nextBump = getelementptr i8, ptr %fresh, i8 64
 
-  store i8* %nextBump, i8** @nextUnusedSlot, align 8
-  ret %struct.Slot* %slot
+  store ptr %nextBump, i8** @nextUnusedSlot, align 8
+
+  ; TODO: DELETE
+  call void @bumpNewPrint(ptr %fresh)
+
+  ret %struct.Slot* %fresh
+}
+
+; Pushes a slot on the top of the free-List.
+define private void @pushOntoFreeList(%struct.Slot* %slot) nounwind {
+entry:
+
+  ; TODO: DELETE
+  call void @pushOntoFreeListPrint(ptr %slot)
+
+  ; oldHead = freeList
+  %oldHead = load %struct.Slot*, %struct.Slot** @freeList, align 8
+
+  ; ptr->next = oldHead
+  %nextPtr = getelementptr %struct.Slot, %struct.Slot* %slot, i32 0, i32 0
+  store %struct.Slot* %oldHead, %struct.Slot** %nextPtr, align 8
+
+  ; freeList = ptr
+  store %struct.Slot* %slot, %struct.Slot** @freeList, align 8
+
+  ret void
 }
 
 ; Pushes a slot on the top of the To-Do-List.
-define private void @release(%struct.Slot* %slot) nounwind {
+define private void @pushOntoTodoList(%struct.Slot* %slot) nounwind {
 entry:
+  ; TODO: DELETE
+  call void @pushOntoTodoListPrint(ptr %slot)
+
   ; oldHead = todoList
   %oldHead = load %struct.Slot*, %struct.Slot** @todoList, align 8
 
