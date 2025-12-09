@@ -137,4 +137,5 @@ void testIfAllSlotsAreFreed()
     assertNumberLeakedSlots(0);    // testing acquire & release
 }
 
-java:suite://effekt.LLVMTests
+void test() {
+}
