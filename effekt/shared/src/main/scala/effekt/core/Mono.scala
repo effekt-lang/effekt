@@ -3,6 +3,7 @@ package core
 
 import effekt.context.Context
 import effekt.util.messages.ErrorMessageReifier
+import effekt.core.Type.functionType
 
 object Mono extends Phase[CoreTransformed, CoreTransformed] {
 
@@ -45,7 +46,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 
             var monoContext = MonoContext(solution, monoNames, polyExternDefs)
             val monoDecls = declarations flatMap (monomorphize(_)(using monoContext))
-            val monoDefs = monomorphize(definitions)(using monoContext)
+            val monoDefs = monomorphize(definitions)(using monoContext)(using Context, DeclarationContext(declarations, externs))
             // monoDecls.foreach(decl => println(util.show(decl)))
             // println()
             // monoDefs.foreach(defn => println(util.show(defn)))
@@ -329,7 +330,8 @@ def solveConstraints(constraints: Constraints)(using Context): Solution = {
       
       // Only add solution vectors which match the size we expect
       // sometimes we don't have enough information in the current iteration to find a correct solution
-      nbs ++= l.filter(i => i.size == b.size)
+      // nbs ++= l.filter(i => i.size == b.size)
+      nbs ++= l
     )
     nbs.map(l => l.toVector)
 
@@ -341,12 +343,12 @@ def productAppend[A](ls: List[List[A]], rs: List[A]): List[List[A]] =
   if (rs.isEmpty) return ls
   for { l <- ls; r <- rs } yield l :+ r
 
-def monomorphize(definitions: List[Toplevel])(using ctx: MonoContext): List[Toplevel] =
+def monomorphize(definitions: List[Toplevel])(using ctx: MonoContext)(using Context, DeclarationContext): List[Toplevel] =
   var newDefinitions: List[Toplevel] = List.empty
   definitions.foreach(definition => newDefinitions ++= monomorphize(definition))
   newDefinitions
 
-def monomorphize(toplevel: Toplevel)(using ctx: MonoContext): List[Toplevel] = toplevel match
+def monomorphize(toplevel: Toplevel)(using ctx: MonoContext)(using Context, DeclarationContext): List[Toplevel] = toplevel match
   case Toplevel.Def(id, BlockLit(List(), cparams, vparams, bparams, body)) => 
     List(Toplevel.Def(id, BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))))
   case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
@@ -421,13 +423,13 @@ def monomorphize(constructor: Constructor, tparamCount: Int)(using ctx: MonoCont
     )
     }
 
-def monomorphize(block: Block)(using ctx: MonoContext): Block = block match
+def monomorphize(block: Block)(using ctx: MonoContext)(using Context, DeclarationContext): Block = block match
   case b: BlockLit => monomorphize(b)
   case b: BlockVar => monomorphize(b)
   case New(impl) => New(monomorphize(impl)) 
   case Unbox(pure) => Unbox(monomorphize(pure))
 
-def monomorphize(impl: Implementation)(using ctx: MonoContext): Implementation = impl match
+def monomorphize(impl: Implementation)(using ctx: MonoContext)(using Context, DeclarationContext): Implementation = impl match
   case Implementation(interface, operations) =>
     Implementation(monomorphize(interface), operations.flatMap(monomorphize))
 
@@ -436,7 +438,7 @@ def monomorphize(interface: BlockType.Interface)(using ctx: MonoContext): BlockT
     val replacementData = replacementDataFromTargs(name, targs)
     BlockType.Interface(replacementData.name, replacementData.targs)
 
-def monomorphize(operation: Operation)(using ctx: MonoContext): List[Operation] = operation match
+def monomorphize(operation: Operation)(using ctx: MonoContext)(using Context, DeclarationContext): List[Operation] = operation match
   case Operation(name, List(), cparams, vparams, bparams, body) =>
     val optMonoTypes = ctx.solution.get(name)
     // TODO: Not for here but in general. Why is the type omission not just syntactic sugar and we re-add the tparams.
@@ -470,7 +472,7 @@ def monomorphize(operation: Operation)(using ctx: MonoContext): List[Operation] 
     )
     
 
-def monomorphize(block: BlockLit)(using ctx: MonoContext): BlockLit = block match
+def monomorphize(block: BlockLit)(using ctx: MonoContext)(using Context, DeclarationContext): BlockLit = block match
   case BlockLit(tparams, cparams, vparams, bparams, body) => 
     // FIXME: Is passing tparams directly here without any change correct?
     BlockLit(tparams, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
@@ -494,14 +496,35 @@ def monomorphize(blockVar: BlockVar, replacementId: FunctionId, targs: List[Valu
   case BlockVar(id, annotatedTpe: BlockType.Interface, annotatedCapt) =>
     BlockVar(id, monomorphize(annotatedTpe), annotatedCapt)
 
-def monomorphize(stmt: Stmt)(using ctx: MonoContext): Stmt = stmt match
+def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationContext): Stmt = stmt match
   case Return(expr) => Return(monomorphize(expr))
   case Val(id, annotatedTpe, binding, body) => 
     Val(id, monomorphize(annotatedTpe), monomorphize(binding), monomorphize(body))
   case Var(ref, init, capture, body) => 
     Var(ref, monomorphize(init), capture, monomorphize(body))
   case ImpureApp(id, callee, targs, vargs, bargs, body) =>
-    ImpureApp(id, callee, targs, vargs map monomorphize, bargs map monomorphize, monomorphize(body))
+    // get callee tpe (function result)
+    // check vargs after mono
+    // zip vargs with type of vparams of callee (use core.Type instantiate)
+    // if expect targ & varg is base type, coerceIntPos
+    val monoVargs = vargs map monomorphize
+    val monoTargs = targs map monomorphize
+    val monoBody = monomorphize(body)
+
+    // We need to see what happens to the extern function if we monomorphize it
+    // and then compare our arguments and the expected parameters to see if any are mismatches, then coerce those
+    val functionTpe = core.Type.instantiate(callee.functionType, monoTargs, callee.functionType.cparams.map(c => Set(c)))
+    val newVargs = functionTpe.vparams.zip(monoVargs).map({
+      case (vt, expr) => (vt, expr.tpe) match {
+        case (ValueType.Var(varName), ValueType.Data(name, targs)) => PolymorphismBoxing.coerce(expr, vt)
+        case (_, _) => expr
+      } 
+    })
+
+    // get callee tpe (function result)
+    // mono targs
+    // core.Type instantiate with mono targs
+    ImpureApp(id, callee, monoTargs, newVargs, bargs map monomorphize, monoBody)
   case App(callee: BlockVar, targs, vargs, bargs) => 
     val replacementData = replacementDataFromTargs(callee.id, targs)
     App(monomorphize(callee, replacementData.name, targs), List.empty, vargs map monomorphize, bargs map monomorphize)
@@ -580,7 +603,7 @@ def exprType(expr: Expr): ValueType = expr match {
   case ValueVar(id, annotatedType) => annotatedType
 }
 
-def monomorphize(clause: (Id, BlockLit), scrutineeTypes: Vector[ValueType])(using ctx: MonoContext): List[(Id, BlockLit)] = clause match
+def monomorphize(clause: (Id, BlockLit), scrutineeTypes: Vector[ValueType])(using ctx: MonoContext)(using Context, DeclarationContext): List[(Id, BlockLit)] = clause match
   case (id, BlockLit(List(), cparams, vparams, bparams, body)) => 
     val monoName = if (scrutineeTypes.isEmpty) {
       Some(id) 
@@ -606,11 +629,11 @@ def monomorphize(clause: (Id, BlockLit), scrutineeTypes: Vector[ValueType])(usin
       (monoId, monoBlockLit)
     ).toList
 
-def monomorphize(opt: Option[Stmt])(using ctx: MonoContext): Option[Stmt] = opt match
+def monomorphize(opt: Option[Stmt])(using ctx: MonoContext)(using Context, DeclarationContext): Option[Stmt] = opt match
   case None => None
   case Some(stmt) => Some(monomorphize(stmt))
 
-def monomorphize(expr: Expr)(using ctx: MonoContext): Expr = expr match
+def monomorphize(expr: Expr)(using ctx: MonoContext)(using Context, DeclarationContext): Expr = expr match
   case Literal(value, annotatedType) =>
     Literal(value, monomorphize(annotatedType))
   case PureApp(b, targs, vargs) =>
