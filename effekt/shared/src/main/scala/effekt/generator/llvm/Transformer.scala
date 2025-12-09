@@ -709,6 +709,49 @@ object Transformer {
     }
   }
 
+  def loadEnvironmentAtDirectly(elementPointer: Operand, environment: machine.Environment, alias: AliasInfo, allInstructions: mutable.ListBuffer[Instruction])(using ModuleContext, FunctionContext, BlockContext): Unit = {
+    alias match {
+      // if we have a sharded object
+      case Object if !fitsInOneSavingSlot(environment) =>
+        // Follow chained ${slotSize}-byte blocks created in produceObject
+        val chunkedEnvironments = splitEnvironment(environment)
+        var currentEnvironmentPtr: Operand = elementPointer
+
+        // here we loop over all environments *in* order 
+        chunkedEnvironments.zipWithIndex.foreach { case (chunk, idx) =>
+          val isLast = idx == chunkedEnvironments.length - 1
+          if (isLast) {
+            val tpe = environmentType(chunk)
+            loadAllVariablesDirectly(currentEnvironmentPtr, chunk, alias, tpe, allInstructions)
+          } else {
+            // Here we do the same as for the normal slot plus some extra stuff 
+
+            // For non-last chunkedEnvironments, layout is chunk ++ [Pos link]
+            val tpe = StructureType(chunk.map { case machine.Variable(_, t) => transform(t) } :+ positiveType) // the same as for the normal case + positive Type for the link
+            loadAllVariablesDirectly(currentEnvironmentPtr, chunk, alias, tpe, allInstructions)
+
+            // Follow link to next block. The Link pointer is the last element of the chunk
+            val linkPtr = LocalReference(PointerType(), freshName("link_pointer"))
+            allInstructions += GetElementPtr(linkPtr.name, tpe, currentEnvironmentPtr, List(0, chunk.length))
+
+            val linkVal = LocalReference(positiveType, freshName("link"))
+            allInstructions += Load(linkVal.name, positiveType, linkPtr, alias)
+
+            val nextObj = LocalReference(objectType, freshName("next_object"))
+            allInstructions += ExtractValue(nextObj.name, linkVal, 1)
+
+            val nextEnv = LocalReference(environmentType, freshName("environment"))
+            allInstructions += Call(nextEnv.name, Ccc(), environmentType, objectEnvironment, List(nextObj))
+            currentEnvironmentPtr = nextEnv
+          }
+        }
+      case _: AliasInfo =>
+        val tpe = environmentType(environment)
+        loadAllVariablesDirectly(elementPointer, environment, alias, tpe, allInstructions)
+        
+    }
+  }
+
   def shareValues(values: machine.Environment, freeInBody: Set[machine.Variable])(using FunctionContext, BlockContext): Unit = {
     @tailrec
     def loop(values: machine.Environment): Unit = {
@@ -987,6 +1030,15 @@ object Transformer {
     }
   }
 
+  private def loadAllVariablesDirectly(pointer: Operand, environment: machine.Environment, alias: AliasInfo, typ: Type, allInstructions: mutable.ListBuffer[Instruction])(using ModuleContext, FunctionContext, BlockContext): Unit = {
+    environment.zipWithIndex.foreach {
+      case (machine.Variable(name, tpe), i) =>
+        val field = LocalReference(PointerType(), freshName(name + "_pointer"))
+        allInstructions += GetElementPtr(field.name, typ, pointer, List(0, i))
+        allInstructions += Load(name, transform(tpe), field, alias)
+    }
+  }
+
   private def createReleaseFunction(releaseLabel: String, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Terminator = {
     val pushOntoFreeListLabel = freshName("pushOntoFreeList")
     val shareChildrenAndEraseLabel = freshName("shareChildrenAndErase")
@@ -999,18 +1051,15 @@ object Transformer {
     // Step 01: Load the environment
     emit(Call(environmentRef.name, Ccc(), environmentType, ConstantGlobal("objectEnvironment"), List(objectReference)))
 
-    // Step 02: Load all variables
-    loadEnvironment(environmentRef, environment, Object)
-
-    // Step 03: Load the reference count
+    // Step 02: Load the reference count
     emit(GetElementPtr(referenceCountPtr.name, headerType, LocalReference(objectType, "object"), List(0, 0)))
     emit(Load(referenceCount.name, referenceCountType, referenceCountPtr, Object))
 
-    // Step 04: Create the branches for dealing with the given reference count
+    // Step 03: Create the branches for dealing with the given reference count
     createReleasePushOntoFreeListBasicBlock(pushOntoFreeListLabel, environment, freeInBody, objectReference, environmentRef)
     createReleaseShareChildrenAndEraseBasicBlock(shareChildrenAndEraseLabel, environment, freeInBody, objectReference, environmentRef)
 
-    // Step 05: Check the reference count
+    // Step 04: Check the reference count
     Switch(referenceCount, shareChildrenAndEraseLabel, List((0, pushOntoFreeListLabel)))
   }
 
@@ -1078,6 +1127,8 @@ object Transformer {
 
   private def createReleaseShareChildrenAndEraseBasicBlock(shareChildrenLabel: String, environment: machine.Environment, freeInBody: Set[machine.Variable], `object`: Operand, environmentRef: LocalReference)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     val allInstructions = mutable.ListBuffer[Instruction]()
+    // Step 02: Load all variables
+    loadEnvironmentAtDirectly(environmentRef, environment, Object, allInstructions)
     shareValuesDirectly(environment, freeInBody, allInstructions)
     allInstructions += (Call("_", Ccc(), VoidType(), eraseObject, List(`object`)))
     emit(BasicBlock(shareChildrenLabel, allInstructions.toList, RetVoid()))
