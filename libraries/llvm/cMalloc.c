@@ -18,6 +18,7 @@ typedef struct Slot
 #define SENTINEL_SLOT ((Slot*)1)
 
 static bool DEBUG = true;
+static Slot* freeList = NULL; // Head of the free-List
 static Slot* todoList = SENTINEL_SLOT; // Head of the To-Do-List
 
 static uint8_t* nextUnusedSlot = NULL; // Pointer to the next unused Slot
@@ -48,12 +49,23 @@ void initializeMemory() {
 
 /**
  * A simple allocator for the effekt slots that are created by newObject and deleted by eraseObject.
+ * If we have an element in the free-list we can pop it and just use it.
  * If we have an element in the to-do-list we can pop it and ensure that it is reusable by calling its eraser to erase the children.
  * Otherwise, bump allocate a new slot.
  */
 void* acquire() {
-    // 1. If there a slot to reuse...
-    if (todoList != SENTINEL_SLOT) {
+    // 1. Fast Path: Try to reuse a slot from the free-list
+    if (freeList != NULL) {
+        // ...pop it from to-do-list
+        Slot* reusedSlot = freeList;
+        freeList = reusedSlot->next;
+
+        if (DEBUG) printf("[acquire] Reusing block (free): %p\n", (void*)reusedSlot);
+
+        return reusedSlot;
+    }
+    // 2. Slot Path: Try to reuse a slot from the to-do-list
+    else if (todoList != SENTINEL_SLOT) {
 
         // ...pop it from to-do-list
         Slot* reusedSlot = todoList;
@@ -62,12 +74,11 @@ void* acquire() {
         // Call the eraser function on it. After that, it is safe to reuse it again.
         reusedSlot->eraser(reusedSlot);
 
-        if (DEBUG) printf("[acquire] Reusing block: %p\n", (void*)reusedSlot);
+        if (DEBUG) printf("[acquire] Reusing block (todo): %p\n", (void*)reusedSlot);
 
         return reusedSlot;
     }
-
-    // 2. Fallback - we bump-allocate a new slot
+    // 3. Fallback - we bump-allocate a new slot
     Slot* fresh = (Slot*)nextUnusedSlot;
     nextUnusedSlot += slotSize;
 
@@ -75,13 +86,26 @@ void* acquire() {
     return fresh;
 }
 
+/**
+ * Pushes a slot on the top of the Free-List.
+ */
+void pushOntoFreeList(void* ptr) {
+    if (DEBUG) {
+        printf("[pushOntoFreeList] Freed block: %p\n", ptr);
+    }
+
+    Slot* slot = (Slot*)ptr;
+    slot->next = freeList;
+    freeList = slot;
+}
+
 
 /**
  * Pushes a slot on the top of the To-Do-List.
  */
-void pushOnFreeList(void* ptr) {
+void pushOntoTodoList(void* ptr) {
     if (DEBUG) {
-        printf("[pushOnFreeList] Freed block: %p\n", ptr);
+        printf("[pushOntoTodoList] Freed block: %p\n", ptr);
     }
 
     Slot* slot = (Slot*)ptr;

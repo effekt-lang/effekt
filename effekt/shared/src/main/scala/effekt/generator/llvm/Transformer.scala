@@ -981,7 +981,7 @@ object Transformer {
 
   private def createAndEmitReleaseBasicBlock(releaseLabel: String)(using ModuleContext, FunctionContext): Unit = {
     emit(BasicBlock(releaseLabel, List(
-      Call("", Ccc(), VoidType(), ConstantGlobal("release"), List(LocalReference(objectType, "object")))
+      Call("", Ccc(), VoidType(), ConstantGlobal("pushOnTodoList"), List(LocalReference(objectType, "object")))
     ), RetVoid()))
   }
 
