@@ -65,7 +65,7 @@ def readDecimal(): Int / Scan[Byte] = {
 }
 
 def readNumbers(): Unit / { Scan[Byte], emit[Int] } =
-  exhaustively {
+  loop {
     do emit(readDecimal())
     do skip()
   }

@@ -111,9 +111,9 @@ def pretty { s: () => Unit / { literal, splice[Term] } }: String = {
 
 /// convert char stream to bit stream, skipping non-bit chars
 def bits { p: () => Unit / { read[Bool], stop } }: Unit / read[Char] =
-  try exhaustively { p() }
+  try loop { p() }
   with read[Bool] {
-    with exhaustively
+    with loop
     val c = do read()
     if (c == '0') resume { false }
     if (c == '1') resume { true  }
