@@ -1,0 +1,6 @@
+effect bar(): Int
+
+def method{b: bar} = println(b.bar())
+def main() = try {
+  b.method()
+} with b: bar { resume(42) }
