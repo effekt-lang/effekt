@@ -2,6 +2,7 @@ package effekt
 package core
 
 import effekt.context.Context
+import effekt.util.messages.ErrorMessageReifier
 
 object Mono extends Phase[CoreTransformed, CoreTransformed] {
 
@@ -271,73 +272,70 @@ def findConstraints(vt: ValueType)(using ctx: MonoFindContext): (TypeArg, Constr
   case ValueType.Var(name) => (ctx.typingContext(name), List.empty)
 }
 
-def solveConstraints(constraints: Constraints): Solution =
-  var solved: Solution = Map()
-
+def solveConstraints(constraints: Constraints)(using Context): Solution = {
   val filteredConstraints = constraints.filterNot(c => c.lower.isEmpty)
   val groupedConstraints = filteredConstraints.groupBy(c => c.upper)
-  val vecConstraints = groupedConstraints.map((sym, constraints) => (sym -> constraints.map(c => c.lower).toSet))
+  var bounds = groupedConstraints.map((sym, constraints) => (sym -> constraints.map(c => c.lower).toSet))
 
   while (true) {
-    val previousSolved = solved
-    vecConstraints.foreach((sym, tas) => 
-      val sol = solveConstraints(sym).map(bs => bs.toVector).filter(v => !v.isEmpty)
-      solved += (sym -> sol)
+    val previousBounds = bounds
+    bounds.foreach((sym, tas) => 
+      val bound = solveConstraints(sym, tas).filter(v => v.nonEmpty)
+      bounds += (sym -> bound)
     )
-    if (previousSolved == solved) return solved
+    
+    if (previousBounds == bounds) return filterBounds(bounds)
   }
 
-  def countInsideTargs(id: Id, targs: List[TypeArg]): Int = {
-    var count = 0
-    targs.foreach(targ => { 
-      val innerCount = targ match {
-        case TypeArg.Base(tpe, targs) => (if (tpe == id) 1 else 0) + countInsideTargs(id, targs)
-        case TypeArg.Boxed(tpe, capt) => 0
-        case TypeArg.Var(funId, pos) => 0 
-      }
-      count += innerCount
+  def filterBounds(bounds: Map[Id, Set[Vector[TypeArg]]]): Map[Id, Set[Vector[Ground]]] = bounds.view.mapValues(filterNonGround).toMap
+
+  def filterNonGround(bounds: Set[Vector[TypeArg]]): Set[Vector[Ground]] = bounds.flatMap(v =>
+    var res: Vector[Ground] = Vector.empty 
+    v.foreach({
+      case TypeArg.Base(id, targs) => res +:= TypeArg.Base(id, targs)
+      case TypeArg.Boxed(tpe, capt) => res +:= TypeArg.Boxed(tpe, capt)
+      case TypeArg.Var(funId, pos) => ()
     })
-    count
-  }
+    if (res.size == v.size) {
+      Some(res)
+    } else {
+      None
+    }
+  )
 
-  def solveConstraints(funId: FunctionId): Set[List[Ground]] =
-    val filteredConstraints = vecConstraints(funId)
-    var nbs: Set[List[Ground]] = Set.empty
+  def solveConstraints(funId: FunctionId, filteredConstraints: Set[Vector[TypeArg]]): Set[Vector[TypeArg]] =
+    var nbs: Set[List[TypeArg]] = Set.empty
     filteredConstraints.foreach(b => 
-      var l: List[List[Ground]] = List(List.empty)
-      def listFromIndex(ind: Int) = if (ind >= l.length) List.empty else l(ind)
+      var l: List[List[TypeArg]] = List(List.empty)
 
-      def solveTypeArg(typeArg: TypeArg): List[Ground] = typeArg match {
+      def solveTypeArg(typeArg: TypeArg, taPos: Int, insideTypeConstructor: Boolean): List[TypeArg] = typeArg match {
         case TypeArg.Base(tpe, targs) => 
-          val solvedTargs = targs map solveTypeArg
+          val solvedTargs = targs.zipWithIndex.map((ta, ind) => solveTypeArg(ta, ind, true))
           var crossTargs: List[List[TypeArg]] = List(List.empty)
           solvedTargs.foreach(targ => {
             crossTargs = productAppend(crossTargs, targ)
           })
 
-          // Detect polymorphic recursion
-          val count = crossTargs.map { tas => countInsideTargs(tpe, tas) }.sum
-          if (count > 10) {
-            sys error s"Polymorphic recursion between '${tpe}' and '${funId}'"
-          }
-
           crossTargs.map(tas => TypeArg.Base(tpe, tas))
         case TypeArg.Boxed(tpe, capt) => List(TypeArg.Boxed(tpe, capt))
-        case TypeArg.Var(funId, pos) => 
-          val funSolved = solved.getOrElse(funId, Set.empty)
+        case TypeArg.Var(fnId, pos) => 
+          if (funId == fnId && taPos == pos && insideTypeConstructor) Context.abort(pretty"Detected polymorphic recursion for '${funId}' at position '${taPos}'")
+          val funSolved = bounds.getOrElse(fnId, Set.empty)
           val posArgs = funSolved.map(v => v(pos)).toList
           posArgs
       }
 
-      b.foreach(typeArg => l = productAppend(l, solveTypeArg(typeArg)))
+      b.zipWithIndex.foreach((typeArg, ind) => l = productAppend(l, solveTypeArg(typeArg, ind, false)))
       
       // Only add solution vectors which match the size we expect
       // sometimes we don't have enough information in the current iteration to find a correct solution
       nbs ++= l.filter(i => i.size == b.size)
     )
-    nbs
+    nbs.map(l => l.toVector)
 
-  solved
+  // we will never get here
+  filterBounds(bounds)
+}
 
 def productAppend[A](ls: List[List[A]], rs: List[A]): List[List[A]] =
   if (rs.isEmpty) return ls
