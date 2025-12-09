@@ -1,10 +1,11 @@
 module array
 
 import effekt
-import exception
-import list
 import option
 import stream
+import control
+import list
+import exception
 
 /// A mutable 0-indexed fixed-sized array.
 extern type Array[T]

@@ -2,8 +2,9 @@ module list
 
 import effekt
 import option
-import exception
+import control
 import stream
+import exception
 
 /// Immutable linked list for finite sequences of elements.
 type List[A] {

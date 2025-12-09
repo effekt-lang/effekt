@@ -2,6 +2,7 @@ module bytearray
 
 import effekt
 import stream
+import control
 
 /**
  * A memory managed, mutable, fixed-length array of bytes.

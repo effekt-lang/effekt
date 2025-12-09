@@ -1,6 +1,6 @@
 def push123(): Unit / emit[Int] = [1, 2, 3].each
 def printAll(): Bool / read[Int] = {
-  exhaustively { println(do read()) }
+  loop { println(do read()) }
   true
 }
 

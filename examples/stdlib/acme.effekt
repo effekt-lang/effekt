@@ -8,6 +8,7 @@ import bench
 import buffer
 import bytearray
 import char
+import control
 import dequeue
 import dictionary
 import effekt
