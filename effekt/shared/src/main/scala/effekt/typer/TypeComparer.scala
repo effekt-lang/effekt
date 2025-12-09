@@ -2,7 +2,7 @@ package effekt
 package typer
 
 import effekt.symbols.*
-import effekt.symbols.builtins.{ TBottom, TUnit }
+import effekt.symbols.builtins.{ TBottom, TTop }
 import effekt.typer.ErrorContext.FunctionEffects
 
 /**
@@ -29,31 +29,6 @@ trait TypeUnifier {
   }
   def unifyCapture(c1: Capture, c2: Capture, ctx: ErrorContext): Unit = unifyCaptures(CaptureSet(Set(c1)), CaptureSet(Set(c2)), ctx)
 
-  def isZeroLike(tpe: ValueType): Boolean = tpe match {
-    case ValueType.ValueTypeApp(constructor, args) => constructor match {
-      case TypeConstructor.DataType(name, tparams, constructors, decl) => constructors.isEmpty
-      case TypeConstructor.Record(name, tparams, constructor, decl) => false
-      case TypeConstructor.ExternType(name, tparams, decl) => false
-      case TypeConstructor.ErrorValueType(name, tparams, decl) => false
-    }
-    case ValueType.BoxedType(tpe, capture) => false
-    case ValueType.ValueTypeRef(tvar) => false
-  }
-
-  def isOneLike(tpe: ValueType): Boolean = tpe match {
-    case ValueType.ValueTypeApp(constructor, args) => constructor match {
-      case TypeConstructor.DataType(name, tparams, constructors, decl) => constructors match {
-        case head :: Nil => head.fields.isEmpty && tparams.isEmpty && head.tparams.isEmpty
-        case _ => false
-      }
-      case TypeConstructor.Record(name, tparams, constructor, decl) => constructor.fields.isEmpty && constructor.tparams.isEmpty && tparams.isEmpty
-      case TypeConstructor.ExternType(name, tparams, decl) => false
-      case TypeConstructor.ErrorValueType(name, tparams, decl) => false
-    }
-    case ValueType.BoxedType(tpe, capture) => false
-    case ValueType.ValueTypeRef(tvar) => false
-  }
-
   def unifyValueTypes(tpe1: ValueType, tpe2: ValueType, ctx: ErrorContext): Unit = (tpe1, tpe2, ctx.polarity, ctx.coercible) match {
     case (t, s, _, _) if t == s => ()
 
@@ -68,7 +43,7 @@ trait TypeUnifier {
 
     // coercing is the last resort...
     case (TBottom, to, Covariant, Some(coerce)) => coerce(Coercion.FromNothing(to))
-    case (from, TUnit, Covariant, Some(coerce)) => coerce(Coercion.ToUnit(from))
+    case (from, TTop, Covariant, Some(coerce)) => coerce(Coercion.ToAny(from))
 
     // For now, we treat all type constructors as invariant.
     case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _, _) =>
@@ -170,8 +145,8 @@ trait TypeMerger extends TypeUnifier {
     (oldBound, newBound) match {
       case (t, s) if t == s => t
 
-      case (t, TUnit) => TUnit
-      case (TUnit, t) => TUnit
+      case (t, TTop) => TTop
+      case (TTop, t) => TTop
       case (TBottom, t) => t
       case (t, TBottom) => t
 

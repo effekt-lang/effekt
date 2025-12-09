@@ -903,7 +903,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def coercing[T <: source.Tree](tree: T)(f: T => Stmt)(using Context): Stmt =
     val result = f(tree)
     Context.annotationOption(Annotations.ShouldCoerce, tree) match {
-      case Some(Coercion.ToUnit(from)) =>
+      case Some(Coercion.ToAny(from)) =>
         insertBindings {
           val sc = Context.bind(result)
           core.Stmt.Return(core.Expr.Literal((), core.Type.TUnit))
@@ -919,7 +919,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def coercing[T <: source.Tree](tree: T)(f: T => Expr)(using Context): Expr =
     val result = f(tree)
     Context.annotationOption(Annotations.ShouldCoerce, tree) match {
-      case Some(Coercion.ToUnit(from)) =>
+      case Some(Coercion.ToAny(from)) =>
         core.Expr.Literal((), core.Type.TUnit)
       case Some(Coercion.FromNothing(to)) =>
         Context.bind(core.Stmt.Match(result, transform(to), Nil, None))

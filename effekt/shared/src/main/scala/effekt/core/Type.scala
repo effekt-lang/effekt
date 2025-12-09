@@ -155,8 +155,9 @@ object Type {
 
   // The subtyping lattice
   val TBottom = ValueType.Data(builtins.BottomSymbol, Nil)
-  val TUnit   = ValueType.Data(builtins.UnitSymbol, Nil)
+  val TAny   = ValueType.Data(builtins.TopSymbol, Nil)
 
+  val TUnit   = ValueType.Data(builtins.UnitSymbol, Nil)
   val TInt = ValueType.Data(builtins.IntSymbol, Nil)
   val TChar = ValueType.Data(builtins.CharSymbol, Nil)
   val TByte = ValueType.Data(builtins.ByteSymbol, Nil)

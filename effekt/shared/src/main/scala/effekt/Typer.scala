@@ -44,7 +44,7 @@ case class Result[+T](tpe: T, effects: ConcreteEffects)
  * Coercion as inferred by Typer
  */
 enum Coercion {
-  case ToUnit(from: ValueType)
+  case ToAny(from: ValueType)
   case FromNothing(to: ValueType)
 }
 
@@ -120,7 +120,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
               case symbols.builtins.TUnit =>
                 ()
               case tpe =>
-                // We disable coercions here for now, even though they could be inferred
                 matchExpected(tpe, symbols.builtins.TUnit, None)
             }
         }
