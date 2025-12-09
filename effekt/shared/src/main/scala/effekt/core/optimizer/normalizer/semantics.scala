@@ -227,13 +227,28 @@ object semantics {
     case Unknown(id: Id)
   }
 
-  case class Env(values: Map[Id, Addr], computations: Map[Id, Computation], captures: Map[Id, RuntimeCapture]) {
+  /**
+   * Environment during normalization
+ *
+   * @param values
+   * @param computations
+   * @param captures: Mapping of static to (dyanmic) runtime captures. Here, it can happen that a single static capture
+   *                  maps to multiple runtime captures. For example:
+   *                  ```
+   *                  def foo{f: () => Unit}: () => Unit at {f} = box f
+   *                  var x = 1;
+   *                  var y = 2;
+   *                  foo { => println(x + y) } ()
+   *                  ```
+   *                  Here we need to substitute the static capture f with runtime captures corresponding to {x, y}.
+   */
+  case class Env(values: Map[Id, Addr], computations: Map[Id, Computation], captures: Map[Id, Set[RuntimeCapture]]) {
     def lookupValue(id: Id): Addr = values(id)
     def bindValue(id: Id, value: Addr): Env = Env(values + (id -> value), computations, captures)
     def bindValue(newValues: List[(Id, Addr)]): Env = Env(values ++ newValues, computations, captures)
 
-    def bindCapture(id: Id, c: RuntimeCapture): Env = Env(values, computations, captures + (id -> c))
-    def lookupCapture(id: Id): RuntimeCapture = captures(id)
+    def bindCapture(id: Id, c: RuntimeCapture): Env = Env(values, computations, captures + (id -> Set(c)))
+    def lookupCapture(id: Id): Set[RuntimeCapture] = captures(id)
 
     def lookupComputation(id: Id): Computation = computations.getOrElse(id, sys error s"Unknown computation: ${util.show(id)} -- env: ${computations.map { case (id, comp) => s"${util.show(id)}: $comp" }.mkString("\n") }")
     def bindComputation(id: Id, computation: Computation): Env = Env(values, computations + (id -> computation), captures)

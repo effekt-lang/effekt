@@ -860,6 +860,19 @@ class NewNormalizerTests extends CoreTests {
         |""".stripMargin
     normalize(input) // does not throw
   }
+
+  test("Single static capture turns into multiple runtime captures") {
+    val input =
+      """
+        |def main() = {
+        |    def foo{f: () => Unit}: () => Unit at {f} = box f
+        |    var x = 1;
+        |    var y = 2;
+        |    foo { => println(x + y) } ()
+        |}
+        |""".stripMargin
+    normalize(input) // does not throw
+  }
 }
 
 /**
