@@ -114,7 +114,7 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
       if (hasMethods) {
         // True method call on interface - receiver is the object
         MethodCall(rewriteAsBlock(receiver), id, targs, vargsTransformed, bargsTransformed, span)
-      } else if (!isInherentlyBlock(receiver)) {
+      } else if (!isBlockLike(receiver)) {
         // Value-UFCS: receiver becomes first value argument
         Call(IdTarget(id).inheritPosition(id), targs,
           rewriteAsExpr(ValueArg.Unnamed(receiver)) :: vargsTransformed,
@@ -241,27 +241,24 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
   }
 
   /**
-   * Determines if a term is inherently a block (computation) based on its syntactic form.
+   * Determines if a term is inherently a block (computation) based on its syntactic form & definition.
    *
-   * This mirrors the logic in [[rewriteAsBlock]]: terms that [[rewriteAsBlock]] returns
-   * unchanged are "inherently blocks", while terms it wraps in [[Unbox]] are not.
-   *
-   * Note: [[RefBinder]] (VarBinder, RegBinder) are treated as values, not blocks,
+   * Notes:
+   * 1. [[RefBinder]] (VarBinder, RegBinder) are treated as values, not blocks,
    * even though they technically extend [[BlockSymbol]].  This is because mutable
    * variables hold values and are accessed like values.
    *
-   * This is used for UFCS disambiguation: when the receiver is inherently a block,
-   * we use block-UFCS (receiver becomes first block argument) rather than value-UFCS.
+   * 2. [[BlockLiteral]] are skipped for the purposes of UFCS, see PR #1250
    */
-  def isInherentlyBlock(e: Term)(using C: Context): Boolean = e match {
+  def isBlockLike(e: Term)(using C: Context): Boolean = e match {
     case v: Var => v.definition match {
       case _: symbols.RefBinder => false   // VarBinder, RegBinder - treated as values!
       case _: symbols.BlockSymbol => true  // Other block symbols (capabilities, functions, etc.)
-      case _ => false                       // ValueSymbol
+      case _ => false                      // ValueSymbol
     }
     case _: Unbox => true
     case _: New => true
-    case _: BlockLiteral => true
+    case _: BlockLiteral => false // explicitly disallowed, see PR #1250
     case _ => false
   }
 }

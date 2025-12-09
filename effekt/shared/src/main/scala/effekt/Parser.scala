@@ -244,22 +244,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   def stmts(inBraces: Boolean = false): Stmt =
     nonterminal:
       (peek.kind match {
-        case `{` =>
-          // Ambiguity: `{ ... }` could be a block statement OR a block literal (for UFCS)
-          // Disambiguate: if `}` is followed by `.`, parse as expression
-          backtrack {
-            val blk = functionArg()
-            if (!peek(`.`)) fail("Expected `.` for block UFCS")
-            val e = callExprContinuation(blk)
-            e
-          }.unspan match {
-            case Some(e) =>
-              semi()
-              if returnPosition then Return(e, span())
-              else ExprStmt(e, stmts(inBraces), span())
-            case None =>
-              BlockStmt(braces { stmts(inBraces = true) }, span())
-          }
+        case `{` => BlockStmt(braces { stmts(inBraces = true) }, span())
         case `val`  => valStmt(inBraces)
         case _ if isDefinition && inBraces => DefStmt(definition(), semi() ~> stmts(inBraces), span())
         case _ if isDefinition => fail("Definitions are only allowed, when enclosed in braces.")
@@ -352,20 +337,8 @@ class Parser(tokens: Seq[Token], source: Source) {
   def stmt(): Stmt =
     nonterminal:
       {
-        if (peek(`{`)) {
-          // Ambiguity: `{ ... }` could be a block statement OR a block literal used as UFCS receiver
-          // Disambiguate: if the `}` is followed by `.`, parse as expression (UFCS)
-          backtrack {
-            val blk = functionArg()
-            if (!peek(`.`)) fail("Expected `.` for block UFCS")
-            val e = callExprContinuation(blk)
-            Return(e, span())
-          } getOrElse {
-            BlockStmt(braces { stmts(inBraces = true) }, span())
-          }
-        } else {
-          when(`return`) { Return(expr(), span()) } { Return(expr(), span()) }
-        }
+        if peek(`{`) then BlockStmt(braces { stmts(inBraces = true) }, span())
+        else when(`return`) { Return(expr(), span()) } { Return(expr(), span()) }
       } labelled "statement"
 
   /**
@@ -1081,45 +1054,6 @@ class Parser(tokens: Seq[Token], source: Source) {
     TypeRef(IdRef(List("effekt"), s"Tuple${tps.size}", tps.span.synthesized), tps, tps.span.synthesized)
 
   /**
-   * Continues parsing a call expression chain given an initial expression.
-   * Handles `.foo`, `.foo(...)`, and `(...)` continuations.
-   */
-  def callExprContinuation(initial: Term): Term = {
-    var e = initial
-
-    while (peek(`.`) || isArguments)
-      peek.kind match {
-        // member selection (or method call)
-        //   <EXPR>.<NAME>
-        // | <EXPR>.<NAME>( ... )
-        case `.` =>
-          consume(`.`)
-          val member = idRef()
-          // method call
-          if (isArguments) {
-            val (targs, vargs, bargs) = arguments()
-            e = Term.MethodCall(e, member, targs, vargs, bargs, span())
-          } else {
-            e = Term.MethodCall(e, member, Nil, Nil, Nil, span())
-          }
-
-        // function call
-        case _ if isArguments =>
-          val callee = e match {
-            case Term.Var(id, _) => IdTarget(id)
-            case other => ExprTarget(other)
-          }
-          val (targs, vargs, bargs) = arguments()
-          e = Term.Call(callee, targs, vargs, bargs, span())
-
-        // nothing to do
-        case _ => ()
-      }
-
-    e
-  }
-
-  /**
    * This is a compound production for
    *  - member selection <EXPR>.<NAME>
    *  - method calls <EXPR>.<NAME>(...)
@@ -1130,13 +1064,38 @@ class Parser(tokens: Seq[Token], source: Source) {
    */
   def callExpr(): Term = nonterminal {
     nonterminal:
-      // Allow block literals as receivers for UFCS on blocks
-      val e = peek.kind match {
-        case `{` => blockArg()
-        case _ => primExpr()
-      }
+      var e = primExpr()
 
-      callExprContinuation(e)
+      while (peek(`.`) || isArguments)
+        peek.kind match {
+          // member selection (or method call)
+          //   <EXPR>.<NAME>
+          // | <EXPR>.<NAME>( ... )
+          case `.` =>
+            consume(`.`)
+            val member = idRef()
+            // method call
+            if (isArguments) {
+              val (targs, vargs, bargs) = arguments()
+              e = Term.MethodCall(e, member, targs, vargs, bargs, span())
+            } else {
+              e = Term.MethodCall(e, member, Nil, Nil, Nil, span())
+            }
+
+          // function call
+          case _ if isArguments =>
+            val callee = e match {
+              case Term.Var(id, _) => IdTarget(id)
+              case other => ExprTarget(other)
+            }
+            val (targs, vargs, bargs) = arguments()
+            e = Term.Call(callee, targs, vargs, bargs, span())
+
+          // nothing to do
+          case _ => ()
+        }
+
+      e
   }
 
   // argument lists cannot follow a linebreak:

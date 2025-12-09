@@ -336,14 +336,6 @@ class ParserTests extends munit.FunSuite {
     parseExpr("\"My name is ${person.lastName}, ${person.firstName} ${person.lastName}\"")
   }
 
-  test("ufcs") {
-    parseExpr("{ l }.foo { x => x + 1}.bar { x => x * 2}")
-    parseExpr("{ 42 }.bar")
-    parseExpr("{ 42 }.bar()")
-    parseExpr("{ x => x }.foo(42)")
-    parseExpr("l.bar { fn }")
-  }
-
   test("Boxing") {
     parseExpr("box f")
     parseExpr("unbox f")
@@ -558,13 +550,6 @@ class ParserTests extends munit.FunSuite {
 
     parseStmts("val g: () => Unit / Exc at {exc} = box { closure() }; ()")
     parseStmts("val g: () => Unit / Exc at exc = box { closure() }; ()")
-  }
-
-  test("UFCS on block literals") {
-    parseStmts(
-      """val x = { foo() }.toList
-        |x
-        |""".stripMargin)
   }
 
   test("Pattern-matching val parses with correct span") {
