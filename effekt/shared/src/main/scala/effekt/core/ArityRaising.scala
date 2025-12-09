@@ -101,17 +101,32 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
 
       val transformedBargs = bargs.map { barg =>
         barg match {
-          // case direct reference here
-          // transform to lambda and then do the same as below for blocklit
+          // this handles: 
+          // val res = myList.map {myFunc} 
+          // by making it:
+          // val res = myList.map {t => myFunc(t)}
           case BlockVar(id, annotatedTpe, annotatedCapt) => 
-            println(barg.tpe)
-            transform(barg)
+            annotatedTpe match {
+              case BlockType.Function(tparams, cparams, vparams, bparams, result) => 
+                val params = vparams.map { tpe =>
+                  // need to fix for propper implementation
+                  val freshId = Id("x_" + scala.util.Random.nextInt())
+                  (ValueParam(freshId, tpe), ValueVar(freshId, tpe))
+                }
+                val call = Stmt.App(barg, List(), params.map(_._2), List())
+                val transformedBody = transform(call)
+      
+                // empty List for Bargs should be fine, since myList.map {myFunc} the myFunc cant have any bargs??
+                BlockLit(tparams, cparams, params.map(_._1), List(), transformedBody)
+
+              case _ => transform(barg)
+            }
+
 
           case BlockLit(btparams, bcparams, bvparams, bbparams, body) =>
             // Keep the signature unchanged
             // But recursively transform the body
             val transformedBody = transform(body)
-            println(barg.tpe)
             BlockLit(btparams, bcparams, bvparams, bbparams, transformedBody)
           
           case _ => 
