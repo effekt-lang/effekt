@@ -1,0 +1,6 @@
+def main() = try {
+  interface Greet { def sayHello(): Unit }
+  do sayHello()
+} with Greet {
+  def sayHello() = { println("Hello!"); resume(()) }
+}
