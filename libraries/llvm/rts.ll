@@ -82,6 +82,9 @@
 ; Reference to a mutable variable (prompt, offset)
 %Reference = type { %Prompt, i64 }
 
+; Link data type consist of a fake tag and a heap object
+%Link = type {i64, %Object}
+
 ; Builtin Types
 
 %Int = type i64
@@ -98,6 +101,7 @@ declare void @initializeMemory()
 declare ptr @acquire()
 declare void @pushOntoFreeList(ptr)
 declare void @test(ptr)
+declare void @testIfAllSlotsAreFreed()
 
 
 declare ptr @malloc(i64)
