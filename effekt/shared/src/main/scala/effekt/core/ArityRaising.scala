@@ -98,6 +98,26 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
 
       val flattened = (vargs zip vparamsTypes).map { case (arg, tpe) => flattenArg(arg, tpe) }
       val (allArgs, allTypes, allMatches) = flattened.unzip3
+
+      val transformedBargs = bargs.map { barg =>
+        barg match {
+          // case direct reference here
+          // transform to lambda and then do the same as below for blocklit
+          case BlockVar(id, annotatedTpe, annotatedCapt) => 
+            println(barg.tpe)
+            transform(barg)
+
+          case BlockLit(btparams, bcparams, bvparams, bbparams, body) =>
+            // Keep the signature unchanged
+            // But recursively transform the body
+            val transformedBody = transform(body)
+            println(barg.tpe)
+            BlockLit(btparams, bcparams, bvparams, bbparams, transformedBody)
+          
+          case _ => 
+            transform(barg)
+        }
+      }
       
       val newCalleTpe: BlockType.Function = BlockType.Function(tparams, cparams, allTypes.flatten, bparams, returnTpe)
       val newCallee = BlockVar(id, newCalleTpe, annotatedCapt)
