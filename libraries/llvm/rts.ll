@@ -174,7 +174,7 @@ bump_alloc:
 }
 
 ; Pushes a slot on the top of the To-Do-List.
-define private void @release(%struct.Slot* %slot) nounwind {
+define private void @pushOntoFreeList(%struct.Slot* %slot) nounwind {
 entry:
   ; oldHead = freeList
   %oldHead = load %struct.Slot*, %struct.Slot** @freeList, align 8
