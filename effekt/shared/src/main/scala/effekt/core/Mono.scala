@@ -656,7 +656,7 @@ def monomorphize(valueType: ValueType)(using ctx: MonoContext): ValueType = valu
   case ValueType.Boxed(tpe, capt) => ValueType.Boxed(monomorphize(tpe), capt)
 
 def monomorphize(typeArg: TypeArg)(using ctx: MonoContext): ValueType = typeArg match {
-  case TypeArg.Base(tpe, targs) => ValueType.Data(tpe, targs map monomorphize)
+  case TypeArg.Base(tpe, targs) => replacementDataFromTargs(tpe, targs map monomorphize)
   case TypeArg.Boxed(tpe, capt) => ValueType.Boxed(monomorphize(tpe), capt)
   case TypeArg.Var(funId, pos) => 
     // FIXME: Do we want to reflect this unreachability in the Data structure used for monomorphizing?
