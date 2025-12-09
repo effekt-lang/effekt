@@ -59,7 +59,7 @@ class NewNormalizer {
   import semantics.*
 
   // used for potentially recursive definitions
-  def evaluateRecursive(id: Id, block: core.BlockLit, bound: List[Static[BlockParam]])(using env: Env, scope: Scope): Computation =
+  def evaluateRecursive(id: Id, block: core.BlockLit, bound: List[Static])(using env: Env, scope: Scope): Computation =
     block match {
       case core.Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
         val freshened = Id(id)
@@ -86,7 +86,7 @@ class NewNormalizer {
           scope.defineRecursive(freshened, normalizedBlock.copy(bparams = normalizedBlock.bparams), block.tpe, block.capt)
           Computation.Def(Closure(freshened, Nil))
         } else {
-          val captures = closureParams.map { p => Computation.Known(p.map(_.id)): Computation.Known }.toList
+          val captures = closureParams.map { bp => Computation.Known(bp): Computation.Known }.toList
           given localEnv1: Env = env
             .bindValue(vparams.map(p => p.id -> p.id))
             .bindComputation(bparams.map(p => p.id -> Computation.Unknown(p.id)))
@@ -113,7 +113,7 @@ class NewNormalizer {
 
   // the stack here is not the one this is run in, but the one the definition potentially escapes
   // Block, String, List[BlockParam], Env, Scope => Computation
-  def evaluate(block: core.Block, hint: String, bound: List[Static[BlockParam]])(using env: Env, scope: Scope): Computation = block match {
+  def evaluate(block: core.Block, hint: String, bound: List[Static])(using env: Env, scope: Scope): Computation = block match {
     case core.Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
       env.lookupComputation(id)
     case core.Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
@@ -126,12 +126,21 @@ class NewNormalizer {
         evaluate(body, Frame.Return, Stack.Unknown)
       })
 
-      val dynamicCapt = env.subst(normalizedBlock.dynamicCapture.toList)
-      val closureParams = bound.filter { bp => dynamicCapt contains bp.id.id }
-
+      val dynamicCapt = (normalizedBlock.dynamicCapture.toList)
+      // HACK: This is a little subtle.
+      // We want to distinguish between static identifiers as written in the source program and
+      // identifiers for the corresponding dynamic references during normalization.
+      // Thereby, the `env` maps static ids to computations that contain the renamed dynamics ids.
+      // For this reason, we have to look up the dynamics id in the values of `env.computations`
+      // rather than in the keys.
+      val closureParams = dynamicCapt.map { c =>
+        env.computations.values.collectFirst {
+          case Computation.Known(bp) if bp.id.id == c => bp: Static
+        }.get
+      }
       val f = Id(hint)
       scope.define(f, normalizedBlock.copy(bparams = normalizedBlock.bparams ++ closureParams.map(_.id)))
-      Computation.Def(Closure(f, closureParams.map { bp => Computation.Known(bp.map(_.id)) }))
+      Computation.Def(Closure(f, closureParams.map { bp => Computation.Known(bp) }))
 
     case core.Block.Unbox(pure) =>
       val addr = evaluate(pure, bound)
@@ -181,7 +190,7 @@ class NewNormalizer {
       Computation.New(interface, ops)
   }
 
-  def evaluate(expr: Expr, bound: List[Static[BlockParam]])(using env: Env, scope: Scope): Addr = expr match {
+  def evaluate(expr: Expr, bound: List[Static])(using env: Env, scope: Scope): Addr = expr match {
     case Expr.ValueVar(id, annotatedType) =>
       env.lookupValue(id)
 
@@ -224,8 +233,8 @@ class NewNormalizer {
       // should capture `counter` but does not since the stack is Stack.Unknown
       // (effekt.JavaScriptTests.examples/pos/capture/borrows.effekt (js))
       // TLDR we need to pass an escaping stack to do a proper escape analysis. Stack.Unkown is insufficient
-      val comp = evaluate(b, "x", bound)
-      scope.allocate("x", Value.Box(comp, annotatedCapture))
+      val comp = evaluate(b, "boxed", bound)
+      scope.allocate("box", Value.Box(comp, annotatedCapture))
   }
 
   // TODO make evaluate(stmt) return BasicBlock (won't work for shift or reset, though)
@@ -380,30 +389,32 @@ class NewNormalizer {
     // State
     case Stmt.Region(BlockLit(Nil, List(capture), Nil, List(cap), body)) =>
       val reg = Id(cap.id)
-      bind(cap.id, Computation.Known(Static.Region(reg))) {
-        evaluate(body, Frame.Return, Stack.Region(BlockParam(reg, cap.tpe, cap.capt), Map.empty, k, ks))
+      val bp = BlockParam(reg, cap.tpe, cap.capt)
+      bind(cap.id, Computation.Known(Static.Region(bp))) {
+        evaluate(body, Frame.Return, Stack.Region(bp, Map.empty, k, ks))
       }
     case Stmt.Region(_) => ???
     case Stmt.Alloc(ref, init, region, body) =>
-      val r = Id(ref)
-      val reg = env.subst(region)
+      val ref1 = Id(ref)
+      val region1 = env.subst(region)
       val addr = evaluate(init, ks.bound)
-      val bp = BlockParam(r, Type.TState(init.tpe), Set(reg))
-      bind(ref, Computation.Known(Static.Reference(r))) {
-        alloc(bp, reg, addr, ks) match {
+      val bp = BlockParam(ref1, Type.TState(init.tpe), Set(region1))
+      bind(ref, Computation.Known(Static.Reference(bp))) {
+        alloc(bp, region1, addr, ks) match {
           case Some(ks1) => evaluate(body, k, ks1)
-          case None => NeutralStmt.Alloc(bp, addr, reg, nested {
+          case None => NeutralStmt.Alloc(bp, addr, region1, nested {
             evaluate(body, k, ks)
           })
         }
       }
 
     case Stmt.Var(ref, init, capture, body) =>
-      val r = Id(ref)
-      val addr = evaluate(init, ks.bound)
-      bind(ref, Computation.Known(Static.Reference(r))) {
-        evaluate(body, Frame.Return, Stack.Var(BlockParam(r, Type.TState(init.tpe), Set(capture)), addr, k, ks))
-      }
+      val ref1 = Id(ref)
+      val addr = evaluate(init, ks.bound)(using env)
+      val bp = BlockParam(ref1, Type.TState(init.tpe), Set(capture))
+      given env1: Env = env.bindComputation(ref, Computation.Known(Static.Reference(bp)))
+      val env2 = env1
+      evaluate(body, Frame.Return, Stack.Var(bp, addr, k, ks))
     case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
       val ref1 = env.subst(ref)
       get(ref1, ks) match {
@@ -441,8 +452,9 @@ class NewNormalizer {
 
     case Stmt.Reset(core.Block.BlockLit(Nil, cparams, Nil, prompt :: Nil, body)) =>
       val p = Id(prompt.id)
-      bind(prompt.id, Computation.Known(Static.Prompt(p))) {
-        evaluate(body, Frame.Return, Stack.Reset(BlockParam(p, prompt.tpe, prompt.capt), k, ks))
+      val bp = BlockParam(p, prompt.tpe, prompt.capt)
+      bind(prompt.id, Computation.Known(Static.Prompt(bp))) {
+        evaluate(body, Frame.Return, Stack.Reset(bp, k, ks))
       }
 
     case Stmt.Reset(_) => ???
@@ -646,7 +658,7 @@ class NewNormalizer {
     case Computation.Def(closure) =>
       etaExpandToBlockLit(closure)
     case Computation.Known(id) =>
-      embedBlockVar(id.id)
+      embedBlockVar(id.id.id)
     case Computation.Continuation(k) => ???
     case Computation.BuiltinExtern(_, _) => ???
     case Computation.New(interface, operations) =>
@@ -674,7 +686,7 @@ class NewNormalizer {
         val origBps = origBparams.zip(origCapts).map { case (bp, c) => core.BlockParam(Id("f"), bp, Set(c)) }
         val origBargs = origBps.map { bp => core.BlockVar(bp.id, bp.tpe, bp.capt) }
         val synthBargs = environment.zip(synthBparams).zip(synthCapts).map {
-          case ((Computation.Known(s), bp), c) => core.BlockVar(s.id, bp, Set(c))
+          case ((Computation.Known(s), bp), c) => core.BlockVar(s.id.id, bp, Set(c))
         }
         val bargs = origBargs ++ synthBargs
 
@@ -744,7 +756,7 @@ class NewNormalizer {
           origBparams.map { case bp => BlockVar(bp.id, bp.tpe, Set()) } ++
             synthBparams.zip(environment).map {
               // TODO: Fix captures
-              case (bp, Computation.Known(s)) => BlockVar(s.id, bp.tpe, Set())
+              case (bp, Computation.Known(s)) => BlockVar(s.id.id, bp.tpe, Set())
             }
 
         core.Operation(

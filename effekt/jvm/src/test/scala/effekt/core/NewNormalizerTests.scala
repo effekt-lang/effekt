@@ -844,6 +844,22 @@ class NewNormalizerTests extends CoreTests {
     val (mainId, actual) = normalize(input)
     assertAlphaEquivalentToplevels(actual, parse(expected), List("run"), List("infixEq"))
   }
+
+  test("Mutable variable being boxed") {
+    val input =
+      """
+        |def main() = {
+        |    var x = 0
+        |    def makeInc() = {
+        |      box { x = x + 1}
+        |    }
+        |    val inc = makeInc()
+        |    (unbox inc)()
+        |    println(x)
+        |}
+        |""".stripMargin
+    normalize(input) // does not throw
+  }
 }
 
 /**

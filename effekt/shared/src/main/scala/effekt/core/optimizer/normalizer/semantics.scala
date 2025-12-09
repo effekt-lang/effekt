@@ -85,7 +85,8 @@ object semantics {
       case Binding.Val(stmt) => stmt.dynamicCapture
       // TODO block args for externs are not supported (for now?)
       case Binding.Run(f, targs, vargs, bargs) => Set.empty
-      case Binding.Unbox(addr: Addr, tpe: BlockType, capt: Captures) => capt // TODO these are the static not dynamic captures
+      case Binding.Unbox(addr: Addr, tpe: BlockType, capt: Captures) =>
+        capt // TODO these are the static not dynamic captures
       case Binding.Get(ref, tpe, cap) => Set(ref)
     }
   }
@@ -221,23 +222,31 @@ object semantics {
     reifyBindings(local, result)
   }
 
-  case class Env(values: Map[Id, Addr], computations: Map[Id, Computation]) {
+  enum RuntimeCapture {
+    case Known(id: Id)
+    case Unknown(id: Id)
+  }
+
+  case class Env(values: Map[Id, Addr], computations: Map[Id, Computation], captures: Map[Id, RuntimeCapture]) {
     def lookupValue(id: Id): Addr = values(id)
-    def bindValue(id: Id, value: Addr): Env = Env(values + (id -> value), computations)
-    def bindValue(newValues: List[(Id, Addr)]): Env = Env(values ++ newValues, computations)
+    def bindValue(id: Id, value: Addr): Env = Env(values + (id -> value), computations, captures)
+    def bindValue(newValues: List[(Id, Addr)]): Env = Env(values ++ newValues, computations, captures)
+
+    def bindCapture(id: Id, c: RuntimeCapture): Env = Env(values, computations, captures + (id -> c))
+    def lookupCapture(id: Id): RuntimeCapture = captures(id)
 
     def lookupComputation(id: Id): Computation = computations.getOrElse(id, sys error s"Unknown computation: ${util.show(id)} -- env: ${computations.map { case (id, comp) => s"${util.show(id)}: $comp" }.mkString("\n") }")
-    def bindComputation(id: Id, computation: Computation): Env = Env(values, computations + (id -> computation))
-    def bindComputation(newComputations: List[(Id, Computation)]): Env = Env(values, computations ++ newComputations)
+    def bindComputation(id: Id, computation: Computation): Env = Env(values, computations + (id -> computation), captures)
+    def bindComputation(newComputations: List[(Id, Computation)]): Env = Env(values, computations ++ newComputations, captures)
     def subst(ids: List[Id]): List[Id] = ids.map(subst)
     def subst(id: Id): Id = computations.get(id) match {
-      case Some(Computation.Known(inner)) => inner.id
+      case Some(Computation.Known(inner)) => inner.id.id
       case Some(Computation.Unknown(id)) => id
       case _ => id
     }
   }
   object Env {
-    def empty: Env = Env(Map.empty, Map.empty)
+    def empty: Env = Env(Map.empty, Map.empty, Map.empty)
   }
   // "handlers"
   def bind[R](id: Id, addr: Addr)(prog: Env ?=> R)(using env: Env): R =
@@ -281,7 +290,7 @@ object semantics {
     case Def(closure: Closure)
 
     // known identifiers introduced by reset, var and region
-    case Known(inner: Static[Id])
+    case Known(inner: Static)
 
     case Continuation(k: Cont)
 
@@ -292,7 +301,7 @@ object semantics {
 
     val free: Variables = this match {
       case Computation.Unknown(id) => Set(id)
-      case Computation.Known(inner) => Set(inner.id)
+      case Computation.Known(inner) => Set(inner.id.id)
       case Computation.Def(closure) => closure.free
       case Computation.Continuation(k) => Set.empty // TODO ???
       case Computation.New(interface, operations) => operations.flatMap(_._2.free).toSet
@@ -301,7 +310,7 @@ object semantics {
 
     val dynamicCapture: Variables = this match {
       case Computation.Unknown(id) => Set(id)
-      case Computation.Known(inner) => Set(inner.id)
+      case Computation.Known(inner) => Set(inner.id.id)
       case Computation.Def(closure) => closure.dynamicCapture
       case Computation.Continuation(k) => Set.empty // TODO ???
       case Computation.New(interface, operations) => operations.flatMap(_._2.dynamicCapture).toSet
@@ -309,23 +318,17 @@ object semantics {
     }
   }
 
-  enum Static[I] {
-    case Prompt(id: I)
-    case Reference(id: I)
-    case Region(id: I)
-    val id: I
-
-    def map[A](f: I => A): Static[A] = this match {
-      case Static.Prompt(id) => Static.Prompt(f(id))
-      case Static.Reference(id) => Static.Reference(f(id))
-      case Static.Region(id) => Static.Region(f(id))
-    }
+  enum Static {
+    case Prompt(id: BlockParam)
+    case Reference(id: BlockParam)
+    case Region(id: BlockParam)
+    val id: BlockParam
   }
 
   // TODO add escaping mutable variables
   case class Closure(label: Label, environment: List[Computation.Known]) {
     val free: Variables = Set(label) ++ environment.flatMap(_.free).toSet
-    val dynamicCapture: Variables = environment.map(_.inner.id).toSet
+    val dynamicCapture: Variables = environment.map(_.inner.id.id).toSet
   }
 
   // Statements
@@ -442,7 +445,7 @@ object semantics {
     // TODO desugar regions into var?
     case Region(id: BlockParam, bindings: Map[BlockParam, Addr], frame: Frame, next: Stack)
 
-    lazy val bound: List[Static[BlockParam]] = this match {
+    lazy val bound: List[Static] = this match {
       case Stack.Empty => List.empty
       case Stack.Unknown => List.empty
       case Stack.Reset(prompt, frame, next) => Static.Prompt(prompt) :: next.bound
@@ -552,7 +555,7 @@ object semantics {
             val k = Id("k")
             val closureParams = escaping.bound.collect { case bp if body.dynamicCapture contains bp.id.id => bp }.toList
             scope.define(k, Block(Nil, ValueParam(x, tpe) :: Nil, closureParams.map(_.id), body))
-            Frame.Dynamic(Closure(k, closureParams.map { bp => Computation.Known(bp.map(_.id)) }))
+            Frame.Dynamic(Closure(k, closureParams.map { bp => Computation.Known(bp) }))
         }
       case Frame.Return => k
       case Frame.Dynamic(label) => k
