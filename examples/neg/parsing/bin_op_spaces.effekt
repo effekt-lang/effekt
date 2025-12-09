@@ -1,0 +1,16 @@
+def main() = {
+  // OK
+  val _ = 1 + 2
+  val _ = 1  + 2
+  val _ = 1 +  2
+  val _ = 1 +
+    2
+
+  // FAIL
+  val _ = 1 +2
+  val _ = 1+ 2
+  val _ = 1+2
+
+  // NOTE: this is here on purpose to showcase error recovery!
+  (
+}
