@@ -19,7 +19,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       // println(PrettyPrinter.format(res))
       val transformed = Context.timed(phaseName, source.name) { transform(res) }
       // println("\n\n\n\nhello")
-      println(PrettyPrinter.format(transformed))
+      // println(PrettyPrinter.format(transformed))
       Some(CoreTransformed(source, tree, mod, transformed))
     }
   }
@@ -97,9 +97,29 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
 
       val flattened = (vargs zip vparamsTypes).map { case (arg, tpe) => flattenArg(arg, tpe) }
       val (allArgs, allTypes, allMatches) = flattened.unzip3
+
+      val transformedBargs = bargs.map { barg =>
+        barg match {
+          // case direct reference here
+          // transform to lambda and then do the same as below for blocklit
+          case BlockVar(id, annotatedTpe, annotatedCapt) => 
+            println(barg.tpe)
+            transform(barg)
+
+          case BlockLit(btparams, bcparams, bvparams, bbparams, body) =>
+            // Keep the signature unchanged
+            // But recursively transform the body
+            val transformedBody = transform(body)
+            println(barg.tpe)
+            BlockLit(btparams, bcparams, bvparams, bbparams, transformedBody)
+          
+          case _ => 
+            transform(barg)
+        }
+      }
       
       val newCallee = BlockVar(id, BlockType.Function(tparams, cparams, allTypes.flatten, bparams, returnTpe), annotatedCapt)
-      val innerApp = Stmt.App(newCallee, targs, allArgs.flatten, bargs map transform)
+      val innerApp = Stmt.App(newCallee, targs, allArgs.flatten, transformedBargs)
       
       allMatches.flatten.foldRight(innerApp) {
         case ((scrutinee, ctor, params), body) =>
