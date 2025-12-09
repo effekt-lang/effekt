@@ -12,23 +12,3 @@ void* initializeArena(void) {
         0                             // Offset
     );
 }
-
-void reuseFreePrint(void* ptr) {
-    printf("[reuseFree]: %p\n", ptr);
-}
-
-void reuseTodoPrint(void* ptr) {
-    printf("[reuseTodo]: %p\n", ptr);
-}
-
-void bumpNewPrint(void* ptr) {
-    printf("[bumpNew]: %p\n", ptr);
-}
-
-void pushOntoFreeListPrint(void* ptr) {
-    printf("[pushOntoFreeList]: %p\n", ptr);
-}
-
-void pushOntoTodoListPrint(void* ptr) {
-    printf("[pushOntoTodoList]: %p\n", ptr);
-}

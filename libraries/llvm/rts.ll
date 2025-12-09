@@ -94,12 +94,6 @@
 
 ; Foreign imports
 declare ptr @initializeArena()
-declare ptr @reuseFreePrint(ptr)
-declare ptr @reuseTodoPrint(ptr)
-declare ptr @bumpNewPrint(ptr)
-declare ptr @pushOntoFreeListPrint(ptr)
-declare ptr @pushOntoTodoListPrint(ptr)
-
 
 declare ptr @malloc(i64)
 declare void @free(ptr)
@@ -161,9 +155,6 @@ freeReuse:
   %freeNext = load %struct.Slot*, %struct.Slot** %freeNextPtr, align 8
   store %struct.Slot* %freeNext, %struct.Slot** @freeList, align 8
 
-  ; TODO: DELETE
-  call void @reuseFreePrint(ptr %freeHead)
-
   ret %struct.Slot* %freeHead
 
 checkTodo:
@@ -183,9 +174,6 @@ todoReuse:
   %eraser = load %Eraser, void (%struct.Slot*)** %eraserptr, align 8, !alias.scope !14, !noalias !24
   tail call void %eraser(%struct.Slot* %todoHead)
 
-  ; TODO: DELETE
-  call void @reuseTodoPrint(ptr %todoHead)
-
   ret %struct.Slot* %todoHead
 
 ; 3. Fallback - Bump Path: We have to allocate a new block.
@@ -198,19 +186,12 @@ bumpAlloc:
 
   store ptr %nextBump, i8** @nextUnusedSlot, align 8
 
-  ; TODO: DELETE
-  call void @bumpNewPrint(ptr %fresh)
-
   ret %struct.Slot* %fresh
 }
 
 ; Pushes a slot on the top of the free-List.
 define private void @pushOntoFreeList(%struct.Slot* %slot) nounwind {
 entry:
-
-  ; TODO: DELETE
-  call void @pushOntoFreeListPrint(ptr %slot)
-
   ; oldHead = freeList
   %oldHead = load %struct.Slot*, %struct.Slot** @freeList, align 8
 
@@ -227,9 +208,6 @@ entry:
 ; Pushes a slot on the top of the To-Do-List.
 define private void @pushOntoTodoList(%struct.Slot* %slot) nounwind {
 entry:
-  ; TODO: DELETE
-  call void @pushOntoTodoListPrint(ptr %slot)
-
   ; oldHead = todoList
   %oldHead = load %struct.Slot*, %struct.Slot** @todoList, align 8
 
