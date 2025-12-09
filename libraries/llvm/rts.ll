@@ -97,8 +97,6 @@
 declare void @initializeMemory()
 declare ptr @acquire()
 declare void @pushOntoFreeList(ptr)
-declare void @test(ptr)
-declare void @testIfAllSlotsAreFreed()
 
 
 declare ptr @malloc(i64)
