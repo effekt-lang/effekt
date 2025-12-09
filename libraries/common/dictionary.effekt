@@ -82,7 +82,7 @@ def lookup[A](trie: Dictionary[A], key: ByteArray): Option[A] = {
 record Tagged[A](key: ByteArray, value: A)
 
 /// Collect key-value pairs from a stream of Tagged elements into a Dictionary.
-def collectTrie[A] { stream: () => Unit / emit[Tagged[A]] }: Dictionary[A] = {
+def collect[A] { stream: () => Unit / emit[Tagged[A]] }: Dictionary[A] = {
   var trie = Empty()
   for[Tagged[A]] { stream() } { case Tagged(bytes, value) =>
     trie = trie.insert(bytes, value)
