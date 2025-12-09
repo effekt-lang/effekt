@@ -12,7 +12,7 @@ class LexerTests extends munit.FunSuite {
 
   def assertTokensEq(prog: String, expected: TokenKind*)(using Location): Unit = {
     val tokens = Lexer.lex(StringSource(prog, ""))
-    assertEquals(tokens.map { t => t.kind }, expected.toVector)
+    assertEquals(tokens.map { t => t.kind }.filterNot { k => k == Space }, expected.toVector)
   }
 
   def assertSuccess(prog: String)(using Location): Unit =

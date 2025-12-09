@@ -114,6 +114,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   // always points to the latest non-space position
   var position: Int = 0
+  spaces() // HACK: eat spaces before we begin!
 
   def recover(tokenKind: TokenKind, tokenPosition: Int): TokenKind = tokenKind match {
     case TokenKind.Error(err) =>
@@ -141,11 +142,19 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def peek: Token = tokens(position).failOnErrorToken(position)
 
-  /**
-   * Negative lookahead
-   */
-  def lookbehind(offset: Int): Token =
-    tokens(position - offset)
+  def sawNewlineLast: Boolean = {
+    @tailrec
+    def go(position: Int): Boolean =
+      if position < 0 then fail("Unexpected start of file")
+
+      tokens(position).failOnErrorToken(position) match {
+        case token if isSpace(token.kind) && token.kind != Newline => go(position - 1)
+        case token if token.kind == Newline => true
+        case _ => false
+      }
+
+    go(position - 1)
+  }
 
   /**
    * Peeks n tokens ahead of the current one.
@@ -317,7 +326,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
     // \n   while
     //      ^
-    case _ => lookbehind(1).kind == Newline
+    case _ => sawNewlineLast
   }
   def semi(): Unit = peek.kind match {
     // \n   ; while
@@ -329,7 +338,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
     // \n   while
     //      ^
-    case _ if lookbehind(1).kind == Newline => ()
+    case _ if sawNewlineLast => ()
 
     case _ => fail("Expected terminator: `;` or a newline")
   }
@@ -1054,28 +1063,11 @@ class Parser(tokens: Seq[Token], source: Source) {
   def TypeTuple(tps: Many[Type]): Type =
     TypeRef(IdRef(List("effekt"), s"Tuple${tps.size}", tps.span.synthesized), tps, tps.span.synthesized)
 
-  // Check that the current token is surrounded by whitespace.
-  // If not, soft fail.
-  //
-  // NOTE: Ideally, we'd reintroduce whitespace tokens and then just check here that
-  //       the tokens at `position - 1` and `position + 1` are in fact, `isSpace`.
-  //       But as of writing this, lexer doesn't even report whitespace tokens, so they never reach here.
+  // Check that the current token is surrounded by whitespace. If not, soft fail.
   private def checkBinaryOpWhitespace(): Unit = {
-    val opToken = peek
-    val opStart = opToken.start
-    val opEnd = opToken.end
-
-    // Check character immediately before operator
-    val wsBefore = opStart > 0 && {
-      val charBefore = source.content.charAt(opStart - 1)
-      charBefore.isWhitespace
-    }
-
-    // Check character immediately after operator
-    val wsAfter = opEnd + 1 < source.content.length && {
-      val charAfter = source.content.charAt(opEnd + 1)
-      charAfter.isWhitespace
-    }
+    // position points to the operator token in the raw token array
+    val wsBefore = position     > 0             && isSpace(tokens(position - 1).kind)
+    val wsAfter  = position + 1 < tokens.length && isSpace(tokens(position + 1).kind)
 
     if (!wsBefore || !wsAfter) {
       softFail(s"Missing whitespace around binary operator", position, position)
@@ -1130,7 +1122,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   // argument lists cannot follow a linebreak:
   //   foo      ==    foo;
   //   ()             ()
-  def isArguments: Boolean = lookbehind(1).kind != Newline && (peek(`(`) || peek(`[`) || peek(`{`))
+  def isArguments: Boolean = !sawNewlineLast && (peek(`(`) || peek(`[`) || peek(`{`))
   def arguments(): (List[ValueType], List[ValueArg], List[Term]) =
     if (!isArguments) fail("at least one argument section (types, values, or blocks)", peek.kind)
     (maybeTypeArgs().unspan, maybeValueArgs(), maybeBlockArgs())
