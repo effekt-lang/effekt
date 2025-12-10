@@ -36,7 +36,7 @@ trait ChezScheme extends Compiler[String] {
   override def supportedFeatureFlags: List[String] = List("chez")
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
-    case Stage.Core => Core(source).map { res => core.PrettyPrinter(Context.config.printDetailedIR()).format(res.core) }
+    case Stage.Core => Core(source).map { res => core.PrettyPrinter(Context.config.debug()).format(res.core) }
     case Stage.CPS => None
     case Stage.Machine => None
     case Stage.Target => Separate(source).map { res => pretty(res) }
