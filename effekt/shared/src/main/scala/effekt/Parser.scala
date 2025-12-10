@@ -1065,7 +1065,6 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   // Check that the current token is surrounded by whitespace. If not, soft fail.
   private def checkBinaryOpWhitespace(): Unit = {
-    // position points to the operator token in the raw token array
     val wsBefore = position     > 0             && isSpace(tokens(position - 1).kind)
     val wsAfter  = position + 1 < tokens.length && isSpace(tokens(position + 1).kind)
 
