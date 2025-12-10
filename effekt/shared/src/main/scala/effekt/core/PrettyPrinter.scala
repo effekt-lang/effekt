@@ -105,7 +105,12 @@ class PrettyPrinter(printDetails: Boolean) extends ParenPrettyPrinter {
 
   def toDoc(p: ValueParam): Doc = toDoc(p.id) <> ":" <+> toDoc(p.tpe)
   def toDoc(p: BlockParam): Doc = braces(toDoc(p.id) <> ":" <+> toDoc(p.tpe))
-  def toDoc(cparam: Id, bparam: BlockParam): Doc = braces(toDoc(bparam.id) <+> "@" <+> toDoc(cparam) <> ":" <+> toDoc(bparam.tpe))
+  def toDoc(cparam: Id, bparam: BlockParam): Doc = {
+    if printDetails then
+      braces(toDoc(bparam.id) <+> "@" <+> toDoc(cparam) <> ":" <+> toDoc(bparam.tpe))
+    else
+      braces(toDoc(bparam.id) <> ":" <+> toDoc(bparam.tpe))
+  }
 
   //def toDoc(n: Name): Doc = n.toString
 
@@ -229,10 +234,13 @@ class PrettyPrinter(printDetails: Boolean) extends ParenPrettyPrinter {
       "return" <+> toDoc(e)
 
     case Val(id, tpe, binding, body) =>
-      // RHS must be a single `stmt`, so we have to wrap it in a block.
-      val pBinding = if printDetails then block(toDocStmts(binding)) else toDocStmts(binding)
-      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> pBinding <> ";" <> line <>
-        toDocStmts(body)
+      if printDetails then
+        // RHS must be a single `stmt`, so we have to wrap it in a block.
+        "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> block(toDocStmts(binding)) <> ";" <> line <>
+          toDocStmts(body)
+      else
+        "val" <+> toDoc(id) <+> "=" <+> toDocStmts(binding) <> ";" <> line <>
+          toDocStmts(body)
 
     case App(b, targs, vargs, bargs) =>
       toDoc(b) <> argsToDoc(targs, vargs, bargs)
@@ -258,16 +266,25 @@ class PrettyPrinter(printDetails: Boolean) extends ParenPrettyPrinter {
         toDocStmts(body)
 
     case Var(ref, init, cap, body) =>
-      "var" <+> toDoc(ref) <+> "@" <+> toDoc(cap) <+> "=" <+> toDoc(init) <> ";" <> line <>
-        toDocStmts(body)
+      if printDetails then
+        "var" <+> toDoc(ref) <+> "@" <+> toDoc(cap) <+> "=" <+> toDoc(init) <> ";" <> line <> toDocStmts(body)
+      else
+        "var" <+> toDoc(ref) <+> "=" <+> toDoc(init) <> ";" <> line <> toDocStmts(body)
 
     case Get(id, tpe, ref, capt, body) =>
-      "get" <+> toDoc(id) <+> ":" <+> toDoc(tpe) <+> "=" <+> "!" <+> toDoc(ref) <+> "@" <+> toDocSingleCapture(capt) <> ";" <> line <>
-        toDocStmts(body)
+      if printDetails then
+        "get" <+> toDoc(id) <+> ":" <+> toDoc(tpe) <+> "=" <+> "!" <+> toDoc(ref) <+> "@" <+> toDocSingleCapture(capt) <> ";" <> line <>
+          toDocStmts(body)
+      else
+        "get" <+> toDoc(id) <+> "=" <+> "!" <+> toDoc(ref) <> ";" <> line <> toDocStmts(body)
 
     case Put(ref, capt, value, body) =>
-      "put" <+> toDoc(ref) <+> "@" <+> toDocSingleCapture(capt) <+> "=" <+> toDoc(value) <> ";" <> line <>
-        toDocStmts(body)
+      if printDetails then
+        "put" <+> toDoc(ref) <+> "@" <+> toDocSingleCapture(capt) <+> "=" <+> toDoc(value) <> ";" <> line <>
+          toDocStmts(body)
+      else
+        "put" <+> toDoc(ref) <+> "=" <+> toDoc(value) <> ";" <> line <>
+          toDocStmts(body)
 
     case Region(body) =>
       "region" <+> toDoc(body)
