@@ -64,7 +64,7 @@ object semantics {
     case Rec(block: Block, tpe: BlockType, capt: Captures)
     case Val(stmt: NeutralStmt)
     case Run(f: BlockVar, targs: List[ValueType], vargs: List[Addr], bargs: List[Computation])
-    case Unbox(addr: Addr, tpe: BlockType, capt: Captures)
+    case Unbox(addr: Addr, tpe: BlockType, capt: Set[RuntimeCapture])
     case Get(ref: Id, tpe: ValueType, cap: Captures)
 
     val free: Variables = this match {
@@ -74,7 +74,7 @@ object semantics {
       case Binding.Val(stmt) => stmt.free
       // TODO block args for externs are not supported (for now?)
       case Binding.Run(f, targs, vargs, bargs) => vargs.toSet
-      case Binding.Unbox(addr: Addr, tpe: BlockType, capt: Captures) => Set(addr)
+      case Binding.Unbox(addr, tpe: BlockType, capt) => Set(addr)
       case Binding.Get(ref, tpe, cap) => Set(ref)
     }
 
@@ -85,8 +85,10 @@ object semantics {
       case Binding.Val(stmt) => stmt.dynamicCapture
       // TODO block args for externs are not supported (for now?)
       case Binding.Run(f, targs, vargs, bargs) => Set.empty
-      case Binding.Unbox(addr: Addr, tpe: BlockType, capt: Captures) =>
-        capt // TODO these are the static not dynamic captures
+      case Binding.Unbox(addr, tpe: BlockType, capt) =>
+        capt.collect {
+          case RuntimeCapture.Known(id) => id.id.id
+        }
       case Binding.Get(ref, tpe, cap) => Set(ref)
     }
   }
@@ -143,7 +145,7 @@ object semantics {
       addr
     }
 
-    def unbox(innerAddr: Addr, tpe: BlockType, capt: Captures): Addr = {
+    def unbox(innerAddr: Addr, tpe: BlockType, capt: Set[RuntimeCapture]): Addr = {
       val unboxAddr = Id("unbox")
       bindings = bindings.updated(unboxAddr, Binding.Unbox(innerAddr, tpe, capt))
       unboxAddr
@@ -223,7 +225,7 @@ object semantics {
   }
 
   enum RuntimeCapture {
-    case Known(id: Id)
+    case Known(id: Static)
     case Unknown(id: Id)
   }
 
@@ -248,7 +250,8 @@ object semantics {
     def bindValue(newValues: List[(Id, Addr)]): Env = Env(values ++ newValues, computations, captures)
 
     def bindCapture(id: Id, c: RuntimeCapture): Env = Env(values, computations, captures + (id -> Set(c)))
-    def lookupCapture(id: Id): Set[RuntimeCapture] = captures(id)
+    def bindCapture(cs: Set[(Id, Set[RuntimeCapture])]): Env = Env(values, computations, captures ++ cs.toMap)
+    def lookupCapture(id: Id): Set[RuntimeCapture] = captures.get(id).getOrElse(Set(RuntimeCapture.Unknown(id)))
 
     def lookupComputation(id: Id): Computation = computations.getOrElse(id, sys error s"Unknown computation: ${util.show(id)} -- env: ${computations.map { case (id, comp) => s"${util.show(id)}: $comp" }.mkString("\n") }")
     def bindComputation(id: Id, computation: Computation): Env = Env(values, computations + (id -> computation), captures)
@@ -405,8 +408,8 @@ object semantics {
       case NeutralStmt.If(cond, thn, els) => thn.dynamicCapture ++ els.dynamicCapture
       case NeutralStmt.Match(scrutinee, clauses, default) => clauses.flatMap(_._2.dynamicCapture).toSet ++ default.map(_.dynamicCapture).getOrElse(Set.empty)
       case NeutralStmt.Reset(prompt, body) => body.dynamicCapture - prompt.id
-      case NeutralStmt.Shift(prompt, capt, k, body) => (body.dynamicCapture - k.id) + prompt
-      case NeutralStmt.Resume(k, body) => Set(k) ++ body.dynamicCapture
+      case NeutralStmt.Shift(prompt, capt, k, body) => body.dynamicCapture + prompt
+      case NeutralStmt.Resume(k, body) => body.dynamicCapture
       case NeutralStmt.Var(id, init, body) => body.dynamicCapture - id.id
       case NeutralStmt.Put(ref, tpe, cap, value, body) => Set(ref) ++ body.dynamicCapture
       case NeutralStmt.Region(id, body) => body.dynamicCapture - id.id
@@ -749,9 +752,7 @@ object semantics {
     def toDoc(comp: Computation): Doc = comp match {
       case Computation.Unknown(id) => toDoc(id)
       case Computation.Def(closure) => toDoc(closure)
-      case Computation.Known(Static.Reference(id)) => "ref@" <> toDoc(id)
-      case Computation.Known(Static.Region(id)) => "reg@" <> toDoc(id)
-      case Computation.Known(Static.Prompt(id)) => "p@" <> toDoc(id)
+      case Computation.Known(s) => toDoc(s)
       case Computation.Continuation(k) => ???
       case Computation.New(interface, operations) => "new" <+> toDoc(interface) <+> braces {
         hsep(operations.map { case (id, impl) => "def" <+> toDoc(id) <+> "=" <+> toDoc(impl) }, ",")
@@ -760,6 +761,12 @@ object semantics {
     }
     def toDoc(closure: Closure): Doc = closure match {
       case Closure(label, env) => toDoc(label) <+> "@" <+> brackets(hsep(env.map(toDoc), comma))
+    }
+
+    def toDoc(s: Static): Doc = s match {
+      case Static.Reference(id) => "ref@" <> toDoc(id.id)
+      case Static.Region(id) => "reg@" <> toDoc(id.id)
+      case Static.Prompt(id) => "p@" <> toDoc(id.id)
     }
 
     def toDoc(bindings: Bindings): Doc =
@@ -771,7 +778,10 @@ object semantics {
         case (addr, Binding.Run(callee, targs, vargs, bargs)) => "let !" <+> toDoc(addr) <+> "=" <+> toDoc(callee.id) <>
           (if (targs.isEmpty) emptyDoc else brackets(hsep(targs.map(toDoc), comma))) <>
           parens(hsep(vargs.map(toDoc), comma)) <> hcat(bargs.map(b => braces { toDoc(b) })) <> line
-        case (addr, Binding.Unbox(innerAddr, tpe, capt)) => "def" <+> toDoc(addr) <+> "=" <+> "unbox" <+> toDoc(innerAddr) <> line
+        case (addr, Binding.Unbox(innerAddr, tpe, capt)) => "def" <+> toDoc(addr) <+> "=" <+> "unbox" <+> toDoc(innerAddr) <+> "@" <+> brackets(hsep(capt.map {
+          case RuntimeCapture.Known(id) => toDoc(id)
+          case RuntimeCapture.Unknown(id) => toDoc(id)
+        }.toSeq, ", ")) <> line
         case (addr, Binding.Get(ref, tpe, cap)) => "let" <+> toDoc(addr) <+> "=" <+> "!" <> toDoc(ref) <> line
       })
 

@@ -66,7 +66,7 @@ class NewNormalizer {
 
         // we keep the params as they are for now...
         given localEnv: Env = env
-          .bindValue(vparams.map(p => p.id -> p.id))
+          .bindValue(vparams.map { p => p.id -> p.id })
           .bindComputation(bparams.map(p => p.id -> Computation.Unknown(p.id)))
           // Assume that we capture nothing
           .bindComputation(id, Computation.Def(Closure(freshened, Nil)))
@@ -77,8 +77,22 @@ class NewNormalizer {
           })
         }
 
-        val dynamicCapt = env.subst(normalizedBlock.dynamicCapture.toList)
-        val closureParams = bound.filter { bp => dynamicCapt.map(_.id) contains bp.id.id }
+        val dynamicCapt = normalizedBlock.dynamicCapture.toList
+        // HACK: This is a little subtle.
+        // We want to distinguish between static identifiers as written in the source program and
+        // identifiers for the corresponding dynamic references during normalization.
+        // Thereby, the `env` maps static ids to computations that contain the renamed dynamics ids.
+        // For this reason, we have to look up the dynamics id in the values of `env.computations`
+        // rather than in the keys.
+        // util.trace(env.computations.collect {
+        //  case (id, Computation.Known(s)) => id.show ++ "->" ++ s.id.id.show
+        //}, env.computations.mkString(", "))
+        val closureParams = dynamicCapt.map { c =>
+          //util.trace(c.show)
+          env.computations.values.collectFirst {
+            case Computation.Known(bp) if bp.id.id == c => bp: Static
+          }.get
+        }
 
         // Only normalize again if we actually we wrong in our assumption that we capture nothing
         // We might run into exponential complexity for nested recursive functions
@@ -126,7 +140,7 @@ class NewNormalizer {
         evaluate(body, Frame.Return, Stack.Unknown)
       })
 
-      val dynamicCapt = (normalizedBlock.dynamicCapture.toList)
+      val dynamicCapt = normalizedBlock.dynamicCapture.toList
       // HACK: This is a little subtle.
       // We want to distinguish between static identifiers as written in the source program and
       // identifiers for the corresponding dynamic references during normalization.
@@ -151,8 +165,15 @@ class NewNormalizer {
             case Boxed(tpe, capt) => (tpe, capt)
             case _ => sys error "should not happen"
           }
+          //util.trace(capt.map(_.show).mkString(", "))
+          //env.captures.foreach { (k, v) =>
+          //  util.trace(k.show, v.map {
+          //    case semantics.RuntimeCapture.Known(id) => id.id.id.show
+          //    case semantics.RuntimeCapture.Unknown(id) => id.show
+          //  }.mkString(", "))
+          //}
           // TODO translate static capture set capt to a dynamic capture set (e.g. {exc} -> {@p_17})
-          val unboxAddr = scope.unbox(addr, tpe, capt)
+          val unboxAddr = scope.unbox(addr, tpe, capt.flatMap { env.lookupCapture(_) })
           Computation.Unknown(unboxAddr)
         }
       }
@@ -390,6 +411,7 @@ class NewNormalizer {
     case Stmt.Region(BlockLit(Nil, List(capture), Nil, List(cap), body)) =>
       val reg = Id(cap.id)
       val bp = BlockParam(reg, cap.tpe, cap.capt)
+      val captures1 = cap.capt
       bind(cap.id, Computation.Known(Static.Region(bp))) {
         evaluate(body, Frame.Return, Stack.Region(bp, Map.empty, k, ks))
       }
@@ -409,10 +431,12 @@ class NewNormalizer {
       }
 
     case Stmt.Var(ref, init, capture, body) =>
-      val ref1 = Id(ref)
+      val label = Id(ref)
+      val runtimeCaptureRegion = label
       val addr = evaluate(init, ks.bound)(using env)
-      val bp = BlockParam(ref1, Type.TState(init.tpe), Set(capture))
+      val bp = BlockParam(label, Type.TState(init.tpe), Set(runtimeCaptureRegion))
       given env1: Env = env.bindComputation(ref, Computation.Known(Static.Reference(bp)))
+        .bindCapture(capture, RuntimeCapture.Known(Static.Reference(bp)))
       val env2 = env1
       evaluate(body, Frame.Return, Stack.Var(bp, addr, k, ks))
     case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
@@ -452,10 +476,12 @@ class NewNormalizer {
 
     case Stmt.Reset(core.Block.BlockLit(Nil, cparams, Nil, prompt :: Nil, body)) =>
       val p = Id(prompt.id)
-      val bp = BlockParam(p, prompt.tpe, prompt.capt)
-      bind(prompt.id, Computation.Known(Static.Prompt(bp))) {
-        evaluate(body, Frame.Return, Stack.Reset(bp, k, ks))
-      }
+      val captures = p
+      val bp = BlockParam(p, prompt.tpe, Set(captures))
+      given Env = env.bindComputation(prompt.id, Computation.Known(Static.Prompt(bp)))
+        // only ever one capture assumed here
+        .bindCapture(prompt.capt.head, RuntimeCapture.Known(Static.Prompt(bp)))
+      evaluate(body, Frame.Return, Stack.Reset(bp, k, ks))
 
     case Stmt.Reset(_) => ???
     case Stmt.Resume(k2, body) =>
@@ -627,7 +653,10 @@ class NewNormalizer {
           core.ImpureApp(id, callee, targs, vargs1, bargs1, rest(G.bind(id, tpe)))
         case ((id, Binding.Unbox(addr, tpe, capt)), rest) => G =>
           val pureValue = embedExpr(addr)(using G)
-          Stmt.Def(id, core.Block.Unbox(pureValue), rest(G.bind(id, tpe, capt)))
+          val c = capt.collect {
+            case RuntimeCapture.Unknown(id) => id
+          }
+          Stmt.Def(id, core.Block.Unbox(pureValue), rest(G.bind(id, tpe, c)))
         case ((id, Binding.Get(ref, tpe, cap)), rest) => G =>
           Stmt.Get(id, tpe, ref, cap, rest(G.bind(id, tpe)) )
       }(G)

@@ -537,7 +537,7 @@ class NewNormalizerTests extends CoreTests {
       |  println(x)
       |}
       """.stripMargin
-    
+
     normalize(input)
   }
 
@@ -547,14 +547,14 @@ class NewNormalizerTests extends CoreTests {
       |effect Eff(): Unit
       |def main() = {
       |  var x = 0
-      |  try { 
+      |  try {
       |    x = 1
       |    do Eff()
       |  } with Eff { resume(()) }
       |  println(x)
       |}
       """.stripMargin
-    
+
     normalize(input)
   }
 
@@ -577,7 +577,7 @@ class NewNormalizerTests extends CoreTests {
 
     normalize(input)
   }
-  
+
   test("basic region usage") {
     val input =
       """
@@ -593,7 +593,7 @@ class NewNormalizerTests extends CoreTests {
 
     normalize(input)
   }
-  
+
   test("region parameter") {
     val input =
       """
@@ -609,7 +609,7 @@ class NewNormalizerTests extends CoreTests {
         | println(y)
         |}
         |""".stripMargin
-        
+
     normalize(input)
   }
 
