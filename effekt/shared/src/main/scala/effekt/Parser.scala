@@ -70,7 +70,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   def parse(input: Input)(using C: Context): Option[ModuleDecl] = {
     def reportRecoverableDiagnostics()(using C: Context): Unit =
       recoverableDiagnostics.foreach { d =>
-        val parserError = report(d.message, d.positionStart, d.positionEnd, d.kind)
+        report(d.message, d.positionStart, d.positionEnd, d.kind)
       }
 
     try {
@@ -1071,7 +1071,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     val wsAfter  = position + 1 < tokens.length && isSpace(tokens(position + 1).kind)
 
     if (!wsBefore || !wsAfter) {
-      softFail(s"Missing whitespace around binary operator", position, position)
+      warn(s"Missing whitespace around binary operator", position, position)
     }
   }
 
