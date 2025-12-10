@@ -10,7 +10,7 @@ object messages {
   type EffektMessages = Vector[EffektError]
 
   sealed trait EffektError extends Message
-  case class ParseError(message: String, range: Option[Range]) extends EffektError { val severity = Error }
+  case class ParseError(message: String, range: Option[Range], severity: Severity) extends EffektError
   case class AmbiguousOverloadError(matches: List[(symbols.BlockSymbol, symbols.FunctionType)], range: Option[Range]) extends EffektError { val severity = Error }
   case class FailedOverloadError(failedAttempts: List[(symbols.BlockSymbol, symbols.FunctionType, EffektMessages)], range: Option[Range]) extends EffektError { val severity = Error }
   case class PlainTextError(content: String, range: Option[Range], severity: Severity) extends EffektError

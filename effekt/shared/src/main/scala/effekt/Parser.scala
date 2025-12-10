@@ -7,6 +7,7 @@ import effekt.source.*
 import effekt.source.Origin.Synthesized
 import effekt.util.VirtualSource
 import kiama.parsing.{Input, ParseResult}
+import kiama.util.Severities.Severity
 import kiama.util.{Position, Range, Source}
 
 import scala.annotation.{tailrec, targetName}
@@ -52,23 +53,24 @@ object Fail {
   def expectedButGot(expected: String, got: String, position: Int): Fail =
     Fail(s"Expected ${expected} but got ${got}", position)
 }
-case class SoftFail(message: String, positionStart: Int, positionEnd: Int)
+
+case class RecoverableDiagnostic(kind: Severity, message: String, positionStart: Int, positionEnd: Int)
 
 class Parser(tokens: Seq[Token], source: Source) {
 
-  var softFails: ListBuffer[SoftFail] = ListBuffer[SoftFail]()
+  var recoverableDiagnostics: ListBuffer[RecoverableDiagnostic] = ListBuffer[RecoverableDiagnostic]()
 
-  private def report(msg: String, fromPosition: Int, toPosition: Int, source: Source = source)(using C: Context) = {
+  private def report(msg: String, fromPosition: Int, toPosition: Int, severity: Severity = kiama.util.Severities.Error, source: Source = source)(using C: Context) = {
     val from = source.offsetToPosition(tokens(fromPosition).start)
     val to = source.offsetToPosition(tokens(toPosition).end + 1)
     val range = Range(from, to)
-    C.report(effekt.util.messages.ParseError(msg, Some(range)))
+    C.report(effekt.util.messages.ParseError(msg, Some(range), severity))
   }
 
   def parse(input: Input)(using C: Context): Option[ModuleDecl] = {
-    def reportSoftFails()(using C: Context): Unit =
-      softFails.foreach {
-        case SoftFail(msg, from, to) => report(msg, from, to, source = input.source)
+    def reportRecoverableDiagnostics()(using C: Context): Unit =
+      recoverableDiagnostics.foreach { d =>
+        val parserError = report(d.message, d.positionStart, d.positionEnd, d.kind)
       }
 
     try {
@@ -78,13 +80,13 @@ class Parser(tokens: Seq[Token], source: Source) {
       //val after = System.currentTimeMillis()
       //println(s"${input.source.name}: ${after - before}ms")
 
-      // Report soft fails
-      reportSoftFails()
-      if softFails.isEmpty then res else None
+      // Report recoverable diagnostics
+      reportRecoverableDiagnostics()
+      if recoverableDiagnostics.isEmpty then res else None
     } catch {
       case Fail(msg, pos) =>
         // Don't forget soft fails!
-        reportSoftFails()
+        reportRecoverableDiagnostics()
 
         report(msg, pos, pos, source = input.source)
         None
@@ -591,7 +593,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     // If we can't parse `effectDef` or `operationDef`, we should try parsing an interface with the wrong keyword
     // and report an error to the user if the malformed interface would be valid.
     def interfaceDefUsingEffect(): Maybe[InterfaceDef] =
-      backtrack(restoreSoftFails = false):
+      backtrack(restoreRecoverable = false):
         softFailWith("Unexpected 'effect', did you mean to declare an interface of multiple operations using the 'interface' keyword?"):
           interfaceDef(info, `effect`)
 
@@ -1615,9 +1617,11 @@ class Parser(tokens: Seq[Token], source: Source) {
   def fail(msg: String): Nothing =
     throw Fail(msg, position)
 
-  def softFail(message: String, start: Int, end: Int): Unit = {
-    softFails += SoftFail(message, start, end)
-  }
+  def softFail(message: String, start: Int, end: Int): Unit =
+    recoverableDiagnostics += RecoverableDiagnostic(kiama.util.Severities.Error, message, start, end)
+
+  def warn(message: String, start: Int, end: Int): Unit =
+    recoverableDiagnostics += RecoverableDiagnostic(kiama.util.Severities.Warning, message, start, end)
 
   inline def softFailWith[T](inline message: String)(inline p: => T): T = {
     val startPosition = position
@@ -1638,21 +1642,21 @@ class Parser(tokens: Seq[Token], source: Source) {
   inline def when[T](t: TokenKind)(inline thn: => T)(inline els: => T): T =
     if peek(t) then { consume(t); thn } else els
 
-  inline def backtrack[T](inline restoreSoftFails: Boolean = true)(inline p: => T): Maybe[T] =
+  inline def backtrack[T](inline restoreRecoverable: Boolean = true)(inline p: => T): Maybe[T] =
     val before = position
     val beforePrevious = previous
     val labelBefore = currentLabel
-    val softFailsBefore = softFails.clone()
+    val recoverableBefore = recoverableDiagnostics.clone()
     try { Maybe.Some(p, span(tokens(before).end)) } catch {
       case Fail(_, _) => {
         position = before
         previous = beforePrevious
         currentLabel = labelBefore
-        if restoreSoftFails then softFails = softFailsBefore
+        if restoreRecoverable then recoverableDiagnostics = recoverableBefore
         Maybe.None(Span(source, pos(), pos(), Synthesized))
       }
     }
-  inline def backtrack[T](inline p: => T): Maybe[T] = backtrack(restoreSoftFails = true)(p)
+  inline def backtrack[T](inline p: => T): Maybe[T] = backtrack(restoreRecoverable = true)(p)
 
   def interleave[A](xs: List[A], ys: List[A]): List[A] = (xs, ys) match {
     case (x :: xs, y :: ys) => x :: y :: interleave(xs, ys)
