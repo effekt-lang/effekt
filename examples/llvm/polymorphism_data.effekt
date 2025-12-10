@@ -15,24 +15,24 @@ def map[A,B](l: List[A]){ f: A => B }: List[B] = {
 
 def show(i: Int): String = {
   def impl_digit(i: Int): String = {
-    if(i==0){"0"} else
-    if(i==1){"1"} else
-    if(i==2){"2"} else
-    if(i==3){"3"} else
-    if(i==4){"4"} else
-    if(i==5){"5"} else
-    if(i==6){"6"} else
-    if(i==7){"7"} else
-    if(i==8){"8"} else
-    if(i==9){"9"} else
+    if(i == 0){"0"} else
+    if(i == 1){"1"} else
+    if(i == 2){"2"} else
+    if(i == 3){"3"} else
+    if(i == 4){"4"} else
+    if(i == 5){"5"} else
+    if(i == 6){"6"} else
+    if(i == 7){"7"} else
+    if(i == 8){"8"} else
+    if(i == 9){"9"} else
     "?"
   }
   def impl(i: Int): String = {
-    if(i<10){impl_digit(i)}else{
-      impl(i/10) ++ impl_digit(mod(i,10))
+    if(i < 10){impl_digit(i)}else{
+      impl(i / 10) ++ impl_digit(mod(i, 10))
     }
   }
-  if(i==0) {
+  if(i == 0) {
     "0"
   } else {
     impl(i)

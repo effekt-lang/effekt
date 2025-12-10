@@ -288,9 +288,6 @@ class Lexer(source: Source) extends Iterator[Token] {
   override def hasNext: Boolean = !eof
 
   override def next(): Token =
-    if !resumeStringNext || delimiters.isEmpty then
-      skipWhitespace()
-
     tokenStartPosition = position
     val kind = nextToken()
 
@@ -299,17 +296,6 @@ class Lexer(source: Source) extends Iterator[Token] {
       Token(tokenStartPosition.offset, position.offset, kind)
     else
       Token(tokenStartPosition.offset, position.offset - 1, kind)
-
-  private def skipWhitespace(): Unit =
-    while !atEndOfInput do
-      currentChar match {
-        case ' ' | '\t' => advance()
-        case '\n' => return // Stop here, let newline be handled as a token
-        case '\r' =>
-          if nextChar == '\n' then return // Stop here for \r\n
-          else advance() // Treat standalone \r as whitespace
-        case _ => return
-      }
 
   private def atEndOfInput: Boolean =
     currentChar == '\u0000'
@@ -351,6 +337,15 @@ class Lexer(source: Source) extends Iterator[Token] {
       advance()
     }
 
+  private def advanceSpaces(): TokenKind = {
+    advanceWhile {
+      case ('\r', '\n') => false
+      case ('\n', _)    => false
+      case (curr, _)    => curr.isWhitespace
+    }
+    TokenKind.Space
+  }
+
   private def peekAhead(offset: Int): Char =
     val targetIndex = position.offset + offset
     if targetIndex < source.content.length then
@@ -380,8 +375,10 @@ class Lexer(source: Source) extends Iterator[Token] {
     }
 
     (currentChar, nextChar) match {
+      // Whitespace: first try matching newlines, then whitespace-like
       case ('\n',    _) => advanceWith(TokenKind.Newline)
       case ('\r', '\n') => advance2With(TokenKind.Newline)
+      case (c, _) if c.isWhitespace => advanceSpaces()
 
       // Numbers
       case (c, _) if c.isDigit => number()
