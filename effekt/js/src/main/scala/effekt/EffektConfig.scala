@@ -39,6 +39,4 @@ trait EffektConfig {
   def timed() = false
 
   def debug() = false
-
-  def printDetailedIR(): Boolean = false
 }

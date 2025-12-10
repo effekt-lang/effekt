@@ -14,8 +14,8 @@ class ChezSchemeCPS extends Compiler[String] {
   override def supportedFeatureFlags: List[String] = List("chez", "chezCPS")
 
   override def prettyIR(source: Source, stage: Stage)(using C: Context): Option[Document] = stage match {
-    case Stage.Core if C.config.optimize() => Optimized(source).map { (_, _, res) => core.PrettyPrinter(Context.config.printDetailedIR()).format(res) }
-    case Stage.Core => Core(source).map { res => core.PrettyPrinter(Context.config.printDetailedIR()).format(res.core) }
+    case Stage.Core if C.config.optimize() => Optimized(source).map { (_, _, res) => core.PrettyPrinter(Context.config.debug()).format(res) }
+    case Stage.Core => Core(source).map { res => core.PrettyPrinter(Context.config.debug()).format(res.core) }
     case Stage.CPS => CPSTransformed(source).map { (_, _, _, res) => cps.PrettyPrinter.format(res) }
     case Stage.Machine => None
     case Stage.Target => LSP(source)

@@ -370,7 +370,7 @@ class PrettyPrinter(printDetails: Boolean) extends ParenPrettyPrinter {
 
 /**
  * Instance of PrettyPrinter that produces output that can be parsed back by the core parser.
- * This corresponds to the `--detailed-ir` command line flag.
+ * This can be enabled using the `--debug` command line flag.
  */
 object ReparsablePrettyPrinter extends PrettyPrinter(true) {}
 
