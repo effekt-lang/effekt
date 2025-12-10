@@ -1,4 +1,5 @@
 module process
+import array
 
 extern def exit(errorCode: Int) at io: Nothing =
   js   "(function() { process.exit(${errorCode}) })()"
@@ -7,3 +8,101 @@ extern def exit(errorCode: Int) at io: Nothing =
     ret %Pos zeroinitializer
   """
   chez "(exit ${errorCode})"
+
+// Subprocesses
+// ------------
+
+extern jsNode """
+const { spawn } = require('node:child_process');
+"""
+extern llvm """
+  declare %Pos @c_spawn_options_default()
+  declare %Pos @c_spawn_options_on_stdout(%Pos, %Pos)
+  declare %Pos @c_spawn_options_on_stderr(%Pos, %Pos)
+  declare %Pos @c_spawn_options_pipe_stdin(%Pos, %Pos)
+  declare %Pos @c_write_stream(%Pos, %Pos)
+  declare %Pos @c_close_stream(%Pos)
+  declare %Pos @c_spawn(%Pos, %Pos, %Pos)
+"""
+
+extern type SpawnOptions
+extern def default() at {}: SpawnOptions =
+  jsNode """{ stdio: [0,1,2], onSpawn: (p) => {} }"""
+  llvm """
+    %opts = call %Pos @c_spawn_options_default()
+    ret %Pos %opts
+  """
+extern def onStdout(opts: SpawnOptions, callback: String => Unit at {io, global}) at {}: SpawnOptions =
+  jsNode """(function() {
+    let old = ${opts};
+    old.stdio[1] = 'pipe';
+    let oldSpawn = old.onSpawn;
+    old.onSpawn = function(p) {
+      oldSpawn(p);
+      p.stdout.on('data', (chunk) => {
+        $effekt.runToplevel((ks, k) => (${callback})(chunk, ks, k));
+      });
+    };
+    return old; })()"""
+  llvm """
+    %opts = call %Pos @c_spawn_options_on_stdout(%Pos ${opts}, %Pos ${callback})
+    ret %Pos %opts
+  """
+extern def onStderr(opts: SpawnOptions, callback: String => Unit at {io, global}) at {}: SpawnOptions =
+  jsNode """(function() {
+    let old = ${opts};
+    old.stdio[2] = 'pipe';
+    let oldSpawn = old.onSpawn;
+    old.onSpawn = function(p) {
+      oldSpawn(p);
+      p.stderr.on('data', (chunk) => {
+        $effekt.runToplevel((ks, k) => (${callback})(chunk, ks, k));
+      });
+    };
+    return old; })()"""
+  llvm """
+    %opts = call %Pos @c_spawn_options_on_stderr(%Pos ${opts}, %Pos ${callback})
+    ret %Pos %opts
+  """
+extern type WritableStream
+extern def withStdin(opts: SpawnOptions, callback: WritableStream => Unit at {io, global}) at {}: SpawnOptions =
+  jsNode """(function () {
+    let old = ${opts};
+    old.stdio[0] = 'pipe'
+    let oldSpawn = old.onSpawn;
+    old.onSpawn = function(p) {
+      oldSpawn(p);
+      p.on('spawn', () => {
+        $effekt.runToplevel((ks, k) => (${callback})(p.stdin, ks, k));
+      });
+    };
+    return old;
+  })()"""
+  llvm """
+    %opts = call %Pos @c_spawn_options_pipe_stdin(%Pos ${opts}, %Pos ${callback})
+    ret %Pos %opts
+  """
+extern def write(to: WritableStream, s: String) at io: Unit =
+  jsNode """${to}.write(${s})"""
+  llvm """
+    call void @c_write_stream(%Pos ${to}, %Pos ${s})
+    ret %Pos zeroinitializer
+  """
+extern def close(to: WritableStream) at io: Unit =
+  jsNode """${to}.end()"""
+  llvm """
+    call void @c_close_stream(%Pos ${to})
+    ret %Pos zeroinitializer
+  """
+
+extern def spawn(cmd: String, args: Array[String], options: SpawnOptions) at async: Int  =
+  jsNode """$effekt.capture(k => {
+    let p = spawn(${cmd}, ${args}, ${options});
+    ${options}.onSpawn(p);
+    p.on('close', (exitcode, sig) => { k(exitcode) });
+    return p;
+    })"""
+  llvm """
+    call void @c_spawn(%Pos ${cmd}, %Pos ${args}, %Pos ${options}, %Stack %stack)
+    ret void
+  """

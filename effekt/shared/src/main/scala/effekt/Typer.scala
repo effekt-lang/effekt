@@ -1261,7 +1261,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     failures match {
       case Nil =>
-        Context.abort("Cannot typecheck call.")
+        Context.abort(pretty"Cannot typecheck call to ${id}. Does a function/method with that name exist?")
 
       // exactly one error
       case List((sym, errs)) =>

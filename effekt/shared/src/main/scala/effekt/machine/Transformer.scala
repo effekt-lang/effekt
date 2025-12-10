@@ -36,9 +36,9 @@ object Transformer {
 
     val toplevelDefinitions = definitions.map {
       case core.Toplevel.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
-        Definition(Label(transform(id), vparams.map(transform) ++ bparams.map(transform)), transform(body))
+        Definition(Label(transform(id), vparams.map(transform) ++ bparams.map(transform)), transform(body).run())
       case core.Toplevel.Val(id, binding) =>
-        Definition(BC.globals(id), transform(binding))
+        Definition(BC.globals(id), transform(binding).run())
       case core.Toplevel.Def(id, block @ core.New(impl)) =>
         val variable = Variable(freshName("returned"), transform(block.tpe))
         Definition(BC.globals(id), New(variable, transform(impl), Return(List(variable))))
@@ -87,7 +87,7 @@ object Transformer {
       ExternBody.Unsupported(err)
   }
 
-  def transform(stmt: core.Stmt)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Statement =
+  def transform(stmt: core.Stmt)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Trampoline[Statement] =
     stmt match {
 
       case core.Def(id, block @ core.BlockLit(tparams, cparams, vparams, bparams, body), rest) =>
@@ -122,13 +122,15 @@ object Transformer {
         noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), freeParams.toList)
 
         // (2) Actually translate the definitions
-        emitDefinition(transformLabel(id), transform(body))
+        emitDefinition(transformLabel(id), transform(body).run())
         transform(rest)
 
       case core.Def(id, block @ core.New(impl), rest) =>
         // this is just a hack...
         noteParameter(id, block.tpe)
-        New(Variable(transform(id), transform(impl.interface)), transform(impl), transform(rest))
+        transform(rest).map { rest =>
+          New(Variable(transform(id), transform(impl.interface)), transform(impl), rest)
+        }
 
       case core.Def(id, core.BlockVar(other, tpe, capt), rest) =>
         getBlockInfo(other) match {
@@ -145,7 +147,9 @@ object Transformer {
       case core.Def(id, block @ core.Unbox(expr), rest) =>
         noteParameter(id, block.tpe)
         transform(expr).run { boxed =>
-          Coerce(Variable(transform(id), Type.Negative()), boxed, transform(rest))
+          transform(rest).map { rest =>
+            Coerce(Variable(transform(id), Type.Negative()), boxed, rest)
+          }
         }
 
       case core.Let(id, core.ValueVar(otherId, otherTpe), rest) =>
@@ -158,35 +162,40 @@ object Transformer {
 
       case core.ImpureApp(id, core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), capt), targs, vargs, bargs, rest) =>
         val variable = Variable(transform(id), Positive())
-        transform(vargs, bargs).run { (values, blocks) =>
-          perhapsUnbox(values, vparamTypes).run { unboxeds =>
-            resultType match {
-              case core.Type.TInt =>
-                val unboxed = Variable(freshName("integer"), Type.Int())
-                ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, Coerce(variable, unboxed, transform(rest)))
-              case core.Type.TChar =>
-                val unboxed = Variable(freshName("char"), Type.Int())
-                ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, Coerce(variable, unboxed, transform(rest)))
-              case core.Type.TByte =>
-                val unboxed = Variable(freshName("byte"), Type.Byte())
-                ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, Coerce(variable, unboxed, transform(rest)))
-              case core.Type.TDouble =>
-                val unboxed = Variable(freshName("double"), Type.Double())
-                ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, Coerce(variable, unboxed, transform(rest)))
-              case _ =>
-                ForeignCall(variable, transform(blockName), unboxeds ++ blocks, transform(rest))
-             }
-           }
+        transform(rest).flatMap { rest =>
+          transform(vargs, bargs).run { (values, blocks) =>
+            perhapsUnbox(values, vparamTypes).run { unboxeds =>
+              resultType match {
+                case core.Type.TInt =>
+                  val unboxed = Variable(freshName("integer"), Type.Int())
+                  Trampoline.Done(ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, Coerce(variable, unboxed, rest)))
+                case core.Type.TChar =>
+                  val unboxed = Variable(freshName("char"), Type.Int())
+                  Trampoline.Done(ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, Coerce(variable, unboxed, rest)))
+                case core.Type.TByte =>
+                  val unboxed = Variable(freshName("byte"), Type.Byte())
+                  Trampoline.Done(ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, Coerce(variable, unboxed, rest)))
+                case core.Type.TDouble =>
+                  val unboxed = Variable(freshName("double"), Type.Double())
+                  Trampoline.Done(ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, Coerce(variable, unboxed, rest)))
+                case _ =>
+                  Trampoline.Done(ForeignCall(variable, transform(blockName), unboxeds ++ blocks, rest))
+              }
+            }
+          }
         }
 
       case core.Return(expr) =>
-        transform(expr).run { value => Return(List(value)) }
+        transform(expr).run { value => Trampoline.Done(Return(List(value))) }
 
       case core.Val(id, binding, rest) =>
-        PushFrame(
-          Clause(List(Variable(transform(id), transform(binding.tpe))), transform(rest)),
-            transform(binding)
-        )
+        val tpe = binding.tpe
+        transform(rest).flatMap { rest =>
+          transform(binding).map { binding =>
+            PushFrame(
+              Clause(List(Variable(transform(id), transform(tpe))), rest), binding)
+           }
+        }
 
       case core.App(callee, targs, vargs, bargs) =>
         transform(vargs, bargs).run { (values, blocks) =>
@@ -195,7 +204,7 @@ object Transformer {
               BPC.info.getOrElse(id, sys.error(pp"In ${stmt}. Cannot find block info for ${id}: ${annotatedTpe}.\n${BPC.info}")) match {
                 // Unknown Jump to function
                 case BlockInfo.Parameter(tpe: core.BlockType.Function) =>
-                  Invoke(Variable(transform(id), transform(tpe)), builtins.Apply, values ++ blocks)
+                  Trampoline.Done(Invoke(Variable(transform(id), transform(tpe)), builtins.Apply, values ++ blocks))
 
                 // Known Jump
                 case BlockInfo.Definition(freeParams, blockParams) =>
@@ -203,10 +212,10 @@ object Transformer {
                   (id, annotatedTpe) match {
                     case (_: symbols.ExternFunction , core.BlockType.Function(_, _, vparamTypes, _, _)) =>
                       perhapsUnbox(values, vparamTypes).run { unboxeds =>
-                        Jump(Label(transform(id), blockParams ++ freeParams), unboxeds ++ blocks ++ freeParams)
+                        Trampoline.Done(Jump(Label(transform(id), blockParams ++ freeParams), unboxeds ++ blocks ++ freeParams))
                       }
                      case _ =>
-                       Jump(Label(transform(id), blockParams ++ freeParams), values ++ blocks ++ freeParams)
+                       Trampoline.Done(Jump(Label(transform(id), blockParams ++ freeParams), values ++ blocks ++ freeParams))
                   }
 
                 case _ => ErrorReporter.panic("Applying an object")
@@ -218,9 +227,7 @@ object Transformer {
             case Block.Unbox(pure) =>
               transform(pure).run { boxedCallee =>
                 val callee = Variable(freshName(boxedCallee.name), Type.Negative())
-
-                Coerce(callee, boxedCallee,
-                  Invoke(callee, builtins.Apply, values ++ blocks))
+                Trampoline.Done(Coerce(callee, boxedCallee, Invoke(callee, builtins.Apply, values ++ blocks)))
               }
 
             case Block.New(impl) =>
@@ -235,17 +242,15 @@ object Transformer {
             case Block.BlockVar(id, tpe, capt) if BPC.globals contains id =>
               val label = BPC.globals(id)
               val variable = Variable(freshName("receiver"), transform(tpe))
-              PushFrame(Clause(List(variable), Invoke(variable, opTag, values ++ blocks)), Jump(label, label.environment))
+              Trampoline.Done(PushFrame(Clause(List(variable), Invoke(variable, opTag, values ++ blocks)), Jump(label, label.environment)))
 
             case Block.BlockVar(id, tpe, capt) =>
-              Invoke(Variable(transform(id), transform(tpe)), opTag, values ++ blocks)
+              Trampoline.Done(Invoke(Variable(transform(id), transform(tpe)), opTag, values ++ blocks))
 
             case Block.Unbox(pure) =>
               transform(pure).run { boxedCallee =>
                 val callee = Variable(freshName(boxedCallee.name), Type.Negative())
-
-                Coerce(callee, boxedCallee,
-                  Invoke(callee, opTag, values ++ blocks))
+                Trampoline.Done(Coerce(callee, boxedCallee, Invoke(callee, opTag, values ++ blocks)))
               }
 
             case Block.New(impl) =>
@@ -258,19 +263,25 @@ object Transformer {
 
       case core.If(cond, thenStmt, elseStmt) =>
         transform(cond).run { value =>
-          Switch(value, List(0 -> Clause(List(), transform(elseStmt)), 1 -> Clause(List(), transform(thenStmt))), None)
+          transform(elseStmt).flatMap { elseStmt =>
+            transform(thenStmt).map { thenStmt =>
+              Switch(value, List(0 -> Clause(List(), elseStmt), 1 -> Clause(List(), thenStmt)), None)
+            }
+          }
         }
 
       case core.Match(scrutinee, tpe, clauses, default) =>
         val transformedClauses = clauses.map { case (constr, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
-          DeclarationContext.getConstructorTag(constr) -> Clause(vparams.map(transform), transform(body))
+          // TODO monadic sequencing to avoid stack overflow
+          DeclarationContext.getConstructorTag(constr) -> Clause(vparams.map(transform), transform(body).run())
         }
         val transformedDefault = default.map { clause =>
-          Clause(List(), transform(clause))
+          // TODO monadic sequencing to avoid stack overflow
+          Clause(List(), transform(clause).run())
         }
 
         transform(scrutinee).run { value =>
-          Switch(value, transformedClauses, transformedDefault)
+          Trampoline.Done(Switch(value, transformedClauses, transformedDefault))
         }
 
       case core.Reset(core.BlockLit(Nil, cparams, Nil, List(prompt), body)) =>
@@ -280,17 +291,22 @@ object Transformer {
         val variable = Variable(freshName("returned"), transform(answerType))
         val returnClause = Clause(List(variable), Return(List(variable)))
 
-        Reset(Variable(transform(prompt.id), Type.Prompt()), returnClause, transform(body))
+        transform(body).map { body =>
+          Reset(Variable(transform(prompt.id), Type.Prompt()), returnClause, body)
+        }
 
       case core.Shift(prompt, k, body) =>
 
         noteParameter(k.id, core.Type.TResume(core.Type.TUnit, core.Type.TUnit))
 
-        Shift(Variable(transform(k.id), Type.Stack()), Variable(transform(prompt.id), Type.Prompt()),
-          transform(body))
+        transform(body).map { body =>
+          Shift(Variable(transform(k.id), Type.Stack()), Variable(transform(prompt.id), Type.Prompt()), body)
+        }
 
       case core.Resume(k, body) =>
-        Resume(Variable(transform(k.id), Type.Stack()), transform(body))
+        transform(body).map { body =>
+            Resume(Variable(transform(k.id), Type.Stack()), body)
+        }
 
       case core.Region(core.BlockLit(tparams, cparams, vparams, List(region), body)) =>
 
@@ -299,7 +315,9 @@ object Transformer {
         val prompt = transform(region)
 
         noteParameters(List(region))
-        Reset(prompt, returnClause, transform(body))
+        transform(body).map { body =>
+          Reset(prompt, returnClause, body)
+        }
 
       case core.Alloc(ref, init, region, body) =>
         val stateType = transform(init.tpe)
@@ -310,20 +328,24 @@ object Transformer {
         // TODO ref should be BlockParam
         noteParameter(ref, core.Type.TState(init.tpe))
         transform(init).run { value =>
-          Shift(temporary, prompt,
-            Var(reference, value, Type.Positive(),
-              Resume(temporary, transform(body))))
+          transform(body).map { body =>
+            Shift(temporary, prompt,
+              Var(reference, value, Type.Positive(),
+                Resume(temporary, body)))
+          }
         }
 
       case core.Var(ref, init, capture, body) =>
         val stateType = transform(init.tpe)
         val reference = Variable(transform(ref), Type.Reference(stateType))
+        val tpe = transform(body.tpe)
 
         // TODO ref should be BlockParam
         noteParameter(ref, core.Type.TState(init.tpe))
         transform(init).run { value =>
-          Var(reference, value, transform(body.tpe),
-            transform(body))
+          transform(body).map { body =>
+            Var(reference, value, tpe, body)
+          }
         }
 
       case core.Get(id, tpe, ref, capt, body) =>
@@ -331,17 +353,21 @@ object Transformer {
         val reference = Variable(transform(ref), Type.Reference(stateType))
         val variable = Variable(transform(id), stateType)
 
-        LoadVar(variable, reference, transform(body))
+        transform(body).map { body =>
+          LoadVar(variable, reference, body)
+        }
 
       case core.Put(ref, capt, arg, body) =>
         val stateType = transform(arg.tpe)
         val reference = Variable(transform(ref), Type.Reference(stateType))
 
         transform(arg).run { value =>
-          StoreVar(reference, value, transform(body))
+          transform(body).map { body =>
+            StoreVar(reference, value, body)
+          }
         }
 
-      case core.Hole(tpe, span) => machine.Statement.Hole(span)
+      case core.Hole(tpe, span) => Trampoline.Done(machine.Statement.Hole(span))
 
       case _ =>
         ErrorReporter.abort(s"Unsupported statement: $stmt")
@@ -386,7 +412,7 @@ object Transformer {
       val parameters = vparams.map(transform) ++ bparams.map(transform);
       val variable = Variable(freshName("blockLit"), Negative())
       shift { k =>
-        New(variable, List(Clause(parameters, transform(body))), k(variable))
+        New(variable, List(Clause(parameters, transform(body).run())), k(variable))
       }
 
     case core.New(impl) =>
@@ -516,7 +542,7 @@ object Transformer {
       // No continuation, implementation of an object
       case core.Operation(name, tparams, cparams, vparams, bparams, body) =>
         noteParameters(bparams)
-        Clause(vparams.map(transform) ++ bparams.map(transform), transform(body))
+        Clause(vparams.map(transform) ++ bparams.map(transform), transform(body).run())
     }
 
   def transform(param: core.ValueParam)(using BlocksParamsContext, ErrorReporter): Variable =
@@ -626,25 +652,34 @@ object Transformer {
     BPC.info.getOrElse(id, sys error s"No block info for ${util.show(id)}")
 
   def shift[A](body: (A => Statement) => Statement): Binding[A] =
-    Binding { k => Trampoline.Done(body { x => trampoline(k(x)) }) }
+    Binding { k => Trampoline.Done(body { x => k(x).run() }) }
 
   case class Binding[A](body: (A => Trampoline[Statement]) => Trampoline[Statement]) {
     def flatMap[B](rest: A => Binding[B]): Binding[B] = {
       Binding(k => Trampoline.More { () => body(a => Trampoline.More { () => rest(a).body(k) }) })
     }
-    def run(k: A => Statement): Statement = trampoline(body { x => Trampoline.Done(k(x)) })
+    def run(k: A => Trampoline[Statement]): Trampoline[Statement] = body(k)
     def map[B](f: A => B): Binding[B] = flatMap { a => pure(f(a)) }
   }
 
   enum Trampoline[A] {
     case Done(value: A)
     case More(thunk: () => Trampoline[A])
-  }
 
-  @tailrec
-  def trampoline[A](body: Trampoline[A]): A = body match {
-    case Trampoline.Done(value) => value
-    case Trampoline.More(thunk) => trampoline(thunk())
+    def map[B](f: A => B): Trampoline[B] =
+      flatMap(a => Done(f(a)))
+
+    def flatMap[B](f: A => Trampoline[B]): Trampoline[B] = this match {
+      case Done(a) => More(() => f(a))
+      case More(next) => More(() => next().flatMap(f))
+    }
+
+    @tailrec
+    final def run(): A = this match {
+      case Trampoline.Done(value) => value
+      case Trampoline.More(thunk) => thunk().run()
+    }
+
   }
 
   def traverse[S, T](l: List[S])(f: S => Binding[T]): Binding[List[T]] =

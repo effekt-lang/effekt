@@ -124,12 +124,13 @@ object Namer extends Phase[Parsed, NameResolved] {
       ()
 
     case d @ source.VarDef(id, annot, binding, doc, span) =>
-      ()
+      Context.requireNotToplevel("Mutable variable")
 
     case d @ source.RegDef(id, annot, region, binding, doc, span) =>
-      ()
+      Context.requireNotToplevel("Mutable variable in a region")
 
     case source.NamespaceDef(id, definitions, doc, span) =>
+      Context.requireToplevel("Namespace")
       Context.namespace(id.name) {
         definitions.foreach(preresolve)
       }
@@ -164,6 +165,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, sym)
 
     case decl @ source.InterfaceDef(id, tparams, ops, doc, span) =>
+      Context.requireToplevel("Interface")
       val effectName = Context.nameFor(id)
       // we use the localName for effects, since they will be bound as capabilities
       val effectSym = Context scoped {
@@ -175,6 +177,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, effectSym)
 
     case d @ source.TypeDef(id, tparams, tpe, doc, span) =>
+      Context.requireToplevel("Type")
       val tps = Context scoped { tparams map resolve }
       val alias = Context scoped {
         tps.foreach { t => Context.bind(t) }
@@ -183,6 +186,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, alias)
 
     case d @ source.EffectDef(id, tparams, effs, doc, span) =>
+      Context.requireToplevel("Effect")
       val tps = Context scoped { tparams map resolve }
       val alias = Context scoped {
         tps.foreach { t => Context.bind(t) }
@@ -191,6 +195,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, alias)
 
     case d @ source.DataDef(id, tparams, ctors, doc, span) =>
+      Context.requireToplevel("Datatype")
       val typ = Context scoped {
         val tps = tparams map resolve
         // we do not resolve the constructors here to allow them to refer to types that are defined
@@ -200,6 +205,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, typ)
 
     case d @ source.RecordDef(id, tparams, fields, doc, span) =>
+      Context.requireToplevel("Record")
       lazy val sym: Record = {
         val tps = Context scoped { tparams map resolve }
         // we do not resolve the fields here to allow them to refer to types that are defined
@@ -209,18 +215,21 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, sym)
 
     case d @source.ExternType(id, tparams, doc, span) =>
+      Context.requireToplevel("Extern type")
       Context.define(id, Context scoped {
         val tps = tparams map resolve
         ExternType(Context.nameFor(id), tps.unspan, d)
       })
 
     case decl @ source.ExternInterface(id, tparams, doc, span) =>
+      Context.requireToplevel("Extern interface")
       Context.define(id, Context scoped {
         val tps = tparams map resolve
         ExternInterface(Context.nameFor(id), tps, decl)
       })
 
     case d @ source.ExternDef(id, tparams, vparams, bparams, captures, ret, bodies, doc, span) =>
+      Context.requireToplevel("Extern definition")
       val name = Context.nameFor(id)
       val capt = resolve(captures)
       Context.define(id, Context scoped {
@@ -237,6 +246,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       })
 
     case d @ source.ExternResource(id, tpe, doc, span) =>
+      Context.requireToplevel("Extern resource")
       val name = Context.nameFor(id)
       val btpe = resolveBlockType(tpe)
       val sym = ExternResource(name, btpe, d)
@@ -244,9 +254,10 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.bindBlock(sym)
 
     case d @ source.ExternInclude(ff, path, Some(contents), _, doc, span) =>
-      ()
+      Context.requireToplevel("Extern include")
 
     case d @ source.ExternInclude(ff, path, None, _, doc, span) =>
+      Context.requireToplevel("Extern include")
       // only load include if it is required by the backend.
       if (ff matches Context.compiler.supportedFeatureFlags) {
         d.contents = Some(Context.contentsOf(path).getOrElse {
@@ -971,6 +982,16 @@ trait NamerOps extends ContextOps { Context: Context =>
     case Some(path) => QualifiedName(path, id.name)
     case None => LocalName(id.name)
   }
+
+  private[namer] def requireToplevel(kind: String): Unit =
+    if (scope.path.isEmpty) {
+      Context.error(s"${kind} declarations are only allowed on the toplevel of a module or in a namespace.")
+    }
+
+  private[namer] def requireNotToplevel(kind: String): Unit =
+    if (scope.path.isDefined) {
+      Context.error(s"${kind} declarations are not allowed on the toplevel of a module or in a namespace.")
+    }
 
   // Name Binding and Resolution
   // ===========================
