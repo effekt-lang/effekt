@@ -82,7 +82,10 @@ class Parser(tokens: Seq[Token], source: Source) {
 
       // Report recoverable diagnostics
       reportRecoverableDiagnostics()
-      if recoverableDiagnostics.isEmpty then res else None
+      // Don't fret unless we had a recoverable error
+      if recoverableDiagnostics.forall { d =>
+        d.kind != kiama.util.Severities.Error
+      } then res else None
     } catch {
       case Fail(msg, pos) =>
         // Don't forget soft fails!
