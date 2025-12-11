@@ -13,6 +13,9 @@ def attempt[R] { program: () => R / fail } { fallback: () => R }: R =
     fallback()
   }
 
+def succeeds { program: () => Unit / fail }: Bool =
+  try { program(); true } with fail { false }
+
 def optionally[R] { program: () => R / fail }: Option[R] =
   try {
     Some(program())
@@ -34,3 +37,9 @@ def successfully { program: () => Unit / fail }: Unit =
 
 def panicking[R](message: String) { program: () => R / fail }: R =
   attempt { program() } { panic(message) }
+
+def suchThat[A](value: A){ predicate: A => Bool }: Option[A] =
+  if (predicate(value)) { Some(value) } else { None() }
+
+def getOrFail[A](option: Option[A]): A / fail =
+  option.getOrElse { do fail() }

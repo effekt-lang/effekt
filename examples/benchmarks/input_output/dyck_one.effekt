@@ -24,7 +24,7 @@ def emitTree(n: Int): Unit / emit[Byte] =
 
 record Tree(children: List[Tree])
 
-def readTree(): Tree / { Scan[Byte], stop } = {
+def readTree(): Tree / { Scan[Byte], fail } = {
   skipIf[Byte] { b => b.toInt == 40 }
   val children = list::collect[Tree] { many { readTree() } }
   skipIf[Byte] { b => b.toInt == 41 }
@@ -50,7 +50,7 @@ def run(n: Int): Int = {
 
   with readFile(filename)
   with returning::scanner[Byte, Int]
-  try { readTree().size } with stop { panic("Expected tree.") }
+  try { readTree().size } with fail { panic("Expected tree.") }
 }
 
 
