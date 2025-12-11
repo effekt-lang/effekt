@@ -48,10 +48,13 @@ def fix[T] { one: T => Unit / emit[T] } { stream: => Unit / emit[T] }: Unit =
   }
 
 
-def many[A] { action: () => A / stop }: Unit / emit[A] =
-  loop { do emit(action()) }
+def more[R] { program: () => R / stop }: R / fail =
+  try { program() } with stop { do fail() }
 
-def some[A] { action: () => A / stop }: Unit / { emit[A], stop } = {
+def many[A] { action: () => A / fail }: Unit / emit[A] =
+  successfully { do emit(action()) }
+
+def some[A] { action: () => A / fail }: Unit / { emit[A], fail } = {
   do emit(action())
   many { action() }
 }

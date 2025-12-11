@@ -91,7 +91,7 @@ def encodeJson[R]{ body: => R / JsonBuilder }: R / emit[String] = {
 
 
 /// Read a double value, in the common format (TODO document)
-def readDouble(): Double / { Scan[Char], stop} = {
+def readDouble(): Double / { Scan[Char], fail} = {
   def exponent(pre: Double) = {
     try {
       if(do peek() == 'e' || do peek() == 'E') {
@@ -108,10 +108,10 @@ def readDouble(): Double / { Scan[Char], stop} = {
     }
   }
   def fraction(pre: Int) = {
-    if (probe { readIf('.') }) {
+    if (succeeds { readIf('.') }) {
       var b = 0.1
       var r = pre.toDouble
-      while (returning::probe[Int] { readDigit() } is Some(d)) {
+      while (optionally[Int] { readDigit() } is Some(d)) {
         r = r + b * d.toDouble
         b = b * 0.1
       }
@@ -130,35 +130,32 @@ def expectString(string: String): Unit / { Scan[Char], Exception[WrongFormat] } 
 
 /// Read and unescape a string in ""
 def readQuotedString(): Unit / { Scan[Char], emit[Char], Exception[WrongFormat] } = {
-  try {
-    skipWhitespace()
-    expect("Expected \"") { readIf('"') }
-    while(read[Char]() is c and c != '"') {
-      c match {
-        case '\\' => read[Char]() match {
-          case '"' => do emit('\"')
-          case '\\' => do emit('\\')
-          case '/' => do emit('/')
-          case 'b' => <>
-          case 'f' => <>
-          case 'n' => do emit('\n')
-          case 'r' => do emit('\r')
-          case 't' => do emit('\t')
-          case c => wrongFormat("Invalid escape sequence '\\" ++ c.toString ++ "'")
-        }
-        case o => do emit(o)
+  with expect("Unexpected end of input while reading a string")
+  skipWhitespace()
+  expect("Expected \"") { readIf('"') }
+  while(read[Char]() is c and c != '"') {
+    c match {
+      case '\\' => read[Char]() match {
+        case '"' => do emit('\"')
+        case '\\' => do emit('\\')
+        case '/' => do emit('/')
+        case 'b' => <>
+        case 'f' => <>
+        case 'n' => do emit('\n')
+        case 'r' => do emit('\r')
+        case 't' => do emit('\t')
+        case c => wrongFormat("Invalid escape sequence '\\" ++ c.toString ++ "'")
       }
+      case o => do emit(o)
     }
-  } with stop {
-    wrongFormat("Unexpected end of input while reading a string")
-  }
+    }
 }
 
 /// Decode a json string and do the appropriate calls to an implicitly bound JsonBuilder
 def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
-  with boundary
+  with expect("Expecting whitespace")
   skipWhitespace()
-  if(do peek() is c) {
+  if(peek() is c) {
     c match {
       case 'n' => expectString("null"); do null()
       case 't' => expectString("true"); do bool(true)
@@ -175,9 +172,9 @@ def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
 def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[WrongFormat]} = {
   var first = true
   expectString("{")
-  with boundary
+  with expect("Expected whitespace")
   skipWhitespace()
-  while(do peek() is c and (c != '}')) {
+  while(peek() is c and (c != '}')) {
     if (not(first)) { expectString(",") }
     val k = string::collect { readQuotedString() }
     skipWhitespace()
@@ -188,20 +185,20 @@ def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[WrongFo
     skipWhitespace()
     first = false
   }
-  do skip()
+  skip()
 }
 def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
   var first = true
   expectString("[")
-  with boundary
+  with expect("Expected whitespace")
   skipWhitespace()
-  while(do peek() is c and (c != ']')) {
+  while(peek() is c and (c != ']')) {
     if (not(first)) { expectString(",") }
     decodeJson()
     skipWhitespace()
     first = false
   }
-  do skip()
+  skip()
 }
 
 // --------------------------------------------------------------------------------
