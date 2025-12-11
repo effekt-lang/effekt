@@ -69,6 +69,7 @@ extern def readln() at async: String =
   """
 
 def println(value: Int): Unit = println(value.show)
+def println(value: Unit): Unit = println(value.show)
 def println(value: Double): Unit = println(value.show)
 def println(value: Bool): Unit = println(value.show)
 def println(value: Byte): Unit = println(value.show)
@@ -81,6 +82,8 @@ extern def show(value: Int) at {}: String =
     ret %Pos %z
   """
   vm "effekt::show(Int)"
+
+def show(value: Unit): String = "()"
 
 extern def show(value: Double) at {}: String =
   js "'' + ${value}"
@@ -229,6 +232,10 @@ extern def equals[R](x: R, y: R) at {}: Bool =
 
 def differsFrom[R](x: R, y: R): Bool =
   not(equals(x, y))
+
+// TODO fix this in the pattern matching compiler
+extern def infixEq(x: Unit, y: Unit) at {}: Bool =
+  default { true }
 
 extern def infixEq(x: Int, y: Int) at {}: Bool =
   js "${x} === ${y}"
@@ -787,3 +794,5 @@ def locally[R] { p: => R } : R = p()
 
 effect literal(s: String): Unit
 effect splice[A](x: A): Unit
+
+
