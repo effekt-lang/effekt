@@ -256,7 +256,7 @@ def foreach[T](arr: Array[T]){ action: T => Unit }: Unit =
 /// Traverse an array, applying the given action on every element.
 ///
 /// O(N)
-def foreach[T](arr: Array[T]){ action: (T) {Control} => Unit }: Unit =
+def foreach[T](arr: Array[T]){ action: (T) {Label} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
     action(arr.unsafeGet(i)) {label}
   }
@@ -272,7 +272,7 @@ def foreachIndex[T](arr: Array[T]){ action: (Int, T) => Unit }: Unit =
 /// Traverse an array, applying the given action on every element and its (zero-based) index.
 ///
 /// O(N)
-def foreachIndex[T](arr: Array[T]){ action: (Int, T) {Control} => Unit }: Unit =
+def foreachIndex[T](arr: Array[T]){ action: (Int, T) {Label} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
     action(i, arr.unsafeGet(i)) {label}
   }
