@@ -172,16 +172,10 @@ extern def set[T](arr: Array[T], index: Int, value: T) at global: Unit =
 // Derived operations:
 
 /// Allocates a new array initialized with zero integer values.
-def allocateZeros(size: Int): Array[Int] =
-  unsafeAllocate(size)
-
-/// Allocates a new array initialized with zero double values.
-def allocateZeros(size: Int): Array[Double] =
-  unsafeAllocate(size)
-
-/// Allocates a new array initialized with zero double values.
-def allocateNones[T](size: Int): Array[Option[T]] =
-  unsafeAllocate(size)
+extern def allocateZeros(size: Int) at global: Array[Int] =
+  js "(new Array(${size})).fill(0)"
+  chez "(vector-fill! (make-vector ${size}) 0)"
+  llvm { unsafeAllocate(size) }
 
 /// Builds a new Array of size `size` from a computation `index` which gets an index
 /// and returns a value that will be on that position in the resulting array
