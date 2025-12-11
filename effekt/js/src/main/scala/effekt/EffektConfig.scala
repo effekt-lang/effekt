@@ -20,6 +20,7 @@ trait EffektConfig {
   def prelude(): List[String] = List(
     "effekt",
     "option",
+    "partial",
     "stream",
     "list",
     "result",
