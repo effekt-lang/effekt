@@ -732,23 +732,37 @@ type OneOrBoth[A, B] {
 
 // Control Flow
 // ============
-interface Control {
-  def break(): Unit
-  def continue(): Unit
-}
 
-def loop { f: () => Unit }: Unit = {
-  def go(): Unit = { f(); go() }
+/// Repeat `action` forever
+def forever { action: () => Unit }: Nothing = {
+  def go(): Nothing = { action(); go() }
   go()
 }
 
-def loop { f: {Control} => Unit }: Unit = try {
-  def go(): Unit = { f {label}; go() }
-  go()
-} with label: Control {
-  def break() = ()
-  def continue() = loop { f }
-}
+/// Signal that we should stop.
+effect stop(): Nothing
+
+/// When the program stops, then to here.
+def boundary { program: () => Unit / stop }: Unit =
+  try { program() } with stop { () }
+
+/// Repeat `action` until `stop` is thrown.
+def loop { action: () => Unit / stop }: Unit =
+  try {
+    def go(): Unit = { action(); go() }
+    go()
+  } with stop {
+    ()
+  }
+
+/// Repeat `action` until `stop` is thrown, supplying the iteration count.
+def loop { action: Int => Unit / stop }: Unit =
+  try {
+    def go(i: Int): Unit = { action(i); go(i + 1) }
+    go(0)
+  } with stop {
+    ()
+  }
 
 /// Calls provided action repeatedly. `start` is inclusive, `end` is not.
 def each(start: Int, end: Int) { action: (Int) => Unit } = {
@@ -758,18 +772,7 @@ def each(start: Int, end: Int) { action: (Int) => Unit } = {
   loop(start)
 }
 
-/// Calls provided action repeatedly with support for breaking. `start` is inclusive, `end` is not.
-def each(start: Int, end: Int) { action: (Int) {Control} => Unit } = {
-  var i = start;
-  loop { {l} =>
-    if (i < end) { val el = i; i = i + 1; action(el){l} }
-    else { l.break() }
-  }
-}
-
 def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }
-
-def repeat(n: Int) { action: () {Control} => Unit } = each(0, n) { (n) {l} => action() {l} }
 
 // NOTE: This is emitted by the close hole code action: do not remove unless you also adjust the code action
 /// Scopes a local computation
