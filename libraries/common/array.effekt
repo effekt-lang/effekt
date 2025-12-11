@@ -56,8 +56,7 @@ extern def unsafeAllocate[T](size: Int) at global: Array[T] =
     %ret_pos = insertvalue %Pos { i64 0, ptr poison }, ptr %calloc, 1
     ret %Pos %ret_pos
   """
-  vm "array::allocate(Int)"
-  // TODO rename vm primitive
+  vm "array::unsafeAllocate(Int)"
 
 /// Fills a given array in-place.
 def fill[T](arr: Array[T], filler: T): Unit = {
@@ -138,8 +137,7 @@ extern def get[T](arr: Array[T], index: Int) at global: T =
     tail call void @erasePositive(%Pos ${arr})
     ret %Pos %element
   """
-  vm "array::unsafeGet[T](Array[T], Int)"
-  // TODO rename vm primitive
+  vm "array::get[T](Array[T], Int)"
 
 extern js """
   function array$set(arr, index, value) {
@@ -166,16 +164,15 @@ extern def set[T](arr: Array[T], index: Int, value: T) at global: Unit =
     tail call void @erasePositive(%Pos ${arr})
     ret %Pos zeroinitializer
   """
-  vm "array::unsafeSet[T](Array[T], Int, T)"
-  // TODO rename vm primitive
+  vm "array::set[T](Array[T], Int, T)"
 
 // Derived operations:
 
 /// Allocates a new array initialized with zero integer values.
 extern def allocateZeros(size: Int) at global: Array[Int] =
-  js "(new Array(${size})).fill(0)"
-  chez "(vector-fill! (make-vector ${size}) 0)"
   llvm { unsafeAllocate(size) }
+  vm { unsafeAllocate(size) }
+  default { array(size, 0) }
 
 /// Builds a new Array of size `size` from a computation `index` which gets an index
 /// and returns a value that will be on that position in the resulting array

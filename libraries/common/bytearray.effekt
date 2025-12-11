@@ -80,8 +80,7 @@ extern def get(arr: ByteArray, index: Int) at global: Byte =
     ret i8 %element
   """
   chez "(bytevector-u8-ref ${arr} ${index})"
-  vm "bytearray::unsafeGet(ByteArray, Int)"
-  // TODO rename vm primitive
+  vm "bytearray::get(ByteArray, Int)"
 
 extern def set(arr: ByteArray, index: Int, value: Byte) at global: Unit =
   js "bytearray$set(${arr}, ${index}, ${value})"
@@ -95,8 +94,7 @@ extern def set(arr: ByteArray, index: Int, value: Byte) at global: Unit =
     ret %Pos zeroinitializer
   """
   chez "(bytevector-u8-set! ${arr} ${index} ${value})"
-  vm "bytearray::unsafeSet(ByteArray, Int, Byte)"
-  // TODO rename vm primitive
+  vm "bytearray::set(ByteArray, Int, Byte)"
 
 /// Creates a new ByteArray of size `size` filled with the value `init`
 def bytearray(size: Int, init: Byte): ByteArray = {
