@@ -143,8 +143,8 @@ void c_fs_read(Int file, struct Pos buffer, Int offset, Int size, Int position, 
     if (result < 0) {
         uv_fs_req_cleanup(request);
         free(request);
+        free(read_closure);
         resume_Int(stack, result);
-	free(read_closure);
     }
 }
 
@@ -166,8 +166,8 @@ void c_fs_write(Int file, struct Pos buffer, Int offset, Int size, Int position,
     if (result < 0) {
         uv_fs_req_cleanup(request);
         free(request);
+        free(write_closure);
         resume_Int(stack, result);
-	free(write_closure);
     }
 }
 
