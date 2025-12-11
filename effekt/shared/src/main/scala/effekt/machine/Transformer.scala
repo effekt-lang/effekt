@@ -53,7 +53,7 @@ object Transformer {
 
   def transform(extern: core.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
     case core.Extern.Def(name, tps, cparams, vparams, bparams, ret, capture, body) =>
-      if bparams.nonEmpty then ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
+      if bparams.nonEmpty then ErrorReporter.abort("Foreign functions cannot take block arguments.")
 
       val transformedParams = vparams.map(transform)
       noteDefinition(name, transformedParams, Nil)
