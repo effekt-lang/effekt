@@ -11,6 +11,11 @@ def lookup[V](assoc: List[(String, V)], k: String): Option[V] = assoc match {
 
 record User(name: String, age: Double)
 
+def toString(u: Option[User]): String = u match {
+  case Some(u) => "User(name=" ++ u.name ++ ", age=" ++ u.age.show ++ ")"
+  case None()  => "No user found"
+}
+
 def processUser { data: { JsonValue => Option[User] } => Option[User] } : Option[User] = {
   with val obj
     and obj is Dict(fields)
@@ -28,5 +33,5 @@ def main() = {
   with feed("""{ "user": { "name": "Joe", "age": 42 } }""")
   with scanner[Char]
   val data = build { decodeJson() }.second
-  inspect(processUser { {f} => f(data) })
+  println(processUser { {f} => f(data) }.toString)
 }

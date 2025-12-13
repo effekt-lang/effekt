@@ -1,1 +1,1 @@
-Some(User(Joe, 42))
+User(name=Joe, age=42)
