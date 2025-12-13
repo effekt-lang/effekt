@@ -4,6 +4,7 @@ import test
 def main() = {
   suite("HeapTests", false) {
     test("simple heap sort on integers") {
+      with on[OutOfBounds].default { assertTrue(false); <> };
       val h = heap[Int](box { (x: Int, y: Int) =>
         if (x < y) {
           Less()

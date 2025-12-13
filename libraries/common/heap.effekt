@@ -73,6 +73,7 @@ namespace internal {
 ///
 /// O(log n) worst case if capacity suffices, O(1) average
 def insert[T](heap: Heap[T], value: T): Unit = {
+  with on[OutOfBounds].panic();
   val idx = heap.rawContents.add(value)
   internal::bubbleUp(heap, idx)
 }
@@ -81,7 +82,7 @@ def insert[T](heap: Heap[T], value: T): Unit = {
 /// panics when heap is empty
 ///
 /// O(1)
-def findMin[T](heap: Heap[T]): T = {
+def findMin[T](heap: Heap[T]): T / Exception[OutOfBounds] = {
   heap.rawContents.get(0)
 }
 
@@ -89,7 +90,7 @@ def findMin[T](heap: Heap[T]): T = {
 /// panics when heap is empty
 ///
 /// O(log n)
-def deleteMin[T](heap: Heap[T]): T = {
+def deleteMin[T](heap: Heap[T]): T / Exception[OutOfBounds] = {
   val arr = heap.rawContents
   val res = arr.get(0)
   if (arr.size == 1) {
