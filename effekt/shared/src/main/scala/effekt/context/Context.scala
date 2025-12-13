@@ -3,7 +3,7 @@ package context
 
 import effekt.namer.NamerOps
 import effekt.typer.{TyperOps, Unification}
-import effekt.core.TransformerOps
+import effekt.core.{BindingDB, TransformerOps}
 import effekt.source.Tree
 import effekt.util.messages.{EffektMessages, ErrorReporter}
 import effekt.util.Timers
@@ -42,11 +42,13 @@ abstract class Context
     extends NamerOps
     with TyperOps
     with ModuleDB
-    with TransformerOps
     with Timers {
 
   // bring the context itself in scope
   implicit val context: Context = this
+
+  // Storage for bindings
+  var bindingDB: BindingDB = new BindingDB
 
   // the currently processed module
   var module: Module = _
