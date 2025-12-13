@@ -672,11 +672,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case MatchGuard.PatternGuard(scrutinee, pattern, _) => boundTypesInPattern(pattern)
     }
     def equalsFor(tpe: symbols.ValueType): (Expr, Expr) => Expr =
-      tpe match {
-        case tpe if tpe == TUnit => return (lhs, rhs) => Literal(true, Type.TBoolean)
-        case _ =>
-      }
-
       val prelude = Context.module.findDependency(QualifiedName(Nil, "effekt")).getOrElse {
         Context.panic(pp"${Context.module.name.name}: Cannot find 'effekt' in prelude, which is necessary to compile pattern matching.")
       }
@@ -839,7 +834,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transform(tpe: ValueType)(using Context): core.ValueType = tpe match {
     case ValueType.BoxedType(tpe, capture) => core.ValueType.Boxed(transform(tpe), transform(capture))
     case ValueType.ValueTypeRef(tvar) => core.ValueType.Var(tvar)
-    case ValueType.ValueTypeApp(tc, List()) if tc == TopSymbol  => core.Type.TUnit
+    case ValueType.ValueTypeApp(tc, List()) if tc == TopSymbol  => core.Type.TUnit // We translate to Unit in core, to be consistent with coercions introducing unit-values.
     case ValueType.ValueTypeApp(tc, List()) if tc == BottomSymbol  => core.Type.TBottom
     case ValueType.ValueTypeApp(tc, args) => core.ValueType.Data(tc, args.map(transform))
   }

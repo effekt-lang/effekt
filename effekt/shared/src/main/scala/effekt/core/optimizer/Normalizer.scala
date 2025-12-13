@@ -215,9 +215,6 @@ object Normalizer { normal =>
           Stmt.Invoke(normalized.shared, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
       }
 
-    //    case Stmt.Match(scrutinee, tpe, clauses, default) if scrutinee.tpe == Type.TBottom =>
-    //      Stmt.Return(normalize(scrutinee))
-
     case Stmt.Match(scrutinee, tpe, clauses, default) => active(scrutinee) match {
       case Expr.Make(data, tag, targs, vargs) if clauses.exists { case (id, _) => id == tag } =>
         val clause: BlockLit = clauses.collectFirst { case (id, cl) if id == tag => cl }.get
@@ -254,10 +251,6 @@ object Normalizer { normal =>
 
       def normalizeVal(id: Id, binding: Stmt, body: Stmt)(using C: Context): Stmt = normalize(binding) match {
 
-        // [[ val x = ABORT; body ]] = ABORT
-        //        case abort if abort.tpe == Type.TBottom  =>
-        //          abort
-
         // [[ val x: A = shift(p) { {k: A => R} => body2 }; body: B ]] = shift(p) { {k: >>>B<<< => R} => body2 }
         case abort @ Stmt.Shift(p, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeA, answer)), captures), body2)
               if !body2.free.toSet.contains(k) =>
@@ -284,6 +277,10 @@ object Normalizer { normal =>
               normalizeVal(x1, thn, Stmt.App(k, Nil, List(ValueVar(x1, tpe)), Nil)),
               normalizeVal(x2, els, Stmt.App(k, Nil, List(ValueVar(x2, tpe)), Nil)))
           }
+
+        // avoid dead joinpoints on coercions
+        case Stmt.Match(sc, tpe, Nil, None) =>
+          Stmt.Match(sc, body.tpe, Nil, None)
 
         case Stmt.Match(sc, tpe, clauses, default) =>
           val res = normalize(body)

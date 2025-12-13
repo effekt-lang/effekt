@@ -153,6 +153,7 @@ case class Typing[+T](tpe: T, capt: Captures, free: Free) {
 
 object Type {
 
+  val TTop = ValueType.Data(builtins.TopSymbol, Nil)
   val TBottom = ValueType.Data(builtins.BottomSymbol, Nil)
   val TUnit   = ValueType.Data(builtins.UnitSymbol, Nil)
   val TInt = ValueType.Data(builtins.IntSymbol, Nil)

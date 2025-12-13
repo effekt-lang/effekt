@@ -26,8 +26,6 @@ object ErrorContext {
   case class PatternMatch(pattern: source.MatchPattern) extends PositiveContext, NotCoercible
 
   // TODO this should have a tree where the coercion _could_ be inserted.
-  //  it also raises the question: what if we have several "unit"s? Which one do we coerce into?
-  // This would be easier, if we _only_ add coercions for effekt.Unit and effekt.Nothing
   case class MergeTypes(left: symbols.Type, right: symbols.Type) extends PositiveContext, NotCoercible
 
   /**
