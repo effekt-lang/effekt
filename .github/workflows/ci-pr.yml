@@ -97,7 +97,7 @@ jobs:
         run: sbt "effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*pos[\\/]*sideeffects.*"
 
   macos-llvm-tests:
-    name: "macOS LLVM Smoke Test"
+    name: "macOS LLVM Smoke Tests"
     needs: build-and-compile
     runs-on: macos-latest
     steps:
@@ -112,8 +112,8 @@ jobs:
       - name: Compile project
         run: sbt Test/compile
 
-      - name: Run macOS LLVM smoke test
-        run: sbt "effektJVM/testOnly effekt.LLVMTests -- --tests=.*benchmarks[\\/]*input_output[\\/]*large_file.*"
+      - name: Run macOS LLVM smoke tests (with debug)
+        run: EFFEKT_DEBUG=1 sbt "effektJVM/testOnly effekt.LLVMTests -- --tests=.*benchmarks[\\/]*input_output[\\/].*"
 
   js-tests:
     name: "JS Backend"
@@ -165,5 +165,5 @@ jobs:
 
       - uses: ./.github/actions/restore-build-cache
 
-      - name: Run LLVM backend tests
+      - name: Run LLVM backend tests (with debug & valgrind)
         run: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt effektJVM/testBackendLLVM
