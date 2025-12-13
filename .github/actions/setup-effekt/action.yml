@@ -15,7 +15,7 @@ inputs:
     required: false
     default: '18'
   install-dependencies:
-    description: 'Whether to install system dependencies (Linux only)'
+    description: 'Whether to install system dependencies (Linux & macOS only)'
     required: false
     default: 'false'
   install-valgrind:
@@ -40,6 +40,7 @@ runs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
+
 
     # Only run the following on Linux-based runners
     - name: Update apt database
@@ -66,3 +67,17 @@ runs:
       if: ${{ inputs.install-dependencies == 'true' && runner.os == 'Linux' }}
       run: sudo apt-get install -y libuv1-dev
       shell: bash
+
+
+    # Only run the following on macOS-based runners
+    - name: Install LLVM ${{ inputs.llvm-version }} (macOS)
+      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'macOS' }}
+      run: |
+        brew install llvm@${{ inputs.llvm-version }}
+        echo "$(brew --prefix llvm@${{ inputs.llvm-version }})/bin" >> $GITHUB_PATH
+      shell: bash
+
+    - name: Install libuv (macOS)
+      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'macOS' }}
+      run: brew install libuv
+      shell: bash 
