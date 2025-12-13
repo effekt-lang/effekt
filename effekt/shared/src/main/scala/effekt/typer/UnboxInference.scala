@@ -106,16 +106,24 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
       val bargsTransformed = bargs.map(rewriteAsBlock)
 
       val hasMethods = m.definition match {
-        // an overloaded call target
-        case symbols.CallTarget(syms) => syms.flatten.exists(b => b.isInstanceOf[symbols.Operation])
-        case s => false
+        case symbols.CallTarget(syms) => syms.flatten.exists(_.isInstanceOf[symbols.Operation])
+        case _: symbols.Operation => true
+        case _ => false
       }
 
-      // we prefer methods over uniform call syntax
       if (hasMethods) {
+        // True method call on interface - receiver is the object
         MethodCall(rewriteAsBlock(receiver), id, targs, vargsTransformed, bargsTransformed, span)
+      } else if (!isBlockLike(receiver)) {
+        // Value-UFCS: receiver becomes first value argument
+        Call(IdTarget(id).inheritPosition(id), targs,
+          rewriteAsExpr(ValueArg.Unnamed(receiver)) :: vargsTransformed,
+          bargsTransformed, span)
       } else {
-        Call(IdTarget(id).inheritPosition(id), targs, rewriteAsExpr(ValueArg.Unnamed(receiver)) :: vargsTransformed, bargsTransformed, span)
+        // Block-UFCS: receiver becomes first block argument
+        Call(IdTarget(id).inheritPosition(id), targs,
+          vargsTransformed,
+          rewriteAsBlock(receiver) :: bargsTransformed, span)
       }
 
     case TryHandle(prog, handlers, span) =>
@@ -230,5 +238,27 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
     target.inheritPosition(source)
     C.copyAnnotations(source, target)
     target
+  }
+
+  /**
+   * Determines if a term is inherently a block (computation) based on its syntactic form & definition.
+   *
+   * Notes:
+   * 1. [[RefBinder]] (VarBinder, RegBinder) are treated as values, not blocks,
+   * even though they technically extend [[BlockSymbol]].  This is because mutable
+   * variables hold values and are accessed like values.
+   *
+   * 2. [[BlockLiteral]] are skipped for the purposes of UFCS, see PR #1250
+   */
+  def isBlockLike(e: Term)(using C: Context): Boolean = e match {
+    case v: Var => v.definition match {
+      case _: symbols.RefBinder => false   // VarBinder, RegBinder - treated as values!
+      case _: symbols.BlockSymbol => true  // Other block symbols (capabilities, functions, etc.)
+      case _ => false                      // ValueSymbol
+    }
+    case _: Unbox => true
+    case _: New => true
+    case _: BlockLiteral => false // explicitly disallowed, see PR #1250
+    case _ => false
   }
 }
