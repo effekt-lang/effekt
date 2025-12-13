@@ -270,16 +270,18 @@ class Parser(tokens: Seq[Token], source: Source) {
           else ExprStmt(e, stmts(inBraces), span())
       }) labelled "statements"
 
-  // with val <PATTERN> (, <PATTERN>)* = <EXPR>; <STMTS>
+  // with val <PATTERN> (, <PATTERN>)* (and <GUARD>)* = <EXPR> (else <STMT>)?; <STMTS>
   // with def <BLOCKPARAM> = <EXPR>; <STMTS>
   // with <EXPR>; <STMTS>
   def withStmt(inBraces: Boolean): Stmt = `with` ~> peek.kind match {
     case `val` =>
       consume(`val`)
       val patterns = some(matchPattern, `,`)
+      val guards = manyWhile(`and` ~> matchGuard(), `and`)
       val call = `=` ~> expr()
+      val fallback = when(`else`) { Some(stmt()) } { None }
       val body = semi() ~> stmts(inBraces)
-      desugarWithPatterns(patterns, call, body, span())
+      desugarWithPatterns(patterns, guards, call, fallback, body, span())
 
     case `def` =>
       val params = (`def` ~> peek.kind match {
@@ -298,17 +300,17 @@ class Parser(tokens: Seq[Token], source: Source) {
       desugarWith(call, blockLit, span())
   }
 
-  // Desugar `with val` with pattern(s)
-  def desugarWithPatterns(patterns: Many[MatchPattern], call: Term, body: Stmt, withSpan: Span): Stmt = {
-    // Check if all patterns are simple variable bindings or ignored
-    val allSimpleVars = patterns.unspan.forall {
+  // Desugar `with val` with pattern(s), optional guards, and optional fallback
+  def desugarWithPatterns(patterns: Many[MatchPattern], guards: List[MatchGuard], call: Term, fallback: Option[Stmt], body: Stmt, withSpan: Span): Stmt = {
+    // Check if all patterns are simple variable bindings or ignored, with no guards and no fallback
+    val allSimpleVars = guards.isEmpty && fallback.isEmpty && patterns.unspan.forall {
       case AnyPattern(_, _) => true
       case IgnorePattern(_) => true
       case _ => false
     }
 
     val blockLit: BlockLiteral = if (allSimpleVars) {
-      // Simple case: all patterns are just variable names (or ignored)
+      // Simple case: all patterns are just variable names (or ignored), no guards, no fallback
       // Desugar to: call { (x, y, _, ...) => body }
       val vparams: List[ValueParam] = patterns.unspan.map {
         case AnyPattern(id, span) => ValueParam(id, None, span)
@@ -317,8 +319,8 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
       BlockLiteral(Nil, vparams, Nil, body, body.span.synthesized)
     } else {
-      // Complex case: at least one pattern needs matching
-      // Desugar to: call { case pat1, pat2, ...  => body }
+      // Complex case: at least one pattern needs matching, or there are guards/fallback
+      // Desugar to: call { case pat1, pat2, ...  and guard1 and ...  => body; else => fallback }
       // This requires one argument per pattern, matching against multiple scrutinees
       val patternList = patterns.unspan
       val names = List.tabulate(patternList.length) { n => s"__withArg${n}" }
@@ -336,8 +338,8 @@ class Parser(tokens: Seq[Token], source: Source) {
         case Many(ps, span) => MultiPattern(ps, span)
       }
 
-      val clause = MatchClause(pattern, Nil, body, Span(source, pattern.span.from, body.span.to, Synthesized))
-      val matchExpr = Match(scrutinees, List(clause), None, withSpan.synthesized)
+      val clause = MatchClause(pattern, guards, body, Span(source, pattern.span.from, body.span.to, Synthesized))
+      val matchExpr = Match(scrutinees, List(clause), fallback, withSpan.synthesized)
       val matchBody = Return(matchExpr, withSpan.synthesized)
       BlockLiteral(Nil, vparams, Nil, matchBody, withSpan.synthesized)
     }
