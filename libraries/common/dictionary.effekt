@@ -26,20 +26,20 @@ def insert[A](trie: Dictionary[A], key: ByteArray, value: A): Dictionary[A] = {
         case Empty() =>
           val child = go(Empty(), i + 1)
           val children = array(256, Empty())
-          children.unsafeSet(key.unsafeGet(i).toInt, child)
+          children.set(key.get(i).toInt, child)
           Branch(children)
         case Leaf(existing) =>
           val child = go(Empty(), i + 1)
           val children = array(256, Empty())
-          children.unsafeSet(key.unsafeGet(i).toInt, child)
+          children.set(key.get(i).toInt, child)
           Node(existing, children)
         case Branch(children) =>
-          val child = go(children.unsafeGet(key.unsafeGet(i).toInt), i + 1)
-          children.unsafeSet(key.unsafeGet(i).toInt, child)
+          val child = go(children.get(key.get(i).toInt), i + 1)
+          children.set(key.get(i).toInt, child)
           Branch(children)
         case Node(existing, children) =>
-          val child = go(children.unsafeGet(key.unsafeGet(i).toInt), i + 1)
-          children.unsafeSet(key.unsafeGet(i).toInt, child)
+          val child = go(children.get(key.get(i).toInt), i + 1)
+          children.set(key.get(i).toInt, child)
           Node(existing, children)
       }
     } else {
@@ -64,8 +64,8 @@ def lookup[A](trie: Dictionary[A], key: ByteArray): Option[A] = {
       trie match {
         case Empty() => None()
         case Leaf(_) => None()
-        case Branch(children) => go(children.unsafeGet(key.unsafeGet(i).toInt), i + 1)
-        case Node(_, children) => go(children.unsafeGet(key.unsafeGet(i).toInt), i + 1)
+        case Branch(children) => go(children.get(key.get(i).toInt), i + 1)
+        case Node(_, children) => go(children.get(key.get(i).toInt), i + 1)
       }
     } else {
       trie match {
@@ -97,12 +97,12 @@ def each[A](trie: Dictionary[A]): Unit / emit[A] =
     case Leaf(value) => do emit(value)
     case Branch(children) =>
       each(0, children.size) { i =>
-        each(children.unsafeGet(i))
+        each(children.get(i))
       }
     case Node(value, children) =>
       do emit(value)
       each(0, children.size) { i =>
-        each(children.unsafeGet(i))
+        each(children.get(i))
       }
   }
 
@@ -110,7 +110,7 @@ def each[A](trie: Dictionary[A]): Unit / emit[A] =
 def eachTagged[A](trie: Dictionary[A]): Unit / emit[Tagged[A]] = {
   def fromBytesReverse(bytes: List[Byte], n: Int): ByteArray = {
     val key = bytearray::allocate(n)
-    foreachIndex(bytes) { (i, b) => key.unsafeSet(n - 1 - i, b) }
+    foreachIndex(bytes) { (i, b) => key.set(n - 1 - i, b) }
     key
   }
   def go(trie: Dictionary[A], key: List[Byte], n: Int): Unit =
@@ -119,12 +119,12 @@ def eachTagged[A](trie: Dictionary[A]): Unit / emit[Tagged[A]] = {
       case Leaf(value) => do emit(Tagged(fromBytesReverse(key, n), value))
       case Branch(children) =>
         each(0, children.size) { i =>
-          go(children.unsafeGet(i), Cons(i.toByte, key), n + 1)
+          go(children.get(i), Cons(i.toByte, key), n + 1)
         }
       case Node(value, children) =>
         do emit(Tagged(fromBytesReverse(key, n), value))
         each(0, children.size) { i =>
-          go(children.unsafeGet(i), Cons(i.toByte, key), n + 1)
+          go(children.get(i), Cons(i.toByte, key), n + 1)
         }
     }
   go(trie, Nil(), 0)
