@@ -96,6 +96,25 @@ jobs:
       - name: Run Windows smoke test
         run: sbt "effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*pos[\\/]*sideeffects.*"
 
+  macos-llvm-tests:
+    name: "macOS LLVM Smoke Test"
+    needs: build-and-compile
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+        with: 
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+        with:
+          install-dependencies: 'true'
+
+      - name: Compile project
+        run: sbt Test/compile
+
+      - name: Run macOS LLVM smoke test
+        run: sbt "effektJVM/testOnly effekt.LLVMTests -- --tests=.*benchmarks[\\/]*input_output[\\/]*large_file.*"
+
   js-tests:
     name: "JS Backend"
     needs: build-and-compile
