@@ -1,0 +1,7 @@
+module with_val_two_args_complex
+
+record Pos(i: Int, x: Char)
+def main() = {
+  with val i, Pos(j, x) = [Pos(1, 'a'), Pos(2, 'b'), Pos(3, 'c')].foreachIndex;
+  println(show(i) ++ ": " ++ show(x))
+}

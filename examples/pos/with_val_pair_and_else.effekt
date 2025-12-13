@@ -1,0 +1,37 @@
+module with_val_pair_and_else
+
+import json
+import scanner
+
+def lookup[V](assoc: List[(String, V)], k: String): Option[V] = assoc match {
+  case Cons((k2, v), rest) and k == k2 => Some(v)
+  case Cons(_      , rest)             => rest.lookup(k)
+  case Nil()                           => None()
+}
+
+record User(name: String, age: Double)
+
+def toString(u: Option[User]): String = u match {
+  case Some(u) => "User(name=" ++ u.name ++ ", age=" ++ u.age.show ++ ")"
+  case None()  => "No user found"
+}
+
+def processUser { data: { ((JsonValue, Double)) => Option[User] } => Option[User] } : Option[User] = {
+  with val (obj, currentYear)
+    and obj is Dict(fields)
+    and fields.lookup("user") is Some(userObj)
+    and userObj is Dict(userFields)
+    and userFields.lookup("name") is Some(String(name))
+    and userFields.lookup("birthYear") is Some(Number(birthYear))
+      = data() else None()
+
+  Some(User(name, currentYear - birthYear))
+}
+
+def main() = {
+  with on[WrongFormat].panic;
+  with feed("""{ "user": { "name": "Joe", "birthYear": 1983 } }""")
+  with scanner[Char]
+  val data = build { decodeJson() }.second
+  println(processUser { {f} => f((data, 2025.0)) }.toString)
+}

@@ -284,40 +284,94 @@ class Parser(tokens: Seq[Token], source: Source) {
           else ExprStmt(e, stmts(inBraces), span())
       }) labelled "statements"
 
-  // ATTENTION: here the grammar changed (we added `with val` to disambiguate)
-  // with val <ID> (: <TYPE>)? = <EXPR>; <STMTS>
-  // with val (<ID> (: <TYPE>)?...) = <EXPR>
+  // with val <PATTERN> (, <PATTERN>)* (and <GUARD>)* = <EXPR> (else <STMT>)?; <STMTS>
+  // with def <BLOCKPARAM> = <EXPR>; <STMTS>
   // with <EXPR>; <STMTS>
   def withStmt(inBraces: Boolean): Stmt = `with` ~> peek.kind match {
     case `val` =>
-      val params = (`val` ~> peek.kind match {
-        case `(` => valueParamsOpt()
-        case _ => List(valueParamOpt()) // TODO copy position
-      })
-      desugarWith(params, Nil, `=` ~> expr(), semi() ~> stmts(inBraces), span())
+      consume(`val`)
+      val patterns = some(matchPattern, `,`)
+      val guards = manyWhile(`and` ~> matchGuard(), `and`)
+      val call = `=` ~> expr()
+      val fallback = when(`else`) { Some(stmt()) } { None }
+      val body = semi() ~> stmts(inBraces)
+      desugarWithPatterns(patterns, guards, call, fallback, body, span())
 
     case `def` =>
       val params = (`def` ~> peek.kind match {
         case `{` => blockParamsOpt()
         case _ => List(blockParamOpt()) // TODO copy position
       })
-      desugarWith(Nil, params, `=` ~> expr(), semi() ~> stmts(inBraces), span())
+      val call = `=` ~> expr()
+      val body = semi() ~> stmts(inBraces)
+      val blockLit: BlockLiteral = BlockLiteral(Nil, Nil, params, body, body.span.synthesized)
+      desugarWith(call, blockLit, span())
 
-    case _ => desugarWith(Nil, Nil, expr(), semi() ~> stmts(inBraces), span())
+    case _ =>
+      val call = expr()
+      val body = semi() ~> stmts(inBraces)
+      val blockLit: BlockLiteral = BlockLiteral(Nil, Nil, Nil, body, body.span.synthesized)
+      desugarWith(call, blockLit, span())
   }
 
-  def desugarWith(vparams: List[ValueParam], bparams: List[BlockParam], call: Term, body: Stmt, withSpan: Span): Stmt = call match {
-     case m@MethodCall(receiver, id, tps, vargs, bargs, callSpan) =>
-       Return(MethodCall(receiver, id, tps, vargs, bargs :+ (BlockLiteral(Nil, vparams, bparams, body, body.span.synthesized)), callSpan), withSpan.synthesized)
-     case c@Call(callee, tps, vargs, bargs, callSpan) =>
-       Return(Call(callee, tps, vargs, bargs :+ (BlockLiteral(Nil, vparams, bparams, body, body.span.synthesized)), callSpan), withSpan.synthesized)
-     case Var(id, varSpan) =>
-       val tgt = IdTarget(id)
-       Return(Call(tgt, Nil, Nil, (BlockLiteral(Nil, vparams, bparams, body, body.span.synthesized)) :: Nil, varSpan), withSpan.synthesized)
-     case Do(id, targs, vargs, bargs, doSpan) =>
-      Return(Do(id, targs, vargs, bargs :+ BlockLiteral(Nil, vparams, bparams, body, body.span.synthesized), doSpan), withSpan.synthesized)
-     case term =>
-       Return(Call(ExprTarget(term), Nil, Nil, (BlockLiteral(Nil, vparams, bparams, body, body.span.synthesized)) :: Nil, term.span.synthesized), withSpan.synthesized)
+  // Desugar `with val` with pattern(s), optional guards, and optional fallback
+  def desugarWithPatterns(patterns: Many[MatchPattern], guards: List[MatchGuard], call: Term, fallback: Option[Stmt], body: Stmt, withSpan: Span): Stmt = {
+    // Check if all patterns are simple variable bindings or ignored, with no guards and no fallback
+    val allSimpleVars = guards.isEmpty && fallback.isEmpty && patterns.unspan.forall {
+      case AnyPattern(_, _) => true
+      case IgnorePattern(_) => true
+      case _ => false
+    }
+
+    val blockLit: BlockLiteral = if (allSimpleVars) {
+      // Simple case: all patterns are just variable names (or ignored), no guards, no fallback
+      // Desugar to: call { (x, y, _, ...) => body }
+      val vparams: List[ValueParam] = patterns.unspan.map {
+        case AnyPattern(id, span) => ValueParam(id, None, span)
+        case IgnorePattern(span) => ValueParam(IdDef(s"__ignored", span.synthesized), None, span)
+        case _ => sys.error("impossible: checked above")
+      }
+      BlockLiteral(Nil, vparams, Nil, body, body.span.synthesized)
+    } else {
+      // Complex case: at least one pattern needs matching, or there are guards/fallback
+      // Desugar to: call { case pat1, pat2, ...  and guard1 and ...  => body; else => fallback }
+      // This requires one argument per pattern, matching against multiple scrutinees
+      val patternList = patterns.unspan
+      val names = List.tabulate(patternList.length) { n => s"__withArg${n}" }
+      val argSpans = patternList.map(_.span)
+
+      val vparams: List[ValueParam] = names.zip(argSpans).map { (name, span) =>
+        ValueParam(IdDef(name, span.synthesized), None, span.synthesized)
+      }
+      val scrutinees = names.zip(argSpans).map { (name, span) =>
+        Var(IdRef(Nil, name, span.synthesized), span.synthesized)
+      }
+
+      val pattern: MatchPattern = patterns match {
+        case Many(List(single), _) => single
+        case Many(ps, span) => MultiPattern(ps, span)
+      }
+
+      val clause = MatchClause(pattern, guards, body, Span(source, pattern.span.from, body.span.to, Synthesized))
+      val matchExpr = Match(scrutinees, List(clause), fallback, withSpan.synthesized)
+      val matchBody = Return(matchExpr, withSpan.synthesized)
+      BlockLiteral(Nil, vparams, Nil, matchBody, withSpan.synthesized)
+    }
+
+    desugarWith(call, blockLit, withSpan)
+  }
+
+  def desugarWith(call: Term, blockLit: BlockLiteral, withSpan: Span): Stmt = call match {
+    case MethodCall(receiver, id, tps, vargs, bargs, callSpan) =>
+      Return(MethodCall(receiver, id, tps, vargs, bargs :+ blockLit, callSpan), withSpan.synthesized)
+    case Call(callee, tps, vargs, bargs, callSpan) =>
+      Return(Call(callee, tps, vargs, bargs :+ blockLit, callSpan), withSpan.synthesized)
+    case Var(id, varSpan) =>
+      Return(Call(IdTarget(id), Nil, Nil, blockLit :: Nil, varSpan), withSpan.synthesized)
+    case Do(id, targs, vargs, bargs, doSpan) =>
+      Return(Do(id, targs, vargs, bargs :+ blockLit, doSpan), withSpan.synthesized)
+    case term =>
+      Return(Call(ExprTarget(term), Nil, Nil, blockLit :: Nil, term.span.synthesized), withSpan.synthesized)
   }
 
   def maybeSemi(): Unit = if isSemi then semi()
