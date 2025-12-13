@@ -128,7 +128,7 @@ class RenamerTests extends CoreTests {
         |
         |type Data { X(a:Int, b:Int) }
         |def foo = { () =>
-        |  12 match {
+        |  12 match [Int] {
         |    X : {(aa:Int, bb:Int) => return aa:Int }
         |  }
         |}
@@ -141,7 +141,7 @@ class RenamerTests extends CoreTests {
     val code =
       """module main
         |
-        |def foo = { ['A](a: A) =>
+        |def foo = { ['A](a: Identity[A]) =>
         |  return a:Identity[A]
         |}
         |""".stripMargin

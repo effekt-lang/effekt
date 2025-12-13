@@ -22,9 +22,9 @@ def makeCounter {r: Region} = {
 def twoCounters() = {
   region outer {
     region inner {
-      val c1: Counter at inner = makeCounter {inner}
-      val c2: Counter at outer = makeCounter {outer}
-      val l = Cons[Counter at {inner, outer}](c1, Cons(c2, Nil())); // works
+      def c1: Counter = makeCounter {inner}
+      def c2: Counter = makeCounter {outer}
+      val l = Cons[Counter at {inner, outer}](box c1, Cons(box c2, Nil())); // works
 
       // Doesnt work since we implement "SimplerSub"
       // We check ?A <: Counter at inner
@@ -33,19 +33,12 @@ def twoCounters() = {
       // val l2 = Cons(c1, Cons(c2, Nil()));
 
       val _ = {
-        val c1 = makeCounter {inner} // infers now {inner,outer} on c1
-        val c2: Counter at outer = makeCounter {outer}
-        val l = Cons(c1, Cons(c2, Nil())); // works
+        def c1 = makeCounter {inner} // infers now {inner,outer} on c1
+        def c2: Counter = makeCounter {outer}
+        val l = Cons(box c1, Cons(box c2, Nil())); // works
         ()
       };
 
-      // also works since boxing is now moved
-      val _ = {
-        def c1 = makeCounter {inner}
-        def c2 = makeCounter {outer}
-        val l = Cons(box c1, Cons(box c2, Nil()));
-        ()
-      };
       ()
     }
   }

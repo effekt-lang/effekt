@@ -142,7 +142,7 @@ class EffektLexers extends Parsers {
   /**
    * Literals
    */
-  lazy val integerLiteral  = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
+  lazy val integerLiteral = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
   lazy val doubleLiteral =
     regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)([eE][+-]?[0-9]+)?".r, "Double literal")
   lazy val stringLiteral =
@@ -150,8 +150,10 @@ class EffektLexers extends Parsers {
       val contents = s.substring(1, s.length - 1)
       unescapeString(contents)
     }
-  lazy val charLiteral   = regex("""'.'""".r, "Character literal") ^^ { s => s.codePointAt(1) }
-  lazy val unicodeChar   = regex("""\\u\{[0-9A-Fa-f]{1,6}\}""".r, "Unicode character literal") ^^ {
+  lazy val charLiteral = regex("""'\\\d+'""".r, "Character literal") ^^ {
+    case s => Integer.parseUnsignedInt(s.stripPrefix("'\\").stripSuffix("'"))
+  }
+  lazy val unicodeChar = regex("""\\u\{[0-9A-Fa-f]{1,6}\}""".r, "Unicode character literal") ^^ {
     case contents =>  Integer.parseInt(contents.stripPrefix("\\u{").stripSuffix("}"), 16)
   }
 
@@ -261,6 +263,7 @@ class CoreParsers(names: Names) extends EffektLexers {
    * Literals
    */
   lazy val int    = integerLiteral ^^ { n => Literal(n.toLong, Type.TInt) }
+  lazy val char   = charLiteral ^^ { n => Literal(n.toLong, Type.TChar) }
   lazy val bool   = `true` ^^^ Literal(true, Type.TBoolean) | `false` ^^^ Literal(false, Type.TBoolean)
   lazy val unit   = literal("()") ^^^ Literal((), Type.TUnit)
   lazy val double = doubleLiteral ^^ { n => Literal(n.toDouble, Type.TDouble) }
@@ -343,7 +346,7 @@ class CoreParsers(names: Names) extends EffektLexers {
   // -----------
   lazy val toplevel: P[Toplevel] =
   ( `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~/> stmt) ^^ {
-    case (name ~ tpe ~ binding) => Toplevel.Val(name, tpe.getOrElse(binding.tpe), binding)
+    case (name ~ tpe ~ binding) => Toplevel.Val(name, binding)
   }
   | `def` ~> id ~ (`=` ~/> block) ^^ Toplevel.Def.apply
   | `def` ~> id ~ parameters ~ (`=` ~> stmt) ^^ {
@@ -360,16 +363,18 @@ class CoreParsers(names: Names) extends EffektLexers {
     ( `{` ~/> stmts <~ `}`
     | `return` ~> expr ^^ Stmt.Return.apply
     | `reset` ~> blockLit ^^ Stmt.Reset.apply
-    | `shift` ~> maybeParens(blockVar) ~ blockLit ^^ Stmt.Shift.apply
+    | `shift` ~> maybeParens(blockVar) ~ (`{` ~> blockParam) ~ (`=>` ~/> stmts <~ `}`) ^^ {
+        case p ~ k ~ body => Stmt.Shift(p, k, body)
+      }
     | `resume` ~> maybeParens(blockVar) ~ stmt ^^ Stmt.Resume.apply
     | block ~ (`.` ~> id ~ (`:` ~> blockType)).? ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ {
-      case (recv ~ Some(method ~ tpe) ~ targs ~ vargs ~ bargs) => Invoke(recv, method, tpe, targs, vargs, bargs)
-      case (recv ~ None ~ targs ~ vargs ~ bargs) => App(recv, targs, vargs, bargs)
+      case recv ~ Some(method ~ tpe) ~ targs ~ vargs ~ bargs => Invoke(recv, method, tpe, targs, vargs, bargs)
+      case recv ~ None ~ targs ~ vargs ~ bargs => App(recv, targs, vargs, bargs)
     }
     | (`if` ~> `(` ~/> expr <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
     | `region` ~> blockLit ^^ Stmt.Region.apply
-    | `<>` ~> `@` ~> (stringLiteral <~ `:`) ~ (integerLiteral <~ `:`) ~ integerLiteral ^^ {
-      case (name ~ from ~ to) =>
+    | `<>` ~> (`:` ~> valueType) ~ (`@` ~> (stringLiteral <~ `:`) ~ (integerLiteral <~ `:`) ~ integerLiteral) ^^ {
+      case (tpe ~ (name ~ from ~ to)) =>
         val source = if (name.startsWith("file://")) {
           kiama.util.FileSource(name.stripPrefix("file://"))
         } else if (name.startsWith("string://")) {
@@ -377,10 +382,10 @@ class CoreParsers(names: Names) extends EffektLexers {
         } else {
           sys error s"Unsupported source scheme in hole source name: $name"
         }
-        Hole(effekt.source.Span(source, from.toInt, to.toInt))
+        Hole(tpe, effekt.source.Span(source, from.toInt, to.toInt))
       }
-    | `<>` ^^^ Hole(effekt.source.Span.missing)
-    | (expr <~ `match`) ~/ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
+    | `<>` ~> (`:` ~> valueType) ^^ { tpe => Hole(tpe, effekt.source.Span.missing) }
+    | (expr <~ `match`) ~/ (`[` ~> valueType <~ `]`) ~ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
     )
 
   lazy val stmts: P[Stmt] =
@@ -388,9 +393,9 @@ class CoreParsers(names: Names) extends EffektLexers {
         case (name ~ callee ~ targs ~ vargs ~ bargs ~ body) =>
           ImpureApp(name, callee, targs, vargs, bargs, body)
       }
-    | `let` ~/> id ~ maybeTypeAnnotation ~ (`=` ~/> expr) ~ stmts ^^ {
-      case (name ~ tpe ~ binding ~ body) =>
-        Let(name, tpe.getOrElse(binding.tpe), binding, body)
+    | `let` ~/> id ~ (`=` ~/> expr) ~ stmts ^^ {
+      case (name ~ binding ~ body) =>
+        Let(name, binding, body)
     }
       | `get` ~> id ~ (`:` ~> valueType) ~ (`=` ~> `!` ~> id) ~ (`@` ~> id) ~ (`;` ~> stmts) ^^ {
       case name ~ tpe ~ ref ~ cap ~ body => Get(name, tpe, ref, Set(cap), body)
@@ -404,7 +409,7 @@ class CoreParsers(names: Names) extends EffektLexers {
         Stmt.Def(name, BlockLit(tparams, cparams, vparams, bparams, body), rest)
     }
       | `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~> stmt) ~ (`;` ~> stmts) ^^ {
-      case id ~ tpe ~ binding ~ body => Val(id, tpe.getOrElse(binding.tpe), binding, body)
+      case id ~ tpe ~ binding ~ body => Val(id, binding, body)
     }
       | `var` ~> id ~ (`in` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ { case id ~ region ~ init ~ body => Alloc(id, init, region, body) }
       | `var` ~> id ~ (`@` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ { case id ~ cap ~ init ~ body => Var(id, init, cap, body) }
@@ -436,7 +441,7 @@ class CoreParsers(names: Names) extends EffektLexers {
     | failure("Expected a pure expression.")
     )
 
-  lazy val literal: P[Expr] = double | int | bool | string | unit
+  lazy val literal: P[Expr] = double | int | char | bool | string | unit
 
 
   // Calls

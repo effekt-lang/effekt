@@ -3,41 +3,53 @@ package typer
 
 import effekt.symbols.ErrorMessageInterpolator
 
-sealed trait ErrorContext { def polarity: Polarity }
+sealed trait ErrorContext { def polarity: Polarity; def coercible: Option[Coercion => Unit] }
 sealed trait PositiveContext extends ErrorContext { def polarity = Covariant }
-sealed trait NegativeContext extends ErrorContext { def polarity = Contravariant }
-sealed trait InvariantContext extends ErrorContext { def polarity = Invariant }
+sealed trait NegativeContext extends ErrorContext, NotCoercible { def polarity = Contravariant }
+sealed trait InvariantContext extends ErrorContext, NotCoercible { def polarity = Invariant }
+trait NotCoercible { def coercible: Option[Coercion => Unit] = None }
 
 object ErrorContext {
 
   /**
    * A generic context, checking a type against an expected type at position [[checkedTree]].
+   *
+   * TODO we use this for value types AND blocktypes (which cannot be coerced)
    */
-  case class Expected(got: symbols.Type, exp: symbols.Type, checkedTree: source.Tree) extends PositiveContext
+  case class Expected(got: symbols.Type, exp: symbols.Type, checkedTree: source.Tree, coercible: Option[Coercion => Unit]) extends PositiveContext
 
   /**
    * A pattern matching context, checking a scrutinee against the return type of the match pattern [[pattern]]
+   *
+   * TODO we need to have the scrutinee since this is the one that we would add a coercion on.
    */
-  case class PatternMatch(pattern: source.MatchPattern) extends PositiveContext
+  case class PatternMatch(pattern: source.MatchPattern) extends PositiveContext, NotCoercible
+
+  // TODO this should have a tree where the coercion _could_ be inserted.
+  case class MergeTypes(left: symbols.Type, right: symbols.Type) extends PositiveContext, NotCoercible
+
+  /**
+   * covariant, but doesn't admit coercions since it is not used on types, but captures.
+   */
+  case class CaptureFlow(from: symbols.Captures, to: symbols.Captures, checkedTree: source.Tree) extends PositiveContext, NotCoercible
+
+  case class MergeCaptures() extends PositiveContext, NotCoercible
 
   /**
    * A context matching a declared type [[declared]] against the type defined at the use site [[defined]].
+   *
+   * Doesn't admit coercions.
    */
   case class Declaration(param: source.Param, declared: symbols.Type, defined: symbols.Type) extends NegativeContext
 
 
-  case class CaptureFlow(from: symbols.Captures, to: symbols.Captures, checkedTree: source.Tree) extends PositiveContext
-
-  case class MergeTypes(left: symbols.Type, right: symbols.Type) extends PositiveContext
-  case class MergeCaptures() extends PositiveContext
-
   case class MergeInvariant(outer: ErrorContext) extends InvariantContext
   case class TypeConstructor(outer: ErrorContext) extends InvariantContext
   case class TypeConstructorArgument(outer: ErrorContext) extends InvariantContext
-  case class BoxedTypeBlock(left: symbols.BoxedType, right: symbols.BoxedType, outer: ErrorContext) extends ErrorContext { def polarity = outer.polarity }
-  case class BoxedTypeCapture(left: symbols.BoxedType, right: symbols.BoxedType, outer: ErrorContext) extends ErrorContext { def polarity = outer.polarity }
-  case class FunctionArgument(left: symbols.FunctionType, right: symbols.FunctionType, outer: ErrorContext) extends ErrorContext { def polarity = outer.polarity.flip }
-  case class FunctionReturn(outer: ErrorContext) extends ErrorContext { def polarity = outer.polarity }
+  case class BoxedTypeBlock(left: symbols.BoxedType, right: symbols.BoxedType, outer: ErrorContext) extends InvariantContext
+  case class BoxedTypeCapture(left: symbols.BoxedType, right: symbols.BoxedType, outer: ErrorContext) extends InvariantContext
+  case class FunctionArgument(left: symbols.FunctionType, right: symbols.FunctionType, outer: ErrorContext) extends InvariantContext
+  case class FunctionReturn(outer: ErrorContext) extends InvariantContext
   case class FunctionEffects(outer: ErrorContext) extends InvariantContext
 
   // TODO defer rendering of error messages to Context
@@ -45,7 +57,7 @@ object ErrorContext {
 
     def go(ctx: ErrorContext): String = ctx match {
 
-      case Expected(got, exp, tree) =>
+      case Expected(got, exp, tree, coercible) =>
         val expRendered = pp"$exp"
         val gotRendered = pp"$got"
         val msg = if ((expRendered.size + gotRendered.size) < 25) {

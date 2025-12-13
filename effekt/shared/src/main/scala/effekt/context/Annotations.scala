@@ -148,6 +148,14 @@ object Annotations {
   )
 
   /**
+   * Coercions inferred by typer and applied by core.Transformer
+   */
+  val ShouldCoerce = TreeAnnotation[source.Tree, typer.Coercion](
+    "ShouldCoerce",
+    "whether to coerce"
+  )
+
+  /**
    * Value type of symbols like value binders or value parameters
    */
   val ValueType = SymbolAnnotation[symbols.ValueSymbol, symbols.ValueType](
@@ -186,7 +194,7 @@ object Annotations {
     "HolesForFile",
     "All holes with information about the names in scope"
   )
-  
+
   /**
    * The module a given symbol is defined in
    *
@@ -293,16 +301,6 @@ object Annotations {
   val CapabilityReceiver = TreeAnnotation[source.Do, symbols.BlockParam](
     "CapabilityReceiver",
     "the receiver as inferred for this effect operation call"
-  )
-
-  /**
-   * The lexical region as introduced by namer
-   *
-   * Used by typer for region checking mutable variables.
-   */
-  val SelfRegion = TreeAnnotation[source.Tree, symbols.TrackedParam](
-    "SelfRegion",
-    "the region corresponding to a lexical scope"
   )
 
   /**

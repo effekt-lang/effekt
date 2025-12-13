@@ -105,7 +105,7 @@ class TestRenamerTests extends CoreTests {
         |
         |type Data { X(a:Int, b:Int) }
         |def foo = { () =>
-        |  12 match {
+        |  12 match [Int] {
         |    X : {(aa:Int, bb:Int) => return aa:Int }
         |  }
         |}
@@ -118,7 +118,7 @@ class TestRenamerTests extends CoreTests {
         |}
         |
         |def renamed2() = {
-        |  12 match {
+        |  12 match [Int] {
         |    X : { (renamed3: Int, renamed4: Int) =>
         |      return renamed3: Int
         |    }
@@ -132,14 +132,14 @@ class TestRenamerTests extends CoreTests {
     val input =
       """module main
         |
-        |def foo = { ['A](a: A) =>
+        |def foo = { ['A](a: Identity[A]) =>
         |  return a:Identity[A]
         |}
         |""".stripMargin
     val expected =
       """module main
         |
-        |def renamed0['renamed1](renamed2: renamed1) = {
+        |def renamed0['renamed1](renamed2: Identity[renamed1]) = {
         |  return renamed2: Identity[renamed1]
         |}
         |""".stripMargin

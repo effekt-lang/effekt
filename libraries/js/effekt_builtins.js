@@ -56,6 +56,6 @@ $effekt.println = function println$impl(str) {
 
 $effekt.unit = { __unit: true }
 
-$effekt.emptyMatch = function() { throw "empty match" }
+$effekt.unreachable = function() { throw "should not be reachable!" }
 
 $effekt.hole = function(pos) { throw pos + " not implemented yet" }

@@ -158,9 +158,9 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       val osName = System.getProperty("os.name").toLowerCase
       val shebang =
         if (osName.contains("win"))
-          "#! /usr/bin/env java -jar\n"
+          "#! /usr/bin/env java -Xss32m -jar\n"
         else
-          "#! /usr/bin/env -S java -jar\n"
+          "#! /usr/bin/env -S java -Xss32m -jar\n"
 
       IO.write(binary, shebang)
       IO.append(binary, IO.readBytes(jarfile))

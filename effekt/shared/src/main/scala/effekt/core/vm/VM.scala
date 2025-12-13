@@ -240,7 +240,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
         // create a closure
         case Stmt.Def(id, block, body) => State.Step(body, env.bind(id, eval(block, env)), stack, heap)
 
-        case Stmt.Let(id, tpe, binding, body) => State.Step(body, env.bind(id, eval(binding, env)), stack, heap)
+        case Stmt.Let(id, binding, body) => State.Step(body, env.bind(id, eval(binding, env)), stack, heap)
 
         case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
           val result = env.lookupBuiltin(callee.id) match {
@@ -258,7 +258,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           val v = eval(expr, env)
           returnWith(v, env, stack, heap)
 
-        case Stmt.Val(id, tpe, binding, body) =>
+        case Stmt.Val(id, binding, body) =>
           instrumentation.pushFrame()
           State.Step(binding, env, push(Frame.Val(id, body, env), stack), heap)
 
@@ -316,7 +316,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
             case v => throw VMError.RuntimeTypeError(s"Expected Bool, but got ${v}")
           }
 
-        case Stmt.Match(scrutinee, clauses, default) => eval(scrutinee, env) match {
+        case Stmt.Match(scrutinee, tpe, clauses, default) => eval(scrutinee, env) match {
           case Value.Data(data, tag, fields) =>
             @tailrec
             def search(clauses: List[(Id, BlockLit)], comparisons: Int): State = (clauses, default) match {
@@ -418,7 +418,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
 
         case Stmt.Reset(b) => ???
 
-        case Stmt.Shift(prompt, BlockLit(tparams, cparams, vparams, List(resume), body)) =>
+        case Stmt.Shift(prompt, resume, body) =>
           instrumentation.shift()
           val address = findFirst(env) {
             case Env.Dynamic(id, Computation.Prompt(addr), rest) if id == prompt.id => addr
@@ -434,8 +434,6 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           val (cont, rest) = unwind(stack, Stack.Empty)
 
           State.Step(body, env.bind(resume.id, Computation.Resumption(cont)), rest, heap)
-        case Stmt.Shift(_, _) => ???
-
 
         case Stmt.Resume(k, body) =>
           instrumentation.resume()
@@ -450,7 +448,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           }
           State.Step(body, env, rewind(cont, stack), heap)
 
-        case Stmt.Hole(span) => throw VMError.Hole(span)
+        case Stmt.Hole(tpe, span) => throw VMError.Hole(span)
       }
     }
 
@@ -534,7 +532,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
     // This is not ideal...
     // First, we run all the toplevel vals:
     m.definitions.collect {
-      case effekt.core.Toplevel.Val(id, tpe, binding) =>
+      case effekt.core.Toplevel.Val(id, binding) =>
         toplevels = toplevels.updated(id, run(State.Step(binding, env, Stack.Toplevel, Map.empty)))
     }
 

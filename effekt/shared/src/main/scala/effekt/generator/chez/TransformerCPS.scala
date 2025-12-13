@@ -137,6 +137,8 @@ object TransformerCPS {
     case If(cond, thn, els) =>
       val chezCond = toChez(cond)
       chez.If(chezCond, toChezExpr(thn), toChezExpr(els))
+    case Match(scrutinee, Nil, None) =>
+      chez.Builtin("unreachable")
     case Match(scrutinee, clauses, default) =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
@@ -168,7 +170,7 @@ object TransformerCPS {
     //TODO: Copy paste escape procedure to this transformer?
     case Literal(v: String) =>
       effekt.generator.chez.TransformerMonadic.escape(v)
-    case Literal(b: Boolean) => 
+    case Literal(b: Boolean) =>
       if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case Literal(value) => chez.RawValue(value.toString())
     case PureApp(id, vargs) => chez.Call(toChez(id), vargs.map(toChez))

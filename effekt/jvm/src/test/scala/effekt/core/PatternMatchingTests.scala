@@ -2,9 +2,8 @@ package effekt
 package core
 import effekt.symbols
 import kiama.util.StringSource
-
 import PatternMatchingCompiler.*
-import core.Type.{TBoolean, TInt, TUnit}
+import core.Type.{ TBoolean, TInt, TString, TUnit }
 
 class PatternMatchingTests extends CoreTests {
 
@@ -47,7 +46,7 @@ class PatternMatchingTests extends CoreTests {
   }
 
   test("Sanity check: compiling empty list of clauses") {
-    assertEquals(compile(Nil), core.Hole(effekt.source.Span.missing))
+    assertEquals(compile(Nil, TUnit), core.Hole(TUnit, effekt.source.Span.missing))
   }
 
   test("Simple guard") {
@@ -71,16 +70,16 @@ class PatternMatchingTests extends CoreTests {
       Clause(
         List(
           Condition.Patterns(Map(sc -> Pattern.Any(x.id))),
-          Condition.Val(p.id, TBoolean, trivalPredicate),
+          Condition.Val(p.id, trivalPredicate),
           Condition.Predicate(p)),
         b1, Nil, List(x)),
       Clause(
         List(
           Condition.Patterns(Map(sc -> Pattern.Ignore()))),
-        b2, Nil, List())))
+        b2, Nil, List())), TString)
 
     val expected =
-      Val(p.id, TBoolean, trivalPredicate,
+      Val(p.id, trivalPredicate,
       If(p,
         jump(b1, sc),
         jump(b2)))
@@ -125,21 +124,21 @@ class PatternMatchingTests extends CoreTests {
       Clause(
         List(
           Condition.Patterns(Map(opt -> Pattern.Tag(SomeC, List(), List(SomeC, NoneC), List(Pattern.Any(v.id) -> TInt)))),
-          Condition.Val(p.id, TBoolean, trivalPredicate),
+          Condition.Val(p.id, trivalPredicate),
           Condition.Predicate(p)),
         b1, Nil, List(v)),
       Clause(
         List(
           Condition.Patterns(Map(opt -> Pattern.Ignore()))),
-        b2, Nil, List())))
+        b2, Nil, List())), TUnit)
 
     // opt match {
     //   case Some(tmp) => val p = return v > 0; if (p) { b1(tmp) } else { b2() }
     //   case _ => b2()
     // }
-    val expected = Match(opt,
+    val expected = Match(opt, TUnit,
       List((SomeC, BlockLit(Nil, Nil, List(ValueParam(tmp.id, tmp.tpe)), Nil,
-        Val(p.id, TBoolean, trivalPredicate, If(p,
+        Val(p.id, trivalPredicate, If(p,
           App(b1, Nil, List(tmp), Nil),
           App(b2, Nil, Nil, Nil)))))),
       Some(App(b2, Nil, Nil, Nil)))

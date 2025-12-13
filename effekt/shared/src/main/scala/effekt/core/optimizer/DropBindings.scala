@@ -51,7 +51,7 @@ object DropBindings extends Phase[CoreTransformed, CoreTransformed] {
     }
 
     override def stmt(using C: DropContext) = {
-      case Stmt.Let(id, tpe, p: Expr, body) if usedOnce(id) =>
+      case Stmt.Let(id, p: Expr, body) if usedOnce(id) =>
         val transformed = rewrite(p)
         rewrite(body)(using C.updated(id, transformed))
     }
