@@ -1,2 +1,4 @@
--Xmx4g
 -Xms1g
+-Xmx4g
+-Xss32m
+-Xmx8g

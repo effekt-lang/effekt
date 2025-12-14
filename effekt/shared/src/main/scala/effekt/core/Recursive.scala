@@ -19,7 +19,7 @@ class Recursive(
   def process(d: Toplevel): Unit =
     d match {
       case Toplevel.Def(id, block) => process(id, block)
-      case Toplevel.Val(id, _, binding) => process(binding)
+      case Toplevel.Val(id, binding) => process(binding)
     }
 
   def process(b: Block): Unit =
@@ -43,14 +43,14 @@ class Recursive(
 
   def process(s: Stmt): Unit = s match {
     case Stmt.Def(id, block, body) =>  process(id, block); process(body)
-    case Stmt.Let(id, tpe, binding, body) => process(binding); process(body)
+    case Stmt.Let(id, binding, body) => process(binding); process(body)
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
       process(callee)
       vargs.foreach(process)
       bargs.foreach(process)
       process(body)
     case Stmt.Return(expr) => process(expr)
-    case Stmt.Val(id, tpe, binding, body) => process(binding); process(body)
+    case Stmt.Val(id, binding, body) => process(binding); process(body)
     case a @ Stmt.App(callee, targs, vargs, bargs) =>
       process(callee)
       vargs.foreach(process)
@@ -69,7 +69,7 @@ class Recursive(
       vargs.foreach(process)
       bargs.foreach(process)
     case Stmt.If(cond, thn, els) => process(cond); process(thn); process(els)
-    case Stmt.Match(scrutinee, clauses, default) =>
+    case Stmt.Match(scrutinee, tpe, clauses, default) =>
       process(scrutinee)
       clauses.foreach { case (id, value) => process(value) }
       default.foreach(process)
@@ -85,10 +85,10 @@ class Recursive(
       process(value)
       process(body)
     case Stmt.Reset(body) => process(body)
-    case Stmt.Shift(prompt, body) => process(prompt); process(body)
+    case Stmt.Shift(prompt, k, body) => process(prompt); process(body)
     case Stmt.Resume(k, body) => process(k); process(body)
     case Stmt.Region(body) => process(body)
-    case Stmt.Hole(span) => ()
+    case Stmt.Hole(tpe, span) => ()
   }
 
   def process(e: Expr): Unit = e match {

@@ -10,7 +10,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   override val defaultIndent = 2
 
+  // def format(prog: Program): Document = pretty(toDoc(prog), 80)
   def format(definitions: List[Definition]): Document = pretty(vsep(definitions.map(toDoc), line), 2)
+
+  val show: PartialFunction[Any, String] = PartialFunction.empty
 
   implicit def toDoc(v: Variable): Doc = string(v.name)
 

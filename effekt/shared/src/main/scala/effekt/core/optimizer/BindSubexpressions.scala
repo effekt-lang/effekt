@@ -32,10 +32,10 @@ object BindSubexpressions {
         case Bind(block, bindings) => bindings.map(Binding.toToplevel) :+ Toplevel.Def(id, block)
 
       }
-      case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, transform(tpe), transform(binding)) :: Nil
+      case Toplevel.Val(id, binding) => Toplevel.Val(id, transform(binding)) :: Nil
     }
 
-  def transform(s: Stmt)(using env: Env): Stmt = s match {
+  def transform(s: Stmt)(using env: Env): Stmt = preserveTypes(s) {
 
     case Stmt.Def(id, block, body) => transform(block) match {
       case Bind(Block.BlockVar(x, _, _), bindings) =>
@@ -44,11 +44,11 @@ object BindSubexpressions {
         Binding(bindings, Stmt.Def(id, other, transform(body)))
     }
 
-    case Stmt.Let(id, tpe, binding, body) => transform(binding) match {
+    case Stmt.Let(id, binding, body) => transform(binding) match {
       case Bind(Expr.ValueVar(x, _), bindings) =>
         Binding(bindings, transform(body)(using alias(id, x, env)))
       case Bind(other, bindings) =>
-        Binding(bindings, Stmt.Let(id, tpe, other, transform(body)))
+        Binding(bindings, Stmt.Let(id, other, transform(body)))
     }
 
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => delimit {
@@ -83,17 +83,17 @@ object BindSubexpressions {
     case Stmt.If(cond, thn, els) => transform(cond).run { c =>
       Stmt.If(c, transform(thn), transform(els))
     }
-    case Stmt.Match(scrutinee, clauses, default) => transform(scrutinee).run { sc =>
-      Stmt.Match(sc, clauses.map { case (tag, rhs) => (tag, transform(rhs)) }, default.map(transform))
+    case Stmt.Match(scrutinee, tpe, clauses, default) => transform(scrutinee).run { sc =>
+      Stmt.Match(sc, tpe, clauses.map { case (tag, rhs) => (tag, transform(rhs)) }, default.map(transform))
     }
 
     // Congruences
     case Stmt.Region(body) => Stmt.Region(transform(body))
-    case Stmt.Val(id, tpe, binding, body) => Stmt.Val(id, transform(tpe), transform(binding), transform(body))
+    case Stmt.Val(id, binding, body) => Stmt.Val(id, transform(binding), transform(body))
     case Stmt.Reset(body) => Stmt.Reset(transform(body))
-    case Stmt.Shift(prompt, body) => Stmt.Shift(transform(prompt), transform(body))
+    case Stmt.Shift(prompt, k, body) => Stmt.Shift(transform(prompt), k, transform(body))
     case Stmt.Resume(k, body) => Stmt.Resume(transform(k), transform(body))
-    case Stmt.Hole(span) => Stmt.Hole(span)
+    case Stmt.Hole(tpe, span) => Stmt.Hole(transform(tpe), span)
   }
 
   def transform(b: Block)(using Env): Bind[Block] = b match {

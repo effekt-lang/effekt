@@ -25,12 +25,12 @@ def handleJsonBuilder[R]{b: JsonBuilder}{ body: => R / JsonBuilder }: R = try bo
   def bool(v) = resume(b.bool(v))
   def number(n) = resume(b.number(n))
   def string(s) = resume(b.string(s))
-  def list() = resume { {c} => b.list{c} }
-  def dict() = resume { {c} => b.dict{c} }
+  def list[T]() = resume { {c} => b.list{c} }
+  def dict[T]() = resume { {c} => b.dict{c} }
 }
 /// Make explicitly bound JsonObjectBuilder instance implicit
 def handleJsonObjectBuilder[R]{b: JsonObjectBuilder}{ body: => R / JsonObjectBuilder }: R = try body() with JsonObjectBuilder {
-  def field(k) = resume { {c} => b.field(k){c} }
+  def field[T](k) = resume { {c} => b.field(k){c} }
 }
 
 // --------------------------------------------------------------------------------
@@ -49,8 +49,8 @@ def encodeJsonList[R]{ body: => R / JsonBuilder }: R / emit[String] = {
       def bool(v) = { c(); resume(do bool(v)) }
       def number(n) = { c(); resume(do number(n)) }
       def string(s) = { c(); resume(do string(s)) }
-      def list() = resume { { b } => c(); do list{b} }
-      def dict() = resume { { b } => c(); do dict{b} }
+      def list[T]() = resume { { b } => c(); do list{b} }
+      def dict[T]() = resume { { b } => c(); do dict{b} }
     }
   }
   do emit("]")
@@ -66,7 +66,7 @@ def encodeJsonObject[R]{ body: => R / JsonObjectBuilder }: R / emit[String] = {
   }
   val r = encodeJson {
     try body() with JsonObjectBuilder {
-      def field(k) = resume { {b} => c(k); b() }
+      def field[T](k) = resume { {b} => c(k); b() }
     }
   }
   do emit("}")
@@ -80,8 +80,8 @@ def encodeJson[R]{ body: => R / JsonBuilder }: R / emit[String] = {
       def bool(v) = { resume(do emit( if(v){ "true" } else { "false" } )) }
       def number(n) = { resume(do emit(show(n))) }
       def string(s) = { resume(do emit(escape(s))) }
-      def list() = resume { {b} => encodeJsonList { b() } }
-      def dict() = resume { {b} => encodeJsonObject { b() } }
+      def list[T]() = resume { {b} => encodeJsonList { b() } }
+      def dict[T]() = resume { {b} => encodeJsonObject { b() } }
   }
 }
 
@@ -209,7 +209,7 @@ def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} =
 // --------------------------------------------------------------------------------
 /// Ignore the generated calls to JsonObjectBuilder
 def ignoreDict[R](){ body: => R / JsonObjectBuilder }: R = try body() with JsonObjectBuilder {
-  def field(k) = resume { {v} => ignore{v} }
+  def field[T](k) = resume { {v} => ignore{v} }
 }
 
 /// Ignore the generated calls to JsonBuilder
@@ -218,8 +218,8 @@ def ignore[R](){ body: => R / JsonBuilder }: R = try body() with JsonBuilder {
   def bool(b) = resume(())
   def null() = resume(())
   def string(s) = resume(())
-  def list() = resume { {e} => ignore{e} }
-  def dict() = resume { {e} => ignoreDict{e} }
+  def list[T]() = resume { {e} => ignore{e} }
+  def dict[T]() = resume { {e} => ignoreDict{e} }
 }
 
 // --------------------------------------------------------------------------------
@@ -264,12 +264,12 @@ def build[R](){ body: => R / JsonBuilder }: (R, JsonValue) = {
     def bool(b) = { r = Bool(b); resume(()) }
     def null() = { r = Null(); resume(()) }
     def string(s) = { r = String(s); resume(()) }
-    def list() = resume { {els} =>
+    def list[T]() = resume { {els} =>
       val x = buildList {els}
       r = List(x.second)
       x.first
     }
-    def dict() = resume { {fs} =>
+    def dict[T]() = resume { {fs} =>
       val x = buildDict {fs}
       r = Dict(x.second)
       x.first
@@ -283,12 +283,12 @@ def buildList[R](){ body: => R / JsonBuilder }: (R, List[JsonValue]) = list::ret
     def bool(b) = { do emit(Bool(b)); resume(()) }
     def null() = { do emit(Null()); resume(()) }
     def string(s) = { do emit(String(s)); resume(()) }
-    def list() = resume { {els} =>
+    def list[T]() = resume { {els} =>
       val x = buildList {els}
       do emit(List(x.second))
       x.first
     }
-    def dict() = resume { {fs} =>
+    def dict[T]() = resume { {fs} =>
       val x = buildDict {fs}
       do emit(Dict(x.second))
       x.first
@@ -297,7 +297,7 @@ def buildList[R](){ body: => R / JsonBuilder }: (R, List[JsonValue]) = list::ret
 }
 def buildDict[R](){ body: => R / JsonObjectBuilder }: (R, List[(String, JsonValue)]) = list::returning::collect[(String, JsonValue), R] {
   try body() with JsonObjectBuilder {
-    def field(k) = resume { {v} =>
+    def field[T](k) = resume { {v} =>
       val x = build{v}
       do emit((k, x.second))
       x.first
@@ -325,7 +325,7 @@ namespace test {
       with scanner[Char]
 
       def k = new JsonObjectBuilder {
-        def field(k){v} = { println(k); ignore{v} }
+        def field[T](k){v} = { println(k); ignore{v} }
       }
       def jsonBuilder[R] {e: => R / JsonBuilder}: R = {
         def d = new JsonBuilder {
@@ -333,8 +333,8 @@ namespace test {
           def bool(b) = ()
           def null() = println("NULL")
           def string(s) = ()
-          def list(){e} = jsonBuilder{e}
-          def dict(){e} = handleJsonObjectBuilder{k}{e}
+          def list[T](){e} = jsonBuilder{e}
+          def dict[T](){e} = handleJsonObjectBuilder{k}{e}
         }
         handleJsonBuilder{d}{e}
       }

@@ -1,0 +1,11 @@
+
+def f(x: Any): Int = 123
+
+def g(y: Int): Any = y
+
+def main() = {
+  println(f(true))
+  val _ = g(456)
+  println(f("456"))
+}
+

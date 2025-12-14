@@ -107,7 +107,7 @@ object TransformerCps extends Transformer {
             List(js.Return(js.Call(toJS(contents), List(js.Variable(ks), js.Variable(k))))))
         case ExternBody.Unsupported(err) =>
           C.errors.report(err)
-          js.Function(nameDef(id), (vps ++ bps) map toJSParam, List(js.Return($effekt.call("hole"))))
+          js.Function(nameDef(id), (vps ++ bps) map toJSParam, List(js.Return($effekt.call("unreachable"))))
       }
 
 
@@ -117,7 +117,7 @@ object TransformerCps extends Transformer {
           js.Function(nameDef(id), (vps ++ bps) map toJSParam, List(js.Return(toJS(contents))))
         case ExternBody.Unsupported(err) =>
           C.errors.report(err)
-          js.Function(nameDef(id), (vps ++ bps) map toJSParam, List(js.Return($effekt.call("hole"))))
+          js.Function(nameDef(id), (vps ++ bps) map toJSParam, List(js.Return($effekt.call("unreachable"))))
       }
 
     case cps.Extern.Include(ff, contents) =>
@@ -236,7 +236,7 @@ object TransformerCps extends Transformer {
       }
 
     case cps.Stmt.Match(sc, Nil, None) =>
-      pure(js.Return($effekt.call("emptyMatch")) :: Nil)
+      pure(js.Return($effekt.call("unreachable")) :: Nil)
 
     case cps.Stmt.Match(sc, List((tag, clause)), None) =>
       val scrutinee = toJS(sc)

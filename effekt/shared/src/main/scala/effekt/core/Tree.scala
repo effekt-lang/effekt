@@ -6,7 +6,7 @@ import effekt.util.Structural
 import effekt.util.messages.INTERNAL_ERROR
 import effekt.util.messages.ErrorReporter
 
-import scala.annotation.tailrec
+import scala.annotation.{ tailrec, targetName }
 
 /**
  * Tree structure of programs in our internal core representation.
@@ -142,7 +142,7 @@ enum Toplevel {
   def id: Id
 
   case Def(id: Id, block: Block)
-  case Val(id: Id, tpe: ValueType, binding: core.Stmt)
+  case Val(id: Id, binding: core.Stmt)
 }
 
 
@@ -180,8 +180,10 @@ enum Expr extends Tree {
 
   case Box(b: Block, annotatedCapture: Captures)
 
-  val tpe: ValueType = Type.inferType(this)
-  val capt: Captures = Type.inferCapt(this)
+  val typing: Typing[ValueType] = Type.typecheck(this)
+  val tpe: ValueType = typing.tpe
+  val capt: Captures = typing.capt
+  val free: Free = typing.free
 
   // This is to register custom type renderers in IntelliJ -- yes, it has to be a method!
   def show: String = util.show(this)
@@ -207,8 +209,10 @@ enum Block extends Tree {
   case Unbox(pure: Expr)
   case New(impl: Implementation)
 
-  val tpe: BlockType = Type.inferType(this)
-  val capt: Captures = Type.inferCapt(this)
+  val typing: Typing[BlockType] = Type.typecheck(this)
+  val tpe: BlockType = typing.tpe
+  val capt: Captures = typing.capt
+  val free: Free = typing.free
 
   def show: String = util.show(this)
 }
@@ -248,18 +252,18 @@ enum Stmt extends Tree {
 
   // Definitions
   case Def(id: Id, block: Block, body: Stmt)
-  case Let(id: Id, annotatedTpe: ValueType, binding: Expr, body: Stmt)
+  case Let(id: Id, binding: Expr, body: Stmt)
   case ImpureApp(id: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block], body: Stmt)
 
   // Fine-grain CBV
   case Return(expr: Expr)
-  case Val(id: Id, annotatedTpe: ValueType, binding: Stmt, body: Stmt)
+  case Val(id: Id, binding: Stmt, body: Stmt)
   case App(callee: Block, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
   case Invoke(callee: Block, method: Id, methodTpe: BlockType, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
 
   // Local Control Flow
   case If(cond: Expr, thn: Stmt, els: Stmt)
-  case Match(scrutinee: Expr, clauses: List[(Id, BlockLit)], default: Option[Stmt])
+  case Match(scrutinee: Expr, annotatedTpe: ValueType, clauses: List[(Id, BlockLit)], default: Option[Stmt])
 
   // (Type-monomorphic?) Regions
   case Region(body: BlockLit)
@@ -281,19 +285,19 @@ enum Stmt extends Tree {
   case Reset(body: Block.BlockLit)
 
   // captures the continuation up to the given prompt
-  // Invariant, it always has the shape:
-  //   Shift(p: Prompt[answer], { [cap]{resume: Resume[result, answer] at cap} => stmt: answer }): result
-  case Shift(prompt: BlockVar, body: BlockLit)
+  case Shift(prompt: BlockVar, k: BlockParam, body: Stmt)
 
   // bidirectional resume: runs the given statement in the original context
   //  Resume(k: Resume[result, answer], stmt: result): answer
   case Resume(k: BlockVar, body: Stmt)
 
   // Others
-  case Hole(span: effekt.source.Span)
+  case Hole(annotatedTpe: ValueType, span: effekt.source.Span)
 
-  val tpe: ValueType = Type.inferType(this)
-  val capt: Captures = Type.inferCapt(this)
+  val typing: Typing[ValueType] = Type.typecheck(this)
+  val tpe: ValueType = typing.tpe
+  val capt: Captures = typing.capt
+  val free: Free = typing.free
 
   def show: String = util.show(this)
 }
@@ -306,8 +310,9 @@ export Stmt.*
  * Used to represent handlers / capabilities, and objects / modules.
  */
 case class Implementation(interface: BlockType.Interface, operations: List[Operation]) extends Tree {
-  val tpe = interface
-  val capt = operations.flatMap(_.capt).toSet
+  val typing: Typing[BlockType.Interface] = Type.typecheck(this)
+  val tpe: BlockType.Interface = typing.tpe
+  val capt: Captures = typing.capt
 }
 
 /**
@@ -315,16 +320,18 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
  *
  * TODO drop resume here since it is not needed anymore...
  */
-case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) {
-  val capt = body.capt -- cparams.toSet
+case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends Tree {
+  val typing: Typing[BlockType.Function] = Type.typecheck(this)
+  val tpe: BlockType.Function = typing.tpe
+  val capt: Captures = typing.capt
 }
 
 /**
  * Bindings are not part of the tree but used in transformations
  */
 private[core] enum Binding {
-  case Val(id: Id, tpe: ValueType, binding: Stmt)
-  case Let(id: Id, tpe: ValueType, binding: Expr)
+  case Val(id: Id, binding: Stmt)
+  case Let(id: Id, binding: Expr)
   case ImpureApp(id: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
   case Def(id: Id, binding: Block)
 
@@ -333,15 +340,15 @@ private[core] enum Binding {
 private[core] object Binding {
   def apply(bindings: List[Binding], body: Stmt): Stmt = bindings match {
     case Nil => body
-    case Binding.Val(name, tpe, binding) :: rest => Stmt.Val(name, tpe, binding, Binding(rest, body))
-    case Binding.Let(name, tpe, binding) :: rest => Stmt.Let(name, tpe, binding, Binding(rest, body))
+    case Binding.Val(name, binding) :: rest => Stmt.Val(name, binding, Binding(rest, body))
+    case Binding.Let(name, binding) :: rest => Stmt.Let(name, binding, Binding(rest, body))
     case Binding.ImpureApp(name, callee, targs, vargs, bargs) :: rest => Stmt.ImpureApp(name, callee, targs, vargs, bargs, Binding(rest, body))
     case Binding.Def(name, binding) :: rest => Stmt.Def(name, binding, Binding(rest, body))
   }
 
   def toToplevel(b: Binding): Toplevel = b match {
-    case Binding.Val(name, tpe, binding) => Toplevel.Val(name, tpe, binding)
-    case Binding.Let(name, tpe, binding) => ??? //Toplevel.Val(name, tpe, Stmt.Return(binding))
+    case Binding.Val(name, binding) => Toplevel.Val(name, binding)
+    case Binding.Let(name, binding) => ??? //Toplevel.Val(name, tpe, Stmt.Return(binding))
     case Binding.ImpureApp(name, callee, targs, vargs, bargs) => ??? //Toplevel.Val(name, tpe, ???)
     case Binding.Def(name, binding) => Toplevel.Def(name, binding)
   }
@@ -361,7 +368,7 @@ object Bind {
   def pure[A](value: A): Bind[A] = Bind(value, Nil)
   def bind[A](expr: Expr): Bind[ValueVar] =
     val id = Id("tmp")
-    Bind(ValueVar(id, expr.tpe), List(Binding.Let(id, expr.tpe, expr)))
+    Bind(ValueVar(id, expr.tpe), List(Binding.Let(id, expr)))
 
   def bind[A](b: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block]): Bind[ValueVar] =
     val id = Id("tmp")
@@ -532,118 +539,6 @@ object Tree {
   }
 }
 
-enum Variable {
-  case Value(id: Id, tpe: core.ValueType)
-  case Block(id: Id, tpe: core.BlockType, capt: core.Captures)
-
-  def id: Id
-
-  // lookup and comparison should still be done per-id, not structurally
-  override def equals(other: Any): Boolean = other match {
-    case other: Variable => this.id == other.id
-    case _ => false
-  }
-  override def hashCode(): Int = id.hashCode
-}
-
-case class Variables(vars: Set[Variable]) {
-  def ++(other: Variables): Variables = {
-    // TODO check:
-    // assert(leftParam == rightParam, s"Same id occurs free with different types: ${leftParam} !== ${rightParam}.")
-    Variables(vars ++ other.vars)
-  }
-  def --(o: Variables): Variables = {
-    val ids = o.vars.map(_.id)
-    Variables(vars.filterNot { x => ids.contains(x.id) })
-  }
-
-  def filter(f: Variable => Boolean): Variables = Variables(vars.filter(f))
-
-  def -(id: Id) = Variables(vars.filter { x => x.id != id })
-  def toSet: Set[Variable] = vars
-  def flatMap(f: Variable => Variables): Variables = Variables(vars.flatMap(x => f(x).vars))
-  def map(f: Variable => Variable): Variables = Variables(vars.map(f))
-  def toList: List[Variable] = vars.toList
-
-  def containsValue(id: Id): Boolean = vars.collect { case v @ Variable.Value(other, tpe) if other == id => v }.nonEmpty
-  def containsBlock(id: Id): Boolean = vars.collect { case v @ Variable.Block(other, tpe, capt) if other == id => v }.nonEmpty
-}
-
-object Variables {
-
-  import core.Type.{TState, TRegion}
-
-  def value(id: Id, tpe: ValueType) = Variables(Set(Variable.Value(id, tpe)))
-  def block(id: Id, tpe: BlockType, capt: Captures) = Variables(Set(Variable.Block(id, tpe, capt)))
-  def empty: Variables = Variables(Set.empty)
-
-  def free(e: Expr): Variables = e match {
-    case Expr.ValueVar(id, annotatedType) => Variables.value(id, annotatedType)
-    case Expr.Literal(value, annotatedType) => Variables.empty
-    case Expr.PureApp(b, targs, vargs) => free(b) ++ all(vargs, free)
-    case Expr.Make(data, tag, targs, vargs) => all(vargs, free)
-    case Expr.Box(b, annotatedCapture) => free(b)
-  }
-
-  def free(b: Block): Variables = b match {
-    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Variables.block(id, annotatedTpe, annotatedCapt)
-    case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-      free(body) -- all(vparams, bound) -- all(bparams, bound)
-    case Block.Unbox(pure) => free(pure)
-    case Block.New(impl) => free(impl)
-  }
-
-  def free(d: Toplevel): Variables = d match {
-    case Toplevel.Def(id, block) => free(block) - id
-    case Toplevel.Val(id, _, binding) => free(binding)
-  }
-
-  def all[T](t: IterableOnce[T], f: T => Variables): Variables =
-    t.iterator.foldLeft(Variables.empty) { case (xs, t) => f(t) ++ xs }
-
-  def free(impl: Implementation): Variables = all(impl.operations, free)
-
-  def free(op: Operation): Variables = op match {
-    case Operation(name, tparams, cparams, vparams, bparams, body) =>
-      free(body) -- all(vparams, bound) -- all(bparams, bound)
-  }
-  def free(s: Stmt): Variables = s match {
-    case Stmt.Def(id, block, body) => (free(block) ++ free(body)) -- Variables.block(id, block.tpe, block.capt)
-    case Stmt.Let(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
-    case s @ Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-      free(callee) ++ all(vargs, free) ++ all(bargs, free) ++ (free(body) -- Variables.value(id, Type.bindingType(s)))
-    case Stmt.Return(expr) => free(expr)
-    case Stmt.Val(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
-    case Stmt.App(callee, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
-    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
-    case Stmt.If(cond, thn, els) => free(cond) ++ free(thn) ++ free(els)
-    case Stmt.Match(scrutinee, clauses, default) => free(scrutinee) ++ all(default, free) ++ all(clauses, {
-      case (id, lit) => free(lit)
-    })
-    case Stmt.Region(body) => free(body)
-    // are mutable variables now block variables or not?
-    case Stmt.Alloc(id, init, region, body) => free(init) ++ Variables.block(region, TRegion, Set(region)) ++ (free(body) -- Variables.block(id, TState(init.tpe), Set(region)))
-    case Stmt.Var(ref, init, capture, body) => free(init) ++ (free(body) -- Variables.block(ref, TState(init.tpe), Set(capture)))
-    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
-      Variables.block(ref, core.Type.TState(annotatedTpe), annotatedCapt) ++ (free(body) -- Variables.value(id, annotatedTpe))
-    case Stmt.Put(ref, annotatedCapt, value, body) =>
-      Variables.block(ref, core.Type.TState(value.tpe), annotatedCapt) ++ free(value) ++ free(body)
-
-    case Stmt.Reset(body) => free(body)
-    case Stmt.Shift(prompt, body) => free(prompt) ++ free(body)
-    case Stmt.Resume(k, body) => free(k) ++ free(body)
-    case Stmt.Hole(span) => Variables.empty
-  }
-
-  def bound(t: ValueParam): Variables = Variables.value(t.id, t.tpe)
-  def bound(t: BlockParam): Variables = Variables.block(t.id, t.tpe, t.capt)
-  def bound(t: Toplevel): Variables = t match {
-    case Toplevel.Def(id, block) => Variables.block(id, block.tpe, block.capt)
-    case Toplevel.Val(id, tpe, binding) => Variables.value(id, tpe)
-  }
-}
-
-
 object substitutions {
 
   case class Substitution(
@@ -665,6 +560,10 @@ object substitutions {
   def substitute(block: BlockLit, targs: List[ValueType], vargs: List[Expr], bargs: List[Block]): Stmt =
     block match {
       case BlockLit(tparams, cparams, vparams, bparams, body) =>
+        assert(tparams.size == targs.size, s"Wrong number of type arguments: ${tparams.map(util.show)} vs ${targs.map(util.show)}")
+        assert(cparams.size == bargs.size, s"Wrong number of capture arguments: ${cparams} vs ${bargs}")
+        assert(bparams.size == bargs.size, s"Wrong number of block arguments: ${bparams} vs ${bargs}")
+        assert(vparams.size == vargs.size, s"Wrong number of value arguments: ${vparams} vs ${vargs}")
         val tSubst = (tparams zip targs).toMap
         val cSubst = (cparams zip bargs.map(_.capt)).toMap
         val vSubst = (vparams.map(_.id) zip vargs).toMap
@@ -679,8 +578,8 @@ object substitutions {
         Def(id, substitute(block)(using subst shadowBlocks List(id)),
           substitute(body)(using subst shadowBlocks List(id)))
 
-      case Let(id, tpe, binding, body) =>
-        Let(id, substitute(tpe), substitute(binding),
+      case Let(id, binding, body) =>
+        Let(id, substitute(binding),
           substitute(body)(using subst shadowValues List(id)))
 
       case ImpureApp(id, callee, targs, vargs, bargs, body) =>
@@ -695,8 +594,8 @@ object substitutions {
       case Return(expr) =>
         Return(substitute(expr))
 
-      case Val(id, tpe, binding, body) =>
-        Val(id, substitute(tpe), substitute(binding),
+      case Val(id, binding, body) =>
+        Val(id, substitute(binding),
           substitute(body)(using subst shadowValues List(id)))
 
       case App(callee, targs, vargs, bargs) =>
@@ -708,8 +607,8 @@ object substitutions {
       case If(cond, thn, els) =>
         If(substitute(cond), substitute(thn), substitute(els))
 
-      case Match(scrutinee, clauses, default) =>
-        Match(substitute(scrutinee), clauses.map {
+      case Match(scrutinee, tpe, clauses, default) =>
+        Match(substitute(scrutinee), substitute(tpe), clauses.map {
           case (id, b) => (id, substitute(b))
         }, default.map(substitute))
 
@@ -730,9 +629,9 @@ object substitutions {
       case Reset(body) =>
         Reset(substitute(body))
 
-      case Shift(prompt, body) =>
-        val after = substitute(body)
-        Shift(substitute(prompt).asInstanceOf[BlockVar], after)
+      case Shift(prompt, k, body) =>
+        val after = substitute(body)(using subst shadowBlocks List(k.id))
+        Shift(substitute(prompt).asInstanceOf[BlockVar], substitute(k), after)
 
       case Resume(k, body) =>
         Resume(substitute(k).asInstanceOf[BlockVar], substitute(body))
@@ -740,7 +639,7 @@ object substitutions {
       case Region(body) =>
         Region(substitute(body))
 
-      case h : Hole => h
+      case Hole(tpe, span) => Hole(substitute(tpe), span)
     }
 
   def substitute(b: BlockLit)(using subst: Substitution): BlockLit = b match {
@@ -821,4 +720,25 @@ object substitutions {
 
   def substitute(capt: Captures)(using subst: Substitution): Captures =
     Type.substitute(capt, subst.captures)
+}
+
+@targetName("preserveTypesStmt")
+inline def preserveTypes(before: Stmt)(inline f: Stmt => Stmt): Stmt = {
+  val after = f(before)
+  assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+  after
+}
+
+@targetName("preserveTypesExpr")
+inline def preserveTypes(before: Expr)(inline f: Expr => Expr): Expr = {
+  val after = f(before)
+  assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+  after
+}
+
+@targetName("preserveTypesBlock")
+inline def preserveTypes(before: Block)(inline f: Block => Block): Block = {
+  val after = f(before)
+  assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+  after
 }

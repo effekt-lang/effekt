@@ -230,13 +230,9 @@ object builtins {
   val Apply: Tag = 0
 
   val Unit: Tag = 0
-  val UnitType = Positive()
 
   val True: Tag = 1
   val False: Tag = 0
-  val BooleanType = Positive()
-
-  val StringType = Positive()
 
   val SingletonRecord: Tag = 0
 }

@@ -41,11 +41,10 @@ object builtins {
   val ByteSymbol = ExternType(name("Byte"), Nil, NoSource)
   val TByte = ValueTypeApp(ByteSymbol, Nil)
 
-  val TopSymbol = ExternType(name("Any"), Nil, NoSource)
+  val TopSymbol = DataType(name("Any"), Nil, Nil, NoSource)
   val TTop = ValueTypeApp(TopSymbol, Nil)
 
-  // should this be a datatype, not an extern type?
-  val BottomSymbol = ExternType(name("Nothing"), Nil, NoSource)
+  val BottomSymbol = DataType(name("Nothing"), Nil, Nil, NoSource)
   val TBottom = ValueTypeApp(BottomSymbol, Nil)
 
   val IOSymbol = Interface(Name.local("IO"), Nil, Nil, decl = NoSource)

@@ -298,7 +298,7 @@ object LLVMRunner extends Runner[String] {
 
   override def includes(path: File): List[File] = List(path / ".." / "llvm")
 
-  lazy val clangCmd = discoverExecutable(List("clang-20", "clang-19", "clang-18", "clang"), List("--version"))
+  lazy val clangCmd = discoverExecutable(List("clang-21", "clang-20", "clang-19", "clang-18", "clang"), List("--version"))
 
   def checkSetup(): Either[String, Unit] =
     clangCmd.getOrElseAborting { return Left("Cannot find clang. This is required to use the LLVM backend.") }
