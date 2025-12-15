@@ -106,6 +106,11 @@ case class ModuleDecl(
   exports: List[Id]
 ) extends Tree {
   def show: String = util.show(this)
+
+  /**
+   * Since core programs have free variables before aggregation, this check is not performed automatically
+   */
+  def typecheck()(using ErrorReporter): Unit = Type.typecheck(this)
 }
 
 /**

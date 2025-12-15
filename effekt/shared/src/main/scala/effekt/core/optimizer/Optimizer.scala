@@ -16,6 +16,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
       case CoreTransformed(source, tree, mod, core) =>
         val term = Context.ensureMainExists(mod)
         val optimized = Context.timed("optimize", source.name) { optimize(source, term, core) }
+        optimized.typecheck()
         Some(CoreTransformed(source, tree, mod, optimized))
     }
 
