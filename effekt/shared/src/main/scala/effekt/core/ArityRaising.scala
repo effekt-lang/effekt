@@ -108,16 +108,22 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
           case BlockVar(id, annotatedTpe, annotatedCapt) => 
             annotatedTpe match {
               case BlockType.Function(tparams, cparams, vparams, bparams, result) => 
-                val params = vparams.map { tpe =>
-                  // need to fix for propper implementation
-                  val freshId = Id("x_" + scala.util.Random.nextInt())
+                val types = tparams.map {id => 
+
+                  }
+                val values = vparams.map { tpe =>
+                  val freshId = Id("x")
                   (ValueParam(freshId, tpe), ValueVar(freshId, tpe))
                 }
-                val call = Stmt.App(barg, List(), params.map(_._2), List())
+                val blocks = bparams.zip(cparams).map { case (tpe, capt)=>
+                  val freshId = Id("f")
+                  (BlockParam(freshId, tpe, Set(capt)), BlockVar(freshId, tpe, Set(capt)))
+                }
+ 
+                val call = Stmt.App(barg, List(), values.map(_._2), List())
                 val transformedBody = transform(call)
       
-                // empty List for Bargs should be fine, since myList.map {myFunc} the myFunc cant have any bargs??
-                BlockLit(tparams, cparams, params.map(_._1), List(), transformedBody)
+                BlockLit(tparams, cparams, values.map(_._1), List(), transformedBody)
 
               case _ => transform(barg)
             }
