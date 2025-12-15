@@ -170,7 +170,9 @@ class EffektLexers extends Parsers {
           case '"'  => sb.append('"');  i += 2
           case 'r'  => sb.append('\r'); i += 2
           case 't'  => sb.append('\t'); i += 2
+          case 'n'  => sb.append('\n'); i += 2
           case other =>
+            sb.append('\\')
             sb.append(other)
             i += 2
         }
