@@ -41,7 +41,12 @@ class ReparseTests extends CoreTests {
     // FIXME: There is currently a limitation in TestRenamer in that it does not rename captures.
     // This means, that in this example, captures for State[Int] and State[String] are both printed as "State",
     // leading to a collapse of the capture set {State_1, State_2} to just {State}.
-    File("examples/pos/parametrized.effekt")
+    File("examples/pos/parametrized.effekt"),
+    // FIXME: Added in #1230, blocked on #1258 (https://github.com/effekt-lang/effekt/pull/1258)
+    //        doesn't work since any program importing `json` fails due to string escapes.
+    examplesDir / "pos" / "with_val_and_else.effekt",
+    examplesDir / "pos" / "with_val_and_two_args_and_else.effekt",
+    examplesDir / "pos" / "with_val_pair_and_else.effekt",
   )
 
   def positives: Set[File] = Set(
