@@ -30,6 +30,8 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       ModuleDecl(path, includes, declarations, externs, definitions map transform, exports)
   }
 
+
+
   def transform(toplevel: Toplevel)(using C: Context, DC: DeclarationContext): Toplevel = toplevel match {
     case Toplevel.Def(id, block) => Toplevel.Def(id, transform(block))
     case Toplevel.Val(id, binding) => Toplevel.Val(id, transform(binding))
@@ -108,10 +110,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
           case BlockVar(id, annotatedTpe, annotatedCapt) => 
             annotatedTpe match {
               case BlockType.Function(tparams, cparams, vparams, bparams, result) => 
-                val types = tparams.map {id => 
-
-                  }
-                val values = vparams.map { tpe =>
+               val values = vparams.map { tpe =>
                   val freshId = Id("x")
                   (ValueParam(freshId, tpe), ValueVar(freshId, tpe))
                 }
@@ -120,10 +119,10 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
                   (BlockParam(freshId, tpe, Set(capt)), BlockVar(freshId, tpe, Set(capt)))
                 }
  
-                val call = Stmt.App(barg, List(), values.map(_._2), List())
-                val transformedBody = transform(call)
+                // Don't transform the call - the BlockVar keeps its original signature
+                val call = Stmt.App(barg, List(), values.map(_._2), blocks.map(_._2))
       
-                BlockLit(tparams, cparams, values.map(_._1), List(), transformedBody)
+                BlockLit(tparams, cparams, values.map(_._1), blocks.map(_._1), call)
 
               case _ => transform(barg)
             }
@@ -142,7 +141,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       
       val newCalleTpe: BlockType.Function = BlockType.Function(tparams, cparams, allTypes.flatten, bparams, returnTpe)
       val newCallee = BlockVar(id, newCalleTpe, annotatedCapt)
-      val innerApp = Stmt.App(newCallee, targs, allArgs.flatten, bargs map transform)
+      val innerApp = Stmt.App(newCallee, targs, allArgs.flatten, transformedBargs)
       
       allMatches.flatten.foldRight(innerApp) {
         case ((scrutinee, ctor, params), body) =>
