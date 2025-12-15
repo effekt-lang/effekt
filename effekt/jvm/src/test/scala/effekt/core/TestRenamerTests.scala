@@ -31,7 +31,7 @@ class TestRenamerTests extends CoreTests {
     val expected =
       """module main
         |
-        |def _renamed_0() = {
+        |def foo_renamed_0() = {
         |  return (bar: (Int) => Int @ {})(baz: Int)
         |}
         |""".stripMargin
@@ -118,13 +118,12 @@ class TestRenamerTests extends CoreTests {
         |}
         |
         |def foo_renamed_2() = {
-        |  12 match {
+        |  12 match[Int] {
         |    X : { (aa_renamed_3: Int, bb_renamed_4: Int) =>
         |      return aa_renamed_3: Int
         |    }
         |  }
-        |}
-        |""".stripMargin
+        |}""".stripMargin
     assertRenamedTo(input, expected)
   }
 
@@ -139,7 +138,7 @@ class TestRenamerTests extends CoreTests {
     val expected =
       """module main
         |
-        |def foo_renamed_0['A_renamed_1](a_renamed_2: A_renamed_1) = {
+        |def foo_renamed_0['A_renamed_1](a_renamed_2: Identity[A_renamed_1]) = {
         |  return a_renamed_2: Identity[A_renamed_1]
         |}
         |""".stripMargin
