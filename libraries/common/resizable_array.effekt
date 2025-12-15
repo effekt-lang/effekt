@@ -21,42 +21,26 @@ def size[T](arr: ResizableArray[T]) = arr.rawSizePtr.get
 
 /// Allocate a new, empty dynamic array with given initial capacity
 def resizableArray[T](capacity: Int): ResizableArray[T] = {
-  ResizableArray(ref(0), ref(allocate(capacity)))
+  ResizableArray(ref(0), ref(unsafeAllocate(capacity)))
 }
 
-/// Allocate a new, empty dynamic array
+/// Aallocate a new, empty dynamic array
 def resizableArray[T](): ResizableArray[T] = resizableArray(8)
 
+
 /// Throw an OutOfBounds exception if index is not a valid index into arr
-def boundsCheck[T](arr: ResizableArray[T], index: Int): Unit / Exception[OutOfBounds] = {
+def boundsCheck[T](arr: ResizableArray[T], index: Int): Unit / Exception[OutOfBounds] =
   if (index < 0 || index >= arr.size) {
     do raise(OutOfBounds(), "Array index out of bounds: " ++ show(index))
   }
-}
 
-/// get the element at position index in the array
-///
-/// precondition: index is a valid index into the array
-///
-/// O(1)
-def unsafeGet[T](arr: ResizableArray[T], index: Int): T = {
-  arr.rawContentPtr.get.unsafeGet(index)
-}
+
 /// get the element at position index in the array
 ///
 /// O(1)
 def get[T](arr: ResizableArray[T], index: Int): T / Exception[OutOfBounds] = {
   arr.boundsCheck(index);
-  arr.unsafeGet(index)
-}
-
-/// set the element at position index in the array
-///
-/// precondition: index is a valid index into the array
-///
-/// O(1)
-def unsafeSet[T](arr: ResizableArray[T], index: Int, value: T): Unit = {
-  arr.rawContentPtr.get.unsafeSet(index, value)
+  arr.rawContentPtr.get.get(index)
 }
 
 /// set the element at position index in the array
@@ -64,19 +48,7 @@ def unsafeSet[T](arr: ResizableArray[T], index: Int, value: T): Unit = {
 /// O(1)
 def set[T](arr: ResizableArray[T], index: Int, value: T): Unit / Exception[OutOfBounds] = {
   arr.boundsCheck(index);
-  arr.unsafeSet(index, value)
-}
-
-/// swap the elements at the given positions in the array
-///
-/// precondition: both are valid indices into the array
-///
-/// O(1)
-def unsafeSwap[T](arr: ResizableArray[T], index1: Int, index2: Int): Unit = {
-  val raw = arr.rawContentPtr.get
-  val tmp = raw.unsafeGet(index1)
-  raw.unsafeSet(index1, raw.unsafeGet(index2))
-  raw.unsafeSet(index2, tmp)
+  arr.rawContentPtr.get.set(index, value)
 }
 
 /// swap the elements at the given positions in the array
@@ -84,22 +56,10 @@ def unsafeSwap[T](arr: ResizableArray[T], index1: Int, index2: Int): Unit = {
 /// O(1)
 def swap[T](arr: ResizableArray[T], index1: Int, index2: Int): Unit / Exception[OutOfBounds] = {
   arr.boundsCheck(max(index1, index2))
-  arr.unsafeSwap(index1, index2)
-}
-
-/// Change the dynamic to have exactly the given capacity
-///
-/// precondition: given capacity is at least the size of the array
-///
-/// O(n)
-def unsafeSetCapacity[T](arr: ResizableArray[T], capacity: Int): Unit = {
-  with on[OutOfBounds].panic
-  val oldRaw = arr.rawContentPtr.get
-  if (oldRaw.size != capacity) { 
-    val newRaw = array::allocate(capacity)
-    oldRaw.copy(0, newRaw, 0, arr.size)
-    arr.rawContentPtr.set(newRaw)
-  }
+  val raw = arr.rawContentPtr.get
+  val tmp = raw.get(index1)
+  raw.set(index1, raw.get(index2))
+  raw.set(index2, tmp)
 }
 
 /// Change the resizable array to have exactly the given capacity.
@@ -110,16 +70,21 @@ def setCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / Exception[OutO
   if (arr.size > capacity) {
     do raise(OutOfBounds(), "Cannot change capacity of ResizableArray to " ++ capacity.show ++ " below size " ++ arr.size.show)
   }
-  arr.unsafeSetCapacity(capacity)
+  val oldRaw = arr.rawContentPtr.get
+  if (oldRaw.size != capacity) { 
+    val newRaw = array::unsafeAllocate(capacity)
+    oldRaw.copy(0, newRaw, 0, arr.size)
+    arr.rawContentPtr.set(newRaw)
+  }
 }
 
 /// If the shrinkThreshold is reached, shrink by growFactor, otherwise do nothing
 ///
 /// O(n)
-def maybeShrink[T](arr: ResizableArray[T]): Unit = {
+def maybeShrink[T](arr: ResizableArray[T]): Unit / Exception[OutOfBounds] = {
   if(arr.size.toDouble < arr.rawContentPtr.get.size.toDouble * shrinkThreshold) {
     val newCap = max(arr.size, (arr.rawContentPtr.get.size.toDouble / growFactor).ceil)
-    arr.unsafeSetCapacity(newCap)
+    arr.setCapacity(newCap)
   }
 }
 
@@ -144,11 +109,11 @@ def setResizing[T](arr: ResizableArray[T], index: Int, value: T): Unit / Excepti
     do raise(OutOfBounds(), "Negative index " ++ index.show)
   }
   if (index < arr.size) {
-    arr.rawContentPtr.get.unsafeSet(index, value)
+    arr.rawContentPtr.get.set(index, value)
   }
   ensureCapacity(arr, index + 1)
-  arr.rawContentPtr.get.unsafeSet(index, value)
-  arr.rawSizePtr.set(index + 1)
+  arr.rawContentPtr.get.set(index, value)
+  if (index >= arr.size) arr.rawSizePtr.set(index + 1)
 }
 
 /// Add a new element at the end of the resizable array.
@@ -166,9 +131,10 @@ def add[T](arr: ResizableArray[T], value: T): Int = {
 ///
 /// O(1) amortized, O(n) worst case
 def popRight[T](arr: ResizableArray[T]): T / Exception[OutOfBounds] = {
-  arr.boundsCheck(arr.size - 1)
-  arr.rawSizePtr.set(arr.size - 1)
-  val r = arr.unsafeGet(arr.size)
+  val last = arr.size - 1
+  arr.boundsCheck(last)
+  val r = arr.rawContentPtr.get.get(last)
+  arr.rawSizePtr.set(last)
   arr.maybeShrink()
   r
 }
@@ -176,36 +142,36 @@ def popRight[T](arr: ResizableArray[T]): T / Exception[OutOfBounds] = {
 
 def foreachIndex[T](arr: ResizableArray[T]){ body: (Int, T) => Unit }: Unit = {
   each(0, arr.size) { i =>
-    body(i, arr.rawContentPtr.get.unsafeGet(i))
+    body(i, arr.rawContentPtr.get.get(i))
   }
 }
 def foreachIndex[T](arr: ResizableArray[T]){ body: (Int, T) {Control} => Unit }: Unit = {
   each(0, arr.size) { (i){label} =>
-    body(i, arr.rawContentPtr.get.unsafeGet(i)){label}
+    body(i, arr.rawContentPtr.get.get(i)){label}
   }
 }
 def foreach[T](arr: ResizableArray[T]){ body: T => Unit }: Unit = {
   each(0, arr.size) { i =>
-    body(arr.rawContentPtr.get.unsafeGet(i))
+    body(arr.rawContentPtr.get.get(i))
   }
 }
 def foreach[T](arr: ResizableArray[T]){ body: (T) {Control} => Unit }: Unit = {
   each(0, arr.size) { (i){label} =>
-    body(arr.rawContentPtr.get.unsafeGet(i)){label}
+    body(arr.rawContentPtr.get.get(i)){label}
   }
 }
 def foreachIndexReversed[T](arr: ResizableArray[T]){ body: (Int, T){Control} => Unit }: Unit = {
   var i = arr.size - 1
   loop { {l} =>
     if (i < 0) { l.break() }
-    body(i, arr.rawContentPtr.get.unsafeGet(i)){l}
+    body(i, arr.rawContentPtr.get.get(i)){l}
     i = i - 1
   }
 }
 def foreachIndexReversed[T](arr: ResizableArray[T]){ body: (Int, T) => Unit }: Unit = {
   var i = arr.size - 1
   while(i >= 0) {
-    body(i, arr.rawContentPtr.get.unsafeGet(i))
+    body(i, arr.rawContentPtr.get.get(i))
     i = i - 1
   }
 }
@@ -213,14 +179,14 @@ def foreachReversed[T](arr: ResizableArray[T]){ body: (T){Control} => Unit }: Un
   var i = arr.size - 1
   loop { {l} =>
     if (i < 0) { l.break() }
-    body(arr.rawContentPtr.get.unsafeGet(i)){l}
+    body(arr.rawContentPtr.get.get(i)){l}
     i = i - 1
   }
 }
 def foreachReversed[T](arr: ResizableArray[T]){ body: T => Unit }: Unit = {
   var i = arr.size - 1
   while (i >= 0) { 
-    body(arr.rawContentPtr.get.unsafeGet(i))
+    body(arr.rawContentPtr.get.get(i))
     i = i - 1
   }
 }
@@ -228,7 +194,7 @@ def foreachReversed[T](arr: ResizableArray[T]){ body: T => Unit }: Unit = {
 def toList[T](arr: ResizableArray[T]): List[T] = {
   def go(i: Int, acc: List[T]): List[T] = {
     if (i < 0) { acc } else {
-      go(i - 1, Cons(arr.unsafeGet(i), acc))
+      go(i - 1, Cons(arr.rawContentPtr.get.get(i), acc))
     }
   }
   go(arr.size - 1, Nil())

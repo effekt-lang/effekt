@@ -18,8 +18,6 @@ extern type Array[T]
  */
 
 extern llvm """
-declare noalias ptr @calloc(i64, i64)
-
 define void @array_erase_fields(ptr %array_pointer) {
 entry:
     %data_pointer = getelementptr inbounds i64, ptr %array_pointer, i64 1
@@ -43,7 +41,7 @@ exit:
 
 /// Allocates a new array of size `size`, keeping its values _undefined_.
 /// Prefer using `array` constructor instead to ensure that values are defined.
-extern def allocate[T](size: Int) at global: Array[T] =
+extern def unsafeAllocate[T](size: Int) at global: Array[T] =
   js "(new Array(${size}))"
   chez "(make-vector ${size})" // creates an array filled with 0s on CS
   llvm """
@@ -58,18 +56,18 @@ extern def allocate[T](size: Int) at global: Array[T] =
     %ret_pos = insertvalue %Pos { i64 0, ptr poison }, ptr %calloc, 1
     ret %Pos %ret_pos
   """
-  vm "array::allocate(Int)"
+  vm "array::unsafeAllocate(Int)"
 
 /// Fills a given array in-place.
 def fill[T](arr: Array[T], filler: T): Unit = {
   arr.foreachIndex { (idx, _) =>
-    arr.unsafeSet(idx, filler)
+    arr.set(idx, filler)
   }
 }
 
 /// Creates a new Array of size `size` filled with the value `init`
 def array[T](size: Int, init: T): Array[T] = {
-  val arr = allocate[T](size);
+  val arr = unsafeAllocate[T](size);
   arr.fill(init)
   arr
 }
@@ -77,10 +75,10 @@ def array[T](size: Int, init: T): Array[T] = {
 /// Converts a List `list` to an Array
 def fromList[T](list: List[T]): Array[T] = {
   val listSize = list.size();
-  val arr = allocate(listSize);
+  val arr = unsafeAllocate(listSize);
 
   foreachIndex(list) { (i, head) =>
-    arr.unsafeSet(i, head)
+    arr.set(i, head)
   }
   return arr;
 }
@@ -99,14 +97,36 @@ extern def size[T](arr: Array[T]) at {}: Int =
   """
   vm "array::size[T](Array[T])"
 
+extern llvm """
+define void @assertInbounds(i64 %index, %Pos %arr) alwaysinline {
+  %pos_data = extractvalue %Pos %arr, 1
+  %size_pointer = getelementptr inbounds i64, ptr %pos_data, i64 2
+  %size = load i64, ptr %size_pointer
+  %in_bounds = icmp ult i64 %index, %size
+  br i1 %in_bounds, label %ok, label %out
+out:
+  call void @exit(i64 1)
+  unreachable
+ok:
+  ret void
+}
+"""
+
+extern js """
+  function array$get(arr, index) {
+    if (index < 0 || index >= arr.length) throw 'Index out of bounds';
+    return arr[index];
+  }
+"""
+
+
 /// Gets the element of the `arr` at given `index` in constant time.
-/// Unchecked Precondition: `index` is in bounds (0 ≤ index < arr.size)
-///
-/// Prefer using `get` instead.
-extern def unsafeGet[T](arr: Array[T], index: Int) at global: T =
-  js "${arr}[${index}]"
+/// Aborts the program when the index is out of bounds.
+extern def get[T](arr: Array[T], index: Int) at global: T =
+  js "array$get(${arr}, ${index})"
   chez "(vector-ref ${arr} ${index})"
   llvm """
+    call void @assertInbounds(i64 ${index}, %Pos ${arr})
     %pos_data = extractvalue %Pos ${arr}, 1
 
     %data_pointer = getelementptr inbounds ptr, ptr %pos_data, i64 3
@@ -117,23 +137,23 @@ extern def unsafeGet[T](arr: Array[T], index: Int) at global: T =
     tail call void @erasePositive(%Pos ${arr})
     ret %Pos %element
   """
-  vm "array::unsafeGet[T](Array[T], Int)"
+  vm "array::get[T](Array[T], Int)"
 
 extern js """
   function array$set(arr, index, value) {
+    if (index < 0 || index >= arr.length) throw 'Index out of bounds';
     arr[index] = value;
     return $effekt.unit
   }
 """
 
 /// Sets the element of the `arr` at given `index` to `value` in constant time.
-/// Unchecked Precondition: `index` is in bounds (0 ≤ index < arr.size)
-///
-/// Prefer using `set` instead.
-extern def unsafeSet[T](arr: Array[T], index: Int, value: T) at global: Unit =
+/// Aborts the program when the index is out of bounds.
+extern def set[T](arr: Array[T], index: Int, value: T) at global: Unit =
   js "array$set(${arr}, ${index}, ${value})"
   chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
   llvm """
+    call void @assertInbounds(i64 ${index}, %Pos ${arr})
     %array_data = extractvalue %Pos ${arr}, 1
 
     %data_pointer = getelementptr inbounds i64, ptr %array_data, i64 3
@@ -144,28 +164,22 @@ extern def unsafeSet[T](arr: Array[T], index: Int, value: T) at global: Unit =
     tail call void @erasePositive(%Pos ${arr})
     ret %Pos zeroinitializer
   """
-  vm "array::unsafeSet[T](Array[T], Int, T)"
+  vm "array::set[T](Array[T], Int, T)"
 
 // Derived operations:
 
-/// Gets the element of the `arr` at given `index` in constant time,
-/// throwing an `Exception[OutOfBounds]` unless `0 ≤ index < arr.size`.
-def get[T](arr: Array[T], index: Int): T / Exception[OutOfBounds] =
-  if (index >= 0 && index < arr.size) arr.unsafeGet(index)
-  else do raise(OutOfBounds(), "Array index out of bounds: " ++ show(index))
-
-/// Sets the element of the `arr` at given `index` to `value` in constant time,
-/// throwing an `Exception[OutOfBounds]` unless `0 ≤ index < arr.size`.
-def set[T](arr: Array[T], index: Int, value: T): Unit / Exception[OutOfBounds] =
-  if (index >= 0 && index < arr.size) unsafeSet(arr, index, value)
-  else do raise(OutOfBounds(), "Array index out of bounds: " ++ show(index))
+/// Allocates a new array initialized with zero integer values.
+extern def allocateZeros(size: Int) at global: Array[Int] =
+  llvm { unsafeAllocate(size) }
+  vm { unsafeAllocate(size) }
+  default { array(size, 0) }
 
 /// Builds a new Array of size `size` from a computation `index` which gets an index
 /// and returns a value that will be on that position in the resulting array
 def build[T](size: Int) { index: Int => T }: Array[T] = {
-  val arr = allocate[T](size);
+  val arr = unsafeAllocate[T](size);
   each(0, size) { i =>
-    unsafeSet(arr, i, index(i))
+    set(arr, i, index(i))
   };
   arr
 }
@@ -174,11 +188,11 @@ def build[T](size: Int) { index: Int => T }: Array[T] = {
 ///
 /// O(N + M)
 def resize[T](source: Array[T], size: Int): Array[T] = {
-  val target = allocate(size)
+  val target = unsafeAllocate(size)
   val n = min(source.size, target.size)
   def go(i: Int): Array[T] =
     if (i < n) {
-      target.unsafeSet(i, source.unsafeGet(i))
+      target.set(i, source.get(i))
       go(i + 1)
     } else {
       target
@@ -195,40 +209,28 @@ def copy[T](array: Array[T]): Array[T] =
 /**
  * Copies `length`-many elements from `from` to `to`
  * starting at `start` (in `from`) and `offset` (in `to`)
+ * Panics if any of those are out of bounds.
  */
-def copy[T](from: Array[T], start: Int, to: Array[T], offset: Int, length: Int): Unit / Exception[OutOfBounds] = {
-  val startValid  = start >= 0 && start + length <= from.size
-  val offsetValid = offset >= 0 && offset + length <= to.size
-
-  def go(i: Int, j: Int, length: Int): Unit =
-    if (length > 0) {
-      to.unsafeSet(j, from.unsafeGet(i))
-      go(i + 1, j + 1, length - 1)
+def copy[T](from: Array[T], start: Int, to: Array[T], offset: Int, length: Int): Unit = {
+  def go(i: Int, j: Int, n: Int): Unit =
+    if (n > 0) {
+      to.set(j, from.get(i))
+      go(i + 1, j + 1, n - 1)
     }
-
-  if (startValid && offsetValid) go(start, offset, length)
-  else do raise(OutOfBounds(), "Array index out of bounds, when copying")
+  go(start, offset, length)
 }
 
 
 // Utility functions:
 
 /// Swap the value at index i with that at index j.
-/// Warning: undefined behaviour if the indices are out bound.
+/// Panics if the indices are out bounds.
 /// 
 /// O(1)
-def unsafeSwap[A](arr: Array[A], i: Int, j: Int): Unit = {
-  val tmp = arr.unsafeGet(i)
-  arr.unsafeSet(i, arr.unsafeGet(j))
-  arr.unsafeSet(j, tmp)
-}
-
-/// Swap the value at index i with that at index j.
-/// 
-/// O(1)
-def swap[A](arr: Array[A], i: Int, j: Int): Unit / Exception[OutOfBounds] = {
-  if (i < 0 || i >= arr.size || j < 0 || j >= arr.size) do raise(OutOfBounds(), "Index out of bounds")
-  arr.unsafeSwap(i, j)
+def swap[A](arr: Array[A], i: Int, j: Int): Unit = {
+  val tmp = arr.get(i)
+  arr.set(i, arr.get(j))
+  arr.set(j, tmp)
 }
 
 /// Converts the given array into a list.
@@ -238,7 +240,7 @@ def toList[T](arr: Array[T]): List[T] = {
   var i = arr.size - 1;
   var l = Nil[T]()
   while (i >= 0) {
-    l = Cons(arr.unsafeGet(i), l)
+    l = Cons(arr.get(i), l)
     i = i - 1
   }
   l
@@ -249,7 +251,7 @@ def toList[T](arr: Array[T]): List[T] = {
 /// O(N)
 def foreach[T](arr: Array[T]){ action: T => Unit }: Unit =
   each(0, arr.size) { i =>
-    action(arr.unsafeGet(i))
+    action(arr.get(i))
   }
 
 /// Traverse an array, applying the given action on every element.
@@ -257,7 +259,7 @@ def foreach[T](arr: Array[T]){ action: T => Unit }: Unit =
 /// O(N)
 def foreach[T](arr: Array[T]){ action: (T) {Control} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
-    action(arr.unsafeGet(i)) {label}
+    action(arr.get(i)) {label}
   }
 
 /// Traverse an array, applying the given action on every element and its (zero-based) index.
@@ -265,7 +267,7 @@ def foreach[T](arr: Array[T]){ action: (T) {Control} => Unit }: Unit =
 /// O(N)
 def foreachIndex[T](arr: Array[T]){ action: (Int, T) => Unit }: Unit =
   each(0, arr.size) { i =>
-    action(i, arr.unsafeGet(i))
+    action(i, arr.get(i))
   }
 
 /// Traverse an array, applying the given action on every element and its (zero-based) index.
@@ -273,7 +275,7 @@ def foreachIndex[T](arr: Array[T]){ action: (Int, T) => Unit }: Unit =
 /// O(N)
 def foreachIndex[T](arr: Array[T]){ action: (Int, T) {Control} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
-    action(i, arr.unsafeGet(i)) {label}
+    action(i, arr.get(i)) {label}
   }
 
 /// Sum the elements of the array.
@@ -295,7 +297,7 @@ def equals[A](this: Array[A], other: Array[A]) { eq: (A, A) => Bool }: Bool = {
   else {
     var res = true
     this.foreachIndex { (idx, elem) {label} =>
-      if (not(eq(elem, other.unsafeGet(idx)))) {
+      if (not(eq(elem, other.get(idx)))) {
         res = false
         label.break()
       }
@@ -310,7 +312,7 @@ def equals[A](this: Array[A], other: Array[A]) { eq: (A, A) => Bool }: Bool = {
 /// O(N)
 def map[A](arr: Array[A]) { f: A => A }: Unit = {
   arr.foreachIndex { (idx, elem) =>
-    arr.unsafeSet(idx, f(arr.unsafeGet(idx)))
+    arr.set(idx, f(arr.get(idx)))
   }
 }
 
@@ -319,9 +321,9 @@ def map[A](arr: Array[A]) { f: A => A }: Unit = {
 ///
 /// O(N)
 def mapped[A, B](arr: Array[A]) { f: A => B }: Array[B] = {
-  val res = allocate(arr.size)
+  val res = unsafeAllocate(arr.size)
   arr.foreachIndex { (idx, elem) =>
-    res.unsafeSet(idx, f(arr.unsafeGet(idx)))
+    res.set(idx, f(arr.get(idx)))
   }
   res
 }
@@ -335,11 +337,11 @@ def reverse[A](arr: Array[A]): Unit = {
 
   // Swap elements from start and end, moving towards the middle
   each(0, mid) { i =>
-    val temp = arr.unsafeGet(i)
+    val temp = arr.get(i)
     val j = size - 1 - i
-    val other = arr.unsafeGet(j)
-    arr.unsafeSet(i, other)
-    arr.unsafeSet(j, temp)
+    val other = arr.get(j)
+    arr.set(i, other)
+    arr.set(j, temp)
   }
 }
 /// Creates a new array with elements in reverse order.
@@ -347,12 +349,12 @@ def reverse[A](arr: Array[A]): Unit = {
 /// O(N)
 def reversed[A](arr: Array[A]): Array[A] = {
   val size = arr.size()
-  val result = allocate[A](size)
+  val result = unsafeAllocate[A](size)
   
   // Copy elements in reverse order to new array
   each(0, size) { i =>
-    val value = arr.unsafeGet(i)
-    result.unsafeSet(size - 1 - i, value)
+    val value = arr.get(i)
+    result.set(size - 1 - i, value)
   }
   result
 }
@@ -385,7 +387,7 @@ def filtered[A](arr: Array[A]) { shouldKeep: A => Bool }: Array[A] = {
   var idx = 0
   arr.foreach { x =>
     if (shouldKeep(x)) {
-      res.unsafeSet(idx, x)
+      res.set(idx, x)
       idx = idx + 1
     }
   }
@@ -430,9 +432,9 @@ def count[A](arr: Array[A]) { predicate: A => Bool }: Int = {
 /// O(N)
 def take[A](arr: Array[A], n: Int): Array[A] = {
   val len = min(max(0, n), arr.size)
-  val result = allocate[A](len)
+  val result = unsafeAllocate[A](len)
   each(0, len) { i => 
-    result.unsafeSet(i, arr.unsafeGet(i))
+    result.set(i, arr.get(i))
   }
   result
 }
@@ -444,9 +446,9 @@ def take[A](arr: Array[A], n: Int): Array[A] = {
 def drop[A](arr: Array[A], n: Int): Array[A] = {
   val start = min(max(0, n), arr.size)
   val len = arr.size - start
-  val result = allocate[A](len)
+  val result = unsafeAllocate[A](len)
   each(0, len) { i =>
-    result.unsafeSet(i, arr.unsafeGet(i + start))
+    result.set(i, arr.get(i + start))
   }
   result
 }
@@ -459,9 +461,9 @@ def sliced[A](arr: Array[A], start: Int, end: Int): Array[A] = {
   val validStart = min(max(0, start), arr.size)
   val validEnd = min(max(validStart, end), arr.size)
   val len = validEnd - validStart
-  val result = allocate[A](len)
+  val result = unsafeAllocate[A](len)
   each(0, len) { i =>
-    result.unsafeSet(i, arr.unsafeGet(i + validStart))
+    result.set(i, arr.get(i + validStart))
   }
   result
 }
@@ -472,9 +474,9 @@ def sliced[A](arr: Array[A], start: Int, end: Int): Array[A] = {
 /// O(min(N, M))
 def zipped[A, B](this: Array[A], other: Array[B]): Array[(A, B)] = {
   val len = min(this.size, other.size)
-  val result = allocate[(A, B)](len)
+  val result = unsafeAllocate[(A, B)](len)
   each(0, len) { i =>
-    result.unsafeSet(i, (this.unsafeGet(i), other.unsafeGet(i)))
+    result.set(i, (this.get(i), other.get(i)))
   }
   result
 }
@@ -485,9 +487,9 @@ def zipped[A, B](this: Array[A], other: Array[B]): Array[(A, B)] = {
 /// O(min(N, M))
 def zippedWith[A, B, C](this: Array[A], other: Array[B]) { f: (A, B) => C }: Array[C] = {
   val len = min(this.size, other.size)
-  val result = allocate[C](len)
+  val result = unsafeAllocate[C](len)
   each(0, len) { i =>
-    result.unsafeSet(i, f(this.unsafeGet(i), other.unsafeGet(i)))
+    result.set(i, f(this.get(i), other.get(i)))
   }
   result
 }
@@ -497,12 +499,12 @@ def zippedWith[A, B, C](this: Array[A], other: Array[B]) { f: (A, B) => C }: Arr
 ///
 /// O(N)
 def unzipped[A, B](arr: Array[(A, B)]): (Array[A], Array[B]) = {
-  val arr1 = allocate(arr.size)
-  val arr2 = allocate(arr.size)
+  val arr1 = unsafeAllocate(arr.size)
+  val arr2 = unsafeAllocate(arr.size)
   arr.foreachIndex { (idx, tpl) =>
     val (x, y) = tpl
-    arr1.unsafeSet(idx, x)
-    arr2.unsafeSet(idx, y)
+    arr1.set(idx, x)
+    arr2.set(idx, y)
   }
   (arr1, arr2)
 }
@@ -519,10 +521,10 @@ def partioned[A](arr: Array[A]) { pred: A => Bool }: (Array[A], Array[A]) = {
   var fidx = 0
   arr.foreach { x =>
     if (pred(x)) {
-      tcases.unsafeSet(tidx, x)
+      tcases.set(tidx, x)
       tidx = tidx + 1
     } else {
-      fcases.unsafeSet(fidx, x)
+      fcases.set(fidx, x)
       fidx = fidx + 1
     }
   }
@@ -564,7 +566,7 @@ def binarySearch[A](arr: Array[A], toFind: A) { ord: (A, A) => Ordering }: Optio
     if (lowerIdx > upperIdx) None()
     else {
       val mid = lowerIdx + (upperIdx - lowerIdx) / 2
-      val current = arr.unsafeGet(mid)
+      val current = arr.get(mid)
       ord(current, toFind) match {
         case Less() => binarySearch(mid + 1, upperIdx)
         case Greater() => binarySearch(lowerIdx, mid - 1)
@@ -581,18 +583,18 @@ def binarySearch[A](arr: Array[A], toFind: A) { ord: (A, A) => Ordering }: Optio
 /// O(N log N) average case
 def sort[A](arr: Array[A]) { ord: (A, A) => Ordering }: Unit = {
   def partition(low: Int, high: Int): Int = {
-    val pivot = arr.unsafeGet(high)
+    val pivot = arr.get(high)
     var i = low - 1
     
     each(low, high) { j =>
-      ord(arr.unsafeGet(j), pivot) match {
+      ord(arr.get(j), pivot) match {
         case Less() =>
           i = i + 1
-          unsafeSwap(arr, i, j)
+          swap(arr, i, j)
         case _ => ()
       }
     }
-    unsafeSwap(arr, i + 1, high)
+    swap(arr, i + 1, high)
     i + 1
   }
   
@@ -653,7 +655,7 @@ def each[T](array: Array[T]): Unit / emit[T] = {
   val n = array.size
   def go(i: Int): Unit = {
     if (i < n) {
-      do emit(array.unsafeGet(i))
+      do emit(array.get(i))
       go(i + 1)
     }
   }
@@ -669,7 +671,7 @@ def feed[T, R](array: Array[T]) { reader: () => R / read[T] }: R = {
       if (i < array.size) {
         val c = i
         i = c + 1
-        array.unsafeGet(c)
+        array.get(c)
       } else {
         do stop()
       }
@@ -683,12 +685,12 @@ def collect[A] { stream: () => Unit / emit[A] }: Array[A] =
 namespace returning {
   def collect[A, R] { stream: () => R / emit[A] }: (R, Array[A]) = {
     var i = 0
-    var a = allocate(1)
+    var a = unsafeAllocate(1)
     try {
       (stream(), a.resize(i))
     } with emit[A] { (v) =>
       if (i >= a.size) { a = a.resize(2 * a.size) }
-      a.unsafeSet(i, v)
+      a.set(i, v)
       i = i + 1
       resume(())
     }
