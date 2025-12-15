@@ -45,7 +45,7 @@ class ReparseTests extends CoreTests {
     // FIXME: Added in #1230, blocked on #1258 (https://github.com/effekt-lang/effekt/pull/1258)
     //        doesn't work since any program importing `json` fails due to string escapes.
     examplesDir / "pos" / "with_val_and_else.effekt",
-    examplesDir / "pos" / "with_val_and_two_args_and_else.effekt",
+    examplesDir / "pos" / "with_val_two_args_and_else.effekt",
     examplesDir / "pos" / "with_val_pair_and_else.effekt",
   )
 
