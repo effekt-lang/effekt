@@ -9,7 +9,7 @@ import kiama.output.PrettyPrinterTypes.Document
 import scala.language.implicitConversions
 import effekt.symbols.{ Name, Wildcard, builtins }
 
-class PrettyPrinter(printDetails: Boolean) extends ParenPrettyPrinter {
+class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) extends ParenPrettyPrinter {
   override val defaultIndent = 2
 
   def format(t: ModuleDecl): Document =
@@ -124,7 +124,7 @@ class PrettyPrinter(printDetails: Boolean) extends ParenPrettyPrinter {
     // In reparsable mode, we just show the string part, which should be freshened by the TestRenamer before printing.
     // The TestRenamer does not rename the Barendregt id because that would violate the internal invariant of having
     // just a single global Barendregt namespace.
-    builtins.coreBuiltinSymbolToString(s).getOrElse(if printDetails then s.name.name else s.show)
+    builtins.coreBuiltinSymbolToString(s).getOrElse(if printInternalIds then s.show else s.name.name)
   }
 
   def toDoc(e: Expr): Doc = e match {
@@ -370,9 +370,8 @@ class PrettyPrinter(printDetails: Boolean) extends ParenPrettyPrinter {
 
 /**
  * Instance of PrettyPrinter that produces output that can be parsed back by the core parser.
- * This can be enabled using the `--debug` command line flag.
  */
-object ReparsablePrettyPrinter extends PrettyPrinter(true) {}
+object ReparsablePrettyPrinter extends PrettyPrinter(true, false) {}
 
 /**
  * Instance of PrettyPrinter that produces less verbose, more human-readable output.
