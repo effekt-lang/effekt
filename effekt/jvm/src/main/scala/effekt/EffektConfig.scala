@@ -200,6 +200,19 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
     group = debugging
   )
 
+  // Experimental
+  // ------------
+
+  lazy val newNormalizer = toggle(
+    "new-normalizer",
+    descrYes = "Use the new normalizer implementation",
+    descrNo = "Use the old normalizer implementation",
+    default = Some(false),
+    noshort = true,
+    prefix = "no-",
+    group = group("Experimental Features")
+  )
+
   /**
    * Tries to find the path to the standard library. Proceeds in the following
    * order:
@@ -262,6 +275,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
   def documenter(): Boolean = showDocumentation() || writeDocumentation()
 
   def timed(): Boolean = time.isSupplied && !server()
+  
+  def useNewNormalizer(): Boolean = newNormalizer()
 
   validateFilesIsDirectory(includePath)
 

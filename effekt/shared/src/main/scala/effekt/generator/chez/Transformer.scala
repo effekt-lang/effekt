@@ -123,7 +123,7 @@ trait Transformer {
   }
 
   def toChez(decl: core.Extern)(using ErrorReporter): chez.Def = decl match {
-    case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body) =>
+    case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body, vmBody) =>
       val tBody = body match {
         case ExternBody.StringExternBody(featureFlag, contents) => toChez(contents)
         case u: ExternBody.Unsupported =>

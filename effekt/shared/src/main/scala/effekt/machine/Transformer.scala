@@ -52,7 +52,7 @@ object Transformer {
   }
 
   def transform(extern: core.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
-    case core.Extern.Def(name, tps, cparams, vparams, bparams, ret, capture, body) =>
+    case core.Extern.Def(name, tps, cparams, vparams, bparams, ret, capture, body, vmBody) =>
       // TODO delete, and/or enforce at call site (ImpureApp)
       if bparams.nonEmpty then ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
 
@@ -642,7 +642,7 @@ object Transformer {
     noteDefinition(id, params, free, false)
 
   def noteParameter(id: Id, tpe: core.BlockType)(using BC: BlocksParamsContext): Unit =
-    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Parameter)")
+    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Parameter(${tpe})")
     BC.info += (id -> BlockInfo.Parameter(tpe))
 
   def noteParameters(ps: List[core.BlockParam])(using BC: BlocksParamsContext): Unit =

@@ -521,8 +521,10 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
     val functions = m.definitions.collect { case Toplevel.Def(id, b: Block.BlockLit) => id -> b }.toMap
 
     val builtinFunctions = m.externs.collect {
-      case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture,
-        ExternBody.StringExternBody(FeatureFlag.NamedFeatureFlag("vm", _), Template(name :: Nil, Nil))) =>
+      case Extern.Def(
+        id, tps, cps, vps, bps, ret, annotatedCapture, _,
+        Some(ExternBody.StringExternBody(FeatureFlag.NamedFeatureFlag("vm", _), Template(name :: Nil, Nil)))
+      ) =>
           id -> builtins.getOrElse(name, throw VMError.MissingBuiltin(name))
     }.toMap
 
