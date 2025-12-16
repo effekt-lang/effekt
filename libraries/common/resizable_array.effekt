@@ -145,7 +145,7 @@ def foreachIndex[T](arr: ResizableArray[T]){ body: (Int, T) => Unit }: Unit = {
     body(i, arr.rawContentPtr.get.get(i))
   }
 }
-def foreachIndex[T](arr: ResizableArray[T]){ body: (Int, T) {Control} => Unit }: Unit = {
+def foreachIndex[T](arr: ResizableArray[T]){ body: (Int, T) {Label} => Unit }: Unit = {
   each(0, arr.size) { (i){label} =>
     body(i, arr.rawContentPtr.get.get(i)){label}
   }
@@ -155,12 +155,12 @@ def foreach[T](arr: ResizableArray[T]){ body: T => Unit }: Unit = {
     body(arr.rawContentPtr.get.get(i))
   }
 }
-def foreach[T](arr: ResizableArray[T]){ body: (T) {Control} => Unit }: Unit = {
+def foreach[T](arr: ResizableArray[T]){ body: (T) {Label} => Unit }: Unit = {
   each(0, arr.size) { (i){label} =>
     body(arr.rawContentPtr.get.get(i)){label}
   }
 }
-def foreachIndexReversed[T](arr: ResizableArray[T]){ body: (Int, T){Control} => Unit }: Unit = {
+def foreachIndexReversed[T](arr: ResizableArray[T]){ body: (Int, T){Label} => Unit }: Unit = {
   var i = arr.size - 1
   loop { {l} =>
     if (i < 0) { l.break() }
@@ -175,7 +175,7 @@ def foreachIndexReversed[T](arr: ResizableArray[T]){ body: (Int, T) => Unit }: U
     i = i - 1
   }
 }
-def foreachReversed[T](arr: ResizableArray[T]){ body: (T){Control} => Unit }: Unit = {
+def foreachReversed[T](arr: ResizableArray[T]){ body: (T){Label} => Unit }: Unit = {
   var i = arr.size - 1
   loop { {l} =>
     if (i < 0) { l.break() }

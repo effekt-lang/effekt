@@ -1434,7 +1434,7 @@ class LSPTests extends FunSuite {
       val expectedIRContents =
         raw"""ModuleDecl(
              |  test,
-             |  List(effekt, option, stream, list, result, exception, array, char, bytearray, stringbuffer, string, ref),
+             |  List(effekt, option, stream, control, list, result, exception, array, char, bytearray, stringbuffer, string, ref),
              |  Nil,
              |  Nil,
              |  List(

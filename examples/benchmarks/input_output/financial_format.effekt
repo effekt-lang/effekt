@@ -34,7 +34,7 @@ def emitOrder(): Unit / emit[Byte] = {
 
 def readTag(): Int / read[Byte] = {
   var tag = 0
-  exhaustively {
+  loop {
     val byte = do read().toInt
     if (byte >= 48 && byte <= 57) {
       tag = tag * 10 + (byte - 48)
@@ -65,7 +65,7 @@ def readOrder(): Unit / read[Byte] = {
   def assertTag(tag: Int) = {
     readEntry { got =>
       if (got == tag) {
-        exhaustively { do read(); () }
+        loop { do read(); () }
       } else {
         panic("wrong tag")
       }

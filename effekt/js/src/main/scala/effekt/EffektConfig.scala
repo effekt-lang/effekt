@@ -21,6 +21,7 @@ trait EffektConfig {
     "effekt",
     "option",
     "stream",
+    "control",
     "list",
     "result",
     "exception",
