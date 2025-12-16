@@ -106,6 +106,11 @@ case class ModuleDecl(
   exports: List[Id]
 ) extends Tree {
   def show: String = util.show(this)
+
+  /**
+   * Since core programs have free variables before aggregation, this check is not performed automatically
+   */
+  def typecheck()(using ErrorReporter): Unit = Type.typecheck(this)
 }
 
 /**
@@ -317,8 +322,6 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
 
 /**
  * Implementation of a method / effect operation.
- *
- * TODO drop resume here since it is not needed anymore...
  */
 case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends Tree {
   val typing: Typing[BlockType.Function] = Type.typecheck(this)

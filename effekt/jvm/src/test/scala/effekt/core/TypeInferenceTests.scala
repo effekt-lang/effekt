@@ -149,13 +149,13 @@ class TypeInferenceTests extends CoreTests {
       typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(x, TInt) :: Nil))
     }
 
-    val ex4 = Make(OptionT(TInt), SomeC, List(), List(Literal(42, TInt)))
+    val ex4: Expr.Make = Make(OptionT(TInt), SomeC, List(), List(Literal(42, TInt)))
     assertSameType(ex4.tpe, OptionT(TInt))
-    assertEquals(ex4.free, Free.make(SomeC, OptionT(TInt), Nil, List(TInt)))
+    assertEquals(ex4.free, Free.defer(ex4))
 
-    val ex5 = Make(OptionT(TInt), NoneC, List(), List())
+    val ex5: Expr.Make = Make(OptionT(TInt), NoneC, List(), List())
     assertSameType(ex5.tpe, OptionT(TInt))
-    assertEquals(ex5.free, Free.make(NoneC, OptionT(TInt), Nil, Nil))
+    assertEquals(ex5.free, Free.defer(ex5))
   }
 
   val ex6 = Stmt.Region(Block.BlockLit(Nil, r :: Nil, Nil, BlockParam(r, TRegion, Set(r)) :: Nil,

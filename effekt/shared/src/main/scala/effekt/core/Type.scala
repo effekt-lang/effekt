@@ -63,24 +63,33 @@ def checking[T <: Tree, R](t: T)(f: T => R): R =
 // this could even improve the error messages, since we can point at the term that's wrong...
 // so `type Later = Expr.Make | Implementation`
 //
-// How do we check the dual method calls and pattern matches then against declarations?
+// Also representing constraints as sets doesn't seem to decrease the number significantly since emit['A]
+// is not necessarily equal to emit['A] (both 'As are type parameters of some function)
 enum Constraints {
-  case Make(ctor: Id, result: ValueType.Data, existentialTypeArgs: List[ValueType], arguments: List[ValueType])
-  case Implementation(interface: BlockType.Interface, operations: Map[Id, BlockType.Function])
-
-  // These are always never traversed (accept when checking on the module level, so we use the free structure)
   case Empty
-  case Append(lhs: Constraints, rhs: Constraints)
+  case Single(c: Constraint)
+  case Concat(c1: Constraints, c2: Constraints)
 
-  def ++(other: Constraints) = (this, other) match {
+  def ++(other: Constraints): Constraints = (this, other) match {
     case (Empty, other) => other
     case (other, Empty) => other
-    case (lhs, rhs) => Constraints.Append(lhs, rhs)
+    case (c1, c2) => Constraints.Concat(c1, c2)
+  }
+
+  def foreach(f: Constraint => Unit): Unit = this match {
+    case Constraints.Empty => ()
+    case Constraints.Single(c) => f(c)
+    case Constraints.Concat(c1, c2) => c1.foreach(f); c2.foreach(f)
   }
 }
 object Constraints {
   def empty: Constraints = Constraints.Empty
+  def apply(c: Constraint): Constraints = Constraints.Single(c)
 }
+
+case class MatchClause(ctor: Id, result: ValueType.Data, existentialTypeArgs: List[ValueType], arguments: List[ValueType])
+
+type Constraint = Expr.Make | Implementation | MatchClause
 
 // only used for type checking
 case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures)], constraints: Constraints) {
@@ -105,7 +114,7 @@ case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures
     blocks.get(id).foreach { case (otherTpe, otherCapt) =>
       if !Type.equals(tpe, otherTpe) then
         typeError(s"free variable ${util.show(id)} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
-
+      // for now ignore captures
       // if !otherCapt.subsetOf(capt) then
         // typeError(s"free variable ${util.show(id)} assumes a wrong capture set (${capt.map(core.PrettyPrinter.show)} vs. ${otherCapt.map(core.PrettyPrinter.show)})")
     }
@@ -124,11 +133,7 @@ object Free {
   def value(id: Id, tpe: ValueType) = Free(Map(id -> tpe), Map.empty, Constraints.empty)
   def block(id: Id, tpe: BlockType, capt: Captures) = Free(Map.empty, Map(id -> (tpe, capt)), Constraints.empty)
 
-  def make(ctor: Id, result: ValueType.Data, existentialTypeArgs: List[ValueType], arguments: List[ValueType]) =
-    Free(Map.empty, Map.empty, Constraints.Make(ctor, result, existentialTypeArgs, arguments))
-
-  def impl(interface: BlockType.Interface, operations: Map[Id, BlockType.Function]) =
-    Free(Map.empty, Map.empty, Constraints.Implementation(interface, operations))
+  def defer(c: Constraint) = Free(Map.empty, Map.empty, Constraints(c))
 
   def valuesCompatible(free1: Map[Id, ValueType], free2: Map[Id, ValueType]): Unit =
     val same = free1.keySet intersect free2.keySet
@@ -171,7 +176,7 @@ object Type {
   def equals(tpe1: ValueType, tpe2: ValueType): Boolean = (tpe1, tpe2) match {
     case (ValueType.Var(name1), ValueType.Var(name2)) => name1 == name2
     case (ValueType.Data(name1, args1), ValueType.Data(name2, args2)) => name1 == name2 && all(args1, args2, equals)
-    // ignore cpatures for now :(
+    // ignore captures for now :(
     case (ValueType.Boxed(btpe1, capt1), ValueType.Boxed(btpe2, capt2)) => equals(btpe1, btpe2) // && equals(capt1, capt2)
     case _ => false
   }
@@ -229,7 +234,7 @@ object Type {
 
   def instantiate(f: BlockType.Function, targs: List[ValueType], cargs: List[Captures]): BlockType.Function = f match {
     case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-      assert(targs.size == tparams.size, "Wrong number of type arguments")
+      assert(targs.size == tparams.size, s"Wrong number of type arguments\n  targs: ${targs}\n  tparams: ${tparams}")
       assert(cargs.size == cparams.size, "Wrong number of capture arguments")
 
       val tsubst = (tparams zip targs).toMap
@@ -293,6 +298,122 @@ object Type {
     }
   }
 
+  def typecheck(module: ModuleDecl)(using ErrorReporter): Unit = module match {
+    case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+      given DeclarationContext(declarations, externs)
+
+      // bound on the toplevel
+      val boundBlocks = definitions.collect {
+        case Toplevel.Def(id, block) => BlockParam(id, block.tpe, block.capt)
+      } ++ externs.collect {
+        case Extern.Def(id, tparams, cparams, vparams, bparams, ret, capt, _) =>
+          BlockParam(id, BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), ret), capt)
+      }
+
+      val boundValues = definitions.collect {
+        case Toplevel.Val(id, expr) => ValueParam(id, expr.tpe)
+      }
+
+      def assertClosed(free: Free): Unit =
+        val toplevel = free.withoutBlocks(boundBlocks).withoutValues(boundValues)
+        assert(toplevel.isEmpty, {
+          val freeBlocks = toplevel.blocks.map { case (id, (tpe, capt)) => s"${util.show(id)}: ${util.show(tpe)} @ ${capt.map(util.show).mkString("{", ", ", "}")}" }
+          s"Toplevel program should be closed, but got:\n${ freeBlocks.mkString("\n") }"
+        })
+
+      var constraints: Constraints = Constraints.empty
+
+      def wellformed(free: Free): Unit = { assertClosed(free); constraints ++= free.constraints }
+
+      definitions.foreach {
+        case Toplevel.Def(id, block) => wellformed(block.free)
+        case Toplevel.Val(id, binding) => wellformed(binding.free)
+      }
+
+      externs.foreach {
+        case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
+          val splices = body match {
+            case ExternBody.StringExternBody(featureFlag, contents) => contents.args
+            case ExternBody.Unsupported(err) => Nil
+          }
+          val free = all(splices, splice => splice.typing).free.withoutValues(vparams).withoutBlocks(bparams)
+          wellformed(free)
+
+        case Extern.Include(featureFlag, contents) => ()
+      }
+
+      constraints.foreach {
+        case impl: Implementation =>
+          checking(impl) { checkAgainstDeclaration }
+        case make @ Expr.Make(data, tag, targs, vargs) =>
+          checking(make) { make => checkAgainstDeclaration(data, tag, targs, vargs.map(_.tpe)) }
+        case MatchClause(tag, result, targs, arguments) =>
+          checkAgainstDeclaration(result, tag, targs, arguments)
+      }
+  }
+
+  // Make Coalg[Bool].State[Int](0, box { n => n + 1 }, box { n => n > 0 })
+  def checkAgainstDeclaration(result: ValueType.Data, tag: Id, existentialTypeArgs: List[ValueType], arguments: List[ValueType])(using DC: DeclarationContext, E: ErrorReporter): Unit = {
+      // type Coalg[T] { case State[S](state: S, next: S => S at {}, get: S => T at {}) }
+      val decl = DC.getData(result.name)
+      // case State[S](state: S, next: S => S at {}, get: S => T at {})
+      val ctor = DC.getConstructor(tag)
+      // [T]
+      val universalParams = decl.tparams
+      // [S]
+      val existentialParams = ctor.tparams
+      // [T, S](S, S => S at {}, S => T at {}) => Coalg[T]
+      val sig: BlockType.Function = BlockType.Function(universalParams ++ existentialParams, Nil, ctor.fields.map(_.tpe), Nil,
+        ValueType.Data(result.name, universalParams.map(ValueType.Var.apply)))
+      // (Int, Int => Int at {}, Int => Bool at {}) => Coalg[Bool]
+      val BlockType.Function(_, _, paramTypes, _, retType) = instantiate(sig, result.targs ++ existentialTypeArgs, Nil)
+      valueShouldEqual(result, retType)
+      valuesShouldEqual(paramTypes, arguments)
+  }
+
+  def checkAgainstDeclaration(impl: Implementation)(using DC: DeclarationContext, E: ErrorReporter): Unit = impl match {
+    // interface is the _applied_ interface type, for instance
+    // Implementation Callback[Int] { def register: [S](arg: S, fun: S => Int at {}) => Unit }
+    case Implementation(interface, operations) =>
+      val definitions = operations.map { op => op.name -> op.tpe }
+
+      // interface Callback[A] { def register: [B](arg: B, fun: B => A at {}) => Unit }
+      val decl = DC.getInterface(interface.name)
+
+      // check all are defined
+      val declared = decl.properties.map(_.id).toSet
+      val implemented = definitions.map(_._1).toSet
+      assert(declared == implemented, s"Interface ${interface.name} declares ${declared}, but implemented: ${implemented}")
+
+      // [A]
+      val universalParams = decl.tparams
+      // [Int]
+      val universalArgs = interface.targs
+
+      definitions.foreach {
+        case (id, tpe) => (DC.getProperty(id).tpe, tpe) match {
+          case (
+            //                 [B]
+            BlockType.Function(declTparams, declCparams, declVparams, declBparams, declRet),
+            //                 [S]
+            BlockType.Function(implTparams, implCparams, implVparams, implBparams, implRet)
+          ) =>
+            // [A, B](B, B => A at {}) => Unit
+            val sig: BlockType.Function = BlockType.Function(universalParams ++ declTparams, declCparams, declVparams, declBparams, declRet)
+            // (S, S => Int at {}) => Unit
+            val BlockType.Function(_, _, vparams, bparams, result) = instantiate(sig, universalArgs ++ implTparams.map(ValueType.Var.apply),
+              implCparams.map(id => Set(id)))
+
+            valueShouldEqual(result, implRet)
+            valuesShouldEqual(vparams, implVparams)
+            blocksShouldEqual(bparams, implBparams)
+
+          case (other1, other2) =>
+            throw new AssertionError(s"Both are required to be function types: ${util.show(other1)} and ${util.show(other2)}")
+        }
+      }
+  }
+
   def typecheck(expr: Expr): Typing[ValueType] = checking(expr) {
     case Expr.ValueVar(id, annotatedType) => Typing(annotatedType, Set.empty, Free.value(id, annotatedType))
     case Expr.Literal(value, annotatedType) => Typing(annotatedType, Set.empty, Free.empty)
@@ -303,30 +424,10 @@ object Type {
        valuesShouldEqual(vparams, argTypes)
        Typing(result, Set.empty, argFrees ++ Free.block(callee.id, callee.annotatedTpe, callee.annotatedCapt))
 
-    // targs here are the existential type arguments
-    // Make Coalg[Bool].State[Int](0, box { n => n + 1 }, box { n => n > 0 })
-    case Expr.Make(data, tag, targs, vargs) =>
-      //      // type Coalg[T] { case State[S](state: S, next: S => S at {}, get: S => T at {}) }
-      //      val decl = D.getData(data.name)
-      //      // case State[S](state: S, next: S => S at {}, get: S => T at {})
-      //      val ctor = D.getConstructor(tag)
-      //      // [T]
-      //      val universalParams = decl.tparams
-      //      // [S]
-      //      val existentialParams = ctor.tparams
-      //      // [T, S](S, S => S at {}, S => T at {}) => Coalg[T]
-      //      val sig: BlockType.Function = BlockType.Function(universalParams ++ existentialParams, Nil, ctor.fields.map(_.tpe), Nil,
-      //        ValueType.Data(data.name, universalParams.map(ValueType.Var.apply)))
-      //      // (Int, Int => Int at {}, Int => Bool at {}) => Coalg[Bool]
-      //      val BlockType.Function(_, _, paramTypes, _, retType) = instantiate(sig, data.targs ++ targs, Nil)
-      //      // TODO factor out callLike things
-      //      shouldEqual(data, retType)
-      //      val Typing(argTypes, argCapt, argFree) = all(vargs, typecheck)
-      //      valuesShouldEqual(paramTypes, argTypes)
-
+    case make @ Expr.Make(data, tag, targs, vargs) =>
       val Typing(argTypes, argCapt, argFree) = all(vargs, arg => arg.typing)
       // we assume that the annotated type is correct and check later...
-      Typing(data, argCapt, argFree ++ Free.make(tag, data, targs, argTypes))
+      Typing(data, argCapt, argFree ++ Free.defer(make))
 
     case Expr.Box(b, annotatedCapture) =>
       val Typing(bTpe, bCapt, bFree) = b.typing
@@ -357,7 +458,7 @@ object Type {
   def typecheck(impl: Implementation): Typing[BlockType.Interface] = checking(impl) {
     case Implementation(interface, operations) =>
       val Typing(ops, capts, free) = fold(operations.map { op => op.typing.map { tpe => Map(op.name -> tpe) }}, Map.empty) { _ ++ _ }
-      Typing(interface, capts, free ++ Free.impl(interface, ops))
+      Typing(interface, capts, free ++ Free.defer(impl))
   }
 
   def typecheck(op: Operation): Typing[BlockType.Function] = checking(op) {
@@ -404,7 +505,7 @@ object Type {
       val Typing(scType, scCapt, scFree) = sc.typing
       val clauseTypings = clauses.map { case (id, arm) =>
         val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), armCapt, armFree) = asFunctionTyping(arm.typing)
-        Typing(result, armCapt, armFree ++ Free.make(id, sc.tpe.asInstanceOf[ValueType.Data], tparams.map(id => ValueType.Var(id)), vparams))
+        Typing(result, armCapt, armFree ++ Free.defer(MatchClause(id, sc.tpe.asInstanceOf[ValueType.Data], tparams.map(id => ValueType.Var(id)), vparams)))
       }
 
       // TODO assert that scrutinee actually has type being matched on
