@@ -514,9 +514,10 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
     // We need to see what happens to the extern function if we monomorphize it
     // and then compare our arguments and the expected parameters to see if any are mismatches, then coerce those
     val functionTpe = core.Type.instantiate(callee.functionType, monoTargs, callee.functionType.cparams.map(c => Set(c)))
-    val newVargs = functionTpe.vparams.zip(monoVargs).map({
+    val newVargs = callee.functionType.vparams.zip(monoVargs).map({
       case (vt, expr) => (vt, expr.tpe) match {
-        case (ValueType.Var(varName), ValueType.Data(name, targs)) => PolymorphismBoxing.coerce(expr, vt)
+        case (ValueType.Var(varName), ValueType.Data(name, targs)) if (name == symbols.builtins.IntSymbol) || (name == symbols.builtins.ByteSymbol) || (name == symbols.builtins.DoubleSymbol) =>
+          PolymorphismBoxing.coerce(expr, vt)
         case (_, _) => expr
       } 
     })
@@ -524,7 +525,15 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
     // get callee tpe (function result)
     // mono targs
     // core.Type instantiate with mono targs
-    ImpureApp(id, callee, monoTargs, newVargs, bargs map monomorphize, monoBody)
+    functionTpe.result match {
+      case ValueType.Data(name, targs) if (name == symbols.builtins.IntSymbol) || (name == symbols.builtins.ByteSymbol) || (name == symbols.builtins.DoubleSymbol) => 
+        // println(callee.functionType.result)
+        val fid = Id("hallo")
+        ImpureApp(fid, callee, monoTargs, newVargs, bargs map monomorphize, 
+          Let(id, core.Type.TInt, PolymorphismBoxing.coerce(ValueVar(fid, callee.functionType.result), Type.TInt), monoBody))
+      case _ => 
+        ImpureApp(id, callee, monoTargs, newVargs, bargs map monomorphize, monoBody)
+    }
   case App(callee: BlockVar, targs, vargs, bargs) => 
     val replacementData = replacementDataFromTargs(callee.id, targs)
     App(monomorphize(callee, replacementData.name, targs), List.empty, vargs map monomorphize, bargs map monomorphize)
