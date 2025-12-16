@@ -408,7 +408,7 @@ object Normalizer { normal =>
   private def reduce(b: BlockLit, targs: List[core.ValueType], vargs: List[Expr], bargs: List[Block])(using C: Context): Stmt = {
     // To update usage information
     val usage = C.usage
-    def copyUsage(from: Id, to: Id) = usage.get(from) match {
+    def copyUsage(to: Id, from: Id) = usage.get(from) match {
       case Some(info) => usage.update(to, info)
       case None => ()
     }
@@ -429,7 +429,7 @@ object Normalizer { normal =>
         val id = symbols.TmpBlock("blockBinding")
         bindings = bindings :+ Binding.Def(id, block)
         bvars = bvars :+ Block.BlockVar(id, block.tpe, block.capt)
-        copyUsage(bparam.id, id)
+        copyUsage(id, bparam.id)
         ids += id
     }
 
