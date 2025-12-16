@@ -8,7 +8,7 @@ permalink: tour/captures
 [Computations](/tour/computation), such as functions and objects, are second-class _by default_ in Effekt, but for a good reason.
 Since computations can capture capabilities, they can only be used where those capabilities remain in scope.
 For statically preventing capabilities from escaping their valid scope, Effekt tracks captured capabilities on the type level and verifies they're still in scope upon usage.
-We call this mechanism _boxing_ and will discuss in greater details in the next [section](/tour/captures#boxing).
+Functions and capabilities can still be treated as first-class values by means of _boxing_, which we discuss in greater details in the next [section](/tour/captures#boxing).
 
 Consider the following example where `divide` is being passed an explicit capability:
 
