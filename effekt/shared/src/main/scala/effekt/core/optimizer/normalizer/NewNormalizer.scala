@@ -442,17 +442,23 @@ class NewNormalizer {
       evaluate(body, Frame.Return, Stack.Var(bp, addr, k, ks))
     case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
       val ref1 = env.subst(ref)
+      val capt = annotatedCapt.flatMap(env.lookupCapture).collect {
+        case RuntimeCapture.Known(s) => s.id.id
+      }
       get(ref1, ks) match {
         case Some(addr) => bind(id, addr) { evaluate(body, k, ks) }
-        case None => bind(id, scope.allocateGet(ref1, annotatedTpe, annotatedCapt)) { evaluate(body, k, ks) }
+        case None => bind(id, scope.allocateGet(ref1, annotatedTpe, capt)) { evaluate(body, k, ks) }
       }
     case Stmt.Put(ref, annotatedCapt, value, body) =>
       val addr = evaluate(value, ks.bound)
       val ref1 = env.subst(ref)
+      val capt = annotatedCapt.flatMap(env.lookupCapture).collect {
+        case RuntimeCapture.Known(s) => s.id.id
+      }
       put(ref1, addr, ks) match {
         case Some(stack) => evaluate(body, k, stack)
         case None =>
-          NeutralStmt.Put(ref1, value.tpe, annotatedCapt, addr, nested { evaluate(body, k, ks) })
+          NeutralStmt.Put(ref1, value.tpe, capt, addr, nested { evaluate(body, k, ks) })
       }
 
     // Control Effects
