@@ -301,20 +301,32 @@ object Type {
         case Toplevel.Val(id, expr) => ValueParam(id, expr.tpe)
       }
 
-      def assertClosed(typing: Typing[Any]): Unit =
-        val free = typing.free.withoutBlocks(boundBlocks).withoutValues(boundValues)
-        assert(free.isEmpty, {
-          val freeBlocks = free.blocks.map { case (id, (tpe, capt)) => s"${util.show(id)}: ${util.show(tpe)} @ ${capt.map(util.show).mkString("{", ", ", "}")}" }
+      def assertClosed(free: Free): Unit =
+        val toplevel = free.withoutBlocks(boundBlocks).withoutValues(boundValues)
+        assert(toplevel.isEmpty, {
+          val freeBlocks = toplevel.blocks.map { case (id, (tpe, capt)) => s"${util.show(id)}: ${util.show(tpe)} @ ${capt.map(util.show).mkString("{", ", ", "}")}" }
           s"Toplevel program should be closed, but got:\n${ freeBlocks.mkString("\n") }"
         })
 
-      def checkConstraints(typing: Typing[Any]): Unit = ()
-
       var constraints: Constraints = Constraints.empty
 
+      def wellformed(free: Free): Unit = { assertClosed(free); constraints ++= free.constraints }
+
       definitions.foreach {
-        case Toplevel.Def(id, block) => assertClosed(block.typing); constraints ++= block.typing.free.constraints
-        case Toplevel.Val(id, binding) => assertClosed(binding.typing); constraints ++= binding.typing.free.constraints
+        case Toplevel.Def(id, block) => wellformed(block.free)
+        case Toplevel.Val(id, binding) => wellformed(binding.free)
+      }
+
+      externs.foreach {
+        case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
+          val splices = body match {
+            case ExternBody.StringExternBody(featureFlag, contents) => contents.args
+            case ExternBody.Unsupported(err) => Nil
+          }
+          val free = all(splices, splice => splice.typing).free.withoutValues(vparams).withoutBlocks(bparams)
+          wellformed(free)
+
+        case Extern.Include(featureFlag, contents) => ()
       }
 
       constraints.foreach {
@@ -338,8 +350,6 @@ object Type {
           valuesShouldEqual(paramTypes, arguments)
         case Constraint.Implementation(interface, operations) => () // TODO
       }
-
-      // also type check externs!
   }
 
   def typecheck(expr: Expr): Typing[ValueType] = checking(expr) {
