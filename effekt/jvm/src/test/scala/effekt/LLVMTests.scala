@@ -54,6 +54,10 @@ class LLVMTests extends EffektTests {
 
     // Generic comparison
     examplesDir / "pos" / "issue733.effekt",
+
+    // re-entrant resumption
+    examplesDir / "pos" / "issue1203.effekt",
+    examplesDir / "pos" / "issue1203b.effekt",
   )
 
   override lazy val withoutOptimizations: Set[File] = Set(

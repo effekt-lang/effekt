@@ -1,0 +1,24 @@
+interface Suspend {
+  def suspend[T](block: (T => Unit at {}) => Unit at {}): T
+}
+
+def handleSuspend(block: => Unit / Suspend at {}) = try block() with Suspend {
+  def suspend[T](block2) = block2(box resume)
+}
+
+def foo(flag: Bool): Unit = {
+  handleSuspend(box { do suspend[=> Unit at {}](box { resume =>
+      def r() = resume(box{}) // inlining this makes the bug not trigger
+      if (flag) (box r)() else resume(box r)
+    })()
+  })
+}
+
+effect random(): Bool
+
+def main() = {
+  var next = box { true }
+  next = box { false } // this seems to be necessary in order to trigger the bug [?]
+
+  try { foo(do random()) } with random { resume(next()) }
+}
