@@ -333,12 +333,18 @@ object PrettyPrinter extends ParenPrettyPrinter {
       case '"'  => "\\\""
       case '\r' => "\\r"
       case '\t' => "\\t"
+      case '\n' => "\\n"
       case c    => c.toString
     }
   }
 
+  // If we encounter any of the following characters, we print a single-line string literal with escape sequences
+  // instead of a multi-line string literal.
+  // This is because multi-line string literals cannot currently contain escape sequences.
+  val mustEscape: Set[Char] = Set('"', '\r', '\t')
+
   def stringLiteral(s: String): Doc =
-    if s.contains("\n") then multilineStringLiteral(s)
+    if !s.exists(mustEscape.contains) then multilineStringLiteral(s)
     else "\"" <> escapeString(s) <> "\""
 
   def multilineStringLiteral(s: String): Doc = {
