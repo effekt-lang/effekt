@@ -368,7 +368,7 @@ object semantics {
     // body is stuck
     case Reset(prompt: BlockParam, body: BasicBlock)
     // prompt / context is unknown
-    case Shift(prompt: Prompt, kCapt: Capture, k: BlockParam, body: BasicBlock)
+    case Shift(prompt: Prompt, k: BlockParam, body: BasicBlock)
     // continuation is unknown
     case Resume(k: Id, body: BasicBlock)
 
@@ -389,7 +389,7 @@ object semantics {
       case NeutralStmt.Match(scrutinee, tpe, clauses, default) => Set(scrutinee) ++ clauses.flatMap(_._2.free).toSet ++ default.map(_.free).getOrElse(Set.empty)
       case NeutralStmt.Return(result) => Set(result)
       case NeutralStmt.Reset(prompt, body) => body.free - prompt.id
-      case NeutralStmt.Shift(prompt, capt, k, body) => (body.free - k.id) + prompt
+      case NeutralStmt.Shift(prompt, k, body) => (body.free - k.id) + prompt
       case NeutralStmt.Resume(k, body) => Set(k) ++ body.free
       case NeutralStmt.Var(id, init, body) => Set(init) ++ body.free - id.id
       case NeutralStmt.Put(ref, tpe, cap, value, body) => Set(ref, value) ++ body.free
@@ -408,7 +408,7 @@ object semantics {
       case NeutralStmt.If(cond, thn, els) => thn.dynamicCapture ++ els.dynamicCapture
       case NeutralStmt.Match(scrutinee, tpe, clauses, default) => clauses.flatMap(_._2.dynamicCapture).toSet ++ default.map(_.dynamicCapture).getOrElse(Set.empty)
       case NeutralStmt.Reset(prompt, body) => body.dynamicCapture - prompt.id
-      case NeutralStmt.Shift(prompt, capt, k, body) => body.dynamicCapture + prompt
+      case NeutralStmt.Shift(prompt, k, body) => body.dynamicCapture + prompt
       case NeutralStmt.Resume(k, body) => body.dynamicCapture
       case NeutralStmt.Var(id, init, body) => body.dynamicCapture - id.id
       case NeutralStmt.Put(ref, tpe, cap, value, body) => Set(ref) ++ body.dynamicCapture
@@ -697,7 +697,7 @@ object semantics {
       case NeutralStmt.Reset(prompt, body) =>
         "reset" <+> braces(toDoc(prompt) <+> "=>" <+> nest(line <> toDoc(body.bindings) <> toDoc(body.body)) <> line)
 
-      case NeutralStmt.Shift(prompt, capt, k, body) =>
+      case NeutralStmt.Shift(prompt, k, body) =>
         "shift" <> parens(toDoc(prompt)) <+> braces(toDoc(k) <+> "=>" <+> nest(line <> toDoc(body.bindings) <> toDoc(body.body)) <> line)
 
       case NeutralStmt.Resume(k, body) =>

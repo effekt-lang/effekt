@@ -457,7 +457,6 @@ class NewNormalizer {
 
     // Control Effects
     case Stmt.Shift(prompt, k2, body) =>
-      val cparam = k2.capt.head
       val p = env.subst(prompt.id)
 
       if (ks.bound.exists { other => other.id == p }) {
@@ -471,8 +470,7 @@ class NewNormalizer {
             evaluate(body, Frame.Return, Stack.Unknown)
           }
         }
-        assert(Set(cparam) == k2.capt, "At least for now these need to be the same")
-        reify(k, ks) { NeutralStmt.Shift(p, cparam, k2, neutralBody) }
+        reify(k, ks) { NeutralStmt.Shift(p, k2, neutralBody) }
       }
     case Stmt.Reset(core.Block.BlockLit(Nil, cparams, Nil, prompt :: Nil, body)) =>
       val p = Id(prompt.id)
@@ -611,7 +609,7 @@ class NewNormalizer {
         case _ => sys error "Prompt needs to have a single capture"
       }
       Stmt.Reset(core.BlockLit(Nil, capture :: Nil, Nil, prompt :: Nil, embedStmt(body)(using G.bindComputation(prompt))))
-    case NeutralStmt.Shift(prompt, capt, k, body) =>
+    case NeutralStmt.Shift(prompt, k, body) =>
       Stmt.Shift(embedBlockVar(prompt), k, embedStmt(body)(using G.bindComputation(k)))
     case NeutralStmt.Resume(k, body) =>
       Stmt.Resume(embedBlockVar(k), embedStmt(body))
