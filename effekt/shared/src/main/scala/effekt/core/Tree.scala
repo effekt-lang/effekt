@@ -646,7 +646,7 @@ object Tree {
     def rewrite(b: Block): Trampoline[Block] = b match {
       case Block.BlockVar(id, tpe, capt) =>
         done(Block.BlockVar(rewrite(id), rewrite(tpe), rewrite(capt)))
-      case lit @ Block.BlockLit(tparams, cparams, vparams, bparams, body) => rewrite(lit)
+      case lit: Block.BlockLit => rewrite(lit: Block.BlockLit)
       case Block.Unbox(pure) => rewrite(pure).map(pure2 => Block.Unbox(pure2))
       case Block.New(impl) => rewrite(impl).map(impl2 => Block.New(impl2))
     }

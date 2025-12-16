@@ -3,7 +3,7 @@ package util
 
 import scala.annotation.tailrec
 
-enum Trampoline[A] {
+enum Trampoline[+A] {
   case Done(value: A)
   case More(thunk: () => Trampoline[A])
 
