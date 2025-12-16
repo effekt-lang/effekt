@@ -503,10 +503,6 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
   case Var(ref, init, capture, body) => 
     Var(ref, monomorphize(init), capture, monomorphize(body))
   case ImpureApp(id, callee, targs, vargs, bargs, body) =>
-    // get callee tpe (function result)
-    // check vargs after mono
-    // zip vargs with type of vparams of callee (use core.Type instantiate)
-    // if expect targ & varg is base type, coerceIntPos
     val monoVargs = vargs map monomorphize
     val monoTargs = targs map monomorphize
     val monoBody = monomorphize(body)
@@ -516,21 +512,17 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
     val functionTpe = core.Type.instantiate(callee.functionType, monoTargs, callee.functionType.cparams.map(c => Set(c)))
     val newVargs = callee.functionType.vparams.zip(monoVargs).map({
       case (vt, expr) => (vt, expr.tpe) match {
-        case (ValueType.Var(varName), ValueType.Data(name, targs)) if (name == symbols.builtins.IntSymbol) || (name == symbols.builtins.ByteSymbol) || (name == symbols.builtins.DoubleSymbol) =>
+        case (ValueType.Var(varName), evt@ValueType.Data(name, targs)) if (evt == core.Type.TInt) || (evt == core.Type.TChar) || (evt == core.Type.TByte) || (evt == core.Type.TDouble) =>
           PolymorphismBoxing.coerce(expr, vt)
         case (_, _) => expr
       } 
     })
 
-    // get callee tpe (function result)
-    // mono targs
-    // core.Type instantiate with mono targs
     functionTpe.result match {
-      case ValueType.Data(name, targs) if (name == symbols.builtins.IntSymbol) || (name == symbols.builtins.ByteSymbol) || (name == symbols.builtins.DoubleSymbol) => 
-        // println(callee.functionType.result)
-        val fid = Id("hallo")
+      case vt@ValueType.Data(name, targs) if (vt == core.Type.TInt) || (vt == core.Type.TChar) || (vt == core.Type.TByte) || (vt == core.Type.TDouble) =>         
+        val fid = Id("imp_app")
         ImpureApp(fid, callee, monoTargs, newVargs, bargs map monomorphize, 
-          Let(id, core.Type.TInt, PolymorphismBoxing.coerce(ValueVar(fid, callee.functionType.result), Type.TInt), monoBody))
+          Let(id, vt, PolymorphismBoxing.coerce(ValueVar(fid, callee.functionType.result), vt), monoBody))
       case _ => 
         ImpureApp(id, callee, monoTargs, newVargs, bargs map monomorphize, monoBody)
     }
