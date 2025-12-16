@@ -48,7 +48,7 @@ This is called a boxed computation. A boxed computation may only be used after u
 
 ## Boxing
 
-Effekt distinguishes between _values_ (that can be returned and stored) and _computation_ (that can be passed, but not returned). Computation can (invisibly) close over arbitrary capabilities, while values make this capture explicit in their type. In the below example we use the term-level construct `box`, to explicitly convert a computation to a value.
+Effekt distinguishes between _values_ (that can be returned and stored) and _computation_ (that can be passed, but not returned). Computation can (invisibly) close over arbitrary capabilities, while values make this capture explicit in their type. In the example below we use the term-level construct `box`, to explicitly convert a computation to a value.
 
 ```
 def example() =
@@ -70,10 +70,7 @@ def example() =
 ```
 Computations are bound using `def` and the type doesn't mention captures, while values are bound using `val` and the inferred type mentions the capture `{exc}`.
 
-Converting second-class computations to first-class values can be done either explicitly by `box`ing them or implicitly when
-- they occur in return position,
-- on the right-hand side of value assignments,
-- or being passed as arguments where first-class values are expected.
+Converting second-class computations to first-class values always needs to be done explicitly by `box`ing them.
 
 ## Restricting Capture
 Boxed computations can be extremely useful to restrict their capture to a certain set of capabilities.
