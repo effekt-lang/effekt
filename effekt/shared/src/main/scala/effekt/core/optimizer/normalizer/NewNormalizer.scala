@@ -173,7 +173,7 @@ class NewNormalizer {
           //  }.mkString(", "))
           //}
           // TODO translate static capture set capt to a dynamic capture set (e.g. {exc} -> {@p_17})
-          val unboxAddr = scope.unbox(addr, tpe, capt.flatMap { env.lookupCapture(_) })
+          val unboxAddr = scope.unbox(addr, tpe, capt.flatMap { env.lookupCapture })
           Computation.Unknown(unboxAddr)
         }
       }
