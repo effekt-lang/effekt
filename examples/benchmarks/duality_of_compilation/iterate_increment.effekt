@@ -11,3 +11,4 @@ def run(n: Int) =
   iterate(n, 0) { x => x + 1 }
 
 def main() = benchmark(5){run}
+
