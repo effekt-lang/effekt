@@ -2,34 +2,39 @@ package effekt
 package core
 package optimizer
 
-class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.Rewrite {
+import util.Trampoline
+
+class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.TrampolinedRewrite {
 
   private def used(id: Id): Boolean = reachable.get(id).exists(u => u != Usage.Never)
 
   private def unused(id: Id): Boolean = !used(id)
 
-  override def stmt = {
+  override def rewrite(stmt: Stmt): Trampoline[Stmt] = stmt match {
     // Remove local unused definitions
     case Stmt.Def(id, block, body) if unused(id) => rewrite(body)
     case Stmt.Let(id, binding, body) if binding.capt.isEmpty && unused(id) => rewrite(body)
 
     case Stmt.Reset(body) =>
-      rewrite(body) match {
+      rewrite(body).map {
         case BlockLit(tparams, cparams, vparams, List(prompt), body) if unused(prompt.id) => body
         case b => Stmt.Reset(b)
       }
 
-    case Stmt.Match(sc, tpe, clauses, default) =>
-      Stmt.Match(rewrite(sc), tpe, clauses.collect {
-        case (id, clause) if used(id) => (id, rewrite(clause))
-      }, default.map(rewrite))
+    case Stmt.Match(sc, tpe, clauses, default) => for {
+      sc2      <- rewrite(sc)
+      clauses2 <- all(clauses.filter { case (id, clause) => used(id) }, rewrite)
+      default2 <- opt(default, rewrite)
+    } yield Match(sc2, tpe, clauses2, default2)
+
+    case other => super.rewrite(other)
   }
 
-  override def implementation = {
-    case Implementation(interface, operations) =>
-      Implementation(rewrite(interface), operations.collect {
-        case op if used(op.name) => rewrite(op)
-      })
+  override def rewrite(impl: Implementation): Trampoline[Implementation] = impl match {
+    case Implementation(interface, operations) => for {
+      interface2  <- Trampoline.done(rewrite(interface))
+      operations2 <- all(operations.filter(op => used(op.name)), rewrite)
+    } yield Implementation(interface2, operations2)
   }
 
   override def rewrite(m: ModuleDecl): ModuleDecl = m match {
