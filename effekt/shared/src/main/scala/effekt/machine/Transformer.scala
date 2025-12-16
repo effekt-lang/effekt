@@ -7,6 +7,7 @@ import effekt.core.{ Block, DeclarationContext, Toplevel, Id, given }
 import effekt.symbols.{ Symbol, TermSymbol }
 import effekt.symbols.builtins.TState
 import effekt.util.messages.ErrorReporter
+import effekt.util.Trampoline
 import effekt.symbols.ErrorMessageInterpolator
 import scala.annotation.tailrec
 
@@ -668,26 +669,6 @@ object Transformer {
     }
     def run(k: A => Trampoline[Statement]): Trampoline[Statement] = body(k)
     def map[B](f: A => B): Binding[B] = flatMap { a => pure(f(a)) }
-  }
-
-  enum Trampoline[A] {
-    case Done(value: A)
-    case More(thunk: () => Trampoline[A])
-
-    def map[B](f: A => B): Trampoline[B] =
-      flatMap(a => Done(f(a)))
-
-    def flatMap[B](f: A => Trampoline[B]): Trampoline[B] = this match {
-      case Done(a) => More(() => f(a))
-      case More(next) => More(() => next().flatMap(f))
-    }
-
-    @tailrec
-    final def run(): A = this match {
-      case Trampoline.Done(value) => value
-      case Trampoline.More(thunk) => thunk().run()
-    }
-
   }
 
   def traverse[S, T](l: List[S])(f: S => Binding[T]): Binding[List[T]] =
