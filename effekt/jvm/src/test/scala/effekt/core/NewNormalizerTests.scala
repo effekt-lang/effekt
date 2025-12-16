@@ -151,7 +151,7 @@ class NewNormalizerTests extends CoreTests {
         |    return y: () => Int at {io}
         |  }
         |  val z: () => Int at {io} = {
-        |    f1: () => (() => Int at {io}) @ {io}()
+        |    f1: () => (() => Int at {io}) @ {}()
         |  };
         |  def r = unbox z: () => Int at {io}
         |  r: () => Int @ {io}()
@@ -191,14 +191,13 @@ class NewNormalizerTests extends CoreTests {
               |extern {io} def foo(): Int = vm"42"
               |
               |def run() = {
-              |    def f() = {
-              |        let x = 42
-              |        return x: Int
-              |    }
-              |    let f_box: => Int at {} = box {} (f: => Int @ {})
-              |    let ! x = (foo: (=> Int at {}) => Int @ {io})(f_box: => Int at {})
-              |
-              |    return x: Int
+              |  def f() = {
+              |    let o = 42
+              |    return o: Int
+              |  }
+              |  let fBox = box {} f: () => Int @ {}
+              |  let ! r = foo: (() => Int at {}) => Int @ {io}(fBox: () => Int at {})
+              |  return r: Int
               |}
               |""".stripMargin
       )
@@ -230,10 +229,9 @@ class NewNormalizerTests extends CoreTests {
               |extern {} def foo(): => Int at {} = vm"42"
               |
               |def run() = {
-              |    let f: => Int at {} =
-              |      (foo: => (=> Int at {}) @ {})()
-              |    def f_unbox = unbox f: => Int at {}
-              |    (f_unbox: => Int @ {})()
+              |  let r1 = (foo: () => (() => Int at {}) @ {})()
+              |  def r2 = (unbox r1: () => Int at {})
+              |  r2: () => Int @ {}()
               |}
               |""".stripMargin
       )
@@ -355,21 +353,17 @@ class NewNormalizerTests extends CoreTests {
               |extern {io} def foo(x: Int): Unit = vm""
               |
               |def run() = {
-              |  let y = 1
-              |
-              |  def handle(){q @ p: Prompt[Unit]}{s @ r: Ref[Int]} =
-              |    shift (q: Prompt[Unit] @ {p}) {
-              |      () { k @ p: Resume[Unit, Unit]} => {
-              |        get z: Int = !s @ r;
-              |        let ! o = (foo: (Int) => Unit @ {io})(z: Int)
-              |        return o: Unit
-              |      }
+              |  let xv = 1
+              |  def handler(){r @ r: Ref[Int]} {p @ p: Prompt[Unit]} = {
+              |    shift(p: Prompt[Unit] @ {p}) {{k: Resume[Unit, Unit]} =>
+              |      get v : Int = ! r @ x;
+              |      let ! o = foo: (Int) => Unit @ {io}(v: Int)
+              |      return o: Unit
               |    }
-              |
-              |  var z @ x = y: Int;
-              |  reset {
-              |    () { q @ p: Prompt[Unit] } =>
-              |      (handle: { p: Prompt[Unit] }{ x: Ref[Int] } => Unit @ {})() { q: Prompt[Unit] @ { p } } { z: Ref[Int] @ { x } }
+              |  }
+              |  var z @ x = xv: Int;
+              |  reset { (){p @ p: Prompt[Unit]} =>
+              |    handler: (){z: Ref[Int]} {p: Prompt[Unit]} => Unit @ {io, x}(){z: Ref[Int] @ {z}} {p: Prompt[Unit] @ {p}}
               |  }
               |}
               |""".stripMargin
@@ -454,8 +448,7 @@ class NewNormalizerTests extends CoreTests {
   // During normalization, this block parameter gets lifted to a `def`.
   // One might hope for this mutable variable to be eliminated entirely,
   // but currently the normalizer does not inline definitions.
-  // FIXME: This test is currently broken due to TestRenamer not properly handling captures.
-  test("Block param capturing mutable reference can be lifted".ignore) {
+  test("Block param capturing mutable reference can be lifted") {
     val input =
       """
         |def run(): Int = {
@@ -487,19 +480,19 @@ class NewNormalizerTests extends CoreTests {
           |    let u = ()
           |    return u: Unit
           |  }
-          |  let xv = 1
-          |  def setter(v: Int){x @ xc: Ref[Int]} = {
-          |    put x @ xc = v: Int;
+          |  let v = 1
+          |  def setter(v: Int){xr @ xr: Ref[Int]} = {
+          |    put xr @ x = v: Int;
           |    let u = ()
           |    return u: Unit
           |  }
-          |  var x @ x = xv: Int;
+          |  var xvar @ x = v: Int;
           |  val r: Unit = {
           |    modifyProg: (){setter: (Int) => Unit} => Unit @ {}(){ (v: Int) =>
-          |      setter: (Int){x: Ref[Int]} => Unit @ {}(v: Int){x: Ref[Int] @ {xc}}
+          |      setter: (Int){x: Ref[Int]} => Unit @ {x}(v: Int){xvar: Ref[Int] @ {xvar}}
           |    }
           |  };
-          |  get o : Int = ! x @ xc;
+          |  get o : Int = ! xvar @ x;
           |  return o: Int
           |}
           |""".stripMargin
