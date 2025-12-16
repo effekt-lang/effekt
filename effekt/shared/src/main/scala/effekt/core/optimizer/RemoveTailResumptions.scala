@@ -65,7 +65,7 @@ object RemoveTailResumptions {
 
     case Stmt.Resume(k, body) => stmt
     case Stmt.Shift(prompt, k, body) => stmt
-    case Stmt.Hole(tpe, span) => stmt
+    case Stmt.Hole(_, span) => Stmt.Hole(tpe, span)
     case Stmt.Return(expr) => stmt
     case Stmt.App(callee, targs, vargs, bargs) => stmt
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => stmt
