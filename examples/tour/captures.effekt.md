@@ -5,8 +5,10 @@ permalink: tour/captures
 
 # Captures
 
-Functions are second-class in Effekt, but for a good reason. Functions closing over capabilities must not be returned, otherwise it can not be guaranteed that these capabilities are still in scope.
-Thus, we have to keep track of these captures and ensure they are in scope upon invoking.
+[Computations](/tour/computation), such as functions and objects, are second-class _by default_ in Effekt, but for a good reason.
+Since computations can capture capabilities, they can only be used where those capabilities remain in scope.
+For statically preventing capabilities from escaping their valid scope, Effekt tracks captured capabilities on the type level and verifies they're still in scope upon usage.
+Functions and capabilities can still be treated as first-class values by means of _boxing_, which we discuss in greater details in the next [section](/tour/captures#boxing).
 
 Consider the following example where `divide` is being passed an explicit capability:
 
@@ -19,7 +21,9 @@ def divide(n: Int, m: Int) {exc: Exception}: Int =
   if (m == 0) { exc.throw("uhoh") }
   else { n / m }
 ```
+
 Handlers (implicitly or explicitly) introduce capabilities that are then passed to the position where an effect is used.
+
 ```effekt:repl
 try {
   val res = divide(10, 0) {exc} // here we pass it explicitly
@@ -28,11 +32,13 @@ try {
   def throw(msg) = println("ERROR: " ++ show(msg))
 }
 ```
+
 What happens if we try to return the capability?
 
 ```effekt:repl
 try { exc } with exc: Exception { def throw(msg) = panic(msg) }
 ```
+
 By directly returning `exc` from the `try` expression, we break the lexical effect handling reasoning since `exc` is only defined within the `try` body.
 For the same reason, we must not return a function that closes over such a capability.
 
@@ -42,7 +48,7 @@ This is called a boxed computation. A boxed computation may only be used after u
 
 ## Boxing
 
-Effekt distinguishes between _values_ (that can be returned and stored) and _computation_ (that can be passed, but not returned). Computation can (invisibly) close over arbitrary capabilities, while values make this capture explicit in their type. In the below example we use the term-level construct `box`, to explicitly convert a computation to a value.
+Effekt distinguishes between _values_ (that can be returned and stored) and _computation_ (that can be passed, but not returned). Computation can (invisibly) close over arbitrary capabilities, while values make this capture explicit in their type. In the example below we use the term-level construct `box`, to explicitly convert a computation to a value.
 
 ```
 def example() =
@@ -64,10 +70,7 @@ def example() =
 ```
 Computations are bound using `def` and the type doesn't mention captures, while values are bound using `val` and the inferred type mentions the capture `{exc}`.
 
-Converting second-class computations to first-class values can be done either explicitly by `box`ing them or implicitly when
-- they occur in return position,
-- on the right-hand side of value assignments,
-- or being passed as arguments where first-class values are expected.
+Converting second-class computations to first-class values always needs to be done explicitly by `box`ing them.
 
 ## Restricting Capture
 Boxed computations can be extremely useful to restrict their capture to a certain set of capabilities.
