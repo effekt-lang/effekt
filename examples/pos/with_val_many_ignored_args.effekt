@@ -1,0 +1,13 @@
+module with_val_many_ignored_args
+
+def callback { f: (Int, Int, String, Char) => Unit }: Unit = {
+  println("before")
+  f(42, 100, "hello", 'a')
+  f(0, 0, "", '0')
+  println("after")
+}
+
+def main() = {
+  with val _, _, _, _ = callback;
+  println("called!")
+}

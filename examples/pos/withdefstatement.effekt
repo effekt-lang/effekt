@@ -15,7 +15,7 @@ def fresh[T](init: Int) { prog: {Cell} => T }: T = {
 }
 
 def main() = {
-  with def target = fresh(0)
+  with def {target} = fresh(0)
   with def c1 = fresh(0)
   with def c2 = fresh(0)
   c1.set(1);

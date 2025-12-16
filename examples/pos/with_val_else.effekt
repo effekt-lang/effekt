@@ -1,0 +1,18 @@
+module with_val_else
+
+import stream
+
+def readOption[T, R] { f: Option[T] => R }: R / read[T] =
+  f(try { Some(do read()) } with stop { None() })
+
+def getValue() = {
+  with val Some(x) = readOption[Int, String]() else "<value not found>"
+  show(x)
+}
+
+def main() =  {
+  with [42, 100].feed;
+  while (getValue() is v and v != "<value not found>") {
+    println("Read value: " ++ v)
+  }
+}

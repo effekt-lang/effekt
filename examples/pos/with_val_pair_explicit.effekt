@@ -1,0 +1,6 @@
+module with_val_pair_explicit
+
+def main() = {
+  with val Tuple2(i, x) = [(0, 'a'), (1, 'b'), (2, 'c'), (3, 'd')].foreach;
+  println(show(i) ++ ": " ++ show(x))
+}
