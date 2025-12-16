@@ -348,7 +348,45 @@ object Type {
           val BlockType.Function(_, _, paramTypes, _, retType) = instantiate(sig, result.targs ++ existentialTypeArgs, Nil)
           valueShouldEqual(result, retType)
           valuesShouldEqual(paramTypes, arguments)
-        case Constraint.Implementation(interface, operations) => () // TODO
+
+        // interface is the _applied_ interface type, for instance
+        // Implementation Callback[Int] { def register: [S](arg: S, fun: S => Int at {}) => Unit }
+        case Constraint.Implementation(interface, operations) =>
+          // interface Callback[A] { def register: [B](arg: B, fun: B => A at {}) => Unit }
+          val decl = DC.getInterface(interface.name)
+
+          // check all are defined
+          val declared = decl.properties.map(_.id).toSet
+          val implemented = operations.keySet
+          assert(declared == implemented, s"Interface ${interface.name} declares ${declared}, but implemented: ${implemented}")
+
+          // [A]
+          val universalParams = decl.tparams
+          // [Int]
+          val universalArgs = interface.targs
+
+          operations.foreach {
+            case (id, tpe) => (DC.getProperty(id).tpe, tpe) match {
+              case (
+                //                 [B]
+                BlockType.Function(declTparams, declCparams, declVparams, declBparams, declRet),
+                //                 [S]
+                BlockType.Function(implTparams, implCparams, implVparams, implBparams, implRet)
+              ) =>
+                // [A, B](B, B => A at {}) => Unit
+                val sig: BlockType.Function = BlockType.Function(universalParams ++ declTparams, declCparams, declVparams, declBparams, declRet)
+                // (S, S => Int at {}) => Unit
+                val BlockType.Function(_, _, vparams, bparams, result) = instantiate(sig, universalArgs ++ implTparams.map(ValueType.Var.apply),
+                  implCparams.map(id => Set(id)))
+
+                valueShouldEqual(implRet, result)
+                valuesShouldEqual(vparams, implVparams)
+                blocksShouldEqual(bparams, declBparams)
+
+              case (other1, other2) =>
+                throw new AssertionError(s"Both are required to be function types: ${util.show(other1)} and ${util.show(other2)}")
+            }
+          }
       }
   }
 
