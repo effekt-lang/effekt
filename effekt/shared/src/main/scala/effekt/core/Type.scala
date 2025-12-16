@@ -63,7 +63,8 @@ def checking[T <: Tree, R](t: T)(f: T => R): R =
 // this could even improve the error messages, since we can point at the term that's wrong...
 // so `type Later = Expr.Make | Implementation`
 //
-// How do we check the dual method calls and pattern matches then against declarations?
+// Also representing constraints as sets doesn't seem to decrease the number significantly since emit['A]
+// is not necessarily equal to emit['A] (both 'As are type parameters of some function)
 type Constraints = Set[Constraint]
 object Constraints {
   def empty: Constraints = Set.empty
@@ -97,7 +98,7 @@ case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures
     blocks.get(id).foreach { case (otherTpe, otherCapt) =>
       if !Type.equals(tpe, otherTpe) then
         typeError(s"free variable ${util.show(id)} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
-
+      // for now ignore captures
       // if !otherCapt.subsetOf(capt) then
         // typeError(s"free variable ${util.show(id)} assumes a wrong capture set (${capt.map(core.PrettyPrinter.show)} vs. ${otherCapt.map(core.PrettyPrinter.show)})")
     }
@@ -163,7 +164,7 @@ object Type {
   def equals(tpe1: ValueType, tpe2: ValueType): Boolean = (tpe1, tpe2) match {
     case (ValueType.Var(name1), ValueType.Var(name2)) => name1 == name2
     case (ValueType.Data(name1, args1), ValueType.Data(name2, args2)) => name1 == name2 && all(args1, args2, equals)
-    // ignore cpatures for now :(
+    // ignore captures for now :(
     case (ValueType.Boxed(btpe1, capt1), ValueType.Boxed(btpe2, capt2)) => equals(btpe1, btpe2) // && equals(capt1, capt2)
     case _ => false
   }
@@ -381,7 +382,7 @@ object Type {
 
                 valueShouldEqual(implRet, result)
                 valuesShouldEqual(vparams, implVparams)
-                blocksShouldEqual(bparams, declBparams)
+                blocksShouldEqual(bparams, implBparams)
 
               case (other1, other2) =>
                 throw new AssertionError(s"Both are required to be function types: ${util.show(other1)} and ${util.show(other2)}")
