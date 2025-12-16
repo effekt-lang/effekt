@@ -14,7 +14,7 @@ val showGeneric: PartialFunction[Any, String] = {
 
 val show: PartialFunction[Any, String] =
   TypePrinter.show orElse
-    core.PrettyPrinter.show orElse
+    core.HumanReadablePrettyPrinter.show orElse
     generator.js.PrettyPrinter.show orElse
     cps.PrettyPrinter.show orElse
     machine.PrettyPrinter.show orElse

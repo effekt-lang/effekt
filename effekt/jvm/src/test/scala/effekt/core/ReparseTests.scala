@@ -80,7 +80,7 @@ class ReparseTests extends CoreTests {
     }
     val renamer = TestRenamer(Names(defaultNames))
     val expectedRenamed = renamer(coreMod)
-    val printed = core.PrettyPrinter.format(expectedRenamed).layout
+    val printed = core.ReparsablePrettyPrinter.format(expectedRenamed).layout
     val reparsed: ModuleDecl = try { parse(printed)(using Location.empty) } catch {
       case e @ TypeError(msg, context) =>
          println(e.toString)
@@ -91,8 +91,8 @@ class ReparseTests extends CoreTests {
         throw e
     }
     val reparsedRenamed = renamer(reparsed)
-    val reparsedPrinted = core.PrettyPrinter.format(reparsedRenamed).layout
-    val expectedPrinted = core.PrettyPrinter.format(expectedRenamed).layout
+    val reparsedPrinted = core.ReparsablePrettyPrinter.format(reparsedRenamed).layout
+    val expectedPrinted = printed
     assertEquals(reparsedPrinted, expectedPrinted)
   }
 
