@@ -19,7 +19,7 @@ class Unique(maxInlineSize: Int) extends InliningPolicy {
 class UniqueJumpSimple(maxInlineSize: Int) extends InliningPolicy {
   def isSimple(s: Stmt): Boolean = s match {
     case Stmt.Def(id, block, body) => isSimple(body)
-    case Stmt.Let(id, annotatedTpe, binding, body) => isSimple(body)
+    case Stmt.Let(id, binding, body) => isSimple(body)
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => isSimple(body)
 
     case Stmt.Alloc(id, init, region, body) => true
@@ -31,14 +31,14 @@ class UniqueJumpSimple(maxInlineSize: Int) extends InliningPolicy {
     case Stmt.App(callee, targs, vargs, bargs) => true
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => true
 
-    case Stmt.Val(id, annotatedTpe, binding, body) => false
+    case Stmt.Val(id, binding, body) => false
     case Stmt.If(cond, thn, els) => false
-    case Stmt.Match(scrutinee, clauses, default) => false
+    case Stmt.Match(scrutinee, annotatedType, clauses, default) => false
     case Stmt.Region(body) => false
     case Stmt.Reset(body) => false
-    case Stmt.Shift(prompt, body) => false
+    case Stmt.Shift(prompt, k, body) => false
     case Stmt.Resume(k, body) => false
-    case Stmt.Hole(span) => false
+    case Stmt.Hole(annotatedTpe, span) => false
   }
   override def apply(id: Id)(using ctx: Context): Boolean = {
     val use = ctx.usages.get(id)
@@ -77,7 +77,7 @@ class Inliner(shouldInline: InliningPolicy, usages: Map[Id, Usage]) extends Tree
             val b = rewrite(block)(using ctx)
             ctx = ctx.bind(id, b)
             Toplevel.Def(id, b)
-          case v@Toplevel.Val(id, tpe, binding) => v
+          case v@Toplevel.Val(id, binding) => v
         }
         ModuleDecl(path, includes, declarations, externs, d, exports)
     }
@@ -98,7 +98,7 @@ class Inliner(shouldInline: InliningPolicy, usages: Map[Id, Usage]) extends Tree
     }
 
   def bindValue(body: Stmt, vparam: ValueParam, varg: Expr): Stmt =
-    Stmt.Let(vparam.id, vparam.tpe, varg, body)
+    Stmt.Let(vparam.id, varg, body)
 
   def bindValues(body: Stmt, values: List[(ValueParam, Expr)]): Stmt =
     values.foldRight(body) { case ((vp, varg), acc) =>
@@ -151,10 +151,10 @@ class Inliner(shouldInline: InliningPolicy, usages: Map[Id, Usage]) extends Tree
       val b = rewrite(block)(using ctx)
       given Context = ctx.bind(id, b)
       Stmt.Def(id, b, rewrite(body))
-    case Stmt.Let(id, tpe, binding, body) =>
+    case Stmt.Let(id, binding, body) =>
       val expr = rewrite(binding)(using ctx)
       given Context = ctx.bind(id, expr)
-      Stmt.Let(id, tpe, expr, rewrite(body))
+      Stmt.Let(id, expr, rewrite(body))
   }
 
   override def expr(using Context): PartialFunction[Expr, Expr] = {
@@ -174,7 +174,7 @@ class Inliner(shouldInline: InliningPolicy, usages: Map[Id, Usage]) extends Tree
     case Toplevel.Def(id, block) =>
       given Context = ctx.bind(id, block)
       Toplevel.Def(id, rewrite(block))
-    case Toplevel.Val(id, tpe, binding) =>
-      Toplevel.Val(id, tpe, rewrite(binding))
+    case Toplevel.Val(id, binding) =>
+      Toplevel.Val(id, rewrite(binding))
   }
 }

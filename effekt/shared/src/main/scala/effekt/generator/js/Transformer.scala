@@ -5,8 +5,6 @@ package js
 import effekt.context.Context
 import effekt.context.assertions.*
 import effekt.core.{ *, given }
-import effekt.core.Variables
-import effekt.core.Variables.{ all, bound, free }
 import effekt.symbols.{ Module, Symbol, Wildcard, Bindings }
 
 import scala.collection.mutable

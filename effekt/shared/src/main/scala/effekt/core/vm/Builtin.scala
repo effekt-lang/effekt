@@ -249,31 +249,31 @@ lazy val chars: Builtins = Map(
 )
 
 lazy val arrays: Builtins = Map(
-  builtin("array::allocate(Int)") {
+  builtin("array::unsafeAllocate(Int)") {
     case As.Int(x) :: Nil => Value.Array(scala.Array.ofDim(x.toInt))
   },
   builtin("array::size[T](Array[T])") {
     case As.Array(arr) :: Nil => Value.Int(arr.length.toLong)
   },
-  builtin("array::unsafeGet[T](Array[T], Int)") {
+  builtin("array::get[T](Array[T], Int)") {
     case As.Array(arr) :: As.Int(index) :: Nil => arr(index.toInt)
   },
-  builtin("array::unsafeSet[T](Array[T], Int, T)") {
+  builtin("array::set[T](Array[T], Int, T)") {
     case As.Array(arr) :: As.Int(index) :: value :: Nil => arr.update(index.toInt, value); Value.Unit()
   },
 )
 
 lazy val bytearrays: Builtins = Map(
-  builtin("bytearray::allocate(Int)") {
+  builtin("bytearray::unsafeAllocate(Int)") {
     case As.Int(x) :: Nil => Value.ByteArray(scala.Array.ofDim(x.toInt))
   },
   builtin("bytearray::size(ByteArray)") {
     case As.ByteArray(arr) :: Nil => Value.Int(arr.length.toLong)
   },
-  builtin("bytearray::unsafeGet(ByteArray, Int)") {
+  builtin("bytearray::get(ByteArray, Int)") {
     case As.ByteArray(arr) :: As.Int(index) :: Nil => Value.Byte(arr(index.toInt))
   },
-  builtin("bytearray::unsafeSet(ByteArray, Int, Byte)") {
+  builtin("bytearray::set(ByteArray, Int, Byte)") {
     case As.ByteArray(arr) :: As.Int(index) :: As.Byte(value) :: Nil => arr.update(index.toInt, value); Value.Unit()
   },
   builtin("bytearray::compare(ByteArray, ByteArray)") {

@@ -22,46 +22,41 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
           optimize
         }
         val optimized = Context.timed("optimize", source.name) { optimizer(source, term, core) }
+        optimized.typecheck()
         Some(CoreTransformed(source, tree, mod, optimized))
     }
 
-  def optimize(source: Source, mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context): ModuleDecl = {
-      var tree = core
+  def optimize(source: Source, mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context): ModuleDecl =
 
-      // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
-      tree = Context.timed("deadcode-elimination", source.name) {
-        Deadcode.remove(mainSymbol, tree)
-      }
+    var tree = core
 
-      if !Context.config.optimize() then return tree;
+    // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
+    tree = Context.timed("deadcode-elimination", source.name) {
+      Deadcode.remove(mainSymbol, tree)
+    }
 
-      // (2) lift static arguments
-      tree = Context.timed("static-argument-transformation", source.name) {
-        StaticArguments.transform(mainSymbol, tree)
-      }
+    if !Context.config.optimize() then return tree;
 
-      def normalize(m: ModuleDecl) = {
-        val anfed = BindSubexpressions.transform(m)
-        val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt)
-        val live = Deadcode.remove(mainSymbol, normalized)
-        val tailRemoved = RemoveTailResumptions(live)
-        val contified = DirectStyle.rewrite(tailRemoved)
-        contified
-      }
+    // (2) lift static arguments
+    tree = Context.timed("static-argument-transformation", source.name) {
+      StaticArguments.transform(mainSymbol, tree)
+    }
 
-      // (3) normalize a few times (since tail resumptions might only surface after normalization and leave dead Resets)
-      tree = Context.timed("normalize-1", source.name) {
-        normalize(tree)
-      }
-      tree = Context.timed("normalize-2", source.name) {
-        normalize(tree)
-      }
-      tree = Context.timed("normalize-3", source.name) {
-        normalize(tree)
-      }
+    def normalize(m: ModuleDecl) = {
+      val anfed = BindSubexpressions.transform(m)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt)
+      val live = Deadcode.remove(mainSymbol, normalized)
+      val tailRemoved = RemoveTailResumptions(live)
+      val contified = DirectStyle.rewrite(tailRemoved)
+      contified
+    }
 
-      tree
-  }
+    // (3) normalize a few times (since tail resumptions might only surface after normalization and leave dead Resets)
+    tree = Context.timed("normalize-1", source.name) { normalize(tree) }
+    tree = Context.timed("normalize-2", source.name) { normalize(tree) }
+    tree = Context.timed("normalize-3", source.name) { normalize(tree) }
+
+    tree
 
   def optimizeWithNewNormalizer(source: Source, mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context): ModuleDecl = {
     var tree = core

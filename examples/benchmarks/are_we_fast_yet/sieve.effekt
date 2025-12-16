@@ -6,11 +6,11 @@ def run(size: Int) = {
   var primeCount: Int = 0;
   val flags: Array[Bool] = array(size, true);
   each(2, size) { i =>
-    if (flags.unsafeGet(i - 1)) {
+    if (flags.get(i - 1)) {
       primeCount = primeCount + 1;
       var k = i + i;
       while (k <= size) {
-        flags.unsafeSet(k - 1, false);
+        flags.set(k - 1, false);
         k = k + i;
       }
     }

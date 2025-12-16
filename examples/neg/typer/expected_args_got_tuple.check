@@ -1,0 +1,6 @@
+[error] examples/neg/typer/expected_args_got_tuple.effekt:4:11: Wrong number of arguments to foo: expected 2 value arguments, but got 1 value argument
+  val _ = foo((42, "hello"))
+          ^^^^^^^^^^^^^^^^^^
+[info] examples/neg/typer/expected_args_got_tuple.effekt:4:11: Did you mean to call foo with 2 separate arguments instead of a tuple?
+  val _ = foo((42, "hello"))
+          ^^^^^^^^^^^^^^^^^^

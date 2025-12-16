@@ -142,10 +142,10 @@ def render(scene: Scene, image: Buffer) = {
   def storeAt(color: Color, x: Int, y: Int): Unit = {
     val opaque = 255;
     val index = x * 4 + y * width * 4;
-    unsafeSet(image, index + 0, color.red);
-    unsafeSet(image, index + 1, color.green);
-    unsafeSet(image, index + 2, color.blue);
-    unsafeSet(image, index + 3, opaque)
+    set(image, index + 0, color.red);
+    set(image, index + 1, color.green);
+    set(image, index + 2, color.blue);
+    set(image, index + 3, opaque)
   }
 
   // now this is a real stress-test of backtrackable state
@@ -255,19 +255,19 @@ def bench() = {
   val scene = exampleScene();
 
   measure(5, 10) {
-    val buffer: Buffer = array::allocate(scene.width * scene.height * 4);
+    val buffer: Buffer = array::unsafeAllocate(scene.width * scene.height * 4);
     render(scene, buffer)
   }
 }
 
 def main() = {
   val scene = exampleScene();
-  val buffer: Buffer = array::allocate(scene.width * scene.height * 4);
+  val buffer: Buffer = array::unsafeAllocate(scene.width * scene.height * 4);
   render(scene, buffer);
 
   var i = 0;
   while (i < buffer.size) {
-    println(buffer.unsafeGet(i).show ++ ", " ++ buffer.unsafeGet(i + 1).show ++ ", " ++ buffer.unsafeGet(i + 2).show);
+    println(buffer.get(i).show ++ ", " ++ buffer.get(i + 1).show ++ ", " ++ buffer.get(i + 2).show);
     i = i + 4
   }
 }

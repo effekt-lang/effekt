@@ -264,8 +264,8 @@ class NewNormalizer {
     case Stmt.Return(expr) =>
       k.ret(ks, evaluate(expr, ks.bound))
 
-    case Stmt.Val(id, annotatedTpe, binding, body) =>
-      evaluate(binding, k.push(annotatedTpe) { scope => res => k => ks =>
+    case Stmt.Val(id, binding, body) =>
+      evaluate(binding, k.push(body.tpe) { scope => res => k => ks =>
         given Scope = scope
         bind(id, res) { evaluate(body, k, ks) }
       }, ks)
@@ -275,7 +275,7 @@ class NewNormalizer {
       val addr = scope.run("x", f, targs, vargs.map(evaluate(_, ks.bound)), bargs.map(evaluate(_, "f", Stack.Unknown.bound)))
       evaluate(body, k, ks)(using env.bindValue(id, addr), scope)
 
-    case Stmt.Let(id, annotatedTpe, binding, body) =>
+    case Stmt.Let(id, binding, body) =>
       bind(id, evaluate(binding, ks.bound)) { evaluate(body, k, ks) }
 
     // can be recursive
@@ -355,7 +355,7 @@ class NewNormalizer {
             })
           }
       }
-    case Stmt.Match(scrutinee, clauses, default) =>
+    case Stmt.Match(scrutinee, annotatedType, clauses, default) =>
       val sc = evaluate(scrutinee, ks.bound)
       scope.lookupValue(sc) match {
         case Some(Value.Make(data, tag, targs, vargs)) =>
@@ -379,6 +379,7 @@ class NewNormalizer {
         case _ =>
           def neutralMatch(k: Frame, ks: Stack) =
             NeutralStmt.Match(sc,
+              annotatedType,
               // This is ALMOST like evaluate(BlockLit), but keeps the current continuation
               clauses.map { case (id, core.Block.BlockLit(tparams, cparams, vparams, bparams, body)) =>
                 given localEnv: Env = env.bindValue(vparams.map(p => p.id -> p.id))
@@ -405,7 +406,7 @@ class NewNormalizer {
           }
       }
 
-    case Stmt.Hole(span) => NeutralStmt.Hole(span)
+    case Stmt.Hole(tpe, span) => NeutralStmt.Hole(tpe, span)
 
     // State
     case Stmt.Region(BlockLit(Nil, List(capture), Nil, List(cap), body)) =>
@@ -455,7 +456,8 @@ class NewNormalizer {
       }
 
     // Control Effects
-    case Stmt.Shift(prompt, core.Block.BlockLit(Nil, cparam :: Nil, Nil, k2 :: Nil, body)) =>
+    case Stmt.Shift(prompt, k2, body) =>
+      val cparam = k2.capt.head
       val p = env.subst(prompt.id)
 
       if (ks.bound.exists { other => other.id == p }) {
@@ -472,8 +474,6 @@ class NewNormalizer {
         assert(Set(cparam) == k2.capt, "At least for now these need to be the same")
         reify(k, ks) { NeutralStmt.Shift(p, cparam, k2, neutralBody) }
       }
-    case Stmt.Shift(_, _) => ???
-
     case Stmt.Reset(core.Block.BlockLit(Nil, cparams, Nil, prompt :: Nil, body)) =>
       val p = Id(prompt.id)
       val captures = p
@@ -532,7 +532,7 @@ class NewNormalizer {
       })
       // user-defined values
       .bindValue(mod.definitions.collect {
-        case Toplevel.Val(id, _, _) => id -> id
+        case Toplevel.Val(id, _) => id -> id
       })
       // async extern functions
       .bindComputation(otherExterns.map(defn => defn.id -> Computation.Unknown(defn.id)))
@@ -541,7 +541,7 @@ class NewNormalizer {
 
     val typingContext = TypingContext(
       mod.definitions.collect {
-        case Toplevel.Val(id, tpe, _) => id -> tpe
+        case Toplevel.Val(id, binding) => id -> binding.tpe
       }.toMap,
       mod.definitions.collect {
         case Toplevel.Def(id, b) => id -> (b.tpe, b.capt)
@@ -600,8 +600,9 @@ class NewNormalizer {
       Stmt.Invoke(embedBlockVar(label), method, tpe, targs, vargs.map(embedExpr), bargs.map(embedBlock))
     case NeutralStmt.If(cond, thn, els) =>
       Stmt.If(embedExpr(cond), embedStmt(thn), embedStmt(els))
-    case NeutralStmt.Match(scrutinee, clauses, default) =>
+    case NeutralStmt.Match(scrutinee, tpe, clauses, default) =>
       Stmt.Match(embedExpr(scrutinee),
+        tpe,
         clauses.map { case (id, block) => id -> embedBlockLit(block) },
         default.map(embedStmt))
     case NeutralStmt.Reset(prompt, body) =>
@@ -611,7 +612,7 @@ class NewNormalizer {
       }
       Stmt.Reset(core.BlockLit(Nil, capture :: Nil, Nil, prompt :: Nil, embedStmt(body)(using G.bindComputation(prompt))))
     case NeutralStmt.Shift(prompt, capt, k, body) =>
-      Stmt.Shift(embedBlockVar(prompt), core.BlockLit(Nil, capt :: Nil, Nil, k :: Nil, embedStmt(body)(using G.bindComputation(k))))
+      Stmt.Shift(embedBlockVar(prompt), k, embedStmt(body)(using G.bindComputation(k)))
     case NeutralStmt.Resume(k, body) =>
       Stmt.Resume(embedBlockVar(k), embedStmt(body))
     case NeutralStmt.Var(blockParam, init, body) =>
@@ -626,8 +627,8 @@ class NewNormalizer {
       Stmt.Region(BlockLit(Nil, List(id.id), Nil, List(id), embedStmt(body)(using G.bindComputation(id))))
     case NeutralStmt.Alloc(blockparam, init, region, body) =>
       Stmt.Alloc(blockparam.id, embedExpr(init), region, embedStmt(body)(using G.bind(blockparam.id, blockparam.tpe, blockparam.capt)))
-    case NeutralStmt.Hole(span) =>
-      Stmt.Hole(span)
+    case NeutralStmt.Hole(tpe, span) =>
+      Stmt.Hole(tpe, span)
   }
 
   def embedStmt(basicBlock: BasicBlock)(using G: TypingContext): core.Stmt = basicBlock match {
@@ -635,8 +636,7 @@ class NewNormalizer {
       bindings.foldRight((G: TypingContext) => embedStmt(stmt)(using G)) {
         case ((id, Binding.Let(value)), rest) => G =>
           val coreExpr = embedExpr(value)(using G)
-          // TODO why do we even have this type in core, if we always infer it?
-          Stmt.Let(id, coreExpr.tpe, coreExpr, rest(G.bind(id, coreExpr.tpe)))
+          Stmt.Let(id,coreExpr, rest(G.bind(id, coreExpr.tpe)))
         case ((id, Binding.Def(block)), rest) => G =>
           val coreBlock = embedBlock(block)(using G)
           Stmt.Def(id, coreBlock, rest(G.bind(id, coreBlock.tpe, coreBlock.capt)))
@@ -645,7 +645,7 @@ class NewNormalizer {
           Stmt.Def(id, coreBlock, rest(G.bind(id, coreBlock.tpe, coreBlock.capt)))
         case ((id, Binding.Val(stmt)), rest) => G =>
           val coreStmt = embedStmt(stmt)(using G)
-          Stmt.Val(id, coreStmt.tpe, coreStmt, rest(G.bind(id, coreStmt.tpe)))
+          Stmt.Val(id, coreStmt, rest(G.bind(id, coreStmt.tpe)))
         case ((id, Binding.Run(callee, targs, vargs, bargs)), rest) => G =>
           val vargs1 = vargs.map(arg => embedExpr(arg)(using G))
           val bargs1 = bargs.map(arg => embedBlock(arg)(using G))

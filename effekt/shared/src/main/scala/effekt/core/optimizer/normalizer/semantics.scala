@@ -363,7 +363,7 @@ object semantics {
     // cond is unknown
     case If(cond: Id, thn: BasicBlock, els: BasicBlock)
     // scrutinee is unknown
-    case Match(scrutinee: Id, clauses: List[(Id, Block)], default: Option[BasicBlock])
+    case Match(scrutinee: Id, tpe: ValueType, clauses: List[(Id, Block)], default: Option[BasicBlock])
 
     // body is stuck
     case Reset(prompt: BlockParam, body: BasicBlock)
@@ -379,14 +379,14 @@ object semantics {
     case Alloc(id: BlockParam, init: Addr, region: Id, body: BasicBlock)
 
     // aborts at runtime
-    case Hole(span: Span)
+    case Hole(tpe: ValueType, span: Span)
 
     val free: Variables = this match {
       case NeutralStmt.Jump(label, targs, vargs, bargs) => Set(label) ++ vargs.toSet ++ all(bargs, _.free)
       case NeutralStmt.App(label, targs, vargs, bargs) => Set(label) ++ vargs.toSet ++ all(bargs, _.free)
       case NeutralStmt.Invoke(label, method, tpe, targs, vargs, bargs) => Set(label) ++ vargs.toSet ++ all(bargs, _.free)
       case NeutralStmt.If(cond, thn, els) => Set(cond) ++ thn.free ++ els.free
-      case NeutralStmt.Match(scrutinee, clauses, default) => Set(scrutinee) ++ clauses.flatMap(_._2.free).toSet ++ default.map(_.free).getOrElse(Set.empty)
+      case NeutralStmt.Match(scrutinee, tpe, clauses, default) => Set(scrutinee) ++ clauses.flatMap(_._2.free).toSet ++ default.map(_.free).getOrElse(Set.empty)
       case NeutralStmt.Return(result) => Set(result)
       case NeutralStmt.Reset(prompt, body) => body.free - prompt.id
       case NeutralStmt.Shift(prompt, capt, k, body) => (body.free - k.id) + prompt
@@ -395,18 +395,18 @@ object semantics {
       case NeutralStmt.Put(ref, tpe, cap, value, body) => Set(ref, value) ++ body.free
       case NeutralStmt.Region(id, body) => body.free - id.id
       case NeutralStmt.Alloc(id, init, region, body) => Set(init, region) ++ body.free - id.id
-      case NeutralStmt.Hole(span) => Set.empty
+      case NeutralStmt.Hole(tpe, span) => Set.empty
     }
 
     val dynamicCapture: Variables = this match {
       case NeutralStmt.Return(result) => Set.empty
-      case NeutralStmt.Hole(span) => Set.empty
+      case NeutralStmt.Hole(tpe, span) => Set.empty
 
       case NeutralStmt.Jump(label, targs, vargs, bargs) => all(bargs, _.dynamicCapture)
       case NeutralStmt.App(label, targs, vargs, bargs) => all(bargs, _.dynamicCapture)
       case NeutralStmt.Invoke(label, method, tpe, targs, vargs, bargs) => all(bargs, _.dynamicCapture)
       case NeutralStmt.If(cond, thn, els) => thn.dynamicCapture ++ els.dynamicCapture
-      case NeutralStmt.Match(scrutinee, clauses, default) => clauses.flatMap(_._2.dynamicCapture).toSet ++ default.map(_.dynamicCapture).getOrElse(Set.empty)
+      case NeutralStmt.Match(scrutinee, tpe, clauses, default) => clauses.flatMap(_._2.dynamicCapture).toSet ++ default.map(_.dynamicCapture).getOrElse(Set.empty)
       case NeutralStmt.Reset(prompt, body) => body.dynamicCapture - prompt.id
       case NeutralStmt.Shift(prompt, capt, k, body) => body.dynamicCapture + prompt
       case NeutralStmt.Resume(k, body) => body.dynamicCapture
@@ -674,7 +674,7 @@ object semantics {
         "return" <+> toDoc(result)
       case NeutralStmt.If(cond, thn, els) =>
         "if" <+> parens(toDoc(cond)) <+> toDoc(thn) <+> "else" <+> toDoc(els)
-      case NeutralStmt.Match(scrutinee, clauses, default) =>
+      case NeutralStmt.Match(scrutinee, tpe, clauses, default) =>
         "match" <+> parens(toDoc(scrutinee)) <+> braces(hcat(clauses.map { case (id, block) => toDoc(id) <> ":" <+> toDoc(block) })) <>
           (if (default.isDefined) "else" <+> toDoc(default.get) else emptyDoc)
       case NeutralStmt.Jump(label, targs, vargs, bargs) =>
@@ -715,7 +715,7 @@ object semantics {
       case NeutralStmt.Alloc(id, init, region, body) =>
         "var" <+> toDoc(id) <+> "in" <+> toDoc(region) <+> "=" <+> toDoc(init) <> line <> toDoc(body.bindings) <> toDoc(body.body)
 
-      case NeutralStmt.Hole(span) => "hole()"
+      case NeutralStmt.Hole(tpe, span) => "hole()"
     }
 
     def toDoc(id: Id): Doc = id.show

@@ -2,6 +2,7 @@ module stream
 
 import effekt
 import option
+import exception
 
 // Effects
 // -------
@@ -44,7 +45,7 @@ def fix[T] { one: T => Unit / emit[T] } { stream: => Unit / emit[T] }: Unit =
   try {
     stream()
   } with emit[T] { value =>
-    fix[T] {one} { one(value) }
+    fix {one} { one(value) }
     resume(())
   }
 
@@ -128,12 +129,97 @@ def iterate[A](initial: A) { step: A => A }: Unit / emit[A] = {
   }
 }
 
+/// Re-emit from the `stream` as long as the `predicate` holds.
+/// Once the predicate fails, the stream ends.
+///
+/// Examples:
+/// ```effekt
+/// > list::collect[Int] { takeWhile[Int] { x => x < 3 } { [1, 2, 3, 4, 1].each } }
+/// [1, 2]
+///
+/// > list::collect[Int] { takeWhile[Int] { x => x < 10 } { [1, 2, 3].each } }
+/// [1, 2, 3]
+///
+/// > list::collect[Int] { takeWhile[Int] { x => x < 0 } { [1, 2, 3].each } }
+/// []
+/// ```
+def takeWhile[A] { predicate: A => Bool } { stream: () => Unit / emit[A] }: Unit / emit[A] =
+  try { stream() } with emit[A] {
+    case value and predicate(value) => do emit(value); resume(())
+    case _                          => () // end the stream
+  }
+
 
 def sum { stream: () => Unit / emit[Int] }: Int =
   returning::sum[Unit]{stream}.second
 
 def product { stream: () => Unit / emit[Int] }: Int =
   returning::product[Unit]{stream}.second
+
+/// Returns true if all elements in the stream satisfy the given predicate,
+/// false otherwise. Short-circuits as soon as a non-matching element is found.
+///
+/// Examples:
+/// ```effekt
+/// > all[Int] { x => x > 0 } { [1, 2, 3].each }
+/// true
+///
+/// > all[Int] { x => x < 3 } { [1, 2, 3, 4].each }
+/// false
+///
+/// > all[Bool] { x => x } { [false, true, true].each }
+/// false
+///
+/// > all[Int] { x => x >= 0 } { () } // empty stream
+/// true
+/// ```
+def all[A] { cond: A => Bool } { stream: => Unit / emit[A] }: Bool =
+  try { stream(); true } with emit[A] {
+    case value and not(cond(value)) => false
+    case _                          => resume(())
+  }
+
+/// Returns true if any element in the stream satisfies the given predicate,
+/// false otherwise. Short-circuits as soon as a matching element is found.
+///
+/// Examples:
+/// ```effekt
+/// > any[Int] { x => x > 0 } { [-2, -1, 0, 1, 2].each }
+/// true
+///
+/// > any[Int] { x => x > 10 } { [1, 2, 3, 4].each }
+/// false
+///
+/// > any[Bool] { x => x } { [false, true, false].each }
+/// true
+///
+/// > any[Int] { x => x == 0 } { () } // empty stream
+/// false
+/// ```
+def any[A] { cond: A => Bool } { stream: => Unit / emit[A] }: Bool =
+  try { stream(); false } with emit[A] {
+    case value and cond(value) => true
+    case _                     => resume(())
+  }
+
+/// Count the number of emitted values that satisfy the given predicate.
+///
+/// Examples:
+/// ```
+/// > countIf[Int] { x => x > 0 } { [2, -1, 0, 1, -2].each }
+/// 2
+///
+/// > countIf[Bool] { x => x } { [false, false, true, false].each }
+/// 1
+/// ```
+def countIf[A] { shouldCount: A => Bool } { stream: () => Unit / emit[A] }: Int = {
+  var count = 0
+  for {stream} {
+    case x and shouldCount(x) => count = count + 1
+    case _                    => ()
+  }
+  count
+}
 
 def source[A] { stream: () => Unit / emit[A] } { reader: () => Unit / read[A] }: Unit =
   returning::source[A, Unit]{stream}{reader}
@@ -177,9 +263,9 @@ namespace internal {
 
 /// Use cons to handle prod, but also emit to the outside.
 /// The outside controls iteration, i.e., if cons aborts, the rest of prod will still be emitted.
-/// 
+///
 /// Starts by executing cons. Will stop cons during execution if the outside stops consuming.
-/// 
+///
 /// Example, printing all values consumed by the outside:
 ///
 ///     with teeing{ {s} => for{s}{ e => println(e) } }
@@ -215,9 +301,9 @@ def teeing[A]{ cons: { => Unit / emit[A] } => Unit }{ prod: => Unit / emit[A] }:
 }
 
 /// Binds a `teeing`-like function in the body, stopping the inner producer once all consumers in tees are done consuming.
-/// 
+///
 /// Example of use, equivalent to `tee[A]{cns1}{cns2}{prd}`:
-/// 
+///
 ///     manyTee[A] { {tee} =>
 ///       with tee{cns1}
 ///       with tee{cns2}
@@ -252,6 +338,25 @@ def tee[A]{ cons1: { => Unit / emit[A] } => Unit }{ cons2: { => Unit / emit[A] }
     prod()
   }
 }
+
+/// Return exactly the very first element of the given stream
+/// or raise MissingValue if no elements are emitted.
+///
+/// Examples:
+/// ```effekt
+/// > first[Int] { [1, 2, 3].each }
+/// 1
+/// > first[Bool] { do emit(true) }
+/// true
+/// > first[String] { () } // empty stream
+/// <Exception MissingValue: code in first did not emit any values>
+/// ```
+def first[A] { body: => Unit / emit[A] }: A / Exception[MissingValue] =
+  try {
+    body()
+    val r: A = do raise[MissingValue](MissingValue(), "code in first did not emit any values")
+    r
+  } with emit[A] { a => a }
 
 namespace returning {
 

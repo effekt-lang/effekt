@@ -71,13 +71,13 @@ def run(n: Int) = {
   val sun = makeBody(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
 
   def createBodies(): Array[Body] = {
-    val bodies = allocate[Body](5)
+    val bodies = unsafeAllocate[Body](5)
 
-    bodies.unsafeSet(0, sun);
-    bodies.unsafeSet(1, jupiter);
-    bodies.unsafeSet(2, saturn);
-    bodies.unsafeSet(3, uranus);
-    bodies.unsafeSet(4, neptune);
+    bodies.set(0, sun);
+    bodies.set(1, jupiter);
+    bodies.set(2, saturn);
+    bodies.set(3, uranus);
+    bodies.set(4, neptune);
 
     var px = 0.0;
     var py = 0.0;
@@ -92,12 +92,12 @@ def run(n: Int) = {
     def offsetMomentum(body: Body, px: Double, py: Double, pz: Double) =
       Body(
         body.x, body.y, body.z,
-        0.0 -(px / SOLAR_MASS),
-        0.0 -(py / SOLAR_MASS),
-        0.0 -(pz / SOLAR_MASS),
+        0.0 - (px / SOLAR_MASS),
+        0.0 - (py / SOLAR_MASS),
+        0.0 - (pz / SOLAR_MASS),
         body.mass)
 
-    bodies.unsafeSet(0, sun.offsetMomentum(px, py, pz))
+    bodies.set(0, sun.offsetMomentum(px, py, pz))
 
     bodies
   }
@@ -105,8 +105,8 @@ def run(n: Int) = {
   def advance(bodies: Array[Body], dt: Double) = {
     each(0, bodies.size) { i =>
       each(i + 1, bodies.size) { j =>
-        val iBody = bodies.unsafeGet(i);
-        val jBody = bodies.unsafeGet(j);
+        val iBody = bodies.get(i);
+        val jBody = bodies.get(j);
 
         val dx = iBody.x - jBody.x;
         val dy = iBody.y - jBody.y;
@@ -116,7 +116,7 @@ def run(n: Int) = {
         val distance = sqrt(dSquared);
         val mag = dt / (dSquared * distance);
 
-        bodies.unsafeSet(i, Body(
+        bodies.set(i, Body(
           iBody.x, iBody.y, iBody.z,
           iBody.vx - dx * jBody.mass * mag,
           iBody.vy - dy * jBody.mass * mag,
@@ -124,7 +124,7 @@ def run(n: Int) = {
           iBody.mass
         ));
 
-        bodies.unsafeSet(j, Body(
+        bodies.set(j, Body(
           jBody.x, jBody.y, jBody.z,
           jBody.vx + dx * iBody.mass * mag,
           jBody.vy + dy * iBody.mass * mag,
@@ -135,8 +135,8 @@ def run(n: Int) = {
     }
 
     each(0, bodies.size) { i =>
-      val body = bodies.unsafeGet(i);
-      bodies.unsafeSet(i, Body(
+      val body = bodies.get(i);
+      bodies.set(i, Body(
         body.x + dt * body.vx,
         body.y + dt * body.vy,
         body.z + dt * body.vz,
@@ -151,11 +151,11 @@ def run(n: Int) = {
   def energy(bodies: Array[Body]): Double = {
     var e = 0.0;
     each(0, bodies.size()){ i =>
-      val iBody = bodies.unsafeGet(i);
+      val iBody = bodies.get(i);
       e = e + 0.5 * iBody.mass * (iBody.vx * iBody.vx + iBody.vy * iBody.vy + iBody.vz * iBody.vz);
 
       each(i + 1, bodies.size){ j =>
-        val jBody = bodies.unsafeGet(j);
+        val jBody = bodies.get(j);
         val dx = iBody.x - jBody.x;
         val dy = iBody.y - jBody.y;
         val dz = iBody.z - jBody.z;

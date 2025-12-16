@@ -248,7 +248,16 @@ trait ChezRunner extends Runner[String] {
     else Left("Cannot find scheme. This is required to use the ChezScheme backend.")
 
   /**
-   * Creates an executable bash script besides the given `.ss` file ([[path]])
+   * Optimization level for Chez Scheme.
+   *
+   * Level 3: Maximum optimization, _disables runtime type checks_ in Chez!
+   * Level 0: No optimization, all runtime checks enabled (better for debugging)
+   */
+  def optimizeLevel(using C: Context): Int =
+    if C.config.optimize() && !C.config.debug() then 3 else 0
+
+  /**
+   * Creates an executable bash script besides the given `. ss` file ([[path]])
    * and returns the resulting absolute path.
    */
   def build(path: String)(using C: Context): Option[String] =
@@ -256,7 +265,10 @@ trait ChezRunner extends Runner[String] {
     val schemeFilePath = (out / path).canonicalPath.escape
     val exeScriptPath = schemeFilePath.stripSuffix(s".$extension")
     val schemeFileName = ("./" + (path.unixPath.split('/').last)).escape
-    Some(createScript(exeScriptPath, "scheme", "--script", "$SCRIPT_DIR/" + schemeFileName))
+    Some(createScript(exeScriptPath,
+      "scheme",
+      "--optimize-level", optimizeLevel.toString,
+      "--script", "$SCRIPT_DIR/" + schemeFileName))
 }
 
 object ChezCPSRunner extends ChezRunner {
@@ -286,7 +298,7 @@ object LLVMRunner extends Runner[String] {
 
   override def includes(path: File): List[File] = List(path / ".." / "llvm")
 
-  lazy val clangCmd = discoverExecutable(List("clang-20", "clang-19", "clang-18", "clang"), List("--version"))
+  lazy val clangCmd = discoverExecutable(List("clang-21", "clang-20", "clang-19", "clang-18", "clang"), List("--version"))
 
   def checkSetup(): Either[String, Unit] =
     clangCmd.getOrElseAborting { return Left("Cannot find clang. This is required to use the LLVM backend.") }

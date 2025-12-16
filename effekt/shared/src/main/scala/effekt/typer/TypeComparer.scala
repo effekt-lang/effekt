@@ -22,33 +22,31 @@ trait TypeUnifier {
   def error(msg: String, ctx: ErrorContext): Unit
   def error(left: Type, right: Type, ctx: ErrorContext): Unit
 
-  def unify(c1: Captures, c2: Captures, ctx: ErrorContext): Unit = ctx.polarity match {
+  def unifyCaptures(c1: Captures, c2: Captures, ctx: ErrorContext): Unit = ctx.polarity match {
     case Covariant     => requireSubregion(c1, c2, ctx)
     case Contravariant => requireSubregion(c2, c1, ctx)
     case Invariant     => requireSubregion(c1, c2, ctx); requireSubregion(c2, c1, ctx)
   }
-  def unify(c1: Capture, c2: Capture, ctx: ErrorContext): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)), ctx)
+  def unifyCapture(c1: Capture, c2: Capture, ctx: ErrorContext): Unit = unifyCaptures(CaptureSet(Set(c1)), CaptureSet(Set(c2)), ctx)
 
-  def unifyValueTypes(tpe1: ValueType, tpe2: ValueType, ctx: ErrorContext): Unit = (tpe1, tpe2, ctx.polarity) match {
-    case (t, s, _) if t == s => ()
+  def unifyValueTypes(tpe1: ValueType, tpe2: ValueType, ctx: ErrorContext): Unit = (tpe1, tpe2, ctx.polarity, ctx.coercible) match {
+    case (t, s, _, _) if t == s => ()
 
-    case (_, TTop, Covariant) => ()
-    case (TBottom, _, Covariant) => ()
+    case (ValueTypeRef(s: UnificationVar), t: ValueType, Covariant, _) => requireUpperBound(s, t, ctx)
+    case (s: ValueType, ValueTypeRef(t: UnificationVar), Covariant, _) => requireLowerBound(t, s, ctx)
 
-    case (TTop, _, Contravariant) => ()
-    case (_, TBottom, Contravariant) => ()
+    case (ValueTypeRef(s: UnificationVar), t: ValueType, Contravariant, _) => requireLowerBound(s, t, ctx)
+    case (s: ValueType, ValueTypeRef(t: UnificationVar), Contravariant, _) => requireUpperBound(t, s, ctx)
 
-    case (ValueTypeRef(s: UnificationVar), t: ValueType, Covariant) => requireUpperBound(s, t, ctx)
-    case (s: ValueType, ValueTypeRef(t: UnificationVar), Covariant) => requireLowerBound(t, s, ctx)
+    case (ValueTypeRef(s: UnificationVar), t: ValueType, Invariant, _) => requireEqual(s, t, ctx)
+    case (s: ValueType, ValueTypeRef(t: UnificationVar), Invariant, _) => requireEqual(t, s, ctx)
 
-    case (ValueTypeRef(s: UnificationVar), t: ValueType, Contravariant) => requireLowerBound(s, t, ctx)
-    case (s: ValueType, ValueTypeRef(t: UnificationVar), Contravariant) => requireUpperBound(t, s, ctx)
-
-    case (ValueTypeRef(s: UnificationVar), t: ValueType, Invariant) => requireEqual(s, t, ctx)
-    case (s: ValueType, ValueTypeRef(t: UnificationVar), Invariant) => requireEqual(t, s, ctx)
+    // coercing is the last resort...
+    case (TBottom, to, Covariant, Some(coerce)) => coerce(Coercion.FromNothing(to))
+    case (from, TTop, Covariant, Some(coerce)) => coerce(Coercion.ToAny(from))
 
     // For now, we treat all type constructors as invariant.
-    case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _) =>
+    case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _, _) =>
 
       if (t1 != t2) { error(tpe1, tpe2, ErrorContext.TypeConstructor(ctx)) }
       else if (args1.size != args2.size) {
@@ -58,11 +56,11 @@ trait TypeUnifier {
       // TODO here we assume that the type constructor is covariant
       (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx)) }
 
-    case (t @ BoxedType(tpe1, capt1), s @ BoxedType(tpe2, capt2), p) =>
+    case (t @ BoxedType(tpe1, capt1), s @ BoxedType(tpe2, capt2), p, _) =>
       unifyBlockTypes(tpe1, tpe2, ErrorContext.BoxedTypeBlock(t, s, ctx))
-      unify(capt1, capt2, ErrorContext.BoxedTypeCapture(t, s, ctx))
+      unifyCaptures(capt1, capt2, ErrorContext.BoxedTypeCapture(t, s, ctx))
 
-    case (t, s, p) =>
+    case (t, s, p, _) =>
       error(t, s, ctx)
   }
 
@@ -80,7 +78,15 @@ trait TypeUnifier {
   }
 
   def unifyEffects(eff1: Effects, eff2: Effects, ctx: ErrorContext): Unit =
-    if (eff1.toList.toSet != eff2.toList.toSet) error(pp"${eff2} is not equal to ${eff1}", ctx)
+    val effs1 = eff1.toList.toSet
+    val effs2 = eff2.toList.toSet
+
+    val hasUnknowns = (effs1 ++ effs2).exists { eff => unknowns(eff).nonEmpty }
+
+    // If we're sure that the effect sets are different, throw an error, otherwise defer it for later.
+    if (effs1 != effs2 && !hasUnknowns) {
+      error(pp"${eff2} is not equal to ${eff1}", ctx)
+    }
 
   def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType, ctx: ErrorContext): Unit = (tpe1, tpe2) match {
     case (
@@ -136,90 +142,36 @@ trait TypeMerger extends TypeUnifier {
 
   // computes union or intersection, based on polarity
   def mergeValueTypes(oldBound: ValueType, newBound: ValueType, ctx: ErrorContext): ValueType =
-    (oldBound, newBound, ctx.polarity) match {
-      case (t, s, _) if t == s      => t
-      case (TBottom, t, Covariant)  => t
-      case (t, TBottom, Covariant)  => t
-      case (TTop, t, Contravariant) => t
-      case (t, TTop, Contravariant) => t
+    (oldBound, newBound) match {
+      case (t, s) if t == s => t
+
+      case (t, TTop) => TTop
+      case (TTop, t) => TTop
+      case (TBottom, t) => t
+      case (t, TBottom) => t
 
       // reuses the type unifier implementation (will potentially register new constraints)
       // TODO we need to create a fresh unification variable here!
-      case (x @ ValueTypeRef(_: UnificationVar), tpe: ValueType, p) =>
+      case (x @ ValueTypeRef(_: UnificationVar), tpe: ValueType) =>
         unifyValueTypes(x, tpe, ctx); x
-      case (tpe: ValueType, x @ ValueTypeRef(_: UnificationVar), p) =>
+      case (tpe: ValueType, x @ ValueTypeRef(_: UnificationVar)) =>
         unifyValueTypes(tpe, x, ctx); x
 
-      case (ValueTypeApp(cons1, args1), ValueTypeApp(cons2, args2), _) =>
+      case (ValueTypeApp(cons1, args1), ValueTypeApp(cons2, args2)) =>
         if (cons1 != cons2) abort(pp"Cannot merge different constructors: $cons1 vs. $cons2", ErrorContext.TypeConstructor(ctx))
         if (args1.size != args2.size) abort(pp"Different count of argument to type constructor: $oldBound vs $newBound", ctx)
 
-        // TODO Here we assume the constructor is invariant
-        val mergedArgs = (args1 zip args2).map {
-          case (t1, t2) =>
-            mergeValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx))
+        (args1 zip args2).foreach {
+          case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx))
         }
-        ValueTypeApp(cons1, mergedArgs)
+        ValueTypeApp(cons1, args1)
 
-      case (s @ BoxedType(tpe1, capt1), t @ BoxedType(tpe2, capt2), p) =>
-        BoxedType(
-          mergeBlockTypes(tpe1, tpe2, ErrorContext.BoxedTypeBlock(s, t, ctx)),
-          mergeCaptures(capt1, capt2, ErrorContext.BoxedTypeCapture(s, t, ctx))
-        )
+      case (s @ BoxedType(tpe1, capt1), t @ BoxedType(tpe2, capt2)) =>
+        unifyBlockTypes(tpe1, tpe2, ErrorContext.BoxedTypeBlock(s, t, ctx))
+        unifyCaptures(capt1, capt2, ErrorContext.BoxedTypeCapture(s, t, ctx))
+        s
 
       case _ =>
         abort(pp"Cannot merge ${oldBound} with ${newBound}", ctx)
     }
-
-  def mergeBlockTypes(oldBound: BlockType, newBound: BlockType, ctx: ErrorContext): BlockType = (oldBound, newBound) match {
-    case (t: FunctionType, s: FunctionType) => mergeFunctionTypes(t, s, ctx)
-    case (t: InterfaceType, s: InterfaceType) => mergeInterfaceTypes(t, s, ctx)
-    case (t, s) => abort(pp"The two types ${t} and ${s} are not compatible", ctx)
-  }
-
-  def mergeInterfaceTypes(tpe1: InterfaceType, tpe2: InterfaceType, ctx: ErrorContext): InterfaceType = (tpe1, tpe2) match {
-    // for now block type constructors are invariant
-    case (InterfaceType(c1, targs1), InterfaceType(c2, targs2)) =>
-      if (c1 != c2) abort(pp"The two types ${ c1 } and ${ c2 } are not compatible", ErrorContext.TypeConstructor(ctx))
-      val mergedConstructor = c1
-      val mergedArgs = (targs1 zip targs2) map { case (t1, t2) => mergeValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx)) }
-      InterfaceType(mergedConstructor, mergedArgs)
-  }
-
-  def mergeFunctionTypes(tpe1: FunctionType, tpe2: FunctionType, ctx: ErrorContext): FunctionType = (tpe1, tpe2) match {
-    case (
-      f1 @ FunctionType(tparams1, cparams1, vparams1, bparams1, ret1, eff1),
-      f2 @ FunctionType(tparams2, cparams2, vparams2, bparams2, ret2, eff2)
-      ) =>
-
-      if (tparams1.size != tparams2.size)
-        abort(pp"Type parameter count does not match $f1 vs. $f2", ctx)
-
-      if (vparams1.size != vparams2.size)
-        abort(pp"Value parameter count does not match $f1 vs. $f2", ctx)
-
-      if (bparams1.size != bparams2.size)
-        abort(pp"Block parameter count does not match $f1 vs. $f2", ctx)
-
-      if (cparams1.size != cparams2.size)
-        abort(pp"Capture parameter count does not match $f1 vs. $f2", ctx)
-
-      // TODO potentially share code with unifyFunctionTypes and instantiate
-
-      val targs1 = tparams1.map(ValueTypeRef.apply)
-      val subst = Substitutions(tparams2 zip targs1, cparams2 zip cparams1.map(c => CaptureSet(c)))
-      val substVParams2 = vparams2 map subst.substitute
-      val substBParams2 = bparams2 map subst.substitute
-      val substRet2 = subst.substitute(ret2)
-      val substEffs2 = subst.substitute(eff2)
-
-      val mergedVps = (vparams1 zip substVParams2) map { case (t1, t2) => mergeValueTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
-      val mergedBps = (bparams1 zip substBParams2) map { case (t1, t2) => mergeBlockTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
-      val mergedRet = mergeValueTypes(ret1, substRet2, ErrorContext.FunctionReturn(ctx))
-
-      // We compare effects to be equal, since we do not have subtyping on effects
-      unifyEffects(eff1, substEffs2, ErrorContext.FunctionEffects(ctx))
-
-      FunctionType(tparams1, cparams1, mergedVps, mergedBps, mergedRet, eff1)
-  }
 }

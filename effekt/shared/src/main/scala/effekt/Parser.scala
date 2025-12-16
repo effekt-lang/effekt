@@ -7,6 +7,7 @@ import effekt.source.*
 import effekt.source.Origin.Synthesized
 import effekt.util.VirtualSource
 import kiama.parsing.{Input, ParseResult}
+import kiama.util.Severities.Severity
 import kiama.util.{Position, Range, Source}
 
 import scala.annotation.{tailrec, targetName}
@@ -52,23 +53,24 @@ object Fail {
   def expectedButGot(expected: String, got: String, position: Int): Fail =
     Fail(s"Expected ${expected} but got ${got}", position)
 }
-case class SoftFail(message: String, positionStart: Int, positionEnd: Int)
+
+case class RecoverableDiagnostic(kind: Severity, message: String, positionStart: Int, positionEnd: Int)
 
 class Parser(tokens: Seq[Token], source: Source) {
 
-  var softFails: ListBuffer[SoftFail] = ListBuffer[SoftFail]()
+  var recoverableDiagnostics: ListBuffer[RecoverableDiagnostic] = ListBuffer[RecoverableDiagnostic]()
 
-  private def report(msg: String, fromPosition: Int, toPosition: Int, source: Source = source)(using C: Context) = {
+  private def report(msg: String, fromPosition: Int, toPosition: Int, severity: Severity = kiama.util.Severities.Error, source: Source = source)(using C: Context) = {
     val from = source.offsetToPosition(tokens(fromPosition).start)
     val to = source.offsetToPosition(tokens(toPosition).end + 1)
     val range = Range(from, to)
-    C.report(effekt.util.messages.ParseError(msg, Some(range)))
+    C.report(effekt.util.messages.ParseError(msg, Some(range), severity))
   }
 
   def parse(input: Input)(using C: Context): Option[ModuleDecl] = {
-    def reportSoftFails()(using C: Context): Unit =
-      softFails.foreach {
-        case SoftFail(msg, from, to) => report(msg, from, to, source = input.source)
+    def reportRecoverableDiagnostics()(using C: Context): Unit =
+      recoverableDiagnostics.foreach { d =>
+        report(d.message, d.positionStart, d.positionEnd, d.kind)
       }
 
     try {
@@ -78,13 +80,16 @@ class Parser(tokens: Seq[Token], source: Source) {
       //val after = System.currentTimeMillis()
       //println(s"${input.source.name}: ${after - before}ms")
 
-      // Report soft fails
-      reportSoftFails()
-      if softFails.isEmpty then res else None
+      // Report recoverable diagnostics
+      reportRecoverableDiagnostics()
+      // Don't fret unless we had a recoverable error
+      if recoverableDiagnostics.forall { d =>
+        d.kind != kiama.util.Severities.Error
+      } then res else None
     } catch {
       case Fail(msg, pos) =>
         // Don't forget soft fails!
-        reportSoftFails()
+        reportRecoverableDiagnostics()
 
         report(msg, pos, pos, source = input.source)
         None
@@ -114,6 +119,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   // always points to the latest non-space position
   var position: Int = 0
+  spaces() // HACK: eat spaces before we begin!
 
   def recover(tokenKind: TokenKind, tokenPosition: Int): TokenKind = tokenKind match {
     case TokenKind.Error(err) =>
@@ -141,11 +147,19 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def peek: Token = tokens(position).failOnErrorToken(position)
 
-  /**
-   * Negative lookahead
-   */
-  def lookbehind(offset: Int): Token =
-    tokens(position - offset)
+  def sawNewlineLast: Boolean = {
+    @tailrec
+    def go(position: Int): Boolean =
+      if position < 0 then fail("Unexpected start of file")
+
+      tokens(position).failOnErrorToken(position) match {
+        case token if isSpace(token.kind) && token.kind != Newline => go(position - 1)
+        case token if token.kind == Newline => true
+        case _ => false
+      }
+
+    go(position - 1)
+  }
 
   /**
    * Peeks n tokens ahead of the current one.
@@ -246,10 +260,10 @@ class Parser(tokens: Seq[Token], source: Source) {
       (peek.kind match {
         case `{` => BlockStmt(braces { stmts(inBraces = true) }, span())
         case `val`  => valStmt(inBraces)
+        case `var`  => DefStmt(varDef(noInfo()), semi() ~> stmts(inBraces), span())
         case _ if isDefinition && inBraces => DefStmt(definition(), semi() ~> stmts(inBraces), span())
         case _ if isDefinition => fail("Definitions are only allowed, when enclosed in braces.")
         case `with` => withStmt(inBraces)
-        case `var`  => DefStmt(varDef(noInfo()), semi() ~> stmts(inBraces), span())
         case `return` =>
           // trailing semicolon only allowed when in braces
           `return` ~> Return(expr() <~ (if inBraces then maybeSemi()), span())
@@ -317,7 +331,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
     // \n   while
     //      ^
-    case _ => lookbehind(1).kind == Newline
+    case _ => sawNewlineLast
   }
   def semi(): Unit = peek.kind match {
     // \n   ; while
@@ -329,7 +343,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
     // \n   while
     //      ^
-    case _ if lookbehind(1).kind == Newline => ()
+    case _ if sawNewlineLast => ()
 
     case _ => fail("Expected terminator: `;` or a newline")
   }
@@ -435,12 +449,8 @@ class Parser(tokens: Seq[Token], source: Source) {
         case `record`    => recordDef(info)
         case `effect`    => effectOrOperationDef(info)
         case `namespace` => namespaceDef(info)
-        case `var`       => backtrack {
-          softFailWith("Mutable variable declarations are currently not supported on the toplevel.") {
-            varDef(info)
-          }
-        } getOrElse fail("Mutable variable declarations are currently not supported on the toplevel.")
-        case _ => fail("Expected a top-level definition")
+        case `var`       => varDef(info)
+        case _           => fail("Expected a definition")
       }
 
   private def toplevelDefs(): List[Def] =
@@ -467,27 +477,10 @@ class Parser(tokens: Seq[Token], source: Source) {
         case _ => Nil
       }
 
-  def isDefinition: Boolean = peek.kind match {
-    case `val` | `def` | `type` | `effect` => true
-    case `interface` | `type` | `record` =>
-      val kw = peek.kind
-      fail(s"Only supported on the toplevel: ${kw.toString} declaration.")
-    case _ => false
-  }
-
-  def definition(): Def =
-    documented: info =>
-      peek.kind match {
-        case `val`       => valDef(info)
-        case `def`       => defDef(info)
-        case `type`      => typeOrAliasDef(info)
-        case `effect`    => effectDef(info)
-        case _ => fail("Expected definition")
-      }
-
-  def definitions(): List[Def] =
-    nonterminal:
-      manyWhile(definition(), isDefinition)
+  // Only aliases for toplevel defs as of #1251
+  def isDefinition: Boolean = isToplevel
+  def definition(): Def = toplevel()
+  def definitions(): List[Def] = toplevelDefs()
 
   def functionBody: Stmt = stmts() // TODO error context: "the body of a function definition"
 
@@ -582,7 +575,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     // If we can't parse `effectDef` or `operationDef`, we should try parsing an interface with the wrong keyword
     // and report an error to the user if the malformed interface would be valid.
     def interfaceDefUsingEffect(): Maybe[InterfaceDef] =
-      backtrack(restoreSoftFails = false):
+      backtrack(restoreRecoverable = false):
         softFailWith("Unexpected 'effect', did you mean to declare an interface of multiple operations using the 'interface' keyword?"):
           interfaceDef(info, `effect`)
 
@@ -1001,6 +994,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     nonterminal:
       var left = nonTerminal()
       while (ops.contains(peek.kind)) {
+         checkBinaryOpWhitespace()
          val op = next()
          val right = nonTerminal()
          left = binaryOp(left, op, right)
@@ -1053,6 +1047,16 @@ class Parser(tokens: Seq[Token], source: Source) {
   def TypeTuple(tps: Many[Type]): Type =
     TypeRef(IdRef(List("effekt"), s"Tuple${tps.size}", tps.span.synthesized), tps, tps.span.synthesized)
 
+  // Check that the current token is surrounded by whitespace. If not, soft fail.
+  private def checkBinaryOpWhitespace(): Unit = {
+    val wsBefore = position     > 0             && isSpace(tokens(position - 1).kind)
+    val wsAfter  = position + 1 < tokens.length && isSpace(tokens(position + 1).kind)
+
+    if (!wsBefore || !wsAfter) {
+      warn(s"Missing whitespace around binary operator", position, position)
+    }
+  }
+
   /**
    * This is a compound production for
    *  - member selection <EXPR>.<NAME>
@@ -1101,7 +1105,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   // argument lists cannot follow a linebreak:
   //   foo      ==    foo;
   //   ()             ()
-  def isArguments: Boolean = lookbehind(1).kind != Newline && (peek(`(`) || peek(`[`) || peek(`{`))
+  def isArguments: Boolean = !sawNewlineLast && (peek(`(`) || peek(`[`) || peek(`{`))
   def arguments(): (List[ValueType], List[ValueArg], List[Term]) =
     if (!isArguments) fail("at least one argument section (types, values, or blocks)", peek.kind)
     (maybeTypeArgs().unspan, maybeValueArgs(), maybeBlockArgs())
@@ -1142,8 +1146,9 @@ class Parser(tokens: Seq[Token], source: Source) {
       braces {
         peek.kind match {
           // { case ... => ... }
-          case `case` => someWhile(matchClause(), `case`) match { case cs =>
+          case `case` =>
             nonterminal:
+              val cs = someWhile(matchClause(), `case`)
               val argSpans = cs match {
                 case Many(MatchClause(MultiPattern(ps, _), _, _, _) :: _, _) => ps.map(_.span)
                 case p => List(p.span)
@@ -1164,7 +1169,7 @@ class Parser(tokens: Seq[Token], source: Source) {
                   ), span().synthesized),
                 span().synthesized
               )
-          }
+
           case _ =>
             // { (x: Int) => ... }
             nonterminal:
@@ -1594,9 +1599,11 @@ class Parser(tokens: Seq[Token], source: Source) {
   def fail(msg: String): Nothing =
     throw Fail(msg, position)
 
-  def softFail(message: String, start: Int, end: Int): Unit = {
-    softFails += SoftFail(message, start, end)
-  }
+  def softFail(message: String, start: Int, end: Int): Unit =
+    recoverableDiagnostics += RecoverableDiagnostic(kiama.util.Severities.Error, message, start, end)
+
+  def warn(message: String, start: Int, end: Int): Unit =
+    recoverableDiagnostics += RecoverableDiagnostic(kiama.util.Severities.Warning, message, start, end)
 
   inline def softFailWith[T](inline message: String)(inline p: => T): T = {
     val startPosition = position
@@ -1617,21 +1624,21 @@ class Parser(tokens: Seq[Token], source: Source) {
   inline def when[T](t: TokenKind)(inline thn: => T)(inline els: => T): T =
     if peek(t) then { consume(t); thn } else els
 
-  inline def backtrack[T](inline restoreSoftFails: Boolean = true)(inline p: => T): Maybe[T] =
+  inline def backtrack[T](inline restoreRecoverable: Boolean = true)(inline p: => T): Maybe[T] =
     val before = position
     val beforePrevious = previous
     val labelBefore = currentLabel
-    val softFailsBefore = softFails.clone()
+    val recoverableBefore = recoverableDiagnostics.clone()
     try { Maybe.Some(p, span(tokens(before).end)) } catch {
       case Fail(_, _) => {
         position = before
         previous = beforePrevious
         currentLabel = labelBefore
-        if restoreSoftFails then softFails = softFailsBefore
+        if restoreRecoverable then recoverableDiagnostics = recoverableBefore
         Maybe.None(Span(source, pos(), pos(), Synthesized))
       }
     }
-  inline def backtrack[T](inline p: => T): Maybe[T] = backtrack(restoreSoftFails = true)(p)
+  inline def backtrack[T](inline p: => T): Maybe[T] = backtrack(restoreRecoverable = true)(p)
 
   def interleave[A](xs: List[A], ys: List[A]): List[A] = (xs, ys) match {
     case (x :: xs, y :: ys) => x :: y :: interleave(xs, ys)

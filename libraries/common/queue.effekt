@@ -49,7 +49,7 @@ def emptyQueue[T](initialCapacity: Int): Queue[T] at global = {
       val oldSize = capacity.get
       val newSize = capacity.get * 2
       val oldContents = contents.get
-      val newContents = array::allocate[Option[T]](newSize)
+      val newContents = array[Option[T]](newSize, None())
 
       if (head.get < tail.get) {
         // The queue does not wrap around; direct copy is possible.
@@ -93,12 +93,12 @@ def emptyQueue[T](initialCapacity: Int): Queue[T] at global = {
       resizeTo(size.get + 1)
       head.set(mod(head.get - 1 + capacity.get, capacity.get))
       size.set(size.get + 1)
-      contents.get.unsafeSet(head.get, Some(el))
+      contents.get.set(head.get, Some(el))
     }
 
     def pushBack(el: T) = {
       resizeTo(size.get + 1)
-      contents.get.unsafeSet(tail.get, Some(el))
+      contents.get.set(tail.get, Some(el))
       size.set(size.get + 1)
       tail.set(mod(tail.get + 1, capacity.get))
     }

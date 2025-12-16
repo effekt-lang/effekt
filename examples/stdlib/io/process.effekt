@@ -1,0 +1,17 @@
+import process
+import stringbuffer
+def main() = {
+  val p = spawn("cat", [].fromList, default().onStdout(box { c =>
+    println(s"Printed '${c}'")
+  }).onStderr(box { c =>
+    println(s"Err '${c}'")
+  }).withStdin(box { h =>
+    h.write("Hello written to stdin");
+    h.close()
+  })
+  )
+  println(p)
+  val p2 = spawn("echo", ["Hello argument"].fromList, default())
+  println(p2)
+  ()
+}

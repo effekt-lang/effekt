@@ -302,6 +302,8 @@ trait Compiler[Executable] {
 
       val aggregated = core.ModuleDecl(main.path, Nil, declarations, externs, definitions, exports)
 
+      aggregated.typecheck()
+
       // TODO in the future check for duplicate exports
       CoreTransformed(src, tree, mod, aggregated)
   }

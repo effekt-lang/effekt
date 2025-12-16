@@ -1,6 +1,6 @@
 def main() = {
   println(array::build(10) { x => x }.foldLeft(0) { (acc, x) => acc + x })
   println(array::build(10000) { x => x }.foldLeft(0) { (acc, x) => acc + x })
-  println(array::allocate[Int](0).foldLeft(0) { (acc, x) => acc + x })
+  println(array[Int](0, 0).foldLeft(0) { (acc, x) => acc + x })
   println(["hello", "world", ",", "effekt!"].fromList.foldLeft("") { (acc, x) => acc ++ x })
 }

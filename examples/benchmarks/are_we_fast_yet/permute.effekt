@@ -4,9 +4,9 @@ import ref
 import array
 
 def swap(arr: Array[Int], i: Int, j: Int) = {
-  val tmp = arr.unsafeGet(i);
-  arr.unsafeSet(i, arr.unsafeGet(j));
-  arr.unsafeSet(j, tmp)
+  val tmp = arr.get(i);
+  arr.set(i, arr.get(j));
+  arr.set(j, tmp)
 }
 
 def run(n: Int) = {

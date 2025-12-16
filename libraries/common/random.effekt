@@ -170,7 +170,7 @@ def main() = {
       val b = randomInt(0, 9)
       val c = randomInt(0, 9)
       println(a.show ++ " " ++ b.show ++ " " ++ c.show)
-      println(a*100 + b*10 + c)
+      println(a * 100 + b * 10 + c)
     }
   }
 

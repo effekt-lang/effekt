@@ -55,7 +55,7 @@ trait ColoredMessaging extends EffektMessaging {
     messages.sorted.map(formatMessage).distinct.mkString("")
 
   override def formatContent(err: EffektError): String = err match {
-    case ParseError(msg, range)               => msg
+    case ParseError(msg, range, severity)     => msg
     case PlainTextError(msg, range, severity) => msg
     case StructuredError(StructuredMessage(sc, args), _, _) => sc.s(args.map {
       case id: source.IdDef    => highlight(TypePrinter.show(id))

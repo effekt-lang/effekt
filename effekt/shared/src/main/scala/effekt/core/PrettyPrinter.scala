@@ -1,12 +1,12 @@
 package effekt
 package core
 
-import effekt.core.Type.{PromptSymbol, ResumeSymbol}
+import effekt.core.Type.{ PromptSymbol, ResumeSymbol, TChar }
 import effekt.source.FeatureFlag
 import kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
-import effekt.symbols.{Name, Wildcard, builtins}
+import effekt.symbols.{ Name, Wildcard, builtins }
 
 object PrettyPrinter extends ParenPrettyPrinter {
 
@@ -38,15 +38,19 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(p: Expr): String =
     pretty(toDoc(p), 60).layout
 
+  def format(p: Implementation): String =
+    pretty(toDoc(p), 60).layout
+
   val show: PartialFunction[Any, String] = {
-    case m: ModuleDecl => format(m).layout
-    case d: Toplevel   => format(List(d))
-    case s: Stmt       => format(s)
-    case t: ValueType  => format(t)
-    case t: BlockType  => format(t)
-    case b: Block      => format(b)
-    case p: Expr       => format(p)
-    case x: Id         => x.show
+    case m: ModuleDecl     => format(m).layout
+    case d: Toplevel       => format(List(d))
+    case s: Stmt           => format(s)
+    case t: ValueType      => format(t)
+    case t: BlockType      => format(t)
+    case b: Block          => format(b)
+    case p: Expr           => format(p)
+    case i: Implementation => format(i)
+    case x: Id             => x.show
   }
 
   val emptyline: Doc = line <> line
@@ -104,7 +108,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case BlockLit(tps, cps, vps, bps, body) =>
       val doc = space <> paramsToDoc(tps, cps, vps, bps) <+> "=>" <+> nest(line <> toDocStmts(body)) <> line
       if preventBraces then doc else braces { doc }
-    case Unbox(e)         => "unbox" <+> toDoc(e)
+    case Unbox(e)         => parens("unbox" <+> toDoc(e))
     case New(handler)     => "new" <+> toDoc(handler)
   }
 
@@ -114,15 +118,16 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   //def toDoc(n: Name): Doc = n.toString
 
-  def toDoc(s: symbols.Symbol): Doc = {
+  def toDoc(s: symbols.Symbol): Doc =
     builtins.coreBuiltinSymbolToString(s).getOrElse(s.name.name)
-  }
 
   def toDoc(e: Expr): Doc = e match {
-    case Literal((), _)            => "()"
-    case Literal(s: String, _)     => stringLiteral(s)
-    case Literal(value, _)         => value.toString
-    case ValueVar(id, tpe)         => toDoc(id) <> ":" <+> toDoc(tpe)
+    case Literal((), _)         => "()"
+    case Literal(n, Type.TInt)  => n.toString
+    case Literal(n, Type.TChar) => s"'\\${n.toString}'"
+    case Literal(s: String, _)  => stringLiteral(s)
+    case Literal(value, _)      => value.toString
+    case ValueVar(id, tpe)      => toDoc(id) <> ":" <+> toDoc(tpe)
 
     case PureApp(b, targs, vargs)  => parens(toDoc(b)) <> argsToDoc(targs, vargs, Nil)
     case Make(data, tag, targs, vargs)    => "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
@@ -187,8 +192,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "def" <+> toDoc(id) <> paramsToDoc(tps, cps, vps, bps) <+> "=" <+> block(toDocStmts(body))
     case Toplevel.Def(id, blockv) =>
       "def" <+> toDoc(id) <+> "=" <+> toDoc(blockv)
-    case Toplevel.Val(id, tpe, binding) =>
-      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> toDoc(binding)
+    case Toplevel.Val(id, binding) =>
+      "val" <+> toDoc(id) <+> "=" <+> toDoc(binding)
   }
 
   def toDoc(s: Stmt): Doc = s match {
@@ -213,7 +218,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "def" <+> toDoc(id) <+> "=" <+> toDoc(block) <> line <>
         toDocStmts(rest)
 
-    case Let(id, _, binding, rest) =>
+    case Let(id, binding, rest) =>
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
         toDocStmts(rest)
 
@@ -224,9 +229,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(e) =>
       "return" <+> toDoc(e)
 
-    case Val(id, tpe, binding, body) =>
+    case Val(id, binding, body) =>
       // RHS must be a single `stmt`, so we have to wrap it in a block.
-      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> block(toDocStmts(binding)) <> ";" <> line <>
+      "val" <+> toDoc(id) <+> "=" <+> block(toDocStmts(binding)) <> ";" <> line <>
         toDocStmts(body)
 
     case App(b, targs, vargs, bargs) =>
@@ -241,8 +246,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Reset(body) =>
       "reset" <+> toDoc(body)
 
-    case Shift(prompt, body) =>
-      "shift" <> parens(toDoc(prompt)) <+> toDoc(body)
+    case Shift(prompt, k, body) =>
+      "shift" <> parens(toDoc(prompt)) <+> braces { toDoc(k) <+> "=>" <+> nest(line <> toDocStmts(body)) <> line }
 
     case Resume(k, body) =>
       "resume" <> parens(toDoc(k)) <+> block(toDocStmts(body))
@@ -266,12 +271,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Region(body) =>
       "region" <+> toDoc(body)
 
-    case Match(sc, clauses, default) =>
-      val cs = braces(nest(line <> vsep(clauses map { case (p, b) => toDoc(p) <+> ":" <+> toDoc(b) })) <> line)
+    case Match(sc, tpe, clauses, default) =>
+      val cs = if clauses.isEmpty then string("{}") else braces(nest(line <> vsep(clauses map { case (p, b) => toDoc(p) <+> ":" <+> toDoc(b) })) <> line)
       val d = default.map { body => space <> "else" <+> braces(nest(line <> toDocStmts(body))) }.getOrElse { emptyDoc }
-      toDoc(sc) <+> "match" <+> cs <> d
+      toDoc(sc) <+> "match" <> brackets(toDoc(tpe)) <+> cs <> d
 
-    case Hole(span) =>
+    case Hole(tpe, span) =>
       val from = span.from
       val to = span.to
       val name = span.source.name
@@ -280,7 +285,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
         case _: kiama.util.StringSource => "string"
         case _                          => "source"
       }
-      "<>" <+> s"@ \"$scheme://$name\":$from:$to"
+      "<>" <> ":" <+> toDoc(tpe) <+> s"@ \"$scheme://$name\":$from:$to"
   }
 
   def toDoc(tpe: core.BlockType): Doc = tpe match {
