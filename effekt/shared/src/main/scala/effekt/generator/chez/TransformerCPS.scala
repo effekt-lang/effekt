@@ -6,6 +6,7 @@ import cps.*
 import core.Declaration
 import effekt.symbols.Symbol
 import effekt.core
+import effekt.util.UByte
 import effekt.util.messages.ErrorReporter
 
 object TransformerCPS {
@@ -172,6 +173,7 @@ object TransformerCPS {
       effekt.generator.chez.TransformerMonadic.escape(v)
     case Literal(b: Boolean) =>
       if (b) chez.RawValue("#t") else chez.RawValue("#f")
+    case Literal(b: Byte) => chez.RawValue(UByte.unsafeFromByte(b).toInt.toString)
     case Literal(value) => chez.RawValue(value.toString())
     case PureApp(id, vargs) => chez.Call(toChez(id), vargs.map(toChez))
     case Make(_, tag, vargs) =>

@@ -8,6 +8,8 @@ import effekt.cps.*
 import effekt.core.{ DeclarationContext, Id }
 import effekt.cps.Variables.{ all, free }
 import effekt.cps.substitutions.Substitution
+import effekt.util.UByte
+
 import scala.collection.mutable
 
 object TransformerCps extends Transformer {
@@ -190,6 +192,7 @@ object TransformerCps extends Transformer {
     case Expr.ValueVar(id)           => nameRef(id)
     case Expr.Literal(())            => $effekt.field("unit")
     case Expr.Literal(s: String)     => JsString(escape(s))
+    case Expr.Literal(b: Byte)       => js.RawExpr(UByte.unsafeFromByte(b).toHexString)
     case literal: Expr.Literal       => js.RawExpr(literal.value.toString)
     case Expr.PureApp(id, vargs)     => inlineExtern(id, vargs)
     case Expr.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
