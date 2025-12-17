@@ -343,11 +343,36 @@ extern def infixSub(x: Int, y: Int) at {}: Int =
   llvm "%z = sub  %Int ${x}, ${y} ret %Int %z"
   vm "effekt::infixSub(Int, Int)"
 
-extern def mod(x: Int, y: Int) at {}: Int =
-  js "(${x} % ${y})"
-  chez "(modulo ${x} ${y})"
-  llvm "%z = srem %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::mod(Int, Int)"
+// Computes the quotient based on floored-division
+def quot(x: Int, y: Int): Int =
+  infixDiv(x, y)
+
+/// Computes the remainder based on floored-division
+def rem(x: Int, y: Int): Int =
+  x - y * (x / y)
+
+/// Computes the result of Euclidean division
+def div(x: Int, y: Int): Int = {
+  val q = x / y
+  val r = x.rem(y)
+  if (r < 0) {
+    if (y > 0) { q - 1 }
+    else { q + 1 }
+  } else {
+    q
+  }
+}
+
+/// Computes the result of Euclidean modulo
+def mod(x: Int, y: Int): Int = {
+  val r = x.rem(y)
+  if (r < 0) {
+    if (y > 0) { r + y }
+    else { r - y }
+  } else {
+    r
+  }
+}
 
 extern def infixAdd(x: Double, y: Double) at {}: Double =
   js "(${x} + ${y})"
