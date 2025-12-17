@@ -396,6 +396,7 @@ object CaptUnificationVar {
   case class AnonymousFunctionRegion(fun: source.BlockLiteral) extends Role
   case class InferredBox(box: source.Box) extends Role
   case class InferredUnbox(unbox: source.Unbox) extends Role
+  case class OpClause(clause: source.OpClause) extends Role
   // underlying should be a UnificationVar
   case class Subtraction(handled: List[Capture], underlying: CaptUnificationVar) extends Role
   case class Substitution() extends Role

@@ -497,9 +497,18 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 case (tpe, capt) => Context.freshCapabilityFor(tpe, CaptureSet(capt))
               }
 
+              val bodyRegion = Context.freshCaptVar(CaptUnificationVar.OpClause(d))
+
               val Result(bodyType, bodyEffs) = Context.bindingCapabilities(d, capabilities) {
-                body checkAgainst tpe
+                flowingInto(bodyRegion) {
+                  body checkAgainst tpe
+                }
               }
+
+              usingCaptureWithout(bodyRegion) {
+                cparams
+              }
+
               Result(bodyType, bodyEffs -- Effects(effs))
 
             // handler implementation: we have a continuation
