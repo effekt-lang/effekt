@@ -1,0 +1,16 @@
+def main() = {
+  println(0x00)
+  println(0x09)
+  println(0x0B)
+  println(0x42)
+  println(0xA0)
+  println(0xAF)
+  println(0xEE)
+  println(0xFF)
+  println("")
+
+  // just check all of them, it's not that bad
+  each(0, 255) { x =>
+    println(x.toByte)
+  }
+}
