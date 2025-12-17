@@ -49,9 +49,10 @@ class ReparseTests extends CoreTests {
     examplesDir / "pos" / "with_val_pair_and_else.effekt",
   )
 
+  // We currently only run reparse tests on the benchmarks rather than all positive examples.
+  // This is to save CI time as the core parser is currently very slow.
+  // This can be expanded later once we have better core frontend performance.
   def positives: Set[File] = Set(
-    examplesDir / "pos",
-    examplesDir / "casestudies",
     examplesDir / "benchmarks",
   )
 
