@@ -4,6 +4,7 @@ package core
 import effekt.core.Type.{PromptSymbol, ResumeSymbol}
 import effekt.source.{FeatureFlag, Span}
 import effekt.symbols.builtins
+import effekt.util.UByte
 import effekt.util.messages.{ErrorReporter, ParseError}
 import kiama.parsing.{NoSuccess, ParseResult, Parsers, Success}
 import kiama.util.{Position, Range, Severities, Source, StringSource}
@@ -156,6 +157,12 @@ class EffektLexers extends Parsers {
   lazy val unicodeChar = regex("""\\u\{[0-9A-Fa-f]{1,6}\}""".r, "Unicode character literal") ^^ {
     case contents =>  Integer.parseInt(contents.stripPrefix("\\u{").stripSuffix("}"), 16)
   }
+  lazy val byteLiteral = regex("0x([0-9A-F]{2})".r, "Byte literal") ^^ { case s =>
+    val hexPart = s.substring(2) // strip the 0x prefix
+    val intVal = Integer.parseInt(hexPart, 16) // parse as unsigned int (0..255)
+    UByte.unsafeFromInt(intVal)
+  }
+
 
   /** Inverse of PrettyPrinter.escapeString */
   private def unescapeString(s: String): String = {
@@ -266,6 +273,7 @@ class CoreParsers(names: Names) extends EffektLexers {
    */
   lazy val int    = integerLiteral ^^ { n => Literal(n.toLong, Type.TInt) }
   lazy val char   = charLiteral ^^ { n => Literal(n.toLong, Type.TChar) }
+  lazy val byte   = byteLiteral ^^ { b => Literal(b, Type.TByte) }
   lazy val bool   = `true` ^^^ Literal(true, Type.TBoolean) | `false` ^^^ Literal(false, Type.TBoolean)
   lazy val unit   = literal("()") ^^^ Literal((), Type.TUnit)
   lazy val double = doubleLiteral ^^ { n => Literal(n.toDouble, Type.TDouble) }
@@ -443,7 +451,7 @@ class CoreParsers(names: Names) extends EffektLexers {
     | failure("Expected a pure expression.")
     )
 
-  lazy val literal: P[Expr] = double | int | char | bool | string | unit
+  lazy val literal: P[Expr] = byte | double | int | char | bool | string | unit
 
 
   // Calls

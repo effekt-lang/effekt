@@ -1,13 +1,14 @@
 package effekt
 package core
 
-import effekt.core.Type.{ PromptSymbol, ResumeSymbol, TChar }
+import effekt.core.Type.{PromptSymbol, ResumeSymbol, TChar}
 import effekt.source.FeatureFlag
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 
 import scala.language.implicitConversions
-import effekt.symbols.{ Name, Wildcard, builtins }
+import effekt.symbols.{Name, Wildcard, builtins}
+import effekt.util.UByte
 
 class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) extends ParenPrettyPrinter {
   override val defaultIndent = 2
@@ -131,6 +132,7 @@ class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) ext
     case Literal((), _)         => "()"
     case Literal(n, Type.TInt)  => n.toString
     case Literal(n, Type.TChar) => s"'\\${n.toString}'"
+    case Literal(b: Byte, Type.TByte) => UByte.unsafeFromByte(b).toHexString
     case Literal(s: String, _)  => stringLiteral(s)
     case Literal(value, _)      => value.toString
     case ValueVar(id, tpe)         => toDoc(id) <> (if printDetails then ":" <+> toDoc(tpe) else emptyDoc)
