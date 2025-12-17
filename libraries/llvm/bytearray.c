@@ -2,6 +2,8 @@
 #define EFFEKT_BYTEARRAY_C
 
 #include <string.h> // For memcopy
+#include <stdint.h>
+#include <inttypes.h>
 
 /** We represent bytearrays like positive types.
  *
@@ -115,8 +117,8 @@ struct Pos c_bytearray_show_Char(const uint64_t n) {
 
 // TODO do this in Effekt
 struct Pos c_bytearray_show_Byte(const Byte n) {
-    char str[4];  // Byte values range from 0 to 255, 3 characters + null terminator
-    snprintf(str, sizeof(str), "%" PRIu8, n);
+    char str[5]; // |"0x" ++ <2 hex digits> ++ '\0'| = 5
+    snprintf(str, sizeof str, "0x%02" PRIX8, (uint8_t)n);
     return c_bytearray_from_nullterminated_string(str);
 }
 

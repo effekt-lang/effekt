@@ -1,11 +1,10 @@
 package effekt
 
 import effekt.lexer.TokenKind.*
-import effekt.lexer.{Lexer, TokenKind, LexerError }
+import effekt.lexer.{Lexer, LexerError, TokenKind}
 import effekt.lexer.LexerError.*
-
+import effekt.util.UByte
 import kiama.util.StringSource
-
 import munit.Location
 
 class LexerTests extends munit.FunSuite {
@@ -83,7 +82,7 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq(
       num,
       Float(12.34), Integer(100), Integer(200), Float(123.345), Integer(1),
-      Float(-12.34), Integer(-100), Float(-123.345), Integer(-1), Byt(0x42),
+      Float(-12.34), Integer(-100), Float(-123.345), Integer(-1), Byt(UByte.lit(0x42)),
       EOF
     )
   }

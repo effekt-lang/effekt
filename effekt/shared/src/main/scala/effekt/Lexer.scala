@@ -3,6 +3,7 @@ package effekt.lexer
 import scala.collection.mutable
 import scala.collection.immutable
 import effekt.source.Span
+import effekt.util.UByte
 import kiama.util.Source
 
 /** Lexing errors that can occur during tokenization */
@@ -65,7 +66,7 @@ enum TokenKind {
   case Str(s: String, multiline: Boolean)
   case HoleStr(s: String)
   case Chr(c: Int)
-  case Byt(b: Int) // assuming 0-255 range, `Byte` in Scala is signed!
+  case Byt(b: UByte)
 
   // identifiers
   case Ident(id: String)
@@ -532,7 +533,7 @@ class Lexer(source: Source) extends Iterator[Token] {
     try {
       val byte = java.lang.Integer.parseInt(hexString, 16)
       assert(byte >= 0 && byte <= 255)
-      TokenKind.Byt(byte)
+      TokenKind.Byt(UByte.unsafeFromInt(byte))
     } catch {
       case e: NumberFormatException => TokenKind.Error(LexerError.InvalidByteFormat)
     }
