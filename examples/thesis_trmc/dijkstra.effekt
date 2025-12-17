@@ -1,0 +1,63 @@
+import array
+import set
+
+record Edge(w:Int,node:Int)
+
+record Graph(adjList:Array[List[Edge]])
+
+def getMinIndex(arr: Array[Int], visited: Set[Int]): Int= {
+  var min = 1000000
+  var ind = 0
+  var curr = 0
+  while(curr<arr.size){
+    if(arr.unsafeGet(curr)<min and (visited.contains(curr) == false)){
+      min = arr.unsafeGet(curr)
+      ind = curr
+    }
+    curr = curr + 1
+  }
+  ind
+}
+
+def dijkstra(graph:Graph, startNode: Int): List[(Int,Int)]= {
+  var dists : Array[Int] = array(graph.adjList.size, 1000000)
+  var preds : Array[Int] = array(graph.adjList.size, 1000000)
+  dists.unsafeSet(startNode, 0)
+  var curr = startNode
+  var count = 0
+  var visited : Set[Int] = emptyGeneric[Int]()
+  while(count < graph.adjList.size){
+    curr = getMinIndex(dists,visited)
+    visited.insert(curr)
+    var edges = graph.adjList.unsafeGet(curr)
+    edges.foreach{
+      edge => var newDist = edge.w + dists.unsafeGet(curr)
+      if(newDist<dists.unsafeGet(edge.node)){
+        dists.unsafeSet(curr,newDist)
+      }
+    }
+    count = count+1
+  }
+  var ret : List[(Int,Int)] = build(graph.adjList.size){i=>(dists.unsafeGet(i), preds.unsafeGet(i))}
+  ret
+}
+def main() = {
+  val diamond : Graph = Graph([[Edge(1,1),Edge(1,2)],[Edge(1,3)],[Edge(2,3)],[]].fromList)
+  println("dijkstra")
+  val res = dijkstra(diamond,0)
+  try{
+    val dists : List[Int] = build(res.size){
+      ind => res.get(ind).first
+    }
+    val preds : List[Int] = build(res.size){
+      ind => res.get(ind).second
+    }
+    println(dists)
+    println(preds)
+  } with Exception[OutOfBounds]{
+    def raise(first,msg) = {
+      panic(msg)
+    }
+  }
+  
+}
