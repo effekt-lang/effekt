@@ -46,14 +46,16 @@ object DropBindings extends Phase[CoreTransformed, CoreTransformed] {
 
   private object dropping extends Tree.RewriteWithContext[DropContext] {
 
-    override def expr(using DropContext) = {
+    override def rewrite(expr: Expr)(using DropContext): Expr = expr match {
       case Expr.ValueVar(id, tpe) if usedOnce(id) && hasDefinition(id) => definitionOf(id)
+      case other => super.rewrite(other)
     }
 
-    override def stmt(using C: DropContext) = {
+    override def rewrite(stmt: Stmt)(using C: DropContext): Stmt = stmt match {
       case Stmt.Let(id, p: Expr, body) if usedOnce(id) =>
         val transformed = rewrite(p)
         rewrite(body)(using C.updated(id, transformed))
+      case other => super.rewrite(other)
     }
   }
 }
