@@ -34,6 +34,7 @@ def dijkstra(graph:Graph, startNode: Int): List[(Int,Int)]= {
       edge => var newDist = edge.w + dists.unsafeGet(curr)
       if(newDist<dists.unsafeGet(edge.node)){
         dists.unsafeSet(curr,newDist)
+        preds.unsafeSet(edge.node,curr)
       }
     }
     count = count+1
