@@ -332,24 +332,9 @@ extern def infixMul(x: Int, y: Int) at {}: Int =
   vm "effekt::infixMul(Int, Int)"
 
 extern def infixDiv(x: Int, y: Int) at {}: Int =
-  js "Math.floor(${x} / ${y})"
-  chez "(floor (/ ${x} ${y}))"
-  llvm """
-    %quot = sdiv %Int ${x}, ${y}
-    %rem = srem %Int ${x}, ${y}
-    ; Check if remainder is non-zero
-    %has_rem = icmp ne %Int %rem, 0
-    ; Check if signs differ (XOR of sign bits)
-    %a_neg = icmp slt %Int ${x}, 0
-    %b_neg = icmp slt %Int ${y}, 0
-    %signs_differ = xor i1 %a_neg, %b_neg
-    ; Need adjustment if there's a remainder AND signs differ
-    %needs_adjust = and i1 %has_rem, %signs_differ
-    ; Adjust quotient: subtract 1 if needed
-    %adjust = select i1 %needs_adjust, %Int -1, %Int 0
-    %result = add %Int %quot, %adjust
-    ret %Int %result
-  """
+  js "Math.trunc(${x} / ${y})"
+  chez "(truncate (/ ${x} ${y}))"
+  llvm "%z = sdiv %Int ${x}, ${y} ret %Int %z"
   vm "effekt::infixDiv(Int, Int)"
 
 extern def infixSub(x: Int, y: Int) at {}: Int =
