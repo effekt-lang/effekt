@@ -357,7 +357,7 @@ extern def infixMinus(x: Int, y: Int) at {}: Int =
 
 // Computes the quotient based on floored-division
 def quot(x: Int, y: Int): Int =
-  infixDiv(x, y)
+  infixSlash(x, y)
 
 /// Computes the remainder based on floored-division
 def rem(x: Int, y: Int): Int =
