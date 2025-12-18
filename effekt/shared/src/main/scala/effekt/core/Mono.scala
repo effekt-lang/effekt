@@ -14,6 +14,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case CoreTransformed(source, tree, mod, core) => {
         core match {
           case ModuleDecl(path, includes, declarations, externs, definitions, exports) => {
+            // println(util.show(core))
             // Find constraints in the definitions
             val monoFindContext = MonoFindContext()
             var constraints = findConstraints(definitions)(using monoFindContext)
@@ -52,7 +53,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             // monoDefs.foreach(defn => println(util.show(defn)))
             val newModuleDecl = ModuleDecl(path, includes, monoDecls, externs, monoDefs, exports)
 
-            // println(util.show(newModuleDecl))
+            println(util.show(newModuleDecl))
 
             return Some(CoreTransformed(source, tree, mod, newModuleDecl))
           }
@@ -64,15 +65,15 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 }
 
 type FunctionId = Id
-case class Constraint(lower: Vector[TypeArg], upper: FunctionId)
-type Constraints = List[Constraint]
+case class MonoConstraint(lower: Vector[TypeArg], upper: FunctionId)
+type MonoConstraints = List[MonoConstraint]
 
 type Ground = TypeArg.Base | TypeArg.Boxed
 type Solution = Map[FunctionId, Set[Vector[Ground]]]
 type MonoNames = Map[(FunctionId, Vector[Ground]), FunctionId]
 
 enum TypeArg {
-  case Base(val tpe: Id, targs: List[TypeArg])
+  case Base(tpe: Id, targs: List[TypeArg])
   case Var(funId: FunctionId, pos: Int)
   case Boxed(tpe: BlockType, capt: Captures)
 }
@@ -100,19 +101,19 @@ def prependDefns(defns: List[(Id, Block.New)], last: Stmt): Stmt = defns match {
   case Nil => last
 }
 
-def findConstraints(definitions: List[Toplevel])(using MonoFindContext): Constraints =
+def findConstraints(definitions: List[Toplevel])(using MonoFindContext): MonoConstraints =
   definitions flatMap findConstraints
 
-def findConstraints(definition: Toplevel)(using ctx: MonoFindContext): Constraints = definition match
+def findConstraints(definition: Toplevel)(using ctx: MonoFindContext): MonoConstraints = definition match
   case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
     findConstraints(body)
   case Toplevel.Def(id, block) => 
     findConstraints(block)
-  case Toplevel.Val(id, tpe, binding) => 
+  case Toplevel.Val(id, binding) => 
     findConstraints(binding)
 
-def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): Constraints = declaration match
+def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): MonoConstraints = declaration match
   // Maybe[T] { Just[](x: T) }
   case Data(id, tparams, constructors) =>
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
@@ -121,76 +122,76 @@ def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): Const
       val constructorArgs = (0 until arity).map(index =>
         TypeArg.Var(constr.id, index) // Just.0  
       ).toVector // < Just.0 >
-      Constraint(constructorArgs, id) // < Just.0 > <: Maybe
+      MonoConstraint(constructorArgs, id) // < Just.0 > <: Maybe
     }
   case Interface(id, tparams, properties) => 
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
     properties flatMap findConstraints
 
-def findConstraints(property: Property)(using ctx: MonoFindContext): Constraints = property match {
+def findConstraints(property: Property)(using ctx: MonoFindContext): MonoConstraints = property match {
   case Property(id, tpe@BlockType.Function(tparams, cparams, vparams, bparams, result)) => findConstraints(tpe, id)
   case Property(id, tpe@BlockType.Interface(name, targs)) => findConstraints(tpe)
 }
 
-def findConstraints(block: Block)(using ctx: MonoFindContext): Constraints = block match
+def findConstraints(block: Block)(using ctx: MonoFindContext): MonoConstraints = block match
   case BlockVar(id, annotatedTpe: BlockType.Interface, annotatedCapt) => findConstraints(annotatedTpe)
   case BlockVar(id, annotatedTpe: BlockType.Function, annotatedCapt) => findConstraints(annotatedTpe, id)
   case BlockLit(tparams, cparams, vparams, bparams, body) => findConstraints(body)
   case Unbox(pure) => findConstraints(pure)
   case New(impl) => findConstraints(impl)
 
-def findConstraints(blockType: BlockType.Interface)(using ctx: MonoFindContext): Constraints = blockType match
+def findConstraints(blockType: BlockType.Interface)(using ctx: MonoFindContext): MonoConstraints = blockType match
   case BlockType.Interface(name, targs) => 
     val (newTargs, constraints) = findConstraints(targs)
-    List(Constraint(newTargs.toVector, name)) ++ constraints
+    List(MonoConstraint(newTargs.toVector, name)) ++ constraints
 
-def findConstraints(blockType: BlockType.Function, fnId: Id)(using ctx: MonoFindContext): Constraints = blockType match
+def findConstraints(blockType: BlockType.Function, fnId: Id)(using ctx: MonoFindContext): MonoConstraints = blockType match
   case BlockType.Function(tparams, cparams, vparams, bparams, result) => 
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, fnId))
     List()
 
-def findConstraints(impl: Implementation)(using ctx: MonoFindContext): Constraints = impl match 
+def findConstraints(impl: Implementation)(using ctx: MonoFindContext): MonoConstraints = impl match 
   case Implementation(interface, operations) => 
     findConstraints(interface) ++
     (operations flatMap findConstraints)
 
-def findConstraints(operation: Operation)(using ctx: MonoFindContext): Constraints = operation match
+def findConstraints(operation: Operation)(using ctx: MonoFindContext): MonoConstraints = operation match
   case Operation(name, tparams, cparams, vparams, bparams, body) => 
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, name))
     findConstraints(body)
 
-def findConstraints(constructor: Constructor)(using ctx: MonoFindContext): Constraints = constructor match
+def findConstraints(constructor: Constructor)(using ctx: MonoFindContext): MonoConstraints = constructor match
   case Constructor(id, tparams, List()) => List.empty
   case Constructor(id, tparams, fields) =>
     val (newTargs, constraints) = findConstraints(fields map (_.tpe))
-    List(Constraint(newTargs.toVector, id)) ++ constraints
+    List(MonoConstraint(newTargs.toVector, id)) ++ constraints
 
-def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt match
-  case Let(id, annotatedTpe, binding, body) => findConstraints(binding) ++ findConstraints(body)
+def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): MonoConstraints = stmt match
+  case Let(id, binding, body) => findConstraints(binding) ++ findConstraints(body)
   case Return(expr) => findConstraints(expr)
-  case Val(id, annotatedTpe, binding, body) => findConstraints(binding) ++ findConstraints(body)
+  case Val(id, binding, body) => findConstraints(binding) ++ findConstraints(body)
   case Var(ref, init, capture, body) => findConstraints(body)
   case ImpureApp(id, callee, targs, vargs, bargs, body) =>
     val (newTargs, constraints) = findConstraints(targs)
-    List(Constraint(newTargs.toVector, callee.id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ findConstraints(body) ++ constraints
+    List(MonoConstraint(newTargs.toVector, callee.id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ findConstraints(body) ++ constraints
   case App(callee: BlockVar, targs, vargs, bargs) => 
     val (newTargs, constraints) = findConstraints(targs)
-    List(Constraint(newTargs.toVector, callee.id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ constraints
+    List(MonoConstraint(newTargs.toVector, callee.id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ constraints
   // TODO: Very specialized, but otherwise passing an id that matches in monomorphize is hard
   //       although I'm not certain any other case can even happen 
   // TODO: part 2, also update the implementation in monomorphize if changing this
   case App(Unbox(ValueVar(id, annotatedType)), targs, vargs, bargs) => 
     val (newTargs, constraints) = findConstraints(targs)
-    List(Constraint(newTargs.toVector, id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ constraints
+    List(MonoConstraint(newTargs.toVector, id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ constraints
   case App(callee, targs, vargs, bargs) =>
     findConstraints(callee) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
   // TODO: Maybe need to do something with methodTpe
   case Invoke(callee: BlockVar, method, methodTpe, targs, vargs, bargs) => 
     val (newTargs, constraints) = findConstraints(targs)
-    List(Constraint(newTargs.toVector, method)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ constraints
+    List(MonoConstraint(newTargs.toVector, method)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ constraints
   case Invoke(Unbox(ValueVar(id, annotatedType)), method, methodTpe, targs, vargs, bargs) =>
     val (newTargs, constraints) = findConstraints(targs)
-    List(Constraint(newTargs.toVector, method)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ constraints
+    List(MonoConstraint(newTargs.toVector, method)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ constraints
   case Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
     findConstraints(callee) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
   case Reset(body) => findConstraints(body)
@@ -200,18 +201,21 @@ def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt 
     findConstraints(bbody) ++ findConstraints(body)
   case Def(id, block, body) => 
     findConstraints(block) ++ findConstraints(body)
-  case Shift(prompt, body) => findConstraints(prompt) ++ findConstraints(body)
-  case Match(scrutinee, clauses, default) => 
+    // FIXME: Handle k as well
+  case Shift(prompt, k, body) => findConstraints(prompt) ++ findConstraints(body)
+  case Match(scrutinee, tpe, clauses, default) => 
+    // FIXME: Handle tpe ? 
+
     // TODO: This is probably not technically correct, but allows for fun stuff like
     // type Foo[A] {
     //   Bar[B](x: B)
     // }
     // to be monomorphized (in special cases (?))
-    var additionalConstraint: Constraints = List()
+    var additionalConstraint: MonoConstraints = List()
     clauses.foreach((id, bl) => { bl match {
         case BlockLit(tparams, cparams, vparams, bparams, App(callee: BlockVar, targs, vargs, bargs)) => 
           if (targs.size == tparams.size) {
-            additionalConstraint +:= Constraint(tparams.zipWithIndex.map((_, paramIndex) => TypeArg.Var(id, paramIndex)).toVector, callee.id)
+            additionalConstraint +:= MonoConstraint(tparams.zipWithIndex.map((_, paramIndex) => TypeArg.Var(id, paramIndex)).toVector, callee.id)
           }
         case _ => ()
       }
@@ -223,35 +227,35 @@ def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): Constraints = stmt 
   case Put(ref, annotatedCapt, value, body) => findConstraints(value) ++ findConstraints(body)
   case Alloc(id, init, region, body) => findConstraints(init) ++ findConstraints(body)
   case Region(body) => findConstraints(body)
-  case Hole(span) => List.empty
+  case Hole(tpe, span) => List.empty
 
-def findConstraints(opt: Option[Stmt])(using ctx: MonoFindContext): Constraints = opt match 
+def findConstraints(opt: Option[Stmt])(using ctx: MonoFindContext): MonoConstraints = opt match 
   case None => List.empty
   case Some(stmt) => findConstraints(stmt)
 
-def findConstraints(expr: Expr)(using ctx: MonoFindContext): Constraints = expr match
+def findConstraints(expr: Expr)(using ctx: MonoFindContext): MonoConstraints = expr match
   case PureApp(b, targs, vargs) => 
     val (newTargs, constraints) = findConstraints(targs)
-    Constraint(newTargs.toVector, b.id) :: constraints
+    MonoConstraint(newTargs.toVector, b.id) :: constraints
   case ValueVar(id, annotatedType) => List.empty
   case Literal(value, annotatedType) => List.empty
   case Make(data, tag, targs, vargs) => 
     // TODO: Is this the correct order?
     val combinedTargs = data.targs ++ targs
     val (newTargs, constraints) = findConstraints(combinedTargs)
-    List(Constraint(newTargs.toVector, tag)) ++ // <Int> <: Just
+    List(MonoConstraint(newTargs.toVector, tag)) ++ // <Int> <: Just
     constraints
   case Box(b, annotatedCapture) => 
     findConstraints(b)
 
-def findConstraints(vts: List[ValueType])(using ctx: MonoFindContext): (List[TypeArg], Constraints) = {
+def findConstraints(vts: List[ValueType])(using ctx: MonoFindContext): (List[TypeArg], MonoConstraints) = {
   val vtFindConstraints = vts map findConstraints
   val targs = vtFindConstraints.map(_._1)
   val constraints = vtFindConstraints.flatMap(_._2)
   (targs, constraints)
 }
 
-def findConstraints(vt: ValueType)(using ctx: MonoFindContext): (TypeArg, Constraints) = vt match {
+def findConstraints(vt: ValueType)(using ctx: MonoFindContext): (TypeArg, MonoConstraints) = vt match {
   case ValueType.Boxed(tpe@BlockType.Function(tparams, cparams, vparams, bparams, result), capt) => {
     // TODO: Perhaps recurse into tpe
     // TODO: What do I do with a function type here? It does not have a name which does not work for my current findConstraints
@@ -264,7 +268,7 @@ def findConstraints(vt: ValueType)(using ctx: MonoFindContext): (TypeArg, Constr
   case ValueType.Data(name, targs) => {
     val (newTargs, constraints) = findConstraints(targs)
     val additionalConstraints = if (!newTargs.isEmpty) {
-      List(Constraint(newTargs.toVector, name))
+      List(MonoConstraint(newTargs.toVector, name))
     } else {
       List.empty
     }
@@ -273,7 +277,7 @@ def findConstraints(vt: ValueType)(using ctx: MonoFindContext): (TypeArg, Constr
   case ValueType.Var(name) => (ctx.typingContext(name), List.empty)
 }
 
-def solveConstraints(constraints: Constraints)(using Context): Solution = {
+def solveConstraints(constraints: MonoConstraints)(using Context): Solution = {
   val filteredConstraints = constraints.filterNot(c => c.lower.isEmpty)
   val groupedConstraints = filteredConstraints.groupBy(c => c.upper)
   var bounds = groupedConstraints.map((sym, constraints) => (sym -> constraints.map(c => c.lower).toSet))
@@ -360,8 +364,8 @@ def monomorphize(toplevel: Toplevel)(using ctx: MonoContext)(using Context, Decl
     )
   case Toplevel.Def(id, block) => 
     List(Toplevel.Def(id, monomorphize(block)))
-  case Toplevel.Val(id, tpe, binding) => 
-    List(Toplevel.Val(id, monomorphize(tpe), monomorphize(binding)))
+  case Toplevel.Val(id, binding) => 
+    List(Toplevel.Val(id, monomorphize(binding)))
 
 def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] = decl match
   case Data(id, List(), constructors) => 
@@ -498,34 +502,12 @@ def monomorphize(blockVar: BlockVar, replacementId: FunctionId, targs: List[Valu
 
 def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationContext): Stmt = stmt match
   case Return(expr) => Return(monomorphize(expr))
-  case Val(id, annotatedTpe, binding, body) => 
-    Val(id, monomorphize(annotatedTpe), monomorphize(binding), monomorphize(body))
+  case Val(id, binding, body) => 
+    Val(id, monomorphize(binding), monomorphize(body))
   case Var(ref, init, capture, body) => 
     Var(ref, monomorphize(init), capture, monomorphize(body))
   case ImpureApp(id, callee, targs, vargs, bargs, body) =>
-    val monoVargs = vargs map monomorphize
-    val monoTargs = targs map monomorphize
-    val monoBody = monomorphize(body)
-
-    // We need to see what happens to the extern function if we monomorphize it
-    // and then compare our arguments and the expected parameters to see if any are mismatches, then coerce those
-    val functionTpe = core.Type.instantiate(callee.functionType, monoTargs, callee.functionType.cparams.map(c => Set(c)))
-    val newVargs = callee.functionType.vparams.zip(monoVargs).map({
-      case (vt, expr) => (vt, expr.tpe) match {
-        case (ValueType.Var(varName), evt@ValueType.Data(name, targs)) if (evt == core.Type.TInt) || (evt == core.Type.TChar) || (evt == core.Type.TByte) || (evt == core.Type.TDouble) =>
-          PolymorphismBoxing.coerce(expr, vt)
-        case (_, _) => expr
-      } 
-    })
-
-    functionTpe.result match {
-      case vt@ValueType.Data(name, targs) if (vt == core.Type.TInt) || (vt == core.Type.TChar) || (vt == core.Type.TByte) || (vt == core.Type.TDouble) =>         
-        val fid = Id("imp_app")
-        ImpureApp(fid, callee, monoTargs, newVargs, bargs map monomorphize, 
-          Let(id, vt, PolymorphismBoxing.coerce(ValueVar(fid, callee.functionType.result), vt), monoBody))
-      case _ => 
-        ImpureApp(id, callee, monoTargs, newVargs, bargs map monomorphize, monoBody)
-    }
+    ImpureApp(id, callee, targs, vargs, bargs, body)
   case App(callee: BlockVar, targs, vargs, bargs) => 
     val replacementData = replacementDataFromTargs(callee.id, targs)
     App(monomorphize(callee, replacementData.name, targs), List.empty, vargs map monomorphize, bargs map monomorphize)
@@ -536,7 +518,7 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
     App(Unbox(ValueVar(id, monomorphize(annotatedTpe))), List.empty, vargs map monomorphize, bargs map monomorphize)
   case App(callee, targs, vargs, bargs) =>
     App(monomorphize(callee), List.empty, vargs map monomorphize, bargs map monomorphize)
-  case Let(id, annotatedTpe, binding, body) => Let(id, monomorphize(annotatedTpe), monomorphize(binding), monomorphize(body))
+  case Let(id, binding, body) => Let(id, monomorphize(binding), monomorphize(body))
   case If(cond, thn, els) => If(monomorphize(cond), monomorphize(thn), monomorphize(els))
   case Invoke(Unbox(pure), method, methodTpe, targs, vargs, bargs) =>
     Invoke(Unbox(monomorphize(pure)), method, methodTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
@@ -570,8 +552,8 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
     }
     nestDefs(monoTypes)
   case Def(id, block, body) => Def(id, monomorphize(block), monomorphize(body))
-  case Shift(prompt, body) => Shift(monomorphize(prompt), monomorphize(body))
-  case Match(scrutinee, clauses, default) =>
+  case Shift(prompt, k, body) => Shift(monomorphize(prompt), monomorphize(k), monomorphize(body))
+  case Match(scrutinee, matchTpe, clauses, default) =>
     val monoScrutinee = monomorphize(scrutinee)
 
     // FIXME: Not correct in all cases. Have to figure out where this is needed
@@ -583,7 +565,7 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
     }
 
     val monoClauses = clauses.flatMap(monomorphize(_, monoScrutineeType.toVector))
-    Match(monomorphize(scrutinee), monoClauses, monomorphize(default))
+    Match(monomorphize(scrutinee), monomorphize(matchTpe), monoClauses, monomorphize(default))
   case Get(id, annotatedTpe, ref, annotatedCapt, body) =>
     Get(id, monomorphize(annotatedTpe), ref, annotatedCapt, monomorphize(body))
   case Put(ref, annotatedCapt, value, body) =>
@@ -591,7 +573,7 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
   case Alloc(id, init, region, body) =>
     Alloc(id, monomorphize(init), region, monomorphize(body))
   case Region(body) => Region(monomorphize(body))
-  case Hole(span) => Hole(span)
+  case Hole(tpe, span) => Hole(monomorphize(tpe), span)
 
 def exprType(expr: Expr): ValueType = expr match {
   case Box(b, annotatedCapture) => ValueType.Boxed(b.tpe, annotatedCapture)
@@ -617,7 +599,7 @@ def monomorphize(clause: (Id, BlockLit), scrutineeTypes: Vector[ValueType])(usin
       case None => 
         // WARN: There is no mono name for some clause in the match
         //       This will happen for example in List[T] ( Cons(head: T, rest: List[T]), Nil() )
-        //       if one of the constructors is never initialized and therefore there is no Constraint flowing into it
+        //       if one of the constructors is never initialized and therefore there is no MonoConstraint flowing into it
         //       in that case we can just reuse the original name, as it is never initialized
         List((id, BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))))
     }

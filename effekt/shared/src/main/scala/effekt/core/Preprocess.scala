@@ -200,7 +200,7 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
       definitions.map({
         case Toplevel.Def(id, block: Block.BlockLit) => Toplevel.Def(id, preprocess(block))
         case Toplevel.Def(id, block) => Toplevel.Def(id, block)
-        case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, tpe, preprocess(binding))
+        case Toplevel.Val(id, binding) => Toplevel.Val(id, preprocess(binding))
       })
 
     def preprocess(block: Block)(using PreprocessContext): Block = block match
@@ -268,8 +268,8 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
           case Unbox(pure) => sys error "Should not happen, BindSubexpressions ran before"
         }
       }
-      case Val(id, annotatedTpe, binding, body) => 
-        Val(id, annotatedTpe, preprocess(binding), preprocess(body))
+      case Val(id, binding, body) => 
+        Val(id, preprocess(binding), preprocess(body))
       case ImpureApp(id, callee, targs, vargs, bargs, body) => 
         ImpureApp(id, callee, targs, vargs, bargs, preprocess(body))
       case Return(expr) => Return(expr)
@@ -277,16 +277,16 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
       case Def(id, block: Block.BlockLit, body) => Def(id, preprocess(block), preprocess(body))
       case Def(id, block, body) => Def(id, block, preprocess(body))
       case Get(id, annotatedTpe, ref, annotatedCapt, body) => Get(id, annotatedTpe, ref, annotatedCapt, preprocess(body))
-      case Hole(span) => stmt
+      case Hole(tpe, span) => stmt
       case If(cond, thn, els) => If(cond, preprocess(thn), preprocess(els))
       case Invoke(callee, method, methodTpe, targs, vargs, bargs) => stmt
-      case Let(id, annotatedTpe, binding, body) => Let(id, annotatedTpe, binding, preprocess(body))
-      case Match(scrutinee, clauses, default) => stmt
+      case Let(id, binding, body) => Let(id, binding, preprocess(body))
+      case Match(scrutinee, matchTpe, clauses, default) => stmt
       case Put(ref, annotatedCapt, value, body) => Put(ref, annotatedCapt, value, preprocess(body))
       case Region(body) => stmt
       case Reset(body) => stmt
       case Resume(k, body) => Resume(k, preprocess(body))
-      case Shift(prompt, body) => stmt
+      case Shift(prompt, k, body) => stmt
       case Var(ref, init, capture, body) => Var(ref, init, capture, preprocess(body))
     }
 
