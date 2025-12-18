@@ -65,8 +65,8 @@ class MonoTests extends AbstractMonoTests {
 
     test("simple polymorphic function") {
         val constraints = List(
-            Constraint(Vector(BaseTInt), id("a")),
-            Constraint(Vector(BaseTString), id("a"))
+            MonoConstraint(Vector(BaseTInt), id("a")),
+            MonoConstraint(Vector(BaseTString), id("a"))
         )
         val expectedSolved: Solution = Map(
             id("a") -> Set(Vector(BaseTInt), Vector(BaseTString))
@@ -77,9 +77,9 @@ class MonoTests extends AbstractMonoTests {
 
     test("calling other polymorphic function") {
         val constraints = List(
-            Constraint(Vector(Var(id("b"), 0)), id("a")),
-            Constraint(Vector(BaseTInt), id("a")),
-            Constraint(Vector(BaseTString), id("b")),
+            MonoConstraint(Vector(Var(id("b"), 0)), id("a")),
+            MonoConstraint(Vector(BaseTInt), id("a")),
+            MonoConstraint(Vector(BaseTString), id("b")),
         )
         val expectedSolved: Solution = Map(
             id("a") -> Set(Vector(BaseTInt), Vector(BaseTString)),
@@ -91,9 +91,9 @@ class MonoTests extends AbstractMonoTests {
 
     test("polymorphic function with multiple type args") {
         val constraints = List(
-            Constraint(Vector(BaseTInt, BaseTString), id("a")),
-            Constraint(Vector(BaseTBool, BaseTChar), id("a")),
-            Constraint(Vector(BaseTBool, BaseTString), id("a")),
+            MonoConstraint(Vector(BaseTInt, BaseTString), id("a")),
+            MonoConstraint(Vector(BaseTBool, BaseTChar), id("a")),
+            MonoConstraint(Vector(BaseTBool, BaseTString), id("a")),
         )
         val expectedSolved: Solution = Map(
             id("a") -> Set(
@@ -108,8 +108,8 @@ class MonoTests extends AbstractMonoTests {
 
     test("calling other polymorphic function with type args swapped") {
         val constraints = List(
-            Constraint(Vector(Var(id("b"), 1), Var(id("b"), 0)), id("a")),
-            Constraint(Vector(BaseTString, BaseTBool), id("b")),
+            MonoConstraint(Vector(Var(id("b"), 1), Var(id("b"), 0)), id("a")),
+            MonoConstraint(Vector(BaseTString, BaseTBool), id("b")),
         )
         val expectedSolved: Solution = Map(
             id("a") -> Set(Vector(BaseTBool, BaseTString)),
@@ -121,8 +121,8 @@ class MonoTests extends AbstractMonoTests {
 
     test("recursive polymorphic function") {
         val constraints = List(
-            Constraint(Vector(Var(id("a"), 0)), id("a")),
-            Constraint(Vector(BaseTInt), id("a")),
+            MonoConstraint(Vector(Var(id("a"), 0)), id("a")),
+            MonoConstraint(Vector(BaseTInt), id("a")),
         )
         val expectedSolved: Solution = Map(
             id("a") -> Set(Vector(BaseTInt)),
@@ -133,10 +133,10 @@ class MonoTests extends AbstractMonoTests {
 
     test("mutually recursive polymorphic functions") {
         val constraints = List(
-            Constraint(Vector(Var(id("b"), 0)), id("a")),
-            Constraint(Vector(Var(id("a"), 0)), id("b")),
-            Constraint(Vector(BaseTInt), id("a")),
-            Constraint(Vector(BaseTString), id("b")),
+            MonoConstraint(Vector(Var(id("b"), 0)), id("a")),
+            MonoConstraint(Vector(Var(id("a"), 0)), id("b")),
+            MonoConstraint(Vector(BaseTInt), id("a")),
+            MonoConstraint(Vector(BaseTString), id("b")),
         )
         val expectedSolved: Solution = Map(
             id("a") -> Set(Vector(BaseTInt), Vector(BaseTString)),
@@ -148,10 +148,10 @@ class MonoTests extends AbstractMonoTests {
 
     test("correct product of vars") {
         val constraints = List(
-            Constraint(Vector(BaseTInt), id("a")),
-            Constraint(Vector(BaseTString), id("a")),
-            Constraint(Vector(BaseTBool), id("b")),
-            Constraint(Vector(Var(id("a"), 0), Var(id("b"), 0)), id("c")),
+            MonoConstraint(Vector(BaseTInt), id("a")),
+            MonoConstraint(Vector(BaseTString), id("a")),
+            MonoConstraint(Vector(BaseTBool), id("b")),
+            MonoConstraint(Vector(Var(id("a"), 0), Var(id("b"), 0)), id("c")),
         )
 
         val expectedSolved: Solution = Map(
@@ -165,8 +165,8 @@ class MonoTests extends AbstractMonoTests {
 
     test("nested constraints") {
         val constraints = List(
-            Constraint(Vector(Base(id("Weighted"), List(Var(id("b"), 0)))), id("a")),
-            Constraint(Vector(BaseTInt), id("b"))
+            MonoConstraint(Vector(Base(id("Weighted"), List(Var(id("b"), 0)))), id("a")),
+            MonoConstraint(Vector(BaseTInt), id("b"))
         )
 
         val expectedSolved: Solution = Map(
