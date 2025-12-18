@@ -3,7 +3,6 @@ package core
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
-import effekt.core.PolymorphismBoxing.ValueCoercer.IdentityCoercer
 import effekt.symbols
 import effekt.symbols.{ TmpBlock, TmpValue }
 import effekt.{ CoreTransformed, Phase }
@@ -36,7 +35,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       wrappings +:= (id, stmt)
 
     def wrap(wraps: List[(Id, Stmt)], stmt: Stmt): Stmt = wraps match {
-      case (id, binding) :: next => Stmt.Val(id, TString, binding, wrap(next, stmt)) 
+      case (id, binding) :: next => Stmt.Val(id, binding, wrap(next, stmt)) 
       case Nil => stmt
     }
 
@@ -82,7 +81,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(toplevel: Toplevel)(using Context, ShowContext, DeclarationContext): Toplevel = toplevel match {
     case Toplevel.Def(id, block) => Toplevel.Def(id, transform(block))
-    case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, tpe, transform(binding))
+    case Toplevel.Val(id, binding) => Toplevel.Val(id, transform(binding))
   }
 
   def transform(block: Block)(using Context, ShowContext, DeclarationContext): Block = block match {
@@ -116,18 +115,18 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(stmt: Stmt)(using ctx: ShowContext)(using Context, DeclarationContext): Stmt = 
     stmt match {
-      case Let(id, annotatedTpe, PureApp(BlockVar(bid, bannotatedTpe, bannotatedCapt), targs, vargs), body) if bid.name.name == FUNCTION_NAME => 
+      case Let(id, PureApp(BlockVar(bid, bannotatedTpe, bannotatedCapt), targs, vargs), body) if bid.name.name == FUNCTION_NAME => 
         if (targs.length != 1) Context.abort(pretty"Expected targs for '${FUNCTION_NAME}' to have exactly one argument")
         // We need to wrap here, because vargs might have been extern show calls that are now not
         // this might happen everywhere we directly transform an expression, I will not mark any further occurences
         val vargs_ = vargs map transform
         val wraps = ctx.getWraps
-        val stmt = Stmt.Val(id, annotatedTpe, Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs_, List.empty), transform(body))
+        val stmt = Stmt.Val(id, Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs_, List.empty), transform(body))
         ctx.wrap(wraps, stmt)
-      case Let(id, annotatedTpe, binding, body) => 
+      case Let(id, binding, body) => 
         val binding_ = transform(binding)
         val wraps = ctx.getWraps
-        val stmt = Let(id, annotatedTpe, binding_, transform(body))
+        val stmt = Let(id, binding_, transform(body))
         ctx.wrap(wraps, stmt)
       case Return(expr) => 
         val expr_ = transform(expr)
@@ -139,7 +138,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         val vargs_ = vargs map transform
         val bargs_ = bargs map transform
         val wraps = ctx.getWraps
-        val stmt = Stmt.Val(id, TString, Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs_, bargs_), transform(body))
+        val stmt = Stmt.Val(id, Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs_, bargs_), transform(body))
         ctx.wrap(wraps, stmt)
       case ImpureApp(id, callee, targs, vargs, bargs, body) => 
         val vargs_ = vargs map transform
@@ -148,7 +147,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         val stmt = ImpureApp(id, callee, targs, vargs_, bargs_, transform(body))
         ctx.wrap(wraps, stmt)
       case Def(id, block, body) => Def(id, transform(block), transform(body))
-      case Val(id, annotatedTpe, binding, body) => Val(id, annotatedTpe, transform(binding), transform(body))
+      case Val(id, binding, body) => Val(id, transform(binding), transform(body))
       case App(callee, targs, vargs, bargs) => 
         val vargs_ = vargs map transform
         val bargs_ = bargs map transform
@@ -166,10 +165,10 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         val wraps = ctx.getWraps
         val stmt = If(transform(cond), transform(thn), transform(els))
         ctx.wrap(wraps, stmt)
-      case Match(scrutinee, clauses, default) => 
+      case Match(scrutinee, matchTpe, clauses, default) => 
         val scrutinee_ = transform(scrutinee)
         val wraps = ctx.getWraps
-        val stmt = Match(scrutinee_, clauses map ((id, blockLit) => (id, transform(blockLit))), transform(default))
+        val stmt = Match(scrutinee_, matchTpe, clauses map ((id, blockLit) => (id, transform(blockLit))), transform(default))
         ctx.wrap(wraps, stmt)
       case Region(body) => Region(transform(body))
       case Alloc(id, init, region, body) => 
@@ -189,9 +188,10 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         val stmt = Put(ref, annotatedCapt, value_, transform(body))
         ctx.wrap(wraps, stmt)
       case Reset(body) => Reset(transform(body))
-      case Shift(prompt, body) => Shift(transform(prompt), transform(body))
+      // FIXME: Does k need to be handled?
+      case Shift(prompt, k, body) => Shift(transform(prompt), k, transform(body))
       case Resume(k, body) => Resume(transform(k), transform(body))
-      case Hole(span) => Hole(span)
+      case Hole(tpe, span) => Hole(tpe, span)
     }
 
   def transform(expr: Expr)(using ctx: ShowContext)(using Context, DeclarationContext): Expr = expr match {
@@ -336,6 +336,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     val clauses = decl.constructors.zip(constructorVparams).map(constructorClauses)
     val matchStmt = Stmt.Match(
       ValueVar(valueId, valueTpe),
+      TString,
       clauses,
       None
     )
@@ -372,7 +373,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       
       def fieldValStmts(idapps: List[(Id, Stmt.App)]): Stmt = 
         idapps match {
-          case (id, app) :: next => Stmt.Val(id, TString, app, fieldValStmts(next))
+          case (id, app) :: next => Stmt.Val(id, app, fieldValStmts(next))
           case Nil => Return(concatenated)
         }
       
