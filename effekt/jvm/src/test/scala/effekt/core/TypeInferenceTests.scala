@@ -3,6 +3,7 @@ package core
 
 import effekt.core.Type.*
 import effekt.util.messages.{ DebugMessaging, ErrorReporter }
+import scala.collection.immutable.HashMap
 
 class TypeInferenceTests extends CoreTests {
 
@@ -86,13 +87,13 @@ class TypeInferenceTests extends CoreTests {
   }
 
   test("compatibility") {
-    Free.valuesCompatible(Map.empty, Map.empty)
-    Free.valuesCompatible(Map(f -> TInt), Map.empty)
-    Free.valuesCompatible(Map(f -> TInt), Map(f -> TInt))
-    Free.valuesCompatible(Map(f -> TInt), Map(f -> TInt, g -> TByte))
+    Free.mergeValues(HashMap.empty, HashMap.empty)
+    Free.mergeValues(HashMap(f -> TInt), HashMap.empty)
+    Free.mergeValues(HashMap(f -> TInt), HashMap(f -> TInt))
+    Free.mergeValues(HashMap(f -> TInt), HashMap(f -> TInt, g -> TByte))
 
     intercept[TypeError] {
-      Free.valuesCompatible(Map(f -> TInt), Map(f -> TBoolean, g -> TByte))
+      Free.mergeValues(HashMap(f -> TInt), HashMap(f -> TBoolean, g -> TByte))
     }
   }
 
@@ -120,7 +121,7 @@ class TypeInferenceTests extends CoreTests {
 
     // we can even type check open terms:
     assertEquals(typecheck(Stmt.Return(Expr.ValueVar(x, TInt))),
-      Typing(TInt, Set.empty, Free(Map(x -> TInt), Map.empty, Constraints.empty)))
+      Typing(TInt, Set.empty, Free(HashMap(x -> TInt), HashMap.empty, Constraints.empty)))
 
     val add: Block.BlockVar = Block.BlockVar(infixAdd, BlockType.Function(Nil, Nil, List(TInt, TInt), Nil, TInt), Set.empty)
 

@@ -6,7 +6,7 @@ import effekt.util.{ Structural, Trampoline }
 import effekt.util.messages.INTERNAL_ERROR
 import effekt.util.messages.ErrorReporter
 
-import scala.annotation.{ tailrec, targetName }
+import scala.annotation.{ tailrec }
 
 /**
  * Tree structure of programs in our internal core representation.
@@ -185,10 +185,10 @@ enum Expr extends Tree {
 
   case Box(b: Block, annotatedCapture: Captures)
 
-  val typing: Typing[ValueType] = Type.typecheck(this)
-  val tpe: ValueType = typing.tpe
-  val capt: Captures = typing.capt
-  val free: Free = typing.free
+  lazy val typing: Typing[ValueType] = Type.typecheck(this)
+  lazy val tpe: ValueType = typing.tpe
+  lazy val capt: Captures = typing.capt
+  lazy val free: Free = typing.free
 
   // This is to register custom type renderers in IntelliJ -- yes, it has to be a method!
   def show: String = util.show(this)
@@ -214,10 +214,10 @@ enum Block extends Tree {
   case Unbox(pure: Expr)
   case New(impl: Implementation)
 
-  val typing: Typing[BlockType] = Type.typecheck(this)
-  val tpe: BlockType = typing.tpe
-  val capt: Captures = typing.capt
-  val free: Free = typing.free
+  lazy val typing: Typing[BlockType] = Type.typecheck(this)
+  lazy val tpe: BlockType = typing.tpe
+  lazy val capt: Captures = typing.capt
+  lazy val free: Free = typing.free
 
   def show: String = util.show(this)
 }
@@ -299,10 +299,10 @@ enum Stmt extends Tree {
   // Others
   case Hole(annotatedTpe: ValueType, span: effekt.source.Span)
 
-  val typing: Typing[ValueType] = Type.typecheck(this)
-  val tpe: ValueType = typing.tpe
-  val capt: Captures = typing.capt
-  val free: Free = typing.free
+  lazy val typing: Typing[ValueType] = Type.typecheck(this)
+  lazy val tpe: ValueType = typing.tpe
+  lazy val capt: Captures = typing.capt
+  lazy val free: Free = typing.free
 
   def show: String = util.show(this)
 }
@@ -315,18 +315,18 @@ export Stmt.*
  * Used to represent handlers / capabilities, and objects / modules.
  */
 case class Implementation(interface: BlockType.Interface, operations: List[Operation]) extends Tree {
-  val typing: Typing[BlockType.Interface] = Type.typecheck(this)
-  val tpe: BlockType.Interface = typing.tpe
-  val capt: Captures = typing.capt
+  lazy val typing: Typing[BlockType.Interface] = Type.typecheck(this)
+  lazy val tpe: BlockType.Interface = typing.tpe
+  lazy val capt: Captures = typing.capt
 }
 
 /**
  * Implementation of a method / effect operation.
  */
 case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends Tree {
-  val typing: Typing[BlockType.Function] = Type.typecheck(this)
-  val tpe: BlockType.Function = typing.tpe
-  val capt: Captures = typing.capt
+  lazy val typing: Typing[BlockType.Function] = Type.typecheck(this)
+  lazy val tpe: BlockType.Function = typing.tpe
+  lazy val capt: Captures = typing.capt
 }
 
 /**
@@ -981,23 +981,3 @@ object substitutions {
     Type.substitute(capt, subst.captures)
 }
 
-@targetName("preserveTypesStmt")
-inline def preserveTypes(before: Stmt)(inline f: Stmt => Stmt): Stmt = {
-  val after = f(before)
-  assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
-  after
-}
-
-@targetName("preserveTypesExpr")
-inline def preserveTypes(before: Expr)(inline f: Expr => Expr): Expr = {
-  val after = f(before)
-  assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
-  after
-}
-
-@targetName("preserveTypesBlock")
-inline def preserveTypes(before: Block)(inline f: Block => Block): Block = {
-  val after = f(before)
-  assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
-  after
-}

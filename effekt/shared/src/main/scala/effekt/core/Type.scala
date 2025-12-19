@@ -91,13 +91,13 @@ case class MatchClause(ctor: Id, result: ValueType.Data, existentialTypeArgs: Li
 
 type Constraint = Expr.Make | Implementation | MatchClause
 
+import scala.collection.immutable.HashMap
+
 // only used for type checking
-case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures)], constraints: Constraints) {
+case class Free(values: HashMap[Id, ValueType], blocks: HashMap[Id, (BlockType, Captures)], constraints: Constraints) {
   // throws type error if they are not compatible
   def ++(other: Free): Free =
-    Free.valuesCompatible(values, other.values)
-    Free.blocksCompatible(blocks, other.blocks)
-    Free(values ++ other.values, blocks ++ other.blocks, constraints ++ other.constraints)
+    Free(Free.mergeValues(values, other.values), Free.mergeBlocks(blocks, other.blocks), constraints ++ other.constraints)
 
   def withoutValue(id: Id, tpe: ValueType): Free =
     values.get(id).foreach { otherTpe =>
@@ -129,28 +129,26 @@ case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures
   def toSet: Set[Id] = values.keySet ++ blocks.keySet
 }
 object Free {
-  def empty = Free(Map.empty, Map.empty, Constraints.empty)
-  def value(id: Id, tpe: ValueType) = Free(Map(id -> tpe), Map.empty, Constraints.empty)
-  def block(id: Id, tpe: BlockType, capt: Captures) = Free(Map.empty, Map(id -> (tpe, capt)), Constraints.empty)
+  def empty = Free(HashMap.empty, HashMap.empty, Constraints.empty)
+  def value(id: Id, tpe: ValueType) = Free(HashMap(id -> tpe), HashMap.empty, Constraints.empty)
+  def block(id: Id, tpe: BlockType, capt: Captures) = Free(HashMap.empty, HashMap(id -> (tpe, capt)), Constraints.empty)
 
-  def defer(c: Constraint) = Free(Map.empty, Map.empty, Constraints(c))
+  def defer(c: Constraint) = Free(HashMap.empty, HashMap.empty, Constraints(c))
 
-  def valuesCompatible(free1: Map[Id, ValueType], free2: Map[Id, ValueType]): Unit =
-    val same = free1.keySet intersect free2.keySet
-    same.foreach { id => Type.valueShouldEqual(free1(id), free2(id)) }
+  def mergeValues(free1: HashMap[Id, ValueType], free2: HashMap[Id, ValueType]): HashMap[Id, ValueType] =
+    free1.merged(free2) {
+      case ((id1, tpe1), (id2, tpe2)) =>
+        Type.valueShouldEqual(tpe1, tpe2)
+        id1 -> tpe1
+    }
 
-  def blocksCompatible(free1: Map[Id, (BlockType, Captures)], free2: Map[Id, (BlockType, Captures)]): Unit =
-    val same = free1.keySet intersect free2.keySet
-    same.foreach { id =>
-      val (tpe1, capt1) = free1(id)
-      val (tpe2, capt2) = free2(id)
-      Type.blockShouldEqual(tpe1, tpe2)
-      // for now ignore captures... :(
-      //assert(Type.equals(capt1, capt2))
+  def mergeBlocks(free1: HashMap[Id, (BlockType, Captures)], free2: HashMap[Id, (BlockType, Captures)]): HashMap[Id, (BlockType, Captures)] =
+    free1.merged(free2) {
+      case ((id1, (tpe1, capt1)), (id2, (tpe2, capt2))) =>
+        Type.blockShouldEqual(tpe1, tpe2)
+        id1 -> (tpe1, capt1)
     }
 }
-
-
 
 case class Typing[+T](tpe: T, capt: Captures, free: Free) {
   def map[S](f: T => S): Typing[S] = Typing(f(tpe), capt, free)
@@ -181,7 +179,7 @@ object Type {
     case _ => false
   }
 
-  private final def all[T](tpes1: List[T], tpes2: List[T], pred: (T, T) => Boolean): Boolean =
+  private final inline def all[T](tpes1: List[T], tpes2: List[T], inline pred: (T, T) => Boolean): Boolean =
     tpes1.size == tpes2.size && tpes1.zip(tpes2).forall { case (t1, t2) => pred(t1, t2) }
 
   def equals(tpe1: BlockType, tpe2: BlockType): Boolean = (tpe1, tpe2) match {
@@ -609,7 +607,7 @@ object Type {
   def blockShouldEqual(tpe1: BlockType, tpe2: BlockType): Unit =
     if !Type.equals(tpe1, tpe2) then typeError(s"Block type mismatch:\n  ${util.show(tpe1)}\n  ${util.show(tpe2)}")
 
-  private def all[T, R](terms: List[T], check: T => Typing[R]): Typing[List[R]] =
+  private inline def all[T, R](terms: List[T], inline check: T => Typing[R]): Typing[List[R]] =
     terms.foldRight(Typing[List[R]](Nil, Set.empty, Free.empty)) {
       case (term, Typing(tpes, capts, frees)) =>
         val Typing(tpe, capt, free) = check(term)

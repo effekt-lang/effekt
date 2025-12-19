@@ -16,7 +16,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
       case CoreTransformed(source, tree, mod, core) =>
         val term = Context.ensureMainExists(mod)
         val optimized = Context.timed("optimize", source.name) { optimize(source, term, core) }
-        optimized.typecheck()
+        if Context.config.debug() then optimized.typecheck()
         Some(CoreTransformed(source, tree, mod, optimized))
     }
 
@@ -38,7 +38,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     def normalize(m: ModuleDecl) = {
       val anfed = BindSubexpressions.transform(m)
-      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt, Context.config.debug())
       val live = Deadcode.remove(mainSymbol, normalized)
       val tailRemoved = RemoveTailResumptions(live)
       val contified = DirectStyle.rewrite(tailRemoved)
