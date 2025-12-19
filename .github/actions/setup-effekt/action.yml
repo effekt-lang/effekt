@@ -41,6 +41,7 @@ runs:
       uses: sbt/setup-sbt@v1
 
     - name: Setup Mill
+      if: runner.os != 'Windows'
       uses: zhutmost/setup-mill@v1.3.0
       with:
         mill-version: ${{ inputs.mill-version }}
