@@ -57,7 +57,7 @@ jobs:
         run: mill project.install
 
       - name: Test effekt binary
-        run: effekt.sh --help
+        run: effekt --help
 
   windows-tests:
     name: "Windows Smoke Test"
