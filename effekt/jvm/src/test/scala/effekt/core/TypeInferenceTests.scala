@@ -111,12 +111,12 @@ class TypeInferenceTests extends CoreTests {
 
     assertEquals(ex1.tpe, TInt)
     assertEquals(ex1.capt, Set.empty)
-    assertEquals(ex1.free, Free.empty)
+    assertEquals(ex1.free, Free.value(x, TInt).withoutValue(x, TInt))
 
     intercept[TypeError] {
       Stmt.Val(x,
         Stmt.Return(Expr.Literal(true, TBoolean)),
-        Stmt.Return(Expr.ValueVar(x, TInt)))
+        Stmt.Return(Expr.ValueVar(x, TInt))).free.wellformed()
     }
 
     // we can even type check open terms:
@@ -129,8 +129,11 @@ class TypeInferenceTests extends CoreTests {
       Stmt.Return(Expr.Literal(42, TInt)),
       Stmt.Return(Expr.PureApp(add, Nil, Expr.ValueVar(x, TInt) :: Expr.ValueVar(x, TInt) :: Nil)))
 
-    assertEquals(typecheck(ex3),
-      Typing(TInt, Set.empty, Free.block(add.id, add.annotatedTpe, add.annotatedCapt)), Constraints.empty)
+    val result3 = typecheck(ex3)
+    assertEquals(result3.tpe, TInt)
+    assertEquals(result3.capt, Set.empty)
+    assert(result3.free.freeIds == Set(add.id))
+    result3.free.wellformed()
 
     // [A](Option[A], A): A
     val orElse: Block.BlockVar = Block.BlockVar(f, BlockType.Function(A :: Nil, Nil, List(OptionT(ValueType.Var(A)), ValueType.Var(A)), Nil, ValueType.Var(A)), Set.empty)
@@ -139,15 +142,18 @@ class TypeInferenceTests extends CoreTests {
 
     // swapped arguments
     intercept[TypeError] {
-      typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(y, TInt) :: Expr.ValueVar(x, OptionT(TInt)) :: Nil))
+      val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(y, TInt) :: Expr.ValueVar(x, OptionT(TInt)) :: Nil))
+      res.free.wellformed()
     }
     // too few arguments
     intercept[TypeError] {
-      typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Nil))
+      val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Nil))
+      res.free.wellformed()
     }
     // incompatible free variables in arguments
     intercept[TypeError] {
-      typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(x, TInt) :: Nil))
+      val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(x, TInt) :: Nil))
+      res.free.wellformed()
     }
 
     val ex4: Expr.Make = Make(OptionT(TInt), SomeC, List(), List(Literal(42, TInt)))
@@ -170,5 +176,6 @@ class TypeInferenceTests extends CoreTests {
     assertEquals(Type.equals(got, expected), true)
 
   inline def shouldTypeCheckAs(expected: ValueType, expr: Expr)(using DeclarationContext): Unit =
+    expr.free.wellformed()
     assertSameType(expr.tpe, expected)
 }

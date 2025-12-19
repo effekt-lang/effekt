@@ -99,14 +99,14 @@ object Transformer {
         // Does not work for mutually recursive local definitions (which are not supported anyway, at the moment)
         val freeValueParams = block.free.freeValues.collect {
           // globals are NOT free
-          case core.ValueParam(id, tpe) if !BPC.globals.contains(id) => Variable(transform(id), transform(tpe))
+          case (id, tpe) if !BPC.globals.contains(id) => Variable(transform(id), transform(tpe))
         }
         val freeBlockParams = block.free.freeBlocks.flatMap {
 
           // Function itself
-          case core.BlockParam(pid, tpe, capt) if pid == id => Set.empty
+          case (pid, (tpe, capt)) if pid == id => Set.empty
 
-          case core.BlockParam(pid, tpe, capt) =>
+          case (pid, (tpe, capt)) =>
             BPC.info.get(pid) match {
               // For each known free block we have to add its free variables to this one (flat closure)
               case Some(BlockInfo.Definition(freeParams, blockParams, _)) =>
