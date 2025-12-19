@@ -66,10 +66,8 @@ type Constraint = Expr.Make | Implementation | MatchClause
 
 sealed trait Free {
   def without(values: List[ValueParam], blocks: List[BlockParam]): Free = Free.Without(values, blocks, this)
-  def withoutValues(bindings: List[ValueParam]): Free = without(bindings, Nil)
-  def withoutBlocks(bindings: List[BlockParam]): Free = without(Nil, bindings)
   def withoutBlock(id: Id, tpe: BlockType, capt: Captures): Free = without(Nil, BlockParam(id, tpe, capt) :: Nil)
-  def withoutValue(id: Id, tpe: ValueType): Free = withoutValues(ValueParam(id, tpe) :: Nil)
+  def withoutValue(id: Id, tpe: ValueType): Free = without(ValueParam(id, tpe) :: Nil, Nil)
   def ++(other: Free): Free = other match {
     case Free.Empty => this
     case other => Free.Join(this, other)
@@ -78,6 +76,7 @@ sealed trait Free {
   // for debugging: checks whether all variables are compatible
   def wellformed(): Unit
 
+  // checks deferred constraints
   def checkConstraints()(using DeclarationContext, ErrorReporter): Unit
 
   // these are cached
@@ -93,10 +92,8 @@ sealed trait Free {
 object Free {
 
   object Empty extends Free {
-    override def withoutValue(id: Id, tpe: ValueType): Free = this
+    override def without(values: List[ValueParam], blocks: List[BlockParam]): Free = this
     override def ++(other: Free): Free = other
-    override def withoutValues(bindings: List[ValueParam]): Free = this
-    override def withoutBlock(id: Id, tpe: BlockType, capt: Captures): Free = this
 
     override def wellformed(): Unit = ()
     override def checkConstraints()(using DeclarationContext, ErrorReporter): Unit = ()
