@@ -545,7 +545,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 FunctionType(Nil, Nil, List(tpe), Nil, ret, Effects.Pure)
               }
               Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
-              Context.bindCapabilities(d, List.empty)
 
               body checkAgainst ret
           }
