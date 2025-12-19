@@ -78,6 +78,11 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       query(body) -- boundCapabilities(b) -- CaptureSet(bps.map(_.symbol.capture))
   }
 
+  override def query(h: OpClause)(using Context, Unit) = h match {
+    case source.OpClause(id, tps, vps, bps, ret, body, resume, span) =>
+      query(body) -- boundCapabilities(h) -- CaptureSet(bps.map(_.symbol.capture))
+  }
+
   override def stmt(using Context, Unit) = {
     // local state
     case source.DefStmt(tree @ VarDef(id, annot, binding, doc, span), rest, _) =>
