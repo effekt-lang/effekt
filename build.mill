@@ -51,7 +51,7 @@ object project extends Module {
   }
   // Installs the current version locally via npm
   def install(): Command[Unit] = Task.Command {
-    assembleBinary()
+    assembleBinary()()
     os.proc(npm(), "pack").call(cwd=rootProjectPath, check = true)
     os.proc(npm(), "install", "-g", s"effekt-lang-effekt-${effektVersion()}.tgz").call(cwd=rootProjectPath, check = true)
   }
