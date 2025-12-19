@@ -117,21 +117,21 @@ sealed trait TrackedParam extends Param, BlockSymbol {
   // Every tracked block gives rise to a capture parameter (except resumptions, they are transparent)
   lazy val capture: Capture = this match {
     case b: BlockParam => CaptureParam(b.name)
-    case r: ResumeParam => ???
     case s: VarBinder => LexicalRegion(name, s.decl)
     case r: ExternResource => Resource(name)
   }
 }
 object TrackedParam {
   case class BlockParam(name: Name, tpe: Option[BlockType], decl: source.Tree) extends TrackedParam
-  case class ResumeParam(module: Module) extends TrackedParam {
-    val name = Name.local("resume")
-    val decl = NoSource
-  }
   case class ExternResource(name: Name, tpe: BlockType, decl: source.Tree) extends TrackedParam
 }
 export TrackedParam.*
 
+// Resume is transparent
+case class ResumeParam(module: Module) extends Param, BlockSymbol {
+  val name = Name.local("resume")
+  val decl = NoSource
+}
 
 trait Callable extends BlockSymbol {
   def tparams: List[TypeParam]

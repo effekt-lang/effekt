@@ -101,7 +101,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       Context.annotate(Annotations.Captures, sym, annotated)
       annotated
     case tree @ DefDef(id, captures, annot, block, info, span) =>
-      val sym = tree.symbol      
+      val sym = tree.symbol
       val inferred = query(block)
       val annotated = sym.caps.getOrElse(inferred)
       Context.annotate(Annotations.Captures, sym, annotated)
