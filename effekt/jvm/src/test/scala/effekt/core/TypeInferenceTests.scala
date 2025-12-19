@@ -121,7 +121,7 @@ class TypeInferenceTests extends CoreTests {
 
     // we can even type check open terms:
     assertEquals(typecheck(Stmt.Return(Expr.ValueVar(x, TInt))),
-      Typing(TInt, Set.empty, Free(HashMap(x -> TInt), HashMap.empty, Constraints.empty)))
+      Typing(TInt, Set.empty, Free.value(x, TInt)))
 
     val add: Block.BlockVar = Block.BlockVar(infixAdd, BlockType.Function(Nil, Nil, List(TInt, TInt), Nil, TInt), Set.empty)
 

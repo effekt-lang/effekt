@@ -93,47 +93,111 @@ type Constraint = Expr.Make | Implementation | MatchClause
 
 import scala.collection.immutable.HashMap
 
-// only used for type checking
-case class Free(values: HashMap[Id, ValueType], blocks: HashMap[Id, (BlockType, Captures)], constraints: Constraints) {
-  // throws type error if they are not compatible
-  def ++(other: Free): Free =
-    Free(Free.mergeValues(values, other.values), Free.mergeBlocks(blocks, other.blocks), constraints ++ other.constraints)
+//case class Free(values: HashMap[Id, ValueType], blocks: HashMap[Id, (BlockType, Captures)], constraints: Constraints) {
+//  // throws type error if they are not compatible
+//  def ++(other: Free): Free =
+//    Free(Free.mergeValues(values, other.values), Free.mergeBlocks(blocks, other.blocks), constraints ++ other.constraints)
+//
+//  def withoutValue(id: Id, tpe: ValueType): Free =
+//    values.get(id).foreach { otherTpe =>
+//      if !Type.equals(tpe, otherTpe) then
+//        typeError(s"free variable ${util.show(id)} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
+//    }
+//    Free(values - id, blocks, constraints)
+//
+//  def withoutValues(bindings: List[ValueParam]): Free = bindings.foldLeft(this) {
+//    case (free, ValueParam(id, tpe)) => free.withoutValue(id, tpe)
+//  }
+//
+//  def withoutBlock(id: Id, tpe: BlockType, capt: Captures): Free =
+//    blocks.get(id).foreach { case (otherTpe, otherCapt) =>
+//      if !Type.equals(tpe, otherTpe) then
+//        typeError(s"free variable ${util.show(id)} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
+//      // for now ignore captures
+//      // if !otherCapt.subsetOf(capt) then
+//        // typeError(s"free variable ${util.show(id)} assumes a wrong capture set (${capt.map(core.PrettyPrinter.show)} vs. ${otherCapt.map(core.PrettyPrinter.show)})")
+//    }
+//    Free(values, blocks - id, constraints)
+//
+//  def withoutBlocks(bindings: List[BlockParam]): Free = bindings.foldLeft(this) {
+//    case (free, BlockParam(id, tpe, capt)) => free.withoutBlock(id, tpe, capt)
+//  }
+//
+//  def isEmpty: Boolean = values.isEmpty && blocks.isEmpty
+//
+//  def toSet: Set[Id] = values.keySet ++ blocks.keySet
+//}
+//assert(toplevel.isEmpty, {
+//  val freeBlocks = toplevel.blocks.map { case (id, (tpe, capt)) => s"${util.show(id)}: ${util.show(tpe)} @ ${capt.map(util.show).mkString("{", ", ", "}")}" }
+//  s"Toplevel program should be closed, but got:\n${ freeBlocks.mkString("\n") }"
+//})
+sealed trait Free {
+  def without(values: List[ValueParam], blocks: List[BlockParam]): Free = Free.Without(values, blocks, this)
+  def withoutValues(bindings: List[ValueParam]): Free = without(bindings, Nil)
+  def withoutBlocks(bindings: List[BlockParam]): Free = without(Nil, bindings)
+  def withoutBlock(id: Id, tpe: BlockType, capt: Captures): Free = without(Nil, BlockParam(id, tpe, capt) :: Nil)
+  def withoutValue(id: Id, tpe: ValueType): Free = withoutValues(ValueParam(id, tpe) :: Nil)
+  def ++(other: Free): Free = Free.Join(this, other)
 
-  def withoutValue(id: Id, tpe: ValueType): Free =
-    values.get(id).foreach { otherTpe =>
-      if !Type.equals(tpe, otherTpe) then
-        typeError(s"free variable ${util.show(id)} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
-    }
-    Free(values - id, blocks, constraints)
+  def assertClosed(): Unit
 
-  def withoutValues(bindings: List[ValueParam]): Free = bindings.foldLeft(this) {
-    case (free, ValueParam(id, tpe)) => free.withoutValue(id, tpe)
-  }
+  // these are cached
+  lazy val freeValues: Set[ValueParam] = _freeValues
+  lazy val freeBlocks: Set[BlockParam] = _freeBlocks
+  lazy val freeIds: Set[Id] = _freeIds
 
-  def withoutBlock(id: Id, tpe: BlockType, capt: Captures): Free =
-    blocks.get(id).foreach { case (otherTpe, otherCapt) =>
-      if !Type.equals(tpe, otherTpe) then
-        typeError(s"free variable ${util.show(id)} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
-      // for now ignore captures
-      // if !otherCapt.subsetOf(capt) then
-        // typeError(s"free variable ${util.show(id)} assumes a wrong capture set (${capt.map(core.PrettyPrinter.show)} vs. ${otherCapt.map(core.PrettyPrinter.show)})")
-    }
-    Free(values, blocks - id, constraints)
+  protected def _freeValues: Set[ValueParam]
+  protected def _freeBlocks: Set[BlockParam]
+  protected def _freeIds: Set[Id]
 
-  def withoutBlocks(bindings: List[BlockParam]): Free = bindings.foldLeft(this) {
-    case (free, BlockParam(id, tpe, capt)) => free.withoutBlock(id, tpe, capt)
-  }
-
-  def isEmpty: Boolean = values.isEmpty && blocks.isEmpty
-
-  def toSet: Set[Id] = values.keySet ++ blocks.keySet
+  // TODO implement again...
+  def constraints: Constraints = Constraints.empty
 }
-object Free {
-  def empty = Free(HashMap.empty, HashMap.empty, Constraints.empty)
-  def value(id: Id, tpe: ValueType) = Free(HashMap(id -> tpe), HashMap.empty, Constraints.empty)
-  def block(id: Id, tpe: BlockType, capt: Captures) = Free(HashMap.empty, HashMap(id -> (tpe, capt)), Constraints.empty)
 
-  def defer(c: Constraint) = Free(HashMap.empty, HashMap.empty, Constraints(c))
+object Free {
+
+  object Empty extends Free {
+    override def withoutValue(id: Id, tpe: ValueType): Free = this
+    override def ++(other: Free): Free = other
+    override def withoutValues(bindings: List[ValueParam]): Free = this
+    override def withoutBlock(id: Id, tpe: BlockType, capt: Captures): Free = this
+
+    override def assertClosed(): Unit = ()
+    override protected def _freeValues: Set[ValueParam] = Set.empty
+    override protected def _freeBlocks: Set[BlockParam] = Set.empty
+    override protected def _freeIds: Set[Id] = Set.empty
+  }
+  case class Join(left: Free, right: Free) extends Free {
+    override def assertClosed(): Unit = ()
+    override protected def _freeValues: Set[ValueParam] = left.freeValues ++ right.freeValues
+    override protected def _freeBlocks: Set[BlockParam] = left.freeBlocks ++ right.freeBlocks
+    override protected def _freeIds: Set[Id] = left.freeIds ++ right.freeIds
+  }
+  case class Value(id: Id, tpe: ValueType) extends Free {
+    override def assertClosed(): Unit = ???
+    override protected def _freeValues: Set[ValueParam] = Set(ValueParam(id, tpe))
+    override protected def _freeBlocks: Set[BlockParam] = Set.empty
+    override protected def _freeIds: Set[Id] = Set(id)
+  }
+  case class Block(id: Id, tpe: BlockType, capt: Captures) extends Free {
+    override def assertClosed(): Unit = ???
+    override protected def _freeValues: Set[ValueParam] = Set.empty
+    override protected def _freeBlocks: Set[BlockParam] = Set(BlockParam(id, tpe, capt))
+    override protected def _freeIds: Set[Id] = Set(id)
+  }
+  case class Without(values: List[ValueParam], blocks: List[BlockParam], underlying: Free) extends Free {
+    private val valueIds = values.map(_.id)
+    private val blockIds = blocks.map(_.id)
+    override def assertClosed(): Unit = ()
+    override protected def _freeValues: Set[ValueParam] = underlying.freeValues.filterNot(p => valueIds.contains(p.id))
+    override protected def _freeBlocks: Set[BlockParam] = underlying.freeBlocks.filterNot(p => blockIds.contains(p.id))
+    override protected def _freeIds: Set[Id] = underlying.freeIds -- valueIds -- blockIds
+  }
+
+  def empty: Free = Free.Empty
+  def value(id: Id, tpe: ValueType): Free = Free.Value(id, tpe)
+  def block(id: Id, tpe: BlockType, capt: Captures): Free = Free.Block(id, tpe, capt)
+  def defer(c: Constraint): Free = Free.Empty // Free(HashMap.empty, HashMap.empty, Constraints(c))
 
   def mergeValues(free1: HashMap[Id, ValueType], free2: HashMap[Id, ValueType]): HashMap[Id, ValueType] =
     free1.merged(free2) {
@@ -314,10 +378,7 @@ object Type {
 
       def assertClosed(free: Free): Unit =
         val toplevel = free.withoutBlocks(boundBlocks).withoutValues(boundValues)
-        assert(toplevel.isEmpty, {
-          val freeBlocks = toplevel.blocks.map { case (id, (tpe, capt)) => s"${util.show(id)}: ${util.show(tpe)} @ ${capt.map(util.show).mkString("{", ", ", "}")}" }
-          s"Toplevel program should be closed, but got:\n${ freeBlocks.mkString("\n") }"
-        })
+        toplevel.assertClosed()
 
       var constraints: Constraints = Constraints.empty
 
