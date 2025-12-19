@@ -3,6 +3,7 @@ package core
 
 import symbols.{ Symbol, builtins }
 import effekt.util.messages.ErrorReporter
+import scala.collection.immutable.HashMap
 
 /**
  * In core, all names, including those in capture sets are just symbols.
@@ -59,98 +60,134 @@ def checking[T <: Tree, R](t: T)(f: T => R): R =
     case TypeError(msg, context) => throw TypeError(msg, t :: context)
   }
 
-// We could ALSO just save the Make to decrease pressure on the GC
-// this could even improve the error messages, since we can point at the term that's wrong...
-// so `type Later = Expr.Make | Implementation`
-//
-// Also representing constraints as sets doesn't seem to decrease the number significantly since emit['A]
-// is not necessarily equal to emit['A] (both 'As are type parameters of some function)
-enum Constraints {
-  case Empty
-  case Single(c: Constraint)
-  case Concat(c1: Constraints, c2: Constraints)
-
-  def ++(other: Constraints): Constraints = (this, other) match {
-    case (Empty, other) => other
-    case (other, Empty) => other
-    case (c1, c2) => Constraints.Concat(c1, c2)
-  }
-
-  def foreach(f: Constraint => Unit): Unit = this match {
-    case Constraints.Empty => ()
-    case Constraints.Single(c) => f(c)
-    case Constraints.Concat(c1, c2) => c1.foreach(f); c2.foreach(f)
-  }
-}
-object Constraints {
-  def empty: Constraints = Constraints.Empty
-  def apply(c: Constraint): Constraints = Constraints.Single(c)
-}
-
 case class MatchClause(ctor: Id, result: ValueType.Data, existentialTypeArgs: List[ValueType], arguments: List[ValueType])
 
 type Constraint = Expr.Make | Implementation | MatchClause
 
-// only used for type checking
-case class Free(values: Map[Id, ValueType], blocks: Map[Id, (BlockType, Captures)], constraints: Constraints) {
-  // throws type error if they are not compatible
-  def ++(other: Free): Free =
-    Free.valuesCompatible(values, other.values)
-    Free.blocksCompatible(blocks, other.blocks)
-    Free(values ++ other.values, blocks ++ other.blocks, constraints ++ other.constraints)
-
-  def withoutValue(id: Id, tpe: ValueType): Free =
-    values.get(id).foreach { otherTpe =>
-      if !Type.equals(tpe, otherTpe) then
-        typeError(s"free variable ${util.show(id)} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
-    }
-    Free(values - id, blocks, constraints)
-
-  def withoutValues(bindings: List[ValueParam]): Free = bindings.foldLeft(this) {
-    case (free, ValueParam(id, tpe)) => free.withoutValue(id, tpe)
+sealed trait Free {
+  def without(values: List[ValueParam], blocks: List[BlockParam]): Free = Free.Without(values, blocks, this)
+  def withoutBlock(id: Id, tpe: BlockType, capt: Captures): Free = without(Nil, BlockParam(id, tpe, capt) :: Nil)
+  def withoutValue(id: Id, tpe: ValueType): Free = without(ValueParam(id, tpe) :: Nil, Nil)
+  def ++(other: Free): Free = other match {
+    case Free.Empty => this
+    case other => Free.Join(this, other)
   }
 
-  def withoutBlock(id: Id, tpe: BlockType, capt: Captures): Free =
-    blocks.get(id).foreach { case (otherTpe, otherCapt) =>
-      if !Type.equals(tpe, otherTpe) then
-        typeError(s"free variable ${util.show(id)} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
-      // for now ignore captures
-      // if !otherCapt.subsetOf(capt) then
-        // typeError(s"free variable ${util.show(id)} assumes a wrong capture set (${capt.map(core.PrettyPrinter.show)} vs. ${otherCapt.map(core.PrettyPrinter.show)})")
-    }
-    Free(values, blocks - id, constraints)
+  // for debugging: checks whether all variables are compatible
+  def wellformed(): Unit
 
-  def withoutBlocks(bindings: List[BlockParam]): Free = bindings.foldLeft(this) {
-    case (free, BlockParam(id, tpe, capt)) => free.withoutBlock(id, tpe, capt)
-  }
+  // checks deferred constraints
+  def checkConstraints()(using DeclarationContext, ErrorReporter): Unit
 
-  def isEmpty: Boolean = values.isEmpty && blocks.isEmpty
+  // these are cached
+  lazy val freeValues: HashMap[Id, ValueType] = _freeValues
+  lazy val freeBlocks: HashMap[Id, (BlockType, Captures)] = _freeBlocks
+  lazy val freeIds: Set[Id] = _freeIds
 
-  def toSet: Set[Id] = values.keySet ++ blocks.keySet
+  protected def _freeValues: HashMap[Id, ValueType]
+  protected def _freeBlocks: HashMap[Id, (BlockType, Captures)]
+  protected def _freeIds: Set[Id]
 }
+
 object Free {
-  def empty = Free(Map.empty, Map.empty, Constraints.empty)
-  def value(id: Id, tpe: ValueType) = Free(Map(id -> tpe), Map.empty, Constraints.empty)
-  def block(id: Id, tpe: BlockType, capt: Captures) = Free(Map.empty, Map(id -> (tpe, capt)), Constraints.empty)
 
-  def defer(c: Constraint) = Free(Map.empty, Map.empty, Constraints(c))
+  object Empty extends Free {
+    override def without(values: List[ValueParam], blocks: List[BlockParam]): Free = this
+    override def ++(other: Free): Free = other
 
-  def valuesCompatible(free1: Map[Id, ValueType], free2: Map[Id, ValueType]): Unit =
-    val same = free1.keySet intersect free2.keySet
-    same.foreach { id => Type.valueShouldEqual(free1(id), free2(id)) }
+    override def wellformed(): Unit = ()
+    override def checkConstraints()(using DeclarationContext, ErrorReporter): Unit = ()
+    override protected def _freeValues: HashMap[Id, ValueType] = HashMap.empty
+    override protected def _freeBlocks: HashMap[Id, (BlockType, Captures)] = HashMap.empty
+    override protected def _freeIds: Set[Id] = Set.empty
+  }
+  case class Join(left: Free, right: Free) extends Free {
+    override def wellformed(): Unit = {
+      left.wellformed()
+      right.wellformed()
+      // check compatiblity of free variables
+      mergeValues(left.freeValues, right.freeValues)
+      mergeBlocks(left.freeBlocks, right.freeBlocks)
+    }
+    override def checkConstraints()(using DeclarationContext, ErrorReporter): Unit = { left.checkConstraints(); right.checkConstraints() }
+    override protected def _freeValues: HashMap[Id, ValueType] = left.freeValues ++ right.freeValues
+    override protected def _freeBlocks: HashMap[Id, (BlockType, Captures)] = left.freeBlocks ++ right.freeBlocks
+    override protected def _freeIds: Set[Id] = left.freeIds ++ right.freeIds
+  }
+  case class Value(id: Id, tpe: ValueType) extends Free {
+    override def wellformed(): Unit = ()
+    override def checkConstraints()(using DeclarationContext, ErrorReporter): Unit = ()
+    override protected def _freeValues: HashMap[Id, ValueType] = HashMap(id -> tpe)
+    override protected def _freeBlocks: HashMap[Id, (BlockType, Captures)] = HashMap.empty
+    override protected def _freeIds: Set[Id] = Set(id)
+  }
+  case class Block(id: Id, tpe: BlockType, capt: Captures) extends Free {
+    override def wellformed(): Unit = ()
+    override def checkConstraints()(using DeclarationContext, ErrorReporter): Unit = ()
+    override protected def _freeValues: HashMap[Id, ValueType] = HashMap.empty
+    override protected def _freeBlocks: HashMap[Id, (BlockType, Captures)] = HashMap(id -> (tpe, capt))
+    override protected def _freeIds: Set[Id] = Set(id)
+  }
+  case class Without(values: List[ValueParam], blocks: List[BlockParam], underlying: Free) extends Free {
+    private val valueIds = values.map(_.id)
+    private val blockIds = blocks.map(_.id)
+    override def wellformed(): Unit = {
+      underlying.wellformed()
+      values.foreach {
+        case ValueParam(id, tpe) => underlying.freeValues.get(id).foreach { otherTpe =>
+          if !Type.equals(tpe, otherTpe) then
+            typeError(s"free variable ${util.show(id)} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
+        }
+      }
+      blocks.foreach {
+        case BlockParam(id, tpe, capt) => underlying.freeBlocks.get(id).foreach { case (otherTpe, otherCapt) =>
+          if !Type.equals(tpe, otherTpe) then
+            typeError(s"free variable ${util.show(id)} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
+          // for now ignore captures
+          // if !otherCapt.subsetOf(capt) then
+            // typeError(s"free variable ${util.show(id)} assumes a wrong capture set (${capt.map(core.PrettyPrinter.show)} vs. ${otherCapt.map(core.PrettyPrinter.show)})")
+        }
+      }
+    }
+    override def checkConstraints()(using DeclarationContext, ErrorReporter): Unit = underlying.checkConstraints()
+    override protected def _freeValues: HashMap[Id, ValueType] = underlying.freeValues.removedAll(valueIds)
+    override protected def _freeBlocks: HashMap[Id, (BlockType, Captures)] = underlying.freeBlocks.removedAll(blockIds)
+    override protected def _freeIds: Set[Id] = underlying.freeIds.removedAll(valueIds).removedAll(blockIds)
+  }
+  case class Defer(constraint: Constraint) extends Free {
+    override def wellformed(): Unit = ()
+    override def checkConstraints()(using DeclarationContext, ErrorReporter): Unit = constraint match {
+      case impl: Implementation =>
+        checking(impl) { Type.checkAgainstDeclaration }
+      case make @ Expr.Make(data, tag, targs, vargs) =>
+        checking(make) { make => Type.checkAgainstDeclaration(data, tag, targs, vargs.map(_.tpe)) }
+      case MatchClause(tag, result, targs, arguments) =>
+        Type.checkAgainstDeclaration(result, tag, targs, arguments)
+    }
+    override protected def _freeValues: HashMap[Id, ValueType] = HashMap.empty
+    override protected def _freeBlocks: HashMap[Id, (BlockType, Captures)] = HashMap.empty
+    override protected def _freeIds: Set[Id] = Set.empty
+  }
 
-  def blocksCompatible(free1: Map[Id, (BlockType, Captures)], free2: Map[Id, (BlockType, Captures)]): Unit =
-    val same = free1.keySet intersect free2.keySet
-    same.foreach { id =>
-      val (tpe1, capt1) = free1(id)
-      val (tpe2, capt2) = free2(id)
-      Type.blockShouldEqual(tpe1, tpe2)
-      // for now ignore captures... :(
-      //assert(Type.equals(capt1, capt2))
+  def empty: Free = Free.Empty
+  def value(id: Id, tpe: ValueType): Free = Free.Value(id, tpe)
+  def block(id: Id, tpe: BlockType, capt: Captures): Free = Free.Block(id, tpe, capt)
+  def defer(c: Constraint): Free = Free.Defer(c)
+
+  def mergeValues(free1: HashMap[Id, ValueType], free2: HashMap[Id, ValueType]): HashMap[Id, ValueType] =
+    free1.merged(free2) {
+      case ((id1, tpe1), (id2, tpe2)) =>
+        Type.valueShouldEqual(tpe1, tpe2)
+        id1 -> tpe1
+    }
+
+  def mergeBlocks(free1: HashMap[Id, (BlockType, Captures)], free2: HashMap[Id, (BlockType, Captures)]): HashMap[Id, (BlockType, Captures)] =
+    free1.merged(free2) {
+      case ((id1, (tpe1, capt1)), (id2, (tpe2, capt2))) =>
+        Type.blockShouldEqual(tpe1, tpe2)
+        id1 -> (tpe1, capt1)
     }
 }
-
-
 
 case class Typing[+T](tpe: T, capt: Captures, free: Free) {
   def map[S](f: T => S): Typing[S] = Typing(f(tpe), capt, free)
@@ -181,7 +218,7 @@ object Type {
     case _ => false
   }
 
-  private final def all[T](tpes1: List[T], tpes2: List[T], pred: (T, T) => Boolean): Boolean =
+  private final inline def all[T](tpes1: List[T], tpes2: List[T], inline pred: (T, T) => Boolean): Boolean =
     tpes1.size == tpes2.size && tpes1.zip(tpes2).forall { case (t1, t2) => pred(t1, t2) }
 
   def equals(tpe1: BlockType, tpe2: BlockType): Boolean = (tpe1, tpe2) match {
@@ -314,16 +351,16 @@ object Type {
         case Toplevel.Val(id, expr) => ValueParam(id, expr.tpe)
       }
 
-      def assertClosed(free: Free): Unit =
-        val toplevel = free.withoutBlocks(boundBlocks).withoutValues(boundValues)
-        assert(toplevel.isEmpty, {
-          val freeBlocks = toplevel.blocks.map { case (id, (tpe, capt)) => s"${util.show(id)}: ${util.show(tpe)} @ ${capt.map(util.show).mkString("{", ", ", "}")}" }
-          s"Toplevel program should be closed, but got:\n${ freeBlocks.mkString("\n") }"
+      def wellformed(free: Free): Unit =
+        val toplevel = free.without(boundValues, boundBlocks)
+        toplevel.wellformed()
+        toplevel.checkConstraints()
+
+        assert(toplevel.freeIds.isEmpty, {
+          val freeBlocks = toplevel.freeBlocks.map { case (id, (tpe, capt)) => s"${util.show(id)}: ${util.show(tpe)} @ ${capt.map(util.show).mkString("{", ", ", "}")}" }
+          val freeValues = toplevel.freeValues.map { case (id, tpe) => s"${util.show(id)}: ${util.show(tpe)}" }
+          s"Toplevel program should be closed, but got:\n${ freeBlocks.mkString("\n") }\n\n${freeValues.mkString("\n")}"
         })
-
-      var constraints: Constraints = Constraints.empty
-
-      def wellformed(free: Free): Unit = { assertClosed(free); constraints ++= free.constraints }
 
       definitions.foreach {
         case Toplevel.Def(id, block) => wellformed(block.free)
@@ -336,19 +373,10 @@ object Type {
             case ExternBody.StringExternBody(featureFlag, contents) => contents.args
             case ExternBody.Unsupported(err) => Nil
           }
-          val free = all(splices, splice => splice.typing).free.withoutValues(vparams).withoutBlocks(bparams)
+          val free = all(splices, splice => splice.typing).free.without(vparams, bparams)
           wellformed(free)
 
         case Extern.Include(featureFlag, contents) => ()
-      }
-
-      constraints.foreach {
-        case impl: Implementation =>
-          checking(impl) { checkAgainstDeclaration }
-        case make @ Expr.Make(data, tag, targs, vargs) =>
-          checking(make) { make => checkAgainstDeclaration(data, tag, targs, vargs.map(_.tpe)) }
-        case MatchClause(tag, result, targs, arguments) =>
-          checkAgainstDeclaration(result, tag, targs, arguments)
       }
   }
 
@@ -452,7 +480,7 @@ object Type {
     case BlockLit(tparams, cparams, vparams, bparams, body) =>
       val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
       Typing(BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), bodyTpe), bodyCapt -- cparams,
-        bodyFree.withoutBlocks(bparams).withoutValues(vparams))
+        bodyFree.without(vparams, bparams))
   }
 
   def typecheck(impl: Implementation): Typing[BlockType.Interface] = checking(impl) {
@@ -465,7 +493,7 @@ object Type {
     case Operation(name, tparams, cparams, vparams, bparams, body) =>
       val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
       Typing(BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), bodyTpe), bodyCapt -- cparams,
-        bodyFree.withoutBlocks(bparams).withoutValues(vparams))
+        bodyFree.without(vparams, bparams))
   }
 
   def typecheck(stmt: Stmt): Typing[ValueType] = checking(stmt) {
@@ -609,7 +637,7 @@ object Type {
   def blockShouldEqual(tpe1: BlockType, tpe2: BlockType): Unit =
     if !Type.equals(tpe1, tpe2) then typeError(s"Block type mismatch:\n  ${util.show(tpe1)}\n  ${util.show(tpe2)}")
 
-  private def all[T, R](terms: List[T], check: T => Typing[R]): Typing[List[R]] =
+  private inline def all[T, R](terms: List[T], inline check: T => Typing[R]): Typing[List[R]] =
     terms.foldRight(Typing[List[R]](Nil, Set.empty, Free.empty)) {
       case (term, Typing(tpes, capts, frees)) =>
         val Typing(tpe, capt, free) = check(term)

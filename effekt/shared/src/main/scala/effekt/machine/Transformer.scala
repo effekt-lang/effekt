@@ -97,11 +97,11 @@ object Transformer {
         noteParameters(bparams)
 
         // Does not work for mutually recursive local definitions (which are not supported anyway, at the moment)
-        val freeValueParams = block.free.values.collect {
+        val freeValueParams = block.free.freeValues.collect {
           // globals are NOT free
           case (id, tpe) if !BPC.globals.contains(id) => Variable(transform(id), transform(tpe))
         }
-        val freeBlockParams = block.free.blocks.flatMap {
+        val freeBlockParams = block.free.freeBlocks.flatMap {
 
           // Function itself
           case (pid, (tpe, capt)) if pid == id => Set.empty
