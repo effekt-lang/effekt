@@ -112,6 +112,11 @@ object project extends Module {
     effekt.jvm.test.test()
   }
 
+  // Compile the test suite
+  def testCompile(): Command[Unit] = Task.Command {
+    effekt.jvm.test.compile()
+  }
+
   // These test commands are used in the CI
   //
   //
@@ -331,7 +336,7 @@ object effekt extends Module {
         }
         .map(PathRef(_))
     }
-    
+
     def stdLibGenerator: T[PathRef] = Task {
       val baseDir = librariesDir().path
       val files   = stdLibFiles().map(_.path)
