@@ -1,5 +1,5 @@
 name: 'Setup Effekt Environment'
-description: 'Sets up Java, Node, Mill, and system dependencies for Effekt'
+description: 'Sets up Java, Node, SBT, Mill, and system dependencies for Effekt'
 
 inputs:
   java-version:
@@ -35,6 +35,10 @@ runs:
       with:
         java-version: ${{ inputs.java-version }}
         distribution: 'zulu'
+        cache: 'sbt'
+
+    - name: Setup SBT
+      uses: sbt/setup-sbt@v1
 
     - name: Setup Mill
       uses: zhutmost/setup-mill@v1.3.0
