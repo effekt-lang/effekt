@@ -272,6 +272,7 @@ object effekt extends Module {
       override def mvnDeps = Seq(mvn"org.scala-sbt::io:1.6.0")
       def testCachedArgs = Seq("-oD")
       override def testSandboxWorkingDir = Task { false }
+      override def forkArgs = Task { super.forkArgs() ++ Seq("-Xss8m") }
 
       /** Alias for running the full JVM test suite. */
       def test = Task { testCached() }
