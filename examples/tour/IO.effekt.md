@@ -157,4 +157,4 @@ concurrentSwap("test1.txt", "test2.txt")
 
 ## References
 
-- [IO in the standard library](https://github.com/effekt-lang/effekt/tree/master/libraries/common/io)
+- [IO in the standard library](https://github.com/effekt-lang/effekt/tree/main/libraries/common/io)
