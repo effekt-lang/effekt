@@ -355,7 +355,7 @@ object Type {
       }
 
       def wellformed(free: Free): Unit =
-        val toplevel = free.withoutBlocks(boundBlocks).withoutValues(boundValues)
+        val toplevel = free.without(boundValues, boundBlocks)
         toplevel.wellformed()
         toplevel.checkConstraints()
 
@@ -376,7 +376,7 @@ object Type {
             case ExternBody.StringExternBody(featureFlag, contents) => contents.args
             case ExternBody.Unsupported(err) => Nil
           }
-          val free = all(splices, splice => splice.typing).free.withoutValues(vparams).withoutBlocks(bparams)
+          val free = all(splices, splice => splice.typing).free.without(vparams, bparams)
           wellformed(free)
 
         case Extern.Include(featureFlag, contents) => ()
@@ -483,7 +483,7 @@ object Type {
     case BlockLit(tparams, cparams, vparams, bparams, body) =>
       val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
       Typing(BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), bodyTpe), bodyCapt -- cparams,
-        bodyFree.withoutBlocks(bparams).withoutValues(vparams))
+        bodyFree.withoutBlocks(vparams, bparams))
   }
 
   def typecheck(impl: Implementation): Typing[BlockType.Interface] = checking(impl) {
@@ -496,7 +496,7 @@ object Type {
     case Operation(name, tparams, cparams, vparams, bparams, body) =>
       val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
       Typing(BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), bodyTpe), bodyCapt -- cparams,
-        bodyFree.withoutBlocks(bparams).withoutValues(vparams))
+        bodyFree.withoutBlocks(vparams, bparams))
   }
 
   def typecheck(stmt: Stmt): Typing[ValueType] = checking(stmt) {
