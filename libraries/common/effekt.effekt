@@ -332,8 +332,8 @@ extern def infixMul(x: Int, y: Int) at {}: Int =
   vm "effekt::infixMul(Int, Int)"
 
 extern def infixDiv(x: Int, y: Int) at {}: Int =
-  js "Math.floor(${x} / ${y})"
-  chez "(floor (/ ${x} ${y}))"
+  js "Math.trunc(${x} / ${y})"
+  chez "(truncate (/ ${x} ${y}))"
   llvm "%z = sdiv %Int ${x}, ${y} ret %Int %z"
   vm "effekt::infixDiv(Int, Int)"
 
@@ -343,11 +343,27 @@ extern def infixSub(x: Int, y: Int) at {}: Int =
   llvm "%z = sub  %Int ${x}, ${y} ret %Int %z"
   vm "effekt::infixSub(Int, Int)"
 
-extern def mod(x: Int, y: Int) at {}: Int =
-  js "(${x} % ${y})"
-  chez "(modulo ${x} ${y})"
-  llvm "%z = srem %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::mod(Int, Int)"
+// Computes the quotient based on truncated-division
+def quot(x: Int, y: Int): Int =
+  infixDiv(x, y)
+
+/// Computes the remainder based on truncated-division
+ extern def rem(x: Int, y: Int) at {}: Int =
+   llvm "%z = srem %Int ${x}, ${y} ret %Int %z"
+   default { x - y * (x / y) }
+
+/// Computes the result of Euclidean division
+def div(x: Int, y: Int): Int = {
+  val q = x / y
+  val r = x.rem(y)
+  q - (r.bitwiseShr(31).bitwiseAnd(y.bitwiseShr(31).bitwiseOr(1)))
+}
+
+/// Computes the result of Euclidean modulo
+def mod(x: Int, y: Int): Int = {
+  val r = x.rem(y)
+  r + y.abs.bitwiseAnd(r.bitwiseShr(31))
+}
 
 extern def infixAdd(x: Double, y: Double) at {}: Double =
   js "(${x} + ${y})"
