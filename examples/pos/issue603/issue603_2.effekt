@@ -3,3 +3,5 @@ interface HigherOrder { def higher{p: () => Unit}: Unit }
 def helloWorld() at {} = box new HigherOrder {
   def higher{p} = p()
 }
+
+def main() = {}

@@ -13,3 +13,6 @@ def helloWorlding[R] { body: => R / Greet }: R =
       if (0 == 1) do fail() else println("Hello")
     }
   }
+
+def main() = {}
+

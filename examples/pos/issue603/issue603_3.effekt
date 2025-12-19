@@ -7,3 +7,5 @@ interface Bi {
 def test(): Bi at {} = box new Bi {
   def foo() = do simple()
 }
+
+def main() = {}
