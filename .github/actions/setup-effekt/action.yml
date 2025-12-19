@@ -1,5 +1,5 @@
 name: 'Setup Effekt Environment'
-description: 'Sets up Java, Node, SBT, and system dependencies for Effekt'
+description: 'Sets up Java, Node, Mill, and system dependencies for Effekt'
 
 inputs:
   java-version:
@@ -10,6 +10,10 @@ inputs:
     description: 'Node version to install'
     required: false
     default: '16.x'
+  mill-version:
+    description: 'Mill version to install'
+    required: false
+    default: '1.0.6'
   llvm-version:
     description: 'LLVM version to install'
     required: false
@@ -31,10 +35,11 @@ runs:
       with:
         java-version: ${{ inputs.java-version }}
         distribution: 'zulu'
-        cache: 'sbt'
 
-    - name: Setup SBT
-      uses: sbt/setup-sbt@v1
+    - name: Setup Mill
+      uses: zhutmost/setup-mill@v1.3.0
+      with:
+        mill-version: ${{ inputs.mill-version }}
 
     - name: Set up NodeJS ${{ inputs.node-version }}
       uses: actions/setup-node@v4
