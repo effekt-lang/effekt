@@ -1,0 +1,425 @@
+// Building Effekt is managed through Mill (https://com-lihaoyi.github.io/mill/).
+// 
+// To compile the project, targeting JVM:
+// ```
+// mill project.assembleBinary
+// ```
+// 
+// This will create an executable `effekt` file in `bin/effekt`.
+//
+// To compile and locally install Effekt via npm, run:
+// ```
+// mill project.install
+// ```
+//
+// To run the full test suite, run:
+// ```
+// mill project.test
+// ```
+// 
+import mill._
+import mill.scalalib._
+import mill.scalajslib._
+import mill.scalajslib.api._
+import mill.api.Task.Source
+
+object project extends Module {
+  // Do not use os.pwd, it doesn't point to the root of the project.
+  def rootProjectPath = moduleDir / os.up
+
+  // Builds the jar with updated licenses and version and moves it to the bin folder
+  def deploy(): Command[Unit] = Task.Command {
+    generateLicenses()
+    updateVersions()
+    assembleBinary()
+  }
+  // Analyses dependencies and downloads all licenses
+  def generateLicenses(): Command[Unit] = Task.Command {
+    // install the Maven licenses plugin: https://www.mojohaus.org/license-maven-plugin/
+    os.proc(mvn(), "license:download-licenses", "license:add-third-party").call(cwd=rootProjectPath, check = true)
+
+    val kiamaFolder   = rootProjectPath / "kiama"
+    val licenseFolder = rootProjectPath / "licenses"
+    os.makeDir.all(licenseFolder)
+    os.copy.over(kiamaFolder / "LICENSE",   licenseFolder / "kiama-license.txt")
+    os.copy.over(kiamaFolder / "README.md", licenseFolder / "kiama-readme.txt")
+  }
+  // Update version in package.json and pom.xml
+  def updateVersions(): Command[Unit] = Task.Command {
+    os.proc(npm(), "version", effektVersion(), "--no-git-tag-version", "--allow-same-version").call(cwd=rootProjectPath, check = true)
+    os.proc(mvn(), "versions:set", s"-DnewVersion=${effektVersion()}", "-DgenerateBackupPoms=false").call(cwd=rootProjectPath, check = true)
+  }
+  // Installs the current version locally via npm
+  def install(): Command[Unit] = Task.Command {
+    assembleBinary()
+    os.proc(npm(), "pack").call(cwd=rootProjectPath, check = true)
+    os.proc(npm(), "install", "-g", s"effekt-lang-effekt-${effektVersion()}.tgz").call(cwd=rootProjectPath, check = true)
+  }
+  // Assemble the JS file in out/effekt.js
+  def assembleJS(): Command[Unit] = Task.Command {
+    val rep = effekt.js.fullLinkJS()
+    val jsFile =
+      rep.publicModules.find(_.jsFileName.endsWith(".js")) match {
+        case Some(m) => rep.dest.path / os.RelPath(m.jsFileName)
+        case None    => throw new Exception("Scala.js linker report has no publicModules")
+      }
+    val outFile = rootProjectPath / "out" / "effekt.js"
+    os.makeDir.all(outFile / os.up)
+    os.copy.over(jsFile, outFile)
+  }
+  // Assembles the effekt binary (jar) in bin/effekt
+  def assembleBinary(): Command[Unit] = Task.Command {
+    val jarfile = effekt.jvm.assembly().path
+
+    // prepend shebang to make jar file executable
+    val binary = rootProjectPath / "bin" / "effekt"
+    if (os.exists(binary)) os.remove(binary)
+    os.makeDir.all(binary / os.up)
+
+    // On Windows, the -S flag to env is not supported.
+    // Hence we conditionally change the shebang based on the OS.
+    // See https://github.com/effekt-lang/effekt/issues/16
+    val osName = System.getProperty("os.name").toLowerCase
+    val shebang =
+      if (osName.contains("win"))
+        "#! /usr/bin/env java -jar\n"
+      else
+        "#! /usr/bin/env -S java -jar\n"
+
+    os.write(binary, shebang.getBytes("UTF-8"))
+    os.write.append(binary, os.read.bytes(jarfile))
+  }
+  def bumpMinorVersion(): Command[Unit] = Task.Command {
+    val versionPattern = """(\d+)\.(\d+)\.(\d+)""".r
+    val newVersion = effektVersion() match {
+      case versionPattern(major, minor, _) => s"$major.${minor.toInt + 1}.0"
+      case _                               => throw new Exception(s"Invalid version format: ${effektVersion()}")
+    }
+
+    val versionFile = moduleDir / "EffektVersion.scala"
+    os.write.over(
+      versionFile,
+      s"""// Don't change this file without changing the CI too!
+         |object EffektVersion { lazy val effektVersion = "$newVersion" }
+         |""".stripMargin
+    )
+
+    println(newVersion)
+  }
+
+  // Run the full test suite
+  def test(): Command[Unit] = Task.Command {
+    effekt.jvm.test.test()
+  }
+
+  // These test commands are used in the CI
+  //
+  //
+  def testBackendJS(): Command[Unit] = Task.Command {
+    effekt.jvm.test.testOnly("effekt.JavaScriptTests", "effekt.StdlibJavaScriptTests")()
+  }
+  // Run Chez Scheme backend tests
+  def testBackendChez(): Command[Unit] = Task.Command {
+    effekt.jvm.test.testOnly(
+      "effekt.ChezSchemeMonadicTests",
+      "effekt.ChezSchemeCallCCTests",
+      "effekt.ChezSchemeCPSTests",
+      "effekt.StdlibChezSchemeMonadicTests",
+      "effekt.StdlibChezSchemeCallCCTests",
+      "effekt.StdlibChezSchemeCPSTests"
+    )()
+  }
+  // Run LLVM backend tests
+  def testBackendLLVM(): Command[Unit] = Task.Command {
+    effekt.jvm.test.testOnly(
+      "effekt.LLVMTests",
+      "effekt.LLVMNoValgrindTests",
+      "effekt.StdlibLLVMTests"
+    )()
+  }
+  // Run all non-backend tests (internal tests) on effektJVM
+  def testRemaining(): Command[Unit] = Task.Command {
+    effekt.jvm.remainingTest.testCached()
+  }
+
+  def platform: T[String] = Task {
+    val platformString = System.getProperty("os.name").toLowerCase
+    if (platformString.contains("win")) "windows"
+    else if (platformString.contains("mac")) "macos"
+    else if (platformString.contains("linux")) "linux"
+    else throw new Exception(s"Unknown platform ${platformString}")
+  }
+
+  def npm: T[String] = Task { if (platform() == "windows") "npm.cmd" else "npm" }
+  def mvn: T[String] = Task { if (platform() == "windows") "mvn.cmd" else "mvn" }
+
+  def effektVersionFile = Source {
+    moduleDir / "EffektVersion.scala"
+  }
+
+  def parseEffektVersion(versionFile: os.Path): String = {
+    val txt = os.read(versionFile)
+    val versionPattern = """(?s).*effektVersion\s*=\s*"([^"]+)".*""".r
+    txt match {
+      case versionPattern(v) => v
+      case _                 => throw new Exception("Could not extract effektVersion from project/EffektVersion.scala")
+    }
+  }
+
+  def sharedCliDeps = Seq(
+    mvn"jline:jline:2.14.6",
+    mvn"org.rogach::scallop:4.1.0",
+    mvn"org.eclipse.lsp4j:org.eclipse.lsp4j:0.23.1"
+  )
+
+  def effektVersion: T[String] = Task {
+    parseEffektVersion(effektVersionFile().path)
+  }
+}
+
+object kiama extends Module {
+  object jvm extends CommonJvm {
+    override def sources = Task.Sources(
+      moduleDir / "src" / "main" / "scala",
+      moduleDir / os.up / "shared" / "src" / "main" / "scala"
+    )
+
+    def moduleDeps = Seq.empty
+    def mvnDeps = Task {
+      super.mvnDeps() ++ project.sharedCliDeps
+    }
+  }
+
+  object js extends CommonJs {
+    def scalaJSVersion = "1.20.1"
+    def moduleDeps = Seq.empty
+
+    override def sources = Task.Sources(
+      moduleDir / "src" / "main" / "scala",
+      moduleDir / os.up / "shared" / "src" / "main" / "scala"
+    )
+  }
+}
+
+object effekt extends Module {
+  def rootProjectPath = moduleDir / os.up
+  def effektVersionFile: T[PathRef] =
+    Task.Source(rootProjectPath / "project" / "EffektVersion.scala")
+  def librariesDir: T[PathRef] = Task.Source(rootProjectPath / "libraries")
+  def licensesDir:  T[PathRef] = Task.Source(rootProjectPath / "licenses")
+  
+  trait EffektGenerated extends ScalaModule {
+    def versionGenerator: T[PathRef] = Task {
+      val out = Task.dest / "effekt" / "util" / "Version.scala"
+      os.makeDir.all(out / os.up)
+      val v = project.parseEffektVersion(effektVersionFile().path)
+      os.write.over(
+        out,
+        s"""package effekt.util
+            |
+            |object Version {
+            |  val effektVersion = """ + '"' + v + '"' + """
+            |}
+            |""".stripMargin
+      )
+      PathRef(Task.dest)
+    }
+  }
+
+  object jvm extends CommonJvm with EffektGenerated {
+    def mainClass = Some("effekt.Main")
+
+    override def sources = Task.Sources(
+      moduleDir / "src" / "main" / "scala",
+      moduleDir / os.up / "shared" / "src" / "main" / "scala",
+    )
+
+    def moduleDeps = Seq(kiama.jvm)
+
+    def mvnDeps = Task {
+      super.mvnDeps() ++ project.sharedCliDeps
+    }
+
+    // Without this overwrite, sbt shows both Server and Main as main classes, but we do not use Server as an entrypoint.
+    def allMainClasses = Task { Seq("effekt.Main") }
+
+    // there is a conflict between the two transitive dependencies "gson:2.11.0"
+    // and "error_prone_annotations:2.27.0", so we need the merge strategy here for `sbt install`
+    override def assemblyRules = super.assemblyRules ++ Seq(
+      Assembly.Rule.Exclude("META-INF/versions/9/module-info.class")
+    )
+
+    // we use the lib folder as resource directory to include it in the JAR
+    override def resources = Task {
+      super.resources() ++ Seq(
+        PathRef(librariesDir().path),
+        PathRef(licensesDir().path)
+      )
+    }
+
+    override def generatedSources = Task {
+      super.generatedSources() ++ Seq(versionGenerator())
+    }
+
+    object test extends ScalaTests with TestModule.Munit {
+      def munitVersion = "0.7.29"
+      override def sources = Task.Sources(effekt.jvm.moduleDir / "src" / "test" / "scala")
+      override def mvnDeps = Seq(mvn"org.scala-sbt::io:1.6.0")
+      def testCachedArgs = Seq("-oD")
+      override def testSandboxWorkingDir = Task { false }
+
+      /** Alias for running the full JVM test suite. */
+      def test = Task { testCached() }
+    }
+
+    object remainingTest extends ScalaTests with TestModule.Munit {
+      def munitVersion = test.munitVersion
+      override def sources = test.sources
+      override def mvnDeps = test.mvnDeps
+      def testCachedArgs = test.testCachedArgs
+      override def testSandboxWorkingDir = test.testSandboxWorkingDir
+
+      override def discoveredTestClasses = Task {
+        val allTests = test.discoveredTestClasses().toSet
+
+        val separatedTests = Set(
+          "effekt.JavaScriptTests",
+          "effekt.StdlibJavaScriptTests",
+          "effekt.ChezSchemeMonadicTests",
+          "effekt.ChezSchemeCallCCTests",
+          "effekt.ChezSchemeCPSTests",
+          "effekt.StdlibChezSchemeMonadicTests",
+          "effekt.StdlibChezSchemeCallCCTests",
+          "effekt.StdlibChezSchemeCPSTests", // keep exactly what your build currently has
+          "effekt.LLVMTests",
+          "effekt.LLVMNoValgrindTests",
+          "effekt.StdlibLLVMTests",
+          "effekt.core.ReparseTests",
+        )
+
+        (allTests -- separatedTests).toSeq.sorted
+      }
+    }
+  }
+
+  object js extends CommonJs with EffektGenerated {
+    def scalaJSVersion = "1.20.1"
+    def moduleDeps = Seq(kiama.js)
+
+    override def sources = Task.Sources(
+      moduleDir / "src" / "main" / "scala",
+      moduleDir / os.up / "shared" / "src" / "main" / "scala"
+    )
+
+    override def generatedSources = Task {
+      super.generatedSources() ++ Seq(versionGenerator(), stdLibGenerator())
+    }
+
+    /**
+     * This generator is used by the JS version of our compiler to bundle the
+     * Effekt standard into the JS files and make them available in the virtual fs.
+     */
+    def stdLibFiles: T[Seq[PathRef]] = Task {
+      val libsDir = librariesDir().path
+
+      os.walk(libsDir)
+        .filter(os.isFile)
+        .filter { p =>
+          val rel  = p.relativeTo(libsDir)
+          val dirs = rel.segments.dropRight(1)
+          dirs.contains("common") || dirs.contains("js")
+        }
+        .map(PathRef(_))
+    }
+    
+    def stdLibGenerator: T[PathRef] = Task {
+      val baseDir = librariesDir().path
+      val files   = stdLibFiles().map(_.path)
+
+      val sourceFile = Task.dest / "effekt" / "util" / "Resources.scala"
+      os.makeDir.all(sourceFile / os.up)
+
+      val virtuals = files.map { file =>
+        val filename = file.relativeTo(baseDir).toString
+        val content  = os.read(file).replace("$", "$$").replace("\"\"\"", "!!!MULTILINEMARKER!!!")
+        s"""loadIntoFile(raw\"\"\"$filename\"\"\", raw\"\"\"$content\"\"\")"""
+      }
+
+      val scalaCode =
+        s"""
+package effekt.util
+import effekt.util.paths._
+
+object Resources {
+
+def loadIntoFile(filename: String, contents: String): Unit =
+  file(filename).write(contents.replace("!!!MULTILINEMARKER!!!", "\\\"\\\"\\\""))
+
+def load() = {
+${virtuals.mkString("\n\n")}
+}
+}
+"""
+
+      os.write.over(sourceFile, scalaCode)
+      PathRef(Task.dest)
+    }
+
+    object test extends ScalaTests with TestModule.Munit {
+      def munitVersion = "0.7.29"
+      override def sources = Task.Sources(effekt.js.moduleDir / "src" / "test" / "scala")
+      override def testSandboxWorkingDir = Task { false }
+    }
+  }
+}
+
+trait CommonJvm extends ScalaModule {
+  def scalaVersion = "3.3.6"
+  def scalacOptions = Task {
+    super.scalacOptions() ++ Seq(
+      "-encoding", "utf8",
+      "-deprecation",
+      "-unchecked",
+      // "-Xlint",
+      // "-Xcheck-macros",
+      "-Xfatal-warnings",
+      // we can use scalafix's organize imports once the next Scala version is out.
+      // https://github.com/scalacenter/scalafix/pull/1800
+      // "-Wunused:imports",
+      "-feature",
+      "-language:existentials",
+      "-language:higherKinds",
+      "-language:implicitConversions"
+    )
+  }
+
+  def mvnDeps = Seq(
+    mvn"org.scala-lang.modules::scala-xml:2.3.0"
+  )
+}
+
+trait CommonJs extends ScalaJSModule {
+  def scalaVersion = "3.3.6"
+  override def moduleKind = Task(ModuleKind.CommonJSModule)
+  def scalacOptions = Task {
+    super.scalacOptions() ++ Seq(
+      "-encoding", "utf8",
+      "-deprecation",
+      "-unchecked",
+      // "-Xlint",
+      // "-Xcheck-macros",
+      "-Xfatal-warnings",
+      // we can use scalafix's organize imports once the next Scala version is out.
+      // https://github.com/scalacenter/scalafix/pull/1800
+      // "-Wunused:imports",
+      "-feature",
+      "-language:existentials",
+      "-language:higherKinds",
+      "-language:implicitConversions"
+    )
+  }
+
+  def mvnDeps = Seq(
+    mvn"org.scala-lang.modules::scala-xml:2.3.0"
+  )
+}
