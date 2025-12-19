@@ -483,7 +483,7 @@ object Type {
     case BlockLit(tparams, cparams, vparams, bparams, body) =>
       val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
       Typing(BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), bodyTpe), bodyCapt -- cparams,
-        bodyFree.withoutBlocks(vparams, bparams))
+        bodyFree.without(vparams, bparams))
   }
 
   def typecheck(impl: Implementation): Typing[BlockType.Interface] = checking(impl) {
@@ -496,7 +496,7 @@ object Type {
     case Operation(name, tparams, cparams, vparams, bparams, body) =>
       val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
       Typing(BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), bodyTpe), bodyCapt -- cparams,
-        bodyFree.withoutBlocks(vparams, bparams))
+        bodyFree.without(vparams, bparams))
   }
 
   def typecheck(stmt: Stmt): Typing[ValueType] = checking(stmt) {
