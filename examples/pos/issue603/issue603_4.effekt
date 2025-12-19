@@ -4,13 +4,11 @@ interface Bi {
   def foo(): Unit / { simple }
 }
 
-def test() = try {
-  box new Bi {
-    def foo() = do simple()
-  }
+def main() = try {
+    val obj = box new Bi {
+      def foo() = do simple()
+    }
+    obj.foo()
   } with simple {
-  resume(())
-  box new Bi {
-    def foo() = ()
+    resume(())
   }
-}

@@ -115,15 +115,11 @@ case class ValueParam(name: Name, tpe: Option[ValueType], decl: source.Tree) ext
 
 sealed trait TrackedParam extends Param, BlockSymbol {
   // Every tracked block gives rise to a capture parameter (except resumptions, they are transparent)
-  lazy val capture: Capture = this match {
-    case b: BlockParam => CaptureParam(b.name)
-    case s: VarBinder => LexicalRegion(name, s.decl)
-    case r: ExternResource => Resource(name)
-  }
+  val capture: Capture
 }
 object TrackedParam {
-  case class BlockParam(name: Name, tpe: Option[BlockType], decl: source.Tree) extends TrackedParam
-  case class ExternResource(name: Name, tpe: BlockType, decl: source.Tree) extends TrackedParam
+  case class BlockParam(name: Name, tpe: Option[BlockType], capture: Capture, decl: source.Tree) extends TrackedParam
+  case class ExternResource(name: Name, tpe: BlockType, capture: Capture, decl: source.Tree) extends TrackedParam
 }
 export TrackedParam.*
 
@@ -202,7 +198,7 @@ enum Binder extends TermSymbol {
 
   case ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder, ValueSymbol
   case RegBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: RegDef) extends Binder, RefBinder
-  case VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder, RefBinder, TrackedParam
+  case VarBinder(name: Name, tpe: Option[ValueType], capture: Capture, decl: VarDef) extends Binder, RefBinder, TrackedParam
   case DefBinder(name: Name, caps: Option[CaptureSet], tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
 }
 export Binder.*

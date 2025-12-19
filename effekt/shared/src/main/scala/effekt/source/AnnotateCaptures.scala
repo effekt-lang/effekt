@@ -75,7 +75,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       tcaps ++ combineAll(vargs map query) ++ combineAll(bargs map query)
 
     case b @ source.BlockLiteral(tps, vps, bps, body, _) =>
-      query(body) -- boundCapabilities(b) -- CaptureSet(bps.map(_.symbol.capture))
+      query(body) -- CaptureSet(bps.map(_.symbol.capture))
   }
 
   override def query(h: OpClause)(using Context, Unit) = h match {
