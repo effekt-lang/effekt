@@ -80,8 +80,6 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
 
   override def query(h: OpClause)(using Context, Unit) = h match {
     case source.OpClause(id, tps, vps, bps, ret, body, resume, span) =>
-      // bps also contains any capabilities as this phase is run after ExplicitCapabilities,
-      // so we don't need to special-case them here.
       query(body) -- CaptureSet(bps.map(_.symbol.capture))
   }
 
