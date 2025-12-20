@@ -6,7 +6,7 @@ interface Counter {
 def makeCounter(start: Int) at {global}: Counter at {global} = {
   val x = ref(start)
   def counter at {io}: Counter = new Counter {
-    def get() = x.get() // ERROR Cannot typecheck call.
+    def get() = x.get() // ERROR Not allowed {global}
     def inc() = x.set(x.get() + 1)
   }
   box counter

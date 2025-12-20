@@ -115,23 +115,19 @@ case class ValueParam(name: Name, tpe: Option[ValueType], decl: source.Tree) ext
 
 sealed trait TrackedParam extends Param, BlockSymbol {
   // Every tracked block gives rise to a capture parameter (except resumptions, they are transparent)
-  lazy val capture: Capture = this match {
-    case b: BlockParam => CaptureParam(b.name)
-    case r: ResumeParam => ???
-    case s: VarBinder => LexicalRegion(name, s.decl)
-    case r: ExternResource => Resource(name)
-  }
+  val capture: Capture
 }
 object TrackedParam {
-  case class BlockParam(name: Name, tpe: Option[BlockType], decl: source.Tree) extends TrackedParam
-  case class ResumeParam(module: Module) extends TrackedParam {
-    val name = Name.local("resume")
-    val decl = NoSource
-  }
-  case class ExternResource(name: Name, tpe: BlockType, decl: source.Tree) extends TrackedParam
+  case class BlockParam(name: Name, tpe: Option[BlockType], capture: Capture, decl: source.Tree) extends TrackedParam
+  case class ExternResource(name: Name, tpe: BlockType, capture: Capture, decl: source.Tree) extends TrackedParam
 }
 export TrackedParam.*
 
+// Resume is transparent
+case class ResumeParam(module: Module) extends Param, BlockSymbol {
+  val name = Name.local("resume")
+  val decl = NoSource
+}
 
 trait Callable extends BlockSymbol {
   def tparams: List[TypeParam]
@@ -202,7 +198,7 @@ enum Binder extends TermSymbol {
 
   case ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder, ValueSymbol
   case RegBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: RegDef) extends Binder, RefBinder
-  case VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder, RefBinder, TrackedParam
+  case VarBinder(name: Name, tpe: Option[ValueType], capture: Capture, decl: VarDef) extends Binder, RefBinder, TrackedParam
   case DefBinder(name: Name, caps: Option[CaptureSet], tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
 }
 export Binder.*
@@ -396,6 +392,7 @@ object CaptUnificationVar {
   case class AnonymousFunctionRegion(fun: source.BlockLiteral) extends Role
   case class InferredBox(box: source.Box) extends Role
   case class InferredUnbox(unbox: source.Unbox) extends Role
+  case class OpClause(clause: source.OpClause) extends Role
   // underlying should be a UnificationVar
   case class Subtraction(handled: List[Capture], underlying: CaptUnificationVar) extends Role
   case class Substitution() extends Role

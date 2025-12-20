@@ -56,9 +56,9 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
         // Heuristic for a specific misunderstanding: Scala sometimes allows calling nullary fns without args, we do not
         sym match {
           case UserFunction(_, _, Nil, Nil, _, _, _, _)
-             | TrackedParam.BlockParam(_, Some(BlockType.FunctionType(_, _, Nil, Nil, _, _)), _)
+             | TrackedParam.BlockParam(_, Some(BlockType.FunctionType(_, _, Nil, Nil, _, _)),_,  _)
             => C.info(s"Did you mean to call the function using `${sym.name.name}()`?")
-          case TrackedParam.ResumeParam(_) // NOTE: we don't know the type of `resume` here, so this is not _great_ advice...
+          case ResumeParam(_) // NOTE: we don't know the type of `resume` here, so this is not _great_ advice...
             => C.info(s"Did you mean to resume using `resume(...)`?")
           case _ => ()
         }

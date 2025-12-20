@@ -38,7 +38,7 @@ object SignaturePrinter extends ParenPrettyPrinter {
       val tpe = context.valueTypeOption(p).getOrElse { t.get }
       pp"${name.name}: ${tpe}"
 
-    case p @ BlockParam(name, t, _) =>
+    case p @ BlockParam(name, t, _, _) =>
       val tpe = context.blockTypeOption(p).getOrElse { t.get }
       pp"{ ${name.name}: ${tpe} }"
 
@@ -72,7 +72,7 @@ object SignaturePrinter extends ParenPrettyPrinter {
     case ExternInterface(name, tparams, _) =>
       pp"extern interface ${name.name}${show(tparams)}"
 
-    case ExternResource(name, tpe, _) =>
+    case ExternResource(name, tpe, _, _) =>
       pp"extern resource ${name.name}: ${tpe}"
 
     case c: Callable =>

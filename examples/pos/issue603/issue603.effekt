@@ -1,0 +1,20 @@
+interface Bar {
+  def bar(): Unit
+}
+interface Foo {
+  def foo(){b: Bar}: Unit
+}
+
+def baz() at {} = {
+  def x at {} = new Foo {
+    def foo(){b} = { b.bar() }
+  }
+  def b2 at {} = new Bar { def bar() = () }
+  x.foo{b2}
+}
+
+def foof(){b: Bar} at {} = b.bar()
+
+def main() at {} = {
+  baz()
+}

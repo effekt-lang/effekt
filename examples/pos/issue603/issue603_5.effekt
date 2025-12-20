@@ -1,0 +1,18 @@
+effect fail(): Nothing
+interface Greet { def sayHello(): Unit / fail }
+
+// error (on the `box new`): Not allowed {fail}
+def helloWorld(): Greet at {io} / fail = box new Greet {
+  def sayHello() = if (0 == 1) do fail() else println("Hello")
+}
+
+// works
+def helloWorlding[R] { body: => R / Greet }: R =
+  try body() with Greet {
+    def sayHello() = resume {
+      if (0 == 1) do fail() else println("Hello")
+    }
+  }
+
+def main() = {}
+
