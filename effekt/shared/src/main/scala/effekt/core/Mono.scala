@@ -403,46 +403,40 @@ def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] =
     monoTypes.map(baseTypes =>
       val replacementTparams = tparams.zip(baseTypes).toMap
       ctx.replacementTparams ++= replacementTparams
-      Declaration.Data(ctx.tpeNames(id, baseTypes).name, List.empty, constructors.flatMap(monomorphize))
+      Declaration.Data(ctx.tpeNames(id, baseTypes).name, List.empty, constructors.map(constr => monomorphize(constr, baseTypes)))
     )
-  case Interface(id, List(), properties) => {
-    val monoProp = properties flatMap monomorphize
-    List(Declaration.Interface(id, List.empty, monoProp))
-  }
   case Interface(id, tparams, properties) =>
     val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
-    monoTypes.map(baseTypes =>
-      val replacementTparams = tparams.zip(baseTypes).toMap
-      ctx.replacementTparams ++= replacementTparams
-      val monoProp = properties flatMap monomorphize
-      val interfaceName = ctx.funNames(id, baseTypes)
-      if (interfaceName == id) {
-        Declaration.Interface(interfaceName, tparams, monoProp)
-      } else {
-        Declaration.Interface(interfaceName, List.empty, monoProp)
-      }
-    )
+    if (monoTypes.isEmpty) {
+      List(Declaration.Interface(id, tparams, properties))
+    } else {
+      monoTypes.map(baseTypes =>
+        val replacementTparams = tparams.zip(baseTypes).toMap
+        ctx.replacementTparams ++= replacementTparams
+        val monoProp = properties.map(prop => monomorphize(prop, baseTypes))
+        val interfaceName = ctx.funNames(id, baseTypes)
+        if (interfaceName == id) {
+          Declaration.Interface(interfaceName, tparams, monoProp)
+        } else {
+          Declaration.Interface(interfaceName, List.empty, monoProp)
+        }
+      )
+    }
 
-def monomorphize(property: Property)(using ctx: MonoContext): List[Property] = property match {
+def monomorphize(property: Property, baseTypes: Vector[Ground])(using ctx: MonoContext): Property = property match {
   case Property(id, tpe@BlockType.Function(tparams, cparams, vparams, bparams, result)) => {
-    val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
-    monoTypes.map(baseTypes => 
-      val replacementTparams = tparams.zip(baseTypes).toMap
-      ctx.replacementTparams ++= replacementTparams
-      Property(ctx.funNames((id, baseTypes)), monomorphize(tpe)) 
-    )
+    val replacementTparams = tparams.zip(baseTypes).toMap
+    ctx.replacementTparams ++= replacementTparams
+    Property(ctx.funNames((id, baseTypes)), monomorphize(tpe)) 
   }
-  case Property(id, tpe) => List(Property(id, monomorphize(tpe)))
+  case Property(id, tpe) => Property(id, monomorphize(tpe))
 }
 
-def monomorphize(constructor: Constructor)(using ctx: MonoContext): List[Constructor] = constructor match
+def monomorphize(constructor: Constructor, baseTypes: Vector[Ground])(using ctx: MonoContext): Constructor = constructor match
   case Constructor(id, tparams, fields) => 
-    val innerSolution = ctx.solution.getOrElse(id, Set.empty)
-    innerSolution.map(baseTypes => {
-      val replacementTparams = tparams.zip(baseTypes).toMap
-      ctx.replacementTparams ++= replacementTparams
-      Constructor(ctx.funNames(id, baseTypes), List.empty, fields map monomorphize)
-    }).toList
+    val replacementTparams = tparams.zip(baseTypes).toMap
+    ctx.replacementTparams ++= replacementTparams
+    Constructor(ctx.funNames(id, baseTypes), List.empty, fields map monomorphize)
 
 def monomorphize(block: Block)(using ctx: MonoContext)(using Context, DeclarationContext): Block = block match
   case b: BlockLit => monomorphize(b)
