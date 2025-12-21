@@ -7,6 +7,7 @@ import effekt.core.DeBruijn.addTparams
 import effekt.core.optimizer.Deadcode
 import effekt.core.optimizer.Normalizer
 import effekt.core.optimizer.BindSubexpressions
+import effekt.core.Type.functionType
 
 
 object DeBruijn {
@@ -132,7 +133,7 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
             // DeadCodeElimination
             transformed = Deadcode.remove(mainSymbol, transformed)
             // Normalize (no blocklits as callees)
-            transformed = Normalizer.normalize(Set(mainSymbol), transformed, 50)
+            // transformed = Normalizer.normalize(Set(mainSymbol), transformed, 50)
             // BindSubexpressions (no unbox as callees)
             transformed = BindSubexpressions.transform(transformed)
             // DeadCodeElimination
@@ -259,7 +260,9 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
               case Some((replacementId, blockVar)) => 
                 Invoke(blockVar, replacementId, annotatedTpe, targs, vargs, processedBargs)
               case None => 
-                App(callee, targs, vargs, processedBargs)
+                val calleeTpe = callee.functionType
+                val updatedCalleeTpe = BlockType.Function(calleeTpe.tparams, calleeTpe.cparams, calleeTpe.vparams, processedBargs.map(_.tpe), calleeTpe.result)
+                App(Block.BlockVar(id, updatedCalleeTpe, annotatedCapt), targs, vargs, processedBargs)
             }
           }
           case New(impl) => App(New(impl), targs, vargs, processedBargs)

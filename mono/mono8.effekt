@@ -1,8 +1,8 @@
 def foo[E](x: E): E = x
 
 def main(): Unit = {
-  foo[() => Int at {io}](box { () => println("asd"); 123 } )
-  foo[Int](42)
+  foo[() => Int at {io}](box { () => println("asd"); 123 } )()
+  println(foo[Int](42))
   ()
 }
 
@@ -10,7 +10,7 @@ def fooInt(x: Int): Int = x
 def fooBoxEmptyIntatIo(x: () => Int at {io}): () => Int at {io} = x
 
 def monoMain(): Unit = {
-  fooBoxEmptyIntatIo(box { () => println("asd"); 123 })
-  fooInt(42)
+  fooBoxEmptyIntatIo(box { () => println("asd"); 123 })()
+  println(fooInt(42))
   ()
 }
