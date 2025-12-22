@@ -498,7 +498,7 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
   case Var(ref, init, capture, body) => 
     Var(ref, monomorphize(init), capture, monomorphize(body))
   case ImpureApp(id, callee, targs, vargs, bargs, body) =>
-    ImpureApp(id, callee, targs map monomorphize, vargs map monomorphize, bargs, monomorphize(body))
+    ImpureApp(id, callee, targs map monomorphize, vargs map monomorphize, bargs map monomorphize, monomorphize(body))
   case App(callee: BlockVar, targs, vargs, bargs) => 
     val monoFnId = replacementFun(callee.id, targs)
     App(monomorphize(callee, monoFnId, targs), List.empty, vargs map monomorphize, bargs map monomorphize)
@@ -616,6 +616,12 @@ def monomorphize(expr: Expr)(using ctx: MonoContext)(using Context, DeclarationC
   case Literal(value, annotatedType) =>
     Literal(value, monomorphize(annotatedType))
   case PureApp(b, targs, vargs) =>
+    // val funTpe = b.functionType
+    // val replacementTparams = funTpe.tparams.zip(targs map toTypeArg).toMap
+    // ctx.replacementTparams ++= replacementTparams
+
+    // val blockTpe = BlockType.Function(funTpe.tparams, funTpe.cparams, funTpe.vparams, funTpe.bparams map monomorphize, monomorphize(funTpe.result))
+    // val blockVar: BlockVar = BlockVar(b.id, blockTpe, b.annotatedCapt)
     PureApp(b, targs, vargs)
   case Make(data, tag, targs, vargs) =>
     val combinedTargs = data.targs ++ targs
@@ -710,7 +716,13 @@ def replacementFun(id: FunctionId, targs: List[ValueType])(using ctx: MonoContex
 def replacementData(id: Id, targs: List[ValueType])(using ctx: MonoContext): ValueType.Data = {
   if (targs.isEmpty) return ValueType.Data(id, List.empty)
   val baseTypes: Vector[Ground] = (targs map toTypeArg).toVector
-  ctx.tpeNames(id, baseTypes)
+
+  // we do not know anything about extern types
+  // therefore we need to rely on types being extern if they are not contained in the names
+  // extern types should really be contained in the Module externs 
+  ctx.tpeNames.getOrElse((id, baseTypes), {
+    ValueType.Data(id, targs)
+  })
 }
 
 def toTypeArg(vt: ValueType)(using ctx: MonoContext): Ground = vt match {
