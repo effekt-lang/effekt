@@ -10,8 +10,7 @@
   "main": "index.js",
   "scripts": {},
   "bin": {
-    "effekt": "bin/effekt",
-    "effekt.sh": "bin/effekt.sh"
+    "effekt": "bin/effekt"
   },
   "preferGlobal": true,
   "license": "MIT",
