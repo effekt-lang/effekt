@@ -3,6 +3,7 @@ package core
 package vm
 
 import effekt.source.FeatureFlag
+import effekt.util.UByte
 
 import scala.annotation.tailrec
 
@@ -23,13 +24,13 @@ enum Value {
   // TODO this could also be Pointer(Array | Ref)
   case Array(array: scala.Array[Value])
   case Ref(ref: Reference)
-  case ByteArray(array: scala.Array[Byte])
+  case ByteArray(array: scala.Array[UByte])
   case Data(data: ValueType.Data, tag: Id, fields: List[Value])
   case Boxed(block: Computation)
 }
 object Value {
   def Int(v: Long): Value = Value.Literal(v)
-  def Byte(v: Byte): Value = Value.Literal(v)
+  def Byte(v: UByte): Value = Value.Literal(v)
   def Bool(b: Boolean): Value = Value.Literal(b)
   def Unit(): Value = Value.Literal(())
   def Double(d: scala.Double): Value = Value.Literal(d)

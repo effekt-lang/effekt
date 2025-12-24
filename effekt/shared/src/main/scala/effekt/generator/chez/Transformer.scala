@@ -5,6 +5,7 @@ package chez
 import effekt.context.Context
 import effekt.core.*
 import effekt.symbols.{ Module, Symbol, TermSymbol, Wildcard }
+import effekt.util.UByte
 import effekt.util.paths.*
 import effekt.util.messages.ErrorReporter
 import kiama.output.PrettyPrinterTypes.Document
@@ -218,6 +219,7 @@ trait Transformer {
 
     case Literal(s: String, _)  => escape(s)
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
+    case Literal(b: Byte, _)    => chez.RawValue(UByte.unsafeFromByte(b).toInt.toString)
     case l: Literal             => chez.RawValue(l.value.toString)
     case ValueVar(id, _)        => chez.Variable(nameRef(id))
 

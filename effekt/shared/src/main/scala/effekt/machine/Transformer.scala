@@ -2,13 +2,15 @@ package effekt
 package machine
 
 import effekt.context.Context
-import effekt.core.substitutions.{ Substitution, substitute }
-import effekt.core.{ Block, DeclarationContext, Toplevel, Id, given }
-import effekt.symbols.{ Symbol, TermSymbol }
+import effekt.core.substitutions.{Substitution, substitute}
+import effekt.core.{Block, DeclarationContext, Id, Toplevel, given}
+import effekt.symbols.{Symbol, TermSymbol}
 import effekt.symbols.builtins.TState
 import effekt.util.messages.ErrorReporter
 import effekt.util.Trampoline
 import effekt.symbols.ErrorMessageInterpolator
+import effekt.util.UByte
+
 import scala.annotation.tailrec
 
 
@@ -476,10 +478,12 @@ object Transformer {
         LiteralInt(unboxed, value, Coerce(variable, unboxed, k(variable)))
       }
 
-    case core.Literal(value: Int, core.Type.TByte) =>
+    case core.Literal(value: Byte, core.Type.TByte) =>
       shift { k =>
         val unboxed = Variable(freshName("byte"), Type.Byte())
-        LiteralByte(unboxed, value, Coerce(variable, unboxed, k(variable)))
+        val b = UByte.unsafeFromByte(value)
+        // TODO: Literal bytes could now also be just byte-sized in Machine (= use 'UByte'; they are byte-sized in LLVM anyway).
+        LiteralByte(unboxed, b.toInt, Coerce(variable, unboxed, k(variable)))
       }
 
     case core.Literal(v: Double, core.Type.TDouble) =>

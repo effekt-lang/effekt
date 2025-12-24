@@ -15,7 +15,7 @@ def run(n: Int) = {
     panic("failed to make directory")
   }
 
-  val buffer = bytearray(size, 33.toByte)
+  val buffer = bytearray(size, 0x21)
   each(0, n) { i =>
     val filename = foldername ++ i.show ++ ".txt"
     val file = internal::openForWriting(filename)
