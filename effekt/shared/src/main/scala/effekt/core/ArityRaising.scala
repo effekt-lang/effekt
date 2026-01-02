@@ -30,8 +30,6 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       ModuleDecl(path, includes, declarations, externs, definitions map transform, exports)
   }
 
-
-
   def transform(toplevel: Toplevel)(using C: Context, DC: DeclarationContext): Toplevel = toplevel match {
     case Toplevel.Def(id, block) => Toplevel.Def(id, transform(block))
     case Toplevel.Val(id, binding) => Toplevel.Val(id, transform(binding))
@@ -49,11 +47,11 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
                 val (params, bindings) = flattenParam(ValueParam(freshId, fieldType))
                 (params, bindings, ValueVar(freshId, fieldType))
               }.unzip3
-              
+
               val binding = (paramId, Make(tpe, ctor, List(), fieldVars))
               (flatParams.flatten, allBindings.flatten :+ binding)
-              
-            case _ => (List(param), List())
+        
+            case _ => (List(param), List()) 
           }
         case _ => (List(param), List())
       }
@@ -67,7 +65,11 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
     
       Block.BlockLit(tparams, cparams, allParams.flatten, bparams, newBody) 
     case Block.Unbox(pure) => Block.Unbox(transform(pure))
-    case Block.New(impl) => block
+    case Block.New(Implementation(interface, operations)) => 
+      Block.New(Implementation(interface, operations.map {
+        case Operation(name, tparams, cparams, vparams, bparams, body) => 
+          Operation(name, tparams, cparams, vparams, bparams, transform(body))
+       }))
   }
 
   def transform(stmt: Stmt)(using C: Context, DC: DeclarationContext): Stmt = stmt match {
@@ -101,20 +103,32 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       val flattened = (vargs zip vparamsTypes).map { case (arg, tpe) => flattenArg(arg, tpe) }
       val (allArgs, allTypes, allMatches) = flattened.unzip3
 
+      // Helper to check if a type needs flattening
+      def needsFlattening(tpe: ValueType): Boolean = tpe match {
+        case ValueType.Data(name, _) =>
+          DC.findData(name) match {
+            case Some(Data(_, List(), List(Constructor(_, List(), _)))) => true
+            case _ => false
+          }
+        case _ => false
+      }
+
       val transformedBargs = bargs.map { barg =>
         barg match {
-          // this handles: 
+          // This handles: 
           // val res = myList.map {myFunc} 
           // by making it:
           // val res = myList.map {t => myFunc(t)}
+          // but only if the arity of myFunc changes
           case BlockVar(id, annotatedTpe, annotatedCapt) => 
             annotatedTpe match {
-              case BlockType.Function(tparams, cparams, vparams, bparams, result) => 
-               val values = vparams.map { tpe =>
+              case BlockType.Function(tparams, cparams, vparams, bparams, result) 
+                  if vparams.exists(needsFlattening) =>
+                val values = vparams.map { tpe =>
                   val freshId = Id("x")
                   (ValueParam(freshId, tpe), ValueVar(freshId, tpe))
                 }
-                val blocks = bparams.zip(cparams).map { case (tpe, capt)=>
+                val blocks = bparams.zip(cparams).map { case (tpe, capt) =>
                   val freshId = Id("f")
                   (BlockParam(freshId, tpe, Set(capt)), BlockVar(freshId, tpe, Set(capt)))
                 }
@@ -122,11 +136,10 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
                 // Don't transform the call - the BlockVar keeps its original signature
                 val call = Stmt.App(barg, List(), values.map(_._2), blocks.map(_._2))
       
-                BlockLit(tparams, cparams, values.map(_._1), blocks.map(_._1), call)
+                BlockLit(tparams, cparams, values.map(_._1), blocks.map(_._1), transform(call))
 
               case _ => transform(barg)
             }
-
 
           case BlockLit(btparams, bcparams, bvparams, bbparams, body) =>
             // Keep the signature unchanged
