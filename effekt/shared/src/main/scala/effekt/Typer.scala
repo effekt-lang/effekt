@@ -268,10 +268,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         var handlerEffs: ConcreteEffects = Pure
 
-        handlers foreach Context.withFocus { h =>
+        val tpesAndTerms = handlers flatMap Context.withFocus { h =>
           flowingInto(continuationCaptHandled) {
-            val Result(_, usedEffects) = checkImplementation(h.impl, Some((ret, continuationCapt)))
+            val (Result(_, usedEffects), tpesAndTerms) = checkImplementation(h.impl, Some((ret, expected, continuationCapt)))
             handlerEffs = handlerEffs ++ usedEffects
+            tpesAndTerms
           }
         }
 
@@ -314,7 +315,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // The captures of the handler continue flowing into the outer scope
         usingCapture(continuationCapt)
 
-        Result(ret, (effs -- handled) ++ handlerEffs)
+        Result(join(expected, tpesAndTerms), (effs -- handled) ++ handlerEffs)
 
       case tree @ source.Match(scs, clauses, default, _) =>
 
@@ -400,7 +401,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   /**
    * The [[continuationDetails]] are only provided, if a continuation is captured (that is for implementations as part of effect handlers).
    */
-  def checkImplementation(impl: source.Implementation, continuationDetails: Option[(ValueType, CaptUnificationVar)])(using Context, Captures): Result[InterfaceType] = Context.focusing(impl) {
+  def checkImplementation(impl: source.Implementation, continuationDetails: Option[(ValueType, Option[ValueType], CaptUnificationVar)])(using Context, Captures): (Result[InterfaceType], List[(ValueType, Option[source.Tree])]) = Context.focusing(impl) {
     case source.Implementation(sig, clauses, _) =>
 
       var handlerEffects: ConcreteEffects = Pure
@@ -421,7 +422,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       if (covered.size > covered.distinct.size)
         Context.error("Duplicate definitions of operations")
 
-      clauses foreach Context.withFocus {
+      val tpesAndTerms = clauses map Context.withFocus {
         case d @ source.OpClause(op, tparams, vparams, bparams, retAnnotation, body, resume, _) =>
 
           retAnnotation.foreach {
@@ -461,7 +462,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           val canonical = CanonicalOrdering(declared.effects.toList)
 
           // distinguish between handler operation or object operation (which does not capture a cont.)
-          val Result(_, effs) = continuationDetails match {
+          val (Result(bodyTpe, effs), bodyStmt) = continuationDetails match {
             // normal object: no continuation there
             case None =>
               // block parameters are to be bound by the definition itself instead of by resume when using handlers
@@ -509,10 +510,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 cparams
               }
 
-              Result(bodyType, bodyEffs -- Effects(effs))
+              (Result(bodyType, bodyEffs -- Effects(effs)), body)
 
             // handler implementation: we have a continuation
-            case Some(ret, continuationCapt) =>
+            case Some(ret, expected, continuationCapt) =>
 
               if (bparams.nonEmpty)
                 Context.error("Block parameters are bound by resume and not the effect operation itself")
@@ -546,16 +547,18 @@ object Typer extends Phase[NameResolved, Typechecked] {
               }
               Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
 
-              body checkAgainst ret
+              (checkStmt(body, expected), body)
           }
 
           handlerEffects = handlerEffects ++ effs
+
+          (bodyTpe, Some(bodyStmt))
       }
 
       // The implementation has the annotated block type
       Context.annotateInferredType(impl, tpe)
 
-      Result(tpe, handlerEffects)
+      (Result(tpe, handlerEffects), tpesAndTerms)
   }
 
 
@@ -601,7 +604,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       case source.New(impl, _) =>
-        val r @ Result(got, eff) = checkImplementation(impl, None)
+        val (r @ Result(got, eff), _) = checkImplementation(impl, None)
         expected foreach { matchExpected(got, _) }
         r
 
@@ -1622,6 +1625,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   /**
    * Computes the join of all types, only called to merge the different arms of if and match
+   * and the different clauses of handlers
    */
   def join(expected: Option[ValueType], tpesAndTerms: List[(ValueType, Option[source.Tree])])(using Context): ValueType =
     val tpes = tpesAndTerms.map(_._1)
