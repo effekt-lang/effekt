@@ -1043,7 +1043,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def isExpr(): Term = nonterminal:
     val scrutinee = relExpr()
-    when(`is`) { desugarIsExpr(scrutinee, matchPattern(), span()) } { scrutinee }
+    when(`is`) { desugarIsExpr(scrutinee, position, matchPattern(), span()) } { scrutinee }
 
   def relExpr(): Term = infix(addExpr, `<=`, `>=`, `<`, `>`)
   def addExpr(): Term = infix(mulExpr, `++`, `+`, `-`)
@@ -1104,10 +1104,10 @@ class Parser(tokens: Seq[Token], source: Source) {
     case _ => sys.error(s"Internal compiler error: not a valid operator ${op}")
   }
 
-  private def desugarIsExpr(scrutinee: Term, pattern: MatchPattern, exprSpan: Span): Term = {
+  private def desugarIsExpr(scrutinee: Term, positionBefore: Int, pattern: MatchPattern, exprSpan: Span): Term = {
     if (hasBindings(pattern)) {
       // TODO: fix positions
-      warn(s"Pattern bindings in `is` expressions are discarded; use match guards for bindings", exprSpan.from, exprSpan.to)
+      warn(s"Pattern bindings in `is` expressions are discarded; use match guards for bindings", positionBefore, positionBefore)
     }
 
     val trueClause = MatchClause(
