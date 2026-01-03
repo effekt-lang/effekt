@@ -1038,8 +1038,13 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
 
   def orExpr(): Term = infix(andExpr, `||`)
-  def andExpr(): Term = infix(eqExpr, `&&`)
-  def eqExpr(): Term = infix(relExpr, `===`, `!==`)
+  def andExpr(): Term = infix(eqExpr, `&&`, `and`)
+  def eqExpr(): Term = infix(isExpr, `===`, `!==`)
+
+  def isExpr(): Term = nonterminal:
+    val scrutinee = relExpr()
+    when(`is`) { desugarIsExpr(scrutinee, matchPattern(), span()) } { scrutinee }
+
   def relExpr(): Term = infix(addExpr, `<=`, `>=`, `<`, `>`)
   def addExpr(): Term = infix(mulExpr, `++`, `+`, `-`)
   def mulExpr(): Term = infix(callExpr, `*`, `/`)
@@ -1077,13 +1082,14 @@ class Parser(tokens: Seq[Token], source: Source) {
          )
 
   private def isThunkedOp(op: TokenKind): Boolean = op match {
-    case `||` | `&&` => true
-    case _           => false
+    case `||` | `&&` | `and` => true
+    case _                   => false
   }
 
   private def opName(op: TokenKind): String = op match {
     case `||` => "infixOr"
     case `&&` => "infixAnd"
+    case `and` => "infixAnd"
     case `===` => "infixEq"
     case `!==` => "infixNeq"
     case `<` => "infixLt"
@@ -1096,6 +1102,31 @@ class Parser(tokens: Seq[Token], source: Source) {
     case `/` => "infixDiv"
     case `++` => "infixConcat"
     case _ => sys.error(s"Internal compiler error: not a valid operator ${op}")
+  }
+
+  private def desugarIsExpr(scrutinee: Term, pattern: MatchPattern, exprSpan: Span): Term = {
+    if (hasBindings(pattern)) {
+      // TODO: fix positions
+      warn(s"Pattern bindings in `is` expressions are discarded; use match guards for bindings", exprSpan.from, exprSpan.to)
+    }
+
+    val trueClause = MatchClause(
+      pattern,
+      Nil,
+      Return(BooleanLit(true, exprSpan.synthesized), exprSpan.synthesized),
+      exprSpan.synthesized
+    )
+    val falseStmt = Return(BooleanLit(false, exprSpan.synthesized), exprSpan.synthesized)
+
+    Match(List(scrutinee), List(trueClause), Some(falseStmt), exprSpan)
+  }
+
+  private def hasBindings(p: MatchPattern): Boolean = p match {
+    case AnyPattern(_, _) => true
+    case TagPattern(_, subpatterns, _) => subpatterns.exists(hasBindings)
+    case MultiPattern(patterns, _) => patterns.exists(hasBindings)
+    case LiteralPattern(_, _) => false
+    case IgnorePattern(_) => false
   }
 
   def TypeTuple(tps: Many[Type]): Type =

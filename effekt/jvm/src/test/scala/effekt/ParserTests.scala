@@ -1613,4 +1613,176 @@ class ParserTests extends munit.FunSuite {
       "extern js \"\"\" function \"\"\""
     )
   }
+
+  test("Is expressions") {
+    // Basic is expressions
+    parseExpr("x is Some(_)")
+    parseExpr("x is None()")
+    parseExpr("x is Cons(_, _)")
+    parseExpr("x is 42")
+    parseExpr("x is true")
+    parseExpr("x is ()")
+
+    // Qualified constructors
+    parseExpr("x is list::Cons(_, _)")
+    parseExpr("x is outer::inner::Tag()")
+
+    // Nested patterns
+    parseExpr("x is Some(Cons(_, Nil()))")
+    parseExpr("x is (left, right)")
+
+    // Negation (primary use case from issue #481)
+    parseExpr("not(x is Some(_))")
+    parseExpr("not(cmd is Some(\"quit\"))")
+  }
+
+  test("Is expression precedence") {
+    // `is` should bind tighter than `and`/`&&`
+    assertEqualModuloSpans(
+      parseExpr("a && b is Some(_)"),
+      parseExpr("a && (b is Some(_))"))
+
+    assertEqualModuloSpans(
+      parseExpr("a and b is Some(_)"),
+      parseExpr("a and (b is Some(_))"))
+
+    // `is` at same level as relational/equality
+    assertEqualModuloSpans(
+      parseExpr("x is Some(_) && y is None()"),
+      parseExpr("(x is Some(_)) && (y is None())"))
+
+    // Mixing with other operators
+    assertEqualModuloSpans(
+      parseExpr("x is Some(_) || y is None()"),
+      parseExpr("(x is Some(_)) || (y is None())"))
+
+    parseExpr("a + b is Positive()")
+    assertEqualModuloSpans(
+      parseExpr("a + b is Positive()"),
+      parseExpr("(a + b) is Positive()"))
+  }
+
+  test("And as boolean operator") {
+    // `and` should work like `&&` in expression position
+    parseExpr("a and b")
+    parseExpr("true and false")
+    parseExpr("f() and g()")
+
+    assertEqualModuloSpans(
+      parseExpr("a and b"),
+      parseExpr("a && b"))
+
+    assertEqualModuloSpans(
+      parseExpr("a and b and c"),
+      parseExpr("(a and b) and c"))
+
+    assertEqualModuloSpans(
+      parseExpr("a and b and c"),
+      parseExpr("a && b && c"))
+
+    // Mixing `and` and `&&`
+    assertEqualModuloSpans(
+      parseExpr("a and b && c"),
+      parseExpr("(a and b) && c"))
+
+    assertEqualModuloSpans(
+      parseExpr("a && b and c"),
+      parseExpr("(a && b) and c"))
+  }
+
+  test("Is with and chaining") {
+    // Combined is + and (the main use case)
+    parseExpr("x is Some(_) and y is None()")
+    parseExpr("x is Some(v) and v > 0")
+    parseExpr("x is Cons(h, t) and h is Some(_)")
+
+    // Multiple chained
+    parseExpr("a is Some(_) and b is Some(_) and c is None()")
+
+    // With negation
+    parseExpr("not(x is Some(_)) and y is None()")
+    parseExpr("not(x is Some(_) and y is None())")
+  }
+
+  test("Is expression desugars to match") {
+    // Verify the desugaring produces a Match node
+    val expr = parseExpr("x is Some(_)")
+    expr match {
+      case Match(scrutinees, clauses, default, _) =>
+        assertEquals(scrutinees.length, 1)
+        assertEquals(clauses.length, 1)
+        assert(default.isDefined, "Expected default case for false branch")
+      case other =>
+        fail(s"Expected Match but got ${other.getClass.getSimpleName}")
+    }
+  }
+
+  test("Is expression with bindings warns") {
+    // Bindings in `is` expressions should trigger a warning
+    val p = parser("x is Some(y)")
+    val expr = p.expr()
+
+    // Check that a warning was recorded
+    assert(
+      p.recoverableDiagnostics.exists(d =>
+        d.kind == kiama.util.Severities.Warning &&
+          d.message.contains("binding")),
+      "Expected warning about pattern bindings"
+    )
+  }
+
+  test("Is in while condition (issue #481 use case)") {
+    parseStmts(
+      """while(not(cmd is Some("quit"))) {
+        |  cmd = readCmd()
+        |}
+        |""".stripMargin)
+
+    parseStmts(
+      """while(x is Some(_) and count < 10) {
+        |  count = count + 1
+        |}
+        |""".stripMargin)
+  }
+
+  test("Is in if condition") {
+    parseExpr(
+      """if (x is Some(_)) {
+        |  doSomething()
+        |} else {
+        |  doOther()
+        |}""".stripMargin)
+
+    parseExpr(
+      """if (x is Some(_) and y is None()) {
+        |  handleBoth()
+        |}""".stripMargin)
+  }
+
+  test("Is expression span") {
+    val (source, pos) =
+      raw"""x is Some(_)
+           |↑ ↑  ↑      ↑
+           |""".sourceAndPositions
+
+    val expr = parseExpr(source.content)
+
+    // The whole `is` expression should have correct span
+    expr match {
+      case m: Match =>
+        assertEquals(m.span, Span(source, pos(0), pos.last))
+      case other =>
+        fail(s"Expected Match but got ${other.getClass.getSimpleName}")
+    }
+  }
+
+  test("And still works in match guards") {
+    // Ensure existing match guard syntax still works
+    parseMatchClause("case x and x > 0 => 42")
+    parseMatchClause("case Some(x) and x > 0 => x")
+    parseMatchClause("case x and x is Some(y) and y > 0 => y")
+
+    // Multiple guards
+    parseMatchClause("case x and pred1(x) and pred2(x) => x")
+  }
 }
