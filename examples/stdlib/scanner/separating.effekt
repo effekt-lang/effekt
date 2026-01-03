@@ -5,7 +5,7 @@ def main() = {
   with feed("1,2,34,")
   with scanner[Char]
   for[Int] {
-    separating(',') { readDecimal() }
+    separating(',') { attempt { readDecimal() } { do stop() }}
   } { c => println(c) }
 }
 

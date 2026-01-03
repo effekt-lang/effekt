@@ -11,18 +11,13 @@ interface Scan[A] {
 }
 
 
-def peek[A](): A / { Scan[A], fail } =
-  more { do peek() }
-
-def skip[A](): Unit / { Scan[A], fail } =
-  more { do skip() }
-
 /// Advance the Scanner to the next token, returning it.
-def read[A](): A / { Scan[A], fail } = {
-  val t = peek()
-  skip()
+def read[A](): A / { Scan[A], stop } = {
+  val t = do peek()
+  do skip()
   return t
 }
+
 
 /// Run a scanner by reading from an input stream, discarding its output.
 def scanner[A] { scanner: () => Unit / Scan[A] }: Unit / read[A] =
@@ -31,24 +26,24 @@ def scanner[A] { scanner: () => Unit / Scan[A] }: Unit / read[A] =
 def expect(message: String) { scanner: () => Unit / fail }: Unit / Exception[WrongFormat] =
   returning::expect[Unit](message){scanner}
 
-/// If conversion is successful read the next token.
-def readIf[A, B] { convert: A => B / fail }: B / { Scan[A], fail } = {
-  val t = convert(peek());
-  skip();
+/// If conversion is successful read the next token, otherwise stop.
+def readIf[A, B] { convert: A => B / fail }: B / { Scan[A], stop } = {
+  val t = attempt { convert(do peek()) } { do stop() };
+  do skip();
   return t
 }
 
 /// Check that the next token satisfies the predicate and skip and return it when it does.
-def readIf[A] { predicate: A => Bool }: A / { Scan[A], fail } =
+def readIf[A] { predicate: A => Bool }: A / { Scan[A], stop } =
   readIf { value => value.suchThat{predicate} }
 
 /// Check that the next token satisfies the predicate and skip it when it does.
-def skipIf[A] { predicate: A => Bool }: Unit / { Scan[A], fail } = {
+def skipIf[A] { predicate: A => Bool }: Unit / { Scan[A], stop } = {
   readIf{predicate}; ()
 }
 
 /// Check that the next token can be converted and skip it when it can.
-def readIf[A, B] { convert: A => Option[B] }: B / { Scan[A], fail } =
+def readIf[A, B] { convert: A => Option[B] }: B / { Scan[A], stop } =
   readIf { value => value.convert.getOrFail }
 
 
@@ -73,25 +68,25 @@ def skipSome[A] { predicate: A => Bool }: Unit / { Scan[A], fail } =
   for[A] { readSome{predicate} } { _ => () }
 
 /// Read the next character if it is the given one.
-def readIf(e: Char): Unit / { Scan[Char], fail } = {
+def readIf(e: Char): Unit / { Scan[Char], stop } = {
   readIf[Char] { c => c == e }; ()
 }
 
 /// Check that the next token satisfies the predicate and skip it when it does.
-def skipIf(e: Char): Unit / { Scan[Char], fail } =
+def skipIf(e: Char): Unit / { Scan[Char], stop } =
   skipIf { c => c == e }
 
 /// Read values produced by `action` followed by `separator` until one of them stops.
 /// Will consume a trailing separator.
-def separating[A] { seperator: () => Unit / fail } { action: () => A / fail }: Unit / emit[A] =
-  successfully {
+def separating[A] { seperator: () => Unit / stop } { action: () => A / stop }: Unit / emit[A] =
+  loop {
     do emit(action())
     seperator()
   }
 
 /// Read a sequence separated by `separator`.
 /// Will consume a trailing separator.
-def separating[A](seperator: Char) { action: () => A / fail }: Unit / { Scan[Char], emit[A] } =
+def separating[A](seperator: Char) { action: () => A / stop }: Unit / { Scan[Char], emit[A] } =
   separating { skipIf(seperator) } {action}
 
 
@@ -102,16 +97,16 @@ def skipWhitespace(): Unit / Scan[Char] =
 /// Read a prefix of the characters of the given string.
 /// Fails when it cannot read all of them.
 def readString(string: String): Unit / { Scan[Char], fail } =
-  for[Char] { string.each } { char => readIf(char) }
+  for[Char] { string.each } { char => must { readIf(char) } }
 
 /// Check that the next character is a digit in base 10, and if so read and return it.
-def readDigit(): Int / { Scan[Char], fail } =
+def readDigit(): Int / { Scan[Char], stop } =
   readIf[Char, Int]{ char => digitValue(char) }
 
 /// Read a positive decimal number.
 /// Fails when there isn't at least one digit.
 def readDecimal(): Int / { Scan[Char], fail } = {
-  var result = readDigit()
+  var result = must { readDigit() }
   for[Int] { many { readDigit() } } { digit =>
     result = result * 10 + digit
   }
@@ -119,24 +114,25 @@ def readDecimal(): Int / { Scan[Char], fail } = {
 }
 
 /// Check that the next character is a digit in base 16, and if so read and return it.
-def readHexDigit(): Int / { Scan[Char], fail } =
+def readHexDigit(): Int / { Scan[Char], stop } =
   readIf[Char, Int]{ char => hexDigitValue(char) }
 
-/// Read a hexadecimal number as long as possible.
+/// Read a hexadecimal number.
 /// Fails when there isn't at least one digit.
 def readHexadecimal(): Int / { Scan[Char], fail } = {
-  var result = readHexDigit()
+  var result = must { readHexDigit() }
   for[Int] { many { readHexDigit() } } { digit =>
     result = result * 16 + digit
   }
   result
 }
 
-/// Read a decimal integer as long as possible.
+/// Read a decimal integer.
 /// Will consume a minus sign if it is not followed by a digit.
+/// Fails whenn there isn't at least one digit.
 def readInteger(): Int / { Scan[Char], fail } =
-  peek() match {
-    case '-' => skip(); neg(readDecimal())
+  must { do peek() } match {
+    case '-' => must { do skip() }; neg(readDecimal())
     case c and isDigit(c) => readDecimal()
     case _ => do fail()
   }

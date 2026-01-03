@@ -46,13 +46,13 @@ def emitNumbers(n: Int) =
     }
   }
 
-def readDigit(): Int / { Scan[Byte], fail } = {
-  val byte = peek()
+def readDigit(): Int / { Scan[Byte], stop } = {
+  val byte = do peek()
   if (byte.toInt >= 48 && byte.toInt <= 57) {
-    skip()
+    do skip()
     return (byte.toInt - 48)
   } else {
-    do fail()
+    do stop()
   }
 }
 
