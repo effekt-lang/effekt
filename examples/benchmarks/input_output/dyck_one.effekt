@@ -2,7 +2,6 @@ import examples/benchmarks/runner
 
 import io/error
 import io/filesystem
-import partial
 import stream
 import scanner
 
@@ -22,18 +21,22 @@ def emitTree(n: Int): Unit / emit[Byte] =
     do emit(41.toByte)
   }
 
-record Tree(children: List[Tree])
+type Tree {
+  Leaf()
+  Node(children: List[Tree])
+}
 
-def readTree(): Tree / { Scan[Byte], fail } = {
-  skipIf[Byte] { b => b.toInt == 40 }
+def readTree(): Tree / { Scan[Byte], stop } = {
+  readIf[Byte] { b => b.toInt == 40 }
   val children = list::collect[Tree] { many { readTree() } }
   skipIf[Byte] { b => b.toInt == 41 }
-  Tree(children)
+  Node(children)
 }
 
 def size(tree: Tree): Int =
   tree match {
-    case Tree(children) => 1 + sum {
+    case Leaf() => 1
+    case Node(children) => 1 + sum {
       for[Tree] { children.each } { tree => do emit(size(tree)) }
     }
   }
@@ -50,7 +53,8 @@ def run(n: Int): Int = {
 
   with readFile(filename)
   with returning::scanner[Byte, Int]
-  try { readTree().size } with fail { panic("Expected tree.") }
+  with panicking("Expected tree.")
+  must { readTree().size }
 }
 
 

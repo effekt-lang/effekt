@@ -23,6 +23,9 @@ def optionally[R] { program: () => R / fail }: Option[R] =
     None()
   }
 
+def must[R] { program: () => R / stop }: R / fail =
+  try { program() } with stop { do fail() }
+
 /// Run `program` forever until `fail` is thrown.
 def successfully { program: () => Unit / fail }: Unit =
   try {
