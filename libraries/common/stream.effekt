@@ -2,7 +2,7 @@ module stream
 
 import effekt
 import option
-import exception
+import partial
 
 // Effects
 // -------
@@ -51,20 +51,10 @@ def fix[T] { one: T => Unit / emit[T] } { stream: => Unit / emit[T] }: Unit =
 def many[A] { action: () => A / stop }: Unit / emit[A] =
   loop { do emit(action()) }
 
-def some[A] { action: () => A / stop }: Unit / { emit[A], stop } = {
-  do emit(action())
+def some[A] { action: () => A / stop }: Unit / { emit[A], fail } = {
+  do emit(must { action() })
   many { action() }
 }
-
-def optionally { program: () => Unit / stop }: Bool =
-  returning::optionally[Unit]{program}.isDefined
-
-def attempt[R] { program: () => R / stop } { fallback: () => R }: R =
-  try {
-    program()
-  } with stop {
-    fallback()
-  }
 
 
 /// In Effekt lower bounds are inclusive and upper bounds are exclusive
@@ -330,14 +320,14 @@ def tee[A]{ cons1: { => Unit / emit[A] } => Unit }{ cons2: { => Unit / emit[A] }
 /// > first[Bool] { do emit(true) }
 /// true
 /// > first[String] { () } // empty stream
-/// <Exception MissingValue: code in first did not emit any values>
+/// <fail>
 /// ```
-def first[A] { body: => Unit / emit[A] }: A / Exception[MissingValue] =
+def first[A] { stream: () => Unit / emit[A] }: A / fail = {
   try {
+    def body(): A = { stream(); do fail() }
     body()
-    val r: A = do raise[MissingValue](MissingValue(), "code in first did not emit any values")
-    r
   } with emit[A] { a => a }
+}
 
 namespace returning {
 
@@ -365,13 +355,6 @@ def tap[A, R] { action: () => A / stop } { reader: () => R / read[A] }: R =
   }
 
 def boundary[R] { program: () => R / stop }: Option[R] =
-  try {
-    Some(program())
-  } with stop {
-    None()
-  }
-
-def optionally[R] { program: () => R / stop }: Option[R] =
   try {
     Some(program())
   } with stop {
