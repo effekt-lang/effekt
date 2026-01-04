@@ -175,36 +175,6 @@ extern def charWidth(c: Char) at {}: Int =
   js "(${c} > 0xffff) ? 2 : 1"
 
 
-def writeLine { body: () => Unit / emit[Char] }: Unit / emit[Char] =
-  returning::writeLine[Unit]{body}
-
-def readLine { body: () => Unit / read[Char] }: Unit / {read[Char], stop} =
-  returning::readLine[Unit]{body}
-
-namespace returning {
-  def writeLine[R] { body: () => R / emit[Char] }: R / emit[Char] = {
-    val result = body()
-    do emit('\n')
-    return result
-  }
-
-  def readLine[R] { body: () => R / read[Char] }: R / {read[Char], stop} = {
-    var stopped = false
-    try {
-      body()
-    } with read[Char] {
-      if(stopped){
-        resume { do stop() }
-      } else {
-        do read() match {
-          case '\n' => stopped = true; resume { do stop() }
-          case char => resume { return char }
-        }
-      }
-    }
-  }
-}
-
 def decodeChar(): Char / {read[Byte], stop} = {
   val b = do read().toInt
   if (b < 128) {
