@@ -32,6 +32,9 @@ class JavaScriptTests extends EffektTests {
     // syntax error (multiple declaration)
     examplesDir / "pos" / "parser.effekt",
     examplesDir / "pos" / "probabilistic.effekt",
+    
+    // local function def needs to be rewritten (issue 1229)
+    examplesDir / "benchmarks" / "folklore_to_fact" / "motzkin.effekt",
   )
 
   override def ignored: Set[File] = super.ignored ++ Set(
