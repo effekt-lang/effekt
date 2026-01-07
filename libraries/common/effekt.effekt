@@ -319,6 +319,12 @@ extern def infixNeq(x: Bool, y: Bool) at {}: Bool =
 
 // Math ops
 // ========
+
+// Numeric representations in the backends:
+// LLVM: int64_t (64-bit integer)
+// JS: 64-bit floating-point (64-bit IEEE 754)
+// Chez: 64-bit integer
+
 extern def infixAdd(x: Int, y: Int) at {}: Int =
   js "(${x} + ${y})"
   chez "(+ ${x} ${y})"
@@ -343,7 +349,7 @@ extern def infixSub(x: Int, y: Int) at {}: Int =
   llvm "%z = sub  %Int ${x}, ${y} ret %Int %z"
   vm "effekt::infixSub(Int, Int)"
 
-// Computes the quotient based on truncated-division
+/// Computes the quotient based on truncated-division
 def quot(x: Int, y: Int): Int =
   infixDiv(x, y)
 
@@ -356,13 +362,17 @@ def quot(x: Int, y: Int): Int =
 def div(x: Int, y: Int): Int = {
   val q = x / y
   val r = x.rem(y)
-  q - (r.bitwiseShr(31).bitwiseAnd(y.bitwiseShr(31).bitwiseOr(1)))
+  val rNeg = r.bitwiseMsb
+  val ySign = y.bitwiseMsb.bitwiseOr(1)
+  q - rNeg.bitwiseAnd(ySign)
 }
 
 /// Computes the result of Euclidean modulo
 def mod(x: Int, y: Int): Int = {
   val r = x.rem(y)
-  r + y.abs.bitwiseAnd(r.bitwiseShr(31))
+  val rNeg = r.bitwiseMsb
+  val absY = y.bitwiseXor(y.bitwiseMsb) - y.bitwiseMsb
+  r + rNeg.bitwiseAnd(absY)
 }
 
 extern def infixAdd(x: Double, y: Double) at {}: Double =
@@ -693,6 +703,11 @@ extern def bitwiseXor(x: Int, y: Int) at {}: Int =
   llvm "%z = xor %Int ${x}, ${y} ret %Int %z"
   vm "effekt::bitwiseXor(Int, Int)"
 
+extern def bitwiseMsb(x: Int) at {}: Int =
+   js "${x} >> 31"
+   chez "(bitwise-arithmetic-shift-right ${x} 63)"
+   llvm "%z = ashr %Int ${x}, 63 ret %Int %z"
+   vm "effekt::bitwiseMsb(Int)"
 
 // Byte operations
 // ===============
