@@ -4,7 +4,7 @@ package optimizer
 
 import util.Trampoline
 
-class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.TrampolinedRewrite {
+class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.RewriteTrampolined {
 
   private def used(id: Id): Boolean = reachable.get(id).exists(u => u != Usage.Never)
 
