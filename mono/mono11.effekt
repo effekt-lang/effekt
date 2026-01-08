@@ -1,0 +1,30 @@
+interface Foo {
+  def bar[A](x: A): A
+}
+
+def main(): Unit = {
+  def foo = new Foo {
+    // Have to write [B], can annotate x
+    def bar[B](x) = x
+  }
+
+  println(foo.bar(123))
+  println(foo.bar("abc"))
+  ()
+}
+
+interface FooMono {
+  def barInt(x: Int): Int
+  def barString(x: String): String
+}
+
+def mainMono(): Unit = {
+  def foo = new FooMono {
+    def barInt(x) = x
+    def barString(x) = x
+  }
+
+  println(foo.barInt(123))
+  println(foo.barString("abc"))
+  ()
+}
