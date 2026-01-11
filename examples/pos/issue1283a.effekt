@@ -1,0 +1,6 @@
+def main(): Unit = {
+  val boxed = 1 match {
+    case 2 => box { () }
+    case _ => box { println("message") }
+  }
+}
