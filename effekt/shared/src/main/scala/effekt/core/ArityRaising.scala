@@ -6,6 +6,8 @@ import effekt.typer.Typer.checkMain
 import effekt.symbols.Symbol.fresh
 import effekt.lexer.TokenKind
 import effekt.core.Type.instantiate
+import effekt.generator.llvm.Transformer.BlockContext
+import effekt.machine.Transformer.BlocksParamsContext
 
 object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
   override val phaseName: String = "arity raising"
@@ -31,19 +33,21 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   def transform(toplevel: Toplevel)(using C: Context, DC: DeclarationContext): Toplevel = toplevel match {
-    case Toplevel.Def(id, block) => Toplevel.Def(id, transform(block))
-    case Toplevel.Val(id, binding) => Toplevel.Val(id, transform(binding))
+    case Toplevel.Def(id, block) => Toplevel.Def(id, transform(block)(using C, DC, Set.empty))
+    case Toplevel.Val(id, binding) => Toplevel.Val(id, transform(binding)(using C, DC, Set.empty))
   }
   
-  def transform(block: Block)(using C: Context, DC: DeclarationContext): Block = block match {
+  def transform(block: Block)(using C: Context, DC: DeclarationContext, bargs: Set[Id]): Block = block match {
     case Block.BlockVar(id, annotatedTpe, annotatedCapt) => block
     case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+      // Add bparams to the set of bargs for the body
+      val newBargs = bargs ++ bparams.map(_.id)
       def flattenParam(param: ValueParam): (List[ValueParam], List[(Id, Expr)]) = param match {
         case ValueParam(paramId, tpe @ ValueType.Data(name, targs)) =>
           DC.findData(name) match {
             case Some(Data(_, List(), List(Constructor(ctor, List(), fields)))) =>
               val (flatParams, allBindings, fieldVars) = fields.map { case Field(fieldName, fieldType) =>
-                val freshId = Id(fieldName.name)
+                val freshId = Id(fieldName)
                 val (params, bindings) = flattenParam(ValueParam(freshId, fieldType))
                 (params, bindings, ValueVar(freshId, fieldType))
               }.unzip3
@@ -59,7 +63,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       val flattened = vparams.map(flattenParam)
       val (allParams, allBindings) = flattened.unzip
       
-      val newBody = allBindings.flatten.foldRight(transform(body)) {
+      val newBody = allBindings.flatten.foldRight(transform(body)(using C, DC, newBargs)) {
         case ((id, expr), body) => Let(id, expr, body)
       }
     
@@ -67,19 +71,22 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
     case Block.Unbox(pure) => Block.Unbox(transform(pure))
     case Block.New(Implementation(interface, operations)) => 
       Block.New(Implementation(interface, operations.map {
-        case Operation(name, tparams, cparams, vparams, bparams, body) => 
-          Operation(name, tparams, cparams, vparams, bparams, transform(body))
+        case Operation(name, tparams, cparams, vparams, bparams, body) =>
+          val opBargs = bargs ++ bparams.map(_.id)
+          Operation(name, tparams, cparams, vparams, bparams, transform(body)(using C, DC, opBargs))
        }))
   }
 
-  def transform(stmt: Stmt)(using C: Context, DC: DeclarationContext): Stmt = stmt match {
-    case Stmt.App(callee @ BlockVar(id, BlockType.Function(tparams, cparams, vparamsTypes, bparams, returnTpe), annotatedCapt), targs, vargs, bargs) =>
+  def transform(stmt: Stmt)(using C: Context, DC: DeclarationContext, bargs: Set[Id]): Stmt = stmt match {
+    // Only arity-raise if the callee is NOT a barg
+    case Stmt.App(callee @ BlockVar(id, BlockType.Function(tparams, cparams, vparamsTypes, bparamTypes, returnTpe), annotatedCapt), targs, vargs, appBargs)
+        if !bargs.contains(id) =>
       def flattenArg(arg: Expr, argType: ValueType): (List[Expr], List[ValueType], List[(Expr, Id, List[ValueParam])]) = argType match {
         case ValueType.Data(name, targs) =>
           DC.findData(name) match {
             case Some(Data(_, List(), List(Constructor(ctor, List(), fields)))) =>
               val fieldInfo = fields.map { case Field(fieldName, fieldType) =>
-                val freshId = Id(fieldName.name)
+                val freshId = Id(fieldName)
                 val freshVar = ValueVar(freshId, fieldType)
                 val freshParam = ValueParam(freshId, fieldType)
                 
@@ -113,7 +120,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
         case _ => false
       }
 
-      val transformedBargs = bargs.map { barg =>
+      val transformedBargs = appBargs.map { barg =>
         barg match {
           // This handles: 
           // val res = myList.map {myFunc} 
@@ -122,29 +129,32 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
           // but only if the arity of myFunc changes
           case BlockVar(id, annotatedTpe, annotatedCapt) => 
             annotatedTpe match {
-              case BlockType.Function(tparams, cparams, vparams, bparams, result) 
+              case BlockType.Function(tparams, cparams, vparams, bparamTpes, result) 
                   if vparams.exists(needsFlattening) =>
                 val values = vparams.map { tpe =>
                   val freshId = Id("x")
                   (ValueParam(freshId, tpe), ValueVar(freshId, tpe))
                 }
-                val blocks = bparams.zip(cparams).map { case (tpe, capt) =>
+                val blocks = bparamTpes.zip(cparams).map { case (tpe, capt) =>
                   val freshId = Id("f")
                   (BlockParam(freshId, tpe, Set(capt)), BlockVar(freshId, tpe, Set(capt)))
                 }
  
                 // Don't transform the call - the BlockVar keeps its original signature
                 val call = Stmt.App(barg, List(), values.map(_._2), blocks.map(_._2))
-      
-                BlockLit(tparams, cparams, values.map(_._1), blocks.map(_._1), transform(call))
+                
+                // Add the new block params to bargs when transforming the call
+                val wrapperBargs = bargs ++ blocks.map(_._1.id)
+                BlockLit(tparams, cparams, values.map(_._1), blocks.map(_._1), transform(call)(using C, DC, wrapperBargs))
 
               case _ => transform(barg)
             }
 
           case BlockLit(btparams, bcparams, bvparams, bbparams, body) =>
             // Keep the signature unchanged
-            // But recursively transform the body
-            val transformedBody = transform(body)
+            // But recursively transform the body, adding bbparams to bargs
+            val litBargs = bargs ++ bbparams.map(_.id)
+            val transformedBody = transform(body)(using C, DC, litBargs)
             BlockLit(btparams, bcparams, bvparams, bbparams, transformedBody)
           
           case _ => 
@@ -152,18 +162,18 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
         }
       }
       
-      val newCalleTpe: BlockType.Function = BlockType.Function(tparams, cparams, allTypes.flatten, bparams, returnTpe)
+      val newCalleTpe: BlockType.Function = BlockType.Function(tparams, cparams, allTypes.flatten, bparamTypes, returnTpe)
       val newCallee = BlockVar(id, newCalleTpe, annotatedCapt)
       val innerApp = Stmt.App(newCallee, targs, allArgs.flatten, transformedBargs)
       
       allMatches.flatten.foldRight(innerApp) {
         case ((scrutinee, ctor, params), body) =>
-          val resultTpe = instantiate(newCalleTpe, targs, bargs.map(_.capt)).result
+          val resultTpe = instantiate(newCalleTpe, targs, appBargs.map(_.capt)).result
           Stmt.Match(scrutinee, resultTpe, List((ctor, BlockLit(List(), List(), params, List(), body))), None)
       }
 
-    case Stmt.App(callee, targs, vargs, bargs) =>
-      Stmt.App(callee, targs, vargs map transform, bargs map transform)
+    case Stmt.App(callee, targs, vargs, appBargs) =>
+      Stmt.App(callee, targs, vargs map transform, appBargs map transform)
     case Stmt.Def(id, block, rest) =>
       Stmt.Def(id, transform(block), transform(rest))
     case Stmt.Let(id, binding, rest) =>
@@ -172,45 +182,52 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       Stmt.Return(transform(expr))
     case Stmt.Val(id, binding, body) =>
       Stmt.Val(id, transform(binding), transform(body))
-    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
-      Stmt.Invoke(transform(callee), method, methodTpe, targs, vargs map transform, bargs map transform)
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, invokeBargs) =>
+      Stmt.Invoke(transform(callee), method, methodTpe, targs, vargs map transform, invokeBargs map transform)
     case Stmt.If(cond, thn, els) =>
       Stmt.If(transform(cond), transform(thn), transform(els))
     case Stmt.Match(scrutinee, tpe, clauses, default) =>
-      Stmt.Match(transform(scrutinee), tpe, clauses.map { case (id, BlockLit(tparams, cparams, vparams, bparams, body)) => (id, BlockLit(tparams, cparams, vparams, bparams, transform(body))) }, default map transform)
-    case Stmt.ImpureApp(callee, ret, targs, vargs, bargs, retCallee) =>
-      Stmt.ImpureApp(callee, ret, targs, vargs map transform, bargs map transform, retCallee)
+      Stmt.Match(transform(scrutinee), tpe, clauses.map { case (id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
+        val clauseBargs = bargs ++ bparams.map(_.id)
+        (id, BlockLit(tparams, cparams, vparams, bparams, transform(body)(using C, DC, clauseBargs)))
+      }, default map transform)
+    case Stmt.ImpureApp(id, callee, targs, vargs, impureBargs, body) =>
+      Stmt.ImpureApp(id, callee, targs, vargs map transform, impureBargs map transform, transform(body))
     case Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, body)) =>
-      Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, transform(body)))
-    case Stmt.Alloc(id, tpe, init, rest) =>
-      Stmt.Alloc(id, tpe, init, transform(rest))
-    case Stmt.Var(id, tpe, init, rest) =>
-      Stmt.Var(id, tpe, init, transform(rest))
-    case Stmt.Get(id, tpe, region, capt, rest) =>
-      Stmt.Get(id, tpe, region, capt, transform(rest))
-    case Stmt.Put(region, capt, value, rest) =>
-      Stmt.Put(region, capt, transform(value), transform(rest))
+      val regionBargs = bargs ++ bparams.map(_.id)
+      Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, transform(body)(using C, DC, regionBargs)))
+    case Stmt.Alloc(id, init, region, body) =>
+      Stmt.Alloc(id, transform(init), region, transform(body))
+    case Stmt.Var(ref, init, capture, body) =>
+      Stmt.Var(ref, transform(init), capture, transform(body))
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
+      Stmt.Get(id, annotatedTpe, ref, annotatedCapt, transform(body))
+    case Stmt.Put(ref, annotatedCapt, value, body) =>
+      Stmt.Put(ref, annotatedCapt, transform(value), transform(body))
     case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) =>
-      Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, transform(body)))
-    case Stmt.Shift(id, k, body) => 
-      Stmt.Shift(id, k, transform(body)) 
-    case Stmt.Resume(k, value) =>
-      Stmt.Resume(k, transform(value))
+      val resetBargs = bargs ++ bparams.map(_.id)
+      Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, transform(body)(using C, DC, resetBargs)))
+    case Stmt.Shift(prompt, k, body) =>
+      // k is a continuation (block param), so add it to bargs
+      val shiftBargs = bargs + k.id
+      Stmt.Shift(prompt, k, transform(body)(using C, DC, shiftBargs))
+    case Stmt.Resume(k, body) =>
+      Stmt.Resume(k, transform(body))
     case Stmt.Hole(tpe, span) =>
       Stmt.Hole(tpe, span)
   }
 
-  def transform(pure: Expr)(using Context, DeclarationContext): Expr = pure match {
+  def transform(pure: Expr)(using C: Context, DC: DeclarationContext, bargIds: Set[Id]): Expr = pure match {
     case Expr.ValueVar(id, annotatedType) => pure
     case Expr.Literal(value, annotatedType) => pure
-    case Expr.Box(b, annotatedCapture) => pure
+    case Expr.Box(b, annotatedCapture) => Expr.Box(transform(b), annotatedCapture)
     case Expr.PureApp(b, targs, vargs) =>
       Expr.PureApp(b, targs, vargs map transform) 
     case Expr.Make(data, tag, targs, vargs) =>
       Expr.Make(data, tag, targs, vargs map transform) 
   }
 
-  def transform(valueType: ValueType.Data)(using Context, DeclarationContext): ValueType.Data = valueType match {
+  def transform(valueType: ValueType.Data)(using C: Context, DC: DeclarationContext): ValueType.Data = valueType match {
     case ValueType.Data(symbol, targs) => valueType // trainsform
   }
 
