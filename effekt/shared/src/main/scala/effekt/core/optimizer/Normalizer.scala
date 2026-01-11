@@ -220,7 +220,7 @@ object Normalizer { normal =>
       case Expr.Make(data, tag, targs, vargs) if clauses.exists { case (id, _) => id == tag } =>
         val clause: BlockLit = clauses.collectFirst { case (id, cl) if id == tag => cl }.get
         val result = reduce(clause, targs, vargs.map(normalize), Nil)
-        assert(result.tpe == tpe)
+        assert(Type.equals(result.tpe, tpe))
         normalize(result)
       case Expr.Make(data, tag, targs, vargs) if default.isDefined =>
         normalize(default.get)
@@ -234,7 +234,7 @@ object Normalizer { normal =>
       case Expr.Literal(true, annotatedType) => normalize(thn)
       case Expr.Literal(false, annotatedType) => normalize(els)
       case _ =>
-        assert(thn.tpe == els.tpe, s"Then and else branch have different types: ${util.show(thn.tpe)} != ${util.show(els.tpe)}\n\n${util.show(thn)}\n\n${util.show(els)}\n\n${util.show(s)}")
+        assert(Type.equals(thn.tpe, els.tpe), s"Then and else branch have different types: ${util.show(thn.tpe)} != ${util.show(els.tpe)}\n\n${util.show(thn)}\n\n${util.show(els)}\n\n${util.show(s)}")
         If(normalize(cond), normalize(thn), normalize(els))
     }
 
@@ -270,7 +270,7 @@ object Normalizer { normal =>
         //   if (cond) { [[ val x1 = thn; k(x1) ]] } else { [[ val x2 = els; k(x2) ]] }
         case Stmt.If(cond, thn, els) =>
           val tpe = thn.tpe
-          assert(thn.tpe == els.tpe)
+          assert(Type.equals(thn.tpe, els.tpe))
           joinpoint(id, tpe, normalize(body)) { k =>
             val x1 = Id(id.name)
             val x2 = Id(id.name)
