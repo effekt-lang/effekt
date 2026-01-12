@@ -173,7 +173,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       }
 
     case Stmt.App(callee, targs, vargs, appBargs) =>
-      Stmt.App(callee, targs, vargs map transform, appBargs map transform)
+      Stmt.App(transform(callee), targs, vargs map transform, appBargs map transform)
     case Stmt.Def(id, block, rest) =>
       Stmt.Def(id, transform(block), transform(rest))
     case Stmt.Let(id, binding, rest) =>
