@@ -466,6 +466,7 @@ function testMapk_inPlace(list, fun, cont){
     return (() => main_0)
 }*/
 
+let $custom_map;
 (typeof module != "undefined" && module !== null ? module : {}).exports = $custom_map = {
   main: () => RUN_TOPLEVEL(main_0)
 };
