@@ -7,10 +7,11 @@ import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
 import effekt.core.PatternMatchingCompiler.Clause
-import effekt.source.{ Many, MatchGuard, MatchPattern, ResolveExternDefs }
-import effekt.symbols.Binder.{ RegBinder, VarBinder }
-import effekt.typer.{ Coercion, Substitutions }
-import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR }
+import effekt.source.{Many, MatchGuard, MatchPattern, ResolveExternDefs}
+import effekt.symbols.Binder.{RegBinder, VarBinder}
+import effekt.typer.Substitutions
+import effekt.util.messages.{ErrorReporter, INTERNAL_ERROR}
+import effekt.util.PrettyPrinter.format
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
