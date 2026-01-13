@@ -1,4 +1,5 @@
 import {emptyContext, HoleContext, make_context, apply_context, compose_context, empty_context} from "./HoleContext.js";
+import {Cons} from "../../.koka/v3.2.2/js-debug-1f15ea/std_core_types.mjs";
 
 function runAll(){
     testApplyEmpty()
