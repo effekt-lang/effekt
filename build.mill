@@ -1,3 +1,5 @@
+//| mill-version: 1.0.6
+
 // Building Effekt is managed through Mill (https://com-lihaoyi.github.io/mill/).
 // 
 // To compile the project, targeting JVM:
