@@ -7,10 +7,12 @@ object RemoveTailResumptions {
   def apply(m: ModuleDecl): ModuleDecl = removal.rewrite(m)
 
   object removal extends Tree.Rewrite {
-    override def stmt: PartialFunction[Stmt, Stmt] = {
+    override def rewrite(stmt: Stmt): Stmt = stmt match {
       case Stmt.Shift(prompt, BlockParam(k, Type.TResume(from, to), capt), body) if tailResumptive(k, body) =>
         removeTailResumption(k, from, body)
       case Stmt.Shift(prompt, k, body) => Shift(prompt, k, rewrite(body))
+
+      case other => super.rewrite(other)
     }
   }
 

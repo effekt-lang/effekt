@@ -42,11 +42,9 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   def withBinding[R](id: Id)(f: => R): R = withBindings(List(id))(f)
 
   // free variables are left untouched
-  override def id: PartialFunction[core.Id, core.Id] = {
-    id => scope.getOrElse(id, id)
-  }
+  override def rewrite(id: Id): Id = scope.getOrElse(id, id)
 
-  override def stmt: PartialFunction[Stmt, Stmt] = {
+  override def rewrite(stmt: Stmt): Stmt = stmt match {
     case core.Def(id, block, body) =>
       // can be recursive
       withBinding(id) { core.Def(rewrite(id), rewrite(block), rewrite(body)) }
@@ -84,9 +82,11 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
     case core.Shift(p, k, body) =>
       val resolvedPrompt = rewrite(p)
       withBinding(k.id) { core.Shift(resolvedPrompt, rewrite(k), rewrite(body)) }
+
+    case other => super.rewrite(other)
   }
 
-  override def block: PartialFunction[Block, Block] = {
+  override def rewrite(block: BlockLit): BlockLit = block match {
     case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
       withBindings(tparams ++ cparams ++ vparams.map(_.id) ++ bparams.map(_.id)) {
         Block.BlockLit(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite,
