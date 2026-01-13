@@ -1,4 +1,5 @@
-import {emptyContext, HoleContext} from "./HoleContext.js";
+import {emptyContext, HoleContext, make_context, apply_context, compose_context, empty_context} from "./HoleContext.js";
+import {Cons} from "../../.koka/v3.2.2/js-debug-1f15ea/std_core_types.mjs";
 
 const $effekt = {  };
 
@@ -70,6 +71,8 @@ function inspect_0(value_0) {
 function main_0() {
     let list = testMap_inPlace(new Cons_0(1, new Cons_0(7, new Cons_0(8, new Cons_0(4, new Nil_0())))), fibonacci_0);
     inspect_0(list);
+    let hole = new Cons_0(2,undefined)
+    let context1 = make_context(new Cons_0(1,hole),{obj:hole,fieldName:"tail_0"})
 
 
     /*let hole = { outer: null }
@@ -99,10 +102,10 @@ function testMap_0(list_0, fun_0) {
 //in-place
 function testMap_inPlace(list_0, fun_0){
     //construct empty context for testList[B]
-    let cont = emptyContext()
+    let cont = empty_context()
 
-    testMapk_inPlace(list_0, fun_0, cont)
-    return cont.data //result
+    return testMapk_inPlace(list_0, fun_0, cont)
+    //return cont.data //result
 }
 //pure continuation passing style
 //cont is a function testList[B] => testList[B]
@@ -124,23 +127,25 @@ function testMapk_inPlace(list, fun, cont){
             //apply
             /*let hole = cont.hole
             hole.outer.tail_0 = new Nil_0()*/
-            cont.apply_context(new Nil_0())
+            //cont.apply_context(new Nil_0())
 
-            return cont.data;
+            //return cont.data;
+            return apply_context(cont,new Nil_0())
         case 1:
             let y = fun(list.head_0)
             let hole = undefined
             let data = new Cons_0(y,hole)
             //compose
-            let innerCont = new HoleContext(data, {obj: data, fieldName: "tail_0"})
-            cont.compose_context(innerCont)
+            let innerCont = make_context(data, {obj: data, fieldName: "tail_0"})
+            //cont.compose_context(innerCont)
+            let composedContext = compose_context(cont, innerCont)
             /*let newHole = {outer:null}
             let newTail = new Cons_0(y,newHole)
             newHole.outer = newTail
             cont.hole.outer.tail_0 = newTail
             cont.hole = newHole*/
 
-            return testMapk_inPlace(list.tail_0, fun, cont)
+            return testMapk_inPlace(list.tail_0, fun, composedContext)
     }
 }
 
