@@ -8,6 +8,7 @@ import effekt.core.optimizer.Deadcode
 import effekt.core.optimizer.Normalizer
 import effekt.core.optimizer.BindSubexpressions
 import effekt.core.Type.functionType
+import effekt.core.Free.value
 
 
 object DeBruijn {
@@ -199,19 +200,20 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
 
     def preprocess(definitions: List[Toplevel])(using PreprocessContext): List[Toplevel] =
       definitions.map({
-        case Toplevel.Def(id, block: Block.BlockLit) => Toplevel.Def(id, preprocess(block))
-        case Toplevel.Def(id, block) => Toplevel.Def(id, block)
+        case Toplevel.Def(id, block) => Toplevel.Def(id, preprocess(block))
         case Toplevel.Val(id, binding) => Toplevel.Val(id, preprocess(binding))
       })
 
     def preprocess(block: Block)(using PreprocessContext): Block = block match
       case b@BlockVar(id, annotatedTpe, annotatedCapt) => preprocess(b)
       case b@BlockLit(tparams, cparams, vparams, bparams, body) => preprocess(b)
+      // TODO: Recurse everywhere
       case Unbox(pure) => block
       case New(impl) => block
     
 
     def preprocess(block: Block.BlockLit)(using ctx: PreprocessContext): Block.BlockLit = 
+      // TODO: Replace with "New"
       val processedBparams = block.bparams.map(blockParam => {
         blockParam.tpe match {
           case b: BlockType.Function => 
@@ -277,8 +279,7 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
         ImpureApp(id, callee, targs, vargs, bargs, preprocess(body))
       case Return(expr) => Return(expr)
       case Alloc(id, init, region, body) => Alloc(id, init, region, preprocess(body))
-      case Def(id, block: Block.BlockLit, body) => Def(id, preprocess(block), preprocess(body))
-      case Def(id, block, body) => Def(id, block, preprocess(body))
+      case Def(id, block, body) => Def(id, preprocess(block), preprocess(body))
       case Get(id, annotatedTpe, ref, annotatedCapt, body) => Get(id, annotatedTpe, ref, annotatedCapt, preprocess(body))
       case Hole(tpe, span) => stmt
       case If(cond, thn, els) => If(cond, preprocess(thn), preprocess(els))
@@ -295,8 +296,16 @@ object Preprocess extends Phase[CoreTransformed, CoreTransformed] {
 
     def preprocess(blockType: BlockType)(using ctx: PreprocessContext): BlockType = blockType match {
       case BlockType.Function(tparams, cparams, vparams, bparams, result) => 
-        BlockType.Function(tparams, cparams, vparams, bparams map preprocess, result)
+        val bruijnBlockTpe = toDeBruijn(blockType)
+        ctx.replacements.get(bruijnBlockTpe) match {
+          case Some(name) => BlockType.Interface(name.interface, List.empty)
+          case None => BlockType.Function(tparams, cparams, vparams map preprocess, bparams map preprocess, preprocess(result))
+        }
+
       case BlockType.Interface(name, targs) => BlockType.Interface(name, targs)
     }
+
+    // FIXME: Implement
+    def preprocess(valueTpe: ValueType)(using ctx: PreprocessContext): ValueType = valueTpe
 
 }
