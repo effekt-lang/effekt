@@ -1,0 +1,52 @@
+import examples/benchmarks/runner
+
+import io
+import io/channel
+
+type Sender = Sender[Option[Int], Unit]
+type Receiver = Receiver[Option[Int], Unit]
+
+def generate(n: Int, sender: Sender) = {
+  each(2, n) { i =>
+    sender.send(Some(i))
+  }
+  sender.send(None())
+}
+
+def filter(prime: Int, input: Receiver, output: Sender) = {
+  while (input.receive(()) is Some(number)) {
+    if (number.mod(prime) != 0) {
+      output.send(Some(number))
+    }
+  }
+  output.send(None())
+}
+
+def run(n: Int) = {
+  val (sender, receiver) = channel()
+
+  spawn(box {
+    generate(n, sender)
+  })
+
+  var last = receiver
+  var count = 0
+
+  while (last.receive(()) is Some(prime)) {
+
+    count = count + 1
+
+    val (nextSender, nextReceiver) = channel()
+    val lastReceiver = last
+    last = nextReceiver
+
+    spawn(box {
+      filter(prime, lastReceiver, nextSender)
+    })
+  }
+
+  count
+}
+
+def main() = benchmark(10){run}
+
