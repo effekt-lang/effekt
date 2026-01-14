@@ -44,7 +44,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
     Frontend andThen Middleend
   }
 
-  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Optimizer andThen core.Show andThen DropBindings map {
+  lazy val Optimized = allToCore(Core) andThen Aggregate andThen core.DeadCodeElimination andThen core.Show andThen Optimizer andThen DropBindings map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
       val mainFile = path(mod)
