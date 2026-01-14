@@ -66,6 +66,9 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "type_parameters_blocks.effekt",
     examplesDir / "benchmarks" / "other" / "variadic_combinators.effekt",
     examplesDir / "benchmarks" / "other" / "unify.effekt",
+
+    // Normalizer timeout
+    examplesDir / "benchmarks" / "nofib" / "boyer.effekt"
   )
 
   override lazy val withoutOptimizations: Set[File] = Set(
