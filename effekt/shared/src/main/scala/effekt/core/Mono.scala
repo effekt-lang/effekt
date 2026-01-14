@@ -578,17 +578,6 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
   case Hole(tpe, span) => 
     Hole(monomorphize(tpe), span)
 
-def exprType(expr: Expr): ValueType = expr match {
-  case Box(b, annotatedCapture) => ValueType.Boxed(b.tpe, annotatedCapture)
-  case Literal(value, annotatedType) => annotatedType
-  case Make(data, tag, targs, vargs) => data
-  case PureApp(b, targs, vargs) => b.annotatedTpe match {
-    case effekt.core.BlockType.Function(tparams, cparams, vparams, bparams, result) => result
-    case effekt.core.BlockType.Interface(name, targs) => ValueType.Data(name, targs)
-  }
-  case ValueVar(id, annotatedType) => annotatedType
-}
-
 def monomorphize(clause: (Id, BlockLit))(using ctx: MonoContext)(using Context, DeclarationContext): List[(Id, BlockLit)] = clause match
   case (id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
     val newClauseNameMap = ctx.funNames.view.filterKeys((tid, groundTypes) => tid == id)
