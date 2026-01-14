@@ -195,17 +195,18 @@ case class Typing[+T](tpe: T, capt: Captures, free: Free) {
 
 object Type {
 
-  val TTop = ValueType.Data(builtins.TopSymbol, Nil)
-  val TBottom = ValueType.Data(builtins.BottomSymbol, Nil)
-  val TUnit   = ValueType.Data(builtins.UnitSymbol, Nil)
-  val TInt = ValueType.Data(builtins.IntSymbol, Nil)
-  val TChar = ValueType.Data(builtins.CharSymbol, Nil)
-  val TByte = ValueType.Data(builtins.ByteSymbol, Nil)
-  val TBoolean = ValueType.Data(builtins.BooleanSymbol, Nil)
-  val TString = ValueType.Data(builtins.StringSymbol, Nil)
-  val TDouble = ValueType.Data(builtins.DoubleSymbol, Nil)
+  val TTop = ValueType.Data(symbols.builtins.TopSymbol, Nil)
+  val TBottom = ValueType.Data(symbols.builtins.BottomSymbol, Nil)
+  val TUnit   = ValueType.Data(symbols.builtins.UnitSymbol, Nil)
+  val TInt = ValueType.Data(symbols.builtins.IntSymbol, Nil)
+  val TChar = ValueType.Data(symbols.builtins.CharSymbol, Nil)
+  val TByte = ValueType.Data(symbols.builtins.ByteSymbol, Nil)
+  val TBoolean = ValueType.Data(symbols.builtins.BooleanSymbol, Nil)
+  val TString = ValueType.Data(symbols.builtins.StringSymbol, Nil)
+  val TDouble = ValueType.Data(symbols.builtins.DoubleSymbol, Nil)
 
-  val TRegion = BlockType.Interface(builtins.RegionSymbol, Nil)
+
+  val TRegion = BlockType.Interface(symbols.builtins.RegionSymbol, Nil)
 
   val PromptSymbol = Id("Prompt")
   val ResumeSymbol = Id("Resume")
@@ -261,10 +262,10 @@ object Type {
   }
 
   object TState {
-    def apply(tpe: ValueType) = BlockType.Interface(builtins.TState.interface, List(tpe))
+    def apply(tpe: ValueType) = BlockType.Interface(symbols.builtins.TState.interface, List(tpe))
     def unapply(tpe: BlockType): Option[ValueType] =
       tpe match {
-        case BlockType.Interface(builtins.TState.interface, List(tpe)) => Some(tpe)
+        case BlockType.Interface(symbols.builtins.TState.interface, List(tpe)) => Some(tpe)
         case tpe => None
       }
   }
