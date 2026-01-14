@@ -640,7 +640,7 @@ def monomorphize(valueParam: ValueParam)(using ctx: MonoContext): ValueParam = v
 
 def monomorphize(blockParam: BlockParam)(using ctx: MonoContext): BlockParam = blockParam match
   case BlockParam(id, tpe, capt) => 
-    BlockParam(id, monomorphize(tpe), capt) 
+    BlockParam(id, monomorphize(tpe), capt)
 
 def monomorphize(blockType: BlockType)(using ctx: MonoContext): BlockType = blockType match {
   case BlockType.Function(tparams, cparams, vparams, bparams, result) => 
@@ -650,7 +650,7 @@ def monomorphize(blockType: BlockType)(using ctx: MonoContext): BlockType = bloc
     // Special case here if we have 'Resume' or 'Prompt' we didn't change the name which we can detect here
     // then we don't change the targs for typechecking to work
     if (funName == name) {
-      BlockType.Interface(funName, targs)
+      BlockType.Interface(funName, targs map monomorphize)
     } else {
       BlockType.Interface(funName, List.empty)
     }
