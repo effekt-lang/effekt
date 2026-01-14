@@ -400,15 +400,19 @@ def monomorphize(toplevel: Toplevel)(using ctx: MonoContext)(using Context, Decl
 def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] = decl match
   case Data(id, tparams, constructors) => 
     val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
-    monoTypes.map(baseTypes =>
-      val replacementTparams = tparams.zip(baseTypes).toMap
-      ctx.replacementTparams ++= replacementTparams
-      Declaration.Data(ctx.tpeNames(id, baseTypes).name, List.empty, constructors.flatMap(monomorphize))
-    )
+    if (monoTypes.isEmpty) {
+      List(Data(id, tparams, constructors flatMap monomorphize))
+    } else {  
+      monoTypes.map(baseTypes =>
+        val replacementTparams = tparams.zip(baseTypes).toMap
+        ctx.replacementTparams ++= replacementTparams
+        Declaration.Data(ctx.tpeNames(id, baseTypes).name, List.empty, constructors.flatMap(monomorphize))
+      )
+    }
   case Interface(id, tparams, properties) =>
     val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
     if (monoTypes.isEmpty) {
-      List(Declaration.Interface(id, tparams, properties))
+      List(Declaration.Interface(id, tparams, properties flatMap monomorphize))
     } else {
       monoTypes.map(baseTypes =>
         val replacementTparams = tparams.zip(baseTypes).toMap
@@ -426,9 +430,15 @@ def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] =
 def monomorphize(property: Property)(using ctx: MonoContext): List[Property] = property match {
   case Property(id, tpe@BlockType.Function(tparams, cparams, vparams, bparams, result)) => {
     val baseTypes = ctx.solution.getOrElse(id, Set.empty).toList
-    baseTypes.map(baseType => {
-      Property(ctx.funNames((id, baseType)), monomorphize(tpe)) 
-    })
+    if (baseTypes.isEmpty) {
+      List(Property(id, monomorphize(tpe)))
+    } else {
+      baseTypes.map(baseType => {
+        val replacementTparams = tparams.zip(baseType).toMap
+        ctx.replacementTparams ++= replacementTparams
+        Property(ctx.funNames((id, baseType)), monomorphize(tpe)) 
+      })
+    }
   }
   case Property(id, tpe) => ???
 }
@@ -436,9 +446,15 @@ def monomorphize(property: Property)(using ctx: MonoContext): List[Property] = p
 def monomorphize(constructor: Constructor)(using ctx: MonoContext): List[Constructor] = constructor match
   case Constructor(id, tparams, fields) => 
     val baseTypes = ctx.solution.getOrElse(id, Set.empty).toList
-    baseTypes.map(baseType => {
-      Constructor(ctx.funNames(id, baseType), List.empty, fields map monomorphize)
-    })
+    if (baseTypes.isEmpty) {
+      List(Constructor(id, tparams, fields map monomorphize))
+    } else {
+      baseTypes.map(baseType => {
+        val replacementTparams = tparams.zip(baseType).toMap
+        ctx.replacementTparams ++= replacementTparams
+        Constructor(ctx.funNames(id, baseType), List.empty, fields map monomorphize)
+      })
+    }
 
 def monomorphize(block: Block)(using ctx: MonoContext)(using Context, DeclarationContext): Block = block match
   case b: BlockLit => monomorphize(b)
@@ -550,18 +566,7 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
   case Shift(prompt, k, body) => 
     Shift(monomorphize(prompt), monomorphize(k), monomorphize(body))
   case Match(scrutinee, matchTpe, clauses, default) =>
-    val monoScrutinee = monomorphize(scrutinee)
-
-    // FIXME: Not correct in all cases. Have to figure out where this is needed
-    // We need the type of the scrutinee, to give each clause the correct monomorphized name based on said type
-    val monoScrutineeType = exprType(scrutinee) match {
-      case ValueType.Data(name, targs) => 
-        targs map monomorphize
-      case _ => sys error "scrutinee type was not data"
-    }
-
-    val monoClauses = clauses.flatMap(monomorphize(_, monoScrutineeType.toVector))
-    Match(monomorphize(scrutinee), monomorphize(matchTpe), monoClauses, monomorphize(default))
+    Match(monomorphize(scrutinee), monomorphize(matchTpe), clauses flatMap monomorphize, monomorphize(default))
   case Get(id, annotatedTpe, ref, annotatedCapt, body) =>
     Get(id, monomorphize(annotatedTpe), ref, annotatedCapt, monomorphize(body))
   case Put(ref, annotatedCapt, value, body) =>
@@ -584,31 +589,20 @@ def exprType(expr: Expr): ValueType = expr match {
   case ValueVar(id, annotatedType) => annotatedType
 }
 
-def monomorphize(clause: (Id, BlockLit), scrutineeTypes: Vector[ValueType])(using ctx: MonoContext)(using Context, DeclarationContext): List[(Id, BlockLit)] = clause match
-  case (id, BlockLit(List(), cparams, vparams, bparams, body)) => 
-    val monoName = if (scrutineeTypes.isEmpty) {
-      Some(id) 
-    } else {
-      ctx.funNames.get((id, scrutineeTypes map toTypeArg))
-    }
-
-    monoName match {
-      case Some(name) => List((name, BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))))
-      case None => 
-        // WARN: There is no mono name for some clause in the match
-        //       This will happen for example in List[T] ( Cons(head: T, rest: List[T]), Nil() )
-        //       if one of the constructors is never initialized and therefore there is no MonoConstraint flowing into it
-        //       in that case we can just reuse the original name, as it is never initialized
-        List((id, BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))))
-    }
+def monomorphize(clause: (Id, BlockLit))(using ctx: MonoContext)(using Context, DeclarationContext): List[(Id, BlockLit)] = clause match
   case (id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
     val newClauseNameMap = ctx.funNames.view.filterKeys((tid, groundTypes) => tid == id)
-    newClauseNameMap.map((clauseKey, monoId) => 
-      val replacementTparams = tparams.zip(clauseKey._2).toMap
-      ctx.replacementTparams ++= replacementTparams
+    if (newClauseNameMap.isEmpty) {
       val monoBlockLit: Block.BlockLit = BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
-      (monoId, monoBlockLit)
-    ).toList
+      List((id, monoBlockLit))
+    } else {
+      newClauseNameMap.map((clauseKey, monoId) => 
+        val replacementTparams = tparams.zip(clauseKey._2).toMap
+        ctx.replacementTparams ++= replacementTparams
+        val monoBlockLit: Block.BlockLit = BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
+        (monoId, monoBlockLit)
+      ).toList
+    }
 
 def monomorphize(opt: Option[Stmt])(using ctx: MonoContext)(using Context, DeclarationContext): Option[Stmt] = opt match
   case None => None
@@ -618,12 +612,6 @@ def monomorphize(expr: Expr)(using ctx: MonoContext)(using Context, DeclarationC
   case Literal(value, annotatedType) =>
     Literal(value, monomorphize(annotatedType))
   case PureApp(b, targs, vargs) =>
-    // val funTpe = b.functionType
-    // val replacementTparams = funTpe.tparams.zip(targs map toTypeArg).toMap
-    // ctx.replacementTparams ++= replacementTparams
-
-    // val blockTpe = BlockType.Function(funTpe.tparams, funTpe.cparams, funTpe.vparams, funTpe.bparams map monomorphize, monomorphize(funTpe.result))
-    // val blockVar: BlockVar = BlockVar(b.id, blockTpe, b.annotatedCapt)
     PureApp(b, targs map monomorphize, vargs map monomorphize)
   case Make(data, tag, targs, vargs) =>
     val combinedTargs = data.targs ++ targs
@@ -646,7 +634,7 @@ def monomorphize(blockType: BlockType)(using ctx: MonoContext): BlockType = bloc
   case BlockType.Function(tparams, cparams, vparams, bparams, result) => 
     BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
   case BlockType.Interface(name, targs) => 
-    val funName = ctx.funNames(name, (targs map toTypeArg).toVector)
+    val funName = ctx.funNames.getOrElse((name, (targs map toTypeArg).toVector), name)
     // Special case here if we have 'Resume' or 'Prompt' we didn't change the name which we can detect here
     // then we don't change the targs for typechecking to work
     if (funName == name) {
