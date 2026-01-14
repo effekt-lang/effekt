@@ -1,0 +1,10 @@
+def main() = {
+  val a = Tuple2(42, true)
+  val b = Tuple2(false, 'b')
+  val c = Tuple2("", 3.0)
+  val d = Tuple2('d', "some")
+  println(a.first.show)
+  println(b.second.show)
+  println(c.first.show)
+  println(d.second.show)
+}
