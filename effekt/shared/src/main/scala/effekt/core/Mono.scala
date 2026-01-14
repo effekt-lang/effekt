@@ -635,7 +635,11 @@ def monomorphize(blockType: BlockType)(using ctx: MonoContext): BlockType = bloc
 
 def monomorphize(valueType: ValueType)(using ctx: MonoContext): ValueType = valueType match {
   case ValueType.Var(name) => monomorphize(ctx.replacementTparams(name))
-  case ValueType.Data(name, targs) => replacementData(name, targs map monomorphize)
+  // We do not monomorphize targs here, because our name lookup for types is looking for
+  // Option[Option[Int]] -> Option_Option_Int
+  // and not
+  // Option[Option_Int] -> Option_Option_Int
+  case ValueType.Data(name, targs) => replacementData(name, targs)
   case ValueType.Boxed(tpe, capt) => ValueType.Boxed(monomorphize(tpe), capt)
 }
 
