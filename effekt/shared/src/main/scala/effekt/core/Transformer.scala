@@ -676,6 +676,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case MatchGuard.BooleanGuard(condition, _) => Nil
       case MatchGuard.PatternGuard(scrutinee, pattern, _) => boundTypesInPattern(pattern)
     }
+    //TODO: Like this for TRMC
     def equalsFor(tpe: symbols.ValueType): (Expr, Expr) => Expr =
       val prelude = Context.module.findDependency(QualifiedName(Nil, "effekt")).getOrElse {
         Context.panic(pp"${Context.module.name.name}: Cannot find 'effekt' in prelude, which is necessary to compile pattern matching.")

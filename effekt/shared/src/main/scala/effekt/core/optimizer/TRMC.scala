@@ -16,8 +16,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     }
 
     Some(CoreTransformed(source, tree, mod, transformed))
-  def trmc(tree: ModuleDecl): ModuleDecl = tree match {
-    case 
-  }
+  def trmc(tree: ModuleDecl): ModuleDecl =
+    tree
   
 }
