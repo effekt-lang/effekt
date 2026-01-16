@@ -49,6 +49,13 @@ def skipIf[A] { predicate: A => Bool }: Unit / { Scan[A], stop } = {
   readIf{predicate}; ()
 }
 
+/// Skips the next token but fails instead of stopping.
+def mustSkip[A](): Unit / { Scan[A], fail } =
+  must { do skip() }
+
+/// Skips the next character but fails if it is not the given one.
+def mustSkip(token: Char): Unit / { Scan[Char], fail } =
+  must { skipIf(token) }
 
 /// Reads until the predicate does not hold for the next token.
 /// Emits the tokens read.
@@ -79,6 +86,31 @@ def readIf(e: Char): Unit / { Scan[Char], stop } = {
 def skipIf(e: Char): Unit / { Scan[Char], stop } =
   skipIf { c => c == e }
 
+/// Read the next line and supply each character to the given scanner.
+/// Immediately stops when already at the end.
+def line[R] { scanner: () => R / Scan[Char] }: R / { Scan[Char], stop } = {
+  var stopped = false
+  if (do peek() == '\n') { stopped = true; do skip() }
+  try {
+    scanner()
+  } with Scan[Char] {
+    def peek() = resume {
+      if (stopped) { do stop() } else { do peek() }
+    }
+    def skip() = resume {
+      if (stopped) { do stop() } else {
+        do skip()
+        // TODO does the scanner stop before or after skipping?
+        try {
+          if (do peek() == '\n') { stopped = true; do skip() }
+        } with stop {
+          ()
+        }
+      }
+    }
+  }
+}
+
 /// Read values produced by `action` followed by `separator` until one of them stops.
 /// Will consume a trailing separator.
 def separating[A] { seperator: () => Unit / stop } { action: () => A / stop }: Unit / emit[A] =
@@ -91,7 +123,6 @@ def separating[A] { seperator: () => Unit / stop } { action: () => A / stop }: U
 /// Will consume a trailing separator.
 def separating[A](seperator: Char) { action: () => A / stop }: Unit / { Scan[Char], emit[A] } =
   separating { skipIf(seperator) } {action}
-
 
 /// Skip until the next character is not a whitespace character.
 def skipWhitespace(): Unit / Scan[Char] =
