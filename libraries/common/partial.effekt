@@ -24,7 +24,7 @@ def optionally[R] { program: () => R / fail }: Option[R] =
   }
 
 def must[R] { program: () => R / stop }: R / fail =
-  try { program() } with stop { do fail() }
+  try { program() } with stop { resume(do fail()) }
 
 /// Run `program` forever until `fail` is thrown.
 def exhaustively { program: () => Unit / fail }: Unit =
