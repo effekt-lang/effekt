@@ -1,0 +1,35 @@
+import examples/benchmarks/runner
+
+import io
+import io/channel
+import io/signal
+
+def worker(i: Int, done: Sender[Int, Unit], receiver: Receiver[Int, Unit], sender: Sender[Int, Unit]) =
+  forever {
+    val token = receiver.receive(())
+    if (token > 1) { sender.send(token - 1) }
+    else { done.send(i) }
+  }
+
+def run(n: Int): Int = {
+  val (firstSender, firstReceiver) = channel()
+  val (doneSender, doneReceiver) = channel()
+
+  def go(i: Int, receiver: Receiver[Int, Unit]): Receiver[Int, Unit] =
+    if (i < 504) {
+      val (nextSender, nextReceiver) = channel()
+      spawn(box { worker(i, doneSender, receiver, nextSender)})
+      go(i + 1, nextReceiver)
+    } else {
+      receiver
+    }
+
+  val lastReceiver = go(2, firstReceiver)
+
+  spawn(box { worker(1, doneSender, lastReceiver, firstSender) })
+
+  firstSender.send(n)
+  doneReceiver.receive(())
+}
+
+def main() = benchmark(1000) { run }
