@@ -341,7 +341,7 @@ object Transformer {
         transform(body).map { body =>
           transformUnboxed(tpe) match {
             case Type.Positive() =>
-              LoadVar(Variable(transform(id), Type.Positive()), Variable(transform(ref), Type.Reference(Type.Positive())), body)
+              LoadVar(variable, Variable(transform(ref), Type.Reference(Type.Positive())), body)
             case unboxedTpe =>
               val unboxed = Variable(freshName("unboxed"), unboxedTpe)
               LoadVar(unboxed, Variable(transform(ref), Type.Reference(unboxedTpe)), Coerce(variable, unboxed, body))
@@ -551,7 +551,7 @@ object Transformer {
       }
 
   def transform(tpe: core.BlockType)(using ErrorReporter): Type = tpe match {
-    case core.Type.TState(stateType) => Type.Reference(transform(stateType))
+    case core.Type.TState(stateType) => Type.Reference(transformUnboxed(stateType))
     case core.Type.TPrompt(answer) => Type.Prompt()
     case core.Type.TResume(result, answer) => Type.Stack()
     case core.Type.TRegion => Type.Prompt()
