@@ -58,19 +58,9 @@ object Transformer {
       if bparams.nonEmpty then ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
 
       val transformedParams = vparams.map {
-        case core.ValueParam(id, core.Type.TInt) => Variable(transform(id), Type.Int())
-        case core.ValueParam(id, core.Type.TChar) => Variable(transform(id), Type.Int())
-        case core.ValueParam(id, core.Type.TByte) => Variable(transform(id), Type.Byte())
-        case core.ValueParam(id, core.Type.TDouble) => Variable(transform(id), Type.Double())
-        case core.ValueParam(id, _) => Variable(transform(id), Positive())
+        case core.ValueParam(id, tpe) => Variable(transform(id), transformUnboxed(tpe))
       }
-      val transformedRet = ret match {
-        case core.Type.TInt => Type.Int()
-        case core.Type.TChar => Type.Int()
-        case core.Type.TByte => Type.Byte()
-        case core.Type.TDouble => Type.Double()
-        case _ => Positive()
-      }
+      val transformedRet = transformUnboxed(ret)
       val isExternAsync = capture.contains(symbols.builtins.AsyncCapability.capture)
       noteDefinition(name, transformedParams, Nil, isExternAsync)
       Extern(transform(name), transformedParams, transformedRet, isExternAsync, transform(body))
@@ -167,21 +157,12 @@ object Transformer {
         transform(rest).flatMap { rest =>
           transform(vargs, bargs).run { (values, blocks) =>
             perhapsUnbox(values, vparamTypes).run { unboxeds =>
-              resultType match {
-                case core.Type.TInt =>
-                  val unboxed = Variable(freshName("integer"), Type.Int())
-                  Trampoline.Done(ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, Coerce(variable, unboxed, rest)))
-                case core.Type.TChar =>
-                  val unboxed = Variable(freshName("char"), Type.Int())
-                  Trampoline.Done(ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, Coerce(variable, unboxed, rest)))
-                case core.Type.TByte =>
-                  val unboxed = Variable(freshName("byte"), Type.Byte())
-                  Trampoline.Done(ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, Coerce(variable, unboxed, rest)))
-                case core.Type.TDouble =>
-                  val unboxed = Variable(freshName("double"), Type.Double())
-                  Trampoline.Done(ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, Coerce(variable, unboxed, rest)))
-                case _ =>
+              transformUnboxed(resultType) match {
+                case Type.Positive() =>
                   Trampoline.Done(ForeignCall(variable, transform(blockName), unboxeds ++ blocks, rest))
+                case unboxedTpe =>
+                  val unboxed = Variable(freshName("unboxed"), unboxedTpe)
+                  Trampoline.Done(ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, Coerce(variable, unboxed, rest)))
               }
             }
           }
@@ -497,21 +478,12 @@ object Transformer {
       transform(vargs).flatMap { values =>
         perhapsUnbox(values, vparamTypes).flatMap { unboxeds =>
           shift { k =>
-            resultType match {
-              case core.Type.TInt =>
-                val unboxed = Variable(freshName("integer"), Type.Int())
-                ForeignCall(unboxed, transform(blockName), unboxeds, Coerce(variable, unboxed, k(variable)))
-              case core.Type.TChar =>
-                val unboxed = Variable(freshName("char"), Type.Int())
-                ForeignCall(unboxed, transform(blockName), unboxeds, Coerce(variable, unboxed, k(variable)))
-              case core.Type.TByte =>
-                val unboxed = Variable(freshName("byte"), Type.Byte())
-                ForeignCall(unboxed, transform(blockName), unboxeds, Coerce(variable, unboxed, k(variable)))
-              case core.Type.TDouble =>
-                val unboxed = Variable(freshName("double"), Type.Double())
-                ForeignCall(unboxed, transform(blockName), unboxeds, Coerce(variable, unboxed, k(variable)))
-              case _ =>
+            transformUnboxed(resultType) match {
+              case Type.Positive() =>
                 ForeignCall(variable, transform(blockName), unboxeds, k(variable))
+              case unboxedTpe =>
+                val unboxed = Variable(freshName("unboxed"), unboxedTpe)
+                ForeignCall(unboxed, transform(blockName), unboxeds, Coerce(variable, unboxed, k(variable)))
             }
           }
         }
@@ -563,8 +535,17 @@ object Transformer {
         Variable(transform(name), transform(tpe))
     }
 
-  def transform(tpe: core.ValueType)(using ErrorReporter): Type =
+  def transform(tpe: core.ValueType): Type =
     Positive()
+
+  def transformUnboxed(tpe: core.ValueType): Type =
+    tpe match {
+        case core.Type.TInt => Type.Int()
+        case core.Type.TChar => Type.Int()
+        case core.Type.TByte => Type.Byte()
+        case core.Type.TDouble => Type.Double()
+        case _ => Positive()
+      }
 
   def transform(tpe: core.BlockType)(using ErrorReporter): Type = tpe match {
     case core.Type.TState(stateType) => Type.Reference(transform(stateType))
