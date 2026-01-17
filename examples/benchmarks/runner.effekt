@@ -7,7 +7,7 @@ def benchmark(testSize: Int) { run: Int => Int }: Unit = commandLineArgs() match
 
   // bench mode
   case Cons(problemSize, _) =>
-    with panicking("input size is not an integer")
+    with crash("input size is not an integer")
 
     val n = problemSize.toInt
 

@@ -86,43 +86,42 @@ def readIf(e: Char): Unit / { Scan[Char], stop } = {
 def skipIf(e: Char): Unit / { Scan[Char], stop } =
   skipIf { c => c == e }
 
-/// Read the next line and supply each character to the given scanner.
+/// Read tokens and supply them to the given scanner.
+/// Stop and skip whenn the predicate is true.
 /// Immediately stops when already at the end.
-def line[R] { scanner: () => R / Scan[Char] }: R / { Scan[Char], stop } = {
+def until[A, R] { predicate: A => Bool } { scanner: () => R / Scan[A] }: R / { Scan[A], stop } = {
   var stopped = false
-  if (do peek() == '\n') { stopped = true; do skip() }
+  if (predicate(do peek())) { stopped = true; do skip() }
   try {
     scanner()
-  } with Scan[Char] {
+  } with Scan[A] {
     def peek() = resume {
       if (stopped) { do stop() } else { do peek() }
     }
     def skip() = resume {
       if (stopped) { do stop() } else {
         do skip()
-        // TODO does the scanner stop before or after skipping?
-        try {
-          if (do peek() == '\n') { stopped = true; do skip() }
-        } with stop {
-          ()
+        boundary {
+          if (predicate(do peek())) { stopped = true; do skip() }
         }
       }
     }
   }
 }
 
+/// Read the next line and supply each character to the given scanner.
+def line[R] { scanner: () => R / Scan[Char] }: R / { Scan[Char], stop } =
+  until { c => c == '\n' } { scanner() }
+
 /// Read values produced by `action` followed by `separator` until one of them stops.
 /// Will consume a trailing separator.
-def separating[A] { seperator: () => Unit / stop } { action: () => A / stop }: Unit / emit[A] =
-  loop {
-    do emit(action())
-    seperator()
-  }
+def list[A] { seperator: () => Unit / stop } { action: () => A / stop }: Unit / emit[A] =
+  loop { do emit(action()); seperator() }
 
 /// Read a sequence separated by `separator`.
 /// Will consume a trailing separator.
-def separating[A](seperator: Char) { action: () => A / stop }: Unit / { Scan[Char], emit[A] } =
-  separating { skipIf(seperator) } {action}
+def list[A](seperator: Char) { action: () => A / stop }: Unit / { Scan[Char], emit[A] } =
+  list { skipIf(seperator) } {action}
 
 /// Skip until the next character is not a whitespace character.
 def skipWhitespace(): Unit / Scan[Char] =

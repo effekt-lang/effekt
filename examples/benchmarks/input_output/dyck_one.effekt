@@ -53,7 +53,7 @@ def run(n: Int): Int = {
 
   with readFile(filename)
   with returning::scanner[Byte, Int]
-  with panicking("Expected tree.")
+  with crash("Expected tree.")
   must { readTree().size }
 }
 

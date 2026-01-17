@@ -38,7 +38,7 @@ def exhaustively { program: () => Unit / fail }: Unit =
     ()
   }
 
-def panicking[R](message: String) { program: () => R / fail }: R =
+def crash[R](message: String) { program: () => R / fail }: R =
   attempt { program() } { panic(message) }
 
 def suchThat[A](value: A){ predicate: A => Bool }: Option[A] =
