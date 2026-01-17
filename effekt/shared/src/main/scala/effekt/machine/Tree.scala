@@ -132,7 +132,7 @@ enum Statement {
   /**
    * e.g. var x = 42; s
    */
-  case Var(name: Variable, init: Variable, returnType: Type, rest: Statement)
+  case Var(name: Variable, init: Variable, rest: Statement)
 
   /**
    * e.g. let y = loadVar(x); s
