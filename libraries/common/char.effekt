@@ -2,9 +2,8 @@
 module char
 
 import effekt
-import exception
 import option
-import result
+import partial
 import stream
 
 
@@ -19,51 +18,49 @@ def isWhitespace(c: Char): Bool = c match {
   case _      => false
 }
 
-/// Gets the value of a given ASCII digit in base 10,
-/// throwing an exception on wrong format
-def digitValue(char: Char): Int / Exception[WrongFormat] =
+/// Gets the value of a given ASCII digit in base 10 or fails
+def digitValue(char: Char): Int / fail =
   if (char >= '0' && char <= '9') {
     char.toInt - '0'.toInt
   } else {
-    wrongFormat("Not a valid digit: '" ++ char.toString ++ "' in base 10")
+    do fail()
   }
 
-/// Gets the value of a given ASCII digit in base 16,
-/// throwing an exception on wrong format
-def hexDigitValue(char: Char): Int / Exception[WrongFormat] =
+/// Gets the value of a given ASCII digit in base 16 or fails
+def hexDigitValue(char: Char): Int / fail =
   char match {
     case char and char >= '0' && char <= '9' => char.toInt - '0'.toInt
     case char and char >= 'A' && char <= 'F' => (char.toInt - 'A'.toInt) + 10
     case char and char >= 'a' && char <= 'f' => (char.toInt - 'a'.toInt) + 10
-    case _ => wrongFormat("Not a valid digit: '" ++ char.toString ++ "' in base 16")
+    case _ => do fail()
   }
 
 /// Gets the value of a given ASCII digit in the given base up to 36,
 /// throwing an exception on wrong format
-def digitValue(char: Char, base: Int): Int / Exception[WrongFormat] = {
+def digitValue(char: Char, base: Int): Int / fail = {
   val digit = char match {
     case char and char >= '0' && char <= '9' => char.toInt - '0'.toInt
     case char and char >= 'A' && char <= 'Z' => (char.toInt - 'A'.toInt) + 10
     case char and char >= 'a' && char <= 'z' => (char.toInt - 'a'.toInt) + 10
-    case _ => wrongFormat("Not a valid digit: '" ++ char.toString ++ "'")
+    case _ => do fail()
   }
   if (digit >= base) {
-    wrongFormat("Digit '" ++ digit.show ++ "' is too big for base " ++ base.show)
+    do fail()
   }
   digit
 }
 
 /// Checks if the given character is an ASCII digit in base 10
 /// Prefer using `digitValue(c: Char)` to get the numeric value out.
-def isDigit(char: Char): Bool = result[Int, WrongFormat] { digitValue(char) }.isSuccess
+def isDigit(char: Char): Bool = optionally[Int] { digitValue(char) }.isDefined
 
 /// Checks if the given character is an ASCII digit in base 16
 /// Prefer using `hexDigitValue(c: Char)` to get the numeric value out.
-def isHexDigit(char: Char): Bool = result[Int, WrongFormat] { hexDigitValue(char)}.isSuccess
+def isHexDigit(char: Char): Bool = optionally[Int] { hexDigitValue(char)}.isDefined
 
 /// Checks if the given character is an ASCII digit in base 10
 /// Prefer using `digitValue(c: Char, base: Int)` to get the numeric value out.
-def isDigit(char: Char, base: Int): Bool = result[Int, WrongFormat] { digitValue(char, base) }.isSuccess
+def isDigit(char: Char, base: Int): Bool = optionally[Int] { digitValue(char, base) }.isDefined
 
 /// Checks if a given character is a 7-bit ASCII character
 def isASCII(c: Char): Bool = { c.toInt < 128 }
@@ -177,36 +174,6 @@ extern def charWidth(c: Char) at {}: Int =
   // JavaScript strings are UTF-16 where every unicode character after 0xffff takes two units
   js "(${c} > 0xffff) ? 2 : 1"
 
-
-def writeLine { body: () => Unit / emit[Char] }: Unit / emit[Char] =
-  returning::writeLine[Unit]{body}
-
-def readLine { body: () => Unit / read[Char] }: Unit / {read[Char], stop} =
-  returning::readLine[Unit]{body}
-
-namespace returning {
-  def writeLine[R] { body: () => R / emit[Char] }: R / emit[Char] = {
-    val result = body()
-    do emit('\n')
-    return result
-  }
-
-  def readLine[R] { body: () => R / read[Char] }: R / {read[Char], stop} = {
-    var stopped = false
-    try {
-      body()
-    } with read[Char] {
-      if(stopped){
-        resume { do stop() }
-      } else {
-        do read() match {
-          case '\n' => stopped = true; resume { do stop() }
-          case char => resume { return char }
-        }
-      }
-    }
-  }
-}
 
 def decodeChar(): Char / {read[Byte], stop} = {
   val b = do read().toInt

@@ -27,6 +27,7 @@ import json
 import list
 import map
 import option
+import partial
 import process
 import queue
 import random
