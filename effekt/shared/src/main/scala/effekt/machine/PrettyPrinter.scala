@@ -70,7 +70,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Invoke(receiver, tag, arguments) =>
       "invoke" <+> receiver <> "." <> tag.toString <> parens(arguments map toDoc)
 
-    case Var(name, init, _, rest) =>
+    case Var(name, init, rest) =>
       "var" <+> name <+> "=" <+> toDoc(init) <> ";" <> line <> toDocStmts(rest)
 
     case LoadVar(name, reference, rest) =>

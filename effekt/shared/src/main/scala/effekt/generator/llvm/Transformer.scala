@@ -179,10 +179,10 @@ object Transformer {
         emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
         RetVoid()
 
-      case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, retType, rest) =>
+      case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, rest) =>
         val environment = List(init)
         val returnAddressName = freshName("returnAddress")
-        val returnType = transform(retType)
+        val returnType = transform(machine.Type.Positive())
         val returnValue = freshName("returnValue")
         val parameters = List(Parameter(returnType, returnValue))
         defineLabel(returnAddressName, parameters) {
@@ -205,7 +205,7 @@ object Transformer {
 
         transform(rest)
 
-      case machine.Var(_, _, _, _) => ???
+      case machine.Var(_, _, _) => ???
 
       case machine.LoadVar(name, ref, rest) =>
         emit(Comment(s"loadvar ${name.name}, reference ${ref.name}"))

@@ -316,14 +316,13 @@ object Transformer {
           transform(init).flatMap { value =>
             perhapsUnbox(value, init.tpe).map { unboxed =>
               Shift(temporary, Variable(transform(region), Type.Prompt()),
-                Var(Variable(transform(ref), Type.Reference(unboxed.tpe)), unboxed, Type.Positive(),
+                Var(Variable(transform(ref), Type.Reference(unboxed.tpe)), unboxed,
                   Resume(temporary, body)))
             }
           }.run(x => Trampoline.Done(x))
         }
 
       case core.Var(ref, init, capture, body) =>
-        val tpe = body.tpe
 
         // TODO ref should be BlockParam
         noteParameter(ref, core.Type.TState(init.tpe))
@@ -331,7 +330,7 @@ object Transformer {
         transform(body).flatMap { body =>
           transform(init).flatMap { value =>
             perhapsUnbox(value, init.tpe).map { unboxed =>
-              Var(Variable(transform(ref), Type.Reference(unboxed.tpe)), unboxed, transform(tpe), body)
+              Var(Variable(transform(ref), Type.Reference(unboxed.tpe)), unboxed, body)
             }
           }.run(x => Trampoline.Done(x))
         }
