@@ -307,51 +307,55 @@ object Transformer {
         }
 
       case core.Alloc(ref, init, region, body) =>
-        val stateType = transform(init.tpe)
-        val reference = Variable(transform(ref), Type.Reference(stateType))
-        val prompt = Variable(transform(region), Type.Prompt())
         val temporary = Variable(freshName("temporaryStack"), Type.Stack())
 
         // TODO ref should be BlockParam
         noteParameter(ref, core.Type.TState(init.tpe))
-        transform(init).run { value =>
-          transform(body).map { body =>
-            Shift(temporary, prompt,
-              Var(reference, value, Type.Positive(),
-                Resume(temporary, body)))
-          }
+
+        transform(body).flatMap { body =>
+          transform(init).flatMap { value =>
+            perhapsUnbox(value, init.tpe).map { unboxed =>
+              Shift(temporary, Variable(transform(region), Type.Prompt()),
+                Var(Variable(transform(ref), Type.Reference(unboxed.tpe)), unboxed, Type.Positive(),
+                  Resume(temporary, body)))
+            }
+          }.run(x => Trampoline.Done(x))
         }
 
       case core.Var(ref, init, capture, body) =>
-        val stateType = transform(init.tpe)
-        val reference = Variable(transform(ref), Type.Reference(stateType))
-        val tpe = transform(body.tpe)
+        val tpe = body.tpe
 
         // TODO ref should be BlockParam
         noteParameter(ref, core.Type.TState(init.tpe))
-        transform(init).run { value =>
-          transform(body).map { body =>
-            Var(reference, value, tpe, body)
-          }
+
+        transform(body).flatMap { body =>
+          transform(init).flatMap { value =>
+            perhapsUnbox(value, init.tpe).map { unboxed =>
+              Var(Variable(transform(ref), Type.Reference(unboxed.tpe)), unboxed, transform(tpe), body)
+            }
+          }.run(x => Trampoline.Done(x))
         }
 
       case core.Get(id, tpe, ref, capt, body) =>
-        val stateType = transform(tpe)
-        val reference = Variable(transform(ref), Type.Reference(stateType))
-        val variable = Variable(transform(id), stateType)
+        val variable = Variable(transform(id), Positive())
 
         transform(body).map { body =>
-          LoadVar(variable, reference, body)
+          transformUnboxed(tpe) match {
+            case Type.Positive() =>
+              LoadVar(Variable(transform(id), Type.Positive()), Variable(transform(ref), Type.Reference(Type.Positive())), body)
+            case unboxedTpe =>
+              val unboxed = Variable(freshName("unboxed"), unboxedTpe)
+              LoadVar(unboxed, Variable(transform(ref), Type.Reference(unboxedTpe)), Coerce(variable, unboxed, body))
+          }
         }
 
       case core.Put(ref, capt, arg, body) =>
-        val stateType = transform(arg.tpe)
-        val reference = Variable(transform(ref), Type.Reference(stateType))
-
-        transform(arg).run { value =>
-          transform(body).map { body =>
-            StoreVar(reference, value, body)
-          }
+        transform(body).flatMap { body =>
+          transform(arg).flatMap { value =>
+            perhapsUnbox(value, arg.tpe).map { unboxed =>
+              StoreVar(Variable(transform(ref), Type.Reference(unboxed.tpe)), unboxed, body)
+            }
+          }.run(x => Trampoline.Done(x))
         }
 
       case core.Hole(tpe, span) => Trampoline.Done(machine.Statement.Hole(span))
