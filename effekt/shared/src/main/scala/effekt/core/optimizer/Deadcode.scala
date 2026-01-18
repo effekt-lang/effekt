@@ -3,8 +3,11 @@ package core
 package optimizer
 
 import util.Trampoline
+import effekt.PhaseResult.CoreTransformed
+import effekt.context.Context
 
-class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.TrampolinedRewrite {
+class DeadcodeRewrite(reachable: Map[Id, Usage])
+    extends core.Tree.TrampolinedRewrite {
 
   private def used(id: Id): Boolean = reachable.get(id).exists(u => u != Usage.Never)
 
@@ -65,10 +68,23 @@ class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.TrampolinedRewrite {
   }
 }
 
-object Deadcode {
+object Deadcode extends Phase[CoreTransformed, CoreTransformed] {
+
+  val phaseName: String = "deadcode-elimination"
+
+  def run(input: CoreTransformed)(using Context): Option[CoreTransformed] =
+    input match {
+      case CoreTransformed(source, tree, mod, core) =>
+        val term = Context.ensureMainExists(mod)
+        val dce = Context.timed("deadcode-elimination", source.name) {
+          Deadcode.remove(term, core)
+        }
+        Some(CoreTransformed(source, tree, mod, dce))
+    }
+
   def remove(entrypoints: Set[Id], m: ModuleDecl): ModuleDecl =
     val reachable = Reachable(entrypoints, m)
-    Deadcode(reachable).rewrite(m)
+    DeadcodeRewrite(reachable).rewrite(m)
 
   def remove(entrypoint: Id, m: ModuleDecl): ModuleDecl =
     remove(Set(entrypoint), m)

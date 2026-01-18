@@ -57,7 +57,7 @@ class LLVM extends Compiler[String] {
     // 1. Split off Deadcode from Optimizer
     // 2. Do Show (hope it still runs)
     // 3. Run Optimizer
-    val afterCore = allToCore(Core) andThen Aggregate andThen core.DeadCodeElimination andThen core.Show andThen optimizer.Optimizer
+    val afterCore = allToCore(Core) andThen Aggregate andThen optimizer.Deadcode andThen core.Show andThen optimizer.Optimizer
     val afterMachine = afterCore andThen Machine map { case (mod, main, prog) => prog }
     val afterLLVM = afterMachine map {
       case machine.Program(decls, defns, entry) =>
