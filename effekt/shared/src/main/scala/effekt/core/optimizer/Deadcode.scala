@@ -44,6 +44,7 @@ class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.TrampolinedRewrite {
         declarations.map(rewrite),
         // drop unreachable externs
         m.externs.collect {
+          // We need to keep "show", "showBuiltin" & "infixConcat" for generating show definitions 
           case e: Extern.Def if used(e.id) || e.id.name.name == "show" || e.id.name.name == "showBuiltin" || e.id.name.name == "infixConcat" => e
           case e: Extern.Include => e
         },
