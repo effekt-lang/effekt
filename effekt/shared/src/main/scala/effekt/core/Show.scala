@@ -283,7 +283,9 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         })
         generateShowInstance(data, targs)
       case ValueType.Var(name) => 
-        val lookup = ctx.tparamLookup(name)
+        val lookup = ctx.tparamLookup.getOrElse(name, {
+          Context.abort(pretty"Too much type indirection over show, cannot lookup '${name}'")
+        })
         val showName = ctx.showNames.get(lookup)
         showName match {
           case None => 
