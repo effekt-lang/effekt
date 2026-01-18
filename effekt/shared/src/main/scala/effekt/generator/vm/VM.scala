@@ -37,7 +37,7 @@ class VM extends Compiler[(Id, symbols.Module, ModuleDecl)] {
     Frontend andThen Middleend
   }
 
-  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Deadcode andThen core.Show andThen core.optimizer.Optimizer map {
+  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Deadcode andThen core.optimizer.Optimizer map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
       (mainSymbol, mod, core)
