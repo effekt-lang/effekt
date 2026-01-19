@@ -1,0 +1,18 @@
+import examples/benchmarks/runner
+
+record Point(x: Int, y: Int)
+
+def add(p: Point, depth: Int): Int = {
+  if (depth <= 0) { p.x + p.y }
+  else { add(Point(p.y, p.x), depth - 1) }
+}
+
+def runBenchmark(n: Int): Int = {
+  def loop(i: Int, acc: Int): Int = {
+    if (i <= 0) { acc } 
+    else { loop(i - 1, acc + add(Point(i, i + 1), 2)) }
+  }
+  loop(n, 0)
+}
+
+def main() = benchmark(250000000){ n => runBenchmark(n) }
