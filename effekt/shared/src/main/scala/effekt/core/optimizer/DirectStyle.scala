@@ -4,7 +4,7 @@ package optimizer
 
 object DirectStyle extends Tree.Rewrite {
 
-  override def stmt = {
+  override def rewrite(stmt: Stmt): Stmt = stmt match {
 
     // val x = { ... return 42 }; stmt2
     //
@@ -24,6 +24,7 @@ object DirectStyle extends Tree.Rewrite {
       else
         Val(id, rewrittenBinding, rewrittenBody)
 
+    case other => super.rewrite(other)
   }
 
   private def canBeDirect(s: Stmt): Boolean = s match {
