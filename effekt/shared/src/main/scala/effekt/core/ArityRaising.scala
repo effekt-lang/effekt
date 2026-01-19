@@ -96,6 +96,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
         val call = Stmt.App(barg, List(), values.map(_._2), blocks.map(_._2))
         BlockLit(tparams, cparams, values.map(_._1), blocks.map(_._1), transform(call)(using C, DC, boundBlockParams ++ blocks.map(_._1.id)))
 
+
       case _ => transform(barg)
     }
 
@@ -126,7 +127,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
           // by making it:
           // val res = myList.map {t => myFunc(t)}
           // but only if the arity of myFunc changes
-          case bvar @ BlockVar(id, annotatedTpe, annotatedCapt) =>
+          case bvar @ BlockVar(id, annotatedTpe, annotatedCapt) if !boundBlockParams.contains(id) =>
             wrapBlockVarIfNeeded(bvar, annotatedTpe)
 
           case BlockLit(btparams, bcparams, bvparams, bbparams, body) =>
@@ -209,7 +210,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
 
     case Expr.Literal(value, annotatedType) => pure
 
-    case Expr.Box(bvar @ BlockVar(id, annotatedTpe, annotatedCapt), annotatedCapture) =>
+    case Expr.Box(bvar @ BlockVar(id, annotatedTpe, annotatedCapt), annotatedCapture) if !boundBlockParams.contains(id) =>
       Expr.Box(wrapBlockVarIfNeeded(bvar, annotatedTpe), annotatedCapture)
 
     case Expr.Box(b, annotatedCapture) =>
