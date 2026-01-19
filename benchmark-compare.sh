@@ -42,15 +42,6 @@ if ! command -v hyperfine &> /dev/null; then
     exit 1
 fi
 
-# Stash any uncommitted changes
-if ! git diff-index --quiet HEAD --; then
-    echo -e "${YELLOW}Stashing uncommitted changes...${NC}"
-    git stash push -m "benchmark-compare temporary stash"
-    STASHED=1
-else
-    STASHED=0
-fi
-
 # Check if we're on main branch
 if [ "$CURRENT_BRANCH" = "$TARGET_BRANCH" ]; then
     echo "Error: You are currently on the $TARGET_BRANCH branch"
@@ -65,38 +56,6 @@ declare -A BENCHMARKS=(
     ["arity_raising/record_addition"]="5000000"
     ["arity_raising/nested_records"]="2500000"
     ["arity_raising/record_map"]="10000"
-    ["are_we_fast_yet/bounce"]="100000"
-    ["are_we_fast_yet/list_tail"]="100"
-    ["are_we_fast_yet/mandelbrot"]="1000"
-    ["are_we_fast_yet/nbody"]="50000"
-    ["are_we_fast_yet/permute"]="10"
-    ["are_we_fast_yet/queens"]="20"
-    ["are_we_fast_yet/sieve"]="10000000"
-    ["are_we_fast_yet/storage"]="5000"
-    ["are_we_fast_yet/towers"]="25"
-    ["duality_of_compilation/erase_unused"]="10000"
-    ["duality_of_compilation/factorial_accumulator"]="500000000"
-    ["# duality_of_compilation/fibonacci_recursive"]="42"
-    ["duality_of_compilation/iterate_increment"]="500000000"
-    ["duality_of_compilation/lookup_tree"]="10000000"
-    ["duality_of_compilation/match_options"]="10000000"
-    ["duality_of_compilation/sum_range"]="5000000"
-    ["effect_handlers_bench/countdown"]="100000000"
-    ["effect_handlers_bench/iterator"]="100000000"
-    ["effect_handlers_bench/nqueens"]="10"
-    ["effect_handlers_bench/parsing_dollars"]="10000"
-    ["effect_handlers_bench/product_early"]="100000"
-    ["effect_handlers_bench/resume_nontail"]="100000"
-    ["effect_handlers_bench/tree_explore"]="14"
-    ["effect_handlers_bench/triples"]="100"
-    ["input_output/large_file"]="60000"
-    ["input_output/small_files"]="20000"
-    ["input_output/interleave_promises"]="300"
-    ["input_output/word_count_ascii"]="20000"
-    ["input_output/word_count_utf8"]="80000"
-    ["input_output/dyck_one"]="3000"
-    ["input_output/number_matrix"]="2000"
-    ["input_output/financial_format"]="200000"
 )
 
 echo -e "${BLUE}Comparing: $CURRENT_BRANCH vs $TARGET_BRANCH${NC}"
@@ -132,6 +91,15 @@ if [ $SKIP_COMPILE -eq 0 ]; then
     done
     echo ""
 
+    # Stash any uncommitted changes before switching branches
+    if ! git diff-index --quiet HEAD --; then
+        echo -e "${YELLOW}Stashing uncommitted changes before switching to $TARGET_BRANCH...${NC}"
+        git stash push -m "benchmark-compare temporary stash"
+        STASHED=1
+    else
+        STASHED=0
+    fi
+
     # Build compiler and compile benchmarks on main branch
     echo -e "${YELLOW}=== Building compiler on $TARGET_BRANCH ===${NC}"
     git checkout -q "$TARGET_BRANCH"
@@ -155,16 +123,15 @@ if [ $SKIP_COMPILE -eq 0 ]; then
     # Switch back to current branch
     echo -e "${YELLOW}=== Switching back to $CURRENT_BRANCH ===${NC}"
     git checkout -q "$CURRENT_BRANCH"
+    
+    # Restore stashed changes if any
+    if [ $STASHED -eq 1 ]; then
+        echo -e "${YELLOW}Restoring stashed changes...${NC}"
+        git stash pop
+    fi
     echo ""
 else
     echo -e "${YELLOW}=== Skipping compilation (using existing binaries) ===${NC}"
-    echo ""
-fi
-
-# Restore stashed changes if any
-if [ $STASHED -eq 1 ]; then
-    echo -e "${YELLOW}Restoring stashed changes...${NC}"
-    git stash pop
     echo ""
 fi
 
