@@ -23,6 +23,13 @@ def optionally[R] { program: () => R / fail }: Option[R] =
     None()
   }
 
+def onFail[R] { fallback: () => R } { program: () => R / fail }: R =
+  try {
+    program()
+  } with fail {
+    fallback()
+  }
+
 def must[R] { program: () => R / stop }: R / fail =
   try { program() } with stop { resume(do fail()) }
 
