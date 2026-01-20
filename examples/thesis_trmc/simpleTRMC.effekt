@@ -1,0 +1,11 @@
+
+
+def simpleTRMC(n: Int): List[Int] = n match {
+  case 0 => Nil()
+  case _ => Cons(n, simpleTRMC(n - 1))
+}
+
+def main()= {
+  println(simpleTRMC(7))
+  println("TRMC!")
+}
