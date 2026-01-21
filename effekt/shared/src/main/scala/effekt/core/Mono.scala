@@ -338,33 +338,28 @@ def solveConstraints(constraints: MonoConstraints)(using Context): Solution = {
     if (previousBounds == bounds) return filterBounds(bounds)
   }
 
+  // propagate Bounds
   def solveConstraints(funId: FunctionId, filteredConstraints: Set[Vector[TypeArg]]): Set[Vector[TypeArg]] =
     var nbs: Set[List[TypeArg]] = Set.empty
     filteredConstraints.foreach(b => 
       var l: List[List[TypeArg]] = List(List.empty)
 
-      def solveTypeArg(typeArg: TypeArg, taPos: Int, insideTypeConstructor: Boolean): List[TypeArg] = typeArg match {
+      def solveTypeArg(typeArg: TypeArg, substitution: Map[Id, Vector[TypeArg]], taPos: Int, insideTypeConstructor: Boolean): TypeArg = typeArg match {
         case TypeArg.Base(tpe, targs) => 
-          val solvedTargs = targs.zipWithIndex.map((ta, ind) => solveTypeArg(ta, ind, true))
-          var crossTargs: List[List[TypeArg]] = List(List.empty)
-          solvedTargs.foreach(targ => {
-            crossTargs = productAppend(crossTargs, targ)
-          })
-
-          crossTargs.map(tas => TypeArg.Base(tpe, tas))
-        case TypeArg.Boxed(tpe, capt) => List(TypeArg.Boxed(tpe, capt))
+          val solvedTargs = targs.zipWithIndex.map((ta, ind) => solveTypeArg(ta, substitution, ind, true))
+          TypeArg.Base(tpe, solvedTargs)
+        case TypeArg.Boxed(tpe, capt) => TypeArg.Boxed(tpe, capt)
         case TypeArg.Var(fnId, pos) => 
           if (funId == fnId && taPos == pos && insideTypeConstructor) Context.abort(pretty"Detected polymorphic recursion for '${funId}' at position '${taPos}'")
-          val funSolved = bounds.getOrElse(fnId, Set.empty)
-          val posArgs = funSolved.map(v => v(pos)).toList
-          posArgs
+          substitution(fnId)(pos)
       }
 
+      // maybe set
+      // 
+      val substitutions: List[Map[Id, Vector[TypeArg]]] = ???      
+      // map/flatMap substitution
       b.zipWithIndex.foreach((typeArg, ind) => l = productAppend(l, solveTypeArg(typeArg, ind, false)))
       
-      // Only add solution vectors which match the size we expect
-      // sometimes we don't have enough information in the current iteration to find a correct solution
-      // nbs ++= l.filter(i => i.size == b.size)
       nbs ++= l
     )
     nbs.map(l => l.toVector)
