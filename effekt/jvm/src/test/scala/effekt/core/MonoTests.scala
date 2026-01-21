@@ -163,6 +163,21 @@ class MonoTests extends AbstractMonoTests {
         assertEquals(solveConstraints(constraints), expectedSolved)
     }
 
+    test("correct product of vars 2") {
+        val constraints = List(
+            MonoConstraint(Vector(BaseTInt, BaseTString), id("a")),
+            MonoConstraint(Vector(BaseTChar, BaseTBool), id("a")),
+            MonoConstraint(Vector(Var(id("a"), 0), Var(id("a"), 1)), id("b")),
+        )
+
+        val expectedSolved: Solution = Map(
+            id("a") -> Set(Vector(BaseTInt, BaseTString), Vector(BaseTChar, BaseTBool)),
+            id("b") -> Set(Vector(BaseTInt, BaseTString), Vector(BaseTChar, BaseTBool)),
+        )
+
+        assertEquals(solveConstraints(constraints), expectedSolved)
+    }
+
     test("nested constraints") {
         val constraints = List(
             MonoConstraint(Vector(Base(id("Weighted"), List(Var(id("b"), 0)))), id("a")),
