@@ -336,12 +336,6 @@ def solveConstraints(constraints: MonoConstraints)(using Context): Solution = {
   val groupedConstraints = filteredConstraints.groupBy(c => c.upper)
   var bounds = groupedConstraints.map((sym, constraints) => (sym -> constraints.map(c => c.lower).toSet))
 
-  val variants = groupedConstraints.map((sym, constraints) =>
-    constraints.map(c => (sym, c.lower))
-  )
-  var substitutions: Substitutions = List(Map.empty)
-  variants.map(variant => substitutions = mapProductAppend(substitutions, variant))
-
   while (true) {
     val previousBounds = bounds
     bounds.foreach((sym, tas) => 
@@ -366,7 +360,14 @@ def solveConstraints(constraints: MonoConstraints)(using Context): Solution = {
           substitution(fnId)(pos)
       }
           
-      substitutions.filter(substitution => substitution.contains(funId)).map(substitution => {
+      // a => <Int, Char>, <Double, Bool>
+      // b => <a.0, a.1>
+      var substitutions: Substitutions = List(Map.empty)
+      bounds.foreach { 
+        case (funId, bs) => substitutions = mapProductAppend(substitutions, bs.map((funId, _)).toList) 
+      }
+
+      substitutions.foreach(substitution => {
         val l = b.zipWithIndex.map((typeArg, ind) => {
           solveTypeArg(typeArg, substitution, ind, false)
         }).toList
