@@ -59,7 +59,7 @@ class MonoProductAppendTests extends AbstractMonoTests {
     }
 
     test("map product append empty") {
-        val start: Substitutions = List(Map((id("a"), Vector(BaseTInt)), (id("a"), Vector(BaseTString))))
+        val start: Substitutions = List(Map((id("a"), Vector(BaseTInt))), Map((id("a"), Vector(BaseTString))))
         val append: Variants = List()
 
         val res = mapProductAppend(start, append)
@@ -204,37 +204,37 @@ class MonoTests extends AbstractMonoTests {
         assertEquals(solveConstraints(constraints), expectedSolved)
     }
 
-    // test("mutually recursive polymorphic functions") {
-    //     val constraints = List(
-    //         MonoConstraint(Vector(Var(id("b"), 0)), id("a")),
-    //         MonoConstraint(Vector(Var(id("a"), 0)), id("b")),
-    //         MonoConstraint(Vector(BaseTInt), id("a")),
-    //         MonoConstraint(Vector(BaseTString), id("b")),
-    //     )
-    //     val expectedSolved: Solution = Map(
-    //         id("a") -> Set(Vector(BaseTInt), Vector(BaseTString)),
-    //         id("b") -> Set(Vector(BaseTInt), Vector(BaseTString)),
-    //     )
+    test("mutually recursive polymorphic functions") {
+        val constraints = List(
+            MonoConstraint(Vector(Var(id("b"), 0)), id("a")),
+            MonoConstraint(Vector(Var(id("a"), 0)), id("b")),
+            MonoConstraint(Vector(BaseTInt), id("a")),
+            MonoConstraint(Vector(BaseTString), id("b")),
+        )
+        val expectedSolved: Solution = Map(
+            id("a") -> Set(Vector(BaseTInt), Vector(BaseTString)),
+            id("b") -> Set(Vector(BaseTInt), Vector(BaseTString)),
+        )
 
-    //     assertEquals(solveConstraints(constraints), expectedSolved)
-    // }
+        assertEquals(solveConstraints(constraints), expectedSolved)
+    }
 
-    // test("correct product of vars") {
-    //     val constraints = List(
-    //         MonoConstraint(Vector(BaseTInt), id("a")),
-    //         MonoConstraint(Vector(BaseTString), id("a")),
-    //         MonoConstraint(Vector(BaseTBool), id("b")),
-    //         MonoConstraint(Vector(Var(id("a"), 0), Var(id("b"), 0)), id("c")),
-    //     )
+    test("correct product of vars") {
+        val constraints = List(
+            MonoConstraint(Vector(BaseTInt), id("a")),
+            MonoConstraint(Vector(BaseTString), id("a")),
+            MonoConstraint(Vector(BaseTBool), id("b")),
+            MonoConstraint(Vector(Var(id("a"), 0), Var(id("b"), 0)), id("c")),
+        )
 
-    //     val expectedSolved: Solution = Map(
-    //         id("a") -> Set(Vector(BaseTInt), Vector(BaseTString)),
-    //         id("b") -> Set(Vector(BaseTBool)),
-    //         id("c") -> Set(Vector(BaseTInt, BaseTBool), Vector(BaseTString, BaseTBool)),
-    //     )
+        val expectedSolved: Solution = Map(
+            id("a") -> Set(Vector(BaseTInt), Vector(BaseTString)),
+            id("b") -> Set(Vector(BaseTBool)),
+            id("c") -> Set(Vector(BaseTInt, BaseTBool), Vector(BaseTString, BaseTBool)),
+        )
 
-    //     assertEquals(solveConstraints(constraints), expectedSolved)
-    // }
+        assertEquals(solveConstraints(constraints), expectedSolved)
+    }
 
     test("correct product of vars 2") {
         val constraints = List(
