@@ -363,8 +363,14 @@ def solveConstraints(constraints: MonoConstraints)(using Context): Solution = {
       // a => <Int, Char>, <Double, Bool>
       // b => <a.0, a.1>
       var substitutions: Substitutions = List(Map.empty)
+      // Optimization: Only add substitutions from bounds that are known to exist inside the current bound
+      val containedVariables = b.flatMap({
+        case TypeArg.Var(fnId, _) => Some(fnId)
+        case _ => None
+      })
       bounds.foreach { 
-        case (funId, bs) => substitutions = mapProductAppend(substitutions, bs.map((funId, _)).toList) 
+        case (funId, bs) if containedVariables.contains(funId) => substitutions = mapProductAppend(substitutions, bs.map((funId, _)).toList)
+        case _ => ()
       }
 
       substitutions.foreach(substitution => {
