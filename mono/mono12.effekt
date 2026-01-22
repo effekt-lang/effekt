@@ -7,7 +7,6 @@ def main(): Unit = {
   val foo2 = Bar("abc")
 
   foo1 match {
-    // Must write [B]
     case Bar(x) => println("true")
   }
   ()
