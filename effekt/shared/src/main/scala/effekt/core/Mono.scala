@@ -419,23 +419,23 @@ def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] =
   case Data(id, tparams, constructors) => 
     val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
     if (monoTypes.isEmpty) {
-      List(Data(id, tparams, constructors flatMap monomorphize))
-    } else {  
+      List(Data(id, tparams, constructors.flatMap(monomorphize(_, Vector.empty))))
+    } else {
       monoTypes.map(baseTypes =>
         val replacementTparams = tparams.zip(baseTypes).toMap
         ctx.replacementTparams ++= replacementTparams
-        Declaration.Data(ctx.tpeNames(id, baseTypes).name, List.empty, constructors.flatMap(monomorphize))
+        Declaration.Data(ctx.tpeNames(id, baseTypes).name, List.empty, constructors.flatMap(constr => monomorphize(constr, baseTypes)))
       )
     }
   case Interface(id, tparams, properties) =>
     val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
     if (monoTypes.isEmpty) {
-      List(Declaration.Interface(id, tparams, properties flatMap monomorphize))
+      List(Declaration.Interface(id, tparams, properties.flatMap(monomorphize(_, Vector.empty))))
     } else {
       monoTypes.map(baseTypes =>
         val replacementTparams = tparams.zip(baseTypes).toMap
         ctx.replacementTparams ++= replacementTparams
-        val monoProp = properties.flatMap(monomorphize)
+        val monoProp = properties.flatMap(prop => monomorphize(prop, baseTypes))
         val interfaceName = ctx.funNames(id, baseTypes)
         if (interfaceName == id) {
           Declaration.Interface(interfaceName, tparams, monoProp)
@@ -445,14 +445,21 @@ def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] =
       )
     }
 
-def monomorphize(property: Property)(using ctx: MonoContext): List[Property] = property match {
+def monomorphize(property: Property, variant: Vector[Ground])(using ctx: MonoContext): List[Property] = property match {
   case Property(id, tpe@BlockType.Function(tparams, cparams, vparams, bparams, result)) => {
+    // All solutions for this property
     val baseTypes = ctx.solution.getOrElse(id, Set.empty).toList
-    if (baseTypes.isEmpty) {
+    // Filter solutions that do not belong to the variant currently being handled
+    val relevantTypes = baseTypes.filter(tpes => tpes.startsWith(variant))
+    // The solution for properties may have more types than the variant because of existentials
+    // in which case we need to generate multiple properties
+    if (relevantTypes.isEmpty) {
       List(Property(id, monomorphize(tpe)))
     } else {
-      baseTypes.map(baseType => {
-        val replacementTparams = tparams.zip(baseType).toMap
+      relevantTypes.map(baseType => {
+        // Remove types not relevant for existentials (mono11)
+        val existentialBaseTypes = baseType.drop(variant.size)
+        val replacementTparams = tparams.zip(existentialBaseTypes).toMap
         ctx.replacementTparams ++= replacementTparams
         Property(ctx.funNames((id, baseType)), monomorphize(tpe)) 
       })
@@ -461,14 +468,21 @@ def monomorphize(property: Property)(using ctx: MonoContext): List[Property] = p
   case Property(id, tpe) => ???
 }
 
-def monomorphize(constructor: Constructor)(using ctx: MonoContext): List[Constructor] = constructor match
+def monomorphize(constructor: Constructor, variant: Vector[Ground])(using ctx: MonoContext): List[Constructor] = constructor match
   case Constructor(id, tparams, fields) => 
+    // All solutions for this constructor
     val baseTypes = ctx.solution.getOrElse(id, Set.empty).toList
-    if (baseTypes.isEmpty) {
+    // Filter solutions that do not belong to the variant currently being handled
+    val relevantTypes = baseTypes.filter(tpes => tpes.startsWith(variant))
+    // The solutions for constructors may have more types than the variant because of existentials
+    // in which case we need to generate multiple constructors
+    if (relevantTypes.isEmpty) {
       List(Constructor(id, tparams, fields map monomorphize))
     } else {
-      baseTypes.map(baseType => {
-        val replacementTparams = tparams.zip(baseType).toMap
+      relevantTypes.map(baseType => {
+        // Remove types not relevant for existentials (mono13)
+        val existentialBaseTypes = baseType.drop(variant.size)
+        val replacementTparams = tparams.zip(existentialBaseTypes).toMap
         ctx.replacementTparams ++= replacementTparams
         Constructor(ctx.funNames(id, baseType), List.empty, fields map monomorphize)
       })
