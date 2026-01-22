@@ -323,27 +323,39 @@ def filterNonGround(bound: Vector[TypeArg]): Option[Vector[Ground]] = {
   }
 }
 
+// One specific variant of a type variable
+type Variant = (Id, Vector[TypeArg])
+type Variants = List[Variant]
+
+// Substitution of all combinations of variants of type variables
+type Substitution = Map[Id, Vector[TypeArg]]
+type Substitutions = List[Substitution]
+
 def solveConstraints(constraints: MonoConstraints)(using Context): Solution = {
   val filteredConstraints = constraints.filterNot(c => c.lower.isEmpty)
   val groupedConstraints = filteredConstraints.groupBy(c => c.upper)
   var bounds = groupedConstraints.map((sym, constraints) => (sym -> constraints.map(c => c.lower).toSet))
 
+  val variants = groupedConstraints.map((sym, constraints) =>
+    constraints.map(c => (sym, c.lower))
+  )
+  var substitutions: Substitutions = List(Map.empty)
+  variants.map(variant => substitutions = mapProductAppend(substitutions, variant))
+
   while (true) {
     val previousBounds = bounds
     bounds.foreach((sym, tas) => 
-      val bound = solveConstraints(sym, tas).filter(v => v.nonEmpty)
+      val bound = propagateBounds(sym, tas).filter(v => v.nonEmpty)
       bounds += (sym -> bound)
     )
     
     if (previousBounds == bounds) return filterBounds(bounds)
   }
 
-  // propagate Bounds
-  def solveConstraints(funId: FunctionId, filteredConstraints: Set[Vector[TypeArg]]): Set[Vector[TypeArg]] =
+  def propagateBounds(funId: FunctionId, filteredConstraints: Set[Vector[TypeArg]]): Set[Vector[TypeArg]] =
     var nbs: Set[List[TypeArg]] = Set.empty
     filteredConstraints.foreach(b => 
-      var l: List[List[TypeArg]] = List(List.empty)
-
+      
       def solveTypeArg(typeArg: TypeArg, substitution: Map[Id, Vector[TypeArg]], taPos: Int, insideTypeConstructor: Boolean): TypeArg = typeArg match {
         case TypeArg.Base(tpe, targs) => 
           val solvedTargs = targs.zipWithIndex.map((ta, ind) => solveTypeArg(ta, substitution, ind, true))
@@ -353,14 +365,13 @@ def solveConstraints(constraints: MonoConstraints)(using Context): Solution = {
           if (funId == fnId && taPos == pos && insideTypeConstructor) Context.abort(pretty"Detected polymorphic recursion for '${funId}' at position '${taPos}'")
           substitution(fnId)(pos)
       }
-
-      // maybe set
-      // 
-      val substitutions: List[Map[Id, Vector[TypeArg]]] = ???      
-      // map/flatMap substitution
-      b.zipWithIndex.foreach((typeArg, ind) => l = productAppend(l, solveTypeArg(typeArg, ind, false)))
-      
-      nbs ++= l
+          
+      substitutions.filter(substitution => substitution.contains(funId)).map(substitution => {
+        val l = b.zipWithIndex.map((typeArg, ind) => {
+          solveTypeArg(typeArg, substitution, ind, false)
+        }).toList
+        nbs += l
+      })
     )
     nbs.map(l => l.toVector)
 
@@ -371,6 +382,11 @@ def solveConstraints(constraints: MonoConstraints)(using Context): Solution = {
 def productAppend[A](ls: List[List[A]], rs: List[A]): List[List[A]] =
   if (rs.isEmpty) return ls
   for { l <- ls; r <- rs } yield l :+ r
+
+// Cross product of existing substitutions and all variants for one type variable
+def mapProductAppend(ls: Substitutions, rs: Variants): List[Map[Id, Vector[TypeArg]]] =
+  if (rs.isEmpty) return ls
+  for { l <- ls; r <- rs } yield l + r
 
 def monomorphize(definitions: List[Toplevel])(using ctx: MonoContext)(using Context, DeclarationContext): List[Toplevel] =
   var newDefinitions: List[Toplevel] = List.empty
