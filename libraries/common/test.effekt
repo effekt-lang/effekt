@@ -56,6 +56,17 @@ def assertEqual[A](obtained: A, expected: A) { equals: (A, A) => Bool } { show: 
   // NOTE:                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   //             Here's an accidental capture! Can we prevent this somehow nicely?
 
+def assertNotThrown[E](ex: on[E]) { body: => Unit / Exception[E] }: Unit / Assertion =
+  ex.default { do assert(false, "Unexpected Exception") } {body}
+
+def assertNoThrow[E] { body: => Unit / Exception[E] }: Unit / Assertion =
+  on[E].default{ do assert(false, "Unexpected Exception") } {body}
+
+def assertThrown[E](ex: on[E]) { body: => Unit / Exception[E] }: Unit / Assertion =
+  do assert(ex.default { true } { body(); false }, "Expected Exception, but exited normally")
+
+def assertThrows[E] { body: => Unit / Exception[E] }: Unit / Assertion =
+  do assert(on[E].default { true } { body(); false }, "Expected Exception, but exited normally")
 
 interface Test {
   def success(name: String, duration: Int): Unit

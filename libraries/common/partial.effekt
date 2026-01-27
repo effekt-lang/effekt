@@ -46,3 +46,19 @@ def suchThat[A](value: A){ predicate: A => Bool }: Option[A] =
 
 def getOrFail[A](option: Option[A]): A / fail =
   option.getOrElse { do fail() }
+
+namespace returning {
+
+def exhaustively[R](init: R) { program: () => R / fail }: R =
+  var res = init
+  try {
+    def go(): R = {
+      res = program()
+      go()
+    }
+    go()
+  } with fail {
+    res
+  }
+
+}

@@ -90,6 +90,13 @@ def replicate[A](number: Int) { action: () => A }: Unit / emit[A] =
     replicate(number - 1) {action}
   }
 
+def size[A] { s: => Unit / emit[A] }: Int = {
+  var size = 0
+  try s()
+  with emit[A] { _ => size = size + 1}
+  size
+}
+
 /// Creates an infinite iterated stream given by an `initial` seed and a `step` function:
 /// iterate(a){f} ~> a, f(a), f(f(a)), f(f(f(a))), ...
 def iterate[A](initial: A) { step: A => A }: Unit / emit[A] = {
