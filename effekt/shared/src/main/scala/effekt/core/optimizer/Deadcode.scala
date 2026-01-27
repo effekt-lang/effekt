@@ -6,7 +6,7 @@ import util.Trampoline
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
 
-class DeadcodeRewrite(reachable: Map[Id, Usage])
+class Deadcode(reachable: Map[Id, Usage])
     extends core.Tree.TrampolinedRewrite {
 
   private def used(id: Id): Boolean = reachable.get(id).exists(u => u != Usage.Never)
@@ -84,7 +84,7 @@ object Deadcode extends Phase[CoreTransformed, CoreTransformed] {
 
   def remove(entrypoints: Set[Id], m: ModuleDecl): ModuleDecl =
     val reachable = Reachable(entrypoints, m)
-    DeadcodeRewrite(reachable).rewrite(m)
+    (new Deadcode(reachable)).rewrite(m)
 
   def remove(entrypoint: Id, m: ModuleDecl): ModuleDecl =
     remove(Set(entrypoint), m)
