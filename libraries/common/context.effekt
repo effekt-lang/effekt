@@ -1,23 +1,30 @@
 module context
 
 import effekt
-import Ref
+import ref
 
 // Hole Contexts
 // =============
 
-type holeContext[A,B]{
-  Context(data:A, hole:Ref[B])
+type Ctx_Hole[A] = A
+
+type HoleContext[A,B]
+{
+  Context(data:A, hole:Ctx_Hole[B])
 }
-extern def ctx_emptyContext[A]() at {}: A = 
+
+extern def ctx_makeHole[A]() at {}: A =
+  js "undefined"
+
+extern def ctx_emptyContext[A]() at {}: HoleContext[A, A] =
   js "emptyContext()"
 
-extern def ctx_applyContext[A,B](ctx:holeContext[A,B], value:B) at {}: A = 
+extern def ctx_applyContext[A,B](ctx:HoleContext[A,B], value:B) at {}: A = 
   js "applyContext(${ctx}, ${value})"
 
-extern def ctx_composeContext[A,B,C](ctx1:holeContext[A,B], ctx2: holeContext[B,C]) at {}: holeContext[A,C] =
+extern def ctx_composeContext[A,B,C](ctx1:HoleContext[A,B], ctx2: HoleContext[B,C]) at {}: HoleContext[A,C] =
   js "composeContext(${ctx1}, ${ctx2})"
 
-extern def ctx_makeContext[A,B](data:A, holePointer: Ref[B]) at {}: holeContext[A,B] = 
+extern def ctx_makeContext[A,B](data:A, holePointer: Ctx_Hole[B]) at {}: HoleContext[A,B] = 
   js "makeContext(${data}, ${holePointer})"
 
