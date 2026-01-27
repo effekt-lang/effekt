@@ -216,18 +216,18 @@ the lexer positions will be restored when calling the continuation a second time
 Having implemented a handler for the `Parser` effect, we can run our example "grammars" on some inputs.
 
 ```effekt:repl
-inspect(parse("42") { parseCalls() })
-inspect(parse("foo(1)") { parseCalls() })
-inspect(parse("foo(1, 2)") { parseCalls() })
-inspect(parse("foo(1, 2, 3, 4)") { parseCalls() })
-inspect(parse("foo(1, 2, bar(4, 5))") { parseCalls() })
-inspect(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() })
+println(parse("42") { parseCalls() }.show)
+println(parse("foo(1)") { parseCalls() }.show)
+println(parse("foo(1, 2)") { parseCalls() }.show)
+println(parse("foo(1, 2, 3, 4)") { parseCalls() }.show)
+println(parse("foo(1, 2, bar(4, 5))") { parseCalls() }.show)
+println(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() }.show)
 
-inspect(parse("}42") { parseExpr() })
-inspect(parse("42") { parseExpr() })
-inspect(parse("let x = 4 in 42") { parseExpr() })
-inspect(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
-inspect(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
-inspect(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
-inspect(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
+println(parse("}42") { parseExpr() }.show)
+println(parse("42") { parseExpr() }.show)
+println(parse("let x = 4 in 42") { parseExpr() }.show)
+println(parse("let x = let y = 2 in 1 in 42") { parseExpr() }.show)
+println(parse("let x = (let y = 2 in 1) in 42") { parseExpr() }.show)
+println(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() }.show)
+println(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() }.show)
 ```

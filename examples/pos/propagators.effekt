@@ -72,7 +72,7 @@ def example() = {
   println("z = y + x")
   z.sumOf(y, x)
 
-  inspect(do subscribe(z))
+  println(do subscribe(z).show)
 }
 
 // cells must not leave the propagator!

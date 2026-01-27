@@ -22,16 +22,10 @@ Most values of built-in types can be printed with `println`, however, `println` 
 ```effekt:repl
 println(str)
 ```
-It is common to define a `show` function that renders a value as a string and then print this value:
+
+Manual definitions of `show` for any specific type can be written and will take priority, but
+Effekt will generate a `show` function for types that do not have one, which renders the value as a string and then print this value:
 
 ```effekt:repl
 println(show(bool))
-```
-
-These `show` functions are predefined for many types in the standard library.
-
-For quick introspection of arbitrary types, the standard library also provides an `inspect` function that works on arbitrary values (only available for certain backends). This outputs a pretty-printed version of a compiler-internal representation and is not meant to be used for actual "production" code.
-
-```effekt:repl
-inspect(unicode)
 ```
