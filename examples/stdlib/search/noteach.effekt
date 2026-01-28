@@ -1,0 +1,35 @@
+
+import stream
+import search
+
+type Tree[A] {
+  Nil()
+  Branch(v: A, l: Tree[A], r: Tree[A])
+}
+
+def notEach(t: Tree[Bool]): Tree[Bool] / {fork, fail} = t match {
+  case Nil() =>
+    do fail()
+  case Branch(v, l, r) =>
+    choice {
+      Branch(not(v), l, r)
+    } {
+      choice {
+        Branch(v, notEach(l), r)
+      } {
+        Branch(v, l, notEach(r))
+      }
+    }
+}
+
+def count[A] { stream: => Unit / emit[A] }: Int = {
+  var n = 0
+  for[A] { stream() } { _ => n = n + 1 }
+  n
+}
+
+def main() = {
+  val example = Branch(false, Branch(false, Nil(), Branch(false, Nil(), Nil())), Nil())
+  println(count[Tree[Bool]] { results { notEach(example) } })
+}
+
