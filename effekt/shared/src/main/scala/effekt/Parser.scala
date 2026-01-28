@@ -1346,12 +1346,20 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def templateString(): Term =
     nonterminal:
+      val start = position
       backtrack(idRef()) ~ template() match {
         // We do not need to apply any transformation if there are no splices _and_ no custom handler id is given
         case Maybe(None, _) ~ SpannedTemplate(str :: Nil, Nil) => StringLit(str.unspan, str.span)
         // s"a${x}b${y}" ~> s { do literal("a"); do splice(x); do literal("b"); do splice(y); return () }
-        case id ~ SpannedTemplate(strs, args) =>
-          val target = id.getOrElse(IdRef(Nil, "s", id.span.synthesized))
+        case Maybe(id, range) ~ SpannedTemplate(strs, args) =>
+          val target = id match {
+            case Some(id) => id
+            case None =>
+              val synthSpan = range.synthesized
+              val end = position - 1
+              warn("String interpolation requires an explicit interpolator. For example: s\"...\"", start, end)
+              IdRef(Nil, "s", synthSpan)
+          }
           val doLits = strs.map { s =>
             Do(
               IdRef(Nil, "literal", s.span.synthesized),
