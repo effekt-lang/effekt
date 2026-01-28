@@ -1357,7 +1357,7 @@ class Parser(tokens: Seq[Token], source: Source) {
             case None =>
               val synthSpan = range.synthesized
               val end = position - 1
-              warn("interpolated string literals need to be explicitly marked with an interpolator function, e.g. 's\"...\"'", start, end)
+              warn("String interpolation requires an explicit interpolator. For example: s\"...\"", start, end)
               IdRef(Nil, "s", synthSpan)
           }
           val doLits = strs.map { s =>
