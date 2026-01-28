@@ -144,5 +144,5 @@ now()
 
 ## Reference
 
-[`effekt.effekt`](https://github.com/effekt-lang/effekt/blob/master/libraries/common/effekt.effekt) is the main stdlib file defining things like primitive addition for each backend.
+[`effekt.effekt`](https://github.com/effekt-lang/effekt/blob/main/libraries/common/effekt.effekt) is the main stdlib file defining things like primitive addition for each backend.
 We highly recommend reading through the source code of the standard library to see how FFI is used.

@@ -13,7 +13,7 @@ play with it and give us your feedback :)
 
 ## Examples
 
-If you are looking for examples of the Effekt language, we invite you to look at the [casestudies](https://github.com/effekt-lang/effekt/tree/master/examples/casestudies) and the [language tour](https://effekt-lang.org/tour).
+If you are looking for examples of the Effekt language, we invite you to look at the [casestudies](https://github.com/effekt-lang/effekt/tree/main/examples/casestudies) and the [language tour](https://effekt-lang.org/tour).
 
 ## Installation
 

@@ -494,12 +494,21 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
               // these capabilities are later introduced as parameters in capability passing
               val capabilities = (CanonicalOrdering(effs) zip cparamsForEffects).map {
-                case (tpe, capt) => Context.freshCapabilityFor(tpe, CaptureSet(capt))
+                case (tpe, capt) => Context.freshCapabilityFor(tpe, capt)
               }
 
+              val bodyRegion = Context.freshCaptVar(CaptUnificationVar.OpClause(d))
+
               val Result(bodyType, bodyEffs) = Context.bindingCapabilities(d, capabilities) {
-                body checkAgainst tpe
+                flowingInto(bodyRegion) {
+                  body checkAgainst tpe
+                }
               }
+
+              usingCaptureWithout(bodyRegion) {
+                cparams
+              }
+
               Result(bodyType, bodyEffs -- Effects(effs))
 
             // handler implementation: we have a continuation
@@ -1775,17 +1784,16 @@ trait TyperOps extends ContextOps { self: Context =>
     cap
 
   private [typer] def freshCapabilityFor(tpe: InterfaceType): symbols.BlockParam =
-    val param: BlockParam = BlockParam(tpe.name, Some(tpe), NoSource)
-    // TODO FIXME -- generated capabilities need to be ignored in LSP!
-//     {
-//      override def synthetic = true
-//    }
-    bind(param, tpe)
-    param
+    freshCapabilityFor(tpe, CaptureParam(tpe.name))
 
-  private [typer] def freshCapabilityFor(tpe: InterfaceType, capture: CaptureSet): symbols.BlockParam =
-    val param = freshCapabilityFor(tpe)
-    bind(param, capture)
+  private [typer] def freshCapabilityFor(tpe: InterfaceType, capt: Capture): symbols.BlockParam =
+    val param: BlockParam = BlockParam(tpe.name, Some(tpe), capt, NoSource)
+    // TODO FIXME -- generated capabilities need to be ignored in LSP!
+      //     {
+      //      override def synthetic = true
+      //    }
+    bind(param, tpe)
+    bind(param, CaptureSet(capt))
     param
 
   private [typer] def provideCapabilities(call: source.CallLike, effs: List[InterfaceType]): List[BlockParam] =
@@ -1863,10 +1871,9 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def bind(p: TrackedParam): Unit = p match {
-    case s @ BlockParam(name, tpe, _) => bind(s, tpe.get, CaptureSet(p.capture))
-    case s @ ExternResource(name, tpe, _) => bind(s, tpe, CaptureSet(p.capture))
-    case s : VarBinder => bind(s, CaptureSet(s.capture))
-    case r : ResumeParam => panic("Cannot bind resume")
+    case s @ BlockParam(name, tpe, capt, _) => bind(s, tpe.get, CaptureSet(capt))
+    case s @ ExternResource(name, tpe, capt, _) => bind(s, tpe, CaptureSet(capt))
+    case s @ VarBinder(name, tpe, capt, _) => bind(s, CaptureSet(capt))
   }
 
   //</editor-fold>

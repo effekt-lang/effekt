@@ -1,0 +1,11 @@
+effect simple(): Unit
+
+interface Bi {
+  def foo(): Unit / { simple }
+}
+
+def test(): Bi at {} = box new Bi {
+  def foo() = do simple()
+}
+
+def main() = {}

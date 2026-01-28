@@ -19,10 +19,10 @@ jobs:
       
       - name: Verify repository state
         run: |
-          # Ensure we're on master
+          # Ensure we're on main
           current_branch=$(git rev-parse --abbrev-ref HEAD)
-          if [ "$current_branch" != "master" ]; then
-            echo "ERROR: Not on master branch! Current branch: $current_branch"
+          if [ "$current_branch" != "main" ]; then
+            echo "ERROR: Not on main branch! Current branch: $current_branch"
             exit 1
           fi
           
@@ -110,7 +110,7 @@ jobs:
       with:
         full-test: 'true'
         use-retry: 'true'
-          # Since we're on 'master', we can assume that the tests already passed.
+          # Since we're on 'main', we can assume that the tests already passed.
           # Therefore retrying is OK (to prevent flaky tests from cancelling the deploy).
 
   set-version:
@@ -159,7 +159,7 @@ jobs:
     needs: [set-version]
     runs-on: ubuntu-latest
     steps:
-      # Login as a GitHub App in order to bypass rules about committing to `master` directly
+      # Login as a GitHub App in order to bypass rules about committing to `main` directly
       - name: Get GitHub App token
         uses: actions/create-github-app-token@v2
         id: app-token
