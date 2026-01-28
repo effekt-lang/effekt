@@ -1,0 +1,4 @@
+hello, world
+[warning] examples/neg/warn_implicit_string_interpolation.effekt:2:13: interpolated string literals need to be explicit marked with an interpolator functions, e.g. 's"..."'
+    println("${"hello"}, ${"world"}")
+            ^^^^^^^^^^^^^^^^^^^^^^^^

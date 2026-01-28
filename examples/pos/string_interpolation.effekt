@@ -39,7 +39,7 @@ def main() = {
   val domain = "https://api.effekt-lang.org"
   val user = "effekt"
   val resourceId = 42
-  println("GET ${domain}/users/${user}/resource/${resourceId.show}")
+  println(s"GET ${domain}/users/${user}/resource/${resourceId.show}")
 
   val fixpoint = Abs("f", App(Abs("x", App(Var("f"), App(Var("x"), Var("x")))), Abs("x", App(Var("f"), App(Var("x"), Var("x"))))))
   println(pretty"Fix point combinator: ${fixpoint}")
