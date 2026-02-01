@@ -18,7 +18,7 @@ jobs:
         run: mill project.testCompile
 
       - name: Cache compiled artifacts
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: |
             target
