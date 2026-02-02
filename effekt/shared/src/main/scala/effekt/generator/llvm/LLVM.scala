@@ -7,6 +7,7 @@ import effekt.core.optimizer
 import effekt.machine
 import kiama.output.PrettyPrinterTypes.{ Document, emptyLinks }
 import kiama.util.Source
+import effekt.core.ArityRaising
 
 
 class LLVM extends Compiler[String] {
@@ -54,7 +55,7 @@ class LLVM extends Compiler[String] {
   // -----------------------------------
   object steps {
     // intermediate steps for VSCode
-    val afterCore = allToCore(Core) andThen Aggregate andThen optimizer.Optimizer
+    val afterCore = allToCore(Core) andThen Aggregate andThen ArityRaising andThen optimizer.Optimizer
     val afterMachine = afterCore andThen Machine map { case (mod, main, prog) => prog }
     val afterLLVM = afterMachine map {
       case machine.Program(decls, defns, entry) =>

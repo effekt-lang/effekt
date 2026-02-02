@@ -1,0 +1,56 @@
+import examples/benchmarks/runner
+
+record Vec4(a: Int, b: Int, c: Int, d: Int)
+
+record Matrix4(row1: Vec4, row2: Vec4, row3: Vec4, row4: Vec4)
+
+record Vec3(a: Int, b: Int, c: Int)
+record Matrix3(row1: Vec3, row2: Vec3, row3: Vec3)
+
+def det3(m: Matrix3): Int = {
+  m.row1.a * (m.row2.b * m.row3.c - m.row2.c * m.row3.b) -
+  m.row1.b * (m.row2.a * m.row3.c - m.row2.c * m.row3.a) +
+  m.row1.c * (m.row2.a * m.row3.b - m.row2.b * m.row3.a)
+}
+
+def det4(m: Matrix4): Int = {
+  val c1 = m.row1.a * det3(Matrix3(
+    Vec3(m.row2.b, m.row2.c, m.row2.d),
+    Vec3(m.row3.b, m.row3.c, m.row3.d),
+    Vec3(m.row4.b, m.row4.c, m.row4.d)
+  ))
+  val c2 = m.row1.b * det3(Matrix3(
+    Vec3(m.row2.a, m.row2.c, m.row2.d),
+    Vec3(m.row3.a, m.row3.c, m.row3.d),
+    Vec3(m.row4.a, m.row4.c, m.row4.d)
+  ))
+  val c3 = m.row1.c * det3(Matrix3(
+    Vec3(m.row2.a, m.row2.b, m.row2.d),
+    Vec3(m.row3.a, m.row3.b, m.row3.d),
+    Vec3(m.row4.a, m.row4.b, m.row4.d)
+  ))
+  val c4 = m.row1.d * det3(Matrix3(
+    Vec3(m.row2.a, m.row2.b, m.row2.c),
+    Vec3(m.row3.a, m.row3.b, m.row3.c),
+    Vec3(m.row4.a, m.row4.b, m.row4.c)
+  ))
+  c1 - c2 + c3 - c4
+}
+
+def runBenchmark(n: Int): Int = {
+  def loop(i: Int, acc: Int): Int = {
+    if (i <= 0) { acc }
+    else {
+      val m = Matrix4(
+        Vec4(i, i + 1, i + 2, i + 3),
+        Vec4(i + 4, i + 5, i + 6, i + 7),
+        Vec4(i + 8, i + 9, i + 10, i + 11),
+        Vec4(i + 12, i + 13, i + 14, i + 15)
+      )
+      loop(i - 1, acc + det4(m))
+    }
+  }
+  loop(n, 0)
+}
+
+def main() = benchmark(1000000){ n => runBenchmark(n) }

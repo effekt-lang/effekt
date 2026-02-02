@@ -6,6 +6,7 @@ import effekt.context.Context
 import effekt.core.optimizer.{DropBindings, Optimizer}
 import kiama.util.Source
 import kiama.output.PrettyPrinterTypes.Document
+import effekt.core.ArityRaising
 
 class ChezSchemeCPS extends Compiler[String] {
 
@@ -37,7 +38,7 @@ class ChezSchemeCPS extends Compiler[String] {
     Frontend andThen Middleend
   }
 
-  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Optimizer map {
+  lazy val Optimized = allToCore(Core) andThen Aggregate andThen ArityRaising andThen Optimizer map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
       val mainFile = path(mod)
