@@ -94,19 +94,14 @@ def parse(): Term / { read[Bool], stop } = {
 }
 
 /// helper function for pretty string interpolation of terms
-def pretty { s: () => Unit / { literal, splice[Term] } }: String = {
+def pretty { stream: () => Unit / { write, splice[Term] } }: String = {
   with stringBuffer
-
-  try { s(); do flush() }
-  with literal { l => resume(do write(l)) }
-  with splice[Term] { t =>
-    t match {
-      case Abs(n, t) => do write("λ" ++ n.show ++ pretty".${t}")
-      case App(a, b) => do write(pretty"(${a} ${b})")
-      case Var(v)    => do write(v.show)
-    }
-    resume(())
+  with splicing[Term] {
+    case Abs(n, t) => do write("λ" ++ n.show ++ pretty".${t}")
+    case App(a, b) => do write(pretty"(${a} ${b})")
+    case Var(v)    => do write(v.show)
   }
+  stream()
 }
 
 /// convert char stream to bit stream, skipping non-bit chars
