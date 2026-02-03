@@ -19,6 +19,11 @@ def builtin(name: String)(impl: Runtime ?=> List[Value] ~> Value): (String, Buil
 type Builtins = Map[String, Builtin]
 
 lazy val printing: Builtins = Map(
+  builtin("effekt::print(String)") {
+    case As.String(msg) :: Nil =>
+      Runtime.out.print(msg)
+      Value.Unit()
+  },
   builtin("effekt::println(String)") {
     case As.String(msg) :: Nil =>
       Runtime.out.println(msg)

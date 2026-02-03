@@ -74,6 +74,16 @@ def tail[A](l: List[A]): List[A] / Exception[MissingValue] = l match {
   case Cons(a, rest) => rest
 }
 
+/// Return all elements of a given list except the last element.
+/// Throws a `MissingValue` exception if it's empty.
+///
+/// O(n)
+def init[A](l: List[A]): List[A] / Exception[MissingValue] = l match {
+  case Nil() => do raise(MissingValue(), "Trying to get the beginning of an empty list")
+  case Cons(a, Nil()) => Nil()
+  case Cons(a, as) => Cons(a, as.init)
+}
+
 /// Return the first element of a given list.
 /// Returns `None()` if it's empty.
 ///

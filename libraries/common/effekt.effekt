@@ -38,6 +38,16 @@ namespace llvm {
 // Showing and debugging
 // =====================
 
+extern def print(value: String): Unit =
+  jsWeb "$effekt.println(${value})"
+  jsNode "$effekt.print(${value})"
+  chez "(print_impl ${value})"
+  llvm """
+    call void @c_io_print(%Pos ${value})
+    ret %Pos zeroinitializer ; Unit
+  """
+  vm "effekt::print(String)"
+
 extern def println(value: String): Unit =
   js "$effekt.println(${value})"
   chez "(println_impl ${value})"

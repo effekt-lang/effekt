@@ -7,11 +7,15 @@
 // Println and Readln and Random
 // -----------------------------
 
-void c_io_println(String text) {
+void c_io_print(String text) {
     for (uint64_t j = 0; j < text.tag; ++j) {
         putchar(c_bytearray_data(text)[j]);
     };
     erasePositive(text);
+}
+
+void c_io_println(String text) {
+    c_io_print(text);
     putchar('\n');
 }
 

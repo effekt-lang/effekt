@@ -192,6 +192,10 @@ def countIf[A] { shouldCount: A => Bool } { stream: () => Unit / emit[A] }: Int 
   count
 }
 
+/// Count the number of emitted values.
+def count[A] { stream: () => Unit / emit[A] }: Int =
+  countIf[A] { _ => true } {stream}
+
 def source[A] { stream: () => Unit / emit[A] } { reader: () => Unit / read[A] }: Unit =
   returning::source[A, Unit]{stream}{reader}
 
