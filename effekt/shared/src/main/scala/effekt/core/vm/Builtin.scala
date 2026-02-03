@@ -185,12 +185,6 @@ lazy val integers: Builtins = Map(
   },
 )
 
-lazy val bytes: Builtins = Map(
-  builtin("effekt::show(Byte)") {
-    case As.Byte(n) :: Nil => Value.String(n.toString)
-  },
-)
-
 lazy val booleans: Builtins = Map(
   builtin("effekt::not(Bool)") {
     case As.Bool(x) :: Nil => Value.Bool(!x)
