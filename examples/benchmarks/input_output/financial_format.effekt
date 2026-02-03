@@ -8,9 +8,9 @@ import stream
 
 def emitEntry(tag: Int) { value: () => Unit / emit[Byte] }: Unit / emit[Byte] = {
   tag.show.fromString.each()
-  do emit(61.toByte)
+  do emit(0x3D)
   value()
-  do emit(01.toByte)
+  do emit(0x01)
 }
 
 def emitOrder(): Unit / emit[Byte] = {

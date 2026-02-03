@@ -112,10 +112,10 @@ extern def showBuiltin(value: Char) at {}: String =
   vm "effekt::show(Char)"
 
 extern def showBuiltin(value: Byte) at {}: String =
-  js "'' + ${value}"
-  chez "(string ${value})"
+  js "'0x' + ${value}.toString(16).toUpperCase().padStart(2, '0')"
+  chez "(format #f \"0x~2,'0X\" ${value})"
   llvm """
-    %z = call %Pos @c_bytearray_show_Byte(i8 ${value})
+    %z = call %Pos @c_bytearray_show_Byte(%Byte ${value})
     ret %Pos %z
   """
   vm "effekt::show(Byte)"

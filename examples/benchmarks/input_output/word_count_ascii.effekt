@@ -71,7 +71,7 @@ def run(n: Int) = {
       repeat(10) {
         do emit(c.toByte)
       }
-      do emit(10.toByte)
+      do emit(0x0A)
     }
   }
 

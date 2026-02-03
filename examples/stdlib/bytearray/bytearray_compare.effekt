@@ -6,7 +6,7 @@ def main() = {
   val empty: ByteArray = "".fromString
   val zeros: ByteArray = bytearray::allocate(8)
   each(0, zeros.size) { i =>
-    zeros.set(i, 0.toByte)
+    zeros.set(i, 0x00)
   }
   val abcs: ByteArray = bytearray::allocate(8)
   each(0, abcs.size) { i =>

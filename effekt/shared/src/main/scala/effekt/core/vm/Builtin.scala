@@ -2,6 +2,8 @@ package effekt
 package core
 package vm
 
+import effekt.util.UByte
+
 import java.io.PrintStream
 import scala.util.matching as regex
 import scala.util.matching.Regex
@@ -188,16 +190,16 @@ lazy val integers: Builtins = Map(
   },
 )
 
-lazy val bytes: Builtins = Map(
-  builtin("effekt::show(Byte)") {
-    case As.Byte(n) :: Nil => Value.String(n.toString)
-  },
-)
-
 lazy val booleans: Builtins = Map(
   builtin("effekt::not(Bool)") {
     case As.Bool(x) :: Nil => Value.Bool(!x)
   },
+)
+
+lazy val bytes: Builtins = Map(
+  builtin("effekt::show(Byte)") {
+    case As.Byte(b) :: Nil => Value.String(b.toHexString)
+  }
 )
 
 lazy val strings: Builtins = Map(
@@ -291,13 +293,13 @@ lazy val bytearrays: Builtins = Map(
     case As.ByteArray(arr) :: As.Int(index) :: As.Byte(value) :: Nil => arr.update(index.toInt, value); Value.Unit()
   },
   builtin("bytearray::compare(ByteArray, ByteArray)") {
-    case As.ByteArray(arr1) :: As.ByteArray(arr2) :: Nil => Value.Int(java.util.Arrays.compare(arr1, arr2))
+    case As.ByteArray(arr1) :: As.ByteArray(arr2) :: Nil => Value.Int(java.util.Arrays.compare(arr1.map(_.toByte), arr2.map(_.toByte)))
   },
   builtin("bytearray::fromString(String)") {
-    case As.String(str) :: Nil => Value.ByteArray(str.getBytes("UTF-8"))
+    case As.String(str) :: Nil => Value.ByteArray(str.getBytes("UTF-8").map(UByte.unsafeFromByte))
   },
   builtin("bytearray::toString(ByteArray)") {
-    case As.ByteArray(arr) :: Nil => Value.String(new String(arr, "UTF-8"))
+    case As.ByteArray(arr) :: Nil => Value.String(new String(arr.map(_.toByte), "UTF-8"))
   },
 )
 
@@ -352,8 +354,8 @@ protected object As {
     }
   }
   object Byte {
-    def unapply(v: Value): Option[scala.Byte] = v match {
-      case Value.Literal(value: scala.Byte) => Some(value)
+    def unapply(v: Value): Option[UByte] = v match {
+      case Value.Literal(value: Byte) => Some(UByte.unsafeFromByte(value))
       case _ => None
     }
   }
@@ -376,7 +378,7 @@ protected object As {
     }
   }
   object ByteArray {
-    def unapply(v: Value): Option[scala.Array[Byte]] = v match {
+    def unapply(v: Value): Option[scala.Array[UByte]] = v match {
       case Value.ByteArray(array) => Some(array)
       case _ => None
     }

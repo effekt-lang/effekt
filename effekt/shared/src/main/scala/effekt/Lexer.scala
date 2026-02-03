@@ -3,6 +3,7 @@ package effekt.lexer
 import scala.collection.mutable
 import scala.collection.immutable
 import effekt.source.Span
+import effekt.util.UByte
 import kiama.util.Source
 
 /** Lexing errors that can occur during tokenization */
@@ -16,6 +17,7 @@ enum LexerError {
   case MultipleCodePointsInChar
   case InvalidIntegerFormat
   case InvalidDoubleFormat
+  case InvalidByteFormat
   case UnterminatedInterpolation(depth: Int)
 
   def message: String = this match {
@@ -34,6 +36,7 @@ enum LexerError {
     case MultipleCodePointsInChar => "Character literal consists of multiple code points"
     case InvalidIntegerFormat => "Invalid integer format, not a 64bit integer literal"
     case InvalidDoubleFormat => "Invalid float format, not a double literal"
+    case InvalidByteFormat => "Invalid byte format, byte has to be exactly two hex digits"
     case UnterminatedInterpolation(depth) =>
       s"Unterminated string interpolation ($depth unclosed splices)"
   }
@@ -63,6 +66,7 @@ enum TokenKind {
   case Str(s: String, multiline: Boolean)
   case HoleStr(s: String)
   case Chr(c: Int)
+  case Byt(b: UByte)
 
   // identifiers
   case Ident(id: String)
@@ -381,7 +385,8 @@ class Lexer(source: Source) extends Iterator[Token] {
       case (c, _) if c.isWhitespace => advanceSpaces()
 
       // Numbers
-      case (c, _) if c.isDigit => number()
+      case ('0', 'x') if isHexDigit(peekAhead(2)) => advance2With(byte())
+      case (c,     _) if c.isDigit                => number()
 
       // Identifiers and keywords
       case (c, _) if isNameFirst(c) => identifier()
@@ -511,6 +516,27 @@ class Lexer(source: Source) extends Iterator[Token] {
         case Some(integer) => TokenKind.Integer(integer)
         case None => TokenKind.Error(LexerError.InvalidIntegerFormat)
       }
+
+  private def byte(): TokenKind =
+    // Consume hex digits
+    advanceWhile { (curr, _) => isHexDigit(curr) }
+
+    // Get the hex string
+    val hexString = getCurrentSlice(skipAfterStart = 2)
+
+    if hexString.length < 2 then
+      return TokenKind.Error(LexerError.InvalidByteFormat)
+
+    if hexString.length > 2 then
+      return TokenKind.Error(LexerError.InvalidByteFormat)
+    
+    try {
+      val byte = java.lang.Integer.parseInt(hexString, 16)
+      assert(byte >= 0 && byte <= 255)
+      TokenKind.Byt(UByte.unsafeFromInt(byte))
+    } catch {
+      case e: NumberFormatException => TokenKind.Error(LexerError.InvalidByteFormat)
+    }
 
   private def identifier(): TokenKind =
     advanceWhile { (curr, _) => isNameRest(curr) }

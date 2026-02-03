@@ -51,7 +51,7 @@ def minstd(seed: Int): Unit / emit[Byte] = {
 ///
 /// Implementation is similar to `stream::source`, specialized for bytes and the `random` effect.
 def minstd(seed: Int) { randomnessReader: () => Unit / random }: Unit = {
-  var next = box { 255.toByte } // sentinel value
+  var next = box { 0xFF } // sentinel value
   next = box {
     try {
       minstd(seed)
