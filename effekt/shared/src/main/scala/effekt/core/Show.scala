@@ -29,27 +29,31 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     def getAllShowDef(using ShowContext)(using DeclarationContext): List[Toplevel.Def] =
       showDefns.map(_._2).toList
 
-    var wrappings: List[(Id, Stmt)] = List.empty
+    var bindings: List[(Id, Stmt)] = List.empty
+
+    def withBindings(block: => Stmt): Stmt =
+      val wraps = this.getWraps
+      val stmt = block
+      this.wrap(wraps, stmt)
 
     def emit(id: Id, stmt: Stmt): Unit =
-      wrappings +:= (id, stmt)
+      bindings +:= (id, stmt)
 
-    def wrap(wraps: List[(Id, Stmt)], stmt: Stmt): Stmt = wraps match {
-      case (id, binding) :: next => Stmt.Val(id, binding, wrap(next, stmt)) 
+    private def wrap(wraps: List[(Id, Stmt)], stmt: Stmt): Stmt = wraps match {
+      case (id, binding) :: next => Stmt.Val(id, binding, wrap(next, stmt))
       case Nil => stmt
     }
 
-    def getWraps: List[(Id, Stmt)] = {
-      val wraps = wrappings
-      wrappings = List.empty
+    private def getWraps: List[(Id, Stmt)] = {
+      val wraps = bindings
+      bindings = List.empty
       wraps
     }
-
   }
 
   // This will check if we have already generated a Show instance for the given type and generate it if we didn't
   def getShowBlockVar(vt: ValueType)(using ctx: ShowContext)(using Context, DeclarationContext): Block.BlockVar =
-    
+
     val showId = ctx.showNames.getOrElse(vt, {
       generateShowInstance(vt) match {
         case None => ctx.showNames.getOrElse(vt, {
@@ -59,7 +63,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       }
     })
     Block.BlockVar(showId, BlockType.Function(List.empty, List.empty, List(vt), List.empty, TString), Set.empty)
-  
+
 
   override def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = input match {
     case CoreTransformed(source, tree, mod, core) => {
@@ -74,7 +78,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   def transform(decl: ModuleDecl)(using ctx: ShowContext)(using Context, DeclarationContext): ModuleDecl = decl match {
-    case ModuleDecl(path, includes, declarations, externs, definitions, exports) => 
+    case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
       val transformedDefns = definitions map transform
       ModuleDecl(path, includes, declarations, externs, transformedDefns ++ ctx.getAllShowDef, exports)
   }
@@ -102,91 +106,91 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(blockLit: BlockLit)(using Context, ShowContext, DeclarationContext): BlockLit = blockLit match {
     case BlockLit(tparams, cparams, vparams, bparams, body) => BlockLit(tparams, cparams, vparams, bparams, transform(body))
-  } 
+  }
 
   def transform(blockLit: BlockVar)(using Context, ShowContext, DeclarationContext): BlockVar = blockLit match {
     case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(id, annotatedTpe, annotatedCapt)
-  } 
+  }
 
   def transform(default: Option[Stmt])(using Context, ShowContext, DeclarationContext): Option[Stmt] = default match {
     case None => None
     case Some(value) => Some(transform(value))
   }
 
-  def transform(stmt: Stmt)(using ctx: ShowContext)(using Context, DeclarationContext): Stmt = 
+  def transform(stmt: Stmt)(using ctx: ShowContext)(using Context, DeclarationContext): Stmt =
     stmt match {
-      case Let(id, PureApp(BlockVar(bid, bannotatedTpe, bannotatedCapt), targs, vargs), body) if bid.name.name == FUNCTION_NAME => 
+      case Let(id, PureApp(BlockVar(bid, bannotatedTpe, bannotatedCapt), targs, vargs), body) if bid.name.name == FUNCTION_NAME =>
         if (targs.length != 1) Context.abort(pretty"Expected targs for '${FUNCTION_NAME}' to have exactly one argument")
         // We need to wrap here, because vargs might have been extern show calls that are now not
-        // this might happen everywhere we directly transform an expression, I will not mark any further occurences
+        // this might happen everywhere we directly transform an expression
         val vargs_ = vargs map transform
-        val wraps = ctx.getWraps
-        val stmt = Stmt.Val(id, Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs_, List.empty), transform(body))
-        ctx.wrap(wraps, stmt)
-      case Let(id, binding, body) => 
+        ctx.withBindings {
+          Stmt.Val(id, Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs_, List.empty), transform(body))
+        }
+      case Let(id, binding, body) =>
         val binding_ = transform(binding)
-        val wraps = ctx.getWraps
-        val stmt = Let(id, binding_, transform(body))
-        ctx.wrap(wraps, stmt)
-      case Return(expr) => 
+        ctx.withBindings {
+          Let(id, binding_, transform(body))
+        }
+      case Return(expr) =>
         val expr_ = transform(expr)
-        val wraps = ctx.getWraps
-        val stmt = Return(expr_)
-        ctx.wrap(wraps, stmt)
+        ctx.withBindings {
+          Return(expr_)
+        }
       case ImpureApp(id, BlockVar(bid, annotatedTpe, annotatedCapt), targs, vargs, bargs, body) if bid.name.name == FUNCTION_NAME =>
         if (targs.length != 1) Context.abort(pretty"Expected targs for '${FUNCTION_NAME}' to have exactly one argument")
         val vargs_ = vargs map transform
         val bargs_ = bargs map transform
-        val wraps = ctx.getWraps
-        val stmt = Stmt.Val(id, Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs_, bargs_), transform(body))
-        ctx.wrap(wraps, stmt)
-      case ImpureApp(id, callee, targs, vargs, bargs, body) => 
+        ctx.withBindings {
+          Stmt.Val(id, Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs_, bargs_), transform(body))
+        }
+      case ImpureApp(id, callee, targs, vargs, bargs, body) =>
         val vargs_ = vargs map transform
         val bargs_ = bargs map transform
-        val wraps = ctx.getWraps
-        val stmt = ImpureApp(id, callee, targs, vargs_, bargs_, transform(body))
-        ctx.wrap(wraps, stmt)
+        ctx.withBindings {
+          ImpureApp(id, callee, targs, vargs_, bargs_, transform(body))
+        }
       case Def(id, block, body) => Def(id, transform(block), transform(body))
       case Val(id, binding, body) => Val(id, transform(binding), transform(body))
-      case App(callee, targs, vargs, bargs) => 
+      case App(callee, targs, vargs, bargs) =>
         val vargs_ = vargs map transform
         val bargs_ = bargs map transform
-        val wraps = ctx.getWraps
-        val stmt = App(transform(callee), targs, vargs_, bargs_)
-        ctx.wrap(wraps, stmt)
-      case Invoke(callee, method, methodTpe, targs, vargs, bargs) => 
+        ctx.withBindings {
+          App(transform(callee), targs, vargs_, bargs_)
+        }
+      case Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
         val vargs_ = vargs map transform
         val bargs_ = bargs map transform
-        val wraps = ctx.getWraps
-        val stmt = Invoke(transform(callee), method, methodTpe, targs, vargs_, bargs_)
-        ctx.wrap(wraps, stmt)
-      case If(cond, thn, els) => 
+        ctx.withBindings {
+          Invoke(transform(callee), method, methodTpe, targs, vargs_, bargs_)
+        }
+      case If(cond, thn, els) =>
         val cond_ = transform(cond)
-        val wraps = ctx.getWraps
-        val stmt = If(transform(cond), transform(thn), transform(els))
-        ctx.wrap(wraps, stmt)
-      case Match(scrutinee, matchTpe, clauses, default) => 
+        ctx.withBindings {
+          If(transform(cond), transform(thn), transform(els))
+        }
+      case Match(scrutinee, matchTpe, clauses, default) =>
         val scrutinee_ = transform(scrutinee)
-        val wraps = ctx.getWraps
-        val stmt = Match(scrutinee_, matchTpe, clauses map ((id, blockLit) => (id, transform(blockLit))), transform(default))
-        ctx.wrap(wraps, stmt)
+        ctx.withBindings {
+          Match(scrutinee_, matchTpe, clauses map ((id, blockLit) => (id, transform(blockLit))), transform(default))
+        }
       case Region(body) => Region(transform(body))
-      case Alloc(id, init, region, body) => 
+      case Alloc(id, init, region, body) =>
         val init_ = transform(init)
-        val wraps = ctx.getWraps
-        val stmt = Alloc(id, init_, region, transform(body))
-        ctx.wrap(wraps, stmt)
-      case Var(ref, init, capture, body) => 
+        ctx.withBindings {
+          Alloc(id, init_, region, transform(body))
+        }
+      case Var(ref, init, capture, body) =>
         val init_ = transform(init)
-        val wraps = ctx.getWraps
-        val stmt = Var(ref, init_, capture, transform(body))
-        ctx.wrap(wraps, stmt)
+        ctx.withBindings {
+          Var(ref, init_, capture, transform(body))
+        }
       case Get(id, annotatedTpe, ref, annotatedCapt, body) => Get(id, annotatedTpe, ref, annotatedCapt, transform(body))
-      case Put(ref, annotatedCapt, value, body) => 
+      case Put(ref, annotatedCapt, value, body) =>
         val value_ = transform(value)
-        val wraps = ctx.getWraps
-        val stmt = Put(ref, annotatedCapt, value_, transform(body))
-        ctx.wrap(wraps, stmt)
+        ctx.withBindings {
+          Put(ref, annotatedCapt, value_, transform(body))
+        }
       case Reset(body) => Reset(transform(body))
       // FIXME: Does k need to be handled?
       case Shift(prompt, k, body) => Shift(transform(prompt), k, transform(body))
@@ -196,9 +200,9 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(expr: Expr)(using ctx: ShowContext)(using Context, DeclarationContext): Expr = expr match {
     case Make(data, tag, targs, vargs) => Make(data, tag, targs, vargs map transform)
-    case PureApp(BlockVar(id, annotatedTpe, annotatedCapt), targs, vargs) if id.name.name == FUNCTION_NAME => 
+    case PureApp(BlockVar(id, annotatedTpe, annotatedCapt), targs, vargs) if id.name.name == FUNCTION_NAME =>
       if (targs.length != 1) Context.abort(pretty"Expected targs for '${FUNCTION_NAME}' to have exactly one argument")
-      // We are switching from Extern call to normal Call, 
+      // We are switching from Extern call to normal Call,
       // so we need to wrap the new call into a Val, store it and finally emit it before the statement that called this
       // therefore we return the name of the Val that we store this call into
       val stmt = Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs map transform, List.empty)
@@ -226,7 +230,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       val blockVar = findExternShowDef(valueType)
       val retId = Id("ret")
       Stmt.ImpureApp(retId, blockVar, List.empty, List(paramValueVar), List.empty, Stmt.Return(Expr.ValueVar(retId, TString)))
-    def generateDef(stmt: Stmt): Toplevel.Def = 
+    def generateDef(stmt: Stmt): Toplevel.Def =
       val block = generateBlockLit(stmt)
       val defn: Toplevel.Def = Toplevel.Def(showId, block)
       ctx.showDefns += (vt -> defn)
@@ -240,7 +244,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         val stmt = Stmt.Return(paramValueVar)
         Some(generateDef(stmt))
       case Type.TUnit =>
-        /* 
+        /*
         (value: Unit) {
           "()"
         }
@@ -248,7 +252,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         val stmt = Stmt.Return(Expr.Literal("()", TString))
         Some(generateDef(stmt))
       case Type.TInt =>
-        /* 
+        /*
         (value: Int) {
           %z = call %Pos @c_bytearray_show_Int(%Int ${value})
           ret %Pos %z
@@ -258,7 +262,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       case Type.TChar =>
         Some(generateShow(Type.TChar))
       case Type.TByte =>
-        /* 
+        /*
         (value: Byte) {
           %z = call %Pos @c_bytearray_show_Byte(%Byte ${value})
           ret %Pos %z
@@ -266,7 +270,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         */
         Some(generateShow(Type.TByte))
       case Type.TDouble =>
-        /* 
+        /*
         (value: Double) {
           %z = call %Pos @c_bytearray_show_Double(%Double ${value})
           ret %Pos %z
@@ -277,18 +281,18 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         // if (value) "true" else "false"
         val stmt = Stmt.If(paramValueVar, Stmt.Return(Expr.Literal("true", TString)), Stmt.Return(Expr.Literal("false", TString)))
         Some(generateDef(stmt))
-      case ValueType.Data(name, targs) => 
+      case ValueType.Data(name, targs) =>
         val data = dctx.datas.getOrElse(name, {
           Context.abort(pretty"Extern type '${name}', does not have a manual show implementation")
         })
         generateShowInstance(data, targs)
-      case ValueType.Var(name) => 
+      case ValueType.Var(name) =>
         val lookup = ctx.tparamLookup.getOrElse(name, {
           Context.abort(pretty"Too much type indirection over show, cannot lookup '${name}'")
         })
         val showName = ctx.showNames.get(lookup)
         showName match {
-          case None => 
+          case None =>
             val varShowInstance = generateShowInstance(lookup)
             varShowInstance match {
               case None => ()
@@ -297,24 +301,24 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
             varShowInstance
           case Some(value) => None
         }
-      case ValueType.Boxed(tpe, capt) => 
+      case ValueType.Boxed(tpe, capt) =>
         // TODO: Handle this better, but honestly your fault for using this
         Context.warning("We not properly handling Boxed types when generating show instances")
         val stmt = Stmt.Return(Expr.Literal("BOXED", TString))
         Some(generateDef(stmt))
     }
 
-  def findExternShowDef(valueType: ValueType)(using dctx: DeclarationContext)(using Context): Block.BlockVar = 
+  def findExternShowDef(valueType: ValueType)(using dctx: DeclarationContext)(using Context): Block.BlockVar =
     findExternDef("showBuiltin", List(valueType))
-  
+
   def findExternDef(name: String, vts: List[ValueType])(using dctx: DeclarationContext)(using Context): Block.BlockVar =
     dctx.findExternDef(name, vts) match
       case None => Context.abort(pretty"Could not find show definition for ${vts}")
-      case Some(Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body)) => 
+      case Some(Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body)) =>
         Block.BlockVar(id, BlockType.Function(tparams, cparams, vparams map (_.tpe), bparams map (_.tpe), ret), annotatedCapture)
 
   def generateShowInstance(decl: Declaration, targs: List[ValueType])(using ctx: ShowContext, dctx: DeclarationContext)(using Context): Option[Toplevel.Def] = decl match {
-    case dataDecl: Declaration.Data if dataDecl.constructors.size > 0 => 
+    case dataDecl: Declaration.Data if dataDecl.constructors.size > 0 =>
       val freshId = freshShowId
       val dataType = ValueType.Data(decl.id, targs)
       ctx.showNames += (dataType -> freshId)
@@ -326,7 +330,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def generateShowInstance(decl: Declaration.Data, id: Id, targs: List[ValueType])(using ctx: ShowContext)(using Context, DeclarationContext): Toplevel.Def =
     val valueId = Id("value")
-    
+
     val tparamLookup = decl.tparams.zip(targs map lookupType).toMap
     ctx.tparamLookup ++= tparamLookup
 
@@ -334,7 +338,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     val vparam = ValueParam(valueId, valueTpe)
 
     val constructorVparams = decl.constructors.map(constructorVparam)
-    
+
     val clauses = decl.constructors.zip(constructorVparams).map(constructorClauses)
     val matchStmt = Stmt.Match(
       ValueVar(valueId, valueTpe),
@@ -348,13 +352,13 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   def constructorClauses(constructor: Constructor, vparams: List[ValueParam])(using Context, ShowContext, DeclarationContext): (Id, BlockLit) =
     (constructor.id, BlockLit(List.empty, List.empty, vparams, List.empty, constructorStmt(constructor)))
 
-  def constructorVparam(constr: Constructor)(using Context)(using ctx: ShowContext): List[ValueParam] = constr match 
+  def constructorVparam(constr: Constructor)(using Context)(using ctx: ShowContext): List[ValueParam] = constr match
     case Constructor(id, tparams, fields) => fields.map({
-      case Field(id, tpe) => 
+      case Field(id, tpe) =>
         val lookup = lookupType(tpe)
         lookup match {
           case ValueType.Data(name, targs) => ValueParam(id, lookup)
-          case ValueType.Var(name) => 
+          case ValueType.Var(name) =>
             Context.warning(pretty"Was not able to lookup var: ${name}")
             ValueParam(id, ctx.tparamLookup(name))
           case ValueType.Boxed(tpe, capt) => ValueParam(id, lookup)
@@ -368,17 +372,17 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   def constructorStmt(constr: Constructor)(using ctx: ShowContext, dctx: DeclarationContext)(using Context): Stmt = constr match
-    case Constructor(id, tparams, fields) => 
+    case Constructor(id, tparams, fields) =>
       val infixConcatBlockVar: Block.BlockVar = findExternDef("infixConcat", List(TString, TString))
       val pureFields = fields map fieldPure
       val concatenated = PureApp(infixConcatBlockVar, List.empty, List(Literal(id.name.name ++ "(", TString), concatPure(pureFields)))
-      
-      def fieldValStmts(idapps: List[(Id, Stmt.App)]): Stmt = 
+
+      def fieldValStmts(idapps: List[(Id, Stmt.App)]): Stmt =
         idapps match {
           case (id, app) :: next => Stmt.Val(id, app, fieldValStmts(next))
           case Nil => Return(concatenated)
         }
-      
+
       fieldValStmts(pureFields)
 
   // Convert a list of pure statements to comma-separated concatenated version
@@ -387,7 +391,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   // PureApp(concat, List(Literal("Just("), PureApp(concat, List(PureApp(show, x), PureApp(concat, List(Literal(", "), ...))))
   def concatPure(pures: List[(Id, Stmt.App)])(using ctx: ShowContext)(using Context, DeclarationContext): Expr =
     val infixConcatDef = findExternDef("infixConcat", List(TString, TString))
-    pures match 
+    pures match
       case (fieldId, _) :: next :: rest => PureApp(infixConcatDef, List.empty, List(Expr.ValueVar(fieldId, TString), PureApp(infixConcatDef, List.empty, List(Literal(", ", TString), concatPure(next :: rest)))))
       case (fieldId, _) :: Nil => PureApp(infixConcatDef, List.empty, List(Expr.ValueVar(fieldId, TString), Literal(")", TString)))
       case Nil => Literal(")", TString)
@@ -402,7 +406,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       (Id("field"), app)
 
   var freshShowCounter = 0
-  def freshShowId: Id = 
+  def freshShowId: Id =
     val freshId = Id(FUNCTION_NAME ++ freshShowCounter.toString())
     freshShowCounter += 1
     freshId

@@ -47,8 +47,8 @@ class Deadcode(reachable: Map[Id, Usage])
         declarations.map(rewrite),
         // drop unreachable externs
         m.externs.collect {
-          // We need to keep "show", "showBuiltin" & "infixConcat" for generating show definitions 
-          case e: Extern.Def if used(e.id) || e.id.name.name == "show" || e.id.name.name == "showBuiltin" || e.id.name.name == "infixConcat" => e
+          // We need to keep "show", "showBuiltin" & "infixConcat" for generating show definitions (see #1123)
+          case e: Extern.Def if used(e.id) || List("show", "showBuiltin", "infixConcat").contains(e.id.name.name) => e
           case e: Extern.Include => e
         },
         // drop unreachable definitions
