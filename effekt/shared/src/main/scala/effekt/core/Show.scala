@@ -1,6 +1,10 @@
 package effekt
 package core
 
+import scala.util.boundary
+import scala.annotation.targetName
+import scala.collection.mutable
+
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
 import effekt.symbols
@@ -10,8 +14,6 @@ import effekt.symbols.builtins.{ TBoolean, TByte, TChar, TDouble, TInt, TState, 
 import effekt.symbols.ErrorMessageInterpolator
 import effekt.util.messages.ErrorMessageReifier
 
-import scala.util.boundary
-import scala.annotation.targetName
 import effekt.core.Type.TString
 import effekt.source.FeatureFlag
 import effekt.generator.llvm.Transformer.llvmFeatureFlags
@@ -27,28 +29,17 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   case class ShowContext(showNames: collection.mutable.Map[ValueType, Id], showDefns: collection.mutable.Map[ValueType, Toplevel.Def], tparamLookup: collection.mutable.Map[Id, ValueType]) {
 
     def getAllShowDef(using ShowContext)(using DeclarationContext): List[Toplevel.Def] =
-      showDefns.map(_._2).toList
+      showDefns.values.toList
 
-    var bindings: List[(Id, Stmt)] = List.empty
+    var bindings = mutable.ListBuffer.empty[Binding]
 
     def withBindings(block: => Stmt): Stmt =
-      val wraps = this.getWraps
-      val stmt = block
-      this.wrap(wraps, stmt)
+      val outer = bindings
+      bindings = mutable.ListBuffer.empty[Binding]
+      Binding(outer.toList, block)
 
     def emit(id: Id, stmt: Stmt): Unit =
-      bindings +:= (id, stmt)
-
-    private def wrap(wraps: List[(Id, Stmt)], stmt: Stmt): Stmt = wraps match {
-      case (id, binding) :: next => Stmt.Val(id, binding, wrap(next, stmt))
-      case Nil => stmt
-    }
-
-    private def getWraps: List[(Id, Stmt)] = {
-      val wraps = bindings
-      bindings = List.empty
-      wraps
-    }
+      bindings.append(Binding.Val(id, stmt))
   }
 
   // This will check if we have already generated a Show instance for the given type and generate it if we didn't
