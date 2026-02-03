@@ -1,0 +1,29 @@
+
+def postfixAccess[T](arr: Array[T], index: Int): T = unsafeGet(arr, index)
+
+// access as a function
+def example1() = {
+  val arr = array[Int](10, 1)
+  println(arr.[2])
+}
+
+// access on a capability / object
+interface MyRef[T] {
+  def postfixAccess(index: Int): T
+}
+
+def example2() = {
+  def arr = new MyRef[Int] {
+    def postfixAccess(index) = 1
+  };
+  println(arr.[0] + arr.[1])
+}
+
+// multi dimensional access
+def example3(arr: Array[Array[Int]]) =
+  println(arr.[0].[1] + arr.[1].[0])
+
+def main() = {
+  example1()
+  example2()
+}
