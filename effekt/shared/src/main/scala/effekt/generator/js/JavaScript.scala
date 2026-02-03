@@ -4,7 +4,7 @@ package js
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
-import effekt.core.optimizer.{ DropBindings, Optimizer }
+import effekt.core.optimizer.{ Deadcode, DropBindings, Optimizer }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
@@ -44,7 +44,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
     Frontend andThen Middleend
   }
 
-  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Optimizer andThen DropBindings map {
+  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Deadcode andThen core.Show andThen Optimizer andThen DropBindings map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
       val mainFile = path(mod)

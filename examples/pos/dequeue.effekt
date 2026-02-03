@@ -11,8 +11,3 @@ def main() = {
     println(dq.pushFront(1).pushFront(2).pushBack(3).first);
     println(dq.pushFront(1).pushFront(2).pushBack(3).last)
 }
-
-def show(popResult: Option[(Int, Dequeue[Int])]): String =
-  popResult.show {
-    case (el, rest) => "Tuple2(" ++ el.show ++ ", " ++ rest.show ++ ")"
-  }

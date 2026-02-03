@@ -185,6 +185,12 @@ lazy val integers: Builtins = Map(
   },
 )
 
+lazy val bytes: Builtins = Map(
+  builtin("effekt::show(Byte)") {
+    case As.Byte(n) :: Nil => Value.String(n.toString)
+  },
+)
+
 lazy val booleans: Builtins = Map(
   builtin("effekt::not(Bool)") {
     case As.Bool(x) :: Nil => Value.Bool(!x)
@@ -253,6 +259,10 @@ lazy val chars: Builtins = Map(
   builtin("effekt::infixEq(Char, Char)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x == y)
   },
+
+  builtin("effekt::show(Char)") {
+    case As.Int(n) :: Nil => Value.String(n.toString)
+  }
 )
 
 lazy val arrays: Builtins = Map(
