@@ -1,24 +1,13 @@
 package effekt
 package core
 
-import scala.util.boundary
-import scala.annotation.targetName
 import scala.collection.mutable
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
-import effekt.symbols
-import effekt.symbols.{ TmpBlock, TmpValue }
-import effekt.{ CoreTransformed, Phase }
-import effekt.symbols.builtins.{ TBoolean, TByte, TChar, TDouble, TInt, TState, TUnit }
-import effekt.symbols.ErrorMessageInterpolator
 import effekt.util.messages.ErrorMessageReifier
 
 import effekt.core.Type.TString
-import effekt.source.FeatureFlag
-import effekt.generator.llvm.Transformer.llvmFeatureFlags
-import effekt.core.ExternBody.StringExternBody
-import effekt.core.ExternBody.Unsupported
 
 object Show extends Phase[CoreTransformed, CoreTransformed] {
 
@@ -60,18 +49,17 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     case CoreTransformed(source, tree, mod, core) => {
       // 3. Synthesize `show` definitions, create (ValueType -> (show) Id) map for context
 
-      implicit val ctx: ShowContext = ShowContext(collection.mutable.Map.empty, collection.mutable.Map.empty, collection.mutable.Map.empty)
-      implicit val dctx: DeclarationContext = DeclarationContext(core.declarations, core.externs)
+      given ctx: ShowContext = ShowContext(collection.mutable.Map.empty, collection.mutable.Map.empty, collection.mutable.Map.empty)
+      given dctx: DeclarationContext = DeclarationContext(core.declarations, core.externs)
 
-      var transformed = transform(core)
-      Some(CoreTransformed(source, tree, mod, transformed))
+      Some(CoreTransformed(source, tree, mod, transform(core)))
     }
   }
 
   def transform(decl: ModuleDecl)(using ctx: ShowContext)(using Context, DeclarationContext): ModuleDecl = decl match {
     case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-      val transformedDefns = definitions map transform
-      ModuleDecl(path, includes, declarations, externs, transformedDefns ++ ctx.getAllShowDef, exports)
+      val transformedDefs = definitions map transform
+      ModuleDecl(path, includes, declarations, externs, transformedDefs ++ ctx.getAllShowDef, exports)
   }
 
   def transform(toplevel: Toplevel)(using Context, ShowContext, DeclarationContext): Toplevel = toplevel match {
@@ -111,12 +99,15 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   def transform(stmt: Stmt)(using ctx: ShowContext)(using Context, DeclarationContext): Stmt =
     stmt match {
       case Let(id, PureApp(BlockVar(bid, bannotatedTpe, bannotatedCapt), targs, vargs), body) if bid.name.name == FUNCTION_NAME =>
-        if (targs.length != 1) Context.abort(pretty"Expected targs for '${FUNCTION_NAME}' to have exactly one argument")
+        val targ = targs match {
+          case targ :: Nil => targ
+          case _ => Context.abort(pretty"Expected targs for '${FUNCTION_NAME}' to have exactly one argument")
+        }
         // We need to wrap here, because vargs might have been extern show calls that are now not
         // this might happen everywhere we directly transform an expression
         val vargs_ = vargs map transform
         ctx.withBindings {
-          Stmt.Val(id, Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs_, List.empty), transform(body))
+          Stmt.Val(id, Stmt.App(getShowBlockVar(targ), List.empty, vargs_, List.empty), transform(body))
         }
       case Let(id, binding, body) =>
         val binding_ = transform(binding)
@@ -129,11 +120,14 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
           Return(expr_)
         }
       case ImpureApp(id, BlockVar(bid, annotatedTpe, annotatedCapt), targs, vargs, bargs, body) if bid.name.name == FUNCTION_NAME =>
-        if (targs.length != 1) Context.abort(pretty"Expected targs for '${FUNCTION_NAME}' to have exactly one argument")
+        val targ = targs match {
+          case targ :: Nil => targ
+          case _ => Context.abort(pretty"Expected targs for '${FUNCTION_NAME}' to have exactly one argument")
+        }
         val vargs_ = vargs map transform
         val bargs_ = bargs map transform
         ctx.withBindings {
-          Stmt.Val(id, Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs_, bargs_), transform(body))
+          Stmt.Val(id, Stmt.App(getShowBlockVar(targ), List.empty, vargs_, bargs_), transform(body))
         }
       case ImpureApp(id, callee, targs, vargs, bargs, body) =>
         val vargs_ = vargs map transform
@@ -192,11 +186,14 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   def transform(expr: Expr)(using ctx: ShowContext)(using Context, DeclarationContext): Expr = expr match {
     case Make(data, tag, targs, vargs) => Make(data, tag, targs, vargs map transform)
     case PureApp(BlockVar(id, annotatedTpe, annotatedCapt), targs, vargs) if id.name.name == FUNCTION_NAME =>
-      if (targs.length != 1) Context.abort(pretty"Expected targs for '${FUNCTION_NAME}' to have exactly one argument")
+      val targ = targs match {
+        case targ :: Nil => targ
+        case _ => Context.abort(pretty"Expected targs for '${FUNCTION_NAME}' to have exactly one argument")
+      }
       // We are switching from Extern call to normal Call,
       // so we need to wrap the new call into a Val, store it and finally emit it before the statement that called this
       // therefore we return the name of the Val that we store this call into
-      val stmt = Stmt.App(getShowBlockVar(targs(0)), List.empty, vargs map transform, List.empty)
+      val stmt = Stmt.App(getShowBlockVar(targ), List.empty, vargs map transform, List.empty)
       val letId = Id("showApp")
       ctx.emit(letId, stmt)
       Expr.ValueVar(letId, TString)
@@ -309,7 +306,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         Block.BlockVar(id, BlockType.Function(tparams, cparams, vparams map (_.tpe), bparams map (_.tpe), ret), annotatedCapture)
 
   def generateShowInstance(decl: Declaration, targs: List[ValueType])(using ctx: ShowContext, dctx: DeclarationContext)(using Context): Option[Toplevel.Def] = decl match {
-    case dataDecl: Declaration.Data if dataDecl.constructors.size > 0 =>
+    case dataDecl: Declaration.Data if dataDecl.constructors.nonEmpty =>
       val freshId = freshShowId
       val dataType = ValueType.Data(decl.id, targs)
       ctx.showNames += (dataType -> freshId)
