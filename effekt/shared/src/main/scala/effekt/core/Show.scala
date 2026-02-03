@@ -47,7 +47,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   override def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = input match {
     case CoreTransformed(source, tree, mod, core) => {
-      // 3. Synthesize `show` definitions, create (ValueType -> (show) Id) map for context
+      // Synthesize `show` definitions, create (ValueType -> (show) Id) map for context
 
       given ctx: ShowContext = ShowContext(collection.mutable.Map.empty, collection.mutable.Map.empty, collection.mutable.Map.empty)
       given dctx: DeclarationContext = DeclarationContext(core.declarations, core.externs)
@@ -79,7 +79,6 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   def transform(operation: Operation)(using Context, ShowContext, DeclarationContext): Operation = operation match {
-    // Maybe need to pass tparams here to be able to lookup while transforming body
     case Operation(name, tparams, cparams, vparams, bparams, body) => Operation(name, tparams, cparams, vparams, bparams, transform(body))
   }
 
@@ -177,7 +176,6 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
           Put(ref, annotatedCapt, value_, transform(body))
         }
       case Reset(body) => Reset(transform(body))
-      // FIXME: Does k need to be handled?
       case Shift(prompt, k, body) => Shift(transform(prompt), k, transform(body))
       case Resume(k, body) => Resume(transform(k), transform(body))
       case Hole(tpe, span) => Hole(tpe, span)
@@ -228,45 +226,20 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
     vt match {
       case Type.TString =>
-        // (value: String) { return value }
         val stmt = Stmt.Return(paramValueVar)
         Some(generateDef(stmt))
       case Type.TUnit =>
-        /*
-        (value: Unit) {
-          "()"
-        }
-        */
         val stmt = Stmt.Return(Expr.Literal("()", TString))
         Some(generateDef(stmt))
       case Type.TInt =>
-        /*
-        (value: Int) {
-          %z = call %Pos @c_bytearray_show_Int(%Int ${value})
-          ret %Pos %z
-        }
-        */
         Some(generateShow(Type.TInt))
       case Type.TChar =>
         Some(generateShow(Type.TChar))
       case Type.TByte =>
-        /*
-        (value: Byte) {
-          %z = call %Pos @c_bytearray_show_Byte(%Byte ${value})
-          ret %Pos %z
-        }
-        */
         Some(generateShow(Type.TByte))
       case Type.TDouble =>
-        /*
-        (value: Double) {
-          %z = call %Pos @c_bytearray_show_Double(%Double ${value})
-          ret %Pos %z
-        }
-        */
         Some(generateShow(Type.TDouble))
       case Type.TBoolean =>
-        // if (value) "true" else "false"
         val stmt = Stmt.If(paramValueVar, Stmt.Return(Expr.Literal("true", TString)), Stmt.Return(Expr.Literal("false", TString)))
         Some(generateDef(stmt))
       case ValueType.Data(name, targs) =>
