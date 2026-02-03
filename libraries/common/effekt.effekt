@@ -74,7 +74,7 @@ def println(value: Double): Unit = println(value.show)
 def println(value: Bool): Unit = println(value.show)
 def println(value: Byte): Unit = println(value.show)
 
-extern def show(value: Int) at {}: String =
+extern def showBuiltin(value: Int) at {}: String =
   js "'' + ${value}"
   chez "(show-number ${value})"
   llvm """
@@ -83,9 +83,7 @@ extern def show(value: Int) at {}: String =
   """
   vm "effekt::show(Int)"
 
-def show(value: Unit): String = "()"
-
-extern def show(value: Double) at {}: String =
+extern def showBuiltin(value: Double) at {}: String =
   js "'' + ${value}"
   chez "(show-number ${value})"
   llvm """
@@ -94,13 +92,7 @@ extern def show(value: Double) at {}: String =
   """
   vm "effekt::show(Double)"
 
-def show(value: String): String =
-  value
-
-def show(value: Bool): String =
-  if (value) "true" else "false"
-
-extern def show(value: Char) at {}: String =
+extern def showBuiltin(value: Char) at {}: String =
   js "String.fromCodePoint(${value})"
   chez "(string (integer->char ${value}))"
   llvm """
@@ -109,7 +101,7 @@ extern def show(value: Char) at {}: String =
   """
   vm "effekt::show(Char)"
 
-extern def show(value: Byte) at {}: String =
+extern def showBuiltin(value: Byte) at {}: String =
   js "'' + ${value}"
   chez "(string ${value})"
   llvm """
@@ -118,13 +110,8 @@ extern def show(value: Byte) at {}: String =
   """
   vm "effekt::show(Byte)"
 
-extern def genericShow[R](value: R) at {}: String =
-  js "$effekt.show(${value})"
-  chez "(show_impl ${value})"
-
 extern def inspect[R](value: R) at io: Unit =
-  js { println(genericShow(value)) }
-  chez { println(genericShow(value)) }
+  default { println(show(value)) }
   vm "effekt::inspect(Any)"
 
 /// A fatal runtime error that cannot be caught
@@ -137,6 +124,10 @@ extern def panic(msg: String) at io: Nothing =
     ret %Pos zeroinitializer ; Unit
   """
 
+extern def show[R](value: R) at {}: String =
+  js "$effekt.show(${value})"
+  chez "(show_impl ${value})"
+  llvm "ret %Pos poison"
 
 // Strings
 // =======
@@ -221,12 +212,6 @@ def genericCompare[R](x: R, y: R): Ordering = {
   } else { // ret > 0
     Greater()
   }
-}
-
-def show(o: Ordering): String = o match {
-  case Less() => "Less()"
-  case Equal() => "Equal()"
-  case Greater() => "Greater()"
 }
 
 def println(o: Ordering): Unit = println(o.show)

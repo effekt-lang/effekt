@@ -969,7 +969,7 @@ namespace internal {
       t match {
         case Tip() => ""
         case Bin(_, k, v, l, r) =>
-          val pair = k.genericShow ++ " → " ++ v.genericShow
+          val pair = k.show ++ " → " ++ v.show
           val currentLine = prefix ++ (if (isTail) "└── " else "├── ") ++ pair ++ "\n"
 
           val newPrefix = prefix ++ (if (isTail) "    " else "│   ")

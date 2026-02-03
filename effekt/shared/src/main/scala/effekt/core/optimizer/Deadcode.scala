@@ -3,8 +3,11 @@ package core
 package optimizer
 
 import util.Trampoline
+import effekt.PhaseResult.CoreTransformed
+import effekt.context.Context
 
-class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.TrampolinedRewrite {
+class Deadcode(reachable: Map[Id, Usage])
+    extends core.Tree.TrampolinedRewrite {
 
   private def used(id: Id): Boolean = reachable.get(id).exists(u => u != Usage.Never)
 
@@ -44,7 +47,8 @@ class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.TrampolinedRewrite {
         declarations.map(rewrite),
         // drop unreachable externs
         m.externs.collect {
-          case e: Extern.Def if used(e.id) => e
+          // We need to keep "show", "showBuiltin" & "infixConcat" for generating show definitions (see #1123)
+          case e: Extern.Def if used(e.id) || List("show", "showBuiltin", "infixConcat").contains(e.id.name.name) => e
           case e: Extern.Include => e
         },
         // drop unreachable definitions
@@ -64,10 +68,23 @@ class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.TrampolinedRewrite {
   }
 }
 
-object Deadcode {
+object Deadcode extends Phase[CoreTransformed, CoreTransformed] {
+
+  val phaseName: String = "deadcode-elimination"
+
+  def run(input: CoreTransformed)(using Context): Option[CoreTransformed] =
+    input match {
+      case CoreTransformed(source, tree, mod, core) =>
+        val term = Context.ensureMainExists(mod)
+        val dce = Context.timed("deadcode-elimination", source.name) {
+          Deadcode.remove(term, core)
+        }
+        Some(CoreTransformed(source, tree, mod, dce))
+    }
+
   def remove(entrypoints: Set[Id], m: ModuleDecl): ModuleDecl =
     val reachable = Reachable(entrypoints, m)
-    Deadcode(reachable).rewrite(m)
+    (new Deadcode(reachable)).rewrite(m)
 
   def remove(entrypoint: Id, m: ModuleDecl): ModuleDecl =
     remove(Set(entrypoint), m)

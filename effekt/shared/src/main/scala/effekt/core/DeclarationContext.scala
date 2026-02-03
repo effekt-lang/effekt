@@ -18,6 +18,10 @@ class DeclarationContext(
      case d: Extern.Def => d.id -> d
    }.toMap
 
+  lazy val externDefsName: Map[(String, List[ValueType]), Extern.Def] = externs.collect {
+    case d: Extern.Def => (d.id.name.name, d.vparams.map(_.tpe)) -> d
+  }.toMap
+
   // Maps to speed-up lookup. Assumes that, if we ever lookup a Constructor/Field/Interface/...,
   // we will eventually lookup most of them (and caches all in a respective map).
 
@@ -71,6 +75,7 @@ class DeclarationContext(
   }
 
   def findExternDef(id: Id): Option[Extern.Def] = externDefs.get(id)
+  def findExternDef(name: String, params: List[ValueType]): Option[Extern.Def] = externDefsName.get((name, params))
 
   def getDeclaration(id: Id)(using context: ErrorReporter): Declaration = findDeclaration(id).getOrElse {
     context.panic(s"No declaration found for ${id}.")

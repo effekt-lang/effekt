@@ -624,7 +624,9 @@ def sorted[A](arr: Array[A]) { ord: (A, A) => Ordering }: Array[A] = {
 // Show Instances
 // --------------
 
-def show[A](arr: Array[A]) { showA: A => String }: String = {
+// TODO: These can eventually be replaced if we ever figure out monomorphization on extern types
+
+def showBuiltin[A](arr: Array[A]) { showA: A => String }: String = {
   var output = "Array("
   val lastIndex = arr.size - 1
 
@@ -636,16 +638,16 @@ def show[A](arr: Array[A]) { showA: A => String }: String = {
 
   output
 }
-def show(l: Array[Int]): String = show(l) { e => show(e) }
-def show(l: Array[Double]): String = show(l) { e => show(e) }
-def show(l: Array[Bool]): String = show(l) { e => show(e) }
-def show(l: Array[String]): String = show(l) { e => e }
 
-def println(l: Array[Int]): Unit = println(show(l))
-def println(l: Array[Double]): Unit = println(show(l))
-def println(l: Array[Bool]): Unit = println(show(l))
-def println(l: Array[String]): Unit = println(show(l))
+def showBuiltin(l: Array[Int]): String = showBuiltin(l) { e => show(e) }
+def showBuiltin(l: Array[Double]): String = showBuiltin(l) { e => show(e) }
+def showBuiltin(l: Array[Bool]): String = showBuiltin(l) { e => show(e) }
+def showBuiltin(l: Array[String]): String = showBuiltin(l) { e => e }
 
+def println(l: Array[Int]): Unit = println(showBuiltin(l))
+def println(l: Array[Double]): Unit = println(showBuiltin(l))
+def println(l: Array[Bool]): Unit = println(showBuiltin(l))
+def println(l: Array[String]): Unit = println(showBuiltin(l))
 
 // Streaming
 // ---------

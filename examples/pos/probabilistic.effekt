@@ -24,11 +24,6 @@ type Var {
   Observed(value: Bool)
 }
 
-def show(x: Var) = x match {
-  case Unobserved() => "Unobserved()"
-  case Observed(value) => "Observed(" ++ value.show ++ ")"
-}
-
 type Ref { MkRef(n: Int) }
 
 interface Heap {
@@ -71,17 +66,6 @@ def choose3[R] { x: => R } { y: => R } { z: => R } : R / fork =
   if (do fork()) { x() } else if (do fork()) { y() } else { z() }
 
 type Weighted[R] { MkWeighted(weight: Double, value: R) }
-
-def showRounded(d: Double): String = show(d.round(2))
-
-def show(w: Weighted[Bool]): String = w match {
-  case MkWeighted(weight, value) => "MkWeighted(" ++ showRounded(weight) ++ ", " ++ show(value) ++ ")"
-}
-
-def show(w: Weighted[Var]): String = w match {
-  case MkWeighted(weight, Observed(value)) => "MkWeighted(" ++ showRounded(weight) ++ ", Observed(" ++ show(value) ++ "))"
-  case MkWeighted(weight, Unobserved()) => "MkWeighted(" ++ showRounded(weight) ++ ", Unobserved())"
-}
 
 def handleProb[R] { prog: => R / { score, fork, fail } } = {
   val empty: List[Weighted[R]] = Nil();
@@ -170,7 +154,10 @@ def main() = {
   val res = handleProb {
     test()
   };
-  println(show(res) { e => show(e) })
+  val rounded = res.map {
+    case MkWeighted(w, v) => MkWeighted(w.round(2), v)
+  }
+  println(show(rounded))
 
   catch {
     heapTest()
@@ -182,7 +169,10 @@ def main() = {
         do disj(do flip(0.2), r)
       }
     };
-    println(show(res) { e => show(e) })
+    val rounded = res.map {
+      case MkWeighted(w, v) => MkWeighted(w.round(2), v)
+    }
+    println(show(rounded))
   }
 
 }
