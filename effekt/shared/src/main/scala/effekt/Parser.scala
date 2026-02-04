@@ -1350,7 +1350,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       backtrack(idRef()) ~ template() match {
         // We do not need to apply any transformation if there are no splices _and_ no custom handler id is given
         case Maybe(None, _) ~ SpannedTemplate(str :: Nil, Nil) => StringLit(str.unspan, str.span)
-        // s"a${x}b${y}" ~> s { do literal("a"); do splice(x); do literal("b"); do splice(y); return () }
+        // s"a${x}b${y}" ~> s { do write("a"); do splice(x); do write("b"); do splice(y); return () }
         case Maybe(id, range) ~ SpannedTemplate(strs, args) =>
           val target = id match {
             case Some(id) => id
@@ -1362,7 +1362,7 @@ class Parser(tokens: Seq[Token], source: Source) {
           }
           val doLits = strs.map { s =>
             Do(
-              IdRef(Nil, "literal", s.span.synthesized),
+              IdRef(Nil, "write", s.span.synthesized),
               Nil,
               List(ValueArg.Unnamed(StringLit(s.unspan, s.span))),
               Nil,
