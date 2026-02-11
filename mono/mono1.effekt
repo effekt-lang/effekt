@@ -1,0 +1,9 @@
+def a[A](in: A) = { in }
+def b[B](in: B): B = { a(in) }
+def c[C](in: C): C = { b(in) }
+def d[D](in: D): D = { c(in) }
+
+def main() = {
+  println(a(1))
+  println(d("32"))
+}
