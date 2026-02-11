@@ -127,6 +127,9 @@ class MonoFindContext {
 
 case class MonoContext(solution: Solution, funNames: MonoFunNames, tpeNames: MonoTpeNames, polyExternDefs: List[Id]) {
   var replacementTparams: Map[Id, Ground] = Map.empty
+
+  lazy val invertedTpeNames: Map[ValueType.Data, (Id, Vector[Ground])] = tpeNames.map { case (k, v) => (v, k) }.toMap
+
   def isPolyExtern(id: Id) = polyExternDefs.contains(id)
 }
 
@@ -600,7 +603,16 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
   case Shift(prompt, k, body) => 
     Shift(monomorphize(prompt), monomorphize(k), monomorphize(body))
   case Match(scrutinee, matchTpe, clauses, default) =>
-    Match(monomorphize(scrutinee), monomorphize(matchTpe), clauses flatMap monomorphize, monomorphize(default))
+    // We need the type of the scrutinee, to be able to only monomorphize the cases to this variant
+    val monoScrut = monomorphize(scrutinee)
+    val scrutTpe: ValueType.Data = monoScrut.tpe match {
+      case t: ValueType.Data => t
+      case _ => Context.abort("Should not happen")
+    }
+    // Get the type of this variant by inverting the monomorphized name of the scrutinee
+    val (_, variant): (Id, Vector[Ground]) = ctx.invertedTpeNames.getOrElse(scrutTpe, (scrutTpe.name, Vector.empty))
+    
+    Match(monoScrut, monomorphize(matchTpe), clauses.flatMap(clause => monomorphize(clause, variant)), monomorphize(default))
   case Get(id, annotatedTpe, ref, annotatedCapt, body) =>
     Get(id, monomorphize(annotatedTpe), ref, annotatedCapt, monomorphize(body))
   case Put(ref, annotatedCapt, value, body) =>
@@ -612,14 +624,14 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
   case Hole(tpe, span) => 
     Hole(monomorphize(tpe), span)
 
-def monomorphize(clause: (Id, BlockLit))(using ctx: MonoContext)(using Context, DeclarationContext): List[(Id, BlockLit)] = clause match
+def monomorphize(clause: (Id, BlockLit), variant: Vector[Ground])(using ctx: MonoContext)(using Context, DeclarationContext): List[(Id, BlockLit)] = clause match
   case (id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
     val newClauseNameMap = ctx.funNames.view.filterKeys((tid, groundTypes) => tid == id)
     if (newClauseNameMap.isEmpty) {
       val monoBlockLit: Block.BlockLit = BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
       List((id, monoBlockLit))
     } else {
-      newClauseNameMap.map((clauseKey, monoId) => 
+      newClauseNameMap.filter((clauseKey, _) => clauseKey._2 == variant).map((clauseKey, monoId) =>
         val replacementTparams = tparams.zip(clauseKey._2).toMap
         ctx.replacementTparams ++= replacementTparams
         val monoBlockLit: Block.BlockLit = BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
@@ -644,7 +656,6 @@ def monomorphize(expr: Expr)(using ctx: MonoContext)(using Context, DeclarationC
     Box(monomorphize(b), annotatedCapture)
   case ValueVar(id, annotatedType) =>
     ValueVar(id, monomorphize(annotatedType))
-
 
 def monomorphize(valueParam: ValueParam)(using ctx: MonoContext): ValueParam = valueParam match 
   case ValueParam(id, tpe) => ValueParam(id, monomorphize(tpe))
