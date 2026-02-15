@@ -43,6 +43,10 @@ mkdir -p "$OUTPUT_DIR"
 declare -A BENCHMARKS=(
    ["arity_raising/record_passing"]="25000000"
    ["arity_raising/matrix_determinant"]="2000000"
+   ["large_records/10"]="2000000"
+   ["large_records/20"]="2000000"
+   ["nested_records/10"]="2000000"
+   ["nested_records/20"]="2000000"
 )
 
 echo "Comparing: $CURRENT_BRANCH vs $TARGET_BRANCH"
