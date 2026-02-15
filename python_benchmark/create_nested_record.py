@@ -29,7 +29,7 @@ def runBenchmark(n: Int): Int = {{
   def loop(i: Int, acc: Int): Int = {{
     if (i <= 0) {{ acc }}
     else {{
-      rec = {recacc}
+      val rec = {recacc}
       loop(i - 1, acc + recfunc{nesting}(rec))
     }}
   }}

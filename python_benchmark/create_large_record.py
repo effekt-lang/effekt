@@ -19,7 +19,7 @@ def runBenchmark(n: Int): Int = {{
   def loop(i: Int, acc: Int): Int = {{
     if (i <= 0) {{ acc }}
     else {{
-      rec = Rec(i + {" , i + ".join(list)})
+      val rec = Rec(i + {" , i + ".join(list)})
       loop(i - 1, acc + recfunc(rec))
     }}
   }}
