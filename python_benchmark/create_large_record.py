@@ -4,23 +4,27 @@ length = int(sys.argv[1])
 
 print("import examples/benchmarks/runner")
 
-list = [ str(i) for i in range(length)]
+fields = [str(i) for i in range(length)]
+field_types = ", ".join([f"x{i}: Int" for i in fields])
+field_sum = " + ".join([f"m.x{i}" for i in fields])
+field_values = ", ".join([f"i + {i}" for i in fields])
+shifted_fields = ", ".join([f"m.x{i}" for i in (fields[-1:] + fields[:-1])])
 
-rec = f"record Rec(x{": Int, x".join(list)}: Int)" 
-recfunc = f"""def recfunc(m: Rec): Int = {{
-   m.x{" + m.x".join(list)} 
+print(f"record Rec({field_types})")
+print(f"""
+def recfunc(m: Rec, depth: Int): Int = {{
+    if (depth <= 0) {{ {field_sum} }}
+    else {{recfunc(Rec({shifted_fields}), depth - 1)}}
 }}
-"""
-print(rec)
-print(recfunc)
+""")
 
 print(f"""
 def runBenchmark(n: Int): Int = {{
   def loop(i: Int, acc: Int): Int = {{
     if (i <= 0) {{ acc }}
     else {{
-      val rec = Rec(i + {" , i + ".join(list)})
-      loop(i - 1, acc + recfunc(rec))
+      val rec = Rec({field_values})
+      loop(i - 1, acc + recfunc(rec, 2))
     }}
   }}
   loop(n, 0)
