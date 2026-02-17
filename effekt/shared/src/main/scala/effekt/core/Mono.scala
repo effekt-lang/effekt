@@ -339,7 +339,13 @@ def filterNonGround(bounds: Set[Vector[TypeArg]]): Set[Vector[Ground]] = bounds.
 def filterNonGround(bound: Vector[TypeArg]): Option[Vector[Ground]] = {
   var res: Vector[Ground] = Vector.empty 
   bound.foreach({
-    case TypeArg.Base(id, targs) => res :+= TypeArg.Base(id, targs)
+    case TypeArg.Base(id, targs) => {
+      val groundTargs = filterNonGround(targs.toVector)
+      groundTargs match {
+        case None => ()
+        case Some(_) => res :+= TypeArg.Base(id, targs)
+      }
+    }
     case TypeArg.Boxed(tpe, capt) => res :+= TypeArg.Boxed(tpe, capt)
     case TypeArg.Var(funId, pos) => ()
   })
@@ -624,7 +630,7 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
     val monoBlock = monomorphize(block)
     val monoBody = monomorphize(body)
     Def(id, monoBlock, monoBody)
-  case Shift(prompt, k, body) => 
+  case Shift(prompt, k, body) =>
     Shift(monomorphize(prompt), monomorphize(k), monomorphize(body))
   case Match(scrutinee, matchTpe, clauses, default) =>
     // We need the type of the scrutinee, to be able to only monomorphize the cases to this variant
