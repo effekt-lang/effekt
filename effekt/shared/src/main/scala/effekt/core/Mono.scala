@@ -21,13 +21,13 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             var constraints = findConstraints(definitions)(using monoFindContext)
             constraints = constraints ++ declarations.flatMap(findConstraints(_)(using monoFindContext))
             // println("Constraints")
-            // constraints.filter(c => c.lower.nonEmpty).toSet.foreach(c => println(c))
+            // constraints.filter(c => c.lower.nonEmpty).toSet.foreach(c => println(pretty(c)))
             // println()
 
             // Solve collected constraints
             val solution = solveConstraints(constraints)
             // println("Solved")
-            // solution.foreach(println)
+            // println(pretty(solution))
             // println()
 
             // Monomorphize existing definitions
@@ -113,6 +113,30 @@ enum TypeArg {
   case Base(tpe: Id, targs: List[TypeArg])
   case Var(funId: FunctionId, pos: Int)
   case Boxed(tpe: BlockType, capt: Captures)
+}
+
+def pretty(constr: MonoConstraint): String = {
+  val start = if (constr.lower.size > 1) "<" else ""
+  val end = if (constr.lower.size > 1) ">" else ""
+  constr.lower.map(pretty).mkString(start, ", ", end) + " ⊑ " + constr.upper.name
+}
+
+def pretty(tpeArg: TypeArg): String = tpeArg match {
+  case TypeArg.Base(tpe, List()) => tpe.name.name
+  case TypeArg.Base(tpe, targs) => tpe.name.name + "[" + targs.map(pretty).mkString(", ") + "]"
+  case TypeArg.Boxed(tpe, capt) => "BOXED"
+  case TypeArg.Var(funId, pos) => funId.name.name + "." + pos
+}
+
+def pretty(solution: Solution): String = {
+  solution.map((k, v) => {
+    val sets = v.map(ground => {
+      val start = if (ground.size > 1) "<" else ""
+      val end = if (ground.size > 1) ">" else ""
+      ground.map(pretty).mkString(start, ", ", end)
+    }).mkString(", ")
+    sets + " <: " + k.name.name 
+  }).mkString("\n")
 }
 
 // Type Id -> Var
