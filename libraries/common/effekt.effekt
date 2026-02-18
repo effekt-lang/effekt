@@ -769,6 +769,19 @@ def loop { action: Int => Unit / stop }: Unit =
     ()
   }
 
+interface ControlAt[T] {
+  def break(t: T): Unit
+  def continue(): Unit
+}
+
+def loop[T] { f: {ControlAt[T]} => Unit }: T = try {
+  def go(): T = { f{label}; go() }
+  go()
+} with label: ControlAt[T] {
+  def break(v) = v
+  def continue() = loop{f}
+}
+
 /// Calls provided action repeatedly. `start` is inclusive, `end` is not.
 def each(start: Int, end: Int) { action: (Int) => Unit } = {
   def loop(i: Int): Unit =
