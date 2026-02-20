@@ -95,10 +95,10 @@ def readDouble(): Double / { Scan[Char], Exception[WrongFormat]} = {
   def exponent(pre: Double): Double / fail = {
     try {
       if(do peek() == 'e' || do peek() == 'E') {
-        do skip[Char]()
+        skip[Char]()
         val e = do peek[Char]() match {
-          case '+' => do skip[Char](); readDecimal()
-          case '-' => do skip[Char](); neg(readDecimal())
+          case '+' => skip[Char](); readDecimal()
+          case '-' => skip[Char](); neg(readDecimal())
           case _ => readDecimal()
         }
         pre * pow(10.0, e)
@@ -133,9 +133,9 @@ def readQuotedString(): Unit / { Scan[Char], emit[Char], Exception[WrongFormat] 
   with expect("Unexpected end of input while reading a string")
   skipWhitespace()
   expect("Expected \"") { must { readIf('"') } }
-  while(must { read[Char]() } is c and c != '"') {
+  while(must { do read[Char]() } is c and c != '"') {
     c match {
-      case '\\' => must { read[Char]() } match {
+      case '\\' => must { do read[Char]() } match {
         case '"' => do emit('\"')
         case '\\' => do emit('\\')
         case '/' => do emit('/')
@@ -184,7 +184,7 @@ def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[WrongFo
     skipWhitespace()
     first = false
   }
-  must { do skip() }
+  must { skip() }
 }
 def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
   var first = true
@@ -197,7 +197,7 @@ def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} =
     skipWhitespace()
     first = false
   }
-  must { do skip() }
+  must { skip() }
 }
 
 // --------------------------------------------------------------------------------
