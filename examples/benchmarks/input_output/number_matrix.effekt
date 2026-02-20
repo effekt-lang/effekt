@@ -49,7 +49,7 @@ def emitNumbers(n: Int) =
 def readDigit(): Int / { Scan[Byte], stop } = {
   val byte = do peek()
   if (byte.toInt >= 48 && byte.toInt <= 57) {
-    do skip()
+    skip()
     return (byte.toInt - 48)
   } else {
     do stop()
@@ -67,7 +67,7 @@ def readDecimal(): Int / Scan[Byte] = {
 def readNumbers(): Unit / { Scan[Byte], emit[Int] } =
   loop {
     do emit(readDecimal())
-    do skip()
+    skip()
   }
 
 
