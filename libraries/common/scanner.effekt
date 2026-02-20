@@ -2,21 +2,12 @@ module scanner
 
 import stream
 
-interface Scan[A] {
-  /// Return the next character, not advancing.
-  /// That is, this does not change what any future calls on the Scanner return.
-  def peek(): A / stop
-  /// Advance the Scanner to the next character.
-  def skip(): Unit / stop
-}
 
+effect peek[A](): A / stop
 
-/// Advance the Scanner to the next token, returning it.
-def read[A](): A / { Scan[A], stop } = {
-  val t = do peek()
-  do skip()
-  return t
-}
+effect Scan[A] = {read[A], peek[A]}
+
+def skip[A](): Unit / {read[A], stop} = { do read(); () }
 
 
 /// Run a scanner by reading from an input stream, discarding its output.
@@ -29,7 +20,7 @@ def expect(message: String) { scanner: () => Unit / fail }: Unit / Exception[Wro
 /// If conversion is successful read the next token, otherwise stop.
 def readWhen[A, B] { convert: A => B / fail }: B / { Scan[A], stop } = {
   val t = attempt { convert(do peek()) } { do stop() };
-  do skip();
+  do read()
   return t
 }
 
@@ -37,7 +28,7 @@ def readWhen[A, B] { convert: A => B / fail }: B / { Scan[A], stop } = {
 def readIf[A] { predicate: A => Bool }: A / { Scan[A], stop } = {
   val t = do peek()
   if (predicate(t)) {
-    do skip()
+    do read()
     return t
   } else {
     do stop()
@@ -51,7 +42,7 @@ def skipIf[A] { predicate: A => Bool }: Unit / { Scan[A], stop } = {
 
 /// Skips the next token but fails instead of stopping.
 def mustSkip[A](): Unit / { Scan[A], fail } =
-  must { do skip() }
+  must { skip() }
 
 /// Skips the next character but fails if it is not the given one.
 def mustSkip(token: Char): Unit / { Scan[Char], fail } =
@@ -91,19 +82,21 @@ def skipIf(e: Char): Unit / { Scan[Char], stop } =
 /// Immediately stops when already at the end.
 def until[A, R] { predicate: A => Bool } { scanner: () => R / Scan[A] }: R / { Scan[A], stop } = {
   var stopped = false
-  if (predicate(do peek())) { stopped = true; do skip() }
+  if (predicate(do peek())) { stopped = true; skip() }
   try {
     scanner()
-  } with Scan[A] {
-    def peek() = resume {
+  } with  peek[A] {
+    resume {
       if (stopped) { do stop() } else { do peek() }
     }
-    def skip() = resume {
+  } with read[A] {
+    resume {
       if (stopped) { do stop() } else {
-        do skip()
+        val t = do read()
         boundary {
-          if (predicate(do peek())) { stopped = true; do skip() }
+          if (predicate(do peek())) { stopped = true; skip() }
         }
+        return t
       }
     }
   }
@@ -165,7 +158,7 @@ def readHexadecimal(): Int / { Scan[Char], fail } = {
 /// Fails whenn there isn't at least one digit.
 def readInteger(): Int / { Scan[Char], fail } =
   must { do peek() } match {
-    case '-' => must { do skip() }; neg(readDecimal())
+    case '-' => must { skip() }; neg(readDecimal())
     case c and isDigit(c) => readDecimal()
     case _ => do fail()
   }
@@ -177,8 +170,8 @@ def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
   var last = None()
   try {
     scanner()
-  } with Scan[A] {
-    def peek() = resume {
+  } with peek[A] { () =>
+    resume {
       last match {
         case None() =>
           val t = do read()
@@ -188,14 +181,14 @@ def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
           return t
       }
     }
-    def skip() = resume {
+  } with read[A] {
+    resume {
       last match {
         case None() =>
-          val _ = do read()
-          return ()
+          do read()
         case Some(t) =>
           last = None()
-          return ()
+          return t
       }
     }
   }
