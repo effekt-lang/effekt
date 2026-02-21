@@ -811,7 +811,7 @@ class LSPTests extends FunSuite {
         raw"""effect raise(): Unit
              |
              |↑
-             |def foo() = { do raise(); 5 }
+             |def boo() = { do raise(); 5 }
              |         ↑
              |
              |↑

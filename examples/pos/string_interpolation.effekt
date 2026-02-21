@@ -4,33 +4,26 @@ type Expr {
   App(fn: Expr, arg: Expr)
 }
 
-def pretty { prog: () => Unit / {literal, splice[Expr]} }: String = {
+def pretty { prog: () => Unit / {write, splice[Expr]} }: String = {
   with stringBuffer
-  try {
-    prog()
-    do flush()
-  } with literal { s =>
-    resume(do write(s))
-  } with splice[Expr] { expr =>
-    expr match {
-      case Var(id) =>
-        do write(id)
-      case App(Abs(param, body), arg) =>
-        do write(pretty"(${Abs(param, body)}) ${arg}")
-      case App(fn, arg) =>
-        do write(pretty"${fn} ${arg}")
-      case Abs(param, body) =>
-        do write(s"\\ ${param} -> " ++ pretty"${body}")
-    }
-    resume(())
+  with splicing[Expr] {
+    case Var(id) =>
+      do write(id)
+    case App(Abs(param, body), arg) =>
+      do write(pretty"(${Abs(param, body)}) ${arg}")
+    case App(fn, arg) =>
+      do write(pretty"${fn} ${arg}")
+    case Abs(param, body) =>
+      do write(s"\\ ${param} -> " ++ pretty"${body}")
   }
+  prog()
 }
 
-def len { prog: () => Unit / {literal} }: Int = {
+def len { prog: () => Unit / write }: Int = {
   try {
     prog()
     0
-  } with literal { s =>
+  } with write { s =>
     s.length
   }
 }

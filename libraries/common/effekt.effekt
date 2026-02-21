@@ -790,9 +790,9 @@ def locally[R] { p: => R } : R = p()
 //
 //     "foo ${42} bar ${43}"
 //
-// to the following stream of `literal`s and `splice[Int]`s:
+// to the following stream of `write`s and `splice[Int]`s:
 //
-//     do literal("foo "); do splice(42); do literal(" bar "); do splice(43)
+//     do write("foo "); do splice(42); do write(" bar "); do splice(43)
 //
 // The stream is wrapped into a handler function, which defaults to `stringbuffer::s`
 //
@@ -800,7 +800,8 @@ def locally[R] { p: => R } : R = p()
 //
 // but can be specified by prefixing the string interpolation `custom"..."`.
 
-effect literal(s: String): Unit
+effect write(s: String): Unit
+
 effect splice[A](x: A): Unit
 
 

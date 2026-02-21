@@ -1,13 +1,13 @@
 effect log(msg: String): Unit
 
-def error { body: => Unit / literal }: Unit / log =
-  try body() with literal { x => do log("[ERROR] " ++ x); resume(()) }
+def error { body: => Unit / write }: Unit / log =
+  try body() with write { x => do log("[ERROR] " ++ x); resume(()) }
 
-def warn { body: => Unit / literal }: Unit / log =
-  try body() with literal { x => do log("[WARNING] " ++ x); resume(()) }
+def warn { body: => Unit / write }: Unit / log =
+  try body() with write { x => do log("[WARNING] " ++ x); resume(()) }
 
-def doc { body: => Unit / {literal} }: Unit =
-  try body() with literal { _ => resume(()) }
+def doc { body: => Unit / write }: Unit =
+  try body() with write { _ => resume(()) }
 
 def main() = try {
   doc"This is the doc string for my main function!"
