@@ -1,0 +1,10 @@
+8 `divmod` 3 = 2, 2
+8 `divmod` -3 = -2, 2
+-8 `divmod` 3 = -3, 1
+-8 `divmod` -3 = 3, 1
+
+8 `quotrem` 3 = 2, 2
+8 `quotrem` -3 = -2, 2
+-8 `quotrem` 3 = -2, -2
+-8 `quotrem` -3 = 2, -2
+

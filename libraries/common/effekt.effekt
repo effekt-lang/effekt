@@ -324,6 +324,12 @@ extern def infixNeq(x: Bool, y: Bool) at {}: Bool =
 
 // Math ops
 // ========
+
+// Numeric representations in the backends:
+// LLVM: int64_t (64-bit integer)
+// JS: 64-bit floating-point (64-bit IEEE 754)
+// Chez: 64-bit integer
+
 extern def infixAdd(x: Int, y: Int) at {}: Int =
   js "(${x} + ${y})"
   chez "(+ ${x} ${y})"
@@ -337,8 +343,8 @@ extern def infixMul(x: Int, y: Int) at {}: Int =
   vm "effekt::infixMul(Int, Int)"
 
 extern def infixDiv(x: Int, y: Int) at {}: Int =
-  js "Math.floor(${x} / ${y})"
-  chez "(floor (/ ${x} ${y}))"
+  js "Math.trunc(${x} / ${y})"
+  chez "(truncate (/ ${x} ${y}))"
   llvm "%z = sdiv %Int ${x}, ${y} ret %Int %z"
   vm "effekt::infixDiv(Int, Int)"
 
@@ -348,11 +354,31 @@ extern def infixSub(x: Int, y: Int) at {}: Int =
   llvm "%z = sub  %Int ${x}, ${y} ret %Int %z"
   vm "effekt::infixSub(Int, Int)"
 
-extern def mod(x: Int, y: Int) at {}: Int =
-  js "(${x} % ${y})"
-  chez "(modulo ${x} ${y})"
-  llvm "%z = srem %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::mod(Int, Int)"
+/// Computes the quotient based on truncated-division
+def quot(x: Int, y: Int): Int =
+  infixDiv(x, y)
+
+/// Computes the remainder based on truncated-division
+ extern def rem(x: Int, y: Int) at {}: Int =
+   llvm "%z = srem %Int ${x}, ${y} ret %Int %z"
+   default { x - y * (x / y) }
+
+/// Computes the result of Euclidean division
+def div(x: Int, y: Int): Int = {
+  val q = x / y
+  val r = x.rem(y)
+  val rNeg = r.bitwiseMsb
+  val ySign = y.bitwiseMsb.bitwiseOr(1)
+  q - rNeg.bitwiseAnd(ySign)
+}
+
+/// Computes the result of Euclidean modulo
+def mod(x: Int, y: Int): Int = {
+  val r = x.rem(y)
+  val rNeg = r.bitwiseMsb
+  val absY = y.bitwiseXor(y.bitwiseMsb) - y.bitwiseMsb
+  r + rNeg.bitwiseAnd(absY)
+}
 
 extern def infixAdd(x: Double, y: Double) at {}: Double =
   js "(${x} + ${y})"
@@ -682,6 +708,11 @@ extern def bitwiseXor(x: Int, y: Int) at {}: Int =
   llvm "%z = xor %Int ${x}, ${y} ret %Int %z"
   vm "effekt::bitwiseXor(Int, Int)"
 
+extern def bitwiseMsb(x: Int) at {}: Int =
+   js "${x} >> 31"
+   chez "(bitwise-arithmetic-shift-right ${x} 63)"
+   llvm "%z = ashr %Int ${x}, 63 ret %Int %z"
+   vm "effekt::bitwiseMsb(Int)"
 
 // Byte operations
 // ===============
