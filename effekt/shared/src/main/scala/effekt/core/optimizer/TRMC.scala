@@ -20,10 +20,13 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
         case Toplevel.Def(id, block) =>
           println("in Toplevel")
           println(id.name.name)
-          if (tailRecModCons(id, block)){
+          if (tailRecModCons(id, block)){ //TODO:schöner machen nach debugging
             println("Halleluja")
+            trmc(id, block)
+          }else{
+            Toplevel.Def(id,block)
           }
-          trmc(id, block)
+          
       }
       override def stmt: PartialFunction[Stmt, Stmt] = {
         case Def(id, block, body) if tailRecModCons(id, block, body) =>
@@ -37,13 +40,19 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
 
     Some(CoreTransformed(source, tree, mod, transformed))
     
+  enum status {
+    case Nothing
+    case Tail
+    case TailRecModCons
+  }
+    
   def tailRecModCons(id: Id, block: Block): Boolean = { 
     if(id.name.name == "simpleTRMC"){
       println(effekt.util.PrettyPrinter.format(Toplevel.Def(id, block)).layout)
     }
     block match {
       case BlockVar(id, annotatedTpe, annotatedCapt) => ???
-      case BlockLit(tparams,cparams,vparams,bparams,body) => tailRecModCons(body, id.name.name, false)
+      case BlockLit(tparams,cparams,vparams,bparams,body) => tailRecModCons(body, id, false)
       case Unbox(pure) => ???
       case New(impl) => ???
     }
@@ -59,9 +68,9 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     
   }
 
-  //non-recursive is also true 
-  //mutually recursive functions should be false, we dont want to jump to definitions
-  def tailRecModCons(stmt: Stmt, fun: String, callerIsTail: Boolean): Boolean = stmt match {
+  //non-recursive is also true??
+  //mutually recursive functions should be false, we dont want to jump to definitions??
+  def tailRecModCons(stmt: Stmt, fun: Id, callerIsTail: Boolean): Boolean = stmt match {
     case Stmt.Def(id, block, body) => tailRecModCons(body,fun, false)
     case Stmt.Let(id, binding, body) => tailRecModCons(binding,fun,isTail(stmt)) && tailRecModCons(body,fun, false)
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
@@ -69,7 +78,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     case Stmt.Val(id, binding, body) => tailRecModCons(binding,fun,isTail(stmt)) && tailRecModCons(body,fun,false)
     case Stmt.App(callee, targs, vargs, bargs) => callee match {
       case effekt.core.Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
-        if(id.name.name == fun && callerIsTail){
+        if(id == fun && callerIsTail){
           true
         }else{
           false
@@ -92,11 +101,11 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     case Stmt.Hole(annotatedTpe, span) => ???
   }
   
-  def tailRecModCons(expr: Expr, fun: String, callerIsTail: Boolean): Boolean = expr match {
+  def tailRecModCons(expr: Expr, fun: Id, callerIsTail: Boolean): Boolean = expr match {
     case Expr.ValueVar(id, annotatedType) => true
     case Expr.Literal(value, annotatedType) => true
     case Expr.PureApp(b, targs, vargs) => 
-      if((b.id.name.name == fun) == callerIsTail){ //subtle difference to above: ==
+      if((b.id == fun) == callerIsTail){ //subtle difference to above: ==
         true
       }else{
         false
@@ -111,10 +120,10 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
   
   def isTail(stmt:Stmt): Boolean = stmt match {
     case Stmt.Def(id, block, body) => ???
-    case Stmt.Let(id, binding, body) => isReturnOrCons(body)
+    case Stmt.Let(id, binding, body) => isReturnOrCons(body)._1 && isReturnOrCons(body)._2.contains(id)
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
     case Stmt.Return(expr) => true
-    case Stmt.Val(id, binding, body) => isReturnOrCons(body)
+    case Stmt.Val(id, binding, body) => isReturnOrCons(body)._1 && isReturnOrCons(body)._2.contains(id)
     case Stmt.App(callee, targs, vargs, bargs) => ???
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
     case Stmt.If(cond, thn, els) => ???
@@ -130,20 +139,37 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     case Stmt.Hole(annotatedTpe, span) => ???
   }
   
-  def isReturnOrCons(stmt: Stmt): Boolean = stmt match {
+  def isReturnOrCons(stmt: Stmt): (Boolean, Option[Id]) = stmt match {
     case effekt.core.Stmt.Let(id, binding, body) => binding match {
-      case effekt.core.Expr.ValueVar(id, annotatedType) => false
-      case effekt.core.Expr.Literal(value, annotatedType) => false
-      case effekt.core.Expr.PureApp(b, targs, vargs) => false
+      case effekt.core.Expr.ValueVar(id, annotatedType) => (false, None)
+      case effekt.core.Expr.Literal(value, annotatedType) => (false, None)
+      case effekt.core.Expr.PureApp(b, targs, vargs) => (false, None)
       case effekt.core.Expr.Make(data, tag, targs, vargs) => tag.name.name match { //vargs could again be anything
-        case "Cons" => true
-        case _ => false
+        case "Cons" => 
+          if(isReturnOrCons(body)._1 && isReturnOrCons(body)._2.contains(id)){
+            vargs.last match {
+              case Expr.ValueVar(id, annotatedType) => (true, Some(id))
+              case Expr.Literal(value, annotatedType) => (true, None) //is this TRMC?
+              case Expr.PureApp(b, targs, vargs) => (false, None)
+              case Expr.Make(data, tag, targs, vargs) => (false, None)
+              case Expr.Box(b, annotatedCapture) => (false, None)
+            }
+          }else{
+              (false,None)
+          }
+        case _ => (false, None)
       }
-      case effekt.core.Expr.Box(b, annotatedCapture) => false
+      case effekt.core.Expr.Box(b, annotatedCapture) => (false, None)
     }
-    case effekt.core.Stmt.Return(expr) => true
-    case effekt.core.Stmt.Val(id, binding, body) => false //?
-    case _ => false
+    case effekt.core.Stmt.Return(expr) => expr match {
+      case effekt.core.Expr.ValueVar(id, annotatedType) => (true, Some(id))
+      case effekt.core.Expr.Literal(value, annotatedType) => (true, None) //is this TRMC?
+      case effekt.core.Expr.PureApp(b, targs, vargs) => (false, None)//?
+      case effekt.core.Expr.Make(data, tag, targs, vargs) => (false, None)//does'nt happen?
+      case effekt.core.Expr.Box(b, annotatedCapture) => (false, None)
+    }
+    case effekt.core.Stmt.Val(id, binding, body) => (false, None) //?
+    case _ => (false, None)
   }
 
   def trmc(id: Id, block: Block): Toplevel = {

@@ -25,6 +25,6 @@ extern def ctx_applyContext[A,B](ctx:HoleContext[A,B], value:B) at {}: A =
 extern def ctx_composeContext[A,B,C](ctx1:HoleContext[A,B], ctx2: HoleContext[B,C]) at {}: HoleContext[A,C] =
   js "composeContext(${ctx1}, ${ctx2})"
 
-extern def ctx_makeContext[A,B](data:A, holePointer: Ctx_Hole[B]) at {}: HoleContext[A,B] = 
+extern def ctx_makeContext[A,B](data:A, holePointer: Ctx_Hole[B]) at {}: HoleContext[A,B] = //TODO: fieldName?
   js "makeContext(${data}, ${holePointer})"
 
