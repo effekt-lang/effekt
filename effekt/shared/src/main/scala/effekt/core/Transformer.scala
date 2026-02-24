@@ -121,6 +121,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case d @ source.NamespaceDef(name, defs, doc, span) =>
       defs.flatMap(transformToplevel)
 
+    case e @ source.ExternType(id, _, _, _) =>
+      val sym@ExternType(name, tps, _) = e.symbol
+      List(Extern.Data(sym, tps))
+
     // For now we forget about all of the following definitions in core:
     case d: source.Def.Extern => Nil
     case d: source.Def.Alias => Nil

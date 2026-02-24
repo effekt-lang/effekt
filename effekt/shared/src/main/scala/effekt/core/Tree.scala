@@ -132,6 +132,7 @@ case class Property(id: Id, tpe: BlockType) extends Tree
  * FFI external definitions
  */
 enum Extern extends Tree {
+  case Data(id: Id, tparams: List[Id])
   case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody)
   case Include(featureFlag: FeatureFlag, contents: String)
 }
@@ -692,6 +693,7 @@ object Tree {
         Extern.Def(rewrite(id), tparams.map(rewrite), cparams.map(rewrite), vparams.map(rewrite), bparams.map(rewrite),
           rewrite(ret), rewrite(annotatedCapture), rewrite(body).run())
       case Extern.Include(featureFlag, contents) => e
+      case Extern.Data(id, tparams) => Extern.Data(rewrite(id), tparams.map(rewrite))
     }
 
     def rewrite(d: Declaration): Declaration = d match {
