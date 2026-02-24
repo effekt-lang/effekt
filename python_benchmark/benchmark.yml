@@ -1,0 +1,92 @@
+backends:
+  - llvm
+
+warmup: 10
+runs: 50
+branch: konradbausch/arity-raising 
+target_branch: main
+output_dir: benchmark-results
+
+benchmarks:
+  # - path: arity_raising/bad_mark
+  #   n: 160000
+  - path: arity_raising/bad_mark_2
+    n: 160000
+
+  # - path: large_record/return_int_recreate_1
+  #   n: 160000000
+  # - path: large_record/return_int_recreate_2
+  #   n: 140000000
+  # - path: large_record/return_int_recreate_3
+  #   n: 4000000000
+  # - path: large_record/return_int_recreate_4
+  #   n: 150000000
+  # - path: large_record/return_int_recreate_5
+  #   n: 150000000
+  # - path: large_record/return_int_recreate_6
+  #   n: 130000000
+  # - path: large_record/return_int_recreate_7
+  #   n: 95000000
+  # - path: large_record/return_int_recreate_8
+  #   n: 85000000
+  # - path: large_record/return_int_recreate_9
+  #   n: 75000000
+  # - path: large_record/return_int_recreate_10
+  #   n: 75000000
+  # - path: large_record/return_int_recreate_11
+  #   n: 70000000
+  # - path: large_record/return_int_recreate_12
+  #   n: 65000000
+  # - path: large_record/return_int_recreate_13
+  #   n: 65000000
+  # - path: large_record/return_int_recreate_14
+  #   n: 37000000
+  # - path: large_record/return_int_recreate_15
+  #   n: 55000000
+  # - path: large_record/return_int_recreate_16
+  #   n: 55000000
+  # - path: large_record/return_int_recreate_17
+  #   n: 50000000
+  # - path: large_record/return_int_recreate_18
+  #   n: 50000000
+  # - path: large_record/return_int_recreate_19
+  #   n: 45000000
+  # - path: large_record/return_int_recreate_20
+  #   n: 40000000
+
+  # - path: nested_record/return_int_recreate_0
+  #   n: 2000
+  # - path: nested_record/return_int_recreate_25
+  #   n: 240000
+  # - path: nested_record/return_int_recreate_50
+  #   n: 120000
+  # - path: nested_record/return_int_recreate_75
+  #   n: 83000
+  # - path: nested_record/return_int_recreate_100
+  #   n: 62000
+  # - path: nested_record/return_int_recreate_125
+  #   n: 47000
+  # - path: nested_record/return_int_recreate_150
+  #   n: 38000
+  # - path: nested_record/return_int_recreate_175
+  #   n: 30000
+  # - path: nested_record/return_int_recreate_200
+  #   n: 25000
+  # - path: nested_record/return_int_recreate_225
+  #   n: 20000
+  # - path: nested_record/return_int_recreate_250
+  #   n: 16000
+  # - path: nested_record/return_int_recreate_275
+  #   n: 13000
+  # - path: nested_record/return_int_recreate_300
+  #   n: 11000
+  # - path: nested_record/return_int_recreate_325
+  #   n: 9000
+  # - path: nested_record/return_int_recreate_350
+  #   n: 7500
+  # - path: nested_record/return_int_recreate_375
+  #   n: 6500
+  # - path: nested_record/return_int_recreate_400
+  #   n: 6000
+  # - path: nested_record/return_int_recreate_425
+  #   n: 5000
