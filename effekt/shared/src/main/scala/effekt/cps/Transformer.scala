@@ -23,7 +23,7 @@ object Transformer {
   def transform(module: core.ModuleDecl): ModuleDecl = module match {
     case core.ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
       given TransformationContext(Map.empty, Map.empty)
-      ModuleDecl(path, includes, declarations, externs.map(transform), definitions.map(transformToplevel), exports)
+      ModuleDecl(path, includes, declarations, externs.flatMap(transform), definitions.map(transformToplevel), exports)
   }
 
   def transformToplevel(definition: core.Toplevel)(using TransformationContext): ToplevelDefinition = definition match {
@@ -34,10 +34,11 @@ object Transformer {
       ToplevelDefinition.Val(id, ks, k, transform(stmt, ks, Continuation.Dynamic(k)))
   }
 
-  def transform(extern: core.Extern)(using TransformationContext): Extern = extern match {
+  def transform(extern: core.Extern)(using TransformationContext): Option[Extern] = extern match {
     case core.Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
-      Extern.Def(id, vparams.map(_.id), bparams.map(_.id), annotatedCapture.contains(symbols.builtins.AsyncCapability.capture), transform(body))
-    case core.Extern.Include(featureFlag, contents) => Extern.Include(featureFlag, contents)
+      Some(Extern.Def(id, vparams.map(_.id), bparams.map(_.id), annotatedCapture.contains(symbols.builtins.AsyncCapability.capture), transform(body)))
+    case core.Extern.Include(featureFlag, contents) => Some(Extern.Include(featureFlag, contents))
+    case core.Extern.Data(id, tparams) => None
   }
 
   def transform(externBody: core.ExternBody)(using TransformationContext): ExternBody = externBody match {

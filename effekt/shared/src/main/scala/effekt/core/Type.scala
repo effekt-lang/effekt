@@ -378,6 +378,7 @@ object Type {
           wellformed(free)
 
         case Extern.Include(featureFlag, contents) => ()
+        case Extern.Data(id, tparams) => ()
       }
   }
 

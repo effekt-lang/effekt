@@ -66,7 +66,7 @@ trait Transformer {
 
   def toChez(module: ModuleDecl)(using ErrorReporter): List[chez.Def] = {
     val decls = module.declarations.flatMap(toChez)
-    val externs = module.externs.map(toChez)
+    val externs = module.externs.flatMap(toChez)
      // TODO FIXME, once there is a let _ = ... in there, we are doomed!
     val defns = module.definitions.map(toChez)
     decls ++ externs ++ defns
@@ -123,7 +123,7 @@ trait Transformer {
       generateConstructor(id, operations.map(op => op.id))
   }
 
-  def toChez(decl: core.Extern)(using ErrorReporter): chez.Def = decl match {
+  def toChez(decl: core.Extern)(using ErrorReporter): Option[chez.Def] = decl match {
     case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body) =>
       val tBody = body match {
         case ExternBody.StringExternBody(featureFlag, contents) => toChez(contents)
@@ -131,12 +131,15 @@ trait Transformer {
           u.report
           chez.Builtin("unreachable")
       }
-      chez.Constant(nameDef(id),
+      Some(chez.Constant(nameDef(id),
         chez.Lambda(vps.map { p => nameDef(p.id) } ++ bps.map { p => nameDef(p.id) },
-          tBody))
+          tBody)))
 
     case Extern.Include(ff, contents) =>
-      RawDef(contents)
+      Some(RawDef(contents))
+
+    case Extern.Data(id, tparams) =>
+      None
   }
 
   def toChez(t: Template[core.Expr]): chez.Expr =

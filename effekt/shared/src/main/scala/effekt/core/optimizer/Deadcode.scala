@@ -50,6 +50,8 @@ class Deadcode(reachable: Map[Id, Usage])
           // We need to keep "show", "showBuiltin" & "infixConcat" for generating show definitions (see #1123)
           case e: Extern.Def if used(e.id) || List("show", "showBuiltin", "infixConcat").contains(e.id.name.name) => e
           case e: Extern.Include => e
+          // We currently do not have usage information on extern types, so we have to keep all of them
+          case e: Extern.Data => e
         },
         // drop unreachable definitions
         definitions.collect { case d if used(d.id) => rewrite(d) },

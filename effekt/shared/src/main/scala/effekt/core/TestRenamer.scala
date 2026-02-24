@@ -201,6 +201,11 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
     case Extern.Include(featureFlag, contents) => {
         Extern.Include(featureFlag, contents)
     }
+    case Extern.Data(id, tparams) => {
+      withBindings(tparams) {
+        Extern.Data(rewrite(id), tparams map rewrite)
+      }
+    }
   }
 
   override def rewrite(c: Constructor) = c match {
@@ -283,6 +288,7 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
       } ++ definitions.map(_.id) ++ externs.flatMap {
         case Extern.Def(id, _, _, _, _, _, _, _) => Some(id)
         case Extern.Include(_, _) => None
+        case Extern.Data(id, _) => Some(id)
       }
     }
 }
