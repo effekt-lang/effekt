@@ -24,10 +24,10 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     var tree = core
 
-     // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
-    tree = Context.timed("deadcode-elimination", source.name) {
-      Deadcode.remove(mainSymbol, tree)
-    }
+    // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
+    // tree = Context.timed("deadcode-elimination", source.name) {
+    //   Deadcode.remove(mainSymbol, tree)
+    // }
 
     if !Context.config.optimize() then return tree;
 

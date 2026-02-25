@@ -1,0 +1,11 @@
+def loop[A](a: A, n: Int): A = {
+  if (n == 0) a
+  else loop(Some(a), n - 1) match {
+    case Some(b) => b
+    case None() => a
+  }
+}
+
+def main() = {
+  println(loop(7, 10))
+}
