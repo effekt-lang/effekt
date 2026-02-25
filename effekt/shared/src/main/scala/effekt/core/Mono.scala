@@ -72,12 +72,13 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             var polyExternDefs: List[Id] = List.empty 
             externs.foreach {
               case Extern.Include(featureFlag, contents) => ()
+              case Extern.Data(id, tparams) => ()
               case Extern.Def(id, List(), cparams, vparams, bparams, ret, annotatedCapture, body) => ()
               case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => polyExternDefs :+= id
             }
 
             var monoContext = MonoContext(solution, monoFunNames, monoTpeNames, polyExternDefs)
-            val monoDecls = declarations flatMap (monomorphize(_)(using monoContext))
+            val monoDecls = declarations flatMap (monomorphize(_)(using monoContext)(using dctx))
             val monoDefs = monomorphize(definitions)(using monoContext)(using Context, dctx)
             // monoDecls.foreach(decl => println(util.show(decl)))
             // println()
@@ -450,7 +451,7 @@ def monomorphize(toplevel: Toplevel)(using ctx: MonoContext)(using Context, Decl
   case Toplevel.Val(id, binding) => 
     List(Toplevel.Val(id, monomorphize(binding)))
 
-def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] = decl match
+def monomorphize(decl: Declaration)(using ctx: MonoContext)(using DeclarationContext): List[Declaration] = decl match
   case Data(id, tparams, constructors) => 
     val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
     if (monoTypes.isEmpty) {
@@ -480,7 +481,7 @@ def monomorphize(decl: Declaration)(using ctx: MonoContext): List[Declaration] =
       )
     }
 
-def monomorphize(property: Property, variant: Vector[Ground])(using ctx: MonoContext): List[Property] = property match {
+def monomorphize(property: Property, variant: Vector[Ground])(using ctx: MonoContext)(using DeclarationContext): List[Property] = property match {
   case Property(id, tpe@BlockType.Function(tparams, cparams, vparams, bparams, result)) => {
     // All solutions for this property
     val baseTypes = ctx.solution.getOrElse(id, Set.empty).toList
@@ -503,7 +504,7 @@ def monomorphize(property: Property, variant: Vector[Ground])(using ctx: MonoCon
   case Property(id, tpe) => ???
 }
 
-def monomorphize(constructor: Constructor, variant: Vector[Ground])(using ctx: MonoContext): List[Constructor] = constructor match
+def monomorphize(constructor: Constructor, variant: Vector[Ground])(using ctx: MonoContext)(using DeclarationContext): List[Constructor] = constructor match
   case Constructor(id, tparams, fields) => 
     // All solutions for this constructor
     val baseTypes = ctx.solution.getOrElse(id, Set.empty).toList
@@ -556,14 +557,14 @@ def monomorphize(block: BlockLit)(using ctx: MonoContext)(using Context, Declara
   case BlockLit(tparams, cparams, vparams, bparams, body) => 
     BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
 
-def monomorphize(block: BlockVar)(using ctx: MonoContext): BlockVar = block match
+def monomorphize(block: BlockVar)(using ctx: MonoContext)(using DeclarationContext): BlockVar = block match
   case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(id, monomorphize(annotatedTpe), annotatedCapt)
 
-def monomorphize(field: Field)(using ctx: MonoContext): Field = field match
+def monomorphize(field: Field)(using ctx: MonoContext)(using DeclarationContext): Field = field match
   case Field(id, tpe) => Field(id, monomorphize(tpe))
 
 // FIXME: Not a big fan of this function needing so many extra parameters
-def monomorphize(blockVar: BlockVar, replacementId: FunctionId, targs: List[ValueType])(using ctx: MonoContext): BlockVar = blockVar match
+def monomorphize(blockVar: BlockVar, replacementId: FunctionId, targs: List[ValueType])(using ctx: MonoContext)(using DeclarationContext): BlockVar = blockVar match
   case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) if ctx.isPolyExtern(id) => 
     val annotatedTpe = BlockType.Function(tparams, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
     BlockVar(id, annotatedTpe, annotatedCapt)
@@ -687,14 +688,14 @@ def monomorphize(expr: Expr)(using ctx: MonoContext)(using Context, DeclarationC
   case ValueVar(id, annotatedType) =>
     ValueVar(id, monomorphize(annotatedType))
 
-def monomorphize(valueParam: ValueParam)(using ctx: MonoContext): ValueParam = valueParam match 
+def monomorphize(valueParam: ValueParam)(using MonoContext, DeclarationContext): ValueParam = valueParam match
   case ValueParam(id, tpe) => ValueParam(id, monomorphize(tpe))
 
-def monomorphize(blockParam: BlockParam)(using ctx: MonoContext): BlockParam = blockParam match
+def monomorphize(blockParam: BlockParam)(using MonoContext, DeclarationContext): BlockParam = blockParam match
   case BlockParam(id, tpe, capt) => 
     BlockParam(id, monomorphize(tpe), capt)
 
-def monomorphize(blockType: BlockType)(using ctx: MonoContext): BlockType = blockType match {
+def monomorphize(blockType: BlockType)(using ctx: MonoContext)(using DeclarationContext): BlockType = blockType match {
   case BlockType.Function(tparams, cparams, vparams, bparams, result) => 
     BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
   case BlockType.Interface(name, targs) => 
