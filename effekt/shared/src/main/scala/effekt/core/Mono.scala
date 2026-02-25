@@ -779,7 +779,10 @@ def replacementData(id: Id, targs: Vector[TypeArg])(using ctx: MonoContext, dctx
   if (targs.isEmpty) return ValueType.Data(id, List.empty)
 
   val groundTpes = filterNonGround(targs).get
-  ctx.tpeNames((id, groundTpes))
+  dctx.findExternData(id) match {
+    case Some(_) => ValueType.Data(id, targs.toList map monomorphize)
+    case None => ctx.tpeNames((id, groundTpes))
+  }
 }
 
 def replacementData(id: Id, targs: List[ValueType])(using ctx: MonoContext, dctx: DeclarationContext): ValueType.Data = {
