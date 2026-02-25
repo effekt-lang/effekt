@@ -58,17 +58,6 @@ class LLVMTests extends EffektTests {
     // re-entrant resumption
     examplesDir / "pos" / "issue1203.effekt",
     examplesDir / "pos" / "issue1203b.effekt",
-    
-    // Normalizer crash include again when fixed
-    examplesDir / "pos" / "raytracer.effekt",
-    examplesDir / "benchmarks" / "nofib" / "constraints.effekt",
-    examplesDir / "pos" / "matchblock.effekt",
-    examplesDir / "pos" / "type_parameters_blocks.effekt",
-    examplesDir / "benchmarks" / "other" / "variadic_combinators.effekt",
-    examplesDir / "benchmarks" / "other" / "unify.effekt",
-
-    // Normalizer timeout
-    examplesDir / "benchmarks" / "nofib" / "boyer.effekt"
   )
 
   override lazy val withoutOptimizations: Set[File] = Set(

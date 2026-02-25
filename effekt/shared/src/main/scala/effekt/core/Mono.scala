@@ -438,13 +438,13 @@ def monomorphize(definitions: List[Toplevel])(using ctx: MonoContext)(using Cont
 
 def monomorphize(toplevel: Toplevel)(using ctx: MonoContext)(using Context, DeclarationContext): List[Toplevel] = toplevel match
   case Toplevel.Def(id, BlockLit(List(), cparams, vparams, bparams, body)) => 
-    List(Toplevel.Def(id, BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))))
+    List(Toplevel.Def(id, Renamer.rename(BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body)))))
   case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
     val monoTypes = ctx.solution(id).toList
     monoTypes.map(baseTypes => 
       val replacementTparams = tparams.zip(baseTypes).toMap
       ctx.replacementTparams ++= replacementTparams
-      Toplevel.Def(ctx.funNames(id, baseTypes), BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body)))
+      Toplevel.Def(ctx.funNames(id, baseTypes), Renamer.rename(BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))))
     )
   case Toplevel.Def(id, block) => 
     List(Toplevel.Def(id, monomorphize(block)))
