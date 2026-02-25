@@ -709,8 +709,11 @@ def monomorphize(blockType: BlockType)(using ctx: MonoContext)(using Declaration
     }
 }
 
-def monomorphize(valueType: ValueType)(using ctx: MonoContext): ValueType = valueType match {
-  case ValueType.Var(name) => monomorphize(ctx.replacementTparams(name))
+def monomorphize(valueType: ValueType)(using ctx: MonoContext)(using dctx: DeclarationContext): ValueType = valueType match {
+  case ValueType.Var(name) => ctx.replacementTparams(name) match {
+    case TypeArg.Base(tpe, targs) => replacementData(tpe, targs.toVector)
+    case TypeArg.Boxed(tpe, capt) => ValueType.Boxed(monomorphize(tpe), capt)
+  }
   // We do not monomorphize targs here, because our name lookup for types is looking for
   // Option[Option[Int]] -> Option_Option_Int
   // and not
@@ -719,8 +722,8 @@ def monomorphize(valueType: ValueType)(using ctx: MonoContext): ValueType = valu
   case ValueType.Boxed(tpe, capt) => ValueType.Boxed(monomorphize(tpe), capt)
 }
 
-def monomorphize(typeArg: TypeArg)(using ctx: MonoContext): ValueType = typeArg match {
-  case TypeArg.Base(tpe, targs) => replacementData(tpe, targs map monomorphize)
+def monomorphize(typeArg: TypeArg)(using MonoContext, DeclarationContext): ValueType = typeArg match {
+  case TypeArg.Base(tpe, targs) => ValueType.Data(tpe, targs map monomorphize)
   case TypeArg.Boxed(tpe, capt) => ValueType.Boxed(monomorphize(tpe), capt)
   case TypeArg.Var(funId, pos) => 
     // FIXME: Do we want to reflect this unreachability in the Data structure used for monomorphizing?
@@ -772,16 +775,23 @@ def replacementFun(id: FunctionId, targs: List[ValueType])(using ctx: MonoContex
   ctx.funNames(id, baseTypes)
 }
 
-def replacementData(id: Id, targs: List[ValueType])(using ctx: MonoContext): ValueType.Data = {
+def replacementData(id: Id, targs: Vector[TypeArg])(using ctx: MonoContext, dctx: DeclarationContext): ValueType.Data = {
   if (targs.isEmpty) return ValueType.Data(id, List.empty)
-  val baseTypes: Vector[Ground] = (targs map toTypeArg).toVector
 
-  // we do not know anything about extern types
-  // therefore we need to rely on types being extern if they are not contained in the names
-  // extern types should really be contained in the Module externs 
-  ctx.tpeNames.getOrElse((id, baseTypes), {
-    ValueType.Data(id, targs)
-  })
+  val groundTpes = filterNonGround(targs).get
+  ctx.tpeNames((id, groundTpes))
+}
+
+def replacementData(id: Id, targs: List[ValueType])(using ctx: MonoContext, dctx: DeclarationContext): ValueType.Data = {
+  dctx.findExternData(id) match {
+    case Some(_) => {
+      ValueType.Data(id, targs map monomorphize)
+    }
+    case None => {
+      val baseTypes: Vector[Ground] = (targs map toTypeArg).toVector
+      replacementData(id, baseTypes)
+    }
+  }
 }
 
 def toTypeArg(vt: ValueType)(using ctx: MonoContext): Ground = vt match {
