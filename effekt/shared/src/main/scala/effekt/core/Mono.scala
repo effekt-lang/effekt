@@ -483,19 +483,12 @@ def monomorphize(decl: Declaration)(using ctx: MonoContext)(using DeclarationCon
 
 def monomorphize(property: Property, variant: Vector[Ground])(using ctx: MonoContext)(using DeclarationContext): List[Property] = property match {
   case Property(id, tpe@BlockType.Function(tparams, cparams, vparams, bparams, result)) => {
-    // All solutions for this property
     val baseTypes = ctx.solution.getOrElse(id, Set.empty).toList
-    // Filter solutions that do not belong to the variant currently being handled
-    val relevantTypes = baseTypes.filter(tpes => tpes.startsWith(variant))
-    // The solution for properties may have more types than the variant because of existentials
-    // in which case we need to generate multiple properties
-    if (relevantTypes.isEmpty) {
+    if (baseTypes.isEmpty) {
       List(Property(id, monomorphize(tpe)))
     } else {
-      relevantTypes.map(baseType => {
-        // Remove types not relevant for existentials (mono11)
-        val existentialBaseTypes = baseType.drop(variant.size)
-        val replacementTparams = tparams.zip(existentialBaseTypes).toMap
+      baseTypes.map(baseType => {
+        val replacementTparams = tparams.zip(baseType).toMap
         ctx.replacementTparams ++= replacementTparams
         Property(ctx.funNames((id, baseType)), monomorphize(tpe)) 
       })
