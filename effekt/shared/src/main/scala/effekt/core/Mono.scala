@@ -629,12 +629,12 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
   case Match(scrutinee, matchTpe, clauses, default) =>
     // We need the type of the scrutinee, to be able to only monomorphize the cases to this variant
     val monoScrut = monomorphize(scrutinee)
-    val scrutTpe: ValueType.Data = monoScrut.tpe match {
-      case t: ValueType.Data => t
-      case _ => Context.abort("Should not happen")
+    val variant = monoScrut.tpe match {
+      // Get the type of this variant by inverting the monomorphized name of the scrutinee
+      case t: ValueType.Data => ctx.invertedTpeNames.getOrElse(t, (t.name, Vector.empty))(1)
+      // Ignore variant if we are matching on anything else (examples/pos/bidirectional/typeparametric.effekt)
+      case _ => Vector.empty
     }
-    // Get the type of this variant by inverting the monomorphized name of the scrutinee
-    val (_, variant): (Id, Vector[Ground]) = ctx.invertedTpeNames.getOrElse(scrutTpe, (scrutTpe.name, Vector.empty))
     
     Match(monoScrut, monomorphize(matchTpe), clauses.flatMap(clause => monomorphize(clause, variant)), monomorphize(default))
   case Get(id, annotatedTpe, ref, annotatedCapt, body) =>
