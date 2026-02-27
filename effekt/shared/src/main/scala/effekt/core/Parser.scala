@@ -309,6 +309,9 @@ class CoreParsers(names: Names) extends EffektLexers {
           id, tparams, cparams, vparams, bparams, result, captures,
           ExternBody.StringExternBody(ff, templ)
         )
+    }
+    | `extern` ~> `type` ~> id ~ typeParams.? ^^ {
+      case id ~ tparams => Extern.Data(id, tparams.getOrElse(Nil))
     })
 
   lazy val externBodyTemplate: P[Template[Expr]] =
