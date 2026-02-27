@@ -589,11 +589,11 @@ typedef struct {
     Stack stack;
 } Signal;
 
-void c_signal_erase(void *envPtr) {
-    // envPtr points to a Signal _after_ the eraser, so let's adjust it to point to the beginning.
-    Signal *signal = (Signal*) (envPtr - offsetof(Signal, state));
+void c_signal_erase(void *object) {
+    Signal *signal = (Signal*) object;
     erasePositive(signal->value);
     if (signal->stack != NULL) { eraseStack(signal->stack); }
+    free(signal);
 }
 
 struct Pos c_signal_make() {
