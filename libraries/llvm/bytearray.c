@@ -2,11 +2,7 @@
 #define EFFEKT_BYTEARRAY_C
 
 #include <string.h> // For memcopy
-#include <stdint.h>
-#include <inttypes.h>
-
-extern void* cMalloc(uint8_t size);
-
+#include <stdlib.h>
 
 /** We represent bytearrays like positive types.
  *
@@ -21,11 +17,13 @@ extern void* cMalloc(uint8_t size);
  */
 
 
-void c_bytearray_erase_noop(void *envPtr) { (void)envPtr; }
+void c_bytearray_erase_noop(void* object) {
+    free(object);
+}
 
 struct Pos c_bytearray_new(const Int size) {
   int object_size = sizeof(struct Header) + size;
-  void *objPtr = cMalloc(object_size);
+  void *objPtr = malloc(object_size);
   struct Header *headerPtr = objPtr;
   *headerPtr = (struct Header) { .rc = 0, .eraser = c_bytearray_erase_noop, };
   return (struct Pos) {

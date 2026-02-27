@@ -93,11 +93,7 @@
 %String = type %Pos
 
 ; Foreign imports
-
-declare void @cInitializeMemory()
-declare ptr @cMalloc(i64)
-declare void @cFree(ptr)
-declare ptr @cRealloc(ptr, i64)
+declare ptr @initializeArena()
 
 declare ptr @malloc(i64)
 declare void @free(ptr)
@@ -124,6 +120,110 @@ declare void @exit(i64)
 declare void @llvm.assume(i1)
 
 
+; typedef struct Slot
+; {
+;     struct Slot* next;
+;     void (*eraser)(void *object);
+; } Slot;
+%struct.Slot = type { %struct.Slot*, %Eraser }
+
+; initializes the todoList with a sentinel slot.
+; Sentinel Slot: Fakes a block with a RC=1. It is used to mark the end of the To-Do-List.
+; But it is not a real heap-object, because it is not 8-byte aligned.
+@freeList = private unnamed_addr global %struct.Slot* null, align 8
+@todoList = private unnamed_addr global %struct.Slot* inttoptr (i64 1 to %struct.Slot*), align 8
+@nextUnusedSlot = private unnamed_addr global i8* null, align 8   ; Pointer to the next unused Slot
+
+
+; Initializes the memory for our effekt-objects that are created by newObject and deleted by eraseObject.
+define private void @initializeMemory() nounwind {
+entry:
+  %startAddress = call noalias ptr @initializeArena()  ;How much storage do we allocate at the beginning of a program? =4GB
+  store i8* %startAddress, i8** @nextUnusedSlot
+  ret void
+}
+
+
+define private %struct.Slot* @acquire() nounwind {
+entry:
+  %freeHead = load %struct.Slot*, %struct.Slot** @freeList
+  %isEmpty = icmp eq %struct.Slot* %freeHead, null
+  br i1 %isEmpty, label %checkTodo, label %freeReuse
+
+; 1. Fast Path: Reuse block from freeList
+freeReuse:
+  %freeNextPtr = getelementptr %struct.Slot, %struct.Slot* %freeHead, i32 0, i32 0
+  %freeNext = load %struct.Slot*, %struct.Slot** %freeNextPtr, align 8
+  store %struct.Slot* %freeNext, %struct.Slot** @freeList, align 8
+
+  ret %struct.Slot* %freeHead
+
+checkTodo:
+  %todoHead = load %struct.Slot*, %struct.Slot** @todoList
+  %isSentinel = icmp eq %struct.Slot* %todoHead, inttoptr (i64 1 to %struct.Slot*)
+  br i1 %isSentinel, label %bumpAlloc, label %todoReuse
+
+; 2. Slot Path: Reuse block from To-Do-List. Here, we have to extra call the eraser to ensure that we can reuse it.
+todoReuse:
+  %todoNextPtr = getelementptr inbounds %struct.Slot, %struct.Slot* %todoHead, i32 0, i32 0
+  %todoNext = load %struct.Slot*, %struct.Slot** %todoNextPtr, align 8
+  store %struct.Slot* %todoNext, %struct.Slot** @todoList, align 8
+
+  ; Call eraser
+  ; reusedSlot->eraser(reusedSlot);
+  %eraserptr = getelementptr inbounds %struct.Slot, %struct.Slot* %todoHead, i32 0, i32 1
+  %eraser = load %Eraser, void (%struct.Slot*)** %eraserptr, align 8, !alias.scope !14, !noalias !24
+  tail call void %eraser(%struct.Slot* %todoHead)
+
+  ret %struct.Slot* %todoHead
+
+; 3. Fallback - Bump Path: We have to allocate a new block.
+bumpAlloc:
+  ; Load nextUnusedBlock
+  %fresh = load ptr, i8** @nextUnusedSlot, align 8
+
+  ; Move bump pointer forward by object size
+  %nextBump = getelementptr i8, ptr %fresh, i8 64
+
+  store ptr %nextBump, i8** @nextUnusedSlot, align 8
+
+  ret %struct.Slot* %fresh
+}
+
+; Pushes a slot on the top of the free-List.
+define private void @pushOntoFreeList(%struct.Slot* %slot) nounwind {
+entry:
+  ; oldHead = freeList
+  %oldHead = load %struct.Slot*, %struct.Slot** @freeList, align 8
+
+  ; ptr->next = oldHead
+  %nextPtr = getelementptr %struct.Slot, %struct.Slot* %slot, i32 0, i32 0
+  store %struct.Slot* %oldHead, %struct.Slot** %nextPtr, align 8
+
+  ; freeList = ptr
+  store %struct.Slot* %slot, %struct.Slot** @freeList, align 8
+
+  ret void
+}
+
+; Pushes a slot on the top of the To-Do-List.
+define private void @pushOntoTodoList(%struct.Slot* %slot) nounwind {
+entry:
+  ; oldHead = todoList
+  %oldHead = load %struct.Slot*, %struct.Slot** @todoList, align 8
+
+  ; ptr->next = oldHead
+  %nextPtr = getelementptr %struct.Slot, %struct.Slot* %slot, i32 0, i32 0
+  store %struct.Slot* %oldHead, %struct.Slot** %nextPtr, align 8
+
+  ; todoList = ptr
+  store %struct.Slot* %slot, %struct.Slot** @todoList, align 8
+
+  ret void
+}
+
+
+
 ; Prompts
 
 define private %Prompt @currentPrompt(%Stack %stack) {
@@ -139,84 +239,8 @@ define private %Prompt @freshPrompt() {
     ret %Prompt %prompt
 }
 
-; Garbage collection
-
-; A type for the free list
-%struct.Block = type { %struct.Block* }
-
-@freeList = global %struct.Block* null
-@nextUnusedBlock = global i8* null
-@endOfChunk = global i8* null
-@blockSize = global i64 1024    ; each Block is 1KB
-
-define private void @initializeMemory() {
-    ; Step 01: mem = malloc(4294967296)
-    %mem = call i8* @malloc(i64 4294967296)
-
-    ; Step 02: nextUnusedBlock = mem
-    store i8* %mem, i8** @nextUnusedBlock
-
-    ; Step 03: endOfChunk = mem + 4294967296
-    %endPtr = getelementptr i8, i8* %mem, i64 4294967296
-    store i8* %endPtr, i8** @endOfChunk
-
-    ret void
-}
-
-define private %Object @myMalloc(i64 %size) {
-entry:
-    ; Step 01: Check if the free list pointer is not null
-    %freeList = load %struct.Block*, %struct.Block** @freeList
-    %isNull = icmp eq %struct.Block* %freeList, null
-    br i1 %isNull, label %newAllocate, label %reuse
-
-; In case we can recycle a block from the free list, we do so and jump to the reuse label.
-reuse:
-    ; Step 01: block = freeList
-    %block = load %struct.Block*, %struct.Block** @freeList
-
-    ; Step 02: freeList = freeList.next
-    %nextPtr = getelementptr %struct.Block, %struct.Block* %block, i32 0, i32 0
-    %nextBlock = load %struct.Block*, %struct.Block** %nextPtr
-    store %struct.Block* %nextBlock, %struct.Block** @freeList
-
-    ; Step 03: Return
-    %ret = bitcast %struct.Block* %block to %Object
-    ret %Object %ret
-
-; In case we do not have a block to reuse
-newAllocate:
-    %nu = load i8*, i8** @nextUnusedBlock
-    %end = load i8*, i8** @endOfChunk
-    %blockSize = load i64, i64* @blockSize
-
-    ; block = next_unused
-    %next_plus = getelementptr i8, i8* %nu, i64 %blockSize
-    store i8* %next_plus, i8** @nextUnusedBlock
-
-    %ret2 = bitcast i8* %nu to %Object
-    ret %Object %ret2
-
-}
-
-define private void @myFree(%Object %object) {
-    ; block = (Block*)object
-    %block = bitcast %Object %object to %struct.Block*
-
-    ; block.next = freeList
-    %nextField = getelementptr %struct.Block, %struct.Block* %block, i32 0, i32 0
-    %freeList = load %struct.Block*, %struct.Block** @freeList
-    store %struct.Block* %freeList, %struct.Block** %nextField
-
-    ; freeList = block
-    store %struct.Block* %block, %struct.Block** @freeList ; <- fails
-    ret void
-}
-
 define private %Object @newObject(%Eraser %eraser, i64 %environmentSize) alwaysinline {
-    %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
-    %size = add i64 %environmentSize, %headerSize
-    %object = call ptr @cMalloc(i64 %size)
+    %object = call ptr @acquire()
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
     store %ReferenceCount 0, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
@@ -274,9 +298,7 @@ define private void @eraseObject(%Object %object) alwaysinline {
     free:
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
     %eraser = load %Eraser, ptr %objectEraser, !alias.scope !14, !noalias !24
-    %environment = call %Environment @objectEnvironment(%Object %object)
-    call void %eraser(%Environment %environment)
-    call void @cFree(%Object %object)
+    call void %eraser(%Object %object)
     br label %done
 
     done:

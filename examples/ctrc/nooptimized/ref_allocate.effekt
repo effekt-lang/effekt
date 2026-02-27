@@ -12,7 +12,7 @@ record Person(
   )
 
 def main() = {
-  val p1 = ref::allocate()
+  val p1 = ref::unsafeAllocate()
   val p2 = Person(1, 2, 3, 4, 5, 6, 7)
   p1.set(p2)
   println(p1.get().field7)
