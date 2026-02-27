@@ -93,6 +93,7 @@
 %String = type %Pos
 
 ; Foreign imports
+declare ptr @initializeArena()
 
 declare ptr @malloc(i64)
 declare void @free(ptr)
@@ -119,6 +120,110 @@ declare void @exit(i64)
 declare void @llvm.assume(i1)
 
 
+; typedef struct Slot
+; {
+;     struct Slot* next;
+;     void (*eraser)(void *object);
+; } Slot;
+%struct.Slot = type { %struct.Slot*, %Eraser }
+
+; initializes the todoList with a sentinel slot.
+; Sentinel Slot: Fakes a block with a RC=1. It is used to mark the end of the To-Do-List.
+; But it is not a real heap-object, because it is not 8-byte aligned.
+@freeList = private unnamed_addr global %struct.Slot* null, align 8
+@todoList = private unnamed_addr global %struct.Slot* inttoptr (i64 1 to %struct.Slot*), align 8
+@nextUnusedSlot = private unnamed_addr global i8* null, align 8   ; Pointer to the next unused Slot
+
+
+; Initializes the memory for our effekt-objects that are created by newObject and deleted by eraseObject.
+define private void @initializeMemory() nounwind {
+entry:
+  %startAddress = call noalias ptr @initializeArena()  ;How much storage do we allocate at the beginning of a program? =4GB
+  store i8* %startAddress, i8** @nextUnusedSlot
+  ret void
+}
+
+
+define private %struct.Slot* @acquire() nounwind {
+entry:
+  %freeHead = load %struct.Slot*, %struct.Slot** @freeList
+  %isEmpty = icmp eq %struct.Slot* %freeHead, null
+  br i1 %isEmpty, label %checkTodo, label %freeReuse
+
+; 1. Fast Path: Reuse block from freeList
+freeReuse:
+  %freeNextPtr = getelementptr %struct.Slot, %struct.Slot* %freeHead, i32 0, i32 0
+  %freeNext = load %struct.Slot*, %struct.Slot** %freeNextPtr, align 8
+  store %struct.Slot* %freeNext, %struct.Slot** @freeList, align 8
+
+  ret %struct.Slot* %freeHead
+
+checkTodo:
+  %todoHead = load %struct.Slot*, %struct.Slot** @todoList
+  %isSentinel = icmp eq %struct.Slot* %todoHead, inttoptr (i64 1 to %struct.Slot*)
+  br i1 %isSentinel, label %bumpAlloc, label %todoReuse
+
+; 2. Slot Path: Reuse block from To-Do-List. Here, we have to extra call the eraser to ensure that we can reuse it.
+todoReuse:
+  %todoNextPtr = getelementptr inbounds %struct.Slot, %struct.Slot* %todoHead, i32 0, i32 0
+  %todoNext = load %struct.Slot*, %struct.Slot** %todoNextPtr, align 8
+  store %struct.Slot* %todoNext, %struct.Slot** @todoList, align 8
+
+  ; Call eraser
+  ; reusedSlot->eraser(reusedSlot);
+  %eraserptr = getelementptr inbounds %struct.Slot, %struct.Slot* %todoHead, i32 0, i32 1
+  %eraser = load %Eraser, void (%struct.Slot*)** %eraserptr, align 8, !alias.scope !14, !noalias !24
+  tail call void %eraser(%struct.Slot* %todoHead)
+
+  ret %struct.Slot* %todoHead
+
+; 3. Fallback - Bump Path: We have to allocate a new block.
+bumpAlloc:
+  ; Load nextUnusedBlock
+  %fresh = load ptr, i8** @nextUnusedSlot, align 8
+
+  ; Move bump pointer forward by object size
+  %nextBump = getelementptr i8, ptr %fresh, i8 64
+
+  store ptr %nextBump, i8** @nextUnusedSlot, align 8
+
+  ret %struct.Slot* %fresh
+}
+
+; Pushes a slot on the top of the free-List.
+define private void @pushOntoFreeList(%struct.Slot* %slot) nounwind {
+entry:
+  ; oldHead = freeList
+  %oldHead = load %struct.Slot*, %struct.Slot** @freeList, align 8
+
+  ; ptr->next = oldHead
+  %nextPtr = getelementptr %struct.Slot, %struct.Slot* %slot, i32 0, i32 0
+  store %struct.Slot* %oldHead, %struct.Slot** %nextPtr, align 8
+
+  ; freeList = ptr
+  store %struct.Slot* %slot, %struct.Slot** @freeList, align 8
+
+  ret void
+}
+
+; Pushes a slot on the top of the To-Do-List.
+define private void @pushOntoTodoList(%struct.Slot* %slot) nounwind {
+entry:
+  ; oldHead = todoList
+  %oldHead = load %struct.Slot*, %struct.Slot** @todoList, align 8
+
+  ; ptr->next = oldHead
+  %nextPtr = getelementptr %struct.Slot, %struct.Slot* %slot, i32 0, i32 0
+  store %struct.Slot* %oldHead, %struct.Slot** %nextPtr, align 8
+
+  ; todoList = ptr
+  store %struct.Slot* %slot, %struct.Slot** @todoList, align 8
+
+  ret void
+}
+
+
+
 ; Prompts
 
 define private %Prompt @currentPrompt(%Stack %stack) {
@@ -134,12 +239,8 @@ define private %Prompt @freshPrompt() {
     ret %Prompt %prompt
 }
 
-; Garbage collection
-
 define private %Object @newObject(%Eraser %eraser, i64 %environmentSize) alwaysinline {
-    %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
-    %size = add i64 %environmentSize, %headerSize
-    %object = call ptr @malloc(i64 %size)
+    %object = call ptr @acquire()
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
     store %ReferenceCount 0, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
@@ -197,9 +298,7 @@ define private void @eraseObject(%Object %object) alwaysinline {
     free:
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
     %eraser = load %Eraser, ptr %objectEraser, !alias.scope !14, !noalias !24
-    %environment = call %Environment @objectEnvironment(%Object %object)
-    call void %eraser(%Environment %environment)
-    call void @free(%Object %object)
+    call void %eraser(%Object %object)
     br label %done
 
     done:

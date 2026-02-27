@@ -1,0 +1,21 @@
+record Person(
+  field1: Int,
+  field2: Array[Int]
+  )
+
+record OneSlotPerson(
+  field1: Int,
+  field2: Int,
+  field3: Int,
+  field4: Int,
+  field5: Int,
+  field6: Int
+)
+
+def main() = {
+  val myArray: Array[Int] = array::unsafeAllocate(1)
+  val p = Person(1, myArray)
+  p match {
+    case Person(f1, _) => println(f1)
+  }
+}

@@ -1,0 +1,20 @@
+import ref
+
+// md = Person requires 2 saving slots
+record Person(
+  field1: Int,
+  field2: Int,
+  field3: Int,
+  field4: Int,
+  field5: Int,
+  field6: Int,
+  field7: Int
+  )
+
+def main() = {
+  val p1 = Person(1, 2, 3, 4, 5, 6, 7)
+  val p2 = Person(1, 2, 3, 4, 5, 6, 9)
+  val p3 = ref(p1)
+  p3.set(p2)
+  println(p3.get().field7)
+}

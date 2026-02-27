@@ -11,8 +11,10 @@
 
 #include "types.c"
 #include "bytearray.c"
+#include "cMalloc.c"
 #include "io.c"
 #include "panic.c"
+#include "initialize-arena.c"
 
 
 extern void effektMain();
