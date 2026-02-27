@@ -13,9 +13,9 @@ record OneSlotPerson(
 )
 
 def main() = {
-  val myArray: Array[Int] = array::allocate(1)
+  val myArray: Array[Int] = array::unsafeAllocate(1)
   val p = Person(1, myArray)
   p match {
-    case Person(f1, arr) => println(f1)
+    case Person(f1, _) => println(f1)
   }
 }
