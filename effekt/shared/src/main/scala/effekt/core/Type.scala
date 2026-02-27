@@ -313,13 +313,13 @@ object Type {
       ValueType.Boxed(substitute(tpe, vsubst, csubst), substitute(capt, csubst))
   }
 
-  def bindingType(stmt: Stmt.ImpureApp): ValueType = stmt match {
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+  def bindingType(stmt: Stmt.ExternApp): ValueType = stmt match {
+    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
       Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
   }
 
-  def bindingType(bind: Binding.ImpureApp): ValueType = bind match {
-    case Binding.ImpureApp(id, callee, targs, vargs, bargs) =>
+  def bindingType(bind: Binding.ExternApp): ValueType = bind match {
+    case Binding.ExternApp(id, purity, callee, targs, vargs, bargs) =>
       Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
   }
 
@@ -447,12 +447,6 @@ object Type {
   def typecheck(expr: Expr): Typing[ValueType] = checking(expr) {
     case Expr.ValueVar(id, annotatedType) => Typing(annotatedType, Set.empty, Free.value(id, annotatedType))
     case Expr.Literal(value, annotatedType) => Typing(annotatedType, Set.empty, Free.empty)
-    case Expr.PureApp(callee, targs, vargs) =>
-       val BlockType.Function(tparams, cparams, vparams, bparams, result) = instantiate(callee.functionType, targs, Nil)
-       if bparams.nonEmpty then typeError("Pure apps cannot have block params")
-       val Typing(argTypes, _, argFrees) = all(vargs, e => e.typing)
-       valuesShouldEqual(vparams, argTypes)
-       Typing(result, Set.empty, argFrees ++ Free.block(callee.id, callee.annotatedTpe, callee.annotatedCapt))
 
     case make @ Expr.Make(data, tag, targs, vargs) =>
       val Typing(argTypes, argCapt, argFree) = all(vargs, arg => arg.typing)
@@ -594,12 +588,12 @@ object Type {
 
     case Stmt.Resume(k, body) => typeError(s"Continuation has wrong type: ${k}")
 
-    case Stmt.ImpureApp(id, BlockVar(f, tpe: BlockType.Function, annotatedCapt), targs, vargs, bargs, body) =>
+    case Stmt.ExternApp(id, purity, BlockVar(f, tpe: BlockType.Function, annotatedCapt), targs, vargs, bargs, body) =>
       val Typing(retType, callCapts, callFree) = typecheckFunctionLike(Typing(tpe, annotatedCapt, Free.block(f, tpe, annotatedCapt)), targs, vargs, bargs)
       val Typing(bodyType, bodyCapts, bodyFree) = body.typing
       Typing(bodyType, callCapts ++ bodyCapts, callFree ++ bodyFree.withoutValue(id, retType))
 
-    case s: Stmt.ImpureApp => typeError("Impure app should have a function type")
+    case s: Stmt.ExternApp => typeError("Extern app should have a function type")
 
     case Stmt.App(callee, targs, vargs, bargs) => typecheckFunctionLike(asFunctionTyping(callee.typing), targs, vargs, bargs)
 
