@@ -22,8 +22,9 @@ def connect(host: String, port: Int): Connection / Exception[IOError] =
   internal::checkResult(internal::connect(host, port))
 
 /// Closes a TCP connection and releases associated resources.
-def close(handle: Connection): Unit =
-  internal::close(handle)
+def close(handle: Connection): Unit / Exception[IOError] = {
+  internal::checkResult(internal::close(handle)); ()
+}
 
 /// A TCP listener. Should not be inspected.
 type Listener = Int
@@ -39,9 +40,9 @@ def listen(listener: Listener, handler: Connection => Unit at {io, async, global
 }
 
 /// Stops a TCP listener and releases associated resources.
-def shutdown(listener: Listener): Unit =
-  internal::shutdown(listener)
-
+def shutdown(listener: Listener): Unit / Exception[IOError] = {
+  internal::checkResult(internal::shutdown(listener)); ()
+}
 
 def streaming[R](connection: Connection) { program: () => R / {read[ByteArray], emit[ByteArray]} }: R / Exception[IOError] =
   try {
