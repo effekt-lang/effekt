@@ -22,8 +22,9 @@ def connect(host: String, port: Int): Connection / Exception[IOError] =
   internal::checkResult(internal::connect(host, port))
 
 /// Closes a TCP connection and releases associated resources.
-def close(handle: Connection): Unit =
-  internal::close(handle)
+def close(handle: Connection): Unit / Exception[IOError] = {
+  internal::checkResult(internal::close(handle)); ()
+}
 
 /// A TCP listener. Should not be inspected.
 type Listener = Int
@@ -39,9 +40,9 @@ def listen(listener: Listener, handler: Connection => Unit at {io, async, global
 }
 
 /// Stops a TCP listener and releases associated resources.
-def shutdown(listener: Listener): Unit =
-  internal::shutdown(listener)
-
+def shutdown(listener: Listener): Unit / Exception[IOError] = {
+  internal::checkResult(internal::shutdown(listener)); ()
+}
 
 def streaming[R](connection: Connection) { program: () => R / {read[ByteArray], emit[ByteArray]} }: R / Exception[IOError] =
   try {
@@ -59,58 +60,148 @@ def streaming[R](connection: Connection) { program: () => R / {read[ByteArray], 
 
 namespace internal {
 
-  extern llvm """
-    declare void @c_tcp_connect(%Pos, %Int, %Stack)
-    declare void @c_tcp_read(%Int, %Pos, %Int, %Int, %Stack)
-    declare void @c_tcp_write(%Int, %Pos, %Int, %Int, %Stack)
-    declare void @c_tcp_close(%Int, %Stack)
-    declare void @c_tcp_bind(%Pos, %Int, %Int, %Stack)
-    declare void @c_tcp_listen(%Int, %Pos, %Stack)
-    declare void @c_tcp_shutdown(%Int, %Stack)
+  // TODO: also in `io/filesystem`, perhaps we want this in a common place?
+  extern js """
+    function toBuffer(buffer) {
+      return Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    }
+  """
+
+  extern jsNode """
+    const net = require('net');
+
+    const tcp$handles = new Map();
+    let   tcp$next    = 1;
+    function tcp$alloc(entry) { const h = tcp$next++; tcp$handles.set(h, entry); return h; }
+    function tcp$free(h)      { tcp$handles.delete(h); }
+
+    function tcp$connect(host, port, callback) {
+      const socket = net.createConnection({ host, port });
+      socket.once('connect', () => { socket.pause(); callback(tcp$alloc({ socket })); });
+      socket.once('error',   err => callback(-(err.errno || 1)));
+    }
+
+    function tcp$read(handle, buffer, offset, size, callback) {
+      const { socket } = tcp$handles.get(handle);
+      function cleanup() {
+        socket.removeListener('readable', onReadable);
+        socket.removeListener('end',      onEnd);
+        socket.removeListener('error',    onError);
+      }
+      function onReadable() { cleanup(); tryRead(); }
+      function onEnd()      { cleanup(); callback(0); }
+      function onError(err) { cleanup(); callback(-(err.errno || 1)); }
+      function tryRead() {
+        const chunk = socket.read(size);
+        if (chunk !== null) { chunk.copy(toBuffer(buffer), offset); callback(chunk.length); return; }
+        if (socket.readableEnded) { callback(0); return; }
+        socket.once('readable', onReadable);
+        socket.once('end',      onEnd);
+        socket.once('error',    onError);
+      }
+      tryRead();
+    }
+
+    function tcp$write(handle, buffer, offset, size, callback) {
+      const { socket } = tcp$handles.get(handle);
+      socket.write(toBuffer(buffer).slice(offset, offset + size), err => {
+        if (err) callback(-(err.errno || 1)); else callback(size);
+      });
+    }
+
+    function tcp$close(handle, callback) {
+      const entry = tcp$handles.get(handle);
+      if (!entry || !entry.socket) { callback(0); return; }
+      tcp$free(handle);
+      const { socket } = entry;
+      if (socket.destroyed) { callback(0); return; }
+      socket.once('error', _err => {});
+      socket.end(() => { socket.destroy(); callback(0); });
+    }
+
+    function tcp$bind(host, port) {
+      return tcp$alloc({ server: net.createServer(), host, port });
+    }
+
+    function tcp$listen(listenerHandle, handler, callback) {
+      const { server, host, port } = tcp$handles.get(listenerHandle);
+      server.once('error', err => callback(-(err.errno || 1)));
+      server.listen(port, host, () => {
+        server.removeAllListeners('error');
+        server.on('error', _err => {});
+        server.on('connection', socket => {
+          socket.pause();
+          const connHandle = tcp$alloc({ socket });
+          $effekt.runToplevel((ks, k) => handler(connHandle, ks, k));
+        });
+        callback(0);
+      });
+    }
+
+    function tcp$shutdown(listenerHandle, callback) {
+      const entry = tcp$handles.get(listenerHandle);
+      if (!entry || !entry.server) { callback(0); return; }
+      tcp$free(listenerHandle);
+      entry.server.close(() => callback(0));
+    }
   """
 
   extern def connect(host: String, port: Int) at async: Int =
+    jsNode "$effekt.capture(k => tcp$connect(${host}, ${port}, k))"
     llvm """
       call void @c_tcp_connect(%Pos ${host}, %Int ${port}, %Stack %stack)
       ret void
     """
 
   extern def read(handle: Int, buffer: ByteArray, offset: Int, size: Int) at async: Int =
+    jsNode "$effekt.capture(k => tcp$read(${handle}, ${buffer}, ${offset}, ${size}, k))"
     llvm """
       call void @c_tcp_read(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
       ret void
     """
 
   extern def write(handle: Int, buffer: ByteArray, offset: Int, size: Int) at async: Int =
+    jsNode "$effekt.capture(k => tcp$write(${handle}, ${buffer}, ${offset}, ${size}, k))"
     llvm """
       call void @c_tcp_write(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
       ret void
     """
 
-  extern def close(handle: Int) at async: Unit =
+  extern def close(handle: Int) at async: Int =
+    jsNode "$effekt.capture(k => tcp$close(${handle}, k))"
     llvm """
       call void @c_tcp_close(%Int ${handle}, %Stack %stack)
       ret void
     """
 
   extern def bind(host: String, port: Int) at io: Int =
+    jsNode "tcp$bind(${host}, ${port})"
     llvm """
       %result = call %Int @c_tcp_bind(%Pos ${host}, %Int ${port})
       ret %Int %result
     """
 
-  extern def listen(listener: Int, handler: Int => Unit at {io, async, global}) at async: Int =
+  extern def listen(listener: Int, handler: Connection => Unit at {io, async, global}) at async: Int =
+    jsNode "$effekt.capture(k => tcp$listen(${listener}, ${handler}, k))"
     llvm """
       call void @c_tcp_listen(%Int ${listener}, %Pos ${handler}, %Stack %stack)
       ret void
     """
 
-  extern def shutdown(handle: Int) at async: Unit =
+  extern def shutdown(handle: Int) at async: Int =
+    jsNode "$effekt.capture(k => tcp$shutdown(${handle}, k))"
     llvm """
       call void @c_tcp_shutdown(%Int ${handle}, %Stack %stack)
       ret void
     """
 
+  extern llvm """
+    declare void @c_tcp_connect(%Pos, %Int, %Stack)
+    declare void @c_tcp_read(%Int, %Pos, %Int, %Int, %Stack)
+    declare void @c_tcp_write(%Int, %Pos, %Int, %Int, %Stack)
+    declare void @c_tcp_close(%Int, %Stack)
+    declare %Int @c_tcp_bind(%Pos, %Int)
+    declare void @c_tcp_listen(%Int, %Pos, %Stack)
+    declare void @c_tcp_shutdown(%Int, %Stack)
+  """
 }
-
-
