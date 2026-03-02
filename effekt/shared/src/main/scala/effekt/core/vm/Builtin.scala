@@ -197,6 +197,17 @@ lazy val booleans: Builtins = Map(
 )
 
 lazy val bytes: Builtins = Map(
+  // Comparison
+  // ----------
+  builtin("effekt::infixEq(Byte, Byte)") {
+    case As.Byte(x) :: As.Byte(y) :: Nil => Value.Bool(x == y)
+  },
+  builtin("effekt::infixNeq(Byte, Byte)") {
+    case As.Byte(x) :: As.Byte(y) :: Nil => Value.Bool(x != y)
+  },
+
+  // Conversion
+  // ----------
   builtin("effekt::show(Byte)") {
     case As.Byte(b) :: Nil => Value.String(b.toHexString)
   }
