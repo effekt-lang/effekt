@@ -1,0 +1,86 @@
+import examples/benchmarks/runner
+
+import io
+import io/error
+import io/network
+import io/promise
+import bytearray
+
+/// Emit a 4-byte big-endian encoding of the given integer `n`
+def emitBE(n: Int): Unit / emit[Byte] = {
+  do emit(n.bitwiseShr(24).toByte)
+  do emit(n.bitwiseShr(16).toByte)
+  do emit(n.bitwiseShr(8).toByte)
+  do emit(n.toByte)
+}
+
+/// Read a 4-byte big-endian integer, failing if any byte missing or invalid
+def readBE(): Int / { read[Byte], fail } = must {
+  do read().toInt.bitwiseShl(24).bitwiseOr(
+    do read().toInt.bitwiseShl(16).bitwiseOr(
+      do read().toInt.bitwiseShl(8).bitwiseOr(
+        do read().toInt
+      )
+    )
+  )
+}
+
+/// Write a 4-byte big-endian int
+def writeInt(conn: Connection, n: Int): Unit / Exception[IOError] = {
+  val buf = bytearray::collect { emitBE(n) }
+  val _ = write(conn, buf, 0, 4)
+}
+
+/// Read exactly 4 bytes and decode into a big-endian int
+def readInt(conn: Connection): Int / Exception[IOError] = {
+  val buf = bytearray::allocate(4)
+  var offset = 0
+  while (offset < 4) {
+    val r = read(conn, buf, offset, 4 - offset)
+    if (r <= 0) { panic("unexpected EOF reading int") }
+    offset = offset + r
+  }
+  try {
+    feed(buf) { readBE()}
+  } with fail { panic("invalid int format") }
+}
+
+def run(n: Int): Int = {
+  with on[IOError].panic
+
+  val PORT = 18080
+
+  val listener = bind("127.0.0.1", PORT)
+
+  // Server: for each connection, read n ints and echo each one back
+  val _server = spawn(box {
+    with on[IOError].panic
+    listen(listener, box { conn =>
+      with on[IOError].panic
+      n.repeat {
+        conn.writeInt(conn.readInt())
+      }
+      conn.close()
+    })
+  })
+
+  // Client: one persistent connection, send 0 .. n - 1, verify responses match
+  val client = promise(box {
+    with on[IOError].result
+    val conn = connect("127.0.0.1", PORT)
+    var ok = true
+    each(0, n) { i =>
+      conn.writeInt(i)
+      val response = conn.readInt()
+      if (response != i) { ok = false }
+    }
+    conn.close()
+    if (ok) n else -1
+  })
+
+  val result = client.await.value
+  shutdown(listener)
+  result
+}
+
+def main() = benchmark(10) { run }
