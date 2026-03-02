@@ -22,9 +22,8 @@ def connect(host: String, port: Int): Connection / Exception[IOError] =
   internal::checkResult(internal::connect(host, port))
 
 /// Closes a TCP connection and releases associated resources.
-def close(handle: Connection): Unit / Exception[IOError] = {
-  internal::checkResult(internal::close(handle)); ()
-}
+def close(handle: Connection): Unit =
+  internal::close(handle)
 
 /// A TCP listener. Should not be inspected.
 type Listener = Int
@@ -40,9 +39,8 @@ def listen(listener: Listener, handler: Connection => Unit at {io, async, global
 }
 
 /// Stops a TCP listener and releases associated resources.
-def shutdown(listener: Listener): Unit / Exception[IOError] = {
-  internal::checkResult(internal::shutdown(listener)); ()
-}
+def shutdown(listener: Listener): Unit =
+  internal::shutdown(listener)
 
 def streaming[R](connection: Connection) { program: () => R / {read[ByteArray], emit[ByteArray]} }: R / Exception[IOError] =
   try {
@@ -111,12 +109,12 @@ namespace internal {
 
     function tcp$close(handle, callback) {
       const entry = tcp$handles.get(handle);
-      if (!entry || !entry.socket) { callback(0); return; }
+      if (!entry || !entry.socket) { callback($effekt.unit); return; }
       tcp$free(handle);
       const { socket } = entry;
-      if (socket.destroyed) { callback(0); return; }
+      if (socket.destroyed) { callback($effekt.unit); return; }
       socket.once('error', _err => {});
-      socket.end(() => { socket.destroy(); callback(0); });
+      socket.end(() => { socket.destroy(); callback($effekt.unit); });
     }
 
     function tcp$bind(host, port) {
@@ -140,9 +138,9 @@ namespace internal {
 
     function tcp$shutdown(listenerHandle, callback) {
       const entry = tcp$handles.get(listenerHandle);
-      if (!entry || !entry.server) { callback(0); return; }
+      if (!entry || !entry.server) { callback($effekt.unit); return; }
       tcp$free(listenerHandle);
-      entry.server.close(() => callback(0));
+      entry.server.close(() => callback($effekt.unit));
     }
   """
 
@@ -167,7 +165,7 @@ namespace internal {
       ret void
     """
 
-  extern def close(handle: Int) at async: Int =
+  extern def close(handle: Int) at async: Unit =
     jsNode "$effekt.capture(k => tcp$close(${handle}, k))"
     llvm """
       call void @c_tcp_close(%Int ${handle}, %Stack %stack)
@@ -188,7 +186,7 @@ namespace internal {
       ret void
     """
 
-  extern def shutdown(handle: Int) at async: Int =
+  extern def shutdown(handle: Int) at async: Unit =
     jsNode "$effekt.capture(k => tcp$shutdown(${handle}, k))"
     llvm """
       call void @c_tcp_shutdown(%Int ${handle}, %Stack %stack)
