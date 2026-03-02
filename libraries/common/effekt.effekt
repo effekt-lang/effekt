@@ -686,9 +686,9 @@ extern def bitwiseXor(x: Int, y: Int) at {}: Int =
 // Byte operations
 // ===============
 extern def toByte(n: Int) at {}: Byte =
-  js "${n}"
+  js "(${n} & 0xFF)"
   llvm "%z = trunc %Int ${n} to %Byte ret %Byte %z"
-  chez "${n}"
+  chez "(logand ${n} 255)"
 
 extern def toInt(n: Byte) at {}: Int =
   js "${n}"
