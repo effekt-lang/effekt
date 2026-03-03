@@ -124,100 +124,102 @@ declare ptr @initializeArena()
 ;     struct Slot* next;
 ;     void (*eraser)(void *object);
 ; } Slot;
-%struct.Slot = type { %struct.Slot*, %Eraser }
+%Slot = type { ptr, %Eraser }
 
+; list of immediately available slots
+@freeList = private unnamed_addr global ptr null
+; list of slots where we still need to erase the children
 ; initializes the todoList with a sentinel slot.
 ; Sentinel Slot: Fakes a block with a RC=1. It is used to mark the end of the To-Do-List.
 ; But it is not a real heap-object, because it is not 8-byte aligned.
-@freeList = private unnamed_addr global %struct.Slot* null, align 8
-@todoList = private unnamed_addr global %struct.Slot* inttoptr (i64 1 to %struct.Slot*), align 8
-@nextUnusedSlot = private unnamed_addr global i8* null, align 8   ; Pointer to the next unused Slot
-
+@todoList = private unnamed_addr global ptr inttoptr (i64 1 to ptr)
+; space of unused consecutive slots
+@bumpList = private unnamed_addr global ptr null
 
 ; Initializes the memory for our effekt-objects that are created by newObject and deleted by eraseObject.
 define private void @initializeMemory() nounwind {
 entry:
   ; we need this because flags for mmap differ between platforms
   %startAddress = call noalias ptr @initializeArena()
-  store ptr %startAddress, ptr @nextUnusedSlot
+  store ptr %startAddress, ptr @bumpList
   ret void
 }
 
 
-define private %struct.Slot* @acquire() nounwind {
+define private ptr @acquire() nounwind {
 entry:
-  %freeHead = load %struct.Slot*, %struct.Slot** @freeList
-  %isEmpty = icmp eq %struct.Slot* %freeHead, null
+  %freeHead = load ptr, ptr @freeList
+  %isEmpty = icmp eq ptr %freeHead, null
   br i1 %isEmpty, label %checkTodo, label %freeReuse
 
 ; 1. Fast Path: Reuse block from freeList
 freeReuse:
-  %freeNextPtr = getelementptr %struct.Slot, %struct.Slot* %freeHead, i32 0, i32 0
-  %freeNext = load %struct.Slot*, %struct.Slot** %freeNextPtr, align 8
-  store %struct.Slot* %freeNext, %struct.Slot** @freeList, align 8
+  %freeNextPtr = getelementptr %Slot, ptr %freeHead, i32 0, i32 0
+  %freeNext = load ptr, ptr %freeNextPtr
+  store ptr %freeNext, ptr @freeList
 
-  ret %struct.Slot* %freeHead
+  ret ptr %freeHead
 
 checkTodo:
-  %todoHead = load %struct.Slot*, %struct.Slot** @todoList
-  %isSentinel = icmp eq %struct.Slot* %todoHead, inttoptr (i64 1 to %struct.Slot*)
+  %todoHead = load ptr, ptr @todoList
+  %isSentinel = icmp eq ptr %todoHead, inttoptr (i64 1 to ptr)
   br i1 %isSentinel, label %bumpAlloc, label %todoReuse
 
 ; 2. Slot Path: Reuse block from To-Do-List. Here, we have to extra call the eraser to ensure that we can reuse it.
 todoReuse:
-  %todoNextPtr = getelementptr inbounds %struct.Slot, %struct.Slot* %todoHead, i32 0, i32 0
-  %todoNext = load %struct.Slot*, %struct.Slot** %todoNextPtr, align 8
-  store %struct.Slot* %todoNext, %struct.Slot** @todoList, align 8
+  %todoNextPtr = getelementptr inbounds %Slot, ptr %todoHead, i32 0, i32 0
+  %todoNext = load ptr, ptr %todoNextPtr
+  store ptr %todoNext, ptr @todoList
 
   ; Call eraser
   ; reusedSlot->eraser(reusedSlot);
-  %eraserptr = getelementptr inbounds %struct.Slot, %struct.Slot* %todoHead, i32 0, i32 1
-  %eraser = load %Eraser, void (%struct.Slot*)** %eraserptr, align 8, !alias.scope !14, !noalias !24
-  tail call void %eraser(%struct.Slot* %todoHead)
+  %eraserPtr = getelementptr inbounds %Slot, ptr %todoHead, i32 0, i32 1
+  %eraser = load %Eraser, ptr %eraserPtr, !alias.scope !14, !noalias !24
+  call void %eraser(ptr %todoHead)
 
-  ret %struct.Slot* %todoHead
+  ret ptr %todoHead
 
 ; 3. Fallback - Bump Path: We have to allocate a new block.
 bumpAlloc:
   ; Load nextUnusedBlock
-  %fresh = load ptr, i8** @nextUnusedSlot, align 8
+  %fresh = load ptr, ptr @bumpList
 
   ; Move bump pointer forward by object size
   %nextBump = getelementptr i8, ptr %fresh, i8 64
 
-  store ptr %nextBump, i8** @nextUnusedSlot, align 8
+  store ptr %nextBump, ptr @bumpList
 
-  ret %struct.Slot* %fresh
+  ret ptr %fresh
 }
 
 ; Pushes a slot on the top of the free-List.
-define private void @pushOntoFreeList(%struct.Slot* %slot) nounwind {
+define private void @pushOntoFreeList(ptr %slot) nounwind {
 entry:
   ; oldHead = freeList
-  %oldHead = load %struct.Slot*, %struct.Slot** @freeList, align 8
+  %oldHead = load ptr, ptr @freeList
 
   ; ptr->next = oldHead
-  %nextPtr = getelementptr %struct.Slot, %struct.Slot* %slot, i32 0, i32 0
-  store %struct.Slot* %oldHead, %struct.Slot** %nextPtr, align 8
+  %nextPtr = getelementptr %Slot, ptr %slot, i32 0, i32 0
+  store ptr %oldHead, ptr %nextPtr
 
   ; freeList = ptr
-  store %struct.Slot* %slot, %struct.Slot** @freeList, align 8
+  store ptr %slot, ptr @freeList
 
   ret void
 }
 
 ; Pushes a slot on the top of the To-Do-List.
-define private void @pushOntoTodoList(%struct.Slot* %slot) nounwind {
+define private void @pushOntoTodoList(ptr %slot) nounwind {
 entry:
   ; oldHead = todoList
-  %oldHead = load %struct.Slot*, %struct.Slot** @todoList, align 8
+  %oldHead = load ptr, ptr @todoList
 
   ; ptr->next = oldHead
-  %nextPtr = getelementptr %struct.Slot, %struct.Slot* %slot, i32 0, i32 0
-  store %struct.Slot* %oldHead, %struct.Slot** %nextPtr, align 8
+  %nextPtr = getelementptr %Slot, ptr %slot, i32 0, i32 0
+  store ptr %oldHead, ptr %nextPtr
 
   ; todoList = ptr
-  store %struct.Slot* %slot, %struct.Slot** @todoList, align 8
+  store ptr %slot, ptr @todoList
 
   ret void
 }
