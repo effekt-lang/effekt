@@ -314,8 +314,8 @@ def tee[A]{ cons1: { => Unit / emit[A] } => Unit }{ cons2: { => Unit / emit[A] }
   }
 }
 
-/// Return exactly the very first element of the given stream
-/// or raise MissingValue if no elements are emitted.
+/// Extract exactly the very first element of the given stream
+/// or fails if no elements are emitted.
 ///
 /// Examples:
 /// ```effekt
@@ -331,6 +331,23 @@ def first[A] { stream: () => Unit / emit[A] }: A / fail = {
     def body(): A = { stream(); do fail() }
     body()
   } with emit[A] { a => a }
+}
+
+/// Extract the nth element of the given stream.
+/// Fails if not enough elements are emitted
+def nth[A](n: Int){ stream: () => Unit / emit[A] }: A / fail = {
+  var m = n
+  try {
+    def body(): A = { stream(); do fail() }
+    body()
+  } with emit[A] { a =>
+    if (m == 0) {
+      return a
+    } else {
+      m = m - 1
+      resume(())
+    }
+  }
 }
 
 // Counting and padding
@@ -359,34 +376,6 @@ def pad[A](fac: Int){ gen: => A }: Unit  / {getPos, emit[A]} = {
 /// Handles getPos
 def tracking[A]{ body: => Unit / { emit[A], getPos } }: Unit / emit[A] =
   tracking[A](0){body}
-
-/// Return just the nth element of the given stream.
-/// Raises MissingValue if not enough elements are emitted
-def nth[A](n: Int){ body: => Unit / emit[A] }: A / Exception[MissingValue] = {
-  var m = n
-  try {
-    body()
-    val r: A = do raise[MissingValue](MissingValue(), "code in first did not emit any values")
-    r
-  } with emit[A] { a =>
-    if (m == 0) {
-      a
-    } else {
-      m = m - 1
-      resume(())
-    }
-  }
-}
-
-/// Return just the first element of the given stream.
-/// Raises MissingValue if no elements are emitted
-def first[A]{ body: => Unit / emit[A] }: A / Exception[MissingValue] = {
-  try {
-    body()
-    val r: A = do raise[MissingValue](MissingValue(), "code in first did not emit any values")
-    r
-  } with emit[A] { a => a }
-}
 
 namespace returning {
 
