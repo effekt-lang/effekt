@@ -1,9 +1,9 @@
-import binstream
+import bytestream
 import stream
 import test
 
 def main() = {
-  suite("Binstream", false){
+  suite("Bytestream", false){
     test("literal hex 10"){ assert(x"10${()}", 16) }
     test("literal hex ff"){ assert(x"ff${()}", 255) }
     test("literal char a"){ assert(x"${'a'}", x"61${()}") }

@@ -5,9 +5,9 @@ module acme
 import args
 import array
 import bench
-import binstream
 import buffer
 import bytearray
+import bytestream
 import char
 import control
 import dequeue
