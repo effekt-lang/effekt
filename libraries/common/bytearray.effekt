@@ -106,6 +106,16 @@ def bytearray(size: Int, init: Byte): ByteArray = {
   arr
 }
 
+/// Builds a new ByteArray of size `size` from a computation `index` which gets an index
+/// and returns a byte that will be on that position in the resulting array
+def build(size: Int) { index: Int => Byte }: ByteArray = {
+  val arr = allocate(size);
+  each(0, size) { i =>
+    set(arr, i, index(i))
+  };
+  arr
+}
+
 def resize(source: ByteArray, size: Int): ByteArray = {
   val target = allocate(size)
   val n = min(source.size, target.size)
