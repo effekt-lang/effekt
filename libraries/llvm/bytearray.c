@@ -17,7 +17,7 @@
  */
 
 
-void c_bytearray_erase_noop(void* object) {
+void c_bytearray_erase(void* object) {
     free(object);
 }
 
@@ -25,7 +25,7 @@ struct Pos c_bytearray_new(const Int size) {
   int object_size = sizeof(struct Header) + size;
   void *objPtr = malloc(object_size);
   struct Header *headerPtr = objPtr;
-  *headerPtr = (struct Header) { .rc = 0, .eraser = c_bytearray_erase_noop, };
+  *headerPtr = (struct Header) { .rc = 0, .eraser = c_bytearray_erase, };
   return (struct Pos) {
     .tag = size,
     .obj = objPtr,
