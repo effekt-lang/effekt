@@ -52,7 +52,7 @@ def readEntry { entry: Int => Unit / read[Byte] }: Unit / read[Byte] = {
   } with read[Byte] {
     resume {
       val byte = do read()
-      if (byte.toInt == 1) {
+      if (byte == 0x01) {
         do stop()
       } else {
         byte

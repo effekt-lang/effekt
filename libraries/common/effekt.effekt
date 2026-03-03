@@ -321,6 +321,27 @@ extern def infixNeq(x: Bool, y: Bool) at {}: Bool =
     ret %Pos %adt_boolean
   """
 
+extern def infixEq(x: Byte, y: Byte) at {}: Bool =
+  js "${x} === ${y}"
+  chez "(equal? ${x} ${y})"
+  llvm """
+    %z = icmp eq %Byte ${x}, ${y}
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+  vm "effekt::infixEq(Byte, Byte)"
+
+extern def infixNeq(x: Byte, y: Byte) at {}: Bool =
+  js "${x} !== ${y}"
+  chez "(not (equal? ${x} ${y}))"
+  llvm """
+    %z = icmp ne %Byte ${x}, ${y}
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+  vm "effekt::infixNeq(Byte, Byte)"
 
 // Math ops
 // ========
