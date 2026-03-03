@@ -1,8 +1,0 @@
-record Person(
-  field1: String
-  )
-
-def main() = {
-  val p = Person("test")
-  println(p.field1)
-}
