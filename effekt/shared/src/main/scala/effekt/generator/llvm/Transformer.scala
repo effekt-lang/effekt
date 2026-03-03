@@ -9,7 +9,6 @@ import effekt.util.messages.ErrorReporter
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
 
 object Transformer {
 
@@ -497,19 +496,19 @@ object Transformer {
 
   def initialEnvironmentPointer = LocalReference(environmentType, "environment")
 
-  def loadEnvironment(environmentPointer: Operand, environment: machine.Environment, alias: AliasInfo)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+  def loadEnvironment(environmentPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     if (environment.isEmpty) {
       ()
     } else {
-      loadEnvironmentAt(environmentPointer, environment, alias);
+      loadObjectEnvironmentAt(environmentPointer, environment);
     }
   }
 
-  def storeEnvironment(environmentPointer: Operand, environment: machine.Environment, alias: AliasInfo)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+  def storeEnvironment(environmentPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     if (environment.isEmpty) {
       ()
     } else {
-      storeEnvironmentAt(environmentPointer, environment, alias);
+      storeEnvironmentAt(environmentPointer, environment, Object);
     }
   }
 
@@ -543,7 +542,7 @@ object Transformer {
             emit(Comment(s"children eraser, ${freshEnvironment.length} free variables"))
             val environmentRef = LocalReference(environmentType, freshName("environment"))
             emit(Call(environmentRef.name, Ccc(), environmentType, ConstantGlobal("objectEnvironment"), List(LocalReference(objectType, "object"))))
-            loadEnvironmentAt(environmentRef, freshEnvironment, Object)
+            loadObjectEnvironmentAt(environmentRef, freshEnvironment)
             eraseValues(freshEnvironment, Set())
             RetVoid()
           }
@@ -555,7 +554,8 @@ object Transformer {
 
             val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
             emit(GetElementPtr(nextStackPointer.name, environmentType(freshEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
-            loadEnvironmentAt(nextStackPointer, freshEnvironment, StackPointer);
+
+            loadEnvironmentAt(nextStackPointer, freshEnvironment, StackPointer, environmentType(environment))
 
             eraseValues(freshEnvironment, Set());
             val next = if (kind == StackEraser) freeStack else eraseFrames // TODO: improve this (in RTS?)
@@ -580,7 +580,7 @@ object Transformer {
 
         val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
         emit(GetElementPtr(nextStackPointer.name, environmentType(freshEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
-        loadEnvironmentAt(nextStackPointer, freshEnvironment, StackPointer);
+        loadEnvironmentAt(nextStackPointer, freshEnvironment, StackPointer, environmentType(environment))
 
         shareValues(freshEnvironment, Set.from(freshEnvironment));
 
@@ -612,7 +612,7 @@ object Transformer {
       // Step 01: We load the variables of the environment such that the continuation can continue
       val environmentReference = LocalReference(environmentType, freshName("environment"));
       emit(Call(environmentReference.name, Ccc(), environmentType, objectEnvironment, List(`object`)));
-      loadEnvironment(environmentReference, environment, Object)
+      loadEnvironment(environmentReference, environment)
 
       // Step 02: we create the release function for this object
       val release = ConstantGlobal(freshName("release"));
@@ -662,7 +662,7 @@ object Transformer {
       val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
       val size = ConstantInt(environmentSize(environment));
       emit(Call(stackPointer.name, Ccc(), stackPointer.tpe, stackDeallocate, List(stack, size)));
-      loadEnvironmentAt(stackPointer, environment, StackPointer)
+      loadEnvironmentAt(stackPointer, environment, StackPointer, environmentType(environment))
     }
   }
 
@@ -681,45 +681,43 @@ object Transformer {
     }
   }
 
-  def loadEnvironmentAt(elementPointer: Operand, environment: machine.Environment, alias: AliasInfo)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    alias match {
-      // if we have a sharded object
-      case Object if !fitsInOneSavingSlot(environment) =>
-        // Follow chained ${slotSize}-byte blocks created in produceObject
-        val chunkedEnvironments = splitEnvironment(environment)
-        var currentEnvironmentPtr: Operand = elementPointer
+  def loadObjectEnvironmentAt(elementPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+    // if we have a sharded object
+    if !fitsInOneSavingSlot(environment) then {
+      // Follow chained ${slotSize}-byte blocks created in produceObject
+      val chunkedEnvironments = splitEnvironment(environment)
+      var currentEnvironmentPtr: Operand = elementPointer
 
-        // here we loop over all environments *in* order
-        chunkedEnvironments.zipWithIndex.foreach { case (chunk, idx) =>
-          val isLast = idx == chunkedEnvironments.length - 1
-          if (isLast) {
-            val tpe = environmentType(chunk)
-            loadAllVariables(currentEnvironmentPtr, chunk, alias, tpe)
-          } else {
-            // Here we do the same as for the normal slot plus some extra stuff
+      // here we loop over all environments *in* order
+      chunkedEnvironments.zipWithIndex.foreach { case (chunk, idx) =>
+        val isLast = idx == chunkedEnvironments.length - 1
+        if (isLast) {
+          val tpe = environmentType(chunk)
+          loadEnvironmentAt(currentEnvironmentPtr, chunk, Object, tpe)
+        } else {
+          // Here we do the same as for the normal slot plus some extra stuff
 
-            // For non-last chunkedEnvironments, layout is chunk ++ [Pos link]
-            val tpe = StructureType(chunk.map { case machine.Variable(_, t) => transform(t) } :+ positiveType) // the same as for the normal case + positive Type for the link
-            loadAllVariables(currentEnvironmentPtr, chunk, alias, tpe)
+          // For non-last chunkedEnvironments, layout is chunk ++ [Pos link]
+          val tpe = StructureType(chunk.map { case machine.Variable(_, t) => transform(t) } :+ positiveType) // the same as for the normal case + positive Type for the link
+          loadEnvironmentAt(currentEnvironmentPtr, chunk, Object, tpe)
 
-            // Follow link to next block. The Link pointer is the last element of the chunk
-            val linkPtr = LocalReference(PointerType(), freshName("link_pointer"))
-            emit(GetElementPtr(linkPtr.name, tpe, currentEnvironmentPtr, List(0, chunk.length)))
+          // Follow link to next block. The Link pointer is the last element of the chunk
+          val linkPtr = LocalReference(PointerType(), freshName("link_pointer"))
+          emit(GetElementPtr(linkPtr.name, tpe, currentEnvironmentPtr, List(0, chunk.length)))
 
-            val linkVal = LocalReference(positiveType, freshName("link"))
-            emit(Load(linkVal.name, positiveType, linkPtr, alias))
+          val linkVal = LocalReference(positiveType, freshName("link"))
+          emit(Load(linkVal.name, positiveType, linkPtr, Object))
 
-            val nextObj = LocalReference(objectType, freshName("next_object"))
-            emit(ExtractValue(nextObj.name, linkVal, 1))
+          val nextObj = LocalReference(objectType, freshName("next_object"))
+          emit(ExtractValue(nextObj.name, linkVal, 1))
 
-            val nextEnv = LocalReference(environmentType, freshName("environment"))
-            emit(Call(nextEnv.name, Ccc(), environmentType, objectEnvironment, List(nextObj)))
-            currentEnvironmentPtr = nextEnv
-          }
+          val nextEnv = LocalReference(environmentType, freshName("environment"))
+          emit(Call(nextEnv.name, Ccc(), environmentType, objectEnvironment, List(nextObj)))
+          currentEnvironmentPtr = nextEnv
         }
-      case _: AliasInfo =>
-        val tpe = environmentType(environment)
-        loadAllVariables(elementPointer, environment, alias, tpe)
+      }
+    } else {
+      loadEnvironmentAt(elementPointer, environment, Object, environmentType(environment))
     }
   }
 
@@ -919,7 +917,7 @@ object Transformer {
     emit(Call(lastObjectReference.name, Ccc(), objectType, newObject, List(lastEraser, lastSize)))
     emit(Call(lastEnvPtr.name, Ccc(), environmentType, objectEnvironment, List(lastObjectReference)))
     shareValues(lastEnvironment, freeInBody)
-    storeEnvironment(lastEnvPtr, lastEnvironment, Object)
+    storeEnvironment(lastEnvPtr, lastEnvironment)
 
     // Chain preceding blocks, each storing a boxed link to the next object
     var headObject: LocalReference = lastObjectReference
@@ -954,11 +952,11 @@ object Transformer {
     emit(Call(objectReference.name, Ccc(), objectType, newObject, List(eraser, size)));
     emit(Call(environmentReference.name, Ccc(), environmentType, objectEnvironment, List(objectReference)));
     shareValues(environment, freeInBody);
-    storeEnvironment(environmentReference, environment, Object);
+    storeEnvironment(environmentReference, environment);
     objectReference
   }
 
-  private def loadAllVariables(pointer: Operand, environment: machine.Environment, alias: AliasInfo, typ: Type)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+  private def loadEnvironmentAt(pointer: Operand, environment: machine.Environment, alias: AliasInfo, typ: Type)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     environment.zipWithIndex.foreach {
       case (machine.Variable(name, tpe), i) =>
         val field = LocalReference(PointerType(), freshName(name + "_pointer"))
@@ -1041,7 +1039,7 @@ object Transformer {
 
   private def createReleaseShareChildrenAndEraseBasicBlock(label: String, environment: machine.Environment, freeInBody: Set[machine.Variable], `object`: Operand, environmentRef: LocalReference)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     implicit val BC = BlockContext()
-    loadEnvironmentAt(environmentRef, environment, Object)
+    loadObjectEnvironmentAt(environmentRef, environment)
     shareValues(environment, freeInBody)
     emit(Call("_", Ccc(), VoidType(), eraseObject, List(`object`)))
     emit(BasicBlock(label, BC.instructions, RetVoid()))
