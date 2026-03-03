@@ -2,12 +2,8 @@ package effekt
 package generator
 package llvm
 
-import effekt.generator.llvm.Type as LLVMType
-import effekt.generator.llvm.Instruction.{Call, Load}
-import effekt.generator.llvm.Transformer.{ModuleContext, createReleaseFunction, emit, environmentType, freshName, objectEnvironment}
 import effekt.machine
-import effekt.machine.{Environment, Variable}
-import effekt.machine.analysis.*
+import effekt.machine.analysis.freeVariables
 import effekt.util.intercalate
 import effekt.util.messages.ErrorReporter
 
@@ -1060,12 +1056,12 @@ object Transformer {
    * It might be that an object consists of several slots.
    * Each slot is pushed onto the free list.
    */
-  private def createReleasePushOntoFreeListBasicBlock(releaseLabel: String, environment: Environment, freeInBody: Set[machine.Variable], `object`: Operand, environmentRef: LocalReference)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+  private def createReleasePushOntoFreeListBasicBlock(releaseLabel: String, environment: machine.Environment, freeInBody: Set[machine.Variable], `object`: Operand, environmentRef: LocalReference)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     val allInstructions = mutable.ListBuffer[Instruction](Call("_", Ccc(), VoidType(), ConstantGlobal("pushOntoFreeList"), List(`object`)))
     var currentEnvironmentPtr = environmentRef
     val slottedEnvironment = splitEnvironment(environment)
 
-    slottedEnvironment.zipWithIndex.foreach { case (slotEnv: Environment, index: Int) =>
+    slottedEnvironment.zipWithIndex.foreach { case (slotEnv: machine.Environment, index: Int) =>
       val isLastSlot = index == slottedEnvironment.length - 1
       val slotEnvTypes = if (isLastSlot) environmentType(slotEnv) else StructureType(slotEnv.map { case machine.Variable(_, t) => transform(t) } :+ positiveType)
 
@@ -1167,7 +1163,7 @@ object Transformer {
     ), RetVoid()))
   }
 
-  private def createAndEmitEraseChildrenBasicBlock(freshEnvironment: Environment, eraseChildrenLabel: String)(using ModuleContext, FunctionContext): Unit = {
+  private def createAndEmitEraseChildrenBasicBlock(freshEnvironment: machine.Environment, eraseChildrenLabel: String)(using ModuleContext, FunctionContext): Unit = {
     val environmentRef = LocalReference(environmentType, freshName("environment"))
     val eraseChildrenInstructions = mutable.ListBuffer[Instruction]()
 
@@ -1208,7 +1204,7 @@ object Transformer {
     }
   }
 
-  private def emitElementPtrAndLoadOfEnvironmentVariable(environmentRef: LocalReference, eraseChildrenInstructions: ListBuffer[Instruction], envType: LLVMType, tpe: machine.Type, i: Int, fieldPtr: LocalReference, loadedVarName: String, eraserFunction: ConstantGlobal) = {
+  private def emitElementPtrAndLoadOfEnvironmentVariable(environmentRef: LocalReference, eraseChildrenInstructions: ListBuffer[Instruction], envType: llvm.Type, tpe: machine.Type, i: Int, fieldPtr: LocalReference, loadedVarName: String, eraserFunction: ConstantGlobal) = {
     eraseChildrenInstructions += GetElementPtr(fieldPtr.name, envType, environmentRef, List(0, i))
     eraseChildrenInstructions += Load(loadedVarName, transform(tpe), fieldPtr, Object)
     eraseChildrenInstructions += Call("_", Ccc(), VoidType(), eraserFunction, List(LocalReference(transform(tpe), loadedVarName)))
