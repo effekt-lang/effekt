@@ -80,7 +80,7 @@ jobs:
     needs: [build-jar]
     steps:
       - name: Download npm package
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: effekt-npm-package
 
