@@ -3,10 +3,13 @@ module scanner
 import stream
 
 
+/// Return the next character, not advancing.
+/// That is, this does not change what any future calls on the Scanner return.
 effect peek[A](): A / stop
 
 effect Scan[A] = {read[A], peek[A]}
 
+/// Advance the pull stream to the next element, discarding the current element.
 def skip[A](): Unit / {read[A], stop} = { do read(); () }
 
 
