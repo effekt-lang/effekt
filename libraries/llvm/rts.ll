@@ -129,10 +129,7 @@ declare ptr @initializeArena()
 ; list of immediately available slots
 @freeList = private unnamed_addr global ptr null
 ; list of slots where we still need to erase the children
-; initializes the todoList with a sentinel slot.
-; Sentinel Slot: Fakes a block with a RC=1. It is used to mark the end of the To-Do-List.
-; But it is not a real heap-object, because it is not 8-byte aligned.
-@todoList = private unnamed_addr global ptr inttoptr (i64 1 to ptr)
+@todoList = private unnamed_addr global ptr null
 ; space of unused consecutive slots
 @bumpList = private unnamed_addr global ptr null
 
@@ -149,8 +146,8 @@ entry:
 define private ptr @acquire() nounwind {
 entry:
   %freeHead = load ptr, ptr @freeList
-  %isEmpty = icmp eq ptr %freeHead, null
-  br i1 %isEmpty, label %checkTodo, label %freeReuse
+  %isFreeEmpty = icmp eq ptr %freeHead, null
+  br i1 %isFreeEmpty, label %checkTodo, label %freeReuse
 
 ; 1. Fast Path: Reuse block from freeList
 freeReuse:
@@ -162,8 +159,8 @@ freeReuse:
 
 checkTodo:
   %todoHead = load ptr, ptr @todoList
-  %isSentinel = icmp eq ptr %todoHead, inttoptr (i64 1 to ptr)
-  br i1 %isSentinel, label %bumpAlloc, label %todoReuse
+  %isTodoEmpty = icmp eq ptr %todoHead, null
+  br i1 %isTodoEmpty, label %bumpAlloc, label %todoReuse
 
 ; 2. Slot Path: Reuse block from To-Do-List. Here, we have to extra call the eraser to ensure that we can reuse it.
 todoReuse:

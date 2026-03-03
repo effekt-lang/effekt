@@ -102,6 +102,7 @@ export Operand.*
 
 enum EraserKind {
   case ObjectEraser
+  case ChildrenEraser
   case StackEraser
   case StackFrameEraser
 }

@@ -421,6 +421,7 @@ object Transformer {
   val returnAddressType = NamedType("ReturnAddress");
   val sharerType = NamedType("Sharer");
   val eraserType = NamedType("Eraser");
+  val slotType = NamedType("Slot");
   val frameHeaderType = NamedType("FrameHeader");
   val environmentType = NamedType("Environment");
   val objectType = NamedType("Object");
@@ -521,7 +522,32 @@ object Transformer {
     C.erasers.getOrElseUpdate((types, kind), {
       kind match {
         case ObjectEraser =>
-          createEraserForNormalObjects(freshEnvironment)
+          // Called by @eraseObject. Stores the ChildrenEraser into the
+          // slot's eraser field, then pushes the slot onto the todo list for later reuse.
+          val childrenEraser = getEraser(freshEnvironment, ChildrenEraser)
+          val eraser = ConstantGlobal(freshName("eraser"))
+          val eraserFieldPtr = LocalReference(PointerType(), freshName("eraserPointer"))
+          defineFunction(eraser.name, List(Parameter(objectType, "object"))) {
+            emit(Comment(s"object eraser, ${freshEnvironment.length} free variables"))
+            emit(GetElementPtr(eraserFieldPtr.name, slotType, LocalReference(objectType, "object"), List(0, 1)))
+            emit(Store(eraserFieldPtr, childrenEraser, Object))
+            emit(Call("", Ccc(), VoidType(), ConstantGlobal("pushOntoTodoList"), List(LocalReference(objectType, "object"))))
+            RetVoid()
+          }
+          eraser
+        case ChildrenEraser =>
+          // Called by @acquire when a slot is popped from the todo list.
+          // Loads the object's environment and erases each heap-typed child (Pos, Neg, Stack).
+          val eraser = ConstantGlobal(freshName("eraser"))
+          defineFunction(eraser.name, List(Parameter(objectType, "object"))) {
+            emit(Comment(s"children eraser, ${freshEnvironment.length} free variables"))
+            val environmentRef = LocalReference(environmentType, freshName("environment"))
+            emit(Call(environmentRef.name, Ccc(), environmentType, ConstantGlobal("objectEnvironment"), List(LocalReference(objectType, "object"))))
+            loadEnvironmentAt(environmentRef, freshEnvironment, Object)
+            eraseValues(freshEnvironment, Set())
+            RetVoid()
+          }
+          eraser
         case StackEraser | StackFrameEraser =>
           val eraser = ConstantGlobal(freshName("eraser"));
           defineFunction(eraser.name, List(Parameter(stackPointerType, "stackPointer"))) {
@@ -1120,88 +1146,6 @@ object Transformer {
     shareValuesDirectly(environment, freeInBody, allInstructions)
     allInstructions += (Call("_", Ccc(), VoidType(), eraseObject, List(`object`)))
     emit(BasicBlock(shareChildrenLabel, allInstructions.toList, RetVoid()))
-  }
-
-  /**
-   * Creates an eraser for normal objects (e.g. Pos and Neg).
-   * When @eraseObject is called, we also call the eraser. And for Pos and Neg objects, that is the eraser.
-   * The object is called 2 times.
-   * 1. Phase: When call @eraseObject -> We call release to prepend the object to our to-do-list.
-   * 2. Phase: When call acquire -> We call %erase on each child, so the object can be reused again.
-   *
-   * @param freshEnvironment the variables of the object
-   * @return the eraser
-   */
-  private def createEraserForNormalObjects(freshEnvironment: machine.Environment)(using C: ModuleContext): Operand = {
-    val eraser = ConstantGlobal(freshName("eraser"))
-    defineFunction(eraser.name, List(Parameter(objectType, "object"))) {
-      val objectRefCountPtr = LocalReference(PointerType(), freshName("objectReferenceCount"))
-      val referenceCount = LocalReference(referenceCountType, freshName("referenceCount"))
-      val pushOntoTodoListLabel = freshName("pushOntoTodoList")
-      val eraseChildrenLabel = freshName("eraseChildren")
-
-      // Entry block: Check reference count to determine phase
-      // Switch: if refCount == 0, go to "pushOntoTodoList" (first phase), else "eraseChildren" (second phase)
-      // Note: When refCount == 0, this is the first call from eraseObject -> just push onto to-do list
-      //       When refCount != 0, this is the second call from acquire -> erase children
-      emit(GetElementPtr(objectRefCountPtr.name, headerType, LocalReference(objectType, "object"), List(0, 0)))
-      emit(Load(referenceCount.name, referenceCountType, objectRefCountPtr, Object))
-
-      createAndEmitPushOntoTodoBasicBasicBlock(pushOntoTodoListLabel)
-      createAndEmitEraseChildrenBasicBlock(freshEnvironment, eraseChildrenLabel)
-
-      // Return switch terminator from entry block
-      Switch(referenceCount, eraseChildrenLabel, List((0, pushOntoTodoListLabel)))
-    }
-
-    eraser
-  }
-
-  private def createAndEmitPushOntoTodoBasicBasicBlock(releaseLabel: String)(using ModuleContext, FunctionContext): Unit = {
-    emit(BasicBlock(releaseLabel, List(
-      Call("", Ccc(), VoidType(), ConstantGlobal("pushOntoTodoList"), List(LocalReference(objectType, "object")))
-    ), RetVoid()))
-  }
-
-  private def createAndEmitEraseChildrenBasicBlock(freshEnvironment: machine.Environment, eraseChildrenLabel: String)(using ModuleContext, FunctionContext): Unit = {
-    val environmentRef = LocalReference(environmentType, freshName("environment"))
-    val eraseChildrenInstructions = mutable.ListBuffer[Instruction]()
-
-    // Load environment variables and erase them
-    val envType = environmentType(freshEnvironment)
-
-    val isAtLeastOneObjectToRelease: Boolean =
-      freshEnvironment.exists {
-        case machine.Variable(_, tpe) =>
-          tpe match {
-            case machine.Positive() | machine.Negative() | machine.Type.Stack() => true
-            case _ => false
-          }
-      }
-
-    if (isAtLeastOneObjectToRelease) {
-      // Get environment pointer
-      eraseChildrenInstructions += Call(environmentRef.name, Ccc(), environmentType, ConstantGlobal("objectEnvironment"), List(LocalReference(objectType, "object")))
-
-      freshEnvironment.zipWithIndex.foreach { case (machine.Variable(varName, tpe), i) =>
-        val fieldPtr = LocalReference(PointerType(), freshName(varName + "_pointer"))
-        val loadedVarName = freshName(varName)
-        // Erase the value based on its type
-        tpe match {
-          case machine.Positive() =>
-            emitElementPtrAndLoadOfEnvironmentVariable(environmentRef, eraseChildrenInstructions, envType, tpe, i, fieldPtr, loadedVarName, erasePositive)
-          case machine.Negative() =>
-            emitElementPtrAndLoadOfEnvironmentVariable(environmentRef, eraseChildrenInstructions, envType, tpe, i, fieldPtr, loadedVarName, eraseNegative)
-          case machine.Type.Stack() =>
-            emitElementPtrAndLoadOfEnvironmentVariable(environmentRef, eraseChildrenInstructions, envType, tpe, i, fieldPtr, loadedVarName, eraseResumption)
-          case _ => // Int, Byte, Double, Reference, etc. don't need erasing
-        }
-      }
-      emit(BasicBlock(eraseChildrenLabel, eraseChildrenInstructions.toList, RetVoid()))
-    } else {
-      // If not: we can return immediately, since we don't need to erase anything
-      emit(BasicBlock(eraseChildrenLabel, eraseChildrenInstructions.toList, RetVoid()))
-    }
   }
 
   private def emitElementPtrAndLoadOfEnvironmentVariable(environmentRef: LocalReference, eraseChildrenInstructions: ListBuffer[Instruction], envType: llvm.Type, tpe: machine.Type, i: Int, fieldPtr: LocalReference, loadedVarName: String, eraserFunction: ConstantGlobal) = {
