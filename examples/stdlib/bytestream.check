@@ -1,4 +1,4 @@
-Binstream
+Bytestream
 ✓ literal hex 10
 ✓ literal hex ff
 ✓ literal char a
@@ -10,11 +10,10 @@ Binstream
 ✓ to bits and back LE bitorder
 ✓ to bits and back BE bitorder
 ✓ append 0 means *2
-✓ pow agrees with double one
 ✓ LE 2s-complement
 ✓ BE 2s-complement
 
- 14 pass
+ 13 pass
  0 fail
- 14 tests total
+ 13 tests total
  

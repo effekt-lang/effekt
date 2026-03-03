@@ -58,10 +58,10 @@ def bytesLE(int: Int): Unit / emit[Byte] = bytesLE(int, 4)
 
 /// emit bytes of the given int as a w bytes in big-endian byte order
 def bytesBE(n: Int, width: Int): Unit / emit[Byte] = {
-  var pos = pow(256, width - 1)
-  repeat(width){
-    do emit((bitwiseAnd(n, pos * 255) / pos).toByte)
-    pos = pos / 256
+  var shift = bitwiseShl(width - 1, 3)
+  repeat(width) {
+    do emit(bitwiseAnd(bitwiseShr(n, shift), 255).toByte)
+    shift = shift - 8
   }
 }
 
@@ -97,13 +97,13 @@ def signedBytesBE(int: Int): Unit / emit[Byte] = signedBytesBE(int, 4)
 
 /// Splicer to emit the bytes in hex notation given, plus eventual splices
 /// Ignores whitespace
-def hex{ body: => Unit / { literal, HexSplices } }: Unit / emit[Byte] = {
+def hex{ body: => Unit / { write, HexSplices } }: Unit / emit[Byte] = {
   try {
     try {
       body()
     }
     with splice[String] { s =>
-      feed(s){ exhaustively{ do splice[Char](do read[Char]()) } }
+      feed(s){ loop { do splice[Char](do read[Char]()) } }
       resume(())
     }
     with splice[ByteArray] { ba =>
@@ -111,13 +111,14 @@ def hex{ body: => Unit / { literal, HexSplices } }: Unit / emit[Byte] = {
       resume(())
     }
   }
-  with literal { s =>
+  with write { s =>
       feed(s){
-        exhaustively {
-          with on[MissingValue].default{ () }
-          val upper: Int = hexDigitValue(do read[Char]()).value
-          val lower: Int = hexDigitValue(do read[Char]()).value
-          do emit[Byte]((16 * upper + lower).toByte)
+        loop {
+          attempt {
+            val upper: Int = hexDigitValue(do read[Char]())
+            val lower: Int = hexDigitValue(do read[Char]())
+            do emit[Byte]((16 * upper + lower).toByte)
+          } { () }
         }
       }
       resume(())
@@ -137,7 +138,7 @@ def hex{ body: => Unit / { literal, HexSplices } }: Unit / emit[Byte] = {
 }
 
 /// convert the given hex notation to an integer (big-endian)
-def x{ body: => Unit / { literal, HexSplices } }: Int = {
+def x{ body: => Unit / { write, HexSplices } }: Int = {
   var res = 0
   for[Byte]{ hex{body} }{ v => res = res * 256 + v.toInt }
   res
@@ -189,7 +190,7 @@ def bitsLE(v: Int, width: Int): Unit / emit[Bit] = {
 
 /// emit bits of the given int as width Bits in big-endian bit order
 def bitsBE(v: Int, width: Int): Unit / emit[Bit] = {
-  var mask = pow(2, width - 1)
+  var mask = bitwiseShl(1, width - 1)
   repeat(width){
     bitwiseAnd(v, mask) match {
       case 0 => do emit(B0())  
@@ -280,7 +281,7 @@ effect BitSplices = {
 }
 /// Splicer to emit the bits in binary notation given, plus evenutal splices
 /// Ignores whitespace
-def bit{ body: => Unit / { literal, BitSplices } }: Unit / emit[Bit] = {
+def bit{ body: => Unit / { write, BitSplices } }: Unit / emit[Bit] = {
   try {
     ungroupBytesBE{
       try {
@@ -292,9 +293,9 @@ def bit{ body: => Unit / { literal, BitSplices } }: Unit / emit[Bit] = {
       with splice[BE[Signed[Int]]] { i => signedBytesBE(i.raw.raw); resume(()) }
     }
   }
-  with literal { s =>
+  with write { s =>
     feed(s){
-      exhaustively {
+      loop {
         do read[Char]() match {
           case '0' => do emit(B0())
           case '1' => do emit(B1())
@@ -324,7 +325,7 @@ def bit{ body: => Unit / { literal, BitSplices } }: Unit / emit[Bit] = {
     resume(())
   }
   with splice[OfWidth[BE[Signed[Int]]]] { i =>
-    collectList[Bit]{
+    list::collect[Bit]{
       if(i.raw.raw.raw < 0){
         twoscomplementLE{ bitsLE(0 - i.raw.raw.raw, i.width) }
       } else {
