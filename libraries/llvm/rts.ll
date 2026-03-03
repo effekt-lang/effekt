@@ -93,8 +93,6 @@
 %String = type %Pos
 
 ; Foreign imports
-declare ptr @initializeArena()
-
 declare ptr @malloc(i64)
 declare void @free(ptr)
 declare ptr @realloc(ptr, i64)
@@ -119,6 +117,7 @@ declare void @print(i64)
 declare void @exit(i64)
 declare void @llvm.assume(i1)
 
+declare ptr @initializeArena()
 
 ; typedef struct Slot
 ; {
@@ -138,8 +137,9 @@ declare void @llvm.assume(i1)
 ; Initializes the memory for our effekt-objects that are created by newObject and deleted by eraseObject.
 define private void @initializeMemory() nounwind {
 entry:
-  %startAddress = call noalias ptr @initializeArena()  ;How much storage do we allocate at the beginning of a program? =4GB
-  store i8* %startAddress, i8** @nextUnusedSlot
+  ; we need this because flags for mmap differ between platforms
+  %startAddress = call noalias ptr @initializeArena()
+  store ptr %startAddress, ptr @nextUnusedSlot
   ret void
 }
 
