@@ -723,49 +723,6 @@ object Transformer {
     }
   }
 
-  def loadEnvironmentAtDirectly(elementPointer: Operand, environment: machine.Environment, alias: AliasInfo, allInstructions: mutable.ListBuffer[Instruction])(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    alias match {
-      // if we have a sharded object
-      case Object if !fitsInOneSavingSlot(environment) =>
-        // Follow chained ${slotSize}-byte blocks created in produceObject
-        val chunkedEnvironments = splitEnvironment(environment)
-        var currentEnvironmentPtr: Operand = elementPointer
-
-        // here we loop over all environments *in* order
-        chunkedEnvironments.zipWithIndex.foreach { case (chunk, idx) =>
-          val isLast = idx == chunkedEnvironments.length - 1
-          if (isLast) {
-            val tpe = environmentType(chunk)
-            loadAllVariablesDirectly(currentEnvironmentPtr, chunk, alias, tpe, allInstructions)
-          } else {
-            // Here we do the same as for the normal slot plus some extra stuff
-
-            // For non-last chunkedEnvironments, layout is chunk ++ [Pos link]
-            val tpe = StructureType(chunk.map { case machine.Variable(_, t) => transform(t) } :+ positiveType) // the same as for the normal case + positive Type for the link
-            loadAllVariablesDirectly(currentEnvironmentPtr, chunk, alias, tpe, allInstructions)
-
-            // Follow link to next block. The Link pointer is the last element of the chunk
-            val linkPtr = LocalReference(PointerType(), freshName("link_pointer"))
-            allInstructions += GetElementPtr(linkPtr.name, tpe, currentEnvironmentPtr, List(0, chunk.length))
-
-            val linkVal = LocalReference(positiveType, freshName("link"))
-            allInstructions += Load(linkVal.name, positiveType, linkPtr, alias)
-
-            val nextObj = LocalReference(objectType, freshName("next_object"))
-            allInstructions += ExtractValue(nextObj.name, linkVal, 1)
-
-            val nextEnv = LocalReference(environmentType, freshName("environment"))
-            allInstructions += Call(nextEnv.name, Ccc(), environmentType, objectEnvironment, List(nextObj))
-            currentEnvironmentPtr = nextEnv
-          }
-        }
-      case _: AliasInfo =>
-        val tpe = environmentType(environment)
-        loadAllVariablesDirectly(elementPointer, environment, alias, tpe, allInstructions)
-
-    }
-  }
-
   def shareValues(values: machine.Environment, freeInBody: Set[machine.Variable])(using FunctionContext, BlockContext): Unit = {
     @tailrec
     def loop(values: machine.Environment): Unit = {
@@ -786,29 +743,6 @@ object Transformer {
     loop(values)
   }
 
-  /*
-     * Adds all sharing functions to the allInstructions list
-     */
-  def shareValuesDirectly(values: machine.Environment, freeInBody: Set[machine.Variable], allInstructions: ListBuffer[Instruction])(using FunctionContext, BlockContext): Unit = {
-    @tailrec
-    def loop(values: machine.Environment): Unit = {
-      values match {
-        case Nil => ()
-        case value :: values =>
-          if values.contains(value) then {
-            shareValueDirectly(value, allInstructions);
-            loop(values)
-          } else if freeInBody.contains(value) then {
-            shareValueDirectly(value, allInstructions);
-            loop(values)
-          } else {
-            loop(values)
-          }
-      }
-    };
-    loop(values)
-  }
-
   def eraseValues(environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Unit =
     environment.foreach { value =>
       if !freeInBody.contains(value) then eraseValue(value)
@@ -820,17 +754,6 @@ object Transformer {
       case machine.Negative()    => Call("_", Ccc(), VoidType(), shareNegative, List(transform(value)))
       case machine.Type.Stack()  => Call("_", Ccc(), VoidType(), shareResumption, List(transform(value)))
     }.map(emit)
-  }
-
-  /**
-   * adds the sharing Functions to the allInstructions list.
-   */
-  def shareValueDirectly(value: machine.Variable, allInstructions: ListBuffer[Instruction])(using FunctionContext, BlockContext): Unit = {
-    Option(value.tpe).collect {
-      case machine.Positive() => allInstructions += (Call("_", Ccc(), VoidType(), sharePositive, List(transform(value))))
-      case machine.Negative() => allInstructions += Call("_", Ccc(), VoidType(), shareNegative, List(transform(value)))
-      case machine.Type.Stack() => allInstructions += Call("_", Ccc(), VoidType(), shareResumption, List(transform(value)))
-    }
   }
 
   def eraseValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
@@ -1044,15 +967,6 @@ object Transformer {
     }
   }
 
-  private def loadAllVariablesDirectly(pointer: Operand, environment: machine.Environment, alias: AliasInfo, typ: Type, allInstructions: mutable.ListBuffer[Instruction])(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    environment.zipWithIndex.foreach {
-      case (machine.Variable(name, tpe), i) =>
-        val field = LocalReference(PointerType(), freshName(name + "_pointer"))
-        allInstructions += GetElementPtr(field.name, typ, pointer, List(0, i))
-        allInstructions += Load(name, transform(tpe), field, alias)
-    }
-  }
-
   private def createReleaseFunction(releaseLabel: String, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Terminator = {
     val pushOntoFreeListLabel = freshName("pushOntoFreeList")
     val shareChildrenAndEraseLabel = freshName("shareChildrenAndErase")
@@ -1083,75 +997,54 @@ object Transformer {
    * Each slot is pushed onto the free list.
    */
   private def createReleasePushOntoFreeListBasicBlock(releaseLabel: String, environment: machine.Environment, freeInBody: Set[machine.Variable], `object`: Operand, environmentRef: LocalReference)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    val allInstructions = mutable.ListBuffer[Instruction](Call("_", Ccc(), VoidType(), ConstantGlobal("pushOntoFreeList"), List(`object`)))
-    var currentEnvironmentPtr = environmentRef
+    implicit val BC = BlockContext()
+    emit(Call("_", Ccc(), VoidType(), ConstantGlobal("pushOntoFreeList"), List(`object`)))
+    var currentEnvironmentPtr: Operand = environmentRef
     val slottedEnvironment = splitEnvironment(environment)
 
-    slottedEnvironment.zipWithIndex.foreach { case (slotEnv: machine.Environment, index: Int) =>
+    slottedEnvironment.zipWithIndex.foreach { case (slotEnv, index) =>
       val isLastSlot = index == slottedEnvironment.length - 1
       val slotEnvTypes = if (isLastSlot) environmentType(slotEnv) else StructureType(slotEnv.map { case machine.Variable(_, t) => transform(t) } :+ positiveType)
 
-      slotEnv.zipWithIndex.foreach { case (variable@machine.Variable(varName, tpe), i) =>
-        val isHeapType = tpe match {
-          case machine.Positive() | machine.Negative() | machine.Type.Stack() => true
-          case _ => false
-        }
-
-        if (isHeapType) {
-          val variableType = transform(tpe)
-          val fieldPtr = LocalReference(PointerType(), freshName(varName + "_pointer"))
-          val loadedVar = LocalReference(variableType, freshName(varName))
-
-          // Load the variable
-          allInstructions += GetElementPtr(fieldPtr.name, slotEnvTypes, currentEnvironmentPtr, List(0, i))
-          allInstructions += Load(loadedVar.name, variableType, fieldPtr, Object)
-
-          val isVariableFreeInBody = freeInBody.contains(variable)
-
-          if (!isVariableFreeInBody) {
-            // Variable is used in the scope -> erase it
-            val erasingFunction = getErasingFunctionForType(variableType)
-            allInstructions += Call("_", Ccc(), VoidType(), erasingFunction, List(loadedVar))
-          }
+      slotEnv.zipWithIndex.foreach { case (variable @ machine.Variable(varName, tpe), i) =>
+        tpe match {
+          case machine.Positive() | machine.Negative() | machine.Type.Stack() =>
+            val variableType = transform(tpe)
+            val fieldPtr = LocalReference(PointerType(), freshName(varName + "_pointer"))
+            val loadedVar = LocalReference(variableType, freshName(varName))
+            emit(GetElementPtr(fieldPtr.name, slotEnvTypes, currentEnvironmentPtr, List(0, i)))
+            emit(Load(loadedVar.name, variableType, fieldPtr, Object))
+            if (!freeInBody.contains(variable)) {
+              emit(Call("_", Ccc(), VoidType(), getErasingFunctionForType(variableType), List(loadedVar)))
+            }
+          case _ =>
         }
       }
 
       if (!isLastSlot) {
-        // erase the link slot
         val linkIndexOfSlot = slotEnv.length
         val linkPtr = LocalReference(PointerType(), freshName("link_pointer"))
         val linkVal = LocalReference(positiveType, freshName("link"))
         val nextObj = LocalReference(objectType, freshName("next_object"))
         val nextEnv = LocalReference(environmentType, freshName("environment"))
-
-        // add all instructions
-        allInstructions += GetElementPtr(linkPtr.name, slotEnvTypes, currentEnvironmentPtr, List(0, linkIndexOfSlot))
-        allInstructions += Load(linkVal.name, positiveType, linkPtr, Object)
-        allInstructions += ExtractValue(nextObj.name, linkVal, 1)
-        allInstructions += Call("_", Ccc(), VoidType(), ConstantGlobal("pushOntoFreeList"), List(nextObj))
-        allInstructions += Call(nextEnv.name, Ccc(), environmentType, objectEnvironment, List(nextObj))
-
-        // now we have to follow the link to the next environment
+        emit(GetElementPtr(linkPtr.name, slotEnvTypes, currentEnvironmentPtr, List(0, linkIndexOfSlot)))
+        emit(Load(linkVal.name, positiveType, linkPtr, Object))
+        emit(ExtractValue(nextObj.name, linkVal, 1))
+        emit(Call("_", Ccc(), VoidType(), ConstantGlobal("pushOntoFreeList"), List(nextObj)))
+        emit(Call(nextEnv.name, Ccc(), environmentType, objectEnvironment, List(nextObj)))
         currentEnvironmentPtr = nextEnv
       }
     }
 
-    emit(BasicBlock(releaseLabel, allInstructions.toList, RetVoid()))
+    emit(BasicBlock(releaseLabel, BC.instructions, RetVoid()))
   }
 
-  private def createReleaseShareChildrenAndEraseBasicBlock(shareChildrenLabel: String, environment: machine.Environment, freeInBody: Set[machine.Variable], `object`: Operand, environmentRef: LocalReference)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    val allInstructions = mutable.ListBuffer[Instruction]()
-    // Step 02: Load all variables
-    loadEnvironmentAtDirectly(environmentRef, environment, Object, allInstructions)
-    shareValuesDirectly(environment, freeInBody, allInstructions)
-    allInstructions += (Call("_", Ccc(), VoidType(), eraseObject, List(`object`)))
-    emit(BasicBlock(shareChildrenLabel, allInstructions.toList, RetVoid()))
-  }
-
-  private def emitElementPtrAndLoadOfEnvironmentVariable(environmentRef: LocalReference, eraseChildrenInstructions: ListBuffer[Instruction], envType: llvm.Type, tpe: machine.Type, i: Int, fieldPtr: LocalReference, loadedVarName: String, eraserFunction: ConstantGlobal) = {
-    eraseChildrenInstructions += GetElementPtr(fieldPtr.name, envType, environmentRef, List(0, i))
-    eraseChildrenInstructions += Load(loadedVarName, transform(tpe), fieldPtr, Object)
-    eraseChildrenInstructions += Call("_", Ccc(), VoidType(), eraserFunction, List(LocalReference(transform(tpe), loadedVarName)))
+  private def createReleaseShareChildrenAndEraseBasicBlock(label: String, environment: machine.Environment, freeInBody: Set[machine.Variable], `object`: Operand, environmentRef: LocalReference)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+    implicit val BC = BlockContext()
+    loadEnvironmentAt(environmentRef, environment, Object)
+    shareValues(environment, freeInBody)
+    emit(Call("_", Ccc(), VoidType(), eraseObject, List(`object`)))
+    emit(BasicBlock(label, BC.instructions, RetVoid()))
   }
 
   /**
