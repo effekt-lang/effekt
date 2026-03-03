@@ -703,7 +703,7 @@ extern def bitwiseXor(x: Int, y: Int) at {}: Int =
   llvm "%z = xor %Int ${x}, ${y} ret %Int %z"
   vm "effekt::bitwiseXor(Int, Int)"
 
-extern pure def bitwiseNot(x: Int): Int =
+extern def bitwiseNot(x: Int) at {}: Int =
   js "(~${x})"
   chez "(lognot ${x})"
   llvm "%z = xor %Int ${x}, -1 ret %Int %z"
