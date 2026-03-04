@@ -555,7 +555,7 @@ object Transformer {
             val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
             emit(GetElementPtr(nextStackPointer.name, environmentType(freshEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
 
-            loadEnvironmentAt(nextStackPointer, freshEnvironment, StackPointer, environmentType(environment))
+            loadEnvironmentAt(nextStackPointer, freshEnvironment, StackPointer)
 
             eraseValues(freshEnvironment, Set());
             val next = if (kind == StackEraser) freeStack else eraseFrames // TODO: improve this (in RTS?)
@@ -580,7 +580,7 @@ object Transformer {
 
         val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
         emit(GetElementPtr(nextStackPointer.name, environmentType(freshEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
-        loadEnvironmentAt(nextStackPointer, freshEnvironment, StackPointer, environmentType(environment))
+        loadEnvironmentAt(nextStackPointer, freshEnvironment, StackPointer)
 
         shareValues(freshEnvironment, Set.from(freshEnvironment));
 
@@ -662,7 +662,7 @@ object Transformer {
       val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
       val size = ConstantInt(environmentSize(environment));
       emit(Call(stackPointer.name, Ccc(), stackPointer.tpe, stackDeallocate, List(stack, size)));
-      loadEnvironmentAt(stackPointer, environment, StackPointer, environmentType(environment))
+      loadEnvironmentAt(stackPointer, environment, StackPointer)
     }
   }
 
@@ -692,32 +692,22 @@ object Transformer {
       chunkedEnvironments.zipWithIndex.foreach { case (chunk, idx) =>
         val isLast = idx == chunkedEnvironments.length - 1
         if (isLast) {
-          val tpe = environmentType(chunk)
-          loadEnvironmentAt(currentEnvironmentPtr, chunk, Object, tpe)
+          loadEnvironmentAt(currentEnvironmentPtr, chunk, Object)
         } else {
-          // Here we do the same as for the normal slot plus some extra stuff
+          val link = machine.Variable(freshName("link"), machine.Positive())
+          val extendedChunk = chunk :+ link
+          loadEnvironmentAt(currentEnvironmentPtr, extendedChunk, Object)
 
-          // For non-last chunkedEnvironments, layout is chunk ++ [Pos link]
-          val tpe = StructureType(chunk.map { case machine.Variable(_, t) => transform(t) } :+ positiveType) // the same as for the normal case + positive Type for the link
-          loadEnvironmentAt(currentEnvironmentPtr, chunk, Object, tpe)
-
-          // Follow link to next block. The Link pointer is the last element of the chunk
-          val linkPtr = LocalReference(PointerType(), freshName("link_pointer"))
-          emit(GetElementPtr(linkPtr.name, tpe, currentEnvironmentPtr, List(0, chunk.length)))
-
-          val linkVal = LocalReference(positiveType, freshName("link"))
-          emit(Load(linkVal.name, positiveType, linkPtr, Object))
-
+          // Follow link to next block
           val nextObj = LocalReference(objectType, freshName("next_object"))
-          emit(ExtractValue(nextObj.name, linkVal, 1))
-
+          emit(ExtractValue(nextObj.name, LocalReference(positiveType, link.name), 1))
           val nextEnv = LocalReference(environmentType, freshName("environment"))
           emit(Call(nextEnv.name, Ccc(), environmentType, objectEnvironment, List(nextObj)))
           currentEnvironmentPtr = nextEnv
         }
       }
     } else {
-      loadEnvironmentAt(elementPointer, environment, Object, environmentType(environment))
+      loadEnvironmentAt(elementPointer, environment, Object)
     }
   }
 
@@ -956,7 +946,8 @@ object Transformer {
     objectReference
   }
 
-  private def loadEnvironmentAt(pointer: Operand, environment: machine.Environment, alias: AliasInfo, typ: Type)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+  private def loadEnvironmentAt(pointer: Operand, environment: machine.Environment, alias: AliasInfo)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+    val typ = environmentType(environment)
     environment.zipWithIndex.foreach {
       case (machine.Variable(name, tpe), i) =>
         val field = LocalReference(PointerType(), freshName(name + "_pointer"))
