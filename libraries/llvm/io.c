@@ -826,15 +826,14 @@ void c_spawn(struct Pos cmd, struct Pos args, struct Pos options, Stack stack) {
     }
 }
 
-// Returns the required buffer size (including null terminator) if the
-// variable exists, or -1 if it does not.
+// Returns the required buffer size if the variable exists, or -1 if it does not.
 // This avoids allocating when the variable is not set.
 Int c_getenv_size(struct Pos name) {
     char* name_str = c_bytearray_into_nullterminated_string(name);
     erasePositive(name);
 
     char dummy;
-    size_t size = 1;
+    size_t size = 1; // Note: size = 1 is required, otherwise libuv always returns EINVAL.
     int result = uv_os_getenv(name_str, &dummy, &size);
     free(name_str);
 
