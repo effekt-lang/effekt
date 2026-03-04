@@ -18,6 +18,7 @@ import io
 import io/channel
 import io/console
 import io/error
+import io/env
 import io/filesystem
 import io/network
 import io/promise

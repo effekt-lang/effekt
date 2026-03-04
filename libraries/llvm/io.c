@@ -826,4 +826,42 @@ void c_spawn(struct Pos cmd, struct Pos args, struct Pos options, Stack stack) {
     }
 }
 
+// Returns the required buffer size (including null terminator) if the
+// variable exists, or -1 if it does not.
+// This avoids allocating when the variable is not set.
+Int c_getenv_size(struct Pos name) {
+    char* name_str = c_bytearray_into_nullterminated_string(name);
+    erasePositive(name);
+
+    char dummy;
+    size_t size = 1;
+    int result = uv_os_getenv(name_str, &dummy, &size);
+    free(name_str);
+
+    if (result == UV_ENOENT) return -1;
+    if (result == 0 || result == UV_ENOBUFS) return (Int)(size + 1);
+    return -1;
+}
+
+// Returns the value, given the caller already knows it exists with
+// the given buffer size. Caller passes the size from c_getenv_size.
+struct Pos c_getenv_value(struct Pos name, Int size) {
+    char* name_str = c_bytearray_into_nullterminated_string(name);
+    erasePositive(name);
+
+    char* buffer = malloc((size_t)size);
+    size_t buf_size = (size_t)size;
+    int result = uv_os_getenv(name_str, buffer, &buf_size);
+    free(name_str);
+
+    if (result != 0) {
+        free(buffer);
+        return c_bytearray_new(0); // empty string fallback
+    }
+
+    struct Pos value = c_bytearray_from_nullterminated_string(buffer);
+    free(buffer);
+    return value;
+}
+
 #endif
