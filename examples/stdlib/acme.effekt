@@ -17,6 +17,7 @@ import heap
 import io
 import io/channel
 import io/console
+import io/env
 import io/error
 import io/filesystem
 import io/network
