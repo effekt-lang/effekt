@@ -839,7 +839,7 @@ Int c_getenv_size(struct Pos name) {
     free(name_str);
 
     if (result == UV_ENOENT) return -1;
-    if (result == 0 || result == UV_ENOBUFS) return (Int)(size + 1);
+    if (result == 0 || result == UV_ENOBUFS) return (Int)size;
     return -1;
 }
 
@@ -855,8 +855,10 @@ struct Pos c_getenv_value(struct Pos name, Int size) {
     free(name_str);
 
     if (result != 0) {
+        // This should not happen, since we already checked with `c_getenv_size`
+        // ...but in case it does, we return an empty string instead.
         free(buffer);
-        return c_bytearray_new(0); // empty string fallback
+        return c_bytearray_new(0);
     }
 
     struct Pos value = c_bytearray_from_nullterminated_string(buffer);
