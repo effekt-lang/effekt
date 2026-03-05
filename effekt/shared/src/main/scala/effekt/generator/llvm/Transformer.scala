@@ -550,22 +550,6 @@ object Transformer {
     emit(Load(returnAddressName, returnAddressType, returnAddressPointer, StackPointer));
   }
 
-  def loadEnvironment(environmentPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    if (environment.isEmpty) {
-      ()
-    } else {
-      loadObjectEnvironmentAt(environmentPointer, environment);
-    }
-  }
-
-  def storeEnvironment(environmentPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    if (environment.isEmpty) {
-      ()
-    } else {
-      storeEnvironmentAt(environmentPointer, environment, Object);
-    }
-  }
-
   /**
    * Produces an Object. It is always ${slotSize} bytes long
    */
@@ -584,9 +568,13 @@ object Transformer {
       ()
     } else {
       // Step 01: We load the variables of the environment such that the continuation can continue
-      val environmentReference = LocalReference(environmentType, freshName("environment"));
-      emit(Call(environmentReference.name, Ccc(), environmentType, objectEnvironment, List(`object`)));
-      loadEnvironment(environmentReference, environment)
+      val environmentPointer = LocalReference(environmentType, freshName("environment"));
+      emit(Call(environmentPointer.name, Ccc(), environmentType, objectEnvironment, List(`object`)));
+      if (environment.isEmpty) {
+        ()
+      } else {
+        loadObjectEnvironmentAt(environmentPointer, environment);
+      }
 
       // Step 02: we create the release function for this object
       val release = ConstantGlobal(freshName("release"));
@@ -705,7 +693,11 @@ object Transformer {
     emit(Call(lastObjectReference.name, Ccc(), objectType, newObject, List(lastEraser, lastSize)))
     emit(Call(lastEnvPtr.name, Ccc(), environmentType, objectEnvironment, List(lastObjectReference)))
     shareValues(lastEnvironment, freeInBody)
-    storeEnvironment(lastEnvPtr, lastEnvironment)
+    if (environment.isEmpty) {
+      ()
+    } else {
+      storeEnvironmentAt(lastEnvPtr, lastEnvironment, Object);
+    }
 
     // Chain preceding blocks, each storing a boxed link to the next object
     var headObject: LocalReference = lastObjectReference
@@ -733,14 +725,18 @@ object Transformer {
    */
   private def produceSingleObject(role: String, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): LocalReference = {
     val objectReference = LocalReference(objectType, freshName(role))
-    val environmentReference = LocalReference(environmentType, freshName("environment"))
+    val environmentPointer = LocalReference(environmentType, freshName("environment"))
     val size = ConstantInt(environmentSize(environment))
     val eraser = getEraser(environment, ObjectEraser)
 
     emit(Call(objectReference.name, Ccc(), objectType, newObject, List(eraser, size)));
-    emit(Call(environmentReference.name, Ccc(), environmentType, objectEnvironment, List(objectReference)));
+    emit(Call(environmentPointer.name, Ccc(), environmentType, objectEnvironment, List(objectReference)));
     shareValues(environment, freeInBody);
-    storeEnvironment(environmentReference, environment);
+    if (environment.isEmpty) {
+      ()
+    } else {
+      storeEnvironmentAt(environmentPointer, environment, Object);
+    }
     objectReference
   }
 
