@@ -3,6 +3,7 @@ module bytearray
 import effekt
 import stream
 import control
+import array
 
 /**
  * A memory managed, mutable, fixed-length array of bytes.
@@ -127,6 +128,32 @@ def resize(source: ByteArray, size: Int): ByteArray = {
       target
     }
   go(0)
+}
+
+/// In-place counting sort for byte arrays
+///
+/// Allocates a temporary array of 256 integers
+def sort(arr: ByteArray): Unit = {
+  val length = arr.size
+  if (length <= 1) {
+    ()
+  } else {
+    // Count occurrences of each byte value
+    val counts = array::allocateZeros(256)
+    each(0, length) { i =>
+      val byte = arr.get(i).toInt
+      counts.set(byte, counts.get(byte) + 1)
+    }
+
+    // Write back in sorted order (like RLE decoding)
+    var pos = 0
+    counts.foreachIndex { (n, count) =>
+      count.repeat {
+        arr.set(pos, n.toByte)
+        pos = pos + 1
+      }
+    }
+  }
 }
 
 def foreach(arr: ByteArray){ action: Byte => Unit }: Unit =
