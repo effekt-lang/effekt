@@ -215,3 +215,48 @@ def toList[T](arr: ResizableArray[T]): List[T] = {
 
   go(arr.size - 1, Nil())
 }
+
+
+/// Turns `arr` into a producer of a push stream
+/// by emitting each contained value from 0 to length - 1.
+def each[T](arr: ResizableArray[T]): Unit / emit[T] =
+  each(0, arr.size) { i =>
+    do emit(arr.rawContentPtr.get.get(i))
+  }
+
+/// Connects `arr` as a producer to a given pull stream `reader` acting as a consumer.
+def feed[R, T](arr: ResizableArray[T]) { reader: () => R / read[T] }: R = {
+  var i = 0
+  try {
+    reader()
+  } with read[T] {
+    resume {
+      if (i < arr.size) {
+        val v = arr.rawContentPtr.get.get(i)
+        i = i + 1
+        v
+      } else {
+        do stop()
+      }
+    }
+  }
+}
+
+/// Collects elements emitted by a push stream producer `stream` into a new resizable array,
+/// discarding the result of the producer.
+def collect[T] { stream: () => Unit / emit[T] }: ResizableArray[T] =
+  returning::collect[T, Unit]{stream}.second
+
+namespace returning {
+  /// Collects elements emitted by a push stream producer `stream` into a new resizable array,
+  /// returning the result of the producer as well as the collected array.
+  def collect[T, R] { stream: () => R / emit[T] }: (R, ResizableArray[T]) = {
+    val arr = resizableArray()
+    try {
+      (stream(), arr)
+    } with emit[T] { v =>
+      arr.add(v)
+      resume(())
+    }
+  }
+}
