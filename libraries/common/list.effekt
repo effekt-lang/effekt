@@ -962,6 +962,7 @@ def tails[A](list: List[A]): Unit / emit[List[A]] =
     case Cons(head, tail) => do emit(list); tails(tail)
   }
 
+/// Connects `list` as a producer to a given pull stream `reader` acting as a consumer.
 def feed[T, R](list: List[T]) { reader: () => R / read[T] }: R = {
   var l = list
   try {
@@ -978,10 +979,14 @@ def feed[T, R](list: List[T]) { reader: () => R / read[T] }: R = {
   }
 }
 
+/// Collects elements emitted by a push stream producer `stream` into a new list,
+/// discarding the result of the producer.
 def collect[A] { stream: () => Unit / emit[A] }: List[A] =
   returning::collect[A, Unit]{stream}.second
 
 namespace returning {
+  /// Collects elements emitted by a push stream producer `stream` into a new list,
+  /// returning the result of the producer as well as the collected list.
   def collect[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
     try {
       (stream(), Nil())
