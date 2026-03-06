@@ -586,12 +586,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case BoxedType(btpe, capt2) =>
             usingCapture(capt2)
             Result(btpe, eff1)
-          case _ =>
+          case unresolved =>
             // `expected` wasn't enough to resolve the type (e.g. unconstrained type variable ?B).
             // Now we *lazily* construct a partial function type to avoid polluting
             // the unification state in the normal case where the first branch succeeds.
-            expectedCallHint match {
-              case Some((arity, retTpe)) =>
+            // We only do this when the callee type appears to be unconstrained.
+            (expectedCallHint, unresolved) match {
+              case (Some(arity, retTpe), ValueTypeRef(_: UnificationVar)) =>
                 val freshVps = List.fill(arity) {
                   ValueTypeRef(Context.freshTypeVar(TypeParam(Name.local("_")), u))
                 }
@@ -600,7 +601,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 matchExpected(vtpe, BoxedType(partialFn, captVar), None)
                 usingCapture(captVar)
                 Result(partialFn, eff1)
-              case None =>
+              case _ =>
                 Context.annotationOption(Annotations.UnboxParent, u) match {
                   case Some(source.DefDef(id, captures, annot, block, doc, span)) =>
                     // Since this `unbox` was synthesized by the compiler from `def foo = E`,
