@@ -93,7 +93,6 @@
 %String = type %Pos
 
 ; Foreign imports
-
 declare ptr @malloc(i64)
 declare void @free(ptr)
 declare ptr @realloc(ptr, i64)
@@ -118,6 +117,111 @@ declare void @print(i64)
 declare void @exit(i64)
 declare void @llvm.assume(i1)
 
+declare ptr @initializeArena()
+
+; typedef struct Slot
+; {
+;     struct Slot* next;
+;     void (*eraser)(void *object);
+; } Slot;
+%Slot = type { ptr, %Eraser }
+
+; list of immediately available slots
+@freeList = private unnamed_addr global ptr null
+; list of slots where we still need to erase the children
+@todoList = private unnamed_addr global ptr null
+; space of unused consecutive slots
+@bumpList = private unnamed_addr global ptr null
+
+; Initializes the memory for our effekt-objects that are created by newObject and deleted by eraseObject.
+define private void @initializeMemory() nounwind {
+entry:
+  ; we need this because flags for mmap differ between platforms
+  %startAddress = call noalias ptr @initializeArena()
+  store ptr %startAddress, ptr @bumpList
+  ret void
+}
+
+
+define private ptr @acquire() nounwind {
+entry:
+  %freeHead = load ptr, ptr @freeList
+  %isFreeEmpty = icmp eq ptr %freeHead, null
+  br i1 %isFreeEmpty, label %checkTodo, label %freeReuse
+
+; 1. Fast Path: Reuse block from freeList
+freeReuse:
+  %freeNextPtr = getelementptr %Slot, ptr %freeHead, i32 0, i32 0
+  %freeNext = load ptr, ptr %freeNextPtr
+  store ptr %freeNext, ptr @freeList
+
+  ret ptr %freeHead
+
+checkTodo:
+  %todoHead = load ptr, ptr @todoList
+  %isTodoEmpty = icmp eq ptr %todoHead, null
+  br i1 %isTodoEmpty, label %bumpAlloc, label %todoReuse
+
+; 2. Slot Path: Reuse block from To-Do-List. Here, we have to extra call the eraser to ensure that we can reuse it.
+todoReuse:
+  %todoNextPtr = getelementptr inbounds %Slot, ptr %todoHead, i32 0, i32 0
+  %todoNext = load ptr, ptr %todoNextPtr
+  store ptr %todoNext, ptr @todoList
+
+  ; Call eraser
+  ; reusedSlot->eraser(reusedSlot);
+  %eraserPtr = getelementptr inbounds %Slot, ptr %todoHead, i32 0, i32 1
+  %eraser = load %Eraser, ptr %eraserPtr, !alias.scope !14, !noalias !24
+  call void %eraser(ptr %todoHead)
+
+  ret ptr %todoHead
+
+; 3. Fallback - Bump Path: We have to allocate a new block.
+bumpAlloc:
+  ; Load nextUnusedBlock
+  %fresh = load ptr, ptr @bumpList
+
+  ; Move bump pointer forward by object size
+  %nextBump = getelementptr i8, ptr %fresh, i8 64
+
+  store ptr %nextBump, ptr @bumpList
+
+  ret ptr %fresh
+}
+
+; Pushes a slot on the top of the free-List.
+define private void @pushOntoFreeList(ptr %slot) nounwind {
+entry:
+  ; oldHead = freeList
+  %oldHead = load ptr, ptr @freeList
+
+  ; ptr->next = oldHead
+  %nextPtr = getelementptr %Slot, ptr %slot, i32 0, i32 0
+  store ptr %oldHead, ptr %nextPtr
+
+  ; freeList = ptr
+  store ptr %slot, ptr @freeList
+
+  ret void
+}
+
+; Pushes a slot on the top of the To-Do-List.
+define private void @pushOntoTodoList(ptr %slot) nounwind {
+entry:
+  ; oldHead = todoList
+  %oldHead = load ptr, ptr @todoList
+
+  ; ptr->next = oldHead
+  %nextPtr = getelementptr %Slot, ptr %slot, i32 0, i32 0
+  store ptr %oldHead, ptr %nextPtr
+
+  ; todoList = ptr
+  store ptr %slot, ptr @todoList
+
+  ret void
+}
+
+
 
 ; Prompts
 
@@ -134,12 +238,8 @@ define private %Prompt @freshPrompt() {
     ret %Prompt %prompt
 }
 
-; Garbage collection
-
 define private %Object @newObject(%Eraser %eraser, i64 %environmentSize) alwaysinline {
-    %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
-    %size = add i64 %environmentSize, %headerSize
-    %object = call ptr @malloc(i64 %size)
+    %object = call ptr @acquire()
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
     store %ReferenceCount 0, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
@@ -197,9 +297,7 @@ define private void @eraseObject(%Object %object) alwaysinline {
     free:
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
     %eraser = load %Eraser, ptr %objectEraser, !alias.scope !14, !noalias !24
-    %environment = call %Environment @objectEnvironment(%Object %object)
-    call void %eraser(%Environment %environment)
-    call void @free(%Object %object)
+    call void %eraser(%Object %object)
     br label %done
 
     done:
