@@ -1,0 +1,15 @@
+type Status[B] {
+  Done(value: Int)
+  More(state: B)
+}
+
+def main(): Unit = {
+  val result: Int = Done(123) match {
+    case Done(v) => v
+    // f() checked with expected = None
+    case More(f) => f() match { // ERROR Unbox requires a boxed type, but got B.
+      case n => n
+    }
+  }
+  result
+}

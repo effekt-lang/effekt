@@ -1,0 +1,11 @@
+type Status[B] {
+  Done(value: Int)
+  More(state: B)
+}
+
+def main(): Unit = {
+  while (Done(123) is More(f)) {
+    f()
+  }
+  println("done")
+}
