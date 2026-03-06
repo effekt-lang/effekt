@@ -573,7 +573,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   def checkExprAsBlock(expr: Term, expected: Option[BlockType],
                        expectedCallHint: Option[(Int, ValueType)] = None)(using Context, Captures): Result[BlockType] =
     checkWellformedness(expr) {
-      case u @ source.Unbox(expr, _) =>
+      case u @ source.Unbox(expr, _) => {
         // Use `expected` to guide inference of the boxed type
         val expectedTpe = expected map { tpe =>
           val captVar = Context.freshCaptVar(CaptUnificationVar.InferredUnbox(u))
@@ -614,7 +614,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
                   case _ =>
                     Context.abort(pretty"Unbox requires a boxed type, but got $vtpe.")
                 }
+            }
         }
+      }
 
       case source.Var(id, _) => id.symbol match {
         case b: BlockSymbol =>
