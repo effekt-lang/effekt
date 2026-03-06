@@ -579,12 +579,16 @@ object Typer extends Phase[NameResolved, Typechecked] {
             usingCapture(capt2)
             Result(btpe, eff1)
           case _ =>
-            Context.annotationOption(Annotations.UnboxParentDef, u) match {
+            Context.annotationOption(Annotations.UnboxParent, u) match {
               case Some(source.DefDef(id, captures, annot, block, doc, span)) =>
                 // Since this `unbox` was synthesized by the compiler from `def foo = E`,
                 // it's possible that the user simply doesn't know that they should have used the `val` keyword to specify a value
                 // instead of using `def`; see [issue #130](https://github.com/effekt-lang/effekt/issues/130) for more details
                 Context.abort(pretty"Expected the right-hand side of a `def` binding to be a block, but got a value of type $vtpe.\nMaybe try `val` if you're defining a value.")
+              case Some(source.IdTarget(id)) =>
+                // Since this `unbox` was synthesized by the compiler when trying to call a value as if it was a function (e.g., `myArray(0)`),
+                // we provide a more helpful error message; see [issue #737](https://github.com/effekt-lang/effekt/issues/737)
+                Context.abort(pretty"Expected $id to be a function, but got a value of type $vtpe instead, which cannot be called as a function.")
               case _ =>
                 Context.abort(pretty"Unbox requires a boxed type, but got $vtpe.")
             }
