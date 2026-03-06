@@ -215,16 +215,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
         checkOverloadedFunctionCall(c, t.id, targs map { _.resolveValueType }, vargs, bargs, expected)
 
       case c @ source.Call(source.ExprTarget(e), targs, vargs, bargs, _) =>
-        // When we have an expected return type and no block args, we can construct
-        // a partial expected function type to propagate inward
-        val expectedCallType: Option[FunctionType] = expected
-          .filter { _ => bargs.isEmpty } // XXX: block args require block type unification, skip for now
-          .map { retTpe =>
-            val freshVps = vargs.map { varg => ValueTypeRef(Context.freshTypeVar(TypeParam(Name.local(varg.name.getOrElse("_"))), c)) }
-            FunctionType(Nil, Nil, freshVps, Nil, retTpe, Effects.empty)
-          }
+        // Construct a hint: expected arity + return type
+        // Fresh vars are created inside checkExprAsBlock only if the callee type is unresolved.
+        // Note that block args are excluded, their types would require block type unification. [!]
+        val hint: Option[(Int, ValueType)] =
+          if bargs.isEmpty then expected.map(retTpe => (vargs.length, retTpe))
+          else None
 
-        val Result(tpe, funEffs) = checkExprAsBlock(e, None, expectedCallType) match {
+        val Result(tpe, funEffs) = checkExprAsBlock(e, None, hint) match {
           case Result(b: FunctionType, capt) => Result(b, capt)
           case _ => Context.abort("Cannot infer function type for callee.")
         }
@@ -573,7 +571,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
    * We defer checking whether something is first-class or second-class to Typer now.
    */
   def checkExprAsBlock(expr: Term, expected: Option[BlockType],
-                       expectedCallType: Option[FunctionType] = None)(using Context, Captures): Result[BlockType] =
+                       expectedCallHint: Option[(Int, ValueType)] = None)(using Context, Captures): Result[BlockType] =
     checkWellformedness(expr) {
       case u @ source.Unbox(expr, _) =>
         // Use `expected` to guide inference of the boxed type
@@ -589,10 +587,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
             usingCapture(capt2)
             Result(btpe, eff1)
           case _ =>
-            // `expected` wasn't enough to resolve the type (e.g. it was None, or the
-            // variable was genuinely unconstrained). Now try a call-site hint.
-            expectedCallType match {
-              case Some(partialFn) =>
+            // `expected` wasn't enough to resolve the type (e.g. unconstrained type variable ?B).
+            // Now we *lazily* construct a partial function type to avoid polluting
+            // the unification state in the normal case where the first branch succeeds.
+            expectedCallHint match {
+              case Some((arity, retTpe)) =>
+                val freshVps = List.fill(arity) {
+                  ValueTypeRef(Context.freshTypeVar(TypeParam(Name.local("_")), u))
+                }
+                val partialFn = FunctionType(Nil, Nil, freshVps, Nil, retTpe, Effects.empty)
                 val captVar = Context.freshCaptVar(CaptUnificationVar.InferredUnbox(u))
                 matchExpected(vtpe, BoxedType(partialFn, captVar), None)
                 usingCapture(captVar)
