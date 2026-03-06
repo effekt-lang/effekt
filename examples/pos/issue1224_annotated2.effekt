@@ -1,0 +1,10 @@
+type Status[B] {
+  Done(value: Int)
+  More(state: B)
+}
+
+def main() =
+  println(Done(123) match {
+    case Done(value) => value
+    case More(task) => task()
+  })
