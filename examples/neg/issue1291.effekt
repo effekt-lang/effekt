@@ -1,0 +1,5 @@
+def main() = {
+  val s = "42"
+  val answer = s"the answer is ${s}!"
+  println(answer)
+}
