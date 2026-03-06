@@ -1,0 +1,3 @@
+def getFirst(words: List[String]): String = words(0)
+
+def main() = println(getFirst(["hello", "world"]))
