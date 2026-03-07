@@ -130,15 +130,17 @@ def resize(source: ByteArray, size: Int): ByteArray = {
   go(0)
 }
 
-/// In-place counting sort for byte arrays
+/// Sorts a given bytearray `arr` in-place using a counting sort,
+/// allocating a temporary array of 256 integers for said counting.
 ///
-/// Allocates a temporary array of 256 integers
+/// O(N)
 def sort(arr: ByteArray): Unit = {
   val length = arr.size
   if (length <= 1) {
     ()
   } else {
     // Count occurrences of each byte value
+    // (maps 0..255 to its count in the byte array)
     val counts = array::allocateZeros(256)
     each(0, length) { i =>
       val byte = arr.get(i).toInt
