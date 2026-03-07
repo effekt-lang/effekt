@@ -1,0 +1,20 @@
+import test
+
+def main() = {
+  // Don't print out times in CI.
+  suite("Test test suite on 'fail'ures", false) {
+    test("Test test assertFail pass") {
+      assertFail { do fail() }
+    }
+    test("Test test assertFail fail") {
+      assertFail { () }
+    }
+    test("Test test assertNoFail pass") {
+      assertNoFail { () }
+    }
+    test("Test test assertNoFail fail") {
+      assertNoFail { do fail() }
+    }
+  };
+  ()
+}
