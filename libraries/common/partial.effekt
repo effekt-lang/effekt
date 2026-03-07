@@ -13,6 +13,13 @@ def attempt[R] { program: () => R / fail } { fallback: () => R }: R =
     fallback()
   }
 
+def onFail[R] { fallback: () => R } { program: () => R / fail }: R =
+  try {
+    program()
+  } with fail {
+    fallback()
+  }
+
 def succeeds { program: () => Unit / fail }: Bool =
   try { program(); true } with fail { false }
 

@@ -1,0 +1,19 @@
+Bytestream
+✓ literal hex 10
+✓ literal hex ff
+✓ literal char a
+✓ literal string ba
+✓ int back-and-forth (17)
+✓ int back-and-forth (17), explicit BE
+✓ int back-and-forth (17), explicit LE
+✓ byte 00101010
+✓ to bits and back LE bitorder
+✓ to bits and back BE bitorder
+✓ append 0 means *2
+✓ LE 2s-complement
+✓ BE 2s-complement
+
+ 13 pass
+ 0 fail
+ 13 tests total
+ 

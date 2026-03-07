@@ -314,8 +314,8 @@ def tee[A]{ cons1: { => Unit / emit[A] } => Unit }{ cons2: { => Unit / emit[A] }
   }
 }
 
-/// Return exactly the very first element of the given stream
-/// or raise MissingValue if no elements are emitted.
+/// Extract exactly the very first element of the given stream
+/// or fails if no elements are emitted.
 ///
 /// Examples:
 /// ```effekt
@@ -332,6 +332,50 @@ def first[A] { stream: () => Unit / emit[A] }: A / fail = {
     body()
   } with emit[A] { a => a }
 }
+
+/// Extract the nth element of the given stream.
+/// Fails if not enough elements are emitted
+def nth[A](n: Int){ stream: () => Unit / emit[A] }: A / fail = {
+  var m = n
+  try {
+    def body(): A = { stream(); do fail() }
+    body()
+  } with emit[A] { a =>
+    if (m == 0) {
+      return a
+    } else {
+      m = m - 1
+      resume(())
+    }
+  }
+}
+
+// Counting and padding
+// --------------------
+
+/// get current position in stream
+effect getPos(): Int
+
+/// Track position in stream, starting with init
+/// Handles getPos
+def tracking[A](init: Int){ body: => Unit / { emit[A], getPos } }: Unit / emit[A] = {
+  var n = init
+  try body()
+  with emit[A] { b => n = n + 1; resume(do emit[A](b)) }
+  with getPos{ resume(n) }
+}
+
+/// Pad to a multiple of fac emitted values, by emitting gen repeatedly
+def pad[A](fac: Int){ gen: => A }: Unit  / {getPos, emit[A]} = {
+  while(mod(do getPos(), fac) != 0) {
+    do emit[A](gen())
+  }
+}
+
+/// Track how many bytes were emitted (in the body)
+/// Handles getPos
+def tracking[A]{ body: => Unit / { emit[A], getPos } }: Unit / emit[A] =
+  tracking[A](0){body}
 
 namespace returning {
 
