@@ -215,7 +215,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
         checkOverloadedFunctionCall(c, t.id, targs map { _.resolveValueType }, vargs, bargs, expected)
 
       case c @ source.Call(source.ExprTarget(e), targs, vargs, bargs, _) =>
-        val Result(tpe, funEffs) = checkExprAsBlock(e, None) match {
+        // Construct a hint: expected arity + return type
+        // Fresh vars are created inside checkExprAsBlock only if the callee type is unresolved.
+        // Note that block args are excluded, their types would require block type unification. [!]
+        val hint: Option[(Int, ValueType)] =
+          if bargs.isEmpty then expected.map(retTpe => (vargs.length, retTpe))
+          else None
+
+        val Result(tpe, funEffs) = checkExprAsBlock(e, None, hint) match {
           case Result(b: FunctionType, capt) => Result(b, capt)
           case _ => Context.abort("Cannot infer function type for callee.")
         }
@@ -563,13 +570,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
   /**
    * We defer checking whether something is first-class or second-class to Typer now.
    */
-  def checkExprAsBlock(expr: Term, expected: Option[BlockType])(using Context, Captures): Result[BlockType] =
+  def checkExprAsBlock(expr: Term, expected: Option[BlockType],
+                       expectedCallHint: Option[(Int, ValueType)] = None)(using Context, Captures): Result[BlockType] =
     checkWellformedness(expr) {
-      case u @ source.Unbox(expr, _) =>
-        val expectedTpe = expected map {
-          tpe =>
-            val captVar = Context.freshCaptVar(CaptUnificationVar.InferredUnbox(u))
-            BoxedType(tpe, captVar)
+      case u @ source.Unbox(expr, _) => {
+        // Use `expected` to guide inference of the boxed type
+        val expectedTpe = expected map { tpe =>
+          val captVar = Context.freshCaptVar(CaptUnificationVar.InferredUnbox(u))
+          BoxedType(tpe, captVar)
         }
         val Result(vtpe, eff1) = checkExpr(expr, expectedTpe)
         // TODO here we also need unification variables for block types!
@@ -578,21 +586,38 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case BoxedType(btpe, capt2) =>
             usingCapture(capt2)
             Result(btpe, eff1)
-          case _ =>
-            Context.annotationOption(Annotations.UnboxParent, u) match {
-              case Some(source.DefDef(id, captures, annot, block, doc, span)) =>
-                // Since this `unbox` was synthesized by the compiler from `def foo = E`,
-                // it's possible that the user simply doesn't know that they should have used the `val` keyword to specify a value
-                // instead of using `def`; see [issue #130](https://github.com/effekt-lang/effekt/issues/130) for more details
-                Context.abort(pretty"Expected the right-hand side of a `def` binding to be a block, but got a value of type $vtpe.\nMaybe try `val` if you're defining a value.")
-              case Some(source.IdTarget(id)) =>
-                // Since this `unbox` was synthesized by the compiler when trying to call a value as if it was a function (e.g., `myArray(0)`),
-                // we provide a more helpful error message; see [issue #737](https://github.com/effekt-lang/effekt/issues/737)
-                Context.abort(pretty"Expected $id to be a function, but got a value of type $vtpe instead, which cannot be called as a function.")
+          case unresolved =>
+            // `expected` wasn't enough to resolve the type (e.g. unconstrained type variable ?B).
+            // Now we *lazily* construct a partial function type to avoid polluting
+            // the unification state in the normal case where the first branch succeeds.
+            // We only do this when the callee type appears to be unconstrained.
+            (expectedCallHint, unresolved) match {
+              case (Some(arity, retTpe), ValueTypeRef(_: UnificationVar)) =>
+                val freshVps = List.fill(arity) {
+                  ValueTypeRef(Context.freshTypeVar(TypeParam(Name.local("_")), u))
+                }
+                val partialFn = FunctionType(Nil, Nil, freshVps, Nil, retTpe, Effects.empty)
+                val captVar = Context.freshCaptVar(CaptUnificationVar.InferredUnbox(u))
+                matchExpected(vtpe, BoxedType(partialFn, captVar), None)
+                usingCapture(captVar)
+                Result(partialFn, eff1)
               case _ =>
-                Context.abort(pretty"Unbox requires a boxed type, but got $vtpe.")
+                Context.annotationOption(Annotations.UnboxParent, u) match {
+                  case Some(source.DefDef(id, captures, annot, block, doc, span)) =>
+                    // Since this `unbox` was synthesized by the compiler from `def foo = E`,
+                    // it's possible that the user simply doesn't know that they should have used the `val` keyword to specify a value
+                    // instead of using `def`; see [issue #130](https://github.com/effekt-lang/effekt/issues/130) for more details
+                    Context.abort(pretty"Expected the right-hand side of a `def` binding to be a block, but got a value of type $vtpe.\nMaybe try `val` if you're defining a value.")
+                  case Some(source.IdTarget(id)) =>
+                    // Since this `unbox` was synthesized by the compiler when trying to call a value as if it was a function (e.g., `myArray(0)`),
+                    // we provide a more helpful error message; see [issue #737](https://github.com/effekt-lang/effekt/issues/737)
+                    Context.abort(pretty"Expected $id to be a function, but got a value of type $vtpe instead, which cannot be called as a function.")
+                  case _ =>
+                    Context.abort(pretty"Unbox requires a boxed type, but got $vtpe.")
+                }
             }
         }
+      }
 
       case source.Var(id, _) => id.symbol match {
         case b: BlockSymbol =>
