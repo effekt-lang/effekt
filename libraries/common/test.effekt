@@ -71,6 +71,13 @@ def assertThrown[E](ex: on[E]) { body: => Unit / Exception[E] }: Unit / Assertio
 def assertThrows[E] { body: => Unit / Exception[E] }: Unit / Assertion =
   do assert(on[E].default { true } { body(); false }, "Expected Exception, but exited normally")
 
+def assertFail { body: => Unit / fail }: Unit / Assertion =
+  do assert(succeeds {body}, "Expected 'fail', but exited normally")
+
+def assertNoFail { body: => Unit / fail }: Unit / Assertion =
+  onFail { do assert(false, "Unexpected 'fail'") } {body}
+
+
 interface Test {
   def success(name: String, duration: Int): Unit
   def failure(name: String, msg: String, duration: Int): Unit

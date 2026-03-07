@@ -1,0 +1,11 @@
+Test test suite on 'fail'ures
+✕ Test test assertFail pass
+  Expected 'fail', but exited normally
+✓ Test test assertFail fail
+✓ Test test assertNoFail pass
+✕ Test test assertNoFail fail
+  Unexpected 'fail'
+
+ 2 pass
+ 2 fail
+ 4 tests total
