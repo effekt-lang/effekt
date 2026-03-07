@@ -170,6 +170,7 @@ namespace returning {
 
 /// Run a scanner by reading from an input stream.
 def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
+  def upstream(): A / stop = do read()
   var last = None()
   try {
     scanner()
@@ -177,7 +178,7 @@ def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
     resume {
       last match {
         case None() =>
-          val t = do read()
+          val t = upstream()
           last = Some(t)
           return t
         case Some(t) =>
@@ -188,7 +189,7 @@ def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
     resume {
       last match {
         case None() =>
-          do read()
+          upstream()
         case Some(t) =>
           last = None()
           return t
