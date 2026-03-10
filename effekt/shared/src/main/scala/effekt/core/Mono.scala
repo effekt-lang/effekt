@@ -19,6 +19,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             val monoFindContext = MonoFindContext()
             val dctx = DeclarationContext(declarations, externs)
             var constraints = findConstraints(definitions)(using monoFindContext)
+            constraints = constraints ++ externs.flatMap(findConstraints(_)(using monoFindContext))
             constraints = constraints ++ declarations.flatMap(findConstraints(_)(using monoFindContext))
             // println("Constraints")
             // constraints.filter(c => c.lower.nonEmpty).toSet.foreach(c => println(pretty(c)))
@@ -184,6 +185,17 @@ def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): MonoC
   case Interface(id, tparams, properties) => 
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
     properties flatMap findConstraints
+
+def findConstraints(extern: Extern)(using ctx: MonoFindContext): MonoConstraints = extern match {
+  case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
+    tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
+    val (_, constraints) = findConstraints(vparams.map(_.tpe))
+    constraints
+  case Extern.Data(id, tparams) =>
+    tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
+    List()
+  case Extern.Include(_, _) => List()
+}
 
 def findConstraints(property: Property)(using ctx: MonoFindContext): MonoConstraints = property match {
   case Property(id, tpe@BlockType.Function(tparams, cparams, vparams, bparams, result)) => findConstraints(tpe, id)
@@ -559,6 +571,8 @@ def monomorphize(field: Field)(using ctx: MonoContext)(using DeclarationContext)
 // FIXME: Not a big fan of this function needing so many extra parameters
 def monomorphize(blockVar: BlockVar, replacementId: FunctionId, targs: List[ValueType])(using ctx: MonoContext)(using DeclarationContext): BlockVar = blockVar match
   case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) if ctx.isPolyExtern(id) => 
+    val replacementTparams = tparams.zip(targs map toTypeArg).toMap
+    ctx.replacementTparams ++= replacementTparams
     val annotatedTpe = BlockType.Function(tparams, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
     BlockVar(id, annotatedTpe, annotatedCapt)
   case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) => 
@@ -578,6 +592,10 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
     Var(ref, monomorphize(init), capture, monomorphize(body))
   case ImpureApp(id, callee, targs, vargs, bargs, body) =>
     ImpureApp(id, callee, targs map monomorphize, vargs map monomorphize, bargs map monomorphize, monomorphize(body))
+  case App(callee: BlockVar, targs, vargs, bargs) if ctx.isPolyExtern(callee.id) => 
+    val replacementTparams = callee.functionType.tparams.zip(targs map toTypeArg).toMap
+    ctx.replacementTparams ++= replacementTparams
+    App(callee, targs map monomorphize, vargs map monomorphize, bargs map monomorphize)
   case App(callee: BlockVar, targs, vargs, bargs) => 
     val monoFnId = replacementFun(callee.id, targs)
     App(monomorphize(callee, monoFnId, targs), List.empty, vargs map monomorphize, bargs map monomorphize)
