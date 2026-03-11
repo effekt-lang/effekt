@@ -163,10 +163,10 @@ lazy val integers: Builtins = Map(
 
   // Comparison
   // ----------
-  builtin("effekt::infixEqEq(Int, Int)") {
+  builtin("effekt::infixEq(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x == y)
   },
-  builtin("effekt::infixEqNeq(Int, Int)") {
+  builtin("effekt::infixNeq(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x != y)
   },
   builtin("effekt::infixLt(Int, Int)") {
