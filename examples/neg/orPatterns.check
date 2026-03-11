@@ -1,0 +1,15 @@
+[error] t.effekt:12:5: Non-exhaustive pattern matching, missing case None()
+    x match {
+    ^
+[error] t.effekt:22:3: Non-exhaustive pattern matching, missing case Blue()
+  c match {
+  ^
+[error] t.effekt:27:3: Non-exhaustive pattern matching, missing case Square(Blue())
+  s match {
+  ^
+[error] t.effekt:35:3: Non-exhaustive pattern matching, missing case Blue()
+  s match {
+  ^
+[warning] t.effekt:44:5: Unreachable case.
+    case Red()                    => "red"
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
