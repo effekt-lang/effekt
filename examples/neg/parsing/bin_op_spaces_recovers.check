@@ -1,13 +1,13 @@
 [error] examples/neg/parsing/bin_op_spaces_recovers.effekt:4:38: Cannot typecheck call.
 There are multiple overloads, which all fail to check:
 
-Possible overload: effekt::infixAdd of type (Int, Int) => Int
+Possible overload: effekt::infixPlus of type (Int, Int) => Int
   Expected type
     JustCauseATypeErrorPlease
   but got type
     Int
 
-Possible overload: effekt::infixAdd of type (Double, Double) => Double
+Possible overload: effekt::infixPlus of type (Double, Double) => Double
   Expected type
     JustCauseATypeErrorPlease
   but got type

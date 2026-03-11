@@ -1,10 +1,10 @@
 
-def infixAdd(n: Int, m: Int): Int = {
+def infixPlus(n: Int, m: Int): Int = {
   println("Adding " ++ n.show ++ " and " ++ m.show)
-  effekt::infixAdd(n, m)
+  effekt::infixPlus(n, m)
 }
 
 def main() = {
-  println(effekt::infixAdd(1, 2).show)
-  println(infixAdd(1, 2).show)
+  println(effekt::infixPlus(1, 2).show)
+  println(infixPlus(1, 2).show)
 }

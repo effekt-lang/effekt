@@ -4,10 +4,10 @@
 [error] examples/neg/polymorphic_adts.effekt:36:38: Cannot typecheck call.
 There are multiple overloads, which all fail to check:
 
-Possible overload: effekt::infixAdd of type (Int, Int) => Int
+Possible overload: effekt::infixPlus of type (Int, Int) => Int
   Expected Int but got Bool.
 
-Possible overload: effekt::infixAdd of type (Double, Double) => Double
+Possible overload: effekt::infixPlus of type (Double, Double) => Double
   Expected Double but got Bool.
   Expected Double but got Int.
 

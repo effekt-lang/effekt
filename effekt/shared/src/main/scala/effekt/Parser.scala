@@ -1093,13 +1093,13 @@ class Parser(tokens: Seq[Token], source: Source) {
     case `<=` => "infixLte"
     case `>=` => "infixGte"
     case `+`  => "infixPlus"
-    case `+=` => "infixPlusEq"
+    case `+=` => "infixPlus"
     case `-`  => "infixMinus"
-    case `-=` => "infixMinusEq"
+    case `-=` => "infixMinus"
     case `*`  => "infixStar"
-    case `*=` => "infixStarEq"
+    case `*=` => "infixStar"
     case `/`  => "infixSlash"
-    case `/=` => "infixSlashEq"
+    case `/=` => "infixSlash"
     case `++` => "infixPlusPlus"
     case `>>` => "infixGtGt"
     case `<<` => "infixLtLt"
@@ -1147,32 +1147,19 @@ class Parser(tokens: Seq[Token], source: Source) {
 
       while (peek(`.`) || isArguments)
         peek.kind match {
-          // member selection, postfix acess, or method call
+          // member selection or method call
           //   <EXPR>.<NAME>
           // | <EXPR>.<NAME>( ... )
           case `.` =>
             val dot = peek
             consume(`.`)
-            peek.kind match {
-              // <EXPR>.[<EXPR>, ...]
-              case `[` =>
-                val bracket = peek
-                val arguments = some(expr, `[`, `,`, `]`)
-                e = MethodCall(e,
-                  IdRef(Nil, "postfixAccess", Span(source, dot.start, bracket.end, Synthesized)),
-                  Nil, arguments.unspan.map(a => ValueArg.Unnamed(a)), Nil,
-                  Span(source, e.span.from, arguments.span.to, Synthesized)
-                )
-
-              case _ =>
-                val member = idRef()
-                // method call
-                if (isArguments) {
-                  val (targs, vargs, bargs) = arguments()
-                  e = Term.MethodCall(e, member, targs, vargs, bargs, span())
-                } else {
-                  e = Term.MethodCall(e, member, Nil, Nil, Nil, span())
-                }
+            val member = idRef()
+            // method call
+            if (isArguments) {
+              val (targs, vargs, bargs) = arguments()
+              e = Term.MethodCall(e, member, targs, vargs, bargs, span())
+            } else {
+              e = Term.MethodCall(e, member, Nil, Nil, Nil, span())
             }
 
           // function call

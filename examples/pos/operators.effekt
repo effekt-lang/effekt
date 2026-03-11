@@ -1,9 +1,9 @@
 import stream
 
-def infixShl(x: Int, y: Int): Int = bitwiseShl(x, y)
-def infixShr(x: Int, y: Int): Int = bitwiseShr(x, y)
+def infixLtLt(x: Int, y: Int): Int = bitwiseShl(x, y)
+def infixGtGt(x: Int, y: Int): Int = bitwiseShr(x, y)
 
-def infixPipe(x: Int, y: Int): Int = bitwiseOr(x, y)
+def infixBar(x: Int, y: Int): Int = bitwiseOr(x, y)
 def infixAmp(x: Int, y: Int): Int = bitwiseAnd(x, y)
 def infixHat(x: Int, y: Int): Int = bitwiseXor(x, y)
 

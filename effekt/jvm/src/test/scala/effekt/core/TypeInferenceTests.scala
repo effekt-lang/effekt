@@ -19,7 +19,7 @@ class TypeInferenceTests extends CoreTests {
   val A: Id        = Id("A")
   val B: Id        = Id("B")
   val C: Id        = Id("C")
-  val infixAdd      = Id("infixAdd")
+  val infixPlus      = Id("infixPlus")
 
   def OptionT(tpe: core.ValueType): core.ValueType.Data =
     core.ValueType.Data(OptionId, List(tpe))
@@ -123,7 +123,7 @@ class TypeInferenceTests extends CoreTests {
     assertEquals(typecheck(Stmt.Return(Expr.ValueVar(x, TInt))),
       Typing(TInt, Set.empty, Free.value(x, TInt)))
 
-    val add: Block.BlockVar = Block.BlockVar(infixAdd, BlockType.Function(Nil, Nil, List(TInt, TInt), Nil, TInt), Set.empty)
+    val add: Block.BlockVar = Block.BlockVar(infixPlus, BlockType.Function(Nil, Nil, List(TInt, TInt), Nil, TInt), Set.empty)
 
     val ex3 = Stmt.Val(x,
       Stmt.Return(Expr.Literal(42, TInt)),
