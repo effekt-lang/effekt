@@ -36,16 +36,16 @@ lazy val printing: Builtins = Map(
 lazy val doubles: Builtins = Map(
   // Arithmetic
   // ----------
-  builtin("effekt::infixAdd(Double, Double)") {
+  builtin("effekt::infixPlus(Double, Double)") {
     case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x + y)
   },
-  builtin("effekt::infixSub(Double, Double)") {
+  builtin("effekt::infixMinus(Double, Double)") {
     case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x - y)
   },
-  builtin("effekt::infixMul(Double, Double)") {
+  builtin("effekt::infixStar(Double, Double)") {
     case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x * y)
   },
-  builtin("effekt::infixDiv(Double, Double)") {
+  builtin("effekt::infixSlash(Double, Double)") {
     case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x / y)
   },
   builtin("effekt::sqrt(Double)") {
@@ -217,7 +217,7 @@ lazy val bytes: Builtins = Map(
 )
 
 lazy val strings: Builtins = Map(
-  builtin("effekt::infixConcat(String, String)") {
+  builtin("effekt::infixPlusPlus(String, String)") {
     case As.String(x) :: As.String(y) :: Nil => Value.String(x + y)
   },
 
