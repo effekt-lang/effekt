@@ -156,6 +156,11 @@ case class MonoContext(solution: Solution, funNames: MonoFunNames, tpeNames: Mon
 
   lazy val invertedTpeNames: Map[ValueType.Data, (Id, Vector[Ground])] = tpeNames.map { case (k, v) => (v, k) }.toMap
 
+  def instantiateTparams(tparams: List[Id], targs: List[Ground]) = {
+    assert(targs.size == tparams.size, s"Wrong number of type arguments\n  targs: ${targs}\n  tparams: ${tparams}")
+    replacementTparams ++= tparams.zip(targs).toMap
+  }
+
   def isPolyExtern(id: Id) = polyExternDefs.contains(id)
 }
 
@@ -436,8 +441,7 @@ def monomorphize(toplevel: Toplevel)(using ctx: MonoContext)(using Context, Decl
   case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
     val monoTypes = ctx.solution(id).toList
     monoTypes.map(baseTypes => 
-      val replacementTparams = tparams.zip(baseTypes).toMap
-      ctx.replacementTparams ++= replacementTparams
+      ctx.instantiateTparams(tparams, baseTypes.toList)
       Toplevel.Def(ctx.funNames(id, baseTypes), Renamer.rename(BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))))
     )
   case Toplevel.Def(id, block) => 
@@ -452,8 +456,7 @@ def monomorphize(decl: Declaration)(using ctx: MonoContext)(using DeclarationCon
       List(Data(id, tparams, constructors.flatMap(monomorphize(_, Vector.empty))))
     } else {
       monoTypes.map(baseTypes =>
-        val replacementTparams = tparams.zip(baseTypes).toMap
-        ctx.replacementTparams ++= replacementTparams
+        ctx.instantiateTparams(tparams, baseTypes.toList)
         Declaration.Data(ctx.tpeNames(id, baseTypes).name, List.empty, constructors.flatMap(constr => monomorphize(constr, baseTypes)))
       )
     }
@@ -463,8 +466,7 @@ def monomorphize(decl: Declaration)(using ctx: MonoContext)(using DeclarationCon
       List(Declaration.Interface(id, tparams, properties.flatMap(monomorphize(_, Vector.empty))))
     } else {
       monoTypes.map(baseTypes =>
-        val replacementTparams = tparams.zip(baseTypes).toMap
-        ctx.replacementTparams ++= replacementTparams
+        ctx.instantiateTparams(tparams, baseTypes.toList)
         val monoProp = properties.flatMap(prop => monomorphize(prop, baseTypes))
         val interfaceName = ctx.funNames(id, baseTypes)
         if (interfaceName == id) {
@@ -482,8 +484,7 @@ def monomorphize(property: Property, variant: Vector[Ground])(using ctx: MonoCon
       List(Property(id, monomorphize(tpe)))
     } else {
       baseTypes.map(baseType => {
-        val replacementTparams = tparams.zip(baseType).toMap
-        ctx.replacementTparams ++= replacementTparams
+        ctx.instantiateTparams(tparams, baseType.toList)
         Property(ctx.funNames((id, baseType)), monomorphize(tpe)) 
       })
     }
@@ -505,8 +506,7 @@ def monomorphize(constructor: Constructor, variant: Vector[Ground])(using ctx: M
       relevantTypes.map(baseType => {
         // Remove types not relevant for existentials (mono13)
         val existentialBaseTypes = baseType.drop(variant.size)
-        val replacementTparams = tparams.zip(existentialBaseTypes).toMap
-        ctx.replacementTparams ++= replacementTparams
+        ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
         Constructor(ctx.funNames(id, baseType), List.empty, fields map monomorphize)
       })
     }
@@ -533,8 +533,7 @@ def monomorphize(operation: Operation)(using ctx: MonoContext)(using Context, De
       List(Operation(name, List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body)))
     } else {
       monoTypes.map(baseTypes =>
-        val replacementTparams = tparams.zip(baseTypes).toMap
-        ctx.replacementTparams ++= replacementTparams
+        ctx.instantiateTparams(tparams, baseTypes.toList)
         Operation(ctx.funNames(name, baseTypes), List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
       )
     }
@@ -553,13 +552,11 @@ def monomorphize(field: Field)(using ctx: MonoContext)(using DeclarationContext)
 // FIXME: Not a big fan of this function needing so many extra parameters
 def monomorphize(blockVar: BlockVar, replacementId: FunctionId, targs: List[ValueType])(using ctx: MonoContext)(using DeclarationContext): BlockVar = blockVar match
   case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) if ctx.isPolyExtern(id) => 
-    val replacementTparams = tparams.zip(targs map toTypeArg).toMap
-    ctx.replacementTparams ++= replacementTparams
+    ctx.instantiateTparams(tparams, targs map toTypeArg)
     val annotatedTpe = BlockType.Function(tparams, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
     BlockVar(id, annotatedTpe, annotatedCapt)
   case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) => 
-    val replacementTparams = tparams.zip(targs map toTypeArg).toMap
-    ctx.replacementTparams ++= replacementTparams
+    ctx.instantiateTparams(tparams, targs map toTypeArg)
     val monoAnnotatedTpe = BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
     BlockVar(replacementId, monoAnnotatedTpe, annotatedCapt)
   case BlockVar(id, annotatedTpe: BlockType.Interface, annotatedCapt) =>
@@ -575,8 +572,7 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
   case ImpureApp(id, callee, targs, vargs, bargs, body) =>
     ImpureApp(id, callee, targs map monomorphize, vargs map monomorphize, bargs map monomorphize, monomorphize(body))
   case App(callee: BlockVar, targs, vargs, bargs) if ctx.isPolyExtern(callee.id) => 
-    val replacementTparams = callee.functionType.tparams.zip(targs map toTypeArg).toMap
-    ctx.replacementTparams ++= replacementTparams
+    ctx.instantiateTparams(callee.functionType.tparams, targs map toTypeArg)
     App(callee, targs map monomorphize, vargs map monomorphize, bargs map monomorphize)
   case App(callee: BlockVar, targs, vargs, bargs) => 
     val monoFnId = replacementFun(callee.id, targs)
@@ -595,8 +591,7 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
     Invoke(Unbox(monomorphize(pure)), method, methodTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
   case Invoke(BlockVar(id, annotatedTpe, annotatedCapt), method, BlockType.Function(tparams, cparams, vparams, bparams, result), targs, vargs, bargs) => 
     val monoFnId = replacementFun(method, targs)
-    val replacementTparams = tparams.zip(targs map toTypeArg).toMap
-    ctx.replacementTparams ++= replacementTparams
+    ctx.instantiateTparams(tparams, targs map toTypeArg)
 
     val monoAnnotatedTpe = BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
     Invoke(BlockVar(id, monomorphize(annotatedTpe), annotatedCapt), monoFnId, monoAnnotatedTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
@@ -614,8 +609,7 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
     // which then need to be nested
     def nestDefs(defnTypes: List[Vector[Ground]]): Stmt = defnTypes match {
       case head :: next => 
-        val replacementTparams = tparams.zip(head).toMap
-        ctx.replacementTparams ++= replacementTparams
+        ctx.instantiateTparams(tparams, head.toList)
         Stmt.Def(ctx.funNames(id, head), BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(bbody)), nestDefs(next))
       case Nil => monomorphize(body)
     }
@@ -656,8 +650,7 @@ def monomorphize(clause: (Id, BlockLit), variant: Vector[Ground])(using ctx: Mon
       List((id, monoBlockLit))
     } else {
       newClauseNameMap.filter((clauseKey, _) => clauseKey._2 == variant).map((clauseKey, monoId) =>
-        val replacementTparams = tparams.zip(clauseKey._2).toMap
-        ctx.replacementTparams ++= replacementTparams
+        ctx.instantiateTparams(tparams, clauseKey._2.toList)
         val monoBlockLit: Block.BlockLit = BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
         (monoId, monoBlockLit)
       ).toList
