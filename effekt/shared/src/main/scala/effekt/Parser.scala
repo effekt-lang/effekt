@@ -975,8 +975,7 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
       }
 
   def orExpr(): Term = infix(andExpr, `||`)
-  def andExpr(): Term = infix(pipeExpr, `&&`)
-  def pipeExpr(): Term = infix(bitOrExpr, `<|`, `|>`)
+  def andExpr(): Term = infix(bitOrExpr, `&&`)
   def bitOrExpr(): Term = infix(bitAndExpr, TokenKind.`|`)
   def bitAndExpr(): Term = infix(eqExpr, `&`)
   def eqExpr(): Term = infix(rangeExpr, `===`, `!==`, `<=`, `>=`, `<`, `>`)
@@ -1021,35 +1020,33 @@ class Parser(positions: Positions, tokens: Seq[Token], source: Source) {
   }
 
   private def opName(op: TokenKind): String = op match {
-    case `||` => "infixOr"
-    case `&&` => "infixAnd"
+    case `||` => "infixBarBar"
+    case `&&` => "infixAmpAmp"
     case `===` => "infixEq"
     case `!==` => "infixNeq"
     case `<`  => "infixLt"
     case `>`  => "infixGt"
     case `<=` => "infixLte"
     case `>=` => "infixGte"
-    case `+`  => "infixAdd"
-    case `+=` => "infixAdd"
-    case `-`  => "infixSub"
-    case `-=` => "infixSub"
-    case `*`  => "infixMul"
-    case `*=` => "infixMul"
-    case `/`  => "infixDiv"
-    case `/=` => "infixDiv"
-    case `++` => "infixConcat"
-    case `>>` => "infixShr"
-    case `<<` => "infixShl"
-    case `--` => "infixRemove"
+    case `+`  => "infixPlus"
+    case `+=` => "infixPlusEq"
+    case `-`  => "infixMinus"
+    case `-=` => "infixMinusEq"
+    case `*`  => "infixStar"
+    case `*=` => "infixStarEq"
+    case `/`  => "infixSlash"
+    case `/=` => "infixSlashEq"
+    case `++` => "infixPlusPlus"
+    case `>>` => "infixGtGt"
+    case `<<` => "infixLtLt"
+    case `--` => "infixMinusMinus"
 
     case TokenKind.`~`  => "infixTilde"
-    case TokenKind.`~>` => "infixTildeRight"
-    case TokenKind.`<~` => "infixTildeLeft"
-    case TokenKind.`|`  => "infixPipe"
+    case TokenKind.`~>` => "infixTildeGt"
+    case TokenKind.`<~` => "infixLtTilde"
+    case TokenKind.`|`  => "infixBar"
     case TokenKind.`&`  => "infixAmp"
 
-    case `<|`  => "infixPipeLeft"
-    case `|>`  => "infixPipeRight"
     case `..`  => "infixDotDot"
     case `...` => "infixDotDotDot"
     case `^^`  => "infixHatHat"

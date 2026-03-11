@@ -117,8 +117,6 @@ enum TokenKind {
   case `--`
   case `~>`
   case `<~`
-  case `<|`
-  case `|>`
   case `+=`
   case `-=`
   case `*=`
@@ -445,7 +443,6 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('<', '>') => advance2With(TokenKind.`<>`)
       case ('<', '{') => advance2With(TokenKind.`<{`)
       case ('<', '~') => advance2With(TokenKind.`<~`)
-      case ('<', '|') => advance2With(TokenKind.`<|`)
       case ('<',   _) => advanceWith(TokenKind.`<`)
 
       case ('>', '>') => advance2With(TokenKind.`>>`)
@@ -456,7 +453,6 @@ class Lexer(source: Source) extends Iterator[Token] {
       case (':',   _) => advanceWith(TokenKind.`:`)
 
       case ('|', '|') => advance2With(TokenKind.`||`)
-      case ('|', '>') => advance2With(TokenKind.`|>`)
       case ('|',   _) => advanceWith(TokenKind.`|`)
 
       case ('&', '&') => advance2With(TokenKind.`&&`)

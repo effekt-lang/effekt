@@ -120,19 +120,19 @@ lazy val doubles: Builtins = Map(
 lazy val integers: Builtins = Map(
   // Arithmetic
   // ----------
-  builtin("effekt::infixAdd(Int, Int)") {
+  builtin("effekt::infixPlus(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x + y)
   },
-  builtin("effekt::infixSub(Int, Int)") {
+  builtin("effekt::infixMinus(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x - y)
   },
-  builtin("effekt::infixMul(Int, Int)") {
+  builtin("effekt::infixStar(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x * y)
   },
   builtin("effekt::mod(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x % y)
   },
-  builtin("effekt::infixDiv(Int, Int)") {
+  builtin("effekt::infixSlash(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x / y)
   },
   builtin("effekt::bitwiseShl(Int, Int)") {
@@ -153,10 +153,10 @@ lazy val integers: Builtins = Map(
 
   // Comparison
   // ----------
-  builtin("effekt::infixEq(Int, Int)") {
+  builtin("effekt::infixEqEq(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x == y)
   },
-  builtin("effekt::infixNeq(Int, Int)") {
+  builtin("effekt::infixEqNeq(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x != y)
   },
   builtin("effekt::infixLt(Int, Int)") {
