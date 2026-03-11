@@ -1033,7 +1033,8 @@ class Parser(tokens: Seq[Token], source: Source) {
   def assignExpr(): Term =
     nonterminal:
       orExpr() match {
-        case x @ Term.Var(id, _) => when(`=`) { Assign(id, expr(), span()) } { x }
+        case x @ Term.Var(id, _) if peek(`=`) => consume(`=`); Assign(id, expr(), span())
+        case x @ Term.Var(id, _) if peek(`:=`) => binaryOp(x, next(), expr())
         case other => other
       }
 
@@ -1092,6 +1093,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     case `>`  => "infixGt"
     case `<=` => "infixLte"
     case `>=` => "infixGte"
+    case `:=` => "infixColonEq"
     case `+`  => "infixPlus"
     case `+=` => "infixPlus"
     case `-`  => "infixMinus"
