@@ -96,31 +96,92 @@ object ExhaustivityChecker {
     case Child(c: Constructor, field: Field, outer: Trace)
   }
 
+  // Standard cartesian product used to expand OR-patterns nested inside constructors
+  // and across multiple guard positions.
+  private def cartesianProduct[A](lists: List[List[A]]): List[List[A]] =
+    lists.foldRight(List(List.empty[A])) { (heads, tails) =>
+      for { h <- heads; t <- tails } yield h :: t
+    }
 
-  def preprocess(roots: List[source.Term], cl: source.MatchClause)(using Context): Clause = (roots, cl) match {
-    case (List(root), source.MatchClause(pattern, guards, body, _)) =>
-      Clause.normalized(Condition.Patterns(Map(Trace.Root(root) -> preprocessPattern(pattern))) :: guards.map(preprocessGuard), cl)
-    case (roots, source.MatchClause(MultiPattern(patterns, _), guards, body, _)) =>
-      val rootConds: Map[Trace, Pattern] = (roots zip patterns).map { case (root, pattern) =>
-        Trace.Root(root) -> preprocessPattern(pattern)
-      }.toMap
-      Clause.normalized(Condition.Patterns(rootConds) :: guards.map(preprocessGuard), cl)
-    case (_, _) => Context.abort("Malformed multi-match")
+  /**
+   * Returns all OR-expanded alternatives of a pattern as a flat list.
+   * For example, `A | B` yields `List(A, B)`, and `Ctor(A | B, C | D)` yields
+   * `List(Ctor(A,C), Ctor(A,D), Ctor(B,C), Ctor(B,D))`.
+   */
+  def preprocessPatternAlts(p: source.MatchPattern)(using Context): List[Pattern] = p match {
+    case AnyPattern(_, _) | IgnorePattern(_) => List(Pattern.Any())
+    case p @ TagPattern(id, patterns, _) =>
+      // Cartesian product: each field may itself be an OR, so we expand all combinations.
+      val fieldAlts: List[List[Pattern]] = patterns.map(preprocessPatternAlts)
+      cartesianProduct(fieldAlts).map(fields => Pattern.Tag(p.definition, fields))
+    case LiteralPattern(lit, _) => List(Pattern.Literal(lit.value, lit.tpe))
+    case OrPattern(patterns, _) => patterns.flatMap(preprocessPatternAlts)
+    case MultiPattern(_, _) => Context.panic("Nested MultiPattern in preprocessPatternAlts")
   }
-  def preprocessPattern(p: source.MatchPattern)(using Context): Pattern = p match {
+
+  private def preprocessPattern(p: source.MatchPattern)(using Context): Pattern = p match {
     case AnyPattern(id, _)  => Pattern.Any()
     case IgnorePattern(_) => Pattern.Any()
     case p @ TagPattern(id, patterns, _) => Pattern.Tag(p.definition, patterns.map(preprocessPattern))
     case LiteralPattern(lit, _) => Pattern.Literal(lit.value, lit.tpe)
     case MultiPattern(patterns, _) =>
       Context.panic("Multi-pattern should have been split in preprocess already / nested MultiPattern")
-    case OrPattern(patterns, _) => Pattern.Any() // TODO
+    case OrPattern(patterns, _) =>
+      Context.panic("OR pattern should have been expanded via preprocessPatternAlts")
   }
-  def preprocessGuard(g: source.MatchGuard)(using Context): Condition = g match {
+
+  /**
+   * Returns all OR-expanded alternatives of a guard as a flat list of Conditions.
+   * A BooleanGuard always yields exactly one Condition.Guard.
+   * A PatternGuard with an OR-pattern yields one Condition.Patterns per alternative.
+   */
+  def preprocessGuardAlts(g: source.MatchGuard)(using Context): List[Condition] = g match {
     case MatchGuard.BooleanGuard(condition, _) =>
-      Condition.Guard(condition)
+      List(Condition.Guard(condition))
     case MatchGuard.PatternGuard(scrutinee, pattern, _) =>
-      Condition.Patterns(Map(Trace.Root(scrutinee) -> preprocessPattern(pattern)))
+      preprocessPatternAlts(pattern).map { p =>
+        Condition.Patterns(Map(Trace.Root(scrutinee) -> p))
+      }
+  }
+
+  /**
+   * Expands OR-patterns (including those nested inside constructors and guards) by returning
+   * a List[Clause] — one per combination of alternatives — all pointing to the same
+   * source.MatchClause so that redundancy tracking remains correct.
+   */
+  def preprocess(roots: List[source.Term], cl: source.MatchClause)(using Context): List[Clause] = {
+
+    // Fold guards into the accumulator of partial clause condition lists.
+    // Each guard position may itself expand into multiple alternatives (OR in PatternGuard),
+    // so we take a cartesian product across all guard positions.
+    def withGuards(baseConds: List[Condition], guards: List[source.MatchGuard]): List[List[Condition]] =
+      guards.foldLeft(List(baseConds)) { (accClauses, guard) =>
+        val guardAlts = preprocessGuardAlts(guard)
+        accClauses.flatMap(conds => guardAlts.map(g => conds :+ g))
+      }
+
+    (roots, cl) match {
+      case (List(root), source.MatchClause(pattern, guards, body, _)) =>
+        for {
+          p     <- preprocessPatternAlts(pattern)
+          base   = Condition.Patterns(Map(Trace.Root(root) -> p))
+          conds <- withGuards(List(base), guards)
+        } yield Clause.normalized(conds, cl)
+
+      case (roots, source.MatchClause(MultiPattern(patterns, _), guards, body, _)) =>
+        val perRootAlts: List[List[(Trace, Pattern)]] =
+          (roots zip patterns).map { case (root, pat) =>
+            preprocessPatternAlts(pat).map(p => Trace.Root(root) -> p)
+          }
+        for {
+          pairs <- cartesianProduct(perRootAlts)
+          base   = Condition.Patterns(pairs.toMap)
+          conds <- withGuards(List(base), guards)
+        } yield Clause.normalized(conds, cl)
+
+      case _ =>
+        List(Context.abort("Malformed multi-match"))
+    }
   }
 
   /**
@@ -202,7 +263,8 @@ object ExhaustivityChecker {
   }
 
   def checkExhaustive(scrutinees: List[source.Term], cls: List[source.MatchClause])(using C: Context): Unit = {
-    val initialClauses: List[Clause] = cls.map(preprocess(scrutinees, _))
+    // each source clause may expand into multiple internal clauses due to the use of OR patterns
+    val initialClauses: List[Clause] = cls.flatMap(preprocess(scrutinees, _))
     given E: Exhaustivity = new Exhaustivity(cls, scrutinees)
     checkScrutinees(scrutinees.map(Trace.Root(_)), scrutinees.map{ scrutinee => Context.inferredTypeOf(scrutinee) }, initialClauses)
     E.report()
@@ -304,7 +366,6 @@ object ExhaustivityChecker {
       case tpe @ (builtins.TInt | builtins.TDouble | builtins.TString | builtins.TBoolean | builtins.TUnit | builtins.TBottom | builtins.TChar | builtins.TByte) =>
         checkLiteral(tpe)
 
-        // missing.add(trace);
       case tpe =>
         clauses match {
           case Nil => E.missingDefault(tpe, scrutinee)
