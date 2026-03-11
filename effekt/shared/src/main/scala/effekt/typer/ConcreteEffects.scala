@@ -46,7 +46,7 @@ object ConcreteEffects {
    * [[Typer.asConcrete]] should be used instead, since it performs substitution and dealiasing.
    */
   def apply(eff: List[InterfaceType])(using Context): ConcreteEffects =
-    eff foreach assertConcreteEffect
+    eff.foreach { eff => assertConcreteEffect(eff) }
     fromList(eff)
 
   def apply(effs: Effects)(using Context): ConcreteEffects = apply(effs.toList)
@@ -80,11 +80,14 @@ implicit def asConcrete(effs: Effects)(using C: Context): ConcreteEffects =
  * TODO Question: should we ALWAYS require effects to be concrete, also when compared with [[TypeUnifier]]?
  */
 private[typer] def assertConcreteEffects(effs: Effects)(using C: Context): Unit =
-  effs.effects.foreach(assertConcreteEffect)
+  effs.effects.foreach { eff => assertConcreteEffect(eff) }
 
-private[typer] def assertConcreteEffect(eff: InterfaceType)(using C: Context): Unit =
+private[typer] def assertConcreteEffect(eff: InterfaceType, hints: Set[InterfaceType] = Set.empty)(using C: Context): Unit =
   unknowns(eff) match {
     case us if us.nonEmpty =>
+      hints.foreach { hint =>
+        C.info(pretty"Did you mean to use an operation of the concrete interface ${hint}?")
+      }
       C.abort(pretty"Effects need to be fully known, but effect ${eff}'s type parameter(s) ${us.mkString(", ")} could not be inferred.\n\nMaybe try annotating them?")
     case _ => ()
   }

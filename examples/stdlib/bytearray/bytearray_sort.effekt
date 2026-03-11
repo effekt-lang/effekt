@@ -1,0 +1,76 @@
+import bytearray
+
+// mocking the test framework here
+def test(name: String) { test: () => Unit / stop }: Unit = {
+  println(name)
+  try { test(); println("...  passed!") }
+  with stop { println("...  failed!") }
+}
+
+def assert(actual: Int, expected: Int) =
+  if (actual != expected) {
+    println(s"${expected.show} == ${actual.show} failed!")
+    do stop()
+  }
+def assert(actual: Byte, expected: Byte) =
+  if (actual != expected) {
+    println(s"${expected.show} == ${actual.show} failed!")
+    do stop()
+  }
+def assertLeq(actual: Byte, expected: Byte) =
+  if (actual.toInt > expected.toInt) {
+    println(s"${actual.show} <= ${expected.show} failed!")
+    do stop()
+  }
+
+def main() = {
+  test("sort empty byte array") {
+    val arr = bytearray::allocate(0)
+    sort(arr)
+    assert(arr.size, 0)
+  }
+
+  test("sort single byte array") {
+    val arr = bytearray::allocate(1)
+    sort(arr)
+    assert(arr.size, 1)
+  }
+
+  test("sort already sorted byte array") {
+    val arr = bytearray::build(10) { i => i.toByte }
+    sort(arr)
+    each(0, arr.size) { i =>
+      assert(arr.get(i), i.toByte)
+    }
+  }
+
+  test("sort reverse sorted byte array") {
+    val arr = bytearray::build(10) { i => (9 - i).toByte }
+    sort(arr)
+    each(0, arr.size) { i =>
+      assert(arr.get(i), i.toByte)
+    }
+  }
+
+  test("sort larger byte array") {
+    val arr = bytearray::allocate(100)
+    each(0, arr.size) { i =>
+      arr.set(i, (255 - i).toByte)
+    }
+    sort(arr)
+    each(0, arr.size) { i =>
+      assert(arr.get(i), (156 + i).toByte)
+    }
+  }
+
+  test("sort giant byte array") {
+    val arr = bytearray::allocate(100000)
+    each(0, arr.size) { i =>
+      arr.set(i, ((i * 37).mod(256)).toByte)
+    }
+    sort(arr)
+    each(0, arr.size - 1) { i =>
+      assertLeq(arr.get(i), arr.get(i + 1))
+    }
+  }
+}

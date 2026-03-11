@@ -1,16 +1,16 @@
 package effekt
 package util
 
-import effekt.source.{ NoSource, Tree }
-import kiama.util.{ Message, Messaging, Positions, Range, Severities }
+import effekt.source.{Origin, Tree}
 import kiama.util.Severities.*
+import kiama.util.{Message, Messaging, Range, Severities}
 
 object messages {
 
   type EffektMessages = Vector[EffektError]
 
   sealed trait EffektError extends Message
-  case class ParseError(message: String, range: Option[Range]) extends EffektError { val severity = Error }
+  case class ParseError(message: String, range: Option[Range], severity: Severity) extends EffektError
   case class AmbiguousOverloadError(matches: List[(symbols.BlockSymbol, symbols.FunctionType)], range: Option[Range]) extends EffektError { val severity = Error }
   case class FailedOverloadError(failedAttempts: List[(symbols.BlockSymbol, symbols.FunctionType, EffektMessages)], range: Option[Range]) extends EffektError { val severity = Error }
   case class PlainTextError(content: String, range: Option[Range], severity: Severity) extends EffektError
@@ -104,8 +104,6 @@ object messages {
 
     val messaging: BufferedMessaging[EffektError]
 
-    def positions: Positions // used to lookup positions of trees
-
     def plainMessage(text: String, severity: Severity): EffektError =
       PlainTextError(text, rangeOf(focus), severity)
 
@@ -159,6 +157,16 @@ object messages {
     def focusing[T <: Tree, R](t: T)(f: T => R): R =
       at(t) { f(t) }
 
-    def rangeOf(t: Tree): Option[Range] = positions.getRange(t)
+    def rangeOf(t: Tree): Option[Range] = {
+      if (t == null) {
+        return None
+      }
+      val s = t.span
+      if (s.origin == Origin.Missing) {
+        None
+      } else {
+        Some(s.range)
+      }
+    }
   }
 }

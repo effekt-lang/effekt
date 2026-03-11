@@ -3,14 +3,15 @@ package effekt
 import effekt.PhaseResult.{AllTransformed, CoreTransformed}
 import effekt.context.Context
 import effekt.core.Transformer
+import effekt.core.optimizer.BindSubexpressions
 import effekt.namer.Namer
 import effekt.source.{AnnotateCaptures, ExplicitCapabilities, ModuleDecl, ResolveExternDefs}
 import effekt.symbols.Module
-import effekt.typer.{BoxUnboxInference, Typer, Wellformedness}
+import effekt.typer.{UnboxInference, Typer, Wellformedness}
 import effekt.util.messages.{CompilerPanic, FatalPhaseError}
-import effekt.util.{SourceTask, Task, VirtualSource, paths}
+import effekt.util.paths
 import kiama.output.PrettyPrinterTypes.Document
-import kiama.util.{Positions, Source}
+import kiama.util.Source
 
 import scala.language.postfixOps
 
@@ -60,7 +61,7 @@ enum PhaseResult {
 }
 export PhaseResult.*
 
-enum Stage { case Core; case Machine; case Target; }
+enum Stage { case Core; case CPS; case Machine; case Target; }
 
 /**
  * The compiler for the Effekt language.
@@ -89,6 +90,7 @@ enum Stage { case Core; case Machine; case Target; }
  *
  * - [[generator.js.JavaScript]]
  * - [[generator.chez.ChezScheme]] (in three variants)
+ * - [[generator.chez.ChezSchemeCPS]]
  * - [[generator.llvm.LLVM]]
  *
  * @tparam Executable information of this compilation run, which is passed to
@@ -207,7 +209,7 @@ trait Compiler[Executable] {
        * Explicit box transformation
        * [[NameResolved]] --> [[NameResolved]]
        */
-      BoxUnboxInference andThen
+      UnboxInference andThen
       /**
        * Wellformedness checks (exhaustivity, non-escape)
        * [[Typechecked]] --> [[Typechecked]]
@@ -300,20 +302,22 @@ trait Compiler[Executable] {
 
       val aggregated = core.ModuleDecl(main.path, Nil, declarations, externs, definitions, exports)
 
+      if Context.config.debug() then aggregated.typecheck()
+
       // TODO in the future check for duplicate exports
       CoreTransformed(src, tree, mod, aggregated)
   }
 
   lazy val Machine = Phase("machine") {
     case CoreTransformed(source, tree, mod, core) =>
-      val main = Context.checkMain(mod)
-      val program = machine.Transformer.transform(main, core)
+      val main = Context.ensureMainExists(mod)
+      val anfed = BindSubexpressions.transform(core)
+      val program = machine.Transformer.transform(main, anfed)
       (mod, main, program)
   }
 
   // Helpers
   // -------
-  import effekt.util.paths.file
 
   /**
    * Path relative to the output folder

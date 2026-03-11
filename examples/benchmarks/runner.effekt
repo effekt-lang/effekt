@@ -1,13 +1,13 @@
 import args
 import bench
 
-def benchmark(testSize: Int) { run: Int => Int } = commandLineArgs() match {
+def benchmark(testSize: Int) { run: Int => Int }: Unit = commandLineArgs() match {
   // test mode
   case Nil() => println(run(testSize))
 
   // bench mode
   case Cons(problemSize, _) =>
-    with on[WrongFormat].panic;
+    with crash("input size is not an integer")
 
     val n = problemSize.toInt
 
@@ -23,7 +23,7 @@ def benchmark(testSize: Int) { run: Int => Int } = commandLineArgs() match {
  * for benchmarking. Since externs are opaque to the optimizer, just wrap the
  * result of the computation to benchmark in `relevant`.
  */
-extern io def relevant(value: Int): Unit =
+extern def relevant(value: Int) at io: Unit =
   default { () }
 
 def main() = ()

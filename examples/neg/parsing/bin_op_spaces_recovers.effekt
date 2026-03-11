@@ -1,0 +1,5 @@
+// this example causes a type error, showing that the parser recovers correctly
+record JustCauseATypeErrorPlease()
+def main() = {
+  val _: JustCauseATypeErrorPlease = 1 +2
+}

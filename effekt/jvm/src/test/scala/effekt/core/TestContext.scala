@@ -1,7 +1,6 @@
 package effekt.core
 
 import effekt.context.{Context, ModuleDB}
-import kiama.util.Positions
 import kiama.util.Source
 import effekt.util.messages.DebugMessaging
 import scala.collection.immutable.Map
@@ -45,7 +44,7 @@ trait TestModuleDB extends ModuleDB { self: Context =>
   override def findSource(modulePath: String): Option[Source] = sources.get(modulePath)
 }
 
-class TestContext extends Context(new Positions) with TestModuleDB {
+class TestContext extends Context with TestModuleDB {
 
   object messaging extends DebugMessaging
 }

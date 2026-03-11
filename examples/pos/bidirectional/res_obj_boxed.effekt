@@ -1,5 +1,5 @@
 interface Eff {
-    def op(f: Int => Int at {}) {greeter: Greet}: Int => Int at {greeter} / Greet
+    def op(f: Int => Int at {}) {greeter: Greet}: Int => Int at greeter / Greet
 }
 
 interface Greet {
@@ -17,7 +17,7 @@ def eff2Impl: Greet = new Greet {
     def greet() = println("hello")
 }
 
-def h(): Int => Int at {io} / Greet =
+def h(): Int => Int at io / Greet =
     try {
         with constant(1);
         do op(box {x => x}) {eff2Impl}

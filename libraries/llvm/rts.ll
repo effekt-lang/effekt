@@ -1,7 +1,5 @@
 ; Run-Time System
 
-%Evidence = type i64
-
 ; Basic types
 
 %Environment = type ptr
@@ -99,6 +97,7 @@
 declare ptr @malloc(i64)
 declare void @free(ptr)
 declare ptr @realloc(ptr, i64)
+declare noalias ptr @calloc(i64, i64)
 declare void @memcpy(ptr, ptr, i64)
 declare i64 @llvm.ctlz.i64 (i64 , i1)
 declare i64 @llvm.fshr.i64(i64, i64, i64)
@@ -409,7 +408,7 @@ define private void @invalidate(%Stack %stack, %Stack %end) {
 
 error:
     call void @duplicated_prompt()
-    ret void
+    unreachable
 
 check:
     %isEnd = icmp eq %Stack %next, %end
@@ -692,15 +691,13 @@ define private %Stack @withEmptyStack() {
     ret %Stack %stack
 }
 
-define void @resume_Int(%Stack %stack, %Int %argument) {
-    %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
-    %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
-    %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
-    tail call tailcc void %returnAddress(%Int %argument, %Stack %stack)
+define ccc void @resume_Int(%Stack %stack, %Int %integer) {
+    %argument = call ccc %Pos @coerceIntPos(%Int %integer)
+    call ccc void @resume_Pos(%Stack %stack, %Pos %argument)
     ret void
 }
 
-define void @resume_Pos(%Stack %stack, %Pos %argument) {
+define ccc void @resume_Pos(%Stack %stack, %Pos %argument) {
     %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
@@ -708,48 +705,37 @@ define void @resume_Pos(%Stack %stack, %Pos %argument) {
     ret void
 }
 
-define void @run(%Neg %f) {
-    ; fresh stack
+define ccc void @run(%Pos %boxed) {
+
+    %function = call %Neg @coercePosNeg(%Pos %boxed)
     %stack = call %Stack @withEmptyStack()
 
-    ; prepare call
-    %arrayPointer = extractvalue %Neg %f, 0
-    %object = extractvalue %Neg %f, 1
+    %arrayPointer = extractvalue %Neg %function, 0
+    %object = extractvalue %Neg %function, 1
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
-    ; call
     tail call tailcc %Pos %functionPointer(%Object %object, %Stack %stack)
     ret void
 }
 
-define void @run_Int(%Neg %f, i64 %argument) {
-    ; fresh stack
-    %stack = call %Stack @withEmptyStack()
-
-    ; prepare call
-    %arrayPointer = extractvalue %Neg %f, 0
-    %object = extractvalue %Neg %f, 1
-    %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
-    %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
-
-    ; call
-    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, i64 %argument, %Stack %stack)
+define ccc void @run_Int(%Pos %boxed, %Int %integer) {
+    %argument = call ccc %Pos @coerceIntPos(%Int %integer)
+    call ccc %Pos @run_Pos(%Pos %boxed, %Pos %argument)
     ret void
 }
 
-define void @run_Pos(%Neg %f, %Pos %argument) {
-    ; fresh stack
+define ccc void @run_Pos(%Pos %boxed, %Pos %argument) {
+
+    %function = call ccc %Neg @coercePosNeg(%Pos %boxed)
     %stack = call %Stack @withEmptyStack()
 
-    ; prepare call
-    %arrayPointer = extractvalue %Neg %f, 0
-    %object = extractvalue %Neg %f, 1
+    %arrayPointer = extractvalue %Neg %function, 0
+    %object = extractvalue %Neg %function, 1
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
-    ; call
-    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Pos %argument, %Stack %stack)
+    tail call tailcc %Pos %functionPointer(%Object %object, %Pos %argument, %Stack %stack)
     ret void
 }
 

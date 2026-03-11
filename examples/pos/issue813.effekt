@@ -1,0 +1,11 @@
+module issue813
+
+effect Go[T](): Unit
+
+def dropTill[T2](l: Int => Int / Go[T2] at {}): Int => Int / Go[T2] at {} =
+  if (false) { dropTill[T2](l) } else { l }
+
+def main() = try {
+  val f = dropTill[String](box { x => do Go(); x * 2 })
+  val _ = f(42)
+} with Go[String] { resume(()) }

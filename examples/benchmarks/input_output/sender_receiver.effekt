@@ -1,0 +1,26 @@
+import examples/benchmarks/runner
+
+import io
+import io/channel
+
+
+def run(n: Int) = {
+  val (sender, receiver) = channel()
+  val closed = ref(false)
+
+  spawn(box {
+    each(0, n) { i =>
+      sender.send(i)
+    }
+    closed.set(true)
+  })
+
+  var s = 0
+  while (not(closed.get())) {
+    s = s + receiver.receive(())
+  }
+  return s
+}
+
+def main() = benchmark(5){run}
+

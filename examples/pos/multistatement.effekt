@@ -1,0 +1,17 @@
+def filesystem { p: => Unit }: Unit = {
+  println("Open files")
+  p()
+  println("Close files")
+}
+def network(port: Int) { p: => Unit }: Unit = {
+  println("Open port " ++ port.show)
+  p()
+  println("Close port")
+}
+def readInt(): Int = 8080
+
+def main() =
+  with filesystem;
+  val port = readInt();
+  with network(port);
+  println("Running!")

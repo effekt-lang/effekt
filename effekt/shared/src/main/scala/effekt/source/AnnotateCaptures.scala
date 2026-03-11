@@ -51,7 +51,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       }
       query(term) ++ capt
 
-    case t @ source.Do(effect, op, targs, vargs, bargs, _) =>
+    case t @ source.Do(op, targs, vargs, bargs, _) =>
       val cap = Context.annotation(Annotations.CapabilityReceiver, t)
       combineAll(vargs.map(query)) ++ combineAll(bargs.map(query)) ++ CaptureSet(cap.capture)
 
@@ -75,7 +75,12 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       tcaps ++ combineAll(vargs map query) ++ combineAll(bargs map query)
 
     case b @ source.BlockLiteral(tps, vps, bps, body, _) =>
-      query(body) -- boundCapabilities(b) -- CaptureSet(bps.map(_.symbol.capture))
+      query(body) -- CaptureSet(bps.map(_.symbol.capture))
+  }
+
+  override def query(h: OpClause)(using Context, Unit) = h match {
+    case source.OpClause(id, tps, vps, bps, ret, body, resume, span) =>
+      query(body) -- CaptureSet(bps.map(_.symbol.capture))
   }
 
   override def stmt(using Context, Unit) = {
@@ -85,13 +90,26 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
   }
 
   override def defn(using Context, Unit) = {
-    case tree @ source.FunDef(id, tps, vps, bps, ret, body, doc, span) =>
-      val cpt = query(body) -- boundCapabilities(tree) -- CaptureSet(bps.unspan.map(_.symbol.capture))
+    case tree @ source.FunDef(id, tps, vps, bps, cpts, ret, body, doc, span) =>
+      val sym = Context.symbolOf(id).asFun
+      val inferred = query(body) -- CaptureSet(bps.unspan.map(_.symbol.capture))
+      val annotated = sym.annotatedCaptures.getOrElse(inferred)
       // TODO Why do we need to update the annotation on the symbol here? Is the inferred capture for recursive functions
       //   wrong? Problematic example: examples/benchmarks/tree.effekt (chooseHandler has the empty set, but should have {this})
-      Context.annotate(Annotations.Captures, tree.symbol, cpt)
-      cpt
-
+      Context.annotate(Annotations.Captures, sym, annotated)
+      annotated
+    case tree @ DefDef(id, captures, annot, block, info, span) =>
+      val sym = tree.symbol
+      val inferred = query(block)
+      val annotated = sym.caps.getOrElse(inferred)
+      Context.annotate(Annotations.Captures, sym, annotated)
+      annotated
+    case tree @ ExternDef(id, tparams, vparams, bparams, captures, ret, bodies, info, span) =>
+      val sym = tree.symbol
+      val capts = sym.capture
+      bodies.foreach { query }
+      Context.annotate(Annotations.Captures, sym, capts)
+      capts
     // regions
     case tree @ RegDef(id, annot, region, binding, doc, span) =>
       val regSymbol = region.symbol.asBlockSymbol

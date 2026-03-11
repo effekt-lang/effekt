@@ -29,8 +29,8 @@ def countWords(): Output / read[Char] = {
   var lines = 0
   var wasSpace = true
 
-  exhaustively {
-    val c = do read[Char]()
+  loop {
+    val c = do read()
 
     chars = chars + 1
 

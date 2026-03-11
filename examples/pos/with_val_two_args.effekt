@@ -1,0 +1,6 @@
+module with_val_two_args
+
+def main() = {
+  with val i, x = ['a', 'b', 'c', 'd'].foreachIndex;
+  println(show(i) ++ ": " ++ show(x))
+}

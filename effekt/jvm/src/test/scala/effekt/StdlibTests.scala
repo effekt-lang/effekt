@@ -33,7 +33,9 @@ class StdlibJavaScriptTests extends StdlibTests {
     examplesDir / "stdlib" / "char" / "ascii_iswhitespace.effekt",
   )
 
-  override def ignored: Set[File] = Set()
+  override def ignored: Set[File] = Set(
+    examplesDir / "stdlib" / "network" / "streaming.effekt",
+  )
 }
 
 abstract class StdlibChezTests extends StdlibTests {
@@ -41,8 +43,12 @@ abstract class StdlibChezTests extends StdlibTests {
     // Not implemented yet
     examplesDir / "stdlib" / "io",
     examplesDir / "stdlib" / "stream" / "characters.effekt",
-    examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt"
+    examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt",
+    examplesDir / "stdlib" / "network" / "streaming.effekt",
   )
+}
+class StdlibChezSchemeCPSTests extends StdlibChezTests {
+  def backendName: String = "chez-cps"
 }
 class StdlibChezSchemeMonadicTests extends StdlibChezTests {
   def backendName: String = "chez-monadic"
@@ -63,9 +69,5 @@ class StdlibLLVMTests extends StdlibTests {
   override def ignored: Set[File] = Set(
     // String comparison using `<`, `<=`, `>`, `>=` is not implemented yet on LLVM
     examplesDir / "stdlib" / "string" / "compare.effekt",
-
-    // Wrong codegen for negative types, see #801
-    examplesDir / "stdlib" / "json.effekt",
-    examplesDir / "stdlib" / "buffer.effekt",
   )
 }

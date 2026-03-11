@@ -43,7 +43,7 @@ object WebTests extends TestSuite {
      */
     def evaluate[A](includes: List[String], content: String): A =
       run(includes,
-        s"""|extern io def withResult[A](value: A): Unit = js"(function() { module.exports.result = $${value} })()"
+        s"""|extern def withResult[A](value: A) at io: Unit = js"(function() { module.exports.result = $${value} })()"
             |def main() = { withResult(${content}) }
             |""".stripMargin)
       js.Dynamic.global.globalThis.module.`exports`.result.asInstanceOf[A]

@@ -1,6 +1,6 @@
-[error] examples/neg/parsing/top-level-var.effekt:2:1: Mutable variable declarations are currently not supported on the toplevel.
+[error] examples/neg/parsing/top-level-var.effekt:2:1: Mutable variable declarations are not allowed on the toplevel of a module or in a namespace.
 var y = 42
-^
-[error] examples/neg/parsing/top-level-var.effekt:3:1: Mutable variable declarations are currently not supported on the toplevel.
+^^^^^^^^^^
+[error] examples/neg/parsing/top-level-var.effekt:3:1: Mutable variable declarations are not allowed on the toplevel of a module or in a namespace.
 var z = 1
-^
+^^^^^^^^^

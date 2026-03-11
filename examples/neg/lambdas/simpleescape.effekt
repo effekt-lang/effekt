@@ -6,9 +6,9 @@ def main() = {
   try {
     def block(msg: String): Unit / {} = { do Raise(msg) }
     val f = if (do Flip()) {
-      fun() { block("first") }
+      box { block("first") }
     } else {
-      fun() { block("second") }
+      box { block("second") }
     }
     f
   } with Raise { msg =>
@@ -16,5 +16,5 @@ def main() = {
   } with Flip {
     resume(true); resume(false)
   }
-
+  ()
 }

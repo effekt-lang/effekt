@@ -1,0 +1,12 @@
+module issue866
+
+def fixey[T] { one: T => Unit / emit[T] } { stream: => Unit / emit[T] }: Unit =
+  try stream() with emit[T] { value =>
+    fixey {one} { one(value) }
+    resume(())
+  }
+
+def main() =
+  fixey { (x: Int) =>
+    if (x <= 150) { println(x); do emit(x * 2) }
+  } { do emit(42); do emit(100) }

@@ -15,10 +15,8 @@ def freeVariables(taggedClause: (Int, Clause)): Set[Variable] = freeVariables(ta
 
 def freeVariables(statement: Statement): Set[Variable] =
   statement match {
-    case Jump(Label(_, environment)) =>
-      environment.toSet
-    case Substitute(bindings, rest) =>
-      freeVariables(rest).map { variable => bindings.toMap.getOrElse(variable, variable) }
+    case Jump(_, arguments) =>
+      arguments.toSet
     case Construct(name, tag, values, rest) =>
       Set.from(values) ++ (freeVariables(rest) -- Set(name))
     case Switch(value, clauses, default: Option[Clause]) =>
@@ -27,7 +25,7 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(clauses) ++ (freeVariables(rest) -- Set(name))
     case Invoke(value, tag, values) =>
       Set(value) ++ Set.from(values)
-    case Var(name, init, tpe, rest) =>
+    case Var(name, init, rest) =>
       Set(init) ++ (freeVariables(rest) -- Set(name))
     case LoadVar(name, ref, rest) =>
       Set(ref) ++ (freeVariables(rest) -- Set(name))
@@ -45,6 +43,8 @@ def freeVariables(statement: Statement): Set[Variable] =
       Set(prompt) ++ (freeVariables(rest) -- Set(name))
     case LiteralInt(name, value, rest) =>
       freeVariables(rest) - name
+    case LiteralByte(name, value, rest) =>
+      freeVariables(rest) - name
     case LiteralDouble(name, value, rest) =>
       freeVariables(rest) - name
     case LiteralUTF8String(name, utf8, rest) =>
@@ -53,5 +53,5 @@ def freeVariables(statement: Statement): Set[Variable] =
       arguments.toSet ++ (freeVariables(rest) - name)
     case Coerce(name, value, rest) =>
       Set(value) ++ (freeVariables(rest) - name)
-    case Hole => Set.empty
+    case Hole(_) => Set.empty
   }

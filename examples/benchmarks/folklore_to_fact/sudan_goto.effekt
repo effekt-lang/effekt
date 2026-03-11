@@ -1,0 +1,23 @@
+import examples/benchmarks/runner
+
+effect goto(i: Int): Int
+
+def sudan(n: Int, x: Int, y: Int): Int / goto = {
+  if (n == 0) {
+    do goto(x + y)
+  } else if (y == 0) {
+    do goto(x)
+  } else {
+    val inner = try { sudan(n, x, y - 1) } with goto { i => i }
+    sudan(n - 1, inner, inner + y)
+  }
+}
+
+def run(n: Int): Int = {
+  // only one argument
+  val x = n * 2
+  val y = n * 2
+  try { sudan(n, x, y) } with goto { i => i }
+}
+
+def main() = benchmark(1){run}

@@ -1,0 +1,22 @@
+[error] examples/neg/parsing/bin_op_spaces_recovers.effekt:4:38: Cannot typecheck call.
+There are multiple overloads, which all fail to check:
+
+Possible overload: effekt::infixAdd of type (Int, Int) => Int
+  Expected type
+    JustCauseATypeErrorPlease
+  but got type
+    Int
+
+Possible overload: effekt::infixAdd of type (Double, Double) => Double
+  Expected type
+    JustCauseATypeErrorPlease
+  but got type
+    Double
+  Expected Double but got Int.
+  Expected Double but got Int.
+
+  val _: JustCauseATypeErrorPlease = 1 +2
+                                     ^^^^
+[warning] examples/neg/parsing/bin_op_spaces_recovers.effekt:4:40: Missing whitespace around binary operator
+  val _: JustCauseATypeErrorPlease = 1 +2
+                                       ^

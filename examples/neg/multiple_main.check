@@ -1,0 +1,3 @@
+[error] examples/neg/multiple_main.effekt:1:1: Multiple main functions defined: multiple_main::main, multiple_main::nested::main
+namespace nested { // ERROR Multiple main functions
+^

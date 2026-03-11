@@ -4,7 +4,7 @@ interface Bar[B] { def bar(): B }
 effect Both[A] = { Foo[A], Bar[A] }
 
 def test(): Int / Both[Int] =
-  do foo[Int]() + do bar[Int]()
+  do foo() + do bar()
 
 def main() = try {
   println(test())

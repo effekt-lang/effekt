@@ -25,15 +25,15 @@ trait Symbol {
   /**
    * The unique id of this symbol
    */
-  lazy val id: Int = Symbol.fresh.next()
+  val id: Int = Symbol.fresh.next()
 
   /**
    * Is this symbol synthesized? (e.g. a constructor or field access)
    */
   def synthetic = false
 
-  override def hashCode: Int = id
-  override def equals(other: Any): Boolean = other match {
+  override final def hashCode: Int = id
+  override final def equals(other: Any): Boolean = other match {
     case other: Symbol => this.id == other.id
     case _             => false
   }

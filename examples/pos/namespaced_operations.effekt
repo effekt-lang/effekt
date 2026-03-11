@@ -1,0 +1,21 @@
+interface Foo {
+  def bar(): Int
+}
+
+interface Boo {
+  def bar(): Int
+}
+
+def useBothEffect() =
+  println(do Foo::bar() + do Boo::bar())
+
+def useBothExplicit {f: Foo} {b: Boo} =
+  println(f.Foo::bar() + b.Boo::bar())
+
+def main() =
+  try {
+    useBothEffect()
+    useBothExplicit {f} {b}
+  }
+  with f: Foo { def bar() = resume(1) }
+  with b: Boo { def bar() = resume(2) }

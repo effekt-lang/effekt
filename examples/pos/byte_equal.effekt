@@ -1,0 +1,56 @@
+/// Checks (in)equality of `Byte` values.
+module examples/pos/byte_equal
+
+def test(a: Byte, b: Byte) = {
+  val describe = (a == b, a != b) match {
+    case (true, false) => "equal"
+    case (false, true) => "not equal"
+    case _ => "inconsistent"
+  }
+
+  println(a.show ++ " vs " ++ b.show ++ " ~> " ++ describe)
+}
+
+def main() = {
+  test(0x00, 0x00) // equal
+  test(0x00, 0x01) // not equal
+  test(0x01, 0x00) // not equal
+  test(0x01, 0x01) // equal
+
+  test(0xFF, 0xFF) // equal
+  test(0xFF, 0x00) // not equal
+  test(0x00, 0xFF) // not equal
+
+  test(0xFF, 0x01) // not equal
+  test(0x01, 0xFF) // not equal
+
+  test(0xAB, 0xCD) // not equal
+  test(0xCD, 0xAB) // not equal
+
+  test(0x0F, 0xF0) // not equal
+  test(0xF0, 0x0F) // not equal
+  test(0x0F, 0x0F) // equal
+  test(0xF0, 0xF0) // equal
+
+  test(0x7F, 0x7F) // equal
+  test(0x7F, 0x80) // not equal
+  test(0x80, 0x7F) // not equal
+  test(0x80, 0x80) // equal
+
+  println(
+    "forall x, x == x? " ++
+    list::build(256) { i => i.toByte == i.toByte }.all { x => x }.show
+  )
+  println(
+    "exists x, x != x? " ++
+    list::build(256) { i => i.toByte != i.toByte }.any { x => x }.show
+  )
+  println(
+    "exists x, x == (x + 1)? " ++
+    list::build(256) { i => i.toByte == (i + 1).toByte }.any { x => x }.show
+  )
+  println(
+    "exists x, (x + 1) == x? " ++
+    list::build(256) { i => (i + 1).toByte == i.toByte }.any { x => x }.show
+  )
+}

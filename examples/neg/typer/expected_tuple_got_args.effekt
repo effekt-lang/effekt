@@ -1,0 +1,5 @@
+def foo(x: (Int, String)): Int = 42
+
+def main() = {
+  val _ = foo(42, "hello")
+}

@@ -4,7 +4,7 @@ effect Yield(): Unit
 def main() = region this {
 
   // here we use the region of the main function
-  var cont: () => Unit at {this} in this = fun() { () }
+  var cont: () => Unit at this in this = box { () }
 
   try {
     try {
@@ -14,7 +14,7 @@ def main() = region this {
     } with Yield {
       // the assignment is not valid since the continuation must not leave
       // the current scope, which is the one of Raise.
-      cont = fun() { resume(()) };
+      cont = box { resume(()) };
       ()
     }
   } with Raise { msg =>

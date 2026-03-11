@@ -1,0 +1,2 @@
+// the following code should still print 2
+def main() = println(1 +1)

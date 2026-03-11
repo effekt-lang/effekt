@@ -22,7 +22,8 @@ class OptimizerTests extends CoreTests {
     val pExpected = parse(moduleHeader + transformed, "expected", names)
 
     // the parser is not assigning symbols correctly, so we need to run renamer first
-    val renamed = TestRenamer(names).rewrite(pInput)
+    val renamer = TestRenamer(names)
+    val renamed = renamer(pInput)
 
     val obtained = transform(renamed)
     assertAlphaEquivalent(obtained, pExpected, "Not transformed to")
@@ -36,7 +37,7 @@ class OptimizerTests extends CoreTests {
   def normalize(input: String, expected: String)(using munit.Location) =
     assertTransformsTo(input, expected) { tree =>
       val anfed = BindSubexpressions.transform(tree)
-      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, 50, false)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, 50, true)
       Deadcode.remove(mainSymbol, normalized)
     }
 
@@ -108,7 +109,7 @@ class OptimizerTests extends CoreTests {
     val input =
       """ def main = { () =>
         |   let x = (add : (Int, Int) => Int @ {})(1, 2)
-        |   let y = !(println: (String) => Unit @ {io})("hello")
+        |   let ! y = (println: (String) => Unit @ {io})("hello")
         |   let z = 7
         |   return z:Int
         | }
@@ -116,7 +117,7 @@ class OptimizerTests extends CoreTests {
 
     val expected =
       """ def main = { () =>
-        |   let y = !(println: (String) => Unit @ {io})("hello")
+        |   let ! y = (println: (String) => Unit @ {io})("hello")
         |   let z = 7
         |   return z:Int
         | }
@@ -150,7 +151,7 @@ class OptimizerTests extends CoreTests {
   test("inline toplevel"){
     val input =
       """ def foo = { () => return 42 }
-        | def main = { () => (foo : () => Unit @ {})() }
+        | def main = { () => (foo : () => Int @ {})() }
         |""".stripMargin
 
     val expected =
@@ -163,7 +164,7 @@ class OptimizerTests extends CoreTests {
   test("inline with argument"){
     val input =
       """ def foo = { (n: Int) => return n:Int }
-        | def main = { () => (foo : (Int) => Unit @ {})(42) }
+        | def main = { () => (foo : (Int) => Int @ {})(42) }
         |""".stripMargin
 
     val expected =
@@ -180,7 +181,7 @@ class OptimizerTests extends CoreTests {
         |   (f : (Int) => Int @ {f})(1)
         | }
         | def main = { () =>
-        |   (hof : (){f : (Int) => Int} => Int @ {})(){ (foo : (Int) => Unit @ {}) }
+        |   (hof : (){f : (Int) => Int} => Int @ {})(){ (foo : (Int) => Int @ {}) }
         | }
         |""".stripMargin
 
@@ -198,7 +199,7 @@ class OptimizerTests extends CoreTests {
         |   (f : (Int) => Int @ {f})(1)
         | }
         | def main = { () =>
-        |   (hof : (){f : (Int) => Int} => Int @ {})(){ (foo : (Int) => Unit @ {}) }
+        |   (hof : (){f : (Int) => Int} => Int @ {})(){ (foo : (Int) => Int @ {}) }
         | }
         |""".stripMargin
 

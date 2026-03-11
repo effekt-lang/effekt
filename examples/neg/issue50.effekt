@@ -8,17 +8,17 @@ def handle2 { prog: () => Unit / { Effect2 } }: Unit = {
 }
 
 def escape { prog: () => Unit / { Effect1, Effect2 } }: Unit = region this {
-  var k: (Unit) => Unit at { this, prog } in this = fun (x: Unit) { () }
+  var k: (Unit) => Unit at { this, prog } in this = box { x => () }
   handle2 {
     try {
       prog()
     } with Effect1 { () =>
-      k = fun (x: Unit) { resume(x) };
+      k = box { x => resume(x) };
       resume(())
     }
   }
 
-  (unbox k)(())
+  k(())
 }
 
 def main() = {

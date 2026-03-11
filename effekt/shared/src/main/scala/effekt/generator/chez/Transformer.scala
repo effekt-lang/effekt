@@ -5,6 +5,7 @@ package chez
 import effekt.context.Context
 import effekt.core.*
 import effekt.symbols.{ Module, Symbol, TermSymbol, Wildcard }
+import effekt.util.UByte
 import effekt.util.paths.*
 import effekt.util.messages.ErrorReporter
 import kiama.output.PrettyPrinterTypes.Document
@@ -65,7 +66,7 @@ trait Transformer {
 
   def toChez(module: ModuleDecl)(using ErrorReporter): List[chez.Def] = {
     val decls = module.declarations.flatMap(toChez)
-    val externs = module.externs.map(toChez)
+    val externs = module.externs.flatMap(toChez)
      // TODO FIXME, once there is a let _ = ... in there, we are doomed!
     val defns = module.definitions.map(toChez)
     decls ++ externs ++ defns
@@ -77,10 +78,10 @@ trait Transformer {
     case Invoke(b, method, methodTpe, targs, vargs, bargs) =>
       chez.Call(chez.Call(chez.Variable(nameRef(method)), List(toChez(b))), vargs.map(toChez) ++ bargs.map(toChez))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
-    case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
+    case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
     // empty matches are translated to a hole in chez scheme
-    case Match(scrutinee, Nil, None) => chez.Builtin("hole")
-    case Match(scrutinee, clauses, default) =>
+    case Match(scrutinee, tpe, Nil, None) => chez.Builtin("unreachable")
+    case Match(scrutinee, tpe, clauses, default) =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
         val names = RecordNames(constr)
@@ -90,7 +91,7 @@ trait Transformer {
       }
       chez.Cond(cls, default.map(toChezExpr))
 
-    case Hole() => chez.Builtin("hole")
+    case Hole(tpe, span) => chez.Builtin("hole", chez.ChezString(span.range.from.format))
 
     case Var(ref, init, capt, body) =>
       state(nameDef(ref), toChez(init), toChez(body))
@@ -100,7 +101,7 @@ trait Transformer {
 
     case Reset(body) => chez.Reset(toChez(body))
 
-    case Shift(p, body) => chez.Shift(nameRef(p.id), toChez(body))
+    case Shift(p, k, body) => chez.Shift(nameRef(p.id), chez.Lambda(toChez(k) :: Nil, toChez(body)))
 
     // currently bidirectional handlers are not supported
     case Resume(k, Return(expr)) => chez.Call(toChez(k), List(toChez(expr)))
@@ -109,7 +110,7 @@ trait Transformer {
 
     case Region(body) => chez.Builtin("with-region", toChez(body))
 
-    case stmt: (Def | Let | Get | Put) =>
+    case stmt: (Def | Let | ImpureApp | Get | Put) =>
       chez.Let(Nil, toChez(stmt))
   }
 
@@ -122,20 +123,23 @@ trait Transformer {
       generateConstructor(id, operations.map(op => op.id))
   }
 
-  def toChez(decl: core.Extern)(using ErrorReporter): chez.Def = decl match {
+  def toChez(decl: core.Extern)(using ErrorReporter): Option[chez.Def] = decl match {
     case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body) =>
       val tBody = body match {
         case ExternBody.StringExternBody(featureFlag, contents) => toChez(contents)
         case u: ExternBody.Unsupported =>
           u.report
-          chez.Builtin("hole")
+          chez.Builtin("unreachable")
       }
-      chez.Constant(nameDef(id),
+      Some(chez.Constant(nameDef(id),
         chez.Lambda(vps.map { p => nameDef(p.id) } ++ bps.map { p => nameDef(p.id) },
-          tBody))
+          tBody)))
 
     case Extern.Include(ff, contents) =>
-      RawDef(contents)
+      Some(RawDef(contents))
+
+    case Extern.Data(id, tparams) =>
+      None
   }
 
   def toChez(t: Template[core.Expr]): chez.Expr =
@@ -143,7 +147,7 @@ trait Transformer {
 
   def toChez(defn: Toplevel): chez.Def = defn match {
     case Toplevel.Def(id, block) => chez.Constant(nameDef(id), toChez(block))
-    case Toplevel.Val(id, tpe, binding) => chez.Constant(nameDef(id), run(toChezExpr(binding)))
+    case Toplevel.Val(id, binding) => chez.Constant(nameDef(id), run(toChezExpr(binding)))
   }
 
   def toChez(stmt: Stmt): chez.Block = stmt match {
@@ -151,7 +155,7 @@ trait Transformer {
       val chez.Block(defs, exprs, result) = toChez(body)
       chez.Block(chez.Constant(nameDef(id), toChez(block)) :: defs, exprs, result)
 
-    case Stmt.Let(Wildcard(), tpe, binding, body) =>
+    case Stmt.Let(Wildcard(), binding, body) =>
       toChez(binding) match {
         // drop the binding altogether, if it is of the form:
         //   let _ = myVariable; BODY
@@ -164,9 +168,13 @@ trait Transformer {
           }
       }
 
-    case Stmt.Let(id, tpe, binding, body) =>
+    case Stmt.Let(id, binding, body) =>
       val chez.Block(defs, exprs, result) = toChez(body)
       chez.Block(chez.Constant(nameDef(id), toChez(binding)) :: defs, exprs, result)
+
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      val chez.Block(defs, exprs, result) = toChez(body)
+      chez.Block(chez.Constant(nameDef(id), chez.Call(toChez(callee), vargs.map(toChez) ++ bargs.map(toChez))) :: defs, exprs, result)
 
     case Stmt.Get(id, tpe, ref, capt, body) =>
       val reading = chez.Constant(nameDef(id), chez.Call(chez.Call(nameRef(symbols.builtins.TState.get), nameRef(ref))))
@@ -214,10 +222,10 @@ trait Transformer {
 
     case Literal(s: String, _)  => escape(s)
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
+    case Literal(b: Byte, _)    => chez.RawValue(UByte.unsafeFromByte(b).toInt.toString)
     case l: Literal             => chez.RawValue(l.value.toString)
     case ValueVar(id, _)        => chez.Variable(nameRef(id))
 
-    case DirectApp(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
     case Make(data, tag, targs, args) => chez.Call(chez.Variable(nameRef(tag)), args map toChez)
 

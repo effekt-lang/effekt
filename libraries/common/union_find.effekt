@@ -15,9 +15,9 @@ namespace internal {
   def parent(u: UnionFind, s: Int): Int / Exception[MissingValue] = {
     with on[OutOfBounds].default { do raise(MissingValue(), "No node " ++ s.show) }
     val c = u.rawElements.get(s)
-    if (c < 0) { 
-      do raise(MissingValue(), "Root node " ++ s.show ++ " has no parent.") 
-    } else { 
+    if (c < 0) {
+      do raise(MissingValue(), "Root node " ++ s.show ++ " has no parent.")
+    } else {
       c
     }
   }
@@ -31,11 +31,11 @@ namespace internal {
     }
   }
   def setParent(u: UnionFind, child: Int, parent: Int) = {
-    with on[OutOfBounds].default { do raise(MissingValue(), "No node " ++ child.show) }
+    with default[OutOfBounds, Unit] { do raise(MissingValue(), "No node " ++ child.show) }
     u.rawElements.set(child, parent)
   }
   def setRank(u: UnionFind, root: Int, rank: Int) = {
-    with on[OutOfBounds].default { do raise(MissingValue(), "No node " ++ root.show) }
+    with default[OutOfBounds, Unit] { do raise(MissingValue(), "No node " ++ root.show) }
     u.rawElements.set(root, -1 * rank - 1)
   }
 }
@@ -66,7 +66,7 @@ def find(u: UnionFind, s: Int): Int / Exception[MissingValue] = {
   }
   val root = goFind(s)
 
-  def goCompress(s: Int): Unit = { 
+  def goCompress(s: Int): Unit = {
     if (not(u.internal::isRoot(s))) {
       val p = u.internal::parent(s)
       u.internal::setParent(s, root)
@@ -82,7 +82,7 @@ def find(u: UnionFind, s: Int): Int / Exception[MissingValue] = {
 ///
 /// O(1)
 def unionRoots(u: UnionFind, x: Int, y: Int): Int / Exception[MissingValue] = {
-  if(not(u.internal::isRoot(x) && u.internal::isRoot(y))) { 
+  if(not(u.internal::isRoot(x) && u.internal::isRoot(y))) {
     panic("unionRoots should only be called on representatives")
   }
 

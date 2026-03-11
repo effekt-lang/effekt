@@ -14,19 +14,19 @@ def run(n: Int) = {
   val queenRows: Array[Int] = array(n, -1);
 
   def getRowColumn(r: Int, c: Int): Bool =
-    freeRows.unsafeGet(r) && freeMaxs.unsafeGet(c + r) && freeMins.unsafeGet(c - r + (n - 1))
+    freeRows.get(r) && freeMaxs.get(c + r) && freeMins.get(c - r + (n - 1))
 
   def setRowColumn(r: Int, c: Int, v: Bool) = {
-    freeRows.unsafeSet(r, v);
-    freeMaxs.unsafeSet(c + r, v);
-    freeMins.unsafeSet(c - r + (n - 1), v)
+    freeRows.set(r, v);
+    freeMaxs.set(c + r, v);
+    freeMins.set(c - r + (n - 1), v)
   }
 
   def placeQueen(c: Int): Bool =
     try {
       each(0, n) { r =>
         if (getRowColumn(r, c)) {
-          queenRows.unsafeSet(r, c);
+          queenRows.set(r, c);
           setRowColumn(r, c, false);
 
           if (c == (n - 1)) {

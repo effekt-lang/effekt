@@ -15,7 +15,7 @@ def my_map[T, U] {action: () => Unit / {Iter[T]}} {f: T => U}: Unit / {Iter[U]} 
   }
 
 def main() =
-  try my_map { iter([1, 2, 3]) } { x => x+1 }
+  try my_map { iter([1, 2, 3]) } { x => x + 1 }
   with Iter[Int] {
     def yield(x) = { println(x); resume(()) }
   }

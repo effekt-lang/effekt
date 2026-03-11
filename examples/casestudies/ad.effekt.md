@@ -154,14 +154,14 @@ println(showString { x => forwardsHigher(x) { x => forwardsHigher(x) { y => forw
 // we have the same pertubation confusion as in Lantern
 val result = forwards(1.0) { x =>
   val shouldBeOne = forwards(1.0) { y => do add(x, y) }
-  val z = do num[NumF](shouldBeOne)
+  val z = do num(shouldBeOne)
   do mul(x, z)
 }
 println(result)
 
 val result2 = backwards(1.0) { x =>
   val shouldBeOne = backwards(1.0) { y => do add(x, y) }
-  val z = do num[NumB](shouldBeOne)
+  val z = do num(shouldBeOne)
   do mul(x, z)
 }
 println(result2)

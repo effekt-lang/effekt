@@ -63,7 +63,7 @@ object DeclPrinter extends ParenPrettyPrinter {
     case ExternInterface(name, tparams, _) =>
       pp"extern interface ${name}${show(tparams)}"
 
-    case ExternResource(name, tpe, _) =>
+    case ExternResource(name, tpe, _, _) =>
       pp"extern resource ${name}: ${tpe}"
 
     case c: Callable =>

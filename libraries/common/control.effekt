@@ -1,0 +1,27 @@
+module control
+
+import effekt
+
+interface Label {
+  def break(): Unit
+  def continue(): Unit
+}
+
+def loop { f: {Label} => Unit }: Unit = try {
+  def go(): Unit = { f {label}; go() }
+  go()
+} with label: Label {
+  def break() = ()
+  def continue() = loop { f }
+}
+
+/// Calls provided action repeatedly with support for breaking. `start` is inclusive, `end` is not.
+def each(start: Int, end: Int) { action: (Int) {Label} => Unit } = {
+  var i = start;
+  loop { {l} =>
+    if (i < end) { val el = i; i = i + 1; action(el){l} }
+    else { l.break() }
+  }
+}
+
+def repeat(n: Int) { action: () {Label} => Unit } = each(0, n) { (n) {l} => action() {l} }

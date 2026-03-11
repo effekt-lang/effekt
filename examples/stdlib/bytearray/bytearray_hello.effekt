@@ -1,0 +1,18 @@
+import bytearray
+
+def main() = {
+
+  val b = bytearray::allocate(8);
+  b.set(0, 0x68)
+  b.set(1, 0x65)
+  b.set(2, 0x6C)
+  b.set(3, 0x6C)
+  b.set(4, 0x6F)
+  b.set(5, 0x21)
+  b.set(6, 0x21)
+  b.set(7, 0x21)
+
+  b.set(1, 0x66)
+
+  println(b.toString) // hfllo!!!
+}

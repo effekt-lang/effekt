@@ -1,9 +1,8 @@
-import stream
 
 def main() = {
   val max = 10
 
-  val fibs = collectList[Int] {
+  val fibs = list::collect[Int] {
     var a = 0
     var b = 1
 

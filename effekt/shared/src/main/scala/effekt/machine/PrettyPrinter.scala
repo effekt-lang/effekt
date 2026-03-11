@@ -10,7 +10,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   override val defaultIndent = 2
 
+  // def format(prog: Program): Document = pretty(toDoc(prog), 80)
   def format(definitions: List[Definition]): Document = pretty(vsep(definitions.map(toDoc), line), 2)
+
+  val show: PartialFunction[Any, String] = PartialFunction.empty
 
   implicit def toDoc(v: Variable): Doc = string(v.name)
 
@@ -50,11 +53,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDocStmts(stmt: Statement): Doc = stmt match {
 
-    case Jump(label) =>
-      "jump" <+> label
-
-    case Substitute(bindings, rest) =>
-      hsep(bindings map { case (left, right) => left <+> ":=" <+> right }, comma) <> ";" <> line <> toDocStmts(rest)
+    case Jump(label, arguments) =>
+      "jump" <+> label <> parens(arguments map toDoc)
 
     case Construct(name, tag, arguments, rest) =>
       "let" <+> name <+> "=" <+> tag.toString <> parens(arguments map toDoc) <> ";" <> line <> toDocStmts(rest)
@@ -70,7 +70,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Invoke(receiver, tag, arguments) =>
       "invoke" <+> receiver <> "." <> tag.toString <> parens(arguments map toDoc)
 
-    case Var(name, init, _, rest) =>
+    case Var(name, init, rest) =>
       "var" <+> name <+> "=" <+> toDoc(init) <> ";" <> line <> toDocStmts(rest)
 
     case LoadVar(name, reference, rest) =>
@@ -101,6 +101,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case LiteralInt(name, value, rest) =>
       "let" <+> name <+> "=" <+> value.toString <> ";" <> line <> toDocStmts(rest)
 
+    case LiteralByte(name, value, rest) =>
+      "let" <+> name <+> "=" <+> "0x" <> value.toHexString.toUpperCase <> ";" <> line <> toDocStmts(rest)
+
     case LiteralDouble(name, value, rest) =>
       "let" <+> name <+> "=" <+> value.toString <> ";" <> line <> toDocStmts(rest)
 
@@ -110,7 +113,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Coerce(name, value, rest) =>
       "let" <+> name <+> ":" <+> toDoc(name.tpe) <+> "=" <+> "coerce" <+> value <+> ":" <+> toDoc(value.tpe) <> ";" <> line <> toDocStmts(rest)
 
-    case Hole => "<>"
+    case Hole(span) => "<>" <+> s"// @ ${span.range.from.format}"
   }
 
   def nested(content: Doc): Doc = group(nest(line <> content))

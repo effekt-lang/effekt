@@ -1,0 +1,149 @@
+name: CI
+
+on:
+  pull_request:
+
+jobs:
+  build-and-compile:
+    name: "Build & Compile"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+
+      - name: Compile project
+        run: mill project.testCompile
+
+      - name: Cache compiled artifacts
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            target
+            project/target
+            project/project/target
+            kiama/jvm/target
+            kiama/js/target
+            effekt/jvm/target
+            effekt/js/target
+            ~/.ivy2/cache
+            ~/.sbt
+            ~/.cache/coursier
+          key: effekt-build-${{ github.sha }}
+
+  internal-tests:
+    name: "Internal Tests & Verify Binary"
+    needs: build-and-compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+
+      - uses: ./.github/actions/restore-build-cache
+
+      - name: Run internal tests
+        run: |
+          mill project.testRemaining
+
+      - name: Assemble fully optimized JS file
+        run: mill project.assembleJS
+
+      - name: Install effekt binary
+        run: mill project.install
+
+      - name: Test effekt binary
+        run: effekt --help
+
+  windows-tests:
+    name: "Windows Smoke Test"
+    needs: build-and-compile
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+
+      - name: Compile project
+        run: sbt Test/compile
+
+      - name: Run Windows smoke test
+        run: sbt "effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*pos[\\/]*sideeffects.*"
+
+  macos-llvm-tests:
+    name: "macOS LLVM Smoke Tests"
+    needs: build-and-compile
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+        with:
+          install-dependencies: 'true'
+
+      - name: Compile project
+        run: sbt Test/compile
+
+      - name: Run macOS LLVM smoke tests (with debug)
+        run: EFFEKT_DEBUG=1 sbt "effektJVM/testOnly effekt.LLVMTests -- --tests=.*benchmarks[\\/]*input_output[\\/].*"
+
+  js-tests:
+    name: "JS Backend"
+    needs: build-and-compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+
+      - uses: ./.github/actions/restore-build-cache
+
+      - name: Run JavaScript backend tests
+        run: mill project.testBackendJS
+
+  chez-tests:
+    name: "Chez Backend"
+    needs: build-and-compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+        with:
+          install-dependencies: 'true'
+
+      - uses: ./.github/actions/restore-build-cache
+
+      - name: Run Chez Scheme backend tests
+        run: mill project.testBackendChez
+
+  llvm-tests:
+    name: "LLVM Backend"
+    needs: build-and-compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'true'
+
+      - uses: ./.github/actions/setup-effekt
+        with:
+          install-dependencies: 'true'
+          install-valgrind: 'true'
+
+      - uses: ./.github/actions/restore-build-cache
+
+      - name: Run LLVM backend tests (with debug & valgrind)
+        run: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 mill project.testBackendLLVM

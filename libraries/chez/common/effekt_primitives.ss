@@ -60,6 +60,8 @@
      out))
 
 
+(define (print_impl str)
+  (display str))
 
 (define (println_impl str)
   (display str)
@@ -70,7 +72,7 @@
   (cond
     ; Same object reference (fast path)
     [(eq? obj1 obj2) #t]
-    
+
     ; If both are records, compare them structurally
     [(and (record? obj1) (record? obj2))
      (let* ([rtd1 (record-rtd obj1)]
@@ -87,7 +89,7 @@
                  (if (not (equal_impl field1 field2))
                      (set! result #f)))))
            #f))]
-    
+
     ; For lists, compare elements recursively
     [(and (list? obj1) (list? obj2))
      (and (= (length obj1) (length obj2))
@@ -95,7 +97,7 @@
             (or (null? l1)
                 (and (equal_impl (car l1) (car l2))
                      (loop (cdr l1) (cdr l2))))))]
-    
+
     ; For all other types, use Scheme's built-in equal?
     [else (equal? obj1 obj2)]))
 
@@ -130,8 +132,14 @@
     (run warmup)
     (run iterations)))
 
-(define (hole)
+(define (hole pos)
   (raise
     (condition
       (make-error)
-      (make-message-condition "not implemented"))))
+      (make-message-condition (string-append pos " not implemented yet" )))))
+
+(define (unreachable)
+  (raise
+    (condition
+      (make-error)
+      (make-message-condition ("should not be reachable!")))))

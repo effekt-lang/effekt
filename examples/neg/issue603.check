@@ -1,0 +1,3 @@
+[error] examples/neg/issue603.effekt:12:3: Capture s escapes through type Bi at {s} inferred as return type of operation simple.
+  resume(())
+  ^

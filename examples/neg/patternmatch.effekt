@@ -5,6 +5,7 @@ def main() = {
   f match {
     case Bar() => 42
   }
+  ()
 }
 
 type Box[A] { MakeBox(a: A) }

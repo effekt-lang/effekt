@@ -95,6 +95,7 @@ case class Effects(effects: List[BlockType.InterfaceType]) {
 
   def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
   def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
+  def ++(other: Effects): Effects = Effects(this.effects ++ other.effects)
 
   def size: Int = effects.size
 

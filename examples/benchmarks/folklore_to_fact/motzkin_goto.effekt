@@ -1,0 +1,35 @@
+import examples/benchmarks/runner
+
+effect goto(n: Int): Int
+
+def sum_loop(i: Int, tot: Int, stop: Int) { f: Int => Int }: Int / goto =
+  if (stop < i) {
+    do goto(tot)
+  } else {
+    sum_loop(i + 1, f(i) + tot, stop) { f }
+  }
+
+def sum(start: Int, stop: Int) { f: Int => Int }: Int / goto =
+  sum_loop(start, 0, stop) { f }
+
+def motz(n: Int): Int / goto = {
+  if (n <= 1) {
+    do goto(1)
+  } else {
+    val limit = n - 2
+    def product(i: Int): Int = {
+      try { motz(i) } with goto { i => i }
+      *
+      try { motz(limit - i) } with goto { i => i }
+    }
+    do goto(
+      try { motz(n - 1) } with goto { i => i }
+      +
+      try { sum(0, limit) { product } } with goto { i => i }
+    )
+  }
+}
+
+def run(n: Int): Int = try { motz(n) } with goto { i => i }
+
+def main() = benchmark(10){run}

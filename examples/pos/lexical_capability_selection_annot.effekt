@@ -1,0 +1,12 @@
+module lexical_capability_selection_annot
+
+interface Greet[T] { def sayHello(): Unit }
+
+// unlike in lexical_capability_selection.effekt,
+// the _annotation_ here forces `sayHello` to be of `Greet[Int]`
+def helloWorld(): Unit / Greet[Int] =
+  do sayHello()
+
+def main() = try helloWorld() with Greet[Int] {
+  def sayHello() = { println("Hello there!"); resume(()) }
+}

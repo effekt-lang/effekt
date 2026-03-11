@@ -1,0 +1,12 @@
+def printNested(list: List[List[Int]]): Unit =
+  list.foreach { l => println(l.show) }
+
+def main() = {
+  printNested(
+    list::collect[List[Int]] { [1, 2, 3].tails }
+  )
+
+  printNested(
+    list::collect[List[Int]] { [].tails }
+  )
+}

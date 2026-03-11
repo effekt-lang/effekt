@@ -22,7 +22,7 @@ def safeDiv(x: Int, y: Int): Int / Fail = {
     if (y == 0){
         do Fail(); 0
     } else {
-        x/y
+        x / y
     }
 }
 

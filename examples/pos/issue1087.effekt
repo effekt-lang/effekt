@@ -1,0 +1,8 @@
+import io/error
+import io/filesystem
+def main() = {
+  with on[IOError].panic
+  println("A")
+  writeFileUTF8("/dev/stdout"){ do emit('B'); do emit('\n') }
+  println("C")
+}

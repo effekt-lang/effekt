@@ -23,17 +23,8 @@ type Environment = List[Variable]
  * Here l is the label and [[environment]] is the list of free variables of s1.
  * It thus can be understood as the type of the label.
  */
-case class Label(name: String, environment: Environment)
+case class Label(name: String, environment: Environment) // TODO delete environment
 
-/**
- * Applying a substitution
- *
- *    List(x -> y)
- *
- * will replace all occurrences of x by y. Here x is a binding occurrence
- * and y is a bound occurrence.
- */
-type Substitution = List[(Variable, Variable)]
 
 type Tag = Int
 
@@ -114,14 +105,9 @@ case class Definition(label: Label, body: Statement)
 enum Statement {
 
   /**
-   * e.g. jump l
+   * e.g. jump l (v1, ...)
    */
-  case Jump(label: Label)
-
-  /**
-   * e.g. s[x1 -> v1, ...]
-   */
-  case Substitute(bindings: Substitution, rest: Statement)
+  case Jump(label: Label, arguments: Environment)
 
   /**
    * e.g. let x = make C(v1, ...); s
@@ -146,7 +132,7 @@ enum Statement {
   /**
    * e.g. var x = 42; s
    */
-  case Var(name: Variable, init: Variable, returnType: Type, rest: Statement)
+  case Var(name: Variable, init: Variable, rest: Statement)
 
   /**
    * e.g. let y = loadVar(x); s
@@ -194,6 +180,11 @@ enum Statement {
   case LiteralInt(name: Variable, value: Long, rest: Statement)
 
   /**
+   * let x = 0xFA; s
+   */
+  case LiteralByte(name: Variable, value: Int, rest: Statement)
+
+  /**
    * let x = 42.2; s
    */
   case LiteralDouble(name: Variable, value: Double, rest: Statement)
@@ -211,7 +202,7 @@ enum Statement {
   /**
    * Statement that is executed when a Hole is encountered.
    */
-  case Hole
+  case Hole(span: effekt.source.Span)
 }
 export Statement.*
 
@@ -239,13 +230,9 @@ object builtins {
   val Apply: Tag = 0
 
   val Unit: Tag = 0
-  val UnitType = Positive()
 
   val True: Tag = 1
   val False: Tag = 0
-  val BooleanType = Positive()
-
-  val StringType = Positive()
 
   val SingletonRecord: Tag = 0
 }

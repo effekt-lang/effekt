@@ -4,6 +4,7 @@ package vm
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
+import effekt.core.optimizer.Deadcode
 import effekt.core.{ ModuleDecl, Id }
 
 import kiama.output.PrettyPrinterTypes.Document
@@ -36,9 +37,9 @@ class VM extends Compiler[(Id, symbols.Module, ModuleDecl)] {
     Frontend andThen Middleend
   }
 
-  lazy val Optimized = allToCore(Core) andThen Aggregate andThen core.optimizer.Optimizer map {
+  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Deadcode andThen core.Show andThen core.optimizer.Optimizer map {
     case input @ CoreTransformed(source, tree, mod, core) =>
-      val mainSymbol = Context.checkMain(mod)
+      val mainSymbol = Context.ensureMainExists(mod)
       (mainSymbol, mod, core)
   }
 }

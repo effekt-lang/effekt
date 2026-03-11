@@ -1,6 +1,7 @@
 module random
 
 import stream
+import io/filesystem
 import io/error
 
 /// Infinite pull stream of random bytes.
@@ -50,7 +51,7 @@ def minstd(seed: Int): Unit / emit[Byte] = {
 ///
 /// Implementation is similar to `stream::source`, specialized for bytes and the `random` effect.
 def minstd(seed: Int) { randomnessReader: () => Unit / random }: Unit = {
-  var next = box { 255.toByte } // sentinel value
+  var next = box { 0xFF } // sentinel value
   next = box {
     try {
       minstd(seed)
@@ -72,7 +73,7 @@ def devurandom { randomnessReader: () => Unit / random }: Unit / Exception[IOErr
   try {
     with readFile("/dev/urandom")
     try randomnessReader() with random {
-      resume(do read[Byte]())
+      resume(do read())
     }
   } with stop {
     do raise(io::error::EOF(), "Unexpected EOF when reading /dev/urandom!")
@@ -169,7 +170,7 @@ def main() = {
       val b = randomInt(0, 9)
       val c = randomInt(0, 9)
       println(a.show ++ " " ++ b.show ++ " " ++ c.show)
-      println(a*100 + b*10 + c)
+      println(a * 100 + b * 10 + c)
     }
   }
 

@@ -1,5 +1,5 @@
 
-effect E() : (() => Unit at {io})
+effect E() : (() => Unit at io)
 
 
 def main() : Unit = {
@@ -9,8 +9,8 @@ def main() : Unit = {
     } with E { () =>
         def f() = { () }
         def g() = {
-          resume(f)
+          resume(box f)
         }
-        resume(g)
+        resume(box g)
     }
 }

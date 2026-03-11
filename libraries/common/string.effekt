@@ -2,10 +2,13 @@ module string
 
 import effekt
 import option
+import stream
 import list
 import exception
+import partial
 import result
 import char
+import bytearray
 
 // TODO
 // - [ ] handle unicode codepoints (that can span two indices) correctly
@@ -111,19 +114,19 @@ def join(strings: List[String], sep: String): String = {
   }
 }
 
-extern pure def trim(str: String): String =
+extern def trim(str: String) at {}: String =
   js "${str}.trim()"
 
 // Parsing
 // -------
-def toBool(s: String): Bool / Exception[WrongFormat] = s match {
+def toBool(s: String): Bool / fail = s match {
   case "true"  => true
   case "false" => false
-  case _ => wrongFormat("Not a boolean value: '" ++ s ++ "'")
+  case _ => do fail()
 }
 
 // TODO optimize (right now this will be horribly slow (compared to the native JS version)
-def toInt(str: String): Int / Exception[WrongFormat] = {
+def toInt(str: String): Int / fail = {
   def go(index: Int, acc: Int): Int = {
     // wrong index means we're done parsing
     with on[OutOfBounds].default { () => acc };
@@ -134,7 +137,7 @@ def toInt(str: String): Int / Exception[WrongFormat] = {
   }
 
   with on[OutOfBounds].default {
-    wrongFormat("Empty string is not a valid number")
+    do fail()
   }
 
   str.charAt(0) match {
@@ -144,9 +147,9 @@ def toInt(str: String): Int / Exception[WrongFormat] = {
 }
 
 // TODO optimize (right now this will be horribly slow (compared to the native JS version)
-def toInt(str: String, base: Int): Int / Exception[WrongFormat] = {
+def toInt(str: String, base: Int): Int / fail = {
   if (base > 36 || base < 1) {
-    wrongFormat("Invalid base: " ++ base.show)
+    do fail()
   }
 
   def go(index: Int, acc: Int): Int = {
@@ -159,7 +162,7 @@ def toInt(str: String, base: Int): Int / Exception[WrongFormat] = {
   }
 
   with on[OutOfBounds].default {
-    wrongFormat("Empty string is not a valid number")
+    do fail()
   }
 
   str.charAt(0) match {
@@ -169,7 +172,7 @@ def toInt(str: String, base: Int): Int / Exception[WrongFormat] = {
 }
 
 /// Native versions of toInt (unused right now)
-extern pure def unsafeToInt(str: String): Int =
+extern def unsafeToInt(str: String) at {}: Int =
   js "(Number.isNaN(parseInt(${str})) ? undefined : parseInt(${str}))"
   chez "(string->number ${str})"
 
@@ -203,7 +206,7 @@ def lastIndexOf(str: String, sub: String, from: Int): Option[Int] = {
 
 // TODO more efficient (native) implementations could be integrated as follows
 
-// extern pure def indexOf(str: String, sub: String): Option[Int] =
+// extern def indexOf(str: String, sub: String) at {}: Option[Int] =
 //   //js { nativeIndexOf(str, sub) }
 //   default { indexOf(str, sub, 0) }
 
@@ -212,7 +215,7 @@ def lastIndexOf(str: String, sub: String, from: Int): Option[Int] = {
 //   if (index < 0) { None() } else { Some(index) }
 // }
 
-// extern pure def unsafeIndexOf(str: String, sub: String): Int =
+// extern def unsafeIndexOf(str: String, sub: String) at {}: Int =
 //   js "${str}.indexOf(${sub})"
 
 def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
@@ -221,7 +224,7 @@ def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
   else
     unsafeCharAt(str, index)
 
-extern pure def unsafeCharAt(str: String, n: Int): Char =
+extern def unsafeCharAt(str: String, n: Int) at {}: Char =
   js "${str}.codePointAt(${n})"
   chez "(char->integer (string-ref ${str} ${n}))"
   llvm """
@@ -229,3 +232,31 @@ extern pure def unsafeCharAt(str: String, n: Int): Char =
     ret %Int %x
   """
   vm "string::unsafeCharAt(String, Int)"
+
+
+// Streaming
+// ---------
+
+def feed[R](string: String) { reader: () => R / read[Char] } =
+  feed(string.fromString) {
+    decodeUTF8 {
+      reader()
+    }
+  }
+
+def each(string: String): Unit / emit[Char] =
+  feed(string) {
+    loop {
+      do emit(do read())
+    }
+  }
+
+def collect { stream: () => Unit / emit[Char] }: String =
+  returning::collect[Unit]{stream}.second
+
+namespace returning {
+  def collect[R] { stream: () => R / emit[Char] }: (R, String) = {
+    val (result, bytes) = bytearray::returning::collect[R] { encodeUTF8 { stream } }
+    (result, bytes.toString)
+  }
+}

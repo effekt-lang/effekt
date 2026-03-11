@@ -1,0 +1,6 @@
+[info] examples/neg/must_box_block_param_nullary.effekt:3:33: Did you mean to call the function using `block()`?
+def foo { block: () => Unit } = block
+                                ^^^^^
+[error] examples/neg/must_box_block_param_nullary.effekt:3:33: Expected a value, but block is a computation. Use `box block` to pass it as a value instead
+def foo { block: () => Unit } = block
+                                ^^^^^

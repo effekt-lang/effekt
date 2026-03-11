@@ -1,0 +1,2 @@
+val f: {This[Is(Not)A] match -ing type!} = <>
+def main() = ()

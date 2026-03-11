@@ -1,16 +1,18 @@
 def greaterFifteen() = {
   var total = 0;
-  each(0, 100) { (i) {label} =>
+  with boundary
+  each(0, 100) { (i) =>
     total = total + i;
-    if (total > 15) label.break()
+    if (total > 15) do stop()
     println(i)
   }
 }
 
 def sumPositive() = {
   var total = 0;
-  each(-10, 10) { (i) {label} =>
-    if (i < 0) label.continue()
+  each(-10, 10) { (i) =>
+    with boundary
+    if (i < 0) do stop()
     total = total + i
   }
   println(total)

@@ -1,0 +1,12 @@
+def printOption[T](option: Option[T]) { printSuccess: T => Unit } = option match {
+  case Some(value) => printSuccess(value)
+  case None() => println("MissingValue")
+}
+
+def main() = {
+  printOption(optionally { stream::first[Int] { [1, 2, 3].each } }) { x => println(x) }
+
+  printOption(optionally { first[Bool] { do emit(true) } })  { x => println(x) }
+
+  printOption(optionally { first[String] { () } })  { x => println(x) }
+}

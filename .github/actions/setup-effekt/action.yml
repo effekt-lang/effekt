@@ -1,5 +1,5 @@
 name: 'Setup Effekt Environment'
-description: 'Sets up Java, Node, SBT, and system dependencies for Effekt'
+description: 'Sets up Java, Node, SBT, Mill, and system dependencies for Effekt'
 
 inputs:
   java-version:
@@ -10,12 +10,16 @@ inputs:
     description: 'Node version to install'
     required: false
     default: '16.x'
+  mill-version:
+    description: 'Mill version to install'
+    required: false
+    default: '1.0.6'
   llvm-version:
     description: 'LLVM version to install'
     required: false
     default: '18'
   install-dependencies:
-    description: 'Whether to install system dependencies (Linux only)'
+    description: 'Whether to install system dependencies (Linux & macOS only)'
     required: false
     default: 'false'
   install-valgrind:
@@ -36,10 +40,17 @@ runs:
     - name: Setup SBT
       uses: sbt/setup-sbt@v1
 
+    - name: Setup Mill
+      if: runner.os != 'Windows'
+      uses: zhutmost/setup-mill@v1.3.0
+      with:
+        mill-version: ${{ inputs.mill-version }}
+
     - name: Set up NodeJS ${{ inputs.node-version }}
       uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
+
 
     # Only run the following on Linux-based runners
     - name: Update apt database
@@ -66,3 +77,17 @@ runs:
       if: ${{ inputs.install-dependencies == 'true' && runner.os == 'Linux' }}
       run: sudo apt-get install -y libuv1-dev
       shell: bash
+
+
+    # Only run the following on macOS-based runners
+    - name: Install LLVM ${{ inputs.llvm-version }} (macOS)
+      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'macOS' }}
+      run: |
+        brew install llvm@${{ inputs.llvm-version }}
+        echo "$(brew --prefix llvm@${{ inputs.llvm-version }})/bin" >> $GITHUB_PATH
+      shell: bash
+
+    - name: Install libuv (macOS)
+      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'macOS' }}
+      run: brew install libuv
+      shell: bash 

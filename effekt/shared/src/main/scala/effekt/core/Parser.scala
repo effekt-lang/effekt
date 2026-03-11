@@ -1,28 +1,37 @@
 package effekt
 package core
 
-import effekt.context.Context
-import effekt.core.ValueParam
-import effekt.util.VirtualSource
+import effekt.core.Type.{PromptSymbol, ResumeSymbol}
 import effekt.source.{FeatureFlag, Span}
-import effekt.util.messages.{DebugMessaging, ErrorReporter, ParseError}
-import kiama.parsing.{Failure, Input, NoSuccess, ParseResult, Success, Parsers}
+import effekt.symbols.builtins
+import effekt.util.UByte
+import effekt.util.messages.{ErrorReporter, ParseError}
+import kiama.parsing.{NoSuccess, ParseResult, Parsers, Success}
+import kiama.util.{Position, Range, Severities, Source, StringSource}
 
-import kiama.util.{Position, Positions, Range, Source, StringSource}
-import effekt.util.messages.ParseError
+class Names(private var knownNames: Map[String, Id]) {
+  private val Suffix = """^(.*)\$(\d+)$""".r
+  private var renamed = knownNames
 
-import scala.util.matching.Regex
+  def isKnown(id: Id): Boolean =
+    builtins.coreBuiltinSymbolFromString(id.name.name).isDefined || knownNames.contains(id.name.name)
 
-class Names(var knownNames: Map[String, Id]) {
-  def idFor(name: String): Id = knownNames.getOrElse(name, {
-    val id = Id(name)
-    knownNames = knownNames.updated(name, id)
-    id
-  })
+  def getKnown(id: Id): Option[Id] =
+    builtins.coreBuiltinSymbolFromString(id.name.name).orElse(knownNames.get(id.name.name))
+
+  def idFor(name: String): Id = {
+    builtins.coreBuiltinSymbolFromString(name).getOrElse(
+      renamed.getOrElse(name, {
+        val id = Id(name)
+        renamed = renamed.updated(name, id)
+        id
+      })
+    )
+  }
 }
 
 
-class EffektLexers(positions: Positions) extends Parsers(positions) {
+class EffektLexers extends Parsers {
 
   type P[T] = PackratParser[T]
 
@@ -48,6 +57,7 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val `=` = literal("=")
   lazy val `:` = literal(":")
   lazy val `@` = literal("@")
+  lazy val `${` = literal("${")
   lazy val `{` = literal("{")
   lazy val `}` = literal("}")
   lazy val `(` = literal("(")
@@ -64,7 +74,10 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val `}>` = literal("}>")
   lazy val `!` = literal("!")
   lazy val `|` = literal("|")
+  lazy val `++` = literal("++")
 
+  lazy val `get` = keyword("get")
+  lazy val `put` = keyword("put")
   lazy val `let` = keyword("let")
   lazy val `true` = keyword("true")
   lazy val `false` = keyword("false")
@@ -80,8 +93,9 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val `with` = keyword("with")
   lazy val `case` = keyword("case")
   lazy val `do` = keyword("do")
-  lazy val `fun` = keyword("fun")
   lazy val `resume` = keyword("resume")
+  lazy val `reset` = keyword("reset")
+  lazy val `shift` = keyword("shift")
   lazy val `match` = keyword("match")
   lazy val `def` = keyword("def")
   lazy val `module` = keyword("module")
@@ -106,14 +120,15 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
     "def", "let", "val", "var", "true", "false", "else", "type",
     "effect", "interface", "try", "with", "case", "do", "if", "while",
     "match", "module", "import", "extern", "fun",
-    "at", "box", "unbox", "return", "region", "new", "resource", "and", "is", "namespace"
+    "at", "box", "unbox", "return", "region", "new", "resource", "and", "is", "namespace",
+    "reset", "shift", "make"
   )
 
   def keyword(kw: String): Parser[String] =
     regex((s"$kw(?!$nameRest)").r, kw)
 
   lazy val anyKeyword =
-    keywords("[^a-zA-Z0-9]".r, keywordStrings)
+    keywords("[^a-zA-Z0-9_!?$]".r, keywordStrings)
 
   /**
    * Whitespace Handling
@@ -128,12 +143,53 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   /**
    * Literals
    */
-  lazy val integerLiteral  = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
-  lazy val doubleLiteral   = regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r, "Double literal")
-  lazy val stringLiteral   = regex("""\"(\\.|\\[\r?\n]|[^\r\n\"])*+\"""".r, "String literal")
-  lazy val charLiteral   = regex("""'.'""".r, "Character literal") ^^ { s => s.codePointAt(1) }
-  lazy val unicodeChar   = regex("""\\u\{[0-9A-Fa-f]{1,6}\}""".r, "Unicode character literal") ^^ {
+  lazy val integerLiteral = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
+  lazy val doubleLiteral =
+    regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)([eE][+-]?[0-9]+)?".r, "Double literal")
+  lazy val stringLiteral =
+    regex("""\"(\\.|\\[\r?\n]|[^\r\n\"])*+\"""".r, "String literal") ^^ { s =>
+      val contents = s.substring(1, s.length - 1)
+      unescapeString(contents)
+    }
+  lazy val charLiteral = regex("""'\\\d+'""".r, "Character literal") ^^ {
+    case s => Integer.parseUnsignedInt(s.stripPrefix("'\\").stripSuffix("'"))
+  }
+  lazy val unicodeChar = regex("""\\u\{[0-9A-Fa-f]{1,6}\}""".r, "Unicode character literal") ^^ {
     case contents =>  Integer.parseInt(contents.stripPrefix("\\u{").stripSuffix("}"), 16)
+  }
+  lazy val byteLiteral = regex("0x([0-9A-F]{2})".r, "Byte literal") ^^ { case s =>
+    val hexPart = s.substring(2) // strip the 0x prefix
+    val intVal = Integer.parseInt(hexPart, 16) // parse as unsigned int (0..255)
+    UByte.unsafeFromInt(intVal)
+  }
+
+
+  /** Inverse of PrettyPrinter.escapeString */
+  private def unescapeString(s: String): String = {
+    val sb = new StringBuilder
+    var i  = 0
+
+    while (i < s.length) {
+      val c = s.charAt(i)
+      if (c == '\\' && i + 1 < s.length) {
+        s.charAt(i + 1) match {
+          case '\\' => sb.append('\\'); i += 2
+          case '"'  => sb.append('"');  i += 2
+          case 'r'  => sb.append('\r'); i += 2
+          case 't'  => sb.append('\t'); i += 2
+          case 'n'  => sb.append('\n'); i += 2
+          case other =>
+            sb.append('\\')
+            sb.append(other)
+            i += 2
+        }
+      } else {
+        sb.append(c)
+        i += 1
+      }
+    }
+
+    sb.toString
   }
 
   // Delimiter for multiline strings
@@ -165,26 +221,6 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
       p.flatMap(_ => error(errorMessage))
   }
 
-  implicit class PositionOps[T](val self: T) {
-    def withPositionOf(other: Any): self.type = { dupAll(other, self); self }
-
-    private def dupIfEmpty(from: Any, to: Any): Unit =
-      if (positions.getStart(to).isEmpty) { positions.dupPos(from, to) }
-
-    private def dupAll(from: Any, to: Any): Unit = to match {
-      case t: Tree =>
-        dupIfEmpty(from, t)
-        t.productIterator.foreach { dupAll(from, _) }
-      case t: Iterable[t] => t.foreach { dupAll(from, _) }
-      case _ => ()
-    }
-
-    def range: Option[Range] = for {
-      from <- positions.getStart(self)
-      to <- positions.getFinish(self)
-    } yield SourceRange(from, to)
-  }
-
   trait Range {
     def ++(other: Range): Range
   }
@@ -202,30 +238,8 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
     }
   }
 
-  /**
-   * Check positions of all subtrees, stopping at trees that already have positions
-   */
-  def checkPosition(t: Tree): Range = t.range.getOrElse {
-    t.productIterator.map(checkPositions).fold(EmptyRange)(_ ++ _) match {
-      case EmptyRange => sys error s"Missing position for ${ t }. Cannot guess the source position from its children."
-      case rng @ SourceRange(from, to) =>
-        positions.setStart(t, from)
-        positions.setFinish(t, to)
-        rng
-    }
-  }
-
-  def checkPositions(t: Any): Range = t match {
-    case t: Tree => checkPosition(t)
-    case t: Iterable[t] => t.map(checkPositions).fold(EmptyRange)(_ ++ _)
-    case _ => EmptyRange
-  }
-
   override implicit def memo[T](parser: => Parser[T]): PackratParser[T] =
-    new PackratParser[T](parser.map { t =>
-      checkPositions(t)
-      t
-    })
+    new PackratParser[T](parser)
 
   def parseAll[T](p: Parser[T], input: String): ParseResult[T] =
     parseAll(p, StringSource(input, "input-string"))
@@ -237,7 +251,7 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
 }
 
 
-class CoreParsers(positions: Positions, names: Names) extends EffektLexers(positions) {
+class CoreParsers(names: Names) extends EffektLexers {
 
   def parse(source: Source)(using C: ErrorReporter): Option[ModuleDecl] =
     parseAll(program, source) match {
@@ -246,7 +260,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
       case res: NoSuccess =>
         val input = res.next
         val range = Range(input.position, input.nextPosition)
-        C.report(ParseError(res.message, Some(range)))
+        C.report(ParseError(res.message, Some(range), Severities.Error))
         None
     }
 
@@ -257,17 +271,18 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   /**
    * Literals
    */
-  lazy val int    = integerLiteral ^^ { n => Literal(n.toInt, Type.TInt) }
+  lazy val int    = integerLiteral ^^ { n => Literal(n.toLong, Type.TInt) }
+  lazy val char   = charLiteral ^^ { n => Literal(n.toLong, Type.TChar) }
+  lazy val byte   = byteLiteral ^^ { b => Literal(b, Type.TByte) }
   lazy val bool   = `true` ^^^ Literal(true, Type.TBoolean) | `false` ^^^ Literal(false, Type.TBoolean)
   lazy val unit   = literal("()") ^^^ Literal((), Type.TUnit)
   lazy val double = doubleLiteral ^^ { n => Literal(n.toDouble, Type.TDouble) }
-  lazy val string = stringLiteral ^^ { s => Literal(s.substring(1, s.size - 1), Type.TString) }
+  lazy val string: P[Expr] = (multilineString | stringLiteral) ^^ { s => Literal(s, Type.TString) }
 
   /**
    * Names
    */
   lazy val id = ident ^^ { name => names.idFor(name) }
-  lazy val wildcard = success(names.idFor("_"))
 
   /**
    * Main Entry
@@ -288,13 +303,32 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // -------
   lazy val externDecl: P[Extern] =
     ( `extern` ~> featureFlag ~ externBody ^^ Extern.Include.apply
-    | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> (featureFlag ~ externBody)) ^^ {
-      case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ body =>
-        Extern.Def(id, tparams, cparams, vparams, bparams, result, captures, body match {
-          case ff ~ (body: String) =>
-            ExternBody.StringExternBody(ff, Template(List(body), Nil))
-        })
+    | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> (featureFlag ~ externBodyTemplate)) ^^ {
+      case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ (ff ~ templ) =>
+        Extern.Def(
+          id, tparams, cparams, vparams, bparams, result, captures,
+          ExternBody.StringExternBody(ff, templ)
+        )
+    }
+    | `extern` ~> `type` ~> id ~ typeParams.? ^^ {
+      case id ~ tparams => Extern.Data(id, tparams.getOrElse(Nil))
     })
+
+  lazy val externBodyTemplate: P[Template[Expr]] =
+    (
+      (multilineString | stringLiteral) ~
+        rep((`++` ~> expr) ~ (`++` ~> (multilineString | stringLiteral)))
+      ) ^^ {
+      case firstStr ~ pairs =>
+        val strings = List.newBuilder[String]
+        val args = List.newBuilder[Expr]
+        strings += firstStr
+        pairs.foreach { case e ~ s =>
+          args += e
+          strings += s
+        }
+        Template(strings.result(), args.result())
+    }
 
   lazy val featureFlag: P[FeatureFlag] =
     ("else" ^^ { _ => FeatureFlag.Default(Span.missing) }
@@ -302,7 +336,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     )
 
 
-  lazy val externBody = stringLiteral | multilineString
+  lazy val externBody = multilineString | stringLiteral
 
 
   // Declarations
@@ -316,7 +350,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     `interface` ~> id ~ maybeTypeParams ~ (`{` ~/> many(property) <~ `}`) ^^ Declaration.Interface.apply
 
   lazy val constructor: P[Constructor] =
-    id ~ valueParams ^^ { case id ~ params => Constructor(id, params.map(p => Field(p.id, p.tpe))) }
+    id ~ maybeTypeParams ~ valueParams ^^ { case id ~ tparams ~ params => Constructor(id, tparams, params.map(p => Field(p.id, p.tpe))) }
 
   lazy val property: P[Property] =
     id ~ (`:` ~> blockType) ^^ Property.apply
@@ -325,7 +359,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // -----------
   lazy val toplevel: P[Toplevel] =
   ( `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~/> stmt) ^^ {
-    case (name ~ tpe ~ binding) => Toplevel.Val(name, tpe.getOrElse(binding.tpe), binding)
+    case (name ~ tpe ~ binding) => Toplevel.Val(name, binding)
   }
   | `def` ~> id ~ (`=` ~/> block) ^^ Toplevel.Def.apply
   | `def` ~> id ~ parameters ~ (`=` ~> stmt) ^^ {
@@ -340,33 +374,60 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // ----------
   lazy val stmt: P[Stmt] =
     ( `{` ~/> stmts <~ `}`
-    | `return` ~> pure ^^ Stmt.Return.apply
-    | block ~ (`.` ~> id ~ (`:` ~> blockType)).? ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ {
-        case (recv ~ Some(method ~ tpe) ~ targs ~ vargs ~ bargs) => Invoke(recv, method, tpe, targs, vargs, bargs)
-        case (recv ~ None ~ targs ~ vargs ~ bargs) => App(recv, targs, vargs, bargs)
+    | `return` ~> expr ^^ Stmt.Return.apply
+    | `reset` ~> blockLit ^^ Stmt.Reset.apply
+    | `shift` ~> maybeParens(blockVar) ~ (`{` ~> blockParam) ~ (`=>` ~/> stmts <~ `}`) ^^ {
+        case p ~ k ~ body => Stmt.Shift(p, k, body)
       }
-    | (`if` ~> `(` ~/> pure <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
+    | `resume` ~> maybeParens(blockVar) ~ stmt ^^ Stmt.Resume.apply
+    | block ~ (`.` ~> id ~ (`:` ~> blockType)).? ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ {
+      case recv ~ Some(method ~ tpe) ~ targs ~ vargs ~ bargs => Invoke(recv, method, tpe, targs, vargs, bargs)
+      case recv ~ None ~ targs ~ vargs ~ bargs => App(recv, targs, vargs, bargs)
+    }
+    | (`if` ~> `(` ~/> expr <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
     | `region` ~> blockLit ^^ Stmt.Region.apply
-    | `<>` ^^^ Hole()
-    | (pure <~ `match`) ~/ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
+    | `<>` ~> (`:` ~> valueType) ~ (`@` ~> (stringLiteral <~ `:`) ~ (integerLiteral <~ `:`) ~ integerLiteral) ^^ {
+      case (tpe ~ (name ~ from ~ to)) =>
+        val source = if (name.startsWith("file://")) {
+          kiama.util.FileSource(name.stripPrefix("file://"))
+        } else if (name.startsWith("string://")) {
+          kiama.util.StringSource("", name.stripPrefix("string://"))
+        } else {
+          sys error s"Unsupported source scheme in hole source name: $name"
+        }
+        Hole(tpe, effekt.source.Span(source, from.toInt, to.toInt))
+      }
+    | `<>` ~> (`:` ~> valueType) ^^ { tpe => Hole(tpe, effekt.source.Span.missing) }
+    | (expr <~ `match`) ~/ (`[` ~> valueType <~ `]`) ~ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
     )
 
   lazy val stmts: P[Stmt] =
-    ( `let` ~/> id ~ maybeTypeAnnotation ~ (`=` ~/> expr) ~ stmts ^^ {
-        case (name ~ tpe ~ binding ~ body) => Let(name, tpe.getOrElse(binding.tpe), binding, body)
+    ( (`let` ~ `!` ~/> id) ~ (`=` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ~ stmts ^^ {
+        case (name ~ callee ~ targs ~ vargs ~ bargs ~ body) =>
+          ImpureApp(name, callee, targs, vargs, bargs, body)
       }
-    | `def` ~> id ~ (`=` ~/> block) ~ stmts ^^ Stmt.Def.apply
-    | `def` ~> id ~ parameters ~ (`=` ~/> stmt) ~ stmts ^^ {
-        case name ~ (tparams, cparams, vparams, bparams) ~ body ~ rest =>
-          Stmt.Def(name, BlockLit(tparams, cparams, vparams, bparams, body), rest)
-      }
-    | `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~> stmt) ~ (`;` ~> stmts) ^^ {
-        case id ~ tpe ~ binding ~ body => Val(id, tpe.getOrElse(binding.tpe), binding, body)
-      }
-    | `var` ~> id ~ (`in` ~> id) ~ (`=` ~> pure) ~ (`;` ~> stmts) ^^ { case id ~ region ~ init ~ body => Alloc(id, init, region, body) }
-    | `var` ~> id ~ (`@` ~> id) ~ (`=` ~> pure) ~ (`;` ~> stmts) ^^ { case id ~ cap ~ init ~ body => Var(id, init, cap, body) }
-    | stmt
-    )
+    | `let` ~/> id ~ (`=` ~/> expr) ~ stmts ^^ {
+      case (name ~ binding ~ body) =>
+        Let(name, binding, body)
+    }
+      | `get` ~> id ~ (`:` ~> valueType) ~ (`=` ~> `!` ~> id) ~ (`@` ~> id) ~ (`;` ~> stmts) ^^ {
+      case name ~ tpe ~ ref ~ cap ~ body => Get(name, tpe, ref, Set(cap), body)
+    }
+      | `put` ~> id ~ (`@` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ {
+      case ref ~ capt ~ value ~ body => Put(ref, Set(capt), value, body)
+    }
+      | `def` ~> id ~ (`=` ~/> block) ~ stmts ^^ Stmt.Def.apply
+      | `def` ~> id ~ parameters ~ (`=` ~/> stmt) ~ stmts ^^ {
+      case name ~ (tparams, cparams, vparams, bparams) ~ body ~ rest =>
+        Stmt.Def(name, BlockLit(tparams, cparams, vparams, bparams, body), rest)
+    }
+      | `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~> stmt) ~ (`;` ~> stmts) ^^ {
+      case id ~ tpe ~ binding ~ body => Val(id, binding, body)
+    }
+      | `var` ~> id ~ (`in` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ { case id ~ region ~ init ~ body => Alloc(id, init, region, body) }
+      | `var` ~> id ~ (`@` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ { case id ~ cap ~ init ~ body => Var(id, init, cap, body) }
+      | stmt
+      )
 
   lazy val clause: P[(Id, BlockLit)] = (id <~ `:`) ~ blockLit ^^ { case id ~ cl => id -> cl }
 
@@ -384,33 +445,25 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
 
   // Pure Expressions
   // ----------------
-  lazy val pure: P[Pure] =
+  lazy val expr: P[Expr] =
     ( literal
-    | id ~ (`:` ~> valueType) ^^ Pure.ValueVar.apply
-    | `box` ~> captures ~ block ^^ { case capt ~ block => Pure.Box(block, capt) }
-    | `make` ~> dataType ~ id ~ maybeTypeArgs ~ valueArgs ^^ Pure.Make.apply
-    | maybeParens(blockVar) ~ maybeTypeArgs ~ valueArgs ^^ Pure.PureApp.apply
+    | `box` ~> captures ~ block ^^ { case capt ~ block => Expr.Box(block, capt) }
+    | `make` ~> dataType ~ id ~ maybeTypeArgs ~ valueArgs ^^ Expr.Make.apply
+    | id ~ (`:` ~> valueType) ^^ Expr.ValueVar.apply
+    | maybeParens(blockVar) ~ maybeTypeArgs ~ valueArgs ^^ Expr.PureApp.apply
     | failure("Expected a pure expression.")
     )
 
-  lazy val literal: P[Pure] = int | bool | string | unit | double
+  lazy val literal: P[Expr] = byte | double | int | char | bool | string | unit
 
 
   // Calls
   // -----
-  lazy val valueArgs: P[List[Pure]] =
-    `(` ~> manySep(pure, `,`) <~ `)`
+  lazy val valueArgs: P[List[Expr]] =
+    `(` ~> manySep(expr, `,`) <~ `)`
 
   lazy val blockArgs: P[List[Block]] =
     many(blockLit | `{` ~> block <~ `}`)
-
-
-  // Expressions
-  // -----------
-  lazy val expr: P[Expr] =
-    ( pure
-    | (`!` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ DirectApp.apply
-    )
 
   def maybeParens[T](p: P[T]): P[T] = (p | `(` ~> p <~ `)`)
 
@@ -419,7 +472,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // ------
   lazy val block: P[Block] =
     ( blockVar
-    | `unbox` ~> pure ^^ Block.Unbox.apply
+    | `unbox` ~> expr ^^ Block.Unbox.apply
     | `new` ~> implementation ^^ Block.New.apply
     | blockLit
     // TODO check left associative nesting (also for select)
@@ -522,12 +575,15 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // { f : S }
   // abbreviation { S } .= { _: S }
   lazy val blockTypeParam: P[(Id, BlockType)] =
-    `{` ~> (id <~ `:` | wildcard) ~ blockType <~ `}` ^^ { case id ~ tpe => id -> tpe }
+    `{` ~> (id <~ `:`) ~ blockType <~ `}` ^^ { case id ~ tpe => id -> tpe }
 
   lazy val interfaceType: P[BlockType.Interface] =
-    ( id ~ maybeTypeArgs ^^ { case id ~ tpe => BlockType.Interface(id, tpe) : BlockType.Interface }
-    | failure("Expected an interface")
-    )
+    (
+      id ~ maybeTypeArgs ^^ {
+        case id ~ targs => BlockType.Interface(id, targs): BlockType.Interface
+      }
+        | failure("Expected an interface")
+      )
 
   lazy val typeArgs: P[List[ValueType]] =
     `[` ~/> manySep(valueType, `,`) <~ `]`
@@ -541,8 +597,7 @@ object CoreParsers {
   def apply(names: Map[String, Id]): CoreParsers = apply(Names(names))
 
   def apply(names: Names): CoreParsers =
-    object pos extends Positions
-    object parsers extends CoreParsers(pos, names)
+    object parsers extends CoreParsers(names)
     parsers
 
   // Some alternative main entry points for most common usages

@@ -54,5 +54,5 @@ runs:
 
     - name: Run effekt binary
       if: ${{ inputs.full-test == 'true' && runner.os != 'Windows' }}
-      run: effekt.sh --help
+      run: effekt --help
       shell: bash
