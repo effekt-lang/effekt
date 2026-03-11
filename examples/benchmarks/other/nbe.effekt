@@ -6,7 +6,6 @@ import io
 import map
 import stream
 import process
-import stringbuffer
 
 type Name = Int
 
@@ -62,14 +61,14 @@ def reify(v: Value): Term / fresh = v match {
 /// strong normalization of the term
 def normalize(t: Term): Term = {
   var i = 0
-  try reify(eval(empty[Name, Value](compareInt), t))
+  try reify(eval(empty[Name, Value](box compareInt), t))
   with fresh { i = i + 1; resume(i) }
 }
 
 /// parse named term from BLC stream (de Bruijn)
 def parse(): Term / { read[Bool], stop } = {
   def go(): Term / { fresh, lookup } =
-    (do read[Bool](), do read[Bool]) match {
+    (do read(), do read()) match {
       case (false, false) => {
         val n = do fresh()
         Abs(n, try go() with lookup { i =>
@@ -80,7 +79,7 @@ def parse(): Term / { read[Bool], stop } = {
       case (true , false) => Var(do lookup(0))
       case (true , true ) => {
         var i = 1
-        while (do read[Bool]()) i = i + 1
+        while (do read()) i = i + 1
         Var(do lookup(i))
       }
     }
@@ -95,27 +94,22 @@ def parse(): Term / { read[Bool], stop } = {
 }
 
 /// helper function for pretty string interpolation of terms
-def pretty { s: () => Unit / { literal, splice[Term] } }: String = {
+def pretty { stream: () => Unit / { write, splice[Term] } }: String = {
   with stringBuffer
-
-  try { s(); do flush() }
-  with literal { l => resume(do write(l)) }
-  with splice[Term] { t =>
-    t match {
-      case Abs(n, t) => do write("λ" ++ n.show ++ pretty".${t}")
-      case App(a, b) => do write(pretty"(${a} ${b})")
-      case Var(v)    => do write(v.show)
-    }
-    resume(())
+  with splicing[Term] {
+    case Abs(n, t) => do write("λ" ++ n.show ++ pretty".${t}")
+    case App(a, b) => do write(pretty"(${a} ${b})")
+    case Var(v)    => do write(v.show)
   }
+  stream()
 }
 
 /// convert char stream to bit stream, skipping non-bit chars
 def bits { p: () => Unit / { read[Bool], stop } }: Unit / read[Char] =
-  try exhaustively { p() }
+  try loop { p() }
   with read[Bool] {
-    with exhaustively
-    val c = do read[Char]()
+    with loop
+    val c = do read()
     if (c == '0') resume { false }
     if (c == '1') resume { true  }
   }

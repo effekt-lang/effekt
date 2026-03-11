@@ -115,28 +115,25 @@ case class ValueParam(name: Name, tpe: Option[ValueType], decl: source.Tree) ext
 
 sealed trait TrackedParam extends Param, BlockSymbol {
   // Every tracked block gives rise to a capture parameter (except resumptions, they are transparent)
-  lazy val capture: Capture = this match {
-    case b: BlockParam => CaptureParam(b.name)
-    case r: ResumeParam => ???
-    case s: VarBinder => LexicalRegion(name, s.decl)
-    case r: ExternResource => Resource(name)
-  }
+  val capture: Capture
 }
 object TrackedParam {
-  case class BlockParam(name: Name, tpe: Option[BlockType], decl: source.Tree) extends TrackedParam
-  case class ResumeParam(module: Module) extends TrackedParam {
-    val name = Name.local("resume")
-    val decl = NoSource
-  }
-  case class ExternResource(name: Name, tpe: BlockType, decl: source.Tree) extends TrackedParam
+  case class BlockParam(name: Name, tpe: Option[BlockType], capture: Capture, decl: source.Tree) extends TrackedParam
+  case class ExternResource(name: Name, tpe: BlockType, capture: Capture, decl: source.Tree) extends TrackedParam
 }
 export TrackedParam.*
 
+// Resume is transparent
+case class ResumeParam(module: Module) extends Param, BlockSymbol {
+  val name = Name.local("resume")
+  val decl = NoSource
+}
 
 trait Callable extends BlockSymbol {
   def tparams: List[TypeParam]
   def vparams: List[ValueParam]
   def bparams: List[BlockParam]
+  def annotatedCaptures: Option[CaptureSet]
   def annotatedResult: Option[ValueType]
   def annotatedEffects: Option[Effects]
 
@@ -166,6 +163,7 @@ case class UserFunction(
   tparams: List[TypeParam],
   vparams: List[ValueParam],
   bparams: List[BlockParam],
+  annotatedCaptures: Option[CaptureSet],
   annotatedResult: Option[ValueType],
   annotatedEffects: Option[Effects],
   decl: FunDef
@@ -180,6 +178,7 @@ sealed trait Anon extends TermSymbol {
 
 case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: source.Tree) extends Callable, Anon {
   // Lambdas currently do not have an annotated return type
+  def annotatedCaptures = None
   def annotatedResult = None
   def annotatedEffects = None
 
@@ -199,8 +198,8 @@ enum Binder extends TermSymbol {
 
   case ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder, ValueSymbol
   case RegBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: RegDef) extends Binder, RefBinder
-  case VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder, RefBinder, TrackedParam
-  case DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
+  case VarBinder(name: Name, tpe: Option[ValueType], capture: Capture, decl: VarDef) extends Binder, RefBinder, TrackedParam
+  case DefBinder(name: Name, caps: Option[CaptureSet], tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
 }
 export Binder.*
 
@@ -297,6 +296,7 @@ case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Fi
   val bparams: List[BlockParam] = Nil
 
   val appliedDatatype: ValueType = ValueTypeApp(tpe, tpe.tparams map ValueTypeRef.apply)
+  def annotatedCaptures = None
   def annotatedResult: Option[ValueType] = Some(appliedDatatype)
   def annotatedEffects: Option[Effects] = Some(Effects.Pure)
 }
@@ -308,6 +308,7 @@ case class Field(name: Name, param: ValueParam, constructor: Constructor, decl: 
   val bparams = List.empty[BlockParam]
 
   val returnType = param.tpe.get
+  def annotatedCaptures = None
   def annotatedResult = Some(returnType)
   def annotatedEffects = Some(Effects.Pure)
 }
@@ -324,6 +325,7 @@ export BlockTypeConstructor.*
 
 
 case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], bparams: List[BlockParam], resultType: ValueType, effects: Effects, interface: BlockTypeConstructor.Interface, decl: source.Tree) extends Callable {
+  def annotatedCaptures = None
   def annotatedResult: Option[ValueType] = Some(resultType)
   def annotatedEffects: Option[Effects] = Some(Effects(effects.toList))
   def appliedInterface: InterfaceType = InterfaceType(interface, interface.tparams map ValueTypeRef.apply)
@@ -390,6 +392,7 @@ object CaptUnificationVar {
   case class AnonymousFunctionRegion(fun: source.BlockLiteral) extends Role
   case class InferredBox(box: source.Box) extends Role
   case class InferredUnbox(unbox: source.Unbox) extends Role
+  case class OpClause(clause: source.OpClause) extends Role
   // underlying should be a UnificationVar
   case class Subtraction(handled: List[Capture], underlying: CaptUnificationVar) extends Role
   case class Substitution() extends Role
@@ -439,6 +442,7 @@ case class ExternFunction(
   bodies: List[source.ExternBody],
   decl: source.Tree
 ) extends Callable {
+  def annotatedCaptures = Some(capture)
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)
 }

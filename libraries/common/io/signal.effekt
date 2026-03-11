@@ -1,0 +1,55 @@
+module io/signal
+
+// Signals
+// -------
+
+/// Must be fired exactly once with an A receiving a B,
+/// and must be waited for exactly once with a B receiving an A.
+extern type Signal[A, B]
+
+extern def signal[A, B]() at global: Signal[A, B] =
+  js "signal$make()"
+  llvm """
+    %signal = call %Pos @c_signal_make()
+    ret %Pos %signal
+  """
+
+extern def unsafeFire[A, B](signal: Signal[A, B], value: A) at async: B =
+  js "$effekt.capture(callback => signal$notify(${signal}, ${value}, callback))"
+  llvm """
+    call void @c_signal_notify(%Pos ${signal}, %Pos ${value}, %Stack %stack)
+    ret void
+  """
+
+extern def unsafeWait[A, B](signal: Signal[A, B], value: B) at async: A =
+  js "$effekt.capture(callback => signal$notify(${signal}, ${value}, callback))"
+  llvm """
+    call void @c_signal_notify(%Pos ${signal}, %Pos ${value}, %Stack %stack)
+    ret void
+  """
+
+extern llvm """
+  declare %Pos @c_signal_make()
+  declare void @c_signal_notify(%Pos, %Pos, %Stack)
+"""
+
+extern js """
+  function signal$make() {
+    return { state: 0, value: null, stack: null };
+  }
+  function signal$notify(signal, value, stack) {
+    if (signal.state === 0) {
+      signal.state = 1;
+      signal.value = value;
+      signal.stack  = stack;
+    } else {
+      const otherValue = signal.value;
+      const otherStack = signal.stack;
+      signal.value = null;
+      signal.stack = null;
+
+      otherStack(value);
+      stack(otherValue);
+    }
+  }
+"""

@@ -13,7 +13,7 @@ def run(n: Int) = {
   var towers: Towers = array(3, Nil());
 
   def pushDisk(newTopDiskOnPile: Disk, pileIdx: Int): Unit = {
-    val pile: Pile = towers.unsafeGet(pileIdx);
+    val pile: Pile = towers.get(pileIdx);
     pile match {
       case Cons(topDiskOnStack, _) =>
         if (newTopDiskOnPile >= topDiskOnStack) {
@@ -21,17 +21,17 @@ def run(n: Int) = {
         }
       case Nil() => ()
     }
-    towers.unsafeSet(pileIdx, Cons(newTopDiskOnPile, pile));
+    towers.set(pileIdx, Cons(newTopDiskOnPile, pile));
   }
 
   def popDisk(pileIdx: Int): Disk = {
-    val pile = towers.unsafeGet(pileIdx);
+    val pile = towers.get(pileIdx);
 
     pile match {
       case Nil() =>
         panic("Attempting to remove a disk from an empty pile");
       case Cons(disk, next) =>
-        towers.unsafeSet(pileIdx, next)
+        towers.set(pileIdx, next)
         disk
     }
   }

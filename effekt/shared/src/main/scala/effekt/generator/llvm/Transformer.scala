@@ -76,20 +76,11 @@ object Transformer {
   def transform(statement: machine.Statement)(using ModuleContext, FunctionContext, BlockContext): Terminator =
     statement match {
 
-     case machine.Jump(label) =>
+     case machine.Jump(label, arguments) =>
         emit(Comment(s"jump ${label.name}"))
-        shareValues(label.environment, Set())
-
-        val arguments = label.environment.map(transform)
-        emit(callLabel(transform(label), arguments))
+        shareValues(arguments, Set())
+        emit(callLabel(transform(label), arguments.map(transform)))
         RetVoid()
-
-      case machine.Substitute(bindings, rest) =>
-        emit(Comment("substitution"))
-        bindings.foreach { (from, to) => emit(Comment(s"substitution [${from.name} !-> ${to.name}]")) }
-        withBindings(bindings) { () =>
-          transform(rest)
-        }
 
       case machine.Construct(variable, tag, values, rest) =>
         emit(Comment(s"construct ${variable.name}, tag ${tag}, ${values.length} values"))
@@ -188,10 +179,10 @@ object Transformer {
         emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
         RetVoid()
 
-      case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, retType, rest) =>
+      case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, rest) =>
         val environment = List(init)
         val returnAddressName = freshName("returnAddress")
-        val returnType = transform(retType)
+        val returnType = transform(machine.Type.Positive())
         val returnValue = freshName("returnValue")
         val parameters = List(Parameter(returnType, returnValue))
         defineLabel(returnAddressName, parameters) {
@@ -214,7 +205,7 @@ object Transformer {
 
         transform(rest)
 
-      case machine.Var(_, _, _, _) => ???
+      case machine.Var(_, _, _) => ???
 
       case machine.LoadVar(name, ref, rest) =>
         emit(Comment(s"loadvar ${name.name}, reference ${ref.name}"))
@@ -341,6 +332,11 @@ object Transformer {
         emit(Add(name, ConstantInt(n), ConstantInt(0)));
         transform(rest)
 
+      case machine.LiteralByte(machine.Variable(name, _), n, rest) =>
+        emit(Comment(s"literalByte $name, n=$n"))
+        emit(Add(name, ConstantByte(n), ConstantByte(0)));
+        transform(rest)
+
       case machine.LiteralDouble(machine.Variable(name, _), x, rest) =>
         emit(Comment(s"literalDouble $name, x=$x"))
         emit(FAdd(name, ConstantDouble(x), ConstantDouble(0)));
@@ -391,10 +387,17 @@ object Transformer {
         }
         transform(rest)
 
-      case machine.Statement.Hole =>
-        emit(Comment("Hole"))
-        emit(Call("_", Ccc(), VoidType(), ConstantGlobal("hole"), List.empty))
-        RetVoid()
+     case machine.Statement.Hole(span) =>
+       val posfmt = span.range.from.format
+       emit(Comment(s"Hole @ $posfmt"))
+
+       // Reused from LiteralUTF8String
+       val utf8 = (posfmt + "\u0000").getBytes("UTF-8") // null-terminated
+       val litName = freshName("hole_pos")
+       emit(GlobalConstant(s"$litName.lit", ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
+
+       emit(Call("_", Ccc(), VoidType(), ConstantGlobal("hole"), List(ConstantGlobal(s"$litName.lit"))))
+       RetVoid()
     }
 
   def transform(label: machine.Label): ConstantGlobal =
@@ -403,7 +406,7 @@ object Transformer {
     }
 
   def transform(value: machine.Variable)(using FunctionContext): Operand =
-    substitute(value) match {
+    value match {
       case machine.Variable(name, tpe) => LocalReference(transform(tpe), name)
     }
 
@@ -664,10 +667,10 @@ object Transformer {
       values match {
         case Nil => ()
         case value :: values =>
-        if values.map(substitute).contains(substitute(value)) then {
+        if values.contains(value) then {
           shareValue(value);
           loop(values)
-        } else if freeInBody.map(substitute).contains(substitute(value)) then {
+        } else if freeInBody.contains(value) then {
           shareValue(value);
           loop(values)
         } else {
@@ -680,7 +683,7 @@ object Transformer {
 
   def eraseValues(environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Unit =
     environment.foreach { value =>
-      if !freeInBody.map(substitute).contains(substitute(value)) then eraseValue(value)
+      if !freeInBody.contains(value) then eraseValue(value)
     }
 
   def shareValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
@@ -760,23 +763,11 @@ object Transformer {
   }
 
   class FunctionContext() {
-    var substitution: Map[machine.Variable, machine.Variable] = Map();
     var basicBlocks: List[BasicBlock] = List();
   }
 
   def emit(basicBlock: BasicBlock)(using C: FunctionContext) =
     C.basicBlocks = C.basicBlocks :+ basicBlock
-
-  def withBindings[R](bindings: List[(machine.Variable, machine.Variable)])(prog: () => R)(using C: FunctionContext): R = {
-    val substitution = C.substitution;
-    C.substitution = substitution ++ bindings.map { case (variable -> value) => (variable -> substitution.getOrElse(value, value) ) }.toMap;
-    val result = prog();
-    C.substitution = substitution
-    result
-  }
-
-  def substitute(value: machine.Variable)(using C: FunctionContext): machine.Variable =
-    C.substitution.toMap.getOrElse(value, value)
 
   class BlockContext() {
     var stack: Operand = LocalReference(stackType, "stack");

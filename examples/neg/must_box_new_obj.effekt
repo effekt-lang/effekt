@@ -1,0 +1,14 @@
+module must_box_new_obj
+
+interface Counter {
+  def inc(): Unit
+  def get(): Int
+}
+
+def make() = {
+  // dummy counter
+  return new Counter {
+    def inc() = ()
+    def get() = 0
+  }
+}

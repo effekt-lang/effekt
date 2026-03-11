@@ -1,0 +1,9 @@
+def main() = {
+  println(
+    countIf[Int] { x => x > 0 } { [2, -1, 0, 1, -2].each }
+  )
+
+  println(
+    countIf[Bool] { x => x } { [false, false, true, false].each }
+  )
+}

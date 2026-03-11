@@ -1,0 +1,17 @@
+def main() = {
+  println(
+    all[Int] { x => x > 0 } { [1, 2, 3].each }
+  )
+
+  println(
+    all[Int] { x => x < 3 } { [1, 2, 3, 4].each }
+  )
+
+  println(
+    all[Bool] { x => x } { [false, true, true].each }
+  )
+
+  println(
+    all[Int] { x => x >= 0 } { () } // empty stream
+  )
+}

@@ -16,36 +16,29 @@ def makeCounter {r: Region} = {
     def get() = state
     def inc() = state = state + 1
   }
-  c1
+  box c1
 }
 
 def twoCounters() = {
   region outer {
     region inner {
-      val c1: Counter at {inner} = makeCounter {inner}
-      val c2: Counter at {outer} = makeCounter {outer}
-      val l = Cons[Counter at {inner, outer}](c1, Cons(c2, Nil())); // works
+      def c1: Counter = makeCounter {inner}
+      def c2: Counter = makeCounter {outer}
+      val l = Cons[Counter at {inner, outer}](box c1, Cons(box c2, Nil())); // works
 
       // Doesnt work since we implement "SimplerSub"
-      // We check ?A <: Counter at {inner}
-      // this immediately creates the substitution {?A !-> Counter at {inner}}
-      // Hence, later the check ?A <: Counter at {outer} fails.
+      // We check ?A <: Counter at inner
+      // this immediately creates the substitution {?A !-> Counter at inner}
+      // Hence, later the check ?A <: Counter at outer fails.
       // val l2 = Cons(c1, Cons(c2, Nil()));
 
       val _ = {
-        val c1 = makeCounter {inner} // infers now {inner,outer} on c1
-        val c2: Counter at {outer} = makeCounter {outer}
-        val l = Cons(c1, Cons(c2, Nil())); // works
+        def c1 = makeCounter {inner} // infers now {inner,outer} on c1
+        def c2: Counter = makeCounter {outer}
+        val l = Cons(box c1, Cons(box c2, Nil())); // works
         ()
       };
 
-      // also works since boxing is now moved
-      val _ = {
-        def c1 = makeCounter {inner}
-        def c2 = makeCounter {outer}
-        val l = Cons(c1, Cons(c2, Nil()));
-        ()
-      };
       ()
     }
   }
@@ -73,7 +66,7 @@ def testLifted2() = try {
       def get() = do Get()
       def inc() = ()
     };
-    obj
+    box obj
   }
   // should print 42
   println(o.get())
@@ -95,7 +88,7 @@ def main() = region this {
     c1.inc()
     println(c1.get())
 
-    val boxed = c1;
+    val boxed = box c1;
     boxed
   };
 

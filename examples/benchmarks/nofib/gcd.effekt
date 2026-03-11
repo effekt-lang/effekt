@@ -1,0 +1,82 @@
+import examples/benchmarks/runner
+
+def quot_rem(a: Int, b: Int): (Int, Int) =
+  (a / b, mod(a, b))
+
+def g(u1u2u3: (Int, Int, Int), v1v2v3: (Int, Int, Int)): (Int, Int, Int) =
+  (u1u2u3, v1v2v3) match {
+    case ((u1, u2, u3), (v1, v2, v3)) =>
+      if (v3 == 0) {
+        (u3, u1, u2)
+      } else {
+        val (q, r) = quot_rem(u3, v3)
+        g((v1, v2, v3), (u1 - (q * v1), u2 - (q * v2), r))
+      }
+  }
+
+def gcd_e(x: Int, y: Int): (Int, Int, Int) =
+  if (x == 0) {
+    (y, 0, 1)
+  } else {
+    g((1, 0, x), (0, 1, y))
+  }
+
+def max_(l: List[Int]): Int =
+  l match {
+    case Nil() => -1 // panic("Empty List")
+    case Cons(x, Nil()) => x
+    case Cons(x, Cons(y, ys)) =>
+      if (x > y) {
+        max_(Cons(x, ys))
+      } else {
+        max_(Cons(y, ys))
+      }
+  }
+
+def enum_from_to(from: Int, to: Int): List[Int] =
+  if (from <= to) {
+    Cons(from, enum_from_to(from + 1, to))
+  } else {
+    Nil()
+  }
+
+def cartesian_product(p1: List[Int], ms: List[Int]): List[(Int, Int)] =
+  p1 match {
+    case Nil() => Nil()
+    case Cons(h1, t1) => append(to_pair(h1, ms), cartesian_product(t1, ms))
+  }
+
+def append[A](l1: List[A], l2: List[A]): List[A] =
+  l1 match {
+    case Nil() => l2
+    case Cons(p, ps) => Cons(p, append(ps, l2))
+  }
+
+def map[A, B](l: List[A]) { f: A => B }: List[B] = l match {
+  case Nil() => Nil()
+  case Cons(a, as) => Cons(f(a), as.map {f})
+}
+
+def to_pair(i: Int, l: List[Int]): List[(Int, Int)] =
+  l match {
+    case Nil() => Nil()
+    case Cons(j, js) => Cons((i, j), to_pair(i, js))
+  }
+
+def abs_int(i: Int): Int =
+  if (i < 0) -1 * i else i
+
+def test(d: Int): Int = {
+  val ns = enum_from_to(5000, 5000 + d)
+  val ms = enum_from_to(10000, 10000 + d)
+  val tripls = cartesian_product(ns, ms).map { case (x, y) => (x, y, gcd_e(x, y)) }
+  val rs = tripls.map { case (d1, d2, (gg, u, v)) => abs_int((gg + u) + v) }
+  max_(rs)
+}
+
+def test_gcd_nofib(x: Int): Int =
+  test(x)
+
+def run(n: Int): Int = test_gcd_nofib(n)
+
+def main() = benchmark(40){run}

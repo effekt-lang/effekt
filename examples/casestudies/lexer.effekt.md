@@ -104,7 +104,7 @@ we can compose the two handlers to run our example consumer:
 ```effekt:repl
 report {
   exampleTokens.lexerFromList {
-    inspect(example1())
+    println(example1().show)
   }
 }
 ```
@@ -181,7 +181,7 @@ Running our above consumer with the string `"foo()"`:
 ```effekt:repl
   report {
     lexer("foo()") {
-      inspect(example1())
+      println(example1().show)
     }
   }
 ```
@@ -208,7 +208,7 @@ The handler `skipWhitespace` simply skips all spaces by using the `Lexer` effect
   report {
     lexer("foo (   \n  )") {
       skipWhitespace {
-        inspect(example1())
+        println(example1().show)
       }
     }
   }

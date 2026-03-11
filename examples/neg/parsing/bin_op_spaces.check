@@ -1,0 +1,12 @@
+[warning] examples/neg/parsing/bin_op_spaces.effekt:10:13: Missing whitespace around binary operator
+  val _ = 1 +2
+            ^
+[warning] examples/neg/parsing/bin_op_spaces.effekt:11:12: Missing whitespace around binary operator
+  val _ = 1+ 2
+           ^
+[warning] examples/neg/parsing/bin_op_spaces.effekt:12:12: Missing whitespace around binary operator
+  val _ = 1+2
+           ^
+[error] examples/neg/parsing/bin_op_spaces.effekt:16:1: Expected expression but got }
+}
+^

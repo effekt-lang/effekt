@@ -2,9 +2,9 @@
 module char
 
 import effekt
-import exception
 import option
-import result
+import partial
+import stream
 
 
 /// Checks if the given character is an ASCII whitespace
@@ -18,51 +18,49 @@ def isWhitespace(c: Char): Bool = c match {
   case _      => false
 }
 
-/// Gets the value of a given ASCII digit in base 10,
-/// throwing an exception on wrong format
-def digitValue(char: Char): Int / Exception[WrongFormat] =
+/// Gets the value of a given ASCII digit in base 10 or fails
+def digitValue(char: Char): Int / fail =
   if (char >= '0' && char <= '9') {
     char.toInt - '0'.toInt
   } else {
-    wrongFormat("Not a valid digit: '" ++ char.toString ++ "' in base 10")
+    do fail()
   }
 
-/// Gets the value of a given ASCII digit in base 16,
-/// throwing an exception on wrong format
-def hexDigitValue(char: Char): Int / Exception[WrongFormat] =
+/// Gets the value of a given ASCII digit in base 16 or fails
+def hexDigitValue(char: Char): Int / fail =
   char match {
     case char and char >= '0' && char <= '9' => char.toInt - '0'.toInt
     case char and char >= 'A' && char <= 'F' => (char.toInt - 'A'.toInt) + 10
     case char and char >= 'a' && char <= 'f' => (char.toInt - 'a'.toInt) + 10
-    case _ => wrongFormat("Not a valid digit: '" ++ char.toString ++ "' in base 16")
+    case _ => do fail()
   }
 
 /// Gets the value of a given ASCII digit in the given base up to 36,
 /// throwing an exception on wrong format
-def digitValue(char: Char, base: Int): Int / Exception[WrongFormat] = {
+def digitValue(char: Char, base: Int): Int / fail = {
   val digit = char match {
     case char and char >= '0' && char <= '9' => char.toInt - '0'.toInt
     case char and char >= 'A' && char <= 'Z' => (char.toInt - 'A'.toInt) + 10
     case char and char >= 'a' && char <= 'z' => (char.toInt - 'a'.toInt) + 10
-    case _ => wrongFormat("Not a valid digit: '" ++ char.toString ++ "'")
+    case _ => do fail()
   }
   if (digit >= base) {
-    wrongFormat("Digit '" ++ digit.show ++ "' is too big for base " ++ base.show)
+    do fail()
   }
   digit
 }
 
 /// Checks if the given character is an ASCII digit in base 10
 /// Prefer using `digitValue(c: Char)` to get the numeric value out.
-def isDigit(char: Char): Bool = result[Int, WrongFormat] { digitValue(char) }.isSuccess
+def isDigit(char: Char): Bool = optionally[Int] { digitValue(char) }.isDefined
 
 /// Checks if the given character is an ASCII digit in base 16
 /// Prefer using `hexDigitValue(c: Char)` to get the numeric value out.
-def isHexDigit(char: Char): Bool = result[Int, WrongFormat] { hexDigitValue(char)}.isSuccess
+def isHexDigit(char: Char): Bool = optionally[Int] { hexDigitValue(char)}.isDefined
 
 /// Checks if the given character is an ASCII digit in base 10
 /// Prefer using `digitValue(c: Char, base: Int)` to get the numeric value out.
-def isDigit(char: Char, base: Int): Bool = result[Int, WrongFormat] { digitValue(char, base) }.isSuccess
+def isDigit(char: Char, base: Int): Bool = optionally[Int] { digitValue(char, base) }.isDefined
 
 /// Checks if a given character is a 7-bit ASCII character
 def isASCII(c: Char): Bool = { c.toInt < 128 }
@@ -86,7 +84,7 @@ def isAlphabetic(c: Char): Bool = isLower(c) || isUpper(c)
 //   Chez: ?
 //   LLVM: i64 representing utf-8 (varying length 1-4 bytes)
 
-extern pure def toString(ch: Char): String =
+extern def toString(ch: Char) at {}: String =
   js "String.fromCodePoint(${ch})"
   chez "(string (integer->char ${ch}))"
   llvm """
@@ -95,20 +93,20 @@ extern pure def toString(ch: Char): String =
   """
 
 // Since we currently represent Char by integers in all backends, we could reuse comparison
-extern pure def toInt(ch: Char): Int =
+extern def toInt(ch: Char) at {}: Int =
   js "${ch}"
   chez "${ch}"
   llvm "ret %Int ${ch}"
   vm "string::toInt(Char)"
 
-extern pure def toChar(codepoint: Int): Char =
+extern def toChar(codepoint: Int) at {}: Char =
   js "${codepoint}"
   chez "${codepoint}"
   llvm "ret %Int ${codepoint}"
   vm "string::toChar(Int)"
 
 
-extern pure def infixLt(x: Char, y: Char): Bool =
+extern def infixLt(x: Char, y: Char) at {}: Bool =
   js "(${x} < ${y})"
   chez "(< ${x} ${y})"
   llvm """
@@ -119,7 +117,7 @@ extern pure def infixLt(x: Char, y: Char): Bool =
   """
   vm "string::infixLt(Char, Char)"
 
-extern pure def infixLte(x: Char, y: Char): Bool =
+extern def infixLte(x: Char, y: Char) at {}: Bool =
   js "(${x} <= ${y})"
   chez "(<= ${x} ${y})"
   llvm """
@@ -130,7 +128,7 @@ extern pure def infixLte(x: Char, y: Char): Bool =
   """
   vm "string::infixLte(Char, Char)"
 
-extern pure def infixGt(x: Char, y: Char): Bool =
+extern def infixGt(x: Char, y: Char) at {}: Bool =
   js "(${x} > ${y})"
   chez "(> ${x} ${y})"
   llvm """
@@ -141,7 +139,7 @@ extern pure def infixGt(x: Char, y: Char): Bool =
   """
   vm "string::infixGt(Char, Char)"
 
-extern pure def infixGte(x: Char, y: Char): Bool =
+extern def infixGte(x: Char, y: Char) at {}: Bool =
   js "(${x} >= ${y})"
   chez "(>= ${x} ${y})"
   llvm """
@@ -172,6 +170,62 @@ def utf16UnitCount(codepoint: Char): Int = codepoint match {
   case c => panic("Not a valid code point")
 }
 
-extern pure def charWidth(c: Char): Int =
+extern def charWidth(c: Char) at {}: Int =
   // JavaScript strings are UTF-16 where every unicode character after 0xffff takes two units
   js "(${c} > 0xffff) ? 2 : 1"
+
+
+def decodeChar(): Char / {read[Byte], stop} = {
+  val b = do read().toInt
+  if (b < 128) {
+    b.toChar
+  } else if (b < 224) {
+    val part1 = bitwiseShl(bitwiseAnd(b, 31), 6)
+    val part2 = bitwiseAnd(do read().toInt, 63)
+    bitwiseOr(part1, part2).toChar
+  } else if (b < 240) {
+    val part1 = bitwiseShl(bitwiseAnd(b, 15), 12)
+    val part2 = bitwiseShl(bitwiseAnd(do read().toInt, 63), 6)
+    val part3 = bitwiseAnd(do read().toInt, 63)
+    bitwiseOr(bitwiseOr(part1, part2), part3).toChar
+  } else {
+    val part1 = bitwiseShl(bitwiseAnd(b, 7), 18)
+    val part2 = bitwiseShl(bitwiseAnd(do read().toInt, 63), 12)
+    val part3 = bitwiseShl(bitwiseAnd(do read().toInt, 63), 6)
+    val part4 = bitwiseAnd(do read().toInt, 63)
+    bitwiseOr(bitwiseOr(bitwiseOr(part1, part2), part3), part4).toChar
+  }
+}
+
+def encodeChar(char: Char): Unit / emit[Byte] = {
+  val code = char.toInt
+  if (code < 128) {
+    do emit(code.toByte)
+  } else if (code < 2048) {
+    do emit(bitwiseOr(192, bitwiseShr(code, 6)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
+  } else if (code < 65536) {
+    do emit(bitwiseOr(224, bitwiseShr(code, 12)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 6), 63)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
+  } else {
+    do emit(bitwiseOr(240, bitwiseShr(code, 18)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 12), 63)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 6), 63)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
+  }
+}
+
+def decodeUTF8[R] { reader: () => R / read[Char] }: R / read[Byte] =
+  try {
+    reader()
+  } with read[Char] {
+    resume { decodeChar() }
+  }
+
+def encodeUTF8[R] { stream: () => R / emit[Char] }: R / emit[Byte] =
+  try {
+    stream()
+  } with emit[Char] { char =>
+    resume(encodeChar(char))
+  }

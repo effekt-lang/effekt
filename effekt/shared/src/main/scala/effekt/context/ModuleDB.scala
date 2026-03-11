@@ -53,16 +53,22 @@ trait ModuleDB { self: Context =>
     mod <- compiler.runFrontend(source)(using this)
   } yield mod
 
-  /**
-   * Util to check whether main exists on the given module
+  /** 
+   * Ad-hoc method of finding all functions called `main` in a module.
+   * 
+   * Should be replaced by explicit @main annotation
    */
-  def checkMain(mod: Module)(implicit C: Context): TermSymbol = C.at(mod.decl) {
+  def findMain(mod: Module): Set[TermSymbol] = {
+    def go(b: Bindings): Set[TermSymbol] =
+      b.terms.getOrElse("main", Set()) ++ b.namespaces.flatMap { case (_, b) => go(b) }
+    go(mod.exports)
+  }
 
-    // deep discovery of main: should be replaced by explicit @main annotation
-    def findMain(b: Bindings): Set[TermSymbol] =
-      b.terms.getOrElse("main", Set()) ++ b.namespaces.flatMap { case (_, b) => findMain(b) }
-
-    val mains = findMain(mod.exports)
+  /**
+   * Util to check whether exactly one main function exists on the given module
+   */
+  def ensureMainExists(mod: Module)(implicit C: Context): TermSymbol = C.at(mod.decl) {
+    val mains = findMain(mod)
 
     if (mains.isEmpty) {
       C.abort("No main function defined")
@@ -73,31 +79,6 @@ trait ModuleDB { self: Context =>
       C.abort(pp"Multiple main functions defined: ${names}")
     }
 
-    val main = mains.head.asUserFunction
-
-    Context.at(main.decl) {
-      val mainValueParams = C.functionTypeOf(main).vparams
-      val mainBlockParams = C.functionTypeOf(main).bparams
-      if (mainValueParams.nonEmpty || mainBlockParams.nonEmpty) {
-        C.abort("Main does not take arguments")
-      }
-
-      val tpe = C.functionTypeOf(main)
-      val controlEffects = tpe.effects
-      if (controlEffects.nonEmpty) {
-        C.abort(pp"Main cannot have effects, but includes effects: ${controlEffects}")
-      }
-
-      tpe.result match {
-        case symbols.builtins.TInt =>
-          C.abort(pp"Main must return Unit, please use `exit(n)` to return an error code.")
-        case symbols.builtins.TUnit =>
-          ()
-        case other =>
-          C.abort(pp"Main must return Unit, but returns ${other}.")
-      }
-
-      main
-    }
+    mains.head.asUserFunction
   }
 }

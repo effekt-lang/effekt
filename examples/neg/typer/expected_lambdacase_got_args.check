@@ -1,0 +1,6 @@
+[error] examples/neg/typer/expected_lambdacase_got_args.effekt:3:20: Wrong number of arguments to function: expected 1 value argument, but got 2 value arguments
+def main() = foo { (n, s) =>
+                   ^
+[info] examples/neg/typer/expected_lambdacase_got_args.effekt:3:20: Did you mean to use `case (x, y) => ...` to pattern match on the tuple Tuple2[Int, String]?
+def main() = foo { (n, s) =>
+                   ^

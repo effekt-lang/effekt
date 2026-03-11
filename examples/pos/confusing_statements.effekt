@@ -1,0 +1,13 @@
+def compute(): Unit = println("doing something")
+
+/// Prints "doing something" three times, since
+/// the second `compute()` is NOT part of `bar`.
+/// The language is NOT indentation senstive!
+def main() = {
+  def bar() =
+    compute(); // <--- this is part of bar!
+    compute()  // <--- this is part of main, not bar!
+
+  bar();
+  bar()
+}

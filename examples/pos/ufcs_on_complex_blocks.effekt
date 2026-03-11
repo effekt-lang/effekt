@@ -1,0 +1,41 @@
+
+interface State[T] {
+  def get(): T
+  def put(t: T): Unit
+}
+
+def withState[T](initial: T) { body: {State[T]} => Unit } = {
+  var state = initial
+  try body {st} with st: State[T] {
+    def get() = resume(state)
+    def put(t: T) = { state = t; resume(()) }
+  }
+}
+
+def add(x: Int) { st: State[Int] } =
+  st.put(st.get() + x)
+
+def map[A] { st: State[A] } { f: A => A } =
+  st.put(f(st.get()))
+
+def main() = {
+  with def st = withState[Int](100);
+  println(st.get())
+  st.add(50)
+  println(st.get())
+  val boxed = box st
+  (unbox boxed).add(25)
+  println(st.get())
+  st.map { x => x * 2 }
+  println(st.get())
+
+  println("----")
+
+  var local = 42
+  println(local)
+  new State[Int] {
+    def get() = local
+    def put(t: Int) = { local = t }
+  }.add(8)
+  println(local)
+}

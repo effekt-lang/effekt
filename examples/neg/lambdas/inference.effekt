@@ -5,11 +5,11 @@ def main() = {
   def hof1(f: (Int) => String at {}): Unit = ()
   def hof2(f: ((Int) => Bool at {}) => String at {}): Unit = ()
 
-  hof2(fun (f: (Int) => Bool at {}) {
+  hof2(box { (f: (Int) => Bool at {}) =>
     f(3);
     ""
   })
 
-  hof2(fun(f: (Int) => Unit at {}) { "" })
-  hof1(fun(b: Bool) { () })
+  hof2(box { (f: (Int) => Unit at {}) => "" })
+  hof1(box { (b: Bool) => () })
 }

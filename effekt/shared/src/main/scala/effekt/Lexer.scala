@@ -3,6 +3,7 @@ package effekt.lexer
 import scala.collection.mutable
 import scala.collection.immutable
 import effekt.source.Span
+import effekt.util.UByte
 import kiama.util.Source
 
 /** Lexing errors that can occur during tokenization */
@@ -16,6 +17,7 @@ enum LexerError {
   case MultipleCodePointsInChar
   case InvalidIntegerFormat
   case InvalidDoubleFormat
+  case InvalidByteFormat
   case UnterminatedInterpolation(depth: Int)
 
   def message: String = this match {
@@ -34,6 +36,7 @@ enum LexerError {
     case MultipleCodePointsInChar => "Character literal consists of multiple code points"
     case InvalidIntegerFormat => "Invalid integer format, not a 64bit integer literal"
     case InvalidDoubleFormat => "Invalid float format, not a double literal"
+    case InvalidByteFormat => "Invalid byte format, byte has to be exactly two hex digits"
     case UnterminatedInterpolation(depth) =>
       s"Unterminated string interpolation ($depth unclosed splices)"
   }
@@ -63,6 +66,7 @@ enum TokenKind {
   case Str(s: String, multiline: Boolean)
   case HoleStr(s: String)
   case Chr(c: Int)
+  case Byt(b: UByte)
 
   // identifiers
   case Ident(id: String)
@@ -142,14 +146,9 @@ enum TokenKind {
   case `with`
   case `case`
   case `do`
-  case `fun`
   case `match`
   case `def`
-  case `module`
-  case `import`
-  case `export`
   case `extern`
-  case `include`
   case `record`
   case `box`
   case `unbox`
@@ -160,7 +159,12 @@ enum TokenKind {
   case `and`
   case `is`
   case `namespace`
-  case `pure`
+
+  case `module`
+  case `import`
+  case `export`
+  case `include`
+  case `private`
 }
 
 object TokenKind {
@@ -191,9 +195,9 @@ object TokenKind {
 
   val keywords = Vector(
     `let`, `true`, `false`, `val`, `var`, `if`, `else`, `while`, `type`, `effect`, `interface`,
-    `try`, `with`, `case`, `do`, `fun`, `match`, `def`, `module`, `import`, `export`, `extern`,
+    `try`, `with`, `case`, `do`, `match`, `def`, `module`, `import`, `export`, `extern`,
     `include`, `record`, `box`, `unbox`, `return`, `region`, `resource`, `new`, `and`, `is`,
-    `namespace`, `pure`
+    `namespace`, `private`
   )
 
   val keywordMap: immutable.HashMap[String, TokenKind] =
@@ -303,9 +307,6 @@ class Lexer(source: Source) extends Iterator[Token] {
   override def hasNext: Boolean = !eof
 
   override def next(): Token =
-    if !resumeStringNext || delimiters.isEmpty then
-      skipWhitespace()
-
     tokenStartPosition = position
     val kind = nextToken()
 
@@ -314,17 +315,6 @@ class Lexer(source: Source) extends Iterator[Token] {
       Token(tokenStartPosition.offset, position.offset, kind)
     else
       Token(tokenStartPosition.offset, position.offset - 1, kind)
-
-  private def skipWhitespace(): Unit =
-    while !atEndOfInput do
-      currentChar match {
-        case ' ' | '\t' => advance()
-        case '\n' => return // Stop here, let newline be handled as a token
-        case '\r' =>
-          if nextChar == '\n' then return // Stop here for \r\n
-          else advance() // Treat standalone \r as whitespace
-        case _ => return
-      }
 
   private def atEndOfInput: Boolean =
     currentChar == '\u0000'
@@ -366,6 +356,15 @@ class Lexer(source: Source) extends Iterator[Token] {
       advance()
     }
 
+  private def advanceSpaces(): TokenKind = {
+    advanceWhile {
+      case ('\r', '\n') => false
+      case ('\n', _)    => false
+      case (curr, _)    => curr.isWhitespace
+    }
+    TokenKind.Space
+  }
+
   private def peekAhead(offset: Int): Char =
     val targetIndex = position.offset + offset
     if targetIndex < source.content.length then
@@ -395,11 +394,14 @@ class Lexer(source: Source) extends Iterator[Token] {
     }
 
     (currentChar, nextChar) match {
+      // Whitespace: first try matching newlines, then whitespace-like
       case ('\n',    _) => advanceWith(TokenKind.Newline)
       case ('\r', '\n') => advance2With(TokenKind.Newline)
+      case (c, _) if c.isWhitespace => advanceSpaces()
 
       // Numbers
-      case (c, _) if c.isDigit => number()
+      case ('0', 'x') if isHexDigit(peekAhead(2)) => advance2With(byte())
+      case (c,     _) if c.isDigit                => number()
 
       // Identifiers and keywords
       case (c, _) if isNameFirst(c) => identifier()
@@ -476,12 +478,12 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('$', _) =>
         advanceWith(TokenKind.Error(LexerError.UnknownChar('$')))
 
+      case ('}', '>') => advance2With(TokenKind.`}>`)
       case ('}', _) if isAtInterpolationBoundary =>
         interpolationDepths.pop()
         depthTracker.braces -= 1
         resumeStringNext = true // remember to resume with a string next!
         advanceWith(TokenKind.`}$`)
-      case ('}', '>') => advance2With(TokenKind.`}>`)
       case ('}', _) =>
         depthTracker.braces -= 1
         advanceWith(TokenKind.`}`)
@@ -547,6 +549,27 @@ class Lexer(source: Source) extends Iterator[Token] {
         case Some(integer) => TokenKind.Integer(integer)
         case None => TokenKind.Error(LexerError.InvalidIntegerFormat)
       }
+
+  private def byte(): TokenKind =
+    // Consume hex digits
+    advanceWhile { (curr, _) => isHexDigit(curr) }
+
+    // Get the hex string
+    val hexString = getCurrentSlice(skipAfterStart = 2)
+
+    if hexString.length < 2 then
+      return TokenKind.Error(LexerError.InvalidByteFormat)
+
+    if hexString.length > 2 then
+      return TokenKind.Error(LexerError.InvalidByteFormat)
+    
+    try {
+      val byte = java.lang.Integer.parseInt(hexString, 16)
+      assert(byte >= 0 && byte <= 255)
+      TokenKind.Byt(UByte.unsafeFromInt(byte))
+    } catch {
+      case e: NumberFormatException => TokenKind.Error(LexerError.InvalidByteFormat)
+    }
 
   private def identifier(): TokenKind =
     advanceWhile { (curr, _) => isNameRest(curr) }

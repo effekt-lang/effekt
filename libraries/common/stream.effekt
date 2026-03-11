@@ -1,12 +1,8 @@
 module stream
 
-import array
-import bytearray
-import map
-import set
-
-import io/filesystem
-import io/error
+import effekt
+import option
+import partial
 
 // Effects
 // -------
@@ -19,8 +15,6 @@ effect emit[A](value: A): Unit
 /// The producer can decide to `stop` emitting values.
 effect read[A](): A / stop
 
-/// Signal from a producer to a consumer that there are no further values.
-effect stop(): Nothing
 
 /// Like `for[A, R]`, but ignores the result of the stream, and consequently
 /// works for any type. Use this to annotate the type of stream elements
@@ -49,107 +43,18 @@ def fix[T] { one: T => Unit / emit[T] } { stream: => Unit / emit[T] }: Unit =
   try {
     stream()
   } with emit[T] { value =>
-    fix[T] {one} { one(value) }
+    fix {one} { one(value) }
     resume(())
   }
 
-/// Turns a `list` into a producer of a push stream
-/// by emitting each contained value left-to-right.
-def each[A](list: List[A]): Unit / emit[A] =
-  list match {
-    case Nil() => ()
-    case Cons(head, tail) =>
-      do emit(head)
-      each(tail)
-  }
-
-/// Turns an `array` into a producer of a push stream
-/// by emitting each contained value from 0 to length - 1.
-def each[T](array: Array[T]): Unit / emit[T] = {
-  val n = array.size
-  def go(i: Int): Unit = {
-    if (i < n) {
-      do emit(array.unsafeGet(i))
-      go(i + 1)
-    }
-  }
-  go(0)
-}
-
-/// Turns `bytes` into a producer of a push stream
-/// by emitting each contained value from 0 to length - 1.
-def each(bytes: ByteArray): Unit / emit[Byte] = {
-  val n = bytes.size
-  def go(i: Int): Unit = {
-    if (i < n) {
-      do emit(bytes.unsafeGet(i))
-      go(i + 1)
-    }
-  }
-  go(0)
-}
-
-/// Turns a `map` into a producer of a push stream
-/// of `(key, value)` pairs by emitting each contained *in order*.
-def each[K, V](map: Map[K, V]): Unit / emit[(K, V)] =
-  map.foreach { (k, v) => do emit((k, v)) }
-
-/// Turns a `map` into a producer of a push stream
-/// of its keys by emitting each contained *in order*.
-def eachKey[K, V](map: Map[K, V]): Unit / emit[K] =
-  map.foreach { (k, _v) => do emit(k) }
-
-/// Turns a `map` into a producer of a push stream
-/// of its values by emitting each contained.
-def eachValue[K, V](map: Map[K, V]): Unit / emit[V] =
-  map.foreach { (_k, v) => do emit(v) }
-
-/// Turns a `set` into a producer of a push stream
-/// by emitting each contained *in order*.
-def each[A](set: Set[A]): Unit / emit[A] =
-  set.foreach { x => do emit(x) }
-
-// not option
-// not dequeue
-// not queue
-// not result
-// not seq
-
-
-def boundary { program: () => Unit / stop }: Unit = {
-  returning::boundary[Unit]{program}
-  ()
-}
-
-/// Run `program` forever until `stop` is thrown.
-def exhaustively { program: () => Unit / stop }: Unit =
-  try {
-    def go(): Unit = {
-      program()
-      go()
-    }
-    go()
-  } with stop {
-    ()
-  }
 
 def many[A] { action: () => A / stop }: Unit / emit[A] =
-  exhaustively { do emit(action()) }
+  loop { do emit(action()) }
 
-def some[A] { action: () => A / stop }: Unit / { emit[A], stop } = {
-  do emit(action())
+def some[A] { action: () => A / stop }: Unit / { emit[A], fail } = {
+  do emit(must { action() })
   many { action() }
 }
-
-def optionally { program: () => Unit / stop }: Bool =
-  returning::optionally[Unit]{program}.isDefined
-
-def attempt[R] { program: () => R / stop } { fallback: () => R }: R =
-  try {
-    program()
-  } with stop {
-    fallback()
-  }
 
 
 /// In Effekt lower bounds are inclusive and upper bounds are exclusive
@@ -195,6 +100,26 @@ def iterate[A](initial: A) { step: A => A }: Unit / emit[A] = {
   }
 }
 
+/// Re-emit from the `stream` as long as the `predicate` holds.
+/// Once the predicate fails, the stream ends.
+///
+/// Examples:
+/// ```effekt
+/// > list::collect[Int] { takeWhile[Int] { x => x < 3 } { [1, 2, 3, 4, 1].each } }
+/// [1, 2]
+///
+/// > list::collect[Int] { takeWhile[Int] { x => x < 10 } { [1, 2, 3].each } }
+/// [1, 2, 3]
+///
+/// > list::collect[Int] { takeWhile[Int] { x => x < 0 } { [1, 2, 3].each } }
+/// []
+/// ```
+def takeWhile[A] { predicate: A => Bool } { stream: () => Unit / emit[A] }: Unit / emit[A] =
+  try { stream() } with emit[A] {
+    case value and predicate(value) => do emit(value); resume(())
+    case _                          => () // end the stream
+  }
+
 
 def sum { stream: () => Unit / emit[Int] }: Int =
   returning::sum[Unit]{stream}.second
@@ -202,249 +127,110 @@ def sum { stream: () => Unit / emit[Int] }: Int =
 def product { stream: () => Unit / emit[Int] }: Int =
   returning::product[Unit]{stream}.second
 
-def collectList[A] { stream: () => Unit / emit[A] }: List[A] =
-  returning::collectList[A, Unit]{stream}.second
-
-def collectArray[A] { stream: () => Unit / emit[A] }: Array[A] =
-  returning::collectArray[A, Unit]{stream}.second
-
-def collectBytes { stream: () => Unit / emit[Byte] }: ByteArray =
-  returning::collectBytes[Unit]{stream}.second
-
-def feed[T, R](list: List[T]) { reader: () => R / read[T] }: R = {
-  var l = list
-  try {
-    reader()
-  } with read[T] {
-    resume {
-      l match {
-        case Nil() => do stop()
-        case Cons(value, rest) =>
-          l = rest
-          return value
-      }
-    }
+/// Returns true if all elements in the stream satisfy the given predicate,
+/// false otherwise. Short-circuits as soon as a non-matching element is found.
+///
+/// Examples:
+/// ```effekt
+/// > all[Int] { x => x > 0 } { [1, 2, 3].each }
+/// true
+///
+/// > all[Int] { x => x < 3 } { [1, 2, 3, 4].each }
+/// false
+///
+/// > all[Bool] { x => x } { [false, true, true].each }
+/// false
+///
+/// > all[Int] { x => x >= 0 } { () } // empty stream
+/// true
+/// ```
+def all[A] { cond: A => Bool } { stream: => Unit / emit[A] }: Bool =
+  try { stream(); true } with emit[A] {
+    case value and not(cond(value)) => false
+    case _                          => resume(())
   }
+
+/// Returns true if any element in the stream satisfies the given predicate,
+/// false otherwise. Short-circuits as soon as a matching element is found.
+///
+/// Examples:
+/// ```effekt
+/// > any[Int] { x => x > 0 } { [-2, -1, 0, 1, 2].each }
+/// true
+///
+/// > any[Int] { x => x > 10 } { [1, 2, 3, 4].each }
+/// false
+///
+/// > any[Bool] { x => x } { [false, true, false].each }
+/// true
+///
+/// > any[Int] { x => x == 0 } { () } // empty stream
+/// false
+/// ```
+def any[A] { cond: A => Bool } { stream: => Unit / emit[A] }: Bool =
+  try { stream(); false } with emit[A] {
+    case value and cond(value) => true
+    case _                     => resume(())
+  }
+
+/// Count the number of emitted values that satisfy the given predicate.
+///
+/// Examples:
+/// ```
+/// > countIf[Int] { x => x > 0 } { [2, -1, 0, 1, -2].each }
+/// 2
+///
+/// > countIf[Bool] { x => x } { [false, false, true, false].each }
+/// 1
+/// ```
+def countIf[A] { shouldCount: A => Bool } { stream: () => Unit / emit[A] }: Int = {
+  var count = 0
+  for {stream} {
+    case x and shouldCount(x) => count = count + 1
+    case _                    => ()
+  }
+  count
 }
 
-def collectMap[K, V, R](compare: (K, K) => Ordering at {}) { stream: () => R / emit[(K, V)] }: (R, Map[K, V]) =
-  try {
-    (stream(), map::empty(compare))
-  } with emit[(K, V)] { case (k, v) =>
-    val (r, map) = resume(());
-    (r, map.put(k, v))
-  }
-
-def collectMap[K, V](compare: (K, K) => Ordering at {}) { stream: () => Any / emit[(K, V)] }: Map[K, V] =
-  collectMap[K, V, Any](compare){stream}.second
-
-def collectSet[A, R](compare: (A, A) => Ordering at {}) { stream: () => R / emit[A] }: (R, Set[A]) =
-  try {
-    (stream(), set::empty(compare))
-  } with emit[A] { (v) =>
-    val (r, set) = resume(());
-    (r, set.insert(v))
-  }
-
-def collectSet[A](compare: (A, A) => Ordering at {}) { stream: () => Any / emit[A] }: Set[A] =
-  collectSet[A, Any](compare){stream}.second
-
-def feed[T, R](array: Array[T]) { reader: () => R / read[T] }: R = {
-  var i = 0
-  try {
-    reader()
-  } with read[T] {
-    resume {
-      if (i < array.size) {
-        val c = i
-        i = c + 1
-        array.unsafeGet(c)
-      } else {
-        do stop()
-      }
-    }
-  }
-}
-
-def feed[R](bytes: ByteArray) { reader: () => R / read[Byte] }: R = {
-  var i = 0
-  try {
-    reader()
-  } with read[Byte] {
-    resume {
-      if (i < bytes.size) {
-        val c = i
-        i = c + 1
-        bytes.unsafeGet(c)
-      } else {
-        do stop()
-      }
-    }
-  }
-}
+/// Count the number of emitted values.
+def count[A] { stream: () => Unit / emit[A] }: Int =
+  countIf[A] { _ => true } {stream}
 
 def source[A] { stream: () => Unit / emit[A] } { reader: () => Unit / read[A] }: Unit =
   returning::source[A, Unit]{stream}{reader}
 
-/// Combines two streams together producing a stream of pairs in lockstep.
+/// Combines two streams together calling action on pairs in lockstep.
 /// Terminates when either of them terminates.
 def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] } { action: (A, B) => Unit }: Unit = {
   with source[A] { stream1 }
   with source[B] { stream2 }
 
-  exhaustively {
-    action(do read[A](), do read[B]())
+  loop {
+    action(do read(), do read())
   }
 }
 
-def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[IOError] = {
+/// Combines two streams together calling action on OneOrBoth in lockstep.
+/// Terminates when both of them terminated.
+def zipLongest[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] } { action: OneOrBoth[A, B] => Unit }: Unit = {
+  with source[A] { stream1 }
+  with source[B] { stream2 }
 
-  val file = openForWriting(path);
-  with on[IOError].finalize { close(file) }
-
-  val chunkSize = 1048576 // 1MB
-  val buffer = bytearray::allocate(chunkSize)
-  var offset = 0
-
-  def push(i: Int, n: Int): Unit = {
-    val r = write(file, buffer, i, n, -1)
-    if (r < n) {
-      push(i + r, n - r)
-    }
-  }
-
-  try {
-    val r = stream()
-    push(0, offset)
-    return r
-  } with emit[Byte] { (byte) =>
-    if (offset >= buffer.size) {
-      push(0, buffer.size)
-      offset = 0
-    }
-    buffer.unsafeSet(offset, byte)
-    offset = offset + 1
-    resume(())
-  }
-}
-
-def readFile[R](path: String) { reader: () => R / read[Byte] }: R / Exception[IOError] = {
-
-  val file = openForReading(path);
-  with on[IOError].finalize { close(file) }
-
-  val chunkSize = 1048576 // 1MB
-  val buffer = bytearray::allocate(chunkSize)
-  var offset = 0
-  var length = 0
-
-  def pull(): Unit / stop = {
-    read(file, buffer, 0, chunkSize, -1) match {
-      case 0 =>
-        do stop()
-      case n =>
-        length = n
-    }
-  }
-
-  try {
-    reader()
-  } with read[Byte] {
-    resume {
-      if (offset >= length) {
-        pull()
-        offset = 0
+  loop {
+     try {
+      val a = do read[A]()
+      try {
+        val b = do read[B]()
+        action(Both(a, b))
+      } with stop { () =>
+        action(This(a))
       }
-      val byte = buffer.unsafeGet(offset)
-      offset = offset + 1
-      return byte
+    } with stop{ () =>
+      val b = do read[B]()
+      action(That(b))
     }
   }
 }
-
-def decodeChar(): Char / {read[Byte], stop} = {
-  val b = do read().toInt
-  if (b < 128) {
-    b.toChar
-  } else if (b < 224) {
-    val part1 = bitwiseShl(bitwiseAnd(b, 31), 6)
-    val part2 = bitwiseAnd(do read().toInt, 63)
-    bitwiseOr(part1, part2).toChar
-  } else if (b < 240) {
-    val part1 = bitwiseShl(bitwiseAnd(b, 15), 12)
-    val part2 = bitwiseShl(bitwiseAnd(do read().toInt, 63), 6)
-    val part3 = bitwiseAnd(do read().toInt, 63)
-    bitwiseOr(bitwiseOr(part1, part2), part3).toChar
-  } else {
-    val part1 = bitwiseShl(bitwiseAnd(b, 7), 18)
-    val part2 = bitwiseShl(bitwiseAnd(do read().toInt, 63), 12)
-    val part3 = bitwiseShl(bitwiseAnd(do read().toInt, 63), 6)
-    val part4 = bitwiseAnd(do read().toInt, 63)
-    bitwiseOr(bitwiseOr(bitwiseOr(part1, part2), part3), part4).toChar
-  }
-}
-
-def encodeChar(char: Char): Unit / emit[Byte] = {
-  val code = char.toInt
-  if (code < 128) {
-    do emit(code.toByte)
-  } else if (code < 2048) {
-    do emit(bitwiseOr(192, bitwiseShr(code, 6)).toByte)
-    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
-  } else if (code < 65536) {
-    do emit(bitwiseOr(224, bitwiseShr(code, 12)).toByte)
-    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 6), 63)).toByte)
-    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
-  } else {
-    do emit(bitwiseOr(240, bitwiseShr(code, 18)).toByte)
-    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 12), 63)).toByte)
-    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 6), 63)).toByte)
-    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
-  }
-}
-
-def decodeUTF8[R] { reader: () => R / read[Char] }: R / read[Byte] =
-  try {
-    reader()
-  } with read[Char] {
-    resume { decodeChar() }
-  }
-
-def encodeUTF8[R] { stream: () => R / emit[Char] }: R / emit[Byte] =
-  try {
-    stream()
-  } with emit[Char] { char =>
-    resume(encodeChar(char))
-  }
-
-def writeFileUTF8[R](path: String) { stream: () => R / emit[Char] }: R / Exception[IOError] =
-  writeFile(path) { encodeUTF8 { stream() } }
-
-def readFileUTF8[R](path: String) { reader: () => R / read[Char] }: R / Exception[IOError] =
-  readFile(path) { decodeUTF8 { reader() } }
-
-def feed[R](string: String) { reader: () => R / read[Char] } =
-  feed(string.fromString) {
-    decodeUTF8 {
-      reader()
-    }
-  }
-
-def each(string: String): Unit / emit[Char] =
-  feed(string) {
-    exhaustively {
-      do emit[Char](do read[Char]())
-    }
-  }
-
-def collectString { stream: () => Unit / emit[Char] }: String =
-  returning::collectString[Unit]{stream}.second
-
-def writeLine { body: () => Unit / emit[Char] }: Unit / emit[Char] =
-  returning::writeLine[Unit]{body}
-
-def readLine { body: () => Unit / read[Char] }: Unit / {read[Char], stop} =
-  returning::readLine[Unit]{body}
 
 namespace internal {
   effect snapshot(): Unit
@@ -452,9 +238,9 @@ namespace internal {
 
 /// Use cons to handle prod, but also emit to the outside.
 /// The outside controls iteration, i.e., if cons aborts, the rest of prod will still be emitted.
-/// 
+///
 /// Starts by executing cons. Will stop cons during execution if the outside stops consuming.
-/// 
+///
 /// Example, printing all values consumed by the outside:
 ///
 ///     with teeing{ {s} => for{s}{ e => println(e) } }
@@ -490,9 +276,9 @@ def teeing[A]{ cons: { => Unit / emit[A] } => Unit }{ prod: => Unit / emit[A] }:
 }
 
 /// Binds a `teeing`-like function in the body, stopping the inner producer once all consumers in tees are done consuming.
-/// 
+///
 /// Example of use, equivalent to `tee[A]{cns1}{cns2}{prd}`:
-/// 
+///
 ///     manyTee[A] { {tee} =>
 ///       with tee{cns1}
 ///       with tee{cns2}
@@ -528,6 +314,69 @@ def tee[A]{ cons1: { => Unit / emit[A] } => Unit }{ cons2: { => Unit / emit[A] }
   }
 }
 
+/// Extract exactly the very first element of the given stream
+/// or fails if no elements are emitted.
+///
+/// Examples:
+/// ```effekt
+/// > first[Int] { [1, 2, 3].each }
+/// 1
+/// > first[Bool] { do emit(true) }
+/// true
+/// > first[String] { () } // empty stream
+/// <fail>
+/// ```
+def first[A] { stream: () => Unit / emit[A] }: A / fail = {
+  try {
+    def body(): A = { stream(); do fail() }
+    body()
+  } with emit[A] { a => a }
+}
+
+/// Extract the nth element of the given stream.
+/// Fails if not enough elements are emitted
+def nth[A](n: Int){ stream: () => Unit / emit[A] }: A / fail = {
+  var m = n
+  try {
+    def body(): A = { stream(); do fail() }
+    body()
+  } with emit[A] { a =>
+    if (m == 0) {
+      return a
+    } else {
+      m = m - 1
+      resume(())
+    }
+  }
+}
+
+// Counting and padding
+// --------------------
+
+/// get current position in stream
+effect getPos(): Int
+
+/// Track position in stream, starting with init
+/// Handles getPos
+def tracking[A](init: Int){ body: => Unit / { emit[A], getPos } }: Unit / emit[A] = {
+  var n = init
+  try body()
+  with emit[A] { b => n = n + 1; resume(do emit[A](b)) }
+  with getPos{ resume(n) }
+}
+
+/// Pad to a multiple of fac emitted values, by emitting gen repeatedly
+def pad[A](fac: Int){ gen: => A }: Unit  / {getPos, emit[A]} = {
+  while(mod(do getPos(), fac) != 0) {
+    do emit[A](gen())
+  }
+}
+
+/// Track how many bytes were emitted (in the body)
+/// Handles getPos
+def tracking[A]{ body: => Unit / { emit[A], getPos } }: Unit / emit[A] =
+  tracking[A](0){body}
+
 namespace returning {
 
 /// Canonical handler of push streams that performs `action` for every
@@ -554,13 +403,6 @@ def tap[A, R] { action: () => A / stop } { reader: () => R / read[A] }: R =
   }
 
 def boundary[R] { program: () => R / stop }: Option[R] =
-  try {
-    Some(program())
-  } with stop {
-    None()
-  }
-
-def optionally[R] { program: () => R / stop }: Option[R] =
   try {
     Some(program())
   } with stop {
@@ -615,67 +457,6 @@ def product[R] { stream: () => R / emit[Int] }: (R, Int) = {
   } with emit[Int] { v =>
     s = s * v;
     resume(())
-  }
-}
-
-def collectList[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
-  try {
-    (stream(), Nil())
-  } with emit[A] { (v) =>
-    val (r, vs) = resume(());
-    (r, Cons(v, vs))
-  }
-
-def collectArray[A, R] { stream: () => R / emit[A] }: (R, Array[A]) = {
-  var i = 0
-  var a = array::allocate(1)
-  try {
-    (stream(), a.resize(i))
-  } with emit[A] { (v) =>
-    if (i >= a.size) { a = a.resize(2 * a.size) }
-    a.unsafeSet(i, v)
-    i = i + 1
-    resume(())
-  }
-}
-
-def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
-  var i = 0
-  var a = bytearray::allocate(1)
-  try {
-    (stream(), a.resize(i))
-  } with emit[Byte] { (v) =>
-    if (i >= a.size) { a = a.resize(2 * a.size) }
-    a.unsafeSet(i, v)
-    i = i + 1
-    resume(())
-  }
-}
-
-def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
-  val (result, bytes) = collectBytes[R] { encodeUTF8 { stream } }
-  (result, bytes.toString)
-}
-
-def writeLine[R] { body: () => R / emit[Char] }: R / emit[Char] = {
-  val result = body()
-  do emit('\n')
-  return result
-}
-
-def readLine[R] { body: () => R / read[Char] }: R / {read[Char], stop} = {
-  var stopped = false
-  try {
-    body()
-  } with read[Char] {
-    if(stopped){
-      resume { do stop() }
-    } else {
-      do read[Char] match {
-        case '\n' => stopped = true; resume { do stop() }
-        case char => resume { return char }
-      }
-    }
   }
 }
 

@@ -1,0 +1,15 @@
+module must_box_existing_obj
+
+interface Counter {
+  def inc(): Unit
+  def get(): Int
+}
+
+def make() = {
+  var value = 0
+  def ctr = new Counter {
+    def inc() = { value = value + 1 }
+    def get() = value
+  }
+  return ctr
+}

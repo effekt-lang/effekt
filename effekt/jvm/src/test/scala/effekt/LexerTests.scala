@@ -1,16 +1,20 @@
 package effekt
 
 import effekt.lexer.TokenKind.*
-import effekt.lexer.{Lexer, TokenKind, LexerError }
+import effekt.lexer.{Lexer, LexerError, TokenKind}
 import effekt.lexer.LexerError.*
-
+import effekt.util.UByte
 import kiama.util.StringSource
-
 import munit.Location
 
 class LexerTests extends munit.FunSuite {
 
   def assertTokensEq(prog: String, expected: TokenKind*)(using Location): Unit = {
+    val tokens = Lexer.lex(StringSource(prog, ""))
+    assertEquals(tokens.map { t => t.kind }.filterNot { k => k == Space }, expected.toVector)
+  }
+
+  def assertTokensEqWithWhitespace(prog: String, expected: TokenKind*)(using Location): Unit = {
     val tokens = Lexer.lex(StringSource(prog, ""))
     assertEquals(tokens.map { t => t.kind }, expected.toVector)
   }
@@ -37,6 +41,15 @@ class LexerTests extends munit.FunSuite {
       `return`, `box`, `{`, `(`, `)`, `=>`, `(`, Ident("x"), `,`, Ident("y"), `)`, `}`, Newline,
       EOF
     )
+    assertTokensEqWithWhitespace(
+      prog,
+      `def`, Space, Ident("f"), `[`, Ident("A"), `]`,
+      `(`, Ident("x"), `:`, Space, Ident("A"), `,`, Space, Ident("y"), `:`, Space, Ident("A"), `)`,
+        `:`, Space, `(`, `)`, Space, `=>`, Space, `(`, Ident("A"), `,`, Space, Ident("A"), `)`, Space,
+        `at`, Space, `{`, `}`, Space, `=`, Newline,
+      Space, `return`, Space, `box`, Space, `{`, Space, `(`, `)`, Space, `=>`, Space, `(`, Ident("x"), `,`, Space, Ident("y"), `)`, Space, `}`, Newline,
+      EOF
+    )
   }
 
   test("braces") {
@@ -60,16 +73,23 @@ class LexerTests extends munit.FunSuite {
     assertSuccess("\"${}}}}\"")
     assertSuccess("\"}\"")
     assertSuccess("\" before ${ \"${ 42 }\" } after\"")
+
+    assertSuccess("<\"${ <{ 5 }> }\">")
   }
 
   test("numbers") {
-    val num = "12.34 100 200 123.345 1 -12.34 -100 -123.345 -1"
+    val num = "12.34 100 200 123.345 1 -12.34 -100 -123.345 -1 0x42"
     assertTokensEq(
       num,
       Float(12.34), Integer(100), Integer(200), Float(123.345), Integer(1),
-      Float(-12.34), Integer(-100), Float(-123.345), Integer(-1),
+      Float(-12.34), Integer(-100), Float(-123.345), Integer(-1), Byt(UByte.lit(0x42)),
       EOF
     )
+  }
+
+  test("illegal byte notation") {
+    assertFailure("0x4")
+    assertFailure("0x444")
   }
 
   test("big numbers") {
@@ -341,7 +361,7 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq(prog, EOF)
   }
 
-  test("ignore whitespace") {
+  test("extra whitespace") {
     val prog =
       """// interface definition
         |  interface
@@ -362,6 +382,29 @@ class LexerTests extends munit.FunSuite {
       `def`, Ident("operation"), Newline, `[`, Ident("C"), `]`, Newline, `(`, Ident("x"), `:`, Ident("C"), `)`, `:`, Newline, Newline, `(`, Ident("A"), `,`, Ident("B"), `)`, Newline,
       Newline,
       `}`, Newline,
+      EOF
+    )
+    assertTokensEqWithWhitespace(
+      prog,
+      Comment(" interface definition"), Newline,
+      Space, `interface`, Newline, Newline, Space, Ident("Eff"), `[`, Ident("A"), `,`, Newline, Space, Ident("B"), `]`, Space, `{`,
+      Space, `def`, Space, Ident("operation"), Newline, Space, `[`, Ident("C"), `]`, Newline, Space, `(`, Ident("x"), `:`, Space, Ident("C"), `)`, Space, `:`,
+      Newline, Newline, Space, `(`, Ident("A"), `,`, Space, Ident("B"), `)`, Newline,
+      Newline,
+      Space,
+      `}`, Newline,
+      EOF
+    )
+  }
+
+  test("just whitespace") {
+    val prog = "\n\n\n\r\n   \t val\t\t\t\t   x =\t\r\r\n42\nx"
+    assertTokensEqWithWhitespace(
+      prog,
+      Newline, Newline, Newline, Newline, Space,
+      `val`, Space, Ident("x"), Space, `=`, Space, Newline,
+      Integer(n = 42), Newline,
+      Ident("x"),
       EOF
     )
   }

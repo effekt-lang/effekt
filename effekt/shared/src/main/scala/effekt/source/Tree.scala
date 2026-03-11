@@ -3,7 +3,9 @@ package source
 
 import effekt.context.Context
 import effekt.symbols.Symbol
+import effekt.util.UByte
 import kiama.util.{Source, StringSource}
+
 import scala.annotation.tailrec
 
 /**
@@ -93,7 +95,6 @@ sealed trait Tree extends Product {
   val span: Span
 
   def inheritPosition(from: Tree)(implicit C: Context): this.type = {
-    C.positions.dupPos(from, this);
     this
   }
 }
@@ -111,6 +112,31 @@ case class Comment() extends Tree {
 }
 
 type Doc = Option[String]
+
+/**
+ * The meta-data of a definition / declaration, consisting of everything up
+ * until, but not including the introducing keyword (such as `def`, or `interface`).
+ * For example:
+ *
+ *     /// documentation
+ *     private
+ *     extern
+ *     pure
+ *     def
+ */
+case class Info(
+  doc: Doc,
+  // we use Maybe[Unit] instead of Boolean to have position info for validation errors
+  isPrivate: Maybe[Unit],
+  isExtern: Maybe[Unit],
+) {
+  def isEmpty = doc.isEmpty && isPrivate.isEmpty && isExtern.isEmpty
+  def nonEmpty = !isEmpty
+}
+
+object Info {
+  def empty(span: Span) = Info(None, Maybe.None(span), Maybe.None(span))
+}
 
 /**
  * The origin of the span
@@ -143,6 +169,11 @@ case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = 
 
   def range: kiama.util.Range = kiama.util.Range(source.offsetToPosition(from), source.offsetToPosition(to))
 
+  def text: Option[String] = {
+    val r = range
+    Spans.substring(r.from, r.to)
+  }
+  
   override def compare(that: Span): Int = {
     val nameCmp = this.source.name compareTo that.source.name
     if (nameCmp != 0) nameCmp
@@ -213,7 +244,6 @@ object ExternBody {
   }
 }
 
-
 /**
  * We distinguish between identifiers corresponding to
  * - binding sites (IdDef)
@@ -227,16 +257,12 @@ sealed trait Id extends Tree {
 }
 case class IdDef(name: String, span: Span) extends Id {
   def clone(using C: Context): IdDef = {
-    val copy = IdDef(name, span)
-    C.positions.dupPos(this, copy)
-    copy
+    IdDef(name, span)
   }
 }
 case class IdRef(path: List[String], name: String, span: Span) extends Id {
   def clone(using C: Context): IdRef = {
-    val copy = IdRef(path, name, span)
-    C.positions.dupPos(this, copy)
-    copy
+    IdRef(path, name, span)
   }
 }
 
@@ -325,7 +351,7 @@ case class Maybe[+T](unspan: Option[T], span: Span) {
       case None => alternative
     }
 
-  export unspan.{foreach, get, getOrElse, isEmpty}
+  export unspan.{foreach, get, getOrElse, isEmpty, nonEmpty}
 }
 
 object Maybe {
@@ -372,40 +398,40 @@ export SpannedOps._
  */
 enum Def extends Definition {
 
-  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, doc: Doc, span: Span)
-  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, doc: Doc, span: Span)
-  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, doc: Doc, span: Span)
-  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, doc: Doc, span: Span)
-  case DefDef(id: IdDef, annot: Option[BlockType], block: Term, doc: Doc, span: Span)
+  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], captures: Maybe[CaptureSet], ret: Maybe[Effectful], body: Stmt, info: Info, span: Span)
+  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, info: Info, span: Span)
+  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, info: Info, span: Span)
+  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, info: Info, span: Span)
+  case DefDef(id: IdDef, captures: Maybe[CaptureSet], annot: Maybe[BlockType], block: Term, info: Info, span: Span)
 
-  case NamespaceDef(id: IdDef, definitions: List[Def], doc: Doc, span: Span)
+  case NamespaceDef(id: IdDef, definitions: List[Def], info: Info, span: Span)
 
-  case InterfaceDef(id: IdDef, tparams: Many[Id], ops: List[Operation], doc: Doc, span: Span)
-  case DataDef(id: IdDef, tparams: Many[Id], ctors: List[Constructor], doc: Doc, span: Span)
-  case RecordDef(id: IdDef, tparams: Many[Id], fields: Many[ValueParam], doc: Doc, span: Span)
+  case InterfaceDef(id: IdDef, tparams: Many[Id], ops: List[Operation], info: Info, span: Span)
+  case DataDef(id: IdDef, tparams: Many[Id], ctors: List[Constructor], info: Info, span: Span)
+  case RecordDef(id: IdDef, tparams: Many[Id], fields: Many[ValueParam], info: Info, span: Span)
 
   /**
    * Type aliases like `type Matrix[T] = List[List[T]]`
    */
-  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType, doc: Doc, span: Span)
+  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType, info: Info, span: Span)
 
   /**
    * Effect aliases like `effect Set = { Get, Put }`
    */
-  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects, doc: Doc, span: Span)
+  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects, info: Info, span: Span)
 
   /**
    * Only valid on the toplevel!
    */
-  case ExternType(id: IdDef, tparams: Many[Id], doc: Doc, span: Span)
+  case ExternType(id: IdDef, tparams: Many[Id], info: Info, span: Span)
 
-  case ExternDef(capture: CaptureSet, id: IdDef,
-                 tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Effectful,
-                 bodies: List[ExternBody], doc: Doc, span: Span) extends Def
+  case ExternDef(id: IdDef,
+                 tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], captures: CaptureSet, ret: Effectful,
+                 bodies: List[ExternBody], info: Info, span: Span) extends Def
 
-  case ExternResource(id: IdDef, tpe: BlockType, doc: Doc, span: Span)
+  case ExternResource(id: IdDef, tpe: BlockType, info: Info, span: Span)
 
-  case ExternInterface(id: IdDef, tparams: List[Id], doc: Doc, span: Span)
+  case ExternInterface(id: IdDef, tparams: List[Id], info: Info, span: Span)
 
   /**
    * Namer resolves the path and loads the contents in field [[contents]]
@@ -413,9 +439,10 @@ enum Def extends Definition {
    * @note Storing content and id as user-visible fields is a workaround for the limitation that Enum's cannot
    *   have case specific refinements.
    */
-  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef, doc: Doc, span: Span)
+  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef, info: Info, span: Span)
 
-  def doc: Doc
+  def info: Info
+  def doc: Doc = info.doc
 }
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude
@@ -499,14 +526,11 @@ enum Term extends Tree {
 
   /**
    * A call to an effect operation, i.e., `do raise()`.
-   *
-   * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
-   * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
    */
-  case Do(effect: Option[TypeRef], id: IdRef, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span) extends Term, Reference
+  case Do(id: IdRef, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span) extends Term, Reference
 
   /**
-   * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
+   * A call to either an expression, i.e., `(box { () => ... })()`; or a named function, i.e., `foo()`
    */
   case Call(target: CallTarget, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span)
 
@@ -547,6 +571,7 @@ export Term.*
 // Smart Constructors for literals
 // -------------------------------
 def UnitLit(span: Span): Literal = Literal((), symbols.builtins.TUnit, span)
+def ByteLit(value: UByte, span: Span) : Literal = Literal(value, symbols.builtins.TByte, span)
 def IntLit(value: Long, span: Span): Literal = Literal(value, symbols.builtins.TInt, span)
 def BooleanLit(value: Boolean, span: Span): Literal = Literal(value, symbols.builtins.TBoolean, span)
 def DoubleLit(value: Double, span: Span): Literal = Literal(value, symbols.builtins.TDouble, span)
@@ -656,7 +681,7 @@ enum MatchPattern extends Tree {
    *
    *   case a, b => ...
    *
-   * Currently should *only* occur in lambda-cases during Parsing
+   * Currently should *only* occur in lambda-cases & `with` statements during parsing
    */
   case MultiPattern(patterns: List[MatchPattern], span: Span) extends MatchPattern
 }
@@ -834,18 +859,13 @@ export Resolvable.*
 extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] = {
   positioned match {
     case m: Many[_] if m.span.origin != Origin.Missing =>
-      C.positions.substring(m.span.range.from, m.span.range.to)
+      Spans.substring(m.span.range.from, m.span.range.to)
 
     case m: Maybe[_] if m.span.origin != Origin.Missing =>
-      C.positions.substring(m.span.range.from, m.span.range.to)
+      Spans.substring(m.span.range.from, m.span.range.to)
 
     case t: Tree if t.span.origin != Origin.Missing =>
-      C.positions.substring(t.span.range.from, t.span.range.to)
-
-    case _ =>
-      C.positions.getRange(positioned).flatMap { range =>
-        C.positions.substring(range.from, range.to)
-      }
+      Spans.substring(t.span.range.from, t.span.range.to)
   }
 }
 

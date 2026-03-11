@@ -20,7 +20,7 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   // Local renamings: map of bound symbols to their renamed variants in a given scope.
   private var scope: Map[Id, Id] = Map.empty
 
-  // All renamings: map of bound symbols to their renamed variants, globally!
+  // All renamings: map of freshly generated bound ids to their old counterparts.
   val renamed: mutable.HashMap[Id, Id] = mutable.HashMap.empty
 
   def freshIdFor(id: Id): Id =
@@ -32,7 +32,7 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
       ids.foreach { x =>
         val fresh = freshIdFor(x)
         scope = scope + (x -> fresh)
-        renamed.put(x, fresh)
+        renamed.put(fresh, x)
       }
 
       f
@@ -51,13 +51,20 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
       // can be recursive
       withBinding(id) { core.Def(rewrite(id), rewrite(block), rewrite(body)) }
 
-    case core.Let(id, tpe, binding, body) =>
+    case core.Let(id, binding, body) =>
       val resolvedBinding = rewrite(binding)
-      withBinding(id) { core.Let(rewrite(id), rewrite(tpe), resolvedBinding, rewrite(body)) }
+      withBinding(id) { core.Let(rewrite(id), resolvedBinding, rewrite(body)) }
 
-    case core.Val(id, tpe, binding, body) =>
+    case core.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      val resolvedCallee = rewrite(callee)
+      val resolvedTargs = targs map rewrite
+      val resolvedVargs = vargs map rewrite
+      val resolvedBargs = bargs map rewrite
+      withBinding(id) { core.ImpureApp(rewrite(id), resolvedCallee, resolvedTargs, resolvedVargs, resolvedBargs, rewrite(body)) }
+
+    case core.Val(id, binding, body) =>
       val resolvedBinding = rewrite(binding)
-      withBinding(id) { core.Val(rewrite(id), rewrite(tpe), resolvedBinding, rewrite(body)) }
+      withBinding(id) { core.Val(rewrite(id), resolvedBinding, rewrite(body)) }
 
     case core.Alloc(id, init, reg, body) =>
       val resolvedInit = rewrite(init)
@@ -74,6 +81,9 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
       val resolvedCapt = rewrite(capt)
       withBinding(id) { core.Get(rewrite(id), rewrite(tpe), resolvedRef, resolvedCapt, rewrite(body)) }
 
+    case core.Shift(p, k, body) =>
+      val resolvedPrompt = rewrite(p)
+      withBinding(k.id) { core.Shift(resolvedPrompt, rewrite(k), rewrite(body)) }
   }
 
   override def block: PartialFunction[Block, Block] = {

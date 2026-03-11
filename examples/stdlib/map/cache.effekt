@@ -8,7 +8,7 @@ effect time(): Int
 def main() = {
   var currentTime = 0
   try {
-    var cache: Map[String, CacheEntry[String]] = map::empty(compareStringBytes)
+    var cache: Map[String, CacheEntry[String]] = map::empty(box compareStringBytes)
     val maxAge = 8
 
     def cachePut(key: String, value: String): Unit =

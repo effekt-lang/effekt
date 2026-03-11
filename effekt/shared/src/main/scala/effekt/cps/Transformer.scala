@@ -4,14 +4,14 @@ package cps
 import core.Id
 import symbols.builtins.TState
 
-case class TransformationContext(values: Map[Id, Pure], blocks: Map[Id, Block]) {
-  def lookupValue(id: Id): Pure = values.getOrElse(id, ValueVar(id))
+case class TransformationContext(values: Map[Id, Expr], blocks: Map[Id, Block]) {
+  def lookupValue(id: Id): Expr = values.getOrElse(id, ValueVar(id))
   def lookupBlock(id: Id): Block = blocks.getOrElse(id, BlockVar(id))
-  def bind(id: Id, value: Pure): TransformationContext = copy(values = values + (id -> value))
+  def bind(id: Id, value: Expr): TransformationContext = copy(values = values + (id -> value))
   def bind(id: Id, block: Block): TransformationContext = copy(blocks = blocks + (id -> block))
 }
 
-def binding[R](id: Id, value: Pure)(body: TransformationContext ?=> R)(using C: TransformationContext): R =
+def binding[R](id: Id, value: Expr)(body: TransformationContext ?=> R)(using C: TransformationContext): R =
   body(using C.bind(id, value))
 
 def binding[R](id: Id, block: Block)(body: TransformationContext ?=> R)(using C: TransformationContext): R =
@@ -23,21 +23,22 @@ object Transformer {
   def transform(module: core.ModuleDecl): ModuleDecl = module match {
     case core.ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
       given TransformationContext(Map.empty, Map.empty)
-      ModuleDecl(path, includes, declarations, externs.map(transform), definitions.map(transformToplevel), exports)
+      ModuleDecl(path, includes, declarations, externs.flatMap(transform), definitions.map(transformToplevel), exports)
   }
 
   def transformToplevel(definition: core.Toplevel)(using TransformationContext): ToplevelDefinition = definition match {
     case core.Toplevel.Def(id, block) => ToplevelDefinition.Def(id, transform(block))
-    case core.Toplevel.Val(id, tpe, stmt) =>
+    case core.Toplevel.Val(id, stmt) =>
       val ks = Id("ks")
       val k = Id("k")
       ToplevelDefinition.Val(id, ks, k, transform(stmt, ks, Continuation.Dynamic(k)))
   }
 
-  def transform(extern: core.Extern)(using TransformationContext): Extern = extern match {
+  def transform(extern: core.Extern)(using TransformationContext): Option[Extern] = extern match {
     case core.Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
-      Extern.Def(id, vparams.map(_.id), bparams.map(_.id), annotatedCapture.contains(symbols.builtins.AsyncCapability.capture), transform(body))
-    case core.Extern.Include(featureFlag, contents) => Extern.Include(featureFlag, contents)
+      Some(Extern.Def(id, vparams.map(_.id), bparams.map(_.id), annotatedCapture.contains(symbols.builtins.AsyncCapability.capture), transform(body)))
+    case core.Extern.Include(featureFlag, contents) => Some(Extern.Include(featureFlag, contents))
+    case core.Extern.Data(id, tparams) => None
   }
 
   def transform(externBody: core.ExternBody)(using TransformationContext): ExternBody = externBody match {
@@ -56,24 +57,24 @@ object Transformer {
       LetDef(id, transform(block), transform(body, ks, k))
 
     // dealiasing
-    case core.Stmt.Let(id, tpe, core.Pure.ValueVar(x, _), body) =>
+    case core.Stmt.Let(id, core.Expr.ValueVar(x, _), body) =>
       binding(id, C.lookupValue(x)) { transform(body, ks, k) }
 
-    case core.Stmt.Let(id, tpe, core.DirectApp(b, targs, vargs, bargs), body) =>
+    case core.Stmt.ImpureApp(id, b, targs, vargs, bargs, body) =>
       transform(b) match {
         case Block.BlockVar(f) =>
-          LetExpr(id, DirectApp(f, vargs.map(transform), bargs.map(transform)),
+          ImpureApp(id, f, vargs.map(transform), bargs.map(transform),
             transform(body, ks, k))
         case _ => sys error "Should not happen"
       }
 
-    case core.Stmt.Let(id, tpe, pure: core.Pure, body) =>
+    case core.Stmt.Let(id, pure: core.Expr, body) =>
       LetExpr(id, transform(pure), transform(body, ks, k))
 
     case core.Stmt.Return(value) =>
       k(transform(value), ks)
 
-    case core.Stmt.Val(id, annotatedTpe, rhs, body) =>
+    case core.Stmt.Val(id, rhs, body) =>
       transform(rhs, ks, Continuation.Static(id) { (value, ks) =>
         binding(id, value) { transform(body, ks, k) }
       })
@@ -89,12 +90,12 @@ object Transformer {
         If(transform(cond), transform(thn, ks, k2), transform(els, ks, k2))
       }
 
-    case core.Stmt.Match(scrutinee, List((id, rhs)), None) =>
+    case core.Stmt.Match(scrutinee, tpe, List((id, rhs)), None) =>
       Match(
         transform(scrutinee),
         List((id, transformClause(rhs, ks, k))), None)
 
-    case core.Stmt.Match(scrutinee, clauses, default) =>
+    case core.Stmt.Match(scrutinee, tpe, clauses, default) =>
       withJoinpoint(k) { k =>
         Match(
           transform(scrutinee),
@@ -112,16 +113,14 @@ object Transformer {
 
     // Only unidirectional, yet
     // core.Block.BlockLit(tparams, cparams, vparams, List(resume), body)
-    case core.Stmt.Shift(prompt, core.Block.BlockLit(tparams, cparams, vparams, List(resume), body)) =>
+    case core.Stmt.Shift(prompt, resume, body) =>
       val ks2 = Id("ks")
       val k2 = Id("k")
 
-      val translatedBody: BlockLit = BlockLit(vparams.map { p => p.id }, List(resume.id), ks2, k2,
+      val translatedBody: BlockLit = BlockLit(Nil, List(resume.id), ks2, k2,
         transform(body, ks2, Continuation.Dynamic(k2)))
 
       Shift(prompt.id, translatedBody, MetaCont(ks), k.reifyAt(stmt.tpe))
-
-    case core.Stmt.Shift(prompt, body) => sys error "Shouldn't happen"
 
     case core.Stmt.Resume(cont, body) =>
       val ks2 = Id("ks")
@@ -129,7 +128,7 @@ object Transformer {
       Resume(cont.id, Block.BlockLit(Nil, Nil, ks2, k2, transform(body, ks2, Continuation.Dynamic(k2))),
         MetaCont(ks), k.reifyAt(stmt.tpe))
 
-    case core.Stmt.Hole() => Hole()
+    case core.Stmt.Hole(tpe, span) => Hole(span)
 
     case core.Stmt.Region(core.Block.BlockLit(_, _, _, List(region), body)) =>
       cps.Region(region.id, MetaCont(ks),
@@ -175,15 +174,15 @@ object Transformer {
           transform(body, ks, Continuation.Dynamic(k)))
     }
 
-  def transform(pure: core.Pure)(using C: TransformationContext): Pure = pure match {
-    case core.Pure.ValueVar(id, annotatedType) => C.lookupValue(id)
-    case core.Pure.Literal(value, annotatedType) => Literal(value)
-    case core.Pure.PureApp(b, targs, vargs) => transform(b) match {
+  def transform(pure: core.Expr)(using C: TransformationContext): Expr = pure match {
+    case core.Expr.ValueVar(id, annotatedType) => C.lookupValue(id)
+    case core.Expr.Literal(value, annotatedType) => Literal(value)
+    case core.Expr.PureApp(b, targs, vargs) => transform(b) match {
       case Block.BlockVar(id) => PureApp(id, vargs.map(transform))
       case _ => sys error "Should not happen"
     }
-    case core.Pure.Make(data, tag, targs, vargs) => Make(data, tag, vargs.map(transform))
-    case core.Pure.Box(b, annotatedCapture) => Box(transform(b))
+    case core.Expr.Make(data, tag, targs, vargs) => Make(data, tag, vargs.map(transform))
+    case core.Expr.Box(b, annotatedCapture) => Box(transform(b))
   }
 
   def transformBlockLit(b: core.BlockLit)(using TransformationContext): BlockLit = b match {
@@ -216,9 +215,9 @@ def withJoinpoint(k: Continuation)(body: Continuation => Stmt): Stmt = k match {
 
 enum Continuation {
   case Dynamic(id: Id) // in ml this is an arbitrary term, why?
-  case Static(hint: Id, k: (Pure, Id) => Stmt)
+  case Static(hint: Id, k: (Expr, Id) => Stmt)
 
-  def apply(arg: Pure, ks: Id): Stmt = this match {
+  def apply(arg: Expr, ks: Id): Stmt = this match {
     case Continuation.Dynamic(id) => Jump(id, arg :: Nil, MetaCont(ks))
     case Continuation.Static(hint, k) => k(arg, ks)
   }
@@ -227,12 +226,12 @@ enum Continuation {
       case c : Continuation.Dynamic => cps.Cont.ContVar(c.id)
       case Continuation.Static(hint, k) =>
         val ks = Id("ks")
-        cps.Cont.ContLam(hint :: Nil, ks, k(Pure.ValueVar(hint), ks))
+        cps.Cont.ContLam(hint :: Nil, ks, k(Expr.ValueVar(hint), ks))
     }
 
   def reifyAt(tpe: core.ValueType): Cont =
     if (tpe == core.Type.TBottom) Cont.Abort else reify
 }
 object Continuation {
-  def Static(hint: Id)(k: (Pure, Id) => Stmt): Continuation.Static = Continuation.Static(hint, k)
+  def Static(hint: Id)(k: (Expr, Id) => Stmt): Continuation.Static = Continuation.Static(hint, k)
 }

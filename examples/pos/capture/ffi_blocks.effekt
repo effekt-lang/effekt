@@ -1,8 +1,8 @@
 interface Foo {}
-extern io def something {f: Foo}: Int = 
+extern def something {f: Foo} at io: Int = 
   js   "${box f}"
   chez "${box f}"
-extern io def createFoo(): Foo at {global} = 
+extern def createFoo() at io: Foo at global = 
   js   "42"
   chez "42"
 

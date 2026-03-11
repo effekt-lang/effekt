@@ -10,10 +10,25 @@ def printListOfPairs(list: List[Tuple2[Int, Int]]): Unit = {
   println(strings)
 }
 
+// used to circumvent missing universal `show` & `println` on some backends
+def printListOfOneOrBoth(list: List[OneOrBoth[Int, Int]]): Unit = {
+  val strings: List[String] = list.map {
+    case Both(fst, snd) => "Both(" ++ show(fst) ++ ", " ++ show(snd) ++ ")"
+    case This(fst) => "This(" ++ show(fst) ++ ")"
+    case That(snd) => "That(" ++ show(snd) ++ ")"
+  }
+  println(strings)
+}
+
 def main() = {
   // synchronized with doctest in `zip`
   printListOfPairs(zip([1, 2, 3], [100, 200, 300]))
   printListOfPairs(zip([1, 2, 3], Nil[Int]()))
   printListOfPairs(zip(Nil[Int](), [1, 2, 3]))
   printListOfPairs(zip([1, 2, 3], [42]))
+  // synchronized with doctest in `zipLongest`
+  printListOfOneOrBoth(zipLongest([1, 2, 3], [100, 200, 300]))
+  printListOfOneOrBoth(zipLongest([1, 2, 3], Nil[Int]()))
+  printListOfOneOrBoth(zipLongest(Nil[Int](), [1, 2, 3]))
+  printListOfOneOrBoth(zipLongest([1, 2, 3], [42]))
 }

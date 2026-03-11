@@ -3,7 +3,7 @@ effect Yield(): Unit
 def main() = try {
 
   val make = {
-    val f = fun() { y.Yield() }
+    val f = box { y.Yield() }
     f
   }
   // here we had the problem that we perform the direct-style "run-optimization", even though make obviously has capture set {y}

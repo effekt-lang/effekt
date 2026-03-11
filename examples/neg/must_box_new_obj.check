@@ -1,0 +1,3 @@
+[error] examples/neg/must_box_new_obj.effekt:10:10: Expected a value, but `new` creates a computation (an object instance). Use `box new Counter[...] { ... }` to pass it as a value instead
+  return new Counter {
+         ^

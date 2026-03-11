@@ -118,7 +118,7 @@ object StaticArguments {
   def rewrite(d: Toplevel)(using StaticArgumentsContext): Toplevel = d match {
     case Toplevel.Def(id, block: BlockLit) if hasStatics(id) => Toplevel.Def(id, wrapDefinition(id, block))
     case Toplevel.Def(id, block) => Toplevel.Def(id, rewrite(block))
-    case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, tpe, rewrite(binding))
+    case Toplevel.Val(id, binding) => Toplevel.Val(id, rewrite(binding))
   }
 
   def rewrite(s: Stmt)(using C: StaticArgumentsContext): Stmt = s match {
@@ -126,7 +126,10 @@ object StaticArguments {
     case Stmt.Def(id, block: BlockLit, body) if hasStatics(id) => Stmt.Def(id, wrapDefinition(id, block), rewrite(body))
     case Stmt.Def(id, block, body) => Stmt.Def(id, rewrite(block), rewrite(body))
 
-    case Stmt.Let(id, tpe, binding, body) => Stmt.Let(id, tpe, rewrite(binding), rewrite(body))
+    case Stmt.Let(id, binding, body) => Stmt.Let(id, rewrite(binding), rewrite(body))
+
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      Stmt.ImpureApp(id, callee, targs, vargs.map(rewrite), bargs.map(rewrite), rewrite(body))
 
     case Stmt.App(b, targs, vargs, bargs) =>
       b match {
@@ -150,17 +153,17 @@ object StaticArguments {
 
     // congruences
     case Stmt.Return(expr) => Return(rewrite(expr))
-    case Stmt.Val(id, tpe, binding, body) => Stmt.Val(id, tpe, rewrite(binding), rewrite(body))
+    case Stmt.Val(id, binding, body) => Stmt.Val(id, rewrite(binding), rewrite(body))
     case Stmt.If(cond, thn, els) => If(rewrite(cond), rewrite(thn), rewrite(els))
-    case Stmt.Match(scrutinee, clauses, default) => Stmt.Match(rewrite(scrutinee), clauses.map { case (id, value) => id -> rewrite(value) }, default.map(rewrite))
+    case Stmt.Match(scrutinee, tpe, clauses, default) => Stmt.Match(rewrite(scrutinee), tpe, clauses.map { case (id, value) => id -> rewrite(value) }, default.map(rewrite))
     case Stmt.Alloc(id, init, region, body) => Alloc(id, rewrite(init), region, rewrite(body))
-    case Stmt.Shift(prompt, body) => Shift(prompt, rewrite(body))
+    case Stmt.Shift(prompt, k, body) => Shift(prompt, k, rewrite(body))
     case Stmt.Resume(k, body) => Resume(k, rewrite(body))
     case Stmt.Region(body) => Region(rewrite(body))
     case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, rewrite(init), capture, rewrite(body))
     case Stmt.Get(id, tpe, ref, capt, body) => Stmt.Get(id, tpe, ref, capt, rewrite(body))
     case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, rewrite(value), rewrite(body))
-    case Stmt.Hole() => Stmt.Hole()
+    case Stmt.Hole(tpe, span) => Stmt.Hole(tpe, span)
   }
   def rewrite(b: BlockLit)(using StaticArgumentsContext): BlockLit =
     b match {
@@ -173,7 +176,7 @@ object StaticArguments {
 
     // congruences
     case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) => rewrite(b)
-    case Block.Unbox(pure) => Block.Unbox(rewrite(pure))
+    case Block.Unbox(expr) => Block.Unbox(rewrite(expr))
     case Block.New(impl) => Block.New(rewrite(impl))
   }
 
@@ -184,21 +187,14 @@ object StaticArguments {
       })
     }
 
-  def rewrite(p: Pure)(using StaticArgumentsContext): Pure = p match {
-    case Pure.PureApp(f, targs, vargs) => Pure.PureApp(f, targs, vargs.map(rewrite))
-    case Pure.Make(data, tag, targs, vargs) => Pure.Make(data, tag, targs, vargs.map(rewrite))
-    case x @ Pure.ValueVar(id, annotatedType) => x
+  def rewrite(p: Expr)(using StaticArgumentsContext): Expr = p match {
+    case Expr.PureApp(f, targs, vargs) => Expr.PureApp(f, targs, vargs.map(rewrite))
+    case Expr.Make(data, tag, targs, vargs) => Expr.Make(data, tag, targs, vargs.map(rewrite))
+    case x @ Expr.ValueVar(id, annotatedType) => x
 
     // congruences
-    case Pure.Literal(value, annotatedType) => p
-    case Pure.Box(b, annotatedCapture) => Pure.Box(rewrite(b), annotatedCapture)
-  }
-
-  def rewrite(e: Expr)(using StaticArgumentsContext): Expr = e match {
-    case DirectApp(b, targs, vargs, bargs) => DirectApp(b, targs, vargs.map(rewrite), bargs.map(rewrite))
-
-    // congruences
-    case pure: Pure => rewrite(pure)
+    case Expr.Literal(value, annotatedType) => p
+    case Expr.Box(b, annotatedCapture) => Expr.Box(rewrite(b), annotatedCapture)
   }
 
   def transform(entrypoint: Id, m: ModuleDecl): ModuleDecl =

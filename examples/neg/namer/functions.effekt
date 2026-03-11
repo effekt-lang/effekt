@@ -1,0 +1,14 @@
+def somefunction() = {
+
+  namespace nested {
+    def go() =
+      list::Cons("hello", Nil())
+  }
+
+  nested::go()
+}
+
+def main() = somefunction() match {
+  case list::Cons(msg, _) => println(msg)
+  case _ => ()
+}

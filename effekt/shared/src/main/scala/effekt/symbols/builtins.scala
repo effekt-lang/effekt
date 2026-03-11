@@ -3,6 +3,7 @@ package symbols
 
 import effekt.source.{Many, ModuleDecl, NoSource, Span}
 import effekt.context.Context
+import effekt.core.Type.{PromptSymbol, ResumeSymbol}
 import effekt.symbols.ErrorMessageInterpolator
 import effekt.util.messages.ErrorMessageReifier
 import kiama.util.StringSource
@@ -40,21 +41,20 @@ object builtins {
   val ByteSymbol = ExternType(name("Byte"), Nil, NoSource)
   val TByte = ValueTypeApp(ByteSymbol, Nil)
 
-  val TopSymbol = ExternType(name("Any"), Nil, NoSource)
+  val TopSymbol = DataType(name("Any"), Nil, Nil, NoSource)
   val TTop = ValueTypeApp(TopSymbol, Nil)
 
-  // should this be a datatype, not an extern type?
-  val BottomSymbol = ExternType(name("Nothing"), Nil, NoSource)
+  val BottomSymbol = DataType(name("Nothing"), Nil, Nil, NoSource)
   val TBottom = ValueTypeApp(BottomSymbol, Nil)
 
   val IOSymbol = Interface(Name.local("IO"), Nil, Nil, decl = NoSource)
-  val IOCapability = ExternResource(name("io"), InterfaceType(IOSymbol, Nil), decl = NoSource)
+  val IOCapability = ExternResource(name("io"), InterfaceType(IOSymbol, Nil), Resource(name("io")), decl = NoSource)
 
   val AsyncSymbol = Interface(Name.local("Async"), Nil, Nil, decl = NoSource)
-  val AsyncCapability = ExternResource(name("async"), InterfaceType(AsyncSymbol, Nil), decl = NoSource)
+  val AsyncCapability = ExternResource(name("async"), InterfaceType(AsyncSymbol, Nil), Resource(name("async")), decl = NoSource)
 
   val GlobalSymbol = Interface(Name.local("Global"), Nil, Nil, decl = NoSource)
-  val GlobalCapability = ExternResource(name("global"), InterfaceType(GlobalSymbol, Nil), decl = NoSource)
+  val GlobalCapability = ExternResource(name("global"), InterfaceType(GlobalSymbol, Nil), Resource(name("global")), decl = NoSource)
 
   object TState {
     val S: TypeParam = TypeParam(Name.local("S"))
@@ -101,4 +101,20 @@ object builtins {
   lazy val rootBindings: Bindings =
     Bindings(Map.empty, rootTypes, rootCaptures, Map("effekt" -> Bindings(Map.empty, rootTypes, rootCaptures, Map.empty)))
 
+  // All built-in symbols that can occur in core programs
+  val coreBuiltins: Map[String, symbols.Symbol] = {
+    symbols.builtins.rootTypes
+      ++ symbols.builtins.rootCaptures
+      + ("Resume" -> ResumeSymbol)
+      + ("Prompt" -> PromptSymbol)
+      + ("Ref" -> effekt.symbols.builtins.TState.interface)
+  }
+
+  def isCoreBuiltin(s: symbols.Symbol): Boolean =
+    coreBuiltins.contains(s.name.name) && coreBuiltins(s.name.name) == s
+
+  def coreBuiltinSymbolToString(s: symbols.Symbol): Option[String] =
+    if isCoreBuiltin(s) then Some(s.name.name) else None
+
+  def coreBuiltinSymbolFromString(s: String): Option[symbols.Symbol] = coreBuiltins.get(s)
 }

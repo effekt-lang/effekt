@@ -1,10 +1,10 @@
 package effekt
 package util
 
-import effekt.symbols.{ Capture, Captures, Effects, ErrorMessageInterpolator, LocalName, Name, NoName, QualifiedName, TypePrinter }
+import effekt.symbols.{Capture, Captures, Effects, ErrorMessageInterpolator, Name, QualifiedName, TypePrinter}
 import effekt.util.messages.*
-import kiama.util.{ Messaging, Position, Positions, Severities }
-import kiama.util.Severities._
+import kiama.util.Severities.*
+import kiama.util.{Position, Severities}
 
 trait ColoredMessaging extends EffektMessaging {
 
@@ -55,7 +55,7 @@ trait ColoredMessaging extends EffektMessaging {
     messages.sorted.map(formatMessage).distinct.mkString("")
 
   override def formatContent(err: EffektError): String = err match {
-    case ParseError(msg, range)               => msg
+    case ParseError(msg, range, severity)     => msg
     case PlainTextError(msg, range, severity) => msg
     case StructuredError(StructuredMessage(sc, args), _, _) => sc.s(args.map {
       case id: source.IdDef    => highlight(TypePrinter.show(id))

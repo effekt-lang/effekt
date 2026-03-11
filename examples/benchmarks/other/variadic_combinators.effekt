@@ -41,7 +41,7 @@ def f3(fs: List[=> (Int => Int at {}) at {}]) =
     else first(fs)()(n - 1)
   }
 
-def mod3(x: Int): Int = first(vfix([f1, f2, f3]))()(x)
+def mod3(x: Int): Int = first(vfix([box f1, box f2, box f3]))()(x)
 
 def run(n: Int) = {
   mod3(n) + mod3(n + 1) + mod3(n + 2)
