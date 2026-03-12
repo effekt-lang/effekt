@@ -7,7 +7,7 @@
 [error] examples/neg/orPatterns.effekt:26:3: Non-exhaustive pattern matching, missing case Square(Blue())
   s match {
   ^
-[error] examples/neg/orPatterns.effekt:34:3: Non-exhaustive pattern matching, missing case Blue()
+[error] examples/neg/orPatterns.effekt:34:3: Non-exhaustive pattern matching, missing case Square(Blue())
   s match {
   ^
 [warning] examples/neg/orPatterns.effekt:43:5: Unreachable case.

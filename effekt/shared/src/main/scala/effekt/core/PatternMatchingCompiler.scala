@@ -14,7 +14,7 @@ import scala.collection.mutable
  *   Jules Jacobs
  *   How to compile pattern matching
  *   https://julesjacobs.com/notes/patternmatching/patternmatching.pdf
- &
+ *
  * A match is represented as a list of [[ Clause ]]s, e.g.
  *
  *    case a is Some(x) => j1(x)
