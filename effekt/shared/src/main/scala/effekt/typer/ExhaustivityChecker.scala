@@ -96,74 +96,60 @@ object ExhaustivityChecker {
     case Child(c: Constructor, field: Field, outer: Trace)
   }
 
-  // Standard cartesian product used to expand OR-patterns nested inside constructors
-  // and across multiple guard positions.
   private def cartesianProduct[A](lists: List[List[A]]): List[List[A]] =
     lists.foldRight(List(List.empty[A])) { (heads, tails) =>
-      for { h <- heads; t <- tails } yield h :: t
+      for { 
+        h <- heads; t <- tails
+      } yield h :: t
     }
 
   /**
-   * Returns all OR-expanded alternatives of a pattern as a flat list.
-   * For example, `A | B` yields `List(A, B)`, and `Ctor(A | B, C | D)` yields
-   * `List(Ctor(A,C), Ctor(A,D), Ctor(B,C), Ctor(B,D))`.
+   * Translates a source match pattern into an internal representation [[ Pattern ]].
+   * A single source match pattern may contain OR patterns, hence this function returns an expanded list of [[ Pattern ]].
    */
-  def preprocessPatternAlts(p: source.MatchPattern)(using Context): List[Pattern] = p match {
-    case AnyPattern(_, _) | IgnorePattern(_) => List(Pattern.Any())
+  private def preprocessPattern(p: source.MatchPattern)(using Context): List[Pattern] = p match {
+    case AnyPattern(_, _) => List(Pattern.Any())
+    case IgnorePattern(_) => List(Pattern.Any())
     case p @ TagPattern(id, patterns, _) =>
-      // Cartesian product: each field may itself be an OR, so we expand all combinations.
-      val fieldAlts: List[List[Pattern]] = patterns.map(preprocessPatternAlts)
+      val fieldAlts: List[List[Pattern]] = patterns.map(preprocessPattern)
+      // `CTor(P1 | P2, P3 | P4)` to `CTor(P1, P3), CTor(P1, P4), CTor(P2, P3), CTor(P2, P4)`  
       cartesianProduct(fieldAlts).map(fields => Pattern.Tag(p.definition, fields))
     case LiteralPattern(lit, _) => List(Pattern.Literal(lit.value, lit.tpe))
-    case OrPattern(patterns, _) => patterns.flatMap(preprocessPatternAlts)
-    case MultiPattern(_, _) => Context.panic("Nested MultiPattern in preprocessPatternAlts")
-  }
-
-  private def preprocessPattern(p: source.MatchPattern)(using Context): Pattern = p match {
-    case AnyPattern(id, _)  => Pattern.Any()
-    case IgnorePattern(_) => Pattern.Any()
-    case p @ TagPattern(id, patterns, _) => Pattern.Tag(p.definition, patterns.map(preprocessPattern))
-    case LiteralPattern(lit, _) => Pattern.Literal(lit.value, lit.tpe)
-    case MultiPattern(patterns, _) =>
-      Context.panic("Multi-pattern should have been split in preprocess already / nested MultiPattern")
-    case OrPattern(patterns, _) =>
-      Context.panic("OR pattern should have been expanded via preprocessPatternAlts")
+    case OrPattern(patterns, _) => patterns.flatMap(preprocessPattern)
+    // MultiPattern must only occur on the toplevel and are already destructed by `preprocess`.
+    case MultiPattern(_, _) => Context.panic("Unreachable: nested MultiPattern")
   }
 
   /**
-   * Returns all OR-expanded alternatives of a guard as a flat list of Conditions.
-   * A BooleanGuard always yields exactly one Condition.Guard.
-   * A PatternGuard with an OR-pattern yields one Condition.Patterns per alternative.
+   * Translates a source match guard to the exhaustivity checker's internal representation of [[ Condition ]].
+   * Since match guard patterns may contain OR patterns, this function returns a list of conditions.
+   * For example, `case CTor(x) and x is CTor1(P1 | P2)` contains the match guard `x is CTor1(P1 | P2)` and is expanded
+   * to `List(Condition.Patterns(Map(x -> P1)), Condition.Patterns(Map(x -> P2)))`
    */
-  def preprocessGuardAlts(g: source.MatchGuard)(using Context): List[Condition] = g match {
+  private def preprocessGuard(g: source.MatchGuard)(using Context): List[Condition] = g match {
     case MatchGuard.BooleanGuard(condition, _) =>
       List(Condition.Guard(condition))
     case MatchGuard.PatternGuard(scrutinee, pattern, _) =>
-      preprocessPatternAlts(pattern).map { p =>
+      preprocessPattern(pattern).map { p =>
         Condition.Patterns(Map(Trace.Root(scrutinee) -> p))
       }
   }
 
   /**
-   * Expands OR-patterns (including those nested inside constructors and guards) by returning
-   * a List[Clause] — one per combination of alternatives — all pointing to the same
-   * source.MatchClause so that redundancy tracking remains correct.
+   * Translates a source match clause to the exhaustivity checker's internal representation of [[ Clause ]].
+   * OR patterns are expanded into a list of [[ Clause ]].
    */
   def preprocess(roots: List[source.Term], cl: source.MatchClause)(using Context): List[Clause] = {
-
-    // Fold guards into the accumulator of partial clause condition lists.
-    // Each guard position may itself expand into multiple alternatives (OR in PatternGuard),
-    // so we take a cartesian product across all guard positions.
     def withGuards(baseConds: List[Condition], guards: List[source.MatchGuard]): List[List[Condition]] =
       guards.foldLeft(List(baseConds)) { (accClauses, guard) =>
-        val guardAlts = preprocessGuardAlts(guard)
+        val guardAlts = preprocessGuard(guard)
         accClauses.flatMap(conds => guardAlts.map(g => conds :+ g))
       }
 
     (roots, cl) match {
       case (List(root), source.MatchClause(pattern, guards, body, _)) =>
         for {
-          p     <- preprocessPatternAlts(pattern)
+          p     <- preprocessPattern(pattern)
           base   = Condition.Patterns(Map(Trace.Root(root) -> p))
           conds <- withGuards(List(base), guards)
         } yield Clause.normalized(conds, cl)
@@ -171,7 +157,7 @@ object ExhaustivityChecker {
       case (roots, source.MatchClause(MultiPattern(patterns, _), guards, body, _)) =>
         val perRootAlts: List[List[(Trace, Pattern)]] =
           (roots zip patterns).map { case (root, pat) =>
-            preprocessPatternAlts(pat).map(p => Trace.Root(root) -> p)
+            preprocessPattern(pat).map(p => Trace.Root(root) -> p)
           }
         for {
           pairs <- cartesianProduct(perRootAlts)
