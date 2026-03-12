@@ -34,6 +34,7 @@ def test4(c: Color): String =
   }
 
 def main() = {
+  println(test1(Red()))
   println(test2(Circle(Red())))
   println(test3(Square(Blue())))
   println(test4(Green()))
