@@ -105,5 +105,10 @@ object WebTests extends TestSuite {
           |def main() = ()
           |""".stripMargin)
     }
+
+    test("Using negative Doubles that could be Bytes") {
+      val result = evaluate[String](Nil, "(-1.0).show")
+      assert(result == "-1.0")
+    }
   }
 }
