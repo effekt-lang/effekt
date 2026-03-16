@@ -75,7 +75,7 @@ object PatternMatchingCompiler {
     case Ignore()
     case Any(id: Id)
     case Or(patterns: List[Pattern])
-    case Literal(l: core.Literal, equals: (core.Expr, core.Expr) => core.Expr)
+    case Literal(l: core.Literal, equals: (core.Expr, core.Expr, core.ValueVar => core.Stmt) => core.Stmt)
   }
 
   /**
@@ -121,7 +121,7 @@ object PatternMatchingCompiler {
     }
 
     // (3a) Match on a literal
-    def splitOnLiteral(lit: Literal, equals: (Expr, Expr) => Expr): core.Stmt = {
+    def splitOnLiteral(lit: Literal, equals: (Expr, Expr, ValueVar => Stmt) => Stmt): core.Stmt = {
       // the different literal values that we match on
       val variants: List[core.Literal] = normalized.collect {
         case Clause(Split(Pattern.Literal(lit, _), _, _), _, _, _) => lit
@@ -171,7 +171,7 @@ object PatternMatchingCompiler {
             case false =>
               core.If(scrutinee, elsStmt, thnStmt)
             case _ =>
-              core.If(equals(scrutinee, lit), thnStmt, elsStmt)
+              equals(scrutinee, lit, result => core.If(result, thnStmt, elsStmt))
           }
       }
     }
