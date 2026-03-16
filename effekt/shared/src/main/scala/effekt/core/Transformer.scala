@@ -279,8 +279,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           sym match {
             case _: ValueSymbol => transformUnbox(tree)
             case cns: Constructor => etaExpandConstructor(cns)
-            case f: ExternFunction if callingConvention(f) == CallingConvention.Pure => etaExpandPure(f)
-            case f: ExternFunction if callingConvention(f) == CallingConvention.Direct => etaExpandDirect(f)
+            case f: ExternFunction if callingConvention(f) == Pure => etaExpandPure(f)
+            case f: ExternFunction if callingConvention(f) == Impure => etaExpandDirect(f)
+            // FIXME: EXTERNAPP: case for Async
             // does not require change of calling convention, so no eta expansion
             case sym: BlockSymbol => BlockVar(sym)
           }
@@ -787,8 +788,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val bargsT = bargs.map(transformAsBlock)
 
     sym match {
-      case f: Callable if callingConvention(f) == CallingConvention.Direct =>
-        Return(Context.bind(BlockVar(f), targs, vargsT, bargsT))
       case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")
         val universals = targs.take(r.tpe.tparams.length)
@@ -798,6 +797,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Context.panic("Should have been translated to a method call!")
       case f: Field =>
         Context.panic("Should have been translated to a select!")
+      // FIXME EXTERNAPP: case for Async
       case f: BlockSymbol =>
         App(BlockVar(f), targs, vargsT, bargsT)
       case f: ValueSymbol =>
@@ -964,9 +964,10 @@ trait TransformerOps extends ContextOps { Context: Context =>
   }
 
   private[core] def bind(callee: Block.BlockVar, targs: List[core.ValueType], vargs: List[Expr], bargs: List[Block]): ValueVar = {
+    // FIXME EXTERNAPP: make it work for all purities
     // create a fresh symbol and assign the type
     val x = TmpValue("r")
-    val binding: Binding.ImpureApp = Binding.ImpureApp(x, callee, targs, vargs, bargs)
+    val binding: Binding.ExternApp = Binding.ExternApp(x, Purity.Impure, callee, targs, vargs, bargs)
     bindings += binding
 
     ValueVar(x, Type.bindingType(binding))
