@@ -108,17 +108,6 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(stmt: Stmt)(using ctx: ShowContext)(using Context, DeclarationContext): Stmt =
     stmt match {
-      case Let(id, PureApp(BlockVar(bid, bannotatedTpe, bannotatedCapt), targs, vargs), body) if bid.name.name == FUNCTION_NAME =>
-        val targ = targs match {
-          case targ :: Nil => targ
-          case _ => Context.abort(pretty"Expected targs for '${FUNCTION_NAME}' to have exactly one argument")
-        }
-        // We need to wrap here, because vargs might have been extern show calls that are now not
-        // this might happen everywhere we directly transform an expression
-        val vargs_ = vargs map transform
-        ctx.withBindings {
-          Stmt.Val(id, Stmt.App(getShowBlockVar(targ), List.empty, vargs_, List.empty), transform(body))
-        }
       case Let(id, binding, body) =>
         val binding_ = transform(binding)
         ctx.withBindings {
@@ -129,7 +118,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         ctx.withBindings {
           Return(expr_)
         }
-      case ImpureApp(id, BlockVar(bid, annotatedTpe, annotatedCapt), targs, vargs, bargs, body) if bid.name.name == FUNCTION_NAME =>
+      case ExternApp(id, purity, BlockVar(bid, annotatedTpe, annotatedCapt), targs, vargs, bargs, body) if bid.name.name == FUNCTION_NAME =>
         val targ = targs match {
           case targ :: Nil => targ
           case _ => Context.abort(pretty"Expected targs for '${FUNCTION_NAME}' to have exactly one argument")
@@ -139,11 +128,11 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         ctx.withBindings {
           Stmt.Val(id, Stmt.App(getShowBlockVar(targ), List.empty, vargs_, bargs_), transform(body))
         }
-      case ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      case ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
         val vargs_ = vargs map transform
         val bargs_ = bargs map transform
         ctx.withBindings {
-          ImpureApp(id, callee, targs, vargs_, bargs_, transform(body))
+          ExternApp(id, purity, callee, targs, vargs_, bargs_, transform(body))
         }
       case Def(id, block, body) => Def(id, transform(block), transform(body))
       case Val(id, binding, body) => Val(id, transform(binding), transform(body))
@@ -194,19 +183,20 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(expr: Expr)(using ctx: ShowContext)(using Context, DeclarationContext): Expr = expr match {
     case Make(data, tag, targs, vargs) => Make(data, tag, targs, vargs map transform)
-    case PureApp(BlockVar(id, annotatedTpe, annotatedCapt), targs, vargs) if id.name.name == FUNCTION_NAME =>
-      val targ = targs match {
-        case targ :: Nil => targ
-        case _ => Context.abort(pretty"Expected targs for '${FUNCTION_NAME}' to have exactly one argument")
-      }
-      // We are switching from Extern call to normal Call,
-      // so we need to wrap the new call into a Val, store it and finally emit it before the statement that called this
-      // therefore we return the name of the Val that we store this call into
-      val stmt = Stmt.App(getShowBlockVar(targ), List.empty, vargs map transform, List.empty)
-      val letId = Id("showApp")
-      ctx.emit(letId, stmt)
-      Expr.ValueVar(letId, TString)
-    case PureApp(b, targs, vargs) => PureApp(transform(b), targs, vargs map transform)
+    // FIXME EXTERNAPP: Might not be possible anymore, needs to be covered in Stmt.ExternApp case anyway. Keeping for reference
+    // case ExternApp(_, Purity.Pure, BlockVar(id, annotatedTpe, annotatedCapt), targs, vargs, bargs) if id.name.name == FUNCTION_NAME =>
+    //   val targ = targs match {
+    //     case targ :: Nil => targ
+    //     case _ => Context.abort(pretty"Expected targs for '${FUNCTION_NAME}' to have exactly one argument")
+    //   }
+    //   // We are switching from Extern call to normal Call,
+    //   // so we need to wrap the new call into a Val, store it and finally emit it before the statement that called this
+    //   // therefore we return the name of the Val that we store this call into
+    //   val stmt = Stmt.App(getShowBlockVar(targ), List.empty, vargs map transform, List.empty)
+    //   val letId = Id("showApp")
+    //   ctx.emit(letId, stmt)
+    //   Expr.ValueVar(letId, TString)
+    // case ExternApp(id, purity, b, targs, vargs, bargs) => ExternApp(id, purity, transform(b), targs, vargs map transform, bargs map transform)
     case Literal(value, annotatedType) => Literal(value, annotatedType)
     case ValueVar(id, annotatedType) => ValueVar(id, annotatedType)
     case Box(b, annotatedCapture) => Box(transform(b), annotatedCapture)
@@ -226,7 +216,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     def generateValAppRet(valueType: ValueType): Stmt =
       val blockVar = findExternShowDef(valueType)
       val retId = Id("ret")
-      Stmt.ImpureApp(retId, blockVar, List.empty, List(paramValueVar), List.empty, Stmt.Return(Expr.ValueVar(retId, TString)))
+      Stmt.ExternApp(retId, Purity.Impure, blockVar, List.empty, List(paramValueVar), List.empty, Stmt.Return(Expr.ValueVar(retId, TString)))
     def generateDef(stmt: Stmt): Toplevel.Def =
       val block = generateBlockLit(stmt)
       val defn: Toplevel.Def = Toplevel.Def(showId, block)
@@ -347,26 +337,30 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     case Constructor(id, tparams, fields) =>
       val infixConcatBlockVar: Block.BlockVar = findExternDef(STRING_CONCAT_NAME, List(TString, TString))
       val pureFields = fields map fieldPure
-      val concatenated = PureApp(infixConcatBlockVar, List.empty, List(Literal(id.name.name ++ "(", TString), concatPure(pureFields)))
+      val concatId = Id("concat")
+      val concatenated = ExternApp(concatId, Purity.Pure, infixConcatBlockVar, List.empty, List(Literal(id.name.name ++ "(", TString)), List.empty, concatPure(pureFields))
 
       def fieldValStmts(idapps: List[(Id, Stmt.App)]): Stmt =
         idapps match {
           case (id, app) :: next => Stmt.Val(id, app, fieldValStmts(next))
-          case Nil => Return(concatenated)
+          case Nil => Return(ValueVar(concatId, TString))
         }
 
       fieldValStmts(pureFields)
 
   // Convert a list of pure statements to comma-separated concatenated version
-  // Literal("Just("), PureApp(show, x), Literal(", "), PureApp(show, y), Literal(")")
+  // Literal("Just("), ExternApp(show, x), Literal(", "), ExternApp(show, y), Literal(")")
   //  =>
-  // PureApp(concat, List(Literal("Just("), PureApp(concat, List(PureApp(show, x), PureApp(concat, List(Literal(", "), ...))))
-  def concatPure(pures: List[(Id, Stmt.App)])(using ctx: ShowContext)(using Context, DeclarationContext): Expr =
+  // ExternApp(concat, List(Literal("Just("), ExternApp(concat, List(ExternApp(show, x), ExternApp(concat, List(Literal(", "), ...))))
+  def concatPure(pures: List[(Id, Stmt.App)])(using ctx: ShowContext)(using Context, DeclarationContext): Stmt =
     val infixConcatDef = findExternDef(STRING_CONCAT_NAME, List(TString, TString))
     pures match
-      case (fieldId, _) :: next :: rest => PureApp(infixConcatDef, List.empty, List(Expr.ValueVar(fieldId, TString), PureApp(infixConcatDef, List.empty, List(Literal(", ", TString), concatPure(next :: rest)))))
-      case (fieldId, _) :: Nil => PureApp(infixConcatDef, List.empty, List(Expr.ValueVar(fieldId, TString), Literal(")", TString)))
-      case Nil => Literal(")", TString)
+      case (fieldId, _) :: next :: rest => {
+        ExternApp(Id("NOTAREALID"), Purity.Pure, infixConcatDef, List.empty, List(Expr.ValueVar(fieldId, TString)), List.empty, 
+          ExternApp(Id("NOTAREALID"), Purity.Pure, infixConcatDef, List.empty, List(Literal(", ", TString)), List.empty, concatPure(next :: rest)))
+      }
+      case (fieldId, _) :: Nil => Stmt.ExternApp(Id("NOTAREALID"), Purity.Pure, infixConcatDef, List.empty, List(Expr.ValueVar(fieldId, TString)), List.empty, Return(Literal(")", TString)))
+      case Nil => Return(Literal(")", TString))
 
   def fieldValueVar(field: Field): Expr = field match
     case Field(id, tpe) => ValueVar(id, tpe)

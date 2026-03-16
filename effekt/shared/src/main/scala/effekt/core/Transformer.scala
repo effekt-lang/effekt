@@ -246,7 +246,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val tpe = Context.blockTypeOf(sym)
       tpe match {
         case BlockType.FunctionType(tparams, cparams, vparamtps, bparamtps, restpe, effects) =>
-          // if this block argument expects to be called using PureApp or ImpureApp, make sure it is
+          // if this block argument expects to be called using PureApp or ExternApp, make sure it is
           // by wrapping it in a BlockLit
           val targs = tparams.map(core.ValueType.Var.apply)
           val vparams = vparamtps.map { t => core.ValueParam(TmpValue("valueParam"), transform(t))}
@@ -257,8 +257,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             util.assert(bparamtps.isEmpty)
             util.assert(effects.isEmpty)
             util.assert(cparams.isEmpty)
-            BlockLit(tparams, Nil, vparams, Nil,
-              Stmt.Return(PureApp(BlockVar(b), targs, vargs)))
+            BlockLit(tparams, Nil, vparams, Nil, {
+              // FIXME EXTERNAPP: This is my attempt, might not be intended
+              val result = Id("result")
+              ExternApp(result, Purity.Pure, BlockVar(b), targs, vargs, List(),
+                Stmt.Return(Expr.ValueVar(result, transform(restpe))))} )
           }
 
           // [[ f ]] = { [A](x) => make f[A](x) }
@@ -280,7 +283,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             val result = TmpValue("etaBinding")
             val callee = BlockVar(f)
             BlockLit(tparams, bparams.map(_.id), vparams, bparams,
-              core.ImpureApp(result, callee, targs, vargs, bargs,
+              core.ExternApp(result, Purity.Impure, callee, targs, vargs, bargs,
                 Stmt.Return(Expr.ValueVar(result, transform(restpe)))))
           }
 
@@ -666,11 +669,23 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       } collectFirst {
         // specialized version
         case (sym, FunctionType(Nil, Nil, List(`tpe`, `tpe`), Nil, builtins.TBoolean, _)) =>
-          (lhs: Expr, rhs: Expr) => core.PureApp(BlockVar(sym), Nil, List(lhs, rhs))
+          (lhs: Expr, rhs: Expr) => {
+            // FIXME EXTERNAPP: This is my attempt, might not be intended
+            val result = Id("eqres")
+            val resultVar = Expr.ValueVar(result, core.Type.TBoolean)
+            core.ExternApp(result, Purity.Pure, BlockVar(sym), Nil, List(lhs, rhs), Nil, core.Return(resultVar))
+            resultVar
+          }
         // generic version
         case (sym, FunctionType(List(tparam), Nil, List(ValueTypeRef(t1), ValueTypeRef(t2)), Nil, builtins.TBoolean, _))
-            if t1 == tparam && t2 == tparam =>
-          (lhs: Expr, rhs: Expr) => core.PureApp(BlockVar(sym), List(transform(tpe)), List(lhs, rhs))
+            if t1 == tparam && t2 == tparam => 
+          (lhs: Expr, rhs: Expr) => {
+            // FIXME EXTERNAPP: This is my attempt, might not be intended
+            val result = Id("eqres")
+            val resultVar = Expr.ValueVar(result, core.Type.TBoolean)
+            core.ExternApp(result, Purity.Pure, BlockVar(sym), List(transform(tpe)), List(lhs, rhs), Nil, core.Return(resultVar))
+            resultVar
+          }
       } getOrElse { Context.panic(pp"Cannot find == for type ${tpe} in prelude!") }
 
     // create joinpoint
@@ -781,8 +796,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val bargsT = bargs.map(transformAsBlock)
 
     sym match {
-      case f: Callable if callingConvention(f) == CallingConvention.Pure =>
-        Return(PureApp(BlockVar(f), targs, vargsT))
       case f: Callable if callingConvention(f) == CallingConvention.Direct =>
         Return(Context.bind(BlockVar(f), targs, vargsT, bargsT))
       case r: Constructor =>
@@ -962,7 +975,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def bind(callee: Block.BlockVar, targs: List[core.ValueType], vargs: List[Expr], bargs: List[Block]): ValueVar = {
     // create a fresh symbol and assign the type
     val x = TmpValue("r")
-    val binding: Binding.ImpureApp = Binding.ImpureApp(x, callee, targs, vargs, bargs)
+    val binding: Binding.ExternApp = Binding.ExternApp(x, Purity.Impure, callee, targs, vargs, bargs)
     bindings += binding
 
     ValueVar(x, Type.bindingType(binding))

@@ -243,7 +243,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
 
         case Stmt.Let(id, binding, body) => State.Step(body, env.bind(id, eval(binding, env)), stack, heap)
 
-        case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+        case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
           val result = env.lookupBuiltin(callee.id) match {
             case Builtin(name, impl) =>
               val arguments = vargs.map(a => eval(a, env))
@@ -496,15 +496,6 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
   def eval(e: Expr, env: Env): Value = e match {
     case Expr.ValueVar(id, annotatedType) => env.lookupValue(id)
     case Expr.Literal(value, annotatedType) => Value.Literal(value)
-    case Expr.PureApp(x, targs, vargs) => env.lookupBuiltin(x.id) match {
-      case Builtin(name, impl) =>
-        val arguments = vargs.map(a => eval(a, env))
-        instrumentation.builtin(name)
-        try { impl(runtime)(arguments) } catch { case e => sys error s"Cannot call ${x} with arguments ${arguments.map {
-          case Value.Literal(l) => s"${l}: ${l.getClass.getName}\n${e.getMessage}"
-          case other => other.toString
-        }.mkString(", ")}" }
-    }
     case Expr.Make(data, tag, targs, vargs) =>
       val result: Value.Data = Value.Data(data, tag, vargs.map(a => eval(a, env)))
       instrumentation.allocate(result)
