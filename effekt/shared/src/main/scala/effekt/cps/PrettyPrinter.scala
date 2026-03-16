@@ -57,9 +57,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(e: Expr): Doc = e match {
     case Expr.ValueVar(id) => toDoc(id)
-    case Expr.Literal(()) => "()"
-    case Expr.Literal(s: String) => "\"" + s + "\""
-    case Expr.Literal(value) => value.toString
+    case Expr.Literal((), core.Type.TUnit) => "()"
+    case Expr.Literal(s: String, core.Type.TString) => "\"" + s + "\""
+    case Expr.Literal(value, _) => value.toString // TODO this should match on the actual types...
     case Expr.PureApp(id, vargs) => toDoc(id) <> argsToDoc(vargs, Nil)
     case Expr.Make(data, tag, vargs) => "make" <+> toDoc(data.name) <+> toDoc(tag) <> argsToDoc(vargs, Nil)
     case Expr.Box(b) => parens("box" <+> toDoc(b))

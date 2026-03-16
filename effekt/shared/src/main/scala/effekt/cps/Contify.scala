@@ -32,7 +32,7 @@ object Contify {
 
   def rewrite(pure: Expr): Expr = pure match {
     case Expr.ValueVar(id) => Expr.ValueVar(id)
-    case Expr.Literal(value) => Expr.Literal(value)
+    case Expr.Literal(value, tpe) => Expr.Literal(value, tpe)
     case Expr.PureApp(id, vargs) => Expr.PureApp(id, vargs.map(rewrite))
     case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(rewrite))
     case Expr.Box(b) => Expr.Box(rewrite(b))
@@ -235,7 +235,7 @@ object Contify {
 
   def returnsTo(id: Id, e: Expr): Set[Cont] = e match {
     case Expr.ValueVar(_) => Set.empty
-    case Expr.Literal(_) => Set.empty
+    case Expr.Literal(_, _) => Set.empty
     case Expr.PureApp(_, vargs) => all(vargs, returnsTo(id, _))
     case Expr.Make(_, _, vargs) => all(vargs, returnsTo(id, _))
     case Expr.Box(b) => returnsTo(id, b)
@@ -319,7 +319,7 @@ object Contify {
 
   def contify(id: Id, p: Expr): Expr = p match {
     case Expr.ValueVar(_) => p
-    case Expr.Literal(_) => p
+    case Expr.Literal(_, _) => p
     case Expr.PureApp(id2, vargs) => Expr.PureApp(id2, vargs.map(contify(id, _)))
     case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(contify(id, _)))
     case Expr.Box(b) => Expr.Box(contify(id, b))
