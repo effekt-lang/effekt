@@ -144,7 +144,6 @@ class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) ext
     case Literal(s: String, _)  => stringLiteral(s)
     case Literal(value, _)      => value.toString
     case ValueVar(id, tpe)         => toDoc(id) <> (if printDetails then ":" <+> toDoc(tpe) else emptyDoc)
-    case PureApp(b, targs, vargs)  => (if printDetails then parens(toDoc(b)) else toDoc(b)) <> argsToDoc(targs, vargs, Nil)
     case Make(data, tag, targs, vargs)    =>
       if printDetails then
         "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
@@ -240,8 +239,13 @@ class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) ext
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
         toDocStmts(rest)
 
-    case ImpureApp(id, callee, targs, vargs, bargs, rest) =>
+    case ExternApp(id, Purity.Impure, callee, targs, vargs, bargs, rest) =>
       "let" <+> "!" <+> toDoc(id) <+> "=" <+> toDoc(callee) <> argsToDoc(targs, vargs, bargs) <> line <>
+        toDocStmts(rest)
+
+    case ExternApp(_, purity, callee, targs, vargs, bargs, rest) =>
+      // FIXME: I think rest should technically not be included. It should do nothing anyway 
+      toDoc(callee) <> argsToDoc(targs, vargs, bargs) <> line <>
         toDocStmts(rest)
 
     case Return(e) =>

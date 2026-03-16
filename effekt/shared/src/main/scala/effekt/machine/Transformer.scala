@@ -170,7 +170,7 @@ object Transformer {
           transform(rest)
         }
 
-      case core.ImpureApp(id, core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), capt), targs, vargs, bargs, rest) =>
+      case core.ExternApp(id, purity, core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), capt), targs, vargs, bargs, rest) =>
         val variable = Variable(transform(id), Positive())
         transform(rest).flatMap { rest =>
           transform(vargs, bargs).run { (values, blocks) =>
@@ -495,21 +495,6 @@ object Transformer {
     case core.Literal(javastring: String, core.Type.TString) =>
       shift { k =>
         LiteralUTF8String(variable, javastring.getBytes("utf-8"), k(variable))
-      }
-
-    case core.PureApp(core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), _), _, vargs) =>
-      transform(vargs).flatMap { values =>
-        perhapsUnbox(values, vparamTypes).flatMap { unboxeds =>
-          shift { k =>
-            transformUnboxed(resultType) match {
-              case Type.Positive() =>
-                ForeignCall(variable, transform(blockName), unboxeds, k(variable))
-              case unboxedTpe =>
-                val unboxed = Variable(freshName("unboxed"), unboxedTpe)
-                ForeignCall(unboxed, transform(blockName), unboxeds, Coerce(variable, unboxed, k(variable)))
-            }
-          }
-        }
       }
 
     case core.Make(data, constructor, targs, vargs) =>

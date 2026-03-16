@@ -118,7 +118,7 @@ class Reachable(
       // We would need to process the binding if it was impure,
       // to keep it for its side effects; however, the binding is guaranteed to be pure
       process(body)(using defs + (id -> binding))
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
       process(callee)
       targs.foreach(process)
       vargs.foreach(process)
@@ -168,7 +168,6 @@ class Reachable(
   def process(e: Expr)(using defs: Definitions): Unit = e match {
     case Expr.ValueVar(id, annotatedType) => process(id); process(annotatedType)
     case Expr.Literal(value, annotatedType) => process(annotatedType)
-    case Expr.PureApp(b, targs, vargs) => process(b); targs.foreach(process); vargs.foreach(process)
     case Expr.Make(data, tag, targs, vargs) =>
       process(data); process(tag); targs.foreach(process); vargs.foreach(process)
     case Expr.Box(b, annotatedCapture) => process(b)

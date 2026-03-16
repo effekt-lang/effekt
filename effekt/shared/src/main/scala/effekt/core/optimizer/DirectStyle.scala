@@ -43,7 +43,7 @@ object DirectStyle extends Tree.Rewrite {
     // Congruences
     case Def(id, block, body) => canBeDirect(body)
     case Let(id, binding, body) => canBeDirect(body)
-    case ImpureApp(id, callee, targs, vargs, bargs, body) => canBeDirect(body)
+    case ExternApp(id, purity, callee, targs, vargs, bargs, body) => canBeDirect(body)
     case Val(id, binding, body) => canBeDirect(body)
     case If(cond, thn, els) => canBeDirect(thn) && canBeDirect(els)
     case Match(scrutinee, tpe, clauses, default) =>
@@ -82,8 +82,8 @@ object DirectStyle extends Tree.Rewrite {
     case Let(id, binding, body) =>
       Let(id, binding, toDirectStyle(body, label))
 
-    case ImpureApp(id, callee, targs, vargs, bargs, body) =>
-      ImpureApp(id, callee, targs, vargs, bargs, toDirectStyle(body, label))
+    case ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
+      ExternApp(id, purity, callee, targs, vargs, bargs, toDirectStyle(body, label))
 
     case Val(id, binding, body) =>
       Val(id, binding, toDirectStyle(body, label))

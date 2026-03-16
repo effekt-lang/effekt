@@ -255,8 +255,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             assert(bparamtps.isEmpty)
             assert(effects.isEmpty)
             assert(cparams.isEmpty)
-            BlockLit(tparams, Nil, vparams, Nil,
-              Stmt.Return(PureApp(BlockVar(b), targs, vargs)))
+            BlockLit(tparams, Nil, vparams, Nil, {
+              // FIXME EXTERNAPP: This is my attempt, might not be intended
+              val result = Id("result")
+              ExternApp(result, Purity.Pure, BlockVar(b), targs, vargs, List(),
+                Stmt.Return(Expr.ValueVar(result, transform(restpe))))} )
           }
 
           // [[ f ]] = { [A](x) => make f[A](x) }
@@ -278,7 +281,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             val result = TmpValue("etaBinding")
             val callee = BlockVar(f)
             BlockLit(tparams, bparams.map(_.id), vparams, bparams,
-              core.ImpureApp(result, callee, targs, vargs, bargs,
+              core.ExternApp(result, Purity.Impure, callee, targs, vargs, bargs,
                 Stmt.Return(Expr.ValueVar(result, transform(restpe)))))
           }
 
@@ -666,11 +669,23 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       } collectFirst {
         // specialized version
         case (sym, FunctionType(Nil, Nil, List(`tpe`, `tpe`), Nil, builtins.TBoolean, _)) =>
-          (lhs: Expr, rhs: Expr) => core.PureApp(BlockVar(sym), Nil, List(lhs, rhs))
+          (lhs: Expr, rhs: Expr) => {
+            // FIXME EXTERNAPP: This is my attempt, might not be intended
+            val result = Id("eqres")
+            val resultVar = Expr.ValueVar(result, core.Type.TBoolean)
+            core.ExternApp(result, Purity.Pure, BlockVar(sym), Nil, List(lhs, rhs), Nil, core.Return(resultVar))
+            resultVar
+          }
         // generic version
         case (sym, FunctionType(List(tparam), Nil, List(ValueTypeRef(t1), ValueTypeRef(t2)), Nil, builtins.TBoolean, _))
-            if t1 == tparam && t2 == tparam =>
-          (lhs: Expr, rhs: Expr) => core.PureApp(BlockVar(sym), List(transform(tpe)), List(lhs, rhs))
+            if t1 == tparam && t2 == tparam => 
+          (lhs: Expr, rhs: Expr) => {
+            // FIXME EXTERNAPP: This is my attempt, might not be intended
+            val result = Id("eqres")
+            val resultVar = Expr.ValueVar(result, core.Type.TBoolean)
+            core.ExternApp(result, Purity.Pure, BlockVar(sym), List(transform(tpe)), List(lhs, rhs), Nil, core.Return(resultVar))
+            resultVar
+          }
       } getOrElse { Context.panic(pp"Cannot find == for type ${tpe} in prelude!") }
 
     // create joinpoint
@@ -781,8 +796,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val bargsT = bargs.map(transformAsBlock)
 
     sym match {
-      case f: Callable if callingConvention(f) == CallingConvention.Pure =>
-        Return(PureApp(BlockVar(f), targs, vargsT))
       case f: Callable if callingConvention(f) == CallingConvention.Direct =>
         Return(Context.bind(BlockVar(f), targs, vargsT, bargsT))
       case r: Constructor =>
