@@ -250,18 +250,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           val vparams = vparamtps.map { t => core.ValueParam(TmpValue("valueParam"), transform(t))}
           val vargs = vparams.map { case core.ValueParam(id, tpe) => Expr.ValueVar(id, tpe) }
 
-          // [[ f ]] = { (x) => f(x) }
-          def etaExpandPure(b: ExternFunction): BlockLit = {
-            assert(bparamtps.isEmpty)
-            assert(effects.isEmpty)
-            assert(cparams.isEmpty)
-            BlockLit(tparams, Nil, vparams, Nil, {
-              // FIXME EXTERNAPP: This is my attempt, might not be intended
-              val result = Id("result")
-              ExternApp(result, Purity.Pure, BlockVar(b), targs, vargs, List(),
-                Stmt.Return(Expr.ValueVar(result, transform(restpe))))} )
-          }
-
           // [[ f ]] = { [A](x) => make f[A](x) }
           def etaExpandConstructor(b: Constructor): BlockLit = {
             assert(bparamtps.isEmpty)
@@ -274,7 +262,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           // [[ f ]] = { (x){g} => let r = f(x){g}; return r }
           def etaExpandExtern(f: ExternFunction): BlockLit = {
             assert(effects.isEmpty)
-            // FIXME EXTERNAPP: calculate purity from capture
+            // TODO calculate purity from capture
             val purity = if f.capture.pure then Pure else if f.capture.pureOrIO then Impure else Async
             val bparams = bparamtps.map { t => val id = TmpBlock("etaParam"); core.BlockParam(id, transform(t), Set(id)) }
             val bargs = bparams.map {
@@ -291,7 +279,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             case _: ValueSymbol => transformUnbox(tree)
             case cns: Constructor => etaExpandConstructor(cns)
             case f: ExternFunction => etaExpandExtern(f)
-            // FIXME: EXTERNAPP: case for Async
             // does not require change of calling convention, so no eta expansion
             case sym: BlockSymbol => BlockVar(sym)
           }
@@ -662,7 +649,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case MatchGuard.BooleanGuard(condition, _) => Nil
       case MatchGuard.PatternGuard(scrutinee, pattern, _) => boundTypesInPattern(pattern)
     }
-    def equalsFor(tpe: symbols.ValueType): (Expr, Expr) => Expr =
+    def equalsFor(tpe: symbols.ValueType): (Expr, Expr, ValueVar => Stmt) => Stmt =
       val prelude = Context.module.findDependency(QualifiedName(Nil, "effekt")).getOrElse {
         Context.panic(pp"${Context.module.name.name}: Cannot find 'effekt' in prelude, which is necessary to compile pattern matching.")
       }
@@ -671,22 +658,18 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       } collectFirst {
         // specialized version
         case (sym, FunctionType(Nil, Nil, List(`tpe`, `tpe`), Nil, builtins.TBoolean, _)) =>
-          (lhs: Expr, rhs: Expr) => {
-            // FIXME EXTERNAPP: This is my attempt, might not be intended
+          (lhs: Expr, rhs: Expr, cont: ValueVar => Stmt) => {
             val result = Id("eqres")
-            val resultVar = Expr.ValueVar(result, core.Type.TBoolean)
-            core.ExternApp(result, Purity.Pure, BlockVar(sym), Nil, List(lhs, rhs), Nil, core.Return(resultVar))
-            resultVar
+            val resultVar: ValueVar = Expr.ValueVar(result, core.Type.TBoolean)
+            core.ExternApp(result, Purity.Pure, BlockVar(sym), Nil, List(lhs, rhs), Nil, cont(resultVar))
           }
         // generic version
         case (sym, FunctionType(List(tparam), Nil, List(ValueTypeRef(t1), ValueTypeRef(t2)), Nil, builtins.TBoolean, _))
-            if t1 == tparam && t2 == tparam => 
-          (lhs: Expr, rhs: Expr) => {
-            // FIXME EXTERNAPP: This is my attempt, might not be intended
+            if t1 == tparam && t2 == tparam =>
+          (lhs: Expr, rhs: Expr, cont: ValueVar => Stmt) => {
             val result = Id("eqres")
-            val resultVar = Expr.ValueVar(result, core.Type.TBoolean)
-            core.ExternApp(result, Purity.Pure, BlockVar(sym), List(transform(tpe)), List(lhs, rhs), Nil, core.Return(resultVar))
-            resultVar
+            val resultVar: ValueVar = Expr.ValueVar(result, core.Type.TBoolean)
+            core.ExternApp(result, Purity.Pure, BlockVar(sym), List(transform(tpe)), List(lhs, rhs), Nil, cont(resultVar))
           }
       } getOrElse { Context.panic(pp"Cannot find == for type ${tpe} in prelude!") }
 
@@ -807,7 +790,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Context.panic("Should have been translated to a method call!")
       case f: Field =>
         Context.panic("Should have been translated to a select!")
-      // FIXME EXTERNAPP: case for Async
       case f: BlockSymbol =>
         App(BlockVar(f), targs, vargsT, bargsT)
       case f: ValueSymbol =>
