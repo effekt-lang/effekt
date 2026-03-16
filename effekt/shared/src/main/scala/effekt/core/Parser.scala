@@ -404,7 +404,7 @@ class CoreParsers(names: Names) extends EffektLexers {
   lazy val stmts: P[Stmt] =
     ( (`let` ~ `!` ~/> id) ~ (`=` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ~ stmts ^^ {
         case (name ~ callee ~ targs ~ vargs ~ bargs ~ body) =>
-          ImpureApp(name, callee, targs, vargs, bargs, body)
+          ExternApp(name, Purity.Impure, callee, targs, vargs, bargs, body)
       }
     | `let` ~/> id ~ (`=` ~/> expr) ~ stmts ^^ {
       case (name ~ binding ~ body) =>
@@ -450,7 +450,6 @@ class CoreParsers(names: Names) extends EffektLexers {
     | `box` ~> captures ~ block ^^ { case capt ~ block => Expr.Box(block, capt) }
     | `make` ~> dataType ~ id ~ maybeTypeArgs ~ valueArgs ^^ Expr.Make.apply
     | id ~ (`:` ~> valueType) ^^ Expr.ValueVar.apply
-    | maybeParens(blockVar) ~ maybeTypeArgs ~ valueArgs ^^ Expr.PureApp.apply
     | failure("Expected a pure expression.")
     )
 

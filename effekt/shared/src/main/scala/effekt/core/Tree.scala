@@ -160,7 +160,6 @@ enum Toplevel {
  *   ─ [[ Expr ]]
  *     │─ [[ ValueVar ]]
  *     │─ [[ Literal ]]
- *     │─ [[ PureApp ]]
  *     │─ [[ Make ]]
  *     │─ [[ Box ]]
  *

@@ -44,7 +44,7 @@ class Recursive(
   def process(s: Stmt): Unit = s match {
     case Stmt.Def(id, block, body) =>  process(id, block); process(body)
     case Stmt.Let(id, binding, body) => process(binding); process(body)
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
       process(callee)
       vargs.foreach(process)
       bargs.foreach(process)
@@ -94,7 +94,6 @@ class Recursive(
   def process(e: Expr): Unit = e match {
     case Expr.ValueVar(id, annotatedType) => ()
     case Expr.Literal(value, annotatedType) => ()
-    case Expr.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
     case Expr.Make(data, tag, targs, vargs) => vargs.foreach(process)
     case Expr.Box(b, annotatedCapture) => process(b)
   }
