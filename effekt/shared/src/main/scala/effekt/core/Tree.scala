@@ -168,7 +168,6 @@ enum Toplevel {
  *   ─ [[ Expr ]]
  *     │─ [[ ValueVar ]]
  *     │─ [[ Literal ]]
- *     │─ [[ PureApp ]]
  *     │─ [[ Make ]]
  *     │─ [[ Box ]]
  *
@@ -496,8 +495,6 @@ object Tree {
         Expr.ValueVar(rewrite(id), rewrite(annotatedType))
       case Expr.Literal(value, annotatedType) =>
         Expr.Literal(value, rewrite(annotatedType))
-      case Expr.PureApp(b, targs, vargs) =>
-        Expr.PureApp(rewrite(b), targs map rewrite, vargs map rewrite)
       case Expr.Make(data, tag, targs, vargs) =>
         Expr.Make(rewrite(data), rewrite(tag), targs map rewrite, vargs map rewrite)
       case Expr.Box(b, annotatedCapture) =>
@@ -508,8 +505,8 @@ object Tree {
         Stmt.Def(rewrite(id), rewrite(block), rewrite(body))
       case Stmt.Let(id, binding, body) =>
         Stmt.Let(rewrite(id), rewrite(binding), rewrite(body))
-      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-        Stmt.ImpureApp(rewrite(id), rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
+      case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
+        Stmt.ExternApp(rewrite(id), purity, rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
       case Stmt.Return(expr) =>
         Stmt.Return(rewrite(expr))
       case Stmt.Val(id, binding, body) =>
@@ -893,8 +890,6 @@ object Tree {
         Expr.ValueVar(rewrite(id), rewrite(annotatedType))
       case Expr.Literal(value, annotatedType) =>
         Expr.Literal(value, rewrite(annotatedType))
-      case Expr.PureApp(b, targs, vargs) =>
-        Expr.PureApp(rewrite(b), targs map rewrite, vargs map rewrite)
       case Expr.Make(data, tag, targs, vargs) =>
         Expr.Make(rewrite(data), rewrite(tag), targs map rewrite, vargs map rewrite)
       case Expr.Box(b, annotatedCapture) =>
@@ -905,8 +900,8 @@ object Tree {
         Stmt.Def(rewrite(id), rewrite(block), rewrite(body))
       case Stmt.Let(id, binding, body) =>
         Stmt.Let(rewrite(id), rewrite(binding), rewrite(body))
-      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-        Stmt.ImpureApp(rewrite(id), rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
+      case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
+        Stmt.ExternApp(rewrite(id), purity, rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
       case Stmt.Return(expr) =>
         Stmt.Return(rewrite(expr))
       case Stmt.Val(id, binding, body) =>
@@ -1251,7 +1246,7 @@ object sizes {
   inline def size(stmt: Stmt): Int = stmt match {
     case Stmt.Def(id, block, body) => block.size + body.size + 1
     case Stmt.Let(id, binding, body) => binding.size + body.size + 1
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => all(vargs, _.size) + all(bargs, _.size) + body.size + 1
+    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) => all(vargs, _.size) + all(bargs, _.size) + body.size + 1
     case Stmt.Return(expr) => expr.size + 1
     case Stmt.Val(id, binding, body) => binding.size + body.size + 1
     case Stmt.App(callee, targs, vargs, bargs) => callee.size + all(vargs, _.size) + all(bargs, _.size) + 1
@@ -1272,7 +1267,6 @@ object sizes {
   inline def size(expr: Expr): Int = expr match {
     case Expr.ValueVar(id, annotatedType) => 1
     case Expr.Literal(value, annotatedType) => 1
-    case Expr.PureApp(b, targs, vargs) => all(vargs, _.size) + 1
     case Expr.Make(data, tag, targs, vargs) => all(vargs, _.size) + 1
     case Expr.Box(b, annotatedCapture) => b.size + 1
   }
@@ -1360,7 +1354,7 @@ object freeVariables {
     case Stmt.Let(id, binding, body) =>
       body.free.withoutValue(id, binding.tpe) ++ binding.free
 
-    case s @ Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+    case s @ Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
       val retType = Type.bindingType(s)
       Free.block(callee.id, callee.annotatedTpe, callee.annotatedCapt) ++
         all(vargs, _.free) ++
@@ -1420,10 +1414,6 @@ object freeVariables {
       Free.value(id, annotatedType)
 
     case Expr.Literal(value, annotatedType) => Free.empty
-
-    case Expr.PureApp(callee, targs, vargs) =>
-      all(vargs, _.free) ++
-        Free.block(callee.id, callee.annotatedTpe, callee.annotatedCapt)
 
     case Expr.Make(data, tag, targs, vargs) =>
       all(vargs, _.free)

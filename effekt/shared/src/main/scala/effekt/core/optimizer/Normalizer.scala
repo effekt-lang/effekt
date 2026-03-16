@@ -80,7 +80,6 @@ object Normalizer { normal =>
 
   /** Is it worth remembering that a variable holds pure expression [[expr]]? */
   private def shareable(expr: Expr)(using C: Context): Boolean = expr match {
-    case _: Expr.PureApp => transparent(expr.tpe)
     case _: Expr.Make => true
     case _ => false
   }
@@ -247,8 +246,8 @@ object Normalizer { normal =>
         case normalized => normalizeLet(id, normalized, body)
       }
 
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-      Stmt.ImpureApp(id, callee, targs, vargs.map(normalize), bargs.map(normalize), normalize(body))
+    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
+      Stmt.ExternApp(id, purity, callee, targs, vargs.map(normalize), bargs.map(normalize), normalize(body))
 
     // Redexes
     // -------
@@ -384,8 +383,8 @@ object Normalizer { normal =>
         case Stmt.Let(id2, binding2, body2) =>
           Stmt.Let(id2, binding2, normalizeVal(id, body2, body))
 
-        case Stmt.ImpureApp(id2, callee2, targs2, vargs2, bargs2, body2) =>
-          Stmt.ImpureApp(id2, callee2, targs2, vargs2, bargs2, normalizeVal(id, body2, body))
+        case Stmt.ExternApp(id2, purity, callee2, targs2, vargs2, bargs2, body2) =>
+          Stmt.ExternApp(id2, purity, callee2, targs2, vargs2, bargs2, normalizeVal(id, body2, body))
 
         // Flatten vals. This should be non-leaking since we use garbage free refcounting.
         // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]
@@ -467,7 +466,6 @@ object Normalizer { normal =>
 
     // congruences
     // [[ let x = f(y); f(y) ]] = let x = f(y); x
-    case Expr.PureApp(f, targs, vargs) => available(Expr.PureApp(f, targs, vargs.map(normalize)))
     case Expr.Make(data, tag, targs, vargs) => available(Expr.Make(data, tag, targs, vargs.map(normalize)))
     // [[ x ]] = y   if `x` was bound to `y`
     // Sound because an alias is only ever bound to something already in scope where the alias is.

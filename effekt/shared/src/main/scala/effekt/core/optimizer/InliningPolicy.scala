@@ -117,7 +117,7 @@ class Default(threshold: Int, onceLimit: Option[Int], carryingLimit: Int) extend
       // a binder cannot select a branch, so pass through it
       case Stmt.Val(_, _, rest) => go(rest, acc)
       case Stmt.Let(_, _, rest) => go(rest, acc)
-      case Stmt.ImpureApp(_, _, _, _, _, rest) => go(rest, acc)
+      case Stmt.ExternApp(_, _, _, _, _, _, rest) => go(rest, acc)
       case Stmt.Def(_, _, rest) => go(rest, acc)
       case Stmt.Alloc(_, _, _, rest) => go(rest, acc)
       case Stmt.Var(_, _, _, rest) => go(rest, acc)

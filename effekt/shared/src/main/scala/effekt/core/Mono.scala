@@ -621,7 +621,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
         function(id, 0, literal, env) ++ statement(body, env)
       case Def(_, binding, body) => block(binding, env) ++ statement(body, env)
       case Let(_, binding, body) => expression(binding, env) ++ statement(body, env)
-      case ImpureApp(_, callee, targs, vargs, bargs, body) =>
+      case ExternApp(_, _, callee, targs, vargs, bargs, body) =>
         application(callee, targs, vargs, bargs, env) ++ statement(body, env)
       case Return(expr) => expression(expr, env)
       case Val(_, binding, body) => statement(binding, env) ++ statement(body, env)
@@ -696,7 +696,6 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
     }
 
     private def expression(expr: Expr, env: Environment)(using Context): Flows = expr match {
-      case PureApp(callee, targs, vargs) => application(callee, targs, vargs, Nil, env)
       case ValueVar(_, annotatedType) => valueType(annotatedType, env)._2
       case Literal(_, annotatedType) => valueType(annotatedType, env)._2
       case Make(data, tag, targs, vargs) =>
@@ -1110,9 +1109,9 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
         Val(id, monomorphize(binding), monomorphize(body))
       case Var(ref, init, capture, body) =>
         Var(ref, monomorphize(init), capture, monomorphize(body))
-      case ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      case ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
         val (monoCallee, monoTargs) = specializeCall(callee, targs)
-        ImpureApp(id, monoCallee, monoTargs, vargs map monomorphize, bargs map monomorphize, monomorphize(body))
+        ExternApp(id, purity, monoCallee, monoTargs, vargs map monomorphize, bargs map monomorphize, monomorphize(body))
       case App(callee: BlockVar, targs, vargs, bargs) =>
         val (monoCallee, monoTargs) = specializeCall(callee, targs)
         App(monoCallee, monoTargs, vargs map monomorphize, bargs map monomorphize)
@@ -1212,9 +1211,6 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
     def monomorphize(expr: Expr)(using ctx: State)(using Context, DeclarationContext): Expr = expr match
       case Literal(value, annotatedType) =>
         Literal(value, monomorphize(annotatedType))
-      case PureApp(b, targs, vargs) =>
-        val (monoCallee, monoTargs) = specializeCall(b, targs)
-        PureApp(monoCallee, monoTargs, vargs map monomorphize)
       case Make(data, tag, targs, vargs) =>
         val combinedTargs = data.targs ++ targs
         val replacementTag = replacementFun(tag, combinedTargs)

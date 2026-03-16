@@ -110,7 +110,7 @@ trait Transformer {
 
     case Region(body) => chez.Builtin("with-region", toChez(body))
 
-    case stmt: (Def | Let | ImpureApp | Get | Put) =>
+    case stmt: (Def | Let | ExternApp | Get | Put) =>
       chez.Let(Nil, toChez(stmt))
   }
 
@@ -175,7 +175,7 @@ trait Transformer {
       val chez.Block(defs, exprs, result) = toChez(body)
       chez.Block(chez.Constant(nameDef(id), toChez(binding)) :: defs, exprs, result)
 
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
       val chez.Block(defs, exprs, result) = toChez(body)
       chez.Block(chez.Constant(nameDef(id), chez.Call(toChez(callee), vargs.map(toChez) ++ bargs.map(toChez))) :: defs, exprs, result)
 
@@ -229,7 +229,6 @@ trait Transformer {
     case l: Literal             => chez.RawValue(l.value.toString)
     case ValueVar(id, _)        => chez.Variable(nameRef(id))
 
-    case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
     case Make(data, tag, targs, args) => chez.Call(chez.Variable(nameRef(tag)), args map toChez)
 
     case Box(b, _) => toChez(b)

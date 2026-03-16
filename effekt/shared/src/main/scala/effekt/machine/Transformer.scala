@@ -224,7 +224,7 @@ object Transformer {
           transform(rest)
         }
 
-      case app @ core.ImpureApp(id, core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), capt), targs, vargs, bargs, rest) =>
+      case app @ core.ExternApp(id, purity, core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), capt), targs, vargs, bargs, rest) =>
         val variable = Variable(transform(id), transform(core.Type.bindingType(app)))
         transform(rest).flatMap { rest =>
           transform(vargs, bargs).run { (values, blocks) =>
@@ -538,13 +538,6 @@ object Transformer {
     case core.Literal(javastring: String, core.Type.TString) =>
       shift { k =>
         LiteralUTF8String(variable, javastring.getBytes("utf-8"), k(variable))
-      }
-
-    case core.PureApp(core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), _), _, vargs) =>
-      transform(vargs).flatMap { values =>
-        coerce(values, vparamTypes map transformExtern).flatMap { coerced =>
-          shift { k => foreignCall(variable, transform(blockName), coerced, transformExtern(resultType), k(variable)) }
-        }
       }
 
     case core.Make(data, constructor, targs, vargs) =>

@@ -51,11 +51,12 @@ object BindSubexpressions {
         Binding(bindings, Stmt.Let(id, other, transform(body)))
     }
 
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => delimit {
+    // FIXME EXTERNAPP: Might require special case for impure / async
+    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) => delimit {
       for {
         vs <- transformExprs(vargs)
         bs <- transformBlocks(bargs)
-      } yield Stmt.ImpureApp(id, transform(callee), targs.map(transform), vs, bs, transform(body))
+      } yield Stmt.ExternApp(id, purity, transform(callee), targs.map(transform), vs, bs, transform(body))
     }
 
     case Stmt.App(callee, targs, vargs, bargs) => delimit {
@@ -136,10 +137,6 @@ object BindSubexpressions {
     case Expr.Make(data, tag, targs, vargs) => transformExprs(vargs) { vs =>
       bind(Expr.Make(data, tag, targs, vs))
     }
-    case Expr.PureApp(f, targs, vargs) => for {
-      vs <- transformExprs(vargs);
-      res <- bind(Expr.PureApp(f, targs.map(transform), vs))
-    } yield res
     case Expr.Box(block, capt) => transform(block) { b => bind(Expr.Box(b, transform(capt))) }
   }
 
