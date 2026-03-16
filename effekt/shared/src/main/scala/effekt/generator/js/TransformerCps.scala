@@ -196,10 +196,10 @@ object TransformerCps extends Transformer {
 
   def toJS(e: cps.Expr)(using D: TransformerContext): js.Expr = e match {
     case Expr.ValueVar(id)           => nameRef(id)
-    case Expr.Literal(())            => $effekt.field("unit")
-    case Expr.Literal(s: String)     => JsString(escape(s))
-    case Expr.Literal(b: Byte)       => js.RawExpr(UByte.unsafeFromByte(b).toHexString)
-    case literal: Expr.Literal       => js.RawExpr(literal.value.toString)
+    case Expr.Literal((), core.Type.TUnit)            => $effekt.field("unit")
+    case Expr.Literal(s: String, core.Type.TString)     => JsString(escape(s))
+    case Expr.Literal(b: Byte, core.Type.TByte)       => js.RawExpr(UByte.unsafeFromByte(b).toHexString)
+    case literal: Expr.Literal       => js.RawExpr(literal.value.toString) // TODO This should match on the type...
     case Expr.PureApp(id, vargs)     => inlineExtern(id, vargs)
     case Expr.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
     case Expr.Box(b)                 => argumentToJS(b)

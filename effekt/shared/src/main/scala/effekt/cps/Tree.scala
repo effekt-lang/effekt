@@ -65,7 +65,7 @@ enum Expr extends Tree {
 
   case ValueVar(id: Id)
 
-  case Literal(value: Any)
+  case Literal(value: Any, annotatedType: core.ValueType)
 
   /**
    * Pure FFI calls. Invariant, block b is pure.
@@ -165,7 +165,7 @@ object Variables {
 
   def free(e: Expr): Variables = e match {
     case Expr.ValueVar(id) => value(id)
-    case Expr.Literal(value) => empty
+    case Expr.Literal(value, tpe) => empty
     case Expr.PureApp(id, vargs) => block(id) ++ all(vargs, free)
     case Expr.Make(data, tag, vargs) => all(vargs, free)
     case Expr.Box(b) => free(b)
@@ -247,7 +247,7 @@ object substitutions {
   def substitute(pure: Expr)(using subst: Substitution): Expr = pure match {
     case ValueVar(id) if subst.values.isDefinedAt(id) => subst.values(id)
     case ValueVar(id) => ValueVar(id)
-    case Literal(value) => Literal(value)
+    case Literal(value, tpe) => Literal(value, tpe)
     case Make(tpe, tag, vargs) => Make(tpe, tag, vargs.map(substitute))
     case PureApp(id, vargs) => PureApp(id, vargs.map(substitute))
     case Box(b) => Box(substitute(b))
