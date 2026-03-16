@@ -176,7 +176,7 @@ object Transformer {
 
   def transform(pure: core.Expr)(using C: TransformationContext): Expr = pure match {
     case core.Expr.ValueVar(id, annotatedType) => C.lookupValue(id)
-    case core.Expr.Literal(value, annotatedType) => Literal(value)
+    case core.Expr.Literal(value, annotatedType) => Literal(value, annotatedType)
     case core.Expr.PureApp(b, targs, vargs) => transform(b) match {
       case Block.BlockVar(id) => PureApp(id, vargs.map(transform))
       case _ => sys error "Should not happen"
