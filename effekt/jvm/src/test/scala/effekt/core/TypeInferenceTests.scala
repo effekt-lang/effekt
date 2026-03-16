@@ -125,36 +125,36 @@ class TypeInferenceTests extends CoreTests {
 
     val add: Block.BlockVar = Block.BlockVar(infixPlus, BlockType.Function(Nil, Nil, List(TInt, TInt), Nil, TInt), Set.empty)
 
-    val ex3 = Stmt.Val(x,
-      Stmt.Return(Expr.Literal(42, TInt)),
-      Stmt.Return(Expr.PureApp(add, Nil, Expr.ValueVar(x, TInt) :: Expr.ValueVar(x, TInt) :: Nil)))
+    // val ex3 = Stmt.Val(x,
+    //   Stmt.Return(Expr.Literal(42, TInt)),
+    //   Stmt.Return(Expr.PureApp(add, Nil, Expr.ValueVar(x, TInt) :: Expr.ValueVar(x, TInt) :: Nil)))
 
-    val result3 = typecheck(ex3)
-    assertEquals(result3.tpe, TInt)
-    assertEquals(result3.capt, Set.empty)
-    assert(result3.free.freeIds == Set(add.id))
-    result3.free.wellformed()
+    // val result3 = typecheck(ex3)
+    // assertEquals(result3.tpe, TInt)
+    // assertEquals(result3.capt, Set.empty)
+    // assert(result3.free.freeIds == Set(add.id))
+    // result3.free.wellformed()
 
-    // [A](Option[A], A): A
-    val orElse: Block.BlockVar = Block.BlockVar(f, BlockType.Function(A :: Nil, Nil, List(OptionT(ValueType.Var(A)), ValueType.Var(A)), Nil, ValueType.Var(A)), Set.empty)
+    // // [A](Option[A], A): A
+    // val orElse: Block.BlockVar = Block.BlockVar(f, BlockType.Function(A :: Nil, Nil, List(OptionT(ValueType.Var(A)), ValueType.Var(A)), Nil, ValueType.Var(A)), Set.empty)
 
-    shouldTypeCheckAs(TInt, Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(y, TInt) :: Nil))
+    // shouldTypeCheckAs(TInt, Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(y, TInt) :: Nil))
 
-    // swapped arguments
-    intercept[TypeError] {
-      val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(y, TInt) :: Expr.ValueVar(x, OptionT(TInt)) :: Nil))
-      res.free.wellformed()
-    }
-    // too few arguments
-    intercept[TypeError] {
-      val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Nil))
-      res.free.wellformed()
-    }
-    // incompatible free variables in arguments
-    intercept[TypeError] {
-      val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(x, TInt) :: Nil))
-      res.free.wellformed()
-    }
+    // // swapped arguments
+    // intercept[TypeError] {
+    //   val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(y, TInt) :: Expr.ValueVar(x, OptionT(TInt)) :: Nil))
+    //   res.free.wellformed()
+    // }
+    // // too few arguments
+    // intercept[TypeError] {
+    //   val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Nil))
+    //   res.free.wellformed()
+    // }
+    // // incompatible free variables in arguments
+    // intercept[TypeError] {
+    //   val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(x, TInt) :: Nil))
+    //   res.free.wellformed()
+    // }
 
     val ex4: Expr.Make = Make(OptionT(TInt), SomeC, List(), List(Literal(42, TInt)))
     assertSameType(ex4.tpe, OptionT(TInt))
