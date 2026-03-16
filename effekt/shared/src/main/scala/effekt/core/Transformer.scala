@@ -263,8 +263,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           }
 
           // [[ f ]] = { (x){g} => let r = f(x){g}; return r }
-          def etaExpandDirect(f: ExternFunction): BlockLit = {
+          def etaExpandExtern(f: ExternFunction): BlockLit = {
             assert(effects.isEmpty)
+            // FIXME EXTERNAPP: calculate purity from capture
+            val purity = if f.capture.pure then Pure else if f.capture.pureOrIO then Impure else Async
             val bparams = bparamtps.map { t => val id = TmpBlock("etaParam"); core.BlockParam(id, transform(t), Set(id)) }
             val bargs = bparams.map {
               case core.BlockParam(id, tpe, capt) => Block.BlockVar(id, tpe, capt)
@@ -272,15 +274,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             val result = TmpValue("etaBinding")
             val callee = BlockVar(f)
             BlockLit(tparams, bparams.map(_.id), vparams, bparams,
-              core.ExternApp(result, Purity.Impure, callee, targs, vargs, bargs,
+              core.ExternApp(result, purity, callee, targs, vargs, bargs,
                 Stmt.Return(Expr.ValueVar(result, transform(restpe)))))
           }
 
           sym match {
             case _: ValueSymbol => transformUnbox(tree)
             case cns: Constructor => etaExpandConstructor(cns)
-            case f: ExternFunction if callingConvention(f) == Pure => etaExpandPure(f)
-            case f: ExternFunction if callingConvention(f) == Impure => etaExpandDirect(f)
+            case f: ExternFunction => etaExpandExtern(f)
             // FIXME: EXTERNAPP: case for Async
             // does not require change of calling convention, so no eta expansion
             case sym: BlockSymbol => BlockVar(sym)
