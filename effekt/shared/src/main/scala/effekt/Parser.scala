@@ -1,5 +1,6 @@
 package effekt
 
+import effekt.Precedence.*
 import effekt.context.Context
 import effekt.lexer.*
 import effekt.lexer.TokenKind.{`::` as PathSep, *}
@@ -13,6 +14,8 @@ import kiama.util.{Position, Range, Source}
 import scala.annotation.{tailrec, targetName}
 import scala.collection.mutable.ListBuffer
 import scala.language.implicitConversions
+import scala.util.boundary
+import scala.util.boundary.break
 
 /**
  * String templates containing unquotes `${... : T}`
@@ -857,9 +860,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     if peek(`:`) then  `:` ~> blockType()
     else fail("a type annotation", peek.kind)
 
-  def expr(): Term = peek.kind match {
-    case _ => matchExpr() labelled "expression"
-  }
+  def expr(): Term = exprOuter(None)
 
   def ifExpr(): Term =
     nonterminal:
@@ -1020,32 +1021,102 @@ class Parser(tokens: Seq[Token], source: Source) {
         case k => fail("pattern", k)
       }
 
-  def matchExpr(): Term =
+  def matchExpr(scrutinee: Term): Term =
     nonterminal:
-      var sc = assignExpr()
-      while (peek(`match`)) {
-         val clauses = `match` ~> braces { manyWhile(matchClause(), `case`) }
-         val default = when(`else`) { Some(stmt()) } { None }
-         sc = Match(List(sc), clauses, default, span())
-      }
-      sc
+      val clauses = `match` ~> braces { manyWhile(matchClause(), `case`) }
+      val default = when(`else`) { Some(stmt()) } { None }
+      Match(List(scrutinee), clauses, default, span())
 
-  def assignExpr(): Term =
+  lazy val precedenceRules = PrecedenceBuilder { builder =>
+    given PrecedenceBuilder = builder
+    Set(`||`) ?< Set(`&&`)
+    Set(`&&`) ?< Set(TokenKind.`|`)
+    Set(TokenKind.`|`) ?< Set(`&`)
+    Set(`&`) ?< Set(`===`, `!==`, `<=`, `>=`, `<`, `>`)
+    Set(`===`, `!==`, `<=`, `>=`, `<`, `>`) ?< Set(`..`, `...`, TokenKind.`~`, TokenKind.`~>`, TokenKind.`<~`)
+    Set(`..`, `...`, TokenKind.`~`, TokenKind.`~>`, TokenKind.`<~`) ?< Set(`++`, `--`, `+`, `-`, `<<`, `>>`, `^`, `^^`)
+    Set(`++`, `--`, `+`, `-`, `<<`, `>>`, `^`, `^^`) ?< Set(`*`, `/`)
+  }
+  lazy val precedenceOf = precedenceComparison(precedenceRules)
+  lazy val infixOps = precedenceRules.flatMap { case PrecedenceEntry(looser, tighter) => looser ++ tighter }.toSet
+
+  def exprOuter(prevOp: Option[TokenKind]): Term =
     nonterminal:
-      orExpr() match {
-        case x @ Term.Var(id, _) if peek(`=`) => consume(`=`); Assign(id, expr(), span())
-        case x @ Term.Var(id, _) if peek(`:=`) => binaryOp(x, next(), expr())
-        case other => other
+      var left = primExpr()
+      boundary:
+        while (true) {
+          val start = position
+          peek.kind match {
+            case op if infixOps.contains(op) =>
+              val precedence = prevOp.map(precedenceOf(_, op)).getOrElse(Precedence.RightBindsTighter)
+              precedence match {
+                case Precedence.LeftBindsTighter => boundary.break()
+                case Precedence.RightBindsTighter =>
+                  checkBinaryOpWhitespace()
+                  val opToken = next()
+                  val right = exprOuter(Some(op))
+                  left = binaryOp(left, opToken, right)
+                case Precedence.Ambiguous =>
+                  fail(s"Ambiguous infix operator precedence for the usage of ${op}. Consider adding parentheses.")
+              }
+            case `match` =>
+              left = matchExpr(left)
+            case `=` | `:=` if left.isInstanceOf[Term.Var] =>
+              left = assignExpr(left.asInstanceOf[Term.Var])
+            case _ if (peek(`.`) || isArguments) =>
+              left = callExpr(left)
+            case _ =>
+              boundary.break()
+          }
+        }
+      left
+
+  def assignExpr(assignee: Term.Var): Term =
+    nonterminal:
+      peek.kind match {
+        case `=` =>
+          consume (`=`)
+          Assign (assignee.id, expr(), span() )
+        case `:=` =>
+          binaryOp (assignee, next(), expr() )
+        case _ => fail ("unreachable")
       }
 
-  def orExpr(): Term = infix(andExpr, `||`)
-  def andExpr(): Term = infix(bitOrExpr, `&&`)
-  def bitOrExpr(): Term = infix(bitAndExpr, TokenKind.`|`)
-  def bitAndExpr(): Term = infix(eqExpr, `&`)
-  def eqExpr(): Term = infix(rangeExpr, `===`, `!==`, `<=`, `>=`, `<`, `>`)
-  def rangeExpr(): Term = infix(addExpr, `..`, `...`, TokenKind.`~`, TokenKind.`~>`, TokenKind.`<~`)
-  def addExpr(): Term = infix(mulExpr, `++`, `--`, `+`, `-`, `<<`, `>>`, `^`, `^^`)
-  def mulExpr(): Term = infix(callExpr, `*`, `/`)
+  def callExpr(callee: Term): Term =
+    nonterminal:
+      var e = callee
+
+      while (peek(`.`) || isArguments) {
+        peek.kind match {
+          // member selection or method call
+          //   <EXPR>.<NAME>
+          // | <EXPR>.<NAME>( ... )
+          case `.` =>
+            val dot = peek
+            consume(`.`)
+            val member = idRef()
+            // method call
+            if (isArguments) {
+              val (targs, vargs, bargs) = arguments()
+              e = Term.MethodCall(e, member, targs, vargs, bargs, span())
+            } else {
+              e = Term.MethodCall(e, member, Nil, Nil, Nil, span())
+            }
+
+          // function call
+          case _ if isArguments =>
+            val callee = e match {
+              case Term.Var(id, _) => IdTarget(id)
+              case other => ExprTarget(other)
+            }
+            val (targs, vargs, bargs) = arguments()
+            e = Term.Call(callee, targs, vargs, bargs, span())
+
+          // nothing to do
+          case _ => ()
+        }
+      }
+      e
 
   inline def infix(nonTerminal: () => Term, ops: TokenKind*): Term =
     nonterminal:
