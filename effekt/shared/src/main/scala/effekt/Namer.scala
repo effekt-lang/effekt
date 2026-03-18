@@ -1085,13 +1085,14 @@ trait NamerOps extends ContextOps { Context: Context =>
   }
 
   private[namer] def resolveOverloadedFunction(id: IdRef): Boolean = at(id) {
-    val fns = scope.lookupFunction(id.path, id.name)
-    val ops = scope.lookupOperation(id.path, id.name)
-    val both = fns ++ ops
+    val syms = scope.lookupFunction(id.path, id.name)
+
+    val syms2 = if (syms.isEmpty) scope.lookupOperation(id.path, id.name) else syms
 
     // lookup first block param and do not collect multiple since we do not (yet?) permit overloading on block parameters
-    val all = if (both.isEmpty) List(scope.lookupFirstBlockParam(id.path, id.name)) else both
-    if (all.nonEmpty) { assignSymbol(id, CallTarget(all.asInstanceOf)); true } else { false }
+    val syms3 = if (syms2.isEmpty) List(scope.lookupFirstBlockParam(id.path, id.name)) else syms2
+
+    if (syms3.nonEmpty) { assignSymbol(id, CallTarget(syms3.asInstanceOf)); true } else { false }
   }
 
   /**
