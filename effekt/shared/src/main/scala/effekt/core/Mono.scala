@@ -116,7 +116,7 @@ enum TypeArg {
 def pretty(constr: MonoConstraint): String = {
   val start = if (constr.lower.size > 1) "<" else ""
   val end = if (constr.lower.size > 1) ">" else ""
-  constr.lower.map(pretty).mkString(start, ", ", end) + " ⊑ " + constr.upper.name
+  constr.lower.map(pretty).mkString(start, ", ", end) + " ⊑ " + constr.upper.name + "_" + constr.upper.id
 }
 
 def pretty(tpeArg: TypeArg): String = tpeArg match {
@@ -133,7 +133,7 @@ def pretty(solution: Solution): String = {
       val end = if (ground.size > 1) ">" else ""
       ground.map(pretty).mkString(start, ", ", end)
     }).mkString(", ")
-    sets + " <: " + k.name.name 
+    sets + " <: " + k.name.name + "_" + k.id
   }).mkString("\n")
 }
 
