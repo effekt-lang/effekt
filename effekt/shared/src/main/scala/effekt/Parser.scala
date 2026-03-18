@@ -860,7 +860,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     if peek(`:`) then  `:` ~> blockType()
     else fail("a type annotation", peek.kind)
 
-  def expr(): Term = exprOuter(None)
+  def expr(): Term = exprOuter(None) labelled("expression")
 
   def ifExpr(): Term =
     nonterminal:
@@ -900,7 +900,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     nonterminal:
       consume(`box`)
       val expr = if (peek(`{`)) functionArg()
-      else callExpr()
+      else callExpr(primExpr())
       val captures = backtrack {
         `at` ~> captureSet()
       }
@@ -1037,7 +1037,16 @@ class Parser(tokens: Seq[Token], source: Source) {
       case _ => fail ("unreachable")
     }
 
-  def callExpr(callee: Term): Term =
+  /**
+   * This is a compound production for
+   *  - member selection <EXPR>.<NAME>
+   *  - method calls <EXPR>.<NAME>(...)
+   *  - function calls <EXPR>(...)
+   *
+   * This way expressions like `foo.bar.baz()(x).bam.boo()` are
+   * parsed with the correct left-associativity.
+   */
+  def callExpr(callee: => Term): Term =
     var e = callee
 
     while (peek(`.`) || isArguments) {
@@ -1092,7 +1101,6 @@ class Parser(tokens: Seq[Token], source: Source) {
       var left = primExpr()
       boundary:
         while (true) {
-          val start = position
           peek.kind match {
             case op if infixOps.contains(op) =>
               val precedence = prevOp.map(precedenceTable.compare(_, op)).getOrElse(Precedence.RightBindsTighter)
@@ -1203,52 +1211,6 @@ class Parser(tokens: Seq[Token], source: Source) {
     if (!wsBefore || !wsAfter) {
       warn(s"Missing whitespace around binary operator", position, position)
     }
-  }
-
-  /**
-   * This is a compound production for
-   *  - member selection <EXPR>.<NAME>
-   *  - method calls <EXPR>.<NAME>(...)
-   *  - function calls <EXPR>(...)
-   *
-   * This way expressions like `foo.bar.baz()(x).bam.boo()` are
-   * parsed with the correct left-associativity.
-   */
-  def callExpr(): Term = nonterminal {
-    nonterminal:
-      var e = primExpr()
-
-      while (peek(`.`) || isArguments)
-        peek.kind match {
-          // member selection or method call
-          //   <EXPR>.<NAME>
-          // | <EXPR>.<NAME>( ... )
-          case `.` =>
-            val dot = peek
-            consume(`.`)
-            val member = idRef()
-            // method call
-            if (isArguments) {
-              val (targs, vargs, bargs) = arguments()
-              e = Term.MethodCall(e, member, targs, vargs, bargs, span())
-            } else {
-              e = Term.MethodCall(e, member, Nil, Nil, Nil, span())
-            }
-
-          // function call
-          case _ if isArguments =>
-            val callee = e match {
-              case Term.Var(id, _) => IdTarget(id)
-              case other => ExprTarget(other)
-            }
-            val (targs, vargs, bargs) = arguments()
-            e = Term.Call(callee, targs, vargs, bargs, span())
-
-          // nothing to do
-          case _ => ()
-        }
-
-      e
   }
 
   // argument lists cannot follow a linebreak:
