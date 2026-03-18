@@ -141,14 +141,14 @@ extern def show[R](value: R) at {}: String =
 
 // Strings
 // =======
-extern def infixConcat(s1: String, s2: String) at {}: String =
+extern def infixPlusPlus(s1: String, s2: String) at {}: String =
   js "${s1} + ${s2}"
   chez "(string-append ${s1} ${s2})"
   llvm """
     %spz = call %Pos @c_bytearray_concatenate(%Pos ${s1}, %Pos ${s2})
     ret %Pos %spz
   """
-  vm "effekt::infixConcat(String, String)"
+  vm "effekt::infixPlusPlus(String, String)"
 
 extern def length(str: String) at {}: Int =
   js "${str}.length"
@@ -345,29 +345,29 @@ extern def infixNeq(x: Byte, y: Byte) at {}: Bool =
 
 // Math ops
 // ========
-extern def infixAdd(x: Int, y: Int) at {}: Int =
+extern def infixPlus(x: Int, y: Int) at {}: Int =
   js "(${x} + ${y})"
   chez "(+ ${x} ${y})"
   llvm "%z = add  %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::infixAdd(Int, Int)"
+  vm "effekt::infixPlus(Int, Int)"
 
-extern def infixMul(x: Int, y: Int) at {}: Int =
+extern def infixStar(x: Int, y: Int) at {}: Int =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
   llvm "%z = mul  %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::infixMul(Int, Int)"
+  vm "effekt::infixStar(Int, Int)"
 
-extern def infixDiv(x: Int, y: Int) at {}: Int =
+extern def infixSlash(x: Int, y: Int) at {}: Int =
   js "Math.floor(${x} / ${y})"
   chez "(floor (/ ${x} ${y}))"
   llvm "%z = sdiv %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::infixDiv(Int, Int)"
+  vm "effekt::infixSlash(Int, Int)"
 
-extern def infixSub(x: Int, y: Int) at {}: Int =
+extern def infixMinus(x: Int, y: Int) at {}: Int =
   js "(${x} - ${y})"
   chez "(- ${x} ${y})"
   llvm "%z = sub  %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::infixSub(Int, Int)"
+  vm "effekt::infixMinus(Int, Int)"
 
 extern def mod(x: Int, y: Int) at {}: Int =
   js "(${x} % ${y})"
@@ -375,29 +375,29 @@ extern def mod(x: Int, y: Int) at {}: Int =
   llvm "%z = srem %Int ${x}, ${y} ret %Int %z"
   vm "effekt::mod(Int, Int)"
 
-extern def infixAdd(x: Double, y: Double) at {}: Double =
+extern def infixPlus(x: Double, y: Double) at {}: Double =
   js "(${x} + ${y})"
   chez "(+ ${x} ${y})"
   llvm "%z = fadd %Double ${x}, ${y} ret %Double %z"
-  vm "effekt::infixAdd(Double, Double)"
+  vm "effekt::infixPlus(Double, Double)"
 
-extern def infixMul(x: Double, y: Double) at {}: Double =
+extern def infixStar(x: Double, y: Double) at {}: Double =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
   llvm "%z = fmul %Double ${x}, ${y} ret %Double %z"
-  vm "effekt::infixMul(Double, Double)"
+  vm "effekt::infixStar(Double, Double)"
 
-extern def infixSub(x: Double, y: Double) at {}: Double =
+extern def infixMinus(x: Double, y: Double) at {}: Double =
   js "(${x} - ${y})"
   chez "(- ${x} ${y})"
   llvm "%z = fsub %Double ${x}, ${y} ret %Double %z"
-  vm "effekt::infixSub(Double, Double)"
+  vm "effekt::infixMinus(Double, Double)"
 
-extern def infixDiv(x: Double, y: Double) at {}: Double =
+extern def infixSlash(x: Double, y: Double) at {}: Double =
   js "(${x} / ${y})"
   chez "(fl/ ${x} ${y})"
   llvm "%z = fdiv %Double ${x}, ${y} ret %Double %z"
-  vm "effekt::infixDiv(Double, Double)"
+  vm "effekt::infixSlash(Double, Double)"
 
 extern def cos(x: Double) at {}: Double =
   js "Math.cos(${x})"
@@ -661,10 +661,10 @@ extern def not(b: Bool) at {}: Bool =
   """
   vm "effekt::not(Bool)"
 
-def infixOr { first: => Bool } { second: => Bool }: Bool =
+def infixBarBar { first: => Bool } { second: => Bool }: Bool =
   if (first()) true else second()
 
-def infixAnd { first: => Bool } { second: => Bool }: Bool =
+def infixAmpAmp { first: => Bool } { second: => Bool }: Bool =
   if (first()) second() else false
 
 

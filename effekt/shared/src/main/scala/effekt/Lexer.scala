@@ -79,6 +79,7 @@ enum TokenKind {
 
   // symbols
   case `=`
+  case `:=`
   case `===`
   case `!==`
   case `:`
@@ -114,6 +115,21 @@ enum TokenKind {
   case `++`
   case `-`
   case `*`
+
+  case `>>`
+  case `<<`
+  case `~`
+  case `--`
+  case `~>`
+  case `<~`
+  case `+=`
+  case `-=`
+  case `*=`
+  case `/=`
+  case `..`
+  case `...`
+  case `^^`
+  case `^`
 
   // keywords
   case `let`
@@ -400,10 +416,16 @@ class Lexer(source: Source) extends Iterator[Token] {
       // Comments
       case ('/', '*') => advance2With(multilineComment())
       case ('/', '/') => advance2With(singlelineComment())
+      case ('/', '=') => advance2With(TokenKind.`/=`)
       case ('/',   _) => advanceWith(TokenKind.`/`)
 
       // Shebang
       case ('#', '!') => advance2With(shebang())
+
+
+      case ('.', '.') if peekAhead(2) == '.' => advance3With(TokenKind.`...`)
+      case ('.', '.') => advance2With(TokenKind.`..`)
+      case ('.', _)   => advanceWith(TokenKind.`.`)
 
       // Two-character operators
       case ('=', '=') => advance2With(TokenKind.`===`)
@@ -413,15 +435,25 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('!', '=') => advance2With(TokenKind.`!==`)
       case ('!',   _) => advanceWith(TokenKind.`!`)
 
+      case ('^', '^') => advance2With(TokenKind.`^^`)
+      case ('^',   _) => advanceWith(TokenKind.`^`)
+
+      case ('~', '>') => advance2With(TokenKind.`~>`)
+      case ('~',   _) => advanceWith(TokenKind.`~`)
+
+      case ('<', '<') => advance2With(TokenKind.`<<`)
       case ('<', '=') => advance2With(TokenKind.`<=`)
       case ('<', '>') => advance2With(TokenKind.`<>`)
       case ('<', '{') => advance2With(TokenKind.`<{`)
+      case ('<', '~') => advance2With(TokenKind.`<~`)
       case ('<',   _) => advanceWith(TokenKind.`<`)
 
+      case ('>', '>') => advance2With(TokenKind.`>>`)
       case ('>', '=') => advance2With(TokenKind.`>=`)
       case ('>',   _) => advanceWith(TokenKind.`>`)
 
       case (':', ':') => advance2With(TokenKind.`::`)
+      case (':', '=') => advance2With(TokenKind.`:=`)
       case (':',   _) => advanceWith(TokenKind.`:`)
 
       case ('|', '|') => advance2With(TokenKind.`||`)
@@ -431,10 +463,15 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('&',   _) => advanceWith(TokenKind.`&`)
 
       case ('+', '+') => advance2With(TokenKind.`++`)
+      case ('+', '=') => advance2With(TokenKind.`+=`)
       case ('+',   _) => advanceWith(TokenKind.`+`)
 
       case ('-', c) if c.isDigit => advanceWith(number(negative = true))
+      case ('-', '=')            => advance2With(TokenKind.`-=`)
       case ('-', _)              => advanceWith(TokenKind.`-`)
+
+      case ('*', '=') => advanceWith(TokenKind.`*=`)
+      case ('*', _)   => advanceWith(TokenKind.`*`)
 
       case ('$', '{') =>
         interpolationDepths.push(depthTracker.braces + 1)
@@ -472,8 +509,6 @@ class Lexer(source: Source) extends Iterator[Token] {
         depthTracker.brackets -= 1
         advanceWith(TokenKind.`]`)
       case (',', _) => advanceWith(TokenKind.`,`)
-      case ('.', _) => advanceWith(TokenKind.`.`)
-      case ('*', _) => advanceWith(TokenKind.`*`)
 
       case ('\u0000', _) =>
         // EOF reached - provide context about unclosed constructs

@@ -334,7 +334,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def constructorStmt(constr: Constructor)(using ctx: ShowContext, dctx: DeclarationContext)(using Context): Stmt = constr match
     case Constructor(id, tparams, fields) =>
-      val infixConcatBlockVar: Block.BlockVar = findExternDef("infixConcat", List(TString, TString))
+      val infixConcatBlockVar: Block.BlockVar = findExternDef("infixPlusPlus", List(TString, TString))
       val pureFields = fields map fieldPure
       val concatenated = PureApp(infixConcatBlockVar, List.empty, List(Literal(id.name.name ++ "(", TString), concatPure(pureFields)))
 
@@ -351,7 +351,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   //  =>
   // PureApp(concat, List(Literal("Just("), PureApp(concat, List(PureApp(show, x), PureApp(concat, List(Literal(", "), ...))))
   def concatPure(pures: List[(Id, Stmt.App)])(using ctx: ShowContext)(using Context, DeclarationContext): Expr =
-    val infixConcatDef = findExternDef("infixConcat", List(TString, TString))
+    val infixConcatDef = findExternDef("infixPlusPlus", List(TString, TString))
     pures match
       case (fieldId, _) :: next :: rest => PureApp(infixConcatDef, List.empty, List(Expr.ValueVar(fieldId, TString), PureApp(infixConcatDef, List.empty, List(Literal(", ", TString), concatPure(next :: rest)))))
       case (fieldId, _) :: Nil => PureApp(infixConcatDef, List.empty, List(Expr.ValueVar(fieldId, TString), Literal(")", TString)))

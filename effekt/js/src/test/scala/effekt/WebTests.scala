@@ -79,7 +79,7 @@ object WebTests extends TestSuite {
           |""".stripMargin)
       val result = server.showCore("test.effekt")
 
-      assert(result.contains("infixAdd"))
+      assert(result.contains("infixPlus"))
     }
 
     test("Load file with multiline extern strings") {

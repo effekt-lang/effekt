@@ -43,7 +43,7 @@ extern def unsafeAllocate[T]() at global: Ref[T] =
     store i64 0, ptr %ref, align 8
     store ptr @c_ref_erase_field, ptr %refEraser, align 8
     store i64 0, ptr %fieldTag, align 8
-    store ptr null, ptr %fieldData_pointer, align 8 
+    store ptr null, ptr %fieldData_pointer, align 8
 
     %refWrap = insertvalue %Pos { i64 0, ptr poison }, ptr %ref, 1
     ret %Pos %refWrap
@@ -99,7 +99,7 @@ extern def set[T](ref: Ref[T], value: T) at global: Unit =
 
     tail call void @erasePositive(%Pos %field)
     store %Pos ${value}, ptr %field_pointer
-    tail call void @erasePositive(%Pos ${ref}) 
+    tail call void @erasePositive(%Pos ${ref})
 
     ret %Pos zeroinitializer
   """
@@ -108,3 +108,7 @@ extern def set[T](ref: Ref[T], value: T) at global: Unit =
 /// Modifies the inner contents of the `ref` with a function `f`
 def map[T](ref: Ref[T]) { f: T => T }: Unit =
   ref.set(f(ref.get))
+
+/// `r := v` serves as an alias for `r.set(v)`
+def infixColonEq[T](ref: Ref[T], v: T): Unit =
+  ref.set(v)

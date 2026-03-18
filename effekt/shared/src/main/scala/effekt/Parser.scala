@@ -1,5 +1,6 @@
 package effekt
 
+import effekt.Precedence.*
 import effekt.context.Context
 import effekt.lexer.*
 import effekt.lexer.TokenKind.{`::` as PathSep, *}
@@ -13,6 +14,8 @@ import kiama.util.{Position, Range, Source}
 import scala.annotation.{tailrec, targetName}
 import scala.collection.mutable.ListBuffer
 import scala.language.implicitConversions
+import scala.util.boundary
+import scala.util.boundary.break
 
 /**
  * String templates containing unquotes `${... : T}`
@@ -857,9 +860,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     if peek(`:`) then  `:` ~> blockType()
     else fail("a type annotation", peek.kind)
 
-  def expr(): Term = peek.kind match {
-    case _ => matchExpr() labelled "expression"
-  }
+  def expr(): Term = exprOuter(None) labelled("expression")
 
   def ifExpr(): Term =
     nonterminal:
@@ -899,7 +900,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     nonterminal:
       consume(`box`)
       val expr = if (peek(`{`)) functionArg()
-      else callExpr()
+      else callExpr(primExpr())
       val captures = backtrack {
         `at` ~> captureSet()
       }
@@ -1020,29 +1021,112 @@ class Parser(tokens: Seq[Token], source: Source) {
         case k => fail("pattern", k)
       }
 
-  def matchExpr(): Term =
-    nonterminal:
-      var sc = assignExpr()
-      while (peek(`match`)) {
-         val clauses = `match` ~> braces { manyWhile(matchClause(), `case`) }
-         val default = when(`else`) { Some(stmt()) } { None }
-         sc = Match(List(sc), clauses, default, span())
-      }
-      sc
+  def matchExpr(scrutinee: Term): Term =
+      val clauses = `match` ~> braces { manyWhile(matchClause(), `case`) }
+      val default = when(`else`) { Some(stmt()) } { None }
+      Match(List(scrutinee), clauses, default, span())
 
-  def assignExpr(): Term =
-    nonterminal:
-      orExpr() match {
-        case x @ Term.Var(id, _) => when(`=`) { Assign(id, expr(), span()) } { x }
-        case other => other
-      }
 
-  def orExpr(): Term = infix(andExpr, `||`)
-  def andExpr(): Term = infix(eqExpr, `&&`)
-  def eqExpr(): Term = infix(relExpr, `===`, `!==`)
-  def relExpr(): Term = infix(addExpr, `<=`, `>=`, `<`, `>`)
-  def addExpr(): Term = infix(mulExpr, `++`, `+`, `-`)
-  def mulExpr(): Term = infix(callExpr, `*`, `/`)
+  def assignExpr(assignee: Term.Var): Term =
+    peek.kind match {
+      case `=` =>
+        consume(`=`)
+        Assign(assignee.id, expr(), span())
+      case `:=` =>
+        binaryOp(assignee, next(), expr())
+      case _ => fail("unreachable")
+    }
+
+  /**
+   * This is a compound production for
+   *  - member selection <EXPR>.<NAME>
+   *  - method calls <EXPR>.<NAME>(...)
+   *  - function calls <EXPR>(...)
+   *
+   * This way expressions like `foo.bar.baz()(x).bam.boo()` are
+   * parsed with the correct left-associativity.
+   */
+  def callExpr(callee: => Term): Term =
+    var e = callee
+
+    while (peek(`.`) || isArguments) {
+      peek.kind match {
+        // member selection or method call
+        //   <EXPR>.<NAME>
+        // | <EXPR>.<NAME>( ... )
+        case `.` =>
+          val dot = peek
+          consume(`.`)
+          val member = idRef()
+          // method call
+          if (isArguments) {
+            val (targs, vargs, bargs) = arguments()
+            e = Term.MethodCall(e, member, targs, vargs, bargs, span())
+          } else {
+            e = Term.MethodCall(e, member, Nil, Nil, Nil, span())
+          }
+
+        // function call
+        case _ if isArguments =>
+          val callee = e match {
+            case Term.Var(id, _) => IdTarget(id)
+            case other => ExprTarget(other)
+          }
+          val (targs, vargs, bargs) = arguments()
+          e = Term.Call(callee, targs, vargs, bargs, span())
+
+        // nothing to do
+        case _ => ()
+      }
+    }
+    e
+
+  lazy val precedenceTable = PrecedenceTable { table =>
+    given PrecedenceTable = table
+    // since by default, the associativity is left-associative, we only need to specify it for the cases where it is different
+    table.declare(Associativity.None, `===`, `!==`, `<=`, `>=`, `<`, `>`)
+    // We want `+` and `-` (as well as `*` and `/`) to bind equally strong and use associativity instead to disambiguate 
+    `+` =?= `-`
+    `*` =?= `/`
+    Set(`||`) ?< Set(`&&`)
+    Set(`&&`) ?< Set(TokenKind.`|`)
+    Set(TokenKind.`|`) ?< Set(`&`)
+    Set(`&`) ?< Set(`===`, `!==`, `<=`, `>=`, `<`, `>`)
+    Set(`===`, `!==`, `<=`, `>=`, `<`, `>`) ?< Set(`..`, `...`, TokenKind.`~`, TokenKind.`~>`, TokenKind.`<~`)
+    Set(`..`, `...`, TokenKind.`~`, TokenKind.`~>`, TokenKind.`<~`) ?< Set(`++`, `--`, `+`, `-`, `<<`, `>>`, `^`, `^^`)
+    Set(`++`, `--`, `+`, `-`, `<<`, `>>`, `^`, `^^`) ?< Set(`*`, `/`)
+  }
+  lazy val infixOps = precedenceTable.operators
+
+  def exprOuter(prevOp: Option[TokenKind]): Term =
+    nonterminal:
+      var left = primExpr()
+      boundary:
+        while (true) {
+          peek.kind match {
+            case op if infixOps.contains(op) =>
+              val precedence = prevOp.map(precedenceTable.compare(_, op)).getOrElse(Precedence.RightBindsTighter)
+              precedence match {
+                case Precedence.LeftBindsTighter => boundary.break()
+                case Precedence.RightBindsTighter =>
+                  checkBinaryOpWhitespace()
+                  val opToken = next()
+                  val right = exprOuter(Some(op))
+                  left = binaryOp(left, opToken, right)
+                case Precedence.Ambiguous =>
+                  fail(s"Ambiguous infix operator precedence for the usage of ${op}. Consider adding parentheses.")
+              }
+            case `match` =>
+              left = matchExpr(left)
+            case `=` | `:=` if left.isInstanceOf[Term.Var] =>
+              left = assignExpr(left.asInstanceOf[Term.Var])
+            case _ if (peek(`.`) || isArguments) =>
+              left = callExpr(left)
+            case _ =>
+              boundary.break()
+          }
+        }
+      left
 
   inline def infix(nonTerminal: () => Term, ops: TokenKind*): Term =
     nonterminal:
@@ -1082,19 +1166,40 @@ class Parser(tokens: Seq[Token], source: Source) {
   }
 
   private def opName(op: TokenKind): String = op match {
-    case `||` => "infixOr"
-    case `&&` => "infixAnd"
+    case `||` => "infixBarBar"
+    case `&&` => "infixAmpAmp"
     case `===` => "infixEq"
     case `!==` => "infixNeq"
-    case `<` => "infixLt"
-    case `>` => "infixGt"
+    case `<`  => "infixLt"
+    case `>`  => "infixGt"
     case `<=` => "infixLte"
     case `>=` => "infixGte"
-    case `+` => "infixAdd"
-    case `-` => "infixSub"
-    case `*` => "infixMul"
-    case `/` => "infixDiv"
-    case `++` => "infixConcat"
+    case `:=` => "infixColonEq"
+    case `+`  => "infixPlus"
+    // `+=` (`-=`, `*=`, `/=`) has the same name as `+` (`-`, `*`, `/`) due to the way it is manually desugared in [[ primExpr ]] 
+    case `+=` => "infixPlus"
+    case `-`  => "infixMinus"
+    case `-=` => "infixMinus"
+    case `*`  => "infixStar"
+    case `*=` => "infixStar"
+    case `/`  => "infixSlash"
+    case `/=` => "infixSlash"
+    case `++` => "infixPlusPlus"
+    case `>>` => "infixGtGt"
+    case `<<` => "infixLtLt"
+    case `--` => "infixMinusMinus"
+
+    case TokenKind.`~`  => "infixTilde"
+    case TokenKind.`~>` => "infixTildeGt"
+    case TokenKind.`<~` => "infixLtTilde"
+    case TokenKind.`|`  => "infixBar"
+    case TokenKind.`&`  => "infixAmp"
+
+    case `..`  => "infixDotDot"
+    case `...` => "infixDotDotDot"
+    case `^^`  => "infixHatHat"
+    case `^`   => "infixHat"
+
     case _ => sys.error(s"Internal compiler error: not a valid operator ${op}")
   }
 
@@ -1109,51 +1214,6 @@ class Parser(tokens: Seq[Token], source: Source) {
     if (!wsBefore || !wsAfter) {
       warn(s"Missing whitespace around binary operator", position, position)
     }
-  }
-
-  /**
-   * This is a compound production for
-   *  - member selection <EXPR>.<NAME>
-   *  - method calls <EXPR>.<NAME>(...)
-   *  - function calls <EXPR>(...)
-   *
-   * This way expressions like `foo.bar.baz()(x).bam.boo()` are
-   * parsed with the correct left-associativity.
-   */
-  def callExpr(): Term = nonterminal {
-    nonterminal:
-      var e = primExpr()
-
-      while (peek(`.`) || isArguments)
-        peek.kind match {
-          // member selection (or method call)
-          //   <EXPR>.<NAME>
-          // | <EXPR>.<NAME>( ... )
-          case `.` =>
-            consume(`.`)
-            val member = idRef()
-            // method call
-            if (isArguments) {
-              val (targs, vargs, bargs) = arguments()
-              e = Term.MethodCall(e, member, targs, vargs, bargs, span())
-            } else {
-              e = Term.MethodCall(e, member, Nil, Nil, Nil, span())
-            }
-
-          // function call
-          case _ if isArguments =>
-            val callee = e match {
-              case Term.Var(id, _) => IdTarget(id)
-              case other => ExprTarget(other)
-            }
-            val (targs, vargs, bargs) = arguments()
-            e = Term.Call(callee, targs, vargs, bargs, span())
-
-          // nothing to do
-          case _ => ()
-        }
-
-      e
   }
 
   // argument lists cannot follow a linebreak:
@@ -1250,7 +1310,20 @@ class Parser(tokens: Seq[Token], source: Source) {
     case _ if isVariable     =>
       peek(1).kind match {
         case _: Str => templateString()
-        case _ => variable()
+        case _ =>
+          val lhs = variable()
+          peek.kind match {
+            case `+=` | `-=` | `*=` | `/=` =>
+              val op = next()
+              val operand = expr()
+              val rhs = Call(
+                IdTarget(IdRef(Nil, opName(op.kind), op.span(source).synthesized)),
+                Nil, List(ValueArg.Unnamed(lhs), ValueArg.Unnamed(operand)), Nil,
+                Span(source, lhs.span.from, operand.span.to, Synthesized)
+              )
+              Assign(lhs.id, rhs, span())
+            case _ => lhs
+          }
       }
     case _ if isHole         => hole()
     case _ if isTupleOrGroup => tupleOrGroup()
@@ -1406,7 +1479,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   private def isUnitLiteral: Boolean = peek(`(`) && peek(1, `)`)
 
   def isVariable: Boolean = isIdRef
-  def variable(): Term =
+  def variable(): Term.Var =
     nonterminal:
       Var(idRef(), span())
 

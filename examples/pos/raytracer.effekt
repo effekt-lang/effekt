@@ -36,10 +36,10 @@ def sub(a: Vector, b: Vector): Vector =
 
 
 // def infixMul(a: Vector, b: Vector): Double = dot(a, b)
-def infixMul(a: Vector, t: Double): Vector = a.scale(t)
-def infixMul(t: Double, a: Vector): Vector = a.scale(t)
-def infixAdd(a: Vector, b: Vector): Vector = add(a, b)
-def infixSub(a: Vector, b: Vector): Vector = sub(a, b)
+def infixStar(a: Vector, t: Double): Vector = a.scale(t)
+def infixStar(t: Double, a: Vector): Vector = a.scale(t)
+def infixPlus(a: Vector, b: Vector): Vector = add(a, b)
+def infixMinus(a: Vector, b: Vector): Vector = sub(a, b)
 
 
 def length(a: Vector): Double = dot(a, a).sqrt
