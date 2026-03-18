@@ -70,12 +70,8 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             // println()
 
             // Collect polymorphic extern definitions
-            var polyExternDefs: List[Id] = List.empty 
-            externs.foreach {
-              case Extern.Include(featureFlag, contents) => ()
-              case Extern.Data(id, tparams) => ()
-              case Extern.Def(id, List(), cparams, vparams, bparams, ret, annotatedCapture, body) => ()
-              case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => polyExternDefs :+= id
+            var polyExternDefs: List[Id] = externs.collect {
+              case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) if tparams.nonEmpty => id
             }
 
             var monoContext = MonoContext(solution, monoFunNames, monoTpeNames, polyExternDefs)
