@@ -706,8 +706,16 @@ def monomorphize(valueType: ValueType)(using ctx: MonoContext)(using dctx: Decla
   case ValueType.Boxed(tpe, capt) => ValueType.Boxed(monomorphize(tpe), capt)
 }
 
-def monomorphize(typeArg: TypeArg)(using MonoContext, DeclarationContext): ValueType = typeArg match {
-  case TypeArg.Base(tpe, targs) => ValueType.Data(tpe, targs map monomorphize)
+def monomorphize(typeArg: TypeArg)(using MonoContext)(using dctx: DeclarationContext): ValueType = typeArg match {
+  case TypeArg.Base(tpe, targs) =>
+    dctx.findExternData(tpe) match {
+      case Some(_) => {
+        ValueType.Data(tpe, targs map monomorphize)
+      }
+      case None => {
+        replacementData(tpe, targs.toVector)
+      }
+    }
   case TypeArg.Boxed(tpe, capt) => ValueType.Boxed(monomorphize(tpe), capt)
   case TypeArg.Var(funId, pos) => 
     // FIXME: Do we want to reflect this unreachability in the Data structure used for monomorphizing?
