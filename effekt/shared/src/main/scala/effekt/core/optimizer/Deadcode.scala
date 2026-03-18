@@ -47,7 +47,7 @@ class Deadcode(reachable: Map[Id, Usage])
         declarations.map(rewrite),
         // drop unreachable externs
         m.externs.collect {
-          // We need to keep "show", "showBuiltin" & "" for generating show definitions (see #1123)
+          // We need to keep "show", "showBuiltin" & "infixPlusPlus" for generating show definitions (see #1123)
           case e: Extern.Def if used(e.id) || List("show", "showBuiltin", "infixPlusPlus").contains(e.id.name.name) => e
           case e: Extern.Include => e
           // We currently do not have usage information on extern types, so we have to keep all of them

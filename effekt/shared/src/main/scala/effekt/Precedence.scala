@@ -36,8 +36,7 @@ extension (looser: Set[TokenKind]) {
  * For convenience, we break the antisymmetric property on purpose by defining `+ ?< -` as well as `- ?< +` such that for example `1 + 2 - 3` can be written without parentheses by
  * falling back to the operators' associativity for disambiguation.
  * 
- * Usage:
- * 
+ * Usage: See [[ Parser.precedenceTable ]]
  */
 class PrecedenceTable {
   var assocMap:   Map[TokenKind, Associativity] = Map.empty

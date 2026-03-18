@@ -1030,11 +1030,11 @@ class Parser(tokens: Seq[Token], source: Source) {
   def assignExpr(assignee: Term.Var): Term =
     peek.kind match {
       case `=` =>
-        consume (`=`)
-        Assign (assignee.id, expr(), span() )
+        consume(`=`)
+        Assign(assignee.id, expr(), span())
       case `:=` =>
-        binaryOp (assignee, next(), expr() )
-      case _ => fail ("unreachable")
+        binaryOp(assignee, next(), expr())
+      case _ => fail("unreachable")
     }
 
   /**
@@ -1083,7 +1083,9 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   lazy val precedenceTable = PrecedenceTable { table =>
     given PrecedenceTable = table
+    // since by default, the associativity is left-associative, we only need to specify it for the cases where it is different
     table.declare(Associativity.None, `===`, `!==`, `<=`, `>=`, `<`, `>`)
+    // We want `+` and `-` (as well as `*` and `/`) to bind equally strong and use associativity instead to disambiguate 
     `+` =?= `-`
     `*` =?= `/`
     Set(`||`) ?< Set(`&&`)
@@ -1174,6 +1176,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     case `>=` => "infixGte"
     case `:=` => "infixColonEq"
     case `+`  => "infixPlus"
+    // `+=` (`-=`, `*=`, `/=`) has the same name as `+` (`-`, `*`, `/`) due to the way it is manually desugared in [[ primExpr ]] 
     case `+=` => "infixPlus"
     case `-`  => "infixMinus"
     case `-=` => "infixMinus"
