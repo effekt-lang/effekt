@@ -1022,13 +1022,61 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
 
   def matchExpr(scrutinee: Term): Term =
-    nonterminal:
       val clauses = `match` ~> braces { manyWhile(matchClause(), `case`) }
       val default = when(`else`) { Some(stmt()) } { None }
       Match(List(scrutinee), clauses, default, span())
 
-  lazy val precedenceRules = PrecedenceBuilder { builder =>
-    given PrecedenceBuilder = builder
+
+  def assignExpr(assignee: Term.Var): Term =
+    peek.kind match {
+      case `=` =>
+        consume (`=`)
+        Assign (assignee.id, expr(), span() )
+      case `:=` =>
+        binaryOp (assignee, next(), expr() )
+      case _ => fail ("unreachable")
+    }
+
+  def callExpr(callee: Term): Term =
+    var e = callee
+
+    while (peek(`.`) || isArguments) {
+      peek.kind match {
+        // member selection or method call
+        //   <EXPR>.<NAME>
+        // | <EXPR>.<NAME>( ... )
+        case `.` =>
+          val dot = peek
+          consume(`.`)
+          val member = idRef()
+          // method call
+          if (isArguments) {
+            val (targs, vargs, bargs) = arguments()
+            e = Term.MethodCall(e, member, targs, vargs, bargs, span())
+          } else {
+            e = Term.MethodCall(e, member, Nil, Nil, Nil, span())
+          }
+
+        // function call
+        case _ if isArguments =>
+          val callee = e match {
+            case Term.Var(id, _) => IdTarget(id)
+            case other => ExprTarget(other)
+          }
+          val (targs, vargs, bargs) = arguments()
+          e = Term.Call(callee, targs, vargs, bargs, span())
+
+        // nothing to do
+        case _ => ()
+      }
+    }
+    e
+
+  lazy val precedenceTable = PrecedenceTable { table =>
+    given PrecedenceTable = table
+    table.declare(Associativity.None, `===`, `!==`, `<=`, `>=`, `<`, `>`)
+    `+` =?= `-`
+    `*` =?= `/`
     Set(`||`) ?< Set(`&&`)
     Set(`&&`) ?< Set(TokenKind.`|`)
     Set(TokenKind.`|`) ?< Set(`&`)
@@ -1037,8 +1085,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     Set(`..`, `...`, TokenKind.`~`, TokenKind.`~>`, TokenKind.`<~`) ?< Set(`++`, `--`, `+`, `-`, `<<`, `>>`, `^`, `^^`)
     Set(`++`, `--`, `+`, `-`, `<<`, `>>`, `^`, `^^`) ?< Set(`*`, `/`)
   }
-  lazy val precedenceOf = precedenceComparison(precedenceRules)
-  lazy val infixOps = precedenceRules.flatMap { case PrecedenceEntry(looser, tighter) => looser ++ tighter }.toSet
+  lazy val infixOps = precedenceTable.operators
 
   def exprOuter(prevOp: Option[TokenKind]): Term =
     nonterminal:
@@ -1048,7 +1095,7 @@ class Parser(tokens: Seq[Token], source: Source) {
           val start = position
           peek.kind match {
             case op if infixOps.contains(op) =>
-              val precedence = prevOp.map(precedenceOf(_, op)).getOrElse(Precedence.RightBindsTighter)
+              val precedence = prevOp.map(precedenceTable.compare(_, op)).getOrElse(Precedence.RightBindsTighter)
               precedence match {
                 case Precedence.LeftBindsTighter => boundary.break()
                 case Precedence.RightBindsTighter =>
@@ -1070,53 +1117,6 @@ class Parser(tokens: Seq[Token], source: Source) {
           }
         }
       left
-
-  def assignExpr(assignee: Term.Var): Term =
-    nonterminal:
-      peek.kind match {
-        case `=` =>
-          consume (`=`)
-          Assign (assignee.id, expr(), span() )
-        case `:=` =>
-          binaryOp (assignee, next(), expr() )
-        case _ => fail ("unreachable")
-      }
-
-  def callExpr(callee: Term): Term =
-    nonterminal:
-      var e = callee
-
-      while (peek(`.`) || isArguments) {
-        peek.kind match {
-          // member selection or method call
-          //   <EXPR>.<NAME>
-          // | <EXPR>.<NAME>( ... )
-          case `.` =>
-            val dot = peek
-            consume(`.`)
-            val member = idRef()
-            // method call
-            if (isArguments) {
-              val (targs, vargs, bargs) = arguments()
-              e = Term.MethodCall(e, member, targs, vargs, bargs, span())
-            } else {
-              e = Term.MethodCall(e, member, Nil, Nil, Nil, span())
-            }
-
-          // function call
-          case _ if isArguments =>
-            val callee = e match {
-              case Term.Var(id, _) => IdTarget(id)
-              case other => ExprTarget(other)
-            }
-            val (targs, vargs, bargs) = arguments()
-            e = Term.Call(callee, targs, vargs, bargs, span())
-
-          // nothing to do
-          case _ => ()
-        }
-      }
-      e
 
   inline def infix(nonTerminal: () => Term, ops: TokenKind*): Term =
     nonterminal:
