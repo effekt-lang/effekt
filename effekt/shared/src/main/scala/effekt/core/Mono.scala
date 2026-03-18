@@ -644,15 +644,17 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
 
 def monomorphize(clause: (Id, BlockLit), variant: Vector[Ground])(using ctx: MonoContext)(using Context, DeclarationContext): List[(Id, BlockLit)] = clause match
   case (id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
-    val newClauseNameMap = ctx.funNames.view.filterKeys((tid, groundTypes) => tid == id)
-    if (newClauseNameMap.isEmpty) {
+    val baseTypes = ctx.solution.getOrElse(id, Set.empty).toList
+    val relevantTypes = baseTypes.filter(tpes => tpes.startsWith(variant))
+    if (relevantTypes.isEmpty) {
       val monoBlockLit: Block.BlockLit = BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
       List((id, monoBlockLit))
     } else {
-      newClauseNameMap.filter((clauseKey, _) => clauseKey._2 == variant).map((clauseKey, monoId) =>
-        ctx.instantiateTparams(tparams, clauseKey._2.toList)
+      relevantTypes.map(baseType =>
+        val existentialBaseTypes = baseType.drop(variant.size)
+        ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
         val monoBlockLit: Block.BlockLit = BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
-        (monoId, monoBlockLit)
+        (ctx.funNames(id, baseType), monoBlockLit)
       ).toList
     }
 
