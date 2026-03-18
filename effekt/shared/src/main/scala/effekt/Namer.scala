@@ -528,7 +528,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           case source.Var(id, _) => Context.resolveTerm(id) match {
             // (foo: ValueType).bar(args)  = Call(bar, foo :: args)
             case symbol: ValueSymbol =>
-              if !Context.resolveOverloadedFunction(target)
+              if !Context.resolveOverloadedFunctionOrOperation(target)
               then Context.abort(pp"Cannot resolve function ${target}, called on a value receiver.")
 
             case symbol: RefBinder =>
@@ -1093,6 +1093,20 @@ trait NamerOps extends ContextOps { Context: Context =>
     val syms3 = if (syms2.isEmpty) List(scope.lookupFirstBlockParam(id.path, id.name)) else syms2
 
     if (syms3.nonEmpty) { assignSymbol(id, CallTarget(syms3.asInstanceOf)); true } else { false }
+  }
+
+  private[namer] def resolveOverloadedFunctionOrOperation(id: IdRef): Boolean = at(id) {
+    val fns = scope.lookupFunction(id.path, id.name)
+    val ops = scope.lookupOperation(id.path, id.name)
+    val both = fns ++ ops
+
+    // lookup first block param and do not collect multiple since we do not (yet?) permit overloading on block parameters
+    val all = if (both.isEmpty) List(scope.lookupFirstBlockParam(id.path, id.name)) else both
+    if (all.nonEmpty) {
+      assignSymbol(id, CallTarget(all.asInstanceOf)); true
+    } else {
+      false
+    }
   }
 
   /**
