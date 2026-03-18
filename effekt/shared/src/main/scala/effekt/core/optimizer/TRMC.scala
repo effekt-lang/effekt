@@ -40,11 +40,15 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
 
     Some(CoreTransformed(source, tree, mod, transformed))
     
-  enum status {
+  enum tailstatus {
     case Nothing
     case Tail
     case TailRecModCons
   }
+
+  def freeInStmt(id:Id, stmt: Stmt): Boolean = stmt.free.freeIds.contains(id)
+  def freeInExpr(id:Id, expr: Expr): Boolean = expr.free.freeIds.contains(id)
+  def freeInBlock(id:Id, block: Block): Boolean = block.free.freeIds.contains(id)
     
   def tailRecModCons(id: Id, block: Block): Boolean = { 
     if(id.name.name == "simpleTRMC"){
@@ -174,10 +178,37 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
 
   def trmc(id: Id, block: Block): Toplevel = {
     println("in trmc()")
-    Toplevel.Def(id: Id, block: Block)
+    block match {
+      case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Toplevel.Def(id: Id, block: Block)
+      case Block.BlockLit(tparams, cparams, vparams, bparams, body) => ???//Toplevel.Def(id: Id, Block.BlockLit(tparams, cparams, vparams, bparams, trmc(id,body,k)))
+      case Block.Unbox(pure) => Toplevel.Def(id: Id, block: Block)
+      case Block.New(impl) => Toplevel.Def(id: Id, block: Block)
+    }
+    
   }
   def trmc(id: Id, block: Block, body: Stmt): Stmt = {
     Def(id, block, body)
+  }
+  
+  def trmc(id: Id, stmt: Stmt, cont: Stmt): Stmt = stmt match {
+    case Stmt.Def(id, block, body) => ???
+    case Stmt.Let(id, binding, body) => ???
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
+    case Stmt.Return(expr) => ???
+    case Stmt.Val(id, binding, body) => ???
+    case Stmt.App(callee, targs, vargs, bargs) => ???
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
+    case Stmt.If(cond, thn, els) => ???
+    case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => ???
+    case Stmt.Region(body) => ???
+    case Stmt.Alloc(id, init, region, body) => ???
+    case Stmt.Var(ref, init, capture, body) => ???
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => ???
+    case Stmt.Put(ref, annotatedCapt, value, body) => ???
+    case Stmt.Reset(body) => ???
+    case Stmt.Shift(prompt, k, body) => ???
+    case Stmt.Resume(k, body) => ???
+    case Stmt.Hole(annotatedTpe, span) => ???
   }
 
 }
