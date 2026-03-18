@@ -69,7 +69,7 @@
 ; This is used for two purposes:
 ;   - a refied first-class list of stacks (cyclic linked-list)
 ;   - as part of an intrusive linked-list of stacks (meta stack)
-%StackValue = type { %ReferenceCount, %StackPointer, %Limit, %Prompt, %Stack }
+%StackValue = type { %ReferenceCount, %StackPointer, %Limit, %Prompt, %Stack, %Neg }
 
 
 
@@ -439,6 +439,18 @@ define private void @assumeFrameHeaderWasPopped(%Stack %stack) alwaysinline {
     ret void
 }
 
+define private %Neg @getCont(%Stack %stack) alwaysinline {
+    %cont_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 5
+    %cont = load %Neg, ptr %cont_pointer
+    ret %Neg %cont
+}
+
+define private void @setCont(%Neg %cont, %Stack %stack) alwaysinline {
+    %cont_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 5
+    store %Neg %cont, ptr %cont_pointer
+    ret void
+}
+
 ; Meta-stack management
 
 define private %Stack @reset(%Stack %oldStack) {
@@ -590,9 +602,11 @@ define private void @nop(%Stack %stack) {
 define private %Stack @copyStack(%Stack %stack) alwaysinline {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
+    %cont_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 5
 
     %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
     %limit = load %Limit, ptr %limit_pointer, !alias.scope !11, !noalias !21
+    %cont = load %Neg, ptr %cont_pointer, !alias.scope !11, !noalias !21
 
     %intStackPointer = ptrtoint %StackPointer %stackPointer to i64
     %intBase = ptrtoint %Stack %stack to i64
@@ -613,6 +627,7 @@ define private %Stack @copyStack(%Stack %stack) alwaysinline {
     store %Limit %newLimit, ptr %newLimit_pointer, !alias.scope !11, !noalias !21
 
     call void @shareFrames(%StackPointer %newStackPointer)
+    call void @shareNegative(%Neg %cont)
 
     %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %prompt = load %Prompt, ptr %prompt_pointer, !alias.scope !11, !noalias !21
@@ -701,10 +716,12 @@ define void @eraseStack(%Stack %stack) alwaysinline {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %rest_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
+    %cont_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 5
 
     %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
     %prompt = load %Stack, ptr %prompt_pointer, !alias.scope !11, !noalias !21
     %rest = load %Stack, ptr %rest_pointer, !alias.scope !11, !noalias !21
+    %cont = load %Neg, ptr %cont_pointer, !alias.scope !11, !noalias !21
 
     %promptStack_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
     %promptStack = load %Stack, ptr %promptStack_pointer, !alias.scope !13, !noalias !23
@@ -716,6 +733,7 @@ clearPrompt:
     br label %free
 
 free:
+    call void @eraseNegative(%Neg %cont)
     call void @eraseFrames(%StackPointer %stackPointer)
     call void @erasePrompt(%Prompt %prompt)
 
@@ -754,7 +772,7 @@ define private void @freeStack(%StackPointer %stackPointer) alwaysinline {
 
 ; RTS initialization
 
-define private tailcc void @topLevel(%Pos %val, %Stack %stack) {
+define private tailcc void @topLevel(ptr %obj, %Pos %val, %Stack %stack) {
     call %Stack @underflowStack(%Stack %stack)
     ret void
 }
@@ -769,23 +787,11 @@ define private void @topLevelEraser(%Environment %environment) {
     ret void
 }
 
+@topLevelVTable =  global [ 1 x ptr ] [ ptr @topLevel ]
+
 define private %Stack @withEmptyStack() {
     %stack = call %Stack @reset(%Stack null)
-
-    %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
-    %stackPointer = load %StackPointer, ptr %stackStackPointer, !alias.scope !11, !noalias !21
-
-    %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
-    %sharerPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 1
-    %eraserPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 2
-
-    store %ReturnAddress @topLevel, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
-    store %Sharer @topLevelSharer, ptr %sharerPointer, !alias.scope !12, !noalias !22
-    store %Eraser @topLevelEraser, ptr %eraserPointer, !alias.scope !12, !noalias !22
-
-    %stackPointer_2 = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 1
-    store %StackPointer %stackPointer_2, ptr %stackStackPointer, !alias.scope !11, !noalias !21
-
+    call void @setCont(%Neg { ptr @topLevelVTable, ptr null }, %Stack %stack)
     ret %Stack %stack
 }
 
@@ -796,10 +802,11 @@ define ccc void @resume_Int(%Stack %stack, %Int %integer) {
 }
 
 define ccc void @resume_Pos(%Stack %stack, %Pos %argument) {
-    %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
-    %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
-    %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
-    tail call tailcc void %returnAddress(%Pos %argument, %Stack %stack)
+    %cont = call %Neg @getCont(%Stack %stack)
+    %returnAddress_pointer = extractvalue %Neg %cont, 0
+    %object = extractvalue %Neg %cont, 1
+    %returnAddress = load ptr, ptr %returnAddress_pointer
+    tail call tailcc void %returnAddress(%Object %object, %Pos %argument, %Stack %stack)
     ret void
 }
 

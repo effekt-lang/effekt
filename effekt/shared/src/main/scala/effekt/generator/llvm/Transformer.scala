@@ -242,36 +242,38 @@ object Transformer {
         transform(rest)
 
       case machine.PushFrame(frame, rest) =>
-        val frameEnvironment = freeVariables(frame).toList;
+        val oldCont = freshName("oldCont")
+        val frameEnvironment = freeVariables(frame).toList ++ List(machine.Variable(oldCont, machine.Negative()));
 
         val returnAddressName = freshName("returnAddress");
-        val parameters = frame.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
-        defineLabel(returnAddressName, parameters) {
-          emit(Comment(s"pushFrame / return address, ${frameEnvironment.length} free variables"))
-          emit(Call("", Ccc(), VoidType(), ConstantGlobal("assumeFrameHeaderWasPopped"), List(getStack())))
-          popEnvironmentFrom(getStack(), frameEnvironment);
-          // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
-          eraseValues(frame.parameters, freeVariables(frame.body))
 
+        val parameters = frame.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
+        defineLabel(returnAddressName, Parameter(objectType, "closure") +: parameters) {
+          emit(Comment(s"pushFrame / return address, ${frameEnvironment.length} free variables"))
+          consumeObject(LocalReference(objectType, "closure"), frameEnvironment, frameEnvironment.toSet);
+          eraseValues(frame.parameters, freeVariables(frame.body))
+          emit(Call("_", Ccc(), VoidType(), setCont, List(LocalReference(negativeType, oldCont), getStack())))
           transform(frame.body);
         }
 
-        val sharer = getSharer(frameEnvironment, StackFrameSharer)
-        val eraser = getEraser(frameEnvironment, StackFrameEraser)
+        val vtableName = freshName("vtable")
+        emit(GlobalConstant(vtableName, ConstantArray(methodType, List(ConstantGlobal(returnAddressName)))))
 
-        shareValues(frameEnvironment, freeVariables(rest));
-        pushFrameOnto(getStack(), frameEnvironment, returnAddressName, sharer, eraser);
+        emit(Call(oldCont, Ccc(), negativeType, getCont, List(getStack())))
+        val vtable = produceObject(frameEnvironment, freeVariables(rest));
+        val temporaryName = freshName("vtable_temporary");
+        val newCont = LocalReference(negativeType, freshName("newCont"));
+        emit(InsertValue(temporaryName, ConstantAggregateZero(negativeType), ConstantGlobal(vtableName), 0));
+        emit(InsertValue(newCont.name, LocalReference(negativeType, temporaryName), vtable, 1));
 
+        emit(Call("_", Ccc(), VoidType(), setCont, List(newCont, getStack())))
         transform(rest)
 
       case machine.Return(values) =>
-        emit(Comment(s"return, ${values.length} values"))
-        shareValues(values, Set())
+        val cont = machine.Variable(freshName("cont"), machine.Type.Negative())
+        emit(Call(cont.name, Ccc(), negativeType, getCont, List(getStack())))
+        transform(machine.Invoke(cont, 0, values))
 
-        val returnAddress = LocalReference(returnAddressType, freshName("returnAddress"));
-        popReturnAddressFrom(getStack(), returnAddress.name);
-        emit(callLabel(returnAddress, values.map(transform)))
-        RetVoid()
 
       case machine.Reset(prompt, frame, rest) =>
         emit(Comment(s"Reset ${prompt.name}"))
@@ -279,17 +281,17 @@ object Transformer {
         val newStack = LocalReference(stackType, freshName("stack"))
         emit(Call(newStack.name, Ccc(), stackType, reset, List(getStack())));
         setStack(newStack)
+        pushFrameOnto(getStack(), Nil, "topLevel", getSharer(Nil, StackSharer), getEraser(Nil, StackEraser))
 
         emit(Call(prompt.name, Ccc(), promptType, currentPrompt, List(getStack())))
 
         val frameEnvironment = freeVariables(frame).toList;
 
-        val returnAddressName = freshName("returnAddress");
+        val returnAddressName = freshName("returnAddressReset");
         val parameters = frame.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
-        defineLabel(returnAddressName, parameters) {
+        defineLabel(returnAddressName, Parameter(objectType, "closure") +: parameters) {
           emit(Comment(s"Reset / return address, ${frameEnvironment.length} free variables"))
-          popEnvironmentFrom(getStack(), frameEnvironment);
-          // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
+          consumeObject(LocalReference(objectType, "closure"), frameEnvironment, freeVariables(frame));
           eraseValues(frame.parameters, freeVariables(frame.body));
 
           val nextStack = LocalReference(stackType, freshName("stack"));
@@ -299,12 +301,15 @@ object Transformer {
           transform(frame.body);
         }
 
-        val sharer = getSharer(frameEnvironment, StackSharer)
-        val eraser = getEraser(frameEnvironment, StackEraser)
+        val vtableName = freshName("vtable")
+        emit(GlobalConstant(vtableName, ConstantArray(methodType, List(ConstantGlobal(returnAddressName)))))
 
-        shareValues(frameEnvironment, freeVariables(rest));
-
-        pushFrameOnto(getStack(), frameEnvironment, returnAddressName, sharer, eraser);
+        val vtable = produceObject(frameEnvironment, freeVariables(rest));
+        val temporaryName = freshName("vtable_temporary");
+        val cont = LocalReference(negativeType, freshName("vtable_temporary"));
+        emit(InsertValue(temporaryName, ConstantAggregateZero(negativeType), ConstantGlobal(vtableName), 0));
+        emit(InsertValue(cont.name, LocalReference(negativeType, temporaryName), vtable, 1));
+        emit(Call("_", Ccc(), VoidType(), setCont, List(cont, getStack())))
 
         transform(rest)
 
@@ -990,6 +995,9 @@ object Transformer {
   val checkLimit = ConstantGlobal("checkLimit")
   val stackAllocate = ConstantGlobal("stackAllocate");
   val stackDeallocate = ConstantGlobal("stackDeallocate");
+  val setCont = ConstantGlobal("setCont");
+  val getCont = ConstantGlobal("getCont");
+
 
   /**
    * Extra info in context
