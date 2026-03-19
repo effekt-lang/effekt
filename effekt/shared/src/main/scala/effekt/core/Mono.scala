@@ -176,7 +176,7 @@ def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): MonoC
   // Maybe[T] { Just[](x: T) }
   case Data(id, tparams, constructors) =>
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
-    constructors.map{ constr =>
+    constructors.map { constr =>
       val arity = tparams.size // + constr.tparams.size
       val constructorArgs = (0 until arity).map(index =>
         TypeArg.Var(constr.id, index) // Just.0  
@@ -185,7 +185,13 @@ def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): MonoC
     }
   case Interface(id, tparams, properties) => 
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
-    properties flatMap findConstraints
+    properties.map { prop =>
+      val arity = tparams.size // + prop.tparams.size
+      val propArgs = (0 until arity).map(index =>
+        TypeArg.Var(prop.id, index) // Just.0  
+      ).toVector // < Just.0 >
+      MonoConstraint(propArgs, id) // < Just.0 > <: Maybe
+    } ++ (properties flatMap findConstraints)
 
 def findConstraints(extern: Extern)(using ctx: MonoFindContext): MonoConstraints = extern match {
   case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
@@ -255,9 +261,8 @@ def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): MonoConstraints = s
     List(MonoConstraint(newTargs.toVector, id)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ constraints
   case App(callee, targs, vargs, bargs) =>
     findConstraints(callee) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints)
-  // TODO: Maybe need to do something with methodTpe
-  case Invoke(callee: BlockVar, method, methodTpe, targs, vargs, bargs) => 
-    val (newTargs, constraints) = findConstraints(targs)
+  case Invoke(callee @ BlockVar(id, annotatedTpe: BlockType.Interface, annotatedCapt), method, methodTpe, targs, vargs, bargs) => 
+    val (newTargs, constraints) = findConstraints(annotatedTpe.targs ++ targs)
     List(MonoConstraint(newTargs.toVector, method)) ++ vargs.flatMap(findConstraints) ++ bargs.flatMap(findConstraints) ++ constraints
   case Invoke(Unbox(ValueVar(id, annotatedType)), method, methodTpe, targs, vargs, bargs) =>
     val (newTargs, constraints) = findConstraints(targs)
@@ -476,11 +481,13 @@ def monomorphize(decl: Declaration)(using ctx: MonoContext)(using DeclarationCon
 def monomorphize(property: Property, variant: Vector[Ground])(using ctx: MonoContext)(using DeclarationContext): List[Property] = property match {
   case Property(id, tpe@BlockType.Function(tparams, cparams, vparams, bparams, result)) => {
     val baseTypes = ctx.solution.getOrElse(id, Set.empty).toList
-    if (baseTypes.isEmpty) {
+    val relevantTypes = baseTypes.filter(tpes => tpes.startsWith(variant))
+    if (relevantTypes.isEmpty) {
       List(Property(id, monomorphize(tpe)))
     } else {
-      baseTypes.map(baseType => {
-        ctx.instantiateTparams(tparams, baseType.toList)
+      relevantTypes.map(baseType => {
+        val existentialBaseTypes = baseType.drop(variant.size)
+        ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
         Property(ctx.funNames((id, baseType)), monomorphize(tpe)) 
       })
     }
@@ -514,22 +521,25 @@ def monomorphize(block: Block)(using ctx: MonoContext)(using Context, Declaratio
   case Unbox(pure) => Unbox(monomorphize(pure))
 
 def monomorphize(impl: Implementation)(using ctx: MonoContext)(using Context, DeclarationContext): Implementation = impl match
-  case Implementation(interface, operations) =>
-    Implementation(monomorphize(interface), operations.flatMap(monomorphize))
+  case Implementation(BlockType.Interface(name, targs), operations) =>
+    val variant = (targs map toTypeArg).toVector
+    Implementation(BlockType.Interface(replacementFun(name, targs), List.empty), operations.flatMap(op => monomorphize(op, variant)))
 
 def monomorphize(interface: BlockType.Interface)(using ctx: MonoContext): BlockType.Interface = interface match
   case BlockType.Interface(name, targs) => 
     val funName = replacementFun(name, targs)
     BlockType.Interface(funName, List.empty)
 
-def monomorphize(operation: Operation)(using ctx: MonoContext)(using Context, DeclarationContext): List[Operation] = operation match
+def monomorphize(operation: Operation, variant: Vector[Ground])(using ctx: MonoContext)(using Context, DeclarationContext): List[Operation] = operation match
   case Operation(name, tparams, cparams, vparams, bparams, body) => 
-    val monoTypes = ctx.solution.getOrElse(name, Set.empty).toList
-    if (monoTypes.isEmpty) {
+    val baseTypes = ctx.solution.getOrElse(name, Set.empty).toList
+    val relevantTypes = baseTypes.filter(tpes => tpes.startsWith(variant))
+    if (relevantTypes.isEmpty) {
       List(Operation(name, List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body)))
     } else {
-      monoTypes.map(baseTypes =>
-        ctx.instantiateTparams(tparams, baseTypes.toList)
+      relevantTypes.map(baseTypes =>
+        val existentialBaseTypes = baseTypes.drop(variant.size)
+        ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
         Operation(ctx.funNames(name, baseTypes), List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
       )
     }
@@ -585,12 +595,11 @@ def monomorphize(stmt: Stmt)(using ctx: MonoContext)(using Context, DeclarationC
     If(monomorphize(cond), monomorphize(thn), monomorphize(els))
   case Invoke(Unbox(pure), method, methodTpe, targs, vargs, bargs) =>
     Invoke(Unbox(monomorphize(pure)), method, methodTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
-  case Invoke(BlockVar(id, annotatedTpe, annotatedCapt), method, BlockType.Function(tparams, cparams, vparams, bparams, result), targs, vargs, bargs) => 
-    val monoFnId = replacementFun(method, targs)
-    ctx.instantiateTparams(tparams, targs map toTypeArg)
-
+  case Invoke(BlockVar(id, annotatedTpe: BlockType.Interface, annotatedCapt), method, BlockType.Function(tparams, cparams, vparams, bparams, result), targs, vargs, bargs) => 
+    val combinedTargs = annotatedTpe.targs ++ targs
+    val replacementMethod = replacementFun(method, combinedTargs)
     val monoAnnotatedTpe = BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
-    Invoke(BlockVar(id, monomorphize(annotatedTpe), annotatedCapt), monoFnId, monoAnnotatedTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
+    Invoke(BlockVar(id, monomorphize(annotatedTpe), annotatedCapt), replacementMethod, monoAnnotatedTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
   case Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
     Invoke(monomorphize(callee), method, methodTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
   case Resume(k, body) =>
