@@ -120,10 +120,10 @@ def pretty(constr: MonoConstraint): String = {
 }
 
 def pretty(tpeArg: TypeArg): String = tpeArg match {
-  case TypeArg.Base(tpe, List()) => tpe.name.name
-  case TypeArg.Base(tpe, targs) => tpe.name.name + "[" + targs.map(pretty).mkString(", ") + "]"
+  case TypeArg.Base(tpe, List()) => tpe.name.name + "_" + tpe.id
+  case TypeArg.Base(tpe, targs) => tpe.name.name + "_"  + tpe.id + "[" + targs.map(pretty).mkString(", ") + "]"
   case TypeArg.Boxed(tpe, capt) => "BOXED"
-  case TypeArg.Var(funId, pos) => funId.name.name + "." + pos
+  case TypeArg.Var(funId, pos) => funId.name.name + "_" + funId.id + "." + pos
 }
 
 def pretty(solution: Solution): String = {
