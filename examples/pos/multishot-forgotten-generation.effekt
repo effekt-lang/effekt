@@ -1,0 +1,18 @@
+effect flip(): Bool
+
+// See #1329
+def main(): Unit = {
+  val result: Int = 
+    try {
+      var x = 0
+      val b = do flip()
+      x = x + 1            // unconditional write triggers the bug
+      x + (if (b) 10 else 20)
+    } with flip {
+      val a = resume(true)   // resume 1: x goes 0 ~> 1, returns 11
+      val b = resume(false)  // resume 2: x badly restored to 0, x goes 0 ~> 1, returns 21
+      val c = resume(true)   // resume 3: x stays 1, goes 1 ~> 2, returns 12 <== BUG!
+      a + b + c
+    }
+  println(result)
+}
