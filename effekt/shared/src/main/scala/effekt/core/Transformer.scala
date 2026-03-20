@@ -128,15 +128,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     core.Constructor(c, c.tparams.drop(c.tpe.tparams.size), c.fields.map(f => core.Field(f, transform(f.returnType))))
 
   def transform(tree: source.Stmt)(using Context): Stmt = coercing(tree) {
-    // { e; stmt } --> { let _ = e; stmt }
-    // TODO this doesn't preserve termination
+    // { e; stmt } --> { stmt }
     case source.ExprStmt(e, rest, span) if isPure(e) =>
       transform(rest)
 
     // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest, span) =>
-      val binding = insertBindings { Return(transformAsExpr(e)) }
-      Val(Wildcard(), binding, transform(rest))
+      insertBindings {
+        transformAsExpr(e)
+        transform(rest)
+      }
 
     // return e
     case source.Return(e, span) =>
