@@ -813,11 +813,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transform(p: source.ValueParam)(using Context): core.ValueParam = ValueParam(p.symbol)
 
-  def insertBindings(stmt: => Stmt)(using Context): Stmt = {
-    val (body, bindings) = Context.withBindings { stmt }
-    Binding(bindings, body)
-  }
-
   // Translation on Types
   // --------------------
   def transform(tpe: ValueType)(using Context): core.ValueType = tpe match {
@@ -855,19 +850,19 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   // -------
   // Helpers to construct typed trees
 
-  def ValueParam(id: ValueSymbol)(using Context): core.ValueParam =
+  private def ValueParam(id: ValueSymbol)(using Context): core.ValueParam =
     core.ValueParam(id, transform(Context.valueTypeOf(id)))
 
-  def BlockParam(id: TrackedParam)(using Context): core.BlockParam =
+  private def BlockParam(id: TrackedParam)(using Context): core.BlockParam =
     core.BlockParam(id, transform(Context.blockTypeOf(id)), Set(id.capture))
 
-  def ValueVar(id: ValueSymbol)(using Context): core.ValueVar =
+  private def ValueVar(id: ValueSymbol)(using Context): core.ValueVar =
     core.ValueVar(id, transform(Context.valueTypeOf(id)))
 
-  def BlockVar(id: BlockSymbol)(using Context): core.BlockVar =
+  private def BlockVar(id: BlockSymbol)(using Context): core.BlockVar =
     core.BlockVar(id, transform(Context.blockTypeOf(id)), transform(Context.captureOf(id)))
 
-  def asConcreteCaptureSet(c: Captures)(using Context): CaptureSet = c match {
+  private def asConcreteCaptureSet(c: Captures)(using Context): CaptureSet = c match {
     case c: CaptureSet => c
     case _ => Context.panic("All capture unification variables should have been replaced by now.")
   }
@@ -927,6 +922,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Context.bind(core.Stmt.Match(result, transform(to), Nil, None))
       case None => result
     }
+
+  private def insertBindings(stmt: => Stmt)(using Context): Stmt = {
+    val (body, bindings) = Context.withBindings { stmt }
+    Binding(bindings, body)
+  }
 }
 
 trait TransformerOps extends ContextOps { Context: Context =>
@@ -970,12 +970,12 @@ trait TransformerOps extends ContextOps { Context: Context =>
   }
 
   private[core] def bind(callee: Block.BlockVar, targs: List[core.ValueType], vargs: List[Expr], bargs: List[Block]): ValueVar = {
-      // create a fresh symbol and assign the type
-      val x = TmpValue("r")
-      val binding: Binding.ImpureApp = Binding.ImpureApp(x, callee, targs, vargs, bargs)
-      bindings += binding
+    // create a fresh symbol and assign the type
+    val x = TmpValue("r")
+    val binding: Binding.ImpureApp = Binding.ImpureApp(x, callee, targs, vargs, bargs)
+    bindings += binding
 
-      ValueVar(x, Type.bindingType(binding))
+    ValueVar(x, Type.bindingType(binding))
   }
 
   private[core] def bind(name: BlockSymbol, b: Block): BlockVar = {
