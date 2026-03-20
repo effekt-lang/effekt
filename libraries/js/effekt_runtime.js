@@ -135,6 +135,27 @@ function RESUME(cont, c, ks, k) {
   return () => c(meta, k1)
 }
 
+let _depth = 0
+
+function THUNK_K(k, v, ks) {
+  const threshold = 1000
+  if (_depth >= threshold) {
+    return () => k(v, ks)
+  } else {
+    _depth += 1
+    return k(v, ks)
+  }
+}
+
+function THUNK(prog) {
+  if (_depth >= threshold) {
+    return () => prog()
+  } else {
+    _depth += 1
+    return prog()
+  }
+}
+
 function RUN_TOPLEVEL(comp) {
   try {
     let a = comp(TOPLEVEL_KS, TOPLEVEL_K)
