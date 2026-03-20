@@ -47,6 +47,7 @@
                    [r (diff-ref realDiff)]
                    [oldValue (ref-value r)])
                 (ref-value-set! r (diff-value realDiff))
+                (ref-generation-set! r (diff-generation realDiff))
                 (set-box! n (make-diff r oldValue (ref-generation r) currentDiff))
                 (applyDiffs currentDiff (cdr diffs)))]))
 
@@ -60,7 +61,8 @@
            [store (snap-store snap)]
            [storeRoot (store-root store)])
         (reroot snapRoot storeRoot)
-        (store-root-set! store snapRoot)))
+        (store-root-set!       store snapRoot)
+        (store-generation-set! store (+ (snap-generation snap) 1))))
 
 ; Cont a = a, MetaCont -> #
 ; Prompt = Int
