@@ -27,22 +27,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Some(CoreTransformed(source, tree, mod, transformed))
     }
 
-  enum CallingConvention {
-    case Pure, Direct, Control
-  }
-  def callingConvention(callable: Callable)(using Context): CallingConvention = callable match {
-    case f @ ExternFunction(name, _, _, _, _, _, capture, bodies, _) =>
-      // resolve the preferred body again and hope it's the same
-      val body = ResolveExternDefs.findPreferred(bodies)
-      body match {
-        case b: source.ExternBody.EffektExternBody => CallingConvention.Control
-        case _ if f.capture.pure => CallingConvention.Pure
-        case _ if f.capture.pureOrIO => CallingConvention.Direct
-        case _ => CallingConvention.Control
-      }
-    case _ => CallingConvention.Control
-  }
-
   def transform(mod: Module, tree: source.ModuleDecl)(using Context): ModuleDecl = Context.using(mod) {
     val source.ModuleDecl(path, imports, defs, doc, span) = tree
     val exports = transform(mod.exports)
@@ -868,8 +852,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   // Helpers
   // -------
+  // Helpers to construct typed trees
 
-  // Helpers to constructed typed trees
   def ValueParam(id: ValueSymbol)(using Context): core.ValueParam =
     core.ValueParam(id, transform(Context.valueTypeOf(id)))
 
@@ -887,21 +871,37 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case _ => Context.panic("All capture unification variables should have been replaced by now.")
   }
 
+  private enum CallingConvention {
+    case Pure, Direct, Control
+  }
+  private def callingConvention(callable: Callable)(using Context): CallingConvention = callable match {
+    case f @ ExternFunction(name, _, _, _, _, _, capture, bodies, _) =>
+      // resolve the preferred body again and hope it's the same
+      val body = ResolveExternDefs.findPreferred(bodies)
+      body match {
+        case b: source.ExternBody.EffektExternBody => CallingConvention.Control
+        case _ if f.capture.pure => CallingConvention.Pure
+        case _ if f.capture.pureOrIO => CallingConvention.Direct
+        case _ => CallingConvention.Control
+      }
+    case _ => CallingConvention.Control
+  }
+
   // we can conservatively approximate to false, in order to disable the optimizations
-  def isPureOrIO(t: source.Tree)(using Context): Boolean =
+  private def isPureOrIO(t: source.Tree)(using Context): Boolean =
     Context.inferredCaptureOption(t) match {
       case Some(capt) => asConcreteCaptureSet(capt).pureOrIO
       case _         => false
     }
 
-  def isPure(t: source.Tree)(using Context): Boolean = Context.inferredCaptureOption(t) match {
+  private def isPure(t: source.Tree)(using Context): Boolean = Context.inferredCaptureOption(t) match {
     case Some(capt) => asConcreteCaptureSet(capt).pure
     case _         => false
   }
 
-  def pureOrIO(t: BlockSymbol)(using Context): Boolean = asConcreteCaptureSet(Context.captureOf(t)).pureOrIO
+  private def pureOrIO(t: BlockSymbol)(using Context): Boolean = asConcreteCaptureSet(Context.captureOf(t)).pureOrIO
 
-  def coercing[T <: source.Tree](tree: T)(f: T => Stmt)(using Context): Stmt =
+  private def coercing[T <: source.Tree](tree: T)(f: T => Stmt)(using Context): Stmt =
     val result = f(tree)
     Context.annotationOption(Annotations.ShouldCoerce, tree) match {
       case Some(Coercion.ToAny(from)) =>
@@ -917,7 +917,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case None => result
     }
 
-  def coercing[T <: source.Tree](tree: T)(f: T => Expr)(using Context): Expr =
+  private def coercing[T <: source.Tree](tree: T)(f: T => Expr)(using Context): Expr =
     val result = f(tree)
     Context.annotationOption(Annotations.ShouldCoerce, tree) match {
       case Some(Coercion.ToAny(from)) =>
