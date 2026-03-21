@@ -23,6 +23,7 @@ object TransformerCps extends Transformer {
   val THUNK = Variable(JSName("THUNK"))
   val DEALLOC = Variable(JSName("DEALLOC"))
   val TRAMPOLINE = Variable(JSName("TRAMPOLINE"))
+  val VAR = Variable(JSName("VAR"))
 
   class RecursiveUsage(var jumped: Boolean)
   case class RecursiveDefInfo(id: Id, label: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, used: RecursiveUsage)
@@ -411,10 +412,10 @@ object TransformerCps extends Transformer {
           toJS(body).run(k)
       }
 
-    // const x = ks.arena.fresh(1); body
+    // const x = VAR(1, ks); body
     case cps.Stmt.Var(id, init, ks, body) =>
       Binding { k =>
-        js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("fresh"), toJS(init))) ::
+        js.Const(nameDef(id), js.Call(VAR, List(toJS(init), toJS(ks)))) ::
           toJS(body).run(k)
       }
 
