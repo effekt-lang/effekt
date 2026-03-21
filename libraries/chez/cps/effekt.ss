@@ -65,7 +65,7 @@
         (store-generation-set! store (+ (snap-generation snap) 1))))
 
 ; Cont a = a, MetaCont -> #
-; Prompt = Int
+; Prompt = Symbol
 
 ; MetaCont = Cont * Prompt * Store | Snapshot * MetaCont?
 ; Holds a "copy" of k, as well as its prompt and store
@@ -104,14 +104,8 @@
 ; Ref | MetaCont -> void
 (define (deallocate _) (void))
 
-(define _prompt 1)
-(define (new-prompt)
-    (let ([prompt _prompt])
-         (set! _prompt (+ prompt 1))
-         prompt))
-
 (define (top-level-k x _) x)
-(define top-level-ks (make-meta-cont top-level-k 0 (create-store) '()))
+(define top-level-ks (make-meta-cont top-level-k (gensym "toplevel") (create-store) '()))
 
 ; a, MetaCont -> #
 (define (return x ks)
@@ -123,7 +117,7 @@
 
 ; Program Prompt b, MetaCont, Cont b -> #
 (define (reset prog ks k)
-    (let ([prompt (new-prompt)])
+    (let ([prompt (gensym)])
          (meta-cont-cont-set! ks k)
          (prog prompt (make-meta-cont return prompt (create-store) ks) return)))
 
