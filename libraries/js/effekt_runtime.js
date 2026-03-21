@@ -6,6 +6,9 @@
 //  restore: O(|write operations since capture|)
 const Mem = null
 
+// reusable buffer for rerooting
+const _rerootPath = []
+
 function Arena() {
   const s = {
     root: { value: Mem },
@@ -46,25 +49,36 @@ function snapshot(s) {
   return snap
 }
 
-function reroot(n) {
-  if (n.value === Mem) return;
+function reroot(target) {
+  // 1. Walk from target toward the Mem node, collecting the path into `_rerootPath`
+  _rerootPath.length = 0
+  let cur = target
+  while (cur.value !== Mem) {
+    _rerootPath.push(cur)
+    cur = cur.value.root
+  }
+  // cur is now Mem (the current root)
 
-  const diff = n.value
-  const r = diff.ref
-  const v = diff.value
-  const g = diff.generation
-  const n2 = diff.root
-  reroot(n2)
-  n.value = Mem
-  n2.value = { ref: r, value: r.value, generation: r.generation, root: n}
-  r.value = v
-  r.generation = g
+  // 2. Walk back from current root toward target,
+  //    reverse each edge, restore each ref.
+  for (let i = _rerootPath.length - 1; i >= 0; i--) {
+    const node   = _rerootPath[i]
+    const diff   = node.value // forward diff
+    const r      = diff.ref
+    cur.value    = { ref: r, value: r.value, generation: r.generation, root: node }
+    r.value      = diff.value      // restore ref's old value
+    r.generation = diff.generation //  ... and old generation
+    node.value   = Mem
+    cur          = node
+  }
 }
 
 function restore(store, snap) {
-  // linear in the number of modifications...
-  reroot(snap.root)
-  store.root = snap.root
+  if (snap.root.value !== Mem) {
+    // fast path: continuation is resumed immediately with no writes in between
+    reroot(snap.root)
+    store.root = snap.root
+  }
   store.generation = snap.generation + 1
 }
 
