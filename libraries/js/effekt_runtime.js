@@ -102,6 +102,11 @@ function VAR(init, ks) {
   return ks.arena.fresh(init)
 }
 
+function REGION(ks) {
+  if (ks.arena === null) ks.arena = Arena()
+  return ks.arena.newRegion()
+}
+
 function CAPTURE(body) {
   return (ks, k) => {
     const res = body(x => TRAMPOLINE(() => k(x, ks)))
