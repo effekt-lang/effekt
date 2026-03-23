@@ -138,7 +138,7 @@ function RESUME(cont, c, ks, k) {
 let _depth = 0
 
 function THUNK_K(k, v, ks) {
-  const threshold = 1000
+  const threshold = 512
   if (_depth >= threshold) {
     return () => k(v, ks)
   } else {
