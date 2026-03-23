@@ -332,22 +332,35 @@ case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: Li
 
 /**
  * Bindings are not part of the tree but used in transformations
+ *
+ * Invariant: all intrusive linked lists (like Val) should appear here as non-intrusive where
+ *   the body / rest is implicit.
  */
 private[core] enum Binding {
   case Val(id: Id, binding: Stmt)
   case Let(id: Id, binding: Expr)
   case ImpureApp(id: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
   case Def(id: Id, binding: Block)
+  case Alloc(id: Id, init: Expr, region: Id)
+  case Var(ref: Id, init: Expr, capture: Id)
+  case Get(id: Id, annotatedTpe: ValueType, ref: Id, annotatedCapt: Captures)
+  case Put(ref: Id, annotatedCapt: Captures, value: Expr)
 
-  def id: Id
+  def toStmt(rest: Stmt): Stmt = this match {
+    case Binding.Val(id, binding) => Stmt.Val(id, binding, rest)
+    case Binding.Let(id, binding) => Stmt.Let(id, binding, rest)
+    case Binding.ImpureApp(id, callee, targs, vargs, bargs) => Stmt.ImpureApp(id, callee, targs, vargs, bargs, rest)
+    case Binding.Def(id, binding) => Stmt.Def(id, binding, rest)
+    case Binding.Alloc(id, init, region) => Stmt.Alloc(id, init, region, rest)
+    case Binding.Var(ref, init, capture) => Stmt.Var(ref, init, capture, rest)
+    case Binding.Get(id, annotatedTpe, ref, annotatedCapt) => Stmt.Get(id, annotatedTpe, ref, annotatedCapt, rest)
+    case Binding.Put(ref, annotatedCapt, value) => Stmt.Put(ref, annotatedCapt, value, rest)
+  }
 }
 private[core] object Binding {
   def apply(bindings: List[Binding], body: Stmt): Stmt = bindings match {
     case Nil => body
-    case Binding.Val(name, binding) :: rest => Stmt.Val(name, binding, Binding(rest, body))
-    case Binding.Let(name, binding) :: rest => Stmt.Let(name, binding, Binding(rest, body))
-    case Binding.ImpureApp(name, callee, targs, vargs, bargs) :: rest => Stmt.ImpureApp(name, callee, targs, vargs, bargs, Binding(rest, body))
-    case Binding.Def(name, binding) :: rest => Stmt.Def(name, binding, Binding(rest, body))
+    case binding :: rest => binding.toStmt(Binding(rest, body))
   }
 
   def toToplevel(b: Binding): Toplevel = b match {
@@ -355,6 +368,10 @@ private[core] object Binding {
     case Binding.Let(name, binding) => ??? //Toplevel.Val(name, tpe, Stmt.Return(binding))
     case Binding.ImpureApp(name, callee, targs, vargs, bargs) => ??? //Toplevel.Val(name, tpe, ???)
     case Binding.Def(name, binding) => Toplevel.Def(name, binding)
+    case Binding.Alloc(name, init, region) => ???
+    case Binding.Var(ref, init, capture) => ???
+    case Binding.Get(id, annotatedTpe, ref, annotatedCapt) => ???
+    case Binding.Put(ref, annotatedCapt, value) => ???
   }
 }
 
@@ -981,5 +998,36 @@ object substitutions {
 
   def substitute(capt: Captures)(using subst: Substitution): Captures =
     Type.substitute(capt, subst.captures)
+
+  def substitute(binding: Binding)(using subst: Substitution): Binding =
+    binding match {
+      case Binding.Val(id, binding) =>
+        Binding.Val(id, substitute(binding))
+
+      case Binding.Let(id, binding) =>
+        Binding.Let(id, substitute(binding))
+
+      case Binding.ImpureApp(id, callee, targs, vargs, bargs) =>
+        substitute(callee) match {
+          case g: Block.BlockVar =>
+            Binding.ImpureApp(id, g, targs.map(substitute), vargs.map(substitute), bargs.map(substitute))
+          case _ => INTERNAL_ERROR("Should never substitute a concrete block for an FFI function.")
+        }
+
+      case Binding.Def(id, binding) =>
+        Binding.Def(id, substitute(binding)(using subst shadowBlocks List(id)))
+
+      case Binding.Alloc(id, init, region) =>
+        Binding.Alloc(id, substitute(init), substituteAsVar(region))
+
+      case Binding.Var(ref, init, capture) =>
+        Binding.Var(ref, substitute(init), capture)
+
+      case Binding.Get(id, annotatedTpe, ref, annotatedCapt) =>
+        Binding.Get(id, substitute(annotatedTpe), substituteAsVar(ref), substitute(annotatedCapt))
+
+      case Binding.Put(ref, annotatedCapt, value) =>
+        Binding.Put(substituteAsVar(ref), substitute(annotatedCapt), substitute(value))
+    }
 }
 

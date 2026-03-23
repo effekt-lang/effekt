@@ -152,28 +152,28 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         val cparams = bps.map { b => b.symbol.capture }
         val vparams = vps map transform
         val bparams = bps map transform
-        Context.emitDef(f.symbol, BlockLit(tparams.unspan, cparams.unspan, vparams.unspan, bparams.unspan,
-          insertBindings { transform(body) }))
+        Context.emit(Binding.Def(f.symbol, BlockLit(tparams.unspan, cparams.unspan, vparams.unspan, bparams.unspan,
+          insertBindings { transform(body) })))
 
         transform(rest)
 
       case v @ source.ValDef(id, tpe, binding, doc, span) =>
-        Context.emitVal(v.symbol, insertBindings { transform(binding) })
+        Context.emit(Binding.Val(v.symbol, insertBindings { transform(binding) }))
         transform(rest)
 
       case v @ source.DefDef(id, captures, annot, binding, doc, span) =>
-        Context.emitDef(v.symbol, transformAsBlock(binding))
+        Context.emit(Binding.Def(v.symbol, transformAsBlock(binding)))
         transform(rest)
 
       case v @ source.RegDef(id, _, reg, binding, doc, span) =>
         val sym = v.symbol
-        Alloc(sym, Context.bind(transform(binding)), sym.region,
-          insertBindings { transform(rest) })
+        Context.emit(Binding.Alloc(sym, Context.bind(transform(binding)), sym.region))
+        transform(rest)
 
       case v @ source.VarDef(id, _, binding, doc, span) =>
         val sym = v.symbol
-        Var(sym, Context.bind(transform(binding)), sym.capture,
-          insertBindings { transform(rest) })
+        Context.emit(Binding.Var(sym, Context.bind(transform(binding)), sym.capture))
+        transform(rest)
 
       case d: source.Def.Extern => Context.panic("Only allowed on the toplevel")
       case d: source.Def.Declaration => Context.panic("Only allowed on the toplevel")
@@ -302,7 +302,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         val tpe = TState.extractType(stateType)
         val stateId = Id("s")
         // emits `let s = !ref; return s`
-        Context.bind(Get(stateId, transform(tpe), sym, transform(Context.captureOf(sym)), Return(core.ValueVar(stateId, transform(tpe)))))
+        Context.emit(Binding.Get(stateId, transform(tpe), sym, transform(Context.captureOf(sym))))
+        core.ValueVar(stateId, transform(tpe))
       case sym: ValueSymbol => ValueVar(sym)
       case sym: BlockSymbol => transformBox(tree)
     }
@@ -443,7 +444,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case a @ source.Assign(id, expr, _) =>
       val sym = a.definition
       // emits `ref := value; return ()`
-      Context.bind(Put(sym, transform(Context.captureOf(sym)), transformAsExpr(expr), Return(Literal((), core.Type.TUnit))))
+      Context.emit(Binding.Put(sym, transform(Context.captureOf(sym)), transformAsExpr(expr)))
       Literal((), core.Type.TUnit)
 
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
@@ -693,12 +694,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             Condition.Patterns(Map(x -> transformPattern(pattern)))
         }
       }
-      bindings.map {
-        case Binding.Val(name, binding) => Condition.Val(name, binding)
-        case Binding.Let(name, binding) => Condition.Let(name, binding)
-        case Binding.ImpureApp(name, callee, targs, vargs, bargs) => Condition.ImpureApp(name, callee, targs, vargs, bargs)
-        case Binding.Def(name, binding) => Context.panic("Should not happen")
-      } :+ cond
+      bindings.map(b => Condition.Run(b)) :+ cond
 
     val transformedPatterns = patterns.map { case (sc, p) => sc -> transformPattern(p) }.toMap
     val transformedGuards   = guards.flatMap(transformGuard)
@@ -962,11 +958,8 @@ trait TransformerOps extends ContextOps { Context: Context =>
     BlockVar(name, b.tpe, b.capt)
   }
 
-  private[core] def emitDef(id: Id, binding: Block): Unit =
-    bindings += Binding.Def(id, binding)
-
-  private[core] def emitVal(id: Id, binding: Stmt): Unit =
-    bindings += Binding.Val(id, binding)
+  private[core] def emit(binding: Binding): Unit =
+    bindings += binding
 
   private[core] def withBindings[R](block: => R): (R, List[Binding]) = Context in {
     val before = bindings

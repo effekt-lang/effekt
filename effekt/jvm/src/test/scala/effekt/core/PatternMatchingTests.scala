@@ -70,7 +70,7 @@ class PatternMatchingTests extends CoreTests {
       Clause(
         List(
           Condition.Patterns(Map(sc -> Pattern.Any(x.id))),
-          Condition.Val(p.id, trivalPredicate),
+          Condition.Run(Binding.Val(p.id, trivalPredicate)),
           Condition.Predicate(p)),
         b1, Nil, List(x)),
       Clause(
@@ -124,7 +124,7 @@ class PatternMatchingTests extends CoreTests {
       Clause(
         List(
           Condition.Patterns(Map(opt -> Pattern.Tag(SomeC, List(), List(SomeC, NoneC), List(Pattern.Any(v.id) -> TInt)))),
-          Condition.Val(p.id, trivalPredicate),
+          Condition.Run(Binding.Val(p.id, trivalPredicate)),
           Condition.Predicate(p)),
         b1, Nil, List(v)),
       Clause(
