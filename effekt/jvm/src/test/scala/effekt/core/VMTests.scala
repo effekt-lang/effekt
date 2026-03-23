@@ -722,12 +722,12 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "casestudies" / "inference.effekt.md" -> Some(Summary(
-      staticDispatches = 1482053,
+      staticDispatches = 1482058,
       dynamicDispatches = 3224986,
       patternMatches = 1497945,
       branches = 304507,
-      pushedFrames = 2643313,
-      poppedFrames = 2066048,
+      pushedFrames = 2643318,
+      poppedFrames = 2066053,
       allocations = 4654131,
       closures = 867079,
       variableReads = 2955965,
