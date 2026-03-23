@@ -1,46 +1,60 @@
-// Complexity of state:
-//
-//  get: O(1)
-//  set: O(1)
-//  capture: O(1)
-//  restore: O(|write operations since capture|)
+
+// Sentinel: a node whose .value is Mem is the current root.
 const Mem = null
 
 // reusable buffer for rerooting
 const _rerootPath = []
 
-function Arena() {
-  const s = {
-    root: { value: Mem },
-    generation: 0,
-    fresh: (v) => {
-      const r = {
-        value: v,
-        generation: s.generation,
-        store: s,
-        set: (v) => {
-          const s = r.store
-          const r_gen = r.generation
-          const s_gen = s.generation
+/**
+ * A mutable reference inside an `Arena`.
+ */
+class Ref {
+  constructor(v, s) {
+    this.value = v;
+    this.generation = s.generation;
+    this.store = s;
+  }
 
-          if (r_gen == s_gen) {
-            r.value = v;
-          } else {
-            const root = { value: Mem }
-            // update store
-            s.root.value = { ref: r, value: r.value, generation: r_gen, root: root }
-            s.root = root
-            r.value = v
-            r.generation = s_gen
-          }
-        }
-      };
-      return r
-    },
-    // not implemented
-    newRegion: () => s
-  };
-  return s
+  set(v) {
+    const s     = this.store;
+    const r_gen = this.generation;
+    const s_gen = s.generation;
+    if (r_gen === s_gen) {
+      this.value = v;
+    } else {
+      const root   = { value: Mem };
+      s.root.value = { ref: this, value: this.value, generation: r_gen, root };
+
+      s.root          = root;
+      this.value      = v;
+      this.generation = s_gen;
+    }
+  }
+}
+
+/**
+ * A snapshottable arena: a bag of `Ref`s whose collective state can be
+ * captured in O(1) and restored in O(#writes since capture).
+ */
+class Arena {
+  constructor() {
+    this.root       = { value: Mem };
+    this.generation = 0;
+  }
+
+  /**
+   * Allocate a new reference with initial value v.
+   */
+  fresh(v) {
+    return new Ref(v, this);
+  }
+
+  /**
+   * Region support (not implemented!).
+   */
+  newRegion() {
+    return this;
+  }
 }
 
 function snapshot(s) {
@@ -87,7 +101,7 @@ function restore(store, snap) {
 let _prompt = 1;
 
 const TOPLEVEL_K = (x, ks) => { throw { computationIsDone: true, result: x } }
-const TOPLEVEL_KS = { prompt: 0, arena: Arena(), rest: null }
+const TOPLEVEL_KS = { stack: null, prompt: 0, arena: new Arena(), rest: null }
 
 function THUNK(f) {
   f.thunk = true
@@ -108,7 +122,7 @@ const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 function RESET(prog, ks, k) {
   const prompt = _prompt++;
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  return prog(prompt, { prompt, arena: Arena([]), rest }, RETURN)
+  return prog(prompt, { stack: null, prompt, arena: new Arena(), rest }, RETURN)
 }
 
 function SHIFT(p, body, ks, k) {
