@@ -82,6 +82,9 @@ function restore(store, snap) {
   store.generation = snap.generation + 1
 }
 
+// Sentinel snapshot used for null arenas — restoring it is always a no-op.
+const NULL_SNAP = { root: { value: Mem }, generation: -1 }
+
 // Common Runtime
 // --------------
 let _prompt = 1;
@@ -92,6 +95,16 @@ const TOPLEVEL_KS = { prompt: 0, arena: Arena(), rest: null }
 function THUNK(f) {
   f.thunk = true
   return f
+}
+
+function VAR(init, ks) {
+  if (ks.arena === null) ks.arena = Arena()
+  return ks.arena.fresh(init)
+}
+
+function REGION(ks) {
+  if (ks.arena === null) ks.arena = Arena()
+  return ks.arena.newRegion()
 }
 
 function CAPTURE(body) {
@@ -108,7 +121,8 @@ const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 function RESET(prog, ks, k) {
   const prompt = _prompt++;
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  return prog(prompt, { prompt, arena: Arena([]), rest }, RETURN)
+  // arena: null; only materialised on first VAR in this handler scope
+  return prog(prompt, { stack: null, prompt, arena: null, rest }, RETURN)
 }
 
 function SHIFT(p, body, ks, k) {
@@ -119,14 +133,20 @@ function SHIFT(p, body, ks, k) {
 
   while (!!meta && meta.prompt !== p) {
     let store = meta.arena
-    cont = { stack: meta.stack, prompt: meta.prompt, arena: store, backup: snapshot(store), rest: cont }
+    // If this handler scope never called VAR, its arena is null.
+    // We still capture the frame, but use a no-op sentinel snapshot.
+    cont = { stack: meta.stack, prompt: meta.prompt, arena: store,
+             backup: store !== null ? snapshot(store) : NULL_SNAP,
+             rest: cont }
     meta = meta.rest
   }
   if (!meta) { throw `Prompt not found ${p}` }
 
   // package the prompt itself
   let store = meta.arena
-  cont = { stack: meta.stack, prompt: meta.prompt, arena: store, backup: snapshot(store), rest: cont }
+  cont = { stack: meta.stack, prompt: meta.prompt, arena: store,
+           backup: store !== null ? snapshot(store) : NULL_SNAP,
+           rest: cont }
   meta = meta.rest
 
   const k1 = meta.stack
@@ -139,7 +159,10 @@ function RESUME(cont, c, ks, k) {
   let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
   let toRewind = cont
   while (!!toRewind) {
-    restore(toRewind.arena, toRewind.backup)
+    // arena is null when this handler scope never called VAR ~> skip restore entirely
+    if (toRewind.arena !== null) {
+      restore(toRewind.arena, toRewind.backup)
+    }
     meta = { stack: toRewind.stack, prompt: toRewind.prompt, arena: toRewind.arena, rest: meta }
     toRewind = toRewind.rest
   }

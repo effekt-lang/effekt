@@ -23,6 +23,8 @@ object TransformerCps extends Transformer {
   val THUNK = Variable(JSName("THUNK"))
   val DEALLOC = Variable(JSName("DEALLOC"))
   val TRAMPOLINE = Variable(JSName("TRAMPOLINE"))
+  val VAR = Variable(JSName("VAR"))
+  val REGION = Variable(JSName("REGION"))
 
   class RecursiveUsage(var jumped: Boolean)
   case class RecursiveDefInfo(id: Id, label: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, used: RecursiveUsage)
@@ -397,24 +399,25 @@ object TransformerCps extends Transformer {
       val args = vargs.map(toJS) ++ bargs.map(argumentToJS) ++ List(toJS(ks), toJS(k))
       pure(js.Return(MethodCall(toJS(callee), memberNameRef(method), args:_*)) :: Nil)
 
-    // const r = ks.arena.newRegion(); body
+    // const r = REGION(ks); body
     case cps.Stmt.Region(id, ks, body) =>
       Binding { k =>
-        js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("newRegion"))) ::
+        js.Const(nameDef(id), js.Call(REGION, List(toJS(ks)))) ::
           toJS(body).run(k)
       }
 
     // const x = r.alloc(init); body
     case cps.Stmt.Alloc(id, init, region, body) =>
       Binding { k =>
+        // region should be non-null here as it's constructed via `REGION`
         js.Const(nameDef(id), js.MethodCall(nameRef(region), JSName("fresh"), toJS(init))) ::
           toJS(body).run(k)
       }
 
-    // const x = ks.arena.fresh(1); body
+    // const x = VAR(1, ks); body
     case cps.Stmt.Var(id, init, ks, body) =>
       Binding { k =>
-        js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("fresh"), toJS(init))) ::
+        js.Const(nameDef(id), js.Call(VAR, List(toJS(init), toJS(ks)))) ::
           toJS(body).run(k)
       }
 
