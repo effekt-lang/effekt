@@ -62,6 +62,16 @@ if (file is File(name, content)) {
 }
 ```
 
+The `is` form also works as the condition of a `while` loop,
+a useful pattern for iterating over lists without recursion, similar to `while let` in Swift or Rust:
+```effekt:repl
+var d = Directory("/", [Directory("subdir", [file]), File("other.md", "")])
+while (d is Directory(_, children) and children is Cons(firstChild, _)) {
+  println(show(children))
+  d = firstChild
+}
+```
+
 ## Lambda match
 
 In all positions where a block is expected, like here

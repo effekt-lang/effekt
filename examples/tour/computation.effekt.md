@@ -42,19 +42,19 @@ interface Yield[A] {
 def example(): List[Int] / Yield[Int] = [1, 2, 3].map { x => do yield(x); x * 2 }
 ```
 
-We can apply a "contract"-based reading to understand effects. The expanded type of `myMap`
-
+The expanded type of `myMap` makes the effect positions explicit:
 ```effekt:sketch
 myMap[A, B](xs: List[A]) { f: A => B / {} }: List[B] / {}
 ```
 
-has an empty effect set on `f` and an empty effect set on `myMap`.
-In general, effects in covariant positions (like those on `myMap`) are part of the precondition and considered as _requirements_ for the calling context.
-In contrast, effects in contravariant positions (like those on `f`) are part of the postcondition and can be read as provided (that is, "myMap provides these capabilities to `f`").
+The `/ {}` on `myMap` itself means its caller needs to handle no extra effects.
+The `/ {}` on `f` might look like it says "f must be pure", but that is **not** the correct reading.
+Instead, it means that `f` imposes *no requirements on `myMap` itself*.
+Any effects `f` actually uses simply propagate to the *call-site of `myMap`*,
+where they are handled in the lexical scope where `f` was written.
 
-This reading is consistent with something we call _effect parametricity_: since the signature of `f` does not mention any effects, the implementation of `myMap` cannot handle any effects occurring in `f`.
-
-The effects used in the passed block thus need to be handled exactly where the block is defined, that is, at the call-site of `myMap`.
+This is *contextual effect polymorphism*: `myMap` stays effect-agnostic regardless of what `f` does.
+See [Effect Polymorphism](../docs/concepts/effect-polymorphism) for more details.
 
 ## Comparison
 
