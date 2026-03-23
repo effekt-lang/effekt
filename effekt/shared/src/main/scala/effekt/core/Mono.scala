@@ -205,7 +205,9 @@ def findConstraints(extern: Extern)(using ctx: MonoFindContext): MonoConstraints
 }
 
 def findConstraints(property: Property)(using ctx: MonoFindContext): MonoConstraints = property match {
-  case Property(id, tpe@BlockType.Function(tparams, cparams, vparams, bparams, result)) => findConstraints(tpe, id)
+  case Property(id, tpe@BlockType.Function(tparams, cparams, vparams, bparams, result)) => 
+    tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
+    findConstraints(tpe, id)
   case Property(id, tpe@BlockType.Interface(name, targs)) => findConstraints(tpe)
 }
 
@@ -241,6 +243,11 @@ def findConstraints(constructor: Constructor)(using ctx: MonoFindContext): MonoC
   case Constructor(id, tparams, fields) =>
     val (newTargs, constraints) = findConstraints(fields map (_.tpe))
     List(MonoConstraint(newTargs.toVector, id)) ++ constraints
+
+def findConstraints(clause: (Id, BlockLit))(using ctx: MonoFindContext): MonoConstraints = clause match
+  case (id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
+    tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
+    findConstraints(body)
 
 def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): MonoConstraints = stmt match
   case Let(id, binding, body) => findConstraints(binding) ++ findConstraints(body)
@@ -278,7 +285,7 @@ def findConstraints(stmt: Stmt)(using ctx: MonoFindContext): MonoConstraints = s
     findConstraints(block) ++ findConstraints(body)
     // FIXME: Handle k as well
   case Shift(prompt, k, body) => findConstraints(prompt) ++ findConstraints(body)
-  case Match(scrutinee, tpe, clauses, default) => clauses.map(_._2).flatMap(findConstraints) ++ findConstraints(default)
+  case Match(scrutinee, tpe, clauses, default) => clauses.flatMap(findConstraints) ++ findConstraints(default)
   case Resume(k, body) => findConstraints(k) ++ findConstraints(body)
   case Get(id, annotatedTpe, ref, annotatedCapt, body) => findConstraints(body)
   case Put(ref, annotatedCapt, value, body) => findConstraints(value) ++ findConstraints(body)
@@ -535,7 +542,13 @@ def monomorphize(operation: Operation, variant: Vector[Ground])(using ctx: MonoC
     val baseTypes = ctx.solution.getOrElse(name, Set.empty).toList
     val relevantTypes = baseTypes.filter(tpes => tpes.startsWith(variant))
     if (relevantTypes.isEmpty) {
-      List(Operation(name, List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body)))
+      // If we are considering a specific variant for an interface,
+      // but none of the solutions for this operation match we don't generate the operation
+      if (variant.nonEmpty) {
+        List()
+      } else {
+        List(Operation(name, List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body)))
+      }
     } else {
       relevantTypes.map(baseTypes =>
         val existentialBaseTypes = baseTypes.drop(variant.size)
