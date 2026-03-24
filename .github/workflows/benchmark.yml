@@ -1,8 +1,7 @@
 name: Run Benchmarks
 
 on:
-  issue_comment:
-    types: [created]
+  issue_comment
 
 permissions:
   issues: write
@@ -11,6 +10,7 @@ permissions:
 
 jobs:
   benchmark:
+    if: ${{ github.event.issue.pull_request }}
     runs-on: ubuntu-latest
 
     steps:
