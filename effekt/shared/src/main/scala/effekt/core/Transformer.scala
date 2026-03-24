@@ -41,6 +41,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       List(Declaration.Data(builtins.BottomSymbol, Nil, Nil))
     else Nil
 
+    Context.assertNoBindings()
+
     // We use the includes on the symbol (since they include the prelude)
     ModuleDecl(path, mod.includes.map { _.path }, preludeDeclarations ++ declarations, externals, definitions, exports)
   }
@@ -140,7 +142,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     // return e
     case source.Return(e, span) =>
-      transformAsStmt(e)
+      transformAsStmt(e) // Return(transformAsExpr(e)) //
 
     // simply drop superfluous {}s
     case source.BlockStmt(b, span) =>
@@ -965,6 +967,9 @@ trait TransformerOps extends ContextOps { Context: Context =>
 
   private[core] def emit(binding: Binding): Unit =
     bindings += binding
+
+  private[core] def assertNoBindings(): Unit =
+    assert(bindings.isEmpty, s"There should not be any bindings left on the toplevel! Got: ${bindings}")
 
   private[core] def withBindings[R](block: => R): (R, List[Binding]) = Context in {
     val before = bindings
