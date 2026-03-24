@@ -13,13 +13,7 @@ jobs:
   benchmark:
     if:
       ${{
-        github.event.issue.pull_request &&
-        contains(github.event.comment.body, '/run-benchmarks') &&
-        (
-          github.event.comment.author_association == 'OWNER' ||
-          github.event.comment.author_association == 'MEMBER' ||
-          github.event.comment.author_association == 'COLLABORATOR'
-        )
+        github.event.issue.pull_request && contains(github.event.comment.body, '/run-benchmarks')
       }}
 
     runs-on: ubuntu-latest
