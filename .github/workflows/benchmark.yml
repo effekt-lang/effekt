@@ -11,11 +11,6 @@ permissions:
 
 jobs:
   benchmark:
-    if:
-      ${{
-        github.event.issue.pull_request && contains(github.event.comment.body, '/run-benchmarks')
-      }}
-
     runs-on: ubuntu-latest
 
     steps:
