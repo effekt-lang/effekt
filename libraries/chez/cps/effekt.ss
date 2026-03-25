@@ -128,7 +128,7 @@
               [snap (snapshot (meta-cont-store below))])
              (meta-cont-store-set! below snap)
              (meta-cont-rest-set! below above)
-             (if (= (meta-cont-prompt below) p)
+             (if (symbol=? (meta-cont-prompt below) p)
                  (values below new-below)
                  (worker below new-below))))
     (worker '() ks))
