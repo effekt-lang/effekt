@@ -1,12 +1,12 @@
 //| mill-version: 1.0.6
 
 // Building Effekt is managed through Mill (https://com-lihaoyi.github.io/mill/).
-// 
+//
 // To compile the project, targeting JVM:
 // ```
 // mill project.assembleBinary
 // ```
-// 
+//
 // This will create an executable `effekt` file in `bin/effekt`.
 //
 // To compile and locally install Effekt via npm, run:
@@ -18,7 +18,7 @@
 // ```
 // mill project.test
 // ```
-// 
+//
 import mill._
 import mill.scalalib._
 import mill.scalajslib._
@@ -214,7 +214,7 @@ object effekt extends Module {
     Task.Source(rootProjectPath / "project" / "EffektVersion.scala")
   def librariesDir: T[PathRef] = Task.Source(rootProjectPath / "libraries")
   def licensesDir:  T[PathRef] = Task.Source(rootProjectPath / "licenses")
-  
+
   trait EffektGenerated extends ScalaModule {
     def versionGenerator: T[PathRef] = Task {
       val out = Task.dest / "effekt" / "util" / "Version.scala"
@@ -274,7 +274,7 @@ object effekt extends Module {
       override def mvnDeps = Seq(mvn"org.scala-sbt::io:1.6.0")
       def testCachedArgs = Seq("-oD")
       override def testSandboxWorkingDir = Task { false }
-      override def forkArgs = Task { super.forkArgs() ++ Seq("-Xss8m") }
+      override def forkArgs = Task { super.forkArgs() ++ Seq("-Xss8m", "-Xmx4g") }
 
       /** Alias for running the full JVM test suite. */
       def test = Task { testCached() }
