@@ -240,8 +240,13 @@ class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) ext
     case Return(e) =>
       "return" <+> toDoc(e)
 
+    // the most common case, binding the result of a single statement
+    case Val(id, binding: (App | Hole | Resume | Shift | Reset | Region | Match | If | Invoke | Return), body) =>
+      "val" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> ";" <> line <>
+        toDocStmts(body)
+
+    // the remaining cases are "intrinsic lists", so we need to wrap them
     case Val(id, binding, body) =>
-      // RHS must be a single `stmt`, so we have to wrap it in a block.
       "val" <+> toDoc(id) <+> "=" <+> block(toDocStmts(binding)) <> ";" <> line <>
         toDocStmts(body)
 

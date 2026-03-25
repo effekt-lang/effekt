@@ -225,8 +225,9 @@ enum Continuation {
     this match {
       case c : Continuation.Dynamic => cps.Cont.ContVar(c.id)
       case Continuation.Static(hint, k) =>
+        val param = Id(hint)
         val ks = Id("ks")
-        cps.Cont.ContLam(hint :: Nil, ks, k(Expr.ValueVar(hint), ks))
+        cps.Cont.ContLam(param :: Nil, ks, k(Expr.ValueVar(param), ks))
     }
 
   def reifyAt(tpe: core.ValueType): Cont =

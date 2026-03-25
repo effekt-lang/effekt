@@ -127,7 +127,7 @@ jobs:
       - uses: ./.github/actions/restore-build-cache
 
       - name: Run Chez Scheme backend tests
-        run: mill project.testBackendChez
+        run: mill --jobs 1 project.testBackendChez
 
   llvm-tests:
     name: "LLVM Backend"
