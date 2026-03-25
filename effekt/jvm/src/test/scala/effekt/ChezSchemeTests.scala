@@ -41,6 +41,8 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "benchmarks" / "input_output" / "financial_format.effekt",
     examplesDir / "benchmarks" / "input_output" / "server_client.effekt",
     examplesDir / "benchmarks" / "input_output" / "sender_receiver.effekt",
+    examplesDir / "benchmarks" / "input_output" / "channel_primes.effekt",
+    examplesDir / "benchmarks" / "input_output" / "thread_ring.effekt",
     examplesDir / "pos" / "issue1087.effekt",
 
     // unsafe continuations are not yet supported in our Chez backend
@@ -106,6 +108,8 @@ class ChezSchemeCPSTests extends EffektTests {
     examplesDir / "benchmarks" / "input_output" / "financial_format.effekt",
     examplesDir / "benchmarks" / "input_output" / "server_client.effekt",
     examplesDir / "benchmarks" / "input_output" / "sender_receiver.effekt",
+    examplesDir / "benchmarks" / "input_output" / "channel_primes.effekt",
+    examplesDir / "benchmarks" / "input_output" / "thread_ring.effekt",
     examplesDir / "pos" / "issue1087.effekt",
 
     // the test is specific to JS
