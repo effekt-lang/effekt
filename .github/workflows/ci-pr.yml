@@ -3,9 +3,6 @@ name: CI
 on:
   pull_request:
 
-env:
-  JAVA_OPTS: -Xmx3G
-
 jobs:
   build-and-compile:
     name: "Build & Compile"
