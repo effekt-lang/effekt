@@ -128,6 +128,11 @@ object project extends Module {
   // Run Chez Scheme backend tests
   def testBackendChez(): Command[Unit] = Task.Command {
     effekt.jvm.test.testOnly(
+      "effekt.ChezSchemeMonadicTests",
+      "effekt.ChezSchemeCallCCTests",
+      "effekt.ChezSchemeCPSTests",
+      "effekt.StdlibChezSchemeMonadicTests",
+      "effekt.StdlibChezSchemeCallCCTests",
       "effekt.StdlibChezSchemeCPSTests"
     )()
   }
@@ -269,7 +274,7 @@ object effekt extends Module {
       override def mvnDeps = Seq(mvn"org.scala-sbt::io:1.6.0")
       def testCachedArgs = Seq("-oD")
       override def testSandboxWorkingDir = Task { false }
-      override def forkArgs = Task { super.forkArgs() ++ Seq("-Xss8m", "-Xmx4g") }
+      override def forkArgs = Task { super.forkArgs() ++ Seq("-Xss8m", "-Xmx8g") }
 
       /** Alias for running the full JVM test suite. */
       def test = Task { testCached() }

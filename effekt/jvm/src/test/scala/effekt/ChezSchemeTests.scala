@@ -113,9 +113,7 @@ class ChezSchemeCPSTests extends EffektTests {
 
     // Generic comparison
     examplesDir / "pos" / "genericcompare.effekt",
-    examplesDir / "pos" / "issue733.effekt",
-
-    examplesDir / "stdlib" / "list" / "deleteat.effekt"
+    examplesDir / "pos" / "issue733.effekt"
   )
 
   def backendName = "chez-cps"
