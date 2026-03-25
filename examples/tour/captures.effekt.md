@@ -94,13 +94,20 @@ parallel(
 )
 ```
 
-Here, by using `println` both arguments have the capture set `{io}` while the expected capture set is expected to be empty `{}`. Hence, this call does not type-check.
+Here, by using `println` both arguments have the capture set `{io}` while the expected capture set is empty, denoted as `{}`.
+Hence, this call does not type-check.
 
 ## Effects vs. Captures
-When programming Effekt, it can be very confusing that there are two different aspects of the type system that ensure type-and-effect safety:
 
-- **Effects** express a requirement to the context (for instance the caller of a function) that certain capabilities still need to be provided.
-- **Captures** express a restriction where a computation can be used.
+When programming in Effekt, it can be very confusing that there are two different aspects of the
+type system that ensure type-and-effect safety. The key distinction is that:
+
+- **Effects** express a *requirement* on the context -- certain capabilities still need to be provided by the caller.
+- **Captures** express a *restriction* on where a computation can be used -- the handler is already fixed in its lexical scope.
+
+Therefore the  meaning of an effect can still change based on the context, the meaning of a capture is already fixed.
+
+In other words: an effect is an open demand; a capture is a fixed capability.
 
 ```
 effect get(): Int
