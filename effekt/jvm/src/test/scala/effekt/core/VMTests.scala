@@ -592,7 +592,7 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "benchmarks" / "effect_handlers_bench" / "tree_explore.effekt" -> Some(Summary(
-      staticDispatches = 2697,
+      staticDispatches = 2077,
       dynamicDispatches = 0,
       patternMatches = 2380,
       branches = 3167,
@@ -643,13 +643,13 @@ class VMTests extends munit.FunSuite {
 
     examplesDir / "casestudies" / "buildsystem.effekt.md" -> Some(Summary(
       staticDispatches = 32,
-      dynamicDispatches = 51,
+      dynamicDispatches = 47,
       patternMatches = 31,
       branches = 40,
       pushedFrames = 24,
       poppedFrames = 21,
       allocations = 15,
-      closures = 34,
+      closures = 30,
       variableReads = 7,
       variableWrites = 3,
       resets = 9,
@@ -1074,13 +1074,13 @@ class VMTests extends munit.FunSuite {
 
   val nofib: Seq[(File, Option[Summary])] = Seq(
     examplesDir / "benchmarks" / "nofib" / "boyer.effekt" -> Some(Summary(
-      staticDispatches = 14378303,
+      staticDispatches = 14386943,
       dynamicDispatches = 717624,
       patternMatches = 23083633,
       branches = 4865861,
       pushedFrames = 12561050,
       poppedFrames = 12561050,
-      allocations = 38231904,
+      allocations = 37522911,
       closures = 3041208,
       variableReads = 0,
       variableWrites = 0,
