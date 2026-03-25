@@ -139,6 +139,10 @@ extern def show[R](value: R) at {}: String =
   chez "(show_impl ${value})"
   llvm "ret %Pos poison"
 
+extern def genericShow[R](value: R) at {}: String =
+  js "$effekt.show(${value})"
+  chez "(show_impl ${value})"
+
 // Strings
 // =======
 extern def infixPlusPlus(s1: String, s2: String) at {}: String =
