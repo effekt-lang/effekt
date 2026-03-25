@@ -344,12 +344,22 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   def concatPure(pures: List[(Id, Stmt.App)], current: Expr)(using ctx: ShowContext)(using Context, DeclarationContext): Stmt =
     val infixConcatDef = findExternDef(STRING_CONCAT_NAME, List(TString, TString))
     pures match
+      case (fieldId, _) :: Nil =>
+        val afterField = Id("current")
+        val afterClose = Id("currentClose")
+        ExternApp(afterField, Purity.Pure, infixConcatDef, List.empty, List(current, Expr.ValueVar(fieldId, TString)), List.empty,
+          ExternApp(afterClose, Purity.Pure, infixConcatDef, List.empty, List(ValueVar(afterField, TString), Literal(")", TString)), List.empty,
+            Return(ValueVar(afterClose, TString))))
       case (fieldId, _) :: rest =>
-        val next = Id("current")
-        ExternApp(next, Purity.Pure, infixConcatDef, List.empty, List(current, Expr.ValueVar(fieldId, TString)), List.empty, concatPure(rest, ValueVar(next, TString)))
+        val afterField = Id("current")
+        val afterSep = Id("currentSep")
+        ExternApp(afterField, Purity.Pure, infixConcatDef, List.empty, List(current, Expr.ValueVar(fieldId, TString)), List.empty,
+          ExternApp(afterSep, Purity.Pure, infixConcatDef, List.empty, List(ValueVar(afterField, TString), Literal(", ", TString)), List.empty,
+            concatPure(rest, ValueVar(afterSep, TString))))
       case Nil =>
         val next = Id("current")
-        ExternApp(next, Purity.Pure, infixConcatDef, List.empty, List(current, Literal(")", TString)), List.empty, Return(ValueVar(next, TString)))
+        ExternApp(next, Purity.Pure, infixConcatDef, List.empty, List(current, Literal(")", TString)), List.empty,
+          Return(ValueVar(next, TString)))
 
   var freshShowCounter = 0
   def freshShowId: Id =
