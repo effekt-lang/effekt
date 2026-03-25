@@ -79,7 +79,9 @@
 ; Negative types (codata) consist of a vtable and a heap object
 %Neg = type {ptr, %Object}
 
-; Reference to a mutable variable (prompt, offset)
+; Reference to a mutable variable
+; Stack-allocated: { prompt, offset } where prompt != null
+; Heap-allocated:  { null,   ptr-as-i64 } where prompt == null
 %Reference = type { %Prompt, i64 }
 
 ; Builtin Types
@@ -231,9 +233,25 @@ define private ptr @getVarPointer(%Reference %reference, %Stack %stack) {
     %prompt = extractvalue %Reference %reference, 0
     %offset = extractvalue %Reference %reference, 1
 
+    %isHeap = icmp eq %Prompt %prompt, null
+    br i1 %isHeap, label %heap, label %stack_based
+
+heap:
+    %heapPtr = inttoptr i64 %offset to ptr
+    ret ptr %heapPtr
+
+stack_based:
     %targetStack = call %Stack @getStack(%Prompt %prompt)
     %varPointer = getelementptr i8, %Base %targetStack, i64 %offset
     ret ptr %varPointer
+}
+
+define private %Reference @newHeapReference(i64 %size) alwaysinline {
+    %ptr = call ptr @malloc(i64 %size)
+    %intPtr = ptrtoint ptr %ptr to i64
+    %ref.1 = insertvalue %Reference undef, %Prompt null, 0
+    %ref = insertvalue %Reference %ref.1, i64 %intPtr, 1
+    ret %Reference %ref
 }
 
 define private %Reference @newReference(%Stack %stack) alwaysinline {

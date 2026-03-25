@@ -1,0 +1,37 @@
+// Regression test for #1281: region variable sent "back in time" via
+// multi-shot continuations should read the correct value, not 0 / segfault.
+
+interface Field[T] {
+  def getValue(): T
+  def setValue(t: T): Unit
+}
+
+def field[T](init: T){reg: Region}: Field[T] at reg = {
+  var value in reg = init
+  box new Field[T] {
+    def getValue() = value
+    def setValue(t) = { value = t }
+  }
+}
+
+interface TimeTravel {
+  def runInParallelWorld[T]{self: TimeTravel}{block: => T}: T
+  def throw(c: => Unit at {io}): Nothing
+}
+
+def timeTravel(block: {TimeTravel} => Unit at {io}) = try block{tt} with tt: TimeTravel {
+  def runInParallelWorld[T] = resume { {self}{block2} =>
+    val t = block2()
+    self.throw(box { resume { {_}{_} => t } })
+  }
+  def throw(c) = c()
+}
+
+def main() = timeTravel(box { {tt} =>
+  region reg {
+    val f: Field[Int] at reg = tt.runInParallelWorld{tt} { field(42){reg} }
+    println(f.getValue())
+    f.setValue(43)
+    println(f.getValue())
+  }
+})
