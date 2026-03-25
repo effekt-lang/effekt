@@ -35,7 +35,7 @@ object TransformerCps extends Transformer {
     // the innermost (in direct style) enclosing functions (used to rewrite a definition to a loop)
     recursive: Option[RecursiveDefInfo],
     // the direct-style continuation, if available (used in case cps.Stmt.LetCont)
-    directStyle: Option[ContinuationInfo], 
+    directStyle: Option[ContinuationInfo],
     // keep track of the function scope we are in to correctly backup function parameters which are used in nested definitions
     // see `Stmt.Letdef` case
     scope: List[(Id, cps.Block)],
@@ -246,7 +246,8 @@ object TransformerCps extends Transformer {
 
     // [[ let k(x, ks) = ...; if (...) jump k(42, ks2) else jump k(10, ks3) ]] =
     //    let x; if (...) { x = 42; ks = ks2 } else { x = 10; ks = ks3 } ...
-    case cps.Stmt.LetCont(id, Cont.ContLam(params, ks, body), body2) if canBeDirect(id, body2) =>
+    case cps.Stmt.LetCont(id, Cont.ContLam(params, ks, body), body2) if canBeDirect(id, body2) &&
+        D.directStyle.forall { case ContinuationInfo(k, ps, ks) => !free(body2).contains(k) } =>
       Binding { k =>
         params.map { p => js.Let(nameDef(p), js.Undefined)  } :::
           toJS(body2)(using markDirectStyle(id, params, ks)).stmts ++
@@ -559,10 +560,10 @@ object TransformerCps extends Transformer {
       case Stmt.LetDef(id, binding, body) => notIn(binding) && canBeDirect(k, body)
       case Stmt.LetExpr(id, binding, body) => notIn(binding) && canBeDirect(k, body)
       case Stmt.ImpureApp(id, callee, vargs, bargs, body) => vargs.forall(notIn) && bargs.forall(notIn) && canBeDirect(k, body)
-      case Stmt.LetCont(id, Cont.ContLam(result, ks2, body), body2) => false
-        //        def willBeDirectItself = canBeDirect(id, body2) && canBeDirect(k, maintainDirectStyle(ks2, body))
-        //        def notFreeinContinuation = notIn(body) && canBeDirect(k, body2)
-        //        willBeDirectItself || notFreeinContinuation
+      case Stmt.LetCont(id, Cont.ContLam(result, ks2, body), body2) =>
+        def willBeDirectItself = canBeDirect(id, body2) && canBeDirect(k, maintainDirectStyle(ks2, body))
+        def notFreeinContinuation = notIn(body) && canBeDirect(k, body2)
+        willBeDirectItself || notFreeinContinuation
       case Stmt.Region(id, ks, body) => notIn(body)
       case Stmt.Alloc(id, init, region, body) => notIn(init) && canBeDirect(k, body)
       case Stmt.Var(id, init, ks2, body) => notIn(init) && canBeDirect(k, body)
