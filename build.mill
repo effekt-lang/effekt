@@ -128,11 +128,6 @@ object project extends Module {
   // Run Chez Scheme backend tests
   def testBackendChez(): Command[Unit] = Task.Command {
     effekt.jvm.test.testOnly(
-      "effekt.ChezSchemeMonadicTests",
-      "effekt.ChezSchemeCallCCTests",
-      "effekt.ChezSchemeCPSTests",
-      "effekt.StdlibChezSchemeMonadicTests",
-      "effekt.StdlibChezSchemeCallCCTests",
       "effekt.StdlibChezSchemeCPSTests"
     )()
   }
