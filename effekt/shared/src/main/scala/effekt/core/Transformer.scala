@@ -790,6 +790,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Context.panic("Should have been translated to a method call!")
       case f: Field =>
         Context.panic("Should have been translated to a select!")
+      case f: ExternFunction =>
+        val purity = if f.capture.pure then Pure else if f.capture.pureOrIO then Impure else Async
+        val x = TmpValue("r")
+        val callee = BlockVar(f)
+        val tpe = Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargsT.map(_.capt)).result
+        ExternApp(x, purity, callee, targs, vargsT, bargsT, Return(core.ValueVar(x, tpe)))
       case f: BlockSymbol =>
         App(BlockVar(f), targs, vargsT, bargsT)
       case f: ValueSymbol =>
@@ -853,22 +859,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   private def asConcreteCaptureSet(c: Captures)(using Context): CaptureSet = c match {
     case c: CaptureSet => c
     case _ => Context.panic("All capture unification variables should have been replaced by now.")
-  }
-
-  private enum CallingConvention {
-    case Pure, Direct, Control
-  }
-  private def callingConvention(callable: Callable)(using Context): CallingConvention = callable match {
-    case f @ ExternFunction(name, _, _, _, _, _, capture, bodies, _) =>
-      // resolve the preferred body again and hope it's the same
-      val body = ResolveExternDefs.findPreferred(bodies)
-      body match {
-        case b: source.ExternBody.EffektExternBody[_] => CallingConvention.Control
-        case _ if f.capture.pure => CallingConvention.Pure
-        case _ if f.capture.pureOrIO => CallingConvention.Direct
-        case _ => CallingConvention.Control
-      }
-    case _ => CallingConvention.Control
   }
 
   // we can conservatively approximate to false, in order to disable the optimizations

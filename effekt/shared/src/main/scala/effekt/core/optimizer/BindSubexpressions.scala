@@ -51,7 +51,6 @@ object BindSubexpressions {
         Binding(bindings, Stmt.Let(id, other, transform(body)))
     }
 
-    // FIXME EXTERNAPP: Might require special case for impure / async
     case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) => delimit {
       for {
         vs <- transformExprs(vargs)
