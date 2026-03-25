@@ -313,11 +313,6 @@ object Type {
       ValueType.Boxed(substitute(tpe, vsubst, csubst), substitute(capt, csubst))
   }
 
-  def bindingType(stmt: Stmt.ExternApp): ValueType = stmt match {
-    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
-      Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
-  }
-
   def bindingType(bind: Binding.ExternApp): ValueType = bind match {
     case Binding.ExternApp(id, purity, callee, targs, vargs, bargs) =>
       Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
