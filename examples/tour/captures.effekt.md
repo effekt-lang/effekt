@@ -105,7 +105,9 @@ type system that ensure type-and-effect safety. The key distinction is that:
 - **Effects** express a *requirement* on the context -- certain capabilities still need to be provided by the caller.
 - **Captures** express a *restriction* on where a computation can be used -- the handler is already fixed in its lexical scope.
 
-In other words: an effect is an open demand; a capture is a closed reference.
+Therefore the  meaning of an effect can still change based on the context, the meaning of a capture is already fixed.
+
+In other words: an effect is an open demand; a capture is a fixed capability.
 
 ```
 effect get(): Int
