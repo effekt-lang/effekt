@@ -142,7 +142,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     // return e
     case source.Return(e, span) =>
-      transformAsStmt(e) // Return(transformAsExpr(e)) //
+      transformAsStmt(e)
 
     // simply drop superfluous {}s
     case source.BlockStmt(b, span) =>
