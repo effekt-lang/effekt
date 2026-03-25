@@ -1085,14 +1085,20 @@ trait NamerOps extends ContextOps { Context: Context =>
   }
 
   private[namer] def resolveOverloadedFunction(id: IdRef): Boolean = at(id) {
-    val syms = scope.lookupFunction(id.path, id.name)
+    val fns = scope.lookupFunction(id.path, id.name)
+    val ops = scope.lookupOperation(id.path, id.name)
 
-    val syms2 = if (syms.isEmpty) scope.lookupOperation(id.path, id.name) else syms
+    // Include both functions and operations so that UnboxInference / Typer can
+    // disambiguate.  This is important for method-call syntax on boxed blocks:
+    //   val b = box new F { def foo(s) = () }
+    //   b.foo(...)   // should resolve the operation, not a same-named function
+    // See #1324.
+    val syms = fns ++ ops
 
     // lookup first block param and do not collect multiple since we do not (yet?) permit overloading on block parameters
-    val syms3 = if (syms2.isEmpty) List(scope.lookupFirstBlockParam(id.path, id.name)) else syms2
+    val syms2 = if (syms.isEmpty) List(scope.lookupFirstBlockParam(id.path, id.name)) else syms
 
-    if (syms3.nonEmpty) { assignSymbol(id, CallTarget(syms3.asInstanceOf)); true } else { false }
+    if (syms2.nonEmpty) { assignSymbol(id, CallTarget(syms2.asInstanceOf)); true } else { false }
   }
 
   /**
