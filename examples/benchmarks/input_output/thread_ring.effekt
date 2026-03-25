@@ -5,10 +5,19 @@ import io/channel
 import io/signal
 
 def worker(i: Int, done: Sender[Int, Unit], receiver: Receiver[Int, Unit], sender: Sender[Int, Unit]) =
-  forever {
+  loop {
     val token = receiver.receive(())
-    if (token > 1) { sender.send(token - 1) }
-    else { done.send(i) }
+    if (token > 1) {
+      sender.send(token - 1)
+    } else if (token == 1) {
+      sender.send(0)
+      receiver.receive(())
+      done.send(i)
+      do stop()
+    } else {
+      sender.send(0)
+      do stop()
+    }
   }
 
 def run(n: Int): Int = {
