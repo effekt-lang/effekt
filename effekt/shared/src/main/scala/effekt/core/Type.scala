@@ -458,6 +458,13 @@ object Type {
       val Typing(argTypes, argCapt, argFree) = all(vargs, arg => arg.typing)
       // we assume that the annotated type is correct and check later...
       Typing(data, argCapt, argFree ++ Free.defer(make))
+      
+    // data=List[Int]
+    case Expr.MakeContext(data, tag, targs, before, after) =>
+      val Typing(argTypes, argCapt, argFree) = all(before ++ after, arg => arg.typing)
+      // Context[List[Int]]
+      val tpe = ValueType.Data(builtins.ContextSymbol, List(data))
+      Typing(tpe, argCapt, argFree) // TODO maybe check like Make later
 
     case Expr.Box(b, annotatedCapture) =>
       val Typing(bTpe, bCapt, bFree) = b.typing

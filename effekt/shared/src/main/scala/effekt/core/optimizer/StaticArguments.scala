@@ -190,6 +190,7 @@ object StaticArguments {
   def rewrite(p: Expr)(using StaticArgumentsContext): Expr = p match {
     case Expr.PureApp(f, targs, vargs) => Expr.PureApp(f, targs, vargs.map(rewrite))
     case Expr.Make(data, tag, targs, vargs) => Expr.Make(data, tag, targs, vargs.map(rewrite))
+    case Expr.MakeContext(data, tag, targs, before, after) => Expr.MakeContext(data, tag, targs, before.map(rewrite), after.map(rewrite))
     case x @ Expr.ValueVar(id, annotatedType) => x
 
     // congruences

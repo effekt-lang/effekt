@@ -178,6 +178,7 @@ object TransformerCPS {
     case PureApp(id, vargs) => chez.Call(toChez(id), vargs.map(toChez))
     case Make(_, tag, vargs) =>
       chez.Call(nameRef(tag), vargs.map(toChez))
+    case MakeContext(data, tag, before, after) => sys error "Contexts not supported in Chez for now."
     case Box(id) => toChez(id)
   }
 

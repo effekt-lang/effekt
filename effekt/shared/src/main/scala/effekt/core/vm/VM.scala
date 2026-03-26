@@ -509,6 +509,10 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
       val result: Value.Data = Value.Data(data, tag, vargs.map(a => eval(a, env)))
       instrumentation.allocate(result)
       result
+      
+    // TODO not implemented yet! This is complicated!
+    // Don't implement. Just comment out / ignore VMTests
+    case Expr.MakeContext(data, tag, targs, before, after) => ???
 
     case Expr.Box(b, annotatedCapture) => Value.Boxed(eval(b, env))
   }

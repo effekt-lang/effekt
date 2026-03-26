@@ -182,6 +182,7 @@ object Transformer {
       case _ => sys error "Should not happen"
     }
     case core.Expr.Make(data, tag, targs, vargs) => Make(data, tag, vargs.map(transform))
+    case core.Expr.MakeContext(data, tag, targs, before, after) => MakeContext(data, tag, before.map(transform), after.map(transform))
     case core.Expr.Box(b, annotatedCapture) => Box(transform(b))
   }
 

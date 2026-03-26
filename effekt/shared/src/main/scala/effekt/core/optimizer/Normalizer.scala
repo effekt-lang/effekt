@@ -399,6 +399,7 @@ object Normalizer { normal =>
     // congruences
     case Expr.PureApp(f, targs, vargs) => Expr.PureApp(f, targs, vargs.map(normalize))
     case Expr.Make(data, tag, targs, vargs) => Expr.Make(data, tag, targs, vargs.map(normalize))
+    case Expr.MakeContext(data, tag, targs, before, after) => Expr.MakeContext(data, tag, targs, before.map(normalize), after.map(normalize))
     case Expr.ValueVar(id, annotatedType) => p
     case Expr.Literal(value, annotatedType) => p
   }

@@ -183,6 +183,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(expr: Expr)(using ctx: ShowContext)(using Context, DeclarationContext): Expr = expr match {
     case Make(data, tag, targs, vargs) => Make(data, tag, targs, vargs map transform)
+    case MakeContext(data, tag, targs, before, after) => MakeContext(data, tag, targs, before map transform, after map transform)
     case PureApp(BlockVar(id, annotatedTpe, annotatedCapt), targs, vargs) if id.name.name == FUNCTION_NAME =>
       val targ = targs match {
         case targ :: Nil => targ

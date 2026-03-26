@@ -35,6 +35,7 @@ object Contify {
     case Expr.Literal(value, tpe) => Expr.Literal(value, tpe)
     case Expr.PureApp(id, vargs) => Expr.PureApp(id, vargs.map(rewrite))
     case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(rewrite))
+    case Expr.MakeContext(data, tag, before, after) => Expr.MakeContext(data, tag, before.map(rewrite), after.map(rewrite))
     case Expr.Box(b) => Expr.Box(rewrite(b))
   }
 
@@ -238,6 +239,7 @@ object Contify {
     case Expr.Literal(_, _) => Set.empty
     case Expr.PureApp(_, vargs) => all(vargs, returnsTo(id, _))
     case Expr.Make(_, _, vargs) => all(vargs, returnsTo(id, _))
+    case Expr.MakeContext(_, _, before, after) => all(before ++ after, returnsTo(id, _))
     case Expr.Box(b) => returnsTo(id, b)
   }
 
@@ -322,6 +324,7 @@ object Contify {
     case Expr.Literal(_, _) => p
     case Expr.PureApp(id2, vargs) => Expr.PureApp(id2, vargs.map(contify(id, _)))
     case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(contify(id, _)))
+    case Expr.MakeContext(data, tag, before, after) => Expr.MakeContext(data, tag, before.map(contify(id, _)), after.map(contify(id, _)))
     case Expr.Box(b) => Expr.Box(contify(id, b))
   }
 

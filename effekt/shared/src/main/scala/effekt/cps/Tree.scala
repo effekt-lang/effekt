@@ -74,6 +74,8 @@ enum Expr extends Tree {
 
   case Make(data: ValueType.Data, tag: Id, vargs: List[Expr])
 
+  case MakeContext(data: ValueType.Data, tag: Id, before: List[Expr], after: List[Expr])
+
   case Box(b: Block)
 }
 export Expr.*
@@ -168,6 +170,7 @@ object Variables {
     case Expr.Literal(value, tpe) => empty
     case Expr.PureApp(id, vargs) => block(id) ++ all(vargs, free)
     case Expr.Make(data, tag, vargs) => all(vargs, free)
+    case Expr.MakeContext(data, tag, before, after) => all(before ++ after, free)
     case Expr.Box(b) => free(b)
   }
 
@@ -249,6 +252,7 @@ object substitutions {
     case ValueVar(id) => ValueVar(id)
     case Literal(value, tpe) => Literal(value, tpe)
     case Make(tpe, tag, vargs) => Make(tpe, tag, vargs.map(substitute))
+    case MakeContext(tpe, tag, before, after) => MakeContext(tpe, tag, before.map(substitute), after.map(substitute))
     case PureApp(id, vargs) => PureApp(id, vargs.map(substitute))
     case Box(b) => Box(substitute(b))
   }

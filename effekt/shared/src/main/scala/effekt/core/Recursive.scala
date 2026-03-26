@@ -96,6 +96,7 @@ class Recursive(
     case Expr.Literal(value, annotatedType) => ()
     case Expr.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
     case Expr.Make(data, tag, targs, vargs) => vargs.foreach(process)
+    case Expr.MakeContext(data, tag, targs, before, after) => (before ++ after).foreach(process)
     case Expr.Box(b, annotatedCapture) => process(b)
   }
 

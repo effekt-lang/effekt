@@ -112,6 +112,7 @@ class Reachable(
     case Expr.Literal(value, annotatedType) => ()
     case Expr.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
     case Expr.Make(data, tag, targs, vargs) => process(tag); vargs.foreach(process)
+    case Expr.MakeContext(data, tag, targs, before, after) => process(tag); (before ++ after).foreach(process)
     case Expr.Box(b, annotatedCapture) => process(b)
   }
 

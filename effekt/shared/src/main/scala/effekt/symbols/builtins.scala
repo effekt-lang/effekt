@@ -56,6 +56,8 @@ object builtins {
   val GlobalSymbol = Interface(Name.local("Global"), Nil, Nil, decl = NoSource)
   val GlobalCapability = ExternResource(name("global"), InterfaceType(GlobalSymbol, Nil), Resource(name("global")), decl = NoSource)
 
+  val ContextSymbol = Interface(Name.local("Context"), Nil, Nil, decl = NoSource)
+
   object TState {
     val S: TypeParam = TypeParam(Name.local("S"))
     val interface: Interface = Interface(Name.local("Ref"), List(S), Nil, decl = NoSource)

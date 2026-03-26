@@ -228,6 +228,7 @@ trait Transformer {
 
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
     case Make(data, tag, targs, args) => chez.Call(chez.Variable(nameRef(tag)), args map toChez)
+    case MakeContext(data, tag, targs, before, after) => sys error "Contexts not supported in Chez for now."
 
     case Box(b, _) => toChez(b)
   }

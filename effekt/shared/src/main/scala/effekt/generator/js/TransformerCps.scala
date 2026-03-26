@@ -202,6 +202,7 @@ object TransformerCps extends Transformer {
     case literal: Expr.Literal       => js.RawExpr(literal.value.toString) // TODO This should match on the type...
     case Expr.PureApp(id, vargs)     => inlineExtern(id, vargs)
     case Expr.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
+    case Expr.MakeContext(data, tag, before, after) => ??? //TODO: how do you make contexts in JS?
     case Expr.Box(b)                 => argumentToJS(b)
   }
 

@@ -183,6 +183,9 @@ enum Expr extends Tree {
    * Note: the structure mirrors interface implementation
    */
   case Make(data: ValueType.Data, tag: Id, targs: List[ValueType], vargs: List[Expr])
+  
+  //Contexts with a single hole. The hole is between the before and after value arguments
+  case MakeContext(data: ValueType.Data, tag: Id, targs: List[ValueType], before: List[Expr], after: List[Expr])
 
   case Box(b: Block, annotatedCapture: Captures)
 
@@ -544,6 +547,13 @@ object Tree {
         targs2 <- done(targs.map(rewrite))
         vargs2 <- all(vargs, rewrite)
       } yield Expr.Make(data2, tag2, targs2, vargs2)
+      case Expr.MakeContext(data, tag, targs, before, after) => for {
+        data2  <- done(rewrite(data))
+        tag2   <- done(rewrite(tag))
+        targs2 <- done(targs.map(rewrite))
+        before <- all(before, rewrite)
+        after  <- all(after, rewrite)
+      } yield Expr.MakeContext(data2, tag2, targs2, before, after)
       case Expr.Box(b, capt) => for {
         b2 <- rewrite(b)
         capt2 <- done(rewrite(capt))
@@ -954,7 +964,8 @@ object substitutions {
 
       case Make(tpe, tag, targs, vargs) =>
         Make(substitute(tpe).asInstanceOf, tag, targs.map(substitute), vargs.map(substitute))
-
+      case MakeContext(tpe, tag, targs, before, after) =>
+        MakeContext(substitute(tpe).asInstanceOf, tag, targs.map(substitute), before.map(substitute), after.map(substitute))
       case PureApp(f, targs, vargs) => substitute(f) match {
         case g : Block.BlockVar => PureApp(g, targs.map(substitute), vargs.map(substitute))
         case _ => INTERNAL_ERROR("Should never substitute a concrete block for an FFI function.")

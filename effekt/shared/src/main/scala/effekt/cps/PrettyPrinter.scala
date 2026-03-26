@@ -62,6 +62,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Expr.Literal(value, _) => value.toString // TODO this should match on the actual types...
     case Expr.PureApp(id, vargs) => toDoc(id) <> argsToDoc(vargs, Nil)
     case Expr.Make(data, tag, vargs) => "make" <+> toDoc(data.name) <+> toDoc(tag) <> argsToDoc(vargs, Nil)
+    case Expr.MakeContext(data, tag, before, after) => ??? //TODO: how should contexts be printed?, synchronize with parser
     case Expr.Box(b) => parens("box" <+> toDoc(b))
   }
 

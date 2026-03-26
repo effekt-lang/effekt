@@ -136,6 +136,12 @@ object BindSubexpressions {
     case Expr.Make(data, tag, targs, vargs) => transformExprs(vargs) { vs =>
       bind(Expr.Make(data, tag, targs, vs))
     }
+    case Expr.MakeContext(data, tag, targs, before, after) =>
+      transformExprs(before) { bs =>
+        transformExprs(after) { as =>
+          bind(Expr.MakeContext(data, tag, targs, bs, as))
+        }
+      }
     case Expr.PureApp(f, targs, vargs) => for {
       vs <- transformExprs(vargs);
       res <- bind(Expr.PureApp(f, targs.map(transform), vs))
