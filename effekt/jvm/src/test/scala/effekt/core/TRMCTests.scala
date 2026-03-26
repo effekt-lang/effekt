@@ -3,10 +3,32 @@ package core
 
 import effekt.core.BlockType.Function
 import effekt.symbols.Capture
+import munit.Clue.generate
 
 class TRMCTests extends CoreTests {
   
   case class ImpossibleStateError(message: String) extends RuntimeException(message: String)
+  
+  val listId = Id("List")
+  val consId = Id("Cons")
+  val nilId = Id("Nil")
+  val headId = Id("head")
+  val tailId = Id("tail")
+  val TList: ValueType.Data = ValueType.Data(listId, Nil)
+  
+  //type List {
+  // Nil
+  // Cons(head: Int, tail: List)
+  //}
+  val listDecl = Declaration.Data(listId, Nil, List(
+    Constructor(nilId, Nil, Nil),
+    Constructor(consId, Nil, List(
+      Field(headId, Type.TInt),
+      Field(tailId, TList)
+    ))
+  ))
+  
+  val DC = DeclarationContext(List(listDecl), Nil)
 
   val mainSymbol = Id("main")
 
@@ -104,7 +126,7 @@ class TRMCTests extends CoreTests {
     // f2(n,ctx)
     val appexpected = Stmt.App(Block.BlockVar(f2, Function(Nil, Nil, List(Type.TInt, ctxType), Nil, Type.TInt), fCapt), Nil, List(Expr.ValueVar(n, Type.TInt),Expr.ValueVar(ctx,ctxType)), Nil)
 
-    val apptransformed = transform(app,app, f, f2, List(transformContext.outer(ctx)))
+    val apptransformed = transform(app, f, f2, List(transformContext.outer(ctx)))
 
 //    val input =
 //      """def f(n: Int) =
@@ -126,28 +148,33 @@ class TRMCTests extends CoreTests {
     val f: Id = Id("f")
     val f2: Id = Id("f2")
     val ctx: Id = Id("ctx")
-    val listType = ValueType.Var(Id("List")
-    val fType: BlockType = Function(Nil, Nil, List(Type.TInt), Nil, listType))
+    val listType = ValueType.Var(Id("List"))
+    val fType: BlockType = Function(Nil, Nil, List(Type.TInt), Nil, listType)
     val fCapt: Captures = Set.empty
     val sub: BlockVar = BlockVar(Id("infixSub"),Function(Nil,Nil,List(Type.TInt,Type.TInt),Nil,Type.TInt),Set.empty)
-    val ctx: BlockVar = ???
+    val ctxfun: BlockVar = ???
     
     
+    val tmpId = Id("tmp")
     //return Cons(n,tmp)
-    val retStmt = Stmt.Return(Make(Nil,Id("Cons"),List(Type.TInt,Type.TInt),List(n,Id("tmp"))))
+    val retStmt = Stmt.Return(Make(TList,consId,List(Type.TInt,Type.TInt),List(ValueVar(n,Type.TInt),ValueVar(tmpId,TList))))
     //f(n-1)
-    val callStmt = Stmt.App(Block.BlockVar(f, fType, fCapt), Nil, List(Expr.PureApp(sub,List(Type.TInt,Type.TInt),List(n,1))), Nil)
+    val callStmt = Stmt.App(Block.BlockVar(f, fType, fCapt), Nil, List(Expr.PureApp(sub,List(Type.TInt,Type.TInt),List(ValueVar(n,Type.TInt),Literal(1,Type.TInt)))),Nil)
     //val tmp= f(n-1)
     //return Cons(n,tmp)
     val inputTree = Stmt.Val(Id("tmp"),callStmt,retStmt)
     
     //n-1
-    val minusOne = Expr.PureApp(sub,List(Type.TInt,Type.TInt),List(n,1))
+    val minusOne = Expr.PureApp(sub,List(Type.TInt,Type.TInt),List(ValueVar(n,Type.TInt),Literal(1,Type.TInt)))
 
     //Cons(n,[])
-    val consctx = Expr.PureApp(ctx,???,???)
+    //val consctx = Expr.PureApp(ctx,Nil,???)
     
     val expected = Stmt.App(Block.BlockVar(f2,Function(Nil, Nil, List(Type.TInt, ctxType), Nil, listType),fCapt),Nil,List(minusOne,???),Nil)
   }
+  val TFieldName = ValueType.Data(Id("FieldName"), Nil)
+  val fieldString1 = Expr.Literal(tailId.show,Type.TString) //proxy
+  val fieldString2 = Expr.Literal(tailId, TFieldName) //proxy
+
 
 }
