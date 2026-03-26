@@ -13,7 +13,7 @@ effect emit[A](value: A): Unit
 /// Describes pull streams by reading values of type `A`.
 ///
 /// The producer can decide to `stop` emitting values.
-effect read[A](): A / stop
+effect next[A](): A / stop
 
 
 /// Like `for[A, R]`, but ignores the result of the stream, and consequently
@@ -30,11 +30,11 @@ def for[A] { stream: () => Unit / emit[A] } { action: A => Unit }: Unit =
 def map[A, B] { function: A => B } { stream: () => Unit / emit[A] }: Unit / emit[B] =
   returning::map[A, B, Unit]{function}{stream}
 
-/// Runs the given action whenever the given reader reads an element.
+/// Runs the given action whenever the given driver reads an element.
 ///
-/// e.g. var i = -1; with tap { i = i + 1; i }; reader()
-def tap[A] { action: () => A / stop } { reader: () => Unit / read[A] }: Unit =
-  returning::tap[A, Unit]{action}{reader}
+/// e.g. var i = -1; with tap { i = i + 1; i }; driver()
+def tap[A] { action: () => A / stop } { driver: () => Unit / next[A] }: Unit =
+  returning::tap[A, Unit]{action}{driver}
 
 /// Runs the stream as a message queue,
 /// handling each of its elements that can produce new elements ("messages"),
@@ -196,8 +196,8 @@ def countIf[A] { shouldCount: A => Bool } { stream: () => Unit / emit[A] }: Int 
 def count[A] { stream: () => Unit / emit[A] }: Int =
   countIf[A] { _ => true } {stream}
 
-def source[A] { stream: () => Unit / emit[A] } { reader: () => Unit / read[A] }: Unit =
-  returning::source[A, Unit]{stream}{reader}
+def source[A] { stream: () => Unit / emit[A] } { driver: () => Unit / next[A] }: Unit =
+  returning::source[A, Unit]{stream}{driver}
 
 /// Combines two streams together calling action on pairs in lockstep.
 /// Terminates when either of them terminates.
@@ -206,7 +206,7 @@ def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] 
   with source[B] { stream2 }
 
   loop {
-    action(do read(), do read())
+    action(do next[A](), do next[B]())
   }
 }
 
@@ -218,15 +218,15 @@ def zipLongest[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / e
 
   loop {
      try {
-      val a = do read[A]()
+      val a = do next[A]()
       try {
-        val b = do read[B]()
+        val b = do next[B]()
         action(Both(a, b))
       } with stop { () =>
         action(This(a))
       }
     } with stop{ () =>
-      val b = do read[B]()
+      val b = do next[B]()
       action(That(b))
     }
   }
@@ -395,10 +395,10 @@ def map[A, B, R] { function: A => B } { stream: () => R / emit[A] }: R / emit[B]
     resume(do emit(function(value)))
   }
 
-def tap[A, R] { action: () => A / stop } { reader: () => R / read[A] }: R =
+def tap[A, R] { action: () => A / stop } { driver: () => R / next[A] }: R =
   try {
-    reader()
-  } with read[A] { () =>
+    driver()
+  } with next[A] { () =>
     resume { action() }
   }
 
@@ -460,7 +460,7 @@ def product[R] { stream: () => R / emit[Int] }: (R, Int) = {
   }
 }
 
-def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }: R = {
+def source[A, R] { stream: () => Unit / emit[A] } { driver: () => R / next[A] }: R = {
   var next = box { None() }
   next = box {
     try {
@@ -473,8 +473,8 @@ def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }:
     }
   }
   try {
-    reader()
-  } with read[A] {
+    driver()
+  } with next[A] {
     resume {
       next().getOrElse { do stop() }
     }
