@@ -98,10 +98,8 @@ function restore(store, snap) {
 
 // Common Runtime
 // --------------
-let _prompt = 1;
-
 const TOPLEVEL_K = (x, ks) => { throw { computationIsDone: true, result: x } }
-const TOPLEVEL_KS = { stack: null, prompt: 0, arena: new Arena(), rest: null }
+const TOPLEVEL_KS = { stack: null, prompt: Symbol("toplevel"), arena: new Arena(), rest: null }
 
 function THUNK(f) {
   f.thunk = true
@@ -120,7 +118,7 @@ const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 
 // HANDLE(ks, ks, (p, ks, k) => { STMT })
 function RESET(prog, ks, k) {
-  const prompt = _prompt++;
+  const prompt = Symbol(); // gensym
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
   return prog(prompt, { stack: null, prompt, arena: new Arena(), rest }, RETURN)
 }
