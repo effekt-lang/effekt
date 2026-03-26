@@ -46,10 +46,10 @@ def assert(obtained: String, expected: String): Unit / { Assertion, Formatted } 
   assertEqual(obtained, expected) { (x, y) => x == y } { x => show(x) }
 
 def assertEqual[A](obtained: A, expected: A, msg: String): Unit / Assertion =
-  assertEqual(obtained, expected, msg) { (x, y) => x.equals(y) }
+  assertEqual(obtained, expected, msg) { (x, y) => x.genericEquals(y) }
 
 def assertEqual[A](obtained: A, expected: A): Unit / { Assertion, Formatted } =
-  assertEqual(obtained, expected) { (x, y) => x.equals(y) } { x => x.show }
+  assertEqual(obtained, expected) { (x, y) => x.genericEquals(y) } { x => x.genericShow }
 
 def assertEqual[A](obtained: A, expected: A, msg: String) { equals: (A, A) => Bool }: Unit / Assertion =
   do assert(equals(obtained, expected), msg)
