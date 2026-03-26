@@ -24,6 +24,9 @@ object TransformerCps extends Transformer {
   val DEALLOC = Variable(JSName("DEALLOC"))
   val TRAMPOLINE = Variable(JSName("TRAMPOLINE"))
 
+  val DEPTH = JSName("d")
+  val DEPTH_INC = js.RawExpr(List("", " + ", ""), List(Variable(DEPTH), js.RawLiteral("1")))
+
   class RecursiveUsage(var jumped: Boolean)
   case class RecursiveDefInfo(id: Id, label: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, used: RecursiveUsage)
   case class ContinuationInfo(k: Id, vparams: List[Id], ks: Id)
@@ -98,7 +101,7 @@ object TransformerCps extends Transformer {
       given TransformerContext = ctx.copy(scope = List(id -> block))
       js.Const(nameDef(id), requiringThunk { toJS(id, block) })
     case cps.ToplevelDefinition.Val(id, ks, k, binding) =>
-      js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding).stmts)))
+      js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(DEPTH, nameDef(ks), nameDef(k)), toJS(binding).stmts)))
     case cps.ToplevelDefinition.Let(id, binding) =>
       js.Const(nameDef(id), toJS(binding))
   }
@@ -156,10 +159,10 @@ object TransformerCps extends Transformer {
     val translatedBody = toJS(body)(using recursive(id, vparams, bparams, ks, k, label, used)).stmts
 
     if used.jumped then
-      js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(nameDef(ks), nameDef(k)),
+      js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(DEPTH, nameDef(ks), nameDef(k)),
         List(js.While(RawExpr("true"), translatedBody, Some(uniqueName(label)))))
     else
-      js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(nameDef(ks), nameDef(k)),
+      js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(DEPTH, nameDef(ks), nameDef(k)),
         translatedBody)
 
   def toJS(b: cps.Block)(using TransformerContext): js.Expr = b match {
@@ -168,7 +171,7 @@ object TransformerCps extends Transformer {
     case cps.New(handler) => toJS(handler)
 
     case cps.BlockLit(vps, bps, ks, k, body) =>
-      js.Lambda(vps.map(nameDef) ++ bps.map(nameDef) ++ List(nameDef(ks), nameDef(k)), toJS(body).stmts)
+      js.Lambda(vps.map(nameDef) ++ bps.map(nameDef) ++ List(DEPTH, nameDef(ks), nameDef(k)), toJS(body).stmts)
   }
 
   def argumentToJS(b: cps.Block)(using TransformerContext): js.Expr = b match {
@@ -180,7 +183,7 @@ object TransformerCps extends Transformer {
     case cps.Implementation(interface, operations) =>
       js.Object(operations.map {
         case cps.Operation(id, vps, bps, ks, k, body) =>
-          nameDef(id) -> js.Lambda(vps.map(nameDef) ++ bps.map(nameDef) ++ List(nameDef(ks), nameDef(k)), toJS(body)(using nonrecursive(ks)).stmts)
+          nameDef(id) -> js.Lambda(vps.map(nameDef) ++ bps.map(nameDef) ++ List(DEPTH, nameDef(ks), nameDef(k)), toJS(body)(using nonrecursive(ks)).stmts)
       })
   }
 
@@ -190,7 +193,7 @@ object TransformerCps extends Transformer {
     case Cont.ContVar(id) =>
       nameRef(id)
     case Cont.ContLam(results, ks, body) =>
-      js.Lambda(results.map(nameDef) :+ nameDef(ks), toJS(body)(using nonrecursive(ks)).stmts)
+      js.Lambda(results.map(nameDef) ++ List(DEPTH, nameDef(ks)), toJS(body)(using nonrecursive(ks)).stmts)
     case Cont.Abort => js.Undefined
   }
 
@@ -301,8 +304,8 @@ object TransformerCps extends Transformer {
     }
 
     case cps.Stmt.Jump(k, vargs, ks) =>
-      pure(js.Return(maybeThunking(js.Call(nameRef(k),
-        vargs.map(toJS) ++  List(toJS(ks)))))  :: Nil)
+      pure(js.Return(maybeThunking(d => js.Call(nameRef(k),
+        vargs.map(toJS) ++  List(d, toJS(ks)))))  :: Nil)
 
 
     case cps.Stmt.App(Recursive(id, label, vparams, bparams, ks1, k1, used), vargs, bargs, MetaCont(ks), k) =>
@@ -391,11 +394,11 @@ object TransformerCps extends Transformer {
       }
 
     case cps.Stmt.App(callee, vargs, bargs, ks, k) =>
-      pure(js.Return(js.Call(toJS(callee), vargs.map(toJS) ++ bargs.map(argumentToJS) ++ List(toJS(ks),
+      pure(js.Return(js.Call(toJS(callee), vargs.map(toJS) ++ bargs.map(argumentToJS) ++ List(DEPTH_INC, toJS(ks),
         requiringThunk { toJS(k) }))) :: Nil)
 
     case cps.Stmt.Invoke(callee, method, vargs, bargs, ks, k) =>
-      val args = vargs.map(toJS) ++ bargs.map(argumentToJS) ++ List(toJS(ks), toJS(k))
+      val args = vargs.map(toJS) ++ bargs.map(argumentToJS) ++ List(DEPTH_INC, toJS(ks), toJS(k))
       pure(js.Return(MethodCall(toJS(callee), memberNameRef(method), args:_*)) :: Nil)
 
     // const r = ks.arena.newRegion(); body
@@ -437,13 +440,13 @@ object TransformerCps extends Transformer {
     }
 
     case cps.Stmt.Reset(prog, ks, k) =>
-      pure(js.Return(Call(RESET, requiringThunk { toJS(prog)(using nonrecursive(prog)) }, toJS(ks), toJS(k))) :: Nil)
+      pure(js.Return(Call(RESET, Variable(DEPTH), requiringThunk { toJS(prog)(using nonrecursive(prog)) }, toJS(ks), toJS(k))) :: Nil)
 
     case cps.Stmt.Shift(prompt, body, ks, k) =>
-      pure(js.Return(Call(SHIFT, nameRef(prompt), requiringThunk { toJS(body)(using nonrecursive(body)) }, toJS(ks), toJS(k))) :: Nil)
+      pure(js.Return(Call(SHIFT, nameRef(prompt), Variable(DEPTH), requiringThunk { toJS(body)(using nonrecursive(body)) }, toJS(ks), toJS(k))) :: Nil)
 
     case cps.Stmt.Resume(r, b, ks2, k2) =>
-      pure(js.Return(js.Call(RESUME, nameRef(r), toJS(b)(using nonrecursive(b)), toJS(ks2), requiringThunk { toJS(k2) })) :: Nil)
+      pure(js.Return(js.Call(RESUME, nameRef(r), Variable(DEPTH), toJS(b)(using nonrecursive(b)), toJS(ks2), requiringThunk { toJS(k2) })) :: Nil)
 
     case cps.Stmt.Hole(span) =>
       pure(js.Return($effekt.call("hole", JsString(span.range.from.format))) :: Nil)
@@ -581,8 +584,18 @@ object TransformerCps extends Transformer {
   // Thunking
   // --------
 
-  def thunked(stmt: js.Stmt): js.Stmt = js.Return(js.Lambda(Nil, stmt))
-  def thunked(expr: js.Expr): js.Expr = js.Lambda(Nil, expr)
+  val MAX_DEPTH = 500
+
+  def thunked(stmt: js.Expr => js.Stmt): js.Stmt =
+    js.If(js.RawExpr(List("", " < ", ""), List(js.Variable(DEPTH), js.RawLiteral(MAX_DEPTH.toString))),
+      stmt(DEPTH_INC),
+      js.Return(js.Lambda(Nil, stmt(js.RawLiteral("0"))))
+    )
+  def thunked(expr: js.Expr => js.Expr): js.Expr =
+    js.IfExpr(js.RawExpr(List("", " < ", ""), List(js.Variable(DEPTH), js.RawLiteral(MAX_DEPTH.toString))),
+      expr(DEPTH_INC),
+      js.Lambda(Nil, expr(js.RawLiteral("0")))
+    )
 
   def requiringThunk[T](prog: TransformerContext ?=> T)(using C: TransformerContext): T =
     prog(using C.copy(requiresThunk = true))
@@ -590,9 +603,9 @@ object TransformerCps extends Transformer {
   def noThunking[T](prog: TransformerContext ?=> T)(using C: TransformerContext): T =
     prog(using C.copy(requiresThunk = false))
 
-  def maybeThunking(stmt: js.Stmt)(using T: TransformerContext): js.Stmt =
-    if T.requiresThunk then thunked(stmt) else stmt
+  def maybeThunking(stmt: js.Expr => js.Stmt)(using T: TransformerContext): js.Stmt =
+    if T.requiresThunk then thunked(stmt) else stmt(DEPTH_INC)
 
-  def maybeThunking(expr: js.Expr)(using T: TransformerContext): js.Expr =
-    if T.requiresThunk then thunked(expr) else expr
+  def maybeThunking(expr: js.Expr => js.Expr)(using T: TransformerContext): js.Expr =
+    if T.requiresThunk then thunked(expr) else expr(DEPTH_INC)
 }
