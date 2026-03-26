@@ -139,6 +139,10 @@ extern def show[R](value: R) at {}: String =
   chez "(show_impl ${value})"
   llvm "ret %Pos poison"
 
+extern def genericShow[R](value: R) at {}: String =
+  js "$effekt.show(${value})"
+  chez "(show_impl ${value})"
+
 // Strings
 // =======
 extern def infixPlusPlus(s1: String, s2: String) at {}: String =
@@ -231,12 +235,9 @@ def println(o: Ordering): Unit = println(o.show)
 // ==============
 
 /// Structural equality: Not available in the LLVM backend
-extern def equals[R](x: R, y: R) at {}: Bool =
+extern def genericEquals[R](x: R, y: R) at {}: Bool =
   js "$effekt.equals(${x}, ${y})"
   chez "(equal_impl ${x} ${y})"
-
-def differsFrom[R](x: R, y: R): Bool =
-  not(equals(x, y))
 
 // TODO fix this in the pattern matching compiler
 extern def infixEq(x: Unit, y: Unit) at {}: Bool =
