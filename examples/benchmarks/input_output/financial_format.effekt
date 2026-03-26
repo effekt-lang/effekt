@@ -32,10 +32,10 @@ def emitOrder(): Unit / emit[Byte] = {
   emitEntry(10) { "123".fromString.each() }
 }
 
-def readTag(): Int / read[Byte] = {
+def nextTag(): Int / next[Byte] = {
   var tag = 0
   loop {
-    val byte = do read().toInt
+    val byte = do next().toInt
     if (byte >= 48 && byte <= 57) {
       tag = tag * 10 + (byte - 48)
     } else {
@@ -45,13 +45,13 @@ def readTag(): Int / read[Byte] = {
   return tag
 }
 
-def readEntry { entry: Int => Unit / read[Byte] }: Unit / read[Byte] = {
-  val tag = readTag()
+def nextEntry { entry: Int => Unit / next[Byte] }: Unit / next[Byte] = {
+  val tag = nextTag()
   try {
     entry(tag)
-  } with read[Byte] {
+  } with next[Byte] {
     resume {
-      val byte = do read()
+      val byte = do next()
       if (byte == 0x01) {
         do stop()
       } else {
@@ -61,11 +61,11 @@ def readEntry { entry: Int => Unit / read[Byte] }: Unit / read[Byte] = {
   }
 }
 
-def readOrder(): Unit / read[Byte] = {
+def nextOrder(): Unit / next[Byte] = {
   def assertTag(tag: Int) = {
-    readEntry { got =>
+    nextEntry { got =>
       if (got == tag) {
-        loop { do read(); () }
+        loop { do next(); () }
       } else {
         panic("wrong tag")
       }
@@ -104,7 +104,7 @@ def run(n: Int) = {
 
   readFile(filename) {
     repeat(n) {
-      readOrder()
+      nextOrder()
     }
   }
 

@@ -224,12 +224,12 @@ def each[T](arr: ResizableArray[T]): Unit / emit[T] =
     do emit(arr.rawContentPtr.get.get(i))
   }
 
-/// Connects `arr` as a producer to a given pull stream `reader` acting as a consumer.
-def feed[R, T](arr: ResizableArray[T]) { reader: () => R / read[T] }: R = {
+/// Connects `arr` as a producer to a given pull stream `driver` acting as a consumer.
+def feed[R, T](arr: ResizableArray[T]) { driver: () => R / next[T] }: R = {
   var i = 0
   try {
-    reader()
-  } with read[T] {
+    driver()
+  } with next[T] {
     resume {
       if (i < arr.size) {
         val v = arr.rawContentPtr.get.get(i)

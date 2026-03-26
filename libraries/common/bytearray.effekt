@@ -283,11 +283,11 @@ def each(bytes: ByteArray): Unit / emit[Byte] = {
   go(0)
 }
 
-def feed[R](bytes: ByteArray) { reader: () => R / read[Byte] }: R = {
+def feed[R](bytes: ByteArray) { driver: () => R / next[Byte] }: R = {
   var i = 0
   try {
-    reader()
-  } with read[Byte] {
+    driver()
+  } with next[Byte] {
     resume {
       if (i < bytes.size) {
         val c = i
