@@ -117,7 +117,7 @@ function CAPTURE(body) {
 const RETURN = (x, d, ks) => ks.rest.stack(x, d, ks.rest)
 
 // HANDLE(ks, ks, (p, ks, k) => { STMT })
-function RESET(d prog, ks, k) {
+function RESET(d, prog, ks, k) {
   const prompt = Symbol(); // gensym
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
   return prog(prompt, d + 1, { stack: null, prompt, arena: new Arena(), rest }, RETURN)
