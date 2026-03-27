@@ -300,13 +300,17 @@ def feed[R](bytes: ByteArray) { reader: () => R / read[Byte] }: R = {
   }
 }
 
+def collect(capacity: Int) { stream: () => Unit / emit[Byte] }: ByteArray =
+  returning::collect[Unit](capacity){stream}.second
+
 def collect { stream: () => Unit / emit[Byte] }: ByteArray =
-  returning::collect[Unit]{stream}.second
+  collect(4){stream}
 
 namespace returning {
-  def collect[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
+
+  def collect[R](capacity: Int) { stream: () => R / emit[Byte] }: (R, ByteArray) = {
     var i = 0
-    var a = allocate(1)
+    var a = allocate(capacity)
     try {
       (stream(), a.resize(i))
     } with emit[Byte] { (v) =>
@@ -316,4 +320,8 @@ namespace returning {
       resume(())
     }
   }
+
+  def collect[R] { stream: () => R / emit[Byte] }: (R, ByteArray) =
+    returning::collect(4){stream}
+
 }

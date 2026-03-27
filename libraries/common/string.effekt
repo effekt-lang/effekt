@@ -251,12 +251,20 @@ def each(string: String): Unit / emit[Char] =
     }
   }
 
+def collect(capacity: Int) { stream: () => Unit / emit[Char] }: String =
+  returning::collect[Unit](capacity){stream}.second
+
 def collect { stream: () => Unit / emit[Char] }: String =
-  returning::collect[Unit]{stream}.second
+  collect(4){stream}
 
 namespace returning {
-  def collect[R] { stream: () => R / emit[Char] }: (R, String) = {
-    val (result, bytes) = bytearray::returning::collect[R] { encodeUTF8 { stream } }
+
+  def collect[R](capacity: Int) { stream: () => R / emit[Char] }: (R, String) = {
+    val (result, bytes) = bytearray::returning::collect[R](capacity) { encodeUTF8 { stream } }
     (result, bytes.toString)
   }
+
+  def collect[R] { stream: () => R / emit[Char] }: (R, String) =
+    returning::collect(4){stream}
+
 }

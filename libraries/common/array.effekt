@@ -679,16 +679,25 @@ def feed[T, R](array: Array[T]) { reader: () => R / read[T] }: R = {
 
 /// Collects elements emitted by a push stream producer `stream` into a new array,
 /// discarding the result of the producer.
+/// The provided capacity is a hint for the expected number of elements.
+/// It must be strictly larger than zero.
+def collect[A](capacity: Int) { stream: () => Unit / emit[A] }: Array[A] =
+  returning::collect[A, Unit](capacity){stream}.second
+
+/// Collects elements emitted by a push stream producer `stream` into a new array,
+/// discarding the result of the producer.
 def collect[A] { stream: () => Unit / emit[A] }: Array[A] =
-  returning::collect[A, Unit]{stream}.second
+  collect[A](4){stream}
 
 namespace returning {
 
   /// Collects elements emitted by a push stream producer `stream` into a new array,
   /// returning the result of the producer as well as the collected array.
-  def collect[A, R] { stream: () => R / emit[A] }: (R, Array[A]) = {
+  /// The provided capacity is a hint for the expected number of elements.
+  /// It must be strictly larger than zero.
+  def collect[A, R](capacity: Int) { stream: () => R / emit[A] }: (R, Array[A]) = {
     var i = 0
-    var a = unsafeAllocate(1)
+    var a = unsafeAllocate(capacity)
     try {
       (stream(), a.resize(i))
     } with emit[A] { (v) =>
@@ -698,4 +707,10 @@ namespace returning {
       resume(())
     }
   }
+
+  /// Collects elements emitted by a push stream producer `stream` into a new array,
+  /// returning the result of the producer as well as the collected array.
+  def collect[A, R] { stream: () => R / emit[A] }: (R, Array[A]) =
+    returning::collect[A, R](4){stream}
+
 }
