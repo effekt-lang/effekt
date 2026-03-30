@@ -1,0 +1,16 @@
+// Regression test for #1324: overloaded function should not shadow
+// an overloaded operation when using method-call syntax on boxed blocks.
+
+def foo(s: String): Unit = println("function: " ++ s)
+
+interface F {
+  def foo(s: Int): Unit
+}
+
+def main() = {
+  val b = box new F {
+    def foo(s) = println("operation: " ++ show(s))
+  }
+  // b.foo(42) should call the operation F.foo, not the function foo
+  b.foo(42)
+}

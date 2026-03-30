@@ -179,6 +179,49 @@ object Transformer {
         emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
         RetVoid()
 
+      // Region-allocated variable (Alloc pattern: Var followed by Resume).
+      // Uses heap allocation so the mutable cell survives continuation capture/resume.
+      // Fixes: region variables read as 0 / segfault when sent "back in time" via multi-shot continuations.
+      case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, rest @ machine.Resume(_, _)) =>
+        emit(Comment(s"heapvar $name"))
+
+        val size = typeSize(tpe)
+
+        // Allocate cell on the heap; Reference = (null, heapPointer-as-i64)
+        emit(Call(name, Ccc(), referenceType, newHeapReference, List(ConstantInt(size))))
+
+        // Store init value into the heap cell
+        val heapPtr = freshName("heapPtr")
+        emit(Call(heapPtr, Ccc(), PointerType(), getVarPointer,
+          List(LocalReference(referenceType, name), getStack())))
+        emit(Store(LocalReference(PointerType(), heapPtr), transform(init), StackPointer))
+
+        // Push a cleanup frame (stores the Reference for stack unwinding).
+        // The heap cell is intentionally not freed here to avoid double-free
+        // with multi-shot continuations. TODO: add reference counting.
+        val environment = List(ref)
+        val returnAddressName = freshName("returnAddress")
+        val returnType = transform(machine.Type.Positive())
+        val returnValue = freshName("returnValue")
+        val parameters = List(Parameter(returnType, returnValue))
+        defineLabel(returnAddressName, parameters) {
+          emit(Comment(s"heapvar $name / return address"))
+          popEnvironmentFrom(getStack(), environment)
+          val nextReturn = LocalReference(returnAddressType, freshName("returnAddress"))
+          popReturnAddressFrom(getStack(), nextReturn.name)
+          emit(callLabel(nextReturn, List(LocalReference(returnType, returnValue))))
+          RetVoid()
+        }
+
+        val sharer = getSharer(environment, StackFrameSharer)
+        val eraser = getEraser(environment, StackFrameEraser)
+
+        shareValues(environment, freeVariables(rest));
+        pushFrameOnto(getStack(), environment, returnAddressName, sharer, eraser);
+
+        transform(rest)
+
+      // Stack-allocated variable (local Var, not in a region).
       case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, rest) =>
         val environment = List(init)
         val returnAddressName = freshName("returnAddress")
@@ -732,6 +775,7 @@ object Transformer {
   val freeStack = ConstantGlobal("freeStack")
 
   val newReference = ConstantGlobal("newReference")
+  val newHeapReference = ConstantGlobal("newHeapReference")
   val getVarPointer = ConstantGlobal("getVarPointer")
 
   val reset = ConstantGlobal("reset");

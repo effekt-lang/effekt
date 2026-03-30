@@ -9,11 +9,13 @@ permalink: tour/io
 import io
 import io/filesystem
 import io/error
+import io/promise
 ```
 
 ```effekt:prelude:hide
 import io
 import io/error
+import io/promise
 ```
 
 ```effekt:hide
