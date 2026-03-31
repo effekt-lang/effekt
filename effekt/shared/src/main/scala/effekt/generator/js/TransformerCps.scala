@@ -200,7 +200,6 @@ object TransformerCps extends Transformer {
     case Expr.Literal(s: String, core.Type.TString)     => JsString(escape(s))
     case Expr.Literal(b: Byte, core.Type.TByte)       => js.RawExpr(UByte.unsafeFromByte(b).toHexString)
     case literal: Expr.Literal       => js.RawExpr(literal.value.toString) // TODO This should match on the type...
-    case Expr.PureApp(id, vargs)     => inlineExtern(id, vargs)
     case Expr.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
     case Expr.Box(b)                 => argumentToJS(b)
   }
@@ -259,12 +258,12 @@ object TransformerCps extends Transformer {
         js.Const(nameDef(id), toJS(binding)(using nonrecursive(ks2))) :: requiringThunk { toJS(body) }.run(k)
       }
 
-    case cps.Stmt.ImpureApp(id, callee, vargs, Nil, body) =>
+    case cps.Stmt.ExternApp(id, purity, callee, vargs, Nil, body) =>
       Binding { k =>
         js.Const(nameDef(id), inlineExtern(callee, vargs)) :: toJS(body).run(k)
       }
 
-    case cps.Stmt.ImpureApp(id, callee, vargs, bargs, body) =>
+    case cps.Stmt.ExternApp(id, purity, callee, vargs, bargs, body) =>
       Binding { k =>
         js.Const(nameDef(id), js.Call(nameRef(callee), vargs.map(toJS) ++ bargs.map(argumentToJS))) :: toJS(body).run(k)
       }
@@ -559,7 +558,7 @@ object TransformerCps extends Transformer {
       } && default.forall(body => canBeDirect(k, body))
       case Stmt.LetDef(id, binding, body) => notIn(binding) && canBeDirect(k, body)
       case Stmt.LetExpr(id, binding, body) => notIn(binding) && canBeDirect(k, body)
-      case Stmt.ImpureApp(id, callee, vargs, bargs, body) => vargs.forall(notIn) && bargs.forall(notIn) && canBeDirect(k, body)
+      case Stmt.ExternApp(id, purity, callee, vargs, bargs, body) => vargs.forall(notIn) && bargs.forall(notIn) && canBeDirect(k, body)
       case Stmt.LetCont(id, Cont.ContLam(result, ks2, body), body2) =>
         def willBeDirectItself = canBeDirect(id, body2) && canBeDirect(k, maintainDirectStyle(ks2, body))
         def notFreeinContinuation = notIn(body) && canBeDirect(k, body2)

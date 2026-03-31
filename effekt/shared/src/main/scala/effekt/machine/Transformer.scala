@@ -64,12 +64,13 @@ object Transformer {
       }
       val transformedRet = transformUnboxed(ret)
       val isExternAsync = capture.contains(symbols.builtins.AsyncCapability.capture)
-      noteDefinition(name, transformedParams, Nil, isExternAsync)
+      // TODO keep track of async externs differently
+      noteDefinition(name, transformedParams, Nil)
       Some(Extern(transform(name), transformedParams, transformedRet, isExternAsync, transform(body)))
 
     case core.Extern.Include(ff, contents) =>
       Some(Include(ff, contents))
-    
+
     case core.Extern.Data(id, tparams) =>
       None
   }
@@ -104,7 +105,7 @@ object Transformer {
           case (pid, (tpe, capt)) =>
             BPC.info.get(pid) match {
               // For each known free block we have to add its free variables to this one (flat closure)
-              case Some(BlockInfo.Definition(freeParams, blockParams, _)) =>
+              case Some(BlockInfo.Definition(freeParams, blockParams)) =>
                 freeParams.toSet
               // Unknown free blocks stay free variables
               case Some(BlockInfo.Parameter(tpe)) =>
@@ -131,7 +132,7 @@ object Transformer {
 
       case core.Def(id, core.BlockVar(other, tpe, capt), rest) =>
         getBlockInfo(other) match {
-          case BlockInfo.Definition(free, params, _) =>
+          case BlockInfo.Definition(free, params) =>
             noteDefinition(id, free, params)
             val label = transformLabel(id)
             emitDefinition(label, Jump(transformLabel(other), label.environment))
@@ -157,7 +158,28 @@ object Transformer {
           transform(rest)
         }
 
-      case core.ImpureApp(id, core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), capt), targs, vargs, bargs, rest) =>
+      case core.ExternApp(id, core.Async, core.BlockVar(blockName, annotatedTpe, capt), targs, vargs, bargs, rest) =>
+        // TODO keep track of async externs differently
+        val variable = Variable(transform(id), Positive())
+        BPC.info.getOrElse(blockName, sys.error(pp"In ${stmt}. Cannot find block info for ${id}: ${annotatedTpe}.\n${BPC.info}")) match {
+          case BlockInfo.Definition(freeParams, blockParams) =>
+            transform(vargs, bargs).run { (values, blocks) =>
+              annotatedTpe match {
+                case core.BlockType.Function(_, _, vparamTypes, _, _) =>
+                  perhapsUnbox(values, vparamTypes).run { unboxeds =>
+                    transform(rest).map { rest =>
+                      PushFrame(Clause(List(variable), rest),
+                        Jump(Label(transform(blockName), blockParams ++ freeParams), unboxeds ++ blocks ++ freeParams))
+                    }
+                  }
+                case _ =>
+                  ErrorReporter.panic("Extern definition does not have function type")
+              }
+            }
+          case _ => ErrorReporter.panic("Applying an object")
+        }
+
+      case core.ExternApp(id, purity, core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), capt), targs, vargs, bargs, rest) =>
         val variable = Variable(transform(id), Positive())
         transform(rest).flatMap { rest =>
           transform(vargs, bargs).run { (values, blocks) =>
@@ -195,20 +217,8 @@ object Transformer {
                   Trampoline.Done(Invoke(Variable(transform(id), transform(tpe)), builtins.Apply, values ++ blocks))
 
                 // Known Jump
-                case BlockInfo.Definition(freeParams, blockParams, false) =>
+                case BlockInfo.Definition(freeParams, blockParams) =>
                   Trampoline.Done(Jump(Label(transform(id), blockParams ++ freeParams), values ++ blocks ++ freeParams))
-
-                // Extern Async
-                case BlockInfo.Definition(freeParams, blockParams, true) =>
-                  // TODO better way to deal with extern async functions
-                  annotatedTpe match {
-                    case core.BlockType.Function(_, _, vparamTypes, _, _) =>
-                      perhapsUnbox(values, vparamTypes).run { unboxeds =>
-                        Trampoline.Done(Jump(Label(transform(id), blockParams ++ freeParams), unboxeds ++ blocks ++ freeParams))
-                      }
-                    case _ =>
-                      ErrorReporter.panic("Extern definition does not have function type")
-                  }
 
                 case _ => ErrorReporter.panic("Applying an object")
               }
@@ -388,7 +398,7 @@ object Transformer {
         PushFrame(Clause(List(variable), k(variable)), Jump(label, label.environment))
       }
     case core.BlockVar(id, tpe, capt) => getBlockInfo(id) match {
-      case BlockInfo.Definition(_, parameters, _) =>
+      case BlockInfo.Definition(_, parameters) =>
         // Passing a top-level function directly, so we need to eta-expand turning it into a closure
         // TODO cache the closure somehow to prevent it from being created on every call
         val label = transformLabel(id)
@@ -484,21 +494,6 @@ object Transformer {
         LiteralUTF8String(variable, javastring.getBytes("utf-8"), k(variable))
       }
 
-    case core.PureApp(core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), _), _, vargs) =>
-      transform(vargs).flatMap { values =>
-        perhapsUnbox(values, vparamTypes).flatMap { unboxeds =>
-          shift { k =>
-            transformUnboxed(resultType) match {
-              case Type.Positive() =>
-                ForeignCall(variable, transform(blockName), unboxeds, k(variable))
-              case unboxedTpe =>
-                val unboxed = Variable(freshName("unboxed"), unboxedTpe)
-                ForeignCall(unboxed, transform(blockName), unboxeds, Coerce(variable, unboxed, k(variable)))
-            }
-          }
-        }
-      }
-
     case core.Make(data, constructor, targs, vargs) =>
       val tag = DeclarationContext.getConstructorTag(constructor)
 
@@ -567,7 +562,7 @@ object Transformer {
   }
 
   def transformLabel(id: Id)(using BPC: BlocksParamsContext): Label = getBlockInfo(id) match {
-    case BlockInfo.Definition(freeParams, boundParams, _) => Label(transform(id), boundParams ++ freeParams)
+    case BlockInfo.Definition(freeParams, boundParams) => Label(transform(id), boundParams ++ freeParams)
     case BlockInfo.Parameter(_) => sys error s"Expected a function definition, but got a block parameter: ${id}"
   }
 
@@ -620,18 +615,15 @@ object Transformer {
   }
 
   enum BlockInfo {
-    case Definition(free: Environment, params: Environment, async: Boolean)
+    case Definition(free: Environment, params: Environment)
     case Parameter(tpe: core.BlockType)
   }
 
   def DeclarationContext(using DC: DeclarationContext): DeclarationContext = DC
 
-  def noteDefinition(id: Id, params: Environment, free: Environment, async: Boolean)(using BC: BlocksParamsContext): Unit =
-    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Definition)")
-    BC.info += (id -> BlockInfo.Definition(free, params, async))
-
   def noteDefinition(id: Id, params: Environment, free: Environment)(using BC: BlocksParamsContext): Unit =
-    noteDefinition(id, params, free, false)
+    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Definition)")
+    BC.info += (id -> BlockInfo.Definition(free, params))
 
   def noteParameter(id: Id, tpe: core.BlockType)(using BC: BlocksParamsContext): Unit =
     assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Parameter)")

@@ -128,8 +128,8 @@ object StaticArguments {
 
     case Stmt.Let(id, binding, body) => Stmt.Let(id, rewrite(binding), rewrite(body))
 
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-      Stmt.ImpureApp(id, callee, targs, vargs.map(rewrite), bargs.map(rewrite), rewrite(body))
+    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
+      Stmt.ExternApp(id, purity, callee, targs, vargs.map(rewrite), bargs.map(rewrite), rewrite(body))
 
     case Stmt.App(b, targs, vargs, bargs) =>
       b match {
@@ -188,7 +188,6 @@ object StaticArguments {
     }
 
   def rewrite(p: Expr)(using StaticArgumentsContext): Expr = p match {
-    case Expr.PureApp(f, targs, vargs) => Expr.PureApp(f, targs, vargs.map(rewrite))
     case Expr.Make(data, tag, targs, vargs) => Expr.Make(data, tag, targs, vargs.map(rewrite))
     case x @ Expr.ValueVar(id, annotatedType) => x
 

@@ -67,11 +67,6 @@ enum Expr extends Tree {
 
   case Literal(value: Any, annotatedType: core.ValueType)
 
-  /**
-   * Pure FFI calls. Invariant, block b is pure.
-   */
-  case PureApp(id: Id, vargs: List[Expr])
-
   case Make(data: ValueType.Data, tag: Id, vargs: List[Expr])
 
   case Box(b: Block)
@@ -99,7 +94,7 @@ enum Stmt extends Tree {
   case LetDef(id: Id, binding: Block, body: Stmt)
   case LetExpr(id: Id, binding: Expr, body: Stmt)
   case LetCont(id: Id, binding: Cont.ContLam, body: Stmt)
-  case ImpureApp(id: Id, callee: Id, vargs: List[Expr], bargs: List[Block], body: Stmt)
+  case ExternApp(id: Id, purity: core.Purity, callee: Id, vargs: List[Expr], bargs: List[Block], body: Stmt)
 
   // Regions
   case Region(id: Id, ks: MetaCont, body: Stmt)
@@ -166,7 +161,6 @@ object Variables {
   def free(e: Expr): Variables = e match {
     case Expr.ValueVar(id) => value(id)
     case Expr.Literal(value, tpe) => empty
-    case Expr.PureApp(id, vargs) => block(id) ++ all(vargs, free)
     case Expr.Make(data, tag, vargs) => all(vargs, free)
     case Expr.Box(b) => free(b)
   }
@@ -194,7 +188,7 @@ object Variables {
     case Stmt.LetDef(id, binding, body)  => (free(binding) ++ free(body)) -- block(id)
     case Stmt.LetExpr(id, binding, body) => free(binding) ++ (free(body) -- value(id))
     case Stmt.LetCont(id, binding, body) => free(binding) ++ (free(body) -- cont(id))
-    case Stmt.ImpureApp(id, callee, vargs, bargs, body) => block(callee) ++ all(vargs, free) ++ all(bargs, free) ++ (free(body) -- value(id))
+    case Stmt.ExternApp(id, purity, callee, vargs, bargs, body) => block(callee) ++ all(vargs, free) ++ all(bargs, free) ++ (free(body) -- value(id))
 
     case Stmt.Region(id, ks, body) => free(ks) ++ (free(body) -- block(id))
     case Stmt.Alloc(id, init, region, body) => free(init) ++ block(region) ++ (free(body) -- block(id))
@@ -249,7 +243,6 @@ object substitutions {
     case ValueVar(id) => ValueVar(id)
     case Literal(value, tpe) => Literal(value, tpe)
     case Make(tpe, tag, vargs) => Make(tpe, tag, vargs.map(substitute))
-    case PureApp(id, vargs) => PureApp(id, vargs.map(substitute))
     case Box(b) => Box(substitute(b))
   }
 
@@ -315,8 +308,8 @@ object substitutions {
       LetCont(id, substitute(binding),
         substitute(body)(using subst.shadowConts(List(id))))
 
-    case ImpureApp(id, callee, vargs, bargs, body) =>
-      ImpureApp(id, callee, vargs.map(substitute), bargs.map(substitute),
+    case ExternApp(id, purity, callee, vargs, bargs, body) =>
+      ExternApp(id, purity, callee, vargs.map(substitute), bargs.map(substitute),
         substitute(body)(using subst.shadowValues(List(id))))
 
     case Region(id, ks, body) =>

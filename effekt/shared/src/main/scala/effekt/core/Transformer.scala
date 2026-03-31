@@ -241,15 +241,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           val vparams = vparamtps.map { t => core.ValueParam(TmpValue("valueParam"), transform(t))}
           val vargs = vparams.map { case core.ValueParam(id, tpe) => Expr.ValueVar(id, tpe) }
 
-          // [[ f ]] = { (x) => f(x) }
-          def etaExpandPure(b: ExternFunction): BlockLit = {
-            assert(bparamtps.isEmpty)
-            assert(effects.isEmpty)
-            assert(cparams.isEmpty)
-            BlockLit(tparams, Nil, vparams, Nil,
-              Stmt.Return(PureApp(BlockVar(b), targs, vargs)))
-          }
-
           // [[ f ]] = { [A](x) => make f[A](x) }
           def etaExpandConstructor(b: Constructor): BlockLit = {
             assert(bparamtps.isEmpty)
@@ -260,8 +251,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           }
 
           // [[ f ]] = { (x){g} => let r = f(x){g}; return r }
-          def etaExpandDirect(f: ExternFunction): BlockLit = {
+          def etaExpandExtern(f: ExternFunction): BlockLit = {
             assert(effects.isEmpty)
+            // TODO calculate purity from capture
+            val purity = if f.capture.pure then Pure else if f.capture.pureOrIO then Impure else Async
             val bparams = bparamtps.map { t => val id = TmpBlock("etaParam"); core.BlockParam(id, transform(t), Set(id)) }
             val bargs = bparams.map {
               case core.BlockParam(id, tpe, capt) => Block.BlockVar(id, tpe, capt)
@@ -269,15 +262,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             val result = TmpValue("etaBinding")
             val callee = BlockVar(f)
             BlockLit(tparams, bparams.map(_.id), vparams, bparams,
-              core.ImpureApp(result, callee, targs, vargs, bargs,
+              core.ExternApp(result, purity, callee, targs, vargs, bargs,
                 Stmt.Return(Expr.ValueVar(result, transform(restpe)))))
           }
 
           sym match {
             case _: ValueSymbol => transformUnbox(tree)
             case cns: Constructor => etaExpandConstructor(cns)
-            case f: ExternFunction if callingConvention(f) == CallingConvention.Pure => etaExpandPure(f)
-            case f: ExternFunction if callingConvention(f) == CallingConvention.Direct => etaExpandDirect(f)
+            case f: ExternFunction => etaExpandExtern(f)
             // does not require change of calling convention, so no eta expansion
             case sym: BlockSymbol => BlockVar(sym)
           }
@@ -648,7 +640,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case MatchGuard.BooleanGuard(condition, _) => Nil
       case MatchGuard.PatternGuard(scrutinee, pattern, _) => boundTypesInPattern(pattern)
     }
-    def equalsFor(tpe: symbols.ValueType): (Expr, Expr) => Expr =
+    def equalsFor(tpe: symbols.ValueType): (Expr, Expr, ValueVar => Stmt) => Stmt =
       val prelude = Context.module.findDependency(QualifiedName(Nil, "effekt")).getOrElse {
         Context.panic(pp"${Context.module.name.name}: Cannot find 'effekt' in prelude, which is necessary to compile pattern matching.")
       }
@@ -657,11 +649,19 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       } collectFirst {
         // specialized version
         case (sym, FunctionType(Nil, Nil, List(`tpe`, `tpe`), Nil, builtins.TBoolean, _)) =>
-          (lhs: Expr, rhs: Expr) => core.PureApp(BlockVar(sym), Nil, List(lhs, rhs))
+          (lhs: Expr, rhs: Expr, cont: ValueVar => Stmt) => {
+            val result = Id("eqres")
+            val resultVar: ValueVar = Expr.ValueVar(result, core.Type.TBoolean)
+            core.ExternApp(result, Purity.Pure, BlockVar(sym), Nil, List(lhs, rhs), Nil, cont(resultVar))
+          }
         // generic version
         case (sym, FunctionType(List(tparam), Nil, List(ValueTypeRef(t1), ValueTypeRef(t2)), Nil, builtins.TBoolean, _))
             if t1 == tparam && t2 == tparam =>
-          (lhs: Expr, rhs: Expr) => core.PureApp(BlockVar(sym), List(transform(tpe)), List(lhs, rhs))
+          (lhs: Expr, rhs: Expr, cont: ValueVar => Stmt) => {
+            val result = Id("eqres")
+            val resultVar: ValueVar = Expr.ValueVar(result, core.Type.TBoolean)
+            core.ExternApp(result, Purity.Pure, BlockVar(sym), List(transform(tpe)), List(lhs, rhs), Nil, cont(resultVar))
+          }
       } getOrElse { Context.panic(pp"Cannot find == for type ${tpe} in prelude!") }
 
     // create joinpoint
@@ -772,10 +772,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val bargsT = bargs.map(transformAsBlock)
 
     sym match {
-      case f: Callable if callingConvention(f) == CallingConvention.Pure =>
-        Return(PureApp(BlockVar(f), targs, vargsT))
-      case f: Callable if callingConvention(f) == CallingConvention.Direct =>
-        Return(Context.bind(BlockVar(f), targs, vargsT, bargsT))
       case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")
         val universals = targs.take(r.tpe.tparams.length)
@@ -785,6 +781,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Context.panic("Should have been translated to a method call!")
       case f: Field =>
         Context.panic("Should have been translated to a select!")
+      case f: ExternFunction =>
+        val purity = if f.capture.pure then Pure else if f.capture.pureOrIO then Impure else Async
+        val x = TmpValue("r")
+        val callee = BlockVar(f)
+        val tpe = Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargsT.map(_.capt)).result
+        ExternApp(x, purity, callee, targs, vargsT, bargsT, Return(core.ValueVar(x, tpe)))
       case f: BlockSymbol =>
         App(BlockVar(f), targs, vargsT, bargsT)
       case f: ValueSymbol =>
@@ -848,22 +850,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   private def asConcreteCaptureSet(c: Captures)(using Context): CaptureSet = c match {
     case c: CaptureSet => c
     case _ => Context.panic("All capture unification variables should have been replaced by now.")
-  }
-
-  private enum CallingConvention {
-    case Pure, Direct, Control
-  }
-  private def callingConvention(callable: Callable)(using Context): CallingConvention = callable match {
-    case f @ ExternFunction(name, _, _, _, _, _, capture, bodies, _) =>
-      // resolve the preferred body again and hope it's the same
-      val body = ResolveExternDefs.findPreferred(bodies)
-      body match {
-        case b: source.ExternBody.EffektExternBody => CallingConvention.Control
-        case _ if f.capture.pure => CallingConvention.Pure
-        case _ if f.capture.pureOrIO => CallingConvention.Direct
-        case _ => CallingConvention.Control
-      }
-    case _ => CallingConvention.Control
   }
 
   // we can conservatively approximate to false, in order to disable the optimizations
@@ -951,9 +937,10 @@ trait TransformerOps extends ContextOps { Context: Context =>
   }
 
   private[core] def bind(callee: Block.BlockVar, targs: List[core.ValueType], vargs: List[Expr], bargs: List[Block]): ValueVar = {
+    // FIXME EXTERNAPP: make it work for all purities
     // create a fresh symbol and assign the type
     val x = TmpValue("r")
-    val binding: Binding.ImpureApp = Binding.ImpureApp(x, callee, targs, vargs, bargs)
+    val binding: Binding.ExternApp = Binding.ExternApp(x, Purity.Impure, callee, targs, vargs, bargs)
     bindings += binding
 
     ValueVar(x, Type.bindingType(binding))
