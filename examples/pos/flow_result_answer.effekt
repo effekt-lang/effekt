@@ -1,0 +1,11 @@
+
+effect done(): Nothing
+
+def main() = {
+  try {
+    do done()
+  } with done {
+    ()
+  }
+}
+
