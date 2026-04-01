@@ -42,13 +42,13 @@ def listen(listener: Listener, handler: Connection => Unit at {io, async, global
 def shutdown(listener: Listener): Unit =
   internal::shutdown(listener)
 
-def streaming[R](connection: Connection) { program: () => R / {read[ByteArray], emit[ByteArray]} }: R / Exception[IOError] =
+def streaming[R](connection: Connection) { program: () => R / {next[ByteArray], emit[ByteArray]} }: R / Exception[IOError] =
   try {
     program()
   } with emit[ByteArray] { bytes =>
     write(connection, bytes, 0, bytes.size)
     resume(())
-  } with read[ByteArray] { () =>
+  } with next[ByteArray] { () =>
     val bytes = bytearray::allocate(4096)
     read(connection, bytes, 0, bytes.size) match {
       case r and r == bytes.size => resume { return bytes }
