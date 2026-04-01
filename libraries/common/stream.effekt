@@ -7,12 +7,12 @@ import partial
 // Effects
 // -------
 
-/// Describes push streams by emitting values of type `A`.
-effect emit[A](value: A): Unit
+/// The effect for emitting an item of type `A` in a push stream.
+effect emit[A](item: A): Unit
 
-/// Describes pull streams by reading values of type `A`.
+/// The effect for getting the next item of type `A` from a pull stream.
 ///
-/// The producer can decide to `stop` emitting values.
+/// Uses the `stop` effect to signal the end of the stream.
 effect next[A](): A / stop
 
 
@@ -42,8 +42,8 @@ def tap[A] { action: () => A / stop } { driver: () => Unit / next[A] }: Unit =
 def fix[T] { one: T => Unit / emit[T] } { stream: => Unit / emit[T] }: Unit =
   try {
     stream()
-  } with emit[T] { value =>
-    fix {one} { one(value) }
+  } with emit[T] { item =>
+    fix {one} { one(item) }
     resume(())
   }
 
@@ -58,7 +58,7 @@ def some[A] { action: () => A / stop }: Unit / { emit[A], fail } = {
 
 
 /// In Effekt lower bounds are inclusive and upper bounds are exclusive
-record Indexed[A](index: Int, value: A)
+record Indexed[A](index: Int, item: A)
 
 def range(lower: Int, upper: Int): Unit / emit[Int] =
   if (lower < upper) {
@@ -116,7 +116,7 @@ def iterate[A](initial: A) { step: A => A }: Unit / emit[A] = {
 /// ```
 def takeWhile[A] { predicate: A => Bool } { stream: () => Unit / emit[A] }: Unit / emit[A] =
   try { stream() } with emit[A] {
-    case value and predicate(value) => do emit(value); resume(())
+    case item and predicate(item) => do emit(item); resume(())
     case _                          => () // end the stream
   }
 
@@ -146,7 +146,7 @@ def product { stream: () => Unit / emit[Int] }: Int =
 /// ```
 def all[A] { cond: A => Bool } { stream: => Unit / emit[A] }: Bool =
   try { stream(); true } with emit[A] {
-    case value and not(cond(value)) => false
+    case item and not(cond(item)) => false
     case _                          => resume(())
   }
 
@@ -169,7 +169,7 @@ def all[A] { cond: A => Bool } { stream: => Unit / emit[A] }: Bool =
 /// ```
 def any[A] { cond: A => Bool } { stream: => Unit / emit[A] }: Bool =
   try { stream(); false } with emit[A] {
-    case value and cond(value) => true
+    case item and cond(item) => true
     case _                     => resume(())
   }
 
@@ -380,19 +380,19 @@ def tracking[A]{ body: => Unit / { emit[A], getPos } }: Unit / emit[A] =
 namespace returning {
 
 /// Canonical handler of push streams that performs `action` for every
-/// value emitted by `stream`.
+/// item emitted by `stream`.
 def for[A, R] { stream: () => R / emit[A] } { action: A => Unit }: R =
   try {
     stream()
-  } with emit[A] { value =>
-    resume(action(value))
+  } with emit[A] { item =>
+    resume(action(item))
   }
 
 def map[A, B, R] { function: A => B } { stream: () => R / emit[A] }: R / emit[B] =
   try {
     stream()
-  } with emit[A] { value =>
-    resume(do emit(function(value)))
+  } with emit[A] { item =>
+    resume(do emit(function(item)))
   }
 
 def tap[A, R] { action: () => A / stop } { driver: () => R / next[A] }: R =
