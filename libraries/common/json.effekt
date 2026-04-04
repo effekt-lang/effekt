@@ -112,7 +112,11 @@ def readDouble(): Double / { Scan[Char], Exception[WrongFormat]} = {
       var b = 0.1
       var r = pre.toDouble
       while (optionally[Int] { must { readDigit() } } is Some(d)) {
-        r = r + b * d.toDouble
+        if (pre >= 0) {
+            r = r + b * d.toDouble
+        } else {
+            r = r - b * d.toDouble
+        }
         b = b * 0.1
       }
       exponent(r)
