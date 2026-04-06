@@ -57,30 +57,26 @@ class TRMCTests extends CoreTests {
       tree
     }
   }
-  enum transformContext {
-    case outer(id: Id)
+  enum TransformContext {
+    case Outer(id: Id)
+    case Val(id:Id, body: Stmt, next: TransformContext)
   }
-  def getIdfromCtx(ctx: transformContext): Id = ctx match {
-    case transformContext.outer(id) => id
-    case _ => Id("not reachable")
-  }
-
   
   val ctxType: ValueType = ValueType.Var(Id("ctxTpe"))
   
+  //def split(context: TransformContext): (TailContext, TransformContext) = ??? //TailContext: leer, make oder Compose, rekursiv
   
-  
-  def transform(input: Stmt, inputfun: Id, outputfun: Id, context: List[transformContext]) : Stmt = input match {
+  def transform(input: Stmt, inputfun: Id, outputfun: Id, context: TransformContext) : Stmt = input match {
     case Stmt.Def(id, block, body) => ???
     case Stmt.Let(id, binding, body) => ???
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
     case Stmt.Return(expr) => ???
-    case Stmt.Val(id, binding, body) => ???
+    case Stmt.Val(id, binding, body) => transform(binding, inputfun, outputfun, TransformContext.Val(id,body,context))
     case Stmt.App(callee, targs, vargs, bargs) => callee match {
       case Block.BlockVar(id, annotatedTpe, annotatedCapt) => 
         if (id == inputfun) {
           annotatedTpe match {
-            case Function(tparams, cparams, vparams, bparams, result) => Stmt.App(Block.BlockVar(outputfun, Function(tparams, cparams, vparams.appended(ctxType), bparams, result), annotatedCapt), targs, vargs.appended(ValueVar(getIdfromCtx(context.last), ctxType)), bargs) //TODO:fix ctxType ?, capt?
+            case Function(tparams, cparams, vparams, bparams, result) => Stmt.App(Block.BlockVar(outputfun, Function(tparams, cparams, vparams.appended(ctxType), bparams, result), annotatedCapt), targs, vargs.appended(reify(context)), bargs) //TODO:capt?
             case _ => throw ImpossibleStateError("in an App() Statement a Function should be called")
           }
         }else{
@@ -103,7 +99,19 @@ class TRMCTests extends CoreTests {
     case Stmt.Resume(k, body) => ???
     case Stmt.Hole(annotatedTpe, span) => ???
   }
-
+  
+  def reify(context: TransformContext) : Expr = context match {
+    case TransformContext.Outer(id) =>  ValueVar(id, ctxType) //TODO: fix ctxType ?
+    case TransformContext.Val(id, body, next) => body match {
+      case Stmt.Return(Make(TList,consId,List(Type.TInt,Type.TInt),List(n,ValueVar(id,TList)))) =>
+        val composefun: BlockVar = BlockVar(Id("ctx_composeContext"),Function(Nil,Nil,List(ctxType,ctxType),Nil,ctxType),Set.empty)
+        val consctx = Expr.MakeContext(TList,consId,Nil,List(n),Nil)
+        Expr.PureApp(composefun,Nil,List(reify(next), consctx)) 
+      case _ => ???
+    }
+  }
+  
+  
   test("simple function call") {
 
     val n: Id = Id("n")
@@ -118,7 +126,7 @@ class TRMCTests extends CoreTests {
       Stmt.Return(Expr.ValueVar(n, Type.TInt)))
 
     // return n
-    Stmt.Return(Expr.ValueVar(n, Type.TInt))
+    //Stmt.Return(Expr.ValueVar(n, Type.TInt))
 
     // f(n)
     val app = Stmt.App(Block.BlockVar(f, fType, fCapt), Nil, List(Expr.ValueVar(n, Type.TInt)), Nil)
@@ -126,7 +134,7 @@ class TRMCTests extends CoreTests {
     // f2(n,ctx)
     val appexpected = Stmt.App(Block.BlockVar(f2, Function(Nil, Nil, List(Type.TInt, ctxType), Nil, Type.TInt), fCapt), Nil, List(Expr.ValueVar(n, Type.TInt),Expr.ValueVar(ctx,ctxType)), Nil)
 
-    val apptransformed = transform(app, f, f2, List(transformContext.outer(ctx)))
+    val apptransformed = transform(app, f, f2, TransformContext.Outer(ctx))
 
 //    val input =
 //      """def f(n: Int) =
@@ -148,11 +156,12 @@ class TRMCTests extends CoreTests {
     val f: Id = Id("f")
     val f2: Id = Id("f2")
     val ctx: Id = Id("ctx")
-    val listType = ValueType.Var(Id("List"))
-    val fType: BlockType = Function(Nil, Nil, List(Type.TInt), Nil, listType)
+    //val listType = ValueType.Var(Id("List"))
+    val fType: BlockType = Function(Nil, Nil, List(Type.TInt), Nil, TList)
     val fCapt: Captures = Set.empty
     val sub: BlockVar = BlockVar(Id("infixSub"),Function(Nil,Nil,List(Type.TInt,Type.TInt),Nil,Type.TInt),Set.empty)
-    val ctxfun: BlockVar = ???
+    val composefun: BlockVar = BlockVar(Id("ctx_composeContext"),Function(Nil,Nil,List(ctxType,ctxType),Nil,ctxType),Set.empty)
+    //val ctxfun: BlockVar = ???
     
     
     val tmpId = Id("tmp")
@@ -162,19 +171,28 @@ class TRMCTests extends CoreTests {
     val callStmt = Stmt.App(Block.BlockVar(f, fType, fCapt), Nil, List(Expr.PureApp(sub,List(Type.TInt,Type.TInt),List(ValueVar(n,Type.TInt),Literal(1,Type.TInt)))),Nil)
     //val tmp= f(n-1)
     //return Cons(n,tmp)
-    val inputTree = Stmt.Val(Id("tmp"),callStmt,retStmt)
+    val inputTree = Stmt.Val(tmpId,callStmt,retStmt)
     
     //n-1
     val minusOne = Expr.PureApp(sub,List(Type.TInt,Type.TInt),List(ValueVar(n,Type.TInt),Literal(1,Type.TInt)))
 
     //Cons(n,[])
-    //val consctx = Expr.PureApp(ctx,Nil,???)
+    val consctx = Expr.MakeContext(TList,consId,Nil,List(ValueVar(n,Type.TInt)),Nil)
     
-    val expected = Stmt.App(Block.BlockVar(f2,Function(Nil, Nil, List(Type.TInt, ctxType), Nil, listType),fCapt),Nil,List(minusOne,???),Nil)
+    //compose(ctx,Cons(n,[]))
+    val composition = Expr.PureApp(composefun,Nil,List(Expr.ValueVar(ctx,ctxType), consctx))
+    
+    //f2(n-1,compose(ctx, Cons(n,[]))
+    val expected = Stmt.App(Block.BlockVar(f2,Function(Nil, Nil, List(Type.TInt, ctxType), Nil, TList),fCapt),Nil,List(minusOne, composition),Nil)
+    
+    val inputtransformed = transform(inputTree,f,f2,TransformContext.Outer(ctx))
+
+    assertAlphaEquivalentStatements(inputtransformed,expected)
+    //assertEquals(inputtransformed,expected)
   }
-  val TFieldName = ValueType.Data(Id("FieldName"), Nil)
-  val fieldString1 = Expr.Literal(tailId.show,Type.TString) //proxy
-  val fieldString2 = Expr.Literal(tailId, TFieldName) //proxy
+//  val TFieldName = ValueType.Data(Id("FieldName"), Nil)
+//  val fieldString1 = Expr.Literal(tailId.show,Type.TString) //proxy
+//  val fieldString2 = Expr.Literal(tailId, TFieldName) //proxy
 
-
+  
 }

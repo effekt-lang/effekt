@@ -144,7 +144,7 @@ class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) ext
       else {
         "make" <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
       }
-    case MakeContext(data, tag, targs, before, after) => ??? //TODO: how should these be printed?, synchronize with parser
+    case MakeContext(data, tag, targs, before, after) => "MakeContext" //TODO: how should these be printed?, synchronize with parser
     case Box(b, capt) => "box" <+> toDoc(capt) <+> toDoc(b)
   }
 
