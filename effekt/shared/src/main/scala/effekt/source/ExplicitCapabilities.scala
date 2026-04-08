@@ -43,7 +43,9 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
   }
 
   def codeposImplFor(span: Span, p: TrackedParam.BlockParam)(using Context): Term = {
-    val pos = s"${span.source.name}:${span.from}-${span.to}"
+    val from = span.source.offsetToPosition(span.from)
+    val to = span.source.offsetToPosition(span.to)
+    val pos = s"${span.source.name}:${from.line}:${from.column}-${to.line}:${to.column}"
     val sp = span.synthesized
     val (ifce, op, tpe) = p.tpe match {
       case Some(tpe @ BlockType.InterfaceType(ifce @ BlockTypeConstructor.Interface(name, Nil, List(op), decl), Nil)) =>
