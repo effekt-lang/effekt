@@ -832,4 +832,8 @@ effect write(s: String): Unit
 
 effect splice[A](x: A): Unit
 
-effect Codepos(): String
+// Code positions
+// ==============
+// 
+/// Allows to get the code position of the callsite of the current function
+effect codepos(): String

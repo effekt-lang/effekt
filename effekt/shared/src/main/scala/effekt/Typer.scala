@@ -1511,7 +1511,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     // We add return effects last to have more information at this point to
     // concretize the effect.
-    effs = effs ++ Effects(retEffs.filterNot { p => p.name.name == "Codepos" })
+    effs = effs ++ Effects(retEffs.filterNot { p => p.name.name == "codepos" })
 
     // annotate call node with inferred type arguments
     Context.annotateTypeArgs(call, typeArgs)
