@@ -6,9 +6,13 @@ def printCodeposTwice(): Unit / codepos = {
   printCodepos()
   printCodepos()
 }
+def atHere{ body: => Unit / codepos }: Unit = {
+  body()
+}
 def main() = {
   printCodepos()
   printCodepos()
   printCodeposTwice()
-  try { printCodepos() } with codepos { () => resume("END") }
+  try { printCodepos() } with codepos { () => resume("X") }
+  atHere{ printCodepos() }
 }

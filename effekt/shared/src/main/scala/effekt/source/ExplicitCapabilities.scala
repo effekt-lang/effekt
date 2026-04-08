@@ -168,7 +168,10 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
     case b @ source.BlockLiteral(tps, vps, bps, body, span) =>
       val capabilities = Context.annotation(Annotations.BoundCapabilities, b)
       val capParams = capabilities.map(definitionFor)
-      source.BlockLiteral(tps, vps, bps ++ capParams, rewrite(body), span)
+
+      shouldForward.withValue(capabilities.exists { p => p.name.name == "codepos" }) {
+        source.BlockLiteral(tps, vps, bps ++ capParams, rewrite(body), span)
+      }
   }
 
   override def rewrite(body: ExternBody)(using context.Context): ExternBody =
