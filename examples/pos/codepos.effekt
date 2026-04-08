@@ -1,5 +1,5 @@
 def printCodepos(): Unit / Codepos = {
-  println(do codepos())
+  println(do Codepos())
 }
 def main() = {
   printCodepos()

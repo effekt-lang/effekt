@@ -62,9 +62,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context in {
           Context.withUnificationScope {
             flowingInto(builtins.toplevelCaptures) {
-              // first, annotate root terms
-              Context.bind(builtins.Codepos.codepos, builtins.Codepos.codepos.toType)
-
               // We split the type-checking of definitions into "pre-check" and "check"
               // to allow mutually recursive defs
               tree.defs.foreach { d => precheckDef(d) }
@@ -1514,7 +1511,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     // We add return effects last to have more information at this point to
     // concretize the effect.
-    effs = effs ++ Effects(retEffs.filterNot { p => p.typeConstructor == builtins.Codepos.interface })
+    effs = effs ++ Effects(retEffs.filterNot { p => p.name.name == "Codepos" })
 
     // annotate call node with inferred type arguments
     Context.annotateTypeArgs(call, typeArgs)

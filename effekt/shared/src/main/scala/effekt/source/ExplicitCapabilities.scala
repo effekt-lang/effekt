@@ -39,20 +39,25 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       extDef.copy(bodies = rewrittenBodies)
   }
 
-  def codeposImplFor(span: Span)(using Context): Term = {
+  def codeposImplFor(span: Span, p: TrackedParam.BlockParam)(using Context): Term = {
     val pos = s"${span.source.name}:${span.from}-${span.to}"
     val sp = span.synthesized
+    val (ifce, op, tpe) = p.tpe match {
+      case Some(tpe @ BlockType.InterfaceType(ifce @ BlockTypeConstructor.Interface(name, Nil, List(op), decl), Nil)) =>
+        (ifce, op, tpe)
+      case _ => Context.abort("Could not find Codepos interface with compatible type")
+    }
     // now, synthesize an object that always returns the current position
-    val idIfce = IdRef(Nil, builtins.Codepos.interface.name.name, sp)
-    Context.annotate(Annotations.Symbol, idIfce, builtins.Codepos.interface)
-    val idOp = IdRef(Nil, builtins.Codepos.codepos.name.name, sp)
-    Context.annotate(Annotations.Symbol, idOp, builtins.Codepos.codepos)
+    val idIfce = IdRef(Nil, "Codepos", sp)
+    Context.annotate(Annotations.Symbol, idIfce, ifce)
+    val idOp = IdRef(Nil, op.name.name, sp)
+    Context.annotate(Annotations.Symbol, idOp, op)
     val impl = Implementation(TypeRef(idIfce, Many(Nil, sp), sp),
       List(OpClause(idOp,
         Nil, Nil, Nil, Some(Effectful(ValueTypeTree(builtins.TString, sp), source.Effects(Nil, sp), sp)),
         Stmt.Return(Term.Literal(pos, builtins.TString, sp), sp),
         IdDef("resume", sp), sp)), sp)
-    Context.annotate(Annotations.InferredBlockType, impl, builtins.Codepos.tpe)
+    Context.annotate(Annotations.InferredBlockType, impl, tpe)
     New(impl, sp)
   }
 
@@ -71,8 +76,8 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
       // the remaining capabilities are provided as arguments
       val capabilityArgs = others.map{
-        case p if p.tpe.contains(builtins.Codepos.tpe) =>
-          codeposImplFor(span)
+        case p if p.name.name == "Codepos" =>
+          codeposImplFor(span, p)
         case p => referenceToCapability(p)
       }
 
@@ -92,8 +97,8 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
       val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
       val capabilityArgs = capabilities.map{
-        case p if p.tpe.contains(builtins.Codepos.tpe) =>
-          codeposImplFor(span)
+        case p if p.name.name == "Codepos" =>
+          codeposImplFor(span, p)
         case p => referenceToCapability(p)
       }
 
@@ -111,8 +116,8 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
       val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
       val capabilityArgs = capabilities.map{
-        case p if p.tpe.contains(builtins.Codepos.tpe) =>
-          codeposImplFor(span)
+        case p if p.name.name == "Codepos" =>
+          codeposImplFor(span, p)
         case p =>
           referenceToCapability(p)
       }

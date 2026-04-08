@@ -56,15 +56,6 @@ object builtins {
   val GlobalSymbol = Interface(Name.local("Global"), Nil, Nil, decl = NoSource)
   val GlobalCapability = ExternResource(name("global"), InterfaceType(GlobalSymbol, Nil), Resource(name("global")), decl = NoSource)
 
-  object Codepos {
-    val interface: Interface = Interface(Name.local("Codepos"), Nil, Nil, decl = NoSource)
-    val tpe: BlockType.InterfaceType = BlockType.InterfaceType(interface, Nil)
-    val codepos = Operation(name("codepos"), Nil, Nil, Nil, TString, Effects.Pure, interface, decl = NoSource)
-    val capture: Capture = Capture.Resource(Name.local("codepos"))
-    val param = BlockParam(Name.local("codeposCap"), Some(tpe), capture, decl = NoSource)
-    interface.operations = List(codepos)
-  }
-
   object TState {
     val S: TypeParam = TypeParam(Name.local("S"))
     val interface: Interface = Interface(Name.local("Ref"), List(S), Nil, decl = NoSource)
@@ -95,8 +86,7 @@ object builtins {
     "Any" -> TopSymbol,
     "Nothing" -> BottomSymbol,
     "IO" -> IOSymbol,
-    "Region" -> RegionSymbol,
-    "Codepos" -> Codepos.interface
+    "Region" -> RegionSymbol
   )
 
   val rootCaptures: Map[String, Capture] = Map(
@@ -105,15 +95,11 @@ object builtins {
     "global" -> GlobalCapability.capture
   )
 
-  val rootTerms: Map[String, Set[TermSymbol]] = Map(
-    "codepos" -> Set(Codepos.codepos)
-  )
-
   // captures which are allowed on the toplevel
   val toplevelCaptures: CaptureSet = CaptureSet() // CaptureSet(IOCapability.capture, GlobalCapability.capture)
 
   lazy val rootBindings: Bindings =
-    Bindings(rootTerms, rootTypes, rootCaptures, Map("effekt" -> Bindings(Map.empty, rootTypes, rootCaptures, Map.empty)))
+    Bindings(Map.empty, rootTypes, rootCaptures, Map("effekt" -> Bindings(Map.empty, rootTypes, rootCaptures, Map.empty)))
 
   // All built-in symbols that can occur in core programs
   val coreBuiltins: Map[String, symbols.Symbol] = {

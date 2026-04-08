@@ -19,13 +19,8 @@ case object GlobalCapabilityScope extends CapabilityScope {
   def parent: CapabilityScope = sys error "No parent"
   // If we try to find a capability for an effect that is known to be unhandled (that is no outer scope could
   // potentially handle it, then we raise an error.
-  def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam = {
-    if (tpe.typeConstructor == symbols.builtins.Codepos.interface) {
-      symbols.builtins.Codepos.param 
-    } else {
-      C.abort(pretty"Effect ${tpe} is not allowed in this context.")
-    }
-  }
+  def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
+    C.abort(pretty"Effect ${tpe} is not allowed in this context.")
   def relevantInScopeFor(tpe: symbols.InterfaceType)(using C: Context): Set[symbols.InterfaceType] = Set.empty
 }
 

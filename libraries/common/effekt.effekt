@@ -832,4 +832,4 @@ effect write(s: String): Unit
 
 effect splice[A](x: A): Unit
 
-
+effect Codepos(): String
