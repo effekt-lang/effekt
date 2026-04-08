@@ -131,9 +131,12 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       Call(receiver, typeArgs, valueArgs, blockArgs ++ capabilityArgs, span)
 
     case h @ TryHandle(prog, handlers, span) =>
-      val body = rewrite(prog)
-
       val capabilities = Context.annotation(Annotations.BoundCapabilities, h)
+
+      val body = shouldForward.withValue(capabilities.exists { p => p.name.name == "codepos" }) {
+        rewrite(prog)
+      }
+
 
       assert(capabilities.size == handlers.size)
 

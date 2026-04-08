@@ -10,4 +10,5 @@ def main() = {
   printCodepos()
   printCodepos()
   printCodeposTwice()
+  try { printCodepos() } with codepos { () => resume("END") }
 }

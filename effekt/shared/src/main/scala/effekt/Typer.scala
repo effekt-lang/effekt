@@ -314,7 +314,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             val allImplicit = capabilities.forall { c => !(explicitCapabilities contains c) }
             val used = effs.exists(e => e == effect)
 
-            if (allImplicit && !used)
+            if (allImplicit && !used && effect.name.name != "codepos")
               Context.warning(pp"Handling effect ${effect}, which seems not to be used by the program.")
         }
 
