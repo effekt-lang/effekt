@@ -68,8 +68,13 @@ class TRMCTests extends CoreTests {
     case Compose(first: TailContext, second: TailContext)
   }
   
-  val ctxType: ValueType = ValueType.Var(Id("ctxTpe"))
-  
+  val ctxType: ValueType = ValueType.Data(Id("ctxTpe"), Nil)
+  val composefun: BlockVar = BlockVar(Id("ctx_composeContext"), Function(Nil, Nil, List(ctxType, ctxType), Nil, ctxType), Set.empty) //TODO: where do i get these in the actual compiler?
+    
+  val applyfun: BlockVar = BlockVar(Id("ctx_applyContext"), Function(Nil, Nil, List(ctxType, ctxType), Nil, ctxType), Set.empty) //TODO: types wrong
+  val emptyfun: BlockVar = BlockVar(Id("ctx_emptyContext"), Function(Nil, Nil, Nil, Nil, ctxType), Set.empty)
+
+
   def split(context: TransformContext): (TailContext, TransformContext) = context match {
     case TransformContext.Outer(id) => (TailContext.Empty, context)
     case TransformContext.Val(id, body, next) => 
@@ -111,12 +116,23 @@ class TRMCTests extends CoreTests {
     case Stmt.App(callee, targs, vargs, bargs) => callee match {
       case Block.BlockVar(id, annotatedTpe, annotatedCapt) => 
         if (id == inputfun) {
+          val (init, rest) = split(context)
           annotatedTpe match {
-            case Function(tparams, cparams, vparams, bparams, result) => Stmt.App(Block.BlockVar(outputfun, Function(tparams, cparams, vparams.appended(ctxType), bparams, result), annotatedCapt), targs, vargs.appended(reify(context)), bargs) //TODO:capt?
+            case Function(tparams, cparams, vparams, bparams, result) => 
+              reify(
+                Stmt.App(
+                  Block.BlockVar(
+                    outputfun,
+                    Function(tparams, cparams, vparams.appended(ctxType), bparams, result), annotatedCapt),
+                  targs,
+                  vargs.appended(innerReify(init)),
+                  bargs) //TODO:capt?
+                , rest, inputfun, outputfun
+              )
             case _ => throw ImpossibleStateError("in an App() Statement a Function should be called")
           }
         }else{
-          input
+          reify(input, context, inputfun, outputfun)
         }
       case Block.BlockLit(tparams, cparams, vparams, bparams, body) => ???
       case Block.Unbox(pure) => ???
@@ -136,15 +152,18 @@ class TRMCTests extends CoreTests {
     case Stmt.Hole(annotatedTpe, span) => ???
   }
   
-  def reify(context: TransformContext) : Expr = context match {
-    case TransformContext.Outer(id) =>  ValueVar(id, ctxType) //TODO: fix ctxType ?
-    case TransformContext.Val(id, body, next) => body match {
-      case Stmt.Return(Make(TList,consId,List(Type.TInt,Type.TInt),List(n,ValueVar(id,TList)))) =>
-        val composefun: BlockVar = BlockVar(Id("ctx_composeContext"),Function(Nil,Nil,List(ctxType,ctxType),Nil,ctxType),Set.empty)
-        val consctx = Expr.MakeContext(TList,consId,Nil,List(n),Nil)
-        Expr.PureApp(composefun,Nil,List(reify(next), consctx)) 
-      case _ => ???
-    }
+  def reify(stmt: Stmt, context: TransformContext, inputfun: Id, outputfun: Id) : Stmt = context match {
+    case TransformContext.Outer(id) =>  
+      val tmpId = Id("tmp")
+      Stmt.Val(tmpId, stmt, Return(PureApp(applyfun, Nil, List(ValueVar(id, ctxType), ValueVar(tmpId, stmt.tpe))))) //TODO: fix ctxType,tmpType?
+    case TransformContext.Val(id, body, next) => 
+      Stmt.Val(id, stmt, transform(body, inputfun, outputfun, next))
+  }
+  
+  def innerReify(context: TailContext): Expr = context match {
+    case TailContext.Empty => PureApp(emptyfun,Nil,Nil)
+    case TailContext.Cons(head) => MakeContext(TList,consId,Nil,List(head),Nil)
+    case TailContext.Compose(first, second) => PureApp(composefun, Nil, List(innerReify(first),innerReify(second)))
   }
   
   
@@ -196,7 +215,7 @@ class TRMCTests extends CoreTests {
     val fType: BlockType = Function(Nil, Nil, List(Type.TInt), Nil, TList)
     val fCapt: Captures = Set.empty
     val sub: BlockVar = BlockVar(Id("infixSub"),Function(Nil,Nil,List(Type.TInt,Type.TInt),Nil,Type.TInt),Set.empty)
-    val composefun: BlockVar = BlockVar(Id("ctx_composeContext"),Function(Nil,Nil,List(ctxType,ctxType),Nil,ctxType),Set.empty)
+    //val composefun: BlockVar = BlockVar(Id("ctx_composeContext"),Function(Nil,Nil,List(ctxType,ctxType),Nil,ctxType),Set.empty)
     //val ctxfun: BlockVar = ???
     
     
@@ -224,7 +243,6 @@ class TRMCTests extends CoreTests {
     val inputtransformed = transform(inputTree,f,f2,TransformContext.Outer(ctx))
 
     assertAlphaEquivalentStatements(inputtransformed,expected)
-    //assertEquals(inputtransformed,expected)
   }
 //  val TFieldName = ValueType.Data(Id("FieldName"), Nil)
 //  val fieldString1 = Expr.Literal(tailId.show,Type.TString) //proxy
