@@ -23,6 +23,7 @@ import effekt.source.SpannedOps._
 object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
   val phaseName = "explicit-capabilities"
+  val shouldForward = scala.util.DynamicVariable[Boolean](false)
 
   def run(input: Typechecked)(using C: Context) =
     val rewritten = C.timed(phaseName, input.source.name) { rewrite(input.tree) }
@@ -33,7 +34,9 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
     case f @ FunDef(id, tps, vps, bps, ret, cpt, body, doc, span) =>
       val capabilities = Context.annotation(Annotations.BoundCapabilities, f)
       val capParams = capabilities.map(definitionFor)
-      f.copy(bparams = (bps.unspan ++ capParams).spanned(bps.span), body = rewrite(body))
+      shouldForward.withValue(capParams.exists { p => p.id.name == "codepos" }) {
+        f.copy(bparams = (bps.unspan ++ capParams).spanned(bps.span), body = rewrite(body))
+      }
     case extDef @ ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) =>
       val rewrittenBodies = bodies.map { rewrite }
       extDef.copy(bodies = rewrittenBodies)
@@ -76,7 +79,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
       // the remaining capabilities are provided as arguments
       val capabilityArgs = others.map{
-        case p if p.name.name == "codepos" =>
+        case p if p.name.name == "codepos" && !shouldForward.value =>
           codeposImplFor(span, p)
         case p => referenceToCapability(p)
       }
@@ -97,7 +100,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
       val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
       val capabilityArgs = capabilities.map{
-        case p if p.name.name == "codepos" =>
+        case p if p.name.name == "codepos" && !shouldForward.value =>
           codeposImplFor(span, p)
         case p => referenceToCapability(p)
       }
@@ -116,7 +119,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
       val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
       val capabilityArgs = capabilities.map{
-        case p if p.name.name == "codepos" =>
+        case p if p.name.name == "codepos" && !shouldForward.value =>
           codeposImplFor(span, p)
         case p =>
           referenceToCapability(p)

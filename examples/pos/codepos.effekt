@@ -1,7 +1,13 @@
 def printCodepos(): Unit / codepos = {
   println(do codepos())
 }
+
+def printCodeposTwice(): Unit / codepos = {
+  printCodepos()
+  printCodepos()
+}
 def main() = {
   printCodepos()
   printCodepos()
+  printCodeposTwice()
 }
