@@ -39,6 +39,23 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       extDef.copy(bodies = rewrittenBodies)
   }
 
+  def codeposImplFor(span: Span)(using Context): Term = {
+    val pos = s"${span.source.name}:${span.from}-${span.to}"
+    val sp = span.synthesized
+    // now, synthesize an object that always returns the current position
+    val idIfce = IdRef(Nil, builtins.Codepos.interface.name.name, sp)
+    Context.annotate(Annotations.Symbol, idIfce, builtins.Codepos.interface)
+    val idOp = IdRef(Nil, builtins.Codepos.codepos.name.name, sp)
+    Context.annotate(Annotations.Symbol, idOp, builtins.Codepos.codepos)
+    val impl = Implementation(TypeRef(idIfce, Many(Nil, sp), sp),
+      List(OpClause(idOp,
+        Nil, Nil, Nil, Some(Effectful(ValueTypeTree(builtins.TString, sp), source.Effects(Nil, sp), sp)),
+        Stmt.Return(Term.Literal(pos, builtins.TString, sp), sp),
+        IdDef("resume", sp), sp)), sp)
+    Context.annotate(Annotations.InferredBlockType, impl, builtins.Codepos.tpe)
+    New(impl, sp)
+  }
+
   override def expr(using Context) = {
 
     // an effect call -- translate to method call on the inferred capability
@@ -53,7 +70,11 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val others = Context.annotation(Annotations.CapabilityArguments, c)
 
       // the remaining capabilities are provided as arguments
-      val capabilityArgs = others.map(referenceToCapability)
+      val capabilityArgs = others.map{
+        case p if p.tpe.contains(builtins.Codepos.tpe) =>
+          codeposImplFor(span)
+        case p => referenceToCapability(p)
+      }
 
       val typeArguments = Context.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e, Span.missing) }
@@ -70,7 +91,11 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val blockArgs = bargs.map { a => rewrite(a) }
 
       val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
-      val capabilityArgs = capabilities.map(referenceToCapability)
+      val capabilityArgs = capabilities.map{
+        case p if p.tpe.contains(builtins.Codepos.tpe) =>
+          codeposImplFor(span)
+        case p => referenceToCapability(p)
+      }
 
       val typeArguments = Context.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e, Span.missing) }
@@ -85,7 +110,12 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val blockArgs = bargs.map { a => rewrite(a) }
 
       val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
-      val capabilityArgs = capabilities.map(referenceToCapability)
+      val capabilityArgs = capabilities.map{
+        case p if p.tpe.contains(builtins.Codepos.tpe) =>
+          codeposImplFor(span)
+        case p =>
+          referenceToCapability(p)
+      }
 
       val typeArguments = Context.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e, Span.missing) }
