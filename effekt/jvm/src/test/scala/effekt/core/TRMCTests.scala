@@ -62,9 +62,45 @@ class TRMCTests extends CoreTests {
     case Val(id:Id, body: Stmt, next: TransformContext)
   }
   
+  enum TailContext {
+    case Empty
+    case Cons(head: Expr) //TODO: more cases later?
+    case Compose(first: TailContext, second: TailContext)
+  }
+  
   val ctxType: ValueType = ValueType.Var(Id("ctxTpe"))
   
-  //def split(context: TransformContext): (TailContext, TransformContext) = ??? //TailContext: leer, make oder Compose, rekursiv
+  def split(context: TransformContext): (TailContext, TransformContext) = context match {
+    case TransformContext.Outer(id) => (TailContext.Empty, context)
+    case TransformContext.Val(id, body, next) => 
+      val (isCons, head) = isNextFrameCons(context)
+      if (isCons){
+        val (init, rest) = split(next)
+        (TailContext.Compose(TailContext.Cons(head.get), init), rest)
+      }else{
+        (TailContext.Empty, context)
+      }
+        
+  }
+  
+  def isNextFrameCons(context: TransformContext): (Boolean, Option[Expr]) = context match {
+    case TransformContext.Outer(id) => (false, None)
+    case TransformContext.Val(id, body, next) => body match {
+      case Stmt.Return(expr) => expr match {
+        case Expr.Make(data, tag, targs, vargs) => 
+          if (tag == consId){
+            vargs match {
+              case ::(head, next) => (true, Some(head))
+              case Nil => throw ImpossibleStateError("vargs of Make for Cons cant be empty")
+            }
+          } else {
+            (false, None)
+          }
+        case _ => (false, None)
+      }
+      case _ => (false, None)
+    }
+  }
   
   def transform(input: Stmt, inputfun: Id, outputfun: Id, context: TransformContext) : Stmt = input match {
     case Stmt.Def(id, block, body) => ???
