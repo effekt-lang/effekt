@@ -34,7 +34,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
     case f @ FunDef(id, tps, vps, bps, ret, cpt, body, doc, span) =>
       val capabilities = Context.annotation(Annotations.BoundCapabilities, f)
       val capParams = capabilities.map(definitionFor)
-      shouldForward.withValue(capParams.exists { p => p.id.name == "codepos" }) {
+      shouldForward.withValue(shouldForward.value || capParams.exists { p => p.id.name == "codepos" }) {
         f.copy(bparams = (bps.unspan ++ capParams).spanned(bps.span), body = rewrite(body))
       }
     case extDef @ ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc, span) =>
@@ -133,7 +133,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
     case h @ TryHandle(prog, handlers, span) =>
       val capabilities = Context.annotation(Annotations.BoundCapabilities, h)
 
-      val body = shouldForward.withValue(capabilities.exists { p => p.name.name == "codepos" }) {
+      val body = shouldForward.withValue(shouldForward.value || capabilities.exists { p => p.name.name == "codepos" }) {
         rewrite(prog)
       }
 
@@ -169,7 +169,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val capabilities = Context.annotation(Annotations.BoundCapabilities, b)
       val capParams = capabilities.map(definitionFor)
 
-      shouldForward.withValue(capabilities.exists { p => p.name.name == "codepos" }) {
+      shouldForward.withValue(shouldForward.value || capabilities.exists { p => p.name.name == "codepos" }) {
         source.BlockLiteral(tps, vps, bps ++ capParams, rewrite(body), span)
       }
   }
