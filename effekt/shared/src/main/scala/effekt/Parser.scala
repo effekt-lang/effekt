@@ -1005,14 +1005,13 @@ class Parser(tokens: Seq[Token], source: Source) {
     nonterminal:
       peek.kind match {
         case `__` => skip(); IgnorePattern(span())
-        case _ if isVariable  =>
-          idRef() match {
+        case _ if isVariable  => idRef() match {
             case id if peek(`(`) => TagPattern(id, many(matchPattern, `(`, `,`, `)`).unspan, span())
-            case IdRef(Nil, name, span) => AnyPattern(IdDef(name, span), span)
+            case IdRef(Nil, name, span) =>
+              maybeValueTypeAnnotation()
+              AnyPattern(IdDef(name, span), span)
             case IdRef(_, name, _) => fail("Cannot use qualified names to bind a pattern variable")
           }
-        case _ if isVariable =>
-          AnyPattern(idDef(), span())
         case _ if isLiteral => LiteralPattern(literal(), span())
         case `(` => some(matchPattern, `(`, `,`, `)`) match {
           case Many(p :: Nil , _) => fail("Pattern matching on tuples requires more than one element")
