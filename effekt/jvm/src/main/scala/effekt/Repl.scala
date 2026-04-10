@@ -139,6 +139,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
           if (current != last && last != 0L)  {
             println(s"\n--- ${f} changed: running ${filename} ---")
             driver.compileFile(filename, config)
+            println(driver.collectDependencies(filename, config))
             files = driver.sources.keys.toList // TODO: doesn't include dependencies
             // println(s"listening on ${files}")
           }
