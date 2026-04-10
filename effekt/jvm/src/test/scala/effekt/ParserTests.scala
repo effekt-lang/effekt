@@ -576,7 +576,7 @@ class ParserTests extends munit.FunSuite {
         )
       ),
       None,
-      Span(source,0,pos(7), Synthesized)
+      Span(source,0,pos(7))
     ),Span(source,0,pos.last, Synthesized));
     assertEquals(parseStmts(source.content), expected)
   }
