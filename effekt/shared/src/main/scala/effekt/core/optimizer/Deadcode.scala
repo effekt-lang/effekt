@@ -43,15 +43,17 @@ class Deadcode(reachable: Map[Id, Usage])
   override def rewrite(m: ModuleDecl): ModuleDecl = m match {
     case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
       ModuleDecl(path, includes,
-        // drop unused constructors and operations
-        declarations.map(rewrite),
+        // drop unused constructors and operations, and types
+        declarations.collect{
+          case d if used(d.id) => rewrite(d)
+        },
         // drop unreachable externs
         m.externs.collect {
           // We need to keep "show", "showBuiltin" & "infixPlusPlus" for generating show definitions (see #1123)
           case e: Extern.Def if used(e.id) || List("show", "showBuiltin", "infixPlusPlus").contains(e.id.name.name) => e
           case e: Extern.Include => e
           // We currently do not have usage information on extern types, so we have to keep all of them
-          case e: Extern.Data => e
+          case e: Extern.Data if used(e.id) => e
         },
         // drop unreachable definitions
         definitions.collect { case d if used(d.id) => rewrite(d) },
