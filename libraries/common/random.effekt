@@ -1,6 +1,7 @@
 module random
 
 import stream
+import array
 import io/filesystem
 import io/error
 
@@ -137,6 +138,17 @@ def randomDouble(): Double / random =
   // This is not perfect, but it will do for now.
 def randomDoubles(): Unit / {emit[Double], random} =
   while (true) do emit(randomDouble())
+
+/// Shuffle an array in-place using the Fisher-Yates algorithm.
+def shuffle[A](arr: Array[A]): Unit / random = {
+  val n = arr.size
+  var i = 0
+  while (i + 1 < n) {
+    val j = randomInt(i, n - 1)
+    arr.swap(i, j)
+    i = i + 1
+  }
+}
 
 
 namespace examples {
