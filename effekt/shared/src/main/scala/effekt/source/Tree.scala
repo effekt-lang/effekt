@@ -684,6 +684,12 @@ enum MatchPattern extends Tree {
    * Currently should *only* occur in lambda-cases & `with` statements during parsing
    */
   case MultiPattern(patterns: List[MatchPattern], span: Span) extends MatchPattern
+
+  /**
+   * Matchin the tail of a list
+   *   case [a, ..b] => ...
+   */
+  case TailPattern(id: IdDef, span: Span) extends MatchPattern, Definition
 }
 export MatchPattern.*
 

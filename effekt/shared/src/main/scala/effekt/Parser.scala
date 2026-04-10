@@ -1005,22 +1005,33 @@ class Parser(tokens: Seq[Token], source: Source) {
     nonterminal:
       peek.kind match {
         case `__` => skip(); IgnorePattern(span())
-        case _ if isVariable  =>
-          idRef() match {
-            case id if peek(`(`) => TagPattern(id, many(matchPattern, `(`, `,`, `)`).unspan, span())
-            case IdRef(Nil, name, span) => AnyPattern(IdDef(name, span), span)
-            case IdRef(_, name, _) => fail("Cannot use qualified names to bind a pattern variable")
-          }
-        case _ if isVariable =>
-          AnyPattern(idDef(), span())
+        case _ if isVariable  => idRef() match {
+          case id if peek(`(`) => TagPattern(id, many(matchPattern, `(`, `,`, `)`).unspan, span())
+          case IdRef(Nil, name, span) => AnyPattern(IdDef(name, span), span)
+          case IdRef(_, name, _) => fail("Cannot use qualified names to bind a pattern variable")
+        }
         case _ if isLiteral => LiteralPattern(literal(), span())
         case `(` => some(matchPattern, `(`, `,`, `)`) match {
           case Many(p :: Nil , _) => fail("Pattern matching on tuples requires more than one element")
           case Many(ps, _) => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}", span().synthesized), ps, span())
         }
-        case `[` => manyTrailing(matchPattern, `[`, `,`, `]`).foldRight(NilPattern)(ConsPattern)
+        case `[` => listPattern()
         case k => fail("pattern", k)
       }
+
+  private def listPattern(): MatchPattern = {
+    val (ps, last) = manyTrailingLastSpecial(matchPattern, listMatchPattern, `[`, `,`, `]`)
+    val last = ps.last match {
+      case 
+    }
+  }
+
+  private def listMatchPattern(): MatchPattern = peek.kind match {
+    case `..` =>
+      consume(`..`)
+      idDef() match { case id: IdDef =>  TailPattern(id, id.span) }
+    case _ => matchPattern()
+  }
   
   private def NilPattern: MatchPattern =
     TagPattern(IdRef(Nil, "Nil", span().synthesized), Nil, span())
@@ -1920,6 +1931,28 @@ class Parser(tokens: Seq[Token], source: Source) {
       components.toList
     }
 
+  inline def manyTrailingLastSpecial[T](p: () => T, last: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): (List[T], Option[T]) =
+    consume(before)
+    if (peek(after)) {
+      consume(after)
+      (Nil, None)
+    } else if (peek(sep)) {
+      consume(sep)
+      consume(after)
+      (Nil, None)
+    } else {
+      val components: ListBuffer[T] = ListBuffer.empty
+      components += p()
+      while (peek(sep)) {
+        consume(sep)
+
+        if (!peek(after)) {
+          components += p()
+        }
+      }
+      consume(after)
+      (components.init.toList, Some(components.last))
+    }
 
   // Positions
 
