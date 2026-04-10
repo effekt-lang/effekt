@@ -102,7 +102,7 @@ class RenamerTests extends CoreTests {
       """module main
         |
         |def foo = { () =>
-        |  var x @ global = (foo:(Int)=>Int@{})(4) ;
+        |  var x @ x = (foo:(Int)=>Int@{})(4) ;
         |  return x:Int
         |}
         |""".stripMargin
