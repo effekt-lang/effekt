@@ -48,7 +48,7 @@ jobs:
 
       - name: Run internal tests
         run: |
-          mill project.testRemaining
+          mill -j1 project.testRemaining
 
       - name: Assemble fully optimized JS file
         run: mill project.assembleJS
