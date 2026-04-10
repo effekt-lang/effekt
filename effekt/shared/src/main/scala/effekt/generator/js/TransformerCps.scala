@@ -157,7 +157,7 @@ object TransformerCps extends Transformer {
 
     if used.jumped then
       js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(nameDef(ks), nameDef(k)),
-        List(js.While(RawExpr("true"), translatedBody, Some(uniqueName(label)))))
+        List(js.While(Some(uniqueName(label)), RawExpr("true"), translatedBody)))
     else
       js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(nameDef(ks), nameDef(k)),
         translatedBody)

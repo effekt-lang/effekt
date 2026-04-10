@@ -178,7 +178,7 @@ enum Stmt {
   case Throw(expr: Expr)
 
   // label : while (<EXPR>) { <STMT>* }
-  case While(cond: Expr, stmts: List[Stmt], label: Option[JSName])
+  case While(label: Option[JSName], cond: Expr, stmts: List[Stmt])
 
   // e.g. break
   case Break(label: Option[JSName])
