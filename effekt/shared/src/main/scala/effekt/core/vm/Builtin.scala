@@ -75,7 +75,7 @@ lazy val doubles: Builtins = Map(
   builtin("effekt::pow(Double, Double)") {
     case As.Double(base) :: As.Double(exp) :: Nil => Value.Double(Math.pow(base, exp))
   },
-  builtin("effekt::pi()") {
+  builtin("effekt::_pi()") {
     case Nil => Value.Double(Math.PI)
   },
 
@@ -106,7 +106,7 @@ lazy val doubles: Builtins = Map(
   builtin("effekt::toInt(Double)") {
     case As.Double(x) :: Nil => Value.Int(x.toLong)
   },
-  builtin("effekt::show(Double)") {
+  builtin("effekt::showBuiltin(Double)") {
     // TODO globally define show on double in a decent way... this mimicks JS
     case As.Double(n) :: Nil =>
       Value.String(
@@ -188,7 +188,7 @@ lazy val integers: Builtins = Map(
     case As.Int(x) :: Nil => Value.Double(x.toDouble)
   },
 
-  builtin("effekt::show(Int)") {
+  builtin("effekt::showBuiltin(Int)") {
     case As.Int(n) :: Nil => Value.String(n.toString)
   },
 )
@@ -211,7 +211,7 @@ lazy val bytes: Builtins = Map(
 
   // Conversion
   // ----------
-  builtin("effekt::show(Byte)") {
+  builtin("effekt::showBuiltin(Byte)") {
     case As.Byte(b) :: Nil => Value.String(b.toHexString)
   }
 )
@@ -236,6 +236,10 @@ lazy val strings: Builtins = Map(
   },
 
   builtin("effekt::substring(String, Int, Int)") {
+    case As.String(x) :: As.Int(from) :: As.Int(to) :: Nil => Value.String(x.substring(from.toInt, to.toInt))
+  },
+
+  builtin("effekt::unsafeSubstring(String, Int, Int)") {
     case As.String(x) :: As.Int(from) :: As.Int(to) :: Nil => Value.String(x.substring(from.toInt, to.toInt))
   },
 
@@ -273,13 +277,13 @@ lazy val chars: Builtins = Map(
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x == y)
   },
 
-  builtin("effekt::show(Char)") {
+  builtin("effekt::showBuiltin(Char)") {
     case As.Int(n) :: Nil => Value.String(n.toString)
   }
 )
 
 lazy val arrays: Builtins = Map(
-  builtin("array::unsafeAllocate(Int)") {
+  builtin("array::unsafeAllocate[T](Int)") {
     case As.Int(x) :: Nil => Value.Array(scala.Array.ofDim(x.toInt))
   },
   builtin("array::size[T](Array[T])") {
