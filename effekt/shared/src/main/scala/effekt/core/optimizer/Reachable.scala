@@ -12,12 +12,12 @@ class Reachable(
 ) {
 
   // TODO we could use [[Binding]] here.
-  type Definitions = Map[Id, Block | Expr | Stmt | Extern.Def | Extern.Data | Declaration]
+  type Definitions = Map[Id, Block | Expr | Stmt | Extern.Def | Extern.Data | Declaration | (Property, Declaration.Interface)]
 
   private def update(id: Id, u: Usage): Unit = reachable = reachable.updated(id, u)
   private def usage(id: Id): Usage = reachable.getOrElse(id, Usage.Never)
 
-  def processDefinition(id: Id, d: Block | Expr | Stmt | Extern.Def | Extern.Data | Declaration)(using defs: Definitions): Unit = {
+  def processDefinition(id: Id, d: Block | Expr | Stmt | Extern.Def | Extern.Data | Declaration | (Property, Declaration.Interface))(using defs: Definitions): Unit = {
     if stack.contains(id) then { update(id, Usage.Recursive); return }
 
     seen = seen + id
@@ -36,6 +36,8 @@ class Reachable(
       case extern: Extern.Def => process(extern)
       case extern: Extern.Data => process(extern)
       case decl: Declaration => process(decl)
+      case (p: Property, d: Declaration.Interface) =>
+        process(p.tpe); process(d.id)
     }
   }
 
@@ -135,6 +137,7 @@ class Reachable(
       bargs.foreach(process)
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
       process(callee)
+      process(callee.tpe)
       process(method)
       process(methodTpe)
       targs.foreach(process)
@@ -186,10 +189,16 @@ class Reachable(
 
 object Reachable {
   def apply(entrypoints: Set[Id], m: ModuleDecl): Map[Id, Usage] = {
-    val definitions: Map[Id, Block | Expr | Stmt | Extern.Def | Extern.Data | Declaration] = (m.definitions.map {
+    val definitions: Map[Id, Block | Expr | Stmt | Extern.Def | Extern.Data | Declaration | (Property, Declaration.Interface)] = (m.definitions.map {
       case Toplevel.Def(id, block) => id -> block
       case Toplevel.Val(id, binding) => id -> binding
-    } ++ m.declarations.map { d => d.id -> d }
+    } ++ m.declarations.flatMap { d =>
+      (d.id -> d) :: (d match {
+        case Declaration.Data(id, tparams, constructors) => Nil
+        case d@Declaration.Interface(id, tparams, properties) =>
+          properties.map { p => p.id -> (p, d) }
+      })
+    }
       ++ m.externs.collect {
       case d @ Extern.Def(id, _, _, _, _, _, _, _) => id -> d
       case d @ Extern.Data(id, tps, body) => d.id -> d
