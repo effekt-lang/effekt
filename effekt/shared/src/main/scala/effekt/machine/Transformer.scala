@@ -70,7 +70,7 @@ object Transformer {
     case core.Extern.Include(ff, contents) =>
       Some(Include(ff, contents))
     
-    case core.Extern.Data(id, tparams) =>
+    case core.Extern.Data(id, tparams, body) =>
       None
   }
 

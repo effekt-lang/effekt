@@ -38,7 +38,7 @@ object Transformer {
     case core.Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
       Some(Extern.Def(id, vparams.map(_.id), bparams.map(_.id), annotatedCapture.contains(symbols.builtins.AsyncCapability.capture), transform(body)))
     case core.Extern.Include(featureFlag, contents) => Some(Extern.Include(featureFlag, contents))
-    case core.Extern.Data(id, tparams) => None
+    case core.Extern.Data(id, tparams, body) => None
   }
 
   def transform(externBody: core.ExternBody)(using TransformationContext): ExternBody = externBody match {

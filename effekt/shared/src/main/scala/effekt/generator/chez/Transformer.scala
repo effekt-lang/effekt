@@ -138,7 +138,7 @@ trait Transformer {
     case Extern.Include(ff, contents) =>
       Some(RawDef(contents))
 
-    case Extern.Data(id, tparams) =>
+    case Extern.Data(id, tparams, body) =>
       None
   }
 

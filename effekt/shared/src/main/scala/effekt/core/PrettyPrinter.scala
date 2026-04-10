@@ -82,7 +82,10 @@ class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) ext
         case ExternBody.Unsupported(err) => ???
       })
     case Extern.Include(ff, contents) => "extern" <+> toDoc(ff) <+> stringLiteral(contents)
-    case Extern.Data(id, tps) => "extern type" <+> toDoc(id) <> typeParamsDoc(tps)
+    case Extern.Data(id, tps, ExternBody.Unsupported(_)) => "extern type" <+> toDoc(id) <> typeParamsDoc(tps)
+    case Extern.Data(id, tps, ExternBody.StringExternBody(featureFlag, contents)) =>
+      "extern type" <+> toDoc(id) <> typeParamsDoc(tps)
+        <+> "=" <+> toDoc(featureFlag) <+> toDoc(contents)
   }
 
   def toDoc(ff: FeatureFlag): Doc = ff match {
