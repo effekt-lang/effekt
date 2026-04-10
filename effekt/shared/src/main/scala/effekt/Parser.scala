@@ -1018,9 +1018,7 @@ class Parser(tokens: Seq[Token], source: Source) {
           case Many(p :: Nil , _) => fail("Pattern matching on tuples requires more than one element")
           case Many(ps, _) => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}", span().synthesized), ps, span())
         }
-        case `[` => some(matchPattern, `[`, `,`, `[`) match {
-          case Many(ps, _) => ps.foldRight(NilPattern)(ConsPattern)
-        }
+        case `[` => manyTrailing(matchPattern, `[`, `,`, `]`).foldRight(NilPattern)(ConsPattern)
         case k => fail("pattern", k)
       }
   
