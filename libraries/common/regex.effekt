@@ -11,7 +11,6 @@ record Match(matched: String, index: Int)
 extern def regex(str: String) at {}: Regex =
   js "new RegExp(${str})"
   chez "(pregexp ${str})"
-  vm "regex::regex(String)"
 
 def exec(reg: Regex, str: String): Option[Match] = {
   val v = internal::exec(reg, str)
@@ -32,12 +31,10 @@ namespace internal {
   extern def matched(r: RegexMatch) at {}: String =
     js "${r}.matched"
     chez "(vector-ref ${r} 0)"
-    vm "regex::matched(RegexMatch)"
 
   extern def index(r: RegexMatch) at {}: Int =
     js "${r}.index"
     chez "(vector-ref ${r} 1)"
-    vm "regex::index(RegexMatch)"
 
   extern js """
     function regex$exec(reg, str) {

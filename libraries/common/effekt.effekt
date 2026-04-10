@@ -46,7 +46,6 @@ extern def print(value: String): Unit =
     call void @c_io_print(%Pos ${value})
     ret %Pos zeroinitializer ; Unit
   """
-  vm "effekt::print(String)"
 
 extern def println(value: String): Unit =
   js "$effekt.println(${value})"
@@ -55,7 +54,6 @@ extern def println(value: String): Unit =
     call void @c_io_println(%Pos ${value})
     ret %Pos zeroinitializer ; Unit
   """
-  vm "effekt::println(String)"
 
 extern jsNode """
 $effekt.readln = function readln$impl(callback) {
@@ -91,7 +89,6 @@ extern def showBuiltin(value: Int) at {}: String =
     %z = call %Pos @c_bytearray_show_Int(%Int ${value})
     ret %Pos %z
   """
-  vm "effekt::show(Int)"
 
 extern def showBuiltin(value: Double) at {}: String =
   js "'' + ${value}"
@@ -100,7 +97,6 @@ extern def showBuiltin(value: Double) at {}: String =
     %z = call %Pos @c_bytearray_show_Double(%Double ${value})
     ret %Pos %z
   """
-  vm "effekt::show(Double)"
 
 extern def showBuiltin(value: Char) at {}: String =
   js "String.fromCodePoint(${value})"
@@ -109,7 +105,6 @@ extern def showBuiltin(value: Char) at {}: String =
     %z = call %Pos @c_bytearray_show_Char(%Int ${value})
     ret %Pos %z
   """
-  vm "effekt::show(Char)"
 
 extern def showBuiltin(value: Byte) at {}: String =
   js "'0x' + ${value}.toString(16).toUpperCase().padStart(2, '0')"
@@ -118,11 +113,9 @@ extern def showBuiltin(value: Byte) at {}: String =
     %z = call %Pos @c_bytearray_show_Byte(%Byte ${value})
     ret %Pos %z
   """
-  vm "effekt::show(Byte)"
 
 extern def inspect[R](value: R) at io: Unit =
   default { println(show(value)) }
-  vm "effekt::inspect(Any)"
 
 /// A fatal runtime error that cannot be caught
 extern def panic(msg: String) at io: Nothing =
@@ -161,7 +154,6 @@ extern def length(str: String) at {}: Int =
     %x = call %Int @c_bytearray_size(%Pos ${str})
     ret %Int %x
   """
-  vm "effekt::length(String)"
 
 extern def unsafeSubstring(str: String, from: Int, to: Int) at {}: String =
   js "${str}.substring(${from}, ${to})"
@@ -183,7 +175,6 @@ extern def random() at io: Double =
     %r = call double @c_io_random()
     ret double %r
   """
-  vm "effekt::random()"
 
 // References and state
 // ====================
@@ -403,32 +394,27 @@ extern def infixSlash(x: Double, y: Double) at {}: Double =
 extern def cos(x: Double) at {}: Double =
   js "Math.cos(${x})"
   chez "(cos ${x})"
-  vm "effekt::cos(Double)"
-  llvm "%z = call %Double @llvm.cos.f64(double ${x}) ret %Double %z"
+   llvm "%z = call %Double @llvm.cos.f64(double ${x}) ret %Double %z"
 
 extern def sin(x: Double) at {}: Double =
   js "Math.sin(${x})"
   chez "(sin ${x})"
-  vm "effekt::sin(Double)"
-  llvm "%z = call %Double @llvm.sin.f64(double ${x}) ret %Double %z"
+   llvm "%z = call %Double @llvm.sin.f64(double ${x}) ret %Double %z"
 
 extern def atan(x: Double) at {}: Double =
   js "Math.atan(${x})"
   chez "(atan ${x})"
-  vm "effekt::atan(Double)"
-  llvm "%z = call %Double @atan(double ${x}) ret %Double %z"
+   llvm "%z = call %Double @atan(double ${x}) ret %Double %z"
 
 extern def tan(x: Double) at {}: Double =
   js "Math.tan(${x})"
   chez "(tan ${x})"
-  vm "effekt::tan(Double)"
-  llvm "%z = call %Double @tan(double ${x}) ret %Double %z"
+   llvm "%z = call %Double @tan(double ${x}) ret %Double %z"
 
 extern def sqrt(x: Double) at {}: Double =
   js "Math.sqrt(${x})"
   chez "(sqrt ${x})"
   llvm "%z = call %Double @llvm.sqrt.f64(double ${x}) ret %Double %z"
-  vm "effekt::sqrt(Double)"
 
 def square(x: Double): Double = x * x
 
@@ -447,8 +433,7 @@ def abs(n: Double): Double =
 extern def log(x: Double) at {}: Double =
   js "Math.log(${x})"
   chez "(log ${x})"
-  vm "effekt::log(Double)"
-  llvm "%z = call %Double @llvm.log.f64(double ${x}) ret %Double %z"
+   llvm "%z = call %Double @llvm.log.f64(double ${x}) ret %Double %z"
 
 extern def log1p(x: Double) at {}: Double =
   js "Math.log1p(${x})"
@@ -458,8 +443,7 @@ extern def log1p(x: Double) at {}: Double =
 extern def exp(x: Double) at {}: Double =
   js "Math.exp(${x})"
   chez "(exp ${x})"
-  vm "effekt::exp(Double)"
-  llvm "%z = call %Double @llvm.exp.f64(double ${x}) ret %Double %z"
+   llvm "%z = call %Double @llvm.exp.f64(double ${x}) ret %Double %z"
 
 def pow(base: Double, exponent: Int): Double = {
   def loop(base: Double, exponent: Int, acc: Double): Double = {
@@ -484,8 +468,7 @@ extern def pow(base: Double, exponent: Double) at {}: Double =
 extern def _pi() at {}: Double =
   js "Math.PI"
   chez "(* 4 (atan 1))"
-  vm "effekt::pi()"
-  llvm "ret double 3.14159265358979323846264338327950288419716939937510582097494459"
+   llvm "ret double 3.14159265358979323846264338327950288419716939937510582097494459"
 
 val PI: Double = _pi()
 
@@ -493,13 +476,11 @@ extern def toInt(d: Double) at {}: Int =
   js "Math.trunc(${d})"
   chez "(flonum->fixnum ${d})"
   llvm "%z = fptosi double ${d} to %Int ret %Int %z"
-  vm "effekt::toInt(Double)"
 
 extern def toDouble(d: Int) at {}: Double =
   js "${d}"
   chez "(fixnum->flonum ${d})"
   llvm "%z = sitofp i64 ${d} to double ret double %z"
-  vm "effekt::toDouble(Int)"
 
 
 extern def round(d: Double) at {}: Int =
@@ -509,7 +490,6 @@ extern def round(d: Double) at {}: Int =
     %i = call %Double @llvm.round.f64(double ${d})
     %z = fptosi double %i to %Int ret %Int %z
   """
-  vm "effekt::round(Double)"
 
 def round(d: Double, digits: Int): Double = {
   val factor = pow(10.0, digits)
@@ -660,7 +640,6 @@ extern def not(b: Bool) at {}: Bool =
     %adt_q = insertvalue %Pos zeroinitializer, i64 %q, 0
     ret %Pos %adt_q
   """
-  vm "effekt::not(Bool)"
 
 def infixBarBar { first: => Bool } { second: => Bool }: Bool =
   if (first()) true else second()
@@ -708,7 +687,6 @@ extern def bitwiseNot(x: Int) at {}: Int =
   js "(~${x})"
   chez "(lognot ${x})"
   llvm "%z = xor %Int ${x}, -1 ret %Int %z"
-  vm "effekt::bitwiseNot(Int)"
 
 
 // Byte operations
@@ -721,8 +699,7 @@ extern def toByte(n: Int) at {}: Byte =
 extern def toInt(n: Byte) at {}: Int =
   js "${n}"
   llvm "%z = zext %Byte ${n} to %Int ret %Int %z"
-  vm "effekt::toInt(Byte)"
-  chez "${n}"
+   chez "${n}"
 
 
 // Undefined and Null
@@ -738,13 +715,11 @@ extern def toInt(n: Byte) at {}: Int =
 extern def undefined[A]() at {}: A =
   js "undefined"
   chez "#f"
-  vm "effekt::undefined()"
 
 /// Is an FFI value undefined?
 extern def isUndefined[A](value: A) at {}: Bool =
   js "(${value} === undefined || ${value} === null)"
   chez "(eq? ${value} #f)"
-  vm "effekt::isUndefined[A](A)"
 
 
 // Tuples

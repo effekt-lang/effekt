@@ -38,7 +38,6 @@ extern def allocate(size: Int) at global: ByteArray =
     ret %Pos %ret_object2
   """
   chez "(make-bytevector ${size})"
-  vm "bytearray::allocate(Int)"
 
 extern def size(arr: ByteArray) at {}: Int =
   js "${arr}.length"
@@ -48,7 +47,6 @@ extern def size(arr: ByteArray) at {}: Int =
     ret i64 %size
   """
   chez "(bytevector-length ${arr})"
-  vm "bytearray::size(ByteArray)"
 
 extern js """
   function bytearray$get(arr, index) {
@@ -184,7 +182,6 @@ extern def fromString(str: String) at {}: ByteArray =
     ret %Pos ${str}
   """
   chez "(string->utf8 ${str})"
-  vm "bytearray::fromString(String)"
 
 extern def toString(arr: ByteArray) at {}: String =
   js "(new TextDecoder('utf-8').decode(${arr}))"
@@ -193,7 +190,6 @@ extern def toString(arr: ByteArray) at {}: String =
     ret %Pos ${arr}
   """
   chez "(utf8->string ${arr})"
-  vm "bytearray::toString(ByteArray)"
 
 extern js """
   function bytearray$set(bytes, index, value) {

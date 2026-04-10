@@ -69,7 +69,6 @@ extern def ref[T](init: T) at global: Ref[T] =
 
     ret %Pos %refWrap
   """
-  vm "ref::ref[T](T)"
 
 /// Gets the referenced element of the `ref` in constant time.
 extern def get[T](ref: Ref[T]) at global: T =
@@ -85,7 +84,6 @@ llvm """
 
     ret %Pos %refField
   """
-  vm "ref::get[T](Ref[T])"
 
 /// Sets the referenced element of the `ref` to `value` in constant time.
 extern def set[T](ref: Ref[T], value: T) at global: Unit =

@@ -97,13 +97,11 @@ extern def toInt(ch: Char) at {}: Int =
   js "${ch}"
   chez "${ch}"
   llvm "ret %Int ${ch}"
-  vm "string::toInt(Char)"
 
 extern def toChar(codepoint: Int) at {}: Char =
   js "${codepoint}"
   chez "${codepoint}"
   llvm "ret %Int ${codepoint}"
-  vm "string::toChar(Int)"
 
 
 extern def infixLt(x: Char, y: Char) at {}: Bool =

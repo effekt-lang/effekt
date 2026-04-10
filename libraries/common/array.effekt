@@ -57,7 +57,6 @@ extern def unsafeAllocate[T](size: Int) at global: Array[T] =
     %ret_pos = insertvalue %Pos { i64 0, ptr poison }, ptr %calloc, 1
     ret %Pos %ret_pos
   """
-  vm "array::unsafeAllocate(Int)"
 
 /// Fills a given array in-place.
 def fill[T](arr: Array[T], filler: T): Unit = {
@@ -96,7 +95,6 @@ extern def size[T](arr: Array[T]) at {}: Int =
     tail call void @erasePositive(%Pos ${arr})
     ret i64 %size
   """
-  vm "array::size[T](Array[T])"
 
 extern llvm """
 define void @assertInbounds(i64 %index, %Pos %arr) alwaysinline {
