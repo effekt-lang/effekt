@@ -80,7 +80,6 @@ extern def get(arr: ByteArray, index: Int) at global: Byte =
     ret i8 %element
   """
   chez "(bytevector-u8-ref ${arr} ${index})"
-  vm "bytearray::get(ByteArray, Int)"
 
 extern def set(arr: ByteArray, index: Int, value: Byte) at global: Unit =
   js "bytearray$set(${arr}, ${index}, ${value})"
@@ -94,7 +93,6 @@ extern def set(arr: ByteArray, index: Int, value: Byte) at global: Unit =
     ret %Pos zeroinitializer
   """
   chez "(bytevector-u8-set! ${arr} ${index} ${value})"
-  vm "bytearray::set(ByteArray, Int, Byte)"
 
 /// Creates a new ByteArray of size `size` filled with the value `init`
 def bytearray(size: Int, init: Byte): ByteArray = {
@@ -243,7 +241,6 @@ extern def compareByteArrayImpl(b1: ByteArray, b2: ByteArray) at {}: Int =
     ret %Int %x
   """
   chez "(bytearray$compare ${b1} ${b2})"
-  vm "bytearray::compare(ByteArray, ByteArray)"
 
 def compareByteArray(b1: ByteArray, b2: ByteArray): Ordering = {
   val ret = compareByteArrayImpl(b1, b2)

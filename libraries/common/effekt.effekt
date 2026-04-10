@@ -145,7 +145,6 @@ extern def infixPlusPlus(s1: String, s2: String) at {}: String =
     %spz = call %Pos @c_bytearray_concatenate(%Pos ${s1}, %Pos ${s2})
     ret %Pos %spz
   """
-  vm "effekt::infixPlusPlus(String, String)"
 
 extern def length(str: String) at {}: Int =
   js "${str}.length"
@@ -162,7 +161,6 @@ extern def unsafeSubstring(str: String, from: Int, to: Int) at {}: String =
     %x = call %Pos @c_bytearray_substring(%Pos ${str}, i64 ${from}, i64 ${to})
     ret %Pos %x
   """
-  vm "effekt::substring(String, Int, Int)"
 
 
 // Side effecting ops
@@ -243,7 +241,6 @@ extern def infixEq(x: Int, y: Int) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "effekt::infixEq(Int, Int)"
 
 extern def infixNeq(x: Int, y: Int) at {}: Bool =
   js "${x} !== ${y}"
@@ -254,7 +251,6 @@ extern def infixNeq(x: Int, y: Int) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "effekt::infixNeq(Int, Int)"
 
 extern def infixEq(x: Char, y: Char) at {}: Bool =
   js "${x} === ${y}"
@@ -265,7 +261,6 @@ extern def infixEq(x: Char, y: Char) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "effekt::infixEq(Char, Char)"
 
 extern def infixNeq(x: Char, y: Char) at {}: Bool =
   js "${x} !== ${y}"
@@ -284,7 +279,6 @@ extern def infixEq(x: String, y: String) at {}: Bool =
     %res = call %Pos @c_bytearray_equal(%Pos ${x}, %Pos ${y})
     ret %Pos %res
   """
-  vm "effekt::infixEq(String, String)"
 
 def infixNeq(x: String, y: String): Bool = not(x == y)
 
@@ -299,7 +293,6 @@ extern def infixEq(x: Bool, y: Bool) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "effekt::infixEq(Bool, Bool)"
 
 extern def infixNeq(x: Bool, y: Bool) at {}: Bool =
   js "${x} !== ${y}"
@@ -322,7 +315,6 @@ extern def infixEq(x: Byte, y: Byte) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "effekt::infixEq(Byte, Byte)"
 
 extern def infixNeq(x: Byte, y: Byte) at {}: Bool =
   js "${x} !== ${y}"
@@ -333,7 +325,6 @@ extern def infixNeq(x: Byte, y: Byte) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "effekt::infixNeq(Byte, Byte)"
 
 // Math ops
 // ========
@@ -341,55 +332,46 @@ extern def infixPlus(x: Int, y: Int) at {}: Int =
   js "(${x} + ${y})"
   chez "(+ ${x} ${y})"
   llvm "%z = add  %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::infixPlus(Int, Int)"
 
 extern def infixStar(x: Int, y: Int) at {}: Int =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
   llvm "%z = mul  %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::infixStar(Int, Int)"
 
 extern def infixSlash(x: Int, y: Int) at {}: Int =
   js "Math.floor(${x} / ${y})"
   chez "(floor (/ ${x} ${y}))"
   llvm "%z = sdiv %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::infixSlash(Int, Int)"
 
 extern def infixMinus(x: Int, y: Int) at {}: Int =
   js "(${x} - ${y})"
   chez "(- ${x} ${y})"
   llvm "%z = sub  %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::infixMinus(Int, Int)"
 
 extern def mod(x: Int, y: Int) at {}: Int =
   js "(${x} % ${y})"
   chez "(modulo ${x} ${y})"
   llvm "%z = srem %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::mod(Int, Int)"
 
 extern def infixPlus(x: Double, y: Double) at {}: Double =
   js "(${x} + ${y})"
   chez "(+ ${x} ${y})"
   llvm "%z = fadd %Double ${x}, ${y} ret %Double %z"
-  vm "effekt::infixPlus(Double, Double)"
 
 extern def infixStar(x: Double, y: Double) at {}: Double =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
   llvm "%z = fmul %Double ${x}, ${y} ret %Double %z"
-  vm "effekt::infixStar(Double, Double)"
 
 extern def infixMinus(x: Double, y: Double) at {}: Double =
   js "(${x} - ${y})"
   chez "(- ${x} ${y})"
   llvm "%z = fsub %Double ${x}, ${y} ret %Double %z"
-  vm "effekt::infixMinus(Double, Double)"
 
 extern def infixSlash(x: Double, y: Double) at {}: Double =
   js "(${x} / ${y})"
   chez "(fl/ ${x} ${y})"
   llvm "%z = fdiv %Double ${x}, ${y} ret %Double %z"
-  vm "effekt::infixSlash(Double, Double)"
 
 extern def cos(x: Double) at {}: Double =
   js "Math.cos(${x})"
@@ -461,8 +443,7 @@ def pow(base: Double, exponent: Int): Double = {
 extern def pow(base: Double, exponent: Double) at {}: Double =
   js "Math.pow(${base}, ${exponent})"
   chez "(expt ${base} ${exponent})"
-  vm "effekt::pow(Double, Double)"
-  llvm "%z = call %Double @llvm.pow.f64(double ${base}, double ${exponent}) ret %Double %z"
+   llvm "%z = call %Double @llvm.pow.f64(double ${base}, double ${exponent}) ret %Double %z"
 
 // since we do not have "extern val", yet
 extern def _pi() at {}: Double =
@@ -534,7 +515,6 @@ extern def infixLt(x: Int, y: Int) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "effekt::infixLt(Int, Int)"
 
 extern def infixLte(x: Int, y: Int) at {}: Bool =
   js "(${x} <= ${y})"
@@ -545,7 +525,6 @@ extern def infixLte(x: Int, y: Int) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "effekt::infixLte(Int, Int)"
 
 extern def infixGt(x: Int, y: Int) at {}: Bool =
   js "(${x} > ${y})"
@@ -556,7 +535,6 @@ extern def infixGt(x: Int, y: Int) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "effekt::infixGt(Int, Int)"
 
 extern def infixGte(x: Int, y: Int) at {}: Bool =
   js "(${x} >= ${y})"
@@ -567,17 +545,14 @@ extern def infixGte(x: Int, y: Int) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "effekt::infixGte(Int, Int)"
 
 extern def infixEq(x: Double, y: Double) at {}: Bool =
   js "${x} === ${y}"
   chez "(= ${x} ${y})"
-  vm "effekt::infixEq(Double, Double)"
 
 extern def infixNeq(x: Double, y: Double) at {}: Bool =
   js "${x} !== ${y}"
   chez "(not (= ${x} ${y}))"
-  vm "effekt::infixNeq(Double, Double)"
 
 extern def infixLt(x: Double, y: Double) at {}: Bool =
   js "(${x} < ${y})"
@@ -588,12 +563,10 @@ extern def infixLt(x: Double, y: Double) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "effekt::infixLt(Double, Double)"
 
 extern def infixLte(x: Double, y: Double) at {}: Bool =
   js "(${x} <= ${y})"
   chez "(<= ${x} ${y})"
-  vm "effekt::infixLte(Double, Double)"
 
 extern def infixGt(x: Double, y: Double) at {}: Bool =
   js "(${x} > ${y})"
@@ -604,12 +577,10 @@ extern def infixGt(x: Double, y: Double) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "effekt::infixGt(Double, Double)"
 
 extern def infixGte(x: Double, y: Double) at {}: Bool =
   js "(${x} >= ${y})"
   chez "(>= ${x} ${y})"
-  vm "effekt::infixGte(Double, Double)"
 
 // TODO do we really need those? if yes, move to string.effekt
 extern def infixLt(x: String, y: String) at {}: Bool =
@@ -656,32 +627,27 @@ extern def bitwiseShl(x: Int, y: Int) at {}: Int =
   js "(${x} << ${y})"
   chez "(ash ${x} ${y})"
   llvm "%z = shl %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::bitwiseShl(Int, Int)"
 
 /// Arithmetic right shift
 extern def bitwiseShr(x: Int, y: Int) at {}: Int =
   js "(${x} >> ${y})"
   chez "(ash ${x} (- ${y}))"
   llvm "%z = ashr %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::bitwiseShr(Int, Int)"
 
 extern def bitwiseAnd(x: Int, y: Int) at {}: Int =
   js "(${x} & ${y})"
   chez "(logand ${x} ${y})"
   llvm "%z = and %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::bitwiseAnd(Int, Int)"
 
 extern def bitwiseOr(x: Int, y: Int) at {}: Int =
   js "(${x} | ${y})"
   chez "(logior ${x} ${y})"
   llvm "%z = or %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::bitwiseOr(Int, Int)"
 
 extern def bitwiseXor(x: Int, y: Int) at {}: Int =
   js "(${x} ^ ${y})"
   chez "(logxor ${x} ${y})"
   llvm "%z = xor %Int ${x}, ${y} ret %Int %z"
-  vm "effekt::bitwiseXor(Int, Int)"
 
 extern def bitwiseNot(x: Int) at {}: Int =
   js "(~${x})"
