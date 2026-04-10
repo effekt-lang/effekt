@@ -150,6 +150,12 @@ def shuffle[A](arr: Array[A]): Unit / random = {
   }
 }
 
+/// Pick a random element from an array.
+def pick[A](arr: Array[A]): A / random = {
+  val idx = randomInt(0, arr.size - 1)
+  arr.get(idx)
+}
+
 
 namespace examples {
 def main() = {
