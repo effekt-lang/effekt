@@ -91,6 +91,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case f @ source.ExternDef(id, _, vps, bps, _, _, bodies, doc, span) =>
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _, _) = f.symbol
       assert(effects.isEmpty)
+      val moduleName = Context.module.name
+      val qualifiedSignature = QualifiedSignature(moduleName, sym)
       val cps = bps.map(b => b.symbol.capture)
       val tBody = bodies match {
         case source.ExternBody.StringExternBody(ff, body, span) :: Nil =>
@@ -100,7 +102,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case _ =>
           Context.abort("Externs should be resolved and desugared before core.Transformer")
       }
-      List(Extern.Def(sym, tps, cps.unspan, vps.unspan map transform, bps.unspan map transform, transform(ret), transform(capt), tBody))
+      List(Extern.Def(sym, qualifiedSignature, tps, cps.unspan, vps.unspan map transform, bps.unspan map transform, transform(ret), transform(capt), tBody))
 
     case e @ source.ExternInclude(ff, path, contents, _, doc, span) =>
       List(Extern.Include(ff, contents.get))

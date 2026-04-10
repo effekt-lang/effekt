@@ -7,6 +7,7 @@ import effekt.util.messages.INTERNAL_ERROR
 import effekt.util.messages.ErrorReporter
 
 import scala.annotation.{ tailrec }
+import effekt.symbols.QualifiedName
 
 /**
  * Tree structure of programs in our internal core representation.
@@ -133,9 +134,34 @@ case class Property(id: Id, tpe: BlockType) extends Tree
  */
 enum Extern extends Tree {
   case Data(id: Id, tparams: List[Id])
-  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody)
+  case Def(id: Id, qualifiedSignature: QualifiedSignature, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody)
   case Include(featureFlag: FeatureFlag, contents: String)
 }
+
+case class QualifiedSignature(
+  name: String,
+)
+
+object QualifiedSignature {
+  def apply(moduleName: QualifiedName, f: symbols.ExternFunction): QualifiedSignature = {
+    val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.mkString(", ")}]"
+    val valueParams = f.vparams.map { p => s"${p.tpe.get}" }.mkString(", ")
+    val vps = if valueParams.isEmpty then "" else s"($valueParams)"
+    val bps = f.bparams.map { b => s"{${b.tpe.get}}" }.mkString("")
+    val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"$vps$bps"
+    QualifiedSignature(s"${moduleName}::${f.name.name}$tps$ps")
+  }
+
+   def apply(name: Id, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam]): QualifiedSignature = {
+    val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
+    val valueParams = vparams.map { p => s"${p.tpe}" }.mkString(", ")
+    val vps = if valueParams.isEmpty then "" else s"($valueParams)"
+    val bps = bparams.map { b => s"{${b.tpe}}" }.mkString("")
+    val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"$vps$bps"
+    QualifiedSignature(s"${name}$tps$ps")
+  }
+}
+
 sealed trait ExternBody extends Tree
 object ExternBody {
   case class StringExternBody(featureFlag: FeatureFlag, contents: Template[Expr]) extends ExternBody
@@ -706,8 +732,8 @@ object Tree {
     }
 
     def rewrite(e: Extern): Extern = e match {
-      case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
-        Extern.Def(rewrite(id), tparams.map(rewrite), cparams.map(rewrite), vparams.map(rewrite), bparams.map(rewrite),
+      case Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
+        Extern.Def(rewrite(id), qualifiedSignature, tparams.map(rewrite), cparams.map(rewrite), vparams.map(rewrite), bparams.map(rewrite),
           rewrite(ret), rewrite(annotatedCapture), rewrite(body).run())
       case Extern.Include(featureFlag, contents) => e
       case Extern.Data(id, tparams) => Extern.Data(rewrite(id), tparams.map(rewrite))
@@ -1030,4 +1056,3 @@ object substitutions {
         Binding.Put(substituteAsVar(ref), substitute(annotatedCapt), substitute(value))
     }
 }
-

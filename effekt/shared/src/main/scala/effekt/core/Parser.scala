@@ -305,8 +305,9 @@ class CoreParsers(names: Names) extends EffektLexers {
     ( `extern` ~> featureFlag ~ externBody ^^ Extern.Include.apply
     | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> (featureFlag ~ externBodyTemplate)) ^^ {
       case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ (ff ~ templ) =>
+        val qualifiedSignature = QualifiedSignature(id, tparams, vparams, bparams)
         Extern.Def(
-          id, tparams, cparams, vparams, bparams, result, captures,
+          id, qualifiedSignature, tparams, cparams, vparams, bparams, result, captures,
           ExternBody.StringExternBody(ff, templ)
         )
     }

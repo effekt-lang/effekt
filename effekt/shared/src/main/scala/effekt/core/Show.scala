@@ -275,7 +275,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   def findExternDef(name: String, vts: List[ValueType])(using dctx: DeclarationContext)(using Context): Block.BlockVar =
     dctx.findExternDef(name, vts) match
       case None => Context.abort(pretty"Could not find show definition for ${vts}")
-      case Some(Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body)) =>
+      case Some(Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, annotatedCapture, body)) =>
         Block.BlockVar(id, BlockType.Function(tparams, cparams, vparams map (_.tpe), bparams map (_.tpe), ret), annotatedCapture)
 
   def generateShowInstance(decl: Declaration, targs: List[ValueType])(using ctx: ShowContext, dctx: DeclarationContext)(using Context): Option[Toplevel.Def] = decl match {
