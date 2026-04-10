@@ -22,6 +22,7 @@ import scala.util.boundary.break
  */
 case class Template[+T](strings: List[String], args: List[T]) {
   def map[R](f: T => R): Template[R] = Template(strings, args.map(f))
+  def fill(f: T => String): String = util.intercalate(strings, args.map(f)).mkString
 }
 
 case class SpannedTemplate[T](strings: List[Spanned[String]], args: List[Spanned[T]]) {

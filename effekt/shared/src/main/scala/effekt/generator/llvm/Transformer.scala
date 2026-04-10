@@ -67,9 +67,9 @@ object Transformer {
         |""".stripMargin
     }
 
-  def transform(template: Template[machine.Variable]): String = "; variable\n    " ++ intercalate(template.strings, template.args.map {
+  def transform(template: Template[machine.Variable]): String = "; variable\n    " ++ template.fill {
     case machine.Variable(name, tpe) => PrettyPrinter.localName(name)
-  }).mkString
+  }
 
   def transform(definition: machine.Definition)(using ModuleContext): Unit = definition match {
    case machine.Definition(machine.Label(name, environment), body) =>
