@@ -25,9 +25,9 @@ namespace internal {
 
   /// The type RegexMatch is used internally to represent platform
   /// dependent results of matching a regex.
-  extern type RegexMatch
-    // js: { matched: String, index: Int } | undefined
-    // vm: scala.util.matching.Regex.Match | null
+  extern type RegexMatch =
+    js "{ matched: String, index: Int } | undefined"
+    vm "scala.util.matching.Regex.Match | null"
 
   extern def matched(r: RegexMatch) at {}: String =
     js "${r}.matched"
