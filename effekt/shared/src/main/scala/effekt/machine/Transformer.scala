@@ -71,10 +71,15 @@ object Transformer {
       Some(Include(ff, contents))
     
     case core.Extern.Data(id, tparams, body) =>
-      None
+      val tBody = body match {
+        case core.ExternBody.StringExternBody(featureFlag, Template(strings, args)) =>
+          ExternBody.StringExternBody(featureFlag, Template(strings, args.map{ absurd => absurd }))
+        case core.ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
+      }
+      Some(ExternType(transform(id), tparams.map(transform), tBody))
   }
 
-  def transform(body: core.ExternBody[core.Expr])(using ErrorReporter): machine.ExternBody = body match {
+  def transform(body: core.ExternBody[core.Expr])(using ErrorReporter): machine.ExternBody[Variable] = body match {
     case core.ExternBody.StringExternBody(ff, Template(strings, args)) =>
       ExternBody.StringExternBody(ff, Template(strings, args map {
         case core.ValueVar(id, tpe) => Variable(transform(id), transform(tpe))

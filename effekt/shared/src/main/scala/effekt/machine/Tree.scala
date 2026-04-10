@@ -38,15 +38,16 @@ case class Program(declarations: List[Declaration], program: List[Definition], e
  * Toplevel declarations for FFI
  */
 enum Declaration {
-  case Extern(name: String, parameters: Environment, returnType: Type, async: Boolean, body: ExternBody)
+  case Extern(name: String, parameters: Environment, returnType: Type, async: Boolean, body: ExternBody[Variable])
+  case ExternType(name: String, tparams: List[String], body: ExternBody[Nothing])
   case Include(featureFlag: FeatureFlag, contents: String)
 }
 export Declaration.*
 
-sealed trait ExternBody
+sealed trait ExternBody[+S]
 object ExternBody {
-  case class StringExternBody(featureFlag: FeatureFlag, contents: Template[Variable]) extends ExternBody
-  case class Unsupported(err: util.messages.EffektError) extends ExternBody {
+  case class StringExternBody[+S](featureFlag: FeatureFlag, contents: Template[S]) extends ExternBody[S]
+  case class Unsupported(err: util.messages.EffektError) extends ExternBody[Nothing] {
     def report(using E: util.messages.ErrorReporter): Unit = E.report(err)
   }
 }
