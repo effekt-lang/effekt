@@ -277,7 +277,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         val tpesAndTerms = handlers flatMap Context.withFocus { h =>
           flowingInto(continuationCaptHandled) {
-            val (Result(_, usedEffects), tpesAndTerms) = checkImplementation(h.impl, Some((ret, expected, continuationCapt)))
+            val (Result(_, usedEffects), tpesAndTerms) = checkImplementation(h.impl, Some((ret, continuationCapt)))
             handlerEffs = handlerEffs ++ usedEffects
             tpesAndTerms
           }
@@ -408,7 +408,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   /**
    * The [[continuationDetails]] are only provided, if a continuation is captured (that is for implementations as part of effect handlers).
    */
-  def checkImplementation(impl: source.Implementation, continuationDetails: Option[(ValueType, Option[ValueType], CaptUnificationVar)])(using Context, Captures): (Result[InterfaceType], List[(ValueType, Option[source.Tree])]) = Context.focusing(impl) {
+  def checkImplementation(impl: source.Implementation, continuationDetails: Option[(ValueType, CaptUnificationVar)])(using Context, Captures): (Result[InterfaceType], List[(ValueType, Option[source.Tree])]) = Context.focusing(impl) {
     case source.Implementation(sig, clauses, _) =>
 
       var handlerEffects: ConcreteEffects = Pure
@@ -520,7 +520,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               (Result(bodyType, bodyEffs -- Effects(effs)), body)
 
             // handler implementation: we have a continuation
-            case Some(ret, expected, continuationCapt) =>
+            case Some(ret, continuationCapt) =>
 
               if (bparams.nonEmpty)
                 Context.error("Block parameters are bound by resume and not the effect operation itself")
@@ -554,7 +554,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               }
               Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
 
-              (checkStmt(body, expected), body)
+              (checkStmt(body, None), body)
           }
 
           handlerEffects = handlerEffects ++ effs
