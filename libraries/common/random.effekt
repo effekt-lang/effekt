@@ -2,6 +2,8 @@ module random
 
 import stream
 import array
+import option
+import exception
 import io/filesystem
 import io/error
 
@@ -151,9 +153,15 @@ def shuffle[A](arr: Array[A]): Unit / random = {
 }
 
 /// Pick a random element from an array.
-def pick[A](arr: Array[A]): A / random = {
-  val idx = randomInt(0, arr.size - 1)
-  arr.get(idx)
+///
+/// Raises `OutOfBounds` when called on an empty array.
+def pick[A](arr: Array[A]): A / { random, Exception[OutOfBounds] } = {
+  if (arr.size == 0) {
+    do raise(OutOfBounds(), "Cannot pick from an empty array")
+  } else {
+    val idx = randomInt(0, arr.size - 1)
+    arr.get(idx)
+  }
 }
 
 
