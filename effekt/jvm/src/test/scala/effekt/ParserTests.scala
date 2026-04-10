@@ -623,6 +623,23 @@ class ParserTests extends munit.FunSuite {
       parseMatchPattern("_"),
       IgnorePattern(Span.missing))
     parseMatchPattern("Cons(x, Cons(x, Nil()))")
+    parseMatchPattern("[]")
+    parseMatchPattern("[1]")
+    parseMatchPattern("[_, 2, (3, 4)]")
+    parseMatchPattern("[[1, 2], [3, [4, (6, [7, 8])]]]")
+
+    {
+      def cons(head: MatchPattern, tail: MatchPattern) =
+        TagPattern(IdRef(Nil, "Cons", Span.missing), List(head, tail), Span.missing)
+      def nil = TagPattern(IdRef(Nil, "Nil", Span.missing), Nil, Span.missing)
+      def lit(l: Int) =
+        LiteralPattern(Literal(l, symbols.builtins.TInt, Span.missing), Span.missing)
+
+      assertEqualModuloSpans(
+        parseMatchPattern("[1, [2, 3, 4], [5]]"),
+        cons(lit(1), cons(cons(lit(2), cons(lit(3), cons(lit(4), nil))), cons(cons(lit(5), nil), nil)))
+      )
+    }
 
     {
       val (source, pos) =

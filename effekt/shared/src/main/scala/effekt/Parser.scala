@@ -1018,8 +1018,17 @@ class Parser(tokens: Seq[Token], source: Source) {
           case Many(p :: Nil , _) => fail("Pattern matching on tuples requires more than one element")
           case Many(ps, _) => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}", span().synthesized), ps, span())
         }
+        case `[` => some(matchPattern, `[`, `,`, `[`) match {
+          case Many(ps, _) => ps.foldRight(NilPattern)(ConsPattern)
+        }
         case k => fail("pattern", k)
       }
+  
+  private def NilPattern: MatchPattern =
+    TagPattern(IdRef(Nil, "Nil", span().synthesized), Nil, span())
+  
+  private def ConsPattern(head: MatchPattern, tail: MatchPattern): MatchPattern =
+    TagPattern(IdRef(Nil, "Cons", span().synthesized), List(head, tail), span())
 
   def matchExpr(scrutinee: Term): Term =
       val clauses = `match` ~> braces { manyWhile(matchClause(), `case`) }
