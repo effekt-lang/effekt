@@ -713,7 +713,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def externType(info: Info): Def =
     ExternType(`type` ~> idDef(), maybeTypeParams(),
-      maybeExternBodies(fail("extern type`s do not support Effekt right hand sides.")),
+      maybeExternBodies(fail("extern type's do not support splices"))(fail("extern type`s do not support Effekt right hand sides.")),
       info, span())
   def externInterface(info: Info): Def =
     ExternInterface(`interface` ~> idDef(), maybeTypeParams().unspan, info, span())
@@ -735,25 +735,25 @@ class Parser(tokens: Seq[Token], source: Source) {
   def externFun(info: Info): Def =
     (`def` ~> idDef() ~ params() ~ maybeCaptureSet() ~ returnAnnotation()) match {
       case id ~ (tps, vps, bps) ~ cpt ~ ret =>
-        val bodies = maybeExternBodies{ stmts(inBraces = true) }
+        val bodies = maybeExternBodies{ expr() }{ stmts(inBraces = true) }
         val captures = cpt.getOrElse(defaultCapture(cpt.span.synthesized))
         ExternDef(id, tps, vps, bps, captures, ret, bodies, info, span())
     }
 
-  def externBody[T](of: => T): ExternBody[T] =
+  def externBody[S, E](splice: => S)(eff: => E): ExternBody[S, E] =
     nonterminal:
       peek.kind match {
         case _: Ident => (peek(1).kind match {
-          case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> of <~ `}`, span())
-          case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template().unspan, span())
+          case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> eff <~ `}`, span())
+          case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template(splice).unspan, span())
         }) labelled "extern body (string or block)"
-        case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template().unspan, span())
+        case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template(splice).unspan, span())
       }
 
-  def maybeExternBodies[T](of: => T): Many[ExternBody[T]] =
+  def maybeExternBodies[S, E](splice: => S)(eff: => E): Many[ExternBody[S, E]] =
     nonterminal:
       peek.kind match {
-        case `=` => `=` ~> Many(manyWhile(externBody(of), isExternBodyStart), span())
+        case `=` => `=` ~> Many(manyWhile(externBody(splice)(eff), isExternBodyStart), span())
         case _ => Many.empty(span())
       }
 
@@ -763,12 +763,12 @@ class Parser(tokens: Seq[Token], source: Source) {
       case _                          => false
     }
 
-  def template(): SpannedTemplate[Term] =
+  def template[T](of: => T): SpannedTemplate[T] =
     nonterminal:
       // TODO handle case where the body is not a string, e.g.
       // Expected an extern definition, which can either be a single-line string (e.g., "x + y") or a multi-line string (e.g., """...""")
       val first = spanned(string())
-      val (exprs, strs) = manyWhile((`${` ~> spanned(expr()) <~ `}$`, spanned(string())), `${`).unzip
+      val (exprs, strs) = manyWhile((`${` ~> spanned(of) <~ `}$`, spanned(string())), `${`).unzip
       SpannedTemplate(first :: strs, exprs)
 
   def spanned[T](p: => T): Spanned[T] =
@@ -1429,7 +1429,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   def templateString(): Term =
     nonterminal:
       val start = position
-      backtrack(idRef()) ~ template() match {
+      backtrack(idRef()) ~ template(expr()) match {
         // We do not need to apply any transformation if there are no splices _and_ no custom handler id is given
         case Maybe(None, _) ~ SpannedTemplate(str :: Nil, Nil) => StringLit(str.unspan, str.span)
         // s"a${x}b${y}" ~> s { do write("a"); do splice(x); do write("b"); do splice(y); return () }

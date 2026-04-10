@@ -15,7 +15,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
 
   def supported(using Context): List[String] = Context.compiler.supportedFeatureFlags
 
-  def defaultExternBody(warning: String)(using Context): ExternBody[Nothing] =
+  def defaultExternBody(warning: String)(using Context): ExternBody[Nothing, Nothing] =
     ExternBody.Unsupported(Context.plainMessage(warning, kiama.util.Severities.Warning))
 
   def rewrite(decl: ModuleDecl)(using Context): ModuleDecl = decl match {
@@ -23,7 +23,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
       ModuleDecl(path, includes, defs.flatMap(rewrite), doc, span)
   }
 
-  def findPreferred[T](bodies: List[ExternBody[T]])(using Context): ExternBody[T] = {
+  def findPreferred[S, E](bodies: List[ExternBody[S, E]])(using Context): ExternBody[S, E] = {
     // IMPORTANT: Should be deterministic.
     bodies.filter { b => b.featureFlag.matches(supported) }
       .minByOption { b =>

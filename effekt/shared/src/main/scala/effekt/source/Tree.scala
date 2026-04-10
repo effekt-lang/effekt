@@ -219,7 +219,7 @@ enum FeatureFlag extends Tree {
   }
 }
 object FeatureFlag {
-  extension[T](self: List[ExternBody[T]]) {
+  extension[S, E](self: List[ExternBody[S, E]]) {
     @tailrec
     def supportedByFeatureFlags(names: List[String]): Boolean = names match {
       case Nil => false
@@ -232,12 +232,12 @@ object FeatureFlag {
   }
 }
 
-sealed trait ExternBody[+T] extends Tree {
+sealed trait ExternBody[+S, +E] extends Tree {
   def featureFlag: FeatureFlag
 }
 object ExternBody {
-  case class StringExternBody(featureFlag: FeatureFlag, template: Template[source.Term], span: Span) extends ExternBody[Nothing]
-  case class EffektExternBody[+T](featureFlag: FeatureFlag, body: T, span: Span) extends ExternBody[T]
+  case class StringExternBody[+S](featureFlag: FeatureFlag, template: Template[S], span: Span) extends ExternBody[S, Nothing]
+  case class EffektExternBody[+T](featureFlag: FeatureFlag, body: T, span: Span) extends ExternBody[Nothing, T]
   case class Unsupported(message: util.messages.EffektError) extends ExternBody {
     val span: Span = Span.missing
     override def featureFlag: FeatureFlag = FeatureFlag.Default(Span.missing)
@@ -423,11 +423,11 @@ enum Def extends Definition {
   /**
    * Only valid on the toplevel!
    */
-  case ExternType(id: IdDef, tparams: Many[Id], body: Many[ExternBody[Nothing]], info: Info, span: Span)
+  case ExternType(id: IdDef, tparams: Many[Id], body: Many[ExternBody[Nothing, Nothing]], info: Info, span: Span)
 
   case ExternDef(id: IdDef,
                  tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], captures: CaptureSet, ret: Effectful,
-                 bodies: Many[ExternBody[Stmt]], info: Info, span: Span) extends Def
+                 bodies: Many[ExternBody[Term, Stmt]], info: Info, span: Span) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType, info: Info, span: Span)
 
@@ -907,7 +907,7 @@ object Tree {
     def rewrite(c: MatchClause)(using Context): MatchClause = structuralVisit(c)
     def rewrite(c: MatchGuard)(using Context): MatchGuard = structuralVisit(c)
     def rewrite(t: source.CallTarget)(using Context): source.CallTarget = structuralVisit(t)
-    def rewrite(b: ExternBody[Stmt])(using Context): source.ExternBody[Stmt] =
+    def rewrite(b: ExternBody[Term, Stmt])(using Context): source.ExternBody[Term, Stmt] =
       visit(b){
         case ExternBody.EffektExternBody(ff, body, span) =>
           ExternBody.EffektExternBody(ff, rewrite(body), span)
@@ -976,7 +976,7 @@ object Tree {
     def query(h: OpClause)(using Context, Ctx): Res = structuralQuery(h)
     def query(c: MatchClause)(using Context, Ctx): Res = structuralQuery(c)
     def query(c: MatchGuard)(using Context, Ctx): Res = structuralQuery(c)
-    def query(b: ExternBody[Stmt])(using Context, Ctx): Res =
+    def query(b: ExternBody[Term, Stmt])(using Context, Ctx): Res =
       visit(b){
         case ExternBody.EffektExternBody(ff, body, span) => query(body)
         case ExternBody.StringExternBody(ff, tmpl, span) => empty
