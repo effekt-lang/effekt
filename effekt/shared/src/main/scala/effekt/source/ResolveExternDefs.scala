@@ -14,8 +14,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
   }
 
   // The list of supported feature flags for this backend
-  // The "vm" flag is always supported as it is used in the normalizer as part of the compiler pipeline.
-  def supported(using Context): List[String] = Context.compiler.supportedFeatureFlags :+ "vm"
+  def supported(using Context): List[String] = Context.compiler.supportedFeatureFlags
 
   def defaultExternBody(warning: String)(using Context): ExternBody =
     ExternBody.Unsupported(Context.plainMessage(warning, kiama.util.Severities.Warning))
