@@ -911,6 +911,8 @@ object Tree {
       visit(b){
         case ExternBody.EffektExternBody(ff, body, span) =>
           ExternBody.EffektExternBody(ff, rewrite(body), span)
+        case ExternBody.StringExternBody(ff, template, span) =>
+          ExternBody.StringExternBody(ff, template.map(rewrite), span)
         case other => other
       }
     def rewrite(a: ValueArg)(using Context): ValueArg = structuralVisit(a)
@@ -979,7 +981,8 @@ object Tree {
     def query(b: ExternBody[Term, Stmt])(using Context, Ctx): Res =
       visit(b){
         case ExternBody.EffektExternBody(ff, body, span) => query(body)
-        case ExternBody.StringExternBody(ff, tmpl, span) => empty
+        case ExternBody.StringExternBody(ff, tmpl, span) =>
+          combineAll(tmpl.args.map(query))
         case ExternBody.Unsupported(msg) => empty
       }
     def query(a: ValueArg)(using Context, Ctx): Res = structuralQuery(a)
