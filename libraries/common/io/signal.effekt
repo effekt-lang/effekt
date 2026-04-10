@@ -59,7 +59,7 @@ extern def signal[A, B]() at global: Signal[A, B] =
     ret %Pos %result
   """
 
-extern def unsafeFire[A, B](signal: Signal[A, B], value: A) at async: B =
+extern def fire[A, B](signal: Signal[A, B], value: A) at async: B =
   js "$effekt.capture(callback => signal$notify(${signal}, ${value}, callback))"
   llvm """
     %base = extractvalue %Pos ${signal}, 1
@@ -87,7 +87,7 @@ extern def unsafeFire[A, B](signal: Signal[A, B], value: A) at async: B =
     ret void
   """
 
-extern def unsafeWait[A, B](signal: Signal[A, B], value: B) at async: A =
+extern def wait[A, B](signal: Signal[A, B], value: B) at async: A =
   js "$effekt.capture(callback => signal$notify(${signal}, ${value}, callback))"
   llvm """
     %base = extractvalue %Pos ${signal}, 1
