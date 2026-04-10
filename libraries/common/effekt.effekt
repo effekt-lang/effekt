@@ -83,6 +83,7 @@ def println(value: Unit): Unit = println(value.show)
 def println(value: Double): Unit = println(value.show)
 def println(value: Bool): Unit = println(value.show)
 def println(value: Byte): Unit = println(value.show)
+def println(value: Char): Unit = println(value.show)
 
 extern def showBuiltin(value: Int) at {}: String =
   js "'' + ${value}"
@@ -135,8 +136,8 @@ extern def panic(msg: String) at io: Nothing =
   """
 
 extern def show[R](value: R) at {}: String =
-  js "$effekt.show(${value})"
-  chez "(show_impl ${value})"
+  js "(function() { throw 'Show should be replaced at compile-time' })()"
+  chez "(error ${"Show should be replaced at compile-time"})"
   llvm "ret %Pos poison"
 
 extern def genericShow[R](value: R) at {}: String =
