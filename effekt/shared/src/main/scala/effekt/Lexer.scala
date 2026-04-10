@@ -227,7 +227,7 @@ object Position {
  * interpolation boundaries. When we see ${, we record the current brace depth
  * and know the interpolation ends when we return to that depth.
  */
-case class DepthTracker(var parens: Int, var braces: Int, var brackets: Int)
+case class DepthTracker(var parens: Int, var braces: Int, var brackets: Int, var holes: Boolean)
 
 /**
  * Never throws exceptions - always returns Error tokens for errors.
@@ -246,7 +246,7 @@ class Lexer(source: Source) extends Iterator[Token] {
 
   // String interpolation state
   private val delimiters = mutable.Stack[Delimiter]()
-  private val depthTracker = DepthTracker(0, 0, 0)
+  private val depthTracker = DepthTracker(0, 0, 0, false)
   private val interpolationDepths = mutable.Stack[Int]()
 
   /**
@@ -444,7 +444,9 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('<', '<') => advance2With(TokenKind.`<<`)
       case ('<', '=') => advance2With(TokenKind.`<=`)
       case ('<', '>') => advance2With(TokenKind.`<>`)
-      case ('<', '{') => advance2With(TokenKind.`<{`)
+      case ('<', '{') =>
+        depthTracker.holes = true
+        advance2With(TokenKind.`<{`)
       case ('<', '~') => advance2With(TokenKind.`<~`)
       case ('<',   _) => advanceWith(TokenKind.`<`)
 
@@ -480,7 +482,9 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('$', _) =>
         advanceWith(TokenKind.Error(LexerError.UnknownChar('$')))
 
-      case ('}', '>') => advance2With(TokenKind.`}>`)
+      case ('}', '>') if depthTracker.holes =>
+        depthTracker.holes = false
+        advance2With(TokenKind.`}>`)
       case ('}', _) if isAtInterpolationBoundary =>
         interpolationDepths.pop()
         depthTracker.braces -= 1
