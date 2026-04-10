@@ -52,6 +52,8 @@ object ErrorContext {
   case class FunctionReturn(outer: ErrorContext) extends InvariantContext
   case class FunctionEffects(outer: ErrorContext) extends InvariantContext
 
+  case class TryAnswer() extends InvariantContext
+
   // TODO defer rendering of error messages to Context
   def explainMismatch(tpe1: symbols.Type, tpe2: symbols.Type, outerCtx: ErrorContext): String =
 
@@ -96,6 +98,7 @@ object ErrorContext {
       case FunctionEffects(outer) => go(outer)
       case TypeConstructor(outer) => go(outer)
       case TypeConstructorArgument(outer) => go(outer)
+      case TryAnswer() => ???
     }
     go(outerCtx)
 

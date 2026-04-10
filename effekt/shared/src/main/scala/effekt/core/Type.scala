@@ -579,6 +579,7 @@ object Type {
     // shift(p) { k: Resume[from, to] => body }
     case Stmt.Shift(BlockVar(id, ptpe@TPrompt(delimiter), annotatedCapt), BlockParam(k, tpe@BlockType.Interface(ResumeSymbol, List(from, to)), capt), body) =>
       val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
+      util.debug(ptpe, bodyTpe)
       valueShouldEqual(to, bodyTpe)
       valueShouldEqual(to, delimiter)
       Typing(from, bodyCapt ++ Set(id), bodyFree.withoutBlock(k, tpe, capt) ++ Free.block(id, ptpe, annotatedCapt))

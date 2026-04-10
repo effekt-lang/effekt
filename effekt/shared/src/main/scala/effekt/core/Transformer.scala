@@ -384,7 +384,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       PatternMatchingCompiler.compile(clauses ++ defaultClause, tpe)
 
     case source.TryHandle(prog, handlers, _) =>
-      val answerType = transform(Context.inferredTypeOf(prog))
+      val answerType = transform(Context.inferredTypeOf(tree))
 
       // create a fresh prompt, a variable referring to it, and a parameter binding it
       val promptId   = Id("p")

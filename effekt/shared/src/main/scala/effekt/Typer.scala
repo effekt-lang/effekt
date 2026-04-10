@@ -246,7 +246,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           checkStmt(body, expected)
         }
 
-      case tree @ source.TryHandle(prog, handlers, _) =>
+      case tree @ source.TryHandle(prog, handlers, _) => Context.withUnificationScope {
 
         // (1) extract all handled effects and capabilities
         val providedCapabilities: List[symbols.BlockParam] = handlers map Context.withFocus { h =>
@@ -275,9 +275,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         var handlerEffs: ConcreteEffects = Pure
 
+        // the return type of the continuation
+        val continuationType = ValueType.ValueTypeRef(Context.freshTypeVar(TypeVar.TypeParam(Name.local("AnswerType")), tree))
+
         val tpesAndTerms = handlers flatMap Context.withFocus { h =>
           flowingInto(continuationCaptHandled) {
-            val (Result(_, usedEffects), tpesAndTerms) = checkImplementation(h.impl, Some((ret, continuationCapt)))
+            val (Result(_, usedEffects), tpesAndTerms) = checkImplementation(h.impl, Some((continuationType, continuationCapt)))
             handlerEffs = handlerEffs ++ usedEffects
             tpesAndTerms
           }
@@ -319,16 +322,19 @@ object Typer extends Phase[NameResolved, Typechecked] {
               Context.warning(pp"Handling effect ${effect}, which seems not to be used by the program.")
         }
 
+        val answerType = join(expected, (ret, Some(prog)) :: tpesAndTerms)
+
         // The captures of the handler continue flowing into the outer scope
         usingCapture(continuationCapt)
+        Context.requireSubtype(answerType, continuationType, ErrorContext.TryAnswer())
 
-        Result(join(expected, tpesAndTerms), (effs -- handled) ++ handlerEffs)
-
+        Result(answerType, (effs -- handled) ++ handlerEffs)
+      }
       case tree @ source.Match(scs, clauses, default, _) =>
 
         // (1) Check scrutinees
         // for example. tpe = List[Int]
-        val results = scs.map{ sc => checkExpr(sc, None) }
+        val results = scs.map { sc => checkExpr(sc, None) }
 
         var resEff = ConcreteEffects.union(results.map { case Result(tpe, effs) => effs })
 
@@ -1661,6 +1667,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val result = tpes match {
       case Nil => expected.getOrElse(TBottom) // TODO actually this type is arbitrary, not bottom!
       case first :: rest => rest.foldLeft[ValueType](first) { (t1, t2) =>
+        if (t1.toString.contains("(R)")) {
+          println("hi")
+        }
         Context.mergeValueTypes(t1, t2, ErrorContext.MergeTypes(Context.unification(t1), Context.unification(t2)))
       }
     }
