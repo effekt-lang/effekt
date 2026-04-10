@@ -7,30 +7,25 @@ module io/signal
 /// and must be waited for exactly once with a B receiving an A.
 extern type Signal[A, B]
 
-extern def signal[A, B]() at global: Signal[A, B] =
-  js "signal$make()"
-  llvm """
-    %signal = call %Pos @c_signal_make()
-    ret %Pos %signal
-  """
-
-extern def unsafeFire[A, B](signal: Signal[A, B], value: A) at async: B =
-  js "$effekt.capture(callback => signal$notify(${signal}, ${value}, callback))"
-  llvm """
-    call void @c_signal_notify(%Pos ${signal}, %Pos ${value}, %Stack %stack)
-    ret void
-  """
-
-extern def unsafeWait[A, B](signal: Signal[A, B], value: B) at async: A =
-  js "$effekt.capture(callback => signal$notify(${signal}, ${value}, callback))"
-  llvm """
-    call void @c_signal_notify(%Pos ${signal}, %Pos ${value}, %Stack %stack)
-    ret void
-  """
-
 extern llvm """
-  declare %Pos @c_signal_make()
-  declare void @c_signal_notify(%Pos, %Pos, %Stack)
+%Signal = type { %Header, i64, ptr, %Pos }
+
+define void @signal_erase(ptr %envPtr) {
+    %base = getelementptr %Header, ptr %envPtr, i64 -1
+    %statePtr = getelementptr %Signal, ptr %base, i64 0, i32 1
+    %stackPtr = getelementptr %Signal, ptr %base, i64 0, i32 2
+    %valuePtr = getelementptr %Signal, ptr %base, i64 0, i32 3
+    %state = load i64, ptr %statePtr
+    switch i64 %state, label %none [i64 0, label %free i64 1, label %free i64 2, label %free]
+  free:
+    %stack = load %Stack, ptr %stackPtr
+    %value = load %Pos, ptr %valuePtr
+    call void @erasePositive(%Pos %value)
+    call void @eraseStack(%Stack %stack)
+    ret void
+  none:
+    ret void
+}
 """
 
 extern js """
@@ -53,3 +48,70 @@ extern js """
     }
   }
 """
+
+extern def signal[A, B]() at global: Signal[A, B] =
+  js "signal$make()"
+  llvm """
+    %base = call ptr @calloc(i64 1, i64 48)
+    %eraserPtr = getelementptr %Signal, ptr %base, i64 0, i32 0, i32 1
+    store ptr @signal_erase, ptr %eraserPtr
+    %result = insertvalue %Pos { i64 0, ptr poison }, ptr %base, 1
+    ret %Pos %result
+  """
+
+extern def unsafeFire[A, B](signal: Signal[A, B], value: A) at async: B =
+  js "$effekt.capture(callback => signal$notify(${signal}, ${value}, callback))"
+  llvm """
+    %base = extractvalue %Pos ${signal}, 1
+    %statePtr = getelementptr %Signal, ptr %base, i64 0, i32 1
+    %stackPtr = getelementptr %Signal, ptr %base, i64 0, i32 2
+    %valuePtr = getelementptr %Signal, ptr %base, i64 0, i32 3
+    %state = load i64, ptr %statePtr
+    switch i64 %state, label %panic [i64 0, label %init i64 1, label %fire]
+  init:
+    store i64 2, ptr %statePtr
+    store %Stack %stack, ptr %stackPtr
+    store %Pos ${value}, ptr %valuePtr
+    call void @erasePositive(%Pos ${signal})
+    ret void
+  fire:
+    %otherStack = load %Stack, ptr %stackPtr
+    %otherValue = load %Pos, ptr %valuePtr
+    store i64 3, ptr %statePtr
+    call void @erasePositive(%Pos ${signal})
+    call void @resume_Pos(%Stack %otherStack, %Pos ${value})
+    call void @resume_Pos(%Stack %stack, %Pos %otherValue)
+    ret void
+  panic:
+    call void @exit(i64 1)
+    ret void
+  """
+
+extern def unsafeWait[A, B](signal: Signal[A, B], value: B) at async: A =
+  js "$effekt.capture(callback => signal$notify(${signal}, ${value}, callback))"
+  llvm """
+    %base = extractvalue %Pos ${signal}, 1
+    %statePtr = getelementptr %Signal, ptr %base, i64 0, i32 1
+    %stackPtr = getelementptr %Signal, ptr %base, i64 0, i32 2
+    %valuePtr = getelementptr %Signal, ptr %base, i64 0, i32 3
+    %state = load i64, ptr %statePtr
+    switch i64 %state, label %panic [i64 0, label %init i64 2, label %wait]
+  init:
+    store i64 1, ptr %statePtr
+    store %Stack %stack, ptr %stackPtr
+    store %Pos ${value}, ptr %valuePtr
+    call void @erasePositive(%Pos ${signal})
+    ret void
+  wait:
+    %otherStack = load %Stack, ptr %stackPtr
+    %otherValue = load %Pos, ptr %valuePtr
+    store i64 3, ptr %statePtr
+    call void @erasePositive(%Pos ${signal})
+    call void @resume_Pos(%Stack %otherStack, %Pos ${value})
+    call void @resume_Pos(%Stack %stack, %Pos %otherValue)
+    ret void
+  panic:
+    call void @exit(i64 1)
+    ret void
+  """
+
