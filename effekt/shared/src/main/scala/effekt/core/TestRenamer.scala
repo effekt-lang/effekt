@@ -172,10 +172,10 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
       }
   }
 
-  override def rewrite(e: ExternBody) = e match {
+  override def rewrite(e: ExternBody[Expr]) = e match {
     case ExternBody.StringExternBody(featureFlag, contents) =>
       ExternBody.StringExternBody(featureFlag, rewriteTemplate(contents))
-    case ExternBody.Unsupported(err) => ???
+    case ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
   }
 
   def rewriteTemplate(t: Template[Expr]) = t match {

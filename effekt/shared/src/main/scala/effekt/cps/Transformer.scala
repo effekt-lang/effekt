@@ -41,7 +41,7 @@ object Transformer {
     case core.Extern.Data(id, tparams, body) => None
   }
 
-  def transform(externBody: core.ExternBody)(using TransformationContext): ExternBody = externBody match {
+  def transform(externBody: core.ExternBody[core.Expr])(using TransformationContext): ExternBody = externBody match {
     case core.ExternBody.StringExternBody(featureFlag, Template(strings, args)) =>
       ExternBody.StringExternBody(featureFlag, Template(strings, args.map(transform)))
     case core.ExternBody.Unsupported(err) => ExternBody.Unsupported(err)

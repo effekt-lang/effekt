@@ -74,7 +74,7 @@ object Transformer {
       None
   }
 
-  def transform(body: core.ExternBody)(using ErrorReporter): machine.ExternBody = body match {
+  def transform(body: core.ExternBody[core.Expr])(using ErrorReporter): machine.ExternBody = body match {
     case core.ExternBody.StringExternBody(ff, Template(strings, args)) =>
       ExternBody.StringExternBody(ff, Template(strings, args map {
         case core.ValueVar(id, tpe) => Variable(transform(id), transform(tpe))

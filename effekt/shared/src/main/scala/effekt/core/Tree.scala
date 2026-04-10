@@ -132,14 +132,14 @@ case class Property(id: Id, tpe: BlockType) extends Tree
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Data(id: Id, tparams: List[Id], body: ExternBody)
-  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody)
+  case Data(id: Id, tparams: List[Id], body: ExternBody[Nothing])
+  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody[Expr])
   case Include(featureFlag: FeatureFlag, contents: String)
 }
-sealed trait ExternBody extends Tree
+sealed trait ExternBody[+T] extends Tree
 object ExternBody {
-  case class StringExternBody(featureFlag: FeatureFlag, contents: Template[Expr]) extends ExternBody
-  case class Unsupported(err: util.messages.EffektError) extends ExternBody {
+  case class StringExternBody[+T](featureFlag: FeatureFlag, contents: Template[T]) extends ExternBody[T]
+  case class Unsupported(err: util.messages.EffektError) extends ExternBody[Nothing] {
     def report(using E: ErrorReporter): Unit = E.report(err)
   }
 }
@@ -439,7 +439,7 @@ object Tree {
     def implementation(using Ctx): PartialFunction[Implementation, Res] = PartialFunction.empty
     def operation(using Ctx): PartialFunction[Operation, Res] = PartialFunction.empty
     def clause(using Ctx): PartialFunction[(Id, BlockLit), Res] = PartialFunction.empty
-    def externBody(using Ctx): PartialFunction[ExternBody, Res] = PartialFunction.empty
+    def externBody(using Ctx): PartialFunction[ExternBody[Expr], Res] = PartialFunction.empty
 
     /**
      * Hook that can be overridden to perform an action at every node in the tree
@@ -460,7 +460,10 @@ object Tree {
       if clause.isDefinedAt(matchClause) then clause.apply(matchClause) else matchClause match {
         case (id, lit) => query(lit)
     }
-    def query(b: ExternBody)(using Ctx): Res = structuralQuery(b, externBody)
+    def query(b: ExternBody[Expr])(using Ctx): Res = visit(b){
+      case ExternBody.StringExternBody(ff, body) => ???
+      case ExternBody.Unsupported(_) => empty
+    }
     def query(m: ModuleDecl)(using Ctx) = structuralQuery(m, PartialFunction.empty)
   }
 
@@ -481,8 +484,16 @@ object Tree {
     def rewrite(o: Operation): Operation = rewriteStructurally(o)
     def rewrite(p: ValueParam): ValueParam = rewriteStructurally(p)
     def rewrite(p: BlockParam): BlockParam = rewriteStructurally(p)
-    def rewrite(b: ExternBody): ExternBody= rewriteStructurally(b)
-    def rewrite(e: Extern): Extern= rewriteStructurally(e)
+    def rewrite(b: ExternBody[Expr]): ExternBody[Expr] = b match {
+      case ExternBody.StringExternBody(ff, Template(strings, args)) =>
+        ExternBody.StringExternBody(ff, Template(strings, args.map(rewrite)))
+      case e: ExternBody.Unsupported => e
+    }
+    def rewrite(e: Extern): Extern= e match {
+      case e @ (Extern.Data(_,_,_) | Extern.Include(_,_)) => e
+      case Extern.Def(id, tps, cps, vps, bps, ret, capts, body) =>
+        Extern.Def(id, tps, cps, vps, bps, ret, capts, rewrite(body))
+    }
     def rewrite(d: Declaration): Declaration = rewriteStructurally(d)
     def rewrite(c: Constructor): Constructor = rewriteStructurally(c)
     def rewrite(f: Field): Field = rewriteStructurally(f)
@@ -694,7 +705,7 @@ object Tree {
       case BlockParam(id, tpe, capt) => BlockParam(rewrite(id), rewrite(tpe), rewrite(capt))
     }
 
-    def rewrite(b: ExternBody): Trampoline[ExternBody] = b match {
+    def rewrite(b: ExternBody[Expr]): Trampoline[ExternBody[Expr]] = b match {
       case ExternBody.StringExternBody(featureFlag, Template(strings, args)) =>
         all(args, rewrite).map { args2 => ExternBody.StringExternBody(featureFlag, Template(strings, args2)) }
       case ExternBody.Unsupported(err) => done(b)
@@ -788,7 +799,7 @@ object Tree {
     def rewrite(o: Operation)(using Ctx): Operation = rewriteStructurally(o)
     def rewrite(p: ValueParam)(using Ctx): ValueParam = rewriteStructurally(p)
     def rewrite(p: BlockParam)(using Ctx): BlockParam = rewriteStructurally(p)
-    def rewrite(b: ExternBody)(using Ctx): ExternBody= rewrite(b)
+    def rewrite(b: ExternBody[Expr])(using Ctx): ExternBody[Expr] = rewrite(b)
 
     def rewrite(b: BlockLit)(using Ctx): BlockLit = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
       case BlockLit(tparams, cparams, vparams, bparams, body) =>
