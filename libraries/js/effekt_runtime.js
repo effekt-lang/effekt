@@ -1,43 +1,60 @@
-// Complexity of state:
-//
-//  get: O(1)
-//  set: O(1)
-//  capture: O(1)
-//  restore: O(|write operations since capture|)
+
+// Sentinel: a node whose .value is Mem is the current root.
 const Mem = null
 
-function Arena() {
-  const s = {
-    root: { value: Mem },
-    generation: 0,
-    fresh: (v) => {
-      const r = {
-        value: v,
-        generation: s.generation,
-        store: s,
-        set: (v) => {
-          const s = r.store
-          const r_gen = r.generation
-          const s_gen = s.generation
+// reusable buffer for rerooting
+const _rerootPath = []
 
-          if (r_gen == s_gen) {
-            r.value = v;
-          } else {
-            const root = { value: Mem }
-            // update store
-            s.root.value = { ref: r, value: r.value, generation: r_gen, root: root }
-            s.root = root
-            r.value = v
-            r.generation = s_gen
-          }
-        }
-      };
-      return r
-    },
-    // not implemented
-    newRegion: () => s
-  };
-  return s
+/**
+ * A mutable reference inside an `Arena`.
+ */
+class Ref {
+  constructor(v, s) {
+    this.value = v;
+    this.generation = s.generation;
+    this.store = s;
+  }
+
+  set(v) {
+    const s     = this.store;
+    const r_gen = this.generation;
+    const s_gen = s.generation;
+    if (r_gen === s_gen) {
+      this.value = v;
+    } else {
+      const root   = { value: Mem };
+      s.root.value = { ref: this, value: this.value, generation: r_gen, root };
+
+      s.root          = root;
+      this.value      = v;
+      this.generation = s_gen;
+    }
+  }
+}
+
+/**
+ * A snapshottable arena: a bag of `Ref`s whose collective state can be
+ * captured in O(1) and restored in O(#writes since capture).
+ */
+class Arena {
+  constructor() {
+    this.root       = { value: Mem };
+    this.generation = 0;
+  }
+
+  /**
+   * Allocate a new reference with initial value v.
+   */
+  fresh(v) {
+    return new Ref(v, this);
+  }
+
+  /**
+   * Region support (not implemented!).
+   */
+  newRegion() {
+    return this;
+  }
 }
 
 function snapshot(s) {
@@ -46,34 +63,43 @@ function snapshot(s) {
   return snap
 }
 
-function reroot(n) {
-  if (n.value === Mem) return;
+function reroot(target) {
+  // 1. Walk from target toward the Mem node, collecting the path into `_rerootPath`
+  _rerootPath.length = 0
+  let cur = target
+  while (cur.value !== Mem) {
+    _rerootPath.push(cur)
+    cur = cur.value.root
+  }
+  // cur is now Mem (the current root)
 
-  const diff = n.value
-  const r = diff.ref
-  const v = diff.value
-  const g = diff.generation
-  const n2 = diff.root
-  reroot(n2)
-  n.value = Mem
-  n2.value = { ref: r, value: r.value, generation: r.generation, root: n}
-  r.value = v
-  r.generation = g
+  // 2. Walk back from current root toward target,
+  //    reverse each edge, restore each ref.
+  for (let i = _rerootPath.length - 1; i >= 0; i--) {
+    const node   = _rerootPath[i]
+    const diff   = node.value // forward diff
+    const r      = diff.ref
+    cur.value    = { ref: r, value: r.value, generation: r.generation, root: node }
+    r.value      = diff.value      // restore ref's old value
+    r.generation = diff.generation //  ... and old generation
+    node.value   = Mem
+    cur          = node
+  }
 }
 
 function restore(store, snap) {
-  // linear in the number of modifications...
-  reroot(snap.root)
-  store.root = snap.root
+  if (snap.root.value !== Mem) {
+    // fast path: continuation is resumed immediately with no writes in between
+    reroot(snap.root)
+    store.root = snap.root
+  }
   store.generation = snap.generation + 1
 }
 
 // Common Runtime
 // --------------
-let _prompt = 1;
-
 const TOPLEVEL_K = (x, ks) => { throw { computationIsDone: true, result: x } }
-const TOPLEVEL_KS = { prompt: 0, arena: Arena(), rest: null }
+const TOPLEVEL_KS = { stack: null, prompt: Symbol("toplevel"), arena: new Arena(), rest: null }
 
 function THUNK(f) {
   f.thunk = true
@@ -92,9 +118,9 @@ const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 
 // HANDLE(ks, ks, (p, ks, k) => { STMT })
 function RESET(prog, ks, k) {
-  const prompt = _prompt++;
+  const prompt = Symbol(); // gensym
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  return prog(prompt, { prompt, arena: Arena([]), rest }, RETURN)
+  return prog(prompt, { stack: null, prompt, arena: new Arena(), rest }, RETURN)
 }
 
 function SHIFT(p, body, ks, k) {

@@ -32,8 +32,8 @@ trait Symbol {
    */
   def synthetic = false
 
-  override def hashCode: Int = id
-  override def equals(other: Any): Boolean = other match {
+  override final def hashCode: Int = id
+  override final def equals(other: Any): Boolean = other match {
     case other: Symbol => this.id == other.id
     case _             => false
   }

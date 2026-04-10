@@ -20,17 +20,17 @@ record Output(chars: Int, words: Int, lines: Int)
 def formatWith(output: Output, filename: String): String =
   output.lines.show ++ " " ++ output.words.show ++ " " ++ output.chars.show ++ " " ++ filename
 
-def isSpace(b: Byte) = b.toInt match {
-  case 32 => true // ' '
-  case 9  => true // '\t'
-  case 10 => true // '\n'
-  case 11 => true // '\v'
-  case 12 => true // '\f'
-  case 13 => true // '\r'
-  case _ => false
+def isSpace(b: Byte) = b match {
+  case 0x20 => true // ' '
+  case 0x09 => true // '\t'
+  case 0x0A => true // '\n'
+  case 0x0B => true // '\v'
+  case 0x0C => true // '\f'
+  case 0x0D => true // '\r'
+  case _  => false
 }
 
-def isNewline(b: Byte) = b.toInt == 10 // \n
+def isNewline(b: Byte) = b == 0x0A // \n
 
 def countWords(): Output / read[Byte] = {
 
@@ -39,7 +39,7 @@ def countWords(): Output / read[Byte] = {
   var lines = 0
   var wasSpace = true
 
-  exhaustively {
+  loop {
     val c = do read()
 
     chars = chars + 1
@@ -71,7 +71,7 @@ def run(n: Int) = {
       repeat(10) {
         do emit(c.toByte)
       }
-      do emit(10.toByte)
+      do emit(0x0A)
     }
   }
 

@@ -4,7 +4,7 @@ package js
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
-import effekt.core.optimizer.{ DropBindings, Optimizer }
+import effekt.core.optimizer.{ Deadcode, DropBindings, Optimizer }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
@@ -18,9 +18,9 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
   override def supportedFeatureFlags: List[String] = additionalFeatureFlags ++ TransformerCps.jsFeatureFlags
 
   override def prettyIR(source: Source, stage: Stage)(using C: Context): Option[Document] = stage match {
-    case Stage.Core if C.config.optimize() => Optimized(source).map { (_, _, res) => core.PrettyPrinter.format(res) }
+    case Stage.Core if C.config.optimize() => Optimized(source).map { (_, _, res) => core.PrettyPrinter(Context.config.debug()).format(res) }
     case Stage.CPS => CPSTransformed(source).map { (_, _, _, res) => cps.PrettyPrinter.format(res) }
-    case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
+    case Stage.Core => Core(source).map { res => core.PrettyPrinter(Context.config.debug()).format(res.core) }
     case Stage.Machine => None
     case Stage.Target => CompileLSP(source).map { pretty }
   }
@@ -44,7 +44,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
     Frontend andThen Middleend
   }
 
-  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Optimizer andThen DropBindings map {
+  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Deadcode andThen core.Show andThen Optimizer andThen DropBindings map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
       val mainFile = path(mod)

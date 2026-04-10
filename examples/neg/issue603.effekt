@@ -1,0 +1,16 @@
+effect simple(): Unit
+
+interface Bi {
+  def foo(): Unit / { simple }
+}
+
+def test() = try {
+  box new Bi {
+    def foo() = s.simple()
+  }
+  } with s: simple {
+  resume(())
+  box new Bi {
+    def foo() = ()
+  }
+}

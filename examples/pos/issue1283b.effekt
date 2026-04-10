@@ -1,0 +1,7 @@
+def main(): Unit = {
+  val boxed2 = if (1 < 2) {
+    box { () }
+  } else {
+    box { println("message") }
+  }
+}

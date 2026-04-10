@@ -811,7 +811,7 @@ class LSPTests extends FunSuite {
         raw"""effect raise(): Unit
              |
              |↑
-             |def foo() = { do raise(); 5 }
+             |def boo() = { do raise(); 5 }
              |         ↑
              |
              |↑
@@ -1434,7 +1434,7 @@ class LSPTests extends FunSuite {
       val expectedIRContents =
         raw"""ModuleDecl(
              |  test,
-             |  List(effekt, option, stream, list, result, exception, array, char, bytearray, stringbuffer, string, ref),
+             |  List(effekt, option, partial, stream, control, list, result, exception, array, char, bytearray, stringbuffer, string, ref),
              |  Nil,
              |  Nil,
              |  List(

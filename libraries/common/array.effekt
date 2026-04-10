@@ -1,22 +1,23 @@
 module array
 
 import effekt
-import exception
-import list
 import option
 import stream
+import control
+import list
+import exception
 
 /// A mutable 0-indexed fixed-sized array.
 extern type Array[T]
 
-/** We represent arrays like positive types.
- *  The tag is 0 and the obj points to memory with the following layout:
- *
- *   +--[ Header ]--+------+------------+
- *   | Rc  | Eraser | Size | Fields ... |
- *   +--------------+------+------------+
- */
-
+/// We represent arrays like positive types.
+/// The tag is 0 and the obj points to memory with the following layout:
+///
+/// ```
+///    +--[ Header ]--+------+------------+
+///    | Rc  | Eraser | Size | Fields ... |
+///    +--------------+------+------------+
+/// ```
 extern llvm """
 define void @array_erase_fields(ptr %array_pointer) {
 entry:
@@ -200,17 +201,13 @@ def resize[T](source: Array[T], size: Int): Array[T] = {
   go(0)
 }
 
-/**
- * Creates a copy of `arr`
- */
+/// Creates a copy of `arr`
 def copy[T](array: Array[T]): Array[T] =
   array.resize(array.size)
 
-/**
- * Copies `length`-many elements from `from` to `to`
- * starting at `start` (in `from`) and `offset` (in `to`)
- * Panics if any of those are out of bounds.
- */
+/// Copies `length`-many elements from `from` to `to`
+/// starting at `start` (in `from`) and `offset` (in `to`)
+/// Panics if any of those are out of bounds.
 def copy[T](from: Array[T], start: Int, to: Array[T], offset: Int, length: Int): Unit = {
   def go(i: Int, j: Int, n: Int): Unit =
     if (n > 0) {
@@ -225,7 +222,7 @@ def copy[T](from: Array[T], start: Int, to: Array[T], offset: Int, length: Int):
 
 /// Swap the value at index i with that at index j.
 /// Panics if the indices are out bounds.
-/// 
+///
 /// O(1)
 def swap[A](arr: Array[A], i: Int, j: Int): Unit = {
   val tmp = arr.get(i)
@@ -234,7 +231,7 @@ def swap[A](arr: Array[A], i: Int, j: Int): Unit = {
 }
 
 /// Converts the given array into a list.
-/// 
+///
 /// O(N)
 def toList[T](arr: Array[T]): List[T] = {
   var i = arr.size - 1;
@@ -257,7 +254,7 @@ def foreach[T](arr: Array[T]){ action: T => Unit }: Unit =
 /// Traverse an array, applying the given action on every element.
 ///
 /// O(N)
-def foreach[T](arr: Array[T]){ action: (T) {Control} => Unit }: Unit =
+def foreach[T](arr: Array[T]){ action: (T) {Label} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
     action(arr.get(i)) {label}
   }
@@ -273,13 +270,13 @@ def foreachIndex[T](arr: Array[T]){ action: (Int, T) => Unit }: Unit =
 /// Traverse an array, applying the given action on every element and its (zero-based) index.
 ///
 /// O(N)
-def foreachIndex[T](arr: Array[T]){ action: (Int, T) {Control} => Unit }: Unit =
+def foreachIndex[T](arr: Array[T]){ action: (Int, T) {Label} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
     action(i, arr.get(i)) {label}
   }
 
 /// Sum the elements of the array.
-/// 
+///
 /// O(N)
 def sum(arr: Array[Int]): Int = {
   var acc = 0
@@ -290,7 +287,7 @@ def sum(arr: Array[Int]): Int = {
 }
 
 /// Checks whether two given arrays are equal with respect to an equalty funciton defined on their element.
-/// 
+///
 /// O(N)
 def equals[A](this: Array[A], other: Array[A]) { eq: (A, A) => Bool }: Bool = {
   if (this.size != other.size) false
@@ -329,7 +326,7 @@ def mapped[A, B](arr: Array[A]) { f: A => B }: Array[B] = {
 }
 
 /// Reverses an array in-place.
-/// 
+///
 /// O(N)
 def reverse[A](arr: Array[A]): Unit = {
   val size = arr.size()
@@ -345,12 +342,12 @@ def reverse[A](arr: Array[A]): Unit = {
   }
 }
 /// Creates a new array with elements in reverse order.
-/// 
+///
 /// O(N)
 def reversed[A](arr: Array[A]): Array[A] = {
   val size = arr.size()
   val result = unsafeAllocate[A](size)
-  
+
   // Copy elements in reverse order to new array
   each(0, size) { i =>
     val value = arr.get(i)
@@ -380,7 +377,7 @@ def foldRight[A, B](arr: Array[A], init: B) { f: (A, B) => B }: B = {
 /// Filters a given array with respect to a given predicate such that a
 /// new array containing all the elements for which the predicate
 /// holds is allocated.
-/// 
+///
 /// O(N)
 def filtered[A](arr: Array[A]) { shouldKeep: A => Bool }: Array[A] = {
   val res = arr.copy()
@@ -433,15 +430,15 @@ def count[A](arr: Array[A]) { predicate: A => Bool }: Int = {
 def take[A](arr: Array[A], n: Int): Array[A] = {
   val len = min(max(0, n), arr.size)
   val result = unsafeAllocate[A](len)
-  each(0, len) { i => 
+  each(0, len) { i =>
     result.set(i, arr.get(i))
   }
   result
 }
 
-// Drop first n elements.
+/// Drop first n elements.
 /// Returns a new array.
-/// 
+///
 /// O(N)
 def drop[A](arr: Array[A], n: Int): Array[A] = {
   val start = min(max(0, n), arr.size)
@@ -532,7 +529,7 @@ def partioned[A](arr: Array[A]) { pred: A => Bool }: (Array[A], Array[A]) = {
 }
 
 /// Get the _first_ index of the last occurance of `elem`, if there is any.
-/// 
+///
 /// O(N)
 def indexOf[A](arr: Array[A], toFind: A) { eq: (A, A) => Bool }: Option[Int] = {
   var found = None[Int]()
@@ -546,7 +543,7 @@ def indexOf[A](arr: Array[A], toFind: A) { eq: (A, A) => Bool }: Option[Int] = {
 }
 
 /// Get the _last_ index of the last occurance of `elem`, if there is any.
-/// 
+///
 /// O(N)
 def lastIndexOf[A](arr: Array[A], toFind: A) { eq: (A, A) => Bool }: Option[Int] = {
   var lastFound = None[Int]()
@@ -559,7 +556,7 @@ def lastIndexOf[A](arr: Array[A], toFind: A) { eq: (A, A) => Bool }: Option[Int]
 }
 
 /// Perform binary search to find the index of a given element.
-/// 
+///
 /// O(log N)
 def binarySearch[A](arr: Array[A], toFind: A) { ord: (A, A) => Ordering }: Option[Int] = {
   def binarySearch(lowerIdx: Int, upperIdx: Int): Option[Int] = {
@@ -578,26 +575,24 @@ def binarySearch[A](arr: Array[A], toFind: A) { ord: (A, A) => Ordering }: Optio
 }
 
 /// Sort an array in-place using provided comparison function.
-/// Note: sort is unstable since it uses QuickSort (unlike list::sortBy)
+/// Note: `sort` is unstable since it uses QuickSort (unlike `list::sortBy`)
 ///
 /// O(N log N) average case
 def sort[A](arr: Array[A]) { ord: (A, A) => Ordering }: Unit = {
   def partition(low: Int, high: Int): Int = {
     val pivot = arr.get(high)
     var i = low - 1
-    
+
     each(low, high) { j =>
-      ord(arr.get(j), pivot) match {
-        case Less() =>
-          i = i + 1
-          swap(arr, i, j)
-        case _ => ()
+      if (ord(arr.get(j), pivot) is Less()) {
+        i = i + 1
+        swap(arr, i, j)
       }
     }
     swap(arr, i + 1, high)
     i + 1
   }
-  
+
   def quickSort(low: Int, high: Int): Unit = {
     if (low < high) {
       val par = partition(low, high)
@@ -605,13 +600,13 @@ def sort[A](arr: Array[A]) { ord: (A, A) => Ordering }: Unit = {
       quickSort(par + 1, high)
     }
   }
-  
+
   quickSort(0, arr.size - 1)
 }
 
 /// Sort an array using provided comparison function.
 /// A newly allocated sorted array is returned as result, i.e., the sorting is not in-place.
-/// Note: sort is unstable since it uses QuickSort (unlike list::sortBy)
+/// Note: `sorted` is unstable since it uses QuickSort (unlike `list::sortBy`)
 ///
 /// O(N log N) average case
 def sorted[A](arr: Array[A]) { ord: (A, A) => Ordering }: Array[A] = {
@@ -623,7 +618,9 @@ def sorted[A](arr: Array[A]) { ord: (A, A) => Ordering }: Array[A] = {
 // Show Instances
 // --------------
 
-def show[A](arr: Array[A]) { showA: A => String }: String = {
+// TODO: These can eventually be replaced if we ever figure out monomorphization on extern types
+
+def showBuiltin[A](arr: Array[A]) { showA: A => String }: String = {
   var output = "Array("
   val lastIndex = arr.size - 1
 
@@ -635,16 +632,16 @@ def show[A](arr: Array[A]) { showA: A => String }: String = {
 
   output
 }
-def show(l: Array[Int]): String = show(l) { e => show(e) }
-def show(l: Array[Double]): String = show(l) { e => show(e) }
-def show(l: Array[Bool]): String = show(l) { e => show(e) }
-def show(l: Array[String]): String = show(l) { e => e }
 
-def println(l: Array[Int]): Unit = println(show(l))
-def println(l: Array[Double]): Unit = println(show(l))
-def println(l: Array[Bool]): Unit = println(show(l))
-def println(l: Array[String]): Unit = println(show(l))
+def showBuiltin(l: Array[Int]): String = showBuiltin(l) { e => show(e) }
+def showBuiltin(l: Array[Double]): String = showBuiltin(l) { e => show(e) }
+def showBuiltin(l: Array[Bool]): String = showBuiltin(l) { e => show(e) }
+def showBuiltin(l: Array[String]): String = showBuiltin(l) { e => e }
 
+def println(l: Array[Int]): Unit = println(showBuiltin(l))
+def println(l: Array[Double]): Unit = println(showBuiltin(l))
+def println(l: Array[Bool]): Unit = println(showBuiltin(l))
+def println(l: Array[String]): Unit = println(showBuiltin(l))
 
 // Streaming
 // ---------
@@ -662,6 +659,7 @@ def each[T](array: Array[T]): Unit / emit[T] = {
   go(0)
 }
 
+/// Connects `array` as a producer to a given pull stream `reader` acting as a consumer.
 def feed[T, R](array: Array[T]) { reader: () => R / read[T] }: R = {
   var i = 0
   try {
@@ -679,13 +677,27 @@ def feed[T, R](array: Array[T]) { reader: () => R / read[T] }: R = {
   }
 }
 
+/// Collects elements emitted by a push stream producer `stream` into a new array,
+/// discarding the result of the producer.
+/// The provided capacity is a hint for the expected number of elements.
+/// It must be strictly larger than zero.
+def collect[A](capacity: Int) { stream: () => Unit / emit[A] }: Array[A] =
+  returning::collect[A, Unit](capacity){stream}.second
+
+/// Collects elements emitted by a push stream producer `stream` into a new array,
+/// discarding the result of the producer.
 def collect[A] { stream: () => Unit / emit[A] }: Array[A] =
-  returning::collect[A, Unit]{stream}.second
+  collect[A](4){stream}
 
 namespace returning {
-  def collect[A, R] { stream: () => R / emit[A] }: (R, Array[A]) = {
+
+  /// Collects elements emitted by a push stream producer `stream` into a new array,
+  /// returning the result of the producer as well as the collected array.
+  /// The provided capacity is a hint for the expected number of elements.
+  /// It must be strictly larger than zero.
+  def collect[A, R](capacity: Int) { stream: () => R / emit[A] }: (R, Array[A]) = {
     var i = 0
-    var a = unsafeAllocate(1)
+    var a = unsafeAllocate(capacity)
     try {
       (stream(), a.resize(i))
     } with emit[A] { (v) =>
@@ -695,4 +707,10 @@ namespace returning {
       resume(())
     }
   }
+
+  /// Collects elements emitted by a push stream producer `stream` into a new array,
+  /// returning the result of the producer as well as the collected array.
+  def collect[A, R] { stream: () => R / emit[A] }: (R, Array[A]) =
+    returning::collect[A, R](4){stream}
+
 }

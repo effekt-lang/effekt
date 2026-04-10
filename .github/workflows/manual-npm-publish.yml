@@ -5,7 +5,13 @@ permissions:
   id-token: write
 
 on:
-  workflow_dispatch: # For manual triggering
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to publish (e.g., v1.2.3). Leave empty to auto-detect latest tag.'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   build-jar:
@@ -26,8 +32,29 @@ jobs:
       id: get_version
       run: |
           git fetch --tags
-          LATEST_TAG=$(git describe --tags --abbrev=0)
-          echo "VERSION=${LATEST_TAG#v}" >> $GITHUB_OUTPUT
+          if [ -n "${{ inputs.version }}" ]; then
+            # Use the provided version input
+            VERSION="${{ inputs.version }}"
+            echo "Using provided version: $VERSION"
+          else
+            # Auto-detect latest tag
+            VERSION=$(git describe --tags --abbrev=0)
+            echo "Auto-detected latest version: $VERSION"
+          fi
+          # Strip 'v' prefix if present
+          VERSION_NO_PREFIX="${VERSION#v}"
+          echo "VERSION=$VERSION_NO_PREFIX" >> $GITHUB_OUTPUT
+          
+          # Sanity check: verify version matches package.json
+          PACKAGE_VERSION=$(jq -r .version package.json)
+          echo "package.json version: $PACKAGE_VERSION"
+          
+          if [ "$VERSION_NO_PREFIX" != "$PACKAGE_VERSION" ]; then
+            echo "Version mismatch! Tag version ($VERSION_NO_PREFIX) does not match package.json version ($PACKAGE_VERSION)"
+            exit 1
+          fi
+          
+          echo "Version check passed: $VERSION_NO_PREFIX"
 
     - name: Assemble jar file
       run: sbt clean deploy
@@ -36,13 +63,13 @@ jobs:
       run: mv $(npm pack) effekt.tgz
 
     - name: Upload Effekt binary
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: effekt
         path: bin/effekt
 
     - name: Upload the npm package
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: effekt-npm-package
         path: effekt.tgz
@@ -53,7 +80,7 @@ jobs:
     needs: [build-jar]
     steps:
       - name: Download npm package
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: effekt-npm-package
 

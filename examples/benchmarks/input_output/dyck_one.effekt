@@ -12,13 +12,13 @@ def emitTree(n: Int): Unit / emit[Byte] =
   if (n <= 0) {
     ()
   } else {
-    do emit(40.toByte)
+    do emit(0x28)
     repeat(n) {
-      do emit(40.toByte)
-      do emit(41.toByte)
+      do emit(0x28)
+      do emit(0x29)
     }
     emitTree(n - 1)
-    do emit(41.toByte)
+    do emit(0x29)
   }
 
 type Tree {
@@ -27,9 +27,9 @@ type Tree {
 }
 
 def readTree(): Tree / { Scan[Byte], stop } = {
-  readIf[Byte] { b => b.toInt == 40 }
+  readIf[Byte] { b => b == 0x28 }
   val children = list::collect[Tree] { many { readTree() } }
-  skipIf[Byte] { b => b.toInt == 41 }
+  skipIf[Byte] { b => b == 0x29 }
   Node(children)
 }
 
@@ -53,7 +53,8 @@ def run(n: Int): Int = {
 
   with readFile(filename)
   with returning::scanner[Byte, Int]
-  attempt { readTree().size } { panic("Expected tree.")}
+  with crash("Expected tree.")
+  must { readTree().size }
 }
 
 

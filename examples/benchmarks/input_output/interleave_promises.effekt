@@ -25,7 +25,7 @@ def run(n: Int) = {
       with on[IOError].result
       val filename = foldername ++ i.show ++ ".txt"
       val file = openForWriting(filename)
-      val buffer = bytearray(size, 35.toByte)
+      val buffer = bytearray(size, 0x23)
       repeat(n) {
         val m = write(file, buffer, 0, size, -1)
         if (m < buffer.size) {

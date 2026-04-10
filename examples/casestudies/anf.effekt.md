@@ -164,7 +164,7 @@ def pipeline(input: String): String =
 Here we use `pipeline` to translate some examples:
 
 ```effekt:repl
-inspect(exampleResult)
+println(exampleResult.show)
 println(examplePretty)
 
 println("----")

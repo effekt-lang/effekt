@@ -79,7 +79,7 @@ object WebTests extends TestSuite {
           |""".stripMargin)
       val result = server.showCore("test.effekt")
 
-      assert(result.contains("infixAdd"))
+      assert(result.contains("infixPlus"))
     }
 
     test("Load file with multiline extern strings") {
@@ -104,6 +104,11 @@ object WebTests extends TestSuite {
           |
           |def main() = ()
           |""".stripMargin)
+    }
+
+    test("Using negative Doubles that could be Bytes") {
+      val result = evaluate[String](Nil, "(-1.0).show")
+      assert(result == "-1")
     }
   }
 }

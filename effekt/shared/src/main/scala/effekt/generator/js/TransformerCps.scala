@@ -5,9 +5,11 @@ package js
 import effekt.context.Context
 import effekt.context.assertions.*
 import effekt.cps.*
-import effekt.core.{ DeclarationContext, Id }
-import effekt.cps.Variables.{ all, free }
+import effekt.core.{Declaration, DeclarationContext, Id}
+import effekt.cps.Variables.{all, free}
 import effekt.cps.substitutions.Substitution
+import effekt.util.UByte
+
 import scala.collection.mutable
 
 object TransformerCps extends Transformer {
@@ -34,6 +36,9 @@ object TransformerCps extends Transformer {
     recursive: Option[RecursiveDefInfo],
     // the direct-style continuation, if available (used in case cps.Stmt.LetCont)
     directStyle: Option[ContinuationInfo],
+    // keep track of the function scope we are in to correctly backup function parameters which are used in nested definitions
+    // see `Stmt.Letdef` case
+    scope: List[(Id, cps.Block)],
     // the current direct-style metacontinuation
     metacont: Option[Id],
     // the original declaration context (used to compile pattern matching)
@@ -57,11 +62,12 @@ object TransformerCps extends Transformer {
   def toJS(module: cps.ModuleDecl, exports: List[js.Export])(using D: DeclarationContext, C: Context): js.Module =
     module match {
       case cps.ModuleDecl(path, includes, declarations, externs, definitions, _) =>
-        given TransformerContext(
+        given ctx: TransformerContext(
           false,
           externs.collect { case d: Extern.Def => (d.id, d) }.toMap,
           None,
           None,
+          Nil,
           None,
           D, C)
 
@@ -80,14 +86,16 @@ object TransformerCps extends Transformer {
           input.externs.collect { case d: Extern.Def => (d.id, d) }.toMap,
           None,
           None,
+          Nil,
           None,
           D, C)
 
     input.definitions.map(toJS)
 
 
-  def toJS(d: cps.ToplevelDefinition)(using TransformerContext): js.Stmt = d match {
+  def toJS(d: cps.ToplevelDefinition)(using ctx: TransformerContext): js.Stmt = d match {
     case cps.ToplevelDefinition.Def(id, block) =>
+      given TransformerContext = ctx.copy(scope = List(id -> block))
       js.Const(nameDef(id), requiringThunk { toJS(id, block) })
     case cps.ToplevelDefinition.Val(id, ks, k, binding) =>
       js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding).stmts)))
@@ -188,9 +196,10 @@ object TransformerCps extends Transformer {
 
   def toJS(e: cps.Expr)(using D: TransformerContext): js.Expr = e match {
     case Expr.ValueVar(id)           => nameRef(id)
-    case Expr.Literal(())            => $effekt.field("unit")
-    case Expr.Literal(s: String)     => JsString(escape(s))
-    case literal: Expr.Literal       => js.RawExpr(literal.value.toString)
+    case Expr.Literal((), core.Type.TUnit)            => $effekt.field("unit")
+    case Expr.Literal(s: String, core.Type.TString)     => JsString(escape(s))
+    case Expr.Literal(b: Byte, core.Type.TByte)       => js.RawExpr(UByte.unsafeFromByte(b).toHexString)
+    case literal: Expr.Literal       => js.RawExpr(literal.value.toString) // TODO This should match on the type...
     case Expr.PureApp(id, vargs)     => inlineExtern(id, vargs)
     case Expr.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
     case Expr.Box(b)                 => argumentToJS(b)
@@ -200,7 +209,31 @@ object TransformerCps extends Transformer {
 
     case cps.Stmt.LetDef(id, block, body) =>
       Binding { k =>
-        js.Const(nameDef(id), requiringThunk { toJS(id, block) }) :: toJS(body).run(k)
+        val stmts = mutable.ListBuffer.empty[js.Stmt]
+        // (1) determine all bound function parameters that may be subsequently altered when preparing calls to a tail-recursive function
+        val bound = D.scope.foldLeft(Set.empty[Id]) {
+          case (acc, (id, Block.BlockLit(vparams, bparams, _, _, _))) => acc ++ vparams ++ bparams
+          case (acc, _) => acc
+        }
+        // (2) backup parameters as const variables bindings
+        val freeIds = Variables.free(block) intersect bound
+        val paramTmps = freeIds.map { param =>
+          val tmp = Id(s"tmp_${param}")
+          stmts.append(js.Const(nameDef(tmp), nameRef(param)))
+          param -> Expr.ValueVar(tmp)
+        }.toMap
+        // (3) Substitute block such that the backed up bindings are used instead
+        val subst = Substitution(
+          values = paramTmps,
+          blocks = Map.empty,
+          conts = Map.empty,
+          metaconts = Map.empty
+        )
+        val substBlock = substitutions.substitute(block)(using subst)
+        val ctx = D.copy(scope = (id -> substBlock) :: D.scope)
+        stmts.append(js.Const(nameDef(id), requiringThunk { toJS(id, substBlock)(using ctx) }))
+        stmts.appendAll(toJS(body).run(k))
+        stmts.toList
       }
 
     case cps.Stmt.If(cond, thn, els) =>
@@ -215,7 +248,8 @@ object TransformerCps extends Transformer {
     //
     // [[ let k(x, ks) = ...; if (...) jump k(42, ks2) else jump k(10, ks3) ]] =
     //    let x; if (...) { x = 42; ks = ks2 } else { x = 10; ks = ks3 } ...
-    case cps.Stmt.LetCont(id, Cont.ContLam(params, ks, body), body2) if D.directStyle.isEmpty && canBeDirect(id, body2) =>
+    case cps.Stmt.LetCont(id, Cont.ContLam(params, ks, body), body2) if canBeDirect(id, body2) &&
+        D.directStyle.forall { case ContinuationInfo(k, ps, ks) => !free(body2).contains(k) } =>
       Binding { k =>
         params.map { p => js.Let(nameDef(p), js.Undefined)  } :::
           toJS(body2)(using markDirectStyle(id, params, ks)).stmts ++
@@ -322,9 +356,12 @@ object TransformerCps extends Transformer {
           } else None
         }
 
+        // Compute which blocks need to be substituted (those that capture overlapping variables)
+        val valueSubst = paramTmps.map { case (p, t) => p -> Expr.ValueVar(t) }
+
         // Prepare the substitution
         val subst = Substitution(
-          values = paramTmps.map { case (p, t) => p -> Expr.ValueVar(t) },
+          values = valueSubst,
           blocks = Map.empty,
           conts = tmp_k.map(t => k1 -> Cont.ContVar(t)).toMap,
           metaconts = tmp_ks.map(t => ks1 -> MetaCont(t)).toMap
@@ -430,8 +467,9 @@ object TransformerCps extends Transformer {
         (tag, Binding { k => extractedFields ++ toJS(body).run(k) })
     }
 
-  def toJS(d: cps.Def)(using T: TransformerContext): js.Stmt = d match {
+  def toJS(d: cps.Def)(using D: TransformerContext): js.Stmt = d match {
     case cps.Def(id, block) =>
+      given TransformerContext = D.copy(scope = (id -> block) :: D.scope)
       js.Const(nameDef(id), requiringThunk { toJS(id, block) })
   }
 

@@ -2,6 +2,8 @@ package effekt
 package core
 package vm
 
+import effekt.util.UByte
+
 import java.io.PrintStream
 import scala.util.matching as regex
 import scala.util.matching.Regex
@@ -20,6 +22,11 @@ def builtin(name: String)(impl: Runtime ?=> List[Value] ~> Value): (String, Buil
 type Builtins = Map[String, Builtin]
 
 lazy val printing: Builtins = Map(
+  builtin("effekt::print(String)") {
+    case As.String(msg) :: Nil =>
+      Runtime.out.print(msg)
+      Value.Unit()
+  },
   builtin("effekt::println(String)") {
     case As.String(msg) :: Nil =>
       Runtime.out.println(msg)
@@ -30,16 +37,16 @@ lazy val printing: Builtins = Map(
 lazy val doubles: Builtins = Map(
   // Arithmetic
   // ----------
-  builtin("effekt::infixAdd(Double, Double)") {
+  builtin("effekt::infixPlus(Double, Double)") {
     case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x + y)
   },
-  builtin("effekt::infixSub(Double, Double)") {
+  builtin("effekt::infixMinus(Double, Double)") {
     case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x - y)
   },
-  builtin("effekt::infixMul(Double, Double)") {
+  builtin("effekt::infixStar(Double, Double)") {
     case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x * y)
   },
-  builtin("effekt::infixDiv(Double, Double)") {
+  builtin("effekt::infixSlash(Double, Double)") {
     case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x / y)
   },
   builtin("effekt::sqrt(Double)") {
@@ -121,19 +128,19 @@ lazy val doubles: Builtins = Map(
 lazy val integers: Builtins = Map(
   // Arithmetic
   // ----------
-  builtin("effekt::infixAdd(Int, Int)") {
+  builtin("effekt::infixPlus(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x + y)
   },
-  builtin("effekt::infixSub(Int, Int)") {
+  builtin("effekt::infixMinus(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x - y)
   },
-  builtin("effekt::infixMul(Int, Int)") {
+  builtin("effekt::infixStar(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x * y)
   },
   builtin("effekt::mod(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x % y)
   },
-  builtin("effekt::infixDiv(Int, Int)") {
+  builtin("effekt::infixSlash(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x / y)
   },
   builtin("effekt::bitwiseShl(Int, Int)") {
@@ -150,6 +157,9 @@ lazy val integers: Builtins = Map(
   },
   builtin("effekt::bitwiseXor(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x ^ y)
+  },
+  builtin("effekt::bitwiseNot(Int)") {
+    case As.Int(x) :: Nil => Value.Int(~x)
   },
 
   // Comparison
@@ -190,8 +200,25 @@ lazy val booleans: Builtins = Map(
   },
 )
 
+lazy val bytes: Builtins = Map(
+  // Comparison
+  // ----------
+  builtin("effekt::infixEq(Byte, Byte)") {
+    case As.Byte(x) :: As.Byte(y) :: Nil => Value.Bool(x == y)
+  },
+  builtin("effekt::infixNeq(Byte, Byte)") {
+    case As.Byte(x) :: As.Byte(y) :: Nil => Value.Bool(x != y)
+  },
+
+  // Conversion
+  // ----------
+  builtin("effekt::show(Byte)") {
+    case As.Byte(b) :: Nil => Value.String(b.toHexString)
+  }
+)
+
 lazy val strings: Builtins = Map(
-  builtin("effekt::infixConcat(String, String)") {
+  builtin("effekt::infixPlusPlus(String, String)") {
     case As.String(x) :: As.String(y) :: Nil => Value.String(x + y)
   },
 
@@ -246,6 +273,10 @@ lazy val chars: Builtins = Map(
   builtin("effekt::infixEq(Char, Char)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x == y)
   },
+
+  builtin("effekt::show(Char)") {
+    case As.Int(n) :: Nil => Value.String(n.toString)
+  }
 )
 
 lazy val arrays: Builtins = Map(
@@ -277,13 +308,13 @@ lazy val bytearrays: Builtins = Map(
     case As.ByteArray(arr) :: As.Int(index) :: As.Byte(value) :: Nil => arr.update(index.toInt, value); Value.Unit()
   },
   builtin("bytearray::compare(ByteArray, ByteArray)") {
-    case As.ByteArray(arr1) :: As.ByteArray(arr2) :: Nil => Value.Int(java.util.Arrays.compare(arr1, arr2))
+    case As.ByteArray(arr1) :: As.ByteArray(arr2) :: Nil => Value.Int(java.util.Arrays.compare(arr1.map(_.toByte), arr2.map(_.toByte)))
   },
   builtin("bytearray::fromString(String)") {
-    case As.String(str) :: Nil => Value.ByteArray(str.getBytes("UTF-8"))
+    case As.String(str) :: Nil => Value.ByteArray(str.getBytes("UTF-8").map(UByte.unsafeFromByte))
   },
   builtin("bytearray::toString(ByteArray)") {
-    case As.ByteArray(arr) :: Nil => Value.String(new String(arr, "UTF-8"))
+    case As.ByteArray(arr) :: Nil => Value.String(new String(arr.map(_.toByte), "UTF-8"))
   },
 )
 
@@ -320,7 +351,7 @@ lazy val regexes: Builtins = Map(
   },
 )
 
-lazy val builtins: Builtins = printing ++ integers ++ doubles ++ booleans ++ strings ++ arrays ++ bytearrays ++ refs ++ chars ++ regexes ++ undefined
+lazy val builtins: Builtins = printing ++ integers ++ doubles ++ booleans ++ bytes ++ strings ++ arrays ++ bytearrays ++ refs ++ chars ++ regexes ++ undefined
 
 protected object As {
   object String {
@@ -338,8 +369,8 @@ protected object As {
     }
   }
   object Byte {
-    def unapply(v: Value): Option[scala.Byte] = v match {
-      case Value.Literal(value: scala.Byte) => Some(value)
+    def unapply(v: Value): Option[UByte] = v match {
+      case Value.Literal(value: Byte) => Some(UByte.unsafeFromByte(value))
       case _ => None
     }
   }
@@ -362,7 +393,7 @@ protected object As {
     }
   }
   object ByteArray {
-    def unapply(v: Value): Option[scala.Array[Byte]] = v match {
+    def unapply(v: Value): Option[scala.Array[UByte]] = v match {
       case Value.ByteArray(array) => Some(array)
       case _ => None
     }

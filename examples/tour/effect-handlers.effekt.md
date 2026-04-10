@@ -54,17 +54,19 @@ def unsafeDiv(a: Double, b: Double): Double / {} =
     }
   }
 ```
-
 ```effekt:repl
 unsafeDiv(42.0, 0.0)
 ```
 
-Each handler consists of a `try` block, followed by one more handlers, starting with `with`, followed by the name of the effect and definitions for each of the effect's declared operations.
+Each handler consists of a `try` block, followed by one or more handlers, starting with `with`,
+followed by the name of the effect and definitions for each of the effect's declared operations.
+
+Notice that the handler for `throw` does *not* call `resume`. This is intentional:
+not resuming is how you abort -- the rest of the computation is simply discarded.
 
 ## Resumptive effects
 
-Besides exceptions, we can also emulate other useful mechanisms with effects. For example, a generator functions using the
-`Yield` effect.
+Besides exceptions, we can also emulate other useful mechanisms with effects. For example, a generator function using the `Yield` effect:
 
 ```
 interface Yield[A] {
@@ -108,17 +110,41 @@ def genFibs(limit: Int): List[Int] / {} = {
 genFibs(15).foreach { x => println(x) }
 ```
 
+When an effect operation fires, the handler receives the *rest of the program* --
+everything that would have run after `do yield(a)` -- as an implicit argument called `resume`.
+
+For an effect `yield(x: A): Unit` handled in a `try` block of type `T`, `resume` has type `Unit => T`.
+You can hover over `resume` in the editor to always see its exact type.
+
+There are three ways of using `resume`:
+- Not calling `resume` aborts the producer, and the continuation is discarded (as with `throw` above).
+- Calling `resume` once is the ordinary case seen in generators and state (as with `yield` above). The producer continues with the value passed to `resume`.
+- Calling `resume` multiple times runs the rest of the computation multiple times: this is how nondeterminism and backtracking work.
+
+For more details on effect handlers as a concept, see the [Effect Handlers](../docs/concepts/effect-handlers) page.
+
 ## Singleton operation
 
-Often, we want to declare an interface that is entirely defined by just one operation (like a "single-abstract-method" in Java). In this case, you can declare it as a singleton operation:
+Often, we want to declare an interface that is entirely defined by just one operation(like a "single-abstract-method" in Java). In this case, you can declare it as a _singleton operation_ using the `effect` keyword:
 
 ```
 effect tell(): Int
 ```
 
-The handler for this interface uses a slightly different more concise syntax like it is used in the literature:
+This is syntactic sugar: a singleton `effect` declaration is exactly equivalent to an `interface` with a single operation of the same name,
+and the concise handler syntax `with tell { () => ... }` is shorthand for `with tell { def tell() = ... }`:
 
+```effekt:sketch
+// These two are equivalent:
+effect tell(): Int
+
+interface tell {
+  def tell(): Int
+}
 ```
+
+The handler for a singleton effect uses the same concise syntax:
+```effekt
 import bench
 
 def tellTime[A] { prog: () => A / tell }: A =
@@ -131,7 +157,7 @@ def tellTime[A] { prog: () => A / tell }: A =
 Here, `prog` is expected to be passed a computation (block) and not as a value.
 You can read more about their distinction in the section about [computations](computation).
 
-Using the function `tellTime` that _handles_ the effect `tell` of `prog`, we can write the following program for measuring the execution time for computing the first 1500 Fibonacci Numbers:
+Using the function `tellTime` that _handles_ the effect `tell` of `prog`, we can write the following program for measuring the execution time for computing the first 1500 Fibonacci numbers:
 
 ```effekt:repl
 tellTime {
@@ -142,7 +168,7 @@ tellTime {
 }
 ```
 
-## `with` handler
+## Chaining handlers
 
 We can decompose `genFibs` into a more general helper function `collect` that collects the
 yielded values by abstracting over the generating program:
@@ -187,4 +213,24 @@ def evenFibs(limit: Int): List[Int] = {
 
 ```effekt:repl
 evenFibs(15).foreach { x => println(x) }
+```
+
+## `with` syntax
+
+`with f(args);` is syntactic sugar: it passes the remainder of the current block as the last block argument to `f`.
+This lets deeply nested calls (such as handler calls) be written as a flat, non-nested sequence.
+The following two forms are exactly equivalent:
+
+```effekt:sketch
+// Nested form:
+collect(limit) {
+  filter { x => x.mod(2) == 0 } {
+    fib()
+  }
+}
+
+// Flat form using `with`:
+with collect(limit)
+with filter { x => x.mod(2) == 0 }
+fib()
 ```

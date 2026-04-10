@@ -3,6 +3,7 @@ module resizable_array
 import ref
 import array
 
+/// A resizable array, implemented as a wrapper around a mutable array and a size field.
 record ResizableArray[T](rawSizePtr: Ref[Int], rawContentPtr: Ref[Array[T]])
 
 // These numbers should be optimized based on benchmarking
@@ -20,11 +21,10 @@ val shrinkThreshold = 0.4
 def size[T](arr: ResizableArray[T]) = arr.rawSizePtr.get
 
 /// Allocate a new, empty dynamic array with given initial capacity
-def resizableArray[T](capacity: Int): ResizableArray[T] = {
+def resizableArray[T](capacity: Int): ResizableArray[T] =
   ResizableArray(ref(0), ref(unsafeAllocate(capacity)))
-}
 
-/// Aallocate a new, empty dynamic array
+/// Allocate a new, empty dynamic array
 def resizableArray[T](): ResizableArray[T] = resizableArray(8)
 
 
@@ -35,7 +35,7 @@ def boundsCheck[T](arr: ResizableArray[T], index: Int): Unit / Exception[OutOfBo
   }
 
 
-/// get the element at position index in the array
+/// Get the element at position `index` in the resizable array `arr`
 ///
 /// O(1)
 def get[T](arr: ResizableArray[T], index: Int): T / Exception[OutOfBounds] = {
@@ -43,7 +43,7 @@ def get[T](arr: ResizableArray[T], index: Int): T / Exception[OutOfBounds] = {
   arr.rawContentPtr.get.get(index)
 }
 
-/// set the element at position index in the array
+/// Set the element at position `index` in the resizable array `arr` to `value`
 ///
 /// O(1)
 def set[T](arr: ResizableArray[T], index: Int, value: T): Unit / Exception[OutOfBounds] = {
@@ -51,7 +51,7 @@ def set[T](arr: ResizableArray[T], index: Int, value: T): Unit / Exception[OutOf
   arr.rawContentPtr.get.set(index, value)
 }
 
-/// swap the elements at the given positions in the array
+/// Swap the elements at the given positions in the resizable array `arr`
 ///
 /// O(1)
 def swap[T](arr: ResizableArray[T], index1: Int, index2: Int): Unit / Exception[OutOfBounds] = {
@@ -71,7 +71,7 @@ def setCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / Exception[OutO
     do raise(OutOfBounds(), "Cannot change capacity of ResizableArray to " ++ capacity.show ++ " below size " ++ arr.size.show)
   }
   val oldRaw = arr.rawContentPtr.get
-  if (oldRaw.size != capacity) { 
+  if (oldRaw.size != capacity) {
     val newRaw = array::unsafeAllocate(capacity)
     oldRaw.copy(0, newRaw, 0, arr.size)
     arr.rawContentPtr.set(newRaw)
@@ -82,13 +82,13 @@ def setCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / Exception[OutO
 ///
 /// O(n)
 def maybeShrink[T](arr: ResizableArray[T]): Unit / Exception[OutOfBounds] = {
-  if(arr.size.toDouble < arr.rawContentPtr.get.size.toDouble * shrinkThreshold) {
+  if (arr.size.toDouble < arr.rawContentPtr.get.size.toDouble * shrinkThreshold) {
     val newCap = max(arr.size, (arr.rawContentPtr.get.size.toDouble / growFactor).ceil)
     arr.setCapacity(newCap)
   }
 }
 
-/// makes sure capacity is at least the given one
+/// Makes sure capacity is at least the given one
 ///
 /// O(given capacity - current capacity) amortized, O(n) worst case // TODO ?
 def ensureCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / Exception[OutOfBounds] = {
@@ -140,62 +140,123 @@ def popRight[T](arr: ResizableArray[T]): T / Exception[OutOfBounds] = {
 }
 
 
-def foreachIndex[T](arr: ResizableArray[T]){ body: (Int, T) => Unit }: Unit = {
+/// Traverse the resizable array `arr`, applying the given action on every element.
+def foreach[T](arr: ResizableArray[T]){ action: T => Unit }: Unit =
   each(0, arr.size) { i =>
-    body(i, arr.rawContentPtr.get.get(i))
+    action(arr.rawContentPtr.get.get(i))
   }
-}
-def foreachIndex[T](arr: ResizableArray[T]){ body: (Int, T) {Control} => Unit }: Unit = {
+
+/// Traverse the resizable array `arr`, applying the given action on every element,
+/// providing a `label` for `break`/`continue`.
+def foreach[T](arr: ResizableArray[T]){ action: (T) {Label} => Unit }: Unit =
   each(0, arr.size) { (i){label} =>
-    body(i, arr.rawContentPtr.get.get(i)){label}
+    action(arr.rawContentPtr.get.get(i)){label}
   }
-}
-def foreach[T](arr: ResizableArray[T]){ body: T => Unit }: Unit = {
+
+/// Traverse the resizable array `arr`, applying the given action on every element and its (zero-based) index.
+def foreachIndex[T](arr: ResizableArray[T]){ action: (Int, T) => Unit }: Unit =
   each(0, arr.size) { i =>
-    body(arr.rawContentPtr.get.get(i))
+    action(i, arr.rawContentPtr.get.get(i))
   }
-}
-def foreach[T](arr: ResizableArray[T]){ body: (T) {Control} => Unit }: Unit = {
+
+/// Traverse the resizable array `arr`, applying the given action on every element and its (zero-based) index,
+/// providing a `label` for `break`/`continue`.
+def foreachIndex[T](arr: ResizableArray[T]){ action: (Int, T) {Label} => Unit }: Unit =
   each(0, arr.size) { (i){label} =>
-    body(arr.rawContentPtr.get.get(i)){label}
+    action(i, arr.rawContentPtr.get.get(i)){label}
   }
-}
-def foreachIndexReversed[T](arr: ResizableArray[T]){ body: (Int, T){Control} => Unit }: Unit = {
+
+/// Traverse the resizable array `arr` in reverse order, applying the given action on every element.
+def foreachReversed[T](arr: ResizableArray[T]){ action: T => Unit }: Unit =
+  var i = arr.size - 1
+  while (i >= 0) {
+    action(arr.rawContentPtr.get.get(i))
+    i = i - 1
+  }
+
+/// Traverse the resizable array `arr` in reverse order, applying the given action on every element,
+/// providing a `label` for `break`/`continue`.
+def foreachReversed[T](arr: ResizableArray[T]){ action: (T) {Label} => Unit }: Unit =
   var i = arr.size - 1
   loop { {l} =>
     if (i < 0) { l.break() }
-    body(i, arr.rawContentPtr.get.get(i)){l}
+    action(arr.rawContentPtr.get.get(i)){l}
     i = i - 1
   }
-}
-def foreachIndexReversed[T](arr: ResizableArray[T]){ body: (Int, T) => Unit }: Unit = {
+
+/// Traverse the resizable array `arr` in reverse order, applying the given action on every element and its (zero-based) index.
+def foreachIndexReversed[T](arr: ResizableArray[T]){ action: (Int, T) => Unit }: Unit =
   var i = arr.size - 1
   while(i >= 0) {
-    body(i, arr.rawContentPtr.get.get(i))
+    action(i, arr.rawContentPtr.get.get(i))
     i = i - 1
   }
-}
-def foreachReversed[T](arr: ResizableArray[T]){ body: (T){Control} => Unit }: Unit = {
+
+/// Traverse the resizable array `arr` in reverse order, applying the given action on every element and its (zero-based) index,
+/// providing a `label` for `break`/`continue`.
+def foreachIndexReversed[T](arr: ResizableArray[T]){ action: (Int, T) {Label} => Unit }: Unit =
   var i = arr.size - 1
   loop { {l} =>
     if (i < 0) { l.break() }
-    body(arr.rawContentPtr.get.get(i)){l}
+    action(i, arr.rawContentPtr.get.get(i)){l}
     i = i - 1
   }
-}
-def foreachReversed[T](arr: ResizableArray[T]){ body: T => Unit }: Unit = {
-  var i = arr.size - 1
-  while (i >= 0) { 
-    body(arr.rawContentPtr.get.get(i))
-    i = i - 1
-  }
-}
 
+
+/// Create a new list from a given resizable array `arr`.
 def toList[T](arr: ResizableArray[T]): List[T] = {
   def go(i: Int, acc: List[T]): List[T] = {
-    if (i < 0) { acc } else {
+    if (i < 0) {
+      acc
+    } else {
       go(i - 1, Cons(arr.rawContentPtr.get.get(i), acc))
     }
   }
+
   go(arr.size - 1, Nil())
+}
+
+
+/// Turns `arr` into a producer of a push stream
+/// by emitting each contained value from 0 to length - 1.
+def each[T](arr: ResizableArray[T]): Unit / emit[T] =
+  each(0, arr.size) { i =>
+    do emit(arr.rawContentPtr.get.get(i))
+  }
+
+/// Connects `arr` as a producer to a given pull stream `reader` acting as a consumer.
+def feed[R, T](arr: ResizableArray[T]) { reader: () => R / read[T] }: R = {
+  var i = 0
+  try {
+    reader()
+  } with read[T] {
+    resume {
+      if (i < arr.size) {
+        val v = arr.rawContentPtr.get.get(i)
+        i = i + 1
+        v
+      } else {
+        do stop()
+      }
+    }
+  }
+}
+
+/// Collects elements emitted by a push stream producer `stream` into a new resizable array,
+/// discarding the result of the producer.
+def collect[T] { stream: () => Unit / emit[T] }: ResizableArray[T] =
+  returning::collect[T, Unit]{stream}.second
+
+namespace returning {
+  /// Collects elements emitted by a push stream producer `stream` into a new resizable array,
+  /// returning the result of the producer as well as the collected array.
+  def collect[T, R] { stream: () => R / emit[T] }: (R, ResizableArray[T]) = {
+    val arr = resizableArray()
+    try {
+      (stream(), arr)
+    } with emit[T] { v =>
+      arr.add(v)
+      resume(())
+    }
+  }
 }

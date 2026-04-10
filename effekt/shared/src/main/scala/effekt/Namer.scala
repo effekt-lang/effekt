@@ -249,7 +249,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.requireToplevel("Extern resource")
       val name = Context.nameFor(id)
       val btpe = resolveBlockType(tpe)
-      val sym = ExternResource(name, btpe, d)
+      val sym = ExternResource(name, btpe, Resource(name), d)
       Context.define(id, sym)
       Context.bindBlock(sym)
 
@@ -307,7 +307,8 @@ object Namer extends Phase[Parsed, NameResolved] {
       val tpe = annot.map(resolveValueType)
 
       resolve(binding)
-      val sym = VarBinder(Context.nameFor(id), tpe, d)
+      val name = Context.nameFor(id)
+      val sym = VarBinder(name, tpe, LexicalRegion(name, d), d)
       Context.define(id, sym)
       Context.bind(sym.capture)
 
@@ -489,7 +490,8 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case tree @ source.Region(name, body, _) =>
-      val reg = BlockParam(Name.local(name.name), Some(builtins.TRegion), tree)
+      val regionName = Name.local(name.name)
+      val reg = BlockParam(regionName, Some(builtins.TRegion), CaptureParam(regionName), tree)
       Context.define(name, reg)
       Context scoped {
         Context.bindBlock(reg)
@@ -675,7 +677,8 @@ object Namer extends Phase[Parsed, NameResolved] {
     sym
   }
   def resolve(p: source.BlockParam)(using Context): BlockParam = {
-    val sym: BlockParam = BlockParam(Name.local(p.id), p.tpe.map { tpe => resolveBlockType(tpe, isParam = true) }, p)
+    val name = Name.local(p.id)
+    val sym: BlockParam = BlockParam(name, p.tpe.map { tpe => resolveBlockType(tpe, isParam = true) }, CaptureParam(name), p)
     Context.assignSymbol(p.id, sym)
     sym
   }

@@ -35,7 +35,7 @@ object BindSubexpressions {
       case Toplevel.Val(id, binding) => Toplevel.Val(id, transform(binding)) :: Nil
     }
 
-  def transform(s: Stmt)(using env: Env): Stmt = preserveTypes(s) {
+  def transform(s: Stmt)(using env: Env): Stmt = s match {
 
     case Stmt.Def(id, block, body) => transform(block) match {
       case Bind(Block.BlockVar(x, _, _), bindings) =>

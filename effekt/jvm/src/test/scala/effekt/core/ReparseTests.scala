@@ -41,12 +41,18 @@ class ReparseTests extends CoreTests {
     // FIXME: There is currently a limitation in TestRenamer in that it does not rename captures.
     // This means, that in this example, captures for State[Int] and State[String] are both printed as "State",
     // leading to a collapse of the capture set {State_1, State_2} to just {State}.
-    File("examples/pos/parametrized.effekt")
+    File("examples/pos/parametrized.effekt"),
+    // FIXME: Added in #1230, blocked on #1258 (https://github.com/effekt-lang/effekt/pull/1258)
+    //        doesn't work since any program importing `json` fails due to string escapes.
+    examplesDir / "pos" / "with_val_and_else.effekt",
+    examplesDir / "pos" / "with_val_two_args_and_else.effekt",
+    examplesDir / "pos" / "with_val_pair_and_else.effekt",
   )
 
+  // We currently only run reparse tests on the benchmarks rather than all positive examples.
+  // This is to save CI time as the core parser is currently very slow.
+  // This can be expanded later once we have better core frontend performance.
   def positives: Set[File] = Set(
-    examplesDir / "pos",
-    examplesDir / "casestudies",
     examplesDir / "benchmarks",
   )
 
@@ -75,19 +81,19 @@ class ReparseTests extends CoreTests {
     }
     val renamer = TestRenamer(Names(defaultNames))
     val expectedRenamed = renamer(coreMod)
-    val printed = core.PrettyPrinter.format(expectedRenamed).layout
+    val printed = core.ReparsablePrettyPrinter.format(expectedRenamed).layout
     val reparsed: ModuleDecl = try { parse(printed)(using Location.empty) } catch {
       case e @ TypeError(msg, context) =>
-         println(e.toString)
-         throw e
+        println(e.toString)
+        throw e
       case e =>
         println("Error while re-parsing:")
-        println(printed)
+        println(e)
         throw e
     }
     val reparsedRenamed = renamer(reparsed)
-    val reparsedPrinted = core.PrettyPrinter.format(reparsedRenamed).layout
-    val expectedPrinted = core.PrettyPrinter.format(expectedRenamed).layout
+    val reparsedPrinted = core.ReparsablePrettyPrinter.format(reparsedRenamed).layout
+    val expectedPrinted = printed
     assertEquals(reparsedPrinted, expectedPrinted)
   }
 

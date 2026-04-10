@@ -3,7 +3,7 @@ package generator
 package chez
 
 import effekt.context.Context
-import effekt.core.optimizer.Optimizer
+import effekt.core.optimizer.{ Deadcode, Optimizer }
 import effekt.symbols.{ Module, Symbol }
 import effekt.util.messages.ErrorReporter
 import kiama.output.PrettyPrinterTypes.Document
@@ -36,7 +36,7 @@ trait ChezScheme extends Compiler[String] {
   override def supportedFeatureFlags: List[String] = List("chez")
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
-    case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
+    case Stage.Core => Core(source).map { res => core.PrettyPrinter(Context.config.debug()).format(res.core) }
     case Stage.CPS => None
     case Stage.Machine => None
     case Stage.Target => Separate(source).map { res => pretty(res) }
@@ -55,7 +55,7 @@ trait ChezScheme extends Compiler[String] {
   // ------------------------
   // Source => Core => Chez
   lazy val Compile =
-    allToCore(Core) andThen Aggregate andThen Optimizer andThen Chez map { case (main, expr) =>
+    allToCore(Core) andThen Aggregate andThen Deadcode andThen core.Show andThen Optimizer andThen Chez map { case (main, expr) =>
       (Map(main -> pretty(expr).layout), main)
     }
 

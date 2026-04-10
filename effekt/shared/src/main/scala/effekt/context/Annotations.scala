@@ -304,14 +304,14 @@ object Annotations {
   )
 
   /**
-   * The [[source.Def]] which is a parent of this [[source.Unbox]] node
+   * The [[source.Def]] or [[source.IdTarget]] which is a parent of this [[source.Unbox]] node
    * provided that the [[source.Unbox]] was synthesized by the compiler.
    *
-   * Introduced by the pretyper.
+   * Introduced by unbox inference.
    * Used by typer in order to display a more precise error message.
    */
-  val UnboxParentDef = TreeAnnotation[source.Unbox, source.Def](
-    "UnboxParentDef",
+  val UnboxParent = TreeAnnotation[source.Unbox, source.Def | source.IdTarget](
+    "UnboxParent",
     "the parent definition of an Unbox if it was synthesized"
   )
 }

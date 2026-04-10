@@ -1,0 +1,14 @@
+effect simple(): Unit
+
+interface Bi {
+  def foo(): Unit / { simple }
+}
+
+def main() = try {
+    val obj = box new Bi {
+      def foo() = do simple()
+    }
+    obj.foo()
+  } with simple {
+    resume(())
+  }

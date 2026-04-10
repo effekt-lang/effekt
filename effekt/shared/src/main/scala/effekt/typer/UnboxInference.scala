@@ -56,9 +56,9 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
         // Heuristic for a specific misunderstanding: Scala sometimes allows calling nullary fns without args, we do not
         sym match {
           case UserFunction(_, _, Nil, Nil, _, _, _, _)
-             | TrackedParam.BlockParam(_, Some(BlockType.FunctionType(_, _, Nil, Nil, _, _)), _)
+             | TrackedParam.BlockParam(_, Some(BlockType.FunctionType(_, _, Nil, Nil, _, _)),_,  _)
             => C.info(s"Did you mean to call the function using `${sym.name.name}()`?")
-          case TrackedParam.ResumeParam(_) // NOTE: we don't know the type of `resume` here, so this is not _great_ advice...
+          case ResumeParam(_) // NOTE: we don't know the type of `resume` here, so this is not _great_ advice...
             => C.info(s"Did you mean to resume using `resume(...)`?")
           case _ => ()
         }
@@ -143,7 +143,11 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
     case source.ExprTarget(receiver) => source.ExprTarget(rewriteAsBlock(receiver))
     case t: source.IdTarget => t.definition match {
       case sym: (ValueSymbol | symbols.RefBinder) =>
-        source.ExprTarget(source.Unbox(source.Var(t.id, t.id.span).inheritPosition(t), t.span.synthesized).inheritPosition(t)).inheritPosition(t)
+        // Since we synthesized this `Unbox`, we mark the `IdTarget` in question for better error messages.
+        // See [[Annotations.UnboxParent]] for more details about this annotation.
+        val u = source.Unbox(source.Var(t.id, t.id.span).inheritPosition(t), t.span.synthesized).inheritPosition(t)
+        C.annotate(Annotations.UnboxParent, u, t)
+        source.ExprTarget(u).inheritPosition(t)
       case sym: BlockSymbol =>
         t
     }
@@ -169,8 +173,8 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
         case (Unbox(_, _), _) => ()
         // If the binding wasn't an `Unbox` and now it is, it means that the compiler synthesized it.
         // We therefore annotate the new `Unbox` expression with its original definition.
-        // See [[Annotations.UnboxParentDef]] for more details about this annotation.
-        case (_, u @ Unbox(_, _)) => C.annotate(Annotations.UnboxParentDef, u, t)
+        // See [[Annotations.UnboxParent]] for more details about this annotation.
+        case (_, u @ Unbox(_, _)) => C.annotate(Annotations.UnboxParent, u, t)
         case (_, _) => ()
       }
       DefDef(id, captures, annot, block, doc, span)

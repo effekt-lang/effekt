@@ -29,4 +29,9 @@ input_output/word_count_ascii 8000
 input_output/word_count_utf8 15000
 input_output/dyck_one 800
 input_output/number_matrix 700
-input_output/financial_format 15000 
+input_output/financial_format 15000
+input_output/server_client 1000
+input_output/networked_numbers 20000
+input_output/sender_receiver 1000
+input_output/channel_primes 500
+input_output/thread_ring 500

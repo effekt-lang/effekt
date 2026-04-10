@@ -2,8 +2,9 @@ module list
 
 import effekt
 import option
-import exception
+import control
 import stream
+import exception
 
 /// Immutable linked list for finite sequences of elements.
 type List[A] {
@@ -73,6 +74,16 @@ def tail[A](l: List[A]): List[A] / Exception[MissingValue] = l match {
   case Cons(a, rest) => rest
 }
 
+/// Return all elements of a given list except the last element.
+/// Throws a `MissingValue` exception if it's empty.
+///
+/// O(n)
+def init[A](l: List[A]): List[A] / Exception[MissingValue] = l match {
+  case Nil() => do raise(MissingValue(), "Trying to get the beginning of an empty list")
+  case Cons(a, Nil()) => Nil()
+  case Cons(a, as) => Cons(a, as.init)
+}
+
 /// Return the first element of a given list.
 /// Returns `None()` if it's empty.
 ///
@@ -123,7 +134,7 @@ def foreach[A](l: List[A]) { f: (A) => Unit } : Unit = l match {
 /// Traverse a list, applying the given action on every element.
 ///
 /// O(N)
-def foreach[A](l: List[A]) { f: (A) {Control} => Unit } : Unit = {
+def foreach[A](l: List[A]) { f: (A) {Label} => Unit } : Unit = {
   var remainder = l
   loop { {label} =>
     remainder match {
@@ -151,7 +162,7 @@ def foreachIndex[A](list: List[A]){ f: (Int, A) => Unit }: Unit = {
 /// Traverse a list, applying the given action on every element and its (zero-based) index.
 ///
 /// O(N)
-def foreachIndex[A](list: List[A]){ f: (Int, A) {Control} => Unit }: Unit = {
+def foreachIndex[A](list: List[A]){ f: (Int, A) {Label} => Unit }: Unit = {
   var remainder = list
   var i = -1
   loop { {label} =>
@@ -407,6 +418,18 @@ def reverseOnto[A](l: List[A], other: List[A]): List[A] =
 /// O(N)
 def append[A](l: List[A], other: List[A]): List[A] =
   l.reverse.reverseOnto(other)
+
+/// `l ++ other` is an alias for `l.append(other)`.
+///
+/// Example:
+/// ```
+/// > [1, 2, 3] ++ [4, 5, 6]
+/// [1, 2, 3, 4, 5, 6]
+/// ```
+///
+/// O(N)
+def infixPlusPlus[A](l: List[A], other: List[A]): List[A] =
+    append(l, other)
 
 /// Flatten a list of lists into a single list.
 ///
@@ -913,23 +936,14 @@ def isSortedBy[A](list: List[A]) { lessOrEqual: (A, A) => Bool }: Bool = {
 // Show Instances
 // --------------
 
-def show[A](l: List[A]) { showA: A => String }: String = {
-  def go(l: List[A]): String = l match {
-    case Nil() => "Nil()"
-    case Cons(x, xs) => "Cons(" ++ showA(x) ++ ", " ++ go(xs) ++ ")"
-  }
-  go(l)
-}
-def show(l: List[Int]): String = show(l) { e => show(e) }
-def show(l: List[Double]): String = show(l) { e => show(e) }
-def show(l: List[Bool]): String = show(l) { e => show(e) }
-def show(l: List[String]): String = show(l) { e => e }
+// TODO: Get rid of these after monomorphization is merged
+
 
 def println(l: List[Int]): Unit = println(show(l))
 def println(l: List[Double]): Unit = println(show(l))
+def println(l: List[Char]): Unit = println(show(l))
 def println(l: List[Bool]): Unit = println(show(l))
 def println(l: List[String]): Unit = println(show(l))
-
 
 // Streaming
 // ---------
@@ -960,6 +974,7 @@ def tails[A](list: List[A]): Unit / emit[List[A]] =
     case Cons(head, tail) => do emit(list); tails(tail)
   }
 
+/// Connects `list` as a producer to a given pull stream `reader` acting as a consumer.
 def feed[T, R](list: List[T]) { reader: () => R / read[T] }: R = {
   var l = list
   try {
@@ -976,10 +991,14 @@ def feed[T, R](list: List[T]) { reader: () => R / read[T] }: R = {
   }
 }
 
+/// Collects elements emitted by a push stream producer `stream` into a new list,
+/// discarding the result of the producer.
 def collect[A] { stream: () => Unit / emit[A] }: List[A] =
   returning::collect[A, Unit]{stream}.second
 
 namespace returning {
+  /// Collects elements emitted by a push stream producer `stream` into a new list,
+  /// returning the result of the producer as well as the collected list.
   def collect[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
     try {
       (stream(), Nil())

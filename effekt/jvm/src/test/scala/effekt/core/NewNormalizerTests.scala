@@ -109,8 +109,8 @@ class NewNormalizerTests extends CoreTests {
       val renamer = TestRenamer(Names(defaultNames), "$")
       val obtainedRenamed = renamer(aDef)
       val expectedRenamed = renamer(eDef)
-      val obtainedPrinted = effekt.core.PrettyPrinter.format(obtainedRenamed).layout
-      val expectedPrinted = effekt.core.PrettyPrinter.format(expectedRenamed).layout
+      val obtainedPrinted = effekt.core.ReparsablePrettyPrinter.format(obtainedRenamed).layout
+      val expectedPrinted = effekt.core.ReparsablePrettyPrinter.format(expectedRenamed).layout
       assertEquals(obtainedPrinted, expectedPrinted)
     }
 

@@ -23,7 +23,7 @@ object Transformer {
   def transform(module: core.ModuleDecl): ModuleDecl = module match {
     case core.ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
       given TransformationContext(Map.empty, Map.empty)
-      ModuleDecl(path, includes, declarations, externs.map(transform), definitions.map(transformToplevel), exports)
+      ModuleDecl(path, includes, declarations, externs.flatMap(transform), definitions.map(transformToplevel), exports)
   }
 
   def transformToplevel(definition: core.Toplevel)(using TransformationContext): ToplevelDefinition = definition match {
@@ -34,10 +34,11 @@ object Transformer {
       ToplevelDefinition.Val(id, ks, k, transform(stmt, ks, Continuation.Dynamic(k)))
   }
 
-  def transform(extern: core.Extern)(using TransformationContext): Extern = extern match {
-    case core.Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, targetBody, vmBody) =>
-      Extern.Def(id, vparams.map(_.id), bparams.map(_.id), annotatedCapture.contains(symbols.builtins.AsyncCapability.capture), transform(targetBody))
-    case core.Extern.Include(featureFlag, contents) => Extern.Include(featureFlag, contents)
+  def transform(extern: core.Extern)(using TransformationContext): Option[Extern] = extern match {
+    case core.Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body, vmBody) =>
+      Some(Extern.Def(id, vparams.map(_.id), bparams.map(_.id), annotatedCapture.contains(symbols.builtins.AsyncCapability.capture), transform(body)))
+    case core.Extern.Include(featureFlag, contents) => Some(Extern.Include(featureFlag, contents))
+    case core.Extern.Data(id, tparams) => None
   }
 
   def transform(externBody: core.ExternBody)(using TransformationContext): ExternBody = externBody match {
@@ -175,7 +176,7 @@ object Transformer {
 
   def transform(pure: core.Expr)(using C: TransformationContext): Expr = pure match {
     case core.Expr.ValueVar(id, annotatedType) => C.lookupValue(id)
-    case core.Expr.Literal(value, annotatedType) => Literal(value)
+    case core.Expr.Literal(value, annotatedType) => Literal(value, annotatedType)
     case core.Expr.PureApp(b, targs, vargs) => transform(b) match {
       case Block.BlockVar(id) => PureApp(id, vargs.map(transform))
       case _ => sys error "Should not happen"
@@ -224,8 +225,9 @@ enum Continuation {
     this match {
       case c : Continuation.Dynamic => cps.Cont.ContVar(c.id)
       case Continuation.Static(hint, k) =>
+        val param = Id(hint)
         val ks = Id("ks")
-        cps.Cont.ContLam(hint :: Nil, ks, k(Expr.ValueVar(hint), ks))
+        cps.Cont.ContLam(param :: Nil, ks, k(Expr.ValueVar(param), ks))
     }
 
   def reifyAt(tpe: core.ValueType): Cont =

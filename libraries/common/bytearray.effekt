@@ -2,6 +2,8 @@ module bytearray
 
 import effekt
 import stream
+import control
+import array
 
 /**
  * A memory managed, mutable, fixed-length array of bytes.
@@ -105,6 +107,16 @@ def bytearray(size: Int, init: Byte): ByteArray = {
   arr
 }
 
+/// Builds a new ByteArray of size `size` from a computation `index` which gets an index
+/// and returns a byte that will be on that position in the resulting array
+def build(size: Int) { index: Int => Byte }: ByteArray = {
+  val arr = allocate(size);
+  each(0, size) { i =>
+    set(arr, i, index(i))
+  };
+  arr
+}
+
 def resize(source: ByteArray, size: Int): ByteArray = {
   val target = allocate(size)
   val n = min(source.size, target.size)
@@ -118,12 +130,40 @@ def resize(source: ByteArray, size: Int): ByteArray = {
   go(0)
 }
 
+/// Sorts a given bytearray `arr` in-place using a counting sort,
+/// allocating a temporary array of 256 integers for said counting.
+///
+/// O(N)
+def sort(arr: ByteArray): Unit = {
+  val length = arr.size
+  if (length <= 1) {
+    ()
+  } else {
+    // Count occurrences of each byte value
+    // (maps 0..255 to its count in the byte array)
+    val counts = array::allocateZeros(256)
+    each(0, length) { i =>
+      val byte = arr.get(i).toInt
+      counts.set(byte, counts.get(byte) + 1)
+    }
+
+    // Write back in sorted order (like RLE decoding)
+    var pos = 0
+    counts.foreachIndex { (n, count) =>
+      count.repeat {
+        arr.set(pos, n.toByte)
+        pos = pos + 1
+      }
+    }
+  }
+}
+
 def foreach(arr: ByteArray){ action: Byte => Unit }: Unit =
   each(0, arr.size) { i =>
     action(arr.get(i))
   }
 
-def foreach(arr: ByteArray){ action: (Byte) {Control} => Unit }: Unit =
+def foreach(arr: ByteArray){ action: (Byte) {Label} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
     action(arr.get(i)) {label}
   }
@@ -133,7 +173,7 @@ def foreachIndex(arr: ByteArray){ action: (Int, Byte) => Unit }: Unit =
     action(i, arr.get(i))
   }
 
-def foreachIndex(arr: ByteArray){ action: (Int, Byte) {Control} => Unit }: Unit =
+def foreachIndex(arr: ByteArray){ action: (Int, Byte) {Label} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
     action(i, arr.get(i)) {label}
   }
@@ -260,13 +300,17 @@ def feed[R](bytes: ByteArray) { reader: () => R / read[Byte] }: R = {
   }
 }
 
+def collect(capacity: Int) { stream: () => Unit / emit[Byte] }: ByteArray =
+  returning::collect[Unit](capacity){stream}.second
+
 def collect { stream: () => Unit / emit[Byte] }: ByteArray =
-  returning::collect[Unit]{stream}.second
+  collect(4){stream}
 
 namespace returning {
-  def collect[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
+
+  def collect[R](capacity: Int) { stream: () => R / emit[Byte] }: (R, ByteArray) = {
     var i = 0
-    var a = allocate(1)
+    var a = allocate(capacity)
     try {
       (stream(), a.resize(i))
     } with emit[Byte] { (v) =>
@@ -276,4 +320,8 @@ namespace returning {
       resume(())
     }
   }
+
+  def collect[R] { stream: () => R / emit[Byte] }: (R, ByteArray) =
+    returning::collect(4){stream}
+
 }

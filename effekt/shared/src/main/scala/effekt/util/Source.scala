@@ -88,7 +88,7 @@ case class MarkdownSource(source: Source) extends Source {
         lines += ""
     }
     val prog = lines.mkString("\n")
-    val repls = 0.until(replCounter).map { i => s"inspect(repl${i}())"}
+    val repls = 0.until(replCounter).map { i => s"println(repl${i}().show)"}
     // We either allow to have one manually defined main function XOR one or more REPLs
     val main = if (replCounter > 0) {
       s"""

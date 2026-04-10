@@ -37,7 +37,7 @@ class OptimizerTests extends CoreTests {
   def normalize(input: String, expected: String)(using munit.Location) =
     assertTransformsTo(input, expected) { tree =>
       val anfed = BindSubexpressions.transform(tree)
-      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, 50)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, 50, true)
       Deadcode.remove(mainSymbol, normalized)
     }
 

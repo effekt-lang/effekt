@@ -110,7 +110,7 @@ we can compose the two handlers to run our example consumer:
 ```effekt:repl
 report {
   exampleTokens.lexerFromList {
-    inspect(example1())
+    println(example1().show)
   }
 }
 ```
@@ -187,7 +187,7 @@ Running our above consumer with the string `"foo()"`:
 ```effekt:repl
   report {
     lexer("foo()") {
-      inspect(example1())
+      println(example1().show)
     }
   }
 ```
@@ -214,7 +214,7 @@ The handler `skipWhitespace` simply skips all spaces by using the `Lexer` effect
   report {
     lexer("foo (   \n  )") {
       skipWhitespace {
-        inspect(example1())
+        println(example1().show)
       }
     }
   }
@@ -299,8 +299,7 @@ Let us start by defining the parser for numeric literals.
 ```
 def parseNum(): Tree / Parser = {
   val numText = number();
-  with default[WrongFormat, Tree] { do fail("Expected number, but cannot convert input to integer: " ++ numText) };
-  Lit(numText.toInt)
+  attempt { Lit(numText.toInt) } { do fail("Expected number, but cannot convert input to integer: " ++ numText) }
 }
 ```
 We simply call the parser for `number()` and try to convert the
@@ -428,20 +427,20 @@ the lexer positions will be restored when calling the continuation a second time
 Having implemented a handler for the `Parser` effect, we can run our example "grammars" on some inputs.
 
 ```effekt:repl
-inspect(parse("42") { parseCalls() })
-inspect(parse("foo(1)") { parseCalls() })
-inspect(parse("foo(1, 2)") { parseCalls() })
-inspect(parse("foo(1, 2, 3, 4)") { parseCalls() })
-inspect(parse("foo(1, 2, bar(4, 5))") { parseCalls() })
-inspect(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() })
+println(parse("42") { parseCalls() }.show)
+println(parse("foo(1)") { parseCalls() }.show)
+println(parse("foo(1, 2)") { parseCalls() }.show)
+println(parse("foo(1, 2, 3, 4)") { parseCalls() }.show)
+println(parse("foo(1, 2, bar(4, 5))") { parseCalls() }.show)
+println(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() }.show)
 
-inspect(parse("}42") { parseExpr() })
-inspect(parse("42") { parseExpr() })
-inspect(parse("let x = 4 in 42") { parseExpr() })
-inspect(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
-inspect(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
-inspect(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
-inspect(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
+println(parse("}42") { parseExpr() }.show)
+println(parse("42") { parseExpr() }.show)
+println(parse("let x = 4 in 42") { parseExpr() }.show)
+println(parse("let x = let y = 2 in 1 in 42") { parseExpr() }.show)
+println(parse("let x = (let y = 2 in 1) in 42") { parseExpr() }.show)
+println(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() }.show)
+println(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() }.show)
 ```
 
 ---
@@ -1069,7 +1068,7 @@ def pipeline(input: String): String =
 Here we use `pipeline` to translate some examples:
 
 ```effekt:repl
-inspect(exampleResult)
+println(exampleResult.show)
 println(examplePretty)
 
 println("----")

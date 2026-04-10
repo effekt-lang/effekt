@@ -60,6 +60,8 @@
      out))
 
 
+(define (print_impl str)
+  (display str))
 
 (define (println_impl str)
   (display str)

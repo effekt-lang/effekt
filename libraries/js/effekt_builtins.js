@@ -54,6 +54,10 @@ $effekt.println = function println$impl(str) {
   console.log(str); return $effekt.unit;
 }
 
+$effekt.print = function println$impl(str) {
+  process.stdout.write(str); return $effekt.unit;
+}
+
 $effekt.unit = { __unit: true }
 
 $effekt.unreachable = function() { throw "should not be reachable!" }

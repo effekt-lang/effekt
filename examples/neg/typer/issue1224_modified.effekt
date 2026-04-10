@@ -1,0 +1,15 @@
+type Status[B] {
+  Done(value: Int)
+  More(state: B)
+}
+
+def main(): Unit = {
+  val result: Int = Done(123) match {
+    case Done(v) => v
+    // f() checked with expected = None
+    case More(f) => f() match { // ERROR Expected f to be a function, but got a value of type B instead, which cannot be called as a function.
+      case n => n
+    }
+  }
+  result
+}

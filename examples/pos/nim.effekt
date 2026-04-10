@@ -141,10 +141,6 @@ type Scoreboard {
   Board(alice: Int, bob: Int)
 }
 
-def show(board: Scoreboard): String = board match {
-  case Board(alice, bob) => "Board(" ++ show(alice) ++ ", " ++ show(bob) ++ ")"
-}
-
 effect GetScore(): Scoreboard
 effect UpdateScore(p: Player): Unit
 
@@ -194,7 +190,7 @@ def main() = {
     val result = cheatReport { check { pc { game(12) } } }; // bob
     println("result is " ++ show(result))
   }};
-  println(show(allResults { bobChooses { game(7) } }) { e => show(e) }); // List(Bob, Alice)
+  println(show(allResults { bobChooses { game(7) } })); // List(Bob, Alice)
   deterministic {
     println(do Choose()); // true
     println(do Choose()); // false

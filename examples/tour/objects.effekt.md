@@ -5,7 +5,7 @@ permalink: tour/objects
 
 # Objects
 
-Effekt features a simple object-system. Let us assume the following interface:
+Effekt features a simple object system. Let us assume the following interface:
 
 ```
 interface Counter {
@@ -41,10 +41,12 @@ def runWithCounter() = {
 ```effekt:repl
 runWithCounter()
 ```
+
 In the above example, `new Counter { ... }` creates a new `Counter` instance by providing implementations for each operation. Note how we use `def` to bind `counter`: it is a computation, not a value.
-In the call to `useCounter`, we can see how we pass computation, such as `counter` in braces.
+In the call to `useCounter`, we can see how we pass computations, such as `counter`, in braces.
 
 ## Objects and Handlers
+
 The instantiation of an object might be reminiscent of how handlers implement effect signatures.
 This is no coincidence: there is a close correspondence between interfaces and effect signatures, as well as capabilities and objects.
 

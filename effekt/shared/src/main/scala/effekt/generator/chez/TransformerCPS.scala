@@ -6,6 +6,7 @@ import cps.*
 import core.Declaration
 import effekt.symbols.Symbol
 import effekt.core
+import effekt.util.UByte
 import effekt.util.messages.ErrorReporter
 
 object TransformerCPS {
@@ -166,13 +167,14 @@ object TransformerCPS {
 
   def toChez(expr: cps.Expr): chez.Expr = expr match {
     case ValueVar(id) => toChez(id)
-    case Literal(()) => chez.RawValue("(void)")
+    case Literal((), core.Type.TUnit) => chez.RawValue("(void)")
     //TODO: Copy paste escape procedure to this transformer?
-    case Literal(v: String) =>
+    case Literal(v: String, core.Type.TString) =>
       effekt.generator.chez.TransformerMonadic.escape(v)
-    case Literal(b: Boolean) =>
+    case Literal(b: Boolean, core.Type.TBoolean) =>
       if (b) chez.RawValue("#t") else chez.RawValue("#f")
-    case Literal(value) => chez.RawValue(value.toString())
+    case Literal(b: Byte, core.Type.TByte) => chez.RawValue(UByte.unsafeFromByte(b).toInt.toString)
+    case Literal(value, _) => chez.RawValue(value.toString()) // TODO this should match on the actual types...
     case PureApp(id, vargs) => chez.Call(toChez(id), vargs.map(toChez))
     case Make(_, tag, vargs) =>
       chez.Call(nameRef(tag), vargs.map(toChez))

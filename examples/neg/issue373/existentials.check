@@ -1,6 +1,14 @@
-[error] examples/neg/issue373/existentials.effekt:7:46: Expected Int but got String.
+[error] examples/neg/issue373/existentials.effekt:7:46: Cannot typecheck call.
+There are multiple overloads, which all fail to check:
+
+Possible overload: effekt::infixPlusPlus of type (String, String) => String
+  Expected Int but got String.
+  Expected String but got C.
+
+Possible overload: list::infixPlusPlus of type [A](List[A], List[A]) => List[A]
+  Expected Int but got List[A].
+  Expected List[A] but got C.
+  Expected List[A] but got String.
+
   with eff: Eff[Int] { def op[C](x) = resume(x ++ "") }
                                              ^^^^^^^
-[error] examples/neg/issue373/existentials.effekt:7:46: Expected String but got C.
-  with eff: Eff[Int] { def op[C](x) = resume(x ++ "") }
-                                             ^

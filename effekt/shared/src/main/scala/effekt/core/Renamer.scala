@@ -20,7 +20,7 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   // Local renamings: map of bound symbols to their renamed variants in a given scope.
   private var scope: Map[Id, Id] = Map.empty
 
-  // All renamings: map of bound symbols to their renamed variants, globally!
+  // All renamings: map of freshly generated bound ids to their old counterparts.
   val renamed: mutable.HashMap[Id, Id] = mutable.HashMap.empty
 
   def freshIdFor(id: Id): Id =
@@ -32,7 +32,7 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
       ids.foreach { x =>
         val fresh = freshIdFor(x)
         scope = scope + (x -> fresh)
-        renamed.put(x, fresh)
+        renamed.put(fresh, x)
       }
 
       f

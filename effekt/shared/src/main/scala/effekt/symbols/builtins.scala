@@ -48,13 +48,13 @@ object builtins {
   val TBottom = ValueTypeApp(BottomSymbol, Nil)
 
   val IOSymbol = Interface(Name.local("IO"), Nil, Nil, decl = NoSource)
-  val IOCapability = ExternResource(name("io"), InterfaceType(IOSymbol, Nil), decl = NoSource)
+  val IOCapability = ExternResource(name("io"), InterfaceType(IOSymbol, Nil), Resource(name("io")), decl = NoSource)
 
   val AsyncSymbol = Interface(Name.local("Async"), Nil, Nil, decl = NoSource)
-  val AsyncCapability = ExternResource(name("async"), InterfaceType(AsyncSymbol, Nil), decl = NoSource)
+  val AsyncCapability = ExternResource(name("async"), InterfaceType(AsyncSymbol, Nil), Resource(name("async")), decl = NoSource)
 
   val GlobalSymbol = Interface(Name.local("Global"), Nil, Nil, decl = NoSource)
-  val GlobalCapability = ExternResource(name("global"), InterfaceType(GlobalSymbol, Nil), decl = NoSource)
+  val GlobalCapability = ExternResource(name("global"), InterfaceType(GlobalSymbol, Nil), Resource(name("global")), decl = NoSource)
 
   object TState {
     val S: TypeParam = TypeParam(Name.local("S"))

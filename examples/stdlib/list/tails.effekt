@@ -1,8 +1,5 @@
-def showNested(list: List[List[Int]]): String =
-  list.show { (xs: List[Int]) => show(xs) }
-
 def printNested(list: List[List[Int]]): Unit =
-  println(showNested(list))
+  list.foreach { l => println(l.show) }
 
 def main() = {
   printNested(
