@@ -130,7 +130,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       source.BlockLiteral(tps, vps, bps ++ capParams, rewrite(body), span)
   }
 
-  override def rewrite(body: ExternBody)(using context.Context): ExternBody =
+  override def rewrite(body: ExternBody[Stmt])(using context.Context): ExternBody[Stmt] =
     body match {
       case b @ source.ExternBody.StringExternBody(ff, body, span) =>
         val rewrittenTemplate =

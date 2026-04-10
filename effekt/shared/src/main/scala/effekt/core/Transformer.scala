@@ -858,7 +858,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       // resolve the preferred body again and hope it's the same
       val body = ResolveExternDefs.findPreferred(bodies)
       body match {
-        case b: source.ExternBody.EffektExternBody => CallingConvention.Control
+        case b: source.ExternBody.EffektExternBody[_] => CallingConvention.Control
         case _ if f.capture.pure => CallingConvention.Pure
         case _ if f.capture.pureOrIO => CallingConvention.Direct
         case _ => CallingConvention.Control
