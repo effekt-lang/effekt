@@ -32,13 +32,13 @@ lazy val supportedBuiltins: Builtins = integers ++ doubles ++ booleans ++ string
 lazy val integers: Builtins = Map(
   // Integer arithmetic operations with symbolic simplification support
   // ----------
-  builtin("effekt::infixAdd(Int, Int)") {
+  builtin("effekt::infixPlus(Int, Int)") {
     case As.IntRep(x) :: As.IntRep(y) :: Nil => semantics.Value.Integer(theories.integers.add(x, y))
   },
-  builtin("effekt::infixSub(Int, Int)") {
+  builtin("effekt::InfixMinus(Int, Int)") {
     case As.IntRep(x) :: As.IntRep(y) :: Nil => semantics.Value.Integer(theories.integers.sub(x, y))
   },
-  builtin("effekt::infixMul(Int, Int)") {
+  builtin("effekt::infixStar(Int, Int)") {
     case As.IntRep(x) :: As.IntRep(y) :: Nil => semantics.Value.Integer(theories.integers.mul(x, y))
   },
   builtin("effekt::infixEq(Int, Int)") {
@@ -99,13 +99,13 @@ lazy val integers: Builtins = Map(
 lazy val doubles: Builtins = Map(
   // Arithmetic
   // ----------
-  builtin("effekt::infixAdd(Double, Double)") {
+  builtin("effekt::infixPlus(Double, Double)") {
     case As.Double(x) :: As.Double(y) :: Nil => x + y
   },
-  builtin("effekt::infixSub(Double, Double)") {
+  builtin("effekt::InfixMinus(Double, Double)") {
     case As.Double(x) :: As.Double(y) :: Nil => x - y
   },
-  builtin("effekt::infixMul(Double, Double)") {
+  builtin("effekt::infixStar(Double, Double)") {
     case As.Double(x) :: As.Double(y) :: Nil => x * y
   },
   builtin("effekt::infixDiv(Double, Double)") {
@@ -190,7 +190,7 @@ lazy val booleans: Builtins = Map(
 )
 
 lazy val strings: Builtins = Map(
-  builtin("effekt::infixConcat(String, String)") {
+  builtin("effekt::infixPlusPlus(String, String)") {
     case As.StringRep(x) :: As.StringRep(y) :: Nil => semantics.Value.String(theories.strings.concat(x, y))
   },
 

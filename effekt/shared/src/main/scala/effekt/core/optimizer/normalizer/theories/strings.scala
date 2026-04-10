@@ -22,17 +22,17 @@ object strings {
       terms.mkString(" ++ ")
     }
   }
-  
+
   def embed(value: String): StringRep = StringRep(List(value))
   def embed(value: Neutral): StringRep = StringRep(List(value))
-  
+
   def reify(value: StringRep, embedBuiltinName: String => BlockVar, embedNeutral: Neutral => Expr): Expr = value match {
     case StringRep(parts) =>
       parts.map {
         case s: String => Expr.Literal(s, Type.TString)
         case n: Neutral    => embedNeutral(n)
       }.reduceLeft { (l, r) =>
-        Expr.PureApp(embedBuiltinName("effekt::infixConcat(String, String)"), List(), List(l, r))
+        Expr.PureApp(embedBuiltinName("effekt::infixPlusPlus(String, String)"), List(), List(l, r))
       }
   }
 

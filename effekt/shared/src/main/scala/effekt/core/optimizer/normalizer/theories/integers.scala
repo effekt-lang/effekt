@@ -132,9 +132,9 @@ object integers {
     def reifyInt(v: Long): Expr = Expr.Literal(v, Type.TInt)
 
     def reifyOp(l: Expr, op: Operation, r: Expr): Expr = op match {
-      case Add => Expr.PureApp(embedBuiltinName("effekt::infixAdd(Int, Int)"), List(), List(l, r))
-      case Sub => Expr.PureApp(embedBuiltinName("effekt::infixSub(Int, Int)"), List(), List(l, r))
-      case Mul => Expr.PureApp(embedBuiltinName("effekt::infixMul(Int, Int)"), List(), List(l, r))
+      case Add => Expr.PureApp(embedBuiltinName("effekt::infixPlus(Int, Int)"), List(), List(l, r))
+      case Sub => Expr.PureApp(embedBuiltinName("effekt::InfixMinus(Int, Int)"), List(), List(l, r))
+      case Mul => Expr.PureApp(embedBuiltinName("effekt::infixStar(Int, Int)"), List(), List(l, r))
       case Div => Expr.PureApp(embedBuiltinName("effekt::infixDiv(Int, Int)"), List(), List(l, r))
     }
 

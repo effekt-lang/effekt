@@ -192,8 +192,8 @@ class NewNormalizerTests extends CoreTests {
               |
               |def run() = {
               |  def f() = {
-              |    let o = 42
-              |    return o: Int
+              |    let x = 42
+              |    return x: Int
               |  }
               |  let fBox = box {} f: () => Int @ {}
               |  let ! r = foo: (() => Int at {}) => Int @ {io}(fBox: () => Int at {})
@@ -229,9 +229,9 @@ class NewNormalizerTests extends CoreTests {
               |extern {} def foo(): => Int at {} = vm"42"
               |
               |def run() = {
-              |  let r1 = (foo: () => (() => Int at {}) @ {})()
-              |  def r2 = (unbox r1: () => Int at {})
-              |  r2: () => Int @ {}()
+              |  let x1 = (foo: () => (() => Int at {}) @ {})()
+              |  def x2 = (unbox x1: () => Int at {})
+              |  x2: () => Int @ {}()
               |}
               |""".stripMargin
       )
@@ -241,7 +241,7 @@ class NewNormalizerTests extends CoreTests {
     assertAlphaEquivalentToplevels(actual, expected, List("run"), List("foo"))
   }
 
-  test("Mutable variable with infixAdd is optimized to a single constant let-binding") {
+  test("Mutable variable with infixPlus is optimized to a single constant let-binding") {
     val input =
       """
         |def run(): Int = {
@@ -257,7 +257,7 @@ class NewNormalizerTests extends CoreTests {
       parse("""
               |module input
               |
-              |extern {} def infixAdd(x: Int, y: Int): Int = vm ""
+              |extern {} def infixPlus(x: Int, y: Int): Int = vm ""
               |
               |def run() = {
               |  let x = 42
@@ -268,7 +268,7 @@ class NewNormalizerTests extends CoreTests {
 
     val (mainId, actual) = normalize(input)
 
-    assertAlphaEquivalentToplevels(actual, expected, List("run"), List("infixAdd"))
+    assertAlphaEquivalentToplevels(actual, expected, List("run"), List("infixPlus"))
   }
 
   // This test case shows mutable variable assignments turning into static let-bindings
@@ -743,8 +743,8 @@ class NewNormalizerTests extends CoreTests {
       """module input
         |extern {} def infixEq(x: Int, y: Int): Bool = vm ""
         |def run(x: Int) = {
-        |  let r = true
-        |  return r: Bool
+        |  let x = true
+        |  return x: Bool
         |}
         |""".stripMargin
 
@@ -772,10 +772,10 @@ class NewNormalizerTests extends CoreTests {
       """module input
         |extern {io} def infixEq(x: Int, y: Int): Bool = vm ""
         |def run(x: Int) = {
-        |  let ! r1 = z: () => Int @ {io}()
-        |  let ! r2 = z: () => Int @ {io}()
-        |  let o = (infixEq: (Int, Int) => Bool @ {})(r1: Int, r2: Int)
-        |  return o: Bool
+        |  let ! x1 = z: () => Int @ {io}()
+        |  let ! x2 = z: () => Int @ {io}()
+        |  let x = (infixEq: (Int, Int) => Bool @ {})(x1: Int, x2: Int)
+        |  return x: Bool
         |}
         |""".stripMargin
 
@@ -801,8 +801,8 @@ class NewNormalizerTests extends CoreTests {
       """module input
         |extern {} def infixEq(x: Int, y: Int): Bool = vm ""
         |def run() = {
-        |  let o = true
-        |  return o: Bool
+        |  let x = true
+        |  return x: Bool
         |}
         |""".stripMargin
 
@@ -829,8 +829,8 @@ class NewNormalizerTests extends CoreTests {
       """module input
         |extern {} def infixEq(x: String, y: String): Bool = vm ""
         |def run() = {
-        |  let o = true
-        |  return o: Bool
+        |  let x = true
+        |  return x: Bool
         |}
         |""".stripMargin
 
