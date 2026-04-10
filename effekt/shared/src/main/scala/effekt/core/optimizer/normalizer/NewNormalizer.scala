@@ -114,10 +114,15 @@ class NewNormalizer {
             case _: BlockType.Interface => ???
             case ftpe: BlockType.Function => ftpe
           }
+
           scope.defineRecursive(
             freshened,
             normalizedBlock1.copy(bparams = normalizedBlock1.bparams ++ closureParams.map(_.id)),
-            tpe.copy(cparams = tpe.cparams ++ closureParams.map { bp => bp.id.id }),
+            // here we update the argument types and captures to account for the closed over block parameters
+            tpe.copy(
+              bparams = tpe.bparams ++ closureParams.map { bp => bp.id.tpe },
+              cparams = tpe.cparams ++ closureParams.map { bp => bp.id.id }
+            ),
             block.capt
           )
           Computation.Def(Closure(freshened, captures))

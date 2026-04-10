@@ -106,7 +106,7 @@ class NewNormalizerTests extends CoreTests {
     def compareOneDef(name: String): Unit = {
       val aDef = findDef(actual, name)
       val eDef = findDef(expected, name)
-      val renamer = TestRenamer(Names(defaultNames), "$")
+      val renamer = TestRenamer(Names(defaultNames), "$", preserveUserAnnotatedPrefix = false)
       val obtainedRenamed = renamer(aDef)
       val expectedRenamed = renamer(eDef)
       val obtainedPrinted = effekt.core.ReparsablePrettyPrinter.format(obtainedRenamed).layout
@@ -356,14 +356,14 @@ class NewNormalizerTests extends CoreTests {
               |  let xv = 1
               |  def handler(){r @ r: Ref[Int]} {p @ p: Prompt[Unit]} = {
               |    shift(p: Prompt[Unit] @ {p}) {{k: Resume[Unit, Unit]} =>
-              |      get v : Int = ! r @ x;
+              |      get v : Int = ! r @ r;
               |      let ! o = foo: (Int) => Unit @ {io}(v: Int)
               |      return o: Unit
               |    }
               |  }
-              |  var z @ x = xv: Int;
+              |  var z @ z = xv: Int;
               |  reset { (){p @ p: Prompt[Unit]} =>
-              |    handler: (){z: Ref[Int]} {p: Prompt[Unit]} => Unit @ {io, x}(){z: Ref[Int] @ {z}} {p: Prompt[Unit] @ {p}}
+              |    handler: (){z: Ref[Int]} {p: Prompt[Unit]} => Unit @ {io}(){z: Ref[Int] @ {z}} {p: Prompt[Unit] @ {p}}
               |  }
               |}
               |""".stripMargin
@@ -482,17 +482,17 @@ class NewNormalizerTests extends CoreTests {
           |  }
           |  let v = 1
           |  def setter(v: Int){xr @ xr: Ref[Int]} = {
-          |    put xr @ x = v: Int;
+          |    put xr @ xr = v: Int;
           |    let u = ()
           |    return u: Unit
           |  }
-          |  var xvar @ x = v: Int;
+          |  var xvar @ xvar = v: Int;
           |  val r: Unit = {
           |    modifyProg: (){setter: (Int) => Unit} => Unit @ {}(){ (v: Int) =>
-          |      setter: (Int){x: Ref[Int]} => Unit @ {x}(v: Int){xvar: Ref[Int] @ {xvar}}
+          |      setter: (Int){x: Ref[Int]} => Unit @ {}(v: Int){xvar: Ref[Int] @ {xvar}}
           |    }
           |  };
-          |  get o : Int = ! xvar @ x;
+          |  get o : Int = ! xvar @ xvar;
           |  return o: Int
           |}
           |""".stripMargin
@@ -714,7 +714,7 @@ class NewNormalizerTests extends CoreTests {
         |def run() = {
         |  let ! s2 = foo: () => String @ {io}()
         |  let s1 = "ab"
-        |  let r = (infixConcat: (String, String) => String @ {})((infixConcat: (String, String) => String @ {})(s1: String, s2: String), "cd")
+        |  let r = (infixPlusPlus: (String, String) => String @ {})((infixPlusPlus: (String, String) => String @ {})(s1: String, s2: String), "cd")
         |  return r: String
         |}
         |""".stripMargin

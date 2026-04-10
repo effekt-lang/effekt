@@ -116,8 +116,7 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
 
     case core.Var(ref, init, capt, body) =>
       val resolvedInit = rewrite(init)
-      val resolvedCapt = rewrite(capt)
-      withBinding(ref) { core.Var(rewrite(ref), resolvedInit, resolvedCapt, rewrite(body)) }
+      withBindings(List(ref, capt)) { core.Var(rewrite(ref), resolvedInit, rewrite(capt), rewrite(body)) }
 
     case core.Get(id, tpe, ref, capt, body) =>
       val resolvedRef = rewrite(ref)

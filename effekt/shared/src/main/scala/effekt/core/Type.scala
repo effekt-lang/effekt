@@ -469,17 +469,18 @@ object Type {
       Typing(ValueType.Boxed(bTpe, annotatedCapture), Set.empty, bFree)
   }
 
-  def typecheck(block: Block): Typing[BlockType] = checking(block) {
-    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Typing(annotatedTpe, annotatedCapt, Free.block(id, annotatedTpe, annotatedCapt))
-    case Block.Unbox(pure) =>
-      val Typing(tpe, capt, free) = pure.typing
-      tpe match {
-        case ValueType.Boxed(tpe2, capt2) => Typing(tpe2, capt2, free)
-        case other => typeError(s"Expected a boxed type, but got: ${util.show(other)}")
-      }
-    case b : Block.BlockLit => typecheck(b)
-    case Block.New(impl) => impl.typing
-  }
+  def typecheck(block: Block): Typing[BlockType] =
+    checking(block) {
+      case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Typing(annotatedTpe, annotatedCapt, Free.block(id, annotatedTpe, annotatedCapt))
+      case Block.Unbox(pure) =>
+        val Typing(tpe, capt, free) = pure.typing
+        tpe match {
+          case ValueType.Boxed(tpe2, capt2) => Typing(tpe2, capt2, free)
+          case other => typeError(s"Expected a boxed type, but got: ${util.show(other)}")
+        }
+      case b : Block.BlockLit => typecheck(b)
+      case Block.New(impl) => impl.typing
+    }
 
   def typecheck(blocklit: BlockLit): Typing[BlockType.Function] = checking(blocklit) {
     case BlockLit(tparams, cparams, vparams, bparams, body) =>
