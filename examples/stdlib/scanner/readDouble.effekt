@@ -3,7 +3,7 @@ import scanner
 def showParse(input: String) = {
   with feed(input)
   with scanner[Char]
-  println(attempt { readDouble().show } { "fail" })
+  println(attempt { scanner::readDouble().round(3).show } { "fail" })
 }
 
 def main() = {
