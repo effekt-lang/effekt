@@ -415,7 +415,7 @@ def abs(n: Double): Double =
 extern def log(x: Double) at {}: Double =
   js "Math.log(${x})"
   chez "(log ${x})"
-   llvm "%z = call %Double @llvm.log.f64(double ${x}) ret %Double %z"
+  llvm "%z = call %Double @llvm.log.f64(double ${x}) ret %Double %z"
 
 extern def log1p(x: Double) at {}: Double =
   js "Math.log1p(${x})"
@@ -425,7 +425,7 @@ extern def log1p(x: Double) at {}: Double =
 extern def exp(x: Double) at {}: Double =
   js "Math.exp(${x})"
   chez "(exp ${x})"
-   llvm "%z = call %Double @llvm.exp.f64(double ${x}) ret %Double %z"
+  llvm "%z = call %Double @llvm.exp.f64(double ${x}) ret %Double %z"
 
 def pow(base: Double, exponent: Int): Double = {
   def loop(base: Double, exponent: Int, acc: Double): Double = {
@@ -443,13 +443,13 @@ def pow(base: Double, exponent: Int): Double = {
 extern def pow(base: Double, exponent: Double) at {}: Double =
   js "Math.pow(${base}, ${exponent})"
   chez "(expt ${base} ${exponent})"
-   llvm "%z = call %Double @llvm.pow.f64(double ${base}, double ${exponent}) ret %Double %z"
+  llvm "%z = call %Double @llvm.pow.f64(double ${base}, double ${exponent}) ret %Double %z"
 
 // since we do not have "extern val", yet
 extern def _pi() at {}: Double =
   js "Math.PI"
   chez "(* 4 (atan 1))"
-   llvm "ret double 3.14159265358979323846264338327950288419716939937510582097494459"
+  llvm "ret double 3.14159265358979323846264338327950288419716939937510582097494459"
 
 val PI: Double = _pi()
 
