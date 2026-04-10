@@ -423,11 +423,11 @@ enum Def extends Definition {
   /**
    * Only valid on the toplevel!
    */
-  case ExternType(id: IdDef, tparams: Many[Id], info: Info, span: Span)
+  case ExternType(id: IdDef, tparams: Many[Id], body: Many[ExternBody[Nothing]], info: Info, span: Span)
 
   case ExternDef(id: IdDef,
                  tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], captures: CaptureSet, ret: Effectful,
-                 bodies: List[ExternBody[Stmt]], info: Info, span: Span) extends Def
+                 bodies: Many[ExternBody[Stmt]], info: Info, span: Span) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType, info: Info, span: Span)
 

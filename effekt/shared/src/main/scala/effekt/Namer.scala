@@ -214,7 +214,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, sym)
 
-    case d @source.ExternType(id, tparams, doc, span) =>
+    case d @source.ExternType(id, tparams, body, doc, span) =>
       Context.requireToplevel("Extern type")
       Context.define(id, Context scoped {
         val tps = tparams map resolve
@@ -242,7 +242,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           resolve(ret)
         }
 
-        ExternFunction(name, tps.unspan, vps.unspan, bps.unspan, tpe, eff, capt, bodies, d)
+        ExternFunction(name, tps.unspan, vps.unspan, bps.unspan, tpe, eff, capt, bodies.unspan, d)
       })
 
     case d @ source.ExternResource(id, tpe, doc, span) =>
@@ -435,7 +435,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.TypeDef(id, tparams, tpe, doc, span)     => ()
     case source.EffectDef(id, tparams, effs, doc, span)  => ()
-    case source.ExternType(id, tparams, doc, span)       => ()
+    case source.ExternType(id, tparams, body, doc, span) => ()
     case source.ExternInterface(id, tparams, doc, span)  => ()
     case source.ExternResource(id, tpe, doc, span)       => ()
     case source.ExternInclude(ff, path, _, _, doc, span) => ()

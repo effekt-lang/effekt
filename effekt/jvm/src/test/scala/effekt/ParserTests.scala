@@ -1345,7 +1345,24 @@ class ParserTests extends munit.FunSuite {
     val definition = parseToplevel(source.content)
 
     val extType = definition match {
-      case et@ExternType(id, tparams, doc, span) => et
+      case et@ExternType(id, tparams, body, doc, span) => et
+      case other =>
+        throw new IllegalArgumentException(s"Expected ExternType but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(extType.span, span)
+  }
+
+  test("Extern type definition with right hand side parses") {
+    val (source, span) =
+      raw"""extern type Foo = backend "ffiFoo"
+           |↑                                ↑
+           |""".sourceAndSpan
+
+    val definition = parseToplevel(source.content)
+
+    val extType = definition match {
+      case et@ExternType(id, tparams, body, doc, span) => et
       case other =>
         throw new IllegalArgumentException(s"Expected ExternType but got ${other.getClass.getSimpleName}")
     }
@@ -1435,8 +1452,8 @@ class ParserTests extends munit.FunSuite {
         throw new IllegalArgumentException(s"Expected ExternDef but got ${other.getClass.getSimpleName}")
     }
 
-    assertEquals(extDef.bodies.head.span, Span(source, pos(1), pos.last))
-    assertEquals(extDef.bodies.head.featureFlag.span, Span(source, pos(1), pos(2)))
+    assertEquals(extDef.bodies.unspan.head.span, Span(source, pos(1), pos.last))
+    assertEquals(extDef.bodies.unspan.head.featureFlag.span, Span(source, pos(1), pos(2)))
     assertEquals(extDef.span, Span(source, pos(0), pos.last))
   }
 

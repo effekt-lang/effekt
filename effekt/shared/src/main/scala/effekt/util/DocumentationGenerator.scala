@@ -256,7 +256,7 @@ trait DocumentationGenerator {
       "span" -> generate(span),
     ))
 
-    case Def.ExternType(id, tparams, info, span) => obj(HashMap(
+    case Def.ExternType(id, tparams, body, info, span) => obj(HashMap(
       "kind" -> str("ExternType"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams.unspan),

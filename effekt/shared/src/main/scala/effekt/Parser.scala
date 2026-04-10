@@ -712,7 +712,9 @@ class Parser(tokens: Seq[Token], source: Source) {
       backtrack(featureFlag()).getOrElse(FeatureFlag.Default(span()))
 
   def externType(info: Info): Def =
-    ExternType(`type` ~> idDef(), maybeTypeParams(), info, span())
+    ExternType(`type` ~> idDef(), maybeTypeParams(),
+      maybeExternBodies(fail("extern type`s do not support Effekt right hand sides.")),
+      info, span())
   def externInterface(info: Info): Def =
     ExternInterface(`interface` ~> idDef(), maybeTypeParams().unspan, info, span())
   def externResource(info: Info): Def =
@@ -731,9 +733,9 @@ class Parser(tokens: Seq[Token], source: Source) {
     }
 
   def externFun(info: Info): Def =
-    (`def` ~> idDef() ~ params() ~ maybeCaptureSet() ~ (returnAnnotation() <~ `=`)) match {
+    (`def` ~> idDef() ~ params() ~ maybeCaptureSet() ~ returnAnnotation()) match {
       case id ~ (tps, vps, bps) ~ cpt ~ ret =>
-        val bodies = manyWhile(externBody{ stmts(inBraces = true)}, isExternBodyStart)
+        val bodies = maybeExternBodies{ stmts(inBraces = true) }
         val captures = cpt.getOrElse(defaultCapture(cpt.span.synthesized))
         ExternDef(id, tps, vps, bps, captures, ret, bodies, info, span())
     }
@@ -746,6 +748,13 @@ class Parser(tokens: Seq[Token], source: Source) {
           case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template().unspan, span())
         }) labelled "extern body (string or block)"
         case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template().unspan, span())
+      }
+
+  def maybeExternBodies[T](of: => T): Many[ExternBody[T]] =
+    nonterminal:
+      peek.kind match {
+        case `=` => `=` ~> Many(manyWhile(externBody(of), isExternBodyStart), span())
+        case _ => Many.empty(span())
       }
 
   private def isExternBodyStart: Boolean =

@@ -92,7 +92,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _, _) = f.symbol
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.capture)
-      val tBody = bodies match {
+      val tBody = bodies.unspan match {
         case source.ExternBody.StringExternBody(ff, body, span) :: Nil =>
           ExternBody.StringExternBody(ff, Template(body.strings, body.args.map(transformAsExpr)))
         case source.ExternBody.Unsupported(err) :: Nil =>
@@ -108,7 +108,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case d @ source.NamespaceDef(name, defs, doc, span) =>
       defs.flatMap(transformToplevel)
 
-    case e @ source.ExternType(id, _, _, _) =>
+    case e @ source.ExternType(id, _, _, _, _) =>
       val sym@ExternType(name, tps, _) = e.symbol
       List(Extern.Data(sym, tps))
 
