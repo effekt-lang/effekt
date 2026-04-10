@@ -73,7 +73,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Break(Some(label))            => "break" <+> toDoc(label) <> ";"
     case Break(None)                   => "break;"
     case Continue(label)               => "continue" <> label.map(l => space <> toDoc(l)).getOrElse(emptyDoc) <> ";"
-    case While(cond, stmts, label)     =>
+    case While(label, cond, stmts)     =>
       label.map(l => toDoc(l) <> ":" <> space).getOrElse(emptyDoc) <>
         "while" <+> parens(toDoc(cond)) <+> jsBlock(stmts.map(toDoc))
 
