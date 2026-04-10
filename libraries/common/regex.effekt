@@ -4,7 +4,9 @@ import string
 
 extern include chez "text/pregexp.scm"
 
-extern type Regex
+extern type Regex =
+  js "RegExp"
+  chez "pregexp"
 
 record Match(matched: String, index: Int)
 

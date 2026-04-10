@@ -25,7 +25,9 @@ extern llvm """
   declare %Pos @c_spawn(%Pos, %Pos, %Pos)
 """
 
-extern type SpawnOptions
+extern type SpawnOptions =
+  jsNode "{ stdio: list[int], onSpawn: fn => {} }"
+  llvm "%Pos"
 extern def default() at {}: SpawnOptions =
   jsNode """{ stdio: [0,1,2], onSpawn: (p) => {} }"""
   llvm """
@@ -64,7 +66,9 @@ extern def onStderr(opts: SpawnOptions, callback: String => Unit at {io, global}
     %opts = call %Pos @c_spawn_options_on_stderr(%Pos ${opts}, %Pos ${callback})
     ret %Pos %opts
   """
-extern type WritableStream
+extern type WritableStream =
+  jsNode "stream.Writable"
+  llvm "%Pos"
 extern def withStdin(opts: SpawnOptions, callback: WritableStream => Unit at {io, global}) at {}: SpawnOptions =
   jsNode """(function () {
     let old = ${opts};

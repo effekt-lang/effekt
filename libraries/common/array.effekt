@@ -8,7 +8,10 @@ import list
 import exception
 
 /// A mutable 0-indexed fixed-sized array.
-extern type Array[T]
+extern type Array[T] =
+  js "Array"
+  chez "vector"
+  llvm "%Pos"
 
 /// We represent arrays like positive types.
 /// The tag is 0 and the obj points to memory with the following layout:

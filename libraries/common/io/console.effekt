@@ -26,7 +26,8 @@ namespace js {
     const readline = require('node:readline');
   """
 
-  extern type JSConsole
+  extern type JSConsole =
+    js "readline.createInterface return type"
 
   extern def newConsole() at io: JSConsole =
     jsNode """readline.createInterface({
