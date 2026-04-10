@@ -12,6 +12,8 @@ def main() = {
   10.repeat{ println(pick(arr)) }
   println(pick(singleton))
 
+  println("")
+
   println(result[Int, OutOfBounds] { pick(empty) }.toOption)
 
 }

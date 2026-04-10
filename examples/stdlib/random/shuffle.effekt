@@ -10,14 +10,20 @@ def main() = {
   shuffle(left)
   println(left)
 
+  println("")
+
   with minstd(1337);
   shuffle(right)
   println(right)
+
+  println("")
 
   val shuffled = array::build(20) { i => i - 10 }
   with minstd(42);
   shuffle(shuffled)
   println(shuffled)
+
+  println("")
 
   with minstd(1337);
   val abcd = array::fromList(["A", "B", "C", "D"])
