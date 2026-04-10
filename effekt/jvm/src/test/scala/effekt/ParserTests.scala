@@ -581,6 +581,45 @@ class ParserTests extends munit.FunSuite {
     assertEquals(parseStmts(source.content), expected)
   }
 
+  test("val-else") {
+    val (source, pos) =
+      raw"""val (left, right) = list else { return 0 }; return left
+           |    ↑↑   ↑ ↑    ↑↑  ↑   ↑     ↑ ↑      ↑↑ ↑ ↑      ↑   ↑
+           |""".sourceAndPositions
+    val expected = Return(Match(
+      List(Var(IdRef(List(), "list", Span(source, pos(6), pos(7))), Span(source, pos(6), pos(7)))),
+      List(
+        MatchClause(
+          TagPattern(
+            IdRef(List("effekt"), "Tuple2", Span(source, pos(0), pos(5), Synthesized)),
+            List(
+              AnyPattern(IdDef("left", Span(source, pos(1), pos(2))), Span(source, pos(1), pos(2))),
+              AnyPattern(IdDef("right", Span(source, pos(3), pos(4))), Span(source, pos(3), pos(4)))
+            ),
+            Span(source, pos(0), pos(5))
+          ),
+          List(),
+          Return(
+            Var(IdRef(List(), "left", Span(source, pos(14), pos(15))), Span(source, pos(14), pos(15))),
+            Span(source, pos(13), pos(15))
+          ),
+          Span(source, pos(0), pos(7))
+        )
+      ),
+      Some(
+        BlockStmt(
+          Return(
+            IntLit(0, Span(source, pos(10), pos(11))),
+            Span(source, pos(9), pos(11))
+          ),
+          Span(source, pos(8), pos(12))
+        )
+      ),
+      Span(source, 0, pos(12))
+    ), Span(source, 0, pos.last, Synthesized));
+    assertEquals(parseStmts(source.content), expected)
+  }
+
   test("Semicolon insertion") {
     parseStmts("f(); return x")
     parseStmts(
