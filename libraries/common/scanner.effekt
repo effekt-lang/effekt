@@ -166,6 +166,40 @@ def readInteger(): Int / { Scan[Char], fail } =
     case _ => do fail()
   }
 
+
+/// Read a decimal floating-point number with optional fraction and exponent.
+def readDouble(): Double / { Scan[Char], fail} = {
+  def exponent(pre: Double): Double / fail = {
+    try {
+      if(do peek() == 'e' || do peek() == 'E') {
+        skip[Char]()
+        val e = do peek[Char]() match {
+          case '+' => skip[Char](); readDecimal()
+          case '-' => skip[Char](); neg(readDecimal())
+          case _ => readDecimal()
+        }
+        pre * pow(10.0, e)
+      } else { pre }
+    } with stop {
+      pre
+    }
+  }
+  def fraction(pre: Int): Double / fail = {
+    if (succeeds { must { readIf('.') } }) {
+      var b = if (pre >= 0) 0.1 else -0.1
+      var r = pre.toDouble
+      while (optionally[Int] { must { readDigit() } } is Some(d)) {
+        r = r + b * d.toDouble
+        b = b * 0.1
+      }
+      exponent(r)
+    } else {
+      exponent(pre.toDouble)
+    }
+  }
+  fraction(readInteger())
+}
+
 namespace returning {
 
 /// Run a scanner by reading from an input stream.

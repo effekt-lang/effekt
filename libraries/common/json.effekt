@@ -90,40 +90,6 @@ def encodeJson[R]{ body: => R / JsonBuilder }: R / emit[String] = {
 // --------------------------------------------------------------------------------
 
 
-/// Read a double value, in the common format (TODO document)
-def readDouble(): Double / { Scan[Char], Exception[WrongFormat]} = {
-  def exponent(pre: Double): Double / fail = {
-    try {
-      if(do peek() == 'e' || do peek() == 'E') {
-        skip[Char]()
-        val e = do peek[Char]() match {
-          case '+' => skip[Char](); readDecimal()
-          case '-' => skip[Char](); neg(readDecimal())
-          case _ => readDecimal()
-        }
-        pre * pow(10.0, e)
-      } else { pre }
-    } with stop {
-      pre
-    }
-  }
-  def fraction(pre: Int): Double / fail = {
-    if (succeeds { must { readIf('.') } }) {
-      var b = if (pre >= 0) 0.1 else -0.1
-      var r = pre.toDouble
-      while (optionally[Int] { must { readDigit() } } is Some(d)) {
-        r = r + b * d.toDouble
-        b = b * 0.1
-      }
-      exponent(r)
-    } else {
-      pre.toDouble
-    }
-  }
-  with returning::expect("Expected double") 
-  fraction(readInteger())
-}
-
 def expectString(string: String): Unit / { Scan[Char], Exception[WrongFormat] } =
   expect("Expected " ++ string) { readString(string) }
 
@@ -159,8 +125,8 @@ def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
       case 'n' => expectString("null"); do null()
       case 't' => expectString("true"); do bool(true)
       case 'f' => expectString("false"); do bool(false)
-      case '-' => do number(readDouble())
-      case d and d.isDigit => do number(readDouble())
+      case '-' => do number(returning::expect("Expected double") { readDouble() })
+      case d and d.isDigit => do number(returning::expect("Expected double") { readDouble() })
       case '"' => do string(collect { readQuotedString() })
       case '{' => do dict{ decodeJsonObject() }
       case '[' => do list{ decodeJsonList() }
@@ -319,7 +285,7 @@ namespace test {
     feed("-1.5") {
       with scanner[Char]
       with on[WrongFormat].report
-      println(readDouble())
+      println(returning::expect("Expected double") { readDouble() })
     }
 
     println("")
