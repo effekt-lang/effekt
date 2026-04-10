@@ -85,10 +85,7 @@ enum Env {
   def lookupBuiltin(id: Id): Builtin = {
     @tailrec
     def go(rest: Env): Builtin = rest match {
-      case Env.Top(functions, builtins, toplevel, declarations) => builtins.getOrElse(id, {
-        println(id)
-        throw VMError.NotFound(id)
-      })
+      case Env.Top(functions, builtins, toplevel, declarations) => builtins.getOrElse(id, throw VMError.NotFound(id))
       case Env.Static(id, block, rest) => go(rest)
       case Env.Dynamic(id, block, rest) => go(rest)
       case Env.Let(id, value, rest) => go(rest)

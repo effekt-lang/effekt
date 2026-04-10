@@ -247,15 +247,15 @@ lazy val strings: Builtins = Map(
     case As.String(x) :: As.Int(at) :: Nil => Value.Int(x.charAt(at.toInt).toLong)
   },
 
-  builtin("string::toInt(Char)") {
+  builtin("char::toInt(Char)") {
     case As.Int(n) :: Nil => Value.Int(n)
   },
 
-  builtin("string::toChar(Int)") {
+  builtin("char::toChar(Int)") {
     case As.Int(n) :: Nil => Value.Int(n)
   },
 
-  builtin("string::infixLte(Char, Char)") {
+  builtin("char::infixLte(Char, Char)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x <= y)
   },
 
@@ -267,9 +267,9 @@ lazy val strings: Builtins = Map(
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x > y)
   },
 
-  builtin("string::infixGte(Char, Char)") {
+  builtin("char::infixGte(Char, Char)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x >= y)
-  },
+  }
 )
 
 lazy val chars: Builtins = Map(
@@ -310,7 +310,7 @@ lazy val bytearrays: Builtins = Map(
   builtin("bytearray::set(ByteArray, Int, Byte)") {
     case As.ByteArray(arr) :: As.Int(index) :: As.Byte(value) :: Nil => arr.update(index.toInt, value); Value.Unit()
   },
-  builtin("bytearray::compare(ByteArray, ByteArray)") {
+  builtin("bytearray::compareByteArrayImpl(ByteArray, ByteArray)") {
     case As.ByteArray(arr1) :: As.ByteArray(arr2) :: Nil => Value.Int(java.util.Arrays.compare(arr1.map(_.toByte), arr2.map(_.toByte)))
   },
   builtin("bytearray::fromString(String)") {
