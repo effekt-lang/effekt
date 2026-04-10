@@ -48,13 +48,14 @@ enum ToplevelDefinition {
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Def(id: Id, vparams: List[Id], bparams: List[Id], async: Boolean, body: ExternBody)
+  case Def(id: Id, vparams: List[Id], bparams: List[Id], async: Boolean, body: ExternBody[Expr])
+  case Data(id: Id, tparams: List[Id], body: ExternBody[Nothing])
   case Include(featureFlag: FeatureFlag, contents: String)
 }
-sealed trait ExternBody extends Tree
+sealed trait ExternBody[+T] extends Tree
 object ExternBody {
-  case class StringExternBody(featureFlag: FeatureFlag, contents: Template[Expr]) extends ExternBody
-  case class Unsupported(err: util.messages.EffektError) extends ExternBody {
+  case class StringExternBody[+T](featureFlag: FeatureFlag, contents: Template[T]) extends ExternBody[T]
+  case class Unsupported(err: util.messages.EffektError) extends ExternBody[Nothing] {
     def report(using E: ErrorReporter): Unit = E.report(err)
   }
 }

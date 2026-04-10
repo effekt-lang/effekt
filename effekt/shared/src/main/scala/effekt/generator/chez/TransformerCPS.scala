@@ -65,11 +65,17 @@ object TransformerCPS {
     case Extern.Def(id, vparams, bparams, _, body) =>
       val params = (vparams ++ bparams).map(nameDef)
       chez.Function(nameDef(id), params, toChez(body))
+    case Extern.Data(id, tps, body) =>
+      val ttps = tps match {
+        case Nil => ""
+        case tps => tps.map { x => x.show }.mkString(", ")
+      }
+      chez.RawDef(s";; extern type ${id.show}${ttps} = ${body}")
     case Extern.Include(_, contents) =>
       chez.RawDef(contents)
   }
 
-  def toChez(externBody: cps.ExternBody)(using ErrorReporter): chez.Expr = externBody match {
+  def toChez(externBody: cps.ExternBody[cps.Expr])(using ErrorReporter): chez.Expr = externBody match {
     case ExternBody.StringExternBody(_, contents) =>
       RawExpr(contents.strings, contents.args.map(toChez))
     case unsupported: ExternBody.Unsupported =>
