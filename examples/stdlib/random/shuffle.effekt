@@ -1,0 +1,24 @@
+import random
+import array
+
+def main() = {
+  val left = array::build(10) { i => i }
+  val right = array::build(10) { i => i }
+
+  with minstd(1337);
+  shuffle(left)
+  println(left)
+
+  with minstd(1337);
+  shuffle(right)
+  println(right)
+
+  val shuffled = array::build(20) { i => i - 10 }
+  with minstd(42);
+  shuffle(shuffled)
+  println(shuffled)
+
+  val sorted = shuffled.copy
+  sorted.sort { compareInt }
+  println(sorted)
+}
