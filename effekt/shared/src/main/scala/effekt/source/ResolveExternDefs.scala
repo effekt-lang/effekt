@@ -15,7 +15,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
 
   def supported(using Context): List[String] = Context.compiler.supportedFeatureFlags
 
-  def defaultExternBody(warning: String)(using Context): ExternBody[Stmt] =
+  def defaultExternBody(warning: String)(using Context): ExternBody[Nothing] =
     ExternBody.Unsupported(Context.plainMessage(warning, kiama.util.Severities.Warning))
 
   def rewrite(decl: ModuleDecl)(using Context): ModuleDecl = decl match {
@@ -23,7 +23,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
       ModuleDecl(path, includes, defs.flatMap(rewrite), doc, span)
   }
 
-  def findPreferred(bodies: List[ExternBody[Stmt]])(using Context): ExternBody[Stmt] = {
+  def findPreferred[T](bodies: List[ExternBody[T]])(using Context): ExternBody[T] = {
     // IMPORTANT: Should be deterministic.
     bodies.filter { b => b.featureFlag.matches(supported) }
       .minByOption { b =>
@@ -57,6 +57,23 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
             Some(d)
           case u: ExternBody.Unsupported =>
             val d = Def.ExternDef(id, tparams, vparams, bparams, capture, ret, Many(List(u), bodies.span), doc, span)
+            Context.copyAnnotations(defn, d)
+            Some(d)
+        }
+
+      case Def.ExternType(id, tparams, bodies, info, span) =>
+        findPreferred(bodies.unspan) match {
+          case body@ExternBody.StringExternBody(featureFlag, template, span) =>
+            if (featureFlag.isDefault) {
+              Context.warning(s"Extern definition ${id} contains extern string without feature flag. This will likely not work in other backends, "
+                + s"please annotate it with a feature flag (Supported by the current backend: ${Context.compiler.supportedFeatureFlags.mkString(", ")})")
+            }
+
+            val d = Def.ExternType(id, tparams, Many(List(body), bodies.span), info, span)
+            Context.copyAnnotations(defn, d)
+            Some(d)
+          case u: ExternBody.Unsupported =>
+            val d = Def.ExternType(id, tparams, Many(List(u), bodies.span), info, span)
             Context.copyAnnotations(defn, d)
             Some(d)
         }
