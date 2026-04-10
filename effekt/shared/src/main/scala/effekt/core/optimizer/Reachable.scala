@@ -109,7 +109,7 @@ class Reachable(
         vparams.foreach(process)
         bparams.foreach(process)
         process(result)
-      case BlockType.Interface(name, targs) => targs.foreach(process)
+      case BlockType.Interface(name, targs) => process(name); targs.foreach(process)
     }
 
   def process(s: Stmt)(using defs: Definitions): Unit = s match {
