@@ -1,0 +1,8 @@
+import random
+import array
+
+def main() = {
+  val arr = array::build(10) { i => i }
+  with minstd(1337);
+  println(pick(arr))
+}
