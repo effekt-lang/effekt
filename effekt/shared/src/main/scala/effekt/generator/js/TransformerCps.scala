@@ -289,7 +289,7 @@ object TransformerCps extends Transformer {
 
           stmts.lastOption match {
             case Some(terminator : (js.Stmt.Return | js.Stmt.Break | js.Stmt.Continue)) => (e, stmts)
-            case other => (e, stmts :+ js.Break())
+            case other => (e, stmts :+ js.Break(None))
           }
         },
         default.map { s => toJS(s).stmts }) :: Nil)
