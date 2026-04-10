@@ -1,5 +1,6 @@
 import random
 import array
+import list
 
 def main() = {
   val left = array::build(10) { i => i }
@@ -18,7 +19,10 @@ def main() = {
   shuffle(shuffled)
   println(shuffled)
 
-  val sorted = shuffled.copy
-  sorted.sort { compareInt }
-  println(sorted)
+  with minstd(1337);
+  val abcd = array::fromList(["A", "B", "C", "D"])
+  10.repeat {
+    shuffle(abcd)
+    println(abcd)
+  }
 }
