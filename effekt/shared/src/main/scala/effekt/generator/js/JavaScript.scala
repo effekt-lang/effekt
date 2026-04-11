@@ -54,8 +54,32 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
   lazy val CPSTransformed = Optimized map {
     case (mainSymbol, mainFile, core) =>
       val cpsTransformed = effekt.cps.Transformer.transform(core)
-      val contified = cps.Contify.rewrite(cpsTransformed)
-      (mainSymbol, mainFile, core, contified)
+
+      var tree = effekt.cpsds.transform(core)
+
+      def optimize(tree: effekt.cpsds.ModuleDecl) =
+         val static = effekt.cpsds.StaticArguments.transform(tree)
+         effekt.cpsds.Inliner.transform(mainSymbol, static)
+
+      println(util.show(tree))
+      println("---")
+      tree = optimize(tree)
+
+      println(util.show(tree))
+      println("---")
+      tree = optimize(tree)
+
+      println(util.show(tree))
+      println("---")
+      tree = optimize(tree)
+      println("---")
+      println(util.show(tree))
+
+      val js = TransformerCpsDs.compile(tree, core, mainSymbol)
+
+      println(util.show(js))
+
+      (mainSymbol, mainFile, core, cpsTransformed)
   }
 
   lazy val Compile = CPSTransformed map {
