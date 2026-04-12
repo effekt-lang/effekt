@@ -38,7 +38,7 @@ object TransformerCpsDs extends Transformer {
   implicit def autoContext(using C: TransformerContext): Context = C.errors
 
   def computeKinds(m: cpsds.ModuleDecl): Map[Id, FunctionKind] = {
-    val analysis = cpsds.Analysis(m)
+    val analysis = cpsds.UsageAnalysis(m)
     val escape = cpsds.EscapeAnalysis(m)
     val kinds = mutable.Map.empty[Id, FunctionKind]
     analysis.functions.foreach { case (id, info) =>
