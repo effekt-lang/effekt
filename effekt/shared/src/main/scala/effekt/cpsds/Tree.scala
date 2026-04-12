@@ -77,7 +77,7 @@ enum Expr extends Tree {
   // MetaContinuations
   case Toplevel
 
-  val free: Set[Id] = freeVariables.free(this)
+  lazy val free: Set[Id] = freeVariables.free(this)
 }
 export Expr.*
 
@@ -141,9 +141,13 @@ enum Stmt extends Tree {
 }
 export Stmt.*
 
-case class Clause(params: List[Id], body: Stmt) extends Tree
+case class Clause(params: List[Id], body: Stmt) extends Tree {
+  val free: Set[Id] = body.free -- params
+}
 
-case class Operation(name: Id, params: List[Id], body: Stmt) extends Tree
+case class Operation(name: Id, params: List[Id], body: Stmt) extends Tree {
+  val free: Set[Id] = body.free -- params
+}
 
 
 // ---------- Binding Monad ----------
