@@ -138,7 +138,7 @@ class UsageAnalysis(
       stack = id :: stack
       process(body)
       stack = before
-    case ToplevelDefinition.Val(id, binding) => process(binding)
+    case ToplevelDefinition.Val(id, ks, k, binding) => process(binding)
     case ToplevelDefinition.Let(id, binding) => process(binding)
   }
 

@@ -95,30 +95,32 @@ private class EscapeAnalysis(
 
     case Stmt.Reset(p, ks, k, body, ks1, k1) =>
       analyze(body)
+      escapes(body.free)
       escapes(k1)
       escapes(ks1)
 
     case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
       escapes(k1)
       escapes(ks1)
+      escapes(body.free)
       analyze(body)
 
     case Stmt.Resume(r, ks, k, body, ks1, k1) =>
       escapes(k1)
       escapes(ks1)
+      escapes(body.free)
       analyze(body)
 
     case Stmt.Hole(_) => ()
   }
 
   // --- Entry points ---
-
   def process(d: ToplevelDefinition): Unit = d match {
     case ToplevelDefinition.Def(id, params, body) =>
       escapes(id)
       analyze(body)
 
-    case ToplevelDefinition.Val(id, binding) =>
+    case ToplevelDefinition.Val(id, ks, k, binding) =>
       analyze(binding)
 
     case ToplevelDefinition.Let(id, binding) =>

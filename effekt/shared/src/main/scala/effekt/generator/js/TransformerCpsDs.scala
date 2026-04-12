@@ -89,8 +89,8 @@ object TransformerCpsDs extends Transformer {
     case cpsds.ToplevelDefinition.Def(id, params, body) =>
       js.Function(nameDef(id), params.map(nameDef), toJS(body).stmts)
 
-    case cpsds.ToplevelDefinition.Val(id, binding) =>
-      js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(Nil, toJS(binding).stmts)))
+    case cpsds.ToplevelDefinition.Val(id, ks, k, binding) =>
+      js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding).stmts)))
 
     case cpsds.ToplevelDefinition.Let(id, binding) =>
       js.Const(nameDef(id), toJS(binding))
@@ -133,14 +133,12 @@ object TransformerCpsDs extends Transformer {
     T.externs.get(id) match {
       case Some(cpsds.Extern.Def(_, params, false, ExternBody.StringExternBody(_, Template(strings, templateArgs)))) =>
         val subst = params.zip(args).toMap
-        val resolvedArgs = templateArgs.map { tArg =>
-          tArg match {
-            case Expr.Variable(id) => subst.get(id) match {
-              case Some(replaced) => toJS(replaced)
-              case None => toJS(tArg)
-            }
-            case other => toJS(other)
+        val resolvedArgs = templateArgs.map {
+          case tArg @ Expr.Variable(id) => subst.get(id) match {
+            case Some(replaced) => toJS(replaced)
+            case None => toJS(tArg)
           }
+          case other => toJS(other)
         }
         js.RawExpr(strings, resolvedArgs)
       case _ => js.Call(nameRef(id), args.map(toJS))
@@ -205,7 +203,6 @@ object TransformerCpsDs extends Transformer {
         js.Const(nameDef(id), toJS(binding)) :: toJS(rest).run(k)
       }
 
-    // --- App ---
     case cpsds.Stmt.App(id, args) =>
       ctx.secondClass.get(id) match {
         case Some(sci) =>
