@@ -19,7 +19,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
 
   override def prettyIR(source: Source, stage: Stage)(using C: Context): Option[Document] = stage match {
     case Stage.Core if C.config.optimize() => Optimized(source).map { (_, _, res) => core.PrettyPrinter(Context.config.debug()).format(res) }
-    case Stage.CPS => CPSTransformed(source).map { (_, _, _, res) => cps.PrettyPrinter.format(res) }
+    case Stage.CPS => CPSTransformed(source).map { (_, _, _, res) => cpsds.PrettyPrinter.format(res) }
     case Stage.Core => Core(source).map { res => core.PrettyPrinter(Context.config.debug()).format(res.core) }
     case Stage.Machine => None
     case Stage.Target => CompileLSP(source).map { pretty }
@@ -53,38 +53,32 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
 
   lazy val CPSTransformed = Optimized map {
     case (mainSymbol, mainFile, core) =>
-      val cpsTransformed = effekt.cps.Transformer.transform(core)
-
       var tree = effekt.cpsds.transform(core)
 
       def optimize(tree: effekt.cpsds.ModuleDecl) =
          val static = effekt.cpsds.StaticArguments.transform(tree)
          effekt.cpsds.Inliner.transform(mainSymbol, static)
 
-      println(util.show(tree))
-      println("---")
+      // println(util.show(tree))
+      // println("---")
       tree = optimize(tree)
 
-      println(util.show(tree))
-      println("---")
+      // println(util.show(tree))
+      // println("---")
       tree = optimize(tree)
 
-      println(util.show(tree))
-      println("---")
+      // println(util.show(tree))
+      // println("---")
       tree = optimize(tree)
-      println("---")
-      println(util.show(tree))
+      // println("---")
+      // println(util.show(tree))
 
-      val js = TransformerCpsDs.compile(tree, core, mainSymbol)
-
-      println(util.show(js))
-
-      (mainSymbol, mainFile, core, cpsTransformed)
+      (mainSymbol, mainFile, core, tree)
   }
 
   lazy val Compile = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val doc = pretty(TransformerCps.compile(cps, core, mainSymbol).commonjs)
+      val doc = pretty(TransformerCpsDs.compile(cps, core, mainSymbol).commonjs)
       (Map(mainFile -> doc.layout), mainFile)
   }
 
@@ -93,7 +87,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
    */
   lazy val CompileWeb = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val doc = pretty(TransformerCps.compile(cps, core, mainSymbol).virtual)
+      val doc = pretty(TransformerCpsDs.compile(cps, core, mainSymbol).virtual)
       (Map(mainFile -> doc.layout), mainFile)
   }
 
@@ -102,7 +96,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
    */
   lazy val CompileLSP = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      TransformerCps.compileLSP(cps, core)
+      TransformerCpsDs.compileLSP(cps, core)
   }
 
   private def pretty(stmts: List[js.Stmt]): Document =
