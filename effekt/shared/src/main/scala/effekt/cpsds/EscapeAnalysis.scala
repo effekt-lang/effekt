@@ -34,7 +34,10 @@ private class EscapeAnalysis(
       }
 
     case Stmt.New(id, _, operations, rest) =>
-      operations.foreach { op => analyze(op.body) }
+      operations.foreach { op =>
+        analyze(op.body)
+        escapes(op.free)
+      }
       analyze(rest)
 
     case Stmt.Val(id, binding, rest) =>

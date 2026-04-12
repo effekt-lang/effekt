@@ -182,14 +182,13 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
       }
 
     case core.Expr.Box(b, _) =>
-      transform(b).run { bExpr =>
-        bExpr match {
-          case Expr.Variable(x) =>
-            given ctx: TransformationContext = C.aliasBlock(id, x)
-            transform(body, ks, k)
-          case other =>
-            Stmt.Let(id, other, transform(body, ks, k))
-        }
+      transform(b).run {
+        case Expr.Variable(x) =>
+          given ctx: TransformationContext = C.aliasBlock(id, x)
+
+          transform(body, ks, k)
+        case other =>
+          Stmt.Let(id, other, transform(body, ks, k))
       }
   }
 
