@@ -368,7 +368,7 @@ object TransformerCpsDs extends Transformer {
       toJS(rest)
 
     // --- Get ---
-    case cpsds.Stmt.Get(ref, id, rest) if !ctx.escaping.contains(ref) =>
+    case cpsds.Stmt.Get(ref, id, rest) if ctx.localVars.contains(ref) =>
       Binding { k =>
         js.Const(nameDef(id), nameRef(ref)) :: toJS(rest).run(k)
       }
@@ -380,7 +380,7 @@ object TransformerCpsDs extends Transformer {
       }
 
     // --- Put ---
-    case cpsds.Stmt.Put(ref, value, rest) if !ctx.escaping.contains(ref) =>
+    case cpsds.Stmt.Put(ref, value, rest) if ctx.localVars.contains(ref) =>
       Binding { k =>
         js.Assign(nameRef(ref), toJS(value)) :: toJS(rest).run(k)
       }
