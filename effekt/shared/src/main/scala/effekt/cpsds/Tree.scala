@@ -230,7 +230,7 @@ object substitutions {
   def substitute(s: Stmt)(using subst: Substitution): Stmt = s match {
     case Stmt.Def(id, params, body, rest) =>
       Stmt.Def(id, params,
-        substitute(body)(using subst.shadow(params)),
+        substitute(body)(using subst.shadow(id :: params)),
         substitute(rest)(using subst.shadow(id)))
 
     case Stmt.New(id, interface, operations, rest) =>
