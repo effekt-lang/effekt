@@ -45,7 +45,7 @@ case class ModuleDecl(
 
 enum ToplevelDefinition {
   case Def(id: Id, params: List[Id], body: Stmt)
-  case Val(id: Id, binding: Stmt) // this is a let-run
+  case Val(id: Id, ks: Id, k: Id, binding: Stmt)
   case Let(id: Id, binding: Expr)
 }
 
@@ -336,7 +336,7 @@ object freeVariables {
       val opsFree = operations.flatMap { op =>
         op.body.free -- op.params.toSet
       }.toSet
-      opsFree ++ (free(rest) - id)
+      opsFree ++ (rest.free - id)
 
     case Stmt.Val(id, binding, rest) =>
       binding.free ++ (rest.free - id)
@@ -368,7 +368,7 @@ object freeVariables {
       init.free + region ++ (rest.free - id)
 
     case Stmt.Var(id, init, ks, rest) =>
-      init.free ++ free(ks) ++ (rest.free - id)
+      init.free ++ ks.free ++ (rest.free - id)
 
     case Stmt.Dealloc(ref, rest) =>
       Set(ref) ++ rest.free
