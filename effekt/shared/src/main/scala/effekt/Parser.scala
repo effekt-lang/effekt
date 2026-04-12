@@ -1020,17 +1020,31 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
 
   private def listPattern(): MatchPattern = {
-    val (ps, last) = manyTrailingLastSpecial(matchPattern, listMatchPattern, `[`, `,`, `]`)
-    val last = ps.last match {
-      case 
-    }
-  }
+    val components: ListBuffer[MatchPattern] = ListBuffer.empty
+    var lastPattern = NilPattern
 
-  private def listMatchPattern(): MatchPattern = peek.kind match {
-    case `..` =>
+    consume(`[`)
+    peek.kind match {
+      case `]` | `,` | `..` => ;
+      case _ => components += matchPattern()
+    }
+      
+    while (peek(`,`)) {
+      consume(`,`)
+      if(!peek(`]`) && !peek(`..`)) {
+        components += matchPattern()
+      }
+    }
+    if (peek(`..`)) {
       consume(`..`)
-      idDef() match { case id: IdDef =>  TailPattern(id, id.span) }
-    case _ => matchPattern()
+      lastPattern = peek.kind match {
+        case `]` => IgnorePattern(span())
+        case _ => idDef() match { case id: IdDef => AnyPattern(id, id.span) }
+      }
+    }
+    consume(`]`)
+
+    components.toList.foldRight(lastPattern)(ConsPattern)
   }
   
   private def NilPattern: MatchPattern =
@@ -1931,28 +1945,6 @@ class Parser(tokens: Seq[Token], source: Source) {
       components.toList
     }
 
-  inline def manyTrailingLastSpecial[T](p: () => T, last: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): (List[T], Option[T]) =
-    consume(before)
-    if (peek(after)) {
-      consume(after)
-      (Nil, None)
-    } else if (peek(sep)) {
-      consume(sep)
-      consume(after)
-      (Nil, None)
-    } else {
-      val components: ListBuffer[T] = ListBuffer.empty
-      components += p()
-      while (peek(sep)) {
-        consume(sep)
-
-        if (!peek(after)) {
-          components += p()
-        }
-      }
-      consume(after)
-      (components.init.toList, Some(components.last))
-    }
 
   // Positions
 

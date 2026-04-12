@@ -1,3 +1,0 @@
-[error] examples/neg/parsing/invalid_lit_list_pattern.effekt:3:17: Expected ] but got )
-  case [1, [2, 3)] => ()
-                ^

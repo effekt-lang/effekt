@@ -1,0 +1,27 @@
+def ex1(lst: List[Int]) = lst match {
+  case [1, 2] => "hello"
+  case [42, x, 2] => x.show
+  case [3, 4, ..y] => y.show
+  case [_, ..] => "42"
+  case [..x] => x.show
+}
+
+def ex2(lst: List[Option[Int]]) = {
+  if(lst is [head, Some(x)]) {
+    "hello" ++ head.show ++ x.show
+  } else {
+    "world"
+  }
+}
+
+def main() = {
+  println(ex1([1, 2]))
+  println(ex1([42, 4, 2]))
+  println(ex1([3, 4, 5, 6]))
+  println(ex1([1, 2]))
+  println(ex1([1]))
+  println("---")
+  println(ex2([Some(2), None()]))
+  println(ex2([Some(2), Some(3), Some(3)]))
+  println(ex2([Some(4), Some(5)]))
+}

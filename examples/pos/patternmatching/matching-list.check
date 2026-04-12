@@ -1,0 +1,9 @@
+hello
+4
+Cons(5, Cons(6, Nil()))
+42
+Cons(1, Nil())
+---
+world
+world
+helloSome(4)5

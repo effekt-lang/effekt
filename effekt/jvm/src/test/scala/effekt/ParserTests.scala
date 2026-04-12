@@ -627,6 +627,7 @@ class ParserTests extends munit.FunSuite {
     parseMatchPattern("[1]")
     parseMatchPattern("[_, 2, (3, 4)]")
     parseMatchPattern("[[1, 2], [3, [4, (6, [7, 8])]]]")
+    parseMatchPattern("[x, [..y], [z, ..v]]")
 
     {
       def cons(head: MatchPattern, tail: MatchPattern) =
