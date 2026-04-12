@@ -32,14 +32,7 @@ object StaticArguments {
 
     analysis.functions.foreach {
       case (id, info) if info.isRecursive =>
-        val isInternallyStatic = info.params.zipWithIndex.map { case (param, idx) =>
-          info.recursiveCalls.nonEmpty && info.recursiveCalls.forall { args =>
-            args.length > idx && (args(idx) match {
-              case Expr.Variable(other) => param == other
-              case _ => false
-            })
-          }
-        }
+        val isInternallyStatic = info.staticArguments
 
         if info.externalCalls.size == 1 then
           statics(id) = isInternallyStatic
@@ -48,13 +41,7 @@ object StaticArguments {
           val firstExt = info.externalCalls.head
           val isStatic = isInternallyStatic.zipWithIndex.map { case (intStatic, idx) =>
             intStatic && info.externalCalls.tail.forall { args =>
-              args.length > idx && (firstExt(idx) match {
-                case Expr.Variable(a) => args(idx) match {
-                  case Expr.Variable(b) => a == b
-                  case _ => false
-                }
-                case a => a == args(idx)
-              })
+              args.length > idx && firstExt(idx) == args(idx)
             }
           }
           statics(id) = isStatic
