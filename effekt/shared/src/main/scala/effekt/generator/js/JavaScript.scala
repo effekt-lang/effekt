@@ -4,6 +4,7 @@ package js
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
+import effekt.core.Renamer
 import effekt.core.optimizer.{ Deadcode, DropBindings, Optimizer }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
@@ -53,14 +54,16 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
 
   lazy val CPSTransformed = Optimized map {
     case (mainSymbol, mainFile, core) =>
-      var tree = effekt.cpsds.transform(core)
+      // establish unique names
+      val renamed = new Renamer().apply(core)
+      var tree = effekt.cpsds.transform(renamed)
 
       def optimize(tree: effekt.cpsds.ModuleDecl) =
-         val static = effekt.cpsds.StaticArguments.transform(tree)
-         effekt.cpsds.Inliner.transform(mainSymbol, static)
+        val static = effekt.cpsds.StaticArguments.transform(tree)
+        effekt.cpsds.Inliner.transform(mainSymbol, static)
 
-      // println(util.show(tree))
-      // println("---")
+      //println(util.show(tree))
+      //println("---")
       tree = optimize(tree)
 
       // println(util.show(tree))
@@ -71,7 +74,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
       // println("---")
       tree = optimize(tree)
       // println("---")
-      // println(util.show(tree))
+      //println(util.show(tree))
 
       (mainSymbol, mainFile, core, tree)
   }
