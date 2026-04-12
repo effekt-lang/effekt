@@ -28,6 +28,7 @@ object TransformerCpsDs extends Transformer {
   case class TransformerContext(
     externs: Map[Id, cpsds.Extern.Def],
     kinds: Map[Id, FunctionKind],
+    escaping: Set[Id],
     // Second-class defs currently in scope — maps id to param list and recursion info
     secondClass: Map[Id, SecondClassDef],
     // Whether we are inside the body (while loop) of a recursive second-class def
@@ -104,6 +105,7 @@ object TransformerCpsDs extends Transformer {
         given ctx: TransformerContext = TransformerContext(
           externs.collect { case d: cpsds.Extern.Def => (d.id, d) }.toMap,
           computeKinds(module),
+          cpsds.EscapeAnalysis(module),
           Map.empty,
           Set.empty,
           Set.empty,
@@ -347,6 +349,11 @@ object TransformerCpsDs extends Transformer {
       }
 
     // --- Var ---
+    case cpsds.Stmt.Var(id, init, ks, rest) if !ctx.escaping.contains(id) =>
+      Binding { k =>
+        js.Let(nameDef(id), toJS(init)) :: toJS(rest).run(k)
+      }
+
     case cpsds.Stmt.Var(id, init, ks, rest) =>
       Binding { k =>
         js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("fresh"), toJS(init))) ::
@@ -358,6 +365,11 @@ object TransformerCpsDs extends Transformer {
       toJS(rest)
 
     // --- Get ---
+    case cpsds.Stmt.Get(ref, id, rest) if !ctx.escaping.contains(ref) =>
+      Binding { k =>
+        js.Const(nameDef(id), nameRef(ref)) :: toJS(rest).run(k)
+      }
+
     case cpsds.Stmt.Get(ref, id, rest) =>
       Binding { k =>
         js.Const(nameDef(id), js.Member(nameRef(ref), JSName("value"))) ::
@@ -365,6 +377,11 @@ object TransformerCpsDs extends Transformer {
       }
 
     // --- Put ---
+    case cpsds.Stmt.Put(ref, value, rest) if !ctx.escaping.contains(ref) =>
+      Binding { k =>
+        js.Assign(nameRef(ref), toJS(value)) :: toJS(rest).run(k)
+      }
+
     case cpsds.Stmt.Put(ref, value, rest) =>
       Binding { k =>
         js.ExprStmt(js.MethodCall(nameRef(ref), JSName("set"), toJS(value))) ::
