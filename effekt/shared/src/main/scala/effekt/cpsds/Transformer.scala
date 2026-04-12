@@ -5,13 +5,10 @@ import core.{ Id, ValueType, BlockType }
 
 // Only maps Ids to Ids for dealiasing
 case class TransformationContext(
-  values: Map[Id, Id] = Map.empty,
-  blocks: Map[Id, Id] = Map.empty
+  renamings: Map[Id, Id] = Map.empty
 ) {
-  def lookupValue(id: Id): Id = values.getOrElse(id, id)
-  def lookupBlock(id: Id): Id = blocks.getOrElse(id, id)
-  def aliasValue(from: Id, to: Id): TransformationContext = copy(values = values + (from -> lookupValue(to)))
-  def aliasBlock(from: Id, to: Id): TransformationContext = copy(blocks = blocks + (from -> lookupBlock(to)))
+  def lookup(id: Id): Id = renamings.getOrElse(id, id)
+  def alias(from: Id, to: Id): TransformationContext = copy(renamings = renamings + (from -> lookup(to)))
 }
 
 
@@ -68,7 +65,7 @@ def withJoinpoint(k: Continuation)(body: Continuation => Stmt): Stmt = k match {
 
 def transform(expr: core.Expr)(using C: TransformationContext): Bind[Expr] = expr match {
   case core.Expr.ValueVar(id, _) =>
-    Bind.pure(Expr.Variable(C.lookupValue(id)))
+    Bind.pure(Expr.Variable(C.lookup(id)))
 
   case core.Expr.Literal(value, tpe) =>
     Bind.pure(Expr.Literal(value, tpe))
@@ -95,7 +92,7 @@ def transform(expr: core.Expr)(using C: TransformationContext): Bind[Expr] = exp
 
 def transform(block: core.Block)(using C: TransformationContext): Bind[Expr] = block match {
   case core.Block.BlockVar(id, _, _) =>
-    Bind.pure(Expr.Variable(C.lookupBlock(id)))
+    Bind.pure(Expr.Variable(C.lookup(id)))
 
   case core.Block.BlockLit(_, _, vparams, bparams, body) =>
     val ks1 = Id("ks")
@@ -151,7 +148,7 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
     transform(rhs, ks, Continuation.Static(id) { (value, ks) =>
       value match {
         case Expr.Variable(x) =>
-          given ctx: TransformationContext = C.aliasValue(id, x)
+          given ctx: TransformationContext = C.alias(id, x)
           transform(body, ks, k)
         case other =>
           Stmt.Let(id, other, transform(body, ks, k))
@@ -162,7 +159,7 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
   case core.Stmt.Let(id, binding, body) => binding match {
     // Dealiasing
     case core.Expr.ValueVar(y, _) =>
-      given ctx: TransformationContext = C.aliasValue(id, C.lookupValue(y))
+      given ctx: TransformationContext = C.alias(id, C.lookup(y))
       transform(body, ks, k)
 
     case core.Expr.Literal(value, tpe) =>
@@ -184,7 +181,7 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
     case core.Expr.Box(b, _) =>
       transform(b).run {
         case Expr.Variable(x) =>
-          given ctx: TransformationContext = C.aliasBlock(id, x)
+          given ctx: TransformationContext = C.alias(id, x)
 
           transform(body, ks, k)
         case other =>
@@ -205,7 +202,7 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
   // --- Def (block definition) ---
   // Dealiasing: def f = g
   case core.Stmt.Def(id, core.Block.BlockVar(x, _, _), body) =>
-    given ctx: TransformationContext = C.aliasBlock(id, C.lookupBlock(x))
+    given ctx: TransformationContext = C.alias(id, C.lookup(x))
     transform(body, ks, k)
 
   case core.Stmt.Def(id, core.Block.BlockLit(_, _, vparams, bparams, litBody), rest) =>
@@ -223,7 +220,7 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
   case core.Stmt.Def(id, core.Block.Unbox(pure), body) =>
     transform(pure).run {
       case Expr.Variable(x) =>
-        given ctx: TransformationContext = C.aliasBlock(id, x)
+        given ctx: TransformationContext = C.alias(id, x)
 
         transform(body, ks, k)
       case other =>
