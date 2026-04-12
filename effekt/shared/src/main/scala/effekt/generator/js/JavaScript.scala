@@ -56,25 +56,16 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
     case (mainSymbol, mainFile, core) =>
       // establish unique names
       val renamed = new Renamer().apply(core)
+
       var tree = effekt.cpsds.transform(renamed)
 
       def optimize(tree: effekt.cpsds.ModuleDecl) =
         val static = effekt.cpsds.StaticArguments.transform(tree)
         effekt.cpsds.Inliner.transform(mainSymbol, static)
 
-      //println(util.show(tree))
-      //println("---")
       tree = optimize(tree)
-
-      // println(util.show(tree))
-      // println("---")
       tree = optimize(tree)
-
-      // println(util.show(tree))
-      // println("---")
       tree = optimize(tree)
-      // println("---")
-      //println(util.show(tree))
 
       (mainSymbol, mainFile, core, tree)
   }
