@@ -44,7 +44,7 @@ object TransformerCpsDs extends Transformer {
     analysis.functions.foreach { case (id, info) =>
       kinds(id) = FunctionKind(
         isRecursive = info.isRecursive,
-        escapes = escape.isEscaping(id)
+        escapes = escape.contains(id)
       )
     }
     kinds.toMap
