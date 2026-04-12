@@ -13,7 +13,7 @@ object Inliner {
     }
 
   def isUnused(id: Id, analysis: UsageAnalysis): Boolean =
-    analysis.usage.get(id).forall(_.isUnused)
+    analysis.usage.get(id).exists(_.isUnused)
 
   def reduce(id: Id, args: List[Expr], analysis: UsageAnalysis): Stmt = {
     val info = analysis.functions(id)
