@@ -136,7 +136,10 @@ object TransformerCpsDs extends Transformer {
     case cpsds.Extern.Def(id, params, true, body) =>
       body match {
         case ExternBody.StringExternBody(_, contents) =>
-          js.Function(nameDef(id), params.map(nameDef), List(js.Return(toJSTemplate(contents))))
+          val ks = freshName("ks_")
+          val k = freshName("k_")
+          js.Function(nameDef(id), params.map(nameDef) ++ List(ks, k),
+            List(js.Return(js.Call(toJSTemplate(contents), List(js.Variable(ks), js.Variable(k))))))
         case ExternBody.Unsupported(err) =>
           C.errors.report(err)
           js.Function(nameDef(id), params.map(nameDef), List(js.Return($effekt.call("unreachable"))))
