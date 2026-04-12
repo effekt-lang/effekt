@@ -26,14 +26,14 @@ object StaticArguments {
   private def dropStatic[A](isStatic: List[Boolean], args: List[A]): List[A] =
     isStatic.zip(args).collect { case (false, a) => a }
 
-  def computeStatics(analysis: Analysis): (Map[Id, List[Boolean]], Map[Id, List[Expr]]) = {
+  def computeStatics(analysis: UsageAnalysis): (Map[Id, List[Boolean]], Map[Id, List[Expr]]) = {
     val statics = mutable.Map.empty[Id, List[Boolean]]
     val extArgs = mutable.Map.empty[Id, List[Expr]]
 
     analysis.functions.foreach {
       case (id, info) if info.isRecursive =>
         val isInternallyStatic = info.params.zipWithIndex.map { case (param, idx) =>
-          info.internalCalls.nonEmpty && info.internalCalls.forall { args =>
+          info.recursiveCalls.nonEmpty && info.recursiveCalls.forall { args =>
             args.length > idx && (args(idx) match {
               case Expr.Variable(other) => param == other
               case _ => false
@@ -257,7 +257,7 @@ object StaticArguments {
   // --- Entry point ---
 
   def transform(m: ModuleDecl): ModuleDecl = {
-    val analysis = Analysis(m)
+    val analysis = UsageAnalysis(m)
     val (statics, extArgs) = computeStatics(analysis)
 
     given ctx: Context = new Context(statics, externalArgs = extArgs)
