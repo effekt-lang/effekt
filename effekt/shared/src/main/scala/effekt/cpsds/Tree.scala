@@ -76,6 +76,8 @@ enum Expr extends Tree {
 
   // MetaContinuations
   case Toplevel
+
+  val free: Set[Id] = freeVariables.free(this)
 }
 export Expr.*
 
@@ -134,6 +136,8 @@ enum Stmt extends Tree {
 
   // Others
   case Hole(span: effekt.source.Span)
+
+  val free: Set[Id] = freeVariables.free(this)
 }
 export Stmt.*
 
@@ -311,4 +315,79 @@ object substitutions {
       case Expr.Variable(x) => x
       case _ => INTERNAL_ERROR("References should always be variables")
     } getOrElse id
+}
+
+object freeVariables {
+
+  def free(e: Expr): Set[Id] = e match {
+    case Expr.Variable(id) => Set(id)
+    case Expr.Literal(_, _) => Set.empty
+    case Expr.Make(_, _, vargs) => vargs.flatMap(arg => arg.free).toSet
+    case Expr.Abort => Set.empty
+    case Expr.Return => Set.empty
+    case Expr.Toplevel => Set.empty
+  }
+
+  def free(s: Stmt): Set[Id] = s match {
+    case Stmt.Def(id, params, body, rest) =>
+      (body.free -- params.toSet - id) ++ (rest.free - id)
+
+    case Stmt.New(id, _, operations, rest) =>
+      val opsFree = operations.flatMap { op =>
+        op.body.free -- op.params.toSet
+      }.toSet
+      opsFree ++ (free(rest) - id)
+
+    case Stmt.Val(id, binding, rest) =>
+      binding.free ++ (rest.free - id)
+
+    case Stmt.Let(id, binding, rest) =>
+      binding.free ++ (rest.free - id)
+
+    case Stmt.App(id, args) =>
+      Set(id) ++ args.flatMap(_.free)
+
+    case Stmt.Invoke(id, _, args) =>
+      Set(id) ++ args.flatMap(_.free)
+
+    case Stmt.Run(id, callee, args, _, rest) =>
+      Set(callee) ++ args.flatMap(_.free) ++ (rest.free - id)
+
+    case Stmt.If(cond, thn, els) =>
+      cond.free ++ thn.free ++ els.free
+
+    case Stmt.Match(scrutinee, clauses, default) =>
+      scrutinee.free ++
+        clauses.flatMap { case (_, cl) => cl.body.free -- cl.params.toSet } ++
+        default.map(_.free).getOrElse(Set.empty)
+
+    case Stmt.Region(id, ks, rest) =>
+      ks.free ++ (rest.free - id)
+
+    case Stmt.Alloc(id, init, region, rest) =>
+      init.free + region ++ (rest.free - id)
+
+    case Stmt.Var(id, init, ks, rest) =>
+      init.free ++ free(ks) ++ (rest.free - id)
+
+    case Stmt.Dealloc(ref, rest) =>
+      Set(ref) ++ rest.free
+
+    case Stmt.Get(ref, id, rest) =>
+      Set(ref) ++ (rest.free - id)
+
+    case Stmt.Put(ref, value, rest) =>
+      Set(ref) ++ value.free ++ rest.free
+
+    case Stmt.Reset(p, ks, k, body, ks1, k1) =>
+      (body.free - p - ks - k) ++ ks1.free ++ k1.free
+
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+      Set(prompt) ++ (body.free - resume - ks - k) ++ ks1.free ++ k1.free
+
+    case Stmt.Resume(r, ks, k, body, ks1, k1) =>
+      Set(r) ++ (body.free - ks - k) ++ ks1.free ++ k1.free
+
+    case Stmt.Hole(_) => Set.empty
+  }
 }
