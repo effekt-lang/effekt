@@ -234,8 +234,8 @@ object StaticArguments {
       ctx.stack = before
       Some(ToplevelDefinition.Def(id, params, rewrittenBody))
 
-    case ToplevelDefinition.Val(id, binding) =>
-      Some(ToplevelDefinition.Val(id, rewrite(binding)))
+    case ToplevelDefinition.Val(id, ks, k, binding) =>
+      Some(ToplevelDefinition.Val(id, ks, k, rewrite(binding)))
 
     case ToplevelDefinition.Let(id, binding) =>
       Some(ToplevelDefinition.Let(id, rewrite(binding)))
