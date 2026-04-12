@@ -222,14 +222,13 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
     Stmt.New(id, impl.interface, ops, transform(body, ks, k))
 
   case core.Stmt.Def(id, core.Block.Unbox(pure), body) =>
-    transform(pure).run { e =>
-      e match {
-        case Expr.Variable(x) =>
-          given ctx: TransformationContext = C.aliasBlock(id, x)
-          transform(body, ks, k)
-        case other =>
-          Stmt.Let(id, other, transform(body, ks, k))
-      }
+    transform(pure).run {
+      case Expr.Variable(x) =>
+        given ctx: TransformationContext = C.aliasBlock(id, x)
+
+        transform(body, ks, k)
+      case other =>
+        Stmt.Let(id, other, transform(body, ks, k))
     }
 
   // --- App ---
@@ -366,10 +365,8 @@ def transformToplevel(definition: core.Toplevel)(using C: TransformationContext)
   case core.Toplevel.Def(id, block) =>
     transform(block) match {
       case Bind(Expr.Variable(x), Nil) =>
-        // Simple alias at toplevel — emit a Let
         ToplevelDefinition.Let(id, Expr.Variable(x))
       case Bind(value, bindings) =>
-        // Has bindings (Def, New, etc.) — wrap in a thunk
         val ks = Id("ks")
         val k = Id("k")
         ToplevelDefinition.Def(id, List(ks, k),
@@ -377,17 +374,10 @@ def transformToplevel(definition: core.Toplevel)(using C: TransformationContext)
     }
 
   case core.Toplevel.Val(id, binding) =>
-    ToplevelDefinition.Val(id,
-      transform(binding, MetaContinuation.Toplevel,
-        Continuation.Static(id) { (value, _) =>
-          value match {
-            case Expr.Variable(x) =>
-              given ctx: TransformationContext = C.aliasValue(id, x)
-              Stmt.App(Id("$return"), List(Expr.Variable(ctx.lookupValue(id))))
-            case other =>
-              Stmt.Let(id, other, Stmt.App(Id("$return"), List(Expr.Variable(id))))
-          }
-        }))
+    val ks = Id("ks")
+    val k = Id("k")
+    ToplevelDefinition.Val(id, ks, k,
+      transform(binding, MetaContinuation.Dynamic(ks), Continuation.Dynamic(k)))
 }
 
 def transformExtern(extern: core.Extern)(using C: TransformationContext): Option[Extern] = extern match {

@@ -148,7 +148,7 @@ enum Toplevel {
   def id: Id
 
   case Def(id: Id, block: Block)
-  case Val(id: Id, binding: core.Stmt)
+  case Val(id: Id, binding: Stmt)
 }
 
 

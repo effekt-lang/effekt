@@ -7,8 +7,9 @@ object Inliner {
 
   def shouldInline(id: Id, analysis: UsageAnalysis): Boolean =
     (analysis.functions.get(id), analysis.usage.get(id)) match {
-      case (Some(info), Some(usage)) => !info.isRecursive && usage.isUsedOnce
-      case _ => false // unknown function (e.g., introduced by inlining), don't inline
+      case (Some(info), Some(usage)) =>
+        !info.isRecursive && usage.isUsedOnce && info.externalCalls.size == 1
+      case _ => false
     }
 
   def isUnused(id: Id, analysis: UsageAnalysis): Boolean =
@@ -148,8 +149,8 @@ object Inliner {
     case ToplevelDefinition.Def(id, params, body) =>
       Some(ToplevelDefinition.Def(id, params, rewrite(body, analysis)))
 
-    case ToplevelDefinition.Val(id, binding) =>
-      Some(ToplevelDefinition.Val(id, rewrite(binding, analysis)))
+    case ToplevelDefinition.Val(id, ks, k, binding) =>
+      Some(ToplevelDefinition.Val(id, ks, k, rewrite(binding, analysis)))
 
     case ToplevelDefinition.Let(id, binding) if isUnused(id, analysis) =>
       None
