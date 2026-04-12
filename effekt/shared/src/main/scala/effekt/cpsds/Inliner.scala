@@ -60,6 +60,10 @@ object Inliner {
     case Stmt.Let(id, binding, rest) if isUnused(id, analysis) =>
       rewrite(rest, analysis)
 
+    case Stmt.Let(id, Expr.Variable(aliasId), rest) =>
+      val subst = Substitution(Map(id -> Expr.Variable(aliasId)))
+      rewrite(substitute(rest)(using subst), analysis)
+
     case Stmt.Let(id, binding, rest) =>
       Stmt.Let(id, rewrite(binding, analysis), rewrite(rest, analysis))
 
