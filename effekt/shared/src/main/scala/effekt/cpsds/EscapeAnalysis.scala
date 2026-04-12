@@ -5,186 +5,187 @@ import core.Id
 import scala.collection.mutable
 
 class EscapeAnalysis(
+  // maps each function to its free variables
   val freeVars: mutable.Map[Id, Set[Id]] = mutable.Map.empty,
   val escaping: mutable.Set[Id] = mutable.Set.empty
 ) {
 
-  def escapes(id: Id): Boolean = escaping.contains(id)
+  def isEscaping(id: Id): Boolean = escaping.contains(id)
 
-  def isSecondClass(id: Id): Boolean = !escapes(id)
+  def isSecondClass(id: Id): Boolean = !isEscaping(id)
 
-  private def markEscaping(id: Id): Unit = {
+  private def escapes(id: Id): Unit = {
     if escaping.add(id) then
       freeVars.get(id).foreach { fvs =>
-        fvs.foreach(markEscaping)
+        fvs.foreach(escapes)
       }
   }
 
-  private def markExprEscaping(e: Expr): Unit = e match {
-    case Expr.Variable(id) => markEscaping(id)
-    case Expr.Make(_, _, vargs) => vargs.foreach(markExprEscaping)
+  private def escapes(e: Expr): Unit = e match {
+    case Expr.Variable(id) => escapes(id)
+    case Expr.Make(_, _, vargs) => vargs.foreach(escapes)
     case _ => ()
   }
 
   // --- Free variables ---
 
-  def freeOfExpr(e: Expr): Set[Id] = e match {
+  def free(e: Expr): Set[Id] = e match {
     case Expr.Variable(id) => Set(id)
     case Expr.Literal(_, _) => Set.empty
-    case Expr.Make(_, _, vargs) => vargs.flatMap(freeOfExpr).toSet
+    case Expr.Make(_, _, vargs) => vargs.flatMap(free).toSet
     case Expr.Abort => Set.empty
     case Expr.Return => Set.empty
     case Expr.Toplevel => Set.empty
   }
 
-  def freeOfStmt(s: Stmt): Set[Id] = s match {
+  def free(s: Stmt): Set[Id] = s match {
     case Stmt.Def(id, params, body, rest) =>
-      val bodyFree = freeOfStmt(body) -- params.toSet - id
+      val bodyFree = free(body) -- params.toSet - id
       freeVars(id) = bodyFree
-      bodyFree ++ (freeOfStmt(rest) - id)
+      bodyFree ++ (free(rest) - id)
 
     case Stmt.New(id, _, operations, rest) =>
       val opsFree = operations.flatMap { op =>
-        freeOfStmt(op.body) -- op.params.toSet
+        free(op.body) -- op.params.toSet
       }.toSet
       freeVars(id) = opsFree
-      opsFree ++ (freeOfStmt(rest) - id)
+      opsFree ++ (free(rest) - id)
 
     case Stmt.Val(id, binding, rest) =>
-      freeOfStmt(binding) ++ (freeOfStmt(rest) - id)
+      free(binding) ++ (free(rest) - id)
 
     case Stmt.Let(id, binding, rest) =>
-      freeOfExpr(binding) ++ (freeOfStmt(rest) - id)
+      free(binding) ++ (free(rest) - id)
 
     case Stmt.App(id, args) =>
-      Set(id) ++ args.flatMap(freeOfExpr)
+      Set(id) ++ args.flatMap(free)
 
     case Stmt.Invoke(id, _, args) =>
-      Set(id) ++ args.flatMap(freeOfExpr)
+      Set(id) ++ args.flatMap(free)
 
     case Stmt.Run(id, callee, args, _, rest) =>
-      Set(callee) ++ args.flatMap(freeOfExpr) ++ (freeOfStmt(rest) - id)
+      Set(callee) ++ args.flatMap(free) ++ (free(rest) - id)
 
     case Stmt.If(cond, thn, els) =>
-      freeOfExpr(cond) ++ freeOfStmt(thn) ++ freeOfStmt(els)
+      free(cond) ++ free(thn) ++ free(els)
 
     case Stmt.Match(scrutinee, clauses, default) =>
-      freeOfExpr(scrutinee) ++
-        clauses.flatMap { case (_, cl) => freeOfStmt(cl.body) -- cl.params.toSet } ++
-        default.map(freeOfStmt).getOrElse(Set.empty)
+      free(scrutinee) ++
+        clauses.flatMap { case (_, cl) => free(cl.body) -- cl.params.toSet } ++
+        default.map(free).getOrElse(Set.empty)
 
     case Stmt.Region(id, ks, rest) =>
-      freeOfExpr(ks) ++ (freeOfStmt(rest) - id)
+      free(ks) ++ (free(rest) - id)
 
     case Stmt.Alloc(id, init, region, rest) =>
-      freeOfExpr(init) + region ++ (freeOfStmt(rest) - id)
+      free(init) + region ++ (free(rest) - id)
 
     case Stmt.Var(id, init, ks, rest) =>
-      freeOfExpr(init) ++ freeOfExpr(ks) ++ (freeOfStmt(rest) - id)
+      free(init) ++ free(ks) ++ (free(rest) - id)
 
     case Stmt.Dealloc(ref, rest) =>
-      Set(ref) ++ freeOfStmt(rest)
+      Set(ref) ++ free(rest)
 
     case Stmt.Get(ref, id, rest) =>
-      Set(ref) ++ (freeOfStmt(rest) - id)
+      Set(ref) ++ (free(rest) - id)
 
     case Stmt.Put(ref, value, rest) =>
-      Set(ref) ++ freeOfExpr(value) ++ freeOfStmt(rest)
+      Set(ref) ++ free(value) ++ free(rest)
 
     case Stmt.Reset(p, ks, k, body, ks1, k1) =>
-      (freeOfStmt(body) - p - ks - k) ++ freeOfExpr(ks1) ++ freeOfExpr(k1)
+      (free(body) - p - ks - k) ++ free(ks1) ++ free(k1)
 
     case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
-      Set(prompt) ++ (freeOfStmt(body) - resume - ks - k) ++ freeOfExpr(ks1) ++ freeOfExpr(k1)
+      Set(prompt) ++ (free(body) - resume - ks - k) ++ free(ks1) ++ free(k1)
 
     case Stmt.Resume(r, ks, k, body, ks1, k1) =>
-      Set(r) ++ (freeOfStmt(body) - ks - k) ++ freeOfExpr(ks1) ++ freeOfExpr(k1)
+      Set(r) ++ (free(body) - ks - k) ++ free(ks1) ++ free(k1)
 
     case Stmt.Hole(_) => Set.empty
   }
 
+
   // --- Escape analysis ---
 
-  def analyzeStmt(s: Stmt): Unit = s match {
+  def analyze(s: Stmt): Unit = s match {
     case Stmt.Def(id, params, body, rest) =>
-      analyzeStmt(body)
-      analyzeStmt(rest)
+      analyze(body)
+      analyze(rest)
 
     case Stmt.New(id, _, operations, rest) =>
-      operations.foreach { op => analyzeStmt(op.body) }
-      analyzeStmt(rest)
+      operations.foreach { op => analyze(op.body) }
+      analyze(rest)
 
     case Stmt.Val(id, binding, rest) =>
-      analyzeStmt(binding)
-      analyzeStmt(rest)
+      analyze(binding)
+      analyze(rest)
 
     case Stmt.Let(id, binding, rest) =>
-      markExprEscaping(binding)
-      analyzeStmt(rest)
+      escapes(binding)
+      analyze(rest)
 
+    // callee does NOT escape
     case Stmt.App(id, args) =>
-      // callee does NOT escape
-      args.foreach(markExprEscaping)
+      args.foreach(escapes)
 
     case Stmt.Invoke(id, _, args) =>
-      // callee does NOT escape
-      args.foreach(markExprEscaping)
+      args.foreach(escapes)
 
-    case Stmt.Run(id, callee, args, _, rest) =>
-      // callee does NOT escape
-      args.foreach(markExprEscaping)
-      analyzeStmt(rest)
+    // This is the essence of async computation: we need to reify the continuation
+    case Stmt.Run(id, callee, args, Purity.Async, rest) =>
+      args.foreach(escapes)
+      free(rest).foreach(escapes)
+      analyze(rest)
+
+    case Stmt.Run(id, callee, args, purity, rest) =>
+      args.foreach(escapes)
+      analyze(rest)
 
     case Stmt.If(cond, thn, els) =>
-      markExprEscaping(cond)
-      analyzeStmt(thn)
-      analyzeStmt(els)
+      escapes(cond)
+      analyze(thn)
+      analyze(els)
 
     case Stmt.Match(scrutinee, clauses, default) =>
-      markExprEscaping(scrutinee)
-      clauses.foreach { case (_, cl) => analyzeStmt(cl.body) }
-      default.foreach(analyzeStmt)
+      escapes(scrutinee)
+      clauses.foreach { case (_, cl) => analyze(cl.body) }
+      default.foreach(analyze)
 
     case Stmt.Region(id, ks, rest) =>
-      // ks does NOT escape
-      analyzeStmt(rest)
+      analyze(rest)
 
     case Stmt.Alloc(id, init, region, rest) =>
-      markExprEscaping(init)
-      // region does NOT escape
-      analyzeStmt(rest)
+      escapes(init)
+      analyze(rest)
 
     case Stmt.Var(id, init, ks, rest) =>
-      markExprEscaping(init)
-      // ks does NOT escape
-      analyzeStmt(rest)
+      escapes(init)
+      analyze(rest)
 
     case Stmt.Dealloc(ref, rest) =>
-      // ref does NOT escape
-      analyzeStmt(rest)
+      analyze(rest)
 
     case Stmt.Get(ref, id, rest) =>
-      // ref does NOT escape
-      analyzeStmt(rest)
+      analyze(rest)
 
     case Stmt.Put(ref, value, rest) =>
-      // ref does NOT escape
-      markExprEscaping(value)
-      analyzeStmt(rest)
+      escapes(value)
+      analyze(rest)
 
     case Stmt.Reset(p, ks, k, body, ks1, k1) =>
-      // ks1, k1 do NOT escape
-      analyzeStmt(body)
+      analyze(body)
+      escapes(k1)
+      escapes(ks1)
 
     case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
-      // ks1, k1 do NOT escape
-      // resume escapes (captured continuation, used as first-class value)
-      markEscaping(resume)
-      analyzeStmt(body)
+      escapes(k1)
+      escapes(ks1)
+      analyze(body)
 
     case Stmt.Resume(r, ks, k, body, ks1, k1) =>
-      // ks1, k1 do NOT escape
-      analyzeStmt(body)
+      escapes(k1)
+      escapes(ks1)
+      analyze(body)
 
     case Stmt.Hole(_) => ()
   }
@@ -193,21 +194,21 @@ class EscapeAnalysis(
 
   def process(d: ToplevelDefinition): Unit = d match {
     case ToplevelDefinition.Def(id, params, body) =>
-      val bodyFree = freeOfStmt(body) -- params.toSet - id
+      val bodyFree = free(body) -- params.toSet - id
       freeVars(id) = bodyFree
-      analyzeStmt(body)
+      analyze(body)
 
     case ToplevelDefinition.Val(id, binding) =>
-      freeOfStmt(binding)
-      analyzeStmt(binding)
+      free(binding)
+      analyze(binding)
 
     case ToplevelDefinition.Let(id, binding) =>
-      markExprEscaping(binding)
+      escapes(binding)
   }
 
   def process(m: ModuleDecl): Unit = {
     m.definitions.foreach(process)
-    m.exports.foreach(markEscaping)
+    m.exports.foreach(escapes)
   }
 }
 

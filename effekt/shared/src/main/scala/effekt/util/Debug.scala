@@ -29,6 +29,7 @@ val show: PartialFunction[Any, String] =
     core.HumanReadablePrettyPrinter.show orElse
     generator.js.PrettyPrinter.show orElse
     cps.PrettyPrinter.show orElse
+    cpsds.PrettyPrinter.show orElse
     machine.PrettyPrinter.show orElse
     showGeneric
 
