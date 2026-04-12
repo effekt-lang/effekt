@@ -5,13 +5,16 @@ import cpsds.substitutions.{ Substitution, substitute }
 
 object Inliner {
 
-  def shouldInline(id: Id, analysis: Analysis): Boolean =
-    analysis.functions.get(id).exists(_.isCalledOnce)
+  def shouldInline(id: Id, analysis: UsageAnalysis): Boolean =
+    (analysis.functions.get(id), analysis.usage.get(id)) match {
+      case (Some(info), Some(usage)) => !info.isRecursive && usage.isUsedOnce
+      case _ => false // unknown function (e.g., introduced by inlining), don't inline
+    }
 
-  def isUnused(id: Id, analysis: Analysis): Boolean =
+  def isUnused(id: Id, analysis: UsageAnalysis): Boolean =
     analysis.usage.get(id).forall(_.isUnused)
 
-  def reduce(id: Id, args: List[Expr], analysis: Analysis): Stmt = {
+  def reduce(id: Id, args: List[Expr], analysis: UsageAnalysis): Stmt = {
     val info = analysis.functions(id)
     val (bindings, subst) = bindArgs(info.params, args)
     val body = substitute(info.body)(using Substitution(subst))
@@ -36,7 +39,7 @@ object Inliner {
 
   // --- Rewrite ---
 
-  def rewrite(s: Stmt, analysis: Analysis): Stmt = s match {
+  def rewrite(s: Stmt, analysis: UsageAnalysis): Stmt = s match {
 
     case Stmt.Def(id, params, body, rest) if shouldInline(id, analysis) =>
       rewrite(rest, analysis)
@@ -118,7 +121,7 @@ object Inliner {
     case h: Stmt.Hole => h
   }
 
-  def rewrite(e: Expr, analysis: Analysis): Expr = e match {
+  def rewrite(e: Expr, analysis: UsageAnalysis): Expr = e match {
     case Expr.Variable(_) => e
     case Expr.Literal(_, _) => e
     case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(rewrite(_, analysis)))
@@ -127,15 +130,15 @@ object Inliner {
     case Expr.Toplevel => e
   }
 
-  def rewrite(op: Operation, analysis: Analysis): Operation =
+  def rewrite(op: Operation, analysis: UsageAnalysis): Operation =
     Operation(op.name, op.params, rewrite(op.body, analysis))
 
-  def rewrite(cl: Clause, analysis: Analysis): Clause =
+  def rewrite(cl: Clause, analysis: UsageAnalysis): Clause =
     Clause(cl.params, rewrite(cl.body, analysis))
 
   // --- Toplevel ---
 
-  def rewrite(d: ToplevelDefinition, analysis: Analysis): Option[ToplevelDefinition] = d match {
+  def rewrite(d: ToplevelDefinition, analysis: UsageAnalysis): Option[ToplevelDefinition] = d match {
     case ToplevelDefinition.Def(id, params, body) if shouldInline(id, analysis) =>
       None
 
@@ -158,7 +161,7 @@ object Inliner {
   // --- Entry point ---
 
   def transform(entrypoint: Id, m: ModuleDecl): ModuleDecl = {
-    val analysis = Analysis(m)
+    val analysis = UsageAnalysis(m)
     // Mark the entrypoint and all exports as used so they aren't dropped
     analysis.usage.getOrElseUpdate(entrypoint, UsageInfo()).references += 1
     m.exports.foreach { id =>
