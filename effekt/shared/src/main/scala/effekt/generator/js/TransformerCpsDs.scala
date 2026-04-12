@@ -29,6 +29,7 @@ object TransformerCpsDs extends Transformer {
     externs: Map[Id, cpsds.Extern.Def],
     kinds: Map[Id, FunctionKind],
     escaping: Set[Id],
+    localVars: Set[Id],
     // Second-class defs currently in scope — maps id to param list and recursion info
     secondClass: Map[Id, SecondClassDef],
     // Whether we are inside the body (while loop) of a recursive second-class def
@@ -106,6 +107,7 @@ object TransformerCpsDs extends Transformer {
           externs.collect { case d: cpsds.Extern.Def => (d.id, d) }.toMap,
           computeKinds(module),
           cpsds.EscapeAnalysis(module),
+          Set.empty,
           Map.empty,
           Set.empty,
           Set.empty,
@@ -351,7 +353,8 @@ object TransformerCpsDs extends Transformer {
     // --- Var ---
     case cpsds.Stmt.Var(id, init, ks, rest) if !ctx.escaping.contains(id) =>
       Binding { k =>
-        js.Let(nameDef(id), toJS(init)) :: toJS(rest).run(k)
+        js.Let(nameDef(id), toJS(init)) ::
+          toJS(rest)(using ctx.copy(localVars = ctx.localVars + id)).run(k)
       }
 
     case cpsds.Stmt.Var(id, init, ks, rest) =>
