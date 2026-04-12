@@ -62,6 +62,9 @@ object TransformerCpsDs extends Transformer {
     toJS(input, exports)
   }
 
+  def compileLSP(input: cpsds.ModuleDecl, coreModule: core.ModuleDecl)(using C: Context): List[js.Stmt] =
+    ???
+
   def toJS(module: cpsds.ModuleDecl, exports: List[js.Export])(using D: DeclarationContext, C: Context): js.Module =
     module match {
       case cpsds.ModuleDecl(path, includes, declarations, externs, definitions, _) =>
@@ -130,18 +133,19 @@ object TransformerCpsDs extends Transformer {
     T.externs.get(id) match {
       case Some(cpsds.Extern.Def(_, params, false, ExternBody.StringExternBody(_, Template(strings, templateArgs)))) =>
         val subst = params.zip(args).toMap
-        val resolvedArgs = templateArgs.map { arg =>
-          arg match {
+        val resolvedArgs = templateArgs.map { tArg =>
+          tArg match {
             case Expr.Variable(id) => subst.get(id) match {
               case Some(replaced) => toJS(replaced)
-              case None => toJS(arg)
+              case None => toJS(tArg)
             }
-            case _ => toJS(arg)
+            case other => toJS(other)
           }
         }
         js.RawExpr(strings, resolvedArgs)
       case _ => js.Call(nameRef(id), args.map(toJS))
     }
+
 
   // --- Declarations ---
 
@@ -225,14 +229,23 @@ object TransformerCpsDs extends Transformer {
       pure(js.Return(MethodCall(nameRef(id), memberNameRef(method), args.map(toJS): _*)) :: Nil)
 
     // --- Run ---
-    case cpsds.Stmt.Run(id, callee, args, purity, rest) =>
+    case cpsds.Stmt.Run(id, callee, args, Purity.Pure | Purity.Impure, rest) =>
       Binding { k =>
-        val call = purity match {
-          case Purity.Pure => inlineExtern(callee, args)
-          case _ => js.Call(nameRef(callee), args.map(toJS))
-        }
-        js.Const(nameDef(id), call) :: toJS(rest).run(k)
+        js.Const(nameDef(id), inlineExtern(callee, args)) :: toJS(rest).run(k)
       }
+
+    // Async: needs CPS — call with continuation
+    case cpsds.Stmt.Run(id, callee, args, Purity.Async, rest) =>
+      ???
+    //      val ks = JSName("ks")
+    //      val kParam = JSName("k")
+    //      pure(js.Return(js.Call(nameRef(callee),
+    //        args.map(toJS) ++ List(
+    //          // TODO: where do ks and k come from in this context?
+    //          // For now, pass a continuation that binds the result and continues
+    //          js.Variable(ks),
+    //          js.Lambda(List(nameDef(id)), toJS(rest).stmts)
+    //        ))) :: Nil)
 
     // --- If ---
     case cpsds.Stmt.If(cond, thn, els) =>
