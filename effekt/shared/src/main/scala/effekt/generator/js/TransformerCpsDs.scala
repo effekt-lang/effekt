@@ -32,6 +32,9 @@ object TransformerCpsDs extends Transformer {
     secondClass: Map[Id, SecondClassDef],
     // Whether we are inside the body (while loop) of a recursive second-class def
     insideBody: Set[Id],
+    // Mutable second-class params currently in scope (from recursive second-class defs).
+    // Any JS closure capturing these must snapshot them first to avoid capture-by-reference bugs.
+    mutableParams: Set[Id],
     declarations: DeclarationContext,
     errors: Context
   )
@@ -53,6 +56,36 @@ object TransformerCpsDs extends Transformer {
   def kindOf(id: Id)(using ctx: TransformerContext): FunctionKind =
     ctx.kinds.getOrElse(id, FunctionKind(isRecursive = false, escapes = true))
 
+  // --- Backup mutable params for closures ---
+
+  /**
+   * Backup mutable second-class params that are free in the given body,
+   * returning (backup statements, substituted body).
+   *
+   * This prevents capture-by-reference bugs: JS `let` variables inside a
+   * `while` loop are captured by reference, so closures defined inside the
+   * loop body would see the mutated value rather than the value at definition time.
+   */
+  def backupMutableParams(body: cpsds.Stmt, boundParams: Set[Id] = Set.empty)(using ctx: TransformerContext): (List[js.Stmt], cpsds.Stmt) = {
+    val freeInBody = body.free -- boundParams
+    val captured = freeInBody.intersect(ctx.mutableParams)
+
+    if captured.nonEmpty then
+      val backups = captured.toList.map { p =>
+        val tmp = Id(s"backup_${p}")
+        (p, tmp)
+      }
+      val backupStmts = backups.map { case (p, tmp) =>
+        js.Const(nameDef(tmp), nameRef(p))
+      }
+      val subst = substitutions.Substitution(
+        backups.map { case (p, tmp) => p -> Expr.Variable(tmp) }.toMap
+      )
+      (backupStmts, substitutions.substitute(body)(using subst))
+    else
+      (Nil, body)
+  }
+
   // --- Entry points ---
 
   def compile(input: cpsds.ModuleDecl, coreModule: core.ModuleDecl, mainSymbol: symbols.TermSymbol)(using Context): js.Module = {
@@ -72,6 +105,7 @@ object TransformerCpsDs extends Transformer {
           externs.collect { case d: cpsds.Extern.Def => (d.id, d) }.toMap,
           computeKinds(module),
           Map.empty,
+          Set.empty,
           Set.empty,
           D, C)
 
@@ -183,10 +217,13 @@ object TransformerCpsDs extends Transformer {
     // --- New ---
     case cpsds.Stmt.New(id, interface, operations, rest) =>
       Binding { k =>
-        val jsObj = js.Object(operations.map { op =>
-          nameDef(op.name) -> js.Lambda(op.params.map(nameDef), toJS(op.body).stmts)
-        })
-        js.Const(nameDef(id), jsObj) :: toJS(rest).run(k)
+        val ops = operations.map { op =>
+          val (backups, substBody) = backupMutableParams(op.body, op.params.toSet)
+          (backups, nameDef(op.name) -> js.Lambda(op.params.map(nameDef), toJS(substBody).stmts))
+        }
+        val allBackups = ops.flatMap(_._1)
+        val jsObj = js.Object(ops.map(_._2))
+        allBackups ++ List(js.Const(nameDef(id), jsObj)) ++ toJS(rest).run(k)
       }
 
     // --- Val ---
@@ -206,19 +243,41 @@ object TransformerCpsDs extends Transformer {
     case cpsds.Stmt.App(id, args) =>
       ctx.secondClass.get(id) match {
         case Some(sci) =>
-          // Second-class call: assign args to params, then jump
-          val assignments = sci.params.zip(args).map { case (param, arg) =>
-            js.Assign(nameRef(param), toJS(arg))
+          // Second-class call: assign args to params, then jump.
+          // Need temporaries for params that appear free in later arguments
+          // to avoid overwriting values before they're read.
+          val stmts = mutable.ListBuffer.empty[js.Stmt]
+
+          val freeInArgs = args.flatMap(_.free).toSet
+          val paramSet = sci.params.toSet
+          val overlapping = freeInArgs.intersect(paramSet)
+
+          val tmpMap = overlapping.map { param =>
+            val tmp = Id(s"tmp_${param}")
+            stmts.append(js.Const(nameDef(tmp), nameRef(param)))
+            param -> tmp
+          }.toMap
+
+          val subst = substitutions.Substitution(
+            tmpMap.map { case (p, t) => p -> Expr.Variable(t) }
+          )
+
+          sci.params.zip(args).foreach { case (param, arg) =>
+            val jsArg = toJS(substitutions.substitute(arg)(using subst))
+            stmts.append(js.Assign(nameRef(param), jsArg))
           }
+
           val jump = if sci.isRecursive && ctx.insideBody.contains(id) then
             js.Continue(Some(nameDef(id)))
           else
             js.Break(Some(nameDef(id)))
-          pure(assignments :+ jump)
+          stmts.append(jump)
 
+          pure(stmts.toList)
+
+        // In the App case for first-class calls:
         case None =>
-          // First-class call
-          pure(js.Return(js.Call(nameRef(id), args.map(toJS))) :: Nil)
+          pure(js.Return(js.Lambda(Nil, js.Return(js.Call(nameRef(id), args.map(toJS))))) :: Nil)
       }
 
     // --- Invoke ---
@@ -311,21 +370,24 @@ object TransformerCpsDs extends Transformer {
 
     // --- Reset ---
     case cpsds.Stmt.Reset(p, ks, k, body, ks1, k1) =>
-      pure(js.Return(Call(RESET,
-        js.Lambda(List(nameDef(p), nameDef(ks), nameDef(k)), toJS(body).stmts),
-        toJS(ks1), toJS(k1))) :: Nil)
+      val (backups, substBody) = backupMutableParams(body, Set(p, ks, k))
+      pure(backups ++ List(js.Return(Call(RESET,
+        js.Lambda(List(nameDef(p), nameDef(ks), nameDef(k)), toJS(substBody).stmts),
+        toJS(ks1), toJS(k1)))))
 
     // --- Shift ---
     case cpsds.Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
-      pure(js.Return(Call(SHIFT, nameRef(prompt),
-        js.Lambda(List(nameDef(resume), nameDef(ks), nameDef(k)), toJS(body).stmts),
-        toJS(ks1), toJS(k1))) :: Nil)
+      val (backups, substBody) = backupMutableParams(body, Set(resume, ks, k))
+      pure(backups ++ List(js.Return(Call(SHIFT, nameRef(prompt),
+        js.Lambda(List(nameDef(resume), nameDef(ks), nameDef(k)), toJS(substBody).stmts),
+        toJS(ks1), toJS(k1)))))
 
     // --- Resume ---
     case cpsds.Stmt.Resume(r, ks, k, body, ks1, k1) =>
-      pure(js.Return(Call(RESUME, nameRef(r),
-        js.Lambda(List(nameDef(ks), nameDef(k)), toJS(body).stmts),
-        toJS(ks1), toJS(k1))) :: Nil)
+      val (backups, substBody) = backupMutableParams(body, Set(ks, k))
+      pure(backups ++ List(js.Return(Call(RESUME, nameRef(r),
+        js.Lambda(List(nameDef(ks), nameDef(k)), toJS(substBody).stmts),
+        toJS(ks1), toJS(k1)))))
 
     // --- Hole ---
     case cpsds.Stmt.Hole(span) =>
@@ -336,7 +398,9 @@ object TransformerCpsDs extends Transformer {
 
   def firstClassDef(id: Id, params: List[Id], body: cpsds.Stmt, rest: cpsds.Stmt)(using ctx: TransformerContext): Binding[List[js.Stmt]] =
     Binding { k =>
-      js.Function(nameDef(id), params.map(nameDef), toJS(body).stmts) ::
+      val (backups, substBody) = backupMutableParams(body, params.toSet)
+      backups ++
+        List(js.Function(nameDef(id), params.map(nameDef), toJS(substBody).stmts)) ++
         toJS(rest).run(k)
     }
 
@@ -366,8 +430,14 @@ object TransformerCpsDs extends Transformer {
     val restStmts = toJS(rest)(using ctxWithDef).stmts
     val entryBlock = js.Block(Some(label), restStmts)
 
-    // Translate body: for recursive defs, calls to id will become assignments + continue
-    val bodyCtx = if isRecursive then ctxWithDef.copy(insideBody = ctxWithDef.insideBody + id) else ctxWithDef
+    // Translate body: for recursive defs, calls to id will become assignments + continue.
+    // Also track params as mutable so that closures inside the body will backup them.
+    val bodyCtx = if isRecursive then
+      ctxWithDef.copy(
+        insideBody = ctxWithDef.insideBody + id,
+        mutableParams = ctxWithDef.mutableParams ++ params.toSet
+      )
+    else ctxWithDef
     val bodyStmts = toJS(body)(using bodyCtx).stmts
 
     val paramDecls = params.map(p => js.Let(nameDef(p), js.Undefined))
