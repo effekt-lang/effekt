@@ -116,8 +116,7 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
 
     case core.Var(ref, init, capt, body) =>
       val resolvedInit = rewrite(init)
-      val resolvedCapt = rewrite(capt)
-      withBinding(ref) { core.Var(rewrite(ref), resolvedInit, resolvedCapt, rewrite(body)) }
+      withBindings(List(ref, capt)) { core.Var(rewrite(ref), resolvedInit, rewrite(capt), rewrite(body)) }
 
     case core.Get(id, tpe, ref, capt, body) =>
       val resolvedRef = rewrite(ref)
@@ -183,7 +182,7 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
   }
 
   override def rewrite(e: Extern) = e match {
-    case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => {
+    case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body, vmBody) => {
       // We don't use withBinding(id) here, because top-level ids are pre-collected.
       withBindings(tparams ++ cparams ++ vparams.map(_.id) ++ bparams.map(_.id)) {
           Extern.Def(
@@ -194,7 +193,8 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
             bparams map rewrite,
             rewrite(ret),
             rewrite(annotatedCapture),
-            rewrite(body)
+            rewrite(body),
+            vmBody
           )
         }
     }
@@ -272,6 +272,12 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
         core.ModuleDecl(path, includes, declarations map rewrite, externs map rewrite, definitions map rewrite, exports map rewrite)
     }
 
+  def apply(t: core.Toplevel): core.Toplevel =
+    suffix = 0
+    scopes = List.empty
+    toplevelScope = Map.empty
+    rewrite(t)
+
   def apply(s: Stmt): Stmt = {
     suffix = 0
     toplevelScope = Map.empty
@@ -286,7 +292,7 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
         case Declaration.Data(id, tparams, constructors) => constructors.map(_.id) :+ id
         case Interface(id, tparams, properties) => properties.map(_.id) :+ id
       } ++ definitions.map(_.id) ++ externs.flatMap {
-        case Extern.Def(id, _, _, _, _, _, _, _) => Some(id)
+        case Extern.Def(id, _, _, _, _, _, _, _, _) => Some(id)
         case Extern.Include(_, _) => None
         case Extern.Data(id, _) => Some(id)
       }

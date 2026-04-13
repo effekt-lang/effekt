@@ -92,15 +92,31 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _, _) = f.symbol
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.capture)
-      val tBody = bodies match {
-        case source.ExternBody.StringExternBody(ff, body, span) :: Nil =>
+
+      val vmBody: Option[ExternBody.StringExternBody] = bodies.collectFirst {
+        case ext @ source.ExternBody.StringExternBody(ff, body, span) if ff.matches("vm", matchDefault = false) =>
           ExternBody.StringExternBody(ff, Template(body.strings, body.args.map(transformAsExpr)))
-        case source.ExternBody.Unsupported(err) :: Nil =>
+      }
+      // TODO after changing vmBody: change `:: _` to `:: Nil` again to check uniqueness of extern resolution.
+      val targetBody = bodies match {
+        case source.ExternBody.StringExternBody(ff, body, span) :: _ =>
+          ExternBody.StringExternBody(ff, Template(body.strings, body.args.map(transformAsExpr)))
+        case source.ExternBody.Unsupported(err) :: _ =>
           ExternBody.Unsupported(err)
         case _ =>
-          Context.abort("Externs should be resolved and desugared before core.Transformer")
+          Context.abort(s"Externs should be resolved and desugared before core.Transformer")
       }
-      List(Extern.Def(sym, tps, cps.unspan, vps.unspan map transform, bps.unspan map transform, transform(ret), transform(capt), tBody))
+      List(Extern.Def(
+        sym,
+        tps,
+        cps.unspan,
+        vps.unspan map transform,
+        bps.unspan map transform,
+        transform(ret),
+        transform(capt),
+        targetBody,
+        vmBody,
+      ))
 
     case e @ source.ExternInclude(ff, path, contents, _, doc, span) =>
       List(Extern.Include(ff, contents.get))

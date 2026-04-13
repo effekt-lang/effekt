@@ -35,7 +35,7 @@ def sub(a: Vector, b: Vector): Vector =
   Vector(a.x - b.x, a.y - b.y, a.z - b.z)
 
 
-// def infixMul(a: Vector, b: Vector): Double = dot(a, b)
+// def infixStar(a: Vector, b: Vector): Double = dot(a, b)
 def infixStar(a: Vector, t: Double): Vector = a.scale(t)
 def infixStar(t: Double, a: Vector): Vector = a.scale(t)
 def infixPlus(a: Vector, b: Vector): Vector = add(a, b)

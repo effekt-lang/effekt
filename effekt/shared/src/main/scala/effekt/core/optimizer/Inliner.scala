@@ -1,0 +1,180 @@
+package effekt.core.optimizer
+
+import effekt.core.*
+import effekt.core
+
+import scala.collection.mutable
+
+sealed trait InliningPolicy {
+  def apply(id: Id)(using Context): Boolean
+}
+
+class Unique(maxInlineSize: Int) extends InliningPolicy {
+  override def apply(id: Id)(using ctx: Context): Boolean =
+    ctx.usages.get(id).contains(Usage.Once) &&
+      !ctx.usages.get(id).contains(Usage.Recursive) &&
+      ctx.blocks.get(id).exists(_.size <= maxInlineSize)
+}
+
+class UniqueJumpSimple(maxInlineSize: Int) extends InliningPolicy {
+  def isSimple(s: Stmt): Boolean = s match {
+    case Stmt.Def(id, block, body) => isSimple(body)
+    case Stmt.Let(id, binding, body) => isSimple(body)
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => isSimple(body)
+
+    case Stmt.Alloc(id, init, region, body) => true
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => true
+    case Stmt.Put(ref, annotatedCapt, value, body) => true
+    case Stmt.Var(ref, init, capture, body) => true
+
+    case Stmt.Return(expr) => true
+    case Stmt.App(callee, targs, vargs, bargs) => true
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => true
+
+    case Stmt.Val(id, binding, body) => false
+    case Stmt.If(cond, thn, els) => false
+    case Stmt.Match(scrutinee, annotatedType, clauses, default) => false
+    case Stmt.Region(body) => false
+    case Stmt.Reset(body) => false
+    case Stmt.Shift(prompt, k, body) => false
+    case Stmt.Resume(k, body) => false
+    case Stmt.Hole(annotatedTpe, span) => false
+  }
+  override def apply(id: Id)(using ctx: Context): Boolean = {
+    val use = ctx.usages.get(id)
+    val block = ctx.blocks.get(id)
+    var doInline = !ctx.usages.get(id).contains(Usage.Recursive)
+    doInline &&= use.contains(Usage.Once) || (block.collect {
+      case Block.BlockLit(_, _, _, _, stmt) => isSimple(stmt)
+      case Block.New(_) => true
+      case Block.BlockVar(_, _, _) => true
+    }.getOrElse(false) && block.exists(_.size <= maxInlineSize))
+    doInline
+  }
+}
+
+case class Context(
+  blocks: Map[Id, Block],
+  exprs: Map[Id, Expr],
+  usages: mutable.Map[Id, Usage]
+) {
+  def bind(id: Id, expr: Expr): Context = copy(exprs = exprs + (id -> expr))
+  def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
+}
+
+object Context {
+  def empty(usages: Map[Id, Usage]): Context = Context(Map.empty, Map.empty, mutable.Map.from(usages))
+}
+
+class Inliner(shouldInline: InliningPolicy, usages: Map[Id, Usage]) extends Tree.RewriteWithContext[Context] {
+
+  def run(mod: ModuleDecl): ModuleDecl = {
+    mod match {
+      case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+        var ctx = Context.empty(usages)
+        val d = definitions.map {
+          case Toplevel.Def(id, block) =>
+            val b = rewrite(block)(using ctx)
+            ctx = ctx.bind(id, b)
+            Toplevel.Def(id, b)
+          case v@Toplevel.Val(id, binding) => v
+        }
+        ModuleDecl(path, includes, declarations, externs, d, exports)
+    }
+  }
+
+  private def blockFor(id: Id)(using ctx: Context): Option[Block] =
+    ctx.blocks.get(id)
+
+  private def exprFor(id: Id)(using ctx: Context): Option[Expr] =
+    ctx.exprs.get(id)
+
+  def bindBlock(body: Stmt, bparam: BlockParam, barg: Block): Stmt =
+    Stmt.Def(bparam.id, barg, body)
+
+  def bindBlocks(body: Stmt, blocks: List[(BlockParam, Block)]): Stmt =
+    blocks.foldRight(body) { case ((bp, barg), acc) =>
+      bindBlock(acc, bp, barg)
+    }
+
+  def bindValue(body: Stmt, vparam: ValueParam, varg: Expr): Stmt =
+    Stmt.Let(vparam.id, varg, body)
+
+  def bindValues(body: Stmt, values: List[(ValueParam, Expr)]): Stmt =
+    values.foldRight(body) { case ((vp, varg), acc) =>
+      bindValue(acc, vp, varg)
+    }
+
+  def inlineApp(b: Block.BlockLit, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])(using ctx: Context): Stmt = {
+    // (1) Rename definition's blocklit to keep IDs globally unique after inlining
+    val (renamedBlock @ Block.BlockLit(tparams, cparams, vparams, bparams, body), renamedIds) = Renamer.rename(b)
+    // (2) Copy usage information for renamed IDs
+    renamedIds.foreach { (from, to) =>
+      ctx.usages.get(from).foreach { info => ctx.usages.update(to, info) }
+    }
+    // (3) We only need to bind block arguments that are _not_ block variables. Thus, separate block var args from the rest
+    val (bvars, other) = bparams.zip(bargs).partition {
+      case (_, _: Block.BlockVar) => true
+      case _ => false
+    }
+    // (4) Substitute. Only substitute block var args, other block args are bound before the inlinee's body
+    val substBody = substitutions.substitute(renamedBlock.body)(using substitutions.Substitution(
+      (tparams zip targs).toMap,
+      (cparams zip bargs.map(_.capt)).toMap,
+      (vparams.map(_.id) zip vargs).toMap,
+      bvars.map { (bp, bv) => bp.id -> bv }.toMap
+    ))
+    // (5) Bind all block arguments that are not block variables
+    bindBlocks(substBody, other)
+  }
+
+  override def stmt(using ctx: Context): PartialFunction[Stmt, Stmt] = {
+    case app @ Stmt.App(v: BlockVar, targs, vargs, bargs) if shouldInline(v.id) =>
+      val vas = vargs.map(rewrite)
+      val bas = bargs.map(rewrite)
+      blockFor(v.id).map {
+        case block: Block.BlockLit =>
+          inlineApp(block, targs, vargs, bargs)
+        case b =>
+          Stmt.App(b, targs, vargs, bargs)
+      }.getOrElse(Stmt.App(v, targs, vas, bas))
+    case Stmt.Invoke(v: BlockVar, method, methodTpe, targs, vargs, bargs) if shouldInline(v.id) =>
+      val vas = vargs.map(rewrite)
+      val bas = bargs.map(rewrite)
+      blockFor(v.id).collect {
+        case b@Block.New(Implementation(interface, operations)) =>
+          val op = operations.find { op => op.name == method }.get
+          val b: Block.BlockLit = Block.BlockLit(op.tparams, op.cparams, op.vparams, op.bparams, op.body)
+          inlineApp(b, targs, vas, bas)
+      }.getOrElse(Stmt.Invoke(v, method, methodTpe, targs, vas, bas))
+    case Stmt.Def(id, block, body) =>
+      val b = rewrite(block)(using ctx)
+      given Context = ctx.bind(id, b)
+      Stmt.Def(id, b, rewrite(body))
+    case Stmt.Let(id, binding, body) =>
+      val expr = rewrite(binding)(using ctx)
+      given Context = ctx.bind(id, expr)
+      Stmt.Let(id, expr, rewrite(body))
+  }
+
+  override def expr(using Context): PartialFunction[Expr, Expr] = {
+    case v@Expr.ValueVar(id, tpe) if shouldInline(id) =>
+      val e = exprFor(id)
+      //util.trace("inlining", id)
+      e match {
+        case Some(p: Expr.Make) => p
+        case Some(p: Expr.Literal) => p
+        case Some(p: Expr.Box) => p
+        case Some(other) if other.capt.isEmpty => other
+        case _ => v
+      }
+  }
+
+  override def toplevel(using ctx: Context): PartialFunction[Toplevel, Toplevel] = {
+    case Toplevel.Def(id, block) =>
+      given Context = ctx.bind(id, block)
+      Toplevel.Def(id, rewrite(block))
+    case Toplevel.Val(id, binding) =>
+      Toplevel.Val(id, rewrite(binding))
+  }
+}

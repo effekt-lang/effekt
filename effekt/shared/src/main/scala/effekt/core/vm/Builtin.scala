@@ -7,6 +7,7 @@ import effekt.util.UByte
 import java.io.PrintStream
 import scala.util.matching as regex
 import scala.util.matching.Regex
+import scala.Conversion
 
 trait Runtime {
   def out: PrintStream
