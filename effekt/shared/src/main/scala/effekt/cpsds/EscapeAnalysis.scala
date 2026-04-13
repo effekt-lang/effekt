@@ -40,10 +40,6 @@ private class EscapeAnalysis(
       }
       analyze(rest)
 
-    case Stmt.Val(id, binding, rest) =>
-      analyze(binding)
-      analyze(rest)
-
     case Stmt.Let(id, binding, rest) =>
       escapes(binding)
       analyze(rest)

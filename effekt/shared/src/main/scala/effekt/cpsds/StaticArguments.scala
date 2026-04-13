@@ -130,9 +130,6 @@ object StaticArguments {
     case Stmt.New(id, interface, operations, rest) =>
       Stmt.New(id, interface, operations.map(rewrite), rewrite(rest))
 
-    case Stmt.Val(id, binding, rest) =>
-      Stmt.Val(id, rewrite(binding), rewrite(rest))
-
     case Stmt.Let(id, binding, rest) =>
       Stmt.Let(id, rewrite(binding), rewrite(rest))
 

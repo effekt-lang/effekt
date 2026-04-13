@@ -79,9 +79,6 @@ object Inliner {
     case Stmt.Invoke(id, method, args) =>
       Stmt.Invoke(id, method, args.map(e => rewrite(e, analysis)))
 
-    case Stmt.Val(id, binding, rest) =>
-      Stmt.Val(id, rewrite(binding, analysis), rewrite(rest, analysis))
-
     case Stmt.If(cond, thn, els) =>
       Stmt.If(rewrite(cond, analysis), rewrite(thn, analysis), rewrite(els, analysis))
 
