@@ -53,6 +53,7 @@ class Deadcode(reachable: Map[Id, Usage])
           case e: Extern.Def if used(e.id) || List("show", "showBuiltin", "infixPlusPlus").contains(e.id.name.name) => e
           case e: Extern.Include => e
           case e: Extern.Data if used(e.id) => e
+          case e: Extern.Interface if used(e.id) => e
         },
         // drop unreachable definitions
         definitions.collect { case d if used(d.id) => rewrite(d) },

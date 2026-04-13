@@ -12,12 +12,12 @@ class Reachable(
 ) {
 
   // TODO we could use [[Binding]] here.
-  type Definitions = Map[Id, Block | Expr | Stmt | Extern.Def | Extern.Data | Declaration | (Property, Declaration.Interface)]
+  type Definitions = Map[Id, Block | Expr | Stmt | Extern.Def | Declaration | (Property, Declaration.Interface)]
 
   private def update(id: Id, u: Usage): Unit = reachable = reachable.updated(id, u)
   private def usage(id: Id): Usage = reachable.getOrElse(id, Usage.Never)
 
-  def processDefinition(id: Id, d: Block | Expr | Stmt | Extern.Def | Extern.Data | Declaration | (Property, Declaration.Interface))(using defs: Definitions): Unit = {
+  def processDefinition(id: Id, d: Block | Expr | Stmt | Extern.Def | Declaration | (Property, Declaration.Interface))(using defs: Definitions): Unit = {
     if stack.contains(id) then { update(id, Usage.Recursive); return }
 
     seen = seen + id
@@ -34,7 +34,6 @@ class Reachable(
       case expr: Expr => process(expr)
       case binding: Stmt => process(binding)
       case extern: Extern.Def => process(extern)
-      case extern: Extern.Data => process(extern)
       case decl: Declaration => process(decl)
       case (p: Property, d: Declaration.Interface) =>
         process(p.tpe); process(d.id)
@@ -81,7 +80,6 @@ class Reachable(
   def process(p: ValueParam)(using defs: Definitions): Unit = process(p.tpe)
   def process(p: BlockParam)(using defs: Definitions): Unit = process(p.tpe)
 
-  def process(e: Extern.Data)(using defs: Definitions): Unit = ()
   def process(d: Declaration)(using defs: Definitions): Unit =
     d match {
       case Declaration.Data(id, tparams, constructors) =>
@@ -189,7 +187,7 @@ class Reachable(
 
 object Reachable {
   def apply(entrypoints: Set[Id], m: ModuleDecl): Map[Id, Usage] = {
-    val definitions: Map[Id, Block | Expr | Stmt | Extern.Def | Extern.Data | Declaration | (Property, Declaration.Interface)] = (m.definitions.map {
+    val definitions: Map[Id, Block | Expr | Stmt | Extern.Def | Declaration | (Property, Declaration.Interface)] = (m.definitions.map {
       case Toplevel.Def(id, block) => id -> block
       case Toplevel.Val(id, binding) => id -> binding
     } ++ m.declarations.flatMap { d =>
@@ -201,7 +199,6 @@ object Reachable {
     }
       ++ m.externs.collect {
       case d @ Extern.Def(id, _, _, _, _, _, _, _) => id -> d
-      case d @ Extern.Data(id, tps, body) => d.id -> d
     }).toMap
     val initialUsage = entrypoints.map { id => id -> Usage.Recursive }.toMap
     val analysis = new Reachable(initialUsage, Nil, Set.empty)
