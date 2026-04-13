@@ -45,6 +45,13 @@ object Transformer {
         case core.ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
       }
       Extern.Data(id, tparams, tBody)
+    case core.Extern.Interface(id, tparams, body) =>
+      val tBody = body match {
+        case core.ExternBody.StringExternBody(ff, Template(strings, args)) =>
+          ExternBody.StringExternBody(ff, Template(strings, args.map { absurd => absurd }))
+        case core.ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
+      }
+      Extern.Interface(id, tparams, tBody)
   }
 
   def transform(externBody: core.ExternBody[core.Expr])(using TransformationContext): ExternBody[Expr] = externBody match {

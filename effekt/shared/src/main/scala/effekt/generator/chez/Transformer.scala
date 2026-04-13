@@ -140,6 +140,9 @@ trait Transformer {
 
     case Extern.Data(id, tparams, body) =>
       None
+
+    case Extern.Interface(id, tparams, body) =>
+      None
   }
 
   def toChez(t: Template[core.Expr]): chez.Expr =

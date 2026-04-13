@@ -133,6 +133,7 @@ case class Property(id: Id, tpe: BlockType) extends Tree
  */
 enum Extern extends Tree {
   case Data(id: Id, tparams: List[Id], body: ExternBody[Nothing])
+  case Interface(id: Id, tparams: List[Id], body: ExternBody[Nothing])
   case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody[Expr])
   case Include(featureFlag: FeatureFlag, contents: String)
 }
@@ -490,7 +491,7 @@ object Tree {
       case e: ExternBody.Unsupported => e
     }
     def rewrite(e: Extern): Extern= e match {
-      case e @ (Extern.Data(_,_,_) | Extern.Include(_,_)) => e
+      case e @ (Extern.Data(_,_,_) | Extern.Include(_,_) | Extern.Interface(_,_,_)) => e
       case Extern.Def(id, tps, cps, vps, bps, ret, capts, body) =>
         Extern.Def(id, tps, cps, vps, bps, ret, capts, rewrite(body))
     }
@@ -722,6 +723,7 @@ object Tree {
           rewrite(ret), rewrite(annotatedCapture), rewrite(body).run())
       case Extern.Include(featureFlag, contents) => e
       case Extern.Data(id, tparams, body) => Extern.Data(rewrite(id), tparams.map(rewrite), body)
+      case Extern.Interface(id, tparams, body) => Extern.Interface(rewrite(id), tparams.map(rewrite), body)
     }
 
     def rewrite(d: Declaration): Declaration = d match {

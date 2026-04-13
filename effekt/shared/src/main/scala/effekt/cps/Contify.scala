@@ -23,6 +23,8 @@ object Contify {
       Extern.Def(id, vparams, bparams, async, rewrite(body))
     case Extern.Data(id, tps, body) =>
       Extern.Data(id, tps, body)
+    case Extern.Interface(id, tps, body) =>
+      Extern.Interface(id, tps, body)
     case include: Extern.Include => include
   }
 

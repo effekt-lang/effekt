@@ -73,6 +73,14 @@ object TransformerCPS {
       chez.RawDef(s";; extern type ${id.show}${ttps} = ${body}")
     case Extern.Data(id, tps, ExternBody.Unsupported(err)) =>
       chez.RawDef(s";; unsupported extern type ${id.show}: ${err}")
+    case Extern.Interface(id, tps, ExternBody.StringExternBody(_, body)) =>
+      val ttps = tps match {
+        case Nil => ""
+        case tps => tps.map { x => x.show }.mkString(", ")
+      }
+      chez.RawDef(s";; extern interface ${id.show}${ttps} = ${body}")
+    case Extern.Interface(id, tps, ExternBody.Unsupported(err)) =>
+      chez.RawDef(s";; unsupported extern interface ${id.show}: ${err}")
     case Extern.Include(_, contents) =>
       chez.RawDef(contents)
   }

@@ -40,6 +40,7 @@ case class Program(declarations: List[Declaration], program: List[Definition], e
 enum Declaration {
   case Extern(name: String, parameters: Environment, returnType: Type, async: Boolean, body: ExternBody[Variable])
   case ExternType(name: String, tparams: List[String], body: ExternBody[Nothing])
+  case ExternInterface(name: String, tparams: List[String], body: ExternBody[Nothing])
   case Include(featureFlag: FeatureFlag, contents: String)
 }
 export Declaration.*

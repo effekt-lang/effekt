@@ -77,6 +77,14 @@ object Transformer {
         case core.ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
       }
       ExternType(transform(id), tparams.map(transform), tBody)
+
+    case core.Extern.Interface(id, tparams, body) =>
+      val tBody = body match {
+        case core.ExternBody.StringExternBody(featureFlag, Template(strings, args)) =>
+          ExternBody.StringExternBody(featureFlag, Template(strings, args.map{ absurd => absurd }))
+        case core.ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
+      }
+      ExternInterface(transform(id), tparams.map(transform), tBody)
   }
 
   def transform(body: core.ExternBody[core.Expr])(using ErrorReporter): machine.ExternBody[Variable] = body match {

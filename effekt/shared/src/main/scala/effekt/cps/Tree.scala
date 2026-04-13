@@ -50,6 +50,7 @@ enum ToplevelDefinition {
 enum Extern extends Tree {
   case Def(id: Id, vparams: List[Id], bparams: List[Id], async: Boolean, body: ExternBody[Expr])
   case Data(id: Id, tparams: List[Id], body: ExternBody[Nothing])
+  case Interface(id: Id, tparams: List[Id], body: ExternBody[Nothing])
   case Include(featureFlag: FeatureFlag, contents: String)
 }
 sealed trait ExternBody[+T] extends Tree
