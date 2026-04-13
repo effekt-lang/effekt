@@ -93,9 +93,6 @@ enum Stmt extends Tree {
   case Def(id: Id, params: List[Id], body: Stmt, rest: Stmt)
   case New(id: Id, interface: BlockType.Interface, operations: List[Operation], rest: Stmt)
 
-  // this is direct style sequencing with the invariant that the binding needs to return using the return continuation
-  case Val(id: Id, binding: Stmt, rest: Stmt)
-
   // also all continuations are named so that we can analyze their usage and jump to them as labels
   case Let(id: Id, binding: Expr, rest: Stmt)
   case App(id: Id, args: List[Expr])
@@ -237,10 +234,6 @@ object substitutions {
       Stmt.New(id, interface, operations.map(substitute),
         substitute(rest)(using subst.shadow(id)))
 
-    case Stmt.Val(id, binding, rest) =>
-      Stmt.Val(id, substitute(binding),
-        substitute(rest)(using subst.shadow(id)))
-
     case Stmt.Let(id, binding, rest) =>
       Stmt.Let(id, substitute(binding),
         substitute(rest)(using subst.shadow(id)))
@@ -341,9 +334,6 @@ object freeVariables {
         op.body.free -- op.params.toSet
       }.toSet
       opsFree ++ (rest.free - id)
-
-    case Stmt.Val(id, binding, rest) =>
-      binding.free ++ (rest.free - id)
 
     case Stmt.Let(id, binding, rest) =>
       binding.free ++ (rest.free - id)

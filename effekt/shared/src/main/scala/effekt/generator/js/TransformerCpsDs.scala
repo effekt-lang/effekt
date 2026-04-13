@@ -233,14 +233,6 @@ object TransformerCpsDs extends Transformer {
         allBackups ++ List(js.Const(nameDef(id), jsObj)) ++ toJS(rest).run(k)
       }
 
-    // --- Val ---
-    case cpsds.Stmt.Val(id, binding, rest) =>
-      Binding { k =>
-        js.Let(nameDef(id), js.Undefined) ::
-          toJS(binding).stmts ++
-          toJS(rest).run(k)
-      }
-
     // --- Let ---
     case cpsds.Stmt.Let(id, binding, rest) =>
       Binding { k =>
