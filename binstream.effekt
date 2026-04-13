@@ -1,0 +1,403 @@
+import option
+import stringbuffer
+import stream
+import char
+import test
+import io/error
+import bytearray
+
+// assumes by default:
+// BE byteorder, BE bitorder, unsigned
+
+// Wrappers
+// --------
+record BE[A](raw: A)
+record LE[A](raw: A)
+record OfWidth[A](raw: A, width: Int)
+record Signed[A](raw: A)
+
+/// Bits
+type Bit { B0(); B1() }
+
+/// Effect alias
+effect HexSplices = {
+  splice[Char], splice[String], 
+  splice[Unit], 
+  splice[Int],
+  splice[Byte],
+  splice[BE[Int]], splice[LE[Int]],
+  splice[LE[Signed[Int]]], splice[OfWidth[LE[Int]]], splice[OfWidth[LE[Signed[Int]]]],
+  splice[BE[Signed[Int]]], splice[OfWidth[BE[Int]]], splice[OfWidth[BE[Signed[Int]]]],
+  splice[ByteArray]
+}
+
+// Splitting
+// ---------
+def bytesLE(int: Int, w: Int): Unit / emit[Byte] = {
+  var c = int
+  repeat(w){
+    do emit(mod(c, 256).toByte)
+    c = c / 256
+  }
+}
+def bytesLE(int: Int): Unit / emit[Byte] = bytesLE(int, 4)
+def bytesBE(n: Int, width: Int): Unit / emit[Byte] = {
+  var pos = pow(256, width - 1)
+  repeat(width){
+    do emit((bitwiseAnd(n, pos * 255) / pos).toByte)
+    pos = pos / 256
+  }
+}
+def bytesBE(n: Int): Unit / emit[Byte] = bytesBE(n, 4)
+def bytes(n: Int): Unit / emit[Byte] = bytesBE(n)
+def signedBytesLE(int: Int, width: Int): Unit / emit[Byte] = {
+  if (int < 0) {
+    bytesLE(bitwiseNot(neg(int)) + 1, width)
+  } else {
+    bytesLE(int, width)
+  }
+}
+def signedBytesBE(int: Int, width: Int): Unit / emit[Byte] = {
+  if (int < 0) {
+    bytesBE(bitwiseNot(neg(int)) + 1, width)
+  } else {
+    bytesBE(int, width)
+  }
+}
+def signedBytesLE(int: Int): Unit / emit[Byte] = signedBytesLE(int, 4)
+def signedBytesBE(int: Int): Unit / emit[Byte] = signedBytesBE(int, 4)
+def bitsBE(int: Int): Unit / emit[Bit] = bitsBE(int, 32)
+def collectBitsBE{ body: => Unit / emit[Bit] }: Int = {
+  var res = 0
+  try body() with emit[Bit] { b =>
+    res = b match {
+      case B0() => res * 2
+      case B1() => res * 2 + 1
+    }
+    resume(())
+  }
+  res
+}
+def not(b: Bit): Bit = b match {
+  case B0() => B1()
+  case B1() => B0()
+}
+def bitwiseNot(n: Int): Int = {
+  collectBitsBE{
+    try bitsBE(n) with emit[Bit]{ b => resume(do emit(not(b))) }
+  }
+}
+
+// Splicers
+// --------
+
+def hex{ body: => Unit / { literal, HexSplices } }: Unit / emit[Byte] = {
+  try {
+    try {
+      body()
+    }
+    with splice[String] { s =>
+      feed(s){ exhaustively{ do splice[Char](do read[Char]()) } }
+      resume(())
+    }
+    with splice[ByteArray] { ba =>
+      ba.foreach{ b => do splice[Byte](b) }
+      resume(())
+    }
+  }
+  with literal { s =>
+      feed(s){
+        exhaustively {
+          with on[MissingValue].default{ () }
+          val upper: Int = hexDigitValue(do read[Char]()).value
+          val lower: Int = hexDigitValue(do read[Char]()).value
+          do emit[Byte]((16 * upper + lower).toByte)
+        }
+      }
+      resume(())
+    }
+  with splice[Char] { c => do emit[Byte](c.toInt.toByte); resume(()) }
+  with splice[Byte] { b => do emit(b); resume(()) }
+  with splice[Unit] { u => resume(()) }
+  with splice[Int] { n => bytesBE(n); resume(()) }
+  with splice[LE[Int]] { w => bytesLE(w.raw); resume(()) }
+  with splice[BE[Int]] { v => bytesBE(v.raw); resume(()) }
+  with splice[LE[Signed[Int]]] { w => signedBytesLE(w.raw.raw); resume(()) }
+  with splice[OfWidth[LE[Int]]] { w => bytesLE(w.raw.raw, w.width); resume(()) }
+  with splice[OfWidth[LE[Signed[Int]]]] { w => signedBytesLE(w.raw.raw.raw, w.width); resume(()) }
+  with splice[BE[Signed[Int]]] { w => signedBytesBE(w.raw.raw); resume(()) }
+  with splice[OfWidth[BE[Int]]] { w => bytesBE(w.raw.raw, w.width); resume(()) }
+  with splice[OfWidth[BE[Signed[Int]]]] { w => signedBytesBE(w.raw.raw.raw, w.width); resume(()) }
+}
+
+def x{ body: => Unit / { literal, HexSplices } }: Int = {
+  var res = 0
+  for[Byte]{ hex{body} }{ v => res = res * 256 + v.toInt }
+  res
+}
+
+// Counting and padding
+// --------------------
+effect pad[A](fac: Int){ gen: => A }: Unit
+effect getPos(): Int
+def tracking[A](init: Int){ body: => Unit / { emit[A], getPos, pad[A] } }: Unit / emit[A] = {
+  var n = init
+  try body()
+  with emit[A] { b => n = n + 1; resume(do emit[A](b)) }
+  with getPos{ resume(n) }
+  with pad[A] { fac => 
+    resume { {gen} =>
+      while(mod(n, fac) != 0){
+        do emit[A](gen())
+        n = n + 1
+      }
+    }
+  }
+}
+def tracking[A]{ body: => Unit / { emit[A], getPos, pad[A] } }: Unit / emit[A] =
+  tracking[A](0){body}
+
+// Sub-Byte
+// ========
+
+// From/to Bytes
+// -------------
+def bitsLE(byte: Byte): Unit / emit[Bit] = {
+  val v = byte.toInt
+  var mask = 1
+  repeat(8){
+    bitwiseAnd(v, mask) match {
+      case 0 => do emit(B0())  
+      case _ => do emit(B1())
+    }
+    mask = mask * 2
+  }
+}
+def bitsBE(byte: Byte): Unit / emit[Bit] = {
+  val v = byte.toInt
+  var mask = 128
+  repeat(8){
+    bitwiseAnd(v, mask) match {
+      case 0 => do emit(B0())  
+      case _ => do emit(B1())
+    }
+    mask = mask / 2
+  }
+}
+def bits(byte: Byte): Unit / emit[Bit] = bitsBE(byte)
+def bitsLE(v: Int, width: Int): Unit / emit[Bit] = {
+  var mask = 1
+  repeat(width){
+    bitwiseAnd(v, mask) match {
+      case 0 => do emit(B0())  
+      case _ => do emit(B1())
+    }
+    mask = mask * 2
+  }
+}
+def pow(n: Int, exp: Int): Int = {
+  def go(n: Int, exp: Int, acc: Int): Int = {
+    if (exp == 0) {
+      acc 
+    } else if (mod(exp, 2) == 0) {
+      go(n * n, exp / 2, acc)
+    } else {
+      go(n * n, exp / 2, acc * n)
+    }
+  }
+  go(n, exp, 1)
+}
+def bitsBE(v: Int, width: Int): Unit / emit[Bit] = {
+  var mask = pow(2, width - 1)
+  repeat(width){
+    bitwiseAnd(v, mask) match {
+      case 0 => do emit(B0())  
+      case _ => do emit(B1())
+    }
+    mask = mask / 2
+  }
+}
+def ungroupBytes{ body: => Unit / emit[Byte] }: Unit / emit[Bit] =
+  for[Byte]{body}{ b => bits(b) }
+def twoscomplementLE{ body: => Unit / emit[Bit] }: Unit / emit[Bit] = {
+  var carry = true
+  try body()
+  with emit[Bit] {
+    case B0() => if(carry) { do emit(B0()) } else { do emit(B1()) }; resume(())
+    case B1() => if(carry) { do emit(B1()); carry = false } else { do emit(B0()) }; resume(())
+  }
+}  
+def groupBytesBE{ body: => Unit / emit[Bit] }: Unit / emit[Byte] = {
+  var next = 0
+  var p = 128
+  for[Bit]{body}{ b =>
+    b match {
+      case B0() => ()
+      case B1() => next = next + p
+    }
+    p = p / 2
+    if(p == 0) {
+      do emit(next.toByte)
+      next = 0
+      p = 128
+    }
+  }
+}
+def groupBytesLE{ body: => Unit / emit[Bit] }: Unit / emit[Byte] = {
+  var next = 0
+  var p = 1
+  for[Bit]{body}{ b =>
+    b match {
+      case B0() => ()
+      case B1() => next = next + p
+    }
+    p = p * 2
+    if(p == 256) {
+      do emit(next.toByte)
+      next = 0
+      p = 1
+    }
+  }
+}
+def groupBytes{ body: => Unit / emit[Bit] }: Unit / emit[Byte] =
+  groupBytesBE{body}
+
+def nth[A](n: Int){ body: => Unit / emit[A] }: A / Exception[MissingValue] = {
+  var m = n
+  try {
+    body()
+    val r: A = do raise[MissingValue](MissingValue(), "code in first did not emit any values")
+    r
+  } with emit[A] { a => 
+    if (m == 0) {
+      a
+    } else {
+      m = m - 1
+      resume(())
+    }
+  }
+}
+def first[A]{ body: => Unit / emit[A] }: A / Exception[MissingValue] = {
+  try {
+    body()
+    val r: A = do raise[MissingValue](MissingValue(), "code in first did not emit any values")
+    r
+  } with emit[A] { a => a }
+}
+// Literals/splices
+// ----------------
+effect BinSplices = {
+  splice[Unit], splice[Bit],
+  splice[Byte],
+  splice[LE[Int]], splice[BE[Int]],
+  splice[LE[Signed[Int]]], splice[BE[Signed[Int]]],
+  splice[OfWidth[LE[Int]]], splice[OfWidth[BE[Int]]],
+  splice[OfWidth[LE[Signed[Int]]]], splice[OfWidth[BE[Signed[Int]]]]
+}
+def bit{ body: => Unit / { literal, BinSplices } }: Unit / emit[Bit] = {
+  try {
+    ungroupBytes{
+      try {
+        body()
+      }
+      with splice[LE[Int]] { i => bytesLE(i.raw); resume(()) }
+      with splice[BE[Int]] { i => bytesBE(i.raw); resume(()) }
+      with splice[LE[Signed[Int]]] { i => signedBytesLE(i.raw.raw); resume(()) }
+      with splice[BE[Signed[Int]]] { i => signedBytesBE(i.raw.raw); resume(()) }
+    }
+  }
+  with literal { s =>
+    feed(s){
+      exhaustively {
+        do read[Char]() match {
+          case '0' => do emit(B0())
+          case '1' => do emit(B1())
+          case _ => ()
+        }
+      }
+    }
+    resume(())
+  }
+  with splice[Unit] { _ => resume(()) }
+  with splice[Bit] { b => do emit(b); resume(()) }
+  with splice[Byte] { b => bits(b); resume(()) }
+  with splice[OfWidth[LE[Int]]] { i =>
+    bitsLE(i.raw.raw, i.width)
+    resume(())
+  }
+  with splice[OfWidth[LE[Signed[Int]]]] { i =>
+    if(i.raw.raw.raw < 0){
+      twoscomplementLE{ bitsLE(0 - i.raw.raw.raw, i.width) }
+    } else {
+      bitsLE(i.raw.raw.raw, i.width)
+    }
+    resume(())
+  }
+  with splice[OfWidth[BE[Int]]] { i =>
+    bitsBE(i.raw.raw, i.width)
+    resume(())
+  }
+  with splice[OfWidth[BE[Signed[Int]]]] { i =>
+    collectList[Bit]{
+      if(i.raw.raw.raw < 0){
+        twoscomplementLE{ bitsLE(0 - i.raw.raw.raw, i.width) }
+      } else {
+        bitsLE(i.raw.raw.raw, i.width)
+      }
+    }.reverse.each
+    resume(())
+  }
+}
+
+namespace examples {
+  def main() = {
+    mainSuite("Simple literals"){
+      test("literal hex 10"){ assertEqual(x"10${()}", 16) }
+      test("literal hex ff"){ assertEqual(x"ff${()}", 255) }
+      test("literal char a"){ assertEqual(x"${'a'}", x"61${()}") }
+      test("literal string ba"){ assertEqual(x"${"ba"}", x"62${()}" * 256 + x"61${()}") }
+      test("int back-and-forth (17)"){ assertEqual(x"${17}", 17)}
+      test("int back-and-forth (17), explicit BE"){ assertEqual(x"${17.BE}", 17) }
+      test("int back-and-forth (17), explicit LE"){ assertEqual(x"${17.LE}", 17 * 256 * 256 * 256) }
+      test("byte 00101010"){
+        with on[MissingValue].default{ assertEqual(true, false) }
+        assertEqual(first[Byte]{groupBytes{ bit"00101010${()}" }}.toInt, 42)
+      }
+      test("to bits and back"){ 
+        with on[MissingValue].default{ assertEqual(true, false) }
+        [42.toByte, 12.toByte, 113.toByte, 0.toByte, 255.toByte].foreach{ v =>
+          assertEqual(first[Byte]{ groupBytes{ bits(v) } }, v)
+        }
+      }
+      test("to bits and back LE bitorder"){ 
+        with on[MissingValue].default{ assertEqual(true, false) }
+        [42.toByte, 12.toByte, 113.toByte, 0.toByte, 255.toByte].foreach{ v =>
+          assertEqual(first[Byte]{ groupBytesLE{ bitsLE(v) } }, v)
+        }
+      }
+      test("to bits and back BE bitorder"){ 
+        with on[MissingValue].default{ assertEqual(true, false) }
+        [42.toByte, 12.toByte, 113.toByte, 0.toByte, 255.toByte].foreach{ v =>
+          assertEqual(first[Byte]{ groupBytesBE{ bitsBE(v) } }, v)
+        }
+      }
+      test("append 0 means *2"){
+        with on[MissingValue].default{ assertEqual(true, false) }
+        [42.toByte, 12.toByte, 127.toByte].foreach{ v =>
+          assertEqual(nth[Byte](1){ groupBytes{ repeat(7){ do emit(B0()) }; bits(v); do emit(B0()) } }, (v.toInt * 2).toByte)
+        }
+      }
+      test("pow agrees with double one"){
+        assertEqual(pow(2,5), pow(2.0,5).toInt)
+      }
+      test("LE 2s-complement"){
+        with on[MissingValue].default{ assertEqual(true, false) }
+        assertEqual(first[Byte]{ groupBytesLE{ twoscomplementLE{ bitsLE(6.toByte) } } }, 250.toByte)
+      }
+      test("BE 2s-complement"){
+        with on[MissingValue].default{ assertEqual(true, false) }
+        assertEqual(first[Byte]{ groupBytesBE{ bit"${-6.Signed.BE.OfWidth(8)}" } }, 250.toByte)
+      }
+    }
+  }
+}
