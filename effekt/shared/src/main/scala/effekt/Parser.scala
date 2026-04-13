@@ -717,7 +717,9 @@ class Parser(tokens: Seq[Token], source: Source) {
       maybeExternBodies(fail("extern type's do not support splices"))(fail("extern type`s do not support Effekt right hand sides.")),
       info, span())
   def externInterface(info: Info): Def =
-    ExternInterface(`interface` ~> idDef(), maybeTypeParams().unspan, info, span())
+    ExternInterface(`interface` ~> idDef(), maybeTypeParams().unspan,
+      maybeExternBodies(fail("extern type's do not support splices"))(fail("extern type`s do not support Effekt right hand sides.")),
+      info, span())
   def externResource(info: Info): Def =
     ExternResource(`resource` ~> idDef(), blockTypeAnnotation(), info, span())
   def externInclude(info: Info): Def =

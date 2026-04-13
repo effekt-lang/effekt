@@ -431,7 +431,7 @@ enum Def extends Definition {
 
   case ExternResource(id: IdDef, tpe: BlockType, info: Info, span: Span)
 
-  case ExternInterface(id: IdDef, tparams: List[Id], info: Info, span: Span)
+  case ExternInterface(id: IdDef, tparams: List[Id], bodies: Many[ExternBody[Nothing, Nothing]], info: Info, span: Span)
 
   /**
    * Namer resolves the path and loads the contents in field [[contents]]

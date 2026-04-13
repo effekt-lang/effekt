@@ -284,7 +284,7 @@ trait DocumentationGenerator {
       "span" -> generate(span),
     ))
 
-    case Def.ExternInterface(id, tparams, info, span) => obj(HashMap(
+    case Def.ExternInterface(id, tparams, bodies, info, span) => obj(HashMap(
       "kind" -> str("ExternInterface"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams),

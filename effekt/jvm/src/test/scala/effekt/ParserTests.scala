@@ -1379,7 +1379,24 @@ class ParserTests extends munit.FunSuite {
     val definition = parseToplevel(source.content)
 
     val extIfc = definition match {
-      case ei@ExternInterface(id, tparams, doc, span) => ei
+      case ei@ExternInterface(id, tparams, bodies, doc, span) => ei
+      case other =>
+        throw new IllegalArgumentException(s"Expected ExternInterface but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(extIfc.span, span)
+  }
+
+  test("Extern interface definition with right-hand side parses with correct span") {
+    val (source, span) =
+      raw"""extern interface IFace[T] = be "foo"
+           |↑                                  ↑
+           |""".sourceAndSpan
+
+    val definition = parseToplevel(source.content)
+
+    val extIfc = definition match {
+      case ei@ExternInterface(id, tparams, bodies, doc, span) => ei
       case other =>
         throw new IllegalArgumentException(s"Expected ExternInterface but got ${other.getClass.getSimpleName}")
     }
