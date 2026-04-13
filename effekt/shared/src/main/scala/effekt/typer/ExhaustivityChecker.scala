@@ -96,30 +96,98 @@ object ExhaustivityChecker {
     case Child(c: Constructor, field: Field, outer: Trace)
   }
 
+  private def cartesianProduct[A](lists: List[List[A]]): List[List[A]] =
+    lists.foldRight(List(List.empty[A])) { (heads, tails) =>
+      for {
+        h <- heads; t <- tails
+      } yield h :: t
+    }
 
-  def preprocess(roots: List[source.Term], cl: source.MatchClause)(using Context): Clause = (roots, cl) match {
-    case (List(root), source.MatchClause(pattern, guards, body, _)) =>
-      Clause.normalized(Condition.Patterns(Map(Trace.Root(root) -> preprocessPattern(pattern))) :: guards.map(preprocessGuard), cl)
-    case (roots, source.MatchClause(MultiPattern(patterns, _), guards, body, _)) =>
-      val rootConds: Map[Trace, Pattern] = (roots zip patterns).map { case (root, pattern) =>
-        Trace.Root(root) -> preprocessPattern(pattern)
+  /**
+   * Translates a source match pattern into an internal representation [[ Pattern ]].
+   * A single source match pattern may contain OR patterns, hence this function returns an expanded list of [[ Pattern ]].
+   */
+  private def preprocessPattern(p: source.MatchPattern)(using Context): List[Pattern] = p match {
+    case AnyPattern(_, _) => List(Pattern.Any())
+    case IgnorePattern(_) => List(Pattern.Any())
+    case p @ TagPattern(id, patterns, _) =>
+      val fieldAlts: List[List[Pattern]] = patterns.map(preprocessPattern)
+      // `CTor(P1 | P2, P3 | P4)` to `CTor(P1, P3), CTor(P1, P4), CTor(P2, P3), CTor(P2, P4)`
+      cartesianProduct(fieldAlts).map(fields => Pattern.Tag(p.definition, fields))
+    case LiteralPattern(lit, _) => List(Pattern.Literal(lit.value, lit.tpe))
+    case OrPattern(patterns, _) => patterns.flatMap(preprocessPattern)
+    // MultiPattern must only occur on the toplevel and are already destructed by `preprocess`.
+    case MultiPattern(_, _) => Context.panic("Unreachable: nested MultiPattern")
+  }
+
+  private def collectTrace(p: source.MatchPattern, trace: Trace)(using Context): Map[symbols.Symbol, Trace] = p match {
+    case AnyPattern(id, _) => Map(id.symbol -> trace)
+    case IgnorePattern(_) => Map.empty
+    case p @ TagPattern(id, patterns, _) =>
+      patterns.zip(p.definition.fields).flatMap { (pattern, field) =>
+        collectTrace(pattern, Trace.Child(p.definition, field, trace))
       }.toMap
-      Clause.normalized(Condition.Patterns(rootConds) :: guards.map(preprocessGuard), cl)
-    case (_, _) => Context.abort("Malformed multi-match")
+    case LiteralPattern(_, _) => Map.empty
+    case MultiPattern(_, _) => Map.empty
+    case OrPattern(patterns, _) => patterns.flatMap(collectTrace(_, trace)).toMap
   }
-  def preprocessPattern(p: source.MatchPattern)(using Context): Pattern = p match {
-    case AnyPattern(id, _)  => Pattern.Any()
-    case IgnorePattern(_) => Pattern.Any()
-    case p @ TagPattern(id, patterns, _) => Pattern.Tag(p.definition, patterns.map(preprocessPattern))
-    case LiteralPattern(lit, _) => Pattern.Literal(lit.value, lit.tpe)
-    case MultiPattern(patterns, _) =>
-      Context.panic("Multi-pattern should have been split in preprocess already / nested MultiPattern")
-  }
-  def preprocessGuard(g: source.MatchGuard)(using Context): Condition = g match {
+
+  /**
+   * Translates a source match guard to the exhaustivity checker's internal representation of [[ Condition ]].
+   * Since match guard patterns may contain OR patterns, this function returns a list of conditions.
+   * For example, `case CTor(x) and x is CTor1(P1 | P2)` contains the match guard `x is CTor1(P1 | P2)` and is expanded
+   * to `List(Condition.Patterns(Map(x -> P1)), Condition.Patterns(Map(x -> P2)))`
+   */
+  private def preprocessGuard(g: source.MatchGuard, traces: Map[symbols.Symbol, Trace])(using Context): List[Condition] = g match {
     case MatchGuard.BooleanGuard(condition, _) =>
-      Condition.Guard(condition)
+      List(Condition.Guard(condition))
     case MatchGuard.PatternGuard(scrutinee, pattern, _) =>
-      Condition.Patterns(Map(Trace.Root(scrutinee) -> preprocessPattern(pattern)))
+      val trace = scrutinee match {
+        case source.Var(id, _) => traces.getOrElse(id.symbol, Trace.Root(scrutinee))
+        case _                 => Trace.Root(scrutinee)
+      }
+      preprocessPattern(pattern).map { p =>
+        Condition.Patterns(Map(trace -> p))
+      }
+  }
+
+  /**
+   * Translates a source match clause to the exhaustivity checker's internal representation of [[ Clause ]].
+   * OR patterns are expanded into a list of [[ Clause ]].
+   */
+  def preprocess(roots: List[source.Term], cl: source.MatchClause)(using Context): List[Clause] = {
+    def withGuards(baseConds: List[Condition], guards: List[source.MatchGuard], traces: Map[symbols.Symbol, Trace]): List[List[Condition]] =
+      guards.foldLeft(List(baseConds)) { (accClauses, guard) =>
+        val guardAlts = preprocessGuard(guard, traces)
+        accClauses.flatMap(conds => guardAlts.map(g => conds :+ g))
+      }
+
+    (roots, cl) match {
+      case (List(root), source.MatchClause(pattern, guards, body, _)) =>
+        val traces = collectTrace(pattern, Trace.Root(root))
+        for {
+          p     <- preprocessPattern(pattern)
+          base   = Condition.Patterns(Map(Trace.Root(root) -> p))
+          conds <- withGuards(List(base), guards, traces)
+        } yield Clause.normalized(conds, cl)
+
+      case (roots, source.MatchClause(MultiPattern(patterns, _), guards, body, _)) =>
+        val traces = (roots zip patterns).flatMap { case (root, pat) =>
+          collectTrace(pat, Trace.Root(root))
+        }.toMap
+        val perRootAlts: List[List[(Trace, Pattern)]] =
+          (roots zip patterns).map { case (root, pat) =>
+            preprocessPattern(pat).map(p => Trace.Root(root) -> p)
+          }
+        for {
+          pairs <- cartesianProduct(perRootAlts)
+          base   = Condition.Patterns(pairs.toMap)
+          conds <- withGuards(List(base), guards, traces)
+        } yield Clause.normalized(conds, cl)
+
+      case _ =>
+        List(Context.abort("Malformed multi-match"))
+    }
   }
 
   /**
@@ -201,7 +269,8 @@ object ExhaustivityChecker {
   }
 
   def checkExhaustive(scrutinees: List[source.Term], cls: List[source.MatchClause])(using C: Context): Unit = {
-    val initialClauses: List[Clause] = cls.map(preprocess(scrutinees, _))
+    // each source clause may expand into multiple internal clauses due to the use of OR patterns
+    val initialClauses: List[Clause] = cls.flatMap(preprocess(scrutinees, _))
     given E: Exhaustivity = new Exhaustivity(cls, scrutinees)
     checkScrutinees(scrutinees.map(Trace.Root(_)), scrutinees.map{ scrutinee => Context.inferredTypeOf(scrutinee) }, initialClauses)
     E.report()
@@ -232,7 +301,13 @@ object ExhaustivityChecker {
             val nestedPatterns  = (ctor.fields zip patterns).map { case (field, pattern) =>
               (Trace.Child(ctor, field, scrutinee) : Trace) -> pattern
             }.toMap
-            Some(cl - scrutinee ++ nestedPatterns)
+            val stripped = cl - scrutinee
+            stripped.conditions match {
+              case Condition.Patterns(existing) :: rest =>
+                Some(Clause.normalized(Condition.Patterns(nestedPatterns ++ existing) :: rest, cl.tree))
+              case _ =>
+                Some(Clause.normalized(Condition.Patterns(nestedPatterns) :: stripped.conditions, cl.tree))
+            }
 
           // drop clauses that match on a different constructor
           case Some(Pattern.Tag(other, patterns)) => None
@@ -303,7 +378,6 @@ object ExhaustivityChecker {
       case tpe @ (builtins.TInt | builtins.TDouble | builtins.TString | builtins.TBoolean | builtins.TUnit | builtins.TBottom | builtins.TChar | builtins.TByte) =>
         checkLiteral(tpe)
 
-        // missing.add(trace);
       case tpe =>
         clauses match {
           case Nil => E.missingDefault(tpe, scrutinee)
