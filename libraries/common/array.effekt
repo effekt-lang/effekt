@@ -659,12 +659,12 @@ def each[T](array: Array[T]): Unit / emit[T] = {
   go(0)
 }
 
-/// Connects `array` as a producer to a given pull stream `reader` acting as a consumer.
-def feed[T, R](array: Array[T]) { reader: () => R / read[T] }: R = {
+/// Connects `array` as a producer to a given pull stream `driver` acting as a consumer.
+def feed[T, R](array: Array[T]) { driver: () => R / next[T] }: R = {
   var i = 0
   try {
-    reader()
-  } with read[T] {
+    driver()
+  } with next[T] {
     resume {
       if (i < array.size) {
         val c = i

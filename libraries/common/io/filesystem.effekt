@@ -74,8 +74,8 @@ def appendFile(path: String, contents: String): Unit / Exception[IOError] = {
 def writeFileUTF8[R](path: String) { stream: () => R / emit[Char] }: R / Exception[IOError] =
   writeFile(path) { encodeUTF8 { stream() } }
 
-def readFileUTF8[R](path: String) { reader: () => R / read[Char] }: R / Exception[IOError] =
-  readFile(path) { decodeUTF8 { reader() } }
+def readFileUTF8[R](path: String) { driver: () => R / next[Char] }: R / Exception[IOError] =
+  readFile(path) { decodeUTF8 { driver() } }
 
 def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[IOError] = {
 
@@ -108,7 +108,7 @@ def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[I
   }
 }
 
-def readFile[R](path: String) { reader: () => R / read[Byte] }: R / Exception[IOError] = {
+def readFile[R](path: String) { driver: () => R / next[Byte] }: R / Exception[IOError] = {
 
   val file = openForReading(path);
   with on[IOError].finalize { close(file) }
@@ -128,8 +128,8 @@ def readFile[R](path: String) { reader: () => R / read[Byte] }: R / Exception[IO
   }
 
   try {
-    reader()
-  } with read[Byte] {
+    driver()
+  } with next[Byte] {
     resume {
       if (offset >= length) {
         pull()

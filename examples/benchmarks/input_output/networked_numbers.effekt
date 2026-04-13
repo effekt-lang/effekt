@@ -15,11 +15,11 @@ def emitBE(n: Int): Unit / emit[Byte] = {
 }
 
 /// Read a 4-byte big-endian integer, failing if any byte missing or invalid
-def readBE(): Int / { read[Byte], fail } = must {
-  do read().toInt.bitwiseShl(24).bitwiseOr(
-    do read().toInt.bitwiseShl(16).bitwiseOr(
-      do read().toInt.bitwiseShl(8).bitwiseOr(
-        do read().toInt
+def nextBE(): Int / { next[Byte], fail } = must {
+  do next().toInt.bitwiseShl(24).bitwiseOr(
+    do next().toInt.bitwiseShl(16).bitwiseOr(
+      do next().toInt.bitwiseShl(8).bitwiseOr(
+        do next().toInt
       )
     )
   )
@@ -32,7 +32,7 @@ def writeInt(connection: Connection, n: Int): Unit / Exception[IOError] = {
 }
 
 /// Read exactly 4 bytes and decode into a big-endian int
-def readInt(connection: Connection): Int / Exception[IOError] = {
+def nextInt(connection: Connection): Int / Exception[IOError] = {
   val buffer = bytearray::allocate(4)
   var offset = 0
   while (offset < 4) {
@@ -41,7 +41,7 @@ def readInt(connection: Connection): Int / Exception[IOError] = {
     offset = offset + r
   }
   try {
-    feed(buffer) { readBE()}
+    feed(buffer) { nextBE()}
   } with fail { panic("invalid int format") }
 }
 
@@ -52,13 +52,13 @@ def run(n: Int): Int = {
 
   val listener = bind("127.0.0.1", PORT)
 
-  // Server: for each connection, read n ints and echo each one back
+  // Server: for each connection, next n ints and echo each one back
   val _server = spawn(box {
     with on[IOError].panic
     listen(listener, box { connection =>
       with on[IOError].panic
       n.repeat {
-        connection.writeInt(connection.readInt())
+        connection.writeInt(connection.nextInt())
       }
       connection.close()
     })
@@ -71,7 +71,7 @@ def run(n: Int): Int = {
     var ok = true
     each(0, n) { i =>
       connection.writeInt(i)
-      val response = connection.readInt()
+      val response = connection.nextInt()
       if (response != i) { ok = false }
     }
     connection.close()
