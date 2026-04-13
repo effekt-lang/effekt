@@ -1,0 +1,6 @@
+def f[C, D](in: C, in2: D) = in
+def g[A, B](in: A, in2: B) = { f[B, A](in2, in) }
+def main() = {
+  println(g(3, "3"))
+  println(g('c', false))
+}
