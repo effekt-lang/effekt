@@ -3,19 +3,10 @@ module scanner
 import stream
 
 
-/// Return the next character, not advancing.
-/// That is, this does not change what any future calls on the Scanner return.
-effect peek[A](): A / stop
-
 effect Scan[A] = {next[A], peek[A]}
 
 /// Advance the pull stream to the next element, discarding the current element.
 def skip[A](): Unit / {next[A], stop} = { do next(); () }
-
-
-/// Run a scanner by reading from an input stream, discarding its output.
-def scanner[A] { scanner: () => Unit / Scan[A] }: Unit / next[A] =
-  returning::scanner[A, Unit]{scanner}
 
 def expect(message: String) { scanner: () => Unit / fail }: Unit / Exception[WrongFormat] =
   returning::expect[Unit](message){scanner}
@@ -202,36 +193,6 @@ def readDouble(): Double / { Scan[Char], fail} = {
 
 namespace returning {
 
-/// Run a scanner by reading from an input stream.
-def scanner[A, R] { scanner: () => R / Scan[A] }: R / next[A] = {
-  def upstream(): A / stop = do next()
-  var last = None()
-  try {
-    scanner()
-  } with peek[A] { () =>
-    resume {
-      last match {
-        case None() =>
-          val t = upstream()
-          last = Some(t)
-          return t
-        case Some(t) =>
-          return t
-      }
-    }
-  } with next[A] {
-    resume {
-      last match {
-        case None() =>
-          upstream()
-        case Some(t) =>
-          last = None()
-          return t
-      }
-    }
-  }
-}
-
 def expect[R](message: String) { scanner: () => R / fail }: R / Exception[WrongFormat] =
   try { scanner() } with fail { wrongFormat(message) }
 
@@ -251,7 +212,7 @@ namespace test {
     with on[WrongFormat].panic
     with expect("this grammar")
     with feed(input)
-    with scanner[Char]
+    with peeking[Char]
 
     skipWhitespace()
     println(readInteger().show)

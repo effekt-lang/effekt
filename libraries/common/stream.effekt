@@ -350,6 +350,16 @@ def nth[A](n: Int){ stream: () => Unit / emit[A] }: A / fail = {
   }
 }
 
+// Peeking
+// -------
+
+/// Return the next item without advancing.
+effect peek[A](): A / stop
+
+/// Provide the ability to peek when consuming a stream.
+def peeking[A] { peeker: () => Unit / {next[A], peek[A]} }: Unit / next[A] =
+  returning::peeking[A, Unit]{peeker}
+
 // Counting and padding
 // --------------------
 
@@ -477,6 +487,36 @@ def source[A, R] { stream: () => Unit / emit[A] } { driver: () => R / next[A] }:
   } with next[A] {
     resume {
       next().getOrElse { do stop() }
+    }
+  }
+}
+
+/// Provide the ability to peek when consuming a stream.
+def peeking[A, R] { peeker: () => R / {next[A], peek[A]} }: R / next[A] = {
+  def upstream(): A / stop = do next()
+  var last = None()
+  try {
+    peeker()
+  } with peek[A] { () =>
+    resume {
+      last match {
+        case None() =>
+          val t = upstream()
+          last = Some(t)
+          return t
+        case Some(t) =>
+          return t
+      }
+    }
+  } with next[A] {
+    resume {
+      last match {
+        case None() =>
+          upstream()
+        case Some(t) =>
+          last = None()
+          return t
+      }
     }
   }
 }
