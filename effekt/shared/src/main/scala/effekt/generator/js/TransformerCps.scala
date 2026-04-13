@@ -301,8 +301,7 @@ object TransformerCps extends Transformer {
     }
 
     case cps.Stmt.Jump(k, vargs, ks) =>
-      pure(js.Return(maybeThunking(js.Call(nameRef(k),
-        vargs.map(toJS) ++  List(toJS(ks)))))  :: Nil)
+      pure(List(js.Return(js.Call(js.Variable(js.JSName("THUNK_K")), nameRef(k) :: vargs.map(toJS) ++ List(toJS(ks))))))
 
 
     case cps.Stmt.App(Recursive(id, label, vparams, bparams, ks1, k1, used), vargs, bargs, MetaCont(ks), k) =>
