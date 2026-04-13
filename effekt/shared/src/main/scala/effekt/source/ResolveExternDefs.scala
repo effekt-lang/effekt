@@ -78,6 +78,23 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
             Some(d)
         }
 
+      case Def.ExternInterface(id, tparams, bodies, info, span) =>
+        findPreferred(bodies.unspan) match {
+          case body@ExternBody.StringExternBody(featureFlag, template, span) =>
+            if (featureFlag.isDefault) {
+              Context.warning(s"Extern definition ${id} contains extern string without feature flag. This will likely not work in other backends, "
+                + s"please annotate it with a feature flag (Supported by the current backend: ${Context.compiler.supportedFeatureFlags.mkString(", ")})")
+            }
+
+            val d = Def.ExternInterface(id, tparams, Many(List(body), bodies.span), info, span)
+            Context.copyAnnotations(defn, d)
+            Some(d)
+          case u: ExternBody.Unsupported =>
+            val d = Def.ExternInterface(id, tparams, Many(List(u), bodies.span), info, span)
+            Context.copyAnnotations(defn, d)
+            Some(d)
+        }
+
       case Def.ExternInclude(featureFlag, path, contents, id, doc, span) if featureFlag.matches(supported) =>
         if (featureFlag.isDefault) {
           val supported = Context.compiler.supportedFeatureFlags.mkString(", ")
