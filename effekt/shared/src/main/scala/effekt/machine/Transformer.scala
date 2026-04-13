@@ -31,7 +31,7 @@ object Transformer {
     given DC: DeclarationContext = core.DeclarationContext(mod.declarations, mod.externs)
 
     // collect all information
-    val declarations = mod.externs.flatMap(transform)
+    val declarations = mod.externs.map(transform)
     val definitions = mod.definitions
     val mainEntry = Label(mainName, Nil)
 
@@ -54,7 +54,7 @@ object Transformer {
     Program(declarations, toplevelDefinitions ++ localDefinitions, mainEntry)
   }
 
-  def transform(extern: core.Extern)(using BlocksParamsContext, ErrorReporter): Option[Declaration] = extern match {
+  def transform(extern: core.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
     case core.Extern.Def(name, tps, cparams, vparams, bparams, ret, capture, body) =>
       // TODO delete, and/or enforce at call site (ImpureApp)
       if bparams.nonEmpty then ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
@@ -65,16 +65,29 @@ object Transformer {
       val transformedRet = transformUnboxed(ret)
       val isExternAsync = capture.contains(symbols.builtins.AsyncCapability.capture)
       noteDefinition(name, transformedParams, Nil, isExternAsync)
-      Some(Extern(transform(name), transformedParams, transformedRet, isExternAsync, transform(body)))
+      Extern(transform(name), transformedParams, transformedRet, isExternAsync, transform(body))
 
     case core.Extern.Include(ff, contents) =>
-      Some(Include(ff, contents))
+      Include(ff, contents)
     
-    case core.Extern.Data(id, tparams) =>
-      None
+    case core.Extern.Data(id, tparams, body) =>
+      val tBody = body match {
+        case core.ExternBody.StringExternBody(featureFlag, Template(strings, args)) =>
+          ExternBody.StringExternBody(featureFlag, Template(strings, args.map{ absurd => absurd }))
+        case core.ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
+      }
+      ExternType(transform(id), tparams.map(transform), tBody)
+
+    case core.Extern.Interface(id, tparams, body) =>
+      val tBody = body match {
+        case core.ExternBody.StringExternBody(featureFlag, Template(strings, args)) =>
+          ExternBody.StringExternBody(featureFlag, Template(strings, args.map{ absurd => absurd }))
+        case core.ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
+      }
+      ExternInterface(transform(id), tparams.map(transform), tBody)
   }
 
-  def transform(body: core.ExternBody)(using ErrorReporter): machine.ExternBody = body match {
+  def transform(body: core.ExternBody[core.Expr])(using ErrorReporter): machine.ExternBody[Variable] = body match {
     case core.ExternBody.StringExternBody(ff, Template(strings, args)) =>
       ExternBody.StringExternBody(ff, Template(strings, args map {
         case core.ValueVar(id, tpe) => Variable(transform(id), transform(tpe))

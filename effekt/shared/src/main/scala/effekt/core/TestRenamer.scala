@@ -172,10 +172,10 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
       }
   }
 
-  override def rewrite(e: ExternBody) = e match {
+  override def rewrite(e: ExternBody[Expr]) = e match {
     case ExternBody.StringExternBody(featureFlag, contents) =>
       ExternBody.StringExternBody(featureFlag, rewriteTemplate(contents))
-    case ExternBody.Unsupported(err) => ???
+    case ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
   }
 
   def rewriteTemplate(t: Template[Expr]) = t match {
@@ -201,9 +201,14 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
     case Extern.Include(featureFlag, contents) => {
         Extern.Include(featureFlag, contents)
     }
-    case Extern.Data(id, tparams) => {
+    case Extern.Data(id, tparams, body) => {
       withBindings(tparams) {
-        Extern.Data(rewrite(id), tparams map rewrite)
+        Extern.Data(rewrite(id), tparams map rewrite, body)
+      }
+    }
+    case Extern.Interface(id, tparams, body) => {
+      withBindings(tparams) {
+        Extern.Interface(rewrite(id), tparams map rewrite, body)
       }
     }
   }
@@ -288,7 +293,8 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
       } ++ definitions.map(_.id) ++ externs.flatMap {
         case Extern.Def(id, _, _, _, _, _, _, _) => Some(id)
         case Extern.Include(_, _) => None
-        case Extern.Data(id, _) => Some(id)
+        case Extern.Data(id, _, _) => Some(id)
+        case Extern.Interface(id, _, _) => Some(id)
       }
     }
 }

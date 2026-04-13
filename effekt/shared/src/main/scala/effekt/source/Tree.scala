@@ -219,7 +219,7 @@ enum FeatureFlag extends Tree {
   }
 }
 object FeatureFlag {
-  extension (self: List[ExternBody]) {
+  extension[S, E](self: List[ExternBody[S, E]]) {
     @tailrec
     def supportedByFeatureFlags(names: List[String]): Boolean = names match {
       case Nil => false
@@ -232,12 +232,12 @@ object FeatureFlag {
   }
 }
 
-sealed trait ExternBody extends Tree {
+sealed trait ExternBody[+S, +E] extends Tree {
   def featureFlag: FeatureFlag
 }
 object ExternBody {
-  case class StringExternBody(featureFlag: FeatureFlag, template: Template[source.Term], span: Span) extends ExternBody
-  case class EffektExternBody(featureFlag: FeatureFlag, body: source.Stmt, span: Span) extends ExternBody
+  case class StringExternBody[+S](featureFlag: FeatureFlag, template: Template[S], span: Span) extends ExternBody[S, Nothing]
+  case class EffektExternBody[+T](featureFlag: FeatureFlag, body: T, span: Span) extends ExternBody[Nothing, T]
   case class Unsupported(message: util.messages.EffektError) extends ExternBody {
     val span: Span = Span.missing
     override def featureFlag: FeatureFlag = FeatureFlag.Default(Span.missing)
@@ -423,15 +423,15 @@ enum Def extends Definition {
   /**
    * Only valid on the toplevel!
    */
-  case ExternType(id: IdDef, tparams: Many[Id], info: Info, span: Span)
+  case ExternType(id: IdDef, tparams: Many[Id], body: Many[ExternBody[Nothing, Nothing]], info: Info, span: Span)
 
   case ExternDef(id: IdDef,
                  tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], captures: CaptureSet, ret: Effectful,
-                 bodies: List[ExternBody], info: Info, span: Span) extends Def
+                 bodies: Many[ExternBody[Term, Stmt]], info: Info, span: Span) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType, info: Info, span: Span)
 
-  case ExternInterface(id: IdDef, tparams: List[Id], info: Info, span: Span)
+  case ExternInterface(id: IdDef, tparams: List[Id], bodies: Many[ExternBody[Nothing, Nothing]], info: Info, span: Span)
 
   /**
    * Namer resolves the path and loads the contents in field [[contents]]
@@ -907,7 +907,14 @@ object Tree {
     def rewrite(c: MatchClause)(using Context): MatchClause = structuralVisit(c)
     def rewrite(c: MatchGuard)(using Context): MatchGuard = structuralVisit(c)
     def rewrite(t: source.CallTarget)(using Context): source.CallTarget = structuralVisit(t)
-    def rewrite(b: ExternBody)(using Context): source.ExternBody = structuralVisit(b)
+    def rewrite(b: ExternBody[Term, Stmt])(using Context): source.ExternBody[Term, Stmt] =
+      visit(b){
+        case ExternBody.EffektExternBody(ff, body, span) =>
+          ExternBody.EffektExternBody(ff, rewrite(body), span)
+        case ExternBody.StringExternBody(ff, template, span) =>
+          ExternBody.StringExternBody(ff, template.map(rewrite), span)
+        case other => other
+      }
     def rewrite(a: ValueArg)(using Context): ValueArg = structuralVisit(a)
 
     /**
@@ -971,7 +978,13 @@ object Tree {
     def query(h: OpClause)(using Context, Ctx): Res = structuralQuery(h)
     def query(c: MatchClause)(using Context, Ctx): Res = structuralQuery(c)
     def query(c: MatchGuard)(using Context, Ctx): Res = structuralQuery(c)
-    def query(b: ExternBody)(using Context, Ctx): Res = structuralQuery(b)
+    def query(b: ExternBody[Term, Stmt])(using Context, Ctx): Res =
+      visit(b){
+        case ExternBody.EffektExternBody(ff, body, span) => query(body)
+        case ExternBody.StringExternBody(ff, tmpl, span) =>
+          combineAll(tmpl.args.map(query))
+        case ExternBody.Unsupported(msg) => empty
+      }
     def query(a: ValueArg)(using Context, Ctx): Res = structuralQuery(a)
 
     def query(t: Template[Term])(using Context, Ctx): Res =

@@ -439,7 +439,7 @@ case class ExternFunction(
   result: ValueType,
   effects: Effects,
   capture: CaptureSet,
-  bodies: List[source.ExternBody],
+  bodies: List[source.ExternBody[source.Term, source.Stmt]],
   decl: source.Tree
 ) extends Callable {
   def annotatedCaptures = Some(capture)

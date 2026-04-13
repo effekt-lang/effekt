@@ -18,7 +18,10 @@ define void @c_ref_erase_field(ptr %0) {
 """
 
 /// Global, mutable references
-extern type Ref[T]
+extern type Ref[T] =
+  js "{ value: T }"
+  chez "box"
+  llvm "%Pos"
 
 /** We represent references like positive types in LLVM
  *  The tag is 0 and the obj points to memory with the following layout:

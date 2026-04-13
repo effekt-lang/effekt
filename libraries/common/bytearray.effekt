@@ -19,10 +19,10 @@ import array
  *
  * The eraser does nothing.
  */
-extern type ByteArray
-  // = llvm "%Pos"
-  // = js "Uint8Array"
-  // = chez "bytevector"
+extern type ByteArray =
+  llvm "%Pos"
+  js "Uint8Array"
+  chez "bytevector"
 
 /// Allocates a new bytearray with the given `size`, its values are zero bytes.
 extern def allocate(size: Int) at global: ByteArray =

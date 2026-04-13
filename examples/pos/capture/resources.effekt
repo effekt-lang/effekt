@@ -8,7 +8,9 @@ extern resource stack: StackLocal
 
 // this does not really implement arrays, but tests whether `makeArray`
 // will be in direct style.
-extern interface Array[T]
+extern interface Array[T] =
+  js   "Array"
+  chez "vector"
 extern def makeArray[T](size: Int) at stack: Array[T] at stack =
   js   "${size}"
   chez "${size}"

@@ -45,11 +45,27 @@ object Transformer {
         } else {
           VerbatimFunction(Ccc(), transform(returnType), functionName, transformedParameters, transform(body))
         }
+      case machine.ExternType(name, tps, machine.ExternBody.StringExternBody(_, body)) =>
+        val ttps = tps match {
+          case Nil => ""
+          case tps => tps.mkString(", ")
+        }
+        Verbatim(s"; declaration extern type ${name}${ttps} = ${body}")
+      case machine.ExternType(name, tps, machine.ExternBody.Unsupported(err)) =>
+        Verbatim(s"; unsupported extern type ${name}: ${err}")
+      case machine.ExternInterface(name, tps, machine.ExternBody.StringExternBody(_, body)) =>
+        val ttps = tps match {
+          case Nil => ""
+          case tps => tps.mkString(", ")
+        }
+        Verbatim(s"; declaration extern interface ${name}${ttps} = ${body}")
+      case machine.ExternInterface(name, tps, machine.ExternBody.Unsupported(err)) =>
+        Verbatim(s"; unsupported extern interface ${name}: ${err}")
       case machine.Include(ff, content) =>
         Verbatim("; declaration include" ++ content)
     }
 
-  def transform(body: machine.ExternBody)(using ErrorReporter): String = body match {
+  def transform(body: machine.ExternBody[machine.Variable])(using ErrorReporter): String = body match {
     case machine.ExternBody.StringExternBody(_, contents) =>
       "; declaration extern\n    " ++ transform(contents)
     case u: machine.ExternBody.Unsupported =>
@@ -59,9 +75,9 @@ object Transformer {
         |""".stripMargin
     }
 
-  def transform(template: Template[machine.Variable]): String = "; variable\n    " ++ intercalate(template.strings, template.args.map {
+  def transform(template: Template[machine.Variable]): String = "; variable\n    " ++ template.fill {
     case machine.Variable(name, tpe) => PrettyPrinter.localName(name)
-  }).mkString
+  }
 
   def transform(definition: machine.Definition)(using ModuleContext): Unit = definition match {
    case machine.Definition(machine.Label(name, environment), body) =>
