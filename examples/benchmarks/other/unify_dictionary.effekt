@@ -34,14 +34,14 @@ def apply(subst: Substitution, ty: Type): Type = ty match {
     Con(name, args.map { arg => subst.apply(arg) })
 }
 
-def unify(ty1: Type, ty2: Type, subst: Substitution): Substitution / Exception[UnificationError] = {
+def unify(ty1: Type, ty2: Type, subst: Substitution): Unit / Exception[UnificationError] = {
   val substTy1 = subst.apply(ty1)
   val substTy2 = subst.apply(ty2)
 
   (substTy1, substTy2) match {
     // If both are the same variable, return current substitution
     case (Var(x), Var(y)) and x == y =>
-      subst
+      ()
 
     // If first is a variable, try to bind it
     case (Var(x), _) =>
@@ -72,17 +72,20 @@ def unify(ty1: Type, ty2: Type, subst: Substitution): Substitution / Exception[U
 }
 
 // Unify a list of arguments with a current substitution
-def unifyMany(args1: List[Type], args2: List[Type], subst: Substitution): Substitution / Exception[UnificationError] =
+def unifyMany(args1: List[Type], args2: List[Type], subst: Substitution): Unit / Exception[UnificationError] =
   (args1, args2) match {
-    case (Nil(), Nil()) => subst
+    case (Nil(), Nil()) => ()
     case (Cons(a1, rest1), Cons(a2, rest2)) =>
-      val newSubst = unify(a1, a2, subst)
-      unifyMany(rest1, rest2, newSubst)
+      unify(a1, a2, subst)
+      unifyMany(rest1, rest2, subst)
     case _ => do raise(UnificationManyFailure(args1, args2), "Different numbers of types on each side!")
   }
 
-def unify(ty1: Type, ty2: Type): Substitution / Exception[UnificationError] =
-  unify(ty1, ty2, Empty())
+def unify(ty1: Type, ty2: Type): Substitution / Exception[UnificationError] = {
+  val subst = dictionary::empty()
+  unify(ty1, ty2, subst)
+  return subst
+}
 
 def showType(ty: Type): String = ty match {
   case Var(name) => name
