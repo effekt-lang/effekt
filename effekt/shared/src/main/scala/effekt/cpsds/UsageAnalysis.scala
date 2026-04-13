@@ -67,9 +67,6 @@ class UsageAnalysis(
       operations.foreach { op => process(op.body) }
       process(rest)
 
-    case Stmt.Val(id, binding, rest) =>
-      process(binding); process(rest)
-
     case Stmt.Let(id, binding, rest) =>
       process(binding); process(rest)
 
