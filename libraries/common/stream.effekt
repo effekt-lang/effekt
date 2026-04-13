@@ -328,8 +328,8 @@ def tee[A]{ cons1: { => Unit / emit[A] } => Unit }{ cons2: { => Unit / emit[A] }
 /// ```
 def first[A] { stream: () => Unit / emit[A] }: A / fail = {
   try {
-    def body(): A = { stream(); do fail() }
-    body()
+    stream()
+    do fail().absurd
   } with emit[A] { a => a }
 }
 
@@ -338,8 +338,8 @@ def first[A] { stream: () => Unit / emit[A] }: A / fail = {
 def nth[A](n: Int){ stream: () => Unit / emit[A] }: A / fail = {
   var m = n
   try {
-    def body(): A = { stream(); do fail() }
-    body()
+    stream()
+    do fail().absurd
   } with emit[A] { a =>
     if (m == 0) {
       return a

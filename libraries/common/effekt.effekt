@@ -747,6 +747,15 @@ extern def isUndefined[A](value: A) at {}: Bool =
   chez "(eq? ${value} #f)"
   vm "effekt::isUndefined[A](A)"
 
+// Ascription
+// ==========
+
+/// Ascribe a type, for example `f().as[Int]`.
+def as[A](x: A): A = x
+
+/// Witness absurdity, for example `f().absurd`.
+/// Very often the type argument is inferred.
+def absurd[A](x: Nothing): A = x match {}
 
 // Tuples
 // ======
