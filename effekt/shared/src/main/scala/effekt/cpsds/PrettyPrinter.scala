@@ -70,10 +70,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "new" <+> toDoc(id) <+> ":" <+> toDoc(interface.name) <+> block(operations.map(toDoc)) <> line <>
         toDoc(rest)
 
-    case Stmt.Val(id, binding, rest) =>
-      "val" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
-        toDoc(rest)
-
     case Stmt.Let(id, binding, rest) =>
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
         toDoc(rest)

@@ -1,14 +1,18 @@
 package effekt
 package cpsds
 
-import core.{ Id, ValueType, BlockType }
+import core.{ BlockType, Captures, Id, ValueType }
+import core.optimizer.Usage
 
 // Only maps Ids to Ids for dealiasing
 case class TransformationContext(
-  renamings: Map[Id, Id] = Map.empty
+  renamings: Map[Id, Id] = Map.empty,
+  reachability: Map[Id, core.optimizer.Usage] = Map.empty,
+  directStyle: Set[Id] = Set.empty
 ) {
   def lookup(id: Id): Id = renamings.getOrElse(id, id)
   def alias(from: Id, to: Id): TransformationContext = copy(renamings = renamings + (from -> lookup(to)))
+  def markDirectStyle(id: Id): TransformationContext = copy(directStyle = directStyle + id)
 }
 
 
@@ -205,12 +209,12 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
     given ctx: TransformationContext = C.alias(id, C.lookup(x))
     transform(body, ks, k)
 
-  case core.Stmt.Def(id, core.Block.BlockLit(_, _, vparams, bparams, litBody), rest) =>
+  case core.Stmt.Def(id, core.Block.BlockLit(_, _, vparams, bparams, body), rest) =>
     val ks1 = Id("ks")
     val k1 = Id("k")
     val params = vparams.map(_.id) ++ bparams.map(_.id) ++ List(ks1, k1)
     Stmt.Def(id, params,
-      transform(litBody, MetaContinuation.Dynamic(ks1), Continuation.Dynamic(k1)),
+      transform(body, MetaContinuation.Dynamic(ks1), Continuation.Dynamic(k1)),
       transform(rest, ks, k))
 
   case core.Stmt.Def(id, core.Block.New(impl), body) =>
@@ -346,12 +350,25 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
 
 def transform(module: core.ModuleDecl): ModuleDecl = module match {
   case core.ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-    given TransformationContext = TransformationContext()
+    val entrypoints = exports.toSet ++ definitions.collect {
+      case core.Toplevel.Val(id, _) => id
+    }
+    val reachability = core.optimizer.Reachable(entrypoints, module)
+    given TransformationContext = TransformationContext(reachability = reachability)
     ModuleDecl(path, includes, declarations, externs.flatMap(transformExtern),
       definitions.map(transformToplevel), exports)
 }
 
+private def canBeDirect(id: Id, captures: Captures)(using C: TransformationContext): Boolean =
+  def nonRecursive = C.reachability.get(id).exists(u => u != Usage.Recursive)
+  def noControl = (captures -- Set(symbols.builtins.IOCapability.capture, symbols.builtins.GlobalCapability.capture)).isEmpty
+  nonRecursive && noControl
+
 def transformToplevel(definition: core.Toplevel)(using C: TransformationContext): ToplevelDefinition = definition match {
+  case core.Toplevel.Def(id, core.Block.BlockLit(_, _, vparams, Nil, body)) if canBeDirect(id, body.capt) =>
+    C.markDirectStyle(id)
+    sys error s"Direct style: ${id}"
+
   case core.Toplevel.Def(id, core.Block.BlockLit(_, _, vparams, bparams, body)) =>
     val ks = Id("ks")
     val k = Id("k")
