@@ -152,15 +152,13 @@ def shuffle[A](arr: Array[A]): Unit / random = {
 
 /// Pick a random element from an array.
 ///
-/// Raises `OutOfBounds` when called on an empty array.
-def pick[A](arr: Array[A]): A / { random, Exception[OutOfBounds] } = {
+/// Panics when called on an empty array.
+def pick[A](arr: Array[A]): A / random =
   if (arr.size == 0) {
-    do raise(OutOfBounds(), "Cannot pick from an empty array")
+    panic("Pick from an empty array")
   } else {
-    val idx = randomInt(0, arr.size - 1)
-    arr.get(idx)
+    arr.get(randomInt(0, arr.size - 1))
   }
-}
 
 
 namespace examples {
