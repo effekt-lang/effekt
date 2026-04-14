@@ -144,11 +144,8 @@ def randomDoubles(): Unit / {emit[Double], random} =
 /// Shuffle an array in-place using the Fisher-Yates algorithm.
 def shuffle[A](arr: Array[A]): Unit / random = {
   val n = arr.size
-  var i = 0
-  while (i + 1 < n) {
-    val j = randomInt(i, n - 1)
-    arr.swap(i, j)
-    i = i + 1
+  each(0, n - 1) { i =>
+    arr.swap(i, randomInt(i, n - 1))
   }
 }
 
