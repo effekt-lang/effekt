@@ -91,7 +91,7 @@ type Cont = Expr
 
 enum Stmt extends Tree {
   case Def(id: Id, params: List[Id], body: Stmt, rest: Stmt)
-  case New(id: Id, interface: BlockType.Interface, operations: List[Operation], rest: Stmt)
+  case New(id: Id, interface: Id, operations: List[Operation], rest: Stmt)
 
   // also all continuations are named so that we can analyze their usage and jump to them as labels
   case Let(id: Id, binding: Expr, rest: Stmt)
@@ -152,7 +152,7 @@ case class Operation(name: Id, params: List[Id], body: Stmt) extends Tree {
 private[cpsds] enum Binding {
   case Let(id: Id, binding: Expr)
   case Def(id: Id, params: List[Id], body: Stmt)
-  case New(id: Id, interface: BlockType.Interface, operations: List[Operation])
+  case New(id: Id, interface: Id, operations: List[Operation])
   case Run(id: Id, callee: Id, args: List[Expr], purity: Purity)
 
   def toStmt(rest: Stmt): Stmt = this match {
@@ -187,7 +187,7 @@ object Bind {
     val id = Id("tmp")
     Bind(Expr.Variable(id), List(Binding.Def(id, params, body)))
 
-  def makeNew(interface: BlockType.Interface, operations: List[Operation]): Bind[Expr] =
+  def makeNew(interface: Id, operations: List[Operation]): Bind[Expr] =
     val id = Id("tmp")
     Bind(Expr.Variable(id), List(Binding.New(id, interface, operations)))
 

@@ -43,7 +43,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(d: ToplevelDefinition): Doc = d match {
     case ToplevelDefinition.Def(id, params, body) =>
-      "def" <+> toDoc(id) <> parens(params.map(toDoc)) <+> "=" <+> nested(toDoc(body))
+      "def" <+> toDoc(id) <> parens(params.map(toDoc)) <+> "=" <+> block(toDoc(body))
     case ToplevelDefinition.Val(id, ks, k, binding) =>
       "let" <+> toDoc(id) <+> "|" <+> toDoc(ks) <> "," <+> toDoc(k) <+> "=" <+> toDoc(binding)
     case ToplevelDefinition.Let(id, binding) =>
@@ -55,7 +55,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Expr.Literal((), core.Type.TUnit) => "()"
     case Expr.Literal(s: String, core.Type.TString) => "\"" + s + "\""
     case Expr.Literal(value, _) => value.toString
-    case Expr.Make(data, tag, vargs) => toDoc(tag) <> parens(vargs.map(toDoc))
+    case Expr.Make(data, tag, vargs) => "make" <+> toDoc(tag) <> parens(vargs.map(toDoc))
     case Expr.Abort => "abort"
     case Expr.Return => "return"
     case Expr.Toplevel => "toplevel"
@@ -63,18 +63,21 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(s: Stmt): Doc = s match {
     case Stmt.Def(id, params, body, rest) =>
-      "def" <+> toDoc(id) <> parens(params.map(toDoc)) <+> "=" <+> nested(toDoc(body)) <> line <>
+      "def" <+> toDoc(id) <> parens(params.map(toDoc)) <+> "=" <+> block(toDoc(body)) <> line <>
         toDoc(rest)
 
     case Stmt.New(id, interface, operations, rest) =>
-      "new" <+> toDoc(id) <+> ":" <+> toDoc(interface.name) <+> block(operations.map(toDoc)) <> line <>
+      "new" <+> toDoc(id) <+> ":" <+> toDoc(interface) <+> block(operations.map(toDoc)) <> line <>
         toDoc(rest)
 
     case Stmt.Let(id, binding, rest) =>
-      "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
+      "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(rest)
 
-    case Stmt.App(id, args, direct) =>
+    case Stmt.App(id, args, true) =>
+      toDoc(id) <> "!" <> parens(args.map(toDoc))
+
+    case Stmt.App(id, args, false) =>
       toDoc(id) <> parens(args.map(toDoc))
 
     case Stmt.Invoke(id, method, args) =>
@@ -86,7 +89,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
         case Purity.Impure => "run!"
         case Purity.Async => "run~"
       }
-      prefix <+> toDoc(id) <+> "=" <+> toDoc(callee) <> parens(args.map(toDoc)) <> line <>
+      prefix <+> toDoc(id) <+> "=" <+> toDoc(callee) <> parens(args.map(toDoc)) <> ";" <> line <>
         toDoc(rest)
 
     case Stmt.If(cond, thn, els) =>
@@ -117,11 +120,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
         toDoc(rest)
 
     case Stmt.Get(ref, id, rest) =>
-      "let" <+> toDoc(id) <+> "=" <+> "!" <> toDoc(ref) <> ";" <> line <>
+      "get" <+> toDoc(id) <+> "=" <+> toDoc(ref) <> ";" <> line <>
         toDoc(rest)
 
     case Stmt.Put(ref, value, rest) =>
-      toDoc(ref) <+> ":=" <+> toDoc(value) <> ";" <> line <>
+      "put" <+> toDoc(ref) <+> "=" <+> toDoc(value) <> ";" <> line <>
         toDoc(rest)
 
     case Stmt.Reset(p, ks, k, body, ks1, k1) =>
@@ -141,7 +144,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
         "@" <+> toDoc(ks1) <> "," <+> toDoc(k1)
 
     case Stmt.Hole(span) =>
-      "<>" <+> s"// @ ${span.range.from.format}"
+      "<>"
   }
 
   def toDoc(clause: Clause): Doc = clause match {
@@ -151,7 +154,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(op: Operation): Doc = op match {
     case Operation(name, params, body) =>
-      "def" <+> toDoc(name) <> parens(params.map(toDoc)) <+> "=" <+> nested(toDoc(body))
+      "def" <+> toDoc(name) <> parens(params.map(toDoc)) <+> "=" <+> block(toDoc(body))
   }
 
   def toDoc(s: symbols.Symbol): Doc = s.show
