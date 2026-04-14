@@ -1,0 +1,16 @@
+Array(5, 7, 4, 9, 1, 0, 2, 8, 6, 3)
+
+Array(5, 7, 4, 9, 1, 0, 2, 8, 6, 3)
+
+Array(8, -5, -3, 7, -4, -8, -7, -2, -6, 2, 3, 6, -10, 0, 4, -9, -1, 5, 1, 9)
+
+Array(D, B, C, A)
+Array(B, D, C, A)
+Array(D, C, B, A)
+Array(C, D, B, A)
+Array(D, A, B, C)
+Array(C, B, A, D)
+Array(B, D, C, A)
+Array(C, B, D, A)
+Array(D, A, C, B)
+Array(B, D, C, A)
