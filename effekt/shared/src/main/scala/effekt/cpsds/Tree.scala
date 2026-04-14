@@ -95,7 +95,7 @@ enum Stmt extends Tree {
 
   // also all continuations are named so that we can analyze their usage and jump to them as labels
   case Let(id: Id, binding: Expr, rest: Stmt)
-  case App(id: Id, args: List[Expr])
+  case App(id: Id, args: List[Expr], canBeDirect: Boolean)
   case Invoke(id: Id, method: Id, args: List[Expr])
   case Run(id: Id, callee: Id, args: List[Expr], purity: Purity, rest: Stmt)
 
@@ -238,8 +238,8 @@ object substitutions {
       Stmt.Let(id, substitute(binding),
         substitute(rest)(using subst.shadow(id)))
 
-    case Stmt.App(id, args) =>
-      Stmt.App(substituteAsVar(id), args.map(substitute))
+    case Stmt.App(id, args, direct) =>
+      Stmt.App(substituteAsVar(id), args.map(substitute), direct)
 
     case Stmt.Invoke(id, method, args) =>
       Stmt.Invoke(substituteAsVar(id), method, args.map(substitute))
@@ -338,7 +338,7 @@ object freeVariables {
     case Stmt.Let(id, binding, rest) =>
       binding.free ++ (rest.free - id)
 
-    case Stmt.App(id, args) =>
+    case Stmt.App(id, args, direct) =>
       Set(id) ++ args.flatMap(_.free)
 
     case Stmt.Invoke(id, _, args) =>

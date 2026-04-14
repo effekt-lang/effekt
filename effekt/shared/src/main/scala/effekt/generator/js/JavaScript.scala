@@ -61,7 +61,8 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
 
       def optimize(tree: effekt.cpsds.ModuleDecl) =
         val static = effekt.cpsds.StaticArguments.transform(tree)
-        effekt.cpsds.Inliner.transform(mainSymbol, static)
+        val inlined = effekt.cpsds.Inliner.transform(mainSymbol, static)
+        effekt.cpsds.Simplifier.transform(inlined)
 
       tree = optimize(tree)
       tree = optimize(tree)

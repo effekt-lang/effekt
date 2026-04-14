@@ -70,11 +70,11 @@ object Inliner {
     case Stmt.Run(id, callee, args, purity, rest) =>
       Stmt.Run(id, callee, args.map(e => rewrite(e, analysis)), purity, rewrite(rest, analysis))
 
-    case Stmt.App(id, args) if shouldInline(id, analysis) =>
+    case Stmt.App(id, args, direct) if shouldInline(id, analysis) =>
       rewrite(reduce(id, args.map(e => rewrite(e, analysis)), analysis), analysis)
 
-    case Stmt.App(id, args) =>
-      Stmt.App(id, args.map(e => rewrite(e, analysis)))
+    case Stmt.App(id, args, direct) =>
+      Stmt.App(id, args.map(e => rewrite(e, analysis)), direct)
 
     case Stmt.Invoke(id, method, args) =>
       Stmt.Invoke(id, method, args.map(e => rewrite(e, analysis)))
