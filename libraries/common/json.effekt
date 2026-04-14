@@ -276,14 +276,14 @@ namespace test {
 
     // Read quoted string
     feed("\"\ta\n\ra\"") {
-      with scanner[Char]
+      with peeking[Char]
       println(string::collect { readQuotedString() })
     }
 
     println("")
 
     feed("-1.5") {
-      with scanner[Char]
+      with peeking[Char]
       with on[WrongFormat].report
       println(returning::expect("Expected double") { readDouble() })
     }
@@ -292,7 +292,7 @@ namespace test {
 
     // Parse example
     feed("""{ "a": null, "b": [true,false,false,true], "f": 12.532   }"""){
-      with scanner[Char]
+      with peeking[Char]
 
       def k = new JsonObjectBuilder {
         def field[T](k){v} = { println(k); ignore{v} }
@@ -336,7 +336,7 @@ namespace test {
                   "a": null,
                   "b": [true, false, false, true], "f": 12.532
                 } """){
-        with returning::scanner[Char, JsonValue]
+        with returning::peeking[Char, JsonValue]
         build {
           decodeJson()
         }.second
@@ -353,7 +353,7 @@ namespace test {
                   "a": null,
                   "b": [true, false, false, true], "f": 12.532
                 } """){
-          with scanner[Char]
+          with peeking[Char]
           decodeJson()
         }
       }
