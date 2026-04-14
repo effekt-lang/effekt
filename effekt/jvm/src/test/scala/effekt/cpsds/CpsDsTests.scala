@@ -6,6 +6,7 @@ import sbt.io.*
 import sbt.io.syntax.*
 import kiama.parsing.{NoSuccess, Success}
 import munit.Location
+import effekt.core.{Id, Names}
 
 enum Pass {
   case Inline
@@ -15,7 +16,7 @@ enum Pass {
 
 case class PassTest(pass: Pass, input: ModuleDecl, expected: ModuleDecl)
 
-class CpsDsPassTests extends munit.FunSuite {
+class CpsDsTests extends munit.FunSuite {
 
   def examplesDir = new File("examples") / "cps"
 
@@ -62,6 +63,44 @@ class CpsDsPassTests extends munit.FunSuite {
     tests.result()
   }
 
+  def runPass(pass: Pass, input: ModuleDecl): ModuleDecl = pass match {
+    case Pass.Inline =>
+      val mainId = input.definitions.collectFirst {
+        case ToplevelDefinition.Def(id, _, _) if id.name.name == "main" => id
+      }.getOrElse {
+        input.definitions.head match {
+          case ToplevelDefinition.Def(id, _, _) => id
+          case ToplevelDefinition.Val(id, _, _, _) => id
+          case ToplevelDefinition.Let(id, _) => id
+        }
+      }
+      Inliner.transform(mainId, input)
+    case Pass.StaticArguments =>
+      StaticArguments.transform(input)
+    case Pass.Simplify =>
+      Simplifier.transform(input)
+  }
+
+  def assertAlphaEquivalent(obtained: ModuleDecl, expected: ModuleDecl, clue: => Any)(using Location): Unit = {
+    val names = Names(Map.empty)
+    val obtainedRenamed = TestRenamer(names)(obtained)
+    val expectedRenamed = TestRenamer(names)(expected)
+    def obtainedStr = PrettyPrinter.format(obtainedRenamed).layout
+    def expectedStr = PrettyPrinter.format(expectedRenamed).layout
+    assertEquals(obtainedStr, expectedStr, {
+      s"""$clue
+         |=====================
+         |Got:
+         |----
+         |$obtainedStr
+         |
+         |Expected:
+         |---------
+         |$expectedStr
+         |""".stripMargin
+    })
+  }
+
   def testFile(file: File): Unit = {
     val content = scala.io.Source.fromFile(file).mkString
     val filename = file.getName
@@ -69,13 +108,10 @@ class CpsDsPassTests extends munit.FunSuite {
     val tests = parseTestFile(content)
 
     tests.zipWithIndex.foreach { case (PassTest(pass, input, expected), idx) =>
-      test(s"$filename step ${idx + 1}: $pass (parse only)") {
-        // For now, just verify that both input and expected parsed successfully
-        // by checking they round-trip through the pretty printer
-        val inputPrinted = PrettyPrinter.format(input).layout
-        val expectedPrinted = PrettyPrinter.format(expected).layout
-        assert(inputPrinted.nonEmpty, s"$filename step ${idx + 1}: input pretty-printed to empty string")
-        assert(expectedPrinted.nonEmpty, s"$filename step ${idx + 1}: expected pretty-printed to empty string")
+      test(s"$filename step ${idx + 1}: $pass") {
+        val obtained = runPass(pass, input)
+        assertAlphaEquivalent(obtained, expected,
+          s"$filename step ${idx + 1} ($pass) produced unexpected result")
       }
     }
   }
