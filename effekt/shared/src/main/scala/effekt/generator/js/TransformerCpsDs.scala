@@ -239,7 +239,7 @@ object TransformerCpsDs extends Transformer {
         js.Const(nameDef(id), toJS(binding)) :: toJS(rest).run(k)
       }
 
-    case cpsds.Stmt.App(id, args) =>
+    case cpsds.Stmt.App(id, args, direct) =>
       ctx.secondClass.get(id) match {
         case Some(sci) =>
           // Second-class call: assign args to params, then jump.
@@ -276,6 +276,7 @@ object TransformerCpsDs extends Transformer {
 
         // In the App case for first-class calls:
         case None =>
+          //if (direct) println(s"call to ${nameRef(id)} could be direct")
           pure(js.Return(js.Lambda(Nil, js.Return(js.Call(nameRef(id), args.map(toJS))))) :: Nil)
       }
 

@@ -11,18 +11,11 @@ object StaticArguments {
     val statics: Map[Id, List[Boolean]],
     val workers: mutable.Map[Id, Id] = mutable.Map.empty,
     var stack: List[Id] = Nil,
-    val uniqueArguments: Map[Id, List[Expr]] = Map.empty,
-    // For unique-external-call functions: store the worker definition
-    // to be emitted at the call site
     val pendingWorkers: mutable.Map[Id, Worker] = mutable.Map.empty
   ) {
     def within(id: Id): Boolean = stack.contains(id)
 
     def hasStatics(id: Id): Boolean = statics.get(id).exists(_.exists(x => x))
-
-    def hasUniqueCall(id: Id): Boolean = uniqueArguments.contains(id)
-
-    def shouldRelocate(id: Id): Boolean = hasStatics(id) && hasUniqueCall(id)
   }
 
   case class Worker(id: Id, staticParams: List[Id], dynamicParams: List[Id], body: Stmt)
@@ -54,40 +47,109 @@ object StaticArguments {
   }
 
   /**
-   * Wrap definition for the multiple-external-calls case (no relocation).
+   * Place a pending worker definition here, binding static args from the call site.
+   * Returns a function that wraps a continuation statement with the worker definition.
    */
-  def wrapDefinition(id: Id, params: List[Id], body: Stmt)(using ctx: Context): (List[Id], Stmt) = {
-
-    val Worker(workerId, staticParams, dynamicParams, workerBody) = buildWorker(id, params, body)
-
-    // build wrapper
+  private def placeWorkerHere(id: Id, args: List[Expr])(using ctx: Context): Stmt => Stmt = {
     val isStatic = ctx.statics(id)
-    val wrapperParams = isStatic.zip(params).map {
-      case (true, p) => p
-      case (false, p) => Id(p)
+    val Worker(workerId, staticParams, dynamicParams, workerBody) = ctx.pendingWorkers.remove(id).get
+    val rewrittenArgs = args.map(rewrite)
+    val staticArgs = keepStatic(isStatic, rewrittenArgs)
+
+    rest => {
+      val withDef = Stmt.Def(workerId, dynamicParams, workerBody, rest)
+      staticParams.zip(staticArgs).foldRight(withDef: Stmt) {
+        case ((param, Expr.Variable(argId)), r) =>
+          val subst = Substitution(Map(param -> Expr.Variable(argId)))
+          substitute(r)(using subst)
+        case ((param, arg), r) =>
+          Stmt.Let(param, arg, r)
+      }
+    }
+  }
+
+  /**
+   * Rewrite a call to a function with static args: redirect to worker, drop static args.
+   */
+  private def rewriteCall(id: Id, args: List[Expr])(using ctx: Context): Stmt = {
+    val isStatic = ctx.statics(id)
+    Stmt.App(ctx.workers(id), dropStatic(isStatic, args.map(rewrite)), false)
+  }
+
+  /**
+   * Find pending workers referenced in the free variables of a statement.
+   */
+  private def referencedWorkers(free: Set[Id])(using ctx: Context): Set[Id] =
+    ctx.pendingWorkers.keySet.filter { id =>
+      free.contains(id) || ctx.workers.get(id).exists(free.contains)
+    }.toSet
+
+  /**
+   * Extract the immediate sub-statements of a statement.
+   */
+  private def children(s: Stmt): List[Stmt] = s match {
+    case Stmt.Def(_, _, body, rest) => List(body, rest)
+    case Stmt.New(_, _, ops, rest) => ops.map(_.body) :+ rest
+    case Stmt.Let(_, _, rest) => List(rest)
+    case Stmt.Run(_, _, _, _, rest) => List(rest)
+    case Stmt.If(_, thn, els) => List(thn, els)
+    case Stmt.Match(_, clauses, default) => clauses.map(_._2.body) ++ default.toList
+    case Stmt.Region(_, _, rest) => List(rest)
+    case Stmt.Alloc(_, _, _, rest) => List(rest)
+    case Stmt.Var(_, _, _, rest) => List(rest)
+    case Stmt.Dealloc(_, rest) => List(rest)
+    case Stmt.Get(_, _, rest) => List(rest)
+    case Stmt.Put(_, _, rest) => List(rest)
+    case Stmt.Reset(_, _, _, body, _, _) => List(body)
+    case Stmt.Shift(_, _, _, _, body, _, _) => List(body)
+    case Stmt.Resume(_, _, _, body, _, _) => List(body)
+    case _ => Nil
+  }
+
+  /**
+   * After rewriting a statement, check if any pending workers are referenced
+   * in multiple sub-statements of the result. If so, wrap them above.
+   */
+  private def placeWorkers(s: Stmt)(rw: PartialFunction[Stmt, Stmt])(using ctx: Context): Stmt = {
+    val rewritten = rw.applyOrElse(s, identity[Stmt])
+    val subStmts = children(rewritten)
+
+    if subStmts.size < 2 then return rewritten
+
+    val frees = subStmts.map(s => referencedWorkers(s.free))
+    val shared = frees.combinations(2).flatMap {
+      case List(a, b) => a intersect b
+      case _ => Set.empty
+    }.toSet
+
+    if shared.isEmpty then return rewritten
+
+    val wrappers = shared.toList.flatMap { id =>
+      ctx.pendingWorkers.remove(id).map(id -> _)
     }
 
-    val wrappedBody = Stmt.Def(workerId, dynamicParams, workerBody,
-      Stmt.App(workerId, dropStatic(isStatic, wrapperParams.map(Expr.Variable(_)))))
+    wrappers.foldRight(rewritten) { case ((id, Worker(workerId, staticParams, dynamicParams, workerBody)), rest) =>
+      val isStatic = ctx.statics(id)
+      var si = staticParams.iterator
+      var di = dynamicParams.iterator
+      val allParams = isStatic.map { s => if s then si.next() else Id(di.next()) }
+      val dynamicWrapperArgs = isStatic.zip(allParams).collect { case (false, p) => Expr.Variable(p) }
 
-    (wrapperParams, wrappedBody)
+      val wrappedBody = Stmt.Def(workerId, dynamicParams, workerBody,
+        Stmt.App(workerId, dynamicWrapperArgs, false))
+
+      Stmt.Def(id, allParams, wrappedBody, rest)
+    }
   }
 
   // --- Rewrite ---
 
-  def rewrite(s: Stmt)(using ctx: Context): Stmt = s match {
+  def rewrite(s: Stmt)(using ctx: Context): Stmt = placeWorkers(s) {
 
-    // Unique external call: remove the definition, build the worker for later insertion
-    case Stmt.Def(id, params, body, rest) if ctx.shouldRelocate(id) =>
+    case Stmt.Def(id, params, body, rest) if ctx.hasStatics(id) =>
       ctx.pendingWorkers(id) = buildWorker(id, params, body)
       rewrite(rest)
 
-    // Multiple external calls: wrap in place
-    case Stmt.Def(id, params, body, rest) if ctx.hasStatics(id) =>
-      val (freshParams, wrappedBody) = wrapDefinition(id, params, body)
-      Stmt.Def(id, freshParams, wrappedBody, rewrite(rest))
-
-    // Keep as is
     case Stmt.Def(id, params, body, rest) =>
       val before = ctx.stack
       ctx.stack = id :: ctx.stack
@@ -96,30 +158,19 @@ object StaticArguments {
       Stmt.Def(id, params, rewrittenBody, rewrite(rest))
 
     // Recursive call: redirect to worker, drop static args
-    case Stmt.App(id, args) if ctx.hasStatics(id) && ctx.within(id) =>
-      val isStatic = ctx.statics(id)
-      Stmt.App(ctx.workers(id), dropStatic(isStatic, args.map(rewrite)))
+    case Stmt.App(id, args, direct) if ctx.hasStatics(id) && ctx.within(id) =>
+      rewriteCall(id, args)
 
-    // External call to a relocated function: emit the pending worker here, then call it
-    case Stmt.App(id, args) if ctx.pendingWorkers.contains(id) =>
-      val isStatic = ctx.statics(id)
-      val Worker(workerId, staticParams, dynamicParams, workerBody) = ctx.pendingWorkers(id)
-      val rewrittenArgs = args.map(rewrite)
-      val dynamicArgs = dropStatic(isStatic, rewrittenArgs)
-      val staticArgs = keepStatic(isStatic, rewrittenArgs)
+    // External call: place pending worker here, then rewrite the call
+    case Stmt.App(id, args, direct) if ctx.pendingWorkers.contains(id) =>
+      placeWorkerHere(id, args)(rewriteCall(id, args))
 
-      val loop = Stmt.Def(workerId, dynamicParams, workerBody,
-        Stmt.App(workerId, dynamicArgs))
+    // Call to an already-placed worker: just rewrite the call
+    case Stmt.App(id, args, direct) if ctx.workers.contains(id) && !ctx.within(id) =>
+      rewriteCall(id, args)
 
-      // let y = 4;
-      // def loop(x) = ...
-      // loop(10)
-      staticParams.zip(staticArgs).foldRight(loop) {
-        case ((param, arg), call) => Let(param, arg, call)
-      }
-
-    case Stmt.App(id, args) =>
-      Stmt.App(id, args.map(rewrite))
+    case Stmt.App(id, args, direct) =>
+      Stmt.App(id, args.map(rewrite), direct)
 
     case Stmt.Invoke(id, method, args) =>
       Stmt.Invoke(id, method, args.map(rewrite))
@@ -189,14 +240,9 @@ object StaticArguments {
   // --- Toplevel ---
 
   def rewrite(d: ToplevelDefinition)(using ctx: Context): Option[ToplevelDefinition] = d match {
-    // Relocated to call site — remove from toplevel
-    case ToplevelDefinition.Def(id, params, body) if ctx.shouldRelocate(id) =>
+    case ToplevelDefinition.Def(id, params, body) if ctx.hasStatics(id) =>
       ctx.pendingWorkers(id) = buildWorker(id, params, body)
       None
-
-    case ToplevelDefinition.Def(id, params, body) if ctx.hasStatics(id) =>
-      val (freshParams, wrappedBody) = wrapDefinition(id, params, body)
-      Some(ToplevelDefinition.Def(id, freshParams, wrappedBody))
 
     case ToplevelDefinition.Def(id, params, body) =>
       val before = ctx.stack
@@ -221,19 +267,16 @@ object StaticArguments {
     m.copy(definitions = m.definitions.flatMap(d => rewrite(d)))
   }
 
-
   private def initializeContext(analysis: UsageAnalysis): Context = {
     val statics = mutable.Map.empty[Id, List[Boolean]]
-    val extArgs = mutable.Map.empty[Id, List[Expr]]
 
     analysis.functions.foreach {
       case (id, info) if info.isRecursive =>
         val isInternallyStatic = info.staticArguments
 
-        if info.externalCalls.size == 1 then
+        if info.externalCalls.size <= 1 then
           statics(id) = isInternallyStatic
-          extArgs(id) = info.externalCalls.head
-        else if info.externalCalls.size > 1 then
+        else
           val firstExt = info.externalCalls.head
           val isStatic = isInternallyStatic.zipWithIndex.map { case (intStatic, idx) =>
             intStatic && info.externalCalls.tail.forall { args =>
@@ -241,11 +284,9 @@ object StaticArguments {
             }
           }
           statics(id) = isStatic
-        else
-          statics(id) = isInternallyStatic
 
       case _ => ()
     }
-    new Context(statics.toMap, uniqueArguments = extArgs.toMap)
+    new Context(statics.toMap)
   }
 }

@@ -70,7 +70,7 @@ class UsageAnalysis(
     case Stmt.Let(id, binding, rest) =>
       process(binding); process(rest)
 
-    case Stmt.App(id, args) =>
+    case Stmt.App(id, args, direct) =>
       use(id)
       args.foreach(process)
       functions.get(id).foreach { info =>
