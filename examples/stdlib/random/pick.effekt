@@ -2,18 +2,11 @@ import random
 import array
 
 def main() = {
-  with on[OutOfBounds].panic;
-
   val arr = array::build(10) { i => i }
   val singleton = array::build(1) { i => i }
   val empty = array(0, 0)
 
-  with minstd(1337);
+  with minstd(1337)
   10.repeat{ println(pick(arr)) }
   println(pick(singleton))
-
-  println("")
-
-  println(result[Int, OutOfBounds] { pick(empty) }.toOption)
-
 }

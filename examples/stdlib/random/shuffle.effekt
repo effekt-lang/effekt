@@ -6,13 +6,13 @@ def main() = {
   val left = array::build(10) { i => i }
   val right = array::build(10) { i => i }
 
-  with minstd(1337);
+  with minstd(1337)
   shuffle(left)
   println(left)
 
   println("")
 
-  with minstd(1337);
+  with minstd(1337)
   shuffle(right)
   println(right)
 
@@ -25,7 +25,7 @@ def main() = {
 
   println("")
 
-  with minstd(1337);
+  with minstd(1337)
   val abcd = array::fromList(["A", "B", "C", "D"])
   10.repeat {
     shuffle(abcd)
