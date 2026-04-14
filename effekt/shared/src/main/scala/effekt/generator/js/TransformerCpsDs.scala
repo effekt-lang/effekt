@@ -102,7 +102,7 @@ object TransformerCpsDs extends Transformer {
 
   def toJS(module: cpsds.ModuleDecl, exports: List[js.Export])(using D: DeclarationContext, C: Context): js.Module =
     module match {
-      case cpsds.ModuleDecl(path, includes, declarations, externs, definitions, _) =>
+      case cpsds.ModuleDecl(includes, declarations, externs, definitions, _) =>
         given ctx: TransformerContext = TransformerContext(
           externs.collect { case d: cpsds.Extern.Def => (d.id, d) }.toMap,
           computeKinds(module),
@@ -113,7 +113,7 @@ object TransformerCpsDs extends Transformer {
           Set.empty,
           D, C)
 
-        val name = JSName(jsModuleName(module.path))
+        val name = JSName(jsModuleName("main"))
         val jsExterns = module.externs.filterNot(canInline).map(toJS)
         val jsDecls = module.declarations.flatMap(toJSDecl)
         val stmts = module.definitions.map(toJSToplevel)
