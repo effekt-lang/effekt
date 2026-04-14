@@ -1,0 +1,16 @@
+def foo(x, ks, k) {
+  k(x, ks)
+}
+def main(ks, k) {
+  foo(10, ks, k)
+}
+
+/// INLINE
+def main(ks, k) {
+  k(10, ks)
+}
+
+/// INLINE
+def main(ks, k) {
+  k(10, ks)
+}

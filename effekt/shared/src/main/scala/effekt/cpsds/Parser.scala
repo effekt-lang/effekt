@@ -118,14 +118,14 @@ class Parser extends Parsers {
   // === Module ===
 
   lazy val program: P[ModuleDecl] =
-    `module` ~> moduleName ~ many(toplevelDef) ^^ {
-      case path ~ defs => ModuleDecl(path, Nil, Nil, Nil, defs, Nil)
+    many(toplevelDef) ^^ {
+      defs => ModuleDecl(Nil, Nil, Nil, defs, Nil)
     }
 
   // === Toplevel ===
 
   lazy val toplevelDef: P[ToplevelDefinition] =
-    ( `def` ~> id ~ parens(commaList(id)) ~ (`=` ~> braces(stmt)) <~ `;`.? ^^ {
+    ( `def` ~> id ~ parens(commaList(id)) ~ braces(stmt) <~ `;`.? ^^ {
         case name ~ params ~ body => ToplevelDefinition.Def(name, params, body)
       }
     | `let` ~> id ~ (`|` ~> id <~ `,`) ~ id ~ (`=` ~> stmt) <~ `;`.? ^^ {
@@ -179,7 +179,7 @@ class Parser extends Parsers {
 
   // def id(params) = { body } rest
   lazy val defStmt: P[Stmt] =
-    `def` ~> id ~ parens(commaList(id)) ~ (`=` ~> braces(stmt)) ~ stmt ^^ {
+    `def` ~> id ~ parens(commaList(id)) ~ braces(stmt) ~ stmt ^^ {
       case name ~ params ~ body ~ rest => Stmt.Def(name, params, body, rest)
     }
 
