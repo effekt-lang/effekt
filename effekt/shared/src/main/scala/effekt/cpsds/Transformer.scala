@@ -105,7 +105,7 @@ def transform(block: core.Block)(using C: TransformationContext): Bind[Expr] = b
     transform(pure)
 
   case core.Block.New(impl) =>
-    Bind.makeNew(impl.interface, transformOperations(impl))
+    Bind.makeNew(impl.interface.name, transformOperations(impl))
 }
 
 /**
@@ -216,7 +216,7 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
 
   case core.Stmt.Def(id, core.Block.New(impl), body) =>
     val ops = transformOperations(impl)
-    Stmt.New(id, impl.interface, ops, transform(body, ks, k))
+    Stmt.New(id, impl.interface.name, ops, transform(body, ks, k))
 
   case core.Stmt.Def(id, core.Block.Unbox(pure), body) =>
     transform(pure).run {
