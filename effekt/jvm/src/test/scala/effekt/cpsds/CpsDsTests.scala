@@ -83,8 +83,9 @@ class CpsDsTests extends munit.FunSuite {
 
   def assertAlphaEquivalent(obtained: ModuleDecl, expected: ModuleDecl, clue: => Any)(using Location): Unit = {
     val names = Names(Map.empty)
-    val obtainedRenamed = TestRenamer(names)(obtained)
-    val expectedRenamed = TestRenamer(names)(expected)
+    val renamer = new TestRenamer
+    val obtainedRenamed = renamer(obtained)
+    val expectedRenamed = renamer(expected)
     def obtainedStr = PrettyPrinter.format(obtainedRenamed).layout
     def expectedStr = PrettyPrinter.format(expectedRenamed).layout
     assertEquals(obtainedStr, expectedStr, {
