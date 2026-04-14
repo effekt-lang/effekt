@@ -91,6 +91,10 @@ object Id {
     val name = n
   }
   def apply(n: String): Id = apply(symbols.Name.local(n))
+  def apply(n: String, i: Int): Id = new symbols.Symbol {
+    val name = symbols.Name.local(n)
+    override val id: Int = i
+  }
   def apply(n: Id): Id = apply(n.name)
 }
 

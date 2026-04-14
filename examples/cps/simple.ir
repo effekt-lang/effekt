@@ -7,10 +7,7 @@ def main(ks, k) {
 
 /// INLINE
 def main(ks, k) {
-  k(10, ks)
+  let x = 10;
+  k(x, ks)
 }
 
-/// INLINE
-def main(ks, k) {
-  k(10, ks)
-}

@@ -7,6 +7,7 @@ import effekt.util.UByte
 import effekt.util.messages.{ErrorReporter, ParseError}
 import kiama.parsing.{NoSuccess, ParseResult, Parsers, Success}
 import kiama.util.{Position, Range, Severities, Source, StringSource}
+import scala.collection.mutable
 
 class Parser extends Parsers {
 
@@ -98,11 +99,24 @@ class Parser extends Parsers {
   }
 
   // === Names ===
+  private val fresh = kiama.util.Counter()
+  private val renamed = mutable.Map[String, Id]()
 
-  private val ids = scala.collection.mutable.Map.empty[String, Id]
 
-  def idFor(name: String): Id =
-    ids.getOrElseUpdate(name, Id(name))
+  def freshId(name: String): Id = renamed.getOrElseUpdate(name, Id(name, fresh.next()))
+
+  def idFor(name: String): Id = name match {
+    case s if s.contains('_') && s.lastIndexOf('_') > 0 =>
+      val idx = s.lastIndexOf('_')
+      val prefix = s.substring(0, idx)
+      val suffix = s.substring(idx + 1)
+      if suffix.nonEmpty && suffix.forall(_.isDigit) then
+        Id(prefix, suffix.toInt)
+      else
+        freshId(name)
+    case _ =>
+      freshId(name)
+  }
 
   lazy val id: P[Id] = ident ^^ idFor
 
