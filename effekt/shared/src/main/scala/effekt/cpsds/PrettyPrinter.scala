@@ -74,7 +74,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
         toDoc(rest)
 
-    case Stmt.App(id, args) =>
+    case Stmt.App(id, args, direct) =>
       toDoc(id) <> parens(args.map(toDoc))
 
     case Stmt.Invoke(id, method, args) =>

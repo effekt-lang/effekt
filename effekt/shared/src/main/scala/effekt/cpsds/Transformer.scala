@@ -6,13 +6,10 @@ import core.optimizer.Usage
 
 // Only maps Ids to Ids for dealiasing
 case class TransformationContext(
-  renamings: Map[Id, Id] = Map.empty,
-  reachability: Map[Id, core.optimizer.Usage] = Map.empty,
-  directStyle: Set[Id] = Set.empty
+  renamings: Map[Id, Id] = Map.empty
 ) {
   def lookup(id: Id): Id = renamings.getOrElse(id, id)
   def alias(from: Id, to: Id): TransformationContext = copy(renamings = renamings + (from -> lookup(to)))
-  def markDirectStyle(id: Id): TransformationContext = copy(directStyle = directStyle + id)
 }
 
 
@@ -23,7 +20,7 @@ enum Continuation {
   case Static(hint: Id, k: (Expr, MetaContinuation) => Stmt)
 
   def apply(arg: Expr, ks: MetaContinuation): Stmt = this match {
-    case Dynamic(id) => Stmt.App(id, List(arg, ks.reify))
+    case Dynamic(id) => Stmt.App(id, List(arg, ks.reify), false)
     case Static(_, k) => k(arg, ks)
   }
 
@@ -239,7 +236,7 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
       bs <- Bind.traverse(bargs)(transform)
     } yield (calleeId, vs ++ bs)).run { case (calleeId, args) =>
       k.reify(stmt.tpe, cont =>
-        Stmt.App(calleeId, args ++ List(ks.reify, cont)))
+        Stmt.App(calleeId, args ++ List(ks.reify, cont), canBeDirect(stmt.capt)))
     }
 
   // --- Invoke ---
@@ -353,22 +350,17 @@ def transform(module: core.ModuleDecl): ModuleDecl = module match {
     val entrypoints = exports.toSet ++ definitions.collect {
       case core.Toplevel.Val(id, _) => id
     }
-    val reachability = core.optimizer.Reachable(entrypoints, module)
-    given TransformationContext = TransformationContext(reachability = reachability)
+    given TransformationContext = TransformationContext()
     ModuleDecl(path, includes, declarations, externs.flatMap(transformExtern),
       definitions.map(transformToplevel), exports)
 }
 
-private def canBeDirect(id: Id, captures: Captures)(using C: TransformationContext): Boolean =
-  def nonRecursive = C.reachability.get(id).exists(u => u != Usage.Recursive)
+private def canBeDirect(captures: Captures)(using C: TransformationContext): Boolean =
+  //def nonRecursive = C.reachability.get(id).exists(u => u != Usage.Recursive)
   def noControl = (captures -- Set(symbols.builtins.IOCapability.capture, symbols.builtins.GlobalCapability.capture)).isEmpty
-  nonRecursive && noControl
+  noControl
 
 def transformToplevel(definition: core.Toplevel)(using C: TransformationContext): ToplevelDefinition = definition match {
-  case core.Toplevel.Def(id, core.Block.BlockLit(_, _, vparams, Nil, body)) if canBeDirect(id, body.capt) =>
-    C.markDirectStyle(id)
-    sys error s"Direct style: ${id}"
-
   case core.Toplevel.Def(id, core.Block.BlockLit(_, _, vparams, bparams, body)) =>
     val ks = Id("ks")
     val k = Id("k")
@@ -383,7 +375,7 @@ def transformToplevel(definition: core.Toplevel)(using C: TransformationContext)
         val ks = Id("ks")
         val k = Id("k")
         ToplevelDefinition.Def(id, List(ks, k),
-          Binding(bindings, Stmt.App(k, List(value, Expr.Variable(ks)))))
+          Binding(bindings, Stmt.App(k, List(value, Expr.Variable(ks)), false)))
     }
 
   case core.Toplevel.Val(id, binding) =>

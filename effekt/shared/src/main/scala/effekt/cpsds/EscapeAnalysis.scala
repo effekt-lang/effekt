@@ -45,7 +45,7 @@ private class EscapeAnalysis(
       analyze(rest)
 
     // callee does NOT escape
-    case Stmt.App(id, args) =>
+    case Stmt.App(id, args, direct) =>
       args.foreach(escapes)
 
     case Stmt.Invoke(id, _, args) =>
