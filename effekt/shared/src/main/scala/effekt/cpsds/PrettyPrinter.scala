@@ -34,7 +34,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
   val emptyline: Doc = line <> line
 
   def toDoc(m: ModuleDecl): Doc = {
-    "module" <+> m.path <> emptyline <>
     toDoc(m.definitions)
   }
 
@@ -43,7 +42,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(d: ToplevelDefinition): Doc = d match {
     case ToplevelDefinition.Def(id, params, body) =>
-      "def" <+> toDoc(id) <> parens(params.map(toDoc)) <+> "=" <+> block(toDoc(body))
+      "def" <+> toDoc(id) <> parens(params.map(toDoc)) <+> block(toDoc(body))
     case ToplevelDefinition.Val(id, ks, k, binding) =>
       "let" <+> toDoc(id) <+> "|" <+> toDoc(ks) <> "," <+> toDoc(k) <+> "=" <+> toDoc(binding)
     case ToplevelDefinition.Let(id, binding) =>
@@ -63,7 +62,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(s: Stmt): Doc = s match {
     case Stmt.Def(id, params, body, rest) =>
-      "def" <+> toDoc(id) <> parens(params.map(toDoc)) <+> "=" <+> block(toDoc(body)) <> line <>
+      "def" <+> toDoc(id) <> parens(params.map(toDoc)) <+> block(toDoc(body)) <> line <>
         toDoc(rest)
 
     case Stmt.New(id, interface, operations, rest) =>
