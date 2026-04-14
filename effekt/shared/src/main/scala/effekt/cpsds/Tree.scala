@@ -35,7 +35,6 @@ sealed trait Tree extends Product {
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  */
 case class ModuleDecl(
-  path: String,
   includes: List[String],
   declarations: List[core.Declaration],
   externs: List[Extern],

@@ -351,7 +351,7 @@ def transform(module: core.ModuleDecl): ModuleDecl = module match {
       case core.Toplevel.Val(id, _) => id
     }
     given TransformationContext = TransformationContext()
-    ModuleDecl(path, includes, declarations, externs.flatMap(transformExtern),
+    ModuleDecl(includes, declarations, externs.flatMap(transformExtern),
       definitions.map(transformToplevel), exports)
 }
 
