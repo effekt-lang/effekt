@@ -1,17 +1,18 @@
 package effekt
 package cpsds
 
-import effekt.core.{Id, Names}
+import effekt.core.Id
 
-class TestRenamer(names: Names = Names(Map.empty)) {
+class TestRenamer {
 
   private var scopes: List[Map[Id, Id]] = List.empty
   private var toplevelScope: Map[Id, Id] = Map.empty
-  private var suffix: Int = 0
+  private var counter: Int = 0
 
   private def freshIdFor(id: Id): Id = {
-    if names.isKnown(id) then return names.getKnown(id).get
-    Id(id.name.name)
+    val n = counter
+    counter += 1
+    Id(id.name.name, n)
   }
 
   private def withBindings[R](ids: List[Id])(f: => R): R = {
@@ -183,14 +184,14 @@ class TestRenamer(names: Names = Names(Map.empty)) {
     }
 
   def apply(m: ModuleDecl): ModuleDecl = {
-    suffix = 0
+    counter = 0
     scopes = List.empty
     toplevelScope = collectToplevelIds(m).map(id => id -> freshIdFor(id)).toMap
     m.copy(definitions = m.definitions.map(rewrite))
   }
 
   def apply(s: Stmt): Stmt = {
-    suffix = 0
+    counter = 0
     scopes = List.empty
     toplevelScope = Map.empty
     rewrite(s)
