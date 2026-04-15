@@ -2,11 +2,6 @@ import repr
 import map
 import set
 
-extern type FooBarBaz
-
-extern def mkFooBarBaz(): FooBarBaz =
-  js "(42)"
-
 type MyType[T] {
   A(x: Int, y: T)
   B(f: Int => Int at {})
@@ -38,7 +33,6 @@ def main() = {
   dump { repr(MyList::Cons(3, MyList::Cons(4, MyList::Nil()))) }
   dump { repr(MyList::Cons("hi", MyList::Cons("there", MyList::Nil()))) }
   dump { MyList::Cons((), MyList::Cons((), MyList::Nil())).repr }
-  dump { mkFooBarBaz().repr }
 
   try {
     dump { repr(box e) }
