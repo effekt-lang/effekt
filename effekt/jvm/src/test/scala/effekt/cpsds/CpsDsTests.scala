@@ -20,8 +20,16 @@ class CpsDsTests extends munit.FunSuite {
 
   def examplesDir = new File("examples") / "cps"
 
+  val defaultNames = Map(
+    "main" -> Id("main"),
+    "add"  -> Id("add"),
+    "sub"  -> Id("sub"),
+    "eq"  -> Id("eq"),
+    "println"  -> Id("println")
+  )
+
   def parse(input: String, nickname: String = "input")(using Location): ModuleDecl = {
-    Parser.module(input) match {
+    Parser.module(input, Names(defaultNames)) match {
       case Success(result, next) if next.atEnd => result
       case Success(result, next) =>
         fail(s"Parsing $nickname had trailing garbage: ${next.source.toString.substring(next.offset)}")

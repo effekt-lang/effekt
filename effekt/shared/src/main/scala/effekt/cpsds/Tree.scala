@@ -67,7 +67,7 @@ object ExternBody {
 enum Expr extends Tree {
   case Variable(id: Id)
   case Literal(value: Any, tpe: core.ValueType)
-  case Make(data: ValueType.Data, tag: Id, vargs: List[Expr])
+  case Make(data: ValueType.Data, tag: Id, args: List[Expr])
 
   // Continuations
   case Abort
