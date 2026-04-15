@@ -1513,8 +1513,19 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 Context.annotate(Annotations.Symbol, r, x)
                 r
               }
+              val ffn = fn match {
+                case source.IdTarget(id) =>
+                  val r = source.IdTarget(source.IdRef(Nil, id.name, source.Span.missing))
+                  Context.annotate(Annotations.Symbol, r.id,
+                    id.symbol match {
+                      case symbols.CallTarget(syms, impls) =>
+                        symbols.CallTarget(syms, impls) // needs to be refreshed for recursive uses
+                    })
+                  r
+                case _ => Context.panic("Implicit block argument should be an (eta-expanded) name, not an expression")
+              }
               source.BlockLiteral(ftparams, fvparams, fbparams,
-                source.Return(source.Call(fn, ftargs, fvargs, fbargs,
+                source.Return(source.Call(ffn, ftargs, fvargs, fbargs,
                   source.Span.missing), source.Span.missing), source.Span.missing)
             case _ => Context.panic("Unexpected implicit value for implicit block parameter")
           }
