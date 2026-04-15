@@ -235,8 +235,8 @@ def intersection[A](s1: Set[A], s2: Set[A]): Set[A] =
   s1.intersection(s2, s1.compare)
 
 
-def reprBuiltin[A](s: Set[A]) { reprA: A => Unit / rose[Llabel, Unit]}: Unit / rose[Llabel, Unit] =
-  do labelled[Llabel, Unit](Llabel::Opaque("Set")) { s.foreach { a => reprA(a) } }
+def reprBuiltin[A](s: Set[A]) { reprA: A => Unit / rose[Repr::Llabel, Unit]}: Unit / rose[Repr::Llabel, Unit] =
+  do labelled[Repr::Llabel, Unit](Repr::Llabel::Opaque("Set")) { s.foreach { a => reprA(a) } }
 
 
 // Streaming

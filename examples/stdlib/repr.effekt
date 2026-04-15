@@ -21,10 +21,10 @@ type MyList[T] {
   Cons(head: T, tail: MyList[T])
 }
 
-def dump { rpr: () => Unit / rose[Llabel, Unit]}: Unit = println(toString { rpr() })
+def dump { rpr: () => Unit / rose[Repr::Llabel, Unit]}: Unit = println(toString { rpr() })
 
 def main() = {
-  dump { do labelled(Llabel::Prop("x")) { do labelled(Llabel::Int(3)) { () } } }
+  dump { do labelled(Repr::Llabel::Prop("x")) { do labelled(Repr::Llabel::Int(3)) { () } } }
 
   val fst = A(3, false); dump { repr(fst) }
 
@@ -47,7 +47,7 @@ def main() = {
   dump { E([(1, "one"), (2, "two")].fromListGeneric, [("one", 1), ("two", 2)].fromListGeneric).repr }
   dump { F([A(3, fst), A(4, fst)].fromListGeneric).repr }
 
-  val (_, trees) = reify[Llabel, Unit] {
+  val (_, trees) = Repr::reify[Unit] {
     val _ = (repr(A(3, A(4, fst))), repr(B[Nothing](box { n => n + 1 })))
   }
   trees.foreach { tree =>

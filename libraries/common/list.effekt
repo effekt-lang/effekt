@@ -974,8 +974,8 @@ def tails[A](list: List[A]): Unit / emit[List[A]] =
     case Cons(head, tail) => do emit(list); tails(tail)
   }
 
-def reprBuiltin[A](list: List[A]) { reprA: A => Unit / rose[Llabel, Unit] }: Unit / rose[Llabel, Unit]
-  = do labelled[Llabel, Unit](Llabel::List()) { list.foreach { a => reprA(a) } }
+def reprBuiltin[A](list: List[A]) { reprA: A => Unit / rose[Repr::Llabel, Unit] }: Unit / rose[Repr::Llabel, Unit]
+  = do labelled[Repr::Llabel, Unit](Repr::Llabel::List()) { list.foreach { a => reprA(a) } }
 
 /// Connects `list` as a producer to a given pull stream `driver` acting as a consumer.
 def feed[T, R](list: List[T]) { driver: () => R / next[T] }: R = {

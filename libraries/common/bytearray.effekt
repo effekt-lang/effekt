@@ -293,8 +293,8 @@ def fromList(lst: List[Byte]): ByteArray = {
   arr
 }
 
-def reprBuiltin(bytes: ByteArray): Unit / rose[Llabel, Unit] =
-  do labelled[Llabel, Unit](Llabel::Opaque("ByteArray")) { bytes.foreach { b => reprBuiltin(b) } }
+def reprBuiltin(bytes: ByteArray): Unit / rose[Repr::Llabel, Unit] =
+  do labelled[Repr::Llabel, Unit](Repr::Llabel::Opaque("ByteArray")) { bytes.foreach { b => reprBuiltin(b) } }
 
 // Streaming
 // ---------
