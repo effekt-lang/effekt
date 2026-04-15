@@ -43,8 +43,11 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
     // an effect call -- translate to method call on the inferred capability
     case c @ Do(id, targs, vargs, bargs, span) =>
-      val transformedValueArgs = vargs.map(rewrite)
-      val transformedBlockArgs = bargs.map(rewrite)
+      val implicitValueArgs = Context.annotation(Annotations.ImplicitValueArguments, c)
+      val implicitBlockArgs = Context.annotation(Annotations.ImplicitBlockArguments, c)
+
+      val transformedValueArgs = (vargs ++ implicitValueArgs).map(rewrite)
+      val transformedBlockArgs = (bargs ++ implicitBlockArgs).map(rewrite)
 
       // the receiver of this effect operation call
       val receiver = Context.annotation(Annotations.CapabilityReceiver, c)
@@ -66,8 +69,11 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       Select(rewrite(receiver.value), fun.id, span.synthesized)
 
     case c @ MethodCall(receiver, id, targs, vargs, bargs, span) =>
-      val valueArgs = vargs.map { a => rewrite(a) }
-      val blockArgs = bargs.map { a => rewrite(a) }
+      val implicitValueArgs = Context.annotation(Annotations.ImplicitValueArguments, c)
+      val implicitBlockArgs = Context.annotation(Annotations.ImplicitBlockArguments, c)
+
+      val valueArgs = (vargs ++ implicitValueArgs).map { a => rewrite(a) }
+      val blockArgs = (bargs ++ implicitBlockArgs).map { a => rewrite(a) }
 
       val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
       val capabilityArgs = capabilities.map(referenceToCapability)
