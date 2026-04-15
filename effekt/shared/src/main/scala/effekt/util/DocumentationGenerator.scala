@@ -11,6 +11,7 @@ trait DocumentationGenerator {
   // A recursive structure that resembles JSON
   enum DocValue {
     case DocNumber(value: Int)
+    case DocBool(value: Boolean)
     case DocString(value: String)
     case DocArray(value: List[DocValue])
     case DocObject(value: Documentation)
@@ -51,6 +52,7 @@ trait DocumentationGenerator {
 
     // block params
     case BlockTypeTree(eff, _) => ???
+    case ReifiedType(tpe) => ???
     case FunctionType(tparams, vparams, bparams, result, effects, span) => obj(HashMap(
       "kind" -> str("FunctionType"),
       "tparams" -> generateTparams(tparams.unspan),
@@ -105,21 +107,23 @@ trait DocumentationGenerator {
     arr(list.map(generate))
 
   def generateVparams(list: List[ValueParam])(using C: Context): DocValue = arr(list.map {
-    case ValueParam(id, tpe, span) =>
+    case ValueParam(id, tpe, isImplicit, span) =>
       obj(HashMap(
         "kind" -> str("ValueParam"),
         "id" -> generate(id),
         "tpe" -> tpe.map(generate).getOrElse(empty),
+        "isImplicit" -> DocBool(isImplicit),
         "span" -> generate(span),
       ))
   })
 
   def generateBparams(list: List[BlockParam])(using C: Context): DocValue = arr(list.map {
-    case BlockParam(id, tpe, span) =>
+    case BlockParam(id, tpe, isImplicit, span) =>
       obj(HashMap(
         "kind" -> str("BlockParam"),
         "id" -> generate(id),
         "tpe" -> tpe.map(generate).getOrElse(empty),
+        "isImplicit" -> DocBool(isImplicit),
         "span" -> generate(span),
       ))
   })
@@ -322,6 +326,7 @@ case class JSONDocumentationGenerator(ast: ModuleDecl, name: String = "")(using 
     case DocValue.DocString(str) => s"\"${str}\""
     case DocValue.DocObject(obj) => toJSON(obj)
     case DocValue.DocArray(arr) => toJSON(arr)
+    case DocValue.DocBool(b) => b.toString
   }
 
   def toJSON(doc: Documentation): String = {

@@ -130,6 +130,7 @@ enum TokenKind {
   case `...`
   case `^^`
   case `^`
+  case `?`
 
   // keywords
   case `let`
@@ -472,6 +473,7 @@ class Lexer(source: Source) extends Iterator[Token] {
 
       case ('*', '=') => advanceWith(TokenKind.`*=`)
       case ('*', _)   => advanceWith(TokenKind.`*`)
+      case ('?', _)   => advanceWith(TokenKind.`?`)
 
       case ('$', '{') =>
         interpolationDepths.push(depthTracker.braces + 1)

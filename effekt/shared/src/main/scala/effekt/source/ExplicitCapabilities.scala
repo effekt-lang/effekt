@@ -81,8 +81,10 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
     case c @ Call(recv, targs, vargs, bargs, span) =>
       val receiver = rewrite(recv)
-      val valueArgs = vargs.map { a => rewrite(a) }
-      val blockArgs = bargs.map { a => rewrite(a) }
+      val implicitValueArgs = Context.annotation(Annotations.ImplicitValueArguments, c)
+      val implicitBlockArgs = Context.annotation(Annotations.ImplicitBlockArguments, c)
+      val valueArgs = (vargs ++ implicitValueArgs).map { a => rewrite(a) }
+      val blockArgs = (bargs ++ implicitBlockArgs).map { a => rewrite(a) }
 
       val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
       val capabilityArgs = capabilities.map(referenceToCapability)
@@ -154,6 +156,6 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
   def definitionFor(s: symbols.BlockParam)(using C: Context): source.BlockParam =
     val id = IdDef(s.name.name, Span.missing)
     C.assignSymbol(id, s)
-    val tree: source.BlockParam = source.BlockParam(id, s.tpe.map { source.BlockTypeTree(_, Span.missing) }, Span.missing)
+    val tree: source.BlockParam = source.BlockParam(id, s.tpe.map { source.BlockTypeTree(_, Span.missing) }, isImplicit=false, Span.missing)
     tree
 }

@@ -293,8 +293,8 @@ case class Include(path: String, span: Span) extends Tree
  * Parameters and arguments
  */
 enum Param extends Definition {
-  case ValueParam(id: IdDef, tpe: Option[ValueType], span: Span)
-  case BlockParam(id: IdDef, tpe: Option[BlockType], span: Span)
+  case ValueParam(id: IdDef, tpe: Option[ValueType], isImplicit: Boolean, span: Span)
+  case BlockParam(id: IdDef, tpe: Option[BlockType], isImplicit: Boolean, span: Span)
 }
 export Param.*
 
@@ -737,6 +737,13 @@ case class FunctionType(tparams: Many[Id], vparams: Many[ValueType], bparams: Ma
  * Type-and-effect annotations
  */
 case class Effectful(tpe: ValueType, eff: Effects, span: Span) extends Type
+
+/**
+ * For generating code with already resolved types
+ */
+case class ReifiedType(tpe: symbols.ValueType | symbols.BlockType) extends Type {
+  val span = Span.missing
+}
 
 // These are just type aliases for documentation purposes.
 type BlockType = Type

@@ -11,6 +11,7 @@ import effekt.source.{Def, Id, IdDef, IdRef, Many, MatchGuard, ModuleDecl, Term,
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
 import effekt.symbols.scopes.*
+import effekt.context.Try
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -445,6 +446,40 @@ object Namer extends Phase[Parsed, NameResolved] {
     resolve(a.value)
   }
 
+  def resolveImplicits(id: source.Id)(using Context): Unit = {
+    Context.symbolOf(id) match {
+      case symbols.CallTarget(syms, cs) =>
+        cs.foreach {
+          case (b, c@ImplicitContext(vimpls, bimpls)) if !c.resolved =>
+            c.resolved = true // set as resolved first, so recursive calls do not continue doing so.
+            val tVimpls = vimpls.flatMap { case k -> v =>
+              val r = Try {
+                resolve(v)
+              };
+              if (r.isRight) {
+                Some(k -> v)
+              } else {
+                None
+              }
+            }
+            val tBimpls = bimpls.flatMap { case k -> b =>
+              val r = Try {
+                resolve(b)
+              }
+              if (r.isRight) {
+                Some(k -> b)
+              } else {
+                None
+              }
+            }
+            c.values = tVimpls
+            c.blocks = tBimpls
+          case _ => ()
+        }
+      case _ => ()
+    }
+  }
+
   def resolve(t: source.Term)(using Context): Unit = Context.focusing(t) {
 
     case source.Literal(value, tpe, _) => ()
@@ -491,7 +526,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case tree @ source.Region(name, body, _) =>
       val regionName = Name.local(name.name)
-      val reg = BlockParam(regionName, Some(builtins.TRegion), CaptureParam(regionName), tree)
+      val reg = BlockParam(regionName, Some(builtins.TRegion), CaptureParam(regionName), isImplicit = false, tree)
       Context.define(name, reg)
       Context scoped {
         Context.bindBlock(reg)
@@ -551,19 +586,21 @@ object Namer extends Phase[Parsed, NameResolved] {
             then Context.abort(pp"Cannot resolve function ${target}, called on an expression.")
         }
       }
+      resolveImplicits(target)
       targs foreach resolveValueType
       vargs foreach resolve
       bargs foreach resolve
 
     case source.Do(target, targs, vargs, bargs, _) =>
       Context.resolveEffectCall(target)
+      resolveImplicits(target)
       targs foreach resolveValueType
       vargs foreach resolve
       bargs foreach resolve
 
     case source.Call(target, targs, vargs, bargs, _) =>
       Context.focusing(target) {
-        case source.IdTarget(id)     => Context.resolveFunctionCalltarget(id)
+        case source.IdTarget(id)     => Context.resolveFunctionCalltarget(id); resolveImplicits(id)
         case source.ExprTarget(expr) => resolve(expr)
       }
       targs foreach resolveValueType
@@ -666,19 +703,19 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Used for fields where "please wrap this in braces" is not good advice to be told by [[resolveValueType]].
    */
   def resolveNonfunctionValueParam(p: source.ValueParam)(using Context): ValueParam = {
-    val sym = ValueParam(Name.local(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = false)), decl = p)
+    val sym = ValueParam(Name.local(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = false)), p.isImplicit, decl = p)
     Context.assignSymbol(p.id, sym)
     sym
   }
 
   def resolve(p: source.ValueParam)(using Context): ValueParam = {
-    val sym = ValueParam(Name.local(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = true)), decl = p)
+    val sym = ValueParam(Name.local(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = true)), p.isImplicit, decl = p)
     Context.assignSymbol(p.id, sym)
     sym
   }
   def resolve(p: source.BlockParam)(using Context): BlockParam = {
     val name = Name.local(p.id)
-    val sym: BlockParam = BlockParam(name, p.tpe.map { tpe => resolveBlockType(tpe, isParam = true) }, CaptureParam(name), p)
+    val sym: BlockParam = BlockParam(name, p.tpe.map { tpe => resolveBlockType(tpe, isParam = true) }, CaptureParam(name), p.isImplicit, p)
     Context.assignSymbol(p.id, sym)
     sym
   }
@@ -719,7 +756,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.IgnorePattern(_)     => Nil
     case source.LiteralPattern(lit, _) => Nil
     case source.AnyPattern(id, _) =>
-      val p = ValueParam(Name.local(id), None, decl = id)
+      val p = ValueParam(Name.local(id), None, isImplicit = false, decl = id)
       Context.assignSymbol(id, p)
       List(p)
     case source.TagPattern(id, patterns, _) =>
@@ -781,6 +818,8 @@ object Namer extends Phase[Parsed, NameResolved] {
     // TODO reconsider reusing the same set for terms and types...
     case source.BoxedType(tpe, capt, _) =>
       BoxedType(resolveBlockType(tpe), resolve(capt))
+    case source.ReifiedType(tpe: ValueType) =>
+      tpe
     case other =>
       Context.error(pretty"Expected value type, but got ${describeType(other)}.")
       other match {
@@ -807,6 +846,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case t: source.FunctionType  => resolve(t)
     case t: source.BlockTypeTree => t.eff
     case t: source.TypeRef => resolveBlockRef(t)
+    case source.ReifiedType(tpe: BlockType) => tpe
     case other =>
       Context.error(pretty"Expected block type, but got ${describeType(other)}.")
       other match
@@ -926,9 +966,10 @@ object Namer extends Phase[Parsed, NameResolved] {
     case _: source.FunctionType => s"a second-class function type ${t.sourceOf}"
     case _: source.Effectful => s"a type-and-effect annotation ${t.sourceOf}"
 
-    // THESE TWO SHOULD NEVER BE USER-VISIBLE!
+    // THESE THREE SHOULD NEVER BE USER-VISIBLE!
     case source.ValueTypeTree(tpe, _) => s"a value type tree ${tpe}"
     case source.BlockTypeTree(eff, _) => s"a block type tree ${eff}"
+    case source.ReifiedType(tpe) => "a type in generated code"
   }
 
   private def prettySourceEffectSet(effects: Set[source.TypeRef])(using Context) =
@@ -1081,7 +1122,11 @@ trait NamerOps extends ContextOps { Context: Context =>
 
     val syms2 = if (syms.isEmpty) scope.lookupFunction(id.path, id.name) else syms
 
-    if (syms2.nonEmpty) { assignSymbol(id, CallTarget(syms2.asInstanceOf)); true } else { false }
+    if (syms2.nonEmpty) {
+      val syms3 = syms2.asInstanceOf[List[Set[BlockSymbol]]]
+      assignSymbol(id, CallTarget(syms3, scope.lookupPotentialImplicits(syms3)))
+      true
+    } else { false }
   }
 
   private[namer] def resolveOverloadedFunction(id: IdRef): Boolean = at(id) {
@@ -1092,7 +1137,11 @@ trait NamerOps extends ContextOps { Context: Context =>
     // lookup first block param and do not collect multiple since we do not (yet?) permit overloading on block parameters
     val syms3 = if (syms2.isEmpty) List(scope.lookupFirstBlockParam(id.path, id.name)) else syms2
 
-    if (syms3.nonEmpty) { assignSymbol(id, CallTarget(syms3.asInstanceOf)); true } else { false }
+    if (syms3.nonEmpty) {
+      val syms4 = syms3.asInstanceOf[List[Set[BlockSymbol]]]
+      assignSymbol(id, CallTarget(syms4, scope.lookupPotentialImplicits(syms4)))
+      true
+    } else { false }
   }
 
   /**
@@ -1116,7 +1165,7 @@ trait NamerOps extends ContextOps { Context: Context =>
           // Always abort with the generic message
           abort(pretty"Cannot find a function named `${id}`.")
         }
-        assignSymbol(id, CallTarget(blocks))
+        assignSymbol(id, CallTarget(blocks, scope.lookupPotentialImplicits(blocks)))
     }
   }
 
@@ -1170,7 +1219,8 @@ trait NamerOps extends ContextOps { Context: Context =>
       abort(pretty"Cannot resolve field access ${id}")
     }
 
-    assignSymbol(id, CallTarget(syms.asInstanceOf))
+    val bsyms = syms.asInstanceOf[List[Set[BlockSymbol]]]
+    assignSymbol(id, CallTarget(bsyms, scope.lookupPotentialImplicits(bsyms)))
   }
 
   /**
@@ -1184,7 +1234,8 @@ trait NamerOps extends ContextOps { Context: Context =>
       abort(pretty"Cannot resolve effect operation ${id}")
     }
 
-    assignSymbol(id, CallTarget(syms.asInstanceOf))
+    val bsyms = syms.asInstanceOf[List[Set[BlockSymbol]]]
+    assignSymbol(id, CallTarget(bsyms, scope.lookupPotentialImplicits(bsyms)))
   }
 
   /**
