@@ -4,6 +4,7 @@ package symbols
 import scala.collection.mutable
 import effekt.source.IdRef
 import effekt.util.messages.ErrorReporter
+import effekt.context.Context
 
 /**
  * An immutable container of bindings.
@@ -282,7 +283,29 @@ object scopes {
     // for caching (to prevent infinite recursion here)
     val foundImplicits: mutable.HashMap[(Scope, BlockSymbol), ImplicitContext] = mutable.HashMap.empty
 
-    def lookupPotentialImplicits(forCandidates: List[Set[BlockSymbol]])(using ErrorReporter): Map[BlockSymbol, ImplicitContext] = {
+    def generateImplicitValueArg(p: symbols.ValueParam)(using Context): source.ValueArg = {
+      source.ValueArg(Some(p.name.name), source.Var(IdRef(Nil, p.name.name, source.Span.missing), source.Span.missing), source.Span.missing)
+    }
+    def generateImplicitBlockArg(p: symbols.BlockParam)(using Context): source.Term =
+      p.tpe.get match {
+        case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
+          val gtparams = tparams.map { p => source.IdDef(p.name.name, source.Span.missing) }
+          val gvparams: List[source.ValueParam] =
+            vparams.map { p => source.ValueParam(source.IdDef("arg0", source.Span.missing), Some(source.ReifiedType(p)), false, source.Span.missing) }
+          val gbparams: List[source.BlockParam] =
+            bparams.map { p => source.BlockParam(source.IdDef("block_arg0", source.Span.missing), Some(source.ReifiedType(p)), false, source.Span.missing) }
+          source.BlockLiteral(gtparams, gvparams, gbparams,
+            source.Return(source.Call(source.IdTarget(source.IdRef(Nil, p.name.name, source.Span.missing)), Nil,
+              gvparams.map { x => source.ValueArg(None, source.Var(source.IdRef(Nil, x.id.name, source.Span.missing), source.Span.missing), source.Span.missing) },
+              gbparams.map { x => source.Var(source.IdRef(Nil, x.id.name, source.Span.missing), source.Span.missing) },
+              source.Span.missing),
+              source.Span.missing), source.Span.missing)
+        case BlockType.InterfaceType(typeConstructor, args) =>
+          // TODO eta-exapnd here, too ?
+          source.Var(IdRef(Nil, p.name.name, source.Span.missing), source.Span.missing)
+      }
+
+    def lookupPotentialImplicits(forCandidates: List[Set[BlockSymbol]])(using Context): Map[BlockSymbol, ImplicitContext] = {
         forCandidates.flatMap { level =>
           level.flatMap { b =>
             def findCached(b: BlockSymbol, scope: Scope): Option[ImplicitContext] = {
@@ -298,28 +321,9 @@ object scopes {
               b match {
                 // walks up scopes, because block parameters should be eta-expanded below
                 case c: Callable =>
-                  val r =ImplicitContext(c.vparams.collect { case p if p.isImplicit =>
-                    p -> source.ValueArg(Some(p.name.name), source.Var(IdRef(Nil, p.name.name, source.Span.missing), source.Span.missing), source.Span.missing)
-                  }.toMap,
-                    c.bparams.collect { case p if p.isImplicit =>
-                      p.tpe.get match {
-                        case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
-                          val gtparams = tparams.map { p => source.IdDef(p.name.name, source.Span.missing) }
-                          val gvparams: List[source.ValueParam] =
-                            vparams.map { p => source.ValueParam(source.IdDef("arg0", source.Span.missing), Some(source.ReifiedType(p)), false, source.Span.missing) }
-                          val gbparams: List[source.BlockParam] =
-                            bparams.map { p => source.BlockParam(source.IdDef("block_arg0", source.Span.missing), Some(source.ReifiedType(p)), false, source.Span.missing) }
-                          p -> source.BlockLiteral(gtparams, gvparams, gbparams,
-                            source.Return(source.Call(source.IdTarget(source.IdRef(Nil, p.name.name, source.Span.missing)), Nil,
-                              gvparams.map { x => source.ValueArg(None, source.Var(source.IdRef(Nil, x.id.name, source.Span.missing), source.Span.missing), source.Span.missing) },
-                              gbparams.map { x => source.Var(source.IdRef(Nil, x.id.name, source.Span.missing), source.Span.missing) },
-                              source.Span.missing),
-                              source.Span.missing), source.Span.missing)
-                        case BlockType.InterfaceType(typeConstructor, args) =>
-                          // TODO eta-exapnd here, too ?
-                          p -> source.Var(IdRef(Nil, p.name.name, source.Span.missing), source.Span.missing)
-                      }
-                    }.toMap)
+                  val r = ImplicitContext(
+                    c.vparams.collect { case p if p.isImplicit => p -> generateImplicitValueArg(p) }.toMap,
+                    c.bparams.collect { case p if p.isImplicit => p -> generateImplicitBlockArg(p) }.toMap)
                   foundImplicits.put((scope, b), r)
                   Some(b -> r)
                 case _ => None
