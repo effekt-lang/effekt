@@ -270,9 +270,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             }
             val result = TmpValue("etaBinding")
             val callee = BlockVar(f)
-            BlockLit(tparams, bparams.map(_.id), vparams, bparams,
-              core.ExternApp(result, purity, callee, targs, vargs, bargs,
-                Stmt.Return(Expr.ValueVar(result, transform(restpe)))))
+            ResolveExternDefs.findPreferred(f.bodies) match {
+              case b: source.ExternBody.EffektExternBody[_] =>
+                BlockLit(tparams, bparams.map(_.id), vparams, bparams,
+                  App(callee, targs, vargs, bargs))
+              case _ =>
+                BlockLit(tparams, bparams.map(_.id), vparams, bparams,
+                  core.ExternApp(result, purity, callee, targs, vargs, bargs,
+                    Stmt.Return(Expr.ValueVar(result, transform(restpe)))))
+            }
           }
 
           sym match {
@@ -791,11 +797,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case f: Field =>
         Context.panic("Should have been translated to a select!")
       case f: ExternFunction =>
-        val purity = if f.capture.pure then Pure else if f.capture.pureOrIO then Impure else Async
-        val x = TmpValue("r")
-        val callee = BlockVar(f)
-        val tpe = Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargsT.map(_.capt)).result
-        ExternApp(x, purity, callee, targs, vargsT, bargsT, Return(core.ValueVar(x, tpe)))
+        ResolveExternDefs.findPreferred(f.bodies) match {
+          case b: source.ExternBody.EffektExternBody[_] =>
+            App(BlockVar(f), targs, vargsT, bargsT)
+          case _ =>
+            val purity = if f.capture.pure then Pure else if f.capture.pureOrIO then Impure else Async
+            val x = TmpValue("r")
+            val callee = BlockVar(f)
+            val tpe = Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargsT.map(_.capt)).result
+            ExternApp(x, purity, callee, targs, vargsT, bargsT, Return(core.ValueVar(x, tpe)))
+        }
       case f: BlockSymbol =>
         App(BlockVar(f), targs, vargsT, bargsT)
       case f: ValueSymbol =>
