@@ -537,7 +537,7 @@ object Tree {
 
     extension [T <: Product](original: T) {
       /** Returns [[original]] if [[rebuilt]] is field-by-field reference-identical. */
-      inline def rebuild(inline rebuilt: T): T = {
+      def rebuild(rebuilt: T): T = {
         val arity = original.productArity
         var i = 0
         var changed = false
