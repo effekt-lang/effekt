@@ -1,0 +1,12 @@
+record Zero()
+record Succ[A](a: A)
+
+def toInt(a: Zero): Int = 0
+def toInt[A](a: Succ[A]){?toInt: A => Int}: Int = toInt(a.a) + 1
+
+def add[A](x: A, y: Zero): A = x
+def add[A](y: Zero, x: A): A = x
+def add[A,B,C](x: Succ[A], y: Succ[B]){?add: (A,B) => C}: Succ[Succ[C]] =
+  Succ(Succ(add(x.a, y.a)))
+
+def main() = println(toInt(add(Succ(Succ(Zero())), Succ(Zero()))).show)
