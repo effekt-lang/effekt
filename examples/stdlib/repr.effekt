@@ -1,6 +1,7 @@
 import repr
 import map
 import set
+import seq
 
 type MyType[T] {
   A(x: Int, y: T)
@@ -12,8 +13,8 @@ type MyType[T] {
 }
 
 type MyList[T] {
-  Nil()
-  Cons(head: T, tail: MyList[T])
+  MyNil()
+  MyCons(head: T, tail: MyList[T])
 }
 
 def dump { rpr: () => Unit / rose[Repr::Llabel, Unit]}: Unit = println(toString { rpr() })
@@ -29,10 +30,10 @@ def main() = {
   dump { repr(B[Nothing](box { n => n + 1 })) }
   dump { repr(C[Nothing]([1, 2, 3, 4].fromList)) }
   dump { repr(D[Nothing](box { n => n + 1 }, [10, 15, 3], [[1, 2].fromList, [3, 4].fromList].fromList, "ABC".fromString)) }
-  dump { repr(MyList::Nil[Int]()) }
-  dump { repr(MyList::Cons(3, MyList::Cons(4, MyList::Nil()))) }
-  dump { repr(MyList::Cons("hi", MyList::Cons("there", MyList::Nil()))) }
-  dump { MyList::Cons((), MyList::Cons((), MyList::Nil())).repr }
+  dump { repr(MyList::MyNil[Int]()) }
+  dump { repr(MyList::MyCons(3, MyList::MyCons(4, MyList::MyNil()))) }
+  dump { repr(MyList::MyCons("hi", MyList::MyCons("there", MyList::MyNil()))) }
+  dump { MyList::MyCons((), MyList::MyCons((), MyList::MyNil())).repr }
 
   try {
     dump { repr(box e) }
@@ -47,4 +48,7 @@ def main() = {
   trees.foreach { tree =>
     println(tree.toUniversalString)
   }
+
+  dump { [1, 2, 3, 4, 5].repr }
+  dump { [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].toSeq.repr }
 }
