@@ -284,7 +284,20 @@ object scopes {
     val foundImplicits: mutable.HashMap[(Scope, BlockSymbol), ImplicitContext] = mutable.HashMap.empty
 
     def generateImplicitValueArg(p: symbols.ValueParam)(using Context): source.ValueArg = {
-      source.ValueArg(Some(p.name.name), source.Var(IdRef(Nil, p.name.name, source.Span.missing), source.Span.missing), source.Span.missing)
+      source.ValueArg(Some(p.name.name), p.name.name match {
+        case "sourcePosition" =>
+          val pos = Context.focus.span
+          val from = pos.source.offsetToPosition(pos.from)
+          val to = pos.source.offsetToPosition(pos.to)
+          source.Call(source.IdTarget(source.IdRef(Nil, "SourcePosition", source.Span.missing)), Nil, List(
+            source.ValueArg(None, source.Literal(pos.source.name, builtins.TString, source.Span.missing), source.Span.missing),
+            source.ValueArg(None, source.Literal(from.line, builtins.TInt, source.Span.missing), source.Span.missing),
+            source.ValueArg(None, source.Literal(from.column, builtins.TInt, source.Span.missing), source.Span.missing),
+            source.ValueArg(None, source.Literal(to.line, builtins.TInt, source.Span.missing), source.Span.missing),
+            source.ValueArg(None, source.Literal(to.column, builtins.TInt, source.Span.missing), source.Span.missing),
+          ), Nil, source.Span.missing)
+        case _ => source.Var(IdRef(Nil, p.name.name, source.Span.missing), source.Span.missing)
+      }, source.Span.missing)
     }
     def generateImplicitBlockArg(p: symbols.BlockParam)(using Context): source.Term =
       p.tpe.get match {
