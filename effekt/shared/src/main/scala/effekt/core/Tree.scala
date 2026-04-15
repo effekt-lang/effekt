@@ -153,16 +153,6 @@ object QualifiedSignature {
     val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"$vps$bps"
     QualifiedSignature(s"${moduleName}::${f.name.name}$tps$ps")
   }
-
-  def apply(name: Id, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam]): QualifiedSignature = {
-    import effekt.symbols.ErrorMessageInterpolator
-    val tps = if (tparams.isEmpty) "" else s"[${tparams.map(tp => pp"${tp}").mkString(", ")}]"
-    val valueParams = vparams.map { p => pp"${p.tpe}" }.mkString(", ")
-    val vps = if valueParams.isEmpty then "" else s"($valueParams)"
-    val bps = bparams.map { b => s"{${pp"${b.tpe}"}}" }.mkString("")
-    val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"$vps$bps"
-    QualifiedSignature(s"${name}$tps$ps")
-  }
 }
 
 sealed trait ExternBody[+T] extends Tree
