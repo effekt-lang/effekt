@@ -2,7 +2,7 @@ def ex1(lst: List[Int]) = lst match {
   case [1, 2] => "hello"
   case [42, x, 2] => x.show
   case [3, 4, ..y] => y.show
-  case [_, ..] => "42"
+  case [_, ..] => "don't care"
   case [..x] => x.show
 }
 
@@ -12,6 +12,18 @@ def ex2(lst: List[Option[Int]]) = {
   } else {
     "world"
   }
+}
+
+def ex3(lst: List[List[Int]]) = {
+  val [fst, [_, x]] = lst else panic("Ohno")
+  x
+}
+
+def foo(lst: List[Int]) { f: List[Int] => Unit } = f(lst)
+
+def ex4(lst: List[Int]) = foo(lst) { 
+  case [a, b, c] => println(a + b + c)
+  case _ => panic("Ohno")
 }
 
 def main() = {
@@ -24,4 +36,8 @@ def main() = {
   println(ex2([Some(2), None()]))
   println(ex2([Some(2), Some(3), Some(3)]))
   println(ex2([Some(4), Some(5)]))
+  println("---")
+  println(ex3([[3], [2, 42]]))
+  println("---")
+  println(ex4([1, 2, 3]))
 }
