@@ -309,7 +309,7 @@ object scopes {
                             vparams.map { p => source.ValueParam(source.IdDef("arg0", source.Span.missing), Some(source.ReifiedType(p)), false, source.Span.missing) }
                           val gbparams: List[source.BlockParam] =
                             bparams.map { p => source.BlockParam(source.IdDef("block_arg0", source.Span.missing), Some(source.ReifiedType(p)), false, source.Span.missing) }
-                          p -> source.BlockLiteral(Nil, gvparams, gbparams,
+                          p -> source.BlockLiteral(gtparams, gvparams, gbparams,
                             source.Return(source.Call(source.IdTarget(source.IdRef(Nil, p.name.name, source.Span.missing)), Nil,
                               gvparams.map { x => source.ValueArg(None, source.Var(source.IdRef(Nil, x.id.name, source.Span.missing), source.Span.missing), source.Span.missing) },
                               gbparams.map { x => source.Var(source.IdRef(Nil, x.id.name, source.Span.missing), source.Span.missing) },

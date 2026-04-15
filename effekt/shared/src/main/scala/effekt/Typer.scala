@@ -1468,6 +1468,74 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
   }
 
+  def instantiateImplicitBlock(b: source.Term, tpe: symbols.BlockType)(using Context): source.Term = {
+    if(!Context.messaging.hasErrors) {
+      (b, tpe) match {
+        // TODO move the instantiation down to when we have the types?
+        case (a, symbols.BlockType.FunctionType(tps, cps, vps, bps, res, effs)) =>
+          // TODO prevent infinite recursion due to this
+          a match {
+            case source.BlockLiteral(tparams, vparams, bparams, source.Return(source.Call(fn, targs, vargs, bargs, _), _), _) =>
+              // We need to refresh the whole binding structure, so we don't have duplicate stuff in the tree.
+              // Doing this in a very specialized way here.
+              // It annotates the correct concrete types for *this* invocation.
+              val ftpsyms = tparams.map { x => symbols.TypeParam(Name.local(x.name)) }
+              val ftparams = (tparams zip ftpsyms).map { (x, sym) =>
+                val r = source.IdDef(x.name, source.Span.missing)
+                Context.annotate(Annotations.Symbol, r, sym)
+                r
+              }
+              val ftargs = ftpsyms.map { x =>
+                val r = source.TypeRef(source.IdRef(Nil, x.name.name, source.Span.missing), Many(Nil, source.Span.missing), source.Span.missing)
+                Context.annotate(Annotations.Symbol, r, x)
+                r
+              }
+              val fvpsyms = (vparams zip vps).map { (x, t) => symbols.ValueParam(Name.local(x.id.name), Some(t), false, NoSource) }
+              val fvparams = (vparams zip fvpsyms).map { (x, sym) =>
+                val r: source.ValueParam = source.ValueParam(source.IdDef(x.id.name, source.Span.missing), Some(source.ReifiedType(sym.tpe.get)), false, source.Span.missing)
+                Context.annotate(Annotations.Symbol, r, sym)
+                Context.annotate(Annotations.Symbol, r.id, sym)
+                r
+              }
+              val fvargs = fvpsyms.map { x =>
+                val r = source.Var(source.IdRef(Nil, x.name.name, source.Span.missing), source.Span.missing)
+                Context.annotate(Annotations.Symbol, r, x)
+                Context.annotate(Annotations.Symbol, r.id, x)
+                source.ValueArg(None, r, source.Span.missing)
+              }
+              val fbpsyms = (bparams zip bps).map { (x, t) => symbols.BlockParam(Name.local(x.id.name), Some(t), x.symbol.capture, false, NoSource) }
+              val fbparams = (bparams zip fbpsyms).map { (x, sym) =>
+                val r: source.BlockParam = source.BlockParam(source.IdDef(x.id.name, source.Span.missing), Some(source.ReifiedType(sym.tpe.get)), false, source.Span.missing)
+                Context.annotate(Annotations.Symbol, r, sym)
+                Context.annotate(Annotations.Symbol, r.id, sym)
+                r
+              }
+              val fbargs = fbpsyms.map { x =>
+                val r = source.Var(source.IdRef(Nil, x.name.name, source.Span.missing), source.Span.missing)
+                Context.annotate(Annotations.Symbol, r, x)
+                r
+              }
+              source.BlockLiteral(ftparams, fvparams, fbparams,
+                source.Return(source.Call(fn, ftargs, fvargs, fbargs,
+                  source.Span.missing), source.Span.missing), source.Span.missing)
+            case _ => Context.panic("Unexpected implicit value for implicit block parameter")
+          }
+        case (a, symbols.BlockType.InterfaceType(tCons, tArgs)) =>
+          // TODO prevent infinite recursion due to this
+          // TODO rename everything to use fresh names (preserving Namer results)
+          // TODO instantiate / substitute types here
+          a
+      }
+    } else {
+      Context.abort("Not instantiating implicit block argument since there are errors.")
+    }
+  }
+  def instantiateImplicitValue(b: source.ValueArg, tpe: symbols.ValueType)(using Context): source.ValueArg = {
+    // TODO rename everything to use fresh names (preserving Namer results)
+    // TODO instantiate / substitute types here
+    b
+  }
+
   def checkCallTo(
     call: source.CallLike,
     name: String,
@@ -1493,12 +1561,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
         v
     }
     val abargs = Aligned(bargs, funTpe.bparams).fillImplicit {
-      case (bb, i) if potentialBlockImplicits.contains(i) =>
-        val b = (new Tree.Rewrite{}).rewrite(potentialBlockImplicits(i)) // deep copy the tree // TODO prevent infinite recursion due to this // TODO rename params in block lits
+      case (_, i) if potentialBlockImplicits.contains(i) =>
+        val b = potentialBlockImplicits(i)
         implicitBargs.append(b)
         b
     }
-    Context.annotateImplicits(call, implicitVargs.toList, implicitBargs.toList)
     assertArgsParamsAlign(name = Some(name), atargs, avargs, abargs)
 
     // (1) Instantiate blocktype
@@ -1529,15 +1596,29 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case _ => ()
     }
 
-    (vps zip (vargs ++ implicitVargs.toList)) foreach { case (tpe, expr) =>
+    val instImplicitVargs: mutable.ListBuffer[source.ValueArg] = mutable.ListBuffer.empty
+    val instImplicitBargs: mutable.ListBuffer[source.Term] = mutable.ListBuffer.empty
+    val (explicitVps, implicitVps) = vps.splitAt(vargs.length)
+
+    (explicitVps zip vargs) foreach { case (tpe, expr) =>
       val Result(t, eff) = checkExpr(expr.value, Some(tpe))
+      effs = effs ++ eff.toEffects
+    }
+
+    (implicitVps zip implicitVargs) foreach { case (tpe, expr) =>
+      // TODO NOW refresh and instantiate them
+      val inst = instantiateImplicitValue(expr, tpe)
+      instImplicitVargs.append(inst)
+      val Result(t, eff) = checkExpr(inst.value, Some(tpe))
       effs = effs ++ eff.toEffects
     }
 
     // To improve inference, we first type check block arguments that DO NOT subtract effects,
     // since those need to be fully known.
+    val (explicitBps, implicitBps) = bps.splitAt(bargs.length)
+    val (explicitCaptArgs, implicitCaptArgs) = captArgs.splitAt(bargs.length)
 
-    val (withoutEffects, withEffects) = (bps zip ((bargs ++ implicitBargs.toList) zip captArgs)).partitionMap {
+    val (withoutEffects, withEffects) = (explicitBps zip (bargs zip explicitCaptArgs)).partitionMap {
       // TODO refine and check that eff.args refers to (inferred) type arguments of this application (`typeArgs`)
       case (tpe : FunctionType, rest) if tpe.effects.exists { eff => eff.args.nonEmpty } => Right((tpe, rest))
       case (tpe, rest) => Left((tpe, rest))
@@ -1551,6 +1632,20 @@ object Typer extends Phase[NameResolved, Typechecked] {
         effs = effs ++ eff.toEffects
       }
     }
+
+    (implicitBps zip (implicitBargs zip implicitCaptArgs)) foreach { case (tpe, (expr, capt)) =>
+      // TODO NOW, refresh and instantiate before checking
+      flowsInto(capt, callsite)
+      // capture of block <: ?C
+      flowingInto(capt) {
+        val inst = instantiateImplicitBlock(expr, tpe)
+        instImplicitBargs.append(inst)
+        val Result(t, eff) = checkExprAsBlock(inst, Some(tpe))
+        effs = effs ++ eff.toEffects
+      }
+    }
+
+    Context.annotateImplicits(call, instImplicitVargs.toList, instImplicitBargs.toList)
 
     // We add return effects last to have more information at this point to
     // concretize the effect.
