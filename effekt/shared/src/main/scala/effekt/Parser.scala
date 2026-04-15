@@ -1017,21 +1017,53 @@ class Parser(tokens: Seq[Token], source: Source) {
     nonterminal:
       peek.kind match {
         case `__` => skip(); IgnorePattern(span())
-        case _ if isVariable  =>
-          idRef() match {
-            case id if peek(`(`) => TagPattern(id, many(matchPattern, `(`, `,`, `)`).unspan, span())
-            case IdRef(Nil, name, span) => AnyPattern(IdDef(name, span), span)
-            case IdRef(_, name, _) => fail("Cannot use qualified names to bind a pattern variable")
-          }
-        case _ if isVariable =>
-          AnyPattern(idDef(), span())
+        case _ if isVariable  => idRef() match {
+          case id if peek(`(`) => TagPattern(id, many(matchPattern, `(`, `,`, `)`).unspan, span())
+          case IdRef(Nil, name, span) => AnyPattern(IdDef(name, span), span)
+          case IdRef(_, name, _) => fail("Cannot use qualified names to bind a pattern variable")
+        }
         case _ if isLiteral => LiteralPattern(literal(), span())
         case `(` => some(matchPattern, `(`, `,`, `)`) match {
           case Many(p :: Nil , _) => fail("Pattern matching on tuples requires more than one element")
           case Many(ps, _) => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}", span().synthesized), ps, span())
         }
+        case `[` => listPattern()
         case k => fail("pattern", k)
       }
+
+  private def listPattern(): MatchPattern = {
+    val components: ListBuffer[MatchPattern] = ListBuffer.empty
+    var lastPattern = NilPattern
+
+    consume(`[`)
+    peek.kind match {
+      case `]` | `,` | `..` => ;
+      case _ => components += matchPattern()
+    }
+      
+    while (peek(`,`)) {
+      consume(`,`)
+      if(!peek(`]`) && !peek(`..`)) {
+        components += matchPattern()
+      }
+    }
+    if (peek(`..`)) {
+      consume(`..`)
+      lastPattern = peek.kind match {
+        case `]` => IgnorePattern(span())
+        case _ => idDef() match { case id: IdDef => AnyPattern(id, id.span) }
+      }
+    }
+    consume(`]`)
+
+    components.toList.foldRight(lastPattern)(ConsPattern)
+  }
+  
+  private def NilPattern: MatchPattern =
+    TagPattern(IdRef(Nil, "Nil", span().synthesized), Nil, span())
+  
+  private def ConsPattern(head: MatchPattern, tail: MatchPattern): MatchPattern =
+    TagPattern(IdRef(Nil, "Cons", span().synthesized), List(head, tail), span())
 
   def matchExpr(scrutinee: Term): Term =
       val clauses = `match` ~> braces { manyWhile(matchClause(), `case`) }
@@ -1903,27 +1935,20 @@ class Parser(tokens: Seq[Token], source: Source) {
 
 
   inline def manyTrailing[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): List[T] =
+    val components: ListBuffer[T] = ListBuffer.empty
     consume(before)
-    if (peek(after)) {
-      consume(after)
-      Nil
-    } else if (peek(sep)) {
-      consume(sep)
-      consume(after)
-      Nil
-    } else {
-      val components: ListBuffer[T] = ListBuffer.empty
+    if (!peek(after) && !peek(sep)) {
       components += p()
-      while (peek(sep)) {
-        consume(sep)
-
-        if (!peek(after)) {
-          components += p()
-        }
-      }
-      consume(after)
-      components.toList
     }
+      
+    while (peek(sep)) {
+      consume(sep)
+      if(!peek(after)) {
+        components += p()
+      }
+    }
+    consume(after)
+    components.toList
 
 
   // Positions
