@@ -467,6 +467,12 @@ object Namer extends Phase[Parsed, NameResolved] {
     case (Nil, _) => ()
   }
 
+  /**
+   * Name-resolves all implicit arguments that could be interesting for calling the given function symbol.
+   *
+   * Errors while doing so are residualized into the respective [[ImplicitContext]] and only reported
+   * during overload resolution later.
+   */
   def resolveImplicits(id: source.Id)(using Context): Unit = {
     Context.symbolOf(id) match {
       case symbols.CallTarget(syms, cs) =>

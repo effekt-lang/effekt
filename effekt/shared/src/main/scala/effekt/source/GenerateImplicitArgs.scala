@@ -11,9 +11,18 @@ import effekt.context.Annotations
 
 object GenerateImplicitArgs {
 
-  // for caching (to prevent infinite recursion here)
+  /**
+   * Map for caching the result of [[lookupPotentialImplicits]] (to prevent infinite recursion in Namer)
+   */
   val foundImplicits: mutable.HashMap[(Scope, BlockSymbol), ImplicitContext] = mutable.HashMap.empty
 
+  /**
+   * Generate source for the given implicit value parameter, matching on the name.
+   *
+   * Will usually return a source.Var with the same name, but can act differently for special cases.
+   * Special cases so far:
+   * - sourcePosition inserts a call to SourcePosition with the components of the current source position
+   */
   def generateImplicitValueArg(p: symbols.ValueParam)(using Context): Either[EffektMessages, ValueArg] = {
     Right(ValueArg(Some(p.name.name), p.name.name match {
       case "sourcePosition" =>
@@ -31,6 +40,11 @@ object GenerateImplicitArgs {
     }, Span.missing))
   }
 
+  /**
+   * Generate source for the given implicit block parameter, matching on the name.
+   *
+   * Will usually return an eta-expanded (based on annotated type) call to a function with the same name.
+   */
   def generateImplicitBlockArg(p: symbols.BlockParam)(using Context): Either[EffektMessages, Term] =
     p.tpe.get match {
       case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
@@ -50,6 +64,12 @@ object GenerateImplicitArgs {
         Right(Var(IdRef(Nil, p.name.name, Span.missing), Span.missing))
     }
 
+  /**
+   * Returns an initial [[ImplicitContext]] for each of the [[BlockSymbol]]s.
+   *
+   * Is called from [[Namer]] to still be in the correct context to name-resolve the implicit arguments
+   * in [[Namer.resolveImplicits]].
+   */
   def lookupPotentialImplicits(forCandidates: List[Set[BlockSymbol]], scope: Scope)(using Context): Map[BlockSymbol, ImplicitContext] = {
     forCandidates.flatMap { level =>
       level.flatMap { b =>
@@ -79,7 +99,11 @@ object GenerateImplicitArgs {
     }.toMap
   }
 
-
+  /**
+   * Called from [[Typer]] to get a fresh instance of the given implicit block argument.
+   *
+   * Also annotates all symbols for the returned code correctly where necessary.
+   */
   def instantiateImplicitBlock(b: source.Term, tpe: symbols.BlockType)(using Context): source.Term = {
     if(!Context.messaging.hasErrors) {
       (b, tpe) match {
@@ -143,16 +167,20 @@ object GenerateImplicitArgs {
             case _ => Context.panic("Unexpected implicit value for implicit block parameter")
           }
         case (a, symbols.BlockType.InterfaceType(tCons, tArgs)) =>
-          // There is nothing to do here
-          a
+          a // TODO Is it a problem if this is used more than once?
       }
     } else {
       Context.abort("Not instantiating implicit block argument since there are errors.")
     }
   }
+
+  /**
+   * Called from [[Typer]] to get a fresh instance of the given implicit value argument.
+   *
+   * Also annotates all symbols for the returned code correctly where necessary.
+   */
   def instantiateImplicitValue(v: source.ValueArg, tpe: symbols.ValueType)(using Context): source.ValueArg = {
-    // There is nothing to do here
-    v
+    v // TODO Is it a problem if this is used more than once?
   }
 
 }
