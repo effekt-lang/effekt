@@ -14,6 +14,17 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   override val phaseName: String = "show"
 
   private final val FUNCTION_NAME: String = "show"
+  private final val FUNCTION_BUILTIN_NAME: String = "showBuiltin"
+  private final val STRING_CONCAT_NAME: String = "infixPlusPlus"
+
+  /** Names that [[Deadcode]] must preserve for the [[Show]] pass to function correctly. */
+  def requiredNames(core: ModuleDecl): Set[Id] = {
+    val requiredExternNames = Set(FUNCTION_NAME, FUNCTION_BUILTIN_NAME, STRING_CONCAT_NAME)
+
+    core.externs.collect {
+      case Extern.Def(id, _, _, _, _, _, _, _) if requiredExternNames.contains(id.name.name) => id
+    }.toSet
+  }
 
   case class ShowContext(showNames: collection.mutable.Map[ValueType, Id], showDefns: collection.mutable.Map[ValueType, Toplevel.Def], tparamLookup: collection.mutable.Map[Id, ValueType]) {
 
@@ -270,7 +281,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     }
 
   def findExternShowDef(valueType: ValueType)(using dctx: DeclarationContext)(using Context): Block.BlockVar =
-    findExternDef("showBuiltin", List(valueType))
+    findExternDef(FUNCTION_BUILTIN_NAME, List(valueType))
 
   def findExternDef(name: String, vts: List[ValueType])(using dctx: DeclarationContext)(using Context): Block.BlockVar =
     dctx.findExternDef(name, vts) match
@@ -334,7 +345,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
   def constructorStmt(constr: Constructor)(using ctx: ShowContext, dctx: DeclarationContext)(using Context): Stmt = constr match
     case Constructor(id, tparams, fields) =>
-      val infixConcatBlockVar: Block.BlockVar = findExternDef("infixPlusPlus", List(TString, TString))
+      val infixConcatBlockVar: Block.BlockVar = findExternDef(STRING_CONCAT_NAME, List(TString, TString))
       val pureFields = fields map fieldPure
       val concatenated = PureApp(infixConcatBlockVar, List.empty, List(Literal(id.name.name ++ "(", TString), concatPure(pureFields)))
 
@@ -351,7 +362,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   //  =>
   // PureApp(concat, List(Literal("Just("), PureApp(concat, List(PureApp(show, x), PureApp(concat, List(Literal(", "), ...))))
   def concatPure(pures: List[(Id, Stmt.App)])(using ctx: ShowContext)(using Context, DeclarationContext): Expr =
-    val infixConcatDef = findExternDef("infixPlusPlus", List(TString, TString))
+    val infixConcatDef = findExternDef(STRING_CONCAT_NAME, List(TString, TString))
     pures match
       case (fieldId, _) :: next :: rest => PureApp(infixConcatDef, List.empty, List(Expr.ValueVar(fieldId, TString), PureApp(infixConcatDef, List.empty, List(Literal(", ", TString), concatPure(next :: rest)))))
       case (fieldId, _) :: Nil => PureApp(infixConcatDef, List.empty, List(Expr.ValueVar(fieldId, TString), Literal(")", TString)))
