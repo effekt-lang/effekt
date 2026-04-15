@@ -1512,6 +1512,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               val fbargs = fbpsyms.map { x =>
                 val r = source.Var(source.IdRef(Nil, x.name.name, source.Span.missing), source.Span.missing)
                 Context.annotate(Annotations.Symbol, r, x)
+                Context.annotate(Annotations.Symbol, r.id, x)
                 r
               }
               val ffn = fn match {
