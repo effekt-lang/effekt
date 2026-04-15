@@ -1,15 +1,16 @@
 package effekt
 package cpsds
 
-import effekt.core.{Id, Type, ValueType, BlockType}
-import effekt.source.{FeatureFlag, Span}
+import effekt.core.{ BlockType, Id, Names, Type, ValueType }
+import effekt.source.{ FeatureFlag, Span }
 import effekt.util.UByte
-import effekt.util.messages.{ErrorReporter, ParseError}
-import kiama.parsing.{NoSuccess, ParseResult, Parsers, Success}
-import kiama.util.{Position, Range, Severities, Source, StringSource}
+import effekt.util.messages.{ ErrorReporter, ParseError }
+import kiama.parsing.{ NoSuccess, ParseResult, Parsers, Success }
+import kiama.util.{ Position, Range, Severities, Source, StringSource }
+
 import scala.collection.mutable
 
-class Parser extends Parsers {
+class Parser(names: Names) extends Parsers {
 
   type P[T] = PackratParser[T]
 
@@ -99,13 +100,7 @@ class Parser extends Parsers {
   }
 
   // === Names ===
-  private val fresh = kiama.util.Counter()
-  private val renamed = mutable.Map[String, Id]()
-
-
-  def freshId(name: String): Id = renamed.getOrElseUpdate(name, Id(name, fresh.next()))
-
-  def idFor(name: String): Id = name match {
+  def idFor(name: String, names: Names): Id = name match {
     case s if s.contains('_') && s.lastIndexOf('_') > 0 =>
       val idx = s.lastIndexOf('_')
       val prefix = s.substring(0, idx)
@@ -113,12 +108,12 @@ class Parser extends Parsers {
       if suffix.nonEmpty && suffix.forall(_.isDigit) then
         Id(prefix, suffix.toInt)
       else
-        freshId(name)
+        names.idFor(name)
     case _ =>
-      freshId(name)
+      names.idFor(name)
   }
 
-  lazy val id: P[Id] = ident ^^ idFor
+  lazy val id: P[Id] = ident ^^ { x => idFor(x, names) }
 
   lazy val moduleName = """[a-zA-Z_][a-zA-Z0-9_]*(/[a-zA-Z_][a-zA-Z0-9_]*)*""".r
 
@@ -341,15 +336,15 @@ class Parser extends Parsers {
 }
 
 object Parser {
-  def apply(): Parser = new Parser()
+  def apply(names: Names): Parser = new Parser(names)
 
-  def module(input: String): ParseResult[ModuleDecl] = {
-    val parsers = Parser()
+  def module(input: String, names: Names): ParseResult[ModuleDecl] = {
+    val parsers = Parser(names)
     parsers.parseAll(parsers.program, StringSource(input, "input-string"))
   }
 
-  def statement(input: String): ParseResult[Stmt] = {
-    val parsers = Parser()
+  def statement(input: String, names: Names): ParseResult[Stmt] = {
+    val parsers = Parser(names)
     parsers.parseAll(parsers.stmt, StringSource(input, "input-string"))
   }
 }
