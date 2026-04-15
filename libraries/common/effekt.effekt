@@ -843,3 +843,47 @@ effect write(s: String): Unit
 effect splice[A](x: A): Unit
 
 
+// Repr
+// ====
+
+interface rose[A, R] {
+  def labelled(node: A) { children: => R }: R
+}
+
+
+type Llabel {
+  // primitives
+  Int(n: Int)
+  Double(d: Double)
+  Bool(b: Bool)
+  Byte(b: Byte)
+  Char(c: Char)
+  String(s: String)
+
+  // collections
+  List()
+  Assoc(name: String)
+
+  // props
+  Prop(name: String)
+  AssocProp()
+
+  // constructors
+  App(name: String)
+  Opaque(name: String)
+  Literal(name: String)
+
+  // for pretty printing only
+  Omitted()
+}
+
+def reprBuiltin(n: Int): Unit / rose[Llabel, Unit] = do labelled[Llabel, Unit](Llabel::Int(n)) { () }
+def reprBuiltin(d: Double): Unit / rose[Llabel, Unit] = do labelled[Llabel, Unit](Llabel::Double(d)) { () }
+def reprBuiltin(b: Bool): Unit / rose[Llabel, Unit] = do labelled[Llabel, Unit](Llabel::Bool(b)) { () }
+def reprBuiltin(c: Char): Unit / rose[Llabel, Unit] = do labelled[Llabel, Unit](Llabel::Char(c)) { () }
+def reprBuiltin(s: String): Unit / rose[Llabel, Unit] = do labelled[Llabel, Unit](Llabel::String(s)) { () }
+def reprBuiltin(b: Byte): Unit / rose[Llabel, Unit] = do labelled[Llabel, Unit](Llabel::Byte(b)) { () }
+def reprBuiltin(u: Unit): Unit / rose[Llabel, Unit] = do labelled[Llabel, Unit](Llabel::Literal("()")) { () }
+def reprBuiltin(absurd: Nothing): Unit / rose[Llabel, Unit] = absurd match {}
+
+def repr[R](value: R): Unit / rose[Llabel, Unit] = <{ "to be replaced by the 'Repr' phase of the compiler" }>

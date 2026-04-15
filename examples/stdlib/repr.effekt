@@ -1,0 +1,56 @@
+import repr
+import map
+import set
+
+extern type FooBarBaz
+
+extern def mkFooBarBaz(): FooBarBaz =
+  js "(42)"
+
+type MyType[T] {
+  A(x: Int, y: T)
+  B(f: Int => Int at {})
+  C(array: Array[Int])
+  D(f: Int => Int at {}, list: List[Int], array: Array[Array[Int]], bytes: ByteArray)
+  E(there: Map[Int, T], back: Map[T, Int])
+  F(s: Set[MyType[T]])
+}
+
+type MyList[T] {
+  Nil()
+  Cons(head: T, tail: MyList[T])
+}
+
+def dump { rpr: () => Unit / rose[Llabel, Unit]}: Unit = println(toString { rpr() })
+
+def main() = {
+  dump { do labelled(Llabel::Prop("x")) { do labelled(Llabel::Int(3)) { () } } }
+
+  val fst = A(3, false); dump { repr(fst) }
+
+  def reprrrr() = repr(fst); dump { reprrrr() }
+
+  dump { repr(A(3, A(4, fst))) }
+  dump { repr(B[Nothing](box { n => n + 1 })) }
+  dump { repr(C[Nothing]([1, 2, 3, 4].fromList)) }
+  dump { repr(D[Nothing](box { n => n + 1 }, [10, 15, 3], [[1, 2].fromList, [3, 4].fromList].fromList, "ABC".fromString)) }
+  dump { repr(MyList::Nil[Int]()) }
+  dump { repr(MyList::Cons(3, MyList::Cons(4, MyList::Nil()))) }
+  dump { repr(MyList::Cons("hi", MyList::Cons("there", MyList::Nil()))) }
+  dump { MyList::Cons((), MyList::Cons((), MyList::Nil())).repr }
+  dump { mkFooBarBaz().repr }
+
+  try {
+    dump { repr(box e) }
+  } with e: emit[Int] { v => resume(()) }
+
+  dump { E([(1, "one"), (2, "two")].fromListGeneric, [("one", 1), ("two", 2)].fromListGeneric).repr }
+  dump { F([A(3, fst), A(4, fst)].fromListGeneric).repr }
+
+  val (_, trees) = reify[Llabel, Unit] {
+    val _ = (repr(A(3, A(4, fst))), repr(B[Nothing](box { n => n + 1 })))
+  }
+  trees.foreach { tree =>
+    println(tree.toUniversalString)
+  }
+}

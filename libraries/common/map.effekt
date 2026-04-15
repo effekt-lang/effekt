@@ -993,6 +993,18 @@ namespace internal {
   }
 }
 
+def reprBuiltin[K, V](m: Map[K, V])
+  { reprK: K => Unit / rose[Llabel, Unit] }
+  { reprV: V => Unit / rose[Llabel, Unit] }
+: Unit / rose[Llabel, Unit] =
+  do labelled[Llabel, Unit](Llabel::Assoc("Map")) {
+    m.foreach { (k, v) =>
+      do labelled(Llabel::AssocProp()) {
+        reprK(k); reprV(v)
+      }
+    }
+  }
+
 
 // Streaming
 // ---------

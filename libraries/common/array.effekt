@@ -646,6 +646,9 @@ def println(l: Array[Double]): Unit = println(showBuiltin(l))
 def println(l: Array[Bool]): Unit = println(showBuiltin(l))
 def println(l: Array[String]): Unit = println(showBuiltin(l))
 
+def reprBuiltin[A](array: Array[A]) { reprA: A => Unit / rose[Llabel, Unit] }: Unit / rose[Llabel, Unit]
+  = do labelled[Llabel, Unit](Llabel::Opaque("Array")) { array.foreach { a => reprA(a) } } // TODO FIXME
+
 // Streaming
 // ---------
 

@@ -1,0 +1,112 @@
+module repr
+
+import effekt
+import list
+import bytearray
+import array
+import stream
+
+/// Rose tree as a datatype
+record Tree[A](node: A, children: List[Tree[A]])
+
+def reflect[A](repr: Tree[A]): Unit / rose[A, Unit] = {
+  def go(r: Tree[A]): Unit / rose[A, Unit] = {
+    do labelled(r.node) { r.children.foreach { x => go(x) } }
+  }
+  go(repr)
+}
+
+def reify[A, R] { program: () => R / rose[A, R] }: (R, List[Tree[A]]) = {
+  var acc: List[Tree[A]] = Nil()
+
+  val res = try program() with rose[A, R] {
+    def labelled(label) =
+      resume { {children} =>
+        val savedAcc = acc
+        acc = Nil()
+        val res = children()
+        val kids = acc.reverse
+        acc = Cons(Tree(label, kids), savedAcc)
+        res
+      }
+  }
+
+  (res, acc.reverse)
+}
+
+def reifySingle[A] { program: () => Unit / rose[A, Unit] }: Tree[A] = {
+  val (_, Cons(repr, Nil())) = program.reify[A, Unit] else panic("repr: expected exactly one repr")
+  repr
+}
+
+namespace Repr {
+  type Repr = Tree[Llabel]
+
+  def leaf(label: Llabel): Repr = Tree(label, [])
+  def int(n: Int): Repr = Int(n).leaf
+  def double(d: Double): Repr = Double(d).leaf
+  def bool(b: Bool): Repr = Bool(b).leaf
+  def string(s: String): Repr = String(s).leaf
+  def byte(b: Byte): Repr = Byte(b).leaf
+  def char(c: Char): Repr = Char(c).leaf
+
+  def array(a: Array[Repr]): Repr = collection("Array", a.toList)
+  def list(l: List[Repr]): Repr = Tree(List(), l)
+  def byteArray(b: ByteArray): Repr = collection("ByteArray", b.toList.map {byte})
+
+  def constructorNamed(name: String, a: List[(String, Repr)]): Repr =
+    Tree(App(name), a.map { case (name, value) => Tree(Prop(name), [value]) })
+  def constructor(name: String, args: List[Repr]): Repr =
+    Tree(App(name), args)
+  def opaque(name: String, child: Repr): Repr =
+    Tree(Opaque(name), [child])
+  def opaque(name: String): Repr =
+    Tree(Opaque(name), [])
+  def opaqueLiteral(name: String, value: String): Repr =
+    Tree(Opaque(name), [Tree(Literal(value), [])])
+  def collection(name: String, contents: List[Repr]): Repr =
+    opaque(name, list(contents))
+  def assoc(name: String, contents: List[(Repr, Repr)]): Repr =
+    Tree(Assoc(name), contents.map { case (key, value) => Tree(AssocProp(), [key, value]) })
+
+
+  def reflect(repr: Repr): Unit / rose[Llabel, Unit] = reflect[Llabel](repr)
+
+  def reify[R] { program: () => R / rose[Llabel, R] }: (R, List[Tree[Llabel]]) =
+    reify[Llabel, R] { program() }
+
+  def reifySingle { program: () => Unit / rose[Llabel, Unit] }: Tree[Llabel] =
+    reifySingle[Llabel] { program() }
+}
+
+/// A representation of a value as a rose tree.
+/// This is used for debugging, testing, and straightforward pretty-printing.
+type Repr = Repr::Repr
+
+def toUniversalString(r: Repr): String = {
+  def commaSepChildren() = r.children.map { x => toUniversalString(x) }.join(", ")
+
+  r.node match {
+    case Llabel::Int(n) => n.show
+    case Llabel::Double(d) => d.show
+    case Llabel::Bool(b) => b.show
+    case Llabel::Byte(b) => b.show
+    case Llabel::Char(c) => c.show
+    case Llabel::String(s) => "\"" ++ s ++ "\""
+    case Llabel::List() => "[" ++ commaSepChildren() ++ "]"
+    case Llabel::App(name) => name ++ "(" ++ commaSepChildren() ++ ")"
+    case Llabel::Prop(name)   and r.children is Cons(child, Nil())            => name ++ " = " ++ toUniversalString(child)
+    case Llabel::AssocProp()  and r.children is Cons(key, Cons(value, Nil())) => toUniversalString(key) ++ " !-> " ++ toUniversalString(value)
+    case Llabel::Opaque(name) and r.children is Cons(_, _)                    => "<" ++ name ++ "(" ++ commaSepChildren() ++ ")" ++ ">"
+    case Llabel::Opaque(name) => "<" ++ name ++ ">"
+    case Llabel::Assoc(name) => "<" ++ name ++ "(" ++ commaSepChildren() ++ ")" ++ ">"
+    case Llabel::Literal(s) => s
+    case Llabel::Omitted() => "..."
+    case _ => panic("invalid Repr")
+  }
+}
+
+def toString { reprey: () => Unit / rose[Llabel, Unit] }: String = {
+  val repr = reifySingle[Llabel] { reprey() }
+  toUniversalString(repr)
+}

@@ -1,0 +1,17 @@
+x = 3
+A(x = 3, y = false)
+A(x = 3, y = false)
+A(x = 3, y = A(x = 4, y = A(x = 3, y = false)))
+B(f = <box>)
+C(array = <Array(1, 2, 3, 4)>)
+D(f = <box>, list = [10, 15, 3], array = <Array(<Array(1, 2)>, <Array(3, 4)>)>, bytes = <ByteArray(0x41, 0x42, 0x43)>)
+Nil()
+Cons(head = 3, tail = Cons(head = 4, tail = Nil()))
+Cons(head = "hi", tail = Cons(head = "there", tail = Nil()))
+Cons(head = (), tail = Cons(head = (), tail = Nil()))
+<FooBarBaz>
+<box>
+E(there = <Map(1 !-> "one", 2 !-> "two")>, back = <Map("one" !-> 1, "two" !-> 2)>)
+F(s = <Set(A(x = 3, y = A(x = 3, y = false)), A(x = 4, y = A(x = 3, y = false)))>)
+A(x = 3, y = A(x = 4, y = A(x = 3, y = false)))
+B(f = <box>)
