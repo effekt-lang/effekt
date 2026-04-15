@@ -1,0 +1,11 @@
+def SourcePosition(file: String, sl: Int, sc: Int, el: Int, ec: Int): String = {
+  s"${file}:${sl.show}:${sc.show}-${el.show}:${ec.show}"
+}
+
+def foo(?sourcePosition: String): Unit = {
+  println(sourcePosition.show)
+}
+
+def main() = {
+  foo()
+}
