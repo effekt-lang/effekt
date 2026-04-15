@@ -16,6 +16,7 @@ import effekt.context.Try
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.DynamicVariable
+import effekt.util.RequirementLevel
 
 /**
  * The output of this phase: a mapping from source identifier to symbol
@@ -338,6 +339,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // FunDef and InterfaceDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) =>
+      checkImplicitParams(vparams.unspan); checkImplicitParams(bparams.unspan)
       val sym = f.symbol
       Context.scopedWithName(id.name) {
         sym.tparams.foreach { p => Context.bind(p) }
@@ -348,6 +350,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case f @ source.ExternDef(id, tparams, vparams, bparams, captures, ret, bodies, doc, span) =>
+      checkImplicitParams(vparams.unspan); checkImplicitParams(bparams.unspan)
       val sym = f.symbol
       Context.scopedWithName(id.name) {
         sym.tparams.foreach { p => Context.bind(p) }
@@ -365,6 +368,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val interface = Context.symbolOf(interfaceId).asInterface
       interface.operations = operations.map {
         case op @ source.Operation(id, tparams, vparams, bparams, ret, doc, span) => Context.at(op) {
+          checkImplicitParams(vparams); checkImplicitParams(bparams)
           val name = Context.nameFor(id)
 
           val opSym = Context.scopedWithName(id.name) {
@@ -444,6 +448,19 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   def resolve(a: source.ValueArg)(using Context): Unit = Context.focusing(a) { _ =>
     resolve(a.value)
+  }
+
+  @tailrec
+  def checkImplicitParams(l: List[source.Param], implicitsAllowed: RequirementLevel = RequirementLevel.Optional)(using Context): Unit = (l, implicitsAllowed) match {
+    case ((source.ValueParam(_, _, true, _) | source.BlockParam(_, _, true, _)) :: tl, RequirementLevel.Forbidden) =>
+      Context.error(pretty"Implicit parameter ${l.head.span.text.getOrElse(l.head.id.name)} can never be passed implicitly to here.")
+    case ((source.ValueParam(_, _, false, _) | source.BlockParam(_, _, false, _)) :: tl, RequirementLevel.Required) =>
+      Context.error(pretty"Parameter ${l.head.span.text.getOrElse(l.head.id.name)} needs to be implicit so earlier implicit parameters can be passed implicitly.")
+    case ((source.ValueParam(_, _, true, _) | source.BlockParam(_, _, true, _)) :: tl, RequirementLevel.Optional) =>
+      checkImplicitParams(tl, RequirementLevel.Required) // require all arguments after an implicit one to be implicit
+    case (_ :: tl, _) =>
+      checkImplicitParams(tl, implicitsAllowed)
+    case (Nil, _) => ()
   }
 
   def resolveImplicits(id: source.Id)(using Context): Unit = {
@@ -534,6 +551,8 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case f @ source.BlockLiteral(tparams, vparams, bparams, stmt, _) =>
+      checkImplicitParams(vparams, RequirementLevel.Forbidden)
+      checkImplicitParams(bparams, RequirementLevel.Forbidden)
       Context scoped {
         val tps = tparams map resolve
         val vps = vparams map resolve
