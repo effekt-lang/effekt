@@ -1214,7 +1214,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
   }
 
   def findImplicitArgs(r: BlockSymbol,
-                       impls: ImplicitContext): (Map[Int, source.ValueArg], Map[Int, source.Term]) = {
+                       impls: ImplicitContext):
+    (Map[Int, Either[EffektMessages, source.ValueArg]], Map[Int, Either[EffektMessages, source.Term]]) = {
     r match {
       case c: Callable =>
         (c.vparams.zipWithIndex.flatMap {
@@ -1347,10 +1348,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   object Aligned {
     extension[A,B](self: Aligned[A, B])
-      def fillImplicit(by: PartialFunction[(B, Int), A]): Aligned[A,B] = {
+      def fillImplicit(by: (B, Int) => Option[A]): Aligned[A,B] = {
         val pre = self.matched.length
-        val (impl, remaining) = self.missing.zipWithIndex.partition{ (a,i) => by.isDefinedAt(a, i + pre) }
-        Aligned(self.matched ++ impl.map{ (a, i) => (by(a, i + pre), a) }, self.extra, remaining.map{ (a, _) => a })
+        val (remaining, impl) = self.missing.zipWithIndex.partitionMap{ (a,i) => by(a, i + pre).map((_, a)).toRight(a) }
+        Aligned(self.matched ++ impl, self.extra, remaining)
       }
     def apply[A, B](got: List[A], expected: List[B]): Aligned[A, B] = {
       @scala.annotation.tailrec
@@ -1553,8 +1554,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     vargs: List[source.ValueArg],
     bargs: List[source.Term],
     expected: Option[ValueType],
-    potentialValueImplicits: Map[Int, source.ValueArg],
-    potentialBlockImplicits: Map[Int, Term]
+    potentialValueImplicits: Map[Int, Either[EffektMessages, source.ValueArg]],
+    potentialBlockImplicits: Map[Int, Either[EffektMessages, Term]]
   )(using Context, Captures): Result[ValueType] = {
     val callsite = currentCapture
 
@@ -1564,15 +1565,29 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val implicitBargs: mutable.ListBuffer[source.Term] = mutable.ListBuffer.empty
     val avargs = Aligned(vargs, funTpe.vparams).fillImplicit {
       case (e, i) if potentialValueImplicits.contains(i) =>
-        val v = potentialValueImplicits(i)
-        implicitVargs.append(v)
-        v
+        potentialValueImplicits(i) match {
+          case Right(v) =>
+            implicitVargs.append(v)
+            Some(v)
+          case Left(msgs) =>
+            Context.error(pretty"""Could not resolve implicit value parameter ${i}:""")
+            msgs.foreach(Context.report)
+            None
+        }
+      case _ => None
     }
     val abargs = Aligned(bargs, funTpe.bparams).fillImplicit {
       case (_, i) if potentialBlockImplicits.contains(i) =>
-        val b = potentialBlockImplicits(i)
-        implicitBargs.append(b)
-        b
+        potentialBlockImplicits(i) match {
+          case Right(b) =>
+            implicitBargs.append(b)
+            Some(b)
+          case Left(msgs) =>
+            Context.error(pretty"""Could not resolve implicit block parameter ${i}:""")
+            msgs.foreach(Context.report)
+            None
+        }
+      case _ => None
     }
     assertArgsParamsAlign(name = Some(name), atargs, avargs, abargs)
 

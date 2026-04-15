@@ -3,7 +3,7 @@ package symbols
 
 import scala.collection.mutable
 import effekt.source.IdRef
-import effekt.util.messages.ErrorReporter
+import effekt.util.messages.{ErrorReporter, EffektMessages}
 import effekt.context.Context
 
 /**
@@ -283,8 +283,8 @@ object scopes {
     // for caching (to prevent infinite recursion here)
     val foundImplicits: mutable.HashMap[(Scope, BlockSymbol), ImplicitContext] = mutable.HashMap.empty
 
-    def generateImplicitValueArg(p: symbols.ValueParam)(using Context): source.ValueArg = {
-      source.ValueArg(Some(p.name.name), p.name.name match {
+    def generateImplicitValueArg(p: symbols.ValueParam)(using Context): Either[EffektMessages, source.ValueArg] = {
+      Right(source.ValueArg(Some(p.name.name), p.name.name match {
         case "sourcePosition" =>
           val pos = Context.focus.span
           val from = pos.source.offsetToPosition(pos.from)
@@ -297,25 +297,25 @@ object scopes {
             source.ValueArg(None, source.Literal(to.column, builtins.TInt, source.Span.missing), source.Span.missing),
           ), Nil, source.Span.missing)
         case _ => source.Var(IdRef(Nil, p.name.name, source.Span.missing), source.Span.missing)
-      }, source.Span.missing)
+      }, source.Span.missing))
     }
-    def generateImplicitBlockArg(p: symbols.BlockParam)(using Context): source.Term =
+    def generateImplicitBlockArg(p: symbols.BlockParam)(using Context): Either[EffektMessages, source.Term] =
       p.tpe.get match {
         case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
           val gtparams = tparams.map { p => source.IdDef(p.name.name, source.Span.missing) }
           val gvparams: List[source.ValueParam] =
-            vparams.map { p => source.ValueParam(source.IdDef("arg0", source.Span.missing), Some(source.ReifiedType(p)), false, source.Span.missing) }
+            vparams.zipWithIndex.map { (p, i) => source.ValueParam(source.IdDef(s"arg${i}", source.Span.missing), Some(source.ReifiedType(p)), false, source.Span.missing) }
           val gbparams: List[source.BlockParam] =
-            bparams.map { p => source.BlockParam(source.IdDef("block_arg0", source.Span.missing), Some(source.ReifiedType(p)), false, source.Span.missing) }
-          source.BlockLiteral(gtparams, gvparams, gbparams,
+            bparams.zipWithIndex.map { (p, i) => source.BlockParam(source.IdDef(s"block_arg${i}", source.Span.missing), Some(source.ReifiedType(p)), false, source.Span.missing) }
+          Right(source.BlockLiteral(gtparams, gvparams, gbparams,
             source.Return(source.Call(source.IdTarget(source.IdRef(Nil, p.name.name, source.Span.missing)), Nil,
               gvparams.map { x => source.ValueArg(None, source.Var(source.IdRef(Nil, x.id.name, source.Span.missing), source.Span.missing), source.Span.missing) },
               gbparams.map { x => source.Var(source.IdRef(Nil, x.id.name, source.Span.missing), source.Span.missing) },
               source.Span.missing),
-              source.Span.missing), source.Span.missing)
+              source.Span.missing), source.Span.missing))
         case BlockType.InterfaceType(typeConstructor, args) =>
           // TODO eta-exapnd here, too ?
-          source.Var(IdRef(Nil, p.name.name, source.Span.missing), source.Span.missing)
+          Right(source.Var(IdRef(Nil, p.name.name, source.Span.missing), source.Span.missing))
       }
 
     def lookupPotentialImplicits(forCandidates: List[Set[BlockSymbol]])(using Context): Map[BlockSymbol, ImplicitContext] = {

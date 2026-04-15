@@ -469,25 +469,17 @@ object Namer extends Phase[Parsed, NameResolved] {
         cs.foreach {
           case (b, c@ImplicitContext(vimpls, bimpls)) if !c.resolved =>
             c.resolved = true // set as resolved first, so recursive calls do not continue doing so.
-            val tVimpls = vimpls.flatMap { case k -> v =>
-              val r = Try {
-                resolve(v)
-              };
-              if (r.isRight) {
-                Some(k -> v)
-              } else {
-                None
-              }
+            val tVimpls = vimpls.map { case k -> mv =>
+              k -> (for {
+                v <- mv
+                r <- Try { resolve(v) }
+              } yield v)
             }
-            val tBimpls = bimpls.flatMap { case k -> b =>
-              val r = Try {
-                resolve(b)
-              }
-              if (r.isRight) {
-                Some(k -> b)
-              } else {
-                None
-              }
+            val tBimpls = bimpls.map { case k -> mb =>
+              k -> (for {
+                b <- mb
+                r <- Try { resolve(b) }
+              } yield b)
             }
             c.values = tVimpls
             c.blocks = tBimpls

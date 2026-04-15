@@ -5,7 +5,7 @@ import effekt.source.{Def, DefDef, FeatureFlag, FunDef, ModuleDecl, NoSource, Re
 import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
-import effekt.util.messages.ErrorReporter
+import effekt.util.messages.{ErrorReporter, EffektMessages}
 
 /**
  * The symbol table contains things that can be pointed to:
@@ -204,8 +204,8 @@ enum Binder extends TermSymbol {
 }
 export Binder.*
 
-case class ImplicitContext(var values: Map[ValueParam, source.ValueArg],
-                           var blocks: Map[BlockParam, source.Term]) {
+case class ImplicitContext(var values: Map[ValueParam, Either[EffektMessages, source.ValueArg]],
+                           var blocks: Map[BlockParam, Either[EffektMessages, source.Term]]) {
   var resolved = false // will be set in namer after the values in the maps are resolved
 }
 object ImplicitContext {
