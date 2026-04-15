@@ -1348,8 +1348,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
   object Aligned {
     extension[A,B](self: Aligned[A, B])
       def fillImplicit(by: PartialFunction[(B, Int), A]): Aligned[A,B] = {
-        val (impl, remaining) = self.missing.zipWithIndex.partition(by.isDefinedAt)
-        Aligned(self.matched ++ impl.map{ (a, i) => (by(a, i), a) }, self.extra, remaining.map{ (a, _) => a })
+        val pre = self.matched.length
+        val (impl, remaining) = self.missing.zipWithIndex.partition{ (a,i) => by.isDefinedAt(a, i + pre) }
+        Aligned(self.matched ++ impl.map{ (a, i) => (by(a, i + pre), a) }, self.extra, remaining.map{ (a, _) => a })
       }
     def apply[A, B](got: List[A], expected: List[B]): Aligned[A, B] = {
       @scala.annotation.tailrec
