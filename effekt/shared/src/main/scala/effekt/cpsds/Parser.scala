@@ -140,9 +140,6 @@ class Parser(names: Names) extends Parsers {
     | `let` ~> id ~ (`|` ~> id <~ `,`) ~ id ~ (`=` ~> stmt) <~ `;`.? ^^ {
         case name ~ ks ~ k ~ binding => ToplevelDefinition.Val(name, ks, k, binding)
       }
-    | `let` ~> id ~ (`=` ~> expr) <~ `;`.? ^^ {
-        case name ~ binding => ToplevelDefinition.Let(name, binding)
-      }
     )
 
   // === Expressions ===

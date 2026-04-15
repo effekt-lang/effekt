@@ -45,8 +45,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "def" <+> toDoc(id) <> parens(params.map(toDoc)) <+> block(toDoc(body))
     case ToplevelDefinition.Val(id, ks, k, binding) =>
       "let" <+> toDoc(id) <+> "|" <+> toDoc(ks) <> "," <+> toDoc(k) <+> "=" <+> toDoc(binding)
-    case ToplevelDefinition.Let(id, binding) =>
-      "let" <+> toDoc(id) <+> "=" <+> toDoc(binding)
   }
 
   def toDoc(e: Expr): Doc = e match {

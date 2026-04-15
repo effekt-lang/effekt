@@ -369,8 +369,6 @@ def transformToplevel(definition: core.Toplevel)(using C: TransformationContext)
 
   case core.Toplevel.Def(id, block) =>
     transform(block) match {
-      case Bind(Expr.Variable(x), Nil) =>
-        ToplevelDefinition.Let(id, Expr.Variable(x))
       case Bind(value, bindings) =>
         val ks = Id("ks")
         val k = Id("k")
