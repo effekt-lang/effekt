@@ -155,10 +155,11 @@ object QualifiedSignature {
   }
 
   def apply(name: Id, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam]): QualifiedSignature = {
-    val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
-    val valueParams = vparams.map { p => s"${p.tpe}" }.mkString(", ")
+    import effekt.symbols.ErrorMessageInterpolator
+    val tps = if (tparams.isEmpty) "" else s"[${tparams.map(tp => pp"${tp}").mkString(", ")}]"
+    val valueParams = vparams.map { p => pp"${p.tpe}" }.mkString(", ")
     val vps = if valueParams.isEmpty then "" else s"($valueParams)"
-    val bps = bparams.map { b => s"{${b.tpe}}" }.mkString("")
+    val bps = bparams.map { b => s"{${pp"${b.tpe}"}}" }.mkString("")
     val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"$vps$bps"
     QualifiedSignature(s"${name}$tps$ps")
   }
