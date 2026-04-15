@@ -204,8 +204,8 @@ enum Binder extends TermSymbol {
 }
 export Binder.*
 
-case class ImplicitContext(var values: Map[ValueParam, Either[EffektMessages, source.ValueArg]],
-                           var blocks: Map[BlockParam, Either[EffektMessages, source.Term]]) {
+case class ImplicitContext(var values: Map[Int, Either[EffektMessages, source.ValueArg]],
+                           var blocks: Map[Int, Either[EffektMessages, source.Term]]) {
   var resolved = false // will be set in namer after the values in the maps are resolved
 }
 object ImplicitContext {

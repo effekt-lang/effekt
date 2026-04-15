@@ -7,7 +7,7 @@ package namer
 import effekt.context.{Annotations, Context, ContextOps}
 import effekt.context.assertions.*
 import effekt.typer.Substitutions
-import effekt.source.{Def, Id, IdDef, IdRef, Many, MatchGuard, ModuleDecl, Term, Tree, sourceOf}
+import effekt.source.{Def, Id, IdDef, IdRef, Many, MatchGuard, ModuleDecl, Term, Tree, sourceOf, GenerateImplicitArgs}
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
 import effekt.symbols.scopes.*
@@ -450,6 +450,10 @@ object Namer extends Phase[Parsed, NameResolved] {
     resolve(a.value)
   }
 
+  /**
+   * Checks that there are no implicit parameters if there shouldn't be (or there are if there must be).
+   * Also checks that there are no non-implicit parameters after implicit ones.
+   */
   @tailrec
   def checkImplicitParams(l: List[source.Param], implicitsAllowed: RequirementLevel = RequirementLevel.Optional)(using Context): Unit = (l, implicitsAllowed) match {
     case ((source.ValueParam(_, _, true, _) | source.BlockParam(_, _, true, _)) :: tl, RequirementLevel.Forbidden) =>
@@ -1135,7 +1139,7 @@ trait NamerOps extends ContextOps { Context: Context =>
 
     if (syms2.nonEmpty) {
       val syms3 = syms2.asInstanceOf[List[Set[BlockSymbol]]]
-      assignSymbol(id, CallTarget(syms3, scope.lookupPotentialImplicits(syms3)))
+      assignSymbol(id, CallTarget(syms3, GenerateImplicitArgs.lookupPotentialImplicits(syms3, scope.scope)))
       true
     } else { false }
   }
@@ -1150,7 +1154,7 @@ trait NamerOps extends ContextOps { Context: Context =>
 
     if (syms3.nonEmpty) {
       val syms4 = syms3.asInstanceOf[List[Set[BlockSymbol]]]
-      assignSymbol(id, CallTarget(syms4, scope.lookupPotentialImplicits(syms4)))
+      assignSymbol(id, CallTarget(syms4, GenerateImplicitArgs.lookupPotentialImplicits(syms4, scope.scope)))
       true
     } else { false }
   }
@@ -1176,7 +1180,7 @@ trait NamerOps extends ContextOps { Context: Context =>
           // Always abort with the generic message
           abort(pretty"Cannot find a function named `${id}`.")
         }
-        assignSymbol(id, CallTarget(blocks, scope.lookupPotentialImplicits(blocks)))
+        assignSymbol(id, CallTarget(blocks, GenerateImplicitArgs.lookupPotentialImplicits(blocks, scope.scope)))
     }
   }
 
@@ -1231,7 +1235,7 @@ trait NamerOps extends ContextOps { Context: Context =>
     }
 
     val bsyms = syms.asInstanceOf[List[Set[BlockSymbol]]]
-    assignSymbol(id, CallTarget(bsyms, scope.lookupPotentialImplicits(bsyms)))
+    assignSymbol(id, CallTarget(bsyms, GenerateImplicitArgs.lookupPotentialImplicits(bsyms, scope.scope)))
   }
 
   /**
@@ -1246,7 +1250,7 @@ trait NamerOps extends ContextOps { Context: Context =>
     }
 
     val bsyms = syms.asInstanceOf[List[Set[BlockSymbol]]]
-    assignSymbol(id, CallTarget(bsyms, scope.lookupPotentialImplicits(bsyms)))
+    assignSymbol(id, CallTarget(bsyms, GenerateImplicitArgs.lookupPotentialImplicits(bsyms, scope.scope)))
   }
 
   /**

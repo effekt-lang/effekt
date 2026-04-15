@@ -227,7 +227,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case _ => Context.abort("Cannot infer function type for callee.")
         }
 
-        val Result(t, eff) = checkCallTo(c, "function", Nil, tpe, targs map { _.resolveValueType }, vargs, bargs, expected, Map.empty, Map.empty)
+        val Result(t, eff) = checkCallTo(c, "function", Nil, tpe, targs map { _.resolveValueType }, vargs, bargs, expected, ImplicitContext.empty)
         Result(t, eff ++ funEffs)
 
       // precondition: PreTyper translates all uniform-function calls to `Call`.
@@ -1207,28 +1207,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
       //   1. make up and annotate unification variables, if no type arguments are there
       //   2. type check call with either existing or made up type arguments
 
-      val (cvimpls, cbimpls) = findImplicitArgs(op, impls.getOrElse(op, ImplicitContext.empty))
-      checkCallTo(call, op.name.name, op.vparams.map { p => p.name.name }, funTpe, synthTargs, vargs, bargs, expected, cvimpls, cbimpls)
+      checkCallTo(call, op.name.name, op.vparams.map { p => p.name.name }, funTpe, synthTargs, vargs, bargs, expected, impls.getOrElse(op, ImplicitContext.empty))
     }
     resolveOverload(id, List(successes), errors)
-  }
-
-  def findImplicitArgs(r: BlockSymbol,
-                       impls: ImplicitContext):
-    (Map[Int, Either[EffektMessages, source.ValueArg]], Map[Int, Either[EffektMessages, source.Term]]) = {
-    r match {
-      case c: Callable =>
-        (c.vparams.zipWithIndex.flatMap {
-          case (v, i) if v.isImplicit =>
-            impls.values.get(v).map(i -> _)
-          case _ => None
-        }.toMap, c.bparams.zipWithIndex.flatMap {
-          case (b, i) if b.isImplicit =>
-            impls.blocks.get(b).map(i -> _)
-          case _ => None
-        }.toMap)
-      case _ => (Map.empty, Map.empty)
-    }
   }
 
   /**
@@ -1279,8 +1260,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case c: Callable  => c.vparams.map(_.name.name)
         case _ => Nil
       }
-      val (cvimpls, cbimpls) = findImplicitArgs(receiver, impls.getOrElse(receiver, ImplicitContext.empty))
-      val Result(tpe, effs) = checkCallTo(call, receiver.name.name, vpnames, funTpe, targs, vargs, bargs, expected, cvimpls, cbimpls)
+      val Result(tpe, effs) = checkCallTo(call, receiver.name.name, vpnames, funTpe, targs, vargs, bargs, expected, impls.getOrElse(receiver, ImplicitContext.empty))
       // This is different, compared to method calls:
       usingCapture(capture)
       Result(tpe, effs)
@@ -1554,8 +1534,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     vargs: List[source.ValueArg],
     bargs: List[source.Term],
     expected: Option[ValueType],
-    potentialValueImplicits: Map[Int, Either[EffektMessages, source.ValueArg]],
-    potentialBlockImplicits: Map[Int, Either[EffektMessages, Term]]
+    potentialImplicits: ImplicitContext
   )(using Context, Captures): Result[ValueType] = {
     val callsite = currentCapture
 
@@ -1564,8 +1543,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val implicitVargs: mutable.ListBuffer[source.ValueArg] = mutable.ListBuffer.empty
     val implicitBargs: mutable.ListBuffer[source.Term] = mutable.ListBuffer.empty
     val avargs = Aligned(vargs, funTpe.vparams).fillImplicit {
-      case (e, i) if potentialValueImplicits.contains(i) =>
-        potentialValueImplicits(i) match {
+      case (e, i) if potentialImplicits.values.contains(i) =>
+        potentialImplicits.values(i) match {
           case Right(v) =>
             implicitVargs.append(v)
             Some(v)
@@ -1577,8 +1556,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case _ => None
     }
     val abargs = Aligned(bargs, funTpe.bparams).fillImplicit {
-      case (_, i) if potentialBlockImplicits.contains(i) =>
-        potentialBlockImplicits(i) match {
+      case (_, i) if potentialImplicits.blocks.contains(i) =>
+        potentialImplicits.blocks(i) match {
           case Right(b) =>
             implicitBargs.append(b)
             Some(b)

@@ -1,10 +1,8 @@
 package effekt
 package symbols
 
-import scala.collection.mutable
 import effekt.source.IdRef
-import effekt.util.messages.{ErrorReporter, EffektMessages}
-import effekt.context.Context
+import effekt.util.messages.ErrorReporter
 
 /**
  * An immutable container of bindings.
@@ -279,72 +277,6 @@ object scopes {
       all(id.path, scope) { namespace =>
         namespace.terms.getOrElse(id.name, Set.empty).collect { case op: Operation if filter(op) => op }
       }
-
-    // for caching (to prevent infinite recursion here)
-    val foundImplicits: mutable.HashMap[(Scope, BlockSymbol), ImplicitContext] = mutable.HashMap.empty
-
-    def generateImplicitValueArg(p: symbols.ValueParam)(using Context): Either[EffektMessages, source.ValueArg] = {
-      Right(source.ValueArg(Some(p.name.name), p.name.name match {
-        case "sourcePosition" =>
-          val pos = Context.focus.span
-          val from = pos.source.offsetToPosition(pos.from)
-          val to = pos.source.offsetToPosition(pos.to)
-          source.Call(source.IdTarget(source.IdRef(Nil, "SourcePosition", source.Span.missing)), Nil, List(
-            source.ValueArg(None, source.Literal(pos.source.name, builtins.TString, source.Span.missing), source.Span.missing),
-            source.ValueArg(None, source.Literal(from.line.toLong, builtins.TInt, source.Span.missing), source.Span.missing),
-            source.ValueArg(None, source.Literal(from.column.toLong, builtins.TInt, source.Span.missing), source.Span.missing),
-            source.ValueArg(None, source.Literal(to.line.toLong, builtins.TInt, source.Span.missing), source.Span.missing),
-            source.ValueArg(None, source.Literal(to.column.toLong, builtins.TInt, source.Span.missing), source.Span.missing),
-          ), Nil, source.Span.missing)
-        case _ => source.Var(IdRef(Nil, p.name.name, source.Span.missing), source.Span.missing)
-      }, source.Span.missing))
-    }
-    def generateImplicitBlockArg(p: symbols.BlockParam)(using Context): Either[EffektMessages, source.Term] =
-      p.tpe.get match {
-        case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
-          val gtparams = tparams.map { p => source.IdDef(p.name.name, source.Span.missing) }
-          val gvparams: List[source.ValueParam] =
-            vparams.zipWithIndex.map { (p, i) => source.ValueParam(source.IdDef(s"arg${i}", source.Span.missing), Some(source.ReifiedType(p)), false, source.Span.missing) }
-          val gbparams: List[source.BlockParam] =
-            bparams.zipWithIndex.map { (p, i) => source.BlockParam(source.IdDef(s"block_arg${i}", source.Span.missing), Some(source.ReifiedType(p)), false, source.Span.missing) }
-          Right(source.BlockLiteral(gtparams, gvparams, gbparams,
-            source.Return(source.Call(source.IdTarget(source.IdRef(Nil, p.name.name, source.Span.missing)), Nil,
-              gvparams.map { x => source.ValueArg(None, source.Var(source.IdRef(Nil, x.id.name, source.Span.missing), source.Span.missing), source.Span.missing) },
-              gbparams.map { x => source.Var(source.IdRef(Nil, x.id.name, source.Span.missing), source.Span.missing) },
-              source.Span.missing),
-              source.Span.missing), source.Span.missing))
-        case BlockType.InterfaceType(typeConstructor, args) =>
-          // TODO eta-exapnd here, too ?
-          Right(source.Var(IdRef(Nil, p.name.name, source.Span.missing), source.Span.missing))
-      }
-
-    def lookupPotentialImplicits(forCandidates: List[Set[BlockSymbol]])(using Context): Map[BlockSymbol, ImplicitContext] = {
-        forCandidates.flatMap { level =>
-          level.flatMap { b =>
-            def findCached(b: BlockSymbol, scope: Scope): Option[ImplicitContext] = {
-              foundImplicits.get((scope, b)).orElse {
-                scope match {
-                  case Scope.Global(_, _) => None
-                  case Scope.Named(_, _, outer) => findCached(b, outer)
-                  case Scope.Local(_, _, _, outer) => findCached(b, outer)
-                }
-              }
-            }
-            findCached(b, scope).map(b -> _).orElse {
-              b match {
-                // walks up scopes, because block parameters should be eta-expanded below
-                case c: Callable =>
-                  val r = ImplicitContext(
-                    c.vparams.collect { case p if p.isImplicit => p -> generateImplicitValueArg(p) }.toMap,
-                    c.bparams.collect { case p if p.isImplicit => p -> generateImplicitBlockArg(p) }.toMap)
-                  foundImplicits.put((scope, b), r)
-                  Some(b -> r)
-                case _ => None
-              }
-            }
-          }
-        }.toMap
-    }
 
     // the last element in the path can also be the type of the name.
     def lookupOperation(path: List[String], name: String)(using ErrorReporter): List[Set[Operation]] =
