@@ -1471,9 +1471,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   def instantiateImplicitBlock(b: source.Term, tpe: symbols.BlockType)(using Context): source.Term = {
     if(!Context.messaging.hasErrors) {
       (b, tpe) match {
-        // TODO move the instantiation down to when we have the types?
         case (a, symbols.BlockType.FunctionType(tps, cps, vps, bps, res, effs)) =>
-          // TODO prevent infinite recursion due to this
           a match {
             case source.BlockLiteral(tparams, vparams, bparams, source.Return(source.Call(fn, targs, vargs, bargs, _), _), _) =>
               // We need to refresh the whole binding structure, so we don't have duplicate stuff in the tree.
@@ -1521,19 +1519,16 @@ object Typer extends Phase[NameResolved, Typechecked] {
             case _ => Context.panic("Unexpected implicit value for implicit block parameter")
           }
         case (a, symbols.BlockType.InterfaceType(tCons, tArgs)) =>
-          // TODO prevent infinite recursion due to this
-          // TODO rename everything to use fresh names (preserving Namer results)
-          // TODO instantiate / substitute types here
+          // There is nothing to do here
           a
       }
     } else {
       Context.abort("Not instantiating implicit block argument since there are errors.")
     }
   }
-  def instantiateImplicitValue(b: source.ValueArg, tpe: symbols.ValueType)(using Context): source.ValueArg = {
-    // TODO rename everything to use fresh names (preserving Namer results)
-    // TODO instantiate / substitute types here
-    b
+  def instantiateImplicitValue(v: source.ValueArg, tpe: symbols.ValueType)(using Context): source.ValueArg = {
+    // There is nothing to do here
+    v
   }
 
   def checkCallTo(
