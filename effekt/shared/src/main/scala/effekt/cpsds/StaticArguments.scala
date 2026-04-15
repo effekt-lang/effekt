@@ -269,9 +269,6 @@ object StaticArguments {
 
     case ToplevelDefinition.Val(id, ks, k, binding) =>
       Some(ToplevelDefinition.Val(id, ks, k, rewrite(binding)))
-
-    case ToplevelDefinition.Let(id, binding) =>
-      Some(ToplevelDefinition.Let(id, rewrite(binding)))
   }
 
   // --- Entry point ---

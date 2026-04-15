@@ -136,7 +136,6 @@ class UsageAnalysis(
       process(body)
       stack = before
     case ToplevelDefinition.Val(id, ks, k, binding) => process(binding)
-    case ToplevelDefinition.Let(id, binding) => process(binding)
   }
 
   def process(m: ModuleDecl): Unit =

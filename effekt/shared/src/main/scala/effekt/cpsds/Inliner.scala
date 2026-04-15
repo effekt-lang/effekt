@@ -162,12 +162,6 @@ object Inliner {
 
     case ToplevelDefinition.Val(id, ks, k, binding) =>
       Some(ToplevelDefinition.Val(id, ks, k, rewrite(binding, analysis)))
-
-    case ToplevelDefinition.Let(id, binding) if isUnused(id, analysis) =>
-      None
-
-    case ToplevelDefinition.Let(id, binding) =>
-      Some(ToplevelDefinition.Let(id, rewrite(binding, analysis)))
   }
 
   // --- Entry point ---
