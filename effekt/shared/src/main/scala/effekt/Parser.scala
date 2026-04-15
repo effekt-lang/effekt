@@ -1923,27 +1923,20 @@ class Parser(tokens: Seq[Token], source: Source) {
 
 
   inline def manyTrailing[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): List[T] =
+    val components: ListBuffer[T] = ListBuffer.empty
     consume(before)
-    if (peek(after)) {
-      consume(after)
-      Nil
-    } else if (peek(sep)) {
-      consume(sep)
-      consume(after)
-      Nil
-    } else {
-      val components: ListBuffer[T] = ListBuffer.empty
+    if (!peek(after) && !peek(sep)) {
       components += p()
-      while (peek(sep)) {
-        consume(sep)
-
-        if (!peek(after)) {
-          components += p()
-        }
-      }
-      consume(after)
-      components.toList
     }
+      
+    while (peek(sep)) {
+      consume(sep)
+      if(!peek(after)) {
+        components += p()
+      }
+    }
+    consume(after)
+    components.toList
 
 
   // Positions
