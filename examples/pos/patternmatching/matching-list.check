@@ -2,7 +2,7 @@ hello
 4
 Cons(5, Cons(6, Nil()))
 don't care
-Cons(1, Nil())
+Nil()
 ---
 world
 world
