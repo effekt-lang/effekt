@@ -33,7 +33,7 @@ def send[A, B](sender: Sender[A, B], value: A): B = {
   sender.set(rest)
   // TODO avoid yield
   yield()
-  this.unsafeFire(value)
+  this.fire(value)
 }
 
 /// Receives a value from a channel and blocks until a sender arrives.
@@ -51,7 +51,7 @@ def receive[A, B](receiver: Receiver[A, B], value: B): A = {
   receiver.set(rest)
   // TODO avoid yield
   yield()
-  this.unsafeWait(value)
+  this.wait(value)
 }
 
 // TODO streaming

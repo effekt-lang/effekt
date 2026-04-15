@@ -1,26 +1,33 @@
 module dictionary
 
+import ref
 import array
 import bytearray
 import stream
 
-
-/// A trie-based dictionary for efficient key-value storage with bytearray keys.
-/// Supports String and ByteArray keys with fast lookup and insertion.
-type Dictionary[A] {
+/// Internal trie node type.
+type Trie[A] {
   Empty()
   Leaf(value: A)
-  Branch(children: Array[Dictionary[A]])
-  Node(value: A, children: Array[Dictionary[A]])
+  Branch(children: Array[Trie[A]])
+  Node(value: A, children: Array[Trie[A]])
 }
 
+/// A mutable trie-based dictionary for efficient key-value storage with bytearray keys.
+type Dictionary[A] = Ref[Trie[A]]
+
+/// A record pairing a key with a value for use in streams.
+record Tagged[A](key: ByteArray, value: A)
+
+def empty[A](): Dictionary[A] = ref(Empty())
+
 /// Insert a value with a String key.
-def insert[A](trie: Dictionary[A], key: String, value: A): Dictionary[A] =
-  insert(trie, key.fromString, value)
+def insert[A](dictionary: Dictionary[A], key: String, value: A): Unit =
+  insert(dictionary, key.fromString, value)
 
 /// Insert a key-value pair into the dictionary with a ByteArray key.
-def insert[A](trie: Dictionary[A], key: ByteArray, value: A): Dictionary[A] = {
-  def go(trie: Dictionary[A], i: Int): Dictionary[A] =
+def insert[A](dictionary: Dictionary[A], key: ByteArray, value: A): Unit = {
+  def go(trie: Trie[A], i: Int): Trie[A] =
     if (i < key.size) {
       trie match {
         case Empty() =>
@@ -50,16 +57,16 @@ def insert[A](trie: Dictionary[A], key: ByteArray, value: A): Dictionary[A] = {
         case Branch(children) => Node(value, children)
       }
     }
-  go(trie, 0)
+  dictionary.set(go(dictionary.get, 0))
 }
 
 /// Look up a value in the dictionary by string key.
-def lookup[A](trie: Dictionary[A], key: String): Option[A] =
-  lookup(trie, key.fromString)
+def lookup[A](dictionary: Dictionary[A], key: String): Option[A] =
+  lookup(dictionary, key.fromString)
 
 /// Look up a value in the dictionary by bytearray key.
-def lookup[A](trie: Dictionary[A], key: ByteArray): Option[A] = {
-  def go(trie: Dictionary[A], i: Int): Option[A] =
+def lookup[A](dictionary: Dictionary[A], key: ByteArray): Option[A] = {
+  def go(trie: Trie[A], i: Int): Option[A] =
     if (i < key.size) {
       trie match {
         case Empty() => None()
@@ -75,45 +82,41 @@ def lookup[A](trie: Dictionary[A], key: ByteArray): Option[A] = {
         case Node(value, _) => Some(value)
       }
     }
-  go(trie, 0)
+  go(dictionary.get, 0)
 }
 
-/// A record pairing a key with a value for use in streams.
-record Tagged[A](key: ByteArray, value: A)
-
-/// Collect key-value pairs from a stream of Tagged elements into a Dictionary.
+/// Collect key-value pairs from a stream of Tagged elements into a fresh Dictionary.
 def collect[A] { stream: () => Unit / emit[Tagged[A]] }: Dictionary[A] = {
-  var trie = Empty()
+  val dictionary = ref(Empty())
   for[Tagged[A]] { stream() } { case Tagged(bytes, value) =>
-    trie = trie.insert(bytes, value)
+    dictionary.insert(bytes, value)
   }
-  return trie
+  return dictionary
 }
 
 /// Emit all values stored in the dictionary as a push stream.
-def each[A](trie: Dictionary[A]): Unit / emit[A] =
-  trie match {
-    case Empty() => ()
-    case Leaf(value) => do emit(value)
-    case Branch(children) =>
-      each(0, children.size) { i =>
-        each(children.get(i))
-      }
-    case Node(value, children) =>
-      do emit(value)
-      each(0, children.size) { i =>
-        each(children.get(i))
-      }
-  }
+def each[A](dictionary: Dictionary[A]): Unit / emit[A] = {
+  def go(trie: Trie[A]): Unit / emit[A] =
+    trie match {
+      case Empty() => ()
+      case Leaf(value) => do emit(value)
+      case Branch(children) =>
+        each(0, children.size) { i => go(children.get(i)) }
+      case Node(value, children) =>
+        do emit(value)
+        each(0, children.size) { i => go(children.get(i)) }
+    }
+  go(dictionary.get)
+}
 
 /// Emit all key-value pairs stored in the dictionary as a push stream of Tagged elements.
-def eachTagged[A](trie: Dictionary[A]): Unit / emit[Tagged[A]] = {
+def eachTagged[A](dictionary: Dictionary[A]): Unit / emit[Tagged[A]] = {
   def fromBytesReverse(bytes: List[Byte], n: Int): ByteArray = {
     val key = bytearray::allocate(n)
     foreachIndex(bytes) { (i, b) => key.set(n - 1 - i, b) }
     key
   }
-  def go(trie: Dictionary[A], key: List[Byte], n: Int): Unit =
+  def go(trie: Trie[A], key: List[Byte], n: Int): Unit =
     trie match {
       case Empty() => ()
       case Leaf(value) => do emit(Tagged(fromBytesReverse(key, n), value))
@@ -127,7 +130,5 @@ def eachTagged[A](trie: Dictionary[A]): Unit / emit[Tagged[A]] = {
           go(children.get(i), Cons(i.toByte, key), n + 1)
         }
     }
-  go(trie, Nil(), 0)
+  go(dictionary.get, Nil(), 0)
 }
-
-

@@ -8,7 +8,10 @@ import list
 import exception
 
 /// A mutable 0-indexed fixed-sized array.
-extern type Array[T]
+extern type Array[T] =
+  js "Array"
+  chez "vector"
+  llvm "%Pos"
 
 /// We represent arrays like positive types.
 /// The tag is 0 and the obj points to memory with the following layout:
@@ -655,12 +658,12 @@ def each[T](array: Array[T]): Unit / emit[T] = {
   go(0)
 }
 
-/// Connects `array` as a producer to a given pull stream `reader` acting as a consumer.
-def feed[T, R](array: Array[T]) { reader: () => R / read[T] }: R = {
+/// Connects `array` as a producer to a given pull stream `driver` acting as a consumer.
+def feed[T, R](array: Array[T]) { driver: () => R / next[T] }: R = {
   var i = 0
   try {
-    reader()
-  } with read[T] {
+    driver()
+  } with next[T] {
     resume {
       if (i < array.size) {
         val c = i

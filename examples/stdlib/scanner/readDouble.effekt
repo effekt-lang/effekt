@@ -1,0 +1,38 @@
+import scanner
+
+def showParse(input: String) = {
+  with feed(input)
+  with peeking[Char]
+  println(attempt { scanner::readDouble().round(3).show } { "fail" })
+}
+
+def main() = {
+  showParse("12.5")
+  println("")
+
+  showParse("-1.5")
+  println("")
+
+  showParse("1e-2")
+  println("")
+
+  showParse("-2E-2")
+  println("")
+
+  showParse(".5")
+  println("")
+
+  showParse("1e2")
+  println("")
+
+  showParse("1.5e-2")
+  println("")
+
+  showParse("1.5e+2")
+  println("")
+
+  showParse("1e1")
+  println("")
+
+  showParse("1e0")
+}

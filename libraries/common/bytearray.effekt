@@ -19,10 +19,10 @@ import array
  *
  * The eraser does nothing.
  */
-extern type ByteArray
-  // = llvm "%Pos"
-  // = js "Uint8Array"
-  // = chez "bytevector"
+extern type ByteArray =
+  llvm "%Pos"
+  js "Uint8Array"
+  chez "bytevector"
 
 /// Allocates a new bytearray with the given `size`, its values are zero bytes.
 extern def allocate(size: Int) at global: ByteArray =
@@ -276,11 +276,11 @@ def each(bytes: ByteArray): Unit / emit[Byte] = {
   go(0)
 }
 
-def feed[R](bytes: ByteArray) { reader: () => R / read[Byte] }: R = {
+def feed[R](bytes: ByteArray) { driver: () => R / next[Byte] }: R = {
   var i = 0
   try {
-    reader()
-  } with read[Byte] {
+    driver()
+  } with next[Byte] {
     resume {
       if (i < bytes.size) {
         val c = i

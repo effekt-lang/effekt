@@ -4,8 +4,6 @@ package optimizer
 
 /**
  * A simple reachability analysis.
- *
- * TODO reachability should also process externs since they now contain splices.
  */
 class Reachable(
   var reachable: Map[Id, Usage],
@@ -14,12 +12,12 @@ class Reachable(
 ) {
 
   // TODO we could use [[Binding]] here.
-  type Definitions = Map[Id, Block | Expr | Stmt]
+  type Definitions = Map[Id, Block | Expr | Stmt | Extern.Def | Declaration | (Property, Declaration.Interface)]
 
   private def update(id: Id, u: Usage): Unit = reachable = reachable.updated(id, u)
   private def usage(id: Id): Usage = reachable.getOrElse(id, Usage.Never)
 
-  def processDefinition(id: Id, d: Block | Expr | Stmt)(using defs: Definitions): Unit = {
+  def processDefinition(id: Id, d: Block | Expr | Stmt | Extern.Def | Declaration | (Property, Declaration.Interface))(using defs: Definitions): Unit = {
     if stack.contains(id) then { update(id, Usage.Recursive); return }
 
     seen = seen + id
@@ -35,6 +33,10 @@ class Reachable(
 
       case expr: Expr => process(expr)
       case binding: Stmt => process(binding)
+      case extern: Extern.Def => process(extern)
+      case decl: Declaration => process(decl)
+      case (p: Property, d: Declaration.Interface) =>
+        process(p.tpe); process(d.id)
     }
   }
 
@@ -54,10 +56,58 @@ class Reachable(
 
   def process(b: Block)(using defs: Definitions): Unit =
     b match {
-      case Block.BlockVar(id, annotatedTpe, annotatedCapt) => process(id)
-      case Block.BlockLit(tparams, cparams, vparams, bparams, body) => process(body)
+      case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
+        process(annotatedTpe); process(id)
+      case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+        vparams.foreach(process); bparams.foreach(process); process(body)
       case Block.Unbox(expr) => process(expr)
       case Block.New(impl) => process(impl)
+    }
+
+  def process(e: Extern.Def)(using defs: Definitions): Unit =
+    e match {
+      case Extern.Def(_, _, tps, cps, vps, bps, ret, capts, body) =>
+        vps.foreach(process)
+        bps.foreach(process)
+        process(ret)
+        body match {
+          case ExternBody.StringExternBody(_, Template(_, args)) =>
+            args.foreach(process)
+          case effekt.core.ExternBody.Unsupported(_) => ()
+        }
+    }
+
+  def process(p: ValueParam)(using defs: Definitions): Unit = process(p.tpe)
+  def process(p: BlockParam)(using defs: Definitions): Unit = process(p.tpe)
+
+  def process(d: Declaration)(using defs: Definitions): Unit =
+    d match {
+      case Declaration.Data(id, tparams, constructors) =>
+        constructors.foreach {
+          case Constructor(id, tparams, fields) =>
+            fields.foreach {
+              case Field(id, tpe) => process(tpe)
+            }
+        }
+      case Declaration.Interface(id, tparams, properties) =>
+        properties.foreach {
+          case Property(id, tpe) => process(tpe)
+        }
+    }
+
+  def process(t: ValueType)(using defs: Definitions): Unit =
+    t match {
+      case ValueType.Var(name) => ()
+      case ValueType.Data(name, targs) => process(name); targs.foreach(process)
+      case ValueType.Boxed(tpe, capt) => process(tpe)
+    }
+  def process(t: BlockType)(using defs: Definitions): Unit =
+    t match {
+      case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
+        vparams.foreach(process)
+        bparams.foreach(process)
+        process(result)
+      case BlockType.Interface(name, targs) => process(name); targs.foreach(process)
     }
 
   def process(s: Stmt)(using defs: Definitions): Unit = s match {
@@ -70,6 +120,7 @@ class Reachable(
       process(body)(using defs + (id -> binding))
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
       process(callee)
+      targs.foreach(process)
       vargs.foreach(process)
       bargs.foreach(process)
       // TODO what to do here?
@@ -79,16 +130,21 @@ class Reachable(
     case Stmt.Val(id, binding, body) => process(binding); process(body)
     case Stmt.App(callee, targs, vargs, bargs) =>
       process(callee)
+      targs.foreach(process)
       vargs.foreach(process)
       bargs.foreach(process)
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
       process(callee)
+      process(callee.tpe)
       process(method)
+      process(methodTpe)
+      targs.foreach(process)
       vargs.foreach(process)
       bargs.foreach(process)
     case Stmt.If(cond, thn, els) => process(cond); process(thn); process(els)
     case Stmt.Match(scrutinee, tpe, clauses, default) =>
       process(scrutinee)
+      process(tpe)
       clauses.foreach { case (id, value) => process(value) }
       default.foreach(process)
     case Stmt.Alloc(id, init, region, body) =>
@@ -98,33 +154,52 @@ class Reachable(
     case Stmt.Var(ref, init, capture, body) =>
       process(init)
       process(body)
-    case Stmt.Get(ref, capt, tpe, id, body) => process(ref); process(body)
-    case Stmt.Put(ref, tpe, value, body) => process(ref); process(value); process(body)
+    case Stmt.Get(ref, tpe, id, capt, body) =>
+      process(ref); process(tpe); process(body)
+    case Stmt.Put(ref, capt, value, body) =>
+      process(ref); process(value); process(body)
     case Stmt.Reset(body) => process(body)
-    case Stmt.Shift(prompt, k, body) => process(prompt); process(body)
+    case Stmt.Shift(prompt, k, body) => process(prompt); process(k); process(body)
     case Stmt.Resume(k, body) => process(k); process(body)
     case Stmt.Region(body) => process(body)
-    case Stmt.Hole(tpe, span) => ()
+    case Stmt.Hole(tpe, span) => process(tpe)
   }
 
   def process(e: Expr)(using defs: Definitions): Unit = e match {
-    case Expr.ValueVar(id, annotatedType) => process(id)
-    case Expr.Literal(value, annotatedType) => ()
-    case Expr.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
-    case Expr.Make(data, tag, targs, vargs) => process(tag); vargs.foreach(process)
+    case Expr.ValueVar(id, annotatedType) => process(id); process(annotatedType)
+    case Expr.Literal(value, annotatedType) => process(annotatedType)
+    case Expr.PureApp(b, targs, vargs) => process(b); targs.foreach(process); vargs.foreach(process)
+    case Expr.Make(data, tag, targs, vargs) =>
+      process(data); process(tag); targs.foreach(process); vargs.foreach(process)
     case Expr.Box(b, annotatedCapture) => process(b)
   }
 
-  def process(i: Implementation)(using defs: Definitions): Unit =
-    i.operations.foreach { op => process(op.body) }
+  def process(i: Implementation)(using defs: Definitions): Unit = {
+    process(i.interface)
+    i.operations.foreach {
+      case Operation(name, tparams, cparams, vparams, bparams, body) =>
+        vparams.foreach(process)
+        bparams.foreach(process)
+        process(body)
+    }
+  }
 }
 
 object Reachable {
   def apply(entrypoints: Set[Id], m: ModuleDecl): Map[Id, Usage] = {
-    val definitions: Map[Id, Block | Expr | Stmt] = m.definitions.map {
+    val definitions: Map[Id, Block | Expr | Stmt | Extern.Def | Declaration | (Property, Declaration.Interface)] = (m.definitions.map {
       case Toplevel.Def(id, block) => id -> block
       case Toplevel.Val(id, binding) => id -> binding
-    }.toMap
+    } ++ m.declarations.flatMap { d =>
+      (d.id -> d) :: (d match {
+        case Declaration.Data(id, tparams, constructors) => Nil
+        case d@Declaration.Interface(id, tparams, properties) =>
+          properties.map { p => p.id -> (p, d) }
+      })
+    }
+      ++ m.externs.collect {
+      case d @ Extern.Def(id, _, _, _, _, _, _, _, _) => id -> d
+    }).toMap
     val initialUsage = entrypoints.map { id => id -> Usage.Recursive }.toMap
     val analysis = new Reachable(initialUsage, Nil, Set.empty)
 

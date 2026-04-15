@@ -1345,7 +1345,24 @@ class ParserTests extends munit.FunSuite {
     val definition = parseToplevel(source.content)
 
     val extType = definition match {
-      case et@ExternType(id, tparams, doc, span) => et
+      case et@ExternType(id, tparams, body, doc, span) => et
+      case other =>
+        throw new IllegalArgumentException(s"Expected ExternType but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(extType.span, span)
+  }
+
+  test("Extern type definition with right hand side parses") {
+    val (source, span) =
+      raw"""extern type Foo = backend "ffiFoo"
+           |↑                                ↑
+           |""".sourceAndSpan
+
+    val definition = parseToplevel(source.content)
+
+    val extType = definition match {
+      case et@ExternType(id, tparams, body, doc, span) => et
       case other =>
         throw new IllegalArgumentException(s"Expected ExternType but got ${other.getClass.getSimpleName}")
     }
@@ -1362,7 +1379,24 @@ class ParserTests extends munit.FunSuite {
     val definition = parseToplevel(source.content)
 
     val extIfc = definition match {
-      case ei@ExternInterface(id, tparams, doc, span) => ei
+      case ei@ExternInterface(id, tparams, bodies, doc, span) => ei
+      case other =>
+        throw new IllegalArgumentException(s"Expected ExternInterface but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(extIfc.span, span)
+  }
+
+  test("Extern interface definition with right-hand side parses with correct span") {
+    val (source, span) =
+      raw"""extern interface IFace[T] = be "foo"
+           |↑                                  ↑
+           |""".sourceAndSpan
+
+    val definition = parseToplevel(source.content)
+
+    val extIfc = definition match {
+      case ei@ExternInterface(id, tparams, bodies, doc, span) => ei
       case other =>
         throw new IllegalArgumentException(s"Expected ExternInterface but got ${other.getClass.getSimpleName}")
     }
@@ -1435,8 +1469,8 @@ class ParserTests extends munit.FunSuite {
         throw new IllegalArgumentException(s"Expected ExternDef but got ${other.getClass.getSimpleName}")
     }
 
-    assertEquals(extDef.bodies.head.span, Span(source, pos(1), pos.last))
-    assertEquals(extDef.bodies.head.featureFlag.span, Span(source, pos(1), pos(2)))
+    assertEquals(extDef.bodies.unspan.head.span, Span(source, pos(1), pos.last))
+    assertEquals(extDef.bodies.unspan.head.featureFlag.span, Span(source, pos(1), pos(2)))
     assertEquals(extDef.span, Span(source, pos(0), pos.last))
   }
 

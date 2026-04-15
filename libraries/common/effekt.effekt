@@ -81,6 +81,7 @@ def println(value: Unit): Unit = println(value.show)
 def println(value: Double): Unit = println(value.show)
 def println(value: Bool): Unit = println(value.show)
 def println(value: Byte): Unit = println(value.show)
+def println(value: Char): Unit = println(value.show)
 
 extern def showBuiltin(value: Int) at {}: String =
   js "'' + ${value}"
@@ -128,8 +129,8 @@ extern def panic(msg: String) at io: Nothing =
   """
 
 extern def show[R](value: R) at {}: String =
-  js "$effekt.show(${value})"
-  chez "(show_impl ${value})"
+  js "undefined"
+  chez "(void)"
   llvm "ret %Pos poison"
 
 extern def genericShow[R](value: R) at {}: String =
@@ -687,6 +688,15 @@ extern def isUndefined[A](value: A) at {}: Bool =
   js "(${value} === undefined || ${value} === null)"
   chez "(eq? ${value} #f)"
 
+// Ascription
+// ==========
+
+/// Ascribe a type, for example `f().as[Int]`.
+def as[A](x: A): A = x
+
+/// Witness absurdity, for example `f().absurd`.
+/// Very often the type argument is inferred.
+def absurd[A](x: Nothing): A = x match {}
 
 // Tuples
 // ======

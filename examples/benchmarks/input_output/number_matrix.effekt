@@ -2,7 +2,6 @@ import examples/benchmarks/runner
 
 import io/error
 import io/filesystem
-import stream
 import scanner
 
 
@@ -46,7 +45,7 @@ def emitNumbers(n: Int) =
     }
   }
 
-def readDigit(): Int / { Scan[Byte], stop } = {
+def nextDigit(): Int / { peek[Byte], next[Byte], stop } = {
   val byte = do peek()
   if (byte.toInt >= 48 && byte.toInt <= 57) {
     skip()
@@ -56,17 +55,17 @@ def readDigit(): Int / { Scan[Byte], stop } = {
   }
 }
 
-def readDecimal(): Int / Scan[Byte] = {
+def nextDecimal(): Int / {peek[Byte], next[Byte]} = {
   var result = 0
-  for[Int] { many { readDigit() } } { digit =>
+  for[Int] { many { nextDigit() } } { digit =>
     result = result * 10 + digit
   }
   result
 }
 
-def readNumbers(): Unit / { Scan[Byte], emit[Int] } =
+def nextNumbers(): Unit / { peek[Byte], next[Byte], emit[Int] } =
   loop {
-    do emit(readDecimal())
+    do emit(nextDecimal())
     skip()
   }
 
@@ -82,8 +81,8 @@ def run(n: Int): Int = {
   }
 
   with readFile(filename)
-  with returning::scanner[Byte, Int]
-  sum { readNumbers() }
+  with returning::peeking[Byte, Int]
+  sum { nextNumbers() }
 }
 
 

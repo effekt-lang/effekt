@@ -236,17 +236,13 @@ extern def unsafeCharAt(str: String, n: Int) at {}: Char =
 // Streaming
 // ---------
 
-def feed[R](string: String) { reader: () => R / read[Char] } =
-  feed(string.fromString) {
-    decodeUTF8 {
-      reader()
-    }
-  }
+def feed[R](string: String) { driver: () => R / next[Char] } =
+  feed(string.fromString) { decodeUTF8 { driver() } }
 
 def each(string: String): Unit / emit[Char] =
   feed(string) {
     loop {
-      do emit(do read())
+      do emit(do next())
     }
   }
 

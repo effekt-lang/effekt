@@ -7,13 +7,13 @@ import partial
 // Effects
 // -------
 
-/// Describes push streams by emitting values of type `A`.
-effect emit[A](value: A): Unit
+/// The effect for emitting an item of type `A` in a push stream.
+effect emit[A](item: A): Unit
 
-/// Describes pull streams by reading values of type `A`.
+/// The effect for getting the next item of type `A` from a pull stream.
 ///
-/// The producer can decide to `stop` emitting values.
-effect read[A](): A / stop
+/// Uses the `stop` effect to signal the end of the stream.
+effect next[A](): A / stop
 
 
 /// Like `for[A, R]`, but ignores the result of the stream, and consequently
@@ -30,11 +30,11 @@ def for[A] { stream: () => Unit / emit[A] } { action: A => Unit }: Unit =
 def map[A, B] { function: A => B } { stream: () => Unit / emit[A] }: Unit / emit[B] =
   returning::map[A, B, Unit]{function}{stream}
 
-/// Runs the given action whenever the given reader reads an element.
+/// Runs the given action whenever the given driver reads an element.
 ///
-/// e.g. var i = -1; with tap { i = i + 1; i }; reader()
-def tap[A] { action: () => A / stop } { reader: () => Unit / read[A] }: Unit =
-  returning::tap[A, Unit]{action}{reader}
+/// e.g. var i = -1; with tap { i = i + 1; i }; driver()
+def tap[A] { action: () => A / stop } { driver: () => Unit / next[A] }: Unit =
+  returning::tap[A, Unit]{action}{driver}
 
 /// Runs the stream as a message queue,
 /// handling each of its elements that can produce new elements ("messages"),
@@ -42,8 +42,8 @@ def tap[A] { action: () => A / stop } { reader: () => Unit / read[A] }: Unit =
 def fix[T] { one: T => Unit / emit[T] } { stream: => Unit / emit[T] }: Unit =
   try {
     stream()
-  } with emit[T] { value =>
-    fix {one} { one(value) }
+  } with emit[T] { item =>
+    fix {one} { one(item) }
     resume(())
   }
 
@@ -58,7 +58,7 @@ def some[A] { action: () => A / stop }: Unit / { emit[A], fail } = {
 
 
 /// In Effekt lower bounds are inclusive and upper bounds are exclusive
-record Indexed[A](index: Int, value: A)
+record Indexed[A](index: Int, item: A)
 
 def range(lower: Int, upper: Int): Unit / emit[Int] =
   if (lower < upper) {
@@ -116,7 +116,7 @@ def iterate[A](initial: A) { step: A => A }: Unit / emit[A] = {
 /// ```
 def takeWhile[A] { predicate: A => Bool } { stream: () => Unit / emit[A] }: Unit / emit[A] =
   try { stream() } with emit[A] {
-    case value and predicate(value) => do emit(value); resume(())
+    case item and predicate(item) => do emit(item); resume(())
     case _                          => () // end the stream
   }
 
@@ -146,7 +146,7 @@ def product { stream: () => Unit / emit[Int] }: Int =
 /// ```
 def all[A] { cond: A => Bool } { stream: => Unit / emit[A] }: Bool =
   try { stream(); true } with emit[A] {
-    case value and not(cond(value)) => false
+    case item and not(cond(item)) => false
     case _                          => resume(())
   }
 
@@ -169,7 +169,7 @@ def all[A] { cond: A => Bool } { stream: => Unit / emit[A] }: Bool =
 /// ```
 def any[A] { cond: A => Bool } { stream: => Unit / emit[A] }: Bool =
   try { stream(); false } with emit[A] {
-    case value and cond(value) => true
+    case item and cond(item) => true
     case _                     => resume(())
   }
 
@@ -196,8 +196,8 @@ def countIf[A] { shouldCount: A => Bool } { stream: () => Unit / emit[A] }: Int 
 def count[A] { stream: () => Unit / emit[A] }: Int =
   countIf[A] { _ => true } {stream}
 
-def source[A] { stream: () => Unit / emit[A] } { reader: () => Unit / read[A] }: Unit =
-  returning::source[A, Unit]{stream}{reader}
+def source[A] { stream: () => Unit / emit[A] } { driver: () => Unit / next[A] }: Unit =
+  returning::source[A, Unit]{stream}{driver}
 
 /// Combines two streams together calling action on pairs in lockstep.
 /// Terminates when either of them terminates.
@@ -206,7 +206,7 @@ def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] 
   with source[B] { stream2 }
 
   loop {
-    action(do read(), do read())
+    action(do next[A](), do next[B]())
   }
 }
 
@@ -218,15 +218,15 @@ def zipLongest[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / e
 
   loop {
      try {
-      val a = do read[A]()
+      val a = do next[A]()
       try {
-        val b = do read[B]()
+        val b = do next[B]()
         action(Both(a, b))
       } with stop { () =>
         action(This(a))
       }
     } with stop{ () =>
-      val b = do read[B]()
+      val b = do next[B]()
       action(That(b))
     }
   }
@@ -328,8 +328,8 @@ def tee[A]{ cons1: { => Unit / emit[A] } => Unit }{ cons2: { => Unit / emit[A] }
 /// ```
 def first[A] { stream: () => Unit / emit[A] }: A / fail = {
   try {
-    def body(): A = { stream(); do fail() }
-    body()
+    stream()
+    do fail().absurd
   } with emit[A] { a => a }
 }
 
@@ -338,8 +338,8 @@ def first[A] { stream: () => Unit / emit[A] }: A / fail = {
 def nth[A](n: Int){ stream: () => Unit / emit[A] }: A / fail = {
   var m = n
   try {
-    def body(): A = { stream(); do fail() }
-    body()
+    stream()
+    do fail().absurd
   } with emit[A] { a =>
     if (m == 0) {
       return a
@@ -349,6 +349,16 @@ def nth[A](n: Int){ stream: () => Unit / emit[A] }: A / fail = {
     }
   }
 }
+
+// Peeking
+// -------
+
+/// Return the next item without advancing.
+effect peek[A](): A / stop
+
+/// Provide the ability to peek when consuming a stream.
+def peeking[A] { peeker: () => Unit / {next[A], peek[A]} }: Unit / next[A] =
+  returning::peeking[A, Unit]{peeker}
 
 // Counting and padding
 // --------------------
@@ -380,25 +390,25 @@ def tracking[A]{ body: => Unit / { emit[A], getPos } }: Unit / emit[A] =
 namespace returning {
 
 /// Canonical handler of push streams that performs `action` for every
-/// value emitted by `stream`.
+/// item emitted by `stream`.
 def for[A, R] { stream: () => R / emit[A] } { action: A => Unit }: R =
   try {
     stream()
-  } with emit[A] { value =>
-    resume(action(value))
+  } with emit[A] { item =>
+    resume(action(item))
   }
 
 def map[A, B, R] { function: A => B } { stream: () => R / emit[A] }: R / emit[B] =
   try {
     stream()
-  } with emit[A] { value =>
-    resume(do emit(function(value)))
+  } with emit[A] { item =>
+    resume(do emit(function(item)))
   }
 
-def tap[A, R] { action: () => A / stop } { reader: () => R / read[A] }: R =
+def tap[A, R] { action: () => A / stop } { driver: () => R / next[A] }: R =
   try {
-    reader()
-  } with read[A] { () =>
+    driver()
+  } with next[A] { () =>
     resume { action() }
   }
 
@@ -460,7 +470,7 @@ def product[R] { stream: () => R / emit[Int] }: (R, Int) = {
   }
 }
 
-def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }: R = {
+def source[A, R] { stream: () => Unit / emit[A] } { driver: () => R / next[A] }: R = {
   var next = box { None() }
   next = box {
     try {
@@ -473,10 +483,40 @@ def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }:
     }
   }
   try {
-    reader()
-  } with read[A] {
+    driver()
+  } with next[A] {
     resume {
       next().getOrElse { do stop() }
+    }
+  }
+}
+
+/// Provide the ability to peek when consuming a stream.
+def peeking[A, R] { peeker: () => R / {next[A], peek[A]} }: R / next[A] = {
+  def upstream(): A / stop = do next()
+  var last = None()
+  try {
+    peeker()
+  } with peek[A] { () =>
+    resume {
+      last match {
+        case None() =>
+          val t = upstream()
+          last = Some(t)
+          return t
+        case Some(t) =>
+          return t
+      }
+    }
+  } with next[A] {
+    resume {
+      last match {
+        case None() =>
+          upstream()
+        case Some(t) =>
+          last = None()
+          return t
+      }
     }
   }
 }

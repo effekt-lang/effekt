@@ -21,10 +21,14 @@ object Contify {
   def rewrite(extern: Extern): Extern = extern match {
     case Extern.Def(id, vparams, bparams, async, body) =>
       Extern.Def(id, vparams, bparams, async, rewrite(body))
+    case Extern.Data(id, tps, body) =>
+      Extern.Data(id, tps, body)
+    case Extern.Interface(id, tps, body) =>
+      Extern.Interface(id, tps, body)
     case include: Extern.Include => include
   }
 
-  def rewrite(body: ExternBody): ExternBody = body match {
+  def rewrite(body: ExternBody[Expr]): ExternBody[Expr] = body match {
     case ExternBody.StringExternBody(ff, template) =>
       ExternBody.StringExternBody(ff, Template(template.strings, template.args.map(rewrite)))
     case unsupported: ExternBody.Unsupported => unsupported

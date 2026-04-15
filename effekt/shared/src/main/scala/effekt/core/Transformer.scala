@@ -94,7 +94,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val moduleName = Context.module.name
       val qualifiedSignature = QualifiedSignature(moduleName, sym)
       val cps = bps.map(b => b.symbol.capture)
-      val tBody = bodies match {
+      val tBody = bodies.unspan match {
         case source.ExternBody.StringExternBody(ff, body, span) :: Nil =>
           ExternBody.StringExternBody(ff, Template(body.strings, body.args.map(transformAsExpr)))
         case source.ExternBody.Unsupported(err) :: Nil =>
@@ -110,9 +110,18 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case d @ source.NamespaceDef(name, defs, doc, span) =>
       defs.flatMap(transformToplevel)
 
-    case e @ source.ExternType(id, _, _, _) =>
+    case e @ source.ExternType(id, _, bodies, _, _) =>
+      val tBody = bodies.unspan match {
+        case source.ExternBody.StringExternBody(ff, body, span) :: Nil =>
+          ExternBody.StringExternBody(ff, Template(body.strings, body.args.map { absurd => absurd }))
+        case source.ExternBody.Unsupported(err) :: Nil =>
+          ExternBody.Unsupported(err)
+        case _ =>
+          Context.abort("Externs should be resolved and desugared before core.Transformer")
+      }
+
       val sym@ExternType(name, tps, _) = e.symbol
-      List(Extern.Data(sym, tps))
+      List(Extern.Data(sym, tps, tBody))
 
     // For now we forget about all of the following definitions in core:
     case d: source.Def.Extern => Nil
@@ -860,7 +869,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       // resolve the preferred body again and hope it's the same
       val body = ResolveExternDefs.findPreferred(bodies)
       body match {
-        case b: source.ExternBody.EffektExternBody => CallingConvention.Control
+        case b: source.ExternBody.EffektExternBody[_] => CallingConvention.Control
         case _ if f.capture.pure => CallingConvention.Pure
         case _ if f.capture.pureOrIO => CallingConvention.Direct
         case _ => CallingConvention.Control
