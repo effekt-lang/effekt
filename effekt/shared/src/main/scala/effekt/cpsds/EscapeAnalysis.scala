@@ -121,9 +121,6 @@ private class EscapeAnalysis(
 
     case ToplevelDefinition.Val(id, ks, k, binding) =>
       analyze(binding)
-
-    case ToplevelDefinition.Let(id, binding) =>
-      escapes(binding)
   }
 
   def process(m: ModuleDecl): Unit = {

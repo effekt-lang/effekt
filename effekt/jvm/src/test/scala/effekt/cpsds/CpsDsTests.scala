@@ -79,7 +79,6 @@ class CpsDsTests extends munit.FunSuite {
         input.definitions.head match {
           case ToplevelDefinition.Def(id, _, _) => id
           case ToplevelDefinition.Val(id, _, _, _) => id
-          case ToplevelDefinition.Let(id, _) => id
         }
       }
       Inliner.transform(mainId, input)
