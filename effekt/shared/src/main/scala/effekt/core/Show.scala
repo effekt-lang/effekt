@@ -18,12 +18,10 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
   private final val STRING_CONCAT_NAME: String = "infixPlusPlus"
 
   /** Names that [[Deadcode]] must preserve for the [[Show]] pass to function correctly. */
-  def requiredNames(core: ModuleDecl)(using Context): Set[Id] = {
-    val dctx = DeclarationContext(core.declarations, core.externs)
-
+  def requiredNames(core: ModuleDecl): Set[Id] = {
     val requiredExternNames = Set(FUNCTION_NAME, FUNCTION_BUILTIN_NAME, STRING_CONCAT_NAME)
 
-    dctx.externs.collect {
+    core.externs.collect {
       case Extern.Def(id, _, _, _, _, _, _, _) if requiredExternNames.contains(id.name.name) => id
     }.toSet
   }
