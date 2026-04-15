@@ -27,8 +27,8 @@ object Inliner {
     val subst = Map.newBuilder[Id, Expr]
     params.zip(args).foreach { case (param, arg) =>
       arg match {
-        case v: Expr.Variable =>
-          subst += (param -> v)
+        case e if isTrivial(e) =>
+          subst += (param -> e)
         case other =>
           val fresh = Id(param)
           bindings += (fresh -> other)
@@ -36,6 +36,16 @@ object Inliner {
       }
     }
     (bindings.result(), subst.result())
+  }
+
+  private def isTrivial(expr: Expr): Boolean = expr match {
+    case Expr.Make(data, tag, args) => false
+    case Expr.Variable(id) => true
+    case Expr.Literal(value, tpe) => true
+
+    case Expr.Abort => true
+    case Expr.Return => true
+    case Expr.Toplevel => true
   }
 
   // --- Rewrite ---
@@ -60,8 +70,8 @@ object Inliner {
     case Stmt.Let(id, binding, rest) if isUnused(id, analysis) =>
       rewrite(rest, analysis)
 
-    case Stmt.Let(id, Expr.Variable(aliasId), rest) =>
-      val subst = Substitution(Map(id -> Expr.Variable(aliasId)))
+    case Stmt.Let(id, binding, rest) if isTrivial(binding) =>
+      val subst = Substitution(Map(id -> binding))
       rewrite(substitute(rest)(using subst), analysis)
 
     case Stmt.Let(id, binding, rest) =>

@@ -110,11 +110,10 @@ object StaticArguments {
    * After rewriting a statement, check if any pending workers are referenced
    * in multiple sub-statements of the result. If so, wrap them above.
    */
-  private def placeWorkers(s: Stmt)(rw: PartialFunction[Stmt, Stmt])(using ctx: Context): Stmt = {
-    val rewritten = rw.applyOrElse(s, identity[Stmt])
-    val subStmts = children(rewritten)
+  private def placeWorkers(s: Stmt)(rewrite: Stmt => Stmt)(using ctx: Context): Stmt = {
+    val subStmts = children(s)
 
-    if subStmts.size < 2 then return rewritten
+    if subStmts.size < 2 then return rewrite(s)
 
     val frees = subStmts.map(s => referencedWorkers(s.free))
     val shared = frees.combinations(2).flatMap {
@@ -122,16 +121,16 @@ object StaticArguments {
       case _ => Set.empty
     }.toSet
 
-    if shared.isEmpty then return rewritten
+    if shared.isEmpty then return rewrite(s)
 
     val wrappers = shared.toList.flatMap { id =>
       ctx.pendingWorkers.remove(id).map(id -> _)
     }
 
-    wrappers.foldRight(rewritten) { case ((id, Worker(workerId, staticParams, dynamicParams, workerBody)), rest) =>
+    wrappers.foldRight(rewrite(s)) { case ((id, Worker(workerId, staticParams, dynamicParams, workerBody)), rest) =>
       val isStatic = ctx.statics(id)
-      var si = staticParams.iterator
-      var di = dynamicParams.iterator
+      val si = staticParams.iterator
+      val di = dynamicParams.iterator
       val allParams = isStatic.map { s => if s then si.next() else Id(di.next()) }
       val dynamicWrapperArgs = isStatic.zip(allParams).collect { case (false, p) => Expr.Variable(p) }
 
@@ -143,6 +142,21 @@ object StaticArguments {
   }
 
   // --- Rewrite ---
+
+  // TODO
+  // what if there are two workers that both are moved?
+  //
+  // def loop1() = ...
+  // def loop2() = ... loop1() ...
+  //
+  // if () {
+  //   loop2()
+  // } else {
+  //   loop2()
+  // }
+  //
+  // the order of insertion matters since we want to sink all loops
+  // but not too far
 
   def rewrite(s: Stmt)(using ctx: Context): Stmt = placeWorkers(s) {
 
@@ -163,7 +177,9 @@ object StaticArguments {
 
     // External call: place pending worker here, then rewrite the call
     case Stmt.App(id, args, direct) if ctx.pendingWorkers.contains(id) =>
-      placeWorkerHere(id, args)(rewriteCall(id, args))
+      placeWorkerHere(id, args) {
+        rewriteCall(id, args)
+      }
 
     // Call to an already-placed worker: just rewrite the call
     case Stmt.App(id, args, direct) if ctx.workers.contains(id) && !ctx.within(id) =>
