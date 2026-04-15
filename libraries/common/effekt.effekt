@@ -377,22 +377,22 @@ extern def infixSlash(x: Double, y: Double) at {}: Double =
 extern def cos(x: Double) at {}: Double =
   js "Math.cos(${x})"
   chez "(cos ${x})"
-   llvm "%z = call %Double @llvm.cos.f64(double ${x}) ret %Double %z"
+  llvm "%z = call %Double @llvm.cos.f64(double ${x}) ret %Double %z"
 
 extern def sin(x: Double) at {}: Double =
   js "Math.sin(${x})"
   chez "(sin ${x})"
-   llvm "%z = call %Double @llvm.sin.f64(double ${x}) ret %Double %z"
+  llvm "%z = call %Double @llvm.sin.f64(double ${x}) ret %Double %z"
 
 extern def atan(x: Double) at {}: Double =
   js "Math.atan(${x})"
   chez "(atan ${x})"
-   llvm "%z = call %Double @atan(double ${x}) ret %Double %z"
+  llvm "%z = call %Double @atan(double ${x}) ret %Double %z"
 
 extern def tan(x: Double) at {}: Double =
   js "Math.tan(${x})"
   chez "(tan ${x})"
-   llvm "%z = call %Double @tan(double ${x}) ret %Double %z"
+  llvm "%z = call %Double @tan(double ${x}) ret %Double %z"
 
 extern def sqrt(x: Double) at {}: Double =
   js "Math.sqrt(${x})"
@@ -666,7 +666,7 @@ extern def toByte(n: Int) at {}: Byte =
 extern def toInt(n: Byte) at {}: Int =
   js "${n}"
   llvm "%z = zext %Byte ${n} to %Int ret %Int %z"
-   chez "${n}"
+  chez "${n}"
 
 
 // Undefined and Null

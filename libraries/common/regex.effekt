@@ -59,4 +59,4 @@ namespace internal {
   extern def exec(reg: Regex, str: String) at io: RegexMatch =
     js "regex$exec(${reg}, ${str})"
     chez "(regex-exec ${reg} ${str})"
-   }
+}
