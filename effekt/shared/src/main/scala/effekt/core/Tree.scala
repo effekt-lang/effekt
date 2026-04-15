@@ -526,261 +526,356 @@ object Tree {
     }
   }
 
+  /**
+   * Guidelines:
+   * 1. use [[List.mapConserve]] instead of [[List.map]]
+   * 2. use [[rebuild]] when constructing the result as `old.rebuild(MkOld(...))`
+   */
   class TrampolinedRewrite {
 
     import Trampoline.done
 
-    final def all[T](xs: List[T], f: T => Trampoline[T]): Trampoline[List[T]] = xs match {
-      case Nil => done(Nil)
-      case x :: xs => f(x).flatMap(x => all(xs, f).map(x :: _))
+    extension [T <: Product](original: T) {
+      /** Returns [[original]] if [[rebuilt]] is field-by-field reference-identical. */
+      inline def rebuild(inline rebuilt: T): T = {
+        val arity = original.productArity
+        var i = 0
+        var changed = false
+        while (i < arity && !changed) {
+          if !(original.productElement(i).asInstanceOf[AnyRef] eq rebuilt.productElement(i).asInstanceOf[AnyRef]) then
+            changed = true
+          i += 1
+        }
+        if changed then rebuilt else original
+      }
     }
 
-    final def opt[T](xs: Option[T], f: T => Trampoline[T]): Trampoline[Option[T]] = xs match {
-      case Some(value) => f(value).map(v => Some(v))
+    final def all[T <: AnyRef](xs: List[T], f: T => Trampoline[T]): Trampoline[List[T]] = xs match {
+      case Nil => done(Nil)
+      case x :: rest => f(x).flatMap { x2 =>
+        all(rest, f).map { rest2 =>
+          if (x2 eq x) && (rest2 eq rest) then xs else x2 :: rest2
+        }
+      }
+    }
+
+    final def opt[T <: AnyRef](xs: Option[T], f: T => Trampoline[T]): Trampoline[Option[T]] = xs match {
+      case Some(value) => f(value).map { v => if v eq value then xs else Some(v) }
       case None => done(None)
     }
 
     def rewrite(x: Id): Id = x
 
     def rewrite(e: Expr): Trampoline[Expr] = e match {
-      case Expr.ValueVar(id, tpe) => done(Expr.ValueVar(rewrite(id), rewrite(tpe)))
-      case Expr.Literal(value, tpe) => done(Expr.Literal(value, rewrite(tpe)))
-      case Expr.PureApp(b, targs, vargs) => for {
+      case e @ Expr.ValueVar(id, tpe) =>
+        done(e.rebuild(Expr.ValueVar(rewrite(id), rewrite(tpe))))
+
+      case e @ Expr.Literal(value, tpe) =>
+        done(e.rebuild(Expr.Literal(value, rewrite(tpe))))
+
+      case e @ Expr.PureApp(b, targs, vargs) => for {
         b2     <- done(rewrite(b))
-        targs2 <- done(targs.map(rewrite))
+        targs2 <- done(targs.mapConserve(rewrite))
         vargs2 <- all(vargs, rewrite)
-      } yield Expr.PureApp(b2, targs2, vargs2)
-      case Expr.Make(data, tag, targs, vargs) => for {
+      } yield e.rebuild(Expr.PureApp(b2, targs2, vargs2))
+
+      case e @ Expr.Make(data, tag, targs, vargs) => for {
         data2  <- done(rewrite(data))
         tag2   <- done(rewrite(tag))
-        targs2 <- done(targs.map(rewrite))
+        targs2 <- done(targs.mapConserve(rewrite))
         vargs2 <- all(vargs, rewrite)
-      } yield Expr.Make(data2, tag2, targs2, vargs2)
-      case Expr.Box(b, capt) => for {
-        b2 <- rewrite(b)
+      } yield e.rebuild(Expr.Make(data2, tag2, targs2, vargs2))
+
+      case e @ Expr.Box(b, capt) => for {
+        b2    <- rewrite(b)
         capt2 <- done(rewrite(capt))
-      } yield Expr.Box(b2, capt2)
+      } yield e.rebuild(Expr.Box(b2, capt2))
     }
 
     def rewrite(s: Stmt): Trampoline[Stmt] = s match {
-      case Stmt.Def(id, block, body) => for {
+      case s @ Stmt.Def(id, block, body) => for {
         id2    <- done(rewrite(id))
         block2 <- rewrite(block)
         body2  <- rewrite(body)
-      } yield Stmt.Def(id2, block2, body2)
+      } yield s.rebuild(Stmt.Def(id2, block2, body2))
 
-      case Stmt.Let(id, binding, body) => for {
+      case s @ Stmt.Let(id, binding, body) => for {
         id2      <- done(rewrite(id))
         binding2 <- rewrite(binding)
         body2    <- rewrite(body)
-      } yield Stmt.Let(id2, binding2, body2)
+      } yield s.rebuild(Stmt.Let(id2, binding2, body2))
 
-      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => for {
+      case s @ Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => for {
         id2     <- done(rewrite(id))
         callee2 <- done(rewrite(callee))
-        targs2  <- done(targs.map(rewrite))
+        targs2  <- done(targs.mapConserve(rewrite))
         vargs2  <- all(vargs, rewrite)
         bargs2  <- all(bargs, rewrite)
         body2   <- rewrite(body)
-      } yield Stmt.ImpureApp(id2, callee2, targs2, vargs2, bargs2, body2)
+      } yield s.rebuild(Stmt.ImpureApp(id2, callee2, targs2, vargs2, bargs2, body2))
 
-      case Stmt.Return(expr) => for {
+      case s @ Stmt.Return(expr) => for {
         expr2 <- rewrite(expr)
-      } yield Stmt.Return(expr2)
+      } yield s.rebuild(Stmt.Return(expr2))
 
-      case Stmt.Val(id, binding, body) => for {
+      case s @ Stmt.Val(id, binding, body) => for {
         id2      <- done(rewrite(id))
         binding2 <- rewrite(binding)
         body2    <- rewrite(body)
-      } yield Stmt.Val(id2, binding2, body2)
+      } yield s.rebuild(Stmt.Val(id2, binding2, body2))
 
-      case Stmt.App(callee, targs, vargs, bargs) => for {
+      case s @ Stmt.App(callee, targs, vargs, bargs) => for {
         callee2 <- rewrite(callee)
-        targs2  <- done(targs.map(rewrite))
+        targs2  <- done(targs.mapConserve(rewrite))
         vargs2  <- all(vargs, rewrite)
         bargs2  <- all(bargs, rewrite)
-      } yield Stmt.App(callee2, targs2, vargs2, bargs2)
+      } yield s.rebuild(Stmt.App(callee2, targs2, vargs2, bargs2))
 
-      case Stmt.Invoke(callee, method, tpe, targs, vargs, bargs) => for {
+      case s @ Stmt.Invoke(callee, method, tpe, targs, vargs, bargs) => for {
         callee2 <- rewrite(callee)
         method2 <- done(rewrite(method))
         tpe2    <- done(rewrite(tpe))
-        targs2  <- done(targs.map(rewrite))
+        targs2  <- done(targs.mapConserve(rewrite))
         vargs2  <- all(vargs, rewrite)
         bargs2  <- all(bargs, rewrite)
-      } yield Stmt.Invoke(callee2, method2, tpe2, targs2, vargs2, bargs2)
+      } yield s.rebuild(Stmt.Invoke(callee2, method2, tpe2, targs2, vargs2, bargs2))
 
-      case Stmt.If(cond, thn, els) => for {
+      case s @ Stmt.If(cond, thn, els) => for {
         cond2 <- rewrite(cond)
         thn2  <- rewrite(thn)
         els2  <- rewrite(els)
-      } yield Stmt.If(cond2, thn2, els2)
+      } yield s.rebuild(Stmt.If(cond2, thn2, els2))
 
-      case Stmt.Match(scrutinee, tpe, clauses, default) => for {
+      case s @ Stmt.Match(scrutinee, tpe, clauses, default) => for {
         scrutinee2 <- rewrite(scrutinee)
         tpe2       <- done(rewrite(tpe))
         clauses2   <- all(clauses, rewrite)
         default2   <- opt(default, rewrite)
-      } yield Stmt.Match(scrutinee2, tpe2, clauses2, default2)
+      } yield s.rebuild(Stmt.Match(scrutinee2, tpe2, clauses2, default2))
 
-      case Stmt.Region(body) => for {
+      case s @ Stmt.Region(body) => for {
         body2 <- rewrite(body)
-      } yield Stmt.Region(body2)
+      } yield s.rebuild(Stmt.Region(body2))
 
-      case Stmt.Alloc(id, init, region, body) => for {
+      case s @ Stmt.Alloc(id, init, region, body) => for {
         id2     <- done(rewrite(id))
         init2   <- rewrite(init)
         region2 <- done(rewrite(region))
         body2   <- rewrite(body)
-      } yield Stmt.Alloc(id2, init2, region2, body2)
+      } yield s.rebuild(Stmt.Alloc(id2, init2, region2, body2))
 
-      case Stmt.Var(ref, init, capture, body) => for {
+      case s @ Stmt.Var(ref, init, capture, body) => for {
         ref2     <- done(rewrite(ref))
         init2    <- rewrite(init)
         capture2 <- done(rewrite(capture))
         body2    <- rewrite(body)
-      } yield Stmt.Var(ref2, init2, capture2, body2)
+      } yield s.rebuild(Stmt.Var(ref2, init2, capture2, body2))
 
-      case Stmt.Get(id, tpe, ref, annotatedCapt, body) => for {
+      case s @ Stmt.Get(id, tpe, ref, annotatedCapt, body) => for {
         id2   <- done(rewrite(id))
         tpe2  <- done(rewrite(tpe))
         ref2  <- done(rewrite(ref))
+        capt2 <- done(rewrite(annotatedCapt))
         body2 <- rewrite(body)
-      } yield Stmt.Get(id2, tpe2, ref2, annotatedCapt, body2)
+      } yield s.rebuild(Stmt.Get(id2, tpe2, ref2, capt2, body2))
 
-      case Stmt.Put(ref, annotatedCapt, value, body) => for {
+      case s @ Stmt.Put(ref, annotatedCapt, value, body) => for {
         ref2   <- done(rewrite(ref))
+        capt2  <- done(rewrite(annotatedCapt))
         value2 <- rewrite(value)
         body2  <- rewrite(body)
-      } yield Stmt.Put(ref2, annotatedCapt, value2, body2)
+      } yield s.rebuild(Stmt.Put(ref2, capt2, value2, body2))
 
-      case Stmt.Reset(body) => for {
+      case s @ Stmt.Reset(body) => for {
         body2 <- rewrite(body)
-      } yield Stmt.Reset(body2)
+      } yield s.rebuild(Stmt.Reset(body2))
 
-      case Stmt.Shift(prompt, k, body) => for {
+      case s @ Stmt.Shift(prompt, k, body) => for {
         prompt2 <- done(rewrite(prompt))
         k2      <- done(rewrite(k))
         body2   <- rewrite(body)
-      } yield Stmt.Shift(prompt2, k2, body2)
+      } yield s.rebuild(Stmt.Shift(prompt2, k2, body2))
 
-      case Stmt.Resume(k, body) => for {
+      case s @ Stmt.Resume(k, body) => for {
         k2    <- done(rewrite(k))
         body2 <- rewrite(body)
-      } yield Stmt.Resume(k2, body2)
+      } yield s.rebuild(Stmt.Resume(k2, body2))
 
-      case Stmt.Hole(tpe, span) =>
-        done(Stmt.Hole(rewrite(tpe), span))
+      case s @ Stmt.Hole(tpe, span) =>
+        done(s.rebuild(Stmt.Hole(rewrite(tpe), span)))
     }
 
     def rewrite(b: Block): Trampoline[Block] = b match {
-      case Block.BlockVar(id, tpe, capt) =>
-        done(Block.BlockVar(rewrite(id), rewrite(tpe), rewrite(capt)))
+      case b @ Block.BlockVar(id, tpe, capt) =>
+        done(b.rebuild(Block.BlockVar(rewrite(id), rewrite(tpe), rewrite(capt))))
       case lit: Block.BlockLit => rewrite(lit: Block.BlockLit)
-      case Block.Unbox(pure) => rewrite(pure).map(pure2 => Block.Unbox(pure2))
-      case Block.New(impl) => rewrite(impl).map(impl2 => Block.New(impl2))
+      case b @ Block.Unbox(pure) => rewrite(pure).map(pure2 =>
+        b.rebuild(Block.Unbox(pure2)))
+      case b @ Block.New(impl) => rewrite(impl).map(impl2 =>
+        b.rebuild(Block.New(impl2)))
     }
 
     def rewrite(impl: Implementation): Trampoline[Implementation] = impl match {
-      case Implementation(interface, operations) => for {
+      case impl @ Implementation(interface, operations) => for {
         interface2  <- done(rewrite(interface))
         operations2 <- all(operations, rewrite)
-      } yield Implementation(interface2, operations2)
+      } yield impl.rebuild(Implementation(interface2, operations2))
     }
 
     def rewrite(o: Operation): Trampoline[Operation] = o match {
-      case Operation(name, tparams, cparams, vparams, bparams, body) =>
-        val name2 = rewrite(name)
-        val tparams2 = tparams map rewrite
-        val cparams2 = cparams map rewrite
-        val vparams2 = vparams map rewrite
-        val bparams2 = bparams map rewrite
-        rewrite(body).map { body2 => Operation(name2, tparams2, cparams2, vparams2, bparams2, body2) }
+      case o @ Operation(name, tparams, cparams, vparams, bparams, body) =>
+        val name2    = rewrite(name)
+        val tparams2 = tparams mapConserve rewrite
+        val cparams2 = cparams mapConserve rewrite
+        val vparams2 = vparams mapConserve rewrite
+        val bparams2 = bparams mapConserve rewrite
+        rewrite(body).map { body2 =>
+          o.rebuild(Operation(name2, tparams2, cparams2, vparams2, bparams2, body2))
+        }
     }
 
     def rewrite(p: ValueParam): ValueParam = p match {
-      case ValueParam(id, tpe) => ValueParam(rewrite(id), rewrite(tpe))
+      case p @ ValueParam(id, tpe) =>
+        p.rebuild(ValueParam(rewrite(id), rewrite(tpe)))
     }
 
     def rewrite(p: BlockParam): BlockParam = p match {
-      case BlockParam(id, tpe, capt) => BlockParam(rewrite(id), rewrite(tpe), rewrite(capt))
+      case p @ BlockParam(id, tpe, capt) =>
+        p.rebuild(BlockParam(rewrite(id), rewrite(tpe), rewrite(capt)))
     }
 
     def rewrite(b: ExternBody[Expr]): Trampoline[ExternBody[Expr]] = b match {
-      case ExternBody.StringExternBody(featureFlag, Template(strings, args)) =>
-        all(args, rewrite).map { args2 => ExternBody.StringExternBody(featureFlag, Template(strings, args2)) }
+      case b @ ExternBody.StringExternBody(featureFlag, Template(strings, args)) =>
+        all(args, rewrite).map { args2 =>
+          if args2 eq args then b
+          else ExternBody.StringExternBody(featureFlag, Template(strings, args2))
+        }
       case ExternBody.Unsupported(err) => done(b)
     }
 
     def rewrite(d: Toplevel): Toplevel = d match {
-      case Toplevel.Def(id, block) => Toplevel.Def(rewrite(id), rewrite(block).run())
-      case Toplevel.Val(id, binding) => Toplevel.Val(rewrite(id), rewrite(binding).run())
+      case d @ Toplevel.Def(id, block) =>
+        val id2    = rewrite(id)
+        val block2 = rewrite(block).run()
+        d.rebuild(Toplevel.Def(id2, block2))
+
+      case d @ Toplevel.Val(id, binding) =>
+        val id2      = rewrite(id)
+        val binding2 = rewrite(binding).run()
+        d.rebuild(Toplevel.Val(id2, binding2))
     }
 
     def rewrite(e: Extern): Extern = e match {
-      case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
-        Extern.Def(rewrite(id), tparams.map(rewrite), cparams.map(rewrite), vparams.map(rewrite), bparams.map(rewrite),
-          rewrite(ret), rewrite(annotatedCapture), rewrite(body).run())
-      case Extern.Include(featureFlag, contents) => e
-      case Extern.Data(id, tparams, body) => Extern.Data(rewrite(id), tparams.map(rewrite), body)
-      case Extern.Interface(id, tparams, body) => Extern.Interface(rewrite(id), tparams.map(rewrite), body)
+      case e @ Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
+        val id2     = rewrite(id)
+        val tps2    = tparams mapConserve rewrite
+        val cps2    = cparams mapConserve rewrite
+        val vps2    = vparams mapConserve rewrite
+        val bps2    = bparams mapConserve rewrite
+        val ret2    = rewrite(ret)
+        val capt2   = rewrite(annotatedCapture)
+        val body2   = rewrite(body).run()
+        e.rebuild(Extern.Def(id2, tps2, cps2, vps2, bps2, ret2, capt2, body2))
+
+      case Extern.Include(_, _) => e
+
+      case e @ Extern.Data(id, tparams, body) =>
+        e.rebuild(Extern.Data(rewrite(id), tparams.mapConserve(rewrite), body))
+
+      case e @ Extern.Interface(id, tparams, body) =>
+        e.rebuild(Extern.Interface(rewrite(id), tparams.mapConserve(rewrite), body))
     }
 
     def rewrite(d: Declaration): Declaration = d match {
-      case Declaration.Data(id, tparams, constructors) => Declaration.Data(rewrite(id), tparams.map(rewrite), constructors.map(rewrite))
-      case Declaration.Interface(id, tparams, properties) => Declaration.Interface(rewrite(id), tparams.map(rewrite), properties.map(rewrite))
+      case d @ Declaration.Data(id, tparams, constructors) =>
+        d.rebuild(Declaration.Data(rewrite(id), tparams.mapConserve(rewrite), constructors.mapConserve(rewrite)))
+
+      case d @ Declaration.Interface(id, tparams, properties) =>
+        d.rebuild(Declaration.Interface(rewrite(id), tparams.mapConserve(rewrite), properties.mapConserve(rewrite)))
     }
 
     def rewrite(c: Constructor): Constructor = c match {
-      case Constructor(id, tparams, params) => Constructor(rewrite(id), tparams.map(rewrite), params.map(rewrite))
+      case c @ Constructor(id, tparams, params) =>
+        c.rebuild(Constructor(rewrite(id), tparams.mapConserve(rewrite), params.mapConserve(rewrite)))
     }
 
     def rewrite(f: Field): Field = f match {
-      case Field(id, tpe) => Field(rewrite(id), rewrite(tpe))
+      case f @ Field(id, tpe) =>
+        f.rebuild(Field(rewrite(id), rewrite(tpe)))
     }
 
     def rewrite(b: BlockLit): Trampoline[BlockLit] = b match {
-      case BlockLit(tparams, cparams, vparams, bparams, body) =>
-        val tparams2 = tparams map rewrite
-        val cparams2 = cparams map rewrite
-        val vparams2 = vparams map rewrite
-        val bparams2 = bparams map rewrite
-        rewrite(body).map { body2 => BlockLit(tparams2, cparams2, vparams2, bparams2, body2) }
+      case b @ BlockLit(tparams, cparams, vparams, bparams, body) =>
+        val tparams2 = tparams mapConserve rewrite
+        val cparams2 = cparams mapConserve rewrite
+        val vparams2 = vparams mapConserve rewrite
+        val bparams2 = bparams mapConserve rewrite
+        rewrite(body).map { body2 =>
+          b.rebuild(BlockLit(tparams2, cparams2, vparams2, bparams2, body2))
+        }
     }
+
     def rewrite(b: BlockVar): BlockVar = b match {
-      case BlockVar(id, tpe, capt) => BlockVar(rewrite(id), rewrite(tpe), rewrite(capt))
+      case b @ BlockVar(id, tpe, capt) =>
+        b.rebuild(BlockVar(rewrite(id), rewrite(tpe), rewrite(capt)))
     }
 
     def rewrite(tpe: ValueType): ValueType = tpe match {
-      case ValueType.Var(name) => ValueType.Var(rewrite(name))
-      case data: ValueType.Data => rewrite(data)
-      case ValueType.Boxed(tpe, capt) => ValueType.Boxed(rewrite(tpe), rewrite(capt))
+      case t @ ValueType.Var(name) =>
+        t.rebuild(ValueType.Var(rewrite(name)))
+
+      case t: ValueType.Data => rewrite(t)
+
+      case t @ ValueType.Boxed(inner, capt) =>
+        t.rebuild(ValueType.Boxed(rewrite(inner), rewrite(capt)))
     }
+
     def rewrite(tpe: ValueType.Data): ValueType.Data = tpe match {
-      case ValueType.Data(name, targs) => ValueType.Data(rewrite(name), targs.map(rewrite))
+      case t @ ValueType.Data(name, targs) =>
+        t.rebuild(ValueType.Data(rewrite(name), targs mapConserve rewrite))
     }
 
     def rewrite(tpe: BlockType): BlockType = tpe match {
-      case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-        BlockType.Function(tparams.map(rewrite), cparams.map(rewrite), vparams.map(rewrite), bparams.map(rewrite), rewrite(result))
-      case interface: BlockType.Interface => rewrite(interface)
-    }
-    def rewrite(tpe: BlockType.Interface): BlockType.Interface = tpe match {
-      case BlockType.Interface(name, targs) => BlockType.Interface(rewrite(name), targs.map(rewrite))
-    }
-    def rewrite(capt: Captures): Captures = capt.map(rewrite)
-    def rewrite(prop: Property): Property = prop match {
-      case Property(id, tpe) => Property(rewrite(id), rewrite(tpe))
+      case t @ BlockType.Function(tparams, cparams, vparams, bparams, result) =>
+        t.rebuild(BlockType.Function(
+          tparams mapConserve rewrite,
+          cparams mapConserve rewrite,
+          vparams mapConserve rewrite,
+          bparams mapConserve rewrite,
+          rewrite(result)))
+
+      case t: BlockType.Interface => rewrite(t)
     }
 
-    def rewrite(m: ModuleDecl): ModuleDecl =
-      m match {
-        case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-          ModuleDecl(path, includes, declarations.map(rewrite), externs.map(rewrite), definitions.map(rewrite), exports)
+    def rewrite(tpe: BlockType.Interface): BlockType.Interface = tpe match {
+      case t @ BlockType.Interface(name, targs) =>
+        t.rebuild(BlockType.Interface(rewrite(name), targs.mapConserve(rewrite)))
+    }
+
+    def rewrite(capt: Captures): Captures = {
+      var changed = false
+      val mapped = capt.map { c =>
+        val c2 = rewrite(c)
+        if !(c2 eq c) then changed = true
+        c2
       }
+      if changed then mapped else capt
+    }
+
+    def rewrite(prop: Property): Property = prop match {
+      case p @ Property(id, tpe) =>
+        p.rebuild(Property(rewrite(id), rewrite(tpe)))
+    }
+
+    def rewrite(m: ModuleDecl): ModuleDecl = m match {
+      case m @ ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+        m.rebuild(ModuleDecl(path, includes, declarations.mapConserve(rewrite), externs.mapConserve(rewrite), definitions.mapConserve(rewrite), exports))
+    }
 
     def rewrite(matchClause: (Id, BlockLit)): Trampoline[(Id, BlockLit)] = matchClause match {
-      case (p, b) => rewrite(b).map { b2 => (p, b2) }
+      case (p, b) => rewrite(b).map { b2 =>
+        if b2 eq b then matchClause else (p, b2)
+      }
     }
   }
 

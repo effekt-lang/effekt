@@ -24,20 +24,20 @@ class Deadcode(reachable: Map[Id, Usage])
         case b => Stmt.Reset(b)
       }
 
-    case Stmt.Match(sc, tpe, clauses, default) => for {
+    case s @ Stmt.Match(sc, tpe, clauses, default) => for {
       sc2      <- rewrite(sc)
       clauses2 <- all(clauses.filter { case (id, clause) => used(id) }, rewrite)
       default2 <- opt(default, rewrite)
-    } yield Match(sc2, tpe, clauses2, default2)
+    } yield s.rebuild(Match(sc2, tpe, clauses2, default2))
 
     case other => super.rewrite(other)
   }
 
   override def rewrite(impl: Implementation): Trampoline[Implementation] = impl match {
-    case Implementation(interface, operations) => for {
+    case i @ Implementation(interface, operations) => for {
       interface2  <- Trampoline.done(rewrite(interface))
       operations2 <- all(operations.filter(op => used(op.name)), rewrite)
-    } yield Implementation(interface2, operations2)
+    } yield i.rebuild(Implementation(interface2, operations2))
   }
 
   override def rewrite(m: ModuleDecl): ModuleDecl = m match {
@@ -60,14 +60,18 @@ class Deadcode(reachable: Map[Id, Usage])
   }
 
   override def rewrite(d: Declaration): Declaration = d match {
-    case Declaration.Data(id, tparams, constructors) =>
-      Declaration.Data(id, tparams, constructors.collect {
-        case c if used(c.id) => c
-      })
-    case Declaration.Interface(id, tparams, properties) =>
-      Declaration.Interface(id, tparams, properties.collect {
-        case p if used(p.id) => p
-      })
+    case d @ Declaration.Data(id, tparams, constructors) =>
+      d.rebuild(
+        Declaration.Data(id, tparams, constructors.collect {
+          case c if used(c.id) => c
+        })
+      )
+    case d @ Declaration.Interface(id, tparams, properties) =>
+      d.rebuild(
+        Declaration.Interface(id, tparams, properties.collect {
+          case p if used(p.id) => p
+        })
+      )
   }
 }
 
