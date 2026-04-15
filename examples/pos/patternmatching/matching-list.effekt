@@ -19,10 +19,10 @@ def ex3(lst: List[List[Int]]) = {
   x
 }
 
-def foo(lst: List[Int]) { f: List[Int] => Unit } = f(lst)
+def foo(lst: List[Int]) { f: List[Int] => Int } = f(lst)
 
 def ex4(lst: List[Int]) = foo(lst) { 
-  case [a, b, c] => println(a + b + c)
+  case [a, b, c] => a + b + c
   case _ => panic("Ohno")
 }
 
