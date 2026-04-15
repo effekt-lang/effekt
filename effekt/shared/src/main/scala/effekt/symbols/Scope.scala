@@ -291,10 +291,10 @@ object scopes {
           val to = pos.source.offsetToPosition(pos.to)
           source.Call(source.IdTarget(source.IdRef(Nil, "SourcePosition", source.Span.missing)), Nil, List(
             source.ValueArg(None, source.Literal(pos.source.name, builtins.TString, source.Span.missing), source.Span.missing),
-            source.ValueArg(None, source.Literal(from.line, builtins.TInt, source.Span.missing), source.Span.missing),
-            source.ValueArg(None, source.Literal(from.column, builtins.TInt, source.Span.missing), source.Span.missing),
-            source.ValueArg(None, source.Literal(to.line, builtins.TInt, source.Span.missing), source.Span.missing),
-            source.ValueArg(None, source.Literal(to.column, builtins.TInt, source.Span.missing), source.Span.missing),
+            source.ValueArg(None, source.Literal(from.line.toLong, builtins.TInt, source.Span.missing), source.Span.missing),
+            source.ValueArg(None, source.Literal(from.column.toLong, builtins.TInt, source.Span.missing), source.Span.missing),
+            source.ValueArg(None, source.Literal(to.line.toLong, builtins.TInt, source.Span.missing), source.Span.missing),
+            source.ValueArg(None, source.Literal(to.column.toLong, builtins.TInt, source.Span.missing), source.Span.missing),
           ), Nil, source.Span.missing)
         case _ => source.Var(IdRef(Nil, p.name.name, source.Span.missing), source.Span.missing)
       }, source.Span.missing))
