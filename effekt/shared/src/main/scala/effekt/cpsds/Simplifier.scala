@@ -105,9 +105,6 @@ object Simplifier {
 
     case ToplevelDefinition.Val(id, ks, k, binding) =>
       ToplevelDefinition.Val(id, ks, k, rewrite(binding, escaping))
-
-    case ToplevelDefinition.Let(id, binding) =>
-      ToplevelDefinition.Let(id, rewrite(binding, escaping))
   }
 
   // --- Entry point ---

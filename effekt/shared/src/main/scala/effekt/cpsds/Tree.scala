@@ -45,7 +45,6 @@ case class ModuleDecl(
 enum ToplevelDefinition {
   case Def(id: Id, params: List[Id], body: Stmt)
   case Val(id: Id, ks: Id, k: Id, binding: Stmt)
-  case Let(id: Id, binding: Expr)
 }
 
 /**

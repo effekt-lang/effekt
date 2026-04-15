@@ -171,16 +171,12 @@ class TestRenamer {
       withBindings(List(ks, k)) {
         ToplevelDefinition.Val(rewrite(id), rewrite(ks), rewrite(k), rewrite(binding))
       }
-
-    case ToplevelDefinition.Let(id, binding) =>
-      ToplevelDefinition.Let(rewrite(id), rewrite(binding))
   }
 
   private def collectToplevelIds(m: ModuleDecl): List[Id] =
     m.definitions.map {
       case ToplevelDefinition.Def(id, _, _) => id
       case ToplevelDefinition.Val(id, _, _, _) => id
-      case ToplevelDefinition.Let(id, _) => id
     }
 
   def apply(m: ModuleDecl): ModuleDecl = {

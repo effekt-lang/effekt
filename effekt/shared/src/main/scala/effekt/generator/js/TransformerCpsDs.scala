@@ -129,9 +129,6 @@ object TransformerCpsDs extends Transformer {
 
     case cpsds.ToplevelDefinition.Val(id, ks, k, binding) =>
       js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding).stmts)))
-
-    case cpsds.ToplevelDefinition.Let(id, binding) =>
-      js.Const(nameDef(id), toJS(binding))
   }
 
   // --- Externs ---
