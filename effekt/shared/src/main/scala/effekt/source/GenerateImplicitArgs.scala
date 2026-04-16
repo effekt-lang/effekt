@@ -2,14 +2,60 @@ package effekt
 package source
 
 import scala.collection.mutable
+import scala.util.DynamicVariable
+
 import effekt.util.messages.{ErrorReporter, EffektMessages}
 import effekt.context.Context
-import effekt.symbols
 import effekt.symbols.scopes.Scope
 import effekt.symbols.{BlockSymbol, BlockType, Callable, ImplicitContext, builtins, Name}
 import effekt.context.Annotations
 
 object GenerateImplicitArgs {
+
+  import effekt.symbols.ValueType
+
+  def typeSize(tpe: symbols.BlockType): Int = tpe match {
+    case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
+      tparams.length + cparams.length + vparams.map(typeSize).sum + bparams.map(typeSize).sum + typeSize(result)
+    case BlockType.InterfaceType(typeConstructor, args) =>
+      1 + args.map(typeSize).sum
+  }
+  def typeSize(tpe: symbols.ValueType): Int = tpe match {
+    case ValueType.BoxedType(tpe, capture) => 1 + typeSize(tpe)
+    case ValueType.ValueTypeRef(tvar) => 5
+    case ValueType.ValueTypeApp(constructor, args) => 1 + args.map(typeSize).sum
+  }
+  def typeSize(effs: Effects)(using Context): Int =
+    effs.effs.map{ r => 1 + r.args.unspan.map { t =>
+      Context.resolvedType(t) match {
+        case v: ValueType => 1 + typeSize(v)
+        case b: BlockType => 1 + typeSize(b)
+      }
+    }.sum }.sum
+
+  private val recursionStack: DynamicVariable[Map[String, (Int, Int)]] = DynamicVariable(Map.empty)
+
+  val maxRecurse = 10
+  /**
+   * Wrapper for recursive type-checking of generated implicits.
+   * Should fail for infinite recursion.
+   */
+  def recursionGuard[R](inst: source.Term, tpe: symbols.BlockType)(body: () => R)(using Context): R = {
+    val instBlockTpe = Context.unification(tpe)
+    val tpeSize = typeSize(instBlockTpe)
+    val newValue = inst match {
+      case source.BlockLiteral(_, _, _, source.Return(source.Call(source.IdTarget(id), _, _, _, _), _), _) =>
+        val (depth, lastSize) = recursionStack.value.getOrElse((id.name), (0, tpeSize))
+        if (tpeSize >= lastSize && depth > maxRecurse) {
+          Context.abort(s"Aborted recursive generation of implicit parameter ${id.name} after ${maxRecurse} levels with non-decreasing types at the same name.")
+        }
+        recursionStack.value.updated((id.name), (if tpeSize >= lastSize then depth + 1 else depth, tpeSize))
+      case _ => recursionStack.value
+    }
+    recursionStack.withValue(newValue) {
+      body()
+    }
+  }
 
   /**
    * Map for caching the result of [[lookupPotentialImplicits]] (to prevent infinite recursion in Namer)

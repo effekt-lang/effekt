@@ -1569,7 +1569,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
       flowingInto(capt) {
         val inst = source.GenerateImplicitArgs.instantiateImplicitBlock(expr, tpe)
         instImplicitBargs.append(inst)
-        val Result(t, eff) = checkExprAsBlock(inst, Some(tpe))
+        val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(inst, tpe){ () =>
+          checkExprAsBlock(inst, Some(tpe))
+        }
         effs = effs ++ eff.toEffects
       }
     }
