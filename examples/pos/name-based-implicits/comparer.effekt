@@ -17,7 +17,7 @@ def myComparer[A](){ ?myComparer: => ((A, A) => Ordering at {})}: (List[A], List
 }
 
 def main() = {
-  val cmp = myComparer()
+  val cmp: (List[Int], List[Int]) => Ordering at {} = myComparer()
   val x: Ordering = ((unbox cmp)([1,2,3], [2,3,4]))
   println(x)
 }
