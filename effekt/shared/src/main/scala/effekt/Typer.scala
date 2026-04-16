@@ -1474,7 +1474,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             implicitVargs.append(v)
             Some(v)
           case Left(msgs) =>
-            Context.error(pretty"""Could not resolve implicit value parameter ${i}:""")
+            Context.error(pretty"""Could not resolve implicit value parameter ${potentialImplicits.valueNames(i)} (index ${i}).""")
             msgs.foreach(Context.report)
             None
         }
@@ -1487,7 +1487,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             implicitBargs.append(b)
             Some(b)
           case Left(msgs) =>
-            Context.error(pretty"""Could not resolve implicit block parameter ${i}:""")
+            Context.error(pretty"""Could not resolve implicit block parameter ${potentialImplicits.blockNames(i)} (index ${i}).""")
             msgs.foreach(Context.report)
             None
         }

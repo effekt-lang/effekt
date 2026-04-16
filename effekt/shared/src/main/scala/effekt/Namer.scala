@@ -477,7 +477,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     Context.symbolOf(id) match {
       case symbols.CallTarget(syms, cs) =>
         cs.foreach {
-          case (b, c@ImplicitContext(vimpls, bimpls)) if !c.resolved =>
+          case (b, c@ImplicitContext(vimpls, _, bimpls, _)) if !c.resolved =>
             c.resolved = true // set as resolved first, so recursive calls do not continue doing so.
             val tVimpls = vimpls.map { case k -> mv =>
               k -> (for {

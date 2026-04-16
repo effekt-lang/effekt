@@ -89,7 +89,9 @@ object GenerateImplicitArgs {
             case c: Callable =>
               val r = ImplicitContext(
                 c.vparams.zipWithIndex.collect { case (p, i) if p.isImplicit => i -> generateImplicitValueArg(p) }.toMap,
-                c.bparams.zipWithIndex.collect { case (p, i) if p.isImplicit => i -> generateImplicitBlockArg(p) }.toMap)
+                c.vparams.zipWithIndex.collect { case (p, i) if p.isImplicit => i -> p.name.name }.toMap,
+                c.bparams.zipWithIndex.collect { case (p, i) if p.isImplicit => i -> generateImplicitBlockArg(p) }.toMap,
+                c.bparams.zipWithIndex.collect { case (p, i) if p.isImplicit => i -> p.name.name }.toMap)
               foundImplicits.put((scope, b), r)
               Some(b -> r)
             case _ => None
