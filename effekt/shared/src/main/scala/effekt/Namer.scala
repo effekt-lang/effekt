@@ -486,13 +486,13 @@ object Namer extends Phase[Parsed, NameResolved] {
             val tVimpls = vimpls.map { case k -> mv =>
               k -> (for {
                 v <- mv
-                () <- Try { resolve(v) }
+                _ <- Try { resolve(v) }
               } yield v)
             }
             val tBimpls = bimpls.map { case k -> mb =>
               k -> (for {
                 b <- mb
-                () <- Try { resolve(b) }
+                _ <- Try { resolve(b) }
               } yield b)
             }
             c.values = tVimpls
