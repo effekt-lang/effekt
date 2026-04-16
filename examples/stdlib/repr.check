@@ -11,7 +11,7 @@ MyCons(head = "hi", tail = MyCons(head = "there", tail = MyNil()))
 MyCons(head = (), tail = MyCons(head = (), tail = MyNil()))
 <box>
 E(there = <Map(1 !-> "one", 2 !-> "two")>, back = <Map("one" !-> 1, "two" !-> 2)>)
-F(s = <Set(A(x = 3, y = A(x = 3, y = false)), A(x = 4, y = A(x = 3, y = false)))>)
+F(s = <Set(3, 4)>)
 A(x = 3, y = A(x = 4, y = A(x = 3, y = false)))
 B(f = <box>)
 [1, 2, 3, 4, 5]

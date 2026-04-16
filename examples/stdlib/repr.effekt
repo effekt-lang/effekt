@@ -9,7 +9,7 @@ type MyType[T] {
   C(array: Array[Int])
   D(f: Int => Int at {}, list: List[Int], array: Array[Array[Int]], bytes: ByteArray)
   E(there: Map[Int, T], back: Map[T, Int])
-  F(s: Set[MyType[T]])
+  F(s: Set[T])
 }
 
 type MyList[T] {
@@ -39,8 +39,8 @@ def main() = {
     dump { repr(box e) }
   } with e: emit[Int] { v => resume(()) }
 
-  dump { E([(1, "one"), (2, "two")].fromListGeneric, [("one", 1), ("two", 2)].fromListGeneric).repr }
-  dump { F([A(3, fst), A(4, fst)].fromListGeneric).repr }
+  dump { E([(1, "one"), (2, "two")].fromList(box compareInt), [("one", 1), ("two", 2)].fromList(box compareStringBytes)).repr }
+  dump { F([3, 4].fromList(box compareInt)).repr }
 
   val (_, trees) = Repr::reify[Unit] {
     val _ = (repr(A(3, A(4, fst))), repr(B[Nothing](box { n => n + 1 })))
