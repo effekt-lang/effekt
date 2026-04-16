@@ -456,10 +456,14 @@ object Namer extends Phase[Parsed, NameResolved] {
    */
   @tailrec
   def checkImplicitParams(l: List[source.Param], implicitsAllowed: RequirementLevel = RequirementLevel.Optional)(using Context): Unit = (l, implicitsAllowed) match {
-    case ((source.ValueParam(_, _, true, _) | source.BlockParam(_, _, true, _)) :: tl, RequirementLevel.Forbidden) =>
-      Context.error(pretty"Implicit parameter ${l.head.span.text.getOrElse(l.head.id.name)} can never be passed implicitly to here.")
-    case ((source.ValueParam(_, _, false, _) | source.BlockParam(_, _, false, _)) :: tl, RequirementLevel.Required) =>
-      Context.error(pretty"Parameter ${l.head.span.text.getOrElse(l.head.id.name)} needs to be implicit so earlier implicit parameters can be passed implicitly.")
+    case ((p@(source.ValueParam(_, _, true, _) | source.BlockParam(_, _, true, _))) :: tl, RequirementLevel.Forbidden) =>
+      Context.at(p) {
+        Context.error(pretty"Implicit parameter ${l.head.span.text.getOrElse(l.head.id.name)} can never be passed implicitly to here.")
+      }
+    case ((p@(source.ValueParam(_, _, false, _) | source.BlockParam(_, _, false, _))) :: tl, RequirementLevel.Required) =>
+      Context.at(p) {
+        Context.error(pretty"Parameter ${l.head.span.text.getOrElse(l.head.id.name)} needs to be implicit so earlier implicit parameters can be passed implicitly.")
+      }
     case ((source.ValueParam(_, _, true, _) | source.BlockParam(_, _, true, _)) :: tl, RequirementLevel.Optional) =>
       checkImplicitParams(tl, RequirementLevel.Required) // require all arguments after an implicit one to be implicit
     case (_ :: tl, _) =>
