@@ -52,7 +52,6 @@ trait DocumentationGenerator {
 
     // block params
     case BlockTypeTree(eff, _) => ???
-    case ReifiedType(tpe) => ???
     case FunctionType(tparams, vparams, bparams, result, effects, span) => obj(HashMap(
       "kind" -> str("FunctionType"),
       "tparams" -> generateTparams(tparams.unspan),

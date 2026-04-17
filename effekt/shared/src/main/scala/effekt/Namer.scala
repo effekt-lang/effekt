@@ -831,8 +831,6 @@ object Namer extends Phase[Parsed, NameResolved] {
     // TODO reconsider reusing the same set for terms and types...
     case source.BoxedType(tpe, capt, _) =>
       BoxedType(resolveBlockType(tpe), resolve(capt))
-    case source.ReifiedType(tpe: ValueType) =>
-      tpe
     case other =>
       Context.error(pretty"Expected value type, but got ${describeType(other)}.")
       other match {
@@ -859,7 +857,6 @@ object Namer extends Phase[Parsed, NameResolved] {
     case t: source.FunctionType  => resolve(t)
     case t: source.BlockTypeTree => t.eff
     case t: source.TypeRef => resolveBlockRef(t)
-    case source.ReifiedType(tpe: BlockType) => tpe
     case other =>
       Context.error(pretty"Expected block type, but got ${describeType(other)}.")
       other match
@@ -982,7 +979,6 @@ object Namer extends Phase[Parsed, NameResolved] {
     // THESE THREE SHOULD NEVER BE USER-VISIBLE!
     case source.ValueTypeTree(tpe, _) => s"a value type tree ${tpe}"
     case source.BlockTypeTree(eff, _) => s"a block type tree ${eff}"
-    case source.ReifiedType(tpe) => "a type in generated code"
   }
 
   private def prettySourceEffectSet(effects: Set[source.TypeRef])(using Context) =

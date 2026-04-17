@@ -163,9 +163,13 @@ object GenerateImplicitArgs {
       case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
         val gtparams = tparams.map { p => IdDef(p.name.name, Span.missing) }
         val gvparams: List[ValueParam] =
-          vparams.zipWithIndex.map { (p, i) => ValueParam(IdDef(s"arg${i}", Span.missing), Some(ReifiedType(p)), false, Span.missing) }
+          vparams.zipWithIndex.map { (p, i) =>
+            ValueParam(IdDef(s"arg${i}", Span.missing), Some(source.ValueTypeTree(p, Span.missing)), false, Span.missing)
+          }
         val gbparams: List[BlockParam] =
-          bparams.zipWithIndex.map { (p, i) => BlockParam(IdDef(s"block_arg${i}", Span.missing), Some(ReifiedType(p)), false, Span.missing) }
+          bparams.zipWithIndex.map { (p, i) =>
+            BlockParam(IdDef(s"block_arg${i}", Span.missing), Some(source.BlockTypeTree(p, Span.missing)), false, Span.missing)
+          }
         ImplicitBlockLiteral(p.name.name, BlockLiteral(gtparams, gvparams, gbparams,
           Return(Call(IdTarget(IdRef(Nil, p.name.name, Span.missing)), Nil,
             gvparams.map { x => ValueArg(None, Var(IdRef(Nil, x.id.name, Span.missing), Span.missing), Span.missing) },
@@ -250,7 +254,8 @@ object GenerateImplicitArgs {
               }
               val fvpsyms = (vparams zip vps).map { (x, t) => symbols.ValueParam(Name.local(x.id.name), Some(t), false, NoSource) }
               val fvparams = (vparams zip fvpsyms).map { (x, sym) =>
-                val r: source.ValueParam = source.ValueParam(source.IdDef(x.id.name, source.Span.missing), Some(source.ReifiedType(sym.tpe.get)), false, source.Span.missing)
+                val r: source.ValueParam = source.ValueParam(source.IdDef(x.id.name, source.Span.missing),
+                  Some(source.ValueTypeTree(sym.tpe.get, source.Span.missing)), false, source.Span.missing)
                 Context.annotate(Annotations.Symbol, r, sym)
                 Context.annotate(Annotations.Symbol, r.id, sym)
                 r
@@ -263,7 +268,8 @@ object GenerateImplicitArgs {
               }
               val fbpsyms = (bparams zip bps).map { (x, t) => symbols.BlockParam(Name.local(x.id.name), Some(t), x.symbol.capture, false, NoSource) }
               val fbparams = (bparams zip fbpsyms).map { (x, sym) =>
-                val r: source.BlockParam = source.BlockParam(source.IdDef(x.id.name, source.Span.missing), Some(source.ReifiedType(sym.tpe.get)), false, source.Span.missing)
+                val r: source.BlockParam = source.BlockParam(source.IdDef(x.id.name, source.Span.missing),
+                  Some(source.BlockTypeTree(sym.tpe.get, source.Span.missing)), false, source.Span.missing)
                 Context.annotate(Annotations.Symbol, r, sym)
                 Context.annotate(Annotations.Symbol, r.id, sym)
                 r
