@@ -24,6 +24,16 @@ object GenerateImplicitArgs {
   case class ImplicitBlockLiteral(name: String, content: source.BlockLiteral) extends ImplicitStencil {
     def kind = "block argument"
   }
+  case class BoxedStencil(name: String, block: ImplicitStencil) extends ImplicitStencil {
+    def kind = "value argument"
+    override def explanation: Option[String] = Some(
+      """An implicit argument of a boxed type will be instantiated by boxing the block
+        |  that an implicit block argument of the same name would be instantiated to
+        |""".stripMargin + (block.explanation match {
+        case Some(e) => ":\n" + e
+        case None => "."
+      }))
+  }
   case class ImplicitVar(kind: String, name: String, content: source.Var) extends ImplicitStencil
   case class SourcePosition(content: source.Call) extends ImplicitStencil {
     def name = "sourcePosition"
@@ -125,8 +135,8 @@ object GenerateImplicitArgs {
    * - sourcePosition inserts a call to SourcePosition with the components of the current source position
    */
   def generateImplicitValueArg(p: symbols.ValueParam)(using Context): ImplicitStencil = {
-    p.name.name match {
-      case "sourcePosition" =>
+    (p.name.name, p.tpe) match {
+      case ("sourcePosition", _) =>
         // This generates a dummy source to be name-resolved (the actual arguments will be generated later)
         SourcePosition(Call(IdTarget(IdRef(Nil, "SourcePosition", Span.missing)), Nil, List(
           ValueArg(None, Literal("<dummy>", builtins.TString, Span.missing), Span.missing),
@@ -135,8 +145,10 @@ object GenerateImplicitArgs {
           ValueArg(None, Literal(-1L, builtins.TInt, Span.missing), Span.missing),
           ValueArg(None, Literal(-1L, builtins.TInt, Span.missing), Span.missing),
         ), Nil, Span.missing))
-      case "callId" =>
-        CallId()
+      case ("callId", _) => CallId()
+      case (name, Some(symbols.BoxedType(t, capt))) =>
+        // try filling boxed types by instantiating a block argument and boxing it
+        BoxedStencil(name, generateImplicitBlockArg(symbols.BlockParam(p.name, Some(t), symbols.Capture.CaptureParam(p.name), true, NoSource)))
       case _ => ImplicitVar("value argument", p.name.name, Var(IdRef(Nil, p.name.name, Span.missing), Span.missing))
     }
   }
@@ -281,7 +293,7 @@ object GenerateImplicitArgs {
           b // TODO Is it a problem if this is used more than once?
 
         case _ =>
-          Context.panic("Unexpected type for implicit stencil.")
+          Context.panic("Unexpected type for implicit stencil for a block argument.")
       }
     } else {
       Context.abort("Not instantiating implicit block argument since there are errors.")
@@ -328,6 +340,13 @@ object GenerateImplicitArgs {
         nextCallId = nextCallId + 1
         source.ValueArg(Some(v.name), Literal(id, builtins.TInt, Span.missing), Span.missing)
 
+      case BoxedStencil(name, block) =>
+        val symbols.BoxedType(btpe, _) = tpe: @unchecked
+        source.ValueArg(Some(v.name),
+          source.Box(Maybe.None(Span.missing),
+            instantiateImplicitBlock(block, btpe), Span.missing),
+          Span.missing)
+
       case ImplicitBlockLiteral(_, _) => Context.panic("Cannot instantiate block literal as an implicit value argument.")
     }
   }
@@ -341,13 +360,16 @@ object GenerateImplicitArgs {
    * This is used to pass ImplicitStencils through other phases (currently, Namer).
    */
   def runPhaseOn[A](i: Int, s: ImplicitStencil)(body: source.Term => Either[EffektMessages, Unit]): ImplicitStencil = {
-    s match {
-      case ImplicitBlockLiteral(name, content) => body(content)
-      case ImplicitVar(kind, name, content) => body(content)
-      case SourcePosition(content) => body(content)
-      case CallId() => Right(())
-      case Error(_, _, _) => Right(())
-    } match {
+    def runOn(s: ImplicitStencil): Either[EffektMessages, Unit] =
+      s match {
+        case ImplicitBlockLiteral(name, content) => body(content)
+        case ImplicitVar(kind, name, content) => body(content)
+        case SourcePosition(content) => body(content)
+        case BoxedStencil(_, block) => runOn(block)
+        case CallId() => Right(())
+        case Error(_, _, _) => Right(())
+      }
+    runOn(s) match {
       case Left(msgs) => Error(s, i, msgs)
       case Right(()) => s
     }
