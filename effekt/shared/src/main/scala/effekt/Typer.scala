@@ -1357,9 +1357,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
    */
   private def assertArgsParamsAlign(
      name: Option[String],
-     types: Aligned[source.Id | ValueType | symbols.ImplicitContext.ImplicitStencil, TypeParam],
-     values: Aligned[source.ValueParam | source.ValueArg | symbols.ImplicitContext.ImplicitStencil, ValueType],
-     blocks: Aligned[source.BlockParam | source.Term | symbols.ImplicitContext.ImplicitStencil, BlockType]
+     types: Aligned[source.Id | ValueType | source.GenerateImplicitArgs.ImplicitStencil, TypeParam],
+     values: Aligned[source.ValueParam | source.ValueArg | source.GenerateImplicitArgs.ImplicitStencil, ValueType],
+     blocks: Aligned[source.BlockParam | source.Term | source.GenerateImplicitArgs.ImplicitStencil, BlockType]
    )(using Context): Unit = {
 
     // Type args are OK iff nothing provided or perfectly aligned

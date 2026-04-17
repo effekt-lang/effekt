@@ -204,43 +204,13 @@ enum Binder extends TermSymbol {
 }
 export Binder.*
 
-case class ImplicitContext(var values: Map[Int, ImplicitContext.ImplicitStencil],
-                           var blocks: Map[Int, ImplicitContext.ImplicitStencil]) {
+case class ImplicitContext(var values: Map[Int, source.GenerateImplicitArgs.ImplicitStencil],
+                           var blocks: Map[Int, source.GenerateImplicitArgs.ImplicitStencil]) {
   var resolved = false // will be set in namer after the values in the maps are resolved
 }
 object ImplicitContext {
   val empty = ImplicitContext(Map.empty, Map.empty)
   empty.resolved = true
-
-  sealed trait ImplicitStencil {
-    def name: String
-    def kind: String
-    def explanation: Option[String] = None
-  }
-  case class ImplicitBlockLiteral(name: String, content: source.BlockLiteral) extends ImplicitStencil {
-    def kind = "block argument"
-  }
-  case class ImplicitVar(kind: String, name: String, content: source.Var) extends ImplicitStencil
-  case class SourcePosition(content: source.Call) extends ImplicitStencil {
-    def name = "sourcePosition"
-    def kind = "value argument"
-    override def explanation =
-      Some(
-        """Implicit sourcePosition will call
-          |  SourcePosition(file, start_line, start_col, end_line, end_col)
-          | with the respective values for the source position of the call.
-          |""".stripMargin)
-  }
-  case class CallId() extends ImplicitStencil {
-    def name = "callId"
-    def kind = "value argument"
-    override def explanation = Some("Implicit callId will generate a unique Int for each call to this function in the source code.")
-  }
-  case class Error(underlying: ImplicitStencil,
-                   index: Int, msgs: EffektMessages) extends ImplicitStencil {
-    export underlying.{name, kind}
-    override def explanation: Option[String] = underlying.explanation
-  }
 }
 
 /**
