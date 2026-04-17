@@ -4,7 +4,7 @@ There are multiple overloads, which all fail to check:
 Possible overload: no-implicit::foo of type String => Unit
   Could not resolve implicit value parameter barbaz (index 0).
   Could not resolve term barbaz
-  Wrong number of arguments to foo: expected 1 value argument, but got 0 value arguments
+  Aborting due to previous errors.
 
 Possible overload: no-implicit::foo of type {() => Unit} => Unit
   Wrong number of arguments to foobaz: expected 1 value argument, but got 0 value arguments

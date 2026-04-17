@@ -204,15 +204,29 @@ enum Binder extends TermSymbol {
 }
 export Binder.*
 
-case class ImplicitContext(var values: Map[Int, Either[EffektMessages, source.ValueArg]],
-                           valueNames: Map[Int, String],
-                           var blocks: Map[Int, Either[EffektMessages, source.Term]],
-                           blockNames: Map[Int, String]) {
+case class ImplicitContext(var values: Map[Int, ImplicitContext.ImplicitStencil[source.Term]],
+                           var blocks: Map[Int, ImplicitContext.ImplicitStencil[source.Term]]) {
   var resolved = false // will be set in namer after the values in the maps are resolved
 }
 object ImplicitContext {
-  val empty = ImplicitContext(Map.empty, Map.empty, Map.empty, Map.empty)
+  val empty = ImplicitContext(Map.empty, Map.empty)
   empty.resolved = true
+
+  sealed trait ImplicitStencil[+A] {
+    def name: String
+    def pretty: String = s"${name}"
+  }
+  case class ImplicitBlockLiteral(name: String, content: source.BlockLiteral) extends ImplicitStencil[source.BlockLiteral]
+  case class ImplicitVar(name: String, content: source.Var) extends ImplicitStencil[source.Var]
+  case class SourcePosition(content: source.Call) extends ImplicitStencil[source.Call] {
+    def name = "sourcePosition"
+    override def pretty = s"${name} as a call to SourcePosition"
+  }
+  case class CallId() extends ImplicitStencil[source.Literal] {
+    def name = "callId"
+    override def pretty = s"${name} as a fresh literal int id"
+  }
+  case class Error(name: String, override val pretty: String, msgs: EffektMessages) extends ImplicitStencil[Nothing]
 }
 
 /**
