@@ -228,7 +228,7 @@ object ImplicitContext {
       Some(
         """Implicit sourcePosition will call
           |  SourcePosition(file, start_line, start_col, end_line, end_col)
-          | with the respecitve values for the source position of the call.
+          | with the respective values for the source position of the call.
           |""".stripMargin)
   }
   case class CallId() extends ImplicitStencil[source.Literal] {
