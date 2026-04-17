@@ -3,10 +3,10 @@ There are multiple overloads, which all fail to check:
 
 Possible overload: type-error::baz of type {() => Int} => String
   Cannot instantiate implicit argument.
-  Cannot instantiate a block argument foo of type () => Int.
+  Cannot instantiate 1st block argument foo of type () => Int.
     Expected Int but got Bool.
 
 Possible overload: type-error::baz of type {() => List[Bool]} => String
   Cannot instantiate implicit argument.
-  Cannot instantiate a block argument foo of type () => List[Bool].
+  Cannot instantiate 1st block argument foo of type () => List[Bool].
     Expected List[Bool] but got Bool.

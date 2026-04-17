@@ -237,7 +237,7 @@ object ImplicitContext {
     override def explanation = Some("Implicit callId will generate a unique Int for each call to this function in the source code.")
   }
   case class Error(underlying: ImplicitStencil[_],
-                   index: Option[Int], msgs: EffektMessages) extends ImplicitStencil[Nothing] {
+                   index: Int, msgs: EffektMessages) extends ImplicitStencil[Nothing] {
     export underlying.{name, kind}
     override def explanation: Option[String] = underlying.explanation
   }

@@ -104,7 +104,7 @@ trait ColoredMessaging extends EffektMessaging {
         case n => s"${n + 1}th"
       }
       val title = bold("Cannot instantiate implicit argument.\n")
-      val prettyIndex = err.index.map(formatIndex).getOrElse("a")
+      val prettyIndex = formatIndex(err.index)
       val prettyTpe = TypePrinter.show(tpe)
       val mainMessage = underlined(s"Cannot instantiate ${prettyIndex} ${err.kind} ${err.name} of type ${prettyTpe}.")
       val info = err.explanation match {

@@ -67,7 +67,7 @@ object GenerateImplicitArgs {
         case Left(msgs) =>
           // Note: Recursion
           Context.abort(util.messages.ImplicitInstantiationError(
-            ImplicitContext.Error(stencil, None, msgs), tpe, Context.rangeOf(Context.focus)))
+            ImplicitContext.Error(stencil, index, msgs), tpe, Context.rangeOf(Context.focus)))
         case Right(r) => r
       }
     }
@@ -299,7 +299,7 @@ object GenerateImplicitArgs {
       case ImplicitContext.Error(_, _, _) => Right(())
     } match {
       case Left(msgs) =>
-        ImplicitContext.Error(s, Some(i), msgs)
+        ImplicitContext.Error(s, i, msgs)
       case Right(()) => s
     }
   }
