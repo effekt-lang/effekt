@@ -4,16 +4,14 @@ package source
 import scala.collection.mutable
 import scala.util.DynamicVariable
 
-import effekt.util.messages.{ErrorReporter, EffektMessages}
+import effekt.util.messages.EffektMessages
 import effekt.context.Context
 import effekt.symbols.scopes.Scope
-import effekt.symbols.{BlockSymbol, BlockType, Callable, ImplicitContext, builtins, Name}
+import effekt.symbols.{BlockSymbol, BlockType, ValueType, Callable, ImplicitContext, builtins, Name}
 import effekt.context.Annotations
 import effekt.context.Try
 
 object GenerateImplicitArgs {
-
-  import effekt.symbols.ValueType
 
   def typeSize(tpe: symbols.Type): Int = tpe match {
     case tpe: symbols.BlockType => typeSize(tpe)
@@ -45,7 +43,7 @@ object GenerateImplicitArgs {
    * Wrapper for recursive type-checking of generated implicits.
    * Should fail for infinite recursion.
    */
-  def recursionGuard[R](stencil: ImplicitContext.ImplicitStencil[_], kind: String, index: Int, inst: source.Tree, tpe: symbols.Type)(body: => R)(using Context): R = {
+  def recursionGuard[R](stencil: ImplicitContext.ImplicitStencil, kind: String, index: Int, inst: source.Tree, tpe: symbols.Type)(body: => R)(using Context): R = {
     val instTpe = tpe match {
       case tpe: symbols.BlockType => Context.unification(tpe)
       case tpe: symbols.ValueType => Context.unification(tpe)
@@ -87,7 +85,7 @@ object GenerateImplicitArgs {
    * Special cases so far:
    * - sourcePosition inserts a call to SourcePosition with the components of the current source position
    */
-  def generateImplicitValueArg(p: symbols.ValueParam)(using Context): ImplicitContext.ImplicitStencil[Term] = {
+  def generateImplicitValueArg(p: symbols.ValueParam)(using Context): ImplicitContext.ImplicitStencil = {
     p.name.name match {
       case "sourcePosition" =>
         // This generates a dummy source to be name-resolved (the actual arguments will be generated later)
@@ -109,7 +107,7 @@ object GenerateImplicitArgs {
    *
    * Will usually return an eta-expanded (based on annotated type) call to a function with the same name.
    */
-  def generateImplicitBlockArg(p: symbols.BlockParam)(using Context): ImplicitContext.ImplicitStencil[Term] =
+  def generateImplicitBlockArg(p: symbols.BlockParam)(using Context): ImplicitContext.ImplicitStencil =
     p.tpe.get match {
       case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
         val gtparams = tparams.map { p => IdDef(p.name.name, Span.missing) }
@@ -168,7 +166,7 @@ object GenerateImplicitArgs {
    *
    * Also annotates all symbols for the returned code correctly where necessary.
    */
-  def instantiateImplicitBlock(b: ImplicitContext.ImplicitStencil[Term], tpe: symbols.BlockType)(using Context): source.Term = {
+  def instantiateImplicitBlock(b: ImplicitContext.ImplicitStencil, tpe: symbols.BlockType)(using Context): source.Term = {
     if(!Context.messaging.hasErrors) {
       (b, tpe) match {
         case (e @ ImplicitContext.Error(s, i, msgs), _) =>
@@ -248,7 +246,7 @@ object GenerateImplicitArgs {
    *
    * Also annotates all symbols for the returned code correctly where necessary.
    */
-  def instantiateImplicitValue(v: ImplicitContext.ImplicitStencil[Term], tpe: symbols.ValueType)(using Context): source.ValueArg = {
+  def instantiateImplicitValue(v: ImplicitContext.ImplicitStencil, tpe: symbols.ValueType)(using Context): source.ValueArg = {
     v match {
       case e @ ImplicitContext.Error(s, i, msgs) =>
         Context.abort(util.messages.ImplicitInstantiationError(
@@ -290,7 +288,7 @@ object GenerateImplicitArgs {
   /**
    * Run body on each of the stencil code parts, generating an Error context if errors occur.
    */
-  def runPhaseOn[A](i: Int, s: ImplicitContext.ImplicitStencil[A])(body: A => Either[EffektMessages, Unit]): ImplicitContext.ImplicitStencil[A] = {
+  def runPhaseOn[A](i: Int, s: ImplicitContext.ImplicitStencil)(body: source.Term => Either[EffektMessages, Unit]): ImplicitContext.ImplicitStencil = {
     s match {
       case ImplicitContext.ImplicitBlockLiteral(name, content) => body(content)
       case ImplicitContext.ImplicitVar(kind, name, content) => body(content)
