@@ -226,7 +226,7 @@ object ImplicitContext {
     def name = "callId"
     override def pretty = s"${name} as a fresh literal int id"
   }
-  case class Error(name: String, override val pretty: String, msgs: EffektMessages) extends ImplicitStencil[Nothing]
+  case class Error(name: String, override val pretty: String, index: Option[Int], msgs: EffektMessages) extends ImplicitStencil[Nothing]
 }
 
 /**

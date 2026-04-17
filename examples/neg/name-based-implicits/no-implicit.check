@@ -3,7 +3,7 @@ There are multiple overloads, which all fail to check:
 
 Possible overload: no-implicit::foo of type String => Unit
   
-  Cannot instantiate implicit value argument barbaz (1st argument).
+  Cannot implicitly instantiate 1st value argument barbaz of type String.
     Could not resolve term barbaz
 
 Possible overload: no-implicit::foo of type {() => Unit} => Unit

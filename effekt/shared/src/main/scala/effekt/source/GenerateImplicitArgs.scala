@@ -155,9 +155,9 @@ object GenerateImplicitArgs {
   def instantiateImplicitBlock(b: ImplicitContext.ImplicitStencil[Term], tpe: symbols.BlockType)(using Context): source.Term = {
     if(!Context.messaging.hasErrors) {
       (b, tpe) match {
-        case (e @ ImplicitContext.Error(_, pretty, msgs), _) =>
+        case (e @ ImplicitContext.Error(_, pretty, i, msgs), _) =>
           Context.abort(util.messages.ImplicitInstantiationError(
-            "block argument", pretty, msgs, Context.rangeOf(Context.focus)))
+            "block argument", pretty, i, tpe, msgs, Context.rangeOf(Context.focus)))
 
         case (ImplicitContext.ImplicitBlockLiteral(name, source.BlockLiteral(tparams, vparams, bparams, source.Return(source.Call(fn, targs, vargs, bargs, _), _), _)),
           symbols.BlockType.FunctionType(tps, cps, vps, bps, res, effs)) =>
@@ -234,9 +234,9 @@ object GenerateImplicitArgs {
    */
   def instantiateImplicitValue(v: ImplicitContext.ImplicitStencil[Term], tpe: symbols.ValueType)(using Context): source.ValueArg = {
     v match {
-      case ImplicitContext.Error(_, pretty, msgs) =>
+      case ImplicitContext.Error(_, pretty, i, msgs) =>
         Context.abort(util.messages.ImplicitInstantiationError(
-          "value argument", pretty, msgs, Context.rangeOf(Context.focus)))
+          "value argument", pretty, i, tpe, msgs, Context.rangeOf(Context.focus)))
 
       case ImplicitContext.ImplicitVar(name, content) =>
         source.ValueArg(Some(name), content, Span.missing) // TODO Is it a problem if this is used more than once?
@@ -280,16 +280,10 @@ object GenerateImplicitArgs {
       case ImplicitContext.ImplicitVar(name, content) => body(content)
       case ImplicitContext.SourcePosition(content) => body(content)
       case ImplicitContext.CallId() => Right(())
-      case ImplicitContext.Error(name, pretty, msgs) => Right(())
+      case ImplicitContext.Error(name, pretty, i, msgs) => Right(())
     } match {
       case Left(msgs) =>
-        def formatIndex(i: Int): String = i match {
-          case 0 => "1st"
-          case 1 => "2nd"
-          case 2 => "3rd"
-          case n => s"${n + 1}th"
-        }
-        ImplicitContext.Error(s.name, s"${s.pretty} (${formatIndex(i)} argument)", msgs)
+        ImplicitContext.Error(s.name, s"${s.pretty}", Some(i), msgs)
       case Right(()) => s
     }
   }
