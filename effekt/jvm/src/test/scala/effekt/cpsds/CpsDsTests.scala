@@ -12,6 +12,7 @@ enum Pass {
   case Inline
   case StaticArguments
   case Simplify
+  case SinkBlocks
 }
 
 case class PassTest(pass: Pass, input: ModuleDecl, expected: ModuleDecl)
@@ -43,6 +44,7 @@ class CpsDsTests extends munit.FunSuite {
     case "INLINE" => Pass.Inline
     case "STATIC_ARGUMENTS" => Pass.StaticArguments
     case "SIMPLIFY" => Pass.Simplify
+    case "SINK_BLOCKS" => Pass.SinkBlocks
     case other => fail(s"Unknown pass: '$other'")
   }
 
@@ -73,23 +75,30 @@ class CpsDsTests extends munit.FunSuite {
 
   def runPass(pass: Pass, input: ModuleDecl): ModuleDecl = pass match {
     case Pass.Inline =>
-      val mainId = input.definitions.collectFirst {
-        case ToplevelDefinition.Def(id, _, _) if id.name.name == "main" => id
-      }.getOrElse {
-        input.definitions.head match {
-          case ToplevelDefinition.Def(id, _, _) => id
-          case ToplevelDefinition.Val(id, _, _, _) => id
-        }
-      }
+      val mainId = findMain(input)
       Inliner.transform(mainId, input)
     case Pass.StaticArguments =>
       StaticArguments.transform(input)
     case Pass.Simplify =>
       Simplifier.transform(input)
+    case Pass.SinkBlocks =>
+      val mainId = findMain(input)
+      val result = BlockSinking.transform(mainId, input)
+      println(result)
+      result
   }
 
+  private def findMain(input: ModuleDecl): Id =
+    input.definitions.collectFirst {
+      case ToplevelDefinition.Def(id, _, _) if id.name.name == "main" => id
+    }.getOrElse {
+      input.definitions.head match {
+        case ToplevelDefinition.Def(id, _, _) => id
+        case ToplevelDefinition.Val(id, _, _, _) => id
+      }
+    }
+
   def assertAlphaEquivalent(obtained: ModuleDecl, expected: ModuleDecl, clue: => Any)(using Location): Unit = {
-    val names = Names(Map.empty)
     val renamer = new TestRenamer
     val obtainedRenamed = renamer(obtained)
     val expectedRenamed = renamer(expected)
@@ -117,7 +126,10 @@ class CpsDsTests extends munit.FunSuite {
 
     tests.zipWithIndex.foreach { case (PassTest(pass, input, expected), idx) =>
       test(s"$filename step ${idx + 1}: $pass") {
-        val obtained = runPass(pass, input)
+        // make sure all ids are globally unique!
+        val renamer = new TestRenamer
+        val unique = renamer(input)
+        val obtained = runPass(pass, unique)
         assertAlphaEquivalent(obtained, expected,
           s"$filename step ${idx + 1} ($pass) produced unexpected result")
       }
