@@ -214,19 +214,33 @@ object ImplicitContext {
 
   sealed trait ImplicitStencil[+A] {
     def name: String
-    def pretty: String = s"${name}"
+    def kind: String
+    def explanation: Option[String] = None
   }
-  case class ImplicitBlockLiteral(name: String, content: source.BlockLiteral) extends ImplicitStencil[source.BlockLiteral]
-  case class ImplicitVar(name: String, content: source.Var) extends ImplicitStencil[source.Var]
+  case class ImplicitBlockLiteral(name: String, content: source.BlockLiteral) extends ImplicitStencil[source.BlockLiteral] {
+    def kind = "block argument"
+  }
+  case class ImplicitVar(kind: String, name: String, content: source.Var) extends ImplicitStencil[source.Var]
   case class SourcePosition(content: source.Call) extends ImplicitStencil[source.Call] {
     def name = "sourcePosition"
-    override def pretty = s"${name} as a call to SourcePosition"
+    def kind = "value argument"
+    override def explanation =
+      Some(
+        """Implicit sourcePosition will call
+          |  SourcePosition(file, start_line, start_col, end_line, end_col)
+          | with the respecitve values for the source position of the call.
+          |""".stripMargin)
   }
   case class CallId() extends ImplicitStencil[source.Literal] {
     def name = "callId"
-    override def pretty = s"${name} as a fresh literal int id"
+    def kind = "value argument"
+    override def explanation = Some("Implicit callId will generate a unique Int for each call to this function in the source code.")
   }
-  case class Error(name: String, override val pretty: String, index: Option[Int], msgs: EffektMessages) extends ImplicitStencil[Nothing]
+  case class Error(underlying: ImplicitStencil[_],
+                   index: Option[Int], msgs: EffektMessages) extends ImplicitStencil[Nothing] {
+    export underlying.{name, kind}
+    override def explanation: Option[String] = underlying.explanation
+  }
 }
 
 /**

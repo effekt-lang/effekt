@@ -1,0 +1,3 @@
+[error] Cannot instantiate implicit argument.
+Cannot instantiate a block argument foo of type () => Int.
+  Expected Int but got Bool.

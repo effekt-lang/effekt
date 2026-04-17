@@ -9,11 +9,16 @@ import effekt.context.Context
 import effekt.symbols.scopes.Scope
 import effekt.symbols.{BlockSymbol, BlockType, Callable, ImplicitContext, builtins, Name}
 import effekt.context.Annotations
+import effekt.context.Try
 
 object GenerateImplicitArgs {
 
   import effekt.symbols.ValueType
 
+  def typeSize(tpe: symbols.Type): Int = tpe match {
+    case tpe: symbols.BlockType => typeSize(tpe)
+    case tpe: symbols.ValueType => typeSize(tpe)
+  }
   def typeSize(tpe: symbols.BlockType): Int = tpe match {
     case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
       tparams.length + cparams.length + vparams.map(typeSize).sum + bparams.map(typeSize).sum + typeSize(result)
@@ -40,9 +45,12 @@ object GenerateImplicitArgs {
    * Wrapper for recursive type-checking of generated implicits.
    * Should fail for infinite recursion.
    */
-  def recursionGuard[R](inst: source.Term, tpe: symbols.BlockType)(body: () => R)(using Context): R = {
-    val instBlockTpe = Context.unification(tpe)
-    val tpeSize = typeSize(instBlockTpe)
+  def recursionGuard[R](stencil: ImplicitContext.ImplicitStencil[_], kind: String, index: Int, inst: source.Tree, tpe: symbols.Type)(body: => R)(using Context): R = {
+    val instTpe = tpe match {
+      case tpe: symbols.BlockType => Context.unification(tpe)
+      case tpe: symbols.ValueType => Context.unification(tpe)
+    }
+    val tpeSize = typeSize(instTpe)
     val newValue = inst match {
       case source.BlockLiteral(_, _, _, source.Return(source.Call(source.IdTarget(id), _, _, _, _), _), _) =>
         val (depth, lastSize) = recursionStack.value.getOrElse((id.name), (0, tpeSize))
@@ -53,7 +61,15 @@ object GenerateImplicitArgs {
       case _ => recursionStack.value
     }
     recursionStack.withValue(newValue) {
-      body()
+      Try {
+        body
+      } match {
+        case Left(msgs) =>
+          // Note: Recursion
+          Context.abort(util.messages.ImplicitInstantiationError(
+            ImplicitContext.Error(stencil, None, msgs), tpe, Context.rangeOf(Context.focus)))
+        case Right(r) => r
+      }
     }
   }
 
@@ -84,7 +100,7 @@ object GenerateImplicitArgs {
         ), Nil, Span.missing))
       case "callId" =>
         ImplicitContext.CallId()
-      case _ => ImplicitContext.ImplicitVar(p.name.name, Var(IdRef(Nil, p.name.name, Span.missing), Span.missing))
+      case _ => ImplicitContext.ImplicitVar("value argument", p.name.name, Var(IdRef(Nil, p.name.name, Span.missing), Span.missing))
     }
   }
 
@@ -109,7 +125,7 @@ object GenerateImplicitArgs {
             Span.missing), Span.missing))
       case BlockType.InterfaceType(typeConstructor, args) =>
         // TODO eta-exapnd here, too ?
-        ImplicitContext.ImplicitVar(p.name.name, Var(IdRef(Nil, p.name.name, Span.missing), Span.missing))
+        ImplicitContext.ImplicitVar("block argument", p.name.name, Var(IdRef(Nil, p.name.name, Span.missing), Span.missing))
     }
 
   /**
@@ -155,9 +171,9 @@ object GenerateImplicitArgs {
   def instantiateImplicitBlock(b: ImplicitContext.ImplicitStencil[Term], tpe: symbols.BlockType)(using Context): source.Term = {
     if(!Context.messaging.hasErrors) {
       (b, tpe) match {
-        case (e @ ImplicitContext.Error(_, pretty, i, msgs), _) =>
+        case (e @ ImplicitContext.Error(s, i, msgs), _) =>
           Context.abort(util.messages.ImplicitInstantiationError(
-            "block argument", pretty, i, tpe, msgs, Context.rangeOf(Context.focus)))
+            e, tpe, Context.rangeOf(Context.focus)))
 
         case (ImplicitContext.ImplicitBlockLiteral(name, source.BlockLiteral(tparams, vparams, bparams, source.Return(source.Call(fn, targs, vargs, bargs, _), _), _)),
           symbols.BlockType.FunctionType(tps, cps, vps, bps, res, effs)) =>
@@ -216,7 +232,7 @@ object GenerateImplicitArgs {
                 source.Return(source.Call(ffn, ftargs, fvargs, fbargs,
                   source.Span.missing), source.Span.missing), source.Span.missing)
 
-        case (ImplicitContext.ImplicitVar(name, b), _) =>
+        case (ImplicitContext.ImplicitVar(kind, name, b), _) =>
           b // TODO Is it a problem if this is used more than once?
 
         case _ =>
@@ -234,11 +250,11 @@ object GenerateImplicitArgs {
    */
   def instantiateImplicitValue(v: ImplicitContext.ImplicitStencil[Term], tpe: symbols.ValueType)(using Context): source.ValueArg = {
     v match {
-      case ImplicitContext.Error(_, pretty, i, msgs) =>
+      case e @ ImplicitContext.Error(s, i, msgs) =>
         Context.abort(util.messages.ImplicitInstantiationError(
-          "value argument", pretty, i, tpe, msgs, Context.rangeOf(Context.focus)))
+          e, tpe, Context.rangeOf(Context.focus)))
 
-      case ImplicitContext.ImplicitVar(name, content) =>
+      case ImplicitContext.ImplicitVar(kind, name, content) =>
         source.ValueArg(Some(name), content, Span.missing) // TODO Is it a problem if this is used more than once?
 
       case ImplicitContext.SourcePosition(content) =>
@@ -277,13 +293,13 @@ object GenerateImplicitArgs {
   def runPhaseOn[A](i: Int, s: ImplicitContext.ImplicitStencil[A])(body: A => Either[EffektMessages, Unit]): ImplicitContext.ImplicitStencil[A] = {
     s match {
       case ImplicitContext.ImplicitBlockLiteral(name, content) => body(content)
-      case ImplicitContext.ImplicitVar(name, content) => body(content)
+      case ImplicitContext.ImplicitVar(kind, name, content) => body(content)
       case ImplicitContext.SourcePosition(content) => body(content)
       case ImplicitContext.CallId() => Right(())
-      case ImplicitContext.Error(name, pretty, i, msgs) => Right(())
+      case ImplicitContext.Error(_, _, _) => Right(())
     } match {
       case Left(msgs) =>
-        ImplicitContext.Error(s.name, s"${s.pretty}", Some(i), msgs)
+        ImplicitContext.Error(s, Some(i), msgs)
       case Right(()) => s
     }
   }

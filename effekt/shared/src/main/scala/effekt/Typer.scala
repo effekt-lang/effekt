@@ -1508,10 +1508,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     // implicit arguments work like normal ones, except that we first have to instantiate them,
     // and later annotate them to be inserted
-    (implicitVps zip implicitVargs) foreach { case (tpe, expr) =>
+    (implicitVps zip implicitVargs).zipWithIndex foreach { case ((tpe, expr), ii) =>
       val inst = source.GenerateImplicitArgs.instantiateImplicitValue(expr, tpe)
       instImplicitVargs.append(inst)
-      val Result(t, eff) = checkExpr(inst.value, Some(tpe))
+      val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(expr, "value argument", vargs.length + ii, inst, tpe) {
+        checkExpr(inst.value, Some(tpe))
+      }
       effs = effs ++ eff.toEffects
     }
 
@@ -1537,13 +1539,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     // implicit arguments work like normal ones, except that we first have to instantiate them,
     // and...
-    (implicitBps zip (implicitBargs zip implicitCaptArgs)) foreach { case (tpe, (expr, capt)) =>
+    (implicitBps zip (implicitBargs zip implicitCaptArgs)).zipWithIndex foreach { case ((tpe, (expr, capt)), ii) =>
       flowsInto(capt, callsite)
       // capture of block <: ?C
       flowingInto(capt) {
         val inst = source.GenerateImplicitArgs.instantiateImplicitBlock(expr, tpe)
         instImplicitBargs.append(inst)
-        val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(inst, tpe){ () =>
+        val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(expr, "block argument", bargs.length + ii, inst, tpe){
           checkExprAsBlock(inst, Some(tpe))
         }
         effs = effs ++ eff.toEffects
