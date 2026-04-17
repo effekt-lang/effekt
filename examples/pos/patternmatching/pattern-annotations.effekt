@@ -1,0 +1,34 @@
+def ex1(lst: List[Int]) = lst match {
+    case Cons(x: Int, y) => x.show
+    case _ => "hello"
+}
+
+def f { g: ((Int, String)) => Unit }: Unit = g((0, ""))
+
+def ex2() = f { case (x: Int, y) => () }
+
+def ex3() = for[(Int, String)] { [(0, "a"), (1, "b"), (2, "c")].each } { case (i: Int, s: String) =>
+  println(i.show) 
+}
+
+def ex4(opt: Option[String]) = if (opt is Some(x: String)) x else "world"
+
+def ex5(opt: Option[Bool]) = {
+  val Some(x: Bool) = opt else false
+  x
+}
+
+def main() = {
+  println(ex1([1, 2]))
+  println(ex1([]))
+  println("---")
+  println(ex2())
+  println("---")
+  ex3()
+  println("---")
+  println(ex4(Some("test")))
+  println(ex4(None()))
+  println("---")
+  println(ex5(Some(true)))
+  println(ex5(None()))
+}
