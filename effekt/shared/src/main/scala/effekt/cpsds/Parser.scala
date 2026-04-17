@@ -100,20 +100,7 @@ class Parser(names: Names) extends Parsers {
   }
 
   // === Names ===
-  def idFor(name: String, names: Names): Id = name match {
-    case s if s.contains('_') && s.lastIndexOf('_') > 0 =>
-      val idx = s.lastIndexOf('_')
-      val prefix = s.substring(0, idx)
-      val suffix = s.substring(idx + 1)
-      if suffix.nonEmpty && suffix.forall(_.isDigit) then
-        Id(prefix, suffix.toInt)
-      else
-        names.idFor(name)
-    case _ =>
-      names.idFor(name)
-  }
-
-  lazy val id: P[Id] = ident ^^ { x => idFor(x, names) }
+  lazy val id: P[Id] = ident ^^ { x => names.idFor(x) }
 
   lazy val moduleName = """[a-zA-Z_][a-zA-Z0-9_]*(/[a-zA-Z_][a-zA-Z0-9_]*)*""".r
 
