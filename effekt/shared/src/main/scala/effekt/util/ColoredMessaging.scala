@@ -96,6 +96,11 @@ trait ColoredMessaging extends EffektMessaging {
       }
 
       mainMessage + "\n\n" + explanations.mkString("\n\n") + "\n"
+    case ImplicitInstantiationError(kind, prettyName, msgs, range) =>
+      val mainMessage = underlined(s"Cannot instantiate implicit ${kind} ${prettyName}.")
+      val nestedErrors = indent(msgs.map { msg => formatContent(msg) }.mkString("\n"))
+
+      "\n" + mainMessage + "\n" + nestedErrors + "\n"
   }
 
   def fullname(n: Name): String = n match {
