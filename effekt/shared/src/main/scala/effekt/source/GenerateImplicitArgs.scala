@@ -28,10 +28,10 @@ object GenerateImplicitArgs {
     def kind = "value argument"
     override def explanation: Option[String] = Some(
       """An implicit argument of a boxed type will be instantiated by boxing the block
-        |  that an implicit block argument of the same name would be instantiated to
-        |""".stripMargin + (block.explanation match {
+        |  that an implicit block argument of the same name would be instantiated to""".stripMargin
+        + (block.explanation match {
         case Some(e) => ":\n" + e
-        case None => "."
+        case None => ".\n"
       }))
   }
   case class ImplicitVar(kind: String, name: String, content: source.Var) extends ImplicitStencil
