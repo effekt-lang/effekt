@@ -239,13 +239,13 @@ class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) ext
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
         toDocStmts(rest)
 
-    case ExternApp(id, Purity.Impure, callee, targs, vargs, bargs, rest) =>
-      "let" <+> "!" <+> toDoc(id) <+> "=" <+> toDoc(callee) <> argsToDoc(targs, vargs, bargs) <> line <>
-        toDocStmts(rest)
-
-    case ExternApp(_, purity, callee, targs, vargs, bargs, rest) =>
-      // FIXME: I think rest should technically not be included. It should do nothing anyway 
-      toDoc(callee) <> argsToDoc(targs, vargs, bargs) <> line <>
+    case ExternApp(id, purity, callee, targs, vargs, bargs, rest) =>
+      val purityKeyword = purity match {
+        case core.Pure => "let"
+        case core.Impure => "let !"
+        case core.Async => "let ?"
+      }
+      purityKeyword <+> toDoc(id) <+> "=" <+> toDoc(callee) <> argsToDoc(targs, vargs, bargs) <> line <>
         toDocStmts(rest)
 
     case Return(e) =>
