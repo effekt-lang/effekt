@@ -7,7 +7,6 @@ def main(ks, k) {
 
 /// INLINE
 def main(ks, k) {
-  let x = 10;
-  k(x, ks)
+  k(10, ks)
 }
 
