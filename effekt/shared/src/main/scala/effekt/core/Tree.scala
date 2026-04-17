@@ -410,7 +410,6 @@ object Bind {
     }
 }
 
-
 object Tree {
 
   // Generic traversal of trees, applying the partial function `f` to every contained
@@ -468,65 +467,151 @@ object Tree {
     def query(m: ModuleDecl)(using Ctx) = structuralQuery(m, PartialFunction.empty)
   }
 
-  class Rewrite extends Structural {
-    def id: PartialFunction[Id, Id] = PartialFunction.empty
-    def pure: PartialFunction[Expr, Expr] = PartialFunction.empty
-    def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty
-    def toplevel: PartialFunction[Toplevel, Toplevel] = PartialFunction.empty
-    def block: PartialFunction[Block, Block] = PartialFunction.empty
-    def implementation: PartialFunction[Implementation, Implementation] = PartialFunction.empty
+  trait Rewrite {
+    def rewrite(x: Id): Id = x
 
-    def rewrite(x: Id): Id = if id.isDefinedAt(x) then id(x) else x
-    def rewrite(p: Expr): Expr = rewriteStructurally(p, pure)
-    def rewrite(s: Stmt): Stmt = rewriteStructurally(s, stmt)
-    def rewrite(b: Block): Block = rewriteStructurally(b, block)
-    def rewrite(d: Toplevel): Toplevel = rewriteStructurally(d, toplevel)
-    def rewrite(e: Implementation): Implementation = rewriteStructurally(e, implementation)
-    def rewrite(o: Operation): Operation = rewriteStructurally(o)
-    def rewrite(p: ValueParam): ValueParam = rewriteStructurally(p)
-    def rewrite(p: BlockParam): BlockParam = rewriteStructurally(p)
+    def rewrite(p: Expr): Expr = p match {
+      case Expr.ValueVar(id, annotatedType) =>
+        Expr.ValueVar(rewrite(id), rewrite(annotatedType))
+      case Expr.Literal(value, annotatedType) =>
+        Expr.Literal(value, rewrite(annotatedType))
+      case Expr.PureApp(b, targs, vargs) =>
+        Expr.PureApp(rewrite(b), targs map rewrite, vargs map rewrite)
+      case Expr.Make(data, tag, targs, vargs) =>
+        Expr.Make(rewrite(data), rewrite(tag), targs map rewrite, vargs map rewrite)
+      case Expr.Box(b, annotatedCapture) =>
+        Expr.Box(rewrite(b), rewrite(annotatedCapture))
+    }
+    def rewrite(s: Stmt): Stmt = s match {
+      case Stmt.Def(id, block, body) =>
+        Stmt.Def(rewrite(id), rewrite(block), rewrite(body))
+      case Stmt.Let(id, binding, body) =>
+        Stmt.Let(rewrite(id), rewrite(binding), rewrite(body))
+      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+        Stmt.ImpureApp(rewrite(id), rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
+      case Stmt.Return(expr) =>
+        Stmt.Return(rewrite(expr))
+      case Stmt.Val(id, binding, body) =>
+        Stmt.Val(rewrite(id), rewrite(binding), rewrite(body))
+      case Stmt.App(callee, targs, vargs, bargs) =>
+        Stmt.App(rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite)
+      case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
+        Stmt.Invoke(rewrite(callee), rewrite(method), rewrite(methodTpe), targs map rewrite, vargs map rewrite, bargs map rewrite)
+      case Stmt.If(cond, thn, els) =>
+        Stmt.If(rewrite(cond), rewrite(thn), rewrite(els))
+      case Stmt.Match(scrutinee, annotatedTpe, clauses, default) =>
+        Stmt.Match(rewrite(scrutinee), rewrite(annotatedTpe), clauses map rewrite, default map rewrite)
+      case Stmt.Region(body) =>
+        Stmt.Region(rewrite(body))
+      case Stmt.Alloc(id, init, region, body) =>
+        Stmt.Alloc(rewrite(id), rewrite(init), rewrite(region), rewrite(body))
+      case Stmt.Var(ref, init, capture, body) =>
+        Stmt.Var(rewrite(ref), rewrite(init), rewrite(capture), rewrite(body))
+      case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
+        Stmt.Get(rewrite(id), rewrite(annotatedTpe), rewrite(ref), rewrite(annotatedCapt), rewrite(body))
+      case Stmt.Put(ref, annotatedCapt, value, body) =>
+        Stmt.Put(rewrite(ref), rewrite(annotatedCapt), rewrite(value), rewrite(body))
+      case Stmt.Reset(body) =>
+        Stmt.Reset(rewrite(body))
+      case Stmt.Shift(prompt, k, body) =>
+        Stmt.Shift(rewrite(prompt), rewrite(k), rewrite(body))
+      case Stmt.Resume(k, body) =>
+        Stmt.Resume(rewrite(k), rewrite(body))
+      case Stmt.Hole(annotatedTpe, span) =>
+        Stmt.Hole(rewrite(annotatedTpe), span)
+    }
+    def rewrite(b: Block): Block = b match {
+      case b @ Block.BlockVar(_, _, _) => rewrite(b)
+      case b @ Block.BlockLit(_, _, _, _, _) => rewrite(b)
+      case Block.Unbox(pure) => Block.Unbox(rewrite(pure))
+      case Block.New(impl) => Block.New(rewrite(impl))
+    }
+    def rewrite(d: Toplevel): Toplevel = d match {
+      case Toplevel.Def(id, block) => Toplevel.Def(rewrite(id), rewrite(block))
+      case Toplevel.Val(id, binding) => Toplevel.Val(rewrite(id), rewrite(binding))
+    }
+    def rewrite(e: Implementation): Implementation = e match {
+      case Implementation(interface, operations) =>
+        Implementation(rewrite(interface), operations map rewrite)
+    }
+    def rewrite(o: Operation): Operation = o match {
+      case Operation(name, tparams, cparams, vparams, bparams, body) =>
+        Operation(rewrite(name), tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, rewrite(body))
+    }
+    def rewrite(p: ValueParam): ValueParam = p match {
+      case ValueParam(id, tpe) => ValueParam(rewrite(id), rewrite(tpe))
+    }
+    def rewrite(p: BlockParam): BlockParam = p match {
+      case BlockParam(id, tpe, capt) => BlockParam(rewrite(id), rewrite(tpe), rewrite(capt))
+    }
     def rewrite(b: ExternBody[Expr]): ExternBody[Expr] = b match {
       case ExternBody.StringExternBody(ff, Template(strings, args)) =>
         ExternBody.StringExternBody(ff, Template(strings, args.map(rewrite)))
       case e: ExternBody.Unsupported => e
     }
-    def rewrite(e: Extern): Extern= e match {
+    def rewrite(e: Extern): Extern = e match {
       case e @ (Extern.Data(_,_,_) | Extern.Include(_,_) | Extern.Interface(_,_,_)) => e
       case Extern.Def(id, tps, cps, vps, bps, ret, capts, body) =>
-        Extern.Def(id, tps, cps, vps, bps, ret, capts, rewrite(body))
+        Extern.Def(rewrite(id), tps map rewrite, cps map rewrite, vps map rewrite, bps map rewrite, rewrite(ret), rewrite(capts), rewrite(body))
     }
-    def rewrite(d: Declaration): Declaration = rewriteStructurally(d)
-    def rewrite(c: Constructor): Constructor = rewriteStructurally(c)
-    def rewrite(f: Field): Field = rewriteStructurally(f)
+    def rewrite(d: Declaration): Declaration = d match {
+      case Declaration.Data(id, tparams, constructors) =>
+        Declaration.Data(rewrite(id), tparams map rewrite, constructors map rewrite)
+      case Declaration.Interface(id, tparams, properties) =>
+        Declaration.Interface(rewrite(id), tparams map rewrite, properties map rewrite)
+    }
+    def rewrite(c: Constructor): Constructor = c match {
+      case Constructor(id, tparams, fields) =>
+        Constructor(rewrite(id), tparams map rewrite, fields map rewrite)
+    }
+    def rewrite(f: Field): Field = f match {
+      case Field(id, tpe) => Field(rewrite(id), rewrite(tpe))
+    }
 
-    def rewrite(b: BlockLit): BlockLit = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
+    def rewrite(b: BlockLit): BlockLit = b match {
       case BlockLit(tparams, cparams, vparams, bparams, body) =>
         BlockLit(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, rewrite(body))
     }
-    def rewrite(b: BlockVar): BlockVar = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
-      case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(rewrite(id), rewrite(annotatedTpe), rewrite(annotatedCapt))
+    def rewrite(b: BlockVar): BlockVar = b match {
+      case BlockVar(id, annotatedTpe, annotatedCapt) =>
+        BlockVar(rewrite(id), rewrite(annotatedTpe), rewrite(annotatedCapt))
     }
 
-    def rewrite(t: ValueType): ValueType = rewriteStructurally(t)
-    def rewrite(t: ValueType.Data): ValueType.Data = rewriteStructurally(t)
+    def rewrite(t: ValueType): ValueType = t match {
+      case ValueType.Var(name) => ValueType.Var(rewrite(name))
+      case ValueType.Data(name, targs) => ValueType.Data(rewrite(name), targs map rewrite)
+      case ValueType.Boxed(tpe, capt) => ValueType.Boxed(rewrite(tpe), rewrite(capt))
+    }
+    def rewrite(t: ValueType.Data): ValueType.Data = t match {
+      case ValueType.Data(name, targs) => ValueType.Data(rewrite(name), targs map rewrite)
+    }
 
-    def rewrite(t: BlockType): BlockType = rewriteStructurally(t)
-    def rewrite(t: BlockType.Interface): BlockType.Interface = rewriteStructurally(t)
+    def rewrite(t: BlockType): BlockType = t match {
+      case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
+        BlockType.Function(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, rewrite(result))
+      case BlockType.Interface(name, targs) =>
+        BlockType.Interface(rewrite(name), targs map rewrite)
+    }
+    def rewrite(t: BlockType.Interface): BlockType.Interface = t match {
+      case BlockType.Interface(name, targs) => BlockType.Interface(rewrite(name), targs map rewrite)
+    }
     def rewrite(capt: Captures): Captures = capt.map(rewrite)
-    def rewrite(p: Property): Property = rewriteStructurally(p)
+    def rewrite(p: Property): Property = p match {
+      case Property(id, tpe) => Property(rewrite(id), rewrite(tpe))
+    }
 
     def rewrite(m: ModuleDecl): ModuleDecl =
       m match {
         case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-          ModuleDecl(path, includes, declarations, externs, definitions.map(rewrite), exports)
+          ModuleDecl(path, includes, declarations map rewrite, externs map rewrite, definitions map rewrite, exports map rewrite)
       }
 
     def rewrite(matchClause: (Id, BlockLit)): (Id, BlockLit) = matchClause match {
-      case (p, b) => (p, rewrite(b))
+      case (p, b) => (rewrite(p), rewrite(b))
     }
   }
 
-  class TrampolinedRewrite {
+  trait TrampolinedRewrite {
 
     import Trampoline.done
 
@@ -784,48 +869,147 @@ object Tree {
     }
   }
 
-  class RewriteWithContext[Ctx] extends Structural {
-    def id(using Ctx): PartialFunction[Id, Id] = PartialFunction.empty
-    def expr(using Ctx): PartialFunction[Expr, Expr] = PartialFunction.empty
-    def stmt(using Ctx): PartialFunction[Stmt, Stmt] = PartialFunction.empty
-    def toplevel(using Ctx): PartialFunction[Toplevel, Toplevel] = PartialFunction.empty
-    def block(using Ctx): PartialFunction[Block, Block] = PartialFunction.empty
-    def implementation(using Ctx): PartialFunction[Implementation, Implementation] = PartialFunction.empty
+  class RewriteWithContext[Ctx] {
 
-    def rewrite(x: Id)(using Ctx): Id = if id.isDefinedAt(x) then id(x) else x
-    def rewrite(p: Expr)(using Ctx): Expr = rewriteStructurally(p, expr)
-    def rewrite(s: Stmt)(using Ctx): Stmt = rewriteStructurally(s, stmt)
-    def rewrite(b: Block)(using Ctx): Block = rewriteStructurally(b, block)
-    def rewrite(d: Toplevel)(using Ctx): Toplevel = rewriteStructurally(d, toplevel)
-    def rewrite(e: Implementation)(using Ctx): Implementation = rewriteStructurally(e, implementation)
-    def rewrite(o: Operation)(using Ctx): Operation = rewriteStructurally(o)
-    def rewrite(p: ValueParam)(using Ctx): ValueParam = rewriteStructurally(p)
-    def rewrite(p: BlockParam)(using Ctx): BlockParam = rewriteStructurally(p)
-    def rewrite(b: ExternBody[Expr])(using Ctx): ExternBody[Expr] = rewrite(b)
+    def rewrite(x: Id)(using Ctx): Id = x
+    def rewrite(p: Expr)(using Ctx): Expr = p match {
+      case Expr.ValueVar(id, annotatedType) =>
+        Expr.ValueVar(rewrite(id), rewrite(annotatedType))
+      case Expr.Literal(value, annotatedType) =>
+        Expr.Literal(value, rewrite(annotatedType))
+      case Expr.PureApp(b, targs, vargs) =>
+        Expr.PureApp(rewrite(b), targs map rewrite, vargs map rewrite)
+      case Expr.Make(data, tag, targs, vargs) =>
+        Expr.Make(rewrite(data), rewrite(tag), targs map rewrite, vargs map rewrite)
+      case Expr.Box(b, annotatedCapture) =>
+        Expr.Box(rewrite(b), rewrite(annotatedCapture))
+    }
+    def rewrite(s: Stmt)(using Ctx): Stmt = s match {
+      case Stmt.Def(id, block, body) =>
+        Stmt.Def(rewrite(id), rewrite(block), rewrite(body))
+      case Stmt.Let(id, binding, body) =>
+        Stmt.Let(rewrite(id), rewrite(binding), rewrite(body))
+      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+        Stmt.ImpureApp(rewrite(id), rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
+      case Stmt.Return(expr) =>
+        Stmt.Return(rewrite(expr))
+      case Stmt.Val(id, binding, body) =>
+        Stmt.Val(rewrite(id), rewrite(binding), rewrite(body))
+      case Stmt.App(callee, targs, vargs, bargs) =>
+        Stmt.App(rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite)
+      case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
+        Stmt.Invoke(rewrite(callee), rewrite(method), rewrite(methodTpe), targs map rewrite, vargs map rewrite, bargs map rewrite)
+      case Stmt.If(cond, thn, els) =>
+        Stmt.If(rewrite(cond), rewrite(thn), rewrite(els))
+      case Stmt.Match(scrutinee, annotatedTpe, clauses, default) =>
+        Stmt.Match(rewrite(scrutinee), rewrite(annotatedTpe), clauses map rewrite, default map rewrite)
+      case Stmt.Region(body) =>
+        Stmt.Region(rewrite(body))
+      case Stmt.Alloc(id, init, region, body) =>
+        Stmt.Alloc(rewrite(id), rewrite(init), rewrite(region), rewrite(body))
+      case Stmt.Var(ref, init, capture, body) =>
+        Stmt.Var(rewrite(ref), rewrite(init), rewrite(capture), rewrite(body))
+      case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
+        Stmt.Get(rewrite(id), rewrite(annotatedTpe), rewrite(ref), rewrite(annotatedCapt), rewrite(body))
+      case Stmt.Put(ref, annotatedCapt, value, body) =>
+        Stmt.Put(rewrite(ref), rewrite(annotatedCapt), rewrite(value), rewrite(body))
+      case Stmt.Reset(body) =>
+        Stmt.Reset(rewrite(body))
+      case Stmt.Shift(prompt, k, body) =>
+        Stmt.Shift(rewrite(prompt), rewrite(k), rewrite(body))
+      case Stmt.Resume(k, body) =>
+        Stmt.Resume(rewrite(k), rewrite(body))
+      case Stmt.Hole(annotatedTpe, span) =>
+        Stmt.Hole(rewrite(annotatedTpe), span)
+    }
+    def rewrite(b: Block)(using Ctx): Block = b match {
+      case b @ Block.BlockVar(_, _, _) => rewrite(b)
+      case b @ Block.BlockLit(_, _, _, _, _) => rewrite(b)
+      case Block.Unbox(pure) => Block.Unbox(rewrite(pure))
+      case Block.New(impl) => Block.New(rewrite(impl))
+    }
+    def rewrite(d: Toplevel)(using Ctx): Toplevel = d match {
+      case Toplevel.Def(id, block) => Toplevel.Def(rewrite(id), rewrite(block))
+      case Toplevel.Val(id, binding) => Toplevel.Val(rewrite(id), rewrite(binding))
+    }
+    def rewrite(e: Implementation)(using Ctx): Implementation = e match {
+      case Implementation(interface, operations) =>
+        Implementation(rewrite(interface), operations map rewrite)
+    }
+    def rewrite(o: Operation)(using Ctx): Operation = o match {
+      case Operation(name, tparams, cparams, vparams, bparams, body) =>
+        Operation(rewrite(name), tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, rewrite(body))
+    }
+    def rewrite(p: ValueParam)(using Ctx): ValueParam = p match {
+      case ValueParam(id, tpe) => ValueParam(rewrite(id), rewrite(tpe))
+    }
+    def rewrite(p: BlockParam)(using Ctx): BlockParam = p match {
+      case BlockParam(id, tpe, capt) => BlockParam(rewrite(id), rewrite(tpe), rewrite(capt))
+    }
+    def rewrite(b: ExternBody[Expr])(using Ctx): ExternBody[Expr] = b match {
+      case ExternBody.StringExternBody(ff, Template(strings, args)) =>
+        ExternBody.StringExternBody(ff, Template(strings, args.map(rewrite)))
+      case e: ExternBody.Unsupported => e
+    }
+    def rewrite(e: Extern)(using Ctx): Extern = e match {
+      case e @ (Extern.Data(_,_,_) | Extern.Include(_,_) | Extern.Interface(_,_,_)) => e
+      case Extern.Def(id, tps, cps, vps, bps, ret, capts, body) =>
+        Extern.Def(rewrite(id), tps map rewrite, cps map rewrite, vps map rewrite, bps map rewrite, rewrite(ret), rewrite(capts), rewrite(body))
+    }
+    def rewrite(d: Declaration)(using Ctx): Declaration = d match {
+      case Declaration.Data(id, tparams, constructors) =>
+        Declaration.Data(rewrite(id), tparams map rewrite, constructors map rewrite)
+      case Declaration.Interface(id, tparams, properties) =>
+        Declaration.Interface(rewrite(id), tparams map rewrite, properties map rewrite)
+    }
+    def rewrite(c: Constructor)(using Ctx): Constructor = c match {
+      case Constructor(id, tparams, fields) =>
+        Constructor(rewrite(id), tparams map rewrite, fields map rewrite)
+    }
+    def rewrite(f: Field)(using Ctx): Field = f match {
+      case Field(id, tpe) => Field(rewrite(id), rewrite(tpe))
+    }
 
-    def rewrite(b: BlockLit)(using Ctx): BlockLit = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
+    def rewrite(b: BlockLit)(using Ctx): BlockLit = b match {
       case BlockLit(tparams, cparams, vparams, bparams, body) =>
         BlockLit(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, rewrite(body))
     }
-    def rewrite(b: BlockVar)(using Ctx): BlockVar = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
-      case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(rewrite(id), rewrite(annotatedTpe), rewrite(annotatedCapt))
+    def rewrite(b: BlockVar)(using Ctx): BlockVar = b match {
+      case BlockVar(id, annotatedTpe, annotatedCapt) =>
+        BlockVar(rewrite(id), rewrite(annotatedTpe), rewrite(annotatedCapt))
     }
 
-    def rewrite(t: ValueType)(using Ctx): ValueType = rewriteStructurally(t)
-    def rewrite(t: ValueType.Data)(using Ctx): ValueType.Data = rewriteStructurally(t)
+    def rewrite(t: ValueType)(using Ctx): ValueType = t match {
+      case ValueType.Var(name) => ValueType.Var(rewrite(name))
+      case ValueType.Data(name, targs) => ValueType.Data(rewrite(name), targs map rewrite)
+      case ValueType.Boxed(tpe, capt) => ValueType.Boxed(rewrite(tpe), rewrite(capt))
+    }
+    def rewrite(t: ValueType.Data)(using Ctx): ValueType.Data = t match {
+      case ValueType.Data(name, targs) => ValueType.Data(rewrite(name), targs map rewrite)
+    }
 
-    def rewrite(t: BlockType)(using Ctx): BlockType = rewriteStructurally(t)
-    def rewrite(t: BlockType.Interface)(using Ctx): BlockType.Interface = rewriteStructurally(t)
+    def rewrite(t: BlockType)(using Ctx): BlockType = t match {
+      case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
+        BlockType.Function(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, rewrite(result))
+      case BlockType.Interface(name, targs) =>
+        BlockType.Interface(rewrite(name), targs map rewrite)
+    }
+    def rewrite(t: BlockType.Interface)(using Ctx): BlockType.Interface = t match {
+      case BlockType.Interface(name, targs) => BlockType.Interface(rewrite(name), targs map rewrite)
+    }
     def rewrite(capt: Captures)(using Ctx): Captures = capt.map(rewrite)
+    def rewrite(p: Property)(using Ctx): Property = p match {
+      case Property(id, tpe) => Property(rewrite(id), rewrite(tpe))
+    }
 
     def rewrite(m: ModuleDecl)(using Ctx): ModuleDecl =
       m match {
         case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-          ModuleDecl(path, includes, declarations, externs, definitions.map(rewrite), exports)
+          ModuleDecl(path, includes, declarations map rewrite, externs map rewrite, definitions map rewrite, exports map rewrite)
       }
 
     def rewrite(matchClause: (Id, BlockLit))(using Ctx): (Id, BlockLit) = matchClause match {
-      case (p, b) => (p, rewrite(b))
+      case (p, b) => (rewrite(p), rewrite(b))
     }
   }
 }
