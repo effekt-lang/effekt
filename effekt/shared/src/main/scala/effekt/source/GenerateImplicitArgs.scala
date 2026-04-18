@@ -224,6 +224,14 @@ object GenerateImplicitArgs {
    */
   private var nextCallId: Long = 0
 
+  private def generateResolvedId(sym: symbols.Symbol)(using Context): (source.IdDef, source.IdRef) = {
+    val d = source.IdDef(sym.name.name, source.Span.missing)
+    val u = source.IdRef(Nil, sym.name.name, source.Span.missing)
+    Context.annotate(Annotations.Symbol, d, sym)
+    Context.annotate(Annotations.Symbol, u, sym)
+    (d, u)
+  }
+
   /**
    * Called from [[Typer]] to get a fresh instance of the given implicit block argument.
    *
@@ -241,45 +249,26 @@ object GenerateImplicitArgs {
               // We need to refresh the whole binding structure, so we don't have duplicate stuff in the tree.
               // Doing this in a very specialized way here.
               // It annotates the correct concrete types for *this* invocation.
-              val ftpsyms = tparams.map { x => symbols.TypeParam(Name.local(x.name)) }
-              val ftparams = (tparams zip ftpsyms).map { (x, sym) =>
-                val r = source.IdDef(x.name, source.Span.missing)
-                Context.annotate(Annotations.Symbol, r, sym)
-                r
-              }
-              val ftargs = ftpsyms.map { x =>
-                val r = source.TypeRef(source.IdRef(Nil, x.name.name, source.Span.missing), Many(Nil, source.Span.missing), source.Span.missing)
-                Context.annotate(Annotations.Symbol, r, x)
-                r
-              }
-              val fvpsyms = (vparams zip vps).map { (x, t) => symbols.ValueParam(Name.local(x.id.name), Some(t), false, NoSource) }
-              val fvparams = (vparams zip fvpsyms).map { (x, sym) =>
-                val r: source.ValueParam = source.ValueParam(source.IdDef(x.id.name, source.Span.missing),
-                  Some(source.ValueTypeTree(sym.tpe.get, source.Span.missing)), false, source.Span.missing)
-                Context.annotate(Annotations.Symbol, r, sym)
-                Context.annotate(Annotations.Symbol, r.id, sym)
-                r
-              }
-              val fvargs = fvpsyms.map { x =>
-                val r = source.Var(source.IdRef(Nil, x.name.name, source.Span.missing), source.Span.missing)
-                Context.annotate(Annotations.Symbol, r, x)
-                Context.annotate(Annotations.Symbol, r.id, x)
-                source.ValueArg(None, r, source.Span.missing)
-              }
-              val fbpsyms = (bparams zip bps).map { (x, t) => symbols.BlockParam(Name.local(x.id.name), Some(t), x.symbol.capture, false, NoSource) }
-              val fbparams = (bparams zip fbpsyms).map { (x, sym) =>
-                val r: source.BlockParam = source.BlockParam(source.IdDef(x.id.name, source.Span.missing),
-                  Some(source.BlockTypeTree(sym.tpe.get, source.Span.missing)), false, source.Span.missing)
-                Context.annotate(Annotations.Symbol, r, sym)
-                Context.annotate(Annotations.Symbol, r.id, sym)
-                r
-              }
-              val fbargs = fbpsyms.map { x =>
-                val r = source.Var(source.IdRef(Nil, x.name.name, source.Span.missing), source.Span.missing)
-                Context.annotate(Annotations.Symbol, r, x)
-                Context.annotate(Annotations.Symbol, r.id, x)
-                r
-              }
+              val (ftpsyms, ftparams, ftargs) = tparams.map { x =>
+                val sym = symbols.TypeParam(Name.local(x.name))
+                val (p, a) = generateResolvedId(sym)
+                (sym, p,
+                  source.TypeRef(a, Many(Nil, source.Span.missing), source.Span.missing))
+              }.unzip3
+              val (fvpsyms, fvparams, fvargs) = (vparams zip vps).map { (x, t) =>
+                val sym = symbols.ValueParam(Name.local(x.id.name), Some(t), false, NoSource)
+                val (p, a) = generateResolvedId(sym)
+                (sym,
+                  source.ValueParam(p, Some(source.ValueTypeTree(sym.tpe.get, source.Span.missing)), false, source.Span.missing): source.ValueParam,
+                  source.ValueArg(None, source.Var(a, source.Span.missing), source.Span.missing))
+              }.unzip3
+              val (fbsyms, fbparams, fbargs) = (bparams zip bps).map { (x, t) =>
+                val sym = symbols.BlockParam(Name.local(x.id.name), Some(t), x.symbol.capture, false, NoSource)
+                val (p, a) = generateResolvedId(sym)
+                (sym,
+                  source.BlockParam(p, Some(source.BlockTypeTree(sym.tpe.get, source.Span.missing)), false, source.Span.missing): source.BlockParam,
+                  source.Var(a, source.Span.missing))
+              }.unzip3
               val ffn = fn match {
                 case source.IdTarget(id) =>
                   val r = source.IdTarget(source.IdRef(Nil, id.name, source.Span.missing))
