@@ -1,0 +1,42 @@
+def go(x, ks, k) {
+  run tmp = eq(x, 0);
+  if (tmp) {
+    k(0, ks)
+  } else {
+    run tmp = sub(x, 1);
+    go(tmp, ks, k)
+  }
+}
+def main(ks, k) {
+  go(10, ks, k)
+}
+
+/// STATIC_ARGUMENTS
+
+def main(ks, k) {
+  def go_worker(x) {
+    run tmp = eq(x, 0);
+    if (tmp) {
+      k(0, ks)
+    } else {
+      run tmp = sub(x, 1);
+      go_worker(tmp)
+    }
+  }
+  go_worker(10)
+}
+
+/// INLINE
+
+def main(ks, k) {
+  def go_worker(x) {
+    run tmp = eq(x, 0);
+    if (tmp) {
+      k(0, ks)
+    } else {
+      run tmp = sub(x, 1);
+      go_worker(tmp)
+    }
+  }
+  go_worker(10)
+}
