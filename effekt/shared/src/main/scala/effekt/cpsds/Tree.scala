@@ -12,25 +12,7 @@ import effekt.util.messages.INTERNAL_ERROR
 // - be able to represent continuations and metacontinuations
 // - purposefully treat functions, joinpoints and continuations etc the same so the same optimizations apply
 
-sealed trait Tree extends Product {
-  /**
-   * The number of nodes of this tree (used by inlining heuristics)
-   */
-  lazy val size: Int = {
-    var nodeCount = 1
-
-    def all(t: IterableOnce[_]): Unit = t.iterator.foreach(one)
-    def one(obj: Any): Unit = obj match {
-      case t: Tree => nodeCount += t.size
-      case s: effekt.symbols.Symbol => ()
-      case p: Product => all(p.productIterator)
-      case t: Iterable[t] => all(t)
-      case leaf           => ()
-    }
-    this.productIterator.foreach(one)
-    nodeCount
-  }
-}
+sealed trait Tree
 
 /**
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
@@ -553,7 +535,12 @@ object functionUsage {
   }
 }
 
-
+/**
+ * Analyses which functions escape
+ *
+ * Implementation details:
+ * - for simplicity we collect ALL escaping variables, not just functions
+ */
 object escapeAnalysis {
 
   inline def escapes(m: ModuleDecl): Set[Id] = m match {
