@@ -121,7 +121,7 @@ object BlockSinking {
     }
   }
 
-  def transform(stmt: Stmt, pending: Pending)(using ctx: Context): Stmt = stmt match {
+  def transform(stmt: Stmt, pending: Pending)(using ctx: Context): Stmt = rewriting(stmt) {
 
     case Stmt.Def(id, params, body, rest) =>
       transform(rest, pending + (id -> (params, body)))
@@ -142,7 +142,7 @@ object BlockSinking {
 
     case Stmt.Match(scrutinee, clauses, default) =>
       val branchSets: List[Set[Id]] = clauses.map { case (_, cl) => pending.usedIn(cl) } ++
-        default.map(pending.usedIn(_)).toList
+        default.map(pending.usedIn).toList
       val useCounts = branchSets.flatten.groupBy(identity).view.mapValues(_.size)
       val inMultiple = useCounts.collect { case (id, n) if n > 1 => id }.toSet
 
