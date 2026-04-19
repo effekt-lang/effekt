@@ -8,7 +8,7 @@ object Inliner {
   def shouldInline(id: Id, analysis: UsageAnalysis): Boolean =
     (analysis.functions.get(id), analysis.usage.get(id)) match {
       case (Some(info), Some(usage)) =>
-        !info.isRecursive && usage.isUsedOnce && info.externalCalls.size == 1
+        info.recursiveCalls.isEmpty && usage.isUsedOnce
       case _ => false
     }
 
@@ -169,9 +169,9 @@ object Inliner {
   def transform(entrypoint: Id, m: ModuleDecl): ModuleDecl = {
     val analysis = UsageAnalysis(m)
     // Mark the entrypoint and all exports as used so they aren't dropped
-    analysis.usage.getOrElseUpdate(entrypoint, UsageInfo()).references += 1
+    analysis.usage.getOrElseUpdate(entrypoint, UsageInfo()).references += 99
     m.exports.foreach { id =>
-      analysis.usage.getOrElseUpdate(id, UsageInfo()).references += 1
+      analysis.usage.getOrElseUpdate(id, UsageInfo()).references += 99
     }
     m.copy(definitions = m.definitions.flatMap(d => rewrite(d, analysis)))
   }
