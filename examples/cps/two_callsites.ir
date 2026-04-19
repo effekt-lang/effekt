@@ -1,0 +1,33 @@
+def outer(x, ks, k) {
+  run tmp = eq(x, 0);
+  if (tmp) {
+    k(0, ks)
+  } else {
+    run tmp = sub(x, 1);
+    outer(tmp, ks, k)
+  }
+}
+def main(ks2, k2) {
+  def k1(res, ks1) {
+    outer(res, ks1, k2)
+  }
+  outer(10, ks2, k1)
+}
+
+/// SINK_BLOCKS
+
+def main(ks2, k2) {
+  def outer(x, ks, k) {
+    run tmp = eq(x, 0);
+    if (tmp) {
+      k(0, ks)
+    } else {
+      run tmp = sub(x, 1);
+      outer(tmp, ks, k)
+    }
+  }
+  def k1(res, ks1) {
+    outer(res, ks1, k2)
+  }
+  outer(10, ks2, k1)
+}

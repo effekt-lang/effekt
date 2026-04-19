@@ -2,241 +2,237 @@ package effekt
 package cpsds
 
 import core.Id
-import scala.collection.mutable
 
 object BlockSinking {
 
-  /**
-   * Sink toplevel Def definitions into the functions that dominate them
-   * in the call graph, restoring block structure.
-   *
-   * A function g dominated by f in the call graph can be moved into f's body
-   * as a local Stmt.Def. Self-recursive functions can be sunk (the enclosing
-   * Stmt.Def scopes over the body). Mutually recursive siblings (same parent
-   * in the dominator tree) cannot be sunk since our IR has no mutual letrec.
-   *
-   * Children of the virtual root are never sunk — they stay at toplevel.
-   */
-  def transform(entrypoint: Id, m: ModuleDecl): ModuleDecl = {
+  def transform(m: ModuleDecl, main: Id): ModuleDecl = {
+    given ctx: Context = Context(m.uses)
 
-    // Separate Defs from everything else (Vals stay untouched)
-    val (defs, rest) = m.definitions.partition {
-      case _: ToplevelDefinition.Def => true
-      case _ => false
+    val uses = m.uses
+
+    // 1. Compute mutual recursion clusters (SCCs of size > 1)
+    val toplevelIds = uses.keySet
+    val mutuallyRecursive: Set[Id] = {
+      // Simple SCC: f and g are mutually recursive if f ∈ uses(g) and g ∈ uses(f)
+      // We need transitive closure, but uses is already transitively closed at toplevel
+      toplevelIds.filter { id =>
+        val reachable = uses.getOrElse(id, Set.empty) & toplevelIds
+        reachable.exists { other =>
+          other != id && uses.getOrElse(other, Set.empty).contains(id)
+        }
+      }
     }
 
-    val defMap: Map[Id, ToplevelDefinition.Def] = defs.collect {
-      case d: ToplevelDefinition.Def => d.id -> d
+    // 2. Anchors: defs that must stay at toplevel
+    //    - mutually recursive defs
+    //    - exported defs
+    //    - Val definitions (they're not Defs, can't be sunk)
+    val exported = m.exports.toSet
+    val anchors: Set[Id] = Set(main) ++ mutuallyRecursive // ++ exported
+
+    // 3. For each non-anchor toplevel Def, determine which anchors use it.
+    //    "uses" maps definer -> used, so we invert: for each candidate,
+    //    which anchors reference it (transitively)?
+    val candidates = toplevelIds -- anchors
+
+    val usedByAnchor: Map[Id, Set[Id]] = candidates.map { cand =>
+      cand -> anchors.filter { anchor =>
+        uses.getOrElse(anchor, Set.empty).contains(cand)
+      }
     }.toMap
 
-    val defIds: Set[Id] = defMap.keySet
+    // 4. A candidate is sinkable if exactly one anchor uses it
+    val sinkable: Set[Id] = usedByAnchor.collect {
+      case (id, anchors) if anchors.size == 1 => id
+    }.toSet
 
-    // --- Step 1: Build call graph ---
+    // 5. Build pending from sinkable defs
+    val pending: Pending = m.definitions.collect {
+      case ToplevelDefinition.Def(id, params, body) if sinkable.contains(id) =>
+        id -> (params, body)
+    }.toMap
 
-    // Edge from f to g means f's body references g (both are toplevel defs).
-    // Self-edges are excluded since they don't affect dominance.
-    val callSuccs: Map[Id, Set[Id]] = defMap.map { case (id, d) =>
-      val bodyFree = d.body.free -- d.params.toSet
-      id -> (bodyFree.intersect(defIds) - id)
+    // 6. Transform: keep non-sinkable defs and Vals at toplevel,
+    //    each body gets the full pending set and will place what it needs
+    val newDefinitions = m.definitions.flatMap {
+      case ToplevelDefinition.Def(id, params, body) if sinkable.contains(id) =>
+        None // will be sunk
+      case ToplevelDefinition.Def(id, params, body) =>
+        Some(ToplevelDefinition.Def(id, params, transform(body, pending)))
+      case ToplevelDefinition.Val(id, ks, k, binding) =>
+        Some(ToplevelDefinition.Val(id, ks, k, transform(binding, pending)))
     }
 
-    // Virtual root connects to entrypoint, exports, and orphan defs
-    val virtualRoot = Id("__root__")
-    val allReferenced = callSuccs.values.flatten.toSet
-    val rootTargets = Set(entrypoint) ++ (defIds -- allReferenced)
-
-    val succs: Map[Id, Set[Id]] = callSuccs + (virtualRoot -> rootTargets)
-    val allNodes: Set[Id] = defIds + virtualRoot
-
-    // --- Step 2: Compute dominator tree ---
-
-    val preds: Map[Id, Set[Id]] = {
-      val p = mutable.Map.empty[Id, Set[Id]]
-      for ((from, tos) <- succs; to <- tos)
-        p(to) = p.getOrElse(to, Set.empty) + from
-      p.toMap
-    }
-
-    val rpo = reversePostorder(virtualRoot, succs, allNodes)
-    val idom = computeDominators(allNodes.toList, virtualRoot, preds, rpo)
-
-    // dominator tree: parent → list of children
-    val domChildren: Map[Id, List[Id]] = {
-      val dc = mutable.Map.empty[Id, mutable.ListBuffer[Id]]
-      for ((node, parent) <- idom if node != virtualRoot && parent != node)
-        dc.getOrElseUpdate(parent, mutable.ListBuffer.empty) += node
-      dc.map { case (k, v) => k -> v.toList }.toMap
-    }
-
-    // --- Step 3: Determine which defs to sink ---
-
-    // Children of virtualRoot stay at toplevel. Only their descendants can be sunk.
-    val toplevelIds: Set[Id] = domChildren.getOrElse(virtualRoot, Nil).toSet
-
-    /**
-     * For a given parent, determine which of its dominator-tree children
-     * can be sunk into it and which must remain at their current level.
-     *
-     * Mutually recursive siblings (SCC of size > 1 among siblings) cannot
-     * be sunk since our IR doesn't support mutual letrec locally.
-     */
-    def sinkableChildren(parentId: Id): (List[Id], List[Id]) = {
-      val children = domChildren.getOrElse(parentId, Nil)
-      if (children.size <= 1) return (children, Nil)
-
-      // Build subgraph among siblings
-      val siblingSet = children.toSet
-      val siblingSuccs = children.map { c =>
-        c -> callSuccs.getOrElse(c, Set.empty).intersect(siblingSet)
-      }.toMap
-
-      val sccs = tarjanSCC(children, siblingSuccs)
-      val (singles, mutuals) = sccs.partition(_.size == 1)
-      (singles.flatten, mutuals.flatten)
-    }
-
-    /**
-     * Collect all ids that are transitively sunk (removed from toplevel).
-     * Starts from toplevel functions and recurses into their sinkable children.
-     */
-    def collectAllSunk(parentId: Id): Set[Id] = {
-      val (sinkable, _) = sinkableChildren(parentId)
-      sinkable.toSet ++ sinkable.flatMap(collectAllSunk)
-    }
-
-    // Unsinkable children of toplevel functions must be promoted back to toplevel
-    val promotedToToplevel: Set[Id] = toplevelIds.flatMap { tid =>
-      val (_, unsinkable) = sinkableChildren(tid)
-      unsinkable.toSet
-    }
-
-    val sunkIds: Set[Id] = toplevelIds.flatMap(collectAllSunk) -- promotedToToplevel
-
-    // --- Step 4: Rebuild program ---
-
-    /**
-     * Build the body of a function, wrapping it with Stmt.Def for each
-     * sinkable child (in order so that later defs can reference earlier ones).
-     */
-    def buildBody(fnId: Id, originalBody: Stmt): Stmt = {
-      val (sinkable, _) = sinkableChildren(fnId)
-
-      sinkable.foldRight(originalBody) { (childId, rest) =>
-        val childDef = defMap(childId)
-        val childBody = buildBody(childId, childDef.body)
-        Stmt.Def(childId, childDef.params, childBody, rest)
-      }
-    }
-
-    val newDefs = defs.collect {
-      case d: ToplevelDefinition.Def if !sunkIds.contains(d.id) =>
-        ToplevelDefinition.Def(d.id, d.params, buildBody(d.id, d.body))
-    }
-
-    m.copy(definitions = newDefs ++ rest)
+    m.copy(definitions = newDefinitions)
   }
 
-  // --- Dominator computation (Cooper-Harvey-Kennedy) ---
-
-  private def computeDominators(
-    nodes: List[Id],
-    root: Id,
-    preds: Map[Id, Set[Id]],
-    rpo: Map[Id, Int]
-  ): Map[Id, Id] = {
-
-    val idom = mutable.Map.empty[Id, Id]
-    idom(root) = root
-
-    def intersect(b1: Id, b2: Id): Id = {
-      var finger1 = b1
-      var finger2 = b2
-      while (finger1 != finger2) {
-        while (rpo(finger1) > rpo(finger2)) finger1 = idom(finger1)
-        while (rpo(finger2) > rpo(finger1)) finger2 = idom(finger2)
+  case class Context(
+    uses: Map[Id, Set[Id]]
+  ) {
+    def close(ids: Set[Id], pending: Pending): Set[Id] = {
+      var result = ids
+      var worklist = ids
+      while (worklist.nonEmpty) {
+        val next = worklist.flatMap { id =>
+          uses.getOrElse(id, Set.empty).filter(pending.contains)
+        } -- result
+        result = result ++ next
+        worklist = next
       }
-      finger1
+      result
     }
-
-    val ordered = nodes.sortBy(rpo).filterNot(_ == root)
-
-    var changed = true
-    while (changed) {
-      changed = false
-      for (b <- ordered) {
-        val ps = preds.getOrElse(b, Set.empty).filter(idom.contains)
-        if (ps.nonEmpty) {
-          var newIdom = ps.head
-          for (p <- ps.tail if idom.contains(p))
-            newIdom = intersect(p, newIdom)
-          if (!idom.get(b).contains(newIdom)) {
-            idom(b) = newIdom
-            changed = true
-          }
-        }
-      }
-    }
-
-    idom.toMap
   }
 
-  private def reversePostorder(root: Id, succs: Map[Id, Set[Id]], allNodes: Set[Id]): Map[Id, Int] = {
-    val visited = mutable.Set.empty[Id]
-    val order = mutable.ListBuffer.empty[Id]
+  type Pending = Map[Id, (List[Id], Stmt)]
 
-    def dfs(n: Id): Unit = {
-      if (visited.contains(n)) return
-      visited += n
-      for (s <- succs.getOrElse(n, Set.empty)) dfs(s)
-      order.prepend(n)
+  extension (pending: Pending) {
+
+    /** Which pending defs are free in the given tree? */
+    def usedIn(tree: Stmt): Set[Id] =
+      pending.keySet & tree.free
+
+    def usedIn(tree: Expr): Set[Id] =
+      pending.keySet & tree.free
+
+    def usedIn(tree: Clause): Set[Id] =
+      pending.keySet & tree.free
+
+    def usedIn(tree: Operation): Set[Id] =
+      pending.keySet & tree.free
+
+    def usedIn(ids: Set[Id]): Set[Id] =
+      pending.keySet & ids
+
+    /** Remove a set of ids from pending */
+    def without(ids: Set[Id]): Pending =
+      pending -- ids
+
+    /** Only keep the given ids */
+    def only(ids: Set[Id]): Pending =
+      pending.view.filterKeys(ids).toMap
+
+    /**
+     * Partition pending into (emitHere, remaining) given forced ids.
+     * Closes forced under dependencies.
+     */
+    def emit(forced: Set[Id])(using ctx: Context): (Set[Id], Pending) = {
+      val emitHere = ctx.close(forced, pending)
+      (emitHere, pending.without(emitHere))
     }
-
-    dfs(root)
-    for (n <- allNodes if !visited.contains(n)) order.append(n)
-    order.toList.zipWithIndex.toMap
   }
 
-  // --- Tarjan's SCC ---
+  def transform(stmt: Stmt, pending: Pending)(using ctx: Context): Stmt = stmt match {
 
-  private def tarjanSCC(nodes: List[Id], succs: Map[Id, Set[Id]]): List[List[Id]] = {
-    var index = 0
-    val nodeIndex = mutable.Map.empty[Id, Int]
-    val nodeLowlink = mutable.Map.empty[Id, Int]
-    val onStack = mutable.Set.empty[Id]
-    val stack = mutable.Stack.empty[Id]
-    val result = mutable.ListBuffer.empty[List[Id]]
+    case Stmt.Def(id, params, body, rest) =>
+      transform(rest, pending + (id -> (params, body)))
 
-    def strongconnect(v: Id): Unit = {
-      nodeIndex(v) = index
-      nodeLowlink(v) = index
-      index += 1
-      stack.push(v)
-      onStack += v
+    case Stmt.If(cond, thn, els) =>
+      val inBoth = pending.usedIn(thn) & pending.usedIn(els)
+      val (emitHere, remaining) = pending.emit(pending.usedIn(cond) ++ inBoth)
 
-      for (w <- succs.getOrElse(v, Set.empty)) {
-        if (!nodeIndex.contains(w)) {
-          strongconnect(w)
-          nodeLowlink(v) = math.min(nodeLowlink(v), nodeLowlink(w))
-        } else if (onStack.contains(w)) {
-          nodeLowlink(v) = math.min(nodeLowlink(v), nodeIndex(w))
-        }
+      val thnOnly = ctx.close(remaining.usedIn(thn), remaining) -- emitHere
+      val elsOnly = ctx.close(remaining.usedIn(els), remaining) -- emitHere
+
+      val result = Stmt.If(
+        cond,
+        transform(thn, remaining.only(thnOnly)),
+        transform(els, remaining.only(elsOnly))
+      )
+      emitDefs(emitHere, pending, result)
+
+    case Stmt.Match(scrutinee, clauses, default) =>
+      val branchSets: List[Set[Id]] = clauses.map { case (_, cl) => pending.usedIn(cl) } ++
+        default.map(pending.usedIn(_)).toList
+      val useCounts = branchSets.flatten.groupBy(identity).view.mapValues(_.size)
+      val inMultiple = useCounts.collect { case (id, n) if n > 1 => id }.toSet
+
+      val (emitHere, remaining) = pending.emit(pending.usedIn(scrutinee) ++ inMultiple)
+
+      val clauses1 = clauses.map { case (tag, cl) =>
+        val branchNeeds = ctx.close(remaining.usedIn(cl), remaining) -- emitHere
+        (tag, Clause(cl.params, transform(cl.body, remaining.only(branchNeeds))))
       }
-
-      if (nodeLowlink(v) == nodeIndex(v)) {
-        val scc = mutable.ListBuffer.empty[Id]
-        var w = stack.pop()
-        onStack -= w
-        scc += w
-        while (w != v) {
-          w = stack.pop()
-          onStack -= w
-          scc += w
-        }
-        result += scc.toList
+      val default1 = default.map { d =>
+        val branchNeeds = ctx.close(remaining.usedIn(d), remaining) -- emitHere
+        transform(d, remaining.only(branchNeeds))
       }
+      emitDefs(emitHere, pending, Stmt.Match(scrutinee, clauses1, default1))
+
+    case Stmt.Let(id, binding, rest) =>
+      val (emitHere, remaining) = pending.emit(pending.usedIn(binding))
+      emitDefs(emitHere, pending, Stmt.Let(id, binding, transform(rest, remaining)))
+
+    case Stmt.Run(id, callee, args, purity, rest) =>
+      val (emitHere, remaining) = pending.emit(args.foldLeft(pending.usedIn(Set(callee))) {
+        (acc, a) => acc ++ pending.usedIn(a)
+      })
+      emitDefs(emitHere, pending, Stmt.Run(id, callee, args, purity, transform(rest, remaining)))
+
+    case Stmt.New(id, interface, operations, rest) =>
+      val (emitHere, remaining) = pending.emit(operations.foldLeft(Set.empty[Id]) {
+        (acc, op) => acc | pending.usedIn(op)
+      })
+      val ops1 = operations.map(op => Operation(op.name, op.params, transform(op.body, Map.empty)))
+      emitDefs(emitHere, pending, Stmt.New(id, interface, ops1, transform(rest, remaining)))
+
+    case Stmt.Region(id, ks, rest) =>
+      Stmt.Region(id, ks, transform(rest, pending))
+
+    case Stmt.Alloc(id, init, region, rest) =>
+      val (emitHere, remaining) = pending.emit(pending.usedIn(init))
+      emitDefs(emitHere, pending, Stmt.Alloc(id, init, region, transform(rest, remaining)))
+
+    case Stmt.Var(id, init, ks, rest) =>
+      val (emitHere, remaining) = pending.emit(pending.usedIn(init) ++ pending.usedIn(ks))
+      emitDefs(emitHere, pending, Stmt.Var(id, init, ks, transform(rest, remaining)))
+
+    case Stmt.Dealloc(ref, rest) =>
+      val (emitHere, remaining) = pending.emit(pending.usedIn(Set(ref)))
+      emitDefs(emitHere, pending, Stmt.Dealloc(ref, transform(rest, remaining)))
+
+    case Stmt.Get(ref, id, rest) =>
+      val (emitHere, remaining) = pending.emit(pending.usedIn(Set(ref)))
+      emitDefs(emitHere, pending, Stmt.Get(ref, id, transform(rest, remaining)))
+
+    case Stmt.Put(ref, value, rest) =>
+      val (emitHere, remaining) = pending.emit(pending.usedIn(value) ++ pending.usedIn(Set(ref)))
+      emitDefs(emitHere, pending, Stmt.Put(ref, value, transform(rest, remaining)))
+
+    case Stmt.Reset(p, ks, k, body, ks1, k1) =>
+      val (emitHere, remaining) = pending.emit(pending.usedIn(ks1) ++ pending.usedIn(k1))
+      emitDefs(emitHere, pending, Stmt.Reset(p, ks, k, transform(body, remaining), ks1, k1))
+
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+      val (emitHere, remaining) = pending.emit(pending.usedIn(Set(prompt)) ++ pending.usedIn(ks1) ++ pending.usedIn(k1))
+      emitDefs(emitHere, pending, Stmt.Shift(prompt, resume, ks, k, transform(body, remaining), ks1, k1))
+
+    case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
+      val (emitHere, remaining) = pending.emit(pending.usedIn(Set(resumption)) ++ pending.usedIn(ks1) ++ pending.usedIn(k1))
+      emitDefs(emitHere, pending, Stmt.Resume(resumption, ks, k, transform(body, remaining), ks1, k1))
+
+    case Stmt.App(_, _, _) | Stmt.Invoke(_, _, _) | Stmt.Hole(_) =>
+      val (emitHere, _) = pending.emit(pending.usedIn(stmt))
+      emitDefs(emitHere, pending, stmt)
+  }
+
+  def emitDefs(ids: Set[Id], pending: Pending, body: Stmt)(using ctx: Context): Stmt = {
+    if (ids.isEmpty) return body
+    topoSort(ids, pending).foldRight(body) { case (id, rest) =>
+      val (params, defBody) = pending(id)
+      Stmt.Def(id, params, transform(defBody, Map.empty), rest)
     }
+  }
 
-    for (n <- nodes if !nodeIndex.contains(n)) strongconnect(n)
-    result.toList
+  def topoSort(ids: Set[Id], pending: Pending)(using ctx: Context): List[Id] = {
+    var visited = Set.empty[Id]
+    var result = List.empty[Id]
+    def visit(id: Id): Unit = {
+      if (visited.contains(id)) return
+      visited += id
+      (ctx.uses.getOrElse(id, Set.empty) & ids).foreach(visit)
+      result = result :+ id
+    }
+    ids.foreach(visit)
+    result
   }
 }
