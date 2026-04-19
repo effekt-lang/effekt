@@ -1,10 +1,11 @@
 package effekt
 package cpsds
 
-import core.{ Id, ValueType, BlockType, Captures }
+import core.{ BlockType, Captures, Id, ValueType }
 import effekt.source.FeatureFlag
 import effekt.util.messages.ErrorReporter
 import effekt.util.messages.INTERNAL_ERROR
+
 
 // Idea behind this IR:
 // - close to JS
@@ -40,11 +41,18 @@ case class ModuleDecl(
   externs: List[Extern],
   definitions: List[ToplevelDefinition],
   exports: List[Id]
-) extends Tree
+) extends Tree {
+  lazy val uses: Map[Id, Set[Id]] = functionUsage.uses(this)
+  lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
+}
 
 enum ToplevelDefinition {
   case Def(id: Id, params: List[Id], body: Stmt)
   case Val(id: Id, ks: Id, k: Id, binding: Stmt)
+
+  lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
+  lazy val free: Set[Id] = freeVariables.free(this)
+  lazy val uses: Map[Id, Set[Id]] = functionUsage.uses(this)
 }
 
 /**
@@ -132,17 +140,27 @@ enum Stmt extends Tree {
   // Others
   case Hole(span: effekt.source.Span)
 
-  val free: Set[Id] = freeVariables.free(this)
+  lazy val free: Set[Id] = freeVariables.free(this)
+  lazy val uses: Map[Id, Set[Id]] = functionUsage.uses(this)
+  lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
 }
 export Stmt.*
 
 case class Clause(params: List[Id], body: Stmt) extends Tree {
-  val free: Set[Id] = body.free -- params
+  lazy val free: Set[Id] = body.free -- params
+  lazy val uses: Map[Id, Set[Id]] = functionUsage.uses(this)
+  lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
 }
 
 case class Operation(name: Id, params: List[Id], body: Stmt) extends Tree {
-  val free: Set[Id] = body.free -- params
+  lazy val free: Set[Id] = body.free -- params
+  lazy val uses: Map[Id, Set[Id]] = functionUsage.uses(this)
+  lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
 }
+
+inline def rewriting[T <: AnyRef](t: T)(inline run: T => T): T =
+  val res = run(t)
+  if res == t then t else res
 
 
 // ---------- Binding Monad ----------
@@ -212,17 +230,17 @@ object substitutions {
       copy(exprs = exprs - id)
   }
 
-  def substitute(e: Expr)(using subst: Substitution): Expr = e match {
+  def substitute(e: Expr)(using subst: Substitution): Expr = rewriting(e) {
     case Expr.Variable(id) if subst.exprs.isDefinedAt(id) => subst.exprs(id)
-    case Expr.Variable(id) => Expr.Variable(id)
-    case Expr.Literal(value, tpe) => Expr.Literal(value, tpe)
+    case Expr.Variable(id) => e
+    case Expr.Literal(value, tpe) => e
     case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(substitute))
-    case Expr.Abort => Expr.Abort
-    case Expr.Return => Expr.Return
-    case Expr.Toplevel => Expr.Toplevel
+    case Expr.Abort => e
+    case Expr.Return => e
+    case Expr.Toplevel => e
   }
 
-  def substitute(s: Stmt)(using subst: Substitution): Stmt = s match {
+  def substitute(s: Stmt)(using subst: Substitution): Stmt = rewriting(s) {
     case Stmt.Def(id, params, body, rest) =>
       Stmt.Def(id, params,
         substitute(body)(using subst.shadow(id :: params)),
@@ -295,12 +313,12 @@ object substitutions {
     case h: Stmt.Hole => h
   }
 
-  def substitute(op: Operation)(using subst: Substitution): Operation = op match {
+  def substitute(op: Operation)(using subst: Substitution): Operation = rewriting(op) {
     case Operation(name, params, body) =>
       Operation(name, params, substitute(body)(using subst.shadow(params)))
   }
 
-  def substitute(clause: Clause)(using subst: Substitution): Clause = clause match {
+  def substitute(clause: Clause)(using subst: Substitution): Clause = rewriting(clause) {
     case Clause(params, body) =>
       Clause(params, substitute(body)(using subst.shadow(params)))
   }
@@ -312,74 +330,330 @@ object substitutions {
     } getOrElse id
 }
 
+/**
+ * Free variables
+ *
+ * Implementation notes:
+ * - we use .free where possible in order to use the already computed result
+ *   cached on the node itself.
+ * - we mark everything as inline to have the Scala compiler check that we do not
+ *   miss any caches (since inlines cannot be recursive).
+ */
 object freeVariables {
 
-  def free(e: Expr): Set[Id] = e match {
-    case Expr.Variable(id) => Set(id)
-    case Expr.Literal(_, _) => Set.empty
-    case Expr.Make(_, _, vargs) => vargs.flatMap(arg => arg.free).toSet
-    case Expr.Abort => Set.empty
-    case Expr.Return => Set.empty
-    case Expr.Toplevel => Set.empty
+  private inline def all[T](t: IterableOnce[T], inline f: T => Set[Id]): Set[Id] =
+    t.iterator.foldLeft(Set.empty) { case (xs, t) => f(t) ++ xs }
+
+  private inline def free(id: Id): Set[Id] = Set(id)
+  private inline def bound(ids: List[Id]): Set[Id] = ids.toSet
+  private val closed = Set.empty[Id]
+
+  inline def free(e: Expr): Set[Id] = e match {
+    case Expr.Variable(id) => free(id)
+    case Expr.Literal(_, _) => closed
+    case Expr.Make(_, _, vargs) => all(vargs, _.free)
+    case Expr.Abort => closed
+    case Expr.Return => closed
+    case Expr.Toplevel => closed
   }
 
-  def free(s: Stmt): Set[Id] = s match {
+  inline def free(op: Operation): Set[Id] = op match {
+    case Operation(name, params, body) => body.free -- bound(params)
+  }
+
+  inline def free(cl: Clause): Set[Id] = cl match {
+    case Clause(params, body) => body.free -- bound(params)
+  }
+
+  inline def free(toplevel: ToplevelDefinition): Set[Id] = toplevel match {
+    case ToplevelDefinition.Def(id, params, body) => body.free -- bound(params) - id
+    case ToplevelDefinition.Val(id, ks, k, binding) => binding.free - ks - k
+  }
+
+  inline def free(s: Stmt): Set[Id] = s match {
     case Stmt.Def(id, params, body, rest) =>
-      (body.free -- params.toSet - id) ++ (rest.free - id)
+      (body.free -- bound(params) - id) ++ (rest.free - id)
 
     case Stmt.New(id, _, operations, rest) =>
-      val opsFree = operations.flatMap { op =>
-        op.body.free -- op.params.toSet
-      }.toSet
-      opsFree ++ (rest.free - id)
+      all(operations, _.free) ++ (rest.free - id)
 
     case Stmt.Let(id, binding, rest) =>
       binding.free ++ (rest.free - id)
 
     case Stmt.App(id, args, direct) =>
-      Set(id) ++ args.flatMap(_.free)
+      free(id) ++ all(args, _.free)
 
     case Stmt.Invoke(id, _, args) =>
-      Set(id) ++ args.flatMap(_.free)
+      free(id) ++ all(args, _.free)
 
     case Stmt.Run(id, callee, args, _, rest) =>
-      Set(callee) ++ args.flatMap(_.free) ++ (rest.free - id)
+      free(callee) ++ all(args, _.free) ++ (rest.free - id)
 
     case Stmt.If(cond, thn, els) =>
       cond.free ++ thn.free ++ els.free
 
     case Stmt.Match(scrutinee, clauses, default) =>
-      scrutinee.free ++
-        clauses.flatMap { case (_, cl) => cl.body.free -- cl.params.toSet } ++
-        default.map(_.free).getOrElse(Set.empty)
+      scrutinee.free ++ all(clauses, { case (id, cl) => cl.free }) ++ all(default, _.free)
 
     case Stmt.Region(id, ks, rest) =>
       ks.free ++ (rest.free - id)
 
     case Stmt.Alloc(id, init, region, rest) =>
-      init.free + region ++ (rest.free - id)
+      init.free ++ free(region) ++ (rest.free - id)
 
     case Stmt.Var(id, init, ks, rest) =>
       init.free ++ ks.free ++ (rest.free - id)
 
     case Stmt.Dealloc(ref, rest) =>
-      Set(ref) ++ rest.free
+      free(ref) ++ rest.free
 
     case Stmt.Get(ref, id, rest) =>
-      Set(ref) ++ (rest.free - id)
+      free(ref) ++ (rest.free - id)
 
     case Stmt.Put(ref, value, rest) =>
-      Set(ref) ++ value.free ++ rest.free
+      free(ref) ++ value.free ++ rest.free
 
     case Stmt.Reset(p, ks, k, body, ks1, k1) =>
       (body.free - p - ks - k) ++ ks1.free ++ k1.free
 
     case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
-      Set(prompt) ++ (body.free - resume - ks - k) ++ ks1.free ++ k1.free
+      free(prompt) ++ (body.free - resume - ks - k) ++ ks1.free ++ k1.free
 
     case Stmt.Resume(r, ks, k, body, ks1, k1) =>
-      Set(r) ++ (body.free - ks - k) ++ ks1.free ++ k1.free
+      free(r) ++ (body.free - ks - k) ++ ks1.free ++ k1.free
 
-    case Stmt.Hole(_) => Set.empty
+    case Stmt.Hole(_) => closed
   }
+}
+
+/**
+ * Which function refers to which other function?
+ *
+ * Small example:
+ *    def f() { g(h) }; ...
+ *
+ * results in
+ *    f -> {g, h}
+ *
+ * Is computed at every **definition** based on the free variables.
+ * On the toplevel, a fixed point computation is necessary due to mutual recursion.
+ *
+ * The keyset at the toplevel also gives a simple way to get a list of all function
+ * definitions (only their names).
+ *
+ * It also provides the basis to determine whether functions are (mutually) recursive.
+ *
+ * Larger example:
+ *    def outer(x, ks, k) {
+ *      run tmp = eq(x, 0);
+ *      if (tmp) {
+ *        k(0, ks)
+ *      } else {
+ *        run tmp = sub(x, 1);
+ *        outer(tmp, ks, k)
+ *      }
+ *     }
+ *     def main(ks, k) {
+ *       def k1(res, ks) {
+ *         outer(res, ks, k)
+ *       }
+ *       outer(10, ks, k1)
+ *     }
+ *
+ * results in
+ *   outer -> {outer}
+ *   k1 -> {outer}
+ *   main -> {outer}
+ */
+object functionUsage {
+
+  inline def uses(cl: Clause): Map[Id, Set[Id]] = uses(cl.body)
+
+  inline def uses(op: Operation): Map[Id, Set[Id]] = uses(op.body)
+
+  inline def uses(stmt: Stmt): Map[Id, Set[Id]] = stmt match {
+    case Stmt.Def(id, params, body, rest) =>
+      rest.uses + (id -> (body.free -- params))
+    case Stmt.New(id, interface, operations, rest) =>
+      rest.uses ++ operations.flatMap(_.uses) + (id -> operations.foldLeft(Set.empty[Id]) {
+        case (free, op) => free ++ op.free
+      })
+    case Stmt.Let(id, binding, rest) =>
+      rest.uses
+    case Stmt.App(id, args, canBeDirect) =>
+      Map.empty
+    case Stmt.Invoke(id, method, args) =>
+      Map.empty
+    case Stmt.Run(id, callee, args, purity, rest) =>
+      rest.uses
+    case Stmt.If(cond, thn, els) =>
+      thn.uses ++ els.uses
+    case Stmt.Match(scrutinee, clauses, default) =>
+      clauses.foldLeft(default.map(_.uses).getOrElse(Map.empty)) {
+        case (acc, (_, cl)) => acc ++ cl.uses
+      }
+    case Stmt.Region(id, ks, rest) =>
+      rest.uses
+    case Stmt.Alloc(id, init, region, rest) =>
+      rest.uses
+    case Stmt.Var(id, init, ks, rest) =>
+      rest.uses
+    case Stmt.Dealloc(ref, rest) =>
+      rest.uses
+    case Stmt.Get(ref, id, rest) =>
+      rest.uses
+    case Stmt.Put(ref, value, rest) =>
+      rest.uses
+    case Stmt.Reset(p, ks, k, body, ks1, k1) =>
+      body.uses
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+      body.uses
+    case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
+      body.uses
+    case Stmt.Hole(span) =>
+      Map.empty
+  }
+
+  // Warning: this info is not accurate since we need to compute the fixed point on the toplevel
+  inline def uses(toplevel: ToplevelDefinition): Map[Id, Set[Id]] = toplevel match {
+    case ToplevelDefinition.Def(id, params, body) =>
+      body.uses + (id -> (body.free -- params))
+    case ToplevelDefinition.Val(id, ks, k, binding) =>
+      binding.uses
+  }
+
+  def uses(m: ModuleDecl): Map[Id, Set[Id]] = {
+    val definedIds = m.definitions.collect {
+      case ToplevelDefinition.Def(id, _, _) => id
+    }.toSet
+
+    // Collect direct uses from all toplevel definitions
+    val direct: Map[Id, Set[Id]] = m.definitions.flatMap(_.uses).toMap
+
+    // Filter to only keep references that are definitions themselves
+    val filtered: Map[Id, Set[Id]] = direct.view.mapValues(_ & direct.keySet).toMap
+
+    // Compute transitive closure for toplevel Defs only
+    var current = filtered
+    var changed = true
+    while (changed) {
+      changed = false
+      current = current.map { case (id, refs) =>
+        if (!definedIds.contains(id)) id -> refs
+        else {
+          val expanded = refs.foldLeft(refs) { case (acc, r) =>
+            acc ++ current.getOrElse(r, Set.empty)
+          }
+          if (expanded.size != refs.size) changed = true
+          id -> expanded
+        }
+      }
+    }
+    current
+  }
+}
+
+
+object escapeAnalysis {
+
+  inline def escapes(m: ModuleDecl): Set[Id] = m match {
+    case ModuleDecl(includes, declarations, externs, definitions, exports) =>
+      definitions.flatMap(escapes).toSet
+  }
+
+  // All free variables of an object escape
+  inline def escapes(op: Operation): Set[Id] = op match {
+    case Operation(name, params, body) =>
+      body.escapes ++ (body.free -- params)
+  }
+
+  inline def escapes(cl: Clause): Set[Id] = cl match {
+    case Clause(params, body) => body.escapes
+  }
+
+  inline def escapes(stmt: Stmt): Set[Id] = stmt match {
+
+    // Free variables of a def escape if the definition itself
+    // escapes.
+    case Stmt.Def(id, params, body, rest) =>
+      val both = body.escapes ++ rest.escapes
+      if (both contains id) {
+        (body.free -- params) ++ both
+      } else both
+
+    case Stmt.New(id, interface, operations, rest) =>
+      operations.foldLeft(rest.escapes) { case (acc, op) => acc ++ op.escapes }
+
+    case Stmt.Let(id, binding, rest) =>
+      rest.escapes ++ binding.free
+
+    // callee does NOT escape
+    case Stmt.App(id, args, canBeDirect) =>
+      args.flatMap(_.free).toSet
+
+    case Stmt.Invoke(id, method, args) =>
+      args.flatMap(_.free).toSet
+
+    // This is the essence of async computation: we need to reify the continuation
+    case Stmt.Run(id, callee, args, Purity.Async, rest) =>
+      rest.free ++ rest.escapes ++ args.flatMap(_.free)
+
+    case Stmt.Run(id, callee, args, purity, rest) =>
+      rest.escapes ++ args.flatMap(_.free)
+
+    case Stmt.If(cond, thn, els) =>
+      cond.free ++ thn.escapes ++ els.escapes
+
+    case Stmt.Match(scrutinee, clauses, default) =>
+      scrutinee.free ++ clauses.flatMap { case (id, cl) => cl.escapes } ++ default.map(_.escapes).getOrElse(Set.empty)
+
+    case Stmt.Region(id, ks, rest) => rest.escapes
+    case Stmt.Alloc(id, init, region, rest) => init.free ++ rest.escapes
+    case Stmt.Var(id, init, ks, rest) => init.free ++ rest.escapes
+    case Stmt.Dealloc(ref, rest) => rest.escapes
+    case Stmt.Get(ref, id, rest) => rest.escapes
+    case Stmt.Put(ref, value, rest) => value.free ++ rest.escapes
+
+    case Stmt.Reset(p, ks, k, body, ks1, k1) =>
+      ks1.free ++ k1.free ++ body.escapes ++ body.free
+
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+      ks1.free ++ k1.free ++ body.escapes ++ body.free
+
+    case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
+      ks1.free ++ k1.free ++ body.escapes ++ body.free
+
+    case Stmt.Hole(span) => Set.empty
+  }
+
+  inline def escapes(toplevel: ToplevelDefinition): Set[Id] = toplevel match {
+    // We mark toplevel definitions as escaping
+    case ToplevelDefinition.Def(id, params, body) =>
+      Set(id) ++ body.escapes
+    case ToplevelDefinition.Val(id, ks, k, binding) =>
+      binding.escapes
+  }
+}
+
+//   def f(x, h) {
+//     g(x, 1)
+//     g(x, 4)
+//     h(3)
+//   }
+// results in
+//   g -> ({x}, {1, 4})
+//   h -> ({3})
+object functionCalls {
+
+}
+
+//   def f(x, y) {
+//     g(x, 1)
+//     g(x, 4)
+//   }
+// results in
+//   f -> Def(params, body)
+// could be extended to values as well for other analyses
+object definitions {
+
 }
