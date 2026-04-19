@@ -1,0 +1,88 @@
+def even(x, ks, k) {
+  run tmp = eq(x, 0);
+  if (tmp) {
+    k(0, ks)
+  } else {
+    run tmp = sub(x, 1);
+    odd(tmp, ks, k)
+  }
+}
+def odd(x, ks, k) {
+  run tmp = eq(x, 0);
+  if (tmp) {
+    k(0, ks)
+  } else {
+    run tmp = sub(x, 1);
+    even(tmp, ks, k)
+  }
+}
+def main(ks, k) {
+  even(10, ks, k)
+}
+
+/// SINK_BLOCKS
+// since they are mutually recursive, the two are not sunk
+
+def even(x, ks, k) {
+  run tmp = eq(x, 0);
+  if (tmp) {
+    k(0, ks)
+  } else {
+    run tmp = sub(x, 1);
+    odd(tmp, ks, k)
+  }
+}
+def odd(x, ks, k) {
+  run tmp = eq(x, 0);
+  if (tmp) {
+    k(0, ks)
+  } else {
+    run tmp = sub(x, 1);
+    even(tmp, ks, k)
+  }
+}
+def main(ks, k) {
+  even(10, ks, k)
+}
+
+/// INLINE
+def even(x, ks, k) {
+  run tmp = eq(x, 0);
+  if (tmp) {
+    k(0, ks)
+  } else {
+    run tmp_1 = sub(x, 1);
+    run tmp_2 = eq(tmp_1, 0);
+    if (tmp_2) {
+      k(0, ks)
+    } else {
+      run tmp_3 = sub(tmp_2, 1);
+      even(tmp_3, ks, k)
+    }
+  }
+};
+def main(ks, k) {
+  even(10, ks, k)
+}
+
+/// SINK_BLOCKS
+// after inlining, we can now sink even
+
+def main(ks_1, k_2) {
+  def even(x_4, ks_5, k_6) {
+    run tmp = eq(x_4, 0);
+    if (tmp) {
+      k_6(0, ks_5)
+    } else {
+      run tmp_8 = sub(x_4, 1);
+      run tmp_9 = eq(tmp_8, 0);
+      if (tmp_9) {
+        k_6(0, ks_5)
+      } else {
+        run tmp_10 = sub(tmp_9, 1);
+        even(tmp_10, ks_5, k_6)
+      }
+    }
+  }
+  even(10, ks_5, k_6)
+}
