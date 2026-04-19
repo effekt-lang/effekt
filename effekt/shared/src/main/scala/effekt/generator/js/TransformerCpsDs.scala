@@ -44,7 +44,7 @@ object TransformerCpsDs extends Transformer {
 
   def computeKinds(m: cpsds.ModuleDecl): Map[Id, FunctionKind] = {
     val analysis = cpsds.UsageAnalysis(m)
-    val escape = cpsds.EscapeAnalysis(m)
+    val escape = cpsds.escapeAnalysis.escapes(m)
     val kinds = mutable.Map.empty[Id, FunctionKind]
     analysis.functions.foreach { case (id, info) =>
       kinds(id) = FunctionKind(
@@ -106,7 +106,7 @@ object TransformerCpsDs extends Transformer {
         given ctx: TransformerContext = TransformerContext(
           externs.collect { case d: cpsds.Extern.Def => (d.id, d) }.toMap,
           computeKinds(module),
-          cpsds.EscapeAnalysis(module),
+          cpsds.escapeAnalysis.escapes(module),
           Set.empty,
           Map.empty,
           Set.empty,

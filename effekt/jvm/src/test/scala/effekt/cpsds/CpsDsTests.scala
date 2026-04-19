@@ -126,10 +126,7 @@ class CpsDsTests extends munit.FunSuite {
 
     tests.zipWithIndex.foreach { case (PassTest(pass, input, expected), idx) =>
       test(s"$filename step ${idx + 1}: $pass") {
-        // make sure all ids are globally unique!
-        val renamer = new TestRenamer
-        val unique = renamer(input)
-        val obtained = runPass(pass, unique)
+        val obtained = runPass(pass, input)
         assertAlphaEquivalent(obtained, expected,
           s"$filename step ${idx + 1} ($pass) produced unexpected result")
       }

@@ -31,8 +31,6 @@ object BlockSinking {
 
     val defIds: Set[Id] = defMap.keySet
 
-    if (defIds.isEmpty) return m
-
     // --- Step 1: Build call graph ---
 
     // Edge from f to g means f's body references g (both are toplevel defs).
@@ -45,8 +43,7 @@ object BlockSinking {
     // Virtual root connects to entrypoint, exports, and orphan defs
     val virtualRoot = Id("__root__")
     val allReferenced = callSuccs.values.flatten.toSet
-    val rootTargets = (Set(entrypoint) ++ m.exports.toSet ++ (defIds -- allReferenced))
-      .intersect(defIds)
+    val rootTargets = Set(entrypoint) ++ (defIds -- allReferenced)
 
     val succs: Map[Id, Set[Id]] = callSuccs + (virtualRoot -> rootTargets)
     val allNodes: Set[Id] = defIds + virtualRoot

@@ -110,7 +110,7 @@ object Simplifier {
   // --- Entry point ---
 
   def transform(m: ModuleDecl): ModuleDecl = {
-    val escaping = EscapeAnalysis(m)
+    val escaping = escapeAnalysis.escapes(m)
     m.copy(definitions = m.definitions.map(d => rewrite(d, escaping)))
   }
 }
