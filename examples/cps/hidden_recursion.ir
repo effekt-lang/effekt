@@ -1,0 +1,17 @@
+def rec(n, self) {
+  self(n, self)
+}
+def main() {
+  // here is exactly one call, but we also refer to rec a second time
+  rec(10, rec)
+}
+
+/// INLINE
+// Should not do anything
+
+def rec(n, self) {
+  self(n, self)
+}
+def main() {
+  rec(10, rec)
+}

@@ -1,0 +1,14 @@
+def foo(x, ks, k) {
+  k(x, ks)
+}
+def main(ks, k) {
+  let x = 10;
+  foo(x, ks, k)
+}
+
+/// INLINE
+def main(ks, k) {
+  // the let binding x = 10 should be inlined below:
+  k(10, ks)
+}
+
