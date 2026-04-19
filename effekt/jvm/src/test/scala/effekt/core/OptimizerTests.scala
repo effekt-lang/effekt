@@ -108,8 +108,8 @@ class OptimizerTests extends CoreTests {
   test("drop pure let expressions"){
     val input =
       """ def main = { () =>
-        |   let x = (add : (Int, Int) => Int @ {})(1, 2)
-        |   let ! y = (println: (String) => Unit @ {io})("hello")
+        |   let ! x = (add : (Int, Int) => Int @ {})(1, 2)
+        |   let !! y = (println: (String) => Unit @ {io})("hello")
         |   let z = 7
         |   return z:Int
         | }

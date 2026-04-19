@@ -72,6 +72,8 @@ class EffektLexers extends Parsers {
   lazy val `<>` = literal("<>")
   lazy val `<{` = literal("<{")
   lazy val `}>` = literal("}>")
+  lazy val `!!!` = literal("!!!")
+  lazy val `!!` = literal("!!")
   lazy val `!` = literal("!")
   lazy val `|` = literal("|")
   lazy val `++` = literal("++")
@@ -415,9 +417,17 @@ class CoreParsers(names: Names) extends EffektLexers {
     )
 
   lazy val stmts: P[Stmt] =
-    ( (`let` ~ `!` ~/> id) ~ (`=` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ~ stmts ^^ {
+    ( (`let` ~ `!!!` ~/> id) ~ (`=` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ~ stmts ^^ {
+        case (name ~ callee ~ targs ~ vargs ~ bargs ~ body) =>
+          ExternApp(name, Purity.Async, callee, targs, vargs, bargs, body)
+      }
+    | (`let` ~ `!!` ~/> id) ~ (`=` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ~ stmts ^^ {
         case (name ~ callee ~ targs ~ vargs ~ bargs ~ body) =>
           ExternApp(name, Purity.Impure, callee, targs, vargs, bargs, body)
+      }
+    | (`let` ~ `!` ~/> id) ~ (`=` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ~ stmts ^^ {
+        case (name ~ callee ~ targs ~ vargs ~ bargs ~ body) =>
+          ExternApp(name, Purity.Pure, callee, targs, vargs, bargs, body)
       }
     | `let` ~/> id ~ (`=` ~/> expr) ~ stmts ^^ {
       case (name ~ binding ~ body) =>
