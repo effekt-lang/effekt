@@ -12,7 +12,8 @@ class TestRenamer {
   private def freshIdFor(id: Id): Id = {
     val n = counter
     counter += 1
-    Id(id.name.name, n)
+    val baseName = id.name.name.replaceAll("(_\\d+)+$", "")
+    Id(baseName, n)
   }
 
   private def withBindings[R](ids: List[Id])(f: => R): R = {
