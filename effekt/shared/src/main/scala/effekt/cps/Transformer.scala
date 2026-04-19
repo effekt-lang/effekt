@@ -73,6 +73,11 @@ object Transformer {
     case core.Stmt.Let(id, core.Expr.ValueVar(x, _), body) =>
       binding(id, C.lookupValue(x)) { transform(body, ks, k) }
 
+    case core.Stmt.ExternApp(id, core.Async, callee, _, vargs, bargs, body) =>
+      App(transform(callee), vargs.map(transform), bargs.map(transform), MetaCont(ks), Continuation.Static(id) { (value, ks) =>
+        binding(id, value) { transform(body, ks, k) }
+      }.reifyAt(stmt.tpe))
+
     case core.Stmt.ExternApp(id, purity, b, targs, vargs, bargs, body) =>
       transform(b) match {
         case Block.BlockVar(f) =>
