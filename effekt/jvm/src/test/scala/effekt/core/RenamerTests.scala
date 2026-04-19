@@ -77,7 +77,7 @@ class RenamerTests extends CoreTests {
       """module main
         |
         |def foo = { () =>
-        |  return (bar: (Int) => Int @ {})(baz:Int)
+        |  (bar: (Int) => Int @ {})(baz:Int)
         |}
         |""".stripMargin
     assertRenamingPreservesAlpha(code)
@@ -102,7 +102,7 @@ class RenamerTests extends CoreTests {
       """module main
         |
         |def foo = { () =>
-        |  var x @ global = (foo:(Int)=>Int@{})(4) ;
+        |  var x @ global = 4 ;
         |  return x:Int
         |}
         |""".stripMargin

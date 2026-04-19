@@ -241,9 +241,9 @@ class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) ext
 
     case ExternApp(id, purity, callee, targs, vargs, bargs, rest) =>
       val purityKeyword = purity match {
-        case core.Pure => "let"
-        case core.Impure => "let !"
-        case core.Async => "let ?"
+        case core.Pure => "let !"
+        case core.Impure => "let !!"
+        case core.Async => "let !!!"
       }
       purityKeyword <+> toDoc(id) <+> "=" <+> toDoc(callee) <> argsToDoc(targs, vargs, bargs) <> line <>
         toDocStmts(rest)
