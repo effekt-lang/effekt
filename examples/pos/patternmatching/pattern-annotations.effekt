@@ -18,6 +18,11 @@ def ex5(opt: Option[Bool]) = {
   x
 }
 
+def ex6(str: String) = str match {
+  case "hello" => "world"
+  case s: String => s
+}
+
 def main() = {
   println(ex1([1, 2]))
   println(ex1([]))
@@ -31,4 +36,7 @@ def main() = {
   println("---")
   println(ex5(Some(true)))
   println(ex5(None()))
+  println("---")
+  println(ex6("hello"))
+  println(ex6("test"))
 }
