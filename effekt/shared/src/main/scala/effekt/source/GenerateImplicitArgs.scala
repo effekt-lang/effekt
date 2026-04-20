@@ -276,6 +276,7 @@ object GenerateImplicitArgs {
                     id.symbol match {
                       case symbols.CallTarget(syms, impls) =>
                         symbols.CallTarget(syms, impls) // needs to be refreshed for recursive uses
+                      case x => x
                     })
                   r
                 case _ => Context.panic("Implicit block argument should be an (eta-expanded) name, not an expression")
