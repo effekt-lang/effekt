@@ -68,28 +68,26 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
 
   // Top-level items may be mutually recursive. This means that a bound occurrence may precede its binding.
   // We use a separate pass to collect all top-level ids, so that we can distinguish them from free variables.
-  override def id: PartialFunction[core.Id, core.Id] = {
-    case id =>
-      if (builtins.isCoreBuiltin(id)) {
-        // builtin, do not rename
-        id
-      } else {
-        scopes.collectFirst {
-          // locally bound variable
-          case bnds if bnds.contains(id) => bnds(id)
-        }.getOrElse {
-          if (toplevelScope.contains(id)) {
-            // id references a top-level item
-            toplevelScope(id)
-          } else {
-            // free variable, do not rename
-            id
-          }
+  override def rewrite(id: Id) =
+    if (builtins.isCoreBuiltin(id)) {
+      // builtin, do not rename
+      id
+    } else {
+      scopes.collectFirst {
+        // locally bound variable
+        case bnds if bnds.contains(id) => bnds(id)
+      }.getOrElse {
+        if (toplevelScope.contains(id)) {
+          // id references a top-level item
+          toplevelScope(id)
+        } else {
+          // free variable, do not rename
+          id
         }
       }
-  }
+    }
 
-  override def stmt: PartialFunction[Stmt, Stmt] = {
+  override def rewrite(stmt: Stmt): Stmt = stmt match {
     case core.Def(id, block, body) =>
       // can be recursive
       withBinding(id) { core.Def(rewrite(id), rewrite(block), rewrite(body)) }
@@ -127,9 +125,11 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
     case core.Shift(p, k, body) =>
       val resolvedPrompt = rewrite(p)
       withBinding(k.id) { core.Shift(resolvedPrompt, rewrite(k), rewrite(body)) }
+
+    case other => super.rewrite(other)
   }
 
-  override def block: PartialFunction[Block, Block] = {
+  override def rewrite(b: BlockLit): BlockLit = b match {
     case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
       withBindings(tparams ++ cparams ++ vparams.map(_.id) ++ bparams.map(_.id)) {
         Block.BlockLit(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite,
@@ -182,7 +182,7 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
     case Template(strings, args) => Template(strings, args map rewrite)
   }
 
-  override def rewrite(e: Extern) = e match {
+  override def rewrite(e: Extern): Extern = e match {
     case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => {
       // We don't use withBinding(id) here, because top-level ids are pre-collected.
       withBindings(tparams ++ cparams ++ vparams.map(_.id) ++ bparams.map(_.id)) {
@@ -213,7 +213,7 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
     }
   }
 
-  override def rewrite(c: Constructor) = c match {
+  override def rewrite(c: Constructor): Constructor = c match {
     case Constructor(id, tparams, fields) =>
       // We don't use withBinding(id) here, because top-level ids are pre-collected.
       withBindings(tparams) {
@@ -221,12 +221,12 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
       }
   }
 
-  override def rewrite(p: Property) = p match {
+  override def rewrite(p: Property): Property = p match {
     // We don't use withBinding here, because top-level ids are pre-collected.
     case Property(id: Id, tpe: BlockType) => Property(rewrite(id), rewrite(tpe))
   }
 
-  override def rewrite(f: Field) = f match {
+  override def rewrite(f: Field): Field = f match {
     // We don't use withBinding here, because top-level ids are pre-collected.
     case Field(id, tpe) => Field(rewrite(id), rewrite(tpe))
   }
@@ -240,7 +240,7 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
       BlockType.Interface(rewrite(name), targs map rewrite)
   }
 
-  override def rewrite(b: BlockType.Interface) = b match {
+  override def rewrite(b: BlockType.Interface): BlockType.Interface = b match {
     case BlockType.Interface(name, targs) =>
       BlockType.Interface(rewrite(name), targs map rewrite)
   }
