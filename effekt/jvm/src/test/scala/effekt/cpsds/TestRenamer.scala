@@ -6,7 +6,6 @@ import effekt.core.Id
 class TestRenamer {
 
   private var scopes: List[Map[Id, Id]] = List.empty
-  private var toplevelScope: Map[Id, Id] = Map.empty
   private var counter: Int = 0
 
   private def freshIdFor(id: Id): Id = {
@@ -27,14 +26,10 @@ class TestRenamer {
 
   private def withBinding[R](id: Id)(f: => R): R = withBindings(List(id))(f)
 
-  private def resolveId(id: Id): Id = {
+  private def resolveId(id: Id): Id =
     scopes.collectFirst {
-      case bnds if bnds.contains(id) => bnds(id)
-    }.getOrElse {
-      if toplevelScope.contains(id) then toplevelScope(id)
-      else id
-    }
-  }
+      case bindings if bindings.contains(id) => bindings(id)
+    }.getOrElse { id }
 
   // --- Rewrite ---
 
@@ -164,33 +159,35 @@ class TestRenamer {
 
   def rewrite(d: ToplevelDefinition): ToplevelDefinition = d match {
     case ToplevelDefinition.Def(id, params, body) =>
+      // id is renamed by refreshToplevel
+      val newId = rewrite(id)
       withBindings(params) {
-        ToplevelDefinition.Def(rewrite(id), params.map(rewrite), rewrite(body))
+        ToplevelDefinition.Def(newId, params.map(rewrite), rewrite(body))
       }
 
     case ToplevelDefinition.Val(id, ks, k, binding) =>
+      // id is renamed by refreshToplevel
+      val newId = rewrite(id)
       withBindings(List(ks, k)) {
-        ToplevelDefinition.Val(rewrite(id), rewrite(ks), rewrite(k), rewrite(binding))
+        ToplevelDefinition.Val(newId, rewrite(ks), rewrite(k), rewrite(binding))
       }
   }
 
-  private def collectToplevelIds(m: ModuleDecl): List[Id] =
+  private def refreshToplevel(m: ModuleDecl): Map[Id, Id] =
     m.definitions.map {
-      case ToplevelDefinition.Def(id, _, _) => id
-      case ToplevelDefinition.Val(id, _, _, _) => id
-    }
+      case ToplevelDefinition.Def(id, _, _) => (id -> freshIdFor(id))
+      case ToplevelDefinition.Val(id, _, _, _) => (id -> freshIdFor(id))
+    }.toMap
 
   def apply(m: ModuleDecl): ModuleDecl = {
     counter = 0
-    scopes = List.empty
-    toplevelScope = collectToplevelIds(m).map(id => id -> freshIdFor(id)).toMap
+    scopes = List(refreshToplevel(m))
     m.copy(definitions = m.definitions.map(rewrite))
   }
 
   def apply(s: Stmt): Stmt = {
     counter = 0
     scopes = List.empty
-    toplevelScope = Map.empty
     rewrite(s)
   }
 }

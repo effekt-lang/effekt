@@ -22,11 +22,11 @@ class CpsDsTests extends munit.FunSuite {
   def examplesDir = new File("examples") / "cps"
 
   val defaultNames = Map(
-    "main" -> Id("main"),
-    "add"  -> Id("add"),
-    "sub"  -> Id("sub"),
-    "eq"  -> Id("eq"),
-    "println"  -> Id("println")
+    "main" -> Id("main", -1),
+    "add"  -> Id("add", -2),
+    "sub"  -> Id("sub", -3),
+    "eq"  -> Id("eq", -4),
+    "println"  -> Id("println", -5)
   )
 
   def parse(input: String, nickname: String = "input")(using Location): ModuleDecl = {
@@ -126,8 +126,11 @@ class CpsDsTests extends munit.FunSuite {
 
     tests.zipWithIndex.foreach { case (PassTest(pass, input, expected), idx) =>
       test(s"$filename step ${idx + 1}: $pass") {
-        val obtained = runPass(pass, input)
-        assertAlphaEquivalent(obtained, expected,
+        val renamer = new TestRenamer()
+        val renamedInput = renamer(input)
+        val renamedExpected = renamer(expected)
+        val obtained = runPass(pass, renamedInput)
+        assertAlphaEquivalent(obtained, renamedExpected,
           s"$filename step ${idx + 1} ($pass) produced unexpected result")
       }
     }
