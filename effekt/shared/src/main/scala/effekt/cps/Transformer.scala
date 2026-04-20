@@ -73,10 +73,15 @@ object Transformer {
     case core.Stmt.Let(id, core.Expr.ValueVar(x, _), body) =>
       binding(id, C.lookupValue(x)) { transform(body, ks, k) }
 
-    case core.Stmt.ImpureApp(id, b, targs, vargs, bargs, body) =>
+    case core.Stmt.ExternApp(id, core.Async, callee, _, vargs, bargs, body) =>
+      App(transform(callee), vargs.map(transform), bargs.map(transform), MetaCont(ks), Continuation.Static(id) { (value, ks) =>
+        binding(id, value) { transform(body, ks, k) }
+      }.reifyAt(stmt.tpe))
+
+    case core.Stmt.ExternApp(id, purity, b, targs, vargs, bargs, body) =>
       transform(b) match {
         case Block.BlockVar(f) =>
-          ImpureApp(id, f, vargs.map(transform), bargs.map(transform),
+          ExternApp(id, purity, f, vargs.map(transform), bargs.map(transform),
             transform(body, ks, k))
         case _ => sys error "Should not happen"
       }
@@ -190,10 +195,6 @@ object Transformer {
   def transform(pure: core.Expr)(using C: TransformationContext): Expr = pure match {
     case core.Expr.ValueVar(id, annotatedType) => C.lookupValue(id)
     case core.Expr.Literal(value, annotatedType) => Literal(value, annotatedType)
-    case core.Expr.PureApp(b, targs, vargs) => transform(b) match {
-      case Block.BlockVar(id) => PureApp(id, vargs.map(transform))
-      case _ => sys error "Should not happen"
-    }
     case core.Expr.Make(data, tag, targs, vargs) => Make(data, tag, vargs.map(transform))
     case core.Expr.Box(b, annotatedCapture) => Box(transform(b))
   }

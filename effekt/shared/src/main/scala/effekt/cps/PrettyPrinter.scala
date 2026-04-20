@@ -60,7 +60,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Expr.Literal((), core.Type.TUnit) => "()"
     case Expr.Literal(s: String, core.Type.TString) => "\"" + s + "\""
     case Expr.Literal(value, _) => value.toString // TODO this should match on the actual types...
-    case Expr.PureApp(id, vargs) => toDoc(id) <> argsToDoc(vargs, Nil)
     case Expr.Make(data, tag, vargs) => "make" <+> toDoc(data.name) <+> toDoc(tag) <> argsToDoc(vargs, Nil)
     case Expr.Box(b) => parens("box" <+> toDoc(b))
   }
@@ -116,9 +115,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
         toDoc(body)
 
-    case Stmt.ImpureApp(id, callee, vargs, bargs, body) =>
+    case Stmt.ExternApp(id, core.Purity.Impure, callee, vargs, bargs, body) =>
       "let!" <+> toDoc(id) <+> "=" <+> toDoc(callee) <> argsToDoc(vargs, bargs) <> line <>
         toDoc(body)
+
+    case Stmt.ExternApp(id, core.Purity.Pure, _, vargs, _, _) => toDoc(id) <> argsToDoc(vargs, Nil)
+
+    case Stmt.ExternApp(id, core.Purity.Async, _, vargs, _, _) => ??? // FIXME EXTERNAPP
 
     case Stmt.Region(id, ks, body) =>
       "region" <+> toDoc(id) <+> "@" <+> toDoc(ks) <+> block(toDoc(body))
