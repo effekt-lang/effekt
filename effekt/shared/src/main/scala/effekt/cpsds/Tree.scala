@@ -26,6 +26,7 @@ case class ModuleDecl(
 ) extends Tree {
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
+  lazy val refs: DB[Int] = references.refs(this)
 }
 
 enum ToplevelDefinition {
@@ -35,6 +36,7 @@ enum ToplevelDefinition {
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
   lazy val free: Set[Id] = freeVariables.free(this)
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
+  lazy val refs: DB[Int] = references.refs(this)
 }
 
 /**
@@ -126,6 +128,7 @@ enum Stmt extends Tree {
   lazy val free: Set[Id] = freeVariables.free(this)
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
+  lazy val refs: DB[Int] = references.refs(this)
 }
 export Stmt.*
 
@@ -133,12 +136,14 @@ case class Clause(params: List[Id], body: Stmt) extends Tree {
   lazy val free: Set[Id] = body.free -- params
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
+  lazy val refs: DB[Int] = references.refs(this)
 }
 
 case class Operation(name: Id, params: List[Id], body: Stmt) extends Tree {
   lazy val free: Set[Id] = body.free -- params
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
+  lazy val refs: DB[Int] = references.refs(this)
 }
 
 inline def rewriting[T <: AnyRef](t: T)(inline run: T => T): T =
@@ -449,7 +454,11 @@ object freeVariables {
  *   main -> {outer}
  */
 object functionUsage {
-  // since every function should be only added ONCE we can simply concatenate the DBs
+  extension (db: DB[Set[Id]]) {
+    // since every function should be only added ONCE we can simply concatenate the DBs
+    private def ++(other: DB[Set[Id]]): DB[Set[Id]] = db.unionWith(other, (l, r) => r)
+  }
+
   private inline def all[T](t: Iterable[T], inline f: T => DB[Set[Id]]): DB[Set[Id]] =
     t.foldLeft(DB.empty[Set[Id]]) { case (acc, t) => acc ++ f(t) }
 
@@ -630,14 +639,29 @@ object escapeAnalysis {
  */
 object references {
 
-  // TODO this might be way to inefficient
+  extension (db: DB[Int]) {
+    private def ++(other: DB[Int]): DB[Int] = db.unionWith(other, _ + _)
+  }
+
+  // TODO this might be way too inefficient
   private inline def all[T](terms: Iterable[T], inline run: T => DB[Int]): DB[Int] =
     terms.foldLeft(DB.empty[Int]) { (acc, t) =>
       acc.unionWith(run(t), _ + _)
     }
 
+  // TODO externs and splices
+  inline def refs(m: ModuleDecl): DB[Int] = m match {
+    case ModuleDecl(includes, declarations, externs, definitions, exports) =>
+      all(definitions, _.refs)
+  }
+
+  inline def refs(t: ToplevelDefinition): DB[Int] = t match {
+    case ToplevelDefinition.Def(id, params, body) => body.refs
+    case ToplevelDefinition.Val(id, ks, k, binding) => binding.refs
+  }
+
   inline def refs(expr: Expr): DB[Int] = expr match {
-    case Expr.Variable(id) => DB(id,  1)
+    case Expr.Variable(id) => DB(id, 1)
     case Expr.Literal(value, tpe) => DB.empty
     case Expr.Make(data, tag, args) => all(args, _.refs)
     case Expr.Abort => DB.empty
@@ -645,26 +669,35 @@ object references {
     case Expr.Toplevel => DB.empty
   }
 
+  private inline def use(id: Id): DB[Int] = DB(id, 1)
+
   inline def refs(stmt: Stmt): DB[Int] = stmt match {
-    case Stmt.Def(id, params, body, rest) => ???
-    case Stmt.New(id, interface, operations, rest) => ???
-    case Stmt.Let(id, binding, rest) => ???
-    case Stmt.App(id, args, canBeDirect) => ???
-    case Stmt.Invoke(id, method, args) => ???
-    case Stmt.Run(id, callee, args, purity, rest) => ???
-    case Stmt.If(cond, thn, els) => ???
-    case Stmt.Match(scrutinee, clauses, default) => ???
-    case Stmt.Region(id, ks, rest) => ???
-    case Stmt.Alloc(id, init, region, rest) => ???
-    case Stmt.Var(id, init, ks, rest) => ???
-    case Stmt.Dealloc(ref, rest) => ???
-    case Stmt.Get(ref, id, rest) => ???
-    case Stmt.Put(ref, value, rest) => ???
-    case Stmt.Reset(p, ks, k, body, ks1, k1) => ???
-    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) => ???
-    case Stmt.Resume(resumption, ks, k, body, ks1, k1) => ???
+    case Stmt.App(id, args, canBeDirect) => use(id) ++ all(args, _.refs)
+    case Stmt.Invoke(id, method, args) => use(id) ++ all(args, _.refs)
+    case Stmt.Alloc(id, init, region, rest) => use(region) ++ init.refs ++ rest.refs
+    case Stmt.Dealloc(ref, rest) => use(ref) ++ rest.refs
+    case Stmt.Get(ref, id, rest) => use(ref) ++ rest.refs
+    case Stmt.Put(ref, value, rest) => use(ref) ++ value.refs ++ rest.refs
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+      use(prompt) ++ body.refs ++ ks1.refs ++ k1.refs
+    case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
+      use(resumption) ++ body.refs ++ ks1.refs ++ k1.refs
+
+    case Stmt.Def(id, params, body, rest) => body.refs ++ rest.refs
+    case Stmt.New(id, interface, operations, rest) => all(operations, _.refs) ++ rest.refs
+    case Stmt.Let(id, binding, rest) => binding.refs ++ rest.refs
+    case Stmt.Run(id, callee, args, purity, rest) => all(args, _.refs) ++ rest.refs
+    case Stmt.If(cond, thn, els) => cond.refs ++ thn.refs ++ els.refs
+    case Stmt.Match(scrutinee, clauses, default) =>
+      scrutinee.refs ++ all(clauses, { case (tag, cl) => cl.refs }) ++ all(default, _.refs)
+    case Stmt.Region(id, ks, rest) => ks.refs ++ rest.refs
+    case Stmt.Var(id, init, ks, rest) => init.refs ++ ks.refs ++ rest.refs
+    case Stmt.Reset(p, ks, k, body, ks1, k1) => body.refs ++ ks1.refs ++ k1.refs
     case Stmt.Hole(span) => DB.empty
   }
+
+  inline def refs(cl: Clause): DB[Int] = cl.body.refs
+  inline def refs(op: Operation): DB[Int] = op.body.refs
 }
 
 //   def f(x, h) {
