@@ -976,7 +976,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case _: source.FunctionType => s"a second-class function type ${t.sourceOf}"
     case _: source.Effectful => s"a type-and-effect annotation ${t.sourceOf}"
 
-    // THESE THREE SHOULD NEVER BE USER-VISIBLE!
+    // THESE TWO SHOULD NEVER BE USER-VISIBLE!
     case source.ValueTypeTree(tpe, _) => s"a value type tree ${tpe}"
     case source.BlockTypeTree(eff, _) => s"a block type tree ${eff}"
   }
