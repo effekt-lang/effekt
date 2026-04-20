@@ -71,11 +71,11 @@ class TRMCTests extends CoreTests {
     assertAlphaEquivalent(obtained, pExpected, "Not transformed to")
   }
 
-  def transform(input: String, expected: String)(using munit.Location) = {
-    assertTransformsTo(input, expected) { tree =>
-      tree
-    }
-  }
+//  def transform(input: String, expected: String)(using munit.Location) = {
+//    assertTransformsTo(input, expected) { tree =>
+//      tree
+//    }
+//  }
   enum TransformContext {
     case Outer(id: Id)
     case Val(id:Id, body: Stmt, next: TransformContext)
@@ -87,24 +87,19 @@ class TRMCTests extends CoreTests {
     case Make(data: ValueType.Data, tag: Id, targs: List[ValueType], before: List[Expr], after: List[Expr])
     case Compose(first: TailContext, second: TailContext)
   }
-  
-//  def HoleContext = Type.TInt //(a: ValueType, b: ValueType): ValueType = ValueType.Data(Id("HoleContext"), List(a, b))
-//  
-//  val composefun: BlockVar = BlockVar(Id("ctx_composeContext"), Function(Nil, Nil, List(HoleContext, HoleContext), Nil, HoleContext), Set.empty) //TODO: where do i get these in the actual compiler?
-//  val applyfun: BlockVar = BlockVar(Id("ctx_applyContext"), Function(Nil, Nil, List(HoleContext, HoleContext), Nil, HoleContext), Set.empty) //TODO: types wrong
-//  val emptyfun: BlockVar = BlockVar(Id("ctx_emptyContext"), Function(Nil, Nil, Nil, Nil, HoleContext), Set.empty)
+
 
 
   def split(context: TransformContext): (TailContext, Option[TransformContext]) = context match {
     case TransformContext.Outer(id) => (TailContext.Outer(id), None)
-    case TransformContext.Val(id, Stmt.Return(Expr.Make(data, tag, targs, head :: Expr.ValueVar(id2, tpe) :: Nil)), next)
+    case TransformContext.Val(id, Stmt.Return(Expr.Make(data, tag, targs, head :: Expr.ValueVar(id2, tpe) :: Nil)), next) //TODO: leads to always a compose TailContext, even if its only one Val
           if tag == consId && id == id2 =>
       val (init, rest) = split(next)
       (TailContext.Compose(init, TailContext.Make(data, tag, targs, List(head), Nil)), rest)
     case _ => (TailContext.Empty, Some(context))
   }
   
-  def transform(input: Stmt, inputfun: Id, outputfun: Id, outputTpe: ValueType, context: TransformContext, outerContextTpe: ValueType) : Stmt = input match {
+  def transform(input: Stmt, inputfun: Id, outputfun: Id, outputTpe: ValueType, context: TransformContext, outerContextTpe: ValueType) : Stmt = input match { //TODO: is OutputTpe necessary?
     case Stmt.Def(id, block, body) => ???
     case Stmt.Let(id, binding, body) => ???
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
@@ -159,7 +154,7 @@ class TRMCTests extends CoreTests {
   }
   
   def innerReify(context: TailContext, outerContextTpe: ValueType): Expr = context match {
-    case TailContext.Empty => PureApp(blockVarFromExternDef(ctxEmtpyId),Nil,Nil)
+    case TailContext.Empty => PureApp(blockVarFromExternDef(ctxEmtpyId),Nil,Nil) //TODO: tparams should be A, but outerContextTpe is HoleContext(A,???)
     case TailContext.Outer(id) => Expr.ValueVar(id,outerContextTpe)
     case TailContext.Make(data, tag, targs, before, after) => MakeContext(data, tag, targs, before, after)
     case TailContext.Compose(first, second) => PureApp(blockVarFromExternDef(ctxcomposeId), Nil, List(innerReify(first, outerContextTpe),innerReify(second, outerContextTpe)))
@@ -259,6 +254,109 @@ class TRMCTests extends CoreTests {
 //  val TFieldName = ValueType.Data(Id("FieldName"), Nil)
 //  val fieldString1 = Expr.Literal(tailId.show,Type.TString) //proxy
 //  val fieldString2 = Expr.Literal(tailId, TFieldName) //proxy
+  test("nested Vals, not TRMC"){
+    val f: Id = Id("f")
+    val f2: Id = Id("f2")
+    val fType: BlockType = Function(Nil, Nil, Nil, Nil, Type.TInt)
+    val fCapt: Captures = Set.empty
 
+    val ctx: Id = Id("ctx")
+    val A: Id = Id("A")
+    val ATpe: ValueType = ValueType.Var(A)
+
+    val g: Id = Id("g")
+    val gType: BlockType = Function(Nil, Nil, List(Type.TInt), Nil, Type.TInt)
+    val gCapt: Captures = Set.empty
+
+    val h: Id = Id("h")
+    val x: Id = Id("x")
+    val y: Id = Id("y")
+
+    //f()
+    val callf = Stmt.App(Block.BlockVar(f, fType, fCapt), Nil, Nil, Nil)
+    //g(y)
+    val callg = Stmt.App(Block.BlockVar(g, gType, gCapt), Nil, List(Expr.ValueVar(y, Type.TInt)), Nil)
+    //val y = f()
+    //g(y)
+    val valY = Stmt.Val(y,callf,callg)
+    //h(x)
+    val callh = Stmt.App(Block.BlockVar(h, gType, gCapt), Nil, List(ValueVar(x, Type.TInt)), Nil)
+
+    //val x = { val y = f()
+    //          g(y)}
+    //h(x)
+    val inputtree = Stmt.Val(x,valY,callh)
+
+    val tmpId = Id("tmp")
+    val val3 = Stmt.Val(tmpId, callh, Return(PureApp(blockVarFromExternDef(ctxApplyId), Nil, List(ValueVar(ctx, HoleContext(ATpe,Type.TInt)), ValueVar(tmpId, Type.TInt)))))
+
+    val val2 = Stmt.Val(x,callg,val3)
+
+    val callf2 = Stmt.App(Block.BlockVar(f2, Function(Nil, Nil, List(HoleContext(ATpe,Type.TInt)),Nil,Type.TInt), fCapt), Nil, List(PureApp(blockVarFromExternDef(ctxEmtpyId),Nil,Nil)), Nil)
+
+    val expected = Stmt.Val(y,callf2,val2)
+
+    val inputtransformed = transform(inputtree,f,f2,Type.TInt,TransformContext.Outer(ctx),HoleContext(ATpe,Type.TInt))
+
+    assertAlphaEquivalentStatements(inputtransformed,expected) //TODO: passes, even though tmpIDs are different, why?
+  }
+
+  test("nested Vals, with TRMC"){
+    val f: Id = Id("f")
+    val f2: Id = Id("f2")
+    val fType: BlockType = Function(Nil, Nil, List(Type.TInt), Nil, TList)
+    val fCapt: Captures = Set.empty
+
+    val ctx: Id = Id("ctx")
+    val A: Id = Id("A")
+    val ATpe: ValueType = ValueType.Var(A)
+
+    val sub: BlockVar = BlockVar(Id("infixSub"), Function(Nil, Nil, List(Type.TInt, Type.TInt), Nil, Type.TInt), Set.empty)
+
+    val g: Id = Id("g")
+    val gType: BlockType = Function(Nil, Nil, List(TList), Nil, TList)
+    val gCapt: Captures = Set.empty
+
+    val x: Id = Id("x")
+    val y: Id = Id("y")
+    val n: Id = Id("n")
+
+    //f(n-1)
+    val callf = Stmt.App(Block.BlockVar(f, fType, fCapt), Nil, List(Expr.PureApp(sub,List(Type.TInt,Type.TInt),List(ValueVar(n,Type.TInt),Literal(1,Type.TInt)))),Nil)
+    //Cons(n,y)
+    val retStmt = Stmt.Return(Make(TList, consId, List(Type.TInt, Type.TInt), List(ValueVar(n, Type.TInt), ValueVar(y, TList))))
+    //val y = f(n-1)
+    //Cons(n,y)
+    val valY = Stmt.Val(y,callf,retStmt)
+    //g(x)
+    val callg = Stmt.App(Block.BlockVar(g, gType, gCapt), Nil, List(Expr.ValueVar(x, TList)), Nil)
+    //val x = {val y = f(n-1)
+    //         Cons(n,y)
+    //        {
+    //g(x)
+    val inputtree = Stmt.Val(x,valY,callg)
+
+    val tmpId = Id("tmp")
+    //val tmp = g(x)
+    //apply_ctx(ctx,tmp)
+    val val2 = Stmt.Val(tmpId, callg, Return(PureApp(blockVarFromExternDef(ctxApplyId), Nil, List(ValueVar(ctx, HoleContext(ATpe, TList)), ValueVar(tmpId, TList)))))
+
+    //n-1
+    val minusone = Expr.PureApp(sub, List(Type.TInt, Type.TInt), List(ValueVar(n, Type.TInt), Literal(1, Type.TInt)))
+
+    //Cons(n,[])
+    val consctx = Expr.MakeContext(TList, consId, List(Type.TInt, Type.TInt), List(ValueVar(n, Type.TInt)), Nil)
+    
+    //compose([],Cons(n,[])) because Split does not see how many vals there will be
+    val composition = Expr.PureApp(blockVarFromExternDef(ctxcomposeId), Nil, List(Expr.PureApp(blockVarFromExternDef(ctxEmtpyId),Nil,Nil),consctx))
+
+    //f2(n-1,Cons(n,[]))
+    val callf2 = Stmt.App(Block.BlockVar(f2, Function(Nil, Nil, List(Type.TInt, HoleContext(ATpe,TList)),Nil,TList), fCapt), Nil, List(minusone,composition), Nil)
+
+    val expected = Stmt.Val(x, callf2, val2)
+
+    val transformed = transform(inputtree, f, f2, TList, TransformContext.Outer(ctx), HoleContext(ATpe, TList))
+    assertAlphaEquivalentStatements(transformed,expected)
+  }
   
 }
