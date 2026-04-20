@@ -3,7 +3,7 @@ package generator
 package chez
 
 import effekt.context.Context
-import effekt.core.optimizer.{DropBindings, Optimizer}
+import effekt.core.optimizer.{Optimizer, Deadcode}
 import kiama.util.Source
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -37,7 +37,7 @@ class ChezSchemeCPS extends Compiler[String] {
     Frontend andThen Middleend
   }
 
-  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Optimizer andThen core.Show map {
+  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Deadcode andThen core.Show andThen Optimizer map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
       val mainFile = path(mod)

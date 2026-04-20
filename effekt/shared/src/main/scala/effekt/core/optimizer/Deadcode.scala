@@ -49,8 +49,7 @@ class Deadcode(reachable: Map[Id, Usage])
         },
         // drop unreachable externs
         m.externs.collect {
-          // We need to keep "show", "showBuiltin" & "infixPlusPlus" for generating show definitions (see #1123)
-          case e: Extern.Def if used(e.id) || List("show", "showBuiltin", "infixPlusPlus").contains(e.id.name.name) => e
+          case e: Extern.Def if used(e.id) => e
           case e: Extern.Include => e
           case e: Extern.Data if used(e.id) => e
           case e: Extern.Interface if used(e.id) => e
@@ -80,8 +79,11 @@ object Deadcode extends Phase[CoreTransformed, CoreTransformed] {
     input match {
       case CoreTransformed(source, tree, mod, core) =>
         val term = Context.ensureMainExists(mod)
+        // when ran "directly" (i.e., before the 'Show' pass),
+        // we add the functions required by subsequent passes
+        val required = Set(term) ++ Show.requiredNames(core)
         val dce = Context.timed("deadcode-elimination", source.name) {
-          Deadcode.remove(term, core)
+          Deadcode.remove(required, core)
         }
         Some(CoreTransformed(source, tree, mod, dce))
     }
