@@ -7,6 +7,7 @@ import effekt.util.messages.INTERNAL_ERROR
 import effekt.util.messages.ErrorReporter
 
 import scala.annotation.{ tailrec }
+import effekt.symbols.QualifiedName
 
 /**
  * Tree structure of programs in our internal core representation.
@@ -134,9 +135,26 @@ case class Property(id: Id, tpe: BlockType) extends Tree
 enum Extern extends Tree {
   case Data(id: Id, tparams: List[Id], body: ExternBody[Nothing])
   case Interface(id: Id, tparams: List[Id], body: ExternBody[Nothing])
-  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody[Expr])
+  case Def(id: Id, qualifiedSignature: QualifiedSignature, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody[Expr])
   case Include(featureFlag: FeatureFlag, contents: String)
 }
+
+case class QualifiedSignature(
+  name: String,
+)
+
+object QualifiedSignature {
+  def apply(moduleName: QualifiedName, f: symbols.ExternFunction): QualifiedSignature = {
+    import effekt.symbols.ErrorMessageInterpolator
+    val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.map(tp => pp"${tp}").mkString(", ")}]"
+    val valueParams = f.vparams.map { p => pp"${p.tpe.get}" }.mkString(", ")
+    val vps = if valueParams.isEmpty then "" else s"($valueParams)"
+    val bps = f.bparams.map { b => pp"{${b.tpe.get}}" }.mkString("")
+    val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"$vps$bps"
+    QualifiedSignature(s"${moduleName}::${f.name.name}$tps$ps")
+  }
+}
+
 sealed trait ExternBody[+T] extends Tree
 object ExternBody {
   case class StringExternBody[+T](featureFlag: FeatureFlag, contents: Template[T]) extends ExternBody[T]
@@ -492,8 +510,8 @@ object Tree {
     }
     def rewrite(e: Extern): Extern= e match {
       case e @ (Extern.Data(_,_,_) | Extern.Include(_,_) | Extern.Interface(_,_,_)) => e
-      case Extern.Def(id, tps, cps, vps, bps, ret, capts, body) =>
-        Extern.Def(id, tps, cps, vps, bps, ret, capts, rewrite(body))
+      case Extern.Def(id, qualifiedSignature, tps, cps, vps, bps, ret, capts, body) =>
+        Extern.Def(id, qualifiedSignature, tps, cps, vps, bps, ret, capts, rewrite(body))
     }
     def rewrite(d: Declaration): Declaration = rewriteStructurally(d)
     def rewrite(c: Constructor): Constructor = rewriteStructurally(c)
@@ -718,8 +736,8 @@ object Tree {
     }
 
     def rewrite(e: Extern): Extern = e match {
-      case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
-        Extern.Def(rewrite(id), tparams.map(rewrite), cparams.map(rewrite), vparams.map(rewrite), bparams.map(rewrite),
+      case Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
+        Extern.Def(rewrite(id), qualifiedSignature, tparams.map(rewrite), cparams.map(rewrite), vparams.map(rewrite), bparams.map(rewrite),
           rewrite(ret), rewrite(annotatedCapture), rewrite(body).run())
       case Extern.Include(featureFlag, contents) => e
       case Extern.Data(id, tparams, body) => Extern.Data(rewrite(id), tparams.map(rewrite), body)
@@ -1043,4 +1061,3 @@ object substitutions {
         Binding.Put(substituteAsVar(ref), substitute(annotatedCapt), substitute(value))
     }
 }
-

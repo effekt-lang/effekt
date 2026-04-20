@@ -66,7 +66,7 @@ class Reachable(
 
   def process(e: Extern.Def)(using defs: Definitions): Unit =
     e match {
-      case Extern.Def(_, tps, cps, vps, bps, ret, capts, body) =>
+      case Extern.Def(_, _, tps, cps, vps, bps, ret, capts, body) =>
         vps.foreach(process)
         bps.foreach(process)
         process(ret)
@@ -198,7 +198,7 @@ object Reachable {
       })
     }
       ++ m.externs.collect {
-      case d @ Extern.Def(id, _, _, _, _, _, _, _) => id -> d
+      case d @ Extern.Def(id, _, _, _, _, _, _, _, _) => id -> d
     }).toMap
     val initialUsage = entrypoints.map { id => id -> Usage.Recursive }.toMap
     val analysis = new Reachable(initialUsage, Nil, Set.empty)
