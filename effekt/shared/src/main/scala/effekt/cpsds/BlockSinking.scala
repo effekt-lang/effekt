@@ -9,6 +9,7 @@ object BlockSinking {
     given ctx: Context = Context(m.uses)
 
     val uses = m.uses.debug
+
     // 1. Compute mutual recursion clusters (SCCs of size > 1)
     val toplevelIds = m.definitions.collect {
       case ToplevelDefinition.Def(id, _, _) => id
@@ -65,7 +66,9 @@ object BlockSinking {
         Some(ToplevelDefinition.Val(id, ks, k, transform(binding, pending)))
     }
 
-    m.copy(definitions = newDefinitions)
+    val result = m.copy(definitions = newDefinitions)
+
+    result
   }
 
   case class Context(
