@@ -79,9 +79,9 @@ object Deadcode extends Phase[CoreTransformed, CoreTransformed] {
     input match {
       case CoreTransformed(source, tree, mod, core) =>
         val term = Context.ensureMainExists(mod)
-        // when ran "directly" (i.e., before the 'Show' pass),
+        // when ran "directly" (i.e., before the 'Show' and 'Repr' passes),
         // we add the functions required by subsequent passes
-        val required = Set(term) ++ Show.requiredNames(core)
+        val required = Set(term) ++ Show.requiredNames(core) ++ Repr.requiredNames(core)
         val dce = Context.timed("deadcode-elimination", source.name) {
           Deadcode.remove(required, core)
         }

@@ -4,6 +4,7 @@ import effekt
 import stream
 import control
 import array
+import list
 
 /**
  * A memory managed, mutable, fixed-length array of bytes.
@@ -266,6 +267,34 @@ def compareStringBytes(left: String, right: String): Ordering = {
   compareByteArray(l, r)
 }
 
+// Conversion
+// ----------
+
+def toArray(bytes: ByteArray): Array[Byte] =
+  array::build(bytes.size) { i =>
+    bytes.get(i)
+  }
+
+def fromArray(arr: Array[Byte]): ByteArray =
+  build(arr.size) { i =>
+    arr.get(i)
+  }
+
+def toList(bytes: ByteArray): List[Byte] =
+  list::build(bytes.size) { i =>
+    bytes.get(i)
+  }
+
+def fromList(lst: List[Byte]): ByteArray = {
+  val arr = allocate(lst.size)
+  lst.foreachIndex { (i, byte) =>
+    arr.set(i, byte)
+  }
+  arr
+}
+
+def reprBuiltin(bytes: ByteArray): Unit / rose[Repr::Llabel, Unit] =
+  do labelled[Repr::Llabel, Unit](Repr::Llabel::Opaque("ByteArray")) { bytes.foreach { b => reprBuiltin(b) } }
 
 // Streaming
 // ---------
