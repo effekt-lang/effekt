@@ -75,7 +75,7 @@ lazy val doubles: Builtins = Map(
   builtin("effekt::pow(Double, Double)") {
     case As.Double(base) :: As.Double(exp) :: Nil => Value.Double(Math.pow(base, exp))
   },
-  builtin("effekt::pi()") {
+  builtin("effekt::_pi()") {
     case Nil => Value.Double(Math.PI)
   },
 
@@ -106,7 +106,7 @@ lazy val doubles: Builtins = Map(
   builtin("effekt::toInt(Double)") {
     case As.Double(x) :: Nil => Value.Int(x.toLong)
   },
-  builtin("effekt::show(Double)") {
+  builtin("effekt::showBuiltin(Double)") {
     // TODO globally define show on double in a decent way... this mimicks JS
     case As.Double(n) :: Nil =>
       Value.String(
@@ -188,7 +188,7 @@ lazy val integers: Builtins = Map(
     case As.Int(x) :: Nil => Value.Double(x.toDouble)
   },
 
-  builtin("effekt::show(Int)") {
+  builtin("effekt::showBuiltin(Int)") {
     case As.Int(n) :: Nil => Value.String(n.toString)
   },
 )
@@ -211,7 +211,7 @@ lazy val bytes: Builtins = Map(
 
   // Conversion
   // ----------
-  builtin("effekt::show(Byte)") {
+  builtin("effekt::showBuiltin(Byte)") {
     case As.Byte(b) :: Nil => Value.String(b.toHexString)
   }
 )
@@ -239,19 +239,23 @@ lazy val strings: Builtins = Map(
     case As.String(x) :: As.Int(from) :: As.Int(to) :: Nil => Value.String(x.substring(from.toInt, to.toInt))
   },
 
+  builtin("effekt::unsafeSubstring(String, Int, Int)") {
+    case As.String(x) :: As.Int(from) :: As.Int(to) :: Nil => Value.String(x.substring(from.toInt, to.toInt))
+  },
+
   builtin("string::unsafeCharAt(String, Int)") {
     case As.String(x) :: As.Int(at) :: Nil => Value.Int(x.charAt(at.toInt).toLong)
   },
 
-  builtin("string::toInt(Char)") {
+  builtin("char::toInt(Char)") {
     case As.Int(n) :: Nil => Value.Int(n)
   },
 
-  builtin("string::toChar(Int)") {
+  builtin("char::toChar(Int)") {
     case As.Int(n) :: Nil => Value.Int(n)
   },
 
-  builtin("string::infixLte(Char, Char)") {
+  builtin("char::infixLte(Char, Char)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x <= y)
   },
 
@@ -263,9 +267,9 @@ lazy val strings: Builtins = Map(
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x > y)
   },
 
-  builtin("string::infixGte(Char, Char)") {
+  builtin("char::infixGte(Char, Char)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x >= y)
-  },
+  }
 )
 
 lazy val chars: Builtins = Map(
@@ -273,13 +277,13 @@ lazy val chars: Builtins = Map(
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x == y)
   },
 
-  builtin("effekt::show(Char)") {
+  builtin("effekt::showBuiltin(Char)") {
     case As.Int(n) :: Nil => Value.String(n.toString)
   }
 )
 
 lazy val arrays: Builtins = Map(
-  builtin("array::unsafeAllocate(Int)") {
+  builtin("array::unsafeAllocate[T](Int)") {
     case As.Int(x) :: Nil => Value.Array(scala.Array.ofDim(x.toInt))
   },
   builtin("array::size[T](Array[T])") {
@@ -306,7 +310,7 @@ lazy val bytearrays: Builtins = Map(
   builtin("bytearray::set(ByteArray, Int, Byte)") {
     case As.ByteArray(arr) :: As.Int(index) :: As.Byte(value) :: Nil => arr.update(index.toInt, value); Value.Unit()
   },
-  builtin("bytearray::compare(ByteArray, ByteArray)") {
+  builtin("bytearray::compareByteArrayImpl(ByteArray, ByteArray)") {
     case As.ByteArray(arr1) :: As.ByteArray(arr2) :: Nil => Value.Int(java.util.Arrays.compare(arr1.map(_.toByte), arr2.map(_.toByte)))
   },
   builtin("bytearray::fromString(String)") {

@@ -231,7 +231,6 @@ extern def unsafeCharAt(str: String, n: Int) at {}: Char =
     %x = call %Int @c_bytearray_character_at(%Pos ${str}, %Int ${n})
     ret %Int %x
   """
-  vm "string::unsafeCharAt(String, Int)"
 
 
 // Streaming

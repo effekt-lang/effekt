@@ -344,7 +344,7 @@ object Type {
       val boundBlocks = definitions.collect {
         case Toplevel.Def(id, block) => BlockParam(id, block.tpe, block.capt)
       } ++ externs.collect {
-        case Extern.Def(id, tparams, cparams, vparams, bparams, ret, capt, _) =>
+        case Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, capt, _) =>
           BlockParam(id, BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), ret), capt)
       }
 
@@ -369,7 +369,7 @@ object Type {
       }
 
       externs.foreach {
-        case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
+        case Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
           val splices = body match {
             case ExternBody.StringExternBody(featureFlag, contents) => contents.args
             case ExternBody.Unsupported(err) => Nil
