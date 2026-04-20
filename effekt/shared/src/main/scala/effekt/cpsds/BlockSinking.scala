@@ -8,15 +8,17 @@ object BlockSinking {
   def transform(m: ModuleDecl, main: Id): ModuleDecl = {
     given ctx: Context = Context(m.uses)
 
-    val uses = m.uses
-
+    val uses = m.uses.debug
     // 1. Compute mutual recursion clusters (SCCs of size > 1)
-    val toplevelIds = uses.keySet
+    val toplevelIds = m.definitions.collect {
+      case ToplevelDefinition.Def(id, _, _) => id
+    }.toSet
+
     val mutuallyRecursive: Set[Id] = {
       // Simple SCC: f and g are mutually recursive if f ∈ uses(g) and g ∈ uses(f)
       // We need transitive closure, but uses is already transitively closed at toplevel
       toplevelIds.filter { id =>
-        val reachable = uses.getOrElse(id, Set.empty) & toplevelIds
+        val reachable = uses.getOrElse(id, Set.empty[Id]) & toplevelIds
         reachable.exists { other =>
           other != id && uses.getOrElse(other, Set.empty).contains(id)
         }
@@ -27,7 +29,7 @@ object BlockSinking {
     //    - mutually recursive defs
     //    - exported defs
     //    - Val definitions (they're not Defs, can't be sunk)
-    val exported = m.exports.toSet
+    val exported: Set[Id] = m.exports.toSet
     val anchors: Set[Id] = Set(main) ++ mutuallyRecursive // ++ exported
 
     // 3. For each non-anchor toplevel Def, determine which anchors use it.
@@ -49,7 +51,7 @@ object BlockSinking {
     // 5. Build pending from sinkable defs
     val pending: Pending = m.definitions.collect {
       case ToplevelDefinition.Def(id, params, body) if sinkable.contains(id) =>
-        id -> (params, body)
+        id -> Def(id, params, body)
     }.toMap
 
     // 6. Transform: keep non-sinkable defs and Vals at toplevel,
@@ -67,14 +69,14 @@ object BlockSinking {
   }
 
   case class Context(
-    uses: Map[Id, Set[Id]]
+    uses: DB[Set[Id]]
   ) {
     def close(ids: Set[Id], pending: Pending): Set[Id] = {
       var result = ids
       var worklist = ids
       while (worklist.nonEmpty) {
         val next = worklist.flatMap { id =>
-          uses.getOrElse(id, Set.empty).filter(pending.contains)
+          uses.getOrElse(id, Set.empty[Id]).filter(pending.contains)
         } -- result
         result = result ++ next
         worklist = next
@@ -82,8 +84,8 @@ object BlockSinking {
       result
     }
   }
-
-  type Pending = Map[Id, (List[Id], Stmt)]
+  case class Def(id: Id, params: List[Id], body: Stmt)
+  type Pending = Map[Id, Def]
 
   extension (pending: Pending) {
 
@@ -124,7 +126,7 @@ object BlockSinking {
   def transform(stmt: Stmt, pending: Pending)(using ctx: Context): Stmt = rewriting(stmt) {
 
     case Stmt.Def(id, params, body, rest) =>
-      transform(rest, pending + (id -> (params, body)))
+      transform(rest, pending + (id -> Def(id, params, body)))
 
     case Stmt.If(cond, thn, els) =>
       val inBoth = pending.usedIn(thn) & pending.usedIn(els)
@@ -218,7 +220,7 @@ object BlockSinking {
   def emitDefs(ids: Set[Id], pending: Pending, body: Stmt)(using ctx: Context): Stmt = {
     if (ids.isEmpty) return body
     topoSort(ids, pending).foldRight(body) { case (id, rest) =>
-      val (params, defBody) = pending(id)
+      val Def(_, params, defBody) = pending(id)
       Stmt.Def(id, params, transform(defBody, Map.empty), rest)
     }
   }
@@ -229,7 +231,7 @@ object BlockSinking {
     def visit(id: Id): Unit = {
       if (visited.contains(id)) return
       visited += id
-      (ctx.uses.getOrElse(id, Set.empty) & ids).foreach(visit)
+      (ctx.uses.getOrElse(id, Set.empty[Id]) & ids).foreach(visit)
       result = result :+ id
     }
     ids.foreach(visit)

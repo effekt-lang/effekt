@@ -1,7 +1,7 @@
 package effekt
 package cpsds
 
-import core.{ BlockType, Captures, Id, ValueType }
+import core.{ Id, ValueType }
 import effekt.source.FeatureFlag
 import effekt.util.messages.ErrorReporter
 import effekt.util.messages.INTERNAL_ERROR
@@ -24,7 +24,7 @@ case class ModuleDecl(
   definitions: List[ToplevelDefinition],
   exports: List[Id]
 ) extends Tree {
-  lazy val uses: Map[Id, Set[Id]] = functionUsage.uses(this)
+  lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
 }
 
@@ -34,7 +34,7 @@ enum ToplevelDefinition {
 
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
   lazy val free: Set[Id] = freeVariables.free(this)
-  lazy val uses: Map[Id, Set[Id]] = functionUsage.uses(this)
+  lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
 }
 
 /**
@@ -66,6 +66,7 @@ enum Expr extends Tree {
   case Toplevel
 
   lazy val free: Set[Id] = freeVariables.free(this)
+  lazy val refs: DB[Int] = references.refs(this)
 }
 export Expr.*
 
@@ -123,20 +124,20 @@ enum Stmt extends Tree {
   case Hole(span: effekt.source.Span)
 
   lazy val free: Set[Id] = freeVariables.free(this)
-  lazy val uses: Map[Id, Set[Id]] = functionUsage.uses(this)
+  lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
 }
 export Stmt.*
 
 case class Clause(params: List[Id], body: Stmt) extends Tree {
   lazy val free: Set[Id] = body.free -- params
-  lazy val uses: Map[Id, Set[Id]] = functionUsage.uses(this)
+  lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
 }
 
 case class Operation(name: Id, params: List[Id], body: Stmt) extends Tree {
   lazy val free: Set[Id] = body.free -- params
-  lazy val uses: Map[Id, Set[Id]] = functionUsage.uses(this)
+  lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
 }
 
@@ -448,32 +449,32 @@ object freeVariables {
  *   main -> {outer}
  */
 object functionUsage {
+  // since every function should be only added ONCE we can simply concatenate the DBs
+  private inline def all[T](t: Iterable[T], inline f: T => DB[Set[Id]]): DB[Set[Id]] =
+    t.foldLeft(DB.empty[Set[Id]]) { case (acc, t) => acc ++ f(t) }
 
-  inline def uses(cl: Clause): Map[Id, Set[Id]] = uses(cl.body)
+  inline def uses(cl: Clause): DB[Set[Id]] = uses(cl.body)
 
-  inline def uses(op: Operation): Map[Id, Set[Id]] = uses(op.body)
+  inline def uses(op: Operation): DB[Set[Id]] = uses(op.body)
 
-  inline def uses(stmt: Stmt): Map[Id, Set[Id]] = stmt match {
+  inline def uses(stmt: Stmt): DB[Set[Id]] = stmt match {
     case Stmt.Def(id, params, body, rest) =>
       rest.uses + (id -> (body.free -- params))
     case Stmt.New(id, interface, operations, rest) =>
-      rest.uses ++ operations.flatMap(_.uses) + (id -> operations.foldLeft(Set.empty[Id]) {
-        case (free, op) => free ++ op.free
-      })
+      val freeInOperations = operations.foldLeft(rest.free) { case (acc, op) => acc ++ op.free }
+      rest.uses ++ all(operations, _.uses) + (id -> freeInOperations)
     case Stmt.Let(id, binding, rest) =>
       rest.uses
     case Stmt.App(id, args, canBeDirect) =>
-      Map.empty
+      DB.empty
     case Stmt.Invoke(id, method, args) =>
-      Map.empty
+      DB.empty
     case Stmt.Run(id, callee, args, purity, rest) =>
       rest.uses
     case Stmt.If(cond, thn, els) =>
       thn.uses ++ els.uses
     case Stmt.Match(scrutinee, clauses, default) =>
-      clauses.foldLeft(default.map(_.uses).getOrElse(Map.empty)) {
-        case (acc, (_, cl)) => acc ++ cl.uses
-      }
+      all(clauses, { case (_, clause) => clause.uses }) ++ all(default, _.uses)
     case Stmt.Region(id, ks, rest) =>
       rest.uses
     case Stmt.Alloc(id, init, region, rest) =>
@@ -493,41 +494,43 @@ object functionUsage {
     case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
       body.uses
     case Stmt.Hole(span) =>
-      Map.empty
+      DB.empty
   }
 
   // Warning: this info is not accurate since we need to compute the fixed point on the toplevel
-  inline def uses(toplevel: ToplevelDefinition): Map[Id, Set[Id]] = toplevel match {
+  inline def uses(toplevel: ToplevelDefinition): DB[Set[Id]] = toplevel match {
     case ToplevelDefinition.Def(id, params, body) =>
       body.uses + (id -> (body.free -- params))
     case ToplevelDefinition.Val(id, ks, k, binding) =>
       binding.uses
   }
 
-  def uses(m: ModuleDecl): Map[Id, Set[Id]] = {
-    val definedIds = m.definitions.collect {
+  def uses(m: ModuleDecl): DB[Set[Id]] = {
+    val toplevelIds = m.definitions.collect {
       case ToplevelDefinition.Def(id, _, _) => id
     }.toSet
 
-    // Collect direct uses from all toplevel definitions
-    val direct: Map[Id, Set[Id]] = m.definitions.flatMap(_.uses).toMap
+    // Collect uses from all toplevel definitions
+    val allUses: DB[Set[Id]] = all(m.definitions, _.uses)
+    val definitions: Set[Id] = allUses.keys
 
     // Filter to only keep references that are definitions themselves
-    val filtered: Map[Id, Set[Id]] = direct.view.mapValues(_ & direct.keySet).toMap
+    // TODO figure out a cheaper way to do this
+    val filtered: DB[Set[Id]] = allUses.mapValues { ids => ids.intersect(definitions) }
 
     // Compute transitive closure for toplevel Defs only
     var current = filtered
     var changed = true
     while (changed) {
       changed = false
-      current = current.map { case (id, refs) =>
-        if (!definedIds.contains(id)) id -> refs
+      current = current.mapWithId { case (id, refs) =>
+        if (!toplevelIds.contains(id)) refs
         else {
           val expanded = refs.foldLeft(refs) { case (acc, r) =>
-            acc ++ current.getOrElse(r, Set.empty)
+            acc ++ current.getOrElse(r, Set.empty[Id])
           }
           if (expanded.size != refs.size) changed = true
-          id -> expanded
+          expanded
         }
       }
     }
@@ -619,6 +622,48 @@ object escapeAnalysis {
       Set(id) ++ body.escapes
     case ToplevelDefinition.Val(id, ks, k, binding) =>
       binding.escapes
+  }
+}
+
+/**
+ * How often is something (a function or expression) referenced in a subterm?
+ */
+object references {
+
+  // TODO this might be way to inefficient
+  private inline def all[T](terms: Iterable[T], inline run: T => DB[Int]): DB[Int] =
+    terms.foldLeft(DB.empty[Int]) { (acc, t) =>
+      acc.unionWith(run(t), _ + _)
+    }
+
+  inline def refs(expr: Expr): DB[Int] = expr match {
+    case Expr.Variable(id) => DB(id,  1)
+    case Expr.Literal(value, tpe) => DB.empty
+    case Expr.Make(data, tag, args) => all(args, _.refs)
+    case Expr.Abort => DB.empty
+    case Expr.Return => DB.empty
+    case Expr.Toplevel => DB.empty
+  }
+
+  inline def refs(stmt: Stmt): DB[Int] = stmt match {
+    case Stmt.Def(id, params, body, rest) => ???
+    case Stmt.New(id, interface, operations, rest) => ???
+    case Stmt.Let(id, binding, rest) => ???
+    case Stmt.App(id, args, canBeDirect) => ???
+    case Stmt.Invoke(id, method, args) => ???
+    case Stmt.Run(id, callee, args, purity, rest) => ???
+    case Stmt.If(cond, thn, els) => ???
+    case Stmt.Match(scrutinee, clauses, default) => ???
+    case Stmt.Region(id, ks, rest) => ???
+    case Stmt.Alloc(id, init, region, rest) => ???
+    case Stmt.Var(id, init, ks, rest) => ???
+    case Stmt.Dealloc(ref, rest) => ???
+    case Stmt.Get(ref, id, rest) => ???
+    case Stmt.Put(ref, value, rest) => ???
+    case Stmt.Reset(p, ks, k, body, ks1, k1) => ???
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) => ???
+    case Stmt.Resume(resumption, ks, k, body, ks1, k1) => ???
+    case Stmt.Hole(span) => DB.empty
   }
 }
 

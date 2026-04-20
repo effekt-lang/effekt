@@ -50,7 +50,7 @@ object Inliner {
 
   // --- Rewrite ---
 
-  def rewrite(s: Stmt, analysis: UsageAnalysis): Stmt = s match {
+  def rewrite(s: Stmt, analysis: UsageAnalysis): Stmt = rewriting(s) {
 
     case Stmt.Def(id, params, body, rest) if shouldInline(id, analysis) =>
       rewrite(rest, analysis)
@@ -133,7 +133,7 @@ object Inliner {
     case h: Stmt.Hole => h
   }
 
-  def rewrite(e: Expr, analysis: UsageAnalysis): Expr = e match {
+  def rewrite(e: Expr, analysis: UsageAnalysis): Expr = rewriting(e) {
     case Expr.Variable(_) => e
     case Expr.Literal(_, _) => e
     case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(rewrite(_, analysis)))
