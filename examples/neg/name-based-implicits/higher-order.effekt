@@ -1,0 +1,5 @@
+def hof{ body: Int => Int }: Int = body(0)
+
+def main() = hof { (?x: Int) => // ERROR Implicit parameter
+  x + 1
+}

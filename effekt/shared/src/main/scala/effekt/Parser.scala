@@ -195,6 +195,9 @@ class Parser(tokens: Seq[Token], source: Source) {
   def peek(offset: Int, kind: TokenKind): Boolean =
     peek(offset).kind == kind
 
+  def skipIf(kind: TokenKind): Boolean =
+    if (peek.kind == kind) { skip(); true } else { false }
+
   def hasNext(): Boolean = position < tokens.length
   def next(): Token =
     val t = tokens(position).failOnErrorToken(position)
@@ -331,8 +334,8 @@ class Parser(tokens: Seq[Token], source: Source) {
       // Simple case: all patterns are just variable names (or ignored), no guards, no fallback
       // Desugar to: call { (x, y, _, ...) => body }
       val vparams: List[ValueParam] = patterns.unspan.map {
-        case AnyPattern(id, span) => ValueParam(id, None, span)
-        case IgnorePattern(span) => ValueParam(IdDef(s"__ignored", span.synthesized), None, span)
+        case AnyPattern(id, span) => ValueParam(id, None, isImplicit = false, span)
+        case IgnorePattern(span) => ValueParam(IdDef(s"__ignored", span.synthesized), None, isImplicit = false, span)
         case _ => sys.error("impossible: checked above")
       }
       BlockLiteral(Nil, vparams, Nil, body, body.span.synthesized)
@@ -345,7 +348,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       val argSpans = patternList.map(_.span)
 
       val vparams: List[ValueParam] = names.zip(argSpans).map { (name, span) =>
-        ValueParam(IdDef(name, span.synthesized), None, span.synthesized)
+        ValueParam(IdDef(name, span.synthesized), None, isImplicit = false, span.synthesized)
       }
       val scrutinees = names.zip(argSpans).map { (name, span) =>
         Var(IdRef(Nil, name, span.synthesized), span.synthesized)
@@ -931,7 +934,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     nonterminal:
       `with` ~> backtrack(idDef() <~ `:`) ~ implementation() match {
         case capabilityName ~ impl =>
-          val capability = capabilityName map { name => BlockParam(name, Some(impl.interface), name.span.synthesized): BlockParam }
+          val capability = capabilityName map { name => BlockParam(name, Some(impl.interface), isImplicit = false, name.span.synthesized): BlockParam }
           Handler(capability.unspan, impl, span())
       }
 
@@ -1284,7 +1287,7 @@ class Parser(tokens: Seq[Token], source: Source) {
               val names = List.tabulate(argSpans.length){ n => s"__arg${n}" }
               BlockLiteral(
                 Nil,
-                names.zip(argSpans).map { (name, span) => ValueParam(IdDef(name, span.synthesized), None, span.synthesized) },
+                names.zip(argSpans).map { (name, span) => ValueParam(IdDef(name, span.synthesized), None, isImplicit = false, span.synthesized) },
                 Nil,
                 Return(
                   Match(
@@ -1654,7 +1657,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def lambdaParams(): (List[Id], List[ValueParam], List[BlockParam]) =
     nonterminal:
-      if isVariable then (Nil, List(ValueParam(idDef(), None, span())), Nil)  else paramsOpt()
+      if isVariable then (Nil, List(ValueParam(idDef(), None, isImplicit=false, span())), Nil)  else paramsOpt()
 
   def params(): (Many[Id], Many[ValueParam], Many[BlockParam]) =
     nonterminal:
@@ -1688,11 +1691,13 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def valueParam(): ValueParam =
     nonterminal:
-      ValueParam(idDef(), Some(valueTypeAnnotation()), span())
+      val isImplicit = skipIf(`?`)
+      ValueParam(idDef(), Some(valueTypeAnnotation()), isImplicit, span())
 
   def valueParamOpt(): ValueParam =
     nonterminal:
-      ValueParam(idDef(), maybeValueTypeAnnotation(), span())
+      val isImplicit = skipIf(`?`)
+      ValueParam(idDef(), maybeValueTypeAnnotation(), isImplicit, span())
 
   def maybeBlockParams(): Many[BlockParam] =
     nonterminal:
@@ -1712,11 +1717,13 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def blockParam(): BlockParam =
     nonterminal:
-      BlockParam(idDef(), Some(blockTypeAnnotation()), span())
+      val isImplicit = skipIf(`?`)
+      BlockParam(idDef(), Some(blockTypeAnnotation()), isImplicit, span())
 
   def blockParamOpt(): BlockParam =
     nonterminal:
-      BlockParam(idDef(), when(`:`)(Some(blockType()))(None), span())
+      val isImplicit = skipIf(`?`)
+      BlockParam(idDef(), when(`:`)(Some(blockType()))(None), isImplicit, span())
 
   def maybeValueTypes(): Many[Type] =
     nonterminal:

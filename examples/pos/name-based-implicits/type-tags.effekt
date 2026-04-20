@@ -1,0 +1,21 @@
+type TypeTag {
+  Int()
+  Bool()
+  String()
+  List(of: TypeTag)
+  Bottom()
+}
+
+def typeTag(x: Int): TypeTag = Int()
+def typeTag(b: Bool): TypeTag = Bool()
+def typeTag(s: String): TypeTag = String()
+def typeTag[A](v: List[A]){ ?typeTag: A => TypeTag }: TypeTag =
+  v match {
+    case Cons(hd, _) => List(typeTag(hd))
+    case _ => List(Bottom())
+  }
+
+def main() = {
+  val x = typeTag([[true]])
+  println(x.show)
+}

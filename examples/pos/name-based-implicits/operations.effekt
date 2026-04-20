@@ -1,0 +1,26 @@
+interface Foo {
+  def foo(?ctx: String): Unit
+}
+
+def bar(): Unit / Foo = {
+  val ctx = "from bar"
+  do foo()
+}
+
+
+def main() = {
+  def fif = new Foo {
+    def foo(ctx: String) = println("object " ++ ctx)
+  }
+  val ctx = "from main"
+  try {
+    do foo() 
+    fif.foo()
+    bar()
+  } with Foo {
+    def foo(ctx: String) = {
+      println("effect " ++ ctx)
+      resume(())
+    }
+  }
+}

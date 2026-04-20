@@ -1,0 +1,7 @@
+[error] examples/neg/name-based-implicits/type-error-call-id.effekt:4:19: Cannot instantiate implicit argument.
+Cannot instantiate 1st value argument callId of type String.
+  Implicit callId will generate a unique Int for each call to this function in the source code.
+  Expected String but got Int.
+
+  val y: String = foo()
+                  ^^^^^

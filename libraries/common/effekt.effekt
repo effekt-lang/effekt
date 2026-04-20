@@ -842,4 +842,10 @@ effect write(s: String): Unit
 
 effect splice[A](x: A): Unit
 
+// Source positions
+// ================
+//
+// When adding an implicit value argument ?sourcePosition of this type, will have the information
+// of the call site unless passed explicitly.
 
+record SourcePosition(file: String, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int)

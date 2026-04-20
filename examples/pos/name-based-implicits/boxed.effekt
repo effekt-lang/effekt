@@ -1,0 +1,21 @@
+def myCompare(x: Int, y: Int): Ordering = {
+  compareInt(x, y)
+}
+def myCompare[A,B](x: (A,B), y: (A,B)){ ?myCompare: (A,A) => Ordering }{ ?myCompare: (B,B) => Ordering }: Ordering = {
+  val ((x1, x2), (y1, y2)) = (x, y)
+  myCompare(x1,y1) match {
+    case Equal() => myCompare(x2, y2)
+    case o => o
+  }
+}
+
+def runBoxedCompare[A](x: A, y: A, ?myCompare: (A, A) => Ordering at {}): Unit = {
+  println(myCompare(x, y).show)
+}
+
+def main() = {
+  runBoxedCompare((1,2), (1,2))
+  runBoxedCompare((1,2), (2,3))
+  runBoxedCompare(1, 2)
+  runBoxedCompare(((1,1),2), ((0,2),3))
+}
