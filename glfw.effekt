@@ -1,0 +1,117 @@
+
+extern type GLFWwindow =
+  llvm "%Pos"
+
+extern llvm """
+%GLFWwindow = type ptr
+
+declare %Int @glfwInit()
+declare void @glfwTerminate()
+
+declare %GLFWwindow @glfwCreateWindow(%Int, %Int, ptr, ptr, ptr)
+
+declare %Int @glfwWindowShouldClose(%GLFWwindow)
+declare void @glfwSwapBuffers(%GLFWwindow)
+declare void @glfwMakeContextCurrent(%GLFWwindow)
+declare void @glfwPollEvents()
+
+declare ptr @glfwGetProcAddress(ptr)
+declare i32 @gladLoadGL(ptr)
+
+@glad_glClearColor = external global ptr, align 8
+@glad_glClear = external global ptr, align 8
+
+define %GLFWwindow @windowPtr(%Pos %window) {
+  %window_ptr = extractvalue %Pos %window, 1
+  ret ptr %window_ptr
+}
+"""
+
+extern def glfwInit(): Unit =
+  llvm """
+    call i64 @glfwInit()
+    ret %Pos zeroinitializer
+  """
+
+extern def glfwTerminate(): Unit =
+  llvm """
+    call void @glfwTerminate()
+    ret %Pos zeroinitializer
+  """
+
+extern def glfwCreateWindow(width: Int, height: Int, title: String): GLFWwindow =
+  llvm """
+    %str_ptr = call ptr @c_bytearray_into_nullterminated_string(%Pos ${title})
+    %window_ptr = call %GLFWwindow @glfwCreateWindow(%Int ${width}, %Int ${height}, ptr %str_ptr, ptr null, ptr null)
+    %ret_pos = insertvalue %Pos { i64 0, ptr poison }, ptr %window_ptr, 1
+    ret %Pos %ret_pos
+  """
+
+extern def glfwWindowShouldClose(window: GLFWwindow): Bool =
+  llvm """
+    %window_ptr = call %GLFWwindow @windowPtr(%Pos ${window})
+    %should_close = call %Int @glfwWindowShouldClose(%GLFWwindow %window_ptr)
+    %ret_pos = insertvalue %Pos zeroinitializer, %Int %should_close, 0
+    ret %Pos %ret_pos
+  """
+
+extern def glfwSwapBuffers(window: GLFWwindow): Unit =
+  llvm """
+    %window_ptr = call %GLFWwindow @windowPtr(%Pos ${window})
+    call void @glfwSwapBuffers(%GLFWwindow %window_ptr)
+    ret %Pos zeroinitializer
+  """
+
+extern def glfwMakeContextCurrent(window: GLFWwindow): Unit =
+  llvm """
+    %window_ptr = call %GLFWwindow @windowPtr(%Pos ${window})
+    call void @glfwMakeContextCurrent(%GLFWwindow %window_ptr)
+    ret %Pos zeroinitializer
+  """
+
+extern def gladLoadGL(): Unit =
+  llvm """
+    call i32 @gladLoadGL(ptr noundef @glfwGetProcAddress)
+    ret %Pos zeroinitializer
+  """
+
+extern def glfwPollEvents(): Unit =
+  llvm """
+    call void @glfwPollEvents()
+    ret %Pos zeroinitializer
+  """
+
+record Color4(r: Double, g: Double, b: Double, a: Double)
+
+def glClearColor(color: Color4): Unit = glClearColor(color.r, color.g, color.b, color.a)
+
+extern def glClearColor(r: Double, g: Double, b: Double, a: Double): Unit =
+  llvm """
+    %gl_clear_color = load ptr, ptr @glad_glClearColor
+    %r_trunc = fptrunc double ${r} to float
+    %g_trunc = fptrunc double ${g} to float
+    %b_trunc = fptrunc double ${b} to float
+    %a_trunc = fptrunc double ${a} to float
+    call void %gl_clear_color(float %r_trunc, float %g_trunc, float %b_trunc, float %a_trunc)
+    %gl_clear = load ptr, ptr @glad_glClear
+    ; GL_COLOR_BUFFER_BIT = 16384
+    call void %gl_clear(i64 16384)
+    ret %Pos zeroinitializer
+  """
+
+def main(): Unit = {
+  glfwInit()
+  val window = glfwCreateWindow(800, 600, "Test window")
+
+  glfwMakeContextCurrent(window)
+  gladLoadGL()
+
+  while(not(glfwWindowShouldClose(window))) {
+
+    glClearColor(0.6, 0.3, 0.1, 1.0)
+
+    glfwSwapBuffers(window)
+    glfwPollEvents()
+  }
+  glfwTerminate()
+}

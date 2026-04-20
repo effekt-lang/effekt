@@ -103,6 +103,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
     group = advanced
   )
 
+  val pkgConfigPath: ScallopOption[List[String]] = opt[List[String]](
+    "pkgconfig",
+    descr = "Libraries to be called with pkg-config",
+    noshort = true,
+    group = advanced
+  )
+
   val exitOnError: ScallopOption[Boolean] = toggle(
     "exit-on-error",
     descrYes = "Exit with non-zero exit code on error",

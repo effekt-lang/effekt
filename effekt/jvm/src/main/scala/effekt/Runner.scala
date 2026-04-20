@@ -304,6 +304,21 @@ object LLVMRunner extends Runner[String] {
     clangCmd.getOrElseAborting { return Left("Cannot find clang. This is required to use the LLVM backend.") }
     Right(())
 
+  def pkgConfigArgs(using C: Context): Seq[String] = 
+    import scala.sys.process.*
+    C.config.pkgConfigPath.toOption match {
+      case None => Seq[String]()
+      case Some(pkgs) =>
+        val pkgCommand = Seq(
+          "pkg-config",
+          "--cflags",
+          "--libs",
+          s"${C.config.pkgConfigPath.toOption.get.mkString(" ")}"
+        )
+        val pkgExec = Process(pkgCommand).!!
+        pkgExec.trim().split(" ").toSeq
+    }
+
   def libuvArgs(using C: Context): Seq[String] =
     val OS = System.getProperty("os.name").toLowerCase
     val libraries = C.config.clangLibraries.toOption.map(file).orElse {
@@ -346,15 +361,16 @@ object LLVMRunner extends Runner[String] {
     val bcPath  = basePath + ".bc"
     val linkedLibraries = Seq(
       "-lm", // Math library
-    ) ++ libuvArgs
+    ) ++ libuvArgs ++ pkgConfigArgs
 
     def missing(cmd: String) = C.abort(s"Cannot find ${cmd}. This is required to use the LLVM backend.")
     val clang = clangCmd.getOrElse(missing("clang"))
 
     val clangMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
+    val gladMainFile = (C.config.libPath / ".." / "llvm" / "gl.c").unixPath
     val executableFile = basePath
 
-    var clangArgs = Seq(clang, llPath, clangMainFile, "-Wno-override-module", "-o", executableFile)
+    var clangArgs = Seq(clang, llPath, clangMainFile, gladMainFile, "-Wno-override-module", "-o", executableFile)
       ++ linkedLibraries
 
     if (C.config.native()) {
