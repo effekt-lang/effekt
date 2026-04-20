@@ -20,8 +20,8 @@ case class DB[T](values: IntMap[T], keys: Set[Id]) {
   def unionWith(other: DB[T], join: (T, T) => T): DB[T] =
     DB(values.unionWith(other.values, { (_, v1, v2) => join(v1, v2) }), keys ++ other.keys)
 
-  def ++(other: DB[T]): DB[T] =
-    DB(values ++ other.values, keys ++ other.keys)
+  //  def ++(other: DB[T]): DB[T] =
+  //    DB(values ++ other.values, keys ++ other.keys)
 
   def mapValues[R](p: T => R): DB[R] =
     DB(values.map { case (k, v) => k -> p(v) }, keys)
