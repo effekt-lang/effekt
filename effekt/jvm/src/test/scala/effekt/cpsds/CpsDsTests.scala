@@ -83,8 +83,6 @@ class CpsDsTests extends munit.FunSuite {
       Simplifier.transform(input)
     case Pass.SinkBlocks =>
       val mainId = findMain(input)
-      val r = input.refs.debug
-
       BlockSinking.transform(input, mainId)
   }
 
