@@ -56,7 +56,7 @@ def even(x, ks, k) {
     if (tmp_2) {
       k(0, ks)
     } else {
-      run tmp_3 = sub(tmp_2, 1);
+      run tmp_3 = sub(tmp_1, 1);
       even(tmp_3, ks, k)
     }
   }
@@ -79,10 +79,10 @@ def main(ks_1, k_2) {
       if (tmp_9) {
         k_6(0, ks_5)
       } else {
-        run tmp_10 = sub(tmp_9, 1);
+        run tmp_10 = sub(tmp_8, 1);
         even(tmp_10, ks_5, k_6)
       }
     }
   }
-  even(10, ks_5, k_6)
+  even(10, ks_1, k_2)
 }
