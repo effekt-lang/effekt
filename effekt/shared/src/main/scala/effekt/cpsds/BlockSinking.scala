@@ -93,37 +93,30 @@ object BlockSinking {
   extension (pending: Pending) {
 
     /** Which pending defs are free in the given tree? */
-    def usedIn(tree: Stmt): Set[Id] =
-      pending.keySet & tree.free
-
-    def usedIn(tree: Expr): Set[Id] =
-      pending.keySet & tree.free
-
-    def usedIn(tree: Clause): Set[Id] =
-      pending.keySet & tree.free
-
-    def usedIn(tree: Operation): Set[Id] =
-      pending.keySet & tree.free
+    def usedIn(tree: Stmt | Expr | Clause | Operation): Set[Id] =
+      pending.keySet & (tree match {
+        case t: Stmt => t.free
+        case e: Expr => e.free
+        case c: Clause => c.free
+        case o: Operation => o.free
+      })
 
     def usedIn(ids: Set[Id]): Set[Id] =
       pending.keySet & ids
 
-    /** Remove a set of ids from pending */
-    def without(ids: Set[Id]): Pending =
-      pending -- ids
-
-    /** Only keep the given ids */
-    def only(ids: Set[Id]): Pending =
-      pending.view.filterKeys(ids).toMap
-
     /**
-     * Partition pending into (emitHere, remaining) given forced ids.
-     * Closes forced under dependencies.
+     * Emit forced defs (transitively closed) before the body.
+     * The callback receives the remaining pending defs.
      */
-    def emit(forced: Set[Id])(using ctx: Context): (Set[Id], Pending) = {
+    def emit(forced: Set[Id])(body: Pending => Stmt)(using ctx: Context): Stmt = {
       val emitHere = ctx.close(forced, pending)
-      (emitHere, pending.without(emitHere))
+      val remaining = pending -- emitHere
+      emitDefs(emitHere, pending, body(remaining))
     }
+
+    def forBranch(tree: Stmt | Clause)(using ctx: Context): Pending =
+      val transitiveClosure = ctx.close(pending.usedIn(tree), pending)
+      pending.view.filterKeys(transitiveClosure).toMap
   }
 
   def transform(stmt: Stmt, pending: Pending)(using ctx: Context): Stmt = rewriting(stmt) {
@@ -133,17 +126,13 @@ object BlockSinking {
 
     case Stmt.If(cond, thn, els) =>
       val inBoth = pending.usedIn(thn) & pending.usedIn(els)
-      val (emitHere, remaining) = pending.emit(pending.usedIn(cond) ++ inBoth)
-
-      val thnOnly = ctx.close(remaining.usedIn(thn), remaining) -- emitHere
-      val elsOnly = ctx.close(remaining.usedIn(els), remaining) -- emitHere
-
-      val result = Stmt.If(
-        cond,
-        transform(thn, remaining.only(thnOnly)),
-        transform(els, remaining.only(elsOnly))
-      )
-      emitDefs(emitHere, pending, result)
+      pending.emit(pending.usedIn(cond) ++ inBoth) { remaining =>
+        Stmt.If(
+          cond,
+          transform(thn, remaining.forBranch(thn)),
+          transform(els, remaining.forBranch(els))
+        )
+      }
 
     case Stmt.Match(scrutinee, clauses, default) =>
       val branchSets: List[Set[Id]] = clauses.map { case (_, cl) => pending.usedIn(cl) } ++
@@ -151,76 +140,82 @@ object BlockSinking {
       val useCounts = branchSets.flatten.groupBy(identity).view.mapValues(_.size)
       val inMultiple = useCounts.collect { case (id, n) if n > 1 => id }.toSet
 
-      val (emitHere, remaining) = pending.emit(pending.usedIn(scrutinee) ++ inMultiple)
-
-      val clauses1 = clauses.map { case (tag, cl) =>
-        val branchNeeds = ctx.close(remaining.usedIn(cl), remaining) -- emitHere
-        (tag, Clause(cl.params, transform(cl.body, remaining.only(branchNeeds))))
+      pending.emit(pending.usedIn(scrutinee) ++ inMultiple) { remaining =>
+        val clauses1 = clauses.map { case (tag, cl) =>
+          (tag, Clause(cl.params, transform(cl.body, remaining.forBranch(cl))))
+        }
+        val default1 = default.map { d => transform(d, remaining.forBranch(d)) }
+        Stmt.Match(scrutinee, clauses1, default1)
       }
-      val default1 = default.map { d =>
-        val branchNeeds = ctx.close(remaining.usedIn(d), remaining) -- emitHere
-        transform(d, remaining.only(branchNeeds))
-      }
-      emitDefs(emitHere, pending, Stmt.Match(scrutinee, clauses1, default1))
 
     case Stmt.Let(id, binding, rest) =>
-      val (emitHere, remaining) = pending.emit(pending.usedIn(binding))
-      emitDefs(emitHere, pending, Stmt.Let(id, binding, transform(rest, remaining)))
+      pending.emit(pending.usedIn(binding)) { remaining =>
+        Stmt.Let(id, binding, transform(rest, remaining))
+      }
 
     case Stmt.Run(id, callee, args, purity, rest) =>
-      val (emitHere, remaining) = pending.emit(args.foldLeft(pending.usedIn(Set(callee))) {
+      pending.emit(args.foldLeft(pending.usedIn(Set(callee))) {
         (acc, a) => acc ++ pending.usedIn(a)
-      })
-      emitDefs(emitHere, pending, Stmt.Run(id, callee, args, purity, transform(rest, remaining)))
+      }) { remaining =>
+        Stmt.Run(id, callee, args, purity, transform(rest, remaining))
+      }
 
     case Stmt.New(id, interface, operations, rest) =>
-      val (emitHere, remaining) = pending.emit(operations.foldLeft(Set.empty[Id]) {
+      pending.emit(operations.foldLeft(Set.empty[Id]) {
         (acc, op) => acc | pending.usedIn(op)
-      })
-      val ops1 = operations.map(op => Operation(op.name, op.params, transform(op.body, Map.empty)))
-      emitDefs(emitHere, pending, Stmt.New(id, interface, ops1, transform(rest, remaining)))
+      }) { remaining =>
+        val ops1 = operations.map(op => Operation(op.name, op.params, transform(op.body, Map.empty)))
+        Stmt.New(id, interface, ops1, transform(rest, remaining))
+      }
 
     case Stmt.Region(id, ks, rest) =>
       Stmt.Region(id, ks, transform(rest, pending))
 
     case Stmt.Alloc(id, init, region, rest) =>
-      val (emitHere, remaining) = pending.emit(pending.usedIn(init))
-      emitDefs(emitHere, pending, Stmt.Alloc(id, init, region, transform(rest, remaining)))
+      pending.emit(pending.usedIn(init)) { remaining =>
+        Stmt.Alloc(id, init, region, transform(rest, remaining))
+      }
 
     case Stmt.Var(id, init, ks, rest) =>
-      val (emitHere, remaining) = pending.emit(pending.usedIn(init) ++ pending.usedIn(ks))
-      emitDefs(emitHere, pending, Stmt.Var(id, init, ks, transform(rest, remaining)))
+      pending.emit(pending.usedIn(init) ++ pending.usedIn(ks)) { remaining =>
+        Stmt.Var(id, init, ks, transform(rest, remaining))
+      }
 
     case Stmt.Dealloc(ref, rest) =>
-      val (emitHere, remaining) = pending.emit(pending.usedIn(Set(ref)))
-      emitDefs(emitHere, pending, Stmt.Dealloc(ref, transform(rest, remaining)))
+      pending.emit(pending.usedIn(Set(ref))) { remaining =>
+        Stmt.Dealloc(ref, transform(rest, remaining))
+      }
 
     case Stmt.Get(ref, id, rest) =>
-      val (emitHere, remaining) = pending.emit(pending.usedIn(Set(ref)))
-      emitDefs(emitHere, pending, Stmt.Get(ref, id, transform(rest, remaining)))
+      pending.emit(pending.usedIn(Set(ref))) { remaining =>
+        Stmt.Get(ref, id, transform(rest, remaining))
+      }
 
     case Stmt.Put(ref, value, rest) =>
-      val (emitHere, remaining) = pending.emit(pending.usedIn(value) ++ pending.usedIn(Set(ref)))
-      emitDefs(emitHere, pending, Stmt.Put(ref, value, transform(rest, remaining)))
+      pending.emit(pending.usedIn(value) ++ pending.usedIn(Set(ref))) { remaining =>
+        Stmt.Put(ref, value, transform(rest, remaining))
+      }
 
     case Stmt.Reset(p, ks, k, body, ks1, k1) =>
-      val (emitHere, remaining) = pending.emit(pending.usedIn(ks1) ++ pending.usedIn(k1))
-      emitDefs(emitHere, pending, Stmt.Reset(p, ks, k, transform(body, remaining), ks1, k1))
+      pending.emit(pending.usedIn(ks1) ++ pending.usedIn(k1)) { remaining =>
+        Stmt.Reset(p, ks, k, transform(body, remaining), ks1, k1)
+      }
 
     case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
-      val (emitHere, remaining) = pending.emit(pending.usedIn(Set(prompt)) ++ pending.usedIn(ks1) ++ pending.usedIn(k1))
-      emitDefs(emitHere, pending, Stmt.Shift(prompt, resume, ks, k, transform(body, remaining), ks1, k1))
+      pending.emit(pending.usedIn(Set(prompt)) ++ pending.usedIn(ks1) ++ pending.usedIn(k1)) { remaining =>
+        Stmt.Shift(prompt, resume, ks, k, transform(body, remaining), ks1, k1)
+      }
 
     case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
-      val (emitHere, remaining) = pending.emit(pending.usedIn(Set(resumption)) ++ pending.usedIn(ks1) ++ pending.usedIn(k1))
-      emitDefs(emitHere, pending, Stmt.Resume(resumption, ks, k, transform(body, remaining), ks1, k1))
+      pending.emit(pending.usedIn(Set(resumption)) ++ pending.usedIn(ks1) ++ pending.usedIn(k1)) { remaining =>
+        Stmt.Resume(resumption, ks, k, transform(body, remaining), ks1, k1)
+      }
 
     case Stmt.App(_, _, _) | Stmt.Invoke(_, _, _) | Stmt.Hole(_) =>
-      val (emitHere, _) = pending.emit(pending.usedIn(stmt))
-      emitDefs(emitHere, pending, stmt)
+      pending.emit(pending.usedIn(stmt)) { _ => stmt }
   }
 
-  def emitDefs(ids: Set[Id], pending: Pending, body: Stmt)(using ctx: Context): Stmt = {
+  private def emitDefs(ids: Set[Id], pending: Pending, body: Stmt)(using ctx: Context): Stmt = {
     if (ids.isEmpty) return body
     topoSort(ids, pending).foldRight(body) { case (id, rest) =>
       val Def(_, params, defBody) = pending(id)
@@ -228,7 +223,7 @@ object BlockSinking {
     }
   }
 
-  def topoSort(ids: Set[Id], pending: Pending)(using ctx: Context): List[Id] = {
+  private def topoSort(ids: Set[Id], pending: Pending)(using ctx: Context): List[Id] = {
     var visited = Set.empty[Id]
     var result = List.empty[Id]
     def visit(id: Id): Unit = {
