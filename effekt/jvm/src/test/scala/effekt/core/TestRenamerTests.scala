@@ -119,7 +119,7 @@ class TestRenamerTests extends CoreTests {
         |
         |def foo_renamed_2() = {
         |  12 match[Int] {
-        |    X : { (aa_renamed_3: Int, bb_renamed_4: Int) =>
+        |    X_renamed_0 : { (aa_renamed_3: Int, bb_renamed_4: Int) =>
         |      return aa_renamed_3: Int
         |    }
         |  }
