@@ -8,6 +8,7 @@ def outer(x, ks, k) {
   }
 }
 def main(ks2, k2) {
+  // <---- should end up here
   def k1(res, ks1) {
     outer(res, ks1, k2)
   }
