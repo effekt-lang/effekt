@@ -324,7 +324,7 @@ define private %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
     ret %StackPointer %newStackPointer
 }
 
-define private i64 @nextPowerOfTwo(i64 %x) {
+define private i64 @nextPowerOfTwo(i64 %x) nounwind nosync willreturn readnone {
     %leadingZeros = call i64 @llvm.ctlz.i64(i64 %x, i1 false)
     %numBits = sub i64 64, %leadingZeros
     %result = shl i64 1, %numBits
@@ -745,7 +745,7 @@ define ccc void @run_Pos(%Pos %boxed, %Pos %argument) {
 }
 
 
-define ccc %Pos @coerceNegPos(%Neg %neg) {
+define ccc %Pos @coerceNegPos(%Neg %neg) nounwind nosync willreturn readnone {
     %arrayPointer = extractvalue %Neg %neg, 0
     %object = extractvalue %Neg %neg, 1
     %tagValue = ptrtoint ptr %arrayPointer to i64
@@ -754,7 +754,7 @@ define ccc %Pos @coerceNegPos(%Neg %neg) {
     ret %Pos %boxed2
 }
 
-define ccc %Neg @coercePosNeg(%Pos %pos) {
+define ccc %Neg @coercePosNeg(%Pos %pos) nounwind nosync willreturn readnone {
     %tagValue = extractvalue %Pos %pos, 0
     %object = extractvalue %Pos %pos, 1
     %arrayPointer = inttoptr i64 %tagValue to ptr
@@ -763,38 +763,38 @@ define ccc %Neg @coercePosNeg(%Pos %pos) {
     ret %Neg %unboxed2
 }
 
-define ccc %Pos @coerceIntPos(%Int %input) {
+define ccc %Pos @coerceIntPos(%Int %input) nounwind nosync willreturn readnone {
     %boxed1 = insertvalue %Pos zeroinitializer, i64 %input, 0
     %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
     ret %Pos %boxed2
 }
 
-define ccc %Int @coercePosInt(%Pos %input) {
+define ccc %Int @coercePosInt(%Pos %input) nounwind nosync willreturn readnone {
     %unboxed = extractvalue %Pos %input, 0
     ret %Int %unboxed
 }
 
-define ccc %Pos @coerceBytePos(%Byte %input) {
+define ccc %Pos @coerceBytePos(%Byte %input) nounwind nosync willreturn readnone {
     %extended = sext i8 %input to i64
     %boxed1 = insertvalue %Pos zeroinitializer, i64 %extended, 0
     %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
     ret %Pos %boxed2
 }
 
-define ccc %Byte @coercePosByte(%Pos %input) {
+define ccc %Byte @coercePosByte(%Pos %input) nounwind nosync willreturn readnone {
     %unboxed = extractvalue %Pos %input, 0
     %truncated = trunc i64 %unboxed to i8
     ret i8 %truncated
 }
 
-define ccc %Pos @coerceDoublePos(%Double %input) {
+define ccc %Pos @coerceDoublePos(%Double %input) nounwind nosync willreturn readnone {
     %number = bitcast double %input to i64
     %boxed1 = insertvalue %Pos zeroinitializer, i64 %number, 0
     %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
     ret %Pos %boxed2
 }
 
-define ccc %Double @coercePosDouble(%Pos %input) {
+define ccc %Double @coercePosDouble(%Pos %input) nounwind nosync willreturn readnone {
     %unboxed = extractvalue %Pos %input, 0
     %d = bitcast i64 %unboxed to double
     ret %Double %d
