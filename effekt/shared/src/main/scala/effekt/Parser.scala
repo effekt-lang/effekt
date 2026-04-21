@@ -357,7 +357,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
 
       val clause = MatchClause(pattern, guards, body, Span(source, pattern.span.from, body.span.to, Synthesized))
-      val matchExpr = Match(scrutinees, List(clause), fallback, withSpan.synthesized)
+      val matchExpr = Match(scrutinees, List(clause), fallback, withSpan)
       val matchBody = Return(matchExpr, withSpan.synthesized)
       BlockLiteral(Nil, vparams, Nil, matchBody, withSpan.synthesized)
     }
@@ -573,11 +573,11 @@ class Parser(tokens: Seq[Token], source: Source) {
           case p ~ guards =>
             // matches do not support doc comments, so we ignore `info`
             val sc = expr()
-            val endPos = pos()
             val default = when(`else`) { Some(stmt()) } { None }
+            val endPos = pos()
             val body = semi() ~> stmts(inBraces)
             val clause = MatchClause(p, guards, body, Span(source, p.span.from, sc.span.to))
-            val matching = Match(List(sc), List(clause), default, Span(source, startPos, endPos, Synthesized))
+            val matching = Match(List(sc), List(clause), default, Span(source, startPos, endPos))
             Return(matching, span().synthesized)
         }
 
@@ -1291,9 +1291,9 @@ class Parser(tokens: Seq[Token], source: Source) {
                     names.zip(argSpans).map{ (name, span) => Var(IdRef(Nil, name, span.synthesized), span.synthesized) },
                     cs.unspan,
                     None,
-                    span().synthesized
+                    span()
                   ), span().synthesized),
-                span().synthesized
+                span()
               )
 
           case _ =>
