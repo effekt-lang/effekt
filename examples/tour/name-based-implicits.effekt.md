@@ -105,7 +105,7 @@ this is expanded to `box {...}` and expanded like block parameters, so
 the following works:
 ```
 def mySort3[A](x: List[A], ?compare: (A, A) => Ordering at {}): List[A] =
-  mySort2(x)
+  mySort2(x){ (x,y) => (unbox compare)(x, y) }
 ```
 ```effekt:repl
 mySort3([12,3,42])
