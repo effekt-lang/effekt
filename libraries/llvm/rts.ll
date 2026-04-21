@@ -117,6 +117,7 @@ declare double @tan(double)
 declare void @print(i64)
 declare void @exit(i64)
 declare void @llvm.assume(i1)
+declare i64 @llvm.expect.i64(i64, i64)
 
 
 ; Prompts
@@ -187,7 +188,8 @@ define private void @eraseObject(%Object %object) alwaysinline {
     next:
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
-    switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
+    %expectedRC = call i64 @llvm.expect.i64(i64 %referenceCount, i64 0) ; assume uniqueness
+    switch %ReferenceCount %expectedRC, label %decr [%ReferenceCount 0, label %free]
 
     decr:
     %referenceCount.1 = sub %ReferenceCount %referenceCount, 1
@@ -449,7 +451,8 @@ define private {%Resumption, %Stack} @shift(%Stack %stack, %Prompt %prompt) {
 define private void @erasePrompt(%Prompt %prompt) alwaysinline {
     %referenceCount_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23
-    switch %ReferenceCount %referenceCount, label %decrement [%ReferenceCount 0, label %free]
+    %expectedRC = call i64 @llvm.expect.i64(i64 %referenceCount, i64 0) ; assume uniqueness
+    switch %ReferenceCount %expectedRC, label %decrement [%ReferenceCount 0, label %free]
 
 decrement:
     %newReferenceCount = sub %ReferenceCount %referenceCount, 1
@@ -532,7 +535,8 @@ define private %Resumption @uniqueStack(%Resumption %resumption) alwaysinline {
 entry:
     %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
-    switch %ReferenceCount %referenceCount, label %copy [%ReferenceCount 0, label %done]
+    %expectedRC = call i64 @llvm.expect.i64(i64 %referenceCount, i64 0) ; assume uniqueness
+    switch %ReferenceCount %expectedRC, label %copy [%ReferenceCount 0, label %done]
 
 done:
     ret %Resumption %resumption
@@ -584,7 +588,8 @@ define void @shareResumption(%Resumption %resumption) alwaysinline {
 define void @eraseResumption(%Resumption %resumption) alwaysinline {
     %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
-    switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
+    %expectedRC = call i64 @llvm.expect.i64(i64 %referenceCount, i64 0) ; assume uniqueness
+    switch %ReferenceCount %expectedRC, label %decr [%ReferenceCount 0, label %free]
 
     decr:
     %referenceCount.1 = sub %ReferenceCount %referenceCount, 1
