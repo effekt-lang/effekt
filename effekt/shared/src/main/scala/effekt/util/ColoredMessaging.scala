@@ -96,6 +96,24 @@ trait ColoredMessaging extends EffektMessaging {
       }
 
       mainMessage + "\n\n" + explanations.mkString("\n\n") + "\n"
+    case ImplicitInstantiationError(err, tpe, range) =>
+      def formatIndex(i: Int): String = i match {
+        case 0 => "1st"
+        case 1 => "2nd"
+        case 2 => "3rd"
+        case n => s"${n + 1}th"
+      }
+      val title = bold("Cannot instantiate implicit argument.\n")
+      val prettyIndex = formatIndex(err.index)
+      val prettyTpe = TypePrinter.show(tpe)
+      val mainMessage = underlined(s"Cannot instantiate ${prettyIndex} ${err.kind} ${err.name} of type ${prettyTpe}.")
+      val info = err.explanation match {
+        case Some(e) => indent(e) + "\n"
+        case None => ""
+      }
+      val nestedErrors = indent(err.msgs.map { msg => formatContent(msg) }.mkString("\n"))
+
+      title + mainMessage + "\n" + info + nestedErrors + "\n"
   }
 
   def fullname(n: Name): String = n match {

@@ -1,0 +1,6 @@
+def foo(?callId: String): String = callId
+
+def main() = {
+  val y: String = foo()
+  println(y)
+}

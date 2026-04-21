@@ -1,0 +1,23 @@
+
+def myComparer(): (Int, Int) => Ordering at {} = {
+  box { (x, y) => compareInt(x, y) }
+}
+def myComparer[A](){ ?myComparer: => ((A, A) => Ordering at {})}: (List[A], List[A]) => Ordering at {} = {
+  val cmp: (A,A) => Ordering at {} = myComparer()
+  box {
+    case Nil(), Nil() => Equal()
+    case Cons(_, _), Nil() => Greater()
+    case Nil(), Cons(_, _) => Less()
+    case Cons(lh, lt), Cons(rh, rt) =>
+      cmp(lh, rh) match {
+        case Equal() => myComparer(){ => cmp }(lt, rt)
+        case o => o
+      }
+  }
+}
+
+def main() = {
+  val cmp: (List[Int], List[Int]) => Ordering at {} = myComparer()
+  val x: Ordering = ((unbox cmp)([1,2,3], [2,3,4]))
+  println(x)
+}

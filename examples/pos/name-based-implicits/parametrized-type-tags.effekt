@@ -1,0 +1,20 @@
+type TypeTag[A] {
+  Int()
+  String()
+  List[E](elements: TypeTag[E])
+}
+
+def typeTag(): TypeTag[Int] = Int()
+def typeTag(): TypeTag[String] = String()
+def typeTag[X](){ ?typeTag: => TypeTag[X] }: TypeTag[List[X]] = List[List[X], X](typeTag())
+
+def showType[X](t: TypeTag[X]): String = t match {
+  case Int() => "Int"
+  case String() => "String"
+  case List(els) => s"List[${showType(els)}]"
+}
+
+def main() = {
+  val t: TypeTag[List[List[Int]]] = typeTag()
+  println(showType(t))
+}

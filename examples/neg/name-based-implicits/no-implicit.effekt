@@ -1,0 +1,9 @@
+def foo(?barbaz: String): Unit = ()
+
+def foo{ ?foobaz: => Unit }: Unit = foobaz()
+
+def foobaz(x: String): Unit = ()
+
+def main() = {
+  foo()
+}

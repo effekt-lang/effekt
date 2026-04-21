@@ -1,0 +1,11 @@
+
+def foo(): String = {
+  println("Foo")
+  "Foo"
+}
+
+def requirePureFoo(?foo: () => String at {}): Unit = println(foo())
+
+def main() = {
+  requirePureFoo()
+}
