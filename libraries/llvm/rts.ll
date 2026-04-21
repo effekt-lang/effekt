@@ -181,7 +181,7 @@ define void @shareNegative(%Neg %val) alwaysinline nounwind nosync nofree {
     ret void
 }
 
-define private void @eraseObject(%Object %object) alwaysinline {
+define private void @eraseObject(%Object %object) alwaysinline nounwind nosync {
     %isNull = icmp eq %Object %object, null
     br i1 %isNull, label %done, label %next
 
@@ -198,7 +198,7 @@ define private void @eraseObject(%Object %object) alwaysinline {
 
     free:
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
-    %eraser = load %Eraser, ptr %objectEraser, !alias.scope !14, !noalias !24
+    %eraser = load %Eraser, ptr %objectEraser, !alias.scope !14, !noalias !24, !invariant.load !{}
     %environment = call %Environment @objectEnvironment(%Object %object)
     call void %eraser(%Environment %environment)
     call void @free(%Object %object)
@@ -208,13 +208,13 @@ define private void @eraseObject(%Object %object) alwaysinline {
     ret void
 }
 
-define void @erasePositive(%Pos %val) alwaysinline {
+define void @erasePositive(%Pos %val) alwaysinline nounwind nosync {
     %object = extractvalue %Pos %val, 1
     tail call void @eraseObject(%Object %object)
     ret void
 }
 
-define void @eraseNegative(%Neg %val) alwaysinline {
+define void @eraseNegative(%Neg %val) alwaysinline nounwind nosync {
     %object = extractvalue %Neg %val, 1
     tail call void @eraseObject(%Object %object)
     ret void
