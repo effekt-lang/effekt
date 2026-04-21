@@ -11,26 +11,26 @@ import effekt.symbols.{TermSymbol, TypeSymbol}
 object TRMC extends Phase[CoreTransformed, CoreTransformed]{
   val phaseName: String = "trmc"
 
-  def run(input: CoreTransformed)(using Context): Option[CoreTransformed] =
+  def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = {
     val CoreTransformed(source, tree, mod, modDec) = input
     //println(effekt.util.PrettyPrinter.format(modDec).layout)
-    
-    object transform extends Tree.Rewrite{
+
+    object transform extends Tree.Rewrite {
       override def toplevel: PartialFunction[Toplevel, Toplevel] = {
         case Toplevel.Def(id, block) =>
           println("in Toplevel")
           println(id.name.name)
-          if (tailRecModCons(id, block)){ //TODO:schöner machen nach debugging
-            println("Halleluja")
+          if (id.name.name == "simpleTRMC") {
             trmc(id, block)
-          }else{
-            Toplevel.Def(id,block)
+          } else {
+            Toplevel.Def(id, block)
           }
-          
+
       }
+
       override def stmt: PartialFunction[Stmt, Stmt] = {
-        case Def(id, block, body) if tailRecModCons(id, block, body) =>
-          trmc(id, block,body)
+        case Def(id, block, body) if id.name.name == "simpleTRMC" =>
+          trmc(id, block, body)
       }
     }
 
@@ -39,180 +39,18 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     }
 
     Some(CoreTransformed(source, tree, mod, transformed))
-    
-  enum tailstatus {
-    case Nothing
-    case Tail
-    case TailRecModCons
   }
+    
 
   def freeInStmt(id:Id, stmt: Stmt): Boolean = stmt.free.freeIds.contains(id)
   def freeInExpr(id:Id, expr: Expr): Boolean = expr.free.freeIds.contains(id)
   def freeInBlock(id:Id, block: Block): Boolean = block.free.freeIds.contains(id)
-    
-  def tailRecModCons(id: Id, block: Block): Boolean = { 
-    if(id.name.name == "simpleTRMC"){
-      println(effekt.util.PrettyPrinter.format(Toplevel.Def(id, block)).layout)
-    }
-    block match {
-      case BlockVar(id, annotatedTpe, annotatedCapt) => ???
-      case BlockLit(tparams,cparams,vparams,bparams,body) => tailRecModCons(body, id, false)
-      case Unbox(pure) => ???
-      case New(impl) => ???
-    }
-  }
-
-
-  def tailRecModCons(id: Id, block: Block, body: Stmt): Boolean = {
-    //println(effekt.util.PrettyPrinter.format(Def(id, block, body)).layout)
-    id.name.name match {
-      case "simpleTRMC" => true
-      case _ => false
-    }
-    
-  }
-
-  //non-recursive is also true??
-  //mutually recursive functions should be false, we dont want to jump to definitions??
-  def tailRecModCons(stmt: Stmt, fun: Id, callerIsTail: Boolean): Boolean = stmt match {
-    case Stmt.Def(id, block, body) => tailRecModCons(body,fun, false)
-    case Stmt.Let(id, binding, body) => tailRecModCons(binding,fun,isTail(stmt)) && tailRecModCons(body,fun, false)
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
-    case Stmt.Return(expr) => tailRecModCons(expr, fun, isTail(stmt)) 
-    case Stmt.Val(id, binding, body) => tailRecModCons(binding,fun,isTail(stmt)) && tailRecModCons(body,fun,false)
-    case Stmt.App(callee, targs, vargs, bargs) => callee match {
-      case effekt.core.Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
-        if(id == fun && callerIsTail){
-          true
-        }else{
-          false
-        }
-      case effekt.core.Block.BlockLit(tparams, cparams, vparams, bparams, body) => ???
-      case effekt.core.Block.Unbox(pure) => ???
-      case effekt.core.Block.New(impl) => ???
-    }
-    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
-    case Stmt.If(cond, thn, els) => tailRecModCons(thn,fun,false) && tailRecModCons(els,fun, false)
-    case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => ???
-    case Stmt.Region(body) => ???
-    case Stmt.Alloc(id, init, region, body) => ???
-    case Stmt.Var(ref, init, capture, body) => ???
-    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => ???
-    case Stmt.Put(ref, annotatedCapt, value, body) => ???
-    case Stmt.Reset(body) => ???
-    case Stmt.Shift(prompt, k, body) => ???
-    case Stmt.Resume(k, body) => ???
-    case Stmt.Hole(annotatedTpe, span) => ???
-  }
   
-  def tailRecModCons(expr: Expr, fun: Id, callerIsTail: Boolean): Boolean = expr match {
-    case Expr.ValueVar(id, annotatedType) => true
-    case Expr.Literal(value, annotatedType) => true
-    case Expr.PureApp(b, targs, vargs) => 
-      if((b.id == fun) == callerIsTail){ //subtle difference to above: ==
-        true
-      }else{
-        false
-      }
-    case Expr.Make(data, tag, targs, vargs) => tag.name.name match {
-      case "Nil" => true
-      case "Cons" => true
-      case _ => false
-    }
-    case Expr.MakeContext(data, tag, targs, before, after) => ??? //does this happen?
-    case Expr.Box(b, annotatedCapture) => ???
-  }
-  
-  def isTail(stmt:Stmt): Boolean = stmt match {
-    case Stmt.Def(id, block, body) => ???
-    case Stmt.Let(id, binding, body) => isReturnOrCons(body)._1 && isReturnOrCons(body)._2.contains(id)
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
-    case Stmt.Return(expr) => true
-    case Stmt.Val(id, binding, body) => isReturnOrCons(body)._1 && isReturnOrCons(body)._2.contains(id)
-    case Stmt.App(callee, targs, vargs, bargs) => ???
-    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
-    case Stmt.If(cond, thn, els) => ???
-    case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => ???
-    case Stmt.Region(body) => ???
-    case Stmt.Alloc(id, init, region, body) => ???
-    case Stmt.Var(ref, init, capture, body) => ???
-    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => ???
-    case Stmt.Put(ref, annotatedCapt, value, body) => ???
-    case Stmt.Reset(body) => ???
-    case Stmt.Shift(prompt, k, body) => ???
-    case Stmt.Resume(k, body) => ???
-    case Stmt.Hole(annotatedTpe, span) => ???
-  }
-  
-  def isReturnOrCons(stmt: Stmt): (Boolean, Option[Id]) = stmt match {
-    case effekt.core.Stmt.Let(id, binding, body) => binding match {
-      case effekt.core.Expr.ValueVar(id, annotatedType) => (false, None)
-      case effekt.core.Expr.Literal(value, annotatedType) => (false, None)
-      case effekt.core.Expr.PureApp(b, targs, vargs) => (false, None)
-      case effekt.core.Expr.Make(data, tag, targs, vargs) => tag.name.name match { //vargs could again be anything
-        case "Cons" => 
-          if(isReturnOrCons(body)._1 && isReturnOrCons(body)._2.contains(id)){
-            vargs.last match {
-              case Expr.ValueVar(id, annotatedType) => (true, Some(id))
-              case Expr.Literal(value, annotatedType) => (true, None) //is this TRMC?
-              case Expr.PureApp(b, targs, vargs) => (false, None)
-              case Expr.Make(data, tag, targs, vargs) => (false, None)
-              case Expr.MakeContext(data, tag, targs, before, after) => ??? //does this happen?
-              case Expr.Box(b, annotatedCapture) => (false, None)
-            }
-          }else{
-              (false,None)
-          }
-        case _ => (false, None)
-      }
-      case effekt.core.Expr.MakeContext(data, tag, targs, before, after) => ???
-      case effekt.core.Expr.Box(b, annotatedCapture) => (false, None)
-    }
-    case effekt.core.Stmt.Return(expr) => expr match {
-      case effekt.core.Expr.ValueVar(id, annotatedType) => (true, Some(id))
-      case effekt.core.Expr.Literal(value, annotatedType) => (true, None) //is this TRMC?
-      case effekt.core.Expr.PureApp(b, targs, vargs) => (false, None)//?
-      case effekt.core.Expr.Make(data, tag, targs, vargs) => (false, None)//does'nt happen?
-      case effekt.core.Expr.MakeContext(data, tag, targs, before, after) => ??? //does this happen?
-      case effekt.core.Expr.Box(b, annotatedCapture) => (false, None)
-    }
-    case effekt.core.Stmt.Val(id, binding, body) => (false, None) //?
-    case _ => (false, None)
-  }
 
-  def trmc(id: Id, block: Block): Toplevel = {
-    println("in trmc()")
-    block match {
-      case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Toplevel.Def(id: Id, block: Block)
-      case Block.BlockLit(tparams, cparams, vparams, bparams, body) => ???//Toplevel.Def(id: Id, Block.BlockLit(tparams, cparams, vparams, bparams, trmc(id,body,k)))
-      case Block.Unbox(pure) => Toplevel.Def(id: Id, block: Block)
-      case Block.New(impl) => Toplevel.Def(id: Id, block: Block)
-    }
-    
-  }
-  def trmc(id: Id, block: Block, body: Stmt): Stmt = {
-    Def(id, block, body)
-  }
+  def trmc(id: Id, block: Block): Toplevel = ???
   
-  def trmc(id: Id, stmt: Stmt, cont: Stmt): Stmt = stmt match {
-    case Stmt.Def(id, block, body) => ???
-    case Stmt.Let(id, binding, body) => ???
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
-    case Stmt.Return(expr) => ???
-    case Stmt.Val(id, binding, body) => ???
-    case Stmt.App(callee, targs, vargs, bargs) => ???
-    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
-    case Stmt.If(cond, thn, els) => ???
-    case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => ???
-    case Stmt.Region(body) => ???
-    case Stmt.Alloc(id, init, region, body) => ???
-    case Stmt.Var(ref, init, capture, body) => ???
-    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => ???
-    case Stmt.Put(ref, annotatedCapt, value, body) => ???
-    case Stmt.Reset(body) => ???
-    case Stmt.Shift(prompt, k, body) => ???
-    case Stmt.Resume(k, body) => ???
-    case Stmt.Hole(annotatedTpe, span) => ???
-  }
+  def trmc(id: Id, block: Block, body: Stmt): Stmt = ???
+  
+  def trmc(id: Id, stmt: Stmt, cont: Stmt): Stmt = ???
 
 }

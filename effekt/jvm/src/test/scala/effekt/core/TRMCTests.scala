@@ -10,6 +10,8 @@ import munit.Clue.generate
 class TRMCTests extends CoreTests {
   
   case class ImpossibleStateError(message: String) extends RuntimeException(message: String)
+
+  def freeInExpr(id:Id, expr: Expr): Boolean = expr.free.freeIds.contains(id)
   
   val listId = Id("List")
   val consId = Id("Cons")
@@ -132,7 +134,14 @@ class TRMCTests extends CoreTests {
       case Block.New(impl) => ???
     }
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
-    case Stmt.If(cond, thn, els) => ???
+    case Stmt.If(cond, thn, els) => 
+      if(freeInExpr(inputfun, cond)){
+        ??? //TODO: probably give up
+      }else{
+        Stmt.If(cond,
+          transform(thn, inputfun, outputfun, outputTpe, context, outerContextTpe),
+          transform(els, inputfun, outputfun, outputTpe, context, outerContextTpe))
+      }
     case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => ???
     case Stmt.Region(body) => ???
     case Stmt.Alloc(id, init, region, body) => ???
@@ -357,6 +366,56 @@ class TRMCTests extends CoreTests {
 
     val transformed = transform(inputtree, f, f2, TList, TransformContext.Outer(ctx), HoleContext(ATpe, TList))
     assertAlphaEquivalentStatements(transformed,expected)
+  }
+  
+  test("if"){
+
+    val f: Id = Id("f")
+    val f2: Id = Id("f2")
+    val fType: BlockType = Function(Nil, Nil, List(Type.TInt), Nil, Type.TInt)
+    val fCapt: Captures = Set.empty
+
+    val ctx: Id = Id("ctx")
+    val A: Id = Id("A")
+    val ATpe: ValueType = ValueType.Var(A)
+
+    val sub: BlockVar = BlockVar(Id("infixSub"), Function(Nil, Nil, List(Type.TInt, Type.TInt), Nil, Type.TInt), Set.empty)
+    val Gt: BlockVar = BlockVar(Id("infixGt"), Function(Nil, Nil, List(Type.TInt, Type.TInt), Nil, Type.TBoolean), Set.empty)
+
+    val g: Id = Id("g")
+    val gType: BlockType = Function(Nil, Nil, Nil, Nil, Type.TInt)
+    val gCapt: Captures = Set.empty
+
+    val n: Id = Id("n")
+    
+    //n-1
+    val minusone = Expr.PureApp(sub, List(Type.TInt, Type.TInt), List(ValueVar(n, Type.TInt), Literal(1, Type.TInt)))
+
+    //f(n-1)
+    val callf = Stmt.App(Block.BlockVar(f, fType, fCapt), Nil, List(minusone), Nil)
+    //g()
+    val callg = Stmt.App(Block.BlockVar(g, gType, gCapt), Nil, Nil, Nil)
+
+    //if(n>0){
+    //  f(n-1)
+    //}else{
+    //  g()
+    //}
+    val inputtree = Stmt.If(Expr.PureApp(Gt, Nil, List(ValueVar(n, Type.TInt), Literal(0, Type.TInt))), callf, callg)
+
+    //f2(n-1,ctx)
+    val callf2 = Stmt.App(Block.BlockVar(f2, Function(Nil, Nil, List(Type.TInt, HoleContext(ATpe,Type.TInt)),Nil,Type.TInt), fCapt), Nil, List(minusone,ValueVar(ctx, HoleContext(ATpe, Type.TInt))), Nil)
+
+    val tmpId = Id("tmp")
+    //val tmp = g()
+    //apply_ctx(ctx,tmp)
+    val val1 = Stmt.Val(tmpId, callg, Return(PureApp(blockVarFromExternDef(ctxApplyId), Nil, List(ValueVar(ctx, HoleContext(ATpe, Type.TInt)), ValueVar(tmpId, Type.TInt)))))
+      
+    val expected = Stmt.If(Expr.PureApp(Gt, Nil, List(ValueVar(n, Type.TInt), Literal(0, Type.TInt))), callf2, val1)
+    
+    val transformed = transform(inputtree, f, f2, Type.TInt, TransformContext.Outer(ctx), HoleContext(ATpe, Type.TInt))
+    
+    assertAlphaEquivalentStatements(transformed, expected)
   }
   
 }
