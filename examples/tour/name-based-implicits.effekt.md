@@ -45,13 +45,13 @@ Then we can just call it as:
 mySort2([3,1,2])
 ```
 
-But are still allowed to pass it explicitly:
+This generates something like the following, which we are still allowed to write explicitly, too:
 ```effekt:repl
 mySort2([3,1,2]){ (x, y) => compare(x, y) }
 ```
 
 Name-based implicit parameters also will be passed
-to the functions generated implicitly, so if we define
+to the functions that get called implicitly like this, so if we define
 ```effekt
 def compare[A](x: Option[A], y: Option[A]){ ?compare: (A,A) => Ordering }: Ordering =
   (x, y) match {
@@ -65,6 +65,11 @@ def compare[A](x: Option[A], y: Option[A]){ ?compare: (A,A) => Ordering }: Order
 we can now also call `mySort2` with lists of options (or options of options, ...):
 ```effekt:repl
 mySort2([Some(12), None(), Some(2)])
+```
+
+This will expand to code equivalent to:
+```effekt:repl
+mySort2([Some(12), None(), Some(2)]){ (x,y) => compare(x, y){ (u, v) => compare(u, v) } }
 ```
 
 ## Values
