@@ -154,7 +154,7 @@ define private %Environment @objectEnvironment(%Object %object) alwaysinline {
     ret %Environment %environment
 }
 
-define private void @shareObject(%Object %object) alwaysinline {
+define private void @shareObject(%Object %object) alwaysinline nounwind nosync nofree {
     %isNull = icmp eq %Object %object, null
     br i1 %isNull, label %done, label %next
 
@@ -169,13 +169,13 @@ define private void @shareObject(%Object %object) alwaysinline {
     ret void
 }
 
-define void @sharePositive(%Pos %val) alwaysinline {
+define void @sharePositive(%Pos %val) alwaysinline nounwind nosync nofree {
     %object = extractvalue %Pos %val, 1
     tail call void @shareObject(%Object %object)
     ret void
 }
 
-define void @shareNegative(%Neg %val) alwaysinline {
+define void @shareNegative(%Neg %val) alwaysinline nounwind nosync nofree {
     %object = extractvalue %Neg %val, 1
     tail call void @shareObject(%Object %object)
     ret void
