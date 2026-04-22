@@ -872,17 +872,13 @@ case class FunctionFlow(id: Id, params: List[Id], internal: Set[Flow])
 
 case class FlowInfo(functions: DB[FunctionFlow], flows: Set[Flow]) {
   def show: String = {
-    functions.debug.map {
+    functions.debug.toList.sortBy(_._1.toString).map {
       case (id, FunctionFlow(_, params, internal)) =>
         s"""${util.show(id)}(${params.map(util.show).mkString(", ")}) {
-           |  ${internal.map { f => "  " + f.show }.mkString("\n  ")}
+           |  ${internal.toList.map { f => "  " + f.show }.sorted.mkString("\n  ")}
            |}""".stripMargin
     }.mkString("\n") + "\n" + flows.map(f => f.show).mkString("\n")
   }
-}
-
-extension (flows: Set[Flow]) {
-  def show: String = flows.map { case Flow(source, target) => s"${util.show(source)} <: ${target.show}" }.mkString("\n")
 }
 
 // TODO right now we track the individual flows
@@ -915,13 +911,18 @@ object flowAnalysis {
     }
   }
 
-  inline def empty: FlowInfo = FlowInfo(DB.empty, Set.empty)
+  val empty: FlowInfo = FlowInfo(DB.empty, Set.empty)
 
   private inline def all[T](t: IterableOnce[T], inline f: T => FlowInfo): FlowInfo =
     t.iterator.foldLeft(empty) { case (xs, t) => f(t) ++ xs }
 
-  private def sink(e: Expr): FlowInfo = FlowInfo(DB.empty, Set(Flow(e, FlowTarget.Unknown)))
+  private def sink(e: Expr): FlowInfo = e match {
+    // don't even construct the flow (this should be moved to a smart constructor on Flow or similar to be always used)
+    case _: Expr.Literal | Expr.Abort | Expr.Return | Expr.Toplevel  => empty
+    case e: (Expr.Make | Expr.Variable) => FlowInfo(DB.empty, Set(Flow(e, FlowTarget.Unknown)))
+  }
   private def sink(id: Id): FlowInfo = FlowInfo(DB.empty, Set(Flow(Expr.Variable(id), FlowTarget.Unknown)))
+
   private def flow(e: Expr, t: Id): FlowInfo = FlowInfo(DB.empty, Set(Flow(e, FlowTarget.Variable(t))))
 
   // TODO later return FlowInfo

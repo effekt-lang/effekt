@@ -11,6 +11,23 @@ def main(ks, k) {
   go(10, ks, k)
 }
 
+/// FLOWS
+
+go_0(x_2, ks_3, k_4) {
+    0 <: k_4[0]
+    k_4 <: go_0[2]
+    ks_3 <: go_0[1]
+    ks_3 <: k_4[1]
+    tmp_5 <: ?
+    tmp_6 <: go_0[0]
+    x_2 <: ?
+}
+main_1(ks_7, k_8) {
+    10 <: go_0[0]
+    k_8 <: go_0[2]
+    ks_7 <: go_0[1]
+}
+
 /// STATIC_ARGUMENTS
 
 def main(ks, k) {
