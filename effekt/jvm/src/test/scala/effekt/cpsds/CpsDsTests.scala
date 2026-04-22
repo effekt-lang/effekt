@@ -13,16 +13,22 @@ enum Step {
   case Analyze(analysis: AnalysisPass, expectedOutput: String)
 }
 
-enum TransformPass {
-  case Inline
-  case StaticArguments
-  case Simplify
-  case SinkBlocks
-  case DropParameters
+enum TransformPass(val header: String, val run: (ModuleDecl, Id) => ModuleDecl) {
+  case Inline extends TransformPass("INLINE",
+    (input, mainId) => Inliner.transform(mainId, input))
+  case StaticArguments extends TransformPass("STATIC_ARGUMENTS",
+    (input, _) => cpsds.StaticArguments.transform(input))
+  case Simplify extends TransformPass("SIMPLIFY",
+    (input, _) => Simplifier.transform(input))
+  case SinkBlocks extends TransformPass("SINK_BLOCKS",
+    (input, mainId) => BlockSinking.transform(input, mainId))
+  case DropParameters extends TransformPass("DROP_PARAMETERS",
+    (input, _) => ???)
 }
 
-enum AnalysisPass {
-  case Flows
+enum AnalysisPass(val header: String, val run: ModuleDecl => String) {
+  case Flows extends AnalysisPass("FLOWS",
+    input => input.flows.show)
 }
 
 class CpsDsTests extends munit.FunSuite {
@@ -48,14 +54,17 @@ class CpsDsTests extends munit.FunSuite {
     }
   }
 
-  def parseStepHeader(name: String)(using Location): Either[TransformPass, AnalysisPass] = name.trim match {
-    case "INLINE"            => Left(TransformPass.Inline)
-    case "STATIC_ARGUMENTS"  => Left(TransformPass.StaticArguments)
-    case "SIMPLIFY"          => Left(TransformPass.Simplify)
-    case "SINK_BLOCKS"       => Left(TransformPass.SinkBlocks)
-    case "DROP_PARAMETERS"   => Left(TransformPass.DropParameters)
-    case "FLOWS"             => Right(AnalysisPass.Flows)
-    case other               => fail(s"Unknown step: '$other'")
+  private val allTransforms: Map[String, TransformPass] =
+    TransformPass.values.map(p => p.header -> p).toMap
+
+  private val allAnalyses: Map[String, AnalysisPass] =
+    AnalysisPass.values.map(a => a.header -> a).toMap
+
+  def parseStepHeader(name: String)(using Location): Either[TransformPass, AnalysisPass] = {
+    val trimmed = name.trim
+    allTransforms.get(trimmed).map(Left(_))
+      .orElse(allAnalyses.get(trimmed).map(Right(_)))
+      .getOrElse(fail(s"Unknown step: '$trimmed'"))
   }
 
   def splitTestFile(content: String)(using Location): (String, List[Step]) = {
@@ -72,32 +81,12 @@ class CpsDsTests extends munit.FunSuite {
     val initialSource = parts.head
     val steps = stepNames.zip(parts.tail).map { case (name, body) =>
       parseStepHeader(name) match {
-        case Left(pass)     => Step.Transform(pass, body)
+        case Left(pass)      => Step.Transform(pass, body)
         case Right(analysis) => Step.Analyze(analysis, body)
       }
     }
 
     (initialSource, steps)
-  }
-
-  def runTransform(pass: TransformPass, input: ModuleDecl): ModuleDecl = pass match {
-    case TransformPass.Inline =>
-      val mainId = findMain(input)
-      Inliner.transform(mainId, input)
-    case TransformPass.StaticArguments =>
-      StaticArguments.transform(input)
-    case TransformPass.Simplify =>
-      Simplifier.transform(input)
-    case TransformPass.SinkBlocks =>
-      val mainId = findMain(input)
-      BlockSinking.transform(input, mainId)
-    case TransformPass.DropParameters =>
-      ???
-  }
-
-  def runAnalysis(analysis: AnalysisPass, input: ModuleDecl): String = analysis match {
-    case AnalysisPass.Flows =>
-      input.flows.show
   }
 
   private def findMain(input: ModuleDecl): Id =
@@ -136,10 +125,6 @@ class CpsDsTests extends munit.FunSuite {
 
     val (initialSource, steps) = splitTestFile(content)
 
-    // Track the current program across steps. Transformations update it;
-    // analyses leave it unchanged. We use a var that is captured by each
-    // test closure — munit runs tests sequentially within a suite, so the
-    // ordering is deterministic.
     var currentTree: ModuleDecl = null
     var currentRenamer: TestRenamer = null
 
@@ -151,29 +136,27 @@ class CpsDsTests extends munit.FunSuite {
     steps.zipWithIndex.foreach { case (step, idx) =>
       step match {
         case Step.Transform(pass, expectedSource) =>
-          test(s"$filename step ${idx + 1}: $pass") {
+          test(s"$filename step ${idx + 1}: ${pass.header}") {
             assert(currentTree != null, "previous step must have succeeded")
-            val expected = currentRenamer(parse(expectedSource, s"expected after step ${idx + 1} ($pass)"))
-            val obtained = runTransform(pass, currentTree)
+            val expected = currentRenamer(parse(expectedSource, s"expected after step ${idx + 1} (${pass.header})"))
+            val mainId = findMain(currentTree)
+            val obtained = pass.run(currentTree, mainId)
             assertAlphaEquivalent(obtained, expected,
-              s"$filename step ${idx + 1} ($pass) produced unexpected result")
-            // Update current tree for subsequent steps
+              s"$filename step ${idx + 1} (${pass.header}) produced unexpected result")
             currentTree = expected
           }
 
         case Step.Analyze(analysis, expectedOutput) =>
-          test(s"$filename step ${idx + 1}: $analysis") {
+          test(s"$filename step ${idx + 1}: ${analysis.header}") {
             assert(currentTree != null, "previous step must have succeeded")
-            val obtained = runAnalysis(analysis, currentTree)
-            assertEquals(obtained.trim, expectedOutput.trim,
-              s"$filename step ${idx + 1} ($analysis) produced unexpected output")
-            // Analysis does NOT update currentTree
+            val obtained = analysis.run(currentTree)
+            assertNoDiff(obtained.trim, expectedOutput.trim,
+              s"$filename step ${idx + 1} (${analysis.header}) produced unexpected output")
           }
       }
     }
   }
 
-  // Discover and register all .ir files in examples/cps/
   if examplesDir.exists() && examplesDir.isDirectory then
     examplesDir.listFiles()
       .filter(_.getName.endsWith(".ir"))
