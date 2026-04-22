@@ -13,6 +13,7 @@ enum Pass {
   case StaticArguments
   case Simplify
   case SinkBlocks
+  case DropParameters
 }
 
 case class PassTest(pass: Pass, input: ModuleDecl, expected: ModuleDecl)
@@ -45,6 +46,7 @@ class CpsDsTests extends munit.FunSuite {
     case "STATIC_ARGUMENTS" => Pass.StaticArguments
     case "SIMPLIFY" => Pass.Simplify
     case "SINK_BLOCKS" => Pass.SinkBlocks
+    case "DROP_PARAMETERS" => Pass.DropParameters
     case other => fail(s"Unknown pass: '$other'")
   }
 
@@ -84,6 +86,16 @@ class CpsDsTests extends munit.FunSuite {
     case Pass.SinkBlocks =>
       val mainId = findMain(input)
       BlockSinking.transform(input, mainId)
+    case Pass.DropParameters =>
+      input.definitions.foreach {
+        case ToplevelDefinition.Def(id, params, body) =>
+          println("drop params")
+          body.info.debug.foreach {
+            case (id, info) => println(s"  $id: \n    external: ${info.external}\n    internal: ${info.internal}")
+          }
+        case ToplevelDefinition.Val(id, ks, k, binding) => ()
+      }
+      ???
   }
 
   private def findMain(input: ModuleDecl): Id =
