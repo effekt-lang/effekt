@@ -6,7 +6,6 @@ import effekt.source.FeatureFlag
 import effekt.util.messages.ErrorReporter
 import effekt.util.messages.INTERNAL_ERROR
 
-
 // Idea behind this IR:
 // - close to JS
 // - be able to represent continuations and metacontinuations
@@ -129,6 +128,8 @@ enum Stmt extends Tree {
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
   lazy val refs: DB[Int] = references.refs(this)
+  lazy val calls: DB[Calls] = allCalls.calls(this)
+  lazy val info: DB[Info] = definitions.info(this)
 }
 export Stmt.*
 
@@ -137,6 +138,8 @@ case class Clause(params: List[Id], body: Stmt) extends Tree {
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
   lazy val refs: DB[Int] = references.refs(this)
+  lazy val info: DB[Info] = definitions.info(this)
+  lazy val calls: DB[Calls] = allCalls.calls(this)
 }
 
 case class Operation(name: Id, params: List[Id], body: Stmt) extends Tree {
@@ -144,6 +147,8 @@ case class Operation(name: Id, params: List[Id], body: Stmt) extends Tree {
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
   lazy val refs: DB[Int] = references.refs(this)
+  lazy val info: DB[Info] = definitions.info(this)
+  lazy val calls: DB[Calls] = allCalls.calls(this)
 }
 
 inline def rewriting[T <: AnyRef](t: T)(inline run: T => T): T =
@@ -643,11 +648,8 @@ object references {
     private def ++(other: DB[Int]): DB[Int] = db.unionWith(other, _ + _)
   }
 
-  // TODO this might be way too inefficient
   private inline def all[T](terms: Iterable[T], inline run: T => DB[Int]): DB[Int] =
-    terms.foldLeft(DB.empty[Int]) { (acc, t) =>
-      acc.unionWith(run(t), _ + _)
-    }
+    terms.foldLeft(DB.empty[Int]) { (acc, t) => acc ++ run(t) }
 
   // TODO externs and splices
   inline def refs(m: ModuleDecl): DB[Int] = m match {
@@ -708,9 +710,61 @@ object references {
 // results in
 //   g -> ({x}, {1, 4})
 //   h -> ({3})
-object functionCalls {
+type Calls = Vector[List[Expr]]
+object allCalls {
 
+  extension (db: DB[Calls]) {
+    private def ++(other: DB[Calls]): DB[Calls] = db.unionWith(other, _ ++ _)
+  }
+
+  private inline def all[T](terms: Iterable[T], inline run: T => DB[Calls]): DB[Calls] =
+    terms.foldLeft(DB.empty[Calls]) { (acc, t) => acc ++ run(t) }
+
+  inline def calls(op: Operation): DB[Calls] = op.body.calls
+  inline def calls(cl: Clause): DB[Calls] = cl.body.calls
+
+  inline def calls(stmt: Stmt): DB[Calls] =
+    println(s"calls on ${stmt.hashCode}")
+    stmt match {
+    case Stmt.App(id, args, canBeDirect) => DB(id, Vector(args))
+    case Stmt.Invoke(id, method, args) => DB.empty
+
+    case Stmt.Def(id, params, body, rest) => body.calls ++ rest.calls
+    case Stmt.New(id, interface, operations, rest) => all(operations, _.calls) ++ rest.calls
+    case Stmt.Let(id, binding, rest) => rest.calls
+
+    case Stmt.Run(id, callee, args, purity, rest) => rest.calls
+    case Stmt.If(cond, thn, els) => thn.calls ++ els.calls
+    case Stmt.Match(scrutinee, clauses, default) => all(clauses, (tag, cl) => cl.calls) ++ all(default, _.calls)
+    case Stmt.Region(id, ks, rest) => rest.calls
+    case Stmt.Alloc(id, init, region, rest) => rest.calls
+    case Stmt.Var(id, init, ks, rest) => rest.calls
+    case Stmt.Dealloc(ref, rest) => rest.calls
+    case Stmt.Get(ref, id, rest) => rest.calls
+    case Stmt.Put(ref, value, rest) => rest.calls
+    case Stmt.Reset(p, ks, k, body, ks1, k1) => body.calls
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) => body.calls
+    case Stmt.Resume(resumption, ks, k, body, ks1, k1) => body.calls
+    case Stmt.Hole(span) => DB.empty
+  }
 }
+
+case class Info(
+  params: List[Id],
+  body: Stmt,
+  internal: Calls,
+  external: Calls
+)
+
+//enum Info {
+//  //case Parameter(calls: Calls)
+//  case Function(
+//    params: List[Id],
+//    body: Stmt,
+//    internal: Calls,
+//    external: Calls
+//  )
+//}
 
 //   def f(x, y) {
 //     g(x, 1)
@@ -719,6 +773,54 @@ object functionCalls {
 // results in
 //   f -> Def(params, body)
 // could be extended to values as well for other analyses
+// for now only functions not objects
 object definitions {
 
+  private def merge(l: Info, r: Info): Info =
+    Info(l.params, l.body, l.internal ++ r.internal, l.external ++ r.external)
+
+  extension (db: DB[Info]) {
+    private def ++(other: DB[Info]): DB[Info] = db.unionWith(other, merge)
+  }
+
+  private inline def all[T](terms: Iterable[T], inline run: T => DB[Info]): DB[Info] =
+    terms.foldLeft(DB.empty[Info]) { (acc, t) => acc ++ run(t) }
+
+  inline def info(op: Operation): DB[Info] = op match {
+    case Operation(name, params, body) => body.info
+  }
+
+  inline def info(op: Clause): DB[Info] = op match {
+    // TODO should we collect calls for parameters here?
+    case Clause(params, body) => body.info
+  }
+
+  inline def info(stmt: Stmt): DB[Info] =
+    println(s"info on ${stmt.hashCode}")
+    stmt match {
+    case Stmt.Def(id, params, body, rest) =>
+      // TODO should we collect calls for parameters here?
+      DB(id, Info(params, body,
+        body.calls.getOrElse(id, Vector.empty),
+        rest.calls.getOrElse(id, Vector.empty))) ++ rest.info
+
+    case Stmt.New(id, interface, operations, rest) => all(operations, _.info) ++ rest.info
+    case Stmt.If(cond, thn, els) => thn.info ++ els.info
+    case Stmt.Match(scrutinee, clauses, default) => all(clauses, (tag, cl) => cl.info) ++ all(default, _.info)
+
+    case Stmt.Let(id, binding, rest) => rest.info
+    case Stmt.App(id, args, canBeDirect) => DB.empty
+    case Stmt.Invoke(id, method, args) => DB.empty
+    case Stmt.Run(id, callee, args, purity, rest) => rest.info
+    case Stmt.Region(id, ks, rest) => rest.info
+    case Stmt.Alloc(id, init, region, rest) => rest.info
+    case Stmt.Var(id, init, ks, rest) => rest.info
+    case Stmt.Dealloc(ref, rest) => rest.info
+    case Stmt.Get(ref, id, rest) => rest.info
+    case Stmt.Put(ref, value, rest) => rest.info
+    case Stmt.Reset(p, ks, k, body, ks1, k1) => body.info
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) => body.info
+    case Stmt.Resume(resumption, ks, k, body, ks1, k1) => body.info
+    case Stmt.Hole(span) => DB.empty
+  }
 }
