@@ -491,8 +491,6 @@ object Tree {
         Expr.ValueVar(rewrite(id), rewrite(annotatedType))
       case Expr.Literal(value, annotatedType) =>
         Expr.Literal(value, rewrite(annotatedType))
-      case Expr.PureApp(b, targs, vargs) =>
-        Expr.PureApp(rewrite(b), targs map rewrite, vargs map rewrite)
       case Expr.Make(data, tag, targs, vargs) =>
         Expr.Make(rewrite(data), rewrite(tag), targs map rewrite, vargs map rewrite)
       case Expr.Box(b, annotatedCapture) =>
@@ -503,8 +501,8 @@ object Tree {
         Stmt.Def(rewrite(id), rewrite(block), rewrite(body))
       case Stmt.Let(id, binding, body) =>
         Stmt.Let(rewrite(id), rewrite(binding), rewrite(body))
-      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-        Stmt.ImpureApp(rewrite(id), rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
+      case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
+        Stmt.ExternApp(rewrite(id), purity, rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
       case Stmt.Return(expr) =>
         Stmt.Return(rewrite(expr))
       case Stmt.Val(id, binding, body) =>
@@ -888,8 +886,6 @@ object Tree {
         Expr.ValueVar(rewrite(id), rewrite(annotatedType))
       case Expr.Literal(value, annotatedType) =>
         Expr.Literal(value, rewrite(annotatedType))
-      case Expr.PureApp(b, targs, vargs) =>
-        Expr.PureApp(rewrite(b), targs map rewrite, vargs map rewrite)
       case Expr.Make(data, tag, targs, vargs) =>
         Expr.Make(rewrite(data), rewrite(tag), targs map rewrite, vargs map rewrite)
       case Expr.Box(b, annotatedCapture) =>
@@ -900,8 +896,8 @@ object Tree {
         Stmt.Def(rewrite(id), rewrite(block), rewrite(body))
       case Stmt.Let(id, binding, body) =>
         Stmt.Let(rewrite(id), rewrite(binding), rewrite(body))
-      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-        Stmt.ImpureApp(rewrite(id), rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
+      case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
+        Stmt.ExternApp(rewrite(id), purity, rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
       case Stmt.Return(expr) =>
         Stmt.Return(rewrite(expr))
       case Stmt.Val(id, binding, body) =>
