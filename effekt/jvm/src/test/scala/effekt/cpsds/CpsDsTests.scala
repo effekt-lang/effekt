@@ -8,7 +8,12 @@ import kiama.parsing.{NoSuccess, Success}
 import munit.Location
 import effekt.core.{Id, Names}
 
-enum Pass {
+enum Step {
+  case Transform(pass: TransformPass, expectedSource: String)
+  case Analyze(analysis: AnalysisPass, expectedOutput: String)
+}
+
+enum TransformPass {
   case Inline
   case StaticArguments
   case Simplify
@@ -16,7 +21,9 @@ enum Pass {
   case DropParameters
 }
 
-case class PassTest(pass: Pass, input: ModuleDecl, expected: ModuleDecl)
+enum AnalysisPass {
+  case Flows
+}
 
 class CpsDsTests extends munit.FunSuite {
 
@@ -41,54 +48,56 @@ class CpsDsTests extends munit.FunSuite {
     }
   }
 
-  def parsePass(name: String)(using Location): Pass = name.trim match {
-    case "INLINE" => Pass.Inline
-    case "STATIC_ARGUMENTS" => Pass.StaticArguments
-    case "SIMPLIFY" => Pass.Simplify
-    case "SINK_BLOCKS" => Pass.SinkBlocks
-    case "DROP_PARAMETERS" => Pass.DropParameters
-    case other => fail(s"Unknown pass: '$other'")
+  def parseStepHeader(name: String)(using Location): Either[TransformPass, AnalysisPass] = name.trim match {
+    case "INLINE"            => Left(TransformPass.Inline)
+    case "STATIC_ARGUMENTS"  => Left(TransformPass.StaticArguments)
+    case "SIMPLIFY"          => Left(TransformPass.Simplify)
+    case "SINK_BLOCKS"       => Left(TransformPass.SinkBlocks)
+    case "DROP_PARAMETERS"   => Left(TransformPass.DropParameters)
+    case "FLOWS"             => Right(AnalysisPass.Flows)
+    case other               => fail(s"Unknown step: '$other'")
   }
 
-  def parseTestFile(content: String)(using Location): List[PassTest] = {
+  def splitTestFile(content: String)(using Location): (String, List[Step]) = {
     val separator = """(?m)^///\s*(.+)$""".r
 
     val parts = separator.split(content).toList.map(_.trim)
-    val passNames = separator.findAllMatchIn(content).map(_.group(1)).toList
+    val stepNames = separator.findAllMatchIn(content).map(_.group(1)).toList
 
     if parts.isEmpty then fail("Test file is empty")
-    if passNames.isEmpty then fail("Test file has no /// separators")
-    if parts.size != passNames.size + 1 then
-      fail(s"Expected ${passNames.size + 1} sections but found ${parts.size}")
+    if stepNames.isEmpty then fail("Test file has no /// separators")
+    if parts.size != stepNames.size + 1 then
+      fail(s"Expected ${stepNames.size + 1} sections but found ${parts.size}")
 
-    val initial = parse(parts.head, "initial IR")
-    val tests = List.newBuilder[PassTest]
-
-    var currentInput = initial
-    passNames.zip(parts.tail).zipWithIndex.foreach { case ((passName, expectedSource), idx) =>
-      val pass = parsePass(passName)
-      val expected = parse(expectedSource, s"expected after step ${idx + 1} ($passName)")
-      tests += PassTest(pass, currentInput, expected)
-      currentInput = expected
+    val initialSource = parts.head
+    val steps = stepNames.zip(parts.tail).map { case (name, body) =>
+      parseStepHeader(name) match {
+        case Left(pass)     => Step.Transform(pass, body)
+        case Right(analysis) => Step.Analyze(analysis, body)
+      }
     }
 
-    tests.result()
+    (initialSource, steps)
   }
 
-  def runPass(pass: Pass, input: ModuleDecl): ModuleDecl = pass match {
-    case Pass.Inline =>
+  def runTransform(pass: TransformPass, input: ModuleDecl): ModuleDecl = pass match {
+    case TransformPass.Inline =>
       val mainId = findMain(input)
       Inliner.transform(mainId, input)
-    case Pass.StaticArguments =>
+    case TransformPass.StaticArguments =>
       StaticArguments.transform(input)
-    case Pass.Simplify =>
+    case TransformPass.Simplify =>
       Simplifier.transform(input)
-    case Pass.SinkBlocks =>
+    case TransformPass.SinkBlocks =>
       val mainId = findMain(input)
       BlockSinking.transform(input, mainId)
-    case Pass.DropParameters =>
-      println(input.flows.show)
+    case TransformPass.DropParameters =>
       ???
+  }
+
+  def runAnalysis(analysis: AnalysisPass, input: ModuleDecl): String = analysis match {
+    case AnalysisPass.Flows =>
+      input.flows.show
   }
 
   private def findMain(input: ModuleDecl): Id =
@@ -125,16 +134,41 @@ class CpsDsTests extends munit.FunSuite {
     val content = scala.io.Source.fromFile(file).mkString
     val filename = file.getName
 
-    val tests = parseTestFile(content)
+    val (initialSource, steps) = splitTestFile(content)
 
-    tests.zipWithIndex.foreach { case (PassTest(pass, input, expected), idx) =>
-      test(s"$filename step ${idx + 1}: $pass") {
-        val renamer = new TestRenamer()
-        val renamedInput = renamer(input)
-        val renamedExpected = renamer(expected)
-        val obtained = runPass(pass, renamedInput)
-        assertAlphaEquivalent(obtained, renamedExpected,
-          s"$filename step ${idx + 1} ($pass) produced unexpected result")
+    // Track the current program across steps. Transformations update it;
+    // analyses leave it unchanged. We use a var that is captured by each
+    // test closure — munit runs tests sequentially within a suite, so the
+    // ordering is deterministic.
+    var currentTree: ModuleDecl = null
+    var currentRenamer: TestRenamer = null
+
+    test(s"$filename: parse initial program") {
+      currentRenamer = new TestRenamer()
+      currentTree = currentRenamer(parse(initialSource, "initial IR"))
+    }
+
+    steps.zipWithIndex.foreach { case (step, idx) =>
+      step match {
+        case Step.Transform(pass, expectedSource) =>
+          test(s"$filename step ${idx + 1}: $pass") {
+            assert(currentTree != null, "previous step must have succeeded")
+            val expected = currentRenamer(parse(expectedSource, s"expected after step ${idx + 1} ($pass)"))
+            val obtained = runTransform(pass, currentTree)
+            assertAlphaEquivalent(obtained, expected,
+              s"$filename step ${idx + 1} ($pass) produced unexpected result")
+            // Update current tree for subsequent steps
+            currentTree = expected
+          }
+
+        case Step.Analyze(analysis, expectedOutput) =>
+          test(s"$filename step ${idx + 1}: $analysis") {
+            assert(currentTree != null, "previous step must have succeeded")
+            val obtained = runAnalysis(analysis, currentTree)
+            assertEquals(obtained.trim, expectedOutput.trim,
+              s"$filename step ${idx + 1} ($analysis) produced unexpected output")
+            // Analysis does NOT update currentTree
+          }
       }
     }
   }
