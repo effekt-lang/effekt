@@ -33,5 +33,3 @@ def main(ks2, k2) {
   outer(10, ks2, k1)
 }
 
-/// DROP_PARAMETERS
-
