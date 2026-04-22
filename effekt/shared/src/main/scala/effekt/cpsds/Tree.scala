@@ -26,6 +26,7 @@ case class ModuleDecl(
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
   lazy val refs: DB[Int] = references.refs(this)
+  lazy val flows: FlowInfo = flowAnalysis.flows(this)
 }
 
 enum ToplevelDefinition {
@@ -36,6 +37,7 @@ enum ToplevelDefinition {
   lazy val free: Set[Id] = freeVariables.free(this)
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val refs: DB[Int] = references.refs(this)
+  lazy val flows: FlowInfo = flowAnalysis.flows(this)
 }
 
 /**
@@ -130,6 +132,7 @@ enum Stmt extends Tree {
   lazy val refs: DB[Int] = references.refs(this)
   lazy val calls: DB[Calls] = allCalls.calls(this)
   lazy val info: DB[Info] = definitions.info(this)
+  lazy val flows: FlowInfo = flowAnalysis.flows(this)
 }
 export Stmt.*
 
@@ -140,6 +143,7 @@ case class Clause(params: List[Id], body: Stmt) extends Tree {
   lazy val refs: DB[Int] = references.refs(this)
   lazy val info: DB[Info] = definitions.info(this)
   lazy val calls: DB[Calls] = allCalls.calls(this)
+  lazy val flows: FlowInfo = flowAnalysis.flows(this)
 }
 
 case class Operation(name: Id, params: List[Id], body: Stmt) extends Tree {
@@ -149,6 +153,7 @@ case class Operation(name: Id, params: List[Id], body: Stmt) extends Tree {
   lazy val refs: DB[Int] = references.refs(this)
   lazy val info: DB[Info] = definitions.info(this)
   lazy val calls: DB[Calls] = allCalls.calls(this)
+  lazy val flows: FlowInfo = flowAnalysis.flows(this)
 }
 
 inline def rewriting[T <: AnyRef](t: T)(inline run: T => T): T =
@@ -639,17 +644,29 @@ object escapeAnalysis {
   }
 }
 
+// TODO better name for this?
+trait UseDB[T] {
+
+  def merge(t1: T, t2: T): T
+
+  def empty: DB[T] = DB.empty[T]
+
+  extension (db: DB[T]) {
+    def ++(other: DB[T]): DB[T] = db.unionWith(other, merge)
+  }
+
+  inline def all[A](terms: Iterable[A], inline run: A => DB[T]): DB[T] =
+    terms.foldLeft(DB.empty[T]) { (acc, t) => acc ++ run(t) }
+}
+
 /**
  * How often is something (a function or expression) referenced in a subterm?
  */
-object references {
+object references extends UseDB[Int] {
 
-  extension (db: DB[Int]) {
-    private def ++(other: DB[Int]): DB[Int] = db.unionWith(other, _ + _)
-  }
+  def merge(t1: Int, t2: Int): Int = t1 + t2
 
-  private inline def all[T](terms: Iterable[T], inline run: T => DB[Int]): DB[Int] =
-    terms.foldLeft(DB.empty[Int]) { (acc, t) => acc ++ run(t) }
+  private inline def use(id: Id): DB[Int] = DB(id, 1)
 
   // TODO externs and splices
   inline def refs(m: ModuleDecl): DB[Int] = m match {
@@ -663,15 +680,13 @@ object references {
   }
 
   inline def refs(expr: Expr): DB[Int] = expr match {
-    case Expr.Variable(id) => DB(id, 1)
-    case Expr.Literal(value, tpe) => DB.empty
+    case Expr.Variable(id) => use(id)
+    case Expr.Literal(value, tpe) => empty
     case Expr.Make(data, tag, args) => all(args, _.refs)
-    case Expr.Abort => DB.empty
-    case Expr.Return => DB.empty
-    case Expr.Toplevel => DB.empty
+    case Expr.Abort => empty
+    case Expr.Return => empty
+    case Expr.Toplevel => empty
   }
-
-  private inline def use(id: Id): DB[Int] = DB(id, 1)
 
   inline def refs(stmt: Stmt): DB[Int] = stmt match {
     case Stmt.App(id, args, canBeDirect) => use(id) ++ all(args, _.refs)
@@ -711,14 +726,12 @@ object references {
 //   g -> ({x}, {1, 4})
 //   h -> ({3})
 type Calls = Vector[List[Expr]]
-object allCalls {
+object allCalls extends UseDB[Calls] {
 
-  extension (db: DB[Calls]) {
-    private def ++(other: DB[Calls]): DB[Calls] = db.unionWith(other, _ ++ _)
-  }
+  def merge(t1: Calls, t2: Calls): Calls = t1 ++ t2
 
-  private inline def all[T](terms: Iterable[T], inline run: T => DB[Calls]): DB[Calls] =
-    terms.foldLeft(DB.empty[Calls]) { (acc, t) => acc ++ run(t) }
+  private inline def call(id: Id, args: List[Expr]): DB[Calls] =
+    DB(id, Vector(args))
 
   inline def calls(op: Operation): DB[Calls] = op.body.calls
   inline def calls(cl: Clause): DB[Calls] = cl.body.calls
@@ -726,8 +739,8 @@ object allCalls {
   inline def calls(stmt: Stmt): DB[Calls] =
     println(s"calls on ${stmt.hashCode}")
     stmt match {
-    case Stmt.App(id, args, canBeDirect) => DB(id, Vector(args))
-    case Stmt.Invoke(id, method, args) => DB.empty
+    case Stmt.App(id, args, canBeDirect) => call(id, args)
+    case Stmt.Invoke(id, method, args) => empty
 
     case Stmt.Def(id, params, body, rest) => body.calls ++ rest.calls
     case Stmt.New(id, interface, operations, rest) => all(operations, _.calls) ++ rest.calls
@@ -745,26 +758,19 @@ object allCalls {
     case Stmt.Reset(p, ks, k, body, ks1, k1) => body.calls
     case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) => body.calls
     case Stmt.Resume(resumption, ks, k, body, ks1, k1) => body.calls
-    case Stmt.Hole(span) => DB.empty
+    case Stmt.Hole(span) => empty
   }
 }
 
-case class Info(
-  params: List[Id],
-  body: Stmt,
-  internal: Calls,
-  external: Calls
-)
-
-//enum Info {
-//  //case Parameter(calls: Calls)
-//  case Function(
-//    params: List[Id],
-//    body: Stmt,
-//    internal: Calls,
-//    external: Calls
-//  )
-//}
+enum Info {
+  case Parameter(calls: Calls)
+  case Function(
+    params: List[Id],
+    body: Stmt,
+    internal: Calls,
+    external: Calls
+  )
+}
 
 //   def f(x, y) {
 //     g(x, 1)
@@ -773,25 +779,33 @@ case class Info(
 // results in
 //   f -> Def(params, body)
 // could be extended to values as well for other analyses
-// for now only functions not objects
-object definitions {
+//
+// - for now only functions not objects
+// - for now only for parameters of functions, not parameters of
+//   builtins like shift (which could in the future be used to optimize further)
+//
+// TODO what if the flow is indirect such as
+//
+//  def outer(f) {
+//    let x = f
+//    x(1)
+//  }
+//
+// this would look like f is not called
+object definitions extends UseDB[Info] {
 
-  private def merge(l: Info, r: Info): Info =
-    Info(l.params, l.body, l.internal ++ r.internal, l.external ++ r.external)
-
-  extension (db: DB[Info]) {
-    private def ++(other: DB[Info]): DB[Info] = db.unionWith(other, merge)
+  def merge(l: Info, r: Info): Info = (l, r) match {
+    case (Info.Parameter(calls1), Info.Parameter(calls2)) => Info.Parameter(calls1 ++ calls2)
+    case (Info.Function(params1, body1, internal1, external1), Info.Function(params2, body2, internal2, external2)) =>
+      Info.Function(params1, body1, internal1 ++ internal2, external1 ++ external2)
+    case _ => ???
   }
-
-  private inline def all[T](terms: Iterable[T], inline run: T => DB[Info]): DB[Info] =
-    terms.foldLeft(DB.empty[Info]) { (acc, t) => acc ++ run(t) }
 
   inline def info(op: Operation): DB[Info] = op match {
     case Operation(name, params, body) => body.info
   }
 
   inline def info(op: Clause): DB[Info] = op match {
-    // TODO should we collect calls for parameters here?
     case Clause(params, body) => body.info
   }
 
@@ -799,10 +813,15 @@ object definitions {
     println(s"info on ${stmt.hashCode}")
     stmt match {
     case Stmt.Def(id, params, body, rest) =>
-      // TODO should we collect calls for parameters here?
-      DB(id, Info(params, body,
+      val funInfo = DB(id, Info.Function(params, body,
         body.calls.getOrElse(id, Vector.empty),
-        rest.calls.getOrElse(id, Vector.empty))) ++ rest.info
+        rest.calls.getOrElse(id, Vector.empty)))
+
+      val paramsInfo = all(params, p =>
+        DB(p, Info.Parameter(body.calls.getOrElse(p, Vector.empty)))
+      )
+
+      funInfo ++ paramsInfo ++ rest.info
 
     case Stmt.New(id, interface, operations, rest) => all(operations, _.info) ++ rest.info
     case Stmt.If(cond, thn, els) => thn.info ++ els.info
@@ -822,5 +841,140 @@ object definitions {
     case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) => body.info
     case Stmt.Resume(resumption, ks, k, body, ks1, k1) => body.info
     case Stmt.Hole(span) => DB.empty
+  }
+}
+
+type FlowSource = Expr
+
+enum FlowTarget {
+  // f match { ... }  --> { f <: ? }
+  // x + y    -> { x <: ?, y <: ? }
+  case Unknown
+  // let x = y; ...  --> { y <: x }
+  case Variable(id: Id)
+  // f(1, x)   --> { 1 <: f[0], x <: f[1] }
+  case Call(fun: Id, index: Int)
+
+  def show: String = this match {
+    case FlowTarget.Unknown => "?"
+    case FlowTarget.Variable(id) => util.show(id)
+    case FlowTarget.Call(fun, index) => s"${util.show(fun)}[${index}]"
+  }
+}
+case class Flow(source: FlowSource, target: FlowTarget) {
+  def show: String = s"${util.show(source)} <: ${target.show}"
+}
+
+// we need to distinguish internal from external flow so that
+//   def rec(n) { rec(1) }; ... no external flow ...
+// can be dropped
+case class FunctionFlow(id: Id, params: List[Id], internal: Set[Flow])
+
+case class FlowInfo(functions: DB[FunctionFlow], flows: Set[Flow]) {
+  def show: String = {
+    functions.debug.map {
+      case (id, FunctionFlow(_, params, internal)) =>
+        s"""${util.show(id)}(${params.map(util.show).mkString(", ")}) {
+           |  ${internal.map { f => "  " + f.show }.mkString("\n  ")}
+           |}""".stripMargin
+    }.mkString("\n") + "\n" + flows.map(f => f.show).mkString("\n")
+  }
+}
+
+extension (flows: Set[Flow]) {
+  def show: String = flows.map { case Flow(source, target) => s"${util.show(source)} <: ${target.show}" }.mkString("\n")
+}
+
+// TODO right now we track the individual flows
+//   it might be MUCH better to saturate the flow graph locally and "cache" the partial solution
+//   for instance:
+//     - flows 1 <: ?   can be dropped
+//     - storing it in a form that keeps upper / lower bounds for ids might make merging / saturating more efficient
+//     - conceptually we can draw the flows as a graph,
+//       each subtree gives rise to a subgraph and composing them connects the graphs.
+//
+// On the other side: the fixedpoint analysis might be more efficient if run in a single tight loop that
+// uses mutable state, so we really should benchmark this before making a decision.
+
+object flowAnalysis {
+
+  def merge(f1: FunctionFlow, f2: FunctionFlow): FunctionFlow = (f1, f2) match {
+    case (FunctionFlow(id1, params1, internal1), FunctionFlow(id2, params2, internal2)) =>
+      FunctionFlow(id1, params1, internal1 ++ internal2)
+  }
+
+  extension (self: DB[FunctionFlow]) {
+    def ++(other: DB[FunctionFlow]): DB[FunctionFlow] =
+      self.unionWith(other, merge)
+  }
+
+  extension (self: FlowInfo) {
+    def ++(other: FlowInfo): FlowInfo = (self, other) match {
+      case (FlowInfo(functions1, flows1), FlowInfo(functions2, flows2)) =>
+        FlowInfo(functions1 ++ functions2, flows1 ++ flows2)
+    }
+  }
+
+  inline def empty: FlowInfo = FlowInfo(DB.empty, Set.empty)
+
+  private inline def all[T](t: IterableOnce[T], inline f: T => FlowInfo): FlowInfo =
+    t.iterator.foldLeft(empty) { case (xs, t) => f(t) ++ xs }
+
+  private def sink(e: Expr): FlowInfo = FlowInfo(DB.empty, Set(Flow(e, FlowTarget.Unknown)))
+  private def sink(id: Id): FlowInfo = FlowInfo(DB.empty, Set(Flow(Expr.Variable(id), FlowTarget.Unknown)))
+  private def flow(e: Expr, t: Id): FlowInfo = FlowInfo(DB.empty, Set(Flow(e, FlowTarget.Variable(t))))
+
+  // TODO later return FlowInfo
+  inline def flows(stmt: Stmt): FlowInfo = stmt match {
+    case Stmt.App(id, args, canBeDirect) =>
+      FlowInfo(DB.empty, args.zipWithIndex.map { case (arg, index) => Flow(arg, FlowTarget.Call(id, index)) }.toSet)
+
+    // for now this is unknown
+    case Stmt.Invoke(id, method, args) => all(args, sink)
+    case Stmt.Run(id, callee, args, purity, rest) => all(args, sink) ++ rest.flows
+    case Stmt.If(cond, thn, els) => sink(cond) ++ thn.flows ++ els.flows
+    case Stmt.Let(id, binding, rest) =>
+      flow(binding, id) ++ rest.flows
+
+    case Stmt.Def(id, params, body, rest) =>
+      // TODO internal vs. external flows
+      val FlowInfo(funs, innerFlow) = body.flows
+      FlowInfo(funs ++ DB(id, FunctionFlow(id, params, innerFlow)), Set.empty) ++ rest.flows
+
+    case Stmt.New(id, interface, operations, rest) => all(operations, _.flows) ++ rest.flows
+    case Stmt.Match(scrutinee, clauses, default) => all(clauses, (tag, cl) => cl.flows) ++ all(default, _.flows)
+    case Stmt.Region(id, ks, rest) => sink(ks) ++ rest.flows
+    // TODO region?
+    case Stmt.Alloc(id, init, region, rest) => sink(init) ++ sink(region) ++ rest.flows
+    case Stmt.Var(id, init, ks, rest) => sink(init) ++ sink(ks) ++ rest.flows
+    case Stmt.Dealloc(ref, rest) => rest.flows
+    case Stmt.Get(ref, id, rest) => sink(ref) ++ rest.flows
+    case Stmt.Put(ref, value, rest) => sink(ref) ++ sink(value) ++ rest.flows
+    // if we want to track flows to resets and shifts, we also need to have labels for the positions
+    // for now it is just unknown "sinks"
+    // we could also "mask" variables that we do not care about, like p, ks, and k for now
+    // potentially simplifying the flow graph (both for inspection and performance)
+    case Stmt.Reset(p, ks, k, body, ks1, k1) =>
+      body.flows ++ sink(ks1) ++ sink(k1)
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+      sink(prompt) ++ body.flows ++ sink(ks1) ++ sink(k1)
+    case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
+      sink(resumption) ++ body.flows ++ sink(ks1) ++ sink(k1)
+    case Stmt.Hole(span) => FlowInfo(DB.empty, Set.empty)
+  }
+
+  inline def flows(op: Operation): FlowInfo = op.body.flows
+  inline def flows(cl: Clause): FlowInfo = cl.body.flows
+
+  inline def flows(toplevel: ToplevelDefinition): FlowInfo = toplevel match {
+    case ToplevelDefinition.Def(id, params, body) =>
+      val FlowInfo(funs, innerFlow) = body.flows
+      FlowInfo(funs ++ DB(id, FunctionFlow(id, params, innerFlow)), Set.empty)
+    case ToplevelDefinition.Val(id, ks, k, binding) => binding.flows
+  }
+
+  inline def flows(m: ModuleDecl): FlowInfo = m match {
+    case ModuleDecl(includes, declarations, externs, definitions, exports) =>
+      all(definitions, _.flows)
   }
 }
