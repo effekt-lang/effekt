@@ -87,14 +87,7 @@ class CpsDsTests extends munit.FunSuite {
       val mainId = findMain(input)
       BlockSinking.transform(input, mainId)
     case Pass.DropParameters =>
-      input.definitions.foreach {
-        case ToplevelDefinition.Def(id, params, body) =>
-          println("drop params")
-          body.info.debug.foreach {
-            case (id, info) => println(s"  $id: \n    external: ${info.external}\n    internal: ${info.internal}")
-          }
-        case ToplevelDefinition.Val(id, ks, k, binding) => ()
-      }
+      println(input.flows.show)
       ???
   }
 
