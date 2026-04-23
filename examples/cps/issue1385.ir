@@ -1,0 +1,95 @@
+def main(ks1, k1) {
+  let tmp1 = make Nil();
+  var adders = tmp1 @ ks1;
+  def loop(i, ks2, k2) {
+    run tmp2 = lt(i, 4);
+    if (tmp2) {
+      run! ret = show(i);
+      run! ignore = println(ret);
+      get s = adders;
+      // The problem was that tmp3 is used ONCE but only in a passive position.
+      // The inliner removed it but didn't "inline" it, since it only does so at calls.
+      def tmp3(y, ks3, k3) {
+        run tmp3 = add(y, i);
+        k3(tmp3, ks3)
+      }
+      let tmp4 = make Cons(tmp3, s);
+      put adders = tmp4;
+      run tmp4 = add(i, 1);
+      loop(tmp4, ks2, k2)
+    } else {
+      k2((), ks2)
+    }
+  }
+  def k(ignore, ks4) {
+    get s = adders;
+    def foreach_worker(l, ks5, k5) {
+      l match {
+        case Nil () => k5((), ks5)
+        case Cons (head, tail) => {
+          def k6(vr, ks6) {
+            run! ret = show(vr);
+            run! ignore = println(ret);
+            foreach_worker!(tail, ks6, k5)
+          }
+          head!(3, ks5, k6)
+        }
+      }
+    }
+    def k7(tmp5, ks7) {
+      dealloc(adders);
+      k1(tmp5, ks7)
+    }
+    foreach_worker!(s, ks4, k7)
+  }
+  loop(1, ks1, k)
+}
+
+/// INLINE
+
+def main(ks1, k1) {
+  let tmp1 = make Nil();
+  var adders = tmp1 @ ks1;
+  def loop(i, ks2, k2) {
+    run tmp2 = lt(i, 4);
+    if (tmp2) {
+      run! ret = show(i);
+      run! ignore = println(ret);
+      get s = adders;
+      def tmp3(y, ks3, k3) {
+        run tmp3 = add(y, i);
+        k3(tmp3, ks3)
+      }
+      let tmp4 = make Cons(tmp3, s);
+      put adders = tmp4;
+      run tmp4 = add(i, 1);
+      loop(tmp4, ks2, k2)
+    } else {
+      k2((), ks2)
+    }
+  }
+  def k(ignore, ks4) {
+    get s = adders;
+    def foreach_worker(l, ks5, k5) {
+      l match {
+        case Nil () => {
+          k5((), ks5)
+        }
+        case Cons (head, tail) => {
+          def k6(vr, ks6) {
+            run! ret = show(vr);
+            run! ignore = println(ret);
+            foreach_worker!(tail, ks6, k5)
+          }
+          head!(3, ks5, k6)
+        }
+      }
+    }
+    def k7(tmp5, ks7) {
+      dealloc(adders);
+      k1(tmp5, ks7)
+    }
+    foreach_worker!(s, ks4, k7)
+  }
+  loop(1, ks1, k)
+}

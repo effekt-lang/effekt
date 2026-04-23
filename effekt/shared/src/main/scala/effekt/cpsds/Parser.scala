@@ -17,7 +17,7 @@ class Parser(names: Names) extends Parsers {
   // === Lexing ===
 
   lazy val nameFirst = """[a-zA-Z_]""".r
-  lazy val nameRest = """[a-zA-Z0-9_!?$]""".r
+  lazy val nameRest = """[a-zA-Z0-9_$]""".r
   lazy val nameBoundary = """(?!%s)""".format(nameRest).r
   lazy val name = "%s(%s)*%s".format(nameFirst, nameRest, nameBoundary).r
 
@@ -64,8 +64,8 @@ class Parser(names: Names) extends Parsers {
   lazy val `return` = keyword("return")
   lazy val `toplevel` = keyword("toplevel")
 
-  lazy val `run!` : P[String] = literal("run!") <~ nameBoundary
-  lazy val `run~` : P[String] = literal("run~") <~ nameBoundary
+  lazy val `run!` : P[String] = regex("run!(?![a-zA-Z0-9_!?$])".r, "run!")
+  lazy val `run~` : P[String] = regex("run~(?![a-zA-Z0-9_!?$])".r, "run~")
 
   def keywordStrings: List[String] = List(
     "def", "let", "new", "run", "if", "else", "match", "case",
@@ -168,6 +168,7 @@ class Parser(names: Names) extends Parsers {
     | resumeStmt
     | holeStmt
     | invokeOrApp
+    | braces(stmt)
     )
 
   // def id(params) = { body } rest
@@ -237,7 +238,7 @@ class Parser(names: Names) extends Parsers {
     `case` ~> id ~ clause ^^ { case tag ~ cl => (tag, cl) }
 
   lazy val clause: P[Clause] =
-    parens(commaList(id)) ~ (`=>` ~> braces(stmt)) ^^ {
+    parens(commaList(id)) ~ (`=>` ~> stmt) ^^ {
       case params ~ body => Clause(params, body)
     }
 
