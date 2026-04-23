@@ -131,6 +131,11 @@ class UsageAnalysis(
   def process(d: ToplevelDefinition): Unit = d match {
     case ToplevelDefinition.Def(id, params, body) =>
       functions(id) = FunctionInfo(params, body)
+    case ToplevelDefinition.Val(_, _, _, _) => ()
+  }
+
+  def processBody(d: ToplevelDefinition): Unit = d match {
+    case ToplevelDefinition.Def(id, params, body) =>
       val before = stack
       stack = id :: stack
       process(body)
@@ -139,7 +144,8 @@ class UsageAnalysis(
   }
 
   def process(m: ModuleDecl): Unit =
-    m.definitions.foreach(process)
+    m.definitions.foreach(process)      // register all functions first
+    m.definitions.foreach(processBody)  // then analyze bodies
 }
 
 object UsageAnalysis {
