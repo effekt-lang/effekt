@@ -8,7 +8,7 @@ object Inliner {
   def shouldInline(id: Id, analysis: UsageAnalysis): Boolean =
     (analysis.functions.get(id), analysis.usage.get(id)) match {
       case (Some(info), Some(usage)) =>
-        info.recursiveCalls.isEmpty && usage.isUsedOnce
+        info.recursiveCalls.isEmpty && usage.isUsedOnce && info.externalCalls.nonEmpty
       case _ => false
     }
 
