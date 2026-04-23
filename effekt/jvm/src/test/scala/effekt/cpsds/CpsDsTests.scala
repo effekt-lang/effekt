@@ -9,7 +9,11 @@ import munit.Location
 import effekt.core.{Id, Names}
 
 enum Step {
+  /** Run a transform and check the result against expectedSource. */
   case Transform(pass: TransformPass, expectedSource: String)
+  /** Run a transform without checking (empty body); updates the current tree. */
+  case TransformOnly(pass: TransformPass)
+  /** Run an analysis on the current tree, check against expectedOutput. */
   case Analyze(analysis: AnalysisPass, expectedOutput: String)
 }
 
@@ -39,8 +43,12 @@ class CpsDsTests extends munit.FunSuite {
     "main" -> Id("main", -1),
     "add"  -> Id("add", -2),
     "sub"  -> Id("sub", -3),
-    "eq"  -> Id("eq", -4),
-    "println"  -> Id("println", -5)
+    "eq"   -> Id("eq", -4),
+    "println"  -> Id("println", -5),
+    "show" -> Id("show", -6),
+    "Nil" -> Id("Nil", -7),
+    "Cons" -> Id("Cons", -8),
+    "lt"   -> Id("lt", -9),
   )
 
   def parse(input: String, nickname: String = "input")(using Location): ModuleDecl = {
@@ -67,7 +75,7 @@ class CpsDsTests extends munit.FunSuite {
       .getOrElse(fail(s"Unknown step: '$trimmed'"))
   }
 
-  def splitTestFile(content: String)(using Location): (String, List[Step]) = {
+  def splitTestFile(content: String)(using Location): (String, List[Step], List[TransformPass]) = {
     val separator = """(?m)^///\s*(.+)$""".r
 
     val parts = separator.split(content).toList.map(_.trim)
@@ -81,12 +89,26 @@ class CpsDsTests extends munit.FunSuite {
     val initialSource = parts.head
     val steps = stepNames.zip(parts.tail).map { case (name, body) =>
       parseStepHeader(name) match {
-        case Left(pass)      => Step.Transform(pass, body)
+        case Left(pass) =>
+          if body.isEmpty then Step.TransformOnly(pass)
+          else Step.Transform(pass, body)
         case Right(analysis) => Step.Analyze(analysis, body)
       }
     }
 
-    (initialSource, steps)
+    steps.lastOption match {
+      case Some(Step.TransformOnly(_)) =>
+        // Drop the trailing TransformOnly steps; we'll run them in a dedicated test
+        val (checkedSteps, trailingRuns) = {
+          val reversed = steps.reverse
+          val trailing = reversed.takeWhile(_.isInstanceOf[Step.TransformOnly]).reverse
+          val checked = reversed.dropWhile(_.isInstanceOf[Step.TransformOnly]).reverse
+          (checked, trailing.collect { case Step.TransformOnly(p) => p })
+        }
+        (initialSource, checkedSteps, trailingRuns)
+      case _ =>
+        (initialSource, steps, Nil)
+    }
   }
 
   private def findMain(input: ModuleDecl): Id =
@@ -123,7 +145,7 @@ class CpsDsTests extends munit.FunSuite {
     val content = scala.io.Source.fromFile(file).mkString
     val filename = file.getName
 
-    val (initialSource, steps) = splitTestFile(content)
+    val (initialSource, steps, trailingPasses) = splitTestFile(content)
 
     var currentTree: ModuleDecl = null
     var currentRenamer: TestRenamer = null
@@ -135,6 +157,13 @@ class CpsDsTests extends munit.FunSuite {
 
     steps.zipWithIndex.foreach { case (step, idx) =>
       step match {
+        case Step.TransformOnly(pass) =>
+          test(s"$filename step ${idx + 1}: ${pass.header} (unchecked)") {
+            assert(currentTree != null, "previous step must have succeeded")
+            val mainId = findMain(currentTree)
+            currentTree = pass.run(currentTree, mainId)
+          }
+
         case Step.Transform(pass, expectedSource) =>
           test(s"$filename step ${idx + 1}: ${pass.header}") {
             assert(currentTree != null, "previous step must have succeeded")
@@ -153,6 +182,19 @@ class CpsDsTests extends munit.FunSuite {
             assertNoDiff(obtained.trim, expectedOutput.trim,
               s"$filename step ${idx + 1} (${analysis.header}) produced unexpected output")
           }
+      }
+    }
+
+    if trailingPasses.nonEmpty then {
+      val pipelineDesc = trailingPasses.map(_.header).mkString(" → ")
+      test(s"$filename: $pipelineDesc (no expected output yet)") {
+        assert(currentTree != null, "previous step must have succeeded")
+        for pass <- trailingPasses do {
+          val mainId = findMain(currentTree)
+          currentTree = pass.run(currentTree, mainId)
+        }
+        val result = PrettyPrinter.format(currentTree).layout
+        fail(s"No expected output after $pipelineDesc. Got:\n\n$result")
       }
     }
   }
