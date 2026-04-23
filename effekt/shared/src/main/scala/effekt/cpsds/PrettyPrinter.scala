@@ -154,7 +154,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "def" <+> toDoc(name) <> parens(params.map(toDoc)) <+> "=" <+> block(toDoc(body))
   }
 
-  def toDoc(s: symbols.Symbol): Doc = s.show
+  def toDoc(s: symbols.Symbol): Doc = if (s.id < 0) s.name.name else s.show
 
   def nested(content: Doc): Doc = group(nest(line <> content))
 
