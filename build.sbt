@@ -344,7 +344,7 @@ lazy val versionGenerator = Def.task {
   Seq(sourceFile)
 }
 
-// based on RFC 4267 directly: https://www.ietf.org/rfc/rfc4627.txt
+// escapes as per RFC 4267: https://www.ietf.org/rfc/rfc4627.txt
 def jsonEncode(s: String): String = {
   val sb = new StringBuilder("\"")
   s.foreach {
@@ -361,10 +361,15 @@ def jsonEncode(s: String): String = {
   sb.append("\"").toString
 }
 
+/**
+ * This generator is used by the JS version of our compiler to bundle the
+ * Effekt standard into the JS files (via JSON) and make them available in the virtual fs.
+ */
 lazy val stdLibGenerator = Def.task {
   val baseDir = (ThisBuild / baseDirectory).value / "libraries"
   val resources = (baseDir.glob("common" || "js") ** "*.*").get
 
+  // 1. Generate the JSON file
   val jsonFile = (Compile / resourceManaged).value / "stdlib-resources.json"
   val entries = resources.map { file =>
     val filename = file.relativeTo(baseDir).get.toString
@@ -373,7 +378,7 @@ lazy val stdLibGenerator = Def.task {
   }.mkString(",\n")
   IO.write(jsonFile, s"{\n$entries\n}\n")
 
-  // Thin Scala facade only to load 'stdlib-resources.json'
+  // 2. Make a thin Scala facade to load the JSON
   val sourceFile = (Compile / sourceManaged).value / "Resources.scala"
   IO.write(sourceFile,
     s"""package effekt.util
