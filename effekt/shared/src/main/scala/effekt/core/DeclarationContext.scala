@@ -21,6 +21,10 @@ class DeclarationContext(
   lazy val externDefsName: Map[(String, List[ValueType]), Extern.Def] = externs.collect {
     case d: Extern.Def => (d.id.name.name, d.vparams.map(_.tpe)) -> d
   }.toMap
+  
+  lazy val externDefsNameUnique: Map[String, Extern.Def] = externs.collect{
+    case d: Extern.Def => d.id.name.name -> d
+  }.toMap
 
   lazy val externDatas: Map[Id, Extern.Data] = externs.collect {
     case d: Extern.Data => d.id -> d
@@ -80,7 +84,7 @@ class DeclarationContext(
 
   def findExternDef(id: Id): Option[Extern.Def] = externDefs.get(id)
   def findExternDef(name: String, params: List[ValueType]): Option[Extern.Def] = externDefsName.get((name, params))
-
+  def findUniqueExternDef(name: String): Option[Extern.Def] = externDefsNameUnique.get(name)
   def findExternData(id: Id): Option[Extern.Data] = externDatas.get(id)
 
   def getDeclaration(id: Id)(using context: ErrorReporter): Declaration = findDeclaration(id).getOrElse {
@@ -121,6 +125,9 @@ class DeclarationContext(
   }
   def getExternDef(id: Id)(using context: ErrorReporter): Extern.Def = findExternDef(id).getOrElse{
     context.panic(s"No extern definition found for ${id}")
+  }
+  def getUniqueExternDef(name: String)(using context: ErrorReporter): Extern.Def = findUniqueExternDef(name).getOrElse{
+    context.panic(s"No extern definition found for ${name}")
   }
   def getExternData(id: Id)(using context: ErrorReporter): Extern.Data = findExternData(id).getOrElse{
     context.panic(s"No extern data found for ${id}")

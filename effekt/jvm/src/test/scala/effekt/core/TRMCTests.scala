@@ -5,7 +5,6 @@ import effekt.core.BlockType.Function
 import effekt.core.ExternBody.StringExternBody
 import effekt.source.FeatureFlag.Default
 import effekt.symbols.Capture
-import munit.Clue.generate
 
 class TRMCTests extends CoreTests {
   
@@ -101,12 +100,12 @@ class TRMCTests extends CoreTests {
     case _ => (TailContext.Empty, Some(context))
   }
   
-  def transform(input: Stmt, inputfun: Id, outputfun: Id, outputTpe: ValueType, context: TransformContext, outerContextTpe: ValueType) : Stmt = input match { //TODO: is OutputTpe necessary?
+  def transform(input: Stmt, inputfun: Id, outputfun: Id, context: TransformContext, outerContextTpe: ValueType) : Stmt = input match {
     case Stmt.Def(id, block, body) => ???
     case Stmt.Let(id, binding, body) => ???
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
-    case Stmt.Return(expr) => ???
-    case Stmt.Val(id, binding, body) => transform(binding, inputfun, outputfun, outputTpe, TransformContext.Val(id,body,context), outerContextTpe)
+    case Stmt.Return(expr) => reify(input, context, inputfun, outputfun, outerContextTpe) //probably works every time, original function must still exit in case inputfun is free in expr
+    case Stmt.Val(id, binding, body) => transform(binding, inputfun, outputfun, TransformContext.Val(id,body,context), outerContextTpe)
     case Stmt.App(callee, targs, vargs, bargs) => callee match {
       case Block.BlockVar(id, annotatedTpe, annotatedCapt) => 
         if (id == inputfun) {
@@ -134,14 +133,10 @@ class TRMCTests extends CoreTests {
       case Block.New(impl) => ???
     }
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
-    case Stmt.If(cond, thn, els) => 
-      if(freeInExpr(inputfun, cond)){
-        ??? //TODO: probably give up
-      }else{
-        Stmt.If(cond,
-          transform(thn, inputfun, outputfun, outputTpe, context, outerContextTpe),
-          transform(els, inputfun, outputfun, outputTpe, context, outerContextTpe))
-      }
+    case Stmt.If(cond, thn, els) =>
+      Stmt.If(cond, //same caveat as Return()
+        transform(thn, inputfun, outputfun, context, outerContextTpe),
+        transform(els, inputfun, outputfun, context, outerContextTpe))
     case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => ???
     case Stmt.Region(body) => ???
     case Stmt.Alloc(id, init, region, body) => ???
@@ -159,7 +154,7 @@ class TRMCTests extends CoreTests {
       val tmpId = Id("tmp")
       Stmt.Val(tmpId, stmt, Return(PureApp(blockVarFromExternDef(ctxApplyId), Nil, List(ValueVar(id, outerContextTpe), ValueVar(tmpId, stmt.tpe))))) //TODO: fix ctxType,tmpType?
     case TransformContext.Val(id, body, next) => 
-      Stmt.Val(id, stmt, transform(body, inputfun, outputfun, body.tpe, next, outerContextTpe))
+      Stmt.Val(id, stmt, transform(body, inputfun, outputfun, next, outerContextTpe))
   }
   
   def innerReify(context: TailContext, outerContextTpe: ValueType): Expr = context match {
@@ -203,7 +198,7 @@ class TRMCTests extends CoreTests {
     // f2(n,ctx)
     val appexpected = Stmt.App(Block.BlockVar(f2, Function(Nil, Nil, List(Type.TInt, HoleContext(ATpe,Type.TInt)), Nil, Type.TInt), fCapt), Nil, List(Expr.ValueVar(n, Type.TInt),Expr.ValueVar(ctx,HoleContext(ATpe,Type.TInt))), Nil)
 
-    val apptransformed = transform(app, f, f2, Type.TInt, TransformContext.Outer(ctx), HoleContext(ATpe,Type.TInt))
+    val apptransformed = transform(app, f, f2,TransformContext.Outer(ctx), HoleContext(ATpe,Type.TInt))
 
 //    val input =
 //      """def f(n: Int) =
@@ -256,7 +251,7 @@ class TRMCTests extends CoreTests {
     //f2(n-1,compose(ctx, Cons(n,[]))
     val expected = Stmt.App(Block.BlockVar(f2,Function(Nil, Nil, List(Type.TInt, HoleContext(ATpe,TList)), Nil, TList),fCapt),Nil,List(minusOne, composition),Nil)
     
-    val inputtransformed = transform(inputTree,f,f2,TList,TransformContext.Outer(ctx),HoleContext(ATpe,TList))
+    val inputtransformed = transform(inputTree,f,f2,TransformContext.Outer(ctx),HoleContext(ATpe,TList))
 
     assertAlphaEquivalentStatements(inputtransformed,expected)
   }
@@ -302,10 +297,10 @@ class TRMCTests extends CoreTests {
     val val2 = Stmt.Val(x,callg,val3)
 
     val callf2 = Stmt.App(Block.BlockVar(f2, Function(Nil, Nil, List(HoleContext(ATpe,Type.TInt)),Nil,Type.TInt), fCapt), Nil, List(PureApp(blockVarFromExternDef(ctxEmtpyId),Nil,Nil)), Nil)
-
+    
     val expected = Stmt.Val(y,callf2,val2)
 
-    val inputtransformed = transform(inputtree,f,f2,Type.TInt,TransformContext.Outer(ctx),HoleContext(ATpe,Type.TInt))
+    val inputtransformed = transform(inputtree,f,f2,TransformContext.Outer(ctx),HoleContext(ATpe,Type.TInt))
 
     assertAlphaEquivalentStatements(inputtransformed,expected) //TODO: passes, even though tmpIDs are different, why?
   }
@@ -364,7 +359,7 @@ class TRMCTests extends CoreTests {
 
     val expected = Stmt.Val(x, callf2, val2)
 
-    val transformed = transform(inputtree, f, f2, TList, TransformContext.Outer(ctx), HoleContext(ATpe, TList))
+    val transformed = transform(inputtree, f, f2, TransformContext.Outer(ctx), HoleContext(ATpe, TList))
     assertAlphaEquivalentStatements(transformed,expected)
   }
   
@@ -413,8 +408,10 @@ class TRMCTests extends CoreTests {
       
     val expected = Stmt.If(Expr.PureApp(Gt, Nil, List(ValueVar(n, Type.TInt), Literal(0, Type.TInt))), callf2, val1)
     
-    val transformed = transform(inputtree, f, f2, Type.TInt, TransformContext.Outer(ctx), HoleContext(ATpe, Type.TInt))
-    
+    val transformed = transform(inputtree, f, f2, TransformContext.Outer(ctx), HoleContext(ATpe, Type.TInt))
+    println(util.show(inputtree))
+
+    println(util.show(transformed))
     assertAlphaEquivalentStatements(transformed, expected)
   }
   

@@ -1,4 +1,4 @@
-
+import context
 
 def simpleTRMC(n: Int): List[Int] = n match {
   case 0 => Nil()

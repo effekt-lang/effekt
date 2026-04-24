@@ -48,7 +48,8 @@ class Deadcode(reachable: Map[Id, Usage])
         // drop unreachable externs
         m.externs.collect {
           // We need to keep "show", "showBuiltin" & "infixPlusPlus" for generating show definitions (see #1123)
-          case e: Extern.Def if used(e.id) || List("show", "showBuiltin", "infixPlusPlus").contains(e.id.name.name) => e
+          // Context-Externs(for TRMC) are used only after this point, so we need to keep them
+          case e: Extern.Def if used(e.id) || List("show", "showBuiltin", "infixPlusPlus","ctx_makeHole", "ctx_emptyContext", "ctx_applyContext", "ctx_composeContext", "ctx_makeContext").contains(e.id.name.name) => e
           case e: Extern.Include => e
           // We currently do not have usage information on extern types, so we have to keep all of them
           case e: Extern.Data => e
