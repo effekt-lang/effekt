@@ -341,7 +341,7 @@ lazy val stdLibGenerator = Def.task {
     val virtuals = resources.get.map { file =>
       val filename = file.relativeTo(baseDir).get
       val tripleQuote = "\"\"\""
-      val content = IO.read(file) .replace("$", "$$") .replace(tripleQuote, "!!!MULTILINEMARKER!!!")
+      val content = IO.read(file).replace("$", "$$").replace(tripleQuote, "!!!MULTILINEMARKER!!!")
 
       // Split into ~64KB chunks to stay well under the compiler's name table limit
       val chunkSize = 65536
