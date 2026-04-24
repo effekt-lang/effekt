@@ -340,8 +340,17 @@ lazy val stdLibGenerator = Def.task {
 
     val virtuals = resources.get.map { file =>
       val filename = file.relativeTo(baseDir).get
-      val content = IO.read(file).replace("$", "$$").replace("\"\"\"", "!!!MULTILINEMARKER!!!")
-      s"""loadIntoFile(raw\"\"\"$filename\"\"\", raw\"\"\"$content\"\"\")"""
+      val tripleQuote = "\"\"\""
+      val content = IO.read(file) .replace("$", "$$") .replace(tripleQuote, "!!!MULTILINEMARKER!!!")
+
+      // Split into ~64KB chunks to stay well under the compiler's name table limit
+      val chunkSize = 65536
+      val chunks = content.grouped(chunkSize).toSeq
+      val chunksCode = chunks
+        .map(chunk => s"raw${tripleQuote}${chunk}${tripleQuote}")
+        .mkString(" +\n      ")
+
+      s"loadIntoFile(raw${tripleQuote}${filename}${tripleQuote}, $chunksCode)"
     }
 
     val scalaCode =
