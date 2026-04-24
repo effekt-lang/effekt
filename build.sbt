@@ -81,6 +81,9 @@ lazy val root = project.in(file("effekt"))
     Compile / run := (effekt.jvm / Compile / run).evaluated
   ))
 
+val jsLinkTasks = Seq(fastLinkJS, fullLinkJS)
+val jsLinkScopes = Seq(Compile, Test)
+
 lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("effekt"))
   .settings(
     name := "effekt",
@@ -272,7 +275,6 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     bench             := benchmarks.measure.value
   )
   .jsSettings(
-
     assembleJS := {
       (Compile / clean).value
       (Compile / compile).value
@@ -280,15 +282,32 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       val outputFile = (ThisBuild / baseDirectory).value / "out" / "effekt.js"
       IO.copyFile(jsFile, outputFile)
     },
-
+  
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
-
+  
     libraryDependencies += "com.lihaoyi" %%% "utest" % "0.8.2" % "test",
-
+  
     testFrameworks += new TestFramework("utest.runner.Framework"),
+  
+    Compile / sourceGenerators += stdLibGenerator.taskValue,
+  
+    // Ensure the JSON file is picked up as a managed resource,
+    // depending on stdLibGenerator so it is written first
+    Compile / resourceGenerators += Def.task {
+      stdLibGenerator.value // runs the generator, writes the JSON as a side effect
+      Seq((Compile / resourceManaged).value / "stdlib-resources.json")
+    }.taskValue,
 
-    // include all resource files in the virtual file system
-    Compile / sourceGenerators += stdLibGenerator.taskValue
+    // Copy the JSON next to the linked output for every link step
+    for (scope <- jsLinkScopes; task <- jsLinkTasks) yield {
+      scope / task := {
+        val result = (scope / task).value
+        val json = (Compile / resourceManaged).value / "stdlib-resources.json"
+        val outDir = (scope / task / scalaJSLinkerOutputDirectory).value
+        IO.copyFile(json, outDir / "stdlib-resources.json")
+        result
+      }
+    }
   )
 
 
@@ -324,53 +343,54 @@ lazy val versionGenerator = Def.task {
   Seq(sourceFile)
 }
 
-/**
- * This generator is used by the JS version of our compiler to bundle the
- * Effekt standard into the JS files and make them available in the virtual fs.
- */
-lazy val stdLibGenerator = Def.task {
-
-  val baseDir = (ThisBuild / baseDirectory).value / "libraries"
-  val resources = baseDir.glob("common" || "js") ** "*.*"
-
-  val sourceDir = (Compile / sourceManaged).value
-  val sourceFile = sourceDir / "Resources.scala"
-
-  if (!sourceFile.exists() || sourceFile.lastModified() < baseDir.lastModified()) {
-
-    val virtuals = resources.get.map { file =>
-      val filename = file.relativeTo(baseDir).get
-      val tripleQuote = "\"\"\""
-      val content = IO.read(file).replace("$", "$$").replace(tripleQuote, "!!!MULTILINEMARKER!!!")
-
-      // Split into ~64KB chunks to stay well under the compiler's name table limit
-      val chunkSize = 65536
-      val chunks = content.grouped(chunkSize).toSeq
-      val chunksCode = chunks
-        .map(chunk => s"raw${tripleQuote}${chunk}${tripleQuote}")
-        .mkString(" +\n      ")
-
-      s"loadIntoFile(raw${tripleQuote}${filename}${tripleQuote}, $chunksCode)"
-    }
-
-    val scalaCode =
-      s"""
-package effekt.util
-import effekt.util.paths._
-
-object Resources {
-
-  def loadIntoFile(filename: String, contents: String): Unit =
-    file(filename).write(contents.replace("!!!MULTILINEMARKER!!!", "\\"\\"\\""))
-
-  def load() = {
-${virtuals.mkString("\n\n")}
+// based on RFC 4267 directly: https://www.ietf.org/rfc/rfc4627.txt
+def jsonEncode(s: String): String = {
+  val sb = new StringBuilder("\"")
+  s.foreach {
+    case '"'  => sb.append("\\\"")
+    case '\\' => sb.append("\\\\")
+    case '\b' => sb.append("\\b")
+    case '\f' => sb.append("\\f")
+    case '\n' => sb.append("\\n")
+    case '\r' => sb.append("\\r")
+    case '\t' => sb.append("\\t")
+    case c if c < 0x20 => sb.append(f"\\u${c.toInt}%04x")
+    case c => sb.append(c)
   }
+  sb.append("\"").toString
 }
-"""
 
-    IO.write(sourceFile, scalaCode)
-  }
+lazy val stdLibGenerator = Def.task {
+  val baseDir = (ThisBuild / baseDirectory).value / "libraries"
+  val resources = (baseDir.glob("common" || "js") ** "*.*").get
+
+  val jsonFile = (Compile / resourceManaged).value / "stdlib-resources.json"
+  val entries = resources.map { file =>
+    val filename = file.relativeTo(baseDir).get.toString
+    val content = IO.read(file, IO.utf8)
+    s"  ${jsonEncode(filename)}: ${jsonEncode(content)}"
+  }.mkString(",\n")
+  IO.write(jsonFile, s"{\n$entries\n}\n")
+
+  // Thin Scala facade only to load 'stdlib-resources.json'
+  val sourceFile = (Compile / sourceManaged).value / "Resources.scala"
+  IO.write(sourceFile,
+    s"""package effekt.util
+       |import scala.scalajs.js
+       |import scala.scalajs.js.annotation.JSImport
+       |import effekt.util.paths._
+       |
+       |@js.native
+       |@JSImport("./stdlib-resources.json", JSImport.Namespace)
+       |object StdlibData extends js.Object
+       |
+       |object Resources {
+       |  def load(): Unit = StdlibData.asInstanceOf[js.Dictionary[String]].foreach {
+       |    case (filename, content) => file(filename).write(content)
+       |  }
+       |}
+       |""".stripMargin)
 
   Seq(sourceFile)
 }
+
