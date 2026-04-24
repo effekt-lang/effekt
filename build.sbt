@@ -275,6 +275,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     bench             := benchmarks.measure.value
   )
   .jsSettings(
+
     assembleJS := {
       (Compile / clean).value
       (Compile / compile).value
@@ -282,15 +283,15 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       val outputFile = (ThisBuild / baseDirectory).value / "out" / "effekt.js"
       IO.copyFile(jsFile, outputFile)
     },
-  
+
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
-  
+
     libraryDependencies += "com.lihaoyi" %%% "utest" % "0.8.2" % "test",
-  
+
     testFrameworks += new TestFramework("utest.runner.Framework"),
-  
+
     Compile / sourceGenerators += stdLibGenerator.taskValue,
-  
+
     // Ensure the JSON file is picked up as a managed resource,
     // depending on stdLibGenerator so it is written first
     Compile / resourceGenerators += Def.task {
