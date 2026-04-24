@@ -8,7 +8,7 @@ object BlockSinking {
   def transform(m: ModuleDecl, main: Id): ModuleDecl = {
     given ctx: Context = Context(m.uses)
 
-    val uses = m.uses.debug
+    val uses = m.uses.toMap
 
     // 1. Compute mutual recursion clusters (SCCs of size > 1)
     val toplevelIds = m.definitions.collect {
