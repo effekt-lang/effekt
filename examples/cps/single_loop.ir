@@ -1,10 +1,10 @@
-def go(x, ks, k) {
+def go(x, ks1, k1) {
   run tmp = eq(x, 0);
   if (tmp) {
-    k(0, ks)
+    k1(0, ks1)
   } else {
-    run tmp = sub(x, 1);
-    go(tmp, ks, k)
+    run tmp2 = sub(x, 1);
+    go(tmp2, ks1, k1)
   }
 }
 def main(ks, k) {

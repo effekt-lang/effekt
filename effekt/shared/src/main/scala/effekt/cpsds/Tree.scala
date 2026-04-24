@@ -6,6 +6,9 @@ import effekt.source.FeatureFlag
 import effekt.util.messages.ErrorReporter
 import effekt.util.messages.INTERNAL_ERROR
 
+import scala.annotation.tailrec
+import scala.collection.mutable
+
 // Idea behind this IR:
 // - close to JS
 // - be able to represent continuations and metacontinuations
@@ -870,9 +873,38 @@ case class Flow(source: FlowSource, target: FlowTarget) {
 // can be dropped
 case class FunctionFlow(id: Id, params: List[Id], internal: Set[Flow])
 
+
+enum UnknownFlow {
+  // f(y, ...)  .=   y <: f(0)
+  case Call(from: Expr, to: Id, index: Int)
+  // x <: y   or   42  <:  y
+  case Data(from: Expr, to: Id)
+}
+
+enum KnownFlow {
+  // y <: f(0)
+  case Call(from: Expr, to: Id, index: Int)
+  // x <: y
+  case Alias(from: Id, to: Id)
+  // 42 <: x
+  case Data(from: Expr, to: Id)
+  // x <: ?
+  case Sink(from: Id)
+}
+
+case class Graph(
+  unknownFlows: Set[UnknownFlow],
+  knownFlows: Set[KnownFlow]
+)
+object Graph {
+  val empty = Graph(Set.empty, Set.empty)
+}
+
+
+
 case class FlowInfo(functions: DB[FunctionFlow], flows: Set[Flow]) {
   def show: String = {
-    functions.debug.toList.sortBy(_._1.toString).map {
+    functions.toMap.toList.sortBy(_._1.toString).map {
       case (id, FunctionFlow(_, params, internal)) =>
         s"""${util.show(id)}(${params.map(util.show).mkString(", ")}) {
            |  ${internal.toList.map { f => "  " + f.show }.sorted.mkString("\n  ")}
@@ -916,11 +948,13 @@ object flowAnalysis {
   private inline def all[T](t: IterableOnce[T], inline f: T => FlowInfo): FlowInfo =
     t.iterator.foldLeft(empty) { case (xs, t) => f(t) ++ xs }
 
-  private def sink(e: Expr): FlowInfo = e match {
-    // don't even construct the flow (this should be moved to a smart constructor on Flow or similar to be always used)
-    case _: Expr.Literal | Expr.Abort | Expr.Return | Expr.Toplevel  => empty
-    case e: (Expr.Make | Expr.Variable) => FlowInfo(DB.empty, Set(Flow(e, FlowTarget.Unknown)))
-  }
+  private def sink(e: Expr): FlowInfo =
+    FlowInfo(DB.empty, Set(Flow(e, FlowTarget.Unknown)))
+    //    e match {
+    //      // don't even construct the flow (this should be moved to a smart constructor on Flow or similar to be always used)
+    //      case _: Expr.Literal | Expr.Abort | Expr.Return | Expr.Toplevel  => empty
+    //      case e: (Expr.Make | Expr.Variable) => FlowInfo(DB.empty, Set(Flow(e, FlowTarget.Unknown)))
+    //    }
   private def sink(id: Id): FlowInfo = FlowInfo(DB.empty, Set(Flow(Expr.Variable(id), FlowTarget.Unknown)))
 
   private def flow(e: Expr, t: Id): FlowInfo = FlowInfo(DB.empty, Set(Flow(e, FlowTarget.Variable(t))))
@@ -970,12 +1004,217 @@ object flowAnalysis {
   inline def flows(toplevel: ToplevelDefinition): FlowInfo = toplevel match {
     case ToplevelDefinition.Def(id, params, body) =>
       val FlowInfo(funs, innerFlow) = body.flows
-      FlowInfo(funs ++ DB(id, FunctionFlow(id, params, innerFlow)), Set.empty)
+      val combined = funs ++ DB(id, FunctionFlow(id, params, innerFlow))
+      solve(id, combined.toMap)
+      FlowInfo(combined, Set.empty)
+
     case ToplevelDefinition.Val(id, ks, k, binding) => binding.flows
   }
 
   inline def flows(m: ModuleDecl): FlowInfo = m match {
     case ModuleDecl(includes, declarations, externs, definitions, exports) =>
       all(definitions, _.flows)
+  }
+
+  // We only solve for each toplevel definition individually. This has the following reasons:
+  //   1. our JS backend mostly benefits from parameter dropping in local functions / loops, since
+  //      more things become second class / do not escape
+  //   2. this avoids the problem of functions being mutually recursive (since they are not)
+  //
+  // Implementation notes:
+  // - if something flows into a function that is not part of `functions`, this probably means the
+  //   function is a toplevel function or unknown. In this case, the flow should go into ? to say "it is used"
+  //     x <: f[0]   where f is unknown (that is, not part of functions)
+  //       ~>
+  //     x <: ?
+  //
+  // - if an expression flows into ?,  then all of its free variables flow into ?:
+  //     Cons(x, Cons(y, Cons(1, Nil()))) <: ?
+  //       ~>
+  //     x <: ?, y <: ?
+  //
+  // - constant flows into ? are discarded
+  //     1 <: ?   ~> .
+  //
+  // - if something flows into a parameter of a known functions, it flows into the parameter
+  //     x <: f[0]  where f(a, b, c) { ... } in functions
+  //       ~>
+  //     x <: a
+  //   For this, probably we need some information about all "parameters", which we can gather from `functions`.
+  //
+  // - higher-order flows: if f <: g, where g is a parameter, and x <: g[0], then x <: g[0], f[0]
+  //   this might be tricky to implement efficiently
+  //
+  // - for main, ks, and k are always used...
+  //   ks <: ?, k <: ?
+  //
+  // - what do we do for:
+  //     Cons(f, Nil()) <: x
+  //   ?
+  //   Probably we just keep it. If x, for example, continues to flow into ? we then mark f as used (f <: ?)
+  //
+
+
+
+  private def solve(toplevel: Id, functions: Map[Id, FunctionFlow]): Unit = {
+    val flows: mutable.HashMap[Id, (FlowSource, FlowTarget)] = mutable.HashMap.empty
+
+    val knownFunctions: Set[Id] = functions.keySet
+    // maps parameters to the function that defines / binds it (if any)
+    val parameters: Map[Id, Id] = functions.flatMap {
+      case (funId, FunctionFlow(_, params, _)) =>
+        params.map(p => p -> funId)
+    }
+
+    var todo: List[Flow] = functions.valuesIterator.flatMap(_.internal).toList
+
+    // direct variable flows (not the transitive closure!)
+    // x <: y
+    var variableFlows: Set[(Id, Id)] = Set.empty
+
+    // if single variables occur here, these are first-class usages of known (!) functions
+    // for example, f <: x where def f() { ... }
+    var inbound: Map[Id, Set[Expr]] = Map.empty
+
+    // x <: f[1]   or   42 <: f[1]
+    var unknownCalls: List[(FlowSource, FlowTarget.Call)] = Nil
+
+    var used: Set[Id] = Set.empty
+
+    var cache: Set[Flow] = Set.empty
+
+    @tailrec
+    def loop(f: Flow => Unit): Unit = todo match {
+      case head :: tail if cache.contains(head) =>
+        todo = tail
+        loop(f)
+      case head :: tail =>
+        cache += head;
+        todo = tail;
+        f(head)
+        loop(f)
+      case Nil => ()
+    }
+
+    def push(others: List[Flow]): Unit =
+      todo = others ::: todo
+
+    loop {
+        // The function x is used in a first-class way (being passed as argument)
+        case Flow(Variable(x), FlowTarget.Variable(y)) if knownFunctions.contains(x) =>
+          inbound += (y -> (inbound.getOrElse(y, Set.empty) + Variable(x)))
+
+        case Flow(Variable(x), FlowTarget.Variable(y)) =>
+          if (x != y) {
+            variableFlows += x -> y
+          }
+          // TODO propagate
+
+        case Flow(exp, FlowTarget.Variable(y)) =>
+          inbound += (y -> (inbound.getOrElse(y, Set.empty) + exp))
+
+        case Flow(Variable(x), FlowTarget.Unknown) =>
+          used += x
+
+        // - if an expression flows into ?,  then all of its free variables flow into ?:
+        //     Cons(x, Cons(y, Cons(1, Nil()))) <: ?
+        //       ~>
+        //     x <: ?, y <: ?
+        // - constant flows into ? are discarded
+        //     1 <: ?   ~> .
+        case Flow(compound, FlowTarget.Unknown) =>
+          push(compound.free.toList.map { x =>
+            Flow(Variable(x), FlowTarget.Unknown)
+          })
+
+        // - if something flows into a parameter of a known functions, it flows into the parameter
+        //     x <: f[0]  where f(a, b, c) { ... } in functions
+        //       ~>
+        //     x <: a
+        case Flow(exp, FlowTarget.Call(fun, index)) if knownFunctions.contains(fun) =>
+          functions(fun) match {
+            case FunctionFlow(_, params, _) =>
+              push(List(Flow(exp, FlowTarget.Variable(params(index)))))
+          }
+
+        // unknown call
+        case Flow(exp, FlowTarget.Call(fun, index)) if parameters.contains(fun) =>
+          unknownCalls = (exp, FlowTarget.Call(fun, index)) :: unknownCalls
+
+          // - higher-order flows: if f <: g, where g is a parameter, and x <: g[0], then x <: g[0], f[0]
+          //   this might be tricky to implement efficiently
+          variableFlows.collect {
+            case (from, to) if to == fun =>
+              // Note: this floods it, which might be too early
+              push(Flow(exp, FlowTarget.Call(from, index)) :: Nil)
+          }
+
+        // not part of our flow
+        case Flow(exp, FlowTarget.Call(fun, index)) =>
+          push(exp.free.toList.map { x =>
+            Flow(Variable(x), FlowTarget.Unknown)
+          })
+
+
+
+        case other => ???
+      }
+
+    // forwarding nodes where there is exactly variable in and one out can be dropped:
+    //
+    //  3            ...          3     ...
+    //    \           /            \      /
+    //     a -> b -> c         ~>   a -> c
+    //    /           \            /      \
+    //  ...           ?          ...       ?
+
+    // for toplevel functions we might not be able to simply drop the parameters since the
+    // callsites in other toplevel functions need to be adapted. We _could_ generate a wrapper
+    // function though (which effectively performs the worker wrapper transformation).
+
+
+    // for each parameter, which is NOT of the toplevel function:
+    // - check whether it is a forwarding node (only has at most one in an at most one out)
+
+    def bindsValues(id: Id): Boolean = inbound.getOrElse(id, Set.empty).nonEmpty
+    def incomingValues(id: Id): Int = inbound.getOrElse(id, Set.empty).size
+    def escapes(id: Id): Boolean = used.contains(id)
+
+    def incomingFlows(id: Id): Int = variableFlows.count(_._2 == id)
+    def usedAsFunction(id: Id): Int = unknownCalls.count(_._2.fun == id)
+
+    def outgoingFlows(id: Id): Int = variableFlows.count(_._1 == id)
+
+
+    // TODO we should also do this for let bindings etc. not only for parameters
+    var forwarding: Set[Id] = Set.empty
+
+    parameters.foreach {
+      case (param, fun) => //if fun != toplevel =>
+        val v = bindsValues(param)
+        val u = escapes(param)
+        val f = usedAsFunction(param)
+        val o = outgoingFlows(param)
+        val i = incomingFlows(param)
+
+        // TODO
+        //  - it is ok if it binds a value, we just need to let bind this value instead of passing it as a parameter.
+        //  - symmetrically, it is ok if it escapes, we "just" need to eta-expand it (is this true??)
+
+        // escapes are ONLY relevant if known function values flow into the parameter, since then the
+        // signature changes. For all other parameters it is ok.
+
+        if (/*!bindsValues(param) && */!escapes(param)) {
+          val indegree = incomingValues(param) + incomingFlows(param)
+          val outdegree = usedAsFunction(param) + outgoingFlows(param)
+
+
+          if indegree <= 1 && outdegree <= 1 then {
+            forwarding += param
+          }
+        }
+    }
+
+    println(s"Parameters in ${toplevel} to be dropped: ${forwarding.mkString(", ")}")
   }
 }
