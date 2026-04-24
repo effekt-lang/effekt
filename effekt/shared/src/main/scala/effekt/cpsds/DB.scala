@@ -26,7 +26,10 @@ case class DB[T](values: IntMap[T], keys: Set[Id]) {
   def mapWithId[R](p: (Id, T) => R): DB[R] =
     DB(values.map { case (k, v) => k -> p(Id("$", k), v) }, keys)
 
-  def debug: Map[Id, T] = {
+  /**
+   * WARNING: this is slow and should be used with care (for debugging for instance)
+   */
+  def toMap: Map[Id, T] = {
     val keyMap: Map[Int, Id] = keys.map(k => k.id -> k).toMap
     values.map { case (k, v) => keyMap(k) -> v }
   }
