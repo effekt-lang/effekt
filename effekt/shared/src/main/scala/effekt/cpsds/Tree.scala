@@ -895,14 +895,16 @@ enum KnownFlow {
 case class Graph(
   unknownFlows: Set[UnknownFlow],
   knownFlows: Set[KnownFlow]
-)
+) {
+  def ++(other: Graph): Graph = Graph(unknownFlows ++ other.unknownFlows, knownFlows ++ other.knownFlows)
+}
 object Graph {
   val empty = Graph(Set.empty, Set.empty)
 }
 
 
 
-case class FlowInfo(functions: DB[FunctionFlow], flows: Set[Flow]) {
+case class FlowInfo(functions: DB[FunctionFlow], flows: Set[Flow], graph: Graph) {
   def show: String = {
     functions.toMap.toList.sortBy(_._1.toString).map {
       case (id, FunctionFlow(_, params, internal)) =>
@@ -938,31 +940,31 @@ object flowAnalysis {
 
   extension (self: FlowInfo) {
     def ++(other: FlowInfo): FlowInfo = (self, other) match {
-      case (FlowInfo(functions1, flows1), FlowInfo(functions2, flows2)) =>
-        FlowInfo(functions1 ++ functions2, flows1 ++ flows2)
+      case (FlowInfo(functions1, flows1, graph1), FlowInfo(functions2, flows2, graph2)) =>
+        FlowInfo(functions1 ++ functions2, flows1 ++ flows2, graph1 ++ graph2)
     }
   }
 
-  val empty: FlowInfo = FlowInfo(DB.empty, Set.empty)
+  val empty: FlowInfo = FlowInfo(DB.empty, Set.empty, Graph.empty)
 
   private inline def all[T](t: IterableOnce[T], inline f: T => FlowInfo): FlowInfo =
     t.iterator.foldLeft(empty) { case (xs, t) => f(t) ++ xs }
 
   private def sink(e: Expr): FlowInfo =
-    FlowInfo(DB.empty, Set(Flow(e, FlowTarget.Unknown)))
+    FlowInfo(DB.empty, Set(Flow(e, FlowTarget.Unknown)), Graph.empty)
     //    e match {
     //      // don't even construct the flow (this should be moved to a smart constructor on Flow or similar to be always used)
     //      case _: Expr.Literal | Expr.Abort | Expr.Return | Expr.Toplevel  => empty
     //      case e: (Expr.Make | Expr.Variable) => FlowInfo(DB.empty, Set(Flow(e, FlowTarget.Unknown)))
     //    }
-  private def sink(id: Id): FlowInfo = FlowInfo(DB.empty, Set(Flow(Expr.Variable(id), FlowTarget.Unknown)))
+  private def sink(id: Id): FlowInfo = FlowInfo(DB.empty, Set(Flow(Expr.Variable(id), FlowTarget.Unknown)), Graph.empty)
 
-  private def flow(e: Expr, t: Id): FlowInfo = FlowInfo(DB.empty, Set(Flow(e, FlowTarget.Variable(t))))
+  private def flow(e: Expr, t: Id): FlowInfo = FlowInfo(DB.empty, Set(Flow(e, FlowTarget.Variable(t))), Graph.empty)
 
   // TODO later return FlowInfo
   inline def flows(stmt: Stmt): FlowInfo = stmt match {
     case Stmt.App(id, args, canBeDirect) =>
-      FlowInfo(DB.empty, args.zipWithIndex.map { case (arg, index) => Flow(arg, FlowTarget.Call(id, index)) }.toSet)
+      FlowInfo(DB.empty, args.zipWithIndex.map { case (arg, index) => Flow(arg, FlowTarget.Call(id, index)) }.toSet, Graph.empty)
 
     // for now this is unknown
     case Stmt.Invoke(id, method, args) => all(args, sink)
@@ -973,8 +975,8 @@ object flowAnalysis {
 
     case Stmt.Def(id, params, body, rest) =>
       // TODO internal vs. external flows
-      val FlowInfo(funs, innerFlow) = body.flows
-      FlowInfo(funs ++ DB(id, FunctionFlow(id, params, innerFlow)), Set.empty) ++ rest.flows
+      val FlowInfo(funs, innerFlow, bodyGraph) = body.flows
+      FlowInfo(funs ++ DB(id, FunctionFlow(id, params, innerFlow)), Set.empty, Graph.empty) ++ rest.flows
 
     case Stmt.New(id, interface, operations, rest) => all(operations, _.flows) ++ rest.flows
     case Stmt.Match(scrutinee, clauses, default) => all(clauses, (tag, cl) => cl.flows) ++ all(default, _.flows)
@@ -995,7 +997,7 @@ object flowAnalysis {
       sink(prompt) ++ body.flows ++ sink(ks1) ++ sink(k1)
     case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
       sink(resumption) ++ body.flows ++ sink(ks1) ++ sink(k1)
-    case Stmt.Hole(span) => FlowInfo(DB.empty, Set.empty)
+    case Stmt.Hole(span) => FlowInfo(DB.empty, Set.empty, Graph.empty)
   }
 
   inline def flows(op: Operation): FlowInfo = op.body.flows
@@ -1003,10 +1005,10 @@ object flowAnalysis {
 
   inline def flows(toplevel: ToplevelDefinition): FlowInfo = toplevel match {
     case ToplevelDefinition.Def(id, params, body) =>
-      val FlowInfo(funs, innerFlow) = body.flows
+      val FlowInfo(funs, innerFlow, bodyGraph) = body.flows
       val combined = funs ++ DB(id, FunctionFlow(id, params, innerFlow))
       solve(id, combined.toMap)
-      FlowInfo(combined, Set.empty)
+      FlowInfo(combined, Set.empty, Graph.empty)
 
     case ToplevelDefinition.Val(id, ks, k, binding) => binding.flows
   }
