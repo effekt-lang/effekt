@@ -17,22 +17,26 @@ enum Step {
   case Analyze(analysis: AnalysisPass, expectedOutput: String)
 }
 
-enum TransformPass(val header: String, val run: (ModuleDecl, Id) => ModuleDecl) {
+enum TransformPass(val header: String, val run: (String, ModuleDecl, Id) => ModuleDecl) {
   case Inline extends TransformPass("INLINE",
-    (input, mainId) => Inliner.transform(mainId, input))
+    (_, input, mainId) => Inliner.transform(mainId, input))
   case StaticArguments extends TransformPass("STATIC_ARGUMENTS",
-    (input, _) => cpsds.StaticArguments.transform(input))
+    (_, input, _) => cpsds.StaticArguments.transform(input))
   case Simplify extends TransformPass("SIMPLIFY",
-    (input, _) => Simplifier.transform(input))
+    (_, input, _) => Simplifier.transform(input))
   case SinkBlocks extends TransformPass("SINK_BLOCKS",
-    (input, mainId) => BlockSinking.transform(input, mainId))
+    (_, input, mainId) => BlockSinking.transform(input, mainId))
   case DropParameters extends TransformPass("DROP_PARAMETERS",
-    (input, _) => ???)
+    (_, input, _) => ???)
 }
 
-enum AnalysisPass(val header: String, val run: ModuleDecl => String) {
+enum AnalysisPass(val header: String, val run: (String, ModuleDecl) => String) {
   case Flows extends AnalysisPass("FLOWS",
-    input => input.flows.show)
+    (name, input) => {
+      val flow = input.flows
+      flow.dump(name);
+      flow.show
+    })
 }
 
 class CpsDsTests extends munit.FunSuite {
@@ -161,7 +165,7 @@ class CpsDsTests extends munit.FunSuite {
           test(s"$filename step ${idx + 1}: ${pass.header} (unchecked)") {
             assert(currentTree != null, "previous step must have succeeded")
             val mainId = findMain(currentTree)
-            currentTree = pass.run(currentTree, mainId)
+            currentTree = pass.run(filename, currentTree, mainId)
           }
 
         case Step.Transform(pass, expectedSource) =>
@@ -169,7 +173,7 @@ class CpsDsTests extends munit.FunSuite {
             assert(currentTree != null, "previous step must have succeeded")
             val expected = currentRenamer(parse(expectedSource, s"expected after step ${idx + 1} (${pass.header})"))
             val mainId = findMain(currentTree)
-            val obtained = pass.run(currentTree, mainId)
+            val obtained = pass.run(filename, currentTree, mainId)
             assertAlphaEquivalent(obtained, expected,
               s"$filename step ${idx + 1} (${pass.header}) produced unexpected result")
             currentTree = expected
@@ -178,7 +182,7 @@ class CpsDsTests extends munit.FunSuite {
         case Step.Analyze(analysis, expectedOutput) =>
           test(s"$filename step ${idx + 1}: ${analysis.header}") {
             assert(currentTree != null, "previous step must have succeeded")
-            val obtained = analysis.run(currentTree)
+            val obtained = analysis.run(filename, currentTree)
             assertNoDiff(obtained.trim, expectedOutput.trim,
               s"$filename step ${idx + 1} (${analysis.header}) produced unexpected output")
           }
@@ -191,7 +195,7 @@ class CpsDsTests extends munit.FunSuite {
         assert(currentTree != null, "previous step must have succeeded")
         for pass <- trailingPasses do {
           val mainId = findMain(currentTree)
-          currentTree = pass.run(currentTree, mainId)
+          currentTree = pass.run(filename, currentTree, mainId)
         }
         val result = PrettyPrinter.format(currentTree).layout
         fail(s"No expected output after $pipelineDesc. Got:\n\n$result")
