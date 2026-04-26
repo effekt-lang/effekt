@@ -23,6 +23,10 @@ def ex6(str: String) = str match {
   case s: String => s
 }
 
+def ex7(f: Int => Int at {}) = f match {
+  case f: (Int => Int at {}) => f(41).show
+}
+
 def main() = {
   println(ex1([1, 2]))
   println(ex1([]))
@@ -39,4 +43,6 @@ def main() = {
   println("---")
   println(ex6("hello"))
   println(ex6("test"))
+  println("---")
+  println(ex7(box { x => x + 1 }))
 }

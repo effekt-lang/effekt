@@ -836,6 +836,10 @@ class Parser(tokens: Seq[Token], source: Source) {
     nonterminal:
       when(`at`) { Maybe.Some(captureSet(), span()) } { Maybe.None(span()) }
 
+  def maybeAtomicTypeAnnotation(): Option[AtomicType] =
+    nonterminal:
+      if peek(`:`) then Some(atomicTypeAnnotation()) else None
+
   def maybeValueTypeAnnotation(): Option[ValueType] =
     nonterminal:
       if peek(`:`) then Some(valueTypeAnnotation()) else None
@@ -851,6 +855,10 @@ class Parser(tokens: Seq[Token], source: Source) {
   def returnAnnotation(): Effectful =
     if peek(`:`) then  `:` ~> effectful()
     else fail("return type annotation", peek.kind)
+
+  def atomicTypeAnnotation(): AtomicType =
+    if peek(`:`) then  `:` ~> atomicType()
+    else fail("a type annotation", peek.kind)
 
   def valueTypeAnnotation(): ValueType =
     if peek(`:`) then  `:` ~> valueType()
@@ -1008,7 +1016,7 @@ class Parser(tokens: Seq[Token], source: Source) {
         case _ if isVariable  => idRef() match {
             case id if peek(`(`) => TagPattern(id, many(matchPattern, `(`, `,`, `)`).unspan, span())
             case IdRef(Nil, name, span) =>
-              maybeValueTypeAnnotation()
+              maybeAtomicTypeAnnotation()
               AnyPattern(IdDef(name, span), span)
             case IdRef(_, name, _) => fail("Cannot use qualified names to bind a pattern variable")
           }
