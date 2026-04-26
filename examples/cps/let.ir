@@ -1,0 +1,11 @@
+def main(k) {
+  let l = k;
+  l(42)
+}
+
+/// FLOWS
+
+main
+---
+{}    <: k_1 <: 1st
+{k_1} <: l_2 <: 1st

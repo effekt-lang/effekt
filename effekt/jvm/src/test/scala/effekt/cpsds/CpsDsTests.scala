@@ -4,9 +4,9 @@ package cpsds
 import java.io.File
 import sbt.io.*
 import sbt.io.syntax.*
-import kiama.parsing.{NoSuccess, Success}
+import kiama.parsing.{ NoSuccess, Success }
 import munit.Location
-import effekt.core.{Id, Names}
+import effekt.core.{ Id, Names }
 
 enum Step {
   /** Run a transform and check the result against expectedSource. */
@@ -34,8 +34,11 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl) => String) {
   case Flows extends AnalysisPass("FLOWS",
     (name, input) => {
       val flow = input.flows
-      flow.dump(name);
-      flow.show
+      input.definitions.collect {
+        case d: ToplevelDefinition.Def =>
+          s"${d.id}\n---\n${flowAnalysis.solve(d).show}"
+        case _ => ()
+      }.mkString("\n")
     })
 }
 
