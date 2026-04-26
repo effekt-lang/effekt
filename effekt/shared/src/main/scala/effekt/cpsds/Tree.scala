@@ -1042,6 +1042,14 @@ object Graph {
     Graph(body.functions, newUnknown, newKnown)
   }
 
+  // all unknown flows are now sinks
+  def close(graph: Graph): Graph =
+    var knownFlows = graph.knownFlows
+    graph.unknownFlows.foreach {
+      case UnknownFlow.Call(from, to, index) => knownFlows ++= from.free.map(x => KnownFlow.Sink(x))
+      case UnknownFlow.Data(from, to) => knownFlows ++= from.free.map(x => KnownFlow.Sink(x))
+    }
+    Graph(graph.functions, Set.empty, knownFlows)
 }
 
 object flowAnalysis {
@@ -1102,19 +1110,238 @@ object flowAnalysis {
   inline def flows(op: Operation): Graph = op.body.flows
   inline def flows(cl: Clause): Graph = cl.body.flows
 
-  inline def flows(toplevel: ToplevelDefinition): Graph = toplevel match {
+  def flows(toplevel: ToplevelDefinition): Graph = toplevel match {
     case ToplevelDefinition.Def(id, params, body) =>
       val graph = Graph.define(id, params, body.flows, Graph.empty)
-      // solve(id, combined.toMap)
-      graph
-
+      Graph.close(graph)
 
     case ToplevelDefinition.Val(id, ks, k, binding) => binding.flows
   }
 
+  def solve(toplevel: ToplevelDefinition): Map[Id, NodeInfo] = toplevel match {
+    case ToplevelDefinition.Def(id, params, body) =>
+      val flows = toplevel.flows
+      solve(flows.functions, flows.knownFlows, params.toSet)
+    case ToplevelDefinition.Val(id, ks, k, binding) => Map.empty
+  }
   inline def flows(m: ModuleDecl): Graph = m match {
     case ModuleDecl(includes, declarations, externs, definitions, exports) =>
-      all(definitions, _.flows)
+      val allFlows = all(definitions, _.flows)
+      assert(allFlows.unknownFlows.isEmpty)
+      allFlows
+  }
+
+  enum Usage {
+    case Unused, SecondClass, FirstClass
+
+    def join(other: Usage): Usage = (this, other) match {
+      case (FirstClass, _) | (_, FirstClass) => FirstClass
+      case (SecondClass, _) | (_, SecondClass) => SecondClass
+      case _ => Unused
+    }
+    override def toString: String = this match {
+      case Usage.Unused => "–"
+      case Usage.SecondClass => "2nd"
+      case Usage.FirstClass => "1st"
+    }
+  }
+
+  case class NodeInfo(
+    inputs: Set[Expr],
+    usage: Usage
+  )
+
+  extension (result: Map[Id, NodeInfo]) {
+    def show: String = {
+      val entries = result.toList
+        .sortBy((id, _) => util.show(id))
+        .map { case (id, NodeInfo(inputs, usage)) =>
+          val inputsStr = "{" + inputs.map(util.show).mkString(", ") + "}"
+          val idStr = util.show(id)
+          val usageStr = usage.toString
+          (inputsStr, idStr, usageStr)
+        }
+
+      val maxInputs = entries.map(_._1.length).maxOption.getOrElse(0)
+      val maxId = entries.map(_._2.length).maxOption.getOrElse(0)
+
+      entries.map { case (inputsStr, idStr, usageStr) =>
+        s"${inputsStr.padTo(maxInputs, ' ')} <: ${idStr.padTo(maxId, ' ')} <: $usageStr"
+      }.mkString("\n")
+    }
+  }
+
+  /**
+   * Solves the flow graph to determine for each node:
+   *   - inputs: the set of expressions that flow into it (after propagation)
+   *   - usage: how it is used (Unused / SecondClass / FirstClass)
+   *
+   * The algorithm has three phases:
+   *
+   * Phase 1: Extract static inputs, calls, and sinks from the flow edges.
+   *
+   * Phase 2: Propagate inputs forward (fixpoint).
+   *   - If a node has a single input, it is "transparent": wherever Variable(node)
+   *     appears as an input to another node, it is replaced by that single input.
+   *     If a node has multiple inputs, it is a "join point" and remains opaque.
+   *   - Self-references (from recursive flows) are dropped.
+   *   - Calls are resolved when all callee inputs are known functions —
+   *     arguments flow into each function's corresponding parameter.
+   *   - Unresolved calls (callee has unknown inputs) mark their arguments as
+   *     escaping (FirstClass).
+   *
+   * Phase 3: Propagate usage backward (fixpoint).
+   *   - Sinks: FirstClass (used in constructs like make, or escaping arguments)
+   *   - Toplevel params: FirstClass
+   *   - Callees in resolved calls: SecondClass (all call sites known)
+   *   - Callees in unresolved calls: FirstClass (call site not fully controllable)
+   *   - Usage propagates backward along flow edges (recorded before substitution,
+   *     so transparent nodes still participate).
+   *   - Join is max: FirstClass > SecondClass > Unused
+   *
+   * Parameter dropping is safe when:
+   *   - The parameter has a single input (can be specialized), AND
+   *   - The owning function is at most SecondClass (all call sites are known)
+   * If a function is FirstClass but has specializable parameters, the
+   * transformation pass can eta-expand at first-class use sites.
+   */
+  def solve(
+    signatures: Vector[Signature],
+    flows: Set[KnownFlow],
+    toplevelParams: Set[Id]
+  ): Map[Id, NodeInfo] = {
+
+    val knownFunctions: Map[Id, Signature] = signatures.map(s => s.id -> s).toMap
+
+    // --- Phase 1: Build initial graph structure ---
+
+    val dynamicInputs = scala.collection.mutable.Map.empty[Id, Set[Expr]].withDefaultValue(Set.empty)
+    val calls = scala.collection.mutable.ListBuffer.empty[(Expr, Id, Int)]
+    val sinks = scala.collection.mutable.Set.empty[Id]       // FirstClass usage
+    val calleeUses = scala.collection.mutable.Set.empty[Id]   // SecondClass usage (may be promoted)
+    val flowEdges = scala.collection.mutable.Set.empty[(Id, Id)]
+
+    flows.foreach {
+      case KnownFlow.Data(from, to) =>
+        dynamicInputs(to) = dynamicInputs(to) + from
+        from match {
+          case Expr.Variable(fromId) => flowEdges += ((fromId, to))
+          case _ => ()
+        }
+      case KnownFlow.Call(from, to, index) =>
+        calls += ((from, to, index))
+      case KnownFlow.Sink(from) =>
+        sinks += from
+    }
+
+    toplevelParams.foreach { id => sinks += id }
+
+    // --- Phase 2: Propagate inputs forward (fixpoint) ---
+
+    val resolvedCalls = scala.collection.mutable.Set.empty[(Expr, Id, Int)]
+
+    def addInput(from: Expr, to: Id): Unit = {
+      dynamicInputs(to) = dynamicInputs(to) + from
+      from match {
+        case Expr.Variable(fromId) => flowEdges += ((fromId, to))
+        case _ => ()
+      }
+    }
+
+    var changed = true
+    while (changed) {
+      changed = false
+
+      // Substitute through single-input nodes
+      for (id <- dynamicInputs.keys.toList) {
+        val oldInputs = dynamicInputs(id)
+        var newInputs = Set.empty[Expr]
+
+        oldInputs.foreach {
+          case Expr.Variable(other) if other == id =>
+            () // drop self-references
+          case v @ Expr.Variable(other) =>
+            val otherInputs = dynamicInputs(other)
+            if (otherInputs.size == 1) newInputs = newInputs ++ otherInputs
+            else newInputs = newInputs + v
+          case other =>
+            newInputs = newInputs + other
+        }
+
+        if (newInputs != oldInputs) {
+          dynamicInputs(id) = newInputs
+          changed = true
+        }
+      }
+
+      // Resolve calls against known function targets
+      for ((from, callee, index) <- calls if !resolvedCalls.contains((from, callee, index))) {
+        val calleeInputs = dynamicInputs(callee)
+
+        val targets =
+          if (calleeInputs.isEmpty && knownFunctions.contains(callee)) Set(callee)
+          else calleeInputs.collect {
+            case Expr.Variable(funId) if knownFunctions.contains(funId) => funId
+          }
+
+        // Only resolve if ALL callee inputs are known functions
+        if (targets.nonEmpty && targets.size >= calleeInputs.size.max(1)) {
+          for (funId <- targets) {
+            val params = knownFunctions(funId).params
+            if (index < params.size) addInput(from, params(index))
+          }
+          resolvedCalls += ((from, callee, index))
+          calleeUses += callee // SecondClass: all targets known
+          changed = true
+        }
+      }
+    }
+
+    // Unresolved calls: arguments escape, callee is FirstClass
+    for ((from, callee, index) <- calls if !resolvedCalls.contains((from, callee, index))) {
+      sinks += callee // FirstClass: not all targets known
+      from match {
+        case Expr.Variable(id) => sinks += id
+        case _ => ()
+      }
+    }
+
+    // --- Phase 3: Propagate usage backward (fixpoint) ---
+
+    val usage = scala.collection.mutable.Map.empty[Id, Usage].withDefaultValue(Usage.Unused)
+
+    sinks.foreach { id => usage(id) = Usage.FirstClass }
+    calleeUses.foreach { id => usage(id) = usage(id).join(Usage.SecondClass) }
+
+    // Build reverse edges
+    val reverseEdges = scala.collection.mutable.Map.empty[Id, Set[Id]].withDefaultValue(Set.empty)
+    for ((from, to) <- flowEdges) {
+      reverseEdges(to) = reverseEdges(to) + from
+    }
+
+    changed = true
+    while (changed) {
+      changed = false
+      for ((id, u) <- usage.toList if u != Usage.Unused) {
+        for (from <- reverseEdges(id)) {
+          val old = usage(from)
+          val joined = old.join(u)
+          if (joined != old) {
+            usage(from) = joined
+            changed = true
+          }
+        }
+      }
+    }
+
+    println(resolvedCalls)
+
+    // --- Collect results ---
+
+    val allIds = dynamicInputs.keySet ++ usage.keySet
+    allIds.map { id =>
+      id -> NodeInfo(dynamicInputs(id), usage(id))
+    }.toMap
   }
 
   // We only solve for each toplevel definition individually. This has the following reasons:

@@ -1,0 +1,16 @@
+def main(k) {
+  def f(y) { k(1) }
+  def g(x) { x(2) }
+  // here f is passed, but to a **known** function
+  // so we _could_ adapt parameteres
+  g(f)
+}
+
+/// FLOWS
+
+main
+---
+{}    <: f_2 <: 2nd
+{}    <: k_1 <: 1st
+{f_2} <: x_5 <: 2nd
+{2}   <: y_3 <: –

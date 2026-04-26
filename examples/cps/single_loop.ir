@@ -13,47 +13,42 @@ def main(ks, k) {
 
 /// FLOWS
 
-go_0(x_2, ks_3, k_4) {
-    0 <: k_4[0]
-    k_4 <: go_0[2]
-    ks_3 <: go_0[1]
-    ks_3 <: k_4[1]
-    tmp_5 <: ?
-    tmp_6 <: go_0[0]
-    x_2 <: ?
-}
-main_1(ks_7, k_8) {
-    10 <: go_0[0]
-    k_8 <: go_0[2]
-    ks_7 <: go_0[1]
-}
+go
+---
+{}       <: k1_4   <: 1st
+{}       <: ks1_3  <: 1st
+{}       <: tmp2_6 <: 1st
+{}       <: tmp_5  <: 1st
+{tmp2_6} <: x_2    <: 1st
+main
+---
+{} <: k_8  <: 1st
+{} <: ks_7 <: 1st
 
-/// STATIC_ARGUMENTS
 
-def main(ks, k) {
-  def go_worker(x) {
-    run tmp = eq(x, 0);
-    if (tmp) {
-      k(0, ks)
+/// SINK_BLOCKS
+def main_1(ks_7, k_8) {
+  def go_0(x_2, ks1_3, k1_4) {
+    run tmp_5 = eq(x_2, 0);
+    if (tmp_5) {
+      k1_4(0, ks1_3)
     } else {
-      run tmp = sub(x, 1);
-      go_worker(tmp)
+      run tmp2_6 = sub(x_2, 1);
+      go_0(tmp2_6, ks1_3, k1_4)
     }
   }
-  go_worker(10)
+  go_0(10, ks_7, k_8)
 }
 
-/// INLINE
+// we can specialize k1 and k, but not x
+/// FLOWS
 
-def main(ks, k) {
-  def go_worker(x) {
-    run tmp = eq(x, 0);
-    if (tmp) {
-      k(0, ks)
-    } else {
-      run tmp = sub(x, 1);
-      go_worker(tmp)
-    }
-  }
-  go_worker(10)
-}
+main
+---
+{k_2}        <: k1_6   <: 1st
+{}           <: k_2    <: 1st
+{ks_1}       <: ks1_5  <: 1st
+{}           <: ks_1   <: 1st
+{}           <: tmp2_8 <: 1st
+{}           <: tmp_7  <: 1st
+{tmp2_8, 10} <: x_4    <: 1st
