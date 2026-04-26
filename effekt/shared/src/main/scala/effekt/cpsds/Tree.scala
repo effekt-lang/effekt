@@ -1118,10 +1118,10 @@ object flowAnalysis {
     case ToplevelDefinition.Val(id, ks, k, binding) => binding.flows
   }
 
-  def solve(toplevel: ToplevelDefinition): Map[Id, NodeInfo] = toplevel match {
+  def solve(toplevel: ToplevelDefinition, main: Id): Map[Id, NodeInfo] = toplevel match {
     case ToplevelDefinition.Def(id, params, body) =>
       val flows = toplevel.flows
-      solve(flows.functions, flows.knownFlows, params.toSet)
+      solve(flows.functions, flows.knownFlows, params.toSet, main)
     case ToplevelDefinition.Val(id, ks, k, binding) => Map.empty
   }
   inline def flows(m: ModuleDecl): Graph = m match {
@@ -1208,7 +1208,8 @@ object flowAnalysis {
   def solve(
     signatures: Vector[Signature],
     flows: Set[KnownFlow],
-    toplevelParams: Set[Id]
+    toplevelParams: Set[Id],
+    main: Id
   ): Map[Id, NodeInfo] = {
 
     val knownFunctions: Map[Id, Signature] = signatures.map(s => s.id -> s).toMap
@@ -1235,6 +1236,17 @@ object flowAnalysis {
     }
 
     toplevelParams.foreach { id => sinks += id }
+
+    // The main function's last two parameters are always Toplevel and Return
+    knownFunctions.get(main).foreach { sig =>
+      val params = sig.params
+      if (params.size >= 2) {
+        val ks = params(params.size - 2)
+        val k = params(params.size - 1)
+        dynamicInputs(ks) = dynamicInputs(ks) + Expr.Toplevel
+        dynamicInputs(k) = dynamicInputs(k) + Expr.Return
+      }
+    }
 
     // --- Phase 2: Propagate inputs forward (fixpoint) ---
 
@@ -1333,8 +1345,6 @@ object flowAnalysis {
         }
       }
     }
-
-    println(resolvedCalls)
 
     // --- Collect results ---
 
