@@ -15,4 +15,3 @@ def rec(n, self) {
 def main() {
   rec(10, rec)
 }
-
