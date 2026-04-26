@@ -20,6 +20,27 @@ def main(ks, k) {
   even(10, ks, k)
 }
 
+/// FLOWS
+
+even
+---
+{} <: k_5   <: 1st
+{} <: ks_4  <: 1st
+{} <: tmp_6 <: 1st
+{} <: tmp_7 <: 1st
+{} <: x_3   <: 1st
+odd
+---
+{} <: k_10   <: 1st
+{} <: ks_9   <: 1st
+{} <: tmp_11 <: 1st
+{} <: tmp_12 <: 1st
+{} <: x_8    <: 1st
+main
+---
+{} <: k_14  <: 1st
+{} <: ks_13 <: 1st
+
 /// SINK_BLOCKS
 // since they are mutually recursive, the two are not sunk
 
@@ -79,6 +100,15 @@ def main(ks_1, k_2) {
       if (tmp_9) {
         k_6(0, ks_5)
       } else {
+
+        // ok this is not correct yet... (in general, here it is ok)
+        // something unknown flows into tmp_10, which could in principle
+        // continue to flow into other variables. However, maybe this is
+        // fine since we only substitute / propagate if there is EXACTLY
+        // one incoming flow. In this case, there are ZERO incoming flows.
+        //
+        // So maybe, in general, we need to read zero incoming flows as
+        // "this is a parameter".
         run tmp_10 = sub(tmp_8, 1);
         even(tmp_10, ks_5, k_6)
       }
@@ -86,3 +116,17 @@ def main(ks_1, k_2) {
   }
   even(10, ks_1, k_2)
 }
+
+/// FLOWS
+
+main
+---
+{}           <: k_2    <: 1st
+{k_2}        <: k_6    <: 1st
+{}           <: ks_1   <: 1st
+{ks_1}       <: ks_5   <: 1st
+{}           <: tmp_10 <: 1st
+{}           <: tmp_7  <: 1st
+{}           <: tmp_8  <: 1st
+{}           <: tmp_9  <: 1st
+{tmp_10, 10} <: x_4    <: 1st

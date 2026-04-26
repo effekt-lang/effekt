@@ -1,0 +1,34 @@
+def main(ks, k) {
+
+  def apply(f, y) {
+    f(y)
+  }
+
+  def inc(x) {
+    run tmp = add(make Cons(x, make Nil()), 1);
+    apply(inc, 0)
+  }
+
+  def dec(z) {
+    apply(inc, z)
+  }
+
+  apply(dec, 0)
+}
+
+// this is quite involved. We should be able to specialize inc AND dec
+// to the argument (0). Both functions are marked as "second class"
+// meaning that we can adapt their signature.
+
+/// FLOWS
+
+main
+---
+{}             <: dec_9 <: 2nd
+{inc_6, dec_9} <: f_4   <: 2nd
+{}             <: inc_6 <: 2nd
+{}             <: k_2   <: 1st
+{}             <: ks_1  <: 1st
+{0}            <: x_7   <: 1st
+{0}            <: y_5   <: 1st
+{0}            <: z_10  <: 1st
