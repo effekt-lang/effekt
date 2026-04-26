@@ -22,8 +22,8 @@ go
 {tmp2_6} <: x_2    <: 1st
 main
 ---
-{} <: k_8  <: 1st
-{} <: ks_7 <: 1st
+{return}   <: k_8  <: 1st
+{toplevel} <: ks_7 <: 1st
 
 
 /// SINK_BLOCKS
@@ -45,10 +45,10 @@ def main_1(ks_7, k_8) {
 
 main
 ---
-{k_2}        <: k1_6   <: 1st
-{}           <: k_2    <: 1st
-{ks_1}       <: ks1_5  <: 1st
-{}           <: ks_1   <: 1st
+{return}     <: k1_6   <: 1st
+{return}     <: k_2    <: 1st
+{toplevel}   <: ks1_5  <: 1st
+{toplevel}   <: ks_1   <: 1st
 {}           <: tmp2_8 <: 1st
 {}           <: tmp_7  <: 1st
 {tmp2_8, 10} <: x_4    <: 1st

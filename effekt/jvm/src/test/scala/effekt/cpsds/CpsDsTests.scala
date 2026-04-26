@@ -30,13 +30,13 @@ enum TransformPass(val header: String, val run: (String, ModuleDecl, Id) => Modu
     (_, input, _) => ???)
 }
 
-enum AnalysisPass(val header: String, val run: (String, ModuleDecl) => String) {
+enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => String) {
   case Flows extends AnalysisPass("FLOWS",
-    (name, input) => {
+    (name, input, main) => {
       val flow = input.flows
       input.definitions.collect {
         case d: ToplevelDefinition.Def =>
-          s"${d.id}\n---\n${flowAnalysis.solve(d).show}"
+          s"${d.id}\n---\n${flowAnalysis.solve(d, main).show}"
         case _ => ()
       }.mkString("\n")
     })
@@ -185,7 +185,8 @@ class CpsDsTests extends munit.FunSuite {
         case Step.Analyze(analysis, expectedOutput) =>
           test(s"$filename step ${idx + 1}: ${analysis.header}") {
             assert(currentTree != null, "previous step must have succeeded")
-            val obtained = analysis.run(filename, currentTree)
+            val mainId = findMain(currentTree)
+            val obtained = analysis.run(filename, currentTree, mainId)
             assertNoDiff(obtained.trim, expectedOutput.trim,
               s"$filename step ${idx + 1} (${analysis.header}) produced unexpected output")
           }

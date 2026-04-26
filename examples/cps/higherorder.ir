@@ -27,8 +27,8 @@ main
 {}             <: dec_9 <: 2nd
 {inc_6, dec_9} <: f_4   <: 2nd
 {}             <: inc_6 <: 2nd
-{}             <: k_2   <: 1st
-{}             <: ks_1  <: 1st
+{return}       <: k_2   <: 1st
+{toplevel}     <: ks_1  <: 1st
 {0}            <: x_7   <: 1st
 {0}            <: y_5   <: 1st
 {0}            <: z_10  <: 1st
