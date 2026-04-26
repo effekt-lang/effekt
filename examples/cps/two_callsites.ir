@@ -33,3 +33,21 @@ def main(ks2, k2) {
   outer(10, ks2, k1)
 }
 
+// there is not a lot we can do...
+// the two calls to outer are with different meta continuations (though at runtime
+// we will know that those are toplevel continuations!)
+
+/// FLOWS
+
+main
+---
+{}                  <: k1_9   <: 1st
+{}                  <: k2_2   <: 1st
+{k2_2, k1_9}        <: k_6    <: 1st
+{}                  <: ks1_11 <: 1st
+{}                  <: ks2_1  <: 1st
+{ks1_11, ks2_1}     <: ks_5   <: 1st
+{}                  <: res_10 <: 1st
+{}                  <: tmp_7  <: 1st
+{}                  <: tmp_8  <: 1st
+{tmp_8, 10, res_10} <: x_4    <: 1st
