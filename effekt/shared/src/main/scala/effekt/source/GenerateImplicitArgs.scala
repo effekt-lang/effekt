@@ -84,6 +84,7 @@ object GenerateImplicitArgs {
     }.sum }.sum
 
   private val recursionStack: DynamicVariable[Map[String, (Int, Int)]] = DynamicVariable(Map.empty)
+  private val currentMaxRecurse: DynamicVariable[Int] = DynamicVariable(1)
 
   val maxRecurse = 10
   /**
@@ -99,22 +100,29 @@ object GenerateImplicitArgs {
     val newValue = inst match {
       case source.BlockLiteral(_, _, _, source.Return(source.Call(source.IdTarget(id), _, _, _, _), _), _) =>
         val (depth, lastSize) = recursionStack.value.getOrElse((id.name), (0, tpeSize))
-        if (tpeSize >= lastSize && depth > maxRecurse) {
-          Context.abort(s"Aborted recursive generation of implicit parameter ${id.name} after ${maxRecurse} levels with non-decreasing types at the same name.")
+        if (tpeSize >= lastSize && depth > currentMaxRecurse.value) {
+          Context.abort(util.messages.ImplicitMaxRecursionError(s"Aborted recursive generation of implicit parameter ${id.name} after ${currentMaxRecurse.value} levels with non-decreasing types at the same name.", Context.rangeOf(Context.focus)))
         }
         recursionStack.value.updated((id.name), (if tpeSize >= lastSize then depth + 1 else depth, tpeSize))
       case _ => recursionStack.value
     }
-    recursionStack.withValue(newValue) {
-      Try {
-        body
-      } match {
-        case Left(msgs) =>
-          // Note: Recursion
-          Context.abort(util.messages.ImplicitInstantiationError(
-            Error(stencil, index, msgs), tpe, Context.rangeOf(Context.focus)))
-        case Right(r) => r
+    typer.Typer.iterativeDeepening(maxRecurse) { d =>
+      currentMaxRecurse.withValue(d) {
+        recursionStack.withValue(newValue) {
+          Try {
+            body
+          } match {
+            case Left(msgs) =>
+              // Note: Recursion
+              Context.abort(util.messages.ImplicitInstantiationError(
+                Error(stencil, index, msgs), tpe, Context.rangeOf(Context.focus)))
+            case Right(r) => r
+          }
+        }
       }
+    }{
+      case util.messages.ImplicitMaxRecursionError(_, _) => true
+      case _ => false
     }
   }
 

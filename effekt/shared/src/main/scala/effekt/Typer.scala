@@ -16,6 +16,7 @@ import effekt.context.Try
 
 import scala.language.implicitConversions
 import scala.collection.mutable
+import scala.annotation.tailrec
 
 /**
  * Typechecking
@@ -1592,6 +1593,21 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val successes = results.collect { case (sym, Right((r, st))) => (sym, r, st) }
     val errors = results.collect { case (sym, Left(r)) => (sym, r) }
     (successes, errors)
+  }
+
+  def iterativeDeepening[R](max: Int)(f: Int => R)(shouldDeepen: util.messages.EffektError => Boolean)(using Context): R = {
+    @tailrec
+    def go(d: Int): R = {
+      val oldTyperstate = Context.backupTyperstate()
+      try {
+        f(d)
+      } catch {
+        case e: util.messages.FatalPhaseError if shouldDeepen(e.message) && d < max =>
+          Context.restoreTyperstate(oldTyperstate)
+          go(d + 1)
+      }
+    }
+    go(1)
   }
 
 
