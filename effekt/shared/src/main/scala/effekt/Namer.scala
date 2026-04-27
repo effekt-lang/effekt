@@ -274,7 +274,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.ModuleDecl(path, includes, definitions, doc, span) =>
       definitions foreach { preresolve }
 
-      // Allow `<module>::foo()` to stand for `foo()` by importing ourselves as `<module>`
+      // Allow `<module>::foo()` to stand for `foo()` by importing current module `m` as `<module>`
       Context.importSelfAs(path.split("/").toList)
 
       definitions.foreach { resolve }
