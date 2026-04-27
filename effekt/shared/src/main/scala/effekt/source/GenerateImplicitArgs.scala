@@ -106,7 +106,7 @@ object GenerateImplicitArgs {
         recursionStack.value.updated((id.name), (if tpeSize >= lastSize then depth + 1 else depth, tpeSize))
       case _ => recursionStack.value
     }
-    typer.Typer.iterativeDeepening(maxRecurse) { d =>
+    typer.Typer.iterativeDeepening(currentMaxRecurse.value, maxRecurse) { d =>
       currentMaxRecurse.withValue(d) {
         recursionStack.withValue(newValue) {
           Try {
