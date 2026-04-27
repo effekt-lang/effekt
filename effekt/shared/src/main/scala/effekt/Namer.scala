@@ -273,6 +273,10 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolve(m: source.ModuleDecl)(using Context): Unit = Context.focusing(m) {
     case source.ModuleDecl(path, includes, definitions, doc, span) =>
       definitions foreach { preresolve }
+
+      // Allow `<module>::foo()` to stand for `foo()` by importing ourselves as `<module>`
+      Context.importSelfAs(path.split("/").toList)
+
       definitions.foreach { resolve }
   }
 
@@ -1090,6 +1094,10 @@ trait NamerOps extends ContextOps { Context: Context =>
   private[namer] def bindBlock(name: String, p: TrackedParam) = {
     scope.define(name, p)
     scope.define(name, p.capture)
+  }
+
+  private[namer] def importSelfAs(path: List[String]): Unit = {
+    scope.importAs(scope.exports, path)
   }
 
   /**
