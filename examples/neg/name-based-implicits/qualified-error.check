@@ -1,3 +1,4 @@
+[error] Cannot instantiate implicit argument.
 Cannot instantiate 1st block argument compare of type (A, A) => Ordering.
   Ambiguous overload.
   There are multiple overloads, which all would type check:
