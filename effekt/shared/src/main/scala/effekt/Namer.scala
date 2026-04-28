@@ -716,18 +716,18 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Used for fields where "please wrap this in braces" is not good advice to be told by [[resolveValueType]].
    */
   def resolveNonfunctionValueParam(p: source.ValueParam)(using Context): ValueParam = {
-    val sym = ValueParam(p.id.toName, p.tpe.map(tpe => resolveValueType(tpe, isParam = false)), p.isImplicit, decl = p)
+    val sym = ValueParam(Name(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = false)), p.isImplicit, decl = p)
     Context.assignSymbol(p.id, sym)
     sym
   }
 
   def resolve(p: source.ValueParam)(using Context): ValueParam = {
-    val sym = ValueParam(p.id.toName, p.tpe.map(tpe => resolveValueType(tpe, isParam = true)), p.isImplicit, decl = p)
+    val sym = ValueParam(Name(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = true)), p.isImplicit, decl = p)
     Context.assignSymbol(p.id, sym)
     sym
   }
   def resolve(p: source.BlockParam)(using Context): BlockParam = {
-    val name = p.id.toName
+    val name = Name(p.id)
     val sym: BlockParam = BlockParam(name, p.tpe.map { tpe => resolveBlockType(tpe, isParam = true) }, CaptureParam(name), p.isImplicit, p)
     Context.assignSymbol(p.id, sym)
     sym
@@ -769,7 +769,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.IgnorePattern(_)     => Nil
     case source.LiteralPattern(lit, _) => Nil
     case source.AnyPattern(id, _) =>
-      val p = ValueParam(Name.local(id), None, isImplicit = false, decl = id)
+      val p = ValueParam(Name(id), None, isImplicit = false, decl = id)
       Context.assignSymbol(id, p)
       List(p)
     case source.TagPattern(id, patterns, _) =>
@@ -889,7 +889,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       var cps: List[Capture] = Nil
       val bps = bparams.map {
         case (id, tpe) =>
-          val name = id.map(Name.local).getOrElse(NoName)
+          val name = id.map(Name.apply).getOrElse(NoName)
           val cap = CaptureParam(name)
           cps = cps :+ cap
           resolveBlockType(tpe)
@@ -957,7 +957,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Resolves type variables, term vars are resolved as part of resolve(tree: Tree)
    */
   def resolve(id: Id)(using Context): TypeParam = Context.at(id) {
-    val sym: TypeParam = TypeParam(Name.local(id))
+    val sym: TypeParam = TypeParam(Name(id))
     Context.define(id, sym)
     sym
   }
@@ -1009,12 +1009,6 @@ object Namer extends Phase[Parsed, NameResolved] {
  * Environment Utils -- we use a mutable cell to express adding definitions more easily
  */
 trait NamerOps extends ContextOps { Context: Context =>
-  /**
-   * Converts a (potentially) qualified source [[IdDef]] into a potentially qualified [[Name]]
-   */
-  extension (id: source.IdDef)
-    def toName: Name = if (id.path.isEmpty) LocalName(id.name) else QualifiedName(id.path, id.name)
-
   /**
    * The state of the namer phase
    */

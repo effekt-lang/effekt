@@ -46,7 +46,7 @@ case class QualifiedName(prefix: List[String], name: String) extends Name {
 // Pseudo-constructors to safely convert ids and strings into names.
 object Name {
 
-  def local(id: Id): LocalName = local(id.name)
+  def apply(id: Id): Name = if (id.path.isEmpty) LocalName(id.name) else QualifiedName(id.path, id.name)
 
   def local(id: String): LocalName = LocalName(id)
 
