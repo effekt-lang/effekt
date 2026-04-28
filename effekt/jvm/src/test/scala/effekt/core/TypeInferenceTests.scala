@@ -3,7 +3,7 @@ package core
 
 import effekt.core.Type.*
 import effekt.util.messages.{ DebugMessaging, ErrorReporter }
-import scala.collection.immutable.HashMap
+import effekt.util.DB
 
 class TypeInferenceTests extends CoreTests {
 
@@ -87,13 +87,13 @@ class TypeInferenceTests extends CoreTests {
   }
 
   test("compatibility") {
-    Free.mergeValues(HashMap.empty, HashMap.empty)
-    Free.mergeValues(HashMap(f -> TInt), HashMap.empty)
-    Free.mergeValues(HashMap(f -> TInt), HashMap(f -> TInt))
-    Free.mergeValues(HashMap(f -> TInt), HashMap(f -> TInt, g -> TByte))
+    Free.mergeValues(DB.empty, DB.empty)
+    Free.mergeValues(DB(f -> TInt), DB.empty)
+    Free.mergeValues(DB(f -> TInt), DB(f -> TInt))
+    Free.mergeValues(DB(f -> TInt), DB(f -> TInt, g -> TByte))
 
     intercept[TypeError] {
-      Free.mergeValues(HashMap(f -> TInt), HashMap(f -> TBoolean, g -> TByte))
+      Free.mergeValues(DB(f -> TInt), DB(f -> TBoolean, g -> TByte))
     }
   }
 
@@ -116,12 +116,15 @@ class TypeInferenceTests extends CoreTests {
     intercept[TypeError] {
       Stmt.Val(x,
         Stmt.Return(Expr.Literal(true, TBoolean)),
-        Stmt.Return(Expr.ValueVar(x, TInt))).free.wellformed()
+        Stmt.Return(Expr.ValueVar(x, TInt))).free
     }
 
     // we can even type check open terms:
-    assertEquals(typecheck(Stmt.Return(Expr.ValueVar(x, TInt))),
-      Typing(TInt, Set.empty, Free.value(x, TInt)))
+    val ex2 = Stmt.Return(Expr.ValueVar(x, TInt))
+    assertEquals(typecheck(ex2),
+      Typing(TInt, Set.empty, Constraints.empty))
+
+    assertEquals(ex2.free, Free.value(x, TInt))
 
     val add: Block.BlockVar = Block.BlockVar(infixPlus, BlockType.Function(Nil, Nil, List(TInt, TInt), Nil, TInt), Set.empty)
 
@@ -132,8 +135,7 @@ class TypeInferenceTests extends CoreTests {
     val result3 = typecheck(ex3)
     assertEquals(result3.tpe, TInt)
     assertEquals(result3.capt, Set.empty)
-    assert(result3.free.freeIds == Set(add.id))
-    result3.free.wellformed()
+    assert(ex3.free.freeIds == Set(add.id))
 
     // [A](Option[A], A): A
     val orElse: Block.BlockVar = Block.BlockVar(f, BlockType.Function(A :: Nil, Nil, List(OptionT(ValueType.Var(A)), ValueType.Var(A)), Nil, ValueType.Var(A)), Set.empty)
@@ -143,26 +145,26 @@ class TypeInferenceTests extends CoreTests {
     // swapped arguments
     intercept[TypeError] {
       val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(y, TInt) :: Expr.ValueVar(x, OptionT(TInt)) :: Nil))
-      res.free.wellformed()
+      res.check()
     }
     // too few arguments
     intercept[TypeError] {
       val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Nil))
-      res.free.wellformed()
+      res.check()
     }
     // incompatible free variables in arguments
     intercept[TypeError] {
       val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(x, TInt) :: Nil))
-      res.free.wellformed()
+      res.check()
     }
 
     val ex4: Expr.Make = Make(OptionT(TInt), SomeC, List(), List(Literal(42, TInt)))
     assertSameType(ex4.tpe, OptionT(TInt))
-    assertEquals(ex4.free, Free.defer(ex4))
+    assertEquals(ex4.typing.constraints, Vector(ex4))
 
     val ex5: Expr.Make = Make(OptionT(TInt), NoneC, List(), List())
     assertSameType(ex5.tpe, OptionT(TInt))
-    assertEquals(ex5.free, Free.defer(ex5))
+    assertEquals(ex5.typing.constraints, Vector(ex5))
   }
 
   val ex6 = Stmt.Region(Block.BlockLit(Nil, r :: Nil, Nil, BlockParam(r, TRegion, Set(r)) :: Nil,
@@ -176,6 +178,6 @@ class TypeInferenceTests extends CoreTests {
     assertEquals(Type.equals(got, expected), true)
 
   inline def shouldTypeCheckAs(expected: ValueType, expr: Expr)(using DeclarationContext): Unit =
-    expr.free.wellformed()
+    expr.typing.check()
     assertSameType(expr.tpe, expected)
 }

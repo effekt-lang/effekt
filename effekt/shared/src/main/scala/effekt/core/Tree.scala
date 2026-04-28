@@ -2,11 +2,12 @@ package effekt
 package core
 
 import effekt.source.FeatureFlag
-import effekt.util.{ Structural, Trampoline }
+import effekt.util.{ DB, Structural, Trampoline }
 import effekt.util.messages.INTERNAL_ERROR
 import effekt.util.messages.ErrorReporter
+import effekt.util.debug
 
-import scala.annotation.{ tailrec }
+import scala.annotation.tailrec
 import effekt.symbols.QualifiedName
 
 /**
@@ -93,7 +94,9 @@ case class ModuleDecl(
   /**
    * Since core programs have free variables before aggregation, this check is not performed automatically
    */
-  def typecheck()(using ErrorReporter): Unit = Type.typecheck(this)
+  def typecheck()(using ErrorReporter): Unit =
+    Type.typecheck(this)
+    freeVariables.assertClosed(this)
 
   lazy val size: Int = sizes.size(this)
 }
@@ -192,9 +195,8 @@ enum Expr extends Tree {
   case Box(b: Block, annotatedCapture: Captures)
 
   lazy val typing: Typing[ValueType] = Type.typecheck(this)
-  lazy val tpe: ValueType = typing.tpe
-  lazy val capt: Captures = typing.capt
-  lazy val free: Free = typing.free
+  lazy val tpe: ValueType = Type.inferType(this)
+  lazy val free: Free = freeVariables.free(this)
 
   // This is to register custom type renderers in IntelliJ -- yes, it has to be a method!
   def show: String = util.show(this)
@@ -223,9 +225,9 @@ enum Block extends Tree {
   case New(impl: Implementation)
 
   lazy val typing: Typing[BlockType] = Type.typecheck(this)
-  lazy val tpe: BlockType = typing.tpe
-  lazy val capt: Captures = typing.capt
-  lazy val free: Free = typing.free
+  lazy val tpe: BlockType = Type.inferType(this)
+  lazy val capt: Captures = Type.inferCapt(this)
+  lazy val free: Free = freeVariables.free(this)
   lazy val size: Int = sizes.size(this)
 
   def show: String = util.show(this)
@@ -309,9 +311,9 @@ enum Stmt extends Tree {
   case Hole(annotatedTpe: ValueType, span: effekt.source.Span)
 
   lazy val typing: Typing[ValueType] = Type.typecheck(this)
-  lazy val tpe: ValueType = typing.tpe
-  lazy val capt: Captures = typing.capt
-  lazy val free: Free = typing.free
+  lazy val tpe: ValueType = Type.inferType(this)
+  lazy val capt: Captures = Type.inferCapt(this)
+  lazy val free: Free = freeVariables.free(this)
   lazy val size: Int = sizes.size(this)
 
   def show: String = util.show(this)
@@ -329,6 +331,7 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
   lazy val tpe: BlockType.Interface = typing.tpe
   lazy val capt: Captures = typing.capt
   lazy val size: Int = sizes.size(this)
+  lazy val free: Free = freeVariables.free(this)
 }
 
 /**
@@ -339,6 +342,7 @@ case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: Li
   lazy val tpe: BlockType.Function = typing.tpe
   lazy val capt: Captures = typing.capt
   lazy val size: Int = sizes.size(this)
+  lazy val free: Free = freeVariables.free(this)
 }
 
 /**
@@ -1026,11 +1030,13 @@ object Tree {
 
 object substitutions {
 
+  import effekt.util.DB
+
   case class Substitution(
-    vtypes: Map[Id, ValueType],
-    captures: Map[Id, Captures],
-    values: Map[Id, Expr],
-    blocks: Map[Id, Block]
+    vtypes: DB[ValueType],
+    captures: DB[Captures],
+    values: DB[Expr],
+    blocks: DB[Block]
   ) {
     def shadowTypes(shadowed: IterableOnce[Id]): Substitution = copy(vtypes = vtypes -- shadowed)
     def shadowCaptures(shadowed: IterableOnce[Id]): Substitution = copy(captures = captures -- shadowed)
@@ -1049,10 +1055,10 @@ object substitutions {
         assert(cparams.size == bargs.size, s"Wrong number of capture arguments: ${cparams} vs ${bargs}")
         assert(bparams.size == bargs.size, s"Wrong number of block arguments: ${bparams} vs ${bargs}")
         assert(vparams.size == vargs.size, s"Wrong number of value arguments: ${vparams} vs ${vargs}")
-        val tSubst = (tparams zip targs).toMap
-        val cSubst = (cparams zip bargs.map(_.capt)).toMap
-        val vSubst = (vparams.map(_.id) zip vargs).toMap
-        val bSubst = (bparams.map(_.id) zip bargs).toMap
+        val tSubst = DB.from(tparams zip targs)
+        val cSubst = DB.from(cparams zip bargs.map(_.capt))
+        val vSubst = DB.from(vparams.map(_.id) zip vargs)
+        val bSubst = DB.from(bparams.map(_.id) zip bargs)
 
         substitute(body)(using Substitution(tSubst, cSubst, vSubst, bSubst))
     }
@@ -1296,5 +1302,202 @@ object sizes {
   inline def size(t: Toplevel): Int = t match {
     case Toplevel.Def(id, block) => block.size
     case Toplevel.Val(id, binding) => binding.size
+  }
+}
+
+case class Free(values: DB[ValueType], blocks: DB[(BlockType, Captures)]) {
+
+  def freeIds: Set[Id] = values.keySet ++ blocks.keySet
+
+  def without(boundValues: List[ValueParam], boundBlocks: List[BlockParam]): Free =
+    Free(
+      values.removedAll(boundValues.map(_.id)),
+      blocks.removedAll(boundBlocks.map(_.id))
+    )
+   def withoutBlock(id: Id, tpe: BlockType, capt: Captures): Free = without(Nil, BlockParam(id, tpe, capt) :: Nil)
+   def withoutValue(id: Id, tpe: ValueType): Free = without(ValueParam(id, tpe) :: Nil, Nil)
+
+  def ++(other: Free): Free = other match {
+    case Free(otherValues, otherBlocks) =>
+      debug {
+        Free(Free.mergeValues(values, otherValues), Free.mergeBlocks(blocks, otherBlocks))
+      } {
+        Free(values ++ otherValues, blocks ++ otherBlocks)
+      }
+  }
+}
+object Free {
+  val empty = Free(DB.empty, DB.empty)
+
+  def value(id: Id, tpe: ValueType): Free = Free(DB(id, tpe), DB.empty)
+  def block(id: Id, tpe: BlockType, capt: Captures): Free = Free(DB.empty, DB(id, (tpe, capt)))
+
+  def mergeValues(free1: DB[ValueType], free2: DB[ValueType]): DB[ValueType] =
+    free1.unionWith(free2, {
+      case (tpe1, tpe2) =>
+        Type.valueShouldEqual(tpe1, tpe2)
+        tpe2
+    })
+
+  def mergeBlocks(free1: DB[(BlockType, Captures)], free2: DB[(BlockType, Captures)]): DB[(BlockType, Captures)] =
+    free1.unionWith(free2, {
+      case ((tpe1, capt1), (tpe2, capt2)) =>
+        Type.blockShouldEqual(tpe1, tpe2)
+        (tpe1, capt1)
+    })
+}
+
+object freeVariables {
+  inline def all[T](it: IterableOnce[T], inline free: T => Free): Free =
+    it.iterator.foldLeft(Free.empty) { case (f, t) => f ++ free(t) }
+
+  def free(stmt: Stmt): Free = stmt match {
+    case Stmt.Def(id, block, body) =>
+      // recursive: block can refer to itself
+      body.free.withoutBlock(id, block.tpe, block.capt) ++
+        block.free.withoutBlock(id, block.tpe, block.capt)
+
+    case Stmt.Let(id, binding, body) =>
+      body.free.withoutValue(id, binding.tpe) ++ binding.free
+
+    case s @ Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      val retType = Type.bindingType(s)
+      Free.block(callee.id, callee.annotatedTpe, callee.annotatedCapt) ++
+        all(vargs, _.free) ++
+        all(bargs, _.free) ++
+        body.free.withoutValue(id, retType)
+
+    case Stmt.Return(expr) => expr.free
+
+    case Stmt.Val(id, binding, body) =>
+      body.free.withoutValue(id, binding.tpe) ++ binding.free
+
+    case Stmt.App(callee, targs, vargs, bargs) =>
+      callee.free ++ all(vargs, _.free) ++ all(bargs, _.free)
+
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
+      callee.free ++ all(vargs, _.free) ++ all(bargs, _.free)
+
+    case Stmt.If(cond, thn, els) =>
+      cond.free ++ thn.free ++ els.free
+
+    case Stmt.Match(scrutinee, annotatedTpe, clauses, default) =>
+      scrutinee.free ++
+        all(clauses, (tag, cl)=> cl.free) ++
+        all(default, _.free)
+
+    case Stmt.Region(body) => body.free
+
+    case Stmt.Alloc(id, init, region, body) =>
+      init.free ++
+        Free.block(region, Type.TRegion, Set(region)) ++
+        body.free.withoutBlock(id, Type.TState(init.tpe), Set(region))
+
+    case Stmt.Var(ref, init, capture, body) =>
+      init.free ++ body.free.withoutBlock(ref, Type.TState(init.tpe), Set(capture))
+
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
+      Free.block(ref, Type.TState(annotatedTpe), annotatedCapt) ++
+        body.free.withoutValue(id, annotatedTpe)
+
+    case Stmt.Put(ref, annotatedCapt, value, body) =>
+      Free.block(ref, Type.TState(value.tpe), annotatedCapt) ++ value.free ++ body.free
+
+    case Stmt.Reset(body) => body.free
+
+    case Stmt.Shift(prompt, k, body) =>
+      body.free.withoutBlock(k.id, k.tpe, k.capt) ++
+        Free.block(prompt.id, prompt.annotatedTpe, prompt.annotatedCapt)
+
+    case Stmt.Resume(k, body) =>
+      body.free ++ Free.block(k.id, k.annotatedTpe, k.annotatedCapt)
+
+    case Stmt.Hole(annotatedTpe, span) => Free.empty
+  }
+
+  def free(expr: Expr): Free = expr match {
+    case Expr.ValueVar(id, annotatedType) =>
+      Free.value(id, annotatedType)
+
+    case Expr.Literal(value, annotatedType) => Free.empty
+
+    case Expr.PureApp(callee, targs, vargs) =>
+      all(vargs, _.free) ++
+        Free.block(callee.id, callee.annotatedTpe, callee.annotatedCapt)
+
+    case Expr.Make(data, tag, targs, vargs) =>
+      all(vargs, _.free)
+
+    case Expr.Box(b, annotatedCapture) => b.free
+  }
+
+  def free(block: Block): Free = block match {
+    case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
+      Free.block(id, annotatedTpe, annotatedCapt)
+
+    case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+      body.free.without(vparams, bparams)
+
+    case Block.Unbox(pure) => pure.free
+
+    case Block.New(impl) => impl.free
+  }
+
+  def free(impl: Implementation): Free = impl match {
+    case Implementation(interface, operations) =>
+      all(operations, _.free)
+  }
+
+  def free(op: Operation): Free = op match {
+    case Operation(name, tparams, cparams, vparams, bparams, body) =>
+      body.free.without(vparams, bparams)
+  }
+
+  def free(t: Toplevel): Free = t match {
+    case Toplevel.Def(id, block) => block.free
+    case Toplevel.Val(id, binding) => binding.free
+  }
+
+  def assertClosed(m: ModuleDecl): Unit = m match {
+    // TODO check that all free variables are bound in the module after subtracting
+    //   bound toplevel ids
+    case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+      val boundBlocks = definitions.collect {
+        case Toplevel.Def(id, block) => BlockParam(id, block.tpe, block.capt)
+      } ++ externs.collect {
+        case Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, capt, _) =>
+          BlockParam(id, BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), ret), capt)
+      }
+
+      val boundValues = definitions.collect {
+        case Toplevel.Val(id, expr) => ValueParam(id, expr.tpe)
+      }
+
+      def assertClosed(free: Free): Unit =
+        val toplevel = free.without(boundValues, boundBlocks)
+
+        assert(toplevel.freeIds.isEmpty, {
+          val freeBlocks = toplevel.blocks.toMap.map { case (id, (tpe, capt)) => s"${util.show(id)}: ${util.show(tpe)} @ ${capt.map(util.show).mkString("{", ", ", "}")}" }
+          val freeValues = toplevel.values.toMap.map { case (id, tpe) => s"${util.show(id)}: ${util.show(tpe)}" }
+          s"Toplevel program should be closed, but got:\n${ freeBlocks.mkString("\n") }\n\n${freeValues.mkString("\n")}"
+        })
+
+      definitions.foreach {
+        case Toplevel.Def(id, block) => assertClosed(block.free)
+        case Toplevel.Val(id, binding) => assertClosed(binding.free)
+      }
+
+      externs.foreach {
+        case Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
+          val splices = body match {
+            case ExternBody.StringExternBody(featureFlag, contents) => contents.args
+            case ExternBody.Unsupported(err) => Nil
+          }
+          assertClosed(all(splices, (splice: Expr) => splice.free).without(vparams, bparams))
+
+        case Extern.Include(featureFlag, contents) => ()
+        case Extern.Data(id, tparams, body) => ()
+        case Extern.Interface(id, tparams, body) => ()
+      }
   }
 }

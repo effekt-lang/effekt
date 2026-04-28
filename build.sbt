@@ -18,6 +18,7 @@ lazy val testBackendJS = taskKey[Unit]("Run JavaScript backend tests")
 lazy val testBackendChez = taskKey[Unit]("Run Chez Scheme backend tests")
 lazy val testBackendLLVM = taskKey[Unit]("Run LLVM backend tests")
 lazy val testRemaining = taskKey[Unit]("Run all non-backend tests (internal tests) on effektJVM")
+lazy val debugCompiler = settingKey[Boolean]("Enable compiler debugging")
 
 lazy val noPublishSettings = Seq(
   publish := {},
@@ -84,7 +85,9 @@ lazy val root = project.in(file("effekt"))
 lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("effekt"))
   .settings(
     name := "effekt",
-    version := effektVersion
+    version := effektVersion,
+    debugCompiler := sys.props.get("debug").contains("true"),
+    Compile / sourceGenerators += versionGenerator.taskValue
   )
   .settings(commonSettings)
   .dependsOn(kiama)
@@ -143,6 +146,9 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     // cli flag so sbt doesn't crash when effekt does
     addCommandAlias("run", "runMain effekt.Main --no-exit-on-error"),
+
+    addCommandAlias("debug", ";set debugCompiler := true ;compile"),
+    addCommandAlias("release", ";set debugCompiler := false ;compile"),
 
     assembleBinary := {
       val jarfile = assembly.value
@@ -264,7 +270,6 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
 
     generateDocumentation := TreeDocs.replacer.value,
-    Compile / sourceGenerators += versionGenerator.taskValue,
     Compile / sourceGenerators += TreeDocs.generator.taskValue,
 
     collectBenchmarks := benchmarks.collect.value,
@@ -308,16 +313,17 @@ lazy val mvn = Def.task {
   if (platform.value == "windows") "mvn.cmd" else "mvn"
 }
 
-
 lazy val versionGenerator = Def.task {
   val sourceDir = (Compile / sourceManaged).value
   val sourceFile = sourceDir / "effekt" / "util" / "Version.scala"
+  val debug = debugCompiler.value
 
   IO.write(sourceFile,
     s"""package effekt.util
        |
        |object Version {
        |  val effektVersion = \"${effektVersion}\"
+       |  inline val DEBUG = $debug
        |}
        |""".stripMargin)
 
