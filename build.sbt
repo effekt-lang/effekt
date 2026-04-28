@@ -247,7 +247,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
         "effekt.ChezSchemeCPSTests",
         "effekt.StdlibChezSchemeMonadicTests",
         "effekt.StdlibChezSchemeCallCCTests",
-        "effekt.StdlibChezCPSTests",
+        "effekt.StdlibChezSchemeCPSTests",
         "effekt.LLVMTests",
         "effekt.LLVMNoValgrindTests",
         "effekt.StdlibLLVMTests"

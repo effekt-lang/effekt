@@ -15,7 +15,7 @@ jobs:
       - uses: ./.github/actions/setup-effekt
 
       - name: Compile project
-        run: mill project.testCompile
+        run: sbt compile Test/compile
 
       - name: Cache compiled artifacts
         uses: actions/cache/save@v5
@@ -48,13 +48,15 @@ jobs:
 
       - name: Run internal tests
         run: |
-          mill -j1 project.testRemaining
+          sbt testRemaining
+          sbt kiamaJVM/test
+          sbt effektJS/test
 
       - name: Assemble fully optimized JS file
-        run: mill project.assembleJS
+        run: sbt effektJS/assembleJS
 
       - name: Install effekt binary
-        run: mill project.install
+        run: sbt install
 
       - name: Test effekt binary
         run: effekt --help
@@ -109,7 +111,7 @@ jobs:
       - uses: ./.github/actions/restore-build-cache
 
       - name: Run JavaScript backend tests
-        run: mill project.testBackendJS
+        run: sbt testBackendJS
 
   chez-tests:
     name: "Chez Backend"
@@ -127,7 +129,7 @@ jobs:
       - uses: ./.github/actions/restore-build-cache
 
       - name: Run Chez Scheme backend tests
-        run: mill --jobs 1 project.testBackendChez
+        run: sbt testBackendChez
 
   llvm-tests:
     name: "LLVM Backend"
@@ -146,4 +148,4 @@ jobs:
       - uses: ./.github/actions/restore-build-cache
 
       - name: Run LLVM backend tests (with debug & valgrind)
-        run: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 mill project.testBackendLLVM
+        run: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt testBackendLLVM
