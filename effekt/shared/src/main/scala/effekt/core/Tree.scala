@@ -63,25 +63,7 @@ import effekt.symbols.QualifiedName
  *
  * -------------------------------------------
  */
-sealed trait Tree extends Product {
-  /**
-   * The number of nodes of this tree (potentially used by inlining heuristics)
-   */
-  lazy val size: Int = {
-    var nodeCount = 1
-
-    def all(t: IterableOnce[_]): Unit = t.iterator.foreach(one)
-    def one(obj: Any): Unit = obj match {
-      case t: Tree => nodeCount += t.size
-      case s: effekt.symbols.Symbol => ()
-      case p: Product => all(p.productIterator)
-      case t: Iterable[t] => all(t)
-      case leaf           => ()
-    }
-    this.productIterator.foreach(one)
-    nodeCount
-  }
-}
+sealed trait Tree
 
 /**
  * In core, all symbols are supposed to be "just" names.
@@ -112,6 +94,8 @@ case class ModuleDecl(
    * Since core programs have free variables before aggregation, this check is not performed automatically
    */
   def typecheck()(using ErrorReporter): Unit = Type.typecheck(this)
+
+  lazy val size: Int = sizes.size(this)
 }
 
 /**
@@ -168,6 +152,8 @@ enum Toplevel {
 
   case Def(id: Id, block: Block)
   case Val(id: Id, binding: core.Stmt)
+
+  lazy val size: Int = sizes.size(this)
 }
 
 
@@ -212,6 +198,8 @@ enum Expr extends Tree {
 
   // This is to register custom type renderers in IntelliJ -- yes, it has to be a method!
   def show: String = util.show(this)
+
+  lazy val size: Int = sizes.size(this)
 }
 export Expr.*
 
@@ -238,6 +226,7 @@ enum Block extends Tree {
   lazy val tpe: BlockType = typing.tpe
   lazy val capt: Captures = typing.capt
   lazy val free: Free = typing.free
+  lazy val size: Int = sizes.size(this)
 
   def show: String = util.show(this)
 }
@@ -323,6 +312,7 @@ enum Stmt extends Tree {
   lazy val tpe: ValueType = typing.tpe
   lazy val capt: Captures = typing.capt
   lazy val free: Free = typing.free
+  lazy val size: Int = sizes.size(this)
 
   def show: String = util.show(this)
 }
@@ -338,6 +328,7 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
   lazy val typing: Typing[BlockType.Interface] = Type.typecheck(this)
   lazy val tpe: BlockType.Interface = typing.tpe
   lazy val capt: Captures = typing.capt
+  lazy val size: Int = sizes.size(this)
 }
 
 /**
@@ -347,6 +338,7 @@ case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: Li
   lazy val typing: Typing[BlockType.Function] = Type.typecheck(this)
   lazy val tpe: BlockType.Function = typing.tpe
   lazy val capt: Captures = typing.capt
+  lazy val size: Int = sizes.size(this)
 }
 
 /**
@@ -1244,4 +1236,65 @@ object substitutions {
       case Binding.Put(ref, annotatedCapt, value) =>
         Binding.Put(substituteAsVar(ref), substitute(annotatedCapt), substitute(value))
     }
+}
+
+/**
+ * The number of nodes of this tree (potentially used by inlining heuristics)
+ */
+object sizes {
+
+  private inline def all[T](t: Iterable[T], inline size: T => Int): Int = t.foldLeft(0)(_ + size(_))
+
+  inline def size(stmt: Stmt): Int = stmt match {
+    case Stmt.Def(id, block, body) => block.size + body.size + 1
+    case Stmt.Let(id, binding, body) => binding.size + body.size + 1
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => all(vargs, _.size) + all(bargs, _.size) + body.size + 1
+    case Stmt.Return(expr) => expr.size + 1
+    case Stmt.Val(id, binding, body) => binding.size + body.size + 1
+    case Stmt.App(callee, targs, vargs, bargs) => callee.size + all(vargs, _.size) + all(bargs, _.size) + 1
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => callee.size + all(vargs, _.size) + all(bargs, _.size) + 1
+    case Stmt.If(cond, thn, els) => cond.size + thn.size + els.size + 1
+    case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => scrutinee.size + all(clauses, { case (tag, cl) => cl.size }) + all(default, _.size) + 1
+    case Stmt.Region(body) => body.size + 1
+    case Stmt.Alloc(id, init, region, body) => init.size + body.size + 1
+    case Stmt.Var(ref, init, capture, body) => init.size + body.size + 1
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => body.size + 1
+    case Stmt.Put(ref, annotatedCapt, value, body) => value.size + body.size + 1
+    case Stmt.Reset(body) => body.size + 1
+    case Stmt.Shift(prompt, k, body) => body.size + 1
+    case Stmt.Resume(k, body) => body.size + 1
+    case Stmt.Hole(annotatedTpe, span) => 1
+  }
+
+  inline def size(expr: Expr): Int = expr match {
+    case Expr.ValueVar(id, annotatedType) => 1
+    case Expr.Literal(value, annotatedType) => 1
+    case Expr.PureApp(b, targs, vargs) => all(vargs, _.size) + 1
+    case Expr.Make(data, tag, targs, vargs) => all(vargs, _.size) + 1
+    case Expr.Box(b, annotatedCapture) => b.size + 1
+  }
+
+  inline def size(block: Block): Int = block match {
+    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => 1
+    case Block.BlockLit(tparams, cparams, vparams, bparams, body) => body.size + 1
+    case Block.Unbox(pure) => pure.size + 1
+    case Block.New(impl) => impl.size + 1
+  }
+
+  inline def size(impl: Implementation): Int = impl match {
+    case Implementation(interface, operations) => all(operations, _.size) + 1
+  }
+
+  inline def size(op: Operation): Int = op match {
+    case Operation(name, tparams, cparams, vparams, bparams, body) => body.size + 1
+  }
+
+  inline def size(m: ModuleDecl): Int = m match {
+    case ModuleDecl(path, includes, declarations, externs, definitions, exports) => all(definitions, _.size)
+  }
+
+  inline def size(t: Toplevel): Int = t match {
+    case Toplevel.Def(id, block) => block.size
+    case Toplevel.Val(id, binding) => binding.size
+  }
 }
