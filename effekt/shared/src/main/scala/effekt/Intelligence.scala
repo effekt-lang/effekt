@@ -113,9 +113,9 @@ trait Intelligence {
   } yield decl
 
   def getDefinitionOf(s: Symbol)(using C: Context): Option[Tree] = s match {
-    case m: Module        => Some(m.decl)
-    case t: TypeSymbol    => Some(t.decl)
-    case t: TermSymbol    => Some(t.decl)
+    case m: Module       => Some(m.decl)
+    case t: TypeSymbol   => Some(t.decl)
+    case t: TermSymbol   => Some(t.decl)
     case u => C.definitionTreeOption(u)
   }
 
