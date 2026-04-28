@@ -1,0 +1,10 @@
+record Person(
+  name: String,
+  age: Int
+)
+
+def main() = {
+  val p = Person("Alice", 30)
+  println(p.show)
+  println(p.generated::show)
+}
