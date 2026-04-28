@@ -10,6 +10,12 @@ inline def debug(inline f: => Unit): Unit =
 inline def debug[T](inline f: => T)(inline otherwise: => T): T =
   inline if DEBUG then f else otherwise
 
+inline def assert(inline assertion: Boolean): Unit =
+  inline if DEBUG then Predef.assert(assertion)
+
+inline def assert(inline assertion: Boolean, inline msg: => String): Unit =
+  inline if DEBUG then Predef.assert(assertion, msg)
+
 val showGeneric: PartialFunction[Any, String] = {
   case l: List[_] =>
     l.map(show).mkString("List(", ", ", ")")
