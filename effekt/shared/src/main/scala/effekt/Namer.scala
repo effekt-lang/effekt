@@ -716,18 +716,20 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Used for fields where "please wrap this in braces" is not good advice to be told by [[resolveValueType]].
    */
   def resolveNonfunctionValueParam(p: source.ValueParam)(using Context): ValueParam = {
-    val sym = ValueParam(Name.local(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = false)), p.isImplicit, decl = p)
+    val name = if (p.id.path.nonEmpty) QualifiedName(p.id.path, p.id.name) else LocalName(p.id.name)
+    val sym = ValueParam(name, p.tpe.map(tpe => resolveValueType(tpe, isParam = false)), p.isImplicit, decl = p)
     Context.assignSymbol(p.id, sym)
     sym
   }
 
   def resolve(p: source.ValueParam)(using Context): ValueParam = {
-    val sym = ValueParam(Name.local(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = true)), p.isImplicit, decl = p)
+    val name = if (p.id.path.nonEmpty) QualifiedName(p.id.path, p.id.name) else LocalName(p.id.name)
+    val sym = ValueParam(name, p.tpe.map(tpe => resolveValueType(tpe, isParam = true)), p.isImplicit, decl = p)
     Context.assignSymbol(p.id, sym)
     sym
   }
   def resolve(p: source.BlockParam)(using Context): BlockParam = {
-    val name = Name.local(p.id)
+    val name = if (p.id.path.nonEmpty) QualifiedName(p.id.path, p.id.name) else LocalName(p.id.name)
     val sym: BlockParam = BlockParam(name, p.tpe.map { tpe => resolveBlockType(tpe, isParam = true) }, CaptureParam(name), p.isImplicit, p)
     Context.assignSymbol(p.id, sym)
     sym
@@ -1050,12 +1052,7 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   // Name Binding and Resolution
   // ===========================
-  inline private[namer] def defineQualified(id: Id, inline baseCase: => Unit): Unit = {
-    val path = id match {
-      case d: source.IdDef => d.path
-      case _               => Nil
-    }
-
+  inline private[namer] def defineInPaths(path: List[String], inline baseCase: => Unit): Unit = {
     def defineInPath(p: List[String]): Unit = p match {
       case Nil => baseCase
       case ns :: rest => namespace(ns) { defineInPath(rest) }
@@ -1069,21 +1066,29 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   private[namer] def define(id: Id, s: TermSymbol): Unit = {
     assignSymbol(id, s)
-    defineQualified(id, scope.define(id.name, s))
+    val path = id match { case d: source.IdDef => d.path; case _ => Nil }
+    defineInPaths(path, scope.define(id.name, s))
   }
 
   private[namer] def define(id: Id, s: TypeSymbol): Unit = {
     assignSymbol(id, s)
-    defineQualified(id, scope.define(id.name, s))
+    val path = id match { case d: source.IdDef => d.path; case _ => Nil }
+    defineInPaths(path, scope.define(id.name, s))
   }
 
   private[namer] def bind(s: Capture): Unit = bind(s.name.name, s)
 
   private[namer] def bind(name: String, s: Capture): Unit = scope.define(name, s)
 
-  private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.name, s)
+  private[namer] def bind(s: TermSymbol): Unit = {
+    val path = s.name match { case QualifiedName(prefix, _) => prefix; case _ => Nil }
+    defineInPaths(path, scope.define(s.name.name, s))
+  }
 
-  private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.name, s)
+  private[namer] def bind(s: TypeSymbol): Unit = {
+    val path = s.name match { case QualifiedName(prefix, _) => prefix; case _ => Nil }
+    defineInPaths(path, scope.define(s.name.name, s))
+  }
 
   private[namer] def bindParams(params: List[Param]) =
     params.foreach { p => bind(p) }
