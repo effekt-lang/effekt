@@ -120,9 +120,14 @@ trait Intelligence {
   }
 
   def getDocumentationOf(s: Symbol)(using C: Context): Doc =
-    getDefinitionOf(s).flatMap {
-      case d: source.Def => d.doc
-      case _             => None
+    getDefinitionOf(s).asInstanceOf[Option[Any]] match {
+      case Some(p: Product) =>
+        p.productElementNames.zip(p.productIterator)
+          .collectFirst {
+            case ("doc", Some(s: String)) => s
+            case ("info", source.Info(Some(s: String), _, _)) => s
+          }
+      case _ => None
     }
 
   // For now, only show the first call target
