@@ -14,12 +14,15 @@ sealed trait Name {
    */
   def rename(f: String => String): Name
 
+  def path: List[String]
+
   override def toString = name
 }
 
 case object NoName extends Name {
   def name = "__anon"
   def rename(f: String => String): NoName.type = this
+  def path = Nil
 }
 
 /**
@@ -27,6 +30,7 @@ case object NoName extends Name {
  */
 case class LocalName(name: String) extends Name {
   def rename(f: String => String): LocalName = LocalName(f(name))
+  def path = Nil
 }
 
 /**
@@ -36,6 +40,7 @@ case class QualifiedName(prefix: List[String], name: String) extends Name {
   val localName = name
   val qualifiedName = (prefix :+ name).mkString("::")
   def rename(f: String => String): QualifiedName = QualifiedName(prefix, f(name))
+  def path = prefix
 }
 
 // Pseudo-constructors to safely convert ids and strings into names.
