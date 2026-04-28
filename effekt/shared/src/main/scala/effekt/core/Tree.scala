@@ -194,6 +194,7 @@ enum Expr extends Tree {
 
   case Box(b: Block, annotatedCapture: Captures)
 
+  // only for debugging
   lazy val typing: Typing[ValueType] = Type.typecheck(this)
   lazy val tpe: ValueType = Type.inferType(this)
   lazy val free: Free = freeVariables.free(this)
@@ -224,6 +225,7 @@ enum Block extends Tree {
   case Unbox(pure: Expr)
   case New(impl: Implementation)
 
+  // only for debugging
   lazy val typing: Typing[BlockType] = Type.typecheck(this)
   lazy val tpe: BlockType = Type.inferType(this)
   lazy val capt: Captures = Type.inferCapt(this)
@@ -328,8 +330,8 @@ export Stmt.*
  */
 case class Implementation(interface: BlockType.Interface, operations: List[Operation]) extends Tree {
   lazy val typing: Typing[BlockType.Interface] = Type.typecheck(this)
-  lazy val tpe: BlockType.Interface = typing.tpe
-  lazy val capt: Captures = typing.capt
+  lazy val tpe: BlockType.Interface = Type.inferType(this)
+  lazy val capt: Captures = Type.inferCapt(this)
   lazy val size: Int = sizes.size(this)
   lazy val free: Free = freeVariables.free(this)
 }
@@ -339,8 +341,8 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
  */
 case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends Tree {
   lazy val typing: Typing[BlockType.Function] = Type.typecheck(this)
-  lazy val tpe: BlockType.Function = typing.tpe
-  lazy val capt: Captures = typing.capt
+  lazy val tpe: BlockType.Function = Type.inferType(this)
+  lazy val capt: Captures = Type.inferCapt(this)
   lazy val size: Int = sizes.size(this)
   lazy val free: Free = freeVariables.free(this)
 }
