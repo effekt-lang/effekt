@@ -1,0 +1,10 @@
+def int::compare(l: Int, r: Int): Ordering = compareInt(l, r)
+def any::compare[A](l: A, r: A): Ordering = <"kaboom">
+
+def mySort[A](xs: List[A]) { ?compare: (A, A) => Ordering }: List[A] =
+  xs.sortBy { (l, r) => if (compare(l, r) is Greater) false else true }
+
+def main() = {
+  val sorted: List[Int] = [3, 1, 2].mySort
+  println(sorted)
+}
