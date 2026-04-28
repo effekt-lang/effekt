@@ -1031,9 +1031,11 @@ trait NamerOps extends ContextOps { Context: Context =>
     result
   }
 
-  private[namer] def nameFor(id: IdDef): Name = scope.path match {
-    case Some(path) => QualifiedName(path, id.name)
-    case None => LocalName(id.name)
+  private[namer] def nameFor(id: IdDef): Name = {
+    val fullPath = scope.path.toList.flatten ++ id.path
+    if fullPath.isEmpty
+      then LocalName(id.name)
+      else QualifiedName(fullPath, id.name)
   }
 
   private[namer] def requireToplevel(kind: String): Unit =
@@ -1048,14 +1050,31 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   // Name Binding and Resolution
   // ===========================
+  inline private[namer] def defineQualified(id: Id, inline baseCase: => Unit): Unit = {
+    val path = id match {
+      case d: source.IdDef => d.path
+      case _               => Nil
+    }
+
+    def defineInPath(p: List[String]): Unit = p match {
+      case Nil => baseCase
+      case ns :: rest => namespace(ns) { defineInPath(rest) }
+    }
+
+    // define in all suffixes
+    path.tails.foreach { suffix =>
+      defineInPath(suffix)
+    }
+  }
+
   private[namer] def define(id: Id, s: TermSymbol): Unit = {
     assignSymbol(id, s)
-    scope.define(id.name, s)
+    defineQualified(id, scope.define(id.name, s))
   }
 
   private[namer] def define(id: Id, s: TypeSymbol): Unit = {
     assignSymbol(id, s)
-    scope.define(id.name, s)
+    defineQualified(id, scope.define(id.name, s))
   }
 
   private[namer] def bind(s: Capture): Unit = bind(s.name.name, s)
