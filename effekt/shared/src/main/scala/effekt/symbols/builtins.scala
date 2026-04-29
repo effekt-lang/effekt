@@ -102,7 +102,7 @@ object builtins {
     Bindings(Map.empty, rootTypes, rootCaptures, Map("effekt" -> Bindings(Map.empty, rootTypes, rootCaptures, Map.empty)))
 
   // All built-in symbols that can occur in core programs
-  val coreBuiltins: Map[String, symbols.Symbol] = {
+  lazy val coreBuiltins: Map[String, symbols.Symbol] = {
     symbols.builtins.rootTypes
       ++ symbols.builtins.rootCaptures
       + ("Resume" -> ResumeSymbol)
@@ -112,6 +112,8 @@ object builtins {
 
   def isCoreBuiltin(s: symbols.Symbol): Boolean =
     coreBuiltins.contains(s.name.name) && coreBuiltins(s.name.name) == s
+
+  coreBuiltins
 
   def coreBuiltinSymbolToString(s: symbols.Symbol): Option[String] =
     if isCoreBuiltin(s) then Some(s.name.name) else None
