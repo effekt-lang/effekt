@@ -407,6 +407,70 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("Hovering over documented extern def shows doc comment") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, cursor) =
+        raw"""
+             |/// Calculate the answer to the ultimate question of life, the universe, and everything
+             |extern def calculate() at io: Int = default { 42 }
+             |
+             |def main() = println(calculate())
+             |                     ↑
+             |""".textDocumentAndPosition
+      val hoverContents =
+        raw"""#### External function definition
+             |```effekt
+             |extern def calculate(): Int / {}
+             |```
+             | Calculate the answer to the ultimate question of life, the universe, and everything
+             |""".stripMargin
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
+      val hover = server.getTextDocumentService().hover(hoverParams).get()
+
+      val expectedHover = new Hover()
+      expectedHover.setRange(new Range(cursor, cursor))
+      expectedHover.setContents(new MarkupContent("markdown", hoverContents))
+      assertEquals(hover, expectedHover)
+    }
+  }
+
+  test("Hovering over documented extern type shows doc comment") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, cursor) =
+        raw"""
+             |/// Represents an open TCP connection. Please use linearly!
+             |extern type Connection
+             |extern def conn(): Connection = default { <> }
+             |                   ↑
+             |def main() = ()
+             |""".textDocumentAndPosition
+      val hoverContents =
+        raw"""#### External type definition
+             |```effekt
+             |extern type Connection
+             |```
+             | Represents an open TCP connection. Please use linearly!
+             |""".stripMargin
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
+      val hover = server.getTextDocumentService().hover(hoverParams).get()
+
+      val expectedHover = new Hover()
+      expectedHover.setRange(new Range(cursor, cursor))
+      expectedHover.setContents(new MarkupContent("markdown", hoverContents))
+      assertEquals(hover, expectedHover)
+    }
+  }
+
   test("Hovering over hole shows inside and outside types") {
     withClientAndServer { (client, server) =>
       val (textDoc, cursor) = raw"""
