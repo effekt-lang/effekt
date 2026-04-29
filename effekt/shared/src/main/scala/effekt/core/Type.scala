@@ -3,7 +3,7 @@ package core
 
 import symbols.{ Symbol, builtins }
 import effekt.util.messages.ErrorReporter
-import effekt.util.{ DB, toDB, debug }
+import effekt.util.{ DB, toDB }
 
 /**
  * In core, all names, including those in capture sets are just symbols.
@@ -50,39 +50,16 @@ enum BlockType extends Type {
   case Interface(name: Id, targs: List[ValueType])
 }
 
+
 case class TypeError(msg: String, context: List[core.Tree]) extends Throwable(msg) {
   override def toString = msg + "\n" + context.map(util.show).mkString("\n----- Context -----\n", "\n------\n", "\n----------\n")
 }
-def typeError(msg: String) = throw TypeError(msg, Nil)
 
-inline def checking[T <: Tree, R](t: T)(inline f: T => R): R =
-  debug {
-    try f(t) catch {
-      case TypeError(msg, context) => throw TypeError(msg, t :: context)
-    }
-  } { f(t) }
-
-case class MatchClause(ctor: Id, result: ValueType.Data, existentialTypeArgs: List[ValueType], arguments: List[ValueType])
-
-type Constraint = Expr.Make | Implementation | MatchClause
-
-type Constraints = Vector[Constraint]
-object Constraints {
-  val empty = Vector.empty[Constraint]
-}
-
-case class Typing[+T](tpe: T, capt: Captures, constraints: Constraints) {
+case class Typing[+T](tpe: T, capt: Captures, constraints: Type.Constraints) {
   def map[S](f: T => S): Typing[S] = Typing(f(tpe), capt, constraints)
 
   def check()(using DeclarationContext, ErrorReporter): Unit =
-    constraints.foreach {
-      case impl: Implementation =>
-        checking(impl) { Type.checkAgainstDeclaration }
-      case make @ Expr.Make(data, tag, targs, vargs) =>
-        checking(make) { make => Type.checkAgainstDeclaration(data, tag, targs, vargs.map(_.tpe)) }
-      case MatchClause(tag, result, targs, arguments) =>
-        Type.checkAgainstDeclaration(result, tag, targs, arguments)
-    }
+    constraints.foreach(Type.checkConstraint)
 }
 
 object Type {
@@ -227,6 +204,36 @@ object Type {
     }
   }
 
+
+  // Type Checking
+  // -------------
+  // This is only used in debug mode of the compiler.
+  // To infer the type of a statement, use `tpe` or `inferType`, which is faster.
+  private def typeError(msg: String) = throw TypeError(msg, Nil)
+
+  private inline def checking[T <: Tree, R](t: T)(inline f: T => R): R =
+    try f(t) catch {
+      case TypeError(msg, context) => throw TypeError(msg, t :: context)
+    }
+
+  case class MatchClause(ctor: Id, result: ValueType.Data, existentialTypeArgs: List[ValueType], arguments: List[ValueType])
+
+  type Constraint = Expr.Make | Implementation | MatchClause
+
+  type Constraints = Vector[Constraint]
+  object Constraints {
+    val empty = Vector.empty[Constraint]
+  }
+
+  def checkConstraint(c: Constraint)(using DeclarationContext, ErrorReporter): Unit = c match {
+    case impl: Implementation =>
+      checking(impl) { impl => checkAgainstDeclaration(impl) }
+    case make @ Expr.Make(data, tag, targs, vargs) =>
+      checking(make) { make => checkAgainstDeclaration(data, tag, targs, vargs.map(_.tpe)) }
+    case Type.MatchClause(tag, result, targs, arguments) =>
+      checkAgainstDeclaration(result, tag, targs, arguments)
+  }
+
   def typecheck(module: ModuleDecl)(using ErrorReporter): Unit = module match {
     case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
       given DeclarationContext(declarations, externs)
@@ -317,21 +324,15 @@ object Type {
     case Expr.Literal(value, annotatedType) => Typing(annotatedType, Set.empty, Constraints.empty)
     case Expr.PureApp(callee, targs, vargs) =>
        val BlockType.Function(tparams, cparams, vparams, bparams, result) = instantiate(callee.functionType, targs, Nil)
-       val cs = debug {
-         val Typing(argTypes, _, argsCs) = all(vargs, e => e.typing)
-         if bparams.nonEmpty then typeError("Pure apps cannot have block params")
-         valuesShouldEqual(vparams, argTypes)
-         argsCs
-       } { Constraints.empty }
+       val Typing(argTypes, _, cs) = all(vargs, e => e.typing)
+       if bparams.nonEmpty then typeError("Pure apps cannot have block params")
+       valuesShouldEqual(vparams, argTypes)
        Typing(result, Set.empty, cs)
 
     case make @ Expr.Make(data, tag, targs, vargs) =>
-      val cs = debug {
-        val Typing(argTypes, argCapt, argsCs) = all(vargs, arg => arg.typing)
+      val Typing(argTypes, argCapt, argsCs) = all(vargs, arg => arg.typing)
       // we assume that the annotated type is correct and check later...
-        argsCs :+ make
-      } { Constraints.empty }
-      Typing(data, Set.empty, cs)
+      Typing(data, Set.empty, argsCs :+ make)
 
     case Expr.Box(b, annotatedCapture) =>
       val Typing(bTpe, bCapt, bCs) = b.typing
@@ -397,10 +398,8 @@ object Type {
       val Typing(condTpe, condCapt, condCs) = cond.typing
       val Typing(thnTpe, thnCapt, thnCs) = thn.typing
       val Typing(elsTpe, elsCapt, elsCs) = els.typing
-      debug {
-        valueShouldEqual(condTpe, TBoolean)
-        valueShouldEqual(thnTpe, elsTpe)
-      }
+      valueShouldEqual(condTpe, TBoolean)
+      valueShouldEqual(thnTpe, elsTpe)
       Typing(thnTpe, condCapt ++ thnCapt ++ elsCapt, condCs ++ thnCs ++ elsCs)
 
     case Stmt.Match(sc, annotatedTpe, clauses, default) =>
@@ -408,14 +407,11 @@ object Type {
 
       val clauseTypings = clauses.map { case (id, arm) =>
         val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), armCapt, armCs) = asFunctionTyping(arm.typing)
-        val cs = debug {
-          armCs :+ MatchClause(id, sc.tpe.asInstanceOf[ValueType.Data], tparams.map(id => ValueType.Var(id)), vparams)
-        } { armCs }
-        Typing(result, armCapt, cs)
+        Typing(result, armCapt, armCs :+ MatchClause(id, sc.tpe.asInstanceOf[ValueType.Data], tparams.map(id => ValueType.Var(id)), vparams))
       }
 
       def join(typings: List[Typing[ValueType]], annotated: ValueType): Typing[ValueType] =
-        fold(typings, annotated) { (tpe1, tpe2) => debug { valueShouldEqual(tpe1, tpe2) }; tpe1 }
+        fold(typings, annotated) { (tpe1, tpe2) => valueShouldEqual(tpe1, tpe2); tpe1 }
 
       val Typing(tpe, capt, cs) = join(clauseTypings ++ default.toList.map { stmt => stmt.typing }, annotatedTpe)
       Typing(tpe, scCapt ++ capt, scCs ++ cs)
@@ -453,10 +449,8 @@ object Type {
     // shift(p) { k: Resume[from, to] => body }
     case Stmt.Shift(BlockVar(id, ptpe@TPrompt(delimiter), annotatedCapt), BlockParam(k, tpe@BlockType.Interface(ResumeSymbol, List(from, to)), capt), body) =>
       val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
-      debug {
-        valueShouldEqual(to, bodyTpe)
-        valueShouldEqual(to, delimiter)
-      }
+      valueShouldEqual(to, bodyTpe)
+      valueShouldEqual(to, delimiter)
       Typing(from, bodyCapt ++ Set(id), bodyCs)
 
     case Stmt.Shift(prompt, BlockParam(k, tpe, capt), body) =>
@@ -465,7 +459,7 @@ object Type {
     // resume(k) { stmt }
     case Stmt.Resume(BlockVar(id, tpe@BlockType.Interface(ResumeSymbol, List(result, answer)), annotatedCapt), body) =>
       val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
-      debug { valueShouldEqual(result, bodyTpe) }
+      valueShouldEqual(result, bodyTpe)
       Typing(answer, annotatedCapt ++ bodyCapt, bodyCs)
 
     case Stmt.Resume(k, body) => typeError(s"Continuation has wrong type: ${k}")
@@ -494,10 +488,8 @@ object Type {
     val Typing(bargTypes, bargCapt, bargCs) = all(bargs, arg => arg.typing)
 
     val BlockType.Function(_, _, vparams, bparams, retType) = instantiate(calleeTpe, targs, bargs.map(_.capt))
-    debug {
-      valuesShouldEqual(vparams, vargTypes)
-      blocksShouldEqual(bparams, bargTypes)
-    }
+    valuesShouldEqual(vparams, vargTypes)
+    blocksShouldEqual(bparams, bargTypes)
 
     Typing(retType, calleeCapt ++ vargCapt ++ bargCapt, calleeCs ++ vargCs ++ bargCs)
   }
