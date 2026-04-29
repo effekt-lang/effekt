@@ -3,7 +3,7 @@ package core
 
 import symbols.{ Symbol, builtins }
 import effekt.util.messages.ErrorReporter
-import scala.collection.immutable.HashMap
+import effekt.util.{ DB, toDB }
 
 /**
  * In core, all names, including those in capture sets are just symbols.
@@ -50,147 +50,16 @@ enum BlockType extends Type {
   case Interface(name: Id, targs: List[ValueType])
 }
 
+
 case class TypeError(msg: String, context: List[core.Tree]) extends Throwable(msg) {
   override def toString = msg + "\n" + context.map(util.show).mkString("\n----- Context -----\n", "\n------\n", "\n----------\n")
 }
-def typeError(msg: String) = throw TypeError(msg, Nil)
 
-def checking[T <: Tree, R](t: T)(f: T => R): R =
-  try f(t) catch {
-    case TypeError(msg, context) => throw TypeError(msg, t :: context)
-  }
+case class Typing[+T](tpe: T, capt: Captures, constraints: Type.Constraints) {
+  def map[S](f: T => S): Typing[S] = Typing(f(tpe), capt, constraints)
 
-case class MatchClause(ctor: Id, result: ValueType.Data, existentialTypeArgs: List[ValueType], arguments: List[ValueType])
-
-type Constraint = Expr.Make | Implementation | MatchClause
-
-sealed trait Free {
-  def without(values: List[ValueParam], blocks: List[BlockParam]): Free = Free.Without(values, blocks, this)
-  def withoutBlock(id: Id, tpe: BlockType, capt: Captures): Free = without(Nil, BlockParam(id, tpe, capt) :: Nil)
-  def withoutValue(id: Id, tpe: ValueType): Free = without(ValueParam(id, tpe) :: Nil, Nil)
-  def ++(other: Free): Free = other match {
-    case Free.Empty => this
-    case other => Free.Join(this, other)
-  }
-
-  // for debugging: checks whether all variables are compatible
-  def wellformed(): Unit
-
-  // checks deferred constraints
-  def checkConstraints()(using DeclarationContext, ErrorReporter): Unit
-
-  // these are cached
-  lazy val freeValues: HashMap[Id, ValueType] = _freeValues
-  lazy val freeBlocks: HashMap[Id, (BlockType, Captures)] = _freeBlocks
-  lazy val freeIds: Set[Id] = _freeIds
-
-  protected def _freeValues: HashMap[Id, ValueType]
-  protected def _freeBlocks: HashMap[Id, (BlockType, Captures)]
-  protected def _freeIds: Set[Id]
-}
-
-object Free {
-
-  object Empty extends Free {
-    override def without(values: List[ValueParam], blocks: List[BlockParam]): Free = this
-    override def ++(other: Free): Free = other
-
-    override def wellformed(): Unit = ()
-    override def checkConstraints()(using DeclarationContext, ErrorReporter): Unit = ()
-    override protected def _freeValues: HashMap[Id, ValueType] = HashMap.empty
-    override protected def _freeBlocks: HashMap[Id, (BlockType, Captures)] = HashMap.empty
-    override protected def _freeIds: Set[Id] = Set.empty
-  }
-  case class Join(left: Free, right: Free) extends Free {
-    override def wellformed(): Unit = {
-      left.wellformed()
-      right.wellformed()
-      // check compatiblity of free variables
-      mergeValues(left.freeValues, right.freeValues)
-      mergeBlocks(left.freeBlocks, right.freeBlocks)
-    }
-    override def checkConstraints()(using DeclarationContext, ErrorReporter): Unit = { left.checkConstraints(); right.checkConstraints() }
-    override protected def _freeValues: HashMap[Id, ValueType] = left.freeValues ++ right.freeValues
-    override protected def _freeBlocks: HashMap[Id, (BlockType, Captures)] = left.freeBlocks ++ right.freeBlocks
-    override protected def _freeIds: Set[Id] = left.freeIds ++ right.freeIds
-  }
-  case class Value(id: Id, tpe: ValueType) extends Free {
-    override def wellformed(): Unit = ()
-    override def checkConstraints()(using DeclarationContext, ErrorReporter): Unit = ()
-    override protected def _freeValues: HashMap[Id, ValueType] = HashMap(id -> tpe)
-    override protected def _freeBlocks: HashMap[Id, (BlockType, Captures)] = HashMap.empty
-    override protected def _freeIds: Set[Id] = Set(id)
-  }
-  case class Block(id: Id, tpe: BlockType, capt: Captures) extends Free {
-    override def wellformed(): Unit = ()
-    override def checkConstraints()(using DeclarationContext, ErrorReporter): Unit = ()
-    override protected def _freeValues: HashMap[Id, ValueType] = HashMap.empty
-    override protected def _freeBlocks: HashMap[Id, (BlockType, Captures)] = HashMap(id -> (tpe, capt))
-    override protected def _freeIds: Set[Id] = Set(id)
-  }
-  case class Without(values: List[ValueParam], blocks: List[BlockParam], underlying: Free) extends Free {
-    private val valueIds = values.map(_.id)
-    private val blockIds = blocks.map(_.id)
-    override def wellformed(): Unit = {
-      underlying.wellformed()
-      values.foreach {
-        case ValueParam(id, tpe) => underlying.freeValues.get(id).foreach { otherTpe =>
-          if !Type.equals(tpe, otherTpe) then
-            typeError(s"free variable ${util.show(id)} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
-        }
-      }
-      blocks.foreach {
-        case BlockParam(id, tpe, capt) => underlying.freeBlocks.get(id).foreach { case (otherTpe, otherCapt) =>
-          if !Type.equals(tpe, otherTpe) then
-            typeError(s"free variable ${util.show(id)} has two different types (${util.show(tpe)} vs. ${util.show(otherTpe)})")
-          // for now ignore captures
-          // if !otherCapt.subsetOf(capt) then
-            // typeError(s"free variable ${util.show(id)} assumes a wrong capture set (${capt.map(core.PrettyPrinter.show)} vs. ${otherCapt.map(core.PrettyPrinter.show)})")
-        }
-      }
-    }
-    override def checkConstraints()(using DeclarationContext, ErrorReporter): Unit = underlying.checkConstraints()
-    override protected def _freeValues: HashMap[Id, ValueType] = underlying.freeValues.removedAll(valueIds)
-    override protected def _freeBlocks: HashMap[Id, (BlockType, Captures)] = underlying.freeBlocks.removedAll(blockIds)
-    override protected def _freeIds: Set[Id] = underlying.freeIds.removedAll(valueIds).removedAll(blockIds)
-  }
-  case class Defer(constraint: Constraint) extends Free {
-    override def wellformed(): Unit = ()
-    override def checkConstraints()(using DeclarationContext, ErrorReporter): Unit = constraint match {
-      case impl: Implementation =>
-        checking(impl) { Type.checkAgainstDeclaration }
-      case make @ Expr.Make(data, tag, targs, vargs) =>
-        checking(make) { make => Type.checkAgainstDeclaration(data, tag, targs, vargs.map(_.tpe)) }
-      case MatchClause(tag, result, targs, arguments) =>
-        Type.checkAgainstDeclaration(result, tag, targs, arguments)
-    }
-    override protected def _freeValues: HashMap[Id, ValueType] = HashMap.empty
-    override protected def _freeBlocks: HashMap[Id, (BlockType, Captures)] = HashMap.empty
-    override protected def _freeIds: Set[Id] = Set.empty
-  }
-
-  def empty: Free = Free.Empty
-  def value(id: Id, tpe: ValueType): Free = Free.Value(id, tpe)
-  def block(id: Id, tpe: BlockType, capt: Captures): Free = Free.Block(id, tpe, capt)
-  def defer(c: Constraint): Free = Free.Defer(c)
-
-  def mergeValues(free1: HashMap[Id, ValueType], free2: HashMap[Id, ValueType]): HashMap[Id, ValueType] =
-    free1.merged(free2) {
-      case ((id1, tpe1), (id2, tpe2)) =>
-        Type.valueShouldEqual(tpe1, tpe2)
-        id1 -> tpe1
-    }
-
-  def mergeBlocks(free1: HashMap[Id, (BlockType, Captures)], free2: HashMap[Id, (BlockType, Captures)]): HashMap[Id, (BlockType, Captures)] =
-    free1.merged(free2) {
-      case ((id1, (tpe1, capt1)), (id2, (tpe2, capt2))) =>
-        Type.blockShouldEqual(tpe1, tpe2)
-        id1 -> (tpe1, capt1)
-    }
-}
-
-case class Typing[+T](tpe: T, capt: Captures, free: Free) {
-  def map[S](f: T => S): Typing[S] = Typing(f(tpe), capt, free)
+  def check()(using DeclarationContext, ErrorReporter): Unit =
+    constraints.foreach(Type.checkConstraint)
 }
 
 object Type {
@@ -228,8 +97,8 @@ object Type {
       BlockType.Function(tparams1, cparams1, vparams1, bparams1, result1),
       BlockType.Function(tparams2, cparams2, vparams2, bparams2, result2)
     ) =>
-      val tparamSubst = tparams1.zip(tparams2).map { case (to, from) => from -> ValueType.Var(to) }.toMap
-      val cparamSubst = cparams1.zip(cparams2).map { case (to, from) => from -> Set(to) }.toMap
+      val tparamSubst = tparams1.zip(tparams2).map { case (to, from) => from -> ValueType.Var(to) }.toDB
+      val cparamSubst = cparams1.zip(cparams2).map { case (to, from) => from -> Set(to) }.toDB
       def typeParamArity = tparams1.size == tparams2.size
       def equalVparams = all(vparams1, vparams2.map(t => substitute(t, tparamSubst, cparamSubst)), equals)
       def equalBparams = all(bparams1, bparams2.map(t => substitute(t, tparamSubst, cparamSubst)), equals)
@@ -242,7 +111,6 @@ object Type {
   }
 
   def equals(capt1: Captures, capt2: Captures): Boolean = capt1 == capt2
-
 
   object TResume {
     def apply(result: ValueType, answer: ValueType) = BlockType.Interface(ResumeSymbol, List(result, answer))
@@ -272,23 +140,23 @@ object Type {
 
   def instantiate(f: BlockType.Function, targs: List[ValueType], cargs: List[Captures]): BlockType.Function = f match {
     case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-      assert(targs.size == tparams.size, s"Wrong number of type arguments\n  targs: ${targs}\n  tparams: ${tparams}")
-      assert(cargs.size == cparams.size, "Wrong number of capture arguments")
+      util.assert(targs.size == tparams.size, s"Wrong number of type arguments\n  targs: ${targs}\n  tparams: ${tparams}")
+      util.assert(cargs.size == cparams.size, "Wrong number of capture arguments")
 
-      val tsubst = (tparams zip targs).toMap
-      val csubst = (cparams zip cargs).toMap
+      val tsubst = (tparams zip targs).toDB
+      val csubst = (cparams zip cargs).toDB
       BlockType.Function(Nil, Nil,
-        vparams.map { tpe => substitute(tpe, tsubst, Map.empty) },
-        bparams.map { tpe => substitute(tpe, tsubst, Map.empty) },
+        vparams.map { tpe => substitute(tpe, tsubst, DB.empty) },
+        bparams.map { tpe => substitute(tpe, tsubst, DB.empty) },
         substitute(result, tsubst, csubst))
   }
 
-  def substitute(capt: Captures, csubst: Map[Id, Captures]): Captures = capt.flatMap {
+  def substitute(capt: Captures, csubst: DB[Captures]): Captures = capt.flatMap {
     case id if csubst.isDefinedAt(id) => csubst(id)
     case c => Set(c)
   }
 
-  def substitute(tpe: BlockType, vsubst: Map[Id, ValueType], csubst: Map[Id, Captures]): BlockType = tpe match {
+  def substitute(tpe: BlockType, vsubst: DB[ValueType], csubst: DB[Captures]): BlockType = tpe match {
     case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
       // names are unique symbols so shadowing should NOT take place; we still subtract to be safe.
       val vsubstLocal = vsubst -- tparams
@@ -303,7 +171,7 @@ object Type {
       BlockType.Interface(sym, targs map { tpe => substitute(tpe, vsubst, csubst) })
   }
 
-  def substitute(tpe: ValueType, vsubst: Map[Id, ValueType], csubst: Map[Id, Captures]): ValueType = tpe match {
+  def substitute(tpe: ValueType, vsubst: DB[ValueType], csubst: DB[Captures]): ValueType = tpe match {
     case ValueType.Var(id) if vsubst.isDefinedAt(id) => vsubst(id)
     case ValueType.Var(id) => tpe
 
@@ -336,36 +204,43 @@ object Type {
     }
   }
 
+
+  // Type Checking
+  // -------------
+  // This is only used in debug mode of the compiler.
+  // To infer the type of a statement, use `tpe` or `inferType`, which is faster.
+  private def typeError(msg: String) = throw TypeError(msg, Nil)
+
+  private inline def checking[T <: Tree, R](t: T)(inline f: T => R): R =
+    try f(t) catch {
+      case TypeError(msg, context) => throw TypeError(msg, t :: context)
+    }
+
+  case class MatchClause(ctor: Id, result: ValueType.Data, existentialTypeArgs: List[ValueType], arguments: List[ValueType])
+
+  type Constraint = Expr.Make | Implementation | MatchClause
+
+  type Constraints = Vector[Constraint]
+  object Constraints {
+    val empty = Vector.empty[Constraint]
+  }
+
+  def checkConstraint(c: Constraint)(using DeclarationContext, ErrorReporter): Unit = c match {
+    case impl: Implementation =>
+      checking(impl) { impl => checkAgainstDeclaration(impl) }
+    case make @ Expr.Make(data, tag, targs, vargs) =>
+      checking(make) { make => checkAgainstDeclaration(data, tag, targs, vargs.map(_.tpe)) }
+    case Type.MatchClause(tag, result, targs, arguments) =>
+      checkAgainstDeclaration(result, tag, targs, arguments)
+  }
+
   def typecheck(module: ModuleDecl)(using ErrorReporter): Unit = module match {
     case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
       given DeclarationContext(declarations, externs)
 
-      // bound on the toplevel
-      val boundBlocks = definitions.collect {
-        case Toplevel.Def(id, block) => BlockParam(id, block.tpe, block.capt)
-      } ++ externs.collect {
-        case Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, capt, _) =>
-          BlockParam(id, BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), ret), capt)
-      }
-
-      val boundValues = definitions.collect {
-        case Toplevel.Val(id, expr) => ValueParam(id, expr.tpe)
-      }
-
-      def wellformed(free: Free): Unit =
-        val toplevel = free.without(boundValues, boundBlocks)
-        toplevel.wellformed()
-        toplevel.checkConstraints()
-
-        assert(toplevel.freeIds.isEmpty, {
-          val freeBlocks = toplevel.freeBlocks.map { case (id, (tpe, capt)) => s"${util.show(id)}: ${util.show(tpe)} @ ${capt.map(util.show).mkString("{", ", ", "}")}" }
-          val freeValues = toplevel.freeValues.map { case (id, tpe) => s"${util.show(id)}: ${util.show(tpe)}" }
-          s"Toplevel program should be closed, but got:\n${ freeBlocks.mkString("\n") }\n\n${freeValues.mkString("\n")}"
-        })
-
       definitions.foreach {
-        case Toplevel.Def(id, block) => wellformed(block.free)
-        case Toplevel.Val(id, binding) => wellformed(binding.free)
+        case Toplevel.Def(id, block) => block.typing.check()
+        case Toplevel.Val(id, binding) => binding.typing.check()
       }
 
       externs.foreach {
@@ -374,8 +249,7 @@ object Type {
             case ExternBody.StringExternBody(featureFlag, contents) => contents.args
             case ExternBody.Unsupported(err) => Nil
           }
-          val free = all(splices, splice => splice.typing).free.without(vparams, bparams)
-          wellformed(free)
+          all(splices, splice => splice.typing).check()
 
         case Extern.Include(featureFlag, contents) => ()
         case Extern.Data(id, tparams, body) => ()
@@ -414,7 +288,7 @@ object Type {
       // check all are defined
       val declared = decl.properties.map(_.id).toSet
       val implemented = definitions.map(_._1).toSet
-      assert(declared == implemented, s"Interface ${interface.name} declares ${declared}, but implemented: ${implemented}")
+      util.assert(declared == implemented, s"Interface ${interface.name} declares ${declared}, but implemented: ${implemented}")
 
       // [A]
       val universalParams = decl.tparams
@@ -445,185 +319,179 @@ object Type {
       }
   }
 
-  def typecheck(expr: Expr): Typing[ValueType] = checking(expr) {
-    case Expr.ValueVar(id, annotatedType) => Typing(annotatedType, Set.empty, Free.value(id, annotatedType))
-    case Expr.Literal(value, annotatedType) => Typing(annotatedType, Set.empty, Free.empty)
+  inline def typecheck(expr: Expr): Typing[ValueType] = checking(expr) {
+    case Expr.ValueVar(id, annotatedType) => Typing(annotatedType, Set.empty, Constraints.empty)
+    case Expr.Literal(value, annotatedType) => Typing(annotatedType, Set.empty, Constraints.empty)
     case Expr.PureApp(callee, targs, vargs) =>
        val BlockType.Function(tparams, cparams, vparams, bparams, result) = instantiate(callee.functionType, targs, Nil)
+       val Typing(argTypes, _, cs) = all(vargs, e => e.typing)
        if bparams.nonEmpty then typeError("Pure apps cannot have block params")
-       val Typing(argTypes, _, argFrees) = all(vargs, e => e.typing)
        valuesShouldEqual(vparams, argTypes)
-       Typing(result, Set.empty, argFrees ++ Free.block(callee.id, callee.annotatedTpe, callee.annotatedCapt))
+       Typing(result, Set.empty, cs)
 
     case make @ Expr.Make(data, tag, targs, vargs) =>
-      val Typing(argTypes, argCapt, argFree) = all(vargs, arg => arg.typing)
+      val Typing(argTypes, argCapt, argsCs) = all(vargs, arg => arg.typing)
       // we assume that the annotated type is correct and check later...
-      Typing(data, argCapt, argFree ++ Free.defer(make))
+      Typing(data, Set.empty, argsCs :+ make)
 
     case Expr.Box(b, annotatedCapture) =>
-      val Typing(bTpe, bCapt, bFree) = b.typing
+      val Typing(bTpe, bCapt, bCs) = b.typing
       // Here we actually allow "subcapturing"
       // if !bCapt.subsetOf(annotatedCapture) then typeError(s"Inferred capture ${bCapt} is not allowed by annotation: ${annotatedCapture}")
-      Typing(ValueType.Boxed(bTpe, annotatedCapture), Set.empty, bFree)
+      Typing(ValueType.Boxed(bTpe, annotatedCapture), Set.empty, bCs)
   }
 
-  def typecheck(block: Block): Typing[BlockType] = checking(block) {
-    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Typing(annotatedTpe, annotatedCapt, Free.block(id, annotatedTpe, annotatedCapt))
+  inline def typecheck(block: Block): Typing[BlockType] = checking(block) {
+    case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
+      Typing(annotatedTpe, annotatedCapt, Constraints.empty)
     case Block.Unbox(pure) =>
-      val Typing(tpe, capt, free) = pure.typing
+      val Typing(tpe, capt, cs) = pure.typing
       tpe match {
-        case ValueType.Boxed(tpe2, capt2) => Typing(tpe2, capt2, free)
+        case ValueType.Boxed(tpe2, capt2) => Typing(tpe2, capt2, cs)
         case other => typeError(s"Expected a boxed type, but got: ${util.show(other)}")
       }
     case b : Block.BlockLit => typecheck(b)
     case Block.New(impl) => impl.typing
   }
 
-  def typecheck(blocklit: BlockLit): Typing[BlockType.Function] = checking(blocklit) {
+  inline def typecheck(blocklit: BlockLit): Typing[BlockType.Function] = checking(blocklit) {
     case BlockLit(tparams, cparams, vparams, bparams, body) =>
-      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
-      Typing(BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), bodyTpe), bodyCapt -- cparams,
-        bodyFree.without(vparams, bparams))
+      val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
+      Typing(BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), bodyTpe),
+        bodyCapt -- cparams,
+        bodyCs)
   }
 
-  def typecheck(impl: Implementation): Typing[BlockType.Interface] = checking(impl) {
+  inline def typecheck(impl: Implementation): Typing[BlockType.Interface] = checking(impl) {
     case Implementation(interface, operations) =>
-      val Typing(ops, capts, free) = fold(operations.map { op => op.typing.map { tpe => Map(op.name -> tpe) }}, Map.empty) { _ ++ _ }
-      Typing(interface, capts, free ++ Free.defer(impl))
+      val Typing(ops, capts, cs) = all(operations, _.typing)
+      Typing(interface, capts, cs :+ impl)
   }
 
-  def typecheck(op: Operation): Typing[BlockType.Function] = checking(op) {
+  inline def typecheck(op: Operation): Typing[BlockType.Function] = checking(op) {
     case Operation(name, tparams, cparams, vparams, bparams, body) =>
-      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
-      Typing(BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), bodyTpe), bodyCapt -- cparams,
-        bodyFree.without(vparams, bparams))
+      val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
+      Typing(BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), bodyTpe),
+        bodyCapt -- cparams,
+        bodyCs)
   }
 
-  def typecheck(stmt: Stmt): Typing[ValueType] = checking(stmt) {
+  inline def typecheck(stmt: Stmt): Typing[ValueType] = checking(stmt) {
     case Stmt.Def(id, block, body) =>
-      val canBeRecursive = block match {
-        case Block.BlockLit(tparams, cparams, vparams, bparams, body) => true
-        case Block.New(impl) => true
-        case _ => false
-      }
-      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
-      val Typing(blockTpe, blockCapt, blockFree) = block.typing
-
-      Typing(bodyTpe, bodyCapt, bodyFree.withoutBlock(id, blockTpe, blockCapt) ++
-        (if canBeRecursive then blockFree.withoutBlock(id, blockTpe, blockCapt) else blockFree))
+      val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
+      val Typing(blockTpe, blockCapt, blockCs) = block.typing
+      Typing(bodyTpe, bodyCapt, bodyCs ++ blockCs)
 
     case Stmt.Let(id, binding, body) =>
-      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
-      val Typing(bindTpe, bindCapt, bindFree) = binding.typing
-      Typing(bodyTpe, bodyCapt ++ bindCapt, bodyFree.withoutValue(id, bindTpe) ++ bindFree)
+      val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
+      val Typing(bindTpe, bindCapt, bindCs) = binding.typing
+      Typing(bodyTpe, bodyCapt ++ bindCapt, bodyCs ++ bindCs)
 
     case Stmt.Return(expr) => expr.typing
 
     case Stmt.Val(id, binding, body) =>
-      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
-      val Typing(bindTpe, bindCapt, bindFree) = binding.typing
-      Typing(bodyTpe, bodyCapt ++ bindCapt, bodyFree.withoutValue(id, bindTpe) ++ bindFree)
+      val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
+      val Typing(bindTpe, bindCapt, bindCs) = binding.typing
+      Typing(bodyTpe, bodyCapt ++ bindCapt, bodyCs ++ bindCs)
 
     case Stmt.If(cond, thn, els) =>
-      val Typing(condTpe, condCapt, condFree) = cond.typing
-      val Typing(thnTpe, thnCapt, thnFree) = thn.typing
-      val Typing(elsTpe, elsCapt, elsFree) = els.typing
+      val Typing(condTpe, condCapt, condCs) = cond.typing
+      val Typing(thnTpe, thnCapt, thnCs) = thn.typing
+      val Typing(elsTpe, elsCapt, elsCs) = els.typing
       valueShouldEqual(condTpe, TBoolean)
       valueShouldEqual(thnTpe, elsTpe)
-      Typing(thnTpe, condCapt ++ thnCapt ++ elsCapt, condFree ++ thnFree ++ elsFree)
+      Typing(thnTpe, condCapt ++ thnCapt ++ elsCapt, condCs ++ thnCs ++ elsCs)
 
     case Stmt.Match(sc, annotatedTpe, clauses, default) =>
-      val Typing(scType, scCapt, scFree) = sc.typing
+      val Typing(scType, scCapt, scCs) = sc.typing
+
       val clauseTypings = clauses.map { case (id, arm) =>
-        val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), armCapt, armFree) = asFunctionTyping(arm.typing)
-        Typing(result, armCapt, armFree ++ Free.defer(MatchClause(id, sc.tpe.asInstanceOf[ValueType.Data], tparams.map(id => ValueType.Var(id)), vparams)))
+        val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), armCapt, armCs) = asFunctionTyping(arm.typing)
+        Typing(result, armCapt, armCs :+ MatchClause(id, sc.tpe.asInstanceOf[ValueType.Data], tparams.map(id => ValueType.Var(id)), vparams))
       }
 
-      // TODO assert that scrutinee actually has type being matched on
       def join(typings: List[Typing[ValueType]], annotated: ValueType): Typing[ValueType] =
         fold(typings, annotated) { (tpe1, tpe2) => valueShouldEqual(tpe1, tpe2); tpe1 }
 
-      val Typing(tpe, capt, free) = join(clauseTypings ++ default.toList.map { stmt => stmt.typing }, annotatedTpe)
-      Typing(tpe, scCapt ++ capt, scFree ++ free)
+      val Typing(tpe, capt, cs) = join(clauseTypings ++ default.toList.map { stmt => stmt.typing }, annotatedTpe)
+      Typing(tpe, scCapt ++ capt, scCs ++ cs)
 
 
     case Stmt.Region(body) =>
-      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = asFunctionTyping(body.typing)
+      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyCs) = asFunctionTyping(body.typing)
       // TODO we should check that cparams do not occur in result!
-      Typing(result, bodyCapt, bodyFree)
+      Typing(result, bodyCapt, bodyCs)
 
     case Stmt.Alloc(id, init, region, body) =>
-      val Typing(initTpe, initCapt, initFree) = init.typing
-      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
-      Typing(bodyTpe, bodyCapt ++ Set(region),
-        initFree ++ Free.block(region, TRegion, Set(region)) ++ bodyFree.withoutBlock(id, TState(init.tpe), Set(region)))
+      val Typing(initTpe, initCapt, initCs) = init.typing
+      val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
+      Typing(bodyTpe, bodyCapt ++ Set(region), initCs ++ bodyCs)
 
     case Stmt.Var(ref, init, capture, body) =>
-      val Typing(initTpe, initCapt, initFree) = init.typing
-      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
-      Typing(bodyTpe, bodyCapt -- Set(capture), initFree ++ bodyFree.withoutBlock(ref, TState(init.tpe), Set(capture)))
+      val Typing(initTpe, initCapt, initCs) = init.typing
+      val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
+      Typing(bodyTpe, bodyCapt -- Set(capture), initCs ++ bodyCs)
 
     case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
-      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
-      Typing(bodyTpe, bodyCapt ++ annotatedCapt, Free.block(ref, core.Type.TState(annotatedTpe), annotatedCapt) ++ bodyFree.withoutValue(id, annotatedTpe))
+      val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
+      Typing(bodyTpe, bodyCapt ++ annotatedCapt, bodyCs)
 
     case Stmt.Put(ref, annotatedCapt, value, body) =>
-      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
-      val Typing(valueTpe, valueCapt, valueFree) = value.typing
-      Typing(bodyTpe, bodyCapt ++ annotatedCapt, Free.block(ref, core.Type.TState(valueTpe), annotatedCapt) ++ valueFree ++ bodyFree)
+      val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
+      val Typing(valueTpe, valueCapt, valueCs) = value.typing
+      Typing(bodyTpe, bodyCapt ++ annotatedCapt, valueCs ++ bodyCs)
 
     case Stmt.Reset(body) =>
-      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyFree) = asFunctionTyping(body.typing)
+      val Typing(BlockType.Function(tparams, cparams, vparams, bparams, result), bodyCapt, bodyCs) = asFunctionTyping(body.typing)
       // TODO we should check that cparams do not occur in result!
-      Typing(result, bodyCapt, bodyFree)
+      Typing(result, bodyCapt, bodyCs)
 
     // shift(p) { k: Resume[from, to] => body }
     case Stmt.Shift(BlockVar(id, ptpe@TPrompt(delimiter), annotatedCapt), BlockParam(k, tpe@BlockType.Interface(ResumeSymbol, List(from, to)), capt), body) =>
-      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
+      val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
       valueShouldEqual(to, bodyTpe)
       valueShouldEqual(to, delimiter)
-      Typing(from, bodyCapt ++ Set(id), bodyFree.withoutBlock(k, tpe, capt) ++ Free.block(id, ptpe, annotatedCapt))
+      Typing(from, bodyCapt ++ Set(id), bodyCs)
 
     case Stmt.Shift(prompt, BlockParam(k, tpe, capt), body) =>
       typeError(s"Block parameter of shift have wrong type: ${k}: ${tpe}")
 
     // resume(k) { stmt }
     case Stmt.Resume(BlockVar(id, tpe@BlockType.Interface(ResumeSymbol, List(result, answer)), annotatedCapt), body) =>
-      val Typing(bodyTpe, bodyCapt, bodyFree) = body.typing
+      val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
       valueShouldEqual(result, bodyTpe)
-      Typing(answer, annotatedCapt ++ bodyCapt, bodyFree ++ Free.block(id, tpe, annotatedCapt))
+      Typing(answer, annotatedCapt ++ bodyCapt, bodyCs)
 
     case Stmt.Resume(k, body) => typeError(s"Continuation has wrong type: ${k}")
 
     case Stmt.ImpureApp(id, BlockVar(f, tpe: BlockType.Function, annotatedCapt), targs, vargs, bargs, body) =>
-      val Typing(retType, callCapts, callFree) = typecheckFunctionLike(Typing(tpe, annotatedCapt, Free.block(f, tpe, annotatedCapt)), targs, vargs, bargs)
-      val Typing(bodyType, bodyCapts, bodyFree) = body.typing
-      Typing(bodyType, callCapts ++ bodyCapts, callFree ++ bodyFree.withoutValue(id, retType))
+      val Typing(retType, callCapts, callCs) = typecheckFunctionLike(Typing(tpe, annotatedCapt, Constraints.empty), targs, vargs, bargs)
+      val Typing(bodyType, bodyCapts, bodyCs) = body.typing
+      Typing(bodyType, callCapts ++ bodyCapts, callCs ++ bodyCs)
 
     case s: Stmt.ImpureApp => typeError("Impure app should have a function type")
 
     case Stmt.App(callee, targs, vargs, bargs) => typecheckFunctionLike(asFunctionTyping(callee.typing), targs, vargs, bargs)
 
     case Stmt.Invoke(callee, method, methodTpe: BlockType.Function, targs, vargs, bargs) =>
-      val Typing(calleeTpe, calleeCapts, calleeFree) = callee.typing
-      typecheckFunctionLike(Typing(methodTpe, calleeCapts, calleeFree), targs, vargs, bargs)
+      val Typing(calleeTpe, calleeCapts, calleeCs) = callee.typing
+      typecheckFunctionLike(Typing(methodTpe, calleeCapts, calleeCs), targs, vargs, bargs)
 
     case s: Stmt.Invoke => typeError("Method type should be a function")
 
-    case Stmt.Hole(annotatedTpe, span) => Typing(annotatedTpe, Set.empty, Free.empty)
+    case Stmt.Hole(annotatedTpe, span) => Typing(annotatedTpe, Set.empty, Constraints.empty)
   }
 
   private def typecheckFunctionLike(calleeTyping: Typing[BlockType.Function], targs: List[ValueType], vargs: List[Expr], bargs: List[Block]): Typing[ValueType] = {
-    val Typing(calleeTpe, calleeCapt, calleeFree) = calleeTyping
-    val Typing(vargTypes, vargCapt, vargFree) = all(vargs, arg => arg.typing)
-    val Typing(bargTypes, bargCapt, bargFree) = all(bargs, arg => arg.typing)
+    val Typing(calleeTpe, calleeCapt, calleeCs) = calleeTyping
+    val Typing(vargTypes, vargCapt, vargCs) = all(vargs, arg => arg.typing)
+    val Typing(bargTypes, bargCapt, bargCs) = all(bargs, arg => arg.typing)
 
     val BlockType.Function(_, _, vparams, bparams, retType) = instantiate(calleeTpe, targs, bargs.map(_.capt))
-
     valuesShouldEqual(vparams, vargTypes)
     blocksShouldEqual(bparams, bargTypes)
 
-    Typing(retType, calleeCapt ++ vargCapt ++ bargCapt, calleeFree ++ vargFree ++ bargFree)
+    Typing(retType, calleeCapt ++ vargCapt ++ bargCapt, calleeCs ++ vargCs ++ bargCs)
   }
 
   private def valuesShouldEqual(tpes1: List[ValueType], tpes2: List[ValueType]): Unit =
@@ -641,17 +509,134 @@ object Type {
     if !Type.equals(tpe1, tpe2) then typeError(s"Block type mismatch:\n  ${util.show(tpe1)}\n  ${util.show(tpe2)}")
 
   private inline def all[T, R](terms: List[T], inline check: T => Typing[R]): Typing[List[R]] =
-    terms.foldRight(Typing[List[R]](Nil, Set.empty, Free.empty)) {
-      case (term, Typing(tpes, capts, frees)) =>
-        val Typing(tpe, capt, free) = check(term)
-        Typing(tpe :: tpes, capts ++ capt, frees ++ free)
+    terms.foldRight(Typing[List[R]](Nil, Set.empty, Constraints.empty)) {
+      case (term, Typing(tpes, capts, css)) =>
+        val Typing(tpe, capt, cs) = check(term)
+        Typing(tpe :: tpes, capts ++ capt, css ++ cs)
     }
 
   private def fold[T](typings: List[Typing[T]], empty: T)(combine: (T, T) => T): Typing[T] =
-    typings.foldLeft(Typing(empty, Set.empty, Free.empty)) {
-      case (Typing(tpe1, capt1, free1), Typing(tpe2, capt2, free2)) =>
-        Typing(combine(tpe1, tpe2), capt1 ++ capt2, free1 ++ free2)
+    typings.foldLeft(Typing(empty, Set.empty, Constraints.empty)) {
+      case (Typing(tpe1, capt1, cs1), Typing(tpe2, capt2, cs2)) =>
+        Typing(combine(tpe1, tpe2), capt1 ++ capt2, cs1 ++ cs2)
     }
 
   private def asFunctionTyping(t: Typing[BlockType]): Typing[BlockType.Function] = t.asInstanceOf
+
+
+  // Inference
+  inline def inferType(stmt: Stmt): ValueType = stmt match {
+    case Stmt.Def(id, block, body) => body.tpe
+    case Stmt.Let(id, binding, body) => body.tpe
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => body.tpe
+    case Stmt.Return(expr) => expr.tpe
+    case Stmt.Val(id, binding, body) => body.tpe
+    case Stmt.App(callee, targs, vargs, bargs) =>
+      Type.instantiate(callee.tpe.asInstanceOf[BlockType.Function], targs, bargs.map(_.capt)).result
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
+      Type.instantiate(methodTpe.asInstanceOf[BlockType.Function], targs, bargs.map(_.capt)).result
+    case Stmt.If(cond, thn, els) => thn.tpe
+    case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => annotatedTpe
+    case Stmt.Region(body) => body.returnType
+    case Stmt.Alloc(id, init, region, body) => body.tpe
+    case Stmt.Var(ref, init, capture, body) => body.tpe
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => body.tpe
+    case Stmt.Put(ref, annotatedCapt, value, body) => body.tpe
+    case Stmt.Reset(body) => body.returnType
+    case Stmt.Shift(prompt, k, body) =>
+      k.tpe match {
+        case BlockType.Interface(_, List(from, _)) => from
+        case _ => typeError(s"Shift continuation must have Resume[from, to] type, got: ${util.show(k.tpe)}")
+      }
+    case Stmt.Resume(k, body) =>
+      k.annotatedTpe match {
+        case BlockType.Interface(_, List(_, answer)) => answer
+        case _ => typeError(s"Resume continuation must have Resume[result, answer] type, got: ${util.show(k.annotatedTpe)}")
+      }
+    case Stmt.Hole(annotatedTpe, span) => annotatedTpe
+  }
+
+  inline def inferType(expr: Expr): ValueType = expr match {
+    case Expr.ValueVar(id, annotatedType) => annotatedType
+    case Expr.Literal(value, annotatedType) => annotatedType
+    case Expr.PureApp(b, targs, vargs) =>
+      Type.instantiate(b.functionType, targs, Nil).result
+    case Expr.Make(data, tag, targs, vargs) => data
+    case Expr.Box(b, annotatedCapture) =>
+      ValueType.Boxed(b.tpe, annotatedCapture)
+  }
+
+  inline def inferType(block: Block): BlockType = block match {
+    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => annotatedTpe
+    case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+      BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), body.tpe)
+    case Block.Unbox(pure) =>
+      pure.tpe match {
+        case ValueType.Boxed(tpe, _) => tpe
+        case other => typeError(s"Expected a boxed type, but got: ${util.show(other)}")
+      }
+    case Block.New(impl) => impl.interface
+  }
+
+  private inline def allCapt[T](t: IterableOnce[T], inline f: T => Captures): Captures =
+    t.iterator.foldLeft[Captures](Set.empty) { case (c, t) => f(t) ++ c }
+
+  inline def inferCapt(stmt: Stmt): Captures = stmt match {
+    case Stmt.Def(id, block, body) => body.capt
+    case Stmt.Let(id, binding, body) => body.capt
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      callee.capt ++ bargs.flatMap(_.capt) ++ body.capt
+    case Stmt.Return(expr) => Set.empty
+    case Stmt.Val(id, binding, body) => body.capt ++ binding.capt
+    case Stmt.App(callee, targs, vargs, bargs) =>
+      callee.capt ++ bargs.flatMap(_.capt)
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
+      callee.capt ++ bargs.flatMap(_.capt)
+    case Stmt.If(cond, thn, els) => thn.capt ++ els.capt
+    case Stmt.Match(scrutinee, annotatedTpe, clauses, default) =>
+      allCapt(clauses, { case (id, cl) => cl.capt }) ++
+      allCapt(default, _.capt)
+    case Stmt.Region(body) => body.capt
+    case Stmt.Alloc(id, init, region, body) =>
+      body.capt ++ Set(region)
+    case Stmt.Var(ref, init, capture, body) =>
+      body.capt -- Set(capture)
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
+      body.capt ++ annotatedCapt
+    case Stmt.Put(ref, annotatedCapt, value, body) =>
+      body.capt ++ annotatedCapt
+    case Stmt.Reset(body) => body.capt
+    case Stmt.Shift(prompt, k, body) =>
+      body.capt ++ Set(prompt.id)
+    case Stmt.Resume(k, body) =>
+      body.capt ++ k.annotatedCapt
+    case Stmt.Hole(annotatedTpe, span) => Set.empty
+  }
+
+  inline def inferCapt(block: Block): Captures = block match {
+    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => annotatedCapt
+    case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+      body.capt -- cparams
+    case Block.Unbox(pure) =>
+      pure.tpe match {
+        case ValueType.Boxed(_, capt) => capt
+        case other => typeError(s"Expected a boxed type, but got: ${util.show(other)}")
+      }
+    case Block.New(impl) => impl.capt
+  }
+
+  inline def inferType(impl: Implementation): BlockType.Interface = impl.interface
+
+  inline def inferCapt(impl: Implementation): Captures =
+    allCapt(impl.operations, _.capt)
+
+  inline def inferType(op: Operation): BlockType.Function = op match {
+    case Operation(name, tparams, cparams, vparams, bparams, body) =>
+      BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), body.tpe)
+  }
+
+  inline def inferCapt(op: Operation): Captures = op match {
+    case Operation(name, tparams, cparams, vparams, bparams, body) =>
+      body.capt -- cparams
+  }
 }

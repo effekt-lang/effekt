@@ -3,6 +3,7 @@ package core
 package optimizer
 
 import effekt.util.messages.INTERNAL_ERROR
+import effekt.util.debug
 
 import scala.annotation.{ tailrec, targetName }
 import scala.collection.mutable
@@ -36,7 +37,6 @@ object Normalizer { normal =>
     decls: DeclarationContext,     // for field selection
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
     maxInlineSize: Int,            // to control inlining and avoid code bloat
-    debug: Boolean                 // enable assertions
   ) {
     def bind(id: Id, expr: Expr): Context = copy(exprs = exprs + (id -> expr))
     def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
@@ -69,14 +69,14 @@ object Normalizer { normal =>
   private def isUnused(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id).forall { u => u == Usage.Never }
 
-  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int, debug: Boolean): ModuleDecl = {
+  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int): ModuleDecl = {
     // usage information is used to detect recursive functions (and not inline them)
     val usage = Reachable(entrypoints, m)
 
     val defs = m.definitions.collect {
       case Toplevel.Def(id, block) => id -> block
     }.toMap
-    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize, true)
+    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize)
 
     val (normalizedDefs, _) = normalizeToplevel(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
@@ -152,12 +152,8 @@ object Normalizer { normal =>
   private def active(e: Expr)(using Context): Expr =
     normalize(e) match {
       case x @ Expr.ValueVar(id, annotatedType) => exprFor(id) match {
-        case Some(p: Expr.Make)    => p
-        case Some(p: Expr.Literal) => p
-        case Some(p: Expr.Box)     => p
-        // We only inline non side-effecting expressions
-        case Some(other) if other.capt.isEmpty  => other
-        case _ => x // stuck
+        case Some(other) => other
+        case None => x // stuck
       }
       case other => other // stuck
     }
@@ -220,7 +216,7 @@ object Normalizer { normal =>
       case Expr.Make(data, tag, targs, vargs) if clauses.exists { case (id, _) => id == tag } =>
         val clause: BlockLit = clauses.collectFirst { case (id, cl) if id == tag => cl }.get
         val result = reduce(clause, targs, vargs.map(normalize), Nil)
-        assert(Type.equals(result.tpe, tpe))
+        util.assert(Type.equals(result.tpe, tpe))
         normalize(result)
       case Expr.Make(data, tag, targs, vargs) if default.isDefined =>
         normalize(default.get)
@@ -234,7 +230,7 @@ object Normalizer { normal =>
       case Expr.Literal(true, annotatedType) => normalize(thn)
       case Expr.Literal(false, annotatedType) => normalize(els)
       case _ =>
-        assert(Type.equals(thn.tpe, els.tpe), s"Then and else branch have different types: ${util.show(thn.tpe)} != ${util.show(els.tpe)}\n\n${util.show(thn)}\n\n${util.show(els)}\n\n${util.show(s)}")
+        util.assert(Type.equals(thn.tpe, els.tpe), s"Then and else branch have different types: ${util.show(thn.tpe)} != ${util.show(els.tpe)}\n\n${util.show(thn)}\n\n${util.show(els)}\n\n${util.show(s)}")
         If(normalize(cond), normalize(thn), normalize(els))
     }
 
@@ -270,7 +266,7 @@ object Normalizer { normal =>
         //   if (cond) { [[ val x1 = thn; k(x1) ]] } else { [[ val x2 = els; k(x2) ]] }
         case Stmt.If(cond, thn, els) =>
           val tpe = thn.tpe
-          assert(Type.equals(thn.tpe, els.tpe))
+          util.assert(Type.equals(thn.tpe, els.tpe))
           joinpoint(id, tpe, normalize(body)) { k =>
             val x1 = Id(id.name)
             val x2 = Id(id.name)
@@ -451,23 +447,29 @@ object Normalizer { normal =>
     }.getOrElse { INTERNAL_ERROR("Should not happen") }
 
   @targetName("preserveTypesStmt")
-  inline def preserveTypes(before: Stmt)(inline f: Stmt => Stmt)(using C: Context): Stmt = if (C.debug) {
+  inline def preserveTypes(before: Stmt)(inline f: Stmt => Stmt): Stmt = debug {
     val after = f(before)
-    assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    val tpeBefore = before.typing.tpe
+    val tpeAfter = after.typing.tpe
+    util.assert(Type.equals(tpeBefore, tpeAfter), s"Normalization doesn't preserve types.\nBefore: ${tpeBefore}\nAfter:  ${tpeAfter}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
     after
-  } else f(before)
+  } { f(before) }
 
   @targetName("preserveTypesExpr")
-  inline def preserveTypes(before: Expr)(inline f: Expr => Expr)(using C: Context): Expr = if (C.debug) {
+  inline def preserveTypes(before: Expr)(inline f: Expr => Expr): Expr = debug {
     val after = f(before)
-    assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    val tpeBefore = before.typing.tpe
+    val tpeAfter = after.typing.tpe
+    util.assert(Type.equals(tpeBefore, tpeAfter), s"Normalization doesn't preserve types.\nBefore: ${tpeBefore}\nAfter:  ${tpeAfter}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
     after
-  } else f(before)
+  } { f(before) }
 
   @targetName("preserveTypesBlock")
-  inline def preserveTypes(before: Block)(inline f: Block => Block)(using C: Context): Block = if (C.debug) {
+  inline def preserveTypes(before: Block)(inline f: Block => Block): Block = debug {
     val after = f(before)
-    assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    val tpeBefore = before.typing.tpe
+    val tpeAfter = after.typing.tpe
+    util.assert(Type.equals(tpeBefore, tpeAfter), s"Normalization doesn't preserve types.\nBefore: ${tpeBefore}\nAfter:  ${tpeAfter}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
     after
-  } else f(before)
+  } { f(before) }
 }

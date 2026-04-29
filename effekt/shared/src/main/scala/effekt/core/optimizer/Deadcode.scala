@@ -16,7 +16,7 @@ class Deadcode(reachable: Map[Id, Usage])
   override def rewrite(stmt: Stmt): Trampoline[Stmt] = stmt match {
     // Remove local unused definitions
     case Stmt.Def(id, block, body) if unused(id) => rewrite(body)
-    case Stmt.Let(id, binding, body) if binding.capt.isEmpty && unused(id) => rewrite(body)
+    case Stmt.Let(id, binding, body) if unused(id) => rewrite(body)
 
     case Stmt.Reset(body) =>
       rewrite(body).map {

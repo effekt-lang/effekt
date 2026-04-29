@@ -10,6 +10,7 @@ import effekt.util.messages.ErrorReporter
 import effekt.util.Trampoline
 import effekt.symbols.ErrorMessageInterpolator
 import effekt.util.UByte
+import effekt.util.{ DB, toDB }
 
 import scala.annotation.tailrec
 
@@ -69,7 +70,7 @@ object Transformer {
 
     case core.Extern.Include(ff, contents) =>
       Include(ff, contents)
-    
+
     case core.Extern.Data(id, tparams, body) =>
       val tBody = body match {
         case core.ExternBody.StringExternBody(featureFlag, Template(strings, args)) =>
@@ -105,11 +106,11 @@ object Transformer {
         noteParameters(bparams)
 
         // Does not work for mutually recursive local definitions (which are not supported anyway, at the moment)
-        val freeValueParams = block.free.freeValues.collect {
+        val freeValueParams = block.free.values.iterator.collect {
           // globals are NOT free
           case (id, tpe) if !BPC.globals.contains(id) => Variable(transform(id), transform(tpe))
         }
-        val freeBlockParams = block.free.freeBlocks.flatMap {
+        val freeBlockParams = block.free.blocks.iterator.flatMap {
 
           // Function itself
           case (pid, (tpe, capt)) if pid == id => Set.empty
@@ -151,7 +152,7 @@ object Transformer {
             transform(rest)
           case BlockInfo.Parameter(_) =>
             noteParameter(id, tpe)
-            transform(substitute(rest)(using Substitution(Map(), Map(), Map(), Map(id -> core.BlockVar(other, tpe, capt)))))
+            transform(substitute(rest)(using Substitution(DB.empty, DB.empty, DB.empty, DB(id, core.BlockVar(other, tpe, capt)))))
         }
 
       case core.Def(id, block @ core.Unbox(expr), rest) =>
@@ -163,7 +164,7 @@ object Transformer {
         }
 
       case core.Let(id, core.ValueVar(otherId, otherTpe), rest) =>
-        transform(substitute(rest)(using Substitution(Map(), Map(), Map(id -> core.ValueVar(otherId, otherTpe)), Map())))
+        transform(substitute(rest)(using Substitution(DB.empty, DB.empty, DB(id, core.ValueVar(otherId, otherTpe)), DB.empty)))
 
       case core.Let(id, expr, rest) =>
         transformNamed(Variable(transform(id), transform(expr.tpe)), expr).run { _ =>
