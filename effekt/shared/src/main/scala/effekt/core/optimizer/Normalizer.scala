@@ -449,21 +449,27 @@ object Normalizer { normal =>
   @targetName("preserveTypesStmt")
   inline def preserveTypes(before: Stmt)(inline f: Stmt => Stmt): Stmt = debug {
     val after = f(before)
-    assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    val tpeBefore = before.typing.tpe
+    val tpeAfter = after.typing.tpe
+    assert(Type.equals(tpeBefore, tpeAfter), s"Normalization doesn't preserve types.\nBefore: ${tpeBefore}\nAfter:  ${tpeAfter}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
     after
   } { f(before) }
 
   @targetName("preserveTypesExpr")
   inline def preserveTypes(before: Expr)(inline f: Expr => Expr): Expr = debug {
     val after = f(before)
-    assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    val tpeBefore = before.typing.tpe
+    val tpeAfter = after.typing.tpe
+    assert(Type.equals(tpeBefore, tpeAfter), s"Normalization doesn't preserve types.\nBefore: ${tpeBefore}\nAfter:  ${tpeAfter}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
     after
   } { f(before) }
 
   @targetName("preserveTypesBlock")
   inline def preserveTypes(before: Block)(inline f: Block => Block): Block = debug {
     val after = f(before)
-    assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    val tpeBefore = before.typing.tpe
+    val tpeAfter = after.typing.tpe
+    assert(Type.equals(tpeBefore, tpeAfter), s"Normalization doesn't preserve types.\nBefore: ${tpeBefore}\nAfter:  ${tpeAfter}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
     after
   } { f(before) }
 }
