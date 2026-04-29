@@ -145,16 +145,15 @@ class Reachable(
     case Stmt.Match(scrutinee, tpe, clauses, default) =>
       process(scrutinee)
       process(tpe)
-      clauses.foreach { case (id, value) => process(value) }
+      clauses.foreach { case (id, clause) => process(clause) }
       default.foreach(process)
     case Stmt.Alloc(id, init, region, body) =>
       process(init)
       process(region)
       process(body)
     case Stmt.Var(ref, init, capture, body) =>
-      process(init)
-      process(body)
-    case Stmt.Get(ref, tpe, id, capt, body) =>
+      process(init); process(body)
+    case Stmt.Get(id, tpe, ref, capt, body) =>
       process(ref); process(tpe); process(body)
     case Stmt.Put(ref, capt, value, body) =>
       process(ref); process(value); process(body)
