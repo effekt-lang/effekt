@@ -720,18 +720,18 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Used for fields where "please wrap this in braces" is not good advice to be told by [[resolveValueType]].
    */
   def resolveNonfunctionValueParam(p: source.ValueParam)(using Context): ValueParam = {
-    val sym = ValueParam(Name.local(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = false)), p.isImplicit, decl = p)
+    val sym = ValueParam(Name(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = false)), p.isImplicit, decl = p)
     Context.assignSymbol(p.id, sym)
     sym
   }
 
   def resolve(p: source.ValueParam)(using Context): ValueParam = {
-    val sym = ValueParam(Name.local(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = true)), p.isImplicit, decl = p)
+    val sym = ValueParam(Name(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = true)), p.isImplicit, decl = p)
     Context.assignSymbol(p.id, sym)
     sym
   }
   def resolve(p: source.BlockParam)(using Context): BlockParam = {
-    val name = Name.local(p.id)
+    val name = Name(p.id)
     val sym: BlockParam = BlockParam(name, p.tpe.map { tpe => resolveBlockType(tpe, isParam = true) }, CaptureParam(name), p.isImplicit, p)
     Context.assignSymbol(p.id, sym)
     sym
@@ -773,7 +773,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.IgnorePattern(_)     => Nil
     case source.LiteralPattern(lit, _) => Nil
     case source.AnyPattern(id, _) =>
-      val p = ValueParam(Name.local(id), None, isImplicit = false, decl = id)
+      val p = ValueParam(Name(id), None, isImplicit = false, decl = id)
       Context.assignSymbol(id, p)
       List(p)
     case source.TagPattern(id, patterns, _) =>
@@ -893,7 +893,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       var cps: List[Capture] = Nil
       val bps = bparams.map {
         case (id, tpe) =>
-          val name = id.map(Name.local).getOrElse(NoName)
+          val name = id.map(Name.apply).getOrElse(NoName)
           val cap = CaptureParam(name)
           cps = cps :+ cap
           resolveBlockType(tpe)
@@ -961,7 +961,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Resolves type variables, term vars are resolved as part of resolve(tree: Tree)
    */
   def resolve(id: Id)(using Context): TypeParam = Context.at(id) {
-    val sym: TypeParam = TypeParam(Name.local(id))
+    val sym: TypeParam = TypeParam(Name(id))
     Context.define(id, sym)
     sym
   }
@@ -1013,7 +1013,6 @@ object Namer extends Phase[Parsed, NameResolved] {
  * Environment Utils -- we use a mutable cell to express adding definitions more easily
  */
 trait NamerOps extends ContextOps { Context: Context =>
-
   /**
    * The state of the namer phase
    */
@@ -1035,9 +1034,11 @@ trait NamerOps extends ContextOps { Context: Context =>
     result
   }
 
-  private[namer] def nameFor(id: IdDef): Name = scope.path match {
-    case Some(path) => QualifiedName(path, id.name)
-    case None => LocalName(id.name)
+  private[namer] def nameFor(id: IdDef): Name = {
+    val fullPath = scope.path.toList.flatten ++ id.path
+    if fullPath.isEmpty
+      then LocalName(id.name)
+      else QualifiedName(fullPath, id.name)
   }
 
   private[namer] def requireToplevel(kind: String): Unit =
@@ -1052,23 +1053,37 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   // Name Binding and Resolution
   // ===========================
+  inline private[namer] def defineInPaths(path: List[String], inline baseCase: => Unit): Unit = {
+    def defineInPath(p: List[String]): Unit = p match {
+      case Nil => baseCase
+      case ns :: rest => namespace(ns) { defineInPath(rest) }
+    }
+
+    // define in all suffixes
+    path.tails.foreach { suffix =>
+      defineInPath(suffix)
+    }
+  }
+
   private[namer] def define(id: Id, s: TermSymbol): Unit = {
     assignSymbol(id, s)
-    scope.define(id.name, s)
+    defineInPaths(id.path, scope.define(id.name, s))
   }
 
   private[namer] def define(id: Id, s: TypeSymbol): Unit = {
     assignSymbol(id, s)
-    scope.define(id.name, s)
+    defineInPaths(id.path, scope.define(id.name, s))
   }
 
   private[namer] def bind(s: Capture): Unit = bind(s.name.name, s)
 
   private[namer] def bind(name: String, s: Capture): Unit = scope.define(name, s)
 
-  private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.name, s)
+  private[namer] def bind(s: TermSymbol): Unit =
+    defineInPaths(s.name.path, scope.define(s.name.name, s))
 
-  private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.name, s)
+  private[namer] def bind(s: TypeSymbol): Unit =
+    defineInPaths(s.name.path, scope.define(s.name.name, s))
 
   private[namer] def bindParams(params: List[Param]) =
     params.foreach { p => bind(p) }

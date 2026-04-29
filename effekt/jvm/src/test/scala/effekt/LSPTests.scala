@@ -1335,6 +1335,7 @@ class LSPTests extends FunSuite {
              |  List(
              |    FunDef(
              |      IdDef(
+             |        Nil,
              |        main,
              |        Span(StringSource(def main() = <>, file://test.effekt), 4, 8, Real())
              |      ),
@@ -1361,6 +1362,7 @@ class LSPTests extends FunSuite {
              |      Return(
              |        Hole(
              |          IdDef(
+             |            Nil,
              |            hole,
              |            Span(
              |              StringSource(def main() = <>, file://test.effekt),

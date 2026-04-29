@@ -254,11 +254,15 @@ sealed trait Id extends Tree {
   def name: String
   def symbol(using C: Context): Symbol = C.symbolOf(this)
   def clone(using C: Context): Id
+  def path: List[String]
 }
-case class IdDef(name: String, span: Span) extends Id {
+case class IdDef(path: List[String], name: String, span: Span) extends Id {
   def clone(using C: Context): IdDef = {
-    IdDef(name, span)
+    IdDef(path, name, span)
   }
+}
+object IdDef {
+  def apply(name: String, span: Span): IdDef = IdDef(Nil, name, span)
 }
 case class IdRef(path: List[String], name: String, span: Span) extends Id {
   def clone(using C: Context): IdRef = {

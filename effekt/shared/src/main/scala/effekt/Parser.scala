@@ -1508,7 +1508,9 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def idDef(): IdDef =
     nonterminal:
-      IdDef(ident(), span())
+      some(ident, PathSep) match {
+        case ids => IdDef(ids.init, ids.last, span())
+      }
 
   def isIdent: Boolean = peek.kind match {
     case Ident(id) => true
