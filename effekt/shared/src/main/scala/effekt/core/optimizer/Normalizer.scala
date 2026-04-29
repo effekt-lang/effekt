@@ -216,7 +216,7 @@ object Normalizer { normal =>
       case Expr.Make(data, tag, targs, vargs) if clauses.exists { case (id, _) => id == tag } =>
         val clause: BlockLit = clauses.collectFirst { case (id, cl) if id == tag => cl }.get
         val result = reduce(clause, targs, vargs.map(normalize), Nil)
-        assert(Type.equals(result.tpe, tpe))
+        util.assert(Type.equals(result.tpe, tpe))
         normalize(result)
       case Expr.Make(data, tag, targs, vargs) if default.isDefined =>
         normalize(default.get)
@@ -230,7 +230,7 @@ object Normalizer { normal =>
       case Expr.Literal(true, annotatedType) => normalize(thn)
       case Expr.Literal(false, annotatedType) => normalize(els)
       case _ =>
-        assert(Type.equals(thn.tpe, els.tpe), s"Then and else branch have different types: ${util.show(thn.tpe)} != ${util.show(els.tpe)}\n\n${util.show(thn)}\n\n${util.show(els)}\n\n${util.show(s)}")
+        util.assert(Type.equals(thn.tpe, els.tpe), s"Then and else branch have different types: ${util.show(thn.tpe)} != ${util.show(els.tpe)}\n\n${util.show(thn)}\n\n${util.show(els)}\n\n${util.show(s)}")
         If(normalize(cond), normalize(thn), normalize(els))
     }
 
@@ -266,7 +266,7 @@ object Normalizer { normal =>
         //   if (cond) { [[ val x1 = thn; k(x1) ]] } else { [[ val x2 = els; k(x2) ]] }
         case Stmt.If(cond, thn, els) =>
           val tpe = thn.tpe
-          assert(Type.equals(thn.tpe, els.tpe))
+          util.assert(Type.equals(thn.tpe, els.tpe))
           joinpoint(id, tpe, normalize(body)) { k =>
             val x1 = Id(id.name)
             val x2 = Id(id.name)
@@ -451,7 +451,7 @@ object Normalizer { normal =>
     val after = f(before)
     val tpeBefore = before.typing.tpe
     val tpeAfter = after.typing.tpe
-    assert(Type.equals(tpeBefore, tpeAfter), s"Normalization doesn't preserve types.\nBefore: ${tpeBefore}\nAfter:  ${tpeAfter}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    util.assert(Type.equals(tpeBefore, tpeAfter), s"Normalization doesn't preserve types.\nBefore: ${tpeBefore}\nAfter:  ${tpeAfter}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
     after
   } { f(before) }
 
@@ -460,7 +460,7 @@ object Normalizer { normal =>
     val after = f(before)
     val tpeBefore = before.typing.tpe
     val tpeAfter = after.typing.tpe
-    assert(Type.equals(tpeBefore, tpeAfter), s"Normalization doesn't preserve types.\nBefore: ${tpeBefore}\nAfter:  ${tpeAfter}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    util.assert(Type.equals(tpeBefore, tpeAfter), s"Normalization doesn't preserve types.\nBefore: ${tpeBefore}\nAfter:  ${tpeAfter}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
     after
   } { f(before) }
 
@@ -469,7 +469,7 @@ object Normalizer { normal =>
     val after = f(before)
     val tpeBefore = before.typing.tpe
     val tpeAfter = after.typing.tpe
-    assert(Type.equals(tpeBefore, tpeAfter), s"Normalization doesn't preserve types.\nBefore: ${tpeBefore}\nAfter:  ${tpeAfter}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    util.assert(Type.equals(tpeBefore, tpeAfter), s"Normalization doesn't preserve types.\nBefore: ${tpeBefore}\nAfter:  ${tpeAfter}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
     after
   } { f(before) }
 }

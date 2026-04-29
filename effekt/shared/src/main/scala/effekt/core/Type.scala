@@ -140,8 +140,8 @@ object Type {
 
   def instantiate(f: BlockType.Function, targs: List[ValueType], cargs: List[Captures]): BlockType.Function = f match {
     case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-      assert(targs.size == tparams.size, s"Wrong number of type arguments\n  targs: ${targs}\n  tparams: ${tparams}")
-      assert(cargs.size == cparams.size, "Wrong number of capture arguments")
+      util.assert(targs.size == tparams.size, s"Wrong number of type arguments\n  targs: ${targs}\n  tparams: ${tparams}")
+      util.assert(cargs.size == cparams.size, "Wrong number of capture arguments")
 
       val tsubst = (tparams zip targs).toDB
       val csubst = (cparams zip cargs).toDB
@@ -288,7 +288,7 @@ object Type {
       // check all are defined
       val declared = decl.properties.map(_.id).toSet
       val implemented = definitions.map(_._1).toSet
-      assert(declared == implemented, s"Interface ${interface.name} declares ${declared}, but implemented: ${implemented}")
+      util.assert(declared == implemented, s"Interface ${interface.name} declares ${declared}, but implemented: ${implemented}")
 
       // [A]
       val universalParams = decl.tparams
