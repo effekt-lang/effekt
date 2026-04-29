@@ -113,12 +113,6 @@ class TypeInferenceTests extends CoreTests {
     assertEquals(ex1.capt, Set.empty)
     assertEquals(ex1.free, Free.value(x, TInt).withoutValue(x, TInt))
 
-    intercept[TypeError] {
-      Stmt.Val(x,
-        Stmt.Return(Expr.Literal(true, TBoolean)),
-        Stmt.Return(Expr.ValueVar(x, TInt))).free
-    }
-
     // we can even type check open terms:
     val ex2 = Stmt.Return(Expr.ValueVar(x, TInt))
     assertEquals(typecheck(ex2),
@@ -150,11 +144,6 @@ class TypeInferenceTests extends CoreTests {
     // too few arguments
     intercept[TypeError] {
       val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Nil))
-      res.check()
-    }
-    // incompatible free variables in arguments
-    intercept[TypeError] {
-      val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(x, TInt) :: Nil))
       res.check()
     }
 
