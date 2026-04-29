@@ -20,12 +20,12 @@ trait Symbol {
   /**
    * The name of this symbol
    */
-  val name: Name
+  lazy val name: Name
 
   /**
    * The unique id of this symbol
    */
-  val id: Int = Symbol.fresh.next()
+  lazy val id: Int = Symbol.fresh.next()
 
   /**
    * Is this symbol synthesized? (e.g. a constructor or field access)
