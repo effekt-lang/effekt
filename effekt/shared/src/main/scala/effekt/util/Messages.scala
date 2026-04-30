@@ -14,6 +14,7 @@ object messages {
   case class AmbiguousOverloadError(matches: List[(symbols.BlockSymbol, symbols.FunctionType)], range: Option[Range]) extends EffektError { val severity = Error }
   case class FailedOverloadError(failedAttempts: List[(symbols.BlockSymbol, symbols.FunctionType, EffektMessages)], range: Option[Range]) extends EffektError { val severity = Error }
   case class ImplicitInstantiationError(stencil: source.GenerateImplicitArgs.Error, tpe: symbols.Type, range: Option[Range]) extends EffektError { val severity = Error }
+  case class ImplicitMaxRecursionError(msg: String, range: Option[Range]) extends EffektError { val severity = Error }
   case class PlainTextError(content: String, range: Option[Range], severity: Severity) extends EffektError
   case class StructuredError(content: StructuredMessage, range: Option[Range], severity: Severity) extends EffektError
 

@@ -96,6 +96,7 @@ trait ColoredMessaging extends EffektMessaging {
       }
 
       mainMessage + "\n\n" + explanations.mkString("\n\n") + "\n"
+    case ImplicitMaxRecursionError(msg, range) => msg
     case ImplicitInstantiationError(err, tpe, range) =>
       def formatIndex(i: Int): String = i match {
         case 0 => "1st"
