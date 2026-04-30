@@ -16,6 +16,7 @@ import effekt.context.Try
 
 import scala.language.implicitConversions
 import scala.collection.mutable
+import scala.annotation.tailrec
 
 /**
  * Typechecking
@@ -227,7 +228,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case _ => Context.abort("Cannot infer function type for callee.")
         }
 
-        val Result(t, eff) = checkCallTo(c, "function", Nil, tpe, targs map { _.resolveValueType }, vargs, bargs, expected, ImplicitContext.empty)
+        val Result(t, eff) = checkCallTo(c, "function", Nil, Nil, tpe, targs map { _.resolveValueType }, vargs, bargs, expected, None)
         Result(t, eff ++ funEffs)
 
       // precondition: PreTyper translates all uniform-function calls to `Call`.
@@ -1163,11 +1164,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
   )(using Context, Captures): Result[ValueType] = {
     val sym = id.symbol
 
-    val (methods, impls) = sym match {
+    val (methods, scope) = sym match {
       // an overloaded call target
-      case CallTarget(syms, impls) => (syms.flatten.collect { case op: Operation => op }, impls)
+      case CallTarget(syms, scope) => (syms.flatten.collect { case op: Operation => op }, scope)
       // already resolved by a previous attempt to typecheck
-      case sym: Operation => (List(sym), Map.empty[BlockSymbol, ImplicitContext])
+      case sym: Operation => (List(sym), None)
       case s => Context.panic(s"Not a valid method: ${s} : ${s.getClass.getSimpleName}")
     }
 
@@ -1207,7 +1208,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       //   1. make up and annotate unification variables, if no type arguments are there
       //   2. type check call with either existing or made up type arguments
 
-      checkCallTo(call, op.name.name, op.vparams.map { p => p.name.name }, funTpe, synthTargs, vargs, bargs, expected, impls.getOrElse(op, ImplicitContext.empty))
+      checkCallTo(call, op.name.name, op.vparams, op.bparams, funTpe, synthTargs, vargs, bargs, expected, scope)
     }
     resolveOverload(id, List(successes), errors)
   }
@@ -1228,11 +1229,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
 
-    val (scopes, impls) = id.symbol match {
+    val (scopes, iscope) = id.symbol match {
       // an overloaded call target
-      case CallTarget(syms, impls) => (syms, impls)
+      case CallTarget(syms, iscope) => (syms, iscope)
       // already resolved by a previous attempt to typecheck
-      case sym: BlockSymbol => (List(Set(sym)), Map.empty[BlockSymbol, ImplicitContext])
+      case sym: BlockSymbol => (List(Set(sym)), None)
       case id: ValueSymbol => Context.abort(pp"Cannot call value ${id}")
     }
 
@@ -1256,11 +1257,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // - If there is exactly one match, fully typecheck the call with this.
     val results = scopes map { scope => tryEach(scope.toList) { receiver =>
       val (funTpe, capture) = findFunctionTypeFor(receiver)
-      val vpnames = receiver match {
-        case c: Callable  => c.vparams.map(_.name.name)
-        case _ => Nil
+      val (vps, bps) = receiver match {
+        case c: Callable  => (c.vparams, c.bparams)
+        case _ => (Nil, Nil)
       }
-      val Result(tpe, effs) = checkCallTo(call, receiver.name.name, vpnames, funTpe, targs, vargs, bargs, expected, impls.getOrElse(receiver, ImplicitContext.empty))
+      val Result(tpe, effs) = checkCallTo(call, receiver.name.name, vps, bps, funTpe, targs, vargs, bargs, expected, iscope)
       // This is different, compared to method calls:
       usingCapture(capture)
       Result(tpe, effs)
@@ -1328,9 +1329,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   object Aligned {
     extension[A,B](self: Aligned[A, B])
-      def fillImplicit[R <: A](by: (B, Int) => Option[R]): (Aligned[A,B], List[R]) = {
-        val pre = self.matched.length
-        val (remaining, impl) = self.missing.zipWithIndex.partitionMap{ (a,i) => by(a, i + pre).map((_, a)).toRight(a) }
+      def fillImplicit[R <: A, C](use: List[C])(by: (Int, C) => Option[R]): (Aligned[A,B], List[R]) = {
+        val useActually = use.drop(self.matched.length)
+        val (remaining, impl) = self.missing.zip(useActually).zipWithIndex.partitionMap{ case ((a,c), i) => by(i, c).map((_, a)).toRight(a) }
         (Aligned(self.matched ++ impl, self.extra, remaining), impl.map { (x, _) => x })
       }
     def apply[A, B](got: List[A], expected: List[B]): Aligned[A, B] = {
@@ -1453,20 +1454,23 @@ object Typer extends Phase[NameResolved, Typechecked] {
   def checkCallTo(
     call: source.CallLike,
     name: String,
-    vpnames: List[String],
+    knownVParams: List[ValueParam],
+    knownBParams: List[BlockParam],
     funTpe: FunctionType,
     targs: List[ValueType],
     vargs: List[source.ValueArg],
     bargs: List[source.Term],
     expected: Option[ValueType],
-    potentialImplicits: ImplicitContext
+    scope: Option[scopes.Scope]
   )(using Context, Captures): Result[ValueType] = {
     val callsite = currentCapture
 
     // (0) Check that arg & param counts align
     val atargs = Aligned(targs, funTpe.tparams)
-    val (avargs, implicitVargs) = Aligned(vargs, funTpe.vparams).fillImplicit { (_, i) => potentialImplicits.values.get(i) }
-    val (abargs, implicitBargs) = Aligned(bargs, funTpe.bparams).fillImplicit { (_, i) => potentialImplicits.blocks.get(i) }
+    val (avargs, implicitVargs) = Aligned(vargs, funTpe.vparams)
+      .fillImplicit(knownVParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitValue(p, i, scope) }
+    val (abargs, implicitBargs) = Aligned(bargs, funTpe.bparams)
+      .fillImplicit(knownBParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitBlock(p, i, scope) }
     assertArgsParamsAlign(name = Some(name), atargs, avargs, abargs)
 
     // (1) Instantiate blocktype
@@ -1484,6 +1488,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // to disambiguate based on the capabilities in scope.
     var effs: Effects = Effects()
 
+    val vpnames = knownVParams.map { p => p.name.name }
     (vpnames.map(Some.apply).zipAll(vargs, None, source.ValueArg.Unnamed(source.UnitLit(source.Span.missing)))) foreach {
       case (Some(expName), source.ValueArg(Some(gotName), _, _)) if expName != gotName =>
         if (vpnames.contains(gotName)) {
@@ -1592,6 +1597,21 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val successes = results.collect { case (sym, Right((r, st))) => (sym, r, st) }
     val errors = results.collect { case (sym, Left(r)) => (sym, r) }
     (successes, errors)
+  }
+
+  def iterativeDeepening[R](start: Int, max: Int)(f: Int => R)(shouldDeepen: util.messages.EffektError => Boolean)(using Context): R = {
+    @tailrec
+    def go(d: Int): R = {
+      val oldTyperstate = Context.backupTyperstate()
+      try {
+        f(d)
+      } catch {
+        case e: util.messages.FatalPhaseError if shouldDeepen(e.message) && d < max =>
+          Context.restoreTyperstate(oldTyperstate)
+          go(d + 1)
+      }
+    }
+    go(start)
   }
 
 
