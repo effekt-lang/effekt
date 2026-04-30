@@ -1328,9 +1328,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   object Aligned {
     extension[A,B](self: Aligned[A, B])
-      def fillImplicit[R <: A, C](use: List[C])(by: C => Option[R]): (Aligned[A,B], List[R]) = {
+      def fillImplicit[R <: A, C](use: List[C])(by: (Int, C) => Option[R]): (Aligned[A,B], List[R]) = {
         val useActually = use.drop(self.matched.length)
-        val (remaining, impl) = self.missing.zip(useActually).partitionMap{ (a,c) => by(c).map((_, a)).toRight(a) }
+        val (remaining, impl) = self.missing.zip(useActually).zipWithIndex.partitionMap{ case ((a,c), i) => by(i, c).map((_, a)).toRight(a) }
         (Aligned(self.matched ++ impl, self.extra, remaining), impl.map { (x, _) => x })
       }
     def apply[A, B](got: List[A], expected: List[B]): Aligned[A, B] = {
@@ -1467,9 +1467,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // (0) Check that arg & param counts align
     val atargs = Aligned(targs, funTpe.tparams)
     val (avargs, implicitVargs) = Aligned(vargs, funTpe.vparams)
-      .fillImplicit(knownVParams) { p => source.GenerateImplicitArgs.resolveImplicitValue(p, scope) }
+      .fillImplicit(knownVParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitValue(p, i, scope) }
     val (abargs, implicitBargs) = Aligned(bargs, funTpe.bparams)
-      .fillImplicit(knownBParams) { p => source.GenerateImplicitArgs.resolveImplicitBlock(p, scope) }
+      .fillImplicit(knownBParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitBlock(p, i, scope) }
     assertArgsParamsAlign(name = Some(name), atargs, avargs, abargs)
 
     // (1) Instantiate blocktype
