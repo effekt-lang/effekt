@@ -141,14 +141,16 @@ object GenerateImplicitArgs {
     (p.name.name, p.tpe) match {
       case ("sourcePosition", _) =>
         // This generates a dummy source to be name-resolved (the actual arguments will be generated later)
-        val candidates = ???
+        val candidates = scope.lookupOverloaded(IdRef(Nil, "SourcePosition", Span.missing), term => !term.isInstanceOf[Operation])
+          .map { scope => scope.collect { case b: symbols.BlockSymbol => b } }
         SourcePosition(symbols.CallTarget(candidates, Some(scope.scope)))
       case ("callId", _) => CallId()
       case (name, Some(symbols.BoxedType(t, capt))) =>
         // try filling boxed types by instantiating a block argument and boxing it
         BoxedStencil(name, generateImplicitBlockArg(symbols.BlockParam(p.name, Some(t), symbols.Capture.CaptureParam(p.name), true, NoSource), scope))
       case _ =>
-        ImplicitVar("value argument", p.name.name, ???)
+        val sym = scope.lookupFirstTerm(IdRef(Nil, p.name.name, Span.missing))
+        ImplicitVar("value argument", p.name.name, sym)
     }
   }
 
@@ -169,10 +171,12 @@ object GenerateImplicitArgs {
           bparams.zipWithIndex.map { (p, i) =>
             BlockParam(IdDef(s"block_arg${i}", Span.missing), Some(source.BlockTypeTree(p, Span.missing)), false, Span.missing)
           }
-        ImplicitBlockLiteral(p.name.name, ???)
+        val candidates = scope.lookupOverloaded(IdRef(Nil, p.name.name, Span.missing), term => !term.isInstanceOf[Operation])
+          .map { scope => scope.collect { case b: symbols.BlockSymbol => b } }
+        ImplicitBlockLiteral(p.name.name, symbols.CallTarget(candidates, Some(scope.scope)))
       case BlockType.InterfaceType(typeConstructor, args) =>
-        // TODO eta-exapnd here, too ?
-        ImplicitVar("block argument", p.name.name, ???)
+        val sym = scope.lookupFirstTerm(IdRef(Nil, p.name.name, Span.missing))
+        ImplicitVar("block argument", p.name.name, sym)
     }
 
   // Instantiation (during typer)
