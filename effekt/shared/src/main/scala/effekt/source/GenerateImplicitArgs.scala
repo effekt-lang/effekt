@@ -1,13 +1,11 @@
 package effekt
 package source
 
-import scala.collection.mutable
 import scala.util.DynamicVariable
 
 import effekt.util.messages.EffektMessages
 import effekt.context.Context
-import effekt.symbols.scopes.Scope
-import effekt.symbols.{BlockSymbol, BlockType, ValueType, Callable, ImplicitContext, builtins, Name}
+import effekt.symbols.{BlockType, ValueType, builtins, Name}
 import effekt.context.Annotations
 import effekt.context.Try
 
@@ -21,7 +19,7 @@ object GenerateImplicitArgs {
     def kind: String
     def explanation: Option[String] = None
   }
-  case class ImplicitBlockLiteral(name: String, content: source.BlockLiteral) extends ImplicitStencil {
+  case class ImplicitBlockLiteral(name: String, callTarget: symbols.CallTarget) extends ImplicitStencil {
     def kind = "block argument"
   }
   case class BoxedStencil(name: String, block: ImplicitStencil) extends ImplicitStencil {
@@ -34,8 +32,8 @@ object GenerateImplicitArgs {
         case None => ".\n"
       }))
   }
-  case class ImplicitVar(kind: String, name: String, content: source.Var) extends ImplicitStencil
-  case class SourcePosition(content: source.Call) extends ImplicitStencil {
+  case class ImplicitVar(kind: String, name: String, content: symbols.Symbol) extends ImplicitStencil
+  case class SourcePosition(constructor: symbols.CallTarget) extends ImplicitStencil {
     def name = "sourcePosition"
     def kind = "value argument"
     override def explanation =
@@ -118,14 +116,19 @@ object GenerateImplicitArgs {
     }
   }
 
-  // Initial generation (during namer)
-  // =================================
+  // Initial generation
+  // ==================
 
-  /**
-   * Map for caching the result of [[lookupPotentialImplicits]] (to prevent infinite recursion in Namer)
-   */
-  val foundImplicits: mutable.HashMap[(Scope, BlockSymbol), ImplicitContext] = mutable.HashMap.empty
-
+  def resolveImplicitValue(vparam: symbols.ValueParam, scope: Option[symbols.scopes.Scope])(using Context): Option[ImplicitStencil] = {
+    if (vparam.isImplicit && scope.isDefined) {
+      Some(generateImplicitValueArg(vparam, symbols.scopes.Scoping(Nil, scope.get)))
+    } else None
+  }
+  def resolveImplicitBlock(bparam: symbols.BlockParam, scope: Option[symbols.scopes.Scope])(using Context): Option[ImplicitStencil] = {
+    if (bparam.isImplicit && scope.isDefined) {
+      Some(generateImplicitBlockArg(bparam, symbols.scopes.Scoping(Nil, scope.get)))
+    } else None
+  }
 
   /**
    * Generate source for the given implicit value parameter, matching on the name.
@@ -134,22 +137,18 @@ object GenerateImplicitArgs {
    * Special cases so far:
    * - sourcePosition inserts a call to SourcePosition with the components of the current source position
    */
-  def generateImplicitValueArg(p: symbols.ValueParam)(using Context): ImplicitStencil = {
+  def generateImplicitValueArg(p: symbols.ValueParam, scope: symbols.scopes.Scoping)(using Context): ImplicitStencil = {
     (p.name.name, p.tpe) match {
       case ("sourcePosition", _) =>
         // This generates a dummy source to be name-resolved (the actual arguments will be generated later)
-        SourcePosition(Call(IdTarget(IdRef(Nil, "SourcePosition", Span.missing)), Nil, List(
-          ValueArg(None, Literal("<dummy>", builtins.TString, Span.missing), Span.missing),
-          ValueArg(None, Literal(-1L, builtins.TInt, Span.missing), Span.missing),
-          ValueArg(None, Literal(-1L, builtins.TInt, Span.missing), Span.missing),
-          ValueArg(None, Literal(-1L, builtins.TInt, Span.missing), Span.missing),
-          ValueArg(None, Literal(-1L, builtins.TInt, Span.missing), Span.missing),
-        ), Nil, Span.missing))
+        val candidates = ???
+        SourcePosition(symbols.CallTarget(candidates, Some(scope.scope)))
       case ("callId", _) => CallId()
       case (name, Some(symbols.BoxedType(t, capt))) =>
         // try filling boxed types by instantiating a block argument and boxing it
-        BoxedStencil(name, generateImplicitBlockArg(symbols.BlockParam(p.name, Some(t), symbols.Capture.CaptureParam(p.name), true, NoSource)))
-      case _ => ImplicitVar("value argument", p.name.name, Var(IdRef(Nil, p.name.name, Span.missing), Span.missing))
+        BoxedStencil(name, generateImplicitBlockArg(symbols.BlockParam(p.name, Some(t), symbols.Capture.CaptureParam(p.name), true, NoSource), scope))
+      case _ =>
+        ImplicitVar("value argument", p.name.name, ???)
     }
   }
 
@@ -158,7 +157,7 @@ object GenerateImplicitArgs {
    *
    * Will usually return an eta-expanded (based on annotated type) call to a function with the same name.
    */
-  def generateImplicitBlockArg(p: symbols.BlockParam)(using Context): ImplicitStencil =
+  def generateImplicitBlockArg(p: symbols.BlockParam, scope: symbols.scopes.Scoping)(using Context): ImplicitStencil =
     p.tpe.get match {
       case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
         val gtparams = tparams.map { p => IdDef(p.name.name, Span.missing) }
@@ -170,51 +169,11 @@ object GenerateImplicitArgs {
           bparams.zipWithIndex.map { (p, i) =>
             BlockParam(IdDef(s"block_arg${i}", Span.missing), Some(source.BlockTypeTree(p, Span.missing)), false, Span.missing)
           }
-        ImplicitBlockLiteral(p.name.name, BlockLiteral(gtparams, gvparams, gbparams,
-          Return(Call(IdTarget(IdRef(Nil, p.name.name, Span.missing)), Nil,
-            gvparams.map { x => ValueArg(None, Var(IdRef(Nil, x.id.name, Span.missing), Span.missing), Span.missing) },
-            gbparams.map { x => Var(IdRef(Nil, x.id.name, Span.missing), Span.missing) },
-            Span.missing),
-            Span.missing), Span.missing))
+        ImplicitBlockLiteral(p.name.name, ???)
       case BlockType.InterfaceType(typeConstructor, args) =>
         // TODO eta-exapnd here, too ?
-        ImplicitVar("block argument", p.name.name, Var(IdRef(Nil, p.name.name, Span.missing), Span.missing))
+        ImplicitVar("block argument", p.name.name, ???)
     }
-
-  /**
-   * Returns an initial [[ImplicitContext]] for each of the [[BlockSymbol]]s.
-   *
-   * Is called from [[Namer]] to still be in the correct context to name-resolve the implicit arguments
-   * in [[Namer.resolveImplicits]].
-   */
-  def lookupPotentialImplicits(forCandidates: List[Set[BlockSymbol]], scope: Scope)(using Context): Map[BlockSymbol, ImplicitContext] = {
-    forCandidates.flatMap { level =>
-      level.flatMap { b =>
-        def findCached(b: BlockSymbol, scope: Scope): Option[ImplicitContext] = {
-          foundImplicits.get((scope, b)).orElse {
-            scope match {
-              case Scope.Global(_, _) => None
-              case Scope.Named(_, _, outer) => findCached(b, outer)
-              case Scope.Local(_, _, _, outer) => findCached(b, outer)
-            }
-          }
-        }
-
-        findCached(b, scope).map(b -> _).orElse {
-          b match {
-            // walks up scopes, because block parameters should be eta-expanded below
-            case c: Callable =>
-              val r = ImplicitContext(
-                c.vparams.zipWithIndex.collect { case (p, i) if p.isImplicit => i -> generateImplicitValueArg(p) }.toMap,
-                c.bparams.zipWithIndex.collect { case (p, i) if p.isImplicit => i -> generateImplicitBlockArg(p) }.toMap)
-              foundImplicits.put((scope, b), r)
-              Some(b -> r)
-            case _ => None
-          }
-        }
-      }
-    }.toMap
-  }
 
   // Instantiation (during typer)
   // ============================
@@ -244,49 +203,42 @@ object GenerateImplicitArgs {
           Context.abort(util.messages.ImplicitInstantiationError(
             e, tpe, Context.rangeOf(Context.focus)))
 
-        case (ImplicitBlockLiteral(name, source.BlockLiteral(tparams, vparams, bparams, source.Return(source.Call(fn, targs, vargs, bargs, _), _), _)),
+        case (ImplicitBlockLiteral(name, sym),
           symbols.BlockType.FunctionType(tps, cps, vps, bps, res, effs)) =>
               // We need to refresh the whole binding structure, so we don't have duplicate stuff in the tree.
               // Doing this in a very specialized way here.
               // It annotates the correct concrete types for *this* invocation.
-              val (ftpsyms, ftparams, ftargs) = tparams.map { x =>
-                val sym = symbols.TypeParam(Name.local(x.name))
+              val (ftpsyms, ftparams, ftargs) = tps.map { x =>
+                val sym = symbols.TypeParam(x.name)
                 val (p, a) = generateResolvedId(sym)
                 (sym, p,
                   source.TypeRef(a, Many(Nil, source.Span.missing), source.Span.missing))
               }.unzip3
-              val (fvpsyms, fvparams, fvargs) = (vparams zip vps).map { (x, t) =>
-                val sym = symbols.ValueParam(Name.local(x.id.name), Some(t), false, NoSource)
+              val (fvpsyms, fvparams, fvargs) = vps.zipWithIndex.map { (t, i) =>
+                val sym = symbols.ValueParam(Name.local(s"value_arg${i}"), Some(t), false, NoSource)
                 val (p, a) = generateResolvedId(sym)
                 (sym,
                   source.ValueParam(p, Some(source.ValueTypeTree(sym.tpe.get, source.Span.missing)), false, source.Span.missing): source.ValueParam,
                   source.ValueArg(None, source.Var(a, source.Span.missing), source.Span.missing))
               }.unzip3
-              val (fbsyms, fbparams, fbargs) = (bparams zip bps).map { (x, t) =>
-                val sym = symbols.BlockParam(Name.local(x.id.name), Some(t), x.symbol.capture, false, NoSource)
+              val (fbsyms, fbparams, fbargs) = bps.zipWithIndex.map { (t, i) =>
+                val name = Name.local(s"block_arg${i}")
+                val sym = symbols.BlockParam(name, Some(t), symbols.Capture.CaptureParam(name), false, NoSource)
                 val (p, a) = generateResolvedId(sym)
                 (sym,
                   source.BlockParam(p, Some(source.BlockTypeTree(sym.tpe.get, source.Span.missing)), false, source.Span.missing): source.BlockParam,
                   source.Var(a, source.Span.missing))
               }.unzip3
-              val ffn = fn match {
-                case source.IdTarget(id) =>
-                  val r = source.IdTarget(source.IdRef(Nil, id.name, source.Span.missing))
-                  Context.annotate(Annotations.Symbol, r.id,
-                    id.symbol match {
-                      case symbols.CallTarget(syms, impls) =>
-                        symbols.CallTarget(syms, impls) // needs to be refreshed for recursive uses
-                      case x => x
-                    })
-                  r
-                case _ => Context.panic("Implicit block argument should be an (eta-expanded) name, not an expression")
-              }
+              val target = source.IdTarget(source.IdRef(Nil, name, source.Span.missing))
+              Context.assignSymbol(target.id, sym)
               source.BlockLiteral(ftparams, fvparams, fbparams,
-                source.Return(source.Call(ffn, ftargs, fvargs, fbargs,
+                source.Return(source.Call(target, ftargs, fvargs, fbargs,
                   source.Span.missing), source.Span.missing), source.Span.missing)
 
-        case (ImplicitVar(kind, name, b), _) =>
-          b // TODO Is it a problem if this is used more than once?
+        case (ImplicitVar(kind, name, sym), _) =>
+          val v = Var(IdRef(Nil, name, Span.missing), Span.missing)
+          Context.assignSymbol(v.id, sym)
+          v
 
         case _ =>
           Context.panic("Unexpected type for implicit stencil for a block argument.")
@@ -310,24 +262,26 @@ object GenerateImplicitArgs {
         Context.abort(util.messages.ImplicitInstantiationError(
           e, tpe, Context.rangeOf(Context.focus)))
 
-      case ImplicitVar(kind, name, content) =>
+      case ImplicitVar(kind, name, sym) =>
+        val content = Var(IdRef(Nil, name, Span.missing), Span.missing)
+        Context.assignSymbol(content.id, sym)
         source.ValueArg(Some(name), content, Span.missing) // TODO Is it a problem if this is used more than once?
 
-      case SourcePosition(content) =>
+      case SourcePosition(sym) =>
         // this generates the version with the correct current positions,
         val pos = Context.focus.span
         val from = pos.source.offsetToPosition(pos.from)
         val to = pos.source.offsetToPosition(pos.to)
-        val code: Call = Call(IdTarget(IdRef(Nil, "SourcePosition", Span.missing)), Nil, List(
+        val target = IdTarget(IdRef(Nil, "SourcePosition", Span.missing))
+        val content: Call = Call(target, Nil, List(
           ValueArg(None, Literal(pos.source.name, builtins.TString, Span.missing), Span.missing),
           intArg(from.line), intArg(from.column), intArg(to.line), intArg(to.column)), Nil, Span.missing)
 
         // copying over the annotations generated by Namer.
-        val (x: IdTarget, y: IdTarget) = (content.target, code.target): @unchecked
-        Context.copyAnnotations(x.id, y.id)
+        Context.assignSymbol(target.id, sym)
 
         // and returns the result
-        source.ValueArg(Some(v.name), code, Span.missing)
+        source.ValueArg(Some(v.name), content, Span.missing)
 
       case CallId() =>
         val id = nextCallId
@@ -342,30 +296,6 @@ object GenerateImplicitArgs {
           Span.missing)
 
       case ImplicitBlockLiteral(_, _) => Context.panic("Cannot instantiate block literal as an implicit value argument.")
-    }
-  }
-
-  // Running other phases on it
-  // ==========================
-
-  /**
-   * Run body on each of the stencil code parts, generating an Error context if errors occur.
-   *
-   * This is used to pass ImplicitStencils through other phases (currently, Namer).
-   */
-  def runPhaseOn[A](i: Int, s: ImplicitStencil)(body: source.Term => Either[EffektMessages, Unit]): ImplicitStencil = {
-    def runOn(s: ImplicitStencil): Either[EffektMessages, Unit] =
-      s match {
-        case ImplicitBlockLiteral(name, content) => body(content)
-        case ImplicitVar(kind, name, content) => body(content)
-        case SourcePosition(content) => body(content)
-        case BoxedStencil(_, block) => runOn(block)
-        case CallId() => Right(())
-        case Error(_, _, _) => Right(())
-      }
-    runOn(s) match {
-      case Left(msgs) => Error(s, i, msgs)
-      case Right(()) => s
     }
   }
 

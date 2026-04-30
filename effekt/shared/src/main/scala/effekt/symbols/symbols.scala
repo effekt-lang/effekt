@@ -204,22 +204,12 @@ enum Binder extends TermSymbol {
 }
 export Binder.*
 
-case class ImplicitContext(var values: Map[Int, source.GenerateImplicitArgs.ImplicitStencil],
-                           var blocks: Map[Int, source.GenerateImplicitArgs.ImplicitStencil]) {
-  var resolved = false // will be set in namer after the values in the maps are resolved
-}
-object ImplicitContext {
-  val empty = ImplicitContext(Map.empty, Map.empty)
-  empty.resolved = true
-}
-
 /**
  * Synthetic symbol representing potentially multiple call targets
  *
  * Refined by typer.
  */
-case class CallTarget(symbols: List[Set[BlockSymbol]],
-                      potentialImplicits: Map[BlockSymbol, ImplicitContext]) extends BlockSymbol {
+case class CallTarget(symbols: List[Set[BlockSymbol]], scope: Option[scopes.Scope]) extends BlockSymbol {
   val name = NoName
   val decl = NoSource
 }

@@ -475,26 +475,6 @@ object Namer extends Phase[Parsed, NameResolved] {
     case (Nil, _) => ()
   }
 
-  /**
-   * Name-resolves all implicit arguments that could be interesting for calling the given function symbol.
-   *
-   * Errors while doing so are residualized into the respective [[ImplicitContext]] and only reported
-   * during overload resolution later.
-   */
-  def resolveImplicits(id: source.Id)(using Context): Unit = {
-    Context.symbolOf(id) match {
-      case symbols.CallTarget(syms, cs) =>
-        cs.foreach {
-          case (b, c@ImplicitContext(vimpls, bimpls)) if !c.resolved =>
-            c.resolved = true // set as resolved first, so recursive calls do not continue doing so.
-            c.values = vimpls.map { case k -> mv => k -> GenerateImplicitArgs.runPhaseOn(k, mv){ v => Try { resolve(v) } } }
-            c.blocks = bimpls.map { case k -> mb => k -> GenerateImplicitArgs.runPhaseOn(k, mb){ b => Try { resolve(b) } } }
-          case _ => ()
-        }
-      case _ => ()
-    }
-  }
-
   def resolve(t: source.Term)(using Context): Unit = Context.focusing(t) {
 
     case source.Literal(value, tpe, _) => ()
@@ -603,21 +583,19 @@ object Namer extends Phase[Parsed, NameResolved] {
             then Context.abort(pp"Cannot resolve function ${target}, called on an expression.")
         }
       }
-      resolveImplicits(target)
       targs foreach resolveValueType
       vargs foreach resolve
       bargs foreach resolve
 
     case source.Do(target, targs, vargs, bargs, _) =>
       Context.resolveEffectCall(target)
-      resolveImplicits(target)
       targs foreach resolveValueType
       vargs foreach resolve
       bargs foreach resolve
 
     case source.Call(target, targs, vargs, bargs, _) =>
       Context.focusing(target) {
-        case source.IdTarget(id)     => Context.resolveFunctionCalltarget(id); resolveImplicits(id)
+        case source.IdTarget(id)     => Context.resolveFunctionCalltarget(id)
         case source.ExprTarget(expr) => resolve(expr)
       }
       targs foreach resolveValueType
@@ -1156,7 +1134,7 @@ trait NamerOps extends ContextOps { Context: Context =>
 
     if (syms2.nonEmpty) {
       val syms3 = syms2.asInstanceOf[List[Set[BlockSymbol]]]
-      assignSymbol(id, CallTarget(syms3, GenerateImplicitArgs.lookupPotentialImplicits(syms3, scope.scope)))
+      assignSymbol(id, CallTarget(syms3, Some(scope.scope)))
       true
     } else { false }
   }
@@ -1171,7 +1149,7 @@ trait NamerOps extends ContextOps { Context: Context =>
 
     if (syms3.nonEmpty) {
       val syms4 = syms3.asInstanceOf[List[Set[BlockSymbol]]]
-      assignSymbol(id, CallTarget(syms4, GenerateImplicitArgs.lookupPotentialImplicits(syms4, scope.scope)))
+      assignSymbol(id, CallTarget(syms4, Some(scope.scope)))
       true
     } else { false }
   }
@@ -1197,7 +1175,7 @@ trait NamerOps extends ContextOps { Context: Context =>
           // Always abort with the generic message
           abort(pretty"Cannot find a function named `${id}`.")
         }
-        assignSymbol(id, CallTarget(blocks, GenerateImplicitArgs.lookupPotentialImplicits(blocks, scope.scope)))
+        assignSymbol(id, CallTarget(blocks, Some(scope.scope)))
     }
   }
 
@@ -1252,7 +1230,7 @@ trait NamerOps extends ContextOps { Context: Context =>
     }
 
     val bsyms = syms.asInstanceOf[List[Set[BlockSymbol]]]
-    assignSymbol(id, CallTarget(bsyms, GenerateImplicitArgs.lookupPotentialImplicits(bsyms, scope.scope)))
+    assignSymbol(id, CallTarget(bsyms, Some(scope.scope)))
   }
 
   /**
@@ -1267,7 +1245,7 @@ trait NamerOps extends ContextOps { Context: Context =>
     }
 
     val bsyms = syms.asInstanceOf[List[Set[BlockSymbol]]]
-    assignSymbol(id, CallTarget(bsyms, GenerateImplicitArgs.lookupPotentialImplicits(bsyms, scope.scope)))
+    assignSymbol(id, CallTarget(bsyms, Some(scope.scope)))
   }
 
   /**
