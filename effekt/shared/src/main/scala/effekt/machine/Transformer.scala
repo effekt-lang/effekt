@@ -55,7 +55,7 @@ object Transformer {
     Program(declarations, toplevelDefinitions ++ localDefinitions, mainEntry)
   }
 
-  def transform(extern: core.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
+  def transform(extern: core.Extern)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Declaration = extern match {
     case core.Extern.Def(name, qualifiedSignature, tps, cparams, vparams, bparams, ret, capture, body) =>
       // TODO delete, and/or enforce at call site (ImpureApp)
       if bparams.nonEmpty then ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
@@ -88,7 +88,7 @@ object Transformer {
       ExternInterface(transform(id), tparams.map(transform), tBody)
   }
 
-  def transform(body: core.ExternBody[core.Expr])(using ErrorReporter): machine.ExternBody[Variable] = body match {
+  def transform(body: core.ExternBody[core.Expr])(using DeclarationContext, ErrorReporter): machine.ExternBody[Variable] = body match {
     case core.ExternBody.StringExternBody(ff, Template(strings, args)) =>
       ExternBody.StringExternBody(ff, Template(strings, args map {
         case core.ValueVar(id, tpe) => Variable(transform(id), transform(tpe))
@@ -178,6 +178,8 @@ object Transformer {
             perhapsUnbox(values, vparamTypes).run { unboxeds =>
               transformUnboxed(resultType) match {
                 case Type.Positive() =>
+                  Trampoline.Done(ForeignCall(variable, transform(blockName), unboxeds ++ blocks, rest))
+                case Type.Named(_) =>
                   Trampoline.Done(ForeignCall(variable, transform(blockName), unboxeds ++ blocks, rest))
                 case unboxedTpe =>
                   val unboxed = Variable(freshName("unboxed"), unboxedTpe)
@@ -505,6 +507,8 @@ object Transformer {
             transformUnboxed(resultType) match {
               case Type.Positive() =>
                 ForeignCall(variable, transform(blockName), unboxeds, k(variable))
+              case Type.Named(name) =>
+                ForeignCall(variable, transform(blockName), unboxeds, k(variable))
               case unboxedTpe =>
                 val unboxed = Variable(freshName("unboxed"), unboxedTpe)
                 ForeignCall(unboxed, transform(blockName), unboxeds, Coerce(variable, unboxed, k(variable)))
@@ -547,31 +551,37 @@ object Transformer {
         Clause(vparams.map(transform) ++ bparams.map(transform), transform(body).run())
     }
 
-  def transform(param: core.ValueParam)(using BlocksParamsContext, ErrorReporter): Variable =
+  def transform(param: core.ValueParam)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Variable =
     param match {
       case core.ValueParam(name, tpe) =>
         Variable(transform(name), transform(tpe))
     }
 
-  def transform(param: core.BlockParam)(using BlocksParamsContext, ErrorReporter): Variable =
+  def transform(param: core.BlockParam)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Variable =
     param match {
       case core.BlockParam(name, tpe, capt) =>
         Variable(transform(name), transform(tpe))
     }
 
-  def transform(tpe: core.ValueType): Type =
-    Positive()
+  def transform(tpe: core.ValueType)(using DC: DeclarationContext): Type =
+    tpe match {
+      case core.ValueType.Data(name, targs) => DC.findExternData(name) match {
+        case None => Positive()
+        case Some(value) => Type.Named(transform(name))
+      }
+      case _ => Positive()
+    }
 
-  def transformUnboxed(tpe: core.ValueType): Type =
+  def transformUnboxed(tpe: core.ValueType)(using DeclarationContext): Type =
     tpe match {
         case core.Type.TInt => Type.Int()
         case core.Type.TChar => Type.Int()
         case core.Type.TByte => Type.Byte()
         case core.Type.TDouble => Type.Double()
-        case _ => Positive()
+        case other => transform(other)
       }
 
-  def transform(tpe: core.BlockType)(using ErrorReporter): Type = tpe match {
+  def transform(tpe: core.BlockType)(using DeclarationContext, ErrorReporter): Type = tpe match {
     case core.Type.TState(stateType) => Type.Reference(transformUnboxed(stateType))
     case core.Type.TPrompt(answer) => Type.Prompt()
     case core.Type.TResume(result, answer) => Type.Stack()
@@ -610,7 +620,7 @@ object Transformer {
 
   def freshName(baseName: String): String = baseName + "_" + symbols.Symbol.fresh.next()
 
-  def findToplevelBlocksParams(definitions: List[core.Toplevel])(using BlocksParamsContext, ErrorReporter): Unit =
+  def findToplevelBlocksParams(definitions: List[core.Toplevel])(using BlocksParamsContext, DeclarationContext, ErrorReporter): Unit =
     definitions.foreach {
       case Toplevel.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
         noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), Nil)

@@ -50,7 +50,11 @@ object Transformer {
           case Nil => ""
           case tps => tps.mkString(", ")
         }
-        Verbatim(s"; declaration extern type ${name}${ttps} = ${body}")
+        Verbatim(
+          s"""; declaration extern type ${name}${ttps} = ${body}
+              |%${name} = type ${body.fill { case machine.Variable(name, tpe) => PrettyPrinter.localName(name) }}
+              |""".stripMargin
+        )
       case machine.ExternType(name, tps, machine.ExternBody.Unsupported(err)) =>
         Verbatim(s"; unsupported extern type ${name}: ${err}")
       case machine.ExternInterface(name, tps, machine.ExternBody.StringExternBody(_, body)) =>
@@ -451,6 +455,7 @@ object Transformer {
     case machine.Type.Byte()         => IntegerType8()
     case machine.Type.Double()       => DoubleType()
     case machine.Type.Reference(tpe) => referenceType
+    case machine.Type.Named(name)    => NamedType(name)
   }
 
   def environmentSize(environment: machine.Environment): Int =
@@ -466,6 +471,7 @@ object Transformer {
       case machine.Type.Byte()       => 1
       case machine.Type.Double()     => 8 // TODO Make fat?
       case machine.Type.Reference(_) => 16
+      case machine.Type.Named(_)     => 16 // Treating this the same as Positive, might be smaller
     }
 
   def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {

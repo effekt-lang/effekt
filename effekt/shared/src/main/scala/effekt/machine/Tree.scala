@@ -221,6 +221,7 @@ enum Type {
   case Byte()
   case Double()
   case Reference(tpe: Type)
+  case Named(name: String)
 }
 export Type.{ Positive, Negative }
 
