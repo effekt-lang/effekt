@@ -12,3 +12,19 @@ main
 ---
 y_3 !-> 2
 x_5 !-> f_2
+
+/// DROP_PARAMETERS
+def main_0(k) {
+  def f() {
+    k(2)
+  }
+  def g() {
+    f()
+  }
+  g()
+}
+
+/// INLINE
+def main(k) {
+  k(2)
+}

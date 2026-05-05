@@ -42,3 +42,17 @@ main
 ---
 ks1_5 !-> ks_1
 k1_6 !-> k_2
+
+/// DROP_PARAMETERS
+def main(ks_1, k_2) {
+  def go(x_4) {
+    run tmp_7 = eq(x_4, 0);
+    if (tmp_7) {
+      k_2(0, ks_1)
+    } else {
+      run tmp2_8 = sub(x_4, 1);
+      go(tmp2_8)
+    }
+  }
+  go(10)
+}

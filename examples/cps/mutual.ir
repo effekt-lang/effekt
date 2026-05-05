@@ -114,3 +114,23 @@ main
 ---
 ks_5 !-> ks_1
 k_6 !-> k_2
+
+/// DROP_PARAMETERS
+def main(ks_1, k_2) {
+  def even(x_4) {
+    run tmp_7 = eq(x_4, 0);
+    if (tmp_7) {
+      k_2(0, ks_1)
+    } else {
+      run tmp_8 = sub(x_4, 1);
+      run tmp_9 = eq(tmp_8, 0);
+      if (tmp_9) {
+        k_2(0, ks_1)
+      } else {
+        run tmp_10 = sub(tmp_8, 1);
+        even(tmp_10)
+      }
+    }
+  }
+  even(10)
+}
