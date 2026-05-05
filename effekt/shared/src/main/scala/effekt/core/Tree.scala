@@ -1242,7 +1242,7 @@ object sizes {
   inline def size(stmt: Stmt): Int = stmt match {
     case Stmt.Def(id, block, body) => block.size + body.size + 1
     case Stmt.Let(id, binding, body) => binding.size + body.size + 1
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => all(vargs, _.size) + all(bargs, _.size) + body.size + 1
+    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) => all(vargs, _.size) + all(bargs, _.size) + body.size + 1
     case Stmt.Return(expr) => expr.size + 1
     case Stmt.Val(id, binding, body) => binding.size + body.size + 1
     case Stmt.App(callee, targs, vargs, bargs) => callee.size + all(vargs, _.size) + all(bargs, _.size) + 1
@@ -1263,7 +1263,6 @@ object sizes {
   inline def size(expr: Expr): Int = expr match {
     case Expr.ValueVar(id, annotatedType) => 1
     case Expr.Literal(value, annotatedType) => 1
-    case Expr.PureApp(b, targs, vargs) => all(vargs, _.size) + 1
     case Expr.Make(data, tag, targs, vargs) => all(vargs, _.size) + 1
     case Expr.Box(b, annotatedCapture) => b.size + 1
   }
@@ -1348,8 +1347,8 @@ object freeVariables {
     case Stmt.Let(id, binding, body) =>
       body.free.withoutValue(id, binding.tpe) ++ binding.free
 
-    case s @ Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-      val retType = Type.bindingType(s)
+    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
+      val retType = Type.bindingType(Binding.ExternApp(id, purity, callee, targs, vargs, bargs))
       Free.block(callee.id, callee.annotatedTpe, callee.annotatedCapt) ++
         all(vargs, _.free) ++
         all(bargs, _.free) ++
@@ -1408,10 +1407,6 @@ object freeVariables {
       Free.value(id, annotatedType)
 
     case Expr.Literal(value, annotatedType) => Free.empty
-
-    case Expr.PureApp(callee, targs, vargs) =>
-      all(vargs, _.free) ++
-        Free.block(callee.id, callee.annotatedTpe, callee.annotatedCapt)
 
     case Expr.Make(data, tag, targs, vargs) =>
       all(vargs, _.free)
