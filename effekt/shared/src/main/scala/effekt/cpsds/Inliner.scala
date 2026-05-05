@@ -166,7 +166,7 @@ object Inliner {
 
   // --- Entry point ---
 
-  def transform(entrypoint: Id, m: ModuleDecl): ModuleDecl = {
+  def transform(m: ModuleDecl, entrypoint: Id): ModuleDecl = {
     val analysis = UsageAnalysis(m)
     // Mark the entrypoint and all exports as used so they aren't dropped
     analysis.usage.getOrElseUpdate(entrypoint, UsageInfo()).references += 99

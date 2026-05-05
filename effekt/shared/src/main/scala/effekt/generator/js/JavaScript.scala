@@ -53,22 +53,23 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
   }
 
   lazy val CPSTransformed = Optimized map {
-    case (mainSymbol, mainFile, core) =>
+    case (mainId, mainFile, core) =>
       // establish unique names
       val renamed = new Renamer().apply(core)
 
       var tree = effekt.cpsds.transform(renamed)
 
       def optimize(tree: effekt.cpsds.ModuleDecl) =
-        val static = effekt.cpsds.StaticArguments.transform(tree)
-        val inlined = effekt.cpsds.Inliner.transform(mainSymbol, static)
-        effekt.cpsds.Simplifier.transform(inlined)
+        val inlined = effekt.cpsds.Inliner.transform(tree, mainId)
+        val sunk    = effekt.cpsds.BlockSinking.transform(inlined, mainId)
+        val dropped = effekt.cpsds.ParameterDropping.transform(sunk, mainId)
+        effekt.cpsds.Simplifier.transform(dropped)
 
       tree = optimize(tree)
       tree = optimize(tree)
       tree = optimize(tree)
 
-      (mainSymbol, mainFile, core, tree)
+      (mainId, mainFile, core, tree)
   }
 
   lazy val Compile = CPSTransformed map {

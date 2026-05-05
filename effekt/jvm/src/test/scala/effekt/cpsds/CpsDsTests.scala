@@ -7,7 +7,6 @@ import sbt.io.syntax.*
 import kiama.parsing.{ NoSuccess, Success }
 import munit.Location
 import effekt.core.{ Id, Names }
-import effekt.cpsds.flowAnalysis.show
 
 enum Step {
   /** Run a transform and check the result against expectedSource. */
@@ -20,7 +19,7 @@ enum Step {
 
 enum TransformPass(val header: String, val run: (String, ModuleDecl, Id) => ModuleDecl) {
   case Inline extends TransformPass("INLINE",
-    (_, input, mainId) => Inliner.transform(mainId, input))
+    (_, input, mainId) => Inliner.transform(input, mainId))
   case StaticArguments extends TransformPass("STATIC_ARGUMENTS",
     (_, input, _) => cpsds.StaticArguments.transform(input))
   case Simplify extends TransformPass("SIMPLIFY",
@@ -28,16 +27,17 @@ enum TransformPass(val header: String, val run: (String, ModuleDecl, Id) => Modu
   case SinkBlocks extends TransformPass("SINK_BLOCKS",
     (_, input, mainId) => BlockSinking.transform(input, mainId))
   case DropParameters extends TransformPass("DROP_PARAMETERS",
-    (_, input, _) => ???)
+    (_, input, mainId) => ParameterDropping.transform(input, mainId))
 }
 
 enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => String) {
   case Flows extends AnalysisPass("FLOWS",
     (name, input, main) => {
       val flow = input.flows
+      flow.dump(name)
       input.definitions.collect {
         case d: ToplevelDefinition.Def =>
-          s"${d.id}\n---\n${flowAnalysis.solve(d, main).show}"
+          s"${d.id}\n---\n${ParameterDropping.solve(d, main).show}"
         case _ => ()
       }.mkString("\n")
     })
