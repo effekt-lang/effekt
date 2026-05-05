@@ -15,15 +15,10 @@ def main(ks, k) {
 
 go
 ---
-{}       <: k1_4   <: 1st
-{}       <: ks1_3  <: 1st
-{}       <: tmp2_6 <: 1st
-{}       <: tmp_5  <: 1st
-{tmp2_6} <: x_2    <: 1st
+
 main
 ---
-{return}   <: k_8  <: 1st
-{toplevel} <: ks_7 <: 1st
+
 
 
 /// SINK_BLOCKS
@@ -45,10 +40,5 @@ def main_1(ks_7, k_8) {
 
 main
 ---
-{return}     <: k1_6   <: 1st
-{return}     <: k_2    <: 1st
-{toplevel}   <: ks1_5  <: 1st
-{toplevel}   <: ks_1   <: 1st
-{}           <: tmp2_8 <: 1st
-{}           <: tmp_7  <: 1st
-{tmp2_8, 10} <: x_4    <: 1st
+ks1_5 !-> ks_1
+k1_6 !-> k_2
