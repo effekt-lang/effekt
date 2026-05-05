@@ -79,7 +79,8 @@ object BlockSinking {
       var worklist = ids
       while (worklist.nonEmpty) {
         val next = worklist.flatMap { id =>
-          uses.getOrElse(id, Set.empty[Id]).filter(pending.contains)
+          pending.get(id).map(d => d.body.free & pending.keySet).getOrElse(Set.empty)
+          //uses.getOrElse(id, Set.empty[Id]).filter(pending.contains)
         } -- result
         result = result ++ next
         worklist = next
@@ -229,7 +230,7 @@ object BlockSinking {
     def visit(id: Id): Unit = {
       if (visited.contains(id)) return
       visited += id
-      (ctx.uses.getOrElse(id, Set.empty[Id]) & ids).foreach(visit)
+      (pending(id).body.free & ids).foreach(visit)
       result = result :+ id
     }
     ids.foreach(visit)
