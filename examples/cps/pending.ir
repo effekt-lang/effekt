@@ -1,0 +1,35 @@
+def f(x, ks1, k1) {
+  def outer(ks2, k2) {
+    def g(ks3, k3) {
+      k3(1, ks3)
+    }
+    def h(ks4, k4) {
+      g(ks4, k4)
+    }
+    h(ks2, k2)
+  }
+  if (x) {
+    outer(ks1, k1)
+  } else {
+    k1(0, ks1)
+  }
+}
+
+/// SINK_BLOCKS
+
+def f_0(x_1, ks1_2, k1_3) {
+  if (x_1) {
+    def outer_4(ks2_5, k2_6) {
+      def g_7(ks3_8, k3_9) {
+        k3_9(1, ks3_8)
+      }
+      def h_10(ks4_11, k4_12) {
+        g_7(ks4_11, k4_12)
+      }
+      h_10(ks2_5, k2_6)
+    }
+    outer_4(ks1_2, k1_3)
+  } else {
+    k1_3(0, ks1_2)
+  }
+}
