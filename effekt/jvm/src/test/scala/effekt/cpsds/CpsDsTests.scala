@@ -7,6 +7,7 @@ import sbt.io.syntax.*
 import kiama.parsing.{ NoSuccess, Success }
 import munit.Location
 import effekt.core.{ Id, Names }
+import effekt.cpsds.flowAnalysis.show
 
 enum Step {
   /** Run a transform and check the result against expectedSource. */
