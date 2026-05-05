@@ -1,8 +1,8 @@
 def main(k) {
-  def f(y) { k(1) }
+  def f(y) { k(y) }
   def g(x) { x(2) }
   // here f is passed, but to a **known** function
-  // so we _could_ adapt parameteres
+  // so we _could_ adapt parameters
   g(f)
 }
 
@@ -10,7 +10,5 @@ def main(k) {
 
 main
 ---
-{}    <: f_2 <: 2nd
-{}    <: k_1 <: 1st
-{f_2} <: x_5 <: 2nd
-{2}   <: y_3 <: –
+y_3 !-> 2
+x_5 !-> f_2
