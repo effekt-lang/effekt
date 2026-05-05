@@ -330,7 +330,11 @@ object substitutions {
       case _ => INTERNAL_ERROR("References should always be variables")
     } getOrElse id
 
-  def substitute(e: Expr, subst: Map[Id, Expr]): Expr = substitute(e)(using Substitution(subst))
+  def substitute(e: Expr, subst: Map[Id, Expr]): Expr =
+    substitute(e)(using Substitution(subst))
+
+  def substitute(s: Stmt, subst: Map[Id, Expr]): Stmt =
+    substitute(s)(using Substitution(subst))
 }
 
 /**
@@ -1119,181 +1123,10 @@ object flowAnalysis {
 
     case ToplevelDefinition.Val(id, ks, k, binding) => binding.flows
   }
-
-  def solve(toplevel: ToplevelDefinition, main: Id): Map[Id, Expr] = toplevel match {
-    case ToplevelDefinition.Def(id, params, body) =>
-      val flows = toplevel.flows
-      solve(flows.functions, flows.knownFlows, params.toSet, main)
-      //solve(flows.functions, flows.knownFlows, params.toSet, main)
-    case ToplevelDefinition.Val(id, ks, k, binding) => Map.empty
-  }
   inline def flows(m: ModuleDecl): Graph = m match {
     case ModuleDecl(includes, declarations, externs, definitions, exports) =>
       val allFlows = all(definitions, _.flows)
       assert(allFlows.unknownFlows.isEmpty)
       allFlows
-  }
-
-  extension (self: Map[Id, Expr]) {
-    def show: String =
-      self.toList.sortBy(_._1.id).map { case (id, expr) => s"${util.show(id)} !-> ${util.show(expr)}" }.mkString("\n")
-  }
-
-  // TODO some examples would require some form of context-dependency like
-  //
-  //   def f(k, x) = k(x)
-  //   f(inc, 1)
-  //   f(dec, 0)
-  //
-  // here inc is ALWAYS called with 1 and dec is ALWAYS called with 0.
-  // However, we already lost this information during flow collection.
-  def solve(
-    signatures: Vector[Signature],
-    flows: Set[KnownFlow],
-    toplevelParams: Set[Id],
-    main: Id
-  ): Map[Id, Expr] = {
-
-    import substitutions.substitute
-
-    val knownFunctions: Map[Id, Signature] = signatures.map(s => s.id -> s).toMap
-
-    // iff `knownFunctions(f) = def f(x)`, then `parameters(x) = (0, f)`
-    val parameters: Map[Id, (Int, Id)] = knownFunctions.flatMap {
-      case (id, Signature(f, params)) => params.zipWithIndex.map { case (x, index) => x -> (index, f) }
-    }
-
-    // todos(x) = {1, x}  ~~  1, z <: x
-    val bounds: mutable.Map[Id, Set[Expr]] = mutable.Map.empty
-
-    var calls: Set[KnownFlow.Call] = Set.empty
-
-    // [x !-> 42], [y !-> x]
-    var substitution: Map[Id, Expr] = Map.empty
-
-    // bounds, calls, and substitution are pairwise disjoint!
-
-    val used: mutable.Set[Id] = mutable.Set.empty
-
-    def flowsInto(from: Expr, to: Id): Unit =
-      val before = bounds.getOrElse(to, Set.empty)
-      bounds.update(to, before + from)
-
-    flows.foreach {
-      case KnownFlow.Data(from, to) =>
-        flowsInto(from, to)
-      case KnownFlow.Sink(from) =>
-        used.add(from)
-      case KnownFlow.Call(from, to, index) =>
-        calls += KnownFlow.Call(from, to, index)
-    }
-
-    // The main function's last two parameters are always Toplevel and Return
-    //    knownFunctions.get(main).foreach {
-    //      case Signature(_, List(ks, k)) =>
-    //        substitution += ks -> Expr.Toplevel
-    //        substitution += k -> Expr.Return
-    //        used.remove(ks)
-    //        used.remove(k)
-    //      case _ => ()
-    //    }
-
-    def usedAsArgument(id: Id): Boolean = calls.exists {
-      case KnownFlow.Call(from, callee, index) => from == id
-    }
-
-    def hasUnknownFlows(id: Id): Boolean =
-      // the parameter might still have unknown flows from undiscovered callsites
-      parameters.get(id) match {
-        case Some((index, f)) => bounds.isDefinedAt(f) || usedAsArgument(f) || used.contains(f)
-        case None => false
-      }
-
-    def lower(id: Id, seen: Set[Id]): Set[Expr] =
-      if (substitution isDefinedAt id) return Set(substitution(id))
-      if (hasUnknownFlows(id)) return Set(Expr.Variable(id))
-      if (seen contains id) return Set.empty
-      if (bounds isDefinedAt id) return bounds(id).flatMap { l => lowerBound(l, seen) }
-      Set(Expr.Variable(id))
-
-    def lowerBound(lbs: Expr, seen: Set[Id]): Set[Expr] = lbs match {
-      case Expr.Variable(id) => lower(id, seen)
-      case other => Set(other)
-    }
-
-    var modified = true
-
-    def learn(id: Id, expr: Expr): Unit = {
-      substitution = substitution.updated(id, expr)
-      modified = true
-
-      // update existing substitutions
-      substitution = substitution.map {
-        case (from, Expr.Variable(to)) if to == id => from -> expr
-        case (from, other) => from -> other
-      }
-    }
-
-    def updateBoundsAndCalls(): Unit = {
-      bounds.mapValuesInPlace {
-        // y <: x  and  y !-> z  then z <: x
-        case (x, lbs) =>
-          lbs.map { e => substitute(e, substitution) }
-      }
-      calls = calls.map {
-        case KnownFlow.Call(from, callee, index) =>
-          val newCallee = substitution.getOrElse(callee, Expr.Variable(callee)) match {
-            case Expr.Variable(id) => id
-            // could be Return...
-            case other =>
-              sys error "Should not happen"
-          }
-          KnownFlow.Call(substitute(from, substitution), newCallee, index)
-      }
-    }
-
-    while (modified) {
-
-      modified = false
-
-      var toRemove: Set[Id] = Set.empty
-
-      bounds.mapValuesInPlace { case (id, lowerBounds) =>
-        lowerBounds.flatMap { l => lowerBound(l, Set(id)) } match {
-          case newBounds if !used.contains(id) && !hasUnknownFlows(id) && newBounds.size == 1 =>
-            toRemove += id // remove later to avoid concurrent modification
-            learn(id, newBounds.head)
-            Set.empty
-
-          case newBounds =>
-            if (newBounds != lowerBounds) { modified = true }
-            newBounds
-        }
-      }.filterInPlace { case (id, _) => !toRemove.contains(id) }
-
-      updateBoundsAndCalls()
-
-      calls = calls.filter {
-        case KnownFlow.Call(from, callee, index) => knownFunctions.get(callee) match {
-          case Some(Signature(_, params)) =>
-            flowsInto(from, params(index))
-            modified = true
-            false // drop
-          case None =>
-            true // keep
-        }
-      }
-    }
-
-    if (used.intersect(substitution.keySet).nonEmpty) {
-      sys error "Should not happen"
-    }
-
-    calls.foreach {
-      case KnownFlow.Call(from, callee, index) =>
-        assert(!substitution.contains(callee))
-    }
-
-    substitution
   }
 }

@@ -3,7 +3,7 @@ package cpsds
 
 import core.Id
 import scala.collection.mutable
-import cpsds.substitutions.{ Substitution, substitute }
+import cpsds.substitutions.substitute
 
 object StaticArguments {
 
@@ -60,8 +60,7 @@ object StaticArguments {
       val withDef = Stmt.Def(workerId, dynamicParams, workerBody, rest)
       staticParams.zip(staticArgs).foldRight(withDef: Stmt) {
         case ((param, Expr.Variable(argId)), r) =>
-          val subst = Substitution(Map(param -> Expr.Variable(argId)))
-          substitute(r)(using subst)
+          substitute(r, Map(param -> Expr.Variable(argId)))
         case ((param, arg), r) =>
           Stmt.Let(param, arg, r)
       }
