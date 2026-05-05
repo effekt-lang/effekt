@@ -502,6 +502,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case other: (source.If | source.While | source.TryHandle | source.Hole | source.MethodCall | source.Region | source.Match | source.Select | source.Call) =>
       transformAsStmt(other) match {
+        case ExternApp(id, purity, callee, targs, vargs, bargs, Return(expr)) =>
+          Context.emit(Binding.ExternApp(id, purity, callee, targs, vargs, bargs))
+          expr
         case Return(expr) => expr
         case other => Context.bind(other)
       }
