@@ -19,7 +19,7 @@ extern def ctx_makeHole[A]() at {}: A =
 extern def ctx_emptyContext[A]() at {}: HoleContext[A, A] =
   js "emptyContext()"
 
-extern def ctx_applyContext[A,B](ctx:HoleContext[A,B], value:B) at {}: A = 
+extern def ctx_applyContext[A,B](ctx:HoleContext[A,B], value:B) at {}: A =
   js "applyContext(${ctx}, ${value})"
 
 extern def ctx_composeContext[A,B,C](ctx1:HoleContext[A,B], ctx2: HoleContext[B,C]) at {}: HoleContext[A,C] =

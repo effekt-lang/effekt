@@ -70,9 +70,6 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
 
   val holeCtxId = Id("HoleContext")
   def HoleContext(a: ValueType, b: ValueType): ValueType = ValueType.Data(holeCtxId, List(a, b))
-  
-  val A: Id = Id("A")
-  val ATpe: ValueType = ValueType.Var(A)
 
   
 
@@ -100,7 +97,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     case effekt.core.Block.BlockVar(id, annotatedTpe, annotatedCapt) => ???
     case effekt.core.Block.BlockLit(tparams, cparams, vparams, bparams, body) => 
       val outputFunId = Id(id.name.name + "_trmc")
-      val outerContextTpe = HoleContext(ATpe,body.tpe)
+      val outerContextTpe = HoleContext(body.tpe,body.tpe)
       Toplevel.Def(outputFunId, BlockLit(tparams, cparams, vparams.appended(ValueParam(Id("ctx"),outerContextTpe)), bparams,
         trmc(body, id, outputFunId, TransformContext.Outer(Id("ctx")), outerContextTpe, DC))) //TODO: fix HoleContext (its in the Declerations, but how to parametrize?)
     case effekt.core.Block.Unbox(pure) => ???
