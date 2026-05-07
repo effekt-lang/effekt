@@ -67,18 +67,15 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     case Make(data: ValueType.Data, tag: Id, targs: List[ValueType], before: List[Expr], after: List[Expr])
     case Compose(first: TailContext, second: TailContext)
   }
-
-  val holeCtxId = Id("HoleContext")
-  def HoleContext(a: ValueType, b: ValueType): ValueType = ValueType.Data(holeCtxId, List(a, b))
-
+  
   
 
-  def split(context: TransformContext, DC: DeclarationContext)(using errorrep: ErrorReporter): (TailContext, Option[TransformContext]) ={
+  def split(context: TransformContext, DC: DeclarationContext)(using Context): (TailContext, Option[TransformContext]) ={
     val listDecl: Declaration = DC.declarations.find(_.id.name.name == "List").getOrElse {
-      errorrep.panic(s"No declaration found for List.")
+      Context.panic(s"No declaration found for List.")
     }
     val consId: Id = listDecl match{
-      case Data(id, tparams, List(Constructor(nilId,niltparams,nilFields),Constructor(consId, constparams, consfields))) => consId //TODO: could this be less ugly?
+      case Data(id, tparams, List(Constructor(nilId, niltparams, nilFields),Constructor(consId, constparams, consfields))) => consId //TODO: could this be less ugly?
       case _ => throw ImpossibleStateError("should have failed above while finding List or the pattern is incorrect")
     }
     context match {
@@ -97,9 +94,13 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     case effekt.core.Block.BlockVar(id, annotatedTpe, annotatedCapt) => ???
     case effekt.core.Block.BlockLit(tparams, cparams, vparams, bparams, body) => 
       val outputFunId = Id(id.name.name + "_trmc")
-      val outerContextTpe = HoleContext(body.tpe,body.tpe)
-      Toplevel.Def(outputFunId, BlockLit(tparams, cparams, vparams.appended(ValueParam(Id("ctx"),outerContextTpe)), bparams,
-        trmc(body, id, outputFunId, TransformContext.Outer(Id("ctx")), outerContextTpe, DC))) //TODO: fix HoleContext (its in the Declerations, but how to parametrize?)
+      val ctxDecl: Declaration = DC.declarations.find(_.id.name.name == "HoleContext").getOrElse {
+        Context.panic(s"No declaration found for HoleContext.")
+      }
+      val outerContextTpe = ValueType.Data(ctxDecl.id,List(body.tpe, body.tpe))
+      val ctxId = Id("ctx")
+      Toplevel.Def(outputFunId, BlockLit(tparams, cparams, vparams.appended(ValueParam(ctxId, outerContextTpe)), bparams,
+        trmc(body, id, outputFunId, TransformContext.Outer(ctxId), outerContextTpe, DC))) //TODO: fix HoleContext (its in the Declerations, but how to parametrize?)
     case effekt.core.Block.Unbox(pure) => ???
     case effekt.core.Block.New(impl) => ???
   }
@@ -121,7 +122,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
                   outputfun,
                   Function(tparams, cparams, vparams.appended(outerContextTpe), bparams, result), annotatedCapt),//TODO:capt? 
                 targs,
-                vargs.appended(innerReify(init, outerContextTpe, DC)),
+                vargs.appended(innerReify(init, outerContextTpe, input.tpe, DC)), //is input.tpe always the correct resType?
                 bargs)
               rest match {
                 case Some(rest) => reify(inner, rest, inputfun, outputfun, outerContextTpe, DC)
@@ -162,11 +163,11 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
       Stmt.Val(id, stmt, trmc(body, inputfun, outputfun, next, outerContextTpe, DC))
   }
 
-  def innerReify(context: TailContext, outerContextTpe: ValueType, DC: DeclarationContext)(using Context): Expr = context match {
-    case TailContext.Empty => PureApp(blockVarFromExternDef("ctx_emptyContext", DC),Nil,Nil) //TODO: tparams should be A, but outerContextTpe is HoleContext(A,???)
+  def innerReify(context: TailContext, outerContextTpe: ValueType, resType: ValueType, DC: DeclarationContext)(using Context): Expr = context match {
+    case TailContext.Empty => PureApp(blockVarFromExternDef("ctx_emptyContext", DC),List(resType),Nil) 
     case TailContext.Outer(id) => Expr.ValueVar(id,outerContextTpe)
     case TailContext.Make(data, tag, targs, before, after) => MakeContext(data, tag, targs, before, after)
-    case TailContext.Compose(first, second) => PureApp(blockVarFromExternDef("ctx_composeContext", DC), Nil, List(innerReify(first, outerContextTpe, DC),innerReify(second, outerContextTpe, DC)))
+    case TailContext.Compose(first, second) => PureApp(blockVarFromExternDef("ctx_composeContext", DC), Nil, List(innerReify(first, outerContextTpe, resType, DC),innerReify(second, outerContextTpe, resType, DC)))
   }
   
   def blockVarFromExternDef(name: String, DC: DeclarationContext)(using Context) : Block.BlockVar = {
