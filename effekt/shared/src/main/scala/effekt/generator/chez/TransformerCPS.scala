@@ -110,7 +110,7 @@ object TransformerCPS {
   }
 
   def toChez(stmt: cps.Stmt): chez.Block = stmt match {
-    case ImpureApp(id, callee, vargs, bargs, body) =>
+    case ExternApp(id, purity, callee, vargs, bargs, body) =>
       val binding = chez.Call(toChez(callee), vargs.map(toChez) ++ bargs.map(toChez))
       resolveLet(id, binding, body)
     case LetCont(id, binding, body) => resolveLet(id, toChez(binding), body)
@@ -176,7 +176,7 @@ object TransformerCPS {
       val args = vargs.map(toChez) ++ bargs.map(toChez)
               ++ List(toChez(ks), toChez(k))
       chez.Call(methodLam, args)
-    case let: (LetCont | LetDef | LetExpr | ImpureApp
+    case let: (LetCont | LetDef | LetExpr | ExternApp
              | Region | Alloc | Get | Put | Dealloc | Var) =>
       chez.Let(Nil, toChez(stmt))
   }
@@ -191,7 +191,6 @@ object TransformerCPS {
       if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case Literal(b: Byte, core.Type.TByte) => chez.RawValue(UByte.unsafeFromByte(b).toInt.toString)
     case Literal(value, _) => chez.RawValue(value.toString()) // TODO this should match on the actual types...
-    case PureApp(id, vargs) => chez.Call(toChez(id), vargs.map(toChez))
     case Make(_, tag, vargs) =>
       chez.Call(nameRef(tag), vargs.map(toChez))
     case Box(id) => toChez(id)

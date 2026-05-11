@@ -168,7 +168,6 @@ enum Toplevel {
  *   ─ [[ Expr ]]
  *     │─ [[ ValueVar ]]
  *     │─ [[ Literal ]]
- *     │─ [[ PureApp ]]
  *     │─ [[ Make ]]
  *     │─ [[ Box ]]
  *
@@ -179,11 +178,6 @@ enum Expr extends Tree {
   case ValueVar(id: Id, annotatedType: ValueType)
 
   case Literal(value: Any, annotatedType: ValueType)
-
-  /**
-   * Pure FFI calls. Invariant, block b is pure.
-   */
-  case PureApp(b: Block.BlockVar, targs: List[ValueType], vargs: List[Expr])
 
   /**
    * Constructor calls
@@ -271,7 +265,7 @@ enum Stmt extends Tree {
   // Definitions
   case Def(id: Id, block: Block, body: Stmt)
   case Let(id: Id, binding: Expr, body: Stmt)
-  case ImpureApp(id: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block], body: Stmt)
+  case ExternApp(id: Id, purity: Purity, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block], body: Stmt)
 
   // Fine-grain CBV
   case Return(expr: Expr)
@@ -322,6 +316,12 @@ enum Stmt extends Tree {
 }
 export Stmt.*
 
+enum Purity {
+  case Pure
+  case Impure
+  case Async
+}
+export Purity.*
 
 /**
  * An instance of an interface, concretely implementing the operations.
@@ -356,7 +356,7 @@ case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: Li
 private[core] enum Binding {
   case Val(id: Id, binding: Stmt)
   case Let(id: Id, binding: Expr)
-  case ImpureApp(id: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
+  case ExternApp(id: Id, purity: Purity, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
   case Def(id: Id, binding: Block)
   case Alloc(id: Id, init: Expr, region: Id)
   case Var(ref: Id, init: Expr, capture: Id)
@@ -366,7 +366,7 @@ private[core] enum Binding {
   def toStmt(rest: Stmt): Stmt = this match {
     case Binding.Val(id, binding) => Stmt.Val(id, binding, rest)
     case Binding.Let(id, binding) => Stmt.Let(id, binding, rest)
-    case Binding.ImpureApp(id, callee, targs, vargs, bargs) => Stmt.ImpureApp(id, callee, targs, vargs, bargs, rest)
+    case Binding.ExternApp(id, purity, callee, targs, vargs, bargs) => Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, rest)
     case Binding.Def(id, binding) => Stmt.Def(id, binding, rest)
     case Binding.Alloc(id, init, region) => Stmt.Alloc(id, init, region, rest)
     case Binding.Var(ref, init, capture) => Stmt.Var(ref, init, capture, rest)
@@ -383,7 +383,7 @@ private[core] object Binding {
   def toToplevel(b: Binding): Toplevel = b match {
     case Binding.Val(name, binding) => Toplevel.Val(name, binding)
     case Binding.Let(name, binding) => ??? //Toplevel.Val(name, tpe, Stmt.Return(binding))
-    case Binding.ImpureApp(name, callee, targs, vargs, bargs) => ??? //Toplevel.Val(name, tpe, ???)
+    case Binding.ExternApp(name, purity, callee, targs, vargs, bargs) => ??? //Toplevel.Val(name, tpe, ???)
     case Binding.Def(name, binding) => Toplevel.Def(name, binding)
     case Binding.Alloc(name, init, region) => ???
     case Binding.Var(ref, init, capture) => ???
@@ -410,8 +410,8 @@ object Bind {
 
   def bind[A](b: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block]): Bind[ValueVar] =
     val id = Id("tmp")
-    val binding: Binding.ImpureApp = Binding.ImpureApp(id, b, targs, vargs, bargs)
-    Bind(ValueVar(id, Type.bindingType(binding)), List(Binding.ImpureApp(id, b, targs, vargs, bargs)))
+    val binding: Binding.ExternApp = Binding.ExternApp(id, Impure, b, targs, vargs, bargs)
+    Bind(ValueVar(id, Type.bindingType(binding)), List(Binding.ExternApp(id, Impure, b, targs, vargs, bargs)))
 
   def bind[A](block: Block): Bind[BlockVar] =
     val id = Id("tmp")
@@ -491,8 +491,6 @@ object Tree {
         Expr.ValueVar(rewrite(id), rewrite(annotatedType))
       case Expr.Literal(value, annotatedType) =>
         Expr.Literal(value, rewrite(annotatedType))
-      case Expr.PureApp(b, targs, vargs) =>
-        Expr.PureApp(rewrite(b), targs map rewrite, vargs map rewrite)
       case Expr.Make(data, tag, targs, vargs) =>
         Expr.Make(rewrite(data), rewrite(tag), targs map rewrite, vargs map rewrite)
       case Expr.Box(b, annotatedCapture) =>
@@ -503,8 +501,8 @@ object Tree {
         Stmt.Def(rewrite(id), rewrite(block), rewrite(body))
       case Stmt.Let(id, binding, body) =>
         Stmt.Let(rewrite(id), rewrite(binding), rewrite(body))
-      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-        Stmt.ImpureApp(rewrite(id), rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
+      case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
+        Stmt.ExternApp(rewrite(id), purity, rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
       case Stmt.Return(expr) =>
         Stmt.Return(rewrite(expr))
       case Stmt.Val(id, binding, body) =>
@@ -646,11 +644,6 @@ object Tree {
     def rewrite(e: Expr): Trampoline[Expr] = e match {
       case Expr.ValueVar(id, tpe) => done(Expr.ValueVar(rewrite(id), rewrite(tpe)))
       case Expr.Literal(value, tpe) => done(Expr.Literal(value, rewrite(tpe)))
-      case Expr.PureApp(b, targs, vargs) => for {
-        b2     <- done(rewrite(b))
-        targs2 <- done(targs.map(rewrite))
-        vargs2 <- all(vargs, rewrite)
-      } yield Expr.PureApp(b2, targs2, vargs2)
       case Expr.Make(data, tag, targs, vargs) => for {
         data2  <- done(rewrite(data))
         tag2   <- done(rewrite(tag))
@@ -676,14 +669,14 @@ object Tree {
         body2    <- rewrite(body)
       } yield Stmt.Let(id2, binding2, body2)
 
-      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => for {
+      case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) => for {
         id2     <- done(rewrite(id))
         callee2 <- done(rewrite(callee))
         targs2  <- done(targs.map(rewrite))
         vargs2  <- all(vargs, rewrite)
         bargs2  <- all(bargs, rewrite)
         body2   <- rewrite(body)
-      } yield Stmt.ImpureApp(id2, callee2, targs2, vargs2, bargs2, body2)
+      } yield Stmt.ExternApp(id2, purity, callee2, targs2, vargs2, bargs2, body2)
 
       case Stmt.Return(expr) => for {
         expr2 <- rewrite(expr)
@@ -893,8 +886,6 @@ object Tree {
         Expr.ValueVar(rewrite(id), rewrite(annotatedType))
       case Expr.Literal(value, annotatedType) =>
         Expr.Literal(value, rewrite(annotatedType))
-      case Expr.PureApp(b, targs, vargs) =>
-        Expr.PureApp(rewrite(b), targs map rewrite, vargs map rewrite)
       case Expr.Make(data, tag, targs, vargs) =>
         Expr.Make(rewrite(data), rewrite(tag), targs map rewrite, vargs map rewrite)
       case Expr.Box(b, annotatedCapture) =>
@@ -905,8 +896,8 @@ object Tree {
         Stmt.Def(rewrite(id), rewrite(block), rewrite(body))
       case Stmt.Let(id, binding, body) =>
         Stmt.Let(rewrite(id), rewrite(binding), rewrite(body))
-      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-        Stmt.ImpureApp(rewrite(id), rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
+      case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
+        Stmt.ExternApp(rewrite(id), purity, rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
       case Stmt.Return(expr) =>
         Stmt.Return(rewrite(expr))
       case Stmt.Val(id, binding, body) =>
@@ -1075,10 +1066,10 @@ object substitutions {
         Let(id, substitute(binding),
           substitute(body)(using subst shadowValues List(id)))
 
-      case ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      case ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
         substitute(callee) match {
           case g : Block.BlockVar =>
-            ImpureApp(id, g, targs.map(substitute), vargs.map(substitute), bargs.map(substitute),
+            ExternApp(id, purity, g, targs.map(substitute), vargs.map(substitute), bargs.map(substitute),
               substitute(body)(using subst shadowValues List(id)))
           case _ => INTERNAL_ERROR("Should never substitute a concrete block for an FFI function.")
         }
@@ -1142,7 +1133,7 @@ object substitutions {
         vparams.map(p => substitute(p)(using shadowedTypelevel)),
         bparams.map(p => substitute(p)(using shadowedTypelevel)),
         substitute(body)(using shadowedTypelevel.shadowParams(vparams, bparams)))
-  }
+    }
 
   def substituteAsVar(id: Id)(using subst: Substitution): Id =
     subst.blocks.get(id) map {
@@ -1169,11 +1160,6 @@ object substitutions {
 
       case Make(tpe, tag, targs, vargs) =>
         Make(substitute(tpe).asInstanceOf, tag, targs.map(substitute), vargs.map(substitute))
-
-      case PureApp(f, targs, vargs) => substitute(f) match {
-        case g : Block.BlockVar => PureApp(g, targs.map(substitute), vargs.map(substitute))
-        case _ => INTERNAL_ERROR("Should never substitute a concrete block for an FFI function.")
-      }
 
       case Box(b, annotatedCapture) =>
         Box(substitute(b), substitute(annotatedCapture))
@@ -1222,10 +1208,10 @@ object substitutions {
       case Binding.Let(id, binding) =>
         Binding.Let(id, substitute(binding))
 
-      case Binding.ImpureApp(id, callee, targs, vargs, bargs) =>
+      case Binding.ExternApp(id, purity, callee, targs, vargs, bargs) =>
         substitute(callee) match {
           case g: Block.BlockVar =>
-            Binding.ImpureApp(id, g, targs.map(substitute), vargs.map(substitute), bargs.map(substitute))
+            Binding.ExternApp(id, purity, g, targs.map(substitute), vargs.map(substitute), bargs.map(substitute))
           case _ => INTERNAL_ERROR("Should never substitute a concrete block for an FFI function.")
         }
 
@@ -1256,7 +1242,7 @@ object sizes {
   inline def size(stmt: Stmt): Int = stmt match {
     case Stmt.Def(id, block, body) => block.size + body.size + 1
     case Stmt.Let(id, binding, body) => binding.size + body.size + 1
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => all(vargs, _.size) + all(bargs, _.size) + body.size + 1
+    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) => all(vargs, _.size) + all(bargs, _.size) + body.size + 1
     case Stmt.Return(expr) => expr.size + 1
     case Stmt.Val(id, binding, body) => binding.size + body.size + 1
     case Stmt.App(callee, targs, vargs, bargs) => callee.size + all(vargs, _.size) + all(bargs, _.size) + 1
@@ -1277,7 +1263,6 @@ object sizes {
   inline def size(expr: Expr): Int = expr match {
     case Expr.ValueVar(id, annotatedType) => 1
     case Expr.Literal(value, annotatedType) => 1
-    case Expr.PureApp(b, targs, vargs) => all(vargs, _.size) + 1
     case Expr.Make(data, tag, targs, vargs) => all(vargs, _.size) + 1
     case Expr.Box(b, annotatedCapture) => b.size + 1
   }
@@ -1362,8 +1347,8 @@ object freeVariables {
     case Stmt.Let(id, binding, body) =>
       body.free.withoutValue(id, binding.tpe) ++ binding.free
 
-    case s @ Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-      val retType = Type.bindingType(s)
+    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
+      val retType = Type.bindingType(Binding.ExternApp(id, purity, callee, targs, vargs, bargs))
       Free.block(callee.id, callee.annotatedTpe, callee.annotatedCapt) ++
         all(vargs, _.free) ++
         all(bargs, _.free) ++
@@ -1422,10 +1407,6 @@ object freeVariables {
       Free.value(id, annotatedType)
 
     case Expr.Literal(value, annotatedType) => Free.empty
-
-    case Expr.PureApp(callee, targs, vargs) =>
-      all(vargs, _.free) ++
-        Free.block(callee.id, callee.annotatedTpe, callee.annotatedCapt)
 
     case Expr.Make(data, tag, targs, vargs) =>
       all(vargs, _.free)

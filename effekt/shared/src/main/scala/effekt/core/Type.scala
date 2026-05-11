@@ -181,13 +181,8 @@ object Type {
       ValueType.Boxed(substitute(tpe, vsubst, csubst), substitute(capt, csubst))
   }
 
-  def bindingType(stmt: Stmt.ImpureApp): ValueType = stmt match {
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-      Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
-  }
-
-  def bindingType(bind: Binding.ImpureApp): ValueType = bind match {
-    case Binding.ImpureApp(id, callee, targs, vargs, bargs) =>
+  def bindingType(bind: Binding.ExternApp): ValueType = bind match {
+    case Binding.ExternApp(id, purity, callee, targs, vargs, bargs) =>
       Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
   }
 
@@ -320,14 +315,12 @@ object Type {
   }
 
   inline def typecheck(expr: Expr): Typing[ValueType] = checking(expr) {
-    case Expr.ValueVar(id, annotatedType) => Typing(annotatedType, Set.empty, Constraints.empty)
-    case Expr.Literal(value, annotatedType) => Typing(annotatedType, Set.empty, Constraints.empty)
-    case Expr.PureApp(callee, targs, vargs) =>
-       val BlockType.Function(tparams, cparams, vparams, bparams, result) = instantiate(callee.functionType, targs, Nil)
-       val Typing(argTypes, _, cs) = all(vargs, e => e.typing)
-       if bparams.nonEmpty then typeError("Pure apps cannot have block params")
-       valuesShouldEqual(vparams, argTypes)
-       Typing(result, Set.empty, cs)
+
+    case Expr.ValueVar(id, annotatedType) =>
+      Typing(annotatedType, Set.empty, Constraints.empty)
+
+    case Expr.Literal(value, annotatedType) =>
+      Typing(annotatedType, Set.empty, Constraints.empty)
 
     case make @ Expr.Make(data, tag, targs, vargs) =>
       val Typing(argTypes, argCapt, argsCs) = all(vargs, arg => arg.typing)
@@ -464,12 +457,12 @@ object Type {
 
     case Stmt.Resume(k, body) => typeError(s"Continuation has wrong type: ${k}")
 
-    case Stmt.ImpureApp(id, BlockVar(f, tpe: BlockType.Function, annotatedCapt), targs, vargs, bargs, body) =>
+    case Stmt.ExternApp(id, purity, BlockVar(f, tpe: BlockType.Function, annotatedCapt), targs, vargs, bargs, body) =>
       val Typing(retType, callCapts, callCs) = typecheckFunctionLike(Typing(tpe, annotatedCapt, Constraints.empty), targs, vargs, bargs)
       val Typing(bodyType, bodyCapts, bodyCs) = body.typing
       Typing(bodyType, callCapts ++ bodyCapts, callCs ++ bodyCs)
 
-    case s: Stmt.ImpureApp => typeError("Impure app should have a function type")
+    case s: Stmt.ExternApp => typeError("Extern app should have a function type")
 
     case Stmt.App(callee, targs, vargs, bargs) => typecheckFunctionLike(asFunctionTyping(callee.typing), targs, vargs, bargs)
 
@@ -528,7 +521,7 @@ object Type {
   inline def inferType(stmt: Stmt): ValueType = stmt match {
     case Stmt.Def(id, block, body) => body.tpe
     case Stmt.Let(id, binding, body) => body.tpe
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => body.tpe
+    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) => body.tpe
     case Stmt.Return(expr) => expr.tpe
     case Stmt.Val(id, binding, body) => body.tpe
     case Stmt.App(callee, targs, vargs, bargs) =>
@@ -559,8 +552,6 @@ object Type {
   inline def inferType(expr: Expr): ValueType = expr match {
     case Expr.ValueVar(id, annotatedType) => annotatedType
     case Expr.Literal(value, annotatedType) => annotatedType
-    case Expr.PureApp(b, targs, vargs) =>
-      Type.instantiate(b.functionType, targs, Nil).result
     case Expr.Make(data, tag, targs, vargs) => data
     case Expr.Box(b, annotatedCapture) =>
       ValueType.Boxed(b.tpe, annotatedCapture)
@@ -584,7 +575,7 @@ object Type {
   inline def inferCapt(stmt: Stmt): Captures = stmt match {
     case Stmt.Def(id, block, body) => body.capt
     case Stmt.Let(id, binding, body) => body.capt
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
       callee.capt ++ bargs.flatMap(_.capt) ++ body.capt
     case Stmt.Return(expr) => Set.empty
     case Stmt.Val(id, binding, body) => body.capt ++ binding.capt
