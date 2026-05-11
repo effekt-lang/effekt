@@ -72,7 +72,6 @@ class EffektLexers extends Parsers {
   lazy val `<>` = literal("<>")
   lazy val `<{` = literal("<{")
   lazy val `}>` = literal("}>")
-  lazy val `!!!` = literal("!!!")
   lazy val `!!` = literal("!!")
   lazy val `!` = literal("!")
   lazy val `|` = literal("|")
@@ -80,6 +79,7 @@ class EffektLexers extends Parsers {
 
   lazy val `get` = keyword("get")
   lazy val `put` = keyword("put")
+  lazy val `run` = keyword("run")
   lazy val `let` = keyword("let")
   lazy val `true` = keyword("true")
   lazy val `false` = keyword("false")
@@ -119,7 +119,7 @@ class EffektLexers extends Parsers {
   lazy val `namespace` = keyword("namespace")
 
   def keywordStrings: List[String] = List(
-    "def", "let", "val", "var", "true", "false", "else", "type",
+    "def", "let", "run", "val", "var", "true", "false", "else", "type",
     "effect", "interface", "try", "with", "case", "do", "if", "while",
     "match", "module", "import", "extern", "fun",
     "at", "box", "unbox", "return", "region", "new", "resource", "and", "is", "namespace",
@@ -266,7 +266,6 @@ class CoreParsers(names: Names) extends EffektLexers {
         None
     }
 
-  lazy val `run`  = keyword("run")
   lazy val `;`    = super.literal(";")
   lazy val `make` = keyword("make")
 
@@ -417,15 +416,15 @@ class CoreParsers(names: Names) extends EffektLexers {
     )
 
   lazy val stmts: P[Stmt] =
-    ( (`let` ~ `!!!` ~/> id) ~ (`=` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ~ stmts ^^ {
+    ( (`run` ~ `!!` ~/> id) ~ (`=` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ~ stmts ^^ {
         case (name ~ callee ~ targs ~ vargs ~ bargs ~ body) =>
           ExternApp(name, Purity.Async, callee, targs, vargs, bargs, body)
       }
-    | (`let` ~ `!!` ~/> id) ~ (`=` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ~ stmts ^^ {
+    | (`run` ~ `!` ~/> id) ~ (`=` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ~ stmts ^^ {
         case (name ~ callee ~ targs ~ vargs ~ bargs ~ body) =>
           ExternApp(name, Purity.Impure, callee, targs, vargs, bargs, body)
       }
-    | (`let` ~ `!` ~/> id) ~ (`=` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ~ stmts ^^ {
+    | (`run` ~/> id) ~ (`=` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ~ stmts ^^ {
         case (name ~ callee ~ targs ~ vargs ~ bargs ~ body) =>
           ExternApp(name, Purity.Pure, callee, targs, vargs, bargs, body)
       }
