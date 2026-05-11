@@ -7,6 +7,7 @@ import effekt.core.Stmt.*
 import effekt.core.{Toplevel, *}
 import effekt.core.Block.*
 import effekt.core.BlockType.*
+import effekt.core.optimizer.TRMC.TransformContext
 import effekt.symbols.{TermSymbol, TypeSymbol}
 import effekt.util.messages.ErrorReporter
 
@@ -151,7 +152,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     case Empty
     case Outer(id: Id)
     case Make(data: ValueType.Data, tag: Id, targs: List[ValueType], before: List[Expr], after: List[Expr])
-    case Compose(first: TailContext, second: TailContext)
+    case Compose(first: TailContext, second: TailContext) //order is currently: second into first
   }
 
   def split(context: TransformContext, DC: DeclarationContext)(using Context): (TailContext, Option[TransformContext]) ={
@@ -164,16 +165,17 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     }
     context match {
       case TransformContext.Outer(id) => (TailContext.Outer(id), None)
-      case TransformContext.Val(id, Stmt.Return(Expr.Make(data, tag, targs, head :: Expr.ValueVar(id2, tpe) :: Nil)), next) //TODO: leads to always a compose TailContext, even if its only one Val
+      case TransformContext.Val(id, Stmt.Return(Expr.Make(data, tag, targs, head :: Expr.ValueVar(id2, tpe) :: Nil)), next) //TODO: leads always to a compose TailContext, even if its only one Val
         if tag == consId && id == id2 =>
+        val (init, rest) = split(next, DC)
+        (TailContext.Compose(init, TailContext.Make(data, tag, targs, List(head), Nil)), rest)
+      case TransformContext.Val(id, Stmt.Let(id2,Expr.Make(data, tag, targs, head :: Expr.ValueVar(id3, tpe) :: Nil), Stmt.Return(Expr.ValueVar(id4, tpe2))), next) //TODO: what about longer let-chains?
+        if tag == consId && id == id3 && id2 == id4 =>
         val (init, rest) = split(next, DC)
         (TailContext.Compose(init, TailContext.Make(data, tag, targs, List(head), Nil)), rest)
       case _ => (TailContext.Empty, Some(context))
     }
   }
-    
-
-
   
   
   def trmc(stmt: Stmt, inputfun: Id, outputfun: Id, context: TransformContext, outerContextTpe: ValueType, DC: DeclarationContext)(using Context): Stmt = stmt match {
@@ -229,7 +231,14 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
   def reify(stmt: Stmt, context: TransformContext, inputfun: Id, outputfun: Id, outerContextTpe: ValueType, DC: DeclarationContext)(using Context) : Stmt = context match {
     case TransformContext.Outer(id) =>
       val tmpId = Id("tmp")
-      Stmt.Val(tmpId, stmt, Stmt.Return(PureApp(blockVarFromExternDef("ctx_applyContext", DC), Nil, List(ValueVar(id, outerContextTpe), ValueVar(tmpId, stmt.tpe))))) //TODO: fix ctxType,tmpType?
+      Stmt.Val(
+        tmpId, 
+        stmt, 
+        Stmt.Return(
+          PureApp(
+            blockVarFromExternDef("ctx_applyContext", DC), 
+            Nil, 
+            List(ValueVar(id, outerContextTpe), ValueVar(tmpId, stmt.tpe))))) //TODO: fix ctxType,tmpType?
     case TransformContext.Val(id, body, next) =>
       Stmt.Val(id, stmt, trmc(body, inputfun, outputfun, next, outerContextTpe, DC))
   }
@@ -238,12 +247,17 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     case TailContext.Empty => PureApp(blockVarFromExternDef("ctx_emptyContext", DC),List(resType),Nil) 
     case TailContext.Outer(id) => Expr.ValueVar(id,outerContextTpe)
     case TailContext.Make(data, tag, targs, before, after) => MakeContext(data, tag, targs, before, after)
-    case TailContext.Compose(first, second) => PureApp(blockVarFromExternDef("ctx_composeContext", DC), Nil, List(innerReify(first, outerContextTpe, resType, DC),innerReify(second, outerContextTpe, resType, DC)))
+    case TailContext.Compose(first, second) => 
+      PureApp(
+        blockVarFromExternDef("ctx_composeContext", DC), 
+        List(resType, resType, resType), 
+        List(innerReify(first, outerContextTpe, resType, DC), innerReify(second, outerContextTpe, resType, DC))) //TODO: targs if general
   }
   
   def blockVarFromExternDef(name: String, DC: DeclarationContext)(using Context) : Block.BlockVar = {
     DC.getUniqueExternDef(name) match {
-      case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => BlockVar(id, Function(tparams, cparams, vparams.map(getType), bparams.map(getType), ret), annotatedCapture)
+      case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => 
+        BlockVar(id, Function(tparams, cparams, vparams.map(getType), bparams.map(getType), ret), annotatedCapture)
     }
   }
 
