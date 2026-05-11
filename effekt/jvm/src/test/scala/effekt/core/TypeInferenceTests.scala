@@ -122,30 +122,30 @@ class TypeInferenceTests extends CoreTests {
 
     val add: Block.BlockVar = Block.BlockVar(infixPlus, BlockType.Function(Nil, Nil, List(TInt, TInt), Nil, TInt), Set.empty)
 
-    // val ex3 = Stmt.Val(x,
-    //   Stmt.Return(Expr.Literal(42, TInt)),
-    //   Stmt.Return(Expr.PureApp(add, Nil, Expr.ValueVar(x, TInt) :: Expr.ValueVar(x, TInt) :: Nil)))
+    val ex3 = Stmt.Val(x,
+      Stmt.Return(Expr.Literal(42, TInt)),
+      Stmt.ExternApp(y, Pure, add, Nil, Expr.ValueVar(x, TInt) :: Expr.ValueVar(x, TInt) :: Nil, Nil, Stmt.Return(Expr.ValueVar(y, TInt))))
 
-    // val result3 = typecheck(ex3)
-    // assertEquals(result3.tpe, TInt)
-    // assertEquals(result3.capt, Set.empty)
-    // assert(ex3.free.freeIds == Set(add.id))
+    val result3 = typecheck(ex3)
+    assertEquals(result3.tpe, TInt)
+    assertEquals(result3.capt, Set.empty)
+    assert(ex3.free.freeIds == Set(add.id))
 
-    // // [A](Option[A], A): A
-    // val orElse: Block.BlockVar = Block.BlockVar(f, BlockType.Function(A :: Nil, Nil, List(OptionT(ValueType.Var(A)), ValueType.Var(A)), Nil, ValueType.Var(A)), Set.empty)
+    // [A](Option[A], A): A
+    val orElse: Block.BlockVar = Block.BlockVar(f, BlockType.Function(A :: Nil, Nil, List(OptionT(ValueType.Var(A)), ValueType.Var(A)), Nil, ValueType.Var(A)), Set.empty)
 
-    // shouldTypeCheckAs(TInt, Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(y, TInt) :: Nil))
+    shouldTypeCheckAs(TInt, Stmt.App(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(y, TInt) :: Nil, Nil))
 
     // swapped arguments
-    // intercept[TypeError] {
-    //   val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(y, TInt) :: Expr.ValueVar(x, OptionT(TInt)) :: Nil))
-    //   res.check()
-    // }
-    // // too few arguments
-    // intercept[TypeError] {
-    //   val res = typecheck(Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Nil))
-    //   res.check()
-    // }
+    intercept[TypeError] {
+      val res = typecheck(Stmt.App(orElse, TInt :: Nil, Expr.ValueVar(y, TInt) :: Expr.ValueVar(x, OptionT(TInt)) :: Nil, Nil))
+      res.check()
+    }
+    // too few arguments
+    intercept[TypeError] {
+      val res = typecheck(Stmt.App(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Nil, Nil))
+      res.check()
+    }
 
     val ex4: Expr.Make = Make(OptionT(TInt), SomeC, List(), List(Literal(42, TInt)))
     assertSameType(ex4.tpe, OptionT(TInt))
@@ -166,7 +166,7 @@ class TypeInferenceTests extends CoreTests {
   inline def assertSameType(got: ValueType, expected: ValueType)(using DeclarationContext): Unit =
     assertEquals(Type.equals(got, expected), true)
 
-  inline def shouldTypeCheckAs(expected: ValueType, expr: Expr)(using DeclarationContext): Unit =
-    expr.typing.check()
-    assertSameType(expr.tpe, expected)
+  inline def shouldTypeCheckAs(expected: ValueType, stmt: Stmt)(using DeclarationContext): Unit =
+    stmt.typing.check()
+    assertSameType(stmt.tpe, expected)
 }
