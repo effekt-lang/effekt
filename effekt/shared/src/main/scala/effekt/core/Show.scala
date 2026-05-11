@@ -336,11 +336,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
       fieldValStmts(pureFields)
 
-  // TODO update comment
-  // Convert a list of pure statements to comma-separated concatenated version
-  // Literal("Just("), ExternApp(show, x), Literal(", "), ExternApp(show, y), Literal(")")
-  //  =>
-  // ExternApp(concat, List(Literal("Just("), ExternApp(concat, List(ExternApp(show, x), ExternApp(concat, List(Literal(", "), ...))))
+  // Concatenate the results of a list of statements, separated with commas
   def concatPure(pures: List[(Id, Stmt.App)], current: Expr)(using ctx: ShowContext)(using Context, DeclarationContext): Stmt =
     val infixConcatDef = findExternDef(STRING_CONCAT_NAME, List(TString, TString))
     pures match
