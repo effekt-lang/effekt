@@ -100,10 +100,11 @@ object PatternMatchingCompiler {
         return binding.toStmt(compile(Clause(rest, target, targs, args) :: remainingClauses, motif))
       // - We need to check a predicate
       case Clause(Condition.Predicate(pred) :: rest, target, targs, args) =>
-        return core.If(pred,
-          compile(Clause(rest, target, targs, args) :: remainingClauses, motif),
-          compile(remainingClauses, motif)
-        )
+        val blockLit = core.BlockLit(List(), List(), List(), List(), compile(remainingClauses, motif))
+        val blockVar: core.BlockVar = core.BlockVar(Id("k"), blockLit.tpe, blockLit.capt)
+        return core.Def(blockVar.id, blockLit, core.If(pred,
+          compile(Clause(rest, target, targs, args) :: Clause(Nil, blockVar, List(), List()) :: Nil, motif),
+          core.App(blockVar, List(), List(), List())))
       case Clause(Condition.Patterns(patterns) :: rest, target, targs, args) =>
         patterns
     }
