@@ -25,14 +25,14 @@ class TestRenamerTests extends CoreTests {
       """module main
         |
         |def foo = { () =>
-        |  return (bar: (Int) => Int @ {})(baz:Int)
+        |  (bar: (Int) => Int @ {})(baz:Int)
         |}
         |""".stripMargin
     val expected =
       """module main
         |
         |def foo_renamed_0() = {
-        |  return (bar: (Int) => Int @ {})(baz: Int)
+        |  (bar: (Int) => Int @ {})(baz: Int)
         |}
         |""".stripMargin
 
@@ -66,7 +66,7 @@ class TestRenamerTests extends CoreTests {
       """module main
         |
         |def foo = { () =>
-        |  var x @ global = (foo:(Int)=>Int@{})(4) ;
+        |  var x @ global = 4;
         |  return x:Int
         |}
         |""".stripMargin
@@ -74,7 +74,7 @@ class TestRenamerTests extends CoreTests {
       """module main
         |
         |def foo_renamed_0() = {
-        |  var x_renamed_1 @ global = (foo_renamed_0: (Int) => Int @ {})(4);
+        |  var x_renamed_1 @ global = 4;
         |  return x_renamed_1: Int
         |}
         |""".stripMargin
