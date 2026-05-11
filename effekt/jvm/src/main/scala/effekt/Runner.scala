@@ -339,20 +339,25 @@ object LLVMRunner extends Runner[String] {
    * Assumes [[path]] has the format "SOMEPATH.ll".
    */
   override def build(path: String)(using C: Context): Option[String] =
+    val OS = System.getProperty("os.name").toLowerCase
+    val isWindows = OS.contains("win")
 
     val out = C.config.outputPath()
     val basePath = (out / path.stripSuffix(".ll")).unixPath
     val llPath  = basePath + ".ll"
     val bcPath  = basePath + ".bc"
     val linkedLibraries = Seq(
-      "-lm", // Math library
-    ) ++ libuvArgs
+      if (isWindows) {
+       "-lmsvcrt"  // Windows math library
+      } else {
+        "-lm"      // Math library
+      }) ++ libuvArgs
 
     def missing(cmd: String) = C.abort(s"Cannot find ${cmd}. This is required to use the LLVM backend.")
     val clang = clangCmd.getOrElse(missing("clang"))
 
     val clangMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
-    val executableFile = basePath
+    val executableFile = if (isWindows) { basePath + ".exe" } else { basePath }
 
     var clangArgs = Seq(clang, llPath, clangMainFile, "-Wno-override-module", "-o", executableFile)
       ++ linkedLibraries
@@ -373,7 +378,7 @@ object LLVMRunner extends Runner[String] {
     }
 
     if (useLTO) {
-      clangArgs ++= Seq("-O3", "-flto=full")
+      clangArgs ++= Seq("-O3", "-fuse-ld=lld", "-flto=full")
     }
 
     exec(clangArgs: _*)
