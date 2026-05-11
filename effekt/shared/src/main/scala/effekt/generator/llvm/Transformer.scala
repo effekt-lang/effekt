@@ -51,9 +51,9 @@ object Transformer {
           case tps => tps.mkString(", ")
         }
         Verbatim(
-          s"""; declaration extern type ${name}${ttps} = ${body}
-              |%${name} = type ${body.fill { case machine.Variable(name, tpe) => PrettyPrinter.localName(name) }}
-              |""".stripMargin
+          s"""; declaration extern type ${name}${ttps} = ${body}"""
+              // |%${name} = type ${body.fill { case machine.Variable(name, tpe) => PrettyPrinter.localName(name) }}
+              // |""".stripMargin
         )
       case machine.ExternType(name, tps, machine.ExternBody.Unsupported(err)) =>
         Verbatim(s"; unsupported extern type ${name}: ${err}")

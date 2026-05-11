@@ -13,6 +13,7 @@ import effekt.util.UByte
 import effekt.util.{ DB, toDB }
 
 import scala.annotation.tailrec
+import effekt.core.ExternBody.StringExternBody
 
 
 object Transformer {
@@ -179,11 +180,9 @@ object Transformer {
               transformUnboxed(resultType) match {
                 case Type.Positive() =>
                   Trampoline.Done(ForeignCall(variable, transform(blockName), unboxeds ++ blocks, rest))
-                case Type.Named(_) =>
-                  Trampoline.Done(ForeignCall(variable, transform(blockName), unboxeds ++ blocks, rest))
                 case unboxedTpe =>
-                  val unboxed = Variable(freshName("unboxed"), unboxedTpe)
-                  Trampoline.Done(ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, Coerce(variable, unboxed, rest)))
+                  val unboxed = Variable(transform(id), unboxedTpe)
+                  Trampoline.Done(ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, rest))
               }
             }
           }
@@ -507,8 +506,6 @@ object Transformer {
             transformUnboxed(resultType) match {
               case Type.Positive() =>
                 ForeignCall(variable, transform(blockName), unboxeds, k(variable))
-              case Type.Named(name) =>
-                ForeignCall(variable, transform(blockName), unboxeds, k(variable))
               case unboxedTpe =>
                 val unboxed = Variable(freshName("unboxed"), unboxedTpe)
                 ForeignCall(unboxed, transform(blockName), unboxeds, Coerce(variable, unboxed, k(variable)))
@@ -563,16 +560,35 @@ object Transformer {
         Variable(transform(name), transform(tpe))
     }
 
-  def transform(tpe: core.ValueType)(using DC: DeclarationContext): Type =
+  def parse(tpe: core.Extern.Data): Option[Type] = tpe match {
+    case core.Extern.Data(id, targs, body) => {
+      body match {
+        case StringExternBody(featureFlag, contents) => {
+          // We only support simple definitions for known types
+          // i.e. extern type Foo = "int" 
+          val typeString = contents.strings.head
+          typeString match {
+            case "byte" => Some(Type.Byte())
+            case "double" => Some(Type.Double())
+            case "int" => Some(Type.Int())
+            case other => None
+          }
+        }
+        case _ => None
+      }
+    }
+  }
+
+  def transform(tpe: core.ValueType)(using DC: DeclarationContext, E: ErrorReporter): Type =
     tpe match {
       case core.ValueType.Data(name, targs) => DC.findExternData(name) match {
         case None => Positive()
-        case Some(value) => Type.Named(transform(name))
+        case Some(value) => parse(value).getOrElse(E.abort(s"Unsupported extern data type '${value}'"))
       }
       case _ => Positive()
     }
 
-  def transformUnboxed(tpe: core.ValueType)(using DeclarationContext): Type =
+  def transformUnboxed(tpe: core.ValueType)(using DeclarationContext, ErrorReporter): Type =
     tpe match {
         case core.Type.TInt => Type.Int()
         case core.Type.TChar => Type.Int()
@@ -598,7 +614,7 @@ object Transformer {
   def transform(id: Id): String =
     s"${id.name}_${id.id}"
 
-  def perhapsUnbox(value: Variable, tpe: core.ValueType): Binding[Variable] =
+  def perhapsUnbox(value: Variable, tpe: core.ValueType)(using DC: DeclarationContext): Binding[Variable] =
     tpe match {
       case core.Type.TInt =>
         val unboxed = Variable(freshName("integer"), Type.Int())
@@ -612,10 +628,19 @@ object Transformer {
       case core.Type.TDouble =>
         val unboxed = Variable(freshName("double"), Type.Double())
         shift { k => Coerce(unboxed, value, k(unboxed)) }
+      case core.ValueType.Data(name, targs) => DC.findExternData(name) match {
+        case None => pure(value)
+        case Some(extVal) => parse(extVal) match {
+          case None => pure(value)
+          case Some(parsedTpe) => {
+            pure(value)
+          }
+        }
+      }
       case _ => pure(value)
     }
 
-  def perhapsUnbox(values: List[Variable], tpes: List[core.ValueType]): Binding[List[Variable]] =
+  def perhapsUnbox(values: List[Variable], tpes: List[core.ValueType])(using DeclarationContext): Binding[List[Variable]] =
     traverse(values.zip(tpes)) { case (value, tpe) => perhapsUnbox(value, tpe) }
 
   def freshName(baseName: String): String = baseName + "_" + symbols.Symbol.fresh.next()
