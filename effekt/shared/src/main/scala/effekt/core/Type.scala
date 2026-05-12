@@ -462,8 +462,8 @@ object Type {
     // data=List[Int]
     case Expr.MakeContext(data, tag, targs, before, after) =>
       val Typing(argTypes, argCapt, argFree) = all(before ++ after, arg => arg.typing)
-      // Context[List[Int]]
-      val tpe = ValueType.Data(builtins.ContextSymbol, List(data))
+      // Context[List[Int], List[Int]]
+      val tpe = ValueType.Data(builtins.ContextSymbol, List(data, data)) //TODO: how to parametrize, if Contexts are more general?
       Typing(tpe, argCapt, argFree) // TODO maybe check like Make later
 
     case Expr.Box(b, annotatedCapture) =>

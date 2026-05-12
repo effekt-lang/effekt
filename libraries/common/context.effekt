@@ -8,23 +8,23 @@ import ref
 
 type Ctx_Hole[A] = A
 
-type HoleContext[A,B]
-{
-  Context(data:A, hole:Ctx_Hole[B])
-}
+//type HoleContext[A,B]
+//{
+//  Context(data:A, hole:Ctx_Hole[B])
+//}
 
 extern def ctx_makeHole[A]() at {}: A =
   js "undefined"
 
-extern def ctx_emptyContext[A]() at {}: HoleContext[A, A] =
+extern def ctx_emptyContext[A]() at {}: Context[A, A] =
   js "emptyContext()"
 
-extern def ctx_applyContext[A,B](ctx:HoleContext[A,B], value:B) at {}: A =
+extern def ctx_applyContext[A,B](ctx:Context[A,B], value:B) at {}: A =
   js "applyContext(${ctx}, ${value})"
 
-extern def ctx_composeContext[A,B,C](ctx1:HoleContext[A,B], ctx2: HoleContext[B,C]) at {}: HoleContext[A,C] =
+extern def ctx_composeContext[A,B,C](ctx1:Context[A,B], ctx2: Context[B,C]) at {}: Context[A,C] =
   js "composeContext(${ctx1}, ${ctx2})"
 
-extern def ctx_makeContext[A,B](data:A, holePointer: Ctx_Hole[B]) at {}: HoleContext[A,B] = //TODO: fieldName?
+extern def ctx_makeContext[A,B](data:A, holePointer: Ctx_Hole[B]) at {}: Context[A,B] = //TODO: fieldName?
   js "makeContext(${data}, ${holePointer})"
 

@@ -1,4 +1,4 @@
-import {emptyContext, HoleContext, make_context, apply_context, compose_context, empty_context} from "./HoleContext.js";
+import {make_context, apply_context, compose_context, empty_context} from "./HoleContext.js";
 
 const $effekt = {  };
 

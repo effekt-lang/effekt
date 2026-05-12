@@ -56,7 +56,8 @@ object builtins {
   val GlobalSymbol = Interface(Name.local("Global"), Nil, Nil, decl = NoSource)
   val GlobalCapability = ExternResource(name("global"), InterfaceType(GlobalSymbol, Nil), Resource(name("global")), decl = NoSource)
 
-  val ContextSymbol = Interface(Name.local("Context"), Nil, Nil, decl = NoSource)
+  val ContextSymbol = ExternType(name("Context"), List(TypeParam(name("A")), TypeParam(name("B"))), NoSource)
+  val TContext = ValueTypeApp(ContextSymbol, Nil)
 
   object TState {
     val S: TypeParam = TypeParam(Name.local("S"))
@@ -88,7 +89,8 @@ object builtins {
     "Any" -> TopSymbol,
     "Nothing" -> BottomSymbol,
     "IO" -> IOSymbol,
-    "Region" -> RegionSymbol
+    "Region" -> RegionSymbol,
+    "Context" -> ContextSymbol //should maybe not be user-facing, but the functions for them are externs
   )
 
   val rootCaptures: Map[String, Capture] = Map(

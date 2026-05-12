@@ -8,7 +8,7 @@ import effekt.core.{Toplevel, *}
 import effekt.core.Block.*
 import effekt.core.BlockType.*
 import effekt.core.optimizer.TRMC.TransformContext
-import effekt.symbols.{TermSymbol, TypeSymbol}
+import effekt.symbols.{TermSymbol, TypeSymbol, builtins}
 import effekt.util.messages.ErrorReporter
 
 object TRMC extends Phase[CoreTransformed, CoreTransformed]{
@@ -82,10 +82,10 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
       case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
         val outputfun = functionLinks.get(id)
         if(id != transformedfun && outputfun.isDefined){
-          val ctxDecl: Declaration = DC.declarations.find(_.id.name.name == "HoleContext").getOrElse { //TODO: refactor duplicate code
-            Context.panic(s"No declaration found for HoleContext.")
-          }
-          val outerContextTpe = ValueType.Data(ctxDecl.id, List(stmt.tpe, stmt.tpe)) //TODO: parameters, if unequal
+//          val ctxDecl: Declaration = DC.declarations.find(_.id.name.name == "HoleContext").getOrElse { //TODO: refactor duplicate code
+//            Context.panic(s"No declaration found for HoleContext.")
+//          }
+          val outerContextTpe = ValueType.Data(builtins.ContextSymbol, List(stmt.tpe, stmt.tpe)) //TODO: parameters, if unequal
           annotatedTpe match {
             case Function(tparams, cparams, vparams, bparams, result) =>
               Stmt.App(
@@ -133,10 +133,10 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
   def trmc(id: Id, block: Block, outputfun: Id, DC: DeclarationContext)(using Context): Toplevel = block match {
     case effekt.core.Block.BlockVar(id, annotatedTpe, annotatedCapt) => ???
     case effekt.core.Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-      val ctxDecl: Declaration = DC.declarations.find(_.id.name.name == "HoleContext").getOrElse {
-        Context.panic(s"No declaration found for HoleContext.")
-      }
-      val outerContextTpe = ValueType.Data(ctxDecl.id, List(body.tpe, body.tpe)) //TODO: parameters, if unequal
+//      val ctxDecl: Declaration = DC.declarations.find(_.id.name.name == "HoleContext").getOrElse {
+//        Context.panic(s"No declaration found for HoleContext.")
+//      }
+      val outerContextTpe = ValueType.Data(builtins.ContextSymbol, List(body.tpe, body.tpe)) //TODO: parameters, if unequal
       val ctxId = Id("ctx")
       Toplevel.Def(outputfun, BlockLit(tparams, cparams, vparams.appended(ValueParam(ctxId, outerContextTpe)), bparams,
         trmc(body, id, outputfun, TransformContext.Outer(ctxId), outerContextTpe, DC)))
