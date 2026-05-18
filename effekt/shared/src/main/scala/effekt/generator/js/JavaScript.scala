@@ -57,7 +57,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
       // establish unique names
       val renamed = new Renamer().apply(core)
 
-      var tree = effekt.cpsds.transform(renamed, mainId)
+      var tree = effekt.cpsds.transform(renamed)
 
       def optimize(input: effekt.cpsds.ModuleDecl) =
         var tree = input
