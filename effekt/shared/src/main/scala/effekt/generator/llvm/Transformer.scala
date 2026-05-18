@@ -9,15 +9,18 @@ import effekt.machine.analysis.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import effekt.machine.ExternBody.StringExternBody
+import effekt.machine.Variable
 
 object Transformer {
 
-  val llvmFeatureFlags: List[String] = List("llvm")
+  val llvmFeatureFlags: List[String] = List("llvm", "c")
 
   def transform(program: machine.Program)(using ErrorReporter): List[Definition] = program match {
     case machine.Program(declarations, definitions, entry) =>
 
       given MC: ModuleContext = ModuleContext();
+      declarations.foreach(transform);
       definitions.foreach(transform);
 
       val globals = MC.definitions; MC.definitions = null;
@@ -27,8 +30,8 @@ object Transformer {
         Call("_", Tailcc(false), VoidType(), transform(entry), List(LocalReference(stackType, "stack"))))
       val entryBlock = BasicBlock("entry", entryInstructions, RetVoid())
       val entryFunction = Function(External(), Ccc(), VoidType(), "effektMain", List(), List(entryBlock))
-
-      declarations.map(transform) ++ globals :+ entryFunction
+      
+      globals :+ entryFunction
   }
 
   // context getters
@@ -36,33 +39,54 @@ object Transformer {
   private def FC(using FC: FunctionContext): FunctionContext = FC
   private def BC(using BC: BlockContext): BlockContext = BC
 
-  def transform(declaration: machine.Declaration)(using ErrorReporter): Definition =
+  def transform(declaration: machine.Declaration)(using ErrorReporter, ModuleContext): Unit =
     declaration match {
+      case machine.Extern(functionName, parameters, returnType, async, body@StringExternBody(featureFlag, contents)) if featureFlag.matches("c") =>
+        // FIXME: We could explicitly disallow CVoid as a type in parameter position
+        val transformedParameters = parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
+        val transformedReturnType = transform(returnType)
+
+        // Function name was already parsed in machine transformer
+        val cFunctionName = contents.strings.head
+        val returnLLVMType = PrettyPrinter.show(transformedReturnType)
+        val parameterLLVMTypes = transformedParameters.map(param => PrettyPrinter.show(param.typ))
+
+        emit(Verbatim(s"declare ${returnLLVMType} @${cFunctionName}(${parameterLLVMTypes.mkString(", ")})"))
+        defineCWrapperFunction(functionName, transformedParameters, transformedReturnType) {
+          emit(Comment(s"C wrapper function for '${cFunctionName}'"))
+          // TODO: Check calling convention here
+          emit(Call("ccall", Ccc(), transformedReturnType, ConstantGlobal(cFunctionName), transformedParameters.map { case Parameter(typ, name) => LocalReference(typ, name) }))
+          
+          transformedReturnType match {
+            case VoidType() => RetVoid()
+            case _          => Ret(LocalReference(transformedReturnType, "ccall"))
+          }
+        }
       case machine.Extern(functionName, parameters, returnType, async, body) =>
         val transformedParameters = parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
         if (async) {
-          VerbatimFunction(Tailcc(true), VoidType(), functionName, transformedParameters :+ Parameter(stackType, "stack"), transform(body))
+          emit(VerbatimFunction(Tailcc(true), VoidType(), functionName, transformedParameters :+ Parameter(stackType, "stack"), transform(body)))
         } else {
-          VerbatimFunction(Ccc(), transform(returnType), functionName, transformedParameters, transform(body))
+          emit(VerbatimFunction(Ccc(), transform(returnType), functionName, transformedParameters, transform(body)))
         }
       case machine.ExternType(name, tps, machine.ExternBody.StringExternBody(_, body)) =>
         val ttps = tps match {
           case Nil => ""
           case tps => tps.mkString(", ")
         }
-        Verbatim(s"; declaration extern type ${name}${ttps} = ${body}")
+        emit(Verbatim(s"; declaration extern type ${name}${ttps} = ${body}"))
       case machine.ExternType(name, tps, machine.ExternBody.Unsupported(err)) =>
-        Verbatim(s"; unsupported extern type ${name}: ${err}")
+        emit(Verbatim(s"; unsupported extern type ${name}: ${err}"))
       case machine.ExternInterface(name, tps, machine.ExternBody.StringExternBody(_, body)) =>
         val ttps = tps match {
           case Nil => ""
           case tps => tps.mkString(", ")
         }
-        Verbatim(s"; declaration extern interface ${name}${ttps} = ${body}")
+        emit(Verbatim(s"; declaration extern interface ${name}${ttps} = ${body}"))
       case machine.ExternInterface(name, tps, machine.ExternBody.Unsupported(err)) =>
-        Verbatim(s"; unsupported extern interface ${name}: ${err}")
+        emit(Verbatim(s"; unsupported extern interface ${name}: ${err}"))
       case machine.Include(ff, content) =>
-        Verbatim("; declaration include" ++ content)
+        emit(Verbatim("; declaration include" ++ content))
     }
 
   def transform(body: machine.ExternBody[machine.Variable])(using ErrorReporter): String = body match {
@@ -442,6 +466,17 @@ object Transformer {
   val promptType = NamedType("Prompt");
   val referenceType = NamedType("Reference");
 
+  def transform(tpe: machine.Type.CType): Type = tpe match {
+    case machine.Type.CType(name) => name match {
+      case "CString" => PointerType()
+      case "CInt" => IntegerType64()
+      case "CDouble" => DoubleType()
+      case "CFloat" => FloatType()
+      case "CPtr" => PointerType()
+      case "CVoid" => VoidType()
+    } 
+  }
+
   def transform(tpe: machine.Type): Type = tpe match {
     case machine.Positive()          => positiveType
     case machine.Negative()          => negativeType
@@ -451,21 +486,34 @@ object Transformer {
     case machine.Type.Byte()         => IntegerType8()
     case machine.Type.Double()       => DoubleType()
     case machine.Type.Reference(tpe) => referenceType
+    case CT@machine.Type.CType(name)    => transform(CT)
   }
 
   def environmentSize(environment: machine.Environment): Int =
     environment.map { case machine.Variable(_, typ) => typeSize(typ) }.sum
 
+  def typeSize(tpe: machine.Type.CType): Int = tpe match {
+    case machine.Type.CType(name) => name match {
+      case "CString" => 8
+      case "CInt"    => 8
+      case "CDouble" => 8
+      case "CFloat"  => 4
+      case "CPtr"    => 8
+      case "CVoid"   => 0
+    }
+  }
+
   def typeSize(tpe: machine.Type): Int =
     tpe match {
-      case machine.Positive()        => 16
-      case machine.Negative()        => 16
-      case machine.Type.Prompt()     => 8 // TODO Make fat?
-      case machine.Type.Stack()      => 8 // TODO Make fat?
-      case machine.Type.Int()        => 8 // TODO Make fat?
-      case machine.Type.Byte()       => 1
-      case machine.Type.Double()     => 8 // TODO Make fat?
-      case machine.Type.Reference(_) => 16
+      case machine.Positive()           => 16
+      case machine.Negative()           => 16
+      case machine.Type.Prompt()        => 8 // TODO Make fat?
+      case machine.Type.Stack()         => 8 // TODO Make fat?
+      case machine.Type.Int()           => 8 // TODO Make fat?
+      case machine.Type.Byte()          => 1
+      case machine.Type.Double()        => 8 // TODO Make fat?
+      case machine.Type.Reference(_)    => 16
+      case CT@machine.Type.CType(name)  => typeSize(CT)
     }
 
   def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
@@ -479,6 +527,21 @@ object Transformer {
 
     val entryBlock = BasicBlock("entry", instructions, terminator);
     val function = Function(Private(), Ccc(), VoidType(), name, parameters, entryBlock :: basicBlocks);
+
+    emit(function)
+  }
+
+  def defineCWrapperFunction(name: String, parameters: List[Parameter], returnType: Type)(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
+    implicit val FC = FunctionContext();
+    implicit val BC = BlockContext();
+
+    val terminator = prog;
+
+    val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
+    val instructions = BC.instructions; BC.instructions = null;
+
+    val entryBlock = BasicBlock("entry", instructions, terminator);
+    val function = Function(Private(), Ccc(), returnType, name, parameters, entryBlock :: basicBlocks);
 
     emit(function)
   }

@@ -88,7 +88,22 @@ object Transformer {
       ExternInterface(transform(id), tparams.map(transform), tBody)
   }
 
+  val validCTypes = List("CString", "CInt", "CDouble", "CFloat", "CPtr", "CVoid")
+
+  def handleExternC(template: Template[core.Expr])(using ErrorReporter): Template[Variable] = template match {
+    case Template(strings, args) => 
+      val cFunName = strings.head.split(" ").head.trim()
+
+      Template(List(cFunName), args map {
+        case core.ValueVar(id, core.ValueType.Data(name, targs)) if validCTypes.contains(name.name.name) => 
+          Variable(transform(id), machine.Type.CType(name.name.name))
+        case _ => ErrorReporter.abort(s"In the C backend, only types '${validCTypes}' are allowed in templates")
+      })
+  }
+
   def transform(body: core.ExternBody[core.Expr])(using ErrorReporter): machine.ExternBody[Variable] = body match {
+    case core.ExternBody.StringExternBody(ff, template) if ff.matches("c") => 
+      ExternBody.StringExternBody(ff, handleExternC(template))
     case core.ExternBody.StringExternBody(ff, Template(strings, args)) =>
       ExternBody.StringExternBody(ff, Template(strings, args map {
         case core.ValueVar(id, tpe) => Variable(transform(id), transform(tpe))
@@ -172,12 +187,14 @@ object Transformer {
         }
 
       case core.ImpureApp(id, core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), capt), targs, vargs, bargs, rest) =>
-        val variable = Variable(transform(id), Positive())
+        val variable = Variable(transform(id), transform(resultType))
         transform(rest).flatMap { rest =>
           transform(vargs, bargs).run { (values, blocks) =>
             perhapsUnbox(values, vparamTypes).run { unboxeds =>
               transformUnboxed(resultType) match {
                 case Type.Positive() =>
+                  Trampoline.Done(ForeignCall(variable, transform(blockName), unboxeds ++ blocks, rest))
+                case Type.CType(_) =>
                   Trampoline.Done(ForeignCall(variable, transform(blockName), unboxeds ++ blocks, rest))
                 case unboxedTpe =>
                   val unboxed = Variable(freshName("unboxed"), unboxedTpe)
@@ -505,6 +522,8 @@ object Transformer {
             transformUnboxed(resultType) match {
               case Type.Positive() =>
                 ForeignCall(variable, transform(blockName), unboxeds, k(variable))
+              case Type.CType(_) =>
+                ForeignCall(variable, transform(blockName), unboxeds, k(variable))
               case unboxedTpe =>
                 val unboxed = Variable(freshName("unboxed"), unboxedTpe)
                 ForeignCall(unboxed, transform(blockName), unboxeds, Coerce(variable, unboxed, k(variable)))
@@ -559,8 +578,10 @@ object Transformer {
         Variable(transform(name), transform(tpe))
     }
 
-  def transform(tpe: core.ValueType): Type =
-    Positive()
+  def transform(tpe: core.ValueType): Type = tpe match {
+    case core.ValueType.Data(name, _) if validCTypes.contains(name.name.name) => Type.CType(name.name.name)
+    case _ => Positive()
+  }
 
   def transformUnboxed(tpe: core.ValueType): Type =
     tpe match {
@@ -568,6 +589,7 @@ object Transformer {
         case core.Type.TChar => Type.Int()
         case core.Type.TByte => Type.Byte()
         case core.Type.TDouble => Type.Double()
+        case core.ValueType.Data(name, _) if validCTypes.contains(name.name.name) => Type.CType(name.name.name)
         case _ => Positive()
       }
 

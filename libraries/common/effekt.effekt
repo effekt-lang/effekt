@@ -795,3 +795,33 @@ effect splice[A](x: A): Unit
 // of the call site unless passed explicitly.
 
 record SourcePosition(file: String, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int)
+
+// C backend definitions
+// =====================
+// 
+// Type definitions & constructors for C types
+// Should only be used to automatically generate effekt wrappers for C functions
+
+namespace C {
+  // FIXME: The right-hand definitions do not currently matter,
+  //        but they do correctly represent what the types are implemented as 
+  extern type CString = llvm "ptr"
+  extern type CInt = llvm "i64"
+  extern type CDouble = llvm "double"
+  extern type CFloat = llvm "float"
+  extern type CPtr = llvm "ptr"
+  extern type CVoid = llvm "void"
+
+  extern def string(value: String): CString = 
+    llvm """
+      %conv = call ptr @c_bytearray_into_nullterminated_string(%Pos ${value})
+      ret ptr %conv
+    """
+  extern def int(value: Int): CInt = llvm "ret %Int ${value}"
+  extern def double(value: Double): CDouble = llvm "ret %Double ${value}"
+  extern def float(value: Double): CFloat = llvm """
+    %trunc = fptrunc %Double ${value} to float
+    ret float %trunc
+  """
+  extern def nullptr(): CPtr = llvm "ret ptr null"
+}

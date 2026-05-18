@@ -36,6 +36,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.Byte()         => "Byte"
     case Type.Double()       => "Double"
     case Type.Reference(tpe) => toDoc(tpe) <> "*"
+    case Type.CType(name)    => s"CType(${name})" 
   }
 
   def toDoc(defi: Definition): Doc = defi match {
