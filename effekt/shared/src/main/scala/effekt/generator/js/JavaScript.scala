@@ -57,20 +57,24 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
       // establish unique names
       val renamed = new Renamer().apply(core)
 
-      var tree = effekt.cpsds.transform(renamed)
+      var tree = effekt.cpsds.transform(renamed, mainId)
 
       def optimize(input: effekt.cpsds.ModuleDecl) =
         var tree = input
-        tree = effekt.cpsds.Inliner.transform(tree, mainId)
-        tree = effekt.cpsds.BlockSinking.transform(tree, mainId)
-        //tree = effekt.cpsds.ParameterDropping.transform(tree, mainId)
-        tree = effekt.cpsds.Simplifier.transform(tree)
+        //tree = effekt.cpsds.Inliner.transform(tree, mainId)
+        println("--- BEFORE ---")
+        println(util.show(tree))
+        //tree = effekt.cpsds.BlockSinking.transform(tree, mainId)
+        println("--- AFTER ---")
+        println(util.show(tree))
+//        tree = effekt.cpsds.ParameterDropping.transform(tree, mainId)
+        //tree = effekt.cpsds.Simplifier.transform(tree)
         tree
 
-
-      tree = optimize(tree)
-      tree = optimize(tree)
-      tree = optimize(tree)
+      //println(util.show(tree))
+      //      tree = optimize(tree)
+      //      tree = optimize(tree)
+      //      tree = optimize(tree)
 
       (mainId, mainFile, core, tree)
   }
