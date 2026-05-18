@@ -125,7 +125,9 @@ object TransformerCpsDs extends Transformer {
 
   def toJSToplevel(d: cpsds.ToplevelDefinition)(using ctx: TransformerContext): js.Stmt = d match {
     case cpsds.ToplevelDefinition.Def(id, params, body) =>
-      js.Function(nameDef(id), params.map(nameDef), toJS(body).stmts)
+      val kind = kindOf(id)
+      js.Function(nameDef(id), params.map(nameDef),
+        secondClassDef(id, params, body, None, kind.isRecursive).stmts)
 
     case cpsds.ToplevelDefinition.Val(id, ks, k, binding) =>
       js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding).stmts)))
@@ -214,7 +216,7 @@ object TransformerCpsDs extends Transformer {
     case cpsds.Stmt.Def(id, params, body, rest) =>
       val kind = kindOf(id)
       if kind.isSecondClass then
-        secondClassDef(id, params, body, rest, kind.isRecursive)
+        secondClassDef(id, params, body, Some(rest), kind.isRecursive)
       else
         firstClassDef(id, params, body, rest)
 
@@ -431,8 +433,11 @@ object TransformerCpsDs extends Transformer {
    *   id: while (true) {      // recursive call: params = args; continue id
    *     [[body]]
    *   }
+   *
+   * If `rest` is defined, this is a local function definition. Otherwise it is a toplevel function and the params
+   * do not need to be initialized.
    */
-  def secondClassDef(id: Id, params: List[Id], body: cpsds.Stmt, rest: cpsds.Stmt, isRecursive: Boolean)(using ctx: TransformerContext): Binding[List[js.Stmt]] = {
+  def secondClassDef(id: Id, params: List[Id], body: cpsds.Stmt, rest: Option[cpsds.Stmt], isRecursive: Boolean)(using ctx: TransformerContext): Binding[List[js.Stmt]] = {
     val label = nameDef(id)
     val sci = SecondClassDef(params, isRecursive)
 
@@ -440,8 +445,9 @@ object TransformerCpsDs extends Transformer {
     val ctxWithDef = ctx.copy(secondClass = ctx.secondClass + (id -> sci))
 
     // Translate rest: calls to id will become assignments + break
-    val restStmts = toJS(rest)(using ctxWithDef).stmts
-    val entryBlock = js.Block(Some(label), restStmts)
+    val entryBlock = rest.map { r =>
+      js.Block(Some(label), toJS(r)(using ctxWithDef).stmts)
+    }
 
     // Translate body: for recursive defs, calls to id will become assignments + continue.
     // Also track params as mutable so that closures inside the body will backup them.
@@ -453,15 +459,14 @@ object TransformerCpsDs extends Transformer {
     else ctxWithDef
     val bodyStmts = toJS(body)(using bodyCtx).stmts
 
-    val paramDecls = params.map(p => js.Let(nameDef(p), js.Undefined))
+    val paramDecls = if rest.isDefined then params.map(p => js.Let(nameDef(p), js.Undefined)) else Nil
 
     if isRecursive then
-      pure(paramDecls ++ List(
-        entryBlock,
+      pure(paramDecls ++ entryBlock ++ List(
         js.While(Some(label), RawExpr("true"), bodyStmts)
       ))
     else
-      pure(paramDecls ++ List(entryBlock) ++ bodyStmts)
+      pure(paramDecls ++ entryBlock ++ bodyStmts)
   }
 
   // --- Pattern matching ---
