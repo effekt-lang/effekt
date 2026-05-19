@@ -169,7 +169,8 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
         if tag == consId && id == id2 =>
         val (init, rest) = split(next, DC)
         (TailContext.Compose(init, TailContext.Make(data, tag, targs, List(head), Nil)), rest)
-      case TransformContext.Val(id, Stmt.Let(id2,Expr.Make(data, tag, targs, head :: Expr.ValueVar(id3, tpe) :: Nil), Stmt.Return(Expr.ValueVar(id4, tpe2))), next) //TODO: what about longer let-chains?
+      case TransformContext.Val(id, Stmt.Let(id2,Expr.Make(data, tag, targs, head :: Expr.ValueVar(id3, tpe) :: Nil), 
+          Stmt.Return(Expr.ValueVar(id4, tpe2))), next) //TODO: what about longer let-chains?
         if tag == consId && id == id3 && id2 == id4 =>
         val (init, rest) = split(next, DC)
         (TailContext.Compose(init, TailContext.Make(data, tag, targs, List(head), Nil)), rest)

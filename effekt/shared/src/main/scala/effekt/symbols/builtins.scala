@@ -57,7 +57,7 @@ object builtins {
   val GlobalCapability = ExternResource(name("global"), InterfaceType(GlobalSymbol, Nil), Resource(name("global")), decl = NoSource)
 
   val ContextSymbol = ExternType(name("Context"), List(TypeParam(name("A")), TypeParam(name("B"))), NoSource)
-  val TContext = ValueTypeApp(ContextSymbol, Nil)
+  def TContext(A: ValueType, B: ValueType) = ValueTypeApp(ContextSymbol, List(A, B))
 
   object TState {
     val S: TypeParam = TypeParam(Name.local("S"))

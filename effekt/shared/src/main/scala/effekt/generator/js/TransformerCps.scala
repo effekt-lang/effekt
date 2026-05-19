@@ -23,6 +23,7 @@ object TransformerCps extends Transformer {
   val THUNK = Variable(JSName("THUNK"))
   val DEALLOC = Variable(JSName("DEALLOC"))
   val TRAMPOLINE = Variable(JSName("TRAMPOLINE"))
+  val MAKE_CONTEXT = Variable(JSName("make_context"))
 
   class RecursiveUsage(var jumped: Boolean)
   case class RecursiveDefInfo(id: Id, label: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, used: RecursiveUsage)
@@ -202,7 +203,12 @@ object TransformerCps extends Transformer {
     case literal: Expr.Literal       => js.RawExpr(literal.value.toString) // TODO This should match on the type...
     case Expr.PureApp(id, vargs)     => inlineExtern(id, vargs)
     case Expr.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
-    case Expr.MakeContext(data, tag, before, after) => ??? //TODO: how do you make contexts in JS?
+    case Expr.MakeContext(data, tag, before, after) => 
+      val con = D.declarations.getConstructor(tag)
+      js.Call(MAKE_CONTEXT,
+      List(js.New(nameRef(tag),
+        (before map toJS) ++ List(Undefined) ++ (after map toJS)),
+        js.JsString(uniqueName(con.fields.apply(before.length).id).name)))
     case Expr.Box(b)                 => argumentToJS(b)
   }
 

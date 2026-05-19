@@ -1,4 +1,4 @@
-import {make_context, apply_context, compose_context, empty_context} from "./HoleContext.js";
+import {create_context, apply_context, compose_context, empty_context} from "./HoleContext.js";
 
 const $effekt = {  };
 
@@ -71,7 +71,7 @@ function main_0() {
     let list = testMap_inPlace(new Cons_0(1, new Cons_0(7, new Cons_0(8, new Cons_0(4, new Nil_0())))), fibonacci_0);
     inspect_0(list);
     let hole = new Cons_0(2,undefined)
-    let context1 = make_context(new Cons_0(1,hole),{obj:hole,fieldName:"tail_0"})
+    let context1 = create_context(new Cons_0(1,hole),{obj:hole,fieldName:"tail_0"})
 
 
     /*let hole = { outer: null }
@@ -135,7 +135,7 @@ function testMapk_inPlace(list, fun, cont){
             let hole = undefined
             let data = new Cons_0(y,hole)
             //compose
-            let innerCont = make_context(data, {obj: data, fieldName: "tail_0"})
+            let innerCont = create_context(data, {obj: data, fieldName: "tail_0"})
             //cont.compose_context(innerCont)
             let composedContext = compose_context(cont, innerCont)
             /*let newHole = {outer:null}
