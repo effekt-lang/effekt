@@ -817,11 +817,11 @@ namespace C {
       %conv = call ptr @c_bytearray_into_nullterminated_string(%Pos ${value})
       ret ptr %conv
     """
-  extern def int(value: Int): CInt = llvm "ret %Int ${value}"
-  extern def double(value: Double): CDouble = llvm "ret %Double ${value}"
-  extern def float(value: Double): CFloat = llvm """
+  extern def int(value: Int) at {}: CInt = llvm "ret %Int ${value}"
+  extern def double(value: Double) at {}: CDouble = llvm "ret %Double ${value}"
+  extern def float(value: Double) at {}: CFloat = llvm """
     %trunc = fptrunc %Double ${value} to float
     ret float %trunc
   """
-  extern def nullptr(): CPtr = llvm "ret ptr null"
+  extern def nullptr() at {}: CPtr = llvm "ret ptr null"
 }
