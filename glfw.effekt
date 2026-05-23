@@ -1,0 +1,74 @@
+extern def isNull(ptr: C::CPtr): Bool = llvm """
+  %cmp = icmp eq ptr ${ptr}, null
+  %ext = zext i1 %cmp to i64
+  %bool = insertvalue %Pos zeroinitializer, i64 %ext, 0
+  ret %Pos %bool
+"""
+
+extern def asBool(value: C::CInt): Bool = llvm """
+  %cmp = icmp eq %Int ${value}, 0
+  %ext = zext i1 %cmp to i64
+  %bool = insertvalue %Pos zeroinitializer, i64 %ext, 0
+  ret %Pos %bool
+"""
+
+extern llvm """
+  declare ptr @glfwGetProcAddress(ptr)
+  declare i32 @gladLoadGL(ptr)
+"""
+
+extern def gladLoadGL(): Unit = llvm """
+  call i32 @gladLoadGL(ptr noundef @glfwGetProcAddress)
+  ret %Pos zeroinitializer
+"""
+
+// 0x00022002
+val GLFW_CONTEXT_VERSION_MAJOR = C::int(139266)
+// 0x00022003
+val GLFW_CONTEXT_VERSION_MINOR = C::int(139267)
+// 0x00022008
+val GLFW_OPENGL_PROFILE = C::int(139272)
+// 0x00032001
+val GLFW_OPENGL_CORE_PROFILE = C::int(204801)
+
+extern def glfwInit(): C::CVoid = c "glfwInit"
+extern def glfwTerminate(): C::CVoid = c "glfwTerminate"
+extern def glfwWindowHint(version: C::CInt, value: C::CInt): C::CVoid = c "glfwWindowHint" 
+
+type GLFWwindow = C::CPtr
+extern def glfwCreateWindow(width: C::CInt, height: C::CInt, title: C::CString, monitor: C::CPtr, share: GLFWwindow): GLFWwindow = c "glfwCreateWindow"
+extern def glfwMakeContextCurrent(window: GLFWwindow): C::CVoid = c "glfwMakeContextCurrent"
+extern def glfwWindowShouldClose(window: GLFWwindow): C::CInt = c "glfwWindowShouldClose"
+def glfwWindowShouldClose(window: GLFWwindow): Bool = glfwWindowShouldClose(window).asBool
+
+extern def glfwSwapBuffers(window: GLFWwindow): C::CVoid = c "glfwSwapBuffers"
+extern def glfwPollEvents(): C::CVoid = c "glfwPollEvents"
+
+
+
+def main() = {
+  glfwInit()
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, C::int(3))
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, C::int(3))
+  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE)
+
+  val window = glfwCreateWindow(C::int(800), C::int(600), C::string("Effekt Example Window"), C::nullptr(), C::nullptr())
+
+  if (window.isNull()) {
+    println("Failed to create window")
+    glfwTerminate()
+    return ()
+  }
+  glfwMakeContextCurrent(window)
+
+  gladLoadGL()
+
+  while(not(glfwWindowShouldClose(window))) {
+    glfwSwapBuffers(window)
+    glfwPollEvents()
+    ()
+  }
+
+  glfwTerminate()
+  ()
+}
