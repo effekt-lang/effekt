@@ -4,6 +4,7 @@ import java.io.File
 import effekt.util.paths.file
 import kiama.util.REPLConfig
 import org.rogach.scallop.{ ScallopOption, fileConverter, fileListConverter, longConverter, stringConverter, stringListConverter }
+import scala.io.Source
 
 class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--")) {
   // Print version information on `--version` and `--help`
@@ -84,6 +85,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
   val clangLibraries: ScallopOption[File] = opt[File](
     "clang-libraries",
     descr = "Additional library path for clang (necessary for libuv on the llvm backend)",
+    noshort = true,
+    group = advanced
+  )
+
+  val configFile: ScallopOption[File] = opt[File](
+    "config",
+    descr = "Toml config file for additional configurations",
     noshort = true,
     group = advanced
   )
@@ -268,3 +276,21 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
   // force some other configs manually to initialize them when compiling with native-image
   server; output; filenames
 }
+
+import toml.derivation.auto._
+
+case class LLVMTable(libraries: List[String], includes: List[String], linked: List[String], sources: List[String])
+case class ConfigRoot(llvm: Option[LLVMTable])
+
+def readEffektConfigToml(file: String): ConfigRoot = {
+  val configFile = Source.fromFile(file)
+  val fileContents = configFile.getLines.mkString
+  configFile.close
+  
+  val parsed = toml.Toml.parseAs[ConfigRoot](fileContents)
+  parsed match {
+    case Left((tables, err)) => sys.error(s"Failed to parse '${file}', ${err} in ${tables}")
+    case Right(value) => value 
+  }
+}
+
