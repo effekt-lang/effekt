@@ -31,7 +31,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
           println("in Toplevel")
           println(id.name.name)
           val outputFunId = Id(id.name.name + "_trmc")
-          if (id.name.name == "simpleTRMC") {
+          if (id.name.name != "main") {
             transformedFunctions = transformedFunctions.appended(trmc(id, block, outputFunId, DC))
             functionLinks = functionLinks+(id -> outputFunId)
           }
@@ -216,7 +216,18 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
       Stmt.If(cond, //same caveat as Return()
         trmc(thn, inputfun, outputfun, context, outerContextTpe, DC),
         trmc(els, inputfun, outputfun, context, outerContextTpe, DC))
-    case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => ???
+    case Stmt.Match(scrutinee, annotatedTpe, clauses, default) =>
+      Stmt.Match(
+        scrutinee,
+        annotatedTpe,
+        clauses.map((id, blockLit) => blockLit match {
+          case BlockLit(tparams, cparams, vparams, bparams, body) => (id, BlockLit(tparams, cparams, vparams, bparams, trmc(body, inputfun, outputfun, context, outerContextTpe, DC)))
+        }),
+        default match {
+          case Some(value) => Some(trmc(value, inputfun, outputfun, context, outerContextTpe, DC))
+          case None => None
+        }
+      )
     case Stmt.Region(body) => ???
     case Stmt.Alloc(id, init, region, body) => ???
     case Stmt.Var(ref, init, capture, body) => ???

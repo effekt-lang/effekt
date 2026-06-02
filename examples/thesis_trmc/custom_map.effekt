@@ -6,7 +6,7 @@ import list
   Cons(head: A, tail: testList[A])
   }*/
 def main() = {
-  inspect(Cons(1,Cons(7,Cons(8,Cons(4,Nil())))).testMap{fib})
+  inspect(Cons(1,Cons(7,Cons(8,Cons(4,Nil())))).map{fib})
 }
 
 def fib(n: Int): Int = n match {
@@ -17,8 +17,13 @@ def fib(n: Int): Int = n match {
 
 
 
-def testMap[A, B](list: List[A]){ fun: A => B}: List[B] =
+def map[A, B](list: List[A]){ f: A => B}: List[B] =
   list match{
   case Nil() => Nil()
-  case Cons(x, xs) => Cons(fun(x), testMap(xs){fun})
+  case Cons(x, xs) => Cons(f(x), map(xs){f})
+}
+
+def countdown(n: Int): Unit = {
+  println(n)
+  countdown(n - 1)
 }
