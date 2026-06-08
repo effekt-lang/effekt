@@ -1,5 +1,0 @@
-[llvm]
-libraries = []
-includes = ["vendor/include"]
-linked = ["glfw3", "GL"]
-sources = ["vendor/src/gl.c"]
