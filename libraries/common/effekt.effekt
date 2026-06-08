@@ -803,25 +803,23 @@ record SourcePosition(file: String, startLine: Int, startColumn: Int, endLine: I
 // Should only be used to automatically generate effekt wrappers for C functions
 
 namespace C {
-  // FIXME: The right-hand definitions do not currently matter,
-  //        but they do correctly represent what the types are implemented as 
-  extern type CString = llvm "ptr"
-  extern type CInt = llvm "i64"
-  extern type CDouble = llvm "double"
-  extern type CFloat = llvm "float"
-  extern type CPtr = llvm "ptr"
-  extern type CVoid = llvm "void"
+  extern type String = llvm "ptr"
+  extern type Int = llvm "i64"
+  extern type Double = llvm "double"
+  extern type Float = llvm "float"
+  extern type Ptr = llvm "ptr"
+  extern type Void = llvm "void"
 
-  extern def string(value: String): CString = 
+  extern def String(value: effekt::String): String = 
     llvm """
       %conv = call ptr @c_bytearray_into_nullterminated_string(%Pos ${value})
       ret ptr %conv
     """
-  extern def int(value: Int) at {}: CInt = llvm "ret %Int ${value}"
-  extern def double(value: Double) at {}: CDouble = llvm "ret %Double ${value}"
-  extern def float(value: Double) at {}: CFloat = llvm """
+  extern def Int(value: effekt::Int) at {}: Int = llvm "ret %Int ${value}"
+  extern def Double(value: effekt::Double) at {}: Double = llvm "ret %Double ${value}"
+  extern def Float(value: effekt::Double) at {}: Float = llvm """
     %trunc = fptrunc %Double ${value} to float
     ret float %trunc
   """
-  extern def nullptr() at {}: CPtr = llvm "ret ptr null"
+  extern def Nullptr() at {}: Ptr = llvm "ret ptr null"
 }
