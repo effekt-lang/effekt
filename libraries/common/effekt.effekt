@@ -810,8 +810,8 @@ namespace C {
   extern type Ptr = llvm "ptr"
   extern type Void = llvm "void"
 
-  extern def String(value: effekt::String): String = 
-    llvm """
+  // Type conversion: effekt -> C
+  extern def String(value: effekt::String): String = llvm """
       %conv = call ptr @c_bytearray_into_nullterminated_string(%Pos ${value})
       ret ptr %conv
     """
@@ -822,4 +822,16 @@ namespace C {
     ret float %trunc
   """
   extern def Nullptr() at {}: Ptr = llvm "ret ptr null"
+
+  // Type conversion: C -> effekt
+  extern def toString(value: String): effekt::String = llvm """
+      %conv = call ptr @c_bytearray_from_nullterminated_string(ptr ${value})
+      ret %Pos %conv
+    """
+  extern def toInt(value: Int) at {}: effekt::Int = llvm "ret %Int ${value}"
+  extern def toDouble(value: Double) at {}: effekt::Double = llvm "ret %Double ${value}"
+  extern def toFloat(value: Float) at {}: effekt::Double = llvm """
+    %ext = fpext float ${value} to %Double
+    ret %Double %ext
+  """
 }
