@@ -834,4 +834,19 @@ namespace C {
     %ext = fpext float ${value} to %Double
     ret %Double %ext
   """
+
+  // Additional utility
+  extern def isNull(ptr: C::Ptr): Bool = llvm """
+    %cmp = icmp eq ptr ${ptr}, null
+    %ext = zext i1 %cmp to i64
+    %bool = insertvalue %Pos zeroinitializer, i64 %ext, 0
+    ret %Pos %bool
+  """
+
+  extern def toBool(value: C::Int): Bool = llvm """
+    %cmp = icmp ne %Int ${value}, 0
+    %ext = zext i1 %cmp to i64
+    %bool = insertvalue %Pos zeroinitializer, i64 %ext, 0
+    ret %Pos %bool
+  """
 }
