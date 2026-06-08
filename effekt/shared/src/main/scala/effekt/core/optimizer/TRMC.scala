@@ -13,9 +13,7 @@ import effekt.util.messages.ErrorReporter
 
 object TRMC extends Phase[CoreTransformed, CoreTransformed]{
   val phaseName: String = "trmc"
-
-  case class ImpossibleStateError(message: String) extends RuntimeException(message: String)
-
+  
   def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = {
     val CoreTransformed(source, tree, mod, modDec) = input
     println(effekt.util.PrettyPrinter.format(modDec).layout)
@@ -30,6 +28,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
         case Toplevel.Def(id, block) =>
           println("in Toplevel")
           println(id.name.name)
+          //println(effekt.util.PrettyPrinter.format(Toplevel.Def(id, block)).layout)
           val outputFunId = Id(id.name.name + "_trmc")
           if (id.name.name != "main") {
             transformedFunctions = transformedFunctions.appended(trmc(id, block, outputFunId, DC))
@@ -47,11 +46,11 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     object rewriteOtherCalls extends Tree.Rewrite {
       override def toplevel: PartialFunction[Toplevel, Toplevel] = {
         case Toplevel.Def(id, block) => block match {
-          case Block.BlockVar(id, annotatedTpe, annotatedCapt) => ???
+          case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Toplevel.Def(id, block) //TODO: do BlockVar, Unbox and New actually happen?
           case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
             Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, rewriteCalls(body, id, functionLinks, DC))) 
-          case Block.Unbox(pure) => ???
-          case Block.New(impl) => ???
+          case Block.Unbox(pure) => Toplevel.Def(id, block)
+          case Block.New(impl) => Toplevel.Def(id, block)
         }
       }
     }
@@ -73,7 +72,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
   def freeInBlock(id:Id, block: Block): Boolean = block.free.freeIds.contains(id)
   
   def rewriteCalls(stmt: Stmt, transformedfun: Id, functionLinks: Map[Id, Id], DC: DeclarationContext)(using Context): Stmt = stmt match {
-    case Stmt.Def(id, block, body) => ???
+    case Stmt.Def(id, block, body) => Stmt.Def(id, block, rewriteCalls(body, transformedfun, functionLinks, DC)) //TODO: rewrite blocks too?
     case Stmt.Let(id, binding, body) => Stmt.Let(id, binding, rewriteCalls(body, transformedfun, functionLinks, DC))
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => Stmt.ImpureApp(id, callee, targs, vargs, bargs, rewriteCalls(body, transformedfun, functionLinks, DC))
     case Stmt.Return(expr) => Stmt.Return(expr)
@@ -95,16 +94,16 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
                 targs,
                 vargs.appended(PureApp(blockVarFromExternDef("ctx_emptyContext", DC), List(stmt.tpe),Nil)),
                 bargs)
-            case _ => throw ImpossibleStateError("in an App() Statement a Function should be called")
+            case _ => Context.panic("in an App() Statement a Function should be called")
           }
         }else{
           stmt
         }
-      case Block.BlockLit(tparams, cparams, vparams, bparams, body) => ???
-      case Block.Unbox(pure) => ???
-      case Block.New(impl) => ???
+      case Block.BlockLit(tparams, cparams, vparams, bparams, body) => stmt //TODO: do BLockLit, Unbox and New actually happen?
+      case Block.Unbox(pure) => stmt
+      case Block.New(impl) => stmt
     }
-    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => stmt
     case Stmt.If(cond, thn, els) => Stmt.If(cond, rewriteCalls(thn, transformedfun, functionLinks, DC), rewriteCalls(els, transformedfun, functionLinks, DC))
     case Stmt.Match(scrutinee, annotatedTpe, clauses, default) => 
       Stmt.Match(
@@ -118,20 +117,19 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
           case None => None
         }
       )
-    case Stmt.Region(body) => ???
-    case Stmt.Alloc(id, init, region, body) => ???
-    case Stmt.Var(ref, init, capture, body) => ???
-    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => ???
-    case Stmt.Put(ref, annotatedCapt, value, body) => ???
-    case Stmt.Reset(body) => ???
-    case Stmt.Shift(prompt, k, body) => ???
-    case Stmt.Resume(k, body) => ???
-    case Stmt.Hole(annotatedTpe, span) => ???
+    case Stmt.Region(body) => stmt //TODO: rewrite blocks too?
+    case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, rewriteCalls(body, transformedfun, functionLinks, DC)) //TODO: body might be smth different?
+    case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, init, capture, rewriteCalls(body, transformedfun, functionLinks, DC)) //TODO: body might be smth different?
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => Stmt.Get(id, annotatedTpe, ref, annotatedCapt, rewriteCalls(body, transformedfun, functionLinks, DC))
+    case Stmt.Put(ref, annotatedCapt, value, body) => Stmt.Put(ref, annotatedCapt, value, rewriteCalls(body, transformedfun, functionLinks, DC))
+    case Stmt.Reset(body) => stmt //TODO: rewrite blocks too?
+    case Stmt.Shift(prompt, k, body) => Stmt.Shift(prompt, k, rewriteCalls(body, transformedfun, functionLinks, DC))
+    case Stmt.Resume(k, body) => Stmt.Resume(k, rewriteCalls(body, transformedfun, functionLinks, DC))
+    case Stmt.Hole(annotatedTpe, span) => stmt
   }
-
-
+  
   def trmc(id: Id, block: Block, outputfun: Id, DC: DeclarationContext)(using Context): Toplevel = block match {
-    case effekt.core.Block.BlockVar(id, annotatedTpe, annotatedCapt) => ???
+    case effekt.core.Block.BlockVar(id, annotatedTpe, annotatedCapt) => Toplevel.Def(id, block) //fallback to original function correct? //TODO: do BlockVar, Unbox and New actually happen?
     case effekt.core.Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
 //      val ctxDecl: Declaration = DC.declarations.find(_.id.name.name == "HoleContext").getOrElse {
 //        Context.panic(s"No declaration found for HoleContext.")
@@ -140,9 +138,10 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
       val ctxId = Id("ctx")
       Toplevel.Def(outputfun, BlockLit(tparams, cparams, vparams.appended(ValueParam(ctxId, outerContextTpe)), bparams,
         trmc(body, id, outputfun, TransformContext.Outer(ctxId), outerContextTpe, DC)))
-    case effekt.core.Block.Unbox(pure) => ???
-    case effekt.core.Block.New(impl) => ???
+    case effekt.core.Block.Unbox(pure) => Toplevel.Def(id, block)
+    case effekt.core.Block.New(impl) => Toplevel.Def(id, block)
   }
+  
   enum TransformContext {
     case Outer(id: Id)
     case Val(id: Id, body: Stmt, next: TransformContext)
@@ -161,7 +160,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     }
     val consId: Id = listDecl match{
       case Data(id, tparams, List(Constructor(nilId, niltparams, nilFields),Constructor(consId, constparams, consfields))) => consId //TODO: could this be less ugly?
-      case _ => throw ImpossibleStateError("should have failed above while finding List or the pattern is incorrect")
+      case _ => Context.panic("should have failed above while finding List or the pattern is incorrect")
     }
     context match {
       case TransformContext.Outer(id) => (TailContext.Outer(id), None)
@@ -180,9 +179,9 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
   
   
   def trmc(stmt: Stmt, inputfun: Id, outputfun: Id, context: TransformContext, outerContextTpe: ValueType, DC: DeclarationContext)(using Context): Stmt = stmt match {
-    case Stmt.Def(id, block, body) => ???
-    case Stmt.Let(id, binding, body) => Stmt.Let(id, binding, trmc(body,inputfun, outputfun, context, outerContextTpe, DC))
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => ???
+    case Stmt.Def(id, block, body) => Stmt.Def(id, block, trmc(body, inputfun, outputfun, context, outerContextTpe, DC)) //TODO: transform inner defs
+    case Stmt.Let(id, binding, body) => Stmt.Let(id, binding, trmc(body, inputfun, outputfun, context, outerContextTpe, DC))
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => Stmt.ImpureApp(id, callee, targs, vargs, bargs, trmc(body, inputfun, outputfun, context, outerContextTpe, DC))
     case Stmt.Return(expr) => reify(stmt, context, inputfun, outputfun, outerContextTpe, DC) //probably works every time, original function must still exit in case inputfun is free in expr
     case Stmt.Val(id, binding, body) => trmc(binding, inputfun, outputfun, TransformContext.Val(id,body,context), outerContextTpe, DC)
     case Stmt.App(callee, targs, vargs, bargs) => callee match {
@@ -202,14 +201,14 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
                 case Some(rest) => reify(inner, rest, inputfun, outputfun, outerContextTpe, DC)
                 case None => inner
               }
-            case _ => throw ImpossibleStateError("in an App() Statement a Function should be called")
+            case _ => Context.panic("in an App() Statement a Function should be called")
           }
         }else{
           reify(stmt, context, inputfun, outputfun, outerContextTpe, DC)
         }
-      case Block.BlockLit(tparams, cparams, vparams, bparams, body) => ???
-      case Block.Unbox(pure) => ???
-      case Block.New(impl) => ???
+      case Block.BlockLit(tparams, cparams, vparams, bparams, body) => reify(stmt, context, inputfun, outputfun, outerContextTpe, DC) //TODO: do BLockLit, Unbox and New actually happen?
+      case Block.Unbox(pure) => reify(stmt, context, inputfun, outputfun, outerContextTpe, DC)
+      case Block.New(impl) => reify(stmt, context, inputfun, outputfun, outerContextTpe, DC)
     }
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
     case Stmt.If(cond, thn, els) =>
