@@ -468,38 +468,36 @@ object Transformer {
 
   def transform(tpe: machine.Type.CType): Type = tpe match {
     case machine.Type.CType(name) => name match {
-      case "CString" => PointerType()
-      case "CInt" => IntegerType64()
-      case "CDouble" => DoubleType()
-      case "CFloat" => FloatType()
-      case "CPtr" => PointerType()
-      case "CVoid" => VoidType()
+      case "ptr" => PointerType()
+      case "i64" => IntegerType64()
+      case "double" => DoubleType()
+      case "float" => FloatType()
+      case "void" => VoidType()
     } 
   }
 
   def transform(tpe: machine.Type): Type = tpe match {
-    case machine.Positive()          => positiveType
-    case machine.Negative()          => negativeType
-    case machine.Type.Prompt()       => promptType
-    case machine.Type.Stack()        => resumptionType
-    case machine.Type.Int()          => IntegerType64()
-    case machine.Type.Byte()         => IntegerType8()
-    case machine.Type.Double()       => DoubleType()
-    case machine.Type.Reference(tpe) => referenceType
-    case CT@machine.Type.CType(name)    => transform(CT)
-  }
+      case machine.Positive()          => positiveType
+      case machine.Negative()          => negativeType
+      case machine.Type.Prompt()       => promptType
+      case machine.Type.Stack()        => resumptionType
+      case machine.Type.Int()          => IntegerType64()
+      case machine.Type.Byte()         => IntegerType8()
+      case machine.Type.Double()       => DoubleType()
+      case machine.Type.Reference(tpe) => referenceType
+      case CT@machine.Type.CType(name) => transform(CT)
+    }
 
   def environmentSize(environment: machine.Environment): Int =
     environment.map { case machine.Variable(_, typ) => typeSize(typ) }.sum
 
   def typeSize(tpe: machine.Type.CType): Int = tpe match {
     case machine.Type.CType(name) => name match {
-      case "CString" => 8
-      case "CInt"    => 8
-      case "CDouble" => 8
-      case "CFloat"  => 4
-      case "CPtr"    => 8
-      case "CVoid"   => 0
+      case "ptr"    => 8
+      case "i64"    => 8
+      case "double" => 8
+      case "float"  => 4
+      case "void"   => 0
     }
   }
 

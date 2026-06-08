@@ -13,6 +13,8 @@ import effekt.util.UByte
 import effekt.util.{ DB, toDB }
 
 import scala.annotation.tailrec
+import effekt.core.ExternBody.StringExternBody
+import effekt.core.ExternBody.Unsupported
 
 
 object Transformer {
@@ -55,7 +57,7 @@ object Transformer {
     Program(declarations, toplevelDefinitions ++ localDefinitions, mainEntry)
   }
 
-  def transform(extern: core.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
+  def transform(extern: core.Extern)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Declaration = extern match {
     case core.Extern.Def(name, qualifiedSignature, tps, cparams, vparams, bparams, ret, capture, body) =>
       // TODO delete, and/or enforce at call site (ImpureApp)
       if bparams.nonEmpty then ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
@@ -88,20 +90,35 @@ object Transformer {
       ExternInterface(transform(id), tparams.map(transform), tBody)
   }
 
-  val validCTypes = List("CString", "CInt", "CDouble", "CFloat", "CPtr", "CVoid")
+  val validCTypes = List("ptr", "i64", "double", "float", "void")
 
-  def handleExternC(template: Template[core.Expr])(using ErrorReporter): Template[Variable] = template match {
+  def getValidExternC(name: Id)(using DC: DeclarationContext)(using ErrorReporter): Option[String] = 
+    DC.findExternData(name).flatMap(ext => ext.body match {
+      case StringExternBody(_, contents) => contents.strings.head match {
+        case tpe if validCTypes.contains(tpe) => Some(tpe)
+        case _ => None
+      }
+      case Unsupported(err) => None
+    })
+
+  def isValidExternC(name: Id)(using DC: DeclarationContext)(using ErrorReporter): Boolean = 
+    getValidExternC(name).isDefined
+
+  def handleExternC(template: Template[core.Expr])(using DC: DeclarationContext)(using ErrorReporter): Template[Variable] = template match {
     case Template(strings, args) => 
       val cFunName = strings.head.split(" ").head.trim()
 
       Template(List(cFunName), args map {
-        case core.ValueVar(id, core.ValueType.Data(name, targs)) if validCTypes.contains(name.name.name) => 
-          Variable(transform(id), machine.Type.CType(name.name.name))
-        case _ => ErrorReporter.abort(s"In the C backend, only types '${validCTypes}' are allowed in templates")
+        case core.ValueVar(id, core.ValueType.Data(name, targs)) =>
+          getValidExternC(name) match {
+            case Some(tpeName) => Variable(transform(id), machine.Type.CType(tpeName))
+            case None => ErrorReporter.abort(s"In the C backend, only types '${validCTypes}' are allowed in templates")
+          }
+        case _ => ErrorReporter.abort(s"In the C backend, only valid extern data types are allowed")
       })
   }
 
-  def transform(body: core.ExternBody[core.Expr])(using ErrorReporter): machine.ExternBody[Variable] = body match {
+  def transform(body: core.ExternBody[core.Expr])(using DeclarationContext, ErrorReporter): machine.ExternBody[Variable] = body match {
     case core.ExternBody.StringExternBody(ff, template) if ff.matches("c") => 
       ExternBody.StringExternBody(ff, handleExternC(template))
     case core.ExternBody.StringExternBody(ff, Template(strings, args)) =>
@@ -566,34 +583,34 @@ object Transformer {
         Clause(vparams.map(transform) ++ bparams.map(transform), transform(body).run())
     }
 
-  def transform(param: core.ValueParam)(using BlocksParamsContext, ErrorReporter): Variable =
+  def transform(param: core.ValueParam)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Variable =
     param match {
       case core.ValueParam(name, tpe) =>
         Variable(transform(name), transform(tpe))
     }
 
-  def transform(param: core.BlockParam)(using BlocksParamsContext, ErrorReporter): Variable =
+  def transform(param: core.BlockParam)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Variable =
     param match {
       case core.BlockParam(name, tpe, capt) =>
         Variable(transform(name), transform(tpe))
     }
 
-  def transform(tpe: core.ValueType): Type = tpe match {
-    case core.ValueType.Data(name, _) if validCTypes.contains(name.name.name) => Type.CType(name.name.name)
+  def transform(tpe: core.ValueType)(using DeclarationContext, ErrorReporter): Type = tpe match {
+    case core.ValueType.Data(name, _) if isValidExternC(name) => Type.CType(getValidExternC(name).get)
     case _ => Positive()
   }
 
-  def transformUnboxed(tpe: core.ValueType): Type =
+  def transformUnboxed(tpe: core.ValueType)(using DeclarationContext, ErrorReporter): Type =
     tpe match {
         case core.Type.TInt => Type.Int()
         case core.Type.TChar => Type.Int()
         case core.Type.TByte => Type.Byte()
         case core.Type.TDouble => Type.Double()
-        case core.ValueType.Data(name, _) if validCTypes.contains(name.name.name) => Type.CType(name.name.name)
+        case core.ValueType.Data(name, _) if isValidExternC(name) => Type.CType(getValidExternC(name).get)
         case _ => Positive()
       }
 
-  def transform(tpe: core.BlockType)(using ErrorReporter): Type = tpe match {
+  def transform(tpe: core.BlockType)(using DeclarationContext, ErrorReporter): Type = tpe match {
     case core.Type.TState(stateType) => Type.Reference(transformUnboxed(stateType))
     case core.Type.TPrompt(answer) => Type.Prompt()
     case core.Type.TResume(result, answer) => Type.Stack()
@@ -632,7 +649,7 @@ object Transformer {
 
   def freshName(baseName: String): String = baseName + "_" + symbols.Symbol.fresh.next()
 
-  def findToplevelBlocksParams(definitions: List[core.Toplevel])(using BlocksParamsContext, ErrorReporter): Unit =
+  def findToplevelBlocksParams(definitions: List[core.Toplevel])(using BlocksParamsContext, DeclarationContext, ErrorReporter): Unit =
     definitions.foreach {
       case Toplevel.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
         noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), Nil)
