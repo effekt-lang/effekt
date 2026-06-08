@@ -300,18 +300,6 @@ object LLVMRunner extends Runner[String] {
 
   lazy val clangCmd = discoverExecutable(List("clang-21", "clang-20", "clang-19", "clang-18", "clang"), List("--version"))
 
-  def additionalClangArgs(file: String): Seq[String] = {
-    val configFile = readEffektConfigToml(file)
-    val llvmConfig = configFile.llvm.getOrElseAborting(return Seq.empty)
-
-    var additionalArgs = llvmConfig.includes.map(inc => s"-I${inc}")
-    additionalArgs ++= llvmConfig.libraries.map(lib => s"-L${lib}")
-    additionalArgs ++= llvmConfig.linked.map(link => s"-l${link}")
-    additionalArgs ++= llvmConfig.sources
-
-    additionalArgs
-  }
-
   def checkSetup(): Either[String, Unit] =
     clangCmd.getOrElseAborting { return Left("Cannot find clang. This is required to use the LLVM backend.") }
     Right(())
@@ -388,9 +376,6 @@ object LLVMRunner extends Runner[String] {
       clangArgs ++= Seq("-O3", "-flto=full")
     }
 
-    clangArgs ++= C.config.configFile.toOption.map(file => additionalClangArgs(file.unixPath)).getOrElse(Seq.empty)    
-
-    println(clangArgs.mkString(" "))
     exec(clangArgs: _*)
 
     Some(executableFile)
