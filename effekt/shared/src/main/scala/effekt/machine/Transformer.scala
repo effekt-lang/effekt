@@ -92,17 +92,27 @@ object Transformer {
 
   val validCTypes = List("ptr", "i64", "double", "float", "void")
 
-  def getValidExternC(name: Id)(using DC: DeclarationContext)(using ErrorReporter): Option[String] = 
-    DC.findExternData(name).flatMap(ext => ext.body match {
-      case StringExternBody(_, contents) => contents.strings.head match {
-        case tpe if validCTypes.contains(tpe) => Some(tpe)
-        case _ => None
-      }
+  def parseCType(tpe: String)(using ErrorReporter): Option[CType] = tpe match {
+    case "ptr"    => Some(machine.CType.Ptr)
+    case "i64"    => Some(machine.CType.I64)
+    case "double" => Some(machine.CType.Double)
+    case "float"  => Some(machine.CType.Float)
+    case "void"   => Some(machine.CType.Void)
+    case o        =>  None
+  } 
+
+  def parseExternCTpe(name: Id)(using DC: DeclarationContext)(using ErrorReporter): Option[machine.Type.CTpe] = 
+    DC.findExternData(name).flatMap(value => value.body match {
+      case StringExternBody(_, contents) => 
+        parseCType(contents.strings.head).map(machine.Type.CTpe.apply)
       case Unsupported(err) => None
     })
 
+  def getExternCTpe(name: Id)(using DC: DeclarationContext)(using ErrorReporter): machine.Type.CTpe =
+    parseExternCTpe(name).get
+
   def isValidExternC(name: Id)(using DC: DeclarationContext)(using ErrorReporter): Boolean = 
-    getValidExternC(name).isDefined
+    parseExternCTpe(name).isDefined
 
   def handleExternC(template: Template[core.Expr])(using DC: DeclarationContext)(using ErrorReporter): Template[Variable] = template match {
     case Template(strings, args) => 
@@ -110,8 +120,8 @@ object Transformer {
 
       Template(List(cFunName), args map {
         case core.ValueVar(id, core.ValueType.Data(name, targs)) =>
-          getValidExternC(name) match {
-            case Some(tpeName) => Variable(transform(id), machine.Type.CType(tpeName))
+          parseExternCTpe(name) match {
+            case Some(tpe) => Variable(transform(id), tpe)
             case None => ErrorReporter.abort(s"In the C backend, only types '${validCTypes}' are allowed in templates")
           }
         case _ => ErrorReporter.abort(s"In the C backend, only valid extern data types are allowed")
@@ -207,11 +217,9 @@ object Transformer {
         val variable = Variable(transform(id), transform(resultType))
         transform(rest).flatMap { rest =>
           transform(vargs, bargs).run { (values, blocks) =>
-            perhapsUnbox(values, vparamTypes).run { unboxeds =>
+            perhapsUnbox(values, vparamTypes map transformUnboxed).run { unboxeds =>
               transformUnboxed(resultType) match {
                 case Type.Positive() =>
-                  Trampoline.Done(ForeignCall(variable, transform(blockName), unboxeds ++ blocks, rest))
-                case Type.CType(_) =>
                   Trampoline.Done(ForeignCall(variable, transform(blockName), unboxeds ++ blocks, rest))
                 case unboxedTpe =>
                   val unboxed = Variable(freshName("unboxed"), unboxedTpe)
@@ -251,7 +259,7 @@ object Transformer {
                   // TODO better way to deal with extern async functions
                   annotatedTpe match {
                     case core.BlockType.Function(_, _, vparamTypes, _, _) =>
-                      perhapsUnbox(values, vparamTypes).run { unboxeds =>
+                      perhapsUnbox(values, vparamTypes map transformUnboxed).run { unboxeds =>
                         Trampoline.Done(Jump(Label(transform(id), blockParams ++ freeParams), unboxeds ++ blocks ++ freeParams))
                       }
                     case _ =>
@@ -367,7 +375,7 @@ object Transformer {
 
         transform(body).flatMap { body =>
           transform(init).flatMap { value =>
-            perhapsUnbox(value, init.tpe).map { unboxed =>
+            perhapsUnbox(value, transformUnboxed(init.tpe)).map { unboxed =>
               Shift(temporary, Variable(transform(region), Type.Prompt()),
                 Var(Variable(transform(ref), Type.Reference(unboxed.tpe)), unboxed,
                   Resume(temporary, body)))
@@ -382,7 +390,7 @@ object Transformer {
 
         transform(body).flatMap { body =>
           transform(init).flatMap { value =>
-            perhapsUnbox(value, init.tpe).map { unboxed =>
+            perhapsUnbox(value, transformUnboxed(init.tpe)).map { unboxed =>
               Var(Variable(transform(ref), Type.Reference(unboxed.tpe)), unboxed, body)
             }
           }.run(x => Trampoline.Done(x))
@@ -404,7 +412,7 @@ object Transformer {
       case core.Put(ref, capt, arg, body) =>
         transform(body).flatMap { body =>
           transform(arg).flatMap { value =>
-            perhapsUnbox(value, arg.tpe).map { unboxed =>
+            perhapsUnbox(value, transformUnboxed(arg.tpe)).map { unboxed =>
               StoreVar(Variable(transform(ref), Type.Reference(unboxed.tpe)), unboxed, body)
             }
           }.run(x => Trampoline.Done(x))
@@ -534,12 +542,10 @@ object Transformer {
 
     case core.PureApp(core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), _), _, vargs) =>
       transform(vargs).flatMap { values =>
-        perhapsUnbox(values, vparamTypes).flatMap { unboxeds =>
+        perhapsUnbox(values, vparamTypes map transformUnboxed).flatMap { unboxeds =>
           shift { k =>
             transformUnboxed(resultType) match {
               case Type.Positive() =>
-                ForeignCall(variable, transform(blockName), unboxeds, k(variable))
-              case Type.CType(_) =>
                 ForeignCall(variable, transform(blockName), unboxeds, k(variable))
               case unboxedTpe =>
                 val unboxed = Variable(freshName("unboxed"), unboxedTpe)
@@ -595,10 +601,8 @@ object Transformer {
         Variable(transform(name), transform(tpe))
     }
 
-  def transform(tpe: core.ValueType)(using DeclarationContext, ErrorReporter): Type = tpe match {
-    case core.ValueType.Data(name, _) if isValidExternC(name) => Type.CType(getValidExternC(name).get)
-    case _ => Positive()
-  }
+  def transform(tpe: core.ValueType)(using DeclarationContext, ErrorReporter): Type =
+    Positive()
 
   def transformUnboxed(tpe: core.ValueType)(using DeclarationContext, ErrorReporter): Type =
     tpe match {
@@ -606,7 +610,7 @@ object Transformer {
         case core.Type.TChar => Type.Int()
         case core.Type.TByte => Type.Byte()
         case core.Type.TDouble => Type.Double()
-        case core.ValueType.Data(name, _) if isValidExternC(name) => Type.CType(getValidExternC(name).get)
+        case core.ValueType.Data(name, _) if isValidExternC(name) => getExternCTpe(name)
         case _ => Positive()
       }
 
@@ -627,24 +631,16 @@ object Transformer {
   def transform(id: Id): String =
     s"${id.name}_${id.id}"
 
-  def perhapsUnbox(value: Variable, tpe: core.ValueType): Binding[Variable] =
+  def perhapsUnbox(value: Variable, tpe: machine.Type): Binding[Variable] =
     tpe match {
-      case core.Type.TInt =>
-        val unboxed = Variable(freshName("integer"), Type.Int())
-        shift { k => Coerce(unboxed, value, k(unboxed)) }
-      case core.Type.TChar =>
-        val unboxed = Variable(freshName("char"), Type.Int())
-        shift { k => Coerce(unboxed, value, k(unboxed)) }
-      case core.Type.TByte =>
-        val unboxed = Variable(freshName("byte"), Type.Byte())
-        shift { k => Coerce(unboxed, value, k(unboxed)) }
-      case core.Type.TDouble =>
-        val unboxed = Variable(freshName("double"), Type.Double())
+      case Type.CTpe(CType.Void) => pure(value)
+      case Type.Int() | Type.Byte() | Type.Double() | Type.CTpe(_) =>
+        val unboxed = Variable(freshName("unboxed"), tpe)
         shift { k => Coerce(unboxed, value, k(unboxed)) }
       case _ => pure(value)
     }
 
-  def perhapsUnbox(values: List[Variable], tpes: List[core.ValueType]): Binding[List[Variable]] =
+  def perhapsUnbox(values: List[Variable], tpes: List[machine.Type]): Binding[List[Variable]] =
     traverse(values.zip(tpes)) { case (value, tpe) => perhapsUnbox(value, tpe) }
 
   def freshName(baseName: String): String = baseName + "_" + symbols.Symbol.fresh.next()
