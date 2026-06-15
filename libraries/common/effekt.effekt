@@ -821,6 +821,10 @@ namespace C {
     %trunc = fptrunc %Double ${value} to float
     ret float %trunc
   """
+  extern def Bool(value: effekt::Bool) at {}: Int = llvm """
+    %bool = extractvalue %Pos ${value}, 0
+    ret i64 %bool
+  """
   extern def Nullptr() at {}: Ptr = llvm "ret ptr null"
 
   // Type conversion: C -> effekt
@@ -850,3 +854,5 @@ namespace C {
     ret %Pos %bool
   """
 }
+
+def infixEq(v1: C::Int, v2: C::Int): Bool = C::toInt(v1) == C::toInt(v2)
