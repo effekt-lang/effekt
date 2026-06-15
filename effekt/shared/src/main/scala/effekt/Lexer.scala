@@ -18,6 +18,7 @@ enum LexerError {
   case InvalidIntegerFormat
   case InvalidDoubleFormat
   case InvalidByteFormat
+  case InvalidHexFormat
   case UnterminatedInterpolation(depth: Int)
 
   def message: String = this match {
@@ -37,6 +38,7 @@ enum LexerError {
     case InvalidIntegerFormat => "Invalid integer format, not a 64bit integer literal"
     case InvalidDoubleFormat => "Invalid float format, not a double literal"
     case InvalidByteFormat => "Invalid byte format, byte has to be exactly two hex digits"
+    case InvalidHexFormat => "Invalid hex format, has to have exactly eight hex digits"
     case UnterminatedInterpolation(depth) =>
       s"Unterminated string interpolation ($depth unclosed splices)"
   }
@@ -402,6 +404,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       case (c, _) if c.isWhitespace => advanceSpaces()
 
       // Numbers
+      case ('0', 'x') if isHexDigit(peekAhead(8)) => advanceWith(8, hexnumber())
       case ('0', 'x') if isHexDigit(peekAhead(2)) => advance2With(byte())
       case (c,     _) if c.isDigit                => number()
 
@@ -553,6 +556,26 @@ class Lexer(source: Source) extends Iterator[Token] {
         case Some(integer) => TokenKind.Integer(integer)
         case None => TokenKind.Error(LexerError.InvalidIntegerFormat)
       }
+
+  private def hexnumber(): TokenKind =
+    advanceWhile { (curr, _) => isHexDigit(curr) }
+
+    // Get the hex string
+    val hexString = getCurrentSlice(skipAfterStart = 2)
+
+    if hexString.length < 8 then
+      return TokenKind.Error(LexerError.InvalidHexFormat)
+
+    if hexString.length > 8 then
+      return TokenKind.Error(LexerError.InvalidHexFormat)
+    
+    try {
+      val number = java.lang.Long.parseLong(hexString, 16)
+      assert(number >= Long.MinValue && number <= Long.MaxValue)
+      TokenKind.Integer(number)
+    } catch {
+      case e: NumberFormatException => TokenKind.Error(LexerError.InvalidHexFormat)
+    }
 
   private def byte(): TokenKind =
     // Consume hex digits
