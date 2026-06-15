@@ -795,6 +795,34 @@ define ccc %Double @coercePosDouble(%Pos %input) {
     ret %Double %d
 }
 
+define ccc %Pos @coerceFloatPos(float %input) {
+    %ext    = fpext float %input to double
+    %number = bitcast double %ext to i64
+    %boxed1 = insertvalue %Pos zeroinitializer, i64 %number, 0
+    %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
+    ret %Pos %boxed2
+}
+
+define ccc float @coercePosFloat(%Pos %input) {
+    %unboxed = extractvalue %Pos %input, 0
+    %d = bitcast i64 %unboxed to double
+    %trunc = fptrunc double %d to float
+    ret float %trunc
+}
+
+define ccc %Pos @coercePtrPos(ptr %input) {
+    %number = ptrtoint ptr %input to i64
+    %boxed1 = insertvalue %Pos zeroinitializer, i64 %number, 0
+    %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
+    ret %Pos %boxed2
+}
+
+define ccc ptr @coercePosPtr(%Pos %input) {
+    %unboxed = extractvalue %Pos %input, 0
+    %d = inttoptr i64 %unboxed to ptr
+    ret ptr %d
+}
+
 
 ; Scope domains
 !0 = !{!"types"}
