@@ -98,7 +98,7 @@ object Transformer {
     case "double" => Some(machine.CType.Double)
     case "float"  => Some(machine.CType.Float)
     case "void"   => Some(machine.CType.Void)
-    case o        =>  None
+    case o        => None
   } 
 
   def parseExternCTpe(name: Id)(using DC: DeclarationContext)(using ErrorReporter): Option[machine.Type.CTpe] = 
