@@ -1,0 +1,4 @@
+def test { f: (Int) => Int } : Int =
+ f() // ERROR arguments
+
+def main() = println(test { n => n })
