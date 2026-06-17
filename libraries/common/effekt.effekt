@@ -825,7 +825,7 @@ namespace C {
     %bool = extractvalue %Pos ${value}, 0
     ret i64 %bool
   """
-  extern def Nullptr() at {}: Ptr = llvm "ret ptr null"
+  extern def Null() at {}: Ptr = llvm "ret ptr null"
 
   // Type conversion: C -> effekt
   extern def toString(value: String): effekt::String = llvm """
