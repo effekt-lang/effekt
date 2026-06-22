@@ -369,6 +369,14 @@ class Lexer(source: Source) extends Iterator[Token] {
     TokenKind.Space
   }
 
+  private def aheadMatches(count: Int, charMatches: Char => Boolean, skip: Int = 0): Boolean =
+    if (position.offset + count > source.content.length) return false
+    var allMatch = true
+    for (index <- position.offset + skip to position.offset + count) {
+      allMatch &= charMatches(source.content(index))
+    }
+    allMatch
+
   private def peekAhead(offset: Int): Char =
     val targetIndex = position.offset + offset
     if targetIndex < source.content.length then
@@ -404,8 +412,8 @@ class Lexer(source: Source) extends Iterator[Token] {
       case (c, _) if c.isWhitespace => advanceSpaces()
 
       // Numbers
-      case ('0', 'x') if isHexDigit(peekAhead(8)) => advanceWith(8, hexnumber())
-      case ('0', 'x') if isHexDigit(peekAhead(2)) => advance2With(byte())
+      case ('0', 'x') if aheadMatches(8, isHexDigit, skip = 2) => advanceWith(8, hexnumber())
+      case ('0', 'x') if aheadMatches(2, isHexDigit, skip = 2) => advance2With(byte())
       case (c,     _) if c.isDigit                => number()
 
       // Identifiers and keywords
