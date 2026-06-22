@@ -77,6 +77,7 @@ export Instruction.*
 
 enum Terminator {
   case RetVoid()
+  case Ret(operand: Operand)
   case Switch(operand: Operand, defaultDest: String, dests: List[(Int, String)])
   case CondBr(condition: Operand, trueDest: String, falseDest: String)
 }
@@ -121,6 +122,7 @@ enum Type {
   case IntegerType1()
   case IntegerType8() // required for `void*` (which only exists as `i8*` in LLVM) and `char*`
   case IntegerType64()
+  case FloatType()
   case DoubleType()
   case PointerType()
   case ArrayType(size: Int, of: Type)

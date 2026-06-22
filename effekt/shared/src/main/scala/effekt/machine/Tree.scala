@@ -209,6 +209,15 @@ enum Statement {
 export Statement.*
 
 
+enum CType {
+  case Ptr
+  case I64
+  case Double
+  case Float
+  case Void
+}
+export CType.*
+
 /**
  * Types
  */
@@ -221,6 +230,7 @@ enum Type {
   case Byte()
   case Double()
   case Reference(tpe: Type)
+  case CTpe(tpe: CType)
 }
 export Type.{ Positive, Negative }
 

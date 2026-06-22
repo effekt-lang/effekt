@@ -9,15 +9,18 @@ import effekt.machine.analysis.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import effekt.machine.ExternBody.StringExternBody
+import effekt.machine.Variable
 
 object Transformer {
 
-  val llvmFeatureFlags: List[String] = List("llvm")
+  val llvmFeatureFlags: List[String] = List("llvm", "c")
 
   def transform(program: machine.Program)(using ErrorReporter): List[Definition] = program match {
     case machine.Program(declarations, definitions, entry) =>
 
       given MC: ModuleContext = ModuleContext();
+      declarations.foreach(transform);
       definitions.foreach(transform);
 
       val globals = MC.definitions; MC.definitions = null;
@@ -27,8 +30,8 @@ object Transformer {
         Call("_", Tailcc(false), VoidType(), transform(entry), List(LocalReference(stackType, "stack"))))
       val entryBlock = BasicBlock("entry", entryInstructions, RetVoid())
       val entryFunction = Function(External(), Ccc(), VoidType(), "effektMain", List(), List(entryBlock))
-
-      declarations.map(transform) ++ globals :+ entryFunction
+      
+      globals :+ entryFunction
   }
 
   // context getters
@@ -36,33 +39,54 @@ object Transformer {
   private def FC(using FC: FunctionContext): FunctionContext = FC
   private def BC(using BC: BlockContext): BlockContext = BC
 
-  def transform(declaration: machine.Declaration)(using ErrorReporter): Definition =
+  def transform(declaration: machine.Declaration)(using ErrorReporter, ModuleContext): Unit =
     declaration match {
+      case machine.Extern(functionName, parameters, returnType, async, body@StringExternBody(featureFlag, contents)) if featureFlag.matches("c") =>
+        // FIXME: We could explicitly disallow CVoid as a type in parameter position
+        val transformedParameters = parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
+        val transformedReturnType = transform(returnType)
+
+        // Function name was already parsed in machine transformer
+        val cFunctionName = contents.strings.head
+        val returnLLVMType = PrettyPrinter.show(transformedReturnType)
+        val parameterLLVMTypes = transformedParameters.map(param => PrettyPrinter.show(param.typ))
+
+        emit(Verbatim(s"declare ${returnLLVMType} @${cFunctionName}(${parameterLLVMTypes.mkString(", ")})"))
+        defineCWrapperFunction(functionName, transformedParameters, transformedReturnType) {
+          emit(Comment(s"C wrapper function for '${cFunctionName}'"))
+          // TODO: Check calling convention here
+          emit(Call("ccall", Ccc(), transformedReturnType, ConstantGlobal(cFunctionName), transformedParameters.map { case Parameter(typ, name) => LocalReference(typ, name) }))
+
+          transformedReturnType match {
+            case VoidType() => RetVoid()
+            case _          => Ret(LocalReference(transformedReturnType, "ccall"))
+          }
+        }
       case machine.Extern(functionName, parameters, returnType, async, body) =>
         val transformedParameters = parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
         if (async) {
-          VerbatimFunction(Tailcc(true), VoidType(), functionName, transformedParameters :+ Parameter(stackType, "stack"), transform(body))
+          emit(VerbatimFunction(Tailcc(true), VoidType(), functionName, transformedParameters :+ Parameter(stackType, "stack"), transform(body)))
         } else {
-          VerbatimFunction(Ccc(), transform(returnType), functionName, transformedParameters, transform(body))
+          emit(VerbatimFunction(Ccc(), transform(returnType), functionName, transformedParameters, transform(body)))
         }
       case machine.ExternType(name, tps, machine.ExternBody.StringExternBody(_, body)) =>
         val ttps = tps match {
           case Nil => ""
           case tps => tps.mkString(", ")
         }
-        Verbatim(s"; declaration extern type ${name}${ttps} = ${body}")
+        emit(Verbatim(s"; declaration extern type ${name}${ttps} = ${body}"))
       case machine.ExternType(name, tps, machine.ExternBody.Unsupported(err)) =>
-        Verbatim(s"; unsupported extern type ${name}: ${err}")
+        emit(Verbatim(s"; unsupported extern type ${name}: ${err}"))
       case machine.ExternInterface(name, tps, machine.ExternBody.StringExternBody(_, body)) =>
         val ttps = tps match {
           case Nil => ""
           case tps => tps.mkString(", ")
         }
-        Verbatim(s"; declaration extern interface ${name}${ttps} = ${body}")
+        emit(Verbatim(s"; declaration extern interface ${name}${ttps} = ${body}"))
       case machine.ExternInterface(name, tps, machine.ExternBody.Unsupported(err)) =>
-        Verbatim(s"; unsupported extern interface ${name}: ${err}")
+        emit(Verbatim(s"; unsupported extern interface ${name}: ${err}"))
       case machine.Include(ff, content) =>
-        Verbatim("; declaration include" ++ content)
+        emit(Verbatim("; declaration include" ++ content))
     }
 
   def transform(body: machine.ExternBody[machine.Variable])(using ErrorReporter): String = body match {
@@ -389,6 +413,10 @@ object Transformer {
             shareValues(List(value), freeVariables(rest))
             emit(Call(name.name, Ccc(), transform(name.tpe), ConstantGlobal("coerceNegPos"), List(transform(value))))
             eraseValues(List(name), freeVariables(rest))
+          case (machine.Type.CTpe(machine.CType.Void), machine.Type.Positive()) =>
+            ()
+          case (machine.Type.Positive(), machine.Type.CTpe(machine.CType.Void)) =>
+            ()
           case (from, into) =>
             val coerce = (from, into) match {
               case (machine.Type.Int(), machine.Type.Positive()) => "coerceIntPos"
@@ -397,6 +425,8 @@ object Transformer {
               case (machine.Type.Positive(), machine.Type.Byte()) => "coercePosByte"
               case (machine.Type.Double(), machine.Type.Positive()) => "coerceDoublePos"
               case (machine.Type.Positive(), machine.Type.Double()) => "coercePosDouble"
+              case (machine.Type.CTpe(tpe), machine.Type.Positive()) => coerceCTpePos(tpe)
+              case (machine.Type.Positive(), machine.Type.CTpe(tpe)) => coercePosCTpe(tpe)
               case (tpe1, tpe2) => sys.error(s"Should not coerce $tpe1 to $tpe2")
             }
             emit(Call(name.name, Ccc(), transform(name.tpe), ConstantGlobal(coerce), List(transform(value))))
@@ -426,6 +456,22 @@ object Transformer {
       case machine.Variable(name, tpe) => LocalReference(transform(tpe), name)
     }
 
+  def coerceCTpePos(tpe: machine.CType): String = tpe match {
+    case machine.CType.Ptr => "coercePtrPos"
+    case machine.CType.I64 => "coerceIntPos"
+    case machine.CType.Double => "coerceDoublePos"
+    case machine.CType.Float => "coerceFloatPos"
+    case machine.CType.Void => sys.error("Should not coerce from Void to Pos")
+  }
+
+  def coercePosCTpe(tpe: machine.CType): String = tpe match {
+    case machine.CType.Ptr => "coercePosPtr"
+    case machine.CType.I64 => "coercePosInt"
+    case machine.CType.Double => "coercePosDouble"
+    case machine.CType.Float => "coercePosFloat"
+    case machine.CType.Void => sys.error("Should not coerce from Pos to Void")
+  }
+
   val positiveType = NamedType("Pos");
   // TODO multiple methods (should be pointer to vtable)
   val negativeType = NamedType("Neg");
@@ -442,30 +488,50 @@ object Transformer {
   val promptType = NamedType("Prompt");
   val referenceType = NamedType("Reference");
 
-  def transform(tpe: machine.Type): Type = tpe match {
-    case machine.Positive()          => positiveType
-    case machine.Negative()          => negativeType
-    case machine.Type.Prompt()       => promptType
-    case machine.Type.Stack()        => resumptionType
-    case machine.Type.Int()          => IntegerType64()
-    case machine.Type.Byte()         => IntegerType8()
-    case machine.Type.Double()       => DoubleType()
-    case machine.Type.Reference(tpe) => referenceType
+  def transform(tpe: machine.CType): Type = tpe match {
+    case machine.CType.Ptr => PointerType()
+    case machine.CType.I64 => IntegerType64()
+    case machine.CType.Double => DoubleType()
+    case machine.CType.Float => FloatType()
+    case machine.CType.Void => VoidType()
   }
+
+  def transform(tpe: machine.Type): Type = tpe match {
+      case machine.Positive()          => positiveType
+      case machine.Negative()          => negativeType
+      case machine.Type.Prompt()       => promptType
+      case machine.Type.Stack()        => resumptionType
+      case machine.Type.Int()          => IntegerType64()
+      case machine.Type.Byte()         => IntegerType8()
+      case machine.Type.Double()       => DoubleType()
+      case machine.Type.Reference(tpe) => referenceType
+      case machine.Type.CTpe(ctpe)     => transform(ctpe)
+    }
 
   def environmentSize(environment: machine.Environment): Int =
     environment.map { case machine.Variable(_, typ) => typeSize(typ) }.sum
 
+  def typeSize(tpe: machine.Type.CTpe): Int = tpe match {
+    case machine.Type.CTpe(tpe) => tpe match {
+      case machine.CType.Ptr    => 8
+      case machine.CType.I64    => 8
+      case machine.CType.Double => 8
+      case machine.CType.Float  => 4
+      case machine.CType.Void   => 0
+    }
+  }
+
   def typeSize(tpe: machine.Type): Int =
     tpe match {
-      case machine.Positive()        => 16
-      case machine.Negative()        => 16
-      case machine.Type.Prompt()     => 8 // TODO Make fat?
-      case machine.Type.Stack()      => 8 // TODO Make fat?
-      case machine.Type.Int()        => 8 // TODO Make fat?
-      case machine.Type.Byte()       => 1
-      case machine.Type.Double()     => 8 // TODO Make fat?
-      case machine.Type.Reference(_) => 16
+      case machine.Positive()           => 16
+      case machine.Negative()           => 16
+      case machine.Type.Prompt()        => 8 // TODO Make fat?
+      case machine.Type.Stack()         => 8 // TODO Make fat?
+      case machine.Type.Int()           => 8 // TODO Make fat?
+      case machine.Type.Byte()          => 1
+      case machine.Type.Double()        => 8 // TODO Make fat?
+      case machine.Type.Reference(_)    => 16
+      case CT@machine.Type.CTpe(_)      => typeSize(CT)
     }
 
   def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
@@ -479,6 +545,21 @@ object Transformer {
 
     val entryBlock = BasicBlock("entry", instructions, terminator);
     val function = Function(Private(), Ccc(), VoidType(), name, parameters, entryBlock :: basicBlocks);
+
+    emit(function)
+  }
+
+  def defineCWrapperFunction(name: String, parameters: List[Parameter], returnType: Type)(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
+    implicit val FC = FunctionContext();
+    implicit val BC = BlockContext();
+
+    val terminator = prog;
+
+    val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
+    val instructions = BC.instructions; BC.instructions = null;
+
+    val entryBlock = BasicBlock("entry", instructions, terminator);
+    val function = Function(Private(), Ccc(), returnType, name, parameters, entryBlock :: basicBlocks);
 
     emit(function)
   }

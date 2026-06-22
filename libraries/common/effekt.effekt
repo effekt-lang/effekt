@@ -795,3 +795,64 @@ effect splice[A](x: A): Unit
 // of the call site unless passed explicitly.
 
 record SourcePosition(file: String, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int)
+
+// C backend definitions
+// =====================
+// 
+// Type definitions & constructors for C types
+// Should only be used to automatically generate effekt wrappers for C functions
+
+namespace C {
+  extern type String = llvm "ptr"
+  extern type Int = llvm "i64"
+  extern type Double = llvm "double"
+  extern type Float = llvm "float"
+  extern type Ptr = llvm "ptr"
+  extern type Void = llvm "void"
+
+  // Type conversion: effekt -> C
+  extern def String(value: effekt::String): String = llvm """
+      %conv = call ptr @c_bytearray_into_nullterminated_string(%Pos ${value})
+      ret ptr %conv
+    """
+  extern def Int(value: effekt::Int) at {}: Int = llvm "ret %Int ${value}"
+  extern def Double(value: effekt::Double) at {}: Double = llvm "ret %Double ${value}"
+  extern def Float(value: effekt::Double) at {}: Float = llvm """
+    %trunc = fptrunc %Double ${value} to float
+    ret float %trunc
+  """
+  extern def Bool(value: effekt::Bool) at {}: Int = llvm """
+    %bool = extractvalue %Pos ${value}, 0
+    ret i64 %bool
+  """
+  extern def Null() at {}: Ptr = llvm "ret ptr null"
+
+  // Type conversion: C -> effekt
+  extern def toString(value: String): effekt::String = llvm """
+      %conv = call ptr @c_bytearray_from_nullterminated_string(ptr ${value})
+      ret %Pos %conv
+    """
+  extern def toInt(value: Int) at {}: effekt::Int = llvm "ret %Int ${value}"
+  extern def toDouble(value: Double) at {}: effekt::Double = llvm "ret %Double ${value}"
+  extern def toFloat(value: Float) at {}: effekt::Double = llvm """
+    %ext = fpext float ${value} to %Double
+    ret %Double %ext
+  """
+
+  // Additional utility
+  extern def isNull(ptr: C::Ptr): Bool = llvm """
+    %cmp = icmp eq ptr ${ptr}, null
+    %ext = zext i1 %cmp to i64
+    %bool = insertvalue %Pos zeroinitializer, i64 %ext, 0
+    ret %Pos %bool
+  """
+
+  extern def toBool(value: C::Int): Bool = llvm """
+    %cmp = icmp ne %Int ${value}, 0
+    %ext = zext i1 %cmp to i64
+    %bool = insertvalue %Pos zeroinitializer, i64 %ext, 0
+    ret %Pos %bool
+  """
+}
+
+def infixEq(v1: C::Int, v2: C::Int): Bool = C::toInt(v1) == C::toInt(v2)
