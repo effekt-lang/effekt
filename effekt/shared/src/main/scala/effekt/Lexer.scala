@@ -17,8 +17,7 @@ enum LexerError {
   case MultipleCodePointsInChar
   case InvalidIntegerFormat
   case InvalidDoubleFormat
-  case InvalidByteFormat
-  case InvalidHexFormat
+  case InvalidHexLiteralFormat
   case UnterminatedInterpolation(depth: Int)
 
   def message: String = this match {
@@ -37,8 +36,7 @@ enum LexerError {
     case MultipleCodePointsInChar => "Character literal consists of multiple code points"
     case InvalidIntegerFormat => "Invalid integer format, not a 64bit integer literal"
     case InvalidDoubleFormat => "Invalid float format, not a double literal"
-    case InvalidByteFormat => "Invalid byte format, byte has to be exactly two hex digits"
-    case InvalidHexFormat => "Invalid hex format, has to have exactly eight hex digits"
+    case InvalidHexLiteralFormat => "Invalid hex literal format, has to be exactly two or eight hex digits for byte or int respectively"
     case UnterminatedInterpolation(depth) =>
       s"Unterminated string interpolation ($depth unclosed splices)"
   }
@@ -369,14 +367,6 @@ class Lexer(source: Source) extends Iterator[Token] {
     TokenKind.Space
   }
 
-  private def aheadMatches(count: Int, charMatches: Char => Boolean, skip: Int = 0): Boolean =
-    if (position.offset + count > source.content.length) return false
-    var allMatch = true
-    for (index <- position.offset + skip to position.offset + count) {
-      allMatch &= charMatches(source.content(index))
-    }
-    allMatch
-
   private def peekAhead(offset: Int): Char =
     val targetIndex = position.offset + offset
     if targetIndex < source.content.length then
@@ -412,8 +402,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       case (c, _) if c.isWhitespace => advanceSpaces()
 
       // Numbers
-      case ('0', 'x') if aheadMatches(8, isHexDigit, skip = 2) => advanceWith(8, hexnumber())
-      case ('0', 'x') if aheadMatches(2, isHexDigit, skip = 2) => advance2With(byte())
+      case ('0', 'x') => advance2With(hexliteral())
       case (c,     _) if c.isDigit                => number()
 
       // Identifiers and keywords
@@ -565,45 +554,28 @@ class Lexer(source: Source) extends Iterator[Token] {
         case None => TokenKind.Error(LexerError.InvalidIntegerFormat)
       }
 
-  private def hexnumber(): TokenKind =
-    advanceWhile { (curr, _) => isHexDigit(curr) }
-
-    // Get the hex string
-    val hexString = getCurrentSlice(skipAfterStart = 2)
-
-    if hexString.length < 8 then
-      return TokenKind.Error(LexerError.InvalidHexFormat)
-
-    if hexString.length > 8 then
-      return TokenKind.Error(LexerError.InvalidHexFormat)
-    
-    try {
-      val number = java.lang.Long.parseLong(hexString, 16)
-      assert(number >= Long.MinValue && number <= Long.MaxValue)
-      TokenKind.Integer(number)
-    } catch {
-      case e: NumberFormatException => TokenKind.Error(LexerError.InvalidHexFormat)
-    }
-
-  private def byte(): TokenKind =
+  private def hexliteral(): TokenKind =
     // Consume hex digits
     advanceWhile { (curr, _) => isHexDigit(curr) }
 
     // Get the hex string
     val hexString = getCurrentSlice(skipAfterStart = 2)
 
-    if hexString.length < 2 then
-      return TokenKind.Error(LexerError.InvalidByteFormat)
-
-    if hexString.length > 2 then
-      return TokenKind.Error(LexerError.InvalidByteFormat)
+    if hexString.length != 2 && hexString.length != 8 then
+      return TokenKind.Error(LexerError.InvalidHexLiteralFormat)
     
     try {
-      val byte = java.lang.Integer.parseInt(hexString, 16)
-      assert(byte >= 0 && byte <= 255)
-      TokenKind.Byt(UByte.unsafeFromInt(byte))
+      if hexString.length == 2 then {
+        val byte = java.lang.Integer.parseInt(hexString, 16)
+        assert(byte >= 0 && byte <= 255)
+        TokenKind.Byt(UByte.unsafeFromInt(byte))
+      } else {
+        val long = java.lang.Long.parseLong(hexString, 16)
+        assert(long >= Long.MinValue && long <= Long.MaxValue)
+        TokenKind.Integer(long)
+      }
     } catch {
-      case e: NumberFormatException => TokenKind.Error(LexerError.InvalidByteFormat)
+      case e: NumberFormatException => TokenKind.Error(LexerError.InvalidHexLiteralFormat)
     }
 
   private def identifier(): TokenKind =
