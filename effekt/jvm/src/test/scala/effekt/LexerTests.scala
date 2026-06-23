@@ -240,6 +240,33 @@ class LexerTests extends munit.FunSuite {
     )
   }
 
+  test("string splice hole") {
+    val prog = "<${x}>"
+    assertTokensEq(
+      prog,
+      `<`, `${`, Ident("x"), `}$`, `>`,
+      EOF
+    )
+  }
+
+  test("all holes") {
+    val prog = "<{<\"str\">; <>}>"
+    assertTokensEq(
+      prog,
+      `<{`, HoleStr("str"), `;`, `<>`, `}>`,
+      EOF
+    )
+  }
+
+  test("all holes imbriqued") {
+    val prog = "<{< <\"str\"> >}>"
+    assertTokensEq(
+      prog,
+      `<{`, `<`, HoleStr("str"), `>`, `}>`,
+      EOF
+    )
+  }
+
   test("multiline string holes") {
     val prog1: String =
       """<" Here it starts
