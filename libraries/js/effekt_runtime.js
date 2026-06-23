@@ -108,22 +108,22 @@ function THUNK(f) {
 
 function CAPTURE(body) {
   return (ks, k) => {
-    const res = body(x => TRAMPOLINE(() => k(x, ks)))
+    const res = body(x => TRAMPOLINE(() => k(x, 0, ks)))
     if (res instanceof Function) return res
     else throw { computationIsDone: true, result: $effekt.unit }
   }
 }
 
-const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
+const RETURN = (x, d, ks) => ks.rest.stack(x, d, ks.rest)
 
 // HANDLE(ks, ks, (p, ks, k) => { STMT })
-function RESET(prog, ks, k) {
+function RESET(d, prog, ks, k) {
   const prompt = Symbol(); // gensym
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  return prog(prompt, { stack: null, prompt, arena: new Arena(), rest }, RETURN)
+  return prog(prompt, d + 1, { stack: null, prompt, arena: new Arena(), rest }, RETURN)
 }
 
-function SHIFT(p, body, ks, k) {
+function SHIFT(p, d, body, ks, k) {
 
   // TODO avoid constructing this object
   let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
@@ -143,11 +143,11 @@ function SHIFT(p, body, ks, k) {
 
   const k1 = meta.stack
   meta.stack = null
-  return body(cont, meta, k1)
+  return body(cont, d + 1, meta, k1)
 }
 
 // Rewind stack `cont` back onto `k` :: `ks` and resume with c
-function RESUME(cont, c, ks, k) {
+function RESUME(cont, d, c, ks, k) {
   let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
   let toRewind = cont
   while (!!toRewind) {
@@ -158,12 +158,12 @@ function RESUME(cont, c, ks, k) {
 
   const k1 = meta.stack // TODO instead copy meta here, like elsewhere?
   meta.stack = null
-  return () => c(meta, k1)
+  return () => c(0, meta, k1)
 }
 
 function RUN_TOPLEVEL(comp) {
   try {
-    let a = comp(TOPLEVEL_KS, TOPLEVEL_K)
+    let a = comp(0, TOPLEVEL_KS, TOPLEVEL_K)
     while (true) { a = a() }
   } catch (e) {
     if (e.computationIsDone) return e.result
