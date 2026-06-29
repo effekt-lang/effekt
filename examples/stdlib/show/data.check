@@ -1,5 +1,5 @@
 Empty()
 Value(42)
-Multiple(a, 0xAA)
+Multiple(a, ABC)
 InnerList(Cons(1, Cons(2, Cons(3, Nil()))))
 Cons(InnerList(Cons(1, Cons(2, Cons(3, Nil())))), Cons(InnerList(Cons(4, Cons(5, Cons(6, Nil())))), Cons(InnerList(Cons(7, Cons(8, Cons(9, Nil())))), Nil())))
