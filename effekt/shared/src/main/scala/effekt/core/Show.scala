@@ -162,7 +162,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       case If(cond, thn, els) =>
         val cond_ = transform(cond)
         ctx.withBindings {
-          If(transform(cond), transform(thn), transform(els))
+          If(cond_, transform(thn), transform(els))
         }
       case Match(scrutinee, matchTpe, clauses, default) =>
         val scrutinee_ = transform(scrutinee)
