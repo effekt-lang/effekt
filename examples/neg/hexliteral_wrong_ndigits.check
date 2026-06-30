@@ -1,0 +1,3 @@
+[error] examples/neg/hexliteral_wrong_ndigits.effekt:1:9: Invalid hex literal format, has to be exactly two or eight hex digits for byte or int respectively
+val a = 0x000
+        ^^^^^
