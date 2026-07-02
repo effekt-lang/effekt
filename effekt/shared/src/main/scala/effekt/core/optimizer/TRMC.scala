@@ -21,7 +21,12 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     
     var transformedFunctions: List[Toplevel] = List()
     
-    var functionLinks: Map[Id, Id] = Map.empty
+    var functionLinks: Map[Id, Id] = modDec.definitions.collect{
+      case Toplevel.Def(id, block) =>
+        val outputFunId = Id(id.name.name + "_trmc")
+        (id -> outputFunId)
+    }.toMap //TODO: exclude main?
+    
     
     object transform extends Tree.Rewrite {
       override def toplevel: PartialFunction[Toplevel, Toplevel] = {
@@ -29,10 +34,9 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
           println("in Toplevel")
           println(id.name.name)
           //println(effekt.util.PrettyPrinter.format(Toplevel.Def(id, block)).layout)
-          val outputFunId = Id(id.name.name + "_trmc")
+          val outputFunId = functionLinks(id)
           if (id.name.name != "main") {
             transformedFunctions = transformedFunctions.appended(trmc(id, block, outputFunId, functionLinks, DC))
-            functionLinks = functionLinks+(id -> outputFunId)
           }
           Toplevel.Def(id, block)
       }
@@ -137,7 +141,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
       val outerContextTpe = ValueType.Data(builtins.ContextSymbol, List(body.tpe, body.tpe)) //TODO: parameters, if unequal
       val ctxId = Id("ctx")
       Toplevel.Def(outputfun, BlockLit(tparams, cparams, vparams.appended(ValueParam(ctxId, outerContextTpe)), bparams,
-        trmc(body, id, outputfun, TransformContext.Outer(ctxId), outerContextTpe, functionLinks, DC)))
+        trmc(body, TransformContext.Outer(ctxId), outerContextTpe, functionLinks, DC)))
     case effekt.core.Block.Unbox(pure) => Toplevel.Def(id, block)
     case effekt.core.Block.New(impl) => Toplevel.Def(id, block)
   }
@@ -177,7 +181,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     }
   }
   
-  private def trmc(block: Block, inputfun: Id, outputfun: Id, functionLinks: Map[Id, Id], DC: DeclarationContext)(using Context): Block = block match {
+  private def trmc(block: Block, functionLinks: Map[Id, Id], DC: DeclarationContext)(using Context): Block = block match {
     case effekt.core.Block.BlockVar(id, annotatedTpe, annotatedCapt) => block
     case effekt.core.Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
       //      val ctxDecl: Declaration = DC.declarations.find(_.id.name.name == "HoleContext").getOrElse {
@@ -186,79 +190,80 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
       val outerContextTpe = ValueType.Data(builtins.ContextSymbol, List(body.tpe, body.tpe)) //TODO: parameters, if unequal
       val ctxId = Id("ctx")
       BlockLit(tparams, cparams, vparams.appended(ValueParam(ctxId, outerContextTpe)), bparams,
-        trmc(body, inputfun, outputfun, TransformContext.Outer(ctxId), outerContextTpe, functionLinks, DC))
+        trmc(body,  TransformContext.Outer(ctxId), outerContextTpe, functionLinks, DC))
     case effekt.core.Block.Unbox(pure) => block
     case effekt.core.Block.New(impl) => block
   }
   
-  private def trmc(stmt: Stmt, inputfun: Id, outputfun: Id, context: TransformContext, outerContextTpe: ValueType, functionLinks: Map[Id, Id], DC: DeclarationContext)(using Context): Stmt = stmt match {
+  private def trmc(stmt: Stmt, context: TransformContext, outerContextTpe: ValueType, functionLinks: Map[Id, Id], DC: DeclarationContext)(using Context): Stmt = stmt match {
     case Stmt.Def(id, block, body) => 
       val outputId = Id(id.name.name + "_trmc")
       val updatedLinks = functionLinks + (id -> outputId)
       Stmt.Def(id, block, 
         Stmt.Def(outputId, 
-          trmc(block, id, outputId, updatedLinks, DC), 
-          trmc(body, inputfun, outputfun, context, outerContextTpe, updatedLinks, DC))) //TODO: transform inner defs?
-    case Stmt.Let(id, binding, body) => Stmt.Let(id, binding, trmc(body, inputfun, outputfun, context, outerContextTpe, functionLinks, DC))
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => Stmt.ImpureApp(id, callee, targs, vargs, bargs, trmc(body, inputfun, outputfun, context, outerContextTpe, functionLinks, DC))
-    case Stmt.Return(expr) => reify(stmt, context, inputfun, outputfun, outerContextTpe, functionLinks, DC) //probably works every time, original function must still exit in case inputfun is free in expr
-    case Stmt.Val(id, binding, body) => trmc(binding, inputfun, outputfun, TransformContext.Val(id,body,context), outerContextTpe, functionLinks, DC)
+          trmc(block, updatedLinks, DC), 
+          trmc(body,  context, outerContextTpe, updatedLinks, DC))) 
+    case Stmt.Let(id, binding, body) => Stmt.Let(id, binding, trmc(body,  context, outerContextTpe, functionLinks, DC))
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => Stmt.ImpureApp(id, callee, targs, vargs, bargs, trmc(body,  context, outerContextTpe, functionLinks, DC))
+    case Stmt.Return(expr) => reify(stmt, context,  outerContextTpe, functionLinks, DC) //probably works every time, original function must still exist in case inputfun is free in expr
+    case Stmt.Val(id, binding, body) => trmc(binding,  TransformContext.Val(id,body,context), outerContextTpe, functionLinks, DC)
     case Stmt.App(callee, targs, vargs, bargs) => callee match {
       case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
-        if (id == inputfun) {
-          val (init, rest) = split(context, DC)
-          annotatedTpe match {
-            case Function(tparams, cparams, vparams, bparams, result) =>
-              val inner = Stmt.App(
-                Block.BlockVar(
-                  outputfun,
-                  Function(tparams, cparams, vparams.appended(outerContextTpe), bparams, result), annotatedCapt),//TODO:capt? 
-                targs,
-                vargs.appended(innerReify(init, outerContextTpe, stmt.tpe, DC)), //is input.tpe always the correct resType?
-                bargs)
-              rest match {
-                case Some(rest) => reify(inner, rest, inputfun, outputfun, outerContextTpe, functionLinks, DC)
-                case None => inner
-              }
-            case _ => Context.panic("in an App() Statement a Function should be called")
-          }
-        }else{
-          reify(rewriteCalls(stmt, inputfun, functionLinks, DC), context, inputfun, outputfun, outerContextTpe, functionLinks, DC)
+        functionLinks.get(id) match {
+          case Some(transformed) => 
+            val (init, rest) = split(context, DC)
+            annotatedTpe match {
+              case Function(tparams, cparams, vparams, bparams, result) =>
+                val inner = Stmt.App(
+                  Block.BlockVar(
+                    transformed,
+                    Function(tparams, cparams, vparams.appended(outerContextTpe), bparams, result), annotatedCapt),//TODO:capt? 
+                  targs,
+                  vargs.appended(innerReify(init, outerContextTpe, stmt.tpe, DC)), //is input.tpe always the correct resType?
+                  bargs)
+                rest match {
+                  case Some(rest) => reify(inner, rest,  outerContextTpe, functionLinks, DC)
+                  case None => inner
+                }
+              case _ => Context.panic("in an App() Statement a Function should be called")
+            }
+            // unknown calls, e.g. function arguments of higher order functions
+          case None => reify(stmt, context,  outerContextTpe, functionLinks, DC)
         }
-      case Block.BlockLit(tparams, cparams, vparams, bparams, body) => reify(stmt, context, inputfun, outputfun, outerContextTpe, functionLinks, DC) //TODO: do BLockLit, Unbox and New actually happen?
-      case Block.Unbox(pure) => reify(stmt, context, inputfun, outputfun, outerContextTpe, functionLinks, DC)
-      case Block.New(impl) => reify(stmt, context, inputfun, outputfun, outerContextTpe, functionLinks, DC)
+      case Block.BlockLit(tparams, cparams, vparams, bparams, body) => reify(stmt, context,  outerContextTpe, functionLinks, DC) //TODO: do BLockLit, Unbox and New actually happen?
+      case Block.Unbox(pure) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
+      case Block.New(impl) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
     }
-    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => reify(stmt, context, inputfun, outputfun, outerContextTpe, functionLinks, DC)
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
     case Stmt.If(cond, thn, els) =>
       Stmt.If(cond, //same caveat as Return()
-        trmc(thn, inputfun, outputfun, context, outerContextTpe, functionLinks, DC),
-        trmc(els, inputfun, outputfun, context, outerContextTpe, functionLinks, DC))
+        trmc(thn,  context, outerContextTpe, functionLinks, DC),
+        trmc(els,  context, outerContextTpe, functionLinks, DC))
     case Stmt.Match(scrutinee, annotatedTpe, clauses, default) =>
       Stmt.Match(
         scrutinee,
         annotatedTpe,
         clauses.map((id, blockLit) => blockLit match {
-          case BlockLit(tparams, cparams, vparams, bparams, body) => (id, BlockLit(tparams, cparams, vparams, bparams, trmc(body, inputfun, outputfun, context, outerContextTpe, functionLinks, DC)))
+          case BlockLit(tparams, cparams, vparams, bparams, body) => (id, BlockLit(tparams, cparams, vparams, bparams, trmc(body,  context, outerContextTpe, functionLinks, DC)))
         }),
         default match {
-          case Some(value) => Some(trmc(value, inputfun, outputfun, context, outerContextTpe, functionLinks, DC))
+          case Some(value) => Some(trmc(value,  context, outerContextTpe, functionLinks, DC))
           case None => None
         }
       )
-    case Stmt.Region(body) => reify(stmt, context, inputfun, outputfun, outerContextTpe, functionLinks, DC)
-    case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, trmc(body, inputfun, outputfun, context, outerContextTpe, functionLinks, DC))
-    case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, init, capture, trmc(body, inputfun, outputfun, context, outerContextTpe, functionLinks, DC))
-    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => Stmt.Get(id, annotatedTpe, ref, annotatedCapt, trmc(body, inputfun, outputfun, context, outerContextTpe, functionLinks, DC))
-    case Stmt.Put(ref, annotatedCapt, value, body) => Stmt.Put(ref, annotatedCapt, value, trmc(body, inputfun, outputfun, context, outerContextTpe, functionLinks, DC))
-    case Stmt.Reset(body) => reify(stmt, context, inputfun, outputfun, outerContextTpe, functionLinks, DC)
-    case Stmt.Shift(prompt, k, body) => Stmt.Shift(prompt, k, trmc(body, inputfun, outputfun, context, outerContextTpe, functionLinks, DC))
-    case Stmt.Resume(k, body) => Stmt.Resume(k, trmc(body, inputfun, outputfun, context, outerContextTpe, functionLinks, DC))
-    case Stmt.Hole(annotatedTpe, span) => reify(stmt, context, inputfun, outputfun, outerContextTpe, functionLinks, DC)
+    case Stmt.Region(body) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
+    case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, trmc(body,  context, outerContextTpe, functionLinks, DC))
+    case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, init, capture, trmc(body,  context, outerContextTpe, functionLinks, DC))
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => Stmt.Get(id, annotatedTpe, ref, annotatedCapt, trmc(body,  context, outerContextTpe, functionLinks, DC))
+    case Stmt.Put(ref, annotatedCapt, value, body) => Stmt.Put(ref, annotatedCapt, value, trmc(body,  context, outerContextTpe, functionLinks, DC))
+    case Stmt.Reset(body) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
+    case Stmt.Shift(prompt, k, body) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
+    case Stmt.Resume(k, body) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
+    case Stmt.Hole(annotatedTpe, span) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
   }
 
 
-  def reify(stmt: Stmt, context: TransformContext, inputfun: Id, outputfun: Id, outerContextTpe: ValueType, functionLinks: Map[Id, Id], DC: DeclarationContext)(using Context) : Stmt = context match {
+  def reify(stmt: Stmt, context: TransformContext, outerContextTpe: ValueType, functionLinks: Map[Id, Id], DC: DeclarationContext)(using Context) : Stmt = context match {
     case TransformContext.Outer(id) =>
       val tmpId = Id("tmp")
       Stmt.Val(
@@ -270,7 +275,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
             Nil, 
             List(ValueVar(id, outerContextTpe), ValueVar(tmpId, stmt.tpe)))))
     case TransformContext.Val(id, body, next) =>
-      Stmt.Val(id, stmt, trmc(body, inputfun, outputfun, next, outerContextTpe, functionLinks, DC))
+      Stmt.Val(id, stmt, trmc(body, next, outerContextTpe, functionLinks, DC))
   }
 
   def innerReify(context: TailContext, outerContextTpe: ValueType, resType: ValueType, DC: DeclarationContext)(using Context): Expr = context match {
