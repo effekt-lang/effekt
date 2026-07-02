@@ -1,0 +1,7 @@
+def a[A](in: A) = { in }
+def b[B](in: B) = { a(in) }
+
+def main() = {
+  println(b(1))
+  println(b("1"))
+}
