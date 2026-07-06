@@ -211,6 +211,7 @@ export Statement.*
 
 enum CType {
   case Ptr
+  case Obj
   case I64
   case Double
   case Float

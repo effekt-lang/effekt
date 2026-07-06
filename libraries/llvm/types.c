@@ -1,10 +1,11 @@
 #ifndef EFFEKT_TYPES_C
 #define EFFEKT_TYPES_C
 
-
 typedef int64_t Int;
 typedef double Double;
 typedef uint8_t Byte;
+typedef void* CObject;
+typedef void (*Eraser)(void*);
 
 struct Header {
     uint64_t rc;
@@ -49,5 +50,9 @@ extern void eraseStack(Stack);
 extern void shareNegative(struct Neg);
 extern void sharePositive(struct Pos);
 extern void shareStack(Stack);
+
+extern CObject effekt_alloc(Eraser eraser, uint64_t size);
+extern void effekt_share(CObject object);
+extern void effekt_erase(CObject object);
 
 #endif

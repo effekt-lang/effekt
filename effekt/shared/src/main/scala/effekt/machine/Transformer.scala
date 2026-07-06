@@ -90,15 +90,16 @@ object Transformer {
       ExternInterface(transform(id), tparams.map(transform), tBody)
   }
 
-  val validCTypes = List("ptr", "i64", "double", "float", "void")
+  val validCTypes = List("ptr", "%CObject", "i64", "double", "float", "void")
 
   def parseCType(tpe: String)(using ErrorReporter): Option[CType] = tpe match {
-    case "ptr"    => Some(machine.CType.Ptr)
-    case "i64"    => Some(machine.CType.I64)
-    case "double" => Some(machine.CType.Double)
-    case "float"  => Some(machine.CType.Float)
-    case "void"   => Some(machine.CType.Void)
-    case o        => None
+    case "ptr"      => Some(machine.CType.Ptr)
+    case "%CObject" => Some(machine.CType.Obj)
+    case "i64"      => Some(machine.CType.I64)
+    case "double"   => Some(machine.CType.Double)
+    case "float"    => Some(machine.CType.Float)
+    case "void"     => Some(machine.CType.Void)
+    case o          => None
   } 
 
   def parseExternCTpe(name: Id)(using DC: DeclarationContext)(using ErrorReporter): Option[machine.Type.CTpe] = 
