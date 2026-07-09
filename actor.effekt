@@ -1,0 +1,379 @@
+import io/time
+import queue
+
+extern llvm """
+  declare i32 @pthread_create(ptr noundef, ptr noundef, ptr noundef, ptr noundef)
+
+  declare i32 @pthread_join(i64 noundef, ptr noundef)
+
+  declare void @sleep(i64)
+
+  ; Id, Function pointer, closure, stack
+  %ThreadObject = type {i64, ptr, %Object, %Stack}
+
+  %Inbox = type i64
+
+  ; front, rear, data ptr
+  %MessageQueue = type {i64, i64, ptr}
+
+  ; Expect a pointer to a %ThreadObject
+  define void @call_thread_wrapper(ptr %threadObject) {
+    %threadObj = load %ThreadObject, ptr %threadObject
+    %functionPointer = extractvalue %ThreadObject %threadObj, 1
+    %closure = extractvalue %ThreadObject %threadObj, 2
+    %stack = extractvalue %ThreadObject %threadObj, 3
+
+    tail call tailcc %Pos %functionPointer(%Object %closure, %Stack %stack)
+    ret void 
+  }
+
+  define i64 @thread_object_size() alwaysinline {
+    %to_sizeptr = getelementptr %ThreadObject, ptr null, i64 1
+    %to_size = ptrtoint ptr %to_sizeptr to i64
+    ret i64 %to_size
+  }
+
+  define %Pos @coercePtrPos(ptr %ptr) {
+    %int = ptrtoint ptr %ptr to i64
+    %pos = call %Pos @coerceIntPos(i64 %int)
+    ret %Pos %pos
+  }
+
+  define ptr @coercePosPtr(%Pos %pos) {
+    %int = call %Int @coercePosInt(%Pos %pos)
+    %ptr = inttoptr i64 %int to ptr
+    ret ptr %ptr
+  }
+"""
+
+extern type ThreadObject
+extern type Inbox
+
+extern def start_thread { g: () => Unit }: ThreadObject = llvm """
+  %threadObjectSize = call i64 @thread_object_size()
+  %threadObject = call ptr @malloc(i64 %threadObjectSize)
+  %threadIdPtr = getelementptr i64, ptr %threadObject, i64 0
+  %functionPtr = getelementptr ptr, ptr %threadObject, i64 1
+  %objectPtr = getelementptr %Object, ptr %threadObject, i64 2 
+  %stackPtr = getelementptr %Stack, ptr %threadObject, i64 3
+
+  %stack = call %Stack @withEmptyStack()
+  store %Stack %stack, %Stack %stackPtr
+
+  ; (f: () => Unit at {io})
+  ; %neg = call %Neg @coercePosNeg(%Pos {f})
+  %arrayPointer = extractvalue %Neg ${g}, 0
+  %object = extractvalue %Neg ${g}, 1
+  %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
+  %functionPointer = load ptr, ptr %functionPointerPointer
+
+  store %Object %object, ptr %objectPtr
+  store ptr %functionPointer, ptr %functionPtr
+  
+  call ccc i64 @pthread_create(ptr %threadIdPtr, ptr null, ptr @call_thread_wrapper, ptr %threadObject)
+  %threadPtrInt = ptrtoint ptr %threadObject to i64
+  %threadPos = call %Pos @coerceIntPos(i64 %threadPtrInt)
+  ret %Pos %threadPos
+"""
+
+extern def thread_id(thread: ThreadObject): Int = llvm """
+  %threadInt = call %Int @coercePosInt(%Pos ${thread})
+  %threadPtr = inttoptr %Int %threadInt to ptr 
+  %thread_id_ptr = getelementptr %ThreadObject, ptr %threadPtr, i64 0
+  %thread_id = load i64, ptr %thread_id_ptr
+  ret i64 %thread_id
+"""
+
+extern def join_thread(thread: ThreadObject): Unit = llvm """
+  %threadInt = call %Int @coercePosInt(%Pos ${thread})
+  %threadPtr = inttoptr %Int %threadInt to ptr 
+  %thread_id_ptr = getelementptr %ThreadObject, ptr %threadPtr, i64 0
+  %thread_id = load i64, ptr %thread_id_ptr
+  call ccc i64 @pthread_join(i64 %thread_id, ptr null)
+  call void @free(ptr %threadPtr)
+  ret %Pos zeroinitializer
+"""
+
+extern def sleep(seconds: Int): Unit = llvm """
+  call ccc void @sleep(%Int ${seconds})
+  ret %Pos zeroinitializer
+"""
+
+extern def createInbox(): Inbox = llvm """
+  %inbox = call ptr @malloc(i64 8)
+  store atomic i64 -1, ptr %inbox monotonic, align 8
+  %pos = call %Pos @coercePtrPos(ptr %inbox)
+  ret %Pos %pos
+"""
+
+extern def freeInbox(inbox: Inbox): Unit = llvm """
+  %inbox = call ptr @coercePosPtr(%Pos ${inbox})
+  call void @free(ptr %inbox)
+  ret %Pos zeroinitializer
+"""
+
+extern def readInbox(inbox: Inbox): Int = llvm """
+  %inbox = call ptr @coercePosPtr(%Pos ${inbox})
+  %value = load atomic i64, ptr %inbox monotonic, align 8
+  ret %Int %value
+"""
+
+extern def clearInbox(inbox: Inbox): Unit = llvm """
+  %inbox = call ptr @coercePosPtr(%Pos ${inbox})
+  store atomic i64 -1, ptr %inbox monotonic, align 8
+  ret %Pos zeroinitializer
+"""
+
+extern def writeInbox(inbox: Inbox, value: Int): Unit = llvm """
+  %inbox = call ptr @coercePosPtr(%Pos ${inbox})
+  store atomic i64 ${value}, ptr %inbox monotonic, align 8
+  ret %Pos zeroinitializer
+"""
+
+extern type MessageQueue
+
+extern def allocateQueue(): MessageQueue = llvm """
+  ; 64 x 8 byte + 2 x 8
+  %queue = call ptr @malloc(i64 528)
+  ; front = -1  |  rear = 0
+  %frontPtr = getelementptr i64, ptr %queue, i64 0
+  %rearPtr = getelementptr i64, ptr %queue, i64 1
+  store atomic i64 -1, ptr %frontPtr monotonic, align 8
+  store atomic i64 0, ptr %rearPtr monotonic, align 8
+  %pos = call %Pos @coercePtrPos(ptr %queue)
+  ret %Pos %pos
+"""
+
+extern def freeQueue(queue: MessageQueue): Unit = llvm """
+  %queue = call ptr @coercePosPtr(%Pos ${queue})
+  call void @free(ptr %queue)
+  ret %Pos zeroinitializer
+"""
+
+extern def isEmpty(queue: MessageQueue): Bool = llvm """
+  %queue = call ptr @coercePosPtr(%Pos ${queue})
+  %frontPtr = getelementptr i64, ptr %queue, i64 0
+  %rearPtr = getelementptr i64, ptr %queue, i64 1
+  %front = load atomic i64, ptr %frontPtr monotonic, align 8
+  %rear = load atomic i64, ptr %rearPtr monotonic, align 8
+  %rearDec = sub i64 %rear, 1
+  
+  %z = icmp eq %Int %front, %rearDec
+  %fat_z = zext i1 %z to i64
+  %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+  ret %Pos %adt_boolean
+"""
+
+extern def isFull(queue: MessageQueue): Bool = llvm """
+  %queue = call ptr @coercePosPtr(%Pos ${queue})
+  %rearPtr = getelementptr i64, ptr %queue, i64 1
+  %rear = load atomic i64, ptr %rearPtr monotonic, align 8
+
+  ; Max size = 64 (in allocate)
+  %z = icmp eq %Int %rear, 64
+  %fat_z = zext i1 %z to i64
+  %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+  ret %Pos %adt_boolean
+"""
+
+extern def unsafeEnqueue(queue: MessageQueue, value: Int): Unit = llvm """
+  %queue = call ptr @coercePosPtr(%Pos ${queue})
+  %rearPtr = getelementptr i64, ptr %queue, i64 1
+  %rear = load atomic i64, ptr %rearPtr monotonic, align 8
+
+  %dataPtr = getelementptr ptr, ptr %queue, i64 2
+  %valuePtr = getelementptr i64, ptr %dataPtr, i64 %rear
+  store atomic i64 ${value}, ptr %valuePtr monotonic, align 8
+  %rearInc = add i64 %rear, 1
+  store atomic i64 %rearInc, ptr %rearPtr monotonic, align 8
+
+  ret %Pos zeroinitializer
+"""
+
+extern def unsafeDequeue(queue: MessageQueue): Unit = llvm """
+  %queue = call ptr @coercePosPtr(%Pos ${queue})
+  %frontPtr = getelementptr i64, ptr %queue, i64 0
+  %front = load atomic i64, ptr %frontPtr monotonic, align 8
+
+  %frontInc = add i64 %front, 1
+  store atomic i64 %frontInc, ptr %frontPtr monotonic, align 8
+
+  ret %Pos zeroinitializer
+"""
+
+extern def unsafePeek(queue: MessageQueue): Int = llvm """
+  %queue = call ptr @coercePosPtr(%Pos ${queue})
+  %frontPtr = getelementptr i64, ptr %queue, i64 0
+  %front = load atomic i64, ptr %frontPtr monotonic, align 8
+
+  %dataPtr = getelementptr ptr, ptr %queue, i64 2
+  ; 1 for inc 2 for location in %MessageQueue
+  %frontInc = add i64 %front, 1
+  %valuePtr = getelementptr i64, ptr %dataPtr, i64 %frontInc
+  %value = load atomic i64, ptr %valuePtr monotonic, align 8
+
+  ret %Int %value
+"""
+
+def enqueue(queue: MessageQueue, value: Int): Bool = {
+  if (queue.isFull()) {
+    false
+  } else {
+    queue.unsafeEnqueue(value)
+    true
+  }
+}
+
+def dequeue(queue: MessageQueue): Bool = {
+  if (queue.isEmpty()) {
+    false
+  } else {
+    queue.unsafeDequeue()
+    true
+  }
+}
+
+def peek(queue: MessageQueue): Option[Int] = {
+  if (queue.isEmpty()) {
+    None()
+  } else {
+    Some(queue.unsafePeek())
+  }
+} 
+
+// record Actor(thread: ThreadObject, messageQueue: MessageQueue)
+
+// def initActor { handleMessage: (Int) => Unit }: Actor = {
+
+//   val queue = allocateQueue()
+//   val thread = start_thread {
+//     loop {
+//       queue.peek() match {
+//         case None() => ()
+//         case Some(msg) => {
+//           queue.dequeue()
+//           handleMessage(msg)
+//         }
+//       }
+//     }
+//   }
+
+//   Actor(thread, queue)
+// }
+
+// def finalizeActor(actor: Actor): Unit = {
+//   join_thread(actor.thread)
+//   freeQueue(actor.messageQueue)
+// }
+
+def main() = {
+
+  // var t1_inbox: Inbox = createInbox()
+  // var t2_inbox: Inbox = createInbox()
+
+  // val t1 = start_thread {
+  //   var state = 0
+  //   println("Starting T1")
+  //   loop {
+  //     readInbox(t1_inbox) match {
+  //       case -1 => () // no message in queue
+  //       case 0 => {
+  //         println("T1 got okay")
+  //         if (state < 3) {
+  //           println(s"T1 sending ${state.show}")
+  //           writeInbox(t2_inbox, state)
+  //           state = state + 1
+  //         } else {
+  //           println("T1 is done")
+  //           writeInbox(t2_inbox, 42)
+  //           do stop()
+  //         }
+  //         clearInbox(t1_inbox)
+  //       }
+  //       case n => println(s"Got unknown message ${n.show}"); clearInbox(t1_inbox)
+  //     }
+  //   }
+  // }
+  
+  // val t2 = start_thread {
+  //   println("Starting T2")
+  //   loop {
+  //     readInbox(t2_inbox) match {
+  //       case -1 => () // no message in queue
+  //       case 42 => {
+  //         println("T2 received stop")
+  //         clearInbox(t2_inbox)
+  //         do stop()
+  //       }
+  //       case n => {
+  //         println(s"T2 received ${n.show}")
+  //         clearInbox(t2_inbox)
+  //         writeInbox(t1_inbox, 0)
+  //       }
+  //     }
+  //   }
+  // }
+
+  // writeInbox(t1_inbox, 0)
+  
+  var t1_queue: MessageQueue = allocateQueue()
+  var t2_queue: MessageQueue = allocateQueue()
+
+  val t1 = start_thread {
+    var state = 0
+    loop {
+      t1_queue.peek() match {
+        case None() => () // no message
+        case Some(msg) => {
+          t1_queue.dequeue()
+          msg match {
+            case 0 => {
+              println("T1 got okay")
+              if (state < 3) {
+                println(s"T1 sending ${state.show}")
+                t2_queue.enqueue(state)
+                state = state + 1
+              } else {
+                println("T1 is done")
+                t2_queue.enqueue(-1)
+                do stop()
+              }
+            }
+            case n => println(s"Got unknown message ${n.show}");
+          }
+        }
+      }
+    }
+  }
+
+  val t2 = start_thread {
+    println("Starting T2")
+    loop {
+      t2_queue.peek() match {
+        case None() => () // no message in queue
+        case Some(-1) => {
+          println("T2 received stop")
+          t2_queue.dequeue()
+          do stop()
+        }
+        case Some(n) => {
+          println(s"T2 received ${n.show}")
+          t2_queue.dequeue()
+          t1_queue.enqueue(0)
+          ()
+        }
+      }
+    }
+  }
+
+  t1_queue.enqueue(0)
+
+  join_thread(t1)
+  join_thread(t2)
+
+  freeQueue(t1_queue)
+  freeQueue(t2_queue)
+
+
+  ()
+}
