@@ -117,6 +117,7 @@ declare double @tan(double)
 declare void @print(i64)
 declare void @exit(i64)
 declare void @llvm.assume(i1)
+declare i64 @llvm.expect.i64(i64, i64)
 
 
 ; Prompts
@@ -153,7 +154,7 @@ define private %Environment @objectEnvironment(%Object %object) alwaysinline {
     ret %Environment %environment
 }
 
-define private void @shareObject(%Object %object) alwaysinline {
+define private void @shareObject(%Object %object) alwaysinline nounwind nosync nofree {
     %isNull = icmp eq %Object %object, null
     br i1 %isNull, label %done, label %next
 
@@ -168,26 +169,27 @@ define private void @shareObject(%Object %object) alwaysinline {
     ret void
 }
 
-define void @sharePositive(%Pos %val) alwaysinline {
+define void @sharePositive(%Pos %val) alwaysinline nounwind nosync nofree {
     %object = extractvalue %Pos %val, 1
     tail call void @shareObject(%Object %object)
     ret void
 }
 
-define void @shareNegative(%Neg %val) alwaysinline {
+define void @shareNegative(%Neg %val) alwaysinline nounwind nosync nofree {
     %object = extractvalue %Neg %val, 1
     tail call void @shareObject(%Object %object)
     ret void
 }
 
-define private void @eraseObject(%Object %object) alwaysinline {
+define private void @eraseObject(%Object %object) alwaysinline nounwind nosync {
     %isNull = icmp eq %Object %object, null
     br i1 %isNull, label %done, label %next
 
     next:
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
-    switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
+    %expectedRC = call i64 @llvm.expect.i64(i64 %referenceCount, i64 0) ; assume uniqueness
+    switch %ReferenceCount %expectedRC, label %decr [%ReferenceCount 0, label %free]
 
     decr:
     %referenceCount.1 = sub %ReferenceCount %referenceCount, 1
@@ -196,7 +198,7 @@ define private void @eraseObject(%Object %object) alwaysinline {
 
     free:
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
-    %eraser = load %Eraser, ptr %objectEraser, !alias.scope !14, !noalias !24
+    %eraser = load %Eraser, ptr %objectEraser, !alias.scope !14, !noalias !24, !invariant.load !{}
     %environment = call %Environment @objectEnvironment(%Object %object)
     call void %eraser(%Environment %environment)
     call void @free(%Object %object)
@@ -206,13 +208,13 @@ define private void @eraseObject(%Object %object) alwaysinline {
     ret void
 }
 
-define void @erasePositive(%Pos %val) alwaysinline {
+define void @erasePositive(%Pos %val) alwaysinline nounwind nosync {
     %object = extractvalue %Pos %val, 1
     tail call void @eraseObject(%Object %object)
     ret void
 }
 
-define void @eraseNegative(%Neg %val) alwaysinline {
+define void @eraseNegative(%Neg %val) alwaysinline nounwind nosync {
     %object = extractvalue %Neg %val, 1
     tail call void @eraseObject(%Object %object)
     ret void
@@ -322,7 +324,7 @@ define private %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
     ret %StackPointer %newStackPointer
 }
 
-define private i64 @nextPowerOfTwo(i64 %x) {
+define private i64 @nextPowerOfTwo(i64 %x) nounwind nosync willreturn readnone {
     %leadingZeros = call i64 @llvm.ctlz.i64(i64 %x, i1 false)
     %numBits = sub i64 64, %leadingZeros
     %result = shl i64 1, %numBits
@@ -449,7 +451,8 @@ define private {%Resumption, %Stack} @shift(%Stack %stack, %Prompt %prompt) {
 define private void @erasePrompt(%Prompt %prompt) alwaysinline {
     %referenceCount_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23
-    switch %ReferenceCount %referenceCount, label %decrement [%ReferenceCount 0, label %free]
+    %expectedRC = call i64 @llvm.expect.i64(i64 %referenceCount, i64 0) ; assume uniqueness
+    switch %ReferenceCount %expectedRC, label %decrement [%ReferenceCount 0, label %free]
 
 decrement:
     %newReferenceCount = sub %ReferenceCount %referenceCount, 1
@@ -532,7 +535,8 @@ define private %Resumption @uniqueStack(%Resumption %resumption) alwaysinline {
 entry:
     %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
-    switch %ReferenceCount %referenceCount, label %copy [%ReferenceCount 0, label %done]
+    %expectedRC = call i64 @llvm.expect.i64(i64 %referenceCount, i64 0) ; assume uniqueness
+    switch %ReferenceCount %expectedRC, label %copy [%ReferenceCount 0, label %done]
 
 done:
     ret %Resumption %resumption
@@ -584,7 +588,8 @@ define void @shareResumption(%Resumption %resumption) alwaysinline {
 define void @eraseResumption(%Resumption %resumption) alwaysinline {
     %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
-    switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
+    %expectedRC = call i64 @llvm.expect.i64(i64 %referenceCount, i64 0) ; assume uniqueness
+    switch %ReferenceCount %expectedRC, label %decr [%ReferenceCount 0, label %free]
 
     decr:
     %referenceCount.1 = sub %ReferenceCount %referenceCount, 1
@@ -740,7 +745,7 @@ define ccc void @run_Pos(%Pos %boxed, %Pos %argument) {
 }
 
 
-define ccc %Pos @coerceNegPos(%Neg %neg) {
+define ccc %Pos @coerceNegPos(%Neg %neg) nounwind nosync willreturn readnone {
     %arrayPointer = extractvalue %Neg %neg, 0
     %object = extractvalue %Neg %neg, 1
     %tagValue = ptrtoint ptr %arrayPointer to i64
@@ -749,7 +754,7 @@ define ccc %Pos @coerceNegPos(%Neg %neg) {
     ret %Pos %boxed2
 }
 
-define ccc %Neg @coercePosNeg(%Pos %pos) {
+define ccc %Neg @coercePosNeg(%Pos %pos) nounwind nosync willreturn readnone {
     %tagValue = extractvalue %Pos %pos, 0
     %object = extractvalue %Pos %pos, 1
     %arrayPointer = inttoptr i64 %tagValue to ptr
@@ -758,38 +763,38 @@ define ccc %Neg @coercePosNeg(%Pos %pos) {
     ret %Neg %unboxed2
 }
 
-define ccc %Pos @coerceIntPos(%Int %input) {
+define ccc %Pos @coerceIntPos(%Int %input) nounwind nosync willreturn readnone {
     %boxed1 = insertvalue %Pos zeroinitializer, i64 %input, 0
     %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
     ret %Pos %boxed2
 }
 
-define ccc %Int @coercePosInt(%Pos %input) {
+define ccc %Int @coercePosInt(%Pos %input) nounwind nosync willreturn readnone {
     %unboxed = extractvalue %Pos %input, 0
     ret %Int %unboxed
 }
 
-define ccc %Pos @coerceBytePos(%Byte %input) {
+define ccc %Pos @coerceBytePos(%Byte %input) nounwind nosync willreturn readnone {
     %extended = sext i8 %input to i64
     %boxed1 = insertvalue %Pos zeroinitializer, i64 %extended, 0
     %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
     ret %Pos %boxed2
 }
 
-define ccc %Byte @coercePosByte(%Pos %input) {
+define ccc %Byte @coercePosByte(%Pos %input) nounwind nosync willreturn readnone {
     %unboxed = extractvalue %Pos %input, 0
     %truncated = trunc i64 %unboxed to i8
     ret i8 %truncated
 }
 
-define ccc %Pos @coerceDoublePos(%Double %input) {
+define ccc %Pos @coerceDoublePos(%Double %input) nounwind nosync willreturn readnone {
     %number = bitcast double %input to i64
     %boxed1 = insertvalue %Pos zeroinitializer, i64 %number, 0
     %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
     ret %Pos %boxed2
 }
 
-define ccc %Double @coercePosDouble(%Pos %input) {
+define ccc %Double @coercePosDouble(%Pos %input) nounwind nosync willreturn readnone {
     %unboxed = extractvalue %Pos %input, 0
     %d = bitcast i64 %unboxed to double
     ret %Double %d
