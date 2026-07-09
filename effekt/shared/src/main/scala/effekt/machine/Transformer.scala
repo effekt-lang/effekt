@@ -60,15 +60,20 @@ object Transformer {
   def transform(extern: core.Extern)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Declaration = extern match {
     case core.Extern.Def(name, qualifiedSignature, tps, cparams, vparams, bparams, ret, capture, body) =>
       // TODO delete, and/or enforce at call site (ImpureApp)
-      if bparams.nonEmpty then ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
+      // if bparams.nonEmpty then ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
 
       val transformedParams = vparams.map {
         case core.ValueParam(id, tpe) => Variable(transform(id), transformUnboxed(tpe))
       }
+
+      val transformedBparams = bparams.map {
+        case core.BlockParam(id, tpe, capt) => Variable(transform(id), transform(tpe))
+      }
+
       val transformedRet = transformUnboxed(ret)
       val isExternAsync = capture.contains(symbols.builtins.AsyncCapability.capture)
-      noteDefinition(name, transformedParams, Nil, isExternAsync)
-      Extern(transform(name), transformedParams, transformedRet, isExternAsync, transform(body))
+      noteDefinition(name, transformedParams ++ transformedBparams, Nil, isExternAsync)
+      Extern(transform(name), transformedParams ++ transformedBparams, transformedRet, isExternAsync, transform(body))
 
     case core.Extern.Include(ff, contents) =>
       Include(ff, contents)
@@ -134,7 +139,8 @@ object Transformer {
     case core.ExternBody.StringExternBody(ff, Template(strings, args)) =>
       ExternBody.StringExternBody(ff, Template(strings, args map {
         case core.ValueVar(id, tpe) => Variable(transform(id), transform(tpe))
-        case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
+        case core.Box(core.BlockVar(id, annotatedTpe, annotatedCapt), annotatedCapture) => Variable(transform(id), transform(annotatedTpe))
+        case _ => ErrorReporter.abort(s"In the LLVM backend, only variables are allowed in templates")
       }))
     case core.ExternBody.Unsupported(err) =>
       ExternBody.Unsupported(err)
