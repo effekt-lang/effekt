@@ -471,7 +471,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('-', '=')            => advance2With(TokenKind.`-=`)
       case ('-', _)              => advanceWith(TokenKind.`-`)
 
-      case ('*', '=') => advanceWith(TokenKind.`*=`)
+      case ('*', '=') => advance2With(TokenKind.`*=`)
       case ('*', _)   => advanceWith(TokenKind.`*`)
       case ('?', _)   => advanceWith(TokenKind.`?`)
 
