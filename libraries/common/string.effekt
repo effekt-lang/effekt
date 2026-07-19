@@ -204,6 +204,23 @@ def lastIndexOf(str: String, sub: String, from: Int): Option[Int] = {
   go(from)
 }
 
+namespace internal {
+  def utf8ByteLength(str: String): Int = stream::sum {
+    for {str.each} { (c: Char) =>
+      do emit(c.utf8ByteCount)
+    }
+  }
+}
+
+/// Returns the number of bytes that the given `str` would take up in a UTF-8 encoding.
+extern def utf8ByteLength(str: String) at {io, global}: Int =
+  jsNode "Buffer.byteLength(${str}, 'utf8')"
+  llvm """
+    %x = call %Int @c_bytearray_size(%Pos ${str})
+    ret %Int %x
+  """ // via bytearray::fromString(str).length
+  default { internal::utf8ByteLength(str) }
+
 // TODO more efficient (native) implementations could be integrated as follows
 
 // extern def indexOf(str: String, sub: String) at {}: Option[Int] =

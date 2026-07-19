@@ -152,6 +152,9 @@ extern def infixPlusPlus(s1: String, s2: String) at {}: String =
     ret %Pos %spz
   """
 
+/// Beware that this function is backend-dependent.
+/// If you want to get the number of bytes that a string would take up in a UTF-8 encoding,
+/// use `string::utf8ByteLength` instead.
 extern def length(str: String) at {}: Int =
   js "${str}.length"
   chez "(string-length ${str})"
