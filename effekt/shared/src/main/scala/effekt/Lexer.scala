@@ -445,7 +445,9 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('<', '<') => advance2With(TokenKind.`<<`)
       case ('<', '=') => advance2With(TokenKind.`<=`)
       case ('<', '>') => advance2With(TokenKind.`<>`)
-      case ('<', '{') => advance2With(TokenKind.`<{`)
+      case ('<', '{') =>
+        depthTracker.braces += 1
+        advance2With(TokenKind.`<{`)
       case ('<', '~') => advance2With(TokenKind.`<~`)
       case ('<',   _) => advanceWith(TokenKind.`<`)
 
@@ -481,16 +483,11 @@ class Lexer(source: Source) extends Iterator[Token] {
         advance2With(TokenKind.`${`)
       case ('$', _) =>
         advanceWith(TokenKind.Error(LexerError.UnknownChar('$')))
-
-      case ('}', '>') => advance2With(TokenKind.`}>`)
       case ('}', _) if isAtInterpolationBoundary =>
         interpolationDepths.pop()
         depthTracker.braces -= 1
         resumeStringNext = true // remember to resume with a string next!
         advanceWith(TokenKind.`}$`)
-      case ('}', _) =>
-        depthTracker.braces -= 1
-        advanceWith(TokenKind.`}`)
 
       // Single-character tokens
       case (';', _) => advanceWith(TokenKind.`;`)
@@ -498,6 +495,12 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('{', _) =>
         depthTracker.braces += 1
         advanceWith(TokenKind.`{`)
+      case ('}', '>') =>
+        depthTracker.braces -= 1
+        advance2With(TokenKind.`}>`)
+      case ('}', _) =>
+        depthTracker.braces -= 1
+        advanceWith(TokenKind.`}`)
       case ('(', _) =>
         depthTracker.parens += 1
         advanceWith(TokenKind.`(`)
