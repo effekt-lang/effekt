@@ -216,7 +216,7 @@ namespace internal {
 extern def utf8ByteLength(str: String) at {io, global}: Int =
   jsNode "Buffer.byteLength(${str}, 'utf8')"
   llvm """
-    %x = call %Int @c_bytearray_utf8_length(%Pos ${str})
+    %x = call %Int @c_bytearray_size(%Pos ${str})
     ret %Int %x
   """ // via bytearray::fromString(str).length
   default { internal::utf8ByteLength(str) }
