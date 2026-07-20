@@ -71,7 +71,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 
             // Collect polymorphic extern definitions
             var polyExternDefs: List[Id] = externs.collect {
-              case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) if tparams.nonEmpty => id
+              case Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) if tparams.nonEmpty => id
             }
 
             var monoContext = MonoContext(solution, monoFunNames, monoTpeNames, polyExternDefs)
@@ -194,11 +194,14 @@ def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): MonoC
     } ++ (properties flatMap findConstraints)
 
 def findConstraints(extern: Extern)(using ctx: MonoFindContext): MonoConstraints = extern match {
-  case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
+  case Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
     val (_, constraints) = findConstraints(vparams.map(_.tpe))
     constraints
-  case Extern.Data(id, tparams) =>
+  case Extern.Data(id, tparams, body) =>
+    tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
+    List()
+  case Extern.Interface(id, tparams, body) => 
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
     List()
   case Extern.Include(_, _) => List()
