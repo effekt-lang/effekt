@@ -1,0 +1,50 @@
+type Foo[A] {
+  Bar[B](x: B)
+  Baz[B](x: A)
+}
+
+def main(): Unit = {
+  val foo1 = Bar[Int,String]("abc")
+  val foo2 = Bar[String,Int](123)
+  val foo3 = Baz[Int,String](456)
+  val foo4 = Baz[String,Int]("def")
+
+  foo1 match {
+    case Bar(x) => println("foo1")
+    case Baz(_) => panic("")
+  }
+
+  foo2 match {
+    case Bar(x) => println("foo2")
+    case Baz(_) => panic("")
+  }
+
+  foo3 match {
+    case Baz(x) => println("foo3")
+    case Bar(_) => panic("")
+  }
+
+  foo4 match {
+    case Baz(x) => println("foo4")
+    case Bar(_) => panic("")
+  }
+   
+  ()
+}
+
+type FooMono {
+  BarInt(x: Int)
+  BarString(x: String)
+}
+
+def mainMono(): Unit = {
+  val foo1 = BarInt(123)
+  val foo2 = BarString("abc")
+
+  foo1 match {
+    case BarInt(x) => println("true")
+    case BarString(x) => println("true")
+  }
+}
+
+

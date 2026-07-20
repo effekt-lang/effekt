@@ -1,0 +1,10 @@
+type Maybe {
+  Nothing()
+  Just[A](x: A)
+}
+
+def main() = {
+  val a = Just[Int](5)
+  val b = Nothing()
+  ()
+}

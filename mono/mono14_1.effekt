@@ -1,0 +1,17 @@
+def higherorder { f : [A] (A) => A } = f[Int](42)
+
+def main() = {
+  println(higherorder { [B] (x) => x })
+}
+
+// interface Poly {
+//   def apply[A](a: A): A
+// }
+// def higherorder { f : Poly } = f.apply[Int](42)
+
+// def main() = {
+//   def id = new Poly {
+//     def apply[B](b: B) = b
+//   }
+//   println(higherorder { id })
+// }
