@@ -14,22 +14,15 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case CoreTransformed(source, tree, mod, core) => {
         core match {
           case ModuleDecl(path, includes, declarations, externs, definitions, exports) => {
-            // println(util.show(core))
             // Find constraints in the definitions
             val monoFindContext = MonoFindContext()
             val dctx = DeclarationContext(declarations, externs)
             var constraints = findConstraints(definitions)(using monoFindContext)
             constraints = constraints ++ externs.flatMap(findConstraints(_)(using monoFindContext))
             constraints = constraints ++ declarations.flatMap(findConstraints(_)(using monoFindContext))
-            // println("Constraints")
-            // constraints.filter(c => c.lower.nonEmpty).toSet.foreach(c => println(pretty(c)))
-            // println()
 
             // Solve collected constraints
             val solution = solveConstraints(constraints)
-            // println("Solved")
-            // println(pretty(solution))
-            // println()
 
             // Monomorphize existing definitions
             var monoFunNames: MonoFunNames = Map.empty
@@ -62,13 +55,6 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
               case _ => ()
             })
 
-            // println("TypeNames")
-            // monoTpeNames.foreach(println)
-            // println()
-            // println("FunNames")
-            // monoFunNames.foreach(println)
-            // println()
-
             // Collect polymorphic extern definitions
             var polyExternDefs: List[Id] = externs.collect {
               case Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) if tparams.nonEmpty => id
@@ -77,12 +63,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             var monoContext = MonoContext(solution, monoFunNames, monoTpeNames, polyExternDefs)
             val monoDecls = declarations flatMap (monomorphize(_)(using monoContext)(using dctx))
             val monoDefs = monomorphize(definitions)(using monoContext)(using Context, dctx)
-            // monoDecls.foreach(decl => println(util.show(decl)))
-            // println()
-            // monoDefs.foreach(defn => println(util.show(defn)))
             val newModuleDecl = ModuleDecl(path, includes, monoDecls, externs, monoDefs, exports)
-
-            // println(util.show(newModuleDecl))
 
             return Some(CoreTransformed(source, tree, mod, newModuleDecl))
           }
@@ -177,7 +158,7 @@ def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): MonoC
   case Data(id, tparams, constructors) =>
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
     constructors.map { constr =>
-      val arity = tparams.size // + constr.tparams.size
+      val arity = tparams.size
       val constructorArgs = (0 until arity).map(index =>
         TypeArg.Var(constr.id, index) // Just.0  
       ).toVector // < Just.0 >
@@ -186,7 +167,7 @@ def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): MonoC
   case Interface(id, tparams, properties) => 
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
     properties.map { prop =>
-      val arity = tparams.size // + prop.tparams.size
+      val arity = tparams.size
       val propArgs = (0 until arity).map(index =>
         TypeArg.Var(prop.id, index) // Just.0  
       ).toVector // < Just.0 >
