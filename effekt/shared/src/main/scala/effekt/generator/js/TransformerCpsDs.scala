@@ -39,7 +39,9 @@ object TransformerCpsDs extends Transformer {
     mutableParams: Set[Id],
     declarations: DeclarationContext,
     errors: Context
-  )
+  ) {
+    def clearSecondClass: TransformerContext = copy(secondClass = Map.empty)
+  }
   implicit def autoContext(using C: TransformerContext): Context = C.errors
 
   def computeKinds(m: cpsds.ModuleDecl): Map[Id, FunctionKind] = {
@@ -387,7 +389,7 @@ object TransformerCpsDs extends Transformer {
     case cpsds.Stmt.Reset(p, ks, k, body, ks1, k1) =>
       val (backups, substBody) = backupMutableParams(body, Set(p, ks, k))
       pure(backups ++ List(js.Return(Call(RESET,
-        js.Lambda(List(nameDef(p), nameDef(ks), nameDef(k)), toJS(substBody).stmts),
+        js.Lambda(List(nameDef(p), nameDef(ks), nameDef(k)), toJS(substBody)(using ctx.clearSecondClass).stmts),
         toJS(ks1), toJS(k1)))))
 
     // --- Shift ---
@@ -415,7 +417,7 @@ object TransformerCpsDs extends Transformer {
     Binding { k =>
       val (backups, substBody) = backupMutableParams(body, params.toSet)
       backups ++
-        List(js.Function(nameDef(id), params.map(nameDef), toJS(substBody).stmts)) ++
+        List(js.Function(nameDef(id), params.map(nameDef), toJS(substBody)(using ctx.clearSecondClass).stmts)) ++
         toJS(rest).run(k)
     }
 
