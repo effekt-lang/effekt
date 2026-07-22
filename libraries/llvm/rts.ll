@@ -23,6 +23,9 @@
 ;   +-----------------+--------+-------------+
 %Object = type ptr
 
+; C-visible managed objects point at the payload, not at the header.
+%CObject = type ptr
+
 
 ; A Frame has the following layout
 ;
@@ -215,6 +218,41 @@ define void @erasePositive(%Pos %val) alwaysinline {
 define void @eraseNegative(%Neg %val) alwaysinline {
     %object = extractvalue %Neg %val, 1
     tail call void @eraseObject(%Object %object)
+    ret void
+}
+
+
+; User-facing C-helpers for GC
+
+define %CObject @effekt_alloc(%Eraser %eraser, i64 %size) {
+    %object = call %Object @newObject(%Eraser %eraser, i64 %size)
+    %environment = call %Environment @objectEnvironment(%Object %object)
+    ret %CObject %environment
+}
+
+define void @effekt_share(%CObject %object) {
+    %isNull = icmp eq %CObject %object, null
+    br i1 %isNull, label %done, label %next
+
+    next:
+    %header = getelementptr %Header, ptr %object, i64 -1
+    call void @shareObject(%Object %header)
+    br label %done
+
+    done:
+    ret void
+}
+
+define void @effekt_erase(%CObject %object) {
+    %isNull = icmp eq %CObject %object, null
+    br i1 %isNull, label %done, label %next
+
+    next:
+    %header = getelementptr %Header, ptr %object, i64 -1
+    call void @eraseObject(%Object %header)
+    br label %done
+
+    done:
     ret void
 }
 
@@ -821,6 +859,37 @@ define ccc ptr @coercePosPtr(%Pos %input) {
     %unboxed = extractvalue %Pos %input, 0
     %d = inttoptr i64 %unboxed to ptr
     ret ptr %d
+}
+
+define ccc %Pos @coerceObjPos(%CObject %input) {
+    entry:
+    %isNull = icmp eq %CObject %input, null
+    br i1 %isNull, label %done, label %next
+
+    next:
+    %header = getelementptr %Header, ptr %input, i64 -1
+    br label %done
+
+    done:
+    %object = phi %Object [ null, %entry ], [ %header, %next ]
+    %boxed1 = insertvalue %Pos zeroinitializer, i64 0, 0
+    %boxed2 = insertvalue %Pos %boxed1, %Object %object, 1
+    ret %Pos %boxed2
+}
+
+define ccc %CObject @coercePosObj(%Pos %input) {
+    entry:
+    %object = extractvalue %Pos %input, 1
+    %isNull = icmp eq %Object %object, null
+    br i1 %isNull, label %done, label %next
+
+    next:
+    %environment = call %Environment @objectEnvironment(%Object %object)
+    br label %done
+
+    done:
+    %result = phi %CObject [ null, %entry ], [ %environment, %next ]
+    ret %CObject %result
 }
 
 

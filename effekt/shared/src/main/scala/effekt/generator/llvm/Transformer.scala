@@ -413,6 +413,14 @@ object Transformer {
             shareValues(List(value), freeVariables(rest))
             emit(Call(name.name, Ccc(), transform(name.tpe), ConstantGlobal("coerceNegPos"), List(transform(value))))
             eraseValues(List(name), freeVariables(rest))
+          case (machine.Type.Positive(), machine.Type.CTpe(machine.CType.Obj)) =>
+            shareValues(List(value), freeVariables(rest))
+            emit(Call(name.name, Ccc(), transform(name.tpe), ConstantGlobal("coercePosObj"), List(transform(value))))
+            eraseValues(List(name), freeVariables(rest))
+          case (machine.Type.CTpe(machine.CType.Obj), machine.Type.Positive()) =>
+            shareValues(List(value), freeVariables(rest))
+            emit(Call(name.name, Ccc(), transform(name.tpe), ConstantGlobal("coerceObjPos"), List(transform(value))))
+            eraseValues(List(name), freeVariables(rest))
           case (machine.Type.CTpe(machine.CType.Void), machine.Type.Positive()) =>
             ()
           case (machine.Type.Positive(), machine.Type.CTpe(machine.CType.Void)) =>
@@ -458,6 +466,7 @@ object Transformer {
 
   def coerceCTpePos(tpe: machine.CType): String = tpe match {
     case machine.CType.Ptr => "coercePtrPos"
+    case machine.CType.Obj => "coerceObjPos"
     case machine.CType.I64 => "coerceIntPos"
     case machine.CType.Double => "coerceDoublePos"
     case machine.CType.Float => "coerceFloatPos"
@@ -466,6 +475,7 @@ object Transformer {
 
   def coercePosCTpe(tpe: machine.CType): String = tpe match {
     case machine.CType.Ptr => "coercePosPtr"
+    case machine.CType.Obj => "coercePosObj"
     case machine.CType.I64 => "coercePosInt"
     case machine.CType.Double => "coercePosDouble"
     case machine.CType.Float => "coercePosFloat"
@@ -482,6 +492,7 @@ object Transformer {
   val frameHeaderType = NamedType("FrameHeader");
   val environmentType = NamedType("Environment");
   val objectType = NamedType("Object");
+  val CObjectType = NamedType("CObject");
   val stackPointerType = NamedType("StackPointer");
   val stackType = NamedType("Stack");
   val resumptionType = NamedType("Resumption");
@@ -490,6 +501,7 @@ object Transformer {
 
   def transform(tpe: machine.CType): Type = tpe match {
     case machine.CType.Ptr => PointerType()
+    case machine.CType.Obj => CObjectType
     case machine.CType.I64 => IntegerType64()
     case machine.CType.Double => DoubleType()
     case machine.CType.Float => FloatType()
@@ -514,6 +526,7 @@ object Transformer {
   def typeSize(tpe: machine.Type.CTpe): Int = tpe match {
     case machine.Type.CTpe(tpe) => tpe match {
       case machine.CType.Ptr    => 8
+      case machine.CType.Obj    => 8
       case machine.CType.I64    => 8
       case machine.CType.Double => 8
       case machine.CType.Float  => 4
@@ -788,6 +801,7 @@ object Transformer {
       case machine.Positive()    => Call("_", Ccc(), VoidType(), sharePositive, List(transform(value)))
       case machine.Negative()    => Call("_", Ccc(), VoidType(), shareNegative, List(transform(value)))
       case machine.Type.Stack()  => Call("_", Ccc(), VoidType(), shareResumption, List(transform(value)))
+      case machine.Type.CTpe(machine.CType.Obj) => Call("_", Ccc(), VoidType(), shareCObject, List(transform(value)))
     }.map(emit)
   }
 
@@ -796,6 +810,7 @@ object Transformer {
       case machine.Positive()    => Call("_", Ccc(), VoidType(), erasePositive, List(transform(value)))
       case machine.Negative()    => Call("_", Ccc(), VoidType(), eraseNegative, List(transform(value)))
       case machine.Type.Stack()  => Call("_", Ccc(), VoidType(), eraseResumption, List(transform(value)))
+      case machine.Type.CTpe(machine.CType.Obj) => Call("_", Ccc(), VoidType(), eraseCObject, List(transform(value)))
     }.map(emit)
   }
 
@@ -817,10 +832,12 @@ object Transformer {
 
   val sharePositive = ConstantGlobal("sharePositive");
   val shareNegative = ConstantGlobal("shareNegative");
+  val shareCObject = ConstantGlobal("effekt_share");
   val shareResumption = ConstantGlobal("shareResumption");
   val shareFrames = ConstantGlobal("shareFrames");
 
   val eraseObject = ConstantGlobal("eraseObject");
+  val eraseCObject = ConstantGlobal("effekt_erase");
   val erasePositive = ConstantGlobal("erasePositive");
   val eraseNegative = ConstantGlobal("eraseNegative");
   val eraseResumption = ConstantGlobal("eraseResumption");

@@ -811,6 +811,7 @@ namespace C {
   extern type Double = llvm "double"
   extern type Float = llvm "float"
   extern type Ptr = llvm "ptr"
+  extern type Obj = llvm "%CObject"
   extern type Void = llvm "void"
 
   // Type conversion: effekt -> C
