@@ -1,0 +1,41 @@
+type Color { Red(); Green(); Blue() }
+type Shape { Circle(color: Color); Square(color: Color); Triangle(color: Color) }
+
+
+def test1(c: Color): String =
+  c match {
+    case Red() | Green() => "warm-ish"
+    case Blue()          => "cool"
+  }
+
+def test2(s: Shape): String =
+  s match {
+    case Circle(Red() | Green()) => "colorful circle"
+    case Circle(Blue())          => "blue circle"
+    case Square(Red() | Green()) => "colorful square"
+    case Square(Blue())          => "blue square"
+    case Triangle(_)             => "triangle"
+  }
+
+
+def test3(s: Shape): String =
+  s match {
+    case Circle(Red())              => "colorful circle"
+    case Circle(Green())            => "colorful circle"
+    case Circle(Blue())             => "blue circle"
+    case Square(c) and c is Red() | Green() => "red or green square"
+    case Square(Blue())             => "blue square"
+    case Triangle(_)                => "any triangle"
+  }
+
+def test4(c: Color): String =
+  c match {
+    case x and x is Red() | Green() | Blue() => "some color"
+  }
+
+def main() = {
+  println(test1(Red()))
+  println(test2(Circle(Red())))
+  println(test3(Square(Blue())))
+  println(test4(Green()))
+}

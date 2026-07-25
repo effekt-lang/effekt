@@ -1,0 +1,44 @@
+record Car(name: String)
+type Color { Red(); Green(); Blue() }
+type Shape { Circle(color: Color); Square(color: Color); Triangle(color: Color) }
+
+def test1() = {
+    val c = Car("Smart")
+    c match {
+        case Car("Smart") | Car("BMW") => println(c.name)
+        case Car(_) => println(c.name)
+    }
+}
+
+def test2(x: Option[Car]) = {
+    x match {
+        case Some(x) and x.name is "Smart" | "BMW" => println(x.name)
+        case Some(x) => println("here")
+    }
+}
+
+def test3(c: Color): String =
+  c match {
+    case Red() | Green() => "warm-ish"
+  }
+
+def test4(s: Shape): String =
+  s match {
+    case Circle(Red() | Green()) => "colorful circle"
+    case Circle(Blue()) => "blue circle"
+    case Square(Red() | Green()) => "colorful square"
+    case Triangle(_) => "triangle"
+  }
+
+def test5(s: Shape): String =
+  s match {
+    case Circle(_) => "circle"
+    case Square(c) and c is Red() | Green() => "colorful square"
+    case Triangle(_) => "triangle"
+  }
+
+def test6(c: Color): String =
+  c match {
+    case Red() | Green() | Blue() => "any color"
+    case Red() => "red"
+  }
