@@ -76,7 +76,7 @@ jobs:
         run: sbt Test/compile
 
       - name: Run Windows smoke test
-        run: sbt "effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*pos[\\/]*sideeffects.*; effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*neg[\[...]; effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*casestudies[\[...]"
+        run: sbt "effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*casestudies.*; effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*neg[\[...]"
 
   macos-llvm-tests:
     name: "macOS LLVM Smoke Tests"
