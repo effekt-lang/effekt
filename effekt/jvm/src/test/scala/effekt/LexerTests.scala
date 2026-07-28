@@ -352,6 +352,26 @@ class LexerTests extends munit.FunSuite {
     )
   }
 
+  test("singleline comment ends with CRLF") {
+    val prog = "// foo\r\nval x = 2"
+    assertTokensEq(
+      prog,
+      Comment(" foo"), Newline,
+      `val`, Ident("x"), `=`, Integer(2),
+      EOF
+    )
+  }
+
+  test("singleline comment ends with LF") {
+    val prog = "// foo\nval x = 2"
+    assertTokensEq(
+      prog,
+      Comment(" foo"), Newline,
+      `val`, Ident("x"), `=`, Integer(2),
+      EOF
+    )
+  }
+
   test("multiline comment") {
     val prog =
       """val x = 42
