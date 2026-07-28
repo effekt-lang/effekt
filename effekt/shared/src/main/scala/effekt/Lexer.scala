@@ -713,7 +713,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       TokenKind.Comment(comment)
 
   private def shebang(): TokenKind =
-    advanceWhile { (curr, _) => curr != '\n' }
+    advanceWhile { (curr, _) => curr != '\n' && curr != '\r' }
     val command = getCurrentSlice(skipAfterStart = 2) // Remove `#!`
     TokenKind.Shebang(command)
 }
