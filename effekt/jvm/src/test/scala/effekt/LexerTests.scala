@@ -476,6 +476,22 @@ class LexerTests extends munit.FunSuite {
     )
   }
 
+  test("single-line string unexpectedly ends with CRLF") {
+    val prog = "val s = \"hello\r\n"
+    assertTokensEq(
+      prog,
+      `val`, Ident("s"), `=`, Error(UnterminatedStringLike(Str("hello", multiline = false))), Newline, EOF
+    )
+  }
+
+  test("single-line string unexpectedly ends with LF") {
+    val prog = "val s = \"hello\n"
+    assertTokensEq(
+      prog,
+      `val`, Ident("s"), `=`, Error(UnterminatedStringLike(Str("hello", multiline = false))), Newline, EOF
+    )
+  }
+
   def assertSuccessFile(filename: String): Unit = {
     // val start = System.nanoTime()
     val file = scala.io.Source.fromFile(filename).mkString
