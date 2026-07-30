@@ -32,7 +32,8 @@ object SpanSyntax {
     }
 
     def sourceAndPositions: (Source, Seq[Int]) = {
-      val lines = content.stripMargin.split("\n").toBuffer
+      val normalized = content.stripMargin.replace("\r\n", "\n")
+      val lines = normalized.split("\n", -1).toBuffer
       val positions = scala.collection.mutable.ArrayBuffer[Int]()
       var lineIdx = 0
       var lineBytePos = 0
@@ -230,7 +231,8 @@ class ParserTests extends munit.FunSuite {
 
     val textWithoutSpan =
       raw"""There is some content here.
-           |And here.""".stripMargin
+           |And here.
+           |""".stripMargin.replace("\r\n", "\n")
 
     assertEquals(span.from, 4)
     assertEquals(span.to, 33)
