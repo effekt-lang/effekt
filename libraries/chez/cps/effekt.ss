@@ -78,16 +78,6 @@
 ; normal return terminates the thread
 (define-record-type thread-boundary (fields mutex (mutable rest)))
 
-; Block b, MetaCont, Cont -> b
-(define (with-boundary prog ks k)
-    (begin
-        (set-meta-cont-cont! ks k)
-        (p (make-meta-cont top-level-k
-                           (gensym "thread")
-                           (create-store)
-                           (make-thread-boundary (make-mutex) ks))
-            top-level-k)))
-
 ; Value, MetaCont -> Ref
 (define (var init ks)
     (let ([store (meta-cont-store ks)])
@@ -137,25 +127,18 @@
          (meta-cont-cont-set! ks k)
          (prog prompt (make-meta-cont return prompt (create-store) ks) return)))
 
-; MetaCont -> MetaCont
-; Addresses potential thread boundaries
-(define (get-meta-cont-rest ks)
-    (if (meta-cont? ks)
-        (let [rest (meta-cont-rest ks)]
-            (if (meta-cont? rest)
-                rest
-                (thread-boundary-rest rest)))
-        (begin
-            (mutex-acquire (thread-boundary-mutex ks))
-            (thread-boundary-rest ks))))
-
 ; MetaCont, Prompt -> MetaCont * MetaCont
 (define (split-stack ks p)
     ; (MetaCont | ThreadBoundary), MetaCont -> MetaCont * MetaCont
     (define (worker captured remaining)
         (let* ([snap (snapshot (meta-cont-store remaining))]
                [remaining-rest (meta-cont-rest remaining)]
-               [hit-boundary? (thread-boundary? remaining-rest)]
+               [hit-boundary? (if (thread-boundary? remaining-rest)
+                                  (begin
+                                    ; Block until no other thread uses the stack below the boundary
+                                    (mutex-acquire (thread-boundary-mutex remaining-rest))
+                                    #t)
+                                   #f)]
                [new-remaining (if hit-boundary?
                                   (thread-boundary-rest remaining-rest)
                                   remaining-rest)]
@@ -163,11 +146,12 @@
                                 (meta-cont-store-set! remaining snap)
                                 (meta-cont-rest-set! remaining captured)
                                 (if hit-boundary?
-                                    (let [(real-rest (thread-boundary-rest remaining-rest))]
-                                        (thread-boundary-rest-set! remaining-rest remaining))
+                                    (begin
+                                        (thread-boundary-rest-set! remaining-rest remaining)
+                                        remaining-rest)
                                     remaining)
                                  )]
-               [captured-prompt (meta-cont-prompt remaining)]
+               [captured-prompt (meta-cont-prompt remaining)])
              (if (symbol=? captured-prompt p)
                  (values new-captured new-remaining)
                  (worker new-captured new-remaining))))
@@ -179,18 +163,26 @@
     (let-values ([(c underC) (split-stack ks p)])
                 (prog c underC (meta-cont-cont underC))))
 
-; MetaCont, MetaCont -> MetaCont
+; (MetaCont? | ThreadBoundary), MetaCont -> MetaCont
 (define (rewind cont ks)
-    (if (null? cont)
-        ks
-        (let* ([snap (meta-cont-store cont)]
-               [next (meta-cont-rest cont)]
-               [newKs (make-meta-cont (meta-cont-cont cont)
-                                      (meta-cont-prompt cont)
-                                      (snap-store snap)
-                                      ks)])
-            (restore snap)
-            (rewind next newKs))))
+    (cond
+        [(null? cont) ks]
+        [(thread-boundary? cont)
+            (let* ([mutex (thread-boundary-mutex cont)]
+                   [next (thread-boundary-rest cont)]
+                   [newKs (make-thread-boundary mutex ks)])
+                ; We are "above" the boundary again, so we can unblock other threads that want to cross it
+                (mutex-release mutex)
+                (rewind next newKs))]
+        [else (let* ([snap (meta-cont-store cont)]
+                     [next (meta-cont-rest cont)]
+                     [newKs (make-meta-cont (meta-cont-cont cont)
+                                            (meta-cont-prompt cont)
+                                            (snap-store snap)
+                                            ks)])
+                (restore snap)
+                (rewind next newKs))]))
+        
 
 ; Block b = Cont b, MetaCont -> #
 
