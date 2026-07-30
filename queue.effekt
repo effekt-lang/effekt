@@ -1,0 +1,146 @@
+extern llvm """
+    declare %Pos @c_queue_new()
+    declare %Pos @c_queue_empty(%Pos)
+    declare %Pos @c_queue_full(%Pos)
+    declare %Pos @c_queue_unsafeEnqueue(%Pos, %Pos)
+    declare %Pos @c_queue_unsafeDequeue(%Pos)
+    declare %Pos @c_queue_unsafePeek(%Pos)
+    declare %Pos @c_queue_unsafePop(%Pos)
+
+    declare %Pos @c_queue_send_emit(%Int, %Pos, %Stack)
+    declare %Pos @c_queue_send_resume(%Pos, %Stack)
+    declare %Pos @c_queue_resume(%Pos)
+    declare %Pos @c_message_new_emit(%Int, %Stack)
+    declare %Pos @c_message_value(%Pos)
+    declare %Stack @c_message_continuation(%Pos)
+"""
+
+extern type MessageQueue[R]
+extern type MessageData
+extern type Continuation
+
+extern def allocateQueue[R](): MessageQueue[R] = llvm """
+    %queue = call %Pos @c_queue_new()
+    ret %Pos %queue
+"""
+
+extern def isEmpty[R](queue: MessageQueue[R]): Bool = llvm """
+    %queue_empty = call %Pos @c_queue_empty(%Pos ${queue})
+    tail call void @erasePositive(%Pos ${queue})
+    ret %Pos %queue_empty
+"""
+
+extern def isFull[R](queue: MessageQueue[R]): Bool = llvm """
+    %queue_full = call %Pos @c_queue_full(%Pos ${queue})
+    tail call void @erasePositive(%Pos ${queue})
+    ret %Pos %queue_full
+"""
+
+extern def unsafeEnqueue[R](queue: MessageQueue[R], value: R): Unit = llvm """
+    %enqueue = call %Pos @c_queue_unsafeEnqueue(%Pos ${queue}, %Pos ${value})
+    tail call void @erasePositive(%Pos ${queue})
+    ; tail call void @erasePositive(%Pos ${value})
+    ret %Pos %enqueue
+"""
+
+extern def unsafeDequeue[R](queue: MessageQueue[R]): Unit = llvm """
+    %enqueue = call %Pos @c_queue_unsafeDequeue(%Pos ${queue})
+    tail call void @erasePositive(%Pos ${queue})
+    ret %Pos %enqueue
+"""
+
+extern def unsafePeek[R](queue: MessageQueue[R]): R = llvm """
+    %peek = call %Pos @c_queue_unsafePeek(%Pos ${queue})
+    tail call void @erasePositive(%Pos ${queue})
+    tail call void @sharePositive(%Pos %peek)
+    ret %Pos %peek
+"""
+
+extern def unsafePop[R](queue: MessageQueue[R]): R = llvm """
+  %peek = call %Pos @c_queue_unsafePop(%Pos ${queue})
+  tail call void @erasePositive(%Pos ${queue})
+  tail call void @sharePositive(%Pos %peek)
+  ret %Pos %peek
+"""
+
+
+extern def test(v: Int) { f: Int => Int } at async: Int = llvm """
+    %vtable = extractvalue %Neg ${f}, 0
+    %closure = extractvalue %Neg ${f}, 1
+    %functionPointer_pointer = getelementptr ptr, ptr %vtable, i64 0
+    %functionPointer = load ptr, ptr %functionPointer_pointer
+
+    %vPos = call %Pos @coerceIntPos(%Int ${v})
+    musttail call tailcc void %functionPointer(%Object %closure, %Pos %vPos, %Stack %stack)
+    ret void
+"""
+
+extern def emitMessage() at async: Unit = llvm """
+  call %Pos @c_message_new_emit(%Int 42, %Stack %stack)
+  ret void
+"""
+
+extern def doEmit(v: Int, handler: MessageQueue[MessageData]) at async: Unit = llvm """
+    call %Pos @c_queue_send_emit(%Int ${v}, %Pos ${handler}, %Stack %stack)
+    ret void
+"""
+
+extern def sendResume(emitter: MessageQueue[MessageData], cont: Continuation): Unit = llvm """
+    call %Pos @c_queue_send_resume(%Pos ${emitter}, %Stack ${cont})
+    ret %Pos zeroinitializer
+"""
+
+extern def doResume(emitter: MessageQueue[MessageData]): Unit = llvm """
+  %resumed = call %Pos @c_queue_resume(%Pos ${emitter})
+  ret %Pos %resumed
+"""
+
+extern def messageValue(message: MessageData): Int = llvm """
+  %value = call %Int @c_message_value(%Pos ${message})
+  ret %Int %value
+"""
+
+extern def messageCont(message: MessageData): Continuation = llvm """
+  %value = call %Stack @c_message_continuation(%Pos ${message})
+  ret %Stack %value
+"""
+
+def emitWaitResume(v: Int, handler: MessageQueue[MessageData], emitter: MessageQueue[MessageData]): Unit = {
+  println("Before doemit")
+  doEmit(v, handler)
+
+  println("Before pop")
+  val message = handler.unsafePop()
+  println(messageValue(message))
+
+  println("Before send resume")
+  sendResume(emitter, messageCont(message))
+  
+  // doResume(emitter)
+
+  println("Before loop")
+  loop {
+    if (not (emitter.isEmpty)) {
+      doResume(emitter)
+      do stop()
+    }
+  }
+}
+
+def main() = {
+  val handler = allocateQueue[MessageData]()
+  val emitter = allocateQueue[MessageData]()
+
+  emitWaitResume(1, handler, emitter)
+  emitWaitResume(2, handler, emitter)
+  emitWaitResume(3, handler, emitter)
+
+  // println("Start")
+  // emitMessage()
+  // println("after message 1")
+  // doEmit(1, handler)
+  // println("After 1")
+  // doEmit(2, handler)
+  // doEmit(3, handler)
+  // println("End")
+}

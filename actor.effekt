@@ -1,10 +1,20 @@
 import io/time
-import queue
+import exception
 
 extern llvm """
   declare i32 @pthread_create(ptr noundef, ptr noundef, ptr noundef, ptr noundef)
-
   declare i32 @pthread_join(i64 noundef, ptr noundef)
+
+  declare i32 @pthread_mutex_init(ptr noundef, ptr)
+  declare i32 @pthread_mutex_lock(ptr noundef)
+  declare i32 @pthread_mutex_unlock(ptr noundef)
+  declare i32 @pthread_mutex_destroy(ptr noundef)
+
+  declare i32 @pthread_cond_init(ptr noundef, ptr)
+  declare i32 @pthread_cond_signal(ptr noundef)
+  declare i32 @pthread_cond_broadcast(ptr noundef)
+  declare i32 @pthread_cond_wait(ptr noundef, ptr noundef)
+  declare i32 @pthread_cond_destroy(ptr noundef)
 
   declare void @sleep(i64)
 
@@ -13,8 +23,8 @@ extern llvm """
 
   %Inbox = type i64
 
-  ; front, rear, data ptr
-  %MessageQueue = type {i64, i64, ptr}
+  ; front, rear, data ptr, mutex, cond, cond mutex
+  %MessageQueue = type {i64, i64, ptr, ptr, ptr, ptr}
 
   ; Expect a pointer to a %ThreadObject
   define void @call_thread_wrapper(ptr %threadObject) {
@@ -33,16 +43,24 @@ extern llvm """
     ret i64 %to_size
   }
 
-  define %Pos @coercePtrPos(ptr %ptr) {
-    %int = ptrtoint ptr %ptr to i64
-    %pos = call %Pos @coerceIntPos(i64 %int)
-    ret %Pos %pos
+  define i64 @default_queue_size() alwaysinline {
+    %to_sizeptr = getelementptr %MessageQueue, ptr null, i64 1
+    %to_size = ptrtoint ptr %to_sizeptr to i64
+    ret i64 %to_size
   }
 
-  define ptr @coercePosPtr(%Pos %pos) {
-    %int = call %Int @coercePosInt(%Pos %pos)
-    %ptr = inttoptr i64 %int to ptr
-    ret ptr %ptr
+  define i64 @default_queue_elements() alwaysinline {
+    ret i64 16
+  }
+
+  ; sizeof(pthread_mutex_t)
+  define i64 @pthread_mutex_size() alwaysinline {
+    ret i64 40
+  }
+
+  ; sizeof(pthread_cond_t)
+  define i64 @pthread_cond_size() alwaysinline {
+    ret i64 48
   }
 """
 
@@ -73,6 +91,7 @@ extern def start_thread { g: () => Unit }: ThreadObject = llvm """
   call ccc i64 @pthread_create(ptr %threadIdPtr, ptr null, ptr @call_thread_wrapper, ptr %threadObject)
   %threadPtrInt = ptrtoint ptr %threadObject to i64
   %threadPos = call %Pos @coerceIntPos(i64 %threadPtrInt)
+  tail call void @sharePositive(%Pos %threadPos)
   ret %Pos %threadPos
 """
 
@@ -99,124 +118,210 @@ extern def sleep(seconds: Int): Unit = llvm """
   ret %Pos zeroinitializer
 """
 
-extern def createInbox(): Inbox = llvm """
-  %inbox = call ptr @malloc(i64 8)
-  store atomic i64 -1, ptr %inbox monotonic, align 8
-  %pos = call %Pos @coercePtrPos(ptr %inbox)
-  ret %Pos %pos
-"""
+extern type MessageQueue[R]
 
-extern def freeInbox(inbox: Inbox): Unit = llvm """
-  %inbox = call ptr @coercePosPtr(%Pos ${inbox})
-  call void @free(ptr %inbox)
-  ret %Pos zeroinitializer
-"""
+extern def allocateQueue[R](): MessageQueue[R] = llvm """
+  %queueSize = call i64 @default_queue_size() ; size of %MessageQueue struct
+  %queueDataElements = call i64 @default_queue_elements()
+  %queueDataSize = mul i64 %queueDataElements, 16 ; 16 being size of %Pos
 
-extern def readInbox(inbox: Inbox): Int = llvm """
-  %inbox = call ptr @coercePosPtr(%Pos ${inbox})
-  %value = load atomic i64, ptr %inbox monotonic, align 8
-  ret %Int %value
-"""
+  %queue = call ptr @malloc(i64 %queueSize)
+  %queueData = call ptr @malloc(i64 %queueDataSize)
 
-extern def clearInbox(inbox: Inbox): Unit = llvm """
-  %inbox = call ptr @coercePosPtr(%Pos ${inbox})
-  store atomic i64 -1, ptr %inbox monotonic, align 8
-  ret %Pos zeroinitializer
-"""
+  %mutexSize = call i64 @pthread_mutex_size()
+  %queueMutex = call ptr @malloc(i64 %mutexSize)
 
-extern def writeInbox(inbox: Inbox, value: Int): Unit = llvm """
-  %inbox = call ptr @coercePosPtr(%Pos ${inbox})
-  store atomic i64 ${value}, ptr %inbox monotonic, align 8
-  ret %Pos zeroinitializer
-"""
+  %condSize = call i64 @pthread_cond_size()
+  %queueCond = call ptr @malloc(i64 %condSize)
 
-extern type MessageQueue
+  %queueCondMutex = call ptr @malloc(i64 %mutexSize)
 
-extern def allocateQueue(): MessageQueue = llvm """
-  ; 64 x 8 byte + 2 x 8
-  %queue = call ptr @malloc(i64 528)
-  ; front = -1  |  rear = 0
-  %frontPtr = getelementptr i64, ptr %queue, i64 0
-  %rearPtr = getelementptr i64, ptr %queue, i64 1
-  store atomic i64 -1, ptr %frontPtr monotonic, align 8
-  store atomic i64 0, ptr %rearPtr monotonic, align 8
+  call i32 @pthread_mutex_init(ptr %queueMutex, ptr null) ; null meaning default attributes
+  call i32 @pthread_mutex_init(ptr %queueCondMutex, ptr null) ; null meaning default attributes
+  call i32 @pthread_cond_init(ptr %queueCond, ptr null) ; null meaning default attributes
+
+  ; front = 0  |  rear = 0
+  %queue1 = insertvalue %MessageQueue zeroinitializer, i64 0, 0       ; front
+  %queue2 = insertvalue %MessageQueue %queue1, i64 0, 1               ; rear
+  %queue3 = insertvalue %MessageQueue %queue2, ptr %queueData, 2      ; dataPtr
+  %queue4 = insertvalue %MessageQueue %queue3, ptr %queueMutex, 3     ; mutex
+  %queue5 = insertvalue %MessageQueue %queue4, ptr %queueCond, 4      ; cond
+  %queue6 = insertvalue %MessageQueue %queue5, ptr %queueCondMutex, 5 ; cond mutex
+  store %MessageQueue %queue6, ptr %queue, align 8 
+
   %pos = call %Pos @coercePtrPos(ptr %queue)
+
+  tail call void @sharePositive(%Pos %pos)
+
   ret %Pos %pos
 """
 
-extern def freeQueue(queue: MessageQueue): Unit = llvm """
-  %queue = call ptr @coercePosPtr(%Pos ${queue})
-  call void @free(ptr %queue)
+extern def freeQueue[R](queue: MessageQueue[R]): Unit = llvm """
+  %queuePtr = call ptr @coercePosPtr(%Pos ${queue})
+
+  %queue = load %MessageQueue, ptr %queuePtr
+  %queueDataPtr = extractvalue %MessageQueue %queue, 2
+  %queueMutex = extractvalue %MessageQueue %queue, 3
+  %queueCond = extractvalue %MessageQueue %queue, 4
+  %queueCondMutex = extractvalue %MessageQueue %queue, 5
+
+  call i32 @pthread_mutex_destroy(ptr %queueMutex)
+  call i32 @pthread_mutex_destroy(ptr %queueCondMutex)
+  call i32 @pthread_cond_destroy(ptr %queueCond)
+
+  call void @free(ptr %queueDataPtr)
+  call void @free(ptr %queueMutex)
+  call void @free(ptr %queueCond)
+  call void @free(ptr %queueCondMutex)
+  call void @free(ptr %queuePtr)
   ret %Pos zeroinitializer
 """
 
-extern def isEmpty(queue: MessageQueue): Bool = llvm """
-  %queue = call ptr @coercePosPtr(%Pos ${queue})
-  %frontPtr = getelementptr i64, ptr %queue, i64 0
-  %rearPtr = getelementptr i64, ptr %queue, i64 1
-  %front = load atomic i64, ptr %frontPtr monotonic, align 8
-  %rear = load atomic i64, ptr %rearPtr monotonic, align 8
-  %rearDec = sub i64 %rear, 1
+extern def isEmpty[R](queue: MessageQueue[R]): Bool = llvm """
+  %queuePtr = call ptr @coercePosPtr(%Pos ${queue})
+
+  %mutexPtr = getelementptr ptr, ptr %queuePtr, i64 3
+  %queueMutex = load atomic ptr, ptr %mutexPtr monotonic, align 8
+  call i32 @pthread_mutex_lock(ptr %queueMutex)
+
+  %frontPtr = getelementptr i64, ptr %queuePtr, i64 0
+  %rearPtr = getelementptr i64, ptr %queuePtr, i64 1
+  %front = load atomic i64, ptr %frontPtr acquire, align 8
+  %rear = load atomic i64, ptr %rearPtr acquire, align 8
+
+  call i32 @pthread_mutex_unlock(ptr %queueMutex)
   
-  %z = icmp eq %Int %front, %rearDec
+  %z = icmp eq %Int %front, %rear
   %fat_z = zext i1 %z to i64
   %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
   ret %Pos %adt_boolean
 """
 
-extern def isFull(queue: MessageQueue): Bool = llvm """
-  %queue = call ptr @coercePosPtr(%Pos ${queue})
-  %rearPtr = getelementptr i64, ptr %queue, i64 1
-  %rear = load atomic i64, ptr %rearPtr monotonic, align 8
+extern def isFull[R](queue: MessageQueue[R]): Bool = llvm """
+  %queuePtr = call ptr @coercePosPtr(%Pos ${queue})
 
-  ; Max size = 64 (in allocate)
-  %z = icmp eq %Int %rear, 64
-  %fat_z = zext i1 %z to i64
-  %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
-  ret %Pos %adt_boolean
-"""
+  %mutexPtr = getelementptr ptr, ptr %queuePtr, i64 3
+  %queueMutex = load atomic ptr, ptr %mutexPtr monotonic, align 8
+  call i32 @pthread_mutex_lock(ptr %queueMutex)
+  
+  %frontPtr = getelementptr i64, ptr %queuePtr, i64 0
+  %rearPtr = getelementptr i64, ptr %queuePtr, i64 1
+  %front = load atomic i64, ptr %frontPtr acquire, align 8
+  %rear = load atomic i64, ptr %rearPtr acquire, align 8
 
-extern def unsafeEnqueue(queue: MessageQueue, value: Int): Unit = llvm """
-  %queue = call ptr @coercePosPtr(%Pos ${queue})
-  %rearPtr = getelementptr i64, ptr %queue, i64 1
-  %rear = load atomic i64, ptr %rearPtr monotonic, align 8
-
-  %dataPtr = getelementptr ptr, ptr %queue, i64 2
-  %valuePtr = getelementptr i64, ptr %dataPtr, i64 %rear
-  store atomic i64 ${value}, ptr %valuePtr monotonic, align 8
+  call i32 @pthread_mutex_unlock(ptr %queueMutex)
+  
   %rearInc = add i64 %rear, 1
-  store atomic i64 %rearInc, ptr %rearPtr monotonic, align 8
+  %queue_size = call i64 @default_queue_size()
+  %rear_mod = srem i64 %rearInc, %queue_size
+
+  %z = icmp eq %Int %rear_mod, %front
+  %fat_z = zext i1 %z to i64
+  %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+  ret %Pos %adt_boolean
+"""
+
+extern def unsafeEnqueue[R](queue: MessageQueue[R], value: R): Unit = llvm """
+  %queuePtr = call ptr @coercePosPtr(%Pos ${queue})
+  %mutexPtr = getelementptr ptr, ptr %queuePtr, i64 3
+  %queueMutex = load atomic ptr, ptr %mutexPtr monotonic, align 8
+  call i32 @pthread_mutex_lock(ptr %queueMutex)
+  
+  %rearPtr = getelementptr i64, ptr %queuePtr, i64 1
+  %rear = load atomic i64, ptr %rearPtr acquire, align 8
+
+  %dataPtr = getelementptr ptr, ptr %queuePtr, i64 2
+  %data = load atomic ptr, ptr %dataPtr acquire, align 8
+  %valuePtr = getelementptr %Pos, ptr %data, i64 %rear
+
+  store %Pos ${value}, ptr %valuePtr
+
+  %rearInc = add i64 %rear, 1
+  %queueSize = call i64 @default_queue_elements()
+  %rearInc_mod = srem i64 %rearInc, %queueSize
+
+  store atomic i64 %rearInc_mod, ptr %rearPtr release, align 8
+
+  call i32 @pthread_mutex_unlock(ptr %queueMutex)
 
   ret %Pos zeroinitializer
 """
 
-extern def unsafeDequeue(queue: MessageQueue): Unit = llvm """
-  %queue = call ptr @coercePosPtr(%Pos ${queue})
-  %frontPtr = getelementptr i64, ptr %queue, i64 0
-  %front = load atomic i64, ptr %frontPtr monotonic, align 8
+extern def unsafeDequeue[R](queue: MessageQueue[R]): Unit = llvm """
+  %queuePtr = call ptr @coercePosPtr(%Pos ${queue})
 
+  %mutexPtr = getelementptr ptr, ptr %queuePtr, i64 3
+  %queueMutex = load atomic ptr, ptr %mutexPtr monotonic, align 8
+  call i32 @pthread_mutex_lock(ptr %queueMutex)
+  
+  %frontPtr = getelementptr i64, ptr %queuePtr, i64 0
+  %front = load atomic i64, ptr %frontPtr acquire, align 8
   %frontInc = add i64 %front, 1
-  store atomic i64 %frontInc, ptr %frontPtr monotonic, align 8
+  %queueSize = call i64 @default_queue_elements()
+  %frontInc_mod = srem i64 %frontInc, %queueSize
+
+  store atomic i64 %frontInc_mod, ptr %frontPtr release, align 8
+
+  call i32 @pthread_mutex_unlock(ptr %queueMutex)
 
   ret %Pos zeroinitializer
 """
 
-extern def unsafePeek(queue: MessageQueue): Int = llvm """
-  %queue = call ptr @coercePosPtr(%Pos ${queue})
-  %frontPtr = getelementptr i64, ptr %queue, i64 0
-  %front = load atomic i64, ptr %frontPtr monotonic, align 8
+extern def unsafePeek[R](queue: MessageQueue[R]): R = llvm """
+  %queuePtr = call ptr @coercePosPtr(%Pos ${queue})
 
-  %dataPtr = getelementptr ptr, ptr %queue, i64 2
-  ; 1 for inc 2 for location in %MessageQueue
-  %frontInc = add i64 %front, 1
-  %valuePtr = getelementptr i64, ptr %dataPtr, i64 %frontInc
-  %value = load atomic i64, ptr %valuePtr monotonic, align 8
+  %mutexPtr = getelementptr ptr, ptr %queuePtr, i64 3
+  %queueMutex = load atomic ptr, ptr %mutexPtr monotonic, align 8
+  call i32 @pthread_mutex_lock(ptr %queueMutex)
 
-  ret %Int %value
+  %frontPtr = getelementptr i64, ptr %queuePtr, i64 0
+  %front = load atomic i64, ptr %frontPtr acquire, align 8
+
+  %dataPtr = getelementptr ptr, ptr %queuePtr, i64 2
+  %data = load atomic ptr, ptr %dataPtr acquire, align 8
+  %valuePtr = getelementptr inbounds %Pos, ptr %data, i64 %front
+
+  ; not techically atomic, because 'load %Pos' cannot directly be atomic and would need to be split. Thread safe because of mutex lock 
+  %value = load %Pos, ptr %valuePtr, align 8 
+
+  call i32 @pthread_mutex_unlock(ptr %queueMutex)
+
+  ret %Pos %value
 """
 
-def enqueue(queue: MessageQueue, value: Int): Bool = {
+extern def condWait[R](queue: MessageQueue[R]): Unit = llvm """
+  %queuePtr = call ptr @coercePosPtr(%Pos ${queue})
+  
+  %condPtr = getelementptr ptr, ptr %queuePtr, i64 4
+  %condMutexPtr = getelementptr ptr, ptr %queuePtr, i64 5
+  %cond = load atomic ptr, ptr %condPtr monotonic, align 8
+  %mutex = load atomic ptr, ptr %condMutexPtr monotonic, align 8
+
+  call i32 @pthread_mutex_lock(ptr %mutex)
+  call i32 @pthread_cond_wait(ptr %cond, ptr %mutex)
+  call i32 @pthread_mutex_unlock(ptr %mutex)
+  
+  ret %Pos zeroinitializer
+"""
+
+extern def condSignal[R](queue: MessageQueue[R]): Unit = llvm """
+  %queuePtr = call ptr @coercePosPtr(%Pos ${queue})
+  
+  %condPtr = getelementptr ptr, ptr %queuePtr, i64 4
+  %condMutexPtr = getelementptr ptr, ptr %queuePtr, i64 5
+  %cond = load atomic ptr, ptr %condPtr monotonic, align 8
+  %mutex = load atomic ptr, ptr %condMutexPtr monotonic, align 8
+
+  call i32 @pthread_mutex_lock(ptr %mutex)
+  call i32 @pthread_cond_signal(ptr %cond)
+  call i32 @pthread_mutex_unlock(ptr %mutex)
+
+  ret %Pos zeroinitializer
+"""
+
+def enqueue[R](queue: MessageQueue[R], value: R) at {io, async}: Bool = {
   if (queue.isFull()) {
+    println("Enqueue failed, queue full")
     false
   } else {
     queue.unsafeEnqueue(value)
@@ -224,8 +329,9 @@ def enqueue(queue: MessageQueue, value: Int): Bool = {
   }
 }
 
-def dequeue(queue: MessageQueue): Bool = {
+def dequeue[R](queue: MessageQueue[R]): Bool = {
   if (queue.isEmpty()) {
+    println("Dequeue failed, queue empty")
     false
   } else {
     queue.unsafeDequeue()
@@ -233,7 +339,7 @@ def dequeue(queue: MessageQueue): Bool = {
   }
 }
 
-def peek(queue: MessageQueue): Option[Int] = {
+def peek[R](queue: MessageQueue[R]): Option[R] = {
   if (queue.isEmpty()) {
     None()
   } else {
@@ -266,114 +372,258 @@ def peek(queue: MessageQueue): Option[Int] = {
 //   freeQueue(actor.messageQueue)
 // }
 
-def main() = {
+type ResumeValue = (Unit)
+type EmitterContinuation = ResumeValue => Unit at {io, async}
+type EmitterMessage {
+  Resume(rv: ResumeValue, k: EmitterContinuation)
+  Terminate()
+}
 
-  // var t1_inbox: Inbox = createInbox()
-  // var t2_inbox: Inbox = createInbox()
+type HandlerMessageType {
+  Register()
+  Deregister()
+  Emit(v: Int, k: EmitterContinuation)
+}
 
-  // val t1 = start_thread {
-  //   var state = 0
-  //   println("Starting T1")
-  //   loop {
-  //     readInbox(t1_inbox) match {
-  //       case -1 => () // no message in queue
-  //       case 0 => {
-  //         println("T1 got okay")
-  //         if (state < 3) {
-  //           println(s"T1 sending ${state.show}")
-  //           writeInbox(t2_inbox, state)
-  //           state = state + 1
-  //         } else {
-  //           println("T1 is done")
-  //           writeInbox(t2_inbox, 42)
-  //           do stop()
-  //         }
-  //         clearInbox(t1_inbox)
-  //       }
-  //       case n => println(s"Got unknown message ${n.show}"); clearInbox(t1_inbox)
-  //     }
-  //   }
+type HandlerMessage = (HandlerMessageType, MessageQueue[EmitterMessage])
+
+def registerEmitter(handler: MessageQueue[HandlerMessage], ?emitterQueue: MessageQueue[EmitterMessage]): Unit = {
+  if (not (handler.enqueue((Register(), emitterQueue)))) {
+    println("Queue is full, cannot register emitter")
+  }
+  ()
+}
+
+def deregisterEmitter(handler: MessageQueue[HandlerMessage], ?emitterQueue: MessageQueue[EmitterMessage]): Unit = {
+  if (not (handler.enqueue((Deregister(), emitterQueue)))) {
+    println("Queue is full, cannot deregister emitter")
+  }
+  ()
+}
+
+def resumeEmitter(emitterQueue: MessageQueue[EmitterMessage], rv: ResumeValue, k: EmitterContinuation): Unit = {
+  if (not (emitterQueue.enqueue(Resume(rv, k)))) {
+    println("Queue is full, cannot resume emitter")
+  } // else {
+    // emitterQueue.condSignal()
   // }
-  
-  // val t2 = start_thread {
-  //   println("Starting T2")
-  //   loop {
-  //     readInbox(t2_inbox) match {
-  //       case -1 => () // no message in queue
-  //       case 42 => {
-  //         println("T2 received stop")
-  //         clearInbox(t2_inbox)
-  //         do stop()
-  //       }
-  //       case n => {
-  //         println(s"T2 received ${n.show}")
-  //         clearInbox(t2_inbox)
-  //         writeInbox(t1_inbox, 0)
-  //       }
-  //     }
-  //   }
+  ()
+}
+
+def terminateEmitter(emitterQueue: MessageQueue[EmitterMessage]): Unit = {
+  if (not (emitterQueue.enqueue(Terminate()))) {
+    println("Queue is full, cannot terminate emitter")
+  } // else {
+    // emitterQueue.condSignal()
   // }
+}
 
-  // writeInbox(t1_inbox, 0)
-  
-  var t1_queue: MessageQueue = allocateQueue()
-  var t2_queue: MessageQueue = allocateQueue()
+def startEmitter(handler: MessageQueue[HandlerMessage]): MessageQueue[EmitterMessage] = {
+  val emitterQueue = allocateQueue()
+  registerEmitter(handler)
+  emitterQueue
+}
 
-  val t1 = start_thread {
-    var state = 0
-    loop {
-      t1_queue.peek() match {
-        case None() => () // no message
-        case Some(msg) => {
-          t1_queue.dequeue()
-          msg match {
-            case 0 => {
-              println("T1 got okay")
-              if (state < 3) {
-                println(s"T1 sending ${state.show}")
-                t2_queue.enqueue(state)
-                state = state + 1
-              } else {
-                println("T1 is done")
-                t2_queue.enqueue(-1)
+def runEmitter(emitterQueue: MessageQueue[EmitterMessage], handler: MessageQueue[HandlerMessage]) { prog: (MessageQueue[EmitterMessage]) => Unit }: ThreadObject = {
+  start_thread {
+    prog(emitterQueue)
+
+    // Handle all remaining "resumes" before ending
+    if (not (emitterQueue.isEmpty)) {
+      loop {
+        emitterQueue.peek() match {
+          case Some(msg) => {
+            emitterQueue.dequeue()
+            msg match {
+              case Resume(rv, k) => {
+                k(rv)
+              }
+              case Terminate() => {
                 do stop()
               }
             }
-            case n => println(s"Got unknown message ${n.show}");
+          }
+          case None() => do stop()
+        }
+      }
+    }
+
+    deregisterEmitter(handler)
+  }
+}
+
+extern def ado(v: Int, ?handlerQueue: MessageQueue[HandlerMessage], ?emitterQueue: MessageQueue[EmitterMessage]) 
+  { f: (Int, MessageQueue[HandlerMessage], MessageQueue[EmitterMessage], EmitterContinuation) => Unit } at async: Unit = llvm """
+
+  %arrayPointer = extractvalue %Neg ${f}, 0
+  %object = extractvalue %Neg ${f}, 1
+  %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
+  %functionPointer = load ptr, ptr %functionPointerPointer
+
+  call %Pos %functionPointer(%Int ${v}, %Pos ${handlerQueue}, %Pos ${emitterQueue}, %Stack %stack)
+
+  ret %Pos zeroinitializer
+"""
+
+def doEmit(v: Int, k: EmitterContinuation, ?handlerQueue: MessageQueue[HandlerMessage], ?emitterQueue: MessageQueue[EmitterMessage]): Unit = {
+  if (not (handlerQueue.enqueue((Emit(v, k), emitterQueue)))) {
+    println("Could not enqueue emit, handler is full")
+  }
+
+  // emitterQueue.condWait()
+  loop {
+    emitterQueue.peek() match {
+      case None() => {
+        // panic("Queue should only be signaled when message was enqueue after condWait")
+        ()
+      }
+      case Some(msg) => {
+        emitterQueue.dequeue()
+        msg match {
+          case Resume(rv, k) => k(rv)
+          case Terminate() => ()
+        }
+        do stop()
+      }
+    }
+  }
+}
+
+def runHandler(handlerQueue: MessageQueue[HandlerMessage]) { handle: (Int, EmitterContinuation) => Unit }: Unit = {
+  var emitters = 0
+  var registeredOnce = false
+
+  loop {
+    if (registeredOnce && emitters == 0) {
+      // println("No more emitters. Terminating")
+      // println("Handler unecessary loops " ++ unLoop.show)
+      do stop()
+    }
+      
+    handlerQueue.peek() match {
+      case Some((msg, queue)) => {
+        handlerQueue.dequeue()
+        msg match {
+          case Register() => {
+            registeredOnce = true
+            emitters = emitters + 1
+          }
+          case Deregister() => {
+            emitters = emitters - 1
+          }
+          case Emit(v, k) => {
+            handle(v, box { (rv: ResumeValue) => resumeEmitter(queue, rv, k) })
           }
         }
       }
-    }
-  }
-
-  val t2 = start_thread {
-    println("Starting T2")
-    loop {
-      t2_queue.peek() match {
-        case None() => () // no message in queue
-        case Some(-1) => {
-          println("T2 received stop")
-          t2_queue.dequeue()
-          do stop()
-        }
-        case Some(n) => {
-          println(s"T2 received ${n.show}")
-          t2_queue.dequeue()
-          t1_queue.enqueue(0)
-          ()
-        }
+      case None() => {
+        ()
       }
     }
   }
+}
 
-  t1_queue.enqueue(0)
+def rangeEmit(lower: Int, upper: Int, ?handlerQueue: MessageQueue[HandlerMessage], ?emitterQueue: MessageQueue[EmitterMessage]): Unit = {
+  if (lower < upper) {
+    doEmit(lower, box { (Unit) => rangeEmit(lower + 1, upper)})
+  }
+  ()
+}
 
-  join_thread(t1)
-  join_thread(t2)
+def example() = {
 
-  freeQueue(t1_queue)
-  freeQueue(t2_queue)
+// try {
+  val handlerQueue = allocateQueue()
+  
+  val e1Queue = startEmitter(handlerQueue)
+  val e2Queue = startEmitter(handlerQueue)
+  // val e3Queue = startEmitter(handlerQueue)
+  // val e4Queue = startEmitter(handlerQueue)
 
+  // The following is meant to emulate 
+  // try {
+  //  val e1 = start_thread {
+  //    do emit(1)
+  //    do emit(2)
+  //    do emit(3)
+  //  }
+  
+  //  val e2 = start_thread {
+  //    do emit(11)
+  //    do emit(12)
+  //    do emit(13) 
+  //  }
+  // } with emit[Int] { v =>
+  //   println(s"Got value: ${v.show}")
+  //   resume(())
+  //   resume(())
+  // }
 
+  // val e1 = runEmitter(e1Queue, handlerQueue) { emitterQueue => 
+  //   doEmit(1, box { (Unit) =>
+  //     doEmit(2, box { (Unit) =>
+  //       doEmit(3, box { (Unit) =>
+  //         ()
+  //       })
+  //     })
+  //   })
+  // }
+  
+  // val e2 = runEmitter(e2Queue, handlerQueue) { emitterQueue =>
+  //   doEmit(11, box { (Unit) =>
+  //     doEmit(12, box { (Unit) =>
+  //       doEmit(13, box { (Unit) =>
+  //         ()
+  //       })
+  //     })
+  //   })
+  // }
+  
+  val amount = 167772
+  val threads = 2
+  val amount_one = amount / threads
+
+  val e1 = runEmitter(e1Queue, handlerQueue) { emitterQueue => 
+    rangeEmit(0, amount_one)
+  }
+  
+  val e2 = runEmitter(e2Queue, handlerQueue) { emitterQueue =>
+    rangeEmit(amount_one, amount_one * 2)
+  }
+
+  // val e3 = runEmitter(e3Queue, handlerQueue) { emitterQueue =>
+  //   rangeEmit(amount_one * 2, amount_one * 3)
+  // }
+
+  // val e4 = runEmitter(e4Queue, handlerQueue) { emitterQueue =>
+  //   rangeEmit(amount_one * 3, amount_one * 4)
+  // }
+
+  // } with emit { v =>
+  // println("Starting")
+  var res = 0
+  runHandler(handlerQueue) { (msg, resumption) =>
+    // println(s"msg: ${msg.show}")
+    res = res + msg
+    resumption(())
+    // println("current res: " ++ res.show)
+    // resumption(())
+  }
+  println(res)
+
+  join_thread(e1)
+  join_thread(e2)
+  // join_thread(e3)
+  // join_thread(e4)
+
+  freeQueue(e1Queue)
+  freeQueue(e2Queue)
+  // freeQueue(e3Queue)
+  // freeQueue(e4Queue)
+  freeQueue(handlerQueue)
+}
+
+def main() = {
+  example()
   ()
 }
