@@ -12,6 +12,8 @@ licenses/
 .bsp/
 bin
 .metals/
+project/metals.sbt
+project/project
 .vscode/
 .bloop/
 *.tgz

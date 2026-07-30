@@ -62,8 +62,9 @@ object TransformerCPS {
   }
 
   def toChez(extern: cps.Extern)(using ErrorReporter): chez.Def = extern match {
-    case Extern.Def(id, vparams, bparams, _, body) =>
-      val params = (vparams ++ bparams).map(nameDef)
+    case Extern.Def(id, vparams, bparams, async, body) =>
+      val usualParams = (vparams ++ bparams).map(nameDef)
+      val params = if async then usualParams ++ List(ChezName("ks"), ChezName("k")) else usualParams
       chez.Function(nameDef(id), params, toChez(body))
     case Extern.Data(id, tps, ExternBody.StringExternBody(_, body)) =>
       val ttps = tps match {

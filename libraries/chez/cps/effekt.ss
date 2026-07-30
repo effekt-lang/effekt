@@ -67,10 +67,26 @@
 ; Cont a = a, MetaCont -> #
 ; Prompt = Symbol
 
-; MetaCont = Cont * Prompt * Store | Snapshot * MetaCont?
+; MetaCont = Cont * Prompt * (Store | Snapshot) * (MetaCont | ThreadBoundary)?
 ; Holds a "copy" of k, as well as its prompt and store
 (define-record-type meta-cont 
     (fields (mutable cont) prompt (mutable store) (mutable rest)))
+
+; ThreadBoundary = Mutex * MetaCont
+; A boundary that should be created when creating threads
+; They can only be crossed when searching for effects,
+; normal return terminates the thread
+(define-record-type thread-boundary (fields mutex (mutable rest)))
+
+; Block b, MetaCont, Cont -> b
+(define (with-boundary prog ks k)
+    (begin
+        (set-meta-cont-cont! ks k)
+        (p (make-meta-cont top-level-k
+                           (gensym "thread")
+                           (create-store)
+                           (make-thread-boundary (make-mutex) ks))
+            top-level-k)))
 
 ; Value, MetaCont -> Ref
 (define (var init ks)
@@ -121,16 +137,40 @@
          (meta-cont-cont-set! ks k)
          (prog prompt (make-meta-cont return prompt (create-store) ks) return)))
 
+; MetaCont -> MetaCont
+; Addresses potential thread boundaries
+(define (get-meta-cont-rest ks)
+    (if (meta-cont? ks)
+        (let [rest (meta-cont-rest ks)]
+            (if (meta-cont? rest)
+                rest
+                (thread-boundary-rest rest)))
+        (begin
+            (mutex-acquire (thread-boundary-mutex ks))
+            (thread-boundary-rest ks))))
+
 ; MetaCont, Prompt -> MetaCont * MetaCont
 (define (split-stack ks p)
-    (define (worker above below)
-        (let ([new-below (meta-cont-rest below)]
-              [snap (snapshot (meta-cont-store below))])
-             (meta-cont-store-set! below snap)
-             (meta-cont-rest-set! below above)
-             (if (symbol=? (meta-cont-prompt below) p)
-                 (values below new-below)
-                 (worker below new-below))))
+    ; (MetaCont | ThreadBoundary), MetaCont -> MetaCont * MetaCont
+    (define (worker captured remaining)
+        (let* ([snap (snapshot (meta-cont-store remaining))]
+               [remaining-rest (meta-cont-rest remaining)]
+               [hit-boundary? (thread-boundary? remaining-rest)]
+               [new-remaining (if hit-boundary?
+                                  (thread-boundary-rest remaining-rest)
+                                  remaining-rest)]
+               [new-captured (begin
+                                (meta-cont-store-set! remaining snap)
+                                (meta-cont-rest-set! remaining captured)
+                                (if hit-boundary?
+                                    (let [(real-rest (thread-boundary-rest remaining-rest))]
+                                        (thread-boundary-rest-set! remaining-rest remaining))
+                                    remaining)
+                                 )]
+               [captured-prompt (meta-cont-prompt remaining)]
+             (if (symbol=? captured-prompt p)
+                 (values new-captured new-remaining)
+                 (worker new-captured new-remaining))))
     (worker '() ks))
 
 ; Prompt, Program MetaCont b, MetaCont, Cont b -> #

@@ -158,7 +158,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
             usingCapture(capt)
             Result(vtpe, Pure)
         }
-        case b: BlockSymbol => Context.abort("Expected an expression, but got a block.")
+        case b: BlockSymbol => Context.lookup(b) match {
+          case (btpe, capt) =>
+            usingCapture(capt)
+            Result(ValueType.ValueTypeRef(TypeVar.TypeParam(b.name)), Pure)
+        } // Context.abort("Expected an expression, but got a block.")
         case x: ValueSymbol => Result(Context.lookup(x), Pure)
       }
 
