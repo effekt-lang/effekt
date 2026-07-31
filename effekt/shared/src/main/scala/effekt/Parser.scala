@@ -1100,7 +1100,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     given PrecedenceTable = table
     // since by default, the associativity is left-associative, we only need to specify it for the cases where it is different
     table.declare(Associativity.None, `===`, `!==`, `<=`, `>=`, `<`, `>`)
-    // We want `+` and `-` (as well as `*` and `/`) to bind equally strong and use associativity instead to disambiguate 
+    // We want `+` and `-` (as well as `*` and `/`) to bind equally strong and use associativity instead to disambiguate
     `+` =?= `-`
     `*` =?= `/`
     Set(`||`) ?< Set(`&&`)
@@ -1191,7 +1191,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     case `>=` => "infixGte"
     case `:=` => "infixColonEq"
     case `+`  => "infixPlus"
-    // `+=` (`-=`, `*=`, `/=`) has the same name as `+` (`-`, `*`, `/`) due to the way it is manually desugared in [[ primExpr ]] 
+    // `+=` (`-=`, `*=`, `/=`) has the same name as `+` (`-`, `*`, `/`) due to the way it is manually desugared in [[ primExpr ]]
     case `+=` => "infixPlus"
     case `-`  => "infixMinus"
     case `-=` => "infixMinus"
