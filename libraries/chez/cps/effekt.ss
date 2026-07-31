@@ -70,7 +70,7 @@
 ; MetaCont = Cont * Prompt * (Store | Snapshot) * (MetaCont | ThreadBoundary)?
 ; Holds a "copy" of k, as well as its prompt and store
 (define-record-type meta-cont 
-    (fields (mutable cont) prompt (mutable store) (mutable rest)))
+    (fields (mutable cont) (immutable prompt) (mutable store) (mutable rest)))
 
 ; ThreadBoundary = Mutex * MetaCont
 ; A boundary that should be created when creating threads
@@ -157,31 +157,33 @@
                  (worker new-captured new-remaining))))
     (worker '() ks))
 
-; Prompt, Program MetaCont b, MetaCont, Cont b -> #
+; Prompt, Program (box MetaCont) b, MetaCont, Cont b -> #
 (define (shift p prog ks k)
     (meta-cont-cont-set! ks k)
     (let-values ([(c underC) (split-stack ks p)])
-                (prog c underC (meta-cont-cont underC))))
+                (prog (box c) underC (meta-cont-cont underC))))
 
-; (MetaCont? | ThreadBoundary), MetaCont -> MetaCont
-(define (rewind cont ks)
+; (MetaCont | ThreadBoundary)?, MetaCont -> (MetaCont | ThreadBoundary)? * MetaCont
+(define (rewind copy cont ks)
     (cond
-        [(null? cont) ks]
+        [(null? cont) (values copy ks)]
         [(thread-boundary? cont)
             (let* ([mutex (thread-boundary-mutex cont)]
-                   [next (thread-boundary-rest cont)]
-                   [newKs (make-thread-boundary mutex ks)])
+                   [next (thread-boundary-rest cont)])
                 ; We are "above" the boundary again, so we can unblock other threads that want to cross it
+                (thread-boundary-rest-set! cont ks)
                 (mutex-release mutex)
-                (rewind next newKs))]
+                (rewind (make-thread-boundary mutex copy) next cont))]
         [else (let* ([snap (meta-cont-store cont)]
                      [next (meta-cont-rest cont)]
-                     [newKs (make-meta-cont (meta-cont-cont cont)
-                                            (meta-cont-prompt cont)
-                                            (snap-store snap)
-                                            ks)])
+                     [newCopy (make-meta-cont (meta-cont-cont cont)
+                                              (meta-cont-prompt cont)
+                                              snap
+                                              copy)])
+                (meta-cont-store-set! cont (snap-store snap))
+                (meta-cont-rest-set! cont ks)
                 (restore snap)
-                (rewind next newKs))]))
+                (rewind newCopy next cont))]))
         
 
 ; Block b = Cont b, MetaCont -> #
@@ -189,8 +191,9 @@
 ; MetaCont, Block, MetaCont, Cont -> #
 (define (resume cont block ks k)
     (meta-cont-cont-set! ks k)
-    (let ([rewinded (rewind cont ks)])
-         (block rewinded (meta-cont-cont rewinded))))
+    (let-values ([(new-cont rewinded) (rewind '() (unbox cont) ks)])
+                (set-box! cont new-cont)
+                (block rewinded (meta-cont-cont rewinded))))
 
 ; Block b -> b
 (define (run-top-level p)
