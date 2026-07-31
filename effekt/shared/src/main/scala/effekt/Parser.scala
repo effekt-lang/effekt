@@ -1835,7 +1835,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   /**
    * Parses `p (sep p)* sep? after` in order to deduplicate work in [[some]] and [[many]].
-   * Soft fails when `failOnSingleton` is set and the "list" has one element and a trailing separator.
+   * Soft fails when [[failOnSingleton]] is set and the "list" has one element and a trailing separator.
    */
   private inline def delimitedUntil[T](
     p: () => T, sep: TokenKind, after: TokenKind,
