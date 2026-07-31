@@ -352,6 +352,26 @@ class LexerTests extends munit.FunSuite {
     )
   }
 
+  test("singleline comment ends with CRLF") {
+    val prog = "// foo\r\nval x = 2"
+    assertTokensEq(
+      prog,
+      Comment(" foo"), Newline,
+      `val`, Ident("x"), `=`, Integer(2),
+      EOF
+    )
+  }
+
+  test("singleline comment ends with LF") {
+    val prog = "// foo\nval x = 2"
+    assertTokensEq(
+      prog,
+      Comment(" foo"), Newline,
+      `val`, Ident("x"), `=`, Integer(2),
+      EOF
+    )
+  }
+
   test("multiline comment") {
     val prog =
       """val x = 42
@@ -453,6 +473,22 @@ class LexerTests extends munit.FunSuite {
       `val`, Ident("c"), `=`, Error(UnterminatedStringLike(Str("", multiline = false))), Newline,
       Ident("inspect"), `(`, Ident("c"), `)`, Newline,
       EOF
+    )
+  }
+
+  test("single-line string unexpectedly ends with CRLF") {
+    val prog = "val s = \"hello\r\n"
+    assertTokensEq(
+      prog,
+      `val`, Ident("s"), `=`, Error(UnterminatedStringLike(Str("hello", multiline = false))), Newline, EOF
+    )
+  }
+
+  test("single-line string unexpectedly ends with LF") {
+    val prog = "val s = \"hello\n"
+    assertTokensEq(
+      prog,
+      `val`, Ident("s"), `=`, Error(UnterminatedStringLike(Str("hello", multiline = false))), Newline, EOF
     )
   }
 

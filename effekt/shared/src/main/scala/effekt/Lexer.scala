@@ -569,7 +569,7 @@ class Lexer(source: Source) extends Iterator[Token] {
 
     if hexString.length > 2 then
       return TokenKind.Error(LexerError.InvalidByteFormat)
-    
+
     try {
       val byte = java.lang.Integer.parseInt(hexString, 16)
       assert(byte >= 0 && byte <= 255)
@@ -650,6 +650,8 @@ class Lexer(source: Source) extends Iterator[Token] {
         // newlines
         case ('\n', _) if !delimiter.isMultiline =>
           return close(unterminated = true)
+        case ('\r', '\n') if !delimiter.isMultiline =>
+          return close(unterminated = true)
 
         // "normal" characters of a string
         case (_, _) => contents.addOne(advance())
@@ -687,7 +689,7 @@ class Lexer(source: Source) extends Iterator[Token] {
 
   private def singlelineComment(): TokenKind =
     val isDocComment = currentChar == '/'
-    advanceWhile { (curr, _) => curr != '\n' }
+    advanceWhile { (curr, _) => curr != '\n' && curr != '\r' }
 
     if isDocComment then
       TokenKind.DocComment(getCurrentSlice(skipAfterStart = 3)) // Remove '///'
@@ -711,7 +713,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       TokenKind.Comment(comment)
 
   private def shebang(): TokenKind =
-    advanceWhile { (curr, _) => curr != '\n' }
+    advanceWhile { (curr, _) => curr != '\n' && curr != '\r' }
     val command = getCurrentSlice(skipAfterStart = 2) // Remove `#!`
     TokenKind.Shebang(command)
 }
