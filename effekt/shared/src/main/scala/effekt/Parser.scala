@@ -297,7 +297,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   def withStmt(inBraces: Boolean): Stmt = `with` ~> peek.kind match {
     case `val` =>
       consume(`val`)
-      val patterns = some(matchPattern, `,`)
+      val patterns = someSep(matchPattern, `,`)
       val guards = manyWhile(`and` ~> matchGuard(), `and`)
       val call = `=` ~> expr()
       val fallback = when(`else`) { Some(stmt()) } { None }
@@ -489,7 +489,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       Include(`import` ~> moduleName(), span())
 
   def moduleName(): String =
-    some(ident, `/`).mkString("/") labelled "module name"
+    someSep(ident, `/`).mkString("/") labelled "module name"
 
   def isToplevel: Boolean = peek.kind match {
     case `val` | `def` | `type` | `effect` | `namespace` | `interface` | `type` | `record` | `var` | `include` | `extern` => true
@@ -993,7 +993,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def matchClause(): MatchClause =
     nonterminal:
-      val patterns = `case` ~> some(matchPattern, `,`)
+      val patterns = `case` ~> someSep(matchPattern, `,`)
       val pattern: MatchPattern = patterns match {
         case Many(List(pat), _) => pat
         case pats => MultiPattern(pats.unspan, pats.span)
@@ -1007,7 +1007,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def matchGuards() =
     nonterminal:
-      some(matchGuard, `and`)
+      someSep(matchGuard, `and`)
 
   def matchGuard(): MatchGuard =
     nonterminal:
@@ -1502,13 +1502,13 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def idRef(): IdRef =
     nonterminal:
-      some(ident, PathSep) match {
+      someSep(ident, PathSep) match {
         case ids => IdRef(ids.init, ids.last, span())
       }
 
   def idDef(): IdDef =
     nonterminal:
-      some(ident, PathSep) match {
+      someSep(ident, PathSep) match {
         case ids => IdDef(ids.init, ids.last, span())
       }
 
@@ -1843,7 +1843,10 @@ class Parser(tokens: Seq[Token], source: Source) {
       consume(after)
       Many(res.unspan, span())
 
-  inline def some[T](p: () => T, sep: TokenKind): Many[T] =
+  /**
+   * Repeats [[p]] at least once, separated by [[sep]]. No trailing commas supported (no delimiters).
+   */
+  inline def someSep[T](p: () => T, sep: TokenKind): Many[T] =
     nonterminal:
       val components: ListBuffer[T] = ListBuffer.empty
       components += p()
