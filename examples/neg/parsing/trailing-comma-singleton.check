@@ -1,0 +1,6 @@
+[error] examples/neg/parsing/trailing_comma_singleton.effekt:2:13: There are no one-element tuples. Remove the trailing `,` to group, or add another element.
+  val a = (1,) // would mean `1` if not for the soft fail
+            ^
+[error] examples/neg/parsing/trailing-comma-singleton.effekt:4:14: There are no one-element tuples. Remove the trailing `,` to group, or add another element.
+  val c: (Int,) = 4  // would mean `Int` if not for the soft fail
+             ^
