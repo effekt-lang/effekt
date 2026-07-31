@@ -147,6 +147,13 @@ class ParserTests extends munit.FunSuite {
   def parseInfo(input: String)(using munit.Location): Info =
     parse(input, _.info())
 
+  def parseRecovering[R](input: String, f: Parser => R)(using munit.Location): List[RecoverableDiagnostic] = {
+    val p = parser(input)
+    f(p)
+    assert(p.peek(TokenKind.EOF), s"Did not consume everything: ${p.peek}")
+    p.recoverableDiagnostics.toList
+  }
+
   // Custom asserts
   //
   //
@@ -326,7 +333,9 @@ class ParserTests extends munit.FunSuite {
     parseExpr("[1,2,3]")
     parseExpr("[3,2,1,]")
     parseExpr("[]")
-    parseExpr("[,]")
+
+    // a comma with nothing before it is not an empty list
+    intercept[Throwable] { parseExpr("[,]") }
     intercept[Throwable] { parseExpr("[,1]") }
   }
 
@@ -1686,5 +1695,82 @@ class ParserTests extends munit.FunSuite {
       "llvm \"\"\"call void @c_io_println_String(%Pos %value); ret %Pos zeroinitializer ; Unit\"\"\"" + "\n" +
       "extern js \"\"\" function \"\"\""
     )
+  }
+
+  test("Trailing commas") {
+    // valueArgs
+    parseExpr("f(1, 2,)")
+    parseExpr("f(x,)")
+
+    // valueParams
+    parseDefinition("def f(x: Int, y: Int,) = 1")
+    parseParams("(x: Int,)")
+    parseDefinition("record R(x: Int, y: Int,)")
+
+    // valueParamsOpt
+    parseLambdaParams("(x, y,)")
+
+    // valueTypes
+    parseValueType("(Int, String,) => Int")
+
+    // typeArgs
+    parseValueType("List[Int,]")
+    parseExpr("f[Int, String,](1)")
+
+    // typeParams
+    parseDefinition("def f[A, B,](x: A) = x")
+
+    // captureSet
+    parseValueType("() => Int at {a, b,}")
+
+    // effects
+    parseReturnAnnotation(": Int / {Exc, State,}")
+
+    // matchPattern: constructor pattern
+    parseMatchPattern("Some(x,)")
+
+    // matchPattern: tuple pattern
+    parseMatchPattern("(x, y,)")
+
+    // tupleOrGroup
+    parseExpr("(1, 2,)")
+
+    // atomicType tuple
+    parseValueType("(Int, String,)")
+
+    // listLiteral
+    parseExpr("[1, 2,]")
+
+    // trailing comma leaves no trace in the tree
+    assertEqualModuloSpans(parseExpr("f(1, 2,)"), parseExpr("f(1, 2)"))
+    assertEqualModuloSpans(parseValueType("List[Int,]"), parseValueType("List[Int]"))
+    assertEqualModuloSpans(parseDefinition("def f(x: Int,) = x"), parseDefinition("def f(x: Int) = x"))
+    assertEqualModuloSpans(parseExpr("(1, 2,)"), parseExpr("(1, 2)"))
+
+    // with trailing commas, `(x,)` would parse as a grouping, although it looks like a tuple
+    assert(parseRecovering("(x,)", _.expr()).nonEmpty, "`(x,)` should soft fail")
+    assert(parseRecovering("(1,)", _.expr()).nonEmpty, "`(1,)` should soft fail")
+    assert(parseRecovering("(Int,)", _.valueType()).nonEmpty, "`(Int,)` should soft fail")
+
+    // ... but it still parses as the grouping it looks like
+    assertEqualModuloSpans(parseExpr("(x,)"), parseExpr("(x)"))
+
+    // no recovery needed for `f(x,)` and similar
+    assert(parseRecovering("f(x,)", _.expr()).isEmpty, "`f(x,)` is a one-element argument list")
+    assert(parseRecovering("[x,]", _.expr()).isEmpty, "`[x,]` is a one-element list literal")
+    assert(parseRecovering("(x: Int,)", _.params()).isEmpty, "`(x: Int,)` is a one-element parameter list")
+    assert(parseRecovering("List[Int,]", _.valueType()).isEmpty, "`List[Int,]` is a one-element type-argument list")
+
+    // ... so `(1, 2,)` is an ordinary tuple
+    assert(parseRecovering("(1, 2,)", _.expr()).isEmpty, "`(1, 2,)` is an ordinary tuple")
+
+    // only trailing -> error
+    intercept[Throwable] { parseExpr("f(,)") }
+    intercept[Throwable] { parseValueType("List[,]") }
+    intercept[Throwable] { parseParams("(,)") }
+    // two commas -> error
+    intercept[Throwable] { parseExpr("f(1,,2)") }
+    intercept[Throwable] { parseExpr("[1,,2]") }
+    intercept[Throwable] { parseExpr("f(1, 2,,)") }
   }
 }
