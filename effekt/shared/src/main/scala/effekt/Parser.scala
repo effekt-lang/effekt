@@ -297,7 +297,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   def withStmt(inBraces: Boolean): Stmt = `with` ~> peek.kind match {
     case `val` =>
       consume(`val`)
-      val patterns = some(matchPattern, `,`)
+      val patterns = someSep(matchPattern, `,`)
       val guards = manyWhile(`and` ~> matchGuard(), `and`)
       val call = `=` ~> expr()
       val fallback = when(`else`) { Some(stmt()) } { None }
@@ -489,7 +489,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       Include(`import` ~> moduleName(), span())
 
   def moduleName(): String =
-    some(ident, `/`).mkString("/") labelled "module name"
+    someSep(ident, `/`).mkString("/") labelled "module name"
 
   def isToplevel: Boolean = peek.kind match {
     case `val` | `def` | `type` | `effect` | `namespace` | `interface` | `type` | `record` | `var` | `include` | `extern` => true
@@ -993,7 +993,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def matchClause(): MatchClause =
     nonterminal:
-      val patterns = `case` ~> some(matchPattern, `,`)
+      val patterns = `case` ~> someSep(matchPattern, `,`)
       val pattern: MatchPattern = patterns match {
         case Many(List(pat), _) => pat
         case pats => MultiPattern(pats.unspan, pats.span)
@@ -1007,7 +1007,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def matchGuards() =
     nonterminal:
-      some(matchGuard, `and`)
+      someSep(matchGuard, `and`)
 
   def matchGuard(): MatchGuard =
     nonterminal:
@@ -1100,7 +1100,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     given PrecedenceTable = table
     // since by default, the associativity is left-associative, we only need to specify it for the cases where it is different
     table.declare(Associativity.None, `===`, `!==`, `<=`, `>=`, `<`, `>`)
-    // We want `+` and `-` (as well as `*` and `/`) to bind equally strong and use associativity instead to disambiguate 
+    // We want `+` and `-` (as well as `*` and `/`) to bind equally strong and use associativity instead to disambiguate
     `+` =?= `-`
     `*` =?= `/`
     Set(`||`) ?< Set(`&&`)
@@ -1191,7 +1191,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     case `>=` => "infixGte"
     case `:=` => "infixColonEq"
     case `+`  => "infixPlus"
-    // `+=` (`-=`, `*=`, `/=`) has the same name as `+` (`-`, `*`, `/`) due to the way it is manually desugared in [[ primExpr ]] 
+    // `+=` (`-=`, `*=`, `/=`) has the same name as `+` (`-`, `*`, `/`) due to the way it is manually desugared in [[ primExpr ]]
     case `+=` => "infixPlus"
     case `-`  => "infixMinus"
     case `-=` => "infixMinus"
@@ -1364,7 +1364,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   }
   def listLiteral(): Term =
     nonterminal:
-      manyTrailing(() => spanned(expr()), `[`, `,`, `]`).foldRight(NilTree) { ConsTree }
+      many(() => spanned(expr()), `[`, `,`, `]`).unspan.foldRight(NilTree) { ConsTree }
 
   private def NilTree: Term =
     Call(IdTarget(IdRef(List(), "Nil", span())), Nil, Nil, Nil, span())
@@ -1381,7 +1381,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   def isTupleOrGroup: Boolean = peek(`(`)
   def tupleOrGroup(): Term =
     nonterminal:
-      some(expr, `(`, `,`, `)`) match {
+      some(expr, `(`, `,`, `)`, failOnSingleton = true) match {
         case Many(e :: Nil, _) => e
         case Many(xs, _) => Call(IdTarget(IdRef(List("effekt"), s"Tuple${xs.size}", span().synthesized)), Nil, xs.map(ValueArg.Unnamed), Nil, span().synthesized)
       }
@@ -1502,13 +1502,13 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def idRef(): IdRef =
     nonterminal:
-      some(ident, PathSep) match {
+      someSep(ident, PathSep) match {
         case ids => IdRef(ids.init, ids.last, span())
       }
 
   def idDef(): IdDef =
     nonterminal:
-      some(ident, PathSep) match {
+      someSep(ident, PathSep) match {
         case ids => IdDef(ids.init, ids.last, span())
       }
 
@@ -1566,7 +1566,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     nonterminal:
       peek.kind match {
         case `(` =>
-          some(boxedType, `(`, `,`, `)`) match {
+          some(boxedType, `(`, `,`, `)`, failOnSingleton = true) match {
             case Many(tpe :: Nil, _) => tpe
             case tpes => TypeTuple(tpes)
           }
@@ -1834,16 +1834,44 @@ class Parser(tokens: Seq[Token], source: Source) {
   }
 
   /**
-   * Repeats [[p]], separated by [[sep]] enclosed by [[before]] and [[after]]
+   * Parses `p (sep p)* sep? after` in order to deduplicate work in [[some]] and [[many]].
+   * Soft fails when [[failOnSingleton]] is set and the "list" has one element and a trailing separator.
    */
-  inline def some[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): Many[T] =
+  private inline def delimitedUntil[T](
+    p: () => T, sep: TokenKind, after: TokenKind,
+    inline failOnSingleton: Boolean
+  ): List[T] =
+    val components: ListBuffer[T] = ListBuffer.empty
+    components += p()
+    while (peek(sep)) {
+      consume(sep)
+      if (!peek(after)) { // if `after` follows `sep`, then it was trailing
+        components += p()
+      } else if (failOnSingleton && components.size == 1) {
+        // NOTE(jiribenes, 2026-07-31): As of the time of writing, this is exclusively fired for the tuple/grouping overload, so the message is phrased for tuples.
+        softFail(s"There are no one-element tuples. Remove the trailing `${explain(sep)}` to group, or add another element.",
+          position - 1, position - 1) // `position - 1` is the `sep` we just consumed
+      }
+    }
+    consume(after)
+    components.toList
+
+  /**
+   * Repeats [[p]], separated by [[sep]] enclosed by [[before]] and [[after]].
+   *
+   * Set [[failOnSingleton]] where the delimiters are overloaded and a one-element list is not a
+   * list at all but just a grouping, i.e., when `(x,)` denotes `(x)`, like with tuples vs groupings.
+   */
+  inline def some[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind,
+                     inline failOnSingleton: Boolean = false): Many[T] =
     nonterminal:
       consume(before)
-      val res = some(p, sep)
-      consume(after)
-      Many(res.unspan, span())
+      Many(delimitedUntil(p, sep, after, failOnSingleton), span())
 
-  inline def some[T](p: () => T, sep: TokenKind): Many[T] =
+  /**
+   * Repeats [[p]] at least once, separated by [[sep]]. No trailing commas supported (no delimiters).
+   */
+  inline def someSep[T](p: () => T, sep: TokenKind): Many[T] =
     nonterminal:
       val components: ListBuffer[T] = ListBuffer.empty
       components += p()
@@ -1900,39 +1928,8 @@ class Parser(tokens: Seq[Token], source: Source) {
         consume(after)
         Many.empty(span())
       } else {
-        val components: ListBuffer[T] = ListBuffer.empty
-        components += p()
-        while (peek(sep)) {
-          consume(sep)
-          components += p()
-        }
-        consume(after)
-        Many(components.toList,span())
+        Many(delimitedUntil(p, sep, after, failOnSingleton = false), span())
       }
-
-
-  inline def manyTrailing[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): List[T] =
-    consume(before)
-    if (peek(after)) {
-      consume(after)
-      Nil
-    } else if (peek(sep)) {
-      consume(sep)
-      consume(after)
-      Nil
-    } else {
-      val components: ListBuffer[T] = ListBuffer.empty
-      components += p()
-      while (peek(sep)) {
-        consume(sep)
-
-        if (!peek(after)) {
-          components += p()
-        }
-      }
-      consume(after)
-      components.toList
-    }
 
 
   // Positions
