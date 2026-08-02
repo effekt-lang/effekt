@@ -288,10 +288,10 @@ def findConstraints(expr: Expr)(using ctx: MonoFindContext): MonoConstraints = e
   case ValueVar(id, annotatedType) => List.empty
   case Literal(value, annotatedType) => List.empty
   case Make(data, tag, targs, vargs) => 
-    val combinedTargs = data.targs ++ targs
-    val (newTargs, constraints) = findConstraints(combinedTargs)
-    List(MonoConstraint(newTargs.toVector, tag)) ++ // <Int> <: Just
-    constraints
+    val (dataTargs, dataConstraints) = findConstraints(data.targs)
+    val (newTargs, constraints) = findConstraints(data.targs ++ targs)
+    List(MonoConstraint(dataTargs.toVector, data.name), MonoConstraint(newTargs.toVector, tag)) ++ // <Int> <: Just
+    dataConstraints ++ constraints
   case Box(b, annotatedCapture) => 
     findConstraints(b)
 
