@@ -55,11 +55,13 @@ object Contify {
     case Stmt.LetDef(id, b @ BlockLit(vparams, Nil, ks, k, body), rest) =>
       val rewrittenBody = rewrite(body)
       val rewrittenRest = rewrite(rest)
-      val recursiveConts = returnsTo(id, rewrittenBody)
-      val continuations  = returnsTo(id, rewrittenRest)
+      val inBody = occurrences(id, rewrittenBody)
+      val inRest = occurrences(id, rewrittenRest)
 
-      def returnsUnique = continuations.size == 1
-      def isRecursive = recursiveConts.nonEmpty
+      def returnsUnique = inRest.returnsTo.size == 1
+      def isRecursive = inBody.returnsTo.nonEmpty
+      // a block that is also used as a value cannot become a continuation
+      def escapes = inRest.usedAsValue || inBody.usedAsValue
 
       // this is problematic:
       //
@@ -79,8 +81,8 @@ object Contify {
       // In the future we could perform lambda-dropping to discover more cases
       def inScope(k: Id) = Variables.free(rewrittenRest) contains k
 
-      continuations.headOption match {
-        case Some(Cont.ContVar(k2)) if returnsUnique && !isRecursive && inScope(k2) =>
+      inRest.returnsTo.headOption match {
+        case Some(Cont.ContVar(k2)) if returnsUnique && !isRecursive && inScope(k2) && !escapes =>
           given Substitution = Substitution(conts = Map(k -> ContVar(k2)))
           Stmt.LetCont(id, ContLam(vparams, ks, substitute(rewrittenBody)), contify(id, rewrittenRest))
 
@@ -186,69 +188,82 @@ object Contify {
       Cont.ContLam(results, ks, rewrite(body))
   }
 
-  def all[T](t: IterableOnce[T], f: T => Set[Cont]): Set[Cont] =
-    t.iterator.foldLeft(Set.empty[Cont]) { case (cs, t) => f(t) ++ cs }
 
-  def returnsTo(id: Id, s: Stmt): Set[Cont] = s match {
+
+  /**
+   * How a block is used inside a statement.
+   *
+   * Contification needs two facts about the block:
+   * 1. [[returnsTo]]: the continuations that calls to the block return to
+   * 2. [[usedAsValue]]: whether it occurs anywhere that is not the callee of a call:
+   *    passed as a block argument, boxed, or the receiver of an [[Stmt.Invoke]].
+   */
+  case class Occurrences(returnsTo: Set[Cont], usedAsValue: Boolean) {
+    def ++(other: Occurrences): Occurrences =
+      Occurrences(returnsTo ++ other.returnsTo, usedAsValue || other.usedAsValue)
+  }
+  object Occurrences {
+    val none: Occurrences = Occurrences(Set.empty, false)
+    val used: Occurrences = Occurrences(Set.empty, true)
+    def call(k: Cont): Occurrences = Occurrences(Set(k), false)
+  }
+
+  def all[T](t: IterableOnce[T], f: T => Occurrences): Occurrences =
+    t.iterator.foldLeft(Occurrences.none) { case (xs, t) => f(t) ++ xs }
+
+  def occurrences(id: Id, s: Stmt): Occurrences = s match {
     case Stmt.App(callee, vargs, bargs, ks, k) =>
+      // the callee position is a call
+      // anything else, including the callee when it is not us, is an ordinary occurrence
       val self = callee match {
-        case Block.BlockVar(id2) if id == id2 => Set(k)
-        case _ => Set.empty
+        case Block.BlockVar(id2) if id == id2 => Occurrences.call(k)
+        case other => occurrences(id, other)
       }
-      self ++ returnsTo(id, callee) ++ all(vargs, returnsTo(id, _)) ++ all(bargs, returnsTo(id, _)) ++ returnsTo(id, k)
+      self ++ all(vargs, occurrences(id, _)) ++ all(bargs, occurrences(id, _)) ++ occurrences(id, k)
     case Stmt.Invoke(callee, _, vargs, bargs, ks, k) =>
-      returnsTo(id, callee) ++ all(vargs, returnsTo(id, _)) ++ all(bargs, returnsTo(id, _)) ++ returnsTo(id, k)
+      // the receiver of an invoke is a value use: you cannot jump to it
+      occurrences(id, callee) ++ all(vargs, occurrences(id, _)) ++ all(bargs, occurrences(id, _)) ++ occurrences(id, k)
     case Stmt.If(cond, thn, els) =>
-      returnsTo(id, cond) ++ returnsTo(id, thn) ++ returnsTo(id, els)
+      occurrences(id, cond) ++ occurrences(id, thn) ++ occurrences(id, els)
     case Stmt.Match(scrutinee, clauses, default) =>
-      returnsTo(id, scrutinee) ++ all(clauses, { case (_, cl) => returnsTo(id, cl.body) }) ++ all(default, returnsTo(id, _))
-    case Stmt.LetDef(_, binding, body) =>
-      returnsTo(id, binding) ++ returnsTo(id, body)
-    case Stmt.LetExpr(_, binding, body) =>
-      returnsTo(id, binding) ++ returnsTo(id, body)
-    case Stmt.LetCont(_, binding, body) =>
-      returnsTo(id, binding) ++ returnsTo(id, body)
+      occurrences(id, scrutinee) ++ all(clauses, { case (_, cl) => occurrences(id, cl.body) }) ++ all(default, occurrences(id, _))
+    case Stmt.LetDef(_, binding, body) => occurrences(id, binding) ++ occurrences(id, body)
+    case Stmt.LetExpr(_, binding, body) => occurrences(id, binding) ++ occurrences(id, body)
+    case Stmt.LetCont(_, binding, body) => occurrences(id, binding) ++ occurrences(id, body)
     case Stmt.ImpureApp(_, callee, vargs, bargs, body) =>
-      all(vargs, returnsTo(id, _)) ++ all(bargs, returnsTo(id, _)) ++ returnsTo(id, body)
-    case Stmt.Region(_, _, body) => returnsTo(id, body)
-    case Stmt.Alloc(_, init, _, body) =>
-      returnsTo(id, init) ++ returnsTo(id, body)
-    case Stmt.Var(_, init, _, body) =>
-      returnsTo(id, init) ++ returnsTo(id, body)
-    case Stmt.Dealloc(_, body) => returnsTo(id, body)
-    case Stmt.Get(_, _, body) => returnsTo(id, body)
-    case Stmt.Put(_, value, body) =>
-      returnsTo(id, value) ++ returnsTo(id, body)
-    case Stmt.Reset(prog, _, k) =>
-      returnsTo(id, prog) ++ returnsTo(id, k)
-    case Stmt.Shift(_, body, _, k) =>
-      returnsTo(id, body) ++ returnsTo(id, k)
-    case Stmt.Resume(_, body, _, k) =>
-      returnsTo(id, body) ++ returnsTo(id, k)
-    case Stmt.Jump(_, vargs, _) =>
-      all(vargs, returnsTo(id, _))
-    case Stmt.Hole(_) => Set.empty
+      all(vargs, occurrences(id, _)) ++ all(bargs, occurrences(id, _)) ++ occurrences(id, body)
+    case Stmt.Region(_, _, body) => occurrences(id, body)
+    case Stmt.Alloc(_, init, _, body) => occurrences(id, init) ++ occurrences(id, body)
+    case Stmt.Var(_, init, _, body) => occurrences(id, init) ++ occurrences(id, body)
+    case Stmt.Dealloc(_, body) => occurrences(id, body)
+    case Stmt.Get(_, _, body) => occurrences(id, body)
+    case Stmt.Put(_, value, body) => occurrences(id, value) ++ occurrences(id, body)
+    case Stmt.Reset(prog, _, k) => occurrences(id, prog) ++ occurrences(id, k)
+    case Stmt.Shift(_, body, _, k) => occurrences(id, body) ++ occurrences(id, k)
+    case Stmt.Resume(_, body, _, k) => occurrences(id, body) ++ occurrences(id, k)
+    case Stmt.Jump(_, vargs, _) => all(vargs, occurrences(id, _))
+    case Stmt.Hole(_) => Occurrences.none
   }
 
-  def returnsTo(id: Id, b: Block): Set[Cont] = b match {
-    case Block.BlockVar(_) => Set.empty
-    case b: Block.BlockLit => returnsTo(id, b.body)
-    case Block.Unbox(p) => returnsTo(id, p)
-    case Block.New(impl) => all(impl.operations, op => returnsTo(id, op.body))
+  def occurrences(id: Id, b: Block): Occurrences = b match {
+    case Block.BlockVar(id2) => if id == id2 then Occurrences.used else Occurrences.none
+    case b: Block.BlockLit => occurrences(id, b.body)
+    case Block.Unbox(p) => occurrences(id, p)
+    case Block.New(impl) => all(impl.operations, op => occurrences(id, op.body))
   }
 
-  def returnsTo(id: Id, e: Expr): Set[Cont] = e match {
-    case Expr.ValueVar(_) => Set.empty
-    case Expr.Literal(_, _) => Set.empty
-    case Expr.PureApp(_, vargs) => all(vargs, returnsTo(id, _))
-    case Expr.Make(_, _, vargs) => all(vargs, returnsTo(id, _))
-    case Expr.Box(b) => returnsTo(id, b)
+  def occurrences(id: Id, e: Expr): Occurrences = e match {
+    case Expr.ValueVar(_) => Occurrences.none
+    case Expr.Literal(_, _) => Occurrences.none
+    case Expr.PureApp(_, vargs) => all(vargs, occurrences(id, _))
+    case Expr.Make(_, _, vargs) => all(vargs, occurrences(id, _))
+    case Expr.Box(b) => occurrences(id, b)
   }
 
-  def returnsTo(id: Id, k: Cont): Set[Cont] = k match {
-    case Cont.ContVar(_) => Set.empty
-    case Cont.ContLam(results, ks, body) => returnsTo(id, body)
-    case Cont.Abort => Set.empty
+  def occurrences(id: Id, k: Cont): Occurrences = k match {
+    case Cont.ContVar(_) => Occurrences.none
+    case Cont.ContLam(results, ks, body) => occurrences(id, body)
+    case Cont.Abort => Occurrences.none
   }
 
   def contify(id: Id, s: Stmt): Stmt = s match {
