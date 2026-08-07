@@ -42,6 +42,17 @@ object TransformerCpsDs extends Transformer {
   )
   implicit def autoContext(using C: TransformerContext): Context = C.errors
 
+  /** JavaScript labels and the mutable parameters implementing them are local
+   *  to one JavaScript function. They cannot be referenced from a nested
+   *  function, even when they remain in lexical scope in the CPS tree.
+   */
+  def functionBodyContext(using ctx: TransformerContext): TransformerContext =
+    ctx.copy(
+      secondClass = Map.empty,
+      insideBody = Set.empty,
+      mutableParams = Set.empty
+    )
+
   def computeKinds(m: cpsds.ModuleDecl): Map[Id, FunctionKind] = {
     val uses = m.uses.toMap
     val escape = cpsds.escapeAnalysis.escapes(m)
@@ -223,7 +234,8 @@ object TransformerCpsDs extends Transformer {
       Binding { k =>
         val ops = operations.map { op =>
           val (backups, substBody) = backupMutableParams(op.body, op.params.toSet)
-          (backups, nameDef(op.name) -> js.Lambda(op.params.map(nameDef), toJS(substBody).stmts))
+          val body = toJS(substBody)(using functionBodyContext).stmts
+          (backups, nameDef(op.name) -> js.Lambda(op.params.map(nameDef), body))
         }
         val allBackups = ops.flatMap(_._1)
         val jsObj = js.Object(ops.map(_._2))
@@ -384,22 +396,25 @@ object TransformerCpsDs extends Transformer {
     // --- Reset ---
     case cpsds.Stmt.Reset(p, ks, k, body, ks1, k1) =>
       val (backups, substBody) = backupMutableParams(body, Set(p, ks, k))
+      val bodyStmts = toJS(substBody)(using functionBodyContext).stmts
       pure(backups ++ List(js.Return(Call(RESET,
-        js.Lambda(List(nameDef(p), nameDef(ks), nameDef(k)), toJS(substBody).stmts),
+        js.Lambda(List(nameDef(p), nameDef(ks), nameDef(k)), bodyStmts),
         toJS(ks1), toJS(k1)))))
 
     // --- Shift ---
     case cpsds.Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
       val (backups, substBody) = backupMutableParams(body, Set(resume, ks, k))
+      val bodyStmts = toJS(substBody)(using functionBodyContext).stmts
       pure(backups ++ List(js.Return(Call(SHIFT, nameRef(prompt),
-        js.Lambda(List(nameDef(resume), nameDef(ks), nameDef(k)), toJS(substBody).stmts),
+        js.Lambda(List(nameDef(resume), nameDef(ks), nameDef(k)), bodyStmts),
         toJS(ks1), toJS(k1)))))
 
     // --- Resume ---
     case cpsds.Stmt.Resume(r, ks, k, body, ks1, k1) =>
       val (backups, substBody) = backupMutableParams(body, Set(ks, k))
+      val bodyStmts = toJS(substBody)(using functionBodyContext).stmts
       pure(backups ++ List(js.Return(Call(RESUME, nameRef(r),
-        js.Lambda(List(nameDef(ks), nameDef(k)), toJS(substBody).stmts),
+        js.Lambda(List(nameDef(ks), nameDef(k)), bodyStmts),
         toJS(ks1), toJS(k1)))))
 
     // --- Hole ---
@@ -412,8 +427,9 @@ object TransformerCpsDs extends Transformer {
   def firstClassDef(id: Id, params: List[Id], body: cpsds.Stmt, rest: cpsds.Stmt)(using ctx: TransformerContext): Binding[List[js.Stmt]] =
     Binding { k =>
       val (backups, substBody) = backupMutableParams(body, params.toSet)
+      val bodyStmts = toJS(substBody)(using functionBodyContext).stmts
       backups ++
-        List(js.Function(nameDef(id), params.map(nameDef), toJS(substBody).stmts)) ++
+        List(js.Function(nameDef(id), params.map(nameDef), bodyStmts)) ++
         toJS(rest).run(k)
     }
 
