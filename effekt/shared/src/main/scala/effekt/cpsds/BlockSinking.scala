@@ -3,310 +3,258 @@ package cpsds
 
 import core.Id
 
+import scala.collection.mutable
+
 object BlockSinking {
 
-  def transform(m: ModuleDecl, main: Id): ModuleDecl = {
-    given ctx: Context = Context(m.uses)
+  case class Def(id: Id, params: List[Id], body: Stmt)
 
+  def transform(m: ModuleDecl, main: Id): ModuleDecl = {
     val uses = m.uses.toMap
 
-    // 1. Compute mutual recursion clusters (SCCs of size > 1)
-    val toplevelIds = m.definitions.collect {
-      case ToplevelDefinition.Def(id, _, _) => id
-    }.toSet
+    val toplevelDefs = m.definitions.collect {
+      case ToplevelDefinition.Def(id, params, body) => Def(id, params, body)
+    }
+    val toplevelIds = toplevelDefs.map(_.id).toSet
 
-    val mutuallyRecursive: Set[Id] = {
-      // Simple SCC: f and g are mutually recursive if f ∈ uses(g) and g ∈ uses(f)
-      // We need transitive closure, but uses is already transitively closed at toplevel
-      toplevelIds.filter { id =>
-        val reachable = uses.getOrElse(id, Set.empty[Id]) & toplevelIds
-        reachable.exists { other =>
-          other != id && uses.getOrElse(other, Set.empty).contains(id)
-        }
+    // A mutually recursive group cannot become local because local functions
+    // in Effekt are not mutually recursive. Self-recursive definitions are
+    // fine: their own name is in scope in their body.
+    val mutuallyRecursive = toplevelIds.filter { id =>
+      val reachable = uses.getOrElse(id, Set.empty) & toplevelIds
+      reachable.exists { other =>
+        other != id && uses.getOrElse(other, Set.empty).contains(id)
       }
     }
 
-    // 2. Anchors: defs that must stay at toplevel
-    //    - mutually recursive defs
-    //    - exported defs
-    //    - Val definitions (they're not Defs, can't be sunk)
-    val exported: Set[Id] = m.exports.toSet
-    val anchors: Set[Id] = Set(main) ++ mutuallyRecursive // ++ exported
-
-    // 3. For each non-anchor toplevel Def, determine which anchors use it.
-    //    "uses" maps definer -> used, so we invert: for each candidate,
-    //    which anchors reference it (transitively)?
+    val anchors = Set(main) ++ mutuallyRecursive
     val candidates = toplevelIds -- anchors
 
-    val usedByAnchor: Map[Id, Set[Id]] = candidates.map { cand =>
-      cand -> anchors.filter { anchor =>
-        uses.getOrElse(anchor, Set.empty).contains(cand)
+    // A definition can be localized when precisely one anchor transitively
+    // uses it. Definitions shared by anchors remain at module scope.
+    val ownerOf = candidates.flatMap { candidate =>
+      val owners = anchors.filter { anchor =>
+        uses.getOrElse(anchor, Set.empty).contains(candidate)
       }
+      Option.when(owners.size == 1)(candidate -> owners.head)
     }.toMap
 
-    // 4. A candidate is sinkable if exactly one anchor uses it
-    val sinkable: Set[Id] = usedByAnchor.collect {
-      case (id, anchors) if anchors.size == 1 => id
-    }.toSet
+    val sinkable = ownerOf.keySet
+    val ownedBy = toplevelDefs
+      .filter(d => sinkable.contains(d.id))
+      .groupBy(d => ownerOf(d.id))
 
-    // 5. Build pending from sinkable defs
-    val pending: Pending = m.definitions.collect {
-      case ToplevelDefinition.Def(id, params, body) if sinkable.contains(id) =>
-        id -> Def(id, params, body)
-    }.toMap
+    val definitions = m.definitions.flatMap {
+      case ToplevelDefinition.Def(id, _, _) if sinkable.contains(id) =>
+        None
 
-    // 6. Transform: keep non-sinkable defs and Vals at toplevel,
-    //    each body gets the full pending set and will place what it needs
-    val newDefinitions = m.definitions.flatMap {
-      case ToplevelDefinition.Def(id, params, body) if sinkable.contains(id) =>
-        None // will be sunk
       case ToplevelDefinition.Def(id, params, body) =>
-        Some(ToplevelDefinition.Def(id, params, transform(body, pending)))
+        val localized = localize(ownedBy.getOrElse(id, Nil), body)
+        Some(ToplevelDefinition.Def(id, params, localized))
+
       case ToplevelDefinition.Val(id, ks, k, binding) =>
-        Some(ToplevelDefinition.Val(id, ks, k, transform(binding, pending)))
+        Some(ToplevelDefinition.Val(id, ks, k, normalize(binding)))
     }
 
-    val result = m.copy(definitions = newDefinitions)
-
-    result
+    m.copy(definitions = definitions)
   }
 
-  case class Context(
-    uses: DB[Set[Id]]
-  ) {
-    def close(ids: Set[Id], pending: Pending): Set[Id] = {
-      var result = ids
-      var worklist = ids
-      while (worklist.nonEmpty) {
-        val next = worklist.flatMap { id =>
-          pending.get(id).map(d => d.body.free & pending.keySet).getOrElse(Set.empty)
-          //uses.getOrElse(id, Set.empty[Id]).filter(pending.contains)
-        } -- result
-        result = result ++ next
-        worklist = next
-      }
-      result
+  /**
+   * Turn globally visible definitions into a well-scoped local telescope.
+   * Dependencies precede their users; normalization then sinks every binding
+   * to the least syntactic scope containing all of its uses.
+   */
+  private def localize(definitions: List[Def], body: Stmt): Stmt = {
+    val telescope = dependencyOrder(definitions).foldRight(body) { case (d, rest) =>
+      Stmt.Def(d.id, d.params, d.body, rest)
     }
+    normalize(telescope)
   }
-  case class Def(id: Id, params: List[Id], body: Stmt)
-  type Pending = Map[Id, Def]
 
-  extension (pending: Pending) {
+  /** Dependency-first order for the one-time module-to-local conversion. */
+  private def dependencyOrder(definitions: List[Def]): List[Def] = {
+    val byId = definitions.map(d => d.id -> d).toMap
+    val ids = byId.keySet
+    val position = definitions.zipWithIndex.map { case (d, index) => d.id -> index }.toMap
+    val visited = mutable.Set.empty[Id]
+    val result = mutable.ListBuffer.empty[Def]
 
-    /** Which pending defs are free in the given tree? */
-    def usedIn(tree: Stmt | Expr | Clause | Operation): Set[Id] =
-      pending.keySet & (tree match {
-        case t: Stmt => t.free
-        case e: Expr => e.free
-        case c: Clause => c.free
-        case o: Operation => o.free
-      })
+    def visit(d: Def): Unit = {
+      if (!visited.add(d.id)) return
 
-    def usedIn(ids: Set[Id]): Set[Id] =
-      pending.keySet & ids
-
-    /**
-     * Emit forced defs (transitively closed) before the body.
-     * The callback receives the remaining pending defs.
-     */
-    def emit(forced: Set[Id])(body: Pending => Stmt)(using ctx: Context): Stmt = {
-      val emitHere = ctx.close(forced, pending)
-      val remaining = pending -- emitHere
-      emitDefs(emitHere, pending, body(remaining))
+      val dependencies = (d.body.free & ids).toList.sortBy(position.apply)
+      dependencies.foreach(id => visit(byId(id)))
+      result += d
     }
 
-    def forBranch(tree: Stmt | Clause)(using ctx: Context): Pending =
-      val transitiveClosure = ctx.close(pending.usedIn(tree), pending)
-      pending.view.filterKeys(transitiveClosure).toMap
+    definitions.foreach(visit)
+    result.toList
   }
 
-  def transform(stmt: Stmt, pending: Pending)(using ctx: Context): Stmt = rewriting(stmt) {
-
+  /** Normalize all existing local definitions from the inside out. */
+  private def normalize(stmt: Stmt): Stmt = rewriting(stmt) {
     case Stmt.Def(id, params, body, rest) =>
-      transform(rest, pending + (id -> Def(id, params, body)))
-
-    case Stmt.If(cond, thn, els) =>
-      // Close the needs of each branch before comparing them. A definition can
-      // be needed by a branch indirectly through another pending definition.
-      // Such dependencies have to stay outside when another branch needs them,
-      // otherwise we would duplicate their definitions.
-      val inThn = ctx.close(pending.usedIn(thn), pending)
-      val inEls = ctx.close(pending.usedIn(els), pending)
-      val inBoth = inThn & inEls
-      pending.emit(pending.usedIn(cond) ++ inBoth) { remaining =>
-        Stmt.If(
-          cond,
-          transform(thn, remaining.forBranch(thn)),
-          transform(els, remaining.forBranch(els))
-        )
-      }
-
-    case Stmt.Match(scrutinee, clauses, default) =>
-      val branchSets: List[Set[Id]] = clauses.map { case (_, cl) =>
-        ctx.close(pending.usedIn(cl), pending)
-      } ++ default.map { d =>
-        ctx.close(pending.usedIn(d), pending)
-      }.toList
-      val useCounts = branchSets.flatten.groupBy(identity).view.mapValues(_.size)
-      val inMultiple = useCounts.collect { case (id, n) if n > 1 => id }.toSet
-
-      pending.emit(pending.usedIn(scrutinee) ++ inMultiple) { remaining =>
-        val clauses1 = clauses.map { case (tag, cl) =>
-          (tag, Clause(cl.params, transform(cl.body, remaining.forBranch(cl))))
-        }
-        val default1 = default.map { d => transform(d, remaining.forBranch(d)) }
-        Stmt.Match(scrutinee, clauses1, default1)
-      }
-
-    case Stmt.Let(id, binding, rest) =>
-      pending.emit(pending.usedIn(binding)) { remaining =>
-        Stmt.Let(id, binding, transform(rest, remaining))
-      }
-
-    case Stmt.Run(id, callee, args, purity, rest) =>
-      pending.emit(args.foldLeft(pending.usedIn(Set(callee))) {
-        (acc, a) => acc ++ pending.usedIn(a)
-      }) { remaining =>
-        Stmt.Run(id, callee, args, purity, transform(rest, remaining))
-      }
+      sink(Def(id, params, normalize(body)), normalize(rest))
 
     case Stmt.New(id, interface, operations, rest) =>
-      pending.emit(operations.foldLeft(Set.empty[Id]) {
-        (acc, op) => acc | pending.usedIn(op)
-      }) { remaining =>
-        val ops1 = operations.map(op => Operation(op.name, op.params, transform(op.body, Map.empty)))
-        Stmt.New(id, interface, ops1, transform(rest, remaining))
+      val operations1 = operations.map { op =>
+        Operation(op.name, op.params, normalize(op.body))
       }
+      Stmt.New(id, interface, operations1, normalize(rest))
 
-    case Stmt.Region(id, ks, rest) =>
-      Stmt.Region(id, ks, transform(rest, pending))
-
-    case Stmt.Alloc(id, init, region, rest) =>
-      pending.emit(pending.usedIn(init)) { remaining =>
-        Stmt.Alloc(id, init, region, transform(rest, remaining))
-      }
-
-    case Stmt.Var(id, init, ks, rest) =>
-      pending.emit(pending.usedIn(init) ++ pending.usedIn(ks)) { remaining =>
-        Stmt.Var(id, init, ks, transform(rest, remaining))
-      }
-
-    case Stmt.Dealloc(ref, rest) =>
-      pending.emit(pending.usedIn(Set(ref))) { remaining =>
-        Stmt.Dealloc(ref, transform(rest, remaining))
-      }
-
-    case Stmt.Get(ref, id, rest) =>
-      pending.emit(pending.usedIn(Set(ref))) { remaining =>
-        Stmt.Get(ref, id, transform(rest, remaining))
-      }
-
-    case Stmt.Put(ref, value, rest) =>
-      pending.emit(pending.usedIn(value) ++ pending.usedIn(Set(ref))) { remaining =>
-        Stmt.Put(ref, value, transform(rest, remaining))
-      }
-
-    case Stmt.Reset(p, ks, k, body, ks1, k1) =>
-      pending.emit(pending.usedIn(ks1) ++ pending.usedIn(k1)) { remaining =>
-        Stmt.Reset(p, ks, k, transform(body, remaining), ks1, k1)
-      }
-
-    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
-      pending.emit(pending.usedIn(Set(prompt)) ++ pending.usedIn(ks1) ++ pending.usedIn(k1)) { remaining =>
-        Stmt.Shift(prompt, resume, ks, k, transform(body, remaining), ks1, k1)
-      }
-
-    case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
-      pending.emit(pending.usedIn(Set(resumption)) ++ pending.usedIn(ks1) ++ pending.usedIn(k1)) { remaining =>
-        Stmt.Resume(resumption, ks, k, transform(body, remaining), ks1, k1)
-      }
+    case Stmt.Let(id, binding, rest) =>
+      Stmt.Let(id, binding, normalize(rest))
 
     case Stmt.App(_, _, _) | Stmt.Invoke(_, _, _) | Stmt.Hole(_) =>
-      pending.emit(pending.usedIn(stmt)) { _ => stmt }
+      stmt
+
+    case Stmt.Run(id, callee, args, purity, rest) =>
+      Stmt.Run(id, callee, args, purity, normalize(rest))
+
+    case Stmt.If(cond, thn, els) =>
+      Stmt.If(cond, normalize(thn), normalize(els))
+
+    case Stmt.Match(scrutinee, clauses, default) =>
+      val clauses1 = clauses.map { case (tag, clause) =>
+        tag -> Clause(clause.params, normalize(clause.body))
+      }
+      Stmt.Match(scrutinee, clauses1, default.map(normalize))
+
+    case Stmt.Region(id, ks, rest) =>
+      Stmt.Region(id, ks, normalize(rest))
+
+    case Stmt.Alloc(id, init, region, rest) =>
+      Stmt.Alloc(id, init, region, normalize(rest))
+
+    case Stmt.Var(id, init, ks, rest) =>
+      Stmt.Var(id, init, ks, normalize(rest))
+
+    case Stmt.Dealloc(ref, rest) =>
+      Stmt.Dealloc(ref, normalize(rest))
+
+    case Stmt.Get(ref, id, rest) =>
+      Stmt.Get(ref, id, normalize(rest))
+
+    case Stmt.Put(ref, value, rest) =>
+      Stmt.Put(ref, value, normalize(rest))
+
+    case Stmt.Reset(p, ks, k, body, ks1, k1) =>
+      Stmt.Reset(p, ks, k, normalize(body), ks1, k1)
+
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+      Stmt.Shift(prompt, resume, ks, k, normalize(body), ks1, k1)
+
+    case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
+      Stmt.Resume(resumption, ks, k, normalize(body), ks1, k1)
   }
 
-  private def emitDefs(ids: Set[Id], pending: Pending, body: Stmt)(using ctx: Context): Stmt = {
-    if (ids.isEmpty) return body
+  /**
+   * Repeatedly apply the inward commuting conversion for one definition.
+   * A definition moves into a constructor exactly when all of its uses occur
+   * in one admissible child region. Otherwise this is its least common scope.
+   */
+  private def sink(d: Def, stmt: Stmt): Stmt = {
+    // Function definitions are pure, so an unused definition can be dropped.
+    if (!stmt.free.contains(d.id)) return stmt
 
-    // Direct users of every definition that is being emitted. `None` denotes
-    // the surrounding statement, while `Some(id)` denotes another definition
-    // body. Self references do not constrain placement.
-    val users: Map[Id, Set[Option[Id]]] = ids.map { target =>
-      val definitions = ids.collect {
-        case user if user != target && pending(user).body.free.contains(target) => Some(user)
-      }
-      val surrounding = Option.when(body.free.contains(target))(None)
-      target -> (definitions ++ surrounding)
-    }.toMap
-
-    // parent(id) is the lowest common owner of all direct uses of `id`.
-    // Since mutually recursive definitions are kept at toplevel, dependencies
-    // normally form an acyclic relation here. Any remaining cycle is handled
-    // conservatively by emitting all its members in the surrounding scope.
-    def path(owner: Option[Id], parents: Map[Id, Option[Id]]): List[Option[Id]] = owner match {
-      case None => List(None)
-      case Some(id) => path(parents(id), parents) :+ Some(id)
-    }
-
-    def commonPrefix(left: List[Option[Id]], right: List[Option[Id]]): List[Option[Id]] =
-      left.zip(right).takeWhile { case (l, r) => l == r }.map(_._1)
-
-    def lowestCommonOwner(owners: Set[Option[Id]], parents: Map[Id, Option[Id]]): Option[Id] = {
-      if (owners.isEmpty) None
-      else owners.iterator.map(path(_, parents)).reduce(commonPrefix).last
-    }
-
-    def assignParents(
-      unresolved: Set[Id],
-      parents: Map[Id, Option[Id]]
-    ): Map[Id, Option[Id]] = {
-      unresolved.find { id =>
-        users(id).forall {
-          case None => true
-          case Some(user) => parents.contains(user)
+    stmt match {
+      case Stmt.Def(id, params, body, rest) =>
+        (body.free.contains(d.id), rest.free.contains(d.id)) match {
+          case (true, false) => Stmt.Def(id, params, sink(d, body), rest)
+          case (false, true) => Stmt.Def(id, params, body, sink(d, rest))
+          case _ => bind(d, stmt)
         }
-      } match {
-        case Some(id) =>
-          assignParents(
-            unresolved - id,
-            parents + (id -> lowestCommonOwner(users(id), parents))
-          )
-        case None =>
-          parents ++ unresolved.map(id => id -> None)
-      }
-    }
 
-    val parents = assignParents(ids, Map.empty)
+      // Operation bodies are barriers for now, matching the previous pass.
+      case Stmt.New(id, interface, operations, rest) =>
+        if (operations.exists(_.free.contains(d.id))) bind(d, stmt)
+        else Stmt.New(id, interface, operations, sink(d, rest))
 
-    def isDescendant(id: Id, ancestor: Id): Boolean = parents(id) match {
-      case None => false
-      case Some(parent) => parent == ancestor || isDescendant(parent, ancestor)
-    }
+      case Stmt.Let(id, binding, rest) =>
+        if (binding.free.contains(d.id)) bind(d, stmt)
+        else Stmt.Let(id, binding, sink(d, rest))
 
-    val roots = ids.filter(id => parents(id).isEmpty)
-    val builtRoots: Pending = roots.map { id =>
-      val Def(_, params, defBody) = pending(id)
-      val nestedIds = ids.filter(other => other != id && isDescendant(other, id))
-      val nested = pending.view.filterKeys(nestedIds.contains).toMap
-      id -> Def(id, params, transform(defBody, nested))
-    }.toMap
+      case Stmt.App(_, _, _) | Stmt.Invoke(_, _, _) =>
+        bind(d, stmt)
 
-    topoSort(roots, builtRoots).foldRight(body) { case (id, rest) =>
-      val Def(_, params, defBody) = builtRoots(id)
-      Stmt.Def(id, params, defBody, rest)
+      case Stmt.Run(id, callee, args, purity, rest) =>
+        val usedImmediately = callee == d.id || args.exists(_.free.contains(d.id))
+        if (usedImmediately) bind(d, stmt)
+        else Stmt.Run(id, callee, args, purity, sink(d, rest))
+
+      case Stmt.If(cond, thn, els) =>
+        if (cond.free.contains(d.id)) bind(d, stmt)
+        else (thn.free.contains(d.id), els.free.contains(d.id)) match {
+          case (true, false) => Stmt.If(cond, sink(d, thn), els)
+          case (false, true) => Stmt.If(cond, thn, sink(d, els))
+          case _ => bind(d, stmt)
+        }
+
+      case Stmt.Match(scrutinee, clauses, default) =>
+        if (scrutinee.free.contains(d.id)) bind(d, stmt)
+        else {
+          val clauseUses = clauses.map { case (_, clause) => clause.free.contains(d.id) }
+          val defaultUses = default.exists(_.free.contains(d.id))
+          val regionCount = clauseUses.count(identity) + Option.when(defaultUses)(1).getOrElse(0)
+
+          if (regionCount != 1) bind(d, stmt)
+          else if (defaultUses) Stmt.Match(scrutinee, clauses, default.map(sink(d, _)))
+          else {
+            val clauses1 = clauses.zip(clauseUses).map {
+              case ((tag, clause), true) =>
+                tag -> Clause(clause.params, sink(d, clause.body))
+              case ((tag, clause), false) =>
+                tag -> clause
+            }
+            Stmt.Match(scrutinee, clauses1, default)
+          }
+        }
+
+      case Stmt.Region(id, ks, rest) =>
+        if (ks.free.contains(d.id)) bind(d, stmt)
+        else Stmt.Region(id, ks, sink(d, rest))
+
+      case Stmt.Alloc(id, init, region, rest) =>
+        if (init.free.contains(d.id) || region == d.id) bind(d, stmt)
+        else Stmt.Alloc(id, init, region, sink(d, rest))
+
+      case Stmt.Var(id, init, ks, rest) =>
+        if (init.free.contains(d.id) || ks.free.contains(d.id)) bind(d, stmt)
+        else Stmt.Var(id, init, ks, sink(d, rest))
+
+      case Stmt.Dealloc(ref, rest) =>
+        if (ref == d.id) bind(d, stmt)
+        else Stmt.Dealloc(ref, sink(d, rest))
+
+      case Stmt.Get(ref, id, rest) =>
+        if (ref == d.id) bind(d, stmt)
+        else Stmt.Get(ref, id, sink(d, rest))
+
+      case Stmt.Put(ref, value, rest) =>
+        if (ref == d.id || value.free.contains(d.id)) bind(d, stmt)
+        else Stmt.Put(ref, value, sink(d, rest))
+
+      case Stmt.Reset(p, ks, k, body, ks1, k1) =>
+        if (ks1.free.contains(d.id) || k1.free.contains(d.id)) bind(d, stmt)
+        else Stmt.Reset(p, ks, k, sink(d, body), ks1, k1)
+
+      case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+        val usedImmediately =
+          prompt == d.id || ks1.free.contains(d.id) || k1.free.contains(d.id)
+        if (usedImmediately) bind(d, stmt)
+        else Stmt.Shift(prompt, resume, ks, k, sink(d, body), ks1, k1)
+
+      case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
+        val usedImmediately =
+          resumption == d.id || ks1.free.contains(d.id) || k1.free.contains(d.id)
+        if (usedImmediately) bind(d, stmt)
+        else Stmt.Resume(resumption, ks, k, sink(d, body), ks1, k1)
+
+      case Stmt.Hole(_) =>
+        bind(d, stmt)
     }
   }
 
-  private def topoSort(ids: Set[Id], pending: Pending)(using ctx: Context): List[Id] = {
-    var visited = Set.empty[Id]
-    var result = List.empty[Id]
-    def visit(id: Id): Unit = {
-      if (visited.contains(id)) return
-      visited += id
-      (pending(id).body.free & ids).foreach(visit)
-      result = result :+ id
-    }
-    ids.foreach(visit)
-    result
-  }
+  private def bind(d: Def, rest: Stmt): Stmt =
+    Stmt.Def(d.id, d.params, d.body, rest)
 }
