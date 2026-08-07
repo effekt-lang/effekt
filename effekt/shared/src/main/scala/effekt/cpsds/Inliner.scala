@@ -1,178 +1,248 @@
 package effekt
 package cpsds
+
 import core.Id
 import cpsds.substitutions.{ Substitution, substitute }
 
 object Inliner {
 
-  def shouldInline(id: Id, analysis: UsageAnalysis): Boolean =
-    (analysis.functions.get(id), analysis.usage.get(id)) match {
-      case (Some(info), Some(usage)) =>
-        info.recursiveCalls.isEmpty && usage.isUsedOnce && info.externalCalls.nonEmpty
-      case _ => false
-    }
+  private case class Definition(params: List[Id], body: Stmt)
 
-  def isUnused(id: Id, analysis: UsageAnalysis): Boolean =
-    analysis.usage.get(id).exists(_.isUnused)
-
-  def reduce(id: Id, args: List[Expr], analysis: UsageAnalysis): Stmt = {
-    val info = analysis.functions(id)
-    val (bindings, subst) = bindArgs(info.params, args)
-    val body = substitute(info.body)(using Substitution(subst))
-    bindings.foldRight(body) { case ((id, expr), rest) => Stmt.Let(id, expr, rest) }
+  private case class Context(definitions: Map[Id, Definition]) {
+    def bind(id: Id, definition: Definition): Context =
+      copy(definitions = definitions.updated(id, definition))
   }
 
-  private def bindArgs(params: List[Id], args: List[Expr]): (List[(Id, Expr)], Map[Id, Expr]) = {
-    val bindings = List.newBuilder[(Id, Expr)]
-    val subst = Map.newBuilder[Id, Expr]
-    params.zip(args).foreach { case (param, arg) =>
-      arg match {
-        case e if isTrivial(e) =>
-          subst += (param -> e)
-        case other =>
-          val fresh = Id(param)
-          bindings += (fresh -> other)
-          subst += (param -> Expr.Variable(fresh))
-      }
-    }
-    (bindings.result(), subst.result())
+  private def references(id: Id, tree: Stmt | ModuleDecl): Int = tree match {
+    case tree: Stmt => tree.refs.getOrElse(id, 0)
+    case tree: ModuleDecl => tree.refs.getOrElse(id, 0)
   }
 
   private def isTrivial(expr: Expr): Boolean = expr match {
     case Expr.Make(data, tag, args) => false
     case Expr.Variable(id) => true
     case Expr.Literal(value, tpe) => true
-
     case Expr.Abort => true
     case Expr.Return => true
     case Expr.Toplevel => true
   }
 
-  // --- Rewrite ---
+  /**
+   * A forwarder performs only one jump, possibly permuting, projecting, or
+   * duplicating its arguments and adding captured atoms or literals.
+   */
+  private def isForwarder(id: Id, body: Stmt): Boolean =
+    !body.free.contains(id) && (body match {
+      case Stmt.App(_, args, _) => args.forall(isTrivial)
+      case _ => false
+    })
 
-  def rewrite(s: Stmt, analysis: UsageAnalysis): Stmt = rewriting(s) {
+  private def isCandidate(id: Id, body: Stmt, occurrences: Int): Boolean =
+    !body.free.contains(id) && (occurrences == 1 || isForwarder(id, body))
 
-    case Stmt.Def(id, params, body, rest) if shouldInline(id, analysis) =>
-      rewrite(rest, analysis)
+  private def reduce(definition: Definition, args: List[Expr]): Stmt = {
+    val (bindings, subst) = bindArgs(definition.params, args)
+    val body = substitute(definition.body)(using Substitution(subst))
+    bindings.foldRight(body) { case ((id, expr), rest) => Stmt.Let(id, expr, rest) }
+  }
 
-    case Stmt.Def(id, params, body, rest) if isUnused(id, analysis) =>
-      rewrite(rest, analysis)
+  private def bindArgs(params: List[Id], args: List[Expr]): (List[(Id, Expr)], Map[Id, Expr]) = {
+    val bindings = List.newBuilder[(Id, Expr)]
+    val subst = Map.newBuilder[Id, Expr]
+
+    params.zip(args).foreach { case (param, arg) =>
+      if isTrivial(arg) then
+        subst += (param -> arg)
+      else {
+        val fresh = Id(param)
+        bindings += (fresh -> arg)
+        subst += (param -> Expr.Variable(fresh))
+      }
+    }
+    (bindings.result(), subst.result())
+  }
+
+
+  // -------------------------------------------------------------------------
+  // Rewriting
+
+  private def rewrite(
+    stmt: Stmt,
+    context: Context,
+    expanding: Set[Id] = Set.empty
+  ): Stmt = rewriting(stmt) {
 
     case Stmt.Def(id, params, body, rest) =>
-      Stmt.Def(id, params, rewrite(body, analysis), rewrite(rest, analysis))
+      val body1 = rewrite(body, context, expanding)
+      val candidate = isCandidate(id, body, references(id, rest))
+      val restContext =
+        if candidate then context.bind(id, Definition(params, body))
+        else context
+      val rest1 = rewrite(rest, restContext, expanding)
 
-    case Stmt.New(id, interface, operations, rest) if isUnused(id, analysis) =>
-      rewrite(rest, analysis)
+      // The first case retains the old dead-definition cleanup. The second
+      // removes a definition exactly when its references were inlined.
+      if !rest.free.contains(id) || candidate && !rest1.free.contains(id) then rest1
+      else Stmt.Def(id, params, body1, rest1)
+
+    case Stmt.New(id, interface, operations, rest)
+        if !rest.free.contains(id) && operations.forall(!_.free.contains(id)) =>
+      rewrite(rest, context, expanding)
 
     case Stmt.New(id, interface, operations, rest) =>
-      Stmt.New(id, interface, operations.map(op => rewrite(op, analysis)), rewrite(rest, analysis))
+      Stmt.New(
+        id,
+        interface,
+        operations.map(rewrite(_, context, expanding)),
+        rewrite(rest, context, expanding))
 
-    case Stmt.Let(id, binding, rest) if isUnused(id, analysis) =>
-      rewrite(rest, analysis)
+    case Stmt.Let(id, binding, rest) if !rest.free.contains(id) =>
+      rewrite(rest, context, expanding)
 
     case Stmt.Let(id, binding, rest) if isTrivial(binding) =>
-      val subst = Substitution(Map(id -> binding))
-      rewrite(substitute(rest)(using subst), analysis)
+      rewrite(substitute(rest)(using Substitution(Map(id -> binding))), context, expanding)
 
     case Stmt.Let(id, binding, rest) =>
-      Stmt.Let(id, rewrite(binding, analysis), rewrite(rest, analysis))
+      Stmt.Let(id, rewrite(binding, context), rewrite(rest, context, expanding))
 
-    case Stmt.Run(id, callee, args, purity, rest) =>
-      Stmt.Run(id, callee, args.map(e => rewrite(e, analysis)), purity, rewrite(rest, analysis))
-
-    case Stmt.App(id, args, direct) if shouldInline(id, analysis) =>
-      rewrite(reduce(id, args.map(e => rewrite(e, analysis)), analysis), analysis)
+    case app @ Stmt.App(id, args, direct)
+        if context.definitions.contains(id) && !expanding.contains(id) =>
+      val args1 = args.map(rewrite(_, context))
+      rewrite(reduce(context.definitions(id), args1), context, expanding + id)
 
     case Stmt.App(id, args, direct) =>
-      Stmt.App(id, args.map(e => rewrite(e, analysis)), direct)
+      Stmt.App(id, args.map(rewrite(_, context)), direct)
 
     case Stmt.Invoke(id, method, args) =>
-      Stmt.Invoke(id, method, args.map(e => rewrite(e, analysis)))
+      Stmt.Invoke(id, method, args.map(rewrite(_, context)))
+
+    case Stmt.Run(id, callee, args, purity, rest) =>
+      Stmt.Run(
+        id,
+        callee,
+        args.map(rewrite(_, context)),
+        purity,
+        rewrite(rest, context, expanding))
 
     case Stmt.If(cond, thn, els) =>
-      Stmt.If(rewrite(cond, analysis), rewrite(thn, analysis), rewrite(els, analysis))
+      Stmt.If(
+        rewrite(cond, context),
+        rewrite(thn, context, expanding),
+        rewrite(els, context, expanding))
 
     case Stmt.Match(scrutinee, clauses, default) =>
-      Stmt.Match(rewrite(scrutinee, analysis),
-        clauses.map { case (id, cl) => (id, rewrite(cl, analysis)) },
-        default.map(rewrite(_, analysis)))
+      Stmt.Match(
+        rewrite(scrutinee, context),
+        clauses.map { case (id, clause) =>
+          id -> rewrite(clause, context, expanding)
+        },
+        default.map(rewrite(_, context, expanding)))
 
     case Stmt.Region(id, ks, rest) =>
-      Stmt.Region(id, rewrite(ks, analysis), rewrite(rest, analysis))
+      Stmt.Region(id, rewrite(ks, context), rewrite(rest, context, expanding))
 
-    case Stmt.Alloc(id, init, region, rest) if isUnused(id, analysis) =>
-      rewrite(rest, analysis)
+    case Stmt.Alloc(id, init, region, rest) if !rest.free.contains(id) =>
+      rewrite(rest, context, expanding)
 
     case Stmt.Alloc(id, init, region, rest) =>
-      Stmt.Alloc(id, rewrite(init, analysis), region, rewrite(rest, analysis))
+      Stmt.Alloc(id, rewrite(init, context), region, rewrite(rest, context, expanding))
 
     case Stmt.Var(id, init, ks, rest) =>
-      Stmt.Var(id, rewrite(init, analysis), rewrite(ks, analysis), rewrite(rest, analysis))
+      Stmt.Var(
+        id,
+        rewrite(init, context),
+        rewrite(ks, context),
+        rewrite(rest, context, expanding))
 
     case Stmt.Dealloc(ref, rest) =>
-      Stmt.Dealloc(ref, rewrite(rest, analysis))
+      Stmt.Dealloc(ref, rewrite(rest, context, expanding))
 
-    case Stmt.Get(ref, id, rest) if isUnused(id, analysis) =>
-      rewrite(rest, analysis)
+    case Stmt.Get(ref, id, rest) if !rest.free.contains(id) =>
+      rewrite(rest, context, expanding)
 
     case Stmt.Get(ref, id, rest) =>
-      Stmt.Get(ref, id, rewrite(rest, analysis))
+      Stmt.Get(ref, id, rewrite(rest, context, expanding))
 
     case Stmt.Put(ref, value, rest) =>
-      Stmt.Put(ref, rewrite(value, analysis), rewrite(rest, analysis))
+      Stmt.Put(ref, rewrite(value, context), rewrite(rest, context, expanding))
 
     case Stmt.Reset(p, ks, k, body, ks1, k1) =>
-      Stmt.Reset(p, ks, k, rewrite(body, analysis), rewrite(ks1, analysis), rewrite(k1, analysis))
+      Stmt.Reset(
+        p, ks, k,
+        rewrite(body, context, expanding),
+        rewrite(ks1, context),
+        rewrite(k1, context))
 
     case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
-      Stmt.Shift(prompt, resume, ks, k, rewrite(body, analysis), rewrite(ks1, analysis), rewrite(k1, analysis))
+      Stmt.Shift(
+        prompt, resume, ks, k,
+        rewrite(body, context, expanding),
+        rewrite(ks1, context),
+        rewrite(k1, context))
 
-    case Stmt.Resume(r, ks, k, body, ks1, k1) =>
-      Stmt.Resume(r, ks, k, rewrite(body, analysis), rewrite(ks1, analysis), rewrite(k1, analysis))
+    case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
+      Stmt.Resume(
+        resumption, ks, k,
+        rewrite(body, context, expanding),
+        rewrite(ks1, context),
+        rewrite(k1, context))
 
-    case h: Stmt.Hole => h
+    case hole: Stmt.Hole => hole
   }
 
-  def rewrite(e: Expr, analysis: UsageAnalysis): Expr = rewriting(e) {
-    case Expr.Variable(_) => e
-    case Expr.Literal(_, _) => e
-    case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(rewrite(_, analysis)))
-    case Expr.Abort => e
-    case Expr.Return => e
-    case Expr.Toplevel => e
+  private def rewrite(expr: Expr, context: Context): Expr = rewriting(expr) {
+    case Expr.Make(data, tag, args) =>
+      Expr.Make(data, tag, args.map(rewrite(_, context)))
+    case _ => expr
   }
 
-  def rewrite(op: Operation, analysis: UsageAnalysis): Operation =
-    Operation(op.name, op.params, rewrite(op.body, analysis))
+  private def rewrite(operation: Operation, context: Context, expanding: Set[Id]): Operation =
+    Operation(operation.name, operation.params, rewrite(operation.body, context, expanding))
 
-  def rewrite(cl: Clause, analysis: UsageAnalysis): Clause =
-    Clause(cl.params, rewrite(cl.body, analysis))
+  private def rewrite(clause: Clause, context: Context, expanding: Set[Id]): Clause =
+    Clause(clause.params, rewrite(clause.body, context, expanding))
 
-  // --- Toplevel ---
 
-  def rewrite(d: ToplevelDefinition, analysis: UsageAnalysis): Option[ToplevelDefinition] = d match {
-    case ToplevelDefinition.Def(id, params, body) if shouldInline(id, analysis) =>
-      None
+  // -------------------------------------------------------------------------
+  // Toplevel
 
-    case ToplevelDefinition.Def(id, params, body) if isUnused(id, analysis) =>
-      None
+  def transform(module: ModuleDecl, entrypoint: Id): ModuleDecl = {
+    val roots = module.exports.toSet + entrypoint
 
-    case ToplevelDefinition.Def(id, params, body) =>
-      Some(ToplevelDefinition.Def(id, params, rewrite(body, analysis)))
+    val candidates = module.definitions.collect {
+      case ToplevelDefinition.Def(id, params, body)
+          if isCandidate(id, body, references(id, module)) &&
+             (isForwarder(id, body) || !roots.contains(id)) =>
+        id -> Definition(params, body)
+    }.toMap
 
-    case ToplevelDefinition.Val(id, ks, k, binding) =>
-      Some(ToplevelDefinition.Val(id, ks, k, rewrite(binding, analysis)))
-  }
-
-  // --- Entry point ---
-
-  def transform(m: ModuleDecl, entrypoint: Id): ModuleDecl = {
-    val analysis = UsageAnalysis(m)
-    // Mark the entrypoint and all exports as used so they aren't dropped
-    analysis.usage.getOrElseUpdate(entrypoint, UsageInfo()).references += 99
-    m.exports.foreach { id =>
-      analysis.usage.getOrElseUpdate(id, UsageInfo()).references += 99
+    val context = Context(candidates)
+    val rewrittenDefinitions = module.definitions.map {
+      case ToplevelDefinition.Def(id, params, body) =>
+        ToplevelDefinition.Def(id, params, rewrite(body, context))
+      case ToplevelDefinition.Val(id, ks, k, binding) =>
+        ToplevelDefinition.Val(id, ks, k, rewrite(binding, context))
     }
-    m.copy(definitions = m.definitions.flatMap(d => rewrite(d, analysis)))
+
+    val rewritten = module.copy(definitions = rewrittenDefinitions)
+
+    val originalBodies = module.definitions.collect {
+      case ToplevelDefinition.Def(id, _, body) => id -> body
+    }.toMap
+
+    val definitions = rewrittenDefinitions.filter {
+      case ToplevelDefinition.Def(id, _, _) if roots.contains(id) => true
+      case ToplevelDefinition.Def(id, _, _) =>
+        val externalReferences =
+          references(id, module) - originalBodies.get(id).fold(0)(references(id, _))
+        val wasInlined =
+          candidates.contains(id) &&
+          references(id, module) > 0 &&
+          references(id, rewritten) == 0
+        externalReferences > 0 && !wasInlined
+      case _: ToplevelDefinition.Val => true
+    }
+
+    rewritten.copy(definitions = definitions)
   }
 }
