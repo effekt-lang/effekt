@@ -38,8 +38,5 @@ def main(k) {
 
 /// INLINE
 def main(k) {
-  def f() {
-    k(2)
-  }
-  f()
+  k(2)
 }

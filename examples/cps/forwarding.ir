@@ -1,0 +1,22 @@
+def main(choice, k) {
+  def forward(x, y) {
+    k(y, x)
+  }
+  if (choice) {
+    forward(1, 2)
+  } else {
+    forward(3, 4)
+  }
+}
+
+// A forwarding definition can be threaded at multiple call sites without
+// duplicating its body: every call is replaced by exactly one remapped call.
+/// INLINE
+
+def main(choice, k) {
+  if (choice) {
+    k(2, 1)
+  } else {
+    k(4, 3)
+  }
+}

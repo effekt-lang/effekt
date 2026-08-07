@@ -43,16 +43,14 @@ object TransformerCpsDs extends Transformer {
   implicit def autoContext(using C: TransformerContext): Context = C.errors
 
   def computeKinds(m: cpsds.ModuleDecl): Map[Id, FunctionKind] = {
-    val analysis = cpsds.UsageAnalysis(m)
+    val uses = m.uses.toMap
     val escape = cpsds.escapeAnalysis.escapes(m)
-    val kinds = mutable.Map.empty[Id, FunctionKind]
-    analysis.functions.foreach { case (id, info) =>
-      kinds(id) = FunctionKind(
-        isRecursive = info.isRecursive,
+    uses.map { case (id, callees) =>
+      id -> FunctionKind(
+        isRecursive = callees.contains(id),
         escapes = escape.contains(id)
       )
     }
-    kinds.toMap
   }
 
   def kindOf(id: Id)(using ctx: TransformerContext): FunctionKind =
