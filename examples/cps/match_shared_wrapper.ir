@@ -29,3 +29,20 @@ def main(value, k_main) {
     k_main(0)
   }
 }
+
+/// DROP_PARAMETERS
+
+def main(value, k_main) {
+  def f() {
+    def g() {
+      k_main(1)
+    }
+    g()
+  }
+  value match {
+    case Nil() => f()
+    case Cons() => f()
+  } else {
+    k_main(0)
+  }
+}

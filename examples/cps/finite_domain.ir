@@ -1,0 +1,29 @@
+def main(seed, k) {
+  def loop(xs, stable) {
+    run ignored = println(xs);
+    loop(make Cons(xs, make Nil()), stable)
+  }
+  loop(make Nil(), seed)
+}
+
+/// SINK_BLOCKS
+
+def main(seed, k) {
+  def loop(xs, stable) {
+    run ignored = println(xs);
+    loop(make Cons(xs, make Nil()), stable)
+  }
+  loop(make Nil(), seed)
+}
+
+// The concrete constructor depth grows without bound. The finite analysis
+// forgets that depth while retaining the independent equality stable = seed.
+/// DROP_PARAMETERS
+
+def main(seed, k) {
+  def loop(xs) {
+    run ignored = println(xs);
+    loop(make Cons(xs, make Nil()))
+  }
+  loop(make Nil())
+}

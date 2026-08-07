@@ -33,3 +33,22 @@ def f_0(x_1, ks1_2, k1_3) {
     k1_3(0, ks1_2)
   }
 }
+
+/// DROP_PARAMETERS
+
+def f(x, ks1, k1) {
+  if (x) {
+    def outer() {
+      def h() {
+        def g() {
+          k1(1, ks1)
+        }
+        g()
+      }
+      h()
+    }
+    outer()
+  } else {
+    k1(0, ks1)
+  }
+}

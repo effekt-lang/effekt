@@ -67,7 +67,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
         tree = effekt.cpsds.BlockSinking.transform(tree, mainId)
         println("--- AFTER ---")
         println(util.show(tree))
-        //tree = effekt.cpsds.ParameterDropping.transform(tree, mainId)
+        //tree = effekt.cpsds.ParameterDropping.transform(tree)
         //tree = effekt.cpsds.Simplifier.transform(tree)
         tree
 

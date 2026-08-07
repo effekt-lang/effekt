@@ -19,3 +19,15 @@ def main(k_main) {
   }
   f(k_main)
 }
+
+/// DROP_PARAMETERS
+
+def main(k_main) {
+  def f() {
+    def g() {
+      k_main(1)
+    }
+    g()
+  }
+  f()
+}

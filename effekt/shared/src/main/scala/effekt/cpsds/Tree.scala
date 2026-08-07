@@ -29,7 +29,6 @@ case class ModuleDecl(
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
   lazy val refs: DB[Int] = references.refs(this)
-  lazy val flows: Graph = flowAnalysis.flows(this)
 }
 
 enum ToplevelDefinition {
@@ -40,7 +39,6 @@ enum ToplevelDefinition {
   lazy val free: Set[Id] = freeVariables.free(this)
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val refs: DB[Int] = references.refs(this)
-  lazy val flows: Graph = flowAnalysis.flows(this)
 }
 
 /**
@@ -133,9 +131,6 @@ enum Stmt extends Tree {
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
   lazy val refs: DB[Int] = references.refs(this)
-  lazy val calls: DB[Calls] = allCalls.calls(this)
-  lazy val info: DB[Info] = definitions.info(this)
-  lazy val flows: Graph = flowAnalysis.flows(this)
 }
 export Stmt.*
 
@@ -144,9 +139,6 @@ case class Clause(params: List[Id], body: Stmt) extends Tree {
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
   lazy val refs: DB[Int] = references.refs(this)
-  lazy val info: DB[Info] = definitions.info(this)
-  lazy val calls: DB[Calls] = allCalls.calls(this)
-  lazy val flows: Graph = flowAnalysis.flows(this)
 }
 
 case class Operation(name: Id, params: List[Id], body: Stmt) extends Tree {
@@ -154,9 +146,6 @@ case class Operation(name: Id, params: List[Id], body: Stmt) extends Tree {
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
   lazy val refs: DB[Int] = references.refs(this)
-  lazy val info: DB[Info] = definitions.info(this)
-  lazy val calls: DB[Calls] = allCalls.calls(this)
-  lazy val flows: Graph = flowAnalysis.flows(this)
 }
 
 inline def rewriting[T <: AnyRef](t: T)(inline run: T => T): T =
@@ -653,27 +642,18 @@ object escapeAnalysis {
   }
 }
 
-// TODO better name for this?
-trait UseDB[T] {
-
-  def merge(t1: T, t2: T): T
-
-  def empty: DB[T] = DB.empty[T]
-
-  extension (db: DB[T]) {
-    def ++(other: DB[T]): DB[T] = db.unionWith(other, merge)
-  }
-
-  inline def all[A](terms: Iterable[A], inline run: A => DB[T]): DB[T] =
-    terms.foldLeft(DB.empty[T]) { (acc, t) => acc ++ run(t) }
-}
-
 /**
  * How often is something (a function or expression) referenced in a subterm?
  */
-object references extends UseDB[Int] {
+object references {
 
-  def merge(t1: Int, t2: Int): Int = t1 + t2
+  extension (db: DB[Int])
+    private def ++(other: DB[Int]): DB[Int] = db.unionWith(other, _ + _)
+
+  private inline def all[A](terms: Iterable[A], inline run: A => DB[Int]): DB[Int] =
+    terms.foldLeft(DB.empty[Int]) { (acc, term) => acc ++ run(term) }
+
+  private def empty: DB[Int] = DB.empty
 
   private inline def use(id: Id): DB[Int] = DB(id, 1)
 
@@ -724,409 +704,4 @@ object references extends UseDB[Int] {
 
   inline def refs(cl: Clause): DB[Int] = cl.body.refs
   inline def refs(op: Operation): DB[Int] = op.body.refs
-}
-
-//   def f(x, h) {
-//     g(x, 1)
-//     g(x, 4)
-//     h(3)
-//   }
-// results in
-//   g -> ({x}, {1, 4})
-//   h -> ({3})
-type Calls = Vector[List[Expr]]
-object allCalls extends UseDB[Calls] {
-
-  def merge(t1: Calls, t2: Calls): Calls = t1 ++ t2
-
-  private inline def call(id: Id, args: List[Expr]): DB[Calls] =
-    DB(id, Vector(args))
-
-  inline def calls(op: Operation): DB[Calls] = op.body.calls
-  inline def calls(cl: Clause): DB[Calls] = cl.body.calls
-
-  inline def calls(stmt: Stmt): DB[Calls] =
-    println(s"calls on ${stmt.hashCode}")
-    stmt match {
-    case Stmt.App(id, args, canBeDirect) => call(id, args)
-    case Stmt.Invoke(id, method, args) => empty
-
-    case Stmt.Def(id, params, body, rest) => body.calls ++ rest.calls
-    case Stmt.New(id, interface, operations, rest) => all(operations, _.calls) ++ rest.calls
-    case Stmt.Let(id, binding, rest) => rest.calls
-
-    case Stmt.Run(id, callee, args, purity, rest) => rest.calls
-    case Stmt.If(cond, thn, els) => thn.calls ++ els.calls
-    case Stmt.Match(scrutinee, clauses, default) => all(clauses, (tag, cl) => cl.calls) ++ all(default, _.calls)
-    case Stmt.Region(id, ks, rest) => rest.calls
-    case Stmt.Alloc(id, init, region, rest) => rest.calls
-    case Stmt.Var(id, init, ks, rest) => rest.calls
-    case Stmt.Dealloc(ref, rest) => rest.calls
-    case Stmt.Get(ref, id, rest) => rest.calls
-    case Stmt.Put(ref, value, rest) => rest.calls
-    case Stmt.Reset(p, ks, k, body, ks1, k1) => body.calls
-    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) => body.calls
-    case Stmt.Resume(resumption, ks, k, body, ks1, k1) => body.calls
-    case Stmt.Hole(span) => empty
-  }
-}
-
-enum Info {
-  case Parameter(calls: Calls)
-  case Function(
-    params: List[Id],
-    body: Stmt,
-    internal: Calls,
-    external: Calls
-  )
-}
-
-//   def f(x, y) {
-//     g(x, 1)
-//     g(x, 4)
-//   }
-// results in
-//   f -> Def(params, body)
-// could be extended to values as well for other analyses
-//
-// - for now only functions not objects
-// - for now only for parameters of functions, not parameters of
-//   builtins like shift (which could in the future be used to optimize further)
-//
-// TODO what if the flow is indirect such as
-//
-//  def outer(f) {
-//    let x = f
-//    x(1)
-//  }
-//
-// this would look like f is not called
-object definitions extends UseDB[Info] {
-
-  def merge(l: Info, r: Info): Info = (l, r) match {
-    case (Info.Parameter(calls1), Info.Parameter(calls2)) => Info.Parameter(calls1 ++ calls2)
-    case (Info.Function(params1, body1, internal1, external1), Info.Function(params2, body2, internal2, external2)) =>
-      Info.Function(params1, body1, internal1 ++ internal2, external1 ++ external2)
-    case _ => ???
-  }
-
-  inline def info(op: Operation): DB[Info] = op match {
-    case Operation(name, params, body) => body.info
-  }
-
-  inline def info(op: Clause): DB[Info] = op match {
-    case Clause(params, body) => body.info
-  }
-
-  inline def info(stmt: Stmt): DB[Info] =
-    println(s"info on ${stmt.hashCode}")
-    stmt match {
-    case Stmt.Def(id, params, body, rest) =>
-      val funInfo = DB(id, Info.Function(params, body,
-        body.calls.getOrElse(id, Vector.empty),
-        rest.calls.getOrElse(id, Vector.empty)))
-
-      val paramsInfo = all(params, p =>
-        DB(p, Info.Parameter(body.calls.getOrElse(p, Vector.empty)))
-      )
-
-      funInfo ++ paramsInfo ++ rest.info
-
-    case Stmt.New(id, interface, operations, rest) => all(operations, _.info) ++ rest.info
-    case Stmt.If(cond, thn, els) => thn.info ++ els.info
-    case Stmt.Match(scrutinee, clauses, default) => all(clauses, (tag, cl) => cl.info) ++ all(default, _.info)
-
-    case Stmt.Let(id, binding, rest) => rest.info
-    case Stmt.App(id, args, canBeDirect) => DB.empty
-    case Stmt.Invoke(id, method, args) => DB.empty
-    case Stmt.Run(id, callee, args, purity, rest) => rest.info
-    case Stmt.Region(id, ks, rest) => rest.info
-    case Stmt.Alloc(id, init, region, rest) => rest.info
-    case Stmt.Var(id, init, ks, rest) => rest.info
-    case Stmt.Dealloc(ref, rest) => rest.info
-    case Stmt.Get(ref, id, rest) => rest.info
-    case Stmt.Put(ref, value, rest) => rest.info
-    case Stmt.Reset(p, ks, k, body, ks1, k1) => body.info
-    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) => body.info
-    case Stmt.Resume(resumption, ks, k, body, ks1, k1) => body.info
-    case Stmt.Hole(span) => DB.empty
-  }
-}
-
-// TODO right now we track the individual flows
-//   it might be MUCH better to saturate the flow graph locally and "cache" the partial solution
-//   for instance:
-//     - flows 1 <: ?   can be dropped
-//     - storing it in a form that keeps upper / lower bounds for ids might make merging / saturating more efficient
-//     - conceptually we can draw the flows as a graph,
-//       each subtree gives rise to a subgraph and composing them connects the graphs.
-//
-// On the other side: the fixedpoint analysis might be more efficient if run in a single tight loop that
-// uses mutable state, so we really should benchmark this before making a decision.
-
-enum UnknownFlow {
-  // f(y, ...)  .=   y <: f(0)
-  case Call(from: Expr, to: Id, index: Int)
-  // x <: y   or   42  <:  y
-  case Data(from: Expr, to: Id)
-}
-
-enum KnownFlow {
-  // y <: f(0)
-  case Call(from: Expr, to: Id, index: Int)
-  // 42 <: x
-  case Data(from: Expr, to: Id)
-  // x <: ?
-  case Sink(from: Id)
-}
-
-
-case class Signature(id: Id, params: List[Id])
-
-case class Graph(
-  // the signatures of all functions encountered so far
-  functions: Vector[Signature],
-  // flows into parameters and variables not encountered so far
-  unknownFlows: Set[UnknownFlow],
-  // flows into parameters and variables that are bound
-  knownFlows: Set[KnownFlow]
-) {
-  def ++(other: Graph): Graph =
-    Graph(functions ++ other.functions, unknownFlows ++ other.unknownFlows, knownFlows ++ other.knownFlows)
-
-  def toDot: String = {
-    val sb = new StringBuilder
-    sb ++= "digraph FlowGraph {\n"
-    sb ++= "  rankdir=TB;\n"
-    sb ++= "  node [fontname=\"Helvetica\"];\n"
-    sb ++= "  edge [fontname=\"Helvetica\"];\n\n"
-
-    var counter = 0
-    def freshNode(): String = { counter += 1; s"n$counter" }
-
-    def nodeId(id: Id): String = s"id_${id.hashCode.abs}"
-
-    val functionIds: Set[Id] = functions.map(_.id).toSet
-
-    val paramOwner: Map[Id, (Id, String)] = {
-      val result = scala.collection.mutable.Map.empty[Id, (Id, String)]
-      functions.foreach { case Signature(id, params) =>
-        params.foreach { p =>
-          if (!result.contains(p)) {
-            result(p) = (id, s"p_${p.hashCode.abs}")
-          }
-        }
-      }
-      result.toMap
-    }
-
-    val knownIds: Set[Id] = functionIds ++ paramOwner.keySet
-    val declaredIds = scala.collection.mutable.Set.empty[Id]
-
-    def targetRef(id: Id): String =
-      if (functionIds.contains(id)) nodeId(id)
-      else paramOwner.get(id) match {
-        case Some((funId, port)) => s"${nodeId(funId)}:$port"
-        case None =>
-          if (declaredIds.add(id)) {
-            sb ++= s"  ${nodeId(id)} [label=\"${util.show(id)}\"];\n"
-          }
-          nodeId(id)
-      }
-
-    // Function nodes as HTML tables
-    functions.foreach { case Signature(id, params) =>
-      val funLabel = util.show(id)
-      val paramCells = params.map { p =>
-        val port = paramOwner(p)._2
-        s"""<TD PORT="$port" BORDER="1" STYLE="ROUNDED"> ${util.show(p)} </TD>"""
-      }.mkString("")
-
-      sb ++= s"  ${nodeId(id)} [shape=plain, label=<"
-      sb ++= s"""<TABLE BORDER="0" CELLSPACING="4" CELLPADDING="4">"""
-      sb ++= s"<TR>"
-      sb ++= s"""<TD BORDER="1"><B>${funLabel}</B></TD>"""
-      sb ++= paramCells
-      sb ++= s"</TR></TABLE>"
-      sb ++= s">];\n\n"
-    }
-
-    // Vertical ordering
-    if (functions.size > 1) {
-      val funChain = functions.map(s => nodeId(s.id)).mkString(" -> ")
-      sb ++= s"  $funChain [style=invis];\n\n"
-    }
-
-    def sourceNode(from: Expr): String = from match {
-      case Expr.Variable(id) if knownIds.contains(id) => targetRef(id)
-      case other =>
-        val n = freshNode()
-        sb ++= s"  $n [shape=plain, label=\"${util.show(other)}\"];\n"
-        n
-    }
-
-    knownFlows.foreach {
-      case KnownFlow.Data(from, to) =>
-        sb ++= s"  ${sourceNode(from)} -> ${targetRef(to)};\n"
-
-      case KnownFlow.Sink(from) =>
-        val sinkNode = freshNode()
-        sb ++= s"  $sinkNode [shape=plain, label=\"?\"];\n"
-        sb ++= s"  ${targetRef(from)} -> $sinkNode;\n"
-
-      case KnownFlow.Call(from, to, index) =>
-        sb ++= s"  ${sourceNode(from)} -> ${targetRef(to)} [label=\"@$index\", style=dashed];\n"
-    }
-
-    unknownFlows.foreach {
-      case UnknownFlow.Call(from, to, index) =>
-        sb ++= s"  ${sourceNode(from)} -> ${targetRef(to)} [label=\"@$index\", style=dashed];\n"
-
-      case UnknownFlow.Data(from, to) =>
-        sb ++= s"  ${sourceNode(from)} -> ${targetRef(to)} [style=dotted];\n"
-    }
-
-    sb ++= "}\n"
-    sb.toString
-  }
-
-  def dump(filename: String = "graph"): Unit = {
-    import java.nio.file.{Files, Paths}
-    val outDir = Paths.get("out")
-    Files.createDirectories(outDir)
-    val dot = toDot
-    val dotPath = outDir.resolve(s"$filename.dot")
-    val pngPath = outDir.resolve(s"$filename.png")
-    Files.writeString(dotPath, dot)
-    import scala.sys.process._
-    s"dot -Tpng $dotPath -o $pngPath".!
-  }
-
-  def show: String = ""
-
-}
-object Graph {
-  val empty = Graph(Vector.empty, Set.empty, Set.empty)
-
-  def define(id: Id, params: List[Id], body: Graph, rest: Graph): Graph =
-    var newUnknown: Set[UnknownFlow] = Set.empty
-    var newKnown: Set[KnownFlow] = body.knownFlows ++ rest.knownFlows
-
-
-    def emitData(from: Expr, to: Id): Unit = from match {
-      case Expr.Variable(other) if to == other => ()
-      case other => newKnown += KnownFlow.Data(from, to)
-    }
-
-    def emitCall(from: Expr, to: Id, index: Int): Unit =
-      newKnown += KnownFlow.Call(from, to, index)
-
-    rest.unknownFlows.foreach {
-      // def f(x, y) {}
-      // expr <: f(0)  ~>  expr <: x
-      case UnknownFlow.Call(from, to, index) if to == id => emitData(from, params(index))
-      case other => newUnknown += other
-    }
-
-    body.unknownFlows.foreach {
-      case UnknownFlow.Call(from, to, index) if to == id => emitData(from, params(index))
-      case UnknownFlow.Call(from, to, index) if params.contains(to) => emitCall(from, to, index)
-      case UnknownFlow.Data(from, to) if to == id => emitData(from, to)
-      case other => newUnknown += other
-    }
-    Graph(Signature(id, params) +: (body.functions ++ rest.functions), newUnknown, newKnown)
-
-  def bind(id: Id, body: Graph): Graph = {
-    var newUnknown: Set[UnknownFlow] = Set.empty
-    var newKnown: Set[KnownFlow] = body.knownFlows
-
-    body.unknownFlows.foreach {
-      case UnknownFlow.Call(from, to, index) if to == id => newKnown += KnownFlow.Call(from, to, index)
-      case UnknownFlow.Data(from, to) if to == id => newKnown += KnownFlow.Data(from, to)
-      case other => newUnknown += other
-    }
-    Graph(body.functions, newUnknown, newKnown)
-  }
-
-  // all unknown flows are now sinks
-  def close(graph: Graph): Graph =
-    var knownFlows = graph.knownFlows
-    graph.unknownFlows.foreach {
-      case UnknownFlow.Call(from, to, index) => knownFlows ++= from.free.map(x => KnownFlow.Sink(x))
-      case UnknownFlow.Data(from, to) => knownFlows ++= from.free.map(x => KnownFlow.Sink(x))
-    }
-    Graph(graph.functions, Set.empty, knownFlows)
-}
-
-object flowAnalysis {
-
-  private inline def all[T](t: IterableOnce[T], inline f: T => Graph): Graph =
-    t.iterator.foldLeft(Graph.empty) { case (xs, t) => f(t) ++ xs }
-
-  private def sink(e: Expr): Graph =
-    e match {
-      case _: Expr.Literal | Expr.Abort | Expr.Return | Expr.Toplevel  => Graph.empty
-      case other =>
-        Graph(Vector.empty, Set.empty, other.free.map(id => KnownFlow.Sink(id)))
-    }
-
-  private def sink(id: Id): Graph = Graph(Vector.empty, Set.empty, Set(KnownFlow.Sink(id)))
-
-  private def known(from: Expr, to: Id): Graph =
-    Graph(Vector.empty, Set.empty, Set(KnownFlow.Data(from, to)))
-
-  inline def flows(stmt: Stmt): Graph = stmt match {
-    case Stmt.App(id, args, canBeDirect) =>
-      // at first all functions are "unknown", we resolve them bottom up and refine the graph
-      val unknownFlows = args.zipWithIndex.map { case (arg, index) => UnknownFlow.Call(arg, id, index) }.toSet
-      Graph(Vector.empty, unknownFlows, Set.empty)
-
-    // for now this is treated as a sink
-    case Stmt.Invoke(id, method, args) => all(args, sink)
-    case Stmt.Run(id, callee, args, purity, rest) => all(args, sink) ++ rest.flows
-    case Stmt.If(cond, thn, els) => sink(cond) ++ thn.flows ++ els.flows
-    case Stmt.Let(id, binding, rest) =>
-      known(binding, id) ++ Graph.bind(id, rest.flows)
-
-    case Stmt.Def(id, params, body, rest) =>
-      Graph.define(id, params, body.flows, rest.flows)
-
-    case Stmt.New(id, interface, operations, rest) => all(operations, _.flows) ++ rest.flows
-    case Stmt.Match(scrutinee, clauses, default) => all(clauses, (tag, cl) => cl.flows) ++ all(default, _.flows)
-    case Stmt.Region(id, ks, rest) => sink(ks) ++ rest.flows
-    // TODO region?
-    case Stmt.Alloc(id, init, region, rest) => sink(init) ++ sink(region) ++ rest.flows
-    case Stmt.Var(id, init, ks, rest) => sink(init) ++ sink(ks) ++ rest.flows
-    case Stmt.Dealloc(ref, rest) => rest.flows
-    case Stmt.Get(ref, id, rest) => sink(ref) ++ rest.flows
-    case Stmt.Put(ref, value, rest) => sink(ref) ++ sink(value) ++ rest.flows
-    // if we want to track flows to resets and shifts, we also need to have labels for the positions
-    // for now it is just unknown "sinks"
-    // we could also "mask" variables that we do not care about, like p, ks, and k for now
-    // potentially simplifying the flow graph (both for inspection and performance)
-    case Stmt.Reset(p, ks, k, body, ks1, k1) =>
-      body.flows ++ sink(ks1) ++ sink(k1)
-    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
-      sink(prompt) ++ body.flows ++ sink(ks1) ++ sink(k1)
-    case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
-      sink(resumption) ++ body.flows ++ sink(ks1) ++ sink(k1)
-    case Stmt.Hole(span) => Graph.empty
-  }
-
-  inline def flows(op: Operation): Graph = op.body.flows
-  inline def flows(cl: Clause): Graph = cl.body.flows
-
-  def flows(toplevel: ToplevelDefinition): Graph = toplevel match {
-    case ToplevelDefinition.Def(id, params, body) =>
-      val graph = Graph.define(id, params, body.flows, Graph.empty)
-      Graph.close(graph)
-
-    case ToplevelDefinition.Val(id, ks, k, binding) => binding.flows
-  }
-  inline def flows(m: ModuleDecl): Graph = m match {
-    case ModuleDecl(includes, declarations, externs, definitions, exports) =>
-      val allFlows = all(definitions, _.flows)
-      assert(allFlows.unknownFlows.isEmpty)
-      allFlows
-  }
 }

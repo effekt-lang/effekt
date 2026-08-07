@@ -12,3 +12,14 @@ def main(ks, k) {
   k(10, ks)
 }
 
+/// SINK_BLOCKS
+
+def main(ks, k) {
+  k(10, ks)
+}
+
+/// DROP_PARAMETERS
+
+def main(ks, k) {
+  k(10, ks)
+}

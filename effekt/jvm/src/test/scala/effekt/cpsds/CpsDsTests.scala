@@ -27,17 +27,15 @@ enum TransformPass(val header: String, val run: (String, ModuleDecl, Id) => Modu
   case SinkBlocks extends TransformPass("SINK_BLOCKS",
     (_, input, mainId) => BlockSinking.transform(input, mainId))
   case DropParameters extends TransformPass("DROP_PARAMETERS",
-    (_, input, mainId) => ParameterDropping.transform(input, mainId))
+    (_, input, _) => ParameterDropping.transform(input))
 }
 
 enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => String) {
   case Flows extends AnalysisPass("FLOWS",
-    (name, input, main) => {
-      val flow = input.flows
-      flow.dump(name)
+    (_, input, _) => {
       input.definitions.collect {
         case d: ToplevelDefinition.Def =>
-          s"${d.id}\n---\n${ParameterDropping.solve(d, main).show}"
+          s"${d.id}\n---\n${ParameterDropping.solve(d).show}"
         case _ => ()
       }.mkString("\n")
     })

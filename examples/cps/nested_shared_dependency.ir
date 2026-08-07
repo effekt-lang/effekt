@@ -45,3 +45,28 @@ def main(b_main, k_main) {
   }
   wrapper(b_main, k_main)
 }
+
+/// DROP_PARAMETERS
+
+def main(b_main, k_main) {
+  def wrapper() {
+    def shared() {
+      def leaf() {
+        k_main(1)
+      }
+      leaf()
+    }
+    if (b_main) {
+      def left() {
+        shared()
+      }
+      left()
+    } else {
+      def right() {
+        shared()
+      }
+      right()
+    }
+  }
+  wrapper()
+}
