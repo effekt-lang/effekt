@@ -126,7 +126,13 @@ object BlockSinking {
       transform(rest, pending + (id -> Def(id, params, body)))
 
     case Stmt.If(cond, thn, els) =>
-      val inBoth = pending.usedIn(thn) & pending.usedIn(els)
+      // Close the needs of each branch before comparing them. A definition can
+      // be needed by a branch indirectly through another pending definition.
+      // Such dependencies have to stay outside when another branch needs them,
+      // otherwise we would duplicate their definitions.
+      val inThn = ctx.close(pending.usedIn(thn), pending)
+      val inEls = ctx.close(pending.usedIn(els), pending)
+      val inBoth = inThn & inEls
       pending.emit(pending.usedIn(cond) ++ inBoth) { remaining =>
         Stmt.If(
           cond,
@@ -136,8 +142,11 @@ object BlockSinking {
       }
 
     case Stmt.Match(scrutinee, clauses, default) =>
-      val branchSets: List[Set[Id]] = clauses.map { case (_, cl) => pending.usedIn(cl) } ++
-        default.map(pending.usedIn).toList
+      val branchSets: List[Set[Id]] = clauses.map { case (_, cl) =>
+        ctx.close(pending.usedIn(cl), pending)
+      } ++ default.map { d =>
+        ctx.close(pending.usedIn(d), pending)
+      }.toList
       val useCounts = branchSets.flatten.groupBy(identity).view.mapValues(_.size)
       val inMultiple = useCounts.collect { case (id, n) if n > 1 => id }.toSet
 
@@ -218,9 +227,73 @@ object BlockSinking {
 
   private def emitDefs(ids: Set[Id], pending: Pending, body: Stmt)(using ctx: Context): Stmt = {
     if (ids.isEmpty) return body
-    topoSort(ids, pending).foldRight(body) { case (id, rest) =>
+
+    // Direct users of every definition that is being emitted. `None` denotes
+    // the surrounding statement, while `Some(id)` denotes another definition
+    // body. Self references do not constrain placement.
+    val users: Map[Id, Set[Option[Id]]] = ids.map { target =>
+      val definitions = ids.collect {
+        case user if user != target && pending(user).body.free.contains(target) => Some(user)
+      }
+      val surrounding = Option.when(body.free.contains(target))(None)
+      target -> (definitions ++ surrounding)
+    }.toMap
+
+    // parent(id) is the lowest common owner of all direct uses of `id`.
+    // Since mutually recursive definitions are kept at toplevel, dependencies
+    // normally form an acyclic relation here. Any remaining cycle is handled
+    // conservatively by emitting all its members in the surrounding scope.
+    def path(owner: Option[Id], parents: Map[Id, Option[Id]]): List[Option[Id]] = owner match {
+      case None => List(None)
+      case Some(id) => path(parents(id), parents) :+ Some(id)
+    }
+
+    def commonPrefix(left: List[Option[Id]], right: List[Option[Id]]): List[Option[Id]] =
+      left.zip(right).takeWhile { case (l, r) => l == r }.map(_._1)
+
+    def lowestCommonOwner(owners: Set[Option[Id]], parents: Map[Id, Option[Id]]): Option[Id] = {
+      if (owners.isEmpty) None
+      else owners.iterator.map(path(_, parents)).reduce(commonPrefix).last
+    }
+
+    def assignParents(
+      unresolved: Set[Id],
+      parents: Map[Id, Option[Id]]
+    ): Map[Id, Option[Id]] = {
+      unresolved.find { id =>
+        users(id).forall {
+          case None => true
+          case Some(user) => parents.contains(user)
+        }
+      } match {
+        case Some(id) =>
+          assignParents(
+            unresolved - id,
+            parents + (id -> lowestCommonOwner(users(id), parents))
+          )
+        case None =>
+          parents ++ unresolved.map(id => id -> None)
+      }
+    }
+
+    val parents = assignParents(ids, Map.empty)
+
+    def isDescendant(id: Id, ancestor: Id): Boolean = parents(id) match {
+      case None => false
+      case Some(parent) => parent == ancestor || isDescendant(parent, ancestor)
+    }
+
+    val roots = ids.filter(id => parents(id).isEmpty)
+    val builtRoots: Pending = roots.map { id =>
       val Def(_, params, defBody) = pending(id)
-      Stmt.Def(id, params, transform(defBody, Map.empty), rest)
+      val nestedIds = ids.filter(other => other != id && isDescendant(other, id))
+      val nested = pending.view.filterKeys(nestedIds.contains).toMap
+      id -> Def(id, params, transform(defBody, nested))
+    }.toMap
+
+    topoSort(roots, builtRoots).foldRight(body) { case (id, rest) =>
+      val Def(_, params, defBody) = builtRoots(id)
+      Stmt.Def(id, params, defBody, rest)
     }
   }
 

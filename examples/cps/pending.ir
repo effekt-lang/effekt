@@ -20,13 +20,13 @@ def f(x, ks1, k1) {
 def f_0(x_1, ks1_2, k1_3) {
   if (x_1) {
     def outer_4(ks2_5, k2_6) {
-      def g_7(ks3_8, k3_9) {
-        k3_9(1, ks3_8)
+      def h_7(ks4_8, k4_9) {
+        def g_10(ks3_11, k3_12) {
+          k3_12(1, ks3_11)
+        }
+        g_10(ks4_8, k4_9)
       }
-      def h_10(ks4_11, k4_12) {
-        g_7(ks4_11, k4_12)
-      }
-      h_10(ks2_5, k2_6)
+      h_7(ks2_5, k2_6)
     }
     outer_4(ks1_2, k1_3)
   } else {

@@ -1,0 +1,47 @@
+def leaf(k_leaf) {
+  k_leaf(1)
+}
+def shared(k_shared) {
+  leaf(k_shared)
+}
+def left(k_left) {
+  shared(k_left)
+}
+def right(k_right) {
+  shared(k_right)
+}
+def wrapper(b_wrapper, k_wrapper) {
+  if (b_wrapper) {
+    left(k_wrapper)
+  } else {
+    right(k_wrapper)
+  }
+}
+def main(b_main, k_main) {
+  wrapper(b_main, k_main)
+}
+
+/// SINK_BLOCKS
+
+def main(b_main, k_main) {
+  def wrapper(b_wrapper, k_wrapper) {
+    def shared(k_shared) {
+      def leaf(k_leaf) {
+        k_leaf(1)
+      }
+      leaf(k_shared)
+    }
+    if (b_wrapper) {
+      def left(k_left) {
+        shared(k_left)
+      }
+      left(k_wrapper)
+    } else {
+      def right(k_right) {
+        shared(k_right)
+      }
+      right(k_wrapper)
+    }
+  }
+  wrapper(b_main, k_main)
+}
