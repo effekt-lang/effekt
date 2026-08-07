@@ -1,0 +1,29 @@
+def main(k) {
+  def f(x) {
+    k(x)
+  }
+  run ignored = println(make Cons(f, make Nil()));
+  f(1)
+}
+
+/// SINK_BLOCKS
+
+def main(k) {
+  def f(x) {
+    k(x)
+  }
+  run ignored = println(make Cons(f, make Nil()));
+  f(1)
+}
+
+// Although the data shape is abstracted away, the enclosed closure is known
+// to escape through Run. Its calling convention therefore remains rigid.
+/// DROP_PARAMETERS
+
+def main(k) {
+  def f(x) {
+    k(x)
+  }
+  run ignored = println(make Cons(f, make Nil()));
+  f(1)
+}
