@@ -7,17 +7,140 @@ extern llvm """
     declare %Pos @c_queue_unsafePeek(%Pos)
     declare %Pos @c_queue_unsafePop(%Pos)
 
-    declare %Pos @c_queue_send_emit(%Int, %Pos, %Stack)
+    declare %Pos @c_queue_send_emit(%Pos, %Int, %Pos, %Stack)
     declare %Pos @c_queue_send_resume(%Pos, %Stack)
+    declare %Pos @c_queue_send_terminate(%Pos)
     declare %Pos @c_queue_resume(%Pos)
     declare %Pos @c_message_new_emit(%Int, %Stack)
     declare %Pos @c_message_value(%Pos)
     declare %Stack @c_message_continuation(%Pos)
+
+    declare %Pos @c_actor_new()
+    declare %Pos @c_actor_start(%Pos, %Stack)
+    declare void @c_actor_inspect_queue(%Pos)
+"""
+
+extern llvm """
+  declare i32 @pthread_create(ptr noundef, ptr noundef, ptr noundef, ptr noundef)
+  declare i32 @pthread_join(i64 noundef, ptr noundef)
+
+  declare i32 @pthread_mutex_init(ptr noundef, ptr)
+  declare i32 @pthread_mutex_lock(ptr noundef)
+  declare i32 @pthread_mutex_unlock(ptr noundef)
+  declare i32 @pthread_mutex_destroy(ptr noundef)
+
+  declare i32 @pthread_cond_init(ptr noundef, ptr)
+  declare i32 @pthread_cond_signal(ptr noundef)
+  declare i32 @pthread_cond_broadcast(ptr noundef)
+  declare i32 @pthread_cond_wait(ptr noundef, ptr noundef)
+  declare i32 @pthread_cond_destroy(ptr noundef)
+
+  declare void @sleep(i64)
+
+  ; Id, Function pointer, closure, stack
+  %ThreadObject = type {i64, ptr, %Object, %Stack}
+
+  %Inbox = type i64
+
+  ; front, rear, data ptr, mutex, cond, cond mutex
+  %MessageQueue = type {i64, i64, ptr, ptr, ptr, ptr}
+
+  ; Expect a pointer to a %ThreadObject
+  define void @call_thread_wrapper(ptr %threadObject) {
+    %threadObj = load %ThreadObject, ptr %threadObject
+    %functionPointer = extractvalue %ThreadObject %threadObj, 1
+    %closure = extractvalue %ThreadObject %threadObj, 2
+    %stack = extractvalue %ThreadObject %threadObj, 3
+
+    tail call tailcc %Pos %functionPointer(%Object %closure, %Stack %stack)
+    ret void 
+  }
+
+  define i64 @thread_object_size() alwaysinline {
+    %to_sizeptr = getelementptr %ThreadObject, ptr null, i64 1
+    %to_size = ptrtoint ptr %to_sizeptr to i64
+    ret i64 %to_size
+  }
+
+  define i64 @default_queue_size() alwaysinline {
+    %to_sizeptr = getelementptr %MessageQueue, ptr null, i64 1
+    %to_size = ptrtoint ptr %to_sizeptr to i64
+    ret i64 %to_size
+  }
+
+  define i64 @default_queue_elements() alwaysinline {
+    ret i64 16
+  }
+
+  ; sizeof(pthread_mutex_t)
+  define i64 @pthread_mutex_size() alwaysinline {
+    ret i64 40
+  }
+
+  ; sizeof(pthread_cond_t)
+  define i64 @pthread_cond_size() alwaysinline {
+    ret i64 48
+  }
+"""
+
+extern type ThreadObject
+extern type Inbox
+
+extern def start_thread { g: () => Unit }: ThreadObject = llvm """
+  %threadObjectSize = call i64 @thread_object_size()
+  %threadObject = call ptr @malloc(i64 %threadObjectSize)
+  %threadIdPtr = getelementptr i64, ptr %threadObject, i64 0
+  %functionPtr = getelementptr ptr, ptr %threadObject, i64 1
+  %objectPtr = getelementptr %Object, ptr %threadObject, i64 2 
+  %stackPtr = getelementptr %Stack, ptr %threadObject, i64 3
+
+  %stack = call %Stack @withEmptyStack()
+  store %Stack %stack, %Stack %stackPtr
+
+  ; (f: () => Unit at {io})
+  ; %neg = call %Neg @coercePosNeg(%Pos {f})
+  %arrayPointer = extractvalue %Neg ${g}, 0
+  %object = extractvalue %Neg ${g}, 1
+  %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
+  %functionPointer = load ptr, ptr %functionPointerPointer
+
+  store %Object %object, ptr %objectPtr
+  store ptr %functionPointer, ptr %functionPtr
+  
+  call ccc i64 @pthread_create(ptr %threadIdPtr, ptr null, ptr @call_thread_wrapper, ptr %threadObject)
+  %threadPtrInt = ptrtoint ptr %threadObject to i64
+  %threadPos = call %Pos @coerceIntPos(i64 %threadPtrInt)
+  tail call void @sharePositive(%Pos %threadPos)
+  ret %Pos %threadPos
+"""
+
+extern def thread_id(thread: ThreadObject): Int = llvm """
+  %threadInt = call %Int @coercePosInt(%Pos ${thread})
+  %threadPtr = inttoptr %Int %threadInt to ptr 
+  %thread_id_ptr = getelementptr %ThreadObject, ptr %threadPtr, i64 0
+  %thread_id = load i64, ptr %thread_id_ptr
+  ret i64 %thread_id
+"""
+
+extern def join_thread(thread: ThreadObject): Unit = llvm """
+  %threadInt = call %Int @coercePosInt(%Pos ${thread})
+  %threadPtr = inttoptr %Int %threadInt to ptr 
+  %thread_id_ptr = getelementptr %ThreadObject, ptr %threadPtr, i64 0
+  %thread_id = load i64, ptr %thread_id_ptr
+  call ccc i64 @pthread_join(i64 %thread_id, ptr null)
+  ; call void @free(ptr %threadPtr)
+  ret %Pos zeroinitializer
+"""
+
+extern def sleep(seconds: Int): Unit = llvm """
+  call ccc void @sleep(%Int ${seconds})
+  ret %Pos zeroinitializer
 """
 
 extern type MessageQueue[R]
 extern type MessageData
 extern type Continuation
+extern type Actor
 
 extern def allocateQueue[R](): MessageQueue[R] = llvm """
     %queue = call %Pos @c_queue_new()
@@ -26,121 +149,100 @@ extern def allocateQueue[R](): MessageQueue[R] = llvm """
 
 extern def isEmpty[R](queue: MessageQueue[R]): Bool = llvm """
     %queue_empty = call %Pos @c_queue_empty(%Pos ${queue})
-    tail call void @erasePositive(%Pos ${queue})
     ret %Pos %queue_empty
 """
 
 extern def isFull[R](queue: MessageQueue[R]): Bool = llvm """
     %queue_full = call %Pos @c_queue_full(%Pos ${queue})
-    tail call void @erasePositive(%Pos ${queue})
     ret %Pos %queue_full
 """
 
 extern def unsafeEnqueue[R](queue: MessageQueue[R], value: R): Unit = llvm """
     %enqueue = call %Pos @c_queue_unsafeEnqueue(%Pos ${queue}, %Pos ${value})
-    tail call void @erasePositive(%Pos ${queue})
-    ; tail call void @erasePositive(%Pos ${value})
     ret %Pos %enqueue
 """
 
 extern def unsafeDequeue[R](queue: MessageQueue[R]): Unit = llvm """
     %enqueue = call %Pos @c_queue_unsafeDequeue(%Pos ${queue})
-    tail call void @erasePositive(%Pos ${queue})
     ret %Pos %enqueue
 """
 
 extern def unsafePeek[R](queue: MessageQueue[R]): R = llvm """
     %peek = call %Pos @c_queue_unsafePeek(%Pos ${queue})
-    tail call void @erasePositive(%Pos ${queue})
-    tail call void @sharePositive(%Pos %peek)
     ret %Pos %peek
 """
 
 extern def unsafePop[R](queue: MessageQueue[R]): R = llvm """
   %peek = call %Pos @c_queue_unsafePop(%Pos ${queue})
-  tail call void @erasePositive(%Pos ${queue})
-  tail call void @sharePositive(%Pos %peek)
   ret %Pos %peek
 """
 
-
-extern def test(v: Int) { f: Int => Int } at async: Int = llvm """
-    %vtable = extractvalue %Neg ${f}, 0
-    %closure = extractvalue %Neg ${f}, 1
-    %functionPointer_pointer = getelementptr ptr, ptr %vtable, i64 0
-    %functionPointer = load ptr, ptr %functionPointer_pointer
-
-    %vPos = call %Pos @coerceIntPos(%Int ${v})
-    musttail call tailcc void %functionPointer(%Object %closure, %Pos %vPos, %Stack %stack)
-    ret void
+extern def newActor(): Actor = llvm """
+  %actor = call %Pos @c_actor_new()
+  ret %Pos %actor
 """
 
-extern def emitMessage() at async: Unit = llvm """
-  call %Pos @c_message_new_emit(%Int 42, %Stack %stack)
+extern def inspectActor(actor: Actor): Unit = llvm """
+  call void @c_actor_inspect_queue(%Pos ${actor})
+  ret %Pos zeroinitializer
+"""
+
+extern def startActor(actor: Actor) at async: Unit = llvm """
+  call void @c_actor_start(%Pos ${actor}, %Stack %stack)
   ret void
 """
 
-extern def doEmit(v: Int, handler: MessageQueue[MessageData]) at async: Unit = llvm """
-    call %Pos @c_queue_send_emit(%Int ${v}, %Pos ${handler}, %Stack %stack)
-    ret void
+extern def sendEmit(self: Actor, value: Int, handler: Actor) at async: Unit = llvm """
+  %ret = call %Pos @c_queue_send_emit(%Pos ${self}, %Int ${value}, %Pos ${handler}, %Stack %stack)
+  call void @erasePositive(%Pos ${self})
+  call void @erasePositive(%Pos ${handler})
+  call void @resume_Pos(%Stack %stack, %Pos zeroinitializer)
+  ret void
 """
 
-extern def sendResume(emitter: MessageQueue[MessageData], cont: Continuation): Unit = llvm """
-    call %Pos @c_queue_send_resume(%Pos ${emitter}, %Stack ${cont})
-    ret %Pos zeroinitializer
+extern def sendTerminate(actor: Actor): Unit = llvm """
+  %ret = call %Pos @c_queue_send_terminate(%Pos ${actor})
+  call void @erasePositive(%Pos ${actor})
+  ret %Pos %ret
 """
 
-extern def doResume(emitter: MessageQueue[MessageData]): Unit = llvm """
-  %resumed = call %Pos @c_queue_resume(%Pos ${emitter})
-  ret %Pos %resumed
+extern def eraseActor(actor: Actor): Unit = llvm """
+  call void @erasePositive(%Pos ${actor})
+  ret %Pos zeroinitializer
 """
 
-extern def messageValue(message: MessageData): Int = llvm """
-  %value = call %Int @c_message_value(%Pos ${message})
-  ret %Int %value
+extern def test(v: Int) { f: Int => Int } at async: Int = llvm """
+  %vtable = extractvalue %Neg ${f}, 0
+  %closure = extractvalue %Neg ${f}, 1
+  %functionPointer_pointer = getelementptr ptr, ptr %vtable, i64 0
+  %functionPointer = load ptr, ptr %functionPointer_pointer
+
+  %vPos = call %Pos @coerceIntPos(%Int ${v})
+  musttail call tailcc void %functionPointer(%Object %closure, %Pos %vPos, %Stack %stack)
+  ret void
 """
-
-extern def messageCont(message: MessageData): Continuation = llvm """
-  %value = call %Stack @c_message_continuation(%Pos ${message})
-  ret %Stack %value
-"""
-
-def emitWaitResume(v: Int, handler: MessageQueue[MessageData], emitter: MessageQueue[MessageData]): Unit = {
-  println("Before doemit")
-  doEmit(v, handler)
-
-  println("Before pop")
-  val message = handler.unsafePop()
-  println(messageValue(message))
-
-  println("Before send resume")
-  sendResume(emitter, messageCont(message))
-  
-  // doResume(emitter)
-
-  println("Before loop")
-  loop {
-    if (not (emitter.isEmpty)) {
-      doResume(emitter)
-      do stop()
-    }
-  }
-}
 
 def main() = {
-  val handler = allocateQueue[MessageData]()
-  val emitter = allocateQueue[MessageData]()
+  val handler = newActor()
+  val emitter = newActor()
 
-  emitWaitResume(1, handler, emitter)
-  emitWaitResume(2, handler, emitter)
-  emitWaitResume(3, handler, emitter)
+  val t1 = start_thread {
+    handler.startActor()
+  }
 
-  // println("Start")
-  // emitMessage()
-  // println("after message 1")
-  // doEmit(1, handler)
-  // println("After 1")
-  // doEmit(2, handler)
-  // doEmit(3, handler)
-  // println("End")
+  val t2 = start_thread {
+    emitter.startActor()
+    emitter.sendEmit(1, handler)
+    emitter.sendEmit(2, handler)
+    emitter.sendEmit(3, handler)
+    handler.sendTerminate()
+    emitter.sendTerminate()
+  }
+
+
+  join_thread(t1)
+  join_thread(t2)
+
+  eraseActor(handler)
+  eraseActor(emitter)
 }

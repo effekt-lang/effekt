@@ -1,274 +1,260 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include "types.c"
 
-// struct ThreadObject {
-//     long id;
-//     void* function_pointer;
-//     void* object;
-//     void* stack;
-// };
 
-// MessageType will be stored in Pos tag
 enum MessageType {
-    RESUME,
-    TERMINATE,
+    // "Special messages"
+    RESUME = -2,
+    TERMINATE = -1,
+    // Effects
     EMIT,
-};
-
-struct MessageData {
-    long message; // Might need to be Pos
-    Stack continuation;
 };
 
 # define QUEUE_SIZE 16
 struct MessageQueue {
     long head;
     long tail;
+    pthread_mutex_t mutex;
     struct Pos* data;
     // Maybe conditions
 };
 
-// void c_thread_erase_noop(void *envPtr) { (void)envPtr; }
+struct Actor {
+    struct MessageQueue* queue;
+    pthread_cond_t signal;
+    pthread_mutex_t signal_mutex;
+};
+typedef struct Actor actor_t;
 
-// struct Pos c_thread_start(void* function_pointer, void* function_arguments) {
+struct MessageData {
+    long tag;
+    long message; // Might need to be Pos
+    struct Pos reply_to;
+    Stack continuation;
+};
 
-//     void *objPtr = malloc(sizeof(struct Header) + sizeof(struct ThreadObject));
-//     struct Header *headerPtr = objPtr;
-//     *headerPtr = (struct Header) { .rc = 0, .eraser = c_thread_erase_noop, };
-
-//     long threadId;
-//     int ret = pthread_create(&threadId, NULL, function_pointer, function_arguments);
-//     if (!ret) {
-//         printf("Failed to create pthread\n");
-//     }
-
-//     struct ThreadObject *threadObject = objPtr + sizeof(struct Header);
-//     *threadObject = (struct ThreadObject) { 
-//         .id = threadId, 
-//         .function_pointer = function_pointer, 
-//         .object = NULL,
-//         .stack = NULL,
-//     };
-
-//     return (struct Pos) {
-//         .tag = threadId,
-//         .obj = objPtr,
-//     };
-// }
-
-// struct ThreadObject* c_thread_object(const struct Pos pos) {
-//     struct ThreadObject *data = pos.obj + sizeof(struct Header);
-//     return data;
-// }
-
-// void c_thread_join(const struct Pos pos) {
-//     int ret = pthread_join(pos.tag, NULL);
-//     if (!ret) {
-//         printf("Failed to join pthread\n");
-//     }
-
-//     erasePositive(pos);
-// }
-
-void c_queue_erase(void *queuePtr) { 
-    pthread_mutex_t *mutex = queuePtr;
-    pthread_mutex_destroy(mutex);
-
-    long *head = queuePtr + sizeof(pthread_mutex_t);
-    long *tail = head + sizeof(long);
-    struct Pos *dataPtr = (struct Pos*) tail + sizeof(long);
-    for (int i = *head; i < *tail; i++) {
-        struct Pos *data_ptr = dataPtr + i * sizeof(struct Pos);
-        struct Pos data = *data_ptr;
+void c_queue_free(struct MessageQueue* queue) {
+    // printf("Freeing queue: %p\n", queue);
+    long head = queue->head;
+    long tail = queue->tail;
+    for (int i = head; i < tail; i++) {
+        struct Pos data = queue->data[i];
         erasePositive(data);
-    } 
+    }
+    free(queue->data);
 }
 
-void c_queue_message_erase(void *queuePtr) {
+void c_actor_free(void* actorPtr) {
+    // printf("Freeing actor: %p\n", actorPtr);
+    struct Actor* actor = actorPtr;
+    c_queue_free(actor->queue);
+    free(actor->queue);
+    pthread_cond_destroy(&actor->signal);
+    pthread_mutex_destroy(&actor->signal_mutex);
+}
+
+struct MessageQueue* c_queue_allocate() {
+    struct MessageQueue* alloc = malloc(sizeof(struct MessageQueue));
+    struct Pos* data = calloc(QUEUE_SIZE, sizeof(struct Pos));
+    struct MessageQueue queue = (struct MessageQueue) { .head = 0, .tail = 0, .mutex = PTHREAD_MUTEX_INITIALIZER, .data = data };
+    *alloc = queue;
+    return alloc;
+}
+
+struct MessageData c_message_allocate() {
+    return (struct MessageData) {};
+}
+
+struct Actor c_actor_allocate() {
+    return (struct Actor) {
+        .queue = c_queue_allocate(),
+        .signal = PTHREAD_COND_INITIALIZER,
+        .signal_mutex = PTHREAD_MUTEX_INITIALIZER,
+    };
+}
+
+void c_erase_log(void* obj) {
+    printf("Erasing object\n");
     return;
 }
 
-struct Pos c_queue_new() {
-    void *objPtr = malloc(sizeof(struct Header) + sizeof(pthread_mutex_t) + sizeof(struct MessageQueue) + QUEUE_SIZE * sizeof(struct Pos));
-    struct Header *headerPtr = objPtr;
-    *headerPtr = (struct Header) { .rc = 0, .eraser = c_queue_erase, };
+struct Pos c_actor_new() {
+    void* wrap_alloc = malloc(sizeof(struct Header) + sizeof(struct Actor));
 
-    pthread_mutex_t *mutexPtr = objPtr + sizeof(struct Header);
-    pthread_mutex_init(mutexPtr, NULL);
+    struct Header* headerPtr = wrap_alloc;
+    *headerPtr = (struct Header) { .rc = 0, .eraser = c_actor_free };
 
-    struct MessageQueue *queuePtr = (struct MessageQueue*) mutexPtr + sizeof(pthread_mutex_t);
-    *queuePtr = (struct MessageQueue) {
-        .head = 0,
-        .tail = 0,
-        .data = (struct Pos*) queuePtr + sizeof(struct MessageQueue),
+    struct Actor* objPtr = wrap_alloc + sizeof(struct Header); 
+    *objPtr = c_actor_allocate();
+    struct Pos wrapped = (struct Pos) {
+      .tag = 0,
+      .obj = wrap_alloc,
     };
+    return wrapped;
+}
 
-    return (struct Pos) {
-        .tag = 0, // We don't use the tag, as the queue is fixed size
-        .obj = objPtr,
+void c_erase_message(void* message) {
+    // printf("Erasing message: %p\n", message);
+    return;
+}
+
+struct Pos c_message_wrap(struct MessageData message) {
+    void* wrap_alloc = malloc(sizeof(struct Header) + sizeof(struct MessageData));
+
+    struct Header* headerPtr = wrap_alloc;
+    *headerPtr = (struct Header) { .rc = 0, .eraser = c_erase_message };
+
+    struct MessageData* messagePtr = wrap_alloc + sizeof(struct Header); 
+    *messagePtr = message;
+    struct Pos wrapped_message = (struct Pos) {
+      .tag = 0,
+      .obj = wrap_alloc,
+    };
+    return wrapped_message;
+}
+
+struct MessageData c_message_effect(struct Pos reply_to, long effect, long message, Stack stack) {
+    return (struct MessageData) {
+        .tag = effect,
+        .message = message,
+        .reply_to = reply_to,
+        .continuation = stack,
     };
 }
 
-struct Pos c_message_new_raw() {
-    void *objPtr = malloc(sizeof(struct Header) + sizeof(struct MessageData));
-    struct Header *headerPtr = objPtr;
-    *headerPtr = (struct Header) { .rc = 0, .eraser = c_queue_message_erase, };
-
-    return (struct Pos) {
-        .tag = 0,
-        .obj = objPtr,
+struct MessageData c_message_resume(Stack stack) {
+    return (struct MessageData) {
+        .tag = RESUME,
+        .continuation = stack,
     };
 }
 
-// Needs to take resume value as well, when necessary
-struct Pos c_message_new_resume(Stack stack) {
-    struct Pos raw_message = c_message_new_raw();
-    struct MessageData *dataPtr = (struct MessageData*) raw_message.obj + sizeof(struct Header);
-    raw_message.tag = RESUME;
-    dataPtr->continuation = stack;
-
-    return raw_message;
+struct MessageData c_message_terminate() {
+    return (struct MessageData) {
+        .tag = TERMINATE,
+    };
 }
 
-struct Pos c_message_new_emit(long message, Stack stack) {
-    struct Pos raw_message = c_message_new_raw();
-    struct MessageData *dataPtr = (struct MessageData*) raw_message.obj + sizeof(struct Header);
-    raw_message.tag = EMIT;
-    dataPtr->message = message;
-    dataPtr->continuation = stack;
-
-    sharePositive(raw_message);
-    return raw_message;
+bool c_queue_isEmpty(struct MessageQueue* queue) {
+    pthread_mutex_lock(&queue->mutex);
+    bool res = queue->head == queue->tail;
+    pthread_mutex_unlock(&queue->mutex);
+    return res;
 }
 
-struct Pos c_message_new_terminate() {
-    struct Pos raw_message = c_message_new_raw();
-    struct MessageData *dataPtr = (struct MessageData*) raw_message.obj + sizeof(struct Header);
-    raw_message.tag = TERMINATE;
-
-    return raw_message;
+bool c_queue_isFull(struct MessageQueue* queue) {
+    pthread_mutex_lock(&queue->mutex);
+    bool res = ((queue->head + 1) % QUEUE_SIZE) == queue->tail;
+    pthread_mutex_unlock(&queue->mutex);
+    return res;
 }
 
-// Might need to be Pos
-long c_message_value(struct Pos message) {
-    return c_message(message)->message;
+void c_queue_unsafeEnqueue(struct MessageQueue* queue, struct Pos value) {
+    pthread_mutex_lock(&queue->mutex);
+
+    queue->data[queue->tail] = value;
+    queue->tail = (queue->tail + 1) % QUEUE_SIZE;
+
+    pthread_mutex_unlock(&queue->mutex);
 }
 
-Stack c_message_continuation(struct Pos message) {
-    return c_message(message)->continuation;
+void c_queue_unsafeDequeue(struct MessageQueue* queue) {
+    pthread_mutex_lock(&queue->mutex);
+    queue->head = (queue->head + 1) % QUEUE_SIZE; 
+    pthread_mutex_unlock(&queue->mutex);
 }
 
-struct MessageData* c_message(struct Pos message) {
-    struct MessageData *data = (struct MessageData*) message.obj + sizeof(struct Header);
-    return data;
-}
+struct Pos c_queue_unsafePeek(struct MessageQueue* queue) {
+    pthread_mutex_lock(&queue->mutex);
+    struct Pos value = queue->data[queue->head];
+    pthread_mutex_unlock(&queue->mutex);
 
-pthread_mutex_t *c_queue_mutex(struct Pos queue) {
-    pthread_mutex_t *mutex_ptr = queue.obj + sizeof(struct Header);
-    return mutex_ptr;
-}
-
-struct MessageQueue* c_queue(struct Pos queue) {
-    struct MessageQueue *data = (struct MessageQueue*) c_queue_mutex(queue) + sizeof(pthread_mutex_t);
-    return data;
-}
-
-struct Pos c_queue_empty(struct Pos queue) {
-    pthread_mutex_t *mutex = c_queue_mutex(queue);
-    pthread_mutex_lock(mutex);
-    struct MessageQueue q = *c_queue(queue);
-    pthread_mutex_unlock(mutex);
-    
-    if (q.head == q.tail) {
-        return BooleanTrue;
-    } else {
-        return BooleanFalse;
-    }
-}
-
-struct Pos c_queue_full(struct Pos queue) {
-    pthread_mutex_t *mutex = c_queue_mutex(queue);
-    pthread_mutex_lock(mutex);
-    struct MessageQueue q = *c_queue(queue);
-    pthread_mutex_unlock(mutex);
-
-    if ((q.head + 1) % QUEUE_SIZE == q.tail) {
-        return BooleanTrue;
-    } else {
-        return BooleanFalse;
-    }
-}
-
-struct Pos c_queue_unsafeEnqueue(struct Pos queue, struct Pos value) {
-    pthread_mutex_t *mutex = c_queue_mutex(queue);
-    pthread_mutex_lock(mutex);
-    struct MessageQueue *q = c_queue(queue);
-
-    q->data[q->tail] = value;
-    q->tail = (q->tail + 1) % QUEUE_SIZE;
-
-    pthread_mutex_unlock(mutex);
-
-    return Unit;
-}
-
-struct Pos c_queue_unsafeDequeue(struct Pos queue) {
-    pthread_mutex_t *mutex = c_queue_mutex(queue);
-    pthread_mutex_lock(mutex);
-    struct MessageQueue *q = c_queue(queue);
-    q->head = (q->head + 1) % QUEUE_SIZE;
-    pthread_mutex_unlock(mutex);
-
-    return Unit;
-}
-
-struct Pos c_queue_unsafePeek(struct Pos queue) {
-    pthread_mutex_t *mutex = c_queue_mutex(queue);
-    pthread_mutex_lock(mutex);
-    struct MessageQueue *q = c_queue(queue);
-    struct Pos value = q->data[q->head];
-    pthread_mutex_unlock(mutex);
     return value;
 }
 
-struct Pos c_queue_unsafePop(struct Pos queue) {
-    pthread_mutex_t *mutex = c_queue_mutex(queue);
-    pthread_mutex_lock(mutex);
-    struct MessageQueue *q = c_queue(queue);
-    struct Pos value = q->data[q->head];
-    q->head = (q->head + 1) % QUEUE_SIZE;
-    pthread_mutex_unlock(mutex);
+struct Pos c_queue_unsafePop(struct MessageQueue* queue) {
+    pthread_mutex_lock(&queue->mutex);
+    struct Pos value = queue->data[queue->head];
+    queue->head = (queue->head + 1) % QUEUE_SIZE;
+    pthread_mutex_unlock(&queue->mutex);
+
     return value;
 }
 
-// Handler & Emitter need to be MessageQueues
-struct Pos c_queue_send_emit(long value, struct Pos handler, Stack cont) {
-    // Should handle handler queue full here
-    c_queue_unsafeEnqueue(handler, c_message_new_emit(value, cont));
-
-    erasePositive(handler);
-
-    resume_Pos(cont, Unit);
-
-    return Unit;
+struct Actor* c_actor(struct Pos pos) {
+    struct Actor* actor = pos.obj + sizeof(struct Header);
+    return actor;
 }
 
-struct Pos c_queue_send_resume(struct Pos emitter, Stack cont) {
-    c_queue_unsafeEnqueue(emitter, c_message_new_resume(cont));
-    erasePositive(emitter);
-
-    return Unit;
+void c_queue_send_emit(struct Pos reply_to, long value, struct Pos handler_pos, Stack cont) {
+    struct Actor* handler = c_actor(handler_pos);
+    struct MessageData message = c_message_effect(reply_to, EMIT, value, cont);
+    c_queue_unsafeEnqueue(handler->queue, c_message_wrap(message));
 }
 
-struct Pos c_queue_resume(struct Pos emitter) {
-    struct Pos popped = c_queue_unsafePop(emitter);
-    // assert(popped.tag == RESUME);
-    struct MessageData* message = c_message(popped);
-    // Use resume value here instead of Unit
-    resume_Pos(message->continuation, Unit);
+void c_queue_send_resume(struct Pos emitter_pos, Stack cont) {
+    struct Actor* emitter = c_actor(emitter_pos);
+    struct MessageData message = c_message_resume(cont);
+    c_queue_unsafeEnqueue(emitter->queue, c_message_wrap(message));
+}
 
-    erasePositive(emitter);
-    return Unit;
+void c_queue_send_terminate(struct Pos actor_pos) {
+    struct Actor* actor = c_actor(actor_pos);
+    struct MessageData message = c_message_terminate();
+    c_queue_unsafeEnqueue(actor->queue, c_message_wrap(message));
+}
+
+void c_actor_inspect_queue(struct Pos actor_pos) {
+    struct Actor* actor = c_actor(actor_pos);
+
+    pthread_mutex_lock(&actor->queue->mutex);
+
+    long length = actor->queue->tail - actor->queue->head;
+    printf("Queue: %ld\n", length);
+    for (int i=actor->queue->head; i < actor->queue->tail; i++) {
+        struct Pos element = actor->queue->data[i];
+        struct MessageData* message = element.obj + sizeof(struct Header);
+        printf("(%ld %ld) ", message->message, message->tag);
+    }
+    printf("\n");
+
+    pthread_mutex_unlock(&actor->queue->mutex);
+}
+
+void c_inspect_rc(struct Pos pos) {
+    struct Header* header = pos.obj;
+    printf("RC: %ld\n", header->rc);
+}
+
+void c_actor_start(struct Pos actor_pos, Stack stack) {
+    struct Actor* actor = actor_pos.obj + sizeof(struct Header);
+    printf("Starting actor\n");
+    resume_Pos(stack, Unit);
+    while (true) {
+        if (!c_queue_isEmpty(actor->queue)) {
+            struct Pos message_pos = c_queue_unsafePop(actor->queue);
+            struct MessageData* messagePtr = message_pos.obj + sizeof(struct Header);
+            struct MessageData message = *messagePtr;
+            erasePositive(message_pos);
+            switch(message.tag) {
+                case RESUME:
+                    printf("Resuming\n");
+                    resume_Int(message.continuation, message.message);
+                    continue;
+                case TERMINATE:
+                    printf("Got terminate\n");
+                    erasePositive(actor_pos);
+                    return;
+                case EMIT:
+                    // Handler things
+                    printf("Emit: %ld\n", message.message);
+                    // Resume
+                    c_queue_send_resume(message.reply_to, message.continuation);
+                    continue;
+            }
+        }
+    }
 }
