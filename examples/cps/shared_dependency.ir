@@ -27,3 +27,19 @@ def main(b, k_main) {
     g(k_main)
   }
 }
+
+/// DROP_PARAMETERS
+
+def main(b, k_main) {
+  def g() {
+    k_main(1)
+  }
+  if (b) {
+    def f() {
+      g()
+    }
+    f()
+  } else {
+    g()
+  }
+}

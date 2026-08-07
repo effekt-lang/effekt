@@ -13,18 +13,33 @@ main
 y_3 !-> 2
 x_5 !-> f_2
 
+/// SINK_BLOCKS
+
+def main(k) {
+  def g(x) {
+    x(2)
+  }
+  def f(y) {
+    k(y)
+  }
+  g(f)
+}
+
 /// DROP_PARAMETERS
-def main_0(k) {
+def main(k) {
+  def g(x) {
+    x()
+  }
   def f() {
     k(2)
   }
-  def g() {
-    f()
-  }
-  g()
+  g(f)
 }
 
 /// INLINE
 def main(k) {
-  k(2)
+  def f() {
+    k(2)
+  }
+  f()
 }

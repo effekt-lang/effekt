@@ -15,3 +15,21 @@ def rec(n, self) {
 def main() {
   rec(10, rec)
 }
+
+/// SINK_BLOCKS
+
+def main() {
+  def rec(n, self) {
+    self(n, self)
+  }
+  rec(10, rec)
+}
+
+/// DROP_PARAMETERS
+
+def main() {
+  def rec(self) {
+    self(self)
+  }
+  rec(rec)
+}

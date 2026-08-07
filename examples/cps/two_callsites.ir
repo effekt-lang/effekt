@@ -33,14 +33,29 @@ def main(ks2, k2) {
   outer(10, ks2, k1)
 }
 
-// there is not a lot we can do...
-// the two calls to outer are with different meta continuations (though at runtime
-// we will know that those are toplevel continuations!)
-//
-// the dataflow analysis is not precise enough here...
+// The continuation changes, but the relational analysis can still establish
+// that the meta continuation is always ks2.
 
 /// FLOWS
 
 main
 ---
+ks_5 !-> ks2_1
 
+/// DROP_PARAMETERS
+
+def main(ks2, k2) {
+  def outer(x, k) {
+    run tmp = eq(x, 0);
+    if (tmp) {
+      k(0, ks2)
+    } else {
+      run tmp = sub(x, 1);
+      outer(tmp, k)
+    }
+  }
+  def k1(res, ks1) {
+    outer(res, k2)
+  }
+  outer(10, k1)
+}

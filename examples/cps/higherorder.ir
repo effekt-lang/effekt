@@ -24,3 +24,36 @@ def main(ks, k) {
 
 main
 ---
+x_7 !-> 0
+
+/// SINK_BLOCKS
+
+def main(ks, k) {
+  def apply(f, y) {
+    f(y)
+  }
+  def dec(z) {
+    def inc(x) {
+      run tmp = add(make Cons(x, make Nil()), 1);
+      apply(inc, 0)
+    }
+    apply(inc, z)
+  }
+  apply(dec, 0)
+}
+
+/// DROP_PARAMETERS
+
+def main(ks, k) {
+  def apply(f) {
+    f()
+  }
+  def dec() {
+    def inc() {
+      run tmp = add(make Cons(0, make Nil()), 1);
+      apply(inc)
+    }
+    apply(inc)
+  }
+  apply(dec)
+}
