@@ -7,6 +7,98 @@ import cpsds.substitutions.substitute
 
 object StaticArguments {
 
+  private class FunctionInfo(
+    val params: List[Id],
+    val recursiveCalls: mutable.ListBuffer[List[Expr]] = mutable.ListBuffer.empty,
+    val externalCalls: mutable.ListBuffer[List[Expr]] = mutable.ListBuffer.empty
+  ) {
+    def isRecursive: Boolean = recursiveCalls.nonEmpty
+
+    def staticArguments: List[Boolean] =
+      params.zipWithIndex.map { case (param, index) =>
+        recursiveCalls.nonEmpty && recursiveCalls.forall { args =>
+          args(index) match {
+            case Expr.Variable(other) => param == other
+            case _ => false
+          }
+        }
+      }
+  }
+
+  /** The call information needed only by static-argument specialization. */
+  private class CallAnalysis(
+    val functions: mutable.Map[Id, FunctionInfo] = mutable.Map.empty,
+    var stack: List[Id] = Nil
+  ) {
+
+    private def within[A](id: Id)(body: => A): A = {
+      val before = stack
+      stack = id :: stack
+      val result = body
+      stack = before
+      result
+    }
+
+    private def register(id: Id, params: List[Id]): Unit =
+      functions(id) = FunctionInfo(params)
+
+    def process(stmt: Stmt): Unit = stmt match {
+      case Stmt.Def(id, params, body, rest) =>
+        register(id, params)
+        within(id) { process(body) }
+        process(rest)
+
+      case Stmt.New(_, _, operations, rest) =>
+        operations.foreach(operation => process(operation.body))
+        process(rest)
+
+      case Stmt.Let(_, _, rest) => process(rest)
+
+      case Stmt.App(id, args, _) =>
+        functions.get(id).foreach { info =>
+          if stack.contains(id) then info.recursiveCalls += args
+          else info.externalCalls += args
+        }
+
+      case Stmt.Invoke(_, _, _) => ()
+      case Stmt.Run(_, _, _, _, rest) => process(rest)
+      case Stmt.If(_, thn, els) => process(thn); process(els)
+      case Stmt.Match(_, clauses, default) =>
+        clauses.foreach { case (_, clause) => process(clause.body) }
+        default.foreach(process)
+      case Stmt.Region(_, _, rest) => process(rest)
+      case Stmt.Alloc(_, _, _, rest) => process(rest)
+      case Stmt.Var(_, _, _, rest) => process(rest)
+      case Stmt.Dealloc(_, rest) => process(rest)
+      case Stmt.Get(_, _, rest) => process(rest)
+      case Stmt.Put(_, _, rest) => process(rest)
+      case Stmt.Reset(_, _, _, body, _, _) => process(body)
+      case Stmt.Shift(_, _, _, _, body, _, _) => process(body)
+      case Stmt.Resume(_, _, _, body, _, _) => process(body)
+      case Stmt.Hole(_) => ()
+    }
+
+    def process(module: ModuleDecl): Unit = {
+      // Toplevel definitions are mutually visible, so register them first.
+      module.definitions.foreach {
+        case ToplevelDefinition.Def(id, params, _) => register(id, params)
+        case _: ToplevelDefinition.Val => ()
+      }
+      module.definitions.foreach {
+        case ToplevelDefinition.Def(id, _, body) => within(id) { process(body) }
+        case ToplevelDefinition.Val(_, _, _, binding) => process(binding)
+      }
+    }
+  }
+
+  private object CallAnalysis {
+    def apply(module: ModuleDecl): CallAnalysis = {
+      val analysis = new CallAnalysis()
+      analysis.process(module)
+      analysis
+    }
+  }
+
   class Context(
     val statics: Map[Id, List[Boolean]],
     val workers: mutable.Map[Id, Id] = mutable.Map.empty,
@@ -273,13 +365,13 @@ object StaticArguments {
   // --- Entry point ---
 
   def transform(m: ModuleDecl): ModuleDecl = {
-    val analysis = UsageAnalysis(m)
+    val analysis = CallAnalysis(m)
     given ctx: Context = initializeContext(analysis)
 
     m.copy(definitions = m.definitions.flatMap(d => rewrite(d)))
   }
 
-  private def initializeContext(analysis: UsageAnalysis): Context = {
+  private def initializeContext(analysis: CallAnalysis): Context = {
     val statics = mutable.Map.empty[Id, List[Boolean]]
 
     analysis.functions.foreach {
