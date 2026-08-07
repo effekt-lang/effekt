@@ -1,0 +1,29 @@
+def finish(k_finish) {
+  k_finish(0)
+}
+def loop(again_loop, k_loop) {
+  if (again_loop) {
+    loop(again_loop, k_loop)
+  } else {
+    finish(k_loop)
+  }
+}
+def main(again_main, k_main) {
+  loop(again_main, k_main)
+}
+
+/// SINK_BLOCKS
+
+def main(again_main, k_main) {
+  def loop(again_loop, k_loop) {
+    if (again_loop) {
+      loop(again_loop, k_loop)
+    } else {
+      def finish(k_finish) {
+        k_finish(0)
+      }
+      finish(k_loop)
+    }
+  }
+  loop(again_main, k_main)
+}
