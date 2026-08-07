@@ -1,0 +1,75 @@
+def fibonacci(i_f, ks_f, k_f) {
+  run is_zero = eq(i_f, 0);
+  if (is_zero) {
+    k_f(0, ks_f)
+  } else {
+    run i1 = sub(i_f, 1);
+    def k1(v1, ks_k1) {
+      run i2 = sub(i_f, 2);
+      def k2(v2, ks_k2) {
+        run result = add(v1, v2);
+        k_f(result, ks_k2)
+      }
+      fibonacci(i2, ks_k1, k2)
+    }
+    fibonacci(i1, ks_f, k1)
+  }
+}
+def main(i_main, ks_main, k_main) {
+  def done(v_done, ks_done) {
+    k_main(v_done, ks_done)
+  }
+  fibonacci(i_main, ks_main, done)
+}
+
+/// SINK_BLOCKS
+
+def main(i_main, ks_main, k_main) {
+  def done(v_done, ks_done) {
+    k_main(v_done, ks_done)
+  }
+  def fibonacci(i_f, ks_f, k_f) {
+    run is_zero = eq(i_f, 0);
+    if (is_zero) {
+      k_f(0, ks_f)
+    } else {
+      run i1 = sub(i_f, 1);
+      def k1(v1, ks_k1) {
+        run i2 = sub(i_f, 2);
+        def k2(v2, ks_k2) {
+          run result = add(v1, v2);
+          k_f(result, ks_k2)
+        }
+        fibonacci(i2, ks_k1, k2)
+      }
+      fibonacci(i1, ks_f, k1)
+    }
+  }
+  fibonacci(i_main, ks_main, done)
+}
+
+/// DROP_PARAMETERS
+
+def main(i_main, ks_main, k_main) {
+  def done(v_done) {
+    k_main(v_done, ks_main)
+  }
+  def fibonacci(i_f, k_f) {
+    run is_zero = eq(i_f, 0);
+    if (is_zero) {
+      k_f(0)
+    } else {
+      run i1 = sub(i_f, 1);
+      def k1(v1) {
+        run i2 = sub(i_f, 2);
+        def k2(v2) {
+          run result = add(v1, v2);
+          k_f(result)
+        }
+        fibonacci(i2, k2)
+      }
+      fibonacci(i1, k1)
+    }
+  }
+  fibonacci(i_main, done)
+}
