@@ -1,0 +1,31 @@
+def g(k_g) {
+  k_g(1)
+}
+def f(k_f) {
+  g(k_f)
+}
+def main(value, k_main) {
+  value match {
+    case Nil() => f(k_main)
+    case Cons() => f(k_main)
+  } else {
+    k_main(0)
+  }
+}
+
+/// SINK_BLOCKS
+
+def main(value, k_main) {
+  def f(k_f) {
+    def g(k_g) {
+      k_g(1)
+    }
+    g(k_f)
+  }
+  value match {
+    case Nil() => f(k_main)
+    case Cons() => f(k_main)
+  } else {
+    k_main(0)
+  }
+}

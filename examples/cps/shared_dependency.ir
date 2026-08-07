@@ -1,0 +1,29 @@
+def g(k_g) {
+  k_g(1)
+}
+def f(k_f) {
+  g(k_f)
+}
+def main(b, k_main) {
+  if (b) {
+    f(k_main)
+  } else {
+    g(k_main)
+  }
+}
+
+/// SINK_BLOCKS
+
+def main(b, k_main) {
+  def g(k_g) {
+    k_g(1)
+  }
+  if (b) {
+    def f(k_f) {
+      g(k_f)
+    }
+    f(k_main)
+  } else {
+    g(k_main)
+  }
+}
