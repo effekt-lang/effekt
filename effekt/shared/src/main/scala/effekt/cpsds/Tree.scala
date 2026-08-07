@@ -476,7 +476,7 @@ object functionUsage {
 
   inline def uses(stmt: Stmt): DB[Set[Id]] = stmt match {
     case Stmt.Def(id, params, body, rest) =>
-      rest.uses + (id -> (body.free -- params))
+      body.uses ++ rest.uses + (id -> (body.free -- params))
     case Stmt.New(id, interface, operations, rest) =>
       val freeInOperations = operations.foldLeft(rest.free) { case (acc, op) => acc ++ op.free }
       rest.uses ++ all(operations, _.uses) + (id -> freeInOperations)
