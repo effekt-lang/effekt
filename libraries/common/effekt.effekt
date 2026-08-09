@@ -347,9 +347,10 @@ extern def infixStar(x: Int, y: Int) at {}: Int =
   chez "(* ${x} ${y})"
   llvm "%z = mul  %Int ${x}, ${y} ret %Int %z"
 
+/// Truncating signed integer division (quotient rounded towards zero)
 extern def infixSlash(x: Int, y: Int) at {}: Int =
-  js "Math.floor(${x} / ${y})"
-  chez "(floor (/ ${x} ${y}))"
+  js "Math.trunc(${x} / ${y})"
+  chez "(quotient ${x} ${y})"
   llvm "%z = sdiv %Int ${x}, ${y} ret %Int %z"
 
 extern def infixMinus(x: Int, y: Int) at {}: Int =
