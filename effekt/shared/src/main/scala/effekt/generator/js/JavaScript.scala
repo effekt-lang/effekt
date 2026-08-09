@@ -80,7 +80,8 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
 
   lazy val Compile = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val doc = pretty(TransformerCpsDs.compile(cps, core, mainSymbol).commonjs)
+      val target = FunctionFloating.transform(TransformerCpsDs.compile(cps, core, mainSymbol))
+      val doc = pretty(target.commonjs)
       (Map(mainFile -> doc.layout), mainFile)
   }
 
@@ -89,7 +90,8 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
    */
   lazy val CompileWeb = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val doc = pretty(TransformerCpsDs.compile(cps, core, mainSymbol).virtual)
+      val target = FunctionFloating.transform(TransformerCpsDs.compile(cps, core, mainSymbol))
+      val doc = pretty(target.virtual)
       (Map(mainFile -> doc.layout), mainFile)
   }
 
@@ -98,7 +100,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
    */
   lazy val CompileLSP = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      TransformerCpsDs.compileLSP(cps, core)
+      FunctionFloating.transform(TransformerCpsDs.compileLSP(cps, core))
   }
 
   private def pretty(stmts: List[js.Stmt]): Document =
