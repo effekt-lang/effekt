@@ -25,6 +25,14 @@ object TransformerCpsDs extends Transformer {
 
   case class SecondClassDef(params: List[Id], isRecursive: Boolean)
 
+  case class DispatchState(
+    dispatch: Defunctionalization.ContinuationDispatch,
+    continuation: JSName,
+    arguments: Vector[JSName],
+    entryLabel: JSName,
+    applyLabel: JSName
+  )
+
   case class TransformerContext(
     externs: Map[Id, cpsds.Extern.Def],
     kinds: Map[Id, FunctionKind],
@@ -37,6 +45,11 @@ object TransformerCpsDs extends Transformer {
     // Mutable second-class params currently in scope (from recursive second-class defs).
     // Any JS closure capturing these must snapshot them first to avoid capture-by-reference bugs.
     mutableParams: Set[Id],
+    defunctionalization: Defunctionalization.Plan,
+    dispatches: Map[Id, DispatchState],
+    dispatchAliases: Map[Id, Defunctionalization.ContinuationDispatch],
+    renamedCaptures: Map[Id, Id],
+    applying: Set[Id],
     declarations: DeclarationContext,
     errors: Context
   )
@@ -50,7 +63,10 @@ object TransformerCpsDs extends Transformer {
     ctx.copy(
       secondClass = Map.empty,
       insideBody = Set.empty,
-      mutableParams = Set.empty
+      mutableParams = Set.empty,
+      dispatches = Map.empty,
+      dispatchAliases = Map.empty,
+      applying = Set.empty
     )
 
   def computeKinds(m: cpsds.ModuleDecl): Map[Id, FunctionKind] = {
@@ -112,13 +128,23 @@ object TransformerCpsDs extends Transformer {
   def toJS(module: cpsds.ModuleDecl, exports: List[js.Export])(using D: DeclarationContext, C: Context): js.Module =
     module match {
       case cpsds.ModuleDecl(includes, declarations, externs, definitions, _) =>
+        val kinds = computeKinds(module)
+        val defunctionalization = Defunctionalization.analyze(
+          module,
+          id => kinds.get(id).exists(_.isRecursive),
+          id => kinds.get(id).exists(_.isSecondClass))
         given ctx: TransformerContext = TransformerContext(
           externs.collect { case d: cpsds.Extern.Def => (d.id, d) }.toMap,
-          computeKinds(module),
+          kinds,
           cpsds.escapeAnalysis.escapes(module),
           Set.empty,
           Map.empty,
           Set.empty,
+          Set.empty,
+          defunctionalization,
+          Map.empty,
+          Map.empty,
+          Map.empty,
           Set.empty,
           D, C)
 
@@ -223,11 +249,24 @@ object TransformerCpsDs extends Transformer {
 
     // --- Def ---
     case cpsds.Stmt.Def(id, params, body, rest) =>
-      val kind = kindOf(id)
-      if kind.isSecondClass then
-        secondClassDef(id, params, body, Some(rest), kind.isRecursive)
-      else
-        firstClassDef(id, params, body, rest, kind.isRecursive)
+      ctx.defunctionalization.caseOf(id) match {
+        case Some(continuationCase) =>
+          Binding { k =>
+            val properties = (`tag` -> js.RawExpr(continuationCase.tag.toString)) +:
+              continuationCase.captures.map { capture =>
+                memberNameRef(capture) ->
+                  nameRef(ctx.renamedCaptures.getOrElse(capture, capture))
+              }
+            js.Const(nameDef(id), js.Object(properties.toList)) :: toJS(rest).run(k)
+          }
+
+        case None =>
+          val kind = kindOf(id)
+          if kind.isSecondClass then
+            secondClassDef(id, params, body, Some(rest), kind.isRecursive)
+          else
+            firstClassDef(id, params, body, rest, kind.isRecursive)
+      }
 
     // --- New ---
     case cpsds.Stmt.New(id, interface, operations, rest) =>
@@ -249,7 +288,9 @@ object TransformerCpsDs extends Transformer {
       }
 
     case cpsds.Stmt.App(id, args, direct) =>
-      ctx.secondClass.get(id) match {
+      ctx.dispatchAliases.get(id).orElse(ctx.defunctionalization.dispatchForCallee(id)) match {
+        case Some(dispatch) => dispatchCall(id, args, dispatch)
+        case None => ctx.secondClass.get(id) match {
         case Some(sci) =>
           // Second-class call: assign args to params, then jump.
           // Need temporaries for params that appear free in later arguments
@@ -287,6 +328,7 @@ object TransformerCpsDs extends Transformer {
         case None =>
           //if (direct) println(s"call to ${nameRef(id)} could be direct")
           pure(js.Return(js.Lambda(Nil, js.Return(js.Call(nameRef(id), args.map(toJS))))) :: Nil)
+        }
       }
 
     // --- Invoke ---
@@ -422,24 +464,156 @@ object TransformerCpsDs extends Transformer {
       pure(js.Return($effekt.call("hole", JsString(span.range.from.format))) :: Nil)
   }
 
+  // --- Defunctionalized continuations ---
+
+  private def dispatchCall(
+    callee: Id,
+    args: List[cpsds.Expr],
+    dispatch: Defunctionalization.ContinuationDispatch
+  )(using ctx: TransformerContext): Binding[List[js.Stmt]] = {
+    val state = ctx.dispatches.get(dispatch.entry)
+      .orElse(ctx.applying.iterator.flatMap(ctx.dispatches.get)
+        .find(_.dispatch.targets == dispatch.targets))
+      .orElse(ctx.dispatches.values.find(_.dispatch.targets == dispatch.targets))
+      .getOrElse(sys.error(s"Continuation dispatch for ${dispatch.entry} is not in scope"))
+
+    // Evaluate everything before changing a register. Case bodies can refer to
+    // the old continuation and argument registers through their local bindings.
+    val nextContinuation = freshName("next_cont_")
+    val nextArguments = args.map(_ => freshName("next_arg_")).toVector
+    val evaluate =
+      js.Const(nextContinuation, nameRef(callee)) +:
+        args.zip(nextArguments).map { case (argument, temporary) =>
+          js.Const(temporary, toJS(argument))
+        }
+    val assign =
+      js.Assign(js.Variable(state.continuation), js.Variable(nextContinuation)) +:
+        state.arguments.zip(nextArguments).map { case (register, temporary) =>
+          js.Assign(js.Variable(register), js.Variable(temporary))
+        }
+    val jump =
+      if ctx.applying.contains(state.dispatch.entry) then
+        js.Continue(Some(state.applyLabel))
+      else
+        js.Break(Some(state.entryLabel))
+
+    pure((evaluate ++ assign :+ jump).toList)
+  }
+
+  private def dispatchLoop(
+    state: DispatchState,
+    ctx: TransformerContext
+  ): js.Stmt = {
+    val scrutinee = js.Member(js.Variable(state.continuation), `tag`)
+    val boundary = Option.when(state.dispatch.boundary) {
+      val target = freshName("boundary_continuation_")
+      js.RawExpr(Defunctionalization.BoundaryTag.toString) -> List(js.Block(None, List(
+        js.Const(target,
+          js.Member(js.Variable(state.continuation), memberNameRef(state.dispatch.callee))),
+        js.Return(js.Lambda(Nil,
+          js.Return(js.Call(js.Variable(target), state.arguments.map(js.Variable(_)).toList))))
+      )))
+    }
+    val localCases = state.dispatch.cases.map { continuationCase =>
+      val renamedCaptures = continuationCase.captures
+        .filterNot(ctx.secondClass.contains)
+        .map { capture =>
+          capture -> Id(s"frame_${capture.name}")
+        }
+      given cpsds.substitutions.Substitution = cpsds.substitutions.Substitution(
+        renamedCaptures.iterator.map { case (capture, local) =>
+          capture -> cpsds.Expr.Variable(local)
+        }.toMap)
+      val parameters = continuationCase.params.zip(state.arguments).map {
+        case (parameter, register) =>
+          js.Const(nameDef(parameter), js.Variable(register))
+      }
+      val captures = renamedCaptures.map { case (capture, local) =>
+        js.Const(nameDef(local),
+          js.Member(js.Variable(state.continuation), memberNameRef(capture)))
+      }
+      val aliases = renamedCaptures.flatMap { case (capture, local) =>
+        ctx.defunctionalization.dispatchForCallee(capture).map(local -> _)
+      }.toMap
+      val caseCtx = ctx.copy(
+        applying = ctx.applying + state.dispatch.entry,
+        dispatchAliases = ctx.dispatchAliases ++ aliases,
+        renamedCaptures = ctx.renamedCaptures ++ renamedCaptures)
+      val body = toJS(cpsds.substitutions.substitute(continuationCase.body))(using caseCtx).stmts
+      js.RawExpr(continuationCase.tag.toString) ->
+        List(js.Block(None, (parameters ++ captures).toList ++ body))
+    }.toList
+    val branches = boundary.toList ++ localCases
+
+    js.While(
+      Some(state.applyLabel),
+      js.RawExpr("true"),
+      List(js.Switch(scrutinee, branches,
+        Some(List(js.Return($effekt.call("unreachable")))))))
+  }
+
+  private def dispatchState(dispatch: Defunctionalization.ContinuationDispatch): DispatchState =
+    DispatchState(
+      dispatch,
+      freshName("cont_"),
+      Vector.tabulate(dispatch.arity)(_ => freshName("value_")),
+      freshName("apply_entry_"),
+      freshName("apply_"))
+
+  private def dispatchDeclarations(state: DispatchState): List[js.Stmt] =
+    js.Let(state.continuation, js.Undefined) ::
+      state.arguments.map(argument => js.Let(argument, js.Undefined)).toList
+
+  /** Preserve an arbitrary continuation entering a first-class recursive
+   *  function as the distinguished boundary frame. */
+  private def boundaryFrame(state: DispatchState): List[js.Stmt] =
+    if state.dispatch.boundary then
+      val continuation = nameRef(state.dispatch.callee)
+      List(js.Assign(continuation, js.IfExpr(
+        js"typeof ${continuation} === \"function\"",
+        js.Object(List(
+          `tag` -> js.RawExpr(Defunctionalization.BoundaryTag.toString),
+          memberNameRef(state.dispatch.callee) -> continuation)),
+        continuation)))
+    else Nil
+
+  private def recursiveBody(
+    state: Option[DispatchState],
+    body: List[js.Stmt],
+    ctx: TransformerContext
+  ): List[js.Stmt] =
+    state.fold(body) { dispatch =>
+      List(
+        js.Block(Some(dispatch.entryLabel), body),
+        dispatchLoop(dispatch, ctx))
+    }
+
   // --- First-class Def ---
 
   def firstClassDef(id: Id, params: List[Id], body: cpsds.Stmt, rest: cpsds.Stmt, isRecursive: Boolean)(using ctx: TransformerContext): Binding[List[js.Stmt]] =
     Binding { k =>
       val (backups, substBody) = backupMutableParams(body, params.toSet)
 
+      val state = ctx.defunctionalization.dispatchFor(id).map(dispatchState)
+
       val functionCtx = functionBodyContext
-      val bodyCtx = if isRecursive then
+      val recursiveCtx = if isRecursive then
         functionCtx.copy(
           secondClass = Map(id -> SecondClassDef(params, isRecursive = true)),
           insideBody = Set(id),
           mutableParams = params.toSet
         )
       else functionCtx
+      val bodyCtx = state.fold(recursiveCtx) { dispatch =>
+        recursiveCtx.copy(dispatches = Map(id -> dispatch))
+      }
 
       val translatedBody = toJS(substBody)(using bodyCtx).stmts
       val bodyStmts = if isRecursive then
-        List(js.While(Some(nameDef(id)), RawExpr("true"), translatedBody))
+        state.toList.flatMap(dispatchDeclarations) ++
+          state.toList.flatMap(boundaryFrame) ++
+          List(js.While(Some(nameDef(id)), RawExpr("true"),
+            recursiveBody(state, translatedBody, bodyCtx)))
       else translatedBody
 
       backups ++
@@ -477,24 +651,33 @@ object TransformerCpsDs extends Transformer {
       js.Block(Some(label), toJS(r)(using ctxWithDef).stmts)
     }
 
+    val state = ctx.defunctionalization.dispatchFor(id).map(dispatchState)
+
     // Translate body: for recursive defs, calls to id will become assignments + continue.
     // Also track params as mutable so that closures inside the body will backup them.
-    val bodyCtx = if isRecursive then
+    val recursiveCtx = if isRecursive then
       ctxWithDef.copy(
         insideBody = ctxWithDef.insideBody + id,
         mutableParams = ctxWithDef.mutableParams ++ params.toSet
       )
     else ctxWithDef
+    val bodyCtx = state.fold(recursiveCtx) { dispatch =>
+      recursiveCtx.copy(dispatches = recursiveCtx.dispatches + (id -> dispatch))
+    }
     val bodyStmts = toJS(body)(using bodyCtx).stmts
 
     val paramDecls = if rest.isDefined then params.map(p => js.Let(nameDef(p), js.Undefined)) else Nil
+    val dispatchDecls = state.toList.flatMap(dispatchDeclarations)
+    val boundary = state.toList.flatMap(boundaryFrame)
 
     if isRecursive then
-      pure(paramDecls ++ entryBlock ++ List(
-        js.While(Some(label), RawExpr("true"), bodyStmts)
+      // A local labeled entry assigns its parameters in `entryBlock`; only
+      // then can an unknown incoming continuation be wrapped as a frame.
+      pure(paramDecls ++ dispatchDecls ++ entryBlock ++ boundary ++ List(
+        js.While(Some(label), RawExpr("true"), recursiveBody(state, bodyStmts, bodyCtx))
       ))
     else
-      pure(paramDecls ++ entryBlock ++ bodyStmts)
+      pure(paramDecls ++ dispatchDecls ++ entryBlock ++ bodyStmts)
   }
 
   // --- Pattern matching ---
