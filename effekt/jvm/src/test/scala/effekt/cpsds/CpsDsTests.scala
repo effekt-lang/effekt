@@ -39,6 +39,14 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
         case _ => ()
       }.mkString("\n")
     })
+  case Equalities extends AnalysisPass("EQUALITIES",
+    (_, input, _) => {
+      input.definitions.collect {
+        case d: ToplevelDefinition.Def =>
+          s"${d.id.name.name}\n---\n${GuardedEquality.analyze(d).show}"
+        case _ => ()
+      }.mkString("\n")
+    })
 }
 
 class CpsDsTests extends munit.FunSuite {

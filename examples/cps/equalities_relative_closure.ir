@@ -1,0 +1,26 @@
+def main(k) {
+  def outer(k_outer) {
+    def done() {
+      k_outer()
+    }
+    def call(f) {
+      f()
+    }
+    call(done)
+  }
+  outer(k)
+}
+
+/// EQUALITIES
+
+main
+---
+outer:
+  entry k_outer = k
+  recursive -
+done:
+  entry -
+  recursive -
+call:
+  entry f = done
+  recursive -

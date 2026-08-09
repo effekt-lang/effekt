@@ -1,0 +1,23 @@
+def main(ks, k) {
+  def loop(again, ks1, k1) {
+    if (again) {
+      loop(again, ks1, k1)
+    } else {
+      k1(ks1)
+    }
+  }
+  println(loop, ks, k)
+}
+
+/// STATIC_ARGUMENTS
+
+def main(ks, k) {
+  def loop(again, ks1, k1) {
+    if (again) {
+      loop(again, ks1, k1)
+    } else {
+      k1(ks1)
+    }
+  }
+  println(loop, ks, k)
+}

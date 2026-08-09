@@ -1,0 +1,24 @@
+def main(choice, seed, k) {
+  def stable(x, changing) {
+    stable(x, 0)
+  }
+  def unstable(x) {
+    unstable(0)
+  }
+  if (choice) {
+    stable(seed, 1)
+  } else {
+    unstable(seed)
+  }
+}
+
+/// EQUALITIES
+
+main
+---
+stable:
+  entry x = seed
+  recursive x
+unstable:
+  entry -
+  recursive -

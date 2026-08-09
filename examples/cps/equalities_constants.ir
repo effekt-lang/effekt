@@ -1,0 +1,28 @@
+def main(which, choice, k) {
+  def constant(x_constant) {
+    k(x_constant)
+  }
+  def varying(x_varying) {
+    k(x_varying)
+  }
+  if (which) {
+    constant(42)
+  } else {
+    if (choice) {
+      varying(0)
+    } else {
+      varying(1)
+    }
+  }
+}
+
+/// EQUALITIES
+
+main
+---
+constant:
+  entry x_constant = 42
+  recursive -
+varying:
+  entry -
+  recursive -

@@ -1,0 +1,23 @@
+def main(k) {
+  def outer(x) {
+    def inner(y) {
+      inner(0)
+    }
+    inner(x)
+  }
+  outer(0)
+}
+
+// The equality for x belongs to the enclosing activation. It must remain
+// available when the nested definition is analyzed relative to that scope.
+
+/// EQUALITIES
+
+main
+---
+outer:
+  entry x = 0
+  recursive -
+inner:
+  entry y = x
+  recursive -
