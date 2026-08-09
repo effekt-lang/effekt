@@ -85,6 +85,9 @@ function reroot(target) {
     node.value   = Mem
     cur          = node
   }
+
+  // Do not retain the reversed path through the global scratch buffer.
+  _rerootPath.length = 0
 }
 
 function restore(store, snap) {
