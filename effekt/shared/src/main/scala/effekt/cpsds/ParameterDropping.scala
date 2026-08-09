@@ -310,6 +310,12 @@ object ParameterDropping {
     case Expr.Abort | Expr.Return | Expr.Toplevel => expr
   }
 
+  private def transformReference(id: Id, info: DropInfo): Id =
+    info.substitute(id) match {
+      case Expr.Variable(replacement) => replacement
+      case other => sys.error(s"A reference cannot be replaced by ${util.show(other)}")
+    }
+
   private def transform(stmt: Stmt, info: DropInfo): Stmt = stmt match {
     case Stmt.Def(id, params, functionBody, rest) =>
       val mask = info.functions(id)
@@ -325,10 +331,7 @@ object ParameterDropping {
       Stmt.Let(id, transform(binding, info), transform(rest, info))
 
     case app @ Stmt.App(id, args, canBeDirect) =>
-      val callee = info.substitute(id) match {
-        case Expr.Variable(callee) => callee
-        case other => sys.error(s"A call target cannot be replaced by ${util.show(other)}")
-      }
+      val callee = transformReference(id, info)
       val mask = info.callMask(app)
       val kept = args.zipWithIndex.collect {
         case (argument, index) if !mask.lift(index).getOrElse(false) =>
@@ -337,10 +340,15 @@ object ParameterDropping {
       Stmt.App(callee, kept, canBeDirect)
 
     case Stmt.Invoke(id, method, args) =>
-      Stmt.Invoke(id, method, args.map(transform(_, info)))
+      Stmt.Invoke(transformReference(id, info), method, args.map(transform(_, info)))
 
     case Stmt.Run(id, callee, args, purity, rest) =>
-      Stmt.Run(id, callee, args.map(transform(_, info)), purity, transform(rest, info))
+      Stmt.Run(
+        id,
+        transformReference(callee, info),
+        args.map(transform(_, info)),
+        purity,
+        transform(rest, info))
 
     case Stmt.If(cond, thn, els) =>
       Stmt.If(transform(cond, info), transform(thn, info), transform(els, info))
@@ -355,26 +363,36 @@ object ParameterDropping {
       Stmt.Region(id, transform(ks, info), transform(rest, info))
 
     case Stmt.Alloc(id, init, region, rest) =>
-      Stmt.Alloc(id, transform(init, info), region, transform(rest, info))
+      Stmt.Alloc(
+        id,
+        transform(init, info),
+        transformReference(region, info),
+        transform(rest, info))
 
     case Stmt.Var(id, init, ks, rest) =>
       Stmt.Var(id, transform(init, info), transform(ks, info), transform(rest, info))
 
-    case Stmt.Dealloc(ref, rest) => Stmt.Dealloc(ref, transform(rest, info))
-    case Stmt.Get(ref, id, rest) => Stmt.Get(ref, id, transform(rest, info))
-    case Stmt.Put(ref, value, rest) => Stmt.Put(ref, transform(value, info), transform(rest, info))
+    case Stmt.Dealloc(ref, rest) =>
+      Stmt.Dealloc(transformReference(ref, info), transform(rest, info))
+    case Stmt.Get(ref, id, rest) =>
+      Stmt.Get(transformReference(ref, info), id, transform(rest, info))
+    case Stmt.Put(ref, value, rest) =>
+      Stmt.Put(
+        transformReference(ref, info),
+        transform(value, info),
+        transform(rest, info))
 
     case Stmt.Reset(p, ks, k, resetBody, ks1, k1) =>
       Stmt.Reset(p, ks, k, transform(resetBody, info), transform(ks1, info), transform(k1, info))
 
     case Stmt.Shift(prompt, resume, ks, k, shiftBody, ks1, k1) =>
       Stmt.Shift(
-        prompt, resume, ks, k,
+        transformReference(prompt, info), resume, ks, k,
         transform(shiftBody, info), transform(ks1, info), transform(k1, info))
 
     case Stmt.Resume(resumption, ks, k, resumeBody, ks1, k1) =>
       Stmt.Resume(
-        resumption, ks, k,
+        transformReference(resumption, info), ks, k,
         transform(resumeBody, info), transform(ks1, info), transform(k1, info))
 
     case _: Stmt.Hole => stmt
