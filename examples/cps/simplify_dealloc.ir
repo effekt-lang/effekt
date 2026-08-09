@@ -1,0 +1,14 @@
+def main(ref, ks, k) {
+  def forward(x, ks2) {
+    dealloc(ref);
+    k(x, ks2)
+  }
+  forward(42, ks)
+}
+
+/// SIMPLIFY
+
+def main(ref, ks, k) {
+  let forward = k;
+  forward(42, ks)
+}
