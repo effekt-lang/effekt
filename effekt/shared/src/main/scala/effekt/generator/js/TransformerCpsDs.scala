@@ -227,7 +227,7 @@ object TransformerCpsDs extends Transformer {
       if kind.isSecondClass then
         secondClassDef(id, params, body, Some(rest), kind.isRecursive)
       else
-        firstClassDef(id, params, body, rest)
+        firstClassDef(id, params, body, rest, kind.isRecursive)
 
     // --- New ---
     case cpsds.Stmt.New(id, interface, operations, rest) =>
@@ -424,10 +424,24 @@ object TransformerCpsDs extends Transformer {
 
   // --- First-class Def ---
 
-  def firstClassDef(id: Id, params: List[Id], body: cpsds.Stmt, rest: cpsds.Stmt)(using ctx: TransformerContext): Binding[List[js.Stmt]] =
+  def firstClassDef(id: Id, params: List[Id], body: cpsds.Stmt, rest: cpsds.Stmt, isRecursive: Boolean)(using ctx: TransformerContext): Binding[List[js.Stmt]] =
     Binding { k =>
       val (backups, substBody) = backupMutableParams(body, params.toSet)
-      val bodyStmts = toJS(substBody)(using functionBodyContext).stmts
+
+      val functionCtx = functionBodyContext
+      val bodyCtx = if isRecursive then
+        functionCtx.copy(
+          secondClass = Map(id -> SecondClassDef(params, isRecursive = true)),
+          insideBody = Set(id),
+          mutableParams = params.toSet
+        )
+      else functionCtx
+
+      val translatedBody = toJS(substBody)(using bodyCtx).stmts
+      val bodyStmts = if isRecursive then
+        List(js.While(Some(nameDef(id)), RawExpr("true"), translatedBody))
+      else translatedBody
+
       backups ++
         List(js.Function(nameDef(id), params.map(nameDef), bodyStmts)) ++
         toJS(rest).run(k)
