@@ -5,7 +5,7 @@ package js
 import scala.annotation.tailrec
 
 /**
- * Float function declarations out of repeatedly executed JavaScript scopes.
+ * Float function declarations to their nearest enclosing capture boundary.
  *
  * At this point join points have already been translated to labeled blocks,
  * so this pass only moves declarations that already require JavaScript
@@ -24,13 +24,13 @@ object FunctionFloating {
     )
 
   def transform(stmts: List[Stmt]): List[Stmt] = {
-    val result = rewriteScope(stmts, Set.empty, repeated = false)
+    val result = rewriteScope(stmts, Set.empty)
     result.floating.map(_.function) ++ result.stmts
   }
 
   /** Rewrite one lexical scope and return declarations that can cross it. */
-  private def rewriteScope(stmts: List[Stmt], parameters: Set[JSName], repeated: Boolean): Result = {
-    val rewritten = stmts.map(rewrite(_, repeated))
+  private def rewriteScope(stmts: List[Stmt], parameters: Set[JSName]): Result = {
+    val rewritten = stmts.map(rewrite)
     val body = rewritten.flatMap(_.stmts)
     val candidates = rewritten.flatMap(_.floating)
     val candidateNames = candidates.map(_.function.name).toSet
@@ -53,9 +53,9 @@ object FunctionFloating {
     Result(staying.map(_.function) ++ body, floating)
   }
 
-  private def rewrite(stmt: Stmt, repeated: Boolean): Result = stmt match {
+  private def rewrite(stmt: Stmt): Result = stmt match {
     case Stmt.Block(label, stmts) =>
-      val result = rewriteScope(stmts, Set.empty, repeated)
+      val result = rewriteScope(stmts, Set.empty)
       Result(List(Stmt.Block(label, result.stmts)), result.floating)
 
     case Stmt.Return(expr) =>
@@ -82,10 +82,10 @@ object FunctionFloating {
         default.iterator.flatMap(bindings)
       val bound = switchBindings.toSet
       val rewrittenBranches = branches.map { case (tag, stmts) =>
-        val result = rewriteScope(stmts, bound, repeated)
+        val result = rewriteScope(stmts, bound)
         (rewrite(tag), result)
       }
-      val rewrittenDefault = default.map(rewriteScope(_, bound, repeated))
+      val rewrittenDefault = default.map(rewriteScope(_, bound))
       val floating = rewrittenBranches.flatMap(_._2.floating) ++ rewrittenDefault.toList.flatMap(_.floating)
       Result(List(Stmt.Switch(
         rewrite(scrutinee),
@@ -97,33 +97,32 @@ object FunctionFloating {
       // Parameters are introduced by entering the function. Its name, however,
       // is introduced by the declaration in the surrounding scope, so nested
       // declarations may float together with the function that names them.
-      val result = rewriteScope(stmts, params.toSet, repeated = false)
+      val result = rewriteScope(stmts, params.toSet)
       val rewritten: Stmt.Function = Stmt.Function(name, params, result.stmts)
       val captured = free(rewritten)
-      val floating = result.floating ++ Option.when(repeated)(Candidate(rewritten, captured))
-      Result(if repeated then Nil else List(rewritten), floating)
+      Result(Nil, result.floating :+ Candidate(rewritten, captured))
 
     case Stmt.Class(name, methods) =>
       // Methods are not ordinary nested declarations. Optimize their bodies,
       // but keep all declarations within the method boundary.
       val rewritten = methods.map { method =>
-        val result = rewriteScope(method.stmts, method.params.toSet + method.name, repeated = false)
+        val result = rewriteScope(method.stmts, method.params.toSet + method.name)
         method.copy(stmts = result.floating.map(_.function) ++ result.stmts)
       }
       Result(List(Stmt.Class(name, rewritten)), Nil)
 
     case Stmt.If(cond, thn, els) =>
-      val thnResult = rewrite(thn, repeated)
-      val elsResult = rewrite(els, repeated)
+      val thnResult = rewrite(thn)
+      val elsResult = rewrite(els)
       Result(
         List(Stmt.If(rewrite(cond), asStmt(thnResult.stmts), asStmt(elsResult.stmts))),
         thnResult.floating ++ elsResult.floating
       )
 
     case Stmt.Try(prog, name, handler, fin) =>
-      val progResult = rewriteScope(prog, Set.empty, repeated)
-      val handlerResult = rewriteScope(handler, Set(name), repeated)
-      val finResult = rewriteScope(fin, Set.empty, repeated)
+      val progResult = rewriteScope(prog, Set.empty)
+      val handlerResult = rewriteScope(handler, Set(name))
+      val finResult = rewriteScope(fin, Set.empty)
       Result(
         List(Stmt.Try(progResult.stmts, name, handlerResult.stmts, finResult.stmts)),
         progResult.floating ++ handlerResult.floating ++ finResult.floating
@@ -133,7 +132,7 @@ object FunctionFloating {
       Result(List(Stmt.Throw(rewrite(expr))), Nil)
 
     case Stmt.While(label, cond, stmts) =>
-      val result = rewriteScope(stmts, Set.empty, repeated = true)
+      val result = rewriteScope(stmts, Set.empty)
       Result(List(Stmt.While(label, rewrite(cond), result.stmts)), result.floating)
 
     case stmt @ (Stmt.Break(_) | Stmt.Continue(_)) =>
@@ -155,7 +154,7 @@ object FunctionFloating {
     case Expr.IfExpr(cond, thn, els) =>
       Expr.IfExpr(rewrite(cond), rewrite(thn), rewrite(els))
     case Expr.Lambda(params, body) =>
-      val result = rewrite(body, repeated = false)
+      val result = rewrite(body)
       Expr.Lambda(params, asStmt(result.floating.map(_.function) ++ result.stmts))
     case Expr.Object(properties) =>
       Expr.Object(properties.map { case (name, value) => name -> rewrite(value) })
