@@ -1,0 +1,30 @@
+def main(choice, k) {
+  def apply(f, x) {
+    f(x)
+  }
+  def inc(x_inc) {
+    k(x_inc)
+  }
+  def dec(x_dec) {
+    k(x_dec)
+  }
+  if (choice) {
+    apply(inc, 1)
+  } else {
+    apply(dec, 0)
+  }
+}
+
+/// EQUALITIES
+
+main
+---
+apply:
+  entry -
+  recursive -
+inc:
+  entry x_inc = 1
+  recursive -
+dec:
+  entry x_dec = 0
+  recursive -

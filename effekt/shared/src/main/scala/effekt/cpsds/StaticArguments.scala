@@ -366,17 +366,22 @@ object StaticArguments {
 
   def transform(m: ModuleDecl): ModuleDecl = {
     val analysis = CallAnalysis(m)
-    given ctx: Context = initializeContext(analysis)
+    val pathStatics = GuardedEquality.analyze(m).view.mapValues(_.recursive).toMap
+    given ctx: Context = initializeContext(analysis, pathStatics)
 
     m.copy(definitions = m.definitions.flatMap(d => rewrite(d)))
   }
 
-  private def initializeContext(analysis: CallAnalysis): Context = {
+  private def initializeContext(
+    analysis: CallAnalysis,
+    pathStatics: Map[Id, Vector[Boolean]]
+  ): Context = {
     val statics = mutable.Map.empty[Id, List[Boolean]]
 
     analysis.functions.foreach {
       case (id, info) if info.isRecursive =>
-        val isInternallyStatic = info.staticArguments
+        val isInternallyStatic =
+          pathStatics.get(id).fold(info.staticArguments)(_.toList)
 
         if info.externalCalls.size <= 1 then
           statics(id) = isInternallyStatic
