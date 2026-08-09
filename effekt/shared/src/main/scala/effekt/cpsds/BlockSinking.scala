@@ -27,14 +27,25 @@ object BlockSinking {
       }
     }
 
-    val anchors = Set(main) ++ mutuallyRecursive
-    val candidates = toplevelIds -- anchors
+    val functionRoots = Set(main) ++ mutuallyRecursive
+    val valueRoots = m.definitions.collect {
+      case ToplevelDefinition.Val(id, _, _, binding) =>
+        val direct = binding.free & toplevelIds
+        id -> direct.foldLeft(direct) { case (reachable, dependency) =>
+          reachable ++ uses.getOrElse(dependency, Set.empty)
+        }
+    }.toMap
+    val roots = functionRoots.iterator.map { id =>
+      id -> uses.getOrElse(id, Set.empty)
+    }.toMap ++ valueRoots
 
-    // A definition can be localized when precisely one anchor transitively
-    // uses it. Definitions shared by anchors remain at module scope.
+    val candidates = toplevelIds -- functionRoots
+
+    // A definition can be localized when precisely one root transitively
+    // uses it. Definitions shared by roots remain at module scope.
     val ownerOf = candidates.flatMap { candidate =>
-      val owners = anchors.filter { anchor =>
-        uses.getOrElse(anchor, Set.empty).contains(candidate)
+      val owners = roots.collect { case (root, reachable) if reachable.contains(candidate) =>
+        root
       }
       Option.when(owners.size == 1)(candidate -> owners.head)
     }.toMap
@@ -53,7 +64,8 @@ object BlockSinking {
         Some(ToplevelDefinition.Def(id, params, localized))
 
       case ToplevelDefinition.Val(id, ks, k, binding) =>
-        Some(ToplevelDefinition.Val(id, ks, k, normalize(binding)))
+        val localized = localize(ownedBy.getOrElse(id, Nil), binding)
+        Some(ToplevelDefinition.Val(id, ks, k, localized))
     }
 
     m.copy(definitions = definitions)

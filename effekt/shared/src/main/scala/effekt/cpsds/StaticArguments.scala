@@ -108,6 +108,25 @@ object StaticArguments {
     def within(id: Id): Boolean = stack.contains(id)
 
     def hasStatics(id: Id): Boolean = statics.get(id).exists(_.exists(x => x))
+
+    /** Discard workers introduced in a lexical subregion. Workers already
+     *  visible on entry may still be placed there, so removals are retained.
+     */
+    def scoped[A](body: => A): A = {
+      val visibleWorkers = workers.keySet.toSet
+      val visiblePending = pendingWorkers.keySet.toSet
+      try body
+      finally {
+        workers.keysIterator.filterNot(visibleWorkers).toList.foreach(workers.remove)
+        pendingWorkers.keysIterator.filterNot(visiblePending).toList.foreach(pendingWorkers.remove)
+      }
+    }
+
+    def withinBody[A](id: Id)(body: => A): A = scoped {
+      val before = stack
+      stack = id :: stack
+      try body finally stack = before
+    }
   }
 
   case class Worker(id: Id, staticParams: List[Id], dynamicParams: List[Id], body: Stmt)
@@ -128,12 +147,18 @@ object StaticArguments {
     ctx.workers(id) = workerId
 
     val staticParams = keepStatic(isStatic, params)
-    val dynamicParams = dropStatic(isStatic, params)
+    val originalDynamicParams = dropStatic(isStatic, params)
+    val dynamicParams = originalDynamicParams.map(Id.apply)
 
-    val before = ctx.stack
-    ctx.stack = id :: ctx.stack
-    val rewrittenBody = rewrite(body)
-    ctx.stack = before
+    // The worker is nested in a scope that can still bind the original
+    // parameters. Its binders therefore have to be fresh, as all binders in
+    // this IR are globally unique.
+    val renaming = originalDynamicParams.zip(dynamicParams).map {
+      case (from, to) => from -> Expr.Variable(to)
+    }.toMap
+    val rewrittenBody = substitute(
+      ctx.withinBody(id) { rewrite(body) },
+      renaming)
 
     Worker(workerId, staticParams, dynamicParams, rewrittenBody)
   }
@@ -218,7 +243,12 @@ object StaticArguments {
       ctx.pendingWorkers.remove(id).map(id -> _)
     }
 
-    wrappers.foldRight(rewrite(s)) { case ((id, Worker(workerId, staticParams, dynamicParams, workerBody)), rest) =>
+    // The worker is local to the wrapper below. Calls in the surrounding
+    // statement must therefore retain the wrapper's original convention.
+    wrappers.foreach { case (id, _) => ctx.workers.remove(id) }
+    val rewritten = rewrite(s)
+
+    wrappers.foldRight(rewritten) { case ((id, Worker(workerId, staticParams, dynamicParams, workerBody)), rest) =>
       val isStatic = ctx.statics(id)
       val si = staticParams.iterator
       val di = dynamicParams.iterator
@@ -256,10 +286,7 @@ object StaticArguments {
       rewrite(rest)
 
     case Stmt.Def(id, params, body, rest) =>
-      val before = ctx.stack
-      ctx.stack = id :: ctx.stack
-      val rewrittenBody = rewrite(body)
-      ctx.stack = before
+      val rewrittenBody = ctx.withinBody(id) { rewrite(body) }
       Stmt.Def(id, params, rewrittenBody, rewrite(rest))
 
     // Recursive call: redirect to worker, drop static args
@@ -292,7 +319,7 @@ object StaticArguments {
       Stmt.Let(id, rewrite(binding), rewrite(rest))
 
     case Stmt.If(cond, thn, els) =>
-      Stmt.If(rewrite(cond), rewrite(thn), rewrite(els))
+      Stmt.If(rewrite(cond), ctx.scoped { rewrite(thn) }, ctx.scoped { rewrite(els) })
 
     case Stmt.Match(scrutinee, clauses, default) =>
       Stmt.Match(rewrite(scrutinee),
@@ -318,13 +345,13 @@ object StaticArguments {
       Stmt.Put(ref, rewrite(value), rewrite(rest))
 
     case Stmt.Reset(p, ks, k, body, ks1, k1) =>
-      Stmt.Reset(p, ks, k, rewrite(body), rewrite(ks1), rewrite(k1))
+      Stmt.Reset(p, ks, k, ctx.scoped { rewrite(body) }, rewrite(ks1), rewrite(k1))
 
     case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
-      Stmt.Shift(prompt, resume, ks, k, rewrite(body), rewrite(ks1), rewrite(k1))
+      Stmt.Shift(prompt, resume, ks, k, ctx.scoped { rewrite(body) }, rewrite(ks1), rewrite(k1))
 
     case Stmt.Resume(r, ks, k, body, ks1, k1) =>
-      Stmt.Resume(r, ks, k, rewrite(body), rewrite(ks1), rewrite(k1))
+      Stmt.Resume(r, ks, k, ctx.scoped { rewrite(body) }, rewrite(ks1), rewrite(k1))
 
     case h: Stmt.Hole => h
   }
@@ -339,27 +366,36 @@ object StaticArguments {
   }
 
   def rewrite(op: Operation)(using ctx: Context): Operation =
-    Operation(op.name, op.params, rewrite(op.body))
+    Operation(op.name, op.params, ctx.scoped { rewrite(op.body) })
 
   def rewrite(cl: Clause)(using ctx: Context): Clause =
-    Clause(cl.params, rewrite(cl.body))
+    Clause(cl.params, ctx.scoped { rewrite(cl.body) })
 
   // --- Toplevel ---
 
   def rewrite(d: ToplevelDefinition)(using ctx: Context): Option[ToplevelDefinition] = d match {
     case ToplevelDefinition.Def(id, params, body) if ctx.hasStatics(id) =>
-      ctx.pendingWorkers(id) = buildWorker(id, params, body)
-      None
+      val worker = buildWorker(id, params, body)
+
+      // A toplevel caller may precede this definition in the module. Keeping
+      // the original calling convention as a wrapper makes specialization
+      // independent of module order. The inliner can still eliminate a
+      // uniquely called wrapper afterwards.
+      ctx.workers -= id
+      val dynamicArgs = dropStatic(ctx.statics(id), params).map(Expr.Variable.apply)
+      val wrapperBody = Stmt.Def(
+        worker.id,
+        worker.dynamicParams,
+        worker.body,
+        Stmt.App(worker.id, dynamicArgs, false))
+      Some(ToplevelDefinition.Def(id, params, wrapperBody))
 
     case ToplevelDefinition.Def(id, params, body) =>
-      val before = ctx.stack
-      ctx.stack = id :: ctx.stack
-      val rewrittenBody = rewrite(body)
-      ctx.stack = before
+      val rewrittenBody = ctx.withinBody(id) { rewrite(body) }
       Some(ToplevelDefinition.Def(id, params, rewrittenBody))
 
     case ToplevelDefinition.Val(id, ks, k, binding) =>
-      Some(ToplevelDefinition.Val(id, ks, k, rewrite(binding)))
+      Some(ToplevelDefinition.Val(id, ks, k, ctx.scoped { rewrite(binding) }))
   }
 
   // --- Entry point ---

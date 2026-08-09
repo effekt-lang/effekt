@@ -1,0 +1,23 @@
+def initialize(ks, k) {
+  k(42, ks)
+}
+
+let initialized | ks, k = initialize(ks, k)
+
+def main(ks, k) {
+  k(initialized, ks)
+}
+
+// Definitions used only by a module initializer can be localized there.
+
+/// SINK_BLOCKS
+
+let initialized | ks, k =
+  def initialize(ks_1, k_1) {
+    k_1(42, ks_1)
+  }
+  initialize(ks, k)
+
+def main(ks, k) {
+  k(initialized, ks)
+}

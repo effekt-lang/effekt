@@ -372,7 +372,7 @@ def transformToplevel(definition: core.Toplevel)(using C: TransformationContext)
       case Bind(value, bindings) =>
         val ks = Id("ks")
         val k = Id("k")
-        ToplevelDefinition.Def(id, List(ks, k),
+        ToplevelDefinition.Val(id, ks, k,
           Binding(bindings, Stmt.App(k, List(value, Expr.Variable(ks)), false)))
     }
 
@@ -384,15 +384,16 @@ def transformToplevel(definition: core.Toplevel)(using C: TransformationContext)
 }
 
 def transformExtern(extern: core.Extern)(using C: TransformationContext): Option[Extern] = extern match {
-  case core.Extern.Def(id, _, _, vparams, bparams, _, annotatedCapture, body) =>
+  case core.Extern.Def(id, _, _, _, vparams, bparams, _, annotatedCapture, body) =>
     val isAsync = annotatedCapture.contains(symbols.builtins.AsyncCapability.capture)
     Some(Extern.Def(id, vparams.map(_.id) ++ bparams.map(_.id), isAsync, transformExternBody(body)))
   case core.Extern.Include(featureFlag, contents) =>
     Some(Extern.Include(featureFlag, contents))
-  case core.Extern.Data(_, _) => None
+  case core.Extern.Data(_, _, _) => None
+  case core.Extern.Interface(_, _, _) => None
 }
 
-def transformExternBody(body: core.ExternBody)(using C: TransformationContext): ExternBody = body match {
+def transformExternBody(body: core.ExternBody[core.Expr])(using C: TransformationContext): ExternBody = body match {
   case core.ExternBody.StringExternBody(featureFlag, Template(strings, args)) =>
     // Extern template args should be atomic (ValueVar or BlockVar after elaboration).
     // We can use the Bind monad but expect no actual bindings.
