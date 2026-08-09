@@ -1,0 +1,24 @@
+def divide(n: Int, m: Int) =
+  println(n.show ++ " / " ++ m.show ++ " = " ++ (n / m).show)
+
+def main() = {
+  divide(1, 1)
+  divide(2, 1)
+  divide(1, 2)
+  divide(0, 2)
+  divide(4, 2)
+
+  println("")
+
+  divide(7, 2)
+  divide(-7, 2)
+  divide(7, -2)
+  divide(-7, -2)
+
+  println("")
+
+  divide(6, 2)
+  divide(-6, 2)
+  divide(6, -2)
+  divide(-6, -2)
+}
