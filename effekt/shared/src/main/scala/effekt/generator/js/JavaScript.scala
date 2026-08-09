@@ -61,15 +61,15 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
 
       def optimize(input: effekt.cpsds.ModuleDecl) =
         var tree = input
-        println("--- BEFORE ---")
-        println(util.show(tree))
+        // println("--- BEFORE ---")
+        // println(util.show(tree))
         tree = effekt.cpsds.StaticArguments.transform(tree)
         tree = effekt.cpsds.Inliner.transform(tree, mainId)
         tree = effekt.cpsds.BlockSinking.transform(tree, mainId)
         tree = effekt.cpsds.ParameterDropping.transform(tree)
         tree = effekt.cpsds.Simplifier.transform(tree)
-        println("--- AFTER ---")
-        println(util.show(tree))
+        // println("--- AFTER ---")
+        // println(util.show(tree))
         tree
 
       tree = optimize(tree)
