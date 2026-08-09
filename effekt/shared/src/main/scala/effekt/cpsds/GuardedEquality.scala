@@ -23,6 +23,33 @@ import scala.collection.mutable
  */
 object GuardedEquality {
 
+  /** Syntactic closure information shared by clients of the target analysis. */
+  final case class LocalDefinition(
+    id: Id,
+    params: Vector[Id],
+    body: Stmt,
+    captures: Vector[Id]
+  )
+
+  /** The finite set of local definitions that can be called at one application. */
+  final case class CallTargets(
+    call: Stmt.App,
+    callee: Id,
+    arity: Int,
+    targets: Set[Id],
+    closed: Boolean
+  )
+
+  final case class TargetResult(
+    localDefinitions: Vector[LocalDefinition],
+    callTargets: Vector[CallTargets],
+    rigidFunctions: Set[Id],
+    escapedFunctions: Set[Id]
+  ) {
+    def isRigid(function: Id): Boolean = rigidFunctions.contains(function)
+    def escapes(function: Id): Boolean = escapedFunctions.contains(function)
+  }
+
   final case class FunctionFacts(
     id: Id,
     params: Vector[Id],
@@ -335,6 +362,7 @@ object GuardedEquality {
     private val mutableTargets = mutable.Map.empty[Int, mutable.Set[Id]]
     private val mutableRigidSites = mutable.Set.empty[Int]
     private val mutableRigidFunctions = mutable.Set.empty[Id]
+    private val mutableEscapedFunctions = mutable.Set.empty[Id]
 
     execute(meta.body, toplevelParams.iterator.map(_ -> TargetValue.Unknown).toMap)
     registerDirectTargets()
@@ -344,6 +372,7 @@ object GuardedEquality {
       mutableTargets.iterator.map((site, targets) => site -> targets.toSet).toMap
     val rigidSites: Set[Int] = mutableRigidSites.toSet
     val rigidFunctions: Set[Id] = mutableRigidFunctions.toSet
+    val escapedFunctions: Set[Id] = mutableEscapedFunctions.toSet
 
     /** Which captures may transitively enclose a particular local closure. */
     def capturesMayContain(function: Id, observed: Id): Vector[Boolean] = {
@@ -405,7 +434,10 @@ object GuardedEquality {
         addArguments(id, Vector.fill(definitions(id).params.size)(TargetValue.Unknown))
 
     private def escape(value: TargetValue): Unit =
-      value.functions.foreach(makeRigid)
+      value.functions.foreach { function =>
+        mutableEscapedFunctions += function
+        makeRigid(function)
+      }
 
     private def eval(expr: Expr, env: Map[Id, TargetValue]): TargetValue = expr match {
       case Expr.Variable(id) => env.getOrElse(id, TargetValue.Unknown)
@@ -952,6 +984,33 @@ object GuardedEquality {
       targets.rigidFunctions,
       meta.bindings.toMap,
       meta.sitesByStmt)
+  }
+
+  /** The finite call-target projection, without solving relative equalities
+   *  for every local definition. */
+  def targets(toplevel: ToplevelDefinition): TargetResult = {
+    val (params, body) = toplevel match {
+      case ToplevelDefinition.Def(_, params, body) => (params, body)
+      case ToplevelDefinition.Val(_, ks, k, binding) => (List(ks, k), binding)
+    }
+    val meta = Metadata(params, body)
+    val targets = TargetAnalysis(meta, params)
+    val definitions = meta.definitions.valuesIterator.map { definition =>
+      LocalDefinition(
+        definition.id,
+        definition.params,
+        definition.body,
+        definition.captures)
+    }.toVector
+    val calls = meta.sites.zipWithIndex.map { case (site, index) =>
+      CallTargets(
+        site.stmt.asInstanceOf[Stmt.App],
+        site.callee,
+        site.arity,
+        targets.targetsAt.getOrElse(index, Set.empty),
+        closed = !targets.rigidSites.contains(index))
+    }.toVector
+    TargetResult(definitions, calls, targets.rigidFunctions, targets.escapedFunctions)
   }
 
   def analyze(toplevel: ToplevelDefinition): Result = toplevel match {
