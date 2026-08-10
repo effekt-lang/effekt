@@ -1,0 +1,28 @@
+def left(k) {
+  right(k)
+}
+def right(k) {
+  left(k)
+}
+def main(k) {
+  left(k)
+}
+
+// At least one transfer in the mutually recursive cycle must remain stack-safe.
+/// JAVASCRIPT
+
+function left_0(k_0) {
+  left_0: while (true) {
+    return () => right_0(k_0);
+  }
+}
+
+function right_0(k_1) {
+  right_0: while (true) {
+    return () => left_0(k_1);
+  }
+}
+
+function main_0(k_2) {
+  return () => left_0(k_2);
+}

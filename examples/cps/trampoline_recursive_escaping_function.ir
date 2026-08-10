@@ -1,0 +1,27 @@
+def main(use, k) {
+  def loop(flag) {
+    if (flag) {
+      loop(false)
+    } else {
+      k(0)
+    }
+  }
+  use(loop)
+}
+
+// An escaping recursive function still loopifies its self tail call.
+/// JAVASCRIPT
+
+function main_0(use_0, k_0) {
+  function loop_0(flag_0) {
+    loop_0: while (true) {
+      if (flag_0) {
+        flag_0 = false;
+        continue loop_0;
+      } else {
+        return () => k_0(0);
+      }
+    }
+  }
+  return () => use_0(loop_0);
+}
