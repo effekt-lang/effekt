@@ -1,0 +1,42 @@
+def apply(k, x) {
+  k(x)
+}
+def loop(flag, k) {
+  if (flag) {
+    def next(value) {
+      loop(false, k)
+    }
+    apply(next, 0)
+  } else {
+    k(1)
+  }
+}
+def main(flag, k) {
+  loop(flag, k)
+}
+
+// apply invokes the continuation that loop passes to it. This indirect edge
+// closes the otherwise hidden loop -> apply -> next -> loop cycle.
+/// JAVASCRIPT
+
+function apply_0(k_0, x_0) {
+  return () => k_0(x_0);
+}
+
+function loop_0(flag_0, k_1) {
+  loop_0: while (true) {
+    if (flag_0) {
+      function next_0(value_0) {
+        return () => loop_0(false, backup_k_0);
+      }
+      const backup_k_0 = k_1;
+      return () => apply_0(next_0, 0);
+    } else {
+      return () => k_1(1);
+    }
+  }
+}
+
+function main_0(flag_1, k_2) {
+  return () => loop_0(flag_1, k_2);
+}

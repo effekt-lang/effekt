@@ -6,7 +6,9 @@ import sbt.io.*
 import sbt.io.syntax.*
 import kiama.parsing.{ NoSuccess, Success }
 import munit.Location
-import effekt.core.{ Id, Names }
+import effekt.context.Context
+import effekt.core.{ DeclarationContext, Id, Names, TestContext }
+import effekt.generator.js
 
 enum Step {
   /** Run a transform and check the result against expectedSource. */
@@ -46,6 +48,15 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
           s"${d.id.name.name}\n---\n${GuardedEquality.analyze(d).show}"
         case _ => ()
       }.mkString("\n")
+    })
+  case JavaScript extends AnalysisPass("JAVASCRIPT",
+    (_, input, _) => {
+      given Context = new TestContext
+      given DeclarationContext = new DeclarationContext(input.declarations, Nil)
+
+      js.TransformerCpsDs.resetNames()
+      val generated = js.TransformerCpsDs.toJS(input, Nil)
+      js.PrettyPrinter.format(js.FunctionFloating.transform(generated).stmts).layout
     })
 }
 

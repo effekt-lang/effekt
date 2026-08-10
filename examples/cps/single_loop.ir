@@ -56,3 +56,23 @@ def main(ks_1, k_2) {
   }
   go(10)
 }
+
+/// JAVASCRIPT
+
+function main_0(ks_0, k_0) {
+  let x_0 = undefined;
+  go_0: {
+    x_0 = 10;
+    break go_0;
+  }
+  go_0: while (true) {
+    const tmp_0 = eq_0(x_0, 0);
+    if (tmp_0) {
+      return () => k_0(0, ks_0);
+    } else {
+      const tmp_1 = sub_0(x_0, 1);
+      x_0 = tmp_1;
+      continue go_0;
+    }
+  }
+}

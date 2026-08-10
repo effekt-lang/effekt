@@ -116,6 +116,7 @@ object TransformerCpsDs extends Transformer {
   // --- Entry points ---
 
   def compile(input: cpsds.ModuleDecl, coreModule: core.ModuleDecl, mainSymbol: symbols.TermSymbol)(using Context): js.Module = {
+    resetNames()
     val exports = List(js.Export(JSName("main"), js.Lambda(Nil,
       js.Return(Call(RUN_TOPLEVEL, nameRef(mainSymbol))))))
     given DeclarationContext = new DeclarationContext(coreModule.declarations, coreModule.externs)
