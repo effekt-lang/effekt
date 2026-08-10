@@ -3,7 +3,7 @@ package generator
 package js
 
 import effekt.core.Id
-import effekt.cpsds
+import effekt.cps
 
 import java.util.IdentityHashMap
 import scala.collection.mutable
@@ -25,7 +25,7 @@ object StackSafety {
   }
 
   private final class Site(
-    val stmt: cpsds.Stmt,
+    val stmt: cps.Stmt,
     val callee: String
   ) {
     val owners = mutable.LinkedHashSet.empty[Id]
@@ -36,11 +36,11 @@ object StackSafety {
   }
 
   final class Plan private[StackSafety] (
-    private val transfers: IdentityHashMap[cpsds.Stmt, Transfer],
+    private val transfers: IdentityHashMap[cps.Stmt, Transfer],
     val ranks: Map[Id, Int],
     private val sites: Vector[Site]
   ) {
-    def transferOf(stmt: cpsds.Stmt): Transfer =
+    def transferOf(stmt: cps.Stmt): Transfer =
       Option(transfers.get(stmt)).getOrElse(Transfer.Bounce)
 
     /** Independently check the ranking certificate carried by this plan. */
@@ -84,7 +84,7 @@ object StackSafety {
   private def name(id: Id): String = id.name.name
 
   def analyze(
-    module: cpsds.ModuleDecl,
+    module: cps.ModuleDecl,
     isRecursive: Id => Boolean,
     isSecondClass: Id => Boolean,
     defunctionalization: Defunctionalization.Plan
@@ -94,21 +94,21 @@ object StackSafety {
       isRecursive,
       isSecondClass,
       defunctionalization,
-      module.definitions.map(cpsds.GuardedEquality.targets).toVector)
+      module.definitions.map(cps.GuardedEquality.targets).toVector)
 
   def analyze(
-    module: cpsds.ModuleDecl,
+    module: cps.ModuleDecl,
     isRecursive: Id => Boolean,
     isSecondClass: Id => Boolean,
     defunctionalization: Defunctionalization.Plan,
-    targetFlows: Vector[cpsds.GuardedEquality.TargetResult]
+    targetFlows: Vector[cps.GuardedEquality.TargetResult]
   ): Plan = {
     require(module.definitions.size == targetFlows.size)
-    val sitesByStmt = new IdentityHashMap[cpsds.Stmt, Site]()
+    val sitesByStmt = new IdentityHashMap[cps.Stmt, Site]()
     val orderedSites = mutable.ArrayBuffer.empty[Site]
     val nodeOrder = mutable.LinkedHashSet.empty[Id]
 
-    def siteFor(stmt: cpsds.Stmt, callee: => String): Site = {
+    def siteFor(stmt: cps.Stmt, callee: => String): Site = {
       val existing = sitesByStmt.get(stmt)
       if existing != null then existing
       else {
@@ -122,13 +122,13 @@ object StackSafety {
     // The target analysis is deliberately kept separate from the stack
     // solver. A syntactic call site denotes one grouped set of transitions:
     // it can only be direct if all of those transitions decrease the rank.
-    val targetsByCall = new IdentityHashMap[cpsds.Stmt.App, cpsds.GuardedEquality.CallTargets]()
+    val targetsByCall = new IdentityHashMap[cps.Stmt.App, cps.GuardedEquality.CallTargets]()
     val parameters = mutable.LinkedHashMap.empty[Id, Int]
 
     module.definitions.zip(targetFlows).foreach { case (toplevel, flow) =>
       toplevel match {
-        case cpsds.ToplevelDefinition.Def(id, params, _) => parameters(id) = params.size
-        case _: cpsds.ToplevelDefinition.Val => ()
+        case cps.ToplevelDefinition.Def(id, params, _) => parameters(id) = params.size
+        case _: cps.ToplevelDefinition.Val => ()
       }
       flow.localDefinitions.foreach(definition => parameters(definition.id) = definition.params.size)
       flow.callTargets.foreach(target => targetsByCall.put(target.call, target))
@@ -138,7 +138,7 @@ object StackSafety {
     val hosts = mutable.LinkedHashMap.empty[Id, Host]
 
     def recordCall(
-      stmt: cpsds.Stmt,
+      stmt: cps.Stmt,
       callee: String,
       owner: Id,
       jump: Boolean
@@ -150,12 +150,12 @@ object StackSafety {
     }
 
     def visit(
-      stmt: cpsds.Stmt,
+      stmt: cps.Stmt,
       owner: Id,
       secondClass: Set[Id],
       insideBody: Set[Id]
     ): Unit = stmt match {
-      case cpsds.Stmt.Def(id, _, body, rest) =>
+      case cps.Stmt.Def(id, _, body, rest) =>
         defunctionalization.caseOf(id) match {
           case Some(_) =>
             // Its body is emitted by every dispatcher that contains this case.
@@ -177,50 +177,50 @@ object StackSafety {
             visit(rest, owner, secondClass, insideBody)
         }
 
-      case cpsds.Stmt.New(_, _, operations, rest) =>
+      case cps.Stmt.New(_, _, operations, rest) =>
         operations.foreach { operation =>
           nodeOrder += operation.name
           visit(operation.body, operation.name, Set.empty, Set.empty)
         }
         visit(rest, owner, secondClass, insideBody)
 
-      case cpsds.Stmt.Let(_, _, rest) => visit(rest, owner, secondClass, insideBody)
+      case cps.Stmt.Let(_, _, rest) => visit(rest, owner, secondClass, insideBody)
 
-      case app @ cpsds.Stmt.App(id, _, _) =>
+      case app @ cps.Stmt.App(id, _, _) =>
         val dispatch = defunctionalization.dispatchForCallee(id).isDefined
         val jump = dispatch || secondClass.contains(id) || insideBody.contains(id)
         recordCall(app, name(id), owner, jump)
 
-      case invoke @ cpsds.Stmt.Invoke(id, method, _) =>
+      case invoke @ cps.Stmt.Invoke(id, method, _) =>
         recordCall(invoke, s"${name(id)}.${name(method)}", owner, jump = false)
 
-      case cpsds.Stmt.Run(_, _, _, _, rest) => visit(rest, owner, secondClass, insideBody)
-      case cpsds.Stmt.If(_, thn, els) =>
+      case cps.Stmt.Run(_, _, _, _, rest) => visit(rest, owner, secondClass, insideBody)
+      case cps.Stmt.If(_, thn, els) =>
         visit(thn, owner, secondClass, insideBody)
         visit(els, owner, secondClass, insideBody)
-      case cpsds.Stmt.Match(_, clauses, default) =>
+      case cps.Stmt.Match(_, clauses, default) =>
         clauses.foreach { case (_, clause) => visit(clause.body, owner, secondClass, insideBody) }
         default.foreach(visit(_, owner, secondClass, insideBody))
-      case cpsds.Stmt.Region(_, _, rest) => visit(rest, owner, secondClass, insideBody)
-      case cpsds.Stmt.Alloc(_, _, _, rest) => visit(rest, owner, secondClass, insideBody)
-      case cpsds.Stmt.Var(_, _, _, rest) => visit(rest, owner, secondClass, insideBody)
-      case cpsds.Stmt.Dealloc(_, rest) => visit(rest, owner, secondClass, insideBody)
-      case cpsds.Stmt.Get(_, _, rest) => visit(rest, owner, secondClass, insideBody)
-      case cpsds.Stmt.Put(_, _, rest) => visit(rest, owner, secondClass, insideBody)
-      case cpsds.Stmt.Reset(_, _, _, body, _, _) => visit(body, owner, secondClass, insideBody)
-      case cpsds.Stmt.Shift(_, _, _, _, body, _, _) => visit(body, owner, secondClass, insideBody)
-      case cpsds.Stmt.Resume(_, _, _, body, _, _) => visit(body, owner, secondClass, insideBody)
-      case _: cpsds.Stmt.Hole => ()
+      case cps.Stmt.Region(_, _, rest) => visit(rest, owner, secondClass, insideBody)
+      case cps.Stmt.Alloc(_, _, _, rest) => visit(rest, owner, secondClass, insideBody)
+      case cps.Stmt.Var(_, _, _, rest) => visit(rest, owner, secondClass, insideBody)
+      case cps.Stmt.Dealloc(_, rest) => visit(rest, owner, secondClass, insideBody)
+      case cps.Stmt.Get(_, _, rest) => visit(rest, owner, secondClass, insideBody)
+      case cps.Stmt.Put(_, _, rest) => visit(rest, owner, secondClass, insideBody)
+      case cps.Stmt.Reset(_, _, _, body, _, _) => visit(body, owner, secondClass, insideBody)
+      case cps.Stmt.Shift(_, _, _, _, body, _, _) => visit(body, owner, secondClass, insideBody)
+      case cps.Stmt.Resume(_, _, _, body, _, _) => visit(body, owner, secondClass, insideBody)
+      case _: cps.Stmt.Hole => ()
     }
 
     module.definitions.foreach {
-      case cpsds.ToplevelDefinition.Def(id, _, body) =>
+      case cps.ToplevelDefinition.Def(id, _, body) =>
         val available = if isRecursive(id) then Set(id) else Set.empty[Id]
         hosts(id) = Host(id, available, available)
         nodeOrder += id
         visit(body, id, available, available)
 
-      case cpsds.ToplevelDefinition.Val(id, _, _, binding) =>
+      case cps.ToplevelDefinition.Val(id, _, _, binding) =>
         hosts(id) = Host(id, Set.empty, Set.empty)
         nodeOrder += id
         visit(binding, id, Set.empty, Set.empty)
@@ -246,7 +246,7 @@ object StackSafety {
         site.closed = true
         site.transfer = Transfer.Jump
       } else site.stmt match {
-        case app @ cpsds.Stmt.App(id, args, _) =>
+        case app @ cps.Stmt.App(id, args, _) =>
           parameters.get(id) match {
             case Some(arity) if arity == args.size && !isSecondClass(id) && defunctionalization.caseOf(id).isEmpty =>
               site.targets = Vector(id)
@@ -268,7 +268,7 @@ object StackSafety {
               }
           }
 
-        case _: cpsds.Stmt.Invoke =>
+        case _: cps.Stmt.Invoke =>
           // Receiver-flow analysis can later turn this into a closed target
           // set. Until then invocation is an open control transfer.
           site.targets = Vector.empty
@@ -366,7 +366,7 @@ object StackSafety {
       ranks(source) = rank
     }
 
-    val transfers = new IdentityHashMap[cpsds.Stmt, Transfer]()
+    val transfers = new IdentityHashMap[cps.Stmt, Transfer]()
     orderedSites.foreach(site => transfers.put(site.stmt, site.transfer))
     val plan = new Plan(transfers, ranks.toMap, orderedSites.toVector)
     plan.validate()

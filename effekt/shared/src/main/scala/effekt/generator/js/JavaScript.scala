@@ -16,11 +16,11 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
   // -----------------------------------------
   def extension = ".js"
 
-  override def supportedFeatureFlags: List[String] = additionalFeatureFlags ++ TransformerCpsDs.jsFeatureFlags
+  override def supportedFeatureFlags: List[String] = additionalFeatureFlags ++ TransformerCps.jsFeatureFlags
 
   override def prettyIR(source: Source, stage: Stage)(using C: Context): Option[Document] = stage match {
     case Stage.Core if C.config.optimize() => Optimized(source).map { (_, _, res) => core.PrettyPrinter(Context.config.debug()).format(res) }
-    case Stage.CPS => CPSTransformed(source).map { (_, _, _, res) => cpsds.PrettyPrinter.format(res) }
+    case Stage.CPS => CPSTransformed(source).map { (_, _, _, res) => cps.PrettyPrinter.format(res) }
     case Stage.Core => Core(source).map { res => core.PrettyPrinter(Context.config.debug()).format(res.core) }
     case Stage.Machine => None
     case Stage.Target => CompileLSP(source).map { pretty }
@@ -57,17 +57,17 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
       // establish unique names
       val renamed = new Renamer().apply(core)
 
-      var tree = effekt.cpsds.transform(renamed)
+      var tree = effekt.cps.transform(renamed)
 
-      def optimize(input: effekt.cpsds.ModuleDecl) =
+      def optimize(input: effekt.cps.ModuleDecl) =
         var tree = input
         // println("--- BEFORE ---")
         // println(util.show(tree))
-        tree = effekt.cpsds.StaticArguments.transform(tree)
-        tree = effekt.cpsds.Inliner.transform(tree, mainId)
-        tree = effekt.cpsds.BlockSinking.transform(tree, mainId)
-        tree = effekt.cpsds.ParameterDropping.transform(tree)
-        tree = effekt.cpsds.Simplifier.transform(tree)
+        tree = effekt.cps.StaticArguments.transform(tree)
+        tree = effekt.cps.Inliner.transform(tree, mainId)
+        tree = effekt.cps.BlockSinking.transform(tree, mainId)
+        tree = effekt.cps.ParameterDropping.transform(tree)
+        tree = effekt.cps.Simplifier.transform(tree)
         // println("--- AFTER ---")
         // println(util.show(tree))
         tree
@@ -80,7 +80,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
 
   lazy val Compile = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val target = FunctionFloating.transform(TransformerCpsDs.compile(cps, core, mainSymbol))
+      val target = FunctionFloating.transform(TransformerCps.compile(cps, core, mainSymbol))
       val doc = pretty(target.commonjs)
       (Map(mainFile -> doc.layout), mainFile)
   }
@@ -90,7 +90,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
    */
   lazy val CompileWeb = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val target = FunctionFloating.transform(TransformerCpsDs.compile(cps, core, mainSymbol))
+      val target = FunctionFloating.transform(TransformerCps.compile(cps, core, mainSymbol))
       val doc = pretty(target.virtual)
       (Map(mainFile -> doc.layout), mainFile)
   }
@@ -100,7 +100,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
    */
   lazy val CompileLSP = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      FunctionFloating.transform(TransformerCpsDs.compileLSP(cps, core))
+      FunctionFloating.transform(TransformerCps.compileLSP(cps, core))
   }
 
   private def pretty(stmts: List[js.Stmt]): Document =

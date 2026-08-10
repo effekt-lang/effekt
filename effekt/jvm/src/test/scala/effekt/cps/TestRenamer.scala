@@ -1,5 +1,5 @@
 package effekt
-package cpsds
+package cps
 
 import effekt.core.Id
 

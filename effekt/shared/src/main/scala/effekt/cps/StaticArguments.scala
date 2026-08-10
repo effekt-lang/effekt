@@ -1,9 +1,9 @@
 package effekt
-package cpsds
+package cps
 
 import core.Id
 import scala.collection.mutable
-import cpsds.substitutions.substitute
+import cps.substitutions.substitute
 
 object StaticArguments {
 

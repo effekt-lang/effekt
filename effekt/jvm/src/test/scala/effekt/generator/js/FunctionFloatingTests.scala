@@ -1,0 +1,195 @@
+package effekt.generator.js
+
+class FunctionFloatingTests extends munit.FunSuite {
+
+  private def name(value: String): JSName = JSName(value)
+  private def variable(value: JSName): Expr = Expr.Variable(value)
+
+  private val truth: Expr = Expr.RawLiteral("true")
+  private val zero: Expr = Expr.RawLiteral("0")
+
+  private def call(callee: JSName, arguments: JSName*): Stmt =
+    Stmt.ExprStmt(Expr.Call(variable(callee), arguments.toList.map(variable)))
+
+  test("float a function out of a loop to its captured binding") {
+    val run = name("run")
+    val loop = name("loop")
+    val helper = name("helper")
+    val captured = name("captured")
+    val value = name("value")
+
+    val helperDef = Stmt.Function(helper, List(value), List(
+      Stmt.Return(Expr.ArrayLiteral(List(variable(captured), variable(value))))
+    ))
+    val loopDef = Stmt.Function(loop, Nil, List(
+      Stmt.While(Some(loop), truth, List(helperDef, call(helper, captured)))
+    ))
+    val capturedDef = Stmt.Const(Pattern.Variable(captured), zero)
+
+    val input = List(Stmt.Function(run, Nil, List(capturedDef, loopDef)))
+    val expected = List(Stmt.Function(run, Nil, List(
+      helperDef,
+      Stmt.Function(loop, Nil, List(
+        Stmt.While(Some(loop), truth, List(call(helper, captured)))
+      )),
+      capturedDef
+    )))
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("float a function that is not inside a loop") {
+    val outer = name("outer")
+    val helper = name("helper")
+
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(zero)))
+    val input = List(Stmt.Function(outer, Nil, List(helperDef, call(helper))))
+    val expected = List(
+      helperDef,
+      Stmt.Function(outer, Nil, List(call(helper)))
+    )
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("a captured parameter stops floating at its function") {
+    val loop = name("loop")
+    val helper = name("helper")
+    val limit = name("limit")
+
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(variable(limit))))
+    val input = List(Stmt.Function(loop, List(limit), List(
+      Stmt.While(Some(loop), truth, List(helperDef, call(helper)))
+    )))
+    val expected = List(Stmt.Function(loop, List(limit), List(
+      helperDef,
+      Stmt.While(Some(loop), truth, List(call(helper)))
+    )))
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("a loop-local capture keeps the declaration in the loop") {
+    val loop = name("loop")
+    val helper = name("helper")
+    val current = name("current")
+
+    val currentDef = Stmt.Const(Pattern.Variable(current), zero)
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(variable(current))))
+    val input = List(Stmt.While(Some(loop), truth, List(
+      currentDef,
+      helperDef,
+      call(helper)
+    )))
+    val expected = List(Stmt.While(Some(loop), truth, List(
+      helperDef,
+      currentDef,
+      call(helper)
+    )))
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("dependencies keep floating functions together") {
+    val run = name("run")
+    val loop = name("loop")
+    val first = name("first")
+    val second = name("second")
+    val captured = name("captured")
+
+    val firstDef = Stmt.Function(first, Nil, List(Stmt.Return(variable(captured))))
+    val secondDef = Stmt.Function(second, Nil, List(Stmt.Return(variable(first))))
+    val capturedDef = Stmt.Const(Pattern.Variable(captured), zero)
+    val input = List(Stmt.Function(run, Nil, List(
+      capturedDef,
+      Stmt.While(Some(loop), truth, List(firstDef, secondDef, call(second)))
+    )))
+    val expected = List(Stmt.Function(run, Nil, List(
+      firstDef,
+      secondDef,
+      capturedDef,
+      Stmt.While(Some(loop), truth, List(call(second)))
+    )))
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("a helper can float together with its enclosing function") {
+    val loop = name("loop")
+    val enclosing = name("enclosing")
+    val helper = name("helper")
+    val inner = name("inner")
+
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(variable(enclosing))))
+    val enclosingDef = Stmt.Function(enclosing, Nil, List(
+      Stmt.While(Some(inner), truth, List(helperDef, call(helper)))
+    ))
+    val input = List(Stmt.While(Some(loop), truth, List(enclosingDef, call(enclosing))))
+    val expected = List(
+      helperDef,
+      Stmt.Function(enclosing, Nil, List(
+        Stmt.While(Some(inner), truth, List(call(helper)))
+      )),
+      Stmt.While(Some(loop), truth, List(call(enclosing)))
+    )
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("switch-local bindings keep declarations in their clause") {
+    val loop = name("loop")
+    val helper = name("helper")
+    val problemSize = name("problemSize")
+    val scrutinee = name("scrutinee")
+
+    val problemSizeDef = Stmt.Const(Pattern.Variable(problemSize), zero)
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(variable(problemSize))))
+    val input = List(Stmt.While(Some(loop), truth, List(
+      Stmt.Switch(variable(scrutinee), List(
+        zero -> List(problemSizeDef, helperDef, call(helper))
+      ), None)
+    )))
+    val expected = List(Stmt.While(Some(loop), truth, List(
+      Stmt.Switch(variable(scrutinee), List(
+        zero -> List(helperDef, problemSizeDef, call(helper))
+      ), None)
+    )))
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("labeled blocks remain blocks") {
+    val loop = name("loop")
+    val join = name("join")
+    val helper = name("helper")
+
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(zero)))
+    val joinPoint = Stmt.Block(Some(join), List(Stmt.Break(Some(join))))
+    val input = List(Stmt.While(Some(loop), truth, List(helperDef, joinPoint)))
+    val expected = List(
+      helperDef,
+      Stmt.While(Some(loop), truth, List(joinPoint))
+    )
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("lambdas are floating boundaries") {
+    val holder = name("holder")
+    val loop = name("loop")
+    val helper = name("helper")
+
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(zero)))
+    val input = List(Stmt.Const(Pattern.Variable(holder), Expr.Lambda(Nil,
+      Stmt.While(Some(loop), truth, List(helperDef, call(helper)))
+    )))
+    val expected = List(Stmt.Const(Pattern.Variable(holder), Expr.Lambda(Nil,
+      Stmt.Block(None, List(
+        helperDef,
+        Stmt.While(Some(loop), truth, List(call(helper)))
+      ))
+    )))
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+}

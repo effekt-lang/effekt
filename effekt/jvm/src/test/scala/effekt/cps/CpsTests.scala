@@ -1,5 +1,5 @@
 package effekt
-package cpsds
+package cps
 
 import java.io.File
 import sbt.io.*
@@ -23,7 +23,7 @@ enum TransformPass(val header: String, val run: (String, ModuleDecl, Id) => Modu
   case Inline extends TransformPass("INLINE",
     (_, input, mainId) => Inliner.transform(input, mainId))
   case StaticArguments extends TransformPass("STATIC_ARGUMENTS",
-    (_, input, _) => cpsds.StaticArguments.transform(input))
+    (_, input, _) => cps.StaticArguments.transform(input))
   case Simplify extends TransformPass("SIMPLIFY",
     (_, input, _) => Simplifier.transform(input))
   case SinkBlocks extends TransformPass("SINK_BLOCKS",
@@ -51,7 +51,7 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
     })
   case ControlFlow extends AnalysisPass("CONTROL_FLOW",
     (_, input, _) => {
-      val kinds = js.TransformerCpsDs.computeKinds(input)
+      val kinds = js.TransformerCps.computeKinds(input)
       val targetFlows = input.definitions.map(GuardedEquality.targets).toVector
       val defunctionalization = js.Defunctionalization.analyze(
         input,
@@ -70,14 +70,14 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
       given Context = new TestContext
       given DeclarationContext = new DeclarationContext(input.declarations, Nil)
 
-      js.TransformerCpsDs.resetNames()
-      val generated = js.TransformerCpsDs.toJS(input, Nil)
+      js.TransformerCps.resetNames()
+      val generated = js.TransformerCps.toJS(input, Nil)
       js.PrettyPrinter.format(js.FunctionFloating.transform(generated).stmts).layout
         .linesIterator.map(_.stripTrailing).mkString("\n")
     })
 }
 
-class CpsDsTests extends munit.FunSuite {
+class CpsTests extends munit.FunSuite {
 
   def examplesDir = new File("examples") / "cps"
 
