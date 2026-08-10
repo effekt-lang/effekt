@@ -16,6 +16,7 @@ object TransformerCpsDs extends Transformer {
   val RESET = js.Variable(JSName("RESET"))
   val SHIFT = js.Variable(JSName("SHIFT"))
   val RESUME = js.Variable(JSName("RESUME"))
+  val BOUNDARY_CONTINUATION = JSName("__boundary")
 
   // --- Context ---
 
@@ -542,7 +543,7 @@ object TransformerCpsDs extends Transformer {
       val target = freshName("boundary_continuation_")
       js.RawExpr(Defunctionalization.BoundaryTag.toString) -> List(js.Block(None, List(
         js.Const(target,
-          js.Member(js.Variable(state.continuation), memberNameRef(state.dispatch.callee))),
+          js.Member(js.Variable(state.continuation), BOUNDARY_CONTINUATION)),
         js.Return(js.Lambda(Nil,
           js.Return(js.Call(js.Variable(target), state.arguments.map(js.Variable(_)).toList))))
       )))
@@ -599,10 +600,10 @@ object TransformerCpsDs extends Transformer {
     if state.dispatch.boundary then
       val continuation = nameRef(state.dispatch.callee)
       List(js.Assign(continuation, js.IfExpr(
-        js"typeof ${continuation} === \"function\"",
+        js"""typeof ${continuation} === "function"""",
         js.Object(List(
           `tag` -> js.RawExpr(Defunctionalization.BoundaryTag.toString),
-          memberNameRef(state.dispatch.callee) -> continuation)),
+          BOUNDARY_CONTINUATION -> continuation)),
         continuation)))
     else Nil
 
