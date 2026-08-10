@@ -110,5 +110,47 @@ object WebTests extends TestSuite {
       val result = evaluate[String](Nil, "(-1.0).show")
       assert(result == "-1")
     }
+
+    test("Effectful block arguments through non-tail handlers") {
+      server.writeFile("ad_base.effekt",
+        """|module ad_base
+           |
+           |import ref
+           |
+           |interface AD {
+           |  def mul(x: Num, y: Num): Num
+           |}
+           |
+           |record Num(value: Int, d: Ref[Int])
+           |
+           |def prog(x: Num): Num / AD = do mul(x, x)
+           |""".stripMargin)
+
+      server.writeFile("ad_handler.effekt",
+        """|module ad_handler
+           |
+           |import ref
+           |import ad_base
+           |
+           |def backwards(in: Int) { prog: Num => Num / AD }: Int = {
+           |  val input = Num(in, ref(0))
+           |
+           |  try { set(prog(input).d, 1) } with AD {
+           |    def mul(x, y) = {
+           |      val z = Num(x.value * y.value, ref(0))
+           |      resume(z)
+           |      set(x.d, get(x.d) + y.value * get(z.d))
+           |      set(y.d, get(y.d) + x.value * get(z.d))
+           |    }
+           |  }
+           |
+           |  get(input.d)
+           |}
+           |""".stripMargin)
+
+      val result = evaluate[Int](List("ad_base", "ad_handler"),
+        "backwards(2) { x => prog(x) }")
+      assert(result == 4)
+    }
   }
 }
