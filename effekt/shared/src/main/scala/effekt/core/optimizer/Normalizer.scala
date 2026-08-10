@@ -41,7 +41,7 @@ object Normalizer { normal =>
   ) {
     // knowing `x = e`, we also know `e = x`, which is what lets us share `e`
     def bind(id: Id, expr: Expr): Context =
-      val known = if shareable(expr) then facts + (expr -> ValueVar(id, expr.tpe)) else facts
+      val known = if shareable(expr)(using this) then facts + (expr -> ValueVar(id, expr.tpe)) else facts
       copy(exprs = exprs + (id -> expr), facts = known)
 
     def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
@@ -50,7 +50,7 @@ object Normalizer { normal =>
     def knowing(expr: Expr, value: Expr): Context = expr match {
       // variables belong into the environment, which `active` already consults
       case ValueVar(id, _) => bind(id, value)
-      case _ if shareable(expr) => copy(facts = facts + (expr -> value))
+      case _ if shareable(expr)(using this) => copy(facts = facts + (expr -> value))
       case _ => this
     }
   }
@@ -76,10 +76,17 @@ object Normalizer { normal =>
     if shareable(expr) then ctx.facts.getOrElse(expr, expr) else expr
 
   /** Is it worth remembering that a variable holds pure expression [[expr]]? */
-  private def shareable(expr: Expr): Boolean = expr match {
-    case _: Expr.PureApp => true
+  private def shareable(expr: Expr)(using C: Context): Boolean = expr match {
+    case _: Expr.PureApp => transparent(expr.tpe)
     case _: Expr.Make => true
     case _ => false
+  }
+
+  /** Are two equal values of this type interchangeable or could someone observe their identity? */
+  private def transparent(tpe: ValueType)(using C: Context): Boolean = tpe match {
+    case ValueType.Data(name, targs) => !C.decls.externDatas.contains(name) && targs.forall(transparent)
+    case ValueType.Var(_) => false
+    case ValueType.Boxed(_, _) => false
   }
 
   private def blockFor(id: Id)(using ctx: Context): Option[Block] =
