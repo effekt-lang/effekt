@@ -1,8 +1,7 @@
 package effekt
 package cpsds
 
-import core.{ BlockType, Captures, Id, ValueType }
-import core.optimizer.Usage
+import core.{ Captures, Id, ValueType }
 
 // Only maps Ids to Ids for dealiasing
 case class TransformationContext(
@@ -347,16 +346,12 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
 
 def transform(module: core.ModuleDecl): ModuleDecl = module match {
   case core.ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-    val entrypoints = exports.toSet ++ definitions.collect {
-      case core.Toplevel.Val(id, _) => id
-    }
     given TransformationContext = TransformationContext()
     ModuleDecl(includes, declarations, externs.flatMap(transformExtern),
       definitions.map(transformToplevel), exports)
 }
 
 private def canBeDirect(captures: Captures)(using C: TransformationContext): Boolean =
-  //def nonRecursive = C.reachability.get(id).exists(u => u != Usage.Recursive)
   def noControl = (captures -- Set(symbols.builtins.IOCapability.capture, symbols.builtins.GlobalCapability.capture)).isEmpty
   noControl
 
