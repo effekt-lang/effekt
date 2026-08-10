@@ -4,13 +4,13 @@ package js
 
 import effekt.context.Context
 import effekt.context.assertions.*
-import effekt.cpsds.*
+import effekt.cps.*
 import effekt.core.{Declaration, DeclarationContext, Id}
 import effekt.util.UByte
 
 import scala.collection.mutable
 
-object TransformerCpsDs extends Transformer {
+object TransformerCps extends Transformer {
 
   val RUN_TOPLEVEL = js.Variable(JSName("RUN_TOPLEVEL"))
   val RESET = js.Variable(JSName("RESET"))
@@ -33,7 +33,7 @@ object TransformerCpsDs extends Transformer {
   )
 
   case class TransformerContext(
-    externs: Map[Id, cpsds.Extern.Def],
+    externs: Map[Id, cps.Extern.Def],
     kinds: Map[Id, FunctionKind],
     escaping: Set[Id],
     localVars: Set[Id],
@@ -69,7 +69,7 @@ object TransformerCpsDs extends Transformer {
       applying = Set.empty
     )
 
-  def computeKinds(m: cpsds.ModuleDecl): Map[Id, FunctionKind] = {
+  def computeKinds(m: cps.ModuleDecl): Map[Id, FunctionKind] = {
     val uses = m.uses.toMap
     val escape = m.escapes
     uses.map { case (id, callees) =>
@@ -99,10 +99,10 @@ object TransformerCpsDs extends Transformer {
    * This prevents capture-by-reference bugs: JS `let` variables inside a
    * `while` loop are captured by reference, so closures defined inside the
    * loop body would see the mutated value rather than the value at definition time.
-   * Keeping the CPSDS body unchanged also preserves the identity of analyzed
+   * Keeping the CPS body unchanged also preserves the identity of analyzed
    * call sites.
    */
-  def backupMutableParams(body: cpsds.Stmt, boundParams: Set[Id] = Set.empty)(using ctx: TransformerContext): (List[js.Stmt], Map[Id, Id]) = {
+  def backupMutableParams(body: cps.Stmt, boundParams: Set[Id] = Set.empty)(using ctx: TransformerContext): (List[js.Stmt], Map[Id, Id]) = {
     val freeInBody = body.free -- boundParams
     val captured = freeInBody.intersect(ctx.mutableParams)
 
@@ -119,7 +119,7 @@ object TransformerCpsDs extends Transformer {
       (Nil, Map.empty)
   }
 
-  def compile(input: cpsds.ModuleDecl, coreModule: core.ModuleDecl, mainSymbol: symbols.TermSymbol)(using Context): js.Module = {
+  def compile(input: cps.ModuleDecl, coreModule: core.ModuleDecl, mainSymbol: symbols.TermSymbol)(using Context): js.Module = {
     resetNames()
     val exports = List(js.Export(JSName("main"), js.Lambda(Nil,
       js.Return(Call(RUN_TOPLEVEL, nameRef(mainSymbol))))))
@@ -127,12 +127,12 @@ object TransformerCpsDs extends Transformer {
     toJS(input, exports)
   }
 
-  def compileLSP(input: cpsds.ModuleDecl, coreModule: core.ModuleDecl)(using C: Context): List[js.Stmt] =
+  def compileLSP(input: cps.ModuleDecl, coreModule: core.ModuleDecl)(using C: Context): List[js.Stmt] =
     ???
 
-  def toJS(module: cpsds.ModuleDecl, exports: List[js.Export])(using D: DeclarationContext, C: Context): js.Module =
+  def toJS(module: cps.ModuleDecl, exports: List[js.Export])(using D: DeclarationContext, C: Context): js.Module =
     module match {
-      case cpsds.ModuleDecl(includes, declarations, externs, definitions, _) =>
+      case cps.ModuleDecl(includes, declarations, externs, definitions, _) =>
         val kinds = computeKinds(module)
         val targetFlows = definitions.map(GuardedEquality.targets).toVector
         val defunctionalization = Defunctionalization.analyze(
@@ -147,7 +147,7 @@ object TransformerCpsDs extends Transformer {
           defunctionalization,
           targetFlows)
         given ctx: TransformerContext = TransformerContext(
-          externs.collect { case d: cpsds.Extern.Def => (d.id, d) }.toMap,
+          externs.collect { case d: cps.Extern.Def => (d.id, d) }.toMap,
           kinds,
           module.escapes,
           Set.empty,
@@ -170,18 +170,18 @@ object TransformerCpsDs extends Transformer {
         js.Module(name, Nil, exports, jsDecls ++ jsExterns ++ stmts)
     }
 
-  def toJSToplevel(d: cpsds.ToplevelDefinition)(using ctx: TransformerContext): js.Stmt = d match {
-    case cpsds.ToplevelDefinition.Def(id, params, body) =>
+  def toJSToplevel(d: cps.ToplevelDefinition)(using ctx: TransformerContext): js.Stmt = d match {
+    case cps.ToplevelDefinition.Def(id, params, body) =>
       val kind = kindOf(id)
       js.Function(nameDef(id), params.map(nameDef),
         secondClassDef(id, params, body, None, kind.isRecursive).stmts)
 
-    case cpsds.ToplevelDefinition.Val(id, ks, k, binding) =>
+    case cps.ToplevelDefinition.Val(id, ks, k, binding) =>
       js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding).stmts)))
   }
 
-  def toJS(e: cpsds.Extern)(using C: TransformerContext): js.Stmt = e match {
-    case cpsds.Extern.Def(id, params, true, body) =>
+  def toJS(e: cps.Extern)(using C: TransformerContext): js.Stmt = e match {
+    case cps.Extern.Def(id, params, true, body) =>
       body match {
         case ExternBody.StringExternBody(_, contents) =>
           val ks = freshName("ks_")
@@ -193,7 +193,7 @@ object TransformerCpsDs extends Transformer {
           js.Function(nameDef(id), params.map(nameDef), List(js.Return($effekt.call("unreachable"))))
       }
 
-    case cpsds.Extern.Def(id, params, false, body) =>
+    case cps.Extern.Def(id, params, false, body) =>
       body match {
         case ExternBody.StringExternBody(_, contents) =>
           js.Function(nameDef(id), params.map(nameDef), List(js.Return(toJSTemplate(contents))))
@@ -202,21 +202,21 @@ object TransformerCpsDs extends Transformer {
           js.Function(nameDef(id), params.map(nameDef), List(js.Return($effekt.call("unreachable"))))
       }
 
-    case cpsds.Extern.Include(_, contents) =>
+    case cps.Extern.Include(_, contents) =>
       js.RawStmt(contents)
   }
 
-  def toJSTemplate(t: Template[cpsds.Expr])(using TransformerContext): js.Expr =
+  def toJSTemplate(t: Template[cps.Expr])(using TransformerContext): js.Expr =
     js.RawExpr(t.strings, t.args.map(toJS))
 
-  def canInline(extern: cpsds.Extern): Boolean = extern match {
-    case cpsds.Extern.Def(_, _, false, ExternBody.StringExternBody(_, _)) => true
+  def canInline(extern: cps.Extern): Boolean = extern match {
+    case cps.Extern.Def(_, _, false, ExternBody.StringExternBody(_, _)) => true
     case _ => false
   }
 
-  def inlineExtern(id: Id, args: List[cpsds.Expr])(using T: TransformerContext): js.Expr =
+  def inlineExtern(id: Id, args: List[cps.Expr])(using T: TransformerContext): js.Expr =
     T.externs.get(id) match {
-      case Some(cpsds.Extern.Def(_, params, false, ExternBody.StringExternBody(_, Template(strings, templateArgs)))) =>
+      case Some(cps.Extern.Def(_, params, false, ExternBody.StringExternBody(_, Template(strings, templateArgs)))) =>
         val subst = params.zip(args).toMap
         val resolvedArgs = templateArgs.map {
           case tArg @ Expr.Variable(id) => subst.get(id) match {
@@ -237,7 +237,7 @@ object TransformerCpsDs extends Transformer {
       Nil
   }
 
-  def toJS(e: cpsds.Expr)(using ctx: TransformerContext): js.Expr = e match {
+  def toJS(e: cps.Expr)(using ctx: TransformerContext): js.Expr = e match {
     case Expr.Variable(id) => valueRef(id)
     case Expr.Literal((), core.Type.TUnit) => $effekt.field("unit")
     case Expr.Literal(s: String, core.Type.TString) => JsString(escape(s))
@@ -249,9 +249,9 @@ object TransformerCpsDs extends Transformer {
     case Expr.Toplevel => js.Undefined
   }
 
-  def toJS(s: cpsds.Stmt)(using ctx: TransformerContext): Binding[List[js.Stmt]] = s match {
+  def toJS(s: cps.Stmt)(using ctx: TransformerContext): Binding[List[js.Stmt]] = s match {
 
-    case cpsds.Stmt.Def(id, params, body, rest) =>
+    case cps.Stmt.Def(id, params, body, rest) =>
       ctx.defunctionalization.caseOf(id) match {
         case Some(continuationCase) =>
           Binding { k =>
@@ -271,7 +271,7 @@ object TransformerCpsDs extends Transformer {
             firstClassDef(id, params, body, rest, kind.isRecursive)
       }
 
-    case cpsds.Stmt.New(id, interface, operations, rest) =>
+    case cps.Stmt.New(id, interface, operations, rest) =>
       Binding { k =>
         val ops = operations.map { op =>
           val (backups, renamings) = backupMutableParams(op.body, op.params.toSet)
@@ -285,12 +285,12 @@ object TransformerCpsDs extends Transformer {
         allBackups ++ List(js.Const(nameDef(id), jsObj)) ++ toJS(rest).run(k)
       }
 
-    case cpsds.Stmt.Let(id, binding, rest) =>
+    case cps.Stmt.Let(id, binding, rest) =>
       Binding { k =>
         js.Const(nameDef(id), toJS(binding)) :: toJS(rest).run(k)
       }
 
-    case app @ cpsds.Stmt.App(id, args, direct) =>
+    case app @ cps.Stmt.App(id, args, direct) =>
       ctx.dispatchAliases.get(id).orElse(ctx.defunctionalization.dispatchForCallee(id)) match {
         case Some(dispatch) => dispatchCall(id, args, dispatch)
         case None => ctx.secondClass.get(id) match {
@@ -338,7 +338,7 @@ object TransformerCpsDs extends Transformer {
         }
       }
 
-    case invoke @ cpsds.Stmt.Invoke(id, method, args) =>
+    case invoke @ cps.Stmt.Invoke(id, method, args) =>
       val call = MethodCall(valueRef(id), memberNameRef(method), args.map(toJS): _*)
       ctx.stackSafety.transferOf(invoke) match {
         case StackSafety.Transfer.Direct => pure(js.Return(call) :: Nil)
@@ -346,13 +346,13 @@ object TransformerCpsDs extends Transformer {
           pure(js.Return(js.Lambda(Nil, js.Return(call))) :: Nil)
       }
 
-    case cpsds.Stmt.Run(id, callee, args, Purity.Pure | Purity.Impure, rest) =>
+    case cps.Stmt.Run(id, callee, args, Purity.Pure | Purity.Impure, rest) =>
       Binding { k =>
         js.Const(nameDef(id), inlineExtern(callee, args)) :: toJS(rest).run(k)
       }
 
     // Async: needs CPS — call with continuation
-    case cpsds.Stmt.Run(id, callee, args, Purity.Async, rest) =>
+    case cps.Stmt.Run(id, callee, args, Purity.Async, rest) =>
       ???
     //      val ks = JSName("ks")
     //      val kParam = JSName("k")
@@ -364,18 +364,18 @@ object TransformerCpsDs extends Transformer {
     //          js.Lambda(List(nameDef(id)), toJS(rest).stmts)
     //        ))) :: Nil)
 
-    case cpsds.Stmt.If(cond, thn, els) =>
+    case cps.Stmt.If(cond, thn, els) =>
       pure(js.If(toJS(cond), toJS(thn).block, toJS(els).block) :: Nil)
 
-    case cpsds.Stmt.Match(sc, Nil, None) =>
+    case cps.Stmt.Match(sc, Nil, None) =>
       pure(js.Return($effekt.call("unreachable")) :: Nil)
 
-    case cpsds.Stmt.Match(sc, List((tag, clause)), None) =>
+    case cps.Stmt.Match(sc, List((tag, clause)), None) =>
       val scrutinee = toJS(sc)
       val (_, stmts) = toJSClause(scrutinee, tag, clause)
       stmts
 
-    case cpsds.Stmt.Match(sc, clauses, default) =>
+    case cps.Stmt.Match(sc, clauses, default) =>
       val scrutinee = toJS(sc)
       pure(js.Switch(js.Member(scrutinee, `tag`),
         clauses.map { case (tag, clause) =>
@@ -388,56 +388,56 @@ object TransformerCpsDs extends Transformer {
         },
         default.map(s => toJS(s).stmts)) :: Nil)
 
-    case cpsds.Stmt.Region(id, ks, rest) =>
+    case cps.Stmt.Region(id, ks, rest) =>
       Binding { k =>
         js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("newRegion"))) ::
           toJS(rest).run(k)
       }
 
-    case cpsds.Stmt.Alloc(id, init, region, rest) =>
+    case cps.Stmt.Alloc(id, init, region, rest) =>
       Binding { k =>
         js.Const(nameDef(id), js.MethodCall(valueRef(region), JSName("fresh"), toJS(init))) ::
           toJS(rest).run(k)
       }
 
-    case cpsds.Stmt.Var(id, init, ks, rest) if !ctx.escaping.contains(id) =>
+    case cps.Stmt.Var(id, init, ks, rest) if !ctx.escaping.contains(id) =>
       Binding { k =>
         js.Let(nameDef(id), toJS(init)) ::
           toJS(rest)(using ctx.copy(localVars = ctx.localVars + id)).run(k)
       }
 
-    case cpsds.Stmt.Var(id, init, ks, rest) =>
+    case cps.Stmt.Var(id, init, ks, rest) =>
       Binding { k =>
         js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("fresh"), toJS(init))) ::
           toJS(rest).run(k)
       }
 
-    case cpsds.Stmt.Dealloc(ref, rest) =>
+    case cps.Stmt.Dealloc(ref, rest) =>
       toJS(rest)
 
-    case cpsds.Stmt.Get(ref, id, rest) if ctx.localVars.contains(ref) =>
+    case cps.Stmt.Get(ref, id, rest) if ctx.localVars.contains(ref) =>
       Binding { k =>
         js.Const(nameDef(id), valueRef(ref)) :: toJS(rest).run(k)
       }
 
-    case cpsds.Stmt.Get(ref, id, rest) =>
+    case cps.Stmt.Get(ref, id, rest) =>
       Binding { k =>
         js.Const(nameDef(id), js.Member(valueRef(ref), JSName("value"))) ::
           toJS(rest).run(k)
       }
 
-    case cpsds.Stmt.Put(ref, value, rest) if ctx.localVars.contains(ref) =>
+    case cps.Stmt.Put(ref, value, rest) if ctx.localVars.contains(ref) =>
       Binding { k =>
         js.Assign(valueRef(ref), toJS(value)) :: toJS(rest).run(k)
       }
 
-    case cpsds.Stmt.Put(ref, value, rest) =>
+    case cps.Stmt.Put(ref, value, rest) =>
       Binding { k =>
         js.ExprStmt(js.MethodCall(valueRef(ref), JSName("set"), toJS(value))) ::
           toJS(rest).run(k)
       }
 
-    case cpsds.Stmt.Reset(p, ks, k, body, ks1, k1) =>
+    case cps.Stmt.Reset(p, ks, k, body, ks1, k1) =>
       Binding { next =>
         js.Const(
           js.Pattern.Array(List(p, ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
@@ -445,7 +445,7 @@ object TransformerCpsDs extends Transformer {
           toJS(body).run(next)
       }
 
-    case cpsds.Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+    case cps.Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
       Binding { next =>
         js.Const(
           js.Pattern.Array(List(resume, ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
@@ -453,7 +453,7 @@ object TransformerCpsDs extends Transformer {
           toJS(body).run(next)
       }
 
-    case cpsds.Stmt.Resume(r, ks, k, body, ks1, k1) =>
+    case cps.Stmt.Resume(r, ks, k, body, ks1, k1) =>
       Binding { next =>
         js.Const(
           js.Pattern.Array(List(ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
@@ -461,13 +461,13 @@ object TransformerCpsDs extends Transformer {
           toJS(body).run(next)
       }
 
-    case cpsds.Stmt.Hole(span) =>
+    case cps.Stmt.Hole(span) =>
       pure(js.Return($effekt.call("hole", JsString(span.range.from.format))) :: Nil)
   }
 
   private def dispatchCall(
     callee: Id,
-    args: List[cpsds.Expr],
+    args: List[cps.Expr],
     dispatch: Defunctionalization.ContinuationDispatch
   )(using ctx: TransformerContext): Binding[List[js.Stmt]] = {
     val state = ctx.dispatches.get(dispatch.entry)
@@ -583,7 +583,7 @@ object TransformerCpsDs extends Transformer {
         dispatchLoop(dispatch, ctx))
     }
 
-  def firstClassDef(id: Id, params: List[Id], body: cpsds.Stmt, rest: cpsds.Stmt, isRecursive: Boolean)(using ctx: TransformerContext): Binding[List[js.Stmt]] =
+  def firstClassDef(id: Id, params: List[Id], body: cps.Stmt, rest: cps.Stmt, isRecursive: Boolean)(using ctx: TransformerContext): Binding[List[js.Stmt]] =
     Binding { k =>
       val (backups, renamings) = backupMutableParams(body, params.toSet)
 
@@ -630,7 +630,7 @@ object TransformerCpsDs extends Transformer {
    * If `rest` is defined, this is a local function definition. Otherwise it is a toplevel function and the params
    * do not need to be initialized.
    */
-  def secondClassDef(id: Id, params: List[Id], body: cpsds.Stmt, rest: Option[cpsds.Stmt], isRecursive: Boolean)(using ctx: TransformerContext): Binding[List[js.Stmt]] = {
+  def secondClassDef(id: Id, params: List[Id], body: cps.Stmt, rest: Option[cps.Stmt], isRecursive: Boolean)(using ctx: TransformerContext): Binding[List[js.Stmt]] = {
     val label = nameDef(id)
     val sci = SecondClassDef(params, isRecursive)
 
@@ -671,9 +671,9 @@ object TransformerCpsDs extends Transformer {
       pure(paramDecls ++ dispatchDecls ++ entryBlock ++ bodyStmts)
   }
 
-  def toJSClause(scrutinee: js.Expr, variant: Id, clause: cpsds.Clause)(using C: TransformerContext): (js.Expr, Binding[List[js.Stmt]]) =
+  def toJSClause(scrutinee: js.Expr, variant: Id, clause: cps.Clause)(using C: TransformerContext): (js.Expr, Binding[List[js.Stmt]]) =
     clause match {
-      case cpsds.Clause(params, body) =>
+      case cps.Clause(params, body) =>
         val fields = C.declarations.getConstructor(variant).fields.map(_.id)
         val tag = js.RawExpr(C.declarations.getConstructorTag(variant).toString)
 
