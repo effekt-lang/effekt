@@ -46,6 +46,11 @@ object TransformerCps extends Transformer {
     mutableParams: Set[Id],
     defunctionalization: Defunctionalization.Plan,
     stackSafety: StackSafety.Plan,
+    workers: Map[Id, JSName],
+    segmentFlow: SegmentEntries.Plan,
+    // Continuations obtained by leaving or entering a delimited continuation
+    // segment. Applying one crosses a segment boundary and therefore bounces.
+    segmentEntries: Set[Id],
     dispatches: Map[Id, DispatchState],
     dispatchAliases: Map[Id, Defunctionalization.ContinuationDispatch],
     renamedCaptures: Map[Id, Id],
@@ -90,6 +95,21 @@ object TransformerCps extends Transformer {
    */
   def valueRef(id: Id)(using ctx: TransformerContext): js.Expr =
     nameRef(ctx.renamedCaptures.getOrElse(id, id))
+
+  /** A statically known direct call can bypass the stack-safe entry exposed
+   *  as a function value and enter its worker immediately. */
+  def directRef(id: Id)(using ctx: TransformerContext): js.Expr =
+    ctx.workers.get(id).fold(valueRef(id))(js.Variable.apply)
+
+  /** The public value-level entry resets the native stack before entering the
+   *  worker. Its arguments are evaluated and captured exactly once. */
+  private def safeEntry(id: Id, params: List[Id], worker: JSName): js.Stmt = {
+    val call = js.Call(js.Variable(worker), params.map(nameRef))
+    js.Function(
+      nameDef(id),
+      params.map(nameDef),
+      List(js.Return(js.Lambda(Nil, call))))
+  }
 
   /**
    * Backup mutable second-class params that are free in the given body,
@@ -146,6 +166,11 @@ object TransformerCps extends Transformer {
           id => kinds.get(id).exists(_.isSecondClass),
           defunctionalization,
           targetFlows)
+        val segmentFlow = SegmentEntries.analyze(module, targetFlows)
+        val workers = stackSafety.safeEntries.definitions.toVector
+          .sortBy(id => (id.name.name, id.id))
+          .map(id => id -> freshName("worker_"))
+          .toMap
         given ctx: TransformerContext = TransformerContext(
           externs.collect { case d: cps.Extern.Def => (d.id, d) }.toMap,
           kinds,
@@ -156,6 +181,9 @@ object TransformerCps extends Transformer {
           Set.empty,
           defunctionalization,
           stackSafety,
+          workers,
+          segmentFlow,
+          segmentFlow.entries,
           Map.empty,
           Map.empty,
           Map.empty,
@@ -165,19 +193,29 @@ object TransformerCps extends Transformer {
         val name = JSName(jsModuleName("main"))
         val jsExterns = module.externs.filterNot(canInline).map(toJS)
         val jsDecls = module.declarations.flatMap(toJSDecl)
-        val stmts = module.definitions.map(toJSToplevel)
+        val stmts = module.definitions.flatMap(toJSToplevel)
 
         js.Module(name, Nil, exports, jsDecls ++ jsExterns ++ stmts)
     }
 
-  def toJSToplevel(d: cps.ToplevelDefinition)(using ctx: TransformerContext): js.Stmt = d match {
+  def toJSToplevel(d: cps.ToplevelDefinition)(using ctx: TransformerContext): List[js.Stmt] = d match {
     case cps.ToplevelDefinition.Def(id, params, body) =>
       val kind = kindOf(id)
-      js.Function(nameDef(id), params.map(nameDef),
-        secondClassDef(id, params, body, None, kind.isRecursive).stmts)
+      // Reserve binder names before translating the body, as in the original
+      // constructor expression. This keeps generated names independent of
+      // evaluation order inside the lowering implementation.
+      val functionName = nameDef(id)
+      val parameterNames = params.map(nameDef)
+      val implementation = secondClassDef(id, params, body, None, kind.isRecursive).stmts
+      ctx.workers.get(id) match {
+        case Some(worker) => List(
+          js.Function(worker, parameterNames, implementation),
+          safeEntry(id, params, worker))
+        case None => List(js.Function(functionName, parameterNames, implementation))
+      }
 
     case cps.ToplevelDefinition.Val(id, ks, k, binding) =>
-      js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding).stmts)))
+      List(js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding).stmts))))
   }
 
   def toJS(e: cps.Extern)(using C: TransformerContext): js.Stmt = e match {
@@ -220,13 +258,13 @@ object TransformerCps extends Transformer {
         val subst = params.zip(args).toMap
         val resolvedArgs = templateArgs.map {
           case tArg @ Expr.Variable(id) => subst.get(id) match {
-            case Some(replaced) => toJS(replaced)
+            case Some(replaced) => toValueJS(replaced)
             case None => toJS(tArg)
           }
           case other => toJS(other)
         }
         js.RawExpr(strings, resolvedArgs)
-      case _ => js.Call(nameRef(id), args.map(toJS))
+      case _ => js.Call(nameRef(id), args.map(toValueJS))
     }
 
 
@@ -243,11 +281,33 @@ object TransformerCps extends Transformer {
     case Expr.Literal(s: String, core.Type.TString) => JsString(escape(s))
     case Expr.Literal(b: Byte, core.Type.TByte) => js.RawExpr(UByte.unsafeFromByte(b).toHexString)
     case Expr.Literal(value, _) => js.RawExpr(value.toString)
-    case Expr.Make(data, tag, vargs) => js.New(nameRef(tag), vargs.map(toJS))
+    case Expr.Make(data, tag, vargs) => js.New(nameRef(tag), vargs.map(toValueJS))
     case Expr.Abort => js.Undefined
     case Expr.Return => js.Undefined
     case Expr.Toplevel => js.Undefined
   }
+
+  /** A segment entry can be called directly only at a site that emits the
+   *  segment-boundary bounce. When it flows into an ordinary value position,
+   *  expose the usual stack-safe function convention with a fixed arity.
+   *
+   *  Continuations always receive a result and a meta-continuation. Functions
+   *  whose parameters were dropped simply ignore the extra arguments.
+   */
+  def toValueJS(e: cps.Expr)(using ctx: TransformerContext): js.Expr = e match {
+    case Expr.Variable(id) if ctx.segmentEntries.contains(id) =>
+      val value = freshName("value_")
+      val ks = freshName("ks_")
+      val call = js.Call(valueRef(id), List(js.Variable(value), js.Variable(ks)))
+      js.Lambda(List(value, ks), js.Lambda(Nil, call))
+    case other => toJS(other)
+  }
+
+  /** A closed internal call preserves the provenance of a raw segment entry
+   *  in its corresponding formal parameter. Open calls receive its ordinary
+   *  stack-safe value representation. */
+  private def toArgumentJS(call: cps.Stmt.App, argument: cps.Expr)(using ctx: TransformerContext): js.Expr =
+    if ctx.segmentFlow.preserves(call) then toJS(argument) else toValueJS(argument)
 
   def toJS(s: cps.Stmt)(using ctx: TransformerContext): Binding[List[js.Stmt]] = s match {
 
@@ -278,21 +338,39 @@ object TransformerCps extends Transformer {
           val bodyCtx = functionBodyContext.copy(
             renamedCaptures = ctx.renamedCaptures ++ renamings)
           val body = toJS(op.body)(using bodyCtx).stmts
-          (backups, nameDef(op.name) -> js.Lambda(op.params.map(nameDef), body))
+          if ctx.stackSafety.safeEntries.needsAdapter(op) then {
+            val worker = freshName("operation_worker_")
+            val declaration = js.Function(worker, op.params.map(nameDef), body)
+            val call = js.Call(js.Variable(worker), op.params.map(nameRef))
+            val entry = js.Lambda(op.params.map(nameDef), js.Lambda(Nil, call))
+            (backups, List(declaration), nameDef(op.name) -> entry)
+          } else
+            (backups, Nil, nameDef(op.name) -> js.Lambda(op.params.map(nameDef), body))
         }
         val allBackups = ops.flatMap(_._1)
-        val jsObj = js.Object(ops.map(_._2))
-        allBackups ++ List(js.Const(nameDef(id), jsObj)) ++ toJS(rest).run(k)
+        val workers = ops.flatMap(_._2)
+        val jsObj = js.Object(ops.map(_._3))
+        allBackups ++ workers ++ List(js.Const(nameDef(id), jsObj)) ++ toJS(rest).run(k)
+      }
+
+    case cps.Stmt.Let(id, Expr.Variable(source), rest) if ctx.segmentEntries.contains(source) =>
+      Binding { k =>
+        js.Const(nameDef(id), valueRef(source)) ::
+          toJS(rest)(using ctx.copy(segmentEntries = ctx.segmentEntries + id)).run(k)
       }
 
     case cps.Stmt.Let(id, binding, rest) =>
       Binding { k =>
-        js.Const(nameDef(id), toJS(binding)) :: toJS(rest).run(k)
+        js.Const(nameDef(id), toValueJS(binding)) :: toJS(rest).run(k)
       }
+
+    case app @ cps.Stmt.App(id, args, direct) if ctx.segmentEntries.contains(id) =>
+      val call = js.Call(valueRef(id), args.map(toValueJS))
+      pure(js.Return(js.Lambda(Nil, js.Return(call))) :: Nil)
 
     case app @ cps.Stmt.App(id, args, direct) =>
       ctx.dispatchAliases.get(id).orElse(ctx.defunctionalization.dispatchForCallee(id)) match {
-        case Some(dispatch) => dispatchCall(id, args, dispatch)
+        case Some(dispatch) => dispatchCall(app, args, dispatch)
         case None => ctx.secondClass.get(id) match {
         case Some(sci) =>
           // Second-class call: assign args to params, then jump.
@@ -314,8 +392,14 @@ object TransformerCps extends Transformer {
             tmpMap.map { case (p, t) => p -> Expr.Variable(t) }
           )
 
+          val temporaryEntries = tmpMap.collect {
+            case (source, temporary) if ctx.segmentEntries.contains(source) => temporary
+          }
+          val argumentCtx = ctx.copy(segmentEntries = ctx.segmentEntries ++ temporaryEntries)
+
           sci.params.zip(args).foreach { case (param, arg) =>
-            val jsArg = toJS(substitutions.substitute(arg)(using subst))
+            val substituted = substitutions.substitute(arg)(using subst)
+            val jsArg = toArgumentJS(app, substituted)(using argumentCtx)
             stmts.append(js.Assign(nameRef(param), jsArg))
           }
 
@@ -329,22 +413,17 @@ object TransformerCps extends Transformer {
 
         // In the App case for first-class calls:
         case None =>
-          val call = js.Call(valueRef(id), args.map(toJS))
-          ctx.stackSafety.transferOf(app) match {
-            case StackSafety.Transfer.Direct => pure(js.Return(call) :: Nil)
-            case StackSafety.Transfer.Jump | StackSafety.Transfer.Bounce =>
-              pure(js.Return(js.Lambda(Nil, js.Return(call))) :: Nil)
+          val callee = ctx.stackSafety.transferOf(app) match {
+            case StackSafety.Transfer.Direct => directRef(id)
+            case StackSafety.Transfer.Jump | StackSafety.Transfer.Safe => valueRef(id)
           }
+          pure(js.Return(js.Call(callee, args.map(toArgumentJS(app, _)))) :: Nil)
         }
       }
 
     case invoke @ cps.Stmt.Invoke(id, method, args) =>
-      val call = MethodCall(valueRef(id), memberNameRef(method), args.map(toJS): _*)
-      ctx.stackSafety.transferOf(invoke) match {
-        case StackSafety.Transfer.Direct => pure(js.Return(call) :: Nil)
-        case StackSafety.Transfer.Jump | StackSafety.Transfer.Bounce =>
-          pure(js.Return(js.Lambda(Nil, js.Return(call))) :: Nil)
-      }
+      val call = MethodCall(valueRef(id), memberNameRef(method), args.map(toValueJS): _*)
+      pure(js.Return(call) :: Nil)
 
     case cps.Stmt.Run(id, callee, args, Purity.Pure | Purity.Impure, rest) =>
       Binding { k =>
@@ -396,19 +475,19 @@ object TransformerCps extends Transformer {
 
     case cps.Stmt.Alloc(id, init, region, rest) =>
       Binding { k =>
-        js.Const(nameDef(id), js.MethodCall(valueRef(region), JSName("fresh"), toJS(init))) ::
+        js.Const(nameDef(id), js.MethodCall(valueRef(region), JSName("fresh"), toValueJS(init))) ::
           toJS(rest).run(k)
       }
 
     case cps.Stmt.Var(id, init, ks, rest) if !ctx.escaping.contains(id) =>
       Binding { k =>
-        js.Let(nameDef(id), toJS(init)) ::
+        js.Let(nameDef(id), toValueJS(init)) ::
           toJS(rest)(using ctx.copy(localVars = ctx.localVars + id)).run(k)
       }
 
     case cps.Stmt.Var(id, init, ks, rest) =>
       Binding { k =>
-        js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("fresh"), toJS(init))) ::
+        js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("fresh"), toValueJS(init))) ::
           toJS(rest).run(k)
       }
 
@@ -428,12 +507,12 @@ object TransformerCps extends Transformer {
 
     case cps.Stmt.Put(ref, value, rest) if ctx.localVars.contains(ref) =>
       Binding { k =>
-        js.Assign(valueRef(ref), toJS(value)) :: toJS(rest).run(k)
+        js.Assign(valueRef(ref), toValueJS(value)) :: toJS(rest).run(k)
       }
 
     case cps.Stmt.Put(ref, value, rest) =>
       Binding { k =>
-        js.ExprStmt(js.MethodCall(valueRef(ref), JSName("set"), toJS(value))) ::
+        js.ExprStmt(js.MethodCall(valueRef(ref), JSName("set"), toValueJS(value))) ::
           toJS(rest).run(k)
       }
 
@@ -450,7 +529,7 @@ object TransformerCps extends Transformer {
         js.Const(
           js.Pattern.Array(List(resume, ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
           Call(SHIFT, valueRef(prompt), toJS(ks1), toJS(k1))) ::
-          toJS(body).run(next)
+          toJS(body)(using ctx.copy(segmentEntries = ctx.segmentEntries + k)).run(next)
       }
 
     case cps.Stmt.Resume(r, ks, k, body, ks1, k1) =>
@@ -458,7 +537,7 @@ object TransformerCps extends Transformer {
         js.Const(
           js.Pattern.Array(List(ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
           Call(RESUME, valueRef(r), toJS(ks1), toJS(k1))) ::
-          toJS(body).run(next)
+          toJS(body)(using ctx.copy(segmentEntries = ctx.segmentEntries + k)).run(next)
       }
 
     case cps.Stmt.Hole(span) =>
@@ -466,7 +545,7 @@ object TransformerCps extends Transformer {
   }
 
   private def dispatchCall(
-    callee: Id,
+    call: cps.Stmt.App,
     args: List[cps.Expr],
     dispatch: Defunctionalization.ContinuationDispatch
   )(using ctx: TransformerContext): Binding[List[js.Stmt]] = {
@@ -481,9 +560,9 @@ object TransformerCps extends Transformer {
     val nextContinuation = freshName("next_cont_")
     val nextArguments = args.map(_ => freshName("next_arg_")).toVector
     val evaluate =
-      js.Const(nextContinuation, valueRef(callee)) +:
+      js.Const(nextContinuation, valueRef(call.id)) +:
         args.zip(nextArguments).map { case (argument, temporary) =>
-          js.Const(temporary, toJS(argument))
+          js.Const(temporary, toArgumentJS(call, argument))
         }
     val assign =
       js.Assign(js.Variable(state.continuation), js.Variable(nextContinuation)) +:
@@ -609,9 +688,14 @@ object TransformerCps extends Transformer {
             recursiveBody(state, translatedBody, bodyCtx)))
       else translatedBody
 
-      backups ++
-        List(js.Function(nameDef(id), params.map(nameDef), bodyStmts)) ++
-        toJS(rest).run(k)
+      val definitions = ctx.workers.get(id) match {
+        case Some(worker) => List(
+          js.Function(worker, params.map(nameDef), bodyStmts),
+          safeEntry(id, params, worker))
+        case None => List(js.Function(nameDef(id), params.map(nameDef), bodyStmts))
+      }
+
+      backups ++ definitions ++ toJS(rest).run(k)
     }
 
   /**

@@ -17,7 +17,7 @@ ranks
 transfers
   main -> loop: jump
   main -> loop: jump
-  main -> k: bounce [?]
+  main -> k: safe [?]
 
 /// JAVASCRIPT
 
@@ -32,7 +32,7 @@ function main_0(again_0, k_0) {
       flag_0 = false;
       continue loop_0;
     } else {
-      return () => k_0(0);
+      return k_0(0);
     }
   }
 }

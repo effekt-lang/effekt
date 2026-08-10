@@ -17,8 +17,12 @@ ranks
   main = 0
 transfers
   loop -> loop: jump
-  loop -> k: bounce [?]
-  main -> use: bounce [?]
+  loop -> k: safe [?]
+  main -> use: safe [?]
+
+/// SAFE_ENTRIES
+
+-
 
 /// JAVASCRIPT
 
@@ -29,9 +33,9 @@ function main_0(use_0, k_0) {
         flag_0 = false;
         continue loop_0;
       } else {
-        return () => k_0(0);
+        return k_0(0);
       }
     }
   }
-  return () => use_0(loop_0);
+  return use_0(loop_0);
 }

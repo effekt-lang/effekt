@@ -69,27 +69,27 @@ ranks
   dec = 0
   inc = 0
 transfers
-  inc -> k: bounce [?]
+  inc -> k: safe [?]
   main -> apply: jump
-  dec -> k: bounce [?]
+  dec -> k: safe [?]
   main -> apply: jump
   main -> f: direct [dec, inc]
 
 /// JAVASCRIPT
 
 function main_0(choice_0, k_0) {
-  function inc_0() {
-    return () => k_0(1);
-  }
-  function dec_0() {
-    return () => k_0(0);
-  }
   let f_0 = undefined;
   apply_0: {
     if (choice_0) {
+      function inc_0() {
+        return k_0(1);
+      }
       f_0 = inc_0;
       break apply_0;
     } else {
+      function dec_0() {
+        return k_0(0);
+      }
       f_0 = dec_0;
       break apply_0;
     }
