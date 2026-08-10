@@ -259,11 +259,11 @@ lazy val strings: Builtins = Map(
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x <= y)
   },
 
-  builtin("string::infixLt(Char, Char)") {
+  builtin("char::infixLt(Char, Char)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x < y)
   },
 
-  builtin("string::infixGt(Char, Char)") {
+  builtin("char::infixGt(Char, Char)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x > y)
   },
 
@@ -278,7 +278,7 @@ lazy val chars: Builtins = Map(
   },
 
   builtin("effekt::showBuiltin(Char)") {
-    case As.Int(n) :: Nil => Value.String(n.toString)
+    case As.Int(n) :: Nil => Value.String(java.lang.String.valueOf(Character.toChars(n.toInt)))
   }
 )
 
