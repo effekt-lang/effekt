@@ -1,0 +1,35 @@
+def main(p0, ks0, k0) {
+  def apply(f, x, ks) {
+    f(x, ks)
+  }
+  def forward(g, f, x, ks) {
+    g(f, x, ks)
+  }
+  shift(p0) { r, ks, k =>
+    forward(apply, k, 1, ks)
+  } @ ks0, k0
+}
+
+// A guarded indirect call whose target set is closed preserves segment-entry
+// provenance just like a syntactically direct call.
+/// JAVASCRIPT
+
+function apply_0(f_0, x_0, ks_1) {
+  return () => f_0(x_0, ks_1);
+}
+
+function main_0(p_0, ks_0, k_0) {
+  let g_0 = undefined;
+  let f_1 = undefined;
+  let x_1 = undefined;
+  let ks_3 = undefined;
+  forward_0: {
+    const [r_0, ks_2, k_1] = SHIFT(p_0, ks_0, k_0);
+    g_0 = apply_0;
+    f_1 = k_1;
+    x_1 = 1;
+    ks_3 = ks_2;
+    break forward_0;
+  }
+  return g_0(f_1, x_1, ks_3);
+}

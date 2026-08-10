@@ -12,13 +12,13 @@ ranks
   main = 1
   callee = 0
 transfers
-  callee -> k: bounce [?]
+  callee -> k: safe [?]
   main -> callee: direct [callee]
 
 /// JAVASCRIPT
 
 function callee_0(x_0, k_0) {
-  return () => k_0(x_0);
+  return k_0(x_0);
 }
 
 function main_0(x_1, k_1) {

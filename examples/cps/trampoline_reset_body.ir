@@ -4,18 +4,18 @@ def main(ks0, k0) {
   } @ ks0, k0
 }
 
-// Reset initializes the direct-style effect protocol, but its returned
-// continuation still has unknown stack behavior.
+// Reset returns the distinguished RETURN continuation. RETURN itself bounces
+// when it crosses back into the surrounding continuation segment.
 /// CONTROL_FLOW
 
 ranks
   main = 0
 transfers
-  main -> k: bounce [?]
+  main -> k: safe [?]
 
 /// JAVASCRIPT
 
 function main_0(ks_0, k_0) {
   const [p_0, ks_1, k_1] = RESET(ks_0, k_0);
-  return () => k_1(1, ks_1);
+  return k_1(1, ks_1);
 }

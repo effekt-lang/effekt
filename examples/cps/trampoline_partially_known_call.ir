@@ -13,23 +13,23 @@ def main(choice, unknown, k) {
 }
 
 // One target is known, but the incoming function keeps the target set open.
-// The call must therefore cross the trampoline.
+// The call therefore uses the stack-safe value-level entry.
 /// CONTROL_FLOW
 
 ranks
   local = 0
   main = 0
 transfers
-  local -> k: bounce [?]
+  local -> k: safe [?]
   main -> apply: jump
   main -> apply: jump
-  main -> f: bounce [local, ?]
+  main -> f: safe [local, ?]
 
 /// JAVASCRIPT
 
 function main_0(choice_0, unknown_0, k_0) {
   function local_0() {
-    return () => k_0(0);
+    return k_0(0);
   }
   let f_0 = undefined;
   apply_0: {
@@ -41,5 +41,5 @@ function main_0(choice_0, unknown_0, k_0) {
       break apply_0;
     }
   }
-  return () => f_0();
+  return f_0();
 }
