@@ -6,6 +6,15 @@ def main(use, k) {
 }
 
 // Passing local as a value forces it to be represented by a JS function.
+/// CONTROL_FLOW
+
+ranks
+  local = 0
+  main = 0
+transfers
+  local -> k: bounce [?]
+  main -> use: bounce [?]
+
 /// JAVASCRIPT
 
 function main_0(use_0, k_0) {

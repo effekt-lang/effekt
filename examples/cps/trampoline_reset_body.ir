@@ -6,6 +6,13 @@ def main(ks0, k0) {
 
 // Reset initializes the direct-style effect protocol, but its returned
 // continuation still has unknown stack behavior.
+/// CONTROL_FLOW
+
+ranks
+  main = 0
+transfers
+  main -> k: bounce [?]
+
 /// JAVASCRIPT
 
 function main_0(ks_0, k_0) {

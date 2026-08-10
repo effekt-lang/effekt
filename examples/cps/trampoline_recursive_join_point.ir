@@ -10,6 +10,15 @@ def main(again, k) {
 }
 
 // A recursive nonescaping local definition is a labeled loop.
+/// CONTROL_FLOW
+
+ranks
+  main = 0
+transfers
+  main -> loop: jump
+  main -> loop: jump
+  main -> k: bounce [?]
+
 /// JAVASCRIPT
 
 function main_0(again_0, k_0) {

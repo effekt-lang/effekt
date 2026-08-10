@@ -17,6 +17,20 @@ def main(flag, k) {
 
 // apply invokes the continuation that loop passes to it. This indirect edge
 // closes the otherwise hidden loop -> apply -> next -> loop cycle.
+/// CONTROL_FLOW
+
+ranks
+  main = 2
+  next = 2
+  loop = 1
+  apply = 0
+transfers
+  apply -> k: bounce [?]
+  next -> loop: direct [loop]
+  loop -> apply: direct [apply]
+  loop -> k: bounce [?]
+  main -> loop: direct [loop]
+
 /// JAVASCRIPT
 
 function apply_0(k_0, x_0) {
@@ -27,10 +41,10 @@ function loop_0(flag_0, k_1) {
   loop_0: while (true) {
     if (flag_0) {
       function next_0(value_0) {
-        return () => loop_0(false, backup_k_0);
+        return loop_0(false, backup_k_0);
       }
       const backup_k_0 = k_1;
-      return () => apply_0(next_0, 0);
+      return apply_0(next_0, 0);
     } else {
       return () => k_1(1);
     }
@@ -38,5 +52,5 @@ function loop_0(flag_0, k_1) {
 }
 
 function main_0(flag_1, k_2) {
-  return () => loop_0(flag_1, k_2);
+  return loop_0(flag_1, k_2);
 }
