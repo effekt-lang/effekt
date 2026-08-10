@@ -3,7 +3,6 @@ package cpsds
 
 import core.Id
 import kiama.output.ParenPrettyPrinter
-import effekt.source.FeatureFlag
 
 object PrettyPrinter extends ParenPrettyPrinter {
 
@@ -30,8 +29,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case e: Expr => format(e)
     case x: Id => x.show
   }
-
-  val emptyline: Doc = line <> line
 
   def toDoc(m: ModuleDecl): Doc = {
     toDoc(m.definitions)
@@ -156,11 +153,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(s: symbols.Symbol): Doc = if (s.id < 0) s.name.name else s.show
 
-  def nested(content: Doc): Doc = group(nest(line <> content))
-
   def parens(docs: List[Doc]): Doc = parens(hsep(docs, comma))
-
-  def braces(docs: List[Doc]): Doc = braces(hsep(docs, semi))
 
   def block(content: Doc): Doc = braces(nest(line <> content) <> line)
 
