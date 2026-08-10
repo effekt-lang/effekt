@@ -3,14 +3,14 @@ package generator
 package js
 
 import effekt.core.Id
-import effekt.cpsds
+import effekt.cps
 
 import java.util.IdentityHashMap
 import scala.annotation.tailrec
 
 /**
  * A flat plan for defunctionalizing finite sets of local continuations while
- * translating CPSDS to JavaScript. The CPSDS tree remains the source of truth;
+ * translating CPS to JavaScript. The CPS tree remains the source of truth;
  * this structure only associates definitions and applications with their
  * target representation.
  */
@@ -23,7 +23,7 @@ object Defunctionalization {
     tag: Int,
     params: Vector[Id],
     captures: Vector[Id],
-    body: cpsds.Stmt
+    body: cps.Stmt
   )
 
   final case class ContinuationDispatch(
@@ -51,7 +51,7 @@ object Defunctionalization {
     arity: Int,
     boundary: Boolean,
     targets: Set[Id],
-    calls: Vector[cpsds.GuardedEquality.CallTargets]
+    calls: Vector[cps.GuardedEquality.CallTargets]
   )
 
   /** Lexical scopes relevant to JavaScript label visibility. Definitions are
@@ -69,7 +69,7 @@ object Defunctionalization {
 
   private final class Locations(
     private val definitions: Map[Id, Vector[Scope]],
-    private val applications: IdentityHashMap[cpsds.Stmt, Vector[Scope]],
+    private val applications: IdentityHashMap[cps.Stmt, Vector[Scope]],
     isSecondClass: Id => Boolean
   ) {
     private def bodyScope(entry: Id): Option[Vector[Scope]] =
@@ -88,7 +88,7 @@ object Defunctionalization {
      *  dispatcher after selected continuation definitions are replaced by
      *  their cases? */
     def visibleFrom(
-      call: cpsds.Stmt,
+      call: cps.Stmt,
       entry: Id,
       cases: Set[Id]
     ): Boolean = {
@@ -108,13 +108,13 @@ object Defunctionalization {
       }
     }
 
-    def insideCase(call: cpsds.Stmt, cases: Set[Id]): Boolean =
+    def insideCase(call: cps.Stmt, cases: Set[Id]): Boolean =
       Option(applications.get(call)).exists(_.exists {
         case Scope.Definition(id, _) => cases.contains(id)
         case Scope.Boundary(_) => false
       })
 
-    def enclosingDefinitions(call: cpsds.Stmt): Vector[Id] =
+    def enclosingDefinitions(call: cps.Stmt): Vector[Id] =
       Option(applications.get(call)).toVector.flatten.collect {
         case Scope.Definition(id, _) => id
       }
@@ -122,9 +122,9 @@ object Defunctionalization {
   }
 
   private object Locations {
-    def apply(module: cpsds.ModuleDecl, isSecondClass: Id => Boolean): Locations = {
+    def apply(module: cps.ModuleDecl, isSecondClass: Id => Boolean): Locations = {
       val definitions = scala.collection.mutable.LinkedHashMap.empty[Id, Vector[Scope]]
-      val applications = new IdentityHashMap[cpsds.Stmt, Vector[Scope]]()
+      val applications = new IdentityHashMap[cps.Stmt, Vector[Scope]]()
       var nextBoundary = 0
 
       def boundary(): Scope = {
@@ -133,43 +133,43 @@ object Defunctionalization {
         result
       }
 
-      def visit(stmt: cpsds.Stmt, scopes: Vector[Scope]): Unit = stmt match {
-        case cpsds.Stmt.Def(id, _, body, rest) =>
+      def visit(stmt: cps.Stmt, scopes: Vector[Scope]): Unit = stmt match {
+        case cps.Stmt.Def(id, _, body, rest) =>
           definitions(id) = scopes
           visit(body, scopes :+ Scope.Definition(id, !isSecondClass(id)))
           visit(rest, scopes)
 
-        case cpsds.Stmt.New(_, _, operations, rest) =>
+        case cps.Stmt.New(_, _, operations, rest) =>
           operations.foreach(operation => visit(operation.body, scopes :+ boundary()))
           visit(rest, scopes)
 
-        case cpsds.Stmt.Let(_, _, rest) => visit(rest, scopes)
-        case call: cpsds.Stmt.App => applications.put(call, scopes)
-        case _: cpsds.Stmt.Invoke => ()
-        case cpsds.Stmt.Run(_, _, _, _, rest) => visit(rest, scopes)
-        case cpsds.Stmt.If(_, thn, els) =>
+        case cps.Stmt.Let(_, _, rest) => visit(rest, scopes)
+        case call: cps.Stmt.App => applications.put(call, scopes)
+        case _: cps.Stmt.Invoke => ()
+        case cps.Stmt.Run(_, _, _, _, rest) => visit(rest, scopes)
+        case cps.Stmt.If(_, thn, els) =>
           visit(thn, scopes)
           visit(els, scopes)
-        case cpsds.Stmt.Match(_, clauses, default) =>
+        case cps.Stmt.Match(_, clauses, default) =>
           clauses.foreach { case (_, clause) => visit(clause.body, scopes) }
           default.foreach(visit(_, scopes))
-        case cpsds.Stmt.Region(_, _, rest) => visit(rest, scopes)
-        case cpsds.Stmt.Alloc(_, _, _, rest) => visit(rest, scopes)
-        case cpsds.Stmt.Var(_, _, _, rest) => visit(rest, scopes)
-        case cpsds.Stmt.Dealloc(_, rest) => visit(rest, scopes)
-        case cpsds.Stmt.Get(_, _, rest) => visit(rest, scopes)
-        case cpsds.Stmt.Put(_, _, rest) => visit(rest, scopes)
-        case cpsds.Stmt.Reset(_, _, _, body, _, _) => visit(body, scopes)
-        case cpsds.Stmt.Shift(_, _, _, _, body, _, _) => visit(body, scopes)
-        case cpsds.Stmt.Resume(_, _, _, body, _, _) => visit(body, scopes)
-        case _: cpsds.Stmt.Hole => ()
+        case cps.Stmt.Region(_, _, rest) => visit(rest, scopes)
+        case cps.Stmt.Alloc(_, _, _, rest) => visit(rest, scopes)
+        case cps.Stmt.Var(_, _, _, rest) => visit(rest, scopes)
+        case cps.Stmt.Dealloc(_, rest) => visit(rest, scopes)
+        case cps.Stmt.Get(_, _, rest) => visit(rest, scopes)
+        case cps.Stmt.Put(_, _, rest) => visit(rest, scopes)
+        case cps.Stmt.Reset(_, _, _, body, _, _) => visit(body, scopes)
+        case cps.Stmt.Shift(_, _, _, _, body, _, _) => visit(body, scopes)
+        case cps.Stmt.Resume(_, _, _, body, _, _) => visit(body, scopes)
+        case _: cps.Stmt.Hole => ()
       }
 
       module.definitions.foreach {
-        case cpsds.ToplevelDefinition.Def(id, _, body) =>
+        case cps.ToplevelDefinition.Def(id, _, body) =>
           definitions(id) = Vector.empty
           visit(body, Vector(Scope.Definition(id, function = true)))
-        case cpsds.ToplevelDefinition.Val(id, _, _, binding) =>
+        case cps.ToplevelDefinition.Val(id, _, _, binding) =>
           definitions(id) = Vector.empty
           visit(binding, Vector(Scope.Definition(id, function = true)))
       }
@@ -179,7 +179,7 @@ object Defunctionalization {
   }
 
   def analyze(
-    module: cpsds.ModuleDecl,
+    module: cps.ModuleDecl,
     isRecursive: Id => Boolean,
     isSecondClass: Id => Boolean
   ): Plan =
@@ -187,13 +187,13 @@ object Defunctionalization {
       module,
       isRecursive,
       isSecondClass,
-      module.definitions.map(cpsds.GuardedEquality.targets).toVector)
+      module.definitions.map(cps.GuardedEquality.targets).toVector)
 
   def analyze(
-    module: cpsds.ModuleDecl,
+    module: cps.ModuleDecl,
     isRecursive: Id => Boolean,
     isSecondClass: Id => Boolean,
-    targetFlows: Vector[cpsds.GuardedEquality.TargetResult]
+    targetFlows: Vector[cps.GuardedEquality.TargetResult]
   ): Plan = {
     require(module.definitions.size == targetFlows.size)
     val locations = Locations(module, isSecondClass)
@@ -209,8 +209,8 @@ object Defunctionalization {
         definition.params.iterator.map(_ -> definition.id)
       }.toMap
       val toplevelParameterOwner = toplevel match {
-        case cpsds.ToplevelDefinition.Def(id, params, _) => params.map(_ -> id).toMap
-        case cpsds.ToplevelDefinition.Val(id, ks, k, _) => Map(ks -> id, k -> id)
+        case cps.ToplevelDefinition.Def(id, params, _) => params.map(_ -> id).toMap
+        case cps.ToplevelDefinition.Val(id, ks, k, _) => Map(ks -> id, k -> id)
       }
       val parameterOwner = localParameterOwner ++ toplevelParameterOwner
       val calls = flow.callTargets

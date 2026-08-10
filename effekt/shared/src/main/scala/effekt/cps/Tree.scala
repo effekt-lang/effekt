@@ -1,5 +1,5 @@
 package effekt
-package cpsds
+package cps
 
 import core.{ Id, ValueType }
 import effekt.source.FeatureFlag
@@ -13,7 +13,7 @@ import effekt.util.messages.INTERNAL_ERROR
 
 sealed trait Tree
 
-/** A CPS-DS module. */
+/** A CPS module. */
 case class ModuleDecl(
   includes: List[String],
   declarations: List[core.Declaration],
@@ -148,7 +148,7 @@ inline def rewriting[T <: AnyRef](t: T)(inline run: T => T): T =
 
 // ---------- Binding Monad ----------
 
-private[cpsds] enum Binding {
+private[cps] enum Binding {
   case Let(id: Id, binding: Expr)
   case Def(id: Id, params: List[Id], body: Stmt)
   case New(id: Id, interface: Id, operations: List[Operation])
@@ -161,7 +161,7 @@ private[cpsds] enum Binding {
     case Binding.Run(id, callee, args, purity) => Stmt.Run(id, callee, args, purity, rest)
   }
 }
-private[cpsds] object Binding {
+private[cps] object Binding {
   def apply(bindings: List[Binding], body: Stmt): Stmt = bindings match {
     case Nil => body
     case binding :: rest => binding.toStmt(Binding(rest, body))

@@ -17,7 +17,7 @@ class ChezSchemeCPS extends Compiler[String] {
   override def prettyIR(source: Source, stage: Stage)(using C: Context): Option[Document] = stage match {
     case Stage.Core if C.config.optimize() => Optimized(source).map { (_, _, res) => core.PrettyPrinter(Context.config.debug()).format(res) }
     case Stage.Core => Core(source).map { res => core.PrettyPrinter(Context.config.debug()).format(res.core) }
-    case Stage.CPS => CPSTransformed(source).map { (_, _, _, res) => cpsds.PrettyPrinter.format(res) }
+    case Stage.CPS => CPSTransformed(source).map { (_, _, _, res) => cps.PrettyPrinter.format(res) }
     case Stage.Machine => None
     case Stage.Target => LSP(source)
   }
@@ -33,7 +33,7 @@ class ChezSchemeCPS extends Compiler[String] {
 
   // The Compilation Pipeline
   // ------------------------
-  // Source => Core => CPS-DS => Chez
+  // Source => Core => CPS => Chez
   lazy val Core = Phase.cached("core") {
     Frontend andThen Middleend
   }
@@ -49,22 +49,22 @@ class ChezSchemeCPS extends Compiler[String] {
     case (mainSymbol, mainFile, core) =>
       val renamed = new Renamer().apply(core)
 
-      def optimize(input: cpsds.ModuleDecl): cpsds.ModuleDecl =
+      def optimize(input: cps.ModuleDecl): cps.ModuleDecl =
         var tree = input
-        tree = cpsds.StaticArguments.transform(tree)
-        tree = cpsds.Inliner.transform(tree, mainSymbol)
-        tree = cpsds.BlockSinking.transform(tree, mainSymbol)
-        tree = cpsds.ParameterDropping.transform(tree)
-        tree = cpsds.Simplifier.transform(tree)
+        tree = cps.StaticArguments.transform(tree)
+        tree = cps.Inliner.transform(tree, mainSymbol)
+        tree = cps.BlockSinking.transform(tree, mainSymbol)
+        tree = cps.ParameterDropping.transform(tree)
+        tree = cps.Simplifier.transform(tree)
         tree
 
-      val transformed = optimize(optimize(cpsds.transform(renamed)))
+      val transformed = optimize(optimize(cps.transform(renamed)))
       (mainSymbol, mainFile, core, transformed)
   }
 
   lazy val Chez = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val compiled = TransformerCpsDs.compile(cps, mainSymbol)
+      val compiled = TransformerCps.compile(cps, mainSymbol)
       val doc = pretty(chez.Let(Nil, compiled))
       (Map(mainFile -> doc.layout), mainFile)
   }
@@ -72,7 +72,7 @@ class ChezSchemeCPS extends Compiler[String] {
   // TODO: Only show generated code
   lazy val LSP = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val compiled = TransformerCpsDs.compileLSP(cps, mainSymbol)
+      val compiled = TransformerCps.compileLSP(cps, mainSymbol)
       pretty(chez.Let(Nil, compiled))
   }
 

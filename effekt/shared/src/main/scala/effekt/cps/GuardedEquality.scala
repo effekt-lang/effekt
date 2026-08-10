@@ -1,5 +1,5 @@
 package effekt
-package cpsds
+package cps
 
 import core.Id
 
@@ -57,7 +57,7 @@ object GuardedEquality {
     recursive: Vector[Boolean]
   )
 
-  private[cpsds] final case class Definition(
+  private[cps] final case class Definition(
     id: Id,
     params: Vector[Id],
     body: Stmt,
@@ -67,7 +67,7 @@ object GuardedEquality {
     captures: Vector[Id]
   )
 
-  private[cpsds] final case class CallSite(
+  private[cps] final case class CallSite(
     stmt: Stmt,
     callee: Id,
     arity: Int
@@ -75,15 +75,15 @@ object GuardedEquality {
 
   final class Result private[GuardedEquality] (
     val facts: Vector[FunctionFacts],
-    private[cpsds] val definitions: Vector[Definition],
-    private[cpsds] val sites: Vector[CallSite],
-    private[cpsds] val targetsAt: Map[Int, Set[Id]],
-    private[cpsds] val rigidSites: Set[Int],
-    private[cpsds] val rigidFunctions: Set[Id],
-    private[cpsds] val bindings: Map[Id, Expr],
+    private[cps] val definitions: Vector[Definition],
+    private[cps] val sites: Vector[CallSite],
+    private[cps] val targetsAt: Map[Int, Set[Id]],
+    private[cps] val rigidSites: Set[Int],
+    private[cps] val rigidFunctions: Set[Id],
+    private[cps] val bindings: Map[Id, Expr],
     private val sitesByStmt: IdentityHashMap[Stmt, Integer]
   ) {
-    private[cpsds] def siteOf(stmt: Stmt): Int = {
+    private[cps] def siteOf(stmt: Stmt): Int = {
       val site = sitesByStmt.get(stmt)
       assert(site != null, "all call sites are registered before analysis")
       site.intValue
@@ -106,7 +106,7 @@ object GuardedEquality {
   // -----------------------------------------------------------------------
   // Finite equality origins
 
-  private[cpsds] enum Origin {
+  private[cps] enum Origin {
     /** The value of a variable in the observed closure's lexical activation. */
     case Symbol(id: Id)
 

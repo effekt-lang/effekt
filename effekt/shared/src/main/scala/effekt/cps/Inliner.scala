@@ -1,8 +1,8 @@
 package effekt
-package cpsds
+package cps
 
 import core.Id
-import cpsds.substitutions.{ Substitution, substitute }
+import cps.substitutions.{ Substitution, substitute }
 
 object Inliner {
 
