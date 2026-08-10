@@ -1,0 +1,8 @@
+def main(x, k) {
+  k(x)
+}
+
+/// JAVASCRIPT
+function main_0(x_0, k_0) {
+  return () => k_0(x_0);
+}
