@@ -182,15 +182,27 @@ object Defunctionalization {
     module: cpsds.ModuleDecl,
     isRecursive: Id => Boolean,
     isSecondClass: Id => Boolean
+  ): Plan =
+    analyze(
+      module,
+      isRecursive,
+      isSecondClass,
+      module.definitions.map(cpsds.GuardedEquality.targets).toVector)
+
+  def analyze(
+    module: cpsds.ModuleDecl,
+    isRecursive: Id => Boolean,
+    isSecondClass: Id => Boolean,
+    targetFlows: Vector[cpsds.GuardedEquality.TargetResult]
   ): Plan = {
+    require(module.definitions.size == targetFlows.size)
     val locations = Locations(module, isSecondClass)
     val allCases = scala.collection.mutable.LinkedHashMap.empty[Id, ContinuationCase]
     val allDispatches = scala.collection.mutable.LinkedHashMap.empty[Id, ContinuationDispatch]
     val allApplications = scala.collection.mutable.LinkedHashMap.empty[Id, ContinuationDispatch]
     var nextTag = 0
 
-    module.definitions.foreach { toplevel =>
-      val flow = cpsds.GuardedEquality.targets(toplevel)
+    module.definitions.zip(targetFlows).foreach { case (toplevel, flow) =>
       val definitions = flow.localDefinitions
       val definitionById = definitions.iterator.map(d => d.id -> d).toMap
       val localParameterOwner = definitions.iterator.flatMap { definition =>

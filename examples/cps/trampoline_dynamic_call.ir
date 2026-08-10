@@ -3,6 +3,13 @@ def main(f, x) {
 }
 
 // The target is unknown, so its stack behavior is unknown as well.
+/// CONTROL_FLOW
+
+ranks
+  main = 0
+transfers
+  main -> f: bounce [?]
+
 /// JAVASCRIPT
 
 function main_0(f_0, x_0) {

@@ -62,6 +62,19 @@ def main(choice, k) {
   }
 }
 
+/// CONTROL_FLOW
+
+ranks
+  main = 1
+  dec = 0
+  inc = 0
+transfers
+  inc -> k: bounce [?]
+  main -> apply: jump
+  dec -> k: bounce [?]
+  main -> apply: jump
+  main -> f: direct [dec, inc]
+
 /// JAVASCRIPT
 
 function main_0(choice_0, k_0) {
@@ -81,5 +94,5 @@ function main_0(choice_0, k_0) {
       break apply_0;
     }
   }
-  return () => f_0();
+  return f_0();
 }

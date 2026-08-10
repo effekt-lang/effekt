@@ -49,6 +49,22 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
         case _ => ()
       }.mkString("\n")
     })
+  case ControlFlow extends AnalysisPass("CONTROL_FLOW",
+    (_, input, _) => {
+      val kinds = js.TransformerCpsDs.computeKinds(input)
+      val targetFlows = input.definitions.map(GuardedEquality.targets).toVector
+      val defunctionalization = js.Defunctionalization.analyze(
+        input,
+        id => kinds.get(id).exists(_.isRecursive),
+        id => kinds.get(id).exists(_.isSecondClass),
+        targetFlows)
+      js.StackSafety.analyze(
+        input,
+        id => kinds.get(id).exists(_.isRecursive),
+        id => kinds.get(id).exists(_.isSecondClass),
+        defunctionalization,
+        targetFlows).show
+    })
   case JavaScript extends AnalysisPass("JAVASCRIPT",
     (_, input, _) => {
       given Context = new TestContext
@@ -57,6 +73,7 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
       js.TransformerCpsDs.resetNames()
       val generated = js.TransformerCpsDs.toJS(input, Nil)
       js.PrettyPrinter.format(js.FunctionFloating.transform(generated).stmts).layout
+        .linesIterator.map(_.stripTrailing).mkString("\n")
     })
 }
 
