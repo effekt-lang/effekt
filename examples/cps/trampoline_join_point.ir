@@ -17,7 +17,7 @@ ranks
 transfers
   main -> join: jump
   main -> join: jump
-  main -> k: bounce [?]
+  main -> k: safe [?]
 
 /// JAVASCRIPT
 
@@ -32,5 +32,5 @@ function main_0(choice_0, k_0) {
       break join_0;
     }
   }
-  return () => k_0(x_0);
+  return k_0(x_0);
 }

@@ -12,14 +12,14 @@ ranks
   local = 0
   main = 0
 transfers
-  local -> k: bounce [?]
-  main -> use: bounce [?]
+  local -> k: safe [?]
+  main -> use: safe [?]
 
 /// JAVASCRIPT
 
 function main_0(use_0, k_0) {
   function local_0(x_0) {
-    return () => k_0(x_0);
+    return k_0(x_0);
   }
-  return () => use_0(local_0);
+  return use_0(local_0);
 }

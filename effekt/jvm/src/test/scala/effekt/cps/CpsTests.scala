@@ -65,6 +65,22 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
         defunctionalization,
         targetFlows).show
     })
+  case SafeEntries extends AnalysisPass("SAFE_ENTRIES",
+    (_, input, _) => {
+      val kinds = js.TransformerCps.computeKinds(input)
+      val targetFlows = input.definitions.map(GuardedEquality.targets).toVector
+      val defunctionalization = js.Defunctionalization.analyze(
+        input,
+        id => kinds.get(id).exists(_.isRecursive),
+        id => kinds.get(id).exists(_.isSecondClass),
+        targetFlows)
+      js.StackSafety.analyze(
+        input,
+        id => kinds.get(id).exists(_.isRecursive),
+        id => kinds.get(id).exists(_.isSecondClass),
+        defunctionalization,
+        targetFlows).safeEntries.show
+    })
   case JavaScript extends AnalysisPass("JAVASCRIPT",
     (_, input, _) => {
       given Context = new TestContext
