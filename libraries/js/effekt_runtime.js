@@ -132,14 +132,14 @@ function CAPTURE(body) {
 
 const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 
-// HANDLE(ks, ks, (p, ks, k) => { STMT })
-function RESET(prog, ks, k) {
+// Creates a fresh prompt and returns the control state in which its body runs.
+function RESET(ks, k) {
   const prompt = Symbol(); // gensym
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  return prog(prompt, { stack: null, prompt, arena: null, rest }, RETURN)
+  return [prompt, { stack: null, prompt, arena: null, rest }, RETURN]
 }
 
-function SHIFT(p, body, ks, k) {
+function SHIFT(p, ks, k) {
 
   // TODO avoid constructing this object
   let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
@@ -159,11 +159,11 @@ function SHIFT(p, body, ks, k) {
 
   const k1 = meta.stack
   meta.stack = null
-  return body(cont, meta, k1)
+  return [cont, meta, k1]
 }
 
-// Rewind stack `cont` back onto `k` :: `ks` and resume with c
-function RESUME(cont, c, ks, k) {
+// Rewind stack `cont` back onto `k` :: `ks` and return the restored control state.
+function RESUME(cont, ks, k) {
   let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
   let toRewind = cont
   while (!!toRewind) {
@@ -174,7 +174,7 @@ function RESUME(cont, c, ks, k) {
 
   const k1 = meta.stack // TODO instead copy meta here, like elsewhere?
   meta.stack = null
-  return () => c(meta, k1)
+  return [meta, k1]
 }
 
 function RUN_TOPLEVEL(comp) {
