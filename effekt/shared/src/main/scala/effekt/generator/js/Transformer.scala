@@ -5,7 +5,7 @@ package js
 import effekt.context.Context
 import effekt.context.assertions.*
 import effekt.core.{ *, given }
-import effekt.symbols.{ Module, Symbol, Wildcard, Bindings }
+import effekt.symbols.{ Module, Wildcard, Bindings }
 
 import scala.collection.mutable
 
@@ -106,7 +106,15 @@ trait Transformer {
   // attempt to have better / shorter names
   val usedNames: mutable.Map[String, Int] = mutable.Map.empty
   val names: mutable.Map[Id, String] = mutable.Map.empty
+  private var nextFreshName: Int = 0
   val baseNameRx = """([A-Za-z$]*(?:_[A-Za-z]+)*)""".r // extracts the base number up until the first number
+
+  /** Start an independent JavaScript translation with deterministic names. */
+  def resetNames(): Unit = {
+    usedNames.clear()
+    names.clear()
+    nextFreshName = 0
+  }
 
   def uniqueName(sym: Id): JSName = {
     def uniqueNameFor(base: String): String =
@@ -129,7 +137,9 @@ trait Transformer {
   def memberNameRef(id: Id): JSName = uniqueName(id)
 
   def freshName(s: String): JSName =
-    JSName(s + Symbol.fresh.next())
+    val result = JSName(s + nextFreshName)
+    nextFreshName += 1
+    result
 
   def escape(scalaString: String): String =
     scalaString.foldLeft(StringBuilder()) { (acc, c) =>

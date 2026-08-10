@@ -1,0 +1,17 @@
+def callee(x, k) {
+  k(x)
+}
+def main(x, k) {
+  callee(x, k)
+}
+
+// The callee is statically known and the call graph is acyclic.
+/// JAVASCRIPT
+
+function callee_0(x_0, k_0) {
+  return () => k_0(x_0);
+}
+
+function main_0(x_1, k_1) {
+  return () => callee_0(x_1, k_1);
+}

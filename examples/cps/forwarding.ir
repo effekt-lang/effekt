@@ -20,3 +20,13 @@ def main(choice, k) {
     k(4, 3)
   }
 }
+
+/// JAVASCRIPT
+
+function main_0(choice_0, k_0) {
+  if (choice_0) {
+    return () => k_0(2, 1);
+  } else {
+    return () => k_0(4, 3);
+  }
+}

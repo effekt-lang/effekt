@@ -1,0 +1,14 @@
+def main(ks0, k0) {
+  reset(p, ks, k) {
+    k(1, ks)
+  } @ ks0, k0
+}
+
+// Reset initializes the direct-style effect protocol, but its returned
+// continuation still has unknown stack behavior.
+/// JAVASCRIPT
+
+function main_0(ks_0, k_0) {
+  const [p_0, ks_1, k_1] = RESET(ks_0, k_0);
+  return () => k_1(1, ks_1);
+}

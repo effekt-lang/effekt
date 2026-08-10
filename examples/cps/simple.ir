@@ -21,3 +21,9 @@ def main(ks, k) {
 def main(ks, k) {
   k(10, ks)
 }
+
+/// JAVASCRIPT
+
+function main_0(ks_0, k_0) {
+  return () => k_0(10, ks_0);
+}

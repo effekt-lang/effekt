@@ -1,0 +1,10 @@
+def main(f, x) {
+  f(x)
+}
+
+// The target is unknown, so its stack behavior is unknown as well.
+/// JAVASCRIPT
+
+function main_0(f_0, x_0) {
+  return () => f_0(x_0);
+}
