@@ -1,14 +1,12 @@
 package effekt
 package cpsds
 
-import effekt.core.{ BlockType, Id, Names, Type, ValueType }
-import effekt.source.{ FeatureFlag, Span }
+import effekt.core.{ Id, Names, Type, ValueType }
+import effekt.source.Span
 import effekt.util.UByte
 import effekt.util.messages.{ ErrorReporter, ParseError }
 import kiama.parsing.{ NoSuccess, ParseResult, Parsers, Success }
-import kiama.util.{ Position, Range, Severities, Source, StringSource }
-
-import scala.collection.mutable
+import kiama.util.{ Range, Severities, Source, StringSource }
 
 class Parser(names: Names) extends Parsers {
 
@@ -54,7 +52,6 @@ class Parser(names: Names) extends Parsers {
   lazy val `reset` = keyword("reset")
   lazy val `shift` = keyword("shift")
   lazy val `resume` = keyword("resume")
-  lazy val `module` = keyword("module")
   lazy val `make` = keyword("make")
   lazy val `get` = keyword("get")
   lazy val `put` = keyword("put")
@@ -70,7 +67,7 @@ class Parser(names: Names) extends Parsers {
   def keywordStrings: List[String] = List(
     "def", "let", "new", "run", "if", "else", "match", "case",
     "var", "dealloc", "region", "alloc", "in", "reset", "shift",
-    "resume", "module", "make", "get", "put", "true", "false",
+    "resume", "make", "get", "put", "true", "false",
     "abort", "return", "toplevel"
   )
 
@@ -101,8 +98,6 @@ class Parser(names: Names) extends Parsers {
 
   // === Names ===
   lazy val id: P[Id] = ident ^^ { x => names.idFor(x) }
-
-  lazy val moduleName = """[a-zA-Z_][a-zA-Z0-9_]*(/[a-zA-Z_][a-zA-Z0-9_]*)*""".r
 
   // === Helpers ===
 

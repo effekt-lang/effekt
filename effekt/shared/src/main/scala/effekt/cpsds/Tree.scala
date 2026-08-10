@@ -6,9 +6,6 @@ import effekt.source.FeatureFlag
 import effekt.util.messages.ErrorReporter
 import effekt.util.messages.INTERNAL_ERROR
 
-import scala.annotation.tailrec
-import scala.collection.mutable
-
 // Idea behind this IR:
 // - close to JS
 // - be able to represent continuations and metacontinuations
@@ -16,9 +13,7 @@ import scala.collection.mutable
 
 sealed trait Tree
 
-/**
- * A module declaration, the path should be an Effekt include path, not a system dependent file path
- */
+/** A CPS-DS module. */
 case class ModuleDecl(
   includes: List[String],
   declarations: List[core.Declaration],
@@ -35,8 +30,6 @@ enum ToplevelDefinition {
   case Def(id: Id, params: List[Id], body: Stmt)
   case Val(id: Id, ks: Id, k: Id, binding: Stmt)
 
-  lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
-  lazy val free: Set[Id] = freeVariables.free(this)
   lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
   lazy val refs: DB[Int] = references.refs(this)
 }
@@ -478,7 +471,7 @@ object functionUsage {
     case Stmt.Def(id, params, body, rest) =>
       body.uses ++ rest.uses + (id -> (body.free -- params))
     case Stmt.New(id, interface, operations, rest) =>
-      val freeInOperations = operations.foldLeft(rest.free) { case (acc, op) => acc ++ op.free }
+      val freeInOperations = operations.foldLeft(Set.empty[Id]) { case (acc, op) => acc ++ op.free }
       rest.uses ++ all(operations, _.uses) + (id -> freeInOperations)
     case Stmt.Let(id, binding, rest) =>
       rest.uses

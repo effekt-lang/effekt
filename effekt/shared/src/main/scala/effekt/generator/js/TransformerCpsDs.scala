@@ -18,8 +18,6 @@ object TransformerCpsDs extends Transformer {
   val RESUME = js.Variable(JSName("RESUME"))
   val BOUNDARY_CONTINUATION = JSName("__boundary")
 
-  // --- Context ---
-
   case class FunctionKind(isRecursive: Boolean, escapes: Boolean) {
     def isSecondClass: Boolean = !escapes
   }
@@ -73,7 +71,7 @@ object TransformerCpsDs extends Transformer {
 
   def computeKinds(m: cpsds.ModuleDecl): Map[Id, FunctionKind] = {
     val uses = m.uses.toMap
-    val escape = cpsds.escapeAnalysis.escapes(m)
+    val escape = m.escapes
     uses.map { case (id, callees) =>
       id -> FunctionKind(
         isRecursive = callees.contains(id),
@@ -92,8 +90,6 @@ object TransformerCpsDs extends Transformer {
    */
   def valueRef(id: Id)(using ctx: TransformerContext): js.Expr =
     nameRef(ctx.renamedCaptures.getOrElse(id, id))
-
-  // --- Backup mutable params for closures ---
 
   /**
    * Backup mutable second-class params that are free in the given body,
@@ -122,8 +118,6 @@ object TransformerCpsDs extends Transformer {
     else
       (Nil, Map.empty)
   }
-
-  // --- Entry points ---
 
   def compile(input: cpsds.ModuleDecl, coreModule: core.ModuleDecl, mainSymbol: symbols.TermSymbol)(using Context): js.Module = {
     resetNames()
@@ -155,7 +149,7 @@ object TransformerCpsDs extends Transformer {
         given ctx: TransformerContext = TransformerContext(
           externs.collect { case d: cpsds.Extern.Def => (d.id, d) }.toMap,
           kinds,
-          cpsds.escapeAnalysis.escapes(module),
+          module.escapes,
           Set.empty,
           Map.empty,
           Set.empty,
@@ -176,8 +170,6 @@ object TransformerCpsDs extends Transformer {
         js.Module(name, Nil, exports, jsDecls ++ jsExterns ++ stmts)
     }
 
-  // --- Toplevel ---
-
   def toJSToplevel(d: cpsds.ToplevelDefinition)(using ctx: TransformerContext): js.Stmt = d match {
     case cpsds.ToplevelDefinition.Def(id, params, body) =>
       val kind = kindOf(id)
@@ -187,8 +179,6 @@ object TransformerCpsDs extends Transformer {
     case cpsds.ToplevelDefinition.Val(id, ks, k, binding) =>
       js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding).stmts)))
   }
-
-  // --- Externs ---
 
   def toJS(e: cpsds.Extern)(using C: TransformerContext): js.Stmt = e match {
     case cpsds.Extern.Def(id, params, true, body) =>
@@ -240,16 +230,12 @@ object TransformerCpsDs extends Transformer {
     }
 
 
-  // --- Declarations ---
-
   def toJSDecl(d: core.Declaration): List[js.Stmt] = d match {
     case core.Data(did, tparams, ctors) =>
       ctors.zipWithIndex.map { case (ctor, index) => generateConstructor(ctor, index) }
     case core.Interface(id, tparams, operations) =>
       Nil
   }
-
-  // --- Expressions ---
 
   def toJS(e: cpsds.Expr)(using ctx: TransformerContext): js.Expr = e match {
     case Expr.Variable(id) => valueRef(id)
@@ -263,11 +249,8 @@ object TransformerCpsDs extends Transformer {
     case Expr.Toplevel => js.Undefined
   }
 
-  // --- Statements ---
-
   def toJS(s: cpsds.Stmt)(using ctx: TransformerContext): Binding[List[js.Stmt]] = s match {
 
-    // --- Def ---
     case cpsds.Stmt.Def(id, params, body, rest) =>
       ctx.defunctionalization.caseOf(id) match {
         case Some(continuationCase) =>
@@ -288,7 +271,6 @@ object TransformerCpsDs extends Transformer {
             firstClassDef(id, params, body, rest, kind.isRecursive)
       }
 
-    // --- New ---
     case cpsds.Stmt.New(id, interface, operations, rest) =>
       Binding { k =>
         val ops = operations.map { op =>
@@ -303,7 +285,6 @@ object TransformerCpsDs extends Transformer {
         allBackups ++ List(js.Const(nameDef(id), jsObj)) ++ toJS(rest).run(k)
       }
 
-    // --- Let ---
     case cpsds.Stmt.Let(id, binding, rest) =>
       Binding { k =>
         js.Const(nameDef(id), toJS(binding)) :: toJS(rest).run(k)
@@ -357,7 +338,6 @@ object TransformerCpsDs extends Transformer {
         }
       }
 
-    // --- Invoke ---
     case invoke @ cpsds.Stmt.Invoke(id, method, args) =>
       val call = MethodCall(valueRef(id), memberNameRef(method), args.map(toJS): _*)
       ctx.stackSafety.transferOf(invoke) match {
@@ -366,7 +346,6 @@ object TransformerCpsDs extends Transformer {
           pure(js.Return(js.Lambda(Nil, js.Return(call))) :: Nil)
       }
 
-    // --- Run ---
     case cpsds.Stmt.Run(id, callee, args, Purity.Pure | Purity.Impure, rest) =>
       Binding { k =>
         js.Const(nameDef(id), inlineExtern(callee, args)) :: toJS(rest).run(k)
@@ -385,11 +364,9 @@ object TransformerCpsDs extends Transformer {
     //          js.Lambda(List(nameDef(id)), toJS(rest).stmts)
     //        ))) :: Nil)
 
-    // --- If ---
     case cpsds.Stmt.If(cond, thn, els) =>
       pure(js.If(toJS(cond), toJS(thn).block, toJS(els).block) :: Nil)
 
-    // --- Match ---
     case cpsds.Stmt.Match(sc, Nil, None) =>
       pure(js.Return($effekt.call("unreachable")) :: Nil)
 
@@ -411,21 +388,18 @@ object TransformerCpsDs extends Transformer {
         },
         default.map(s => toJS(s).stmts)) :: Nil)
 
-    // --- Region ---
     case cpsds.Stmt.Region(id, ks, rest) =>
       Binding { k =>
         js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("newRegion"))) ::
           toJS(rest).run(k)
       }
 
-    // --- Alloc ---
     case cpsds.Stmt.Alloc(id, init, region, rest) =>
       Binding { k =>
         js.Const(nameDef(id), js.MethodCall(valueRef(region), JSName("fresh"), toJS(init))) ::
           toJS(rest).run(k)
       }
 
-    // --- Var ---
     case cpsds.Stmt.Var(id, init, ks, rest) if !ctx.escaping.contains(id) =>
       Binding { k =>
         js.Let(nameDef(id), toJS(init)) ::
@@ -438,11 +412,9 @@ object TransformerCpsDs extends Transformer {
           toJS(rest).run(k)
       }
 
-    // --- Dealloc ---
     case cpsds.Stmt.Dealloc(ref, rest) =>
       toJS(rest)
 
-    // --- Get ---
     case cpsds.Stmt.Get(ref, id, rest) if ctx.localVars.contains(ref) =>
       Binding { k =>
         js.Const(nameDef(id), valueRef(ref)) :: toJS(rest).run(k)
@@ -454,7 +426,6 @@ object TransformerCpsDs extends Transformer {
           toJS(rest).run(k)
       }
 
-    // --- Put ---
     case cpsds.Stmt.Put(ref, value, rest) if ctx.localVars.contains(ref) =>
       Binding { k =>
         js.Assign(valueRef(ref), toJS(value)) :: toJS(rest).run(k)
@@ -466,7 +437,6 @@ object TransformerCpsDs extends Transformer {
           toJS(rest).run(k)
       }
 
-    // --- Reset ---
     case cpsds.Stmt.Reset(p, ks, k, body, ks1, k1) =>
       Binding { next =>
         js.Const(
@@ -475,7 +445,6 @@ object TransformerCpsDs extends Transformer {
           toJS(body).run(next)
       }
 
-    // --- Shift ---
     case cpsds.Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
       Binding { next =>
         js.Const(
@@ -484,7 +453,6 @@ object TransformerCpsDs extends Transformer {
           toJS(body).run(next)
       }
 
-    // --- Resume ---
     case cpsds.Stmt.Resume(r, ks, k, body, ks1, k1) =>
       Binding { next =>
         js.Const(
@@ -493,12 +461,9 @@ object TransformerCpsDs extends Transformer {
           toJS(body).run(next)
       }
 
-    // --- Hole ---
     case cpsds.Stmt.Hole(span) =>
       pure(js.Return($effekt.call("hole", JsString(span.range.from.format))) :: Nil)
   }
-
-  // --- Defunctionalized continuations ---
 
   private def dispatchCall(
     callee: Id,
@@ -618,8 +583,6 @@ object TransformerCpsDs extends Transformer {
         dispatchLoop(dispatch, ctx))
     }
 
-  // --- First-class Def ---
-
   def firstClassDef(id: Id, params: List[Id], body: cpsds.Stmt, rest: cpsds.Stmt, isRecursive: Boolean)(using ctx: TransformerContext): Binding[List[js.Stmt]] =
     Binding { k =>
       val (backups, renamings) = backupMutableParams(body, params.toSet)
@@ -650,8 +613,6 @@ object TransformerCpsDs extends Transformer {
         List(js.Function(nameDef(id), params.map(nameDef), bodyStmts)) ++
         toJS(rest).run(k)
     }
-
-  // --- Second-class Def ---
 
   /**
    * Non-recursive:
@@ -709,8 +670,6 @@ object TransformerCpsDs extends Transformer {
     else
       pure(paramDecls ++ dispatchDecls ++ entryBlock ++ bodyStmts)
   }
-
-  // --- Pattern matching ---
 
   def toJSClause(scrutinee: js.Expr, variant: Id, clause: cpsds.Clause)(using C: TransformerContext): (js.Expr, Binding[List[js.Stmt]]) =
     clause match {
