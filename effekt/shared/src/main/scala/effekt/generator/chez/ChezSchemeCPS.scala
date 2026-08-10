@@ -3,7 +3,8 @@ package generator
 package chez
 
 import effekt.context.Context
-import effekt.core.optimizer.{Optimizer, Deadcode}
+import effekt.core.Renamer
+import effekt.core.optimizer.{Optimizer, Deadcode, DropBindings}
 import kiama.util.Source
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -16,7 +17,7 @@ class ChezSchemeCPS extends Compiler[String] {
   override def prettyIR(source: Source, stage: Stage)(using C: Context): Option[Document] = stage match {
     case Stage.Core if C.config.optimize() => Optimized(source).map { (_, _, res) => core.PrettyPrinter(Context.config.debug()).format(res) }
     case Stage.Core => Core(source).map { res => core.PrettyPrinter(Context.config.debug()).format(res.core) }
-    case Stage.CPS => CPSTransformed(source).map { (_, _, _, res) => cps.PrettyPrinter.format(res) }
+    case Stage.CPS => CPSTransformed(source).map { (_, _, _, res) => cpsds.PrettyPrinter.format(res) }
     case Stage.Machine => None
     case Stage.Target => LSP(source)
   }
@@ -32,12 +33,12 @@ class ChezSchemeCPS extends Compiler[String] {
 
   // The Compilation Pipeline
   // ------------------------
-  // Source => Core => CPS => Chez
+  // Source => Core => CPS-DS => Chez
   lazy val Core = Phase.cached("core") {
     Frontend andThen Middleend
   }
 
-  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Deadcode andThen core.Show andThen Optimizer map {
+  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Deadcode andThen core.Show andThen Optimizer andThen DropBindings map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
       val mainFile = path(mod)
@@ -46,13 +47,24 @@ class ChezSchemeCPS extends Compiler[String] {
 
   lazy val CPSTransformed = Optimized map {
     case (mainSymbol, mainFile, core) =>
-      val cpsTransformed = effekt.cps.Transformer.transform(core)
-      (mainSymbol, mainFile, core, cpsTransformed)
+      val renamed = new Renamer().apply(core)
+
+      def optimize(input: cpsds.ModuleDecl): cpsds.ModuleDecl =
+        var tree = input
+        tree = cpsds.StaticArguments.transform(tree)
+        tree = cpsds.Inliner.transform(tree, mainSymbol)
+        tree = cpsds.BlockSinking.transform(tree, mainSymbol)
+        tree = cpsds.ParameterDropping.transform(tree)
+        tree = cpsds.Simplifier.transform(tree)
+        tree
+
+      val transformed = optimize(optimize(cpsds.transform(renamed)))
+      (mainSymbol, mainFile, core, transformed)
   }
 
   lazy val Chez = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val compiled = TransformerCPS.compile(cps, mainSymbol)
+      val compiled = TransformerCpsDs.compile(cps, mainSymbol)
       val doc = pretty(chez.Let(Nil, compiled))
       (Map(mainFile -> doc.layout), mainFile)
   }
@@ -60,7 +72,7 @@ class ChezSchemeCPS extends Compiler[String] {
   // TODO: Only show generated code
   lazy val LSP = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val compiled = TransformerCPS.compileLSP(cps, mainSymbol)
+      val compiled = TransformerCpsDs.compileLSP(cps, mainSymbol)
       pretty(chez.Let(Nil, compiled))
   }
 
