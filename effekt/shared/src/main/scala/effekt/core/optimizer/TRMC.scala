@@ -16,7 +16,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
   
   def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = {
     val CoreTransformed(source, tree, mod, modDec) = input
-    println(effekt.util.PrettyPrinter.format(modDec).layout)
+    //println(effekt.util.PrettyPrinter.format(modDec).layout)
     val DC = DeclarationContext(modDec.declarations, modDec.externs)
     
     var transformedFunctions: List[Toplevel] = List()
@@ -31,8 +31,8 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     object transform extends Tree.Rewrite {
       override def toplevel: PartialFunction[Toplevel, Toplevel] = {
         case Toplevel.Def(id, block) =>
-          println("in Toplevel")
-          println(id.name.name)
+          //println("in Toplevel")
+          //println(id.name.name)
           //println(effekt.util.PrettyPrinter.format(Toplevel.Def(id, block)).layout)
           val outputFunId = functionLinks(id)
           if (id.name.name != "main") {
@@ -286,7 +286,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
       PureApp(
         blockVarFromExternDef("ctx_composeContext", DC), 
         List(resType, resType, resType), 
-        List(innerReify(first, outerContextTpe, resType, DC), innerReify(second, outerContextTpe, resType, DC))) //TODO: targs if general
+        List(innerReify(first, outerContextTpe, resType, DC), innerReify(second, outerContextTpe, resType, DC)))//currently second into first //TODO: targs if general
   }
   
   def blockVarFromExternDef(name: String, DC: DeclarationContext)(using Context) : Block.BlockVar = {
