@@ -6,6 +6,15 @@ def main(x, k) {
 }
 
 // The callee is statically known and the call graph is acyclic.
+/// CONTROL_FLOW
+
+ranks
+  main = 1
+  callee = 0
+transfers
+  callee -> k: bounce [?]
+  main -> callee: direct [callee]
+
 /// JAVASCRIPT
 
 function callee_0(x_0, k_0) {
@@ -13,5 +22,5 @@ function callee_0(x_0, k_0) {
 }
 
 function main_0(x_1, k_1) {
-  return () => callee_0(x_1, k_1);
+  return callee_0(x_1, k_1);
 }

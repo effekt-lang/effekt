@@ -10,6 +10,16 @@ def main(use, k) {
 }
 
 // An escaping recursive function still loopifies its self tail call.
+/// CONTROL_FLOW
+
+ranks
+  loop = 0
+  main = 0
+transfers
+  loop -> loop: jump
+  loop -> k: bounce [?]
+  main -> use: bounce [?]
+
 /// JAVASCRIPT
 
 function main_0(use_0, k_0) {

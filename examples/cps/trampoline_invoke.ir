@@ -3,8 +3,15 @@ def main(object, k) {
 }
 
 // Interface invocation uses its separate calling convention.
+/// CONTROL_FLOW
+
+ranks
+  main = 0
+transfers
+  main -> object.operation: bounce [?]
+
 /// JAVASCRIPT
 
 function main_0(object_0, k_0) {
-  return object_0.operation_0(k_0);
+  return () => object_0.operation_0(k_0);
 }
