@@ -28,7 +28,7 @@ extern llvm """
 extern type SpawnOptions =
   jsNode "{ stdio: list[int], onSpawn: fn => {} }"
   llvm "%Pos"
-extern def default() at {}: SpawnOptions =
+extern def default() at {io}: SpawnOptions =
   jsNode """{ stdio: [0,1,2], onSpawn: (p) => {} }"""
   llvm """
     %opts = call %Pos @c_spawn_options_default()
