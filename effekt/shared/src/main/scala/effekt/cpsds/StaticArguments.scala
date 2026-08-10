@@ -239,7 +239,7 @@ object StaticArguments {
 
     if shared.isEmpty then return rewrite(s)
 
-    val wrappers = shared.toList.flatMap { id =>
+    val wrappers = shared.toList.sortBy(_.id).flatMap { id =>
       ctx.pendingWorkers.remove(id).map(id -> _)
     }
 
@@ -263,21 +263,6 @@ object StaticArguments {
   }
 
   // --- Rewrite ---
-
-  // TODO
-  // what if there are two workers that both are moved?
-  //
-  // def loop1() = ...
-  // def loop2() = ... loop1() ...
-  //
-  // if () {
-  //   loop2()
-  // } else {
-  //   loop2()
-  // }
-  //
-  // the order of insertion matters since we want to sink all loops
-  // but not too far
 
   def rewrite(s: Stmt)(using ctx: Context): Stmt = placeWorkers(s) {
 

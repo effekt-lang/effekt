@@ -183,6 +183,25 @@ class CpsDsTests extends munit.FunSuite {
     })
   }
 
+  test("function usage of an object excludes its lexical remainder") {
+    val module = parse("""
+      def main(k) {
+        new handler : Handler {
+          def op() = { dependency() }
+        }
+        unrelated()
+      };
+      def dependency(k) { k() };
+      def unrelated(k) { k() }
+    """)
+    val uses = module.uses.toMap
+    val handler = uses.keys.find(_.name.name == "handler").getOrElse {
+      fail("missing local object definition")
+    }
+
+    assertEquals(uses(handler).map(_.name.name), Set("dependency"))
+  }
+
   def testFile(file: File): Unit = {
     val content = scala.io.Source.fromFile(file).mkString
     val filename = file.getName

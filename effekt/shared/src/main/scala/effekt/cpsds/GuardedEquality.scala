@@ -1056,9 +1056,6 @@ object GuardedEquality {
     case ToplevelDefinition.Val(_, ks, k, binding) => analyze(List(ks, k), binding)
   }
 
-  def analyze(module: ModuleDecl): Map[Id, FunctionFacts] =
-    module.definitions.iterator.flatMap(analyze(_).facts).map(f => f.id -> f).toMap
-
   def recursive(module: ModuleDecl): Map[Id, Vector[Boolean]] =
     module.definitions.iterator.flatMap {
       case ToplevelDefinition.Def(_, params, body) => recursive(params, body)
