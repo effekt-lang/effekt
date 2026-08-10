@@ -104,25 +104,41 @@ trait Transformer {
   def nameDef(id: Id): JSName = uniqueName(id)
 
   // attempt to have better / shorter names
-  val usedNames: mutable.Map[String, Int] = mutable.Map.empty
-  val names: mutable.Map[Id, String] = mutable.Map.empty
-  private var nextFreshName: Int = 0
+  private class NameSupply {
+    val usedNames: mutable.Map[String, Int] = mutable.Map.empty
+    val names: mutable.Map[Id, String] = mutable.Map.empty
+    val occupiedNames: mutable.Set[String] = mutable.Set.empty
+    var nextFreshName: Int = 0
+  }
+
+  /** Backend transformers are singletons, while compiler instances can run in
+   *  parallel (in particular, the JavaScript test suites do). Keep their name
+   *  supplies independent without serializing JavaScript generation. */
+  private val nameSupply = new ThreadLocal[NameSupply] {
+    override def initialValue(): NameSupply = new NameSupply
+  }
+
   val baseNameRx = """([A-Za-z$]*(?:_[A-Za-z]+)*)""".r // extracts the base number up until the first number
 
   /** Start an independent JavaScript translation with deterministic names. */
-  def resetNames(): Unit = {
-    usedNames.clear()
-    names.clear()
-    nextFreshName = 0
-  }
+  def resetNames(): Unit = nameSupply.set(new NameSupply)
 
   def uniqueName(sym: Id): JSName = {
-    def uniqueNameFor(base: String): String =
-      val nextId = usedNames.getOrElse(base, 0)
-      usedNames.update(base, nextId + 1)
-      s"${base}_${nextId}"
+    val supply = nameSupply.get()
 
-    val name = names.getOrElseUpdate(sym, baseNameRx.findFirstIn(sym.name.name) match {
+    def uniqueNameFor(base: String): String = {
+      var nextId = supply.usedNames.getOrElse(base, 0)
+      var candidate = s"${base}_${nextId}"
+      while supply.occupiedNames.contains(candidate) do {
+        nextId += 1
+        candidate = s"${base}_${nextId}"
+      }
+      supply.usedNames.update(base, nextId + 1)
+      supply.occupiedNames += candidate
+      candidate
+    }
+
+    val name = supply.names.getOrElseUpdate(sym, baseNameRx.findFirstIn(sym.name.name) match {
       case Some(base) => uniqueNameFor(base)
       case None =>
         println(sym.name)
@@ -136,10 +152,17 @@ trait Transformer {
   // name references for fields and methods
   def memberNameRef(id: Id): JSName = uniqueName(id)
 
-  def freshName(s: String): JSName =
-    val result = JSName(s + nextFreshName)
-    nextFreshName += 1
-    result
+  def freshName(s: String): JSName = {
+    val supply = nameSupply.get()
+    var candidate = s + supply.nextFreshName
+    supply.nextFreshName += 1
+    while supply.occupiedNames.contains(candidate) do {
+      candidate = s + supply.nextFreshName
+      supply.nextFreshName += 1
+    }
+    supply.occupiedNames += candidate
+    JSName(candidate)
+  }
 
   def escape(scalaString: String): String =
     scalaString.foldLeft(StringBuilder()) { (acc, c) =>
