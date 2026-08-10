@@ -16,7 +16,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
   // -----------------------------------------
   def extension = ".js"
 
-  override def supportedFeatureFlags: List[String] = additionalFeatureFlags ++ TransformerCps.jsFeatureFlags
+  override def supportedFeatureFlags: List[String] = additionalFeatureFlags ++ TransformerCpsDs.jsFeatureFlags
 
   override def prettyIR(source: Source, stage: Stage)(using C: Context): Option[Document] = stage match {
     case Stage.Core if C.config.optimize() => Optimized(source).map { (_, _, res) => core.PrettyPrinter(Context.config.debug()).format(res) }
