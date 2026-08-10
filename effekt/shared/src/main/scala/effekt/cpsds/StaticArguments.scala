@@ -402,7 +402,7 @@ object StaticArguments {
 
   def transform(m: ModuleDecl): ModuleDecl = {
     val analysis = CallAnalysis(m)
-    val pathStatics = GuardedEquality.analyze(m).view.mapValues(_.recursive).toMap
+    val pathStatics = GuardedEquality.recursive(m)
     given ctx: Context = initializeContext(analysis, pathStatics)
 
     m.copy(definitions = m.definitions.flatMap(d => rewrite(d)))

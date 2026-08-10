@@ -374,20 +374,38 @@ object GuardedEquality {
     val rigidFunctions: Set[Id] = mutableRigidFunctions.toSet
     val escapedFunctions: Set[Id] = mutableEscapedFunctions.toSet
 
-    /** Which captures may transitively enclose a particular local closure. */
-    def capturesMayContain(function: Id, observed: Id): Vector[Boolean] = {
-      def contains(value: TargetValue, seen: Set[Id]): Boolean =
-        value.functions.exists { target =>
-          target == observed ||
-            (!seen.contains(target) && allocations.get(target).exists {
-              _.exists(contains(_, seen + target))
-            })
+    /** Transitive closure of the closure-capture graph. The target fixed point
+     *  is complete before relative equality queries begin, so this graph is
+     *  immutable and can be shared by every observed-closure analysis. */
+    private lazy val transitivelyCaptured: Map[Id, Set[Id]] = {
+      val direct = allocations.iterator.map { case (function, captures) =>
+        function -> captures.iterator.flatMap(_.functions).toSet
+      }.toMap
+
+      definitions.keysIterator.map { function =>
+        val found = mutable.Set.empty[Id]
+        val todo = mutable.Queue.from(direct.getOrElse(function, Set.empty))
+
+        while todo.nonEmpty do {
+          val current = todo.dequeue()
+          if found.add(current) then
+            todo.enqueueAll(direct.getOrElse(current, Set.empty))
         }
 
-      allocations.get(function).fold(Vector.empty) {
-        _.map(contains(_, Set(function)))
-      }
+        function -> found.toSet
+      }.toMap
     }
+
+    /** Which captures may transitively enclose a particular local closure. */
+    def capturesMayContain(function: Id, observed: Id): Vector[Boolean] =
+      allocations.get(function).fold(Vector.empty) { captures =>
+        captures.map { value =>
+          value.functions.exists { target =>
+            target == observed ||
+              transitivelyCaptured.getOrElse(target, Set.empty).contains(observed)
+          }
+        }
+      }
 
     private def siteOf(stmt: Stmt): Int = {
       val site = meta.sitesByStmt.get(stmt)
@@ -702,7 +720,10 @@ object GuardedEquality {
       case Expr.Toplevel => Origin.Term(Expr.Toplevel)
     }
 
-    private val scopeValues = observed.scopeValues.map(lexicalValue)
+    private lazy val scopeValues = observed.scopeValues.map(lexicalValue)
+
+    private val canBeCalled =
+      targets.targetsAt.valuesIterator.exists(_.contains(observed.id))
 
     private def unknowns(ids: IterableOnce[Id]): Map[Id, Origin] =
       ids.iterator.map(_ -> Unknown).toMap
@@ -910,6 +931,9 @@ object GuardedEquality {
       }
 
     def entries(): Vector[Option[Expr]] = {
+      if !canBeCalled || targets.rigidFunctions.contains(observed.id) then
+        return Vector.fill(observed.params.size)(None)
+
       val observation = EntryObservation(observed, scopeValues, meta.callees.toSet)
 
       def onCall(args: Vector[Origin], direct: Boolean): Unit = {
@@ -932,6 +956,9 @@ object GuardedEquality {
     }
 
     def recursive(): Vector[Boolean] = {
+      if !canBeCalled || targets.rigidFunctions.contains(observed.id) then
+        return Vector.fill(observed.params.size)(false)
+
       summaries.clear()
       queue.clear()
       queued.clear()
@@ -986,6 +1013,17 @@ object GuardedEquality {
       meta.sitesByStmt)
   }
 
+  /** Recursive must-equalities without computing entry equalities. */
+  private def recursive(toplevelParams: List[Id], body: Stmt): Map[Id, Vector[Boolean]] = {
+    val meta = Metadata(toplevelParams, body)
+    val targets = TargetAnalysis(meta, toplevelParams)
+
+    meta.definitions.valuesIterator.map { definition =>
+      val relative = RelativeAnalysis(meta, targets, definition, Map.empty)
+      definition.id -> relative.recursive()
+    }.toMap
+  }
+
   /** The finite call-target projection, without solving relative equalities
    *  for every local definition. */
   def targets(toplevel: ToplevelDefinition): TargetResult = {
@@ -1020,4 +1058,10 @@ object GuardedEquality {
 
   def analyze(module: ModuleDecl): Map[Id, FunctionFacts] =
     module.definitions.iterator.flatMap(analyze(_).facts).map(f => f.id -> f).toMap
+
+  def recursive(module: ModuleDecl): Map[Id, Vector[Boolean]] =
+    module.definitions.iterator.flatMap {
+      case ToplevelDefinition.Def(_, params, body) => recursive(params, body)
+      case ToplevelDefinition.Val(_, ks, k, binding) => recursive(List(ks, k), binding)
+    }.toMap
 }
