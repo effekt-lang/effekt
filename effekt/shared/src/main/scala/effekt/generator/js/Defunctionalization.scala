@@ -159,9 +159,9 @@ object Defunctionalization {
         case cpsds.Stmt.Dealloc(_, rest) => visit(rest, scopes)
         case cpsds.Stmt.Get(_, _, rest) => visit(rest, scopes)
         case cpsds.Stmt.Put(_, _, rest) => visit(rest, scopes)
-        case cpsds.Stmt.Reset(_, _, _, body, _, _) => visit(body, scopes :+ boundary())
-        case cpsds.Stmt.Shift(_, _, _, _, body, _, _) => visit(body, scopes :+ boundary())
-        case cpsds.Stmt.Resume(_, _, _, body, _, _) => visit(body, scopes :+ boundary())
+        case cpsds.Stmt.Reset(_, _, _, body, _, _) => visit(body, scopes)
+        case cpsds.Stmt.Shift(_, _, _, _, body, _, _) => visit(body, scopes)
+        case cpsds.Stmt.Resume(_, _, _, body, _, _) => visit(body, scopes)
         case _: cpsds.Stmt.Hole => ()
       }
 
