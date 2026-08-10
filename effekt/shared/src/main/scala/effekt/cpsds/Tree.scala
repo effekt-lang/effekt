@@ -622,13 +622,13 @@ object escapeAnalysis {
     case Stmt.Put(ref, value, rest) => value.free ++ rest.escapes
 
     case Stmt.Reset(p, ks, k, body, ks1, k1) =>
-      ks1.free ++ k1.free ++ body.escapes ++ body.free
+      ks1.free ++ k1.free ++ body.escapes
 
     case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
-      ks1.free ++ k1.free ++ body.escapes ++ body.free
+      ks1.free ++ k1.free ++ body.escapes
 
     case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
-      ks1.free ++ k1.free ++ body.escapes ++ body.free
+      ks1.free ++ k1.free ++ body.escapes
 
     case Stmt.Hole(span) => Set.empty
   }

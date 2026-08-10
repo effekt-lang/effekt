@@ -437,27 +437,30 @@ object TransformerCpsDs extends Transformer {
 
     // --- Reset ---
     case cpsds.Stmt.Reset(p, ks, k, body, ks1, k1) =>
-      val (backups, substBody) = backupMutableParams(body, Set(p, ks, k))
-      val bodyStmts = toJS(substBody)(using functionBodyContext).stmts
-      pure(backups ++ List(js.Return(Call(RESET,
-        js.Lambda(List(nameDef(p), nameDef(ks), nameDef(k)), bodyStmts),
-        toJS(ks1), toJS(k1)))))
+      Binding { next =>
+        js.Const(
+          js.Pattern.Array(List(p, ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
+          Call(RESET, toJS(ks1), toJS(k1))) ::
+          toJS(body).run(next)
+      }
 
     // --- Shift ---
     case cpsds.Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
-      val (backups, substBody) = backupMutableParams(body, Set(resume, ks, k))
-      val bodyStmts = toJS(substBody)(using functionBodyContext).stmts
-      pure(backups ++ List(js.Return(Call(SHIFT, nameRef(prompt),
-        js.Lambda(List(nameDef(resume), nameDef(ks), nameDef(k)), bodyStmts),
-        toJS(ks1), toJS(k1)))))
+      Binding { next =>
+        js.Const(
+          js.Pattern.Array(List(resume, ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
+          Call(SHIFT, nameRef(prompt), toJS(ks1), toJS(k1))) ::
+          toJS(body).run(next)
+      }
 
     // --- Resume ---
     case cpsds.Stmt.Resume(r, ks, k, body, ks1, k1) =>
-      val (backups, substBody) = backupMutableParams(body, Set(ks, k))
-      val bodyStmts = toJS(substBody)(using functionBodyContext).stmts
-      pure(backups ++ List(js.Return(Call(RESUME, nameRef(r),
-        js.Lambda(List(nameDef(ks), nameDef(k)), bodyStmts),
-        toJS(ks1), toJS(k1)))))
+      Binding { next =>
+        js.Const(
+          js.Pattern.Array(List(ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
+          Call(RESUME, nameRef(r), toJS(ks1), toJS(k1))) ::
+          toJS(body).run(next)
+      }
 
     // --- Hole ---
     case cpsds.Stmt.Hole(span) =>
