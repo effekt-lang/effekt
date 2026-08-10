@@ -1,5 +1,5 @@
 package effekt
-package cpsds
+package cps
 
 // For now only
 // - drops deallocations.

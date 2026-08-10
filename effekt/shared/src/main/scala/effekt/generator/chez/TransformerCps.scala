@@ -2,7 +2,7 @@ package effekt
 package generator
 package chez
 
-import cpsds.*
+import cps.*
 import core.Declaration
 import effekt.core
 import effekt.symbols.Symbol
@@ -11,11 +11,11 @@ import effekt.util.messages.ErrorReporter
 
 /** Lowers the direct-style CPS IR to Chez Scheme.
  *
- *  Chez already provides proper tail calls, so CPS-DS applications can be
+ *  Chez already provides proper tail calls, so CPS applications can be
  *  translated literally. Reset, shift, and resume use the existing Chez CPS
- *  runtime; their CPS-DS bodies become the program lambdas expected there.
+ *  runtime; their CPS bodies become the program lambdas expected there.
  */
-object TransformerCpsDs {
+object TransformerCps {
 
   val HOLE = "hole"
 
@@ -31,7 +31,7 @@ object TransformerCpsDs {
   val ALLOCATE = "allocate"
   val DEALLOCATE = "deallocate"
 
-  def compile(input: cpsds.ModuleDecl, mainSymbol: symbols.TermSymbol)(using ErrorReporter): chez.Block = {
+  def compile(input: cps.ModuleDecl, mainSymbol: symbols.TermSymbol)(using ErrorReporter): chez.Block = {
     val externs = input.externs.map(toChez)
     val declarations = input.declarations.flatMap(toChez)
     val definitions = input.definitions.map(toChez)
@@ -39,7 +39,7 @@ object TransformerCpsDs {
     chez.Block(externs ++ declarations ++ definitions, Nil, runMain)
   }
 
-  def compileLSP(input: cpsds.ModuleDecl, mainSymbol: symbols.TermSymbol)(using ErrorReporter): chez.Block = {
+  def compileLSP(input: cps.ModuleDecl, mainSymbol: symbols.TermSymbol)(using ErrorReporter): chez.Block = {
     val lspModule = input.copy(
       includes = Nil,
       declarations = Nil,
@@ -48,7 +48,7 @@ object TransformerCpsDs {
     compile(lspModule, mainSymbol)
   }
 
-  def toChez(definition: cpsds.ToplevelDefinition): chez.Def = definition match {
+  def toChez(definition: cps.ToplevelDefinition): chez.Def = definition match {
     case ToplevelDefinition.Def(id, params, body) =>
       chez.Function(nameDef(id), params.map(nameDef), toChez(body))
 
@@ -64,7 +64,7 @@ object TransformerCpsDs {
       generateConstructor(id, properties.map(_.id))
   }
 
-  def toChez(extern: cpsds.Extern)(using ErrorReporter): chez.Def = extern match {
+  def toChez(extern: cps.Extern)(using ErrorReporter): chez.Def = extern match {
     // This preserves the old Chez backend's treatment of async externs. The
     // Chez test suite excludes asynchronous I/O, and its FFI calls are direct.
     case Extern.Def(id, params, _, body) =>
@@ -74,7 +74,7 @@ object TransformerCpsDs {
       chez.RawDef(contents)
   }
 
-  def toChez(externBody: cpsds.ExternBody)(using ErrorReporter): chez.Expr = externBody match {
+  def toChez(externBody: cps.ExternBody)(using ErrorReporter): chez.Expr = externBody match {
     case ExternBody.StringExternBody(_, contents) =>
       RawExpr(contents.strings, contents.args.map(toChez))
     case unsupported: ExternBody.Unsupported =>
@@ -82,12 +82,12 @@ object TransformerCpsDs {
       chez.Builtin(HOLE)
   }
 
-  def toChez(operation: cpsds.Operation): chez.Expr = operation match {
+  def toChez(operation: cps.Operation): chez.Expr = operation match {
     case Operation(_, params, body) =>
       chez.Lambda(params.map(nameDef), toChez(body))
   }
 
-  def toChez(stmt: cpsds.Stmt): chez.Block = stmt match {
+  def toChez(stmt: cps.Stmt): chez.Block = stmt match {
     case Stmt.Def(id, params, binding, rest) =>
       val lambda = chez.Lambda(params.map(nameDef), toChez(binding))
       resolveLet(id, lambda, rest)
@@ -125,18 +125,18 @@ object TransformerCpsDs {
       chez.Block(Nil, Nil, toChezExpr(stmt))
   }
 
-  private def resolveLet(toBind: Symbol, bindTo: chez.Expr, rest: cpsds.Stmt): chez.Block = {
+  private def resolveLet(toBind: Symbol, bindTo: chez.Expr, rest: cps.Stmt): chez.Block = {
     val chez.Block(definitions, expressions, result) = toChez(rest)
     chez.Block(chez.Constant(nameDef(toBind), bindTo) :: definitions, expressions, result)
   }
 
-  private def prepend(expression: chez.Expr, rest: cpsds.Stmt): chez.Block = {
+  private def prepend(expression: chez.Expr, rest: cps.Stmt): chez.Block = {
     // Keep the remainder nested: hoisting its definitions ahead of this
     // expression could reorder an effectful Run binding.
     chez.Block(Nil, List(expression), toChezExpr(rest))
   }
 
-  def toChezExpr(stmt: cpsds.Stmt): chez.Expr = stmt match {
+  def toChezExpr(stmt: cps.Stmt): chez.Expr = stmt match {
     case Stmt.App(id, args, _) =>
       chez.Call(nameRef(id), args.map(toChez))
 
@@ -180,7 +180,7 @@ object TransformerCpsDs {
       chez.Let(Nil, toChez(nested))
   }
 
-  def toChez(expr: cpsds.Expr): chez.Expr = expr match {
+  def toChez(expr: cps.Expr): chez.Expr = expr match {
     case Expr.Variable(id) => chez.Variable(nameRef(id))
     case Expr.Literal((), core.Type.TUnit) => chez.RawValue("(void)")
     case Expr.Literal(value: String, core.Type.TString) =>
@@ -201,7 +201,7 @@ object TransformerCpsDs {
       chez.Variable(ChezName("top-level-ks"))
   }
 
-  def toChez(clause: cpsds.Clause): chez.Expr = clause match {
+  def toChez(clause: cps.Clause): chez.Expr = clause match {
     case Clause(params, body) =>
       chez.Lambda(params.map(nameDef), toChez(body))
   }
