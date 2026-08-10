@@ -17,23 +17,31 @@ ranks
   right = 0
 transfers
   left -> right: direct [right]
-  right -> left: bounce [left]
+  right -> left: safe [left]
   main -> left: direct [left]
+
+/// SAFE_ENTRIES
+
+function left
 
 /// JAVASCRIPT
 
-function left_0(k_0) {
+function worker_0(k_0) {
   left_0: while (true) {
     return right_0(k_0);
   }
 }
 
+function left_0(k_0) {
+  return () => worker_0(k_0);
+}
+
 function right_0(k_1) {
   right_0: while (true) {
-    return () => left_0(k_1);
+    return left_0(k_1);
   }
 }
 
 function main_0(k_2) {
-  return left_0(k_2);
+  return worker_0(k_2);
 }

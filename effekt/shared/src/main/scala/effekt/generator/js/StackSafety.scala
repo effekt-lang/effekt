@@ -14,14 +14,15 @@ import scala.collection.mutable
  * labels.
  *
  * A direct transfer retains the current JavaScript activation. Consequently,
- * direct transfers must admit a finite ranking. Bounce transfers cross the
- * trampoline and reset the native stack; jumps stay in one activation and do
- * not participate in the ranking.
+ * direct transfers must admit a finite ranking. Safe transfers use the
+ * value-level calling convention: the callee either has a finite native-stack
+ * bound or suspends before entering its worker. Jumps stay in one activation
+ * and do not participate in the ranking.
  */
 object StackSafety {
 
   enum Transfer {
-    case Jump, Direct, Bounce
+    case Jump, Direct, Safe
   }
 
   private final class Site(
@@ -32,16 +33,17 @@ object StackSafety {
     val sources = mutable.LinkedHashSet.empty[Id]
     var targets = Vector.empty[Id]
     var closed = false
-    var transfer = Transfer.Bounce
+    var transfer = Transfer.Safe
   }
 
   final class Plan private[StackSafety] (
     private val transfers: IdentityHashMap[cps.Stmt, Transfer],
     val ranks: Map[Id, Int],
-    private val sites: Vector[Site]
+    private val sites: Vector[Site],
+    val safeEntries: SafeEntries.Result
   ) {
     def transferOf(stmt: cps.Stmt): Transfer =
-      Option(transfers.get(stmt)).getOrElse(Transfer.Bounce)
+      Option(transfers.get(stmt)).getOrElse(Transfer.Safe)
 
     /** Independently check the ranking certificate carried by this plan. */
     def validate(): Unit =
@@ -326,7 +328,7 @@ object StackSafety {
     orderedSites.foreach { site =>
       if site.sources.isEmpty then site.transfer = Transfer.Jump
       else if site.closed && !backSites.contains(site) then site.transfer = Transfer.Direct
-      else site.transfer = Transfer.Bounce
+      else site.transfer = Transfer.Safe
     }
 
     val directEdges = mutable.LinkedHashMap.empty[Id, mutable.LinkedHashSet[Id]]
@@ -368,7 +370,13 @@ object StackSafety {
 
     val transfers = new IdentityHashMap[cps.Stmt, Transfer]()
     orderedSites.foreach(site => transfers.put(site.stmt, site.transfer))
-    val plan = new Plan(transfers, ranks.toMap, orderedSites.toVector)
+    val safeEntries = SafeEntries.analyze(
+      module,
+      stmt => Option(transfers.get(stmt)).getOrElse(Transfer.Safe),
+      isSecondClass,
+      defunctionalization,
+      targetFlows)
+    val plan = new Plan(transfers, ranks.toMap, orderedSites.toVector, safeEntries)
     plan.validate()
     plan
   }

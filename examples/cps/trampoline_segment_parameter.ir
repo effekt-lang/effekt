@@ -1,0 +1,29 @@
+def loop(ks0, k0) {
+  reset(p, ks1, k1) {
+    shift(p) { r, ks2, k2 =>
+      loop(ks2, k2)
+    } @ ks1, k1
+  } @ ks0, k0
+}
+
+def main(ks0, k0) {
+  loop(ks0, k0)
+}
+
+// A known recursive call preserves the raw segment entry in its formal
+// parameter instead of allocating an adapter on every iteration.
+/// JAVASCRIPT
+
+function loop_0(ks_0, k_0) {
+  loop_0: while (true) {
+    const [p_0, ks_1, k_1] = RESET(ks_0, k_0);
+    const [r_0, ks_2, k_2] = SHIFT(p_0, ks_1, k_1);
+    ks_0 = ks_2;
+    k_0 = k_2;
+    continue loop_0;
+  }
+}
+
+function main_0(ks_3, k_3) {
+  return loop_0(ks_3, k_3);
+}

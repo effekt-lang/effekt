@@ -25,28 +25,35 @@ ranks
   loop = 1
   apply = 0
 transfers
-  apply -> k: bounce [?]
+  apply -> k: safe [?]
   next -> loop: direct [loop]
   loop -> apply: direct [apply]
-  loop -> k: bounce [?]
+  loop -> k: safe [?]
   main -> loop: direct [loop]
+
+/// SAFE_ENTRIES
+
+function next
 
 /// JAVASCRIPT
 
 function apply_0(k_0, x_0) {
-  return () => k_0(x_0);
+  return k_0(x_0);
 }
 
 function loop_0(flag_0, k_1) {
   loop_0: while (true) {
     if (flag_0) {
-      function next_0(value_0) {
+      function worker_0(value_0) {
         return loop_0(false, backup_k_0);
+      }
+      function next_0(value_0) {
+        return () => worker_0(value_0);
       }
       const backup_k_0 = k_1;
       return apply_0(next_0, 0);
     } else {
-      return () => k_1(1);
+      return k_1(1);
     }
   }
 }

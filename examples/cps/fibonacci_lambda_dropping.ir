@@ -83,7 +83,7 @@ transfers
   fibonacci -> k_f: jump
   fibonacci -> fibonacci: jump
   main -> fibonacci: direct [fibonacci]
-  fibonacci -> k_main: bounce [?]
+  fibonacci -> k_main: safe [?]
   fibonacci -> fibonacci: jump
   fibonacci -> k_f: jump
 
@@ -121,7 +121,7 @@ function fibonacci_0(i_f_0, k_f_0) {
             const v_done_0 = value_1;
             const frame_ks_main_0 = cont_0.ks_main_0;
             const frame_k_main_0 = cont_0.k_main_0;
-            return () => frame_k_main_0(v_done_0, frame_ks_main_0);
+            return frame_k_main_0(v_done_0, frame_ks_main_0);
           }
         case 1:
           {

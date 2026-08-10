@@ -25,5 +25,5 @@ def main(ks, k) {
 /// JAVASCRIPT
 
 function main_0(ks_0, k_0) {
-  return () => k_0(10, ks_0);
+  return k_0(10, ks_0);
 }

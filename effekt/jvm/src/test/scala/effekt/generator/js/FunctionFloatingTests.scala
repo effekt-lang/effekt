@@ -151,8 +151,108 @@ class FunctionFloatingTests extends munit.FunSuite {
     )))
     val expected = List(Stmt.While(Some(loop), truth, List(
       Stmt.Switch(variable(scrutinee), List(
-        zero -> List(helperDef, problemSizeDef, call(helper))
+        zero -> List(Stmt.Block(None, List(helperDef, problemSizeDef, call(helper))))
       ), None)
+    )))
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("a function does not float across an if") {
+    val outer = name("outer")
+    val helper = name("helper")
+
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(zero)))
+    val input = List(Stmt.Function(outer, Nil, List(
+      Stmt.If(truth, Stmt.Block(None, List(helperDef, call(helper))), Stmt.Block(None, Nil))
+    )))
+    val expected = List(Stmt.Function(outer, Nil, List(
+      Stmt.If(truth, Stmt.Block(None, List(helperDef, call(helper))), Stmt.Block(None, Nil))
+    )))
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("a function floats out of a loop but not its enclosing if") {
+    val outer = name("outer")
+    val loop = name("loop")
+    val helper = name("helper")
+
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(zero)))
+    val loopDef = Stmt.While(Some(loop), truth, List(helperDef, call(helper)))
+    val input = List(Stmt.Function(outer, Nil, List(
+      Stmt.If(truth, Stmt.Block(None, List(loopDef)), Stmt.Block(None, Nil))
+    )))
+    val expected = List(Stmt.Function(outer, Nil, List(
+      Stmt.If(truth, Stmt.Block(None, List(
+        helperDef,
+        Stmt.While(Some(loop), truth, List(call(helper)))
+      )), Stmt.Block(None, Nil))
+    )))
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("functions referenced outside an if cross it with their dependencies") {
+    val outer = name("outer")
+    val base = name("base")
+    val helper = name("helper")
+    val captured = name("captured")
+
+    val baseDef = Stmt.Function(base, Nil, List(Stmt.Return(variable(captured))))
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(variable(base))))
+    val input = List(Stmt.Function(outer, List(captured), List(
+      Stmt.If(truth, Stmt.Block(None, List(baseDef, helperDef)), Stmt.Block(None, Nil)),
+      call(helper)
+    )))
+    val expected = List(Stmt.Function(outer, List(captured), List(
+      baseDef,
+      helperDef,
+      Stmt.If(truth, Stmt.Block(None, Nil), Stmt.Block(None, Nil)),
+      call(helper)
+    )))
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("a function does not float across a switch clause") {
+    val outer = name("outer")
+    val helper = name("helper")
+    val scrutinee = name("scrutinee")
+
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(zero)))
+    val input = List(Stmt.Function(outer, Nil, List(
+      Stmt.Switch(variable(scrutinee), List(
+        zero -> List(helperDef, call(helper))
+      ), None)
+    )))
+    val expected = List(Stmt.Function(outer, Nil, List(
+      Stmt.Switch(variable(scrutinee), List(
+        zero -> List(Stmt.Block(None, List(helperDef, call(helper))))
+      ), None)
+    )))
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("functions referenced outside a switch clause cross it with their dependencies") {
+    val outer = name("outer")
+    val base = name("base")
+    val helper = name("helper")
+    val captured = name("captured")
+    val scrutinee = name("scrutinee")
+
+    val baseDef = Stmt.Function(base, Nil, List(Stmt.Return(variable(captured))))
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(variable(base))))
+    val input = List(Stmt.Function(outer, List(captured), List(
+      Stmt.Switch(variable(scrutinee), List(zero -> List(baseDef, helperDef)), None),
+      call(helper)
+    )))
+    val expected = List(Stmt.Function(outer, List(captured), List(
+      baseDef,
+      helperDef,
+      Stmt.Switch(variable(scrutinee), List(zero -> Nil), None),
+      call(helper)
     )))
 
     assertEquals(FunctionFloating.transform(input), expected)

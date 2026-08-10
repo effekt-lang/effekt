@@ -117,7 +117,10 @@ function CAPTURE(body) {
   }
 }
 
-const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
+// Returning from a reset crosses a continuation-segment boundary. The
+// boundary, rather than every continuation stored in the segment, resets the
+// native JavaScript stack.
+const RETURN = (x, ks) => () => ks.rest.stack(x, ks.rest)
 
 // Creates a fresh prompt and returns the control state in which its body runs.
 function RESET(ks, k) {

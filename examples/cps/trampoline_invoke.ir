@@ -8,10 +8,10 @@ def main(object, k) {
 ranks
   main = 0
 transfers
-  main -> object.operation: bounce [?]
+  main -> object.operation: safe [?]
 
 /// JAVASCRIPT
 
 function main_0(object_0, k_0) {
-  return () => object_0.operation_0(k_0);
+  return object_0.operation_0(k_0);
 }

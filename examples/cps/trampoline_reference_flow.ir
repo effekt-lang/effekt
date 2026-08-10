@@ -1,0 +1,22 @@
+def loop(flag, k) {
+  if (flag) {
+    def next() {
+      loop(false, k)
+    }
+    var cell = k @ toplevel;
+    put cell = next;
+    get current = cell;
+    current()
+  } else {
+    k(0)
+  }
+}
+def main(flag, k) {
+  loop(flag, k)
+}
+
+// A mutable cell joins every function stored in it. Loading `next` exposes
+// the otherwise hidden recursive entry.
+/// SAFE_ENTRIES
+
+function next
