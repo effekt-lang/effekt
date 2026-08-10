@@ -73,3 +73,86 @@ def main(i_main, ks_main, k_main) {
   }
   fibonacci(i_main, done)
 }
+
+/// CONTROL_FLOW
+
+ranks
+  main = 1
+  fibonacci = 0
+transfers
+  fibonacci -> k_f: jump
+  fibonacci -> fibonacci: jump
+  main -> fibonacci: direct [fibonacci]
+  fibonacci -> k_main: bounce [?]
+  fibonacci -> fibonacci: jump
+  fibonacci -> k_f: jump
+
+/// JAVASCRIPT
+
+function fibonacci_0(i_f_0, k_f_0) {
+  let cont_0 = undefined;
+  let value_1 = undefined;
+  fibonacci_0: while (true) {
+    apply_entry_2: {
+      const is_zero_0 = eq_0(i_f_0, 0);
+      if (is_zero_0) {
+        const next_cont_4 = k_f_0;
+        const next_arg_5 = 0;
+        cont_0 = next_cont_4;
+        value_1 = next_arg_5;
+        break apply_entry_2;
+      } else {
+        const i_0 = sub_0(i_f_0, 1);
+        const k_0 = {
+          __tag: 1,
+          fibonacci_0: fibonacci_0,
+          i_f_0: i_f_0,
+          k_f_0: k_f_0
+        };
+        i_f_0 = i_0;
+        k_f_0 = k_0;
+        continue fibonacci_0;
+      }
+    }
+    apply_3: while (true) {
+      switch (cont_0.__tag) {
+        case 0:
+          {
+            const v_done_0 = value_1;
+            const frame_ks_main_0 = cont_0.ks_main_0;
+            const frame_k_main_0 = cont_0.k_main_0;
+            return () => frame_k_main_0(v_done_0, frame_ks_main_0);
+          }
+        case 1:
+          {
+            const v_0 = value_1;
+            const frame_i_f_0 = cont_0.i_f_0;
+            const frame_k_f_0 = cont_0.k_f_0;
+            const i_1 = sub_0(frame_i_f_0, 2);
+            const k_1 = { __tag: 2, k_f_0: frame_k_f_0, v_0: v_0 };
+            i_f_0 = i_1;
+            k_f_0 = k_1;
+            continue fibonacci_0;
+          }
+        case 2:
+          {
+            const v_1 = value_1;
+            const frame_k_f_1 = cont_0.k_f_0;
+            const frame_v_0 = cont_0.v_0;
+            const result_0 = add_0(frame_v_0, v_1);
+            const next_cont_6 = frame_k_f_1;
+            const next_arg_7 = result_0;
+            cont_0 = next_cont_6;
+            value_1 = next_arg_7;
+            continue apply_3;
+          }
+        default:  return $effekt.unreachable();
+      }
+    }
+  }
+}
+
+function main_0(i_main_0, ks_main_0, k_main_0) {
+  const done_0 = { __tag: 0, ks_main_0: ks_main_0, k_main_0: k_main_0 };
+  return fibonacci_0(i_main_0, done_0);
+}

@@ -9,11 +9,22 @@ def main(k) {
 }
 
 // At least one transfer in the mutually recursive cycle must remain stack-safe.
+/// CONTROL_FLOW
+
+ranks
+  main = 2
+  left = 1
+  right = 0
+transfers
+  left -> right: direct [right]
+  right -> left: bounce [left]
+  main -> left: direct [left]
+
 /// JAVASCRIPT
 
 function left_0(k_0) {
   left_0: while (true) {
-    return () => right_0(k_0);
+    return right_0(k_0);
   }
 }
 
@@ -24,5 +35,5 @@ function right_0(k_1) {
 }
 
 function main_0(k_2) {
-  return () => left_0(k_2);
+  return left_0(k_2);
 }
