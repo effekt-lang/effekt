@@ -37,9 +37,56 @@ object Normalizer { normal =>
     decls: DeclarationContext,     // for field selection
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
     maxInlineSize: Int,            // to control inlining and avoid code bloat
+    facts: Map[Expr, Expr],        // maps a pure expression to something simpler it is known to equal
   ) {
-    def bind(id: Id, expr: Expr): Context = copy(exprs = exprs + (id -> expr))
+    // knowing `x = e`, we also know `e = x`, which is what lets us share `e`
+    def bind(id: Id, expr: Expr): Context =
+      val known = if shareable(expr)(using this) then facts + (expr -> ValueVar(id, expr.tpe)) else facts
+      copy(exprs = exprs + (id -> expr), facts = known)
+
     def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
+
+    /** Records that [[expr]] equals the simpler [[value]] for the subtree we normalize next. */
+    def knowing(expr: Expr, value: Expr): Context = expr match {
+      // variables belong into the environment, which `active` already consults
+      case ValueVar(id, _) => bind(id, value)
+      case _ if shareable(expr)(using this) => copy(facts = facts + (expr -> value))
+      case _ => this
+    }
+  }
+
+  /** Within a branch, we know the value of the condition. */
+  private def assuming(cond: Expr, value: Boolean)(using C: Context): Context =
+    C.knowing(cond, Expr.Literal(value, Type.TBoolean))
+
+  /** Within the clause for [[tag]], we know that [[scrutinee]] is a value of the data type with that tag. */
+  private def selecting(scrutinee: Expr, tag: Id, clause: BlockLit)(using C: Context): Context = scrutinee.tpe match {
+    case data: ValueType.Data => C.knowing(scrutinee, destructured(data, tag, clause))
+    case _ => C
+  }
+
+  /** Creates the [[Expr.Make]] that represents the value of [[scrutinee]] in the context of [[clause]]. */
+  private def destructured(data: ValueType.Data, tag: Id, clause: BlockLit): Expr.Make =
+    Expr.Make(data, tag,
+      clause.tparams.map(ValueType.Var.apply),
+      clause.vparams.map { p => ValueVar(p.id, p.tpe) })
+
+  /** Replaces an expression by something simpler that is known to be equal to it. */
+  private def available(expr: Expr)(using ctx: Context): Expr =
+    if shareable(expr) then ctx.facts.getOrElse(expr, expr) else expr
+
+  /** Is it worth remembering that a variable holds pure expression [[expr]]? */
+  private def shareable(expr: Expr)(using C: Context): Boolean = expr match {
+    case _: Expr.PureApp => transparent(expr.tpe)
+    case _: Expr.Make => true
+    case _ => false
+  }
+
+  /** Are two equal values of this type interchangeable or could someone observe their identity? */
+  private def transparent(tpe: ValueType)(using C: Context): Boolean = tpe match {
+    case ValueType.Data(name, targs) => !C.decls.externDatas.contains(name) && targs.forall(transparent)
+    case ValueType.Var(_) => false
+    case ValueType.Boxed(_, _) => false
   }
 
   private def blockFor(id: Id)(using ctx: Context): Option[Block] =
@@ -76,7 +123,7 @@ object Normalizer { normal =>
     val defs = m.definitions.collect {
       case Toplevel.Def(id, block) => id -> block
     }.toMap
-    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize)
+    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize, Map.empty)
 
     val (normalizedDefs, _) = normalizeToplevel(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
@@ -158,6 +205,16 @@ object Normalizer { normal =>
       case other => other // stuck
     }
 
+  /**
+   * [[ let x = e; body ]] = let x = y; [[ body ]]   if we already know `y = e`
+   *
+   * Shared with `val x = return e`. The lookup cannot live in `normalize(e: Expr)` alone, since
+   * `active` dealiases and would resolve `y` back to `e` again.
+   */
+  private def normalizeLet(id: Id, expr: Expr, body: Stmt)(using C: Context): Stmt =
+    val bound = available(expr)
+    Stmt.Let(id, bound, normalize(body)(using C.bind(id, bound)))
+
   def normalize(s: Stmt)(using C: Context): Stmt = preserveTypes(s) {
 
     // see #798 for context (led to stack overflow)
@@ -174,8 +231,7 @@ object Normalizer { normal =>
         //        case abort if abort.tpe == Type.TBottom =>
         //          Stmt.Let(id, abort, Return(ValueVar(id, tpe)))
 
-        case normalized =>
-          Stmt.Let(id, normalized, normalize(body)(using C.bind(id, normalized)))
+        case normalized => normalizeLet(id, normalized, body)
       }
 
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
@@ -222,7 +278,9 @@ object Normalizer { normal =>
         normalize(default.get)
       case _ =>
         val normalized = normalize(scrutinee)
-        Stmt.Match(normalized, tpe, clauses.map { case (id, value) => id -> normalize(value) }, default.map(normalize))
+        Stmt.Match(normalized, tpe, clauses.map { case (tag, clause) =>
+          tag -> normalize(clause)(using selecting(normalized, tag, clause))
+        }, default.map(normalize))
     }
 
     // [[ if (true) stmt1 else stmt2 ]] = [[ stmt1 ]]
@@ -231,7 +289,10 @@ object Normalizer { normal =>
       case Expr.Literal(false, annotatedType) => normalize(els)
       case _ =>
         util.assert(Type.equals(thn.tpe, els.tpe), s"Then and else branch have different types: ${util.show(thn.tpe)} != ${util.show(els.tpe)}\n\n${util.show(thn)}\n\n${util.show(els)}\n\n${util.show(s)}")
-        If(normalize(cond), normalize(thn), normalize(els))
+        val condition = normalize(cond)
+        If(condition,
+          normalize(thn)(using assuming(condition, true)),
+          normalize(els)(using assuming(condition, false)))
     }
 
     case Stmt.Val(id, binding, body) =>
@@ -256,8 +317,8 @@ object Normalizer { normal =>
                 normalize(body2))
 
         // [[ val x: A = sc match [A] { case ... => body2: A }; body: B ]] == sc match [B] { case ... => [[ val x: A = body2; body: B ]] }
-        case Stmt.Match(sc, tpe, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
-          val res = normalizeVal(id, body2, body)
+        case Stmt.Match(sc, tpe, List((id2, clause @ BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
+          val res = normalizeVal(id, body2, body)(using selecting(sc, id2, clause))
           Stmt.Match(sc, res.tpe, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, res))), None)
 
         // Introduce joinpoints that are potentially later inlined or garbage collected
@@ -271,8 +332,8 @@ object Normalizer { normal =>
             val x1 = Id(id.name)
             val x2 = Id(id.name)
             Stmt.If(cond,
-              normalizeVal(x1, thn, Stmt.App(k, Nil, List(ValueVar(x1, tpe)), Nil)),
-              normalizeVal(x2, els, Stmt.App(k, Nil, List(ValueVar(x2, tpe)), Nil)))
+              normalizeVal(x1, thn, Stmt.App(k, Nil, List(ValueVar(x1, tpe)), Nil))(using assuming(cond, true)),
+              normalizeVal(x2, els, Stmt.App(k, Nil, List(ValueVar(x2, tpe)), Nil))(using assuming(cond, false)))
           }
 
         // avoid dead joinpoints on coercions
@@ -287,9 +348,9 @@ object Normalizer { normal =>
           joinpoint(id, tpe, res) { k =>
             // since we commuted Val and Match, we need to change the type of the match!
             Stmt.Match(sc, res.tpe, clauses.map {
-              case (tag, BlockLit(tparams, cparams, vparams, bparams, body)) =>
+              case (tag, clause @ BlockLit(tparams, cparams, vparams, bparams, body)) =>
                 val x = Id(id.name)
-                val res = normalizeVal(x, body, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))
+                val res = normalizeVal(x, body, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))(using selecting(sc, tag, clause))
                 (tag, BlockLit(tparams, cparams, vparams, bparams, res))
             }, default.map { stmt =>
               val x = Id(id.name)
@@ -298,8 +359,7 @@ object Normalizer { normal =>
           }
 
         // [[ val x = return e; s ]] = let x = [[ e ]]; [[ s ]]
-        case Stmt.Return(expr2) =>
-          Stmt.Let(id, expr2, normalize(body)(using C.bind(id, expr2)))
+        case Stmt.Return(expr2) => normalizeLet(id, expr2, body)
 
         // Commute val and bindings
         // [[ val x = { def f = ...; STMT }; STMT ]] = def f = ...; val x = STMT; STMT
@@ -393,8 +453,9 @@ object Normalizer { normal =>
     }
 
     // congruences
-    case Expr.PureApp(f, targs, vargs) => Expr.PureApp(f, targs, vargs.map(normalize))
-    case Expr.Make(data, tag, targs, vargs) => Expr.Make(data, tag, targs, vargs.map(normalize))
+    // [[ let x = f(y); f(y) ]] = let x = f(y); x
+    case Expr.PureApp(f, targs, vargs) => available(Expr.PureApp(f, targs, vargs.map(normalize)))
+    case Expr.Make(data, tag, targs, vargs) => available(Expr.Make(data, tag, targs, vargs.map(normalize)))
     case Expr.ValueVar(id, annotatedType) => p
     case Expr.Literal(value, annotatedType) => p
   }
