@@ -137,12 +137,23 @@ object TransformerCps {
   }
 
   def toChezExpr(stmt: cps.Stmt): chez.Expr = stmt match {
-    case Stmt.App(id, args, _) =>
+    case Stmt.Call(result, id, args, ks, rest) =>
+      val returnedKs = core.Id("ks")
+      val continuation = chez.Lambda(
+        List(result, returnedKs).map(nameDef),
+        toChez(rest))
+      val lowered = args.map(toChez) ++ List(toChez(ks), continuation)
+      chez.Call(nameRef(id), lowered)
+
+    case Stmt.App(id, args) =>
       chez.Call(nameRef(id), args.map(toChez))
 
     case Stmt.Invoke(id, method, args) =>
       val operation = chez.Call(nameRef(method), nameRef(id))
       chez.Call(operation, args.map(toChez))
+
+    case Stmt.Return(value) =>
+      toChez(value)
 
     case Stmt.Hole(span) =>
       chez.Builtin(HOLE, chez.ChezString(span.range.from.format))
@@ -195,8 +206,6 @@ object TransformerCps {
       chez.Call(nameRef(tag), args.map(toChez))
     case Expr.Abort =>
       chez.RawExpr("(void)")
-    case Expr.Return =>
-      chez.Variable(ChezName("return"))
     case Expr.Toplevel =>
       chez.Variable(ChezName("top-level-ks"))
   }

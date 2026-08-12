@@ -19,7 +19,7 @@ enum Continuation {
   case Static(hint: Id, k: (Expr, MetaContinuation) => Stmt)
 
   def apply(arg: Expr, ks: MetaContinuation): Stmt = this match {
-    case Dynamic(id) => Stmt.App(id, List(arg, ks.reify), false)
+    case Dynamic(id) => Stmt.App(id, List(arg, ks.reify))
     case Static(_, k) => k(arg, ks)
   }
 
@@ -234,8 +234,17 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
       vs <- Bind.traverse(vargs)(transform)
       bs <- Bind.traverse(bargs)(transform)
     } yield (calleeId, vs ++ bs)).run { case (calleeId, args) =>
-      k.reify(stmt.tpe, cont =>
-        Stmt.App(calleeId, args ++ List(ks.reify, cont), canBeDirect(stmt.capt)))
+      if isControlPure(stmt.capt) then {
+        val result = Id("result")
+        Stmt.Call(
+          result,
+          calleeId,
+          args,
+          ks.reify,
+          k(Expr.Variable(result), ks))
+      } else
+        k.reify(stmt.tpe, cont =>
+          Stmt.App(calleeId, args ++ List(ks.reify, cont)))
     }
 
   // --- Invoke ---
@@ -351,7 +360,7 @@ def transform(module: core.ModuleDecl): ModuleDecl = module match {
       definitions.map(transformToplevel), exports)
 }
 
-private def canBeDirect(captures: Captures)(using C: TransformationContext): Boolean =
+private def isControlPure(captures: Captures)(using C: TransformationContext): Boolean =
   def noControl = (captures -- Set(symbols.builtins.IOCapability.capture, symbols.builtins.GlobalCapability.capture)).isEmpty
   noControl
 
@@ -368,7 +377,7 @@ def transformToplevel(definition: core.Toplevel)(using C: TransformationContext)
         val ks = Id("ks")
         val k = Id("k")
         ToplevelDefinition.Val(id, ks, k,
-          Binding(bindings, Stmt.App(k, List(value, Expr.Variable(ks)), false)))
+          Binding(bindings, Stmt.App(k, List(value, Expr.Variable(ks)))))
     }
 
   case core.Toplevel.Val(id, binding) =>

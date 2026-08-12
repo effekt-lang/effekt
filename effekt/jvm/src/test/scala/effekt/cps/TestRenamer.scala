@@ -40,7 +40,6 @@ class TestRenamer {
     case Expr.Literal(_, _) => e
     case Expr.Make(data, tag, vargs) => Expr.Make(data, rewrite(tag), vargs.map(rewrite))
     case Expr.Abort => e
-    case Expr.Return => e
     case Expr.Toplevel => e
   }
 
@@ -64,11 +63,22 @@ class TestRenamer {
         Stmt.Let(rewrite(id), newBinding, rewrite(rest))
       }
 
-    case Stmt.App(id, args, direct) =>
-      Stmt.App(rewrite(id), args.map(rewrite), direct)
+    case Stmt.Call(id, callee, args, ks, rest) =>
+      val newCallee = rewrite(callee)
+      val newArgs = args.map(rewrite)
+      val newKs = rewrite(ks)
+      withBinding(id) {
+        Stmt.Call(rewrite(id), newCallee, newArgs, newKs, rewrite(rest))
+      }
+
+    case Stmt.App(id, args) =>
+      Stmt.App(rewrite(id), args.map(rewrite))
 
     case Stmt.Invoke(id, method, args) =>
       Stmt.Invoke(rewrite(id), rewrite(method), args.map(rewrite))
+
+    case Stmt.Return(value) =>
+      Stmt.Return(rewrite(value))
 
     case Stmt.Run(id, callee, args, purity, rest) =>
       val newCallee = rewrite(callee)

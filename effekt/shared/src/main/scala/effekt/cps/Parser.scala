@@ -128,7 +128,6 @@ class Parser(names: Names) extends Parsers {
 
   lazy val expr: P[Expr] =
     ( `abort` ^^^ Expr.Abort
-    | `return` ^^^ Expr.Return
     | `toplevel` ^^^ Expr.Toplevel
     | literal("()") ^^^ Expr.Literal((), Type.TUnit)
     | `true` ^^^ Expr.Literal(true, Type.TBoolean)
@@ -150,6 +149,7 @@ class Parser(names: Names) extends Parsers {
     | newStmt
     | getStmt
     | putStmt
+    | callStmt
     | letStmt
     | runStmt
     | ifStmt
@@ -161,10 +161,15 @@ class Parser(names: Names) extends Parsers {
     | resetStmt
     | shiftStmt
     | resumeStmt
+    | returnStmt
     | holeStmt
     | invokeOrApp
     | braces(stmt)
     )
+
+  // return(value)
+  lazy val returnStmt: P[Stmt] =
+    `return` ~> parens(expr) ^^ Stmt.Return.apply
 
   // def id(params) = { body } rest
   lazy val defStmt: P[Stmt] =
@@ -194,6 +199,18 @@ class Parser(names: Names) extends Parsers {
   lazy val putStmt: P[Stmt] =
     `put` ~> id ~ (`=` ~> expr <~ `;`) ~ stmt ^^ {
       case ref ~ value ~ rest => Stmt.Put(ref, value, rest)
+    }
+
+  // let id = expr;
+  private lazy val callArguments: P[(List[Expr], Expr)] =
+    parens(rep1sep(expr, `,`) <~ `,` <~ `return`) ^^ { values =>
+        val expressions = values.toList
+        expressions.init -> expressions.last
+      }
+
+  lazy val callStmt: P[Stmt] =
+    `let` ~> id ~ (`=` ~> id <~ `!`) ~ callArguments ~ (`;` ~> stmt) ^^ {
+      case name ~ callee ~ (args, ks) ~ rest => Stmt.Call(name, callee, args, ks, rest)
     }
 
   // let id = expr;
@@ -291,12 +308,11 @@ class Parser(names: Names) extends Parsers {
   lazy val holeStmt: P[Stmt] =
     `<>` ^^^ Stmt.Hole(Span.missing)
 
-  // id.method(args) or id(args) or id!(args)
+  // id.method(args) or id(args)
   lazy val invokeOrApp: P[Stmt] =
-    id ~ (`.` ~> id).? ~ (`!`.? <~ `(`) ~ (commaList(expr) <~ `)`) ^^ {
-      case obj ~ Some(method) ~ _ ~ args => Stmt.Invoke(obj, method, args)
-      case func ~ None ~ Some(_) ~ args => Stmt.App(func, args, true)
-      case func ~ None ~ None ~ args => Stmt.App(func, args, false)
+    id ~ (`.` ~> id).? ~ parens(commaList(expr)) ^^ {
+      case obj ~ Some(method) ~ args => Stmt.Invoke(obj, method, args)
+      case func ~ None ~ args => Stmt.App(func, args)
     }
 
   // === Entry points ===

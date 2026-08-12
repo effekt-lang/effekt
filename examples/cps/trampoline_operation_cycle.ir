@@ -17,6 +17,12 @@ def main(flag, k) {
 
 // The receiver is known compositionally at invoke's call site. The operation
 // entry, rather than either surrounding function, breaks the hidden cycle.
+// Its worker has no direct call site, however: the object contains only the
+// stack-safe adapter. The two closures can therefore be represented by one
+// stack-safe operation closure.
+// Moreover, the receiver analysis already establishes this operation as the
+// only target of invoke's property call, but JavaScript generation does not
+// yet use that result to devirtualize the invocation.
 /// CONTROL_FLOW
 
 ranks

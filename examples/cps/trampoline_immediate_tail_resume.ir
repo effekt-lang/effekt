@@ -1,0 +1,21 @@
+def main(ks0, k0) {
+  reset(p, ks1, k1) {
+    shift(p) { r, ks2, k2 =>
+      resume(r) { ks3, k3 =>
+        k3(1, ks3)
+      } @ ks2, k2
+    } @ ks1, k1
+  } @ ks0, k0
+}
+
+// The captured segment is resumed exactly once, immediately, and in tail
+// position. The current translation still captures it with SHIFT, restores it
+// with RESUME, and bounces when entering it again.
+/// JAVASCRIPT
+
+function main_0(ks_0, k_0) {
+  const [p_0, ks_1, k_1] = RESET(ks_0, k_0);
+  const [r_0, ks_2, k_2] = SHIFT(p_0, ks_1, k_1);
+  const [ks_3, k_3] = RESUME(r_0, ks_2, k_2);
+  return () => k_3(1, ks_3);
+}

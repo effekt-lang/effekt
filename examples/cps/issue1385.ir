@@ -30,9 +30,9 @@ def main(ks1, k1) {
           def k6(vr, ks6) {
             run! ret = show(vr);
             run! ignore = println(ret);
-            foreach_worker!(tail, ks6, k5)
+            foreach_worker(tail, ks6, k5)
           }
-          head!(3, ks5, k6)
+          head(3, ks5, k6)
         }
       }
     }
@@ -40,7 +40,7 @@ def main(ks1, k1) {
       dealloc(adders);
       k1(tmp5, ks7)
     }
-    foreach_worker!(s, ks4, k7)
+    foreach_worker(s, ks4, k7)
   }
   loop(1, ks1, k)
 }
@@ -79,9 +79,9 @@ def main(ks1, k1) {
           def k6(vr, ks6) {
             run! ret = show(vr);
             run! ignore = println(ret);
-            foreach_worker!(tail, ks6, k5)
+            foreach_worker(tail, ks6, k5)
           }
-          head!(3, ks5, k6)
+          head(3, ks5, k6)
         }
       }
     }
@@ -89,7 +89,7 @@ def main(ks1, k1) {
       dealloc(adders);
       k1(tmp5, ks7)
     }
-    foreach_worker!(s, ks4, k7)
+    foreach_worker(s, ks4, k7)
   }
   loop(1, ks1, k)
 }
@@ -114,13 +114,13 @@ def main(ks1, k1) {
           def k6(vr, ks6) {
             run! ret = show(vr);
             run! ignore = println(ret);
-            foreach_worker!(tail, ks6, k5)
+            foreach_worker(tail, ks6, k5)
           }
-          head!(3, ks5, k6)
+          head(3, ks5, k6)
         }
       }
     }
-    foreach_worker!(s, ks4, k7)
+    foreach_worker(s, ks4, k7)
   }
   def loop(i, ks2, k2) {
     run tmp2 = lt(i, 4);
@@ -163,13 +163,13 @@ def main(ks1, k1) {
           def k6(vr, ks6) {
             run! ret = show(vr);
             run! ignore = println(ret);
-            foreach_worker!(tail, ks6)
+            foreach_worker(tail, ks6)
           }
-          head!(3, ks5, k6)
+          head(3, ks5, k6)
         }
       }
     }
-    foreach_worker!(s, ks1)
+    foreach_worker(s, ks1)
   }
   def loop(i) {
     run tmp2 = lt(i, 4);

@@ -1,0 +1,38 @@
+def main(flag, ks, k) {
+  def one(x) {
+    k(x, ks)
+  }
+  def two(x, y) {
+    k(x, ks)
+  }
+  def apply(f) {
+    f(0)
+  }
+  if (flag) {
+    apply(one)
+  } else {
+    apply(two)
+  }
+}
+
+// Definitions flowing to the same indirect call form one convention group.
+// If their arities disagree, the group is fixed rather than transformed; its
+// bottom mask must still be defined at every member position.
+/// DROP_PARAMETERS
+
+def main(flag, ks, k) {
+  def one(x) {
+    k(x, ks)
+  }
+  def two(x, y) {
+    k(x, ks)
+  }
+  def apply(f) {
+    f(0)
+  }
+  if (flag) {
+    apply(one)
+  } else {
+    apply(two)
+  }
+}

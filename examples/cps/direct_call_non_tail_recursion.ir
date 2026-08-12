@@ -1,0 +1,17 @@
+def loop(i, ks, k) {
+  if (true) {
+    let result = loop!(i, ks, return);
+    run answer = add(result, 1);
+    k(answer, ks)
+  } else {
+    k(i, ks)
+  }
+};
+def main(i, ks, k) {
+  let result = loop!(i, ks, return);
+  k(result, ks)
+}
+
+/// CALLING_CONVENTIONS
+
+-
