@@ -168,6 +168,7 @@ object SafeEntries {
         collect(rest)
 
       case cps.Stmt.Let(_, _, rest) => collect(rest)
+      case cps.Stmt.Call(_, _, _, _, rest) => collect(rest)
       case cps.Stmt.Run(_, _, _, _, rest) => collect(rest)
       case cps.Stmt.If(_, thn, els) => collect(thn); collect(els)
       case cps.Stmt.Match(_, clauses, default) =>
@@ -182,7 +183,7 @@ object SafeEntries {
       case cps.Stmt.Reset(_, _, _, body, _, _) => collect(body)
       case cps.Stmt.Shift(_, _, _, _, body, _, _) => collect(body)
       case cps.Stmt.Resume(_, _, _, body, _, _) => collect(body)
-      case _: (cps.Stmt.App | cps.Stmt.Invoke | cps.Stmt.Hole) => ()
+      case _: (cps.Stmt.App | cps.Stmt.Invoke | cps.Stmt.Return | cps.Stmt.Hole) => ()
     }
 
     module.definitions.foreach {
@@ -193,7 +194,7 @@ object SafeEntries {
       case cps.ToplevelDefinition.Val(_, _, _, binding) => collect(binding)
     }
 
-    val targetsByCall = new IdentityHashMap[cps.Stmt.App, cps.GuardedEquality.CallTargets]()
+    val targetsByCall = new IdentityHashMap[cps.Stmt, cps.GuardedEquality.CallTargets]()
     targetFlows.foreach(_.callTargets.foreach(target => targetsByCall.put(target.call, target)))
 
     // ---------------------------------------------------------------------
@@ -288,7 +289,20 @@ object SafeEntries {
         watch(dependency(binding)) { add(Variable(id), eval(binding)) }
         scan(rest, source)
 
-      case app @ cps.Stmt.App(id, arguments, _) =>
+      case call @ cps.Stmt.Call(result, id, arguments, ks, rest) =>
+        val supplied = arguments :+ ks
+        watch(Set(Variable(id)) ++ dependencies(supplied)) {
+          val flowed = Option(targetsByCall.get(call)).iterator
+            .flatMap(_.targets).flatMap(functions.get).toSet
+          val targets = values(Variable(id)).functions ++ flowed
+          targets.foreach { target =>
+            edges += Edge(source, target, safe = false, addsFrame = true)
+            propagate(supplied, infos(target).params)
+          }
+        }
+        scan(rest, source)
+
+      case app @ cps.Stmt.App(id, arguments) =>
         watch(Set(Variable(id)) ++ dependencies(arguments)) {
           val flowed = Option(targetsByCall.get(app)).iterator
             .flatMap(_.targets).flatMap(functions.get).toSet
@@ -315,6 +329,8 @@ object SafeEntries {
             }
           }
         }
+
+      case _: cps.Stmt.Return => ()
 
       case cps.Stmt.Run(_, _, _, _, rest) =>
         scan(rest, source)
@@ -455,7 +471,11 @@ object SafeEntries {
           members.contains(edge.source) && members.contains(edge.target))
         val cyclic = component.size > 1 || internal.exists(edge => edge.source eq edge.target)
         val positive = internal.exists(_.addsFrame)
-        val entersThroughSafeValue = internal.exists(_.safe)
+        // Only first-class entries have a runtime function value whose direct
+        // invocation can introduce a JavaScript stack frame. Flow into a
+        // continuation case or a labeled block is represented by a frame or
+        // a jump; a Safe edge to such a node is merely a 0-CFA artifact.
+        val safeEntries = internal.filter(edge => edge.safe && edge.target.cuttable)
 
         // StackSafety already certifies the graph that contains only Direct
         // and Jump transfers. SafeEntries is responsible precisely for the
@@ -463,11 +483,8 @@ object SafeEntries {
         // immediately. Ignoring an SCC without such an edge is important:
         // 0-CFA can merge unrelated second-class continuation states into a
         // spurious SCC, but none of those entries can or needs to be adapted.
-        if cyclic && positive && entersThroughSafeValue then {
-          val candidates = internal.filter(edge => edge.safe && edge.target.cuttable)
-          assert(candidates.nonEmpty,
-            s"direct-call cycle has no safe entry: ${component.map(_.label).mkString(" -> ")}")
-          Some(candidates.minBy(_.target.ordinal).target)
+        if cyclic && positive && safeEntries.nonEmpty then {
+          Some(safeEntries.minBy(_.target.ordinal).target)
         } else None
       }.toSet
     }

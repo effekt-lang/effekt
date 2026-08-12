@@ -17,6 +17,9 @@ def main(flag, k) {
 
 // apply invokes the continuation that loop passes to it. This indirect edge
 // closes the otherwise hidden loop -> apply -> next -> loop cycle.
+// Consequently next needs a stack-safe value entry. There is, however, no
+// statically known direct call to next: its direct worker is referenced only
+// by the stack-safe adapter. This is the canonical worker-adapter fusion case.
 /// CONTROL_FLOW
 
 ranks

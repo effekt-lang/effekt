@@ -38,7 +38,13 @@ object Defunctionalization {
   final class Plan private[js] (
     val cases: Map[Id, ContinuationCase],
     val dispatches: Map[Id, ContinuationDispatch],
-    private val applications: Map[Id, ContinuationDispatch]
+    private val applications: Map[Id, ContinuationDispatch],
+    /** Stable local definitions referenced directly by relocated cases which
+     *  must therefore retain a JavaScript function binding. */
+    val firstClassRequirements: Set[Id],
+    /** Definitions whose residual bodies contain a reference to themselves
+     *  after continuation cases have moved to their dispatchers. */
+    val reenteredDefinitions: Set[Id]
   ) {
     def caseOf(id: Id): Option[ContinuationCase] = cases.get(id)
     def dispatchFor(entry: Id): Option[ContinuationDispatch] = dispatches.get(entry)
@@ -59,10 +65,21 @@ object Defunctionalization {
    *  during translation and therefore rebases its body into the dispatcher. */
   private enum Scope {
     case Definition(id: Id, function: Boolean)
+    /** A preceding local definition visible in the remainder. `label` records
+     *  whether its current representation contributes a labeled scope; the
+     *  binding itself remains a potential label in either representation. */
+    case Binding(id: Id, label: Boolean)
     case Boundary(serial: Int)
 
     def isFunctionBoundary: Boolean = this match {
       case Definition(_, function) => function
+      case Binding(_, _) => false
+      case Boundary(_) => true
+    }
+
+    def isStructural: Boolean = this match {
+      case Definition(_, _) => true
+      case Binding(_, label) => label
       case Boundary(_) => true
     }
   }
@@ -70,6 +87,7 @@ object Defunctionalization {
   private final class Locations(
     private val definitions: Map[Id, Vector[Scope]],
     private val applications: IdentityHashMap[cps.Stmt, Vector[Scope]],
+    private val staticDefinitions: Map[Id, Set[Id]],
     isSecondClass: Id => Boolean
   ) {
     private def bodyScope(entry: Id): Option[Vector[Scope]] =
@@ -82,7 +100,7 @@ object Defunctionalization {
       bodyScope(entry).map(functionBoundaries)
 
     def lexicalDepth(entry: Id): Int =
-      bodyScope(entry).fold(Int.MaxValue)(_.size)
+      bodyScope(entry).fold(Int.MaxValue)(_.count(_.isStructural))
 
     /** Does this application end up in the JavaScript function containing the
      *  dispatcher after selected continuation definitions are replaced by
@@ -98,6 +116,7 @@ object Defunctionalization {
         case (Some(scopes), Some(expected)) =>
           val caseIndex = scopes.lastIndexWhere {
             case Scope.Definition(id, _) => cases.contains(id)
+            case Scope.Binding(_, _) => false
             case Scope.Boundary(_) => false
           }
           val effective =
@@ -111,6 +130,7 @@ object Defunctionalization {
     def insideCase(call: cps.Stmt, cases: Set[Id]): Boolean =
       Option(applications.get(call)).exists(_.exists {
         case Scope.Definition(id, _) => cases.contains(id)
+        case Scope.Binding(_, _) => false
         case Scope.Boundary(_) => false
       })
 
@@ -119,12 +139,47 @@ object Defunctionalization {
         case Scope.Definition(id, _) => id
       }
 
+    /** Whether a second-class definition can be named as a JavaScript label
+     *  at this entry. Unlike an immutable function binding, a label cannot be
+     *  captured across a JavaScript function boundary. */
+    def labelVisibleAt(entry: Id, label: Id): Boolean =
+      bodyScope(entry).exists { scopes =>
+        // The definition named `label` is not itself a boundary in the
+        // representation whose validity we are checking: lowering it would
+        // replace that function scope by a label scope.
+        val boundary = scopes.lastIndexWhere {
+          case Scope.Definition(id, function) => function && id != label
+          case Scope.Binding(_, _) => false
+          case Scope.Boundary(_) => true
+        }
+        scopes.iterator.drop(boundary + 1).exists {
+          case Scope.Definition(id, _) => id == label
+          case Scope.Binding(id, _) => id == label
+          case Scope.Boundary(_) => false
+        }
+      }
+
+    /** Immutable definition bindings denoted by the same JavaScript value at
+     *  every execution of this definition's body. These need not be stored in
+     *  a continuation frame whose dispatcher is hosted here. */
+    def staticAt(entry: Id): Set[Id] =
+      staticDefinitions.getOrElse(entry, Set.empty)
+
+    /** Definition bodies that lexically contain this entry, including the
+     *  entry itself. A continuation case emitted at the entry becomes part of
+     *  each of these residual bodies. */
+    def enclosingDefinitionBodies(entry: Id): Set[Id] =
+      bodyScope(entry).toVector.flatten.collect {
+        case Scope.Definition(id, _) => id
+      }.toSet
+
   }
 
   private object Locations {
     def apply(module: cps.ModuleDecl, isSecondClass: Id => Boolean): Locations = {
       val definitions = scala.collection.mutable.LinkedHashMap.empty[Id, Vector[Scope]]
       val applications = new IdentityHashMap[cps.Stmt, Vector[Scope]]()
+      val staticDefinitions = scala.collection.mutable.LinkedHashMap.empty[Id, Set[Id]]
       var nextBoundary = 0
 
       def boundary(): Scope = {
@@ -133,48 +188,93 @@ object Defunctionalization {
         result
       }
 
-      def visit(stmt: cps.Stmt, scopes: Vector[Scope]): Unit = stmt match {
+      /** `repeated` means that evaluating the surrounding CPS body can revisit
+       *  a local definition without entering a fresh JavaScript activation.
+       *  Such a definition is not a stable substitute for a captured closure.
+       *
+       *  Local function bodies are conservatively repeated here. A later
+       *  representation fixed point may turn them into labels, and keeping
+       *  stability independent of that choice makes frame layouts monotone.
+       */
+      def visit(
+        stmt: cps.Stmt,
+        scopes: Vector[Scope],
+        static: Set[Id],
+        repeated: Boolean
+      ): Unit = stmt match {
         case cps.Stmt.Def(id, _, body, rest) =>
           definitions(id) = scopes
-          visit(body, scopes :+ Scope.Definition(id, !isSecondClass(id)))
-          visit(rest, scopes)
+          // The recursive binder itself always denotes the current closure (or
+          // label) in its body. In the remainder it is stable only when its
+          // allocation site is executed once in this JavaScript activation.
+          staticDefinitions(id) = static + id
+          visit(
+            body,
+            scopes :+ Scope.Definition(id, !isSecondClass(id)),
+            static + id,
+            repeated = true)
+          visit(
+            rest,
+            scopes :+ Scope.Binding(id, isSecondClass(id)),
+            static ++ Option.when(!repeated)(id),
+            repeated)
 
         case cps.Stmt.New(_, _, operations, rest) =>
-          operations.foreach(operation => visit(operation.body, scopes :+ boundary()))
-          visit(rest, scopes)
+          operations.foreach(operation =>
+            visit(operation.body, scopes :+ boundary(), static, repeated = false))
+          visit(rest, scopes, static, repeated)
 
-        case cps.Stmt.Let(_, _, rest) => visit(rest, scopes)
+        case cps.Stmt.Let(_, _, rest) => visit(rest, scopes, static, repeated)
+        case cps.Stmt.Call(_, _, _, _, rest) => visit(rest, scopes, static, repeated)
         case call: cps.Stmt.App => applications.put(call, scopes)
         case _: cps.Stmt.Invoke => ()
-        case cps.Stmt.Run(_, _, _, _, rest) => visit(rest, scopes)
+        case _: cps.Stmt.Return => ()
+        case cps.Stmt.Run(_, _, _, _, rest) => visit(rest, scopes, static, repeated)
         case cps.Stmt.If(_, thn, els) =>
-          visit(thn, scopes)
-          visit(els, scopes)
+          visit(thn, scopes, static, repeated)
+          visit(els, scopes, static, repeated)
         case cps.Stmt.Match(_, clauses, default) =>
-          clauses.foreach { case (_, clause) => visit(clause.body, scopes) }
-          default.foreach(visit(_, scopes))
-        case cps.Stmt.Region(_, _, rest) => visit(rest, scopes)
-        case cps.Stmt.Alloc(_, _, _, rest) => visit(rest, scopes)
-        case cps.Stmt.Var(_, _, _, rest) => visit(rest, scopes)
-        case cps.Stmt.Dealloc(_, rest) => visit(rest, scopes)
-        case cps.Stmt.Get(_, _, rest) => visit(rest, scopes)
-        case cps.Stmt.Put(_, _, rest) => visit(rest, scopes)
-        case cps.Stmt.Reset(_, _, _, body, _, _) => visit(body, scopes)
-        case cps.Stmt.Shift(_, _, _, _, body, _, _) => visit(body, scopes)
-        case cps.Stmt.Resume(_, _, _, body, _, _) => visit(body, scopes)
+          clauses.foreach { case (_, clause) => visit(clause.body, scopes, static, repeated) }
+          default.foreach(visit(_, scopes, static, repeated))
+        case cps.Stmt.Region(_, _, rest) => visit(rest, scopes, static, repeated)
+        case cps.Stmt.Alloc(_, _, _, rest) => visit(rest, scopes, static, repeated)
+        case cps.Stmt.Var(_, _, _, rest) => visit(rest, scopes, static, repeated)
+        case cps.Stmt.Dealloc(_, rest) => visit(rest, scopes, static, repeated)
+        case cps.Stmt.Get(_, _, rest) => visit(rest, scopes, static, repeated)
+        case cps.Stmt.Put(_, _, rest) => visit(rest, scopes, static, repeated)
+        case cps.Stmt.Reset(_, _, _, body, _, _) => visit(body, scopes, static, repeated)
+        case cps.Stmt.Shift(_, _, _, _, body, _, _) => visit(body, scopes, static, repeated)
+        case cps.Stmt.Resume(_, _, _, body, _, _) => visit(body, scopes, static, repeated)
         case _: cps.Stmt.Hole => ()
       }
 
+      val toplevelDefinitions = module.definitions.collect {
+        case cps.ToplevelDefinition.Def(id, _, _) => id
+      }.toSet
       module.definitions.foreach {
         case cps.ToplevelDefinition.Def(id, _, body) =>
           definitions(id) = Vector.empty
-          visit(body, Vector(Scope.Definition(id, function = true)))
+          staticDefinitions(id) = toplevelDefinitions
+          visit(
+            body,
+            Vector(Scope.Definition(id, function = true)),
+            toplevelDefinitions,
+            repeated = false)
         case cps.ToplevelDefinition.Val(id, _, _, binding) =>
           definitions(id) = Vector.empty
-          visit(binding, Vector(Scope.Definition(id, function = true)))
+          staticDefinitions(id) = toplevelDefinitions
+          visit(
+            binding,
+            Vector(Scope.Definition(id, function = true)),
+            toplevelDefinitions,
+            repeated = false)
       }
 
-      new Locations(definitions.toMap, applications, isSecondClass)
+      new Locations(
+        definitions.toMap,
+        applications,
+        staticDefinitions.toMap,
+        isSecondClass)
     }
   }
 
@@ -187,24 +287,46 @@ object Defunctionalization {
       module,
       isRecursive,
       isSecondClass,
-      module.definitions.map(cps.GuardedEquality.targets).toVector)
+      module.definitions.map(cps.GuardedEquality.targets).toVector,
+      Set.empty)
 
   def analyze(
     module: cps.ModuleDecl,
     isRecursive: Id => Boolean,
     isSecondClass: Id => Boolean,
-    targetFlows: Vector[cps.GuardedEquality.TargetResult]
+    targetFlows: Vector[cps.GuardedEquality.TargetResult],
+    directDefinitions: Set[Id]
   ): Plan = {
     require(module.definitions.size == targetFlows.size)
     val locations = Locations(module, isSecondClass)
     val allCases = scala.collection.mutable.LinkedHashMap.empty[Id, ContinuationCase]
     val allDispatches = scala.collection.mutable.LinkedHashMap.empty[Id, ContinuationDispatch]
     val allApplications = scala.collection.mutable.LinkedHashMap.empty[Id, ContinuationDispatch]
+    val firstClassRequirements = scala.collection.mutable.LinkedHashSet.empty[Id]
+    val reenteredDefinitions = scala.collection.mutable.LinkedHashSet.empty[Id]
     var nextTag = 0
+
+    val toplevelDefinitions = module.definitions.collect {
+      case cps.ToplevelDefinition.Def(id, _, _) => id
+    }.toSet
 
     module.definitions.zip(targetFlows).foreach { case (toplevel, flow) =>
       val definitions = flow.localDefinitions
       val definitionById = definitions.iterator.map(d => d.id -> d).toMap
+
+      // A closed direct definition denotes code, not an activation-dependent
+      // closure. Relocated continuation cases can name that code directly,
+      // so it is not part of their dynamic environment. Close transitively
+      // over other closed direct definitions to cover small helper clusters.
+      @tailrec def closeDirectDefinitions(closed: Set[Id]): Set[Id] = {
+        val next = closed ++ definitions.iterator.collect {
+          case definition
+              if directDefinitions(definition.id) &&
+                definition.captures.forall(closed) => definition.id
+        }
+        if next == closed then closed else closeDirectDefinitions(next)
+      }
+      val closedDirectDefinitions = closeDirectDefinitions(Set.empty)
       val localParameterOwner = definitions.iterator.flatMap { definition =>
         definition.params.iterator.map(_ -> definition.id)
       }.toMap
@@ -213,7 +335,9 @@ object Defunctionalization {
         case cps.ToplevelDefinition.Val(id, ks, k, _) => Map(ks -> id, k -> id)
       }
       val parameterOwner = localParameterOwner ++ toplevelParameterOwner
-      val calls = flow.callTargets
+      // A `Call` has an explicit lexical remainder and is not a continuation
+      // application. Only terminal CPS applications can form dispatches.
+      val calls = flow.callTargets.filter(_.call.isInstanceOf[cps.Stmt.App])
 
       val candidates = calls.groupBy(_.callee).iterator.flatMap { case (callee, sites) =>
         parameterOwner.get(callee).flatMap { entry =>
@@ -312,7 +436,29 @@ object Defunctionalization {
         val owners = groups.map { members =>
           members.minBy(candidate => locations.lexicalDepth(candidate.entry)) -> members
         }
+        val staticAtEveryDispatcher = owners.iterator
+          .map { case (owner, _) => locations.staticAt(owner.entry) }
+          .reduceOption(_ intersect _)
+          .getOrElse(Set.empty)
+        val capturedStaticDefinitions = definitions.iterator
+          .filter(definition => domain.contains(definition.id))
+          .flatMap(_.captures)
+          .filter(staticAtEveryDispatcher)
+          .toSet
+        val requireFunction = capturedStaticDefinitions.filterNot { capture =>
+          toplevelDefinitions(capture) || owners.forall {
+            case (owner, _) => locations.labelVisibleAt(owner.entry, capture)
+          }
+        }
+        val labelsAvailableAtEveryDispatcher = definitions
+          .filter(definition => domain.contains(definition.id))
+          .forall(definition => definition.captures.forall(capture =>
+            !isSecondClass(capture) ||
+              staticAtEveryDispatcher(capture) && owners.forall {
+                case (owner, _) => locations.labelVisibleAt(owner.entry, capture)
+              }))
         val eligible = component.map(_.arity).distinct.size == 1 && covered &&
+          labelsAvailableAtEveryDispatcher &&
           owners.forall { case (owner, members) =>
             members.flatMap(_.calls).forall(call =>
               locations.visibleFrom(call.call, owner.entry, domain)) &&
@@ -321,14 +467,26 @@ object Defunctionalization {
         }
 
         if eligible then {
+          // A stable definition can be referenced directly instead of stored
+          // in every frame. If it could not be a label at all dispatchers,
+          // that choice contributes a first-class representation constraint.
+          // This makes representation and layout one simultaneous solution,
+          // rather than relying on the current iteration accidentally keeping
+          // the definition as a function.
+          firstClassRequirements ++= requireFunction
           val cases = definitions.filter(d => domain.contains(d.id)).map { definition =>
             allCases.getOrElseUpdate(definition.id, {
               val continuationCase = ContinuationCase(
                 definition.id,
                 nextTag,
                 definition.params,
-                // Second-class definitions are statically compiled labels.
-                definition.captures.filterNot(isSecondClass),
+                // A frame is closure conversion relative to its dispatchers:
+                // a definition binding available with the same identity at
+                // every host is referenced directly; all dynamic values are
+                // retained as fields.
+                definition.captures
+                  .filterNot(staticAtEveryDispatcher)
+                  .filterNot(closedDirectDefinitions),
                 definition.body)
               nextTag += 1
               continuationCase
@@ -345,11 +503,27 @@ object Defunctionalization {
               cases)
             allDispatches(owner.entry) = dispatch
             members.foreach(candidate => allApplications(candidate.callee) = dispatch)
+
+            // Case bodies are emitted at the dispatcher rather than at their
+            // original definition sites. A reference to an enclosing
+            // definition therefore becomes a residual back-edge. Captures
+            // retained in the frame are field reads, not lexical references.
+            val enclosing = locations.enclosingDefinitionBodies(owner.entry)
+            cases.foreach { continuationCase =>
+              val direct = continuationCase.body.free --
+                continuationCase.params -- continuationCase.captures
+              reenteredDefinitions ++= enclosing.intersect(direct)
+            }
           }
         }
       }
     }
 
-    new Plan(allCases.toMap, allDispatches.toMap, allApplications.toMap)
+    new Plan(
+      allCases.toMap,
+      allDispatches.toMap,
+      allApplications.toMap,
+      firstClassRequirements.toSet,
+      reenteredDefinitions.toSet)
   }
 }

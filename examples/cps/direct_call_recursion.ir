@@ -1,0 +1,51 @@
+def loop(i, ks, k) {
+  if (true) {
+    let result = loop!(i, ks, return);
+    k(result, ks)
+  } else {
+    k(i, ks)
+  }
+};
+def main(i, ks, k) {
+  let result = loop!(i, ks, return);
+  k(result, ks)
+}
+
+/// CALLING_CONVENTIONS
+
+direct
+  loop = 0 adapter
+  main = 1 adapter
+
+/// JAVASCRIPT
+
+function direct_0(i_0) {
+  loop_0: while (true) {
+    if (true) {
+      const next_arg_2 = i_0;
+      i_0 = next_arg_2;
+      continue loop_0;
+    } else {
+      return i_0;
+    }
+  }
+}
+
+function loop_0(i_0, ks_0, k_0) {
+  return () => {
+    const result_3 = direct_0(i_0);
+    return k_0(result_3, ks_0);
+  };
+}
+
+function direct_1(i_1) {
+  const result_0 = direct_0(i_1);
+  return result_0;
+}
+
+function main_0(i_1, ks_1, k_1) {
+  return () => {
+    const result_4 = direct_1(i_1);
+    return k_1(result_4, ks_1);
+  };
+}

@@ -49,37 +49,31 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
         case _ => ()
       }.mkString("\n")
     })
+  case CallingConventions extends AnalysisPass("CALLING_CONVENTIONS",
+    (_, input, _) => js.CallingConvention.analyze(
+      input,
+      input.definitions.map(GuardedEquality.targets).toVector).show)
   case ControlFlow extends AnalysisPass("CONTROL_FLOW",
     (_, input, _) => {
-      val kinds = js.TransformerCps.computeKinds(input)
-      val targetFlows = input.definitions.map(GuardedEquality.targets).toVector
-      val defunctionalization = js.Defunctionalization.analyze(
-        input,
-        id => kinds.get(id).exists(_.isRecursive),
-        id => kinds.get(id).exists(_.isSecondClass),
-        targetFlows)
+      val representations = js.TransformerCps.computePlan(input)
+      val kinds = representations.kinds
       js.StackSafety.analyze(
         input,
         id => kinds.get(id).exists(_.isRecursive),
         id => kinds.get(id).exists(_.isSecondClass),
-        defunctionalization,
-        targetFlows).show
+        representations.defunctionalization,
+        input.definitions.map(GuardedEquality.targets).toVector).show
     })
   case SafeEntries extends AnalysisPass("SAFE_ENTRIES",
     (_, input, _) => {
-      val kinds = js.TransformerCps.computeKinds(input)
-      val targetFlows = input.definitions.map(GuardedEquality.targets).toVector
-      val defunctionalization = js.Defunctionalization.analyze(
-        input,
-        id => kinds.get(id).exists(_.isRecursive),
-        id => kinds.get(id).exists(_.isSecondClass),
-        targetFlows)
+      val representations = js.TransformerCps.computePlan(input)
+      val kinds = representations.kinds
       js.StackSafety.analyze(
         input,
         id => kinds.get(id).exists(_.isRecursive),
         id => kinds.get(id).exists(_.isSecondClass),
-        defunctionalization,
-        targetFlows).safeEntries.show
+        representations.defunctionalization,
+        input.definitions.map(GuardedEquality.targets).toVector).safeEntries.show
     })
   case JavaScript extends AnalysisPass("JAVASCRIPT",
     (_, input, _) => {

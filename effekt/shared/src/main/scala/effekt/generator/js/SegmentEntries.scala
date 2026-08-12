@@ -51,7 +51,11 @@ object SegmentEntries {
 
     val targetsByCall = new IdentityHashMap[cps.Stmt.App, cps.GuardedEquality.CallTargets]()
     targetFlows.foreach(_.callTargets.foreach { targets =>
-      targetsByCall.put(targets.call, targets)
+      targets.call match {
+        case call: cps.Stmt.App => targetsByCall.put(call, targets)
+        case _: cps.Stmt.Call => ()
+        case _ => ()
+      }
     })
 
     val preservingCalls = new IdentityHashMap[cps.Stmt.App, java.lang.Boolean]()
@@ -85,6 +89,8 @@ object SegmentEntries {
         visit(rest)
       case cps.Stmt.Let(_, _, rest) => visit(rest)
 
+      case cps.Stmt.Call(_, _, _, _, rest) => visit(rest)
+
       case call: cps.Stmt.App =>
         val targets = closedTargets(call)
         if targets.nonEmpty then {
@@ -97,6 +103,7 @@ object SegmentEntries {
         }
 
       case _: cps.Stmt.Invoke => ()
+      case _: cps.Stmt.Return => ()
       case cps.Stmt.Run(_, _, _, _, rest) => visit(rest)
       case cps.Stmt.If(_, thn, els) => visit(thn); visit(els)
       case cps.Stmt.Match(_, clauses, default) =>
