@@ -103,7 +103,7 @@ function restore(store, snap) {
 
 // Common Runtime
 // --------------
-const TOPLEVEL_K = (x, ks) => { throw { computationIsDone: true, result: x } }
+const TOPLEVEL_K = (x, ks) => ({ result: x })
 const TOPLEVEL_KS = { stack: null, prompt: Symbol("toplevel"), arena: null, rest: null }
 
 // The first variable in a scope creates its arena; until then `ks.arena` is null.
@@ -126,7 +126,7 @@ function CAPTURE(body) {
   return (ks, k) => {
     const res = body(x => TRAMPOLINE(() => k(x, ks)))
     if (typeof res === "function") return res
-    else throw { computationIsDone: true, result: $effekt.unit }
+    else return { result: $effekt.unit }
   }
 }
 
@@ -181,26 +181,20 @@ function RESUME(cont, ks, k) {
 }
 
 function RUN_TOPLEVEL(comp) {
-  try {
-    let a = comp(TOPLEVEL_KS, TOPLEVEL_K)
-    while (true) { a = a() }
-  } catch (e) {
-    if (e.computationIsDone) return e.result
-    else throw e
+  let step = comp(TOPLEVEL_KS, TOPLEVEL_K)
+  while (typeof step === "function") {
+    step = step()
   }
+  return step.result
 }
 
 // trampolines the given computation (like RUN_TOPLEVEL, but doesn't provide continuations)
 function TRAMPOLINE(comp) {
-  let a = comp;
-  try {
-    while (true) {
-      a = a()
-    }
-  } catch (e) {
-    if (e.computationIsDone) return e.result
-    else throw e
+  let step = comp
+  while (typeof step === "function") {
+    step = step()
   }
+  return step.result
 }
 
 // keeps the current trampoline going and dispatches the given task
@@ -210,7 +204,7 @@ function RUN(task) {
 
 // aborts the current continuation
 function ABORT(value) {
-  throw { computationIsDone: true, result: value }
+  return { result: value }
 }
 
 

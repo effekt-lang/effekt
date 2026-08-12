@@ -1,0 +1,94 @@
+def main(seed, k) {
+  def generate(n, c) {
+    def recur(i, next) {
+      if (true) {
+        next(i)
+      } else {
+        def after(value) {
+          recur(value, next)
+        }
+        recur(i, after)
+      }
+    }
+    recur(n, c)
+  }
+  def first(value) {
+    generate(value, k)
+  }
+  generate(seed, first)
+}
+
+// `generate` is not recursive in the CPS syntax: its two calls occur in
+// sequence. Defunctionalizing `first` moves the second call into `recur`'s
+// dispatcher, which is inside `generate`. The residual definition is
+// therefore recursive and needs a loop even though syntactic recursion did
+// not report a self-edge.
+/// JAVASCRIPT
+
+function main_0(seed_0, k_0) {
+  let n_0 = undefined;
+  let c_0 = undefined;
+  generate_0: {
+    const first_0 = { __tag: 1, k_0: k_0 };
+    n_0 = seed_0;
+    c_0 = first_0;
+    break generate_0;
+  }
+  generate_0: while (true) {
+    let i_0 = undefined;
+    let next_0 = undefined;
+    let cont_0 = undefined;
+    let value_1 = undefined;
+    recur_0: {
+      i_0 = n_0;
+      next_0 = c_0;
+      break recur_0;
+    }
+    next_0 = (typeof next_0 === "function") ? {
+      __tag: -1,
+      __boundary: next_0
+    } : next_0;
+    recur_0: while (true) {
+      apply_entry_2: {
+        if (true) {
+          const next_cont_4 = next_0;
+          const next_arg_5 = i_0;
+          cont_0 = next_cont_4;
+          value_1 = next_arg_5;
+          break apply_entry_2;
+        } else {
+          const after_0 = { __tag: 0, next_0: next_0 };
+          next_0 = after_0;
+          continue recur_0;
+        }
+      }
+      apply_3: while (true) {
+        switch (cont_0.__tag) {
+          case -1:
+            {
+              const boundary_continuation_6 = cont_0.__boundary;
+              return () => boundary_continuation_6(value_1);
+            }
+          case 0:
+            {
+              const value_0 = value_1;
+              const frame_next_0 = cont_0.next_0;
+              const tmp_next_0 = frame_next_0;
+              i_0 = value_0;
+              next_0 = tmp_next_0;
+              continue recur_0;
+            }
+          case 1:
+            {
+              const value_2 = value_1;
+              const frame_k_0 = cont_0.k_0;
+              n_0 = value_2;
+              c_0 = frame_k_0;
+              continue generate_0;
+            }
+          default:  return $effekt.unreachable();
+        }
+      }
+    }
+  }
+}

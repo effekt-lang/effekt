@@ -11,7 +11,7 @@ object Simplifier {
     case Stmt.Def(id, params, body, rest) =>
       rewrite(body) match {
         // eta-reduction
-        case Stmt.App(id2, args, _) if args == params.map(Expr.Variable(_)) =>
+        case Stmt.App(id2, args) if args == params.map(Expr.Variable(_)) =>
           Stmt.Let(id, Expr.Variable(id2), rewrite(rest))
         case newBody =>
           Stmt.Def(id, params, newBody, rewrite(rest))
@@ -23,11 +23,17 @@ object Simplifier {
     case Stmt.Let(id, binding, rest) =>
       Stmt.Let(id, rewrite(binding), rewrite(rest))
 
-    case Stmt.App(id, args, direct) =>
-      Stmt.App(id, args.map(rewrite), direct)
+    case Stmt.Call(id, callee, args, ks, rest) =>
+      Stmt.Call(id, callee, args.map(rewrite), rewrite(ks), rewrite(rest))
+
+    case Stmt.App(id, args) =>
+      Stmt.App(id, args.map(rewrite))
 
     case Stmt.Invoke(id, method, args) =>
       Stmt.Invoke(id, method, args.map(rewrite))
+
+    case Stmt.Return(value) =>
+      Stmt.Return(rewrite(value))
 
     case Stmt.Run(id, callee, args, purity, rest) =>
       Stmt.Run(id, callee, args.map(rewrite), purity, rewrite(rest))
@@ -75,7 +81,6 @@ object Simplifier {
     case Expr.Literal(_, _) => e
     case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(rewrite))
     case Expr.Abort => e
-    case Expr.Return => e
     case Expr.Toplevel => e
   }
 

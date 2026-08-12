@@ -1,0 +1,21 @@
+def loop(n, ks, k) {
+  if (true) {
+    def identity(x, ks1, k1) {
+      k1(x, ks1)
+    }
+    k(identity, ks)
+  } else {
+    let recursive = loop!(n, ks, return);
+    run ignored = add(n, 1);
+    k(recursive, ks)
+  }
+};
+def main(n, ks, k) {
+  let result = loop!(n, ks, return);
+  k(result, ks)
+}
+
+/// CALLING_CONVENTIONS
+
+direct
+  identity = 0 adapter

@@ -1,0 +1,75 @@
+def main(n, k) {
+  def loop(i, next) {
+    run done = eq(i, 0);
+    if (done) {
+      next(i)
+    } else {
+      def after(value) {
+        loop(value, next)
+      }
+      run previous = sub(i, 1);
+      loop(previous, after)
+    }
+  }
+  loop(n, k)
+}
+
+// In the defunctionalized continuation case, `next` denotes the value loaded
+// from the immutable frame rather than the current loop register. The back
+// edge must therefore retain the apparently syntactic `next := next` update.
+// `loop`, on the other hand, is a static label at every dispatcher and is not
+// part of the residual frame layout.
+/// JAVASCRIPT
+
+function main_0(n_0, k_0) {
+  let i_0 = undefined;
+  let next_0 = undefined;
+  let cont_0 = undefined;
+  let value_1 = undefined;
+  loop_0: {
+    i_0 = n_0;
+    next_0 = k_0;
+    break loop_0;
+  }
+  next_0 = (typeof next_0 === "function") ? {
+    __tag: -1,
+    __boundary: next_0
+  } : next_0;
+  loop_0: while (true) {
+    apply_entry_2: {
+      const done_0 = eq_0(i_0, 0);
+      if (done_0) {
+        const next_cont_4 = next_0;
+        const next_arg_5 = i_0;
+        cont_0 = next_cont_4;
+        value_1 = next_arg_5;
+        break apply_entry_2;
+      } else {
+        const after_0 = { __tag: 0, next_0: next_0 };
+        const previous_0 = sub_0(i_0, 1);
+        i_0 = previous_0;
+        next_0 = after_0;
+        continue loop_0;
+      }
+    }
+    apply_3: while (true) {
+      switch (cont_0.__tag) {
+        case -1:
+          {
+            const boundary_continuation_6 = cont_0.__boundary;
+            return () => boundary_continuation_6(value_1);
+          }
+        case 0:
+          {
+            const value_0 = value_1;
+            const frame_next_0 = cont_0.next_0;
+            const tmp_next_0 = frame_next_0;
+            i_0 = value_0;
+            next_0 = tmp_next_0;
+            continue loop_0;
+          }
+        default:  return $effekt.unreachable();
+      }
+    }
+  }
+}

@@ -51,7 +51,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Expr.Literal(value, _) => value.toString
     case Expr.Make(data, tag, vargs) => "make" <+> toDoc(tag) <> parens(vargs.map(toDoc))
     case Expr.Abort => "abort"
-    case Expr.Return => "return"
     case Expr.Toplevel => "toplevel"
   }
 
@@ -68,14 +67,19 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(rest)
 
-    case Stmt.App(id, args, true) =>
-      toDoc(id) <> "!" <> parens(args.map(toDoc))
+    case Stmt.Call(id, callee, args, ks, rest) =>
+      val returnDoc: Doc = "return"
+      "let" <+> toDoc(id) <+> "=" <+> toDoc(callee) <> "!" <>
+        parens(args.map(toDoc) ++ List(toDoc(ks), returnDoc)) <> ";" <> line <> toDoc(rest)
 
-    case Stmt.App(id, args, false) =>
+    case Stmt.App(id, args) =>
       toDoc(id) <> parens(args.map(toDoc))
 
     case Stmt.Invoke(id, method, args) =>
       toDoc(id) <> "." <> method.name.toString <> parens(args.map(toDoc))
+
+    case Stmt.Return(value) =>
+      "return" <> parens(toDoc(value))
 
     case Stmt.Run(id, callee, args, purity, rest) =>
       val prefix = purity match {

@@ -117,7 +117,10 @@ object BlockSinking {
     case Stmt.Let(id, binding, rest) =>
       Stmt.Let(id, binding, normalize(rest))
 
-    case Stmt.App(_, _, _) | Stmt.Invoke(_, _, _) | Stmt.Hole(_) =>
+    case Stmt.Call(id, callee, args, ks, rest) =>
+      Stmt.Call(id, callee, args, ks, normalize(rest))
+
+    case Stmt.App(_, _) | Stmt.Invoke(_, _, _) | Stmt.Return(_) | Stmt.Hole(_) =>
       stmt
 
     case Stmt.Run(id, callee, args, purity, rest) =>
@@ -160,6 +163,52 @@ object BlockSinking {
       Stmt.Resume(resumption, ks, k, normalize(body), ks1, k1)
   }
 
+  /** Sink only the definitions introduced for rejected compositional calls.
+   * Existing lexical choices stay intact, which keeps this post-lowering
+   * normalization independent of the earlier block-sinking pass. */
+  def sinkIntroduced(module: ModuleDecl, introduced: Set[Id]): ModuleDecl = {
+    def go(stmt: Stmt): Stmt = stmt match {
+      case Stmt.Def(id, params, body, rest) =>
+        val definition = Def(id, params, go(body))
+        val remainder = go(rest)
+        if introduced.contains(id) then sink(definition, remainder)
+        else Stmt.Def(id, params, definition.body, remainder)
+      case Stmt.New(id, interface, operations, rest) =>
+        Stmt.New(id, interface, operations.map(op => op.copy(body = go(op.body))), go(rest))
+      case Stmt.Let(id, binding, rest) => Stmt.Let(id, binding, go(rest))
+      case Stmt.Call(id, callee, args, ks, rest) => Stmt.Call(id, callee, args, ks, go(rest))
+      case terminal @ (Stmt.App(_, _) | Stmt.Invoke(_, _, _) |
+          Stmt.Return(_) | Stmt.Hole(_)) => terminal
+      case Stmt.Run(id, callee, args, purity, rest) =>
+        Stmt.Run(id, callee, args, purity, go(rest))
+      case Stmt.If(condition, thn, els) => Stmt.If(condition, go(thn), go(els))
+      case Stmt.Match(scrutinee, clauses, default) =>
+        Stmt.Match(
+          scrutinee,
+          clauses.map { case (tag, clause) => tag -> clause.copy(body = go(clause.body)) },
+          default.map(go))
+      case Stmt.Region(id, ks, rest) => Stmt.Region(id, ks, go(rest))
+      case Stmt.Alloc(id, init, region, rest) => Stmt.Alloc(id, init, region, go(rest))
+      case Stmt.Var(id, init, ks, rest) => Stmt.Var(id, init, ks, go(rest))
+      case Stmt.Dealloc(ref, rest) => Stmt.Dealloc(ref, go(rest))
+      case Stmt.Get(ref, id, rest) => Stmt.Get(ref, id, go(rest))
+      case Stmt.Put(ref, value, rest) => Stmt.Put(ref, value, go(rest))
+      case Stmt.Reset(prompt, ks, k, body, ks1, k1) =>
+        Stmt.Reset(prompt, ks, k, go(body), ks1, k1)
+      case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+        Stmt.Shift(prompt, resume, ks, k, go(body), ks1, k1)
+      case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
+        Stmt.Resume(resumption, ks, k, go(body), ks1, k1)
+    }
+
+    module.copy(definitions = module.definitions.map {
+      case ToplevelDefinition.Def(id, params, body) =>
+        ToplevelDefinition.Def(id, params, go(body))
+      case ToplevelDefinition.Val(id, ks, k, binding) =>
+        ToplevelDefinition.Val(id, ks, k, go(binding))
+    })
+  }
+
   /**
    * Repeatedly apply the inward commuting conversion for one definition.
    * A definition moves into a constructor exactly when all of its uses occur
@@ -186,7 +235,13 @@ object BlockSinking {
         if (binding.free.contains(d.id)) bind(d, stmt)
         else Stmt.Let(id, binding, sink(d, rest))
 
-      case Stmt.App(_, _, _) | Stmt.Invoke(_, _, _) =>
+      case Stmt.Call(id, callee, args, ks, rest) =>
+        val usedImmediately = callee == d.id ||
+          args.exists(_.free.contains(d.id)) || ks.free.contains(d.id)
+        if (usedImmediately) bind(d, stmt)
+        else Stmt.Call(id, callee, args, ks, sink(d, rest))
+
+      case Stmt.App(_, _) | Stmt.Invoke(_, _, _) | Stmt.Return(_) =>
         bind(d, stmt)
 
       case Stmt.Run(id, callee, args, purity, rest) =>

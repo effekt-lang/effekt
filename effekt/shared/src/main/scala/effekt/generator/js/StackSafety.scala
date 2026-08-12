@@ -133,7 +133,12 @@ object StackSafety {
         case _: cps.ToplevelDefinition.Val => ()
       }
       flow.localDefinitions.foreach(definition => parameters(definition.id) = definition.params.size)
-      flow.callTargets.foreach(target => targetsByCall.put(target.call, target))
+      flow.callTargets.foreach { target =>
+        target.call match {
+          case call: cps.Stmt.App => targetsByCall.put(call, target)
+          case _ => ()
+        }
+      }
     }
 
     final case class Host(owner: Id, secondClass: Set[Id], insideBody: Set[Id])
@@ -188,13 +193,18 @@ object StackSafety {
 
       case cps.Stmt.Let(_, _, rest) => visit(rest, owner, secondClass, insideBody)
 
-      case app @ cps.Stmt.App(id, _, _) =>
+      case cps.Stmt.Call(_, _, _, _, rest) =>
+        visit(rest, owner, secondClass, insideBody)
+
+      case app @ cps.Stmt.App(id, _) =>
         val dispatch = defunctionalization.dispatchForCallee(id).isDefined
         val jump = dispatch || secondClass.contains(id) || insideBody.contains(id)
         recordCall(app, name(id), owner, jump)
 
       case invoke @ cps.Stmt.Invoke(id, method, _) =>
         recordCall(invoke, s"${name(id)}.${name(method)}", owner, jump = false)
+
+      case _: cps.Stmt.Return => ()
 
       case cps.Stmt.Run(_, _, _, _, rest) => visit(rest, owner, secondClass, insideBody)
       case cps.Stmt.If(_, thn, els) =>
@@ -248,7 +258,7 @@ object StackSafety {
         site.closed = true
         site.transfer = Transfer.Jump
       } else site.stmt match {
-        case app @ cps.Stmt.App(id, args, _) =>
+        case app @ cps.Stmt.App(id, args) =>
           parameters.get(id) match {
             case Some(arity) if arity == args.size && !isSecondClass(id) && defunctionalization.caseOf(id).isEmpty =>
               site.targets = Vector(id)

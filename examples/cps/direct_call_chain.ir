@@ -1,0 +1,59 @@
+def inc(x, ks, k) {
+  run y = add(x, 1);
+  k(y, ks)
+};
+def twice(x, ks, k) {
+  let first = inc!(x, ks, return);
+  let second = inc!(first, ks, return);
+  k(second, ks)
+};
+def main(x, ks, k) {
+  let result = twice!(x, ks, return);
+  k(result, ks)
+}
+
+/// CALLING_CONVENTIONS
+
+direct
+  inc = 0 adapter
+  main = 2 adapter
+  twice = 1 adapter
+
+/// JAVASCRIPT
+
+function direct_0(x_0) {
+  const y_0 = add_0(x_0, 1);
+  return y_0;
+}
+
+function inc_0(x_0, ks_0, k_0) {
+  return () => {
+    const result_3 = direct_0(x_0);
+    return k_0(result_3, ks_0);
+  };
+}
+
+function direct_2(x_1) {
+  const first_0 = direct_0(x_1);
+  const second_0 = direct_0(first_0);
+  return second_0;
+}
+
+function twice_0(x_1, ks_1, k_1) {
+  return () => {
+    const result_4 = direct_2(x_1);
+    return k_1(result_4, ks_1);
+  };
+}
+
+function direct_1(x_2) {
+  const result_0 = direct_2(x_2);
+  return result_0;
+}
+
+function main_0(x_2, ks_2, k_2) {
+  return () => {
+    const result_5 = direct_1(x_2);
+    return k_2(result_5, ks_2);
+  };
+}

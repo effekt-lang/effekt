@@ -1,0 +1,16 @@
+def even(i, ks, k) {
+  let result = odd!(i, ks, return);
+  k(result, ks)
+};
+def odd(i, ks, k) {
+  let result = even!(i, ks, return);
+  k(result, ks)
+};
+def main(i, ks, k) {
+  let result = even!(i, ks, return);
+  k(result, ks)
+}
+
+/// CALLING_CONVENTIONS
+
+-

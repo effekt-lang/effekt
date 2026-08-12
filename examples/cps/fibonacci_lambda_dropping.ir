@@ -77,21 +77,28 @@ def main(i_main, ks_main, k_main) {
 /// CONTROL_FLOW
 
 ranks
-  main = 1
-  fibonacci = 0
+  main = 0
 transfers
-  fibonacci -> k_f: jump
-  fibonacci -> fibonacci: jump
-  main -> fibonacci: direct [fibonacci]
-  fibonacci -> k_main: safe [?]
-  fibonacci -> fibonacci: jump
-  fibonacci -> k_f: jump
+  main -> fibonacci: jump
+  main -> k_f: jump
+  main -> fibonacci: jump
+  main -> k_main: safe [?]
+  main -> fibonacci: jump
+  main -> k_f: jump
 
 /// JAVASCRIPT
 
-function fibonacci_0(i_f_0, k_f_0) {
+function main_0(i_main_0, ks_main_0, k_main_0) {
+  const done_0 = { __tag: 0, ks_main_0: ks_main_0, k_main_0: k_main_0 };
+  let i_f_0 = undefined;
+  let k_f_0 = undefined;
   let cont_0 = undefined;
   let value_1 = undefined;
+  fibonacci_0: {
+    i_f_0 = i_main_0;
+    k_f_0 = done_0;
+    break fibonacci_0;
+  }
   fibonacci_0: while (true) {
     apply_entry_2: {
       const is_zero_0 = eq_0(i_f_0, 0);
@@ -103,12 +110,7 @@ function fibonacci_0(i_f_0, k_f_0) {
         break apply_entry_2;
       } else {
         const i_0 = sub_0(i_f_0, 1);
-        const k_0 = {
-          __tag: 1,
-          fibonacci_0: fibonacci_0,
-          i_f_0: i_f_0,
-          k_f_0: k_f_0
-        };
+        const k_0 = { __tag: 1, i_f_0: i_f_0, k_f_0: k_f_0 };
         i_f_0 = i_0;
         k_f_0 = k_0;
         continue fibonacci_0;
@@ -150,9 +152,4 @@ function fibonacci_0(i_f_0, k_f_0) {
       }
     }
   }
-}
-
-function main_0(i_main_0, ks_main_0, k_main_0) {
-  const done_0 = { __tag: 0, ks_main_0: ks_main_0, k_main_0: k_main_0 };
-  return fibonacci_0(i_main_0, done_0);
 }

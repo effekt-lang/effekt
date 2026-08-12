@@ -2,6 +2,7 @@ package effekt
 package cps
 
 import core.Id
+import java.util.IdentityHashMap
 import scala.collection.mutable
 import cps.substitutions.substitute
 
@@ -9,8 +10,10 @@ object StaticArguments {
 
   private class FunctionInfo(
     val params: List[Id],
-    val recursiveCalls: mutable.ListBuffer[List[Expr]] = mutable.ListBuffer.empty,
-    val externalCalls: mutable.ListBuffer[List[Expr]] = mutable.ListBuffer.empty
+    val recursiveCalls: mutable.ListBuffer[List[Option[Expr]]] = mutable.ListBuffer.empty,
+    val externalCalls: mutable.ListBuffer[List[Option[Expr]]] = mutable.ListBuffer.empty,
+    var hasCompositionalCall: Boolean = false,
+    var hasCpsReturn: Boolean = false
   ) {
     def isRecursive: Boolean = recursiveCalls.nonEmpty
 
@@ -18,15 +21,25 @@ object StaticArguments {
       params.zipWithIndex.map { case (param, index) =>
         recursiveCalls.nonEmpty && recursiveCalls.forall { args =>
           args(index) match {
-            case Expr.Variable(other) => param == other
+            case Some(Expr.Variable(other)) => param == other
             case _ => false
           }
         }
+      }
+
+    /** A direct call removes the final CPS convention parameters. They must
+     *  therefore remain on the specialized worker until calling-convention
+     *  lowering has consumed them. */
+    def admissibleStatics(statics: List[Boolean]): List[Boolean] =
+      if !hasCompositionalCall then statics
+      else statics.zipWithIndex.map { case (isStatic, index) =>
+        isStatic && index < params.size - 2
       }
   }
 
   /** The call information needed only by static-argument specialization. */
   private class CallAnalysis(
+    targetsByCall: IdentityHashMap[Stmt, GuardedEquality.CallTargets],
     val functions: mutable.Map[Id, FunctionInfo] = mutable.Map.empty,
     var stack: List[Id] = Nil
   ) {
@@ -42,6 +55,29 @@ object StaticArguments {
     private def register(id: Id, params: List[Id]): Unit =
       functions(id) = FunctionInfo(params)
 
+    /** Static-argument specialization rewrites syntactically known calls.
+     *  Indirect calls therefore constrain a target's calling convention, but
+     *  are not themselves specialization sites. */
+    private def recordKnown(
+      callee: Id,
+      args: List[Option[Expr]],
+      compositional: Boolean
+    ): Unit =
+      functions.get(callee).filter(_.params.size == args.size).foreach { info =>
+        info.hasCompositionalCall ||= compositional
+        if stack.contains(callee) then info.recursiveCalls += args
+        else info.externalCalls += args
+      }
+
+    private def markCompositionalTargets(call: Stmt.Call): Unit =
+      Option(targetsByCall.get(call)).foreach { flow =>
+        flow.targets.foreach { target =>
+          functions.get(target).filter(_.params.size == call.args.size + 2).foreach {
+            _.hasCompositionalCall = true
+          }
+        }
+      }
+
     def process(stmt: Stmt): Unit = stmt match {
       case Stmt.Def(id, params, body, rest) =>
         register(id, params)
@@ -54,13 +90,29 @@ object StaticArguments {
 
       case Stmt.Let(_, _, rest) => process(rest)
 
-      case Stmt.App(id, args, _) =>
-        functions.get(id).foreach { info =>
-          if stack.contains(id) then info.recursiveCalls += args
-          else info.externalCalls += args
+      case call @ Stmt.Call(_, id, args, ks, rest) =>
+        if functions.contains(id) then
+          recordKnown(
+            id,
+            args.map(Some(_)) ++ List(Some(ks), None),
+            compositional = true)
+        else markCompositionalTargets(call)
+        process(rest)
+
+      case Stmt.App(id, args) =>
+        stack.headOption.flatMap(functions.get).foreach { owner =>
+          val metaContinuation = owner.params.size - 2
+          val returnsThroughConvention = args match {
+            case List(_, Expr.Variable(ks)) if metaContinuation >= 0 =>
+              id == owner.params.last && ks == owner.params(metaContinuation)
+            case _ => false
+          }
+          owner.hasCpsReturn ||= returnsThroughConvention
         }
+        recordKnown(id, args.map(Some(_)), compositional = false)
 
       case Stmt.Invoke(_, _, _) => ()
+      case Stmt.Return(_) => ()
       case Stmt.Run(_, _, _, _, rest) => process(rest)
       case Stmt.If(_, thn, els) => process(thn); process(els)
       case Stmt.Match(_, clauses, default) =>
@@ -92,8 +144,15 @@ object StaticArguments {
   }
 
   private object CallAnalysis {
-    def apply(module: ModuleDecl): CallAnalysis = {
-      val analysis = new CallAnalysis()
+    def apply(
+      module: ModuleDecl,
+      targetFlows: Vector[GuardedEquality.TargetResult]
+    ): CallAnalysis = {
+      val targetsByCall = new IdentityHashMap[Stmt, GuardedEquality.CallTargets]()
+      targetFlows.foreach(_.callTargets.foreach { targets =>
+        targetsByCall.put(targets.call, targets)
+      })
+      val analysis = new CallAnalysis(targetsByCall)
       analysis.process(module)
       analysis
     }
@@ -101,6 +160,7 @@ object StaticArguments {
 
   class Context(
     val statics: Map[Id, List[Boolean]],
+    val wrapperSpecializations: Set[Id],
     val workers: mutable.Map[Id, Id] = mutable.Map.empty,
     var stack: List[Id] = Nil,
     val pendingWorkers: mutable.Map[Id, Worker] = mutable.Map.empty
@@ -189,7 +249,55 @@ object StaticArguments {
    */
   private def rewriteCall(id: Id, args: List[Expr])(using ctx: Context): Stmt = {
     val isStatic = ctx.statics(id)
-    Stmt.App(ctx.workers(id), dropStatic(isStatic, args.map(rewrite)), false)
+    Stmt.App(ctx.workers(id), dropStatic(isStatic, args.map(rewrite)))
+  }
+
+  private def rewriteCall(
+    result: Id,
+    id: Id,
+    args: List[Expr],
+    ks: Expr,
+    rest: Stmt
+  )(using ctx: Context): Stmt = {
+    val isStatic = ctx.statics(id)
+    Stmt.Call(
+      result,
+      ctx.workers(id),
+      dropStatic(isStatic, args.map(rewrite)),
+      rewrite(ks),
+      rewrite(rest))
+  }
+
+  /** Enter a specialized worker from its original calling convention.
+   *
+   * If the invariant is the CPS meta-continuation, close it into an entry
+   * continuation. Recursive continuations can then uniformly omit `ks`, while
+   * the entry continuation restores the original `(value, ks)` convention at
+   * the boundary. The ordinary parameter-dropping pass removes its unused
+   * `returnedKs` parameter afterwards.
+   */
+  private def enterWorker(
+    id: Id,
+    params: List[Id],
+    worker: Worker
+  )(using ctx: Context): Stmt = {
+    val isStatic = ctx.statics(id)
+    val dynamicArgs = dropStatic(isStatic, params).map(Expr.Variable.apply)
+    val workerCall = Stmt.App(worker.id, dynamicArgs)
+
+    if params.size >= 2 && isStatic(params.size - 2) && !isStatic.last then {
+      val entry = Id("k")
+      val result = Id("result")
+      val returnedKs = Id("ks")
+      val originalKs = params(params.size - 2)
+      val originalK = params.last
+      val adaptedArgs = dynamicArgs.dropRight(1) :+ Expr.Variable(entry)
+      Stmt.Def(
+        entry,
+        List(result, returnedKs),
+        Stmt.App(originalK, List(Expr.Variable(result), Expr.Variable(originalKs))),
+        Stmt.App(worker.id, adaptedArgs))
+    } else workerCall
   }
 
   /**
@@ -207,6 +315,7 @@ object StaticArguments {
     case Stmt.Def(_, _, body, rest) => List(body, rest)
     case Stmt.New(_, _, ops, rest) => ops.map(_.body) :+ rest
     case Stmt.Let(_, _, rest) => List(rest)
+    case Stmt.Call(_, _, _, _, rest) => List(rest)
     case Stmt.Run(_, _, _, _, rest) => List(rest)
     case Stmt.If(_, thn, els) => List(thn, els)
     case Stmt.Match(_, clauses, default) => clauses.map(_._2.body) ++ default.toList
@@ -256,7 +365,7 @@ object StaticArguments {
       val dynamicWrapperArgs = isStatic.zip(allParams).collect { case (false, p) => Expr.Variable(p) }
 
       val wrappedBody = Stmt.Def(workerId, dynamicParams, workerBody,
-        Stmt.App(workerId, dynamicWrapperArgs, false))
+        Stmt.App(workerId, dynamicWrapperArgs))
 
       Stmt.Def(id, allParams, wrappedBody, rest)
     }
@@ -266,6 +375,20 @@ object StaticArguments {
 
   def rewrite(s: Stmt)(using ctx: Context): Stmt = placeWorkers(s) {
 
+    // When a recursive invariant differs between entry sites, retain the
+    // original function as an entry wrapper. Its parameters bind the static
+    // values for a fresh worker invocation; recursive calls bypass the
+    // wrapper and use only the dynamic parameters.
+    case Stmt.Def(id, params, body, rest) if ctx.wrapperSpecializations.contains(id) =>
+      val worker = buildWorker(id, params, body)
+      ctx.workers -= id
+      val wrapperBody = Stmt.Def(
+        worker.id,
+        worker.dynamicParams,
+        worker.body,
+        enterWorker(id, params, worker))
+      Stmt.Def(id, params, wrapperBody, rewrite(rest))
+
     case Stmt.Def(id, params, body, rest) if ctx.hasStatics(id) =>
       ctx.pendingWorkers(id) = buildWorker(id, params, body)
       rewrite(rest)
@@ -274,25 +397,42 @@ object StaticArguments {
       val rewrittenBody = ctx.withinBody(id) { rewrite(body) }
       Stmt.Def(id, params, rewrittenBody, rewrite(rest))
 
+    case Stmt.Call(result, id, args, ks, rest) if ctx.hasStatics(id) && ctx.within(id) =>
+      rewriteCall(result, id, args, ks, rest)
+
+    case Stmt.Call(result, id, args, ks, rest) if ctx.pendingWorkers.contains(id) =>
+      placeWorkerHere(id, args) {
+        rewriteCall(result, id, args, ks, rest)
+      }
+
+    case Stmt.Call(result, id, args, ks, rest) if ctx.workers.contains(id) && !ctx.within(id) =>
+      rewriteCall(result, id, args, ks, rest)
+
+    case Stmt.Call(result, id, args, ks, rest) =>
+      Stmt.Call(result, id, args.map(rewrite), rewrite(ks), rewrite(rest))
+
     // Recursive call: redirect to worker, drop static args
-    case Stmt.App(id, args, direct) if ctx.hasStatics(id) && ctx.within(id) =>
+    case Stmt.App(id, args) if ctx.hasStatics(id) && ctx.within(id) =>
       rewriteCall(id, args)
 
     // External call: place pending worker here, then rewrite the call
-    case Stmt.App(id, args, direct) if ctx.pendingWorkers.contains(id) =>
+    case Stmt.App(id, args) if ctx.pendingWorkers.contains(id) =>
       placeWorkerHere(id, args) {
         rewriteCall(id, args)
       }
 
     // Call to an already-placed worker: just rewrite the call
-    case Stmt.App(id, args, direct) if ctx.workers.contains(id) && !ctx.within(id) =>
+    case Stmt.App(id, args) if ctx.workers.contains(id) && !ctx.within(id) =>
       rewriteCall(id, args)
 
-    case Stmt.App(id, args, direct) =>
-      Stmt.App(id, args.map(rewrite), direct)
+    case Stmt.App(id, args) =>
+      Stmt.App(id, args.map(rewrite))
 
     case Stmt.Invoke(id, method, args) =>
       Stmt.Invoke(id, method, args.map(rewrite))
+
+    case Stmt.Return(value) =>
+      Stmt.Return(rewrite(value))
 
     case Stmt.Run(id, callee, args, purity, rest) =>
       Stmt.Run(id, callee, args.map(rewrite), purity, rewrite(rest))
@@ -346,7 +486,6 @@ object StaticArguments {
     case Expr.Literal(_, _) => e
     case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(rewrite))
     case Expr.Abort => e
-    case Expr.Return => e
     case Expr.Toplevel => e
   }
 
@@ -367,12 +506,11 @@ object StaticArguments {
       // independent of module order. The inliner can still eliminate a
       // uniquely called wrapper afterwards.
       ctx.workers -= id
-      val dynamicArgs = dropStatic(ctx.statics(id), params).map(Expr.Variable.apply)
       val wrapperBody = Stmt.Def(
         worker.id,
         worker.dynamicParams,
         worker.body,
-        Stmt.App(worker.id, dynamicArgs, false))
+        enterWorker(id, params, worker))
       Some(ToplevelDefinition.Def(id, params, wrapperBody))
 
     case ToplevelDefinition.Def(id, params, body) =>
@@ -385,26 +523,76 @@ object StaticArguments {
 
   // --- Entry point ---
 
-  def transform(m: ModuleDecl): ModuleDecl = {
-    val analysis = CallAnalysis(m)
-    val pathStatics = GuardedEquality.recursive(m)
-    given ctx: Context = initializeContext(analysis, pathStatics)
+  def transform(m: ModuleDecl): ModuleDecl =
+    transform(m, Set.empty)
+
+  /** Specialize recursive invariants without changing functions whose ABI has
+   * already been fixed by a later calling-convention decision. */
+  def transform(m: ModuleDecl, protectedDefinitions: Set[Id]): ModuleDecl = {
+    transform(m, protectedDefinitions, cpsMetaContinuationsOnly = false)
+  }
+
+  /** Specialize only a recursively invariant CPS meta-continuation. This is
+   * the focused cleanup needed after compositional calls have been lowered;
+   * it deliberately does not rerun general static-argument specialization. */
+  def specializeCpsMetaContinuations(
+    m: ModuleDecl,
+    protectedDefinitions: Set[Id]
+  ): ModuleDecl = {
+    transform(m, protectedDefinitions, cpsMetaContinuationsOnly = true)
+  }
+
+  private def transform(
+    m: ModuleDecl,
+    protectedDefinitions: Set[Id],
+    cpsMetaContinuationsOnly: Boolean
+  ): ModuleDecl = {
+    val recursive = GuardedEquality.analyzeRecursion(m)
+    val analysis = CallAnalysis(m, recursive.targetFlows)
+    given ctx: Context = initializeContext(
+      analysis,
+      recursive.staticParameters,
+      protectedDefinitions,
+      cpsMetaContinuationsOnly)
 
     m.copy(definitions = m.definitions.flatMap(d => rewrite(d)))
   }
 
   private def initializeContext(
     analysis: CallAnalysis,
-    pathStatics: Map[Id, Vector[Boolean]]
+    pathStatics: Map[Id, Vector[Boolean]],
+    protectedDefinitions: Set[Id],
+    cpsMetaContinuationsOnly: Boolean
   ): Context = {
     val statics = mutable.Map.empty[Id, List[Boolean]]
+    val wrapperSpecializations = mutable.Set.empty[Id]
 
     analysis.functions.foreach {
-      case (id, info) if info.isRecursive =>
-        val isInternallyStatic =
+      case (id, info) if info.isRecursive && !protectedDefinitions.contains(id) =>
+        val preciseStatics =
           pathStatics.get(id).fold(info.staticArguments)(_.toList)
+        val isInternallyStatic = info.admissibleStatics(preciseStatics)
 
-        if info.externalCalls.size <= 1 then
+        if cpsMetaContinuationsOnly then {
+          val metaContinuation = info.params.size - 2
+          val specialize =
+            info.hasCpsReturn &&
+              metaContinuation >= 0 &&
+              isInternallyStatic(metaContinuation)
+
+          if specialize then {
+            val mask = info.params.indices.map(_ == metaContinuation).toList
+            statics(id) = mask
+
+            val sameAtEveryEntry = info.externalCalls.size <= 1 || {
+              val first = info.externalCalls.head(metaContinuation)
+              info.externalCalls.tail.forall { args =>
+                args.length > metaContinuation && args(metaContinuation) == first
+              }
+            }
+            if !sameAtEveryEntry then wrapperSpecializations += id
+          }
+        } else if info.externalCalls.size <= 1 then
           statics(id) = isInternallyStatic
         else
           val firstExt = info.externalCalls.head
@@ -413,10 +601,26 @@ object StaticArguments {
               args.length > idx && firstExt(idx) == args(idx)
             }
           }
-          statics(id) = isStatic
+          if isStatic.exists(identity) then statics(id) = isStatic
+
+          // A path-static meta-continuation admits the CPS analogue of a
+          // loop-entry wrapper: bind it once at entry and let recursion use a
+          // worker specialized to that value. Restricting this construction
+          // to the conventional (ks, k) pair keeps it distinct from general
+          // polyvariant specialization.
+          val metaContinuation = info.params.size - 2
+          val specializeEntryMetaContinuation =
+            info.hasCpsReturn &&
+              metaContinuation >= 0 &&
+              isInternallyStatic(metaContinuation) &&
+              !isStatic(metaContinuation)
+          if specializeEntryMetaContinuation then {
+            statics(id) = isStatic.updated(metaContinuation, true)
+            wrapperSpecializations += id
+          }
 
       case _ => ()
     }
-    new Context(statics.toMap)
+    new Context(statics.toMap, wrapperSpecializations.toSet)
   }
 }

@@ -1,0 +1,8 @@
+def main(f, x, ks, k) {
+  let result = f!(x, ks, return);
+  k(result, ks)
+}
+
+/// CALLING_CONVENTIONS
+
+-
