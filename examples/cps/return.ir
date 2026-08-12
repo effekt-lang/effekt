@@ -1,0 +1,9 @@
+def main(value, ks, k) {
+  return(value)
+}
+
+/// JAVASCRIPT
+
+function main_0(value_0, ks_0, k_0) {
+  return { result: value_0 };
+}

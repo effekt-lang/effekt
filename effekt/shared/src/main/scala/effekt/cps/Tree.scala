@@ -57,7 +57,6 @@ enum Expr extends Tree {
 
   // Continuations
   case Abort
-  case Return
 
   // MetaContinuations
   case Toplevel
@@ -81,8 +80,17 @@ enum Stmt extends Tree {
 
   // also all continuations are named so that we can analyze their usage and jump to them as labels
   case Let(id: Id, binding: Expr, rest: Stmt)
-  case App(id: Id, args: List[Expr], canBeDirect: Boolean)
+  /** A control-pure call whose result is consumed by `rest`. Unlike `App`,
+   *  this preserves the direct-style sequencing present in Core. The
+   *  remainder is its not-yet-reified continuation; `ks` is retained in case
+   *  the callee ultimately keeps the CPS calling convention. */
+  case Call(id: Id, callee: Id, args: List[Expr], ks: MetaCont, rest: Stmt)
+  case App(id: Id, args: List[Expr])
   case Invoke(id: Id, method: Id, args: List[Expr])
+  /** Terminates the current computation with `value`. Under a direct calling
+   *  convention this is an ordinary return; under CPS it completes the
+   *  enclosing trampoline. */
+  case Return(value: Expr)
   case Run(id: Id, callee: Id, args: List[Expr], purity: Purity, rest: Stmt)
 
   // Local Control Flow
@@ -219,7 +227,6 @@ object substitutions {
     case Expr.Literal(value, tpe) => e
     case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(substitute))
     case Expr.Abort => e
-    case Expr.Return => e
     case Expr.Toplevel => e
   }
 
@@ -237,11 +244,18 @@ object substitutions {
       Stmt.Let(id, substitute(binding),
         substitute(rest)(using subst.shadow(id)))
 
-    case Stmt.App(id, args, direct) =>
-      Stmt.App(substituteAsVar(id), args.map(substitute), direct)
+    case Stmt.Call(id, callee, args, ks, rest) =>
+      Stmt.Call(id, substituteAsVar(callee), args.map(substitute), substitute(ks),
+        substitute(rest)(using subst.shadow(id)))
+
+    case Stmt.App(id, args) =>
+      Stmt.App(substituteAsVar(id), args.map(substitute))
 
     case Stmt.Invoke(id, method, args) =>
       Stmt.Invoke(substituteAsVar(id), method, args.map(substitute))
+
+    case Stmt.Return(value) =>
+      Stmt.Return(substitute(value))
 
     case Stmt.Run(id, callee, args, purity, rest) =>
       Stmt.Run(id, substituteAsVar(callee), args.map(substitute), purity,
@@ -309,7 +323,8 @@ object substitutions {
   def substituteAsVar(id: Id)(using subst: Substitution): Id =
     subst.exprs.get(id) map {
       case Expr.Variable(x) => x
-      case _ => INTERNAL_ERROR("References should always be variables")
+      case replacement => INTERNAL_ERROR(
+        s"Reference ${util.show(id)} cannot be replaced by ${util.show(replacement)}")
     } getOrElse id
 
   def substitute(e: Expr, subst: Map[Id, Expr]): Expr =
@@ -342,7 +357,6 @@ object freeVariables {
     case Expr.Literal(_, _) => closed
     case Expr.Make(_, _, vargs) => all(vargs, _.free)
     case Expr.Abort => closed
-    case Expr.Return => closed
     case Expr.Toplevel => closed
   }
 
@@ -369,11 +383,16 @@ object freeVariables {
     case Stmt.Let(id, binding, rest) =>
       binding.free ++ (rest.free - id)
 
-    case Stmt.App(id, args, direct) =>
+    case Stmt.Call(id, callee, args, ks, rest) =>
+      free(callee) ++ all(args, _.free) ++ ks.free ++ (rest.free - id)
+
+    case Stmt.App(id, args) =>
       free(id) ++ all(args, _.free)
 
     case Stmt.Invoke(id, _, args) =>
       free(id) ++ all(args, _.free)
+
+    case Stmt.Return(value) => value.free
 
     case Stmt.Run(id, callee, args, _, rest) =>
       free(callee) ++ all(args, _.free) ++ (rest.free - id)
@@ -475,9 +494,13 @@ object functionUsage {
       rest.uses ++ all(operations, _.uses) + (id -> freeInOperations)
     case Stmt.Let(id, binding, rest) =>
       rest.uses
-    case Stmt.App(id, args, canBeDirect) =>
+    case Stmt.Call(id, callee, args, ks, rest) =>
+      rest.uses
+    case Stmt.App(id, args) =>
       DB.empty
     case Stmt.Invoke(id, method, args) =>
+      DB.empty
+    case Stmt.Return(value) =>
       DB.empty
     case Stmt.Run(id, callee, args, purity, rest) =>
       rest.uses
@@ -587,12 +610,19 @@ object escapeAnalysis {
     case Stmt.Let(id, binding, rest) =>
       rest.escapes ++ binding.free
 
+    // The callee does not escape; arguments have the same value boundary as
+    // an ordinary application. The explicit remainder is still local.
+    case Stmt.Call(id, callee, args, ks, rest) =>
+      args.flatMap(_.free).toSet ++ ks.free ++ rest.escapes
+
     // callee does NOT escape
-    case Stmt.App(id, args, canBeDirect) =>
+    case Stmt.App(id, args) =>
       args.flatMap(_.free).toSet
 
     case Stmt.Invoke(id, method, args) =>
       args.flatMap(_.free).toSet
+
+    case Stmt.Return(value) => value.free
 
     // This is the essence of async computation: we need to reify the continuation
     case Stmt.Run(id, callee, args, Purity.Async, rest) =>
@@ -666,13 +696,15 @@ object references {
     case Expr.Literal(value, tpe) => empty
     case Expr.Make(data, tag, args) => all(args, _.refs)
     case Expr.Abort => empty
-    case Expr.Return => empty
     case Expr.Toplevel => empty
   }
 
   inline def refs(stmt: Stmt): DB[Int] = stmt match {
-    case Stmt.App(id, args, canBeDirect) => use(id) ++ all(args, _.refs)
+    case Stmt.App(id, args) => use(id) ++ all(args, _.refs)
+    case Stmt.Call(id, callee, args, ks, rest) =>
+      use(callee) ++ all(args, _.refs) ++ ks.refs ++ rest.refs
     case Stmt.Invoke(id, method, args) => use(id) ++ all(args, _.refs)
+    case Stmt.Return(value) => value.refs
     case Stmt.Alloc(id, init, region, rest) => use(region) ++ init.refs ++ rest.refs
     case Stmt.Dealloc(ref, rest) => use(ref) ++ rest.refs
     case Stmt.Get(ref, id, rest) => use(ref) ++ rest.refs

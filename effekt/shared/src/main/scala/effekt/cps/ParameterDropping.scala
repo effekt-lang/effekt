@@ -51,10 +51,14 @@ object ParameterDropping {
   private final case class Conventions(
     groups: Vector[Vector[Id]],
     groupOf: Map[Id, Int],
-    blocked: Set[Int]
+    blocked: Set[Int],
+    fixed: Map[Int, Set[Int]]
   )
 
-  private final class Analysis(flow: GuardedEquality.Result, body: Stmt) {
+  private final class Analysis(
+    flow: GuardedEquality.Result,
+    body: Stmt
+  ) {
     private val definitions = flow.definitions.iterator.map(d => d.id -> d).toMap
     private val order = flow.definitions.map(_.id)
     private val reconstruction = flow.facts.iterator.map { facts =>
@@ -104,10 +108,30 @@ object ParameterDropping {
             if members.map(definitions(_).params.size).distinct.size != 1 => group
       }.toSet
 
+      // A `Call` structurally retains `ks` and its continuation remainder.
+      // Their positions in the CPS signature must survive until the later
+      // calling-convention choice either erases or reifies them.
+      val fixed = mutable.Map.empty[Int, Set[Int]].withDefaultValue(Set.empty)
+      flow.sites.iterator.zipWithIndex.foreach { case (call, site) =>
+        call.stmt match {
+          case _: Stmt.Call =>
+            flow.targetsAt.getOrElse(site, Set.empty)
+              .filter(definitions.contains)
+              .foreach { target =>
+                val group = groupOf(target)
+                val arity = definitions(target).params.size
+                if arity >= 2 then
+                  fixed(group) = fixed(group) ++ Set(arity - 2, arity - 1)
+              }
+          case _ => ()
+        }
+      }
+
       Conventions(
         groups,
         groupOf,
-        blockedFunctions.map(groupOf) ++ incompatibleGroups)
+        blockedFunctions.map(groupOf) ++ incompatibleGroups,
+        fixed.toMap)
     }
 
     private def siteMasks(
@@ -169,13 +193,25 @@ object ParameterDropping {
 
         case Stmt.Let(id, binding, rest) => binding.free ++ (visit(rest) - id)
 
-        case app @ Stmt.App(id, args, _) =>
+        case call @ Stmt.Call(id, callee, args, ks, rest) =>
+          val mask = callMasks(flow.siteOf(call))
+          val ksFree =
+            if mask.lift(args.size).getOrElse(false) then Set.empty else ks.free
+          Set(callee) ++ args.zipWithIndex.iterator.collect {
+            case (arg, index) if !mask.lift(index).getOrElse(false) => arg.free
+          }.flatten.toSet ++
+            ksFree ++
+            (visit(rest) - id)
+
+        case app @ Stmt.App(id, args) =>
           val mask = callMasks(flow.siteOf(app))
           Set(id) ++ args.zipWithIndex.iterator.collect {
             case (arg, index) if !mask.lift(index).getOrElse(false) => arg.free
           }.flatten.toSet
 
         case Stmt.Invoke(id, _, args) => Set(id) ++ args.flatMap(_.free)
+
+        case Stmt.Return(value) => value.free
 
         case Stmt.Run(id, callee, args, _, rest) =>
           Set(callee) ++ args.flatMap(_.free) ++ (visit(rest) - id)
@@ -231,8 +267,13 @@ object ParameterDropping {
 
       // Begin with the greatest convention; facts can only be removed.
       val initialMasks = convention.groups.zipWithIndex.map { case (members, group) =>
-        val arity = definitions(members.head).params.size
-        group -> Vector.fill(arity)(!convention.blocked.contains(group))
+        // Incompatible target arities block the whole convention group. Use
+        // their common upper shape so that the all-false mask is nevertheless
+        // defined at every member position.
+        val arity = members.map(definitions(_).params.size).max
+        group -> Vector.tabulate(arity) { index =>
+          !convention.blocked.contains(group) && !convention.fixed.getOrElse(group, Set.empty).contains(index)
+        }
       }.toMap
 
       @tailrec def greatestFixedPoint(
@@ -307,7 +348,7 @@ object ParameterDropping {
     case Expr.Variable(id) => info.substitute(id)
     case Expr.Literal(_, _) => expr
     case Expr.Make(data, tag, args) => Expr.Make(data, tag, args.map(transform(_, info)))
-    case Expr.Abort | Expr.Return | Expr.Toplevel => expr
+    case Expr.Abort | Expr.Toplevel => expr
   }
 
   private def transformReference(id: Id, info: DropInfo): Id =
@@ -330,17 +371,29 @@ object ParameterDropping {
     case Stmt.Let(id, binding, rest) =>
       Stmt.Let(id, transform(binding, info), transform(rest, info))
 
-    case app @ Stmt.App(id, args, canBeDirect) =>
+    case call @ Stmt.Call(id, callee, args, ks, rest) =>
+      val target = transformReference(callee, info)
+      val mask = info.callMask(call)
+      val kept = args.zipWithIndex.collect {
+        case (argument, index) if !mask.lift(index).getOrElse(false) =>
+          transform(argument, info)
+      }
+      Stmt.Call(id, target, kept, transform(ks, info), transform(rest, info))
+
+    case app @ Stmt.App(id, args) =>
       val callee = transformReference(id, info)
       val mask = info.callMask(app)
       val kept = args.zipWithIndex.collect {
         case (argument, index) if !mask.lift(index).getOrElse(false) =>
           transform(argument, info)
       }
-      Stmt.App(callee, kept, canBeDirect)
+      Stmt.App(callee, kept)
 
     case Stmt.Invoke(id, method, args) =>
       Stmt.Invoke(transformReference(id, info), method, args.map(transform(_, info)))
+
+    case Stmt.Return(value) =>
+      Stmt.Return(transform(value, info))
 
     case Stmt.Run(id, callee, args, purity, rest) =>
       Stmt.Run(
@@ -406,7 +459,10 @@ object ParameterDropping {
 
   private def transform(toplevel: ToplevelDefinition): ToplevelDefinition = toplevel match {
     case definition @ ToplevelDefinition.Def(id, params, body) =>
-      ToplevelDefinition.Def(id, params, transform(body, solve(definition)))
+      ToplevelDefinition.Def(
+        id,
+        params,
+        transform(body, solve(definition)))
     case value: ToplevelDefinition.Val => value
   }
 

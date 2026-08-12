@@ -1,0 +1,96 @@
+def main(n, ks, k) {
+  def sum(i, sumKs, sumK) {
+    def helper(x, helperKs, helperK) {
+      helperK(x, helperKs)
+    }
+    run done = eq(i, 0);
+    if (done) {
+      sumK(0, sumKs)
+    } else {
+      run previous = sub(i, 1);
+      def after(value, returnedKs) {
+        let first = helper!(value, returnedKs, return);
+        let second = helper!(first, returnedKs, return);
+        sumK(second, returnedKs)
+      }
+      sum(previous, sumKs, after)
+    }
+  }
+  sum(n, ks, k)
+}
+
+// `helper` is called through its statically named direct entry inside the
+// relocated continuation case. It is not a dynamic value dependency and must
+// therefore not become a continuation-frame field.
+/// CALLING_CONVENTIONS
+
+direct
+  helper = 0
+
+/// JAVASCRIPT
+
+function direct_0(x_0) {
+  return x_0;
+}
+
+function main_0(n_0, ks_0, k_0) {
+  let i_0 = undefined;
+  let sumK_0 = undefined;
+  let cont_1 = undefined;
+  let value_2 = undefined;
+  let value_3 = undefined;
+  sum_worker_0: {
+    i_0 = n_0;
+    sumK_0 = k_0;
+    break sum_worker_0;
+  }
+  sumK_0 = (typeof sumK_0 === "function") ? {
+    __tag: -1,
+    __boundary: sumK_0
+  } : sumK_0;
+  sum_worker_0: while (true) {
+    apply_entry_4: {
+      const done_0 = eq_0(i_0, 0);
+      if (done_0) {
+        const next_cont_6 = sumK_0;
+        const next_arg_7 = 0;
+        const next_arg_8 = ks_0;
+        cont_1 = next_cont_6;
+        value_2 = next_arg_7;
+        value_3 = next_arg_8;
+        break apply_entry_4;
+      } else {
+        const previous_0 = sub_0(i_0, 1);
+        const after_0 = { __tag: 0, sumK_0: sumK_0 };
+        i_0 = previous_0;
+        sumK_0 = after_0;
+        continue sum_worker_0;
+      }
+    }
+    apply_5: while (true) {
+      switch (cont_1.__tag) {
+        case -1:
+          {
+            const boundary_continuation_9 = cont_1.__boundary;
+            return () => boundary_continuation_9(value_2, value_3);
+          }
+        case 0:
+          {
+            const value_0 = value_2;
+            const returnedKs_0 = value_3;
+            const frame_sumK_0 = cont_1.sumK_0;
+            const first_0 = direct_0(value_0);
+            const second_0 = direct_0(first_0);
+            const next_cont_10 = frame_sumK_0;
+            const next_arg_11 = second_0;
+            const next_arg_12 = returnedKs_0;
+            cont_1 = next_cont_10;
+            value_2 = next_arg_11;
+            value_3 = next_arg_12;
+            continue apply_5;
+          }
+        default:  return $effekt.unreachable();
+      }
+    }
+  }
+}

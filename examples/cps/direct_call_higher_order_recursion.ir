@@ -1,0 +1,22 @@
+def main(x, ks, k) {
+  def inc(value, ks1, k1) {
+    run result = add(value, 1);
+    k1(result, ks1)
+  }
+  def loop(f, value, ks2, k2) {
+    if (true) {
+      let recursive = loop!(f, value, ks2, return);
+      let result = f!(recursive, ks2, return);
+      k2(result, ks2)
+    } else {
+      k2(value, ks2)
+    }
+  }
+  let result = loop!(inc, x, ks, return);
+  k(result, ks)
+}
+
+/// CALLING_CONVENTIONS
+
+direct
+  inc = 0 adapter

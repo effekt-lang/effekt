@@ -33,7 +33,7 @@ object GuardedEquality {
 
   /** The finite set of local definitions that can be called at one application. */
   final case class CallTargets(
-    call: Stmt.App,
+    call: Stmt,
     callee: Id,
     arity: Int,
     targets: Set[Id],
@@ -49,6 +49,14 @@ object GuardedEquality {
     def isRigid(function: Id): Boolean = rigidFunctions.contains(function)
     def escapes(function: Id): Boolean = escapedFunctions.contains(function)
   }
+
+  /** The two projections needed by static-argument specialization share the
+   *  same metadata and target analysis. Keeping them together avoids solving
+   *  the call graph twice. */
+  final case class RecursiveAnalysis(
+    staticParameters: Map[Id, Vector[Boolean]],
+    targetFlows: Vector[TargetResult]
+  )
 
   final case class FunctionFacts(
     id: Id,
@@ -167,7 +175,6 @@ object GuardedEquality {
     case Expr.Make(_, tag, args) =>
       s"${name(tag)}(${args.map(show).mkString(", ")})"
     case Expr.Abort => "abort"
-    case Expr.Return => "return"
     case Expr.Toplevel => "toplevel"
   }
 
@@ -207,7 +214,6 @@ object GuardedEquality {
           if terms.contains(term) || term == expression then Origin.Term(term) else Unknown
         } else Origin.Unknown(values.exists(mayBeObserved))
       case Expr.Abort => Origin.Term(Expr.Abort)
-      case Expr.Return => Origin.Term(Expr.Return)
       case Expr.Toplevel => Origin.Term(Expr.Toplevel)
     }
 
@@ -263,7 +269,14 @@ object GuardedEquality {
         }
         collect(rest, scope :+ id, env + (id -> value))
 
-      case app @ Stmt.App(id, args, _) =>
+      case call @ Stmt.Call(result, id, args, ks, rest) =>
+        callees += id
+        args.foreach(remember)
+        remember(ks)
+        registerSite(call, id, args.size + 2)
+        collect(rest, scope :+ result, env + (result -> Unknown))
+
+      case app @ Stmt.App(id, args) =>
         callees += id
         args.foreach(remember)
         registerSite(app, id, args.size)
@@ -271,6 +284,9 @@ object GuardedEquality {
       case Stmt.Invoke(id, _, args) =>
         callees += id
         args.foreach(remember)
+
+      case Stmt.Return(value) =>
+        remember(value)
 
       case Stmt.Run(id, callee, args, _, rest) =>
         callees += callee
@@ -462,7 +478,7 @@ object GuardedEquality {
       case _: Expr.Literal => TargetValue.Empty
       case Expr.Make(_, _, args) =>
         args.iterator.map(eval(_, env)).foldLeft(TargetValue.Empty)(_ join _)
-      case Expr.Abort | Expr.Return | Expr.Toplevel => TargetValue.Empty
+      case Expr.Abort | Expr.Toplevel => TargetValue.Empty
     }
 
     private def unknowns(ids: IterableOnce[Id]): Map[Id, TargetValue] =
@@ -500,12 +516,23 @@ object GuardedEquality {
       case Stmt.Let(id, binding, rest) =>
         execute(rest, env + (id -> eval(binding, env)))
 
-      case app @ Stmt.App(id, args, _) =>
+      case application @ Stmt.Call(result, id, args, ks, rest) =>
+        call(
+          siteOf(application),
+          env.getOrElse(id, TargetValue.Unknown),
+          args.map(eval(_, env)).toVector :+
+            eval(ks, env) :+ TargetValue.Unknown)
+        execute(rest, env + (result -> TargetValue.Unknown))
+
+      case app @ Stmt.App(id, args) =>
         call(siteOf(app), env.getOrElse(id, TargetValue.Unknown), args.map(eval(_, env)).toVector)
 
       case Stmt.Invoke(id, _, args) =>
         escape(env.getOrElse(id, TargetValue.Unknown))
         args.foreach(arg => escape(eval(arg, env)))
+
+      case Stmt.Return(value) =>
+        escape(eval(value, env))
 
       case Stmt.Run(id, callee, args, _, rest) =>
         escape(env.getOrElse(callee, TargetValue.Unknown))
@@ -694,7 +721,6 @@ object GuardedEquality {
           else Unknown
         } else Origin.Unknown(values.exists(mayBeObserved))
       case Expr.Abort => Origin.Term(Expr.Abort)
-      case Expr.Return => Origin.Term(Expr.Return)
       case Expr.Toplevel => Origin.Term(Expr.Toplevel)
     }
 
@@ -716,7 +742,6 @@ object GuardedEquality {
           Origin.Term(Expr.Make(data, tag, rebuilt.map(_.get)))
         else Origin.Unknown(values.exists(mayBeObserved))
       case Expr.Abort => Origin.Term(Expr.Abort)
-      case Expr.Return => Origin.Term(Expr.Return)
       case Expr.Toplevel => Origin.Term(Expr.Toplevel)
     }
 
@@ -777,6 +802,54 @@ object GuardedEquality {
         case _ => ()
       }
 
+    private def executeCall(
+      application: Stmt,
+      id: Id,
+      arguments: Vector[Origin],
+      env: Map[Id, Origin],
+      onObservedCall: (Vector[Origin], Boolean) => Unit,
+      markUnsafe: () => Unit
+    ): Unit = {
+      val site = siteOf(application)
+      val callee = env.getOrElse(id, Unknown)
+      val possibleTargets = targets.targetsAt.getOrElse(site, Set.empty)
+
+      def invoke(target: Definition, preciseCaptures: Boolean): Unit =
+        if target.id == observed.id then
+          onObservedCall(arguments, id == observed.id)
+        else
+          enqueue(target.id, captures(target, env, preciseCaptures) ++ arguments)
+
+      def invokePossible(includeObserved: Boolean): Unit = {
+        if includeObserved && possibleTargets.contains(observed.id) then
+          onObservedCall(arguments, false)
+
+        possibleTargets.iterator.filterNot(_ == observed.id).foreach { target =>
+          meta.definitions.get(target).foreach(invoke(_, preciseCaptures = false))
+        }
+
+        if targets.rigidSites.contains(site) then escape(arguments, markUnsafe)
+      }
+
+      callee match {
+        case Origin.Observed => onObservedCall(arguments, id == observed.id)
+        case Origin.Closure(target, closureCaptures) if meta.definitions.contains(target) =>
+          if target == observed.id then
+            onObservedCall(arguments, id == observed.id)
+          else
+            enqueue(target, closureCaptures ++ arguments)
+        case Origin.Symbol(target) if meta.definitions.contains(target) =>
+          invoke(meta.definitions(target), preciseCaptures = true)
+
+        case Origin.Symbol(_) => invokePossible(includeObserved = true)
+
+        case Origin.Unknown(mayBeObserved) => invokePossible(mayBeObserved)
+
+        case _ =>
+          if targets.rigidSites.contains(site) then escape(arguments, markUnsafe)
+      }
+    }
+
     private def execute(
       stmt: Stmt,
       env: Map[Id, Origin],
@@ -806,49 +879,26 @@ object GuardedEquality {
       case Stmt.Let(id, binding, rest) =>
         execute(rest, env + (id -> eval(binding, env)), onObservedCall, markUnsafe)
 
-      case app @ Stmt.App(id, args, _) =>
-        val site = siteOf(app)
-        val arguments = args.map(eval(_, env)).toVector
-        val callee = env.getOrElse(id, Unknown)
-        val possibleTargets = targets.targetsAt.getOrElse(site, Set.empty)
+      case application @ Stmt.Call(result, id, args, ks, rest) =>
+        val arguments =
+          args.map(eval(_, env)).toVector :+ eval(ks, env) :+ Unknown
+        executeCall(application, id, arguments, env, onObservedCall, markUnsafe)
+        execute(
+          rest,
+          env + (result -> Unknown),
+          onObservedCall,
+          markUnsafe)
 
-        def invoke(target: Definition, preciseCaptures: Boolean): Unit =
-          if target.id == observed.id then
-            onObservedCall(arguments, id == observed.id)
-          else
-            enqueue(target.id, captures(target, env, preciseCaptures) ++ arguments)
-
-        def invokePossible(includeObserved: Boolean): Unit = {
-          if includeObserved && possibleTargets.contains(observed.id) then
-            onObservedCall(arguments, false)
-
-          possibleTargets.iterator.filterNot(_ == observed.id).foreach { target =>
-            meta.definitions.get(target).foreach(invoke(_, preciseCaptures = false))
-          }
-
-          if targets.rigidSites.contains(site) then escape(arguments, markUnsafe)
-        }
-
-        callee match {
-          case Origin.Observed => onObservedCall(arguments, id == observed.id)
-          case Origin.Closure(target, closureCaptures) if meta.definitions.contains(target) =>
-            if target == observed.id then
-              onObservedCall(arguments, id == observed.id)
-            else
-              enqueue(target, closureCaptures ++ arguments)
-          case Origin.Symbol(target) if meta.definitions.contains(target) =>
-            invoke(meta.definitions(target), preciseCaptures = true)
-
-          case Origin.Symbol(_) => invokePossible(includeObserved = true)
-
-          case Origin.Unknown(mayBeObserved) => invokePossible(mayBeObserved)
-
-          case _ =>
-            if targets.rigidSites.contains(site) then escape(arguments, markUnsafe)
-        }
+      case app @ Stmt.App(id, args) =>
+        executeCall(
+          app, id, args.map(eval(_, env)).toVector, env,
+          onObservedCall, markUnsafe)
 
       case Stmt.Invoke(id, _, args) =>
         escape(env.get(id).iterator ++ args.iterator.map(eval(_, env)), markUnsafe)
+
+      case Stmt.Return(value) =>
+        escape(Iterator(eval(value, env)), markUnsafe)
 
       case Stmt.Run(id, callee, args, _, rest) =>
         escape(env.get(callee).iterator ++ args.iterator.map(eval(_, env)), markUnsafe)
@@ -1013,15 +1063,32 @@ object GuardedEquality {
       meta.sitesByStmt)
   }
 
-  /** Recursive must-equalities without computing entry equalities. */
-  private def recursive(toplevelParams: List[Id], body: Stmt): Map[Id, Vector[Boolean]] = {
-    val meta = Metadata(toplevelParams, body)
-    val targets = TargetAnalysis(meta, toplevelParams)
-
+  private def recursive(
+    meta: Metadata,
+    targets: TargetAnalysis
+  ): Map[Id, Vector[Boolean]] =
     meta.definitions.valuesIterator.map { definition =>
       val relative = RelativeAnalysis(meta, targets, definition, Map.empty)
       definition.id -> relative.recursive()
     }.toMap
+
+  private def targetResult(meta: Metadata, targets: TargetAnalysis): TargetResult = {
+    val definitions = meta.definitions.valuesIterator.map { definition =>
+      LocalDefinition(
+        definition.id,
+        definition.params,
+        definition.body,
+        definition.captures)
+    }.toVector
+    val calls = meta.sites.zipWithIndex.map { case (site, index) =>
+      CallTargets(
+        site.stmt,
+        site.callee,
+        site.arity,
+        targets.targetsAt.getOrElse(index, Set.empty),
+        closed = !targets.rigidSites.contains(index))
+    }.toVector
+    TargetResult(definitions, calls, targets.rigidFunctions, targets.escapedFunctions)
   }
 
   /** The finite call-target projection, without solving relative equalities
@@ -1033,22 +1100,7 @@ object GuardedEquality {
     }
     val meta = Metadata(params, body)
     val targets = TargetAnalysis(meta, params)
-    val definitions = meta.definitions.valuesIterator.map { definition =>
-      LocalDefinition(
-        definition.id,
-        definition.params,
-        definition.body,
-        definition.captures)
-    }.toVector
-    val calls = meta.sites.zipWithIndex.map { case (site, index) =>
-      CallTargets(
-        site.stmt.asInstanceOf[Stmt.App],
-        site.callee,
-        site.arity,
-        targets.targetsAt.getOrElse(index, Set.empty),
-        closed = !targets.rigidSites.contains(index))
-    }.toVector
-    TargetResult(definitions, calls, targets.rigidFunctions, targets.escapedFunctions)
+    targetResult(meta, targets)
   }
 
   def analyze(toplevel: ToplevelDefinition): Result = toplevel match {
@@ -1056,9 +1108,20 @@ object GuardedEquality {
     case ToplevelDefinition.Val(_, ks, k, binding) => analyze(List(ks, k), binding)
   }
 
-  def recursive(module: ModuleDecl): Map[Id, Vector[Boolean]] =
-    module.definitions.iterator.flatMap {
-      case ToplevelDefinition.Def(_, params, body) => recursive(params, body)
-      case ToplevelDefinition.Val(_, ks, k, binding) => recursive(List(ks, k), binding)
-    }.toMap
+  /** Recursive must-equalities and call targets without computing entry
+   *  equalities. Both projections use one target-analysis solution. */
+  def analyzeRecursion(module: ModuleDecl): RecursiveAnalysis = {
+    val statics = mutable.LinkedHashMap.empty[Id, Vector[Boolean]]
+    val flows = module.definitions.map { toplevel =>
+      val (params, body) = toplevel match {
+        case ToplevelDefinition.Def(_, params, body) => (params, body)
+        case ToplevelDefinition.Val(_, ks, k, binding) => (List(ks, k), binding)
+      }
+      val meta = Metadata(params, body)
+      val targets = TargetAnalysis(meta, params)
+      statics ++= recursive(meta, targets)
+      targetResult(meta, targets)
+    }.toVector
+    RecursiveAnalysis(statics.toMap, flows)
+  }
 }
