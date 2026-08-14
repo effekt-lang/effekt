@@ -16,11 +16,15 @@ def main(ks0, k0) {
 
 function loop_0(ks_0, k_0) {
   loop_0: while (true) {
-    const [p_0, ks_1, k_1] = RESET(ks_0, k_0);
-    const [r_0, ks_2, k_2] = SHIFT(p_0, ks_1, k_1);
-    ks_0 = ks_2;
-    k_0 = k_2;
-    continue loop_0;
+    {
+      const [p_0, ks_1, k_1] = RESET(ks_0, k_0);
+      {
+        const [r_0, ks_2, k_2] = SHIFT(p_0, ks_1, k_1);
+        ks_0 = ks_2;
+        k_0 = k_2;
+        continue loop_0;
+      }
+    }
   }
 }
 

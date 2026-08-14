@@ -17,6 +17,8 @@ function apply_0(f_0, x_0, ks_0) {
 }
 
 function main_0(p_0, ks_1, k_0) {
-  const [r_0, ks_2, k_1] = SHIFT(p_0, ks_1, k_0);
-  return apply_0(k_1, 1, ks_2);
+  {
+    const [r_0, ks_2, k_1] = SHIFT(p_0, ks_1, k_0);
+    return apply_0(k_1, 1, ks_2);
+  }
 }

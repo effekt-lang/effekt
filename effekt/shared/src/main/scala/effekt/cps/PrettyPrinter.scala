@@ -67,9 +67,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(rest)
 
-    case Stmt.Call(id, callee, args, ks, rest) =>
+    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
       val returnDoc: Doc = "return"
-      "let" <+> toDoc(id) <+> "=" <+> toDoc(callee) <> "!" <>
+      val result =
+        if rest.free.contains(returnedKs) then toDoc(id) <+> "|" <+> toDoc(returnedKs)
+        else toDoc(id)
+      "let" <+> result <+> "=" <+> toDoc(callee) <> "!" <>
         parens(args.map(toDoc) ++ List(toDoc(ks), returnDoc)) <> ";" <> line <> toDoc(rest)
 
     case Stmt.App(id, args) =>
@@ -153,6 +156,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(op: Operation): Doc = op match {
     case Operation(name, params, body) =>
       "def" <+> toDoc(name) <> parens(params.map(toDoc)) <+> "=" <+> block(toDoc(body))
+  }
+
+  def toDoc(callee: Callee): Doc = callee match {
+    case Callee.Function(id) => toDoc(id)
+    case Callee.Method(receiver, method) =>
+      toDoc(receiver) <> "." <> method.name.toString
   }
 
   def toDoc(s: symbols.Symbol): Doc = if (s.id < 0) s.name.name else s.show

@@ -10,10 +10,9 @@ def main(flag, f, x, ks, k) {
   f(result, ks, k)
 }
 
-// `choose` has one call site but two result exits. Commuting it into its use
-// would copy the remainder into both branches, so it remains a direct local
-// function. The restriction makes repeated commuting conversions linear in
-// the size of the program.
+// `choose` has one call site but two result exits. Its structured region
+// shares the remainder without either allocating a function or duplicating
+// that remainder into both branches.
 /// CALLING_CONVENTIONS
 
 direct
@@ -22,13 +21,11 @@ direct
 /// JAVASCRIPT
 
 function main_0(flag_0, f_0, x_0, ks_0, k_0) {
-  function direct_0(value_0) {
-    if (flag_0) {
-      return value_0;
-    } else {
-      return 0;
-    }
+  let result_0 = undefined;
+  if (flag_0) {
+    result_0 = x_0;
+  } else {
+    result_0 = 0;
   }
-  const result_0 = direct_0(x_0);
   return f_0(result_0, ks_0, k_0);
 }

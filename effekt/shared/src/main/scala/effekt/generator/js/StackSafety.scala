@@ -14,15 +14,15 @@ import scala.collection.mutable
  * labels.
  *
  * A direct transfer retains the current JavaScript activation. Consequently,
- * direct transfers must admit a finite ranking. Safe transfers use the
- * value-level calling convention: the callee either has a finite native-stack
- * bound or suspends before entering its worker. Jumps stay in one activation
- * and do not participate in the ranking.
+ * direct transfers must admit a finite ranking. A closed feedback edge,
+ * including an indirect one with a finite target set, can bounce at its call
+ * site. An open transfer instead relies on the callee's stack-safe value
+ * entry. Jumps stay in one activation and do not participate in the ranking.
  */
 object StackSafety {
 
   enum Transfer {
-    case Jump, Direct, Safe
+    case Jump, Direct, Bounce, Safe
   }
 
   private final class Site(
@@ -40,24 +40,66 @@ object StackSafety {
     private val transfers: IdentityHashMap[cps.Stmt, Transfer],
     val ranks: Map[Id, Int],
     private val sites: Vector[Site],
+    private val loopified: Set[Id],
+    private val loopMutations: Map[Id, Set[Id]],
     val safeEntries: SafeEntries.Result
   ) {
-    def transferOf(stmt: cps.Stmt): Transfer =
-      Option(transfers.get(stmt)).getOrElse(Transfer.Safe)
+    private val immediateTargets: Set[Id] =
+      sites.iterator
+        .filter(site => site.transfer == Transfer.Direct || site.transfer == Transfer.Bounce)
+        .flatMap { site =>
+          site.stmt match {
+            // JavaScript generation can bypass an adapter only for a
+            // syntactically named entry. A closed indirect call still invokes
+            // the value representation, even when its target set is known.
+            case cps.Stmt.App(id, _) if site.targets.contains(id) => Iterator.single(id)
+            case _ => Iterator.empty
+          }
+        }
+        .toSet
+
+    def transferOf(stmt: cps.Stmt): Transfer = stmt match {
+      case application: cps.Stmt.App if safeEntries.bouncesAt(application) =>
+        Transfer.Bounce
+      case _ => Option(transfers.get(stmt)).getOrElse(Transfer.Safe)
+    }
+
+    /** A stack-safe entry needs a separate immediate worker precisely when a
+     *  known transfer bypasses it. Otherwise its adapter and body are one
+     *  suspended function. */
+    def needsWorker(id: Id): Boolean =
+      safeEntries.needsAdapter(id) && immediateTargets.contains(id)
+
+    /** A JavaScript loop is useful exactly when translation turns a call from
+     *  a definition's own body into a back jump to that definition. Recursive
+     *  SCC membership alone is not sufficient. */
+    def isLoopified(id: Id): Boolean = loopified.contains(id)
+
+    /** Parameters whose loop registers can receive a different value on a
+     *  back edge. Identity assignments do not make a parameter mutable. */
+    def mutableParameters(id: Id): Set[Id] =
+      loopMutations.getOrElse(id, Set.empty)
 
     /** Independently check the ranking certificate carried by this plan. */
     def validate(): Unit =
       sites.foreach { site =>
-        if site.transfer == Transfer.Direct then {
-          assert(site.closed, s"Direct call ${site.callee} has an open target set")
-          assert(site.targets.nonEmpty, s"Direct call ${site.callee} has no targets")
-          site.sources.foreach { source =>
-            site.targets.foreach { target =>
-              assert(
-                ranks.getOrElse(source, 0) > ranks.getOrElse(target, 0),
-                s"Direct call ${name(source)} -> ${name(target)} does not decrease its stack rank")
+        transferOf(site.stmt) match {
+          case Transfer.Direct =>
+            assert(site.closed, s"Direct call ${site.callee} has an open target set")
+            assert(site.targets.nonEmpty, s"Direct call ${site.callee} has no targets")
+            site.sources.foreach { source =>
+              site.targets.foreach { target =>
+                assert(
+                  ranks.getOrElse(source, 0) > ranks.getOrElse(target, 0),
+                  s"Direct call ${name(source)} -> ${name(target)} does not decrease its stack rank")
+              }
             }
-          }
+
+          case Transfer.Bounce =>
+            assert(site.closed, s"Bounced call ${site.callee} has an open target set")
+            assert(site.targets.nonEmpty, s"Bounced call ${site.callee} has no targets")
+
+          case Transfer.Jump | Transfer.Safe => ()
         }
       }
 
@@ -69,14 +111,15 @@ object StackSafety {
       val transferLines = sites.map { site =>
         val owners = site.owners.iterator.map(name).mkString(" | ")
         val source = if owners.nonEmpty then owners else "local"
-        val target = site.transfer match {
+        val transfer = transferOf(site.stmt)
+        val target = transfer match {
           case Transfer.Jump => ""
           case _ if !site.closed =>
             val known = site.targets.map(name)
             s" [${(known :+ "?").mkString(", ")}]"
           case _ => s" [${site.targets.map(name).mkString(", ")}]"
         }
-        s"  $source -> ${site.callee}: ${site.transfer.toString.toLowerCase}$target"
+        s"  $source -> ${site.callee}: ${transfer.toString.toLowerCase}$target"
       }
 
       s"ranks\n${rankLines.mkString("\n")}\ntransfers\n${transferLines.mkString("\n")}"
@@ -104,11 +147,32 @@ object StackSafety {
     isSecondClass: Id => Boolean,
     defunctionalization: Defunctionalization.Plan,
     targetFlows: Vector[cps.GuardedEquality.TargetResult]
+  ): Plan =
+    analyze(
+      module,
+      isRecursive,
+      isSecondClass,
+      defunctionalization,
+      targetFlows,
+      Set.empty,
+      Map.empty)
+
+  def analyze(
+    module: cps.ModuleDecl,
+    isRecursive: Id => Boolean,
+    isSecondClass: Id => Boolean,
+    defunctionalization: Defunctionalization.Plan,
+    targetFlows: Vector[cps.GuardedEquality.TargetResult],
+    directDefinitions: Set[Id],
+    directEntries: Map[Id, Vector[Id]]
   ): Plan = {
     require(module.definitions.size == targetFlows.size)
     val sitesByStmt = new IdentityHashMap[cps.Stmt, Site]()
     val orderedSites = mutable.ArrayBuffer.empty[Site]
     val nodeOrder = mutable.LinkedHashSet.empty[Id]
+    // A dispatcher re-enters its owning definition through the generated
+    // apply loop even if no source-level self call remains in its body.
+    val loopified = mutable.LinkedHashSet.from(defunctionalization.dispatches.keys)
 
     def siteFor(stmt: cps.Stmt, callee: => String): Site = {
       val existing = sitesByStmt.get(stmt)
@@ -125,14 +189,14 @@ object StackSafety {
     // solver. A syntactic call site denotes one grouped set of transitions:
     // it can only be direct if all of those transitions decrease the rank.
     val targetsByCall = new IdentityHashMap[cps.Stmt.App, cps.GuardedEquality.CallTargets]()
-    val parameters = mutable.LinkedHashMap.empty[Id, Int]
+    val parameters = mutable.LinkedHashMap.empty[Id, Vector[Id]]
 
     module.definitions.zip(targetFlows).foreach { case (toplevel, flow) =>
       toplevel match {
-        case cps.ToplevelDefinition.Def(id, params, _) => parameters(id) = params.size
+        case cps.ToplevelDefinition.Def(id, params, _) => parameters(id) = params.toVector
         case _: cps.ToplevelDefinition.Val => ()
       }
-      flow.localDefinitions.foreach(definition => parameters(definition.id) = definition.params.size)
+      flow.localDefinitions.foreach(definition => parameters(definition.id) = definition.params.toVector)
       flow.callTargets.foreach { target =>
         target.call match {
           case call: cps.Stmt.App => targetsByCall.put(call, target)
@@ -140,6 +204,8 @@ object StackSafety {
         }
       }
     }
+
+    val loopMutations = mutable.LinkedHashMap.empty[Id, mutable.LinkedHashSet[Id]]
 
     final case class Host(owner: Id, secondClass: Set[Id], insideBody: Set[Id])
     val hosts = mutable.LinkedHashMap.empty[Id, Host]
@@ -160,45 +226,61 @@ object StackSafety {
       stmt: cps.Stmt,
       owner: Id,
       secondClass: Set[Id],
-      insideBody: Set[Id]
+      insideBody: Set[Id],
+      frameCaptures: Set[Id] = Set.empty
     ): Unit = stmt match {
       case cps.Stmt.Def(id, _, body, rest) =>
         defunctionalization.caseOf(id) match {
           case Some(_) =>
             // Its body is emitted by every dispatcher that contains this case.
-            visit(rest, owner, secondClass, insideBody)
+            visit(rest, owner, secondClass, insideBody, frameCaptures)
 
           case None if isSecondClass(id) =>
             val available = secondClass + id
             val inside = if isRecursive(id) then insideBody + id else insideBody
             hosts(id) = Host(owner, available, inside)
-            visit(rest, owner, available, insideBody)
-            visit(body, owner, available, inside)
+            visit(rest, owner, available, insideBody, frameCaptures)
+            visit(body, owner, available, inside, frameCaptures)
 
           case None =>
             val available = if isRecursive(id) then Set(id) else Set.empty[Id]
             val inside = if isRecursive(id) then Set(id) else Set.empty[Id]
             hosts(id) = Host(id, available, inside)
             nodeOrder += id
-            visit(body, id, available, inside)
-            visit(rest, owner, secondClass, insideBody)
+            visit(body, id, available, inside, frameCaptures)
+            visit(rest, owner, secondClass, insideBody, frameCaptures)
         }
 
       case cps.Stmt.New(_, _, operations, rest) =>
         operations.foreach { operation =>
           nodeOrder += operation.name
-          visit(operation.body, operation.name, Set.empty, Set.empty)
+          visit(operation.body, operation.name, Set.empty, Set.empty, frameCaptures)
         }
-        visit(rest, owner, secondClass, insideBody)
+        visit(rest, owner, secondClass, insideBody, frameCaptures)
 
-      case cps.Stmt.Let(_, _, rest) => visit(rest, owner, secondClass, insideBody)
+      case cps.Stmt.Let(_, _, rest) => visit(rest, owner, secondClass, insideBody, frameCaptures)
 
-      case cps.Stmt.Call(_, _, _, _, rest) =>
-        visit(rest, owner, secondClass, insideBody)
+      case cps.Stmt.Call(_, _, _, _, _, rest) =>
+        visit(rest, owner, secondClass, insideBody, frameCaptures)
 
-      case app @ cps.Stmt.App(id, _) =>
+      case app @ cps.Stmt.App(id, arguments) =>
         val dispatch = defunctionalization.dispatchForCallee(id).isDefined
-        val jump = dispatch || secondClass.contains(id) || insideBody.contains(id)
+        val selfJump = insideBody.contains(id)
+        val jump = dispatch || secondClass.contains(id) || selfJump
+        if selfJump then {
+          loopified += id
+          val params = parameters.getOrElse(id, Vector.empty)
+          val mutated = loopMutations.getOrElseUpdate(id, mutable.LinkedHashSet.empty)
+          if params.size != arguments.size then mutated ++= params
+          else params.zip(arguments).foreach {
+            // A case capture keeps its CPS id, but JavaScript reads it from
+            // the immutable frame rather than from the current loop register.
+            // Hence syntactic p := p is an update precisely in this case.
+            case (param, cps.Expr.Variable(argument))
+                if param == argument && !frameCaptures(argument) => ()
+            case (param, _) => mutated += param
+          }
+        }
         recordCall(app, name(id), owner, jump)
 
       case invoke @ cps.Stmt.Invoke(id, method, _) =>
@@ -206,22 +288,27 @@ object StackSafety {
 
       case _: cps.Stmt.Return => ()
 
-      case cps.Stmt.Run(_, _, _, _, rest) => visit(rest, owner, secondClass, insideBody)
+      case cps.Stmt.Run(_, _, _, _, rest) => visit(rest, owner, secondClass, insideBody, frameCaptures)
       case cps.Stmt.If(_, thn, els) =>
-        visit(thn, owner, secondClass, insideBody)
-        visit(els, owner, secondClass, insideBody)
+        visit(thn, owner, secondClass, insideBody, frameCaptures)
+        visit(els, owner, secondClass, insideBody, frameCaptures)
       case cps.Stmt.Match(_, clauses, default) =>
-        clauses.foreach { case (_, clause) => visit(clause.body, owner, secondClass, insideBody) }
-        default.foreach(visit(_, owner, secondClass, insideBody))
-      case cps.Stmt.Region(_, _, rest) => visit(rest, owner, secondClass, insideBody)
-      case cps.Stmt.Alloc(_, _, _, rest) => visit(rest, owner, secondClass, insideBody)
-      case cps.Stmt.Var(_, _, _, rest) => visit(rest, owner, secondClass, insideBody)
-      case cps.Stmt.Dealloc(_, rest) => visit(rest, owner, secondClass, insideBody)
-      case cps.Stmt.Get(_, _, rest) => visit(rest, owner, secondClass, insideBody)
-      case cps.Stmt.Put(_, _, rest) => visit(rest, owner, secondClass, insideBody)
-      case cps.Stmt.Reset(_, _, _, body, _, _) => visit(body, owner, secondClass, insideBody)
-      case cps.Stmt.Shift(_, _, _, _, body, _, _) => visit(body, owner, secondClass, insideBody)
-      case cps.Stmt.Resume(_, _, _, body, _, _) => visit(body, owner, secondClass, insideBody)
+        clauses.foreach { case (_, clause) =>
+          visit(clause.body, owner, secondClass, insideBody, frameCaptures)
+        }
+        default.foreach(visit(_, owner, secondClass, insideBody, frameCaptures))
+      case cps.Stmt.Region(_, _, rest) => visit(rest, owner, secondClass, insideBody, frameCaptures)
+      case cps.Stmt.Alloc(_, _, _, rest) => visit(rest, owner, secondClass, insideBody, frameCaptures)
+      case cps.Stmt.Var(_, _, _, rest) => visit(rest, owner, secondClass, insideBody, frameCaptures)
+      case cps.Stmt.Dealloc(_, rest) => visit(rest, owner, secondClass, insideBody, frameCaptures)
+      case cps.Stmt.Get(_, _, rest) => visit(rest, owner, secondClass, insideBody, frameCaptures)
+      case cps.Stmt.Put(_, _, rest) => visit(rest, owner, secondClass, insideBody, frameCaptures)
+      case cps.Stmt.Reset(_, _, _, body, _, _) =>
+        visit(body, owner, secondClass, insideBody, frameCaptures)
+      case cps.Stmt.Shift(_, _, _, _, body, _, _) =>
+        visit(body, owner, secondClass, insideBody, frameCaptures)
+      case cps.Stmt.Resume(_, _, _, body, _, _) =>
+        visit(body, owner, secondClass, insideBody, frameCaptures)
       case _: cps.Stmt.Hole => ()
     }
 
@@ -247,7 +334,12 @@ object StackSafety {
         val Host(owner, available, inside) =
           hosts.getOrElse(dispatch.entry, Host(dispatch.entry, Set.empty, Set.empty))
         dispatch.cases.foreach { continuationCase =>
-          visit(continuationCase.body, owner, available, inside)
+          visit(
+            continuationCase.body,
+            owner,
+            available,
+            inside,
+            continuationCase.captures.toSet)
         }
       }
 
@@ -260,7 +352,7 @@ object StackSafety {
       } else site.stmt match {
         case app @ cps.Stmt.App(id, args) =>
           parameters.get(id) match {
-            case Some(arity) if arity == args.size && !isSecondClass(id) && defunctionalization.caseOf(id).isEmpty =>
+            case Some(params) if params.size == args.size && !isSecondClass(id) && defunctionalization.caseOf(id).isEmpty =>
               site.targets = Vector(id)
               site.closed = true
 
@@ -338,6 +430,11 @@ object StackSafety {
     orderedSites.foreach { site =>
       if site.sources.isEmpty then site.transfer = Transfer.Jump
       else if site.closed && !backSites.contains(site) then site.transfer = Transfer.Direct
+      // A closed indirect call can break a feedback cycle at the call site:
+      // suspending `f(args)` is sound without knowing a syntactic worker name.
+      // This keeps every bounded target's value entry immediate. Only an open
+      // call must rely on the callee-side stack-safe convention.
+      else if site.closed then site.transfer = Transfer.Bounce
       else site.transfer = Transfer.Safe
     }
 
@@ -385,8 +482,16 @@ object StackSafety {
       stmt => Option(transfers.get(stmt)).getOrElse(Transfer.Safe),
       isSecondClass,
       defunctionalization,
-      targetFlows)
-    val plan = new Plan(transfers, ranks.toMap, orderedSites.toVector, safeEntries)
+      targetFlows,
+      directDefinitions,
+      directEntries)
+    val plan = new Plan(
+      transfers,
+      ranks.toMap,
+      orderedSites.toVector,
+      loopified.toSet,
+      loopMutations.iterator.map { case (id, params) => id -> params.toSet }.toMap,
+      safeEntries)
     plan.validate()
     plan
   }

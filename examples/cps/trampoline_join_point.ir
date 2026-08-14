@@ -23,14 +23,10 @@ transfers
 
 function main_0(choice_0, k_0) {
   let x_0 = undefined;
-  join_0: {
-    if (choice_0) {
-      x_0 = 1;
-      break join_0;
-    } else {
-      x_0 = 2;
-      break join_0;
-    }
+  if (choice_0) {
+    x_0 = 1;
+  } else {
+    x_0 = 2;
   }
   return k_0(x_0);
 }

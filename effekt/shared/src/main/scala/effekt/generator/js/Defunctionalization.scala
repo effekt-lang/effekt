@@ -44,11 +44,40 @@ object Defunctionalization {
     val firstClassRequirements: Set[Id],
     /** Definitions whose residual bodies contain a reference to themselves
      *  after continuation cases have moved to their dispatchers. */
-    val reenteredDefinitions: Set[Id]
+    val reenteredDefinitions: Set[Id],
+    /** Dynamic captures that are lexically available with the same identity
+     *  at every dispatcher. They can be omitted unless JavaScript lowering
+     *  turns their binding into a mutable loop register. */
+    private val recoverableCaptures: Map[Id, Set[Id]]
   ) {
     def caseOf(id: Id): Option[ContinuationCase] = cases.get(id)
     def dispatchFor(entry: Id): Option[ContinuationDispatch] = dispatches.get(entry)
     def dispatchForCallee(callee: Id): Option[ContinuationDispatch] = applications.get(callee)
+
+    /** Finalize frame layouts after loop lowering has identified mutable
+     *  registers. A recoverable immutable binding is read from the lexical
+     *  environment; every other capture remains an immutable frame field. */
+    private[js] def refineFrames(mutable: Set[Id]): Plan = {
+      val refinedCases = cases.view.mapValues { continuationCase =>
+        val recoverable = recoverableCaptures
+          .getOrElse(continuationCase.definition, Set.empty) -- mutable
+        continuationCase.copy(
+          captures = continuationCase.captures.filterNot(recoverable))
+      }.toMap
+      val refinedDispatches = dispatches.view.mapValues { dispatch =>
+        dispatch.copy(cases = dispatch.cases.map(c => refinedCases(c.definition)))
+      }.toMap
+      val refinedApplications = applications.view.mapValues { dispatch =>
+        refinedDispatches(dispatch.entry)
+      }.toMap
+      new Plan(
+        refinedCases,
+        refinedDispatches,
+        refinedApplications,
+        firstClassRequirements,
+        reenteredDefinitions,
+        recoverableCaptures)
+    }
   }
 
   private final case class Candidate(
@@ -225,7 +254,7 @@ object Defunctionalization {
           visit(rest, scopes, static, repeated)
 
         case cps.Stmt.Let(_, _, rest) => visit(rest, scopes, static, repeated)
-        case cps.Stmt.Call(_, _, _, _, rest) => visit(rest, scopes, static, repeated)
+        case cps.Stmt.Call(_, _, _, _, _, rest) => visit(rest, scopes, static, repeated)
         case call: cps.Stmt.App => applications.put(call, scopes)
         case _: cps.Stmt.Invoke => ()
         case _: cps.Stmt.Return => ()
@@ -309,6 +338,24 @@ object Defunctionalization {
     val toplevelDefinitions = module.definitions.collect {
       case cps.ToplevelDefinition.Def(id, _, _) => id
     }.toSet
+    val lexicalEnvironments = {
+      val locals = targetFlows.iterator.flatMap(_.localDefinitions).map { definition =>
+        // A function parameter belongs to a fresh dynamic activation on every
+        // call. A second-class definition, by contrast, reuses one set of
+        // registers in its enclosing activation, so an unmodified parameter
+        // can be recovered there. Captures are bound outside either entry.
+        val stableParameters =
+          if isSecondClass(definition.id) then definition.params.toSet
+          else Set.empty[Id]
+        definition.id -> (stableParameters ++ definition.captures)
+      }
+      val toplevel = module.definitions.iterator.map {
+        case cps.ToplevelDefinition.Def(id, _, _) => id -> Set.empty[Id]
+        case cps.ToplevelDefinition.Val(id, _, _, _) => id -> Set.empty[Id]
+      }
+      (locals ++ toplevel).toMap
+    }
+    val definitionIds = lexicalEnvironments.keySet
 
     module.definitions.zip(targetFlows).foreach { case (toplevel, flow) =>
       val definitions = flow.localDefinitions
@@ -519,11 +566,31 @@ object Defunctionalization {
       }
     }
 
+    // A case can be shared by several dispatchers. A capture is recoverable
+    // only if every dispatcher can name the same lexical binding. Definition
+    // bindings are handled by the representation fixed point above; this
+    // late refinement concerns ordinary dynamic values only.
+    val dispatchersByCase = allDispatches.valuesIterator.flatMap { dispatch =>
+      dispatch.cases.iterator.map(_.definition -> dispatch.entry)
+    }.toVector.groupMap(_._1)(_._2)
+    val recoverableCaptures = allCases.iterator.map { case (id, continuationCase) =>
+      val commonEnvironment = dispatchersByCase.getOrElse(id, Vector.empty)
+        .iterator
+        .map(entry => lexicalEnvironments.getOrElse(entry, Set.empty))
+        .reduceOption(_ intersect _)
+        .getOrElse(Set.empty)
+      id -> continuationCase.captures.iterator
+        .filter(commonEnvironment)
+        .filterNot(definitionIds)
+        .toSet
+    }.toMap
+
     new Plan(
       allCases.toMap,
       allDispatches.toMap,
       allApplications.toMap,
       firstClassRequirements.toSet,
-      reenteredDefinitions.toSet)
+      reenteredDefinitions.toSet,
+      recoverableCaptures)
   }
 }

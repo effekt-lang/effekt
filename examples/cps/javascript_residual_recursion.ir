@@ -32,7 +32,6 @@ function main_0(seed_0, k_0) {
     const first_0 = { __tag: 1, k_0: k_0 };
     n_0 = seed_0;
     c_0 = first_0;
-    break generate_0;
   }
   generate_0: while (true) {
     let i_0 = undefined;
@@ -42,7 +41,6 @@ function main_0(seed_0, k_0) {
     recur_0: {
       i_0 = n_0;
       next_0 = c_0;
-      break recur_0;
     }
     next_0 = (typeof next_0 === "function") ? {
       __tag: -1,
@@ -55,7 +53,6 @@ function main_0(seed_0, k_0) {
           const next_arg_5 = i_0;
           cont_0 = next_cont_4;
           value_1 = next_arg_5;
-          break apply_entry_2;
         } else {
           const after_0 = { __tag: 0, next_0: next_0 };
           next_0 = after_0;

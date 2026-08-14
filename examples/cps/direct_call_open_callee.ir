@@ -6,3 +6,9 @@ def main(f, x, ks, k) {
 /// CALLING_CONVENTIONS
 
 -
+
+/// JAVASCRIPT
+
+function main_0(f_0, x_0, ks_0, k_0) {
+  return f_0(x_0, ks_0, k_0);
+}
