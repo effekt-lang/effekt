@@ -211,9 +211,16 @@ lazy val bytes: Builtins = Map(
 
   // Conversion
   // ----------
+  builtin("effekt::toInt(Byte)") {
+    case As.Byte(b) :: Nil => Value.Int(b.toInt.toLong)
+  },
+  builtin("effekt::toByte(Int)") {
+    case As.Int(n) :: Nil => Value.Byte(UByte.unsafeFromInt(n.toInt & 0xFF))
+  },
+
   builtin("effekt::showBuiltin(Byte)") {
     case As.Byte(b) :: Nil => Value.String(b.toHexString)
-  }
+  },
 )
 
 lazy val strings: Builtins = Map(
@@ -298,7 +305,7 @@ lazy val arrays: Builtins = Map(
 )
 
 lazy val bytearrays: Builtins = Map(
-  builtin("bytearray::unsafeAllocate(Int)") {
+  builtin("bytearray::allocate(Int)") {
     case As.Int(x) :: Nil => Value.ByteArray(scala.Array.ofDim(x.toInt))
   },
   builtin("bytearray::size(ByteArray)") {
