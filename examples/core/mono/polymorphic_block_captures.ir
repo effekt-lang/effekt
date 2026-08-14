@@ -1,0 +1,33 @@
+def first(){f: ['A](() => 'A at {k}){k: () => 'A} => Unit} = {
+  return ()
+}
+
+def second(){f: ['B](() => 'B at {h}){h: () => 'B} => Unit} = {
+  return ()
+}
+
+def global(){f: ['A](() => 'A at {io}) => Unit} = {
+  return ()
+}
+
+/// MONO_PREPROCESS
+
+interface Poly {
+  apply: ['A](() => 'A at {k}){k: () => 'A} => Unit
+}
+
+interface Poly1 {
+  apply1: ['A](() => 'A at {io}) => Unit
+}
+
+def first(){f: Poly} = {
+  return ()
+}
+
+def second(){f: Poly} = {
+  return ()
+}
+
+def global(){f: Poly1} = {
+  return ()
+}

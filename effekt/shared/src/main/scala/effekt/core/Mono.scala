@@ -36,93 +36,8 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
   type Ground = TypeArg.Data | TypeArg.Boxed
   type Solution = Map[FlowVar, Set[Vector[Ground]]]
 
-  object preprocess {
-    private object DeBruijn {
 
-      // Filled when handling new function
-      var typeToIndex: Map[Id, Index] = Map.empty
-
-      // https://blueberrywren.dev/blog/debruijn-explanation/
-      // λa. λb. λc. c
-
-      // indexes:
-      // λ λ λ 0
-      // ^ ^ ^
-      // 2 1 0
-
-      // levels:
-      // λ λ λ 2
-      // ^ ^ ^
-      // 0 1 2
-
-      // In lambda bump everything
-      // -> we are using de bruijn indices
-      case class Index(level: Int, position: Int)
-      // Currently only supported toplevel (non-debruijn) captures (e.g. {io})
-      // type Captures = Set[Id]
-
-      def bumpTypeLevels() = {
-        typeToIndex = typeToIndex.map((id, index) =>
-          (id, Index(index.level + 1, index.position))
-        )
-      }
-
-      def addTparams(tparams: List[Id]) = {
-        tparams.zipWithIndex.foreach((id, index) => {
-          typeToIndex += (id -> Index(0, index))
-        })
-      }
-
-      enum ValueType {
-        case Var(index: Index)
-        case Data(name: Id, targs: List[ValueType])
-        case Boxed(tpe: BlockType, capt: Captures)
-      }
-
-      enum BlockType {
-        case Function(tarity: Int, carity: Int, vparams: List[ValueType], bparams: List[BlockType], result: ValueType)
-        case Interface(name: Id, targs: List[ValueType])
-      }
-
-      def toDeBruijn(tpe: core.ValueType): ValueType = tpe match {
-        case core.ValueType.Boxed(tpe, capt) =>
-          // FIXME: Actually only support toplevel captures, if we pass stuff like this we will crash with some programs
-          ValueType.Boxed(toDeBruijn(tpe), capt)
-        case core.ValueType.Data(name, targs) =>
-          ValueType.Data(name, targs map toDeBruijn)
-        case core.ValueType.Var(name) =>
-          ValueType.Var(typeToIndex(name))
-      }
-
-      def toDeBruijn(tpe: core.BlockType): BlockType = tpe match {
-        case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => {
-
-          // We are one level deeper, bump all existing Indices by one level
-          // save current map to reset to later
-          val savedTypeIndexMap = typeToIndex
-          bumpTypeLevels()
-
-          // Insert new tparams at level 0
-          addTparams(tparams)
-
-          // Handle all the types of the lower level, then reset our type -> index map to before we went to this level
-          val vparams_ = vparams map toDeBruijn
-          val bparams_ = bparams map toDeBruijn
-          val result_ = toDeBruijn(result)
-
-          typeToIndex = savedTypeIndexMap
-
-          BlockType.Function(tparams.size, cparams.size, vparams_, bparams_, result_)
-        }
-        case core.BlockType.Interface(name, targs) =>
-          BlockType.Interface(name, targs map toDeBruijn)
-      }
-
-    }
-
-    import DeBruijn.{ addTparams, toDeBruijn }
-
-    /**
+  /**
     Rewrites this:
 
     {{{
@@ -148,164 +63,415 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
         println(higherorder { id })
         }
     }}}
-    */
-    case class FreshNames(interface: Id, apply: Id)
-    class PreprocessContext {
-      // List of Interfaces that are emitted during preprocessing
-      var interfaces: List[Declaration.Interface] = List.empty
+  */
+  object preprocess {
 
-      // Map from function name + block arg index -> (interface + interface operation)
-      var replacements: Map[DeBruijn.BlockType, FreshNames] = Map.empty
+    private object DeBruijn {
 
-      // apply ids for block arguments
-      var appReplacements: Map[Id, (Id, Block.BlockVar)] = Map.empty
+      case class Index(level: Int, position: Int)
 
-      def freshInterfaceNames(): FreshNames =
-        FreshNames(Id("Poly"), Id("apply"))
+      enum Capture {
+        case Bound(index: Index)
+        case Named(id: Id)
+      }
 
-      def freshInterface(blockTpe: BlockType.Function, block: Block.BlockLit): FreshNames =
-        val freshNames = freshInterfaceNames()
-        // Fresh tparams and subst?
-        val extendedBlockTpe = BlockType.Function(blockTpe.tparams, blockTpe.cparams, blockTpe.vparams, blockTpe.bparams, blockTpe.result)
-        val property = Property(freshNames.apply, extendedBlockTpe)
-        interfaces +:= Declaration.Interface(freshNames.interface, block.tparams, List(property))
-        freshNames
+      enum ValueType {
+        case Var(index: Index)
+        case Data(name: Id, targs: List[ValueType])
+        case Boxed(tpe: BlockType, captures: Set[Capture])
+      }
 
-      def emit(blockId: Id, blockTpe: BlockType.Function, block: Block.BlockLit): BlockType.Interface =
-        val debruijnBlockTpe = toDeBruijn(blockTpe)
-        val interface = replacements.get(debruijnBlockTpe) match {
-          case None => {
-            val interface = freshInterface(blockTpe, block)
-            replacements += debruijnBlockTpe -> interface
-            interface
+      enum BlockType {
+        case Function(
+          tarity: Int,
+          carity: Int,
+          vparams: List[ValueType],
+          bparams: List[BlockType],
+          result: ValueType
+        )
+        case Interface(name: Id, targs: List[ValueType])
+      }
+
+      private case class Environment(
+        typeBinders: List[List[Id]],
+        captureBinders: List[List[Id]]
+      ) {
+        def enter(tparams: List[Id], cparams: List[Id]): Environment =
+          Environment(tparams :: typeBinders, cparams :: captureBinders)
+
+        def typeIndex(id: Id): Option[Index] = indexOf(id, typeBinders)
+        def captureIndex(id: Id): Option[Index] = indexOf(id, captureBinders)
+
+        private def indexOf(id: Id, binders: List[List[Id]]): Option[Index] =
+          binders.zipWithIndex.collectFirst {
+            case (level, depth) if level.contains(id) =>
+              Index(depth, level.indexOf(id))
           }
-          case Some(value) => value
-        }
+      }
 
-        val targs = block.tparams.map(id => ValueType.Var(id))
-        val btInterface: BlockType.Interface = BlockType.Interface(interface.interface, targs)
-        val callee: Block.BlockVar = BlockVar(blockId, btInterface, Set(blockId))
-        appReplacements += blockId -> (interface.apply, callee)
+      def apply(tpe: core.BlockType.Function, outer: List[Id])(using Context): BlockType =
+        blockType(tpe)(using Environment(List(outer), List(Nil)))
 
-        btInterface
+      // Closing free variables in first-occurrence order makes the result
+      // invariant under renaming both the local and the enclosing binders.
+      def freeTypeVariables(tpe: core.BlockType): List[Id] =
+        freeTypeVariables(tpe, Set.empty).distinct
+
+      def freeCaptureVariables(tpe: core.BlockType): Set[Id] =
+        freeCaptureVariables(tpe, Set.empty)
+
+      private def blockType(tpe: core.BlockType)(using env: Environment, context: Context): BlockType = tpe match {
+        case core.BlockType.Function(tparams, cparams, vparams, bparams, result) =>
+          given Environment = env.enter(tparams, cparams)
+          BlockType.Function(
+            tparams.size,
+            cparams.size,
+            vparams.map(valueType),
+            bparams.map(blockType),
+            valueType(result)
+          )
+
+        case core.BlockType.Interface(name, targs) =>
+          BlockType.Interface(name, targs.map(valueType))
+      }
+
+      private def valueType(tpe: core.ValueType)(using env: Environment, context: Context): ValueType = tpe match {
+        case core.ValueType.Var(id) =>
+          env.typeIndex(id) match {
+            case Some(index) => ValueType.Var(index)
+            case None => Context.abort(pretty"Unbound type variable '${id}' while encoding a polymorphic block")
+          }
+
+        case core.ValueType.Data(name, targs) =>
+          ValueType.Data(name, targs.map(valueType))
+
+        case core.ValueType.Boxed(tpe, captures) =>
+          ValueType.Boxed(blockType(tpe), captures.map { id =>
+            env.captureIndex(id).map(Capture.Bound.apply).getOrElse(Capture.Named(id))
+          })
+      }
+
+      private def freeTypeVariables(tpe: core.BlockType, bound: Set[Id]): List[Id] = tpe match {
+        case core.BlockType.Function(tparams, _, vparams, bparams, result) =>
+          val locallyBound = bound ++ tparams
+          vparams.flatMap(freeTypeVariables(_, locallyBound)) ++
+            bparams.flatMap(freeTypeVariables(_, locallyBound)) ++
+            freeTypeVariables(result, locallyBound)
+
+        case core.BlockType.Interface(_, targs) =>
+          targs.flatMap(freeTypeVariables(_, bound))
+      }
+
+      private def freeTypeVariables(tpe: core.ValueType, bound: Set[Id]): List[Id] = tpe match {
+        case core.ValueType.Var(id) if !bound.contains(id) => List(id)
+        case core.ValueType.Var(_) => Nil
+        case core.ValueType.Data(_, targs) => targs.flatMap(freeTypeVariables(_, bound))
+        case core.ValueType.Boxed(tpe, _) => freeTypeVariables(tpe, bound)
+      }
+
+      private def freeCaptureVariables(tpe: core.BlockType, bound: Set[Id]): Set[Id] = tpe match {
+        case core.BlockType.Function(_, cparams, vparams, bparams, result) =>
+          val locallyBound = bound ++ cparams
+          vparams.flatMap(freeCaptureVariables(_, locallyBound)).toSet ++
+            bparams.flatMap(freeCaptureVariables(_, locallyBound)) ++
+            freeCaptureVariables(result, locallyBound)
+
+        case core.BlockType.Interface(_, targs) =>
+          targs.flatMap(freeCaptureVariables(_, bound)).toSet
+      }
+
+      private def freeCaptureVariables(tpe: core.ValueType, bound: Set[Id]): Set[Id] = tpe match {
+        case core.ValueType.Var(_) => Set.empty
+        case core.ValueType.Data(_, targs) => targs.flatMap(freeCaptureVariables(_, bound)).toSet
+        case core.ValueType.Boxed(tpe, captures) =>
+          captures.diff(bound) ++ freeCaptureVariables(tpe, bound)
+      }
     }
 
+    private case class Encoding(interface: Id, method: Id)
 
-    def apply(module: ModuleDecl): ModuleDecl = module match
-      case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-        val preprocessContext = PreprocessContext()
-        val defns = preprocess(definitions)(using preprocessContext)
-        ModuleDecl(path, includes, declarations ++ preprocessContext.interfaces, externs, defns, exports)
+    private case class Encoded(encoding: Encoding, outer: List[Id]) {
+      def interface(arguments: List[ValueType]): BlockType.Interface = {
+        assert(arguments.size == outer.size)
+        BlockType.Interface(encoding.interface, arguments)
+      }
 
+      def openInterface: BlockType.Interface =
+        interface(outer.map(ValueType.Var.apply))
+    }
 
-    def preprocess(definitions: List[Toplevel])(using PreprocessContext): List[Toplevel] =
-      definitions.map({
-        case Toplevel.Def(id, block) => Toplevel.Def(id, preprocess(block))
-        case Toplevel.Val(id, binding) => Toplevel.Val(id, preprocess(binding))
-      })
+    private class State(using Context) {
+      val interfaces = collection.mutable.ArrayBuffer.empty[Declaration.Interface]
+      private var encodings: Map[DeBruijn.BlockType, Encoding] = Map.empty
 
-    def preprocess(block: Block)(using PreprocessContext): Block = block match
-      case b@BlockVar(id, annotatedTpe, annotatedCapt) => preprocess(b)
-      case b@BlockLit(tparams, cparams, vparams, bparams, body) => preprocess(b)
-      // TODO: Recurse everywhere
-      case Unbox(pure) => block
-      case New(impl) => block
+      def encode(tpe: BlockType.Function, scope: Scope): Encoded = {
+        val outer = DeBruijn.freeTypeVariables(tpe)
+        val unbound = outer.toSet -- scope.typeParams.toSet
 
+        if (unbound.nonEmpty) {
+          Context.abort(pretty"Unbound type variables while encoding a polymorphic block: ${unbound}")
+        }
 
-    def preprocess(block: Block.BlockLit)(using ctx: PreprocessContext): Block.BlockLit =
-      // TODO: Replace with "New"
-      val processedBparams = block.bparams.map(blockParam => {
-        blockParam.tpe match {
-          case b: BlockType.Function =>
-            if(b.tparams.nonEmpty) {
-              val interface = ctx.emit(blockParam.id, b, block)
-              BlockParam(blockParam.id, interface, blockParam.capt)
-            } else {
-              blockParam
+        val freeCaptures = DeBruijn.freeCaptureVariables(tpe).intersect(scope.captureParams.toSet)
+        if (freeCaptures.nonEmpty) {
+          Context.abort(pretty"Cannot encode a polymorphic block with free capture parameters: ${freeCaptures}")
+        }
+
+        val key = DeBruijn(tpe, outer)
+        val encoding = encodings.getOrElse(key, {
+          val interface = Id("Poly")
+          val method = Id("apply")
+          val freshParams = outer.map(param => Id(param.name.name))
+          val substitution = effekt.util.DB.from(
+            outer.zip(freshParams.map(ValueType.Var.apply))
+          )
+          val methodType = Type.substitute(tpe, substitution, effekt.util.DB.empty)
+          interfaces += Declaration.Interface(
+            interface,
+            freshParams,
+            List(Property(method, methodType))
+          )
+
+          val fresh = Encoding(interface, method)
+          encodings += key -> fresh
+          fresh
+        })
+
+        Encoded(encoding, outer)
+      }
+    }
+
+    private case class Scope(
+      typeParams: List[Id] = Nil,
+      captureParams: List[Id] = Nil,
+      blocks: Map[Id, Encoded] = Map.empty
+    ) {
+      def bind(tparams: List[Id], cparams: List[Id]): Scope =
+        copy(
+          typeParams = typeParams ++ tparams,
+          captureParams = captureParams ++ cparams
+        )
+
+      def bind(blocks: Map[Id, Encoded]): Scope =
+        copy(blocks = this.blocks ++ blocks)
+    }
+
+    private class Elaborator(state: State)(using Context) extends Tree.RewriteWithContext[Scope] {
+
+      override def rewrite(declaration: Declaration)(using scope: Scope): Declaration = declaration match {
+        case Declaration.Interface(id, tparams, properties) =>
+          val local = scope.bind(tparams, Nil)
+          Declaration.Interface(id, tparams, properties.map(rewrite(_)(using local)))
+
+        case Declaration.Data(id, tparams, constructors) =>
+          val local = scope.bind(tparams, Nil)
+          Declaration.Data(id, tparams, constructors.map {
+            case Constructor(tag, existentialParams, fields) =>
+              val constructorScope = local.bind(existentialParams, Nil)
+              Constructor(tag, existentialParams, fields.map {
+                case Field(field, tpe) => Field(field, rewrite(tpe)(using constructorScope))
+              })
+          })
+      }
+
+      override def rewrite(operation: Operation)(using scope: Scope): Operation = operation match {
+        case Operation(name, tparams, cparams, vparams, bparams, body) =>
+          val local = scope.bind(tparams, cparams)
+          val (rewrittenParams, encoded) = rewriteParameters(bparams, local)
+          Operation(
+            name,
+            tparams,
+            cparams,
+            vparams.map(rewrite(_)(using local)),
+            rewrittenParams,
+            rewrite(body)(using local.bind(encoded))
+          )
+      }
+
+      override def rewrite(block: BlockLit)(using scope: Scope): BlockLit = block match {
+        case BlockLit(tparams, cparams, vparams, bparams, body) =>
+          val local = scope.bind(tparams, cparams)
+          val (rewrittenParams, encoded) = rewriteParameters(bparams, local)
+          BlockLit(
+            tparams,
+            cparams,
+            vparams.map(rewrite(_)(using local)),
+            rewrittenParams,
+            rewrite(body)(using local.bind(encoded))
+          )
+      }
+
+      private def rewriteParameters(
+        params: List[BlockParam],
+        scope: Scope
+      ): (List[BlockParam], Map[Id, Encoded]) = {
+        var encoded: Map[Id, Encoded] = Map.empty
+        val rewritten = params.map {
+          case BlockParam(id, tpe: BlockType.Function, captures) if tpe.tparams.nonEmpty =>
+            val replacement = state.encode(tpe, scope)
+            encoded += id -> replacement
+            BlockParam(id, replacement.openInterface, captures)
+
+          case BlockParam(id, tpe, captures) =>
+            BlockParam(id, rewrite(tpe)(using scope), captures)
+        }
+        (rewritten, encoded)
+      }
+
+      override def rewrite(block: BlockVar)(using scope: Scope): BlockVar = block match {
+        case BlockVar(id, _, captures) if scope.blocks.contains(id) =>
+          BlockVar(id, scope.blocks(id).openInterface, captures)
+
+        case BlockVar(id, tpe, captures) =>
+          BlockVar(id, rewrite(tpe), captures)
+      }
+
+      override def rewrite(tpe: ValueType)(using scope: Scope): ValueType = tpe match {
+        case ValueType.Var(id) => ValueType.Var(id)
+        case ValueType.Data(name, targs) => ValueType.Data(name, targs.map(rewrite))
+        case ValueType.Boxed(blockType, captures) =>
+          ValueType.Boxed(rewrite(blockType), captures)
+      }
+
+      override def rewrite(tpe: BlockType)(using scope: Scope): BlockType = tpe match {
+        case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
+          val local = scope.bind(tparams, cparams)
+          BlockType.Function(
+            tparams,
+            cparams,
+            vparams.map(rewrite(_)(using local)),
+            bparams.map {
+              case polymorphic: BlockType.Function if polymorphic.tparams.nonEmpty =>
+                state.encode(polymorphic, local).openInterface
+              case other =>
+                rewrite(other)(using local)
+            },
+            rewrite(result)(using local)
+          )
+
+        case BlockType.Interface(name, targs) =>
+          BlockType.Interface(name, targs.map(rewrite))
+      }
+
+      override def rewrite(stmt: Stmt)(using scope: Scope): Stmt = stmt match {
+        case App(callee, targs, vargs, bargs) =>
+          val function = callee.functionType
+          val rewrittenTargs = targs.map(rewrite)
+          val rewrittenBargs = rewriteArguments(
+            bargs,
+            function,
+            rewrittenTargs,
+            scope
+          )
+          val rewrittenVargs = vargs.map(rewrite)
+
+          callee match {
+            case variable @ BlockVar(id, _, _) if scope.blocks.contains(id) =>
+              val encoding = scope.blocks(id).encoding
+              Invoke(
+                rewrite(variable),
+                encoding.method,
+                rewrite(function),
+                rewrittenTargs,
+                rewrittenVargs,
+                rewrittenBargs
+              )
+
+            case _ =>
+              App(rewrite(callee), rewrittenTargs, rewrittenVargs, rewrittenBargs)
+          }
+
+        case Invoke(callee, method, methodType: BlockType.Function, targs, vargs, bargs) =>
+          val rewrittenTargs = targs.map(rewrite)
+          Invoke(
+            rewrite(callee),
+            method,
+            rewrite(methodType),
+            rewrittenTargs,
+            vargs.map(rewrite),
+            rewriteArguments(bargs, methodType, rewrittenTargs, scope)
+          )
+
+        case other =>
+          super.rewrite(other)
+      }
+
+      private def rewriteArguments(
+        arguments: List[Block],
+        function: BlockType.Function,
+        targs: List[ValueType],
+        scope: Scope
+      ): List[Block] = {
+        assert(arguments.size == function.bparams.size)
+
+        val signatureScope = scope.bind(function.tparams, function.cparams)
+        val substitution = function.tparams.zip(targs).toMap
+
+        arguments.zip(function.bparams).map {
+          case (argument, polymorphic: BlockType.Function) if polymorphic.tparams.nonEmpty =>
+            val encoded = state.encode(polymorphic, signatureScope)
+            val interfaceArgs = encoded.outer.map { id =>
+              substitution.getOrElse(id, ValueType.Var(id))
             }
-          case BlockType.Interface(name, targs) =>
-            blockParam
-        }
-      })
-      addTparams(block.tparams)
-      Block.BlockLit(block.tparams, block.cparams, block.vparams, processedBparams, preprocess(block.body))
+            rewriteBlock(
+              rewrite(argument)(using scope),
+              encoded.interface(interfaceArgs),
+              encoded.encoding
+            )
 
-    def preprocess(block: Block.BlockVar)(using PreprocessContext): Block.BlockVar = block match {
-      case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(id, preprocess(annotatedTpe), annotatedCapt)
-    }
-
-    def preprocessBargs(bargs: List[Block], targs: List[ValueType])(using ctx: PreprocessContext): List[Block] = bargs map {
-      // TODO: add example to each case
-      case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(id, preprocess(annotatedTpe), annotatedCapt)
-      case block@BlockLit(tparams, cparams, vparams, bparams, body) =>
-        val debruijnBlockTpe = toDeBruijn(block.tpe)
-        ctx.replacements.get(debruijnBlockTpe) match {
-          case Some(value) => {
-            val freshOp = Operation(value.apply, tparams, cparams, vparams, bparams, preprocess(body))
-            val interfaceTpe: BlockType.Interface = BlockType.Interface(value.interface, targs)
-            Block.New(Implementation(interfaceTpe, List(freshOp)))
-          }
-          case None => Block.BlockLit(tparams, cparams, vparams, bparams, preprocess(body))
-        }
-      case Unbox(pure) => Unbox(pure)
-      case New(impl) => New(impl)
-    }
-
-    def preprocess(stmt: Stmt)(using ctx: PreprocessContext): Stmt = stmt match {
-      case App(callee, targs, vargs, bargs) => {
-        val processedBargs = preprocessBargs(bargs, targs)
-
-        callee match {
-          case BlockVar(id, annotatedTpe, annotatedCapt) => {
-            ctx.appReplacements.get(id) match {
-              case Some((replacementId, blockVar)) =>
-                Invoke(blockVar, replacementId, annotatedTpe, targs, vargs, processedBargs)
-              case None =>
-                val calleeTpe = callee.functionType
-                val updatedCalleeTpe = BlockType.Function(calleeTpe.tparams, calleeTpe.cparams, calleeTpe.vparams, processedBargs.map(_.tpe), calleeTpe.result)
-                App(Block.BlockVar(id, updatedCalleeTpe, annotatedCapt), targs, vargs, processedBargs)
-            }
-          }
-          case New(impl) => App(New(impl), targs, vargs, processedBargs)
-          // TODO: I tought this should not happen, but it does (i.e. in examples/llvm/nosuchelement.effekt and others)
-          case BlockLit(tparams, cparams, vparams, bparams, body) => App(preprocess(callee), targs, vargs, bargs)
-          case Unbox(pure) => sys error "Should not happen, BindSubexpressions ran before"
+          case (argument, _) =>
+            rewrite(argument)(using scope)
         }
       }
-      case Val(id, binding, body) =>
-        Val(id, preprocess(binding), preprocess(body))
-      case ImpureApp(id, callee, targs, vargs, bargs, body) =>
-        ImpureApp(id, callee, targs, vargs, bargs, preprocess(body))
-      case Return(expr) => Return(expr)
-      case Alloc(id, init, region, body) => Alloc(id, init, region, preprocess(body))
-      case Def(id, block, body) => Def(id, preprocess(block), preprocess(body))
-      case Get(id, annotatedTpe, ref, annotatedCapt, body) => Get(id, annotatedTpe, ref, annotatedCapt, preprocess(body))
-      case Hole(tpe, span) => stmt
-      case If(cond, thn, els) => If(cond, preprocess(thn), preprocess(els))
-      case Invoke(callee, method, methodTpe, targs, vargs, bargs) => stmt
-      case Let(id, binding, body) => Let(id, binding, preprocess(body))
-      case Match(scrutinee, matchTpe, clauses, default) => stmt
-      case Put(ref, annotatedCapt, value, body) => Put(ref, annotatedCapt, value, preprocess(body))
-      case Region(body) => stmt
-      case Reset(body) => stmt
-      case Resume(k, body) => Resume(k, preprocess(body))
-      case Shift(prompt, k, body) => stmt
-      case Var(ref, init, capture, body) => Var(ref, init, capture, preprocess(body))
+
+      private def rewriteBlock(
+        block: Block,
+        target: BlockType.Interface,
+        encoding: Encoding
+      ): Block = block match {
+        case BlockLit(tparams, cparams, vparams, bparams, body) =>
+          New(Implementation(
+            target,
+            List(Operation(encoding.method, tparams, cparams, vparams, bparams, body))
+          ))
+
+        case block @ BlockVar(_, BlockType.Interface(name, _), _) if name == target.name =>
+          block
+
+        case block @ New(Implementation(interface, _)) if interface.name == target.name =>
+          block
+
+        case other =>
+          Context.abort(pretty"Expected a polymorphic block literal, but found '${other}'")
+      }
     }
 
-    def preprocess(blockType: BlockType)(using ctx: PreprocessContext): BlockType = blockType match {
-      case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-        val bruijnBlockTpe = toDeBruijn(blockType)
-        ctx.replacements.get(bruijnBlockTpe) match {
-          case Some(name) => BlockType.Interface(name.interface, List.empty)
-          case None => BlockType.Function(tparams, cparams, vparams map preprocess, bparams map preprocess, preprocess(result))
+    def apply(module: ModuleDecl)(using Context): ModuleDecl = module match {
+      case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+        val state = new State
+        val elaborator = new Elaborator(state)
+        val initial = Scope()
+
+        val rewrittenDeclarations = declarations.map(elaborator.rewrite(_)(using initial))
+        val rewrittenDefinitions = definitions.map(elaborator.rewrite(_)(using initial))
+
+        var index = 0
+        while (index < state.interfaces.size) {
+          state.interfaces(index) =
+            elaborator.rewrite(state.interfaces(index))(using initial)
+              .asInstanceOf[Declaration.Interface]
+          index += 1
         }
 
-      case BlockType.Interface(name, targs) => BlockType.Interface(name, targs)
+        ModuleDecl(
+          path,
+          includes,
+          rewrittenDeclarations ++ state.interfaces,
+          externs,
+          rewrittenDefinitions,
+          exports
+        )
     }
-
-    // FIXME: Implement
-    def preprocess(valueTpe: ValueType)(using ctx: PreprocessContext): ValueType = valueTpe
   }
 
   object collect {
