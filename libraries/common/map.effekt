@@ -172,7 +172,7 @@ def foreachReversed[K, V](m: Map[K, V]) { action: (K, V) => Unit }: Unit =
 /// O(N)
 def toList[K, V](m: Map[K, V]): List[(K, V)] = {
   var acc = Nil()
-  m.foreachReversed{ (k, v) =>
+  m.foreachReversed { (k, v) =>
     acc = Cons((k, v), acc)
   }
   acc
