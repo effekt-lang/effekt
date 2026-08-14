@@ -218,7 +218,8 @@ class MonoTests extends CorePhaseTests(Mono) {
     case Base(tpe, Nil) => tpe.name.name
     case Base(tpe, targs) => s"${tpe.name.name}[${targs.map(showTypeArg).mkString(", ")}]"
     case Var(owner, position) => s"${owner.name.name}.$position"
-    case Boxed(_, _) => "BOXED"
+    case Boxed(tpe, captures) =>
+      ReparsablePrettyPrinter.format(ValueType.Boxed(tpe, captures))
   }
 
   private def showConstraint(constraint: MonoConstraint): String =

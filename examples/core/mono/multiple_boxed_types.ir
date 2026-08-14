@@ -1,0 +1,28 @@
+def id['A](x: 'A) = {
+  return x: 'A
+}
+
+def main(f: () => Int at {io}, g: (Int) => String at {}) = {
+  val x = (id: ['A]('A) => 'A @ {})[() => Int at {io}](f: () => Int at {io});
+  (id: ['A]('A) => 'A @ {})[(Int) => String at {}](g: (Int) => String at {})
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<() => Int at {io}> <: id
+<(Int) => String at {}> <: id
+
+/// MONO_SPECIALIZE
+
+def idBoxedInt(f: () => Int at {io}) = {
+  return f: () => Int at {io}
+}
+
+def idBoxedString(g: (Int) => String at {}) = {
+  return g: (Int) => String at {}
+}
+
+def main(f: () => Int at {io}, g: (Int) => String at {}) = {
+  val x = (idBoxedInt: (() => Int at {io}) => (() => Int at {io}) @ {})(f: () => Int at {io});
+  (idBoxedString: ((Int) => String at {}) => ((Int) => String at {}) @ {})(g: (Int) => String at {})
+}

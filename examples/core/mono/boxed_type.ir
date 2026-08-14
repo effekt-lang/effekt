@@ -9,7 +9,7 @@ def main(f: () => Int at {io}) = {
 
 /// MONO_COLLECT_CONSTRAINTS
 
-<BOXED> <: id
+<() => Int at {io}> <: id
 <Int> <: id
 
 /// MONO_SPECIALIZE
