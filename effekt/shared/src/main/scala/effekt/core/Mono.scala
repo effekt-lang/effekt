@@ -432,6 +432,9 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             List(Operation(encoding.method, tparams, cparams, vparams, bparams, body))
           ))
 
+        case block @ BlockVar(_, function: BlockType.Function, _) if function.tparams.nonEmpty =>
+          rewriteBlock(etaExpand(block, function), target, encoding)
+
         case block @ BlockVar(_, BlockType.Interface(name, _), _) if name == target.name =>
           block
 
@@ -440,6 +443,37 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 
         case other =>
           Context.abort(pretty"Expected a polymorphic block literal, but found '${other}'")
+      }
+
+      private def etaExpand(block: BlockVar, function: BlockType.Function): BlockLit = function match {
+        case BlockType.Function(tparams, cparams, vparamTypes, bparamTypes, _) =>
+          assert(cparams.size == bparamTypes.size)
+
+          val freshTparams = tparams.map(Id.apply)
+          val freshCparams = cparams.map(Id.apply)
+          val typeSubstitution = effekt.util.DB.from(tparams.zip(freshTparams.map(ValueType.Var.apply)))
+          val captureSubstitution = effekt.util.DB.from(cparams.zip(freshCparams.map(Set(_))))
+
+          def substituteValue(tpe: ValueType): ValueType =
+            Type.substitute(tpe, typeSubstitution, captureSubstitution)
+
+          def substituteBlock(tpe: BlockType): BlockType =
+            Type.substitute(tpe, typeSubstitution, captureSubstitution)
+
+          val vparams = vparamTypes.zipWithIndex.map { (tpe, index) =>
+            ValueParam(Id(s"x$index"), substituteValue(tpe))
+          }
+          val bparams = bparamTypes.zip(freshCparams).zipWithIndex.map { case ((tpe, capture), index) =>
+            BlockParam(Id(s"f$index"), substituteBlock(tpe), Set(capture))
+          }
+          val body = App(
+            block,
+            freshTparams.map(ValueType.Var.apply),
+            vparams.map(param => ValueVar(param.id, param.tpe)),
+            bparams.map(param => BlockVar(param.id, param.tpe, param.capt))
+          )
+
+          BlockLit(freshTparams, freshCparams, vparams, bparams, body)
       }
     }
 
@@ -896,34 +930,92 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 
   object specialize {
     type FunctionNames = Map[(FlowVar, Vector[GroundType]), Id]
-    type TypeNames = collection.mutable.Map[(FlowVar, Vector[GroundType]), ValueType.Data]
+    type TypeNames = Map[(FlowVar, Vector[GroundType]), ValueType.Data]
+    private type MutableTypeNames = collection.mutable.Map[(FlowVar, Vector[GroundType]), ValueType.Data]
 
-    case class State(solution: Solution, funNames: FunctionNames, tpeNames: TypeNames, polyExternDefs: List[Id]) {
-      var replacementTparams: Map[Id, GroundType] = Map.empty
+    private def variantKey(variant: Vector[GroundType]): String =
+      variant.map(typeKey).mkString("<", ",", ">")
 
-      lazy val invertedTpeNames: Map[ValueType.Data, (FlowVar, Vector[GroundType])] = tpeNames.map { case (k, v) => (v, k) }.toMap
+    private def typeKey(tpe: GroundType): String = tpe match
+      case MonoValueType.Var(impossible) => impossible
+      case MonoValueType.Bound(level, position) => s"V$level.$position"
+      case MonoValueType.Data(name, targs) =>
+        s"D${name.name.name}[${targs.map(typeKey).mkString(",")}]"
+      case MonoValueType.Boxed(tpe, captures) =>
+        val captureKey = captures.toList.map {
+          case MonoCapture.Bound(level, position) => s"$level.$position"
+          case MonoCapture.Named(id) => id.name.name
+        }.sorted.mkString("{", ",", "}")
+        s"B${blockTypeKey(tpe)}@$captureKey"
 
-      def instantiateTparams(tparams: List[Id], targs: List[GroundType]) = {
+    private def blockTypeKey(tpe: MonoBlockType[Nothing]): String = tpe match
+      case MonoBlockType.Function(tarity, carity, vparams, bparams, result) =>
+        s"[$tarity,$carity](${vparams.map(typeKey).mkString(",")})" +
+          s"{${bparams.map(blockTypeKey).mkString(",")}}:${typeKey(result)}"
+      case MonoBlockType.Interface(name, targs) =>
+        s"${name.name.name}[${targs.map(typeKey).mkString(",")}]"
+
+    private class NameSupply(reserved: Iterable[String]) {
+      private val used = collection.mutable.Set.from(reserved)
+
+      def fresh(preferred: String): Id = {
+        var candidate = preferred
+        var index = 2
+        while used.contains(candidate) do
+          candidate = s"${preferred}_$index"
+          index += 1
+        used += candidate
+        Id(candidate)
+      }
+    }
+
+    case class State(
+      solution: Solution,
+      funNames: FunctionNames,
+      tpeNames: TypeNames,
+      polyExternDefs: Set[Id],
+      substitution: Map[Id, GroundType] = Map.empty
+    ) {
+      val invertedTpeNames: Map[ValueType.Data, (FlowVar, Vector[GroundType])] =
+        tpeNames.map { case (variant, name) => name -> variant }
+
+      def bind(tparams: List[Id], targs: List[GroundType]): State = {
         assert(targs.size == tparams.size, s"Wrong number of type arguments\n  targs: ${targs}\n  tparams: ${tparams}")
-        replacementTparams ++= tparams.zip(targs).toMap
+        copy(substitution = substitution ++ tparams.zip(targs))
       }
 
       def isPolyExtern(id: Id) = polyExternDefs.contains(id)
+
+      def variants(id: FlowVar): List[Vector[GroundType]] =
+        solution.getOrElse(id, Set.empty).toList.sortBy(variantKey)
     }
+
+    private def instances(id: FlowVar, prefix: Vector[GroundType], tparams: List[Id])(using ctx: State): List[(Vector[GroundType], State)] =
+      ctx.variants(id).filter(_.startsWith(prefix)).map { variant =>
+        variant -> ctx.bind(tparams, variant.drop(prefix.size).toList)
+      }
 
     def apply(module: ModuleDecl, solution: Solution)(using Context): ModuleDecl = module match
       case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
         val dctx = DeclarationContext(declarations, externs)
         var monoFunNames: FunctionNames = Map.empty
-        val monoTpeNames: TypeNames = collection.mutable.Map.empty
-        solution.foreach((id, targs) =>
+        val monoTpeNames: MutableTypeNames = collection.mutable.Map.empty
+        val reservedNames = solution.keys.map(_.name.name)
+        val functionNames = new NameSupply(reservedNames)
+        val typeNames = new NameSupply(reservedNames)
+        solution.toList.sortBy((id, _) => id.name.name).foreach((id, targs) =>
           if (dctx.findExternDef(id).isDefined) {
-            targs.foreach(vb => monoFunNames += ((id, vb) -> id))
+            targs.toList.sortBy(variantKey).foreach(vb => monoFunNames += ((id, vb) -> id))
           } else if (dctx.findData(id).isDefined) {
             val data = dctx.findData(id).get
-            targs.foreach(vb => freshMonoTypeName(data.id, vb, monoTpeNames))
+            targs.toList.sortBy(variantKey).foreach(vb => freshMonoTypeName(data.id, vb, monoTpeNames, typeNames))
           } else {
-            targs.foreach(vb => monoFunNames += ((id, vb) -> freshMonoName(id, vb)))
+            targs.toList.sortBy(variantKey).foreach { variant =>
+              val name =
+                if variant.isEmpty || id == core.Type.ResumeSymbol || id == core.Type.PromptSymbol then id
+                else functionNames.fresh(preferredMonoName(id, variant))
+              monoFunNames += ((id, variant) -> name)
+            }
           }
         )
 
@@ -933,28 +1025,25 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
           case _ => ()
         }
 
-        val polyExternDefs: List[Id] = externs.collect {
+        val polyExternDefs: Set[Id] = externs.collect {
           case Extern.Def(id, _, tparams, _, _, _, _, _, _) if tparams.nonEmpty => id
-        }
-        val monoContext = State(solution, monoFunNames, monoTpeNames, polyExternDefs)
+        }.toSet
+        val monoContext = State(solution, monoFunNames, monoTpeNames.toMap, polyExternDefs)
         val monoDecls = declarations.flatMap(monomorphize(_)(using monoContext)(using dctx))
         val monoDefs = monomorphize(definitions)(using monoContext)(using Context, dctx)
         ModuleDecl(path, includes, monoDecls, externs, monoDefs, exports)
 
     def monomorphize(definitions: List[Toplevel])(using ctx: State)(using Context, DeclarationContext): List[Toplevel] =
-      var newDefinitions: List[Toplevel] = List.empty
-      definitions.foreach(definition => newDefinitions ++= monomorphize(definition))
-      newDefinitions
+      definitions.flatMap(monomorphize)
 
     def monomorphize(toplevel: Toplevel)(using ctx: State)(using Context, DeclarationContext): List[Toplevel] = toplevel match
       case Toplevel.Def(id, BlockLit(List(), cparams, vparams, bparams, body)) =>
         List(Toplevel.Def(id, Renamer.rename(BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body)))))
       case Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
-        val monoTypes = ctx.solution(id).toList
-        monoTypes.map(baseTypes =>
-          ctx.instantiateTparams(tparams, baseTypes.toList)
-          Toplevel.Def(ctx.funNames(id, baseTypes), Renamer.rename(BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))))
-        )
+        ctx.variants(id).map { variant =>
+          given State = ctx.bind(tparams, variant.toList)
+          Toplevel.Def(ctx.funNames(id, variant), Renamer.rename(BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))))
+        }
       case Toplevel.Def(id, block) =>
         List(Toplevel.Def(id, monomorphize(block)))
       case Toplevel.Val(id, binding) =>
@@ -962,59 +1051,46 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 
     def monomorphize(decl: Declaration)(using ctx: State)(using DeclarationContext): List[Declaration] = decl match
       case Data(id, tparams, constructors) =>
-        val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
+        val monoTypes = ctx.variants(id)
         if (monoTypes.isEmpty) {
           List(Data(id, tparams, constructors.flatMap(monomorphize(_, Vector.empty))))
         } else {
-          monoTypes.map(baseTypes =>
-            ctx.instantiateTparams(tparams, baseTypes.toList)
-            Declaration.Data(ctx.tpeNames(id, baseTypes).name, List.empty, constructors.flatMap(constr => monomorphize(constr, baseTypes)))
-          )
+          monoTypes.map { variant =>
+            given State = ctx.bind(tparams, variant.toList)
+            Declaration.Data(ctx.tpeNames(id, variant).name, List.empty, constructors.flatMap(constr => monomorphize(constr, variant)))
+          }
         }
       case Interface(id, tparams, properties) =>
-        val monoTypes = ctx.solution.getOrElse(id, Set.empty).toList
+        val monoTypes = ctx.variants(id)
         if (monoTypes.isEmpty) {
           List(Declaration.Interface(id, tparams, properties.flatMap(monomorphize(_, Vector.empty))))
         } else {
-          monoTypes.map(baseTypes =>
-            ctx.instantiateTparams(tparams, baseTypes.toList)
-            val monoProp = properties.flatMap(prop => monomorphize(prop, baseTypes))
-            val interfaceName = ctx.funNames(id, baseTypes)
+          monoTypes.map { variant =>
+            given State = ctx.bind(tparams, variant.toList)
+            val monoProp = properties.flatMap(prop => monomorphize(prop, variant))
+            val interfaceName = ctx.funNames(id, variant)
             if (interfaceName == id) {
               Declaration.Interface(interfaceName, tparams, monoProp)
             } else {
               Declaration.Interface(interfaceName, List.empty, monoProp)
             }
-          )
+          }
         }
 
     def monomorphize(property: Property, variant: Vector[GroundType])(using ctx: State)(using DeclarationContext): List[Property] = property match {
       case Property(id, tpe@BlockType.Function(tparams, cparams, vparams, bparams, result)) => {
-        val baseTypes = ctx.solution.getOrElse(id, Set.empty).toList
-        val relevantTypes = baseTypes.filter(tpes => tpes.startsWith(variant))
-        relevantTypes.map(baseType => {
-          val existentialBaseTypes = baseType.drop(variant.size)
-          ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
-          Property(ctx.funNames((id, baseType)), monomorphize(tpe))
-        })
+        instances(id, variant, tparams).map { (baseTypes, local) =>
+          Property(ctx.funNames((id, baseTypes)), monomorphize(tpe)(using local))
+        }
       }
-      case Property(id, tpe) => ???
+      case Property(id, tpe) => List(Property(id, monomorphize(tpe)))
     }
 
     def monomorphize(constructor: Constructor, variant: Vector[GroundType])(using ctx: State)(using DeclarationContext): List[Constructor] = constructor match
       case Constructor(id, tparams, fields) =>
-        // All solutions for this constructor
-        val baseTypes = ctx.solution.getOrElse(id, Set.empty).toList
-        // Filter solutions that do not belong to the variant currently being handled
-        val relevantTypes = baseTypes.filter(tpes => tpes.startsWith(variant))
-        // The solutions for constructors may have more types than the variant because of existentials
-        // in which case we need to generate multiple constructors
-        relevantTypes.map(baseType => {
-          // Remove types not relevant for existentials (mono13)
-          val existentialBaseTypes = baseType.drop(variant.size)
-          ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
-          Constructor(ctx.funNames(id, baseType), List.empty, fields map monomorphize)
-        })
+        instances(id, variant, tparams).map { (baseTypes, local) =>
+          Constructor(ctx.funNames(id, baseTypes), List.empty, fields.map(monomorphize(_)(using local)))
+        }
 
     def monomorphize(block: Block)(using ctx: State)(using Context, DeclarationContext): Block = block match
       case b: BlockLit => monomorphize(b)
@@ -1034,13 +1110,16 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 
     def monomorphize(operation: Operation, variant: Vector[GroundType])(using ctx: State)(using Context, DeclarationContext): List[Operation] = operation match
       case Operation(name, tparams, cparams, vparams, bparams, body) =>
-        val baseTypes = ctx.solution.getOrElse(name, Set.empty).toList
-        val relevantTypes = baseTypes.filter(tpes => tpes.startsWith(variant))
-        relevantTypes.map(baseTypes =>
-          val existentialBaseTypes = baseTypes.drop(variant.size)
-          ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
-          Operation(ctx.funNames(name, baseTypes), List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
-        )
+        instances(name, variant, tparams).map { (baseTypes, local) =>
+          Operation(
+            ctx.funNames(name, baseTypes),
+            List.empty,
+            cparams,
+            vparams.map(monomorphize(_)(using local)),
+            bparams.map(monomorphize(_)(using local)),
+            monomorphize(body)(using local)
+          )
+        }
 
 
     def monomorphize(block: BlockLit)(using ctx: State)(using Context, DeclarationContext): BlockLit = block match
@@ -1053,18 +1132,15 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
     def monomorphize(field: Field)(using ctx: State)(using DeclarationContext): Field = field match
       case Field(id, tpe) => Field(id, monomorphize(tpe))
 
-    // FIXME: Not a big fan of this function needing so many extra parameters
-    def monomorphize(blockVar: BlockVar, replacementId: Id, targs: List[ValueType])(using ctx: State)(using DeclarationContext): BlockVar = blockVar match
-      case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) if ctx.isPolyExtern(id) =>
-        ctx.instantiateTparams(tparams, targs map toGroundType)
-        val annotatedTpe = BlockType.Function(tparams, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
-        BlockVar(id, annotatedTpe, annotatedCapt)
-      case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCapt) =>
-        ctx.instantiateTparams(tparams, targs map toGroundType)
-        val monoAnnotatedTpe = BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
-        BlockVar(replacementId, monoAnnotatedTpe, annotatedCapt)
-      case BlockVar(id, annotatedTpe: BlockType.Interface, annotatedCapt) =>
-        BlockVar(id, monomorphize(annotatedTpe), annotatedCapt)
+    private def specializeCall(callee: BlockVar, targs: List[ValueType])(using ctx: State)(using DeclarationContext): (BlockVar, List[ValueType]) =
+      if ctx.isPolyExtern(callee.id) then
+        callee -> targs.map(monomorphize)
+      else
+        val function = callee.functionType
+        val groundTypes = targs.map(toGroundType)
+        val local = ctx.bind(function.tparams, groundTypes)
+        val replacement = replacementFun(callee.id, targs)
+        BlockVar(replacement, monomorphize(function)(using local), callee.annotatedCapt) -> Nil
 
     def monomorphize(stmt: Stmt)(using ctx: State)(using Context, DeclarationContext): Stmt = stmt match
       case Return(expr) =>
@@ -1074,32 +1150,32 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case Var(ref, init, capture, body) =>
         Var(ref, monomorphize(init), capture, monomorphize(body))
       case ImpureApp(id, callee, targs, vargs, bargs, body) =>
-        ImpureApp(id, callee, targs map monomorphize, vargs map monomorphize, bargs map monomorphize, monomorphize(body))
-      case App(callee: BlockVar, targs, vargs, bargs) if ctx.isPolyExtern(callee.id) =>
-        ctx.instantiateTparams(callee.functionType.tparams, targs map toGroundType)
-        App(callee, targs map monomorphize, vargs map monomorphize, bargs map monomorphize)
+        val (monoCallee, monoTargs) = specializeCall(callee, targs)
+        ImpureApp(id, monoCallee, monoTargs, vargs map monomorphize, bargs map monomorphize, monomorphize(body))
       case App(callee: BlockVar, targs, vargs, bargs) =>
-        val monoFnId = replacementFun(callee.id, targs)
-        App(monomorphize(callee, monoFnId, targs), List.empty, vargs map monomorphize, bargs map monomorphize)
-      // TODO: Highly specialized, see todo in findConstraints for info
-      //       change at the same time as findConstraints
-      case App(Unbox(ValueVar(id, annotatedTpe)), targs, vargs, bargs) =>
-        App(Unbox(ValueVar(id, monomorphize(annotatedTpe))), List.empty, vargs map monomorphize, bargs map monomorphize)
+        val (monoCallee, monoTargs) = specializeCall(callee, targs)
+        App(monoCallee, monoTargs, vargs map monomorphize, bargs map monomorphize)
+      case App(Unbox(ValueVar(id, ValueType.Boxed(function: BlockType.Function, captures))), targs, vargs, bargs) if targs.nonEmpty =>
+        val local = ctx.bind(function.tparams, targs.map(toGroundType))
+        val monoType = ValueType.Boxed(monomorphize(function)(using local), captures)
+        App(Unbox(ValueVar(id, monoType)), List.empty, vargs map monomorphize, bargs map monomorphize)
       case App(callee, targs, vargs, bargs) =>
-        App(monomorphize(callee), List.empty, vargs map monomorphize, bargs map monomorphize)
+        if targs.nonEmpty then Context.abort(pretty"Polymorphic application has no stable flow variable: ${callee}")
+        App(monomorphize(callee), Nil, vargs map monomorphize, bargs map monomorphize)
       case Let(id, binding, body) =>
         Let(id, monomorphize(binding), monomorphize(body))
       case If(cond, thn, els) =>
         If(monomorphize(cond), monomorphize(thn), monomorphize(els))
-      case Invoke(Unbox(pure), method, methodTpe, targs, vargs, bargs) =>
-        Invoke(Unbox(monomorphize(pure)), method, methodTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
-      case Invoke(BlockVar(id, annotatedTpe: BlockType.Interface, annotatedCapt), method, BlockType.Function(tparams, cparams, vparams, bparams, result), targs, vargs, bargs) =>
-        val combinedTargs = annotatedTpe.targs ++ targs
+      case Invoke(callee, method, methodTpe: BlockType.Function, targs, vargs, bargs) =>
+        val receiverTargs = callee.tpe match
+          case BlockType.Interface(_, arguments) => arguments
+          case other => Context.abort(pretty"Expected an interface receiver, but found '${other}'")
+        val combinedTargs = receiverTargs ++ targs
         val replacementMethod = replacementFun(method, combinedTargs)
-        val monoAnnotatedTpe = BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
-        Invoke(BlockVar(id, monomorphize(annotatedTpe), annotatedCapt), replacementMethod, monoAnnotatedTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
-      case Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
-        Invoke(monomorphize(callee), method, methodTpe, List.empty, vargs map monomorphize, bargs map monomorphize)
+        val local = ctx.bind(methodTpe.tparams, targs.map(toGroundType))
+        Invoke(monomorphize(callee), replacementMethod, monomorphize(methodTpe)(using local), Nil, vargs map monomorphize, bargs map monomorphize)
+      case Invoke(_, _, other, _, _, _) =>
+        Context.abort(pretty"Expected a function method type, but found '${other}'")
       case Resume(k, body) =>
         Resume(monomorphize(k), monomorphize(body))
       case Reset(body) =>
@@ -1107,13 +1183,23 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case Def(id, BlockLit(List(), cparams, vparams, bparams, bbody), body) =>
         Stmt.Def(id, BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(bbody)), monomorphize(body))
       case Def(id, BlockLit(tparams, cparams, vparams, bparams, bbody), body) =>
-        val monoTypes = ctx.solution(id).toList
+        val monoTypes = ctx.variants(id)
         // Monomorphizing inner functions may yield multiple definitions
         // which then need to be nested
         def nestDefs(defnTypes: List[Vector[GroundType]]): Stmt = defnTypes match {
           case head :: next =>
-            ctx.instantiateTparams(tparams, head.toList)
-            Stmt.Def(ctx.funNames(id, head), BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(bbody)), nestDefs(next))
+            val local = ctx.bind(tparams, head.toList)
+            Stmt.Def(
+              ctx.funNames(id, head),
+              BlockLit(
+                List.empty,
+                cparams,
+                vparams.map(monomorphize(_)(using local)),
+                bparams.map(monomorphize(_)(using local)),
+                monomorphize(bbody)(using local)
+              ),
+              nestDefs(next)
+            )
           case Nil => monomorphize(body)
         }
         nestDefs(monoTypes)
@@ -1147,14 +1233,16 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 
     def monomorphize(clause: (Id, BlockLit), variant: Vector[GroundType])(using ctx: State)(using Context, DeclarationContext): List[(Id, BlockLit)] = clause match
       case (id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
-        val baseTypes = ctx.solution.getOrElse(id, Set.empty).toList
-        val relevantTypes = baseTypes.filter(tpes => tpes.startsWith(variant))
-        relevantTypes.map(baseType =>
-          val existentialBaseTypes = baseType.drop(variant.size)
-          ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
-          val monoBlockLit: Block.BlockLit = BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
-          (ctx.funNames(id, baseType), monoBlockLit)
-        ).toList
+        instances(id, variant, tparams).map { (baseTypes, local) =>
+          val monoBlockLit: Block.BlockLit = BlockLit(
+            List.empty,
+            cparams,
+            vparams.map(monomorphize(_)(using local)),
+            bparams.map(monomorphize(_)(using local)),
+            monomorphize(body)(using local)
+          )
+          (ctx.funNames(id, baseTypes), monoBlockLit)
+        }
 
     def monomorphize(opt: Option[Stmt])(using ctx: State)(using Context, DeclarationContext): Option[Stmt] = opt match
       case None => None
@@ -1164,7 +1252,8 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case Literal(value, annotatedType) =>
         Literal(value, monomorphize(annotatedType))
       case PureApp(b, targs, vargs) =>
-        PureApp(b, targs map monomorphize, vargs map monomorphize)
+        val (monoCallee, monoTargs) = specializeCall(b, targs)
+        PureApp(monoCallee, monoTargs, vargs map monomorphize)
       case Make(data, tag, targs, vargs) =>
         val combinedTargs = data.targs ++ targs
         val replacementTag = replacementFun(tag, combinedTargs)
@@ -1196,7 +1285,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
     }
 
     def monomorphize(valueType: ValueType)(using ctx: State)(using dctx: DeclarationContext): ValueType = valueType match {
-      case ValueType.Var(name) => monomorphize(ctx.replacementTparams(name))
+      case ValueType.Var(name) => monomorphize(ctx.substitution(name))
       // We do not monomorphize targs here, because our name lookup for types is looking for
       // Option[Option[Int]] -> Option_Option_Int
       // and not
@@ -1273,39 +1362,35 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case MonoBlockType.Interface(_, targs) => targs.exists(containsBound)
     }
 
-    def freshMonoTypeName(dataName: Id, tpes: Vector[GroundType], monoTypeNames: TypeNames): ValueType.Data = {
+    private def freshMonoTypeName(
+      dataName: Id,
+      tpes: Vector[GroundType],
+      monoTypeNames: MutableTypeNames,
+      names: NameSupply
+    ): ValueType.Data = {
       monoTypeNames.getOrElse((dataName, tpes), {
-        val nameBuilder = StringBuilder(dataName.name.name)
-        tpes.foreach {
-          case MonoValueType.Data(tpe, targs) =>
-            val innerData = freshMonoTypeName(tpe, targs.toVector, monoTypeNames)
-            nameBuilder.append("_" + innerData.name.name.name)
-          case MonoValueType.Boxed(_, _) => nameBuilder.append("_BOXED")
-          case MonoValueType.Bound(_, _) => throw new IllegalArgumentException("A free bound variable cannot name a specialization")
-          case MonoValueType.Var(impossible) => impossible
-        }
-        val freshId = Id(nameBuilder.toString())
-        val monoData: ValueType.Data = ValueType.Data(freshId, List.empty)
+        val monoData: ValueType.Data = ValueType.Data(names.fresh(preferredMonoName(dataName, tpes)), List.empty)
         monoTypeNames += ((dataName, tpes) -> monoData)
         monoData
       })
     }
 
-    def freshMonoName(baseId: Id, tpes: Vector[GroundType]): Id = {
-      if (tpes.isEmpty) return baseId
+    private def preferredMonoName(baseId: Id, tpes: Vector[GroundType]): String =
+      baseId.name.name + tpes.map(typeName).mkString
 
-      // Keep the ids of 'Resume' and 'Prompt', so we can detect this case and make typechecking work later
-      // also see monomorphize(blockType: BlockType)
-      if (baseId == core.Type.ResumeSymbol || baseId == core.Type.PromptSymbol) return baseId
+    private def typeName(tpe: GroundType): String = tpe match
+      case MonoValueType.Var(impossible) => impossible
+      case MonoValueType.Bound(_, _) =>
+        throw new IllegalArgumentException("A free bound variable cannot name a specialization")
+      case MonoValueType.Data(name, Nil) => name.name.name
+      case MonoValueType.Data(name, targs) =>
+        name.name.name + targs.map(typeName).mkString("_", "_", "")
+      case MonoValueType.Boxed(tpe, _) => s"Boxed${resultName(tpe)}"
 
-      val tpesString = tpes.map({
-        case MonoValueType.Data(tpe, _) => tpe.name.name
-        case MonoValueType.Boxed(_, _) => "BOXED"
-        case MonoValueType.Bound(_, _) => throw new IllegalArgumentException("A free bound variable cannot name a specialization")
-        case MonoValueType.Var(impossible) => impossible
-      }).mkString
-      Id(baseId.name.name + tpesString)
-    }
+    private def resultName(tpe: MonoBlockType[Nothing]): String = tpe match
+      case MonoBlockType.Function(_, _, _, _, result) => typeName(result)
+      case MonoBlockType.Interface(name, targs) =>
+        name.name.name + targs.map(typeName).mkString("_", "_", "")
 
     def replacementFun(id: FlowVar, targs: List[ValueType])(using ctx: State): Id = {
       if (targs.isEmpty) return id
@@ -1341,7 +1426,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case ValueType.Var(name) =>
         binders.typeIndex(name) match {
           case Some((level, position)) => MonoValueType.Bound(level, position)
-          case None => ctx.replacementTparams(name)
+          case None => ctx.substitution(name)
         }
       case ValueType.Data(name, targs) => MonoValueType.Data(name, targs.map(toGroundType(_, binders)))
       case ValueType.Boxed(tpe, captures) =>

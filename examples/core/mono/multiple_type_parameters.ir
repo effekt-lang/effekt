@@ -24,20 +24,20 @@ S = first ↦ { <Bool, Char>, <String, Int> },
 
 /// MONO_SPECIALIZE
 
-def firstStringInt(x: String, y: Int) = {
-  return x: String
-}
-
 def firstBoolChar(x: Bool, y: Char) = {
   return x: Bool
 }
 
-def secondIntString(x: Int, y: String) = {
-  (firstStringInt: (String, Int) => String @ {})(y: String, x: Int)
+def firstStringInt(x: String, y: Int) = {
+  return x: String
 }
 
 def secondCharBool(x: Char, y: Bool) = {
   (firstBoolChar: (Bool, Char) => Bool @ {})(y: Bool, x: Char)
+}
+
+def secondIntString(x: Int, y: String) = {
+  (firstStringInt: (String, Int) => String @ {})(y: String, x: Int)
 }
 
 def main() = {

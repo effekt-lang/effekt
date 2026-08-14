@@ -2,19 +2,21 @@ def id['A](x: 'A) = {
   return x: 'A
 }
 
-def main(f: () => Int at {io}, g: (Int) => String at {}) = {
+def main(f: () => Int at {io}, g: (Int) => String at {}, h: (String) => Int at {}) = {
   val x = (id: ['A]('A) => 'A @ {})[() => Int at {io}](f: () => Int at {io});
-  (id: ['A]('A) => 'A @ {})[(Int) => String at {}](g: (Int) => String at {})
+  val y = (id: ['A]('A) => 'A @ {})[(Int) => String at {}](g: (Int) => String at {});
+  (id: ['A]('A) => 'A @ {})[(String) => Int at {}](h: (String) => Int at {})
 }
 
 /// MONO_COLLECT_CONSTRAINTS
 
 <() => Int at {io}> <: id
 <(Int) => String at {}> <: id
+<(String) => Int at {}> <: id
 
 /// MONO_SOLVE
 
-S = id ↦ { <() => Int at {io}>, <(Int) => String at {}> }
+S = id ↦ { <() => Int at {io}>, <(Int) => String at {}>, <(String) => Int at {}> }
 
 /// MONO_SPECIALIZE
 
@@ -26,7 +28,12 @@ def idBoxedString(g: (Int) => String at {}) = {
   return g: (Int) => String at {}
 }
 
-def main(f: () => Int at {io}, g: (Int) => String at {}) = {
+def idBoxedInt_2(h: (String) => Int at {}) = {
+  return h: (String) => Int at {}
+}
+
+def main(f: () => Int at {io}, g: (Int) => String at {}, h: (String) => Int at {}) = {
   val x = (idBoxedInt: (() => Int at {io}) => (() => Int at {io}) @ {})(f: () => Int at {io});
-  (idBoxedString: ((Int) => String at {}) => ((Int) => String at {}) @ {})(g: (Int) => String at {})
+  val y = (idBoxedString: ((Int) => String at {}) => ((Int) => String at {}) @ {})(g: (Int) => String at {});
+  (idBoxedInt_2: ((String) => Int at {}) => ((String) => Int at {}) @ {})(h: (String) => Int at {})
 }

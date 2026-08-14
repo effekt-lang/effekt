@@ -26,6 +26,6 @@ interface Foo {
 }
 
 def main(){foo: Foo} = {
-  val x = (foo: Foo @ {foo}).barInt: (String) => String(1);
+  val x = (foo: Foo @ {foo}).barInt: (Int) => Int(1);
   (foo: Foo @ {foo}).barString: (String) => String("two")
 }

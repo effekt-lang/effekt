@@ -29,17 +29,6 @@ S = pair ↦ { <Bool>, <String> },
 
 /// MONO_SPECIALIZE
 
-def pairString(x: String) = {
-  def withIntInt(y: Int) = {
-    return x: String
-  }
-  def withStringString(y: String) = {
-    return x: String
-  }
-  val a = (withIntInt: (Int) => String @ {})(1);
-  (withStringString: (String) => String @ {})("two")
-}
-
 def pairBool(x: Bool) = {
   def withIntInt(y: Int) = {
     return x: Bool
@@ -49,6 +38,17 @@ def pairBool(x: Bool) = {
   }
   val a = (withIntInt: (Int) => Bool @ {})(1);
   (withStringString: (String) => Bool @ {})("two")
+}
+
+def pairString(x: String) = {
+  def withIntInt(y: Int) = {
+    return x: String
+  }
+  def withStringString(y: String) = {
+    return x: String
+  }
+  val a = (withIntInt: (Int) => String @ {})(1);
+  (withStringString: (String) => String @ {})("two")
 }
 
 def main() = {
