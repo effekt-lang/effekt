@@ -432,20 +432,21 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             List(Operation(encoding.method, tparams, cparams, vparams, bparams, body))
           ))
 
-        case block @ BlockVar(_, function: BlockType.Function, _) if function.tparams.nonEmpty =>
-          rewriteBlock(etaExpand(block, function), target, encoding)
-
         case block @ BlockVar(_, BlockType.Interface(name, _), _) if name == target.name =>
           block
 
         case block @ New(Implementation(interface, _)) if interface.name == target.name =>
           block
 
-        case other =>
-          Context.abort(pretty"Expected a polymorphic block literal, but found '${other}'")
+        case block => block.tpe match {
+          case function: BlockType.Function if function.tparams.nonEmpty =>
+            rewriteBlock(etaExpand(block, function), target, encoding)
+          case _ =>
+            Context.abort(pretty"Expected a polymorphic block literal, but found '${block}'")
+        }
       }
 
-      private def etaExpand(block: BlockVar, function: BlockType.Function): BlockLit = function match {
+      private def etaExpand(block: Block, function: BlockType.Function): BlockLit = function match {
         case BlockType.Function(tparams, cparams, vparamTypes, bparamTypes, _) =>
           assert(cparams.size == bparamTypes.size)
 

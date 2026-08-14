@@ -28,6 +28,48 @@ class MonoTests extends CoreTests {
   private def variable(owner: String, position: Int): FlowType =
     Var(Projection(id(owner), position))
 
+  // Preprocess
+
+  test("preprocess: shadowed alpha-equivalent boxed schemas share one encoding") {
+    def definition(name: String): Toplevel.Def = {
+      val outer = Id("A")
+      val inner = Id("A")
+      val parameter = Id("f")
+      val thunk = BlockType.Function(Nil, Nil, Nil, Nil, ValueType.Var(inner))
+      val schema = BlockType.Function(
+        List(inner),
+        Nil,
+        List(ValueType.Boxed(thunk, Set.empty)),
+        Nil,
+        ValueType.Var(inner)
+      )
+
+      Toplevel.Def(
+        Id(name),
+        BlockLit(
+          List(outer),
+          Nil,
+          Nil,
+          List(BlockParam(parameter, schema, Set(parameter))),
+          Return(Literal((), Type.TUnit))
+        )
+      )
+    }
+
+    val result = Mono.preprocess(ModuleDecl(
+      "shadowing",
+      Nil,
+      Nil,
+      Nil,
+      List(definition("first"), definition("second")),
+      Nil
+    ))
+    val encodings = result.declarations.collect { case interface: Declaration.Interface => interface }
+
+    assertEquals(encodings.size, 1)
+    assertEquals(encodings.head.tparams, Nil)
+  }
+
   // Product append
 
   test("product append: empty with empty") {
