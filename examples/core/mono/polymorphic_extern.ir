@@ -10,6 +10,7 @@ def use(array: Array[Char]) = {
 
 /// MONO_COLLECT_CONSTRAINTS
 
+<Char> <: Array
 <Char> <: get
 <Char> <: set
 <get.0> <: Array

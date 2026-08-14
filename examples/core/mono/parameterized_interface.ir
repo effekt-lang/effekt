@@ -12,6 +12,7 @@ def main(){on: On[Int]} = {
 
 <Int> <: On
 <Int> <: use
+<use.0> <: On
 
 /// MONO_SOLVE
 

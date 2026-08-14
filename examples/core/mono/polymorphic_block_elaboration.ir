@@ -47,6 +47,7 @@ def main() = {
 <forward.1, forward.0> <: Poly
 <forward.1, forward.0> <: use
 <use.0, use.1, String> <: apply
+<use.0, use.1> <: Poly
 
 /// MONO_SOLVE
 

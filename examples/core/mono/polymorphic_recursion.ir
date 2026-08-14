@@ -23,4 +23,4 @@ def main() = {
 
 /// MONO_SOLVE
 
-no finite solution: Detected polymorphic recursion for 'loop' at position '0'
+no finite solution: Detected polymorphic recursion for 'loop'

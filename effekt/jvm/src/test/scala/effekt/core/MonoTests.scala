@@ -3,18 +3,18 @@ package core
 
 import java.io.File
 
-import Mono.{Flow, Flows, FlowVar, Solution, TypeArg}
-import Mono.TypeArg.*
+import Mono.{Flow, Flows, FlowType, FlowVar, GroundType, MonoBlockType, MonoCapture, Projection, Solution}
+import Mono.MonoValueType.*
 import effekt.util.PlainMessaging
 import effekt.util.messages.FatalPhaseError
 
 
 class MonoTests extends CoreTests {
 
-  private val TInt: Data = Data(Id("Int"), Nil)
-  private val TString: Data = Data(Id("String"), Nil)
-  private val TChar: Data = Data(Id("Char"), Nil)
-  private val TBool: Data = Data(Id("Bool"), Nil)
+  private val TInt: GroundType = Data(Id("Int"), Nil)
+  private val TString: GroundType = Data(Id("String"), Nil)
+  private val TChar: GroundType = Data(Id("Char"), Nil)
+  private val TBool: GroundType = Data(Id("Bool"), Nil)
 
   private var flowVars: Map[String, FlowVar] = Map.empty
 
@@ -24,6 +24,9 @@ class MonoTests extends CoreTests {
       flowVars += name -> result
       result
     })
+
+  private def variable(owner: String, position: Int): FlowType =
+    Var(Projection(id(owner), position))
 
   // Product append
 
@@ -119,7 +122,7 @@ class MonoTests extends CoreTests {
 
   test("solve: call to another polymorphic function") {
     val constraints = List(
-      Flow(Vector(Var(id("b"), 0)), id("a")),
+      Flow(Vector(variable("b", 0)), id("a")),
       Flow(Vector(TInt), id("a")),
       Flow(Vector(TString), id("b")))
     val expected: Solution = Map(
@@ -131,7 +134,7 @@ class MonoTests extends CoreTests {
 
   test("solve: unconstrained variable contributes no variants") {
     val constraints = List(
-      Flow(Vector(Var(id("none"), 0)), id("maybe")),
+      Flow(Vector(variable("none", 0)), id("maybe")),
       Flow(Vector(TInt), id("maybe")))
     val expected: Solution = Map(
       id("maybe") -> Set(Vector(TInt)))
@@ -155,7 +158,7 @@ class MonoTests extends CoreTests {
 
   test("solve: swapped type arguments") {
     val constraints = List(
-      Flow(Vector(Var(id("b"), 1), Var(id("b"), 0)), id("a")),
+      Flow(Vector(variable("b", 1), variable("b", 0)), id("a")),
       Flow(Vector(TString, TBool), id("b")))
     val expected: Solution = Map(
       id("a") -> Set(Vector(TBool, TString)),
@@ -166,7 +169,7 @@ class MonoTests extends CoreTests {
 
   test("solve: recursive polymorphic function") {
     val constraints = List(
-      Flow(Vector(Var(id("a"), 0)), id("a")),
+      Flow(Vector(variable("a", 0)), id("a")),
       Flow(Vector(TInt), id("a")))
     val expected: Solution = Map(
       id("a") -> Set(Vector(TInt)))
@@ -174,10 +177,50 @@ class MonoTests extends CoreTests {
     assertEquals(Mono.solve(constraints), expected)
   }
 
+  test("solve: recursive permutation is finite") {
+    val constraints = List(
+      Flow(Vector(variable("a", 1), variable("a", 0)), id("a")),
+      Flow(Vector(TInt, TString), id("a")))
+    val expected: Solution = Map(
+      id("a") -> Set(Vector(TInt, TString), Vector(TString, TInt)))
+
+    assertEquals(Mono.solve(constraints), expected)
+  }
+
+  test("solve: detects growth across parameter positions") {
+    val constraints = List(
+      Flow(Vector(
+        variable("a", 1),
+        Data(id("List"), List(variable("a", 0)))), id("a")),
+      Flow(Vector(TInt, TString), id("a")))
+
+    intercept[FatalPhaseError](Mono.solve(constraints))
+  }
+
+  test("solve: detects growth through mutual recursion") {
+    val constraints = List(
+      Flow(Vector(Data(id("List"), List(variable("b", 0)))), id("a")),
+      Flow(Vector(variable("a", 0)), id("b")),
+      Flow(Vector(TInt), id("a")))
+
+    intercept[FatalPhaseError](Mono.solve(constraints))
+  }
+
+  test("solve: detects growth inside boxed types") {
+    val recursiveBox: FlowType = Boxed(
+      MonoBlockType.Function(0, 0, Nil, Nil, variable("a", 0)),
+      Set.empty)
+    val constraints = List(
+      Flow(Vector(recursiveBox), id("a")),
+      Flow(Vector(TInt), id("a")))
+
+    intercept[FatalPhaseError](Mono.solve(constraints))
+  }
+
   test("solve: mutually recursive polymorphic functions") {
     val constraints = List(
-      Flow(Vector(Var(id("b"), 0)), id("a")),
-      Flow(Vector(Var(id("a"), 0)), id("b")),
+      Flow(Vector(variable("b", 0)), id("a")),
+      Flow(Vector(variable("a", 0)), id("b")),
       Flow(Vector(TInt), id("a")),
       Flow(Vector(TString), id("b")))
     val expected: Solution = Map(
@@ -192,7 +235,7 @@ class MonoTests extends CoreTests {
       Flow(Vector(TInt), id("a")),
       Flow(Vector(TString), id("a")),
       Flow(Vector(TBool), id("b")),
-      Flow(Vector(Var(id("a"), 0), Var(id("b"), 0)), id("c")))
+      Flow(Vector(variable("a", 0), variable("b", 0)), id("c")))
     val expected: Solution = Map(
       id("a") -> Set(Vector(TInt), Vector(TString)),
       id("b") -> Set(Vector(TBool)),
@@ -205,7 +248,7 @@ class MonoTests extends CoreTests {
     val constraints = List(
       Flow(Vector(TInt, TString), id("a")),
       Flow(Vector(TChar, TBool), id("a")),
-      Flow(Vector(Var(id("a"), 0), Var(id("a"), 1)), id("b")))
+      Flow(Vector(variable("a", 0), variable("a", 1)), id("b")))
     val expected: Solution = Map(
       id("a") -> Set(Vector(TInt, TString), Vector(TChar, TBool)),
       id("b") -> Set(Vector(TInt, TString), Vector(TChar, TBool)))
@@ -215,7 +258,7 @@ class MonoTests extends CoreTests {
 
   test("solve: nested constraints") {
     val constraints = List(
-      Flow(Vector(Data(id("Weighted"), List(Var(id("b"), 0)))), id("a")),
+      Flow(Vector(Data(id("Weighted"), List(variable("b", 0)))), id("a")),
       Flow(Vector(TInt), id("b")))
     val expected: Solution = Map(
       id("b") -> Set(Vector(TInt)),
@@ -224,18 +267,83 @@ class MonoTests extends CoreTests {
     assertEquals(Mono.solve(constraints), expected)
   }
 
-  private def collectConstraints(input: ModuleDecl): Flows = Mono.collect(input)
+  test("solve: free variables inside boxed types are solved") {
+    val openBox: FlowType = Boxed(
+      MonoBlockType.Function(0, 0, Nil, Nil, variable("a", 0)),
+      Set.empty)
+    val closedBox: GroundType = Boxed(
+      MonoBlockType.Function(0, 0, Nil, Nil, TInt),
+      Set.empty)
+    val constraints = List(
+      Flow(Vector(openBox), id("b")),
+      Flow(Vector(TInt), id("a")))
 
-  private def showTypeArg(arg: TypeArg): String = arg match {
-    case Data(tpe, Nil) => tpe.name.name
-    case Data(tpe, targs) => s"${tpe.name.name}[${targs.map(showTypeArg).mkString(", ")}]"
-    case Var(owner, position) => s"${owner.name.name}.$position"
-    case Boxed(tpe, captures) =>
-      ReparsablePrettyPrinter.format(ValueType.Boxed(tpe, captures))
+    assertEquals(Mono.solve(constraints), Map(
+      id("a") -> Set(Vector(TInt)),
+      id("b") -> Set(Vector(closedBox))))
   }
 
+  test("solve: unresolved variables inside boxed types are not ground") {
+    val openBox: FlowType = Boxed(
+      MonoBlockType.Function(0, 0, Nil, Nil, variable("a", 0)),
+      Set.empty)
+
+    assertEquals(Mono.solve(List(Flow(Vector(openBox), id("b")))), Map(
+      id("b") -> Set.empty))
+  }
+
+  test("solve: locally bound variables inside boxed types are ground") {
+    val polymorphicBox: GroundType = Boxed(
+      MonoBlockType.Function(
+        1,
+        1,
+        List(Bound(0, 0), Boxed(MonoBlockType.Interface(id("Thunk"), Nil), Set(MonoCapture.Bound(0, 0)))),
+        Nil,
+        Bound(0, 0)),
+      Set.empty)
+
+    assertEquals(Mono.solve(List(Flow(Vector(polymorphicBox), id("a")))), Map(
+      id("a") -> Set(Vector(polymorphicBox))))
+  }
+
+  test("solve: ill-scoped bound variables inside boxed types are not ground") {
+    val illScoped: FlowType = Boxed(
+      MonoBlockType.Function(0, 0, Nil, Nil, Bound(0, 0)),
+      Set.empty)
+
+    assertEquals(Mono.solve(List(Flow(Vector(illScoped), id("a")))), Map(
+      id("a") -> Set.empty))
+  }
+
+  private def collectConstraints(input: ModuleDecl): Flows = Mono.collect(input)
+
+  private def showFlowType(arg: FlowType): String = arg match {
+    case Data(tpe, Nil) => tpe.name.name
+    case Data(tpe, targs) => s"${tpe.name.name}[${targs.map(showFlowType).mkString(", ")}]"
+    case Var(Projection(owner, position)) => s"${owner.name.name}.$position"
+    case Bound(level, position) => s"$level.$position"
+    case Boxed(tpe, captures) =>
+      s"${showBlockType(tpe)} at ${showCaptures(captures)}"
+  }
+
+  private def showBlockType(tpe: MonoBlockType[Projection]): String = tpe match {
+    case MonoBlockType.Function(tarity, _, vparams, bparams, result) =>
+      val tparams = if tarity == 0 then "" else List.tabulate(tarity)(i => s"'$i").mkString("[", ", ", "]")
+      val values = vparams.map(showFlowType).mkString("(", ", ", ")")
+      val blocks = if bparams.isEmpty then "" else bparams.map(showBlockType).mkString("{", ", ", "}")
+      s"$tparams$values$blocks => ${showFlowType(result)}"
+    case MonoBlockType.Interface(name, Nil) => name.name.name
+    case MonoBlockType.Interface(name, targs) => s"${name.name.name}[${targs.map(showFlowType).mkString(", ")}]"
+  }
+
+  private def showCaptures(captures: Set[MonoCapture]): String =
+    captures.toList.map {
+      case MonoCapture.Bound(level, position) => s"$level.$position"
+      case MonoCapture.Named(id) => id.name.name
+    }.sorted.mkString("{", ", ", "}")
+
   private def showConstraint(constraint: Flow): String =
-    s"${constraint.from.map(showTypeArg).mkString("<", ", ", ">")} <: ${constraint.to.name.name}"
+    s"${constraint.from.map(showFlowType).mkString("<", ", ", ">")} <: ${constraint.to.name.name}"
 
   private def showConstraints(input: ModuleDecl): String =
     collectConstraints(input)
@@ -251,7 +359,7 @@ class MonoTests extends CoreTests {
         .sortBy { case (parameter, _) => (parameter.name.name, parameter.id) }
         .map { case (parameter, variants) =>
           val image = variants
-            .map(_.map(showTypeArg).mkString("<", ", ", ">"))
+            .map(_.map(showFlowType).mkString("<", ", ", ">"))
             .toList
             .sorted
             .mkString("{ ", ", ", " }")

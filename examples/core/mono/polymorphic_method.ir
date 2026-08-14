@@ -9,12 +9,14 @@ def main(){foo: Foo} = {
 
 /// MONO_COLLECT_CONSTRAINTS
 
+<> <: Foo
 <Int> <: bar
 <String> <: bar
 
 /// MONO_SOLVE
 
-S = bar ↦ { <Int>, <String> }
+S = Foo ↦ { <> },
+    bar ↦ { <Int>, <String> }
 
 /// MONO_SPECIALIZE
 

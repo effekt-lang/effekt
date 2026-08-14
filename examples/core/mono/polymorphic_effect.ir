@@ -9,7 +9,9 @@ def emit(){ints: Yield[Int]}{strings: Yield[String]} = {
 
 /// MONO_COLLECT_CONSTRAINTS
 
+<Int> <: Yield
 <Int> <: yield
+<String> <: Yield
 <String> <: yield
 <yield.0> <: Yield
 
