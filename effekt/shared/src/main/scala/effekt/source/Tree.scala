@@ -861,7 +861,7 @@ object Resolvable {
 }
 export Resolvable.*
 
-extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] = {
+extension [T](positioned: T) def sourceOfOpt: Option[String] = {
   positioned match {
     case m: Many[_] if m.span.origin != Origin.Missing =>
       Spans.substring(m.span.range.from, m.span.range.to)
@@ -874,7 +874,7 @@ extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] =
   }
 }
 
-extension [T](positioned: T) def sourceOf(using C: Context): String =
+extension [T](positioned: T) def sourceOf: String =
   positioned.sourceOfOpt.getOrElse { s"${positioned}" }
 
 object Tree {
