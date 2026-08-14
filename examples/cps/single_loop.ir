@@ -63,7 +63,6 @@ function main_0(ks_0, k_0) {
   let x_0 = undefined;
   go_0: {
     x_0 = 10;
-    break go_0;
   }
   go_0: while (true) {
     const tmp_0 = eq_0(x_0, 0);

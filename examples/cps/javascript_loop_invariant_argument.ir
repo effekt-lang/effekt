@@ -32,19 +32,17 @@ function main_0(choice_0, k_0) {
   let next_0 = undefined;
   let cont_0 = undefined;
   let value_1 = undefined;
-  loop_0: {
+  {
     const first_0 = { __tag: 0, k_0: k_0 };
     const second_0 = { __tag: 1, k_0: k_0 };
     if (choice_0) {
       a_0 = 1;
       i_0 = 5;
       next_0 = first_0;
-      break loop_0;
     } else {
       a_0 = 2;
       i_0 = 6;
       next_0 = second_0;
-      break loop_0;
     }
   }
   loop_0: while (true) {
@@ -55,7 +53,6 @@ function main_0(choice_0, k_0) {
         const next_arg_5 = a_0;
         cont_0 = next_cont_4;
         value_1 = next_arg_5;
-        break apply_entry_2;
       } else {
         const value_0 = sub_0(i_0, 1);
         a_0 = value_0;

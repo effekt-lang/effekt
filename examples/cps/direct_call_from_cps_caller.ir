@@ -7,9 +7,8 @@ def main(f, x, ks, k) {
 }
 
 // The caller retains CPS because `f` is unknown. This does not prevent the
-// known finite-rank call to `identity` from using its value-returning ABI.
-// Since `identity` has one syntactic use, the commuting conversion then
-// removes its definition altogether.
+// known finite-rank call to `identity` from becoming a structured local
+// region. No JavaScript function is needed.
 /// CALLING_CONVENTIONS
 
 direct
@@ -18,5 +17,9 @@ direct
 /// JAVASCRIPT
 
 function main_0(f_0, x_0, ks_0, k_0) {
-  return f_0(x_0, ks_0, k_0);
+  let result_0 = undefined;
+  identity_return_0: {
+    result_0 = x_0;
+  }
+  return f_0(result_0, ks_0, k_0);
 }

@@ -1,0 +1,18 @@
+def main(ks, k) {
+  def produce(ks1) {
+    def loop(next) {
+      next(loop)
+    }
+    return(loop)
+  }
+  let result = produce!(ks, return);
+  result(result)
+}
+
+// A compositional call can return a function value. That result must
+// participate in higher-order flow: here `produce` returns `loop`, and the
+// subsequent indirect invocation feeds `loop` to itself. Its value entry must
+// therefore suspend in order to break the synchronous self-cycle.
+/// SAFE_ENTRIES
+
+function loop

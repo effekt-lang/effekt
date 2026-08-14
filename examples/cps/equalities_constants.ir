@@ -26,3 +26,22 @@ constant:
 varying:
   entry -
   recursive -
+
+/// JAVASCRIPT
+
+function main_0(which_0, choice_0, k_0) {
+  let x_constant_0 = undefined;
+  constant_0: {
+    let x_varying_0 = undefined;
+    if (which_0) {
+      x_constant_0 = 42;
+      break constant_0;
+    } else if (choice_0) {
+      x_varying_0 = 0;
+    } else {
+      x_varying_0 = 1;
+    }
+    return k_0(x_varying_0);
+  }
+  return k_0(x_constant_0);
+}

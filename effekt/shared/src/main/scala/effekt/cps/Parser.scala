@@ -208,9 +208,16 @@ class Parser(names: Names) extends Parsers {
         expressions.init -> expressions.last
       }
 
+  private lazy val callCallee: P[Callee] =
+    id ~ (`.` ~> id).? ^^ {
+      case receiver ~ Some(method) => Callee.Method(receiver, method)
+      case function ~ None => Callee.Function(function)
+    }
+
   lazy val callStmt: P[Stmt] =
-    `let` ~> id ~ (`=` ~> id <~ `!`) ~ callArguments ~ (`;` ~> stmt) ^^ {
-      case name ~ callee ~ (args, ks) ~ rest => Stmt.Call(name, callee, args, ks, rest)
+    `let` ~> id ~ (`|` ~> id).? ~ (`=` ~> callCallee <~ `!`) ~ callArguments ~ (`;` ~> stmt) ^^ {
+      case name ~ returnedKs ~ callee ~ (args, ks) ~ rest =>
+        Stmt.Call(name, returnedKs.getOrElse(Id("ks")), callee, args, ks, rest)
     }
 
   // let id = expr;

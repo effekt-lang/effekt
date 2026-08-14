@@ -24,13 +24,6 @@ def main(ks, k) {
 
 /// JAVASCRIPT
 
-function direct_0() {
-  return 10;
-}
-
 function main_0(ks_0, k_0) {
-  return () => {
-    const result_1 = direct_0();
-    return k_0(result_1, ks_0);
-  };
+  return k_0(10, ks_0);
 }

@@ -17,33 +17,24 @@ def main(x, ks, k) {
 direct
   apply = 1 [direct: 0]
   inc = 0
-  main = 2 adapter
+  main = 0 adapter
 
 /// JAVASCRIPT
 
-function direct_1(value_0) {
+function inc_0(value_0) {
   const result_0 = add_0(value_0, 1);
   return result_0;
 }
 
-function direct_0(f_0, value_1) {
-  const result_1 = f_0(value_1);
-  const ignored_0 = println_0((arg_3, ks_4, k_5) =>
-    () => {
-      const result_6 = f_0(arg_3);
-      return k_5(result_6, ks_4);
-    });
-  return result_1;
-}
-
-function direct_2(x_0) {
-  const result_2 = direct_0(direct_1, x_0);
-  return result_2;
-}
-
 function main_0(x_0, ks_0, k_0) {
-  return () => {
-    const result_7 = direct_2(x_0);
-    return k_0(result_7, ks_0);
-  };
+  let result_1 = undefined;
+  apply_return_0: {
+    const result_2 = inc_0(x_0);
+    const ignored_0 = println_0((arg_0, ks_1, k_2) => {
+      const result_3 = inc_0(arg_0);
+      return k_2(result_3, ks_1);
+    });
+    result_1 = result_2;
+  }
+  return k_0(result_1, ks_0);
 }

@@ -1,0 +1,41 @@
+def direct(ks1, k1) {
+  k1(direct, ks1)
+}
+def main(flag, ks, k) {
+  if (flag) {
+    let result = direct!(ks, return);
+    k(result, ks)
+  } else {
+    direct(ks, direct)
+  }
+}
+
+// The direct worker is also used through its CPS-facing value entry. Calling
+// that entry with itself as the continuation forms a synchronous cycle, so
+// the entry -- but not calls to the worker -- must suspend.
+/// CALLING_CONVENTIONS
+
+direct
+  direct = 0 adapter
+
+/// JAVASCRIPT
+
+function direct_0() {
+  return direct_cps_0;
+}
+
+function direct_cps_0(ks_0, k_0) {
+  return () => {
+    const result_0 = direct_0();
+    return k_0(result_0, ks_0);
+  };
+}
+
+function main_0(flag_0, ks_1, k_1) {
+  if (flag_0) {
+    const result_1 = direct_0();
+    return k_1(result_1, ks_1);
+  } else {
+    return direct_cps_0(ks_1, direct_cps_0);
+  }
+}

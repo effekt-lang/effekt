@@ -29,7 +29,6 @@ function main_0(n_0, k_0) {
   loop_0: {
     i_0 = n_0;
     next_0 = k_0;
-    break loop_0;
   }
   next_0 = (typeof next_0 === "function") ? {
     __tag: -1,
@@ -43,7 +42,6 @@ function main_0(n_0, k_0) {
         const next_arg_5 = i_0;
         cont_0 = next_cont_4;
         value_1 = next_arg_5;
-        break apply_entry_2;
       } else {
         const after_0 = { __tag: 0, next_0: next_0 };
         const previous_0 = sub_0(i_0, 1);

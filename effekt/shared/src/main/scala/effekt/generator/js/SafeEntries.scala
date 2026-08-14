@@ -26,9 +26,10 @@ import scala.collection.mutable
  *
  * without enumerating concrete call paths. Second, strongly connected
  * components identify exactly those synchronous cycles that contain a native
- * stack frame. Installing an adapter cuts all safe incoming edges to its
- * entry. Repeating SCC decomposition terminates because every round adapts a
- * previously unadapted node from the finite program.
+ * stack frame. A closed indirect edge can be cut locally by suspending that
+ * call. Otherwise an adapter cuts all safe incoming edges to its entry.
+ * Repeating SCC decomposition terminates because every round removes an edge
+ * or adapts a node from the finite program.
  */
 object SafeEntries {
 
@@ -63,7 +64,7 @@ object SafeEntries {
   private final case class Info(
     node: Node,
     params: Vector[Id],
-    body: cps.Stmt
+    body: Option[cps.Stmt]
   )
 
   /** A finite 0-CFA value: the internal allocation sites to which a value may
@@ -95,6 +96,7 @@ object SafeEntries {
 
   private enum Location {
     case Variable(id: Id)
+    case ReturnValue(node: Node)
     case Cell(node: CellNode)
     case Field(node: DataNode, index: Int)
   }
@@ -104,18 +106,27 @@ object SafeEntries {
     source: Node,
     target: Node,
     safe: Boolean,
-    addsFrame: Boolean
+    addsFrame: Boolean,
+    callSite: Option[CallSite] = None
   )
+
+  /** Identity of a syntactic application whose finite target set is closed.
+   *  All abstract edges contributed by one application are cut together. */
+  private final class CallSite(val application: cps.Stmt.App)
 
   final class Result private[SafeEntries] (
     val definitions: Set[Id],
     private val operations: IdentityHashMap[cps.Operation, java.lang.Boolean],
+    private val bounces: IdentityHashMap[cps.Stmt.App, java.lang.Boolean],
     val adapters: Vector[String]
   ) {
     def needsAdapter(id: Id): Boolean = definitions.contains(id)
 
     def needsAdapter(operation: cps.Operation): Boolean =
       java.lang.Boolean.TRUE == operations.get(operation)
+
+    def bouncesAt(application: cps.Stmt.App): Boolean =
+      java.lang.Boolean.TRUE == bounces.get(application)
 
     def show: String = if adapters.isEmpty then "-" else adapters.mkString("\n")
   }
@@ -125,7 +136,9 @@ object SafeEntries {
     transferOf: cps.Stmt => StackSafety.Transfer,
     isSecondClass: Id => Boolean,
     defunctionalization: Defunctionalization.Plan,
-    targetFlows: Vector[cps.GuardedEquality.TargetResult]
+    targetFlows: Vector[cps.GuardedEquality.TargetResult],
+    directDefinitions: Set[Id] = Set.empty,
+    directEntries: Map[Id, Vector[Id]] = Map.empty
   ): Result = {
     var nextNode = 0
     def freshOrdinal(): Int = {
@@ -134,33 +147,51 @@ object SafeEntries {
       result
     }
 
+    // A direct definition can have two distinct entries: its value-returning
+    // worker and its CPS-facing function value. Keeping both nodes explicit
+    // lets the cycle analysis decide whether the latter must suspend.
     val functions = mutable.LinkedHashMap.empty[Id, FunctionNode]
+    val entries = mutable.LinkedHashMap.empty[Id, FunctionNode]
     val objectNodes = new IdentityHashMap[cps.Stmt.New, ObjectNode]()
     val infos = mutable.LinkedHashMap.empty[Node, Info]
 
     def function(id: Id): FunctionNode = functions.getOrElseUpdate(id, {
       val secondClass = isSecondClass(id) || defunctionalization.caseOf(id).isDefined
-      new FunctionNode(id, freshOrdinal(), cuttable = !secondClass)
+      new FunctionNode(
+        id,
+        freshOrdinal(),
+        cuttable = !secondClass && !directDefinitions.contains(id))
     })
+
+    def entry(id: Id): FunctionNode =
+      entries.getOrElse(id, function(id))
 
     module.definitions.foreach {
       case cps.ToplevelDefinition.Def(id, _, _) =>
-        functions(id) = new FunctionNode(id, freshOrdinal(), cuttable = true)
+        functions(id) = new FunctionNode(
+          id,
+          freshOrdinal(),
+          cuttable = !directDefinitions.contains(id))
       case _: cps.ToplevelDefinition.Val => ()
     }
     targetFlows.foreach(_.localDefinitions.foreach(definition => function(definition.id)))
+    directEntries.foreach { case (id, params) =>
+      val node = new FunctionNode(id, freshOrdinal(), cuttable = true)
+      entries(id) = node
+      infos(node) = Info(node, params, None)
+    }
 
     def collect(stmt: cps.Stmt): Unit = stmt match {
       case cps.Stmt.Def(id, params, body, rest) =>
         val node = function(id)
-        infos(node) = Info(node, params.toVector, body)
+        infos(node) = Info(node, params.toVector, Some(body))
         collect(body)
         collect(rest)
 
       case statement @ cps.Stmt.New(_, _, operations, rest) =>
         val methods = operations.iterator.map { operation =>
           val node = new OperationNode(operation, freshOrdinal())
-          infos(node) = Info(node, operation.params.toVector, operation.body)
+          infos(node) = Info(node, operation.params.toVector, Some(operation.body))
           operation.name -> node
         }.toMap
         objectNodes.put(statement, new ObjectNode(methods))
@@ -168,7 +199,7 @@ object SafeEntries {
         collect(rest)
 
       case cps.Stmt.Let(_, _, rest) => collect(rest)
-      case cps.Stmt.Call(_, _, _, _, rest) => collect(rest)
+      case cps.Stmt.Call(_, _, _, _, _, rest) => collect(rest)
       case cps.Stmt.Run(_, _, _, _, rest) => collect(rest)
       case cps.Stmt.If(_, thn, els) => collect(thn); collect(els)
       case cps.Stmt.Match(_, clauses, default) =>
@@ -189,7 +220,7 @@ object SafeEntries {
     module.definitions.foreach {
       case cps.ToplevelDefinition.Def(id, params, body) =>
         val node = function(id)
-        infos(node) = Info(node, params.toVector, body)
+        infos(node) = Info(node, params.toVector, Some(body))
         collect(body)
       case cps.ToplevelDefinition.Val(_, _, _, binding) => collect(binding)
     }
@@ -206,6 +237,7 @@ object SafeEntries {
     val pending = mutable.Queue.empty[Int]
     val queued = mutable.BitSet.empty
     val edges = mutable.LinkedHashSet.empty[Edge]
+    val callSites = new IdentityHashMap[cps.Stmt.App, CallSite]()
     val dataNodes = new IdentityHashMap[cps.Expr.Make, DataNode]()
     val cellNodes = new IdentityHashMap[cps.Stmt, CellNode]()
 
@@ -269,7 +301,27 @@ object SafeEntries {
       }
     }
 
-    functions.foreach { case (id, node) => add(Variable(id), Value.function(node)) }
+    functions.foreach { case (id, _) => add(Variable(id), Value.function(entry(id))) }
+
+    def worker(node: Node): Node = node match {
+      case function: FunctionNode => functions.getOrElse(function.id, function)
+      case other => other
+    }
+
+    def callSite(application: cps.Stmt.App): CallSite = {
+      val existing = callSites.get(application)
+      if existing != null then existing
+      else {
+        val created = new CallSite(application)
+        callSites.put(application, created)
+        created
+      }
+    }
+
+    def valueEntry(node: Node): Node = node match {
+      case function: FunctionNode => entry(function.id)
+      case other => other
+    }
 
     def propagate(arguments: List[cps.Expr], parameters: Vector[Id]): Unit =
       arguments.iterator.zip(parameters.iterator).foreach { case (argument, parameter) =>
@@ -289,33 +341,65 @@ object SafeEntries {
         watch(dependency(binding)) { add(Variable(id), eval(binding)) }
         scan(rest, source)
 
-      case call @ cps.Stmt.Call(result, id, arguments, ks, rest) =>
+      case call @ cps.Stmt.Call(result, _, cps.Callee.Function(id), arguments, ks, rest) =>
         val supplied = arguments :+ ks
+        val installedResults = mutable.Set.empty[Node]
         watch(Set(Variable(id)) ++ dependencies(supplied)) {
           val flowed = Option(targetsByCall.get(call)).iterator
             .flatMap(_.targets).flatMap(functions.get).toSet
-          val targets = values(Variable(id)).functions ++ flowed
+          val targets = (values(Variable(id)).functions ++ flowed).map(worker)
           targets.foreach { target =>
             edges += Edge(source, target, safe = false, addsFrame = true)
             propagate(supplied, infos(target).params)
+            if installedResults.add(target) then
+              watch(List(ReturnValue(target))) {
+                add(Variable(result), values(ReturnValue(target)))
+              }
+          }
+        }
+        scan(rest, source)
+
+      case cps.Stmt.Call(_, _, cps.Callee.Method(id, method), arguments, ks, rest) =>
+        val supplied = arguments :+ ks
+        watch(Set(Variable(id)) ++ dependencies(supplied)) {
+          values(Variable(id)).objects.foreach { obj =>
+            obj.methods.get(method).foreach { target =>
+              edges += Edge(source, target, safe = true, addsFrame = true)
+              propagate(supplied, infos(target).params)
+            }
           }
         }
         scan(rest, source)
 
       case app @ cps.Stmt.App(id, arguments) =>
         watch(Set(Variable(id)) ++ dependencies(arguments)) {
-          val flowed = Option(targetsByCall.get(app)).iterator
-            .flatMap(_.targets).flatMap(functions.get).toSet
-          val targets = values(Variable(id)).functions ++ flowed
-          val exact = functions.get(id)
+          val targetFlow = Option(targetsByCall.get(app))
+          val flowed = targetFlow.iterator
+            .flatMap(_.targets).flatMap(functions.get).map(valueEntry).toSet
+          val targets = values(Variable(id)).functions.map(valueEntry) ++ flowed
+          val exact = functions.get(id).map(valueEntry)
           val transfer = transferOf(app)
           val dispatched = defunctionalization.dispatchForCallee(id).isDefined
 
           targets.foreach { target =>
             val syntacticallyKnown = exact.exists(_ eq target)
-            val jump = dispatched || syntacticallyKnown && transfer == StackSafety.Transfer.Jump
-            val safe = !dispatched && (!syntacticallyKnown || transfer == StackSafety.Transfer.Safe)
-            edges += Edge(source, target, safe, addsFrame = !jump)
+            // A closed feedback edge is already cut by a call-site bounce.
+            // This is equally true for named and indirect callees.
+            val bounced = transfer == StackSafety.Transfer.Bounce
+            if !bounced then {
+              val jump = dispatched || syntacticallyKnown && transfer == StackSafety.Transfer.Jump
+              // Only an indirect transfer enters a stack-safe value entry.
+              // A known safe edge has already been cut by its call-site bounce.
+              val safe = !dispatched && !syntacticallyKnown
+              // GuardedEquality certifies that every runtime callee is among
+              // the finite targets. Such an indirect edge can carry its own
+              // suspension instead of changing every entry to the callee.
+              val closed = targetFlow.exists(flow =>
+                flow.closed && flow.targets.nonEmpty &&
+                  flow.targets.forall(functions.contains))
+              val site = Option.when(safe && closed)(callSite(app))
+              edges += Edge(source, target, safe, addsFrame = !jump, site)
+            }
             propagate(arguments, infos(target).params)
           }
         }
@@ -330,7 +414,10 @@ object SafeEntries {
           }
         }
 
-      case _: cps.Stmt.Return => ()
+      case cps.Stmt.Return(value) =>
+        watch(dependency(value)) {
+          add(ReturnValue(source), eval(value))
+        }
 
       case cps.Stmt.Run(_, _, _, _, rest) =>
         scan(rest, source)
@@ -396,7 +483,29 @@ object SafeEntries {
       case _: cps.Stmt.Hole => ()
     }
 
-    infos.valuesIterator.foreach(info => scan(info.body, info.node))
+    infos.valuesIterator.foreach(info => info.body.foreach(scan(_, info.node)))
+
+    // A named direct definition's CPS value entry executes its finite-rank
+    // worker and then invokes the supplied continuation. This entry is part
+    // of the same graph as every other function value; it is not inherently
+    // a trampoline boundary.
+    directEntries.foreach { case (id, params) =>
+      val adapter = entry(id)
+      val direct = function(id)
+      val List(ks, k) = params.takeRight(2).toList: @unchecked
+
+      edges += Edge(adapter, direct, safe = false, addsFrame = true)
+      watch(List(Variable(k), Variable(ks), ReturnValue(direct))) {
+        val targets = values(Variable(k)).functions.map(valueEntry)
+        targets.foreach { target =>
+          edges += Edge(adapter, target, safe = true, addsFrame = true)
+          val arguments = Vector(values(ReturnValue(direct)), values(Variable(ks)))
+          arguments.iterator.zip(infos(target).params.iterator).foreach {
+            case (argument, parameter) => add(Variable(parameter), argument)
+          }
+        }
+      }
+    }
 
     while pending.nonEmpty do {
       val action = pending.dequeue()
@@ -409,13 +518,17 @@ object SafeEntries {
 
     val nodes = infos.keysIterator.toVector.sortBy(_.ordinal)
     val unsafe = mutable.LinkedHashSet.empty[Node]
+    val bounced = mutable.LinkedHashSet.empty[CallSite]
+
+    def activeEdges: Vector[Edge] = edges.iterator.filterNot { edge =>
+      edge.safe && unsafe.contains(edge.target) ||
+        edge.callSite.exists(bounced.contains)
+    }.toVector
 
     /** Strongly connected components of the graph left after the currently
      *  selected adapters cut their safe incoming edges. */
     def components(): Vector[Vector[Node]] = {
-      val active = edges.iterator
-        .filterNot(edge => edge.safe && unsafe.contains(edge.target))
-        .toVector
+      val active = activeEdges
       val outgoing = active.groupMap(_.source)(identity).withDefaultValue(Vector.empty)
       val incoming = active.groupMap(_.target)(_.source).withDefaultValue(Vector.empty)
 
@@ -460,10 +573,12 @@ object SafeEntries {
       result.toVector
     }
 
-    def findCuts(): Set[Node] = {
-      val active = edges.iterator
-        .filterNot(edge => edge.safe && unsafe.contains(edge.target))
-        .toVector
+    sealed trait Cut
+    final case class Bounce(site: CallSite) extends Cut
+    final case class Adapt(node: Node) extends Cut
+
+    def findCuts(): Set[Cut] = {
+      val active = activeEdges
 
       components().iterator.flatMap { component =>
         val members = component.toSet
@@ -484,14 +599,36 @@ object SafeEntries {
         // 0-CFA can merge unrelated second-class continuation states into a
         // spurious SCC, but none of those entries can or needs to be adapted.
         if cyclic && positive && safeEntries.nonEmpty then {
-          Some(safeEntries.minBy(_.target.ordinal).target)
+          // A site cut changes one closed invocation; an entry cut changes
+          // every indirect invocation of its target. Prefer the former as the
+          // least global calling-convention change. The remaining ordering is
+          // only a deterministic tie-breaker; iteration removes every cycle.
+          safeEntries.iterator.flatMap(_.callSite).toVector.distinct
+            .sortBy(site => {
+              val siteEdges = safeEntries.filter(_.callSite.contains(site))
+              (siteEdges.map(_.source.ordinal).min, siteEdges.map(_.target.ordinal).min)
+            }).headOption
+            .map(Bounce.apply)
+            .orElse {
+              // Adapting a node cuts every safe incoming edge to it. Choose
+              // the node with the smallest such footprint in the current
+              // graph; this preserves the greatest number of immediate value
+              // entries. Ordinal is merely a deterministic tie-breaker.
+              val incoming = active.iterator.filter(_.safe).toVector
+                .groupMapReduce(_.target)(_ => 1)(_ + _)
+              Some(Adapt(safeEntries.iterator.map(_.target).toSet.minBy(node =>
+                (incoming.getOrElse(node, 0), node.ordinal))))
+            }
         } else None
       }.toSet
     }
 
     var cuts = findCuts()
     while cuts.nonEmpty do {
-      unsafe ++= cuts
+      cuts.foreach {
+        case Bounce(site) => bounced += site
+        case Adapt(node) => unsafe += node
+      }
       cuts = findCuts()
     }
 
@@ -504,10 +641,13 @@ object SafeEntries {
         unsafeOperations.put(node.operation, java.lang.Boolean.TRUE)
       case _ => ()
     }
+    val bouncedApplications = new IdentityHashMap[cps.Stmt.App, java.lang.Boolean]()
+    bounced.foreach(site =>
+      bouncedApplications.put(site.application, java.lang.Boolean.TRUE))
     val adapters = unsafe.iterator.map {
       case node: FunctionNode => s"function ${node.label}"
       case node: OperationNode => s"operation ${node.label}"
     }.toVector.sorted
-    Result(unsafeDefinitions, unsafeOperations, adapters)
+    Result(unsafeDefinitions, unsafeOperations, bouncedApplications, adapters)
   }
 }

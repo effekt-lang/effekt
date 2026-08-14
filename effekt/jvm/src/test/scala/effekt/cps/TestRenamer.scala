@@ -63,12 +63,12 @@ class TestRenamer {
         Stmt.Let(rewrite(id), newBinding, rewrite(rest))
       }
 
-    case Stmt.Call(id, callee, args, ks, rest) =>
+    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
       val newCallee = rewrite(callee)
       val newArgs = args.map(rewrite)
       val newKs = rewrite(ks)
-      withBinding(id) {
-        Stmt.Call(rewrite(id), newCallee, newArgs, newKs, rewrite(rest))
+      withBindings(List(id, returnedKs)) {
+        Stmt.Call(rewrite(id), rewrite(returnedKs), newCallee, newArgs, newKs, rewrite(rest))
       }
 
     case Stmt.App(id, args) =>
@@ -158,6 +158,12 @@ class TestRenamer {
       withBindings(params) {
         Operation(rewrite(name), params.map(rewrite), rewrite(body))
       }
+  }
+
+  def rewrite(callee: Callee): Callee = callee match {
+    case Callee.Function(id) => Callee.Function(rewrite(id))
+    case Callee.Method(receiver, method) =>
+      Callee.Method(rewrite(receiver), rewrite(method))
   }
 
   def rewrite(cl: Clause): Clause = cl match {

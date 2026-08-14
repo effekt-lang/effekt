@@ -21,3 +21,17 @@ let initialized | ks, k =
 def main(ks, k) {
   k(initialized, ks)
 }
+
+/// INLINE
+let initialized_0 | ks_2, k_3 = k_3(42, ks_2);
+def main_1(ks_4, k_5) {
+  k_5(initialized_0, ks_4)
+}
+
+/// JAVASCRIPT
+
+function main_0(ks_1, k_1) {
+  return k_1(initialized_0, ks_1);
+}
+
+const initialized_0 = RUN_TOPLEVEL((ks_0, k_0) => k_0(42, ks_0));
