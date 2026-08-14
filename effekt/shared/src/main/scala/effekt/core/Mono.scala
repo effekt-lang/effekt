@@ -56,34 +56,14 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
   type Flows = List[Flow]
   type Solution = Map[FlowVar, Set[Vector[GroundType]]]
 
+  private def binderIndex(id: Id, binders: List[List[Id]]): Option[(Int, Int)] =
+    binders.zipWithIndex.collectFirst {
+      case (bindings, level) if bindings.contains(id) => (level, bindings.indexOf(id))
+    }
 
-  /**
-    Rewrites this:
-
-    {{{
-        def higherorder { f : [A] (A) => A } = f[Int](42)
-
-        def main() = {
-            println(higherorder { [B] (x) => x })
-        }
-    }}}
-
-    To this:
-
-    {{{
-        interface Poly {
-        def apply[A](a: A): A
-        }
-
-        def higherorder { f : Poly } = f.apply[Int](42)
-        def main() = {
-        def id = new Poly {
-            def apply[B](b: B) = b
-        }
-        println(higherorder { id })
-        }
-    }}}
-  */
+  /** Elaborates polymorphic block parameters into interface values.
+    * Alpha-equivalent block schemas share an interface.
+    */
   object preprocess {
 
     private object DeBruijn {
@@ -94,14 +74,8 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
         def enter(tparams: List[Id], cparams: List[Id]): Environment =
           Environment(tparams :: typeBinders, cparams :: captureBinders)
 
-        def typeIndex(id: Id): Option[(Int, Int)] = indexOf(id, typeBinders)
-        def captureIndex(id: Id): Option[(Int, Int)] = indexOf(id, captureBinders)
-
-        private def indexOf(id: Id, binders: List[List[Id]]): Option[(Int, Int)] =
-          binders.zipWithIndex.collectFirst {
-            case (level, depth) if level.contains(id) =>
-              (depth, level.indexOf(id))
-          }
+        def typeIndex(id: Id): Option[(Int, Int)] = binderIndex(id, typeBinders)
+        def captureIndex(id: Id): Option[(Int, Int)] = binderIndex(id, captureBinders)
       }
 
       def apply(tpe: core.BlockType.Function, outer: List[Id])(using Context): MonoBlockType[Nothing] =
@@ -524,7 +498,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
         )
 
       def typeVariable(id: Id)(using Context): FlowType =
-        indexOf(id, typeBinders) match {
+        binderIndex(id, typeBinders) match {
           case Some((level, position)) => MonoValueType.Bound(level, position)
           case None => variables.get(id).map(MonoValueType.Var.apply).getOrElse {
             Context.abort(pretty"Unbound type variable '${id}' while collecting monomorphization flows")
@@ -532,14 +506,9 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
         }
 
       def capture(id: Id): MonoCapture =
-        indexOf(id, captureBinders) match {
+        binderIndex(id, captureBinders) match {
           case Some((level, position)) => MonoCapture.Bound(level, position)
           case None => MonoCapture.Named(id)
-        }
-
-      private def indexOf(id: Id, binders: List[List[Id]]): Option[(Int, Int)] =
-        binders.zipWithIndex.collectFirst {
-          case (level, depth) if level.contains(id) => (depth, level.indexOf(id))
         }
     }
 
@@ -851,7 +820,6 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       variants: Set[Vector[FlowType]],
       bounds: Map[FlowVar, Set[Vector[FlowType]]]
     )(using Context): Set[Vector[FlowType]] = {
-      rejectGrowingRecursion(owner, variants)
       val result = variants.flatMap { variant =>
         val substitutions = dependencies(variant).foldLeft(List(Map.empty): Substitutions) {
           case (substitutions, dependency) =>
@@ -921,10 +889,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case MonoBlockType.Interface(_, targs) => targs.exists(grows(owner, _, guarded = true))
     }
 
-    def productAppend[A](ls: List[List[A]], rs: List[A]): List[List[A]] =
-      for { l <- ls; r <- rs } yield l :+ r
-
-    // Cross product of existing substitutions and all variants for one type variable
+    // Cross product of existing substitutions and all variants for one flow variable
     def mapProductAppend(ls: Substitutions, rs: Variants): List[Substitution] =
       for { l <- ls; r <- rs } yield l + r
   }
@@ -1103,11 +1068,6 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case Implementation(BlockType.Interface(name, targs), operations) =>
         val variant = (targs map toGroundType).toVector
         Implementation(BlockType.Interface(replacementFun(name, targs), List.empty), operations.flatMap(op => monomorphize(op, variant)))
-
-    def monomorphize(interface: BlockType.Interface)(using ctx: State): BlockType.Interface = interface match
-      case BlockType.Interface(name, targs) =>
-        val funName = replacementFun(name, targs)
-        BlockType.Interface(funName, List.empty)
 
     def monomorphize(operation: Operation, variant: Vector[GroundType])(using ctx: State)(using Context, DeclarationContext): List[Operation] = operation match
       case Operation(name, tparams, cparams, vparams, bparams, body) =>
@@ -1302,15 +1262,10 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       def enter(tparams: List[Id], cparams: List[Id]): Binders =
         Binders(tparams :: types, cparams :: captures)
 
-      def typeIndex(id: Id): Option[(Int, Int)] = indexOf(id, types)
-      def captureIndex(id: Id): Option[(Int, Int)] = indexOf(id, captures)
+      def typeIndex(id: Id): Option[(Int, Int)] = binderIndex(id, types)
+      def captureIndex(id: Id): Option[(Int, Int)] = binderIndex(id, captures)
       def typeBinder(level: Int, position: Int): Id = types(level)(position)
       def captureBinder(level: Int, position: Int): Id = captures(level)(position)
-
-      private def indexOf(id: Id, binders: List[List[Id]]): Option[(Int, Int)] =
-        binders.zipWithIndex.collectFirst {
-          case (level, depth) if level.contains(id) => (depth, level.indexOf(id))
-        }
     }
 
     def monomorphize(tpe: GroundType)(using ctx: State)(using dctx: DeclarationContext): ValueType =

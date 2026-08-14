@@ -70,27 +70,9 @@ class MonoTests extends CoreTests {
     assertEquals(encodings.head.tparams, Nil)
   }
 
-  // Product append
+  // Substitution product
 
-  test("product append: empty with empty") {
-    assertEquals(Mono.solve.productAppend(List(Nil), Nil), Nil)
-  }
-
-  test("product append: starts with empty list") {
-    val first = Mono.solve.productAppend(List(Nil), List(1, 2))
-    val result = Mono.solve.productAppend(first, List(3, 4))
-
-    assertEquals(result, List(List(1, 3), List(1, 4), List(2, 3), List(2, 4)))
-  }
-
-  test("product append: unequal numbers of values") {
-    val first = Mono.solve.productAppend(List(List(1)), List(2, 3))
-    val result = Mono.solve.productAppend(first, List(4))
-
-    assertEquals(result, List(List(1, 2, 4), List(1, 3, 4)))
-  }
-
-  test("product append: empty map product has no combinations") {
+  test("substitution product: empty product has no combinations") {
     val start: Mono.solve.Substitutions = List(
       Map(id("a") -> Vector(TInt)),
       Map(id("a") -> Vector(TString)))
@@ -98,7 +80,7 @@ class MonoTests extends CoreTests {
     assertEquals(Mono.solve.mapProductAppend(start, Nil), Nil)
   }
 
-  test("product append: single map product") {
+  test("substitution product: single product") {
     val start: Mono.solve.Substitutions = List(
       Map(id("a") -> Vector(TInt)),
       Map(id("a") -> Vector(TString)))
@@ -110,7 +92,7 @@ class MonoTests extends CoreTests {
     assertEquals(Mono.solve.mapProductAppend(start, append), expected)
   }
 
-  test("product append: multiple map products") {
+  test("substitution product: multiple products") {
     val start: Mono.solve.Substitutions = List(
       Map(id("a") -> Vector(TInt)),
       Map(id("a") -> Vector(TString)))
@@ -127,7 +109,7 @@ class MonoTests extends CoreTests {
     assertEquals(result, expected)
   }
 
-  test("product append: multiple types in a variant") {
+  test("substitution product: multiple types in a variant") {
     val start: Mono.solve.Substitutions = List(
       Map(id("a") -> Vector(TInt, TString)),
       Map(id("a") -> Vector(TString, TInt)))
