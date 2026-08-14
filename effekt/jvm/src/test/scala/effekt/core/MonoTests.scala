@@ -272,8 +272,8 @@ class MonoTests extends CorePhaseTests(Mono) {
 
   registerCoreIRTests(
     new File("examples/core/mono"),
-    CoreIRTransform("MONO_PREPROCESS", Preprocess.preprocess),
+    CoreIRTransform("MONO_PREPROCESS", preprocess),
     CoreIRAnalysis("MONO_COLLECT_CONSTRAINTS", showConstraints),
     CoreIRAnalysis("MONO_SOLVE", showSolution),
-    CoreIRTransform("MONO_SPECIALIZE", transform))
+    CoreIRTransform("MONO_SPECIALIZE", specialize))
 }
