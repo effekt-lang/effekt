@@ -8,7 +8,7 @@ record Map[K, V](tree: internal::Tree[K, V], compare: (K, K) => Ordering at {})
 /// Create a new empty map using a pure, first-class comparison function.
 ///
 /// O(1)
-def empty[K, V](compare: (K, K) => Ordering at {}): Map[K, V] =
+def empty[K, V](?compare: (K, K) => Ordering at {}): Map[K, V] =
   Map(internal::empty(), compare)
 
 /// Create a new empty map using a generic comparison function.
@@ -34,7 +34,7 @@ def nonEmpty[K, V](m: Map[K, V]): Bool = internal::nonEmpty(m.tree)
 /// Create a new map containing the mapping from `k` to `v` and a pure, first-class comparison function.
 ///
 /// O(1)
-def singleton[K, V](k: K, v: V, compare: (K, K) => Ordering at {}): Map[K, V] =
+def singleton[K, V](k: K, v: V, ?compare: (K, K) => Ordering at {}): Map[K, V] =
   Map(internal::singleton(k, v), compare)
 
 /// Create a new map containing the mapping from `k` to `v` using a generic comparison function.
@@ -206,7 +206,7 @@ def values[K, V](m: Map[K, V]): List[V] = {
 ///
 /// O(N) if the list is sorted by key,
 /// O(N log N) otherwise
-def fromList[K, V](pairs: List[(K, V)], compare: (K, K) => Ordering at {}): Map[K, V] =
+def fromList[K, V](pairs: List[(K, V)], ?compare: (K, K) => Ordering at {}): Map[K, V] =
   Map(internal::fromList(pairs, compare), compare)
 
 /// Create a map from a list of (key, value) pairs and a generic comparison function.
@@ -264,7 +264,7 @@ def getIndex[K, V](m: Map[K, V], n: Int): Option[(K, V)] =
 /// Uses an explicit pure, first-class comparison function.
 ///
 /// O(???)
-def difference[K, V](m1: Map[K, V], m2: Map[K, V], compare: (K, K) => Ordering at {}) = {
+def difference[K, V](m1: Map[K, V], m2: Map[K, V], ?compare: (K, K) => Ordering at {}) = {
   val newTree = internal::difference(m1.tree, m2.tree, compare)
   Map(newTree, compare)
 }
@@ -284,7 +284,7 @@ def difference[K, V](m1: Map[K, V], m2: Map[K, V]) = {
 /// Uses an explicit pure, first-class comparison function.
 ///
 /// O(???)
-def union[K, V](m1: Map[K, V], m2: Map[K, V], compare: (K, K) => Ordering at {}) { combine: (K, V, V) => V }: Map[K, V] = {
+def union[K, V](m1: Map[K, V], m2: Map[K, V], ?compare: (K, K) => Ordering at {}) { combine: (K, V, V) => V }: Map[K, V] = {
   val newTree = internal::union(m1.tree, m2.tree, compare) {combine}
   Map(newTree, compare)
 }
@@ -294,7 +294,7 @@ def union[K, V](m1: Map[K, V], m2: Map[K, V], compare: (K, K) => Ordering at {})
 /// Uses an explicit pure, first-class comparison function.
 ///
 /// O(???)
-def union[K, V](m1: Map[K, V], m2: Map[K, V], compare: (K, K) => Ordering at {}) { combine: (V, V) => V }: Map[K, V] =
+def union[K, V](m1: Map[K, V], m2: Map[K, V], ?compare: (K, K) => Ordering at {}) { combine: (V, V) => V }: Map[K, V] =
   union(m1, m2, compare) { (k, v1, v2) => combine(v1, v2) }
 
 /// Construct a new map which contains the elements of both `m1` and `m2`.
@@ -308,7 +308,7 @@ def union[K, V](m1: Map[K, V], m2: Map[K, V]): Map[K, V] =
 /// Construct a new map which combines all elements that are in both `m1` and `m2` using the `combine` function.
 ///
 /// O(???)
-def intersection[K, A, B, C](m1: Map[K, A], m2: Map[K, B], compare: (K, K) => Ordering at {}) { combine: (K, A, B) => C }: Map[K, C] = {
+def intersection[K, A, B, C](m1: Map[K, A], m2: Map[K, B], ?compare: (K, K) => Ordering at {}) { combine: (K, A, B) => C }: Map[K, C] = {
   val newTree = internal::intersection(m1.tree, m2.tree, compare) {combine}
   Map(newTree, compare)
 }
@@ -316,7 +316,7 @@ def intersection[K, A, B, C](m1: Map[K, A], m2: Map[K, B], compare: (K, K) => Or
 /// Construct a new map which combines all elements that are in both `m1` and `m2` using the `combine` function.
 ///
 /// O(???)
-def intersection[K, A, B, C](m1: Map[K, A], m2: Map[K, B], compare: (K, K) => Ordering at {}) { combine: (A, B) => C }: Map[K, C] =
+def intersection[K, A, B, C](m1: Map[K, A], m2: Map[K, B], ?compare: (K, K) => Ordering at {}) { combine: (A, B) => C }: Map[K, C] =
   m1.intersection[K, A, B, C](m2, compare) { (k, v1, v2) => combine(v1, v2) }
 
 /// Construct a new map which combines all elements that are in both `m1` and `m2`.
@@ -325,6 +325,47 @@ def intersection[K, A, B, C](m1: Map[K, A], m2: Map[K, B], compare: (K, K) => Or
 /// O(???)
 def intersection[K, A, B](m1: Map[K, A], m2: Map[K, B]): Map[K, A] =
   m1.intersection[K, A, B, A](m2, m1.compare) { (k, v1, v2) => v1 }
+
+
+
+// Streaming
+// ---------
+
+/// Turns a `map` into a producer of a push stream
+/// of `(key, value)` pairs by emitting each contained *in order*.
+def each[K, V](map: Map[K, V]): Unit / emit[(K, V)] =
+  map.foreach { (k, v) => do emit((k, v)) }
+
+/// Turns a `map` into a producer of a push stream
+/// of its keys by emitting each contained *in order*.
+def eachKey[K, V](map: Map[K, V]): Unit / emit[K] =
+  map.foreach { (k, _v) => do emit(k) }
+
+/// Turns a `map` into a producer of a push stream
+/// of its values by emitting each contained.
+def eachValue[K, V](map: Map[K, V]): Unit / emit[V] =
+  map.foreach { (_k, v) => do emit(v) }
+
+/// Collects `(key, value)` pairs from a push stream producer `stream` into a new `map`
+/// using the provided `compare` function, discarding the result of the producer.
+def collect[K, V](?compare: (K, K) => Ordering at {}) { stream: () => Unit / emit[(K, V)] }: Map[K, V] =
+  returning::collect[K, V, Unit](compare){stream}.second
+
+namespace returning {
+  /// Collects `(key, value)` pairs from a push stream producer `stream` into a new `map`,
+  /// using the provided `compare` function, returning the result of the producer as well as the collected map.
+  def collect[K, V, R](?compare: (K, K) => Ordering at {}) { stream: () => R / emit[(K, V)] }: (R, Map[K, V]) =
+    var map = map::empty[K, V](compare)
+    val r = try {
+      stream()
+    } with emit[(K, V)] { case (k, v) =>
+      map = map.put(k, v)
+      resume(())
+    }
+    (r, map)
+}
+
+// Internal tree representation
 
 /// Please don't directly use:
 /// - the `Tree` type
@@ -984,13 +1025,13 @@ namespace internal {
   // Section: prettyprinting for trees:
 
   /// Works only on the backends that support `genericShow` (JavaScript)!
-  def prettyTree[K, V](m: Tree[K, V]): String = {
+  def prettyTree[K, V](m: Tree[K, V]) { ?key::show: K => String } { ?value::show: V => String }: String = {
     // Helper function to recursively build the string representation of the tree
     def go(t: Tree[K, V], prefix: String, isTail: Bool): String = {
       t match {
         case Tip() => ""
         case Bin(_, k, v, l, r) =>
-          val pair = k.show ++ " → " ++ v.show
+          val pair = key::show(k) ++ " → " ++ value::show(v)
           val currentLine = prefix ++ (if (isTail) "└── " else "├── ") ++ pair ++ "\n"
 
           val newPrefix = prefix ++ (if (isTail) "    " else "│   ")
@@ -1005,49 +1046,11 @@ namespace internal {
     go(m, "", true)
   }
 
-  def prettyPairs[K, V](list: List[(K, V)]) { showLeft: K => String } { showRight: V => String }: String = {
+  def prettyPairs[K, V](list: List[(K, V)]) { ?key::show: K => String } { ?value::show: V => String }: String = {
     val res: String =
-      list.map { case (k, v) => showLeft(k) ++ " → " ++ showRight(v) }
+      list.map { case (k, v) => key::show(k) ++ " → " ++ value::show(v) }
           .join(", ")
 
     "[" ++ res ++ "]"
   }
-}
-
-
-// Streaming
-// ---------
-
-/// Turns a `map` into a producer of a push stream
-/// of `(key, value)` pairs by emitting each contained *in order*.
-def each[K, V](map: Map[K, V]): Unit / emit[(K, V)] =
-  map.foreach { (k, v) => do emit((k, v)) }
-
-/// Turns a `map` into a producer of a push stream
-/// of its keys by emitting each contained *in order*.
-def eachKey[K, V](map: Map[K, V]): Unit / emit[K] =
-  map.foreach { (k, _v) => do emit(k) }
-
-/// Turns a `map` into a producer of a push stream
-/// of its values by emitting each contained.
-def eachValue[K, V](map: Map[K, V]): Unit / emit[V] =
-  map.foreach { (_k, v) => do emit(v) }
-
-/// Collects `(key, value)` pairs from a push stream producer `stream` into a new `map`
-/// using the provided `compare` function, discarding the result of the producer.
-def collect[K, V](compare: (K, K) => Ordering at {}) { stream: () => Unit / emit[(K, V)] }: Map[K, V] =
-  returning::collect[K, V, Unit](compare){stream}.second
-
-namespace returning {
-  /// Collects `(key, value)` pairs from a push stream producer `stream` into a new `map`,
-  /// using the provided `compare` function, returning the result of the producer as well as the collected map.
-  def collect[K, V, R](compare: (K, K) => Ordering at {}) { stream: () => R / emit[(K, V)] }: (R, Map[K, V]) =
-    var map = map::empty[K, V](compare)
-    val r = try {
-      stream()
-    } with emit[(K, V)] { case (k, v) =>
-      map = map.put(k, v)
-      resume(())
-    }
-    (r, map)
 }
