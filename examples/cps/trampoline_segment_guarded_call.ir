@@ -24,12 +24,13 @@ function main_0(p_0, ks_0, k_0) {
   let x_1 = undefined;
   let ks_3 = undefined;
   forward_0: {
-    const [r_0, ks_2, k_1] = SHIFT(p_0, ks_0, k_0);
-    g_0 = apply_0;
-    f_1 = k_1;
-    x_1 = 1;
-    ks_3 = ks_2;
-    break forward_0;
+    {
+      const [r_0, ks_2, k_1] = SHIFT(p_0, ks_0, k_0);
+      g_0 = apply_0;
+      f_1 = k_1;
+      x_1 = 1;
+      ks_3 = ks_2;
+    }
   }
   return g_0(f_1, x_1, ks_3);
 }

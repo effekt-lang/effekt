@@ -48,17 +48,11 @@ function invoke_0(object_0) {
 }
 
 function loop_0(flag_0, k_0) {
-  loop_0: while (true) {
-    if (flag_0) {
-      function operation_worker_0() {
-        return loop_0(false, backup_k_0);
-      }
-      const backup_k_0 = k_0;
-      const object_1 = { operation_0: () => () => operation_worker_0() };
-      return invoke_0(object_1);
-    } else {
-      return k_0(0);
-    }
+  if (flag_0) {
+    const object_1 = { operation_0: () => () => loop_0(false, k_0) };
+    return invoke_0(object_1);
+  } else {
+    return k_0(0);
   }
 }
 

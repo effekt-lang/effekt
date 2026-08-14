@@ -18,7 +18,11 @@ object TransformerCps extends Transformer {
   val RESUME = js.Variable(JSName("RESUME"))
   val BOUNDARY_CONTINUATION = JSName("__boundary")
 
-  case class SecondClassDef(params: List[Id], isRecursive: Boolean)
+  case class SecondClassDef(
+    params: List[Id],
+    loopified: Boolean,
+    directBody: Option[cps.Stmt] = None,
+    directParameters: Map[Id, Int] = Map.empty)
 
   case class DispatchState(
     dispatch: Defunctionalization.ContinuationDispatch,
@@ -45,6 +49,7 @@ object TransformerCps extends Transformer {
     callingConvention: CallingConvention.Plan,
     workers: Map[Id, JSName],
     directWorkers: Map[Id, JSName],
+    directEntries: Map[Id, JSName],
     segmentFlow: SegmentEntries.Plan,
     // Continuations obtained by leaving or entering a delimited continuation
     // segment. Applying one crosses a segment boundary and therefore bounces.
@@ -56,6 +61,8 @@ object TransformerCps extends Transformer {
     directParameters: Map[Id, Int],
     applying: Set[Id],
     directBody: Option[(Id, List[Id])],
+    directResult: Option[(Option[Id], JSName)],
+    directContinuation: Option[(JSName, JSName)],
     declarations: DeclarationContext,
     errors: Context
   )
@@ -73,7 +80,9 @@ object TransformerCps extends Transformer {
       dispatches = Map.empty,
       dispatchAliases = Map.empty,
       applying = Set.empty,
-      directBody = None
+      directBody = None,
+      directResult = None,
+      directContinuation = None
     )
 
   def computePlan(m: cps.ModuleDecl): DefinitionPlanning.Plan =
@@ -91,10 +100,14 @@ object TransformerCps extends Transformer {
    *  original identifier.
    */
   def valueRef(id: Id)(using ctx: TransformerContext): js.Expr =
-    nameRef(ctx.renamedCaptures.getOrElse(id, id))
+    ctx.renamedCaptures.get(id) match {
+      case Some(snapshot) => nameRef(snapshot)
+      case None => ctx.directEntries.get(id).fold(nameRef(id))(js.Variable.apply)
+    }
 
-  /** A statically known direct call can bypass the stack-safe entry exposed
-   *  as a function value and enter its worker immediately. */
+  /** A statically known transfer can bypass the stack-safe entry exposed as a
+   *  function value. A direct transfer enters the worker now; a bounced
+   *  transfer enters the same worker after returning to the trampoline. */
   def directRef(id: Id)(using ctx: TransformerContext): js.Expr =
     ctx.workers.get(id).fold(valueRef(id))(js.Variable.apply)
 
@@ -114,6 +127,30 @@ object TransformerCps extends Transformer {
       List(js.Return(js.Lambda(Nil, call))))
   }
 
+  /** A value entry that suspends before executing its body. This is the
+   *  worker-adapter pair after beta contraction when no direct transfer needs
+   *  an immediate worker entry. */
+  private def suspendedEntry(id: Id, params: List[Id], body: List[js.Stmt]): js.Stmt =
+    js.Function(
+      nameDef(id),
+      params.map(nameDef),
+      List(js.Return(js.Lambda(Nil, body))))
+
+  private def cpsDefinition(
+    id: Id,
+    params: List[Id],
+    body: List[js.Stmt]
+  )(using ctx: TransformerContext): List[js.Stmt] =
+    ctx.workers.get(id) match {
+      case Some(worker) => List(
+        js.Function(worker, params.map(nameDef), body),
+        safeEntry(id, params, worker))
+      case None if ctx.stackSafety.safeEntries.needsAdapter(id) =>
+        List(suspendedEntry(id, params, body))
+      case None =>
+        List(js.Function(nameDef(id), params.map(nameDef), body))
+    }
+
   /** Adapt a CPS function value to the value-returning ABI. */
   private def toDirectFunction(callee: js.Expr, arity: Int): js.Expr = {
     val arguments = List.fill(arity)(freshName("arg_"))
@@ -129,18 +166,19 @@ object TransformerCps extends Transformer {
       js.Return(js.Call(RUN_TOPLEVEL, List(computation))))
   }
 
-  /** Adapt a value-returning function to the stack-safe CPS ABI. */
+  /** Adapt a value-returning function to the CPS ABI. The direct callee has a
+   *  finite stack rank, and the continuation already has the stack-safe value
+   *  representation, so this adapter need not introduce another bounce. */
   private def toCpsFunction(callee: js.Expr, arity: Int): js.Expr = {
     val arguments = List.fill(arity)(freshName("arg_"))
     val ks = freshName("ks_")
     val k = freshName("k_")
     val result = freshName("result_")
-    val suspended = js.Lambda(Nil, js.Block(None, List(
+    js.Lambda(arguments ++ List(ks, k), js.Block(None, List(
       js.Const(result, js.Call(callee, arguments.map(js.Variable.apply))),
       js.Return(js.Call(
         js.Variable(k),
         List(js.Variable(result), js.Variable(ks)))))))
-    js.Lambda(arguments ++ List(ks, k), js.Return(suspended))
   }
 
   /** Coerce a function value to the direct ABI expected at a compositional
@@ -159,9 +197,9 @@ object TransformerCps extends Transformer {
       toDirectFunction(toValueJS(value), arity)
   }
 
-  /** CPS-facing entry for a value-returning worker. The suspension is the
-   *  representation boundary: unknown callers remain stack safe, while every
-   *  statically selected call bypasses this adapter. */
+  /** CPS-facing entry for a value-returning worker. Unknown calls enter this
+   *  adapter immediately. It suspends only when the stack-safety analysis
+   *  selects the entry to break a synchronous cycle. */
   private def directAdapter(id: Id, params: List[Id], worker: JSName)(using ctx: TransformerContext): js.Stmt = {
     val List(ks, k) = ctx.callingConvention.original(id).params.takeRight(2).map(nameDef): @unchecked
     val result = freshName("result_")
@@ -171,30 +209,36 @@ object TransformerCps extends Transformer {
     }
     val workerCall = js.Call(js.Variable(worker), workerArguments)
     val resume = js.Call(js.Variable(k), List(js.Variable(result), js.Variable(ks)))
-    val suspended = js.Lambda(Nil, js.Block(None, List(
+    val body = List(
       js.Const(result, workerCall),
-      js.Return(resume))))
+      js.Return(resume))
+    val entry =
+      if ctx.stackSafety.safeEntries.needsAdapter(id) then
+        List(js.Return(js.Lambda(Nil, js.Block(None, body))))
+      else body
     js.Function(
-      nameDef(id),
+      ctx.directEntries(id),
       params.map(nameDef) ++ List(ks, k),
-      List(js.Return(suspended)))
+      entry)
   }
 
   private def directImplementation(
     id: Id,
     params: List[Id],
     body: cps.Stmt,
-    renamings: Map[Id, Id] = Map.empty
+    renamings: Map[Id, Id] = Map.empty,
+    continuation: Option[(JSName, JSName)] = None
   )(using ctx: TransformerContext): List[js.Stmt] = {
     val directParams = params
     val parameterArities = directParams.zipWithIndex.flatMap { case (param, position) =>
       ctx.callingConvention.directParameterArity(id, position).map(param -> _)
     }.toMap
     val bodyCtx = functionBodyContext.copy(
-      mutableParams = directParams.toSet,
+      mutableParams = ctx.callingConvention.mutableParameters(id),
       renamedCaptures = ctx.renamedCaptures ++ renamings,
       directParameters = ctx.directParameters ++ parameterArities,
-      directBody = Some((id, directParams)))
+      directBody = Some((id, directParams)),
+      directContinuation = continuation)
     val translated = toJS(body)(using bodyCtx).stmts
     if ctx.callingConvention.isTailRecursive(id) then
       List(js.While(Some(nameDef(id)), js.RawExpr("true"), translated))
@@ -207,16 +251,34 @@ object TransformerCps extends Transformer {
     body: cps.Stmt,
     renamings: Map[Id, Id] = Map.empty
   )(using ctx: TransformerContext): List[js.Stmt] = {
-    val worker = ctx.directWorkers(id)
-    val implementation = directImplementation(id, params, body, renamings)
-    val definition = js.Function(worker, params.map(nameDef), implementation)
-    if ctx.callingConvention.needsCpsEntry(id) then
-      List(definition, directAdapter(id, params, worker))
-    else List(definition)
+    ctx.directWorkers.get(id) match {
+      case Some(worker) =>
+        val implementation = directImplementation(id, params, body, renamings)
+        val definition = js.Function(worker, params.map(nameDef), implementation)
+        if ctx.callingConvention.needsCpsEntry(id) then
+          List(definition, directAdapter(id, params, worker))
+        else List(definition)
+
+      case None =>
+        require(ctx.callingConvention.needsCpsEntry(id),
+          s"Direct definition $id has neither a worker nor a CPS entry")
+        val List(ks, k) = ctx.callingConvention.original(id).params
+          .takeRight(2).map(nameDef): @unchecked
+        val implementation = directImplementation(
+          id, params, body, renamings, Some(ks -> k))
+        val entry =
+          if ctx.stackSafety.safeEntries.needsAdapter(id) then
+            List(js.Return(js.Lambda(Nil, js.Block(None, implementation))))
+          else implementation
+        List(js.Function(
+          nameDef(id),
+          params.map(nameDef) ++ List(ks, k),
+          entry))
+    }
   }
 
   /**
-   * Backup mutable second-class params that are free in the given body,
+   * Backup mutable loop parameters that are free in the given body,
    * returning the backup statements and the renaming to use while emitting
    * the body.
    *
@@ -248,18 +310,21 @@ object TransformerCps extends Transformer {
     val exports = List(js.Export(JSName("main"), js.Lambda(Nil,
       js.Return(js.Call(RUN_TOPLEVEL, nameRef(mainSymbol))))))
     given DeclarationContext = new DeclarationContext(coreModule.declarations, coreModule.externs)
-    toJS(input, exports)
+    toJS(input, exports, Set(mainSymbol))
   }
 
   def compileLSP(input: cps.ModuleDecl, coreModule: core.ModuleDecl)(using C: Context): List[js.Stmt] =
     ???
 
-  def toJS(module: cps.ModuleDecl, exports: List[js.Export])(using D: DeclarationContext, C: Context): js.Module = {
+  def toJS(
+    module: cps.ModuleDecl,
+    exports: List[js.Export],
+    requiredCpsEntries: Set[Id]
+  )(using D: DeclarationContext, C: Context): js.Module = {
     val conventionFlows = module.definitions.map(GuardedEquality.targets).toVector
-    val callingConvention = CallingConvention.analyze(module, conventionFlows)
-    val lowered = cps.Inliner.transformDirectCalls(
-      CallingConvention.lower(module, callingConvention),
-      callingConvention.directDefinitions.filter(callingConvention.isFirstOrder))
+    val callingConvention = CallingConvention.analyze(
+      module, conventionFlows, requiredCpsEntries)
+    val lowered = CallingConvention.lower(module, callingConvention)
 
     lowered match {
       case cps.ModuleDecl(includes, declarations, externs, definitions, _) =>
@@ -267,35 +332,56 @@ object TransformerCps extends Transformer {
         val liveDefinitions = lowered.uses.toMap.keySet
         val liveDirect = callingConvention.directDefinitions.intersect(liveDefinitions)
 
-        // A uniquely used non-recursive direct definition has already
-        // commuted into its call site above. Remaining direct definitions
-        // need a JavaScript function only when they have multiple entries or
-        // recursion; ordinary value escape is discovered by DefinitionPlanning
-        // itself. This keeps calling convention and representation separate.
-        val directFunctionRequirements = liveDirect.filter { id =>
-          lowered.refs.getOrElse(id, 0) != 1
-        }
+        // Direct definitions with a unique structured entry use the same
+        // second-class representation as CPS join points. Every other direct
+        // definition retains a JavaScript function representation.
+        val directFunctionRequirements =
+          liveDirect -- callingConvention.joinDefinitions
         val representations = DefinitionPlanning.analyze(
           lowered,
           targetFlows,
           directFunctionRequirements,
           liveDirect)
         val kinds = representations.kinds
-        val defunctionalization = representations.defunctionalization
+        val initialDefunctionalization = representations.defunctionalization
         val stackSafety = StackSafety.analyze(
           lowered,
           id => kinds.get(id).exists(_.isRecursive),
           id => kinds.get(id).exists(_.isSecondClass),
-          defunctionalization,
-          targetFlows)
+          initialDefunctionalization,
+          targetFlows,
+          liveDirect,
+          liveDirect.iterator
+            .filter(callingConvention.needsCpsEntry)
+            .map(id => id -> callingConvention.original(id).params.toVector)
+            .toMap)
+        val definitionIds = definitions.iterator.map {
+          case cps.ToplevelDefinition.Def(id, _, _) => id
+          case cps.ToplevelDefinition.Val(id, _, _, _) => id
+        }.toSet ++
+          targetFlows.iterator.flatMap(_.localDefinitions).map(_.id)
+        val mutableFrameBindings = definitionIds.iterator.flatMap { id =>
+          stackSafety.mutableParameters(id) ++ callingConvention.mutableParameters(id)
+        }.toSet
+        val defunctionalization = initialDefunctionalization
+          .refineFrames(mutableFrameBindings)
         val segmentFlow = SegmentEntries.analyze(lowered, targetFlows)
-        val workers = (stackSafety.safeEntries.definitions -- liveDirect).toVector
+        val workers = (stackSafety.safeEntries.definitions -- liveDirect)
+          .filter(stackSafety.needsWorker).toVector
           .sortBy(id => (id.name.name, id.id))
           .map(id => id -> freshName("worker_"))
           .toMap
-        val directWorkers = liveDirect.toVector
+        val directWorkers = liveDirect.iterator
+          .filter(callingConvention.needsDirectWorker)
+          .toVector
           .sortBy(id => (id.name.name, id.id))
-          .map(id => id -> freshName("direct_"))
+          .map(id => id -> nameDef(id))
+          .toMap
+        val directEntries = directWorkers.keysIterator
+          .filter(callingConvention.needsCpsEntry)
+          .toVector
+          .sortBy(id => (id.name.name, id.id))
+          .map(id => id -> derivedName(id, "cps"))
           .toMap
         given ctx: TransformerContext = TransformerContext(
           externs.collect { case d: cps.Extern.Def => (d.id, d) }.toMap,
@@ -310,6 +396,7 @@ object TransformerCps extends Transformer {
           callingConvention,
           workers,
           directWorkers,
+          directEntries,
           segmentFlow,
           segmentFlow.entries,
           Map.empty,
@@ -317,6 +404,8 @@ object TransformerCps extends Transformer {
           Map.empty,
           Map.empty,
           Set.empty,
+          None,
+          None,
           None,
           D, C)
 
@@ -338,19 +427,14 @@ object TransformerCps extends Transformer {
       directDefinitions(id, params, body)
 
     case cps.ToplevelDefinition.Def(id, params, body) =>
-      val kind = kindOf(id)
       // Reserve binder names before translating the body, as in the original
       // constructor expression. This keeps generated names independent of
       // evaluation order inside the lowering implementation.
       val functionName = nameDef(id)
       val parameterNames = params.map(nameDef)
-      val implementation = secondClassDef(id, params, body, None, kind.isRecursive).stmts
-      ctx.workers.get(id) match {
-        case Some(worker) => List(
-          js.Function(worker, parameterNames, implementation),
-          safeEntry(id, params, worker))
-        case None => List(js.Function(functionName, parameterNames, implementation))
-      }
+      val implementation = secondClassDef(
+        id, params, body, None, ctx.stackSafety.isLoopified(id)).stmts
+      cpsDefinition(id, params, implementation)
 
     case cps.ToplevelDefinition.Val(id, ks, k, binding) =>
       List(js.Const(nameDef(id), js.Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding).stmts))))
@@ -452,7 +536,104 @@ object TransformerCps extends Transformer {
   private def toArgumentJS(call: cps.Stmt.App, argument: cps.Expr)(using ctx: TransformerContext): js.Expr =
     if ctx.segmentFlow.preserves(call) then toJS(argument) else toValueJS(argument)
 
+  private def directArguments(call: cps.Stmt.Call)(using ctx: TransformerContext): List[js.Expr] = {
+    val directPositions = ctx.callingConvention.directArguments(call)
+    call.args.zipWithIndex.map { case (argument, index) =>
+      directPositions.get(index)
+        .fold(toValueJS(argument))(toDirectFunctionValue(argument, _))
+    }
+  }
+
+  /** Simultaneously update the registers of an active structured join. */
+  private def jumpTo(
+    id: Id,
+    join: SecondClassDef,
+    arguments: List[cps.Expr],
+    lowered: List[js.Expr]
+  )(using ctx: TransformerContext): List[js.Stmt] = {
+    val updates = join.params.zip(arguments).zip(lowered).filterNot {
+      case ((param, cps.Expr.Variable(argument)), _) =>
+        ctx.renamedCaptures.getOrElse(argument, argument) == param
+      case _ => false
+    }
+    val temporaries = updates.map(_ => freshName("next_arg_"))
+    updates.zip(temporaries).map { case ((_, value), temporary) =>
+      js.Const(temporary, value)
+    } ++ updates.zip(temporaries).map { case (((param, _), _), temporary) =>
+      js.Assign(nameRef(param), js.Variable(temporary))
+    } :+ js.Continue(Some(nameDef(id)))
+  }
+
+  /** Insert a direct second-class definition at its unique forward call.
+   * Tail transfers to an active definition use [[jumpTo]]; hence recursive
+   * lexical components become ordinary nested loops. */
+  private def enterJoin(
+    call: cps.Stmt.Call,
+    join: SecondClassDef
+  )(using ctx: TransformerContext): Binding[List[js.Stmt]] = Binding { k =>
+    val cps.Callee.Function(id) = call.callee: @unchecked
+    val body = join.directBody.get
+    val arguments = directArguments(call)
+    val resultLabel = derivedName(id, "return")
+    val parameterArities = join.params.zipWithIndex.flatMap { case (param, position) =>
+      ctx.callingConvention.directParameterArity(id, position).map(param -> _)
+    }.toMap
+    val aliases = Option.when(!join.loopified) {
+      join.params.zipWithIndex.zip(call.args).collect {
+        case ((param, position), cps.Expr.Variable(argument))
+            if !parameterArities.contains(param) ||
+              ctx.callingConvention.isDirect(argument) ||
+              ctx.directParameters.contains(argument) =>
+          param -> ctx.renamedCaptures.getOrElse(argument, argument)
+      }.toMap
+    }.getOrElse(Map.empty)
+    val parameters = join.params.zip(arguments).collect {
+      case (param, argument) if !aliases.contains(param) =>
+        js.Let(nameDef(param), argument)
+    }
+    val resultUsed = call.rest.free.contains(call.id)
+    val result = Option.when(resultUsed) {
+      js.Let(nameDef(call.id), js.Undefined)
+    }
+    val bodyCtx = ctx.copy(
+      insideBody = ctx.insideBody + id,
+      mutableParams = ctx.mutableParams ++ ctx.callingConvention.mutableParameters(id),
+      renamedCaptures = ctx.renamedCaptures ++ aliases,
+      directParameters = ctx.directParameters ++ parameterArities,
+      directBody = Some(id -> join.params),
+      directResult = Some(Option.when(resultUsed)(call.id) -> resultLabel))
+    val bodyStmts = toJS(body)(using bodyCtx).stmts
+    val implementation =
+      if join.loopified then
+        List(js.While(Some(nameDef(id)), js.RawExpr("true"), bodyStmts))
+      else bodyStmts
+    parameters ++ result.toList ++ List(
+      js.Block(Some(resultLabel), implementation)
+    ) ++ toJS(call.rest).run(k)
+  }
+
   def toJS(s: cps.Stmt)(using ctx: TransformerContext): Binding[List[js.Stmt]] = s match {
+
+    case cps.Stmt.Def(id, params, body, rest)
+        if ctx.callingConvention.isSharedJoin(id) =>
+      val directParameters = params.zipWithIndex.flatMap { case (param, position) =>
+        ctx.callingConvention.directParameterArity(id, position).map(param -> _)
+      }.toMap
+      secondClassDef(
+        id,
+        params,
+        body,
+        Some(rest),
+        ctx.callingConvention.isJoinLoop(id),
+        directParameters)
+
+    case cps.Stmt.Def(id, params, body, rest)
+        if ctx.callingConvention.isJoin(id) =>
+      val join = SecondClassDef(
+        params,
+        ctx.callingConvention.isJoinLoop(id),
+        Some(body))
+      toJS(rest)(using ctx.copy(secondClass = ctx.secondClass.updated(id, join)))
 
     case cps.Stmt.Def(id, params, body, rest)
         if ctx.callingConvention.isDirect(id) =>
@@ -476,24 +657,28 @@ object TransformerCps extends Transformer {
         case None =>
           val kind = kindOf(id)
           if kind.isSecondClass then
-            secondClassDef(id, params, body, Some(rest), kind.isRecursive)
+            secondClassDef(
+              id, params, body, Some(rest), ctx.stackSafety.isLoopified(id))
           else
-            firstClassDef(id, params, body, rest, kind.isRecursive)
+            firstClassDef(
+              id, params, body, rest, ctx.stackSafety.isLoopified(id))
       }
 
     case cps.Stmt.New(id, interface, operations, rest) =>
       Binding { k =>
         val ops = operations.map { op =>
           val (backups, renamings) = backupMutableParams(op.body, op.params.toSet)
+          val directOperation = ctx.callingConvention.directOperation(id, op.name)
           val bodyCtx = functionBodyContext.copy(
-            renamedCaptures = ctx.renamedCaptures ++ renamings)
+            renamedCaptures = ctx.renamedCaptures ++ renamings,
+            directBody = directOperation.map(_ -> op.params))
           val body = toJS(op.body)(using bodyCtx).stmts
-          if ctx.stackSafety.safeEntries.needsAdapter(op) then {
-            val worker = freshName("operation_worker_")
-            val declaration = js.Function(worker, op.params.map(nameDef), body)
-            val call = js.Call(js.Variable(worker), op.params.map(nameRef))
-            val entry = js.Lambda(op.params.map(nameDef), js.Lambda(Nil, call))
-            (backups, List(declaration), nameDef(op.name) -> entry)
+          if !ctx.callingConvention.isDirectOperation(id, op.name) &&
+              ctx.stackSafety.safeEntries.needsAdapter(op) then {
+            val entry = js.Lambda(
+              op.params.map(nameDef),
+              js.Lambda(Nil, body))
+            (backups, Nil, nameDef(op.name) -> entry)
           } else
             (backups, Nil, nameDef(op.name) -> js.Lambda(op.params.map(nameDef), body))
         }
@@ -514,40 +699,57 @@ object TransformerCps extends Transformer {
         js.Const(nameDef(id), toValueJS(binding)) :: toJS(rest).run(k)
       }
 
-    case call @ cps.Stmt.Call(result, id, args, _, rest)
+    case call @ cps.Stmt.Call(_, _, cps.Callee.Function(id), args, _, _)
+        if ctx.callingConvention.isDirect(call) &&
+          ctx.secondClass.get(id).exists(_.directBody.nonEmpty) =>
+      val join = ctx.secondClass(id)
+      if ctx.insideBody.contains(id) then {
+        require(ctx.callingConvention.isJoinBackEdge(call),
+          s"Non-tail transfer to active join $id")
+        pure(jumpTo(id, join, args, directArguments(call)))
+      } else enterJoin(call, join)
+
+    case call @ cps.Stmt.Call(result, _, callee, args, _, rest)
         if ctx.callingConvention.isDirect(call) =>
-      val directPositions = ctx.callingConvention.directArguments(call)
-      val arguments = args.zipWithIndex.map { case (argument, index) =>
-        directPositions.get(index)
-          .fold(toValueJS(argument))(toDirectFunctionValue(argument, _))
-      }
+      val arguments = directArguments(call)
 
       ctx.directBody match {
         case Some((owner, params))
-            if owner == id && ctx.callingConvention.isTailSelf(call) =>
-          // Evaluate the parallel substitution before mutating any parameter.
-          val temporaries = arguments.map(_ => freshName("next_arg_"))
+            if callee == cps.Callee.Function(owner) && ctx.callingConvention.isTailSelf(call) =>
+          // Evaluate only the support of the parallel substitution before
+          // mutating any parameter. Identity components neither write a
+          // register nor require a temporary.
+          val updates = params.zip(call.args).zip(arguments).filterNot {
+            case ((param, cps.Expr.Variable(argument)), _) =>
+              ctx.renamedCaptures.getOrElse(argument, argument) == param
+            case _ => false
+          }
+          val temporaries = updates.map(_ => freshName("next_arg_"))
           pure(
-            arguments.zip(temporaries).map { case (argument, temporary) =>
+            updates.zip(temporaries).map { case ((_, argument), temporary) =>
               js.Const(temporary, argument)
             } ++
-            params.zip(temporaries).map { case (param, temporary) =>
+            updates.zip(temporaries).map { case (((param, _), _), temporary) =>
               js.Assign(nameRef(param), js.Variable(temporary))
             } :+ js.Continue(Some(nameDef(owner))))
 
         case _ =>
           Binding { k =>
-            val callee = toDirectFunctionValue(cps.Expr.Variable(id), args.size)
-            js.Const(nameDef(result), js.Call(callee, arguments)) ::
+            val target = callee match {
+              case cps.Callee.Function(id) =>
+                toDirectFunctionValue(cps.Expr.Variable(id), args.size)
+              case cps.Callee.Method(receiver, method) =>
+                js.Member(valueRef(receiver), memberNameRef(method))
+            }
+            js.Const(nameDef(result), js.Call(target, arguments)) ::
               toJS(rest).run(k)
           }
       }
 
     // A candidate rejected by the convention analysis becomes ordinary CPS.
     // The explicit remainder is reified exactly once, here at the boundary.
-    case cps.Stmt.Call(result, id, args, ks, rest) =>
+    case cps.Stmt.Call(result, returnedKs, callee, args, ks, rest) =>
       Binding { k =>
-        val returnedKs = Id("ks")
         val (backups, renamings) = backupMutableParams(rest, Set(result, returnedKs))
         val bodyCtx = functionBodyContext.copy(
           renamedCaptures = ctx.renamedCaptures ++ renamings)
@@ -557,7 +759,12 @@ object TransformerCps extends Transformer {
           js.Block(None, continuationBody))
         val loweredArgs =
           args.map(toValueJS) ++ List(toValueJS(ks), continuation)
-        backups :+ js.Return(js.Call(valueRef(id), loweredArgs))
+        val target = callee match {
+          case cps.Callee.Function(id) => valueRef(id)
+          case cps.Callee.Method(receiver, method) =>
+            js.Member(valueRef(receiver), memberNameRef(method))
+        }
+        backups :+ js.Return(js.Call(target, loweredArgs))
       }
 
     case app @ cps.Stmt.App(id, args) if ctx.segmentEntries.contains(id) =>
@@ -606,11 +813,16 @@ object TransformerCps extends Transformer {
 
           updates.foreach { case (param, arg) =>
             val substituted = substitutions.substitute(arg)(using subst)
-            val jsArg = toArgumentJS(app, substituted)(using argumentCtx)
+            val jsArg = sci.directParameters.get(param) match {
+              case Some(arity) =>
+                toDirectFunctionValue(substituted, arity)(using argumentCtx)
+              case None =>
+                toArgumentJS(app, substituted)(using argumentCtx)
+            }
             stmts.append(js.Assign(nameRef(param), jsArg))
           }
 
-          val jump = if sci.isRecursive && ctx.insideBody.contains(id) then
+          val jump = if sci.loopified && ctx.insideBody.contains(id) then
             js.Continue(Some(nameDef(id)))
           else
             js.Break(Some(nameDef(id)))
@@ -620,11 +832,17 @@ object TransformerCps extends Transformer {
 
         // In the App case for first-class calls:
         case None =>
-          val callee = ctx.stackSafety.transferOf(app) match {
-            case StackSafety.Transfer.Direct => directRef(id)
-            case StackSafety.Transfer.Jump | StackSafety.Transfer.Safe => valueRef(id)
+          ctx.stackSafety.transferOf(app) match {
+            case StackSafety.Transfer.Direct =>
+              val call = js.Call(directRef(id), args.map(toArgumentJS(app, _)))
+              pure(js.Return(call) :: Nil)
+            case StackSafety.Transfer.Bounce =>
+              val call = js.Call(directRef(id), args.map(toArgumentJS(app, _)))
+              pure(js.Return(js.Lambda(Nil, call)) :: Nil)
+            case StackSafety.Transfer.Jump | StackSafety.Transfer.Safe =>
+              val call = js.Call(valueRef(id), args.map(toArgumentJS(app, _)))
+              pure(js.Return(call) :: Nil)
           }
-          pure(js.Return(js.Call(callee, args.map(toArgumentJS(app, _)))) :: Nil)
         }
       }
 
@@ -634,10 +852,21 @@ object TransformerCps extends Transformer {
 
     case cps.Stmt.Return(value) =>
       val result = toValueJS(value)
-      if ctx.directBody.nonEmpty then
-        pure(js.Return(result) :: Nil)
-      else
-        pure(js.Return(js.Object(List(JSName("result") -> result))) :: Nil)
+      ctx.directResult match {
+        case Some((target, label)) =>
+          pure(target.toList.map(id => js.Assign(nameRef(id), result)) :+
+            js.Break(Some(label)))
+        case None => ctx.directContinuation match {
+          case Some((ks, k)) =>
+            pure(js.Return(js.Call(
+              js.Variable(k),
+              List(result, js.Variable(ks)))) :: Nil)
+          case None if ctx.directBody.nonEmpty =>
+            pure(js.Return(result) :: Nil)
+          case None =>
+            pure(js.Return(js.Object(List(JSName("result") -> result))) :: Nil)
+        }
+      }
 
     case cps.Stmt.Run(id, callee, args, Purity.Pure | Purity.Impure, rest) =>
       Binding { k =>
@@ -723,26 +952,29 @@ object TransformerCps extends Transformer {
 
     case cps.Stmt.Reset(p, ks, k, body, ks1, k1) =>
       Binding { next =>
-        js.Const(
-          js.Pattern.Array(List(p, ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
-          js.Call(RESET, toJS(ks1), toJS(k1))) ::
-          toJS(body).run(next)
+        List(js.Block(None,
+          js.Const(
+            js.Pattern.Array(List(p, ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
+            js.Call(RESET, toJS(ks1), toJS(k1))) ::
+            toJS(body).run(next)))
       }
 
     case cps.Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
       Binding { next =>
-        js.Const(
-          js.Pattern.Array(List(resume, ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
-          js.Call(SHIFT, valueRef(prompt), toJS(ks1), toJS(k1))) ::
-          toJS(body)(using ctx.copy(segmentEntries = ctx.segmentEntries + k)).run(next)
+        List(js.Block(None,
+          js.Const(
+            js.Pattern.Array(List(resume, ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
+            js.Call(SHIFT, valueRef(prompt), toJS(ks1), toJS(k1))) ::
+            toJS(body)(using ctx.copy(segmentEntries = ctx.segmentEntries + k)).run(next)))
       }
 
     case cps.Stmt.Resume(r, ks, k, body, ks1, k1) =>
       Binding { next =>
-        js.Const(
-          js.Pattern.Array(List(ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
-          js.Call(RESUME, valueRef(r), toJS(ks1), toJS(k1))) ::
-          toJS(body)(using ctx.copy(segmentEntries = ctx.segmentEntries + k)).run(next)
+        List(js.Block(None,
+          js.Const(
+            js.Pattern.Array(List(ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
+            js.Call(RESUME, valueRef(r), toJS(ks1), toJS(k1))) ::
+            toJS(body)(using ctx.copy(segmentEntries = ctx.segmentEntries + k)).run(next)))
       }
 
     case cps.Stmt.Hole(span) =>
@@ -839,6 +1071,15 @@ object TransformerCps extends Transformer {
       freshName("apply_entry_"),
       freshName("apply_"))
 
+  /** A connected continuation domain has one dispatcher per JavaScript
+   *  function. Nested definitions in a relocated case can name another entry
+   *  of that same domain; in that situation the enclosing dispatcher is
+   *  already the implementation of the application and must be reused. */
+  private def freshDispatchFor(id: Id)(using ctx: TransformerContext): Option[DispatchState] =
+    ctx.defunctionalization.dispatchFor(id).filterNot { dispatch =>
+      ctx.dispatches.values.exists(_.dispatch.targets == dispatch.targets)
+    }.map(dispatchState)
+
   private def dispatchDeclarations(state: DispatchState): List[js.Stmt] =
     js.Let(state.continuation, js.Undefined) ::
       state.arguments.map(argument => js.Let(argument, js.Undefined)).toList
@@ -867,18 +1108,17 @@ object TransformerCps extends Transformer {
         dispatchLoop(dispatch, ctx))
     }
 
-  def firstClassDef(id: Id, params: List[Id], body: cps.Stmt, rest: cps.Stmt, isRecursive: Boolean)(using ctx: TransformerContext): Binding[List[js.Stmt]] =
+  def firstClassDef(id: Id, params: List[Id], body: cps.Stmt, rest: cps.Stmt, loopified: Boolean)(using ctx: TransformerContext): Binding[List[js.Stmt]] =
     Binding { k =>
       val (backups, renamings) = backupMutableParams(body, params.toSet)
 
-      val state = ctx.defunctionalization.dispatchFor(id).map(dispatchState)
-
       val functionCtx = functionBodyContext
-      val recursiveCtx = if isRecursive then
+      val state = freshDispatchFor(id)(using functionCtx)
+      val recursiveCtx = if loopified then
         functionCtx.copy(
-          secondClass = Map(id -> SecondClassDef(params, isRecursive = true)),
+          secondClass = Map(id -> SecondClassDef(params, loopified = true)),
           insideBody = Set(id),
-          mutableParams = params.toSet
+          mutableParams = ctx.stackSafety.mutableParameters(id)
         )
       else functionCtx
       val bodyCtx = state.fold(recursiveCtx) { dispatch =>
@@ -886,19 +1126,14 @@ object TransformerCps extends Transformer {
       }.copy(renamedCaptures = recursiveCtx.renamedCaptures ++ renamings)
 
       val translatedBody = toJS(body)(using bodyCtx).stmts
-      val bodyStmts = if isRecursive then
+      val bodyStmts = if loopified then
         state.toList.flatMap(dispatchDeclarations) ++
           state.toList.flatMap(boundaryFrame) ++
           List(js.While(Some(nameDef(id)), RawExpr("true"),
             recursiveBody(state, translatedBody, bodyCtx)))
       else translatedBody
 
-      val definitions = ctx.workers.get(id) match {
-        case Some(worker) => List(
-          js.Function(worker, params.map(nameDef), bodyStmts),
-          safeEntry(id, params, worker))
-        case None => List(js.Function(nameDef(id), params.map(nameDef), bodyStmts))
-      }
+      val definitions = cpsDefinition(id, params, bodyStmts)
 
       backups ++ definitions ++ toJS(rest).run(k)
     }
@@ -919,26 +1154,35 @@ object TransformerCps extends Transformer {
    * If `rest` is defined, this is a local function definition. Otherwise it is a toplevel function and the params
    * do not need to be initialized.
    */
-  def secondClassDef(id: Id, params: List[Id], body: cps.Stmt, rest: Option[cps.Stmt], isRecursive: Boolean)(using ctx: TransformerContext): Binding[List[js.Stmt]] = {
+  def secondClassDef(
+    id: Id,
+    params: List[Id],
+    body: cps.Stmt,
+    rest: Option[cps.Stmt],
+    loopified: Boolean,
+    directParameters: Map[Id, Int] = Map.empty
+  )(using ctx: TransformerContext): Binding[List[js.Stmt]] = {
     val label = nameDef(id)
-    val sci = SecondClassDef(params, isRecursive)
+    val sci = SecondClassDef(params, loopified, directParameters = directParameters)
 
     // Register this def as second-class for nested code
-    val ctxWithDef = ctx.copy(secondClass = ctx.secondClass + (id -> sci))
+    val ctxWithDef = ctx.copy(
+      secondClass = ctx.secondClass + (id -> sci),
+      directParameters = ctx.directParameters ++ directParameters)
 
     // Translate rest: calls to id will become assignments + break
     val entryBlock = rest.map { r =>
       js.Block(Some(label), toJS(r)(using ctxWithDef).stmts)
     }
 
-    val state = ctx.defunctionalization.dispatchFor(id).map(dispatchState)
+    val state = freshDispatchFor(id)
 
     // Translate body: for recursive defs, calls to id will become assignments + continue.
     // Also track params as mutable so that closures inside the body will backup them.
-    val recursiveCtx = if isRecursive then
+    val recursiveCtx = if loopified then
       ctxWithDef.copy(
         insideBody = ctxWithDef.insideBody + id,
-        mutableParams = ctxWithDef.mutableParams ++ params.toSet
+        mutableParams = ctxWithDef.mutableParams ++ ctx.stackSafety.mutableParameters(id)
       )
     else ctxWithDef
     val bodyCtx = state.fold(recursiveCtx) { dispatch =>
@@ -950,7 +1194,7 @@ object TransformerCps extends Transformer {
     val dispatchDecls = state.toList.flatMap(dispatchDeclarations)
     val boundary = state.toList.flatMap(boundaryFrame)
 
-    if isRecursive then
+    if loopified then
       // A local labeled entry assigns its parameters in `entryBlock`; only
       // then can an unknown incoming continuation be wrapped as a frame.
       pure(paramDecls ++ dispatchDecls ++ entryBlock ++ boundary ++ List(
@@ -965,8 +1209,10 @@ object TransformerCps extends Transformer {
       case cps.Clause(params, body) =>
         val fields = C.declarations.getConstructor(variant).fields.map(_.id)
         val tag = js.RawExpr(C.declarations.getConstructorTag(variant).toString)
+        val used = body.free
 
-        val extractedFields = params.zip(fields).map { case (p, f) =>
+        val extractedFields = params.zip(fields).collect { case (p, f)
+            if used.contains(p) =>
           js.Const(nameDef(p), js.Member(scrutinee, memberNameRef(f)))
         }
 

@@ -1,0 +1,48 @@
+def use(random, ks, k) {
+  let result | returnedKs = random.random!(ks, return);
+  k(result, returnedKs)
+}
+
+def main(flag, ks, k) {
+  new first : Random {
+    def random(ks1, k1) = { k1(1, ks1) }
+  }
+  new second : Random {
+    def random(ks2, k2) = { k2(2, ks2) }
+  }
+  if (flag) {
+    use(first, ks, k)
+  } else {
+    use(second, ks, k)
+  }
+}
+
+// Receiver flow is the object-valued analogue of function target flow. Both
+// implementations agree on a value-returning ABI, so the property itself can
+// use that ABI and the invocation stays an ordinary dynamic property call.
+// The compositional call explicitly binds the meta-continuation returned by
+// the CPS convention. Selecting the direct ABI proves it unchanged and
+// substitutes the incoming `ks` in the remainder.
+/// CALLING_CONVENTIONS
+
+direct
+  first.random = 0
+  second.random = 0
+  use = 1 adapter
+
+/// JAVASCRIPT
+
+function use_0(random_0, ks_0, k_0) {
+  const result_0 = random_0.random_0();
+  return k_0(result_0, ks_0);
+}
+
+function main_0(flag_0, ks_1, k_1) {
+  const first_0 = { random_1: () => 1 };
+  const second_0 = { random_1: () => 2 };
+  if (flag_0) {
+    return use_0(first_0, ks_1, k_1);
+  } else {
+    return use_0(second_0, ks_1, k_1);
+  }
+}

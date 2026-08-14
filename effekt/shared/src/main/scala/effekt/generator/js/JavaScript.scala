@@ -12,6 +12,12 @@ import kiama.util.Source
 
 class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[String] {
 
+  private def optimize(target: js.Module): js.Module =
+    FunctionFloating.transform(ControlFlowSimplification.transform(target))
+
+  private def optimize(target: List[js.Stmt]): List[js.Stmt] =
+    FunctionFloating.transform(ControlFlowSimplification.transform(target))
+
   // Implementation of the Compiler Interface:
   // -----------------------------------------
   def extension = ".js"
@@ -76,7 +82,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
 
   lazy val Compile = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val target = FunctionFloating.transform(TransformerCps.compile(cps, core, mainSymbol))
+      val target = optimize(TransformerCps.compile(cps, core, mainSymbol))
       val doc = pretty(target.commonjs)
       (Map(mainFile -> doc.layout), mainFile)
   }
@@ -86,7 +92,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
    */
   lazy val CompileWeb = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val target = FunctionFloating.transform(TransformerCps.compile(cps, core, mainSymbol))
+      val target = optimize(TransformerCps.compile(cps, core, mainSymbol))
       val doc = pretty(target.virtual)
       (Map(mainFile -> doc.layout), mainFile)
   }
@@ -96,7 +102,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
    */
   lazy val CompileLSP = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      FunctionFloating.transform(TransformerCps.compileLSP(cps, core))
+      optimize(TransformerCps.compileLSP(cps, core))
   }
 
   private def pretty(stmts: List[js.Stmt]): Document =

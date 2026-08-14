@@ -16,7 +16,43 @@ def main(x, ks, k) {
   k(result, ks)
 }
 
+// `inc` has a bounded body and therefore keeps an immediate value entry. The
+// recursive higher-order cycle is cut at its closed indirect application in
+// `k_3`, rather than by suspending every invocation of `inc`.
 /// CALLING_CONVENTIONS
 
-direct
-  inc = 0 adapter
+-
+
+/// SAFE_ENTRIES
+
+-
+
+/// JAVASCRIPT
+
+function inc_0(value_0, ks_1, k_1) {
+  const result_0 = add_0(value_0, 1);
+  return k_1(result_0, ks_1);
+}
+
+function main_0(x_0, ks_0, k_0) {
+  let f_0 = undefined;
+  let value_1 = undefined;
+  let k_2 = undefined;
+  loop_worker_0: {
+    f_0 = inc_0;
+    value_1 = x_0;
+    k_2 = k_0;
+  }
+  loop_worker_0: while (true) {
+    if (true) {
+      function k_3(recursive_0, ks_2) {
+        return () => f_0(recursive_0, ks_0, backup_k_0);
+      }
+      const backup_k_0 = k_2;
+      k_2 = k_3;
+      continue loop_worker_0;
+    } else {
+      return k_2(value_1, ks_0);
+    }
+  }
+}

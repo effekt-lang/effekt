@@ -1,0 +1,80 @@
+def main(d, digits, ks, k) {
+  def loop(base, exponent, acc, loopKs, loopK) {
+    run done = eq(exponent, 0);
+    if (done) {
+      loopK(acc, loopKs)
+    } else {
+      run even = eq(exponent, 2);
+      if (even) {
+        run squared = add(base, base);
+        run half = sub(exponent, 1);
+        let result = loop!(squared, half, acc, loopKs, return);
+        loopK(result, loopKs)
+      } else {
+        run previous = sub(exponent, 1);
+        run product = add(acc, base);
+        let result = loop!(base, previous, product, loopKs, return);
+        loopK(result, loopKs)
+      }
+    }
+  }
+  run negative = lt(digits, 0);
+  if (negative) {
+    run positive = sub(0, digits);
+    let factor = loop!(1, positive, 0, ks, return);
+    run result = add(d, factor);
+    k(result, ks)
+  } else {
+    let factor = loop!(10, digits, 0, ks, return);
+    run result = add(d, factor);
+    k(result, ks)
+  }
+}
+
+// A recursive local definition can have several incoming edges while its
+// body remains the unique entry node of a reducible component. Lambda
+// dropping must retain that local component instead of turning it into an
+// independently callable JavaScript function.
+/// JAVASCRIPT
+
+function loop_0(base_0, exponent_0, acc_0) {
+  loop_0: while (true) {
+    const done_0 = eq_0(exponent_0, 0);
+    if (done_0) {
+      return acc_0;
+    } else {
+      const even_0 = eq_0(exponent_0, 2);
+      if (even_0) {
+        const squared_0 = add_0(base_0, base_0);
+        const half_0 = sub_0(exponent_0, 1);
+        const next_arg_0 = squared_0;
+        const next_arg_1 = half_0;
+        base_0 = next_arg_0;
+        exponent_0 = next_arg_1;
+        continue loop_0;
+      } else {
+        const previous_0 = sub_0(exponent_0, 1);
+        const product_0 = add_0(acc_0, base_0);
+        const next_arg_2 = previous_0;
+        const next_arg_3 = product_0;
+        exponent_0 = next_arg_2;
+        acc_0 = next_arg_3;
+        continue loop_0;
+      }
+    }
+  }
+}
+
+function main_0(d_0, digits_0, ks_0, k_0) {
+  const negative_0 = lt_0(digits_0, 0);
+  if (negative_0) {
+    const positive_0 = sub_0(0, digits_0);
+    const factor_0 = loop_0(1, positive_0, 0);
+    const result_0 = add_0(d_0, factor_0);
+    return k_0(result_0, ks_0);
+  } else {
+    const factor_1 = loop_0(10, digits_0, 0);
+    const result_1 = add_0(d_0, factor_1);
+    return k_0(result_1, ks_0);
+  }
+}

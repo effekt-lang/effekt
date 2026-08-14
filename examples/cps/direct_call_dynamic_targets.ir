@@ -31,55 +31,47 @@ direct
   applyPlain = 0 [direct: 0]
   dispatch = 2 [direct: 0]
   inc = 0 adapter
-  main = 3 adapter
+  main = 0 adapter
 
 /// JAVASCRIPT
 
-function direct_3(value_0) {
+function inc_0(value_0) {
   const result_0 = add_0(value_0, 1);
   return result_0;
 }
 
-function inc_0(value_0, ks_0, k_0) {
-  return () => {
-    const result_5 = direct_3(value_0);
-    return k_0(result_5, ks_0);
-  };
+function inc_cps_0(value_0, ks_1, k_1) {
+  const result_1 = inc_0(value_0);
+  return k_1(result_1, ks_1);
 }
 
-function direct_0(f_0, value_1) {
-  const result_1 = f_0(value_1);
-  return result_1;
-}
-
-function direct_1(f_1, value_2) {
-  const ignored_0 = println_0((arg_6, ks_7, k_8) =>
-    () => {
-      const result_9 = f_1(arg_6);
-      return k_8(result_9, ks_7);
-    });
-  return value_2;
-}
-
-function direct_2(target_0, f_2, value_3) {
-  const result_2 = target_0((arg_10) =>
-    RUN_TOPLEVEL((ks_11, k_12) => f_2(arg_10, ks_11, k_12)), value_3);
+function applyDirect_0(f_0, value_1) {
+  const result_2 = f_0(value_1);
   return result_2;
 }
 
-function direct_4(flag_0, x_0) {
-  if (flag_0) {
-    const result_3 = direct_2(direct_0, inc_0, x_0);
-    return result_3;
-  } else {
-    const result_4 = direct_2(direct_1, inc_0, x_0);
-    return result_4;
-  }
+function applyPlain_0(f_1, value_2) {
+  const ignored_0 = println_0((arg_2, ks_3, k_4) => {
+    const result_5 = f_1(arg_2);
+    return k_4(result_5, ks_3);
+  });
+  return value_2;
 }
 
-function main_0(flag_0, x_0, ks_1, k_1) {
-  return () => {
-    const result_13 = direct_4(flag_0, x_0);
-    return k_1(result_13, ks_1);
-  };
+function main_0(flag_0, x_0, ks_0, k_0) {
+  let target_0 = undefined;
+  let f_2 = undefined;
+  let value_3 = undefined;
+  if (flag_0) {
+    target_0 = applyDirect_0;
+    f_2 = inc_cps_0;
+    value_3 = x_0;
+  } else {
+    target_0 = applyPlain_0;
+    f_2 = inc_cps_0;
+    value_3 = x_0;
+  }
+  const result_3 = target_0((arg_6) =>
+    RUN_TOPLEVEL((ks_7, k_8) => f_2(arg_6, ks_7, k_8)), value_3);
+  return k_0(result_3, ks_0);
 }

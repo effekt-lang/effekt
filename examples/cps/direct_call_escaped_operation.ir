@@ -1,0 +1,27 @@
+def main(consume, ks, k) {
+  new random : Random {
+    def random(ks1, k1) = { k1(1, ks1) }
+  }
+  let result = random.random!(ks, return);
+  let ignored = consume!(random, result, ks, return);
+  k(result, ks)
+}
+
+// An object passed to an open callee must retain its externally visible CPS
+// operation ABI, even if every operation invocation visible here is direct.
+/// CALLING_CONVENTIONS
+
+-
+
+/// JAVASCRIPT
+
+function main_0(consume_0, ks_0, k_0) {
+  function k_3(result_0, ks_3) {
+    function k_2(ignored_0, ks_2) {
+      return k_0(result_0, ks_0);
+    }
+    return consume_0(random_0, result_0, ks_0, k_2);
+  }
+  const random_0 = { random_0: (ks_1, k_1) => k_1(1, ks_1) };
+  return random_0.random_0(ks_0, k_3);
+}

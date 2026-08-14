@@ -123,21 +123,21 @@ trait Transformer {
   /** Start an independent JavaScript translation with deterministic names. */
   def resetNames(): Unit = nameSupply.set(new NameSupply)
 
+  private def uniqueNameFor(base: String): String = {
+    val supply = nameSupply.get()
+    var nextId = supply.usedNames.getOrElse(base, 0)
+    var candidate = s"${base}_${nextId}"
+    while supply.occupiedNames.contains(candidate) do {
+      nextId += 1
+      candidate = s"${base}_${nextId}"
+    }
+    supply.usedNames.update(base, nextId + 1)
+    supply.occupiedNames += candidate
+    candidate
+  }
+
   def uniqueName(sym: Id): JSName = {
     val supply = nameSupply.get()
-
-    def uniqueNameFor(base: String): String = {
-      var nextId = supply.usedNames.getOrElse(base, 0)
-      var candidate = s"${base}_${nextId}"
-      while supply.occupiedNames.contains(candidate) do {
-        nextId += 1
-        candidate = s"${base}_${nextId}"
-      }
-      supply.usedNames.update(base, nextId + 1)
-      supply.occupiedNames += candidate
-      candidate
-    }
-
     val name = supply.names.getOrElseUpdate(sym, baseNameRx.findFirstIn(sym.name.name) match {
       case Some(base) => uniqueNameFor(base)
       case None =>
@@ -145,6 +145,13 @@ trait Transformer {
         uniqueNameFor("tmp")
     })
     JSName(jsEscape(name))
+  }
+
+  /** Allocate a fresh JavaScript name that retains the source identifier's
+   *  stem while denoting a distinct representation of that identifier. */
+  def derivedName(sym: Id, suffix: String): JSName = {
+    val base = baseNameRx.findFirstIn(sym.name.name).getOrElse("tmp")
+    JSName(jsEscape(uniqueNameFor(s"${base}_${suffix}")))
   }
 
   def nameRef(id: Id): js.Expr = js.Variable(uniqueName(id))

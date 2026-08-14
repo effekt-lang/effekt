@@ -27,9 +27,12 @@ class DefunctionalizationTests extends munit.FunSuite {
 
   private def translate(source: String): String = {
     val module = parse(source)
+    val main = module.definitions.collectFirst {
+      case cps.ToplevelDefinition.Def(id, _, _) if id.name.name == "main" => id
+    }.getOrElse(fail("missing main definition"))
     given Context = new TestContext
     given DeclarationContext = new DeclarationContext(module.declarations, Nil)
-    PrettyPrinter.format(TransformerCps.toJS(module, Nil).stmts).layout
+    PrettyPrinter.format(TransformerCps.toJS(module, Nil, Set(main)).stmts).layout
   }
 
   private def dispatch(

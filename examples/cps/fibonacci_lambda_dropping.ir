@@ -97,7 +97,6 @@ function main_0(i_main_0, ks_main_0, k_main_0) {
   fibonacci_0: {
     i_f_0 = i_main_0;
     k_f_0 = done_0;
-    break fibonacci_0;
   }
   fibonacci_0: while (true) {
     apply_entry_2: {
@@ -107,7 +106,6 @@ function main_0(i_main_0, ks_main_0, k_main_0) {
         const next_arg_5 = 0;
         cont_0 = next_cont_4;
         value_1 = next_arg_5;
-        break apply_entry_2;
       } else {
         const i_0 = sub_0(i_f_0, 1);
         const k_0 = { __tag: 1, i_f_0: i_f_0, k_f_0: k_f_0 };

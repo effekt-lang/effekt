@@ -137,13 +137,17 @@ object TransformerCps {
   }
 
   def toChezExpr(stmt: cps.Stmt): chez.Expr = stmt match {
-    case Stmt.Call(result, id, args, ks, rest) =>
-      val returnedKs = core.Id("ks")
+    case Stmt.Call(result, returnedKs, callee, args, ks, rest) =>
       val continuation = chez.Lambda(
         List(result, returnedKs).map(nameDef),
         toChez(rest))
       val lowered = args.map(toChez) ++ List(toChez(ks), continuation)
-      chez.Call(nameRef(id), lowered)
+      callee match {
+        case Callee.Function(id) => chez.Call(nameRef(id), lowered)
+        case Callee.Method(receiver, method) =>
+          val operation = chez.Call(nameRef(method), nameRef(receiver))
+          chez.Call(operation, lowered)
+      }
 
     case Stmt.App(id, args) =>
       chez.Call(nameRef(id), args.map(toChez))

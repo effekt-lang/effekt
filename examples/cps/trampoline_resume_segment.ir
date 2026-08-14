@@ -8,6 +8,8 @@ def main(r0, ks0, k0) {
 /// JAVASCRIPT
 
 function main_0(r_0, ks_0, k_0) {
-  const [ks_1, k_1] = RESUME(r_0, ks_0, k_0);
-  return () => k_1(1, ks_1);
+  {
+    const [ks_1, k_1] = RESUME(r_0, ks_0, k_0);
+    return () => k_1(1, ks_1);
+  }
 }

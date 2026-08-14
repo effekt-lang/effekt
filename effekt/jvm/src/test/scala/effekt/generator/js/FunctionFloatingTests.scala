@@ -292,4 +292,5 @@ class FunctionFloatingTests extends munit.FunSuite {
 
     assertEquals(FunctionFloating.transform(input), expected)
   }
+
 }

@@ -62,8 +62,9 @@ object Inliner {
       Stmt.New(id, interface, operations, continueWith(remainder, result, rest))
     case Stmt.Let(id, binding, remainder) =>
       Stmt.Let(id, binding, continueWith(remainder, result, rest))
-    case Stmt.Call(id, callee, args, ks, remainder) =>
-      Stmt.Call(id, callee, args, ks, continueWith(remainder, result, rest))
+    case Stmt.Call(id, returnedKs, callee, args, ks, remainder) =>
+      Stmt.Call(id, returnedKs, callee, args, ks,
+        continueWith(remainder, result, rest))
     case Stmt.Return(value) if isTrivial(value) =>
       substitute(rest)(using Substitution(Map(result -> value)))
     case Stmt.Return(value) =>
@@ -114,42 +115,6 @@ object Inliner {
     val composed = continueWith(body, result, rest)
     bindings.foldRight(composed) { case ((id, expr), remainder) =>
       Stmt.Let(id, expr, remainder)
-    }
-  }
-
-  /** Number of result exits of the current definition, saturated at two.
-   *
-   * Bodies of nested definitions and operations have their own result
-   * convention and are deliberately not counted. Saturation is sufficient:
-   * the commuting conversion below needs only distinguish a linear result
-   * path from one that would duplicate its continuation.
-   */
-  private def resultExits(stmt: Stmt): Int = {
-    def plus(left: Int, right: => Int): Int =
-      if left >= 2 then 2 else math.min(2, left + right)
-
-    stmt match {
-      case Stmt.Def(_, _, _, rest) => resultExits(rest)
-      case Stmt.New(_, _, _, rest) => resultExits(rest)
-      case Stmt.Let(_, _, rest) => resultExits(rest)
-      case Stmt.Call(_, _, _, _, rest) => resultExits(rest)
-      case Stmt.Return(_) => 1
-      case Stmt.Run(_, _, _, _, rest) => resultExits(rest)
-      case Stmt.If(_, thn, els) => plus(resultExits(thn), resultExits(els))
-      case Stmt.Match(_, clauses, default) =>
-        val clauseExits = clauses.iterator.map(_._2.body).foldLeft(0) { (count, body) =>
-          plus(count, resultExits(body))
-        }
-        plus(clauseExits, default.fold(0)(resultExits))
-      case Stmt.Region(_, _, rest) => resultExits(rest)
-      case Stmt.Alloc(_, _, _, rest) => resultExits(rest)
-      case Stmt.Var(_, _, _, rest) => resultExits(rest)
-      case Stmt.Dealloc(_, rest) => resultExits(rest)
-      case Stmt.Get(_, _, rest) => resultExits(rest)
-      case Stmt.Put(_, _, rest) => resultExits(rest)
-      case Stmt.App(_, _) | Stmt.Invoke(_, _, _) | Stmt.Reset(_, _, _, _, _, _) |
-          Stmt.Shift(_, _, _, _, _, _, _) | Stmt.Resume(_, _, _, _, _, _) |
-          Stmt.Hole(_) => 0
     }
   }
 
@@ -216,19 +181,20 @@ object Inliner {
     // can commute into its call site without code duplication. Before that
     // point definitions still have two additional CPS parameters, so this
     // case deliberately does not fire.
-    case Stmt.Call(id, callee, args, ks, rest)
-        if context.definitions.get(callee).exists(_.params.size == args.size) &&
-          !expanding.contains(callee) =>
+    case Stmt.Call(id, returnedKs, callee @ Callee.Function(target), args, ks, rest)
+        if context.definitions.get(target).exists(_.params.size == args.size) &&
+          !expanding.contains(target) =>
       val args1 = args.map(rewrite(_, context))
       val rest1 = rewrite(rest, context, expanding)
       rewrite(
-        reduceCall(context.definitions(callee), args1, id, rest1),
+        reduceCall(context.definitions(target), args1, id, rest1),
         context,
-        expanding + callee)
+        expanding + target)
 
-    case Stmt.Call(id, callee, args, ks, rest) =>
+    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
       Stmt.Call(
         id,
+        returnedKs,
         callee,
         args.map(rewrite(_, context)),
         rewrite(ks, context),
@@ -378,86 +344,4 @@ object Inliner {
     rewritten.copy(definitions = definitions)
   }
 
-  /** Apply only the direct-style commuting conversion to local definitions.
-   * Ordinary CPS definitions retain their existing representation. */
-  def transformDirectCalls(module: ModuleDecl, inlineable: Set[Id]): ModuleDecl = {
-    def direct(
-      stmt: Stmt,
-      context: Context,
-      expanding: Set[Id] = Set.empty
-    ): Stmt = stmt match {
-      case Stmt.Def(id, params, body, rest) =>
-        val body1 = direct(body, context, expanding)
-        val candidate = inlineable.contains(id) &&
-          !body.free.contains(id) && references(id, rest) == 1 &&
-          resultExits(body1) <= 1
-        val restContext =
-          if candidate then context.bind(id, Definition(params, body1))
-          else context
-        val rest1 = direct(rest, restContext, expanding)
-        if candidate && !rest1.free.contains(id) then rest1
-        else Stmt.Def(id, params, body1, rest1)
-
-      case Stmt.New(id, interface, operations, rest) =>
-        Stmt.New(
-          id,
-          interface,
-          operations.map(op => op.copy(body = direct(op.body, context, expanding))),
-          direct(rest, context, expanding))
-      case Stmt.Let(id, binding, rest) =>
-        Stmt.Let(id, binding, direct(rest, context, expanding))
-
-      case Stmt.Call(result, callee, args, ks, rest)
-          if context.definitions.get(callee).exists(_.params.size == args.size) &&
-            !expanding.contains(callee) =>
-        direct(
-          reduceCall(context.definitions(callee), args, result, rest),
-          context,
-          expanding + callee)
-      case Stmt.Call(result, callee, args, ks, rest) =>
-        Stmt.Call(result, callee, args, ks, direct(rest, context, expanding))
-
-      case terminal @ (Stmt.App(_, _) | Stmt.Invoke(_, _, _) |
-          Stmt.Return(_) | Stmt.Hole(_)) => terminal
-      case Stmt.Run(id, callee, args, purity, rest) =>
-        Stmt.Run(id, callee, args, purity, direct(rest, context, expanding))
-      case Stmt.If(condition, thn, els) =>
-        Stmt.If(
-          condition,
-          direct(thn, context, expanding),
-          direct(els, context, expanding))
-      case Stmt.Match(scrutinee, clauses, default) =>
-        Stmt.Match(
-          scrutinee,
-          clauses.map { case (tag, clause) =>
-            tag -> clause.copy(body = direct(clause.body, context, expanding))
-          },
-          default.map(direct(_, context, expanding)))
-      case Stmt.Region(id, ks, rest) =>
-        Stmt.Region(id, ks, direct(rest, context, expanding))
-      case Stmt.Alloc(id, init, region, rest) =>
-        Stmt.Alloc(id, init, region, direct(rest, context, expanding))
-      case Stmt.Var(id, init, ks, rest) =>
-        Stmt.Var(id, init, ks, direct(rest, context, expanding))
-      case Stmt.Dealloc(ref, rest) =>
-        Stmt.Dealloc(ref, direct(rest, context, expanding))
-      case Stmt.Get(ref, id, rest) =>
-        Stmt.Get(ref, id, direct(rest, context, expanding))
-      case Stmt.Put(ref, value, rest) =>
-        Stmt.Put(ref, value, direct(rest, context, expanding))
-      case Stmt.Reset(prompt, ks, k, body, ks1, k1) =>
-        Stmt.Reset(prompt, ks, k, direct(body, context, expanding), ks1, k1)
-      case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
-        Stmt.Shift(prompt, resume, ks, k, direct(body, context, expanding), ks1, k1)
-      case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
-        Stmt.Resume(resumption, ks, k, direct(body, context, expanding), ks1, k1)
-    }
-
-    module.copy(definitions = module.definitions.map {
-      case ToplevelDefinition.Def(id, params, body) =>
-        ToplevelDefinition.Def(id, params, direct(body, Context(Map.empty)))
-      case ToplevelDefinition.Val(id, ks, k, binding) =>
-        ToplevelDefinition.Val(id, ks, k, direct(binding, Context(Map.empty)))
-    })
-  }
 }

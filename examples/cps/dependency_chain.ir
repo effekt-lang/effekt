@@ -31,3 +31,15 @@ def main(k_main) {
   }
   f()
 }
+
+/// JAVASCRIPT
+
+function main_0(k_main_0) {
+  f_0: {
+
+  }
+  g_0: {
+
+  }
+  return k_main_0(1);
+}

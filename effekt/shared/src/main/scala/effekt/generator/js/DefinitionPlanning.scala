@@ -159,11 +159,11 @@ object DefinitionPlanning {
           binding.free ++ (continuation.free - id),
           definitionsIn(binding.free) ++ continuation.functions)
 
-      case cps.Stmt.Call(id, callee, arguments, ks, rest) =>
+      case cps.Stmt.Call(id, returnedKs, callee, arguments, ks, rest) =>
         val argumentFree = free(arguments) ++ ks.free
         val continuation = statement(rest)
         Summary(
-          argumentFree ++ (continuation.free - id) + callee,
+          argumentFree ++ (continuation.free -- Set(id, returnedKs)) + callee.value,
           definitionsIn(argumentFree) ++ continuation.functions)
 
       case cps.Stmt.App(callee, arguments) =>

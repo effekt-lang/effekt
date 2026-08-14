@@ -193,15 +193,19 @@ object ParameterDropping {
 
         case Stmt.Let(id, binding, rest) => binding.free ++ (visit(rest) - id)
 
-        case call @ Stmt.Call(id, callee, args, ks, rest) =>
+        case call @ Stmt.Call(id, returnedKs, callee @ Callee.Function(_), args, ks, rest) =>
           val mask = callMasks(flow.siteOf(call))
           val ksFree =
             if mask.lift(args.size).getOrElse(false) then Set.empty else ks.free
-          Set(callee) ++ args.zipWithIndex.iterator.collect {
+          Set(callee.value) ++ args.zipWithIndex.iterator.collect {
             case (arg, index) if !mask.lift(index).getOrElse(false) => arg.free
           }.flatten.toSet ++
             ksFree ++
-            (visit(rest) - id)
+            (visit(rest) -- Set(id, returnedKs))
+
+        case Stmt.Call(id, returnedKs, callee @ Callee.Method(_, _), args, ks, rest) =>
+          Set(callee.value) ++ args.flatMap(_.free) ++ ks.free ++
+            (visit(rest) -- Set(id, returnedKs))
 
         case app @ Stmt.App(id, args) =>
           val mask = callMasks(flow.siteOf(app))
@@ -371,14 +375,20 @@ object ParameterDropping {
     case Stmt.Let(id, binding, rest) =>
       Stmt.Let(id, transform(binding, info), transform(rest, info))
 
-    case call @ Stmt.Call(id, callee, args, ks, rest) =>
-      val target = transformReference(callee, info)
+    case call @ Stmt.Call(id, returnedKs, callee @ Callee.Function(target), args, ks, rest) =>
       val mask = info.callMask(call)
       val kept = args.zipWithIndex.collect {
         case (argument, index) if !mask.lift(index).getOrElse(false) =>
           transform(argument, info)
       }
-      Stmt.Call(id, target, kept, transform(ks, info), transform(rest, info))
+      Stmt.Call(id, returnedKs, Callee.Function(transformReference(target, info)), kept,
+        transform(ks, info), transform(rest, info))
+
+    case Stmt.Call(id, returnedKs, Callee.Method(receiver, method), args, ks, rest) =>
+      Stmt.Call(id, returnedKs,
+        Callee.Method(transformReference(receiver, info), method),
+        args.map(transform(_, info)),
+        transform(ks, info), transform(rest, info))
 
     case app @ Stmt.App(id, args) =>
       val callee = transformReference(id, info)

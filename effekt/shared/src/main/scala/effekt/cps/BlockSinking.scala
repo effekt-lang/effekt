@@ -117,8 +117,8 @@ object BlockSinking {
     case Stmt.Let(id, binding, rest) =>
       Stmt.Let(id, binding, normalize(rest))
 
-    case Stmt.Call(id, callee, args, ks, rest) =>
-      Stmt.Call(id, callee, args, ks, normalize(rest))
+    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
+      Stmt.Call(id, returnedKs, callee, args, ks, normalize(rest))
 
     case Stmt.App(_, _) | Stmt.Invoke(_, _, _) | Stmt.Return(_) | Stmt.Hole(_) =>
       stmt
@@ -176,7 +176,8 @@ object BlockSinking {
       case Stmt.New(id, interface, operations, rest) =>
         Stmt.New(id, interface, operations.map(op => op.copy(body = go(op.body))), go(rest))
       case Stmt.Let(id, binding, rest) => Stmt.Let(id, binding, go(rest))
-      case Stmt.Call(id, callee, args, ks, rest) => Stmt.Call(id, callee, args, ks, go(rest))
+      case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
+        Stmt.Call(id, returnedKs, callee, args, ks, go(rest))
       case terminal @ (Stmt.App(_, _) | Stmt.Invoke(_, _, _) |
           Stmt.Return(_) | Stmt.Hole(_)) => terminal
       case Stmt.Run(id, callee, args, purity, rest) =>
@@ -235,11 +236,11 @@ object BlockSinking {
         if (binding.free.contains(d.id)) bind(d, stmt)
         else Stmt.Let(id, binding, sink(d, rest))
 
-      case Stmt.Call(id, callee, args, ks, rest) =>
-        val usedImmediately = callee == d.id ||
+      case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
+        val usedImmediately = callee.value == d.id ||
           args.exists(_.free.contains(d.id)) || ks.free.contains(d.id)
         if (usedImmediately) bind(d, stmt)
-        else Stmt.Call(id, callee, args, ks, sink(d, rest))
+        else Stmt.Call(id, returnedKs, callee, args, ks, sink(d, rest))
 
       case Stmt.App(_, _) | Stmt.Invoke(_, _, _) | Stmt.Return(_) =>
         bind(d, stmt)

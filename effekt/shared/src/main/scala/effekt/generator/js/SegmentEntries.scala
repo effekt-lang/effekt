@@ -89,7 +89,7 @@ object SegmentEntries {
         visit(rest)
       case cps.Stmt.Let(_, _, rest) => visit(rest)
 
-      case cps.Stmt.Call(_, _, _, _, rest) => visit(rest)
+      case cps.Stmt.Call(_, _, _, _, _, rest) => visit(rest)
 
       case call: cps.Stmt.App =>
         val targets = closedTargets(call)
