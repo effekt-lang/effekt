@@ -94,30 +94,6 @@ enum TypeArg {
   case Boxed(tpe: BlockType, capt: Captures)
 }
 
-def pretty(constr: MonoConstraint): String = {
-  val start = if (constr.lower.size > 1) "<" else ""
-  val end = if (constr.lower.size > 1) ">" else ""
-  constr.lower.map(pretty).mkString(start, ", ", end) + " ⊑ " + constr.upper.name + "_" + constr.upper.id
-}
-
-def pretty(tpeArg: TypeArg): String = tpeArg match {
-  case TypeArg.Base(tpe, List()) => tpe.name.name + "_" + tpe.id
-  case TypeArg.Base(tpe, targs) => tpe.name.name + "_"  + tpe.id + "[" + targs.map(pretty).mkString(", ") + "]"
-  case TypeArg.Boxed(tpe, capt) => "BOXED"
-  case TypeArg.Var(funId, pos) => funId.name.name + "_" + funId.id + "." + pos
-}
-
-def pretty(solution: Solution): String = {
-  solution.map((k, v) => {
-    val sets = v.map(ground => {
-      val start = if (ground.size > 1) "<" else ""
-      val end = if (ground.size > 1) ">" else ""
-      ground.map(pretty).mkString(start, ", ", end)
-    }).mkString(", ")
-    sets + " <: " + k.name.name + "_" + k.id
-  }).mkString("\n")
-}
-
 // Type Id -> Var
 type TypeParams = Map[Id, TypeArg.Var]
 
