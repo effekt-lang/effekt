@@ -1037,9 +1037,15 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
 
   def matchExpr(scrutinee: Term): Term =
-      val clauses = `match` ~> braces { manyWhile(matchClause(), `case`) }
-      val default = when(`else`) { Some(stmt()) } { None }
-      Match(List(scrutinee), clauses, default, span())
+   val clauses = `match` ~> braces {
+     peek.kind match {
+       case `case` | `}` => ()
+       case k => fail("case", k)
+     }
+     manyWhile(matchClause(), `case`)
+   }
+   val default = when(`else`) { Some(stmt()) } { None }
+   Match(List(scrutinee), clauses, default, span())
 
 
   def assignExpr(assignee: Term.Var): Term =
