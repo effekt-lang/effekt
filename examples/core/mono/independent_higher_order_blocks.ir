@@ -1,3 +1,22 @@
+def applyInt(){f: ['A]('A) => 'A} = {
+  (f: ['A]('A) => 'A @ {f})[Int](42)
+}
+
+def applyBool(){f: ['A]('A) => 'A} = {
+  (f: ['A]('A) => 'A @ {f})[Bool](true)
+}
+
+def main() = {
+  val x = (applyInt: (){f: ['A]('A) => 'A} => Int @ {})(){['B](x: 'B) =>
+    return x: 'B
+  };
+  (applyBool: (){f: ['A]('A) => 'A} => Bool @ {})(){['C](x: 'C) =>
+    return x: 'C
+  }
+}
+
+/// MONO_PREPROCESS
+
 interface Poly {
   apply: ['A]('A) => 'A
 }
@@ -25,5 +44,15 @@ def main() = {
 
 /// MONO_COLLECT_CONSTRAINTS
 
+<> <: Poly
+<> <: applyBool
+<> <: applyInt
 <Bool> <: apply
 <Int> <: apply
+
+/// MONO_SOLVE
+
+S = Poly ↦ { <> },
+    apply ↦ { <Bool>, <Int> },
+    applyBool ↦ { <> },
+    applyInt ↦ { <> }

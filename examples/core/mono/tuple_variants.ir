@@ -20,3 +20,8 @@ def main() = {
 <MkPair.0, MkPair.1> <: Pair
 <String, Double> <: MkPair
 <String, Double> <: Pair
+
+/// MONO_SOLVE
+
+S = MkPair ↦ { <Bool, Char>, <Char, String>, <Int, Bool>, <String, Double> },
+    Pair ↦ { <Bool, Char>, <Char, String>, <Int, Bool>, <String, Double> }

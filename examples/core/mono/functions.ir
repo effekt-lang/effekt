@@ -29,6 +29,13 @@ def main() = {
 <c.0> <: b
 <d.0> <: c
 
+/// MONO_SOLVE
+
+S = a ↦ { <Bool>, <Int>, <String> },
+    b ↦ { <Bool>, <Int>, <String> },
+    c ↦ { <Bool> },
+    d ↦ { <Bool> }
+
 /// MONO_SPECIALIZE
 
 def aBool(x: Bool) = {

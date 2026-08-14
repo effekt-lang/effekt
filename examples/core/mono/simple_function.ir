@@ -10,6 +10,10 @@ def main() = {
 
 <Int> <: foo
 
+/// MONO_SOLVE
+
+S = foo ↦ { <Int> }
+
 /// MONO_SPECIALIZE
 
 def fooInt() = {

@@ -4,6 +4,8 @@ package core
 import java.io.File
 
 import TypeArg.*
+import effekt.util.PlainMessaging
+import effekt.util.messages.FatalPhaseError
 
 
 class MonoTests extends CorePhaseTests(Mono) {
@@ -25,7 +27,7 @@ class MonoTests extends CorePhaseTests(Mono) {
   // Product append
 
   test("product append: empty with empty") {
-    assertEquals(productAppend(List(Nil), Nil), List(Nil))
+    assertEquals(productAppend(List(Nil), Nil), Nil)
   }
 
   test("product append: starts with empty list") {
@@ -42,12 +44,12 @@ class MonoTests extends CorePhaseTests(Mono) {
     assertEquals(result, List(List(1, 2, 4), List(1, 3, 4)))
   }
 
-  test("product append: empty map product") {
+  test("product append: empty map product has no combinations") {
     val start: Substitutions = List(
       Map(id("a") -> Vector(BaseTInt)),
       Map(id("a") -> Vector(BaseTString)))
 
-    assertEquals(mapProductAppend(start, Nil), start)
+    assertEquals(mapProductAppend(start, Nil), Nil)
   }
 
   test("product append: single map product") {
@@ -107,6 +109,13 @@ class MonoTests extends CorePhaseTests(Mono) {
     assertEquals(solveConstraints(constraints), expected)
   }
 
+  test("solve: monomorphic demand") {
+    val constraints = List(MonoConstraint(Vector.empty, id("a")))
+    val expected: Solution = Map(id("a") -> Set(Vector.empty))
+
+    assertEquals(solveConstraints(constraints), expected)
+  }
+
   test("solve: call to another polymorphic function") {
     val constraints = List(
       MonoConstraint(Vector(Var(id("b"), 0)), id("a")),
@@ -115,6 +124,16 @@ class MonoTests extends CorePhaseTests(Mono) {
     val expected: Solution = Map(
       id("a") -> Set(Vector(BaseTInt), Vector(BaseTString)),
       id("b") -> Set(Vector(BaseTString)))
+
+    assertEquals(solveConstraints(constraints), expected)
+  }
+
+  test("solve: unconstrained variable contributes no variants") {
+    val constraints = List(
+      MonoConstraint(Vector(Var(id("none"), 0)), id("maybe")),
+      MonoConstraint(Vector(BaseTInt), id("maybe")))
+    val expected: Solution = Map(
+      id("maybe") -> Set(Vector(BaseTInt)))
 
     assertEquals(solveConstraints(constraints), expected)
   }
@@ -227,14 +246,34 @@ class MonoTests extends CorePhaseTests(Mono) {
 
   private def showConstraints(input: ModuleDecl): String =
     collectConstraints(input)
-      .filter(_.lower.nonEmpty)
       .map(showConstraint)
       .distinct
       .sorted
       .mkString("\n")
 
+  private def showSolution(input: ModuleDecl): String =
+    try {
+      val bindings = solveConstraints(collectConstraints(input))
+        .toList
+        .sortBy { case (parameter, _) => (parameter.name.name, parameter.id) }
+        .map { case (parameter, variants) =>
+          val image = variants
+            .map(_.map(showTypeArg).mkString("<", ", ", ">"))
+            .toList
+            .sorted
+            .mkString("{ ", ", ", " }")
+          s"${parameter.name.name} ↦ $image"
+        }
+      if bindings.isEmpty then "S = ∅" else bindings.mkString("S = ", ",\n    ", "")
+    } catch {
+      case FatalPhaseError(message) =>
+        s"no finite solution: ${PlainMessaging().formatContent(message)}"
+    }
+
   registerCoreIRTests(
     new File("examples/core/mono"),
+    CoreIRTransform("MONO_PREPROCESS", Preprocess.preprocess),
     CoreIRAnalysis("MONO_COLLECT_CONSTRAINTS", showConstraints),
+    CoreIRAnalysis("MONO_SOLVE", showSolution),
     CoreIRTransform("MONO_SPECIALIZE", transform))
 }

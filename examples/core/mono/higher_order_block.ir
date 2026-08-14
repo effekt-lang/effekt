@@ -1,3 +1,15 @@
+def callPoly(){f: ['A]('A) => 'A} = {
+  (f: ['A]('A) => 'A @ {f})[Int](42)
+}
+
+def main() = {
+  (callPoly: (){f: ['A]('A) => 'A} => Int @ {})(){['B](x: 'B) =>
+    return x: 'B
+  }
+}
+
+/// MONO_PREPROCESS
+
 interface Poly {
   apply: ['A]('A) => 'A
 }
@@ -16,7 +28,15 @@ def main() = {
 
 /// MONO_COLLECT_CONSTRAINTS
 
+<> <: Poly
+<> <: callPoly
 <Int> <: apply
+
+/// MONO_SOLVE
+
+S = Poly ↦ { <> },
+    apply ↦ { <Int> },
+    callPoly ↦ { <> }
 
 /// MONO_SPECIALIZE
 

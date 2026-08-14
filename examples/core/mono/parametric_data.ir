@@ -27,6 +27,8 @@ def main() = {
 
 /// MONO_COLLECT_CONSTRAINTS
 
+<> <: Exists
+<> <: Nothing
 <Bool> <: wrap
 <Int, Char> <: Just
 <Int, String> <: Left
@@ -40,6 +42,18 @@ def main() = {
 <String> <: Pack
 <wrap.0, Bool> <: Just
 <wrap.0> <: Maybe
+
+/// MONO_SOLVE
+
+S = Choice ↦ { <Int>, <String> },
+    Exists ↦ { <> },
+    Just ↦ { <Bool, Bool>, <Int, Char> },
+    Left ↦ { <Int, String> },
+    Maybe ↦ { <Bool>, <Int> },
+    Nothing ↦ { <> },
+    Pack ↦ { <String> },
+    Right ↦ { <String, Int> },
+    wrap ↦ { <Bool> }
 
 /// MONO_SPECIALIZE
 
@@ -58,11 +72,9 @@ type Exists {
 
 type ChoiceInt {
   LeftString(value: String)
-  Right['B](value: Int)
 }
 
 type ChoiceString {
-  Left['B](value: String)
   RightInt(value: String)
 }
 

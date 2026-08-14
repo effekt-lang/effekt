@@ -13,6 +13,11 @@ def main(){on: On[Int]} = {
 <Int> <: On
 <Int> <: use
 
+/// MONO_SOLVE
+
+S = On ↦ { <Int> },
+    use ↦ { <Int> }
+
 /// MONO_SPECIALIZE
 
 interface OnInt {}

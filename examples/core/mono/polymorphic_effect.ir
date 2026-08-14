@@ -13,6 +13,11 @@ def emit(){ints: Yield[Int]}{strings: Yield[String]} = {
 <String> <: yield
 <yield.0> <: Yield
 
+/// MONO_SOLVE
+
+S = Yield ↦ { <Int>, <String> },
+    yield ↦ { <Int>, <String> }
+
 /// MONO_SPECIALIZE
 
 interface YieldInt {

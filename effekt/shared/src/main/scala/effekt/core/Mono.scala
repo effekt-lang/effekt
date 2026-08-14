@@ -139,7 +139,7 @@ def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): MonoC
         TypeArg.Var(constr.id, index) // Just.0  
       ).toVector // < Just.0 >
       MonoConstraint(constructorArgs, id) // < Just.0 > <: Maybe
-    }
+    }.filter(_.lower.nonEmpty)
   case Interface(id, tparams, properties) => 
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, id))
     properties.map { prop =>
@@ -148,7 +148,7 @@ def findConstraints(declaration: Declaration)(using ctx: MonoFindContext): MonoC
         TypeArg.Var(prop.id, index) // Just.0  
       ).toVector // < Just.0 >
       MonoConstraint(propArgs, id) // < Just.0 > <: Maybe
-    } ++ (properties flatMap findConstraints)
+    }.filter(_.lower.nonEmpty) ++ (properties flatMap findConstraints)
 
 def findConstraints(extern: Extern)(using ctx: MonoFindContext): MonoConstraints = extern match {
   case Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
@@ -197,12 +197,6 @@ def findConstraints(operation: Operation)(using ctx: MonoFindContext): MonoConst
   case Operation(name, tparams, cparams, vparams, bparams, body) => 
     tparams.zipWithIndex.foreach(ctx.extendTypingContext(_, _, name))
     findConstraints(body)
-
-def findConstraints(constructor: Constructor)(using ctx: MonoFindContext): MonoConstraints = constructor match
-  case Constructor(id, tparams, List()) => List.empty
-  case Constructor(id, tparams, fields) =>
-    val (newTargs, constraints) = findConstraints(fields map (_.tpe))
-    List(MonoConstraint(newTargs.toVector, id)) ++ constraints
 
 def findConstraints(clause: (Id, BlockLit))(using ctx: MonoFindContext): MonoConstraints = clause match
   case (id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
@@ -333,14 +327,13 @@ type Substitution = Map[Id, Vector[TypeArg]]
 type Substitutions = List[Substitution]
 
 def solveConstraints(constraints: MonoConstraints)(using Context): Solution = {
-  val filteredConstraints = constraints.filterNot(c => c.lower.isEmpty)
-  val groupedConstraints = filteredConstraints.groupBy(c => c.upper)
+  val groupedConstraints = constraints.groupBy(c => c.upper)
   var bounds = groupedConstraints.map((sym, constraints) => (sym -> constraints.map(c => c.lower).toSet))
 
   while (true) {
     val previousBounds = bounds
     bounds.foreach((sym, tas) => 
-      val bound = propagateBounds(sym, tas).filter(v => v.nonEmpty)
+      val bound = propagateBounds(sym, tas)
       bounds += (sym -> bound)
     )
     
@@ -363,17 +356,15 @@ def solveConstraints(constraints: MonoConstraints)(using Context): Solution = {
           
       // a => <Int, Char>, <Double, Bool>
       // b => <a.0, a.1>
-      var substitutions: Substitutions = List(Map.empty)
-      // Optimization: Only add substitutions from bounds that are known to exist inside the current bound
       def collectBounds(typeArg: TypeArg): List[FunctionId] = typeArg match {
         case TypeArg.Var(fnId, _) => List(fnId)
         case TypeArg.Base(_, targs) => targs.flatMap(collectBounds)
         case _ => List()
       }
-      val containedVariables = b.flatMap(collectBounds)
-      bounds.foreach { 
-        case (funId, bs) if containedVariables.contains(funId) => substitutions = mapProductAppend(substitutions, bs.map((funId, _)).toList)
-        case _ => ()
+      val substitutions = b.flatMap(collectBounds).distinct.foldLeft(List(Map.empty): Substitutions) {
+        case (substitutions, funId) =>
+          val variants = bounds.getOrElse(funId, Set.empty).map((funId, _)).toList
+          mapProductAppend(substitutions, variants)
       }
 
       substitutions.foreach(substitution => {
@@ -390,12 +381,10 @@ def solveConstraints(constraints: MonoConstraints)(using Context): Solution = {
 }
 
 def productAppend[A](ls: List[List[A]], rs: List[A]): List[List[A]] =
-  if (rs.isEmpty) return ls
   for { l <- ls; r <- rs } yield l :+ r
 
 // Cross product of existing substitutions and all variants for one type variable
 def mapProductAppend(ls: Substitutions, rs: Variants): List[Map[Id, Vector[TypeArg]]] =
-  if (rs.isEmpty) return ls
   for { l <- ls; r <- rs } yield l + r
 
 def monomorphize(definitions: List[Toplevel])(using ctx: MonoContext)(using Context, DeclarationContext): List[Toplevel] =
@@ -449,15 +438,11 @@ def monomorphize(property: Property, variant: Vector[Ground])(using ctx: MonoCon
   case Property(id, tpe@BlockType.Function(tparams, cparams, vparams, bparams, result)) => {
     val baseTypes = ctx.solution.getOrElse(id, Set.empty).toList
     val relevantTypes = baseTypes.filter(tpes => tpes.startsWith(variant))
-    if (relevantTypes.isEmpty) {
-      List(Property(id, monomorphize(tpe)))
-    } else {
-      relevantTypes.map(baseType => {
-        val existentialBaseTypes = baseType.drop(variant.size)
-        ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
-        Property(ctx.funNames((id, baseType)), monomorphize(tpe)) 
-      })
-    }
+    relevantTypes.map(baseType => {
+      val existentialBaseTypes = baseType.drop(variant.size)
+      ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
+      Property(ctx.funNames((id, baseType)), monomorphize(tpe))
+    })
   }
   case Property(id, tpe) => ???
 }
@@ -470,16 +455,12 @@ def monomorphize(constructor: Constructor, variant: Vector[Ground])(using ctx: M
     val relevantTypes = baseTypes.filter(tpes => tpes.startsWith(variant))
     // The solutions for constructors may have more types than the variant because of existentials
     // in which case we need to generate multiple constructors
-    if (relevantTypes.isEmpty) {
-      List(Constructor(id, tparams, fields map monomorphize))
-    } else {
-      relevantTypes.map(baseType => {
-        // Remove types not relevant for existentials (mono13)
-        val existentialBaseTypes = baseType.drop(variant.size)
-        ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
-        Constructor(ctx.funNames(id, baseType), List.empty, fields map monomorphize)
-      })
-    }
+    relevantTypes.map(baseType => {
+      // Remove types not relevant for existentials (mono13)
+      val existentialBaseTypes = baseType.drop(variant.size)
+      ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
+      Constructor(ctx.funNames(id, baseType), List.empty, fields map monomorphize)
+    })
 
 def monomorphize(block: Block)(using ctx: MonoContext)(using Context, DeclarationContext): Block = block match
   case b: BlockLit => monomorphize(b)
@@ -501,21 +482,11 @@ def monomorphize(operation: Operation, variant: Vector[Ground])(using ctx: MonoC
   case Operation(name, tparams, cparams, vparams, bparams, body) => 
     val baseTypes = ctx.solution.getOrElse(name, Set.empty).toList
     val relevantTypes = baseTypes.filter(tpes => tpes.startsWith(variant))
-    if (relevantTypes.isEmpty) {
-      // If we are considering a specific variant for an interface,
-      // but none of the solutions for this operation match we don't generate the operation
-      if (variant.nonEmpty) {
-        List()
-      } else {
-        List(Operation(name, List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body)))
-      }
-    } else {
-      relevantTypes.map(baseTypes =>
-        val existentialBaseTypes = baseTypes.drop(variant.size)
-        ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
-        Operation(ctx.funNames(name, baseTypes), List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
-      )
-    }
+    relevantTypes.map(baseTypes =>
+      val existentialBaseTypes = baseTypes.drop(variant.size)
+      ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
+      Operation(ctx.funNames(name, baseTypes), List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
+    )
     
 
 def monomorphize(block: BlockLit)(using ctx: MonoContext)(using Context, DeclarationContext): BlockLit = block match
@@ -624,17 +595,12 @@ def monomorphize(clause: (Id, BlockLit), variant: Vector[Ground])(using ctx: Mon
   case (id, BlockLit(tparams, cparams, vparams, bparams, body)) => 
     val baseTypes = ctx.solution.getOrElse(id, Set.empty).toList
     val relevantTypes = baseTypes.filter(tpes => tpes.startsWith(variant))
-    if (relevantTypes.isEmpty) {
+    relevantTypes.map(baseType =>
+      val existentialBaseTypes = baseType.drop(variant.size)
+      ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
       val monoBlockLit: Block.BlockLit = BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
-      List((id, monoBlockLit))
-    } else {
-      relevantTypes.map(baseType =>
-        val existentialBaseTypes = baseType.drop(variant.size)
-        ctx.instantiateTparams(tparams, existentialBaseTypes.toList)
-        val monoBlockLit: Block.BlockLit = BlockLit(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(body))
-        (ctx.funNames(id, baseType), monoBlockLit)
-      ).toList
-    }
+      (ctx.funNames(id, baseType), monoBlockLit)
+    ).toList
 
 def monomorphize(opt: Option[Stmt])(using ctx: MonoContext)(using Context, DeclarationContext): Option[Stmt] = opt match
   case None => None

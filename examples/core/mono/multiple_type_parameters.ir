@@ -17,6 +17,11 @@ def main() = {
 <Int, String> <: second
 <second.1, second.0> <: first
 
+/// MONO_SOLVE
+
+S = first ↦ { <Bool, Char>, <String, Int> },
+    second ↦ { <Char, Bool>, <Int, String> }
+
 /// MONO_SPECIALIZE
 
 def firstStringInt(x: String, y: Int) = {

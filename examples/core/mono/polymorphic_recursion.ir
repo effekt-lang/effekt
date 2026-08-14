@@ -20,3 +20,7 @@ def main() = {
 <Some.0> <: Maybe
 <loop.0> <: Maybe
 <loop.0> <: Some
+
+/// MONO_SOLVE
+
+no finite solution: Detected polymorphic recursion for 'loop' at position '0'

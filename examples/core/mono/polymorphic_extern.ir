@@ -15,6 +15,12 @@ def use(array: Array[Char]) = {
 <get.0> <: Array
 <set.0> <: Array
 
+/// MONO_SOLVE
+
+S = Array ↦ { <Char> },
+    get ↦ { <Char> },
+    set ↦ { <Char> }
+
 /// MONO_SPECIALIZE
 
 extern type Array['A]

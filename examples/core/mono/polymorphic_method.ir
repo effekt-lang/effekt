@@ -12,6 +12,10 @@ def main(){foo: Foo} = {
 <Int> <: bar
 <String> <: bar
 
+/// MONO_SOLVE
+
+S = bar ↦ { <Int>, <String> }
+
 /// MONO_SPECIALIZE
 
 interface Foo {

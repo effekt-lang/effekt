@@ -21,6 +21,12 @@ def main() = {
 <String> <: pair
 <String> <: withString
 
+/// MONO_SOLVE
+
+S = pair ↦ { <Bool>, <String> },
+    withInt ↦ { <Int> },
+    withString ↦ { <String> }
+
 /// MONO_SPECIALIZE
 
 def pairString(x: String) = {
