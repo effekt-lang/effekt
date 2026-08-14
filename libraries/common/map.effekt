@@ -91,7 +91,7 @@ def getOrElse[K, V](m: Map[K, V], k: K) { default: => V }: V =
 def contains[K, V](m: Map[K, V], k: K): Bool =
   internal::get(m.tree, m.compare, k) match {
     case None() => false
-    case Some(v) => true
+    case Some(_) => true
   }
 
 /// Get minimum in the map `m`.
@@ -156,15 +156,26 @@ def filter[K, V](m: Map[K, V]) { shouldKeep: V => Bool }: Map[K, V] =
 def foreach[K, V](m: Map[K, V]) { action: (K, V) => Unit }: Unit =
   internal::foreach(m.tree) {action}
 
+/// Traverse all keys and their associated values in map `m` in *reverse*order,
+/// running the function `action` on a key and its associated value.
+///
+/// Law: `m.foreachReversed { action } === m.toList.reverse.foreach { action }`
+///
+/// O(N)
+///
+/// TODO: Support {Control} for early exits.
+def foreachReversed[K, V](m: Map[K, V]) { action: (K, V) => Unit }: Unit =
+  internal::foreachReversed(m.tree) {action}
+
 /// Convert a map `m` into a list of (key, value) pairs.
 ///
 /// O(N)
 def toList[K, V](m: Map[K, V]): List[(K, V)] = {
   var acc = Nil()
-  m.foreach { (k, v) =>
+  m.foreachReversed{ (k, v) =>
     acc = Cons((k, v), acc)
   }
-  acc.reverse
+  acc
 }
 
 /// Get a list of keys of the map `m`.
@@ -172,10 +183,10 @@ def toList[K, V](m: Map[K, V]): List[(K, V)] = {
 /// O(N)
 def keys[K, V](m: Map[K, V]): List[K] = {
   var acc = Nil()
-  m.foreach { (k, _v) =>
+  m.foreachReversed { (k, _v) =>
     acc = Cons(k, acc)
   }
-  acc.reverse
+  acc
 }
 
 /// Get a list of values of the map `m`.
@@ -183,10 +194,10 @@ def keys[K, V](m: Map[K, V]): List[K] = {
 /// O(N)
 def values[K, V](m: Map[K, V]): List[V] = {
   var acc = Nil()
-  m.foreach { (_k, v) =>
+  m.foreachReversed { (_k, v) =>
     acc = Cons(v, acc)
   }
-  acc.reverse
+  acc
 }
 
 /// Create a map from a list of (key, value) pairs and a pure, first-class comparison function.
@@ -527,6 +538,27 @@ namespace internal {
     go(m)
   }
 
+  /// Traverse all keys and their associated values in tree `m` in *reverse* order,
+  /// running the function `action` on a key and its associated value.
+  ///
+  /// Law: `m.foreachReversed { action } === m.toList.reverse.foreach { action }`
+  ///
+  /// O(N)
+  ///
+  /// TODO: Support {Control} for early exits.
+  def foreachReversed[K, V](m: Tree[K, V]) { action: (K, V) => Unit }: Unit = {
+    def go(m: Tree[K, V]): Unit = {
+      m match {
+        case Tip() => ()
+        case Bin(_, k, v, l, r) =>
+          go(r)
+          action(k, v)
+          go(l)
+      }
+    }
+    go(m)
+  }
+
   /// Create a tree from a list of (key, value) pairs.
   /// If the list contains more than one value for the same key,
   /// only the last value is used in the tree.
@@ -572,20 +604,18 @@ namespace internal {
             case Nil() => (Tip(), [], [])
             case Cons((k, v), rest) =>
               if (level == 1) {
-                val singleton = Bin(1, k, v, Tip(), Tip())
+                val one = singleton(k, v)
                 if (notOrdered(k, rest)) {
-                  (singleton, [], rest)
+                  (one, [], rest)
                 } else {
-                  (singleton, rest, [])
+                  (one, rest, [])
                 }
               } else {
                 val res = create(level.bitwiseShr(1), pairs)
                 res match {
                   case (_, Nil(), _) => res
                   case (l, Cons((k2, v2), Nil()), zs) => (l.putMax(k2, v2), [], zs)
-                  case (l, Cons((k2, v2), rest2), _) =>
-                    val xs = Cons((k2, v2), rest2) // @-pattern
-
+                  case (l, xs, _) and xs is Cons((k2, v2), rest2) =>
                     if (notOrdered(k2, rest2)) { (l, [], xs) }
                     else {
                       val (r, zs, ws) = create(level.bitwiseShr(1), rest2);
@@ -763,9 +793,8 @@ namespace internal {
   val ratio = 2
   val delta = 3
 
-  def bin[K, V](k: K, v: V, l: Tree[K, V], r: Tree[K, V]): Tree[K, V] = {
+  def bin[K, V](k: K, v: V, l: Tree[K, V], r: Tree[K, V]): Tree[K, V] =
     Bin(l.size() + r.size() + 1, k, v, l, r)
-  }
 
   def balance[K, V](k: K, v: V, l: Tree[K, V], r: Tree[K, V]): Tree[K, V] = {
     /*
@@ -859,7 +888,7 @@ namespace internal {
     if ((sizeL + sizeR) <= 1) { Bin(sizeCombined, k, v, l, r) }
     else if (sizeR > (delta * sizeL)) { rotateL(k, v, l, r) }
     else if (sizeL > (delta * sizeR)) { rotateR(k, v, l, r) }
-    else { Bin(sizeCombined, k, v, l, r)}
+    else { Bin(sizeCombined, k, v, l, r) }
   }
 
   record MaxView[K, V](k: K, v: V, m: Tree[K, V])
@@ -1021,10 +1050,12 @@ namespace returning {
   /// Collects `(key, value)` pairs from a push stream producer `stream` into a new `map`,
   /// using the provided `compare` function, returning the result of the producer as well as the collected map.
   def collect[K, V, R](compare: (K, K) => Ordering at {}) { stream: () => R / emit[(K, V)] }: (R, Map[K, V]) =
-    try {
-      (stream(), empty(compare))
+    var map = map::empty[K, V](compare)
+    val r = try {
+      stream()
     } with emit[(K, V)] { case (k, v) =>
-      val (r, map) = resume(());
-      (r, map.put(k, v))
+      map = map.put(k, v)
+      resume(())
     }
+    (r, map)
 }

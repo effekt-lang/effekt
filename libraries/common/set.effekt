@@ -105,15 +105,23 @@ def fromListGeneric[A](list: List[A]): Set[A] = {
 def foreach[A](s: Set[A]) { action: A => Unit }: Unit =
   internal::foreach(s.tree) { (k, _v) => action(k) }
 
+/// Traverse all elements in *reverse* order, running the function `action` on each element.
+///
+/// Law: `s.foreachReversed { action } === s.toList.reverse.foreach { action }`
+///
+/// O(N)
+def foreachReversed[A](s: Set[A]) { action: A => Unit }: Unit =
+  internal::foreachReversed(s.tree) { (k, _v) => action(k) }
+
 /// Create a list from a given set.
 ///
 /// O(N)
 def toList[A](s: Set[A]): List[A] = {
   var acc = Nil()
-  s.foreach { a =>
+  s.foreachReversed { a =>
     acc = Cons(a, acc)
   }
-  acc.reverse
+  acc
 }
 
 /// Check if a predicate holds for all elements in a given set.
@@ -251,11 +259,14 @@ def collect[A](compare: (A, A) => Ordering at {}) { stream: () => Unit / emit[A]
 namespace returning {
   /// Collects elements emitted by a push stream producer `stream` into a new set
   /// using provided `compare` function, returning the result of the producer as well as the collected set.
-  def collect[A, R](compare: (A, A) => Ordering at {}) { stream: () => R / emit[A] }: (R, Set[A]) =
-    try {
-      (stream(), empty(compare))
+  def collect[A, R](compare: (A, A) => Ordering at {}) { stream: () => R / emit[A] }: (R, Set[A]) = {
+    var set = set::empty(compare)
+    val r = try {
+      stream()
     } with emit[A] { (v) =>
-      val (r, set) = resume(());
-      (r, set.insert(v))
+      set = set.insert(v)
+      resume(())
     }
+    (r, set)
+  }
 }
