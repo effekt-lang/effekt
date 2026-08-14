@@ -74,6 +74,25 @@ enum Purity {
 type MetaCont = Expr
 type Cont = Expr
 
+/** A compositional call can target either a function value or an operation
+ *  selected from an object value. */
+enum Callee {
+  case Function(id: Id)
+  case Method(receiver: Id, method: Id)
+
+  /** The value whose flow determines this call's target. */
+  def value: Id = this match {
+    case Function(id) => id
+    case Method(receiver, _) => receiver
+  }
+
+  def function: Option[Id] = this match {
+    case Function(id) => Some(id)
+    case Method(_, _) => None
+  }
+}
+export Callee.*
+
 enum Stmt extends Tree {
   case Def(id: Id, params: List[Id], body: Stmt, rest: Stmt)
   case New(id: Id, interface: Id, operations: List[Operation], rest: Stmt)
@@ -84,7 +103,14 @@ enum Stmt extends Tree {
    *  this preserves the direct-style sequencing present in Core. The
    *  remainder is its not-yet-reified continuation; `ks` is retained in case
    *  the callee ultimately keeps the CPS calling convention. */
-  case Call(id: Id, callee: Id, args: List[Expr], ks: MetaCont, rest: Stmt)
+  case Call(
+    id: Id,
+    returnedKs: Id,
+    callee: Callee,
+    args: List[Expr],
+    ks: MetaCont,
+    rest: Stmt
+  )
   case App(id: Id, args: List[Expr])
   case Invoke(id: Id, method: Id, args: List[Expr])
   /** Terminates the current computation with `value`. Under a direct calling
@@ -230,6 +256,12 @@ object substitutions {
     case Expr.Toplevel => e
   }
 
+  def substitute(callee: Callee)(using subst: Substitution): Callee = callee match {
+    case Callee.Function(id) => Callee.Function(substituteAsVar(id))
+    case Callee.Method(receiver, method) =>
+      Callee.Method(substituteAsVar(receiver), method)
+  }
+
   def substitute(s: Stmt)(using subst: Substitution): Stmt = rewriting(s) {
     case Stmt.Def(id, params, body, rest) =>
       Stmt.Def(id, params,
@@ -244,9 +276,9 @@ object substitutions {
       Stmt.Let(id, substitute(binding),
         substitute(rest)(using subst.shadow(id)))
 
-    case Stmt.Call(id, callee, args, ks, rest) =>
-      Stmt.Call(id, substituteAsVar(callee), args.map(substitute), substitute(ks),
-        substitute(rest)(using subst.shadow(id)))
+    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
+      Stmt.Call(id, returnedKs, substitute(callee), args.map(substitute), substitute(ks),
+        substitute(rest)(using subst.shadow(List(id, returnedKs))))
 
     case Stmt.App(id, args) =>
       Stmt.App(substituteAsVar(id), args.map(substitute))
@@ -360,6 +392,11 @@ object freeVariables {
     case Expr.Toplevel => closed
   }
 
+  inline def free(callee: Callee): Set[Id] = callee match {
+    case Callee.Function(id) => free(id)
+    case Callee.Method(receiver, _) => free(receiver)
+  }
+
   inline def free(op: Operation): Set[Id] = op match {
     case Operation(name, params, body) => body.free -- bound(params)
   }
@@ -383,8 +420,9 @@ object freeVariables {
     case Stmt.Let(id, binding, rest) =>
       binding.free ++ (rest.free - id)
 
-    case Stmt.Call(id, callee, args, ks, rest) =>
-      free(callee) ++ all(args, _.free) ++ ks.free ++ (rest.free - id)
+    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
+      free(callee) ++ all(args, _.free) ++ ks.free ++
+        (rest.free -- Set(id, returnedKs))
 
     case Stmt.App(id, args) =>
       free(id) ++ all(args, _.free)
@@ -494,7 +532,7 @@ object functionUsage {
       rest.uses ++ all(operations, _.uses) + (id -> freeInOperations)
     case Stmt.Let(id, binding, rest) =>
       rest.uses
-    case Stmt.Call(id, callee, args, ks, rest) =>
+    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
       rest.uses
     case Stmt.App(id, args) =>
       DB.empty
@@ -612,7 +650,7 @@ object escapeAnalysis {
 
     // The callee does not escape; arguments have the same value boundary as
     // an ordinary application. The explicit remainder is still local.
-    case Stmt.Call(id, callee, args, ks, rest) =>
+    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
       args.flatMap(_.free).toSet ++ ks.free ++ rest.escapes
 
     // callee does NOT escape
@@ -701,8 +739,8 @@ object references {
 
   inline def refs(stmt: Stmt): DB[Int] = stmt match {
     case Stmt.App(id, args) => use(id) ++ all(args, _.refs)
-    case Stmt.Call(id, callee, args, ks, rest) =>
-      use(callee) ++ all(args, _.refs) ++ ks.refs ++ rest.refs
+    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
+      refs(callee) ++ all(args, _.refs) ++ ks.refs ++ rest.refs
     case Stmt.Invoke(id, method, args) => use(id) ++ all(args, _.refs)
     case Stmt.Return(value) => value.refs
     case Stmt.Alloc(id, init, region, rest) => use(region) ++ init.refs ++ rest.refs
@@ -729,4 +767,9 @@ object references {
 
   inline def refs(cl: Clause): DB[Int] = cl.body.refs
   inline def refs(op: Operation): DB[Int] = op.body.refs
+
+  inline def refs(callee: Callee): DB[Int] = callee match {
+    case Callee.Function(id) => use(id)
+    case Callee.Method(receiver, _) => use(receiver)
+  }
 }

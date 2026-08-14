@@ -236,9 +236,11 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
     } yield (calleeId, vs ++ bs)).run { case (calleeId, args) =>
       if isControlPure(stmt.capt) then {
         val result = Id("result")
+        val returnedKs = Id("ks")
         Stmt.Call(
           result,
-          calleeId,
+          returnedKs,
+          Callee.Function(calleeId),
           args,
           ks.reify,
           k(Expr.Variable(result), ks))
@@ -254,8 +256,15 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
       vs <- Bind.traverse(vargs)(transform)
       bs <- Bind.traverse(bargs)(transform)
     } yield (calleeId, vs ++ bs)).run { case (calleeId, args) =>
-      k.reify(stmt.tpe, cont =>
-        Stmt.Invoke(calleeId, method, args ++ List(ks.reify, cont)))
+      val result = Id("result")
+      val returnedKs = Id("ks")
+      Stmt.Call(
+        result,
+        returnedKs,
+        Callee.Method(calleeId, method),
+        args,
+        ks.reify,
+        k(Expr.Variable(result), MetaContinuation.Dynamic(returnedKs)))
     }
 
   // --- If ---

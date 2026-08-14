@@ -23,8 +23,8 @@ object Simplifier {
     case Stmt.Let(id, binding, rest) =>
       Stmt.Let(id, rewrite(binding), rewrite(rest))
 
-    case Stmt.Call(id, callee, args, ks, rest) =>
-      Stmt.Call(id, callee, args.map(rewrite), rewrite(ks), rewrite(rest))
+    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
+      Stmt.Call(id, returnedKs, callee, args.map(rewrite), rewrite(ks), rewrite(rest))
 
     case Stmt.App(id, args) =>
       Stmt.App(id, args.map(rewrite))

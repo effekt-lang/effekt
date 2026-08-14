@@ -50,9 +50,10 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
       }.mkString("\n")
     })
   case CallingConventions extends AnalysisPass("CALLING_CONVENTIONS",
-    (_, input, _) => js.CallingConvention.analyze(
+    (_, input, mainId) => js.CallingConvention.analyze(
       input,
-      input.definitions.map(GuardedEquality.targets).toVector).show)
+      input.definitions.map(GuardedEquality.targets).toVector,
+      Set(mainId)).show)
   case ControlFlow extends AnalysisPass("CONTROL_FLOW",
     (_, input, _) => {
       val representations = js.TransformerCps.computePlan(input)
@@ -76,13 +77,14 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
         input.definitions.map(GuardedEquality.targets).toVector).safeEntries.show
     })
   case JavaScript extends AnalysisPass("JAVASCRIPT",
-    (_, input, _) => {
+    (_, input, mainId) => {
       given Context = new TestContext
       given DeclarationContext = new DeclarationContext(input.declarations, Nil)
 
       js.TransformerCps.resetNames()
-      val generated = js.TransformerCps.toJS(input, Nil)
-      js.PrettyPrinter.format(js.FunctionFloating.transform(generated).stmts).layout
+      val generated = js.TransformerCps.toJS(input, Nil, Set(mainId))
+      val simplified = js.ControlFlowSimplification.transform(generated)
+      js.PrettyPrinter.format(js.FunctionFloating.transform(simplified).stmts).layout
         .linesIterator.map(_.stripTrailing).mkString("\n")
     })
 }
@@ -101,6 +103,7 @@ class CpsTests extends munit.FunSuite {
     "Nil" -> Id("Nil", -7),
     "Cons" -> Id("Cons", -8),
     "lt"   -> Id("lt", -9),
+    "Triple" -> Id("Triple", -10),
   )
 
   def parse(input: String, nickname: String = "input")(using Location): ModuleDecl = {
@@ -210,6 +213,60 @@ class CpsTests extends munit.FunSuite {
     }
 
     assertEquals(uses(handler).map(_.name.name), Set("dependency"))
+  }
+
+  test("calling conventions ignore calls owned by non-CPS definitions") {
+    val module = parse("""
+      def callee(x, ks, k) { k(x, ks) };
+      def main(ks, k) {
+        def initializer() {
+          let value = callee!(1, toplevel, return);
+          return(value)
+        }
+        k(0, ks)
+      }
+    """)
+
+    js.CallingConvention.analyze(
+      module,
+      module.definitions.map(GuardedEquality.targets).toVector,
+      Set(findMain(module)))
+  }
+
+  test("JavaScript match clauses project only used fields") {
+    val triple = defaultNames("Triple")
+    val data = Id("TripleData", -11)
+    val first = Id("first", -12)
+    val second = Id("second", -13)
+    val third = Id("third", -14)
+    val parsed = parse("""
+      def main(value, k) {
+        value match {
+          case Triple(unused1, used, unused2) => k(used)
+        }
+      }
+    """)
+    val module = parsed.copy(declarations = List(
+      core.Declaration.Data(data, Nil, List(
+        core.Constructor(triple, Nil, List(
+          core.Field(first, core.Type.TInt),
+          core.Field(second, core.Type.TInt),
+          core.Field(third, core.Type.TInt)))))))
+
+    given Context = new TestContext
+    given DeclarationContext = new DeclarationContext(module.declarations, Nil)
+    js.TransformerCps.resetNames()
+    val generated = js.TransformerCps.toJS(module, Nil, Set(findMain(module)))
+    val simplified = js.ControlFlowSimplification.transform(generated)
+    val output = js.PrettyPrinter
+      .format(js.FunctionFloating.transform(simplified).stmts).layout
+      .linesIterator.map(_.stripTrailing).mkString("\n")
+
+    val projections = output.linesIterator
+      .filter(_.contains(" = value_0."))
+      .map(_.trim)
+      .mkString("\n")
+    assertNoDiff(projections, "const used_0 = value_0.second_0;")
   }
 
   def testFile(file: File): Unit = {

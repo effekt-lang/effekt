@@ -90,13 +90,16 @@ object StaticArguments {
 
       case Stmt.Let(_, _, rest) => process(rest)
 
-      case call @ Stmt.Call(_, id, args, ks, rest) =>
+      case call @ Stmt.Call(_, _, Callee.Function(id), args, ks, rest) =>
         if functions.contains(id) then
           recordKnown(
             id,
             args.map(Some(_)) ++ List(Some(ks), None),
             compositional = true)
         else markCompositionalTargets(call)
+        process(rest)
+
+      case Stmt.Call(_, _, Callee.Method(_, _), _, _, rest) =>
         process(rest)
 
       case Stmt.App(id, args) =>
@@ -254,6 +257,7 @@ object StaticArguments {
 
   private def rewriteCall(
     result: Id,
+    returnedKs: Id,
     id: Id,
     args: List[Expr],
     ks: Expr,
@@ -262,7 +266,8 @@ object StaticArguments {
     val isStatic = ctx.statics(id)
     Stmt.Call(
       result,
-      ctx.workers(id),
+      returnedKs,
+      Callee.Function(ctx.workers(id)),
       dropStatic(isStatic, args.map(rewrite)),
       rewrite(ks),
       rewrite(rest))
@@ -315,7 +320,7 @@ object StaticArguments {
     case Stmt.Def(_, _, body, rest) => List(body, rest)
     case Stmt.New(_, _, ops, rest) => ops.map(_.body) :+ rest
     case Stmt.Let(_, _, rest) => List(rest)
-    case Stmt.Call(_, _, _, _, rest) => List(rest)
+    case Stmt.Call(_, _, _, _, _, rest) => List(rest)
     case Stmt.Run(_, _, _, _, rest) => List(rest)
     case Stmt.If(_, thn, els) => List(thn, els)
     case Stmt.Match(_, clauses, default) => clauses.map(_._2.body) ++ default.toList
@@ -397,19 +402,19 @@ object StaticArguments {
       val rewrittenBody = ctx.withinBody(id) { rewrite(body) }
       Stmt.Def(id, params, rewrittenBody, rewrite(rest))
 
-    case Stmt.Call(result, id, args, ks, rest) if ctx.hasStatics(id) && ctx.within(id) =>
-      rewriteCall(result, id, args, ks, rest)
+    case Stmt.Call(result, returnedKs, Callee.Function(id), args, ks, rest) if ctx.hasStatics(id) && ctx.within(id) =>
+      rewriteCall(result, returnedKs, id, args, ks, rest)
 
-    case Stmt.Call(result, id, args, ks, rest) if ctx.pendingWorkers.contains(id) =>
+    case Stmt.Call(result, returnedKs, Callee.Function(id), args, ks, rest) if ctx.pendingWorkers.contains(id) =>
       placeWorkerHere(id, args) {
-        rewriteCall(result, id, args, ks, rest)
+        rewriteCall(result, returnedKs, id, args, ks, rest)
       }
 
-    case Stmt.Call(result, id, args, ks, rest) if ctx.workers.contains(id) && !ctx.within(id) =>
-      rewriteCall(result, id, args, ks, rest)
+    case Stmt.Call(result, returnedKs, Callee.Function(id), args, ks, rest) if ctx.workers.contains(id) && !ctx.within(id) =>
+      rewriteCall(result, returnedKs, id, args, ks, rest)
 
-    case Stmt.Call(result, id, args, ks, rest) =>
-      Stmt.Call(result, id, args.map(rewrite), rewrite(ks), rewrite(rest))
+    case Stmt.Call(result, returnedKs, id, args, ks, rest) =>
+      Stmt.Call(result, returnedKs, id, args.map(rewrite), rewrite(ks), rewrite(rest))
 
     // Recursive call: redirect to worker, drop static args
     case Stmt.App(id, args) if ctx.hasStatics(id) && ctx.within(id) =>

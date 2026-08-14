@@ -14,8 +14,14 @@ def main(ks0, k0) {
 /// JAVASCRIPT
 
 function main_0(ks_0, k_0) {
-  const [p_0, ks_1, k_1] = RESET(ks_0, k_0);
-  const [r_0, ks_2, k_2] = SHIFT(p_0, ks_1, k_1);
-  const [ks_3, k_3] = RESUME(r_0, ks_2, k_2);
-  return () => k_3(1, ks_3);
+  {
+    const [p_0, ks_1, k_1] = RESET(ks_0, k_0);
+    {
+      const [r_0, ks_2, k_2] = SHIFT(p_0, ks_1, k_1);
+      {
+        const [ks_3, k_3] = RESUME(r_0, ks_2, k_2);
+        return () => k_3(1, ks_3);
+      }
+    }
+  }
 }
