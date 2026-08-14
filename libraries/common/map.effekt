@@ -615,7 +615,10 @@ namespace internal {
                 res match {
                   case (_, Nil(), _) => res
                   case (l, Cons((k2, v2), Nil()), zs) => (l.putMax(k2, v2), [], zs)
-                  case (l, xs, _) and xs is Cons((k2, v2), rest2) =>
+                  case (l, Cons((k2, v2), rest2), _) =>
+                    // @-pattern
+                    val xs = Cons((k2, v2), rest2)
+
                     if (notOrdered(k2, rest2)) { (l, [], xs) }
                     else {
                       val (r, zs, ws) = create(level.bitwiseShr(1), rest2);
