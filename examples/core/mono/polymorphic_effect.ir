@@ -1,0 +1,29 @@
+interface Yield['A] {
+  yield: ('A) => Unit
+}
+
+def emit(){ints: Yield[Int]}{strings: Yield[String]} = {
+  val u = (ints: Yield[Int] @ {ints}).yield: (Int) => Unit(1);
+  (strings: Yield[String] @ {strings}).yield: (String) => Unit("two")
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<Int> <: yield
+<String> <: yield
+<yield.0> <: Yield
+
+/// MONO_SPECIALIZE
+
+interface YieldInt {
+  yieldInt: (Int) => Unit
+}
+
+interface YieldString {
+  yieldString: (String) => Unit
+}
+
+def emit(){ints: YieldInt}{strings: YieldString} = {
+  val u = (ints: YieldInt @ {ints}).yieldInt: (Int) => Unit(1);
+  (strings: YieldString @ {strings}).yieldString: (String) => Unit("two")
+}

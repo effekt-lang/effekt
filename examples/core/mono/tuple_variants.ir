@@ -1,0 +1,22 @@
+type Pair['A, 'B] {
+  MkPair(first: 'A, second: 'B)
+}
+
+def main() = {
+  let a = make Pair[Int, Bool] MkPair[](42, true)
+  let b = make Pair[Bool, Char] MkPair[](false, '\98')
+  let c = make Pair[String, Double] MkPair[]("", 3.0)
+  return make Pair[Char, String] MkPair[]('\100', "some")
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<Bool, Char> <: MkPair
+<Bool, Char> <: Pair
+<Char, String> <: MkPair
+<Char, String> <: Pair
+<Int, Bool> <: MkPair
+<Int, Bool> <: Pair
+<MkPair.0, MkPair.1> <: Pair
+<String, Double> <: MkPair
+<String, Double> <: Pair

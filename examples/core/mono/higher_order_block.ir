@@ -1,0 +1,37 @@
+interface Poly {
+  apply: ['A]('A) => 'A
+}
+
+def callPoly(){f: Poly} = {
+  (f: Poly @ {f}).apply: ['A]('A) => 'A[Int](42)
+}
+
+def main() = {
+  (callPoly: (){f: Poly} => Int @ {})(){new Poly {
+    def apply['B](x: 'B) = {
+      return x: 'B
+    }
+  }}
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<Int> <: apply
+
+/// MONO_SPECIALIZE
+
+interface Poly {
+  applyInt: (Int) => Int
+}
+
+def callPoly(){f: Poly} = {
+  (f: Poly @ {f}).applyInt: (Int) => Int(42)
+}
+
+def main() = {
+  (callPoly: (){f: Poly} => Int @ {})(){new Poly {
+    def applyInt(x: Int) = {
+      return x: Int
+    }
+  }}
+}

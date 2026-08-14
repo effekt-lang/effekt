@@ -1,6 +1,0 @@
-def foo[E](on: on[E]): Unit = println("hello")
-
-def main(): Unit = {
-  foo[Int](on[Int])
-  ()
-}

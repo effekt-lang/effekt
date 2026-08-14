@@ -1,0 +1,21 @@
+def foo['A]() = {
+  return ()
+}
+
+def main() = {
+  (foo: ['A]() => Unit @ {})[Int]()
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<Int> <: foo
+
+/// MONO_SPECIALIZE
+
+def fooInt() = {
+  return ()
+}
+
+def main() = {
+  (fooInt: () => Unit @ {})()
+}

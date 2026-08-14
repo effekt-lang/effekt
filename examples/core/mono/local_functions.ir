@@ -1,0 +1,51 @@
+def pair['A](x: 'A) = {
+  def withInt['B](y: 'B) = {
+    return x: 'A
+  }
+  def withString['B](y: 'B) = {
+    return x: 'A
+  }
+  val a = (withInt: ['B]('B) => 'A @ {})[Int](1);
+  (withString: ['B]('B) => 'A @ {})[String]("two")
+}
+
+def main() = {
+  val a = (pair: ['A]('A) => 'A @ {})[String]("one");
+  (pair: ['A]('A) => 'A @ {})[Bool](false)
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<Bool> <: pair
+<Int> <: withInt
+<String> <: pair
+<String> <: withString
+
+/// MONO_SPECIALIZE
+
+def pairString(x: String) = {
+  def withIntInt(y: Int) = {
+    return x: String
+  }
+  def withStringString(y: String) = {
+    return x: String
+  }
+  val a = (withIntInt: (Int) => String @ {})(1);
+  (withStringString: (String) => String @ {})("two")
+}
+
+def pairBool(x: Bool) = {
+  def withIntInt(y: Int) = {
+    return x: Bool
+  }
+  def withStringString(y: String) = {
+    return x: Bool
+  }
+  val a = (withIntInt: (Int) => Bool @ {})(1);
+  (withStringString: (String) => Bool @ {})("two")
+}
+
+def main() = {
+  val a = (pairString: (String) => String @ {})("one");
+  (pairBool: (Bool) => Bool @ {})(false)
+}

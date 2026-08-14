@@ -1,0 +1,70 @@
+def a['A](x: 'A) = {
+  return x: 'A
+}
+
+def b['B](x: 'B) = {
+  (a: ['A]('A) => 'A @ {})['B](x: 'B)
+}
+
+def c['C](x: 'C) = {
+  (b: ['B]('B) => 'B @ {})['C](x: 'C)
+}
+
+def d['D](x: 'D) = {
+  (c: ['C]('C) => 'C @ {})['D](x: 'D)
+}
+
+def main() = {
+  val x = (b: ['B]('B) => 'B @ {})[Int](1);
+  val y = (b: ['B]('B) => 'B @ {})[String]("two");
+  (d: ['D]('D) => 'D @ {})[Bool](true)
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<Bool> <: d
+<Int> <: b
+<String> <: b
+<b.0> <: a
+<c.0> <: b
+<d.0> <: c
+
+/// MONO_SPECIALIZE
+
+def aBool(x: Bool) = {
+  return x: Bool
+}
+
+def aInt(x: Int) = {
+  return x: Int
+}
+
+def aString(x: String) = {
+  return x: String
+}
+
+def bBool(x: Bool) = {
+  (aBool: (Bool) => Bool @ {})(x: Bool)
+}
+
+def bInt(x: Int) = {
+  (aInt: (Int) => Int @ {})(x: Int)
+}
+
+def bString(x: String) = {
+  (aString: (String) => String @ {})(x: String)
+}
+
+def cBool(x: Bool) = {
+  (bBool: (Bool) => Bool @ {})(x: Bool)
+}
+
+def dBool(x: Bool) = {
+  (cBool: (Bool) => Bool @ {})(x: Bool)
+}
+
+def main() = {
+  val x = (bInt: (Int) => Int @ {})(1);
+  val y = (bString: (String) => String @ {})("two");
+  (dBool: (Bool) => Bool @ {})(true)
+}

@@ -1,0 +1,29 @@
+interface Poly {
+  apply: ['A]('A) => 'A
+}
+
+def applyInt(){f: Poly} = {
+  (f: Poly @ {f}).apply: ['A]('A) => 'A[Int](42)
+}
+
+def applyBool(){f: Poly} = {
+  (f: Poly @ {f}).apply: ['A]('A) => 'A[Bool](true)
+}
+
+def main() = {
+  val x = (applyInt: (){f: Poly} => Int @ {})(){new Poly {
+    def apply['B](x: 'B) = {
+      return x: 'B
+    }
+  }};
+  (applyBool: (){f: Poly} => Bool @ {})(){new Poly {
+    def apply['C](x: 'C) = {
+      return x: 'C
+    }
+  }}
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<Bool> <: apply
+<Int> <: apply
