@@ -3,246 +3,239 @@ package core
 
 import java.io.File
 
-import TypeArg.*
+import Mono.{Flow, Flows, FlowVar, Solution, TypeArg}
+import Mono.TypeArg.*
 import effekt.util.PlainMessaging
 import effekt.util.messages.FatalPhaseError
 
 
-class MonoTests extends CorePhaseTests(Mono) {
+class MonoTests extends CoreTests {
 
-  private val BaseTInt: Base = Base(Id("Int"), Nil)
-  private val BaseTString: Base = Base(Id("String"), Nil)
-  private val BaseTChar: Base = Base(Id("Char"), Nil)
-  private val BaseTBool: Base = Base(Id("Bool"), Nil)
+  private val TInt: Data = Data(Id("Int"), Nil)
+  private val TString: Data = Data(Id("String"), Nil)
+  private val TChar: Data = Data(Id("Char"), Nil)
+  private val TBool: Data = Data(Id("Bool"), Nil)
 
-  private var functionIds: Map[String, FunctionId] = Map.empty
+  private var flowVars: Map[String, FlowVar] = Map.empty
 
-  private def id(name: String): FunctionId =
-    functionIds.getOrElse(name, {
+  private def id(name: String): FlowVar =
+    flowVars.getOrElse(name, {
       val result = Id(name)
-      functionIds += name -> result
+      flowVars += name -> result
       result
     })
 
   // Product append
 
   test("product append: empty with empty") {
-    assertEquals(productAppend(List(Nil), Nil), Nil)
+    assertEquals(Mono.solve.productAppend(List(Nil), Nil), Nil)
   }
 
   test("product append: starts with empty list") {
-    val first = productAppend(List(Nil), List(1, 2))
-    val result = productAppend(first, List(3, 4))
+    val first = Mono.solve.productAppend(List(Nil), List(1, 2))
+    val result = Mono.solve.productAppend(first, List(3, 4))
 
     assertEquals(result, List(List(1, 3), List(1, 4), List(2, 3), List(2, 4)))
   }
 
   test("product append: unequal numbers of values") {
-    val first = productAppend(List(List(1)), List(2, 3))
-    val result = productAppend(first, List(4))
+    val first = Mono.solve.productAppend(List(List(1)), List(2, 3))
+    val result = Mono.solve.productAppend(first, List(4))
 
     assertEquals(result, List(List(1, 2, 4), List(1, 3, 4)))
   }
 
   test("product append: empty map product has no combinations") {
-    val start: Substitutions = List(
-      Map(id("a") -> Vector(BaseTInt)),
-      Map(id("a") -> Vector(BaseTString)))
+    val start: Mono.solve.Substitutions = List(
+      Map(id("a") -> Vector(TInt)),
+      Map(id("a") -> Vector(TString)))
 
-    assertEquals(mapProductAppend(start, Nil), Nil)
+    assertEquals(Mono.solve.mapProductAppend(start, Nil), Nil)
   }
 
   test("product append: single map product") {
-    val start: Substitutions = List(
-      Map(id("a") -> Vector(BaseTInt)),
-      Map(id("a") -> Vector(BaseTString)))
-    val append: Variants = List(id("b") -> Vector(BaseTBool))
-    val expected: Substitutions = List(
-      Map(id("a") -> Vector(BaseTInt), id("b") -> Vector(BaseTBool)),
-      Map(id("a") -> Vector(BaseTString), id("b") -> Vector(BaseTBool)))
+    val start: Mono.solve.Substitutions = List(
+      Map(id("a") -> Vector(TInt)),
+      Map(id("a") -> Vector(TString)))
+    val append: Mono.solve.Variants = List(id("b") -> Vector(TBool))
+    val expected: Mono.solve.Substitutions = List(
+      Map(id("a") -> Vector(TInt), id("b") -> Vector(TBool)),
+      Map(id("a") -> Vector(TString), id("b") -> Vector(TBool)))
 
-    assertEquals(mapProductAppend(start, append), expected)
+    assertEquals(Mono.solve.mapProductAppend(start, append), expected)
   }
 
   test("product append: multiple map products") {
-    val start: Substitutions = List(
-      Map(id("a") -> Vector(BaseTInt)),
-      Map(id("a") -> Vector(BaseTString)))
-    val withB = mapProductAppend(start, List(id("b") -> Vector(BaseTBool)))
-    val result = mapProductAppend(withB, List(
-      id("c") -> Vector(BaseTString),
-      id("c") -> Vector(BaseTInt)))
-    val expected: Substitutions = List(
-      Map(id("a") -> Vector(BaseTInt), id("b") -> Vector(BaseTBool), id("c") -> Vector(BaseTString)),
-      Map(id("a") -> Vector(BaseTInt), id("b") -> Vector(BaseTBool), id("c") -> Vector(BaseTInt)),
-      Map(id("a") -> Vector(BaseTString), id("b") -> Vector(BaseTBool), id("c") -> Vector(BaseTString)),
-      Map(id("a") -> Vector(BaseTString), id("b") -> Vector(BaseTBool), id("c") -> Vector(BaseTInt)))
+    val start: Mono.solve.Substitutions = List(
+      Map(id("a") -> Vector(TInt)),
+      Map(id("a") -> Vector(TString)))
+    val withB = Mono.solve.mapProductAppend(start, List(id("b") -> Vector(TBool)))
+    val result = Mono.solve.mapProductAppend(withB, List(
+      id("c") -> Vector(TString),
+      id("c") -> Vector(TInt)))
+    val expected: Mono.solve.Substitutions = List(
+      Map(id("a") -> Vector(TInt), id("b") -> Vector(TBool), id("c") -> Vector(TString)),
+      Map(id("a") -> Vector(TInt), id("b") -> Vector(TBool), id("c") -> Vector(TInt)),
+      Map(id("a") -> Vector(TString), id("b") -> Vector(TBool), id("c") -> Vector(TString)),
+      Map(id("a") -> Vector(TString), id("b") -> Vector(TBool), id("c") -> Vector(TInt)))
 
     assertEquals(result, expected)
   }
 
   test("product append: multiple types in a variant") {
-    val start: Substitutions = List(
-      Map(id("a") -> Vector(BaseTInt, BaseTString)),
-      Map(id("a") -> Vector(BaseTString, BaseTInt)))
-    val append: Variants = List(
-      id("b") -> Vector(BaseTBool, BaseTBool),
-      id("b") -> Vector(BaseTInt, BaseTInt))
-    val expected: Substitutions = List(
-      Map(id("a") -> Vector(BaseTInt, BaseTString), id("b") -> Vector(BaseTBool, BaseTBool)),
-      Map(id("a") -> Vector(BaseTInt, BaseTString), id("b") -> Vector(BaseTInt, BaseTInt)),
-      Map(id("a") -> Vector(BaseTString, BaseTInt), id("b") -> Vector(BaseTBool, BaseTBool)),
-      Map(id("a") -> Vector(BaseTString, BaseTInt), id("b") -> Vector(BaseTInt, BaseTInt)))
+    val start: Mono.solve.Substitutions = List(
+      Map(id("a") -> Vector(TInt, TString)),
+      Map(id("a") -> Vector(TString, TInt)))
+    val append: Mono.solve.Variants = List(
+      id("b") -> Vector(TBool, TBool),
+      id("b") -> Vector(TInt, TInt))
+    val expected: Mono.solve.Substitutions = List(
+      Map(id("a") -> Vector(TInt, TString), id("b") -> Vector(TBool, TBool)),
+      Map(id("a") -> Vector(TInt, TString), id("b") -> Vector(TInt, TInt)),
+      Map(id("a") -> Vector(TString, TInt), id("b") -> Vector(TBool, TBool)),
+      Map(id("a") -> Vector(TString, TInt), id("b") -> Vector(TInt, TInt)))
 
-    assertEquals(mapProductAppend(start, append), expected)
+    assertEquals(Mono.solve.mapProductAppend(start, append), expected)
   }
 
   // Solve
 
   test("solve: simple polymorphic function") {
     val constraints = List(
-      MonoConstraint(Vector(BaseTInt), id("a")),
-      MonoConstraint(Vector(BaseTString), id("a")))
+      Flow(Vector(TInt), id("a")),
+      Flow(Vector(TString), id("a")))
     val expected: Solution = Map(
-      id("a") -> Set(Vector(BaseTInt), Vector(BaseTString)))
+      id("a") -> Set(Vector(TInt), Vector(TString)))
 
-    assertEquals(solveConstraints(constraints), expected)
+    assertEquals(Mono.solve(constraints), expected)
   }
 
   test("solve: monomorphic demand") {
-    val constraints = List(MonoConstraint(Vector.empty, id("a")))
+    val constraints = List(Flow(Vector.empty, id("a")))
     val expected: Solution = Map(id("a") -> Set(Vector.empty))
 
-    assertEquals(solveConstraints(constraints), expected)
+    assertEquals(Mono.solve(constraints), expected)
   }
 
   test("solve: call to another polymorphic function") {
     val constraints = List(
-      MonoConstraint(Vector(Var(id("b"), 0)), id("a")),
-      MonoConstraint(Vector(BaseTInt), id("a")),
-      MonoConstraint(Vector(BaseTString), id("b")))
+      Flow(Vector(Var(id("b"), 0)), id("a")),
+      Flow(Vector(TInt), id("a")),
+      Flow(Vector(TString), id("b")))
     val expected: Solution = Map(
-      id("a") -> Set(Vector(BaseTInt), Vector(BaseTString)),
-      id("b") -> Set(Vector(BaseTString)))
+      id("a") -> Set(Vector(TInt), Vector(TString)),
+      id("b") -> Set(Vector(TString)))
 
-    assertEquals(solveConstraints(constraints), expected)
+    assertEquals(Mono.solve(constraints), expected)
   }
 
   test("solve: unconstrained variable contributes no variants") {
     val constraints = List(
-      MonoConstraint(Vector(Var(id("none"), 0)), id("maybe")),
-      MonoConstraint(Vector(BaseTInt), id("maybe")))
+      Flow(Vector(Var(id("none"), 0)), id("maybe")),
+      Flow(Vector(TInt), id("maybe")))
     val expected: Solution = Map(
-      id("maybe") -> Set(Vector(BaseTInt)))
+      id("maybe") -> Set(Vector(TInt)))
 
-    assertEquals(solveConstraints(constraints), expected)
+    assertEquals(Mono.solve(constraints), expected)
   }
 
   test("solve: multiple type arguments") {
     val constraints = List(
-      MonoConstraint(Vector(BaseTInt, BaseTString), id("a")),
-      MonoConstraint(Vector(BaseTBool, BaseTChar), id("a")),
-      MonoConstraint(Vector(BaseTBool, BaseTString), id("a")))
+      Flow(Vector(TInt, TString), id("a")),
+      Flow(Vector(TBool, TChar), id("a")),
+      Flow(Vector(TBool, TString), id("a")))
     val expected: Solution = Map(
       id("a") -> Set(
-        Vector(BaseTInt, BaseTString),
-        Vector(BaseTBool, BaseTChar),
-        Vector(BaseTBool, BaseTString)))
+        Vector(TInt, TString),
+        Vector(TBool, TChar),
+        Vector(TBool, TString)))
 
-    assertEquals(solveConstraints(constraints), expected)
+    assertEquals(Mono.solve(constraints), expected)
   }
 
   test("solve: swapped type arguments") {
     val constraints = List(
-      MonoConstraint(Vector(Var(id("b"), 1), Var(id("b"), 0)), id("a")),
-      MonoConstraint(Vector(BaseTString, BaseTBool), id("b")))
+      Flow(Vector(Var(id("b"), 1), Var(id("b"), 0)), id("a")),
+      Flow(Vector(TString, TBool), id("b")))
     val expected: Solution = Map(
-      id("a") -> Set(Vector(BaseTBool, BaseTString)),
-      id("b") -> Set(Vector(BaseTString, BaseTBool)))
+      id("a") -> Set(Vector(TBool, TString)),
+      id("b") -> Set(Vector(TString, TBool)))
 
-    assertEquals(solveConstraints(constraints), expected)
+    assertEquals(Mono.solve(constraints), expected)
   }
 
   test("solve: recursive polymorphic function") {
     val constraints = List(
-      MonoConstraint(Vector(Var(id("a"), 0)), id("a")),
-      MonoConstraint(Vector(BaseTInt), id("a")))
+      Flow(Vector(Var(id("a"), 0)), id("a")),
+      Flow(Vector(TInt), id("a")))
     val expected: Solution = Map(
-      id("a") -> Set(Vector(BaseTInt)))
+      id("a") -> Set(Vector(TInt)))
 
-    assertEquals(solveConstraints(constraints), expected)
+    assertEquals(Mono.solve(constraints), expected)
   }
 
   test("solve: mutually recursive polymorphic functions") {
     val constraints = List(
-      MonoConstraint(Vector(Var(id("b"), 0)), id("a")),
-      MonoConstraint(Vector(Var(id("a"), 0)), id("b")),
-      MonoConstraint(Vector(BaseTInt), id("a")),
-      MonoConstraint(Vector(BaseTString), id("b")))
+      Flow(Vector(Var(id("b"), 0)), id("a")),
+      Flow(Vector(Var(id("a"), 0)), id("b")),
+      Flow(Vector(TInt), id("a")),
+      Flow(Vector(TString), id("b")))
     val expected: Solution = Map(
-      id("a") -> Set(Vector(BaseTInt), Vector(BaseTString)),
-      id("b") -> Set(Vector(BaseTInt), Vector(BaseTString)))
+      id("a") -> Set(Vector(TInt), Vector(TString)),
+      id("b") -> Set(Vector(TInt), Vector(TString)))
 
-    assertEquals(solveConstraints(constraints), expected)
+    assertEquals(Mono.solve(constraints), expected)
   }
 
   test("solve: product of variables") {
     val constraints = List(
-      MonoConstraint(Vector(BaseTInt), id("a")),
-      MonoConstraint(Vector(BaseTString), id("a")),
-      MonoConstraint(Vector(BaseTBool), id("b")),
-      MonoConstraint(Vector(Var(id("a"), 0), Var(id("b"), 0)), id("c")))
+      Flow(Vector(TInt), id("a")),
+      Flow(Vector(TString), id("a")),
+      Flow(Vector(TBool), id("b")),
+      Flow(Vector(Var(id("a"), 0), Var(id("b"), 0)), id("c")))
     val expected: Solution = Map(
-      id("a") -> Set(Vector(BaseTInt), Vector(BaseTString)),
-      id("b") -> Set(Vector(BaseTBool)),
-      id("c") -> Set(Vector(BaseTInt, BaseTBool), Vector(BaseTString, BaseTBool)))
+      id("a") -> Set(Vector(TInt), Vector(TString)),
+      id("b") -> Set(Vector(TBool)),
+      id("c") -> Set(Vector(TInt, TBool), Vector(TString, TBool)))
 
-    assertEquals(solveConstraints(constraints), expected)
+    assertEquals(Mono.solve(constraints), expected)
   }
 
   test("solve: correlated components from one variable") {
     val constraints = List(
-      MonoConstraint(Vector(BaseTInt, BaseTString), id("a")),
-      MonoConstraint(Vector(BaseTChar, BaseTBool), id("a")),
-      MonoConstraint(Vector(Var(id("a"), 0), Var(id("a"), 1)), id("b")))
+      Flow(Vector(TInt, TString), id("a")),
+      Flow(Vector(TChar, TBool), id("a")),
+      Flow(Vector(Var(id("a"), 0), Var(id("a"), 1)), id("b")))
     val expected: Solution = Map(
-      id("a") -> Set(Vector(BaseTInt, BaseTString), Vector(BaseTChar, BaseTBool)),
-      id("b") -> Set(Vector(BaseTInt, BaseTString), Vector(BaseTChar, BaseTBool)))
+      id("a") -> Set(Vector(TInt, TString), Vector(TChar, TBool)),
+      id("b") -> Set(Vector(TInt, TString), Vector(TChar, TBool)))
 
-    assertEquals(solveConstraints(constraints), expected)
+    assertEquals(Mono.solve(constraints), expected)
   }
 
   test("solve: nested constraints") {
     val constraints = List(
-      MonoConstraint(Vector(Base(id("Weighted"), List(Var(id("b"), 0)))), id("a")),
-      MonoConstraint(Vector(BaseTInt), id("b")))
+      Flow(Vector(Data(id("Weighted"), List(Var(id("b"), 0)))), id("a")),
+      Flow(Vector(TInt), id("b")))
     val expected: Solution = Map(
-      id("b") -> Set(Vector(BaseTInt)),
-      id("a") -> Set(Vector(Base(id("Weighted"), List(BaseTInt)))))
+      id("b") -> Set(Vector(TInt)),
+      id("a") -> Set(Vector(Data(id("Weighted"), List(TInt)))))
 
-    assertEquals(solveConstraints(constraints), expected)
+    assertEquals(Mono.solve(constraints), expected)
   }
 
-  private def collectConstraints(input: ModuleDecl): MonoConstraints = {
-    given MonoFindContext = MonoFindContext()
-    input match {
-      case ModuleDecl(_, _, declarations, externs, definitions, _) =>
-        findConstraints(definitions) ++
-          externs.flatMap(findConstraints) ++
-          declarations.flatMap(findConstraints)
-    }
-  }
+  private def collectConstraints(input: ModuleDecl): Flows = Mono.collect(input)
 
   private def showTypeArg(arg: TypeArg): String = arg match {
-    case Base(tpe, Nil) => tpe.name.name
-    case Base(tpe, targs) => s"${tpe.name.name}[${targs.map(showTypeArg).mkString(", ")}]"
+    case Data(tpe, Nil) => tpe.name.name
+    case Data(tpe, targs) => s"${tpe.name.name}[${targs.map(showTypeArg).mkString(", ")}]"
     case Var(owner, position) => s"${owner.name.name}.$position"
     case Boxed(tpe, captures) =>
       ReparsablePrettyPrinter.format(ValueType.Boxed(tpe, captures))
   }
 
-  private def showConstraint(constraint: MonoConstraint): String =
-    s"${constraint.lower.map(showTypeArg).mkString("<", ", ", ">")} <: ${constraint.upper.name.name}"
+  private def showConstraint(constraint: Flow): String =
+    s"${constraint.from.map(showTypeArg).mkString("<", ", ", ">")} <: ${constraint.to.name.name}"
 
   private def showConstraints(input: ModuleDecl): String =
     collectConstraints(input)
@@ -253,7 +246,7 @@ class MonoTests extends CorePhaseTests(Mono) {
 
   private def showSolution(input: ModuleDecl): String =
     try {
-      val bindings = solveConstraints(collectConstraints(input))
+      val bindings = Mono.solve(collectConstraints(input))
         .toList
         .sortBy { case (parameter, _) => (parameter.name.name, parameter.id) }
         .map { case (parameter, variants) =>
@@ -272,8 +265,9 @@ class MonoTests extends CorePhaseTests(Mono) {
 
   registerCoreIRTests(
     new File("examples/core/mono"),
-    CoreIRTransform("MONO_PREPROCESS", preprocess),
+    CoreIRTransform("MONO_PREPROCESS", Mono.preprocess.apply),
     CoreIRAnalysis("MONO_COLLECT_CONSTRAINTS", showConstraints),
     CoreIRAnalysis("MONO_SOLVE", showSolution),
-    CoreIRTransform("MONO_SPECIALIZE", specialize))
+    CoreIRTransform("MONO_SPECIALIZE", input =>
+      Mono.specialize(input, Mono.solve(Mono.collect(input)))))
 }
