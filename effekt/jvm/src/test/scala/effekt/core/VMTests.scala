@@ -1249,7 +1249,7 @@ class VMTests extends munit.FunSuite {
       staticDispatches = 4662067,
       dynamicDispatches = 184329,
       patternMatches = 2556198,
-      branches = 2695696,
+      branches = 2703889,
       pushedFrames = 1732897,
       poppedFrames = 1732897,
       allocations = 1749276,
