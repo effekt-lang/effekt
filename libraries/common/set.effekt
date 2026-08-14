@@ -9,7 +9,7 @@ record Set[A](tree: internal::Tree[A, Unit], compare: (A, A) => Ordering at {})
 /// Create a new empty set using a pure, first-class comparison function.
 ///
 /// O(1)
-def empty[A](compare: (A, A) => Ordering at {}): Set[A] =
+def empty[A](?compare: (A, A) => Ordering at {}): Set[A] =
   Set(internal::empty(), compare)
 
 /// Create a new empty set using a generic comparison function.
@@ -36,7 +36,7 @@ def nonEmpty[A](s: Set[A]): Bool = internal::nonEmpty(s.tree)
 /// Requires a pure, first-class comparison function.
 ///
 /// O(1)
-def singleton[A](element: A, compare: (A, A) => Ordering at {}): Set[A] =
+def singleton[A](element: A, ?compare: (A, A) => Ordering at {}): Set[A] =
   Set(internal::singleton(element, ()), compare)
 
 /// Create a new set containing a single `element` and a generic comparison function.
@@ -81,7 +81,7 @@ def toMap[K, V](keys: Set[K]) { valueOf: K => V }: Map[K, V] = {
 ///
 /// O(N log N)
 /// O(N) if the list is sorted
-def fromList[A](list: List[A], compare: (A, A) => Ordering at {}): Set[A] = {
+def fromList[A](list: List[A], ?compare: (A, A) => Ordering at {}): Set[A] = {
   val tree: internal::Tree[A, Unit] = internal::fromList(list.map { k => (k, ()) }, compare)
   Set(tree, compare)
 }
@@ -105,15 +105,23 @@ def fromListGeneric[A](list: List[A]): Set[A] = {
 def foreach[A](s: Set[A]) { action: A => Unit }: Unit =
   internal::foreach(s.tree) { (k, _v) => action(k) }
 
+/// Traverse all elements in *reverse* order, running the function `action` on each element.
+///
+/// Law: `s.foreachReversed { action } === s.toList.reverse.foreach { action }`
+///
+/// O(N)
+def foreachReversed[A](s: Set[A]) { action: A => Unit }: Unit =
+  internal::foreachReversed(s.tree) { (k, _v) => action(k) }
+
 /// Create a list from a given set.
 ///
 /// O(N)
 def toList[A](s: Set[A]): List[A] = {
   var acc = Nil()
-  s.foreach { a =>
+  s.foreachReversed { a =>
     acc = Cons(a, acc)
   }
-  acc.reverse
+  acc
 }
 
 /// Check if a predicate holds for all elements in a given set.
@@ -189,7 +197,7 @@ def deleteMany[A](s: Set[A], list: List[A]): Set[A] = {
 /// Uses an explicit comparison function.
 ///
 /// O(???)
-def difference[A](s1: Set[A], s2: Set[A], compare: (A, A) => Ordering at {}): Set[A] = {
+def difference[A](s1: Set[A], s2: Set[A], ?compare: (A, A) => Ordering at {}): Set[A] = {
   val newTree = internal::difference(s1.tree, s2.tree, compare)
   Set(newTree, compare)
 }
@@ -206,7 +214,7 @@ def difference[A](s1: Set[A], s2: Set[A]): Set[A] =
 /// Uses an explicit comparison function.
 ///
 /// O(???)
-def union[A](s1: Set[A], s2: Set[A], compare: (A, A) => Ordering at {}): Set[A] = {
+def union[A](s1: Set[A], s2: Set[A], ?compare: (A, A) => Ordering at {}): Set[A] = {
   val newTree = internal::union(s1.tree, s2.tree, compare) { (_k, _v1, _v2) => () }
   Set(newTree, compare)
 }
@@ -222,7 +230,7 @@ def union[A](s1: Set[A], s2: Set[A]): Set[A] =
 /// Uses an explicit comparison function.
 ///
 /// O(???)
-def intersection[A](s1: Set[A], s2: Set[A], compare: (A, A) => Ordering at {}): Set[A] = {
+def intersection[A](s1: Set[A], s2: Set[A], ?compare: (A, A) => Ordering at {}): Set[A] = {
   val newTree = internal::intersection(s1.tree, s2.tree, compare) { (_k, _v1, _v2) => () }
   Set(newTree, compare)
 }
@@ -245,17 +253,20 @@ def each[A](set: Set[A]): Unit / emit[A] =
 
 /// Collects elements emitted by a push stream producer `stream` into a new set
 /// using provided `compare` function, discarding the result of the producer.
-def collect[A](compare: (A, A) => Ordering at {}) { stream: () => Unit / emit[A] }: Set[A] =
+def collect[A](?compare: (A, A) => Ordering at {}) { stream: () => Unit / emit[A] }: Set[A] =
   returning::collect[A, Unit](compare){stream}.second
 
 namespace returning {
   /// Collects elements emitted by a push stream producer `stream` into a new set
   /// using provided `compare` function, returning the result of the producer as well as the collected set.
-  def collect[A, R](compare: (A, A) => Ordering at {}) { stream: () => R / emit[A] }: (R, Set[A]) =
-    try {
-      (stream(), empty(compare))
+  def collect[A, R](?compare: (A, A) => Ordering at {}) { stream: () => R / emit[A] }: (R, Set[A]) = {
+    var set = set::empty(compare)
+    val r = try {
+      stream()
     } with emit[A] { (v) =>
-      val (r, set) = resume(());
-      (r, set.insert(v))
+      set = set.insert(v)
+      resume(())
     }
+    (r, set)
+  }
 }

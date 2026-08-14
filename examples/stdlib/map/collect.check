@@ -1,0 +1,17 @@
+m1 := map::collect { stream() }
+m1.toList.foreach === m1.foreach
+1 -> uno
+2 -> two
+3 -> three
+1 -> uno
+2 -> two
+3 -> three
+----
+m2 := list::collect { stream() }.map:fromList
+m2.toList.foreach === m2.foreach
+1 -> uno
+2 -> two
+3 -> three
+1 -> uno
+2 -> two
+3 -> three
