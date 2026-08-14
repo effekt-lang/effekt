@@ -641,7 +641,7 @@ namespace internal {
                 cr match {
                   case (r, xs, Nil()) => go(level.bitwiseShl(1), link(k, v, l, r), xs)
                   case (r, Nil(), ys) => insertMany(link(k, v, l, r), ys)
-                  case _ => panic("create: go: cannot happen, invariant broken!")
+                  case _ => <{ "create: go: cannot happen, invariant broken!" }>
                 }
               }
           }
@@ -810,10 +810,8 @@ namespace internal {
           t2    t3            t1    t2
     */
     def singleL[A, B](k1: A, v1: B, t1: Tree[A, B], m: Tree[A, B]): Tree[A, B] = {
-      m match {
-        case Bin(_, k2, v2, t2, t3) => bin(k2, v2, bin(k1, v1, t1, t2), t3)
-        case _ => panic("impossible: singleL: Tip")
-      }
+      val Bin(_, k2, v2, t2, t3) = m else <{ "impossible: singleL: Tip" }>
+      bin(k2, v2, bin(k1, v1, t1, t2), t3)
     }
 
     /*
@@ -826,10 +824,8 @@ namespace internal {
       t1    t2            t1      t2    t3
     */
     def singleR[A, B](k1: A, v1: B, m: Tree[A, B], t3: Tree[A, B]): Tree[A, B] = {
-      m match {
-        case Bin(_, k2, v2, t1, t2) => bin(k2, v2, t1, bin(k1, v1, t2, t3))
-        case _ => panic("impossible: singleR: Tip")
-      }
+      val Bin(_, k2, v2, t1, t2) = m else <{ "impossible: singleR: Tip" }>
+      bin(k2, v2, t1, bin(k1, v1, t2, t3))
     }
 
     /*
@@ -844,11 +840,8 @@ namespace internal {
           t2    t3
     */
     def doubleL[A, B](k1: A, v1: B, t1: Tree[A, B], m: Tree[A, B]): Tree[A, B] = {
-      m match {
-        case Bin(_, k2, v2, Bin(_, k3, v3, t2, t3), t4) =>
-          bin(k3, v3, bin(k1, v1, t1, t2), bin(k2, v2, t3, t4))
-        case _ => panic("impossible: doubleL: Tip")
-      }
+      val Bin(_, k2, v2, Bin(_, k3, v3, t2, t3), t4) = m else <{ "impossible: doubleL: Tip" }>
+      bin(k3, v3, bin(k1, v1, t1, t2), bin(k2, v2, t3, t4))
     }
 
     /*
@@ -863,12 +856,8 @@ namespace internal {
                 t2    t3
     */
     def doubleR[A, B](k1: A, v1: B, m: Tree[A, B], t4: Tree[A, B]): Tree[A, B] = {
-      m match {
-        case Bin(_, k2, v2, t1, Bin(_, k3, v3, t2, t3)) =>
-          bin(k3, v3, bin(k2, v2, t1, t2), bin(k1, v1, t3, t4))
-        case _ =>
-          panic("impossible: doubleR: Tip")
-      }
+      val Bin(_, k2, v2, t1, Bin(_, k3, v3, t2, t3)) = m else <{ "impossible: doubleR: Tip" }>
+      bin(k3, v3, bin(k2, v2, t1, t2), bin(k1, v1, t3, t4))
     }
 
     def rotateL[A, B](k: A, v: B, l: Tree[A, B], r: Tree[A, B]): Tree[A, B] = {
