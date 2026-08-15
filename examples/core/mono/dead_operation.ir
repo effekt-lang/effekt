@@ -1,0 +1,41 @@
+interface Service {
+  used: () => Int
+  unused: () => Bool
+}
+
+def main() = {
+  def service = new Service {
+    def used() = {
+      return 1
+    }
+    def unused() = {
+      return false
+    }
+  }
+  (service: Service @ {}).used: () => Int()
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<> <: Service
+<> <: used
+
+/// MONO_SOLVE
+
+S = Service ↦ { <> },
+    used ↦ { <> }
+
+/// MONO_SPECIALIZE
+
+interface Service {
+  used: () => Int
+}
+
+def main() = {
+  def service = new Service {
+    def used() = {
+      return 1
+    }
+  }
+  (service: Service @ {}).used: () => Int()
+}

@@ -1,0 +1,25 @@
+def first(){f: ['A](){g: ['B]('A, 'B) => 'A} => 'A} = {
+  return ()
+}
+
+def second(){f: ['X](){g: ['Y]('X, 'Y) => 'X} => 'X} = {
+  return ()
+}
+
+/// MONO_PREPROCESS
+
+interface Poly {
+  apply: ['A](){g: Poly1['A]} => 'A
+}
+
+interface Poly1['A] {
+  apply1: ['B]('A, 'B) => 'A
+}
+
+def first(){f: Poly} = {
+  return ()
+}
+
+def second(){f: Poly} = {
+  return ()
+}

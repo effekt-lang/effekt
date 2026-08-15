@@ -1,0 +1,92 @@
+type Maybe['A] {
+  Just['B](value: 'A)
+}
+
+type Exists {
+  Nothing()
+  Pack['A](value: 'A)
+}
+
+type Choice['A] {
+  Left['B](value: 'B)
+  Right['B](value: 'A)
+}
+
+def wrap['A](value: 'A) = {
+  return make Maybe['A] Just[Bool](value: 'A)
+}
+
+def main() = {
+  let a = make Maybe[Int] Just[Char](1)
+  let b = make Exists Nothing[]()
+  let c = make Exists Pack[String]("packed")
+  let d = make Choice[Int] Left[String]("left")
+  let e = make Choice[String] Right[Int]("right")
+  (wrap: ['A]('A) => Maybe['A] @ {})[Bool](true)
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<> <: Exists
+<> <: Nothing
+<Bool> <: wrap
+<Int, Char> <: Just
+<Int, String> <: Left
+<Int> <: Choice
+<Int> <: Maybe
+<Just.0> <: Maybe
+<Left.0> <: Choice
+<Right.0> <: Choice
+<String, Int> <: Right
+<String> <: Choice
+<String> <: Pack
+<wrap.0, Bool> <: Just
+<wrap.0> <: Maybe
+
+/// MONO_SOLVE
+
+S = Choice ↦ { <Int>, <String> },
+    Exists ↦ { <> },
+    Just ↦ { <Bool, Bool>, <Int, Char> },
+    Left ↦ { <Int, String> },
+    Maybe ↦ { <Bool>, <Int> },
+    Nothing ↦ { <> },
+    Pack ↦ { <String> },
+    Right ↦ { <String, Int> },
+    wrap ↦ { <Bool> }
+
+/// MONO_SPECIALIZE
+
+type MaybeBool {
+  JustBool(value: Bool)
+}
+
+type MaybeInt {
+  JustChar(value: Int)
+}
+
+type Exists {
+  Nothing()
+  PackString(value: String)
+}
+
+type ChoiceInt {
+  LeftString(value: String)
+}
+
+type ChoiceString {
+  RightInt(value: String)
+}
+
+def wrapBool(value: Bool) = {
+  return make MaybeBool JustBool(value: Bool)
+}
+
+def main() = {
+  let a = make MaybeInt JustChar(1)
+  let b = make Exists Nothing()
+  let c = make Exists PackString("packed")
+  let d = make ChoiceInt LeftString("left")
+  let e = make ChoiceString RightInt("right")
+  (wrapBool: (Bool) => MaybeBool @ {})(true)
+}

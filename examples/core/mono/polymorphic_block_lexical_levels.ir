@@ -1,0 +1,19 @@
+def outer['A]() = {
+  def inner['B](){f: ['C]('A, 'B, 'C) => 'C} = {
+    return ()
+  }
+  return ()
+}
+
+/// MONO_PREPROCESS
+
+interface Poly['A, 'B] {
+  apply: ['C]('A, 'B, 'C) => 'C
+}
+
+def outer['A]() = {
+  def inner['B](){f: Poly['A, 'B]} = {
+    return ()
+  }
+  return ()
+}

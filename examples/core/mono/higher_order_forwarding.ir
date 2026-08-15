@@ -1,0 +1,67 @@
+def run(){f: ['A]('A) => 'A} = {
+  (f: ['A]('A) => 'A @ {f})[Int](42)
+}
+
+def forward(){f: ['A]('A) => 'A} = {
+  (run: (){f: ['A]('A) => 'A} => Int @ {})(){
+    (f: ['A]('A) => 'A @ {f})
+  }
+}
+
+def forwardAgain(){f: ['A]('A) => 'A} = {
+  (forward: (){f: ['A]('A) => 'A} => Int @ {})(){
+    (f: ['A]('A) => 'A @ {f})
+  }
+}
+
+def main() = {
+  (forwardAgain: (){f: ['A]('A) => 'A} => Int @ {})(){['B](x: 'B) =>
+    return x: 'B
+  }
+}
+
+/// MONO_PREPROCESS
+
+interface Poly {
+  apply: ['A]('A) => 'A
+}
+
+def run(){f: Poly} = {
+  (f: Poly @ {f}).apply: ['A]('A) => 'A[Int](42)
+}
+
+def forward(){f: Poly} = {
+  (run: (){f: Poly} => Int @ {})(){
+    (f: Poly @ {f})
+  }
+}
+
+def forwardAgain(){f: Poly} = {
+  (forward: (){f: Poly} => Int @ {})(){
+    (f: Poly @ {f})
+  }
+}
+
+def main() = {
+  (forwardAgain: (){f: Poly} => Int @ {})(){new Poly {
+    def apply['B](x: 'B) = {
+      return x: 'B
+    }
+  }}
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<> <: Poly
+<> <: forward
+<> <: forwardAgain
+<> <: run
+<Int> <: apply
+
+/// MONO_SOLVE
+
+S = Poly ↦ { <> },
+    apply ↦ { <Int> },
+    forward ↦ { <> },
+    forwardAgain ↦ { <> },
+    run ↦ { <> }
