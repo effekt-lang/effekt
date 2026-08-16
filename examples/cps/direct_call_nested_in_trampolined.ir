@@ -25,6 +25,10 @@ def main(n, ks, k) {
 
 /// JAVASCRIPT
 
+function identity_0(x_0, ks_1, k_3) {
+  return k_3(x_0, ks_1);
+}
+
 function loop_0(n_0, ks_0, k_0) {
   let n_1 = undefined;
   let k_2 = undefined;
@@ -39,9 +43,6 @@ function loop_0(n_0, ks_0, k_0) {
   loop_worker_0: while (true) {
     apply_entry_3: {
       if (true) {
-        function identity_0(x_0, ks_1, k_3) {
-          return k_3(x_0, ks_1);
-        }
         const next_cont_5 = k_2;
         const next_arg_6 = identity_0;
         const next_arg_7 = ks_0;

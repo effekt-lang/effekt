@@ -5,32 +5,42 @@ package js
 import scala.annotation.tailrec
 
 /**
- * Float function declarations out of repeated scopes while preserving both
- * lexical captures and control dependence.
+ * Float function declarations to their outermost valid scope.
  *
  * At this point join points have already been translated to labeled blocks,
  * so this pass only moves declarations that already require JavaScript
  * function values. A function can cross a lexical scope exactly when it does
- * not refer to a name bound by that scope. It crosses a branch only when a use
- * outside the branch requires it to do so.
+ * not refer to a name bound by that scope. Module-closed functions cross every
+ * control boundary; other functions cross a branch only when a use outside the
+ * branch requires it to do so.
  */
 object FunctionFloating {
 
   private case class Candidate(function: Stmt.Function, free: Set[JSName])
   private case class Result(stmts: List[Stmt], floating: List[Candidate])
+  private case class ExprResult(expr: Expr, floating: List[Candidate])
   private type ReferenceCounts = Map[JSName, Int]
+  private type ModuleClosed = Set[JSName]
 
   def transform(module: Module): Module = {
     given ReferenceCounts =
       merge(referenceCounts(module.stmts), referenceCountsExprs(module.exports.map(_.expr)))
+    given ModuleClosed = moduleClosed(module.stmts, module.exports.map(_.expr))
+    val exports = module.exports.map { declaration =>
+      val result = rewrite(declaration.expr)
+      declaration.copy(expr = result.expr) -> result.floating
+    }
+    val body = rewriteScope(module.stmts, Set.empty)
     module.copy(
-      exports = module.exports.map(e => e.copy(expr = rewrite(e.expr))),
-      stmts = materialize(rewriteScope(module.stmts, Set.empty))
+      exports = exports.map(_._1),
+      stmts = materialize(body.copy(
+        floating = body.floating ++ exports.flatMap(_._2)))
     )
   }
 
   def transform(stmts: List[Stmt]): List[Stmt] = {
     given ReferenceCounts = referenceCounts(stmts)
+    given ModuleClosed = moduleClosed(stmts, Nil)
     materialize(rewriteScope(stmts, Set.empty))
   }
 
@@ -42,10 +52,13 @@ object FunctionFloating {
    * Keep candidates at a control-flow boundary unless their name is used
    * outside it. Dependencies of escaping candidates have to escape as well.
    */
-  private def restrict(result: Result, local: ReferenceCounts)(using global: ReferenceCounts): Result = {
+  private def restrict(result: Result, local: ReferenceCounts)(using
+    global: ReferenceCounts,
+    moduleClosed: ModuleClosed
+  ): Result = {
     val candidateNames = result.floating.map(_.function.name).toSet
     val initiallyEscaping = candidateNames.filter { name =>
-      global.getOrElse(name, 0) > local.getOrElse(name, 0)
+      moduleClosed(name) || global.getOrElse(name, 0) > local.getOrElse(name, 0)
     }
 
     @tailrec
@@ -70,7 +83,10 @@ object FunctionFloating {
     }
 
   /** Rewrite one lexical scope and return declarations that can cross it. */
-  private def rewriteScope(stmts: List[Stmt], parameters: Set[JSName])(using ReferenceCounts): Result = {
+  private def rewriteScope(stmts: List[Stmt], parameters: Set[JSName])(using
+    ReferenceCounts,
+    ModuleClosed
+  ): Result = {
     val rewritten = stmts.map(rewrite)
     val body = rewritten.flatMap(_.stmts)
     val candidates = rewritten.flatMap(_.floating)
@@ -94,47 +110,57 @@ object FunctionFloating {
     Result(staying.map(_.function) ++ body, floating)
   }
 
-  private def rewrite(stmt: Stmt)(using ReferenceCounts): Result = stmt match {
+  private def rewrite(stmt: Stmt)(using ReferenceCounts, ModuleClosed): Result = stmt match {
     case Stmt.Block(label, stmts) =>
       val result = rewriteScope(stmts, Set.empty)
       Result(List(Stmt.Block(label, result.stmts)), result.floating)
 
     case Stmt.Return(expr) =>
-      Result(List(Stmt.Return(rewrite(expr))), Nil)
+      val result = rewrite(expr)
+      Result(List(Stmt.Return(result.expr)), result.floating)
 
     case Stmt.RawStmt(raw, args) =>
-      Result(List(Stmt.RawStmt(raw, args.map(rewrite))), Nil)
+      val result = rewrite(args)
+      Result(List(Stmt.RawStmt(raw, result._1)), result._2)
 
     case Stmt.Const(pattern, binding) =>
-      Result(List(Stmt.Const(pattern, rewrite(binding))), Nil)
+      val result = rewrite(binding)
+      Result(List(Stmt.Const(pattern, result.expr)), result.floating)
 
     case Stmt.Let(pattern, binding) =>
-      Result(List(Stmt.Let(pattern, rewrite(binding))), Nil)
+      val result = rewrite(binding)
+      Result(List(Stmt.Let(pattern, result.expr)), result.floating)
 
     case Stmt.Assign(target, value) =>
-      Result(List(Stmt.Assign(rewrite(target), rewrite(value))), Nil)
+      val left = rewrite(target)
+      val right = rewrite(value)
+      Result(List(Stmt.Assign(left.expr, right.expr)), left.floating ++ right.floating)
 
     case Stmt.Destruct(names, binding) =>
-      Result(List(Stmt.Destruct(names, rewrite(binding))), Nil)
+      val result = rewrite(binding)
+      Result(List(Stmt.Destruct(names, result.expr)), result.floating)
 
     case Stmt.Switch(scrutinee, branches, default) =>
+      val rewrittenScrutinee = rewrite(scrutinee)
       // Keep declarations control-dependent on their clause unless they are
-      // also referenced elsewhere. A clause containing declarations gets an
-      // explicit block because JavaScript switch clauses otherwise share one
-      // lexical scope.
+      // module-closed or also referenced elsewhere. A clause containing
+      // declarations gets an explicit block because JavaScript switch clauses
+      // otherwise share one lexical scope.
       val rewrittenBranches = branches.map { case (tag, stmts) =>
+        val rewrittenTag = rewrite(tag)
         val result = restrict(rewriteScope(stmts, Set.empty), referenceCounts(stmts))
-        (rewrite(tag), clause(result.stmts), result.floating)
+        (rewrittenTag.expr, clause(result.stmts), rewrittenTag.floating ++ result.floating)
       }
       val rewrittenDefault = default.map { stmts =>
         val result = restrict(rewriteScope(stmts, Set.empty), referenceCounts(stmts))
         (clause(result.stmts), result.floating)
       }
       Result(List(Stmt.Switch(
-        rewrite(scrutinee),
+        rewrittenScrutinee.expr,
         rewrittenBranches.map { case (tag, stmts, _) => tag -> stmts },
         rewrittenDefault.map(_._1)
-      )), rewrittenBranches.flatMap(_._3) ++ rewrittenDefault.toList.flatMap(_._2))
+      )), rewrittenScrutinee.floating ++ rewrittenBranches.flatMap(_._3) ++
+        rewrittenDefault.toList.flatMap(_._2))
 
     case Stmt.Function(name, params, stmts) =>
       // Parameters are introduced by entering the function. Its name, however,
@@ -146,20 +172,23 @@ object FunctionFloating {
       Result(Nil, result.floating :+ Candidate(rewritten, captured))
 
     case Stmt.Class(name, methods) =>
-      // Methods are not ordinary nested declarations. Optimize their bodies,
-      // but keep all declarations within the method boundary.
+      // Method parameters form a lexical boundary, but module-closed nested
+      // declarations can leave it just like they can leave a lambda.
       val rewritten = methods.map { method =>
-        val result = rewriteScope(method.stmts, method.params.toSet + method.name)
-        method.copy(stmts = materialize(result))
+        val result = restrict(
+          rewriteScope(method.stmts, method.params.toSet + method.name),
+          referenceCounts(method.stmts))
+        method.copy(stmts = result.stmts) -> result.floating
       }
-      Result(List(Stmt.Class(name, rewritten)), Nil)
+      Result(List(Stmt.Class(name, rewritten.map(_._1))), rewritten.flatMap(_._2))
 
     case Stmt.If(cond, thn, els) =>
+      val condition = rewrite(cond)
       val thnResult = restrict(rewrite(thn), referenceCounts(thn))
       val elsResult = restrict(rewrite(els), referenceCounts(els))
       Result(
-        List(Stmt.If(rewrite(cond), asStmt(thnResult.stmts), asStmt(elsResult.stmts))),
-        thnResult.floating ++ elsResult.floating
+        List(Stmt.If(condition.expr, asStmt(thnResult.stmts), asStmt(elsResult.stmts))),
+        condition.floating ++ thnResult.floating ++ elsResult.floating
       )
 
     case Stmt.Try(prog, name, handler, fin) =>
@@ -172,40 +201,69 @@ object FunctionFloating {
       )
 
     case Stmt.Throw(expr) =>
-      Result(List(Stmt.Throw(rewrite(expr))), Nil)
+      val result = rewrite(expr)
+      Result(List(Stmt.Throw(result.expr)), result.floating)
 
     case Stmt.While(label, cond, stmts) =>
+      val condition = rewrite(cond)
       val result = rewriteScope(stmts, Set.empty)
-      Result(List(Stmt.While(label, rewrite(cond), result.stmts)), result.floating)
+      Result(
+        List(Stmt.While(label, condition.expr, result.stmts)),
+        condition.floating ++ result.floating)
 
     case stmt @ (Stmt.Break(_) | Stmt.Continue(_)) =>
       Result(List(stmt), Nil)
 
     case Stmt.ExprStmt(expr) =>
-      Result(List(Stmt.ExprStmt(rewrite(expr))), Nil)
+      val result = rewrite(expr)
+      Result(List(Stmt.ExprStmt(result.expr)), result.floating)
   }
 
-  /** Lambdas are function boundaries, so declarations cannot leave them. */
-  private def rewrite(expr: Expr)(using ReferenceCounts): Expr = expr match {
+  private def rewrite(exprs: List[Expr])(using
+    ReferenceCounts,
+    ModuleClosed
+  ): (List[Expr], List[Candidate]) = {
+    val results = exprs.map(rewrite)
+    results.map(_.expr) -> results.flatMap(_.floating)
+  }
+
+  private def rewrite(expr: Expr)(using ReferenceCounts, ModuleClosed): ExprResult = expr match {
     case Expr.Call(callee, arguments) =>
-      Expr.Call(rewrite(callee), arguments.map(rewrite))
+      val function = rewrite(callee)
+      val args = rewrite(arguments)
+      ExprResult(Expr.Call(function.expr, args._1), function.floating ++ args._2)
     case Expr.New(callee, arguments) =>
-      Expr.New(rewrite(callee), arguments.map(rewrite))
+      val constructor = rewrite(callee)
+      val args = rewrite(arguments)
+      ExprResult(Expr.New(constructor.expr, args._1), constructor.floating ++ args._2)
     case Expr.RawExpr(raw, args) =>
-      Expr.RawExpr(raw, args.map(rewrite))
-    case literal: Expr.RawLiteral => literal
+      val result = rewrite(args)
+      ExprResult(Expr.RawExpr(raw, result._1), result._2)
+    case literal: Expr.RawLiteral => ExprResult(literal, Nil)
     case Expr.IfExpr(cond, thn, els) =>
-      Expr.IfExpr(rewrite(cond), rewrite(thn), rewrite(els))
+      val condition = rewrite(cond)
+      val left = rewrite(thn)
+      val right = rewrite(els)
+      ExprResult(
+        Expr.IfExpr(condition.expr, left.expr, right.expr),
+        condition.floating ++ left.floating ++ right.floating)
     case Expr.Lambda(params, body) =>
-      val result = rewrite(body)
-      Expr.Lambda(params, asStmt(materialize(result)))
+      val result = restrict(
+        rewriteScope(List(body), params.toSet),
+        referenceCounts(body))
+      ExprResult(Expr.Lambda(params, asStmt(result.stmts)), result.floating)
     case Expr.Object(properties) =>
-      Expr.Object(properties.map { case (name, value) => name -> rewrite(value) })
+      val results = properties.map { case (name, value) => name -> rewrite(value) }
+      ExprResult(
+        Expr.Object(results.map { case (name, result) => name -> result.expr }),
+        results.flatMap(_._2.floating))
     case Expr.Member(callee, selection) =>
-      Expr.Member(rewrite(callee), selection)
+      val result = rewrite(callee)
+      ExprResult(Expr.Member(result.expr, selection), result.floating)
     case Expr.ArrayLiteral(elements) =>
-      Expr.ArrayLiteral(elements.map(rewrite))
-    case variable: Expr.Variable => variable
+      val result = rewrite(elements)
+      ExprResult(Expr.ArrayLiteral(result._1), result._2)
+    case variable: Expr.Variable => ExprResult(variable, Nil)
   }
 
   private def asStmt(stmts: List[Stmt]): Stmt = stmts match {
@@ -237,6 +295,79 @@ object FunctionFloating {
     names.foldLeft(Map.empty[JSName, Int]) { (counts, name) =>
       counts.updated(name, counts.getOrElse(name, 0) + 1)
     }
+
+  /**
+   * Greatest set of declarations whose free names are available at module
+   * scope, possibly through other declarations in the same set.
+   */
+  private def moduleClosed(stmts: List[Stmt], exprs: List[Expr]): ModuleClosed = {
+    val definitions =
+      (stmts.flatMap(functions) ++ exprs.flatMap(functions))
+        .map(function => function.name -> free(function)).toMap
+    val names = definitions.keySet
+    val moduleNames = bindings(stmts) ++ free(stmts) ++ exprs.flatMap(free)
+    val available = moduleNames ++ names
+
+    // The complement of the greatest closed set is the least set containing
+    // every definition with an unavailable dependency and all its dependents.
+    val dependents = definitions.foldLeft(Map.empty[JSName, Set[JSName]]) {
+      case (index, (name, dependencies)) =>
+        (dependencies intersect names).foldLeft(index) { (index, dependency) =>
+          index.updated(dependency, index.getOrElse(dependency, Set.empty) + name)
+        }
+    }
+    val open = definitions.collect {
+      case (name, dependencies) if !dependencies.subsetOf(available) => name
+    }.toSet
+
+    @tailrec
+    def propagate(open: Set[JSName], pending: List[JSName]): Set[JSName] = pending match {
+      case Nil => names -- open
+      case dependency :: pending =>
+        val discovered = dependents.getOrElse(dependency, Set.empty) -- open
+        propagate(open ++ discovered, discovered.toList ::: pending)
+    }
+
+    propagate(open, open.toList)
+  }
+
+  private def functions(stmt: Stmt): List[Stmt.Function] = stmt match {
+    case Stmt.Block(_, stmts) => stmts.flatMap(functions)
+    case Stmt.Return(expr) => functions(expr)
+    case Stmt.RawStmt(_, args) => args.flatMap(functions)
+    case Stmt.Const(_, binding) => functions(binding)
+    case Stmt.Let(_, binding) => functions(binding)
+    case Stmt.Assign(target, value) => functions(target) ++ functions(value)
+    case Stmt.Destruct(_, binding) => functions(binding)
+    case Stmt.Switch(scrutinee, branches, default) =>
+      functions(scrutinee) ++ branches.flatMap((tag, stmts) =>
+        functions(tag) ++ stmts.flatMap(functions)) ++
+        default.toList.flatten.flatMap(functions)
+    case function @ Stmt.Function(_, _, stmts) =>
+      function :: stmts.flatMap(functions)
+    case Stmt.Class(_, methods) =>
+      methods.flatMap(_.stmts.flatMap(functions))
+    case Stmt.If(cond, thn, els) => functions(cond) ++ functions(thn) ++ functions(els)
+    case Stmt.Try(prog, _, handler, fin) =>
+      prog.flatMap(functions) ++ handler.flatMap(functions) ++ fin.flatMap(functions)
+    case Stmt.Throw(expr) => functions(expr)
+    case Stmt.While(_, cond, stmts) => functions(cond) ++ stmts.flatMap(functions)
+    case Stmt.Break(_) | Stmt.Continue(_) => Nil
+    case Stmt.ExprStmt(expr) => functions(expr)
+  }
+
+  private def functions(expr: Expr): List[Stmt.Function] = expr match {
+    case Expr.Call(callee, arguments) => functions(callee) ++ arguments.flatMap(functions)
+    case Expr.New(callee, arguments) => functions(callee) ++ arguments.flatMap(functions)
+    case Expr.RawExpr(_, args) => args.flatMap(functions)
+    case Expr.RawLiteral(_) => Nil
+    case Expr.IfExpr(cond, thn, els) => functions(cond) ++ functions(thn) ++ functions(els)
+    case Expr.Lambda(_, body) => functions(body)
+    case Expr.Object(properties) => properties.flatMap((_, value) => functions(value))
+    case Expr.Member(callee, _) => functions(callee)
+    case Expr.ArrayLiteral(elements) => elements.flatMap(functions)
+    case Expr.Variable(_) => Nil
+  }
 
   /** All variable occurrences, including occurrences bound in this subtree. */
   private def references(stmt: Stmt): List[JSName] = stmt match {

@@ -1,0 +1,34 @@
+def inc(x: Int) = {
+  return x: Int
+}
+
+def dec(x: Int) = {
+  return x: Int
+}
+
+def compose(x: Int){g: (Int) => Int}{h: (Int) => Int} = {
+  val intermediate = (h: (Int) => Int @ {h})(x: Int);
+  (g: (Int) => Int @ {g})(intermediate: Int)
+}
+
+def main(flag: Bool) = {
+  if (flag: Bool) {
+    (compose: (Int){g: (Int) => Int}{h: (Int) => Int} => Int @ {})(0){
+      (inc: (Int) => Int @ {})
+    }{
+      (dec: (Int) => Int @ {})
+    }
+  } else {
+    (compose: (Int){g: (Int) => Int}{h: (Int) => Int} => Int @ {})(0){
+      (dec: (Int) => Int @ {})
+    }{
+      (inc: (Int) => Int @ {})
+    }
+  }
+}
+
+/// LAMBDA_SETS
+
+S = compose ↦ { <dec, inc>, <inc, dec> },
+    dec ↦ { <> },
+    inc ↦ { <> }
