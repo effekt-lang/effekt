@@ -1,0 +1,13 @@
+def inc(x: Int) = {
+  return x: Int
+}
+
+def main() = {
+  let boxed = box {} (inc: (Int) => Int @ {})
+  return ()
+}
+
+/// LAMBDA_SETS
+
+S = ∅
+generic = { inc }

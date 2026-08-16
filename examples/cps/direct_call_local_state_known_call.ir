@@ -1,0 +1,24 @@
+def main(value, ks, k) {
+  def identity(x, ks1, k1) {
+    k1(x, ks1)
+  }
+  def stateful(x, ks2, k2) {
+    var cell = x @ ks2;
+    get current = cell;
+    let result = identity!(current, ks2, return);
+    put cell = result;
+    get final = cell;
+    k2(final, ks2)
+  }
+  let result = stateful!(value, ks, return);
+  k(result, ks)
+}
+
+// Local state composes with ordinary direct calls; it does not introduce a
+// control boundary of its own.
+/// CALLING_CONVENTIONS
+
+direct
+  identity = 0
+  main = 0 adapter
+  stateful = 1

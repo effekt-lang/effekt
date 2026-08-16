@@ -636,6 +636,11 @@ object TransformerCps extends Transformer {
       toJS(rest)(using ctx.copy(secondClass = ctx.secondClass.updated(id, join)))
 
     case cps.Stmt.Def(id, params, body, rest)
+        if ctx.callingConvention.inheritsReturn(id) =>
+      secondClassDef(
+        id, params, body, Some(rest), ctx.stackSafety.isLoopified(id))
+
+    case cps.Stmt.Def(id, params, body, rest)
         if ctx.callingConvention.isDirect(id) =>
       Binding { k =>
         val (backups, renamings) = backupMutableParams(body, params.toSet)

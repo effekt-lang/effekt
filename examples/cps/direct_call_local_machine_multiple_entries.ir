@@ -1,0 +1,27 @@
+def main(flag, n, ks, k) {
+  def build(i, ks1, k1) {
+    run done = eq(i, 0);
+    if (done) {
+      k1(i, ks1)
+    } else {
+      run previous = sub(i, 1);
+      let value = build!(previous, ks1, return);
+      run result = add(value, 1);
+      k1(result, ks1)
+    }
+  }
+  if (flag) {
+    let left = build!(n, ks, return);
+    k(left, ks)
+  } else {
+    let right = build!(n, ks, return);
+    run result = add(right, 1);
+    k(result, ks)
+  }
+}
+
+// Two forward entries carry two different remainders. There is no unique
+// return case with which a direct enclosing computation can enter `build`.
+/// CALLING_CONVENTIONS
+
+-

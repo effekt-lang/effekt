@@ -79,7 +79,8 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
   case JavaScript extends AnalysisPass("JAVASCRIPT",
     (_, input, mainId) => {
       given Context = new TestContext
-      given DeclarationContext = new DeclarationContext(input.declarations, Nil)
+      given DeclarationContext = new DeclarationContext(
+        input.declarations ++ CpsTests.fixtureDeclarations, Nil)
 
       js.TransformerCps.resetNames()
       val generated = js.TransformerCps.toJS(input, Nil, Set(mainId))
@@ -87,6 +88,23 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
       js.PrettyPrinter.format(js.FunctionFloating.transform(simplified).stmts).layout
         .linesIterator.map(_.stripTrailing).mkString("\n")
     })
+}
+
+object CpsTests {
+  private val listData = Id("ListData", -15)
+
+  val fixtureDeclarations: List[core.Declaration] = List(
+    core.Declaration.Data(Id("TripleData", -11), Nil, List(
+      core.Constructor(Id("Triple", -10), Nil, List(
+        core.Field(Id("first", -12), core.Type.TInt),
+        core.Field(Id("second", -13), core.Type.TInt),
+        core.Field(Id("third", -14), core.Type.TInt))))),
+    core.Declaration.Data(listData, Nil, List(
+      core.Constructor(Id("Nil", -7), Nil, Nil),
+      core.Constructor(Id("Cons", -8), Nil, List(
+        core.Field(Id("head", -16), core.Type.TInt),
+        core.Field(Id("tail", -17), core.ValueType.Data(listData, Nil))))))
+  )
 }
 
 class CpsTests extends munit.FunSuite {
