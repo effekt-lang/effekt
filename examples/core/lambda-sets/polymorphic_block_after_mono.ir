@@ -1,0 +1,36 @@
+def callPoly(){f: ['A]('A) => 'A} = {
+  (f: ['A]('A) => 'A @ {f})[Int](42)
+}
+
+def main() = {
+  (callPoly: (){f: ['A]('A) => 'A} => Int @ {})(){['B](x: 'B) =>
+    return x: 'B
+  }
+}
+
+/// MONO_LAMBDA_SETS
+
+S = callPoly ↦ { <implementation1> },
+    implementation1.applyInt ↦ { <> }
+
+/// MONO_LAMBDA_SPECIALIZE
+
+interface FnInt {
+  applyInt: (Int) => Int
+}
+
+def callPoly(){f: FnInt} = {
+  (f: FnInt @ {f}).applyInt: (Int) => Int(42)
+}
+
+def main() = {
+  (callPoly_implementation1: () => Int @ {})()
+}
+
+def callPoly_implementation1() = {
+  (implementation1_applyInt_specialized: (Int) => Int @ {})(42)
+}
+
+def implementation1_applyInt_specialized(x: Int) = {
+  return x: Int
+}
