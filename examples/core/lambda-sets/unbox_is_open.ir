@@ -1,0 +1,17 @@
+def apply(){f: () => Int} = {
+  (f: () => Int @ {f})()
+}
+
+def main(boxed: () => Int at {}) = {
+  (apply: (){f: () => Int} => Int @ {})(){
+    unbox boxed: () => Int at {}
+  }
+}
+
+export main
+
+/// LAMBDA_SETS
+
+S = apply ↦ { <?> },
+    main ↦ { <> }
+generic = { main }

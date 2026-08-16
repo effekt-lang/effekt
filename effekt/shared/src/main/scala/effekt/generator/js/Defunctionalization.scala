@@ -151,7 +151,16 @@ object Defunctionalization {
           val effective =
             if caseIndex < 0 then functionBoundaries(scopes)
             else expected ++ functionBoundaries(scopes.drop(caseIndex + 1))
-          effective == expected
+          // A call in a relocated case is emitted at the dispatcher. Every
+          // other call must already be in the definition's body or remainder:
+          // sibling labels share a JavaScript function, but the later sibling
+          // does not dominate the earlier one's body.
+          val dispatcherInScope = caseIndex >= 0 || scopes.exists {
+            case Scope.Definition(id, _) => id == entry
+            case Scope.Binding(id, _) => id == entry
+            case Scope.Boundary(_) => false
+          }
+          effective == expected && dispatcherInScope
         case _ => false
       }
     }
@@ -481,7 +490,16 @@ object Defunctionalization {
           .toVector
         val groups = component.filter(_.boundary).map(Vector(_)) ++ closedGroups
         val owners = groups.map { members =>
-          members.minBy(candidate => locations.lexicalDepth(candidate.entry)) -> members
+          val requiredCalls = members.flatMap(_.calls) ++ callsInsideCases
+          val dominating = members.filter { candidate =>
+            requiredCalls.forall(call =>
+              locations.visibleFrom(call.call, candidate.entry, domain))
+          }
+          dominating
+            .minByOption(candidate =>
+              locations.lexicalDepth(candidate.entry) -> candidate.entry.id)
+            .getOrElse(members.minBy(candidate =>
+              locations.lexicalDepth(candidate.entry) -> candidate.entry.id)) -> members
         }
         val staticAtEveryDispatcher = owners.iterator
           .map { case (owner, _) => locations.staticAt(owner.entry) }

@@ -1,0 +1,84 @@
+interface Reader {
+  read: () => Int
+}
+
+def run(){program @ c: (){reader: Reader} => Int} = {
+  def source = new Reader {
+    def read() = {
+      return 0
+    }
+  }
+  (program: (){reader: Reader} => Int @ {c})(){
+    (source: Reader @ {})
+  }
+}
+
+def forward(){program @ d: (){input: Reader} => Int} = {
+  (run: (){program: (){reader: Reader} => Int} => Int @ {})(){
+    (program: (){input: Reader} => Int @ {d})
+  }
+}
+
+def main(n: Int) = {
+  (forward: (){program: (){input: Reader} => Int} => Int @ {})(){
+    (){actual: Reader} => {
+      return n: Int
+    }
+  }
+}
+
+// The actual and formal function types differ only in the names of their
+// bound capture parameters. They must share one nominal closure type.
+/// LAMBDA_SPECIALIZE
+
+interface Reader {
+  read: () => Int
+}
+
+type ClosureProgram {
+  Program(n_captured: Int)
+}
+
+def run(){program @ c: (){reader: Reader} => Int} = {
+  def source = new Reader {
+    def read() = {
+      return 0
+    }
+  }
+  (program: (){reader: Reader} => Int @ {c})(){
+    (source: Reader @ {})
+  }
+}
+
+def forward(){program @ d: (){input: Reader} => Int} = {
+  (run: (){program: (){reader: Reader} => Int} => Int @ {})(){
+    (program: (){input: Reader} => Int @ {d})
+  }
+}
+
+def main(n: Int) = {
+  (forward_specialized: (ClosureProgram) => Int @ {})(make ClosureProgram Program(n: Int))
+}
+
+def forward_specialized(program_closure: ClosureProgram) = {
+  (run_specialized: (ClosureProgram) => Int @ {})(program_closure: ClosureProgram)
+}
+
+def run_specialized(program_closure: ClosureProgram) = {
+  def source = new Reader {
+    def read() = {
+      return 0
+    }
+  }
+  (apply_program: (ClosureProgram){actual: Reader} => Int @ {})(program_closure: ClosureProgram){
+    (source: Reader @ {})
+  }
+}
+
+def apply_program(closure: ClosureProgram){actual @ capture: Reader} = {
+  closure: ClosureProgram match[Int] {
+    Program : { (n_captured: Int) =>
+      return n_captured: Int
+    }
+  }
+}

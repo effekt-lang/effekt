@@ -1,0 +1,46 @@
+extern {} def consumeBox(boxed: (Int) => Int at {}): Unit = js ""
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def dec(x: Int) = {
+  return x: Int
+}
+
+def main(flag: Bool) = {
+  val boxed = if (flag: Bool) {
+    return box {} (inc: (Int) => Int @ {})
+  } else {
+    return box {} (dec: (Int) => Int @ {})
+  };
+  let ignored = (consumeBox: ((Int) => Int at {}) => Unit @ {})(boxed: (Int) => Int at {})
+  (unbox boxed: (Int) => Int at {})(42)
+}
+
+/// LAMBDA_SETS
+
+S = ∅
+generic = { dec, inc }
+
+/// LAMBDA_SPECIALIZE
+
+extern {} def consumeBox(boxed: (Int) => Int at {}): Unit = js ""
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def dec(x: Int) = {
+  return x: Int
+}
+
+def main(flag: Bool) = {
+  val boxed = if (flag: Bool) {
+    return box {} (inc: (Int) => Int @ {})
+  } else {
+    return box {} (dec: (Int) => Int @ {})
+  };
+  let ignored = (consumeBox: ((Int) => Int at {}) => Unit @ {})(boxed: (Int) => Int at {})
+  (unbox boxed: (Int) => Int at {})(42)
+}

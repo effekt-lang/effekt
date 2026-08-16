@@ -1,0 +1,75 @@
+def inc(x: Int) = {
+  return x: Int
+}
+
+def dec(x: Int) = {
+  return x: Int
+}
+
+def loop(flag: Bool, x: Int){f: (Int) => Int}{g: (Int) => Int} = {
+  if (flag: Bool) {
+    (loop: (Bool, Int){f: (Int) => Int}{g: (Int) => Int} => Int @ {})(false, x: Int){
+      (g: (Int) => Int @ {g})
+    }{
+      (f: (Int) => Int @ {f})
+    }
+  } else {
+    (f: (Int) => Int @ {f})(x: Int)
+  }
+}
+
+def main() = {
+  (loop: (Bool, Int){f: (Int) => Int}{g: (Int) => Int} => Int @ {})(true, 0){
+    (inc: (Int) => Int @ {})
+  }{
+    (dec: (Int) => Int @ {})
+  }
+}
+
+/// LAMBDA_SETS
+
+S = dec ↦ { <> },
+    inc ↦ { <> },
+    loop ↦ { <dec, inc>, <inc, dec> }
+
+/// LAMBDA_SPECIALIZE
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def dec(x: Int) = {
+  return x: Int
+}
+
+def loop(flag: Bool, x: Int){f: (Int) => Int}{g: (Int) => Int} = {
+  if (flag: Bool) {
+    (loop: (Bool, Int){f: (Int) => Int}{g: (Int) => Int} => Int @ {})(false, x: Int){
+      (g: (Int) => Int @ {g})
+    }{
+      (f: (Int) => Int @ {f})
+    }
+  } else {
+    (f: (Int) => Int @ {f})(x: Int)
+  }
+}
+
+def main() = {
+  (loop_inc_dec: (Bool, Int) => Int @ {})(true, 0)
+}
+
+def loop_inc_dec(flag: Bool, x: Int) = {
+  if (flag: Bool) {
+    (loop_dec_inc: (Bool, Int) => Int @ {})(false, x: Int)
+  } else {
+    (inc: (Int) => Int @ {})(x: Int)
+  }
+}
+
+def loop_dec_inc(flag: Bool, x: Int) = {
+  if (flag: Bool) {
+    (loop_inc_dec: (Bool, Int) => Int @ {})(false, x: Int)
+  } else {
+    (dec: (Int) => Int @ {})(x: Int)
+  }
+}

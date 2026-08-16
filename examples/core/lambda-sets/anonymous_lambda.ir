@@ -1,0 +1,32 @@
+def apply(x: Int){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(x: Int)
+}
+
+def main() = {
+  (apply: (Int){f: (Int) => Int} => Int @ {})(0){(x: Int) =>
+    return x: Int
+  }
+}
+
+/// LAMBDA_SETS
+
+S = apply ↦ { <lambda1> },
+    lambda1 ↦ { <> }
+
+/// LAMBDA_SPECIALIZE
+
+def apply(x: Int){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(x: Int)
+}
+
+def main() = {
+  (apply_lambda1: (Int) => Int @ {})(0)
+}
+
+def apply_lambda1(x: Int) = {
+  (lambda1_specialized: (Int) => Int @ {})(x: Int)
+}
+
+def lambda1_specialized(x: Int) = {
+  return x: Int
+}

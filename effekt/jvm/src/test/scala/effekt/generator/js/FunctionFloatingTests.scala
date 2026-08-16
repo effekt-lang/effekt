@@ -158,7 +158,7 @@ class FunctionFloatingTests extends munit.FunSuite {
     assertEquals(FunctionFloating.transform(input), expected)
   }
 
-  test("a function does not float across an if") {
+  test("a module-closed function floats across an if") {
     val outer = name("outer")
     val helper = name("helper")
 
@@ -166,14 +166,16 @@ class FunctionFloatingTests extends munit.FunSuite {
     val input = List(Stmt.Function(outer, Nil, List(
       Stmt.If(truth, Stmt.Block(None, List(helperDef, call(helper))), Stmt.Block(None, Nil))
     )))
-    val expected = List(Stmt.Function(outer, Nil, List(
-      Stmt.If(truth, Stmt.Block(None, List(helperDef, call(helper))), Stmt.Block(None, Nil))
-    )))
+    val expected = List(
+      helperDef,
+      Stmt.Function(outer, Nil, List(
+        Stmt.If(truth, Stmt.Block(None, List(call(helper))), Stmt.Block(None, Nil))
+      )))
 
     assertEquals(FunctionFloating.transform(input), expected)
   }
 
-  test("a function floats out of a loop but not its enclosing if") {
+  test("a module-closed function floats across a loop and its enclosing if") {
     val outer = name("outer")
     val loop = name("loop")
     val helper = name("helper")
@@ -183,12 +185,13 @@ class FunctionFloatingTests extends munit.FunSuite {
     val input = List(Stmt.Function(outer, Nil, List(
       Stmt.If(truth, Stmt.Block(None, List(loopDef)), Stmt.Block(None, Nil))
     )))
-    val expected = List(Stmt.Function(outer, Nil, List(
-      Stmt.If(truth, Stmt.Block(None, List(
-        helperDef,
-        Stmt.While(Some(loop), truth, List(call(helper)))
-      )), Stmt.Block(None, Nil))
-    )))
+    val expected = List(
+      helperDef,
+      Stmt.Function(outer, Nil, List(
+        Stmt.If(truth, Stmt.Block(None, List(
+          Stmt.While(Some(loop), truth, List(call(helper)))
+        )), Stmt.Block(None, Nil))
+      )))
 
     assertEquals(FunctionFloating.transform(input), expected)
   }
@@ -215,7 +218,7 @@ class FunctionFloatingTests extends munit.FunSuite {
     assertEquals(FunctionFloating.transform(input), expected)
   }
 
-  test("a function does not float across a switch clause") {
+  test("a module-closed function floats across a switch clause") {
     val outer = name("outer")
     val helper = name("helper")
     val scrutinee = name("scrutinee")
@@ -226,11 +229,13 @@ class FunctionFloatingTests extends munit.FunSuite {
         zero -> List(helperDef, call(helper))
       ), None)
     )))
-    val expected = List(Stmt.Function(outer, Nil, List(
-      Stmt.Switch(variable(scrutinee), List(
-        zero -> List(Stmt.Block(None, List(helperDef, call(helper))))
-      ), None)
-    )))
+    val expected = List(
+      helperDef,
+      Stmt.Function(outer, Nil, List(
+        Stmt.Switch(variable(scrutinee), List(
+          zero -> List(call(helper))
+        ), None)
+      )))
 
     assertEquals(FunctionFloating.transform(input), expected)
   }
@@ -274,7 +279,7 @@ class FunctionFloatingTests extends munit.FunSuite {
     assertEquals(FunctionFloating.transform(input), expected)
   }
 
-  test("lambdas are floating boundaries") {
+  test("a module-closed function floats out of a lambda") {
     val holder = name("holder")
     val loop = name("loop")
     val helper = name("helper")
@@ -283,7 +288,82 @@ class FunctionFloatingTests extends munit.FunSuite {
     val input = List(Stmt.Const(Pattern.Variable(holder), Expr.Lambda(Nil,
       Stmt.While(Some(loop), truth, List(helperDef, call(helper)))
     )))
-    val expected = List(Stmt.Const(Pattern.Variable(holder), Expr.Lambda(Nil,
+    val expected = List(
+      helperDef,
+      Stmt.Const(Pattern.Variable(holder), Expr.Lambda(Nil,
+        Stmt.While(Some(loop), truth, List(call(helper)))
+      )))
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("module-closed dependencies float together across different boundaries") {
+    val outer = name("outer")
+    val base = name("base")
+    val helper = name("helper")
+
+    val baseDef = Stmt.Function(base, Nil, List(Stmt.Return(zero)))
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(variable(base))))
+    val input = List(Stmt.Function(outer, Nil, List(
+      baseDef,
+      Stmt.If(truth, Stmt.Block(None, List(helperDef, call(helper))), Stmt.Block(None, Nil))
+    )))
+    val expected = List(
+      baseDef,
+      helperDef,
+      Stmt.Function(outer, Nil, List(
+        Stmt.If(truth, Stmt.Block(None, List(call(helper))), Stmt.Block(None, Nil))
+      )))
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("a dependency on a captured function prevents module lifting") {
+    val outer = name("outer")
+    val base = name("base")
+    val helper = name("helper")
+    val captured = name("captured")
+
+    val baseDef = Stmt.Function(base, Nil, List(Stmt.Return(variable(captured))))
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(variable(base))))
+    val branch = Stmt.If(
+      truth,
+      Stmt.Block(None, List(helperDef, call(helper))),
+      Stmt.Block(None, Nil))
+    val input = List(Stmt.Function(outer, List(captured), List(baseDef, branch)))
+
+    assertEquals(FunctionFloating.transform(input), input)
+  }
+
+  test("a module-closed function floats out of a class method") {
+    val container = name("Container")
+    val method = name("method")
+    val helper = name("helper")
+
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(zero)))
+    val input = List(Stmt.Class(container, List(
+      Stmt.Function(method, Nil, List(helperDef, call(helper)))
+    )))
+    val expected = List(
+      helperDef,
+      Stmt.Class(container, List(
+        Stmt.Function(method, Nil, List(call(helper)))
+      )))
+
+    assertEquals(FunctionFloating.transform(input), expected)
+  }
+
+  test("a function capturing a lambda parameter stays in the lambda") {
+    val holder = name("holder")
+    val loop = name("loop")
+    val helper = name("helper")
+    val captured = name("captured")
+
+    val helperDef = Stmt.Function(helper, Nil, List(Stmt.Return(variable(captured))))
+    val input = List(Stmt.Const(Pattern.Variable(holder), Expr.Lambda(List(captured),
+      Stmt.While(Some(loop), truth, List(helperDef, call(helper)))
+    )))
+    val expected = List(Stmt.Const(Pattern.Variable(holder), Expr.Lambda(List(captured),
       Stmt.Block(None, List(
         helperDef,
         Stmt.While(Some(loop), truth, List(call(helper)))

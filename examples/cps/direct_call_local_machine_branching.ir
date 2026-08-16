@@ -1,0 +1,23 @@
+def main(n, ks, k) {
+  def build(i, ks1, k1) {
+    run done = eq(i, 0);
+    if (done) {
+      k1(1, ks1)
+    } else {
+      run previous = sub(i, 1);
+      let left = build!(previous, ks1, return);
+      let right = build!(previous, ks1, return);
+      run result = add(left, right);
+      k1(result, ks1)
+    }
+  }
+  let result = build!(n, ks, return);
+  k(result, ks)
+}
+
+// Several recursive call sites still form one closed continuation machine.
+// They do not add native-stack edges to the enclosing direct computation.
+/// CALLING_CONVENTIONS
+
+direct
+  main = 0 adapter
