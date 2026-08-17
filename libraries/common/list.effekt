@@ -827,7 +827,7 @@ namespace slow {
   /// 
   /// O(N)
   def find[A](list: List[A]){ pred: A => Bool }: Option[A] = list match {
-    case Cons(x, xs) => if (pred(x)) Some(x) else find(xs){ pred }
+    case Cons(x, xs) => if (pred(x)) Some(x) else find(xs){pred}
     case Nil() => None()
   }
 }
