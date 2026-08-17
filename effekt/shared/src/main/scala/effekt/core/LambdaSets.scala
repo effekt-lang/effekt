@@ -335,6 +335,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
   private case class LambdaGraph(
     sets: Map[LambdaSetId, LambdaSet],
     instances: Map[(BlockCase, Vector[LambdaSetId]), LambdaSetId],
+    projections: Map[Projection, LambdaSetId],
     boxes: Map[Id, LambdaSetId],
     boxedExpressions: IdentityHashMap[Expr.Box, LambdaSetId]
   ) {
@@ -353,13 +354,11 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
   private case class Variant(owner: Callable, shape: Shape, id: Id)
 
   private enum Selection {
-    case Static(set: LambdaSetId)
-    case Lowered(set: LambdaSetId, value: Expr)
+    case Known(set: LambdaSetId, representation: List[Expr])
     case Dynamic
 
     def lambdaSet: Option[LambdaSetId] = this match {
-      case Static(set) => Some(set)
-      case Lowered(set, _) => Some(set)
+      case Known(set, _) => Some(set)
       case Dynamic => None
     }
   }
@@ -447,11 +446,12 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
         reached.toSet
       }
 
-      val boxesCrossingBoundaries = constraints.boxFlows.collect {
+      val opaque = constraints.boxFlows.collect {
+        case BoxFlow(BoxSource.Open, destination) => destination
         case BoxFlow(BoxSource.Block(box, _), destination)
             if constraints.unsafeBoxes.containsKey(box) => destination
       }
-      val unsafe = closure(constraints.unsafeBoxValues ++ boxesCrossingBoundaries)
+      val unsafe = closure(constraints.unsafeBoxValues ++ opaque)
       closure(constraints.unboxes).diff(unsafe)
     }
 
@@ -488,11 +488,27 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
     private def defineEquations(): Unit = {
       orderedVariants.foreach { case key @ (owner, vector) =>
         val exact = variantRaw(key)
-        val environment = Map(owner -> exact)
+        val closed = vector.zipWithIndex.map {
+          case (BlockCase.Open, _) => openNode
+          case (_, position) => genericRaw(Projection(owner, position))
+        }
+        val exactEnvironment = Map(owner -> exact)
+        val closedEnvironment = Map(owner -> closed)
 
         vector.indices.foreach { position =>
-          nodes(exact(position)).includes += term(vector(position), environment)
-          nodes(genericRaw(Projection(owner, position))).includes += exact(position)
+          // Exact nodes retain call-entry correlations for ordinary
+          // specialization. Projection nodes describe the regular closure
+          // family at a formal position: captured projections therefore point
+          // back to that family rather than to one finite unfolding. An opaque
+          // entry is not part of the closed family, but remains opaque when it
+          // occurs in the environment of a known alternative.
+          nodes(exact(position)).includes += term(vector(position), exactEnvironment)
+          vector(position) match {
+            case BlockCase.Open => ()
+            case block =>
+              nodes(genericRaw(Projection(owner, position))).includes +=
+                term(block, closedEnvironment)
+          }
         }
 
         owner match {
@@ -506,7 +522,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
             })
           case Callable.Operation(implementation, _) =>
             val info = constraints.implementations(implementation)
-            val captured = info.captures.map(resolve(_, environment))
+            val captured = info.captures.map(resolve(_, exactEnvironment))
             termRaw.getOrElseUpdate(BlockCase.Implementation(implementation) -> captured, {
               val node = fresh()
               nodes(node).cases += RawCase(BlockCase.Implementation(implementation), captured)
@@ -598,12 +614,15 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
       val instances = termRaw.map { case ((block, captures), raw) =>
         (block -> captures.map(canonical)) -> canonical(raw)
       }.toMap
+      val projections = genericRaw.map { case (projection, raw) =>
+        projection -> canonical(raw)
+      }
       val boxes = boxRaw.collect {
         case (id, raw) if lowerableBoxes(id) => id -> canonical(raw)
       }
       val boxedExpressions = new IdentityHashMap[Expr.Box, LambdaSetId]
       boxedExpressionRaw.forEach { (box, raw) => boxedExpressions.put(box, canonical(raw)) }
-      LambdaGraph(sets, instances, boxes, boxedExpressions)
+      LambdaGraph(sets, instances, projections, boxes, boxedExpressions)
     }
   }
 
@@ -653,9 +672,9 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
       case ValueType.Boxed(_, _) => false
     }
 
-    /** Closed function sets whose complete environments can be represented by
-      * ordinary nominal values. Sets involving implementations or opaque
-      * boxed captures remain in the original capture-aware representation.
+    /** Closed block sets whose complete environments can be represented by
+      * ordinary nominal values. Opaque boxed captures remain in the original
+      * capture-aware representation.
       */
     private val lowerableSets: Set[LambdaSetId] = {
       var result = graph.sets.keySet.filter(id => {
@@ -663,7 +682,9 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
         !set.open && set.cases.nonEmpty && set.cases.forall {
           case LambdaCase(BlockCase.Function(function), _) =>
             constraints.functions(function).valueCaptures.forall(p => storable(p.tpe))
-          case LambdaCase(BlockCase.Implementation(_) | BlockCase.Open, _) => false
+          case LambdaCase(BlockCase.Implementation(implementation), _) =>
+            constraints.implementations(implementation).valueCaptures.forall(p => storable(p.tpe))
+          case LambdaCase(BlockCase.Open, _) => false
         }
       })
       var changed = true
@@ -677,7 +698,74 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
 
     private def lowerable(id: LambdaSetId): Boolean = lowerableSets(id)
 
+    /** A boxed closure has one value representation. Even a singleton set is
+      * therefore represented nominally rather than by a possibly multi-field
+      * unboxed environment product. */
+    private val boxedSets: Set[LambdaSetId] = {
+      val result = mutable.Set.from(graph.boxes.values)
+      graph.boxedExpressions.forEach((_, set) => result += set)
+      result.toSet
+    }
+
+    /** A singleton closure is a product of its captured values and captured
+      * block environments. This least fixed point selects exactly the finite
+      * products obtained by expanding singleton captures; sums stop expansion,
+      * while cycles retain a nominal representation.
+      */
+    private val unboxedSets: Set[LambdaSetId] = {
+      val candidates = lowerableSets.filter { id =>
+        !boxedSets(id) &&
+        !erasable(id) && singleton(id).exists {
+          case LambdaCase(BlockCase.Function(_), _) => true
+          case _ => false
+        }
+      }
+      var result = Set.empty[LambdaSetId]
+      var changed = true
+      while changed do {
+        val next = result ++ candidates.filter { id =>
+          singleton(id).exists(_.captures.forall { capture =>
+            erasable(capture) || !candidates(capture) || result(capture)
+          })
+        }
+        changed = next != result
+        result = next
+      }
+      result
+    }
+
+    private def unboxed(id: LambdaSetId): Boolean = unboxedSets(id)
+
     private def selectable(id: LambdaSetId): Boolean = erasable(id) || lowerable(id)
+
+    /** Nodes on a capture cycle denote regular, potentially unbounded closure
+      * families. They must be represented nominally instead of specialized at
+      * successively deeper finite unfoldings. */
+    private val recursiveSets: Set[LambdaSetId] = graph.projections.values.toSet.filter { root =>
+      val seen = mutable.Set.empty[LambdaSetId]
+      val pending = mutable.Stack.from(graph(root).cases.flatMap(_.captures))
+      var recursive = false
+      while pending.nonEmpty && !recursive do {
+        val current = pending.pop()
+        if current == root then recursive = true
+        else if seen.add(current) then
+          pending.pushAll(graph(current).cases.flatMap(_.captures))
+      }
+      recursive
+    }
+
+    /** Select exact acyclic sets, but close recursive demands at the formal
+      * projection that defines their shared nominal family. */
+    private def select(owner: Callable, position: Int, actual: Option[LambdaSetId]): Option[LambdaSetId] =
+      actual.filter(selectable).map { set =>
+        graph.projections.get(Projection(owner, position)) match {
+          case Some(family)
+              if recursiveSets(family) &&
+                selectable(family) &&
+                graph(set).cases.subsetOf(graph(family).cases) => family
+          case _ => set
+        }
+      }
 
     private def singleton(id: LambdaSetId): Option[LambdaCase] = {
       val set = graph(id)
@@ -745,12 +833,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
       loop(id, Set.empty, 0)
     }
 
-    private case class Representation(
-      set: LambdaSetId,
-      function: BlockType.Function,
-      data: Id,
-      dispatcher: Id
-    ) {
+    private case class Representation(set: LambdaSetId, block: BlockType, data: Id, dispatcher: Id) {
       val tpe: ValueType.Data = ValueType.Data(data, Nil)
     }
 
@@ -758,15 +841,39 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
     private val pendingRepresentations = mutable.Queue.empty[Representation]
     private val constructorNames = mutable.LinkedHashMap.empty[(Representation, LambdaCase), Id]
 
-    private def representation(set: LambdaSetId, function: BlockType.Function): Representation = {
+    private def representation(set: LambdaSetId, block: BlockType): Representation = {
       assert(lowerable(set))
-      representations.getOrElseUpdate(set, {
-        val name = setName(set)
-        val result = Representation(set, function, Id(s"Closure_${name}"), Id(s"apply_${name}"))
-        pendingRepresentations.enqueue(result)
-        result
-      })
+      representations.get(set) match {
+        case Some(result) if result.block == block => result
+        case Some(_) => Context.abort(pretty"One lambda set cannot represent different block types")
+        case None =>
+          val name = setName(set)
+          val result = Representation(set, block, Id(s"Closure_${name}"), Id(s"apply_${name}"))
+          representations(set) = result
+          pendingRepresentations.enqueue(result)
+          result
+      }
     }
+
+    private def environmentTypes(set: LambdaSetId): List[ValueType] =
+      singleton(set).toList.flatMap {
+        case LambdaCase(BlockCase.Function(id), captures) =>
+          val definition = constraints.functions(id)
+          val info = constraints.callables(Callable.Function(id))
+          definition.valueCaptures.map(_.tpe).toList ++
+            (info.captureIds zip captures).flatMap { case (capture, capturedSet) =>
+              val (tpe, _) = definition.literal.free.blocks(capture)
+              runtimeTypes(capturedSet, tpe)
+            }
+        case _ => Nil
+      }
+
+    private def runtimeTypes(set: LambdaSetId, block: BlockType): List[ValueType] =
+      if erasable(set) then Nil
+      else block match {
+        case function: BlockType.Function if unboxed(set) => environmentTypes(set)
+        case _ => List(representation(set, block).tpe)
+      }
 
     private def orderedCases(set: LambdaSetId): Vector[LambdaCase] =
       graph(set).cases.toVector.sortBy { c =>
@@ -809,8 +916,10 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
 
     private def shape(owner: Callable, arguments: List[Block])(using context: Specialization): Shape = {
       val info = constraints.callables(owner)
-      val captures = info.captureIds.map(set(_).filter(selectable))
-      captures ++ arguments.map(set(_).filter(selectable))
+      val blocks = info.captureIds.map(set) ++ arguments.map(set)
+      blocks.zipWithIndex.map { case (actual, position) =>
+        select(owner, position, actual)
+      }
     }
 
     private def shape(callee: LambdaSetId, arguments: List[Block])(using Specialization): Shape = {
@@ -825,8 +934,10 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
       val info = constraints.callables(owner)
       if captures.size != info.captures.size then
         Context.abort(pretty"Wrong capture arity for '${show(owner)}'")
-      captures.map(id => Option.when(selectable(id))(id)) ++
-        arguments.map(set(_).filter(selectable))
+      val blocks = captures.map(Some.apply) ++ arguments.map(set)
+      blocks.zipWithIndex.map { case (actual, position) =>
+        select(owner, position, actual)
+      }
     }
 
     private def explicitShape(owner: Callable, shape: Shape): Vector[Option[LambdaSetId]] = {
@@ -844,39 +955,45 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
       (choices zip values).collect { case (None, value) => value }.toList
     }
 
-    private case class LoweredParameter(
-      parameter: BlockParam,
+    private case class SelectedBlock(
+      id: Id,
+      tpe: BlockType,
       set: LambdaSetId,
-      value: ValueParam
+      parameters: List[ValueParam]
     )
 
-    private def loweredParameters(owner: Callable, shape: Shape, parameters: List[BlockParam]): List[LoweredParameter] = {
-      val choices = explicitShape(owner, shape)
-      (parameters zip choices zip specializedBlockTypes(owner, shape)).collect {
-        case ((parameter, Some(set)), function: BlockType.Function) if !erasable(set) =>
-          val rep = representation(set, function)
-          LoweredParameter(parameter, set,
-            ValueParam(Id(s"${parameter.id.name.name}_closure"), rep.tpe))
+    private def selectedBlocks(owner: Callable, shape: Shape, literal: BlockLit): List[SelectedBlock] = {
+      val info = constraints.callables(owner)
+      val captured = info.captureIds.map { id =>
+        val (tpe, _) = literal.free.blocks(id)
+        id -> tpe
       }
+      val explicit = literal.bparams.map(parameter => parameter.id -> parameter.tpe)
+      ((captured ++ explicit) zip shape).collect { case ((id, tpe), Some(set)) =>
+        val parameters = runtimeTypes(set, tpe).zipWithIndex.map { case (valueType, index) =>
+          ValueParam(Id(s"${id.name.name}_environment${index}"), valueType)
+        }
+        SelectedBlock(id, tpe, set, parameters)
+      }.toList
     }
 
     private def specializationContext(
       owner: Callable,
       shape: Shape,
-      parameters: List[BlockParam],
-      lowered: List[LoweredParameter]
+      literal: BlockLit,
+      selected: List[SelectedBlock]
     ): Specialization = {
       val info = constraints.callables(owner)
-      val ids = info.captureIds ++ parameters.map(_.id)
+      val ids = info.captureIds ++ literal.bparams.map(_.id)
       if ids.size != shape.size then
         Context.abort(pretty"Wrong specialization arity for '${show(owner)}': expected ${ids.size}, found ${shape.size}")
-      val loweredById = lowered.map(p => p.parameter.id -> p).toMap
+      val selectedById = selected.map(block => block.id -> block).toMap
       val selections = (ids zip shape).map {
-        case (id, Some(set)) if erasable(set) => id -> Selection.Static(set)
         case (id, Some(set)) =>
-          val parameter = loweredById.getOrElse(id,
+          val block = selectedById.getOrElse(id,
             Context.abort(pretty"A captured non-static closure cannot be lifted without an environment"))
-          id -> Selection.Lowered(set, Expr.ValueVar(parameter.value.id, parameter.value.tpe))
+          val representation = block.parameters.map(p => Expr.ValueVar(p.id, p.tpe))
+          id -> Selection.Known(set, representation)
         case (id, None) => id -> Selection.Dynamic
       }
       Specialization(selections.toMap)
@@ -889,11 +1006,21 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
       }
     }
 
-    private def originalType(owner: Callable): BlockType.Function = owner match {
-      case Callable.Function(id) =>
-        constraints.functions(id).literal.tpe.asInstanceOf[BlockType.Function]
-      case operation: Callable.Operation => this.operation(operation).tpe
+    private def originalLiteral(owner: Callable): BlockLit = owner match {
+      case Callable.Function(id) => constraints.functions(id).literal
+      case operation: Callable.Operation =>
+        val op = this.operation(operation)
+        BlockLit(op.tparams, op.cparams, op.vparams, op.bparams, op.body)
     }
+
+    private def valueCaptures(owner: Callable): Vector[ValueParam] = owner match {
+      case Callable.Function(id) => constraints.functions(id).valueCaptures
+      case Callable.Operation(implementation, _) =>
+        constraints.implementations(implementation).valueCaptures
+    }
+
+    private def originalType(owner: Callable): BlockType.Function =
+      originalLiteral(owner).tpe.asInstanceOf[BlockType.Function]
 
     private def originalCapture(owner: Callable): Captures = owner match {
       case Callable.Function(id) => constraints.functions(id).literal.capt
@@ -957,14 +1084,19 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
             })
           val noTypes = DB.empty[ValueType]
           val rewrittenBlocks = specializedBlockTypes(owner, shape)
-          val lowered = (choices zip rewrittenBlocks).collect {
-            case (Some(set), function: BlockType.Function) if !erasable(set) =>
-              representation(set, function).tpe
+          val literal = originalLiteral(owner)
+          val info = constraints.callables(owner)
+          val capturedBlocks = info.captureIds.map(id => literal.free.blocks(id)._1)
+          val lowered = (shape zip (capturedBlocks ++ rewrittenBlocks)).flatMap {
+            case (Some(set), block) => runtimeTypes(set, block)
+            case (None, _) => Nil
           }
+          val capturedValues = valueCaptures(owner).map(_.tpe)
           BlockType.Function(
             tparams,
             residual(owner, shape, cparams),
-            vparams.map(Type.substitute(_, noTypes, captureSubstitution)) ++ lowered,
+            (vparams ++ capturedValues ++ lowered)
+              .map(Type.substitute(_, noTypes, captureSubstitution)),
             (choices zip rewrittenBlocks).collect { case (None, block) => block }.toList,
             Type.substitute(result, noTypes, captureSubstitution))
       }
@@ -1006,23 +1138,78 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
     private def selection(id: Id)(using context: Specialization): Option[Selection] =
       context.blocks.get(id)
 
+    private def lexicalEnvironment(lambda: LambdaCase)(using context: Specialization): List[Expr] =
+      lambda.block match {
+        case BlockCase.Function(id) =>
+          val definition = constraints.functions(id)
+          val values = definition.valueCaptures.map { parameter =>
+            bodyRewriter.rewrite(Expr.ValueVar(parameter.id, parameter.tpe))
+          }
+          val info = constraints.callables(Callable.Function(id))
+          val blocks = (info.captureIds zip lambda.captures).flatMap { case (capture, set) =>
+            val (tpe, capt) = definition.literal.free.blocks(capture)
+            runtimeArguments(BlockVar(capture, tpe, capt), set, tpe)
+          }
+          (values ++ blocks).toList
+
+        case BlockCase.Implementation(id) =>
+          val definition = constraints.implementations(id)
+          val values = definition.valueCaptures.map { parameter =>
+            bodyRewriter.rewrite(Expr.ValueVar(parameter.id, parameter.tpe))
+          }
+          val blocks = (definition.captureIds zip lambda.captures).flatMap { case (capture, set) =>
+            val (tpe, capt) = definition.implementation.free.blocks(capture)
+            runtimeArguments(BlockVar(capture, tpe, capt), set, tpe)
+          }
+          (values ++ blocks).toList
+
+        case BlockCase.Open => Context.abort(pretty"An open block has no finite environment")
+      }
+
+    private def environment(
+      block: Block,
+      set: LambdaSetId
+    )(using context: Specialization): List[Expr] = block match {
+      case BlockVar(id, _, _) => selection(id) match {
+        case Some(Selection.Known(actual, values)) if actual == set && unboxed(actual) => values
+        case Some(Selection.Known(actual, Nil)) if actual == set => Nil
+        case Some(Selection.Known(actual, _)) if actual == set =>
+          Context.abort(pretty"A nominal closure environment cannot be projected statically")
+        case _ => lexicalEnvironment(singleton(set).getOrElse(
+          Context.abort(pretty"A block environment must denote one lambda case")))
+      }
+      case _ => lexicalEnvironment(singleton(set).getOrElse(
+        Context.abort(pretty"A block environment must denote one lambda case")))
+    }
+
+    private def runtimeArguments(
+      block: Block,
+      expected: LambdaSetId,
+      tpe: BlockType
+    )(using context: Specialization): List[Expr] =
+      if erasable(expected) then Nil
+      else tpe match {
+        case function: BlockType.Function if unboxed(expected) => environment(block, expected)
+        case _ => List(closureExpression(block, expected, tpe))
+      }
+
     private def closureExpression(
       block: Block,
       expected: LambdaSetId,
-      function: BlockType.Function
+      blockType: BlockType
     )(using context: Specialization): Expr = block match {
       case BlockVar(id, _, _) => selection(id) match {
-        case Some(Selection.Lowered(set, value)) if set == expected => value
-        case _ => constructClosure(block, expected, function)
+        case Some(Selection.Known(set, value :: Nil)) if set == expected && !unboxed(set) => value
+        case _ => constructClosure(block, expected, blockType)
       }
       case Unbox(expr) => bodyRewriter.rewrite(expr)
-      case _: BlockLit | New(_) => constructClosure(block, expected, function)
+      case _: BlockLit | New(_) => constructClosure(block, expected, blockType)
     }
 
     private def constructClosure(
       block: Block,
       expected: LambdaSetId,
-      function: BlockType.Function
+      blockType: BlockType
     )(using context: Specialization): Expr = {
       val actual = set(block).getOrElse(
         Context.abort(pretty"Cannot construct a closure for an open block"))
@@ -1031,27 +1218,8 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
       if !graph(expected).cases(lambda) then
         Context.abort(pretty"Lambda case is not contained in its target lambda set")
 
-      val rep = representation(expected, function)
-      val fields = lambda.block match {
-        case BlockCase.Function(id) =>
-          val definition = constraints.functions(id)
-          val values = definition.valueCaptures.map { parameter =>
-            bodyRewriter.rewrite(Expr.ValueVar(parameter.id, parameter.tpe))
-          }
-          val info = constraints.callables(Callable.Function(id))
-          val blocks = (info.captureIds zip lambda.captures).flatMap { case (capture, set) =>
-            if erasable(set) then None
-            else {
-              val (tpe, capt) = definition.literal.free.blocks(capture)
-              val function = tpe.asInstanceOf[BlockType.Function]
-              Some(closureExpression(BlockVar(capture, tpe, capt), set, function))
-            }
-          }
-          values ++ blocks
-        case BlockCase.Implementation(_) | BlockCase.Open =>
-          Context.abort(pretty"Only function closures are lowered")
-      }
-      Expr.Make(rep.tpe, constructor(rep, lambda), Nil, fields.toList)
+      val rep = representation(expected, blockType)
+      Expr.Make(rep.tpe, constructor(rep, lambda), Nil, environment(block, actual))
     }
 
     private def loweredArguments(
@@ -1060,22 +1228,62 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
       arguments: List[Block]
     )(using Specialization): List[Expr] = {
       val choices = explicitShape(owner, shape)
-      (choices zip arguments zip specializedBlockTypes(owner, shape)).collect {
-        case ((Some(set), argument), function: BlockType.Function) if !erasable(set) =>
-          closureExpression(argument, set, function)
+      (choices zip arguments zip specializedBlockTypes(owner, shape)).flatMap {
+        case ((Some(set), argument), tpe) => runtimeArguments(argument, set, tpe)
+        case _ => Nil
       }.toList
     }
 
-    private def dispatcherRef(rep: Representation): BlockVar = rep.function match {
+    private def dispatcherRef(rep: Representation): BlockVar = rep.block match {
       case BlockType.Function(_, cparams, vparams, bparams, result) =>
         BlockVar(
           rep.dispatcher,
           BlockType.Function(Nil, cparams, rep.tpe :: vparams, bparams, result),
           Set.empty)
+      case _: BlockType.Interface =>
+        Context.abort(pretty"An implementation is dispatched through one of its operations")
     }
 
-    private def adapter(set: LambdaSetId, value: Expr, function: BlockType.Function): BlockLit = {
-      val rep = representation(set, function)
+    private case class OperationDispatcher(
+      representation: Representation,
+      method: Id,
+      function: BlockType.Function,
+      id: Id
+    )
+
+    private val operationDispatchers = mutable.LinkedHashMap.empty[(Representation, Id), OperationDispatcher]
+    private val pendingOperationDispatchers = mutable.Queue.empty[OperationDispatcher]
+
+    private def operationDispatcher(
+      rep: Representation,
+      method: Id,
+      function: BlockType.Function
+    ): OperationDispatcher =
+      operationDispatchers.getOrElseUpdate(rep -> method, {
+        val result = OperationDispatcher(
+          rep,
+          method,
+          function,
+          Id(s"${method.name.name}_${setName(rep.set)}"))
+        pendingOperationDispatchers.enqueue(result)
+        result
+      })
+
+    private def operationDispatcherRef(dispatcher: OperationDispatcher): BlockVar =
+      dispatcher.function match {
+        case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
+          BlockVar(
+            dispatcher.id,
+            BlockType.Function(tparams, cparams,
+              dispatcher.representation.tpe :: vparams, bparams, result),
+            Set.empty)
+      }
+
+    private def adapter(
+      set: LambdaSetId,
+      environment: List[Expr],
+      function: BlockType.Function
+    ): BlockLit = {
       val BlockType.Function(tparams, cparams, vtypes, btypes, result) = function
       val vparams = vtypes.zipWithIndex.map { case (tpe, index) =>
         ValueParam(Id(s"arg${index}"), tpe)
@@ -1083,11 +1291,22 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
       val bparams = btypes.zip(cparams).zipWithIndex.map { case ((tpe, capture), index) =>
         BlockParam(Id(s"block${index}"), tpe, Set(capture))
       }
-      val body = Stmt.App(
-        dispatcherRef(rep),
-        Nil,
-        value :: vparams.map(p => Expr.ValueVar(p.id, p.tpe)),
-        bparams.map(p => BlockVar(p.id, p.tpe, p.capt)))
+      val values = vparams.map(p => Expr.ValueVar(p.id, p.tpe))
+      val blocks = bparams.map(p => BlockVar(p.id, p.tpe, p.capt))
+      val body = singleton(set) match {
+        case Some(LambdaCase(BlockCase.Function(id), captures)) if erasable(set) || unboxed(set) =>
+          val owner = Callable.Function(id)
+          val shape = captures.map(Some.apply) ++ Vector.fill(bparams.size)(None)
+          val target = request(owner, shape)
+          Stmt.App(functionRef(owner, shape, target), Nil, values ++ environment, blocks)
+
+        case _ =>
+          val closure = environment match {
+            case value :: Nil => value
+            case _ => Context.abort(pretty"A nominal closure requires exactly one representation value")
+          }
+          Stmt.App(dispatcherRef(representation(set, function)), Nil, closure :: values, blocks)
+      }
       BlockLit(tparams, cparams, vparams, bparams, body)
     }
 
@@ -1101,53 +1320,81 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
 
     private val caseLayouts = mutable.LinkedHashMap.empty[(Representation, LambdaCase), CaseLayout]
 
-    private def caseLayout(rep: Representation, lambda: LambdaCase): CaseLayout =
-      caseLayouts.getOrElseUpdate(rep -> lambda, lambda.block match {
-        case BlockCase.Function(id) =>
-          val definition = constraints.functions(id)
-          val valueFields = definition.valueCaptures.map { original =>
-            val field = Id(s"${original.id.name.name}_captured")
-            (Field(field, original.tpe), ValueParam(field, original.tpe),
-              original.id -> Expr.ValueVar(field, original.tpe))
-          }
-          val info = constraints.callables(Callable.Function(id))
-          val blockFields = (info.captureIds zip lambda.captures).flatMap { case (capture, set) =>
-            if erasable(set) then None
-            else {
-              val (tpe, _) = definition.literal.free.blocks(capture)
-              val function = tpe.asInstanceOf[BlockType.Function]
-              val fieldType = representation(set, function).tpe
-              val field = Id(s"${capture.name.name}_captured")
-              Some((Field(field, fieldType), ValueParam(field, fieldType),
-                capture -> Selection.Lowered(set, Expr.ValueVar(field, fieldType))))
-            }
-          }
-          val staticBlocks = (info.captureIds zip lambda.captures).collect {
-            case (capture, set) if erasable(set) => capture -> Selection.Static(set)
-          }
-          CaseLayout(
-            constructor(rep, lambda),
-            (valueFields.map(_._1) ++ blockFields.map(_._1)).toList,
-            (valueFields.map(_._2) ++ blockFields.map(_._2)).toList,
-            DB.from(valueFields.map(_._3)),
-            staticBlocks.toMap ++ blockFields.map(_._3))
+    private def closureLayout(block: BlockCase): (Vector[ValueParam], Vector[(Id, BlockType)]) = block match {
+      case BlockCase.Function(id) =>
+        val definition = constraints.functions(id)
+        val captures = constraints.callables(Callable.Function(id)).captureIds.map { capture =>
+          capture -> definition.literal.free.blocks(capture)._1
+        }
+        definition.valueCaptures -> captures
 
-        case BlockCase.Implementation(_) | BlockCase.Open =>
-          Context.abort(pretty"Only function closures are lowered")
+      case BlockCase.Implementation(id) =>
+        val definition = constraints.implementations(id)
+        val captures = definition.captureIds.map { capture =>
+          capture -> definition.implementation.free.blocks(capture)._1
+        }
+        definition.valueCaptures -> captures
+
+      case BlockCase.Open => Context.abort(pretty"An open block has no finite layout")
+    }
+
+    private def caseLayout(rep: Representation, lambda: LambdaCase): CaseLayout =
+      caseLayouts.getOrElseUpdate(rep -> lambda, {
+        val (values, blocks) = closureLayout(lambda.block)
+        val valueFields = values.map { original =>
+          val field = Id(s"${original.id.name.name}_captured")
+          (Field(field, original.tpe), ValueParam(field, original.tpe),
+            original.id -> Expr.ValueVar(field, original.tpe))
+        }
+        val blockLayouts = (blocks zip lambda.captures).map { case ((capture, tpe), set) =>
+          val fieldTypes = runtimeTypes(set, tpe)
+          val fields = fieldTypes.zipWithIndex.map { case (fieldType, index) =>
+            val suffix = if fieldTypes.size == 1 then "" else s"_${index}"
+            val field = Id(s"${capture.name.name}_captured${suffix}")
+            (Field(field, fieldType), ValueParam(field, fieldType))
+          }
+          val selection = Selection.Known(set, fields.map { case (_, parameter) =>
+            Expr.ValueVar(parameter.id, parameter.tpe)
+          }.toList)
+          (fields, capture -> selection)
+        }
+        val blockFields = blockLayouts.flatMap(_._1)
+        CaseLayout(
+          constructor(rep, lambda),
+          (valueFields.map(_._1) ++ blockFields.map(_._1)).toList,
+          (valueFields.map(_._2) ++ blockFields.map(_._2)).toList,
+          DB.from(valueFields.map(_._3)),
+          blockLayouts.map(_._2).toMap)
       })
 
     private object bodyRewriter extends Tree.RewriteWithContext[Specialization] {
 
+      override def rewrite(block: BlockLit)(using context: Specialization): BlockLit =
+        super.rewrite(block)
+
+      override def rewrite(block: BlockVar)(using context: Specialization): BlockVar =
+        super.rewrite(block)
+
+      override def rewrite(block: Block)(using context: Specialization): Block = block match {
+        case unbox @ Unbox(expr) => (set(unbox).filter(lowerable), unbox.tpe) match {
+          case (Some(set), function: BlockType.Function) =>
+            val environment = Option.when(!erasable(set))(rewrite(expr)).toList
+            adapter(set, environment, function)
+          case _ => super.rewrite(block)
+        }
+        case other => super.rewrite(other)
+      }
+
       override def rewrite(expr: Expr)(using context: Specialization): Expr = expr match {
-        case value @ Expr.ValueVar(id, ValueType.Boxed(function: BlockType.Function, _)) =>
+        case value @ Expr.ValueVar(id, ValueType.Boxed(block, _)) =>
           graph.boxes.get(id).filter(lowerable) match {
-            case Some(set) => Expr.ValueVar(id, representation(set, function).tpe)
+            case Some(set) => Expr.ValueVar(id, representation(set, block).tpe)
             case None => super.rewrite(value)
           }
 
         case box @ Expr.Box(block, _) =>
           Option(graph.boxedExpressions.get(box)).filter(lowerable) match {
-            case Some(set) => closureExpression(block, set, block.functionType)
+            case Some(set) => closureExpression(block, set, block.tpe)
             case None => super.rewrite(box)
           }
 
@@ -1156,7 +1403,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
 
       override def rewrite(stmt: Stmt)(using context: Specialization): Stmt = stmt match {
         case Stmt.App(callee, targs, vargs, bargs) =>
-          set(callee).filter(erasable) match {
+          set(callee).filter(set => erasable(set) || unboxed(set)) match {
             case Some(calleeSet) => singleton(calleeSet) match {
               case Some(LambdaCase(BlockCase.Function(id), _))
                   if constraints.callables.contains(Callable.Function(id)) =>
@@ -1166,7 +1413,9 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
                 Stmt.App(
                   functionRef(owner, specialization, target),
                   targs.map(rewrite),
-                  vargs.map(rewrite) ++ loweredArguments(owner, specialization, bargs),
+                  vargs.map(rewrite) ++
+                    runtimeArguments(callee, calleeSet, callee.functionType) ++
+                    loweredArguments(owner, specialization, bargs),
                   residual(owner, specialization, bargs).map(rewrite))
               case _ => super.rewrite(stmt)
             }
@@ -1183,7 +1432,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
             }
           }
 
-        case Stmt.Invoke(receiver, method, _, targs, vargs, bargs) =>
+        case Stmt.Invoke(receiver, method, methodType, targs, vargs, bargs) =>
           set(receiver).filter(erasable).flatMap(singleton).map(_.block) match {
             case Some(BlockCase.Implementation(implementation)) =>
               constraints.operations.get(implementation -> method).flatMap { owner =>
@@ -1198,7 +1447,21 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
                     residual(owner, specialization, bargs).map(rewrite))
                 case None => super.rewrite(stmt)
               }
-            case _ => super.rewrite(stmt)
+            case _ => set(receiver).filter(set => lowerable(set) && !erasable(set)) match {
+              case Some(set) => methodType match {
+                case function: BlockType.Function =>
+                  val rep = representation(set, receiver.tpe)
+                  val dispatcher = operationDispatcher(rep, method, function)
+                  Stmt.App(
+                    operationDispatcherRef(dispatcher),
+                    targs.map(rewrite),
+                    closureExpression(receiver, set, receiver.tpe) :: vargs.map(rewrite),
+                    bargs.map(rewrite))
+                case _: BlockType.Interface =>
+                  Context.abort(pretty"An operation must have a function type")
+              }
+              case None => super.rewrite(stmt)
+            }
           }
 
         case other => super.rewrite(other)
@@ -1207,36 +1470,42 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
 
     private def specialize(literal: BlockLit, owner: Callable, shape: Shape): BlockLit = {
       val choices = explicitShape(owner, shape)
-      val lowered = loweredParameters(owner, shape, literal.bparams)
+      val selected = selectedBlocks(owner, shape, literal)
+      val capturedValues = valueCaptures(owner).map { original =>
+        original -> ValueParam(Id(s"${original.id.name.name}_captured"), original.tpe)
+      }
       val rewritten = bodyRewriter.rewrite(literal)(using
-        specializationContext(owner, shape, literal.bparams, lowered))
+        specializationContext(owner, shape, literal, selected))
       val captureSubstitution = DB.from(
         (literal.cparams zip choices).collect {
           case (capture, Some(set)) => capture -> selectedCapture(set)
         })
       val usedBlocks = rewritten.body.free.blocks.keySet
-      val loweredById = lowered.map(p => p.parameter.id -> p).toMap
       val blockSubstitution = DB.from(
-        (literal.bparams zip choices).collect {
-          case (parameter, Some(set)) if erasable(set) && usedBlocks(parameter.id) =>
-            parameter.id -> representative(set)
-          case (parameter, Some(set)) if usedBlocks(parameter.id) =>
-            val lowered = loweredById(parameter.id)
-            parameter.id -> adapter(
-              set,
-              Expr.ValueVar(lowered.value.id, lowered.value.tpe),
-              parameter.tpe.asInstanceOf[BlockType.Function])
+        selected.collect {
+          case block if erasable(block.set) && usedBlocks(block.id) =>
+            block.id -> representative(block.set)
+          case block if usedBlocks(block.id) =>
+            val environment = block.parameters.map(p => Expr.ValueVar(p.id, p.tpe))
+            block.id -> adapter(
+              block.set,
+              environment,
+              block.tpe.asInstanceOf[BlockType.Function])
         })
+      val valueSubstitution = DB.from(capturedValues.map { case (original, parameter) =>
+        original.id -> Expr.ValueVar(parameter.id, parameter.tpe)
+      })
       val substitution = substitutions.Substitution(
         DB.empty,
         captureSubstitution,
-        DB.empty,
+        valueSubstitution,
         blockSubstitution)
 
       BlockLit(
         rewritten.tparams,
         residual(owner, shape, rewritten.cparams),
-        rewritten.vparams.map(substitutions.substitute(_)(using substitution)) ++ lowered.map(_.value),
+        (rewritten.vparams ++ capturedValues.map(_._2) ++ selected.flatMap(_.parameters))
+          .map(substitutions.substitute(_)(using substitution)),
         residual(owner, shape, rewritten.bparams)
           .map(substitutions.substitute(_)(using substitution)),
         substitutions.substitute(rewritten.body)(using substitution))
@@ -1255,13 +1524,12 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
 
     private def worker(variant: Variant): Option[Toplevel.Def] = variant.owner match {
       case Callable.Function(id) if variant.id != id =>
-        val literal = constraints.functions(id).literal
+        val literal = originalLiteral(variant.owner)
         val body = specialize(literal, variant.owner, variant.shape)
         Some(Toplevel.Def(variant.id, Renamer.rename(body)._1))
 
       case owner: Callable.Operation =>
-        val op = operation(owner)
-        val literal: BlockLit = BlockLit(op.tparams, op.cparams, op.vparams, op.bparams, op.body)
+        val literal = originalLiteral(owner)
         val body = specialize(literal, owner, variant.shape)
         Some(Toplevel.Def(variant.id, Renamer.rename(body)._1))
 
@@ -1274,10 +1542,10 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
       blocks: List[BlockParam]
     )
 
-    private val dispatcherLayouts = mutable.LinkedHashMap.empty[Representation, DispatcherLayout]
+    private val dispatcherLayouts = mutable.LinkedHashMap.empty[(Representation, BlockType.Function), DispatcherLayout]
 
-    private def dispatcherLayout(rep: Representation): DispatcherLayout =
-      dispatcherLayouts.getOrElseUpdate(rep, rep.function match {
+    private def dispatcherLayout(rep: Representation, function: BlockType.Function): DispatcherLayout =
+      dispatcherLayouts.getOrElseUpdate(rep -> function, function match {
         case BlockType.Function(tparams, cparams, vtypes, btypes, _) =>
           if tparams.nonEmpty then
             Context.abort(pretty"Lambda-set lowering expected a monomorphic function")
@@ -1298,69 +1566,120 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
       Declaration.Data(rep.data, Nil, constructors)
     }
 
-    private def dispatcherClause(rep: Representation, lambda: LambdaCase): (Id, BlockLit) = {
+    private def dispatcherClause(
+      rep: Representation,
+      lambda: LambdaCase,
+      owner: Callable,
+      dispatcher: DispatcherLayout
+    ): (Id, BlockLit) = {
       val layout = caseLayout(rep, lambda)
-      val dispatcher = dispatcherLayout(rep)
-      lambda.block match {
-        case BlockCase.Function(id) =>
-          val literal = constraints.functions(id).literal
-          val dynamicParameters = literal.bparams.map(p => p.id -> Selection.Dynamic)
-          val context = Specialization(layout.capturedBlocks ++ dynamicParameters)
-          val rewritten = bodyRewriter.rewrite(literal.body)(using context)
+      val literal = originalLiteral(owner)
+      val dynamicParameters = literal.bparams.map(p => p.id -> Selection.Dynamic)
+      val context = Specialization(layout.capturedBlocks ++ dynamicParameters)
+      val rewritten = bodyRewriter.rewrite(literal.body)(using context)
 
-          val valueSubstitution = layout.valueSubstitution ++ DB.from(
-            literal.vparams.map(_.id) zip dispatcher.values.map(p => Expr.ValueVar(p.id, p.tpe)))
-          val captureSubstitution = DB.from(
-            literal.cparams zip dispatcher.blocks.map(_.capt))
-          val parameterBlocks = DB.from(
-            literal.bparams.map(_.id) zip dispatcher.blocks.map(p => BlockVar(p.id, p.tpe, p.capt)))
-          val capturedBlocks = DB.from(layout.capturedBlocks.map {
-            case (capture, Selection.Static(set)) => capture -> representative(set)
-            case (capture, Selection.Lowered(set, value)) =>
-              val (tpe, _) = literal.free.blocks(capture)
-              capture -> adapter(set, value, tpe.asInstanceOf[BlockType.Function])
-            case (_, Selection.Dynamic) =>
+      val valueSubstitution = layout.valueSubstitution ++ DB.from(
+        literal.vparams.map(_.id) zip dispatcher.values.map(p => Expr.ValueVar(p.id, p.tpe)))
+      val captureSubstitution = DB.from(
+        literal.cparams zip dispatcher.blocks.map(_.capt))
+      val parameterBlocks = DB.from(
+        literal.bparams.map(_.id) zip dispatcher.blocks.map(p => BlockVar(p.id, p.tpe, p.capt)))
+      val usedBlocks = rewritten.free.blocks.keySet
+      val capturedBlocks = DB.from(layout.capturedBlocks.flatMap {
+        case (capture, selection) if usedBlocks(capture) => literal.free.blocks.get(capture).map { case (tpe, _) =>
+          val block = selection match {
+            case Selection.Known(set, _) if erasable(set) => representative(set)
+            case Selection.Known(set, environment) =>
+              tpe match {
+                case function: BlockType.Function => adapter(set, environment, function)
+                case _: BlockType.Interface =>
+                  Context.abort(pretty"A represented implementation must be used through an invocation")
+              }
+            case Selection.Dynamic =>
               Context.abort(pretty"A closure case cannot have a dynamic captured block")
-          })
-          val substitution = substitutions.Substitution(
-            DB.empty,
-            captureSubstitution,
-            valueSubstitution,
-            parameterBlocks ++ capturedBlocks)
-          val body = substitutions.substitute(rewritten)(using substitution)
-          layout.constructor -> BlockLit(Nil, Nil, layout.parameters, Nil, body)
-
-        case BlockCase.Implementation(_) | BlockCase.Open =>
-          Context.abort(pretty"Only function closures are lowered")
-      }
+          }
+          capture -> block
+        }
+        case _ => None
+      })
+      val substitution = substitutions.Substitution(
+        DB.empty,
+        captureSubstitution,
+        valueSubstitution,
+        parameterBlocks ++ capturedBlocks)
+      val body = substitutions.substitute(rewritten)(using substitution)
+      layout.constructor -> BlockLit(Nil, Nil, layout.parameters, Nil, body)
     }
 
     private def dispatcherDefinition(rep: Representation): Toplevel.Def = {
-      val layout = dispatcherLayout(rep)
-      val result = rep.function.result
-      val clauses = orderedCases(rep.set).map(dispatcherClause(rep, _)).toList
+      rep.block match {
+        case function @ BlockType.Function(_, cparams, _, _, result) =>
+          val layout = dispatcherLayout(rep, function)
+          val clauses = orderedCases(rep.set).map { lambda =>
+            lambda.block match {
+              case BlockCase.Function(id) =>
+                dispatcherClause(rep, lambda, Callable.Function(id), layout)
+              case BlockCase.Implementation(_) | BlockCase.Open =>
+                Context.abort(pretty"A function lambda set contains a non-function case")
+            }
+          }.toList
+          val body = Stmt.Match(
+            Expr.ValueVar(layout.closure.id, layout.closure.tpe),
+            result,
+            clauses,
+            None)
+          Toplevel.Def(
+            rep.dispatcher,
+            BlockLit(Nil, cparams, layout.closure :: layout.values, layout.blocks, body))
+
+        case _: BlockType.Interface =>
+          Context.abort(pretty"An implementation has one dispatcher per operation")
+      }
+    }
+
+    private def operationDispatcherDefinition(dispatcher: OperationDispatcher): Toplevel.Def = {
+      val rep = dispatcher.representation
+      val layout = dispatcherLayout(rep, dispatcher.function)
+      val result = dispatcher.function.result
+      val clauses = orderedCases(rep.set).map { lambda =>
+        lambda.block match {
+          case BlockCase.Implementation(id) =>
+            val owner = constraints.operations.getOrElse(id -> dispatcher.method,
+              Context.abort(pretty"Missing operation '${dispatcher.method.name.name}'"))
+            dispatcherClause(rep, lambda, owner, layout)
+          case BlockCase.Function(_) | BlockCase.Open =>
+            Context.abort(pretty"An implementation lambda set contains a non-implementation case")
+        }
+      }.toList
       val body = Stmt.Match(
         Expr.ValueVar(layout.closure.id, layout.closure.tpe),
         result,
         clauses,
         None)
-      val BlockType.Function(_, cparams, _, _, _) = rep.function
-      Toplevel.Def(
-        rep.dispatcher,
-        BlockLit(Nil, cparams, layout.closure :: layout.values, layout.blocks, body))
+      dispatcher.function match {
+        case BlockType.Function(tparams, cparams, _, _, _) =>
+          Toplevel.Def(
+            dispatcher.id,
+            BlockLit(tparams, cparams, layout.closure :: layout.values, layout.blocks, body))
+      }
     }
 
     def result(): ModuleDecl = {
       val originals = module.definitions.map(original)
       val workers = mutable.ArrayBuffer.empty[Toplevel.Def]
       val declarations = mutable.ArrayBuffer.empty[Declaration.Data]
-      while pending.nonEmpty || pendingRepresentations.nonEmpty do {
+      while pending.nonEmpty || pendingRepresentations.nonEmpty || pendingOperationDispatchers.nonEmpty do {
         while pending.nonEmpty do worker(pending.dequeue()).foreach(workers += _)
         while pendingRepresentations.nonEmpty do {
           val rep = pendingRepresentations.dequeue()
           declarations += dataDeclaration(rep)
-          workers += dispatcherDefinition(rep)
+          rep.block match {
+            case _: BlockType.Function => workers += dispatcherDefinition(rep)
+            case _: BlockType.Interface => ()
+          }
         }
+        while pendingOperationDispatchers.nonEmpty do
+          workers += operationDispatcherDefinition(pendingOperationDispatchers.dequeue())
       }
       module.copy(
         declarations = module.declarations ++ declarations,
@@ -1612,7 +1931,13 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
         expression(value, env)
         statement(body, env, boxedDestination)
 
-      case Stmt.Reset(body) => scope(body, env, boxedDestination)
+      // A shift can return from the reset without following an ordinary
+      // `return` in its body. Without an effect-sensitive control-flow proof,
+      // the result of a reset is therefore an open boxed value.
+      case Stmt.Reset(body) =>
+        scope(body, env, boxedDestination)
+        boxedDestination.foreach(destination =>
+          boxFlows += BoxFlow(BoxSource.Open, destination))
 
       case Stmt.Shift(_, continuation, body) =>
         statement(body, env + (continuation.id -> Entry.Open))

@@ -648,10 +648,12 @@ object escapeAnalysis {
     case Stmt.Let(id, binding, rest) =>
       rest.escapes ++ binding.free
 
-    // The callee does not escape; arguments have the same value boundary as
-    // an ordinary application. The explicit remainder is still local.
+    // The callee does not escape unless `Toplevel` marks a direct-to-CPS
+    // boundary: that boundary invokes the callee through RUN_TOPLEVEL and
+    // therefore requires an actual function value.
     case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
-      args.flatMap(_.free).toSet ++ ks.free ++ rest.escapes
+      val boundary = if ks == Expr.Toplevel then Set(callee.value) else Set.empty
+      args.flatMap(_.free).toSet ++ ks.free ++ boundary ++ rest.escapes
 
     // callee does NOT escape
     case Stmt.App(id, args) =>

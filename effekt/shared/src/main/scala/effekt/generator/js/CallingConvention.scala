@@ -55,6 +55,7 @@ object CallingConvention {
   private def lowerStatement(
     stmt: cps.Stmt,
     returns: Option[(Id, Id)],
+    directBody: Boolean,
     plan: Plan
   ): cps.Stmt = stmt match {
       case cps.Stmt.Def(id, params, body, rest) =>
@@ -64,11 +65,14 @@ object CallingConvention {
         val bodyReturns =
           if plan.inheritsReturn(id) then returns
           else returnParameters(plan, id, params)
+        val bodyIsDirect =
+          if plan.inheritsReturn(id) then directBody
+          else plan.isDirect(id)
         cps.Stmt.Def(
           id,
           directParams,
-          lowerStatement(body, bodyReturns, plan),
-          lowerStatement(rest, returns, plan))
+          lowerStatement(body, bodyReturns, bodyIsDirect, plan),
+          lowerStatement(rest, returns, directBody, plan))
       case cps.Stmt.New(id, interface, operations, rest) =>
         cps.Stmt.New(
           id,
@@ -80,11 +84,11 @@ object CallingConvention {
               .flatMap(operationId => returnParameters(plan, operationId, operation.params))
             operation.copy(
               params = if direct then operation.params.dropRight(2) else operation.params,
-              body = lowerStatement(operation.body, returns, plan))
+              body = lowerStatement(operation.body, returns, direct, plan))
           },
-          lowerStatement(rest, returns, plan))
+          lowerStatement(rest, returns, directBody, plan))
       case cps.Stmt.Let(id, binding, rest) =>
-        cps.Stmt.Let(id, binding, lowerStatement(rest, returns, plan))
+        cps.Stmt.Let(id, binding, lowerStatement(rest, returns, directBody, plan))
 
       // A shared join is entered only in tail position. Its declaration is
       // retained as a lexical labeled region, so the compositional call
@@ -103,7 +107,7 @@ object CallingConvention {
           callee,
           arguments,
           ks,
-          lowerStatement(directRest, returns, plan))
+          lowerStatement(directRest, returns, directBody, plan))
 
       // A positive recursive local region retains CPS internally, but its
       // closed continuation machine can return a value to a direct enclosing
@@ -118,10 +122,26 @@ object CallingConvention {
         cps.Stmt.Def(
           continuation,
           List(result, returnedKs),
-          lowerStatement(directRest, returns, plan),
+          lowerStatement(directRest, returns, directBody, plan),
           apply(callee, arguments ++ List(
             cps.Expr.Toplevel,
             cps.Expr.Variable(continuation))))
+
+      // If a direct computation calls a region that retains CPS, run that
+      // region to completion and continue with its ordinary result. The
+      // JavaScript backend supplies fresh boundary continuations, so neither
+      // removed control parameter may remain free here.
+      case cps.Stmt.Call(result, returnedKs, callee, arguments, _, rest)
+          if directBody =>
+        val directRest = cps.substitutions.substitute(rest)(using
+          cps.substitutions.Substitution(Map(returnedKs -> cps.Expr.Toplevel)))
+        cps.Stmt.Call(
+          result,
+          returnedKs,
+          callee,
+          arguments,
+          cps.Expr.Toplevel,
+          lowerStatement(directRest, returns, directBody, plan))
 
       // Reifying an already-tail CPS call would introduce the eta expansion
       //
@@ -146,7 +166,7 @@ object CallingConvention {
         cps.Stmt.Def(
           continuation,
           List(result, returnedKs),
-          lowerStatement(rest, returns, plan),
+          lowerStatement(rest, returns, directBody, plan),
           apply(callee, arguments ++ List(ks, cps.Expr.Variable(continuation))))
 
       case app: cps.Stmt.App =>
@@ -161,53 +181,54 @@ object CallingConvention {
       case cps.Stmt.Run(id, callee, arguments, purity, rest) =>
         cps.Stmt.Run(
           id, callee, arguments, purity,
-          lowerStatement(rest, returns, plan))
+          lowerStatement(rest, returns, directBody, plan))
       case cps.Stmt.If(condition, thn, els) =>
         cps.Stmt.If(
           condition,
-          lowerStatement(thn, returns, plan),
-          lowerStatement(els, returns, plan))
+          lowerStatement(thn, returns, directBody, plan),
+          lowerStatement(els, returns, directBody, plan))
       case cps.Stmt.Match(scrutinee, clauses, default) =>
         cps.Stmt.Match(
           scrutinee,
           clauses.map { case (tag, clause) =>
             tag -> clause.copy(
-              body = lowerStatement(clause.body, returns, plan))
+              body = lowerStatement(clause.body, returns, directBody, plan))
           },
-          default.map(lowerStatement(_, returns, plan)))
+          default.map(lowerStatement(_, returns, directBody, plan)))
       case cps.Stmt.Region(id, ks, rest) =>
-        cps.Stmt.Region(id, ks, lowerStatement(rest, returns, plan))
+        cps.Stmt.Region(id, ks, lowerStatement(rest, returns, directBody, plan))
       case cps.Stmt.Alloc(id, init, region, rest) =>
         cps.Stmt.Alloc(
           id, init, region,
-          lowerStatement(rest, returns, plan))
+          lowerStatement(rest, returns, directBody, plan))
       case cps.Stmt.Var(id, init, ks, rest) =>
         // A selected direct definition can contain only local variables whose
         // reference and meta-continuation dependency were proved erasable.
         // Make that erasure explicit so the lowered body does not retain the
         // removed `ks` binder as a free variable.
-        val loweredKs = if returns.nonEmpty then cps.Expr.Toplevel else ks
-        cps.Stmt.Var(id, init, loweredKs, lowerStatement(rest, returns, plan))
+        val loweredKs = if directBody then cps.Expr.Toplevel else ks
+        cps.Stmt.Var(id, init, loweredKs,
+          lowerStatement(rest, returns, directBody, plan))
       case cps.Stmt.Dealloc(ref, rest) =>
-        cps.Stmt.Dealloc(ref, lowerStatement(rest, returns, plan))
+        cps.Stmt.Dealloc(ref, lowerStatement(rest, returns, directBody, plan))
       case cps.Stmt.Get(ref, id, rest) =>
-        cps.Stmt.Get(ref, id, lowerStatement(rest, returns, plan))
+        cps.Stmt.Get(ref, id, lowerStatement(rest, returns, directBody, plan))
       case cps.Stmt.Put(ref, value, rest) =>
-        cps.Stmt.Put(ref, value, lowerStatement(rest, returns, plan))
+        cps.Stmt.Put(ref, value, lowerStatement(rest, returns, directBody, plan))
       case cps.Stmt.Reset(p, ks, k, body, ks1, k1) =>
         cps.Stmt.Reset(
           p, ks, k,
-          lowerStatement(body, None, plan),
+          lowerStatement(body, None, false, plan),
           ks1, k1)
       case cps.Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
         cps.Stmt.Shift(
           prompt, resume, ks, k,
-          lowerStatement(body, None, plan),
+          lowerStatement(body, None, false, plan),
           ks1, k1)
       case cps.Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
         cps.Stmt.Resume(
           resumption, ks, k,
-          lowerStatement(body, None, plan),
+          lowerStatement(body, None, false, plan),
           ks1, k1)
       case hole: cps.Stmt.Hole => hole
   }
@@ -227,11 +248,12 @@ object CallingConvention {
           lowerStatement(
             body,
             returnParameters(plan, id, params),
+            plan.isDirect(id),
             plan))
       case cps.ToplevelDefinition.Val(id, ks, k, binding) =>
         cps.ToplevelDefinition.Val(
           id, ks, k,
-          lowerStatement(binding, None, plan))
+          lowerStatement(binding, None, false, plan))
     })
     val introduced = lowered.uses.toMap.keySet -- module.uses.toMap.keySet
     val nested = cps.BlockSinking.sinkIntroduced(lowered, introduced)
@@ -973,6 +995,16 @@ object CallingConvention {
       case _ => false
     }
 
+    def preservesReturn(
+      arguments: List[cps.Expr],
+      definition: Definition,
+      stableKs: Set[Id]
+    ): Boolean = arguments.takeRight(2) match {
+      case List(ks, cps.Expr.Variable(k)) =>
+        k == definition.k && stableMeta(ks, stableKs)
+      case _ => false
+    }
+
     def isAncestor(ancestor: Id, descendant: Id): Boolean = {
       var current = Option(descendant)
       while current.nonEmpty && current.get != ancestor do
@@ -1038,7 +1070,8 @@ object CallingConvention {
           case Some(target)
               if !target.toplevel && !escaping.contains(id) &&
                 target.params.size == arguments.size &&
-                isAncestor(definition.id, id) =>
+                isAncestor(definition.id, id) &&
+                (id != definition.id || preservesReturn(arguments, definition, stableKs)) =>
             if visiting.contains(id) then
               Some(emptyInspection.copy(returnBlocks = Set(id)))
             else
@@ -1226,7 +1259,7 @@ object CallingConvention {
           site.call.callee == cps.Callee.Function(id))
       val external = entries.filterNot(site => isAncestor(id, site.owner))
       !definition.toplevel && !module.escapes.contains(id) && exact &&
-        external.size == 1 && definition.parent.contains(external.head.owner)
+        external.size == 1 && isAncestor(external.head.owner, id)
     }.intersect(cyclic(erasable, _.tailSelf))
 
     /** A machine is closed when every compositional call in its body is
@@ -1341,7 +1374,7 @@ object CallingConvention {
       // defunctionalization without removing any control representation.
       val joins = selectedJoins(controlClosed)
       val updated = close(controlClosed -- cyclic(controlClosed, site =>
-        site.tailSelf || site.targets.nonEmpty && site.targets.subsetOf(joins)))
+        site.tailSelf || site.tail && site.targets.nonEmpty && site.targets.subsetOf(joins)))
       requirements = nextRequirements.view.filterKeys(updated.contains).toMap
       stable = updated == direct
       direct = updated
@@ -1388,7 +1421,7 @@ object CallingConvention {
       val controlClosed = close(direct)
       val joins = selectedJoins(controlClosed)
       val updated = close(controlClosed -- cyclic(controlClosed, site =>
-        site.tailSelf || site.targets.nonEmpty && site.targets.subsetOf(joins)))
+        site.tailSelf || site.tail && site.targets.nonEmpty && site.targets.subsetOf(joins)))
       stable = updated == direct
       direct = updated
     }

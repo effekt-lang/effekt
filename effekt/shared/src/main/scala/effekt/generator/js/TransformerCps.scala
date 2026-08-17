@@ -13,6 +13,7 @@ import scala.collection.mutable
 object TransformerCps extends Transformer {
 
   val RUN_TOPLEVEL = js.Variable(JSName("RUN_TOPLEVEL"))
+  val TRAMPOLINE = js.Variable(JSName("TRAMPOLINE"))
   val RESET = js.Variable(JSName("RESET"))
   val SHIFT = js.Variable(JSName("SHIFT"))
   val RESUME = js.Variable(JSName("RESUME"))
@@ -55,7 +56,6 @@ object TransformerCps extends Transformer {
     // segment. Applying one crosses a segment boundary and therefore bounces.
     segmentEntries: Set[Id],
     dispatches: Map[Id, DispatchState],
-    dispatchAliases: Map[Id, Defunctionalization.ContinuationDispatch],
     renamedCaptures: Map[Id, Id],
     // Function values carried by these variables use the direct ABI.
     directParameters: Map[Id, Int],
@@ -78,7 +78,6 @@ object TransformerCps extends Transformer {
       insideBody = Set.empty,
       mutableParams = Set.empty,
       dispatches = Map.empty,
-      dispatchAliases = Map.empty,
       applying = Set.empty,
       directBody = None,
       directResult = None,
@@ -402,7 +401,6 @@ object TransformerCps extends Transformer {
           Map.empty,
           Map.empty,
           Map.empty,
-          Map.empty,
           Set.empty,
           None,
           None,
@@ -597,7 +595,8 @@ object TransformerCps extends Transformer {
     }
     val bodyCtx = ctx.copy(
       insideBody = ctx.insideBody + id,
-      mutableParams = ctx.mutableParams ++ ctx.callingConvention.mutableParameters(id),
+      mutableParams = ctx.mutableParams ++ ctx.stackSafety.mutableParameters(id) ++
+        ctx.callingConvention.mutableParameters(id),
       renamedCaptures = ctx.renamedCaptures ++ aliases,
       directParameters = ctx.directParameters ++ parameterArities,
       directBody = Some(id -> join.params),
@@ -624,14 +623,14 @@ object TransformerCps extends Transformer {
         params,
         body,
         Some(rest),
-        ctx.callingConvention.isJoinLoop(id),
+        ctx.callingConvention.isJoinLoop(id) || ctx.stackSafety.isLoopified(id),
         directParameters)
 
     case cps.Stmt.Def(id, params, body, rest)
         if ctx.callingConvention.isJoin(id) =>
       val join = SecondClassDef(
         params,
-        ctx.callingConvention.isJoinLoop(id),
+        ctx.callingConvention.isJoinLoop(id) || ctx.stackSafety.isLoopified(id),
         Some(body))
       toJS(rest)(using ctx.copy(secondClass = ctx.secondClass.updated(id, join)))
 
@@ -751,6 +750,27 @@ object TransformerCps extends Transformer {
           }
       }
 
+    // Direct code crosses into CPS by running that computation to completion.
+    // This is the total fallback when the call is neither direct nor handled
+    // by a local continuation machine.
+    case cps.Stmt.Call(result, _, callee, args, _, rest)
+        if ctx.directBody.nonEmpty =>
+      Binding { k =>
+        val target = callee match {
+          case cps.Callee.Function(id) => valueRef(id)
+          case cps.Callee.Method(receiver, method) =>
+            js.Member(valueRef(receiver), memberNameRef(method))
+        }
+        val ks = freshName("ks_")
+        val continuation = freshName("k_")
+        val computation = js.Lambda(
+          List(ks, continuation),
+          js.Return(js.Call(target,
+            args.map(toValueJS) ++ List(js.Variable(ks), js.Variable(continuation)))))
+        js.Const(nameDef(result), js.Call(RUN_TOPLEVEL, List(computation))) ::
+          toJS(rest).run(k)
+      }
+
     // A candidate rejected by the convention analysis becomes ordinary CPS.
     // The explicit remainder is reified exactly once, here at the boundary.
     case cps.Stmt.Call(result, returnedKs, callee, args, ks, rest) =>
@@ -772,13 +792,12 @@ object TransformerCps extends Transformer {
         backups :+ js.Return(js.Call(target, loweredArgs))
       }
 
-    case app @ cps.Stmt.App(id, args) if ctx.segmentEntries.contains(id) =>
-      val call = js.Call(valueRef(id), args.map(toValueJS))
-      pure(js.Return(js.Lambda(Nil, js.Return(call))) :: Nil)
-
     case app @ cps.Stmt.App(id, args) =>
-      ctx.dispatchAliases.get(id).orElse(ctx.defunctionalization.dispatchForCallee(id)) match {
+      ctx.defunctionalization.dispatchFor(app) match {
         case Some(dispatch) => dispatchCall(app, args, dispatch)
+        case None if ctx.segmentEntries.contains(id) =>
+          val call = js.Call(valueRef(id), args.map(toValueJS))
+          pure(js.Return(js.Lambda(Nil, js.Return(call))) :: Nil)
         case None => ctx.secondClass.get(id) match {
         case Some(sci) =>
           // Second-class call: assign args to params, then jump.
@@ -1027,11 +1046,17 @@ object TransformerCps extends Transformer {
     val scrutinee = js.Member(js.Variable(state.continuation), `tag`)
     val boundary = Option.when(state.dispatch.boundary) {
       val target = freshName("boundary_continuation_")
+      val call = js.Call(
+        js.Variable(target),
+        state.arguments.map(js.Variable(_)).toList)
+      val exit = if ctx.directBody.nonEmpty then
+        js.Return(js.Call(TRAMPOLINE, List(call)))
+      else
+        js.Return(js.Lambda(Nil, js.Return(call)))
       js.RawExpr(Defunctionalization.BoundaryTag.toString) -> List(js.Block(None, List(
         js.Const(target,
           js.Member(js.Variable(state.continuation), BOUNDARY_CONTINUATION)),
-        js.Return(js.Lambda(Nil,
-          js.Return(js.Call(js.Variable(target), state.arguments.map(js.Variable(_)).toList))))
+        exit
       )))
     }
     val localCases = state.dispatch.cases.map { continuationCase =>
@@ -1048,12 +1073,8 @@ object TransformerCps extends Transformer {
         js.Const(nameDef(local),
           js.Member(js.Variable(state.continuation), memberNameRef(capture)))
       }
-      val aliases = captureRenamings.flatMap { case (capture, _) =>
-        ctx.defunctionalization.dispatchForCallee(capture).map(capture -> _)
-      }.toMap
       val caseCtx = ctx.copy(
         applying = ctx.applying + state.dispatch.entry,
-        dispatchAliases = ctx.dispatchAliases ++ aliases,
         renamedCaptures = ctx.renamedCaptures ++ captureRenamings)
       val body = toJS(continuationCase.body)(using caseCtx).stmts
       js.RawExpr(continuationCase.tag.toString) ->

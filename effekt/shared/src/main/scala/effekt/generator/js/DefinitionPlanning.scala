@@ -162,9 +162,13 @@ object DefinitionPlanning {
       case cps.Stmt.Call(id, returnedKs, callee, arguments, ks, rest) =>
         val argumentFree = free(arguments) ++ ks.free
         val continuation = statement(rest)
+        val boundary = ks match {
+          case cps.Expr.Toplevel => Set(callee.value)
+          case _ => Set.empty[Id]
+        }
         Summary(
           argumentFree ++ (continuation.free -- Set(id, returnedKs)) + callee.value,
-          definitionsIn(argumentFree) ++ continuation.functions)
+          definitionsIn(argumentFree ++ boundary) ++ continuation.functions)
 
       case cps.Stmt.App(callee, arguments) =>
         val argumentFree = free(arguments)

@@ -28,15 +28,12 @@ def main(n: Int) = {
 }
 
 // The actual and formal function types differ only in the names of their
-// bound capture parameters. They must share one nominal closure type.
+// bound capture parameters. The singleton lambda set is nevertheless known,
+// so its captured value is passed directly without a nominal closure.
 /// LAMBDA_SPECIALIZE
 
 interface Reader {
   read: () => Int
-}
-
-type ClosureProgram {
-  Program(n_captured: Int)
 }
 
 def run(){program @ c: (){reader: Reader} => Int} = {
@@ -57,28 +54,22 @@ def forward(){program @ d: (){input: Reader} => Int} = {
 }
 
 def main(n: Int) = {
-  (forward_specialized: (ClosureProgram) => Int @ {})(make ClosureProgram Program(n: Int))
+  (forward_specialized: (Int) => Int @ {})(n: Int)
 }
 
-def forward_specialized(program_closure: ClosureProgram) = {
-  (run_specialized: (ClosureProgram) => Int @ {})(program_closure: ClosureProgram)
+def forward_specialized(program_environment: Int) = {
+  (run_specialized: (Int) => Int @ {})(program_environment: Int)
 }
 
-def run_specialized(program_closure: ClosureProgram) = {
+def run_specialized(program_environment: Int) = {
   def source = new Reader {
     def read() = {
       return 0
     }
   }
-  (apply_program: (ClosureProgram){actual: Reader} => Int @ {})(program_closure: ClosureProgram){
-    (source: Reader @ {})
-  }
+  (program_specialized: (Int) => Int @ {})(program_environment: Int)
 }
 
-def apply_program(closure: ClosureProgram){actual @ capture: Reader} = {
-  closure: ClosureProgram match[Int] {
-    Program : { (n_captured: Int) =>
-      return n_captured: Int
-    }
-  }
+def program_specialized(n_captured: Int) = {
+  return n_captured: Int
 }

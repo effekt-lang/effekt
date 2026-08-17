@@ -264,7 +264,7 @@ object StackSafety {
         visit(rest, owner, secondClass, insideBody, frameCaptures)
 
       case app @ cps.Stmt.App(id, arguments) =>
-        val dispatch = defunctionalization.dispatchForCallee(id).isDefined
+        val dispatch = defunctionalization.dispatchFor(app).isDefined
         val selfJump = insideBody.contains(id)
         val jump = dispatch || secondClass.contains(id) || selfJump
         if selfJump then {
