@@ -1,0 +1,74 @@
+def eq(x: Int, y: Int) = {
+  return true
+}
+
+def sub(x: Int, y: Int) = {
+  return x: Int
+}
+
+def loop(n: Int){k: (Int) => Int} = {
+  val done = (eq: (Int, Int) => Bool @ {})(n: Int, 0);
+  if (done: Bool) {
+    (k: (Int) => Int @ {k})(0)
+  } else {
+    def next(x: Int) = {
+      (k: (Int) => Int @ {k})(x: Int)
+    }
+    val previous = (sub: (Int, Int) => Int @ {})(n: Int, 1);
+    (loop: (Int){k: (Int) => Int} => Int @ {})(previous: Int){
+      (next: (Int) => Int @ {k})
+    }
+  }
+}
+
+def main(n: Int){k: (Int) => Int} = {
+  (loop: (Int){k: (Int) => Int} => Int @ {})(n: Int){
+    (k: (Int) => Int @ {k})
+  }
+}
+
+export main
+
+// The recursive family reaches an exported, hence opaque, function. It has no
+// closed nominal representation and must retain the ordinary block parameter.
+/// LAMBDA_SETS
+
+S = eq ↦ { <> },
+    loop ↦ { <?>, <next> },
+    main ↦ { <?> },
+    next ↦ { <next> },
+    sub ↦ { <> }
+generic = { main }
+
+/// LAMBDA_SPECIALIZE
+
+def eq(x: Int, y: Int) = {
+  return true
+}
+
+def sub(x: Int, y: Int) = {
+  return x: Int
+}
+
+def loop(n: Int){k: (Int) => Int} = {
+  val done = (eq: (Int, Int) => Bool @ {})(n: Int, 0);
+  if (done: Bool) {
+    (k: (Int) => Int @ {k})(0)
+  } else {
+    def next(x: Int) = {
+      (k: (Int) => Int @ {k})(x: Int)
+    }
+    val previous = (sub: (Int, Int) => Int @ {})(n: Int, 1);
+    (loop: (Int){k: (Int) => Int} => Int @ {})(previous: Int){
+      (next: (Int) => Int @ {k})
+    }
+  }
+}
+
+def main(n: Int){k: (Int) => Int} = {
+  (loop: (Int){k: (Int) => Int} => Int @ {})(n: Int){
+    (k: (Int) => Int @ {k})
+  }
+}
+
+export main
