@@ -379,7 +379,7 @@ object SafeEntries {
           val targets = values(Variable(id)).functions.map(valueEntry) ++ flowed
           val exact = functions.get(id).map(valueEntry)
           val transfer = transferOf(app)
-          val dispatched = defunctionalization.dispatchForCallee(id).isDefined
+          val dispatched = defunctionalization.dispatchFor(app).isDefined
 
           targets.foreach { target =>
             val syntacticallyKnown = exact.exists(_ eq target)

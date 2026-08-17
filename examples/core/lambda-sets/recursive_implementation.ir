@@ -1,0 +1,140 @@
+interface Service {
+  run: (Int) => Int
+}
+
+def eq(x: Int, y: Int) = {
+  return true
+}
+
+def sub(x: Int, y: Int) = {
+  return x: Int
+}
+
+def add(x: Int, y: Int) = {
+  return x: Int
+}
+
+def loop(n: Int){service: Service} = {
+  val done = (eq: (Int, Int) => Bool @ {})(n: Int, 0);
+  if (done: Bool) {
+    (service: Service @ {service}).run: (Int) => Int(0)
+  } else {
+    def wrapper = new Service {
+      def run(x: Int) = {
+        val result = (add: (Int, Int) => Int @ {})(n: Int, x: Int);
+        (service: Service @ {service}).run: (Int) => Int(result: Int)
+      }
+    }
+    val previous = (sub: (Int, Int) => Int @ {})(n: Int, 1);
+    (loop: (Int){service: Service} => Int @ {})(previous: Int){
+      (wrapper: Service @ {service})
+    }
+  }
+}
+
+def main(n: Int) = {
+  def base = new Service {
+    def run(x: Int) = {
+      return x: Int
+    }
+  }
+  (loop: (Int){service: Service} => Int @ {})(n: Int){
+    (base: Service @ {})
+  }
+}
+
+// The opaque exported entry remains available while the known call from main
+// uses the closed recursive family.
+export loop
+
+/// LAMBDA_SETS
+
+S = add ↦ { <> },
+    base.run ↦ { <> },
+    eq ↦ { <> },
+    loop ↦ { <?>, <base>, <wrapper> },
+    sub ↦ { <> },
+    wrapper.run ↦ { <wrapper> }
+generic = { loop }
+
+/// LAMBDA_SPECIALIZE
+
+interface Service {
+  run: (Int) => Int
+}
+
+type Services {
+  Base()
+  Wrapper(n_captured: Int, service_captured: Services)
+}
+
+def eq(x: Int, y: Int) = {
+  return true
+}
+
+def sub(x: Int, y: Int) = {
+  return x: Int
+}
+
+def add(x: Int, y: Int) = {
+  return x: Int
+}
+
+def loop(n: Int){service: Service} = {
+  val done = (eq: (Int, Int) => Bool @ {})(n: Int, 0);
+  if (done: Bool) {
+    (service: Service @ {service}).run: (Int) => Int(0)
+  } else {
+    def wrapper = new Service {
+      def run(x: Int) = {
+        val result = (add: (Int, Int) => Int @ {})(n: Int, x: Int);
+        (service: Service @ {service}).run: (Int) => Int(result: Int)
+      }
+    }
+    val previous = (sub: (Int, Int) => Int @ {})(n: Int, 1);
+    (loop: (Int){service: Service} => Int @ {})(previous: Int){
+      (wrapper: Service @ {service})
+    }
+  }
+}
+
+def main(n: Int) = {
+  def base = new Service {
+    def run(x: Int) = {
+      return x: Int
+    }
+  }
+  (loop_Services: (Int, Services) => Int @ {})(n: Int,
+    make Services Base())
+}
+
+def loop_Services(n: Int, service: Services) = {
+  val done = (eq: (Int, Int) => Bool @ {})(n: Int, 0);
+  if (done: Bool) {
+    (run_Services: (Services, Int) => Int @ {})(service: Services, 0)
+  } else {
+    def wrapper = new Service {
+      def run(x: Int) = {
+        val result = (add: (Int, Int) => Int @ {})(n: Int, x: Int);
+        (run_Services: (Services, Int) => Int @ {})(service: Services, result: Int)
+      }
+    }
+    val previous = (sub: (Int, Int) => Int @ {})(n: Int, 1);
+    (loop_Services: (Int, Services) => Int @ {})(previous: Int,
+      make Services Wrapper(n: Int, service: Services))
+  }
+}
+
+def run_Services(service: Services, argument: Int) = {
+  service: Services match[Int] {
+    Base : { () =>
+      return argument: Int
+    }
+    Wrapper : { (n_captured: Int, service_captured: Services) =>
+      val result = (add: (Int, Int) => Int @ {})(n_captured: Int, argument: Int);
+      (run_Services: (Services, Int) => Int @ {})(service_captured: Services, result: Int)
+    }
+  }
+}
+
+export loop

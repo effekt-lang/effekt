@@ -38,7 +38,7 @@ object Defunctionalization {
   final class Plan private[js] (
     val cases: Map[Id, ContinuationCase],
     val dispatches: Map[Id, ContinuationDispatch],
-    private val applications: Map[Id, ContinuationDispatch],
+    private val applications: IdentityHashMap[cps.Stmt.App, ContinuationDispatch],
     /** Stable local definitions referenced directly by relocated cases which
      *  must therefore retain a JavaScript function binding. */
     val firstClassRequirements: Set[Id],
@@ -52,7 +52,8 @@ object Defunctionalization {
   ) {
     def caseOf(id: Id): Option[ContinuationCase] = cases.get(id)
     def dispatchFor(entry: Id): Option[ContinuationDispatch] = dispatches.get(entry)
-    def dispatchForCallee(callee: Id): Option[ContinuationDispatch] = applications.get(callee)
+    def dispatchFor(application: cps.Stmt.App): Option[ContinuationDispatch] =
+      Option(applications.get(application))
 
     /** Finalize frame layouts after loop lowering has identified mutable
      *  registers. A recoverable immutable binding is read from the lexical
@@ -67,9 +68,10 @@ object Defunctionalization {
       val refinedDispatches = dispatches.view.mapValues { dispatch =>
         dispatch.copy(cases = dispatch.cases.map(c => refinedCases(c.definition)))
       }.toMap
-      val refinedApplications = applications.view.mapValues { dispatch =>
-        refinedDispatches(dispatch.entry)
-      }.toMap
+      val refinedApplications = new IdentityHashMap[cps.Stmt.App, ContinuationDispatch]()
+      applications.forEach { (application, dispatch) =>
+        refinedApplications.put(application, refinedDispatches(dispatch.entry))
+      }
       new Plan(
         refinedCases,
         refinedDispatches,
@@ -86,6 +88,7 @@ object Defunctionalization {
     arity: Int,
     boundary: Boolean,
     targets: Set[Id],
+    externalTargets: Set[Id],
     calls: Vector[cps.GuardedEquality.CallTargets]
   )
 
@@ -131,6 +134,14 @@ object Defunctionalization {
     def lexicalDepth(entry: Id): Int =
       bodyScope(entry).fold(Int.MaxValue)(_.count(_.isStructural))
 
+    /** Definitions allocated while evaluating `entry`. Moving their bodies
+     *  to a dispatcher hosted at `entry` does not cross the entry boundary. */
+    def localTo(target: Id, entry: Id): Boolean =
+      definitions.get(target).exists(_.exists {
+        case Scope.Definition(id, _) => id == entry
+        case Scope.Binding(_, _) | Scope.Boundary(_) => false
+      })
+
     /** Does this application end up in the JavaScript function containing the
      *  dispatcher after selected continuation definitions are replaced by
      *  their cases? */
@@ -152,13 +163,12 @@ object Defunctionalization {
             if caseIndex < 0 then functionBoundaries(scopes)
             else expected ++ functionBoundaries(scopes.drop(caseIndex + 1))
           // A call in a relocated case is emitted at the dispatcher. Every
-          // other call must already be in the definition's body or remainder:
-          // sibling labels share a JavaScript function, but the later sibling
-          // does not dominate the earlier one's body.
+          // other call must be in the definition's body. Its lexical remainder
+          // runs before the definition's loop and therefore before the local
+          // dispatcher, even when both share one JavaScript function.
           val dispatcherInScope = caseIndex >= 0 || scopes.exists {
             case Scope.Definition(id, _) => id == entry
-            case Scope.Binding(id, _) => id == entry
-            case Scope.Boundary(_) => false
+            case Scope.Binding(_, _) | Scope.Boundary(_) => false
           }
           effective == expected && dispatcherInScope
         case _ => false
@@ -339,7 +349,7 @@ object Defunctionalization {
     val locations = Locations(module, isSecondClass)
     val allCases = scala.collection.mutable.LinkedHashMap.empty[Id, ContinuationCase]
     val allDispatches = scala.collection.mutable.LinkedHashMap.empty[Id, ContinuationDispatch]
-    val allApplications = scala.collection.mutable.LinkedHashMap.empty[Id, ContinuationDispatch]
+    val allApplications = new IdentityHashMap[cps.Stmt.App, ContinuationDispatch]()
     val firstClassRequirements = scala.collection.mutable.LinkedHashSet.empty[Id]
     val reenteredDefinitions = scala.collection.mutable.LinkedHashSet.empty[Id]
     var nextTag = 0
@@ -412,73 +422,79 @@ object Defunctionalization {
 
           Option.when(
             isRecursive(entry) && inhabited && compatible
-          )(Candidate(entry, callee, arities.head, boundary, targets, sites))
+          )(Candidate(entry, callee, arities.head, boundary, targets, Set.empty, sites))
         }
       }.toVector
 
       val uniqueEntries = candidates.groupBy(_.entry).values.collect {
         case Vector(candidate) => candidate
       }.toVector
-      val candidateByEntry = uniqueEntries.iterator.map(candidate =>
-        candidate.entry -> candidate).toMap
-      val candidatesByTarget = uniqueEntries
-        .flatMap(candidate => candidate.targets.map(_ -> candidate.entry))
-        .groupMap(_._1)(_._2)
-      val candidatesByCallee = uniqueEntries.iterator.map(candidate =>
-        candidate.callee -> candidate.entry).toMap
-      val adjacent = uniqueEntries.iterator.map(candidate =>
-        candidate.entry -> scala.collection.mutable.LinkedHashSet.empty[Id]).toMap
 
-      def connect(left: Id, right: Id): Unit =
-        if left != right then {
-          adjacent(left) += right
-          adjacent(right) += left
-        }
+      /** Connected components are the maximal sets forced to share a frame
+       *  representation: either an application can receive cases from both
+       *  entries, or a case applies a continuation owned by another entry. */
+      def components(candidates: Vector[Candidate]): Vector[Vector[Candidate]] = {
+        val candidateByEntry = candidates.iterator.map(candidate =>
+          candidate.entry -> candidate).toMap
+        val candidatesByTarget = candidates
+          .flatMap(candidate => candidate.targets.map(_ -> candidate.entry))
+          .groupMap(_._1)(_._2)
+        val candidatesByCallee = candidates.iterator.map(candidate =>
+          candidate.callee -> candidate.entry).toMap
+        val adjacent = candidates.iterator.map(candidate =>
+          candidate.entry -> scala.collection.mutable.LinkedHashSet.empty[Id]).toMap
 
-      candidatesByTarget.values.foreach { candidates =>
-        candidates.headOption.foreach { first =>
-          candidates.tail.foreach(other => connect(first, other))
-        }
-      }
-
-      // A continuation domain must also be closed under applications made by
-      // its cases. Otherwise a frame can outlive the nested dispatcher whose
-      // registers would be needed to apply a captured continuation.
-      calls.foreach { call =>
-        candidatesByCallee.get(call.callee).foreach { callee =>
-          locations.enclosingDefinitions(call.call).iterator
-            .flatMap(candidatesByTarget.getOrElse(_, Vector.empty))
-            .foreach(caller => connect(caller, callee))
-        }
-      }
-
-      // Connected components of interacting target sets share one finite
-      // continuation domain. This lets nested recursive loops pass immutable
-      // frames between their structured apply loops.
-      @tailrec def components(
-        remaining: Vector[Candidate],
-        result: Vector[Vector[Candidate]] = Vector.empty
-      ): Vector[Vector[Candidate]] =
-        if remaining.isEmpty then result
-        else {
-          val seen = scala.collection.mutable.LinkedHashSet.empty[Id]
-          val pending = scala.collection.mutable.Queue(remaining.head.entry)
-          while pending.nonEmpty do {
-            val entry = pending.dequeue()
-            if seen.add(entry) then
-              adjacent(entry).filterNot(seen).foreach(pending.enqueue(_))
+        def connect(left: Id, right: Id): Unit =
+          if left != right then {
+            adjacent(left) += right
+            adjacent(right) += left
           }
-          val component = seen.toVector.map(candidateByEntry)
-          components(remaining.filterNot(candidate => seen(candidate.entry)), result :+ component)
+
+        candidatesByTarget.values.foreach { entries =>
+          entries.headOption.foreach { first =>
+            entries.tail.foreach(other => connect(first, other))
+          }
         }
 
-      components(uniqueEntries).foreach { component =>
+        calls.foreach { call =>
+          candidatesByCallee.get(call.callee).foreach { callee =>
+            locations.enclosingDefinitions(call.call).iterator
+              .flatMap(candidatesByTarget.getOrElse(_, Vector.empty))
+              .foreach(caller => connect(caller, callee))
+          }
+        }
+
+        @tailrec def collect(
+          remaining: Vector[Candidate],
+          result: Vector[Vector[Candidate]] = Vector.empty
+        ): Vector[Vector[Candidate]] =
+          if remaining.isEmpty then result
+          else {
+            val seen = scala.collection.mutable.LinkedHashSet.empty[Id]
+            val pending = scala.collection.mutable.Queue(remaining.head.entry)
+            while pending.nonEmpty do {
+              val entry = pending.dequeue()
+              if seen.add(entry) then
+                adjacent(entry).filterNot(seen).foreach(pending.enqueue(_))
+            }
+            val component = seen.toVector.map(candidateByEntry)
+            collect(
+              remaining.filterNot(candidate => seen(candidate.entry)),
+              result :+ component)
+          }
+
+        collect(candidates)
+      }
+
+      /** Select and materialize one closed continuation family. */
+      def select(component: Vector[Candidate]): Boolean = {
         val domain = component.iterator.flatMap(_.targets).toSet
         val memberByCallee = component.iterator.map(candidate =>
           candidate.callee -> candidate).toMap
         val covered = calls.forall { call =>
           !call.targets.exists(domain) || memberByCallee.get(call.callee).exists { candidate =>
-            (call.closed || candidate.boundary) && call.targets.subsetOf(domain)
+            (call.closed || candidate.boundary) &&
+              call.targets.subsetOf(domain ++ candidate.externalTargets)
           }
         }
         val callsInsideCases = calls.filter(call =>
@@ -522,7 +538,12 @@ object Defunctionalization {
               staticAtEveryDispatcher(capture) && owners.forall {
                 case (owner, _) => locations.labelVisibleAt(owner.entry, capture)
               }))
-        val eligible = component.map(_.arity).distinct.size == 1 && covered &&
+        val externalTargets = component.iterator.flatMap(_.externalTargets).toSet
+        val representationAvailable =
+          !domain.exists(firstClassRequirements) &&
+            !externalTargets.exists(allCases.contains)
+        val eligible = representationAvailable &&
+          component.map(_.arity).distinct.size == 1 && covered &&
           labelsAvailableAtEveryDispatcher &&
           owners.forall { case (owner, members) =>
             members.flatMap(_.calls).forall(call =>
@@ -538,7 +559,7 @@ object Defunctionalization {
           // This makes representation and layout one simultaneous solution,
           // rather than relying on the current iteration accidentally keeping
           // the definition as a function.
-          firstClassRequirements ++= requireFunction
+          firstClassRequirements ++= requireFunction ++ externalTargets
           val cases = definitions.filter(d => domain.contains(d.id)).map { definition =>
             allCases.getOrElseUpdate(definition.id, {
               val continuationCase = ContinuationCase(
@@ -567,7 +588,13 @@ object Defunctionalization {
               domain,
               cases)
             allDispatches(owner.entry) = dispatch
-            members.foreach(candidate => allApplications(candidate.callee) = dispatch)
+            members.flatMap(_.calls).foreach { call =>
+              call.call match {
+                case application: cps.Stmt.App =>
+                  allApplications.put(application, dispatch)
+                case _ => () // candidates contain terminal applications only
+              }
+            }
 
             // Case bodies are emitted at the dispatcher rather than at their
             // original definition sites. A reference to an enclosing
@@ -580,6 +607,35 @@ object Defunctionalization {
               reenteredDefinitions ++= enclosing.intersect(direct)
             }
           }
+        }
+        eligible
+      }
+
+      components(uniqueEntries).foreach { component =>
+        if !select(component) then {
+          // A maximal flow component can span nested JavaScript activations.
+          // Cut such a component at entry boundaries: cases allocated while
+          // evaluating an entry remain local, while every incoming value uses
+          // the distinguished function-valued boundary representation.
+          val local = component.flatMap { candidate =>
+            val (targets, external) = candidate.targets.partition(
+              target => locations.localTo(target, candidate.entry))
+            Option.when(targets.nonEmpty)(candidate.copy(
+              boundary = candidate.boundary || external.nonEmpty,
+              targets = targets,
+              externalTargets = external))
+          }
+          val localComponents = components(local)
+          // One definition cannot be a frame in one local sum and the
+          // function-valued boundary of another without representation
+          // conversion. Retain exactly the non-conflicting local components.
+          val boundaries = localComponents.iterator
+            .flatMap(_.iterator.flatMap(_.externalTargets)).toSet
+          localComponents
+            .filterNot(_.exists(_.targets.exists(boundaries)))
+            .sortBy(_.map(candidate =>
+              locations.lexicalDepth(candidate.entry) -> candidate.entry.id).min)
+            .foreach(select)
         }
       }
     }
@@ -606,7 +662,7 @@ object Defunctionalization {
     new Plan(
       allCases.toMap,
       allDispatches.toMap,
-      allApplications.toMap,
+      allApplications,
       firstClassRequirements.toSet,
       reenteredDefinitions.toSet,
       recoverableCaptures)
