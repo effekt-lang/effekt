@@ -820,6 +820,18 @@ def partition[A](l: List[A]) { pred: A => Bool }: (List[A], List[A]) = {
   (lefts.reverse, rights.reverse)
 }
 
+/// List functions that we discourage to use, but should still be available
+namespace slow {
+  /// Find the first element in a list which satisfies a given predicate.
+  /// If there is no such element, returns None.
+  /// 
+  /// O(N)
+  def find[A](list: List[A]){ pred: A => Bool }: Option[A] = list match {
+    case Cons(x, xs) => if (pred(x)) Some(x) else find(xs){ pred }
+    case Nil() => None()
+  }
+}
+
 /// Utilities for sorting, see 'sortBy' for more details.
 namespace sort {
   /// Splits the given list into monotonic segments (so a list of lists).
