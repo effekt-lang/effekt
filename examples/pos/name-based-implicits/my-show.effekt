@@ -1,0 +1,29 @@
+
+def myShow(i: Int) = i.show
+
+def myShow[A](l: List[A]){ ?myShow: A => String }: String = {
+  def go(l: List[A]): String =
+    l match {
+      case Nil() => "]"
+      case Cons(hd, tl) => myShow(hd) ++ "," ++ go(tl)
+    }
+  "[" ++ go(l)
+}
+
+def myShowTwo[A](a: A){ ?myShow: A => String }: String =
+  myShow(a) ++ myShow(a)
+
+def myCallee(? callee: String): Unit = {
+  println(callee)
+}
+
+def main() = {
+  val callee = "main"
+  def bar() = {
+    val callee = "bar"
+    myCallee()
+  }
+  println(myShowTwo([[12]]))
+  myCallee()
+  bar()
+}

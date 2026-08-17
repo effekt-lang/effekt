@@ -22,7 +22,7 @@ record Output(chars: Int, words: Int, lines: Int)
 def formatWith(output: Output, filename: String): String =
   output.lines.show ++ " " ++ output.words.show ++ " " ++ output.chars.show ++ " " ++ filename
 
-def countWords(): Output / read[Char] = {
+def countWords(): Output / next[Char] = {
 
   var chars = 0
   var words = 0
@@ -30,7 +30,7 @@ def countWords(): Output / read[Char] = {
   var wasSpace = true
 
   loop {
-    val c = do read()
+    val c = do next()
 
     chars = chars + 1
 

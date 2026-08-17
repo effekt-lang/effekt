@@ -37,7 +37,7 @@ def await[T](promise: Promise[T]): T =
       val signal = signal()
       promise.set(Pending(Cons(signal, signals)))
       // TODO perhaps yield to avoid stack overflow
-      signal.unsafeWait(())
+      signal.wait(())
   }
 
 /// Resolves the given promise, unblocking all awaiting tasks.
@@ -48,6 +48,6 @@ def resolve[T](promise: Promise[T], value: T): Unit =
     case Pending(signals) =>
       promise.set(Resolved(value))
       // TODO perhaps yield to avoid stack overflow
-      signals.reverse.foreach { signal => unsafeFire(signal, value) }
+      signals.reverse.foreach { signal => fire(signal, value) }
   }
 

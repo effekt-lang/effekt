@@ -1,0 +1,49 @@
+def id['A](x: 'A) = {
+  return x: 'A
+}
+
+def forward['A](f: () => 'A at {}) = {
+  (id: ['B]('B) => 'B @ {})[() => 'A at {}](f: () => 'A at {})
+}
+
+def main(f: () => Int at {}) = {
+  (forward: ['A](() => 'A at {}) => (() => 'A at {}) @ {})[Int](f: () => Int at {})
+}
+
+/// MONO_PREPROCESS
+
+def id['A](x: 'A) = {
+  return x: 'A
+}
+
+def forward['A](f: () => 'A at {}) = {
+  (id: ['B]('B) => 'B @ {})[() => 'A at {}](f: () => 'A at {})
+}
+
+def main(f: () => Int at {}) = {
+  (forward: ['A](() => 'A at {}) => (() => 'A at {}) @ {})[Int](f: () => Int at {})
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<() => forward.0 at {}> <: id
+<Int> <: forward
+
+/// MONO_SOLVE
+
+S = forward ↦ { <Int> },
+    id ↦ { <() => Int at {}> }
+
+/// MONO_SPECIALIZE
+
+def idBoxedInt(x: () => Int at {}) = {
+  return x: () => Int at {}
+}
+
+def forwardInt(f: () => Int at {}) = {
+  (idBoxedInt: (() => Int at {}) => (() => Int at {}) @ {})(f: () => Int at {})
+}
+
+def main(f: () => Int at {}) = {
+  (forwardInt: (() => Int at {}) => (() => Int at {}) @ {})(f: () => Int at {})
+}

@@ -1,0 +1,6 @@
+def foo(a: Int, ?b: Int, c: Int): Unit = { // ERROR implicit
+
+  val x = box { (?i: Int) => () } // ERROR implicit
+}
+
+def main() = ()

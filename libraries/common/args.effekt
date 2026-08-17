@@ -7,7 +7,7 @@ extern def commandLineArgs() at io: List[String] =
   vm { Nil() }
 
 namespace js {
-  extern type Args // = Array[String]
+  extern type Args = js "Array[String]"
 
   extern def nativeArgs() at io: Args = js "process.argv.slice(1)"
 
@@ -26,7 +26,7 @@ namespace js {
 }
 
 namespace chez {
-  extern type Args // = CSList[String]
+  extern type Args = chez "CSList[String]"
 
   extern def nativeArgs() at io: Args =
     chez "(cdr (command-line))"

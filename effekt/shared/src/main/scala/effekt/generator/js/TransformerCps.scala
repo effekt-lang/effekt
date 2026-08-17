@@ -128,6 +128,26 @@ object TransformerCps extends Transformer {
           js.Function(nameDef(id), (vps ++ bps) map toJSParam, List(js.Return($effekt.call("unreachable"))))
       }
 
+    case cps.Extern.Data(id, tps, ExternBody.StringExternBody(_, body)) =>
+      val ttps = tps match {
+        case Nil => ""
+        case tps => tps.map { x => x.show }.mkString(", ")
+      }
+      js.RawStmt(s"// extern type ${id.show}${ttps} = ${body}")
+
+    case cps.Extern.Data(id, tps, ExternBody.Unsupported(err)) =>
+      js.RawStmt(s"// unsupported extern type ${id.show}: ${err}")
+
+    case cps.Extern.Interface(id, tps, ExternBody.StringExternBody(_, body)) =>
+      val ttps = tps match {
+        case Nil => ""
+        case tps => tps.map { x => x.show }.mkString(", ")
+      }
+      js.RawStmt(s"// extern type ${id.show}${ttps} = ${body}")
+
+    case cps.Extern.Interface(id, tps, ExternBody.Unsupported(err)) =>
+      js.RawStmt(s"// unsupported extern type ${id.show}: ${err}")
+
     case cps.Extern.Include(ff, contents) =>
       js.RawStmt(contents)
   }

@@ -75,14 +75,21 @@ class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) ext
     vsep(definitions map toDoc)
 
   def toDoc(e: Extern): Doc = e match {
-    case Extern.Def(id, tps, cps, vps, bps, ret, capt, bodies) =>
+    case Extern.Def(id, qualifiedSignature, tps, cps, vps, bps, ret, capt, bodies) =>
       "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <> paramsToDoc(tps, cps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> (bodies match {
         case ExternBody.StringExternBody(ff, body) => toDoc(ff) <+> toDoc(body)
         // The unsupported case is not currently supported by the core parser
         case ExternBody.Unsupported(err) => ???
       })
     case Extern.Include(ff, contents) => "extern" <+> toDoc(ff) <+> stringLiteral(contents)
-    case Extern.Data(id, tps) => "extern type" <+> toDoc(id) <> typeParamsDoc(tps)
+    case Extern.Data(id, tps, ExternBody.Unsupported(_)) => "extern type" <+> toDoc(id) <> typeParamsDoc(tps)
+    case Extern.Data(id, tps, ExternBody.StringExternBody(featureFlag, contents)) =>
+      "extern type" <+> toDoc(id) <> typeParamsDoc(tps)
+        <+> "=" <+> toDoc(featureFlag) <+> toDoc(contents)
+    case Extern.Interface(id, tps, ExternBody.Unsupported(_)) => "extern interface" <+> toDoc(id) <> typeParamsDoc(tps)
+    case Extern.Interface(id, tps, ExternBody.StringExternBody(featureFlag, contents)) =>
+      "extern interface" <+> toDoc(id) <> typeParamsDoc(tps)
+        <+> "=" <+> toDoc(featureFlag) <+> toDoc(contents)
   }
 
   def toDoc(ff: FeatureFlag): Doc = ff match {

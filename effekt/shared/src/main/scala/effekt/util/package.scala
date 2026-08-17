@@ -19,3 +19,9 @@ extension(ch: Char) def escape: String = ch match {
   case ch if ch.toInt >= 32 && ch.toInt <= 126 => String.valueOf(ch)
   case ch => "\\u%04x".format(ch.toInt)
 }
+
+enum RequirementLevel {
+  case Required
+  case Optional
+  case Forbidden
+}

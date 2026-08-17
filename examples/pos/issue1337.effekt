@@ -1,0 +1,9 @@
+module issue1337
+
+def bar(): Int = 42
+
+def main() = {
+  val n = bar()
+  val m = issue1337::bar()
+  println(n + m)
+}

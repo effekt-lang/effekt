@@ -1,0 +1,6 @@
+def main() = {
+  println(show(1))
+  println(show(2.0))
+  println(show(0xA2))
+  println(show('d'))
+}

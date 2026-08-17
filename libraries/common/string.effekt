@@ -204,6 +204,23 @@ def lastIndexOf(str: String, sub: String, from: Int): Option[Int] = {
   go(from)
 }
 
+namespace internal {
+  def utf8ByteLength(str: String): Int = stream::sum {
+    for {str.each} { (c: Char) =>
+      do emit(c.utf8ByteCount)
+    }
+  }
+}
+
+/// Returns the number of bytes that the given `str` would take up in a UTF-8 encoding.
+extern def utf8ByteLength(str: String) at {io, global}: Int =
+  jsNode "Buffer.byteLength(${str}, 'utf8')"
+  llvm """
+    %x = call %Int @c_bytearray_size(%Pos ${str})
+    ret %Int %x
+  """ // via bytearray::fromString(str).length
+  default { internal::utf8ByteLength(str) }
+
 // TODO more efficient (native) implementations could be integrated as follows
 
 // extern def indexOf(str: String, sub: String) at {}: Option[Int] =
@@ -231,23 +248,18 @@ extern def unsafeCharAt(str: String, n: Int) at {}: Char =
     %x = call %Int @c_bytearray_character_at(%Pos ${str}, %Int ${n})
     ret %Int %x
   """
-  vm "string::unsafeCharAt(String, Int)"
 
 
 // Streaming
 // ---------
 
-def feed[R](string: String) { reader: () => R / read[Char] } =
-  feed(string.fromString) {
-    decodeUTF8 {
-      reader()
-    }
-  }
+def feed[R](string: String) { driver: () => R / next[Char] } =
+  feed(string.fromString) { decodeUTF8 { driver() } }
 
 def each(string: String): Unit / emit[Char] =
   feed(string) {
     loop {
-      do emit(do read())
+      do emit(do next())
     }
   }
 

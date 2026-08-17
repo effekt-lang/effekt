@@ -7,15 +7,16 @@ package typer
 import effekt.context.{Annotation, Annotations, Context, ContextOps}
 import effekt.context.assertions.*
 import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, Many, MatchGuard, MatchPattern, Maybe, ModuleDecl, NoSource, OpClause, Stmt, TagPattern, Term, Tree, resolve, resolveBlockRef, resolveBlockType, resolveValueType, symbol}
-import effekt.source.Term.BlockLiteral
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
 import effekt.util.messages.*
 import effekt.util.foreachAborting
+import effekt.context.Try
 
 import scala.language.implicitConversions
-import effekt.source.Implementation
+import scala.collection.mutable
+import scala.annotation.tailrec
 
 /**
  * Typechecking
@@ -227,7 +228,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case _ => Context.abort("Cannot infer function type for callee.")
         }
 
-        val Result(t, eff) = checkCallTo(c, "function", Nil, tpe, targs map { _.resolveValueType }, vargs, bargs, expected)
+        val Result(t, eff) = checkCallTo(c, "function", Nil, Nil, tpe, targs map { _.resolveValueType }, vargs, bargs, expected, None)
         Result(t, eff ++ funEffs)
 
       // precondition: PreTyper translates all uniform-function calls to `Call`.
@@ -1163,11 +1164,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
   )(using Context, Captures): Result[ValueType] = {
     val sym = id.symbol
 
-    val methods = sym match {
+    val (methods, scope) = sym match {
       // an overloaded call target
-      case CallTarget(syms) => syms.flatten.collect { case op: Operation => op }
+      case CallTarget(syms, scope) => (syms.flatten.collect { case op: Operation => op }, scope)
       // already resolved by a previous attempt to typecheck
-      case sym: Operation => List(sym)
+      case sym: Operation => (List(sym), None)
       case s => Context.panic(s"Not a valid method: ${s} : ${s.getClass.getSimpleName}")
     }
 
@@ -1175,7 +1176,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     val interface = recvTpe.asInterfaceType
     // filter out operations that do not fit the receiver
-    val candidates = methods.filter(op => op.interface == interface.typeConstructor)
+    val candidates = methods.filter( op => op.interface == interface.typeConstructor )
 
     val (successes, errors) = tryEach(candidates) { op =>
       val (funTpe, capture) = findFunctionTypeFor(op)
@@ -1207,7 +1208,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       //   1. make up and annotate unification variables, if no type arguments are there
       //   2. type check call with either existing or made up type arguments
 
-      checkCallTo(call, op.name.name, op.vparams.map { p => p.name.name }, funTpe, synthTargs, vargs, bargs, expected)
+      checkCallTo(call, op.name.name, op.vparams, op.bparams, funTpe, synthTargs, vargs, bargs, expected, scope)
     }
     resolveOverload(id, List(successes), errors)
   }
@@ -1228,11 +1229,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
 
-    val scopes = id.symbol match {
+    val (scopes, iscope) = id.symbol match {
       // an overloaded call target
-      case CallTarget(syms) => syms
+      case CallTarget(syms, iscope) => (syms, iscope)
       // already resolved by a previous attempt to typecheck
-      case sym: BlockSymbol => List(Set(sym))
+      case sym: BlockSymbol => (List(Set(sym)), None)
       case id: ValueSymbol => Context.abort(pp"Cannot call value ${id}")
     }
 
@@ -1256,11 +1257,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // - If there is exactly one match, fully typecheck the call with this.
     val results = scopes map { scope => tryEach(scope.toList) { receiver =>
       val (funTpe, capture) = findFunctionTypeFor(receiver)
-      val vpnames = receiver match {
-        case c: Callable  => c.vparams.map(_.name.name)
-        case _ => Nil
+      val (vps, bps) = receiver match {
+        case c: Callable  => (c.vparams, c.bparams)
+        case _ => (Nil, Nil)
       }
-      val Result(tpe, effs) = checkCallTo(call, receiver.name.name, vpnames, funTpe, targs, vargs, bargs, expected)
+      val Result(tpe, effs) = checkCallTo(call, receiver.name.name, vps, bps, funTpe, targs, vargs, bargs, expected, iscope)
       // This is different, compared to method calls:
       usingCapture(capture)
       Result(tpe, effs)
@@ -1293,7 +1294,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // Ambiguous reference
       case results =>
-        val successfulOverloads = results.map { (sym, res, st) => (sym, findFunctionTypeFor(sym)._1) }
+        val successfulOverloads = results.map { case (sym, res, st) => (sym, findFunctionTypeFor(sym)._1) }
         Context.abort(AmbiguousOverloadError(successfulOverloads, Context.rangeOf(id)))
     }
 
@@ -1323,9 +1324,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
     def gotCount: Int = matched.size + extra.size
     def expectedCount: Int = matched.size + missing.size
     def delta: Int = extra.size - missing.size // > 0 => too many
+
   }
 
   object Aligned {
+    extension[A,B](self: Aligned[A, B])
+      def fillImplicit[R <: A, C](use: List[C])(by: (Int, C) => Option[R]): (Aligned[A,B], List[R]) = {
+        val useActually = use.drop(self.matched.length)
+        val definitelyMissing = self.missing.drop(useActually.length)
+        val (remaining, impl) = self.missing.zip(useActually).zipWithIndex.partitionMap{ case ((a,c), i) => by(i, c).map((_, a)).toRight(a) }
+        (Aligned(self.matched ++ impl, self.extra, remaining ++ definitelyMissing), impl.map { (x, _) => x })
+      }
     def apply[A, B](got: List[A], expected: List[B]): Aligned[A, B] = {
       @scala.annotation.tailrec
       def loop(got: List[A], expected: List[B], matched: List[(A, B)]): Aligned[A, B] =
@@ -1350,9 +1359,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
    */
   private def assertArgsParamsAlign(
      name: Option[String],
-     types: Aligned[source.Id | ValueType, TypeParam],
-     values: Aligned[source.ValueParam | source.ValueArg, ValueType],
-     blocks: Aligned[source.BlockParam | source.Term, BlockType]
+     types: Aligned[source.Id | ValueType | source.GenerateImplicitArgs.ImplicitStencil, TypeParam],
+     values: Aligned[source.ValueParam | source.ValueArg | source.GenerateImplicitArgs.ImplicitStencil, ValueType],
+     blocks: Aligned[source.BlockParam | source.Term | source.GenerateImplicitArgs.ImplicitStencil, BlockType]
    )(using Context): Unit = {
 
     // Type args are OK iff nothing provided or perfectly aligned
@@ -1446,17 +1455,24 @@ object Typer extends Phase[NameResolved, Typechecked] {
   def checkCallTo(
     call: source.CallLike,
     name: String,
-    vpnames: List[String],
+    knownVParams: List[ValueParam],
+    knownBParams: List[BlockParam],
     funTpe: FunctionType,
     targs: List[ValueType],
     vargs: List[source.ValueArg],
     bargs: List[source.Term],
-    expected: Option[ValueType]
+    expected: Option[ValueType],
+    scope: Option[scopes.Scope]
   )(using Context, Captures): Result[ValueType] = {
     val callsite = currentCapture
 
     // (0) Check that arg & param counts align
-    assertArgsParamsAlign(name = Some(name), Aligned(targs, funTpe.tparams), Aligned(vargs, funTpe.vparams), Aligned(bargs, funTpe.bparams))
+    val atargs = Aligned(targs, funTpe.tparams)
+    val (avargs, implicitVargs) = Aligned(vargs, funTpe.vparams)
+      .fillImplicit(knownVParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitValue(p, i, scope) }
+    val (abargs, implicitBargs) = Aligned(bargs, funTpe.bparams)
+      .fillImplicit(knownBParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitBlock(p, i, scope) }
+    assertArgsParamsAlign(name = Some(name), atargs, avargs, abargs)
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
@@ -1473,6 +1489,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // to disambiguate based on the capabilities in scope.
     var effs: Effects = Effects()
 
+    val vpnames = knownVParams.map { p => p.name.name }
     (vpnames.map(Some.apply).zipAll(vargs, None, source.ValueArg.Unnamed(source.UnitLit(source.Span.missing)))) foreach {
       case (Some(expName), source.ValueArg(Some(gotName), _, _)) if expName != gotName =>
         if (vpnames.contains(gotName)) {
@@ -1486,15 +1503,32 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case _ => ()
     }
 
-    (vps zip vargs) foreach { case (tpe, expr) =>
+    val instImplicitVargs: mutable.ListBuffer[source.ValueArg] = mutable.ListBuffer.empty
+    val instImplicitBargs: mutable.ListBuffer[source.Term] = mutable.ListBuffer.empty
+    val (explicitVps, implicitVps) = vps.splitAt(vargs.length)
+
+    (explicitVps zip vargs) foreach { case (tpe, expr) =>
       val Result(t, eff) = checkExpr(expr.value, Some(tpe))
+      effs = effs ++ eff.toEffects
+    }
+
+    // implicit arguments work like normal ones, except that we first have to instantiate them,
+    // and later annotate them to be inserted
+    (implicitVps zip implicitVargs).zipWithIndex foreach { case ((tpe, expr), ii) =>
+      val inst = source.GenerateImplicitArgs.instantiateImplicitValue(expr, tpe)
+      instImplicitVargs.append(inst)
+      val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(expr, "value argument", vargs.length + ii, inst, tpe) {
+        checkExpr(inst.value, Some(tpe))
+      }
       effs = effs ++ eff.toEffects
     }
 
     // To improve inference, we first type check block arguments that DO NOT subtract effects,
     // since those need to be fully known.
+    val (explicitBps, implicitBps) = bps.splitAt(bargs.length)
+    val (explicitCaptArgs, implicitCaptArgs) = captArgs.splitAt(bargs.length)
 
-    val (withoutEffects, withEffects) = (bps zip (bargs zip captArgs)).partitionMap {
+    val (withoutEffects, withEffects) = (explicitBps zip (bargs zip explicitCaptArgs)).partitionMap {
       // TODO refine and check that eff.args refers to (inferred) type arguments of this application (`typeArgs`)
       case (tpe : FunctionType, rest) if tpe.effects.exists { eff => eff.args.nonEmpty } => Right((tpe, rest))
       case (tpe, rest) => Left((tpe, rest))
@@ -1509,6 +1543,24 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
     }
 
+    // implicit arguments work like normal ones, except that we first have to instantiate them,
+    // and...
+    (implicitBps zip (implicitBargs zip implicitCaptArgs)).zipWithIndex foreach { case ((tpe, (expr, capt)), ii) =>
+      flowsInto(capt, callsite)
+      // capture of block <: ?C
+      flowingInto(capt) {
+        val inst = source.GenerateImplicitArgs.instantiateImplicitBlock(expr, tpe)
+        instImplicitBargs.append(inst)
+        val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(expr, "block argument", bargs.length + ii, inst, tpe){
+          checkExprAsBlock(inst, Some(tpe))
+        }
+        effs = effs ++ eff.toEffects
+      }
+    }
+
+    // ... annotate them to be inserted by [[ExplicitCapabilites]]
+    Context.annotateImplicits(call, instImplicitVargs.toList, instImplicitBargs.toList)
+
     // We add return effects last to have more information at this point to
     // concretize the effect.
     effs = effs ++ Effects(retEffs)
@@ -1522,7 +1574,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // since this might conflate State[A] and State[B] after A -> Int, B -> Int.
     val capabilities = Context.provideCapabilities(call, retEffs.map(Context.unification.apply))
 
-    val captParams = captArgs.drop(bargs.size)
+    val captParams = captArgs.drop(bargs.size + implicitBargs.size)
     (captParams zip capabilities) foreach { case (param, cap) =>
       flowsInto(CaptureSet(cap.capture), param)
     }
@@ -1548,29 +1600,22 @@ object Typer extends Phase[NameResolved, Typechecked] {
     (successes, errors)
   }
 
-  /**
-   * Returns Left(Messages) if there are any errors
-   *
-   * In the case of nested calls, currently only the errors of the innermost failing call
-   * are reported
-   */
-  private def Try[T](block: => T)(using C: Context): Either[EffektMessages, T] = {
-    import kiama.util.Severities.Error
-
-    val (msgs, optRes) = Context withMessages {
-      try { Some(block) } catch {
-        case FatalPhaseError(msg) =>
-          C.report(msg)
-          None
+  def iterativeDeepening[R](start: Int, max: Int)(f: Int => R)(shouldDeepen: util.messages.EffektError => Boolean)(using Context): R = {
+    @tailrec
+    def go(d: Int): R = {
+      val oldTyperstate = Context.backupTyperstate()
+      try {
+        f(d)
+      } catch {
+        case e: util.messages.FatalPhaseError if shouldDeepen(e.message) && d < max =>
+          Context.restoreTyperstate(oldTyperstate)
+          go(d + 1)
       }
     }
-
-    if (msgs.exists { m => m.severity == Error } || optRes.isEmpty) {
-      Left(msgs)
-    } else {
-      Right(optRes.get)
-    }
+    go(start)
   }
+
+
 
   //</editor-fold>
 
@@ -1816,7 +1861,7 @@ trait TyperOps extends ContextOps { self: Context =>
     freshCapabilityFor(tpe, CaptureParam(tpe.name))
 
   private [typer] def freshCapabilityFor(tpe: InterfaceType, capt: Capture): symbols.BlockParam =
-    val param: BlockParam = BlockParam(tpe.name, Some(tpe), capt, NoSource)
+    val param: BlockParam = BlockParam(tpe.name, Some(tpe), capt, isImplicit = false, NoSource)
     // TODO FIXME -- generated capabilities need to be ignored in LSP!
       //     {
       //      override def synthetic = true
@@ -1895,12 +1940,12 @@ trait TyperOps extends ContextOps { self: Context =>
     }
 
   private[typer] def bind(p: ValueParam): Unit = p match {
-    case s @ ValueParam(name, Some(tpe), _) => bind(s, tpe)
+    case s @ ValueParam(name, Some(tpe), isImplicit, _) => bind(s, tpe)
     case s => panic(pretty"Internal Error: Cannot add $s to typing context.")
   }
 
   private[typer] def bind(p: TrackedParam): Unit = p match {
-    case s @ BlockParam(name, tpe, capt, _) => bind(s, tpe.get, CaptureSet(capt))
+    case s @ BlockParam(name, tpe, capt, isImplicit, _) => bind(s, tpe.get, CaptureSet(capt))
     case s @ ExternResource(name, tpe, capt, _) => bind(s, tpe, CaptureSet(capt))
     case s @ VarBinder(name, tpe, capt, _) => bind(s, CaptureSet(capt))
   }
@@ -1930,6 +1975,14 @@ trait TyperOps extends ContextOps { self: Context =>
     // apply what we know before saving
     annotations.update(Annotations.TypeArguments, call, targs map this.unification)
   }
+
+  private[typer] def annotateImplicits(call: source.CallLike,
+                                       vargs: List[source.ValueArg],
+                                       bargs: List[source.Term]): Unit = {
+    annotations.update(Annotations.ImplicitValueArguments, call, vargs)
+    annotations.update(Annotations.ImplicitBlockArguments, call, bargs)
+  }
+
 
   private[typer] def annotatedTypeArgs(call: source.CallLike): List[symbols.ValueType] = {
     annotations.apply(Annotations.TypeArguments, call)
@@ -1973,6 +2026,8 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.updateAndCommit(Annotations.InferredEffect) { case (t, effs) => subst.substitute(effs) }
 
     annotations.updateAndCommit(Annotations.TypeArguments) { case (t, targs) => targs map subst.substitute }
+    annotations.updateAndCommit(Annotations.ImplicitValueArguments) { case (t, ivargs) => ivargs }
+    annotations.updateAndCommit(Annotations.ImplicitBlockArguments) { case (t, ibargs) => ibargs }
 
     annotations.updateAndCommit(Annotations.BoundCapabilities) { case (t, caps) => caps }
     annotations.updateAndCommit(Annotations.CapabilityArguments) { case (t, caps) => caps }

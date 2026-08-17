@@ -1,0 +1,9 @@
+def lens(v: Int){ fn: Int => Int }: Int = fn(v)
+def lens[A](x: List[A]){ fn: A => A }{ ?lens: (A){ A => A } => A }: List[A] =
+  x.map { e => lens(e){fn} }
+def lens[A](x: List[A]){ fn: List[A] => List[A] }: List[A] =
+  fn(x)
+
+def main() = {
+  println(lens([1,2,3]){ x => x + 1}.show)
+}

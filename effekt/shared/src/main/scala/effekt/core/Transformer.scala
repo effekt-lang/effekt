@@ -90,9 +90,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case f @ source.ExternDef(id, _, vps, bps, _, _, bodies, doc, span) =>
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _, _) = f.symbol
-      assert(effects.isEmpty)
+      util.assert(effects.isEmpty)
+      val moduleName = Context.module.name
+      val qualifiedSignature = QualifiedSignature(moduleName, sym)
       val cps = bps.map(b => b.symbol.capture)
-      val tBody = bodies match {
+      val tBody = bodies.unspan match {
         case source.ExternBody.StringExternBody(ff, body, span) :: Nil =>
           ExternBody.StringExternBody(ff, Template(body.strings, body.args.map(transformAsExpr)))
         case source.ExternBody.Unsupported(err) :: Nil =>
@@ -100,7 +102,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case _ =>
           Context.abort("Externs should be resolved and desugared before core.Transformer")
       }
-      List(Extern.Def(sym, tps, cps.unspan, vps.unspan map transform, bps.unspan map transform, transform(ret), transform(capt), tBody))
+      List(Extern.Def(sym, qualifiedSignature, tps, cps.unspan, vps.unspan map transform, bps.unspan map transform, transform(ret), transform(capt), tBody))
 
     case e @ source.ExternInclude(ff, path, contents, _, doc, span) =>
       List(Extern.Include(ff, contents.get))
@@ -108,9 +110,18 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case d @ source.NamespaceDef(name, defs, doc, span) =>
       defs.flatMap(transformToplevel)
 
-    case e @ source.ExternType(id, _, _, _) =>
+    case e @ source.ExternType(id, _, bodies, _, _) =>
+      val tBody = bodies.unspan match {
+        case source.ExternBody.StringExternBody(ff, body, span) :: Nil =>
+          ExternBody.StringExternBody(ff, Template(body.strings, body.args.map { absurd => absurd }))
+        case source.ExternBody.Unsupported(err) :: Nil =>
+          ExternBody.Unsupported(err)
+        case _ =>
+          Context.abort("Externs should be resolved and desugared before core.Transformer")
+      }
+
       val sym@ExternType(name, tps, _) = e.symbol
-      List(Extern.Data(sym, tps))
+      List(Extern.Data(sym, tps, tBody))
 
     // For now we forget about all of the following definitions in core:
     case d: source.Def.Extern => Nil
@@ -127,6 +138,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }
   }.toList ++ exports.namespaces.values.flatMap(transform)
 
+  // Add tparams separately
   def transform(c: symbols.Constructor)(using Context): core.Constructor =
     core.Constructor(c, c.tparams.drop(c.tpe.tparams.size), c.fields.map(f => core.Field(f, transform(f.returnType))))
 
@@ -243,25 +255,25 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
           // [[ f ]] = { (x) => f(x) }
           def etaExpandPure(b: ExternFunction): BlockLit = {
-            assert(bparamtps.isEmpty)
-            assert(effects.isEmpty)
-            assert(cparams.isEmpty)
+            util.assert(bparamtps.isEmpty)
+            util.assert(effects.isEmpty)
+            util.assert(cparams.isEmpty)
             BlockLit(tparams, Nil, vparams, Nil,
               Stmt.Return(PureApp(BlockVar(b), targs, vargs)))
           }
 
           // [[ f ]] = { [A](x) => make f[A](x) }
           def etaExpandConstructor(b: Constructor): BlockLit = {
-            assert(bparamtps.isEmpty)
-            assert(effects.isEmpty)
-            assert(cparams.isEmpty)
+            util.assert(bparamtps.isEmpty)
+            util.assert(effects.isEmpty)
+            util.assert(cparams.isEmpty)
             BlockLit(tparams, Nil, vparams, Nil,
               Stmt.Return(Make(core.ValueType.Data(b.tpe, targs), b, targs, vargs)))
           }
 
           // [[ f ]] = { (x){g} => let r = f(x){g}; return r }
           def etaExpandDirect(f: ExternFunction): BlockLit = {
-            assert(effects.isEmpty)
+            util.assert(effects.isEmpty)
             val bparams = bparamtps.map { t => val id = TmpBlock("etaParam"); core.BlockParam(id, transform(t), Set(id)) }
             val bargs = bparams.map {
               case core.BlockParam(id, tpe, capt) => Block.BlockVar(id, tpe, capt)
@@ -349,9 +361,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val universals: List[symbols.TypeParam] = dataType.tparams
 
       // allTypeParams = universals ++ existentials
-      val allTypeParams: List[symbols.TypeParam] = constructor.tparams
-
-      assert(allTypeParams.length == universals.length, "Existentials on record selection not supported, yet.")
+      util.assert(constructor.tparams.length == universals.length, "Existentials on record selection not supported, yet.")
 
       val scrutineeTypeArgs = Context.inferredTypeOf(receiver) match {
         case effekt.symbols.ValueType.ValueTypeApp(constructor, args) => args
@@ -812,7 +822,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val capabilityTypes = CanonicalOrdering(effects.toList).map(transform)
       val allBlockParams = bparams.map(transform) ++ capabilityTypes
 
-      assert(cparams.size == allBlockParams.size,
+      util.assert(cparams.size == allBlockParams.size,
         s"""Internal error: number of block parameters does not match number of capture parameters.
            |
            |  Blockparams: ${bparams}
@@ -858,7 +868,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       // resolve the preferred body again and hope it's the same
       val body = ResolveExternDefs.findPreferred(bodies)
       body match {
-        case b: source.ExternBody.EffektExternBody => CallingConvention.Control
+        case b: source.ExternBody.EffektExternBody[_] => CallingConvention.Control
         case _ if f.capture.pure => CallingConvention.Pure
         case _ if f.capture.pureOrIO => CallingConvention.Direct
         case _ => CallingConvention.Control
@@ -969,7 +979,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
     bindings += binding
 
   private[core] def assertNoBindings(): Unit =
-    assert(bindings.isEmpty, s"There should not be any bindings left on the toplevel! Got: ${bindings}")
+    util.assert(bindings.isEmpty, s"There should not be any bindings left on the toplevel! Got: ${bindings}")
 
   private[core] def withBindings[R](block: => R): (R, List[Binding]) = Context in {
     val before = bindings

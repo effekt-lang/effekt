@@ -32,7 +32,8 @@ object SpanSyntax {
     }
 
     def sourceAndPositions: (Source, Seq[Int]) = {
-      val lines = content.stripMargin.split("\n").toBuffer
+      val normalized = content.stripMargin.replace("\r\n", "\n")
+      val lines = normalized.split("\n", -1).toBuffer
       val positions = scala.collection.mutable.ArrayBuffer[Int]()
       var lineIdx = 0
       var lineBytePos = 0
@@ -147,6 +148,13 @@ class ParserTests extends munit.FunSuite {
   def parseInfo(input: String)(using munit.Location): Info =
     parse(input, _.info())
 
+  def parseRecovering[R](input: String, f: Parser => R)(using munit.Location): List[RecoverableDiagnostic] = {
+    val p = parser(input)
+    f(p)
+    assert(p.peek(TokenKind.EOF), s"Did not consume everything: ${p.peek}")
+    p.recoverableDiagnostics.toList
+  }
+
   // Custom asserts
   //
   //
@@ -230,7 +238,8 @@ class ParserTests extends munit.FunSuite {
 
     val textWithoutSpan =
       raw"""There is some content here.
-           |And here.""".stripMargin
+           |And here.
+           |""".stripMargin.replace("\r\n", "\n")
 
     assertEquals(span.from, 4)
     assertEquals(span.to, 33)
@@ -326,7 +335,9 @@ class ParserTests extends munit.FunSuite {
     parseExpr("[1,2,3]")
     parseExpr("[3,2,1,]")
     parseExpr("[]")
-    parseExpr("[,]")
+
+    // a comma with nothing before it is not an empty list
+    intercept[Throwable] { parseExpr("[,]") }
     intercept[Throwable] { parseExpr("[,1]") }
   }
 
@@ -576,8 +587,47 @@ class ParserTests extends munit.FunSuite {
         )
       ),
       None,
-      Span(source,0,pos(7), Synthesized)
+      Span(source,0,pos(7))
     ),Span(source,0,pos.last, Synthesized));
+    assertEquals(parseStmts(source.content), expected)
+  }
+
+  test("val-else") {
+    val (source, pos) =
+      raw"""val (left, right) = list else { return 0 }; return left
+           |    ↑↑   ↑ ↑    ↑↑  ↑   ↑     ↑ ↑      ↑↑ ↑ ↑      ↑   ↑
+           |""".sourceAndPositions
+    val expected = Return(Match(
+      List(Var(IdRef(List(), "list", Span(source, pos(6), pos(7))), Span(source, pos(6), pos(7)))),
+      List(
+        MatchClause(
+          TagPattern(
+            IdRef(List("effekt"), "Tuple2", Span(source, pos(0), pos(5), Synthesized)),
+            List(
+              AnyPattern(IdDef("left", Span(source, pos(1), pos(2))), Span(source, pos(1), pos(2))),
+              AnyPattern(IdDef("right", Span(source, pos(3), pos(4))), Span(source, pos(3), pos(4)))
+            ),
+            Span(source, pos(0), pos(5))
+          ),
+          List(),
+          Return(
+            Var(IdRef(List(), "left", Span(source, pos(14), pos(15))), Span(source, pos(14), pos(15))),
+            Span(source, pos(13), pos(15))
+          ),
+          Span(source, pos(0), pos(7))
+        )
+      ),
+      Some(
+        BlockStmt(
+          Return(
+            IntLit(0, Span(source, pos(10), pos(11))),
+            Span(source, pos(9), pos(11))
+          ),
+          Span(source, pos(8), pos(12))
+        )
+      ),
+      Span(source, 0, pos(12))
+    ), Span(source, 0, pos.last, Synthesized));
     assertEquals(parseStmts(source.content), expected)
   }
 
@@ -1363,7 +1413,24 @@ class ParserTests extends munit.FunSuite {
     val definition = parseToplevel(source.content)
 
     val extType = definition match {
-      case et@ExternType(id, tparams, doc, span) => et
+      case et@ExternType(id, tparams, body, doc, span) => et
+      case other =>
+        throw new IllegalArgumentException(s"Expected ExternType but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(extType.span, span)
+  }
+
+  test("Extern type definition with right hand side parses") {
+    val (source, span) =
+      raw"""extern type Foo = backend "ffiFoo"
+           |↑                                ↑
+           |""".sourceAndSpan
+
+    val definition = parseToplevel(source.content)
+
+    val extType = definition match {
+      case et@ExternType(id, tparams, body, doc, span) => et
       case other =>
         throw new IllegalArgumentException(s"Expected ExternType but got ${other.getClass.getSimpleName}")
     }
@@ -1380,7 +1447,24 @@ class ParserTests extends munit.FunSuite {
     val definition = parseToplevel(source.content)
 
     val extIfc = definition match {
-      case ei@ExternInterface(id, tparams, doc, span) => ei
+      case ei@ExternInterface(id, tparams, bodies, doc, span) => ei
+      case other =>
+        throw new IllegalArgumentException(s"Expected ExternInterface but got ${other.getClass.getSimpleName}")
+    }
+
+    assertEquals(extIfc.span, span)
+  }
+
+  test("Extern interface definition with right-hand side parses with correct span") {
+    val (source, span) =
+      raw"""extern interface IFace[T] = be "foo"
+           |↑                                  ↑
+           |""".sourceAndSpan
+
+    val definition = parseToplevel(source.content)
+
+    val extIfc = definition match {
+      case ei@ExternInterface(id, tparams, bodies, doc, span) => ei
       case other =>
         throw new IllegalArgumentException(s"Expected ExternInterface but got ${other.getClass.getSimpleName}")
     }
@@ -1453,8 +1537,8 @@ class ParserTests extends munit.FunSuite {
         throw new IllegalArgumentException(s"Expected ExternDef but got ${other.getClass.getSimpleName}")
     }
 
-    assertEquals(extDef.bodies.head.span, Span(source, pos(1), pos.last))
-    assertEquals(extDef.bodies.head.featureFlag.span, Span(source, pos(1), pos(2)))
+    assertEquals(extDef.bodies.unspan.head.span, Span(source, pos(1), pos.last))
+    assertEquals(extDef.bodies.unspan.head.featureFlag.span, Span(source, pos(1), pos(2)))
     assertEquals(extDef.span, Span(source, pos(0), pos.last))
   }
 
@@ -1631,5 +1715,82 @@ class ParserTests extends munit.FunSuite {
       "llvm \"\"\"call void @c_io_println_String(%Pos %value); ret %Pos zeroinitializer ; Unit\"\"\"" + "\n" +
       "extern js \"\"\" function \"\"\""
     )
+  }
+
+  test("Trailing commas") {
+    // valueArgs
+    parseExpr("f(1, 2,)")
+    parseExpr("f(x,)")
+
+    // valueParams
+    parseDefinition("def f(x: Int, y: Int,) = 1")
+    parseParams("(x: Int,)")
+    parseDefinition("record R(x: Int, y: Int,)")
+
+    // valueParamsOpt
+    parseLambdaParams("(x, y,)")
+
+    // valueTypes
+    parseValueType("(Int, String,) => Int")
+
+    // typeArgs
+    parseValueType("List[Int,]")
+    parseExpr("f[Int, String,](1)")
+
+    // typeParams
+    parseDefinition("def f[A, B,](x: A) = x")
+
+    // captureSet
+    parseValueType("() => Int at {a, b,}")
+
+    // effects
+    parseReturnAnnotation(": Int / {Exc, State,}")
+
+    // matchPattern: constructor pattern
+    parseMatchPattern("Some(x,)")
+
+    // matchPattern: tuple pattern
+    parseMatchPattern("(x, y,)")
+
+    // tupleOrGroup
+    parseExpr("(1, 2,)")
+
+    // atomicType tuple
+    parseValueType("(Int, String,)")
+
+    // listLiteral
+    parseExpr("[1, 2,]")
+
+    // trailing comma leaves no trace in the tree
+    assertEqualModuloSpans(parseExpr("f(1, 2,)"), parseExpr("f(1, 2)"))
+    assertEqualModuloSpans(parseValueType("List[Int,]"), parseValueType("List[Int]"))
+    assertEqualModuloSpans(parseDefinition("def f(x: Int,) = x"), parseDefinition("def f(x: Int) = x"))
+    assertEqualModuloSpans(parseExpr("(1, 2,)"), parseExpr("(1, 2)"))
+
+    // with trailing commas, `(x,)` would parse as a grouping, although it looks like a tuple
+    assert(parseRecovering("(x,)", _.expr()).nonEmpty, "`(x,)` should soft fail")
+    assert(parseRecovering("(1,)", _.expr()).nonEmpty, "`(1,)` should soft fail")
+    assert(parseRecovering("(Int,)", _.valueType()).nonEmpty, "`(Int,)` should soft fail")
+
+    // ... but it still parses as the grouping it looks like
+    assertEqualModuloSpans(parseExpr("(x,)"), parseExpr("(x)"))
+
+    // no recovery needed for `f(x,)` and similar
+    assert(parseRecovering("f(x,)", _.expr()).isEmpty, "`f(x,)` is a one-element argument list")
+    assert(parseRecovering("[x,]", _.expr()).isEmpty, "`[x,]` is a one-element list literal")
+    assert(parseRecovering("(x: Int,)", _.params()).isEmpty, "`(x: Int,)` is a one-element parameter list")
+    assert(parseRecovering("List[Int,]", _.valueType()).isEmpty, "`List[Int,]` is a one-element type-argument list")
+
+    // ... so `(1, 2,)` is an ordinary tuple
+    assert(parseRecovering("(1, 2,)", _.expr()).isEmpty, "`(1, 2,)` is an ordinary tuple")
+
+    // only trailing -> error
+    intercept[Throwable] { parseExpr("f(,)") }
+    intercept[Throwable] { parseValueType("List[,]") }
+    intercept[Throwable] { parseParams("(,)") }
+    // two commas -> error
+    intercept[Throwable] { parseExpr("f(1,,2)") }
+    intercept[Throwable] { parseExpr("[1,,2]") }
+    intercept[Throwable] { parseExpr("f(1, 2,,)") }
   }
 }

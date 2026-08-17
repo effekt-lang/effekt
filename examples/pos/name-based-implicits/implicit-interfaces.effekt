@@ -1,0 +1,12 @@
+interface Foo[A] {
+  def foo(): A
+}
+
+def bar[A](){ ?instance: Foo[A] }: A = instance.foo()
+
+def main() = {
+  def instance = new Foo[Int] {
+    def foo() = 42
+  }
+  println(bar().show)
+}

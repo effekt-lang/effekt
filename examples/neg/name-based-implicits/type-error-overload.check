@@ -1,0 +1,26 @@
+[error] Cannot typecheck call.
+There are multiple overloads, which all fail to check:
+
+Possible overload: type-error-overload::baz of type {() => Int} => String
+  Cannot instantiate implicit argument.
+  Cannot instantiate 1st block argument foo of type () => Int.
+    Cannot typecheck call.
+    There are multiple overloads, which all fail to check:
+    
+    Possible overload: type-error-overload::foo of type () => Bool
+      Expected Int but got Bool.
+    
+    Possible overload: type-error-overload::foo of type () => Double
+      Expected Int but got Double.
+
+Possible overload: type-error-overload::baz of type {() => List[Bool]} => String
+  Cannot instantiate implicit argument.
+  Cannot instantiate 1st block argument foo of type () => List[Bool].
+    Cannot typecheck call.
+    There are multiple overloads, which all fail to check:
+    
+    Possible overload: type-error-overload::foo of type () => Bool
+      Expected List[Bool] but got Bool.
+    
+    Possible overload: type-error-overload::foo of type () => Double
+      Expected List[Bool] but got Double.

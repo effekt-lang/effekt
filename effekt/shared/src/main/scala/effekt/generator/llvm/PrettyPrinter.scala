@@ -122,6 +122,8 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
   def show(terminator: Terminator): LLVMString = terminator match {
     case RetVoid() =>
       s"ret void"
+    case Ret(operand) => 
+      s"ret ${show(operand)}"
     case Switch(operand, defaultDest, dests) =>
       def destAsFragment(dest: (Int, String)) = s"i64 ${dest._1}, label ${localName(dest._2)}";
       s"switch ${show(operand)}, label ${localName(defaultDest)} [${spaceSeparated(dests.map(destAsFragment))}]"
@@ -146,6 +148,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case IntegerType1() => "i1"
     case IntegerType8() => "i8"
     case IntegerType64() => "i64"
+    case FloatType() => "float"
     case DoubleType() => "double"
     case PointerType() => "ptr"
     case ArrayType(size, of) => s"[$size x ${show(of)}]"

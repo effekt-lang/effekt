@@ -113,11 +113,9 @@ trait Intelligence {
   } yield decl
 
   def getDefinitionOf(s: Symbol)(using C: Context): Option[Tree] = s match {
-    case u: UserFunction => Some(u.decl)
-    case u: Binder       => Some(u.decl)
-    case d: Operation    => C.definitionTreeOption(d.interface)
-    case a: Anon         => Some(a.decl)
     case m: Module       => Some(m.decl)
+    case t: TypeSymbol   => Some(t.decl)
+    case t: TermSymbol   => Some(t.decl)
     case u => C.definitionTreeOption(u)
   }
 
@@ -130,7 +128,7 @@ trait Intelligence {
             case ("info", source.Info(Some(s: String), _, _)) => s
           }
       case _ => None
-  }
+    }
 
   // For now, only show the first call target
   def resolveCallTarget(sym: Symbol): Symbol = sym match {

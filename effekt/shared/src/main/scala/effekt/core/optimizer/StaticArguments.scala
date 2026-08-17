@@ -14,6 +14,11 @@ import effekt.core.Type.returnType
  */
 object StaticArguments {
 
+  enum ArgumentType {
+    case Static(name: String)
+    case NonStatic
+  }
+
   case class IsStatic(
     types: List[Boolean],
     values: List[Boolean],
@@ -105,7 +110,7 @@ object StaticArguments {
         dropStatic(staticB, blockLit.cparams),
         dropStatic(staticV, blockLit.vparams),
         dropStatic(staticB, blockLit.bparams),
-        rewrite(blockLit.body)(using enterFunction(id))
+        rewriter.rewrite(blockLit.body)(using enterFunction(id))
       ), App(
         workerVar,
         dropStatic(staticT, blockLit.tparams.map(t => ValueType.Var(t))),
@@ -115,89 +120,31 @@ object StaticArguments {
     )
   }
 
-  def rewrite(d: Toplevel)(using StaticArgumentsContext): Toplevel = d match {
-    case Toplevel.Def(id, block: BlockLit) if hasStatics(id) => Toplevel.Def(id, wrapDefinition(id, block))
-    case Toplevel.Def(id, block) => Toplevel.Def(id, rewrite(block))
-    case Toplevel.Val(id, binding) => Toplevel.Val(id, rewrite(binding))
-  }
+  object rewriter extends Tree.RewriteWithContext[StaticArgumentsContext] {
+    override def rewrite(d: Toplevel)(using StaticArgumentsContext): Toplevel = d match {
+     case Toplevel.Def(id, block: BlockLit) if hasStatics(id) =>
+       Toplevel.Def(id, wrapDefinition(id, block))
 
-  def rewrite(s: Stmt)(using C: StaticArgumentsContext): Stmt = s match {
-
-    case Stmt.Def(id, block: BlockLit, body) if hasStatics(id) => Stmt.Def(id, wrapDefinition(id, block), rewrite(body))
-    case Stmt.Def(id, block, body) => Stmt.Def(id, rewrite(block), rewrite(body))
-
-    case Stmt.Let(id, binding, body) => Stmt.Let(id, rewrite(binding), rewrite(body))
-
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-      Stmt.ImpureApp(id, callee, targs, vargs.map(rewrite), bargs.map(rewrite), rewrite(body))
-
-    case Stmt.App(b, targs, vargs, bargs) =>
-      b match {
-        // if arguments are static && recursive call: call worker with reduced arguments
-        case BlockVar(id, annotatedTpe, annotatedCapt) if hasStatics(id) && within(id) =>
-          val IsStatic(staticT, staticV, staticB) = C.statics(id)
-          Stmt.App(C.workers(id),
-            dropStatic(staticT, targs),
-            dropStatic(staticV, vargs).map(rewrite),
-            dropStatic(staticB, bargs).map(rewrite))
-        case _ => Stmt.App(rewrite(b), targs, vargs.map(rewrite), bargs.map(rewrite))
-      }
-
-    case Stmt.Invoke(b, method, methodTpe, targs, vargs, bargs) =>
-      Stmt.Invoke(rewrite(b), method, methodTpe, targs, vargs.map(rewrite), bargs.map(rewrite))
-
-    case Stmt.Reset(body) =>
-      rewrite(body) match {
-        case b => Stmt.Reset(b)
-      }
-
-    // congruences
-    case Stmt.Return(expr) => Return(rewrite(expr))
-    case Stmt.Val(id, binding, body) => Stmt.Val(id, rewrite(binding), rewrite(body))
-    case Stmt.If(cond, thn, els) => If(rewrite(cond), rewrite(thn), rewrite(els))
-    case Stmt.Match(scrutinee, tpe, clauses, default) => Stmt.Match(rewrite(scrutinee), tpe, clauses.map { case (id, value) => id -> rewrite(value) }, default.map(rewrite))
-    case Stmt.Alloc(id, init, region, body) => Alloc(id, rewrite(init), region, rewrite(body))
-    case Stmt.Shift(prompt, k, body) => Shift(prompt, k, rewrite(body))
-    case Stmt.Resume(k, body) => Resume(k, rewrite(body))
-    case Stmt.Region(body) => Region(rewrite(body))
-    case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, rewrite(init), capture, rewrite(body))
-    case Stmt.Get(id, tpe, ref, capt, body) => Stmt.Get(id, tpe, ref, capt, rewrite(body))
-    case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, rewrite(value), rewrite(body))
-    case Stmt.Hole(tpe, span) => Stmt.Hole(tpe, span)
-  }
-  def rewrite(b: BlockLit)(using StaticArgumentsContext): BlockLit =
-    b match {
-      case BlockLit(tparams, cparams, vparams, bparams, body) =>
-        BlockLit(tparams, cparams, vparams, bparams, rewrite(body))
+     case other => super.rewrite(other)
     }
 
-  def rewrite(b: Block)(using C: StaticArgumentsContext): Block = b match {
-    case b @ Block.BlockVar(id, _, _) => b
+    override def rewrite(s: Stmt)(using C: StaticArgumentsContext): Stmt = s match {
+      case Stmt.Def(id, block: BlockLit, body) if hasStatics(id) =>
+        Stmt.Def(id, wrapDefinition(id, block), rewrite(body))
 
-    // congruences
-    case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) => rewrite(b)
-    case Block.Unbox(expr) => Block.Unbox(rewrite(expr))
-    case Block.New(impl) => Block.New(rewrite(impl))
-  }
+      // if arguments are static && recursive call: call worker with reduced arguments
+      case Stmt.App(BlockVar(id, annotatedTpe, annotatedCapt), targs, vargs, bargs) if hasStatics(id) && within(id) =>
+        val IsStatic(staticT, staticV, staticB) = C.statics(id)
+        Stmt.App(C.workers(id),
+          dropStatic(staticT, targs),
+          dropStatic(staticV, vargs).map(rewrite),
+          dropStatic(staticB, bargs).map(rewrite))
 
-  def rewrite(s: Implementation)(using StaticArgumentsContext): Implementation =
-    s match {
-      case Implementation(interface, operations) => Implementation(interface, operations.map { op =>
-        op.copy(body = rewrite(op.body))
-      })
+      case other => super.rewrite(other)
     }
-
-  def rewrite(p: Expr)(using StaticArgumentsContext): Expr = p match {
-    case Expr.PureApp(f, targs, vargs) => Expr.PureApp(f, targs, vargs.map(rewrite))
-    case Expr.Make(data, tag, targs, vargs) => Expr.Make(data, tag, targs, vargs.map(rewrite))
-    case x @ Expr.ValueVar(id, annotatedType) => x
-
-    // congruences
-    case Expr.Literal(value, annotatedType) => p
-    case Expr.Box(b, annotatedCapture) => Expr.Box(rewrite(b), annotatedCapture)
   }
 
-  def transform(entrypoint: Id, m: ModuleDecl): ModuleDecl =
+  def transform(entrypoint: Id, m: ModuleDecl): ModuleDecl = {
     val recursiveFunctions = Recursive(m)
 
     val statics: Map[Id, IsStatic] = recursiveFunctions.map {
@@ -229,11 +176,7 @@ object StaticArguments {
       List()
     )
 
-    val updatedDefs = m.definitions.map(rewrite)
+    val updatedDefs = m.definitions.map(rewriter.rewrite)
     m.copy(definitions = updatedDefs)
-}
-
-enum ArgumentType {
-  case Static(name: String)
-  case NonStatic
+  }
 }

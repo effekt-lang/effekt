@@ -32,9 +32,7 @@ interface AD[Num] {
   def exp(x: Num): Num
 }
 ```
-If Effekt would support polymorphic effects (or abstract type members on
-effects) we could abstract over the domain `Num`, which is hard-coded above to
-contain a double value and a mutable reference.
+As Effekt supports polymorphic effects, we abstract over the domain `Num`. 
 
 We can use the number DSL to express two example programs.
 ```
@@ -149,7 +147,7 @@ println(backwards(1.0) { x => progExp(x) })
 println(forwards(0.0) { x => progExp(x) })
 println(backwards(0.0) { x => progExp(x) })
 
-println(showString { x => forwardsHigher(x) { x => forwardsHigher(x) { y => forwardsHigher(y) { z => prog(z) } }} })
+println(showString { x => forwardsHigher(x) { x => forwardsHigher(x) { y => forwardsHigher(y) { z => prog(z) } } } })
 
 // we have the same pertubation confusion as in Lantern
 val result = forwards(1.0) { x =>

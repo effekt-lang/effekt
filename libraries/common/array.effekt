@@ -8,7 +8,10 @@ import list
 import exception
 
 /// A mutable 0-indexed fixed-sized array.
-extern type Array[T]
+extern type Array[T] =
+  js "Array"
+  chez "vector"
+  llvm "%Pos"
 
 /// We represent arrays like positive types.
 /// The tag is 0 and the obj points to memory with the following layout:
@@ -57,7 +60,6 @@ extern def unsafeAllocate[T](size: Int) at global: Array[T] =
     %ret_pos = insertvalue %Pos { i64 0, ptr poison }, ptr %calloc, 1
     ret %Pos %ret_pos
   """
-  vm "array::unsafeAllocate(Int)"
 
 /// Fills a given array in-place.
 def fill[T](arr: Array[T], filler: T): Unit = {
@@ -96,7 +98,6 @@ extern def size[T](arr: Array[T]) at {}: Int =
     tail call void @erasePositive(%Pos ${arr})
     ret i64 %size
   """
-  vm "array::size[T](Array[T])"
 
 extern llvm """
 define void @assertInbounds(i64 %index, %Pos %arr) alwaysinline {
@@ -138,7 +139,6 @@ extern def get[T](arr: Array[T], index: Int) at global: T =
     tail call void @erasePositive(%Pos ${arr})
     ret %Pos %element
   """
-  vm "array::get[T](Array[T], Int)"
 
 extern js """
   function array$set(arr, index, value) {
@@ -165,7 +165,6 @@ extern def set[T](arr: Array[T], index: Int, value: T) at global: Unit =
     tail call void @erasePositive(%Pos ${arr})
     ret %Pos zeroinitializer
   """
-  vm "array::set[T](Array[T], Int, T)"
 
 // Derived operations:
 
@@ -659,12 +658,12 @@ def each[T](array: Array[T]): Unit / emit[T] = {
   go(0)
 }
 
-/// Connects `array` as a producer to a given pull stream `reader` acting as a consumer.
-def feed[T, R](array: Array[T]) { reader: () => R / read[T] }: R = {
+/// Connects `array` as a producer to a given pull stream `driver` acting as a consumer.
+def feed[T, R](array: Array[T]) { driver: () => R / next[T] }: R = {
   var i = 0
   try {
-    reader()
-  } with read[T] {
+    driver()
+  } with next[T] {
     resume {
       if (i < array.size) {
         val c = i

@@ -576,61 +576,6 @@ void c_yield(Stack stack) {
     c_timer_start(0, stack);
 }
 
-// Signals
-// --------
-
-typedef enum { INITIAL, NOTIFIED } signal_state_t;
-
-typedef struct {
-    uint64_t rc;
-    void* eraser;
-    signal_state_t state;
-    struct Pos value;
-    Stack stack;
-} Signal;
-
-void c_signal_erase(void *envPtr) {
-    // envPtr points to a Signal _after_ the eraser, so let's adjust it to point to the beginning.
-    Signal *signal = (Signal*) (envPtr - offsetof(Signal, state));
-    erasePositive(signal->value);
-    if (signal->stack != NULL) { eraseStack(signal->stack); }
-}
-
-struct Pos c_signal_make() {
-    Signal* f = (Signal*)malloc(sizeof(Signal));
-
-    f->rc = 0;
-    f->eraser = c_signal_erase;
-    f->state = INITIAL;
-    f->value = (struct Pos) { .tag = 0, .obj = NULL, };
-    f->stack = NULL;
-
-    return (struct Pos) { .tag = 0, .obj = f, };
-}
-
-void c_signal_notify(struct Pos signal, struct Pos value, Stack stack) {
-    Signal* f = (Signal*)signal.obj;
-    switch (f->state) {
-        case INITIAL: {
-            f->state = NOTIFIED;
-            f->value = value;
-            f->stack = stack;
-            erasePositive(signal);
-            break;
-        }
-        case NOTIFIED: {
-            struct Pos other_value = f->value;
-            f->value = (struct Pos) { .tag = 0, .obj = NULL, };
-            Stack other_stack = f->stack;
-            f->stack = NULL;
-            erasePositive(signal);
-            resume_Pos(other_stack, value);
-            resume_Pos(stack, other_value);
-            break;
-        }
-    }
-}
-
 // Subprocesses
 // ------------
 

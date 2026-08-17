@@ -974,12 +974,12 @@ def tails[A](list: List[A]): Unit / emit[List[A]] =
     case Cons(head, tail) => do emit(list); tails(tail)
   }
 
-/// Connects `list` as a producer to a given pull stream `reader` acting as a consumer.
-def feed[T, R](list: List[T]) { reader: () => R / read[T] }: R = {
+/// Connects `list` as a producer to a given pull stream `driver` acting as a consumer.
+def feed[T, R](list: List[T]) { driver: () => R / next[T] }: R = {
   var l = list
   try {
-    reader()
-  } with read[T] {
+    driver()
+  } with next[T] {
     resume {
       l match {
         case Nil() => do stop()

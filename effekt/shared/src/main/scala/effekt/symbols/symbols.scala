@@ -5,7 +5,7 @@ import effekt.source.{Def, DefDef, FeatureFlag, FunDef, ModuleDecl, NoSource, Re
 import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
-import effekt.util.messages.ErrorReporter
+import effekt.util.messages.{ErrorReporter, EffektMessages}
 
 /**
  * The symbol table contains things that can be pointed to:
@@ -110,7 +110,7 @@ case class Module(
 sealed trait RefBinder extends BlockSymbol
 
 sealed trait Param extends TermSymbol
-case class ValueParam(name: Name, tpe: Option[ValueType], decl: source.Tree) extends Param, ValueSymbol
+case class ValueParam(name: Name, tpe: Option[ValueType], isImplicit: Boolean, decl: source.Tree) extends Param, ValueSymbol
 
 
 sealed trait TrackedParam extends Param, BlockSymbol {
@@ -118,7 +118,7 @@ sealed trait TrackedParam extends Param, BlockSymbol {
   val capture: Capture
 }
 object TrackedParam {
-  case class BlockParam(name: Name, tpe: Option[BlockType], capture: Capture, decl: source.Tree) extends TrackedParam
+  case class BlockParam(name: Name, tpe: Option[BlockType], capture: Capture, isImplicit: Boolean, decl: source.Tree) extends TrackedParam
   case class ExternResource(name: Name, tpe: BlockType, capture: Capture, decl: source.Tree) extends TrackedParam
 }
 export TrackedParam.*
@@ -156,6 +156,7 @@ trait Callable extends BlockSymbol {
       //   in the future namer needs to annotate the function with the capture parameters it introduced.
       capt = CanonicalOrdering(effects.toList).map { tpe => CaptureParam(tpe.name) }
     } yield toType(ret, effects, capt)
+
 }
 
 case class UserFunction(
@@ -208,7 +209,7 @@ export Binder.*
  *
  * Refined by typer.
  */
-case class CallTarget(symbols: List[Set[BlockSymbol]]) extends BlockSymbol {
+case class CallTarget(symbols: List[Set[BlockSymbol]], scope: Option[scopes.Scope]) extends BlockSymbol {
   val name = NoName
   val decl = NoSource
 }
@@ -304,7 +305,7 @@ case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Fi
 // TODO maybe split into Field (the symbol) and Selector (the synthetic function)
 case class Field(name: Name, param: ValueParam, constructor: Constructor, decl: source.Tree) extends Callable {
   val tparams: List[TypeParam] = constructor.tparams
-  val vparams = List(ValueParam(constructor.name, Some(constructor.appliedDatatype), decl = NoSource))
+  val vparams = List(ValueParam(constructor.name, Some(constructor.appliedDatatype), isImplicit = false, decl = NoSource))
   val bparams = List.empty[BlockParam]
 
   val returnType = param.tpe.get
@@ -439,7 +440,7 @@ case class ExternFunction(
   result: ValueType,
   effects: Effects,
   capture: CaptureSet,
-  bodies: List[source.ExternBody],
+  bodies: List[source.ExternBody[source.Term, source.Stmt]],
   decl: source.Tree
 ) extends Callable {
   def annotatedCaptures = Some(capture)

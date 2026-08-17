@@ -3,6 +3,7 @@ package effekt
 import org.rogach.scallop.exceptions.ScallopException
 
 object Main {
+
   /**
    * Main entry point for the Effekt compiler.
    *

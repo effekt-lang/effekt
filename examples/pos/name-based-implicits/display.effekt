@@ -1,0 +1,35 @@
+// from Section 1 of Syntactic Implicit Parameters with Static Overloading
+
+def digit::display(x: Int): Char = {
+  if (x < 10) (x + '0'.toInt).toChar
+  else (x - 10 + 'A'.toInt).toChar
+}
+
+def int::display(x: Int, ?base: Int): String = {
+  if (x < base) digit::display(x).toString()
+  else display(x / base, base) ++ digit::display(x.mod(base)).toString
+}
+
+def int::display(x: Int): String = display(x, 10)
+
+def list::display[A](xs: List[A]) { ?display: A => String }: String =
+  xs match {
+    case Nil() => "[]"
+    case Cons(x, xs) => display(x) ++ " :: " ++ display(xs) {display}
+  }
+def string::display(s: String): String = s
+
+def pair::display[A, B](p: (A, B)) { ?left::display: A => String } { ?right::display: B => String }: String = {
+  val (left, right) = p
+  return "(" ++ left::display(left) ++ ", " ++ right::display(right) ++ ")"
+}
+
+def printString(s: String): Unit = println(s)
+
+def main() = {
+  printString(display(12345, 10))
+
+  printString(display([[1], [2]]))
+
+  printString(display(([1], ["hello", "world"])))
+}

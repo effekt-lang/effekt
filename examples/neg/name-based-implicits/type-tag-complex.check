@@ -1,0 +1,6 @@
+[error] examples/neg/name-based-implicits/type-tag-complex.effekt:15:95: Ambiguous overload.
+There are multiple overloads, which all would type check:
+- typeTag: () => TypeTag[F]
+- typeTag: () => TypeTag[S]
+def typeTag[F,S]{ ?typeTag: => TypeTag[F] }{ ?typeTag: => TypeTag[S] }: TypeTag[(F,S)] = Pair(typeTag(), typeTag())
+                                                                                              ^^^^^^^

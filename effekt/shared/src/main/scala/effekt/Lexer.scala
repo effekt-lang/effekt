@@ -130,6 +130,7 @@ enum TokenKind {
   case `...`
   case `^^`
   case `^`
+  case `?`
 
   // keywords
   case `let`
@@ -444,7 +445,9 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('<', '<') => advance2With(TokenKind.`<<`)
       case ('<', '=') => advance2With(TokenKind.`<=`)
       case ('<', '>') => advance2With(TokenKind.`<>`)
-      case ('<', '{') => advance2With(TokenKind.`<{`)
+      case ('<', '{') =>
+        depthTracker.braces += 1
+        advance2With(TokenKind.`<{`)
       case ('<', '~') => advance2With(TokenKind.`<~`)
       case ('<',   _) => advanceWith(TokenKind.`<`)
 
@@ -470,8 +473,9 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('-', '=')            => advance2With(TokenKind.`-=`)
       case ('-', _)              => advanceWith(TokenKind.`-`)
 
-      case ('*', '=') => advanceWith(TokenKind.`*=`)
+      case ('*', '=') => advance2With(TokenKind.`*=`)
       case ('*', _)   => advanceWith(TokenKind.`*`)
+      case ('?', _)   => advanceWith(TokenKind.`?`)
 
       case ('$', '{') =>
         interpolationDepths.push(depthTracker.braces + 1)
@@ -479,16 +483,11 @@ class Lexer(source: Source) extends Iterator[Token] {
         advance2With(TokenKind.`${`)
       case ('$', _) =>
         advanceWith(TokenKind.Error(LexerError.UnknownChar('$')))
-
-      case ('}', '>') => advance2With(TokenKind.`}>`)
       case ('}', _) if isAtInterpolationBoundary =>
         interpolationDepths.pop()
         depthTracker.braces -= 1
         resumeStringNext = true // remember to resume with a string next!
         advanceWith(TokenKind.`}$`)
-      case ('}', _) =>
-        depthTracker.braces -= 1
-        advanceWith(TokenKind.`}`)
 
       // Single-character tokens
       case (';', _) => advanceWith(TokenKind.`;`)
@@ -496,6 +495,12 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('{', _) =>
         depthTracker.braces += 1
         advanceWith(TokenKind.`{`)
+      case ('}', '>') =>
+        depthTracker.braces -= 1
+        advance2With(TokenKind.`}>`)
+      case ('}', _) =>
+        depthTracker.braces -= 1
+        advanceWith(TokenKind.`}`)
       case ('(', _) =>
         depthTracker.parens += 1
         advanceWith(TokenKind.`(`)
@@ -564,7 +569,7 @@ class Lexer(source: Source) extends Iterator[Token] {
 
     if hexString.length > 2 then
       return TokenKind.Error(LexerError.InvalidByteFormat)
-    
+
     try {
       val byte = java.lang.Integer.parseInt(hexString, 16)
       assert(byte >= 0 && byte <= 255)
@@ -645,6 +650,8 @@ class Lexer(source: Source) extends Iterator[Token] {
         // newlines
         case ('\n', _) if !delimiter.isMultiline =>
           return close(unterminated = true)
+        case ('\r', '\n') if !delimiter.isMultiline =>
+          return close(unterminated = true)
 
         // "normal" characters of a string
         case (_, _) => contents.addOne(advance())
@@ -682,7 +689,7 @@ class Lexer(source: Source) extends Iterator[Token] {
 
   private def singlelineComment(): TokenKind =
     val isDocComment = currentChar == '/'
-    advanceWhile { (curr, _) => curr != '\n' }
+    advanceWhile { (curr, _) => curr != '\n' && curr != '\r' }
 
     if isDocComment then
       TokenKind.DocComment(getCurrentSlice(skipAfterStart = 3)) // Remove '///'
@@ -706,7 +713,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       TokenKind.Comment(comment)
 
   private def shebang(): TokenKind =
-    advanceWhile { (curr, _) => curr != '\n' }
+    advanceWhile { (curr, _) => curr != '\n' && curr != '\r' }
     val command = getCurrentSlice(skipAfterStart = 2) // Remove `#!`
     TokenKind.Shebang(command)
 }

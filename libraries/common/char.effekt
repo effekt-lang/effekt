@@ -97,13 +97,11 @@ extern def toInt(ch: Char) at {}: Int =
   js "${ch}"
   chez "${ch}"
   llvm "ret %Int ${ch}"
-  vm "string::toInt(Char)"
 
 extern def toChar(codepoint: Int) at {}: Char =
   js "${codepoint}"
   chez "${codepoint}"
   llvm "ret %Int ${codepoint}"
-  vm "string::toChar(Int)"
 
 
 extern def infixLt(x: Char, y: Char) at {}: Bool =
@@ -115,7 +113,6 @@ extern def infixLt(x: Char, y: Char) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "string::infixLt(Char, Char)"
 
 extern def infixLte(x: Char, y: Char) at {}: Bool =
   js "(${x} <= ${y})"
@@ -126,7 +123,6 @@ extern def infixLte(x: Char, y: Char) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "string::infixLte(Char, Char)"
 
 extern def infixGt(x: Char, y: Char) at {}: Bool =
   js "(${x} > ${y})"
@@ -137,7 +133,6 @@ extern def infixGt(x: Char, y: Char) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "string::infixGt(Char, Char)"
 
 extern def infixGte(x: Char, y: Char) at {}: Bool =
   js "(${x} >= ${y})"
@@ -148,7 +143,6 @@ extern def infixGte(x: Char, y: Char) at {}: Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
-  vm "string::infixGte(Char, Char)"
 
 
 /**
@@ -175,24 +169,24 @@ extern def charWidth(c: Char) at {}: Int =
   js "(${c} > 0xffff) ? 2 : 1"
 
 
-def decodeChar(): Char / {read[Byte], stop} = {
-  val b = do read().toInt
+def decodeChar(): Char / {next[Byte], stop} = {
+  val b = do next().toInt
   if (b < 128) {
     b.toChar
   } else if (b < 224) {
     val part1 = bitwiseShl(bitwiseAnd(b, 31), 6)
-    val part2 = bitwiseAnd(do read().toInt, 63)
+    val part2 = bitwiseAnd(do next().toInt, 63)
     bitwiseOr(part1, part2).toChar
   } else if (b < 240) {
     val part1 = bitwiseShl(bitwiseAnd(b, 15), 12)
-    val part2 = bitwiseShl(bitwiseAnd(do read().toInt, 63), 6)
-    val part3 = bitwiseAnd(do read().toInt, 63)
+    val part2 = bitwiseShl(bitwiseAnd(do next().toInt, 63), 6)
+    val part3 = bitwiseAnd(do next().toInt, 63)
     bitwiseOr(bitwiseOr(part1, part2), part3).toChar
   } else {
     val part1 = bitwiseShl(bitwiseAnd(b, 7), 18)
-    val part2 = bitwiseShl(bitwiseAnd(do read().toInt, 63), 12)
-    val part3 = bitwiseShl(bitwiseAnd(do read().toInt, 63), 6)
-    val part4 = bitwiseAnd(do read().toInt, 63)
+    val part2 = bitwiseShl(bitwiseAnd(do next().toInt, 63), 12)
+    val part3 = bitwiseShl(bitwiseAnd(do next().toInt, 63), 6)
+    val part4 = bitwiseAnd(do next().toInt, 63)
     bitwiseOr(bitwiseOr(bitwiseOr(part1, part2), part3), part4).toChar
   }
 }
@@ -216,10 +210,10 @@ def encodeChar(char: Char): Unit / emit[Byte] = {
   }
 }
 
-def decodeUTF8[R] { reader: () => R / read[Char] }: R / read[Byte] =
+def decodeUTF8[R] { reader: () => R / next[Char] }: R / next[Byte] =
   try {
     reader()
-  } with read[Char] {
+  } with next[Char] {
     resume { decodeChar() }
   }
 

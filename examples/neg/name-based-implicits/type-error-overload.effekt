@@ -1,0 +1,10 @@
+def foo(): Bool = false
+def foo(): Double = 0.0
+
+def baz{ ?foo: => Int }: String = "1"
+def baz{ ?foo: => List[Bool] }: String = "2"
+
+def main() = {
+  val y: String = baz()
+  println(y)
+}

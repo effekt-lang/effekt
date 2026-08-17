@@ -132,3 +132,30 @@ abstract class Context
  * Helper method to find the currently implicit context
  */
 def Context(using C: Context): C.type = C
+
+
+/**
+ * Returns Left(Messages) if there are any errors
+ *
+ * In the case of nested calls, currently only the errors of the innermost failing call
+ * are reported
+ */
+def Try[T](block: => T)(using C: Context): Either[EffektMessages, T] = {
+  import kiama.util.Severities.Error
+
+  val (msgs, optRes) = Context withMessages {
+    try {
+      Some(block)
+    } catch {
+      case util.messages.FatalPhaseError(msg) =>
+        C.report(msg)
+        None
+    }
+  }
+
+  if (msgs.exists { m => m.severity == Error } || optRes.isEmpty) {
+    Left(msgs)
+  } else {
+    Right(optRes.get)
+  }
+}

@@ -7,14 +7,16 @@ package namer
 import effekt.context.{Annotations, Context, ContextOps}
 import effekt.context.assertions.*
 import effekt.typer.Substitutions
-import effekt.source.{Def, Id, IdDef, IdRef, Many, MatchGuard, ModuleDecl, Term, Tree, sourceOf}
+import effekt.source.{Def, Id, IdDef, IdRef, Many, MatchGuard, ModuleDecl, Term, Tree, sourceOf, GenerateImplicitArgs}
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
 import effekt.symbols.scopes.*
+import effekt.context.Try
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.DynamicVariable
+import effekt.util.RequirementLevel
 
 /**
  * The output of this phase: a mapping from source identifier to symbol
@@ -214,14 +216,14 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, sym)
 
-    case d @source.ExternType(id, tparams, doc, span) =>
+    case d @source.ExternType(id, tparams, body, doc, span) =>
       Context.requireToplevel("Extern type")
       Context.define(id, Context scoped {
         val tps = tparams map resolve
         ExternType(Context.nameFor(id), tps.unspan, d)
       })
 
-    case decl @ source.ExternInterface(id, tparams, doc, span) =>
+    case decl @ source.ExternInterface(id, tparams, bodies, doc, span) =>
       Context.requireToplevel("Extern interface")
       Context.define(id, Context scoped {
         val tps = tparams map resolve
@@ -242,7 +244,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           resolve(ret)
         }
 
-        ExternFunction(name, tps.unspan, vps.unspan, bps.unspan, tpe, eff, capt, bodies, d)
+        ExternFunction(name, tps.unspan, vps.unspan, bps.unspan, tpe, eff, capt, bodies.unspan, d)
       })
 
     case d @ source.ExternResource(id, tpe, doc, span) =>
@@ -271,6 +273,10 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolve(m: source.ModuleDecl)(using Context): Unit = Context.focusing(m) {
     case source.ModuleDecl(path, includes, definitions, doc, span) =>
       definitions foreach { preresolve }
+
+      // Allow `<module>::foo()` to stand for `foo()` by importing current module `m` as `<module>`
+      Context.importSelfAs(path.split("/").toList)
+
       definitions.foreach { resolve }
   }
 
@@ -337,6 +343,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // FunDef and InterfaceDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, bparams, captures, ret, body, doc, span) =>
+      checkImplicitParams(vparams.unspan); checkImplicitParams(bparams.unspan)
       val sym = f.symbol
       Context.scopedWithName(id.name) {
         sym.tparams.foreach { p => Context.bind(p) }
@@ -347,6 +354,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case f @ source.ExternDef(id, tparams, vparams, bparams, captures, ret, bodies, doc, span) =>
+      checkImplicitParams(vparams.unspan); checkImplicitParams(bparams.unspan)
       val sym = f.symbol
       Context.scopedWithName(id.name) {
         sym.tparams.foreach { p => Context.bind(p) }
@@ -364,6 +372,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val interface = Context.symbolOf(interfaceId).asInterface
       interface.operations = operations.map {
         case op @ source.Operation(id, tparams, vparams, bparams, ret, doc, span) => Context.at(op) {
+          checkImplicitParams(vparams); checkImplicitParams(bparams)
           val name = Context.nameFor(id)
 
           val opSym = Context.scopedWithName(id.name) {
@@ -435,14 +444,35 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.TypeDef(id, tparams, tpe, doc, span)     => ()
     case source.EffectDef(id, tparams, effs, doc, span)  => ()
-    case source.ExternType(id, tparams, doc, span)       => ()
-    case source.ExternInterface(id, tparams, doc, span)  => ()
+    case source.ExternType(id, tparams, body, doc, span) => ()
+    case source.ExternInterface(id, tparams, bodies, doc, span) => ()
     case source.ExternResource(id, tpe, doc, span)       => ()
     case source.ExternInclude(ff, path, _, _, doc, span) => ()
   }
 
   def resolve(a: source.ValueArg)(using Context): Unit = Context.focusing(a) { _ =>
     resolve(a.value)
+  }
+
+  /**
+   * Checks that there are no implicit parameters if there shouldn't be (or there are if there must be).
+   * Also checks that there are no non-implicit parameters after implicit ones.
+   */
+  @tailrec
+  def checkImplicitParams(l: List[source.Param], implicitsAllowed: RequirementLevel = RequirementLevel.Optional)(using Context): Unit = (l, implicitsAllowed) match {
+    case ((p@(source.ValueParam(_, _, true, _) | source.BlockParam(_, _, true, _))) :: tl, RequirementLevel.Forbidden) =>
+      Context.at(p) {
+        Context.error(pretty"Implicit parameter ${l.head.span.text.getOrElse(l.head.id.name)} can never be passed implicitly to here.")
+      }
+    case ((p@(source.ValueParam(_, _, false, _) | source.BlockParam(_, _, false, _))) :: tl, RequirementLevel.Required) =>
+      Context.at(p) {
+        Context.error(pretty"Parameter ${l.head.span.text.getOrElse(l.head.id.name)} needs to be implicit so earlier implicit parameters can be passed implicitly.")
+      }
+    case ((source.ValueParam(_, _, true, _) | source.BlockParam(_, _, true, _)) :: tl, RequirementLevel.Optional) =>
+      checkImplicitParams(tl, RequirementLevel.Required) // require all arguments after an implicit one to be implicit
+    case (_ :: tl, _) =>
+      checkImplicitParams(tl, implicitsAllowed)
+    case (Nil, _) => ()
   }
 
   def resolve(t: source.Term)(using Context): Unit = Context.focusing(t) {
@@ -491,7 +521,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case tree @ source.Region(name, body, _) =>
       val regionName = Name.local(name.name)
-      val reg = BlockParam(regionName, Some(builtins.TRegion), CaptureParam(regionName), tree)
+      val reg = BlockParam(regionName, Some(builtins.TRegion), CaptureParam(regionName), isImplicit = false, tree)
       Context.define(name, reg)
       Context scoped {
         Context.bindBlock(reg)
@@ -499,6 +529,8 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case f @ source.BlockLiteral(tparams, vparams, bparams, stmt, _) =>
+      checkImplicitParams(vparams, RequirementLevel.Forbidden)
+      checkImplicitParams(bparams, RequirementLevel.Forbidden)
       Context scoped {
         val tps = tparams map resolve
         val vps = vparams map resolve
@@ -666,19 +698,19 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Used for fields where "please wrap this in braces" is not good advice to be told by [[resolveValueType]].
    */
   def resolveNonfunctionValueParam(p: source.ValueParam)(using Context): ValueParam = {
-    val sym = ValueParam(Name.local(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = false)), decl = p)
+    val sym = ValueParam(Name(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = false)), p.isImplicit, decl = p)
     Context.assignSymbol(p.id, sym)
     sym
   }
 
   def resolve(p: source.ValueParam)(using Context): ValueParam = {
-    val sym = ValueParam(Name.local(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = true)), decl = p)
+    val sym = ValueParam(Name(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = true)), p.isImplicit, decl = p)
     Context.assignSymbol(p.id, sym)
     sym
   }
   def resolve(p: source.BlockParam)(using Context): BlockParam = {
-    val name = Name.local(p.id)
-    val sym: BlockParam = BlockParam(name, p.tpe.map { tpe => resolveBlockType(tpe, isParam = true) }, CaptureParam(name), p)
+    val name = Name(p.id)
+    val sym: BlockParam = BlockParam(name, p.tpe.map { tpe => resolveBlockType(tpe, isParam = true) }, CaptureParam(name), p.isImplicit, p)
     Context.assignSymbol(p.id, sym)
     sym
   }
@@ -719,7 +751,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.IgnorePattern(_)     => Nil
     case source.LiteralPattern(lit, _) => Nil
     case source.AnyPattern(id, _) =>
-      val p = ValueParam(Name.local(id), None, decl = id)
+      val p = ValueParam(Name(id), None, isImplicit = false, decl = id)
       Context.assignSymbol(id, p)
       List(p)
     case source.TagPattern(id, patterns, _) =>
@@ -839,7 +871,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       var cps: List[Capture] = Nil
       val bps = bparams.map {
         case (id, tpe) =>
-          val name = id.map(Name.local).getOrElse(NoName)
+          val name = id.map(Name.apply).getOrElse(NoName)
           val cap = CaptureParam(name)
           cps = cps :+ cap
           resolveBlockType(tpe)
@@ -907,7 +939,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Resolves type variables, term vars are resolved as part of resolve(tree: Tree)
    */
   def resolve(id: Id)(using Context): TypeParam = Context.at(id) {
-    val sym: TypeParam = TypeParam(Name.local(id))
+    val sym: TypeParam = TypeParam(Name(id))
     Context.define(id, sym)
     sym
   }
@@ -959,7 +991,6 @@ object Namer extends Phase[Parsed, NameResolved] {
  * Environment Utils -- we use a mutable cell to express adding definitions more easily
  */
 trait NamerOps extends ContextOps { Context: Context =>
-
   /**
    * The state of the namer phase
    */
@@ -981,9 +1012,11 @@ trait NamerOps extends ContextOps { Context: Context =>
     result
   }
 
-  private[namer] def nameFor(id: IdDef): Name = scope.path match {
-    case Some(path) => QualifiedName(path, id.name)
-    case None => LocalName(id.name)
+  private[namer] def nameFor(id: IdDef): Name = {
+    val fullPath = scope.path.toList.flatten ++ id.path
+    if fullPath.isEmpty
+      then LocalName(id.name)
+      else QualifiedName(fullPath, id.name)
   }
 
   private[namer] def requireToplevel(kind: String): Unit =
@@ -998,23 +1031,37 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   // Name Binding and Resolution
   // ===========================
+  inline private[namer] def defineInPaths(path: List[String], inline baseCase: => Unit): Unit = {
+    def defineInPath(p: List[String]): Unit = p match {
+      case Nil => baseCase
+      case ns :: rest => namespace(ns) { defineInPath(rest) }
+    }
+
+    // define in all suffixes
+    path.tails.foreach { suffix =>
+      defineInPath(suffix)
+    }
+  }
+
   private[namer] def define(id: Id, s: TermSymbol): Unit = {
     assignSymbol(id, s)
-    scope.define(id.name, s)
+    defineInPaths(id.path, scope.define(id.name, s))
   }
 
   private[namer] def define(id: Id, s: TypeSymbol): Unit = {
     assignSymbol(id, s)
-    scope.define(id.name, s)
+    defineInPaths(id.path, scope.define(id.name, s))
   }
 
   private[namer] def bind(s: Capture): Unit = bind(s.name.name, s)
 
   private[namer] def bind(name: String, s: Capture): Unit = scope.define(name, s)
 
-  private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.name, s)
+  private[namer] def bind(s: TermSymbol): Unit =
+    defineInPaths(s.name.path, scope.define(s.name.name, s))
 
-  private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.name, s)
+  private[namer] def bind(s: TypeSymbol): Unit =
+    defineInPaths(s.name.path, scope.define(s.name.name, s))
 
   private[namer] def bindParams(params: List[Param]) =
     params.foreach { p => bind(p) }
@@ -1040,6 +1087,10 @@ trait NamerOps extends ContextOps { Context: Context =>
   private[namer] def bindBlock(name: String, p: TrackedParam) = {
     scope.define(name, p)
     scope.define(name, p.capture)
+  }
+
+  private[namer] def importSelfAs(path: List[String]): Unit = {
+    scope.importAs(scope.exports, path)
   }
 
   /**
@@ -1081,7 +1132,11 @@ trait NamerOps extends ContextOps { Context: Context =>
 
     val syms2 = if (syms.isEmpty) scope.lookupFunction(id.path, id.name) else syms
 
-    if (syms2.nonEmpty) { assignSymbol(id, CallTarget(syms2.asInstanceOf)); true } else { false }
+    if (syms2.nonEmpty) {
+      val syms3 = syms2.asInstanceOf[List[Set[BlockSymbol]]]
+      assignSymbol(id, CallTarget(syms3, Some(scope.scope)))
+      true
+    } else { false }
   }
 
   private[namer] def resolveOverloadedFunction(id: IdRef): Boolean = at(id) {
@@ -1092,7 +1147,11 @@ trait NamerOps extends ContextOps { Context: Context =>
     // lookup first block param and do not collect multiple since we do not (yet?) permit overloading on block parameters
     val syms3 = if (syms2.isEmpty) List(scope.lookupFirstBlockParam(id.path, id.name)) else syms2
 
-    if (syms3.nonEmpty) { assignSymbol(id, CallTarget(syms3.asInstanceOf)); true } else { false }
+    if (syms3.nonEmpty) {
+      val syms4 = syms3.asInstanceOf[List[Set[BlockSymbol]]]
+      assignSymbol(id, CallTarget(syms4, Some(scope.scope)))
+      true
+    } else { false }
   }
 
   /**
@@ -1116,7 +1175,7 @@ trait NamerOps extends ContextOps { Context: Context =>
           // Always abort with the generic message
           abort(pretty"Cannot find a function named `${id}`.")
         }
-        assignSymbol(id, CallTarget(blocks))
+        assignSymbol(id, CallTarget(blocks, Some(scope.scope)))
     }
   }
 
@@ -1170,7 +1229,8 @@ trait NamerOps extends ContextOps { Context: Context =>
       abort(pretty"Cannot resolve field access ${id}")
     }
 
-    assignSymbol(id, CallTarget(syms.asInstanceOf))
+    val bsyms = syms.asInstanceOf[List[Set[BlockSymbol]]]
+    assignSymbol(id, CallTarget(bsyms, Some(scope.scope)))
   }
 
   /**
@@ -1184,7 +1244,8 @@ trait NamerOps extends ContextOps { Context: Context =>
       abort(pretty"Cannot resolve effect operation ${id}")
     }
 
-    assignSymbol(id, CallTarget(syms.asInstanceOf))
+    val bsyms = syms.asInstanceOf[List[Set[BlockSymbol]]]
+    assignSymbol(id, CallTarget(bsyms, Some(scope.scope)))
   }
 
   /**

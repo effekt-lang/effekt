@@ -2,7 +2,6 @@ import examples/benchmarks/runner
 
 import io/error
 import io/filesystem
-import stream
 import scanner
 
 // dyck_one.txt
@@ -26,7 +25,7 @@ type Tree {
   Node(children: List[Tree])
 }
 
-def readTree(): Tree / { Scan[Byte], stop } = {
+def readTree(): Tree / { peek[Byte], next[Byte], stop } = {
   readIf[Byte] { b => b == 0x28 }
   val children = list::collect[Tree] { many { readTree() } }
   skipIf[Byte] { b => b == 0x29 }
@@ -52,7 +51,7 @@ def run(n: Int): Int = {
   }
 
   with readFile(filename)
-  with returning::scanner[Byte, Int]
+  with returning::peeking[Byte, Int]
   with crash("Expected tree.")
   must { readTree().size }
 }
