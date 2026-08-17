@@ -1,0 +1,11 @@
+module examples/pos/list/find
+
+import list
+
+def even(x: Int): Bool = x.mod(2) == 0
+
+def main() = {
+  println([].slow::find{even})
+  println([1, 3, 6].slow::find{even})
+  println([2, 4, 6].slow::find{even})
+}
