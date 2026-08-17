@@ -35,9 +35,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
           println(id.name.name)
           //println(effekt.util.PrettyPrinter.format(Toplevel.Def(id, block)).layout)
           val outputFunId = functionLinks(id)
-          if (id.name.name != "main") {
-            transformedFunctions = transformedFunctions.appended(trmc(id, block, outputFunId, functionLinks, DC))
-          }
+          transformedFunctions = transformedFunctions.appended(trmc(id, block, outputFunId, functionLinks, DC))
           Toplevel.Def(id, block)
       }
 
@@ -58,16 +56,43 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
         }
       }
     }
+    object rewriteMain extends Tree.Rewrite {
+      override def toplevel: PartialFunction[Toplevel, Toplevel] = {
+        case Toplevel.Def(id, block) => block match {
+          case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Toplevel.Def(id, block) //TODO: do BlockVar, Unbox and New actually happen?
+          case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+            val calledContextTpe = ValueType.Data(builtins.ContextSymbol, List(body.tpe, body.tpe)) //TODO: parameters, if unequal
+            if(id.name.name == "main"){
+              functionLinks.get(id) match {
+                case Some(transformed) =>
+                  Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, Stmt.App(
+                    Block.BlockVar(
+                      transformed,
+                      Function(tparams, cparams, vparams.map(p => p.tpe).appended(calledContextTpe), bparams.map(p => p.tpe), body.tpe), Set()),//TODO:capt? 
+                    List(),
+                    List(PureApp(blockVarFromExternDef("ctx_emptyContext", DC),List(body.tpe),Nil)),
+                    List())))
+                case None => Context.panic("main should have been TRMC-transformed")
+              }
+            }else{
+              Toplevel.Def(id, block)
+            } 
+          case Block.Unbox(pure) => Toplevel.Def(id, block)
+          case Block.New(impl) => Toplevel.Def(id, block)
+        }
+      }
+    }
 
     val transformed = Context.timed(phaseName, source.name) {
       transform.rewrite(modDec)
-      val m = rewriteOtherCalls.rewrite(modDec)
-      m match {
+      val callsToTRMC = rewriteOtherCalls.rewrite(modDec)
+      val mainCallsMainTRMC = rewriteMain.rewrite(callsToTRMC)
+      mainCallsMainTRMC match {
         case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
           ModuleDecl(path, includes, declarations, externs, definitions ++ transformedFunctions, exports)
       }
     }
-
+    println(effekt.util.PrettyPrinter.format(transformed).layout)
     Some(CoreTransformed(source, tree, mod, transformed))
   }
   
@@ -88,13 +113,13 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
 //          val ctxDecl: Declaration = DC.declarations.find(_.id.name.name == "HoleContext").getOrElse { //TODO: refactor duplicate code
 //            Context.panic(s"No declaration found for HoleContext.")
 //          }
-          val outerContextTpe = ValueType.Data(builtins.ContextSymbol, List(stmt.tpe, stmt.tpe)) //TODO: parameters, if unequal
+          val calledContextTpe = ValueType.Data(builtins.ContextSymbol, List(stmt.tpe, stmt.tpe)) //TODO: parameters, if unequal
           annotatedTpe match {
             case Function(tparams, cparams, vparams, bparams, result) =>
               Stmt.App(
                 Block.BlockVar(
                   outputfun.get,
-                  Function(tparams, cparams, vparams.appended(outerContextTpe), bparams, result), annotatedCapt),//TODO:capt? 
+                  Function(tparams, cparams, vparams.appended(calledContextTpe), bparams, result), annotatedCapt),//TODO:capt? 
                 targs,
                 vargs.appended(PureApp(blockVarFromExternDef("ctx_emptyContext", DC), List(stmt.tpe),Nil)),
                 bargs)
@@ -214,12 +239,13 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
             val (init, rest) = split(context, DC)
             annotatedTpe match {
               case Function(tparams, cparams, vparams, bparams, result) =>
+                val calledContextTpe = ValueType.Data(builtins.ContextSymbol, List(stmt.tpe, stmt.tpe)) //TODO: parameters, if unequal
                 val inner = Stmt.App(
                   Block.BlockVar(
                     transformed,
-                    Function(tparams, cparams, vparams.appended(outerContextTpe), bparams, result), annotatedCapt),//TODO:capt? 
+                    Function(tparams, cparams, vparams.appended(calledContextTpe), bparams, result), annotatedCapt),//TODO:capt? 
                   targs,
-                  vargs.appended(innerReify(init, outerContextTpe, stmt.tpe, DC)), //is input.tpe always the correct resType?
+                  vargs.appended(innerReify(init, outerContextTpe, stmt.tpe, DC)), //is stmt.tpe always the correct resType?
                   bargs)
                 rest match {
                   case Some(rest) => reify(inner, rest,  outerContextTpe, functionLinks, DC)

@@ -37,7 +37,7 @@ readList("./examples/thesis_trmc/longlist.txt")
   Cons(head: A, tail: testList[A])
   }*/
 def main() = {
-  val res = Cons(1,Cons(3,Cons(7,Cons(4,Nil())))).map{plusten};
+  val res = readList("./examples/thesis_trmc/longlist.txt").map{plusten};
   //inspect(res)
   foreach(res){(n) => println(n)}
 }
