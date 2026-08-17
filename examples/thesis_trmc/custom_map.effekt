@@ -18,10 +18,7 @@ def map[A, B](list: List[A]){ f: A => B}: List[B] =
   case Cons(x, xs) => Cons(f(x), map(xs){f})
 }
 
-def countdown(n: Int): Unit = {
-  println(n)
-  countdown(n - 1)
-}
+def plusten(n: Int): Int = n + 10
 
 def readList(file:String): List[Int] = {
   with on[IOError].panic;
@@ -30,12 +27,17 @@ def readList(file:String): List[Int] = {
   val IntList = map(strList){unsafeToInt}
   IntList
 }
+/*
+Cons(1,Cons(3,Cons(7,Cons(4,Nil()))))
+readList("./examples/thesis_trmc/longlist.txt")
+*/
 
 /*type testList[A]{
   Nil()
   Cons(head: A, tail: testList[A])
   }*/
 def main() = {
-  val res = readList("./examples/thesis_trmc/longlist.txt").map{fib};
+  val res = Cons(1,Cons(3,Cons(7,Cons(4,Nil())))).map{plusten};
+  //inspect(res)
   foreach(res){(n) => println(n)}
 }

@@ -31,8 +31,8 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     object transform extends Tree.Rewrite {
       override def toplevel: PartialFunction[Toplevel, Toplevel] = {
         case Toplevel.Def(id, block) =>
-          //println("in Toplevel")
-          //println(id.name.name)
+          println("in Toplevel")
+          println(id.name.name)
           //println(effekt.util.PrettyPrinter.format(Toplevel.Def(id, block)).layout)
           val outputFunId = functionLinks(id)
           if (id.name.name != "main") {
