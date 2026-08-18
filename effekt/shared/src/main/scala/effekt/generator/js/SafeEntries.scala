@@ -341,7 +341,7 @@ object SafeEntries {
         watch(dependency(binding)) { add(Variable(id), eval(binding)) }
         scan(rest, source)
 
-      case call @ cps.Stmt.Call(result, _, cps.Callee.Function(id), arguments, ks, rest) =>
+      case call @ cps.Stmt.Call(results, _, cps.Callee.Function(id), arguments, ks, rest) =>
         val supplied = arguments :+ ks
         val installedResults = mutable.Set.empty[Node]
         watch(Set(Variable(id)) ++ dependencies(supplied)) {
@@ -353,7 +353,7 @@ object SafeEntries {
             propagate(supplied, infos(target).params)
             if installedResults.add(target) then
               watch(List(ReturnValue(target))) {
-                add(Variable(result), values(ReturnValue(target)))
+                results.foreach(r => add(Variable(r), values(ReturnValue(target))))
               }
           }
         }
@@ -414,9 +414,9 @@ object SafeEntries {
           }
         }
 
-      case cps.Stmt.Return(value) =>
-        watch(dependency(value)) {
-          add(ReturnValue(source), eval(value))
+      case cps.Stmt.Return(values) =>
+        watch(dependencies(values)) {
+          values.foreach(v => add(ReturnValue(source), eval(v)))
         }
 
       case cps.Stmt.Run(_, _, _, _, rest) =>
