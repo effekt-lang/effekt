@@ -4,8 +4,9 @@ def main(p0, ks0, k0) {
   } @ ks0, k0
 }
 
-// The continuation returned by shift enters another continuation segment.
-// Calling it therefore crosses the trampoline exactly once.
+// The resumption is unused, so this shift is an abortive transfer. The current
+// translation nevertheless captures and snapshots the segment with SHIFT;
+// calling the handler continuation then crosses the trampoline once.
 /// JAVASCRIPT
 
 function main_0(p_0, ks_0, k_0) {
