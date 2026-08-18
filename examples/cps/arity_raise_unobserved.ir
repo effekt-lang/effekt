@@ -1,0 +1,16 @@
+def ignore(xs, k) {
+  k(0)
+}
+def main(k) {
+  ignore(make Cons(42, make Nil()), k)
+}
+
+// Constructor flow alone does not justify changing a representation.
+/// ARITY_RAISE
+
+def ignore(xs, k) {
+  k(0)
+}
+def main(k) {
+  ignore(make Cons(42, make Nil()), k)
+}
