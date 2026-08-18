@@ -1,0 +1,40 @@
+def use(xs, ys, k) {
+  xs match {
+    case Nil() => k(0)
+    case Cons(x, xs1) => {
+      ys match {
+        case Nil() => k(x)
+        case Cons(y, ys1) => k(y)
+      }
+    }
+  }
+}
+def main(flag, k) {
+  if (flag) {
+    use(make Cons(1, make Nil()), make Nil(), k)
+  } else {
+    use(make Cons(1, make Nil()), make Cons(2, make Nil()), k)
+  }
+}
+
+/// ARITY_SHAPES
+
+use
+  <Cons(_, _), Cons(_, _), ?>
+  <Cons(_, _), Nil(), ?>
+
+/// ARITY_RAISE
+
+def use_0_Cons_1_Cons(xs_0, xs_1, ys_0, ys_1, k) {
+  k(ys_0)
+}
+def use_0_Cons_1_Nil(xs_0, xs_1, k) {
+  k(xs_0)
+}
+def main(flag, k) {
+  if (flag) {
+    use_0_Cons_1_Nil(1, make Nil(), k)
+  } else {
+    use_0_Cons_1_Cons(1, make Nil(), 2, make Nil(), k)
+  }
+}

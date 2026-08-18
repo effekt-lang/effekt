@@ -1,0 +1,25 @@
+def use(xs, ks1, k1) {
+  xs match {
+    case Nil() => k1(0, ks1)
+    case Cons(head, tail) => k1(head, ks1)
+  }
+}
+def main(ks, k) {
+  let result = use!(make Cons(42, make Nil()), ks, return);
+  k(result, ks)
+}
+
+/// ARITY_SHAPES
+
+use
+  <Cons(_, _), ?, ?>
+
+/// ARITY_RAISE
+
+def use_0_Cons(xs_0, xs_1, ks1, k1) {
+  k1(xs_0, ks1)
+}
+def main(ks, k) {
+  let result = use_0_Cons!(42, make Nil(), ks, return);
+  k(result, ks)
+}

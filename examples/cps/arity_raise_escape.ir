@@ -1,0 +1,33 @@
+def use(xs, k) {
+  xs match {
+    case Nil() => k(0)
+    case Cons(head, tail) => k(head)
+  }
+}
+def main(k) {
+  run ignored = println(use);
+  use(make Cons(42, make Nil()), k)
+}
+
+// The known call is specialized, while the value use still requires the
+// original calling convention.
+/// ARITY_SHAPES
+
+use
+  <Cons(_, _), ?>
+
+/// ARITY_RAISE
+
+def use(xs, k) {
+  xs match {
+    case Nil() => k(0)
+    case Cons(head, tail) => k(head)
+  }
+}
+def use_0_Cons(xs_0, xs_1, k) {
+  k(xs_0)
+}
+def main(k) {
+  run ignored = println(use);
+  use_0_Cons(42, make Nil(), k)
+}
