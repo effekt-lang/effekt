@@ -104,7 +104,7 @@ enum Stmt extends Tree {
    *  remainder is its not-yet-reified continuation; `ks` is retained in case
    *  the callee ultimately keeps the CPS calling convention. */
   case Call(
-    id: Id,
+    ids: List[Id],
     returnedKs: Id,
     callee: Callee,
     args: List[Expr],
@@ -113,10 +113,10 @@ enum Stmt extends Tree {
   )
   case App(id: Id, args: List[Expr])
   case Invoke(id: Id, method: Id, args: List[Expr])
-  /** Terminates the current computation with `value`. Under a direct calling
-   *  convention this is an ordinary return; under CPS it completes the
-   *  enclosing trampoline. */
-  case Return(value: Expr)
+  /** Terminates the current computation with `values`. Under a direct calling
+   *  convention this is an ordinary (multi-value) return; under CPS it completes
+   *  the enclosing trampoline. */
+  case Return(values: List[Expr])
   case Run(id: Id, callee: Id, args: List[Expr], purity: Purity, rest: Stmt)
 
   // Local Control Flow
@@ -276,9 +276,9 @@ object substitutions {
       Stmt.Let(id, substitute(binding),
         substitute(rest)(using subst.shadow(id)))
 
-    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
-      Stmt.Call(id, returnedKs, substitute(callee), args.map(substitute), substitute(ks),
-        substitute(rest)(using subst.shadow(List(id, returnedKs))))
+    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
+      Stmt.Call(ids, returnedKs, substitute(callee), args.map(substitute), substitute(ks),
+        substitute(rest)(using subst.shadow(returnedKs :: ids)))
 
     case Stmt.App(id, args) =>
       Stmt.App(substituteAsVar(id), args.map(substitute))
@@ -286,8 +286,8 @@ object substitutions {
     case Stmt.Invoke(id, method, args) =>
       Stmt.Invoke(substituteAsVar(id), method, args.map(substitute))
 
-    case Stmt.Return(value) =>
-      Stmt.Return(substitute(value))
+    case Stmt.Return(values) =>
+      Stmt.Return(values.map(substitute))
 
     case Stmt.Run(id, callee, args, purity, rest) =>
       Stmt.Run(id, substituteAsVar(callee), args.map(substitute), purity,
@@ -420,9 +420,9 @@ object freeVariables {
     case Stmt.Let(id, binding, rest) =>
       binding.free ++ (rest.free - id)
 
-    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
+    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
       free(callee) ++ all(args, _.free) ++ ks.free ++
-        (rest.free -- Set(id, returnedKs))
+        (rest.free -- ids.toSet - returnedKs)
 
     case Stmt.App(id, args) =>
       free(id) ++ all(args, _.free)
@@ -430,7 +430,7 @@ object freeVariables {
     case Stmt.Invoke(id, _, args) =>
       free(id) ++ all(args, _.free)
 
-    case Stmt.Return(value) => value.free
+    case Stmt.Return(values) => all(values, _.free)
 
     case Stmt.Run(id, callee, args, _, rest) =>
       free(callee) ++ all(args, _.free) ++ (rest.free - id)
@@ -532,13 +532,13 @@ object functionUsage {
       rest.uses ++ all(operations, _.uses) + (id -> freeInOperations)
     case Stmt.Let(id, binding, rest) =>
       rest.uses
-    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
+    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
       rest.uses
     case Stmt.App(id, args) =>
       DB.empty
     case Stmt.Invoke(id, method, args) =>
       DB.empty
-    case Stmt.Return(value) =>
+    case Stmt.Return(values) =>
       DB.empty
     case Stmt.Run(id, callee, args, purity, rest) =>
       rest.uses
@@ -651,7 +651,7 @@ object escapeAnalysis {
     // The callee does not escape unless `Toplevel` marks a direct-to-CPS
     // boundary: that boundary invokes the callee through RUN_TOPLEVEL and
     // therefore requires an actual function value.
-    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
+    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
       val boundary = if ks == Expr.Toplevel then Set(callee.value) else Set.empty
       args.flatMap(_.free).toSet ++ ks.free ++ boundary ++ rest.escapes
 
@@ -662,7 +662,7 @@ object escapeAnalysis {
     case Stmt.Invoke(id, method, args) =>
       args.flatMap(_.free).toSet
 
-    case Stmt.Return(value) => value.free
+    case Stmt.Return(values) => values.flatMap(_.free).toSet
 
     // This is the essence of async computation: we need to reify the continuation
     case Stmt.Run(id, callee, args, Purity.Async, rest) =>
@@ -741,10 +741,10 @@ object references {
 
   inline def refs(stmt: Stmt): DB[Int] = stmt match {
     case Stmt.App(id, args) => use(id) ++ all(args, _.refs)
-    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
+    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
       refs(callee) ++ all(args, _.refs) ++ ks.refs ++ rest.refs
     case Stmt.Invoke(id, method, args) => use(id) ++ all(args, _.refs)
-    case Stmt.Return(value) => value.refs
+    case Stmt.Return(values) => all(values, _.refs)
     case Stmt.Alloc(id, init, region, rest) => use(region) ++ init.refs ++ rest.refs
     case Stmt.Dealloc(ref, rest) => use(ref) ++ rest.refs
     case Stmt.Get(ref, id, rest) => use(ref) ++ rest.refs

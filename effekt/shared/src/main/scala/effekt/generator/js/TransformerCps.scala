@@ -19,6 +19,20 @@ object TransformerCps extends Transformer {
   val RESUME = js.Variable(JSName("RESUME"))
   val BOUNDARY_CONTINUATION = JSName("__boundary")
 
+  // The `Return`/`Call` nodes carry a vector of result values so the CPS IR can
+  // express multi-value returns. JavaScript has no native multi-value return,
+  // so materializing a result vector into JS is deferred to the arity-raising
+  // exploitation pass. Until that exists, every vector reaching lowering has
+  // exactly one element; these guards make that invariant explicit.
+  private def onlyResult(ids: List[Id]): Id = ids match {
+    case id :: Nil => id
+    case _ => sys.error(s"JavaScript backend cannot yet lower a multi-value call result: $ids")
+  }
+  private def onlyValue(values: List[cps.Expr]): cps.Expr = values match {
+    case value :: Nil => value
+    case _ => sys.error(s"JavaScript backend cannot yet lower a multi-value return: $values")
+  }
+
   case class SecondClassDef(
     params: List[Id],
     loopified: Boolean,
@@ -589,9 +603,10 @@ object TransformerCps extends Transformer {
       case (param, argument) if !aliases.contains(param) =>
         js.Let(nameDef(param), argument)
     }
-    val resultUsed = call.rest.free.contains(call.id)
+    val resultId = onlyResult(call.ids)
+    val resultUsed = call.rest.free.contains(resultId)
     val result = Option.when(resultUsed) {
-      js.Let(nameDef(call.id), js.Undefined)
+      js.Let(nameDef(resultId), js.Undefined)
     }
     val bodyCtx = ctx.copy(
       insideBody = ctx.insideBody + id,
@@ -600,7 +615,7 @@ object TransformerCps extends Transformer {
       renamedCaptures = ctx.renamedCaptures ++ aliases,
       directParameters = ctx.directParameters ++ parameterArities,
       directBody = Some(id -> join.params),
-      directResult = Some(Option.when(resultUsed)(call.id) -> resultLabel))
+      directResult = Some(Option.when(resultUsed)(resultId) -> resultLabel))
     val bodyStmts = toJS(body)(using bodyCtx).stmts
     val implementation =
       if join.loopified then
@@ -745,7 +760,7 @@ object TransformerCps extends Transformer {
               case cps.Callee.Method(receiver, method) =>
                 js.Member(valueRef(receiver), memberNameRef(method))
             }
-            js.Const(nameDef(result), js.Call(target, arguments)) ::
+            js.Const(nameDef(onlyResult(result)), js.Call(target, arguments)) ::
               toJS(rest).run(k)
           }
       }
@@ -767,7 +782,7 @@ object TransformerCps extends Transformer {
           List(ks, continuation),
           js.Return(js.Call(target,
             args.map(toValueJS) ++ List(js.Variable(ks), js.Variable(continuation)))))
-        js.Const(nameDef(result), js.Call(RUN_TOPLEVEL, List(computation))) ::
+        js.Const(nameDef(onlyResult(result)), js.Call(RUN_TOPLEVEL, List(computation))) ::
           toJS(rest).run(k)
       }
 
@@ -775,12 +790,12 @@ object TransformerCps extends Transformer {
     // The explicit remainder is reified exactly once, here at the boundary.
     case cps.Stmt.Call(result, returnedKs, callee, args, ks, rest) =>
       Binding { k =>
-        val (backups, renamings) = backupMutableParams(rest, Set(result, returnedKs))
+        val (backups, renamings) = backupMutableParams(rest, Set(onlyResult(result), returnedKs))
         val bodyCtx = functionBodyContext.copy(
           renamedCaptures = ctx.renamedCaptures ++ renamings)
         val continuationBody = toJS(rest)(using bodyCtx).stmts
         val continuation = js.Lambda(
-          List(nameDef(result), nameDef(returnedKs)),
+          List(nameDef(onlyResult(result)), nameDef(returnedKs)),
           js.Block(None, continuationBody))
         val loweredArgs =
           args.map(toValueJS) ++ List(toValueJS(ks), continuation)
@@ -874,8 +889,8 @@ object TransformerCps extends Transformer {
       val call = MethodCall(valueRef(id), memberNameRef(method), args.map(toValueJS): _*)
       pure(js.Return(call) :: Nil)
 
-    case cps.Stmt.Return(value) =>
-      val result = toValueJS(value)
+    case cps.Stmt.Return(values) =>
+      val result = toValueJS(onlyValue(values))
       ctx.directResult match {
         case Some((target, label)) =>
           pure(target.toList.map(id => js.Assign(nameRef(id), result)) :+

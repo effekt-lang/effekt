@@ -269,19 +269,19 @@ object GuardedEquality {
         }
         collect(rest, scope :+ id, env + (id -> value))
 
-      case call @ Stmt.Call(result, returnedKs, Callee.Function(id), args, ks, rest) =>
+      case call @ Stmt.Call(results, returnedKs, Callee.Function(id), args, ks, rest) =>
         callees += id
         args.foreach(remember)
         remember(ks)
         registerSite(call, id, args.size + 2)
-        collect(rest, scope ++ List(result, returnedKs),
-          env ++ Map(result -> Unknown, returnedKs -> Unknown))
+        collect(rest, scope ++ (results :+ returnedKs),
+          env ++ results.map(_ -> Unknown) ++ Map(returnedKs -> Unknown))
 
-      case Stmt.Call(result, returnedKs, Callee.Method(_, _), args, ks, rest) =>
+      case Stmt.Call(results, returnedKs, Callee.Method(_, _), args, ks, rest) =>
         args.foreach(remember)
         remember(ks)
-        collect(rest, scope ++ List(result, returnedKs),
-          env ++ Map(result -> Unknown, returnedKs -> Unknown))
+        collect(rest, scope ++ (results :+ returnedKs),
+          env ++ results.map(_ -> Unknown) ++ Map(returnedKs -> Unknown))
 
       case app @ Stmt.App(id, args) =>
         callees += id
@@ -292,8 +292,8 @@ object GuardedEquality {
         callees += id
         args.foreach(remember)
 
-      case Stmt.Return(value) =>
-        remember(value)
+      case Stmt.Return(values) =>
+        values.foreach(remember)
 
       case Stmt.Run(id, callee, args, _, rest) =>
         callees += callee
@@ -523,20 +523,18 @@ object GuardedEquality {
       case Stmt.Let(id, binding, rest) =>
         execute(rest, env + (id -> eval(binding, env)))
 
-      case application @ Stmt.Call(result, returnedKs, Callee.Function(id), args, ks, rest) =>
+      case application @ Stmt.Call(results, returnedKs, Callee.Function(id), args, ks, rest) =>
         call(
           siteOf(application),
           env.getOrElse(id, TargetValue.Unknown),
           args.map(eval(_, env)).toVector :+
             eval(ks, env) :+ TargetValue.Unknown)
-        execute(rest, env ++ Map(
-          result -> TargetValue.Unknown,
+        execute(rest, env ++ results.map(_ -> TargetValue.Unknown) ++ Map(
           returnedKs -> TargetValue.Unknown))
 
-      case Stmt.Call(result, returnedKs, Callee.Method(_, _), args, ks, rest) =>
+      case Stmt.Call(results, returnedKs, Callee.Method(_, _), args, ks, rest) =>
         (args.iterator.map(eval(_, env)) ++ Iterator.single(eval(ks, env))).foreach(escape)
-        execute(rest, env ++ Map(
-          result -> TargetValue.Unknown,
+        execute(rest, env ++ results.map(_ -> TargetValue.Unknown) ++ Map(
           returnedKs -> TargetValue.Unknown))
 
       case app @ Stmt.App(id, args) =>
@@ -546,8 +544,8 @@ object GuardedEquality {
         escape(env.getOrElse(id, TargetValue.Unknown))
         args.foreach(arg => escape(eval(arg, env)))
 
-      case Stmt.Return(value) =>
-        escape(eval(value, env))
+      case Stmt.Return(values) =>
+        values.foreach(v => escape(eval(v, env)))
 
       case Stmt.Run(id, callee, args, _, rest) =>
         escape(env.getOrElse(callee, TargetValue.Unknown))
@@ -894,24 +892,24 @@ object GuardedEquality {
       case Stmt.Let(id, binding, rest) =>
         execute(rest, env + (id -> eval(binding, env)), onObservedCall, markUnsafe)
 
-      case application @ Stmt.Call(result, returnedKs, Callee.Function(id), args, ks, rest) =>
+      case application @ Stmt.Call(results, returnedKs, Callee.Function(id), args, ks, rest) =>
         val arguments =
           args.map(eval(_, env)).toVector :+ eval(ks, env) :+ Unknown
         executeCall(application, id, arguments, env, onObservedCall, markUnsafe)
         execute(
           rest,
-          env ++ Map(result -> Unknown, returnedKs -> Unknown),
+          env ++ results.map(_ -> Unknown) ++ Map(returnedKs -> Unknown),
           onObservedCall,
           markUnsafe)
 
-      case Stmt.Call(result, returnedKs, Callee.Method(receiver, _), args, ks, rest) =>
+      case Stmt.Call(results, returnedKs, Callee.Method(receiver, _), args, ks, rest) =>
         escape(
           env.get(receiver).iterator ++
             args.iterator.map(eval(_, env)) ++ Iterator(eval(ks, env)),
           markUnsafe)
         execute(
           rest,
-          env ++ Map(result -> Unknown, returnedKs -> Unknown),
+          env ++ results.map(_ -> Unknown) ++ Map(returnedKs -> Unknown),
           onObservedCall,
           markUnsafe)
 
@@ -923,8 +921,8 @@ object GuardedEquality {
       case Stmt.Invoke(id, _, args) =>
         escape(env.get(id).iterator ++ args.iterator.map(eval(_, env)), markUnsafe)
 
-      case Stmt.Return(value) =>
-        escape(Iterator(eval(value, env)), markUnsafe)
+      case Stmt.Return(values) =>
+        escape(values.iterator.map(eval(_, env)), markUnsafe)
 
       case Stmt.Run(id, callee, args, _, rest) =>
         escape(env.get(callee).iterator ++ args.iterator.map(eval(_, env)), markUnsafe)
