@@ -159,7 +159,7 @@ object DefinitionPlanning {
           binding.free ++ (continuation.free - id),
           definitionsIn(binding.free) ++ continuation.functions)
 
-      case cps.Stmt.Call(id, returnedKs, callee, arguments, ks, rest) =>
+      case cps.Stmt.Call(ids, returnedKs, callee, arguments, ks, rest) =>
         val argumentFree = free(arguments) ++ ks.free
         val continuation = statement(rest)
         val boundary = ks match {
@@ -167,7 +167,7 @@ object DefinitionPlanning {
           case _ => Set.empty[Id]
         }
         Summary(
-          argumentFree ++ (continuation.free -- Set(id, returnedKs)) + callee.value,
+          argumentFree ++ (continuation.free -- ids.toSet - returnedKs) + callee.value,
           definitionsIn(argumentFree ++ boundary) ++ continuation.functions)
 
       case cps.Stmt.App(callee, arguments) =>
@@ -177,8 +177,9 @@ object DefinitionPlanning {
         val argumentFree = free(arguments)
         Summary(argumentFree + receiver, definitionsIn(argumentFree))
 
-      case cps.Stmt.Return(value) =>
-        Summary(value.free, definitionsIn(value.free))
+      case cps.Stmt.Return(values) =>
+        val valuesFree = free(values)
+        Summary(valuesFree, definitionsIn(valuesFree))
 
       case cps.Stmt.Run(id, callee, arguments, cps.Purity.Async, rest) =>
         val argumentFree = free(arguments)

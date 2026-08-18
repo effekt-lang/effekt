@@ -193,7 +193,7 @@ object ParameterDropping {
 
         case Stmt.Let(id, binding, rest) => binding.free ++ (visit(rest) - id)
 
-        case call @ Stmt.Call(id, returnedKs, callee @ Callee.Function(_), args, ks, rest) =>
+        case call @ Stmt.Call(ids, returnedKs, callee @ Callee.Function(_), args, ks, rest) =>
           val mask = callMasks(flow.siteOf(call))
           val ksFree =
             if mask.lift(args.size).getOrElse(false) then Set.empty else ks.free
@@ -201,11 +201,11 @@ object ParameterDropping {
             case (arg, index) if !mask.lift(index).getOrElse(false) => arg.free
           }.flatten.toSet ++
             ksFree ++
-            (visit(rest) -- Set(id, returnedKs))
+            (visit(rest) -- ids.toSet - returnedKs)
 
-        case Stmt.Call(id, returnedKs, callee @ Callee.Method(_, _), args, ks, rest) =>
+        case Stmt.Call(ids, returnedKs, callee @ Callee.Method(_, _), args, ks, rest) =>
           Set(callee.value) ++ args.flatMap(_.free) ++ ks.free ++
-            (visit(rest) -- Set(id, returnedKs))
+            (visit(rest) -- ids.toSet - returnedKs)
 
         case app @ Stmt.App(id, args) =>
           val mask = callMasks(flow.siteOf(app))
@@ -215,7 +215,7 @@ object ParameterDropping {
 
         case Stmt.Invoke(id, _, args) => Set(id) ++ args.flatMap(_.free)
 
-        case Stmt.Return(value) => value.free
+        case Stmt.Return(values) => values.flatMap(_.free).toSet
 
         case Stmt.Run(id, callee, args, _, rest) =>
           Set(callee) ++ args.flatMap(_.free) ++ (visit(rest) - id)
@@ -402,8 +402,8 @@ object ParameterDropping {
     case Stmt.Invoke(id, method, args) =>
       Stmt.Invoke(transformReference(id, info), method, args.map(transform(_, info)))
 
-    case Stmt.Return(value) =>
-      Stmt.Return(transform(value, info))
+    case Stmt.Return(values) =>
+      Stmt.Return(values.map(transform(_, info)))
 
     case Stmt.Run(id, callee, args, purity, rest) =>
       Stmt.Run(

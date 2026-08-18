@@ -167,9 +167,9 @@ class Parser(names: Names) extends Parsers {
     | braces(stmt)
     )
 
-  // return(value)
+  // return(v1, ..., vn)
   lazy val returnStmt: P[Stmt] =
-    `return` ~> parens(expr) ^^ Stmt.Return.apply
+    `return` ~> parens(commaList(expr)) ^^ Stmt.Return.apply
 
   // def id(params) = { body } rest
   lazy val defStmt: P[Stmt] =
@@ -214,10 +214,16 @@ class Parser(names: Names) extends Parsers {
       case function ~ None => Callee.Function(function)
     }
 
+  // single result `x` or a parenthesized tuple of results `(x, y, ...)`
+  private lazy val resultBinding: P[List[Id]] =
+    ( parens(commaList(id))
+    | id ^^ { List(_) }
+    )
+
   lazy val callStmt: P[Stmt] =
-    `let` ~> id ~ (`|` ~> id).? ~ (`=` ~> callCallee <~ `!`) ~ callArguments ~ (`;` ~> stmt) ^^ {
-      case name ~ returnedKs ~ callee ~ (args, ks) ~ rest =>
-        Stmt.Call(name, returnedKs.getOrElse(Id("ks")), callee, args, ks, rest)
+    `let` ~> resultBinding ~ (`|` ~> id).? ~ (`=` ~> callCallee <~ `!`) ~ callArguments ~ (`;` ~> stmt) ^^ {
+      case names ~ returnedKs ~ callee ~ (args, ks) ~ rest =>
+        Stmt.Call(names, returnedKs.getOrElse(Id("ks")), callee, args, ks, rest)
     }
 
   // let id = expr;

@@ -32,8 +32,8 @@ object Simplifier {
     case Stmt.Invoke(id, method, args) =>
       Stmt.Invoke(id, method, args.map(rewrite))
 
-    case Stmt.Return(value) =>
-      Stmt.Return(rewrite(value))
+    case Stmt.Return(values) =>
+      Stmt.Return(values.map(rewrite))
 
     case Stmt.Run(id, callee, args, purity, rest) =>
       Stmt.Run(id, callee, args.map(rewrite), purity, rewrite(rest))

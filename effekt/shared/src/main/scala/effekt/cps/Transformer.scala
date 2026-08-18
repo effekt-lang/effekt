@@ -238,7 +238,7 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
         val result = Id("result")
         val returnedKs = Id("ks")
         Stmt.Call(
-          result,
+          List(result),
           returnedKs,
           Callee.Function(calleeId),
           args,
@@ -259,7 +259,7 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
       val result = Id("result")
       val returnedKs = Id("ks")
       Stmt.Call(
-        result,
+        List(result),
         returnedKs,
         Callee.Method(calleeId, method),
         args,

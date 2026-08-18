@@ -195,15 +195,15 @@ object ArityRaising {
       case Stmt.Let(id, binding, rest) =>
         scan(rest, env + (id -> shape(binding, env)))
 
-      case Stmt.Call(id, returnedKs, Callee.Function(callee), args, ks, rest) =>
+      case Stmt.Call(ids, returnedKs, Callee.Function(callee), args, ks, rest) =>
         // A compositional call supplies the conventional (ks, k) pair. They
         // remain opaque; this pass changes data arguments, not continuations.
         demand(callee,
           (args.map(shape(_, env)) ++ List(Shape.Unknown, Shape.Unknown)).toVector)
-        scan(rest, env + (id -> Shape.Unknown) + (returnedKs -> Shape.Unknown))
+        scan(rest, env ++ ids.map(_ -> Shape.Unknown) + (returnedKs -> Shape.Unknown))
 
-      case Stmt.Call(id, returnedKs, _, _, _, rest) =>
-        scan(rest, env + (id -> Shape.Unknown) + (returnedKs -> Shape.Unknown))
+      case Stmt.Call(ids, returnedKs, _, _, _, rest) =>
+        scan(rest, env ++ ids.map(_ -> Shape.Unknown) + (returnedKs -> Shape.Unknown))
 
       case Stmt.App(id, args) =>
         demand(id, args.map(shape(_, env)).toVector)
@@ -481,7 +481,7 @@ object ArityRaising {
               rewriteStmt(rest, values + (id -> Whole(Expr.Variable(renamed))), functions))
         }
 
-      case Stmt.Call(id, returnedKs, Callee.Function(callee), args, ks, rest) =>
+      case Stmt.Call(ids, returnedKs, Callee.Function(callee), args, ks, rest) =>
         val arguments = args.map(value(_, values, functions))
         val callEntry = arguments.map(_.shape).toVector ++ Vector(Shape.Unknown, Shape.Unknown)
         val (target, rewrittenArgs) = functions.get(callee).flatMap { names =>
@@ -490,22 +490,22 @@ object ArityRaising {
               .map(all => variant.id -> all.dropRight(2))
           }.orElse(Some(names.generic -> arguments.map(materialize)))
         }.getOrElse(rewriteId(callee, values, functions) -> arguments.map(materialize))
-        val result = fresh(id)
+        val results = ids.map(fresh)
         val resultKs = fresh(returnedKs)
-        Stmt.Call(result, resultKs, Callee.Function(target), rewrittenArgs,
+        Stmt.Call(results, resultKs, Callee.Function(target), rewrittenArgs,
           rewriteExpr(ks, values, functions),
           rewriteStmt(rest,
-            values + (id -> Whole(Expr.Variable(result))) +
+            values ++ ids.zip(results).map { case (i, r) => i -> Whole(Expr.Variable(r)) } +
               (returnedKs -> Whole(Expr.Variable(resultKs))), functions))
 
-      case Stmt.Call(id, returnedKs, Callee.Method(receiver, method), args, ks, rest) =>
-        val result = fresh(id)
+      case Stmt.Call(ids, returnedKs, Callee.Method(receiver, method), args, ks, rest) =>
+        val results = ids.map(fresh)
         val resultKs = fresh(returnedKs)
-        Stmt.Call(result, resultKs,
+        Stmt.Call(results, resultKs,
           Callee.Method(rewriteId(receiver, values, functions), method),
           args.map(rewriteExpr(_, values, functions)), rewriteExpr(ks, values, functions),
           rewriteStmt(rest,
-            values + (id -> Whole(Expr.Variable(result))) +
+            values ++ ids.zip(results).map { case (i, r) => i -> Whole(Expr.Variable(r)) } +
               (returnedKs -> Whole(Expr.Variable(resultKs))), functions))
 
       case Stmt.App(id, args) =>
@@ -517,7 +517,7 @@ object ArityRaising {
         Stmt.Invoke(rewriteId(id, values, functions), method,
           args.map(rewriteExpr(_, values, functions)))
 
-      case Stmt.Return(result) => Stmt.Return(rewriteExpr(result, values, functions))
+      case Stmt.Return(results) => Stmt.Return(results.map(rewriteExpr(_, values, functions)))
 
       case Stmt.Run(id, callee, args, purity, rest) =>
         val renamed = fresh(id)

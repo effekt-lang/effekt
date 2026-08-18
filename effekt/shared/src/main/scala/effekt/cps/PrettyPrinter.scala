@@ -67,11 +67,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(rest)
 
-    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
+    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
       val returnDoc: Doc = "return"
+      val binding = ids match {
+        case List(one) => toDoc(one)
+        case _ => parens(ids.map(toDoc))
+      }
       val result =
-        if rest.free.contains(returnedKs) then toDoc(id) <+> "|" <+> toDoc(returnedKs)
-        else toDoc(id)
+        if rest.free.contains(returnedKs) then binding <+> "|" <+> toDoc(returnedKs)
+        else binding
       "let" <+> result <+> "=" <+> toDoc(callee) <> "!" <>
         parens(args.map(toDoc) ++ List(toDoc(ks), returnDoc)) <> ";" <> line <> toDoc(rest)
 
@@ -81,8 +85,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Stmt.Invoke(id, method, args) =>
       toDoc(id) <> "." <> method.name.toString <> parens(args.map(toDoc))
 
-    case Stmt.Return(value) =>
-      "return" <> parens(toDoc(value))
+    case Stmt.Return(values) =>
+      "return" <> parens(values.map(toDoc))
 
     case Stmt.Run(id, callee, args, purity, rest) =>
       val prefix = purity match {

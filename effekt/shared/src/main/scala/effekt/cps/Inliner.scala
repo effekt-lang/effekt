@@ -55,46 +55,47 @@ object Inliner {
    * Bodies of nested definitions and operations have their own return
    * convention and are deliberately left untouched.
    */
-  private def continueWith(body: Stmt, result: Id, rest: Stmt): Stmt = body match {
+  private def continueWith(body: Stmt, results: List[Id], rest: Stmt): Stmt = body match {
     case Stmt.Def(id, params, nested, remainder) =>
-      Stmt.Def(id, params, nested, continueWith(remainder, result, rest))
+      Stmt.Def(id, params, nested, continueWith(remainder, results, rest))
     case Stmt.New(id, interface, operations, remainder) =>
-      Stmt.New(id, interface, operations, continueWith(remainder, result, rest))
+      Stmt.New(id, interface, operations, continueWith(remainder, results, rest))
     case Stmt.Let(id, binding, remainder) =>
-      Stmt.Let(id, binding, continueWith(remainder, result, rest))
+      Stmt.Let(id, binding, continueWith(remainder, results, rest))
     case Stmt.Call(id, returnedKs, callee, args, ks, remainder) =>
       Stmt.Call(id, returnedKs, callee, args, ks,
-        continueWith(remainder, result, rest))
-    case Stmt.Return(value) if isTrivial(value) =>
-      substitute(rest)(using Substitution(Map(result -> value)))
-    case Stmt.Return(value) =>
-      Stmt.Let(result, value, rest)
+        continueWith(remainder, results, rest))
+    case Stmt.Return(values) =>
+      results.zip(values).foldRight(rest) { case ((result, value), remainder) =>
+        if isTrivial(value) then substitute(remainder)(using Substitution(Map(result -> value)))
+        else Stmt.Let(result, value, remainder)
+      }
     case Stmt.Run(id, callee, args, purity, remainder) =>
-      Stmt.Run(id, callee, args, purity, continueWith(remainder, result, rest))
+      Stmt.Run(id, callee, args, purity, continueWith(remainder, results, rest))
     case Stmt.If(condition, thn, els) =>
       Stmt.If(
         condition,
-        continueWith(thn, result, rest),
-        continueWith(els, result, rest))
+        continueWith(thn, results, rest),
+        continueWith(els, results, rest))
     case Stmt.Match(scrutinee, clauses, default) =>
       Stmt.Match(
         scrutinee,
         clauses.map { case (tag, clause) =>
-          tag -> clause.copy(body = continueWith(clause.body, result, rest))
+          tag -> clause.copy(body = continueWith(clause.body, results, rest))
         },
-        default.map(continueWith(_, result, rest)))
+        default.map(continueWith(_, results, rest)))
     case Stmt.Region(id, ks, remainder) =>
-      Stmt.Region(id, ks, continueWith(remainder, result, rest))
+      Stmt.Region(id, ks, continueWith(remainder, results, rest))
     case Stmt.Alloc(id, init, region, remainder) =>
-      Stmt.Alloc(id, init, region, continueWith(remainder, result, rest))
+      Stmt.Alloc(id, init, region, continueWith(remainder, results, rest))
     case Stmt.Var(id, init, ks, remainder) =>
-      Stmt.Var(id, init, ks, continueWith(remainder, result, rest))
+      Stmt.Var(id, init, ks, continueWith(remainder, results, rest))
     case Stmt.Dealloc(ref, remainder) =>
-      Stmt.Dealloc(ref, continueWith(remainder, result, rest))
+      Stmt.Dealloc(ref, continueWith(remainder, results, rest))
     case Stmt.Get(ref, id, remainder) =>
-      Stmt.Get(ref, id, continueWith(remainder, result, rest))
+      Stmt.Get(ref, id, continueWith(remainder, results, rest))
     case Stmt.Put(ref, value, remainder) =>
-      Stmt.Put(ref, value, continueWith(remainder, result, rest))
+      Stmt.Put(ref, value, continueWith(remainder, results, rest))
 
     // A direct body cannot contain these control boundaries. Keeping them
     // unchanged makes this operation partial only at the point where the
@@ -107,12 +108,12 @@ object Inliner {
   private def reduceCall(
     definition: Definition,
     args: List[Expr],
-    result: Id,
+    results: List[Id],
     rest: Stmt
   ): Stmt = {
     val (bindings, subst) = bindArgs(definition.params, args)
     val body = substitute(definition.body)(using Substitution(subst))
-    val composed = continueWith(body, result, rest)
+    val composed = continueWith(body, results, rest)
     bindings.foldRight(composed) { case ((id, expr), remainder) =>
       Stmt.Let(id, expr, remainder)
     }
@@ -181,19 +182,19 @@ object Inliner {
     // can commute into its call site without code duplication. Before that
     // point definitions still have two additional CPS parameters, so this
     // case deliberately does not fire.
-    case Stmt.Call(id, returnedKs, callee @ Callee.Function(target), args, ks, rest)
+    case Stmt.Call(ids, returnedKs, callee @ Callee.Function(target), args, ks, rest)
         if context.definitions.get(target).exists(_.params.size == args.size) &&
           !expanding.contains(target) =>
       val args1 = args.map(rewrite(_, context))
       val rest1 = rewrite(rest, context, expanding)
       rewrite(
-        reduceCall(context.definitions(target), args1, id, rest1),
+        reduceCall(context.definitions(target), args1, ids, rest1),
         context,
         expanding + target)
 
-    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
+    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
       Stmt.Call(
-        id,
+        ids,
         returnedKs,
         callee,
         args.map(rewrite(_, context)),
@@ -211,8 +212,8 @@ object Inliner {
     case Stmt.Invoke(id, method, args) =>
       Stmt.Invoke(id, method, args.map(rewrite(_, context)))
 
-    case Stmt.Return(value) =>
-      Stmt.Return(rewrite(value, context))
+    case Stmt.Return(values) =>
+      Stmt.Return(values.map(rewrite(_, context)))
 
     case Stmt.Run(id, callee, args, purity, rest) =>
       Stmt.Run(

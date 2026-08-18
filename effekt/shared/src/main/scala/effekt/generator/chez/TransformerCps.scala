@@ -137,9 +137,9 @@ object TransformerCps {
   }
 
   def toChezExpr(stmt: cps.Stmt): chez.Expr = stmt match {
-    case Stmt.Call(result, returnedKs, callee, args, ks, rest) =>
+    case Stmt.Call(results, returnedKs, callee, args, ks, rest) =>
       val continuation = chez.Lambda(
-        List(result, returnedKs).map(nameDef),
+        (results :+ returnedKs).map(nameDef),
         toChez(rest))
       val lowered = args.map(toChez) ++ List(toChez(ks), continuation)
       callee match {
@@ -156,8 +156,16 @@ object TransformerCps {
       val operation = chez.Call(nameRef(method), nameRef(id))
       chez.Call(operation, args.map(toChez))
 
-    case Stmt.Return(value) =>
+    case Stmt.Return(List(value)) =>
       toChez(value)
+
+    // Chez Scheme natively supports multiple return values via `values` /
+    // `call-with-values`, so this is the backend where genuine multi-value
+    // returns can be realized. Wiring the continuation side to receive them
+    // is left to the arity-raising exploitation pass; until then only the
+    // single-value form is produced.
+    case Stmt.Return(values) =>
+      sys.error(s"Chez backend does not yet lower multi-value returns: $values")
 
     case Stmt.Hole(span) =>
       chez.Builtin(HOLE, chez.ChezString(span.range.from.format))
