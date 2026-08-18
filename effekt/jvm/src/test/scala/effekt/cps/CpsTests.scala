@@ -20,6 +20,8 @@ enum Step {
 }
 
 enum TransformPass(val header: String, val run: (String, ModuleDecl, Id) => ModuleDecl) {
+  case RaiseArity extends TransformPass("ARITY_RAISE",
+    (_, input, mainId) => ArityRaising.transform(input, Set(mainId)))
   case Inline extends TransformPass("INLINE",
     (_, input, mainId) => Inliner.transform(input, mainId))
   case StaticArguments extends TransformPass("STATIC_ARGUMENTS",
@@ -33,6 +35,8 @@ enum TransformPass(val header: String, val run: (String, ModuleDecl, Id) => Modu
 }
 
 enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => String) {
+  case ArityShapes extends AnalysisPass("ARITY_SHAPES",
+    (_, input, mainId) => ArityRaising.analyze(input, Set(mainId)).show)
   case Flows extends AnalysisPass("FLOWS",
     (_, input, _) => {
       input.definitions.collect {
