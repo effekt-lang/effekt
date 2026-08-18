@@ -58,8 +58,10 @@ class ChezSchemeCPS extends Compiler[String] {
         tree = cps.Simplifier.transform(tree)
         tree
 
-      val transformed = optimize(optimize(cps.transform(renamed)))
-      (mainSymbol, mainFile, core, transformed)
+      var tree = optimize(cps.transform(renamed))
+      tree = cps.ArityRaising.transform(tree, Set(mainSymbol))
+      tree = optimize(tree)
+      (mainSymbol, mainFile, core, tree)
   }
 
   lazy val Chez = CPSTransformed map {

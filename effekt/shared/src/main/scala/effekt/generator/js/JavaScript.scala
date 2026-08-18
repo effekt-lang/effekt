@@ -75,6 +75,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
         tree
 
       tree = optimize(tree)
+      tree = effekt.cps.ArityRaising.transform(tree, Set(mainId))
       tree = optimize(tree)
 
       (mainId, mainFile, core, tree)
