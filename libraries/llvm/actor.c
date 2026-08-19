@@ -7,8 +7,7 @@
 
 enum MessageType {
     // "Special messages"
-    RESUME = -2,
-    TERMINATE = -1,
+    RESUME = -1,
     // Effects
     EMIT,
 };
@@ -77,11 +76,12 @@ struct Actor c_actor_allocate() {
 }
 
 void c_erase_log(void* obj) {
+    (void)obj;
     printf("Erasing object\n");
     return;
 }
 
-struct Pos c_actor_new() {
+struct Pos c_actor_new(struct Pos name) {
     void* wrap_alloc = malloc(sizeof(struct Header) + sizeof(struct Actor));
 
     struct Header* headerPtr = wrap_alloc;
@@ -89,6 +89,9 @@ struct Pos c_actor_new() {
 
     struct Actor* objPtr = wrap_alloc + sizeof(struct Header); 
     *objPtr = c_actor_allocate();
+    char* cname = c_bytearray_into_nullterminated_string(name);
+    printf("New actor '%s': %p\n", cname, objPtr);
+    free(cname);
     struct Pos wrapped = (struct Pos) {
       .tag = 0,
       .obj = wrap_alloc,
@@ -97,6 +100,7 @@ struct Pos c_actor_new() {
 }
 
 void c_erase_message(void* message) {
+    (void)message;
     // printf("Erasing message: %p\n", message);
     return;
 }
@@ -129,12 +133,6 @@ struct MessageData c_message_resume(Stack stack) {
     return (struct MessageData) {
         .tag = RESUME,
         .continuation = stack,
-    };
-}
-
-struct MessageData c_message_terminate() {
-    return (struct MessageData) {
-        .tag = TERMINATE,
     };
 }
 
@@ -201,10 +199,30 @@ void c_queue_send_resume(struct Pos emitter_pos, Stack cont) {
     c_queue_unsafeEnqueue(emitter->queue, c_message_wrap(message));
 }
 
-void c_queue_send_terminate(struct Pos actor_pos) {
+void c_actor_share(struct Pos actor_pos) {
     struct Actor* actor = c_actor(actor_pos);
-    struct MessageData message = c_message_terminate();
-    c_queue_unsafeEnqueue(actor->queue, c_message_wrap(message));
+
+    // printf("Share actor\n");
+
+    pthread_mutex_lock(&actor->queue->mutex);
+
+    struct Header* header = actor_pos.obj;
+    header->rc += 1;
+
+    pthread_mutex_unlock(&actor->queue->mutex);
+}
+
+void c_actor_erase(struct Pos actor_pos) {
+    struct Actor* actor = c_actor(actor_pos);
+
+    // printf("Erase actor\n");
+
+    pthread_mutex_lock(&actor->queue->mutex);
+
+    struct Header* header = actor_pos.obj;
+    header->rc -= 1;
+
+    pthread_mutex_unlock(&actor->queue->mutex);
 }
 
 void c_actor_inspect_queue(struct Pos actor_pos) {
@@ -231,9 +249,14 @@ void c_inspect_rc(struct Pos pos) {
 
 void c_actor_start(struct Pos actor_pos, Stack stack) {
     struct Actor* actor = actor_pos.obj + sizeof(struct Header);
-    printf("Starting actor\n");
+    // printf("Starting actor\n");
     resume_Pos(stack, Unit);
     while (true) {
+        struct Header* header = actor_pos.obj;
+        if (header->rc == 0) {
+            erasePositive(actor_pos);
+            return;
+        }
         if (!c_queue_isEmpty(actor->queue)) {
             struct Pos message_pos = c_queue_unsafePop(actor->queue);
             struct MessageData* messagePtr = message_pos.obj + sizeof(struct Header);
@@ -241,13 +264,9 @@ void c_actor_start(struct Pos actor_pos, Stack stack) {
             erasePositive(message_pos);
             switch(message.tag) {
                 case RESUME:
-                    printf("Resuming\n");
+                    // printf("Resuming\n");
                     resume_Int(message.continuation, message.message);
                     continue;
-                case TERMINATE:
-                    printf("Got terminate\n");
-                    erasePositive(actor_pos);
-                    return;
                 case EMIT:
                     // Handler things
                     printf("Emit: %ld\n", message.message);
