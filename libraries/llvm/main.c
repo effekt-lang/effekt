@@ -14,6 +14,7 @@
 #include "io.c"
 #include "panic.c"
 #include "actor.c"
+#include "thread.c"
 
 
 extern void effektMain();
