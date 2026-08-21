@@ -39,13 +39,13 @@ namespace internal {
   val maxSparse = 2
 
   /// The `j`-th branching byte of a packed key set.
-  def byteAt(keys: Int, j: Int): Int = keys.bitwiseShr(8 * j).bitwiseAnd(255)
+  def byteAt(keys: Int, j: Int): Byte = keys.bitwiseShr(8 * j).toByte
 
   /// Index of `b` among the `count` keys, or -1 if it is not one of them.
   def find(keys: Int, count: Int, b: Byte): Int = {
     def go(j: Int): Int =
       if (j >= count) -1
-      else if (byteAt(keys, j) == b.toInt) j
+      else if (keys.byteAt(j) == b) j
       else go(j + 1)
 
     go(0)
@@ -55,7 +55,7 @@ namespace internal {
   def rank(keys: Int, count: Int, b: Byte): Int = {
     def go(j: Int): Int =
       if (j >= count) count
-      else if (byteAt(keys, j) > b.toInt) j
+      else if (keys.byteAt(j).toInt > b.toInt) j
       else go(j + 1)
 
     go(0)
@@ -83,7 +83,7 @@ namespace internal {
   def densify[A](keys: Int, children: Array[Trie[A]], b: Byte, child: Trie[A]): Array[Trie[A]] = {
     val cs = array[Trie[A]](256, Empty())
     def go(j: Int): Unit =
-      if (j < children.size) { cs.set(byteAt(keys, j), children.get(j)); go(j + 1) }
+      if (j < children.size) { cs.set(keys.byteAt(j).toInt, children.get(j)); go(j + 1) }
 
     go(0)
     cs.set(b.toInt, child)
@@ -110,22 +110,22 @@ def insert[A](dictionary: Dictionary[A], key: ByteArray, value: A): Unit = {
 
         case SparseBranch(keys, children) =>
           val count = children.size
-          val j = internal::find(keys, count, b)
+          val j = keys.internal::find(count, b)
           if (j >= 0) { children.set(j, go(children.get(j), i + 1)); trie }
-          else if (count >= internal::maxSparse) { DenseBranch(internal::densify(keys, children, b, go(Empty(), i + 1))) }
+          else if (count >= internal::maxSparse) { DenseBranch(keys.internal::densify(children, b, go(Empty(), i + 1))) }
           else {
-            val at = internal::rank(keys, count, b)
-            SparseBranch(internal::spliced(keys, at, b), internal::insertedChild(children, at, go(Empty(), i + 1)))
+            val at = keys.internal::rank(count, b)
+            SparseBranch(keys.internal::spliced(at, b), internal::insertedChild(children, at, go(Empty(), i + 1)))
           }
 
         case SparseNode(v, keys, children) =>
           val count = children.size
-          val j = internal::find(keys, count, b)
+          val j = keys.internal::find(count, b)
           if (j >= 0) { children.set(j, go(children.get(j), i + 1)); trie }
-          else if (count >= internal::maxSparse) { DenseNode(v, internal::densify(keys, children, b, go(Empty(), i + 1))) }
+          else if (count >= internal::maxSparse) { DenseNode(v, keys.internal::densify(children, b, go(Empty(), i + 1))) }
           else {
-            val at = internal::rank(keys, count, b)
-            SparseNode(v, internal::spliced(keys, at, b), internal::insertedChild(children, at, go(Empty(), i + 1)))
+            val at = keys.internal::rank(count, b)
+            SparseNode(v, keys.internal::spliced(at, b), internal::insertedChild(children, at, go(Empty(), i + 1)))
           }
 
         case DenseBranch(children) =>
@@ -162,10 +162,10 @@ def lookup[A](dictionary: Dictionary[A], key: ByteArray): Option[A] = {
         case DenseBranch(children) => go(children.get(key.get(i).toInt), i + 1)
         case DenseNode(_, children) => go(children.get(key.get(i).toInt), i + 1)
         case SparseBranch(keys, children) =>
-          val j = internal::find(keys, children.size, key.get(i))
+          val j = keys.internal::find(children.size, key.get(i))
           if (j >= 0) go(children.get(j), i + 1) else None()
         case SparseNode(_, keys, children) =>
-          val j = internal::find(keys, children.size, key.get(i))
+          val j = keys.internal::find(children.size, key.get(i))
           if (j >= 0) go(children.get(j), i + 1) else None()
       }
     } else {
@@ -216,20 +216,20 @@ def eachTagged[A](dictionary: Dictionary[A]): Unit / emit[Tagged[A]] = {
     }
     buffer.set(depth, b)
   }
-  def emitAt(depth: Int, value: A): Unit / emit[Tagged[A]] = {
+  def emitAt(depth: Int, value: A): Unit = {
     val key = bytearray::allocate(depth)
     bytearray::unsafeCopy(buffer, 0, key, 0, depth)
     do emit(Tagged(key, value))
   }
-  def go(trie: Trie[A], depth: Int): Unit / emit[Tagged[A]] =
+  def go(trie: Trie[A], depth: Int): Unit =
     trie match {
       case Empty() => ()
       case Leaf(value) => emitAt(depth, value)
       case SparseBranch(keys, children) =>
-        each(0, children.size) { j => push(depth, internal::byteAt(keys, j).toByte); go(children.get(j), depth + 1) }
+        each(0, children.size) { j => push(depth, keys.internal::byteAt(j)); go(children.get(j), depth + 1) }
       case SparseNode(value, keys, children) =>
         emitAt(depth, value)
-        each(0, children.size) { j => push(depth, internal::byteAt(keys, j).toByte); go(children.get(j), depth + 1) }
+        each(0, children.size) { j => push(depth, keys.internal::byteAt(j)); go(children.get(j), depth + 1) }
       case DenseBranch(children) =>
         each(0, 256) { j => push(depth, j.toByte); go(children.get(j), depth + 1) }
       case DenseNode(value, children) =>
