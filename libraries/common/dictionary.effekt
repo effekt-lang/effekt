@@ -210,14 +210,13 @@ def eachTagged[A](dictionary: Dictionary[A]): Unit / emit[Tagged[A]] = {
   var buffer = bytearray::allocate(32)
   def push(depth: Int, b: Byte): Unit = {
     if (depth >= buffer.size) {
-      val bigger = bytearray::allocate(buffer.size * 2)
-      bytearray::unsafeCopy(buffer, 0, bigger, 0, buffer.size)
-      buffer = bigger
+      buffer = buffer.resize(buffer.size * 2)
     }
     buffer.set(depth, b)
   }
   def emitAt(depth: Int, value: A): Unit = {
     val key = bytearray::allocate(depth)
+    // safe: `key` has exactly `depth` bytes, and `depth` is within `buffer`'s capacity.
     bytearray::unsafeCopy(buffer, 0, key, 0, depth)
     do emit(Tagged(key, value))
   }
