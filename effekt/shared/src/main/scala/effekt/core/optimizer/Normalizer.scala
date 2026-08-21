@@ -55,22 +55,6 @@ object Normalizer { normal =>
     }
   }
 
-  /**
-   * Do the clauses name every constructor of the scrutinee's type?
-   * If so, the default is unreachable!
-   *
-   * Beware: Deadcode might have dropped constructors that are never built.
-   */
-  private def covers(tpe: ValueType, clauses: List[(Id, BlockLit)])(using C: Context): Boolean = tpe match {
-    case ValueType.Data(name, _) => C.decls.findData(name).exists { data =>
-      clauses.length >= data.constructors.length && {
-        val tags = clauses.iterator.map(_._1).toSet
-        data.constructors.forall { c => tags.contains(c.id) }
-      }
-    }
-    case _ => false
-  }
-
   /** Within a branch, we know the value of the condition. */
   private def assuming(cond: Expr, value: Boolean)(using C: Context): Context =
     C.knowing(cond, Expr.Literal(value, Type.TBoolean))
@@ -296,7 +280,7 @@ object Normalizer { normal =>
         val normalized = normalize(scrutinee)
         Stmt.Match(normalized, tpe, clauses.map { case (tag, clause) =>
           tag -> normalize(clause)(using selecting(normalized, tag, clause))
-        }, default.filter(_ => !covers(normalized.tpe, clauses)).map(normalize))
+        }, default.map(normalize))
     }
 
     // [[ if (true) stmt1 else stmt2 ]] = [[ stmt1 ]]
