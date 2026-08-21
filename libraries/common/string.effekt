@@ -210,6 +210,28 @@ namespace internal {
       do emit(c.utf8ByteCount)
     }
   }
+
+  def compareCodePoints(left: String, right: String): Ordering = {
+    val ln = left.length
+    val rn = right.length
+    def go(i: Int, j: Int): Ordering =
+      if (i >= ln) { if (j >= rn) Equal() else Less() }
+      else if (j >= rn) Greater()
+      else {
+        val a = unsafeCharAt(left, i)
+        val b = unsafeCharAt(right, j)
+        compareChar(a, b) match {
+          case Equal() =>
+            // equal code points have equal widths, so take the step only once
+            val w = a.charWidth
+            go(i + w, j + w)
+          case Less() => Less()
+          case Greater() => Greater()
+        }
+      }
+
+    go(0, 0)
+  }
 }
 
 /// Returns the number of bytes that the given `str` would take up in a UTF-8 encoding.
@@ -234,6 +256,12 @@ extern def utf8ByteLength(str: String) at {io, global}: Int =
 
 // extern def unsafeIndexOf(str: String, sub: String) at {}: Int =
 //   js "${str}.indexOf(${sub})"
+
+/// Compares two strings lexicographically by code point.
+/// Identical on every backend.
+extern def compareStringBytes(left: String, right: String) at {}: Ordering =
+  llvm { compareByteArray(fromString(left), fromString(right)) }
+  default { internal::compareCodePoints(left, right) }
 
 def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
   if (index < 0 || index >= length(str))

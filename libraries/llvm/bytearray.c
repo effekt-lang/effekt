@@ -56,6 +56,17 @@ uint8_t* c_bytearray_data(const struct Pos arr) {
     return data;
 }
 
+struct Pos c_bytearray_copy(const struct Pos source, const Int sourceOffset,
+                            const struct Pos target, const Int targetOffset,
+                            const Int length) {
+  // memmove, not memcpy: the ranges may overlap, and may even be the same bytearray
+  memmove(c_bytearray_data(target) + targetOffset,
+          c_bytearray_data(source) + sourceOffset, length);
+  erasePositive(source);
+  erasePositive(target);
+  return Unit;
+}
+
 struct Pos c_bytearray_construct(const uint64_t n, const uint8_t *data) {
     struct Pos arr = c_bytearray_new(n);
     memcpy(c_bytearray_data(arr), data, n);
@@ -134,11 +145,9 @@ struct Pos c_bytearray_concatenate(const struct Pos left, const struct Pos right
     uint64_t left_size = left.tag;
     uint64_t right_size = right.tag;
     const struct Pos concatenated = c_bytearray_new(left_size + right_size);
-    for (uint64_t j = 0; j < concatenated.tag; ++j)
-        c_bytearray_data(concatenated)[j]
-            = j < left_size
-            ? c_bytearray_data(left)[j]
-            : c_bytearray_data(right)[j - left_size];
+    // two memcpys rather than a byte loop with a branch per byte
+    memcpy(c_bytearray_data(concatenated), c_bytearray_data(left), left_size);
+    memcpy(c_bytearray_data(concatenated) + left_size, c_bytearray_data(right), right_size);
 
     erasePositive(left);
     erasePositive(right);

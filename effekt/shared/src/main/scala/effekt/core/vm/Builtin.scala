@@ -251,7 +251,7 @@ lazy val strings: Builtins = Map(
   },
 
   builtin("string::unsafeCharAt(String, Int)") {
-    case As.String(x) :: As.Int(at) :: Nil => Value.Int(x.charAt(at.toInt).toLong)
+    case As.String(x) :: As.Int(at) :: Nil => Value.Int(x.codePointAt(at.toInt).toLong)
   },
 
   builtin("char::toInt(Char)") {
@@ -260,6 +260,10 @@ lazy val strings: Builtins = Map(
 
   builtin("char::toChar(Int)") {
     case As.Int(n) :: Nil => Value.Int(n)
+  },
+
+  builtin("char::charWidth(Char)") {
+    case As.Int(c) :: Nil => Value.Int(if (c > 0xFFFF) 2 else 1)
   },
 
   builtin("char::infixLte(Char, Char)") {
@@ -316,6 +320,11 @@ lazy val bytearrays: Builtins = Map(
   },
   builtin("bytearray::set(ByteArray, Int, Byte)") {
     case As.ByteArray(arr) :: As.Int(index) :: As.Byte(value) :: Nil => arr.update(index.toInt, value); Value.Unit()
+  },
+  builtin("bytearray::unsafeCopy(ByteArray, Int, ByteArray, Int, Int)") {
+    case As.ByteArray(from) :: As.Int(start) :: As.ByteArray(to) :: As.Int(offset) :: As.Int(length) :: Nil =>
+      System.arraycopy(from, start.toInt, to, offset.toInt, length.toInt)
+      Value.Unit()
   },
   builtin("bytearray::compareByteArrayImpl(ByteArray, ByteArray)") {
     case As.ByteArray(arr1) :: As.ByteArray(arr2) :: Nil => Value.Int(java.util.Arrays.compare(arr1.map(_.toByte), arr2.map(_.toByte)))

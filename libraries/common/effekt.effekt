@@ -191,19 +191,24 @@ extern def random() at io: Double =
 // extern io def freshGlobal[T](t: T): Ref[T] at global = js "$effekt.fresh(${t})"
 
 
-// Equality
+// Comparison
 // ========
 
 /// Result of comparison between two objects according to some order:
 ///
 /// - `Less()` means that the first object is *before* the first in the order,
-/// - `Equal()` means that the two objects are the same in the order,
-/// - and `Greater()` means that the second object is *before* the first in the order.
+/// - `Equal()` means that the two objects are the same in the order, and
+/// - `Greater()` means that the second object is *before* the first in the order.
 type Ordering {
   Less();
   Equal();
   Greater()
 }
+
+def ordering::fromInt(n: Int): Ordering =
+  if (n == 0) Equal()
+  else if (n < 0) Less()
+  else Greater()
 
 def compareInt(n: Int, m: Int) =
   if (n == m) Equal()
@@ -215,16 +220,8 @@ extern def genericCompareImpl[R](x: R, y: R) at {}: Int =
 
 /// Compares two values of the same type, returning an `Ordering`.
 /// Only available on the JavaScript backend.
-def genericCompare[R](x: R, y: R): Ordering = {
-  val ret = genericCompareImpl(x, y)
-  if (ret == 0) {
-    Equal()
-  } else if (ret < 0) {
-    Less()
-  } else { // ret > 0
-    Greater()
-  }
-}
+def genericCompare[R](x: R, y: R): Ordering =
+  genericCompareImpl(x, y).fromInt
 
 def println(o: Ordering): Unit = println(o.show)
 

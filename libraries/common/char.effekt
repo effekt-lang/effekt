@@ -144,6 +144,10 @@ extern def infixGte(x: Char, y: Char) at {}: Bool =
     ret %Pos %adt_boolean
   """
 
+def compareChar(x: Char, y: Char): Ordering =
+  if (x == y) Equal()
+  else if (x < y) Less()
+  else Greater()
 
 /**
  * Determines the number of bytes needed by a codepoint
@@ -155,18 +159,21 @@ def utf8ByteCount(codepoint: Char): Int = codepoint match {
   case c and c >= '\u0080'  and c <= '\u07FF'   => 2
   case c and c >= '\u0800'  and c <= '\uFFFF'   => 3
   case c and c >= '\u10000' and c <= '\u10FFFF' => 4
-  case c => panic("Not a valid code point")
+  case c => <{ "Not a valid code point" }>
 }
 
 def utf16UnitCount(codepoint: Char): Int = codepoint match {
   case c and c >= '\u0000'  and c <= '\uFFFF'   => 1
-  case c and c >= '\u10000' and c <= '\u10FFFF' => 4
-  case c => panic("Not a valid code point")
+  case c and c >= '\u10000' and c <= '\u10FFFF' => 2
+  case c => <{ "Not a valid code point" }>
 }
 
+/// How many index units `c` occupies in the unit that `length` and `unsafeCharAt`
+/// use on this backend. Adding it to a code-point boundary gives the next character.
 extern def charWidth(c: Char) at {}: Int =
-  // JavaScript strings are UTF-16 where every unicode character after 0xffff takes two units
-  js "(${c} > 0xffff) ? 2 : 1"
+  js { utf16UnitCount(c) }
+  chez { 1 }
+  llvm { utf8ByteCount(c) }
 
 
 def decodeChar(): Char / {next[Byte], stop} = {

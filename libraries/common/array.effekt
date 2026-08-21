@@ -63,9 +63,10 @@ extern def unsafeAllocate[T](size: Int) at global: Array[T] =
 
 /// Fills a given array in-place.
 def fill[T](arr: Array[T], filler: T): Unit = {
-  arr.foreachIndex { (idx, _) =>
-    arr.set(idx, filler)
-  }
+  val n = arr.size
+  def go(i: Int): Unit =
+    if (i < n) { arr.set(i, filler); go(i + 1) }
+  go(0)
 }
 
 /// Creates a new Array of size `size` filled with the value `init`
