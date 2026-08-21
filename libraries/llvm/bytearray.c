@@ -56,6 +56,17 @@ uint8_t* c_bytearray_data(const struct Pos arr) {
     return data;
 }
 
+struct Pos c_bytearray_copy(const struct Pos source, const Int sourceOffset,
+                            const struct Pos target, const Int targetOffset,
+                            const Int length) {
+  // memmove, not memcpy: the ranges may overlap, and may even be the same bytearray
+  memmove(c_bytearray_data(target) + targetOffset,
+          c_bytearray_data(source) + sourceOffset, length);
+  erasePositive(source);
+  erasePositive(target);
+  return Unit;
+}
+
 struct Pos c_bytearray_construct(const uint64_t n, const uint8_t *data) {
     struct Pos arr = c_bytearray_new(n);
     memcpy(c_bytearray_data(arr), data, n);

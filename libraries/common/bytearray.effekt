@@ -113,17 +113,35 @@ def build(size: Int) { index: Int => Byte }: ByteArray = {
   arr
 }
 
+/// Copies `length`-many bytes from `from` to `to`
+/// starting at `start` (in `from`) and `offset` (in `to`).
+/// The ranges may overlap, even within the same bytearray: the source bytes are
+/// read before any are written. Panics if out of bounds.
+///
+/// O(N)
+def copy(from: ByteArray, start: Int, to: ByteArray, offset: Int, length: Int): Unit =
+  if (length < 0 || start < 0 || offset < 0
+      || start + length > from.size || offset + length > to.size) {
+    <{ "bytearray::copy: range out of bounds" }>
+  } else {
+    unsafeCopy(from, start, to, offset, length)
+  }
+
+/// `copy` without its bounds check.
+/// Corrupts memory if misused; prefer `copy`.
+extern def unsafeCopy(from: ByteArray, start: Int, to: ByteArray, offset: Int, length: Int) at global: Unit =
+  js "bytearray$copy(${from}, ${start}, ${to}, ${offset}, ${length})"
+  chez "(bytevector-copy! ${from} ${start} ${to} ${offset} ${length})"
+  llvm """
+    %z = call %Pos @c_bytearray_copy(%Pos ${from}, %Int ${start}, %Pos ${to}, %Int ${offset}, %Int ${length})
+    ret %Pos %z
+  """
+
 def resize(source: ByteArray, size: Int): ByteArray = {
   val target = allocate(size)
-  val n = min(source.size, target.size)
-  def go(i: Int): ByteArray =
-    if (i < n) {
-      target.set(i, source.get(i))
-      go(i + 1)
-    } else {
-      target
-    }
-  go(0)
+  // safe: `min` establishes the bound for both ranges ~> no check is needed
+  unsafeCopy(source, 0, target, 0, min(source.size, size))
+  target
 }
 
 /// Sorts a given bytearray `arr` in-place using a counting sort,
@@ -190,6 +208,21 @@ extern def toString(arr: ByteArray) at {}: String =
   chez "(utf8->string ${arr})"
 
 extern js """
+  function bytearray$copy(src, srcOff, dst, dstOff, n) {
+    // for small `n`, it's faster to copy manually to avoid allocating `subarray`
+    if (n < 40) {
+      if (srcOff < dstOff) {
+        for (let i = n - 1; i >= 0; --i) dst[dstOff + i] = src[srcOff + i];
+      } else {
+        for (let i = 0; i < n; ++i) dst[dstOff + i] = src[srcOff + i];
+      }
+    } else {
+      // safe: `set` clones the source region first when both share a buffer
+      dst.set(src.subarray(srcOff, srcOff + n), dstOff);
+    }
+    return $effekt.unit;
+  }
+
   function bytearray$set(bytes, index, value) {
     bytes[index] = value;
     return $effekt.unit;
