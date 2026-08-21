@@ -332,7 +332,7 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "benchmarks" / "are_we_fast_yet" / "towers.effekt" -> Some(Summary(
-      staticDispatches = 16402,
+      staticDispatches = 16401,
       dynamicDispatches = 0,
       patternMatches = 16396,
       branches = 16287,
@@ -807,7 +807,7 @@ class VMTests extends munit.FunSuite {
       branches = 43,
       pushedFrames = 72,
       poppedFrames = 72,
-      allocations = 136,
+      allocations = 121,
       closures = 0,
       variableReads = 0,
       variableWrites = 0,
@@ -867,7 +867,7 @@ class VMTests extends munit.FunSuite {
       branches = 929615,
       pushedFrames = 51607,
       poppedFrames = 51607,
-      allocations = 137799,
+      allocations = 137797,
       closures = 0,
       variableReads = 0,
       variableWrites = 0,
@@ -1230,7 +1230,7 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "benchmarks" / "other" / "unify.effekt" -> Some(Summary(
-      staticDispatches = 6662383,
+      staticDispatches = 6662382,
       dynamicDispatches = 1460350,
       patternMatches = 3850477,
       branches = 13982006,
@@ -1246,7 +1246,7 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "benchmarks" / "other" / "unify_dictionary.effekt" -> Some(Summary(
-      staticDispatches = 4662067,
+      staticDispatches = 4662066,
       dynamicDispatches = 184329,
       patternMatches = 2556198,
       branches = 2703889,

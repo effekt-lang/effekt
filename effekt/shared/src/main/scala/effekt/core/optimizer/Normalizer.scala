@@ -328,7 +328,7 @@ object Normalizer { normal =>
         case Stmt.If(cond, thn, els) =>
           val tpe = thn.tpe
           util.assert(Type.equals(thn.tpe, els.tpe))
-          joinpoint(id, tpe, normalize(body)) { k =>
+          joinpoint(id, tpe, normalize(body)) { k => (C: Context) ?=>
             val x1 = Id(id.name)
             val x2 = Id(id.name)
             Stmt.If(cond,
@@ -345,7 +345,7 @@ object Normalizer { normal =>
           // [[ val id: A = sc match[A] { ... }; body : B ]] =
           //   def k(id: A): B  = [[ body ]]
           //   sc match [B] { ... k() ... }
-          joinpoint(id, tpe, res) { k =>
+          joinpoint(id, tpe, res) { k => (C: Context) ?=>
             // since we commuted Val and Match, we need to change the type of the match!
             Stmt.Match(sc, res.tpe, clauses.map {
               case (tag, clause @ BlockLit(tparams, cparams, vparams, bparams, body)) =>
@@ -456,7 +456,12 @@ object Normalizer { normal =>
     // [[ let x = f(y); f(y) ]] = let x = f(y); x
     case Expr.PureApp(f, targs, vargs) => available(Expr.PureApp(f, targs, vargs.map(normalize)))
     case Expr.Make(data, tag, targs, vargs) => available(Expr.Make(data, tag, targs, vargs.map(normalize)))
-    case Expr.ValueVar(id, annotatedType) => p
+    // [[ x ]] = y   if `x` was bound to `y`
+    // Sound because an alias is only ever bound to something already in scope where the alias is.
+    case Expr.ValueVar(id, annotatedType) => ctx.exprs.get(id) match {
+      case Some(v: Expr.ValueVar) => normalize(v)
+      case _ => p
+    }
     case Expr.Literal(value, annotatedType) => p
   }
 
