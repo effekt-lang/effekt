@@ -144,6 +144,10 @@ extern def infixGte(x: Char, y: Char) at {}: Bool =
     ret %Pos %adt_boolean
   """
 
+def compareChar(x: Char, y: Char): Ordering =
+  if (x == y) Equal()
+  else if (x < y) Less()
+  else Greater()
 
 /**
  * Determines the number of bytes needed by a codepoint

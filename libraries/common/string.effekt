@@ -211,20 +211,25 @@ namespace internal {
     }
   }
 
-  /// Negative, zero or positive, like `compareByteArrayImpl`.
-  def compareCodePoints(left: String, right: String): Int = {
+  def compareCodePoints(left: String, right: String): Ordering = {
     val ln = left.length
     val rn = right.length
-    def go(i: Int, j: Int): Int =
-      if (i >= ln) { if (j >= rn) 0 else -1 }
-      else if (j >= rn) 1
+    def go(i: Int, j: Int): Ordering =
+      if (i >= ln) { if (j >= rn) Equal() else Less() }
+      else if (j >= rn) Greater()
       else {
-        val a = unsafeCharAt(left, i).toInt
-        val b = unsafeCharAt(right, j).toInt
-        if (a != b) a - b
-        // equal code points have equal widths, so take the step only once
-        else { val w = a.toChar.charWidth; go(i + w, j + w) }
+        val a = unsafeCharAt(left, i)
+        val b = unsafeCharAt(right, j)
+        compareChar(a, b) match {
+          case Equal() =>
+            // equal code points have equal widths, so take the step only once
+            val w = a.charWidth
+            go(i + w, j + w)
+          case Less() => Less()
+          case Greater() => Greater()
+        }
       }
+
     go(0, 0)
   }
 }
@@ -254,13 +259,8 @@ extern def utf8ByteLength(str: String) at {io, global}: Int =
 
 /// Compares two strings lexicographically by code point.
 /// Identical on every backend.
-def compareStringBytes(left: String, right: String): Ordering = {
-  val ret = compareStringBytesImpl(left, right)
-  if (ret == 0) { Equal() } else if (ret < 0) { Less() } else { Greater() }
-}
-
-extern def compareStringBytesImpl(left: String, right: String) at {}: Int =
-  llvm { compareByteArrayImpl(fromString(left), fromString(right)) }
+extern def compareStringBytes(left: String, right: String) at {}: Ordering =
+  llvm { compareByteArray(fromString(left), fromString(right)) }
   default { internal::compareCodePoints(left, right) }
 
 def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =

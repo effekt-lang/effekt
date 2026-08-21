@@ -275,16 +275,8 @@ extern def compareByteArrayImpl(b1: ByteArray, b2: ByteArray) at {}: Int =
   """
   chez "(bytearray$compare ${b1} ${b2})"
 
-def compareByteArray(b1: ByteArray, b2: ByteArray): Ordering = {
-  val ret = compareByteArrayImpl(b1, b2)
-  if (ret == 0) {
-    Equal()
-  } else if (ret < 0) {
-    Less()
-  } else { // ret > 0
-    Greater()
-  }
-}
+def compareByteArray(b1: ByteArray, b2: ByteArray): Ordering =
+  compareByteArrayImpl(b1, b2).fromInt
 
 
 // Streaming
