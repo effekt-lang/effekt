@@ -28,11 +28,11 @@ def flushableStringBuffer[A] { program: () => A / { write, flush } }: A = {
     program()
   } with write { string =>
     val bytes = fromString(string)
-    ensureCapacity(bytes.size)
-    bytes.foreach { b =>
-      buffer.set(position, b)
-      position = position + 1
-    }
+    val n = bytes.size
+    ensureCapacity(n)
+    // safe: `ensureCapacity` just established the target range
+    bytearray::unsafeCopy(bytes, 0, buffer, position, n)
+    position = position + n
     resume(())
   } with flush {
     val string = buffer.resize(position).toString()
