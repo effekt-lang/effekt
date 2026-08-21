@@ -145,11 +145,9 @@ struct Pos c_bytearray_concatenate(const struct Pos left, const struct Pos right
     uint64_t left_size = left.tag;
     uint64_t right_size = right.tag;
     const struct Pos concatenated = c_bytearray_new(left_size + right_size);
-    for (uint64_t j = 0; j < concatenated.tag; ++j)
-        c_bytearray_data(concatenated)[j]
-            = j < left_size
-            ? c_bytearray_data(left)[j]
-            : c_bytearray_data(right)[j - left_size];
+    // two memcpys rather than a byte loop with a branch per byte
+    memcpy(c_bytearray_data(concatenated), c_bytearray_data(left), left_size);
+    memcpy(c_bytearray_data(concatenated) + left_size, c_bytearray_data(right), right_size);
 
     erasePositive(left);
     erasePositive(right);
