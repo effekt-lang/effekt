@@ -34,14 +34,12 @@ object CallingConvention {
     case cps.Callee.Method(receiver, method) => cps.Stmt.Invoke(receiver, method, arguments)
   }
 
-  /** A continuation application can omit its meta-continuation after
-   * parameter dropping. Keeping both shapes here makes the control-erasure
-   * judgment independent of that earlier representation choice. */
+  /** A continuation application returns one value to `k`, optionally threading
+   *  the meta-continuation `ks`: `k(value)` or `k(value, ks)`. */
   private def continuationResult(stmt: cps.Stmt): Option[(Id, cps.Expr, Option[Id])] =
     stmt match {
       case cps.Stmt.App(k, List(value)) => Some((k, value, None))
-      case cps.Stmt.App(k, List(value, cps.Expr.Variable(ks))) =>
-        Some((k, value, Some(ks)))
+      case cps.Stmt.App(k, List(value, cps.Expr.Variable(ks))) => Some((k, value, Some(ks)))
       case _ => None
     }
 
@@ -501,10 +499,10 @@ object CallingConvention {
     module: cps.ModuleDecl,
     functions: Map[Id, Definition],
     operations: Map[(Id, String), OperationInfo],
-    targetFlows: Vector[cps.GuardedEquality.TargetResult],
+    targetFlows: Vector[cps.Targets.TargetResult],
     externalEntries: Set[Id]
   ) {
-    private val functionTargets = new IdentityHashMap[cps.Stmt, cps.GuardedEquality.CallTargets]()
+    private val functionTargets = new IdentityHashMap[cps.Stmt, cps.Targets.CallTargets]()
     targetFlows.foreach(_.callTargets.foreach { targets =>
       targets.call match {
         case call @ cps.Stmt.Call(_, _, cps.Callee.Function(_), _, _, _) =>
@@ -768,7 +766,7 @@ object CallingConvention {
 
   def analyze(
     module: cps.ModuleDecl,
-    targetFlows: Vector[cps.GuardedEquality.TargetResult],
+    targetFlows: Vector[cps.Targets.TargetResult],
     requiredCpsEntries: Set[Id]
   ): Plan = {
     require(module.definitions.size == targetFlows.size)
@@ -882,7 +880,7 @@ object CallingConvention {
       case cps.ToplevelDefinition.Val(_, _, _, binding) => recordParents(binding, None)
     }
 
-    val flowed = new IdentityHashMap[cps.Stmt.Call, cps.GuardedEquality.CallTargets]()
+    val flowed = new IdentityHashMap[cps.Stmt.Call, cps.Targets.CallTargets]()
     targetFlows.foreach(_.callTargets.foreach { targets =>
       targets.call match {
         case call: cps.Stmt.Call => flowed.put(call, targets)
@@ -1012,12 +1010,37 @@ object CallingConvention {
       current.contains(ancestor)
     }
 
-    final case class Inspection(calls: Vector[Site], returnBlocks: Set[Id]) {
+    final case class Inspection(
+      calls: Vector[Site],
+      returnBlocks: Set[Id],
+      resultArities: Set[Int]
+    ) {
       def ++(other: Inspection): Inspection =
-        Inspection(calls ++ other.calls, returnBlocks ++ other.returnBlocks)
+        Inspection(
+          calls ++ other.calls,
+          returnBlocks ++ other.returnBlocks,
+          resultArities ++ other.resultArities)
     }
 
-    val emptyInspection = Inspection(Vector.empty, Set.empty)
+    val emptyInspection = Inspection(Vector.empty, Set.empty, Set.empty)
+
+    /** Number of ordinary values returned to this definition's continuation.
+     * Parameter dropping may already have removed the meta-continuation. */
+    def returnArity(
+      app: cps.Stmt.App,
+      definition: Definition,
+      stableKs: Set[Id],
+      metaWitness: Boolean
+    ): Option[Int] = app match {
+      case cps.Stmt.App(k, arguments) if k == definition.k =>
+        arguments.lastOption match {
+          case Some(cps.Expr.Variable(ks)) if stableKs.contains(ks) =>
+            Some(arguments.size - 1)
+          case _ if metaWitness => Some(arguments.size)
+          case _ => None
+        }
+      case _ => None
+    }
 
     def inspect(
       stmt: cps.Stmt,
@@ -1056,28 +1079,27 @@ object CallingConvention {
             known = known(call, closed)) +: following.calls)
         }
 
-      case app: cps.Stmt.App if continuationResult(app).exists {
-          case (k, _, None) => k == definition.k && metaWitness
-          case (k, _, Some(ks)) => k == definition.k && stableKs.contains(ks)
-        } => Some(emptyInspection)
-
       // Parameter dropping can turn a local CPS definition into an ordinary
       // tail-called block which closes over the enclosing continuation. Such
       // a block belongs to the same lexical control region. Revisiting it
       // closes the coinductive proof and denotes a loop, not host recursion.
-      case cps.Stmt.App(id, arguments) =>
-        definitions.get(id) match {
-          case Some(target)
-              if !target.toplevel && !escaping.contains(id) &&
-                target.params.size == arguments.size &&
-                isAncestor(definition.id, id) &&
-                (id != definition.id || preservesReturn(arguments, definition, stableKs)) =>
-            if visiting.contains(id) then
-              Some(emptyInspection.copy(returnBlocks = Set(id)))
-            else
-              inspect(target.body, definition, stableKs, visiting + id, metaWitness)
-                .map(found => found.copy(returnBlocks = found.returnBlocks + id))
-          case _ => None
+      case app @ cps.Stmt.App(id, arguments) =>
+        returnArity(app, definition, stableKs, metaWitness) match {
+          case Some(arity) =>
+            Some(emptyInspection.copy(resultArities = Set(arity)))
+          case None => definitions.get(id) match {
+            case Some(target)
+                if !target.toplevel && !escaping.contains(id) &&
+                  target.params.size == arguments.size &&
+                  isAncestor(definition.id, id) &&
+                  (id != definition.id || preservesReturn(arguments, definition, stableKs)) =>
+              if visiting.contains(id) then
+                Some(emptyInspection.copy(returnBlocks = Set(id)))
+              else
+                inspect(target.body, definition, stableKs, visiting + id, metaWitness)
+                  .map(found => found.copy(returnBlocks = found.returnBlocks + id))
+            case _ => None
+          }
         }
 
       // Before convention lowering, `Return` means completion of the current
@@ -1119,11 +1141,15 @@ object CallingConvention {
     val returnBlocksByOwner = mutable.LinkedHashMap.empty[Id, Set[Id]]
     val controlErasable = definitions.valuesIterator.flatMap { definition =>
       Option.when(definition.params.size >= 2) {
-        inspect(definition.body, definition, Set(definition.ks)).map { result =>
-          callsByOwner(definition.id) = result.calls
-          returnBlocksByOwner(definition.id) = result.returnBlocks
-          definition.id
-        }
+        inspect(definition.body, definition, Set(definition.ks))
+          // The value-returning JavaScript ABI is scalar. Keeping products in
+          // CPS preserves their allocation-free multiple-value convention.
+          .filter(_.resultArities.forall(_ == 1))
+          .map { result =>
+            callsByOwner(definition.id) = result.calls
+            returnBlocksByOwner(definition.id) = result.returnBlocks
+            definition.id
+          }
       }.flatten
     }.toSet
     val erasable = controlErasable --

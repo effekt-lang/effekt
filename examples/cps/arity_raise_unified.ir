@@ -1,0 +1,40 @@
+type PairData { Pair(first: Int, second: Int) }
+
+def produce(x, ks1, k1) {
+  k1(make Pair(x, x), ks1)
+}
+def consume(pair, ks2, k2) {
+  pair match {
+    case Pair(first, second) => k2(first, ks2)
+  }
+}
+def main(ks, k) {
+  new box : Box {
+    def read(ks3, k3) = { k3(1, ks3) }
+  }
+  let seed = box.read!(ks, return);
+  let pair = produce!(seed, ks, return);
+  pair match {
+    case Pair(first, second) => consume(make Pair(first, second), ks, k)
+  }
+}
+
+// The same representation-directed traversal unbundles an object into its
+// operation, a returned product into multiple results, and a product argument
+// into multiple parameters.
+/// ARITY_RAISE
+
+def produce(x, ks1, k1) {
+  k1(x, x, ks1)
+}
+def consume(pair_0, pair_1, ks2, k2) {
+  k2(pair_0, ks2)
+}
+def main(ks, k) {
+  def box_read(ks3, k3) {
+    k3(1, ks3)
+  }
+  let seed = box_read!(ks, return);
+  let (pair_0, pair_1) = produce!(seed, ks, return);
+  consume(pair_0, pair_1, ks, k)
+}

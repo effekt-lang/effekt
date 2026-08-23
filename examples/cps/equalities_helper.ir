@@ -14,7 +14,5 @@ main
 ---
 loop:
   entry x = seed
-  recursive x
 step:
   entry y = x
-  recursive -

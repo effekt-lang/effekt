@@ -3,7 +3,6 @@ package cps
 
 import core.Id
 
-import java.util.IdentityHashMap
 import scala.annotation.tailrec
 import scala.collection.mutable
 
@@ -11,11 +10,10 @@ import scala.collection.mutable
 /**
  * Parameter dropping for local functions.
  *
- * `GuardedEquality` supplies the two semantic facts used here:
+ * `GuardedEquality` supplies the expression in a closure's lexical scope
+ * that equals a parameter on every invocation.
  *
- *   - which expression in a closure's lexical scope equals a parameter on
- *     every invocation, and
- *   - which local functions may meet at each call site.
+ * `Targets` supplies the local definitions and possible callees at each call.
  *
  * This file only chooses a uniform calling convention, computes parameters
  * that become dead together, and applies the resulting rewrite.
@@ -29,7 +27,7 @@ object ParameterDropping {
     /** Replacements for used parameters and aliases. */
     bindings: Map[Id, Expr],
 
-    private val calls: IdentityHashMap[Stmt, Vector[Boolean]] = IdentityHashMap()
+    private val calls: Map[Site[Stmt], Vector[Boolean]] = Map.empty
   ) {
     def show: String =
       bindings.toList.sortBy(_._1.id).map { case (id, expr) =>
@@ -39,9 +37,9 @@ object ParameterDropping {
     def substitute(id: Id): Expr = bindings.getOrElse(id, Expr.Variable(id))
 
     private[ParameterDropping] def callMask(call: Stmt): Vector[Boolean] =
-      Option(calls.get(call)).getOrElse {
+      calls.getOrElse(Site(call), {
         sys.error("Every call must have a parameter-dropping mask")
-      }
+      })
   }
 
 
@@ -56,12 +54,14 @@ object ParameterDropping {
   )
 
   private final class Analysis(
-    flow: GuardedEquality.Result,
+    equalities: GuardedEquality.Result,
+    targets: Targets.TargetResult,
+    parameters: List[Id],
     body: Stmt
   ) {
-    private val definitions = flow.definitions.iterator.map(d => d.id -> d).toMap
-    private val order = flow.definitions.map(_.id)
-    private val reconstruction = flow.facts.iterator.map { facts =>
+    private val definitions = targets.localDefinitions.iterator.map(d => d.id -> d).toMap
+    private val order = targets.localDefinitions.map(_.id)
+    private val reconstruction = equalities.facts.iterator.map { facts =>
       facts.id -> facts.entry
     }.toMap
 
@@ -69,8 +69,8 @@ object ParameterDropping {
       val neighbours = order.iterator.map(id => id -> mutable.Set.empty[Id]).toMap
 
       // Functions that can occur at the same call site require one signature.
-      flow.targetsAt.valuesIterator.foreach { targets =>
-        val local = targets.filter(definitions.contains)
+      targets.callTargets.foreach { call =>
+        val local = call.targets.filter(definitions.contains)
         local.foreach(from => neighbours(from) ++= local.filterNot(_ == from))
       }
 
@@ -97,10 +97,8 @@ object ParameterDropping {
         members.map(_ -> group)
       }.toMap
 
-      val unsafeTargets = flow.rigidSites.iterator.flatMap { site =>
-        flow.targetsAt.getOrElse(site, Set.empty)
-      }
-      val blockedFunctions = (flow.rigidFunctions.iterator ++ unsafeTargets)
+      val unsafeTargets = targets.callTargets.iterator.filterNot(_.closed).flatMap(_.targets)
+      val blockedFunctions = (targets.rigidFunctions.iterator ++ unsafeTargets)
         .filter(definitions.contains)
         .toSet
       val incompatibleGroups = groups.iterator.zipWithIndex.collect {
@@ -112,11 +110,10 @@ object ParameterDropping {
       // Their positions in the CPS signature must survive until the later
       // calling-convention choice either erases or reifies them.
       val fixed = mutable.Map.empty[Int, Set[Int]].withDefaultValue(Set.empty)
-      flow.sites.iterator.zipWithIndex.foreach { case (call, site) =>
-        call.stmt match {
+      targets.callTargets.foreach { call =>
+        call.call match {
           case _: Stmt.Call =>
-            flow.targetsAt.getOrElse(site, Set.empty)
-              .filter(definitions.contains)
+            call.targets.filter(definitions.contains)
               .foreach { target =>
                 val group = groupOf(target)
                 val arity = definitions(target).params.size
@@ -137,19 +134,19 @@ object ParameterDropping {
     private def siteMasks(
       conventions: Conventions,
       groupMasks: Map[Int, Vector[Boolean]]
-    ): Map[Int, Vector[Boolean]] =
-      flow.sites.iterator.zipWithIndex.map { case (call, site) =>
-        val targets = flow.targetsAt.getOrElse(site, Set.empty).filter(definitions.contains)
+    ): Map[Site[Stmt], Vector[Boolean]] =
+      targets.callTargets.iterator.map { call =>
+        val local = call.targets.filter(definitions.contains)
         val mask =
-          if targets.isEmpty || flow.rigidSites.contains(site) then
+          if local.isEmpty || !call.closed then
             Vector.fill(call.arity)(false)
           else {
-            val group = conventions.groupOf(targets.head)
-            assert(targets.forall(conventions.groupOf(_) == group))
+            val group = conventions.groupOf(local.head)
+            assert(local.forall(conventions.groupOf(_) == group))
             val groupMask = groupMasks(group)
             Vector.tabulate(call.arity)(index => groupMask.lift(index).getOrElse(false))
           }
-        site -> mask
+        Site(call.call) -> mask
       }.toMap
 
     /**
@@ -161,7 +158,7 @@ object ParameterDropping {
      */
     private def parameterUses(
       functionMasks: Map[Id, Vector[Boolean]],
-      callMasks: Map[Int, Vector[Boolean]]
+      callMasks: Map[Site[Stmt], Vector[Boolean]]
     ): Map[Id, Vector[Boolean]] = {
       val result = mutable.Map.empty[Id, Vector[Boolean]]
 
@@ -194,7 +191,7 @@ object ParameterDropping {
         case Stmt.Let(id, binding, rest) => binding.free ++ (visit(rest) - id)
 
         case call @ Stmt.Call(ids, returnedKs, callee @ Callee.Function(_), args, ks, rest) =>
-          val mask = callMasks(flow.siteOf(call))
+          val mask = callMasks(Site(call))
           val ksFree =
             if mask.lift(args.size).getOrElse(false) then Set.empty else ks.free
           Set(callee.value) ++ args.zipWithIndex.iterator.collect {
@@ -208,7 +205,7 @@ object ParameterDropping {
             (visit(rest) -- ids.toSet - returnedKs)
 
         case app @ Stmt.App(id, args) =>
-          val mask = callMasks(flow.siteOf(app))
+          val mask = callMasks(Site(app))
           Set(id) ++ args.zipWithIndex.iterator.collect {
             case (arg, index) if !mask.lift(index).getOrElse(false) => arg.free
           }.flatten.toSet
@@ -266,6 +263,52 @@ object ParameterDropping {
       bindings.map { case (id, expression) => id -> go(expression, Set(id)) }
     }
 
+    /** Syntactic equalities are independent of the flow analysis that
+     * discovers parameter equalities. Computation and store results are left
+     * abstract, so constructor terms containing them are not duplicated. */
+    private def lexicalBindings(statement: Stmt): Map[Id, Expr] = {
+      val result = mutable.LinkedHashMap.empty[Id, Expr]
+
+      def reifiable(expression: Expr, scope: Set[Id]): Boolean = expression match {
+        case Expr.Variable(id) => scope.contains(id)
+        case _: Expr.Literal => true
+        case Expr.Make(_, _, arguments) => arguments.forall(reifiable(_, scope))
+        case Expr.Abort | Expr.Toplevel => true
+      }
+
+      def visit(statement: Stmt, scope: Set[Id]): Unit = statement match {
+        case Stmt.Def(_, params, body, rest) =>
+          visit(body, scope ++ params); visit(rest, scope)
+        case Stmt.New(_, _, operations, rest) =>
+          operations.foreach(operation => visit(operation.body, scope ++ operation.params))
+          visit(rest, scope)
+        case Stmt.Let(id, binding, rest) =>
+          val known = reifiable(binding, scope)
+          if known then result(id) = binding
+          visit(rest, if known then scope + id else scope)
+        case Stmt.Call(_, _, _, _, _, rest) => visit(rest, scope)
+        case Stmt.Run(_, _, _, _, rest) => visit(rest, scope)
+        case Stmt.If(_, thn, els) => visit(thn, scope); visit(els, scope)
+        case Stmt.Match(_, clauses, default) =>
+          clauses.foreach { case (_, clause) => visit(clause.body, scope ++ clause.params) }
+          default.foreach(visit(_, scope))
+        case Stmt.Region(_, _, rest) => visit(rest, scope)
+        case Stmt.Alloc(_, _, _, rest) => visit(rest, scope)
+        case Stmt.Var(_, _, _, rest) => visit(rest, scope)
+        case Stmt.Dealloc(_, rest) => visit(rest, scope)
+        case Stmt.Get(_, _, rest) => visit(rest, scope)
+        case Stmt.Put(_, _, rest) => visit(rest, scope)
+        case Stmt.Reset(p, ks, k, body, _, _) => visit(body, scope ++ Set(p, ks, k))
+        case Stmt.Shift(_, resume, ks, k, body, _, _) =>
+          visit(body, scope ++ Set(resume, ks, k))
+        case Stmt.Resume(_, ks, k, body, _, _) => visit(body, scope ++ Set(ks, k))
+        case Stmt.App(_, _) | Stmt.Invoke(_, _, _) | Stmt.Return(_) | Stmt.Hole(_) => ()
+      }
+
+      visit(statement, parameters.toSet)
+      result.toMap
+    }
+
     def result(): DropInfo = {
       val convention = conventions()
 
@@ -310,7 +353,7 @@ object ParameterDropping {
       val masksAtCalls = siteMasks(convention, groupMasks)
       val finalUses = parameterUses(functionMasks, masksAtCalls)
 
-      val parameterBindings = flow.definitions.iterator.flatMap { definition =>
+      val parameterBindings = targets.localDefinitions.iterator.flatMap { definition =>
         definition.params.zipWithIndex.flatMap { case (param, index) =>
           val dropped = functionMasks(definition.id)(index)
           val used = finalUses(definition.id)(index)
@@ -323,15 +366,10 @@ object ParameterDropping {
         }
       }.toMap
 
-      val callMasks = new IdentityHashMap[Stmt, Vector[Boolean]]()
-      flow.sites.zipWithIndex.foreach { case (call, site) =>
-        callMasks.put(call.stmt, masksAtCalls(site))
-      }
-
       DropInfo(
         functionMasks,
-        normalize(parameterBindings ++ flow.bindings),
-        callMasks)
+        normalize(lexicalBindings(body) ++ parameterBindings),
+        masksAtCalls)
     }
   }
 
@@ -340,9 +378,12 @@ object ParameterDropping {
   // Public analyses
 
   def solve(toplevel: ToplevelDefinition): DropInfo = toplevel match {
-    case ToplevelDefinition.Def(_, _, body) =>
-      val flow = GuardedEquality.analyze(toplevel)
-      Analysis(flow, body).result()
+    case ToplevelDefinition.Def(_, parameters, body) =>
+      Analysis(
+        GuardedEquality.analyze(toplevel),
+        Targets.targets(toplevel),
+        parameters,
+        body).result()
     case _: ToplevelDefinition.Val => DropInfo(Map.empty, Map.empty)
   }
   // -----------------------------------------------------------------------

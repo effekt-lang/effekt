@@ -36,7 +36,7 @@ object SegmentEntries {
 
   def analyze(
     module: cps.ModuleDecl,
-    targetFlows: Vector[cps.GuardedEquality.TargetResult]
+    targetFlows: Vector[cps.Targets.TargetResult]
   ): Plan = {
     require(module.definitions.size == targetFlows.size)
 
@@ -49,7 +49,7 @@ object SegmentEntries {
       parameters(definition.id) = definition.params
     })
 
-    val targetsByCall = new IdentityHashMap[cps.Stmt.App, cps.GuardedEquality.CallTargets]()
+    val targetsByCall = new IdentityHashMap[cps.Stmt.App, cps.Targets.CallTargets]()
     targetFlows.foreach(_.callTargets.foreach { targets =>
       targets.call match {
         case call: cps.Stmt.App => targetsByCall.put(call, targets)

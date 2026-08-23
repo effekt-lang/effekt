@@ -1,0 +1,33 @@
+def main(choice, k) {
+  def apply(flag, f, g, x, y) {
+    if (flag) {
+      f(x)
+    } else {
+      g(y)
+    }
+  }
+  def inc(x_inc) {
+    k(x_inc)
+  }
+  def dec(x_dec) {
+    k(x_dec)
+  }
+  if (choice) {
+    apply(choice, inc, dec, 1, 0)
+  } else {
+    apply(choice, dec, inc, 0, 1)
+  }
+}
+
+// Each focused closure reaches `apply` through two different argument
+// positions. Relational context advancement must retain both guards.
+/// EQUALITIES
+
+main
+---
+apply:
+  entry flag = choice
+inc:
+  entry x_inc = 1
+dec:
+  entry x_dec = 0

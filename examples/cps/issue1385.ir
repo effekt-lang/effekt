@@ -1,3 +1,5 @@
+type ListData { Nil() Cons(head: Int, tail: ListData) }
+
 def main(ks1, k1) {
   let tmp1 = make Nil();
   var adders = tmp1 @ ks1;

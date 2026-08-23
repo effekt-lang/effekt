@@ -136,7 +136,7 @@ object SafeEntries {
     transferOf: cps.Stmt => StackSafety.Transfer,
     isSecondClass: Id => Boolean,
     defunctionalization: Defunctionalization.Plan,
-    targetFlows: Vector[cps.GuardedEquality.TargetResult],
+    targetFlows: Vector[cps.Targets.TargetResult],
     directDefinitions: Set[Id] = Set.empty,
     directEntries: Map[Id, Vector[Id]] = Map.empty
   ): Result = {
@@ -225,7 +225,7 @@ object SafeEntries {
       case cps.ToplevelDefinition.Val(_, _, _, binding) => collect(binding)
     }
 
-    val targetsByCall = new IdentityHashMap[cps.Stmt, cps.GuardedEquality.CallTargets]()
+    val targetsByCall = new IdentityHashMap[cps.Stmt, cps.Targets.CallTargets]()
     targetFlows.foreach(_.callTargets.foreach(target => targetsByCall.put(target.call, target)))
 
     // ---------------------------------------------------------------------

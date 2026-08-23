@@ -1,0 +1,92 @@
+type TripleData { Triple(first: Int, second: Int, third: Int) }
+
+def main(i, ks, k) {
+  def make3(x, ks1, k1) {
+    run inc = add(x, 1);
+    run inc2 = add(inc, 1);
+    let t = make Triple(x, inc, inc2);
+    k1(t, ks1)
+  }
+  let r = make3!(i, ks, return);
+  r match {
+    case Triple(a, b, c) => {
+      run s = add(a, b);
+      run total = add(s, c);
+      k(total, ks)
+    }
+  }
+}
+
+// `make3` returns a `Triple` (a single-constructor product), and its only
+// caller immediately deconstructs the result. Return raising — argument arity
+// raising aimed at the continuation's value argument — drops the allocation:
+// the fields flow directly through the continuation `k1(x, inc, inc2, ks1)` and
+// the caller binds them with `let (a, b, c) = make3!(...)`, folding the match.
+/// ARITY_RAISE
+
+def main(i, ks, k) {
+  def make3(x, ks1, k1) {
+    run inc = add(x, 1);
+    run inc2 = add(inc, 1);
+    k1(x, inc, inc2, ks1)
+  }
+  let (r_0, r_1, r_2) = make3!(i, ks, return);
+  run s = add(r_0, r_1);
+  run total = add(s, r_2);
+  k(total, ks)
+}
+
+/// JAVASCRIPT
+
+function main_0(i_0, ks_0, k_0) {
+  function k_1(r_0, r_1, r_2, ks_1) {
+    const s_0 = add_0(r_0, r_1);
+    const total_0 = add_0(s_0, r_2);
+    return k_0(total_0, ks_0);
+  }
+  let x_0 = undefined;
+  let ks_2 = undefined;
+  let k_2 = undefined;
+  make_0: {
+    x_0 = i_0;
+    ks_2 = ks_0;
+    k_2 = k_1;
+  }
+  const inc_0 = add_0(x_0, 1);
+  const inc_1 = add_0(inc_0, 1);
+  return k_2(x_0, inc_0, inc_1, ks_2);
+}
+
+class Triple_0 {
+  constructor(first_0, second_0, third_0) {
+    this.__tag = 0;
+    this.first_0 = first_0;
+    this.second_0 = second_0;
+    this.third_0 = third_0;
+  }
+  __reflect() {
+    return {
+      __tag: 0,
+      __name: "Triple",
+      __data: [this.first_0, this.second_0, this.third_0]
+    };
+  }
+  __equals(other0) {
+    if (!other0) {
+      return false;
+    }
+    if (!($effekt.equals(this.__tag, other0.__tag))) {
+      return false;
+    }
+    if (!($effekt.equals(this.first_0, other0.first_0))) {
+      return false;
+    }
+    if (!($effekt.equals(this.second_0, other0.second_0))) {
+      return false;
+    }
+    if (!($effekt.equals(this.third_0, other0.third_0))) {
+      return false;
+    }
+    return true;
+  }
+}

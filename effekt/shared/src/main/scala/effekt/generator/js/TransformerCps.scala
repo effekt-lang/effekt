@@ -75,7 +75,10 @@ object TransformerCps extends Transformer {
     directParameters: Map[Id, Int],
     applying: Set[Id],
     directBody: Option[(Id, List[Id])],
-    directResult: Option[(Option[Id], JSName)],
+    // Registers a value-returning body assigns before jumping to its label.
+    // Positionally aligned with the returned value vector; `None` marks a
+    // returned value whose result is unused and therefore dropped.
+    directResult: Option[(List[Option[Id]], JSName)],
     directContinuation: Option[(JSName, JSName)],
     declarations: DeclarationContext,
     errors: Context
@@ -101,7 +104,7 @@ object TransformerCps extends Transformer {
   def computePlan(m: cps.ModuleDecl): DefinitionPlanning.Plan =
     DefinitionPlanning.analyze(
       m,
-      m.definitions.map(cps.GuardedEquality.targets).toVector)
+      m.definitions.map(cps.Targets.targets).toVector)
 
   def kindOf(id: Id)(using ctx: TransformerContext): DefinitionPlanning.Kind =
     ctx.kinds.getOrElse(id,
@@ -334,14 +337,14 @@ object TransformerCps extends Transformer {
     exports: List[js.Export],
     requiredCpsEntries: Set[Id]
   )(using D: DeclarationContext, C: Context): js.Module = {
-    val conventionFlows = module.definitions.map(GuardedEquality.targets).toVector
+    val conventionFlows = module.definitions.map(Targets.targets).toVector
     val callingConvention = CallingConvention.analyze(
       module, conventionFlows, requiredCpsEntries)
     val lowered = CallingConvention.lower(module, callingConvention)
 
     lowered match {
       case cps.ModuleDecl(includes, declarations, externs, definitions, _) =>
-        val targetFlows = definitions.map(GuardedEquality.targets).toVector
+        val targetFlows = definitions.map(Targets.targets).toVector
         val liveDefinitions = lowered.uses.toMap.keySet
         val liveDirect = callingConvention.directDefinitions.intersect(liveDefinitions)
 
@@ -603,11 +606,10 @@ object TransformerCps extends Transformer {
       case (param, argument) if !aliases.contains(param) =>
         js.Let(nameDef(param), argument)
     }
-    val resultId = onlyResult(call.ids)
-    val resultUsed = call.rest.free.contains(resultId)
-    val result = Option.when(resultUsed) {
-      js.Let(nameDef(resultId), js.Undefined)
-    }
+    // Each returned value flows into a register the remainder reads. Unused
+    // results need neither a register nor an assignment; the body still jumps.
+    val targets = call.ids.map(resultId => Option.when(call.rest.free.contains(resultId))(resultId))
+    val results = targets.flatten.map(resultId => js.Let(nameDef(resultId), js.Undefined))
     val bodyCtx = ctx.copy(
       insideBody = ctx.insideBody + id,
       mutableParams = ctx.mutableParams ++ ctx.stackSafety.mutableParameters(id) ++
@@ -615,13 +617,13 @@ object TransformerCps extends Transformer {
       renamedCaptures = ctx.renamedCaptures ++ aliases,
       directParameters = ctx.directParameters ++ parameterArities,
       directBody = Some(id -> join.params),
-      directResult = Some(Option.when(resultUsed)(resultId) -> resultLabel))
+      directResult = Some(targets -> resultLabel))
     val bodyStmts = toJS(body)(using bodyCtx).stmts
     val implementation =
       if join.loopified then
         List(js.While(Some(nameDef(id)), js.RawExpr("true"), bodyStmts))
       else bodyStmts
-    parameters ++ result.toList ++ List(
+    parameters ++ results ++ List(
       js.Block(Some(resultLabel), implementation)
     ) ++ toJS(call.rest).run(k)
   }
@@ -890,20 +892,22 @@ object TransformerCps extends Transformer {
       pure(js.Return(call) :: Nil)
 
     case cps.Stmt.Return(values) =>
-      val result = toValueJS(onlyValue(values))
       ctx.directResult match {
-        case Some((target, label)) =>
-          pure(target.toList.map(id => js.Assign(nameRef(id), result)) :+
-            js.Break(Some(label)))
+        // The jump path passes each returned value in its own register and
+        // breaks to the shared label; multi-value returns need no allocation.
+        case Some((targets, label)) =>
+          pure(targets.zip(values).collect {
+            case (Some(id), value) => js.Assign(nameRef(id), toValueJS(value))
+          } :+ js.Break(Some(label)))
         case None => ctx.directContinuation match {
           case Some((ks, k)) =>
             pure(js.Return(js.Call(
               js.Variable(k),
-              List(result, js.Variable(ks)))) :: Nil)
+              List(toValueJS(onlyValue(values)), js.Variable(ks)))) :: Nil)
           case None if ctx.directBody.nonEmpty =>
-            pure(js.Return(result) :: Nil)
+            pure(js.Return(toValueJS(onlyValue(values))) :: Nil)
           case None =>
-            pure(js.Return(js.Object(List(JSName("result") -> result))) :: Nil)
+            pure(js.Return(js.Object(List(JSName("result") -> toValueJS(onlyValue(values))))) :: Nil)
         }
       }
 

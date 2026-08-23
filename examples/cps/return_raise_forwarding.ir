@@ -1,0 +1,31 @@
+type PairData { Pair(first: Int, second: Int) }
+
+def produce(x, ks1, k1) {
+  k1(make Pair(x, x), ks1)
+}
+def forward(x, ks2, k2) {
+  produce(x, ks2, k2)
+}
+def main(ks, k) {
+  let pair = forward!(42, ks, return);
+  let alias = pair;
+  alias match {
+    case Pair(first, second) => k(first, ks)
+  }
+}
+
+// The constructor value flows through both an explicit continuation parameter
+// and a value alias. Return unbundling therefore requires no special case for
+// either forwarding function or an immediately adjacent match.
+/// ARITY_RAISE
+
+def produce(x, ks1, k1) {
+  k1(x, x, ks1)
+}
+def forward(x, ks2, k2) {
+  produce(x, ks2, k2)
+}
+def main(ks, k) {
+  let (pair_0, pair_1) = forward!(42, ks, return);
+  k(pair_0, ks)
+}

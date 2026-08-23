@@ -17,7 +17,5 @@ main
 ---
 outer:
   entry x = 0
-  recursive -
 inner:
   entry y = x
-  recursive -

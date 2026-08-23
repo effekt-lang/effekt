@@ -1,3 +1,5 @@
+type ListData { Nil() Cons(head: Int, tail: ListData) }
+
 def use(xs, ks1, k1) {
   xs match {
     case Nil() => k1(0, ks1)
@@ -16,10 +18,10 @@ use
 
 /// ARITY_RAISE
 
-def use_0_Cons(xs_0, xs_1, ks1, k1) {
+def use(xs_0, xs_1, ks1, k1) {
   k1(xs_0, ks1)
 }
 def main(ks, k) {
-  let result = use_0_Cons!(42, make Nil(), ks, return);
+  let result = use!(42, make Nil(), ks, return);
   k(result, ks)
 }

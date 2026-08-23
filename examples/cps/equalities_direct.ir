@@ -11,4 +11,3 @@ main
 ---
 f:
   entry x = seed
-  recursive -

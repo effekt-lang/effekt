@@ -39,7 +39,7 @@ object DefinitionPlanning {
 
   def analyze(
     module: cps.ModuleDecl,
-    targetFlows: Vector[cps.GuardedEquality.TargetResult],
+    targetFlows: Vector[cps.Targets.TargetResult],
     requiredFunctions: Set[Id] = Set.empty,
     directDefinitions: Set[Id] = Set.empty
   ): Plan = {

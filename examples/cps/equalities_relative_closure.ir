@@ -17,10 +17,7 @@ main
 ---
 outer:
   entry k_outer = k
-  recursive -
 done:
   entry -
-  recursive -
 call:
   entry f = done
-  recursive -

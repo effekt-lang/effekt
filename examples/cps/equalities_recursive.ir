@@ -18,7 +18,5 @@ main
 ---
 stable:
   entry x = seed
-  recursive x
 unstable:
   entry -
-  recursive -

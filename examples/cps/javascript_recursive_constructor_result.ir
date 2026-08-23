@@ -1,3 +1,5 @@
+type TripleData { Triple(first: Int, second: Int, third: Int) }
+
 def main(i, ks, k) {
   def boxed(i1, ks1, k1) {
     run done = eq(i1, 0);
@@ -35,23 +37,23 @@ function main_0(i_0, ks_0, k_0) {
   const ks_1 = undefined;
   let i_1 = undefined;
   let k_2 = undefined;
-  let cont_0 = undefined;
-  let value_1 = undefined;
+  let cont_1 = undefined;
   let value_2 = undefined;
+  let value_3 = undefined;
   boxed_worker_0: {
     i_1 = i_0;
     k_2 = k_1;
   }
   boxed_worker_0: while (true) {
-    apply_entry_3: {
+    apply_entry_4: {
       const done_0 = eq_0(i_1, 0);
       if (done_0) {
-        const next_cont_5 = k_2;
-        const next_arg_6 = new Triple_0(i_1, i_1, i_1);
-        const next_arg_7 = ks_1;
-        cont_0 = next_cont_5;
-        value_1 = next_arg_6;
+        const next_cont_6 = k_2;
+        const next_arg_7 = new Triple_0(i_1, i_1, i_1);
+        const next_arg_8 = ks_1;
+        cont_1 = next_cont_6;
         value_2 = next_arg_7;
+        value_3 = next_arg_8;
       } else {
         const previous_0 = sub_0(i_1, 1);
         const k_3 = { __tag: 1, k_2: k_2 };
@@ -60,34 +62,68 @@ function main_0(i_0, ks_0, k_0) {
         continue boxed_worker_0;
       }
     }
-    apply_4: while (true) {
-      switch (cont_0.__tag) {
+    apply_5: while (true) {
+      switch (cont_1.__tag) {
         case 0:
           {
-            const result_0 = value_1;
-            const ks_2 = value_2;
+            const result_0 = value_2;
+            const ks_2 = value_3;
             const value_0 = result_0.first_0;
             return k_0(value_0, ks_0);
           }
         case 1:
           {
-            const recursive_0 = value_1;
-            const ks_3 = value_2;
-            const frame_k_0 = cont_0.k_2;
-            const value_3 = recursive_0.first_0;
-            const second_0 = recursive_0.second_1;
-            const third_0 = recursive_0.third_1;
-            const next_0 = add_0(value_3, 1);
-            const next_cont_8 = frame_k_0;
-            const next_arg_9 = new Triple_0(next_0, second_0, third_0);
-            const next_arg_10 = ks_1;
-            cont_0 = next_cont_8;
-            value_1 = next_arg_9;
+            const recursive_0 = value_2;
+            const ks_3 = value_3;
+            const frame_k_0 = cont_1.k_2;
+            const value_1 = recursive_0.first_0;
+            const second_1 = recursive_0.second_0;
+            const third_1 = recursive_0.third_0;
+            const next_0 = add_0(value_1, 1);
+            const next_cont_9 = frame_k_0;
+            const next_arg_10 = new Triple_0(next_0, second_1, third_1);
+            const next_arg_11 = ks_1;
+            cont_1 = next_cont_9;
             value_2 = next_arg_10;
-            continue apply_4;
+            value_3 = next_arg_11;
+            continue apply_5;
           }
         default:  return $effekt.unreachable();
       }
     }
+  }
+}
+
+class Triple_0 {
+  constructor(first_0, second_0, third_0) {
+    this.__tag = 0;
+    this.first_0 = first_0;
+    this.second_0 = second_0;
+    this.third_0 = third_0;
+  }
+  __reflect() {
+    return {
+      __tag: 0,
+      __name: "Triple",
+      __data: [this.first_0, this.second_0, this.third_0]
+    };
+  }
+  __equals(other0) {
+    if (!other0) {
+      return false;
+    }
+    if (!($effekt.equals(this.__tag, other0.__tag))) {
+      return false;
+    }
+    if (!($effekt.equals(this.first_0, other0.first_0))) {
+      return false;
+    }
+    if (!($effekt.equals(this.second_0, other0.second_0))) {
+      return false;
+    }
+    if (!($effekt.equals(this.third_0, other0.third_0))) {
+      return false;
+    }
+    return true;
   }
 }

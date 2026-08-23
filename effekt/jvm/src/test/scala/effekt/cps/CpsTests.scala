@@ -56,7 +56,7 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
   case CallingConventions extends AnalysisPass("CALLING_CONVENTIONS",
     (_, input, mainId) => js.CallingConvention.analyze(
       input,
-      input.definitions.map(GuardedEquality.targets).toVector,
+      input.definitions.map(Targets.targets).toVector,
       Set(mainId)).show)
   case ControlFlow extends AnalysisPass("CONTROL_FLOW",
     (_, input, _) => {
@@ -67,7 +67,7 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
         id => kinds.get(id).exists(_.isRecursive),
         id => kinds.get(id).exists(_.isSecondClass),
         representations.defunctionalization,
-        input.definitions.map(GuardedEquality.targets).toVector).show
+        input.definitions.map(Targets.targets).toVector).show
     })
   case SafeEntries extends AnalysisPass("SAFE_ENTRIES",
     (_, input, _) => {
@@ -78,13 +78,12 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
         id => kinds.get(id).exists(_.isRecursive),
         id => kinds.get(id).exists(_.isSecondClass),
         representations.defunctionalization,
-        input.definitions.map(GuardedEquality.targets).toVector).safeEntries.show
+        input.definitions.map(Targets.targets).toVector).safeEntries.show
     })
   case JavaScript extends AnalysisPass("JAVASCRIPT",
     (_, input, mainId) => {
       given Context = new TestContext
-      given DeclarationContext = new DeclarationContext(
-        input.declarations ++ CpsTests.fixtureDeclarations, Nil)
+      given DeclarationContext = new DeclarationContext(input.declarations, Nil)
 
       js.TransformerCps.resetNames()
       val generated = js.TransformerCps.toJS(input, Nil, Set(mainId))
@@ -94,22 +93,7 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
     })
 }
 
-object CpsTests {
-  private val listData = Id("ListData", -15)
-
-  val fixtureDeclarations: List[core.Declaration] = List(
-    core.Declaration.Data(Id("TripleData", -11), Nil, List(
-      core.Constructor(Id("Triple", -10), Nil, List(
-        core.Field(Id("first", -12), core.Type.TInt),
-        core.Field(Id("second", -13), core.Type.TInt),
-        core.Field(Id("third", -14), core.Type.TInt))))),
-    core.Declaration.Data(listData, Nil, List(
-      core.Constructor(Id("Nil", -7), Nil, Nil),
-      core.Constructor(Id("Cons", -8), Nil, List(
-        core.Field(Id("head", -16), core.Type.TInt),
-        core.Field(Id("tail", -17), core.ValueType.Data(listData, Nil))))))
-  )
-}
+object CpsTests
 
 class CpsTests extends munit.FunSuite {
 
@@ -251,7 +235,7 @@ class CpsTests extends munit.FunSuite {
 
     js.CallingConvention.analyze(
       module,
-      module.definitions.map(GuardedEquality.targets).toVector,
+      module.definitions.map(Targets.targets).toVector,
       Set(findMain(module)))
   }
 
@@ -322,7 +306,9 @@ class CpsTests extends munit.FunSuite {
             val obtained = pass.run(filename, currentTree, mainId)
             assertAlphaEquivalent(obtained, expected,
               s"$filename step ${idx + 1} (${pass.header}) produced unexpected result")
-            currentTree = expected
+            // Expected sources omit the data declarations; carry the ones parsed
+            // from the initial program forward so later steps still see them.
+            currentTree = expected.copy(declarations = currentTree.declarations)
           }
 
         case Step.Analyze(analysis, expectedOutput) =>
