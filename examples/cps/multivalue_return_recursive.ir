@@ -1,0 +1,75 @@
+def main(n, ks, k) {
+  def countdown(i, acc, ks1, k1) {
+    run done = eq(i, 0);
+    if (done) {
+      k1(i, acc, ks1)
+    } else {
+      run i2 = sub(i, 1);
+      run acc2 = add(acc, i);
+      countdown(i2, acc2, ks1, k1)
+    }
+  }
+  let (final, sum) = countdown!(n, 0, ks, return);
+  run total = add(final, sum);
+  k(total, ks)
+}
+
+// A tail-recursive function returning two values. The recursion becomes a loop
+// and the two-value return `k1(i, acc, ks1)` writes both result registers
+// (`final_0`, `sum_0`) before breaking to the shared return label — no tuple is
+// allocated at the base case or across the iterations.
+/// JAVASCRIPT
+
+function main_0(n_0, ks_0, k_0) {
+  let i_0 = undefined;
+  let acc_0 = undefined;
+  let ks_1 = undefined;
+  let k_2 = undefined;
+  let cont_0 = undefined;
+  let value_1 = undefined;
+  let value_2 = undefined;
+  let value_3 = undefined;
+  countdown_0: {
+    const k_1 = { __tag: 0, ks_0: ks_0, k_0: k_0 };
+    i_0 = n_0;
+    acc_0 = 0;
+    ks_1 = ks_0;
+    k_2 = k_1;
+  }
+  countdown_0: while (true) {
+    apply_entry_4: {
+      const done_0 = eq_0(i_0, 0);
+      if (done_0) {
+        const next_cont_6 = k_2;
+        const next_arg_7 = i_0;
+        const next_arg_8 = acc_0;
+        const next_arg_9 = ks_1;
+        cont_0 = next_cont_6;
+        value_1 = next_arg_7;
+        value_2 = next_arg_8;
+        value_3 = next_arg_9;
+      } else {
+        const i_1 = sub_0(i_0, 1);
+        const acc_1 = add_0(acc_0, i_0);
+        i_0 = i_1;
+        acc_0 = acc_1;
+        continue countdown_0;
+      }
+    }
+    apply_5: while (true) {
+      switch (cont_0.__tag) {
+        case 0:
+          {
+            const final_0 = value_1;
+            const sum_0 = value_2;
+            const ks_2 = value_3;
+            const frame_ks_0 = cont_0.ks_0;
+            const frame_k_0 = cont_0.k_0;
+            const total_0 = add_0(final_0, sum_0);
+            return frame_k_0(total_0, frame_ks_0);
+          }
+        default:  return $effekt.unreachable();
+      }
+    }
+  }
+}

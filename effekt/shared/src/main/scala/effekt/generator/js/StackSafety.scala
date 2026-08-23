@@ -139,14 +139,14 @@ object StackSafety {
       isRecursive,
       isSecondClass,
       defunctionalization,
-      module.definitions.map(cps.GuardedEquality.targets).toVector)
+      module.definitions.map(cps.Targets.targets).toVector)
 
   def analyze(
     module: cps.ModuleDecl,
     isRecursive: Id => Boolean,
     isSecondClass: Id => Boolean,
     defunctionalization: Defunctionalization.Plan,
-    targetFlows: Vector[cps.GuardedEquality.TargetResult]
+    targetFlows: Vector[cps.Targets.TargetResult]
   ): Plan =
     analyze(
       module,
@@ -162,7 +162,7 @@ object StackSafety {
     isRecursive: Id => Boolean,
     isSecondClass: Id => Boolean,
     defunctionalization: Defunctionalization.Plan,
-    targetFlows: Vector[cps.GuardedEquality.TargetResult],
+    targetFlows: Vector[cps.Targets.TargetResult],
     directDefinitions: Set[Id],
     directEntries: Map[Id, Vector[Id]]
   ): Plan = {
@@ -188,7 +188,7 @@ object StackSafety {
     // The target analysis is deliberately kept separate from the stack
     // solver. A syntactic call site denotes one grouped set of transitions:
     // it can only be direct if all of those transitions decrease the rank.
-    val targetsByCall = new IdentityHashMap[cps.Stmt.App, cps.GuardedEquality.CallTargets]()
+    val targetsByCall = new IdentityHashMap[cps.Stmt.App, cps.Targets.CallTargets]()
     val parameters = mutable.LinkedHashMap.empty[Id, Vector[Id]]
 
     module.definitions.zip(targetFlows).foreach { case (toplevel, flow) =>

@@ -89,7 +89,7 @@ object Defunctionalization {
     boundary: Boolean,
     targets: Set[Id],
     externalTargets: Set[Id],
-    calls: Vector[cps.GuardedEquality.CallTargets]
+    calls: Vector[cps.Targets.CallTargets]
   )
 
   /** Lexical scopes relevant to JavaScript label visibility. Definitions are
@@ -335,14 +335,14 @@ object Defunctionalization {
       module,
       isRecursive,
       isSecondClass,
-      module.definitions.map(cps.GuardedEquality.targets).toVector,
+      module.definitions.map(cps.Targets.targets).toVector,
       Set.empty)
 
   def analyze(
     module: cps.ModuleDecl,
     isRecursive: Id => Boolean,
     isSecondClass: Id => Boolean,
-    targetFlows: Vector[cps.GuardedEquality.TargetResult],
+    targetFlows: Vector[cps.Targets.TargetResult],
     directDefinitions: Set[Id]
   ): Plan = {
     require(module.definitions.size == targetFlows.size)
