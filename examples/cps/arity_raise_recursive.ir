@@ -1,3 +1,5 @@
+type ListData { Nil() Cons(head: Int, tail: ListData) }
+
 def main(k) {
   def loop(xs, k1) {
     xs match {
@@ -16,8 +18,8 @@ loop
 /// ARITY_RAISE
 
 def main(k) {
-  def loop_0_Cons(xs_0, xs_1, k1) {
-    loop_0_Cons(xs_0, xs_1, k1)
+  def loop(xs_0, xs_1, k1) {
+    loop(xs_0, xs_1, k1)
   }
-  loop_0_Cons(1, make Nil(), k)
+  loop(1, make Nil(), k)
 }

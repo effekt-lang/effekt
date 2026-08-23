@@ -27,6 +27,8 @@ class Parser(names: Names) extends Parsers {
   lazy val `}` = literal("}")
   lazy val `(` = literal("(")
   lazy val `)` = literal(")")
+  lazy val `[` = literal("[")
+  lazy val `]` = literal("]")
   lazy val `,` = literal(",")
   lazy val `.` = literal(".")
   lazy val `=>` = literal("=>")
@@ -36,6 +38,8 @@ class Parser(names: Names) extends Parsers {
   lazy val `:` = literal(":")
   lazy val `<>` = literal("<>")
 
+  lazy val `type` = keyword("type")
+  lazy val `interface` = keyword("interface")
   lazy val `def` = keyword("def")
   lazy val `let` = keyword("let")
   lazy val `new` = keyword("new")
@@ -65,7 +69,7 @@ class Parser(names: Names) extends Parsers {
   lazy val `run~` : P[String] = regex("run~(?![a-zA-Z0-9_!?$])".r, "run~")
 
   def keywordStrings: List[String] = List(
-    "def", "let", "new", "run", "if", "else", "match", "case",
+    "type", "interface", "def", "let", "new", "run", "if", "else", "match", "case",
     "var", "dealloc", "region", "alloc", "in", "reset", "shift",
     "resume", "make", "get", "put", "true", "false",
     "abort", "return", "toplevel"
@@ -109,9 +113,50 @@ class Parser(names: Names) extends Parsers {
   // === Module ===
 
   lazy val program: P[ModuleDecl] =
-    many(toplevelDef) ^^ {
-      defs => ModuleDecl(Nil, Nil, Nil, defs, Nil)
+    many(declaration | toplevelDef) ^^ { items =>
+      val declarations = items.collect { case d: core.Declaration => d }
+      val definitions = items.collect { case d: ToplevelDefinition => d }
+      ModuleDecl(Nil, declarations, Nil, definitions, Nil)
     }
+
+  // === Declarations ===
+  // Mirrors the core surface syntax: `type Id[T] { Ctor(f: Type) }` and
+  // `interface Id[T] { op: BlockType }`.
+
+  def brackets[T](p: => Parser[T]): Parser[T] = `[` ~> p <~ `]`
+  lazy val maybeTypeParams: P[List[Id]] = brackets(commaList(id)).? ^^ (_.getOrElse(Nil))
+  lazy val maybeTypeArgs: P[List[core.ValueType]] = brackets(commaList(valueType)).? ^^ (_.getOrElse(Nil))
+
+  lazy val valueType: P[core.ValueType] =
+    id ~ maybeTypeArgs ^^ { case name ~ targs => core.ValueType.Data(name, targs) }
+
+  // A minimal block type, enough for interface operations in fixtures.
+  lazy val blockType: P[core.BlockType] =
+    ( parens(commaList(valueType)) ~ (`=>` ~> valueType) ^^ {
+        case vparams ~ result => core.BlockType.Function(Nil, Nil, vparams, Nil, result)
+      }
+    | id ~ maybeTypeArgs ^^ { case name ~ targs => core.BlockType.Interface(name, targs) }
+    )
+
+  lazy val declaration: P[core.Declaration] =
+    ( `type` ~> id ~ maybeTypeParams ~ braces(many(constructorDecl)) ^^ {
+        case name ~ tparams ~ constructors => core.Declaration.Data(name, tparams, constructors)
+      }
+    | `interface` ~> id ~ maybeTypeParams ~ braces(many(propertyDecl)) ^^ {
+        case name ~ tparams ~ properties => core.Declaration.Interface(name, tparams, properties)
+      }
+    )
+
+  lazy val constructorDecl: P[core.Constructor] =
+    id ~ maybeTypeParams ~ parens(commaList(fieldDecl)) ^^ {
+      case tag ~ tparams ~ fields => core.Constructor(tag, tparams, fields)
+    }
+
+  lazy val fieldDecl: P[core.Field] =
+    id ~ (`:` ~> valueType) ^^ { case name ~ tpe => core.Field(name, tpe) }
+
+  lazy val propertyDecl: P[core.Property] =
+    id ~ (`:` ~> blockType) ^^ { case name ~ tpe => core.Property(name, tpe) }
 
   // === Toplevel ===
 

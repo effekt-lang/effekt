@@ -4,13 +4,17 @@ package cps
 import core.{ Id, ValueType }
 import scala.collection.mutable
 
-/** Relational arity raising.
+/** Monovariant unbundling of product representations.
  *
- *  The analysis records the constructor shape of all arguments at every
- *  reachable, syntactically known call. Keeping complete argument vectors is
- *  what preserves dependencies between parameters. Shapes expose exactly one
- *  constructor layer: fields remain ordinary values and can be considered by
- *  a later run of the pass.
+ *  One instance of [[AbstractMachine]] determines where a value has one known
+ *  constructor representation. Matches are representation demands: merely
+ *  knowing a value's constructor does not justify changing its convention.
+ *  Since compositional call remainders are reified as ordinary continuations,
+ *  returned products are handled by exactly the same analysis.
+ *
+ *  The analysis also identifies object allocations observed through their
+ *  operations. One representation-directed traversal then performs argument
+ *  unbundling, return unbundling, and object splitting.
  */
 object ArityRaising {
 
@@ -21,19 +25,24 @@ object ArityRaising {
 
   type Entry = Vector[Shape]
 
-  case class Analysis(entries: Map[Id, Set[Entry]]) {
+  case class Analysis(entries: Map[Id, Entry]) {
     def show: String = entries.toList
-      .filter(_._2.exists(_.exists(_ != Shape.Unknown)))
+      .filter(_._2.exists(_ != Shape.Unknown))
       .sortBy(_._1.id)
-      .map { case (id, entries) =>
-        val rendered = entries.toList
-          .filter(_.exists(_ != Shape.Unknown))
-          .sortBy(showEntry).map(e => s"  ${showEntry(e)}")
-        (id.name.name :: rendered).mkString("\n")
+      .map { case (id, entry) =>
+        s"${id.name.name}\n  ${showEntry(entry)}"
       }.mkString("\n")
   }
 
-  private case class Definition(params: List[Id], body: Stmt)
+  private case class Flow(var targets: Set[Id], var open: Boolean)
+  private case class Plan(
+    analysis: Analysis,
+    calls: Map[Site[Stmt], Entry],
+    continuations: Map[Site[Stmt], Entry],
+    objects: Set[Id]
+  )
+
+  private def site(statement: Stmt): Site[Stmt] = Site(statement)
 
   private def showShape(shape: Shape): String = shape match {
     case Shape.Unknown => "?"
@@ -44,588 +53,605 @@ object ArityRaising {
   private def showEntry(entry: Entry): String =
     entry.map(showShape).mkString("<", ", ", ">")
 
-  /** Collect definitions independently of their lexical nesting. Identifiers
-   *  in CPS are globally unique, while the transformer below restores the
-   *  original nesting. */
-  private def collect(module: ModuleDecl): Map[Id, Definition] = {
-    val definitions = mutable.LinkedHashMap.empty[Id, Definition]
-
-    def visit(stmt: Stmt): Unit = stmt match {
-      case Stmt.Def(id, params, body, rest) =>
-        definitions(id) = Definition(params, body)
-        visit(body); visit(rest)
-      case Stmt.New(_, _, operations, rest) =>
-        operations.foreach(op => visit(op.body)); visit(rest)
-      case Stmt.Let(_, _, rest) => visit(rest)
-      case Stmt.Call(_, _, _, _, _, rest) => visit(rest)
-      case Stmt.Run(_, _, _, _, rest) => visit(rest)
-      case Stmt.If(_, thn, els) => visit(thn); visit(els)
-      case Stmt.Match(_, clauses, default) =>
-        clauses.foreach { case (_, clause) => visit(clause.body) }
-        default.foreach(visit)
-      case Stmt.Region(_, _, rest) => visit(rest)
-      case Stmt.Alloc(_, _, _, rest) => visit(rest)
-      case Stmt.Var(_, _, _, rest) => visit(rest)
-      case Stmt.Dealloc(_, rest) => visit(rest)
-      case Stmt.Get(_, _, rest) => visit(rest)
-      case Stmt.Put(_, _, rest) => visit(rest)
-      case Stmt.Reset(_, _, _, body, _, _) => visit(body)
-      case Stmt.Shift(_, _, _, _, body, _, _) => visit(body)
-      case Stmt.Resume(_, _, _, body, _, _) => visit(body)
-      case _: Stmt.App | _: Stmt.Invoke | _: Stmt.Return | _: Stmt.Hole => ()
-    }
-
-    module.definitions.foreach {
-      case ToplevelDefinition.Def(id, params, body) =>
-        definitions(id) = Definition(params, body)
-        visit(body)
-      case ToplevelDefinition.Val(_, _, _, binding) => visit(binding)
-    }
-    definitions.toMap
-  }
-
-  /** Parameters whose representation is observed by pattern matching.
-   *
-   *  An edge x -> y records that the value of x is passed unchanged to y.
-   *  Representation demand is the inverse reachability closure of variables
-   *  scrutinized by Match. Thus demand propagates through aliases and known
-   *  calls, but not through a newly constructed outer value.
-   */
-  private def representationDemand(
+  /** The complete analysis for this transformation. The abstract machine
+   *  collects values, direct address flows, and representation observations
+   *  in one run; no additional syntax traversal is necessary. */
+  private class RepresentationAnalysis(
     module: ModuleDecl,
-    definitions: Map[Id, Definition]
-  ): Map[Id, Set[Int]] = {
-    val predecessors = mutable.Map.empty[Id, mutable.Set[Id]]
-    val demanded = mutable.Set.empty[Id]
+    roots: Set[Id]
+  ) extends AbstractMachine(module) {
 
-    def flows(expr: Expr, to: Id): Unit = expr match {
-      case Expr.Variable(from) =>
-        predecessors.getOrElseUpdate(to, mutable.Set.empty) += from
-      case _ => ()
-    }
+    type Property = Set[Address]
+    type Context = Unit
 
-    def call(id: Id, args: List[Expr]): Unit =
-      definitions.get(id).foreach { definition =>
-        args.zip(definition.params).foreach { case (arg, param) => flows(arg, param) }
+    def bottom: Property = Set.empty
+    def external: Property = Set.empty
+    def join(left: Property, right: Property): Property = left ++ right
+    def literal(value: Any, annotatedType: core.ValueType): Property = Set.empty
+    def closure(value: Value.Closure, context: Unit): Property = Set.empty
+    def instance(value: Value.Object, context: Unit): Property = Set.empty
+    def constructor(value: Value.Constructor, context: Unit): Property = Set.empty
+    def initialContext: Unit = ()
+    def tick(
+      call: Option[Stmt],
+      callee: Value.Closure,
+      arguments: List[Values],
+      caller: Unit
+    ): Unit = ()
+
+    private val predecessors = mutable.Map.empty[Address, mutable.Set[Address]]
+    private val successors = mutable.Map.empty[Address, mutable.Set[Address]]
+    private val demanded = mutable.Set.empty[Address]
+    private val pendingDemand = mutable.Queue.empty[Address]
+
+    private def demand(addresses: IterableOnce[Address]): Unit = {
+      addresses.iterator.foreach { address =>
+        if demanded.add(address) then pendingDemand.enqueue(address)
       }
-
-    def visit(stmt: Stmt): Unit = stmt match {
-      case Stmt.Def(_, _, body, rest) => visit(body); visit(rest)
-      case Stmt.New(_, _, operations, rest) =>
-        operations.foreach(op => visit(op.body)); visit(rest)
-      case Stmt.Let(id, binding, rest) => flows(binding, id); visit(rest)
-      case Stmt.Call(_, _, Callee.Function(id), args, _, rest) =>
-        call(id, args); visit(rest)
-      case Stmt.Call(_, _, _, _, _, rest) => visit(rest)
-      case Stmt.App(id, args) => call(id, args)
-      case Stmt.Run(_, _, _, _, rest) => visit(rest)
-      case Stmt.If(_, thn, els) => visit(thn); visit(els)
-      case Stmt.Match(Expr.Variable(id), clauses, default) =>
-        demanded += id
-        clauses.foreach { case (_, clause) => visit(clause.body) }
-        default.foreach(visit)
-      case Stmt.Match(_, clauses, default) =>
-        clauses.foreach { case (_, clause) => visit(clause.body) }
-        default.foreach(visit)
-      case Stmt.Region(_, _, rest) => visit(rest)
-      case Stmt.Alloc(_, _, _, rest) => visit(rest)
-      case Stmt.Var(_, _, _, rest) => visit(rest)
-      case Stmt.Dealloc(_, rest) => visit(rest)
-      case Stmt.Get(_, _, rest) => visit(rest)
-      case Stmt.Put(_, _, rest) => visit(rest)
-      case Stmt.Reset(_, _, _, body, _, _) => visit(body)
-      case Stmt.Shift(_, _, _, _, body, _, _) => visit(body)
-      case Stmt.Resume(_, _, _, body, _, _) => visit(body)
-      case _: Stmt.Invoke | _: Stmt.Return | _: Stmt.Hole => ()
-    }
-
-    module.definitions.foreach {
-      case ToplevelDefinition.Def(_, _, body) => visit(body)
-      case ToplevelDefinition.Val(_, _, _, binding) => visit(binding)
-    }
-
-    val pending = mutable.Queue.from(demanded)
-    while pending.nonEmpty do {
-      val variable = pending.dequeue()
-      predecessors.get(variable).foreach { variables =>
-        variables.foreach { predecessor =>
-          if demanded.add(predecessor) then pending.enqueue(predecessor)
+      while pendingDemand.nonEmpty do {
+        val address = pendingDemand.dequeue()
+        predecessors.get(address).foreach { sources =>
+          sources.foreach { source =>
+            if demanded.add(source) then pendingDemand.enqueue(source)
+          }
         }
       }
     }
 
-    definitions.map { case (id, definition) =>
-      id -> definition.params.indices.filter(i => demanded.contains(definition.params(i))).toSet
+    private def flow(source: Address, target: Address): Unit = {
+      val incoming = predecessors.getOrElseUpdate(target, mutable.Set.empty)
+      if incoming.add(source) then {
+        successors.getOrElseUpdate(source, mutable.Set.empty) += target
+        if demanded.contains(target) then demand(List(source))
+      }
     }
-  }
 
-  def analyze(module: ModuleDecl, entrypoints: Set[Id]): Analysis = {
-    val definitions = collect(module)
-    val demanded = representationDemand(module, definitions)
-    val entries = mutable.LinkedHashMap.empty[Id, mutable.LinkedHashSet[Entry]]
-    val pending = mutable.Queue.empty[(Id, Entry)]
+    /** Properties denote the address from which a value was just read. They
+     *  are transient: a write records the direct flow edge and stores only the
+     *  collecting value. */
+    override protected def readValue(address: Address, value: Values): Values =
+      value.copy(property = Set(address))
 
-    def demand(id: Id, entry: Entry): Unit = definitions.get(id).foreach { definition =>
-      if definition.params.size == entry.size then {
-        val observedEntry = entry.zipWithIndex.map { case (shape, index) =>
-          if demanded.getOrElse(id, Set.empty).contains(index) then shape
+    override protected def writeValue(address: Address, value: Values): Values = {
+      address match {
+        case _: Address.Binding => value.property.foreach(flow(_, address))
+        case _ => ()
+      }
+      value.copy(property = Set.empty)
+    }
+
+    private val topLevelParameters: Map[Id, List[Id]] = module.definitions.map {
+      case ToplevelDefinition.Def(id, params, _) => id -> params
+      case ToplevelDefinition.Val(id, ks, k, _) => id -> List(ks, k)
+    }.toMap
+
+    private val flows = mutable.Map.empty[Site[Stmt], Flow]
+    private val functions = mutable.Set.empty[Id]
+    private val objectBindings = mutable.Set.empty[Id]
+    private val calls = new java.util.IdentityHashMap[Stmt.Call, java.lang.Boolean]()
+
+    private def record(statement: Stmt, targets: Set[Id], open: Boolean): Unit = {
+      val flow = flows.getOrElseUpdate(site(statement), Flow(Set.empty, open = false))
+      flow.targets ++= targets
+      flow.open ||= open
+      functions ++= targets
+      statement match {
+        case call: Stmt.Call => calls.put(call, java.lang.Boolean.TRUE)
+        case _ => ()
+      }
+    }
+
+    override protected def observeApply(
+      statement: Stmt,
+      callee: Values,
+      targets: Set[Id],
+      arguments: List[Values],
+      context: Unit
+    ): Unit = record(statement, targets, callee.open)
+
+    override protected def observeInvoke(
+      statement: Stmt,
+      receiver: Values,
+      method: Id,
+      targets: Set[Id],
+      arguments: List[Values],
+      context: Unit
+    ): Unit = {
+      demand(receiver.property)
+      record(statement, targets, receiver.open)
+    }
+
+    override protected def observeMatch(
+      statement: Stmt.Match,
+      scrutinee: Values,
+      context: Unit
+    ): Unit = demand(scrutinee.property)
+
+    override protected def observeNew(
+      statement: Stmt.New,
+      instance: Values,
+      context: Unit
+    ): Unit = objectBindings += statement.id
+
+    override protected def entryPoints: List[(Id, List[Values])] = {
+      val initializers = module.definitions.collect {
+        case ToplevelDefinition.Val(id, _, _, _) => id
+      }.toSet
+      val entries = roots ++ module.exports ++ initializers
+      functions ++= entries
+      entries.toList.flatMap { id =>
+        topLevelParameters.get(id).map { params =>
+          id -> List.fill(params.size)(Values(Set.empty, open = true, Set.empty))
+        }
+      }
+    }
+
+    private def meet(left: Entry, right: Entry): Entry =
+      if left.size != right.size then Vector.fill(left.size)(Shape.Unknown)
+      else left.zip(right).map { case (l, r) => if l == r then l else Shape.Unknown }
+
+    private def meet(left: Shape, right: Shape): Shape =
+      if left == right then left else Shape.Unknown
+
+    private def address(id: Id): Address = Address.Binding(id, ())
+
+    private def preferred(address: Address): Shape = address match {
+      case Address.Binding(_, _) if demanded.contains(address) =>
+        val values = valueAt(address)
+        if values.open || values.values.isEmpty then Shape.Unknown
+        else {
+          val constructors = values.values.collect {
+            case value: Value.Constructor => value
+          }
+          val shapes = constructors.map { value =>
+            Shape.Constructor(value.tpe, value.tag, value.fields.size)
+          }
+          if constructors.size == values.values.size && shapes.size == 1
+          then shapes.head
           else Shape.Unknown
         }
-        val observed = entries.getOrElseUpdate(id, mutable.LinkedHashSet.empty)
-        if observed.add(observedEntry) then pending.enqueue(id -> observedEntry)
-      }
-    }
-
-    def shape(expr: Expr, env: Map[Id, Shape]): Shape = expr match {
-      case Expr.Variable(id) => env.getOrElse(id, Shape.Unknown)
-      case Expr.Make(data, tag, args) => Shape.Constructor(data, tag, args.size)
       case _ => Shape.Unknown
     }
 
-    def scanOperation(operation: Operation, env: Map[Id, Shape]): Unit =
-      scan(operation.body, env ++ operation.params.map(_ -> Shape.Unknown))
+    private lazy val computed: Plan = {
+      run()
 
-    def scan(stmt: Stmt, env: Map[Id, Shape]): Unit = stmt match {
-      case Stmt.Def(_, _, _, rest) => scan(rest, env)
-
-      case Stmt.New(id, _, operations, rest) =>
-        operations.foreach(scanOperation(_, env))
-        scan(rest, env + (id -> Shape.Unknown))
-
-      case Stmt.Let(id, binding, rest) =>
-        scan(rest, env + (id -> shape(binding, env)))
-
-      case Stmt.Call(ids, returnedKs, Callee.Function(callee), args, ks, rest) =>
-        // A compositional call supplies the conventional (ks, k) pair. They
-        // remain opaque; this pass changes data arguments, not continuations.
-        demand(callee,
-          (args.map(shape(_, env)) ++ List(Shape.Unknown, Shape.Unknown)).toVector)
-        scan(rest, env ++ ids.map(_ -> Shape.Unknown) + (returnedKs -> Shape.Unknown))
-
-      case Stmt.Call(ids, returnedKs, _, _, _, rest) =>
-        scan(rest, env ++ ids.map(_ -> Shape.Unknown) + (returnedKs -> Shape.Unknown))
-
-      case Stmt.App(id, args) =>
-        demand(id, args.map(shape(_, env)).toVector)
-
-      case Stmt.Invoke(_, _, _) => ()
-      case Stmt.Return(_) => ()
-
-      case Stmt.Run(id, _, _, _, rest) =>
-        scan(rest, env + (id -> Shape.Unknown))
-
-      case Stmt.If(_, thn, els) => scan(thn, env); scan(els, env)
-
-      case Stmt.Match(scrutinee, clauses, default) =>
-        shape(scrutinee, env) match {
-          case Shape.Constructor(_, tag, _) =>
-            clauses.find(_._1 == tag) match {
-              case Some((_, Clause(params, body))) =>
-                scan(body, env ++ params.map(_ -> Shape.Unknown))
-              case None => default.foreach(scan(_, env))
-            }
-          case Shape.Unknown =>
-            clauses.foreach { case (_, Clause(params, body)) =>
-              scan(body, env ++ params.map(_ -> Shape.Unknown))
-            }
-            default.foreach(scan(_, env))
+      val continuationIds = mutable.Set.empty[Id]
+      val continuationEntries = mutable.Map.empty[Site[Stmt], Entry]
+      val iterator = calls.keySet().iterator()
+      while iterator.hasNext do {
+        val call = iterator.next()
+        reifiedContinuationOf(call).foreach { id =>
+          continuationIds += id
+          functions += id
         }
-
-      case Stmt.Region(id, _, rest) => scan(rest, env + (id -> Shape.Unknown))
-      case Stmt.Alloc(id, _, _, rest) => scan(rest, env + (id -> Shape.Unknown))
-      case Stmt.Var(id, _, _, rest) => scan(rest, env + (id -> Shape.Unknown))
-      case Stmt.Dealloc(_, rest) => scan(rest, env)
-      case Stmt.Get(_, id, rest) => scan(rest, env + (id -> Shape.Unknown))
-      case Stmt.Put(_, _, rest) => scan(rest, env)
-
-      case Stmt.Reset(p, ks, k, body, _, _) =>
-        scan(body, env ++ List(p, ks, k).map(_ -> Shape.Unknown))
-      case Stmt.Shift(_, resume, ks, k, body, _, _) =>
-        scan(body, env ++ List(resume, ks, k).map(_ -> Shape.Unknown))
-      case Stmt.Resume(_, ks, k, body, _, _) =>
-        scan(body, env ++ List(ks, k).map(_ -> Shape.Unknown))
-      case _: Stmt.Hole => ()
-    }
-
-    // ToplevelDefinition.escapes includes the definition itself. Here we need
-    // only actual value uses found in bodies: a known call does not require the
-    // generic calling convention.
-    val escaped = module.definitions.flatMap {
-      case ToplevelDefinition.Def(_, _, body) => body.escapes
-      case ToplevelDefinition.Val(_, _, _, binding) => binding.escapes
-    }.toSet
-
-    (entrypoints ++ module.exports ++ escaped).foreach { id =>
-      definitions.get(id).foreach { definition =>
-        demand(id, Vector.fill(definition.params.size)(Shape.Unknown))
       }
+
+      val definitions = functions.iterator.flatMap { id =>
+        val parameters = parameterListsOf(id)
+        Option.when(parameters.nonEmpty)(id -> parameters)
+      }.toMap
+
+      val addresses = mutable.Set.empty[Address]
+      definitions.valuesIterator.flatten.flatten.foreach(id => addresses += address(id))
+      successors.foreach { case (source, targets) =>
+        addresses += source
+        addresses ++= targets
+      }
+
+      // Equality of calling conventions generates an equivalence relation on
+      // addresses. Solve availability on its quotient rather than repeatedly
+      // propagating agreement between individual parameters.
+      val parent = mutable.Map.from(addresses.iterator.map(a => a -> a))
+      val rank = mutable.Map.empty[Address, Int].withDefaultValue(0)
+
+      def find(address: Address): Address = {
+        val next = parent.getOrElseUpdate(address, address)
+        if next == address then address
+        else {
+          val root = find(next)
+          parent(address) = root
+          root
+        }
+      }
+
+      def union(left: Address, right: Address): Unit = {
+        val l = find(left)
+        val r = find(right)
+        if l != r then {
+          if rank(l) < rank(r) then parent(l) = r
+          else {
+            parent(r) = l
+            if rank(l) == rank(r) then rank(l) += 1
+          }
+        }
+      }
+
+      val forced = mutable.Set.empty[Address]
+      def agree(parameterLists: Iterable[List[Id]], open: Boolean): Unit = {
+        val lists = parameterLists.toList
+        if lists.nonEmpty then {
+          if open || lists.map(_.size).distinct.size != 1 then
+            lists.flatten.foreach(id => forced += address(id))
+          else lists.transpose.foreach { parameters =>
+            val members = parameters.iterator.map(address).toList.distinct
+            members.tail.foreach(union(members.head, _))
+          }
+        }
+      }
+
+      // Definitions sharing a name (notably operations of one interface) and
+      // all targets of an indirect call must expose one representation.
+      definitions.values.foreach(agree(_, open = false))
+      flows.values.foreach { flow =>
+        agree(flow.targets.iterator.flatMap(id => definitions.getOrElse(id, Nil)).toList,
+          flow.open)
+      }
+      addresses ++= forced
+
+      val classes = addresses.groupBy(find)
+      val representations = mutable.Map.from(classes.iterator.map { case (root, members) =>
+        val shapes = members.iterator.map { member =>
+          if forced.contains(member) then Shape.Unknown else preferred(member)
+        }
+        root -> shapes.reduce(meet)
+      })
+      val quotient = mutable.Map.empty[Address, mutable.Set[Address]]
+      successors.foreach { case (source, targets) =>
+        val from = find(source)
+        targets.foreach { target =>
+          val to = find(target)
+          if from != to then quotient.getOrElseUpdate(from, mutable.Set.empty) += to
+        }
+      }
+
+      // A split producer can be materialized for a boxed consumer. The
+      // converse is unavailable without introducing a new match, hence the
+      // directed source-to-target constraint.
+      val pending = mutable.Queue.from(classes.keys)
+      val scheduled = mutable.Set.from(classes.keys)
+      while pending.nonEmpty do {
+        val source = pending.dequeue()
+        scheduled -= source
+        quotient.get(source).foreach { targets =>
+          targets.foreach { target =>
+            val previous = representations(target)
+            val next = meet(previous, representations(source))
+            if next != previous then {
+              representations(target) = next
+              if scheduled.add(target) then pending.enqueue(target)
+            }
+          }
+        }
+      }
+
+      def entry(parameters: List[Id]): Entry =
+        parameters.map(id => representations.getOrElse(find(address(id)), Shape.Unknown)).toVector
+
+      val entries = definitions.iterator.flatMap { case (id, parameterLists) =>
+        parameterLists.map(entry).reduceOption(meet).map(id -> _)
+      }.toMap
+
+      val callEntries = flows.iterator.flatMap { case (callSite, flow) =>
+        val targetEntries = flow.targets.flatMap(entries.get)
+        Option.when(!flow.open && targetEntries.size == 1) {
+          callSite -> targetEntries.head
+        }
+      }.toMap
+
+      val callIterator = calls.keySet().iterator()
+      while callIterator.hasNext do {
+        val call = callIterator.next()
+        reifiedContinuationOf(call).flatMap(entries.get).foreach { entry =>
+          continuationEntries(site(call)) = entry
+        }
+      }
+
+      val splitObjects = objectBindings.filter(id => demanded.contains(address(id))).toSet
+
+      Plan(
+        Analysis(entries.toMap -- continuationIds),
+        callEntries,
+        continuationEntries.toMap,
+        splitObjects)
     }
 
-    module.definitions.foreach {
-      case ToplevelDefinition.Def(_, _, _) => ()
-      case ToplevelDefinition.Val(_, ks, k, binding) =>
-        scan(binding, Map(ks -> Shape.Unknown, k -> Shape.Unknown))
-    }
-
-    while pending.nonEmpty do {
-      val (id, entry) = pending.dequeue()
-      val definition = definitions(id)
-      scan(definition.body, definition.params.zip(entry).toMap)
-    }
-
-    Analysis(entries.view.mapValues(_.toSet).toMap)
+    def result: Plan = computed
   }
 
-  private case class Variant(entry: Entry, id: Id)
-  private case class FunctionNames(generic: Id, variants: List[Variant]) {
-    def select(entry: Entry): Option[Variant] = variants.find(_.entry == entry)
+  def analyze(module: ModuleDecl, entrypoints: Set[Id]): Analysis =
+    RepresentationAnalysis(module, entrypoints).result.analysis
+
+  private enum KnownValue {
+    case Whole(expression: Expr)
+    case Constructor(
+      data: ValueType.Data,
+      tag: Id,
+      fields: List[KnownValue],
+      whole: Option[Expr]
+    )
   }
 
-  private sealed trait Value {
-    def shape: Shape
-  }
-  private case class Whole(expr: Expr) extends Value {
-    val shape: Shape = Shape.Unknown
-  }
-  private case class Split(
-    data: ValueType.Data,
-    tag: Id,
-    fields: List[Value],
-    whole: Option[Expr]
-  ) extends Value {
-    val shape: Shape = Shape.Constructor(data, tag, fields.size)
-  }
+  private type KnownValues = Map[Id, KnownValue]
+  private type Objects = Map[Id, Map[Id, Id]]
 
-  private type Values = Map[Id, Value]
-  private type Functions = Map[Id, FunctionNames]
+  private class Rewriter(plan: Plan) {
 
-  private def variantName(id: Id, entry: Entry): Id = {
-    val suffix = entry.zipWithIndex.collect {
-      case (Shape.Constructor(_, tag, _), index) => s"${index}_${tag.name.name}"
-    }.mkString("_")
-    Id(id.name.rename(name => s"${name}_${suffix}"))
-  }
+    import KnownValue.*
 
-  /** Exact observed vectors are the polyvariance policy. Keeping this choice
-   *  separate makes a later widening or clustering policy independent of the
-   *  analysis and the representation-directed rewrite. */
-  private def variants(id: Id, analysis: Analysis): List[Variant] =
-    analysis.entries.getOrElse(id, Set.empty).toList
-      .filter(_.exists(_ != Shape.Unknown))
-      .sortBy(showEntry)
-      .map(entry => Variant(entry, variantName(id, entry)))
+    private case class Raised(
+      ids: List[Id],
+      values: KnownValues,
+      materializations: List[(Id, KnownValue.Constructor)]
+    )
 
-  private class Rewriter(analysis: Analysis, topLevel: Functions) {
-
-    private def fresh(id: Id): Id = Id(id)
-
-    private def materialize(value: Value): Expr = value match {
-      case Whole(expr) => expr
-      case Split(data, tag, fields, whole) =>
+    private def materialize(value: KnownValue): Expr = value match {
+      case Whole(expression) => expression
+      case Constructor(data, tag, fields, whole) =>
         whole.getOrElse(Expr.Make(data, tag, fields.map(materialize)))
     }
 
-    private def value(expr: Expr, values: Values, functions: Functions): Value = expr match {
-      case Expr.Variable(id) =>
-        values.getOrElse(id,
-          functions.get(id).fold[Value](Whole(expr))(names => Whole(Expr.Variable(names.generic))))
-      case Expr.Make(data, tag, args) =>
-        Split(data, tag, args.map(value(_, values, functions)), None)
-      case Expr.Literal(_, _) | Expr.Abort | Expr.Toplevel => Whole(expr)
+    private def value(expression: Expr, values: KnownValues): KnownValue = expression match {
+      case Expr.Variable(id) => values.getOrElse(id, Whole(expression))
+      case Expr.Make(data, tag, arguments) =>
+        Constructor(data, tag, arguments.map(value(_, values)), None)
+      case Expr.Literal(_, _) | Expr.Abort | Expr.Toplevel => Whole(expression)
     }
 
-    private def rewriteExpr(expr: Expr, values: Values, functions: Functions): Expr =
-      materialize(value(expr, values, functions))
+    private def expression(expression: Expr, values: KnownValues): Expr =
+      materialize(value(expression, values))
 
-    private def rewriteId(id: Id, values: Values, functions: Functions): Id =
-      materialize(value(Expr.Variable(id), values, functions)) match {
+    private def identifier(id: Id, values: KnownValues): Id =
+      expression(Expr.Variable(id), values) match {
         case Expr.Variable(result) => result
-        case _ => id // Well-typed CPS only uses function-like values here.
+        case _ => id
       }
 
-    private def freshParams(params: List[Id], values: Values): (List[Id], Values) = {
-      val renamed = params.map(fresh)
-      (renamed, values ++ params.zip(renamed.map(id => Whole(Expr.Variable(id)))))
+    private def expand(values: List[KnownValue], entry: List[Shape]): Option[List[Expr]] =
+      (values, entry) match {
+        case (Nil, Nil) => Some(Nil)
+        case (Constructor(_, tag, fields, _) :: tail,
+            Shape.Constructor(_, expected, arity) :: shapes)
+            if tag == expected && fields.size == arity =>
+          expand(tail, shapes).map(fields.map(materialize) ++ _)
+        case (head :: tail, Shape.Unknown :: shapes) =>
+          expand(tail, shapes).map(materialize(head) :: _)
+        case _ => None
+      }
+
+    private def arguments(
+      statement: Stmt,
+      arguments: List[Expr],
+      values: KnownValues,
+      directTarget: Option[Id]
+    ): List[Expr] = {
+      val known = arguments.map(value(_, values))
+      val entry = plan.calls.get(site(statement)).orElse {
+        directTarget.flatMap(plan.analysis.entries.get)
+      }.map(_.take(arguments.size).toList)
+      entry.flatMap(expand(known, _)).getOrElse(known.map(materialize))
     }
 
-    private def functionNames(id: Id): FunctionNames = {
-      val generic = fresh(id)
-      FunctionNames(generic, variants(id, analysis).map(v => v.copy(id = variantName(generic, v.entry))))
+    private def raise(ids: List[Id], entry: List[Shape], values: KnownValues): Raised = {
+      val raised = mutable.ListBuffer.empty[Id]
+      val materializations = mutable.ListBuffer.empty[(Id, KnownValue.Constructor)]
+      var known = values
+
+      ids.zip(entry.padTo(ids.size, Shape.Unknown)).foreach {
+        case (id, Shape.Unknown) => raised += id
+        case (id, Shape.Constructor(data, tag, arity)) =>
+          val fields = List.tabulate(arity) { index =>
+            Id(id.name.rename(name => s"${name}_${index}"))
+          }
+          val split: KnownValue.Constructor = Constructor(
+            data,
+            tag,
+            fields.map(field => Whole(Expr.Variable(field))),
+            Some(Expr.Variable(id)))
+          raised ++= fields
+          known += id -> split
+          materializations += id -> split
+      }
+      Raised(raised.toList, known, materializations.toList)
     }
 
-    private def callArguments(
-      arguments: List[Value],
-      entry: List[Shape]
-    ): Option[List[Expr]] = (arguments, entry) match {
-      case (Nil, Nil) => Some(Nil)
-      case (Split(_, tag, fields, _) :: arguments,
-          Shape.Constructor(_, expected, arity) :: entry)
-          if tag == expected && fields.size == arity =>
-        callArguments(arguments, entry).map(fields.map(materialize) ++ _)
-      case (argument :: arguments, Shape.Unknown :: entry) =>
-        callArguments(arguments, entry).map(materialize(argument) :: _)
-      case _ => None
+    private def materializeUsed(
+      materializations: List[(Id, KnownValue.Constructor)],
+      statement: Stmt
+    ): Stmt = materializations.foldRight(statement) {
+      case ((id, split), rest) if rest.free.contains(id) =>
+        Stmt.Let(id, Expr.Make(split.data, split.tag, split.fields.map(materialize)), rest)
+      case (_, rest) => rest
     }
 
-    private def select(
+    private def raisedDefinition(
       id: Id,
-      arguments: List[Value],
-      values: Values,
-      functions: Functions
-    ): (Id, List[Expr]) = functions.get(id) match {
-      case Some(names) =>
-        val entry = arguments.map(_.shape).toVector
-        names.select(entry).flatMap { variant =>
-          callArguments(arguments, variant.entry.toList).map(variant.id -> _)
-        }.getOrElse(names.generic -> arguments.map(materialize))
-      case None => rewriteId(id, values, functions) -> arguments.map(materialize)
-    }
-
-    private def rewriteOperation(op: Operation, values: Values, functions: Functions): Operation = {
-      val (params, bodyValues) = freshParams(op.params, values)
-      Operation(op.name, params, rewriteStmt(op.body, bodyValues, functions))
-    }
-
-    private def rewriteClause(clause: Clause, values: Values, functions: Functions): Clause = {
-      val (params, bodyValues) = freshParams(clause.params, values)
-      Clause(params, rewriteStmt(clause.body, bodyValues, functions))
-    }
-
-    private def rewriteDefinition(
       params: List[Id],
       body: Stmt,
-      entry: Entry,
-      values: Values,
-      functions: Functions
+      values: KnownValues,
+      objects: Objects
     ): (List[Id], Stmt) = {
-      val raised = mutable.ListBuffer.empty[(Id, Split)]
-      val newParams = mutable.ListBuffer.empty[Id]
-      var bodyValues = values
-
-      params.zip(entry).foreach {
-        case (param, Shape.Unknown) =>
-          val renamed = fresh(param)
-          newParams += renamed
-          bodyValues += param -> Whole(Expr.Variable(renamed))
-
-        case (param, Shape.Constructor(data, tag, arity)) =>
-          val fields = List.tabulate(arity)(index => Id(param.name.rename(name => s"${name}_${index}")))
-          val whole = fresh(param)
-          val split = Split(data, tag, fields.map(id => Whole(Expr.Variable(id))), Some(Expr.Variable(whole)))
-          newParams ++= fields
-          bodyValues += param -> split
-          raised += whole -> split
-      }
-
-      val rewritten = rewriteStmt(body, bodyValues, functions)
-      val withMaterializations = raised.foldRight(rewritten) { case ((whole, split), rest) =>
-        if rest.free.contains(whole) then
-          Stmt.Let(whole, Expr.Make(split.data, split.tag, split.fields.map(materialize)), rest)
-        else rest
-      }
-      newParams.toList -> withMaterializations
+      val entry = plan.analysis.entries.getOrElse(
+        id, Vector.fill(params.size)(Shape.Unknown))
+      val raised = raise(params, entry.toList, values)
+      val rewritten = rewrite(body, raised.values, objects)
+      raised.ids -> materializeUsed(raised.materializations, rewritten)
     }
 
-    private def genericDefinition(
-      params: List[Id],
-      body: Stmt,
-      values: Values,
-      functions: Functions
-    ): (List[Id], Stmt) =
-      rewriteDefinition(params, body, Vector.fill(params.size)(Shape.Unknown), values, functions)
+    private def operation(
+      operation: Operation,
+      values: KnownValues,
+      objects: Objects
+    ): Operation = {
+      val (params, body) = raisedDefinition(
+        operation.name, operation.params, operation.body, values, objects)
+      Operation(operation.name, params, body)
+    }
 
-    private def rewriteStmt(stmt: Stmt, values: Values, functions: Functions): Stmt = stmt match {
+    private def clause(
+      clause: Clause,
+      values: KnownValues,
+      objects: Objects
+    ): Clause = Clause(clause.params, rewrite(clause.body, values, objects))
+
+    private def rewrite(
+      statement: Stmt,
+      values: KnownValues,
+      objects: Objects
+    ): Stmt = statement match {
       case Stmt.Def(id, params, body, rest) =>
-        val names = functionNames(id)
-        val nestedFunctions = functions + (id -> names)
-        val rewrittenRest = rewriteStmt(rest, values, nestedFunctions)
-        val withVariants = names.variants.foldRight(rewrittenRest) { case (variant, next) =>
-          val variantFunctions = functions +
-            (id -> names.copy(variants = List(variant)))
-          val (raisedParams, raisedBody) =
-            rewriteDefinition(params, body, variant.entry, values, variantFunctions)
-          Stmt.Def(variant.id, raisedParams, raisedBody, next)
-        }
-        val genericEntry = Vector.fill(params.size)(Shape.Unknown)
-        val needsGeneric = names.variants.size != 1 ||
-          analysis.entries.get(id).exists(_.contains(genericEntry))
-        if needsGeneric then {
-          // Local definitions are individually recursive, not mutually
-          // recursive. A polyvariant family therefore uses the generic
-          // definition for transitions between distinct variants.
-          val genericFunctions = functions + (id -> names.copy(variants = Nil))
-          val (genericParams, genericBody) =
-            genericDefinition(params, body, values, genericFunctions)
-          Stmt.Def(names.generic, genericParams, genericBody, withVariants)
-        } else withVariants
+        val (raisedParams, raisedBody) = raisedDefinition(id, params, body, values, objects)
+        Stmt.Def(id, raisedParams, raisedBody, rewrite(rest, values, objects))
+
+      case Stmt.New(id, interface, operations, rest)
+          if plan.objects.contains(id) =>
+        val projections = operations.map { operation =>
+          operation.name -> Id(id.name.rename(name => s"${name}_${operation.name.name}"))
+        }.toMap
+        val rewrittenRest = rewrite(rest, values, objects + (id -> projections))
+        if !rewrittenRest.free.contains(id) && operations.forall(!_.body.free.contains(id)) then
+          operations.foldRight(rewrittenRest) { (op, next) =>
+            val rewritten = operation(op, values, objects)
+            Stmt.Def(projections(op.name), rewritten.params, rewritten.body, next)
+          }
+        else
+          Stmt.New(id, interface,
+            operations.map(operation(_, values, objects)),
+            rewrite(rest, values, objects))
 
       case Stmt.New(id, interface, operations, rest) =>
-        val renamed = fresh(id)
-        val objectValues = values + (id -> Whole(Expr.Variable(renamed)))
-        Stmt.New(renamed, interface,
-          operations.map(rewriteOperation(_, objectValues, functions)),
-          rewriteStmt(rest, objectValues, functions))
+        Stmt.New(id, interface,
+          operations.map(operation(_, values, objects)),
+          rewrite(rest, values, objects))
 
-      case Stmt.Let(id, binding, rest) =>
-        val renamed = fresh(id)
-        value(binding, values, functions) match {
-          case split: Split =>
-            val known = split.copy(whole = Some(Expr.Variable(renamed)))
-            val rewritten = rewriteStmt(rest, values + (id -> known), functions)
-            if rewritten.free.contains(renamed) then
-              Stmt.Let(renamed,
-                Expr.Make(split.data, split.tag, split.fields.map(materialize)), rewritten)
-            else rewritten
-          case Whole(expr) =>
-            Stmt.Let(renamed, expr,
-              rewriteStmt(rest, values + (id -> Whole(Expr.Variable(renamed))), functions))
+      case Stmt.Let(id, Expr.Variable(source), rest) if objects.contains(source) =>
+        val rewritten = rewrite(rest, values, objects + (id -> objects(source)))
+        if rewritten.free.contains(id) then
+          Stmt.Let(id, Expr.Variable(source), rewritten)
+        else rewritten
+
+      case Stmt.Let(id, binding, rest) => value(binding, values) match {
+        case split: Constructor =>
+          val known = split.copy(whole = Some(Expr.Variable(id)))
+          val rewritten = rewrite(rest, values + (id -> known), objects)
+          if rewritten.free.contains(id) then
+            Stmt.Let(id,
+              Expr.Make(split.data, split.tag, split.fields.map(materialize)), rewritten)
+          else rewritten
+        case Whole(rewrittenBinding) =>
+          Stmt.Let(id, rewrittenBinding, rewrite(rest, values, objects))
+      }
+
+      case call @ Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
+        val continuation = plan.continuations.get(site(call))
+          .map(_.take(ids.size).toList)
+          .getOrElse(List.fill(ids.size)(Shape.Unknown))
+        val raised = raise(ids, continuation, values)
+        val rewrittenRest = materializeUsed(
+          raised.materializations,
+          rewrite(rest, raised.values, objects))
+        val rewrittenCallee = callee match {
+          case Callee.Function(id) => Callee.Function(identifier(id, values))
+          case Callee.Method(receiver, method) =>
+            objects.get(receiver).flatMap(_.get(method)) match {
+              case Some(target) => Callee.Function(target)
+              case None => Callee.Method(identifier(receiver, values), method)
+            }
+        }
+        Stmt.Call(
+          raised.ids,
+          returnedKs,
+          rewrittenCallee,
+          arguments(call, args, values, callee.function),
+          expression(ks, values),
+          rewrittenRest)
+
+      case app @ Stmt.App(id, args) =>
+        Stmt.App(identifier(id, values), arguments(app, args, values, Some(id)))
+
+      case invocation @ Stmt.Invoke(receiver, method, args) =>
+        val target = objects.get(receiver).flatMap(_.get(method))
+        val rewrittenArguments = arguments(invocation, args, values, target)
+        target match {
+          case Some(id) => Stmt.App(id, rewrittenArguments)
+          case None => Stmt.Invoke(
+            identifier(receiver, values), method, rewrittenArguments)
         }
 
-      case Stmt.Call(ids, returnedKs, Callee.Function(callee), args, ks, rest) =>
-        val arguments = args.map(value(_, values, functions))
-        val callEntry = arguments.map(_.shape).toVector ++ Vector(Shape.Unknown, Shape.Unknown)
-        val (target, rewrittenArgs) = functions.get(callee).flatMap { names =>
-          names.variants.find(_.entry == callEntry).flatMap { variant =>
-            callArguments(arguments ++ List(Whole(rewriteExpr(ks, values, functions)), Whole(Expr.Abort)), variant.entry.toList)
-              .map(all => variant.id -> all.dropRight(2))
-          }.orElse(Some(names.generic -> arguments.map(materialize)))
-        }.getOrElse(rewriteId(callee, values, functions) -> arguments.map(materialize))
-        val results = ids.map(fresh)
-        val resultKs = fresh(returnedKs)
-        Stmt.Call(results, resultKs, Callee.Function(target), rewrittenArgs,
-          rewriteExpr(ks, values, functions),
-          rewriteStmt(rest,
-            values ++ ids.zip(results).map { case (i, r) => i -> Whole(Expr.Variable(r)) } +
-              (returnedKs -> Whole(Expr.Variable(resultKs))), functions))
-
-      case Stmt.Call(ids, returnedKs, Callee.Method(receiver, method), args, ks, rest) =>
-        val results = ids.map(fresh)
-        val resultKs = fresh(returnedKs)
-        Stmt.Call(results, resultKs,
-          Callee.Method(rewriteId(receiver, values, functions), method),
-          args.map(rewriteExpr(_, values, functions)), rewriteExpr(ks, values, functions),
-          rewriteStmt(rest,
-            values ++ ids.zip(results).map { case (i, r) => i -> Whole(Expr.Variable(r)) } +
-              (returnedKs -> Whole(Expr.Variable(resultKs))), functions))
-
-      case Stmt.App(id, args) =>
-        val (target, arguments) =
-          select(id, args.map(value(_, values, functions)), values, functions)
-        Stmt.App(target, arguments)
-
-      case Stmt.Invoke(id, method, args) =>
-        Stmt.Invoke(rewriteId(id, values, functions), method,
-          args.map(rewriteExpr(_, values, functions)))
-
-      case Stmt.Return(results) => Stmt.Return(results.map(rewriteExpr(_, values, functions)))
+      case Stmt.Return(results) => Stmt.Return(results.map(expression(_, values)))
 
       case Stmt.Run(id, callee, args, purity, rest) =>
-        val renamed = fresh(id)
-        Stmt.Run(renamed, rewriteId(callee, values, functions),
-          args.map(rewriteExpr(_, values, functions)), purity,
-          rewriteStmt(rest, values + (id -> Whole(Expr.Variable(renamed))), functions))
+        Stmt.Run(id, identifier(callee, values), args.map(expression(_, values)), purity,
+          rewrite(rest, values, objects))
 
-      case Stmt.If(cond, thn, els) =>
-        Stmt.If(rewriteExpr(cond, values, functions),
-          rewriteStmt(thn, values, functions), rewriteStmt(els, values, functions))
+      case Stmt.If(condition, thn, els) =>
+        Stmt.If(expression(condition, values),
+          rewrite(thn, values, objects),
+          rewrite(els, values, objects))
 
-      case Stmt.Match(scrutinee, clauses, default) =>
-        value(scrutinee, values, functions) match {
-          case Split(_, tag, fields, _) =>
-            clauses.find(_._1 == tag) match {
-              case Some((_, Clause(params, body))) if params.size == fields.size =>
-                rewriteStmt(body, values ++ params.zip(fields), functions)
-              case _ => default.map(rewriteStmt(_, values, functions)).getOrElse {
-                Stmt.Match(rewriteExpr(scrutinee, values, functions),
-                  clauses.map { case (tag, clause) => tag -> rewriteClause(clause, values, functions) },
-                  default.map(rewriteStmt(_, values, functions)))
-              }
+      case Stmt.Match(scrutinee, clauses, default) => value(scrutinee, values) match {
+        case Constructor(_, tag, fields, _) =>
+          clauses.find(_._1 == tag) match {
+            case Some((_, Clause(params, body))) if params.size == fields.size =>
+              rewrite(body, values ++ params.zip(fields), objects)
+            case _ => default.map(rewrite(_, values, objects)).getOrElse {
+              Stmt.Match(expression(scrutinee, values),
+                clauses.map { case (tag, body) =>
+                  tag -> clause(body, values, objects)
+                }, default.map(rewrite(_, values, objects)))
             }
-          case Whole(expr) =>
-            Stmt.Match(expr,
-              clauses.map { case (tag, clause) => tag -> rewriteClause(clause, values, functions) },
-              default.map(rewriteStmt(_, values, functions)))
-        }
+          }
+        case Whole(rewrittenScrutinee) =>
+          Stmt.Match(rewrittenScrutinee,
+            clauses.map { case (tag, body) =>
+              tag -> clause(body, values, objects)
+            }, default.map(rewrite(_, values, objects)))
+      }
 
       case Stmt.Region(id, ks, rest) =>
-        val renamed = fresh(id)
-        Stmt.Region(renamed, rewriteExpr(ks, values, functions),
-          rewriteStmt(rest, values + (id -> Whole(Expr.Variable(renamed))), functions))
-
+        Stmt.Region(id, expression(ks, values), rewrite(rest, values, objects))
       case Stmt.Alloc(id, init, region, rest) =>
-        val renamed = fresh(id)
-        Stmt.Alloc(renamed, rewriteExpr(init, values, functions),
-          rewriteId(region, values, functions),
-          rewriteStmt(rest, values + (id -> Whole(Expr.Variable(renamed))), functions))
-
+        Stmt.Alloc(id, expression(init, values), identifier(region, values),
+          rewrite(rest, values, objects))
       case Stmt.Var(id, init, ks, rest) =>
-        val renamed = fresh(id)
-        Stmt.Var(renamed, rewriteExpr(init, values, functions), rewriteExpr(ks, values, functions),
-          rewriteStmt(rest, values + (id -> Whole(Expr.Variable(renamed))), functions))
-
+        Stmt.Var(id, expression(init, values), expression(ks, values),
+          rewrite(rest, values, objects))
       case Stmt.Dealloc(ref, rest) =>
-        Stmt.Dealloc(rewriteId(ref, values, functions), rewriteStmt(rest, values, functions))
-
+        Stmt.Dealloc(identifier(ref, values), rewrite(rest, values, objects))
       case Stmt.Get(ref, id, rest) =>
-        val renamed = fresh(id)
-        Stmt.Get(rewriteId(ref, values, functions), renamed,
-          rewriteStmt(rest, values + (id -> Whole(Expr.Variable(renamed))), functions))
-
+        Stmt.Get(identifier(ref, values), id, rewrite(rest, values, objects))
       case Stmt.Put(ref, newValue, rest) =>
-        Stmt.Put(rewriteId(ref, values, functions), rewriteExpr(newValue, values, functions),
-          rewriteStmt(rest, values, functions))
+        Stmt.Put(identifier(ref, values), expression(newValue, values),
+          rewrite(rest, values, objects))
 
-      case Stmt.Reset(p, ks, k, body, ks1, k1) =>
-        val (params, bodyValues) = freshParams(List(p, ks, k), values)
-        Stmt.Reset(params(0), params(1), params(2), rewriteStmt(body, bodyValues, functions),
-          rewriteExpr(ks1, values, functions), rewriteExpr(k1, values, functions))
-
+      case Stmt.Reset(prompt, ks, k, body, ks1, k1) =>
+        Stmt.Reset(prompt, ks, k, rewrite(body, values, objects),
+          expression(ks1, values), expression(k1, values))
       case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
-        val (params, bodyValues) = freshParams(List(resume, ks, k), values)
-        Stmt.Shift(rewriteId(prompt, values, functions), params(0), params(1), params(2),
-          rewriteStmt(body, bodyValues, functions),
-          rewriteExpr(ks1, values, functions), rewriteExpr(k1, values, functions))
-
+        Stmt.Shift(identifier(prompt, values), resume, ks, k,
+          rewrite(body, values, objects),
+          expression(ks1, values), expression(k1, values))
       case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
-        val (params, bodyValues) = freshParams(List(ks, k), values)
-        Stmt.Resume(rewriteId(resumption, values, functions), params(0), params(1),
-          rewriteStmt(body, bodyValues, functions),
-          rewriteExpr(ks1, values, functions), rewriteExpr(k1, values, functions))
+        Stmt.Resume(identifier(resumption, values), ks, k,
+          rewrite(body, values, objects),
+          expression(ks1, values), expression(k1, values))
 
       case hole: Stmt.Hole => hole
     }
 
-    def rewrite(module: ModuleDecl): ModuleDecl = {
-      val rewritten = module.definitions.flatMap {
+    def module(module: ModuleDecl): ModuleDecl = module.copy(
+      definitions = module.definitions.map {
         case ToplevelDefinition.Def(id, params, body) =>
-          val names = topLevel(id)
-          val specialized = names.variants.map { variant =>
-              val (raisedParams, raisedBody) =
-                rewriteDefinition(params, body, variant.entry, Map.empty, topLevel)
-              ToplevelDefinition.Def(variant.id, raisedParams, raisedBody)
-            }
-          val genericEntry = Vector.fill(params.size)(Shape.Unknown)
-          if names.variants.isEmpty || analysis.entries.get(id).exists(_.contains(genericEntry)) then {
-            val (genericParams, genericBody) =
-              genericDefinition(params, body, Map.empty, topLevel)
-            ToplevelDefinition.Def(names.generic, genericParams, genericBody) :: specialized
-          } else specialized
-
+          val (raisedParams, raisedBody) = raisedDefinition(
+            id, params, body, Map.empty, Map.empty)
+          ToplevelDefinition.Def(id, raisedParams, raisedBody)
         case ToplevelDefinition.Val(id, ks, k, binding) =>
-          val (params, values) = freshParams(List(ks, k), Map.empty)
-          List(ToplevelDefinition.Val(id, params.head, params(1),
-            rewriteStmt(binding, values, topLevel)))
-      }
-      module.copy(definitions = rewritten)
-    }
+          ToplevelDefinition.Val(id, ks, k, rewrite(binding, Map.empty, Map.empty))
+      })
   }
 
   def transform(module: ModuleDecl, entrypoints: Set[Id]): ModuleDecl = {
-    val analysis = analyze(module, entrypoints)
-    val topLevel = module.definitions.collect {
-      case ToplevelDefinition.Def(id, _, _) =>
-        id -> FunctionNames(id, variants(id, analysis))
-    }.toMap
-    Rewriter(analysis, topLevel).rewrite(module)
+    val plan = RepresentationAnalysis(module, entrypoints).result
+    Rewriter(plan).module(module)
   }
 }

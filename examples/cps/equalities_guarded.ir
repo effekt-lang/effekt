@@ -21,10 +21,7 @@ main
 ---
 apply:
   entry -
-  recursive -
 inc:
   entry x_inc = 1
-  recursive -
 dec:
   entry x_dec = 0
-  recursive -

@@ -1,0 +1,21 @@
+def main(prompt, ks, k) {
+  def loop(ks1, k1) {
+    shift(prompt) { resumption, resumedKs, resumedK =>
+      loop(resumedKs, k1)
+    } @ ks1, k1
+  }
+  loop(ks, k)
+}
+
+// The recursive call occurs beyond an opaque control transfer. Its
+// meta-continuation differs syntactically and must remain a loop parameter.
+/// STATIC_ARGUMENTS
+
+def main(prompt, ks, k) {
+  def loop_worker(ks1) {
+    shift(prompt) { resumption, resumedKs, resumedK =>
+      loop_worker(resumedKs)
+    } @ ks1, k
+  }
+  loop_worker(ks)
+}

@@ -1,0 +1,20 @@
+def main(ks, k) {
+  new box : Box {
+    def read(ks1, k1) = { k1(42, ks1) }
+  }
+  let alias = box;
+  let v = alias.read!(ks, return);
+  k(v, ks)
+}
+
+// The AAM observes the same object through both bindings. Object splitting is
+// therefore independent of the syntactic name used as the receiver.
+/// ARITY_RAISE
+
+def main(ks, k) {
+  def box_read(ks1, k1) {
+    k1(42, ks1)
+  }
+  let v = box_read!(ks, return);
+  k(v, ks)
+}

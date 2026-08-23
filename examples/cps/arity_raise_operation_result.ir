@@ -1,0 +1,35 @@
+type PairData { Pair(first: Int, second: Int) }
+
+def produce(x, ks1, k1) {
+  k1(make Pair(x, x), ks1)
+}
+def use(producer, x, ks2, k2) {
+  let pair = producer!(x, ks2, return);
+  pair match {
+    case Pair(first, second) => k2(first, ks2)
+  }
+}
+def main(ks, k) {
+  use(produce, 42, ks, k)
+}
+
+// Result representations flow through higher-order calls as part of the same
+// AAM solution. The unboxed pair remains in CPS because JavaScript's direct
+// calling convention returns one value, whereas CPS supports multiple values
+// without allocating a tuple.
+/// ARITY_RAISE
+
+def produce(x, ks1, k1) {
+  k1(x, x, ks1)
+}
+def use(producer, x, ks2, k2) {
+  let (pair_0, pair_1) = producer!(x, ks2, return);
+  k2(pair_0, ks2)
+}
+def main(ks, k) {
+  use(produce, 42, ks, k)
+}
+
+/// CALLING_CONVENTIONS
+
+-

@@ -22,10 +22,8 @@ main
 ---
 constant:
   entry x_constant = 42
-  recursive -
 varying:
   entry -
-  recursive -
 
 /// JAVASCRIPT
 
