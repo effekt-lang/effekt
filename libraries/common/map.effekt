@@ -80,19 +80,13 @@ def get[K, V](m: Map[K, V], k: K): Option[V] = internal::get(m.tree, m.compare, 
 ///
 /// O(log N)
 def getOrElse[K, V](m: Map[K, V], k: K) { default: => V }: V =
-  internal::get(m.tree, m.compare, k) match {
-    case None() => default()
-    case Some(v) => v
-  }
+  internal::getOrElse(m.tree, m.compare, k) {default}
 
 /// Check if map `m` contains a key `k`.
 ///
 /// O(log N)
 def contains[K, V](m: Map[K, V], k: K): Bool =
-  internal::get(m.tree, m.compare, k) match {
-    case None() => false
-    case Some(_) => true
-  }
+  internal::contains(m.tree, m.compare, k)
 
 /// Get minimum in the map `m`.
 ///
@@ -417,6 +411,33 @@ namespace internal {
       case Bin(size, _, _, _, _) => size
     }
 
+  /// Look up `k` in the tree `m`, handing the value it is bound to to `found`,
+  /// or running `missing` if there is none.
+  ///
+  /// O(log N)
+  def getWith[K, V, R](m: Tree[K, V], compare: (K, K) => Ordering at {}, k: K) { found: V => R } { missing: => R }: R =
+    m match {
+      case Tip() => missing()
+      case Bin(_, k2, v, l, r) =>
+        compare(k, k2) match {
+          case Less() => getWith(l, compare, k) {found} {missing}
+          case Greater() => getWith(r, compare, k) {found} {missing}
+          case Equal() => found(v)
+        }
+    }
+
+  /// Whether the tree `m` binds the key `k`.
+  ///
+  /// O(log N)
+  def contains[K, V](m: Tree[K, V], compare: (K, K) => Ordering at {}, k: K): Bool =
+    getWith(m, compare, k) { _v => true } { false }
+
+  /// The value bound to `k` in the tree `m`, or `default` if there is none.
+  ///
+  /// O(log N)
+  def getOrElse[K, V](m: Tree[K, V], compare: (K, K) => Ordering at {}, k: K) { default: => V }: V =
+    getWith(m, compare, k) { v => v } {default}
+
   /// Insert a new key `k` and value `v` into the tree `m`.
   /// If the key `k` is already present in `m`, its associated value is replaced with `v`.
   ///
@@ -451,15 +472,7 @@ namespace internal {
   ///
   /// O(log N)
   def get[K, V](m: Tree[K, V], compare: (K, K) => Ordering at {}, k: K): Option[V] =
-    m match {
-      case Tip() => None()
-      case Bin(size, k2, v, l, r) =>
-        compare(k, k2) match {
-          case Less() => get(l, compare, k)
-          case Greater() => get(r, compare, k)
-          case Equal() => Some(v)
-        }
-    }
+    getWith(m, compare, k) { v => Some(v) } { None() }
 
   /// Get minimum in the tree `m`.
   ///
