@@ -150,10 +150,7 @@ def any[A](s: Set[A]) { predicate: A => Bool }: Bool = {
 ///
 /// O(log N)
 def contains[A](s: Set[A], a: A): Bool =
-  internal::get(s.tree, s.compare, a) match {
-    case None() => false
-    case Some(v) => true
-  }
+  internal::contains(s.tree, s.compare, a)
 
 
 /// Check if set `s1` is a subset of set `s2`.
