@@ -7,89 +7,41 @@ import stream
 
 /// Internal trie node type.
 ///
-/// A node keeps its children in one of two shapes:
-/// - `Sparse` nodes hold at most `internal::maxSparse` of them, with the branching bytes
-/// packed into `keys` (sorted, one per byte) so that a level is two objects
-/// and the scan needs no memory access.
-/// - `Dense` nodes hold a full 256-slot array indexed by the byte,
-/// so descending is a single load. Most nodes of a real key set branch very
-/// little, but most *descents* pass through the few that branch widely.
+/// Nodes with at most two children are `Branch1` / `Branch2`, holding their
+/// children behind `Ref`s so that descending along an existing path can
+/// update in place without rebuilding the spine. A third child promotes the
+/// node to the dense representation (`Branch256` / `Node256`), a full 256-slot
+/// array indexed by the byte, whose cells are mutable themselves.
 ///
-/// Whereas `Node` carries a value at this position, `Branch` does not.
+/// Invariant: in `Branch2` and `Node2`, `byte1 < byte2` (bytes are
+/// unsigned), so iteration is in key order in every representation.
+///
+/// `Leaf`, `Node1`, `Node2` and `Node256` carry a value at this
+/// position; `Branch1`, `Branch2` and `Branch256` do not.
+///
+/// No `Trie` value is ever shared between two live positions: insertion
+/// mutates through `Ref`s and array cells, so aliasing a subtree would be
+/// unsound.
 type Trie[A] {
   Empty()
   Leaf(value: A)
-  SparseBranch(keys: Int, children: Array[Trie[A]])
-  SparseNode(value: A, keys: Int, children: Array[Trie[A]])
-  DenseBranch(children: Array[Trie[A]])
-  DenseNode(value: A, children: Array[Trie[A]])
+  Branch1(byte: Byte, child: Ref[Trie[A]])
+  Node1(value: A, byte: Byte, child: Ref[Trie[A]])
+  Branch2(byte1: Byte, child1: Ref[Trie[A]], byte2: Byte, child2: Ref[Trie[A]])
+  Node2(value: A, byte1: Byte, child1: Ref[Trie[A]], byte2: Byte, child2: Ref[Trie[A]])
+  Branch256(children: Array[Trie[A]])
+  Node256(value: A, children: Array[Trie[A]])
 }
 
 /// A mutable trie-based dictionary for efficient key-value storage with bytearray keys.
+///
+/// Mutating the dictionary while iterating it (`each`, `eachTagged`) is undefined.
 type Dictionary[A] = Ref[Trie[A]]
 
 /// A record pairing a key with a value for use in streams.
 record Tagged[A](key: ByteArray, value: A)
 
 def empty[A](): Dictionary[A] = ref(Empty())
-
-namespace internal {
-  /// How many children a node may have before it becomes `Dense`.
-  /// MUST NOT exceed 4 (`Int` is guaranteed only 32 bits ~> 32 / 8 = 4 bytes).
-  val maxSparse = 2
-
-  /// The `j`-th branching byte of a packed key set.
-  def byteAt(keys: Int, j: Int): Byte = keys.bitwiseShr(8 * j).toByte
-
-  /// Index of `b` among the `count` keys, or -1 if it is not one of them.
-  def find(keys: Int, count: Int, b: Byte): Int = {
-    def go(j: Int): Int =
-      if (j >= count) -1
-      else if (keys.byteAt(j) == b) j
-      else go(j + 1)
-
-    go(0)
-  }
-
-  /// Position that `b` should take among the `count` sorted keys.
-  def rank(keys: Int, count: Int, b: Byte): Int = {
-    def go(j: Int): Int =
-      if (j >= count) count
-      else if (keys.byteAt(j).toInt > b.toInt) j
-      else go(j + 1)
-
-    go(0)
-  }
-
-  /// `keys` with `b` spliced in at `at`, shifting the higher bytes up.
-  def spliced(keys: Int, at: Int, b: Byte): Int = {
-    val shift = 8 * at
-    val low = keys.bitwiseAnd(1.bitwiseShl(shift) - 1)
-    val high = keys.bitwiseShr(shift).bitwiseShl(shift + 8)
-    low.bitwiseOr(b.toInt.bitwiseShl(shift)).bitwiseOr(high)
-  }
-
-  /// `children` with `child` spliced in at `at`.
-  def insertedChild[A](children: Array[Trie[A]], at: Int, child: Trie[A]): Array[Trie[A]] = {
-    val n = children.size
-    val out = array[Trie[A]](n + 1, Empty())
-    children.copy(0, out, 0, at)
-    out.set(at, child)
-    children.copy(at, out, at + 1, n - at)
-    out
-  }
-
-  /// The children of a sparse node, plus `child` at `b`, as a full 256-slot array.
-  def densify[A](keys: Int, children: Array[Trie[A]], b: Byte, child: Trie[A]): Array[Trie[A]] = {
-    val cs = array[Trie[A]](256, Empty())
-    def go(j: Int): Unit =
-      if (j < children.size) { cs.set(keys.byteAt(j).toInt, children.get(j)); go(j + 1) }
-
-    go(0)
-    cs.set(b.toInt, child)
-    cs
-  }
-}
 
 /// Insert a value with a String key.
 def insert[A](dictionary: Dictionary[A], key: String, value: A): Unit =
@@ -99,48 +51,62 @@ def insert[A](dictionary: Dictionary[A], key: String, value: A): Unit =
 def insert[A](dictionary: Dictionary[A], key: ByteArray, value: A): Unit = {
   val n = key.size
 
-  def one(child: Trie[A]): Array[Trie[A]] = array[Trie[A]](1, child)
+  // The rest of the key from position `i` on, as a chain of `Branch1`s
+  // ending in a `Leaf`.
+  def chain(i: Int): Trie[A] =
+    if (i < n) Branch1(key.get(i), ref(chain(i + 1)))
+    else Leaf(value)
+
+  // The two children of a `Branch2`, plus the rest of the key at `b`,
+  // as a full 256-slot array.
+  def densified(byte1: Byte, child1: Ref[Trie[A]], byte2: Byte, child2: Ref[Trie[A]], b: Byte, i: Int): Array[Trie[A]] = {
+    val children = array[Trie[A]](256, Empty())
+    children.set(byte1.toInt, child1.get)
+    children.set(byte2.toInt, child2.get)
+    children.set(b.toInt, chain(i + 1))
+    children
+  }
 
   def go(trie: Trie[A], i: Int): Trie[A] =
     if (i < n) {
       val b = key.get(i)
       trie match {
-        case Empty() => SparseBranch(b.toInt, one(go(Empty(), i + 1)))
-        case Leaf(v) => SparseNode(v, b.toInt, one(go(Empty(), i + 1)))
+        case Empty() => chain(i)
+        case Leaf(existing) => Node1(existing, b, ref(chain(i + 1)))
 
-        case SparseBranch(keys, children) =>
-          val count = children.size
-          val j = keys.internal::find(count, b)
-          if (j >= 0) { children.set(j, go(children.get(j), i + 1)); trie }
-          else if (count >= internal::maxSparse) { DenseBranch(keys.internal::densify(children, b, go(Empty(), i + 1))) }
-          else {
-            val at = keys.internal::rank(count, b)
-            SparseBranch(keys.internal::spliced(at, b), internal::insertedChild(children, at, go(Empty(), i + 1)))
-          }
+        case Branch1(byte1, child1) =>
+          if (b == byte1) { child1.set(go(child1.get, i + 1)); trie }
+          else if (b.toInt < byte1.toInt) Branch2(b, ref(chain(i + 1)), byte1, child1)
+          else Branch2(byte1, child1, b, ref(chain(i + 1)))
+        case Node1(existing, byte1, child1) =>
+          if (b == byte1) { child1.set(go(child1.get, i + 1)); trie }
+          else if (b.toInt < byte1.toInt) Node2(existing, b, ref(chain(i + 1)), byte1, child1)
+          else Node2(existing, byte1, child1, b, ref(chain(i + 1)))
 
-        case SparseNode(v, keys, children) =>
-          val count = children.size
-          val j = keys.internal::find(count, b)
-          if (j >= 0) { children.set(j, go(children.get(j), i + 1)); trie }
-          else if (count >= internal::maxSparse) { DenseNode(v, keys.internal::densify(children, b, go(Empty(), i + 1))) }
-          else {
-            val at = keys.internal::rank(count, b)
-            SparseNode(v, keys.internal::spliced(at, b), internal::insertedChild(children, at, go(Empty(), i + 1)))
-          }
+        case Branch2(byte1, child1, byte2, child2) =>
+          if (b == byte1) { child1.set(go(child1.get, i + 1)); trie }
+          else if (b == byte2) { child2.set(go(child2.get, i + 1)); trie }
+          else Branch256(densified(byte1, child1, byte2, child2, b, i))
+        case Node2(existing, byte1, child1, byte2, child2) =>
+          if (b == byte1) { child1.set(go(child1.get, i + 1)); trie }
+          else if (b == byte2) { child2.set(go(child2.get, i + 1)); trie }
+          else Node256(existing, densified(byte1, child1, byte2, child2, b, i))
 
-        case DenseBranch(children) =>
+        case Branch256(children) =>
           children.set(b.toInt, go(children.get(b.toInt), i + 1)); trie
-        case DenseNode(_, children) =>
+        case Node256(_, children) =>
           children.set(b.toInt, go(children.get(b.toInt), i + 1)); trie
       }
     } else {
       trie match {
         case Empty() => Leaf(value)
         case Leaf(_) => Leaf(value)
-        case SparseBranch(keys, children) => SparseNode(value, keys, children)
-        case SparseNode(_, keys, children) => SparseNode(value, keys, children)
-        case DenseBranch(children) => DenseNode(value, children)
-        case DenseNode(_, children) => DenseNode(value, children)
+        case Branch1(byte1, child1) => Node1(value, byte1, child1)
+        case Node1(_, byte1, child1) => Node1(value, byte1, child1)
+        case Branch2(byte1, child1, byte2, child2) => Node2(value, byte1, child1, byte2, child2)
+        case Node2(_, byte1, child1, byte2, child2) => Node2(value, byte1, child1, byte2, child2)
+        case Branch256(children) => Node256(value, children)
+        case Node256(_, children) => Node256(value, children)
       }
     }
   dictionary.set(go(dictionary.get, 0))
@@ -152,31 +118,36 @@ def lookup[A](dictionary: Dictionary[A], key: String): Option[A] =
 
 /// Look up a value in the dictionary by bytearray key.
 def lookup[A](dictionary: Dictionary[A], key: ByteArray): Option[A] = {
-  val n = key.size
-
   def go(trie: Trie[A], i: Int): Option[A] =
-    if (i < n) {
+    if (i < key.size) {
+      val b = key.get(i)
       trie match {
         case Empty() => None()
         case Leaf(_) => None()
-        case DenseBranch(children) => go(children.get(key.get(i).toInt), i + 1)
-        case DenseNode(_, children) => go(children.get(key.get(i).toInt), i + 1)
-        case SparseBranch(keys, children) =>
-          val j = keys.internal::find(children.size, key.get(i))
-          if (j >= 0) go(children.get(j), i + 1) else None()
-        case SparseNode(_, keys, children) =>
-          val j = keys.internal::find(children.size, key.get(i))
-          if (j >= 0) go(children.get(j), i + 1) else None()
+        case Branch1(byte1, child1) =>
+          if (b == byte1) go(child1.get, i + 1) else None()
+        case Node1(_, byte1, child1) =>
+          if (b == byte1) go(child1.get, i + 1) else None()
+        case Branch2(byte1, child1, byte2, child2) =>
+          if (b == byte1) go(child1.get, i + 1)
+          else if (b == byte2) go(child2.get, i + 1)
+          else None()
+        case Node2(_, byte1, child1, byte2, child2) =>
+          if (b == byte1) go(child1.get, i + 1)
+          else if (b == byte2) go(child2.get, i + 1)
+          else None()
+        case Branch256(children) => go(children.get(b.toInt), i + 1)
+        case Node256(_, children) => go(children.get(b.toInt), i + 1)
       }
     } else {
       trie match {
         case Leaf(value) => Some(value)
-        case SparseNode(value, _, _) => Some(value)
-        case DenseNode(value, _) => Some(value)
+        case Node1(value, _, _) => Some(value)
+        case Node2(value, _, _, _, _) => Some(value)
+        case Node256(value, _) => Some(value)
         case _ => None()
       }
     }
-
   go(dictionary.get, 0)
 }
 
@@ -186,28 +157,38 @@ def collect[A] { stream: () => Unit / emit[Tagged[A]] }: Dictionary[A] = {
   for[Tagged[A]] { stream() } { case Tagged(bytes, value) =>
     dictionary.insert(bytes, value)
   }
-  return dictionary
+  dictionary
 }
 
-/// Emit all values stored in the dictionary as a push stream.
+/// Emit all values stored in the dictionary as a push stream,
+/// in lexicographic key order (a key before its extensions).
 def each[A](dictionary: Dictionary[A]): Unit / emit[A] = {
   def go(trie: Trie[A]): Unit / emit[A] =
     trie match {
       case Empty() => ()
       case Leaf(value) => do emit(value)
-      case SparseBranch(_, children) => each(0, children.size) { j => go(children.get(j)) }
-      case SparseNode(value, _, children) =>
-        do emit(value); each(0, children.size) { j => go(children.get(j)) }
-      case DenseBranch(children) => each(0, 256) { j => go(children.get(j)) }
-      case DenseNode(value, children) =>
-        do emit(value); each(0, 256) { j => go(children.get(j)) }
+      case Branch1(_, child1) => go(child1.get)
+      case Node1(value, _, child1) =>
+        do emit(value); go(child1.get)
+      case Branch2(_, child1, _, child2) =>
+        go(child1.get); go(child2.get)
+      case Node2(value, _, child1, _, child2) =>
+        do emit(value); go(child1.get); go(child2.get)
+      case Branch256(children) =>
+        each(0, 256) { i => go(children.get(i)) }
+      case Node256(value, children) =>
+        do emit(value)
+        each(0, 256) { i => go(children.get(i)) }
     }
   go(dictionary.get)
 }
 
-/// Emit all key-value pairs stored in the dictionary as a push stream of Tagged elements.
+/// Emit all key-value pairs stored in the dictionary as a push stream of
+/// Tagged elements, in lexicographic key order (a key before its extensions).
 def eachTagged[A](dictionary: Dictionary[A]): Unit / emit[Tagged[A]] = {
   var buffer = bytearray::allocate(32)
+  // `depth` grows by exactly one per level, so `depth <= buffer.size` always
+  // holds and a single doubling suffices.
   def push(depth: Int, b: Byte): Unit = {
     if (depth >= buffer.size) {
       buffer = buffer.resize(buffer.size * 2)
@@ -224,16 +205,24 @@ def eachTagged[A](dictionary: Dictionary[A]): Unit / emit[Tagged[A]] = {
     trie match {
       case Empty() => ()
       case Leaf(value) => emitAt(depth, value)
-      case SparseBranch(keys, children) =>
-        each(0, children.size) { j => push(depth, keys.internal::byteAt(j)); go(children.get(j), depth + 1) }
-      case SparseNode(value, keys, children) =>
+      case Branch1(byte1, child1) =>
+        push(depth, byte1); go(child1.get, depth + 1)
+      case Node1(value, byte1, child1) =>
         emitAt(depth, value)
-        each(0, children.size) { j => push(depth, keys.internal::byteAt(j)); go(children.get(j), depth + 1) }
-      case DenseBranch(children) =>
-        each(0, 256) { j => push(depth, j.toByte); go(children.get(j), depth + 1) }
-      case DenseNode(value, children) =>
+        push(depth, byte1); go(child1.get, depth + 1)
+      case Branch2(byte1, child1, byte2, child2) =>
+        push(depth, byte1); go(child1.get, depth + 1)
+        push(depth, byte2); go(child2.get, depth + 1)
+      case Node2(value, byte1, child1, byte2, child2) =>
         emitAt(depth, value)
-        each(0, 256) { j => push(depth, j.toByte); go(children.get(j), depth + 1) }
+        push(depth, byte1); go(child1.get, depth + 1)
+        push(depth, byte2); go(child2.get, depth + 1)
+      case Branch256(children) =>
+        each(0, 256) { i => push(depth, i.toByte); go(children.get(i), depth + 1) }
+      case Node256(value, children) =>
+        emitAt(depth, value)
+        each(0, 256) { i => push(depth, i.toByte); go(children.get(i), depth + 1) }
     }
   go(dictionary.get, 0)
 }
+
