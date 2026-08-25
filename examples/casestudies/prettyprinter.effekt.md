@@ -306,7 +306,7 @@ def printer(width: Int, defaultIndent: Int) { prog: => Unit / { Emit, Layout } }
 
 Maybe most interestingly, we update the current position and invoke the effect operation `fail`, if
 the document exceeds the width.
-This will potentially cause backtracking and revision of a preceeding layout decision.
+This will potentially cause backtracking and revision of a preceding layout decision.
 If the current text still fits the line, we simply re-emit it.
 
 Finally, we can compose the different handlers to a single pretty printing handler:
