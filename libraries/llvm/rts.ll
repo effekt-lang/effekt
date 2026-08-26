@@ -91,9 +91,6 @@
 %Double = type double
 %Byte = type i8
 %Char = type i64
-%Bool = type %Pos
-%Unit = type %Pos
-%String = type %Pos
 
 ; Foreign imports
 
@@ -726,9 +723,11 @@ define private %Stack @withEmptyStack() {
     ret %Stack %stack
 }
 
-define ccc void @resume_Int(%Stack %stack, %Int %integer) {
-    %argument = call ccc %Pos @coerceIntPos(%Int %integer)
-    call ccc void @resume_Pos(%Stack %stack, %Pos %argument)
+define ccc void @resume_Int(%Stack %stack, %Int %argument) {
+    %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
+    %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
+    %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
+    tail call tailcc void %returnAddress(%Int %argument, %Stack %stack)
     ret void
 }
 
@@ -754,9 +753,17 @@ define ccc void @run(%Pos %boxed) {
     ret void
 }
 
-define ccc void @run_Int(%Pos %boxed, %Int %integer) {
-    %argument = call ccc %Pos @coerceIntPos(%Int %integer)
-    call ccc %Pos @run_Pos(%Pos %boxed, %Pos %argument)
+define ccc void @run_Int(%Pos %boxed, %Int %argument) {
+
+    %function = call ccc %Neg @coercePosNeg(%Pos %boxed)
+    %stack = call %Stack @withEmptyStack()
+
+    %arrayPointer = extractvalue %Neg %function, 0
+    %object = extractvalue %Neg %function, 1
+    %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
+    %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
+
+    tail call tailcc %Pos %functionPointer(%Object %object, %Int %argument, %Stack %stack)
     ret void
 }
 

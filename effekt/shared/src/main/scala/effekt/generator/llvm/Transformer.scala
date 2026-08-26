@@ -132,6 +132,10 @@ object Transformer {
         eraseValues(List(variable), freeVariables(rest))
         transform(rest)
 
+      case machine.Switch(value, Nil, None) =>
+        // TODO unreachable
+        RetVoid()
+
       case machine.Switch(value, clauses, default) =>
         emit(Comment(s"switch ${value.name}, ${clauses.length} clauses"))
         val freeInClauses = clauses.flatMap(freeVariables).toSet ++ default.map(freeVariables).getOrElse(Set.empty)
@@ -219,19 +223,18 @@ object Transformer {
         emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
         RetVoid()
 
-      case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, rest) =>
+      case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, returnType, rest) =>
         val environment = List(init)
         val returnAddressName = freshName("returnAddress")
-        val returnType = transform(machine.Type.Positive())
         val returnValue = freshName("returnValue")
-        val parameters = List(Parameter(returnType, returnValue))
+        val parameters = List(Parameter(transform(returnType), returnValue))
         defineLabel(returnAddressName, parameters) {
           emit(Comment(s"var $name / return address"))
           popEnvironmentFrom(getStack(), environment)
           eraseValue(init)
           val nextReturn = LocalReference(returnAddressType, freshName("returnAddress"))
           popReturnAddressFrom(getStack(), nextReturn.name)
-          emit(callLabel(nextReturn, List(LocalReference(returnType, returnValue))))
+          emit(callLabel(nextReturn, List(LocalReference(transform(returnType), returnValue))))
           RetVoid()
         }
 
@@ -245,7 +248,7 @@ object Transformer {
 
         transform(rest)
 
-      case machine.Var(_, _, _) => ???
+      case machine.Var(_, _, _, _) => ???
 
       case machine.LoadVar(name, ref, rest) =>
         emit(Comment(s"loadvar ${name.name}, reference ${ref.name}"))

@@ -63,9 +63,9 @@ object Transformer {
       if bparams.nonEmpty then ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
 
       val transformedParams = vparams.map {
-        case core.ValueParam(id, tpe) => Variable(transform(id), transformUnboxed(tpe))
+        case core.ValueParam(id, tpe) => Variable(transform(id), transformExtern(tpe))
       }
-      val transformedRet = transformUnboxed(ret)
+      val transformedRet = transformExtern(ret)
       val isExternAsync = capture.contains(symbols.builtins.AsyncCapability.capture)
       noteDefinition(name, transformedParams, Nil, isExternAsync)
       Extern(transform(name), transformedParams, transformedRet, isExternAsync, transform(body))
@@ -134,7 +134,7 @@ object Transformer {
       ExternBody.StringExternBody(ff, handleExternC(template))
     case core.ExternBody.StringExternBody(ff, Template(strings, args)) =>
       ExternBody.StringExternBody(ff, Template(strings, args map {
-        case core.ValueVar(id, tpe) => Variable(transform(id), transformUnboxed(tpe))
+        case core.ValueVar(id, tpe) => Variable(transform(id), transformExtern(tpe))
         case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
       }))
     case core.ExternBody.Unsupported(err) =>
@@ -198,16 +198,26 @@ object Transformer {
             transform(substitute(rest)(using Substitution(DB.empty, DB.empty, DB.empty, DB(id, core.BlockVar(other, tpe, capt)))))
         }
 
-      case core.Def(id, block @ core.Unbox(expr), rest) =>
+      case core.Def(id, block @ core.Unbox(pure: core.ValueVar), rest) =>
         noteParameter(id, block.tpe)
-        transform(expr).run { boxed =>
-          transform(rest).map { rest =>
-            Coerce(Variable(transform(id), Type.Negative()), boxed, rest)
-          }
-        }
+        transform(substitute(rest)(using Substitution(DB.empty, DB.empty, DB.empty, DB(id, core.Unbox(pure)))))
+
+      case core.Def(id, block @ core.Unbox(expr), rest) =>
+        ErrorReporter.panic(s"Unbox of a non-variable expression: ${expr}")
 
       case core.Let(id, core.ValueVar(otherId, otherTpe), rest) =>
         transform(substitute(rest)(using Substitution(DB.empty, DB.empty, DB(id, core.ValueVar(otherId, otherTpe)), DB.empty)))
+
+      case core.Let(id, expr @ core.Box(block, _), rest) => block match {
+        case core.BlockVar(other, tpe, capt) if !(BPC.globals contains other) && isParameter(other) =>
+          transform(substitute(rest)(using Substitution(DB.empty, DB.empty, DB(id, expr), DB.empty)))
+        case core.Unbox(pure) =>
+          transform(substitute(rest)(using Substitution(DB.empty, DB.empty, DB(id, pure), DB.empty)))
+        case _ =>
+          transformBlockArg(Variable(transform(id), transform(expr.tpe)), block).run { _ =>
+            transform(rest)
+          }
+      }
 
       case core.Let(id, expr, rest) =>
         transformNamed(Variable(transform(id), transform(expr.tpe)), expr).run { _ =>
@@ -218,14 +228,8 @@ object Transformer {
         val variable = Variable(transform(id), transform(core.Type.bindingType(app)))
         transform(rest).flatMap { rest =>
           transform(vargs, bargs).run { (values, blocks) =>
-            perhapsUnbox(values, vparamTypes map transformUnboxed).run { unboxeds =>
-              transformUnboxed(resultType) match {
-                case Type.Positive() =>
-                  Trampoline.Done(ForeignCall(variable, transform(blockName), unboxeds ++ blocks, rest))
-                case unboxedTpe =>
-                  val unboxed = Variable(freshName("unboxed"), unboxedTpe)
-                  Trampoline.Done(ForeignCall(unboxed, transform(blockName), unboxeds ++ blocks, Coerce(variable, unboxed, rest)))
-              }
+            coerce(values, vparamTypes map transformExtern).run { coerced =>
+              Trampoline.Done(foreignCall(variable, transform(blockName), coerced ++ blocks, transformExtern(resultType), rest))
             }
           }
         }
@@ -259,9 +263,16 @@ object Transformer {
                 case BlockInfo.Definition(freeParams, blockParams, true) =>
                   // TODO better way to deal with extern async functions
                   annotatedTpe match {
-                    case core.BlockType.Function(_, _, vparamTypes, _, _) =>
-                      perhapsUnbox(values, vparamTypes map transformUnboxed).run { unboxeds =>
-                        Trampoline.Done(Jump(Label(transform(id), blockParams ++ freeParams), unboxeds ++ blocks ++ freeParams))
+                    case core.BlockType.Function(_, _, vparamTypes, _, resultType) =>
+                      val returnType = transformExtern(resultType)
+                      val expectedType = transform(stmt.tpe)
+                      coerce(values, vparamTypes map transformExtern).run { coerced =>
+                        val jump = Jump(Label(transform(id), blockParams ++ freeParams), coerced ++ blocks ++ freeParams)
+                        if returnType == expectedType then Trampoline.Done(jump)
+                        else
+                          val returned = Variable(freshName("returned"), returnType)
+                          val expected = Variable(freshName("coerced"), expectedType)
+                          Trampoline.Done(PushFrame(Clause(List(returned), Coerce(expected, returned, Return(List(expected)))), jump))
                       }
                     case _ =>
                       ErrorReporter.panic("Extern definition does not have function type")
@@ -274,9 +285,8 @@ object Transformer {
               transform(substitute(Block.BlockLit(tparams, cparams, vparams, bparams, body), targs, vargs, bargs))
 
             case Block.Unbox(pure) =>
-              transform(pure).run { boxedCallee =>
-                val callee = Variable(freshName(boxedCallee.name), Type.Negative())
-                Trampoline.Done(Coerce(callee, boxedCallee, Invoke(callee, builtins.Apply, values ++ blocks)))
+              transform(pure).run { callee =>
+                Trampoline.Done(Invoke(callee, builtins.Apply, values ++ blocks))
               }
 
             case Block.New(impl) =>
@@ -297,9 +307,8 @@ object Transformer {
               Trampoline.Done(Invoke(Variable(transform(id), transform(tpe)), opTag, values ++ blocks))
 
             case Block.Unbox(pure) =>
-              transform(pure).run { boxedCallee =>
-                val callee = Variable(freshName(boxedCallee.name), Type.Negative())
-                Trampoline.Done(Coerce(callee, boxedCallee, Invoke(callee, opTag, values ++ blocks)))
+              transform(pure).run { callee =>
+                Trampoline.Done(Invoke(callee, opTag, values ++ blocks))
               }
 
             case Block.New(impl) =>
@@ -318,6 +327,9 @@ object Transformer {
             }
           }
         }
+
+      case core.Match(scrutinee, tpe, Nil, Some(default)) =>
+        transform(default)
 
       case core.Match(scrutinee, tpe, clauses, default) =>
         val transformedClauses = clauses.map { case (constr, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
@@ -358,14 +370,25 @@ object Transformer {
         }
 
       case core.Region(core.BlockLit(tparams, cparams, vparams, List(region), body)) =>
-
-        val variable = Variable(freshName("returned"), transform(body.tpe))
-        val returnClause = Clause(List(variable), Return(List(variable)))
         val prompt = transform(region)
-
         noteParameters(List(region))
-        transform(body).map { body =>
-          Reset(prompt, returnClause, body)
+
+        // Variables allocated in the region live in frames below the reset, so we box the result of the region
+        transform(body.tpe) match {
+          case Positive() =>
+            val returned = Variable(freshName("returned"), Positive())
+            transform(body).map { body =>
+              Reset(prompt, Clause(List(returned), Return(List(returned))), body)
+            }
+          case returnType =>
+            val returned = Variable(freshName("returned"), returnType)
+            val boxed = Variable(freshName("boxed"), Positive())
+            val received = Variable(freshName("boxed"), Positive())
+            val unboxed = Variable(freshName("unboxed"), returnType)
+            transform(body).map { body =>
+              PushFrame(Clause(List(received), Coerce(unboxed, received, Return(List(unboxed)))),
+                Reset(prompt, Clause(List(returned), Coerce(boxed, returned, Return(List(boxed)))), body))
+            }
         }
 
       case core.Alloc(ref, init, region, body) =>
@@ -375,12 +398,10 @@ object Transformer {
         noteParameter(ref, core.Type.TState(init.tpe))
 
         transform(body).flatMap { body =>
-          transform(init).flatMap { value =>
-            perhapsUnbox(value, transformUnboxed(init.tpe)).map { unboxed =>
-              Shift(temporary, Variable(transform(region), Type.Prompt()),
-                Var(Variable(transform(ref), Type.Reference(unboxed.tpe)), unboxed,
-                  Resume(temporary, body)))
-            }
+          transform(init).map { value =>
+            Shift(temporary, Variable(transform(region), Type.Prompt()),
+              Var(Variable(transform(ref), Type.Reference(value.tpe)), value, Positive(),
+                Resume(temporary, body)))
           }.run(x => Trampoline.Done(x))
         }
 
@@ -389,33 +410,23 @@ object Transformer {
         // TODO ref should be BlockParam
         noteParameter(ref, core.Type.TState(init.tpe))
 
+        val returnType = transform(body.tpe)
         transform(body).flatMap { body =>
-          transform(init).flatMap { value =>
-            perhapsUnbox(value, transformUnboxed(init.tpe)).map { unboxed =>
-              Var(Variable(transform(ref), Type.Reference(unboxed.tpe)), unboxed, body)
-            }
+          transform(init).map { value =>
+            Var(Variable(transform(ref), Type.Reference(value.tpe)), value, returnType, body)
           }.run(x => Trampoline.Done(x))
         }
 
       case core.Get(id, tpe, ref, capt, body) =>
-        val variable = Variable(transform(id), Positive())
-
+        val variable = Variable(transform(id), transform(tpe))
         transform(body).map { body =>
-          transformUnboxed(tpe) match {
-            case Type.Positive() =>
-              LoadVar(variable, Variable(transform(ref), Type.Reference(Type.Positive())), body)
-            case unboxedTpe =>
-              val unboxed = Variable(freshName("unboxed"), unboxedTpe)
-              LoadVar(unboxed, Variable(transform(ref), Type.Reference(unboxedTpe)), Coerce(variable, unboxed, body))
-          }
+          LoadVar(variable, Variable(transform(ref), Type.Reference(variable.tpe)), body)
         }
 
       case core.Put(ref, capt, arg, body) =>
         transform(body).flatMap { body =>
-          transform(arg).flatMap { value =>
-            perhapsUnbox(value, transformUnboxed(arg.tpe)).map { unboxed =>
-              StoreVar(Variable(transform(ref), Type.Reference(unboxed.tpe)), unboxed, body)
-            }
+          transform(arg).map { value =>
+            StoreVar(Variable(transform(ref), Type.Reference(value.tpe)), value, body)
           }.run(x => Trampoline.Done(x))
         }
 
@@ -437,10 +448,15 @@ object Transformer {
       blocks <- transformBlockArgs(bargs)
     } yield (values, blocks)
 
-  def transformBlockArg(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
+  def transformBlockArg(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] =
+    transformBlockArg(Variable(freshName("block"), Negative()), block)
+
+  /**
+   * Binds [[variable]] to the block, except for block parameters and unboxed values, which are returned as they are.
+   */
+  def transformBlockArg(variable: Variable, block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
     case core.BlockVar(id, tpe, _) if BPC.globals contains id =>
       val label = BPC.globals(id)
-      val variable = Variable(transform(id), transform(tpe))
       shift { k =>
         PushFrame(Clause(List(variable), k(variable)), Jump(label, label.environment))
       }
@@ -449,7 +465,6 @@ object Transformer {
         // Passing a top-level function directly, so we need to eta-expand turning it into a closure
         // TODO cache the closure somehow to prevent it from being created on every call
         val label = transformLabel(id)
-        val variable = Variable(freshName(id.name.name ++ "$closure"), Negative())
         shift { k =>
           New(variable, List(Clause(parameters,
             Jump(label, label.environment)
@@ -462,13 +477,11 @@ object Transformer {
     case core.BlockLit(tparams, cparams, vparams, bparams, body) =>
       noteParameters(bparams)
       val parameters = vparams.map(transform) ++ bparams.map(transform);
-      val variable = Variable(freshName("blockLit"), Negative())
       shift { k =>
         New(variable, List(Clause(parameters, transform(body).run())), k(variable))
       }
 
     case core.New(impl) =>
-      val variable = Variable(freshName("new"), Negative())
       shift { k =>
         New(variable, transform(impl), k(variable))
       }
@@ -511,30 +524,16 @@ object Transformer {
       }
 
     case core.Literal(value: Long, core.Type.TInt) =>
-      shift { k =>
-        val unboxed = Variable(freshName("integer"), Type.Int())
-        LiteralInt(unboxed, value, Coerce(variable, unboxed, k(variable)))
-      }
+      shift { k => LiteralInt(variable, value, k(variable)) }
 
     case core.Literal(value: Int, core.Type.TChar) =>
-      shift { k =>
-        val unboxed = Variable(freshName("character"), Type.Int())
-        LiteralInt(unboxed, value, Coerce(variable, unboxed, k(variable)))
-      }
+      shift { k => LiteralInt(variable, value, k(variable)) }
 
     case core.Literal(value: Byte, core.Type.TByte) =>
-      shift { k =>
-        val unboxed = Variable(freshName("byte"), Type.Byte())
-        val b = UByte.unsafeFromByte(value)
-        // TODO: Literal bytes could now also be just byte-sized in Machine (= use 'UByte'; they are byte-sized in LLVM anyway).
-        LiteralByte(unboxed, b.toInt, Coerce(variable, unboxed, k(variable)))
-      }
+      shift { k => LiteralByte(variable, UByte.unsafeFromByte(value).toInt, k(variable)) }
 
     case core.Literal(v: Double, core.Type.TDouble) =>
-      shift { k =>
-        val unboxed = Variable(freshName("double"), Type.Double())
-        LiteralDouble(unboxed, v, Coerce(variable, unboxed, k(variable)))
-      }
+      shift { k => LiteralDouble(variable, v, k(variable)) }
 
     case core.Literal(javastring: String, core.Type.TString) =>
       shift { k =>
@@ -543,16 +542,8 @@ object Transformer {
 
     case core.PureApp(core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), _), _, vargs) =>
       transform(vargs).flatMap { values =>
-        perhapsUnbox(values, vparamTypes map transformUnboxed).flatMap { unboxeds =>
-          shift { k =>
-            transformUnboxed(resultType) match {
-              case Type.Positive() =>
-                ForeignCall(variable, transform(blockName), unboxeds, k(variable))
-              case unboxedTpe =>
-                val unboxed = Variable(freshName("unboxed"), unboxedTpe)
-                ForeignCall(unboxed, transform(blockName), unboxeds, Coerce(variable, unboxed, k(variable)))
-            }
-          }
+        coerce(values, vparamTypes map transformExtern).flatMap { coerced =>
+          shift { k => foreignCall(variable, transform(blockName), coerced, transformExtern(resultType), k(variable)) }
         }
       }
 
@@ -566,11 +557,7 @@ object Transformer {
       }
 
     case core.Box(block, annot) =>
-      transformBlockArg(block).flatMap { unboxed =>
-        shift { k =>
-          Coerce(variable, unboxed, k(variable))
-        }
-      }
+      transformBlockArg(variable, block)
 
     case _ =>
       ErrorReporter.abort(s"Unsupported expression: $expr")
@@ -603,22 +590,27 @@ object Transformer {
     }
 
   def transform(tpe: core.ValueType)(using DeclarationContext, ErrorReporter): Type = tpe match {
+    case core.Type.TInt => Type.Int()
+    case core.Type.TChar => Type.Int()
+    case core.Type.TByte => Type.Byte()
+    case core.Type.TDouble => Type.Double()
+    case core.ValueType.Data(name, _) if isValidExternC(name) => getExternCTpe(name)
+    case core.ValueType.Data(_, _) => Positive()
+    case core.ValueType.Boxed(_, _) => Negative()
     case core.ValueType.Var(name) => ErrorReporter.panic(s"Unexpected type variable ${name} after monomorphization")
-    case _ => Positive()
   }
 
-  def transformUnboxed(tpe: core.ValueType)(using DeclarationContext, ErrorReporter): Type =
-    tpe match {
-        case core.Type.TInt => Type.Int()
-        case core.Type.TChar => Type.Int()
-        case core.Type.TByte => Type.Byte()
-        case core.Type.TDouble => Type.Double()
-        case core.ValueType.Data(name, _) if isValidExternC(name) => getExternCTpe(name)
-        case _ => Positive()
-      }
+  /**
+   * Types in the signatures of externs, where type variables and boxed blocks are represented as positive values.
+   */
+  def transformExtern(tpe: core.ValueType)(using DeclarationContext, ErrorReporter): Type = tpe match {
+    case core.ValueType.Var(_) => Positive()
+    case core.ValueType.Boxed(_, _) => Positive()
+    case _ => transform(tpe)
+  }
 
   def transform(tpe: core.BlockType)(using DeclarationContext, ErrorReporter): Type = tpe match {
-    case core.Type.TState(stateType) => Type.Reference(transformUnboxed(stateType))
+    case core.Type.TState(stateType) => Type.Reference(transform(stateType))
     case core.Type.TPrompt(answer) => Type.Prompt()
     case core.Type.TResume(result, answer) => Type.Stack()
     case core.Type.TRegion => Type.Prompt()
@@ -634,17 +626,25 @@ object Transformer {
   def transform(id: Id): String =
     s"${id.name}_${id.id}"
 
-  def perhapsUnbox(value: Variable, tpe: machine.Type): Binding[Variable] =
-    tpe match {
-      case Type.CTpe(CType.Void) => pure(value)
-      case Type.Int() | Type.Byte() | Type.Double() | Type.CTpe(_) =>
-        val unboxed = Variable(freshName("unboxed"), tpe)
-        shift { k => Coerce(unboxed, value, k(unboxed)) }
-      case _ => pure(value)
+  def coerce(value: Variable, tpe: Type): Binding[Variable] =
+    if value.tpe == tpe then pure(value)
+    else
+      val coerced = Variable(freshName("coerced"), tpe)
+      shift { k => Coerce(coerced, value, k(coerced)) }
+
+  def coerce(values: List[Variable], tpes: List[Type]): Binding[List[Variable]] =
+    traverse(values.zip(tpes)) { case (value, tpe) => coerce(value, tpe) }
+
+  def foreignCall(variable: Variable, name: String, arguments: Environment, returnType: Type, rest: Statement): Statement =
+    if (returnType == variable.tpe) {
+      ForeignCall(variable, name, arguments, rest)
+    } else {
+      val returned = Variable(freshName("returned"), returnType)
+      ForeignCall(returned, name, arguments, Coerce(variable, returned, rest))
     }
 
-  def perhapsUnbox(values: List[Variable], tpes: List[machine.Type]): Binding[List[Variable]] =
-    traverse(values.zip(tpes)) { case (value, tpe) => perhapsUnbox(value, tpe) }
+  def isParameter(id: Id)(using BPC: BlocksParamsContext): Boolean =
+    BPC.info.get(id).exists { case BlockInfo.Parameter(_) => true; case _ => false }
 
   def freshName(baseName: String): String = baseName + "_" + symbols.Symbol.fresh.next()
 
