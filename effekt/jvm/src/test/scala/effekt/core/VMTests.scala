@@ -1278,19 +1278,19 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "benchmarks" / "other" / "tracking_map.effekt" -> Some(Summary(
-      staticDispatches = 999999,
-      dynamicDispatches = 999999,
-      patternMatches = 999999,
-      branches = 999999,
-      pushedFrames = 999999,
-      poppedFrames = 999999,
-      allocations = 999999,
-      closures = 999999,
-      variableReads = 999999,
-      variableWrites = 999999,
-      resets = 999999,
-      shifts = 999999,
-      resumes = 999999
+      staticDispatches = 14747629,
+      dynamicDispatches = 3311671,
+      patternMatches = 21847274,
+      branches = 18315422,
+      pushedFrames = 7363763,
+      poppedFrames = 7363763,
+      allocations = 8642831,
+      closures = 3,
+      variableReads = 152387,
+      variableWrites = 152384,
+      resets = 384,
+      shifts = 147456,
+      resumes = 147456
     )),
 
 
