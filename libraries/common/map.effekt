@@ -753,13 +753,13 @@ namespace internal {
         def fromSorted(count: Int): Tree[K, V] =
           if (count <= 0) Tip() else {
             val half = (count - 1) / 2
-            val l = fromSorted(half)
+            val l = half.fromSorted
             rest match {
               case Nil() => <{ "fromList: fewer pairs than counted" }>
               case Cons((k, v), tail) =>
                 rest = tail
                 val value = if (repeated) lastBinding(k, v) else v
-                val r = fromSorted(count - 1 - half)
+                val r = (count - 1 - half).fromSorted
                 bin(k, value, l, r)
             }
           }
@@ -768,10 +768,10 @@ namespace internal {
         def insertMany(m: Tree[K, V], ps: List[(K, V)]): Tree[K, V] =
           ps match {
             case Nil() => m
-            case Cons((k, v), tail) => insertMany(m.put(compare, k, v), tail)
+            case Cons((k, v), tail) => m.put(compare, k, v).insertMany(tail)
           }
 
-        val sorted = fromSorted(runLength(pairs, 0))
+        val sorted = runLength(pairs, 0).fromSorted
         sorted.insertMany(rest)
     }
 
