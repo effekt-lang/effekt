@@ -720,17 +720,18 @@ namespace internal {
   /// If the list contains more than one value for the same key,
   /// only the last value is used in the tree.
   ///
-  /// O(N) if the list is sorted by key,
+  /// O(N) if the list is sorted by key (in _either_ direction),
   /// O(N log N) otherwise
   def fromList[K, V](pairs: List[(K, V)], compare: (K, K) => Ordering at {}): Tree[K, V] =
     pairs match {
-      // at most one pair is a tree already, and needs no counting
       case Nil() => Tip()
       case Cons((k, v), Nil()) => singleton(k, v)
       case Cons(_, _) =>
         // the first pair not yet taken, and whether the run repeated a key
         var rest = pairs
         var repeated = false
+        // which way the current run is going; is `Equal` once a monotone run is over
+        var direction: Ordering = Equal()
 
         // How many distinct keys the non-decreasing run at the front of `ps` holds.
         def runLength(ps: List[(K, V)], count: Int): Int =
@@ -738,39 +739,40 @@ namespace internal {
             case Nil() => count
             case Cons((k, _), tail) => tail match { // note: tail is effectivelly an @-pattern!
               case Nil() => count + 1
-              case Cons((next, _), _) => compare(k, next) match {
-                case Less() => runLength(tail, count + 1)
-                case Equal() => repeated = true; runLength(tail, count)
-                case Greater() => count + 1
+              case Cons((next, _), _) => (compare(k, next), direction) match {
+                case (Less()   , Less()   ) => runLength(tail, count + 1)
+                case (Greater(), Greater()) => runLength(tail, count + 1)
+                case (Equal(), _) => repeated = true; runLength(tail, count)
+
+                // the first comparison that is not `Equal` settles which way we go
+                case (ordering, Equal()) => direction = ordering; runLength(tail, count + 1)
+                case _ => count + 1
               }
             }
           }
 
         // Advance `rest` past any repeats of `k`, giving back the last binding of it.
         def lastBinding(k: K, v: V): V =
-          rest match {
-            case Nil() => v
-            case Cons((next, value), tail) => compare(k, next) match {
-              case Equal() => rest = tail; lastBinding(k, value)
-              case Less() => v
-              case Greater() => v
-            }
+          if (rest is Cons((next, value), tail) and compare(k, next) is Equal()) {
+            rest = tail
+            lastBinding(k, value)
+          } else {
+            v
           }
 
-        // Shape `count` distinct keys from `rest` into a balanced tree, leaving `rest` on
-        // the first pair not taken. The order is established already, so knowing the size
-        // lays the tree out from the root down, one node per key.
+        // Shape `count` distinct keys from `rest` into a balanced tree, leaving `rest` on the first pair not taken.
+        // The order is established already, so knowing the size lays the tree out from the root down, one node per key.
         def fromSorted(count: Int): Tree[K, V] =
           if (count <= 0) Tip() else {
             val half = (count - 1) / 2
-            val l = half.fromSorted
+            val front = half.fromSorted
             rest match {
               case Nil() => <{ "fromList: fewer pairs than counted" }>
               case Cons((k, v), tail) =>
                 rest = tail
                 val value = if (repeated) lastBinding(k, v) else v
-                val r = (count - 1 - half).fromSorted
-                bin(k, value, l, r)
+                val back = (count - 1 - half).fromSorted
+                if (direction is Greater()) bin(k, value, back, front) else bin(k, value, front, back)
             }
           }
 
