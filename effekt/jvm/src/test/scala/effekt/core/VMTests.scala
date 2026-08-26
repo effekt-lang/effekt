@@ -1277,6 +1277,22 @@ class VMTests extends munit.FunSuite {
       resumes = 94730
     )),
 
+    examplesDir / "benchmarks" / "other" / "tracking_map.effekt" -> Some(Summary(
+      staticDispatches = 999999,
+      dynamicDispatches = 999999,
+      patternMatches = 999999,
+      branches = 999999,
+      pushedFrames = 999999,
+      poppedFrames = 999999,
+      allocations = 999999,
+      closures = 999999,
+      variableReads = 999999,
+      variableWrites = 999999,
+      resets = 999999,
+      shifts = 999999,
+      resumes = 999999
+    )),
+
 
     examplesDir / "stdlib" / "stream" / "fix.effekt" -> Some(Summary(
       staticDispatches = 38,
