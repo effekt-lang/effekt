@@ -618,7 +618,7 @@ namespace internal {
   /// returning the result of the producer as well.
   /// Consider using `map::fromList` if you know the full list.
   ///
-  /// O(N) if the stream is sorted by key,
+  /// O(N) if the stream is sorted by key (in _either_ direction),
   /// O(N log N) otherwise
   def collect[K, V, R](compare: (K, K) => Ordering at {}) { stream: () => R / emit[(K, V)] }: (R, Tree[K, V]) = {
     // Note that `fromList` is always better since it knows the whole list of pairs in advance,
@@ -628,7 +628,15 @@ namespace internal {
     var lowest: Tree[K, V] = Tip()
     var spine: List[Waiting[K, V]] = Nil()
     var tree = Tip()
-    var extending = true
+    // which way the current run is going; is `Equal` once a monotone run is over
+    var direction: Ordering = Less()
+
+    // A pair continues the run when it goes the same way the run has been going.
+    def continues(ordering: Ordering): Bool = (direction, ordering) match {
+      case (Less(), Less()) => true
+      case (Greater(), Greater()) => true
+      case _ => false
+    }
 
     // How the currently collected pair compares with the one collected last.
     def compareLast(k: K): Ordering =
@@ -659,7 +667,8 @@ namespace internal {
           case Nil() => [Waiting(size, k, v, subtree)]
           case Cons(Waiting(s, k2, v2, t), more) =>
             if (s == size) {
-              carry(2 * size + 1, bin(k2, v2, t, subtree), more)
+              val merged = if (direction is Greater()) bin(k2, v2, subtree, t) else bin(k2, v2, t, subtree)
+              carry(2 * size + 1, merged, more)
             } else {
               Cons(Waiting(size, k, v, subtree), rest)
             }
@@ -678,32 +687,36 @@ namespace internal {
       spine match {
         case Nil() => whole
         case Cons(Waiting(_, k, v, subtree), more) =>
-          more.joinSpineWith(link(k, v, subtree, whole))
+          val joined = if (direction is Greater()) link(k, v, whole, subtree) else link(k, v, subtree, whole)
+          more.joinSpineWith(joined)
       }
 
     val result = try {
       stream()
     } with emit[(K, V)] { case (k, v) =>
-      // as long as all keys are non-decreasing, we can build a tree in O(N) time
-      if (extending) {
-        compareLast(k) match {
-          case Less() => extend(k, v)
+      // as long as the keys all keep going the same way, we can build a tree in O(N) time
+      direction match {
+        // the run is over, so we have to insert each new pair without a shortcut
+        case Equal() => tree = tree.put(compare, k, v)
+        case _ => compareLast(k) match {
           case Equal() => rebind(v)
-          case Greater() => {
-            // when we discover a key that is greater, we have to switch into a slow mode
-            extending = false
-            tree = spine.joinSpineWith(lowest).put(compare, k, v)
-          }
+          case ordering =>
+            // while the run is still one pair long it has no direction of its own,
+            // so this comparison is what settles it
+            if (spine.isEmpty) { direction = ordering; extend(k, v) }
+            else if (continues(ordering)) { extend(k, v) }
+            else {
+              // the pair goes against the run, so we join up what we have and stop
+              tree = spine.joinSpineWith(lowest).put(compare, k, v)
+              direction = Equal()
+            }
         }
-      } else {
-        // when we are in slow mode, we have to insert each new pair into the tree without a shortcut
-        tree = tree.put(compare, k, v)
       }
 
       resume(())
     }
 
-    (result, if (extending) spine.joinSpineWith(lowest) else tree)
+    (result, if (direction is Equal()) tree else spine.joinSpineWith(lowest))
   }
 
   /// Create a tree from a list of (key, value) pairs.
