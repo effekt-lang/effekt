@@ -7,17 +7,17 @@ import stream
 
 /// Internal trie node type.
 ///
-/// Nodes with at most two children are `Branch1` / `Branch2`, holding their
+/// Nodes with at most four children are `Branch1` ... `Branch4`, holding their
 /// children behind `Ref`s so that descending along an existing path can
-/// update in place without rebuilding the spine. A third child promotes the
+/// update in place without rebuilding the spine. A fifth child promotes the
 /// node to the dense representation (`Branch256` / `Node256`), a full 256-slot
 /// array indexed by the byte, whose cells are mutable themselves.
 ///
-/// Invariant: in `Branch2` and `Node2`, `byte1 < byte2` (bytes are
-/// unsigned), so iteration is in key order in every representation.
+/// Invariant: in the sparse representations, `byte1 < byte2 < byte3 < byte4`
+/// (bytes are unsigned), so iteration is in key order in every representation.
 ///
-/// `Leaf`, `Node1`, `Node2` and `Node256` carry a value at this
-/// position; `Branch1`, `Branch2` and `Branch256` do not.
+/// `Leaf`, `Node1` ... `Node4` and `Node256` carry a value at this
+/// position; `Branch1` ... `Branch4` and `Branch256` do not.
 ///
 /// No `Trie` value is ever shared between two live positions: insertion
 /// mutates through `Ref`s and array cells, so aliasing a subtree would be
@@ -29,6 +29,10 @@ type Trie[A] {
   Node1(value: A, byte: Byte, child: Ref[Trie[A]])
   Branch2(byte1: Byte, child1: Ref[Trie[A]], byte2: Byte, child2: Ref[Trie[A]])
   Node2(value: A, byte1: Byte, child1: Ref[Trie[A]], byte2: Byte, child2: Ref[Trie[A]])
+  Branch3(byte1: Byte, child1: Ref[Trie[A]], byte2: Byte, child2: Ref[Trie[A]], byte3: Byte, child3: Ref[Trie[A]])
+  Node3(value: A, byte1: Byte, child1: Ref[Trie[A]], byte2: Byte, child2: Ref[Trie[A]], byte3: Byte, child3: Ref[Trie[A]])
+  Branch4(byte1: Byte, child1: Ref[Trie[A]], byte2: Byte, child2: Ref[Trie[A]], byte3: Byte, child3: Ref[Trie[A]], byte4: Byte, child4: Ref[Trie[A]])
+  Node4(value: A, byte1: Byte, child1: Ref[Trie[A]], byte2: Byte, child2: Ref[Trie[A]], byte3: Byte, child3: Ref[Trie[A]], byte4: Byte, child4: Ref[Trie[A]])
   Branch256(children: Array[Trie[A]])
   Node256(value: A, children: Array[Trie[A]])
 }
@@ -57,12 +61,14 @@ def insert[A](dictionary: Dictionary[A], key: ByteArray, value: A): Unit = {
     if (i < n) Branch1(key.get(i), ref(chain(i + 1)))
     else Leaf(value)
 
-  // The two children of a `Branch2`, plus the rest of the key at `b`,
+  // The four children of a `Branch4`, plus the rest of the key at `b`,
   // as a full 256-slot array.
-  def densified(byte1: Byte, child1: Ref[Trie[A]], byte2: Byte, child2: Ref[Trie[A]], b: Byte, i: Int): Array[Trie[A]] = {
+  def densified(byte1: Byte, child1: Ref[Trie[A]], byte2: Byte, child2: Ref[Trie[A]], byte3: Byte, child3: Ref[Trie[A]], byte4: Byte, child4: Ref[Trie[A]], b: Byte, i: Int): Array[Trie[A]] = {
     val children = array[Trie[A]](256, Empty())
     children.set(byte1.toInt, child1.get)
     children.set(byte2.toInt, child2.get)
+    children.set(byte3.toInt, child3.get)
+    children.set(byte4.toInt, child4.get)
     children.set(b.toInt, chain(i + 1))
     children
   }
@@ -86,11 +92,45 @@ def insert[A](dictionary: Dictionary[A], key: ByteArray, value: A): Unit = {
         case Branch2(byte1, child1, byte2, child2) =>
           if (b == byte1) { child1.set(go(child1.get, i + 1)); trie }
           else if (b == byte2) { child2.set(go(child2.get, i + 1)); trie }
-          else Branch256(densified(byte1, child1, byte2, child2, b, i))
+          else if (b.toInt < byte1.toInt) Branch3(b, ref(chain(i + 1)), byte1, child1, byte2, child2)
+          else if (b.toInt < byte2.toInt) Branch3(byte1, child1, b, ref(chain(i + 1)), byte2, child2)
+          else Branch3(byte1, child1, byte2, child2, b, ref(chain(i + 1)))
         case Node2(existing, byte1, child1, byte2, child2) =>
           if (b == byte1) { child1.set(go(child1.get, i + 1)); trie }
           else if (b == byte2) { child2.set(go(child2.get, i + 1)); trie }
-          else Node256(existing, densified(byte1, child1, byte2, child2, b, i))
+          else if (b.toInt < byte1.toInt) Node3(existing, b, ref(chain(i + 1)), byte1, child1, byte2, child2)
+          else if (b.toInt < byte2.toInt) Node3(existing, byte1, child1, b, ref(chain(i + 1)), byte2, child2)
+          else Node3(existing, byte1, child1, byte2, child2, b, ref(chain(i + 1)))
+
+        case Branch3(byte1, child1, byte2, child2, byte3, child3) =>
+          if (b == byte1) { child1.set(go(child1.get, i + 1)); trie }
+          else if (b == byte2) { child2.set(go(child2.get, i + 1)); trie }
+          else if (b == byte3) { child3.set(go(child3.get, i + 1)); trie }
+          else if (b.toInt < byte1.toInt) Branch4(b, ref(chain(i + 1)), byte1, child1, byte2, child2, byte3, child3)
+          else if (b.toInt < byte2.toInt) Branch4(byte1, child1, b, ref(chain(i + 1)), byte2, child2, byte3, child3)
+          else if (b.toInt < byte3.toInt) Branch4(byte1, child1, byte2, child2, b, ref(chain(i + 1)), byte3, child3)
+          else Branch4(byte1, child1, byte2, child2, byte3, child3, b, ref(chain(i + 1)))
+        case Node3(existing, byte1, child1, byte2, child2, byte3, child3) =>
+          if (b == byte1) { child1.set(go(child1.get, i + 1)); trie }
+          else if (b == byte2) { child2.set(go(child2.get, i + 1)); trie }
+          else if (b == byte3) { child3.set(go(child3.get, i + 1)); trie }
+          else if (b.toInt < byte1.toInt) Node4(existing, b, ref(chain(i + 1)), byte1, child1, byte2, child2, byte3, child3)
+          else if (b.toInt < byte2.toInt) Node4(existing, byte1, child1, b, ref(chain(i + 1)), byte2, child2, byte3, child3)
+          else if (b.toInt < byte3.toInt) Node4(existing, byte1, child1, byte2, child2, b, ref(chain(i + 1)), byte3, child3)
+          else Node4(existing, byte1, child1, byte2, child2, byte3, child3, b, ref(chain(i + 1)))
+
+        case Branch4(byte1, child1, byte2, child2, byte3, child3, byte4, child4) =>
+          if (b == byte1) { child1.set(go(child1.get, i + 1)); trie }
+          else if (b == byte2) { child2.set(go(child2.get, i + 1)); trie }
+          else if (b == byte3) { child3.set(go(child3.get, i + 1)); trie }
+          else if (b == byte4) { child4.set(go(child4.get, i + 1)); trie }
+          else Branch256(densified(byte1, child1, byte2, child2, byte3, child3, byte4, child4, b, i))
+        case Node4(existing, byte1, child1, byte2, child2, byte3, child3, byte4, child4) =>
+          if (b == byte1) { child1.set(go(child1.get, i + 1)); trie }
+          else if (b == byte2) { child2.set(go(child2.get, i + 1)); trie }
+          else if (b == byte3) { child3.set(go(child3.get, i + 1)); trie }
+          else if (b == byte4) { child4.set(go(child4.get, i + 1)); trie }
+          else Node256(existing, densified(byte1, child1, byte2, child2, byte3, child3, byte4, child4, b, i))
 
         case Branch256(children) =>
           children.set(b.toInt, go(children.get(b.toInt), i + 1)); trie
@@ -105,6 +145,10 @@ def insert[A](dictionary: Dictionary[A], key: ByteArray, value: A): Unit = {
         case Node1(_, byte1, child1) => Node1(value, byte1, child1)
         case Branch2(byte1, child1, byte2, child2) => Node2(value, byte1, child1, byte2, child2)
         case Node2(_, byte1, child1, byte2, child2) => Node2(value, byte1, child1, byte2, child2)
+        case Branch3(byte1, child1, byte2, child2, byte3, child3) => Node3(value, byte1, child1, byte2, child2, byte3, child3)
+        case Node3(_, byte1, child1, byte2, child2, byte3, child3) => Node3(value, byte1, child1, byte2, child2, byte3, child3)
+        case Branch4(byte1, child1, byte2, child2, byte3, child3, byte4, child4) => Node4(value, byte1, child1, byte2, child2, byte3, child3, byte4, child4)
+        case Node4(_, byte1, child1, byte2, child2, byte3, child3, byte4, child4) => Node4(value, byte1, child1, byte2, child2, byte3, child3, byte4, child4)
         case Branch256(children) => Node256(value, children)
         case Node256(_, children) => Node256(value, children)
       }
@@ -136,6 +180,28 @@ def lookup[A](dictionary: Dictionary[A], key: ByteArray): Option[A] = {
           if (b == byte1) go(child1.get, i + 1)
           else if (b == byte2) go(child2.get, i + 1)
           else None()
+        case Branch3(byte1, child1, byte2, child2, byte3, child3) =>
+          if (b == byte1) go(child1.get, i + 1)
+          else if (b == byte2) go(child2.get, i + 1)
+          else if (b == byte3) go(child3.get, i + 1)
+          else None()
+        case Node3(_, byte1, child1, byte2, child2, byte3, child3) =>
+          if (b == byte1) go(child1.get, i + 1)
+          else if (b == byte2) go(child2.get, i + 1)
+          else if (b == byte3) go(child3.get, i + 1)
+          else None()
+        case Branch4(byte1, child1, byte2, child2, byte3, child3, byte4, child4) =>
+          if (b == byte1) go(child1.get, i + 1)
+          else if (b == byte2) go(child2.get, i + 1)
+          else if (b == byte3) go(child3.get, i + 1)
+          else if (b == byte4) go(child4.get, i + 1)
+          else None()
+        case Node4(_, byte1, child1, byte2, child2, byte3, child3, byte4, child4) =>
+          if (b == byte1) go(child1.get, i + 1)
+          else if (b == byte2) go(child2.get, i + 1)
+          else if (b == byte3) go(child3.get, i + 1)
+          else if (b == byte4) go(child4.get, i + 1)
+          else None()
         case Branch256(children) => go(children.get(b.toInt), i + 1)
         case Node256(_, children) => go(children.get(b.toInt), i + 1)
       }
@@ -144,6 +210,8 @@ def lookup[A](dictionary: Dictionary[A], key: ByteArray): Option[A] = {
         case Leaf(value) => Some(value)
         case Node1(value, _, _) => Some(value)
         case Node2(value, _, _, _, _) => Some(value)
+        case Node3(value, _, _, _, _, _, _) => Some(value)
+        case Node4(value, _, _, _, _, _, _, _, _) => Some(value)
         case Node256(value, _) => Some(value)
         case _ => None()
       }
@@ -174,6 +242,14 @@ def each[A](dictionary: Dictionary[A]): Unit / emit[A] = {
         go(child1.get); go(child2.get)
       case Node2(value, _, child1, _, child2) =>
         do emit(value); go(child1.get); go(child2.get)
+      case Branch3(_, child1, _, child2, _, child3) =>
+        go(child1.get); go(child2.get); go(child3.get)
+      case Node3(value, _, child1, _, child2, _, child3) =>
+        do emit(value); go(child1.get); go(child2.get); go(child3.get)
+      case Branch4(_, child1, _, child2, _, child3, _, child4) =>
+        go(child1.get); go(child2.get); go(child3.get); go(child4.get)
+      case Node4(value, _, child1, _, child2, _, child3, _, child4) =>
+        do emit(value); go(child1.get); go(child2.get); go(child3.get); go(child4.get)
       case Branch256(children) =>
         each(0, 256) { i => go(children.get(i)) }
       case Node256(value, children) =>
@@ -217,6 +293,26 @@ def eachTagged[A](dictionary: Dictionary[A]): Unit / emit[Tagged[A]] = {
         emitAt(depth, value)
         push(depth, byte1); go(child1.get, depth + 1)
         push(depth, byte2); go(child2.get, depth + 1)
+      case Branch3(byte1, child1, byte2, child2, byte3, child3) =>
+        push(depth, byte1); go(child1.get, depth + 1)
+        push(depth, byte2); go(child2.get, depth + 1)
+        push(depth, byte3); go(child3.get, depth + 1)
+      case Node3(value, byte1, child1, byte2, child2, byte3, child3) =>
+        emitAt(depth, value)
+        push(depth, byte1); go(child1.get, depth + 1)
+        push(depth, byte2); go(child2.get, depth + 1)
+        push(depth, byte3); go(child3.get, depth + 1)
+      case Branch4(byte1, child1, byte2, child2, byte3, child3, byte4, child4) =>
+        push(depth, byte1); go(child1.get, depth + 1)
+        push(depth, byte2); go(child2.get, depth + 1)
+        push(depth, byte3); go(child3.get, depth + 1)
+        push(depth, byte4); go(child4.get, depth + 1)
+      case Node4(value, byte1, child1, byte2, child2, byte3, child3, byte4, child4) =>
+        emitAt(depth, value)
+        push(depth, byte1); go(child1.get, depth + 1)
+        push(depth, byte2); go(child2.get, depth + 1)
+        push(depth, byte3); go(child3.get, depth + 1)
+        push(depth, byte4); go(child4.get, depth + 1)
       case Branch256(children) =>
         each(0, 256) { i => push(depth, i.toByte); go(children.get(i), depth + 1) }
       case Node256(value, children) =>
