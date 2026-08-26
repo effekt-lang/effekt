@@ -134,7 +134,7 @@ object Transformer {
       ExternBody.StringExternBody(ff, handleExternC(template))
     case core.ExternBody.StringExternBody(ff, Template(strings, args)) =>
       ExternBody.StringExternBody(ff, Template(strings, args map {
-        case core.ValueVar(id, tpe) => Variable(transform(id), transform(tpe))
+        case core.ValueVar(id, tpe) => Variable(transform(id), transformUnboxed(tpe))
         case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
       }))
     case core.ExternBody.Unsupported(err) =>
@@ -214,8 +214,8 @@ object Transformer {
           transform(rest)
         }
 
-      case core.ImpureApp(id, core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), capt), targs, vargs, bargs, rest) =>
-        val variable = Variable(transform(id), transform(resultType))
+      case app @ core.ImpureApp(id, core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), capt), targs, vargs, bargs, rest) =>
+        val variable = Variable(transform(id), transform(core.Type.bindingType(app)))
         transform(rest).flatMap { rest =>
           transform(vargs, bargs).run { (values, blocks) =>
             perhapsUnbox(values, vparamTypes map transformUnboxed).run { unboxeds =>
@@ -602,8 +602,10 @@ object Transformer {
         Variable(transform(name), transform(tpe))
     }
 
-  def transform(tpe: core.ValueType)(using DeclarationContext, ErrorReporter): Type =
-    Positive()
+  def transform(tpe: core.ValueType)(using DeclarationContext, ErrorReporter): Type = tpe match {
+    case core.ValueType.Var(name) => ErrorReporter.panic(s"Unexpected type variable ${name} after monomorphization")
+    case _ => Positive()
+  }
 
   def transformUnboxed(tpe: core.ValueType)(using DeclarationContext, ErrorReporter): Type =
     tpe match {

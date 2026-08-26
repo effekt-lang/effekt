@@ -523,29 +523,32 @@ object Transformer {
   def environmentSize(environment: machine.Environment): Int =
     environment.map { case machine.Variable(_, typ) => typeSize(typ) }.sum
 
-  def typeSize(tpe: machine.Type.CTpe): Int = tpe match {
-    case machine.Type.CTpe(tpe) => tpe match {
-      case machine.CType.Ptr    => 8
-      case machine.CType.Obj    => 8
-      case machine.CType.I64    => 8
-      case machine.CType.Double => 8
-      case machine.CType.Float  => 4
-      case machine.CType.Void   => 0
-    }
-  }
-
+  /**
+   * Number of bytes reserved for a value of this type in objects and stack frames.
+   */
   def typeSize(tpe: machine.Type): Int =
     tpe match {
-      case machine.Positive()           => 16
-      case machine.Negative()           => 16
-      case machine.Type.Prompt()        => 8 // TODO Make fat?
-      case machine.Type.Stack()         => 8 // TODO Make fat?
-      case machine.Type.Int()           => 8 // TODO Make fat?
-      case machine.Type.Byte()          => 1
-      case machine.Type.Double()        => 8 // TODO Make fat?
-      case machine.Type.Reference(_)    => 16
-      case CT@machine.Type.CTpe(_)      => typeSize(CT)
+      case machine.Positive() => 16
+      case machine.Negative() => 16
+      case machine.Type.Prompt() => 8
+      case machine.Type.Stack() => 8
+      case machine.Type.Int() => 8
+      case machine.Type.Byte() => 8 // rounded up to full word
+      case machine.Type.Double() => 8
+      case machine.Type.Reference(_) => 16
+      case CT@machine.Type.CTpe(_) => typeSize(CT)
     }
+
+  def typeSize(tpe: machine.Type.CTpe): Int = tpe match {
+    case machine.Type.CTpe(tpe) => tpe match {
+      case machine.CType.Ptr => 8
+      case machine.CType.Obj => 8
+      case machine.CType.I64 => 8
+      case machine.CType.Double => 8
+      case machine.CType.Float => 8 // rounded up to full word
+      case machine.CType.Void => 0
+    }
+  }
 
   def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
     implicit val FC = FunctionContext();
