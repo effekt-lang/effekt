@@ -1262,19 +1262,19 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "benchmarks" / "other" / "wordfreq_dictionary.effekt" -> Some(Summary(
-      staticDispatches = 999999,
-      dynamicDispatches = 999999,
-      patternMatches = 999999,
-      branches = 999999,
-      pushedFrames = 999999,
-      poppedFrames = 999999,
-      allocations = 999999,
-      closures = 999999,
-      variableReads = 999999,
-      variableWrites = 999999,
-      resets = 999999,
-      shifts = 999999,
-      resumes = 999999
+      staticDispatches = 1528444,
+      dynamicDispatches = 203628,
+      patternMatches = 438798,
+      branches = 1583315,
+      pushedFrames = 892686,
+      poppedFrames = 892680,
+      allocations = 76471,
+      closures = 98836,
+      variableReads = 1043091,
+      variableWrites = 310465,
+      resets = 2,
+      shifts = 94732,
+      resumes = 94730
     )),
 
 
