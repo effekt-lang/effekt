@@ -692,7 +692,7 @@ namespace internal {
           case Greater() => {
             // when we discover a key that is greater, we have to switch into a slow mode
             extending = false
-            tree = spine.joinSpineWith(tree).put(compare, k, v)
+            tree = spine.joinSpineWith(lowest).put(compare, k, v)
           }
         }
       } else {
@@ -703,7 +703,7 @@ namespace internal {
       resume(())
     }
 
-    (result, if (extending) spine.joinSpineWith(tree) else tree)
+    (result, if (extending) spine.joinSpineWith(lowest) else tree)
   }
 
   /// Create a tree from a list of (key, value) pairs.
