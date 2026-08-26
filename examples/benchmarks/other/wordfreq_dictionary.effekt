@@ -17,7 +17,7 @@ def vocabulary(size: Int): Array[String] = {
     with val i = each(0, size)
 
     val length = randomInt(1, 6)
-    val stem = if (i == 0) "" else {
+    val root = if (i == 0) "" else {
       val earlier = words.get(randomInt(0, i - 1))
       val prefix = randomInt(1, earlier.length)
       if (prefix + length <= 12) earlier.substring(0, prefix) else ""
@@ -26,7 +26,7 @@ def vocabulary(size: Int): Array[String] = {
     val rest = string::collect(length) {
       repeat(length) { do emit(randomLowercase()) }
     }
-    words.set(i, stem ++ rest)
+    words.set(i, root ++ rest)
   }
 
   words
