@@ -1246,19 +1246,35 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "benchmarks" / "other" / "unify_dictionary.effekt" -> Some(Summary(
-      staticDispatches = 4662066,
+      staticDispatches = 1376302,
       dynamicDispatches = 184329,
-      patternMatches = 2556198,
-      branches = 2703889,
-      pushedFrames = 1732897,
-      poppedFrames = 1732897,
-      allocations = 1749276,
+      patternMatches = 1359906,
+      branches = 1069071,
+      pushedFrames = 688158,
+      poppedFrames = 688158,
+      allocations = 704537,
       closures = 90123,
-      variableReads = 569362,
+      variableReads = 589843,
       variableWrites = 380936,
       resets = 2,
       shifts = 0,
       resumes = 0
+    )),
+
+    examplesDir / "benchmarks" / "other" / "wordfreq_dictionary.effekt" -> Some(Summary(
+      staticDispatches = 1528444,
+      dynamicDispatches = 203628,
+      patternMatches = 438798,
+      branches = 1583315,
+      pushedFrames = 892686,
+      poppedFrames = 892680,
+      allocations = 76471,
+      closures = 98836,
+      variableReads = 1043091,
+      variableWrites = 310465,
+      resets = 2,
+      shifts = 94732,
+      resumes = 94730
     )),
 
 

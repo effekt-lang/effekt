@@ -114,11 +114,24 @@ def randomInt32s(): Unit / {emit[Int], random} =
 
 /// `max` is _inclusive_!
 def randomInt(min: Int, max: Int): Int / random = {
+  // How many bytes it takes to represent `range` distinct values.
+  // Each bound is a power of two, so it's exact even as a JS 'number'.
+  def bytesFor(range: Int): Int =
+    if (range <= 1) 0
+    else if (range <= 256) 1
+    else if (range <= 65536) 2
+    else if (range <= 16777216) 3
+    else if (range <= 4294967296) 4
+    else if (range <= 1099511627776) 5
+    else if (range <= 281474976710656) 6
+    else if (range <= 72057594037927936) 7
+    else 8
+
   if (min > max) {
     randomInt(max, min)
   } else {
     val range = max - min + 1
-    val bytesNeeded = (log(range.toDouble) / log(256.0)).ceil
+    val bytesNeeded = bytesFor(range)
 
     var result = 0
     repeat(bytesNeeded) {
