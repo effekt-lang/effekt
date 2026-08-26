@@ -631,13 +631,6 @@ namespace internal {
     // which way the current run is going; is `Equal` once a monotone run is over
     var direction: Ordering = Less()
 
-    // A pair continues the run when it goes the same way the run has been going.
-    def continues(ordering: Ordering): Bool = (direction, ordering) match {
-      case (Less(), Less()) => true
-      case (Greater(), Greater()) => true
-      case _ => false
-    }
-
     // How the currently collected pair compares with the one collected last.
     def compareLast(k: K): Ordering =
       lowest match {
@@ -698,19 +691,23 @@ namespace internal {
       direction match {
         // the run is over, so we have to insert each new pair without a shortcut
         case Equal() => tree = tree.put(compare, k, v)
-        case _ => compareLast(k) match {
-          case Equal() => rebind(v)
-          case ordering =>
-            // while the run is still one pair long it has no direction of its own,
-            // so this comparison is what settles it
-            if (spine.isEmpty) { direction = ordering; extend(k, v) }
-            else if (continues(ordering)) { extend(k, v) }
-            else {
-              // the pair goes against the run, so we join up what we have and stop
-              tree = spine.joinSpineWith(lowest).put(compare, k, v)
-              direction = Equal()
-            }
-        }
+        case _ =>
+          (compareLast(k), direction) match {
+            case (Equal(), _) => rebind(v)
+            case (Less(), Less()) => extend(k, v)
+            case (Greater(), Greater()) => extend(k, v)
+            case (ordering, _) =>
+              // the new key goes against the run:
+              if (spine is Nil()) {
+                // - if it's the first pair, we just set the direction
+                direction = ordering
+                extend(k, v)
+              } else {
+                // - if it's not the first pair, we have to join up the run and use the slow path
+                tree = spine.joinSpineWith(lowest).put(compare, k, v)
+                direction = Equal()
+              }
+          }
       }
 
       resume(())
