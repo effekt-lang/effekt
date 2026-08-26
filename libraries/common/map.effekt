@@ -348,15 +348,10 @@ def collect[K, V](?compare: (K, K) => Ordering at {}) { stream: () => Unit / emi
 namespace returning {
   /// Collects `(key, value)` pairs from a push stream producer `stream` into a new `map`,
   /// using the provided `compare` function, returning the result of the producer as well as the collected map.
-  def collect[K, V, R](?compare: (K, K) => Ordering at {}) { stream: () => R / emit[(K, V)] }: (R, Map[K, V]) =
-    var map = map::empty[K, V](compare)
-    val r = try {
-      stream()
-    } with emit[(K, V)] { case (k, v) =>
-      map = map.put(k, v)
-      resume(())
-    }
-    (r, map)
+  def collect[K, V, R](?compare: (K, K) => Ordering at {}) { stream: () => R / emit[(K, V)] }: (R, Map[K, V]) = {
+    val (r, tree) = internal::collect[K, V, R](compare) {stream}
+    (r, Map(tree, compare))
+  }
 }
 
 // Internal tree representation
@@ -613,98 +608,172 @@ namespace internal {
     go(m)
   }
 
+  /// A balanced subtree waiting to be joined, and the key separating it from the pairs collected after it.
+  ///
+  /// A list of these is the *right* spine of the tree being built.
+  /// Their sizes strictly increase towards the back, so the list is the digits of a binary counter.
+  record Waiting[K, V](size: Int, key: K, value: V, tree: Tree[K, V])
+
+  /// Collect `(key, value)` pairs from a push stream producer `stream` into a tree,
+  /// returning the result of the producer as well.
+  /// Consider using `map::fromList` if you know the full list.
+  ///
+  /// O(N) if the stream is sorted by key,
+  /// O(N log N) otherwise
+  def collect[K, V, R](compare: (K, K) => Ordering at {}) { stream: () => R / emit[(K, V)] }: (R, Tree[K, V]) = {
+    // Note that `fromList` is always better since it knows the whole list of pairs in advance,
+    // whereas we have to be streaming here. Otherwise the functions are very similar...
+
+    // The lowest digit of the binary counter is a lone pair, kept as the leaf it will one day become. :)
+    var lowest: Tree[K, V] = Tip()
+    var spine: List[Waiting[K, V]] = Nil()
+    var tree = Tip()
+    var extending = true
+
+    // How the currently collected pair compares with the one collected last.
+    def compareLast(k: K): Ordering =
+      lowest match {
+        case Bin(_, previous, _, _, _) => compare(previous, k)
+        case Tip() => spine match {
+          case Nil() => Less()
+          case Cons(Waiting(_, previous, _, _), _) => compare(previous, k)
+        }
+      }
+
+    // Give the pair collected last a new value, overwriting the existing one.
+    def rebind(v: V): Unit =
+      lowest match {
+        case Bin(_, k, _, _, _) =>
+          lowest = singleton(k, v)
+        case Tip() => spine match {
+          case Nil() => ()
+          case Cons(Waiting(size, k, _, tree), more) =>
+            spine = Cons(Waiting(size, k, v, tree), more)
+        }
+      }
+
+    // Increment the binary counter: carry while the next subtree has the same size.
+    def extend(k: K, v: V): Unit = {
+      def carry(size: Int, subtree: Tree[K, V], rest: List[Waiting[K, V]]): List[Waiting[K, V]] =
+        rest match {
+          case Nil() => [Waiting(size, k, v, subtree)]
+          case Cons(Waiting(s, k2, v2, t), more) =>
+            if (s == size) {
+              carry(2 * size + 1, bin(k2, v2, t, subtree), more)
+            } else {
+              Cons(Waiting(size, k, v, subtree), rest)
+            }
+        }
+
+      lowest match {
+        case Tip() => lowest = singleton(k, v)
+        case Bin(_, _, _, _, _) =>
+          val leaf = lowest
+          lowest = Tip()
+          spine = carry(1, leaf, spine)
+      }
+    }
+
+    def joinSpineWith(spine: List[Waiting[K, V]], whole: Tree[K, V]): Tree[K, V] =
+      spine match {
+        case Nil() => whole
+        case Cons(Waiting(_, k, v, subtree), more) =>
+          more.joinSpineWith(link(k, v, subtree, whole))
+      }
+
+    val result = try {
+      stream()
+    } with emit[(K, V)] { case (k, v) =>
+      // as long as all keys are non-decreasing, we can build a tree in O(N) time
+      if (extending) {
+        compareLast(k) match {
+          case Less() => extend(k, v)
+          case Equal() => rebind(v)
+          case Greater() => {
+            // when we discover a key that is greater, we have to switch into a slow mode
+            extending = false
+            tree = spine.joinSpineWith(tree).put(compare, k, v)
+          }
+        }
+      } else {
+        // when we are in slow mode, we have to insert each new pair into the tree without a shortcut
+        tree = tree.put(compare, k, v)
+      }
+
+      resume(())
+    }
+
+    (result, if (extending) spine.joinSpineWith(tree) else tree)
+  }
+
   /// Create a tree from a list of (key, value) pairs.
   /// If the list contains more than one value for the same key,
   /// only the last value is used in the tree.
   ///
   /// O(N) if the list is sorted by key,
   /// O(N log N) otherwise
-  def fromList[K, V](pairs: List[(K, V)], compare: (K, K) => Ordering at {}): Tree[K, V] = {
+  def fromList[K, V](pairs: List[(K, V)], compare: (K, K) => Ordering at {}): Tree[K, V] =
     pairs match {
+      // at most one pair is a tree already, and needs no counting
       case Nil() => Tip()
       case Cons((k, v), Nil()) => singleton(k, v)
-      case Cons((k, v), rest) =>
-        // TODO: this function should really, **really** get inlined!
-        def notOrdered(k: K, pairs: List[(K, V)]) = {
-          pairs match {
-            case Nil() => false
-            case Cons((k2, _), _) =>  // k >= k2
-              compare(k, k2) match {
-                case Less() => false
-                case Greater() => true
-                case Equal() => true
-              }
-          }
-        }
+      case Cons(_, _) =>
+        // the first pair not yet taken, and whether the run repeated a key
+        var rest = pairs
+        var repeated = false
 
-        // Naive insertion, used for the worst-case scenario when the list is not sorted by key
-        def insertMany(m: Tree[K, V], pairs: List[(K, V)]) = {
-          var treeSoFar = m
-          pairs.foreach { case (k, v) =>
-            treeSoFar = treeSoFar.put(compare, k, v)
-          }
-          treeSoFar
-        }
-
-        // Returns a triple `(tree, xs, ys)`
-        //
-        // Invariant: At least one of `xs`, `ys` is empty.
-        // Moreover, if `ys` is nonempty, its keys are **not** ordered!
-        // Otherwise, all of the seen keys have been ordered so far.
-        //
-        // TODO: Possibly use a better type to encode the invariant?
-        def create(level: Int, pairs: List[(K, V)]): (Tree[K, V], List[(K, V)], List[(K, V)]) = {
-          pairs match {
-            case Nil() => (Tip(), [], [])
-            case Cons((k, v), rest) =>
-              if (level == 1) {
-                val one = singleton(k, v)
-                if (notOrdered(k, rest)) {
-                  (one, [], rest)
-                } else {
-                  (one, rest, [])
-                }
-              } else {
-                val res = create(level.bitwiseShr(1), pairs)
-                res match {
-                  case (_, Nil(), _) => res
-                  case (l, Cons((k2, v2), Nil()), zs) => (l.putMax(k2, v2), [], zs)
-                  case (l, Cons((k2, v2), rest2), _) =>
-                    // @-pattern
-                    val xs = Cons((k2, v2), rest2)
-
-                    if (notOrdered(k2, rest2)) { (l, [], xs) }
-                    else {
-                      val (r, zs, ws) = create(level.bitwiseShr(1), rest2);
-                      (link(k2, v2, l, r), zs, ws)
-                    }
+        // How many distinct keys the non-decreasing run at the front of `ps` holds.
+        def runLength(ps: List[(K, V)], count: Int): Int =
+          ps match {
+            case Nil() => count
+            case Cons((k, _), tail) => tail match { // note: tail is effectivelly an @-pattern!
+                case Nil() => count + 1
+                case Cons((next, _), _) => compare(k, next) match {
+                  case Less() => runLength(tail, count + 1)
+                  case Equal() => repeated = true; runLength(tail, count)
+                  case Greater() => count + 1
                 }
               }
           }
-        }
 
-        def go(level: Int, m: Tree[K, V], pairs: List[(K, V)]): Tree[K, V] = {
-          pairs match {
+        // Advance `rest` past any repeats of `k`, giving back the last binding of it.
+        def lastBinding(k: K, v: V): V =
+          rest match {
+            case Nil() => v
+            case Cons((next, value), tail) => compare(k, next) match {
+              case Equal() => rest = tail; lastBinding(k, value)
+              case Less() => v
+              case Greater() => v
+            }
+          }
+
+        // Shape `count` distinct keys from `rest` into a balanced tree, leaving `rest` on
+        // the first pair not taken. The order is established already, so knowing the size
+        // lays the tree out from the root down, one node per key.
+        def fromSorted(count: Int): Tree[K, V] =
+          if (count <= 0) Tip() else {
+            val half = (count - 1) / 2
+            val l = fromSorted(half)
+            rest match {
+              case Nil() => <{ "fromList: fewer pairs than counted" }>
+              case Cons((k, v), tail) =>
+                rest = tail
+                val value = if (repeated) lastBinding(k, v) else v
+                val r = fromSorted(count - 1 - half)
+                bin(k, value, l, r)
+            }
+          }
+
+        // Whatever is left, once the run has stopped, goes through `put`.
+        def insertMany(m: Tree[K, V], ps: List[(K, V)]): Tree[K, V] =
+          ps match {
             case Nil() => m
-            case Cons((k, v), Nil()) => m.putMax(k, v)
-            case Cons((k, v), rest) =>
-              if (notOrdered(k, rest)) { insertMany(m, pairs) }
-              else {
-                val l = m; // m is the left subtree here
-                val cr = create(level, rest)
-                cr match {
-                  case (r, xs, Nil()) => go(level.bitwiseShl(1), link(k, v, l, r), xs)
-                  case (r, Nil(), ys) => insertMany(link(k, v, l, r), ys)
-                  case _ => <{ "create: go: cannot happen, invariant broken!" }>
-                }
-              }
+            case Cons((k, v), tail) => insertMany(m.put(compare, k, v), tail)
           }
-        }
 
-        if (notOrdered(k, rest)) { insertMany(singleton(k, v), rest) }
-        else { go(1, singleton(k, v), rest) }
+        val sorted = fromSorted(runLength(pairs, 0))
+        sorted.insertMany(rest)
     }
-  }
 
   /// Remove a key `k` from a tree `m`.
   /// If `k` is not in `m`, `m` is returned.

@@ -257,13 +257,9 @@ namespace returning {
   /// Collects elements emitted by a push stream producer `stream` into a new set
   /// using provided `compare` function, returning the result of the producer as well as the collected set.
   def collect[A, R](?compare: (A, A) => Ordering at {}) { stream: () => R / emit[A] }: (R, Set[A]) = {
-    var set = set::empty(compare)
-    val r = try {
-      stream()
-    } with emit[A] { (v) =>
-      set = set.insert(v)
-      resume(())
+    val (r, tree) = internal::collect[A, Unit, R](compare) {
+      stream::returning::for[A, R] {stream} { (v: A) => do emit((v, ())) }
     }
-    (r, set)
+    (r, Set(tree, compare))
   }
 }
