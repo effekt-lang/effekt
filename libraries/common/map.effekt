@@ -737,13 +737,13 @@ namespace internal {
           ps match {
             case Nil() => count
             case Cons((k, _), tail) => tail match { // note: tail is effectivelly an @-pattern!
-                case Nil() => count + 1
-                case Cons((next, _), _) => compare(k, next) match {
-                  case Less() => runLength(tail, count + 1)
-                  case Equal() => repeated = true; runLength(tail, count)
-                  case Greater() => count + 1
-                }
+              case Nil() => count + 1
+              case Cons((next, _), _) => compare(k, next) match {
+                case Less() => runLength(tail, count + 1)
+                case Equal() => repeated = true; runLength(tail, count)
+                case Greater() => count + 1
               }
+            }
           }
 
         // Advance `rest` past any repeats of `k`, giving back the last binding of it.
