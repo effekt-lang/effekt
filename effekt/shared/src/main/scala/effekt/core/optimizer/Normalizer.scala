@@ -192,8 +192,18 @@ object Normalizer { normal =>
   //   to decide inlining.
   private def shouldInline(b: BlockLit, boundBy: Option[BlockVar], blockArgs: List[Block])(using C: Context): Boolean = boundBy match {
     case Some(id) if isRecursive(id.id) => false
-    case Some(id) => isOnce(id.id) || b.body.size <= C.maxInlineSize
-    case _ => blockArgs.exists { b => b.isInstanceOf[BlockLit] } // higher-order function with known arg
+    case Some(id) => isOnce(id.id) || isTrivial(b) || b.body.size <= C.maxInlineSize
+    case _ => false //case _ => blockArgs.exists { b => b.isInstanceOf[BlockLit] } // higher-order function with known arg
+  }
+
+  private def isTrivial(b: BlockLit): Boolean = b match {
+    case BlockLit(tparams, cparams, vparams, bparams, body) =>
+      body match {
+        case Stmt.App(_, _, _, _) => true
+        case Stmt.Invoke(_, _, _, _, _, _) => true
+        case Stmt.Return(_) => true
+        case _ => false
+      }
   }
 
   private def active(e: Expr)(using Context): Expr =

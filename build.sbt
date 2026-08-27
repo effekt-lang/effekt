@@ -279,8 +279,6 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
   .jsSettings(
 
     assembleJS := {
-      (Compile / clean).value
-      (Compile / compile).value
       val jsFile = (Compile / fullOptJS).value.data
       val outputFile = (ThisBuild / baseDirectory).value / "out" / "effekt.js"
       IO.copyFile(jsFile, outputFile)
@@ -342,16 +340,14 @@ lazy val stdLibGenerator = Def.task {
   val sourceDir = (Compile / sourceManaged).value
   val sourceFile = sourceDir / "Resources.scala"
 
-  if (!sourceFile.exists() || sourceFile.lastModified() < baseDir.lastModified()) {
+  val virtuals = resources.get.sortBy(_.relativeTo(baseDir).get.toString).map { file =>
+    val filename = file.relativeTo(baseDir).get
+    val content = IO.read(file).replace("$", "$$").replace("\"\"\"", "!!!MULTILINEMARKER!!!")
+    s"""loadIntoFile(raw\"\"\"$filename\"\"\", raw\"\"\"$content\"\"\")"""
+  }
 
-    val virtuals = resources.get.map { file =>
-      val filename = file.relativeTo(baseDir).get
-      val content = IO.read(file).replace("$", "$$").replace("\"\"\"", "!!!MULTILINEMARKER!!!")
-      s"""loadIntoFile(raw\"\"\"$filename\"\"\", raw\"\"\"$content\"\"\")"""
-    }
-
-    val scalaCode =
-      s"""
+  val scalaCode =
+    s"""
 package effekt.util
 import effekt.util.paths._
 
@@ -366,6 +362,7 @@ ${virtuals.mkString("\n\n")}
 }
 """
 
+  if (!sourceFile.exists() || IO.read(sourceFile) != scalaCode) {
     IO.write(sourceFile, scalaCode)
   }
 

@@ -1,0 +1,23 @@
+def main(seed, k) {
+  def loop(changing, stable) {
+    def step(next, ignored) {
+      loop(next, stable)
+    }
+    k(step)
+  }
+  loop(seed, k)
+}
+
+// The opaque call may invoke resume with arbitrary arguments. The analysis
+// must therefore forget changing, while retaining the captured stable value.
+
+/// EQUALITIES
+
+main
+---
+loop:
+  entry stable = k
+  recursive stable
+step:
+  entry -
+  recursive -

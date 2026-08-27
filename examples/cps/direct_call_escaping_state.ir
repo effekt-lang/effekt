@@ -1,0 +1,10 @@
+def main(value, ks, k) {
+  var cell = value @ ks;
+  k(cell, ks)
+}
+
+// Returning the reference makes its association with the current
+// meta-continuation observable, so the CPS convention must be retained.
+/// CALLING_CONVENTIONS
+
+-

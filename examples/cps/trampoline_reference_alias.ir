@@ -1,0 +1,26 @@
+def loop(flag, k) {
+  if (flag) {
+    def next() {
+      loop(false, k)
+    }
+    var cell = k @ toplevel;
+    def call(writeRef, readRef) {
+      put writeRef = next;
+      get current = readRef;
+      current()
+    }
+    call(cell, cell)
+  } else {
+    k(0)
+  }
+}
+def main(flag, k) {
+  loop(flag, k)
+}
+
+// The same reference flows into two parameters of `call`. A continuation is
+// stored through one alias and loaded through the other, still closing the
+// recursive cycle.
+/// SAFE_ENTRIES
+
+function next

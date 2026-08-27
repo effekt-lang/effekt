@@ -1,0 +1,360 @@
+package effekt
+package cps
+
+import java.io.File
+import sbt.io.*
+import sbt.io.syntax.*
+import kiama.parsing.{ NoSuccess, Success }
+import munit.Location
+import effekt.context.Context
+import effekt.core.{ DeclarationContext, Id, Names, TestContext }
+import effekt.generator.js
+
+enum Step {
+  /** Run a transform and check the result against expectedSource. */
+  case Transform(pass: TransformPass, expectedSource: String)
+  /** Run a transform without checking (empty body); updates the current tree. */
+  case TransformOnly(pass: TransformPass)
+  /** Run an analysis on the current tree, check against expectedOutput. */
+  case Analyze(analysis: AnalysisPass, expectedOutput: String)
+}
+
+enum TransformPass(val header: String, val run: (String, ModuleDecl, Id) => ModuleDecl) {
+  case RaiseArity extends TransformPass("ARITY_RAISE",
+    (_, input, mainId) => ArityRaising.transform(input, Set(mainId)))
+  case Inline extends TransformPass("INLINE",
+    (_, input, mainId) => Inliner.transform(input, mainId))
+  case StaticArguments extends TransformPass("STATIC_ARGUMENTS",
+    (_, input, _) => cps.StaticArguments.transform(input))
+  case Simplify extends TransformPass("SIMPLIFY",
+    (_, input, _) => Simplifier.transform(input))
+  case SinkBlocks extends TransformPass("SINK_BLOCKS",
+    (_, input, mainId) => BlockSinking.transform(input, mainId))
+  case DropParameters extends TransformPass("DROP_PARAMETERS",
+    (_, input, _) => ParameterDropping.transform(input))
+}
+
+enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => String) {
+  case ArityShapes extends AnalysisPass("ARITY_SHAPES",
+    (_, input, mainId) => ArityRaising.analyze(input, Set(mainId)).show)
+  case Flows extends AnalysisPass("FLOWS",
+    (_, input, _) => {
+      input.definitions.collect {
+        case d: ToplevelDefinition.Def =>
+          s"${d.id}\n---\n${ParameterDropping.solve(d).show}"
+        case _ => ()
+      }.mkString("\n")
+    })
+  case Equalities extends AnalysisPass("EQUALITIES",
+    (_, input, _) => {
+      input.definitions.collect {
+        case d: ToplevelDefinition.Def =>
+          s"${d.id.name.name}\n---\n${GuardedEquality.analyze(d).show}"
+        case _ => ()
+      }.mkString("\n")
+    })
+  case CallingConventions extends AnalysisPass("CALLING_CONVENTIONS",
+    (_, input, mainId) => js.CallingConvention.analyze(
+      input,
+      input.definitions.map(GuardedEquality.targets).toVector,
+      Set(mainId)).show)
+  case ControlFlow extends AnalysisPass("CONTROL_FLOW",
+    (_, input, _) => {
+      val representations = js.TransformerCps.computePlan(input)
+      val kinds = representations.kinds
+      js.StackSafety.analyze(
+        input,
+        id => kinds.get(id).exists(_.isRecursive),
+        id => kinds.get(id).exists(_.isSecondClass),
+        representations.defunctionalization,
+        input.definitions.map(GuardedEquality.targets).toVector).show
+    })
+  case SafeEntries extends AnalysisPass("SAFE_ENTRIES",
+    (_, input, _) => {
+      val representations = js.TransformerCps.computePlan(input)
+      val kinds = representations.kinds
+      js.StackSafety.analyze(
+        input,
+        id => kinds.get(id).exists(_.isRecursive),
+        id => kinds.get(id).exists(_.isSecondClass),
+        representations.defunctionalization,
+        input.definitions.map(GuardedEquality.targets).toVector).safeEntries.show
+    })
+  case JavaScript extends AnalysisPass("JAVASCRIPT",
+    (_, input, mainId) => {
+      given Context = new TestContext
+      given DeclarationContext = new DeclarationContext(
+        input.declarations ++ CpsTests.fixtureDeclarations, Nil)
+
+      js.TransformerCps.resetNames()
+      val generated = js.TransformerCps.toJS(input, Nil, Set(mainId))
+      val simplified = js.ControlFlowSimplification.transform(generated)
+      js.PrettyPrinter.format(js.FunctionFloating.transform(simplified).stmts).layout
+        .linesIterator.map(_.stripTrailing).mkString("\n")
+    })
+}
+
+object CpsTests {
+  private val listData = Id("ListData", -15)
+
+  val fixtureDeclarations: List[core.Declaration] = List(
+    core.Declaration.Data(Id("TripleData", -11), Nil, List(
+      core.Constructor(Id("Triple", -10), Nil, List(
+        core.Field(Id("first", -12), core.Type.TInt),
+        core.Field(Id("second", -13), core.Type.TInt),
+        core.Field(Id("third", -14), core.Type.TInt))))),
+    core.Declaration.Data(listData, Nil, List(
+      core.Constructor(Id("Nil", -7), Nil, Nil),
+      core.Constructor(Id("Cons", -8), Nil, List(
+        core.Field(Id("head", -16), core.Type.TInt),
+        core.Field(Id("tail", -17), core.ValueType.Data(listData, Nil))))))
+  )
+}
+
+class CpsTests extends munit.FunSuite {
+
+  def examplesDir = new File("examples") / "cps"
+
+  val defaultNames = Map(
+    "main" -> Id("main", -1),
+    "add"  -> Id("add", -2),
+    "sub"  -> Id("sub", -3),
+    "eq"   -> Id("eq", -4),
+    "println"  -> Id("println", -5),
+    "show" -> Id("show", -6),
+    "Nil" -> Id("Nil", -7),
+    "Cons" -> Id("Cons", -8),
+    "lt"   -> Id("lt", -9),
+    "Triple" -> Id("Triple", -10),
+  )
+
+  def parse(input: String, nickname: String = "input")(using Location): ModuleDecl = {
+    Parser.module(input, Names(defaultNames)) match {
+      case Success(result, next) if next.atEnd => result
+      case Success(result, next) =>
+        fail(s"Parsing $nickname had trailing garbage: ${next.source.toString.substring(next.offset)}")
+      case err: NoSuccess =>
+        val pos = err.next.position
+        fail(s"Parsing $nickname failed\n[${pos.line}:${pos.column}] ${err.message}")
+    }
+  }
+
+  private val allTransforms: Map[String, TransformPass] =
+    TransformPass.values.map(p => p.header -> p).toMap
+
+  private val allAnalyses: Map[String, AnalysisPass] =
+    AnalysisPass.values.map(a => a.header -> a).toMap
+
+  def parseStepHeader(name: String)(using Location): Either[TransformPass, AnalysisPass] = {
+    val trimmed = name.trim
+    allTransforms.get(trimmed).map(Left(_))
+      .orElse(allAnalyses.get(trimmed).map(Right(_)))
+      .getOrElse(fail(s"Unknown step: '$trimmed'"))
+  }
+
+  def splitTestFile(content: String)(using Location): (String, List[Step], List[TransformPass]) = {
+    val separator = """(?m)^///\s*(.+)$""".r
+
+    val parts = separator.split(content).toList.map(_.trim)
+    val stepNames = separator.findAllMatchIn(content).map(_.group(1)).toList
+
+    if parts.isEmpty then fail("Test file is empty")
+    if stepNames.isEmpty then fail("Test file has no /// separators")
+    if parts.size != stepNames.size + 1 then
+      fail(s"Expected ${stepNames.size + 1} sections but found ${parts.size}")
+
+    val initialSource = parts.head
+    val steps = stepNames.zip(parts.tail).map { case (name, body) =>
+      parseStepHeader(name) match {
+        case Left(pass) =>
+          if body.isEmpty then Step.TransformOnly(pass)
+          else Step.Transform(pass, body)
+        case Right(analysis) => Step.Analyze(analysis, body)
+      }
+    }
+
+    steps.lastOption match {
+      case Some(Step.TransformOnly(_)) =>
+        // Drop the trailing TransformOnly steps; we'll run them in a dedicated test
+        val (checkedSteps, trailingRuns) = {
+          val reversed = steps.reverse
+          val trailing = reversed.takeWhile(_.isInstanceOf[Step.TransformOnly]).reverse
+          val checked = reversed.dropWhile(_.isInstanceOf[Step.TransformOnly]).reverse
+          (checked, trailing.collect { case Step.TransformOnly(p) => p })
+        }
+        (initialSource, checkedSteps, trailingRuns)
+      case _ =>
+        (initialSource, steps, Nil)
+    }
+  }
+
+  private def findMain(input: ModuleDecl): Id =
+    input.definitions.collectFirst {
+      case ToplevelDefinition.Def(id, _, _) if id.name.name == "main" => id
+    }.getOrElse {
+      input.definitions.head match {
+        case ToplevelDefinition.Def(id, _, _) => id
+        case ToplevelDefinition.Val(id, _, _, _) => id
+      }
+    }
+
+  def assertAlphaEquivalent(obtained: ModuleDecl, expected: ModuleDecl, clue: => Any)(using Location): Unit = {
+    val renamer = new TestRenamer
+    val obtainedRenamed = renamer(obtained)
+    val expectedRenamed = renamer(expected)
+    def obtainedStr = PrettyPrinter.format(obtainedRenamed).layout
+    def expectedStr = PrettyPrinter.format(expectedRenamed).layout
+    assertEquals(obtainedStr, expectedStr, {
+      s"""$clue
+         |=====================
+         |Got:
+         |----
+         |$obtainedStr
+         |
+         |Expected:
+         |---------
+         |$expectedStr
+         |""".stripMargin
+    })
+  }
+
+  test("function usage of an object excludes its lexical remainder") {
+    val module = parse("""
+      def main(k) {
+        new handler : Handler {
+          def op() = { dependency() }
+        }
+        unrelated()
+      };
+      def dependency(k) { k() };
+      def unrelated(k) { k() }
+    """)
+    val uses = module.uses.toMap
+    val handler = uses.keys.find(_.name.name == "handler").getOrElse {
+      fail("missing local object definition")
+    }
+
+    assertEquals(uses(handler).map(_.name.name), Set("dependency"))
+  }
+
+  test("calling conventions ignore calls owned by non-CPS definitions") {
+    val module = parse("""
+      def callee(x, ks, k) { k(x, ks) };
+      def main(ks, k) {
+        def initializer() {
+          let value = callee!(1, toplevel, return);
+          return(value)
+        }
+        k(0, ks)
+      }
+    """)
+
+    js.CallingConvention.analyze(
+      module,
+      module.definitions.map(GuardedEquality.targets).toVector,
+      Set(findMain(module)))
+  }
+
+  test("JavaScript match clauses project only used fields") {
+    val triple = defaultNames("Triple")
+    val data = Id("TripleData", -11)
+    val first = Id("first", -12)
+    val second = Id("second", -13)
+    val third = Id("third", -14)
+    val parsed = parse("""
+      def main(value, k) {
+        value match {
+          case Triple(unused1, used, unused2) => k(used)
+        }
+      }
+    """)
+    val module = parsed.copy(declarations = List(
+      core.Declaration.Data(data, Nil, List(
+        core.Constructor(triple, Nil, List(
+          core.Field(first, core.Type.TInt),
+          core.Field(second, core.Type.TInt),
+          core.Field(third, core.Type.TInt)))))))
+
+    given Context = new TestContext
+    given DeclarationContext = new DeclarationContext(module.declarations, Nil)
+    js.TransformerCps.resetNames()
+    val generated = js.TransformerCps.toJS(module, Nil, Set(findMain(module)))
+    val simplified = js.ControlFlowSimplification.transform(generated)
+    val output = js.PrettyPrinter
+      .format(js.FunctionFloating.transform(simplified).stmts).layout
+      .linesIterator.map(_.stripTrailing).mkString("\n")
+
+    val projections = output.linesIterator
+      .filter(_.contains(" = value_0."))
+      .map(_.trim)
+      .mkString("\n")
+    assertNoDiff(projections, "const used_0 = value_0.second_0;")
+  }
+
+  def testFile(file: File): Unit = {
+    val content = scala.io.Source.fromFile(file).mkString
+    val filename = file.getName
+
+    val (initialSource, steps, trailingPasses) = splitTestFile(content)
+
+    var currentTree: ModuleDecl = null
+    var currentRenamer: TestRenamer = null
+
+    test(s"$filename: parse initial program") {
+      currentRenamer = new TestRenamer()
+      currentTree = currentRenamer(parse(initialSource, "initial IR"))
+    }
+
+    steps.zipWithIndex.foreach { case (step, idx) =>
+      step match {
+        case Step.TransformOnly(pass) =>
+          test(s"$filename step ${idx + 1}: ${pass.header} (unchecked)") {
+            assert(currentTree != null, "previous step must have succeeded")
+            val mainId = findMain(currentTree)
+            currentTree = pass.run(filename, currentTree, mainId)
+          }
+
+        case Step.Transform(pass, expectedSource) =>
+          test(s"$filename step ${idx + 1}: ${pass.header}") {
+            assert(currentTree != null, "previous step must have succeeded")
+            val expected = currentRenamer(parse(expectedSource, s"expected after step ${idx + 1} (${pass.header})"))
+            val mainId = findMain(currentTree)
+            val obtained = pass.run(filename, currentTree, mainId)
+            assertAlphaEquivalent(obtained, expected,
+              s"$filename step ${idx + 1} (${pass.header}) produced unexpected result")
+            currentTree = expected
+          }
+
+        case Step.Analyze(analysis, expectedOutput) =>
+          test(s"$filename step ${idx + 1}: ${analysis.header}") {
+            assert(currentTree != null, "previous step must have succeeded")
+            val mainId = findMain(currentTree)
+            val obtained = analysis.run(filename, currentTree, mainId)
+            assertNoDiff(obtained.trim, expectedOutput.trim,
+              s"$filename step ${idx + 1} (${analysis.header}) produced unexpected output")
+          }
+      }
+    }
+
+    if trailingPasses.nonEmpty then {
+      val pipelineDesc = trailingPasses.map(_.header).mkString(" → ")
+      test(s"$filename: $pipelineDesc (no expected output yet)") {
+        assert(currentTree != null, "previous step must have succeeded")
+        for pass <- trailingPasses do {
+          val mainId = findMain(currentTree)
+          currentTree = pass.run(filename, currentTree, mainId)
+        }
+        val result = PrettyPrinter.format(currentTree).layout
+        fail(s"No expected output after $pipelineDesc. Got:\n\n$result")
+      }
+    }
+  }
+
+  if examplesDir.exists() && examplesDir.isDirectory then
+    examplesDir.listFiles()
+      .filter(_.getName.endsWith(".ir"))
+      .sorted
+      .foreach(testFile)
+  else
+    test("examples/cps directory not found".ignore) { () }
+}

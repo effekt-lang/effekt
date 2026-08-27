@@ -1,0 +1,25 @@
+def main(n, ks, k) {
+  def loop(i, ks1, k1) {
+    if (true) {
+      def enter() {
+        def after(value, ks2) {
+          k1(value, ks2)
+        }
+        loop(i, ks1, after)
+      }
+      enter()
+    } else {
+      k1(i, ks1)
+    }
+  }
+  let result = loop!(n, ks, return);
+  k(result, ks)
+}
+
+// Entering a recursive definition through a local block is a structured
+// transfer only when it preserves the definition's return continuation.
+// Here `after` represents the pending remainder, so `loop` stays CPS and can
+// be implemented by the local continuation dispatcher.
+/// CALLING_CONVENTIONS
+
+-

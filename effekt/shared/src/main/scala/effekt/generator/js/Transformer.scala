@@ -5,7 +5,7 @@ package js
 import effekt.context.Context
 import effekt.context.assertions.*
 import effekt.core.{ *, given }
-import effekt.symbols.{ Module, Symbol, Wildcard, Bindings }
+import effekt.symbols.{ Module, Wildcard, Bindings }
 
 import scala.collection.mutable
 
@@ -52,7 +52,7 @@ trait Transformer {
     val other = freshName("other")
     def otherGet(field: JSName): js.Expr = js.Member(js.Variable(other), field)
     def compare(field: JSName): js.Expr = js"!${$effekt.call("equals", get(field), otherGet(field))}"
-    val noop    = js.Block(Nil)
+    val noop    = js.Block(None, Nil)
     val abort   = js.Return(js"false")
     val succeed = js.Return(js"true")
     val otherExists   = js.If(js"!${js.Variable(other)}", abort, noop)
@@ -104,17 +104,41 @@ trait Transformer {
   def nameDef(id: Id): JSName = uniqueName(id)
 
   // attempt to have better / shorter names
-  val usedNames: mutable.Map[String, Int] = mutable.Map.empty
-  val names: mutable.Map[Id, String] = mutable.Map.empty
+  private class NameSupply {
+    val usedNames: mutable.Map[String, Int] = mutable.Map.empty
+    val names: mutable.Map[Id, String] = mutable.Map.empty
+    val occupiedNames: mutable.Set[String] = mutable.Set.empty
+    var nextFreshName: Int = 0
+  }
+
+  /** Backend transformers are singletons, while compiler instances can run in
+   *  parallel (in particular, the JavaScript test suites do). Keep their name
+   *  supplies independent without serializing JavaScript generation. */
+  private val nameSupply = new ThreadLocal[NameSupply] {
+    override def initialValue(): NameSupply = new NameSupply
+  }
+
   val baseNameRx = """([A-Za-z$]*(?:_[A-Za-z]+)*)""".r // extracts the base number up until the first number
 
-  def uniqueName(sym: Id): JSName = {
-    def uniqueNameFor(base: String): String =
-      val nextId = usedNames.getOrElse(base, 0)
-      usedNames.update(base, nextId + 1)
-      s"${base}_${nextId}"
+  /** Start an independent JavaScript translation with deterministic names. */
+  def resetNames(): Unit = nameSupply.set(new NameSupply)
 
-    val name = names.getOrElseUpdate(sym, baseNameRx.findFirstIn(sym.name.name) match {
+  private def uniqueNameFor(base: String): String = {
+    val supply = nameSupply.get()
+    var nextId = supply.usedNames.getOrElse(base, 0)
+    var candidate = s"${base}_${nextId}"
+    while supply.occupiedNames.contains(candidate) do {
+      nextId += 1
+      candidate = s"${base}_${nextId}"
+    }
+    supply.usedNames.update(base, nextId + 1)
+    supply.occupiedNames += candidate
+    candidate
+  }
+
+  def uniqueName(sym: Id): JSName = {
+    val supply = nameSupply.get()
+    val name = supply.names.getOrElseUpdate(sym, baseNameRx.findFirstIn(sym.name.name) match {
       case Some(base) => uniqueNameFor(base)
       case None =>
         println(sym.name)
@@ -123,13 +147,29 @@ trait Transformer {
     JSName(jsEscape(name))
   }
 
+  /** Allocate a fresh JavaScript name that retains the source identifier's
+   *  stem while denoting a distinct representation of that identifier. */
+  def derivedName(sym: Id, suffix: String): JSName = {
+    val base = baseNameRx.findFirstIn(sym.name.name).getOrElse("tmp")
+    JSName(jsEscape(uniqueNameFor(s"${base}_${suffix}")))
+  }
+
   def nameRef(id: Id): js.Expr = js.Variable(uniqueName(id))
 
   // name references for fields and methods
   def memberNameRef(id: Id): JSName = uniqueName(id)
 
-  def freshName(s: String): JSName =
-    JSName(s + Symbol.fresh.next())
+  def freshName(s: String): JSName = {
+    val supply = nameSupply.get()
+    var candidate = s + supply.nextFreshName
+    supply.nextFreshName += 1
+    while supply.occupiedNames.contains(candidate) do {
+      candidate = s + supply.nextFreshName
+      supply.nextFreshName += 1
+    }
+    supply.occupiedNames += candidate
+    JSName(candidate)
+  }
 
   def escape(scalaString: String): String =
     scalaString.foldLeft(StringBuilder()) { (acc, c) =>

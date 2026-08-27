@@ -1,0 +1,44 @@
+def main(flag, n, ks, k) {
+  def loop(i, loopKs, loopK) {
+    run done = eq(i, 0);
+    if (done) {
+      loopK(i, loopKs)
+    } else {
+      run previous = sub(i, 1);
+      let result = loop!(previous, loopKs, return);
+      loopK(result, loopKs)
+    }
+  }
+  if (flag) {
+    let result = loop!(n, ks, return);
+    k(result, ks)
+  } else {
+    run previous = sub(n, 1);
+    let result = loop!(previous, ks, return);
+    k(result, ks)
+  }
+}
+
+// Both entries and the recursive back edge stay in `main`'s direct
+// activation, so the shared region is a nested loop rather than a closure.
+/// JAVASCRIPT
+
+function main_0(flag_0, n_0, ks_0, k_0) {
+  let i_0 = undefined;
+  if (flag_0) {
+    i_0 = n_0;
+  } else {
+    const previous_0 = sub_0(n_0, 1);
+    i_0 = previous_0;
+  }
+  loop_0: while (true) {
+    const done_0 = eq_0(i_0, 0);
+    if (done_0) {
+      return k_0(i_0, ks_0);
+    } else {
+      const previous_1 = sub_0(i_0, 1);
+      i_0 = previous_1;
+      continue loop_0;
+    }
+  }
+}

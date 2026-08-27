@@ -1,0 +1,61 @@
+def outer(x, ks, k) {
+  run tmp = eq(x, 0);
+  if (tmp) {
+    k(0, ks)
+  } else {
+    run tmp = sub(x, 1);
+    outer(tmp, ks, k)
+  }
+}
+def main(ks2, k2) {
+  // <---- should end up here
+  def k1(res, ks1) {
+    outer(res, ks1, k2)
+  }
+  outer(10, ks2, k1)
+}
+
+/// SINK_BLOCKS
+
+def main(ks2, k2) {
+  def outer(x, ks, k) {
+    run tmp = eq(x, 0);
+    if (tmp) {
+      k(0, ks)
+    } else {
+      run tmp = sub(x, 1);
+      outer(tmp, ks, k)
+    }
+  }
+  def k1(res, ks1) {
+    outer(res, ks1, k2)
+  }
+  outer(10, ks2, k1)
+}
+
+// The continuation changes, but the relational analysis can still establish
+// that the meta continuation is always ks2.
+
+/// FLOWS
+
+main
+---
+ks_5 !-> ks2_1
+
+/// DROP_PARAMETERS
+
+def main(ks2, k2) {
+  def outer(x, k) {
+    run tmp = eq(x, 0);
+    if (tmp) {
+      k(0, ks2)
+    } else {
+      run tmp = sub(x, 1);
+      outer(tmp, k)
+    }
+  }
+  def k1(res, ks1) {
+    outer(res, k2)
+  }
+  outer(10, k1)
+}

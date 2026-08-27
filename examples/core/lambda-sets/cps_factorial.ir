@@ -1,0 +1,119 @@
+def eq(x: Int, y: Int) = {
+  return true
+}
+
+def sub(x: Int, y: Int) = {
+  return x: Int
+}
+
+def mul(x: Int, y: Int) = {
+  return x: Int
+}
+
+def f(x: Int){k: (Int) => Int} = {
+  val done = (eq: (Int, Int) => Bool @ {})(x: Int, 0);
+  if (done: Bool) {
+    (k: (Int) => Int @ {k})(1)
+  } else {
+    def k2(y: Int) = {
+      val result = (mul: (Int, Int) => Int @ {})(x: Int, y: Int);
+      (k: (Int) => Int @ {k})(result: Int)
+    }
+    val previous = (sub: (Int, Int) => Int @ {})(x: Int, 1);
+    (f: (Int){k: (Int) => Int} => Int @ {})(previous: Int){
+      (k2: (Int) => Int @ {x, k})
+    }
+  }
+}
+
+def main(x: Int) = {
+  def done(result: Int) = {
+    return result: Int
+  }
+  (f: (Int){k: (Int) => Int} => Int @ {})(x: Int){
+    (done: (Int) => Int @ {})
+  }
+}
+
+export f
+
+/// LAMBDA_SETS
+
+S = done ↦ { <> },
+    eq ↦ { <> },
+    f ↦ { <?>, <done>, <k2> },
+    k2 ↦ { <k2> },
+    mul ↦ { <> },
+    sub ↦ { <> }
+generic = { f }
+
+/// LAMBDA_SPECIALIZE
+
+type K {
+  Done()
+  K2(x_captured: Int, k_captured: K)
+}
+
+def eq(x: Int, y: Int) = {
+  return true
+}
+
+def sub(x: Int, y: Int) = {
+  return x: Int
+}
+
+def mul(x: Int, y: Int) = {
+  return x: Int
+}
+
+def f(x: Int){k: (Int) => Int} = {
+  val done = (eq: (Int, Int) => Bool @ {})(x: Int, 0);
+  if (done: Bool) {
+    (k: (Int) => Int @ {k})(1)
+  } else {
+    def k2(y: Int) = {
+      val result = (mul: (Int, Int) => Int @ {})(x: Int, y: Int);
+      (k: (Int) => Int @ {k})(result: Int)
+    }
+    val previous = (sub: (Int, Int) => Int @ {})(x: Int, 1);
+    (f: (Int){k: (Int) => Int} => Int @ {x})(previous: Int){
+      (k2: (Int) => Int @ {x, k})
+    }
+  }
+}
+
+def main(x: Int) = {
+  def done(result: Int) = {
+    return result: Int
+  }
+  (f_K: (Int, K) => Int @ {x})(x: Int, make K Done())
+}
+
+def f_K(x: Int, k: K) = {
+  val done = (eq: (Int, Int) => Bool @ {})(x: Int, 0);
+  if (done: Bool) {
+    (apply_K: (K, Int) => Int @ {})(k: K, 1)
+  } else {
+    def k2(y: Int) = {
+      val result = (mul: (Int, Int) => Int @ {})(x: Int, y: Int);
+      (apply_K: (K, Int) => Int @ {})(k: K, result: Int)
+    }
+    val previous = (sub: (Int, Int) => Int @ {})(x: Int, 1);
+    (f_K: (Int, K) => Int @ {x})(previous: Int,
+      make K K2(x: Int, k: K))
+  }
+}
+
+def apply_K(closure: K, argument: Int) = {
+  closure: K match[Int] {
+    Done : { () =>
+      return argument: Int
+    }
+    K2 : { (x_captured: Int, k_captured: K) =>
+      val result = (mul: (Int, Int) => Int @ {})(x_captured: Int, argument: Int);
+      (apply_K: (K, Int) => Int @ {})(k_captured: K, result: Int)
+    }
+  }
+}
+
+export f

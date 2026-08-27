@@ -1,0 +1,61 @@
+def inc(x: Int) = {
+  return x: Int
+}
+
+def dec(x: Int) = {
+  return x: Int
+}
+
+def compose(x: Int){g: (Int) => Int}{h: (Int) => Int} = {
+  val intermediate = (h: (Int) => Int @ {h})(x: Int);
+  (g: (Int) => Int @ {g})(intermediate: Int)
+}
+
+def main() = {
+  val first = (compose: (Int){g: (Int) => Int}{h: (Int) => Int} => Int @ {})(0){
+    (inc: (Int) => Int @ {})
+  }{
+    (dec: (Int) => Int @ {})
+  };
+  (compose: (Int){g: (Int) => Int}{h: (Int) => Int} => Int @ {})(first: Int){
+    (inc: (Int) => Int @ {})
+  }{
+    (inc: (Int) => Int @ {})
+  }
+}
+
+/// LAMBDA_SETS
+
+S = compose ↦ { <inc, dec>, <inc, inc> },
+    dec ↦ { <> },
+    inc ↦ { <> }
+
+/// LAMBDA_SPECIALIZE
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def dec(x: Int) = {
+  return x: Int
+}
+
+def compose(x: Int){g: (Int) => Int}{h: (Int) => Int} = {
+  val intermediate = (h: (Int) => Int @ {h})(x: Int);
+  (g: (Int) => Int @ {g})(intermediate: Int)
+}
+
+def main() = {
+  val first = (compose_inc_dec: (Int) => Int @ {})(0);
+  (compose_inc_inc: (Int) => Int @ {})(first: Int)
+}
+
+def compose_inc_dec(x: Int) = {
+  val intermediate = (dec: (Int) => Int @ {})(x: Int);
+  (inc: (Int) => Int @ {})(intermediate: Int)
+}
+
+def compose_inc_inc(x: Int) = {
+  val intermediate = (inc: (Int) => Int @ {})(x: Int);
+  (inc: (Int) => Int @ {})(intermediate: Int)
+}

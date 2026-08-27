@@ -1,0 +1,16 @@
+def main(random, ks, k) {
+  let result = random.random!(ks, return);
+  k(result, ks)
+}
+
+// An entry parameter may denote an object from separately compiled code.
+// Its operation ABI is therefore open and must remain CPS.
+/// CALLING_CONVENTIONS
+
+-
+
+/// JAVASCRIPT
+
+function main_0(random_0, ks_0, k_0) {
+  return random_0.random_0(ks_0, k_0);
+}

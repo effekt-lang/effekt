@@ -1,0 +1,22 @@
+def use(xs, k) {
+  xs match {
+    case Nil() => k(xs)
+    case Cons(head, tail) => k(xs)
+  }
+}
+def main(k) {
+  use(make Cons(42, make Nil()), k)
+}
+
+// A residual use of the whole value materializes it exactly once in the
+// specialized definition. The constructor allocation has moved, not been
+// duplicated.
+/// ARITY_RAISE
+
+def use_0_Cons(xs_0, xs_1, k) {
+  let xs = make Cons(xs_0, xs_1);
+  k(xs)
+}
+def main(k) {
+  use_0_Cons(42, make Nil(), k)
+}

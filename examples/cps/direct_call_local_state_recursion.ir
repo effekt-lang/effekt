@@ -1,0 +1,47 @@
+def main(n, ks, k) {
+  var state = n @ ks;
+  def loop(ks1, k1) {
+    get current = state;
+    run done = eq(current, 0);
+    if (done) {
+      k1(current, ks1)
+    } else {
+      run next = sub(current, 1);
+      put state = next;
+      let result = loop!(ks1, return);
+      k1(result, ks1)
+    }
+  }
+  let result = loop!(ks, return);
+  k(result, ks)
+}
+
+// A non-escaping local reference does not prevent the enclosing computation
+// or its tail-recursive worker from using the direct convention.
+/// CALLING_CONVENTIONS
+
+direct
+  loop = 0
+  main = 0 adapter
+
+/// JAVASCRIPT
+
+function main_0(n_0, ks_0, k_0) {
+  let state_0 = n_0;
+  let result_0 = undefined;
+  loop_return_0: {
+    loop_0: while (true) {
+      const current_0 = state_0;
+      const done_0 = eq_0(current_0, 0);
+      if (done_0) {
+        result_0 = current_0;
+        break loop_return_0;
+      } else {
+        const next_0 = sub_0(current_0, 1);
+        state_0 = next_0;
+        continue loop_0;
+      }
+    }
+  }
+  return k_0(result_0, ks_0);
+}

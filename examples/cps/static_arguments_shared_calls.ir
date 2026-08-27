@@ -1,0 +1,38 @@
+def main(choice, ks, k) {
+  def loop(i, ks1, k1) {
+    run done = eq(i, 0);
+    if (done) {
+      k1(ks1)
+    } else {
+      run next = sub(i, 1);
+      loop(next, ks1, k1)
+    }
+  }
+  if (choice) {
+    loop(1, ks, k)
+  } else {
+    loop(2, ks, k)
+  }
+}
+
+/// STATIC_ARGUMENTS
+
+def main(choice, ks, k) {
+  def loop(i, ks1, k1) {
+    def loop_worker(i_1) {
+      run done = eq(i_1, 0);
+      if (done) {
+        k1(ks1)
+      } else {
+        run next = sub(i_1, 1);
+        loop_worker(next)
+      }
+    }
+    loop_worker(i)
+  }
+  if (choice) {
+    loop(1, ks, k)
+  } else {
+    loop(2, ks, k)
+  }
+}

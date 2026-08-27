@@ -1,0 +1,43 @@
+def main(flag, ks, k) {
+  def loop(i, ks1, k1) {
+    run done = eq(i, 0);
+    if (done) {
+      k1(i, ks1)
+    } else {
+      run next = sub(i, 1);
+      loop(next, ks1, k1)
+    }
+  }
+  def direct(f, i, ks2, k2) {
+    let value = f!(i, ks2, return);
+    k2(value, ks2)
+  }
+  if (flag) {
+    loop(1, ks, k)
+  } else {
+    direct(loop, 1, ks, k)
+  }
+}
+
+/// STATIC_ARGUMENTS
+
+def main(flag, ks, k) {
+  def loop(i, ks1, k1) {
+    run done = eq(i, 0);
+    if (done) {
+      k1(i, ks1)
+    } else {
+      run next = sub(i, 1);
+      loop(next, ks1, k1)
+    }
+  }
+  def direct(f, i, ks2, k2) {
+    let value = f!(i, ks2, return);
+    k2(value, ks2)
+  }
+  if (flag) {
+    loop(1, ks, k)
+  } else {
+    direct(loop, 1, ks, k)
+  }
+}

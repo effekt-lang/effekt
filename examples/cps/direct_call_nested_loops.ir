@@ -1,0 +1,69 @@
+def main(flag, value, ks, k) {
+  def outer(active, current, ks1, k1) {
+    if (active) {
+      def inner(recur, nested, ks2, k2) {
+        if (recur) {
+          let result = inner!(false, nested, ks2, return);
+          k2(result, ks2)
+        } else {
+          let result = outer!(false, nested, ks2, return);
+          k2(result, ks2)
+        }
+      }
+      let result = inner!(true, current, ks1, return);
+      k1(result, ks1)
+    } else {
+      k1(current, ks1)
+    }
+  }
+  let result = outer!(flag, value, ks, return);
+  k(result, ks)
+}
+
+// The unique forward entries follow lexical nesting. The remaining edges are
+// tail transfers to the same or an enclosing definition, so the recursive
+// component is reducible to nested loops.
+/// CALLING_CONVENTIONS
+
+direct
+  inner = 0
+  main = 0 adapter
+  outer = 0
+
+/// JAVASCRIPT
+
+function main_0(flag_0, value_0, ks_0, k_0) {
+  let active_0 = flag_0;
+  let current_0 = value_0;
+  let result_0 = undefined;
+  outer_return_0: {
+    outer_0: while (true) {
+      if (active_0) {
+        let recur_0 = true;
+        let nested_0 = current_0;
+        let result_1 = undefined;
+        inner_return_0: {
+          inner_0: while (true) {
+            if (recur_0) {
+              const next_arg_0 = false;
+              recur_0 = next_arg_0;
+              continue inner_0;
+            } else {
+              const next_arg_1 = false;
+              const next_arg_2 = nested_0;
+              active_0 = next_arg_1;
+              current_0 = next_arg_2;
+              continue outer_0;
+            }
+          }
+        }
+        result_0 = result_1;
+        break outer_return_0;
+      } else {
+        result_0 = current_0;
+        break outer_return_0;
+      }
+    }
+  }
+  return k_0(result_0, ks_0);
+}

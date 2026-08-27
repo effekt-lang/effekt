@@ -1,0 +1,24 @@
+def loop(x, ks, k) {
+  def after(flag, ks1, k1) {
+    if (flag) {
+      let result = loop!(x, ks1, return);
+      k1(result, ks1)
+    } else {
+      k1(x, ks1)
+    }
+  }
+  let result = after!(true, ks, return);
+  k(result, ks)
+};
+def main(x, ks, k) {
+  let result = loop!(x, ks, return);
+  k(result, ks)
+}
+
+// `after` is a zero-cost structured join, but it participates in the cycle
+// loop -> after -> loop. Since the second edge consumes JavaScript stack, the
+// component as a whole must retain CPS.
+
+/// CALLING_CONVENTIONS
+
+-

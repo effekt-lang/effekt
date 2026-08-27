@@ -1,406 +1,777 @@
 package effekt
 package cps
 
-import core.{ Id, ValueType, BlockType, Captures }
+import core.{ Id, ValueType }
 import effekt.source.FeatureFlag
 import effekt.util.messages.ErrorReporter
 import effekt.util.messages.INTERNAL_ERROR
 
-sealed trait Tree extends Product {
-  /**
-   * The number of nodes of this tree (used by inlining heuristics)
-   */
-  lazy val size: Int = {
-    var nodeCount = 1
+// Idea behind this IR:
+// - close to JS
+// - be able to represent continuations and metacontinuations
+// - purposefully treat functions, joinpoints and continuations etc the same so the same optimizations apply
 
-    def all(t: IterableOnce[_]): Unit = t.iterator.foreach(one)
-    def one(obj: Any): Unit = obj match {
-      case t: Tree => nodeCount += t.size
-      case s: effekt.symbols.Symbol => ()
-      case p: Product => all(p.productIterator)
-      case t: Iterable[t] => all(t)
-      case leaf           => ()
-    }
-    this.productIterator.foreach(one)
-    nodeCount
-  }
-}
+sealed trait Tree
 
-/**
- * A module declaration, the path should be an Effekt include path, not a system dependent file path
- */
+/** A CPS module. */
 case class ModuleDecl(
-  path: String,
   includes: List[String],
   declarations: List[core.Declaration],
   externs: List[Extern],
   definitions: List[ToplevelDefinition],
   exports: List[Id]
-) extends Tree
+) extends Tree {
+  lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
+  lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
+  lazy val refs: DB[Int] = references.refs(this)
+}
 
 enum ToplevelDefinition {
-  case Def(id: Id, block: Block)
-  case Val(id: Id, ks: Id, k: Id, binding: Stmt) // this is a let-run
-  case Let(id: Id, binding: Expr)
+  case Def(id: Id, params: List[Id], body: Stmt)
+  case Val(id: Id, ks: Id, k: Id, binding: Stmt)
+
+  lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
+  lazy val refs: DB[Int] = references.refs(this)
 }
 
 /**
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Def(id: Id, vparams: List[Id], bparams: List[Id], async: Boolean, body: ExternBody[Expr])
-  case Data(id: Id, tparams: List[Id], body: ExternBody[Nothing])
-  case Interface(id: Id, tparams: List[Id], body: ExternBody[Nothing])
+  case Def(id: Id, params: List[Id], async: Boolean, body: ExternBody)
   case Include(featureFlag: FeatureFlag, contents: String)
 }
-sealed trait ExternBody[+T] extends Tree
+sealed trait ExternBody extends Tree
 object ExternBody {
-  case class StringExternBody[+T](featureFlag: FeatureFlag, contents: Template[T]) extends ExternBody[T]
-  case class Unsupported(err: util.messages.EffektError) extends ExternBody[Nothing] {
+  case class StringExternBody(featureFlag: FeatureFlag, contents: Template[Expr]) extends ExternBody
+  case class Unsupported(err: util.messages.EffektError) extends ExternBody {
     def report(using E: ErrorReporter): Unit = E.report(err)
   }
 }
 
-case class Def(id: Id, block: Block) extends Tree
 
 enum Expr extends Tree {
+  case Variable(id: Id)
+  case Literal(value: Any, tpe: core.ValueType)
+  case Make(data: ValueType.Data, tag: Id, args: List[Expr])
 
-  case ValueVar(id: Id)
+  // Continuations
+  case Abort
 
-  case Literal(value: Any, annotatedType: core.ValueType)
+  // MetaContinuations
+  case Toplevel
 
-  /**
-   * Pure FFI calls. Invariant, block b is pure.
-   */
-  case PureApp(id: Id, vargs: List[Expr])
-
-  case Make(data: ValueType.Data, tag: Id, vargs: List[Expr])
-
-  case Box(b: Block)
+  lazy val free: Set[Id] = freeVariables.free(this)
+  lazy val refs: DB[Int] = references.refs(this)
 }
 export Expr.*
 
-
-enum Block extends Tree {
-  case BlockVar(id: Id)
-  case BlockLit(vparams: List[Id], bparams: List[Id], ks: Id, k: Id, body: Stmt)
-  case Unbox(pure: Expr)
-  case New(impl: Implementation)
+enum Purity {
+  case Pure, Impure, Async
 }
-export Block.*
+
+// just for documentation purposes
+type MetaCont = Expr
+type Cont = Expr
+
+/** A compositional call can target either a function value or an operation
+ *  selected from an object value. */
+enum Callee {
+  case Function(id: Id)
+  case Method(receiver: Id, method: Id)
+
+  /** The value whose flow determines this call's target. */
+  def value: Id = this match {
+    case Function(id) => id
+    case Method(receiver, _) => receiver
+  }
+
+  def function: Option[Id] = this match {
+    case Function(id) => Some(id)
+    case Method(_, _) => None
+  }
+}
+export Callee.*
 
 enum Stmt extends Tree {
-  case Jump(k: Id, vargs: List[Expr], ks: MetaCont)
-  case App(callee: Block, vargs: List[Expr], bargs: List[Block], ks: MetaCont, k: Cont)
-  case Invoke(callee: Block, method: Id, vargs: List[Expr], bargs: List[Block], ks: MetaCont, k: Cont)
+  case Def(id: Id, params: List[Id], body: Stmt, rest: Stmt)
+  case New(id: Id, interface: Id, operations: List[Operation], rest: Stmt)
+
+  // also all continuations are named so that we can analyze their usage and jump to them as labels
+  case Let(id: Id, binding: Expr, rest: Stmt)
+  /** A control-pure call whose result is consumed by `rest`. Unlike `App`,
+   *  this preserves the direct-style sequencing present in Core. The
+   *  remainder is its not-yet-reified continuation; `ks` is retained in case
+   *  the callee ultimately keeps the CPS calling convention. */
+  case Call(
+    ids: List[Id],
+    returnedKs: Id,
+    callee: Callee,
+    args: List[Expr],
+    ks: MetaCont,
+    rest: Stmt
+  )
+  case App(id: Id, args: List[Expr])
+  case Invoke(id: Id, method: Id, args: List[Expr])
+  /** Terminates the current computation with `values`. Under a direct calling
+   *  convention this is an ordinary (multi-value) return; under CPS it completes
+   *  the enclosing trampoline. */
+  case Return(values: List[Expr])
+  case Run(id: Id, callee: Id, args: List[Expr], purity: Purity, rest: Stmt)
 
   // Local Control Flow
   case If(cond: Expr, thn: Stmt, els: Stmt)
   case Match(scrutinee: Expr, clauses: List[(Id, Clause)], default: Option[Stmt])
 
-  case LetDef(id: Id, binding: Block, body: Stmt)
-  case LetExpr(id: Id, binding: Expr, body: Stmt)
-  case LetCont(id: Id, binding: Cont.ContLam, body: Stmt)
-  case ImpureApp(id: Id, callee: Id, vargs: List[Expr], bargs: List[Block], body: Stmt)
-
   // Regions
-  case Region(id: Id, ks: MetaCont, body: Stmt)
-  case Alloc(id: Id, init: Expr, region: Id, body: Stmt)
+  case Region(id: Id, ks: MetaCont, rest: Stmt)
+  case Alloc(id: Id, init: Expr, region: Id, rest: Stmt)
 
   // creates a fresh state handler to model local (backtrackable) state.
   // [[capture]] is a binding occurence.
   // val id = ks.fresh(init); body
-  case Var(id: Id, init: Expr, ks: MetaCont, body: Stmt)
-  // dealloc(ref); body
-  case Dealloc(ref: Id, body: Stmt)
+  //
+  // Var(x, ..., Toplevel, ...) is used to represent JS-native mutable state
+  case Var(id: Id, init: Expr, ks: MetaCont, rest: Stmt)
 
-  // val id = !ref; body
-  case Get(ref: Id, id: Id, body: Stmt)
+  // dealloc(ref); rest
+  case Dealloc(ref: Id, rest: Stmt)
 
-  case Put(ref: Id, value: Expr, body: Stmt)
+  // val id = !ref; rest
+  case Get(ref: Id, id: Id, rest: Stmt)
 
-  // reset( { (p, ks, k) => STMT }, ks, k)
-  case Reset(prog: BlockLit, ks: MetaCont, k: Cont)
+  case Put(ref: Id, value: Expr, rest: Stmt)
 
-  // shift(p, { (resume, ks, k) => STMT }, ks, k)
-  case Shift(prompt: Id, body: BlockLit, ks: MetaCont, k: Cont)
+  // reset( { (p, ks, k) => STMT }, ks1, k1)
+  case Reset(p: Id, ks: Id, k: Id, body: Stmt, ks1: MetaCont, k1: Cont)
 
-  // resume(r, (ks, k) => STMT, ks, k)
-  case Resume(resumption: Id, body: BlockLit, ks: MetaCont, k: Cont)
+  // shift(p, { (resume, ks, k) => STMT }, ks1, k1)
+  case Shift(prompt: Id, resume: Id, ks: Id, k: Id, body: Stmt, ks1: MetaCont, k1: Cont)
+
+  // resume(r, (ks, k) => STMT, ks1, k1)
+  case Resume(resumption: Id, ks: Id, k: Id, body: Stmt, ks1: MetaCont, k1: Cont)
 
   // Others
   case Hole(span: effekt.source.Span)
+
+  lazy val free: Set[Id] = freeVariables.free(this)
+  lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
+  lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
+  lazy val refs: DB[Int] = references.refs(this)
 }
 export Stmt.*
 
-case class Clause(vparams: List[Id], body: Stmt) extends Tree
-
-enum Cont extends Tree {
-  case ContVar(id: Id)
-  case ContLam(results: List[Id], ks: Id, body: Stmt)
-  case Abort
+case class Clause(params: List[Id], body: Stmt) extends Tree {
+  lazy val free: Set[Id] = body.free -- params
+  lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
+  lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
+  lazy val refs: DB[Int] = references.refs(this)
 }
 
-case class MetaCont(id: Id) extends Tree
+case class Operation(name: Id, params: List[Id], body: Stmt) extends Tree {
+  lazy val free: Set[Id] = body.free -- params
+  lazy val uses: DB[Set[Id]] = functionUsage.uses(this)
+  lazy val escapes: Set[Id] = escapeAnalysis.escapes(this)
+  lazy val refs: DB[Int] = references.refs(this)
+}
 
-case class Implementation(interface: BlockType.Interface, operations: List[Operation]) extends Tree
-
-case class Operation(name: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, body: Stmt) extends Tree
-
-
-// unless we need some more information, we keep it simple for now:
-type Variable = Id
-type Variables = Set[Id]
-
-object Variables {
-
-  def value(id: Id) = Set(id)
-  def block(id: Id) = Set(id)
-  def cont(id: Id) = Set(id)
-  def meta(id: Id) = Set(id)
-
-  def empty: Variables = Set.empty
-
-  def all[T](t: IterableOnce[T], f: T => Variables): Variables =
-    t.iterator.foldLeft(Variables.empty) { case (xs, t) => f(t) ++ xs }
+inline def rewriting[T <: AnyRef](t: T)(inline run: T => T): T =
+  val res = run(t)
+  if res == t then t else res
 
 
-  def free(e: Expr): Variables = e match {
-    case Expr.ValueVar(id) => value(id)
-    case Expr.Literal(value, tpe) => empty
-    case Expr.PureApp(id, vargs) => block(id) ++ all(vargs, free)
-    case Expr.Make(data, tag, vargs) => all(vargs, free)
-    case Expr.Box(b) => free(b)
+// ---------- Binding Monad ----------
+
+private[cps] enum Binding {
+  case Let(id: Id, binding: Expr)
+  case Def(id: Id, params: List[Id], body: Stmt)
+  case New(id: Id, interface: Id, operations: List[Operation])
+  case Run(id: Id, callee: Id, args: List[Expr], purity: Purity)
+
+  def toStmt(rest: Stmt): Stmt = this match {
+    case Binding.Let(id, binding) => Stmt.Let(id, binding, rest)
+    case Binding.Def(id, params, body) => Stmt.Def(id, params, body, rest)
+    case Binding.New(id, interface, operations) => Stmt.New(id, interface, operations, rest)
+    case Binding.Run(id, callee, args, purity) => Stmt.Run(id, callee, args, purity, rest)
   }
-
-  def free(b: Block): Variables = b match {
-    case Block.BlockVar(id) => block(id)
-    case Block.BlockLit(vparams, bparams, ks, k, body) => free(body) -- vparams -- bparams - ks - k
-    case Block.Unbox(pure) => free(pure)
-    case Block.New(impl) => free(impl)
-  }
-
-  def free(impl: Implementation): Variables = all(impl.operations, free)
-
-  def free(op: Operation): Variables = op match {
-    case Operation(name, vparams, bparams, ks, k, body) =>
-      free(body) -- all(vparams, value) -- all(bparams, block) -- meta(ks) -- cont(k)
-  }
-
-  def free(s: Stmt): Variables = s match {
-    case Stmt.Jump(k, vargs, ks) => cont(k) ++ all(vargs, free) ++ free(ks)
-    case Stmt.App(callee, vargs, bargs, ks, k) => free(callee) ++ all(vargs, free) ++ all(bargs, free) ++ free(ks) ++ free(k)
-    case Stmt.Invoke(callee, method, vargs, bargs, ks, k) => free(callee) ++ all(vargs, free) ++ all(bargs, free) ++ free(ks) ++ free(k)
-    case Stmt.If(cond, thn, els) => free(cond) ++ free(thn) ++ free(els)
-    case Stmt.Match(scrutinee, clauses, default) => free(scrutinee) ++ all(clauses, free) ++ all(default, free)
-    case Stmt.LetDef(id, binding, body)  => (free(binding) ++ free(body)) -- block(id)
-    case Stmt.LetExpr(id, binding, body) => free(binding) ++ (free(body) -- value(id))
-    case Stmt.LetCont(id, binding, body) => free(binding) ++ (free(body) -- cont(id))
-    case Stmt.ImpureApp(id, callee, vargs, bargs, body) => block(callee) ++ all(vargs, free) ++ all(bargs, free) ++ (free(body) -- value(id))
-
-    case Stmt.Region(id, ks, body) => free(ks) ++ (free(body) -- block(id))
-    case Stmt.Alloc(id, init, region, body) => free(init) ++ block(region) ++ (free(body) -- block(id))
-
-    case Stmt.Var(id, init, ks, body) => free(init) ++ free(ks) ++ (free(body) -- block(id))
-    case Stmt.Dealloc(ref, body) => block(ref) ++ free(body)
-    case Stmt.Get(ref, id, body) => block(ref) ++ (free(body) -- value(id))
-    case Stmt.Put(ref, value, body) => block(ref) ++ free(value) ++ free(body)
-
-    case Stmt.Reset(prog, ks, k) => free(prog) ++ free(ks) ++ free(k)
-    case Stmt.Shift(prompt, body, ks, k) => block(prompt) ++ free(body) ++ free(ks) ++ free(k)
-    case Stmt.Resume(r, body, ks, k) => block(r) ++ free(body) ++ free(ks) ++ free(k)
-    case Stmt.Hole(span) => empty
-  }
-
-  def free(cl: (Id, Clause)): Variables = cl match {
-    case (_, Clause(vparams, body)) => free(body) -- all(vparams, value)
-  }
-
-  def free(d: Def): Variables = d match {
-    case Def(id, binding) => free(binding) -- block(id)
-  }
-
-  def free(ks: MetaCont): Variables = meta(ks.id)
-  def free(k: Cont): Variables = k match {
-    case Cont.ContVar(id) => cont(id)
-    case Cont.Abort => Set()
-    case Cont.ContLam(results, ks, body) => free(body) -- all(results, value) -- meta(ks)
+}
+private[cps] object Binding {
+  def apply(bindings: List[Binding], body: Stmt): Stmt = bindings match {
+    case Nil => body
+    case binding :: rest => binding.toStmt(Binding(rest, body))
   }
 }
 
+case class Bind[+A](value: A, bindings: List[Binding]) {
+  def run(f: A => Stmt): Stmt = Binding(bindings, f(value))
+  def map[B](f: A => B): Bind[B] = Bind(f(value), bindings)
+  def flatMap[B](f: A => Bind[B]): Bind[B] =
+    val Bind(result, other) = f(value)
+    Bind(result, bindings ++ other)
+}
+object Bind {
+  def pure[A](value: A): Bind[A] = Bind(value, Nil)
+
+  def let(expr: Expr): Bind[Expr] =
+    val id = Id("tmp")
+    Bind(Expr.Variable(id), List(Binding.Let(id, expr)))
+
+  def define(params: List[Id], body: Stmt): Bind[Expr] =
+    val id = Id("tmp")
+    Bind(Expr.Variable(id), List(Binding.Def(id, params, body)))
+
+  def makeNew(interface: Id, operations: List[Operation]): Bind[Expr] =
+    val id = Id("tmp")
+    Bind(Expr.Variable(id), List(Binding.New(id, interface, operations)))
+
+  def run(callee: Id, args: List[Expr], purity: Purity): Bind[Expr] =
+    val id = Id("tmp")
+    Bind(Expr.Variable(id), List(Binding.Run(id, callee, args, purity)))
+
+  def traverse[S, T](l: List[S])(f: S => Bind[T]): Bind[List[T]] =
+    l match {
+      case Nil => pure(Nil)
+      case head :: tail => for { x <- f(head); xs <- traverse(tail)(f) } yield x :: xs
+    }
+}
 
 object substitutions {
 
   case class Substitution(
-    values: Map[Id, Expr] = Map.empty,
-    blocks: Map[Id, Block] = Map.empty,
-    conts: Map[Id, Cont] = Map.empty,
-    metaconts: Map[Id, MetaCont] = Map.empty
+    exprs: Map[Id, Expr] = Map.empty
   ) {
-    def shadowValues(shadowed: IterableOnce[Id]): Substitution = copy(values = values -- shadowed)
-    def shadowBlocks(shadowed: IterableOnce[Id]): Substitution = copy(blocks = blocks -- shadowed)
-    def shadowConts(shadowed: IterableOnce[Id]): Substitution = copy(conts = conts -- shadowed)
-    def shadowMetaconts(shadowed: IterableOnce[Id]): Substitution = copy(metaconts = metaconts -- shadowed)
+    def shadow(shadowed: IterableOnce[Id]): Substitution =
+      copy(exprs = exprs -- shadowed)
 
-    def shadowParams(vparams: Seq[Id], bparams: Seq[Id]): Substitution =
-      copy(values = values -- vparams, blocks = blocks -- bparams)
+    def shadow(id: Id): Substitution =
+      copy(exprs = exprs - id)
   }
 
-  def substitute(pure: Expr)(using subst: Substitution): Expr = pure match {
-    case ValueVar(id) if subst.values.isDefinedAt(id) => subst.values(id)
-    case ValueVar(id) => ValueVar(id)
-    case Literal(value, tpe) => Literal(value, tpe)
-    case Make(tpe, tag, vargs) => Make(tpe, tag, vargs.map(substitute))
-    case PureApp(id, vargs) => PureApp(id, vargs.map(substitute))
-    case Box(b) => Box(substitute(b))
+  def substitute(e: Expr)(using subst: Substitution): Expr = rewriting(e) {
+    case Expr.Variable(id) if subst.exprs.isDefinedAt(id) => subst.exprs(id)
+    case Expr.Variable(id) => e
+    case Expr.Literal(value, tpe) => e
+    case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(substitute))
+    case Expr.Abort => e
+    case Expr.Toplevel => e
   }
 
-  def substitute(block: Block)(using subst: Substitution): Block = block match {
-    case BlockVar(id) if subst.blocks.isDefinedAt(id) => subst.blocks(id)
-    case BlockVar(id) => BlockVar(id)
-    case b: BlockLit => substitute(b)
-    case Unbox(pure) => Unbox(substitute(pure))
-    case New(impl) => New(substitute(impl))
+  def substitute(callee: Callee)(using subst: Substitution): Callee = callee match {
+    case Callee.Function(id) => Callee.Function(substituteAsVar(id))
+    case Callee.Method(receiver, method) =>
+      Callee.Method(substituteAsVar(receiver), method)
   }
 
-  def substitute(b: BlockLit)(using subst: Substitution): BlockLit = b match {
-    case BlockLit(vparams, bparams, ks, k, body) =>
-      BlockLit(vparams, bparams, ks, k,
-        substitute(body)(using subst
-          .shadowParams(vparams, bparams)
-          .shadowMetaconts(List(ks))
-          .shadowConts(List(k))))
-  }
+  def substitute(s: Stmt)(using subst: Substitution): Stmt = rewriting(s) {
+    case Stmt.Def(id, params, body, rest) =>
+      Stmt.Def(id, params,
+        substitute(body)(using subst.shadow(id :: params)),
+        substitute(rest)(using subst.shadow(id)))
 
-  def substitute(stmt: Stmt)(using subst: Substitution): Stmt = stmt match {
-    case Jump(k, vargs, ks) =>
-      Jump(
-        substituteAsContVar(k),
-        vargs.map(substitute),
-        substitute(ks))
+    case Stmt.New(id, interface, operations, rest) =>
+      Stmt.New(id, interface, operations.map(substitute),
+        substitute(rest)(using subst.shadow(id)))
 
-    case App(callee, vargs, bargs, ks, k) =>
-      App(
-        substitute(callee),
-        vargs.map(substitute),
-        bargs.map(substitute),
-        substitute(ks),
-        substitute(k))
+    case Stmt.Let(id, binding, rest) =>
+      Stmt.Let(id, substitute(binding),
+        substitute(rest)(using subst.shadow(id)))
 
-    case Invoke(callee, method, vargs, bargs, ks, k) =>
-      Invoke(
-        substitute(callee),
-        method,
-        vargs.map(substitute),
-        bargs.map(substitute),
-        substitute(ks),
-        substitute(k))
+    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
+      Stmt.Call(ids, returnedKs, substitute(callee), args.map(substitute), substitute(ks),
+        substitute(rest)(using subst.shadow(returnedKs :: ids)))
 
-    case If(cond, thn, els) =>
-      If(substitute(cond), substitute(thn), substitute(els))
+    case Stmt.App(id, args) =>
+      Stmt.App(substituteAsVar(id), args.map(substitute))
 
-    case Match(scrutinee, clauses, default) =>
-      Match(
+    case Stmt.Invoke(id, method, args) =>
+      Stmt.Invoke(substituteAsVar(id), method, args.map(substitute))
+
+    case Stmt.Return(values) =>
+      Stmt.Return(values.map(substitute))
+
+    case Stmt.Run(id, callee, args, purity, rest) =>
+      Stmt.Run(id, substituteAsVar(callee), args.map(substitute), purity,
+        substitute(rest)(using subst.shadow(id)))
+
+    case Stmt.If(cond, thn, els) =>
+      Stmt.If(substitute(cond), substitute(thn), substitute(els))
+
+    case Stmt.Match(scrutinee, clauses, default) =>
+      Stmt.Match(
         substitute(scrutinee),
         clauses.map { case (id, cl) => (id, substitute(cl)) },
         default.map(substitute))
 
-    case LetDef(id, binding, body) =>
-      LetDef(id, substitute(binding),
-        substitute(body)(using subst.shadowBlocks(List(id))))
+    case Stmt.Region(id, ks, rest) =>
+      Stmt.Region(id, substitute(ks),
+        substitute(rest)(using subst.shadow(id)))
 
-    case LetExpr(id, binding, body) =>
-      LetExpr(id, substitute(binding),
-        substitute(body)(using subst.shadowValues(List(id))))
+    case Stmt.Alloc(id, init, region, rest) =>
+      Stmt.Alloc(id, substitute(init), substituteAsVar(region),
+        substitute(rest)(using subst.shadow(id)))
 
-    case LetCont(id, binding, body) =>
-      LetCont(id, substitute(binding),
-        substitute(body)(using subst.shadowConts(List(id))))
+    case Stmt.Var(id, init, ks, rest) =>
+      Stmt.Var(id, substitute(init), substitute(ks),
+        substitute(rest)(using subst.shadow(id)))
 
-    case ImpureApp(id, callee, vargs, bargs, body) =>
-      ImpureApp(id, callee, vargs.map(substitute), bargs.map(substitute),
-        substitute(body)(using subst.shadowValues(List(id))))
+    case Stmt.Dealloc(ref, rest) =>
+      Stmt.Dealloc(substituteAsVar(ref), substitute(rest))
 
-    case Region(id, ks, body) =>
-      Region(id, substitute(ks),
-        substitute(body)(using subst.shadowBlocks(List(id))))
+    case Stmt.Get(ref, id, rest) =>
+      Stmt.Get(substituteAsVar(ref), id,
+        substitute(rest)(using subst.shadow(id)))
 
-    case Alloc(id, init, region, body) =>
-      Alloc(id, substitute(init), substituteAsBlockVar(region),
-        substitute(body)(using subst.shadowBlocks(List(id))))
+    case Stmt.Put(ref, value, rest) =>
+      Stmt.Put(substituteAsVar(ref), substitute(value), substitute(rest))
 
-    case Var(id, init, ks, body) =>
-      Var(id, substitute(init), substitute(ks),
-        substitute(body)(using subst.shadowBlocks(List(id))))
+    case Stmt.Reset(p, ks, k, body, ks1, k1) =>
+      Stmt.Reset(p, ks, k,
+        substitute(body)(using subst.shadow(List(p, ks, k))),
+        substitute(ks1), substitute(k1))
 
-    case Dealloc(ref, body) =>
-      Dealloc(substituteAsBlockVar(ref), substitute(body))
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+      Stmt.Shift(substituteAsVar(prompt), resume, ks, k,
+        substitute(body)(using subst.shadow(List(resume, ks, k))),
+        substitute(ks1), substitute(k1))
 
-    case Get(ref, id, body) =>
-      Get(substituteAsBlockVar(ref), id,
-        substitute(body)(using subst.shadowValues(List(id))))
+    case Stmt.Resume(r, ks, k, body, ks1, k1) =>
+      Stmt.Resume(substituteAsVar(r), ks, k,
+        substitute(body)(using subst.shadow(List(ks, k))),
+        substitute(ks1), substitute(k1))
 
-    case Put(ref, value, body) =>
-      Put(substituteAsBlockVar(ref), substitute(value), substitute(body))
-
-    case Reset(prog, ks, k) =>
-      Reset(substitute(prog), substitute(ks), substitute(k))
-
-    case Shift(prompt, body, ks, k) =>
-      Shift(substituteAsBlockVar(prompt), substitute(body), substitute(ks), substitute(k))
-
-    case Resume(r, body, ks, k) =>
-      Resume(substituteAsBlockVar(r), substitute(body), substitute(ks), substitute(k))
-
-    case h: Hole => h
+    case h: Stmt.Hole => h
   }
 
-  def substitute(impl: Implementation)(using Substitution): Implementation = impl match {
-    case Implementation(interface, operations) =>
-      Implementation(interface, operations.map(substitute))
+  def substitute(op: Operation)(using subst: Substitution): Operation = rewriting(op) {
+    case Operation(name, params, body) =>
+      Operation(name, params, substitute(body)(using subst.shadow(params)))
   }
 
-  def substitute(op: Operation)(using subst: Substitution): Operation = op match {
-    case Operation(name, vparams, bparams, ks, k, body) =>
-      Operation(name, vparams, bparams, ks, k,
-        substitute(body)(using subst
-          .shadowParams(vparams, bparams)
-          .shadowMetaconts(List(ks))
-          .shadowConts(List(k))))
+  def substitute(clause: Clause)(using subst: Substitution): Clause = rewriting(clause) {
+    case Clause(params, body) =>
+      Clause(params, substitute(body)(using subst.shadow(params)))
   }
 
-  def substitute(clause: Clause)(using subst: Substitution): Clause = clause match {
-    case Clause(vparams, body) =>
-      Clause(vparams, substitute(body)(using subst.shadowValues(vparams)))
-  }
-
-  def substitute(k: Cont)(using subst: Substitution): Cont = k match {
-    case Cont.ContVar(id) if subst.conts.isDefinedAt(id) => subst.conts(id)
-    case Cont.ContVar(id) => Cont.ContVar(id)
-    case lam @ Cont.ContLam(result, ks, body) => substitute(lam)
-    case Cont.Abort => Cont.Abort
-  }
-
-  def substitute(k: Cont.ContLam)(using subst: Substitution): Cont.ContLam = k match {
-    case Cont.ContLam(results, ks, body) =>
-      Cont.ContLam(results, ks,
-        substitute(body)(using subst
-          .shadowValues(results)
-          .shadowMetaconts(List(ks))))
-  }
-
-  def substitute(ks: MetaCont)(using subst: Substitution): MetaCont =
-    subst.metaconts.getOrElse(ks.id, ks)
-
-  def substituteAsBlockVar(id: Id)(using subst: Substitution): Id =
-    subst.blocks.get(id) map {
-      case BlockVar(x) => x
-      case _ => INTERNAL_ERROR("References should always be variables")
+  def substituteAsVar(id: Id)(using subst: Substitution): Id =
+    subst.exprs.get(id) map {
+      case Expr.Variable(x) => x
+      case replacement => INTERNAL_ERROR(
+        s"Reference ${util.show(id)} cannot be replaced by ${util.show(replacement)}")
     } getOrElse id
 
-  def substituteAsContVar(id: Id)(using subst: Substitution): Id =
-    subst.conts.get(id) map {
-      case Cont.ContVar(x) => x
-      case _ => INTERNAL_ERROR("Continuation references should always be variables")
-    } getOrElse id
+  def substitute(e: Expr, subst: Map[Id, Expr]): Expr =
+    substitute(e)(using Substitution(subst))
+
+  def substitute(s: Stmt, subst: Map[Id, Expr]): Stmt =
+    substitute(s)(using Substitution(subst))
+}
+
+/**
+ * Free variables
+ *
+ * Implementation notes:
+ * - we use .free where possible in order to use the already computed result
+ *   cached on the node itself.
+ * - we mark everything as inline to have the Scala compiler check that we do not
+ *   miss any caches (since inlines cannot be recursive).
+ */
+object freeVariables {
+
+  private inline def all[T](t: IterableOnce[T], inline f: T => Set[Id]): Set[Id] =
+    t.iterator.foldLeft(Set.empty) { case (xs, t) => f(t) ++ xs }
+
+  private inline def free(id: Id): Set[Id] = Set(id)
+  private inline def bound(ids: List[Id]): Set[Id] = ids.toSet
+  private val closed = Set.empty[Id]
+
+  inline def free(e: Expr): Set[Id] = e match {
+    case Expr.Variable(id) => free(id)
+    case Expr.Literal(_, _) => closed
+    case Expr.Make(_, _, vargs) => all(vargs, _.free)
+    case Expr.Abort => closed
+    case Expr.Toplevel => closed
+  }
+
+  inline def free(callee: Callee): Set[Id] = callee match {
+    case Callee.Function(id) => free(id)
+    case Callee.Method(receiver, _) => free(receiver)
+  }
+
+  inline def free(op: Operation): Set[Id] = op match {
+    case Operation(name, params, body) => body.free -- bound(params)
+  }
+
+  inline def free(cl: Clause): Set[Id] = cl match {
+    case Clause(params, body) => body.free -- bound(params)
+  }
+
+  inline def free(toplevel: ToplevelDefinition): Set[Id] = toplevel match {
+    case ToplevelDefinition.Def(id, params, body) => body.free -- bound(params) - id
+    case ToplevelDefinition.Val(id, ks, k, binding) => binding.free - ks - k
+  }
+
+  inline def free(s: Stmt): Set[Id] = s match {
+    case Stmt.Def(id, params, body, rest) =>
+      (body.free -- bound(params) - id) ++ (rest.free - id)
+
+    case Stmt.New(id, _, operations, rest) =>
+      all(operations, _.free) ++ (rest.free - id)
+
+    case Stmt.Let(id, binding, rest) =>
+      binding.free ++ (rest.free - id)
+
+    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
+      free(callee) ++ all(args, _.free) ++ ks.free ++
+        (rest.free -- ids.toSet - returnedKs)
+
+    case Stmt.App(id, args) =>
+      free(id) ++ all(args, _.free)
+
+    case Stmt.Invoke(id, _, args) =>
+      free(id) ++ all(args, _.free)
+
+    case Stmt.Return(values) => all(values, _.free)
+
+    case Stmt.Run(id, callee, args, _, rest) =>
+      free(callee) ++ all(args, _.free) ++ (rest.free - id)
+
+    case Stmt.If(cond, thn, els) =>
+      cond.free ++ thn.free ++ els.free
+
+    case Stmt.Match(scrutinee, clauses, default) =>
+      scrutinee.free ++ all(clauses, { case (id, cl) => cl.free }) ++ all(default, _.free)
+
+    case Stmt.Region(id, ks, rest) =>
+      ks.free ++ (rest.free - id)
+
+    case Stmt.Alloc(id, init, region, rest) =>
+      init.free ++ free(region) ++ (rest.free - id)
+
+    case Stmt.Var(id, init, ks, rest) =>
+      init.free ++ ks.free ++ (rest.free - id)
+
+    case Stmt.Dealloc(ref, rest) =>
+      free(ref) ++ rest.free
+
+    case Stmt.Get(ref, id, rest) =>
+      free(ref) ++ (rest.free - id)
+
+    case Stmt.Put(ref, value, rest) =>
+      free(ref) ++ value.free ++ rest.free
+
+    case Stmt.Reset(p, ks, k, body, ks1, k1) =>
+      (body.free - p - ks - k) ++ ks1.free ++ k1.free
+
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+      free(prompt) ++ (body.free - resume - ks - k) ++ ks1.free ++ k1.free
+
+    case Stmt.Resume(r, ks, k, body, ks1, k1) =>
+      free(r) ++ (body.free - ks - k) ++ ks1.free ++ k1.free
+
+    case Stmt.Hole(_) => closed
+  }
+}
+
+/**
+ * Which function refers to which other function?
+ *
+ * Small example:
+ *    def f() { g(h) }; ...
+ *
+ * results in
+ *    f -> {g, h}
+ *
+ * Is computed at every **definition** based on the free variables.
+ * On the toplevel, a fixed point computation is necessary due to mutual recursion.
+ *
+ * The keyset at the toplevel also gives a simple way to get a list of all function
+ * definitions (only their names).
+ *
+ * It also provides the basis to determine whether functions are (mutually) recursive.
+ *
+ * Larger example:
+ *    def outer(x, ks, k) {
+ *      run tmp = eq(x, 0);
+ *      if (tmp) {
+ *        k(0, ks)
+ *      } else {
+ *        run tmp = sub(x, 1);
+ *        outer(tmp, ks, k)
+ *      }
+ *     }
+ *     def main(ks, k) {
+ *       def k1(res, ks) {
+ *         outer(res, ks, k)
+ *       }
+ *       outer(10, ks, k1)
+ *     }
+ *
+ * results in
+ *   outer -> {outer}
+ *   k1 -> {outer}
+ *   main -> {outer}
+ */
+object functionUsage {
+  extension (db: DB[Set[Id]]) {
+    // since every function should be only added ONCE we can simply concatenate the DBs
+    private def ++(other: DB[Set[Id]]): DB[Set[Id]] = db.unionWith(other, (l, r) => r)
+  }
+
+  private inline def all[T](t: Iterable[T], inline f: T => DB[Set[Id]]): DB[Set[Id]] =
+    t.foldLeft(DB.empty[Set[Id]]) { case (acc, t) => acc ++ f(t) }
+
+  inline def uses(cl: Clause): DB[Set[Id]] = uses(cl.body)
+
+  inline def uses(op: Operation): DB[Set[Id]] = uses(op.body)
+
+  inline def uses(stmt: Stmt): DB[Set[Id]] = stmt match {
+    case Stmt.Def(id, params, body, rest) =>
+      body.uses ++ rest.uses + (id -> (body.free -- params))
+    case Stmt.New(id, interface, operations, rest) =>
+      val freeInOperations = operations.foldLeft(Set.empty[Id]) { case (acc, op) => acc ++ op.free }
+      rest.uses ++ all(operations, _.uses) + (id -> freeInOperations)
+    case Stmt.Let(id, binding, rest) =>
+      rest.uses
+    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
+      rest.uses
+    case Stmt.App(id, args) =>
+      DB.empty
+    case Stmt.Invoke(id, method, args) =>
+      DB.empty
+    case Stmt.Return(values) =>
+      DB.empty
+    case Stmt.Run(id, callee, args, purity, rest) =>
+      rest.uses
+    case Stmt.If(cond, thn, els) =>
+      thn.uses ++ els.uses
+    case Stmt.Match(scrutinee, clauses, default) =>
+      all(clauses, { case (_, clause) => clause.uses }) ++ all(default, _.uses)
+    case Stmt.Region(id, ks, rest) =>
+      rest.uses
+    case Stmt.Alloc(id, init, region, rest) =>
+      rest.uses
+    case Stmt.Var(id, init, ks, rest) =>
+      rest.uses
+    case Stmt.Dealloc(ref, rest) =>
+      rest.uses
+    case Stmt.Get(ref, id, rest) =>
+      rest.uses
+    case Stmt.Put(ref, value, rest) =>
+      rest.uses
+    case Stmt.Reset(p, ks, k, body, ks1, k1) =>
+      body.uses
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+      body.uses
+    case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
+      body.uses
+    case Stmt.Hole(span) =>
+      DB.empty
+  }
+
+  // Warning: this info is not accurate since we need to compute the fixed point on the toplevel
+  inline def uses(toplevel: ToplevelDefinition): DB[Set[Id]] = toplevel match {
+    case ToplevelDefinition.Def(id, params, body) =>
+      body.uses + (id -> (body.free -- params))
+    case ToplevelDefinition.Val(id, ks, k, binding) =>
+      binding.uses
+  }
+
+  def uses(m: ModuleDecl): DB[Set[Id]] = {
+    val toplevelIds = m.definitions.collect {
+      case ToplevelDefinition.Def(id, _, _) => id
+    }.toSet
+
+    // Collect uses from all toplevel definitions
+    val allUses: DB[Set[Id]] = all(m.definitions, _.uses)
+    val definitions: Set[Id] = allUses.keys
+
+    // Filter to only keep references that are definitions themselves
+    // TODO figure out a cheaper way to do this
+    val filtered: DB[Set[Id]] = allUses.mapValues { ids => ids.intersect(definitions) }
+
+    // Compute transitive closure for toplevel Defs only
+    var current = filtered
+    var changed = true
+    while (changed) {
+      changed = false
+      current = current.mapWithId { case (id, refs) =>
+        if (!toplevelIds.contains(id)) refs
+        else {
+          val expanded = refs.foldLeft(refs) { case (acc, r) =>
+            acc ++ current.getOrElse(r, Set.empty[Id])
+          }
+          if (expanded.size != refs.size) changed = true
+          expanded
+        }
+      }
+    }
+    current
+  }
+}
+
+/**
+ * Analyses which functions escape
+ *
+ * Implementation details:
+ * - for simplicity we collect ALL escaping variables, not just functions
+ */
+object escapeAnalysis {
+
+  inline def escapes(m: ModuleDecl): Set[Id] = m match {
+    case ModuleDecl(includes, declarations, externs, definitions, exports) =>
+      definitions.flatMap(escapes).toSet
+  }
+
+  // All free variables of an object escape
+  inline def escapes(op: Operation): Set[Id] = op match {
+    case Operation(name, params, body) =>
+      body.escapes ++ (body.free -- params)
+  }
+
+  inline def escapes(cl: Clause): Set[Id] = cl match {
+    case Clause(params, body) => body.escapes
+  }
+
+  inline def escapes(stmt: Stmt): Set[Id] = stmt match {
+
+    // Free variables of a def escape if the definition itself
+    // escapes.
+    case Stmt.Def(id, params, body, rest) =>
+      val both = body.escapes ++ rest.escapes
+      if (both contains id) {
+        (body.free -- params) ++ both
+      } else both
+
+    case Stmt.New(id, interface, operations, rest) =>
+      operations.foldLeft(rest.escapes) { case (acc, op) => acc ++ op.escapes }
+
+    case Stmt.Let(id, binding, rest) =>
+      rest.escapes ++ binding.free
+
+    // The callee does not escape unless `Toplevel` marks a direct-to-CPS
+    // boundary: that boundary invokes the callee through RUN_TOPLEVEL and
+    // therefore requires an actual function value.
+    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
+      val boundary = if ks == Expr.Toplevel then Set(callee.value) else Set.empty
+      args.flatMap(_.free).toSet ++ ks.free ++ boundary ++ rest.escapes
+
+    // callee does NOT escape
+    case Stmt.App(id, args) =>
+      args.flatMap(_.free).toSet
+
+    case Stmt.Invoke(id, method, args) =>
+      args.flatMap(_.free).toSet
+
+    case Stmt.Return(values) => values.flatMap(_.free).toSet
+
+    // This is the essence of async computation: we need to reify the continuation
+    case Stmt.Run(id, callee, args, Purity.Async, rest) =>
+      rest.free ++ rest.escapes ++ args.flatMap(_.free)
+
+    case Stmt.Run(id, callee, args, purity, rest) =>
+      rest.escapes ++ args.flatMap(_.free)
+
+    case Stmt.If(cond, thn, els) =>
+      cond.free ++ thn.escapes ++ els.escapes
+
+    case Stmt.Match(scrutinee, clauses, default) =>
+      scrutinee.free ++ clauses.flatMap { case (id, cl) => cl.escapes } ++ default.map(_.escapes).getOrElse(Set.empty)
+
+    case Stmt.Region(id, ks, rest) => rest.escapes
+    case Stmt.Alloc(id, init, region, rest) => init.free ++ rest.escapes
+    case Stmt.Var(id, init, ks, rest) => init.free ++ rest.escapes
+    case Stmt.Dealloc(ref, rest) => rest.escapes
+    case Stmt.Get(ref, id, rest) => rest.escapes
+    case Stmt.Put(ref, value, rest) => value.free ++ rest.escapes
+
+    case Stmt.Reset(p, ks, k, body, ks1, k1) =>
+      ks1.free ++ k1.free ++ body.escapes
+
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+      ks1.free ++ k1.free ++ body.escapes
+
+    case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
+      ks1.free ++ k1.free ++ body.escapes
+
+    case Stmt.Hole(span) => Set.empty
+  }
+
+  inline def escapes(toplevel: ToplevelDefinition): Set[Id] = toplevel match {
+    // We mark toplevel definitions as escaping
+    case ToplevelDefinition.Def(id, params, body) =>
+      Set(id) ++ body.escapes
+    case ToplevelDefinition.Val(id, ks, k, binding) =>
+      binding.escapes
+  }
+}
+
+/**
+ * How often is something (a function or expression) referenced in a subterm?
+ */
+object references {
+
+  extension (db: DB[Int])
+    private def ++(other: DB[Int]): DB[Int] = db.unionWith(other, _ + _)
+
+  private inline def all[A](terms: Iterable[A], inline run: A => DB[Int]): DB[Int] =
+    terms.foldLeft(DB.empty[Int]) { (acc, term) => acc ++ run(term) }
+
+  private def empty: DB[Int] = DB.empty
+
+  private inline def use(id: Id): DB[Int] = DB(id, 1)
+
+  // TODO externs and splices
+  inline def refs(m: ModuleDecl): DB[Int] = m match {
+    case ModuleDecl(includes, declarations, externs, definitions, exports) =>
+      all(definitions, _.refs)
+  }
+
+  inline def refs(t: ToplevelDefinition): DB[Int] = t match {
+    case ToplevelDefinition.Def(id, params, body) => body.refs
+    case ToplevelDefinition.Val(id, ks, k, binding) => binding.refs
+  }
+
+  inline def refs(expr: Expr): DB[Int] = expr match {
+    case Expr.Variable(id) => use(id)
+    case Expr.Literal(value, tpe) => empty
+    case Expr.Make(data, tag, args) => all(args, _.refs)
+    case Expr.Abort => empty
+    case Expr.Toplevel => empty
+  }
+
+  inline def refs(stmt: Stmt): DB[Int] = stmt match {
+    case Stmt.App(id, args) => use(id) ++ all(args, _.refs)
+    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
+      refs(callee) ++ all(args, _.refs) ++ ks.refs ++ rest.refs
+    case Stmt.Invoke(id, method, args) => use(id) ++ all(args, _.refs)
+    case Stmt.Return(values) => all(values, _.refs)
+    case Stmt.Alloc(id, init, region, rest) => use(region) ++ init.refs ++ rest.refs
+    case Stmt.Dealloc(ref, rest) => use(ref) ++ rest.refs
+    case Stmt.Get(ref, id, rest) => use(ref) ++ rest.refs
+    case Stmt.Put(ref, value, rest) => use(ref) ++ value.refs ++ rest.refs
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+      use(prompt) ++ body.refs ++ ks1.refs ++ k1.refs
+    case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
+      use(resumption) ++ body.refs ++ ks1.refs ++ k1.refs
+
+    case Stmt.Def(id, params, body, rest) => body.refs ++ rest.refs
+    case Stmt.New(id, interface, operations, rest) => all(operations, _.refs) ++ rest.refs
+    case Stmt.Let(id, binding, rest) => binding.refs ++ rest.refs
+    case Stmt.Run(id, callee, args, purity, rest) => all(args, _.refs) ++ rest.refs
+    case Stmt.If(cond, thn, els) => cond.refs ++ thn.refs ++ els.refs
+    case Stmt.Match(scrutinee, clauses, default) =>
+      scrutinee.refs ++ all(clauses, { case (tag, cl) => cl.refs }) ++ all(default, _.refs)
+    case Stmt.Region(id, ks, rest) => ks.refs ++ rest.refs
+    case Stmt.Var(id, init, ks, rest) => init.refs ++ ks.refs ++ rest.refs
+    case Stmt.Reset(p, ks, k, body, ks1, k1) => body.refs ++ ks1.refs ++ k1.refs
+    case Stmt.Hole(span) => DB.empty
+  }
+
+  inline def refs(cl: Clause): DB[Int] = cl.body.refs
+  inline def refs(op: Operation): DB[Int] = op.body.refs
+
+  inline def refs(callee: Callee): DB[Int] = callee match {
+    case Callee.Function(id) => use(id)
+    case Callee.Method(receiver, _) => use(receiver)
+  }
 }

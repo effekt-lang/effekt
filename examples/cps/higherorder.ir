@@ -1,0 +1,59 @@
+def main(ks, k) {
+
+  def apply(f, y) {
+    f(y)
+  }
+
+  def inc(x) {
+    run tmp = add(make Cons(x, make Nil()), 1);
+    apply(inc, 0)
+  }
+
+  def dec(z) {
+    apply(inc, z)
+  }
+
+  apply(dec, 0)
+}
+
+// this is quite involved. We should be able to specialize inc AND dec
+// to the argument (0). Both functions are marked as "second class"
+// meaning that we can adapt their signature.
+
+/// FLOWS
+
+main
+---
+x_7 !-> 0
+
+/// SINK_BLOCKS
+
+def main(ks, k) {
+  def apply(f, y) {
+    f(y)
+  }
+  def dec(z) {
+    def inc(x) {
+      run tmp = add(make Cons(x, make Nil()), 1);
+      apply(inc, 0)
+    }
+    apply(inc, z)
+  }
+  apply(dec, 0)
+}
+
+/// DROP_PARAMETERS
+
+def main(ks, k) {
+  def apply(f) {
+    f()
+  }
+  def dec() {
+    def inc() {
+      run tmp = add(make Cons(0, make Nil()), 1);
+      apply(inc)
+    }
+    apply(inc)
+  }
+  apply(dec)
+}

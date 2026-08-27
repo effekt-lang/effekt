@@ -1,0 +1,27 @@
+def main(x, ks, k) {
+  def identity(value, ks1, k1) {
+    k1(value, ks1)
+  }
+  identity(x, ks, k)
+}
+
+// An ordinary known tail application is not yet part of calling-convention
+// demand or its stack-cost graph. The local definition therefore remains CPS,
+// even though its body would otherwise admit the value-returning convention.
+/// CALLING_CONVENTIONS
+
+-
+
+/// JAVASCRIPT
+
+function main_0(x_0, ks_0, k_0) {
+  let value_0 = undefined;
+  let ks_1 = undefined;
+  let k_1 = undefined;
+  identity_0: {
+    value_0 = x_0;
+    ks_1 = ks_0;
+    k_1 = k_0;
+  }
+  return k_1(value_0, ks_1);
+}

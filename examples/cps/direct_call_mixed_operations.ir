@@ -1,0 +1,40 @@
+def use(random, ks, k) {
+  let result = random.random!(ks, return);
+  k(result, ks)
+}
+
+def main(flag, fallback, ks, k) {
+  new direct : Random {
+    def random(ks1, k1) = { k1(1, ks1) }
+  }
+  new cps : Random {
+    def random(ks2, k2) = { fallback(ks2, k2) }
+  }
+  if (flag) {
+    use(direct, ks, k)
+  } else {
+    use(cps, ks, k)
+  }
+}
+
+// A dynamic property has one ABI. If one reachable implementation cannot
+// return directly, neither the call nor the other implementation is lowered.
+/// CALLING_CONVENTIONS
+
+-
+
+/// JAVASCRIPT
+
+function use_0(random_0, ks_0, k_0) {
+  return random_0.random_0(ks_0, k_0);
+}
+
+function main_0(flag_0, fallback_0, ks_1, k_1) {
+  const direct_0 = { random_1: (ks_2, k_2) => k_2(1, ks_2) };
+  const cps_0 = { random_1: (ks_3, k_3) => fallback_0(ks_3, k_3) };
+  if (flag_0) {
+    return use_0(direct_0, ks_1, k_1);
+  } else {
+    return use_0(cps_0, ks_1, k_1);
+  }
+}

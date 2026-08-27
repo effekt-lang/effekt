@@ -3,7 +3,8 @@ package generator
 package chez
 
 import effekt.context.Context
-import effekt.core.optimizer.{Optimizer, Deadcode}
+import effekt.core.Renamer
+import effekt.core.optimizer.{Optimizer, Deadcode, DropBindings}
 import kiama.util.Source
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -37,7 +38,7 @@ class ChezSchemeCPS extends Compiler[String] {
     Frontend andThen Middleend
   }
 
-  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Deadcode andThen core.Show andThen Optimizer map {
+  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Deadcode andThen core.Show andThen Optimizer andThen DropBindings map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
       val mainFile = path(mod)
@@ -46,13 +47,26 @@ class ChezSchemeCPS extends Compiler[String] {
 
   lazy val CPSTransformed = Optimized map {
     case (mainSymbol, mainFile, core) =>
-      val cpsTransformed = effekt.cps.Transformer.transform(core)
-      (mainSymbol, mainFile, core, cpsTransformed)
+      val renamed = new Renamer().apply(core)
+
+      def optimize(input: cps.ModuleDecl): cps.ModuleDecl =
+        var tree = input
+        tree = cps.StaticArguments.transform(tree)
+        tree = cps.Inliner.transform(tree, mainSymbol)
+        tree = cps.BlockSinking.transform(tree, mainSymbol)
+        tree = cps.ParameterDropping.transform(tree)
+        tree = cps.Simplifier.transform(tree)
+        tree
+
+      var tree = optimize(cps.transform(renamed))
+      tree = cps.ArityRaising.transform(tree, Set(mainSymbol))
+      tree = optimize(tree)
+      (mainSymbol, mainFile, core, tree)
   }
 
   lazy val Chez = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val compiled = TransformerCPS.compile(cps, mainSymbol)
+      val compiled = TransformerCps.compile(cps, mainSymbol)
       val doc = pretty(chez.Let(Nil, compiled))
       (Map(mainFile -> doc.layout), mainFile)
   }
@@ -60,7 +74,7 @@ class ChezSchemeCPS extends Compiler[String] {
   // TODO: Only show generated code
   lazy val LSP = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val compiled = TransformerCPS.compileLSP(cps, mainSymbol)
+      val compiled = TransformerCps.compileLSP(cps, mainSymbol)
       pretty(chez.Let(Nil, compiled))
   }
 

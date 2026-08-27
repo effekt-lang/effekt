@@ -1,0 +1,34 @@
+def step(k) {
+  k()
+}
+
+def loop(n, k) {
+  run done = eq(n, 0);
+  if (done) {
+    step(k)
+  } else {
+    def afterFirst() {
+      def afterStep() {
+        run previous = sub(n, 1);
+        loop(previous, k)
+      }
+      step(afterStep)
+    }
+    run previous = sub(n, 1);
+    loop(previous, afterFirst)
+  }
+}
+
+def main(n, k) {
+  loop(n, k)
+}
+
+// The context-insensitive continuation flow merges the two calls to `step`:
+// step(afterFirst) and step(afterStep). It consequently loses the fact that
+// the concrete path alternates `afterFirst` and `afterStep`, and installs a
+// stack-safe adapter at both local continuation entries. Preserving that
+// correlation would make one trampoline cut sufficient.
+/// SAFE_ENTRIES
+
+function afterFirst
+function afterStep

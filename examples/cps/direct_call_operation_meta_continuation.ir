@@ -1,0 +1,23 @@
+def main(random, ks, k) {
+  let result | returnedKs = random.random!(ks, return);
+  run value = add(result, 1);
+  k(value, returnedKs)
+}
+
+// An open operation remains in CPS. Its continuation must use the
+// meta-continuation returned by the operation, rather than the one that was
+// current before the call. This matters when the operation resumes across a
+// delimited-control boundary.
+/// CALLING_CONVENTIONS
+
+-
+
+/// JAVASCRIPT
+
+function main_0(random_0, ks_0, k_0) {
+  function k_1(result_0, returnedKs_0) {
+    const value_0 = add_0(result_0, 1);
+    return k_0(value_0, returnedKs_0);
+  }
+  return random_0.random_0(ks_0, k_1);
+}
