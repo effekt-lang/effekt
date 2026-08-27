@@ -79,22 +79,19 @@ def toMap[K, V](keys: Set[K]) { valueOf: K => V }: Map[K, V] = {
 
 /// Create a set from a given list and a pure, first-class comparison function.
 ///
-/// O(N log N)
 /// O(N) if the list is sorted
-def fromList[A](list: List[A], ?compare: (A, A) => Ordering at {}): Set[A] = {
-  val tree: internal::Tree[A, Unit] = internal::fromList(list.map { k => (k, ()) }, compare)
-  Set(tree, compare)
-}
+/// O(N log N)
+def fromList[A](list: List[A], ?compare: (A, A) => Ordering at {}): Set[A] =
+  set::collect(compare) { list.each }
 
 /// Create a set from a given list with a generic comparison function.
 /// Works only on the JavaScript backends!
 ///
-/// O(N log N)
 /// O(N) if the list is sorted
+/// O(N log N)
 def fromListGeneric[A](list: List[A]): Set[A] = {
   val compare: (A, A) => Ordering at {} = box { (left, right) => genericCompare(left, right) }
-  val tree: internal::Tree[A, Unit] = internal::fromList(list.map { k => (k, ()) }, compare)
-  Set(tree, compare)
+  set::collect(compare) { list.each }
 }
 
 /// Traverse all elements in order, running the function `action` on each element.
@@ -257,13 +254,9 @@ namespace returning {
   /// Collects elements emitted by a push stream producer `stream` into a new set
   /// using provided `compare` function, returning the result of the producer as well as the collected set.
   def collect[A, R](?compare: (A, A) => Ordering at {}) { stream: () => R / emit[A] }: (R, Set[A]) = {
-    var set = set::empty(compare)
-    val r = try {
-      stream()
-    } with emit[A] { (v) =>
-      set = set.insert(v)
-      resume(())
+    val (r, tree) = internal::collect[A, Unit, R](compare) {
+      stream::returning::for[A, R] {stream} { (v: A) => do emit((v, ())) }
     }
-    (r, set)
+    (r, Set(tree, compare))
   }
 }
