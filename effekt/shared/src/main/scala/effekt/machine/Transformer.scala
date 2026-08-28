@@ -601,11 +601,11 @@ object Transformer {
   }
 
   /**
-   * Types in the signatures of externs, where type variables and boxed blocks are represented as positive values.
+   * Types in the signatures of externs, where type variables and boxed extern interfaces are represented as positive values.
    */
   def transformExtern(tpe: core.ValueType)(using DeclarationContext, ErrorReporter): Type = tpe match {
     case core.ValueType.Var(_) => Positive()
-    case core.ValueType.Boxed(_, _) => Positive()
+    case core.ValueType.Boxed(core.BlockType.Interface(_: symbols.ExternInterface, _), _) => Positive()
     case _ => transform(tpe)
   }
 

@@ -182,7 +182,7 @@ namespace internal {
   extern def listen(listener: Int, handler: Connection => Unit at {io, async, global}) at async: Int =
     jsNode "$effekt.capture(k => tcp$listen(${listener}, ${handler}, k))"
     llvm """
-      notail call void @c_tcp_listen(%Int ${listener}, %Pos ${handler}, %Stack %stack)
+      notail call void @c_tcp_listen(%Int ${listener}, %Neg ${handler}, %Stack %stack)
       ret void
     """
 

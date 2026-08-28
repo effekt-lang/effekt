@@ -48,7 +48,7 @@ extern def onStdout(opts: SpawnOptions, callback: String => Unit at {io, global}
     };
     return old; })()"""
   llvm """
-    %opts = call %Pos @c_spawn_options_on_stdout(%Pos ${opts}, %Pos ${callback})
+    %opts = call %Pos @c_spawn_options_on_stdout(%Pos ${opts}, %Neg ${callback})
     ret %Pos %opts
   """
 extern def onStderr(opts: SpawnOptions, callback: String => Unit at {io, global}) at {}: SpawnOptions =
@@ -64,7 +64,7 @@ extern def onStderr(opts: SpawnOptions, callback: String => Unit at {io, global}
     };
     return old; })()"""
   llvm """
-    %opts = call %Pos @c_spawn_options_on_stderr(%Pos ${opts}, %Pos ${callback})
+    %opts = call %Pos @c_spawn_options_on_stderr(%Pos ${opts}, %Neg ${callback})
     ret %Pos %opts
   """
 extern type WritableStream =
@@ -84,7 +84,7 @@ extern def withStdin(opts: SpawnOptions, callback: WritableStream => Unit at {io
     return old;
   })()"""
   llvm """
-    %opts = call %Pos @c_spawn_options_pipe_stdin(%Pos ${opts}, %Pos ${callback})
+    %opts = call %Pos @c_spawn_options_pipe_stdin(%Pos ${opts}, %Neg ${callback})
     ret %Pos %opts
   """
 extern def write(to: WritableStream, s: String) at io: Unit =

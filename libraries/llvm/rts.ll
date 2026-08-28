@@ -739,9 +739,7 @@ define ccc void @resume_Pos(%Stack %stack, %Pos %argument) {
     ret void
 }
 
-define ccc void @run(%Pos %boxed) {
-
-    %function = call %Neg @coercePosNeg(%Pos %boxed)
+define ccc void @run(%Neg %function) {
     %stack = call %Stack @withEmptyStack()
 
     %arrayPointer = extractvalue %Neg %function, 0
@@ -753,9 +751,7 @@ define ccc void @run(%Pos %boxed) {
     ret void
 }
 
-define ccc void @run_Int(%Pos %boxed, %Int %argument) {
-
-    %function = call ccc %Neg @coercePosNeg(%Pos %boxed)
+define ccc void @run_Int(%Neg %function, %Int %argument) {
     %stack = call %Stack @withEmptyStack()
 
     %arrayPointer = extractvalue %Neg %function, 0
@@ -767,9 +763,7 @@ define ccc void @run_Int(%Pos %boxed, %Int %argument) {
     ret void
 }
 
-define ccc void @run_Pos(%Pos %boxed, %Pos %argument) {
-
-    %function = call ccc %Neg @coercePosNeg(%Pos %boxed)
+define ccc void @run_Pos(%Neg %function, %Pos %argument) {
     %stack = call %Stack @withEmptyStack()
 
     %arrayPointer = extractvalue %Neg %function, 0
