@@ -35,15 +35,11 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
     var bindings = emptyBindings
 
-    private def scoped[A](block: => A): (A, List[Binding]) =
+    def withBindings(block: => Stmt): Stmt =
       val outer = bindings
       bindings = emptyBindings
-      try (block, bindings.toList)
-      finally bindings = outer
-
-    def withBindings(block: => Stmt): Stmt =
-      val (transformed, inner) = scoped(block)
-      Binding(inner, transformed)
+      val transformed = block
+      Binding(outer.toList, transformed)
 
     def emit(id: Id, stmt: Stmt): Unit =
       bindings.append(Binding.Val(id, stmt))
