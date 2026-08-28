@@ -31,12 +31,19 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     def getAllShowDef(using ShowContext)(using DeclarationContext): List[Toplevel.Def] =
       showDefns.values.toList
 
-    var bindings = mutable.ListBuffer.empty[Binding]
+    private def emptyBindings: mutable.ListBuffer[Binding] = mutable.ListBuffer.empty[Binding]
+
+    var bindings = emptyBindings
+
+    private def scoped[A](block: => A): (A, List[Binding]) =
+      val outer = bindings
+      bindings = emptyBindings
+      try (block, bindings.toList)
+      finally bindings = outer
 
     def withBindings(block: => Stmt): Stmt =
-      val outer = bindings
-      bindings = mutable.ListBuffer.empty[Binding]
-      Binding(outer.toList, block)
+      val (transformed, inner) = scoped(block)
+      Binding(inner, transformed)
 
     def emit(id: Id, stmt: Stmt): Unit =
       bindings.append(Binding.Val(id, stmt))
