@@ -746,6 +746,7 @@ case class Effectful(tpe: ValueType, eff: Effects, span: Span) extends Type
 // These are just type aliases for documentation purposes.
 type BlockType = Type
 type ValueType = Type
+type AtomicType = Type
 
 /**
  * Represents an annotated set of effects. Before name resolution, we cannot know
