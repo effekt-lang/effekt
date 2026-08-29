@@ -56,7 +56,7 @@ trait TypeUnifier {
       // TODO here we assume that the type constructor is covariant
       (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx)) }
 
-    case (t @ BoxedType(tpe1, capt1), s @ BoxedType(tpe2, capt2), p, _) =>
+    case (t @ BoxedType(tpe1, capt1), s @ BoxedType(tpe2, capt2), _, _) =>
       unifyBlockTypes(tpe1, tpe2, ErrorContext.BoxedTypeBlock(t, s, ctx))
       unifyCaptures(capt1, capt2, ErrorContext.BoxedTypeCapture(t, s, ctx))
 

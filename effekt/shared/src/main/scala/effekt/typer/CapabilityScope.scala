@@ -42,15 +42,13 @@ object DummyUnifier extends TypeUnifier {
   override def requireEqual(x: symbols.UnificationVar, tpe: symbols.ValueType, ctx: ErrorContext): Unit = ()
   override def requireSubregion(lower: symbols.Captures, upper: symbols.Captures, ctx: ErrorContext): Unit = ()
 
-
-  // NOTE(jiribenes, 2025-11-12): I think the 'abort' should never be triggered here.
-  override def abort(msg: String, ctx: ErrorContext): Nothing = sys error "Unexpected abort in DummyUnifier!"
+  override def abort(msg: String, ctx: ErrorContext): Nothing = throw UnificationFailed
 
   override def error(msg: String, ctx: ErrorContext): Unit = throw UnificationFailed
   override def error(left: symbols.Type, right: symbols.Type, ctx: ErrorContext): Unit = throw UnificationFailed
 }
 
-class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, symbols.BlockParam],val parent: CapabilityScope) extends CapabilityScope {
+class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, symbols.BlockParam], val parent: CapabilityScope) extends CapabilityScope {
   def copy: CapabilityScope = BindSome(binder, capabilities, parent.copy)
   def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
     capabilities.get(tpe).orElse {
