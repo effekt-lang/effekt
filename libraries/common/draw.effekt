@@ -1,0 +1,71 @@
+import stream
+import vec
+import color
+import path
+import stringbuffer
+
+// simple drawing library
+
+effect fillColor(): RGBA
+effect FillStyle = { fillColor }
+
+effect strokeColor(): RGBA
+effect StrokeStyle = { strokeColor }
+
+effect fontColor(): RGBA
+effect fontSize(): Double
+effect FontStyle = { fontColor, fontSize }
+
+effect Style = { FillStyle, StrokeStyle, FontStyle }
+
+interface Draw {
+  def fill(){ body: => Unit / Path2D }: Unit / FillStyle
+  def stroke(){ body: => Unit / Path2D }: Unit / StrokeStyle
+  def text(pos: Vec2D, text: String): Unit / FontStyle
+}
+
+/// Compute a bounding box for the given drawing as (top-left, bottom-right)
+def boundingBox{ body: => Unit / Draw }: (Vec2D, Vec2D) / Exception[MissingValue] = {
+  pathBoundingBox{ 
+    try body() with Draw {
+      def fill() = resume { {body} => body() }
+      def stroke() = resume { {body} => body() }
+      def text(pos, text) = resume { do moveTo(pos); do moveTo(pos - Vec2D(0.0, do fontSize())) } // TODO
+    }
+  }
+}
+
+/// emit drawing as a SVG (token-by-token)
+def asSVG(w: Int, h: Int){ body: => Unit / {Draw} }: Unit / { emit[String] } = {
+  do emit("<svg width=\"${w.show}\" height=\"${h.show}\" xmlns=\"http://www.w3.org/2000/svg\">\n")
+  try body() with Draw {
+    def fill() = resume { {body} =>
+      val path = asSvgPath { body() }
+      do emit("<path d=\"${path}\" fill=\"${do fillColor().toHTML}\" stroke=\"none\"/>")
+    }
+    def stroke() = resume { {body} =>
+      val path = asSvgPath { body() }
+      do emit("<path d=\"${path}\" stroke=\"${do strokeColor().toHTML}\" fill=\"none\"/>")
+    }
+    def text(pos, text) = resume {
+      do emit("<text x=\"${pos.x.show}\" y=\"${pos.y.show}\" fill=\"${do fontColor().toHTML}\" font-size=\"${do fontSize().show}\">")
+      do emit(text)
+      do emit("</text>")
+    }
+  }
+  do emit("</svg>")
+}
+
+/// emit as a SVG, scaling to content (re-runs body!)
+def asSVG{ body: => Unit / Draw }: Unit / {emit[String], Exception[MissingValue]} = {
+  boundingBox{body} match {
+    case (tl, br) =>
+      asSVG((br - tl).x.toInt + 1, (br - tl).y.toInt + 1) {
+        try body() with Draw {
+          def fill() = resume { {body} => do fill{ translate(-1.0 * tl){body} } }
+          def stroke() = resume { {body} => do stroke{ translate(-1.0 * tl){body} } }
+          def text(pos, text) = resume { do text(pos - tl, text) }
+        }
+      }
+  }
+}
