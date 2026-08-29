@@ -41,8 +41,8 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
       val anfed = BindSubexpressions.transform(m)
       val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt)
       val live = Deadcode.remove(mainSymbol, normalized)
-      val tailRemoved = RemoveTailResumptions(live)
-      val contified = DirectStyle.rewrite(tailRemoved)
+      //val tailRemoved = RemoveTailResumptions(live)
+      val contified = DirectStyle.rewrite(live)
       contified
     }
 

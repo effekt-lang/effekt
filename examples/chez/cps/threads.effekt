@@ -1,0 +1,312 @@
+import array
+
+extern type Thread
+extern type ThreadBoundary
+
+extern chezCPS """
+; Block, Boundary -> b
+(define (with-boundary prog b)
+  (prog (make-meta-cont top-level-k
+                        (gensym "thread")
+                        (create-store)
+                        (make-thread-boundary (thread-boundary-mutex b)
+                                              (thread-boundary-rest b)))
+        top-level-k))
+"""
+
+extern def forkThread[T](boundary: ThreadBoundary){p: => T} at async: Thread =
+  chezCPS "(k (fork-thread (lambda () (with-boundary ${p} ${boundary}))) ks)"
+
+extern def initializeThreadBoundary() at async: ThreadBoundary =
+  chezCPS "(k (make-thread-boundary (make-mutex) ks) ks)"
+
+extern def join(thread: Thread): Unit =
+  chezCPS "(thread-join ${thread})"
+
+def join(threads: List[Thread]): Unit =
+  threads.foreach{ t => join(t) }
+
+effect terminate(): Unit
+
+effect fork{ comp: => Unit / terminate }: Unit
+
+// Rules:
+// - Threads accessing a handler of the main thread have to pass a thread boundary
+// - The same thread boundary has to be used by all threads that use this handler/part of the main thread metacontinuation
+// - The handler HAS TO RESUME
+// - the main thread has to join
+def threading{ p: => Unit / fork }: Unit = {
+  var threads: List[Thread] = Nil()
+  val boundary = initializeThreadBoundary()
+  try {
+    p()
+    join(threads)
+  } with fork { resume { {comp} =>
+      val thread = forkThread(boundary){
+        try { comp() }
+        with terminate { () }
+      }
+      threads = Cons(thread, threads)
+      ()
+    }
+  }
+}
+
+extern def sleep(ms: Int): Unit =
+  chezCPS """
+    (let* ([seconds (quotient ${ms} 1000)]
+           [nanoseconds (* (- ${ms} (* seconds 1000)) 1000)])
+      (sleep (make-time 'time-duration nanoseconds seconds)))
+  """
+
+// For debugging
+extern def displayMetaCont() at async: Unit =
+  chezCPS """
+    (begin
+      (display "Metacontinuation:\n")
+      (display ks)
+      (display "\n\n")
+      (k (void) ks))
+  """
+
+type Address = Int
+
+record MemoryCell(value: Int, version: Int)
+
+record Read(address: Address, cell: MemoryCell)
+record Write(address: Address, value: Int)
+record Diary(reads: List[Read], writes: List[Write])
+
+interface Atomic {
+  def read(address: Address): Int
+  def write(address: Address, value: Int): Unit
+}
+
+effect restart(): Unit
+
+interface STM {
+  def read(address: Address): MemoryCell
+  def commit(diary: Diary): Unit / restart
+}
+
+def find[T](list: List[T]){ pred: T => Bool }: Option[T] = list match {
+  case Cons(x, xs) =>
+    if (pred(x)) {
+      Some(x)
+    } else find(xs){pred}
+  case Nil() => None()
+}
+
+def read(diary: Diary, address: Int): Option[Int] =
+  diary.writes.find{ w => w.address == address }.map{ w => w.value }
+
+def atomic{ p: => Unit / Atomic }: Unit / { STM } = {
+  var diary: Diary = Diary(Nil(), Nil())
+  try { p() } with Atomic {
+    def read(address) = {
+      diary.read(address) match {
+        case Some(value) => resume(value)
+        case None() => 
+          val cell = do STM::read(address)
+          diary = Diary(Cons(Read(address, cell), diary.reads), diary.writes)
+          resume(cell.value)
+      }
+    }
+    def write(address, value) = {
+      diary = Diary(diary.reads, Cons(Write(address, value), diary.writes))
+      resume(())
+    }
+  }
+
+  try { do commit(diary) } with restart {
+    // BACKOFF: Pause briefly with a random jitter before retrying
+    sleep(randomInt(1, 5))
+    atomic { p }
+  }
+}
+
+def stm(memSize: Int, memInit: Int){ p: => Unit / STM }: Unit = {
+  val memory: Array[MemoryCell] = array(memSize, MemoryCell(memInit, 0))
+  var restarts = 0
+  try { p() } with STM {
+    def read(address) = resume(memory.get(address))
+    def commit(diary) = {
+      val onlyValidReads = diary.reads.all { read => read.cell.version == memory.get(read.address).version }
+      if (onlyValidReads) {
+        diary.writes.reverse.foreach { write =>
+          val cell = memory.get(write.address)
+          memory.set(write.address, MemoryCell(write.value, cell.version + 1))
+        }
+        resume{ () }
+      } else { restarts += 1; resume{ do restart () }}
+    }
+  }
+  println(s"Total of ${restarts.show} restarts")
+}
+
+def randomInt(min: Int, max: Int): Int = {
+  min + (random() * (max - min).toDouble).toInt
+}
+
+def main(): Unit = {
+  val n = 10000
+  with stm(10, 100); // this has to be above threading, or else this will be popped by the main thread before joining
+  with threading;
+
+  // Auditor: Checks if bank sum is still 1000
+  do fork {
+    each(0, n / 10) { i =>
+      sleep(10)
+      var accountBalances = 0
+      atomic {
+        accountBalances = list::build(10){ i =>
+          do Atomic::read(i)
+        }.sum
+      }
+      println(accountBalances)
+    }
+  }
+
+  // Worker 1: The "Hotspot" Hopper (Heavy contention on Account 0)
+  do fork {
+    each(0, n) { i =>
+      atomic {
+        val srcBal = do Atomic::read(0)
+        val dstAcc = i.mod(8) + 1
+        val dstBal = do Atomic::read(dstAcc)
+
+        if (srcBal >= 5) {
+          do Atomic::write(0, srcBal - 5)
+          do Atomic::write(dstAcc, dstBal + 5)
+        }
+      }
+    }
+  }
+
+  // Worker 2: The Reverse Hopper (Collides head-on with Worker 1)
+  do fork {
+    each(0, n) { i =>
+      atomic {
+        val srcAcc = i.mod(8) + 1
+        val srcBal = do Atomic::read(srcAcc)
+        val dstBal = do Atomic::read(0)
+
+        if (srcBal >= 5) {
+          do Atomic::write(srcAcc, srcBal - 5)
+          do Atomic::write(0, dstBal + 5)
+        }
+      }
+    }
+  }
+
+  // Worker 3: Multi-Account Ring Swap (Large Read/Write sets)
+  do fork {
+    each(0, n) { i =>
+      atomic {
+        val a1 = do Atomic::read(1)
+        val a2 = do Atomic::read(2)
+        val a3 = do Atomic::read(3)
+        val a4 = do Atomic::read(4)
+
+        do Atomic::write(1, a4)
+        do Atomic::write(2, a1)
+        do Atomic::write(3, a2)
+        do Atomic::write(4, a3)
+      }
+    }
+  }
+
+  // Worker 4: Greedy Wealth Redistributor (Averages accounts 0 to 4)
+  do fork {
+    each(0, n) { i =>
+      atomic {
+        var sum = 0
+        each(0, 5) { acc =>
+          sum = sum + do Atomic::read(acc)
+        }
+
+        val avg = sum / 5
+        val remainder = sum.mod(5)
+
+        each(0, 5) { acc =>
+          val extra = if (acc == 0) remainder else 0
+          do Atomic::write(acc, avg + extra)
+        }
+      }
+    }
+  }
+
+  // Workers 5 & 6: Ping-Pong (Rapid transfers between Accounts 8 and 9)
+  def workerPingPong(dir: Int): Unit = {
+    do fork {
+      each(0, n) { i =>
+        atomic {
+          val accA = if (dir == 0) 8 else 9
+          val accB = if (dir == 0) 9 else 8
+
+          val balA = do Atomic::read(accA)
+          val balB = do Atomic::read(accB)
+
+          if (balA >= 1) {
+            do Atomic::write(accA, balA - 1)
+            do Atomic::write(accB, balB + 1)
+          }
+        }
+      }
+    }
+  }
+  workerPingPong(0)
+  workerPingPong(1)
+
+  // Worker 7: Conditional Flash-Drain
+  do fork {
+    each(0, n) { i =>
+      atomic {
+        val b0 = do Atomic::read(0)
+        val b1 = do Atomic::read(1)
+
+        if (b0 + b1 > 200) {
+          do Atomic::write(0, b0 - 20)
+          val b9 = do Atomic::read(9)
+          do Atomic::write(9, b9 + 20)
+        }
+      }
+    }
+  }
+
+  // Worker 8: Slow Compute (Uses `sleep` inside to force conflict windows)
+  do fork {
+    each(0, n) { i =>
+      atomic {
+        val b2 = do Atomic::read(2)
+        val b7 = do Atomic::read(7)
+
+        // Yield control to provoke other workers mid-transaction
+        sleep(10)
+
+        do Atomic::write(2, b2 + 1)
+        do Atomic::write(7, b7 - 1)
+      }
+    }
+  }
+
+  // Worker 9: Chaos Randomizer (Random account pairs)
+  do fork {
+    each(0, n) { i =>
+      val accA = randomInt(0, 10)
+      val accB = randomInt(0, 10)
+
+      if (accA != accB) {
+        atomic {
+          val bA = do Atomic::read(accA)
+          val bB = do Atomic::read(accB)
+
+          if (bA >= 2) {
+            do Atomic::write(accA, bA - 2)
+            do Atomic::write(accB, bB + 2)
+          }
+        }
+      }
+    }
+  }
+}
