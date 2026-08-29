@@ -10,6 +10,8 @@ import effekt.util.Version.effektVersion
 import kiama.util.{Console, REPL, Range, Source, StringSource}
 import kiama.parsing.{NoSuccess, ParseResult, Success, Input}
 
+import java.nio.file.Paths
+
 class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
   private implicit lazy val context: Context with IOModuleDB = driver.context
@@ -83,6 +85,8 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
            |:status                   show the current REPL environment
            |:type (:t) <expression>   show the type of an expression
            |:imports                  list all current imports
+           |:compile <path>           compile program with current flags
+           |:watch <path>             watch path and all its dependencies
            |:reset                    reset the REPL state
            |:help (:h)                print this help message
            |:quit (:q)                quit this REPL""".stripMargin
@@ -112,6 +116,35 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
           case u: Def =>
             outputCode(DeclPrinter(context.symbolOf(u)), config)
         }
+      }
+    }
+
+    /**
+     * Command `:compile` -- compiles given file with current effekt config
+     */
+    def compile(filename: String, config: EffektConfig): Unit =
+      driver.compileFile(filename, config)
+
+    /**
+     * Command `:watch` -- watches the given file and compiles with current effekt config
+     */
+    def watch(filename: String, config: EffektConfig): Unit = {
+      var files = List(filename)
+      var timestamps = Map.empty[String, Long]
+      while (!Thread.currentThread().isInterrupted) {
+        Thread.sleep(100)
+        timestamps = files.map { f =>
+          val current = Paths.get(f).toFile.lastModified
+          val last = timestamps.getOrElse(f, 0L)
+          if (current != last && last != 0L)  {
+            println(s"\n--- ${f} changed: running ${filename} ---")
+            driver.compileFile(filename, config)
+            println(driver.collectDependencies(filename, config))
+            files = driver.sources.keys.toList // TODO: doesn't include dependencies
+            // println(s"listening on ${files}")
+          }
+          f -> current
+        }.toMap
       }
     }
 
@@ -162,6 +195,14 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
       case Command(":quit", _) | Command(":q", _) =>
         None
+
+      case Command(cmd, filename) if cmd == ":compile" || cmd == ":c" =>
+        compile(filename, config)
+        Some(config)
+
+      case Command(cmd, filename) if cmd == ":watch" || cmd == ":w" =>
+        watch(filename, config)
+        Some(config)
 
       case Command(cmd, expr) if cmd == ":type" || cmd == ":t" =>
         typecheck(StringSource(expr, source.name), config)
