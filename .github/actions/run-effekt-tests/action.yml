@@ -44,7 +44,7 @@ runs:
 
     - name: Assemble fully optimized js file
       if: ${{ inputs.full-test == 'true' && runner.os != 'Windows' }}
-      run: sbt effektJS/fullOptJS
+      run: sbt effektJS/assembleJS
       shell: bash
 
     - name: Try installing effekt binary
