@@ -101,7 +101,7 @@ declare ptr @malloc(i64)
 declare void @free(ptr)
 declare ptr @realloc(ptr, i64)
 declare noalias ptr @calloc(i64, i64)
-declare void @memcpy(ptr, ptr, i64)
+declare ptr @memcpy(ptr, ptr, i64)
 declare i64 @llvm.ctlz.i64 (i64 , i1)
 declare i64 @llvm.fshr.i64(i64, i64, i64)
 declare double @llvm.sqrt.f64(double)
@@ -544,7 +544,7 @@ define private %Stack @copyStack(%Stack %stack) alwaysinline {
     %newStackPointer = getelementptr i8, %Stack %newStack, i64 %used
     %newLimit = getelementptr i8, %Stack %newStack, i64 %size
 
-    call void @memcpy(ptr %newStack, ptr %stack, i64 %used)
+    %copied = call ptr @memcpy(ptr %newStack, ptr %stack, i64 %used)
 
     %newStackPointer_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 1
     %newLimit_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 2
