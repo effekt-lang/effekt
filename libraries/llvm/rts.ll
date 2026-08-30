@@ -162,7 +162,7 @@ define private void @shareObject(%Object %object) alwaysinline {
 
     next:
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
+    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24, !range !41
     %referenceCount.1 = add %ReferenceCount %referenceCount, 1
     store %ReferenceCount %referenceCount.1, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
     br label %done
@@ -189,7 +189,7 @@ define private void @eraseObject(%Object %object) alwaysinline {
 
     next:
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
+    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24, !range !41
     switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
 
     decr:
@@ -486,7 +486,7 @@ define private {%Resumption, %Stack} @shift(%Stack %stack, %Prompt %prompt) {
 
 define private void @erasePrompt(%Prompt %prompt) alwaysinline {
     %referenceCount_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23
+    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23, !range !41
     switch %ReferenceCount %referenceCount, label %decrement [%ReferenceCount 0, label %free]
 
 decrement:
@@ -501,7 +501,7 @@ free:
 
 define private void @sharePrompt(%Prompt %prompt) alwaysinline {
     %referenceCount_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23
+    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23, !range !41
     %newReferenceCount = add %ReferenceCount %referenceCount, 1
     store %ReferenceCount %newReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23
     ret void
@@ -569,7 +569,7 @@ define private %Resumption @uniqueStack(%Resumption %resumption) alwaysinline {
 
 entry:
     %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
+    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21, !range !41
     switch %ReferenceCount %referenceCount, label %copy [%ReferenceCount 0, label %done]
 
 done:
@@ -613,7 +613,7 @@ stop:
 
 define void @shareResumption(%Resumption %resumption) alwaysinline {
     %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
+    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21, !range !41
     %referenceCount.1 = add %ReferenceCount %referenceCount, 1
     store %ReferenceCount %referenceCount.1, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
     ret void
@@ -621,7 +621,7 @@ define void @shareResumption(%Resumption %resumption) alwaysinline {
 
 define void @eraseResumption(%Resumption %resumption) alwaysinline {
     %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
+    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21, !range !41
     switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
 
     decr:
@@ -915,3 +915,6 @@ define ccc %CObject @coercePosObj(%Pos %input) {
 !23 = !{!1, !2,     !4, !5} ; not prompt
 !24 = !{!1, !2, !3,     !5} ; not object
 !25 = !{!1, !2, !3, !4    } ; not vtable
+
+; Ranges
+!41 = !{i64 0, i64 9223372036854775807} ; positive i64
