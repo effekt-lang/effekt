@@ -4,7 +4,8 @@ import array
 extern def exit(errorCode: Int) at io: Nothing =
   js   "(function() { process.exit(${errorCode}) })()"
   llvm """
-    call void @exit(i64 ${errorCode})
+    %exitCode = trunc i64 ${errorCode} to i32
+    call void @exit(i32 %exitCode)
     ret %Pos zeroinitializer
   """
   chez "(exit ${errorCode})"

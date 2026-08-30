@@ -117,8 +117,7 @@ declare double @log1p(double)
 ; Intrinsic versions of the following two only added in LLVM 19
 declare double @atan(double)
 declare double @tan(double)
-declare void @print(i64)
-declare void @exit(i64)
+declare void @exit(i32)
 declare void @llvm.assume(i1)
 
 

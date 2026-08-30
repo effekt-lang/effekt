@@ -85,7 +85,7 @@ extern def fire[A, B](signal: Signal[A, B], value: A) at async: B =
     notail call void @resume_Pos(%Stack %stack, %Pos %otherValue)
     ret void
   panic:
-    notail call void @exit(i64 1)
+    notail call void @exit(i32 1)
     ret void
   """
 
@@ -113,7 +113,7 @@ extern def wait[A, B](signal: Signal[A, B], value: B) at async: A =
     notail call void @resume_Pos(%Stack %stack, %Pos %otherValue)
     ret void
   panic:
-    notail call void @exit(i64 1)
+    notail call void @exit(i32 1)
     ret void
   """
 
