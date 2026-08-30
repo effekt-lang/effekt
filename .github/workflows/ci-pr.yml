@@ -95,7 +95,7 @@ jobs:
         run: sbt Test/compile
 
       - name: Run macOS LLVM smoke tests (with debug)
-        run: EFFEKT_DEBUG=1 sbt "effektJVM/testOnly effekt.LLVMTests -- --tests=.*benchmarks[\\/]*input_output[\\/].*"
+        run: EFFEKT_DEBUG=1 sbt "effektJVM/testOnly effekt.LLVMTests"
 
   js-tests:
     name: "JS Backend"
