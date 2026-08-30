@@ -77,7 +77,7 @@ struct Pos c_bytearray_construct(const uint64_t n, const uint8_t *data) {
 
 struct Pos c_bytearray_from_nullterminated_string(const char *data) {
     uint64_t n = 0;
-    while (data[++n]);
+    while (data[n]) n++;
 
     return c_bytearray_construct(n, (uint8_t*)data);
 }
