@@ -81,7 +81,7 @@ jobs:
   macos-llvm-tests:
     name: "macOS LLVM Smoke Tests"
     needs: build-and-compile
-    runs-on: macos-16
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
         with:
