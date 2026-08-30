@@ -334,10 +334,8 @@ realloc:
 
 define private %StackPointer @stackAllocate(%Stack %stack, i64 %n) alwaysinline {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
-    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
 
     %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
-    %limit = load %Limit, ptr %limit_pointer, !alias.scope !11, !noalias !21
     %nextStackPointer = getelementptr i8, %StackPointer %currentStackPointer, i64 %n
 
     store %StackPointer %nextStackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
