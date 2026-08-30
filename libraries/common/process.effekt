@@ -107,6 +107,6 @@ extern def spawn(cmd: String, args: Array[String], options: SpawnOptions) at asy
     return p;
     })"""
   llvm """
-    call void @c_spawn(%Pos ${cmd}, %Pos ${args}, %Pos ${options}, %Stack %stack)
+    notail call void @c_spawn(%Pos ${cmd}, %Pos ${args}, %Pos ${options}, %Stack %stack)
     ret void
   """

@@ -72,7 +72,7 @@ extern def readln() at async: String =
   jsNode "$effekt.capture(callback => $effekt.readln(callback))"
   llvm """
     %result = call %Pos @c_io_readln()
-    tail call void @resume_Pos(%Stack %stack, %Pos %result)
+    notail call void @resume_Pos(%Stack %stack, %Pos %result)
     ret void
   """
 

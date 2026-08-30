@@ -11,22 +11,22 @@ extern llvm """
 extern def spawn[T](task: () => T at {io, async, global}) at async: Unit =
   js "$effekt.capture(k => { setTimeout(() => k($effekt.unit), 0); return $effekt.run(${task}) })"
   llvm """
-    call void @c_yield(%Stack %stack)
-    call void @run(%Pos ${task})
+    notail call void @c_yield(%Stack %stack)
+    notail call void @run(%Pos ${task})
     ret void
   """
 
 extern def yield() at async: Unit =
   js "$effekt.capture(k => setTimeout(() => k($effekt.unit), 0))"
   llvm """
-    call void @c_yield(%Stack %stack)
+    notail call void @c_yield(%Stack %stack)
     ret void
   """
 
 extern def abort() at async: Nothing =
   js "$effekt.capture(k => undefined)"
   llvm """
-    call void @eraseStack(%Stack %stack)
+    notail call void @eraseStack(%Stack %stack)
     ret void
   """
 
