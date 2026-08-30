@@ -61,7 +61,7 @@ define void @assertInboundsByteArray(i64 %index, %Pos %arr) alwaysinline {
   %in_bounds = icmp ult i64 %index, %size
   br i1 %in_bounds, label %ok, label %out
 out:
-  call void @exit(i64 1)
+  call void @exit(i32 1)
   unreachable
 ok:
   ret void

@@ -101,7 +101,7 @@ declare ptr @malloc(i64)
 declare void @free(ptr)
 declare ptr @realloc(ptr, i64)
 declare noalias ptr @calloc(i64, i64)
-declare void @memcpy(ptr, ptr, i64)
+declare ptr @memcpy(ptr, ptr, i64)
 declare i64 @llvm.ctlz.i64 (i64 , i1)
 declare i64 @llvm.fshr.i64(i64, i64, i64)
 declare double @llvm.sqrt.f64(double)
@@ -117,8 +117,7 @@ declare double @log1p(double)
 ; Intrinsic versions of the following two only added in LLVM 19
 declare double @atan(double)
 declare double @tan(double)
-declare void @print(i64)
-declare void @exit(i64)
+declare void @exit(i32)
 declare void @llvm.assume(i1)
 
 
@@ -162,7 +161,7 @@ define private void @shareObject(%Object %object) alwaysinline {
 
     next:
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
+    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24, !range !41
     %referenceCount.1 = add %ReferenceCount %referenceCount, 1
     store %ReferenceCount %referenceCount.1, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
     br label %done
@@ -189,7 +188,7 @@ define private void @eraseObject(%Object %object) alwaysinline {
 
     next:
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
+    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24, !range !41
     switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
 
     decr:
@@ -334,10 +333,8 @@ realloc:
 
 define private %StackPointer @stackAllocate(%Stack %stack, i64 %n) alwaysinline {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
-    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
 
     %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
-    %limit = load %Limit, ptr %limit_pointer, !alias.scope !11, !noalias !21
     %nextStackPointer = getelementptr i8, %StackPointer %currentStackPointer, i64 %n
 
     store %StackPointer %nextStackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
@@ -486,7 +483,7 @@ define private {%Resumption, %Stack} @shift(%Stack %stack, %Prompt %prompt) {
 
 define private void @erasePrompt(%Prompt %prompt) alwaysinline {
     %referenceCount_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23
+    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23, !range !41
     switch %ReferenceCount %referenceCount, label %decrement [%ReferenceCount 0, label %free]
 
 decrement:
@@ -501,7 +498,7 @@ free:
 
 define private void @sharePrompt(%Prompt %prompt) alwaysinline {
     %referenceCount_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23
+    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23, !range !41
     %newReferenceCount = add %ReferenceCount %referenceCount, 1
     store %ReferenceCount %newReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23
     ret void
@@ -544,7 +541,7 @@ define private %Stack @copyStack(%Stack %stack) alwaysinline {
     %newStackPointer = getelementptr i8, %Stack %newStack, i64 %used
     %newLimit = getelementptr i8, %Stack %newStack, i64 %size
 
-    call void @memcpy(ptr %newStack, ptr %stack, i64 %used)
+    %copied = call ptr @memcpy(ptr %newStack, ptr %stack, i64 %used)
 
     %newStackPointer_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 1
     %newLimit_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 2
@@ -569,7 +566,7 @@ define private %Resumption @uniqueStack(%Resumption %resumption) alwaysinline {
 
 entry:
     %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
+    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21, !range !41
     switch %ReferenceCount %referenceCount, label %copy [%ReferenceCount 0, label %done]
 
 done:
@@ -613,7 +610,7 @@ stop:
 
 define void @shareResumption(%Resumption %resumption) alwaysinline {
     %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
+    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21, !range !41
     %referenceCount.1 = add %ReferenceCount %referenceCount, 1
     store %ReferenceCount %referenceCount.1, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
     ret void
@@ -621,7 +618,7 @@ define void @shareResumption(%Resumption %resumption) alwaysinline {
 
 define void @eraseResumption(%Resumption %resumption) alwaysinline {
     %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
+    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21, !range !41
     switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
 
     decr:
@@ -915,3 +912,6 @@ define ccc %CObject @coercePosObj(%Pos %input) {
 !23 = !{!1, !2,     !4, !5} ; not prompt
 !24 = !{!1, !2, !3,     !5} ; not object
 !25 = !{!1, !2, !3, !4    } ; not vtable
+
+; Ranges
+!41 = !{i64 0, i64 9223372036854775807} ; positive i64
