@@ -74,18 +74,18 @@ extern def fire[A, B](signal: Signal[A, B], value: A) at async: B =
     store i64 2, ptr %statePtr
     store %Stack %stack, ptr %stackPtr
     store %Pos ${value}, ptr %valuePtr
-    call void @erasePositive(%Pos ${signal})
+    notail call void @erasePositive(%Pos ${signal})
     ret void
   fire:
     %otherStack = load %Stack, ptr %stackPtr
     %otherValue = load %Pos, ptr %valuePtr
     store i64 3, ptr %statePtr
-    call void @erasePositive(%Pos ${signal})
-    call void @resume_Pos(%Stack %otherStack, %Pos ${value})
-    call void @resume_Pos(%Stack %stack, %Pos %otherValue)
+    notail call void @erasePositive(%Pos ${signal})
+    notail call void @resume_Pos(%Stack %otherStack, %Pos ${value})
+    notail call void @resume_Pos(%Stack %stack, %Pos %otherValue)
     ret void
   panic:
-    call void @exit(i64 1)
+    notail call void @exit(i64 1)
     ret void
   """
 
@@ -102,18 +102,18 @@ extern def wait[A, B](signal: Signal[A, B], value: B) at async: A =
     store i64 1, ptr %statePtr
     store %Stack %stack, ptr %stackPtr
     store %Pos ${value}, ptr %valuePtr
-    call void @erasePositive(%Pos ${signal})
+    notail call void @erasePositive(%Pos ${signal})
     ret void
   wait:
     %otherStack = load %Stack, ptr %stackPtr
     %otherValue = load %Pos, ptr %valuePtr
     store i64 3, ptr %statePtr
-    call void @erasePositive(%Pos ${signal})
-    call void @resume_Pos(%Stack %otherStack, %Pos ${value})
-    call void @resume_Pos(%Stack %stack, %Pos %otherValue)
+    notail call void @erasePositive(%Pos ${signal})
+    notail call void @resume_Pos(%Stack %otherStack, %Pos ${value})
+    notail call void @resume_Pos(%Stack %stack, %Pos %otherValue)
     ret void
   panic:
-    call void @exit(i64 1)
+    notail call void @exit(i64 1)
     ret void
   """
 

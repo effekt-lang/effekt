@@ -147,28 +147,28 @@ namespace internal {
   extern def connect(host: String, port: Int) at async: Int =
     jsNode "$effekt.capture(k => tcp$connect(${host}, ${port}, k))"
     llvm """
-      call void @c_tcp_connect(%Pos ${host}, %Int ${port}, %Stack %stack)
+      notail call void @c_tcp_connect(%Pos ${host}, %Int ${port}, %Stack %stack)
       ret void
     """
 
   extern def read(handle: Int, buffer: ByteArray, offset: Int, size: Int) at async: Int =
     jsNode "$effekt.capture(k => tcp$read(${handle}, ${buffer}, ${offset}, ${size}, k))"
     llvm """
-      call void @c_tcp_read(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
+      notail call void @c_tcp_read(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
       ret void
     """
 
   extern def write(handle: Int, buffer: ByteArray, offset: Int, size: Int) at async: Int =
     jsNode "$effekt.capture(k => tcp$write(${handle}, ${buffer}, ${offset}, ${size}, k))"
     llvm """
-      call void @c_tcp_write(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
+      notail call void @c_tcp_write(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
       ret void
     """
 
   extern def close(handle: Int) at async: Unit =
     jsNode "$effekt.capture(k => tcp$close(${handle}, k))"
     llvm """
-      call void @c_tcp_close(%Int ${handle}, %Stack %stack)
+      notail call void @c_tcp_close(%Int ${handle}, %Stack %stack)
       ret void
     """
 
@@ -182,14 +182,14 @@ namespace internal {
   extern def listen(listener: Int, handler: Connection => Unit at {io, async, global}) at async: Int =
     jsNode "$effekt.capture(k => tcp$listen(${listener}, ${handler}, k))"
     llvm """
-      call void @c_tcp_listen(%Int ${listener}, %Pos ${handler}, %Stack %stack)
+      notail call void @c_tcp_listen(%Int ${listener}, %Pos ${handler}, %Stack %stack)
       ret void
     """
 
   extern def shutdown(handle: Int) at async: Unit =
     jsNode "$effekt.capture(k => tcp$shutdown(${handle}, k))"
     llvm """
-      call void @c_tcp_shutdown(%Int ${handle}, %Stack %stack)
+      notail call void @c_tcp_shutdown(%Int ${handle}, %Stack %stack)
       ret void
     """
 
