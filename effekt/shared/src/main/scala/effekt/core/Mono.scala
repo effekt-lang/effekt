@@ -978,7 +978,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
           } else {
             targs.toList.sortBy(variantKey).foreach { variant =>
               val name =
-                if variant.isEmpty || id == core.Type.ResumeSymbol || id == core.Type.PromptSymbol then id
+                if variant.isEmpty || id == core.Type.ResumeSymbol || id == core.Type.PromptSymbol || id.isInstanceOf[symbols.ExternInterface] then id
                 else functionNames.fresh(preferredMonoName(id, variant))
               monoFunNames += ((id, variant) -> name)
             }

@@ -12,7 +12,7 @@ extern def spawn[T](task: () => T at {io, async, global}) at async: Unit =
   js "$effekt.capture(k => { setTimeout(() => k($effekt.unit), 0); return $effekt.run(${task}) })"
   llvm """
     notail call void @c_yield(%Stack %stack)
-    notail call void @run(%Pos ${task})
+    notail call void @run(%Neg ${task})
     ret void
   """
 
