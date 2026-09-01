@@ -213,4 +213,26 @@ class OptimizerTests extends CoreTests {
     normalize(input, expected)
   }
 
+
+  test("used once is inlined even when the threshold forbids it") {
+    val input =
+      """ def foo = { () => return 42 }
+        | def main = { () => (foo : () => Unit @ {})() }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () => return 42 }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 0, onceLimit = None))(input, expected)
+  }
+
+  test("used once is not inlined once it exceeds the once-limit") {
+    val input =
+      """ def foo = { () => return 42 }
+        | def main = { () => (foo : () => Unit @ {})() }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 0, onceLimit = Some(0)))(input, input)
+  }
 }

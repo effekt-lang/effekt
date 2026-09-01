@@ -24,3 +24,24 @@ class Unique(threshold: Int) extends InliningPolicy {
         (Normalizer.isOnce(callee.id) || site.callee.body.size <= threshold)
   }
 }
+
+/**
+ * [[Unique]], with the used-once rule bounded.
+ *
+ * @param threshold the max size budget a call site starts with (`--max-inline-size`)
+ * @param onceLimit size budget for [[usedOnce]]; `None` means unbounded (`--max-once-inline-size -1`)
+ */
+class Default(threshold: Int, onceLimit: Option[Int]) extends InliningPolicy {
+
+  def apply(site: CallSite)(using Context): Boolean = site.boundBy match {
+    case None => site.bargs.exists { b => b.isInstanceOf[BlockLit] }
+    case Some(callee) =>
+      !Normalizer.isRecursive(callee.id) &&
+        (usedOnce(callee, site) || site.callee.body.size <= threshold)
+  }
+
+  /** A callee used exactly once is inlined according to [[onceLimit]], as opposed to [[threshold]]. */
+  private def usedOnce(callee: BlockVar, site: CallSite)(using Context): Boolean =
+    Normalizer.isOnce(callee.id) &&
+      onceLimit.forall { limit => site.callee.body.size <= limit }
+}
