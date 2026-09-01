@@ -235,4 +235,27 @@ class OptimizerTests extends CoreTests {
 
     normalizeWith(Default(threshold = 0, onceLimit = Some(0)))(input, input)
   }
+
+  test("an object argument is known, so the callee is inlined") {
+    val input =
+      """ interface Foo { op: () => Int }
+        | def main = { () => ({ (){f: Foo} => (f : Foo @ {f}).op : () => Int () })(){ new Foo { def op() = return 42 } } }
+        |""".stripMargin
+
+    val expected =
+      """ interface Foo { op: () => Int }
+        | def main = { () => def f = new Foo { def op() = return 42 } (f : Foo @ {}).op : () => Int () }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 0, onceLimit = Some(0)))(input, expected)
+  }
+
+  test("a block variable argument is not known, so the callee is kept") {
+    val input =
+      """ interface Foo { op: () => Int }
+        | def main = { (){g: Foo} => ({ (){f: Foo} => (f : Foo @ {f}).op : () => Int () })(){ (g : Foo @ {g}) } }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 0, onceLimit = Some(0)))(input, input)
+  }
 }

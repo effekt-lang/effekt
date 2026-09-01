@@ -34,7 +34,7 @@ class Unique(threshold: Int) extends InliningPolicy {
 class Default(threshold: Int, onceLimit: Option[Int]) extends InliningPolicy {
 
   def apply(site: CallSite)(using Context): Boolean = site.boundBy match {
-    case None => site.bargs.exists { b => b.isInstanceOf[BlockLit] }
+    case None => hasKnownBlockArg(site)
     case Some(callee) =>
       !Normalizer.isRecursive(callee.id) &&
         (usedOnce(callee, site) || site.callee.body.size <= threshold)
@@ -44,4 +44,11 @@ class Default(threshold: Int, onceLimit: Option[Int]) extends InliningPolicy {
   private def usedOnce(callee: BlockVar, site: CallSite)(using Context): Boolean =
     Normalizer.isOnce(callee.id) &&
       onceLimit.forall { limit => site.callee.body.size <= limit }
+
+  /** A block argument known can be called directly instead of becoming a closure. */
+  private def hasKnownBlockArg(site: CallSite): Boolean =
+    site.bargs.exists {
+      case _: BlockLit | _: Block.New => true
+      case _: BlockVar | _: Block.Unbox => false
+    }
 }
