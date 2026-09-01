@@ -193,10 +193,10 @@ object Normalizer { normal =>
 
   // TODO for `New` we should track how often each operation is used, not the object itself
   //   to decide inlining.
-  private def shouldInline(b: BlockLit, boundBy: Option[BlockVar], blockArgs: List[Block])(using C: Context): Boolean =
-    C.policy(CallSite(b, boundBy, blockArgs))
+  private def shouldInline(b: BlockLit, boundBy: Option[BlockVar], valueArgs: List[Expr], blockArgs: List[Block])(using C: Context): Boolean =
+    C.policy(CallSite(b, boundBy, valueArgs, blockArgs))
 
-  private def active(e: Expr)(using Context): Expr =
+  private[optimizer] def active(e: Expr)(using Context): Expr =
     normalize(e) match {
       case x @ Expr.ValueVar(id, annotatedType) => exprFor(id) match {
         case Some(other) => other
@@ -241,7 +241,7 @@ object Normalizer { normal =>
     // -------
     case Stmt.App(b, targs, vargs, bargs) =>
       active(b) match {
-        case NormalizedBlock.Known(b: BlockLit, boundBy) if shouldInline(b, boundBy, bargs) =>
+        case NormalizedBlock.Known(b: BlockLit, boundBy) if shouldInline(b, boundBy, vargs, bargs) =>
           val blockUsage = boundBy.flatMap { bv => C.usage.get(bv.id) }.getOrElse(Usage.Once)
           if (blockUsage == Usage.Many) {
             // This is a conservative approximation:
@@ -260,7 +260,7 @@ object Normalizer { normal =>
       active(b) match {
         case n @ NormalizedBlock.Known(Block.New(impl), boundBy) =>
           selectOperation(impl, method) match {
-            case b: BlockLit if shouldInline(b, boundBy, bargs) => reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
+            case b: BlockLit if shouldInline(b, boundBy, vargs, bargs) => reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
             case _ => Stmt.Invoke(n.shared, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
           }
 

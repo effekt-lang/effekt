@@ -280,4 +280,26 @@ class OptimizerTests extends CoreTests {
 
     normalizeWith(Default(threshold = 0, onceLimit = None))(input, input)
   }
+
+  test("a known argument discounts the call, so an over-budget callee is inlined") {
+    val input =
+      """ def foo = { (b: Bool) => if (b: Bool) { return 1 } else { return 2 } }
+        | def main = { () => (foo : (Bool) => Int @ {})(true) }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () => return 1 }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 4, onceLimit = Some(0)))(input, expected)
+  }
+
+  test("an unknown argument earns no discount, so the same callee is kept") {
+    val input =
+      """ def foo = { (b: Bool) => if (b: Bool) { return 1 } else { return 2 } }
+        | def main = { (x: Bool) => (foo : (Bool) => Int @ {})(x: Bool) }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 4, onceLimit = Some(0)))(input, input)
+  }
 }
