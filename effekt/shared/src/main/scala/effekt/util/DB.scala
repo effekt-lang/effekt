@@ -15,6 +15,7 @@ import scala.collection.immutable.IntMap
 case class DB[+T](values: IntMap[T], keys: IntMap[Id]) {
   def get(id: Id): Option[T] = values.get(id.id)
   def isDefinedAt(id: Id): Boolean = values.isDefinedAt(id.id)
+  def isEmpty: Boolean = values.isEmpty
   def apply(id: Id): T = values(id.id)
 
   def keySet: Set[Id] = keys.keySet.map(keys)

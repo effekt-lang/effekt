@@ -151,10 +151,12 @@ object Type {
         substitute(result, tsubst, csubst))
   }
 
-  def substitute(capt: Captures, csubst: DB[Captures]): Captures = capt.flatMap {
-    case id if csubst.isDefinedAt(id) => csubst(id)
-    case c => Set(c)
-  }
+  def substitute(capt: Captures, csubst: DB[Captures]): Captures =
+    if csubst.isEmpty || !capt.exists(csubst.isDefinedAt) then capt
+    else capt.flatMap {
+      case id if csubst.isDefinedAt(id) => csubst(id)
+      case c => Set(c)
+    }
 
   def substitute(tpe: BlockType, vsubst: DB[ValueType], csubst: DB[Captures]): BlockType = tpe match {
     case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
