@@ -36,14 +36,19 @@ class Default(threshold: Int, onceLimit: Option[Int]) extends InliningPolicy {
   def apply(site: CallSite)(using Context): Boolean = site.boundBy match {
     case None => hasKnownBlockArg(site)
     case Some(callee) =>
+      // 1) don't inline recursive identifiers
       !Normalizer.isRecursive(callee.id) &&
-        (usedOnce(callee, site) || site.callee.body.size <= threshold)
+        // 2) if the callee is only used once, let [[usedOnce]] try first
+        (usedOnce(callee, site) ||
+          // 3) otherwise, inline if below [[threshold]]
+          site.callee.body.size <= threshold)
   }
 
-  /** A callee used exactly once is inlined according to [[onceLimit]], as opposed to [[threshold]]. */
-  private def usedOnce(callee: BlockVar, site: CallSite)(using Context): Boolean =
+  /** A callee used exactly once is inlined if it's at most [[onceLimit]], and only if it doesn't move scopes. */
+  private def usedOnce(callee: BlockVar, site: CallSite)(using C: Context): Boolean =
     Normalizer.isOnce(callee.id) &&
-      onceLimit.forall { limit => site.callee.body.size <= limit }
+      onceLimit.forall { limit => site.callee.body.size <= limit } &&
+        (C.prompts == 0 || !installsScope(site.callee.body)) // don't move resets/regions
 
   /** A block argument known can be called directly instead of becoming a closure. */
   private def hasKnownBlockArg(site: CallSite): Boolean =
@@ -51,4 +56,17 @@ class Default(threshold: Int, onceLimit: Option[Int]) extends InliningPolicy {
       case _: BlockLit | _: Block.New => true
       case _: BlockVar | _: Block.Unbox => false
     }
+
+  /** Whether inlining [[body]] would *move* a scope rather than copy computation. */
+  private def installsScope(body: Stmt): Boolean =
+    object query extends Tree.Query[Unit, Boolean] {
+      def empty = false
+      def combine = _ || _
+
+      override def stmt(using Unit) = {
+        case _: Stmt.Reset => true
+        case _: Stmt.Region => true
+      }
+    }
+    query.query(body)(using ())
 }

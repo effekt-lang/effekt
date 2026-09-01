@@ -38,7 +38,10 @@ object Normalizer { normal =>
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
     policy: InliningPolicy,        // whether to inline a call (see [[InliningPolicy]])
     facts: Map[Expr, Expr],        // maps a pure expression to something simpler it is known to equal
+    prompts: Int,                  // how many enclosing `Reset`s we are inside (see [[Default.usedOnce]])
   ) {
+    def enterPrompt: Context = copy(prompts = prompts + 1)
+
     // knowing `x = e`, we also know `e = x`, which is what lets us share `e`
     def bind(id: Id, expr: Expr): Context =
       val known = if shareable(expr)(using this) then facts + (expr -> ValueVar(id, expr.tpe)) else facts
@@ -123,7 +126,7 @@ object Normalizer { normal =>
     val defs = m.definitions.collect {
       case Toplevel.Def(id, block) => id -> block
     }.toMap
-    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), policy, Map.empty)
+    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), policy, Map.empty, 0)
 
     val (normalizedDefs, _) = normalizeToplevel(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
@@ -403,7 +406,7 @@ object Normalizer { normal =>
     // "Congruences"
     // -------------
 
-    case Stmt.Reset(body) => Stmt.Reset(normalize(body))
+    case Stmt.Reset(body) => Stmt.Reset(normalize(body)(using C.enterPrompt))
     case Stmt.Shift(prompt, k, body) => Shift(prompt, k, normalize(body))
     case Stmt.Return(expr) => Return(normalize(expr))
     case Stmt.Alloc(id, init, region, body) => Alloc(id, normalize(init), region, normalize(body))

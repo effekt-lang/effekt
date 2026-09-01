@@ -548,15 +548,15 @@ class VMTests extends munit.FunSuite {
       dynamicDispatches = 0,
       patternMatches = 0,
       branches = 210,
-      pushedFrames = 68,
-      poppedFrames = 67,
+      pushedFrames = 1,
+      poppedFrames = 1,
       allocations = 0,
       closures = 0,
       variableReads = 222,
       variableWrites = 88,
-      resets = 2,
-      shifts = 68,
-      resumes = 66
+      resets = 1,
+      shifts = 1,
+      resumes = 0
     )),
 
     examplesDir / "benchmarks" / "effect_handlers_bench" / "product_early.effekt" -> Some(Summary(
@@ -642,14 +642,14 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "casestudies" / "buildsystem.effekt.md" -> Some(Summary(
-      staticDispatches = 32,
-      dynamicDispatches = 47,
+      staticDispatches = 36,
+      dynamicDispatches = 55,
       patternMatches = 31,
       branches = 40,
       pushedFrames = 24,
       poppedFrames = 21,
-      allocations = 11,
-      closures = 30,
+      allocations = 15,
+      closures = 38,
       variableReads = 7,
       variableWrites = 3,
       resets = 9,
@@ -674,67 +674,67 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "casestudies" / "lexer.effekt.md" -> Some(Summary(
-      staticDispatches = 314,
+      staticDispatches = 322,
       dynamicDispatches = 15,
       patternMatches = 219,
       branches = 405,
-      pushedFrames = 199,
-      poppedFrames = 199,
+      pushedFrames = 196,
+      poppedFrames = 196,
       allocations = 105,
-      closures = 23,
+      closures = 31,
       variableReads = 164,
       variableWrites = 51,
-      resets = 29,
-      shifts = 3,
-      resumes = 3
+      resets = 28,
+      shifts = 0,
+      resumes = 0
     )),
 
     examplesDir / "casestudies" / "parser.effekt.md" -> Some(Summary(
-      staticDispatches = 11414,
-      dynamicDispatches = 783,
+      staticDispatches = 11740,
+      dynamicDispatches = 1109,
       patternMatches = 8765,
       branches = 14892,
       pushedFrames = 7296,
       poppedFrames = 7189,
       allocations = 3744,
-      closures = 521,
+      closures = 860,
       variableReads = 6742,
       variableWrites = 1901,
-      resets = 776,
-      shifts = 542,
-      resumes = 526
+      resets = 763,
+      shifts = 229,
+      resumes = 213
     )),
 
     examplesDir / "casestudies" / "anf.effekt.md" -> Some(Summary(
-      staticDispatches = 6147,
-      dynamicDispatches = 443,
-      patternMatches = 4733,
+      staticDispatches = 6317,
+      dynamicDispatches = 643,
+      patternMatches = 4730,
       branches = 8110,
-      pushedFrames = 4150,
-      poppedFrames = 4081,
+      pushedFrames = 4156,
+      poppedFrames = 4087,
       allocations = 2085,
-      closures = 358,
+      closures = 540,
       variableReads = 4080,
       variableWrites = 1343,
-      resets = 451,
-      shifts = 488,
-      resumes = 472
+      resets = 446,
+      shifts = 322,
+      resumes = 306
     )),
 
     examplesDir / "casestudies" / "inference.effekt.md" -> Some(Summary(
-      staticDispatches = 1482042,
+      staticDispatches = 1482048,
       dynamicDispatches = 3224955,
       patternMatches = 1497935,
       branches = 304507,
-      pushedFrames = 2643286,
-      poppedFrames = 2066021,
+      pushedFrames = 2643281,
+      poppedFrames = 2066017,
       allocations = 4360030,
       closures = 867068,
       variableReads = 2955965,
       variableWrites = 1480868,
-      resets = 288867,
-      shifts = 298106,
-      resumes = 9257
+      resets = 288862,
+      shifts = 298085,
+      resumes = 9241
     )),
 
     examplesDir / "pos" / "raytracer.effekt" -> Some(Summary(
@@ -1282,15 +1282,15 @@ class VMTests extends munit.FunSuite {
       dynamicDispatches = 339629,
       patternMatches = 2735909,
       branches = 1456072,
-      pushedFrames = 897732,
-      poppedFrames = 897732,
+      pushedFrames = 757028,
+      poppedFrames = 757028,
       allocations = 1156011,
       closures = 9,
       variableReads = 896183,
       variableWrites = 226310,
-      resets = 384,
-      shifts = 147456,
-      resumes = 147456
+      resets = 0,
+      shifts = 0,
+      resumes = 0
     )),
 
 
