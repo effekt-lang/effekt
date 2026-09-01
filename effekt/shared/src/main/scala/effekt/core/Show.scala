@@ -100,12 +100,12 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     case Implementation(interface, operations) => Implementation(interface, operations map transform)
   }
 
-  def transform(operation: Operation)(using Context, ShowContext, DeclarationContext): Operation = operation match {
+  def transform(operation: Operation)(using ctx: ShowContext)(using Context, DeclarationContext): Operation = operation match {
     case Operation(name, tparams, cparams, vparams, bparams, body) =>
       Operation(name, tparams, cparams, vparams, bparams, ctx.withoutBindings { transform(body) })
   }
 
-  def transform(blockLit: BlockLit)(using Context, ShowContext, DeclarationContext): BlockLit = blockLit match {
+  def transform(blockLit: BlockLit)(using ctx: ShowContext)(using Context, DeclarationContext): BlockLit = blockLit match {
     case BlockLit(tparams, cparams, vparams, bparams, body) =>
       BlockLit(tparams, cparams, vparams, bparams, ctx.withoutBindings { transform(body) })
   }
