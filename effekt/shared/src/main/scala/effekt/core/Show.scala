@@ -31,15 +31,26 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     def getAllShowDef(using ShowContext)(using DeclarationContext): List[Toplevel.Def] =
       showDefns.values.toList
 
-    var bindings = mutable.ListBuffer.empty[Binding]
-
-    def withBindings(block: => Stmt): Stmt =
-      val outer = bindings
-      bindings = mutable.ListBuffer.empty[Binding]
-      Binding(outer.toList, block)
+    private def emptyBindings: mutable.ListBuffer[Binding] = mutable.ListBuffer.empty
+    private var bindings = emptyBindings
 
     def emit(id: Id, stmt: Stmt): Unit =
       bindings.append(Binding.Val(id, stmt))
+
+    private def scoped[A](block: => A): (List[Binding], A) =
+      val pending = bindings.toList
+      bindings = emptyBindings
+      val result = block
+      (pending, result)
+
+    def withBindings(block: => Stmt): Stmt =
+      val (pending, transformed) = scoped(block)
+      Binding(pending, transformed)
+
+    def withoutBindings[A](block: => A): A =
+      val (pending, result) = scoped(block)
+      bindings = mutable.ListBuffer.from(pending)
+      result
   }
 
   // This will check if we have already generated a Show instance for the given type and generate it if we didn't
@@ -89,12 +100,14 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     case Implementation(interface, operations) => Implementation(interface, operations map transform)
   }
 
-  def transform(operation: Operation)(using Context, ShowContext, DeclarationContext): Operation = operation match {
-    case Operation(name, tparams, cparams, vparams, bparams, body) => Operation(name, tparams, cparams, vparams, bparams, transform(body))
+  def transform(operation: Operation)(using ctx: ShowContext)(using Context, DeclarationContext): Operation = operation match {
+    case Operation(name, tparams, cparams, vparams, bparams, body) =>
+      Operation(name, tparams, cparams, vparams, bparams, ctx.withoutBindings { transform(body) })
   }
 
-  def transform(blockLit: BlockLit)(using Context, ShowContext, DeclarationContext): BlockLit = blockLit match {
-    case BlockLit(tparams, cparams, vparams, bparams, body) => BlockLit(tparams, cparams, vparams, bparams, transform(body))
+  def transform(blockLit: BlockLit)(using ctx: ShowContext)(using Context, DeclarationContext): BlockLit = blockLit match {
+    case BlockLit(tparams, cparams, vparams, bparams, body) =>
+      BlockLit(tparams, cparams, vparams, bparams, ctx.withoutBindings { transform(body) })
   }
 
   def transform(blockLit: BlockVar)(using Context, ShowContext, DeclarationContext): BlockVar = blockLit match {
