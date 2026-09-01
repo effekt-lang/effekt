@@ -37,9 +37,11 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
       StaticArguments.transform(mainSymbol, tree)
     }
 
+    val policy = Unique(threshold = Context.config.maxInlineSize().toInt)
+
     def normalize(m: ModuleDecl) = {
       val anfed = BindSubexpressions.transform(m)
-      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, policy)
       val live = Deadcode.remove(mainSymbol, normalized)
       val tailRemoved = RemoveTailResumptions(live)
       val contified = DirectStyle.rewrite(tailRemoved)

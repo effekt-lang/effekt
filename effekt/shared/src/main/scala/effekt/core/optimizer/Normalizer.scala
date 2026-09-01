@@ -36,7 +36,7 @@ object Normalizer { normal =>
     exprs: Map[Id, Expr],
     decls: DeclarationContext,     // for field selection
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
-    maxInlineSize: Int,            // to control inlining and avoid code bloat
+    policy: InliningPolicy,        // whether to inline a call (see [[InliningPolicy]])
     facts: Map[Expr, Expr],        // maps a pure expression to something simpler it is known to equal
   ) {
     // knowing `x = e`, we also know `e = x`, which is what lets us share `e`
@@ -95,7 +95,7 @@ object Normalizer { normal =>
   private def exprFor(id: Id)(using ctx: Context): Option[Expr] =
     ctx.exprs.get(id)
 
-  private def isRecursive(id: Id)(using ctx: Context): Boolean =
+  private[optimizer] def isRecursive(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id) match {
       case Some(value) => value == Usage.Recursive
       // We assume it is recursive, if (for some reason) we do not have information;
@@ -107,7 +107,7 @@ object Normalizer { normal =>
       case None => true // sys error s"No info for ${id}"
     }
 
-  private def isOnce(id: Id)(using ctx: Context): Boolean =
+  private[optimizer] def isOnce(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id) match {
       case Some(value) => value == Usage.Once
       case None => false
@@ -116,14 +116,14 @@ object Normalizer { normal =>
   private def isUnused(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id).forall { u => u == Usage.Never }
 
-  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int): ModuleDecl = {
+  def normalize(entrypoints: Set[Id], m: ModuleDecl, policy: InliningPolicy): ModuleDecl = {
     // usage information is used to detect recursive functions (and not inline them)
     val usage = Reachable(entrypoints, m)
 
     val defs = m.definitions.collect {
       case Toplevel.Def(id, block) => id -> block
     }.toMap
-    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize, Map.empty)
+    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), policy, Map.empty)
 
     val (normalizedDefs, _) = normalizeToplevel(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
@@ -190,11 +190,8 @@ object Normalizer { normal =>
 
   // TODO for `New` we should track how often each operation is used, not the object itself
   //   to decide inlining.
-  private def shouldInline(b: BlockLit, boundBy: Option[BlockVar], blockArgs: List[Block])(using C: Context): Boolean = boundBy match {
-    case Some(id) if isRecursive(id.id) => false
-    case Some(id) => isOnce(id.id) || b.body.size <= C.maxInlineSize
-    case _ => blockArgs.exists { b => b.isInstanceOf[BlockLit] } // higher-order function with known arg
-  }
+  private def shouldInline(b: BlockLit, boundBy: Option[BlockVar], blockArgs: List[Block])(using C: Context): Boolean =
+    C.policy(CallSite(b, boundBy, blockArgs))
 
   private def active(e: Expr)(using Context): Expr =
     normalize(e) match {

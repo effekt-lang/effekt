@@ -34,12 +34,15 @@ class OptimizerTests extends CoreTests {
       Deadcode.remove(Set(mainSymbol), tree)
     }
 
-  def normalize(input: String, expected: String)(using munit.Location) =
+  def normalizeWith(policy: InliningPolicy)(input: String, expected: String)(using munit.Location) =
     assertTransformsTo(input, expected) { tree =>
       val anfed = BindSubexpressions.transform(tree)
-      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, 50)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, policy)
       Deadcode.remove(mainSymbol, normalized)
     }
+
+  def normalize(input: String, expected: String)(using munit.Location) =
+    normalizeWith(Unique(threshold = 50))(input, expected)
 
   test("toplevel"){
     val input =
