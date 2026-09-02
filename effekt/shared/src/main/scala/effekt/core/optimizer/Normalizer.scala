@@ -36,9 +36,12 @@ object Normalizer { normal =>
     exprs: Map[Id, Expr],
     decls: DeclarationContext,     // for field selection
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
-    maxInlineSize: Int,            // to control inlining and avoid code bloat
+    policy: InliningPolicy,        // whether to inline a call (see [[InliningPolicy]])
     facts: Map[Expr, Expr],        // maps a pure expression to something simpler it is known to equal
+    prompts: Int,                  // how many enclosing `Reset`s we are inside (see [[Default.usedOnce]])
   ) {
+    def enterPrompt: Context = copy(prompts = prompts + 1)
+
     // knowing `x = e`, we also know `e = x`, which is what lets us share `e`
     def bind(id: Id, expr: Expr): Context =
       val known = if shareable(expr)(using this) then facts + (expr -> ValueVar(id, expr.tpe)) else facts
@@ -95,7 +98,7 @@ object Normalizer { normal =>
   private def exprFor(id: Id)(using ctx: Context): Option[Expr] =
     ctx.exprs.get(id)
 
-  private def isRecursive(id: Id)(using ctx: Context): Boolean =
+  private[optimizer] def isRecursive(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id) match {
       case Some(value) => value == Usage.Recursive
       // We assume it is recursive, if (for some reason) we do not have information;
@@ -107,7 +110,7 @@ object Normalizer { normal =>
       case None => true // sys error s"No info for ${id}"
     }
 
-  private def isOnce(id: Id)(using ctx: Context): Boolean =
+  private[optimizer] def isOnce(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id) match {
       case Some(value) => value == Usage.Once
       case None => false
@@ -116,14 +119,14 @@ object Normalizer { normal =>
   private def isUnused(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id).forall { u => u == Usage.Never }
 
-  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int): ModuleDecl = {
+  def normalize(entrypoints: Set[Id], m: ModuleDecl, policy: InliningPolicy): ModuleDecl = {
     // usage information is used to detect recursive functions (and not inline them)
     val usage = Reachable(entrypoints, m)
 
     val defs = m.definitions.collect {
       case Toplevel.Def(id, block) => id -> block
     }.toMap
-    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize, Map.empty)
+    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), policy, Map.empty, 0)
 
     val (normalizedDefs, _) = normalizeToplevel(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
@@ -190,13 +193,10 @@ object Normalizer { normal =>
 
   // TODO for `New` we should track how often each operation is used, not the object itself
   //   to decide inlining.
-  private def shouldInline(b: BlockLit, boundBy: Option[BlockVar], blockArgs: List[Block])(using C: Context): Boolean = boundBy match {
-    case Some(id) if isRecursive(id.id) => false
-    case Some(id) => isOnce(id.id) || b.body.size <= C.maxInlineSize
-    case _ => blockArgs.exists { b => b.isInstanceOf[BlockLit] } // higher-order function with known arg
-  }
+  private def shouldInline(b: BlockLit, boundBy: Option[BlockVar], valueArgs: List[Expr], blockArgs: List[Block])(using C: Context): Boolean =
+    C.policy(CallSite(b, boundBy, valueArgs, blockArgs))
 
-  private def active(e: Expr)(using Context): Expr =
+  private[optimizer] def active(e: Expr)(using Context): Expr =
     normalize(e) match {
       case x @ Expr.ValueVar(id, annotatedType) => exprFor(id) match {
         case Some(other) => other
@@ -241,7 +241,7 @@ object Normalizer { normal =>
     // -------
     case Stmt.App(b, targs, vargs, bargs) =>
       active(b) match {
-        case NormalizedBlock.Known(b: BlockLit, boundBy) if shouldInline(b, boundBy, bargs) =>
+        case NormalizedBlock.Known(b: BlockLit, boundBy) if shouldInline(b, boundBy, vargs, bargs) =>
           val blockUsage = boundBy.flatMap { bv => C.usage.get(bv.id) }.getOrElse(Usage.Once)
           if (blockUsage == Usage.Many) {
             // This is a conservative approximation:
@@ -260,7 +260,7 @@ object Normalizer { normal =>
       active(b) match {
         case n @ NormalizedBlock.Known(Block.New(impl), boundBy) =>
           selectOperation(impl, method) match {
-            case b: BlockLit if shouldInline(b, boundBy, bargs) => reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
+            case b: BlockLit if shouldInline(b, boundBy, vargs, bargs) => reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
             case _ => Stmt.Invoke(n.shared, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
           }
 
@@ -406,7 +406,7 @@ object Normalizer { normal =>
     // "Congruences"
     // -------------
 
-    case Stmt.Reset(body) => Stmt.Reset(normalize(body))
+    case Stmt.Reset(body) => Stmt.Reset(normalize(body)(using C.enterPrompt))
     case Stmt.Shift(prompt, k, body) => Shift(prompt, k, normalize(body))
     case Stmt.Return(expr) => Return(normalize(expr))
     case Stmt.Alloc(id, init, region, body) => Alloc(id, normalize(init), region, normalize(body))

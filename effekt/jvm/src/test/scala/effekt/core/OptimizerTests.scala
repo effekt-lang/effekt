@@ -34,12 +34,15 @@ class OptimizerTests extends CoreTests {
       Deadcode.remove(Set(mainSymbol), tree)
     }
 
-  def normalize(input: String, expected: String)(using munit.Location) =
+  def normalizeWith(policy: InliningPolicy)(input: String, expected: String)(using munit.Location) =
     assertTransformsTo(input, expected) { tree =>
       val anfed = BindSubexpressions.transform(tree)
-      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, 50)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, policy)
       Deadcode.remove(mainSymbol, normalized)
     }
+
+  def normalize(input: String, expected: String)(using munit.Location) =
+    normalizeWith(Unique(threshold = 50))(input, expected)
 
   test("toplevel"){
     val input =
@@ -210,4 +213,93 @@ class OptimizerTests extends CoreTests {
     normalize(input, expected)
   }
 
+
+  test("used once is inlined even when the threshold forbids it") {
+    val input =
+      """ def foo = { () => return 42 }
+        | def main = { () => (foo : () => Unit @ {})() }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () => return 42 }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 0, onceLimit = None))(input, expected)
+  }
+
+  test("used once is not inlined once it exceeds the once-limit") {
+    val input =
+      """ def foo = { () => return 42 }
+        | def main = { () => (foo : () => Unit @ {})() }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 0, onceLimit = Some(0)))(input, input)
+  }
+
+  test("an object argument is known, so the callee is inlined") {
+    val input =
+      """ interface Foo { op: () => Int }
+        | def main = { () => ({ (){f: Foo} => (f : Foo @ {f}).op : () => Int () })(){ new Foo { def op() = return 42 } } }
+        |""".stripMargin
+
+    val expected =
+      """ interface Foo { op: () => Int }
+        | def main = { () => def f = new Foo { def op() = return 42 } (f : Foo @ {}).op : () => Int () }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 0, onceLimit = Some(0)))(input, expected)
+  }
+
+  test("a block variable argument is not known, so the callee is kept") {
+    val input =
+      """ interface Foo { op: () => Int }
+        | def main = { (){g: Foo} => ({ (){f: Foo} => (f : Foo @ {f}).op : () => Int () })(){ (g : Foo @ {g}) } }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 0, onceLimit = Some(0)))(input, input)
+  }
+
+  test("a used-once block that installs a scope is inlined where no prompt encloses it") {
+    val input =
+      """ def foo = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 1 } } }
+        | def main = { () => (foo : () => Int @ {})() }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 1 } } }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 0, onceLimit = None))(input, expected)
+  }
+
+  test("the same block is kept when the call site is already under a prompt") {
+    val input =
+      """ def foo = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 1 } } }
+        | def main = { () => reset { (){q: Prompt[Int]} => shift (q : Prompt[Int] @ {q}) { {j: Resume[Int, Int]} => (foo : () => Int @ {})() } } }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 0, onceLimit = None))(input, input)
+  }
+
+  test("a known argument discounts the call, so an over-budget callee is inlined") {
+    val input =
+      """ def foo = { (b: Bool) => if (b: Bool) { return 1 } else { return 2 } }
+        | def main = { () => (foo : (Bool) => Int @ {})(true) }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () => return 1 }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 4, onceLimit = Some(0)))(input, expected)
+  }
+
+  test("an unknown argument earns no discount, so the same callee is kept") {
+    val input =
+      """ def foo = { (b: Bool) => if (b: Bool) { return 1 } else { return 2 } }
+        | def main = { (x: Bool) => (foo : (Bool) => Int @ {})(x: Bool) }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 4, onceLimit = Some(0)))(input, input)
+  }
 }
