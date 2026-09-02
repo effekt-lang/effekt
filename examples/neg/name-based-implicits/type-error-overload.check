@@ -1,4 +1,4 @@
-[error] Cannot typecheck call.
+[error] examples/neg/name-based-implicits/type-error-overload.effekt:8:19: Cannot typecheck call.
 There are multiple overloads, which all fail to check:
 
 Possible overload: type-error-overload::baz of type {() => Int} => String
@@ -24,3 +24,6 @@ Possible overload: type-error-overload::baz of type {() => List[Bool]} => String
     
     Possible overload: type-error-overload::foo of type () => Double
       Expected List[Bool] but got Double.
+
+  val y: String = baz()
+                  ^^^^^

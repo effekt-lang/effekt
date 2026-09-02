@@ -1,6 +1,9 @@
-[error] Cannot instantiate implicit argument.
+[error] examples/neg/name-based-implicits/qualified-error.effekt:8:27: Cannot instantiate implicit argument.
 Cannot instantiate 1st block argument compare of type (A, A) => Ordering.
   Ambiguous overload.
   There are multiple overloads, which all would type check:
   - qualified-error::int::compare: (Int, Int) => Ordering
   - qualified-error::any::compare: [A](A, A) => Ordering
+
+  val sorted: List[Int] = [3, 1, 2].mySort
+                          ^^^^^^^^^^^^^^^^
