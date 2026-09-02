@@ -1,0 +1,6 @@
+def foo[A](x: A) { ?app: A => Unit }: Unit = app(x)
+
+def app(n: Int) = println(n)
+def app[A](x: A) = <"crash">
+
+def main() = foo(42) // ERROR: implicit argument
