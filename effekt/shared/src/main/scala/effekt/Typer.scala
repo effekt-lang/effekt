@@ -1465,13 +1465,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
     scope: Option[scopes.Scope]
   )(using Context, Captures): Result[ValueType] = {
     val callsite = currentCapture
+    val span = call.span
 
     // (0) Check that arg & param counts align
     val atargs = Aligned(targs, funTpe.tparams)
     val (avargs, implicitVargs) = Aligned(vargs, funTpe.vparams)
-      .fillImplicit(knownVParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitValue(p, i, scope) }
+      .fillImplicit(knownVParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitValue(p, i, scope, span) }
     val (abargs, implicitBargs) = Aligned(bargs, funTpe.bparams)
-      .fillImplicit(knownBParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitBlock(p, i, scope) }
+      .fillImplicit(knownBParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitBlock(p, i, scope, span) }
     assertArgsParamsAlign(name = Some(name), atargs, avargs, abargs)
 
     // (1) Instantiate blocktype
@@ -1515,7 +1516,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // implicit arguments work like normal ones, except that we first have to instantiate them,
     // and later annotate them to be inserted
     (implicitVps zip implicitVargs).zipWithIndex foreach { case ((tpe, expr), ii) =>
-      val inst = source.GenerateImplicitArgs.instantiateImplicitValue(expr, tpe)
+      val inst = source.GenerateImplicitArgs.instantiateImplicitValue(expr, tpe, span)
       instImplicitVargs.append(inst)
       val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(expr, "value argument", vargs.length + ii, inst, tpe) {
         checkExpr(inst.value, Some(tpe))
@@ -1549,7 +1550,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       flowsInto(capt, callsite)
       // capture of block <: ?C
       flowingInto(capt) {
-        val inst = source.GenerateImplicitArgs.instantiateImplicitBlock(expr, tpe)
+        val inst = source.GenerateImplicitArgs.instantiateImplicitBlock(expr, tpe, span)
         instImplicitBargs.append(inst)
         val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(expr, "block argument", bargs.length + ii, inst, tpe){
           checkExprAsBlock(inst, Some(tpe))

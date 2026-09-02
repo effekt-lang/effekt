@@ -127,14 +127,14 @@ object GenerateImplicitArgs {
   // Initial generation
   // ==================
 
-  def resolveImplicitValue(vparam: symbols.ValueParam, index: Int, scope: Option[symbols.scopes.Scope])(using Context): Option[ImplicitStencil] = {
+  def resolveImplicitValue(vparam: symbols.ValueParam, index: Int, scope: Option[symbols.scopes.Scope], span: source.Span = source.Span.missing)(using Context): Option[ImplicitStencil] = {
     if (vparam.isImplicit && scope.isDefined) {
-      Some(generateImplicitValueArg(vparam, index, symbols.scopes.Scoping(Nil, scope.get)))
+      Some(generateImplicitValueArg(vparam, index, symbols.scopes.Scoping(Nil, scope.get), span))
     } else None
   }
-  def resolveImplicitBlock(bparam: symbols.BlockParam, index: Int, scope: Option[symbols.scopes.Scope])(using Context): Option[ImplicitStencil] = {
+  def resolveImplicitBlock(bparam: symbols.BlockParam, index: Int, scope: Option[symbols.scopes.Scope], span: source.Span = source.Span.missing)(using Context): Option[ImplicitStencil] = {
     if (bparam.isImplicit && scope.isDefined) {
-      Some(generateImplicitBlockArg(bparam, index, symbols.scopes.Scoping(Nil, scope.get)))
+      Some(generateImplicitBlockArg(bparam, index, symbols.scopes.Scoping(Nil, scope.get), span))
     } else None
   }
 
@@ -145,12 +145,12 @@ object GenerateImplicitArgs {
    * Special cases so far:
    * - sourcePosition inserts a call to SourcePosition with the components of the current source position
    */
-  def generateImplicitValueArg(p: symbols.ValueParam, index: Int, scope: symbols.scopes.Scoping)(using Context): ImplicitStencil = {
+  def generateImplicitValueArg(p: symbols.ValueParam, index: Int, scope: symbols.scopes.Scoping, span: source.Span = source.Span.missing)(using Context): ImplicitStencil = {
     (p.name.name, p.tpe) match {
       case ("sourcePosition", _) =>
         // This generates a dummy source to be name-resolved (the actual arguments will be generated later)
         Try {
-          val candidates = scope.lookupOverloaded(IdRef(Nil, "SourcePosition", Span.missing), term => !term.isInstanceOf[Operation])
+          val candidates = scope.lookupOverloaded(IdRef(Nil, "SourcePosition", span.synthesized), term => !term.isInstanceOf[Operation])
             .map { scope => scope.collect { case b: symbols.BlockSymbol => b } }
           SourcePosition(symbols.CallTarget(candidates, Some(scope.scope)))
         } match {
@@ -160,13 +160,13 @@ object GenerateImplicitArgs {
       case ("callId", _) => CallId()
       case (name, Some(symbols.BoxedType(t, capt))) =>
         // try filling boxed types by instantiating a block argument and boxing it
-        generateImplicitBlockArg(symbols.BlockParam(p.name, Some(t), symbols.Capture.CaptureParam(p.name), true, NoSource), index, scope) match {
+        generateImplicitBlockArg(symbols.BlockParam(p.name, Some(t), symbols.Capture.CaptureParam(p.name), true, NoSource), index, scope, span) match {
           case Error(u, i, msgs) => Error(BoxedStencil(name, u), i, msgs)
           case b => BoxedStencil(name, b)
         }
       case _ =>
         Try {
-          val sym = scope.lookupFirstTerm(IdRef(Nil, p.name.name, Span.missing))
+          val sym = scope.lookupFirstTerm(IdRef(Nil, p.name.name, span.synthesized))
           ImplicitVar("value argument", p.name.name, Some(sym))
         } match {
           case Left(msgs) => Error(ImplicitVar("value argument", p.name.name, None), index, msgs)
@@ -180,20 +180,20 @@ object GenerateImplicitArgs {
    *
    * Will usually return an eta-expanded (based on annotated type) call to a function with the same name.
    */
-  def generateImplicitBlockArg(p: symbols.BlockParam, index: Int, scope: symbols.scopes.Scoping)(using Context): ImplicitStencil =
+  def generateImplicitBlockArg(p: symbols.BlockParam, index: Int, scope: symbols.scopes.Scoping, span: source.Span = source.Span.missing)(using Context): ImplicitStencil =
     p.tpe.get match {
       case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
-        val gtparams = tparams.map { p => IdDef(p.name.name, Span.missing) }
+        val gtparams = tparams.map { p => IdDef(p.name.name, span.synthesized) }
         val gvparams: List[ValueParam] =
           vparams.zipWithIndex.map { (p, i) =>
-            ValueParam(IdDef(s"arg${i}", Span.missing), Some(source.ValueTypeTree(p, Span.missing)), false, Span.missing)
+            ValueParam(IdDef(s"arg${i}", span.synthesized), Some(source.ValueTypeTree(p, span.synthesized)), false, span.synthesized)
           }
         val gbparams: List[BlockParam] =
           bparams.zipWithIndex.map { (p, i) =>
-            BlockParam(IdDef(s"block_arg${i}", Span.missing), Some(source.BlockTypeTree(p, Span.missing)), false, Span.missing)
+            BlockParam(IdDef(s"block_arg${i}", span.synthesized), Some(source.BlockTypeTree(p, span.synthesized)), false, span.synthesized)
           }
         Try {
-          val candidates = scope.lookupOverloaded(IdRef(Nil, p.name.name, Span.missing), term => !term.isInstanceOf[Operation])
+          val candidates = scope.lookupOverloaded(IdRef(Nil, p.name.name, span.synthesized), term => !term.isInstanceOf[Operation])
             .map { scope => scope.collect { case b: symbols.BlockSymbol => b } }
           ImplicitBlockLiteral(p.name.name, symbols.CallTarget(candidates, Some(scope.scope)))
         } match {
@@ -202,7 +202,7 @@ object GenerateImplicitArgs {
         }
       case BlockType.InterfaceType(typeConstructor, args) =>
         Try {
-          val sym = scope.lookupFirstTerm(IdRef(Nil, p.name.name, Span.missing))
+          val sym = scope.lookupFirstTerm(IdRef(Nil, p.name.name, span.synthesized))
           ImplicitVar("block argument", p.name.name, Some(sym))
         } match {
           case Left(msgs) => Error(ImplicitVar("block argument", p.name.name, None), index, msgs)
@@ -218,9 +218,9 @@ object GenerateImplicitArgs {
    */
   private var nextCallId: Long = 0
 
-  private def generateResolvedId(sym: symbols.Symbol)(using Context): (source.IdDef, source.IdRef) = {
-    val d = source.IdDef(sym.name.name, source.Span.missing)
-    val u = source.IdRef(Nil, sym.name.name, source.Span.missing)
+  private def generateResolvedId(sym: symbols.Symbol, span: source.Span = source.Span.missing)(using Context): (source.IdDef, source.IdRef) = {
+    val d = source.IdDef(sym.name.name, span.synthesized)
+    val u = source.IdRef(Nil, sym.name.name, span.synthesized)
     Context.annotate(Annotations.Symbol, d, sym)
     Context.annotate(Annotations.Symbol, u, sym)
     (d, u)
@@ -231,7 +231,7 @@ object GenerateImplicitArgs {
    *
    * Also annotates all symbols for the returned code correctly where necessary.
    */
-  def instantiateImplicitBlock(b: ImplicitStencil, tpe: symbols.BlockType)(using Context): source.Term = {
+  def instantiateImplicitBlock(b: ImplicitStencil, tpe: symbols.BlockType, span: source.Span = source.Span.missing)(using Context): source.Term = {
     if(!Context.messaging.hasErrors) {
       (b, tpe) match {
         case (e @ Error(s, i, msgs), _) =>
@@ -245,33 +245,33 @@ object GenerateImplicitArgs {
               // It annotates the correct concrete types for *this* invocation.
               val (ftpsyms, ftparams, ftargs) = tps.map { x =>
                 val sym = symbols.TypeParam(x.name)
-                val (p, a) = generateResolvedId(sym)
+                val (p, a) = generateResolvedId(sym, span)
                 (sym, p,
-                  source.TypeRef(a, Many(Nil, source.Span.missing), source.Span.missing))
+                  source.TypeRef(a, Many(Nil, span.synthesized), span.synthesized))
               }.unzip3
               val (fvpsyms, fvparams, fvargs) = vps.zipWithIndex.map { (t, i) =>
                 val sym = symbols.ValueParam(Name.local(s"value_arg${i}"), Some(t), false, NoSource)
-                val (p, a) = generateResolvedId(sym)
+                val (p, a) = generateResolvedId(sym, span)
                 (sym,
-                  source.ValueParam(p, Some(source.ValueTypeTree(sym.tpe.get, source.Span.missing)), false, source.Span.missing): source.ValueParam,
-                  source.ValueArg(None, source.Var(a, source.Span.missing), source.Span.missing))
+                  source.ValueParam(p, Some(source.ValueTypeTree(sym.tpe.get, span.synthesized)), false, span.synthesized): source.ValueParam,
+                  source.ValueArg(None, source.Var(a, span.synthesized), span.synthesized))
               }.unzip3
               val (fbsyms, fbparams, fbargs) = bps.zipWithIndex.map { (t, i) =>
                 val name = Name.local(s"block_arg${i}")
                 val sym = symbols.BlockParam(name, Some(t), symbols.Capture.CaptureParam(name), false, NoSource)
-                val (p, a) = generateResolvedId(sym)
+                val (p, a) = generateResolvedId(sym, span)
                 (sym,
-                  source.BlockParam(p, Some(source.BlockTypeTree(sym.tpe.get, source.Span.missing)), false, source.Span.missing): source.BlockParam,
-                  source.Var(a, source.Span.missing))
+                  source.BlockParam(p, Some(source.BlockTypeTree(sym.tpe.get, span.synthesized)), false, span.synthesized): source.BlockParam,
+                  source.Var(a, span.synthesized))
               }.unzip3
-              val target = source.IdTarget(source.IdRef(Nil, name, source.Span.missing))
+              val target = source.IdTarget(source.IdRef(Nil, name, span.synthesized))
               Context.assignSymbol(target.id, sym)
               source.BlockLiteral(ftparams, fvparams, fbparams,
                 source.Return(source.Call(target, ftargs, fvargs, fbargs,
-                  source.Span.missing), source.Span.missing), source.Span.missing)
+                  span.synthesized), span.synthesized), span.synthesized)
 
         case (ImplicitVar(kind, name, Some(sym)), _) =>
-          val v = Var(IdRef(Nil, name, Span.missing), Span.missing)
+          val v = Var(IdRef(Nil, name, span.synthesized), span.synthesized)
           Context.assignSymbol(v.id, sym)
           v
 
@@ -288,9 +288,9 @@ object GenerateImplicitArgs {
    *
    * Also annotates all symbols for the returned code correctly where necessary.
    */
-  def instantiateImplicitValue(v: ImplicitStencil, tpe: symbols.ValueType)(using Context): source.ValueArg = {
+  def instantiateImplicitValue(v: ImplicitStencil, tpe: symbols.ValueType, span: source.Span = source.Span.missing)(using Context): source.ValueArg = {
     def intArg(v: Long, name: Option[String] = None): source.ValueArg =
-      ValueArg(name, Literal(v, builtins.TInt, Span.missing), Span.missing)
+      ValueArg(name, Literal(v, builtins.TInt, span.synthesized), span.synthesized)
 
     v match {
       case e @ Error(s, i, msgs) =>
@@ -298,25 +298,25 @@ object GenerateImplicitArgs {
           e, tpe, Context.rangeOf(Context.focus)))
 
       case ImplicitVar(kind, name, Some(sym)) =>
-        val content = Var(IdRef(Nil, name, Span.missing), Span.missing)
+        val content = Var(IdRef(Nil, name, span.synthesized), span.synthesized)
         Context.assignSymbol(content.id, sym)
-        source.ValueArg(Some(name), content, Span.missing) // TODO Is it a problem if this is used more than once?
+        source.ValueArg(Some(name), content, span.synthesized) // TODO Is it a problem if this is used more than once?
 
       case SourcePosition(sym) =>
         // this generates the version with the correct current positions,
-        val pos = Context.focus.span
+        val pos = Context.focus.span.synthesized
         val from = pos.source.offsetToPosition(pos.from)
         val to = pos.source.offsetToPosition(pos.to)
-        val target = IdTarget(IdRef(Nil, "SourcePosition", Span.missing))
+        val target = IdTarget(IdRef(Nil, "SourcePosition", span.synthesized))
         val content: Call = Call(target, Nil, List(
-          ValueArg(None, Literal(pos.source.name, builtins.TString, Span.missing), Span.missing),
-          intArg(from.line), intArg(from.column), intArg(to.line), intArg(to.column)), Nil, Span.missing)
+          ValueArg(None, Literal(pos.source.name, builtins.TString, span.synthesized), span.synthesized),
+          intArg(from.line), intArg(from.column), intArg(to.line), intArg(to.column)), Nil, span.synthesized)
 
         // copying over the annotations generated by Namer.
         Context.assignSymbol(target.id, sym)
 
         // and returns the result
-        source.ValueArg(Some(v.name), content, Span.missing)
+        source.ValueArg(Some(v.name), content, span.synthesized)
 
       case CallId() =>
         val id = nextCallId
@@ -326,9 +326,9 @@ object GenerateImplicitArgs {
       case BoxedStencil(name, block) =>
         val symbols.BoxedType(btpe, _) = tpe: @unchecked
         source.ValueArg(Some(v.name),
-          source.Box(Maybe.None(Span.missing),
-            instantiateImplicitBlock(block, btpe), Span.missing),
-          Span.missing)
+          source.Box(Maybe.None(span.synthesized),
+            instantiateImplicitBlock(block, btpe, span.synthesized), span),
+          span.synthesized)
 
       case ImplicitBlockLiteral(_, _) => Context.panic("Cannot instantiate block literal as an implicit value argument.")
 
