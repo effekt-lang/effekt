@@ -1,102 +1,103 @@
 import tty
 import process
 import bench
+import sourcepos
 
 interface Assertion {
-  def assert(condition: Bool, msg: String): Unit
+  def assert(condition: Bool, msg: String, ?sourcePosition: SourcePosition): Unit
 }
 
-def assertTrue(condition: Bool, msg: String) =
-  do assert(condition, msg)
+def assertTrue(condition: Bool, msg: String, ?sourcePosition: SourcePosition) =
+  do assert(condition, msg, sourcePosition)
 
-def assertTrue(condition: Bool) =
-  do assert(condition, "Assertion failed")
+def assertTrue(condition: Bool, ?sourcePosition: SourcePosition) =
+  do assert(condition, "Assertion failed", sourcePosition)
 
-def assertFalse(condition: Bool, msg: String) =
-  do assert(not(condition), msg)
+def assertFalse(condition: Bool, msg: String, ?sourcePosition: SourcePosition) =
+  do assert(not(condition), msg, sourcePosition)
 
-def assertFalse(condition: Bool) =
-  do assert(not(condition), "Assertion failed")
+def assertFalse(condition: Bool, ?sourcePosition: SourcePosition) =
+  do assert(not(condition), "Assertion failed", sourcePosition)
 
-def assert(obtained: Int, expected: Int, msg: String): Unit / Assertion =
-  assertEqual(obtained, expected, msg) { (x, y) => x == y }
+def assert(obtained: Int, expected: Int, msg: String, ?sourcePosition: SourcePosition): Unit / Assertion =
+  assertEqual(obtained, expected, msg, sourcePosition) { (x, y) => x == y }
 
-def assert(obtained: Bool, expected: Bool, msg: String): Unit / Assertion =
-  assertEqual(obtained, expected, msg) { (x, y) => x == y }
+def assert(obtained: Bool, expected: Bool, msg: String, ?sourcePosition: SourcePosition): Unit / Assertion =
+  assertEqual(obtained, expected, msg, sourcePosition) { (x, y) => x == y }
 
-def assert(obtained: Char, expected: Char, msg: String): Unit / Assertion =
-  assertEqual(obtained, expected, msg) { (x, y) => x == y }
+def assert(obtained: Char, expected: Char, msg: String, ?sourcePosition: SourcePosition): Unit / Assertion =
+  assertEqual(obtained, expected, msg, sourcePosition) { (x, y) => x == y }
 
-def assert(obtained: String, expected: String, msg: String): Unit / Assertion =
-  assertEqual(obtained, expected, msg) { (x, y) => x == y }
+def assert(obtained: String, expected: String, msg: String, ?sourcePosition: SourcePosition): Unit / Assertion =
+  assertEqual(obtained, expected, msg, sourcePosition) { (x, y) => x == y }
 
-def assert(obtained: Int, expected: Int): Unit / { Assertion, Formatted } =
-  assertEqual(obtained, expected) { (x, y) => x == y } { x => show(x) }
+def assert(obtained: Int, expected: Int, ?sourcePosition: SourcePosition): Unit / { Assertion, Formatted } =
+  assertEqual(obtained, expected, sourcePosition) { (x, y) => x == y } { x => show(x) }
 
-def assert(obtained: Byte, expected: Byte): Unit / { Assertion, Formatted } =
-  assertEqual(obtained, expected) { (x, y) => x == y } { x => show(x) }
+def assert(obtained: Byte, expected: Byte, ?sourcePosition: SourcePosition): Unit / { Assertion, Formatted } =
+  assertEqual(obtained, expected, sourcePosition) { (x, y) => x == y } { x => show(x) }
 
-def assert(obtained: Bool, expected: Bool): Unit / { Assertion, Formatted } =
-  assertEqual(obtained, expected) { (x, y) => x == y } { x => show(x) }
+def assert(obtained: Bool, expected: Bool, ?sourcePosition: SourcePosition): Unit / { Assertion, Formatted } =
+  assertEqual(obtained, expected, sourcePosition) { (x, y) => x == y } { x => show(x) }
 
-def assert(obtained: Char, expected: Char): Unit / { Assertion, Formatted } =
-  assertEqual(obtained, expected) { (x, y) => x == y } { x => show(x) }
+def assert(obtained: Char, expected: Char, ?sourcePosition: SourcePosition): Unit / { Assertion, Formatted } =
+  assertEqual(obtained, expected, sourcePosition) { (x, y) => x == y } { x => show(x) }
 
-def assert(obtained: String, expected: String): Unit / { Assertion, Formatted } =
-  assertEqual(obtained, expected) { (x, y) => x == y } { x => show(x) }
+def assert(obtained: String, expected: String, ?sourcePosition: SourcePosition): Unit / { Assertion, Formatted } =
+  assertEqual(obtained, expected, sourcePosition) { (x, y) => x == y } { x => show(x) }
 
-def assertEqual[A](obtained: A, expected: A, msg: String): Unit / Assertion =
-  assertEqual(obtained, expected, msg) { (x, y) => x.genericEquals(y) }
+def assertEqual[A](obtained: A, expected: A, msg: String, ?sourcePosition: SourcePosition): Unit / Assertion =
+  assertEqual(obtained, expected, msg, sourcePosition) { (x, y) => x.genericEquals(y) }
 
-def assertEqual[A](obtained: A, expected: A): Unit / { Assertion, Formatted } =
-  assertEqual(obtained, expected) { (x, y) => x.genericEquals(y) } { x => x.genericShow }
+def assertEqual[A](obtained: A, expected: A, ?sourcePosition: SourcePosition): Unit / { Assertion, Formatted } =
+  assertEqual(obtained, expected, sourcePosition) { (x, y) => x.genericEquals(y) } { x => x.genericShow }
 
-def assertEqual[A](obtained: A, expected: A, msg: String) { equals: (A, A) => Bool }: Unit / Assertion =
-  do assert(equals(obtained, expected), msg)
+def assertEqual[A](obtained: A, expected: A, msg: String, ?sourcePosition: SourcePosition) { equals: (A, A) => Bool }: Unit / Assertion =
+  do assert(equals(obtained, expected), msg, sourcePosition)
 
-def assertEqual[A](obtained: A, expected: A) { equals: (A, A) => Bool } { show: A => String }: Unit / { Assertion, Formatted } =
-  do assert(equals(obtained, expected), Formatted::tryEmit(Escape::RESET) ++ "Expected: ".dim ++ show(expected).green ++ "\n  Obtained: ".dim ++ show(obtained).red)
+def assertEqual[A](obtained: A, expected: A, ?sourcePosition: SourcePosition) { equals: (A, A) => Bool } { show: A => String }: Unit / { Assertion, Formatted } =
+  do assert(equals(obtained, expected), Formatted::tryEmit(Escape::RESET) ++ "Expected: ".dim ++ show(expected).green ++ "\n  Obtained: ".dim ++ show(obtained).red, sourcePosition)
   // NOTE:                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   //             Here's an accidental capture! Can we prevent this somehow nicely?
 
-def assertNotThrown[E](ex: on[E]) { body: => Unit / Exception[E] }: Unit / Assertion =
-  ex.default { do assert(false, "Unexpected Exception") } {body}
+def assertNotThrown[E](ex: on[E], ?sourcePosition: SourcePosition) { body: => Unit / Exception[E] }: Unit / Assertion =
+  ex.default { do assert(false, "Unexpected Exception", sourcePosition) } {body}
 
-def assertNoThrow[E] { body: => Unit / Exception[E] }: Unit / Assertion =
-  on[E].default{ do assert(false, "Unexpected Exception") } {body}
+def assertNoThrow[E](?sourcePosition: SourcePosition) { body: => Unit / Exception[E] }: Unit / Assertion =
+  on[E].default{ do assert(false, "Unexpected Exception", sourcePosition) } {body}
 
-def assertThrown[E](ex: on[E]) { body: => Unit / Exception[E] }: Unit / Assertion =
-  do assert(ex.default { true } { body(); false }, "Expected Exception, but exited normally")
+def assertThrown[E](ex: on[E], ?sourcePosition: SourcePosition) { body: => Unit / Exception[E] }: Unit / Assertion =
+  do assert(ex.default { true } { body(); false }, "Expected Exception, but exited normally", sourcePosition)
 
-def assertThrows[E] { body: => Unit / Exception[E] }: Unit / Assertion =
-  do assert(on[E].default { true } { body(); false }, "Expected Exception, but exited normally")
+def assertThrows[E](?sourcePosition: SourcePosition) { body: => Unit / Exception[E] }: Unit / Assertion =
+  do assert(on[E].default { true } { body(); false }, "Expected Exception, but exited normally", sourcePosition)
 
-def assertFail { body: => Unit / fail }: Unit / Assertion =
-  do assert(succeeds {body}, "Expected 'fail', but exited normally")
+def assertFail(?sourcePosition: SourcePosition) { body: => Unit / fail }: Unit / Assertion =
+  do assert(succeeds {body}, "Expected 'fail', but exited normally", sourcePosition)
 
-def assertNoFail { body: => Unit / fail }: Unit / Assertion =
-  onFail { do assert(false, "Unexpected 'fail'") } {body}
+def assertNoFail(?sourcePosition: SourcePosition) { body: => Unit / fail }: Unit / Assertion =
+  onFail { do assert(false, "Unexpected 'fail'", sourcePosition) } {body}
 
 
 interface Test {
-  def success(name: String, duration: Int): Unit
-  def failure(name: String, msg: String, duration: Int): Unit
+  def success(name: String, duration: Int, ?sourcePosition: SourcePosition): Unit
+  def failure(name: String, msg: String, duration: Int, ?sourcePosition: SourcePosition): Unit
 }
 
 /// Runs the `body` as a test under the given `name`
 /// See `suite` for examples.
-def test(name: String) { body: => Unit / Assertion } = {
+def test(name: String, ?sourcePosition: SourcePosition) { body: => Unit / Assertion } = {
   val startTime = bench::relativeTimestamp()
   try {
     body()
     val duration = Duration::diff(startTime, bench::relativeTimestamp())
-    do success(name, duration)
+    do success(name, duration, sourcePosition)
   } with Assertion {
-    def assert(condition, msg) =
+    def assert(condition, msg, assertSourcePosition) =
       if (condition) resume(())
       else {
         val duration = Duration::diff(startTime, bench::relativeTimestamp())
-        do failure(name, msg, duration)
+        do failure(name, msg, duration, assertSourcePosition)
       }
   }
 }
@@ -138,17 +139,19 @@ def suite(name: String, printTimes: Bool) { body: => Unit / { Test, Formatted } 
   val totalDuration = timed {
     try { body() } with Test {
       // 2a) Handle a passing test on success
-      def success(name, duration) = {
+      def success(name, duration, sourcePosition) = {
         passed = passed + 1
         println("✓".green ++ " " ++ name ++ duration.ms)
         resume(())
       }
 
       // 2b) Handle a failing test on failure, additionally printing its message
-      def failure(name, msg, duration) = {
+      def failure(name, msg, duration, sourcePosition) = {
         failed = failed + 1
         println("✕".red ++ " " ++ name ++ duration.ms)
         println("  " ++ msg.red)
+        println("  at " ++ sourcePosition.toGccStyleString() ++ ":")
+        println(getMarkedSource(sourcePosition))
         resume(())
       }
     }
