@@ -291,6 +291,10 @@ lazy val chars: Builtins = Map(
   builtin("effekt::showBuiltin(Char)") {
     case As.Int(n) :: Nil => Value.String(java.lang.String.valueOf(Character.toChars(n.toInt)))
   }
+
+  builtin("char::toString(Char)") {
+    case As.Int(n) :: Nil => Value.String(java.lang.String.valueOf(Character.toChars(n.toInt)))
+  }
 )
 
 lazy val arrays: Builtins = Map(
