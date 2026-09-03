@@ -217,7 +217,7 @@ class OptimizerTests extends CoreTests {
   test("used once is inlined even when the threshold forbids it") {
     val input =
       """ def foo = { () => return 42 }
-        | def main = { () => (foo : () => Unit @ {})() }
+        | def main = { () => (foo : () => Int @ {})() }
         |""".stripMargin
 
     val expected =
@@ -230,7 +230,7 @@ class OptimizerTests extends CoreTests {
   test("used once is not inlined once it exceeds the once-limit") {
     val input =
       """ def foo = { () => return 42 }
-        | def main = { () => (foo : () => Unit @ {})() }
+        | def main = { () => (foo : () => Int @ {})() }
         |""".stripMargin
 
     normalizeWith(Default(threshold = 0, onceLimit = Some(0)))(input, input)
@@ -261,12 +261,12 @@ class OptimizerTests extends CoreTests {
 
   test("a used-once block that installs a scope is inlined where no prompt encloses it") {
     val input =
-      """ def foo = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 1 } } }
+      """ def foo = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => resume (k : Resume[Int, Int] @ {k}) { return 1 } } } }
         | def main = { () => (foo : () => Int @ {})() }
         |""".stripMargin
 
     val expected =
-      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 1 } } }
+      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => resume (k : Resume[Int, Int] @ {k}) { return 1 } } } }
         |""".stripMargin
 
     normalizeWith(Default(threshold = 0, onceLimit = None))(input, expected)
@@ -274,8 +274,8 @@ class OptimizerTests extends CoreTests {
 
   test("the same block is kept when the call site is already under a prompt") {
     val input =
-      """ def foo = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 1 } } }
-        | def main = { () => reset { (){q: Prompt[Int]} => shift (q : Prompt[Int] @ {q}) { {j: Resume[Int, Int]} => (foo : () => Int @ {})() } } }
+      """ def foo = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => resume (k : Resume[Int, Int] @ {k}) { return 1 } } } }
+        | def main = { () => reset { (){q: Prompt[Int]} => shift (q : Prompt[Int] @ {q}) { {j: Resume[Int, Int]} => resume (j : Resume[Int, Int] @ {j}) { (foo : () => Int @ {})() } } } }
         |""".stripMargin
 
     normalizeWith(Default(threshold = 0, onceLimit = None))(input, input)

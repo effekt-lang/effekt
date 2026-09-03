@@ -1311,6 +1311,119 @@ class VMTests extends munit.FunSuite {
     )),
 
 
+    examplesDir / "pos" / "abort_past_var.effekt" -> Some(Summary(
+      staticDispatches = 0,
+      dynamicDispatches = 1,
+      patternMatches = 0,
+      branches = 0,
+      pushedFrames = 2,
+      poppedFrames = 2,
+      allocations = 0,
+      closures = 2,
+      variableReads = 2,
+      variableWrites = 2,
+      resets = 1,
+      shifts = 1,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "issue992.effekt" -> Some(Summary(
+      staticDispatches = 6,
+      dynamicDispatches = 2,
+      patternMatches = 2,
+      branches = 9,
+      pushedFrames = 10,
+      poppedFrames = 6,
+      allocations = 4,
+      closures = 4,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 4,
+      shifts = 2,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "issue995.effekt" -> Some(Summary(
+      staticDispatches = 0,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 0,
+      pushedFrames = 0,
+      poppedFrames = 0,
+      allocations = 0,
+      closures = 0,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 1,
+      shifts = 1,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "issue1064.effekt" -> Some(Summary(
+      staticDispatches = 17,
+      dynamicDispatches = 0,
+      patternMatches = 17,
+      branches = 10,
+      pushedFrames = 18,
+      poppedFrames = 18,
+      allocations = 16,
+      closures = 0,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 1,
+      shifts = 5,
+      resumes = 5
+    )),
+
+    // issue 1272: Optimizing through useless constructs / obfuscated code (optimizer-wishlist)
+    examplesDir / "pos" / "with_val_else.effekt" -> Some(Summary(
+      staticDispatches = 3,
+      dynamicDispatches = 0,
+      patternMatches = 6,
+      branches = 3,
+      pushedFrames = 3,
+      poppedFrames = 3,
+      allocations = 6,
+      closures = 0,
+      variableReads = 3,
+      variableWrites = 2,
+      resets = 3,
+      shifts = 1,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "issue842.effekt" -> Some(Summary(
+      staticDispatches = 0,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 0,
+      pushedFrames = 0,
+      poppedFrames = 0,
+      allocations = 0,
+      closures = 0,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "issue972.effekt" -> Some(Summary(
+      staticDispatches = 0,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 0,
+      pushedFrames = 4,
+      poppedFrames = 4,
+      allocations = 0,
+      closures = 0,
+      variableReads = 5,
+      variableWrites = 2,
+      resets = 3,
+      shifts = 4,
+      resumes = 4
+    )),
+
     examplesDir / "pos" / "diy_binder.effekt" -> Some(Summary(
       staticDispatches = 28,
       dynamicDispatches = 0,
