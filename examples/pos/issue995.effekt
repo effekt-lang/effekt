@@ -1,0 +1,6 @@
+effect fail(): Nothing
+
+def main() = try {
+  do fail()
+  println("after") // unreachable
+} with fail { println("failed") }

@@ -1,0 +1,30 @@
+import exception
+import result
+
+def digitValue(char: Char): Int / Exception[WrongFormat] =
+  if (char >= '0' && char <= '9') {
+    char.toInt - '0'.toInt
+  } else {
+    wrongFormat("Not a valid digit: '" ++ char.toString ++ "' in base 10")
+  }
+
+def isDigitGood(char: Char): Bool =
+  try { digitValue(char); true } with Exception[WrongFormat] {
+    def raise(e, msg) = false
+  }
+
+def isDigitBad(char: Char): Bool =
+  try { Success(digitValue(char)) } with Exception[WrongFormat] {
+    def raise(e, msg) = Error(e, msg)
+  } match {
+    case Success(_) => true
+    case Error(_, _) => false
+  }
+
+def main() = {
+  println(isDigitGood('1'))
+  println(isDigitGood('x'))
+
+  println(isDigitBad('7'))
+  println(isDigitBad('!'))
+}
