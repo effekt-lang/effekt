@@ -1,0 +1,13 @@
+Hello World!
+Second line \n #1 // doo de
+ #| #|
+Even with interpolation
+ still nice
+And multiline splices
+We can even nest stuff:
+  Inner nested
+ with more lines even nested splices
+Not with 
+                    foo
+ foo
+ bar
