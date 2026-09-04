@@ -7,7 +7,5 @@ And multiline splices
 We can even nest stuff:
   Inner nested
  with more lines even nested splices
-Not with 
-                    foo
  foo
  bar

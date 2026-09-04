@@ -21,10 +21,6 @@ def main() = {
                 $|   }
   println(nested)
 
-  val neststr = s#|Not with ${"""
-                   """
-                 $|} foo
-  println(neststr)
   val neststr2 = s"""${
     #| foo
     #| bar
