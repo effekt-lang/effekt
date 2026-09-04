@@ -1,4 +1,4 @@
-[error] Cannot typecheck call.
+[error] examples/neg/name-based-implicits/no-implicit.effekt:8:3: Cannot typecheck call.
 There are multiple overloads, which all fail to check:
 
 Possible overload: no-implicit::foo of type String => Unit
@@ -10,3 +10,6 @@ Possible overload: no-implicit::foo of type {() => Unit} => Unit
   Cannot instantiate implicit argument.
   Cannot instantiate 1st block argument foobaz of type () => Unit.
     Wrong number of arguments to foobaz: expected 1 value argument, but got 0 value arguments
+
+  foo()
+  ^^^^^

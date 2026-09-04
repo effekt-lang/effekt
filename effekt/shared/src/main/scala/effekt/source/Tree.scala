@@ -584,6 +584,12 @@ def CharLit(value: Int, span: Span): Literal = Literal(value, symbols.builtins.T
 
 type CallLike = Call | Do | Select | MethodCall
 
+extension(self: CallLike) def span: Span = self match {
+  case c: Call => c.span
+  case d: Do => d.span
+  case s: Select => s.span
+  case m: MethodCall => m.span
+}
 
 enum CallTarget extends Tree {
 
