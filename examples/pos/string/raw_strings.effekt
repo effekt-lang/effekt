@@ -1,0 +1,33 @@
+def main() = {
+  val foo = #|Hello World!
+            #|Second line \n #1 // doo de
+            #| #| #|
+  println(foo)
+
+  val bar = s#|Even with ${"interpolation"}
+             #| still nice
+  println(bar)
+
+  val baz = s#|And multiline ${
+             $| "splices"
+             $| }
+  println(baz)
+
+  val nested = s#|We can even nest stuff:
+                #|  ${s#|Inner nested
+                $|     #| with more lines ${
+                $|     $|   "even nested splices"
+                $|     $|}
+                $|   }
+  println(nested)
+
+  val neststr = s#|Not with ${"""
+                   """
+                 $|} foo
+  println(neststr)
+  val neststr2 = s"""${
+    #| foo
+    #| bar
+  }"""
+  println(neststr2)
+}
