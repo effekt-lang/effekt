@@ -1,10 +1,16 @@
 Test test suite on 'fail'ures
 ✕ Test test assertFail pass
   Expected 'fail', but exited normally
+  at examples/stdlib/test/onfail.effekt:7:7:
+      assertFail { do fail() }
+      ^^^^^^^^^^^^^^^^^^^^^^^^
 ✓ Test test assertFail fail
 ✓ Test test assertNoFail pass
 ✕ Test test assertNoFail fail
   Unexpected 'fail'
+  at examples/stdlib/test/onfail.effekt:16:7:
+      assertNoFail { do fail() }
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
  2 pass
  2 fail

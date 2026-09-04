@@ -2,14 +2,26 @@ Test test suite on Exceptions
 ✓ Test test assertNotThrown pass
 ✕ Test test assertNotThrown fail
   Unexpected Exception
+  at examples/stdlib/test/exceptions.effekt:13:12:
+      with on[MissingValue].assertNotThrown
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ✕ Test test assertThrown fail
   Expected Exception, but exited normally
+  at examples/stdlib/test/exceptions.effekt:17:12:
+      with on[MissingValue].assertThrown
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ✓ Test test assertThrows pass
 ✓ Test test assertNoThrow pass
 ✕ Test test assertNoThrow fail
   Unexpected Exception
+  at examples/stdlib/test/exceptions.effekt:31:12:
+      with assertNoThrow[MissingValue]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ✕ Test test assertThrows fail
   Expected Exception, but exited normally
+  at examples/stdlib/test/exceptions.effekt:35:12:
+      with assertThrows[MissingValue]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
 ✓ Test test assertThrows pass
 
  4 pass
