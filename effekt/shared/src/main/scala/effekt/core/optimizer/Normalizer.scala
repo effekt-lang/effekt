@@ -311,7 +311,7 @@ object Normalizer { normal =>
 
         // [[ val x: A = shift(p) { {k: A => R} => body2 }; body: B ]] = shift(p) { {k: >>>B<<< => R} => body2 }
         case abort @ Stmt.Shift(p, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeA, answer)), captures), body2)
-              if !body2.free.freeIds.contains(k) =>
+              if !body2.free.contains(k) =>
             val tpeB = body.tpe
             Stmt.Shift(p, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeB, answer)), captures),
                 normalize(body2))

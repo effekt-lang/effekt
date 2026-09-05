@@ -1309,6 +1309,9 @@ object sizes {
 
 case class Free(values: DB[ValueType], blocks: DB[(BlockType, Captures)]) {
 
+  /** Whether [[id]] occurs free. Prefer this to `freeIds.contains`, which builds two sets to answer it. */
+  def contains(id: Id): Boolean = values.isDefinedAt(id) || blocks.isDefinedAt(id)
+
   def freeIds: Set[Id] = values.keySet ++ blocks.keySet
 
   def without(boundValues: List[ValueParam], boundBlocks: List[BlockParam]): Free =
