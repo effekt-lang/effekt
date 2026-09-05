@@ -147,6 +147,14 @@ object Transformer {
         emit(ExtractValue(tagName, transform(value), 0))
         emit(ExtractValue(objectName, transform(value), 1))
 
+        // if there's no default clause, tell LLVM that it can assume that the tag is less than number of clauses
+        if (default.isEmpty) {
+          val cmpName = freshName("tagInRange")
+          val numTags = clauses.iterator.map(_._1).max + 1 // TODO: carry this on the switch / data type?
+          emit(Icmp(cmpName, "ult", IntegerType64(), LocalReference(IntegerType64(), tagName), ConstantInt(numTags)))
+          emit(Call("_", Ccc(), VoidType(), assume, List(LocalReference(IntegerType1(), cmpName))))
+        }
+
         val stack = getStack()
         def labelClause(clause: machine.Clause, isDefault: Boolean): String = {
           implicit val BC = BlockContext()
@@ -857,6 +865,7 @@ object Transformer {
 
   val hole = ConstantGlobal("hole");
   val unmatchedTag = ConstantGlobal("unmatched_tag");
+  val assume = ConstantGlobal("llvm.assume");
 
   val newReference = ConstantGlobal("newReference")
   val getVarPointer = ConstantGlobal("getVarPointer")
