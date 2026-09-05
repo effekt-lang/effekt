@@ -112,6 +112,9 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case ExtractValue(result, aggregate, index) =>
       s"${localName(result)} = extractvalue ${show(aggregate)}, $index"
 
+    case Icmp(result, predicate, tpe, operand0, operand1) =>
+      s"${localName(result)} = icmp ${predicate} ${show(tpe)} ${showOperand(operand0)._2}, ${showOperand(operand1)._2}"
+
     case Comment(msg) if C.config.debug() =>
       val sanitized = msg.map((c: Char) => if (' ' <= c && c != '\\' && c <= '~') c else '?').mkString
       s"\n; $sanitized"
@@ -122,25 +125,32 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
   def show(terminator: Terminator): LLVMString = terminator match {
     case RetVoid() =>
       s"ret void"
-    case Ret(operand) => 
+    case Ret(operand) =>
       s"ret ${show(operand)}"
     case Switch(operand, defaultDest, dests) =>
       def destAsFragment(dest: (Int, String)) = s"i64 ${dest._1}, label ${localName(dest._2)}";
       s"switch ${show(operand)}, label ${localName(defaultDest)} [${spaceSeparated(dests.map(destAsFragment))}]"
     case CondBr(condition, trueDest, falseDest) =>
       s"br ${show(condition)}, label ${localName(trueDest)}, label ${localName(falseDest)}"
+    case Unreachable() =>
+      s"unreachable"
   }
 
-  def show(operand: Operand): LLVMString = operand match {
-    case LocalReference(tpe, name)          => s"${show(tpe)} ${localName(name)}"
-    case ConstantGlobal(name)               => s"ptr ${globalName(name)}"
-    case ConstantInt(n)                     => s"i64 $n"
-    case ConstantByte(n)                    => s"i8 $n"
-    case ConstantDouble(n)                  => s"double $n"
-    case ConstantAggregateZero(tpe)         => s"${show(tpe)} zeroinitializer"
-    case ConstantNull(tpe)                  => s"${show(tpe)} null"
-    case ConstantArray(memberType, members) => s"[${members.length} x ${show(memberType)}] [${commaSeparated(members.map(show))}]"
-    case ConstantInteger8(b)                => s"i8 $b"
+  private def showOperand(operand: Operand): (Type, LLVMString) = operand match {
+    case LocalReference(tpe, name)          => (tpe, localName(name))
+    case ConstantGlobal(name)               => (PointerType(), globalName(name))
+    case ConstantInt(n)                     => (IntegerType64(), s"$n")
+    case ConstantByte(n)                    => (IntegerType8(), s"$n")
+    case ConstantDouble(n)                  => (DoubleType(), s"$n")
+    case ConstantAggregateZero(tpe)         => (tpe, "zeroinitializer")
+    case ConstantNull(tpe)                  => (tpe, "null")
+    case ConstantArray(memberType, members) => (ArrayType(members.length, memberType), s"[${commaSeparated(members.map(show))}]")
+    case ConstantInteger8(b)                => (IntegerType8(), s"$b")
+  }
+
+  def show(operand: Operand): LLVMString = {
+    val (typ, name) = showOperand(operand)
+    s"${show(typ)} $name"
   }
 
   def show(tpe: Type): LLVMString = tpe match {
