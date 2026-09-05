@@ -19,7 +19,7 @@ object RemoveTailResumptions {
     }
   }
 
-  /** 
+  /**
    * Tail positions of a statement, storing only its rewrite.
    *
    * @param transparent blocks whose tail calls are tail positions too
@@ -35,14 +35,14 @@ object RemoveTailResumptions {
   /**
    * A statement stands in tail position when the enclosing computation's answer is its answer.
    *
-   * @param crossesVar whether a `Var` preserves tail position. 
+   * @param crossesVar whether a `Var` preserves tail position.
    *   It does preserve it for a handler that never resumes, but does **not** for one that observes it.
    *   (in other words: crossing a [[Var]] is not always semantics-preserving)
    */
-  def tailPositions(stmt: Stmt, crossesVar: Stmt.Var => Boolean, crossesTailCalls: Boolean = false): Option[TailPositions] = stmt match {
+  def tailPositions(stmt: Stmt, crossesVar: Stmt.Var => Boolean): Option[TailPositions] = stmt match {
     // a block that is only ever tail-called adds no frame ~> its own tail positions are tail positions here (and so is every call to it)
     case Stmt.Def(id, BlockLit(tps, cps, vps, bps, inner), body)
-      if crossesTailCalls && tailCalledOnly(id, body, crossesVar) && tailCalledOnly(id, inner, crossesVar) =>
+      if tailCalledOnly(id, body, crossesVar) && tailCalledOnly(id, inner, crossesVar) =>
         Some(TailPositions(f => Stmt.Def(id, BlockLit(tps, cps, vps, bps, f(inner)), f(body)), Free.empty, Set(id)))
 
     case Stmt.Val(id, binding, body) =>
@@ -87,7 +87,7 @@ object RemoveTailResumptions {
     case Stmt.Shift(Block.BlockVar(p, _, _), k, body)
       if p == prompt && !Stmt.demandsResumption(k, body) && !body.free.contains(prompt) => body
 
-    case other => tailPositions(other, crossesVar = _ => true, crossesTailCalls = true) match {
+    case other => tailPositions(other, crossesVar = _ => true) match {
       case Some(positions) => positions.rewrite(removeTailAborts(prompt, _))
       case None => other
     }
@@ -120,13 +120,13 @@ object RemoveTailResumptions {
     !query.query(v.body)(using ())
 
 
-  /** 
+  /**
    * Whether every path through [[stmt]] ends by resuming [[k]].
    *
    * @param transparent blocks known to resume in tail position, so a call to one is a tail position
    */
   def tailResumptive(k: Id, stmt: Stmt, transparent: Set[Id] = Set.empty): Boolean =
-    tailPositions(stmt, crossesVar = unobserved(k, _), crossesTailCalls = true) match {
+    tailPositions(stmt, crossesVar = unobserved(k, _)) match {
       case Some(positions) =>
         !positions.skipped.contains(k) &&
           positions.forall(tailResumptive(k, _, transparent ++ positions.transparent))
@@ -144,13 +144,13 @@ object RemoveTailResumptions {
       }
     }
 
-  /** 
+  /**
    * Replaces the tail resumptions of [[k]] by what they resume with.
    *
    * Must agree with [[tailResumptive]].
    */
   def removeTailResumption(k: Id, tpe: ValueType, stmt: Stmt, transparent: Set[Id] = Set.empty): Stmt =
-    tailPositions(stmt, crossesVar = unobserved(k, _), crossesTailCalls = true) match {
+    tailPositions(stmt, crossesVar = unobserved(k, _)) match {
       case Some(positions) =>
         val blocks = transparent ++ positions.transparent
         retypeAnswer(positions.rewrite(removeTailResumption(k, tpe, _, blocks)), tpe)

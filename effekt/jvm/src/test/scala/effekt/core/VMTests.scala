@@ -1375,6 +1375,22 @@ class VMTests extends munit.FunSuite {
       resumes = 0
     )),
 
+    examplesDir / "pos" / "abort_past_joinpoint.effekt" -> Some(Summary(
+      staticDispatches = 12,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 11,
+      pushedFrames = 1,
+      poppedFrames = 1,
+      allocations = 0,
+      closures = 0,
+      variableReads = 18,
+      variableWrites = 10,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
     examplesDir / "pos" / "issue992.effekt" -> Some(Summary(
       staticDispatches = 8,
       dynamicDispatches = 0,

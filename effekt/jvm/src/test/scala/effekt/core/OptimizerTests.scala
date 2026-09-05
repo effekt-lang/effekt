@@ -394,6 +394,17 @@ class OptimizerTests extends CoreTests {
     removeTailResumptions(input, expected)
   }
 
+  test("an abort behind a joinpoint in a tail-called worker is still in tail position") {
+    val input =
+      """ def main = { (b: Bool) => reset { (){p: Prompt[Int]} => def go = { (i: Int) => def k = { (x: Int) => (go : (Int) => Int @ {})(x: Int) } if (b: Bool) { shift (p : Prompt[Int] @ {p}) { {r: Resume[Int, Int]} => return 2 } } else { (k : (Int) => Int @ {})(i: Int) } } (go : (Int) => Int @ {})(1) } }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { (b: Bool) => reset { (){p: Prompt[Int]} => def go = { (i: Int) => def k = { (x: Int) => (go : (Int) => Int @ {})(x: Int) } if (b: Bool) { return 2 } else { (k : (Int) => Int @ {})(i: Int) } } (go : (Int) => Int @ {})(1) } }
+        |""".stripMargin
+
+    removeTailResumptions(input, expected)
+  }
 
   test("a call carrying a capability to a prompt we are inside of is inlined past the normal budget") {
     val input =
