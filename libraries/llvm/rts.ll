@@ -694,13 +694,11 @@ define private tailcc void @topLevel(%Pos %val, %Stack %stack) {
 }
 
 define private void @topLevelSharer(%Environment %environment) {
-    ; TODO this should never be called
-    ret void
+    unreachable ; should never be called
 }
 
 define private void @topLevelEraser(%Environment %environment) {
-    ; TODO this should never be called
-    ret void
+    unreachable ; should never be called
 }
 
 define private %Stack @withEmptyStack() {
