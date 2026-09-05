@@ -346,6 +346,23 @@ class OptimizerTests extends CoreTests {
     removeTailResumptions(input, input)
   }
 
+  test("a resumption that resumes with something naming it again is not tail-resumptive") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => resume (k : Resume[Int, Int] @ {k}) { resume (k : Resume[Int, Int] @ {k}) { return 1 } } } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
+  }
+
+  test("an aborting shift that resumes on its way out is not tail-resumptive") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => shift (p : Prompt[Int] @ {p}) { {j: Resume[Nothing, Int]} => resume (k : Resume[Int, Int] @ {k}) { return 1 } } } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
+  }
+
+
   test("a call carrying a capability to a prompt we are inside of is inlined past the normal budget") {
     val input =
       """ interface Exc { raise: () => Int }

@@ -110,9 +110,12 @@ object RemoveTailResumptions {
       case Some(positions) =>
         !positions.skipped.contains(k) && positions.forall(tailResumptive(k, _))
 
+      // each leaf has to account for every occurrence of `k` in its subterms
+      // (the cases above handle this with `skipped`)
       case None => stmt match {
-        case Stmt.Resume(k2, body) => k2.id == k // what if k is free in body?
-        case _: Stmt.Shift => stmt.tpe == Type.TBottom
+        case Stmt.Resume(k2, body) => k2.id == k && !body.free.contains(k)
+        // an abort never returns, so it resumes vacuously; **unless** it resumes `k`!
+        case Stmt.Shift(_, _, body) => stmt.tpe == Type.TBottom && !body.free.contains(k)
         case _: Stmt.Hole => true
         // the answer is produced here, or a frame stands in the way
         case other => false
