@@ -554,8 +554,8 @@ class VMTests extends munit.FunSuite {
       closures = 0,
       variableReads = 222,
       variableWrites = 88,
-      resets = 1,
-      shifts = 1,
+      resets = 0,
+      shifts = 0,
       resumes = 0
     )),
 
@@ -619,7 +619,7 @@ class VMTests extends munit.FunSuite {
       variableReads = 0,
       variableWrites = 0,
       resets = 1,
-      shifts = 347,
+      shifts = 231,
       resumes = 350
     )),
   )
@@ -669,7 +669,7 @@ class VMTests extends munit.FunSuite {
       variableReads = 29,
       variableWrites = 18,
       resets = 1,
-      shifts = 7,
+      shifts = 6,
       resumes = 7
     )),
 
@@ -684,40 +684,40 @@ class VMTests extends munit.FunSuite {
       closures = 31,
       variableReads = 164,
       variableWrites = 51,
-      resets = 28,
+      resets = 27,
       shifts = 0,
       resumes = 0
     )),
 
     examplesDir / "casestudies" / "parser.effekt.md" -> Some(Summary(
-      staticDispatches = 11612,
-      dynamicDispatches = 1109,
+      staticDispatches = 11560,
+      dynamicDispatches = 1094,
       patternMatches = 8765,
       branches = 14764,
-      pushedFrames = 7296,
-      poppedFrames = 7189,
-      allocations = 3744,
-      closures = 860,
+      pushedFrames = 7229,
+      poppedFrames = 7152,
+      allocations = 3729,
+      closures = 808,
       variableReads = 6742,
       variableWrites = 1901,
-      resets = 763,
-      shifts = 229,
+      resets = 726,
+      shifts = 214,
       resumes = 213
     )),
 
     examplesDir / "casestudies" / "anf.effekt.md" -> Some(Summary(
-      staticDispatches = 6269,
-      dynamicDispatches = 643,
+      staticDispatches = 6227,
+      dynamicDispatches = 631,
       patternMatches = 4730,
       branches = 8062,
-      pushedFrames = 4156,
-      poppedFrames = 4087,
-      allocations = 2085,
-      closures = 540,
+      pushedFrames = 4102,
+      poppedFrames = 4057,
+      allocations = 2073,
+      closures = 498,
       variableReads = 4080,
       variableWrites = 1343,
-      resets = 446,
-      shifts = 322,
+      resets = 416,
+      shifts = 310,
       resumes = 306
     )),
 
@@ -846,18 +846,18 @@ class VMTests extends munit.FunSuite {
       resumes = 0
     )),
     examplesDir / "benchmarks" / "folklore_to_fact" / "even_odd_goto.effekt" -> Some(Summary(
-      staticDispatches = 12,
+      staticDispatches = 11,
       dynamicDispatches = 0,
       patternMatches = 0,
-      branches = 27,
-      pushedFrames = 13,
-      poppedFrames = 13,
+      branches = 25,
+      pushedFrames = 2,
+      poppedFrames = 2,
       allocations = 0,
       closures = 0,
       variableReads = 0,
       variableWrites = 0,
-      resets = 11,
-      shifts = 11,
+      resets = 0,
+      shifts = 0,
       resumes = 0
     )),
     examplesDir / "benchmarks" / "folklore_to_fact" / "life.effekt" -> Some(Summary(
@@ -931,8 +931,8 @@ class VMTests extends munit.FunSuite {
       closures = 4348,
       variableReads = 0,
       variableWrites = 0,
-      resets = 5333,
-      shifts = 5333,
+      resets = 4348,
+      shifts = 4348,
       resumes = 0
     )),
     examplesDir / "benchmarks" / "folklore_to_fact" / "nqueens.effekt" -> Some(Summary(
@@ -1282,8 +1282,8 @@ class VMTests extends munit.FunSuite {
       dynamicDispatches = 339629,
       patternMatches = 2726372,
       branches = 1450252,
-      pushedFrames = 752233,
-      poppedFrames = 752233,
+      pushedFrames = 750202,
+      poppedFrames = 750202,
       allocations = 1146603,
       closures = 9,
       variableReads = 896183,
@@ -1311,35 +1311,99 @@ class VMTests extends munit.FunSuite {
     )),
 
 
+    examplesDir / "pos" / "mutabletailrec.effekt" -> Some(Summary(
+      staticDispatches = 0,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 0,
+      pushedFrames = 0,
+      poppedFrames = 0,
+      allocations = 0,
+      closures = 0,
+      variableReads = 2,
+      variableWrites = 1,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "resume_past_var.effekt" -> Some(Summary(
+      staticDispatches = 0,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 0,
+      pushedFrames = 0,
+      poppedFrames = 0,
+      allocations = 0,
+      closures = 0,
+      variableReads = 8,
+      variableWrites = 4,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "resume_past_worker.effekt" -> Some(Summary(
+      staticDispatches = 1,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 1,
+      pushedFrames = 1,
+      poppedFrames = 1,
+      allocations = 0,
+      closures = 0,
+      variableReads = 1,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
     examplesDir / "pos" / "abort_past_var.effekt" -> Some(Summary(
       staticDispatches = 0,
       dynamicDispatches = 1,
       patternMatches = 0,
       branches = 0,
-      pushedFrames = 2,
-      poppedFrames = 2,
+      pushedFrames = 1,
+      poppedFrames = 1,
       allocations = 0,
       closures = 2,
       variableReads = 2,
       variableWrites = 2,
-      resets = 1,
-      shifts = 1,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "abort_past_joinpoint.effekt" -> Some(Summary(
+      staticDispatches = 12,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 11,
+      pushedFrames = 1,
+      poppedFrames = 1,
+      allocations = 0,
+      closures = 0,
+      variableReads = 18,
+      variableWrites = 10,
+      resets = 0,
+      shifts = 0,
       resumes = 0
     )),
 
     examplesDir / "pos" / "issue992.effekt" -> Some(Summary(
-      staticDispatches = 6,
-      dynamicDispatches = 2,
+      staticDispatches = 8,
+      dynamicDispatches = 0,
       patternMatches = 2,
-      branches = 9,
-      pushedFrames = 10,
-      poppedFrames = 6,
-      allocations = 4,
-      closures = 4,
+      branches = 10,
+      pushedFrames = 0,
+      poppedFrames = 0,
+      allocations = 3,
+      closures = 0,
       variableReads = 0,
       variableWrites = 0,
-      resets = 4,
-      shifts = 2,
+      resets = 0,
+      shifts = 0,
       resumes = 0
     )),
 
@@ -1354,8 +1418,8 @@ class VMTests extends munit.FunSuite {
       closures = 0,
       variableReads = 0,
       variableWrites = 0,
-      resets = 1,
-      shifts = 1,
+      resets = 0,
+      shifts = 0,
       resumes = 0
     )),
 
@@ -1387,8 +1451,8 @@ class VMTests extends munit.FunSuite {
       closures = 0,
       variableReads = 3,
       variableWrites = 2,
-      resets = 3,
-      shifts = 1,
+      resets = 0,
+      shifts = 0,
       resumes = 0
     )),
 
