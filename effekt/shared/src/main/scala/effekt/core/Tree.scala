@@ -320,6 +320,10 @@ enum Stmt extends Tree {
 
   def show: String = util.show(this)
 }
+object Stmt {
+  /** Whether the body of a [[Stmt.Shift]] uses the resumption it binds. */
+  def demandsResumption(k: BlockParam, body: Stmt): Boolean = body.free.contains(k.id)
+}
 export Stmt.*
 
 

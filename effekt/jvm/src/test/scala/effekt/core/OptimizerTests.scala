@@ -34,6 +34,9 @@ class OptimizerTests extends CoreTests {
       Deadcode.remove(Set(mainSymbol), tree)
     }
 
+  def removeTailResumptions(input: String, expected: String)(using munit.Location) =
+    assertTransformsTo(input, expected) { tree => RemoveTailResumptions(tree) }
+
   def normalizeWith(policy: InliningPolicy)(input: String, expected: String)(using munit.Location) =
     assertTransformsTo(input, expected) { tree =>
       val anfed = BindSubexpressions.transform(tree)
@@ -301,5 +304,45 @@ class OptimizerTests extends CoreTests {
         |""".stripMargin
 
     normalizeWith(Default(threshold = 4, onceLimit = Some(0)))(input, input)
+  }
+
+  test("an aborting shift in tail position of its prompt becomes what it aborts with") {
+    val input =
+      """ def main = { (b: Bool) => reset { (){p: Prompt[Int]} => if (b: Bool) { return 1 } else { shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 2 } } } }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { (b: Bool) => reset { (){p: Prompt[Int]} => if (b: Bool) { return 1 } else { return 2 } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, expected)
+  }
+
+  test("a binder does not end tail position, so the abort behind one is still removed") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => let y = 7 shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 2 } } }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () => reset { (){p: Prompt[Int]} => let y = 7 return 2 } }
+        |""".stripMargin
+
+    removeTailResumptions(input, expected)
+  }
+
+  test("an aborting shift consumed by a val is not in tail position") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => val x = shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 2 }; return x:Int } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
+  }
+
+  test("a nested prompt stands between the abort and the prompt it names") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => reset { (){q: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 2 } } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
   }
 }

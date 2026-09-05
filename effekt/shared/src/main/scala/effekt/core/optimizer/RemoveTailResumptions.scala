@@ -11,15 +11,92 @@ object RemoveTailResumptions {
       case Stmt.Shift(prompt, BlockParam(k, Type.TResume(from, to), capt), body) if tailResumptive(k, body) =>
         removeTailResumption(k, from, body)
 
+      case Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt), body)) =>
+        Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt),
+          removeTailAborts(prompt.id, rewrite(body))))
+
       case other => super.rewrite(other)
     }
   }
 
+  /**
+   * Replaces an abort on [[prompt]] by what it aborts with, iff it is in tail position.
+   *
+   *   [[ reset { (p) => ... shift(p) { {k} => b } ... }  ]] = reset { (p) => ... b ... }
+   *
+   * Note: `k` must not occur in `b`, since its binder goes away, same for `p`
+   */
+  def removeTailAborts(prompt: Id, stmt: Stmt): Stmt = stmt match {
+    case Stmt.Shift(Block.BlockVar(p, _, _), k, body)
+      if p == prompt && !Stmt.demandsResumption(k, body) && !body.free.contains(prompt) => body
+
+    // a binder leaves the prompt as the next frame
+    case Stmt.Val(id, binding, body) => Stmt.Val(id, binding, removeTailAborts(prompt, body))
+    case Stmt.Let(id, binding, body) => Stmt.Let(id, binding, removeTailAborts(prompt, body))
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      Stmt.ImpureApp(id, callee, targs, vargs, bargs, removeTailAborts(prompt, body))
+    case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, removeTailAborts(prompt, body))
+    case Stmt.Get(id, tpe, ref, capt, body) => Stmt.Get(id, tpe, ref, capt, removeTailAborts(prompt, body))
+    case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, value, removeTailAborts(prompt, body))
+    case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, init, capture, removeTailAborts(prompt, body))
+
+    // a block that is only ever tail-called adds no frame ~> its own tail positions are tail positions here
+    case Stmt.Def(id, BlockLit(tparams, cparams, vparams, bparams, inner), body) if tailCalledOnly(id, body) && tailCalledOnly(id, inner) =>
+      Stmt.Def(id, BlockLit(tparams, cparams, vparams, bparams, removeTailAborts(prompt, inner)), removeTailAborts(prompt, body))
+    case Stmt.Def(id, block, body) => Stmt.Def(id, block, removeTailAborts(prompt, body))
+
+    // every branch ends where the whole statement does
+    case Stmt.If(cond, thn, els) =>
+      Stmt.If(cond, removeTailAborts(prompt, thn), removeTailAborts(prompt, els))
+    case Stmt.Match(scrutinee, tpe, clauses, default) =>
+      Stmt.Match(scrutinee, tpe, clauses.map {
+        case (tag, BlockLit(tparams, cparams, vparams, bparams, body)) =>
+          tag -> BlockLit(tparams, cparams, vparams, bparams, removeTailAborts(prompt, body))
+      }, default.map { stmt => removeTailAborts(prompt, stmt) })
+
+    // anything else either returns, or puts a frame between the abort and the prompt
+    case other => other
+  }
+
+  /** Whether every use of [[id]] in [[stmt]] is a call to it in tail position. */
+  def tailCalledOnly(id: Id, stmt: Stmt): Boolean =
+    def freeInStmt(stmt: Stmt): Boolean = stmt.free.contains(id)
+    def freeInExpr(expr: Expr): Boolean = expr.free.contains(id)
+    def freeInBlock(block: Block): Boolean = block.free.contains(id)
+
+    stmt match {
+      // a tail call, whose arguments must not mention it again
+      case Stmt.App(Block.BlockVar(callee, _, _), _, vargs, bargs) if callee == id =>
+        !vargs.exists(freeInExpr) && !bargs.exists(freeInBlock)
+
+      // matching [[removeTailAborts]]
+      case Stmt.Val(_, binding, body) => !freeInStmt(binding) && tailCalledOnly(id, body)
+      case Stmt.Let(_, binding, body) => !freeInExpr(binding) && tailCalledOnly(id, body)
+      case Stmt.ImpureApp(_, callee, _, vargs, bargs, body) =>
+        !freeInBlock(callee) && !vargs.exists(freeInExpr) && !bargs.exists(freeInBlock) &&
+          tailCalledOnly(id, body)
+      case Stmt.Def(_, block, body) => !freeInBlock(block) && tailCalledOnly(id, body)
+      case Stmt.Alloc(_, init, _, body) => !freeInExpr(init) && tailCalledOnly(id, body)
+      case Stmt.Get(_, _, _, _, body) => tailCalledOnly(id, body)
+      case Stmt.Put(_, _, value, body) => !freeInExpr(value) && tailCalledOnly(id, body)
+      case Stmt.Var(_, init, _, body) => !freeInExpr(init) && tailCalledOnly(id, body)
+
+      case Stmt.If(cond, thn, els) =>
+        !freeInExpr(cond) && tailCalledOnly(id, thn) && tailCalledOnly(id, els)
+      case Stmt.Match(scrutinee, _, clauses, default) =>
+        !freeInExpr(scrutinee) && clauses.forall {
+          case (_, BlockLit(_, _, _, _, body)) => tailCalledOnly(id, body)
+        } && default.forall { stmt => tailCalledOnly(id, stmt) }
+
+      // anywhere else it simply may not occur
+      case other => !freeInStmt(other)
+    }
+
   // A simple syntactic check whether this stmt is tailresumptive in k
   def tailResumptive(k: Id, stmt: Stmt): Boolean =
-    def freeInStmt(stmt: Stmt): Boolean = stmt.free.freeIds.contains(k)
-    def freeInExpr(expr: Expr): Boolean = expr.free.freeIds.contains(k)
-    def freeInBlock(block: Block): Boolean = block.free.freeIds.contains(k)
+    def freeInStmt(stmt: Stmt): Boolean = stmt.free.contains(k)
+    def freeInExpr(expr: Expr): Boolean = expr.free.contains(k)
+    def freeInBlock(block: Block): Boolean = block.free.contains(k)
 
     stmt match {
       case Stmt.Def(id, block, body) => !freeInBlock(block) && tailResumptive(k, body)

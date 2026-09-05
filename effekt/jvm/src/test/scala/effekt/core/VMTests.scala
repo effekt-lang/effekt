@@ -555,7 +555,7 @@ class VMTests extends munit.FunSuite {
       variableReads = 222,
       variableWrites = 88,
       resets = 1,
-      shifts = 1,
+      shifts = 0,
       resumes = 0
     )),
 
@@ -619,7 +619,7 @@ class VMTests extends munit.FunSuite {
       variableReads = 0,
       variableWrites = 0,
       resets = 1,
-      shifts = 347,
+      shifts = 231,
       resumes = 350
     )),
   )
@@ -669,7 +669,7 @@ class VMTests extends munit.FunSuite {
       variableReads = 29,
       variableWrites = 18,
       resets = 1,
-      shifts = 7,
+      shifts = 6,
       resumes = 7
     )),
 
@@ -846,18 +846,18 @@ class VMTests extends munit.FunSuite {
       resumes = 0
     )),
     examplesDir / "benchmarks" / "folklore_to_fact" / "even_odd_goto.effekt" -> Some(Summary(
-      staticDispatches = 12,
+      staticDispatches = 11,
       dynamicDispatches = 0,
       patternMatches = 0,
-      branches = 27,
-      pushedFrames = 13,
-      poppedFrames = 13,
+      branches = 25,
+      pushedFrames = 2,
+      poppedFrames = 2,
       allocations = 0,
       closures = 0,
       variableReads = 0,
       variableWrites = 0,
-      resets = 11,
-      shifts = 11,
+      resets = 0,
+      shifts = 0,
       resumes = 0
     )),
     examplesDir / "benchmarks" / "folklore_to_fact" / "life.effekt" -> Some(Summary(
@@ -931,8 +931,8 @@ class VMTests extends munit.FunSuite {
       closures = 4348,
       variableReads = 0,
       variableWrites = 0,
-      resets = 5333,
-      shifts = 5333,
+      resets = 4348,
+      shifts = 4348,
       resumes = 0
     )),
     examplesDir / "benchmarks" / "folklore_to_fact" / "nqueens.effekt" -> Some(Summary(
@@ -1316,14 +1316,14 @@ class VMTests extends munit.FunSuite {
       dynamicDispatches = 1,
       patternMatches = 0,
       branches = 0,
-      pushedFrames = 2,
-      poppedFrames = 2,
+      pushedFrames = 1,
+      poppedFrames = 1,
       allocations = 0,
       closures = 2,
       variableReads = 2,
       variableWrites = 2,
-      resets = 1,
-      shifts = 1,
+      resets = 0,
+      shifts = 0,
       resumes = 0
     )),
 
@@ -1354,8 +1354,8 @@ class VMTests extends munit.FunSuite {
       closures = 0,
       variableReads = 0,
       variableWrites = 0,
-      resets = 1,
-      shifts = 1,
+      resets = 0,
+      shifts = 0,
       resumes = 0
     )),
 
@@ -1388,7 +1388,7 @@ class VMTests extends munit.FunSuite {
       variableReads = 3,
       variableWrites = 2,
       resets = 3,
-      shifts = 1,
+      shifts = 0,
       resumes = 0
     )),
 
