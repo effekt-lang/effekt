@@ -129,6 +129,8 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
       s"switch ${show(operand)}, label ${localName(defaultDest)} [${spaceSeparated(dests.map(destAsFragment))}]"
     case CondBr(condition, trueDest, falseDest) =>
       s"br ${show(condition)}, label ${localName(trueDest)}, label ${localName(falseDest)}"
+    case Unreachable() =>
+      s"unreachable"
   }
 
   def show(operand: Operand): LLVMString = operand match {
