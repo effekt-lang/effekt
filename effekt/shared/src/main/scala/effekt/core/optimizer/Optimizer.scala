@@ -56,5 +56,10 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     tree = Context.timed("normalize-2", source.name) { normalize(tree) }
     tree = Context.timed("normalize-3", source.name) { normalize(tree) }
 
+    // `RemoveTailResumptions` runs after `Deadcode` and frees stuff, so let's run `Deadcode` one more time
+    tree = Context.timed("deadcode-elimination-final", source.name) {
+      Deadcode.remove(mainSymbol, tree)
+    }
+
     tree
 }

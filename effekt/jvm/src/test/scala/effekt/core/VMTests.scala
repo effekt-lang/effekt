@@ -554,7 +554,7 @@ class VMTests extends munit.FunSuite {
       closures = 0,
       variableReads = 222,
       variableWrites = 88,
-      resets = 1,
+      resets = 0,
       shifts = 0,
       resumes = 0
     )),
@@ -684,7 +684,7 @@ class VMTests extends munit.FunSuite {
       closures = 31,
       variableReads = 164,
       variableWrites = 51,
-      resets = 28,
+      resets = 27,
       shifts = 0,
       resumes = 0
     )),
@@ -1387,7 +1387,7 @@ class VMTests extends munit.FunSuite {
       closures = 0,
       variableReads = 3,
       variableWrites = 2,
-      resets = 3,
+      resets = 0,
       shifts = 0,
       resumes = 0
     )),
