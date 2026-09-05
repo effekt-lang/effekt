@@ -2,6 +2,7 @@ package effekt
 package generator
 package llvm
 
+import effekt.context.Context
 import effekt.machine
 import effekt.util.intercalate
 import effekt.util.messages.ErrorReporter
@@ -16,10 +17,10 @@ object Transformer {
 
   val llvmFeatureFlags: List[String] = List("llvm", "c")
 
-  def transform(program: machine.Program)(using ErrorReporter): List[Definition] = program match {
+  def transform(program: machine.Program)(using C: Context): List[Definition] = program match {
     case machine.Program(declarations, definitions, entry) =>
 
-      given MC: ModuleContext = ModuleContext();
+      given MC: ModuleContext = ModuleContext(debug = C.config.debug());
       declarations.foreach(transform);
       definitions.foreach(transform);
 
@@ -132,9 +133,9 @@ object Transformer {
         eraseValues(List(variable), freeVariables(rest))
         transform(rest)
 
+      // No clauses and no default: the scrutinee's type is uninhabited ~> unreachable
       case machine.Switch(value, Nil, None) =>
-        // TODO unreachable
-        RetVoid()
+        Unreachable()
 
       case machine.Switch(value, clauses, default) =>
         emit(Comment(s"switch ${value.name}, ${clauses.length} clauses"))
@@ -167,9 +168,12 @@ object Transformer {
 
         val defaultLabel = default match {
           case Some(clause) => labelClause(clause, isDefault = true)
+          // No default ~> clauses cover every tag the scrutinee can have ~> unreachable
+          // in `--debug` mode, we emit a call to [[unmatchedTag]] for better debugging
           case None =>
             val label = freshName("label");
-            emit(BasicBlock(label, List(), RetVoid()))
+            val checks = if MC.debug then List(Call("_", Ccc(), VoidType(), unmatchedTag, List())) else Nil
+            emit(BasicBlock(label, checks, Unreachable()))
             label
         }
 
@@ -453,8 +457,8 @@ object Transformer {
        val litName = freshName("hole_pos")
        emit(GlobalConstant(s"$litName.lit", ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
 
-       emit(Call("_", Ccc(), VoidType(), ConstantGlobal("hole"), List(ConstantGlobal(s"$litName.lit"))))
-       RetVoid()
+       emit(Call("_", Ccc(), VoidType(), hole, List(ConstantGlobal(s"$litName.lit"))))
+       Unreachable() // hole never returns
     }
 
   def transform(label: machine.Label): ConstantGlobal =
@@ -851,6 +855,9 @@ object Transformer {
 
   val freeStack = ConstantGlobal("freeStack")
 
+  val hole = ConstantGlobal("hole");
+  val unmatchedTag = ConstantGlobal("unmatched_tag");
+
   val newReference = ConstantGlobal("newReference")
   val getVarPointer = ConstantGlobal("getVarPointer")
 
@@ -867,7 +874,7 @@ object Transformer {
   /**
    * Extra info in context
    */
-  class ModuleContext() {
+  class ModuleContext(val debug: Boolean) {
     var counter = 0;
     var definitions: List[Definition] = List();
     val erasers = mutable.HashMap[(List[machine.Type], EraserKind), Operand]();

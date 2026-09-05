@@ -80,6 +80,7 @@ enum Terminator {
   case Ret(operand: Operand)
   case Switch(operand: Operand, defaultDest: String, dests: List[(Int, String)])
   case CondBr(condition: Operand, trueDest: String, falseDest: String)
+  case Unreachable()
 }
 export Terminator.*
 
