@@ -1,0 +1,14 @@
+import args
+
+effect ask(): Int
+
+def main() = {
+  // opaque to the optimizer, so the worker survives as a local recursive block
+  val n = commandLineArgs().size
+  val r = try { do ask() + 1 } with ask {
+    val bound = n;
+    def worker(m: Int): Int = if (m <= 0) resume(41) else worker(m - 1)
+    worker(bound)
+  }
+  println(r)
+}
