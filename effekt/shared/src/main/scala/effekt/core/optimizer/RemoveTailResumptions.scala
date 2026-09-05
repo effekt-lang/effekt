@@ -21,57 +21,55 @@ object RemoveTailResumptions {
 
   /** Tail positions of a statement, storing only its rewrite */
   case class TailPositions(rewrite: (Stmt => Stmt) => Stmt, skipped: Free) {
-    def forall(p: Stmt => Boolean): Boolean =
+    def forall(p: Stmt => Boolean): Boolean = {
       var holds = true
       rewrite { child => holds &&= p(child); child }
       holds
+    }
   }
 
   /**
    * A statement stands in tail position when the enclosing computation's answer is its answer.
    *
    * @param crossesVar whether a `Var` preserves tail position. 
-   *   It does preserve it for a rewrite that never resumes,
-   *   but does **not** for one that may resume *twice*!   
+   *   It does preserve it for a rewrite that never resumes, but does **not** for one that may resume *twice*!
    *   (in other words: crossing a [[Var]] is not always semantics-preserving)
    */
-  def tailPositions(stmt: Stmt, crossesVar: Boolean, crossesTailCalls: Boolean = false)
-    : Option[TailPositions] =
-    stmt match {
-      // a block that is only ever tail-called adds no frame ~> its own tail positions are tail positions here
-      case Stmt.Def(id, BlockLit(tps, cps, vps, bps, inner), body)
-        if crossesTailCalls && tailCalledOnly(id, body, crossesVar) && tailCalledOnly(id, inner, crossesVar) =>
+  def tailPositions(stmt: Stmt, crossesVar: Boolean, crossesTailCalls: Boolean = false): Option[TailPositions] = stmt match {
+    // a block that is only ever tail-called adds no frame ~> its own tail positions are tail positions here
+    case Stmt.Def(id, BlockLit(tps, cps, vps, bps, inner), body)
+      if crossesTailCalls && tailCalledOnly(id, body, crossesVar) && tailCalledOnly(id, inner, crossesVar) =>
         Some(TailPositions(f => Stmt.Def(id, BlockLit(tps, cps, vps, bps, f(inner)), f(body)), Free.empty))
 
-      case Stmt.Val(id, binding, body) =>
-        Some(TailPositions(f => Stmt.Val(id, binding, f(body)), binding.free))
-      case Stmt.Let(id, binding, body) =>
-        Some(TailPositions(f => Stmt.Let(id, binding, f(body)), binding.free))
-      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-        val arguments = (vargs.map(_.free) ++ bargs.map(_.free)).foldLeft(callee.free)(_ ++ _)
-        Some(TailPositions(f => Stmt.ImpureApp(id, callee, targs, vargs, bargs, f(body)), arguments))
-      case Stmt.Def(id, block, body) =>
-        Some(TailPositions(f => Stmt.Def(id, block, f(body)), block.free))
-      case Stmt.Alloc(id, init, region, body) =>
-        Some(TailPositions(f => Stmt.Alloc(id, init, region, f(body)), init.free))
-      case Stmt.Get(id, tpe, ref, capt, body) =>
-        Some(TailPositions(f => Stmt.Get(id, tpe, ref, capt, f(body)), Free.empty))
-      case Stmt.Put(ref, capt, value, body) =>
-        Some(TailPositions(f => Stmt.Put(ref, capt, value, f(body)), value.free))
-      case Stmt.Var(ref, init, capture, body) if crossesVar =>
-        Some(TailPositions(f => Stmt.Var(ref, init, capture, f(body)), init.free))
+    case Stmt.Val(id, binding, body) =>
+      Some(TailPositions(f => Stmt.Val(id, binding, f(body)), binding.free))
+    case Stmt.Let(id, binding, body) =>
+      Some(TailPositions(f => Stmt.Let(id, binding, f(body)), binding.free))
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      val arguments = (vargs.map(_.free) ++ bargs.map(_.free)).foldLeft(callee.free)(_ ++ _)
+      Some(TailPositions(f => Stmt.ImpureApp(id, callee, targs, vargs, bargs, f(body)), arguments))
+    case Stmt.Def(id, block, body) =>
+      Some(TailPositions(f => Stmt.Def(id, block, f(body)), block.free))
+    case Stmt.Alloc(id, init, region, body) =>
+      Some(TailPositions(f => Stmt.Alloc(id, init, region, f(body)), init.free))
+    case Stmt.Get(id, tpe, ref, capt, body) =>
+      Some(TailPositions(f => Stmt.Get(id, tpe, ref, capt, f(body)), Free.empty))
+    case Stmt.Put(ref, capt, value, body) =>
+      Some(TailPositions(f => Stmt.Put(ref, capt, value, f(body)), value.free))
+    case Stmt.Var(ref, init, capture, body) if crossesVar =>
+      Some(TailPositions(f => Stmt.Var(ref, init, capture, f(body)), init.free))
 
-      case Stmt.If(cond, thn, els) =>
-        Some(TailPositions(f => Stmt.If(cond, f(thn), f(els)), cond.free))
-      case Stmt.Match(scrutinee, tpe, clauses, default) =>
-        def rewrite(f: Stmt => Stmt): Stmt =
-          Stmt.Match(scrutinee, tpe, clauses.map {
-            case (tag, BlockLit(tps, cps, vps, bps, body)) => tag -> BlockLit(tps, cps, vps, bps, f(body))
-          }, default.map(f))
-        Some(TailPositions(rewrite, scrutinee.free))
+    case Stmt.If(cond, thn, els) =>
+      Some(TailPositions(f => Stmt.If(cond, f(thn), f(els)), cond.free))
+    case Stmt.Match(scrutinee, tpe, clauses, default) =>
+      def rewrite(f: Stmt => Stmt): Stmt =
+        Stmt.Match(scrutinee, tpe, clauses.map {
+          case (tag, BlockLit(tps, cps, vps, bps, body)) => tag -> BlockLit(tps, cps, vps, bps, f(body))
+        }, default.map(f))
+      Some(TailPositions(rewrite, scrutinee.free))
 
-      case _ => None
-    }
+    case _ => None
+  }
 
 
   /**
@@ -96,6 +94,7 @@ object RemoveTailResumptions {
     tailPositions(stmt, crossesVar) match {
       case Some(positions) =>
         !positions.skipped.contains(id) && positions.forall(tailCalledOnly(id, _, crossesVar))
+
       case None => stmt match {
         // the only permitted occurrence: a tail call, whose arguments must not mention it again
         case Stmt.App(Block.BlockVar(callee, _, _), _, vargs, bargs) if callee == id =>
@@ -110,6 +109,7 @@ object RemoveTailResumptions {
     tailPositions(stmt, crossesVar = false) match {
       case Some(positions) =>
         !positions.skipped.contains(k) && positions.forall(tailResumptive(k, _))
+
       case None => stmt match {
         case Stmt.Resume(k2, body) => k2.id == k // what if k is free in body?
         case _: Stmt.Shift => stmt.tpe == Type.TBottom
@@ -128,6 +128,7 @@ object RemoveTailResumptions {
     tailPositions(stmt, crossesVar = false) match {
       case Some(positions) =>
         retypeAnswer(positions.rewrite(removeTailResumption(k, tpe, _)), tpe)
+
       case None => stmt match {
         case Stmt.Resume(k2, body) if k2.id == k => body
         case other => retypeAnswer(other, tpe)
