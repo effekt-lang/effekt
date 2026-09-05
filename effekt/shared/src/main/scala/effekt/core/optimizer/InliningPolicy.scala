@@ -51,7 +51,7 @@ class Default(threshold: Int, onceLimit: Option[Int]) extends InliningPolicy {
   private def usedOnce(callee: BlockVar, site: CallSite)(using C: Context): Boolean =
     Normalizer.isOnce(callee.id) &&
       onceLimit.forall { limit => site.callee.body.size <= limit } &&
-        (C.prompts == 0 || !installsScope(site.callee.body)) // don't move resets/regions
+        (C.prompts.isEmpty || !installsScope(site.callee.body)) // don't move resets/regions
 
   /** Does the body fit the budget this call site can afford? */
   private def affordable(site: CallSite)(using Context): Boolean =
