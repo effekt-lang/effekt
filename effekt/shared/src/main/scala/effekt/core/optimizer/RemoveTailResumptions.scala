@@ -19,8 +19,12 @@ object RemoveTailResumptions {
     }
   }
 
-  /** Tail positions of a statement, storing only its rewrite */
-  case class TailPositions(rewrite: (Stmt => Stmt) => Stmt, skipped: Free) {
+  /** 
+   * Tail positions of a statement, storing only its rewrite.
+   *
+   * @param transparent blocks whose tail calls are tail positions too
+   */
+  case class TailPositions(rewrite: (Stmt => Stmt) => Stmt, skipped: Free, transparent: Set[Id] = Set.empty) {
     def forall(p: Stmt => Boolean): Boolean = {
       var holds = true
       rewrite { child => holds &&= p(child); child }
@@ -36,10 +40,10 @@ object RemoveTailResumptions {
    *   (in other words: crossing a [[Var]] is not always semantics-preserving)
    */
   def tailPositions(stmt: Stmt, crossesVar: Stmt.Var => Boolean, crossesTailCalls: Boolean = false): Option[TailPositions] = stmt match {
-    // a block that is only ever tail-called adds no frame ~> its own tail positions are tail positions here
+    // a block that is only ever tail-called adds no frame ~> its own tail positions are tail positions here (and so is every call to it)
     case Stmt.Def(id, BlockLit(tps, cps, vps, bps, inner), body)
       if crossesTailCalls && tailCalledOnly(id, body, crossesVar) && tailCalledOnly(id, inner, crossesVar) =>
-        Some(TailPositions(f => Stmt.Def(id, BlockLit(tps, cps, vps, bps, f(inner)), f(body)), Free.empty))
+        Some(TailPositions(f => Stmt.Def(id, BlockLit(tps, cps, vps, bps, f(inner)), f(body)), Free.empty, Set(id)))
 
     case Stmt.Val(id, binding, body) =>
       Some(TailPositions(f => Stmt.Val(id, binding, f(body)), binding.free))
@@ -116,11 +120,16 @@ object RemoveTailResumptions {
     !query.query(v.body)(using ())
 
 
-  /** Whether every path through [[stmt]] ends by resuming [[k]]. */
-  def tailResumptive(k: Id, stmt: Stmt): Boolean =
-    tailPositions(stmt, crossesVar = unobserved(k, _)) match {
+  /** 
+   * Whether every path through [[stmt]] ends by resuming [[k]].
+   *
+   * @param transparent blocks known to resume in tail position, so a call to one is a tail position
+   */
+  def tailResumptive(k: Id, stmt: Stmt, transparent: Set[Id] = Set.empty): Boolean =
+    tailPositions(stmt, crossesVar = unobserved(k, _), crossesTailCalls = true) match {
       case Some(positions) =>
-        !positions.skipped.contains(k) && positions.forall(tailResumptive(k, _))
+        !positions.skipped.contains(k) &&
+          positions.forall(tailResumptive(k, _, transparent ++ positions.transparent))
 
       // each leaf has to account for every occurrence of `k` in its subterms
       // (the cases above handle this with `skipped`)
@@ -129,6 +138,7 @@ object RemoveTailResumptions {
         // an abort never returns, so it resumes vacuously; **unless** it resumes `k`!
         case Stmt.Shift(_, _, body) => stmt.tpe == Type.TBottom && !body.free.contains(k)
         case _: Stmt.Hole => true
+        case Stmt.App(Block.BlockVar(callee, _, _), _, _, _) => transparent.contains(callee)
         // the answer is produced here, or a frame stands in the way
         case other => false
       }
@@ -139,13 +149,17 @@ object RemoveTailResumptions {
    *
    * Must agree with [[tailResumptive]].
    */
-  def removeTailResumption(k: Id, tpe: ValueType, stmt: Stmt): Stmt =
-    tailPositions(stmt, crossesVar = unobserved(k, _)) match {
+  def removeTailResumption(k: Id, tpe: ValueType, stmt: Stmt, transparent: Set[Id] = Set.empty): Stmt =
+    tailPositions(stmt, crossesVar = unobserved(k, _), crossesTailCalls = true) match {
       case Some(positions) =>
-        retypeAnswer(positions.rewrite(removeTailResumption(k, tpe, _)), tpe)
+        val blocks = transparent ++ positions.transparent
+        retypeAnswer(positions.rewrite(removeTailResumption(k, tpe, _, blocks)), tpe)
 
       case None => stmt match {
         case Stmt.Resume(k2, body) if k2.id == k => body
+        // a tail call to such a block is now a tail position
+        case Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, _), capt), targs, vargs, bargs) if transparent.contains(f) =>
+          Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, tpe), capt), targs, vargs, bargs) // note that we must fix the type here
         case other => retypeAnswer(other, tpe)
       }
     }
