@@ -362,6 +362,26 @@ class OptimizerTests extends CoreTests {
     removeTailResumptions(input, input)
   }
 
+  test("a tail resumption crosses a variable its body cannot observe") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => var r @ c = 1; resume (k : Resume[Int, Int] @ {k}) { return 2 } } } }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () => reset { (){p: Prompt[Int]} => var r @ c = 1; return 2 } }
+        |""".stripMargin
+
+    removeTailResumptions(input, expected)
+  }
+
+  test("a tail resumption does not cross a variable its body can observe") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => var r @ c = 1; resume (k : Resume[Int, Int] @ {k}) { get y : Int = ! r @ c; return y:Int } } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
+  }
+
 
   test("a call carrying a capability to a prompt we are inside of is inlined past the normal budget") {
     val input =

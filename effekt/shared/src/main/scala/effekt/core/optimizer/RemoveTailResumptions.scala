@@ -32,10 +32,10 @@ object RemoveTailResumptions {
    * A statement stands in tail position when the enclosing computation's answer is its answer.
    *
    * @param crossesVar whether a `Var` preserves tail position. 
-   *   It does preserve it for a rewrite that never resumes, but does **not** for one that may resume *twice*!
+   *   It does preserve it for a handler that never resumes, but does **not** for one that observes it.
    *   (in other words: crossing a [[Var]] is not always semantics-preserving)
    */
-  def tailPositions(stmt: Stmt, crossesVar: Boolean, crossesTailCalls: Boolean = false): Option[TailPositions] = stmt match {
+  def tailPositions(stmt: Stmt, crossesVar: Stmt.Var => Boolean, crossesTailCalls: Boolean = false): Option[TailPositions] = stmt match {
     // a block that is only ever tail-called adds no frame ~> its own tail positions are tail positions here
     case Stmt.Def(id, BlockLit(tps, cps, vps, bps, inner), body)
       if crossesTailCalls && tailCalledOnly(id, body, crossesVar) && tailCalledOnly(id, inner, crossesVar) =>
@@ -56,7 +56,7 @@ object RemoveTailResumptions {
       Some(TailPositions(f => Stmt.Get(id, tpe, ref, capt, f(body)), Free.empty))
     case Stmt.Put(ref, capt, value, body) =>
       Some(TailPositions(f => Stmt.Put(ref, capt, value, f(body)), value.free))
-    case Stmt.Var(ref, init, capture, body) if crossesVar =>
+    case v @ Stmt.Var(ref, init, capture, body) if crossesVar(v) =>
       Some(TailPositions(f => Stmt.Var(ref, init, capture, f(body)), init.free))
 
     case Stmt.If(cond, thn, els) =>
@@ -83,14 +83,14 @@ object RemoveTailResumptions {
     case Stmt.Shift(Block.BlockVar(p, _, _), k, body)
       if p == prompt && !Stmt.demandsResumption(k, body) && !body.free.contains(prompt) => body
 
-    case other => tailPositions(other, crossesVar = true, crossesTailCalls = true) match {
+    case other => tailPositions(other, crossesVar = _ => true, crossesTailCalls = true) match {
       case Some(positions) => positions.rewrite(removeTailAborts(prompt, _))
       case None => other
     }
   }
 
   /** Whether every use of [[id]] in [[stmt]] is a call to it in tail position. */
-  def tailCalledOnly(id: Id, stmt: Stmt, crossesVar: Boolean = true): Boolean =
+  def tailCalledOnly(id: Id, stmt: Stmt, crossesVar: Stmt.Var => Boolean = _ => true): Boolean =
     tailPositions(stmt, crossesVar) match {
       case Some(positions) =>
         !positions.skipped.contains(id) && positions.forall(tailCalledOnly(id, _, crossesVar))
@@ -104,9 +104,21 @@ object RemoveTailResumptions {
       }
     }
 
+  /** Whether a resumption of [[k]] may cross this variable's scope. */
+  private def unobserved(k: Id, v: Stmt.Var): Boolean =
+    object query extends Tree.Query[Unit, Boolean] {
+      def empty = false
+      def combine = _ || _
+      override def stmt(using Unit) = {
+        case Stmt.Resume(k2, body) if k2.id == k => body.typing.capt.contains(v.capture)
+      }
+    }
+    !query.query(v.body)(using ())
+
+
   /** Whether every path through [[stmt]] ends by resuming [[k]]. */
   def tailResumptive(k: Id, stmt: Stmt): Boolean =
-    tailPositions(stmt, crossesVar = false) match {
+    tailPositions(stmt, crossesVar = unobserved(k, _)) match {
       case Some(positions) =>
         !positions.skipped.contains(k) && positions.forall(tailResumptive(k, _))
 
@@ -128,7 +140,7 @@ object RemoveTailResumptions {
    * Must agree with [[tailResumptive]].
    */
   def removeTailResumption(k: Id, tpe: ValueType, stmt: Stmt): Stmt =
-    tailPositions(stmt, crossesVar = false) match {
+    tailPositions(stmt, crossesVar = unobserved(k, _)) match {
       case Some(positions) =>
         retypeAnswer(positions.rewrite(removeTailResumption(k, tpe, _)), tpe)
 
