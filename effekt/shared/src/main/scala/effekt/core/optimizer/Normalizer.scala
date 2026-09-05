@@ -191,6 +191,19 @@ object Normalizer { normal =>
       }
     }
 
+  /**
+   * The block that [[b]] denotes, when it is known here *and* nothing else uses it.
+   *
+   * Enables inlining (known ~> its ops resolve; used once ~> consumed rather than copied)
+   */
+  private[optimizer] def knownAndUsedOnce(b: Block)(using Context): Option[Block] = b match {
+    case x: Block.BlockVar if isOnce(x.id) => active(x) match {
+      case NormalizedBlock.Known(known, Some(_)) => Some(known)
+      case _ => None
+    }
+    case _ => None
+  }
+
   // TODO for `New` we should track how often each operation is used, not the object itself
   //   to decide inlining.
   private def shouldInline(b: BlockLit, boundBy: Option[BlockVar], valueArgs: List[Expr], blockArgs: List[Block])(using C: Context): Boolean =

@@ -40,7 +40,8 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     val onceLimit = Context.config.maxOnceInlineSize().toInt
     val policy = Default(
       threshold = Context.config.maxInlineSize().toInt,
-      onceLimit = Option.when(onceLimit >= 0)(onceLimit)) // negative means no limit
+      onceLimit = Option.when(onceLimit >= 0)(onceLimit), // negative means no limit
+      carryingLimit = Context.config.maxCarryingInlineSize().toInt)
 
     def normalize(m: ModuleDecl) = {
       val anfed = BindSubexpressions.transform(m)
