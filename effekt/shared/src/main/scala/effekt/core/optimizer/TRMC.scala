@@ -31,8 +31,8 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     object transform extends Tree.Rewrite {
       override def toplevel: PartialFunction[Toplevel, Toplevel] = {
         case Toplevel.Def(id, block) =>
-          println("in Toplevel")
-          println(id.name.name)
+          //println("in Toplevel")
+          //println(id.name.name)
           //println(effekt.util.PrettyPrinter.format(Toplevel.Def(id, block)).layout)
           val outputFunId = functionLinks(id)
           transformedFunctions = transformedFunctions.appended(trmc(id, block, outputFunId, functionLinks, DC))
@@ -92,7 +92,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
           ModuleDecl(path, includes, declarations, externs, definitions ++ transformedFunctions, exports)
       }
     }
-    println(effekt.util.PrettyPrinter.format(transformed).layout)
+    //println(effekt.util.PrettyPrinter.format(transformed).layout)
     Some(CoreTransformed(source, tree, mod, transformed))
   }
   
@@ -228,7 +228,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
         Stmt.Def(outputId, 
           trmc(block, updatedLinks, DC), 
           trmc(body,  context, outerContextTpe, updatedLinks, DC))) 
-    case Stmt.Let(id, binding, body) => Stmt.Let(id, binding, trmc(body,  context, outerContextTpe, functionLinks, DC))
+    case Stmt.Let(id, binding, body) => Stmt.Let(id, binding, trmc(body, context, outerContextTpe, functionLinks, DC))
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => Stmt.ImpureApp(id, callee, targs, vargs, bargs, trmc(body,  context, outerContextTpe, functionLinks, DC))
     case Stmt.Return(expr) => reify(stmt, context,  outerContextTpe, functionLinks, DC) //probably works every time, original function must still exist in case inputfun is free in expr
     case Stmt.Val(id, binding, body) => trmc(binding,  TransformContext.Val(id,body,context), outerContextTpe, functionLinks, DC)
