@@ -87,6 +87,8 @@ function reroot(target) {
     cur          = node
   }
 
+  // 3. Reclaim the path to reuse the buffer eagerly
+  _rerootPath.length = 0
 }
 
 function restore(store, snap) {
