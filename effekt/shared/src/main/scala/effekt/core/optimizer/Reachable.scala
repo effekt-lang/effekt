@@ -170,7 +170,7 @@ class Reachable(
     case Expr.PureApp(b, targs, vargs) => process(b); targs.foreach(process); vargs.foreach(process)
     case Expr.Make(data, tag, targs, vargs) =>
       process(data); process(tag); targs.foreach(process); vargs.foreach(process)
-    case Expr.MakeContext(data, tag, targs, before, after) =>process(data); process(tag); process(targs); (before ++ after).foreach(process)
+    case Expr.MakeContext(data, tag, targs, before, after) =>process(data); process(tag); targs.foreach(process); (before ++ after).foreach(process)
     case Expr.Box(b, annotatedCapture) => process(b)
   }
 

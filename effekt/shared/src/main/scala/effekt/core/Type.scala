@@ -571,6 +571,7 @@ object Type {
     case Expr.PureApp(b, targs, vargs) =>
       Type.instantiate(b.functionType, targs, Nil).result
     case Expr.Make(data, tag, targs, vargs) => data
+    case Expr.MakeContext(data, tag, targs, before, after) => data
     case Expr.Box(b, annotatedCapture) =>
       ValueType.Boxed(b.tpe, annotatedCapture)
   }

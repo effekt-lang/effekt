@@ -40,12 +40,14 @@ class TRMCTests extends CoreTests {
   val ctxEmtpyId = Id("ctx_emptyContext")
   val ctxApplyId = Id("ctx_applyContext")
   val ctxcomposeId = Id("ctx_composeContext")
+  
+  def mockSignature = QualifiedSignature("mock")
 
-  def emptyfun: Extern = Extern.Def(ctxEmtpyId, List(vTpeIdA), Nil, Nil, Nil, HoleContext(ValueType.Var(vTpeIdA), ValueType.Var(vTpeIdA)), Set.empty, StringExternBody(Default(null), null))
+  def emptyfun: Extern = Extern.Def(ctxEmtpyId, mockSignature, List(vTpeIdA), Nil, Nil, Nil, HoleContext(ValueType.Var(vTpeIdA), ValueType.Var(vTpeIdA)), Set.empty, StringExternBody(Default(null), null))
 
-  def applyfun: Extern = Extern.Def(ctxApplyId, List(vTpeIdA,vTpeIdB), Nil, List(ValueParam(Id("ctx"),HoleContext(ValueType.Var(vTpeIdA),ValueType.Var(vTpeIdB))),ValueParam(Id("value"),ValueType.Var(vTpeIdB))), Nil, ValueType.Var(vTpeIdA), Set.empty, StringExternBody(Default(null), null))
+  def applyfun: Extern = Extern.Def(ctxApplyId, mockSignature, List(vTpeIdA,vTpeIdB), Nil, List(ValueParam(Id("ctx"),HoleContext(ValueType.Var(vTpeIdA),ValueType.Var(vTpeIdB))),ValueParam(Id("value"),ValueType.Var(vTpeIdB))), Nil, ValueType.Var(vTpeIdA), Set.empty, StringExternBody(Default(null), null))
 
-  def composefun: Extern = Extern.Def(ctxcomposeId, List(vTpeIdA, vTpeIdB, vTpeIdC), Nil, List(ValueParam(Id("ctx1"), HoleContext(ValueType.Var(vTpeIdA), ValueType.Var(vTpeIdB))), ValueParam(Id("ctx2"), HoleContext(ValueType.Var(vTpeIdB),ValueType.Var(vTpeIdC)))), Nil, HoleContext(ValueType.Var(vTpeIdA),ValueType.Var(vTpeIdC)), Set.empty, StringExternBody(Default(null), null))
+  def composefun: Extern = Extern.Def(ctxcomposeId, mockSignature, List(vTpeIdA, vTpeIdB, vTpeIdC), Nil, List(ValueParam(Id("ctx1"), HoleContext(ValueType.Var(vTpeIdA), ValueType.Var(vTpeIdB))), ValueParam(Id("ctx2"), HoleContext(ValueType.Var(vTpeIdB),ValueType.Var(vTpeIdC)))), Nil, HoleContext(ValueType.Var(vTpeIdA),ValueType.Var(vTpeIdC)), Set.empty, StringExternBody(Default(null), null))
 
 
   val DC = DeclarationContext(List(listDecl), List(emptyfun,applyfun,composefun))
@@ -166,7 +168,7 @@ class TRMCTests extends CoreTests {
   
   def blockVarFromExternDef(id: Id) : Block.BlockVar = {
     DC.getExternDef(id) match {
-      case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => BlockVar(id, Function(tparams, cparams, vparams.map(getType), bparams.map(getType), ret), annotatedCapture)
+      case Extern.Def(id, signature, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => BlockVar(id, Function(tparams, cparams, vparams.map(getType), bparams.map(getType), ret), annotatedCapture)
     }
   }
 

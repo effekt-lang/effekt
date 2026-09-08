@@ -29,7 +29,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     
     
     object transform extends Tree.Rewrite {
-      override def toplevel: PartialFunction[Toplevel, Toplevel] = {
+      override def rewrite(t: Toplevel): Toplevel = t match {
         case Toplevel.Def(id, block) =>
           //println("in Toplevel")
           //println(id.name.name)
@@ -37,8 +37,8 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
           val outputFunId = functionLinks(id)
           transformedFunctions = transformedFunctions.appended(trmc(id, block, outputFunId, functionLinks, DC))
           Toplevel.Def(id, block)
+        case Toplevel.Val(id, binding) => super.rewrite(t)
       }
-
 //      override def stmt: PartialFunction[Stmt, Stmt] = {
 //        case Def(id, block, body) if id.name.name == "simpleTRMC" =>
 //          trmc(id, block, body)
@@ -46,18 +46,19 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     }
     
     object rewriteOtherCalls extends Tree.Rewrite {
-      override def toplevel: PartialFunction[Toplevel, Toplevel] = {
+      override def rewrite(t: Toplevel): Toplevel = t match {
         case Toplevel.Def(id, block) => block match {
           case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Toplevel.Def(id, block) //TODO: do BlockVar, Unbox and New actually happen?
           case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-            Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, rewriteCalls(body, id, functionLinks, DC))) 
+            Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, rewriteCalls(body, id, functionLinks, DC)))
           case Block.Unbox(pure) => Toplevel.Def(id, block)
           case Block.New(impl) => Toplevel.Def(id, block)
         }
+        case _ => super.rewrite(t)
       }
     }
     object rewriteMain extends Tree.Rewrite {
-      override def toplevel: PartialFunction[Toplevel, Toplevel] = {
+      override def rewrite(t:Toplevel): Toplevel = t match {
         case Toplevel.Def(id, block) => block match {
           case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Toplevel.Def(id, block) //TODO: do BlockVar, Unbox and New actually happen?
           case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
@@ -80,6 +81,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
           case Block.Unbox(pure) => Toplevel.Def(id, block)
           case Block.New(impl) => Toplevel.Def(id, block)
         }
+        case _ => super.rewrite(t)
       }
     }
 
@@ -317,7 +319,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
   
   def blockVarFromExternDef(name: String, DC: DeclarationContext)(using Context) : Block.BlockVar = {
     DC.getUniqueExternDef(name) match {
-      case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) => 
+      case Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
         BlockVar(id, Function(tparams, cparams, vparams.map(getType), bparams.map(getType), ret), annotatedCapture)
     }
   }

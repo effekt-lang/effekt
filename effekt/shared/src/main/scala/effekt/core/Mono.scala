@@ -705,6 +705,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
         val dataDemand = if data.targs.isEmpty then List(Flow(Vector.empty, data.name)) else Nil
         Flow(constructorArgs.toVector, tag) ::
           (dataDemand ++ dataFlows ++ constructorFlows ++ vargs.flatMap(expression(_, env)))
+      case MakeContext(data, tag, targs, before, after) => ???
       case Box(value, _) => block(value, env)
     }
 
@@ -1219,6 +1220,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
         val combinedTargs = data.targs ++ targs
         val replacementTag = replacementFun(tag, combinedTargs)
         Make(replacementData(data.name, data.targs), replacementTag, List.empty, vargs map monomorphize)
+      case MakeContext(data, tag, targs, before, after) => ???
       case Box(b, annotatedCapture) =>
         Box(monomorphize(b), annotatedCapture)
       case ValueVar(id, annotatedType) =>

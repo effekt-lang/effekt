@@ -498,6 +498,8 @@ object Tree {
         Expr.PureApp(rewrite(b), targs map rewrite, vargs map rewrite)
       case Expr.Make(data, tag, targs, vargs) =>
         Expr.Make(rewrite(data), rewrite(tag), targs map rewrite, vargs map rewrite)
+      case Expr.MakeContext(data, tag, targs, before, after) => 
+        Expr.MakeContext(rewrite(data), rewrite(tag), targs map rewrite, before map rewrite, after map rewrite)
       case Expr.Box(b, annotatedCapture) =>
         Expr.Box(rewrite(b), rewrite(annotatedCapture))
     }
@@ -907,6 +909,8 @@ object Tree {
         Expr.PureApp(rewrite(b), targs map rewrite, vargs map rewrite)
       case Expr.Make(data, tag, targs, vargs) =>
         Expr.Make(rewrite(data), rewrite(tag), targs map rewrite, vargs map rewrite)
+      case Expr.MakeContext(data, tag, targs, before, after) =>
+        Expr.MakeContext(rewrite(data), rewrite(tag), targs map rewrite, before map rewrite, after map rewrite)
       case Expr.Box(b, annotatedCapture) =>
         Expr.Box(rewrite(b), rewrite(annotatedCapture))
     }
@@ -1290,6 +1294,7 @@ object sizes {
     case Expr.Literal(value, annotatedType) => 1
     case Expr.PureApp(b, targs, vargs) => all(vargs, _.size) + 1
     case Expr.Make(data, tag, targs, vargs) => all(vargs, _.size) + 1
+    case Expr.MakeContext(data, tag, targs, before, after) => all(before ++ after, _.size) + 1
     case Expr.Box(b, annotatedCapture) => b.size + 1
   }
 
@@ -1440,6 +1445,9 @@ object freeVariables {
 
     case Expr.Make(data, tag, targs, vargs) =>
       all(vargs, _.free)
+      
+    case Expr.MakeContext(data, tag, targs, before, after) =>
+      all(before ++ after, _.free)
 
     case Expr.Box(b, annotatedCapture) => b.free
   }
