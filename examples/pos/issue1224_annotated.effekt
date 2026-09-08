@@ -1,0 +1,12 @@
+type Status[B] {
+  Done(value: Int)
+  More(state: B)
+}
+
+def main(): Unit = {
+  val res: Int = Done(123) match {
+    case Done(value) => value
+    case More(task) => task()
+  }
+  println(res)
+}

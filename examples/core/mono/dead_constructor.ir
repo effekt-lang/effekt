@@ -1,0 +1,43 @@
+type Maybe['A] {
+  None()
+  Some(value: 'A)
+}
+
+def main() = {
+  let value = make Maybe[Int] Some[](1)
+  value: Maybe[Int] match[Int] {
+    None: {() =>
+      return 0
+    }
+    Some: {(value: Int) =>
+      return value: Int
+    }
+  }
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<Int> <: Maybe
+<Int> <: Some
+<None.0> <: Maybe
+<Some.0> <: Maybe
+
+/// MONO_SOLVE
+
+S = Maybe ↦ { <Int> },
+    Some ↦ { <Int> }
+
+/// MONO_SPECIALIZE
+
+type MaybeInt {
+  SomeInt(value: Int)
+}
+
+def main() = {
+  let value = make MaybeInt SomeInt(1)
+  value: MaybeInt match[Int] {
+    SomeInt: {(value: Int) =>
+      return value: Int
+    }
+  }
+}

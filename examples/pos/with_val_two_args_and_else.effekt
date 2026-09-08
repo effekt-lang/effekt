@@ -1,7 +1,7 @@
 module with_val_two_args_and_else
 
 import json
-import scanner
+import stream
 
 def lookup[V](assoc: List[(String, V)], k: String): Option[V] = assoc match {
   case Cons((k2, v), rest) and k == k2 => Some(v)
@@ -30,7 +30,7 @@ def processUser { data: { (JsonValue, Double) => Option[User] } => Option[User] 
 def main() = {
   with on[WrongFormat].panic;
   with feed("""{ "user": { "name": "Joe", "birthYear": 1983 } }""")
-  with scanner[Char]
+  with peeking[Char]
   val data = build { decodeJson() }.second
   println(processUser { {f} => f(data, 2025.0) }.toString)
 }

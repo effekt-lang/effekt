@@ -3,11 +3,11 @@ import stream
 import bytearray
 
 def main() = {
-  var trie = Empty()
+  val trie = dictionary::empty()
 
-  trie = trie.insert("a", "apple")
-  trie = trie.insert("ab", "amazing")
-  trie = trie.insert("b", "banana")
+  trie.insert("a", "apple")
+  trie.insert("ab", "amazing")
+  trie.insert("b", "banana")
 
   for[Tagged[String]] { eachTagged(trie) } { case Tagged(key, value) =>
     println(bytearray::toString(key))

@@ -10,6 +10,7 @@ import effekt.symbols.Module
 import effekt.typer.{UnboxInference, Typer, Wellformedness}
 import effekt.util.messages.{CompilerPanic, FatalPhaseError}
 import effekt.util.paths
+import effekt.util.debug
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
@@ -302,7 +303,7 @@ trait Compiler[Executable] {
 
       val aggregated = core.ModuleDecl(main.path, Nil, declarations, externs, definitions, exports)
 
-      if Context.config.debug() then aggregated.typecheck()
+      debug { aggregated.typecheck() }
 
       // TODO in the future check for duplicate exports
       CoreTransformed(src, tree, mod, aggregated)

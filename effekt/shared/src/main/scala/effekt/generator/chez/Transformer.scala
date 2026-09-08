@@ -124,7 +124,7 @@ trait Transformer {
   }
 
   def toChez(decl: core.Extern)(using ErrorReporter): Option[chez.Def] = decl match {
-    case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body) =>
+    case Extern.Def(id, qualifiedSignature, tpe, cps, vps, bps, ret, capt, body) =>
       val tBody = body match {
         case ExternBody.StringExternBody(featureFlag, contents) => toChez(contents)
         case u: ExternBody.Unsupported =>
@@ -138,7 +138,10 @@ trait Transformer {
     case Extern.Include(ff, contents) =>
       Some(RawDef(contents))
 
-    case Extern.Data(id, tparams) =>
+    case Extern.Data(id, tparams, body) =>
+      None
+
+    case Extern.Interface(id, tparams, body) =>
       None
   }
 

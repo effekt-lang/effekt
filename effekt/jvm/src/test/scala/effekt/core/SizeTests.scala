@@ -8,7 +8,7 @@ class SizeTests extends CoreTests {
   }
 
   test("Small program"){
-    assertSized(6) {
+    assertSized(4) {
       """module main
         |
         |def foo = { () =>
@@ -19,7 +19,7 @@ class SizeTests extends CoreTests {
   }
 
   test("Nested definitions") {
-    assertSized(15) {
+    assertSized(14) {
       """ module main
         |
         | def bar = { () => return 1 }

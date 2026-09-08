@@ -3,19 +3,10 @@ module scanner
 import stream
 
 
-/// Return the next character, not advancing.
-/// That is, this does not change what any future calls on the Scanner return.
-effect peek[A](): A / stop
-
-effect Scan[A] = {read[A], peek[A]}
+effect Scan[A] = {next[A], peek[A]}
 
 /// Advance the pull stream to the next element, discarding the current element.
-def skip[A](): Unit / {read[A], stop} = { do read(); () }
-
-
-/// Run a scanner by reading from an input stream, discarding its output.
-def scanner[A] { scanner: () => Unit / Scan[A] }: Unit / read[A] =
-  returning::scanner[A, Unit]{scanner}
+def skip[A](): Unit / {next[A], stop} = { do next(); () }
 
 def expect(message: String) { scanner: () => Unit / fail }: Unit / Exception[WrongFormat] =
   returning::expect[Unit](message){scanner}
@@ -23,7 +14,7 @@ def expect(message: String) { scanner: () => Unit / fail }: Unit / Exception[Wro
 /// If conversion is successful read the next token, otherwise stop.
 def readWhen[A, B] { convert: A => B / fail }: B / { Scan[A], stop } = {
   val t = attempt { convert(do peek()) } { do stop() };
-  do read()
+  do next()
   return t
 }
 
@@ -31,7 +22,7 @@ def readWhen[A, B] { convert: A => B / fail }: B / { Scan[A], stop } = {
 def readIf[A] { predicate: A => Bool }: A / { Scan[A], stop } = {
   val t = do peek()
   if (predicate(t)) {
-    do read()
+    do next()
     return t
   } else {
     do stop()
@@ -92,10 +83,10 @@ def until[A, R] { predicate: A => Bool } { scanner: () => R / Scan[A] }: R / { S
     resume {
       if (stopped) { do stop() } else { do peek() }
     }
-  } with read[A] {
+  } with next[A] {
     resume {
       if (stopped) { do stop() } else {
-        val t = do read()
+        val t = do next()
         boundary {
           if (predicate(do peek())) { stopped = true; skip() }
         }
@@ -166,37 +157,41 @@ def readInteger(): Int / { Scan[Char], fail } =
     case _ => do fail()
   }
 
-namespace returning {
 
-/// Run a scanner by reading from an input stream.
-def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
-  def upstream(): A / stop = do read()
-  var last = None()
-  try {
-    scanner()
-  } with peek[A] { () =>
-    resume {
-      last match {
-        case None() =>
-          val t = upstream()
-          last = Some(t)
-          return t
-        case Some(t) =>
-          return t
-      }
-    }
-  } with read[A] {
-    resume {
-      last match {
-        case None() =>
-          upstream()
-        case Some(t) =>
-          last = None()
-          return t
-      }
+/// Read a decimal floating-point number with optional fraction and exponent.
+def readDouble(): Double / { Scan[Char], fail} = {
+  def exponent(pre: Double): Double / fail = {
+    try {
+      if(do peek() == 'e' || do peek() == 'E') {
+        skip[Char]()
+        val e = do peek[Char]() match {
+          case '+' => skip[Char](); readDecimal()
+          case '-' => skip[Char](); neg(readDecimal())
+          case _ => readDecimal()
+        }
+        pre * pow(10.0, e)
+      } else { pre }
+    } with stop {
+      pre
     }
   }
+  def fraction(pre: Int): Double / fail = {
+    if (succeeds { must { readIf('.') } }) {
+      var b = if (pre >= 0) 0.1 else -0.1
+      var r = pre.toDouble
+      while (optionally[Int] { must { readDigit() } } is Some(d)) {
+        r = r + b * d.toDouble
+        b = b * 0.1
+      }
+      exponent(r)
+    } else {
+      exponent(pre.toDouble)
+    }
+  }
+  fraction(readInteger())
 }
+
+namespace returning {
 
 def expect[R](message: String) { scanner: () => R / fail }: R / Exception[WrongFormat] =
   try { scanner() } with fail { wrongFormat(message) }
@@ -217,7 +212,7 @@ namespace test {
     with on[WrongFormat].panic
     with expect("this grammar")
     with feed(input)
-    with scanner[Char]
+    with peeking[Char]
 
     skipWhitespace()
     println(readInteger().show)

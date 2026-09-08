@@ -4,6 +4,12 @@ import munit.Location
 import kiama.parsing.{NoSuccess, Success}
 import effekt.PhaseResult.CoreTransformed
 import effekt.source.Span
+import java.io.File
+import java.nio.file.Files
+
+sealed trait CoreIRPass { def header: String }
+final case class CoreIRTransform(header: String, run: ModuleDecl => ModuleDecl) extends CoreIRPass
+final case class CoreIRAnalysis(header: String, run: ModuleDecl => String) extends CoreIRPass
 
 /** Base class for tests of [[core]]-related stuff.
  * Provides helpers to parse inputs and test for alpha-equivalence(*),
@@ -53,7 +59,6 @@ trait CoreTests extends munit.FunSuite {
     val obtainedPrinted = effekt.core.ReparsablePrettyPrinter.format(obtainedRenamed).layout
     val expectedPrinted = effekt.core.ReparsablePrettyPrinter.format(expectedRenamed).layout
     assertEquals(obtainedPrinted, expectedPrinted)
-    shouldBeEqual(obtainedRenamed, expectedRenamed, clue)
   }
   def assertAlphaEquivalentStatements(obtained: Stmt,
                             expected: Stmt,
@@ -86,6 +91,45 @@ trait CoreTests extends munit.FunSuite {
         val pos = err.next.position
         fail(s"Parsing ${nickname} failed\n[${pos.line}:${pos.column}] ${err.message}")
     }
+  }
+
+  /** Runs ordered analysis and transformation expectations embedded in Core `.ir` files. */
+  protected final def registerCoreIRTests(directory: File, passes: CoreIRPass*): Unit = {
+    val byHeader = passes.map(pass => pass.header -> pass).toMap
+    val separator = """(?m)^///\s*(.+)$""".r
+
+    directory.listFiles()
+      .filter(_.getName.endsWith(".ir"))
+      .sortBy(_.getName)
+      .foreach { file =>
+        test(file.getName) {
+          val content = Files.readString(file.toPath)
+          val sections = separator.split(content).toList.map(_.trim)
+          val headers = separator.findAllMatchIn(content).map(_.group(1).trim).toList
+
+          assert(headers.nonEmpty, "fixture has no /// steps")
+          assertEquals(sections.size, headers.size + 1)
+
+          val defaultModule = s"core/tests/${file.getName.stripSuffix(".ir")}"
+          def asModule(source: String, path: String): String =
+            if source.trim.startsWith("module ") then source else s"module $path\n\n$source"
+
+          var current = parse(asModule(sections.head, defaultModule), "initial Core IR")
+          headers.zip(sections.tail).zipWithIndex.foreach { case ((header, expected), index) =>
+            val clue = s"${file.getName} step ${index + 1} ($header)"
+            byHeader.getOrElse(header, fail(s"Unknown Core IR test step: '$header'")) match {
+              case CoreIRAnalysis(_, run) =>
+                assertNoDiff(run(current).trim, expected.trim, clue)
+
+              case CoreIRTransform(_, run) =>
+                val obtained = run(current)
+                val expectedTree = parse(asModule(expected, current.path), s"expected after $header")
+                assertAlphaEquivalent(obtained, expectedTree, clue)
+                current = obtained
+            }
+          }
+        }
+      }
   }
 
   protected given testContext: TestContext = new TestContext

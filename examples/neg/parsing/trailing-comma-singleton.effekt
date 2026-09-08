@@ -1,0 +1,11 @@
+def main() = {
+  val a = (1,) // would mean `1` if not for the soft fail
+  val b = (2, 3,)
+  val c: (Int,) = 4  // would mean `Int` if not for the soft fail
+  val d: (Int, Int,) = (5, 6,)
+
+  println(a)
+  println(b.second)
+  println(c)
+  println(d.first)
+}

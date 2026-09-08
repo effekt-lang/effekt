@@ -1,0 +1,4 @@
+def main() = { // user wanted to write `... match { case _ => ... }` but forgot the `case` keyword
+  val res = [1, 2, 3] match { _ => 42 }
+  println(res)
+}

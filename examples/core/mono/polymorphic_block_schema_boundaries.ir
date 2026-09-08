@@ -1,0 +1,53 @@
+def repeated['A, 'Unused](){f: ['B]('A, 'A, 'B) => 'B} = {
+  return ()
+}
+
+def renamed['X](){f: ['Y]('X, 'X, 'Y) => 'Y} = {
+  return ()
+}
+
+def unary(){f: ['A]('A) => 'A} = {
+  return ()
+}
+
+def binary(){f: ['A]('A, 'A) => 'A} = {
+  return ()
+}
+
+def pair(){left: ['A]('A) => 'A}{right: ['B]('B) => 'B} = {
+  return ()
+}
+
+/// MONO_PREPROCESS
+
+interface Poly['A] {
+  apply: ['B]('A, 'A, 'B) => 'B
+}
+
+interface Poly1 {
+  apply1: ['A]('A) => 'A
+}
+
+interface Poly2 {
+  apply2: ['A]('A, 'A) => 'A
+}
+
+def repeated['A, 'Unused](){f: Poly['A]} = {
+  return ()
+}
+
+def renamed['X](){f: Poly['X]} = {
+  return ()
+}
+
+def unary(){f: Poly1} = {
+  return ()
+}
+
+def binary(){f: Poly2} = {
+  return ()
+}
+
+def pair(){left: Poly1}{right: Poly1} = {
+  return ()
+}

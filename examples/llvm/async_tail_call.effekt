@@ -1,0 +1,10 @@
+import io/error
+import io/filesystem
+
+def main() = {
+  with on[IOError].panic
+
+  val path = "/tmp/effekt-async_tail_call.txt"
+  writeFile(path, "abcde")
+  println(readFile(path).length)
+}

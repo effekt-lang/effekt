@@ -4,14 +4,15 @@ import string
 
 extern include chez "text/pregexp.scm"
 
-extern type Regex
+extern type Regex =
+  js "RegExp"
+  chez "pregexp"
 
 record Match(matched: String, index: Int)
 
 extern def regex(str: String) at {}: Regex =
   js "new RegExp(${str})"
   chez "(pregexp ${str})"
-  vm "regex::regex(String)"
 
 def exec(reg: Regex, str: String): Option[Match] = {
   val v = internal::exec(reg, str)
@@ -25,19 +26,17 @@ namespace internal {
 
   /// The type RegexMatch is used internally to represent platform
   /// dependent results of matching a regex.
-  extern type RegexMatch
-    // js: { matched: String, index: Int } | undefined
-    // vm: scala.util.matching.Regex.Match | null
+  extern type RegexMatch =
+    js "{ matched: String, index: Int } | undefined"
+    vm "scala.util.matching.Regex.Match | null"
 
   extern def matched(r: RegexMatch) at {}: String =
     js "${r}.matched"
     chez "(vector-ref ${r} 0)"
-    vm "regex::matched(RegexMatch)"
 
   extern def index(r: RegexMatch) at {}: Int =
     js "${r}.index"
     chez "(vector-ref ${r} 1)"
-    vm "regex::index(RegexMatch)"
 
   extern js """
     function regex$exec(reg, str) {
@@ -60,5 +59,4 @@ namespace internal {
   extern def exec(reg: Regex, str: String) at io: RegexMatch =
     js "regex$exec(${reg}, ${str})"
     chez "(regex-exec ${reg} ${str})"
-    vm "regex::exec(Regex, String)"
 }

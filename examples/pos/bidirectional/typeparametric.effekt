@@ -1,4 +1,7 @@
-extern interface Cap[U, V]
+extern interface Cap[U, V] =
+  js   "number"
+  chez "int"
+  llvm "%Pos"
 
 extern def cap[U, V]() at {}: Cap[U, V] at {} =
   js   "42"

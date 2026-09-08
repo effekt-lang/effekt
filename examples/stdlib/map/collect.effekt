@@ -1,0 +1,40 @@
+import map
+
+def main() = {
+  def stream() = {
+    do emit((1, "one"))
+    do emit((2, "two"))
+    do emit((3, "three"))
+    do emit((1, "uno")) // checks that we override the existing key
+  }
+
+  println("m1 := map::collect { stream() }")
+
+  val m1: Map[Int, String] = map::collect(box compareInt) { stream() }
+
+  println("m1.toList.foreach === m1.foreach")
+
+  m1.toList.foreach { case (k, v) =>
+    println(s"${k.show} -> ${v}")
+  }
+
+  m1.foreach { (k, v) =>
+    println(s"${k.show} -> ${v}")
+  }
+
+  println("----")
+
+  println("m2 := list::collect { stream() }.map:fromList")
+
+  val m2: Map[Int, String] = list::collect { stream() }.fromList(box compareInt)
+
+  println("m2.toList.foreach === m2.foreach")
+
+  m2.toList.foreach { case (k, v) =>
+    println(s"${k.show} -> ${v}")
+  }
+
+  m2.foreach { (k, v) =>
+    println(s"${k.show} -> ${v}")
+  }
+}

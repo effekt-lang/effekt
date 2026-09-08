@@ -66,9 +66,9 @@ def normalize(t: Term): Term = {
 }
 
 /// parse named term from BLC stream (de Bruijn)
-def parse(): Term / { read[Bool], stop } = {
+def parse(): Term / { next[Bool], stop } = {
   def go(): Term / { fresh, lookup } =
-    (do read(), do read()) match {
+    (do next(), do next()) match {
       case (false, false) => {
         val n = do fresh()
         Abs(n, try go() with lookup { i =>
@@ -79,7 +79,7 @@ def parse(): Term / { read[Bool], stop } = {
       case (true , false) => Var(do lookup(0))
       case (true , true ) => {
         var i = 1
-        while (do read()) i = i + 1
+        while (do next()) i = i + 1
         Var(do lookup(i))
       }
     }
@@ -105,11 +105,11 @@ def pretty { stream: () => Unit / { write, splice[Term] } }: String = {
 }
 
 /// convert char stream to bit stream, skipping non-bit chars
-def bits { p: () => Unit / { read[Bool], stop } }: Unit / read[Char] =
+def bits { p: () => Unit / { next[Bool], stop } }: Unit / next[Char] =
   try loop { p() }
-  with read[Bool] {
+  with next[Bool] {
     with loop
-    val c = do read()
+    val c = do next()
     if (c == '0') resume { false }
     if (c == '1') resume { true  }
   }

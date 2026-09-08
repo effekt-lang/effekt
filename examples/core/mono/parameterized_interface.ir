@@ -1,0 +1,32 @@
+interface On['A] {}
+
+def use['A](){on: On['A]} = {
+  return ()
+}
+
+def main(){on: On[Int]} = {
+  (use: ['A](){on: On['A]} => Unit @ {})[Int](){on: On[Int] @ {on}}
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<Int> <: On
+<Int> <: use
+<use.0> <: On
+
+/// MONO_SOLVE
+
+S = On ↦ { <Int> },
+    use ↦ { <Int> }
+
+/// MONO_SPECIALIZE
+
+interface OnInt {}
+
+def useInt(){on: OnInt} = {
+  return ()
+}
+
+def main(){on: OnInt} = {
+  (useInt: (){on: OnInt} => Unit @ {})(){on: OnInt @ {on}}
+}

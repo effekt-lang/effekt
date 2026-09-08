@@ -1,0 +1,13 @@
+effect stop(): Nothing
+
+def main() = region r {
+  var getter in r = box { 0 }
+  val res = try {
+    var x in r = 0
+    x = 41
+    getter = box { x + 1 }
+    do stop()
+    "resumed"
+  } with stop { "aborted" }
+  println(res ++ " getter=" ++ (unbox getter)().show)
+}

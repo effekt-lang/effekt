@@ -36,6 +36,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.Byte()         => "Byte"
     case Type.Double()       => "Double"
     case Type.Reference(tpe) => toDoc(tpe) <> "*"
+    case Type.CTpe(name)    => s"CType(${name})" 
   }
 
   def toDoc(defi: Definition): Doc = defi match {
@@ -70,7 +71,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Invoke(receiver, tag, arguments) =>
       "invoke" <+> receiver <> "." <> tag.toString <> parens(arguments map toDoc)
 
-    case Var(name, init, rest) =>
+    case Var(name, init, returnType, rest) =>
       "var" <+> name <+> "=" <+> toDoc(init) <> ";" <> line <> toDocStmts(rest)
 
     case LoadVar(name, reference, rest) =>

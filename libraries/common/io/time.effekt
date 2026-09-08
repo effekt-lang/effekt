@@ -7,6 +7,6 @@ extern llvm """
 extern def sleep(millis: Int) at async: Unit =
   js "$effekt.capture(k => setTimeout(() => k($effekt.unit), ${millis}))"
   llvm """
-    call void @c_timer_start(%Int ${millis}, %Stack %stack)
+    notail call void @c_timer_start(%Int ${millis}, %Stack %stack)
     ret void
   """

@@ -1,11 +1,11 @@
 import dictionary
 
 def main() = {
-  var trie = Empty()
+  val trie = dictionary::empty()
 
-  trie = trie.insert("hello", 1)
-  trie = trie.insert("world", 2)
-  trie = trie.insert("help", 3)
+  trie.insert("hello", 1)
+  trie.insert("world", 2)
+  trie.insert("help", 3)
 
   println(trie.lookup("hello"))
   println(trie.lookup("world"))

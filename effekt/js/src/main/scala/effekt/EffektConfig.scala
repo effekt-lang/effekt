@@ -38,6 +38,8 @@ trait EffektConfig {
 
   def maxInlineSize() = 50L
 
+  def maxOnceInlineSize() = 5000L
+
   def timed() = false
 
   def debug() = false

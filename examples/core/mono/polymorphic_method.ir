@@ -1,0 +1,31 @@
+interface Foo {
+  bar: ['A]('A) => 'A
+}
+
+def main(){foo: Foo} = {
+  val x = (foo: Foo @ {foo}).bar: ['A]('A) => 'A[Int](1);
+  (foo: Foo @ {foo}).bar: ['A]('A) => 'A[String]("two")
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<> <: Foo
+<Int> <: bar
+<String> <: bar
+
+/// MONO_SOLVE
+
+S = Foo ↦ { <> },
+    bar ↦ { <Int>, <String> }
+
+/// MONO_SPECIALIZE
+
+interface Foo {
+  barInt: (Int) => Int
+  barString: (String) => String
+}
+
+def main(){foo: Foo} = {
+  val x = (foo: Foo @ {foo}).barInt: (Int) => Int(1);
+  (foo: Foo @ {foo}).barString: (String) => String("two")
+}

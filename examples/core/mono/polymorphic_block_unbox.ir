@@ -1,0 +1,29 @@
+def use(){f: ['A]('A){k: () => 'A} => 'A} = {
+  (f: ['A]('A){k: () => 'A} => 'A @ {f})[Int](42){() => return 0}
+}
+
+def main(boxed: ['A]('A){k: () => 'A} => 'A at {io}) = {
+  (use: (){f: ['A]('A){k: () => 'A} => 'A} => Int @ {})(){
+    unbox boxed: ['A]('A){k: () => 'A} => 'A at {io}
+  }
+}
+
+/// MONO_PREPROCESS
+
+interface Poly {
+  apply: ['A]('A){k: () => 'A} => 'A
+}
+
+def use(){f: Poly} = {
+  (f: Poly @ {f}).apply: ['A]('A){k: () => 'A} => 'A[Int](42){() => return 0}
+}
+
+def main(boxed: ['A]('A){k: () => 'A} => 'A at {io}) = {
+  (use: (){f: Poly} => Int @ {})(){new Poly {
+    def apply['A](x: 'A){k @ c: () => 'A} = {
+      (unbox boxed: ['A]('A){k: () => 'A} => 'A at {io})['A](x: 'A){
+        (k: () => 'A @ {c})
+      }
+    }
+  }}
+}

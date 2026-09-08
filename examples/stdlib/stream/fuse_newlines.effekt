@@ -1,7 +1,7 @@
 import stream
 
-def fuseNewlines(): Nothing / {read[Char], emit[Char], stop} = {
-  val c = do read()
+def fuseNewlines(): Nothing / {next[Char], emit[Char], stop} = {
+  val c = do next()
   if (c == '\n') {
     do emit(c)
     skipNewlines()
@@ -11,8 +11,8 @@ def fuseNewlines(): Nothing / {read[Char], emit[Char], stop} = {
   }
 }
 
-def skipNewlines(): Nothing / {read[Char], emit[Char], stop} = {
-  val c = do read()
+def skipNewlines(): Nothing / {next[Char], emit[Char], stop} = {
+  val c = do next()
   if (c == '\n') {
     skipNewlines()
   } else {

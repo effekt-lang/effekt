@@ -1,0 +1,12 @@
+def main() = {
+  def f() = <{def g() = <{<"myFun">}>; 42}>
+  val x = println(s"<${1.show}>")
+  def g() = <{ 
+    val x = 42 + <" here's a string ">
+    println(x)
+    <>
+  }>
+  val x = println(s"${"test"}")
+  def h() = println(s"<${"1" ++ <"string"> ++ <>}>")
+  ()
+}

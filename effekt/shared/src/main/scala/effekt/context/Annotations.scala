@@ -140,6 +140,23 @@ object Annotations {
   )
 
   /**
+   * Generated implicit value arguments for this call.
+   * They are annotated by [[Typer]] and will be inserted by [[ExplicitCapbilities]]
+   */
+  val ImplicitValueArguments = TreeAnnotation[source.CallLike, List[source.ValueArg]](
+    "ImplicitValueArguments",
+    "the inferred implicit value arguments"
+  )
+  /**
+   * Generated implicit block arguments for this call.
+   * They are annotated by [[Typer]] and will be inserted by [[ExplicitCapbilities]]
+   */
+  val ImplicitBlockArguments = TreeAnnotation[source.CallLike, List[source.Term]](
+    "ImplicitBlockArguments",
+    "the inferred implicit block arguments"
+  )
+
+  /**
    * Existential type parameters inferred by the typer when type-checking pattern matches.
    */
   val TypeParameters = TreeAnnotation[source.TagPattern | source.OpClause, List[symbols.TypeVar]](

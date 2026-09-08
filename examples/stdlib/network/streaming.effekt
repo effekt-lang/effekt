@@ -16,7 +16,7 @@ def main() = {
       shutdown(listener)
       streaming(connection) {
         with boundary
-        val request = do read()
+        val request = do next()
         do emit(request)
       }
       close(connection)
@@ -27,7 +27,7 @@ def main() = {
     with boundary
     val request = "abcd".fromString
     do emit(request)
-    val response = do read()
+    val response = do next()
     println(response.toString)
   }
   close(connection)

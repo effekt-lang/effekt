@@ -1,0 +1,26 @@
+effect emit[A](value: A): Unit
+
+def filter[A](input: List[A]) { keep?: A => Bool }: List[A] = {
+  def stream[A](input: List[A]): Unit / emit[A] = input match {
+    case Nil() => ()
+    case Cons(x, xs) => do emit(x); stream(xs)
+  }
+
+  def unstream[A] { stream: => Unit / emit[A] }: List[A] =
+    try { stream(); Nil() } with emit[A] { x =>
+      Cons(x, resume(()))
+    }
+
+  def sfilter[A] { keep?: A => Bool } { stream: => Unit / emit[A] }: Unit / emit[A] =
+    try stream() with emit[A] { x =>
+      if (x.keep?) { do emit(x); resume(()) } else { resume(()) }
+    }
+
+  unstream {
+    sfilter { x => x.keep? } {
+      stream(input)
+    }
+  }
+}
+
+def main() = println([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter { x => x.mod(2) == 0 })

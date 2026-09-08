@@ -103,7 +103,7 @@ def hex{ body: => Unit / { write, HexSplices } }: Unit / emit[Byte] = {
       body()
     }
     with splice[String] { s =>
-      feed(s){ loop { do splice[Char](do read[Char]()) } }
+      feed(s){ loop { do splice[Char](do next[Char]()) } }
       resume(())
     }
     with splice[ByteArray] { ba =>
@@ -115,8 +115,8 @@ def hex{ body: => Unit / { write, HexSplices } }: Unit / emit[Byte] = {
       feed(s){
         loop {
           attempt {
-            val upper: Int = hexDigitValue(do read[Char]())
-            val lower: Int = hexDigitValue(do read[Char]())
+            val upper: Int = hexDigitValue(do next[Char]())
+            val lower: Int = hexDigitValue(do next[Char]())
             do emit[Byte]((16 * upper + lower).toByte)
           } { () }
         }
@@ -296,7 +296,7 @@ def bit{ body: => Unit / { write, BitSplices } }: Unit / emit[Bit] = {
   with write { s =>
     feed(s){
       loop {
-        do read[Char]() match {
+        do next[Char]() match {
           case '0' => do emit(B0())
           case '1' => do emit(B1())
           case _ => ()

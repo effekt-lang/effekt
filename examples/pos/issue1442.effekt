@@ -1,0 +1,4 @@
+def find(key: String) { missing: => Int }: Int =
+  if (key == "hello1") { 42 } else { missing() }
+
+def main() = println(find("hello" ++ show(1)) { 0 })

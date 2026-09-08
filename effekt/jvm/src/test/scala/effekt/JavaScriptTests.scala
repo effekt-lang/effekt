@@ -29,6 +29,9 @@ class JavaScriptTests extends EffektTests {
     examplesDir / "pos" / "issue842.effekt",
     examplesDir / "pos" / "issue861.effekt",
 
+    // contifying a block that is also passed as an argument
+    examplesDir / "pos" / "contify_block_used_as_value.effekt",
+
     // syntax error (multiple declaration)
     examplesDir / "pos" / "parser.effekt",
     examplesDir / "pos" / "probabilistic.effekt",

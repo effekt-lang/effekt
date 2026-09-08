@@ -1,0 +1,75 @@
+/// Word frequencies over a stream of documents:
+/// - one dictionary per document, counted, summarized.
+module examples/benchmarks/wordfreq_dictionary
+
+import examples/benchmarks/runner
+import dictionary
+import random
+
+def randomLowercase(): Char / random = ('a'.toInt + randomInt(0, 25)).toChar
+
+/// A vocabulary whose words share prefixes, as natural text does:
+/// each word extends a prefix of an earlier one, and none grows past twelve letters.
+def vocabulary(size: Int): Array[String] = {
+  val words = array(size, "a")
+
+  minstd(1) {
+    with val i = each(0, size)
+
+    val length = randomInt(1, 6)
+    val root = if (i == 0) "" else {
+      val earlier = words.get(randomInt(0, i - 1))
+      val prefix = randomInt(1, earlier.length)
+      if (prefix + length <= 12) earlier.substring(0, prefix) else ""
+    }
+
+    val rest = string::collect(length) {
+      repeat(length) { do emit(randomLowercase()) }
+    }
+    words.set(i, root ++ rest)
+  }
+
+  words
+}
+
+/// Words drawn from `vocab` in a skewed distribution similar to real text:
+/// a few are drawn constantly and most only once.
+def tokens(vocab: Array[String], count: Int): Array[String] = {
+  val result = array(count, "a")
+
+  minstd(7) {
+    with val i = each(0, count)
+    // drawing the bound and then the index composes to ~1/n
+    val bound = randomInt(1, vocab.size)
+    result.set(i, vocab.get(randomInt(0, bound - 1)))
+  }
+
+  result
+}
+
+/// How often each word occurs in the `length` words of `text` from `start`.
+def countWords(text: Array[String], start: Int, length: Int): Dictionary[Int] = {
+  val counts: Dictionary[Int] = dictionary::empty()
+  each(0, length) { i =>
+    val word = text.get((start + i).mod(text.size))
+    counts.insert(word, counts.lookup(word).getOrElse { 0 } + 1)
+  }
+  counts
+}
+
+def run(N: Int): Int = {
+  val vocabularySize = 4096
+  val documentSize = 2048
+  val text = tokens(vocabulary(vocabularySize), documentSize * 8)
+  var checksum = 0
+
+  each(0, 1 + N / documentSize) { document =>
+    val counts = countWords(text, document * documentSize, documentSize)
+    for[Tagged[Int]] { counts.eachTagged } { case Tagged(word, n) =>
+      checksum = checksum + n * word.size
+    }
+  }
+  checksum
+}
+
+def main() = benchmark(16384){run}

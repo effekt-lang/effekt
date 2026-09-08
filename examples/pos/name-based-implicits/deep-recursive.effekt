@@ -1,0 +1,10 @@
+
+record F[X](x: X)
+
+def foo(): Unit = ()
+def foo[X](){ ?foo: => X }: F[X] = F[X](foo())
+
+def main() = {
+  val x: F[F[F[F[F[F[F[F[F[F[F[F[F[F[F[Unit]]]]]]]]]]]]]]] = foo()
+  println("OK")
+}

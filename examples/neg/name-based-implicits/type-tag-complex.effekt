@@ -1,0 +1,20 @@
+type TypeTag[T] {
+  Int()
+  Bool()
+  String()
+  List[A](elem: TypeTag[A])
+  Option[A](elem: TypeTag[A])
+  Pair[F,S](fst: TypeTag[F], snd: TypeTag[S])
+}
+
+def typeTag(): TypeTag[Int] = Int()
+def typeTag(): TypeTag[Bool] = Bool()
+def typeTag(): TypeTag[String] = String()
+def typeTag[A]{ ?typeTag: => TypeTag[A] }: TypeTag[List[A]] = List(typeTag())
+def typeTag[A]{ ?typeTag: => TypeTag[A] }: TypeTag[Option[A]] = Option(typeTag())
+def typeTag[F,S]{ ?typeTag: => TypeTag[F] }{ ?typeTag: => TypeTag[S] }: TypeTag[(F,S)] = Pair(typeTag(), typeTag())
+
+def main() = {
+  val x: TypeTag[List[(Bool, Int)]] = typeTag()
+  ()
+}

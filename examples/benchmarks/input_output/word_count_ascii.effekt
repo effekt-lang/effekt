@@ -32,7 +32,7 @@ def isSpace(b: Byte) = b match {
 
 def isNewline(b: Byte) = b == 0x0A // \n
 
-def countWords(): Output / read[Byte] = {
+def countWords(): Output / next[Byte] = {
 
   var chars = 0
   var words = 0
@@ -40,7 +40,7 @@ def countWords(): Output / read[Byte] = {
   var wasSpace = true
 
   loop {
-    val c = do read()
+    val c = do next()
 
     chars = chars + 1
 

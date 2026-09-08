@@ -23,6 +23,9 @@
 ;   +-----------------+--------+-------------+
 %Object = type ptr
 
+; C-visible managed objects point at the payload, not at the header.
+%CObject = type ptr
+
 
 ; A Frame has the following layout
 ;
@@ -88,9 +91,6 @@
 %Double = type double
 %Byte = type i8
 %Char = type i64
-%Bool = type %Pos
-%Unit = type %Pos
-%String = type %Pos
 
 ; Foreign imports
 
@@ -98,7 +98,7 @@ declare ptr @malloc(i64)
 declare void @free(ptr)
 declare ptr @realloc(ptr, i64)
 declare noalias ptr @calloc(i64, i64)
-declare void @memcpy(ptr, ptr, i64)
+declare ptr @memcpy(ptr, ptr, i64)
 declare i64 @llvm.ctlz.i64 (i64 , i1)
 declare i64 @llvm.fshr.i64(i64, i64, i64)
 declare double @llvm.sqrt.f64(double)
@@ -114,8 +114,7 @@ declare double @log1p(double)
 ; Intrinsic versions of the following two only added in LLVM 19
 declare double @atan(double)
 declare double @tan(double)
-declare void @print(i64)
-declare void @exit(i64)
+declare void @exit(i32)
 declare void @llvm.assume(i1)
 
 
@@ -159,7 +158,7 @@ define private void @shareObject(%Object %object) alwaysinline {
 
     next:
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
+    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24, !range !41
     %referenceCount.1 = add %ReferenceCount %referenceCount, 1
     store %ReferenceCount %referenceCount.1, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
     br label %done
@@ -186,7 +185,7 @@ define private void @eraseObject(%Object %object) alwaysinline {
 
     next:
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24
+    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24, !range !41
     switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
 
     decr:
@@ -215,6 +214,41 @@ define void @erasePositive(%Pos %val) alwaysinline {
 define void @eraseNegative(%Neg %val) alwaysinline {
     %object = extractvalue %Neg %val, 1
     tail call void @eraseObject(%Object %object)
+    ret void
+}
+
+
+; User-facing C-helpers for GC
+
+define %CObject @effekt_alloc(%Eraser %eraser, i64 %size) {
+    %object = call %Object @newObject(%Eraser %eraser, i64 %size)
+    %environment = call %Environment @objectEnvironment(%Object %object)
+    ret %CObject %environment
+}
+
+define void @effekt_share(%CObject %object) {
+    %isNull = icmp eq %CObject %object, null
+    br i1 %isNull, label %done, label %next
+
+    next:
+    %header = getelementptr %Header, ptr %object, i64 -1
+    call void @shareObject(%Object %header)
+    br label %done
+
+    done:
+    ret void
+}
+
+define void @effekt_erase(%CObject %object) {
+    %isNull = icmp eq %CObject %object, null
+    br i1 %isNull, label %done, label %next
+
+    next:
+    %header = getelementptr %Header, ptr %object, i64 -1
+    call void @eraseObject(%Object %header)
+    br label %done
+
+    done:
     ret void
 }
 
@@ -296,10 +330,8 @@ realloc:
 
 define private %StackPointer @stackAllocate(%Stack %stack, i64 %n) alwaysinline {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
-    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
 
     %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
-    %limit = load %Limit, ptr %limit_pointer, !alias.scope !11, !noalias !21
     %nextStackPointer = getelementptr i8, %StackPointer %currentStackPointer, i64 %n
 
     store %StackPointer %nextStackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
@@ -448,7 +480,7 @@ define private {%Resumption, %Stack} @shift(%Stack %stack, %Prompt %prompt) {
 
 define private void @erasePrompt(%Prompt %prompt) alwaysinline {
     %referenceCount_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23
+    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23, !range !41
     switch %ReferenceCount %referenceCount, label %decrement [%ReferenceCount 0, label %free]
 
 decrement:
@@ -463,7 +495,7 @@ free:
 
 define private void @sharePrompt(%Prompt %prompt) alwaysinline {
     %referenceCount_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23
+    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23, !range !41
     %newReferenceCount = add %ReferenceCount %referenceCount, 1
     store %ReferenceCount %newReferenceCount, ptr %referenceCount_pointer, !alias.scope !13, !noalias !23
     ret void
@@ -506,7 +538,7 @@ define private %Stack @copyStack(%Stack %stack) alwaysinline {
     %newStackPointer = getelementptr i8, %Stack %newStack, i64 %used
     %newLimit = getelementptr i8, %Stack %newStack, i64 %size
 
-    call void @memcpy(ptr %newStack, ptr %stack, i64 %used)
+    %copied = call ptr @memcpy(ptr %newStack, ptr %stack, i64 %used)
 
     %newStackPointer_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 1
     %newLimit_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 2
@@ -531,7 +563,7 @@ define private %Resumption @uniqueStack(%Resumption %resumption) alwaysinline {
 
 entry:
     %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
+    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21, !range !41
     switch %ReferenceCount %referenceCount, label %copy [%ReferenceCount 0, label %done]
 
 done:
@@ -575,7 +607,7 @@ stop:
 
 define void @shareResumption(%Resumption %resumption) alwaysinline {
     %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
+    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21, !range !41
     %referenceCount.1 = add %ReferenceCount %referenceCount, 1
     store %ReferenceCount %referenceCount.1, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
     ret void
@@ -583,7 +615,7 @@ define void @shareResumption(%Resumption %resumption) alwaysinline {
 
 define void @eraseResumption(%Resumption %resumption) alwaysinline {
     %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21
+    %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer, !alias.scope !11, !noalias !21, !range !41
     switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
 
     decr:
@@ -691,9 +723,11 @@ define private %Stack @withEmptyStack() {
     ret %Stack %stack
 }
 
-define ccc void @resume_Int(%Stack %stack, %Int %integer) {
-    %argument = call ccc %Pos @coerceIntPos(%Int %integer)
-    call ccc void @resume_Pos(%Stack %stack, %Pos %argument)
+define ccc void @resume_Int(%Stack %stack, %Int %argument) {
+    %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
+    %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
+    %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
+    tail call tailcc void %returnAddress(%Int %argument, %Stack %stack)
     ret void
 }
 
@@ -705,9 +739,7 @@ define ccc void @resume_Pos(%Stack %stack, %Pos %argument) {
     ret void
 }
 
-define ccc void @run(%Pos %boxed) {
-
-    %function = call %Neg @coercePosNeg(%Pos %boxed)
+define ccc void @run(%Neg %function) {
     %stack = call %Stack @withEmptyStack()
 
     %arrayPointer = extractvalue %Neg %function, 0
@@ -719,15 +751,19 @@ define ccc void @run(%Pos %boxed) {
     ret void
 }
 
-define ccc void @run_Int(%Pos %boxed, %Int %integer) {
-    %argument = call ccc %Pos @coerceIntPos(%Int %integer)
-    call ccc %Pos @run_Pos(%Pos %boxed, %Pos %argument)
+define ccc void @run_Int(%Neg %function, %Int %argument) {
+    %stack = call %Stack @withEmptyStack()
+
+    %arrayPointer = extractvalue %Neg %function, 0
+    %object = extractvalue %Neg %function, 1
+    %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
+    %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
+
+    tail call tailcc %Pos %functionPointer(%Object %object, %Int %argument, %Stack %stack)
     ret void
 }
 
-define ccc void @run_Pos(%Pos %boxed, %Pos %argument) {
-
-    %function = call ccc %Neg @coercePosNeg(%Pos %boxed)
+define ccc void @run_Pos(%Neg %function, %Pos %argument) {
     %stack = call %Stack @withEmptyStack()
 
     %arrayPointer = extractvalue %Neg %function, 0
@@ -795,6 +831,65 @@ define ccc %Double @coercePosDouble(%Pos %input) {
     ret %Double %d
 }
 
+define ccc %Pos @coerceFloatPos(float %input) {
+    %ext    = fpext float %input to double
+    %number = bitcast double %ext to i64
+    %boxed1 = insertvalue %Pos zeroinitializer, i64 %number, 0
+    %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
+    ret %Pos %boxed2
+}
+
+define ccc float @coercePosFloat(%Pos %input) {
+    %unboxed = extractvalue %Pos %input, 0
+    %d = bitcast i64 %unboxed to double
+    %trunc = fptrunc double %d to float
+    ret float %trunc
+}
+
+define ccc %Pos @coercePtrPos(ptr %input) {
+    %number = ptrtoint ptr %input to i64
+    %boxed1 = insertvalue %Pos zeroinitializer, i64 %number, 0
+    %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
+    ret %Pos %boxed2
+}
+
+define ccc ptr @coercePosPtr(%Pos %input) {
+    %unboxed = extractvalue %Pos %input, 0
+    %d = inttoptr i64 %unboxed to ptr
+    ret ptr %d
+}
+
+define ccc %Pos @coerceObjPos(%CObject %input) {
+    entry:
+    %isNull = icmp eq %CObject %input, null
+    br i1 %isNull, label %done, label %next
+
+    next:
+    %header = getelementptr %Header, ptr %input, i64 -1
+    br label %done
+
+    done:
+    %object = phi %Object [ null, %entry ], [ %header, %next ]
+    %boxed1 = insertvalue %Pos zeroinitializer, i64 0, 0
+    %boxed2 = insertvalue %Pos %boxed1, %Object %object, 1
+    ret %Pos %boxed2
+}
+
+define ccc %CObject @coercePosObj(%Pos %input) {
+    entry:
+    %object = extractvalue %Pos %input, 1
+    %isNull = icmp eq %Object %object, null
+    br i1 %isNull, label %done, label %next
+
+    next:
+    %environment = call %Environment @objectEnvironment(%Object %object)
+    br label %done
+
+    done:
+    %result = phi %CObject [ null, %entry ], [ %environment, %next ]
+    ret %CObject %result
+}
+
 
 ; Scope domains
 !0 = !{!"types"}
@@ -818,3 +913,6 @@ define ccc %Double @coercePosDouble(%Pos %input) {
 !23 = !{!1, !2,     !4, !5} ; not prompt
 !24 = !{!1, !2, !3,     !5} ; not object
 !25 = !{!1, !2, !3, !4    } ; not vtable
+
+; Ranges
+!41 = !{i64 0, i64 9223372036854775807} ; positive i64

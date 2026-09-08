@@ -2,11 +2,11 @@ module with_val_else
 
 import stream
 
-def readOption[T, R] { f: Option[T] => R }: R / read[T] =
-  f(try { Some(do read()) } with stop { None() })
+def nextOption[T, R] { f: Option[T] => R }: R / next[T] =
+  f(try { Some(do next()) } with stop { None() })
 
 def getValue() = {
-  with val Some(x) = readOption[Int, String]() else "<value not found>"
+  with val Some(x) = nextOption[Int, String]() else "<value not found>"
   show(x)
 }
 

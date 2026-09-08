@@ -128,6 +128,14 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
     noshort = true,
     group = advanced
   )
+  val maxOnceInlineSize: ScallopOption[Long] = opt(
+    "max-once-inline-size",
+    descr = "Maximum size (number of core tree-nodes) of a function inlined for being used once; -1 for no limit",
+    default = Some(5000L),
+    noshort = true,
+    group = advanced
+  )
+
   advanced.append(server)
 
 

@@ -4,7 +4,7 @@ package core
 import effekt.core.substitutions.Substitution
 
 import scala.collection.mutable
-
+import effekt.util.DB
 
 /**
  * Pattern Matching Compiler
@@ -263,7 +263,7 @@ object PatternMatchingCompiler {
    */
   def normalize(clause: Clause): Clause = clause match {
     case Clause(conditions, label, targs, args) =>
-      val (normalized, substitution) = normalize(Map.empty, conditions, Map.empty)
+      val (normalized, substitution) = normalize(Map.empty, conditions, DB.empty)
       // TODO also substitute types?
       Clause(normalized, label, targs, args.map(v => substitution.getOrElse(v.id, v)))
   }
@@ -284,10 +284,10 @@ object PatternMatchingCompiler {
   def normalize(
     patterns: Map[ValueVar, Pattern],
     conditions: List[Condition],
-    substitution: Map[Id, ValueVar]
-  ): (List[Condition], Map[Id, ValueVar]) = {
+    substitution: DB[ValueVar]
+  ): (List[Condition], DB[ValueVar]) = {
 
-    val subst = Substitution(Map.empty, Map.empty, substitution, Map.empty)
+    val subst = Substitution(DB.empty, DB.empty, substitution, DB.empty)
 
     def prefix(p: Map[ValueVar, Pattern], cs: List[Condition]): List[Condition] =
       if p.isEmpty then cs else Condition.Patterns(p) :: cs
@@ -304,7 +304,7 @@ object PatternMatchingCompiler {
           case (sc, p: Pattern.Tag) => sc -> p
           case (sc, p: Pattern.Literal) => sc -> p
         }
-        normalize(patterns ++ filtered, rest, substitution ++ additionalSubst)
+        normalize(patterns ++ filtered, rest, substitution ++ DB.from(additionalSubst))
 
       case Condition.Run(binding) :: rest =>
         val substituted = core.substitutions.substitute(binding)(using subst)

@@ -1,0 +1,45 @@
+def use['A](x: 'A){f: ['B]('A, 'B){k: ['C]('B, 'C) => 'A} => 'A} = {
+  (f: ['B]('A, 'B){k: ['C]('B, 'C) => 'A} => 'A @ {f})[Bool](x: 'A, false){
+    ['C](b: Bool, c: 'C) => return x: 'A
+  }
+}
+
+def outer['A](x: 'A) = {
+  def choose['B](a: 'A, b: 'B){k: ['C]('B, 'C) => 'A} = {
+    (k: ['C]('B, 'C) => 'A @ {k})[String](b: 'B, "ignored")
+  }
+  (use: ['A]('A){f: ['B]('A, 'B){k: ['C]('B, 'C) => 'A} => 'A} => 'A @ {})['A](x: 'A){
+    (choose: ['B]('A, 'B){k: ['C]('B, 'C) => 'A} => 'A @ {x})
+  }
+}
+
+/// MONO_PREPROCESS
+
+interface Poly['A] {
+  apply: ['B]('A, 'B){k: Poly1['B, 'A]} => 'A
+}
+
+interface Poly1['B, 'A] {
+  apply1: ['C]('B, 'C) => 'A
+}
+
+def use['A](x: 'A){f: Poly['A]} = {
+  (f: Poly['A] @ {f}).apply: ['B]('A, 'B){k: Poly1['B, 'A]} => 'A[Bool](x: 'A, false){new Poly1[Bool, 'A] {
+    def apply1['C](b: Bool, c: 'C) = {
+      return x: 'A
+    }
+  }}
+}
+
+def outer['A](x: 'A) = {
+  def choose['B](a: 'A, b: 'B){k: Poly1['B, 'A]} = {
+    (k: Poly1['B, 'A] @ {k}).apply1: ['C]('B, 'C) => 'A[String](b: 'B, "ignored")
+  }
+  (use: ['A]('A){f: Poly['A]} => 'A @ {})['A](x: 'A){new Poly['A] {
+    def apply['B](a: 'A, b: 'B){k @ c: Poly1['B, 'A]} = {
+      (choose: ['B]('A, 'B){k: Poly1['B, 'A]} => 'A @ {x})['B](a: 'A, b: 'B){
+        (k: Poly1['B, 'A] @ {c})
+      }
+    }
+  }}
+}

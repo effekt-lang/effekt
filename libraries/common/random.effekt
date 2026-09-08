@@ -1,6 +1,9 @@
 module random
 
 import stream
+import array
+import option
+import exception
 import io/filesystem
 import io/error
 
@@ -38,7 +41,7 @@ def minstd(seed: Int): Unit / emit[Byte] = {
     if (result < 0) result + m else result
   }
 
-  while (true) {
+  forever {
     state = nextInt()
     val b = state.mod(256).toByte
     do emit(b)
@@ -73,7 +76,7 @@ def devurandom { randomnessReader: () => Unit / random }: Unit / Exception[IOErr
   try {
     with readFile("/dev/urandom")
     try randomnessReader() with random {
-      resume(do read())
+      resume(do next())
     }
   } with stop {
     do raise(io::error::EOF(), "Unexpected EOF when reading /dev/urandom!")
@@ -88,14 +91,14 @@ def devurandom { randomnessReader: () => Unit / random }: Unit / Exception[IOErr
 
 def randomByte(): Byte / random = do random()
 def randomBytes(): Unit / {emit[Byte], random} =
-  while (true) do emit(do random())
+  forever { do emit(do random()) }
 
 def randomBool(): Bool / random = {
   val b = do random()
   b.toInt.mod(2) == 1
 }
 def randomBools(): Unit / {emit[Bool], random} =
-  while (true) do emit(randomBool())
+  forever { do emit(randomBool()) }
 
 def randomInt32(): Int / random = {
   var result = 0
@@ -107,15 +110,28 @@ def randomInt32(): Int / random = {
   result.mod(1.bitwiseShl(31)).abs * if (signBit) 1 else -1
 }
 def randomInt32s(): Unit / {emit[Int], random} =
-  while (true) do emit(randomInt32())
+  forever { do emit(randomInt32()) }
 
 /// `max` is _inclusive_!
 def randomInt(min: Int, max: Int): Int / random = {
+  // How many bytes it takes to represent `range` distinct values.
+  // Each bound is a power of two, so it's exact even as a JS 'number'.
+  def bytesFor(range: Int): Int =
+    if (range <= 1) 0
+    else if (range <= 256) 1
+    else if (range <= 65536) 2
+    else if (range <= 16777216) 3
+    else if (range <= 4294967296) 4
+    else if (range <= 1099511627776) 5
+    else if (range <= 281474976710656) 6
+    else if (range <= 72057594037927936) 7
+    else 8
+
   if (min > max) {
     randomInt(max, min)
   } else {
     val range = max - min + 1
-    val bytesNeeded = (log(range.toDouble) / log(256.0)).ceil
+    val bytesNeeded = bytesFor(range)
 
     var result = 0
     repeat(bytesNeeded) {
@@ -126,9 +142,10 @@ def randomInt(min: Int, max: Int): Int / random = {
     min + (abs(result).mod(range))
   }
 }
+
 /// `max` is _inclusive_!
 def randomInts(min: Int, max: Int): Unit / {emit[Int], random} =
-  while (true) do emit(randomInt(min, max))
+  forever { do emit(randomInt(min, max)) }
 
 
 /// Random double between 0.0 and 1.0
@@ -136,7 +153,25 @@ def randomDouble(): Double / random =
   (randomInt32().toDouble / 1.bitwiseShl(31).toDouble).abs
   // This is not perfect, but it will do for now.
 def randomDoubles(): Unit / {emit[Double], random} =
-  while (true) do emit(randomDouble())
+  forever { do emit(randomDouble()) }
+
+/// Shuffle an array in-place using the Fisher-Yates algorithm.
+def shuffle[A](arr: Array[A]): Unit / random = {
+  val n = arr.size
+  each(0, n - 1) { i =>
+    arr.swap(i, randomInt(i, n - 1))
+  }
+}
+
+/// Pick a random element from an array.
+///
+/// Panics when called on an empty array.
+def pick[A](arr: Array[A]): A / random =
+  if (arr.size == 0) {
+    panic("Pick from an empty array")
+  } else {
+    arr.get(randomInt(0, arr.size - 1))
+  }
 
 
 namespace examples {
