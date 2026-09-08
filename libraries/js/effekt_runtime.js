@@ -125,7 +125,7 @@ function THUNK(f) {
 function CAPTURE(body) {
   return (ks, k) => {
     const res = body(x => TRAMPOLINE(() => k(x, ks)))
-    if (res instanceof Function) return res
+    if (typeof res === "function") return res
     else throw { computationIsDone: true, result: $effekt.unit }
   }
 }
