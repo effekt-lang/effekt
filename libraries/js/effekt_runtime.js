@@ -58,6 +58,7 @@ class Arena {
 }
 
 function snapshot(s) {
+  if (s === null) return null
   const snap = { store: s, root: s.root, generation: s.generation }
   s.generation = s.generation + 1
   return snap
@@ -85,9 +86,11 @@ function reroot(target) {
     node.value   = Mem
     cur          = node
   }
+
 }
 
 function restore(store, snap) {
+  if (snap === null) return // nothing saved ~> nothing to restore
   if (snap.root.value !== Mem) {
     // fast path: continuation is resumed immediately with no writes in between
     reroot(snap.root)
@@ -99,7 +102,18 @@ function restore(store, snap) {
 // Common Runtime
 // --------------
 const TOPLEVEL_K = (x, ks) => { throw { computationIsDone: true, result: x } }
-const TOPLEVEL_KS = { stack: null, prompt: Symbol("toplevel"), arena: new Arena(), rest: null }
+const TOPLEVEL_KS = { stack: null, prompt: Symbol("toplevel"), arena: null, rest: null }
+
+// The first variable in a scope creates its arena; until then `ks.arena` is null.
+function VAR(init, ks) {
+  const arena = ks.arena !== null ? ks.arena : (ks.arena = new Arena())
+  return arena.fresh(init)
+}
+
+function REGION(ks) {
+  const arena = ks.arena !== null ? ks.arena : (ks.arena = new Arena())
+  return arena.newRegion()
+}
 
 function THUNK(f) {
   f.thunk = true
@@ -120,7 +134,7 @@ const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 function RESET(prog, ks, k) {
   const prompt = Symbol(); // gensym
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  return prog(prompt, { stack: null, prompt, arena: new Arena(), rest }, RETURN)
+  return prog(prompt, { stack: null, prompt, arena: null, rest }, RETURN)
 }
 
 function SHIFT(p, body, ks, k) {
