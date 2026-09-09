@@ -1,0 +1,8 @@
+namespace foo {
+  def bar{ body: => Unit / {splice[Int], write} }: Unit =
+    println("OK")
+}
+
+def main() = {
+  foo::bar"This should not fail to parse"
+}
