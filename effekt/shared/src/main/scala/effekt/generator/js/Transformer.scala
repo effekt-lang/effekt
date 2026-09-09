@@ -9,6 +9,97 @@ import effekt.symbols.{ Module, Symbol, Wildcard, Bindings }
 
 import scala.collection.mutable
 
+
+val `fresh` = JSName("fresh")
+val `ref`   = JSName("ref")
+val `__tag` = JSName("__tag")
+
+/** How the values of one constructor are written, and where its fields then live. */
+sealed trait Encoding {
+  def name: JSName
+
+  /** The members a value has, in declaration order, or none when it is not an object. */
+  def members: List[JSName] = this match {
+    case Encoding.AsObject(_, _, fields)           => fields
+    case Encoding.AsTaggedObject(_, _, fields)     => fields
+    case Encoding.AsNull(_) | Encoding.AsTag(_, _) => Nil
+  }
+
+  /** A value of this constructor, ascribed with it, since the value itself does not say which. */
+  def make(values: List[js.Expr]): js.Expr = this match {
+    case e: Encoding.AsNull                 => e.value                 // null
+    case e: Encoding.AsTag                  => e.label                 // 1, the value being its tag
+    case Encoding.AsObject(name, _, fields) => js.Ascription(name, js.Object(fields zip values))
+    case Encoding.AsTaggedObject(name, tag, fields) =>
+      js.Ascription(name, js.Object((`__tag` -> js.RawExpr(tag.toString)) :: (fields zip values)))
+  }
+}
+
+/**
+ * An encoding that writes a tag, which is what a `case` label selects on.
+ *
+ * [[Encoding.AsNull]] is the one that writes none, and it carries no tag to write (told apart by an `if`)
+ */
+sealed trait Tagged extends Encoding {
+  def tag: Int
+
+  /** The `case` label that selects this constructor. */
+  def label: js.Expr = js.Ascription(name, js.RawExpr(tag.toString))
+}
+
+object Encoding {
+  /** `null`, being the only field-free constructor of a data type that has objects too. */
+  case class AsNull(name: JSName) extends Encoding {
+    def value: js.Expr = js.Ascription(name, js.Null)
+  }
+
+  /** `1`, being one field-free constructor of several, or of a data type with no objects. */
+  case class AsTag(name: JSName, tag: Int) extends Tagged
+
+  /** `{ head: h, tail: t }`, the only object, so nothing has to say which constructor it is. */
+  case class AsObject(name: JSName, tag: Int, fields: List[JSName]) extends Tagged
+
+  /** `{ __tag: 1, head: h, tail: t }`, one object of several. */
+  case class AsTaggedObject(name: JSName, tag: Int, fields: List[JSName]) extends Tagged
+}
+
+/** Where the tag of a value comes from (for a value that has one) */
+enum Tag {
+
+  /** the value is its tag: it is a number */
+  case Itself
+
+  /** stored in the object */
+  case Stored
+
+  /** fixed, needing no read, as no other constructor of the data type is an object */
+  case Fixed(label: js.Expr)
+
+  /** a number is its own tag, and anything else is an object, whose tag is `ofObject`. */
+  case NumberOr(ofObject: Tag)
+
+  /** Reads the tag off a value, which a `switch` then selects on. */
+  def read(value: js.Expr): js.Expr = this match {
+    case Itself             => value
+    case Stored             => js.Member(value, `__tag`)
+    case Fixed(label)       => label
+    case NumberOr(ofObject) => js.IfExpr(js"typeof ${value} === ${JsString("number")}", value, ofObject.read(value))
+  }
+}
+
+/** What a match does to find out which constructor a value is which */
+enum Dispatch {
+
+  /** The constructor is known: the data type is a record. */
+  case Known
+
+  /** A `switch` selects on the tag. */
+  case ByTag(tag: Tag)
+
+  /** A test against the one value that carries no tag; whatever fails it, `rest` tells apart. */
+  case ByTest(absent: js.Expr, rest: Dispatch)
+}
+
 /**
  * Parent all JS transformers.
  *
@@ -24,45 +115,65 @@ trait Transformer {
 
   // Representation of Data / Codata
   // ----
-  def tagFor(constructor: Id)(using D: DeclarationContext, C: Context): js.Expr = {
-    js.RawExpr(D.getConstructorTag(constructor).toString)
-  }
+  case class Layout(dispatch: Dispatch, encodings: Map[Id, Encoding])
 
-  def generateConstructor(constructor: Constructor, tagValue: Int): js.Stmt = {
-    val fields = constructor.fields
-    // class Id {
-    //   constructor(param...) { this.param = param; ...  }
-    //   __reflect() { return { name: "NAME", data: [this.param...] }
-    //   __equals(other) { ... }
-    // }
-    val params = fields.map { f => nameDef(f.id) }
+  val layouts: mutable.Map[Id, Layout] = mutable.Map.empty
 
-    def set(field: JSName, value: js.Expr): js.Stmt = js.Assign(js.Member(js"this", field), value)
-    def get(field: JSName): js.Expr = js.Member(js"this", field)
+  /** The layout of the data type that declares this constructor, decided from its shape alone. */
+  def layoutFor(constructor: Id)(using D: DeclarationContext, C: Context): Layout =
+    val data = D.findConstructor(constructor).flatMap(D.findData).getOrElse {
+      C.panic(s"No data type declares the constructor ${constructor.name.name}")
+    }
+    layouts.getOrElseUpdate(data.id, {
+      val constructors = data.constructors.zipWithIndex
 
-    val initParams = params.map { param => set(param, js.Variable(param))  }
-    val initTag    = set(`tag`, js.RawExpr(tagValue.toString))
-    val jsConstructor: js.Function = js.Function(JSName("constructor"), params, initTag :: initParams)
+      // 1. the shape of the whole data type decides how its constructors are written
+      val (objects, singletons) = constructors.partition { case (c, _) => c.fields.nonEmpty }
+      val encoded = constructors.map { case (c, tag) =>
+        val name = nameDef(c.id)
+        val members = c.fields.map { f => memberNameRef(f.id) }
+        c.id -> ((c.fields, singletons, objects) match {
+          // a) only singleton constructor, when there are full objects ~> null
+          case (Nil, _ :: Nil, _ :: _) => Encoding.AsNull(name)
+          // b) any other singleton constructor:                        ~> 1
+          case (Nil, _, _)             => Encoding.AsTag(name, tag)
+          // c) only constructor that is an object (no tag needed)      ~> { head_0: h }
+          case (_, _, _ :: Nil)        => Encoding.AsObject(name, tag, members)
+          // d) one object of several (tag is needed)                   ~> { __tag: 1, head_0: h }
+          case _                       => Encoding.AsTaggedObject(name, tag, members)
+        })
+      }
 
-    val jsReflect: js.Function = js.Function(`reflect`, Nil, List(js.Return(js.Object(List(
-      `tag`  -> js.RawExpr(tagValue.toString),
-      `name` -> JsString(constructor.id.name.name),
-      `data` -> js.ArrayLiteral(fields map { f => get(memberNameRef(f.id)) }))))))
+      // 2. match tells constructors apart based on the encodings above, building the dispatch
+      val absent     = encoded.collectFirst { case (_, e: Encoding.AsNull)   => e }
+      val onlyObject = encoded.collectFirst { case (_, e: Encoding.AsObject) => e }
 
-    val other = freshName("other")
-    def otherGet(field: JSName): js.Expr = js.Member(js.Variable(other), field)
-    def compare(field: JSName): js.Expr = js"!${$effekt.call("equals", get(field), otherGet(field))}"
-    val noop    = js.Block(Nil)
-    val abort   = js.Return(js"false")
-    val succeed = js.Return(js"true")
-    val otherExists   = js.If(js"!${js.Variable(other)}", abort, noop)
-    val compareTags   = js.If(compare(`tag`), abort, noop)
-    val compareFields = params.map(f => js.If(compare(f), abort, noop))
+      val (tagOfObject, amongObjects) = onlyObject match {
+        // either it is the only object, so the dispatch is clear
+        case Some(only) => (Tag.Fixed(only.label), Dispatch.Known)
+        // or there are several objects, so the dispatch is by `switch (x.__tag)`
+        case None       => (Tag.Stored,            Dispatch.ByTag(Tag.Stored))
+      }
 
-    val jsEquals: js.Function = js.Function(`equals`, List(other), otherExists :: compareTags :: compareFields ::: List(succeed))
+      val dispatch = (absent, singletons, objects) match {
+        // a) one is `null`, other are objects                              ~> if (x === null) ... else ...
+        case (Some(nothing), _, _) => Dispatch.ByTest(nothing.value, amongObjects)
+        // b) every constructor is a singleton                              ~> switch (x)
+        case (_, _, Nil)           => Dispatch.ByTag(Tag.Itself)
+        // c) every constructor is an object (potentially carrying its tag) ~> switch (x.__tag) (or nothing when there is one)
+        case (_, Nil, _)           => amongObjects
+        // d) several are numbers, the rest are objects                     ~> switch (typeof x === "number" ? x : x.__tag)
+        case _                     => Dispatch.ByTag(Tag.NumberOr(tagOfObject))
+      }
 
-    js.Class(nameDef(constructor.id), List(jsConstructor, jsReflect, jsEquals))
-  }
+      Layout(dispatch, encoded.toMap)
+    })
+
+  def dispatchFor(constructor: Id)(using D: DeclarationContext, C: Context): Dispatch =
+    layoutFor(constructor).dispatch
+
+  def encodingFor(constructor: Id)(using D: DeclarationContext, C: Context): Encoding =
+    layoutFor(constructor).encodings(constructor)
 
   // Names
   // -----
@@ -92,14 +203,6 @@ trait Transformer {
   def jsModuleName(path: String): String = "$" + path.replace('/', '_').replace('-', '_')
 
   def jsModuleFile(path: String): String = path.replace('/', '_').replace('-', '_') + ".js"
-
-  val `fresh` = JSName("fresh")
-  val `ref`   = JSName("ref")
-  val `tag`   = JSName("__tag")
-  val `name`  = JSName("__name")
-  val `data`  = JSName("__data")
-  val `reflect`  = JSName("__reflect")
-  val `equals`  = JSName("__equals")
 
   def nameDef(id: Id): JSName = uniqueName(id)
 
