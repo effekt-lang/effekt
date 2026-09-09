@@ -170,7 +170,7 @@ class ParserTests extends munit.FunSuite {
       case (p1: Product, p2: Product) if p1.getClass == p2.getClass =>
         val f1 = p1.productIterator.toList
         val f2 = p2.productIterator.toList
-        (f1.length == f2.length) && f1.zip(f2).forall((eq _).tupled)
+        (f1.length == f2.length) && f1.zip(f2).forall((eq).tupled)
 
       case _ =>
         x == y
@@ -188,7 +188,7 @@ class ParserTests extends munit.FunSuite {
         "Trees are not the same modulo spans",
         munitPrint(obtained),
         munitPrint(expected),
-      )(loc)
+      )(using loc)
     }
   }
 
@@ -201,7 +201,7 @@ class ParserTests extends munit.FunSuite {
         "Trees are the same modulo spans, but expected them to be different",
         munitPrint(obtained),
         munitPrint(expected),
-      )(loc)
+      )(using loc)
     }
   }
 
