@@ -56,7 +56,7 @@ lazy val replDependencies = Seq(
 )
 
 lazy val lspDependencies = Seq(
-  "org.eclipse.lsp4j" % "org.eclipse.lsp4j" % "0.23.1"
+  "org.eclipse.lsp4j" % "org.eclipse.lsp4j" % "1.0.0"
 )
 
 lazy val testingDependencies = Seq(
