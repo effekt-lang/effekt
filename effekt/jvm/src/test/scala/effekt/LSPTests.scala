@@ -5,6 +5,7 @@ import effekt.Intelligence.{BindingInfo, BindingKind, BindingOrigin, Code, LSPLo
 import munit.FunSuite
 import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit}
 import org.eclipse.lsp4j.jsonrpc.messages
+import org.eclipse.lsp4j.jsonrpc.services.ServiceEndpoints
 
 import java.io.{PipedInputStream, PipedOutputStream}
 import java.util
@@ -77,6 +78,34 @@ class LSPTests extends FunSuite {
   // LSP: lifecycle events
   //
   //
+
+  /**
+   * We declare the JSON-RPC methods explicitly, see the comment on [[Server]].
+   * This test checks that the names are correct and that we're not implementing things twice.
+   */
+  test("Server advertises exactly the implemented JSON-RPC methods") {
+    val advertised = ServiceEndpoints.getSupportedMethods(classOf[Server]).keySet.asScala.toSet
+    val expected = Set(
+      "initialize",
+      "initialized",
+      "shutdown",
+      "exit",
+      "$/setTrace",
+      "textDocument/didOpen",
+      "textDocument/didChange",
+      "textDocument/didSave",
+      "textDocument/didClose",
+      "textDocument/hover",
+      "textDocument/definition",
+      "textDocument/references",
+      "textDocument/documentSymbol",
+      "textDocument/codeAction",
+      "textDocument/inlayHint",
+      "workspace/didChangeConfiguration",
+      "workspace/didChangeWatchedFiles",
+    )
+    assertEquals(advertised, expected)
+  }
 
   test("Initialization works") {
     withClientAndServer { (client, server) =>
