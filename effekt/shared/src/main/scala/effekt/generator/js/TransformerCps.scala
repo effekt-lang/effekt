@@ -544,8 +544,13 @@ object TransformerCps extends Transformer {
   def toJS(scrutinee: js.Expr, clause: Clause[Encoding])(using C: TransformerContext): Binding[List[js.Stmt]] =
     val used = cps.Variables.free(clause.body)
 
-    val extractedFields = (clause.vparams zip clause.encoding.members).collect {
-      case (p, field) if used contains p => js.Const(nameDef(p), js.Member(scrutinee, field))
+    val bound = (clause.vparams zip clause.encoding.members).collect {
+      case (p, field) if used contains p => field -> js.Pattern.Variable(nameDef(p))
+    }
+    val extractedFields = bound match {
+      case Nil                => Nil
+      case (field, p) :: Nil  => js.Const(p, js.Member(scrutinee, field)) :: Nil
+      case _                  => js.Const(js.Pattern.Object(bound), scrutinee) :: Nil
     }
 
     Binding { k => extractedFields ++ toJS(clause.body).run(k) }

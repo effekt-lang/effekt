@@ -104,6 +104,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(pattern: Pattern): Doc = pattern match {
     case Pattern.Variable(name) => toDoc(name)
     case Pattern.Array(ps) => brackets(ps map toDoc)
+    case Pattern.Object(fields) =>
+      group(jsBlock(vsep(fields.map { case (f, p) => toDoc(f) <> ":" <+> toDoc(p) }, comma)))
   }
 
   // some helpers
