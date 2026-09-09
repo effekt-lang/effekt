@@ -15,11 +15,13 @@ import effekt.util.{PlainMessaging, PrettyPrinter}
 import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
 import kiama.util.Convert.*
 import kiama.util.{Collections, Convert, Position, Source}
-import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
+import org.eclipse.lsp4j.adapters.{CodeActionResponseAdapter, DocumentSymbolResponseAdapter, LocationLinkListAdapter}
+import org.eclipse.lsp4j.jsonrpc.json.ResponseJsonAdapter
+import org.eclipse.lsp4j.jsonrpc.services.{JsonNotification, JsonRequest}
 import org.eclipse.lsp4j.jsonrpc.{Launcher, messages}
 import org.eclipse.lsp4j.launch.LSPLauncher
 import org.eclipse.lsp4j.services.*
-import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, MessageParams, MessageType, PublishDiagnosticsParams, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, SymbolInformation, SymbolKind, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, WorkspaceEdit, Range as LSPRange}
+import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InitializedParams, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, MessageParams, MessageType, PublishDiagnosticsParams, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, SymbolInformation, SymbolKind, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, WorkspaceEdit, Range as LSPRange}
 
 import java.io.{InputStream, OutputStream, PrintWriter}
 import java.net.ServerSocket
@@ -34,8 +36,11 @@ import kiama.util.Range
  * @param compileOnChange Whether to compile on `didChange` events
  *                        Currently disabled because references are erased when there are any compiler errors.
  *                        Therefore, we currently only update on `didSave` until we have working caching for references.
+ *
+ * We deliberately do not implement LSP4J's `LanguageServer`, `TextDocumentService` and `WorkspaceService`
+ * interfaces, but instead declare the JSON-RPC surface explicitly to avoid Scala weirdness.
  */
-class Server(config: EffektConfig, compileOnChange: Boolean=false) extends LanguageServer with Driver with Intelligence with TextDocumentService with WorkspaceService {
+class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Driver with Intelligence {
   private var client: EffektLanguageClient = scala.compiletime.uninitialized
   private val textDocumentService = this
   private val workspaceService = this
@@ -54,7 +59,8 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
   //
 
-  override def initialize(params: InitializeParams): CompletableFuture[InitializeResult] = {
+  @JsonRequest("initialize")
+  def initialize(params: InitializeParams): CompletableFuture[InitializeResult] = {
     val capabilities = new ServerCapabilities()
     capabilities.setTextDocumentSync(TextDocumentSyncKind.Full)
     capabilities.setHoverProvider(true)
@@ -89,22 +95,26 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     CompletableFuture.completedFuture(result)
   }
 
-  override def shutdown(): CompletableFuture[Object] = {
+  @JsonNotification("initialized")
+  def initialized(params: InitializedParams): Unit = {
+    // Do nothing
+  }
+
+  @JsonRequest("shutdown")
+  def shutdown(): CompletableFuture[Object] = {
     shutdownRequested = true
     CompletableFuture.completedFuture(null)
   }
 
-  override def exit(): Unit = {
+  @JsonNotification("exit")
+  def exit(): Unit = {
     System.exit(if (shutdownRequested) 0 else 1)
   }
 
-  override def setTrace(params: SetTraceParams): Unit = {
+  @JsonNotification("$/setTrace")
+  def setTrace(params: SetTraceParams): Unit = {
     // Do nothing
   }
-
-  // The LSP services are also implemented by the Server class as they are strongly coupled anyway.
-  override def getTextDocumentService(): TextDocumentService = this
-  override def getWorkspaceService(): WorkspaceService = this
 
   // LSP Diagnostics
   //
@@ -231,6 +241,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
   //
 
+  @JsonNotification("textDocument/didChange")
   def didChange(params: DidChangeTextDocumentParams): Unit = {
     if (!compileOnChange) return
     val document = params.getTextDocument
@@ -238,16 +249,19 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     getDriver.compileString(document.getUri, params.getContentChanges.get(0).getText, getConfig)
   }
 
+  @JsonNotification("textDocument/didClose")
   def didClose(params: DidCloseTextDocumentParams): Unit = {
     clearDiagnostics(params.getTextDocument.getUri)
   }
 
+  @JsonNotification("textDocument/didOpen")
   def didOpen(params: DidOpenTextDocumentParams): Unit = {
     val document = params.getTextDocument
     clearDiagnostics(document.getUri)
     getDriver.compileString(document.getUri, document.getText, getConfig)
   }
 
+  @JsonNotification("textDocument/didSave")
   def didSave(params: DidSaveTextDocumentParams): Unit = {
     val document = params.getTextDocument
     val text = Option(params.getText) match {
@@ -263,7 +277,8 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
   //
 
-  override def hover(params: HoverParams): CompletableFuture[Hover] = {
+  @JsonRequest("textDocument/hover")
+  def hover(params: HoverParams): CompletableFuture[Hover] = {
     val position = sources.get(params.getTextDocument.getUri).map { source =>
       Convert.fromLSPPosition(params.getPosition, source)
     }
@@ -282,7 +297,9 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
   //
 
-  override def documentSymbol(params: DocumentSymbolParams): CompletableFuture[util.List[messages.Either[SymbolInformation, DocumentSymbol]]] = {
+  @JsonRequest("textDocument/documentSymbol")
+  @ResponseJsonAdapter(classOf[DocumentSymbolResponseAdapter])
+  def documentSymbol(params: DocumentSymbolParams): CompletableFuture[util.List[messages.Either[SymbolInformation, DocumentSymbol]]] = {
     val source = sources.get(params.getTextDocument.getUri)
     if (source.isEmpty) return CompletableFuture.completedFuture(Collections.seqToJavaList(Vector()))
 
@@ -332,7 +349,9 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
   //
 
-  override def definition(params: DefinitionParams): CompletableFuture[messages.Either[util.List[? <: Location], util.List[? <: LocationLink]]] = {
+  @JsonRequest("textDocument/definition")
+  @ResponseJsonAdapter(classOf[LocationLinkListAdapter])
+  def definition(params: DefinitionParams): CompletableFuture[messages.Either[util.List[? <: Location], util.List[? <: LocationLink]]] = {
     val location = for {
       position <- sources.get(params.getTextDocument.getUri).map { source =>
         fromLSPPosition(params.getPosition, source)
@@ -351,7 +370,8 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
   //
 
-  override def references(params: ReferenceParams): CompletableFuture[util.List[? <: Location]] = {
+  @JsonRequest("textDocument/references")
+  def references(params: ReferenceParams): CompletableFuture[util.List[? <: Location]] = {
     val position = sources.get(params.getTextDocument.getUri).map { source =>
       fromLSPPosition(params.getPosition, source)
     }
@@ -374,7 +394,8 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
   //
 
-  override def inlayHint(params: InlayHintParams): CompletableFuture[util.List[InlayHint]] = {
+  @JsonRequest("textDocument/inlayHint")
+  def inlayHint(params: InlayHintParams): CompletableFuture[util.List[InlayHint]] = {
 
     // Inlay Hint Setting Json Object
     val inlayHintSetting = settingObject("inlayHints")
@@ -441,7 +462,9 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
   //
 
-  override def codeAction(params: CodeActionParams): CompletableFuture[util.List[messages.Either[Command, CodeAction]]] = {
+  @JsonRequest("textDocument/codeAction")
+  @ResponseJsonAdapter(classOf[CodeActionResponseAdapter])
+  def codeAction(params: CodeActionParams): CompletableFuture[util.List[messages.Either[Command, CodeAction]]] = {
     val codeActions = for {
       position <- sources.get(params.getTextDocument.getUri).map { source =>
         fromLSPPosition(params.getRange.getStart, source)
@@ -518,6 +541,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
   //
 
+  @JsonNotification("workspace/didChangeConfiguration")
   def didChangeConfiguration(params: DidChangeConfigurationParams): Unit = {
     // The configuration arrives as a JSON object nested under the "effekt" key
     // `{ "effekt": { "showIR": "core", ... } }`
@@ -537,6 +561,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
     }
   }
 
+  @JsonNotification("workspace/didChangeWatchedFiles")
   def didChangeWatchedFiles(params: DidChangeWatchedFilesParams): Unit = {}
 
   // Settings
