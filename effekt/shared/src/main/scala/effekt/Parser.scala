@@ -863,9 +863,19 @@ class Parser(tokens: Seq[Token], source: Source) {
             peek.kind match {
               case t@RawStr(s) =>
                 skip()
-                res.addOne('\n'); res.append(s)
+                res.append(s)
                 go()
-              case _ => res.mkString
+              case _ =>
+                // remove the trailing newline, which will *always* be there as either a \n or \r\n (see Lexer).
+                // Reasoning: Note that escapes are not allowed in raw strings, so the \r couldn't have come from
+                // a `\r` in the raw string. If we were to allow escapes in raw strings, a trailing \r in
+                // the string would break (but *only* this would).
+                assert(res.last == '\n')
+                res.deleteCharAt(res.length() - 1)
+                if (res.last == '\r') {
+                  res.deleteCharAt(res.length() - 1)
+                }
+                res.mkString
             }
           }
           go()

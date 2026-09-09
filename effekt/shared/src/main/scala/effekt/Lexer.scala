@@ -635,9 +635,17 @@ class Lexer(source: Source) extends Iterator[Token] {
           return advance2With(close())
         case ('\'', _) if delimiter == CharString =>
           return advanceWith(close())
-        case ('\n', _) | ('\r', '\n') if delimiter == RawString =>
+        case ('\n', _) if delimiter == RawString =>
           delimiters.popWhile(_ == RawString)
-          return advanceWith(close(shouldPop = false))
+          // will be removed in Parser for the last line
+          contents.addOne(advance())
+          return close(shouldPop = false)
+        case ('\r', '\n') if delimiter == RawString =>
+          delimiters.popWhile(_ == RawString)
+          // will be removed in Parser for the last line
+          contents.addOne(advance())
+          contents.addOne(advance())
+          return close(shouldPop = false)
 
         // escapes
         case ('\\', _) if delimiter.allowsEscapes =>
