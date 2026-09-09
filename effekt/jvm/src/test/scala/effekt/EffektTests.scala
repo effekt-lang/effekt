@@ -165,6 +165,7 @@ trait EffektTests extends munit.FunSuite {
           val severity = res.group(1) match {
             case "ERROR" => Severities.Error
             case "WARN" => Severities.Warning
+            case _ => fail("Internal error: Should not happen")
           }
           findError(severity, no + 1, res.group(2))
         }
