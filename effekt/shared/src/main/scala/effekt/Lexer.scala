@@ -64,7 +64,7 @@ enum TokenKind {
   case Integer(n: Long)
   case Float(d: Double)
   case Str(s: String, multiline: Boolean)
-  case RawStr(s: String)
+  case RawStr(s: String, terminator: String)
   case HoleStr(s: String)
   case Chr(c: Int)
   case Byt(b: UByte)
@@ -299,14 +299,14 @@ class Lexer(source: Source) extends Iterator[Token] {
 
     def allowsEscapes: Boolean = !this.isMultiline
 
-    def toTokenKind(cs: String): TokenKind = this match {
+    def toTokenKind(cs: String, terminator: String = ""): TokenKind = this match {
       case SingleString => TokenKind.Str(cs, multiline = false)
       case MultiString => TokenKind.Str(cs, multiline = true)
       case HoleString => TokenKind.HoleStr(cs)
       case CharString if cs.isEmpty => TokenKind.Error(LexerError.EmptyCharLiteral)
       case CharString if cs.codePointCount(0, cs.length) > 1 => TokenKind.Error(LexerError.MultipleCodePointsInChar)
       case CharString /* otherwise */ => TokenKind.Chr(cs.codePointAt(0))
-      case RawString => TokenKind.RawStr(cs)
+      case RawString => TokenKind.RawStr(cs, terminator)
     }
   }
   export Delimiter.*
@@ -608,6 +608,7 @@ class Lexer(source: Source) extends Iterator[Token] {
     if !continued then delimiters.push(delimiter)
 
     val contents = StringBuilder()
+    var terminator = ""
 
     /**
      * Creates the correct token to be returned, takes care of the [[delimiters]] stack.
@@ -615,7 +616,7 @@ class Lexer(source: Source) extends Iterator[Token] {
     def close(shouldPop: Boolean = true, unterminated: Boolean = false) = {
       if shouldPop then delimiters.pop()
 
-      val kind = delimiter.toTokenKind(contents.toString)
+      val kind = delimiter.toTokenKind(contents.toString, terminator)
 
       if (unterminated) {
         TokenKind.Error(LexerError.UnterminatedStringLike(kind))
@@ -638,13 +639,12 @@ class Lexer(source: Source) extends Iterator[Token] {
         case ('\n', _) if delimiter == RawString =>
           delimiters.popWhile(_ == RawString)
           // will be removed in Parser for the last line
-          contents.addOne(advance())
-          return close(shouldPop = false)
+          terminator = "\n"
+          return advanceWith(close(shouldPop = false))
         case ('\r', '\n') if delimiter == RawString =>
           delimiters.popWhile(_ == RawString)
           // will be removed in Parser for the last line
-          contents.addOne(advance())
-          contents.addOne(advance())
+          terminator = "\r\n"
           return close(shouldPop = false)
 
         // escapes

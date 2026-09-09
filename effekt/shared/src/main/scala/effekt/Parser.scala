@@ -856,25 +856,19 @@ class Parser(tokens: Seq[Token], source: Source) {
   def string(): String =
     nonterminal:
       expect("string literal") {
-        case RawStr(fst) =>
+        case RawStr(fst, terminator) =>
           val res = mutable.StringBuilder(fst)
+          var lastTerminator = terminator
           @tailrec
           def go(): String = {
             peek.kind match {
-              case t@RawStr(s) =>
+              case t@RawStr(s, terminator) =>
                 skip()
+                res.append(lastTerminator)
                 res.append(s)
+                lastTerminator = terminator
                 go()
               case _ =>
-                // remove the trailing newline, which will *always* be there as either a \n or \r\n (see Lexer).
-                // Reasoning: Note that escapes are not allowed in raw strings, so the \r couldn't have come from
-                // a `\r` in the raw string. If we were to allow escapes in raw strings, a trailing \r in
-                // the string would break (but *only* this would).
-                assert(res.last == '\n')
-                res.deleteCharAt(res.length() - 1)
-                if (res.last == '\r') {
-                  res.deleteCharAt(res.length() - 1)
-                }
                 res.mkString
             }
           }
