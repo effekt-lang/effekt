@@ -44,7 +44,7 @@ case class Module(
 
   def path = decl.path
 
-  private var _exports: Bindings = _
+  private var _exports: Bindings = scala.compiletime.uninitialized
   def exports: Bindings = _exports
 
   def terms = exports.terms
@@ -52,7 +52,7 @@ case class Module(
   def captures = exports.captures
 
 
-  private var _includes: List[Module] = _
+  private var _includes: List[Module] = scala.compiletime.uninitialized
   def includes = _includes
 
   // a topological ordering of all transitive dependencies

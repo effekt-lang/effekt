@@ -39,7 +39,7 @@ class Annotations private(
   /**
    * Local Annotations are organized differently to allow simple access.
    */
-  private var annotations: Map[Annotation[_, _], Map[Annotations.Key[Any], Any]]
+  private var annotations: Map[Annotation[?, ?], Map[Annotations.Key[Any], Any]]
 ) {
   import Annotations._
 
@@ -81,9 +81,9 @@ class Annotations private(
     anns.foreach { case (kk, v) =>
       kk.key match {
         case sym: symbols.Symbol =>
-          symbolsDB.annotate(ann.asInstanceOf[SymbolAnnotation[_, V]], sym, f(sym, v))
+          symbolsDB.annotate(ann.asInstanceOf[SymbolAnnotation[?, V]], sym, f(sym, v))
         case key: source.Tree =>
-          treesDB.annotate(ann.asInstanceOf[TreeAnnotation[_, V]], key, f(key, v))
+          treesDB.annotate(ann.asInstanceOf[TreeAnnotation[?, V]], key, f(key, v))
       }
     }
 
@@ -346,10 +346,10 @@ object Annotations {
  * It should thus only be used to store a "ground" truth that will not be changed again.
  */
 trait TreeAnnotations { self: Context =>
-  private type AnnotationsMap = Map[TreeAnnotation[_, _], Any]
+  private type AnnotationsMap = Map[TreeAnnotation[?, ?], Any]
 
-  private type Annotations = Map[TreeAnnotation[_, _], Any]
-  type DB = util.IdentityHashMap[source.Tree, Map[TreeAnnotation[_, _], Any]]
+  private type Annotations = Map[TreeAnnotation[?, ?], Any]
+  type DB = util.IdentityHashMap[source.Tree, Map[TreeAnnotation[?, ?], Any]]
   var db: DB = new util.IdentityHashMap()
 
   private def annotationsAt[K](key: K): AnnotationsMap =
@@ -379,15 +379,15 @@ trait TreeAnnotations { self: Context =>
     db.put(key, anns + (ann -> value))
   }
 
-  def annotationOption[V](ann: TreeAnnotation[_, V], key: source.Tree): Option[V] =
+  def annotationOption[V](ann: TreeAnnotation[?, V], key: source.Tree): Option[V] =
     annotationsAt(key).get(ann).asInstanceOf[Option[V]]
 
-  def annotation[V](ann: TreeAnnotation[_, V], key: source.Tree): V =
+  def annotation[V](ann: TreeAnnotation[?, V], key: source.Tree): V =
     annotationOption(ann, key).getOrElse {
       panic(s"Cannot find ${ann.description} for '${key}'")
     }
 
-  def hasAnnotation[V](ann: TreeAnnotation[_, V], key: source.Tree): Boolean =
+  def hasAnnotation[V](ann: TreeAnnotation[?, V], key: source.Tree): Boolean =
     annotationsAt(key).isDefinedAt(ann)
 
   // Customized Accessors
@@ -520,18 +520,18 @@ trait TreeAnnotations { self: Context =>
 trait SourceAnnotations { self: Context =>
   import scala.collection.mutable
 
-  private val sourceAnnotationsDB: mutable.Map[kiama.util.Source, Map[SourceAnnotation[_, _], Any]] =
+  private val sourceAnnotationsDB: mutable.Map[kiama.util.Source, Map[SourceAnnotation[?, ?], Any]] =
     mutable.Map.empty
 
-  private def annotationsAt(source: kiama.util.Source): Map[SourceAnnotation[_, _], Any] =
+  private def annotationsAt(source: kiama.util.Source): Map[SourceAnnotation[?, ?], Any] =
     sourceAnnotationsDB.getOrElse(source, Map.empty)
 
-  def annotate[A](ann: SourceAnnotation[_, A], source: kiama.util.Source, value: A): Unit = {
+  def annotate[A](ann: SourceAnnotation[?, A], source: kiama.util.Source, value: A): Unit = {
     val anns = annotationsAt(source)
     sourceAnnotationsDB.update(source, anns + (ann -> value))
   }
 
-  def annotationOption[A](ann: SourceAnnotation[_, A], source: kiama.util.Source): Option[A] =
+  def annotationOption[A](ann: SourceAnnotation[?, A], source: kiama.util.Source): Option[A] =
     annotationsAt(source).get(ann).asInstanceOf[Option[A]]
 
   /**
@@ -559,22 +559,22 @@ trait SourceAnnotations { self: Context =>
  */
 trait SymbolAnnotations { self: Context =>
 
-  private val symbolAnnotationsDB: util.IdentityHashMap[symbols.Symbol, Map[SymbolAnnotation[_, _], Any]] =
+  private val symbolAnnotationsDB: util.IdentityHashMap[symbols.Symbol, Map[SymbolAnnotation[?, ?], Any]] =
     new util.IdentityHashMap()
 
   // Retrieve the annotations for a given symbol.
-  private def annotationsAt(sym: symbols.Symbol): Map[SymbolAnnotation[_, _], Any] =
+  private def annotationsAt(sym: symbols.Symbol): Map[SymbolAnnotation[?, ?], Any] =
     symbolAnnotationsDB.getOrDefault(sym, Map.empty)
 
   // Annotate a symbol with an annotation and its value.
-  def annotate[A](ann: SymbolAnnotation[_, A], sym: symbols.Symbol, value: A): Unit = {
+  def annotate[A](ann: SymbolAnnotation[?, A], sym: symbols.Symbol, value: A): Unit = {
     val key = sym
     val anns = annotationsAt(sym)
     symbolAnnotationsDB.put(key, anns + (ann -> value))
   }
 
   // Retrieve an optional annotation for a symbol.
-  def annotationOption[A](ann: SymbolAnnotation[_, A], sym: symbols.Symbol): Option[A] =
+  def annotationOption[A](ann: SymbolAnnotation[?, A], sym: symbols.Symbol): Option[A] =
     annotationsAt(sym).get(ann).asInstanceOf[Option[A]]
 
   def typeOf(s: Symbol): symbols.Type = s match {

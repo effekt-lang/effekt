@@ -7,12 +7,12 @@ import scala.collection.immutable.{ AbstractSeq, LinearSeq }
 // TODO choose appropriate representation and apply conversions
 case class JSName(name: String)
 
-object $effekt {
+object `$effekt` {
   val namespace = Variable(JSName("$effekt"))
   def field(name: String): js.Expr =
     js.Member(namespace, JSName(name))
   def call(name: String, args: js.Expr*): js.Expr =
-    js.MethodCall(namespace, JSName(name), args: _*)
+    js.MethodCall(namespace, JSName(name), args*)
 }
 
 enum Import {

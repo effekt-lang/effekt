@@ -36,7 +36,7 @@ import kiama.util.Range
  *                        Therefore, we currently only update on `didSave` until we have working caching for references.
  */
 class Server(config: EffektConfig, compileOnChange: Boolean=false) extends LanguageServer with Driver with Intelligence with TextDocumentService with WorkspaceService {
-  private var client: EffektLanguageClient = _
+  private var client: EffektLanguageClient = scala.compiletime.uninitialized
   private val textDocumentService = this
   private val workspaceService = this
 
@@ -332,7 +332,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
   //
 
-  override def definition(params: DefinitionParams): CompletableFuture[messages.Either[util.List[_ <: Location], util.List[_ <: LocationLink]]] = {
+  override def definition(params: DefinitionParams): CompletableFuture[messages.Either[util.List[? <: Location], util.List[? <: LocationLink]]] = {
     val location = for {
       position <- sources.get(params.getTextDocument.getUri).map { source =>
         fromLSPPosition(params.getPosition, source)
@@ -341,7 +341,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
       location = rangeToLocation(definition.span.range)
     } yield location
 
-    val result = location.map(l => messages.Either.forLeft[util.List[_ <: Location], util.List[_ <: LocationLink]](Collections.seqToJavaList(List(l))))
+    val result = location.map(l => messages.Either.forLeft[util.List[? <: Location], util.List[? <: LocationLink]](Collections.seqToJavaList(List(l))))
       .getOrElse(messages.Either.forLeft(Collections.seqToJavaList(List())))
 
     CompletableFuture.completedFuture(result)
@@ -351,7 +351,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Langu
   //
   //
 
-  override def references(params: ReferenceParams): CompletableFuture[util.List[_ <: Location]] = {
+  override def references(params: ReferenceParams): CompletableFuture[util.List[? <: Location]] = {
     val position = sources.get(params.getTextDocument.getUri).map { source =>
       fromLSPPosition(params.getPosition, source)
     }

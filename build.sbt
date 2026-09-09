@@ -26,7 +26,7 @@ lazy val noPublishSettings = Seq(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "3.3.6",
+  scalaVersion := "3.9.0",
   semanticdbEnabled := true,
   scalacOptions ++= Seq(
     "-encoding", "utf8",
@@ -34,14 +34,14 @@ lazy val commonSettings = Seq(
     "-unchecked",
     // "-Xlint",
     // "-Xcheck-macros",
-    "-Xfatal-warnings",
+    "-Werror",
     // we can use scalafix's organize imports once the next Scala version is out.
     // https://github.com/scalacenter/scalafix/pull/1800
     // "-Wunused:imports",
     "-feature",
     "-language:existentials",
     "-language:higherKinds",
-    "-language:implicitConversions"
+    "-language:implicitConversions",
   ),
   libraryDependencies ++= Seq(
     "org.scala-lang.modules" %%% "scala-xml" % "2.3.0"

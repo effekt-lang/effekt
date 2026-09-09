@@ -51,7 +51,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
     group = common
   )
 
-  val backend: ScallopOption[Backend[_]] = choice(
+  val backend: ScallopOption[Backend[?]] = choice(
     choices = List("js", "js-web", "chez-callcc", "chez-cps", "chez-monadic", "llvm"),
     name = "backend",
     descr = "The backend that should be used",

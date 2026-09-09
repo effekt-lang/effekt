@@ -25,7 +25,7 @@ trait Docs[A] { def show(indentation: String, depth: Int): String }
 @nowarn("msg=New anonymous class definition will be duplicated at each inline")
 object Docs {
 
-  inline def summonAll[T <: Tuple]: List[Docs[_]] =
+  inline def summonAll[T <: Tuple]: List[Docs[?]] =
     inline erasedValue[T] match
       case _: EmptyTuple => Nil
       case _: (t *: ts) => summonInline[Docs[t]] :: summonAll[ts]

@@ -12,7 +12,7 @@ import kiama.parsing.{NoSuccess, ParseResult, Success, Input}
 
 class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
-  private implicit lazy val context: Context with IOModuleDB = driver.context
+  private implicit lazy val context: Context & IOModuleDB = driver.context
 
   val messaging = new AnsiColoredMessaging
 

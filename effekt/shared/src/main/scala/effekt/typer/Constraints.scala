@@ -128,7 +128,7 @@ class Constraints(
    *
    * This significantly improves the performance of Typer (see https://github.com/effekt-lang/effekt/pull/954)
    */
-  private var _typeSubstitution:  Map[TypeVar, ValueType] = _
+  private var _typeSubstitution:  Map[TypeVar, ValueType] = scala.compiletime.uninitialized
   private def invalidate(): Unit = _typeSubstitution = null
 
   /**
