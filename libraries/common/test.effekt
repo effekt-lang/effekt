@@ -149,9 +149,7 @@ def suite(name: String, printTimes: Bool) { body: => Unit / { Test, Formatted } 
       def failure(name, msg, duration, sourcePosition) = {
         failed = failed + 1
         println("✕".red ++ " " ++ name ++ duration.ms)
-        println("  " ++ msg.red)
-        println("  at " ++ sourcePosition.toGccStyleString() ++ ":")
-        println(getMarkedSource(sourcePosition))
+        println("  " ++ msg.red ++ " at " ++ sourcePosition.toGccStyleString())
         resume(())
       }
     }
