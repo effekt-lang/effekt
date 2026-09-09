@@ -65,7 +65,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Function(name, params, stmts) => "function" <+> toDoc(name) <> parens(params map toDoc) <+> jsBlock(stmts map toDoc)
     case Class(name, methods)          => "class" <+> toDoc(name) <+> jsBlock(methods.map(jsMethod))
     case If(cond, thn, Block(Nil))     => "if" <+> parens(toDoc(cond)) <+> toDocBlock(thn)
-    case If(cond, thn, els)            => "if" <+> parens(toDoc(cond)) <+> toDocBlock(thn) <+> "else" <+> toDocBlock(els)
+    case If(cond, thn, els)            => "if" <+> parens(toDoc(cond)) <+> toDocBlock(thn) <+> "else" <+> toDocElse(els)
     case Try(prog, id, handler, Nil)   => "try" <+> jsBlock(prog.map(toDoc)) <+> "catch" <+> parens(toDoc(id)) <+> jsBlock(handler.map(toDoc))
     case Try(prog, id, handler, fin)    => "try" <+> jsBlock(prog.map(toDoc)) <+> "catch" <+> parens(toDoc(id)) <+> jsBlock(handler.map(toDoc)) <+> "finally" <+> jsBlock(fin.map(toDoc))
     case Throw(expr)                   => "throw" <+> toDoc(expr) <> ";"
@@ -82,8 +82,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDocBlock(stmt: Stmt): Doc = stmt match {
     case Block(stmts) => toDoc(stmt)
-    case If(cond, thn, els) => toDoc(stmt)
     case _ => jsBlock(toDoc(stmt))
+  }
+
+  def toDocElse(stmt: Stmt): Doc = stmt match {
+    case If(cond, thn, els) => toDoc(stmt) // nested if ~> `else if ...`
+    case _ => toDocBlock(stmt)             // otherwise ~> `else { ... }
   }
 
   def jsMethod(c: js.Function): Doc = c match {
