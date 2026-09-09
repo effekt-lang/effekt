@@ -96,8 +96,8 @@ enum Dispatch {
   /** A `switch` selects on the tag. */
   case ByTag(tag: Tag)
 
-  /** A test against the one value that carries no tag; whatever fails it, `rest` tells apart. */
-  case ByTest(absent: js.Expr, rest: Dispatch)
+  /** A test against `null`, use `rest` for everything else. */
+  case ByTest(rest: Dispatch)
 }
 
 /**
@@ -157,13 +157,13 @@ trait Transformer {
 
       val dispatch = (absent, singletons, objects) match {
         // a) one is `null`, other are objects                              ~> if (x === null) ... else ...
-        case (Some(nothing), _, _) => Dispatch.ByTest(nothing.value, amongObjects)
+        case (Some(_), _, _) => Dispatch.ByTest(amongObjects)
         // b) every constructor is a singleton                              ~> switch (x)
-        case (_, _, Nil)           => Dispatch.ByTag(Tag.Itself)
+        case (_, _, Nil)     => Dispatch.ByTag(Tag.Itself)
         // c) every constructor is an object (potentially carrying its tag) ~> switch (x.__tag) (or nothing when there is one)
-        case (_, Nil, _)           => amongObjects
+        case (_, Nil, _)     => amongObjects
         // d) several are numbers, the rest are objects                     ~> switch (typeof x === "number" ? x : x.__tag)
-        case _                     => Dispatch.ByTag(Tag.NumberOr(tagOfObject))
+        case _               => Dispatch.ByTag(Tag.NumberOr(tagOfObject))
       }
 
       Layout(dispatch, encoded.toMap)

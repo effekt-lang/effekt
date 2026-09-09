@@ -494,30 +494,30 @@ object TransformerCps extends Transformer {
     def first(clauses: List[Clause[Encoding]]): List[js.Stmt] =
       clauses.headOption.map(bodyOf) getOrElse otherwise
 
-    def whenPresent(rest: Dispatch, clauses: Clauses): js.Stmt = (rest, clauses.tagged) match {
-      // 1. nothing left to dispatch on
-      case (_             , Nil)             => js.Block(otherwise)
-      // 2. one clause / constructor left ~> ascribe the branch, but no switch needed
+    def branch(dispatch: Dispatch, clauses: List[Clause[Encoding]]): js.Stmt = (dispatch, clauses) match {
+      // 1. one constructor left ~> ascribe the branch, but no switch needed
       case (Dispatch.Known, one :: Nil)      => js.Ascribed(one.encoding.name, js.Block(bodyOf(one)))
-      // 3. several clauses left ~> a `switch` is needed
-      case (_             , opens :: others) => js.Block(select(rest, Clauses(opens, others)))
+      // 2. no clause            ~> fallthrough to the `otherwise`
+      case (_             , Nil)             => js.Block(otherwise)
+      // 3. several clauses left ~> tell them apart according to `dispatch`
+      case (_             , opens :: others) => js.Block(select(dispatch, Clauses(opens, others)))
     }
-
-    def testing(opens: Clause[Encoding], absent: js.Expr, nothing: js.Stmt, present: js.Stmt): js.Stmt =
-      opens.encoding match {
-        // Warning: no `break` may be emitted in either branch: it would bind to an enclosing loop.
-        case _: Encoding.AsNull => js.If(js"${scrutinee} === ${absent}", nothing, present) // first clause is the null one
-        case _                  => js.If(js"${scrutinee} !== ${absent}", present, nothing) // first clause is the tagged (non-null) one
-      }
 
     def select(dispatch: Dispatch, clauses: Clauses): List[js.Stmt] = dispatch match {
       // const h = l.head_0; body
       case Dispatch.Known => first(clauses.all)
 
-      // if (l === /* Nil_0 */ null) { body } else /* Cons_0 */ { ... },
-      //   (or `!==` with the branches the other way round, so that the clauses stay in order)
-      case Dispatch.ByTest(absent, rest) =>
-        testing(clauses.opens, absent, js.Block(first(clauses.absent)), whenPresent(rest, clauses)) :: Nil
+      // if (l === null) /* Nil_0 */ { ... } else /* Cons_0 */ { ... }, or `!==` with the branches
+      //   the other way round, so that the clauses stay in the order the match writes them.
+      case Dispatch.ByTest(rest) =>
+        val nothing = branch(Dispatch.Known, clauses.absent)
+        val present = branch(rest, clauses.tagged)
+
+        // Warning: no `break` may be emitted in either branch: it would bind to an enclosing loop.
+        clauses.opens.encoding match {
+          case _: Encoding.AsNull => js.If(js"${scrutinee} === ${js.Null}", nothing, present) :: Nil // first clause is the `null` one
+          case _                  => js.If(js"${scrutinee} !== ${js.Null}", present, nothing) :: Nil // first class is the tagged (non-`null`) one
+        }
 
       // switch (l.__tag) { case /* Cons_0 */ 1: const h = l.head_0; ...; default: ... }
       case Dispatch.ByTag(tag) => clauses.tagged match {
