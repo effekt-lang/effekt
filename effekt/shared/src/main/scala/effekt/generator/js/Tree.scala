@@ -136,6 +136,9 @@ implicit class JavaScriptInterpolator(private val sc: StringContext) extends Any
 enum Pattern {
   case Variable(name: JSName)
   case Array(ps: List[Pattern])
+
+  // e.g. { head_0: h, tail_0: t }
+  case Object(fields: List[(JSName, Pattern)])
 }
 
 enum Stmt {
