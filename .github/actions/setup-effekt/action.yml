@@ -5,7 +5,7 @@ inputs:
   java-version:
     description: 'Java version to install'
     required: false
-    default: '11'
+    default: '17'
   node-version:
     description: 'Node version to install'
     required: false
@@ -27,7 +27,7 @@ runs:
   using: "composite"
   steps:
     - name: Set up JDK ${{ inputs.java-version }}
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         java-version: ${{ inputs.java-version }}
         distribution: 'zulu'
