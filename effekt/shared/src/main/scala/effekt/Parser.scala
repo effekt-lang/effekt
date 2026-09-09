@@ -1316,7 +1316,7 @@ class Parser(tokens: Seq[Token], source: Source) {
               }
         }
       }
-
+      
   def primExpr(): Term = peek.kind match {
     case `if`     => ifExpr()
     case `while`  => whileExpr()
@@ -1327,11 +1327,13 @@ class Parser(tokens: Seq[Token], source: Source) {
     case `new`    => newExpr()
     case `do`                => doExpr()
     case _ if isString       => templateString(Maybe.None(span()))
+    case `#[`                => streamLiteral(Maybe.None(span()))
     case _ if isLiteral      => literal()
     case _ if isVariable     =>
       val lhs = variable()
       peek.kind match {
         case _: Str => templateString(Maybe.Some(lhs.id, lhs.id.span))
+        case `#[` => streamLiteral(Maybe.Some(lhs.id, lhs.id.span))
         case _ =>
           peek.kind match {
             case `+=` | `-=` | `*=` | `/=` =>
@@ -1437,6 +1439,30 @@ class Parser(tokens: Seq[Token], source: Source) {
     case _: Str => true
     case _      => false
   }
+
+  def streamLiteral(splicer: Maybe[IdRef]): Term =
+    nonterminalAt(splicer.span):
+      val start = position
+      (splicer, many(() => spanned(expr()), `#[`, `,`, `]`)) match {
+        case (Maybe(id, _), Many(elements, _)) =>
+          val body = elements.map { element =>
+            Do(
+              IdRef(Nil, "emit", element.span.synthesized),
+              Nil,
+              List(ValueArg.Unnamed(element.unspan)),
+              Nil,
+              element.span.synthesized
+            )
+          }.foldRight(
+            Return(UnitLit(span().synthesized), span().synthesized)
+          ) { (elem, acc) => ExprStmt(elem, acc, elem.span.synthesized) }
+          val blk = BlockLiteral(Nil, Nil, Nil, body, span().synthesized)
+          val target = id match {
+            case None => IdTarget(IdRef(Nil, "locally", span().synthesized))
+            case Some(target) => IdTarget(target)
+          }
+          Call(target, Nil, Nil, List(blk), span().synthesized)
+      }
 
   def templateString(splicer: Maybe[IdRef]): Term =
     nonterminalAt(splicer.span):

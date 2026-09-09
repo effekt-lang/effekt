@@ -93,6 +93,7 @@ enum TokenKind {
   case `(`
   case `)`
   case `[`
+  case `#[`
   case `]`
   case `,`
   case `'`
@@ -476,6 +477,10 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('*', '=') => advance2With(TokenKind.`*=`)
       case ('*', _)   => advanceWith(TokenKind.`*`)
       case ('?', _)   => advanceWith(TokenKind.`?`)
+
+      case ('#', '[') =>
+        depthTracker.brackets += 1 // count this as a "special" kind of bracket, since its closed by one
+        advance2With(TokenKind.`#[`)
 
       case ('$', '{') =>
         interpolationDepths.push(depthTracker.braces + 1)
