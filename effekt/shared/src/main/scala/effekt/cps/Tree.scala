@@ -13,7 +13,7 @@ sealed trait Tree extends Product {
   lazy val size: Int = {
     var nodeCount = 1
 
-    def all(t: IterableOnce[_]): Unit = t.iterator.foreach(one)
+    def all(t: IterableOnce[?]): Unit = t.iterator.foreach(one)
     def one(obj: Any): Unit = obj match {
       case t: Tree => nodeCount += t.size
       case s: effekt.symbols.Symbol => ()

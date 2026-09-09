@@ -207,10 +207,10 @@ class EffektLexers extends Parsers {
   def some[T](p: => Parser[T]): Parser[List[T]] =
     rep1(p) ^^ { _.toList }
 
-  def manySep[T](p: => Parser[T], sep: => Parser[_]): Parser[List[T]] =
+  def manySep[T](p: => Parser[T], sep: => Parser[?]): Parser[List[T]] =
     repsep(p, sep) ^^ { _.toList }
 
-  def someSep[T](p: => Parser[T], sep: => Parser[_]): Parser[List[T]] =
+  def someSep[T](p: => Parser[T], sep: => Parser[?]): Parser[List[T]] =
     rep1sep(p, sep) ^^ { _.toList }
 
   extension [T] (p: Parser[T]) {

@@ -86,7 +86,7 @@ object Task { build =>
     def fingerprint: Long = task.fingerprint(key)
   }
 
-  case class Info(target: Target[_, _], hash: Long) {
+  case class Info(target: Target[?, ?], hash: Long) {
     def isValid: Boolean = target.fingerprint == hash
     override def toString =
       if (isValid) target.toString else s"${target}#${Console.RED_B}${Console.WHITE}${hash}${Console.RESET}"

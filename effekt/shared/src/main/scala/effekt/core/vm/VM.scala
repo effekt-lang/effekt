@@ -166,22 +166,31 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
 
   @tailrec
   private def returnWith(value: Value, env: Env, stack: Stack, heap: Heap): State =
-    @tailrec
-    def go(frames: List[Frame], prompt: Address, stack: Stack): State =
-      frames match {
-        case Frame.Val(x, body, frameEnv) :: rest =>
-          instrumentation.popFrame()
-          State.Step(body, frameEnv.bind(x, value), Stack.Segment(rest, prompt, stack), heap)
-        // free the mutable state
-        case Frame.Var(x, value) :: rest => go(rest, prompt, stack)
-        // free the region
-        case Frame.Region(x, values) :: rest => go(rest, prompt, stack)
-        case Nil => returnWith(value, env, stack, heap)
-      }
     stack match {
       case Stack.Empty => State.Done(value)
       case Stack.Segment(frames, prompt, rest) =>
-        go(frames, prompt, rest)
+        @tailrec
+        def go(frames: List[Frame]): State | Stack =
+          frames match {
+            case Frame.Val(x, body, frameEnv) :: rest =>
+              instrumentation.popFrame()
+              State.Step(
+                body,
+                frameEnv.bind(x, value),
+                Stack.Segment(rest, prompt, stack),
+                heap
+              )
+            // free the mutable state
+            case Frame.Var(x, value) :: rest => go(rest)
+            // free the region
+            case Frame.Region(x, values) :: rest => go(rest)
+            case Nil => rest
+          }
+  
+        go(frames) match {
+          case rest: Stack  => returnWith(value, env, rest, heap)
+          case state: State => state
+        }
     }
 
   private def push(frame: Frame, stack: Stack): Stack = stack match {
@@ -195,20 +204,23 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
       case Stack.Empty => None
       case Stack.Segment(frames, prompt, rest) =>
         @tailrec
-        def go(frames: List[Frame]): Option[A] =
+        def go(frames: List[Frame]): List[Frame] =
           frames match {
-            case Nil => findFirst(rest)(f)
-            case frame :: rest if f.isDefinedAt(frame) => Some(f(frame))
-            case frame :: rest => go(rest)
+            case Nil => Nil
+            case frame :: rest if f.isDefinedAt(frame) => frames
+            case _     :: rest => go(rest)
           }
-        go(frames)
+  
+        go(frames) match {
+          case Nil => findFirst(rest)(f)
+          case frame :: _ => Some(f(frame))
+        }
     }
 
   def updateOnce(stack: Stack)(f: Frame ~> Frame): Stack =
     stack match {
       case Stack.Empty => ???
       case Stack.Segment(frames, prompt, rest) =>
-        @tailrec
         def go(frames: List[Frame], acc: List[Frame]): Stack =
           frames match {
             case Nil =>
