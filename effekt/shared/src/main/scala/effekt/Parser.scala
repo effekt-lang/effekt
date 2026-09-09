@@ -1326,13 +1326,13 @@ class Parser(tokens: Seq[Token], source: Source) {
     case `unbox`  => unboxExpr()
     case `new`    => newExpr()
     case `do`                => doExpr()
-    case _ if isString       => templateString()
+    case _ if isString       => templateString(Maybe.None(span()))
     case _ if isLiteral      => literal()
     case _ if isVariable     =>
-      peek(1).kind match {
-        case _: Str => templateString()
+      val lhs = variable()
+      peek.kind match {
+        case _: Str => templateString(Maybe.Some(lhs.id, lhs.id.span))
         case _ =>
-          val lhs = variable()
           peek.kind match {
             case `+=` | `-=` | `*=` | `/=` =>
               val op = next()
@@ -1438,14 +1438,14 @@ class Parser(tokens: Seq[Token], source: Source) {
     case _      => false
   }
 
-  def templateString(): Term =
-    nonterminal:
+  def templateString(splicer: Maybe[IdRef]): Term =
+    nonterminalAt(splicer.span):
       val start = position
-      backtrack(idRef()) ~ template(expr()) match {
+      (splicer, template(expr())) match {
         // We do not need to apply any transformation if there are no splices _and_ no custom handler id is given
-        case Maybe(None, _) ~ SpannedTemplate(str :: Nil, Nil) => StringLit(str.unspan, str.span)
+        case (Maybe(None, _), SpannedTemplate(str :: Nil, Nil)) => StringLit(str.unspan, str.span)
         // s"a${x}b${y}" ~> s { do write("a"); do splice(x); do write("b"); do splice(y); return () }
-        case Maybe(id, range) ~ SpannedTemplate(strs, args) =>
+        case (Maybe(id, range), SpannedTemplate(strs, args)) =>
           val target = id match {
             case Some(id) => id
             case None =>
@@ -1980,6 +1980,9 @@ class Parser(tokens: Seq[Token], source: Source) {
   // the handler for the "span" effect.
   private val _start: scala.util.DynamicVariable[Int] = scala.util.DynamicVariable(0)
   inline def nonterminal[T](inline p: => T): T = _start.withValue(peek.start) {
+    p
+  }
+  inline def nonterminalAt[T](span: Span)(inline p: => T): T = _start.withValue(span.from) {
     p
   }
 }
