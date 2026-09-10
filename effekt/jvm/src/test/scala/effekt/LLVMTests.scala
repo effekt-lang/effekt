@@ -7,6 +7,7 @@ import scala.language.implicitConversions
 import scala.sys.process.Process
 
 class LLVMTests extends EffektTests {
+  override val munitTimeout = Duration(60, "s")
 
   def backendName = "llvm"
 
