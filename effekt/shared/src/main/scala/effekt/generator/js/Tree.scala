@@ -2,11 +2,13 @@ package effekt
 package generator
 package js
 
+import scala.annotation.nowarn
 import scala.collection.immutable.{ AbstractSeq, LinearSeq }
 
 // TODO choose appropriate representation and apply conversions
 case class JSName(name: String)
 
+@nowarn("id=E230") // `$effekt` matches the JS runtime namespace it generates references to; see #1460
 object `$effekt` {
   val namespace = Variable(JSName("$effekt"))
   def field(name: String): js.Expr =
