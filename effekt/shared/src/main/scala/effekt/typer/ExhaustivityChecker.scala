@@ -191,7 +191,11 @@ object ExhaustivityChecker {
     }
 
     def reportRedundant()(using C: ErrorReporter): Unit = redundant.foreach { p =>
-      C.at(p) { C.warning(pp"Unreachable case.") }
+      val target = p.pattern match {
+        case AnyPattern(_, _) | IgnorePattern(_) => p.body
+        case _ => p
+      }
+      C.at(target) { C.warning(pp"Unreachable case.") }
     }
 
     def report()(using C: ErrorReporter): Unit = {

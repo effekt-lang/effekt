@@ -254,11 +254,15 @@ sealed trait Id extends Tree {
   def name: String
   def symbol(using C: Context): Symbol = C.symbolOf(this)
   def clone(using C: Context): Id
+  def path: List[String]
 }
-case class IdDef(name: String, span: Span) extends Id {
+case class IdDef(path: List[String], name: String, span: Span) extends Id {
   def clone(using C: Context): IdDef = {
-    IdDef(name, span)
+    IdDef(path, name, span)
   }
+}
+object IdDef {
+  def apply(name: String, span: Span): IdDef = IdDef(Nil, name, span)
 }
 case class IdRef(path: List[String], name: String, span: Span) extends Id {
   def clone(using C: Context): IdRef = {
@@ -293,8 +297,8 @@ case class Include(path: String, span: Span) extends Tree
  * Parameters and arguments
  */
 enum Param extends Definition {
-  case ValueParam(id: IdDef, tpe: Option[ValueType], span: Span)
-  case BlockParam(id: IdDef, tpe: Option[BlockType], span: Span)
+  case ValueParam(id: IdDef, tpe: Option[ValueType], isImplicit: Boolean, span: Span)
+  case BlockParam(id: IdDef, tpe: Option[BlockType], isImplicit: Boolean, span: Span)
 }
 export Param.*
 
@@ -580,6 +584,12 @@ def CharLit(value: Int, span: Span): Literal = Literal(value, symbols.builtins.T
 
 type CallLike = Call | Do | Select | MethodCall
 
+extension(self: CallLike) def span: Span = self match {
+  case c: Call => c.span
+  case d: Do => d.span
+  case s: Select => s.span
+  case m: MethodCall => m.span
+}
 
 enum CallTarget extends Tree {
 
@@ -738,6 +748,7 @@ case class FunctionType(tparams: Many[Id], vparams: Many[ValueType], bparams: Ma
  */
 case class Effectful(tpe: ValueType, eff: Effects, span: Span) extends Type
 
+
 // These are just type aliases for documentation purposes.
 type BlockType = Type
 type ValueType = Type
@@ -856,7 +867,7 @@ object Resolvable {
 }
 export Resolvable.*
 
-extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] = {
+extension [T](positioned: T) def sourceOfOpt: Option[String] = {
   positioned match {
     case m: Many[_] if m.span.origin != Origin.Missing =>
       Spans.substring(m.span.range.from, m.span.range.to)
@@ -869,7 +880,7 @@ extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] =
   }
 }
 
-extension [T](positioned: T) def sourceOf(using C: Context): String =
+extension [T](positioned: T) def sourceOf: String =
   positioned.sourceOfOpt.getOrElse { s"${positioned}" }
 
 object Tree {

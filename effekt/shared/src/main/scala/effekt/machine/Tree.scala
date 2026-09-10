@@ -134,7 +134,7 @@ enum Statement {
   /**
    * e.g. var x = 42; s
    */
-  case Var(name: Variable, init: Variable, rest: Statement)
+  case Var(name: Variable, init: Variable, returnType: Type, rest: Statement)
 
   /**
    * e.g. let y = loadVar(x); s
@@ -209,6 +209,16 @@ enum Statement {
 export Statement.*
 
 
+enum CType {
+  case Ptr
+  case Obj
+  case I64
+  case Double
+  case Float
+  case Void
+}
+export CType.*
+
 /**
  * Types
  */
@@ -221,6 +231,7 @@ enum Type {
   case Byte()
   case Double()
   case Reference(tpe: Type)
+  case CTpe(tpe: CType)
 }
 export Type.{ Positive, Negative }
 

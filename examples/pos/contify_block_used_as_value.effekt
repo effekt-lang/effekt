@@ -1,0 +1,15 @@
+module contify_block_used_as_value
+
+// see PR #1417
+// this demonstrates a local block that is **both** tail-called and passed as a block argument
+// where contification previously failed to recognize that helper is used as a value as well as a tail call
+
+def twice(x: Int) { f: Int => Int }: Int = f(f(x))
+
+def go(): Int = {
+  def helper(x: Int): Int = x + 1
+  val b = twice(10) { helper }
+  helper(b)
+}
+
+def main() = println(go())

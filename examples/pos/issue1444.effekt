@@ -1,0 +1,56 @@
+def collectString { s: => Unit / { emit[Char], stop } }: String = {
+  var a = bytearray::allocate(64)
+  var i = 0
+  boundary {
+    try s() with emit[Char] { c =>
+      if (i + 1 > a.size) { a = a.resize(2 * (i + 1)) }
+      a.set(i, c.toInt.toByte)
+      i = i + 1
+      resume(())
+    }
+  }
+  a.resize(i).toString
+}
+
+// note: more clauses here lead to an exponential blow-up (<12 are OK, 12 takes two minutes to optimise, >12 OOMs)
+def isSpecial(c: Char): Bool =
+  c == '*' || c == '_' || c == '`' || c == '[' || c == ']' || c == '(' || c == ')' ||
+  c == '{' || c == '}' || c == '.' || c == '-' || c == '\'' || c == '"' || c == '\n'
+
+def readWhile { pred: Char => Bool }: Unit / { emit[Char], peek[Char], next[Char], stop } = {
+  val c = do peek[Char]()
+  if (pred(c)) { do emit(c); do next[Char](); readWhile {pred} }
+}
+
+def lex(input: String): Unit / emit[String] =
+  feed(input) {
+    peeking[Char] {
+      loop {
+        do peek[Char]() match {
+          case '*' => do next[Char](); do emit("*")
+          case c   =>
+            do next[Char]()
+            do emit(collectString { do emit(c); readWhile { ch => not(isSpecial(ch)) } })
+        }
+      }
+    }
+  }
+
+effect tree[R](tag: Int) { children: () => R }: R
+
+// needs to keep state across children [!]
+def intoCount { program: () => Unit / tree[Unit] }: Int = {
+  var n = 0
+  try { program() } with tree[Unit] { tag =>
+   resume { {children} =>
+      val outer = n
+      n = 0
+      children()
+      n = outer + n + 1
+    }
+  }
+  n
+}
+
+def main() =
+  println(intoCount { for[String] { lex("a") } { _t => do tree(1) { () } } }.show)

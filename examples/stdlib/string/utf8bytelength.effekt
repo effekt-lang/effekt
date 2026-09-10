@@ -1,0 +1,11 @@
+def one(str: String) = {
+  val bytes = str.utf8ByteLength
+  val bytes2 = str.internal::utf8ByteLength
+  val bytes3 = str.bytearray::fromString.size
+  println(s"${str}: ${bytes.show} (internal: ${bytes2.show}, bytearray: ${bytes3.show})")
+}
+
+def main() = {
+  val cases = ["", "a", "ab", "abc", "é", "λ", "💩", "aé💩b", "§é💩", "©", "¢", "€", "漢", "अ", "😀", "𝄞", "𐍈", "مرحبا", "👨‍👩‍👧‍👦", "e\u0301"]
+  for { cases.each } { (s: String) => one(s) }
+}

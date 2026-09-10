@@ -1,0 +1,35 @@
+extern type Array['A]
+
+extern {global} def get['A](array: Array['A], index: Int): 'A = llvm ""
+extern {global} def set['A](array: Array['A], index: Int, value: 'A): Unit = llvm ""
+
+def use(array: Array[Char]) = {
+  let ! value = (get: ['A](Array['A], Int) => 'A @ {global})[Char](array: Array[Char], 0)
+  (set: ['A](Array['A], Int, 'A) => Unit @ {global})[Char](array: Array[Char], 0, value: Char)
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<Char> <: Array
+<Char> <: get
+<Char> <: set
+<get.0> <: Array
+<set.0> <: Array
+
+/// MONO_SOLVE
+
+S = Array ↦ { <Char> },
+    get ↦ { <Char> },
+    set ↦ { <Char> }
+
+/// MONO_SPECIALIZE
+
+extern type Array['A]
+
+extern {global} def get['A](array: Array['A], index: Int): 'A = llvm ""
+extern {global} def set['A](array: Array['A], index: Int, value: 'A): Unit = llvm ""
+
+def use(array: Array[Char]) = {
+  let ! value = (get: ['A](Array['A], Int) => 'A @ {global})[Char](array: Array[Char], 0)
+  (set: ['A](Array['A], Int, 'A) => Unit @ {global})[Char](array: Array[Char], 0, value: Char)
+}

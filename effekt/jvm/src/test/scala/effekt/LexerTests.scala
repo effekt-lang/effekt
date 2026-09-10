@@ -240,6 +240,33 @@ class LexerTests extends munit.FunSuite {
     )
   }
 
+  test("string splice hole") {
+    val prog = "<${x}>"
+    assertTokensEq(
+      prog,
+      `<`, `${`, Ident("x"), `}$`, `>`,
+      EOF
+    )
+  }
+
+  test("all holes") {
+    val prog = "<{<\"str\">; <>}>"
+    assertTokensEq(
+      prog,
+      `<{`, HoleStr("str"), `;`, `<>`, `}>`,
+      EOF
+    )
+  }
+
+  test("all holes imbriqued") {
+    val prog = "<{< <\"str\"> >}>"
+    assertTokensEq(
+      prog,
+      `<{`, `<`, HoleStr("str"), `>`, `}>`,
+      EOF
+    )
+  }
+
   test("multiline string holes") {
     val prog1: String =
       """<" Here it starts
@@ -320,6 +347,26 @@ class LexerTests extends munit.FunSuite {
       prog,
       `interface`, Ident("Eff"), `{`, `def`, Ident("operation"), `(`, `)`, `:`, Ident("Unit"), `}`, Newline,
       Comment(" val x = 1 def while / \\t still\\n comment"), Newline,
+      `val`, Ident("x"), `=`, Integer(2),
+      EOF
+    )
+  }
+
+  test("singleline comment ends with CRLF") {
+    val prog = "// foo\r\nval x = 2"
+    assertTokensEq(
+      prog,
+      Comment(" foo"), Newline,
+      `val`, Ident("x"), `=`, Integer(2),
+      EOF
+    )
+  }
+
+  test("singleline comment ends with LF") {
+    val prog = "// foo\nval x = 2"
+    assertTokensEq(
+      prog,
+      Comment(" foo"), Newline,
       `val`, Ident("x"), `=`, Integer(2),
       EOF
     )
@@ -426,6 +473,22 @@ class LexerTests extends munit.FunSuite {
       `val`, Ident("c"), `=`, Error(UnterminatedStringLike(Str("", multiline = false))), Newline,
       Ident("inspect"), `(`, Ident("c"), `)`, Newline,
       EOF
+    )
+  }
+
+  test("single-line string unexpectedly ends with CRLF") {
+    val prog = "val s = \"hello\r\n"
+    assertTokensEq(
+      prog,
+      `val`, Ident("s"), `=`, Error(UnterminatedStringLike(Str("hello", multiline = false))), Newline, EOF
+    )
+  }
+
+  test("single-line string unexpectedly ends with LF") {
+    val prog = "val s = \"hello\n"
+    assertTokensEq(
+      prog,
+      `val`, Ident("s"), `=`, Error(UnterminatedStringLike(Str("hello", multiline = false))), Newline, EOF
     )
   }
 

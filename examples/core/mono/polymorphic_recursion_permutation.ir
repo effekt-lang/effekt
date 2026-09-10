@@ -1,0 +1,19 @@
+extern type List['A]
+
+def loop['A, 'B]() = {
+  (loop: ['A, 'B]() => Unit @ {})[List['B], 'A]()
+}
+
+def main() = {
+  (loop: ['A, 'B]() => Unit @ {})[Int, String]()
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<Int, String> <: loop
+<List[loop.1], loop.0> <: loop
+<loop.1> <: List
+
+/// MONO_SOLVE
+
+no finite solution: Detected polymorphic recursion for 'loop'

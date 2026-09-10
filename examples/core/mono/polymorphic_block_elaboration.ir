@@ -1,0 +1,81 @@
+def use['A, 'C](x: 'A, c: 'C){f: ['B]('A, 'C, 'B) => 'B} = {
+  (f: ['B]('A, 'C, 'B) => 'B @ {f})[String](x: 'A, c: 'C, "result")
+}
+
+def forward['C, 'A](c: 'C, x: 'A){f: ['B]('A, 'C, 'B) => 'B} = {
+  (use: ['A, 'C]('A, 'C){f: ['B]('A, 'C, 'B) => 'B} => String @ {})['A, 'C](x: 'A, c: 'C){
+    (f: ['B]('A, 'C, 'B) => 'B @ {f})
+  }
+}
+
+def main() = {
+  (forward: ['C, 'A]('C, 'A){f: ['B]('A, 'C, 'B) => 'B} => String @ {})[Bool, Int](false, 42){
+    ['B](x: Int, c: Bool, result: 'B) =>
+      return result: 'B
+  }
+}
+
+/// MONO_PREPROCESS
+
+interface Poly['A, 'C] {
+  apply: ['B]('A, 'C, 'B) => 'B
+}
+
+def use['A, 'C](x: 'A, c: 'C){f: Poly['A, 'C]} = {
+  (f: Poly['A, 'C] @ {f}).apply: ['B]('A, 'C, 'B) => 'B[String](x: 'A, c: 'C, "result")
+}
+
+def forward['C, 'A](c: 'C, x: 'A){f: Poly['A, 'C]} = {
+  (use: ['A, 'C]('A, 'C){f: Poly['A, 'C]} => String @ {})['A, 'C](x: 'A, c: 'C){
+    (f: Poly['A, 'C] @ {f})
+  }
+}
+
+def main() = {
+  (forward: ['C, 'A]('C, 'A){f: Poly['A, 'C]} => String @ {})[Bool, Int](false, 42){new Poly[Int, Bool] {
+    def apply['B](x: Int, c: Bool, result: 'B) = {
+      return result: 'B
+    }
+  }}
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<Bool, Int> <: forward
+<Int, Bool> <: Poly
+<apply.0, apply.1> <: Poly
+<forward.1, forward.0> <: Poly
+<forward.1, forward.0> <: use
+<use.0, use.1, String> <: apply
+<use.0, use.1> <: Poly
+
+/// MONO_SOLVE
+
+S = Poly ↦ { <Int, Bool> },
+    apply ↦ { <Int, Bool, String> },
+    forward ↦ { <Bool, Int> },
+    use ↦ { <Int, Bool> }
+
+/// MONO_SPECIALIZE
+
+interface PolyIntBool {
+  applyIntBoolString: (Int, Bool, String) => String
+}
+
+def useIntBool(x: Int, c: Bool){f: PolyIntBool} = {
+  (f: PolyIntBool @ {f}).applyIntBoolString: (Int, Bool, String) => String(x: Int, c: Bool, "result")
+}
+
+def forwardBoolInt(c: Bool, x: Int){f: PolyIntBool} = {
+  (useIntBool: (Int, Bool){f: PolyIntBool} => String @ {})(x: Int, c: Bool){
+    (f: PolyIntBool @ {f})
+  }
+}
+
+def main() = {
+  (forwardBoolInt: (Bool, Int){f: PolyIntBool} => String @ {})(false, 42){new PolyIntBool {
+    def applyIntBoolString(x: Int, c: Bool, result: String) = {
+      return result: String
+    }
+  }}
+}

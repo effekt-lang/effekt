@@ -1,0 +1,46 @@
+def first['A, 'B](x: 'A, y: 'B) = {
+  return x: 'A
+}
+
+def second['A, 'B](x: 'A, y: 'B) = {
+  (first: ['C, 'D]('C, 'D) => 'C @ {})['B, 'A](y: 'B, x: 'A)
+}
+
+def main() = {
+  val x = (second: ['A, 'B]('A, 'B) => 'B @ {})[Int, String](1, "one");
+  (second: ['A, 'B]('A, 'B) => 'B @ {})[Char, Bool]('\99', false)
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<Char, Bool> <: second
+<Int, String> <: second
+<second.1, second.0> <: first
+
+/// MONO_SOLVE
+
+S = first ↦ { <Bool, Char>, <String, Int> },
+    second ↦ { <Char, Bool>, <Int, String> }
+
+/// MONO_SPECIALIZE
+
+def firstBoolChar(x: Bool, y: Char) = {
+  return x: Bool
+}
+
+def firstStringInt(x: String, y: Int) = {
+  return x: String
+}
+
+def secondCharBool(x: Char, y: Bool) = {
+  (firstBoolChar: (Bool, Char) => Bool @ {})(y: Bool, x: Char)
+}
+
+def secondIntString(x: Int, y: String) = {
+  (firstStringInt: (String, Int) => String @ {})(y: String, x: Int)
+}
+
+def main() = {
+  val x = (secondIntString: (Int, String) => String @ {})(1, "one");
+  (secondCharBool: (Char, Bool) => Bool @ {})('\99', false)
+}

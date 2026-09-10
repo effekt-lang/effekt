@@ -1,0 +1,13 @@
+record Token()
+effect make(): Token
+
+def graph { block: => Unit / make } =
+  try block() with make {
+    resume() // <- notice no args! // ERROR arguments
+    // ^ hover over and see `{ resume: Token => Unit }`
+  }
+
+def main() = graph {
+  val tok = do make()
+  println("got tok! " ++ genericShow(tok))
+}

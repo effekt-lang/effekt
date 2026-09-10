@@ -3,6 +3,7 @@ package core
 package optimizer
 
 import effekt.util.messages.INTERNAL_ERROR
+import effekt.util.debug
 
 import scala.annotation.{ tailrec, targetName }
 import scala.collection.mutable
@@ -35,11 +36,60 @@ object Normalizer { normal =>
     exprs: Map[Id, Expr],
     decls: DeclarationContext,     // for field selection
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
-    maxInlineSize: Int,            // to control inlining and avoid code bloat
-    debug: Boolean                 // enable assertions
+    policy: InliningPolicy,        // whether to inline a call (see [[InliningPolicy]])
+    facts: Map[Expr, Expr],        // maps a pure expression to something simpler it is known to equal
+    prompts: List[Id],             // the enclosing `Reset`s' prompts, innermost first
   ) {
-    def bind(id: Id, expr: Expr): Context = copy(exprs = exprs + (id -> expr))
+    def enterPrompt(prompt: Id): Context = copy(prompts = prompt :: prompts)
+
+    // knowing `x = e`, we also know `e = x`, which is what lets us share `e`
+    def bind(id: Id, expr: Expr): Context =
+      val known = if shareable(expr)(using this) then facts + (expr -> ValueVar(id, expr.tpe)) else facts
+      copy(exprs = exprs + (id -> expr), facts = known)
+
     def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
+
+    /** Records that [[expr]] equals the simpler [[value]] for the subtree we normalize next. */
+    def knowing(expr: Expr, value: Expr): Context = expr match {
+      // variables belong into the environment, which `active` already consults
+      case ValueVar(id, _) => bind(id, value)
+      case _ if shareable(expr)(using this) => copy(facts = facts + (expr -> value))
+      case _ => this
+    }
+  }
+
+  /** Within a branch, we know the value of the condition. */
+  private def assuming(cond: Expr, value: Boolean)(using C: Context): Context =
+    C.knowing(cond, Expr.Literal(value, Type.TBoolean))
+
+  /** Within the clause for [[tag]], we know that [[scrutinee]] is a value of the data type with that tag. */
+  private def selecting(scrutinee: Expr, tag: Id, clause: BlockLit)(using C: Context): Context = scrutinee.tpe match {
+    case data: ValueType.Data => C.knowing(scrutinee, destructured(data, tag, clause))
+    case _ => C
+  }
+
+  /** Creates the [[Expr.Make]] that represents the value of [[scrutinee]] in the context of [[clause]]. */
+  private def destructured(data: ValueType.Data, tag: Id, clause: BlockLit): Expr.Make =
+    Expr.Make(data, tag,
+      clause.tparams.map(ValueType.Var.apply),
+      clause.vparams.map { p => ValueVar(p.id, p.tpe) })
+
+  /** Replaces an expression by something simpler that is known to be equal to it. */
+  private def available(expr: Expr)(using ctx: Context): Expr =
+    if shareable(expr) then ctx.facts.getOrElse(expr, expr) else expr
+
+  /** Is it worth remembering that a variable holds pure expression [[expr]]? */
+  private def shareable(expr: Expr)(using C: Context): Boolean = expr match {
+    case _: Expr.PureApp => transparent(expr.tpe)
+    case _: Expr.Make => true
+    case _ => false
+  }
+
+  /** Are two equal values of this type interchangeable or could someone observe their identity? */
+  private def transparent(tpe: ValueType)(using C: Context): Boolean = tpe match {
+    case ValueType.Data(name, targs) => !C.decls.externDatas.contains(name) && targs.forall(transparent)
+    case ValueType.Var(_) => false
+    case ValueType.Boxed(_, _) => false
   }
 
   private def blockFor(id: Id)(using ctx: Context): Option[Block] =
@@ -48,7 +98,7 @@ object Normalizer { normal =>
   private def exprFor(id: Id)(using ctx: Context): Option[Expr] =
     ctx.exprs.get(id)
 
-  private def isRecursive(id: Id)(using ctx: Context): Boolean =
+  private[optimizer] def isRecursive(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id) match {
       case Some(value) => value == Usage.Recursive
       // We assume it is recursive, if (for some reason) we do not have information;
@@ -60,7 +110,7 @@ object Normalizer { normal =>
       case None => true // sys error s"No info for ${id}"
     }
 
-  private def isOnce(id: Id)(using ctx: Context): Boolean =
+  private[optimizer] def isOnce(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id) match {
       case Some(value) => value == Usage.Once
       case None => false
@@ -69,14 +119,14 @@ object Normalizer { normal =>
   private def isUnused(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id).forall { u => u == Usage.Never }
 
-  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int, debug: Boolean): ModuleDecl = {
+  def normalize(entrypoints: Set[Id], m: ModuleDecl, policy: InliningPolicy): ModuleDecl = {
     // usage information is used to detect recursive functions (and not inline them)
     val usage = Reachable(entrypoints, m)
 
     val defs = m.definitions.collect {
       case Toplevel.Def(id, block) => id -> block
     }.toMap
-    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize, true)
+    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), policy, Map.empty, Nil)
 
     val (normalizedDefs, _) = normalizeToplevel(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
@@ -141,26 +191,42 @@ object Normalizer { normal =>
       }
     }
 
-  // TODO for `New` we should track how often each operation is used, not the object itself
-  //   to decide inlining.
-  private def shouldInline(b: BlockLit, boundBy: Option[BlockVar], blockArgs: List[Block])(using C: Context): Boolean = boundBy match {
-    case Some(id) if isRecursive(id.id) => false
-    case Some(id) => isOnce(id.id) || b.body.size <= C.maxInlineSize
-    case _ => blockArgs.exists { b => b.isInstanceOf[BlockLit] } // higher-order function with known arg
+  /**
+   * The block that [[b]] denotes, when it is known here *and* nothing else uses it.
+   *
+   * Enables inlining (known ~> its ops resolve; used once ~> consumed rather than copied)
+   */
+  private[optimizer] def knownAndUsedOnce(b: Block)(using Context): Option[Block] = b match {
+    case x: Block.BlockVar if isOnce(x.id) => active(x) match {
+      case NormalizedBlock.Known(known, Some(_)) => Some(known)
+      case _ => None
+    }
+    case _ => None
   }
 
-  private def active(e: Expr)(using Context): Expr =
+  // TODO for `New` we should track how often each operation is used, not the object itself
+  //   to decide inlining.
+  private def shouldInline(b: BlockLit, boundBy: Option[BlockVar], valueArgs: List[Expr], blockArgs: List[Block])(using C: Context): Boolean =
+    C.policy(CallSite(b, boundBy, valueArgs, blockArgs))
+
+  private[optimizer] def active(e: Expr)(using Context): Expr =
     normalize(e) match {
       case x @ Expr.ValueVar(id, annotatedType) => exprFor(id) match {
-        case Some(p: Expr.Make)    => p
-        case Some(p: Expr.Literal) => p
-        case Some(p: Expr.Box)     => p
-        // We only inline non side-effecting expressions
-        case Some(other) if other.capt.isEmpty  => other
-        case _ => x // stuck
+        case Some(other) => other
+        case None => x // stuck
       }
       case other => other // stuck
     }
+
+  /**
+   * [[ let x = e; body ]] = let x = y; [[ body ]]   if we already know `y = e`
+   *
+   * Shared with `val x = return e`. The lookup cannot live in `normalize(e: Expr)` alone, since
+   * `active` dealiases and would resolve `y` back to `e` again.
+   */
+  private def normalizeLet(id: Id, expr: Expr, body: Stmt)(using C: Context): Stmt =
+    val bound = available(expr)
+    Stmt.Let(id, bound, normalize(body)(using C.bind(id, bound)))
 
   def normalize(s: Stmt)(using C: Context): Stmt = preserveTypes(s) {
 
@@ -178,8 +244,7 @@ object Normalizer { normal =>
         //        case abort if abort.tpe == Type.TBottom =>
         //          Stmt.Let(id, abort, Return(ValueVar(id, tpe)))
 
-        case normalized =>
-          Stmt.Let(id, normalized, normalize(body)(using C.bind(id, normalized)))
+        case normalized => normalizeLet(id, normalized, body)
       }
 
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
@@ -189,7 +254,7 @@ object Normalizer { normal =>
     // -------
     case Stmt.App(b, targs, vargs, bargs) =>
       active(b) match {
-        case NormalizedBlock.Known(b: BlockLit, boundBy) if shouldInline(b, boundBy, bargs) =>
+        case NormalizedBlock.Known(b: BlockLit, boundBy) if shouldInline(b, boundBy, vargs, bargs) =>
           val blockUsage = boundBy.flatMap { bv => C.usage.get(bv.id) }.getOrElse(Usage.Once)
           if (blockUsage == Usage.Many) {
             // This is a conservative approximation:
@@ -208,7 +273,7 @@ object Normalizer { normal =>
       active(b) match {
         case n @ NormalizedBlock.Known(Block.New(impl), boundBy) =>
           selectOperation(impl, method) match {
-            case b: BlockLit if shouldInline(b, boundBy, bargs) => reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
+            case b: BlockLit if shouldInline(b, boundBy, vargs, bargs) => reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
             case _ => Stmt.Invoke(n.shared, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
           }
 
@@ -220,13 +285,15 @@ object Normalizer { normal =>
       case Expr.Make(data, tag, targs, vargs) if clauses.exists { case (id, _) => id == tag } =>
         val clause: BlockLit = clauses.collectFirst { case (id, cl) if id == tag => cl }.get
         val result = reduce(clause, targs, vargs.map(normalize), Nil)
-        assert(Type.equals(result.tpe, tpe))
+        util.assert(Type.equals(result.tpe, tpe))
         normalize(result)
       case Expr.Make(data, tag, targs, vargs) if default.isDefined =>
         normalize(default.get)
       case _ =>
         val normalized = normalize(scrutinee)
-        Stmt.Match(normalized, tpe, clauses.map { case (id, value) => id -> normalize(value) }, default.map(normalize))
+        Stmt.Match(normalized, tpe, clauses.map { case (tag, clause) =>
+          tag -> normalize(clause)(using selecting(normalized, tag, clause))
+        }, default.map(normalize))
     }
 
     // [[ if (true) stmt1 else stmt2 ]] = [[ stmt1 ]]
@@ -234,8 +301,11 @@ object Normalizer { normal =>
       case Expr.Literal(true, annotatedType) => normalize(thn)
       case Expr.Literal(false, annotatedType) => normalize(els)
       case _ =>
-        assert(Type.equals(thn.tpe, els.tpe), s"Then and else branch have different types: ${util.show(thn.tpe)} != ${util.show(els.tpe)}\n\n${util.show(thn)}\n\n${util.show(els)}\n\n${util.show(s)}")
-        If(normalize(cond), normalize(thn), normalize(els))
+        util.assert(Type.equals(thn.tpe, els.tpe), s"Then and else branch have different types: ${util.show(thn.tpe)} != ${util.show(els.tpe)}\n\n${util.show(thn)}\n\n${util.show(els)}\n\n${util.show(s)}")
+        val condition = normalize(cond)
+        If(condition,
+          normalize(thn)(using assuming(condition, true)),
+          normalize(els)(using assuming(condition, false)))
     }
 
     case Stmt.Val(id, binding, body) =>
@@ -254,14 +324,14 @@ object Normalizer { normal =>
 
         // [[ val x: A = shift(p) { {k: A => R} => body2 }; body: B ]] = shift(p) { {k: >>>B<<< => R} => body2 }
         case abort @ Stmt.Shift(p, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeA, answer)), captures), body2)
-              if !body2.free.freeIds.contains(k) =>
+              if !body2.free.contains(k) =>
             val tpeB = body.tpe
             Stmt.Shift(p, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeB, answer)), captures),
                 normalize(body2))
 
         // [[ val x: A = sc match [A] { case ... => body2: A }; body: B ]] == sc match [B] { case ... => [[ val x: A = body2; body: B ]] }
-        case Stmt.Match(sc, tpe, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
-          val res = normalizeVal(id, body2, body)
+        case Stmt.Match(sc, tpe, List((id2, clause @ BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
+          val res = normalizeVal(id, body2, body)(using selecting(sc, id2, clause))
           Stmt.Match(sc, res.tpe, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, res))), None)
 
         // Introduce joinpoints that are potentially later inlined or garbage collected
@@ -270,13 +340,13 @@ object Normalizer { normal =>
         //   if (cond) { [[ val x1 = thn; k(x1) ]] } else { [[ val x2 = els; k(x2) ]] }
         case Stmt.If(cond, thn, els) =>
           val tpe = thn.tpe
-          assert(Type.equals(thn.tpe, els.tpe))
-          joinpoint(id, tpe, normalize(body)) { k =>
+          util.assert(Type.equals(thn.tpe, els.tpe))
+          joinpoint(id, tpe, normalize(body)) { k => (C: Context) ?=>
             val x1 = Id(id.name)
             val x2 = Id(id.name)
             Stmt.If(cond,
-              normalizeVal(x1, thn, Stmt.App(k, Nil, List(ValueVar(x1, tpe)), Nil)),
-              normalizeVal(x2, els, Stmt.App(k, Nil, List(ValueVar(x2, tpe)), Nil)))
+              normalizeVal(x1, thn, Stmt.App(k, Nil, List(ValueVar(x1, tpe)), Nil))(using assuming(cond, true)),
+              normalizeVal(x2, els, Stmt.App(k, Nil, List(ValueVar(x2, tpe)), Nil))(using assuming(cond, false)))
           }
 
         // avoid dead joinpoints on coercions
@@ -288,12 +358,12 @@ object Normalizer { normal =>
           // [[ val id: A = sc match[A] { ... }; body : B ]] =
           //   def k(id: A): B  = [[ body ]]
           //   sc match [B] { ... k() ... }
-          joinpoint(id, tpe, res) { k =>
+          joinpoint(id, tpe, res) { k => (C: Context) ?=>
             // since we commuted Val and Match, we need to change the type of the match!
             Stmt.Match(sc, res.tpe, clauses.map {
-              case (tag, BlockLit(tparams, cparams, vparams, bparams, body)) =>
+              case (tag, clause @ BlockLit(tparams, cparams, vparams, bparams, body)) =>
                 val x = Id(id.name)
-                val res = normalizeVal(x, body, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))
+                val res = normalizeVal(x, body, Stmt.App(k, Nil, List(ValueVar(x, tpe)), Nil))(using selecting(sc, tag, clause))
                 (tag, BlockLit(tparams, cparams, vparams, bparams, res))
             }, default.map { stmt =>
               val x = Id(id.name)
@@ -302,8 +372,7 @@ object Normalizer { normal =>
           }
 
         // [[ val x = return e; s ]] = let x = [[ e ]]; [[ s ]]
-        case Stmt.Return(expr2) =>
-          Stmt.Let(id, expr2, normalize(body)(using C.bind(id, expr2)))
+        case Stmt.Return(expr2) => normalizeLet(id, expr2, body)
 
         // Commute val and bindings
         // [[ val x = { def f = ...; STMT }; STMT ]] = def f = ...; val x = STMT; STMT
@@ -350,7 +419,7 @@ object Normalizer { normal =>
     // "Congruences"
     // -------------
 
-    case Stmt.Reset(body) => Stmt.Reset(normalize(body))
+    case Stmt.Reset(body) => Stmt.Reset(normalize(body)(using C.enterPrompt(body.bparams.head.id)))
     case Stmt.Shift(prompt, k, body) => Shift(prompt, k, normalize(body))
     case Stmt.Return(expr) => Return(normalize(expr))
     case Stmt.Alloc(id, init, region, body) => Alloc(id, normalize(init), region, normalize(body))
@@ -397,9 +466,15 @@ object Normalizer { normal =>
     }
 
     // congruences
-    case Expr.PureApp(f, targs, vargs) => Expr.PureApp(f, targs, vargs.map(normalize))
-    case Expr.Make(data, tag, targs, vargs) => Expr.Make(data, tag, targs, vargs.map(normalize))
-    case Expr.ValueVar(id, annotatedType) => p
+    // [[ let x = f(y); f(y) ]] = let x = f(y); x
+    case Expr.PureApp(f, targs, vargs) => available(Expr.PureApp(f, targs, vargs.map(normalize)))
+    case Expr.Make(data, tag, targs, vargs) => available(Expr.Make(data, tag, targs, vargs.map(normalize)))
+    // [[ x ]] = y   if `x` was bound to `y`
+    // Sound because an alias is only ever bound to something already in scope where the alias is.
+    case Expr.ValueVar(id, annotatedType) => ctx.exprs.get(id) match {
+      case Some(v: Expr.ValueVar) => normalize(v)
+      case _ => p
+    }
     case Expr.Literal(value, annotatedType) => p
   }
 
@@ -451,23 +526,29 @@ object Normalizer { normal =>
     }.getOrElse { INTERNAL_ERROR("Should not happen") }
 
   @targetName("preserveTypesStmt")
-  inline def preserveTypes(before: Stmt)(inline f: Stmt => Stmt)(using C: Context): Stmt = if (C.debug) {
+  inline def preserveTypes(before: Stmt)(inline f: Stmt => Stmt): Stmt = debug {
     val after = f(before)
-    assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    val tpeBefore = before.typing.tpe
+    val tpeAfter = after.typing.tpe
+    util.assert(Type.equals(tpeBefore, tpeAfter), s"Normalization doesn't preserve types.\nBefore: ${tpeBefore}\nAfter:  ${tpeAfter}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
     after
-  } else f(before)
+  } { f(before) }
 
   @targetName("preserveTypesExpr")
-  inline def preserveTypes(before: Expr)(inline f: Expr => Expr)(using C: Context): Expr = if (C.debug) {
+  inline def preserveTypes(before: Expr)(inline f: Expr => Expr): Expr = debug {
     val after = f(before)
-    assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    val tpeBefore = before.typing.tpe
+    val tpeAfter = after.typing.tpe
+    util.assert(Type.equals(tpeBefore, tpeAfter), s"Normalization doesn't preserve types.\nBefore: ${tpeBefore}\nAfter:  ${tpeAfter}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
     after
-  } else f(before)
+  } { f(before) }
 
   @targetName("preserveTypesBlock")
-  inline def preserveTypes(before: Block)(inline f: Block => Block)(using C: Context): Block = if (C.debug) {
+  inline def preserveTypes(before: Block)(inline f: Block => Block): Block = debug {
     val after = f(before)
-    assert(Type.equals(before.tpe, after.tpe), s"Normalization doesn't preserve types.\nBefore: ${before.tpe}\nAfter:  ${after.tpe}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
+    val tpeBefore = before.typing.tpe
+    val tpeAfter = after.typing.tpe
+    util.assert(Type.equals(tpeBefore, tpeAfter), s"Normalization doesn't preserve types.\nBefore: ${tpeBefore}\nAfter:  ${tpeAfter}\n\nTree before:\n${util.show(before)}\n\nTree after:\n${util.show(after)}")
     after
-  } else f(before)
+  } { f(before) }
 }

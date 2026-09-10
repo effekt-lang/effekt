@@ -82,7 +82,7 @@ def unifyMany(args1: List[Type], args2: List[Type], subst: Substitution): Substi
   }
 
 def unify(ty1: Type, ty2: Type): Substitution / Exception[UnificationError] =
-  unify(ty1, ty2, map::empty(box bytearray::compareStringBytes))
+  unify(ty1, ty2, map::empty(box string::compareStringBytes))
 
 def showType(ty: Type): String = ty match {
   case Var(name) => name

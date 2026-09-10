@@ -4,6 +4,7 @@ package optimizer
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
+import effekt.util.debug
 
 import kiama.util.Source
 
@@ -16,7 +17,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
       case CoreTransformed(source, tree, mod, core) =>
         val term = Context.ensureMainExists(mod)
         val optimized = Context.timed("optimize", source.name) { optimize(source, term, core) }
-        if Context.config.debug() then optimized.typecheck()
+        debug { optimized.typecheck() }
         Some(CoreTransformed(source, tree, mod, optimized))
     }
 
@@ -24,7 +25,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     var tree = core
 
-     // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
+    // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
     tree = Context.timed("deadcode-elimination", source.name) {
       Deadcode.remove(mainSymbol, tree)
     }
@@ -36,9 +37,15 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
       StaticArguments.transform(mainSymbol, tree)
     }
 
+    val onceLimit = Context.config.maxOnceInlineSize().toInt
+    val policy = Default(
+      threshold = Context.config.maxInlineSize().toInt,
+      onceLimit = Option.when(onceLimit >= 0)(onceLimit), // negative means no limit
+      carryingLimit = Context.config.maxCarryingInlineSize().toInt)
+
     def normalize(m: ModuleDecl) = {
       val anfed = BindSubexpressions.transform(m)
-      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt, Context.config.debug())
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, policy)
       val live = Deadcode.remove(mainSymbol, normalized)
       val tailRemoved = RemoveTailResumptions(live)
       val contified = DirectStyle.rewrite(tailRemoved)
@@ -49,6 +56,11 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     tree = Context.timed("normalize-1", source.name) { normalize(tree) }
     tree = Context.timed("normalize-2", source.name) { normalize(tree) }
     tree = Context.timed("normalize-3", source.name) { normalize(tree) }
+
+    // `RemoveTailResumptions` runs after `Deadcode` and frees stuff, so let's run `Deadcode` one more time
+    tree = Context.timed("deadcode-elimination-final", source.name) {
+      Deadcode.remove(mainSymbol, tree)
+    }
 
     tree
 }

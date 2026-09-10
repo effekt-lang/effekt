@@ -1,0 +1,10 @@
+def default(): Int = 0
+def default(): Bool = false
+def default(): String = ""
+def default[A](): List[A] = Nil()
+def default[A,B](){ ?default: => A }{ ?default: => B }: (A, B) = (default(), default())
+
+def main() = {
+  val x: (Int, (List[String], (Bool, String))) = default()
+  println(x.show)
+}

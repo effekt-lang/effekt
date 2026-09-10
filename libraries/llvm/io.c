@@ -383,18 +383,18 @@ Int c_tcp_bind(String host, Int port) {
 
 typedef struct {
     Stack stack;
-    struct Pos handler;
+    struct Neg handler;
 } tcp_listen_closure_t;
 
 void c_tcp_listen_cb(uv_stream_t* server, int status) {
     tcp_listen_closure_t* listen_closure = (tcp_listen_closure_t*)server->data;
     Stack closure_stack = listen_closure->stack;
-    struct Pos closure_handler = listen_closure->handler;
+    struct Neg closure_handler = listen_closure->handler;
 
     if (status < 0) {
         server->data = NULL;
         free(listen_closure);
-        erasePositive(closure_handler);
+        eraseNegative(closure_handler);
         resume_Int(closure_stack, status);
         return;
     }
@@ -406,7 +406,7 @@ void c_tcp_listen_cb(uv_stream_t* server, int status) {
         free(client);
         server->data = NULL;
         free(listen_closure);
-        erasePositive(closure_handler);
+        eraseNegative(closure_handler);
         resume_Int(closure_stack, result);
         return;
     }
@@ -416,16 +416,16 @@ void c_tcp_listen_cb(uv_stream_t* server, int status) {
         uv_close((uv_handle_t*)client, (uv_close_cb)free);
         server->data = NULL;
         free(listen_closure);
-        erasePositive(closure_handler);
+        eraseNegative(closure_handler);
         resume_Int(closure_stack, result);
         return;
     }
 
-    sharePositive(closure_handler);
+    shareNegative(closure_handler);
     run_Int(closure_handler, (int64_t)client);
 }
 
-void c_tcp_listen(Int listener, struct Pos handler, Stack stack) {
+void c_tcp_listen(Int listener, struct Neg handler, Stack stack) {
     uv_stream_t* server = (uv_stream_t*)listener;
 
     tcp_listen_closure_t* listen_closure = malloc(sizeof(tcp_listen_closure_t));
@@ -436,7 +436,7 @@ void c_tcp_listen(Int listener, struct Pos handler, Stack stack) {
     int result = uv_listen(server, SOMAXCONN, c_tcp_listen_cb);
     if (result < 0) {
         free(listen_closure);
-        erasePositive(handler);
+        eraseNegative(handler);
         resume_Int(stack, result);
         return;
     }
@@ -451,9 +451,9 @@ void c_tcp_shutdown(Int handle, Stack stack) {
 
     if (listen_closure) {
         Stack closure_stack = listen_closure->stack;
-        struct Pos closure_handler = listen_closure->handler;
+        struct Neg closure_handler = listen_closure->handler;
         free(listen_closure);
-        erasePositive(closure_handler);
+        eraseNegative(closure_handler);
         resume_Int(closure_stack, 0);
     }
 }
@@ -601,7 +601,7 @@ static void subproc_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_
 }
 
 typedef struct {
-  struct Pos handler;
+  struct Neg handler;
 } subproc_stream_cb_closure_t;
 void subproc_stream_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
   subproc_stream_cb_closure_t* clos = (subproc_stream_cb_closure_t*)(stream->data);
@@ -611,12 +611,12 @@ void subproc_stream_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) 
     run_Pos(clos->handler, chunk);
   } else {
     uv_read_stop(stream);
-    erasePositive(clos->handler);
+    eraseNegative(clos->handler);
     free(clos);
     if (buf->base) free(buf->base);
   }
 }
-struct Pos subproc_options_on_stream(struct Pos opts, size_t id, uv_stdio_flags flags, struct Pos callback) {
+struct Pos subproc_options_on_stream(struct Pos opts, size_t id, uv_stdio_flags flags, struct Neg callback) {
     uv_process_options_t* options = (uv_process_options_t*)opts.obj;
 
     options->stdio[id].flags = UV_CREATE_PIPE | flags;
@@ -631,13 +631,13 @@ struct Pos subproc_options_on_stream(struct Pos opts, size_t id, uv_stdio_flags 
 
     return opts;
 }
-struct Pos c_spawn_options_on_stdout(struct Pos opts, struct Pos callback) {
+struct Pos c_spawn_options_on_stdout(struct Pos opts, struct Neg callback) {
   return subproc_options_on_stream(opts, 1, UV_WRITABLE_PIPE, callback);
 }
-struct Pos c_spawn_options_on_stderr(struct Pos opts, struct Pos callback) {
+struct Pos c_spawn_options_on_stderr(struct Pos opts, struct Neg callback) {
   return subproc_options_on_stream(opts, 2, UV_WRITABLE_PIPE, callback);
 }
-struct Pos c_spawn_options_pipe_stdin(struct Pos opts, struct Pos callback) {
+struct Pos c_spawn_options_pipe_stdin(struct Pos opts, struct Neg callback) {
   return subproc_options_on_stream(opts, 0, UV_READABLE_PIPE, callback);
 }
 
@@ -754,7 +754,7 @@ void c_spawn(struct Pos cmd, struct Pos args, struct Pos options, Stack stack) {
         subproc_stream_cb_closure_t* clos = (subproc_stream_cb_closure_t*)(stream->data);
         struct Pos str = (struct Pos) { .tag = 0, .obj = stream, };
         run_Pos(clos->handler, str);
-        erasePositive(clos->handler);
+        eraseNegative(clos->handler);
         free(clos);
     }
     if(opts->stdio[1].flags & UV_CREATE_PIPE)

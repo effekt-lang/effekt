@@ -245,49 +245,49 @@ namespace internal {
   extern def openForReading(path: String) at async: Int =
     jsNode "$effekt.capture(callback => open(${path}, 'r', callback))"
     llvm """
-      call void @c_fs_open_reading(%Pos ${path}, %Stack %stack)
+      notail call void @c_fs_open_reading(%Pos ${path}, %Stack %stack)
       ret void
     """
 
   extern def openForWriting(path: String) at async: Int =
     jsNode "$effekt.capture(callback => open(${path}, 'w', callback))"
     llvm """
-      call void @c_fs_open_writing(%Pos ${path}, %Stack %stack)
+      notail call void @c_fs_open_writing(%Pos ${path}, %Stack %stack)
       ret void
     """
 
   extern def openForAppending(path: String) at async: Int =
     jsNode "$effekt.capture(callback => open(${path}, 'a', callback))"
     llvm """
-      call void @c_fs_open_appending(%Pos ${path}, %Stack %stack)
+      notail call void @c_fs_open_appending(%Pos ${path}, %Stack %stack)
       ret void
     """
 
   extern def read(file: Int, buffer: ByteArray, offset: Int, size: Int, position: Int) at async: Int =
     jsNode "$effekt.capture(callback => read(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
     llvm """
-      call void @c_fs_read(%Int ${file}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Int ${position}, %Stack %stack)
+      notail call void @c_fs_read(%Int ${file}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Int ${position}, %Stack %stack)
       ret void
     """
 
   extern def write(file: Int, buffer: ByteArray, offset: Int, size: Int, position: Int) at async: Int =
     jsNode "$effekt.capture(callback => write(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
     llvm """
-      call void @c_fs_write(%Int ${file}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Int ${position}, %Stack %stack)
+      notail call void @c_fs_write(%Int ${file}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Int ${position}, %Stack %stack)
       ret void
     """
 
   extern def close(file: Int) at async: Int =
     jsNode "$effekt.capture(callback => close(${file}, callback))"
     llvm """
-      call void @c_fs_close(%Int ${file}, %Stack %stack)
+      notail call void @c_fs_close(%Int ${file}, %Stack %stack)
       ret void
     """
 
   extern def mkdir(path: String) at async: Int =
     jsNode "$effekt.capture(callback => mkdir(${path}, callback))"
     llvm """
-      call void @c_fs_mkdir(%Pos ${path}, %Stack %stack)
+      notail call void @c_fs_mkdir(%Pos ${path}, %Stack %stack)
       ret void
     """
 

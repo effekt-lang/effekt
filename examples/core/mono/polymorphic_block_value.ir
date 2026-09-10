@@ -1,0 +1,35 @@
+def identity['A](x: 'A) = {
+  return x: 'A
+}
+
+def use(){f: ['A]('A) => 'A} = {
+  (f: ['A]('A) => 'A @ {f})[Int](42)
+}
+
+def main() = {
+  (use: (){f: ['A]('A) => 'A} => Int @ {})(){
+    (identity: ['A]('A) => 'A @ {})
+  }
+}
+
+/// MONO_PREPROCESS
+
+interface Poly {
+  apply: ['A]('A) => 'A
+}
+
+def identity['A](x: 'A) = {
+  return x: 'A
+}
+
+def use(){f: Poly} = {
+  (f: Poly @ {f}).apply: ['A]('A) => 'A[Int](42)
+}
+
+def main() = {
+  (use: (){f: Poly} => Int @ {})(){new Poly {
+    def apply['A](x: 'A) = {
+      (identity: ['A]('A) => 'A @ {})['A](x: 'A)
+    }
+  }}
+}

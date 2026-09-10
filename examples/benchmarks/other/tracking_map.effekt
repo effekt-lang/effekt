@@ -1,0 +1,68 @@
+/// Tracking objects across a grid of sightings:
+/// - two sightings of one object say where it was before and where it goes next.
+///
+/// Benchmarks efficient map/set::collect.
+///
+/// Adapted from Advent of Code 2024, Day 8.
+module examples/benchmarks/tracking_map
+
+import examples/benchmarks/runner
+import map
+import set
+
+record Point(x: Int, y: Int)
+
+/// Which object was sighted at each point, or 0 for none.
+type Grid = Map[Point, Int]
+
+def point::compare(p: Point, q: Point): Ordering = compareInt(p.x, q.x) match {
+  case Equal() => compareInt(p.y, q.y)
+  case other   => other
+}
+
+def isInside(p: Point, size: Int): Bool =
+  p.x >= 0 && p.x < size && p.y >= 0 && p.y < size
+
+/// Where something that moved `from` one point `to` another goes next.
+def moved(from: Point, to: Point): Point =
+  Point(2 * to.x - from.x, 2 * to.y - from.y)
+
+/// Which object was sighted at `(x, y)`.
+/// One sighting per row, so that pairing them up does not outgrow reading the grid.
+def sighting(x: Int, y: Int, size: Int): Int =
+  if (y == (x * x).mod(size)) 1 + x.mod(8) else 0
+
+def grid(size: Int): Grid = map::collect {
+  with val x = each(0, size)
+  with val y = each(0, size)
+
+  do emit((Point(x, y), sighting(x, y, size)))
+}
+
+/// Filter the grid down to the points that recorded a sighting.
+def sightings(cells: Grid): Grid = map::collect {
+  for[(Point, Int)] { cells.each } {
+    case (p, 0)      => ()
+    case (p, object) => do emit((p, object))
+  }
+}
+
+/// Collect where each pair of sightings of one object puts it, before and after.
+def predictions(cells: Grid, size: Int): Set[Point] = set::collect {
+  val seen = sightings(cells)
+
+  with val (p, first) = for[(Point, Int)] { seen.each }
+  with val (q, second) = for[(Point, Int)] { seen.each }
+
+  if (first == second and p.compare(q) is Less()) {
+    val ahead = p.moved(q)
+    val behind = q.moved(p)
+
+    if (ahead.isInside(size)) { do emit(ahead) }
+    if (behind.isInside(size)) { do emit(behind) }
+  }
+}
+
+def run(N: Int): Int = predictions(N.grid, N).size
+
+def main() = benchmark(384){run}

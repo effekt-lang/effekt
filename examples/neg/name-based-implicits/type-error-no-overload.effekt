@@ -1,0 +1,8 @@
+def foo(): Bool = false
+
+def baz{ ?foo: => Int }: String = "1"
+
+def main() = {
+  val y: String = baz()
+  println(y)
+}

@@ -1,7 +1,7 @@
 Arithmetic
 ✓ addition
 ✕ faulty addition
-  2 + 2 should be 4!
+  2 + 2 should be 4! at examples/stdlib/test/fail.effekt:17:7
 ✓ multiplication
 
  2 pass

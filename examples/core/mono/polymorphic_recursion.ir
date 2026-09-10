@@ -1,0 +1,26 @@
+type Maybe['A] {
+  None()
+  Some(value: 'A)
+}
+
+def loop['A](value: 'A) = {
+  let nested = make Maybe['A] Some[](value: 'A)
+  (loop: ['A]('A) => 'A @ {})[Maybe['A]](nested: Maybe['A])
+}
+
+def main() = {
+  (loop: ['A]('A) => 'A @ {})[Int](7)
+}
+
+/// MONO_COLLECT_CONSTRAINTS
+
+<Int> <: loop
+<Maybe[loop.0]> <: loop
+<None.0> <: Maybe
+<Some.0> <: Maybe
+<loop.0> <: Maybe
+<loop.0> <: Some
+
+/// MONO_SOLVE
+
+no finite solution: Detected polymorphic recursion for 'loop'

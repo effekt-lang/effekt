@@ -195,6 +195,9 @@ class Parser(tokens: Seq[Token], source: Source) {
   def peek(offset: Int, kind: TokenKind): Boolean =
     peek(offset).kind == kind
 
+  def skipIf(kind: TokenKind): Boolean =
+    if (peek.kind == kind) { skip(); true } else { false }
+
   def hasNext(): Boolean = position < tokens.length
   def next(): Token =
     val t = tokens(position).failOnErrorToken(position)
@@ -294,7 +297,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   def withStmt(inBraces: Boolean): Stmt = `with` ~> peek.kind match {
     case `val` =>
       consume(`val`)
-      val patterns = some(matchPattern, `,`)
+      val patterns = someSep(matchPattern, `,`)
       val guards = manyWhile(`and` ~> matchGuard(), `and`)
       val call = `=` ~> expr()
       val fallback = when(`else`) { Some(stmt()) } { None }
@@ -331,8 +334,8 @@ class Parser(tokens: Seq[Token], source: Source) {
       // Simple case: all patterns are just variable names (or ignored), no guards, no fallback
       // Desugar to: call { (x, y, _, ...) => body }
       val vparams: List[ValueParam] = patterns.unspan.map {
-        case AnyPattern(id, span) => ValueParam(id, None, span)
-        case IgnorePattern(span) => ValueParam(IdDef(s"__ignored", span.synthesized), None, span)
+        case AnyPattern(id, span) => ValueParam(id, None, isImplicit = false, span)
+        case IgnorePattern(span) => ValueParam(IdDef(s"__ignored", span.synthesized), None, isImplicit = false, span)
         case _ => sys.error("impossible: checked above")
       }
       BlockLiteral(Nil, vparams, Nil, body, body.span.synthesized)
@@ -345,7 +348,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       val argSpans = patternList.map(_.span)
 
       val vparams: List[ValueParam] = names.zip(argSpans).map { (name, span) =>
-        ValueParam(IdDef(name, span.synthesized), None, span.synthesized)
+        ValueParam(IdDef(name, span.synthesized), None, isImplicit = false, span.synthesized)
       }
       val scrutinees = names.zip(argSpans).map { (name, span) =>
         Var(IdRef(Nil, name, span.synthesized), span.synthesized)
@@ -357,7 +360,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
 
       val clause = MatchClause(pattern, guards, body, Span(source, pattern.span.from, body.span.to, Synthesized))
-      val matchExpr = Match(scrutinees, List(clause), fallback, withSpan.synthesized)
+      val matchExpr = Match(scrutinees, List(clause), fallback, withSpan)
       val matchBody = Return(matchExpr, withSpan.synthesized)
       BlockLiteral(Nil, vparams, Nil, matchBody, withSpan.synthesized)
     }
@@ -486,7 +489,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       Include(`import` ~> moduleName(), span())
 
   def moduleName(): String =
-    some(ident, `/`).mkString("/") labelled "module name"
+    someSep(ident, `/`).mkString("/") labelled "module name"
 
   def isToplevel: Boolean = peek.kind match {
     case `val` | `def` | `type` | `effect` | `namespace` | `interface` | `type` | `record` | `var` | `include` | `extern` => true
@@ -573,11 +576,11 @@ class Parser(tokens: Seq[Token], source: Source) {
           case p ~ guards =>
             // matches do not support doc comments, so we ignore `info`
             val sc = expr()
-            val endPos = pos()
             val default = when(`else`) { Some(stmt()) } { None }
+            val endPos = pos()
             val body = semi() ~> stmts(inBraces)
             val clause = MatchClause(p, guards, body, Span(source, p.span.from, sc.span.to))
-            val matching = Match(List(sc), List(clause), default, Span(source, startPos, endPos, Synthesized))
+            val matching = Match(List(sc), List(clause), default, Span(source, startPos, endPos))
             Return(matching, span().synthesized)
         }
 
@@ -931,7 +934,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     nonterminal:
       `with` ~> backtrack(idDef() <~ `:`) ~ implementation() match {
         case capabilityName ~ impl =>
-          val capability = capabilityName map { name => BlockParam(name, Some(impl.interface), name.span.synthesized): BlockParam }
+          val capability = capabilityName map { name => BlockParam(name, Some(impl.interface), isImplicit = false, name.span.synthesized): BlockParam }
           Handler(capability.unspan, impl, span())
       }
 
@@ -990,7 +993,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def matchClause(): MatchClause =
     nonterminal:
-      val patterns = `case` ~> some(matchPattern, `,`)
+      val patterns = `case` ~> someSep(matchPattern, `,`)
       val pattern: MatchPattern = patterns match {
         case Many(List(pat), _) => pat
         case pats => MultiPattern(pats.unspan, pats.span)
@@ -1004,7 +1007,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def matchGuards() =
     nonterminal:
-      some(matchGuard, `and`)
+      someSep(matchGuard, `and`)
 
   def matchGuard(): MatchGuard =
     nonterminal:
@@ -1034,9 +1037,15 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
 
   def matchExpr(scrutinee: Term): Term =
-      val clauses = `match` ~> braces { manyWhile(matchClause(), `case`) }
-      val default = when(`else`) { Some(stmt()) } { None }
-      Match(List(scrutinee), clauses, default, span())
+   val clauses = `match` ~> braces {
+     peek.kind match {
+       case `case` | `}` => ()
+       case k => fail("case", k)
+     }
+     manyWhile(matchClause(), `case`)
+   }
+   val default = when(`else`) { Some(stmt()) } { None }
+   Match(List(scrutinee), clauses, default, span())
 
 
   def assignExpr(assignee: Term.Var): Term =
@@ -1097,7 +1106,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     given PrecedenceTable = table
     // since by default, the associativity is left-associative, we only need to specify it for the cases where it is different
     table.declare(Associativity.None, `===`, `!==`, `<=`, `>=`, `<`, `>`)
-    // We want `+` and `-` (as well as `*` and `/`) to bind equally strong and use associativity instead to disambiguate 
+    // We want `+` and `-` (as well as `*` and `/`) to bind equally strong and use associativity instead to disambiguate
     `+` =?= `-`
     `*` =?= `/`
     Set(`||`) ?< Set(`&&`)
@@ -1188,7 +1197,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     case `>=` => "infixGte"
     case `:=` => "infixColonEq"
     case `+`  => "infixPlus"
-    // `+=` (`-=`, `*=`, `/=`) has the same name as `+` (`-`, `*`, `/`) due to the way it is manually desugared in [[ primExpr ]] 
+    // `+=` (`-=`, `*=`, `/=`) has the same name as `+` (`-`, `*`, `/`) due to the way it is manually desugared in [[ primExpr ]]
     case `+=` => "infixPlus"
     case `-`  => "infixMinus"
     case `-=` => "infixMinus"
@@ -1284,16 +1293,16 @@ class Parser(tokens: Seq[Token], source: Source) {
               val names = List.tabulate(argSpans.length){ n => s"__arg${n}" }
               BlockLiteral(
                 Nil,
-                names.zip(argSpans).map { (name, span) => ValueParam(IdDef(name, span.synthesized), None, span.synthesized) },
+                names.zip(argSpans).map { (name, span) => ValueParam(IdDef(name, span.synthesized), None, isImplicit = false, span.synthesized) },
                 Nil,
                 Return(
                   Match(
                     names.zip(argSpans).map{ (name, span) => Var(IdRef(Nil, name, span.synthesized), span.synthesized) },
                     cs.unspan,
                     None,
-                    span().synthesized
+                    span()
                   ), span().synthesized),
-                span().synthesized
+                span()
               )
 
           case _ =>
@@ -1317,13 +1326,13 @@ class Parser(tokens: Seq[Token], source: Source) {
     case `unbox`  => unboxExpr()
     case `new`    => newExpr()
     case `do`                => doExpr()
-    case _ if isString       => templateString()
+    case _ if isString       => templateString(Maybe.None(span()))
     case _ if isLiteral      => literal()
     case _ if isVariable     =>
-      peek(1).kind match {
-        case _: Str => templateString()
+      val lhs = variable()
+      peek.kind match {
+        case _: Str => templateString(Maybe.Some(lhs.id, lhs.id.span))
         case _ =>
-          val lhs = variable()
           peek.kind match {
             case `+=` | `-=` | `*=` | `/=` =>
               val op = next()
@@ -1361,7 +1370,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   }
   def listLiteral(): Term =
     nonterminal:
-      manyTrailing(() => spanned(expr()), `[`, `,`, `]`).foldRight(NilTree) { ConsTree }
+      many(() => spanned(expr()), `[`, `,`, `]`).unspan.foldRight(NilTree) { ConsTree }
 
   private def NilTree: Term =
     Call(IdTarget(IdRef(List(), "Nil", span())), Nil, Nil, Nil, span())
@@ -1378,7 +1387,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   def isTupleOrGroup: Boolean = peek(`(`)
   def tupleOrGroup(): Term =
     nonterminal:
-      some(expr, `(`, `,`, `)`) match {
+      some(expr, `(`, `,`, `)`, failOnSingleton = true) match {
         case Many(e :: Nil, _) => e
         case Many(xs, _) => Call(IdTarget(IdRef(List("effekt"), s"Tuple${xs.size}", span().synthesized)), Nil, xs.map(ValueArg.Unnamed), Nil, span().synthesized)
       }
@@ -1429,14 +1438,14 @@ class Parser(tokens: Seq[Token], source: Source) {
     case _      => false
   }
 
-  def templateString(): Term =
-    nonterminal:
+  def templateString(splicer: Maybe[IdRef]): Term =
+    nonterminalAt(splicer.span):
       val start = position
-      backtrack(idRef()) ~ template(expr()) match {
+      (splicer, template(expr())) match {
         // We do not need to apply any transformation if there are no splices _and_ no custom handler id is given
-        case Maybe(None, _) ~ SpannedTemplate(str :: Nil, Nil) => StringLit(str.unspan, str.span)
+        case (Maybe(None, _), SpannedTemplate(str :: Nil, Nil)) => StringLit(str.unspan, str.span)
         // s"a${x}b${y}" ~> s { do write("a"); do splice(x); do write("b"); do splice(y); return () }
-        case Maybe(id, range) ~ SpannedTemplate(strs, args) =>
+        case (Maybe(id, range), SpannedTemplate(strs, args)) =>
           val target = id match {
             case Some(id) => id
             case None =>
@@ -1499,13 +1508,15 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def idRef(): IdRef =
     nonterminal:
-      some(ident, PathSep) match {
+      someSep(ident, PathSep) match {
         case ids => IdRef(ids.init, ids.last, span())
       }
 
   def idDef(): IdDef =
     nonterminal:
-      IdDef(ident(), span())
+      someSep(ident, PathSep) match {
+        case ids => IdDef(ids.init, ids.last, span())
+      }
 
   def isIdent: Boolean = peek.kind match {
     case Ident(id) => true
@@ -1561,7 +1572,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     nonterminal:
       peek.kind match {
         case `(` =>
-          some(boxedType, `(`, `,`, `)`) match {
+          some(boxedType, `(`, `,`, `)`, failOnSingleton = true) match {
             case Many(tpe :: Nil, _) => tpe
             case tpes => TypeTuple(tpes)
           }
@@ -1654,7 +1665,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def lambdaParams(): (List[Id], List[ValueParam], List[BlockParam]) =
     nonterminal:
-      if isVariable then (Nil, List(ValueParam(idDef(), None, span())), Nil)  else paramsOpt()
+      if isVariable then (Nil, List(ValueParam(idDef(), None, isImplicit=false, span())), Nil)  else paramsOpt()
 
   def params(): (Many[Id], Many[ValueParam], Many[BlockParam]) =
     nonterminal:
@@ -1688,11 +1699,13 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def valueParam(): ValueParam =
     nonterminal:
-      ValueParam(idDef(), Some(valueTypeAnnotation()), span())
+      val isImplicit = skipIf(`?`)
+      ValueParam(idDef(), Some(valueTypeAnnotation()), isImplicit, span())
 
   def valueParamOpt(): ValueParam =
     nonterminal:
-      ValueParam(idDef(), maybeValueTypeAnnotation(), span())
+      val isImplicit = skipIf(`?`)
+      ValueParam(idDef(), maybeValueTypeAnnotation(), isImplicit, span())
 
   def maybeBlockParams(): Many[BlockParam] =
     nonterminal:
@@ -1712,11 +1725,13 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def blockParam(): BlockParam =
     nonterminal:
-      BlockParam(idDef(), Some(blockTypeAnnotation()), span())
+      val isImplicit = skipIf(`?`)
+      BlockParam(idDef(), Some(blockTypeAnnotation()), isImplicit, span())
 
   def blockParamOpt(): BlockParam =
     nonterminal:
-      BlockParam(idDef(), when(`:`)(Some(blockType()))(None), span())
+      val isImplicit = skipIf(`?`)
+      BlockParam(idDef(), when(`:`)(Some(blockType()))(None), isImplicit, span())
 
   def maybeValueTypes(): Many[Type] =
     nonterminal:
@@ -1825,16 +1840,44 @@ class Parser(tokens: Seq[Token], source: Source) {
   }
 
   /**
-   * Repeats [[p]], separated by [[sep]] enclosed by [[before]] and [[after]]
+   * Parses `p (sep p)* sep? after` in order to deduplicate work in [[some]] and [[many]].
+   * Soft fails when [[failOnSingleton]] is set and the "list" has one element and a trailing separator.
    */
-  inline def some[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): Many[T] =
+  private inline def delimitedUntil[T](
+    p: () => T, sep: TokenKind, after: TokenKind,
+    inline failOnSingleton: Boolean
+  ): List[T] =
+    val components: ListBuffer[T] = ListBuffer.empty
+    components += p()
+    while (peek(sep)) {
+      consume(sep)
+      if (!peek(after)) { // if `after` follows `sep`, then it was trailing
+        components += p()
+      } else if (failOnSingleton && components.size == 1) {
+        // NOTE(jiribenes, 2026-07-31): As of the time of writing, this is exclusively fired for the tuple/grouping overload, so the message is phrased for tuples.
+        softFail(s"There are no one-element tuples. Remove the trailing `${explain(sep)}` to group, or add another element.",
+          position - 1, position - 1) // `position - 1` is the `sep` we just consumed
+      }
+    }
+    consume(after)
+    components.toList
+
+  /**
+   * Repeats [[p]], separated by [[sep]] enclosed by [[before]] and [[after]].
+   *
+   * Set [[failOnSingleton]] where the delimiters are overloaded and a one-element list is not a
+   * list at all but just a grouping, i.e., when `(x,)` denotes `(x)`, like with tuples vs groupings.
+   */
+  inline def some[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind,
+                     inline failOnSingleton: Boolean = false): Many[T] =
     nonterminal:
       consume(before)
-      val res = some(p, sep)
-      consume(after)
-      Many(res.unspan, span())
+      Many(delimitedUntil(p, sep, after, failOnSingleton), span())
 
-  inline def some[T](p: () => T, sep: TokenKind): Many[T] =
+  /**
+   * Repeats [[p]] at least once, separated by [[sep]]. No trailing commas supported (no delimiters).
+   */
+  inline def someSep[T](p: () => T, sep: TokenKind): Many[T] =
     nonterminal:
       val components: ListBuffer[T] = ListBuffer.empty
       components += p()
@@ -1891,39 +1934,8 @@ class Parser(tokens: Seq[Token], source: Source) {
         consume(after)
         Many.empty(span())
       } else {
-        val components: ListBuffer[T] = ListBuffer.empty
-        components += p()
-        while (peek(sep)) {
-          consume(sep)
-          components += p()
-        }
-        consume(after)
-        Many(components.toList,span())
+        Many(delimitedUntil(p, sep, after, failOnSingleton = false), span())
       }
-
-
-  inline def manyTrailing[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): List[T] =
-    consume(before)
-    if (peek(after)) {
-      consume(after)
-      Nil
-    } else if (peek(sep)) {
-      consume(sep)
-      consume(after)
-      Nil
-    } else {
-      val components: ListBuffer[T] = ListBuffer.empty
-      components += p()
-      while (peek(sep)) {
-        consume(sep)
-
-        if (!peek(after)) {
-          components += p()
-        }
-      }
-      consume(after)
-      components.toList
-    }
 
 
   // Positions
@@ -1968,6 +1980,9 @@ class Parser(tokens: Seq[Token], source: Source) {
   // the handler for the "span" effect.
   private val _start: scala.util.DynamicVariable[Int] = scala.util.DynamicVariable(0)
   inline def nonterminal[T](inline p: => T): T = _start.withValue(peek.start) {
+    p
+  }
+  inline def nonterminalAt[T](span: Span)(inline p: => T): T = _start.withValue(span.from) {
     p
   }
 }
