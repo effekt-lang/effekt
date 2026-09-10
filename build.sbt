@@ -44,7 +44,7 @@ lazy val commonSettings = Seq(
     "-language:implicitConversions",
   ),
   libraryDependencies ++= Seq(
-    "org.scala-lang.modules" %%% "scala-xml" % "2.3.0"
+    "org.scala-lang.modules" %%% "scala-xml" % "2.5.0"
   )
 )
 
@@ -52,7 +52,7 @@ enablePlugins(ScalaJSPlugin)
 
 lazy val replDependencies = Seq(
   "jline" % "jline" % "2.14.6",
-  "org.rogach" %% "scallop" % "4.1.0",
+  "org.rogach" %% "scallop" % "6.0.0",
 )
 
 lazy val lspDependencies = Seq(
@@ -61,7 +61,7 @@ lazy val lspDependencies = Seq(
 
 lazy val testingDependencies = Seq(
   "org.scala-sbt" %% "io" % "1.6.0" % Test,
-  "org.scalameta" %% "munit" % "0.7.29" % Test
+  "org.scalameta" %% "munit" % "1.3.6" % Test
 )
 
 lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("kiama"))
