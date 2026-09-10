@@ -288,7 +288,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
 
-    libraryDependencies += "com.lihaoyi" %%% "utest" % "0.8.2" % "test",
+    libraryDependencies += "com.lihaoyi" %%% "utest" % "0.9.5" % "test",
 
     testFrameworks += new TestFramework("utest.runner.Framework"),
 
