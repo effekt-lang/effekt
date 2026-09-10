@@ -13,6 +13,7 @@ import scala.sys.process.*
 import scala.language.implicitConversions
 
 trait EffektTests extends munit.FunSuite {
+  override val munitTimeout = scala.concurrent.duration.Duration(2, "m")
 
   // The name of the backend as it is passed to the --backend flag.
   def backendName: String
