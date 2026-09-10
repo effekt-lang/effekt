@@ -1,0 +1,8 @@
+def parse(s: String): Int = {
+  with feed(s)
+  var acc = 0
+  loop { acc = 10 * acc + (do next[Char]().toInt - 48) }
+  acc
+}
+
+def main() = println(parse("12345"))

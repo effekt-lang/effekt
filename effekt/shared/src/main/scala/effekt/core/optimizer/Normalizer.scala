@@ -38,9 +38,9 @@ object Normalizer { normal =>
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
     policy: InliningPolicy,        // whether to inline a call (see [[InliningPolicy]])
     facts: Map[Expr, Expr],        // maps a pure expression to something simpler it is known to equal
-    prompts: Int,                  // how many enclosing `Reset`s we are inside (see [[Default.usedOnce]])
+    prompts: List[Id],             // the enclosing `Reset`s' prompts, innermost first
   ) {
-    def enterPrompt: Context = copy(prompts = prompts + 1)
+    def enterPrompt(prompt: Id): Context = copy(prompts = prompt :: prompts)
 
     // knowing `x = e`, we also know `e = x`, which is what lets us share `e`
     def bind(id: Id, expr: Expr): Context =
@@ -126,7 +126,7 @@ object Normalizer { normal =>
     val defs = m.definitions.collect {
       case Toplevel.Def(id, block) => id -> block
     }.toMap
-    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), policy, Map.empty, 0)
+    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), policy, Map.empty, Nil)
 
     val (normalizedDefs, _) = normalizeToplevel(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
@@ -190,6 +190,19 @@ object Normalizer { normal =>
         case other => NormalizedBlock.Known(Block.Unbox(expr), None)
       }
     }
+
+  /**
+   * The block that [[b]] denotes, when it is known here *and* nothing else uses it.
+   *
+   * Enables inlining (known ~> its ops resolve; used once ~> consumed rather than copied)
+   */
+  private[optimizer] def knownAndUsedOnce(b: Block)(using Context): Option[Block] = b match {
+    case x: Block.BlockVar if isOnce(x.id) => active(x) match {
+      case NormalizedBlock.Known(known, Some(_)) => Some(known)
+      case _ => None
+    }
+    case _ => None
+  }
 
   // TODO for `New` we should track how often each operation is used, not the object itself
   //   to decide inlining.
@@ -311,7 +324,7 @@ object Normalizer { normal =>
 
         // [[ val x: A = shift(p) { {k: A => R} => body2 }; body: B ]] = shift(p) { {k: >>>B<<< => R} => body2 }
         case abort @ Stmt.Shift(p, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeA, answer)), captures), body2)
-              if !body2.free.freeIds.contains(k) =>
+              if !body2.free.contains(k) =>
             val tpeB = body.tpe
             Stmt.Shift(p, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeB, answer)), captures),
                 normalize(body2))
@@ -406,7 +419,7 @@ object Normalizer { normal =>
     // "Congruences"
     // -------------
 
-    case Stmt.Reset(body) => Stmt.Reset(normalize(body)(using C.enterPrompt))
+    case Stmt.Reset(body) => Stmt.Reset(normalize(body)(using C.enterPrompt(body.bparams.head.id)))
     case Stmt.Shift(prompt, k, body) => Shift(prompt, k, normalize(body))
     case Stmt.Return(expr) => Return(normalize(expr))
     case Stmt.Alloc(id, init, region, body) => Alloc(id, normalize(init), region, normalize(body))

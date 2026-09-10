@@ -33,8 +33,9 @@ class Unique(threshold: Int) extends InliningPolicy {
  *
  * @param threshold the max size budget a call site starts with (`--max-inline-size`)
  * @param onceLimit size budget for [[usedOnce]]; `None` means unbounded (`--max-once-inline-size -1`)
+ * @param carryingLimit size budget for [[carriesAnOperationToItsHandler]] (`--max-carrying-inline-size`)
  */
-class Default(threshold: Int, onceLimit: Option[Int]) extends InliningPolicy {
+class Default(threshold: Int, onceLimit: Option[Int], carryingLimit: Int) extends InliningPolicy {
 
   def apply(site: CallSite)(using Context): Boolean = site.boundBy match {
     case None => hasKnownBlockArg(site)
@@ -43,15 +44,46 @@ class Default(threshold: Int, onceLimit: Option[Int]) extends InliningPolicy {
       !Normalizer.isRecursive(callee.id) &&
         // 2) if the callee is only used once, let [[usedOnce]] try first
         (usedOnce(callee, site) ||
-          // 3) otherwise, inline if [[affordable]]
-          affordable(site))
+        // 3) or if the call carries an operation to the handler that serves it
+        carriesAnOperationToItsHandler(site) ||
+        // 4) otherwise, inline if [[affordable]]
+        affordable(site))
   }
+
+  /** Whether inlining this call would carry a `Reset` or `Region` into the extent of a prompt we are in. */
+  private def movesAScopeIntoAPrompt(site: CallSite)(using C: Context): Boolean =
+    C.prompts.nonEmpty && installsScope(site.callee.body) 
 
   /** A callee used exactly once is inlined if it's at most [[onceLimit]], and only if it doesn't move scopes. */
   private def usedOnce(callee: BlockVar, site: CallSite)(using C: Context): Boolean =
     Normalizer.isOnce(callee.id) &&
       onceLimit.forall { limit => site.callee.body.size <= limit } &&
-        (C.prompts == 0 || !installsScope(site.callee.body)) // don't move resets/regions
+        !movesAScopeIntoAPrompt(site)
+
+  private def carriesAnOperationToItsHandler(site: CallSite)(using C: Context): Boolean =
+    // 1) cheapest first: if there are block args
+    site.bargs.nonEmpty &&
+      // 2) and callee's body is within the [[carryingLimit]]
+      site.callee.body.size <= carryingLimit &&
+      // 3) and there's a block arg which shifts into an enclosing prompt
+      site.bargs.exists { barg =>
+        Normalizer.knownAndUsedOnce(barg).exists {
+          case Block.New(impl) => shiftsToAnEnclosingPrompt(impl)
+          case _ => false
+        }
+      } &&
+      // 4) and finally, it does not move a scope into a prompt
+      !movesAScopeIntoAPrompt(site) // somewhat costly, so we're trying this only at the end
+
+  private def shiftsToAnEnclosingPrompt(impl: Implementation)(using C: Context): Boolean =
+    object query extends Tree.Query[Unit, Boolean] {
+      def empty = false
+      def combine = _ || _
+      override def stmt(using Unit) = {
+        case Stmt.Shift(prompt, _, _) => C.prompts.contains(prompt.id)
+      }
+    }
+    query.query(impl)(using ())
 
   /** Does the body fit the budget this call site can afford? */
   private def affordable(site: CallSite)(using Context): Boolean =
