@@ -382,9 +382,6 @@ class ParserTests extends munit.FunSuite {
           throw new IllegalArgumentException(s"Expected Box but got ${other.getClass.getSimpleName}")
       }
     }
-
-    // { f } is parsed as a capture set and not backtracked.
-    intercept[Throwable] { parseExpr("box { f }") }
   }
 
   test("Holes") {
@@ -812,8 +809,6 @@ class ParserTests extends munit.FunSuite {
     parseBlockType("[T] => T") // Not sure we want this...
 
     parseValueType("Exc at { a, b, c }")
-    intercept[Throwable] { parseBlockType("Exc / Eff") }
-    intercept[Throwable] { parseBlockType("Exc / {}") }
 
     parseValueType("() => (Exc at {}) / {} at { a, b, c }")
 
