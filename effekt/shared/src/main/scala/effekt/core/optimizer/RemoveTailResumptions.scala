@@ -20,7 +20,8 @@ object RemoveTailResumptions {
   }
 
   /**
-   * Tail positions of a statement, storing only its rewrite.
+   * Stores a [[rewrite]] function that will get applied to all tail positions of a given (partially applied) statement.
+   * (thus being somewhat `lens`-ey)
    *
    * @param transparent blocks whose tail calls are tail positions too
    */
@@ -34,6 +35,7 @@ object RemoveTailResumptions {
 
   /**
    * A statement stands in tail position when the enclosing computation's answer is its answer.
+   * This function extracts the immediate [[TailPositions]] from a [[Stmt]].
    *
    * @param crossesVar whether a `Var` preserves tail position.
    *   It does preserve it for a handler that never resumes, but does **not** for one that observes it.
@@ -121,7 +123,7 @@ object RemoveTailResumptions {
 
 
   /**
-   * Whether every path through [[stmt]] ends by resuming [[k]].
+   * Whether every path through [[stmt]] ends by resuming [[k]] or by a [[Stmt.Shift]] that aborts.
    *
    * @param transparent blocks known to resume in tail position, so a call to one is a tail position
    */
