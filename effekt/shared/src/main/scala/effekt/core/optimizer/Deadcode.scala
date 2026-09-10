@@ -13,10 +13,19 @@ class Deadcode(reachable: Map[Id, Usage])
 
   private def unused(id: Id): Boolean = !used(id)
 
+  /** A call that cannot be observed: the callee captures nothing, and neither does anything passed to it. */
+  private def isPureCall(stmt: Stmt): Boolean = stmt match {
+    case Stmt.App(callee, _, _, bargs) => callee.capt.isEmpty && bargs.forall(_.capt.isEmpty) && stmt.tpe != Type.TBottom
+    case _ => false
+  }
+
   override def rewrite(stmt: Stmt): Trampoline[Stmt] = stmt match {
     // Remove local unused definitions
     case Stmt.Def(id, block, body) if unused(id) => rewrite(body)
     case Stmt.Let(id, binding, body) if unused(id) => rewrite(body)
+
+    // Remove local unused 'val's as long as they are pure calls.
+    case Stmt.Val(id, binding, body) if unused(id) && isPureCall(binding) => rewrite(body)
 
     case Stmt.Reset(body) =>
       rewrite(body).map {
