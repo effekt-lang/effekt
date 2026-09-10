@@ -34,7 +34,7 @@ lazy val commonSettings = Seq(
     "-unchecked",
     // "-Xlint",
     // "-Xcheck-macros",
-    // "-Werror",
+    "-Werror",
     // we can use scalafix's organize imports once the next Scala version is out.
     // https://github.com/scalacenter/scalafix/pull/1800
     // "-Wunused:imports",
