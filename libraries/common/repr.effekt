@@ -1,0 +1,113 @@
+module repr
+
+import effekt
+import list
+import bytearray
+import array
+import stream
+
+/// Rose tree as a datatype
+record Tree[A](node: A, children: List[Tree[A]])
+
+def reflect[A](repr: Tree[A]): Unit / rose[A, Unit] = {
+  def go(r: Tree[A]): Unit / rose[A, Unit] = {
+    do labelled(r.node) { r.children.foreach { x => go(x) } }
+  }
+  go(repr)
+}
+
+def reify[A, R] { program: () => R / rose[A, R] }: (R, List[Tree[A]]) = {
+  var acc: List[Tree[A]] = Nil()
+
+  val res = try program() with rose[A, R] {
+    def labelled(label) =
+      resume { {children} =>
+        val savedAcc = acc
+        acc = Nil()
+        val res = children()
+        val kids = acc.reverse
+        acc = Cons(Tree(label, kids), savedAcc)
+        res
+      }
+  }
+
+  (res, acc.reverse)
+}
+
+def reifySingle[A] { program: () => Unit / rose[A, Unit] }: Tree[A] = {
+  val (_, Cons(repr, Nil())) = program.reify[A, Unit] else panic("repr: expected exactly one repr")
+  repr
+}
+
+namespace Repr {
+  type Llabel = Repr::Llabel
+  type Repr = Tree[Repr::Llabel]
+
+  def leaf(label: Llabel): Repr = Tree(label, [])
+  def int(n: Int): Repr = Repr::Int(n).leaf
+  def double(d: Double): Repr = Repr::Double(d).leaf
+  def bool(b: Bool): Repr = Repr::Bool(b).leaf
+  def string(s: String): Repr = Repr::String(s).leaf
+  def byte(b: Byte): Repr = Repr::Byte(b).leaf
+  def char(c: Char): Repr = Repr::Char(c).leaf
+
+  def array(a: Array[Repr]): Repr = collection("Array", a.toList)
+  def list(l: List[Repr]): Repr = Tree(Repr::List(), l)
+  def byteArray(b: ByteArray): Repr = collection("ByteArray", b.toList.map {byte})
+
+  def constructorNamed(name: String, a: List[(String, Repr)]): Repr =
+    Tree(Repr::App(name), a.map { case (name, value) => Tree(Repr::Prop(name), [value]) })
+  def constructor(name: String, args: List[Repr]): Repr =
+    Tree(Repr::App(name), args)
+  def opaque(name: String, child: Repr): Repr =
+    Tree(Repr::Opaque(name), [child])
+  def opaque(name: String): Repr =
+    Tree(Repr::Opaque(name), [])
+  def opaqueLiteral(name: String, value: String): Repr =
+    Tree(Repr::Opaque(name), [Tree(Repr::Literal(value), [])])
+  def collection(name: String, contents: List[Repr]): Repr =
+    opaque(name, list(contents))
+  def assoc(name: String, contents: List[(Repr, Repr)]): Repr =
+    Tree(Repr::Assoc(name), contents.map { case (key, value) => Tree(Repr::AssocProp(), [key, value]) })
+
+
+  def reflect(repr: Repr): Unit / rose[Llabel, Unit] = reflect[Llabel](repr)
+
+  def reify[R] { program: () => R / rose[Llabel, R] }: (R, List[Tree[Llabel]]) =
+    reify[Llabel, R] { program() }
+
+  def reifySingle { program: () => Unit / rose[Llabel, Unit] }: Tree[Llabel] =
+    reifySingle[Llabel] { program() }
+}
+
+/// A representation of a value as a rose tree.
+/// This is used for debugging, testing, and straightforward pretty-printing.
+type Repr = Repr::Repr
+
+def toUniversalString(r: Repr): String = {
+  def commaSepChildren() = r.children.map { x => toUniversalString(x) }.join(", ")
+
+  r.node match {
+    case Repr::Int(n) => n.show
+    case Repr::Double(d) => d.show
+    case Repr::Bool(b) => b.show
+    case Repr::Byte(b) => b.show
+    case Repr::Char(c) => c.show
+    case Repr::String(s) => "\"" ++ s ++ "\""
+    case Repr::List() => "[" ++ commaSepChildren() ++ "]"
+    case Repr::App(name) => name ++ "(" ++ commaSepChildren() ++ ")"
+    case Repr::Prop(name)   and r.children is Cons(child, Nil())            => name ++ " = " ++ toUniversalString(child)
+    case Repr::AssocProp()  and r.children is Cons(key, Cons(value, Nil())) => toUniversalString(key) ++ " !-> " ++ toUniversalString(value)
+    case Repr::Opaque(name) and r.children is Cons(_, _)                    => "<" ++ name ++ "(" ++ commaSepChildren() ++ ")" ++ ">"
+    case Repr::Opaque(name) => "<" ++ name ++ ">"
+    case Repr::Assoc(name) => "<" ++ name ++ "(" ++ commaSepChildren() ++ ")" ++ ">"
+    case Repr::Literal(s) => s
+    case Repr::Omitted() => "..."
+    case _ => panic("invalid Repr")
+  }
+}
+
+def toString { reprey: () => Unit / rose[Repr::Llabel, Unit] }: String = {
+  val repr = Repr::reifySingle { reprey() }
+  toUniversalString(repr)
+}
