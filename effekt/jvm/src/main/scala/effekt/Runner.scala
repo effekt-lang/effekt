@@ -326,7 +326,7 @@ object LLVMRunner extends Runner[String] {
       case (Some(lib), Some(include)) => Seq(s"-L${lib.unixPath}", "-luv", s"-I${include.unixPath}")
       case _ =>
         C.warning(s"Cannot find libuv on ${OS}; please use --clang-libraries and --clang-includes to configure the paths for the libuv dylib and header files, respectively.")
-        Seq()
+        Seq("-luv")
     }
 
   def useLTO(using C: Context): Boolean =
