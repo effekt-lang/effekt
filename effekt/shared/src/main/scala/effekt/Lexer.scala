@@ -1,5 +1,6 @@
 package effekt.lexer
 
+import scala.annotation.nowarn
 import scala.collection.mutable
 import scala.collection.immutable
 import effekt.source.Span
@@ -86,9 +87,11 @@ enum TokenKind {
   case `;`
   case `::`
   case `@`
+  @nowarn("id=E230") // `$` is intentional here, see PR #1460
   case `${`
   case `{`
   case `}`
+  @nowarn("id=E230") // `$` is intentional here, see PR #1460
   case `}$`
   case `(`
   case `)`

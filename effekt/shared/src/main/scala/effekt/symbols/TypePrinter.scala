@@ -121,6 +121,6 @@ object TypePrinter extends ParenPrettyPrinter {
 }
 
 implicit class ErrorMessageInterpolator(private val sc: StringContext) extends AnyVal {
-  def pp(args: Any*): String = sc.s(args.map(effekt.util.show): _*)
+  def pp(args: Any*): String = sc.s(args.map(effekt.util.show)*)
 }
 

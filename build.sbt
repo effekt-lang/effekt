@@ -26,7 +26,7 @@ lazy val noPublishSettings = Seq(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "3.3.6",
+  scalaVersion := "3.9.0",
   semanticdbEnabled := true,
   scalacOptions ++= Seq(
     "-encoding", "utf8",
@@ -34,17 +34,17 @@ lazy val commonSettings = Seq(
     "-unchecked",
     // "-Xlint",
     // "-Xcheck-macros",
-    "-Xfatal-warnings",
+    "-Werror",
     // we can use scalafix's organize imports once the next Scala version is out.
     // https://github.com/scalacenter/scalafix/pull/1800
     // "-Wunused:imports",
     "-feature",
     "-language:existentials",
     "-language:higherKinds",
-    "-language:implicitConversions"
+    "-language:implicitConversions",
   ),
   libraryDependencies ++= Seq(
-    "org.scala-lang.modules" %%% "scala-xml" % "2.3.0"
+    "org.scala-lang.modules" %%% "scala-xml" % "2.5.0"
   )
 )
 
@@ -52,16 +52,16 @@ enablePlugins(ScalaJSPlugin)
 
 lazy val replDependencies = Seq(
   "jline" % "jline" % "2.14.6",
-  "org.rogach" %% "scallop" % "4.1.0",
+  "org.rogach" %% "scallop" % "6.0.0",
 )
 
 lazy val lspDependencies = Seq(
-  "org.eclipse.lsp4j" % "org.eclipse.lsp4j" % "0.23.1"
+  "org.eclipse.lsp4j" % "org.eclipse.lsp4j" % "1.0.0"
 )
 
 lazy val testingDependencies = Seq(
   "org.scala-sbt" %% "io" % "1.6.0" % Test,
-  "org.scalameta" %% "munit" % "0.7.29" % Test
+  "org.scalameta" %% "munit" % "1.3.6" % Test
 )
 
 lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("kiama"))
@@ -288,7 +288,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
 
-    libraryDependencies += "com.lihaoyi" %%% "utest" % "0.8.2" % "test",
+    libraryDependencies += "com.lihaoyi" %%% "utest" % "0.9.5" % "test",
 
     testFrameworks += new TestFramework("utest.runner.Framework"),
 

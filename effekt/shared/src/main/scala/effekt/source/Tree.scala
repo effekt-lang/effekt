@@ -175,12 +175,12 @@ case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = 
   }
   
   override def compare(that: Span): Int = {
-    val nameCmp = this.source.name compareTo that.source.name
+    val nameCmp = this.source.name `compareTo` that.source.name
     if (nameCmp != 0) nameCmp
     else {
-      val startCmp = this.from compareTo that.from
+      val startCmp = this.from `compareTo` that.from
       if (startCmp != 0) startCmp
-      else this.to compareTo that.to
+      else this.to `compareTo` that.to
     }
   }
 }
@@ -316,8 +316,8 @@ case class Many[T](unspan: List[T], span: Span) {
   def map[B](f: T => B): Many[B] =
     Many(unspan.map(f), span)
 
-  def unzip [A1, A2](implicit asPair: T => (A1, A2)): (Many[A1], Many[A2]) = {
-    val (list1: List[A1], list2: List[A2]) = unspan.unzip(asPair)
+  def unzip[A1, A2](using asPair: T => (A1, A2)): (Many[A1], Many[A2]) = {
+    val (list1: List[A1], list2: List[A2]) = unspan.unzip(using asPair)
     (Many(list1, span), Many(list2, span))
   }
 

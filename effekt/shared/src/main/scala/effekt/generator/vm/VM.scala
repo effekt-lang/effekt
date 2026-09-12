@@ -34,10 +34,10 @@ class VM extends Compiler[(Id, symbols.Module, ModuleDecl)] {
   // ------------------------
   // Source => Core => CPS => JS
   lazy val Core = Phase.cached("core") {
-    Frontend andThen Middleend
+    Frontend `andThen` Middleend
   }
 
-  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Deadcode andThen core.Show andThen core.optimizer.Optimizer map {
+  lazy val Optimized = allToCore(Core) `andThen` Aggregate `andThen` Deadcode `andThen` core.Show `andThen` core.optimizer.Optimizer map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
       (mainSymbol, mod, core)

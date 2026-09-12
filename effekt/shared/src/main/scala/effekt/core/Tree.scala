@@ -1072,18 +1072,18 @@ object substitutions {
   def substitute(statement: Stmt)(using subst: Substitution): Stmt =
     statement match {
       case Def(id, block, body) =>
-        Def(id, substitute(block)(using subst shadowBlocks List(id)),
-          substitute(body)(using subst shadowBlocks List(id)))
+        Def(id, substitute(block)(using subst `shadowBlocks` List(id)),
+          substitute(body)(using subst `shadowBlocks` List(id)))
 
       case Let(id, binding, body) =>
         Let(id, substitute(binding),
-          substitute(body)(using subst shadowValues List(id)))
+          substitute(body)(using subst `shadowValues` List(id)))
 
       case ImpureApp(id, callee, targs, vargs, bargs, body) =>
         substitute(callee) match {
           case g : Block.BlockVar =>
             ImpureApp(id, g, targs.map(substitute), vargs.map(substitute), bargs.map(substitute),
-              substitute(body)(using subst shadowValues List(id)))
+              substitute(body)(using subst `shadowValues` List(id)))
           case _ => INTERNAL_ERROR("Should never substitute a concrete block for an FFI function.")
         }
 
@@ -1093,7 +1093,7 @@ object substitutions {
 
       case Val(id, binding, body) =>
         Val(id, substitute(binding),
-          substitute(body)(using subst shadowValues List(id)))
+          substitute(body)(using subst `shadowValues` List(id)))
 
       case App(callee, targs, vargs, bargs) =>
         App(substitute(callee), targs.map(substitute), vargs.map(substitute), bargs.map(substitute))
@@ -1111,13 +1111,13 @@ object substitutions {
 
       case Alloc(id, init, region, body) =>
         Alloc(id, substitute(init), substituteAsVar(region),
-          substitute(body)(using subst shadowBlocks List(id)))
+          substitute(body)(using subst `shadowBlocks` List(id)))
 
       case Var(ref, init, capture, body) =>
-        Var(ref, substitute(init), capture, substitute(body)(using subst shadowBlocks List(ref)))
+        Var(ref, substitute(init), capture, substitute(body)(using subst `shadowBlocks` List(ref)))
 
       case Get(id, tpe, ref, capt, body) =>
-        Get(id, substitute(tpe), substituteAsVar(ref), substitute(capt), substitute(body)(using subst shadowBlocks List(id)))
+        Get(id, substitute(tpe), substituteAsVar(ref), substitute(capt), substitute(body)(using subst `shadowBlocks` List(id)))
 
       case Put(ref, capt, value, body) =>
         Put(substituteAsVar(ref), substitute(capt), substitute(value), substitute(body))
@@ -1127,7 +1127,7 @@ object substitutions {
         Reset(substitute(body))
 
       case Shift(prompt, k, body) =>
-        val after = substitute(body)(using subst shadowBlocks List(k.id))
+        val after = substitute(body)(using subst `shadowBlocks` List(k.id))
         Shift(substitute(prompt).asInstanceOf[BlockVar], substitute(k), after)
 
       case Resume(k, body) =>
@@ -1141,7 +1141,7 @@ object substitutions {
 
   def substitute(b: BlockLit)(using subst: Substitution): BlockLit = b match {
     case BlockLit(tparams, cparams, vparams, bparams, body) =>
-      val shadowedTypelevel = subst shadowTypes tparams shadowCaptures cparams
+      val shadowedTypelevel = subst `shadowTypes` tparams `shadowCaptures` cparams
       BlockLit(tparams, cparams,
         vparams.map(p => substitute(p)(using shadowedTypelevel)),
         bparams.map(p => substitute(p)(using shadowedTypelevel)),
@@ -1192,7 +1192,7 @@ object substitutions {
   def substitute(op: Operation)(using subst: Substitution): Operation =
     op match {
       case Operation(name, tparams, cparams, vparams, bparams, body) =>
-        val shadowedTypelevel = subst shadowTypes tparams shadowCaptures cparams
+        val shadowedTypelevel = subst `shadowTypes` tparams `shadowCaptures` cparams
         Operation(name, tparams, cparams,
           vparams.map(p => substitute(p)(using shadowedTypelevel)),
           bparams.map(p => substitute(p)(using shadowedTypelevel)),
@@ -1234,7 +1234,7 @@ object substitutions {
         }
 
       case Binding.Def(id, binding) =>
-        Binding.Def(id, substitute(binding)(using subst shadowBlocks List(id)))
+        Binding.Def(id, substitute(binding)(using subst `shadowBlocks` List(id)))
 
       case Binding.Alloc(id, init, region) =>
         Binding.Alloc(id, substitute(init), substituteAsVar(region))

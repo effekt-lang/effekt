@@ -68,7 +68,7 @@ trait ColoredMessaging extends EffektMessaging {
       case n: Int              => highlight(n.toString)
       case nested: EffektError => formatContent(nested)
       case other               => other.toString
-    }: _*)
+    }*)
     case AmbiguousOverloadError(matches, range) =>
       val title = bold("Ambiguous overload.\n")
       val mainMessage = s"${title}There are multiple overloads, which all would type check:"

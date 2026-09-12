@@ -8,7 +8,7 @@ jobs:
     name: "Build & Compile"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'true'
 
@@ -18,7 +18,7 @@ jobs:
         run: sbt compile Test/compile
 
       - name: Cache compiled artifacts
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: |
             target
@@ -38,7 +38,7 @@ jobs:
     needs: build-and-compile
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'true'
 
@@ -66,7 +66,7 @@ jobs:
     needs: build-and-compile
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'true'
 
@@ -83,7 +83,7 @@ jobs:
     needs: build-and-compile
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'true'
 
@@ -102,7 +102,7 @@ jobs:
     needs: build-and-compile
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'true'
 
@@ -118,7 +118,7 @@ jobs:
     needs: build-and-compile
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'true'
 
@@ -136,7 +136,7 @@ jobs:
     needs: build-and-compile
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'true'
 

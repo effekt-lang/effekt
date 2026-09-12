@@ -289,7 +289,7 @@ class Parser(tokens: Seq[Token], source: Source) {
           semi()
           if returnPosition then Return(e, span())
           else ExprStmt(e, stmts(inBraces), span())
-      }) labelled "statements"
+      }) `labelled` "statements"
 
   // with val <PATTERN> (, <PATTERN>)* (and <GUARD>)* = <EXPR> (else <STMT>)?; <STMTS>
   // with def <BLOCKPARAM> = <EXPR>; <STMTS>
@@ -414,7 +414,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       {
         if peek(`{`) then BlockStmt(braces { stmts(inBraces = true) }, span())
         else when(`return`) { Return(expr(), span()) } { Return(expr(), span()) }
-      } labelled "statement"
+      } `labelled` "statement"
 
   /**
    * Main entry point for the repl.
@@ -489,7 +489,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       Include(`import` ~> moduleName(), span())
 
   def moduleName(): String =
-    someSep(ident, `/`).mkString("/") labelled "module name"
+    someSep(ident, `/`).mkString("/") `labelled` "module name"
 
   def isToplevel: Boolean = peek.kind match {
     case `val` | `def` | `type` | `effect` | `namespace` | `interface` | `type` | `record` | `var` | `include` | `extern` => true
@@ -584,7 +584,7 @@ class Parser(tokens: Seq[Token], source: Source) {
             Return(matching, span().synthesized)
         }
 
-      simpleLhs() getOrElse matchLhs()
+      simpleLhs() `getOrElse` matchLhs()
 
 
   def varDef(info: Info): Def =
@@ -622,7 +622,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def constructor(): Constructor =
     documented: info =>
-      Constructor(idDef(), maybeTypeParams(), valueParams(), info.onlyDoc().doc, span()) labelled "constructor"
+      Constructor(idDef(), maybeTypeParams(), valueParams(), info.onlyDoc().doc, span()) `labelled` "constructor"
 
   // On the top-level both
   //    effect Foo = {}
@@ -669,7 +669,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def interfaceDef(info: Info, keyword: TokenKind = `interface`): InterfaceDef =
     InterfaceDef(keyword ~> idDef(), maybeTypeParams(),
-      `{` ~> manyUntil(documented { opInfo => { `def` ~> operation(opInfo) } labelled "} or another operation declaration" }, `}`) <~ `}`, info, span())
+      `{` ~> manyUntil(documented { opInfo => { `def` ~> operation(opInfo) } `labelled` "} or another operation declaration" }, `}`) <~ `}`, info, span())
 
   def namespaceDef(info: Info): Def =
     consume(`namespace`)
@@ -752,7 +752,7 @@ class Parser(tokens: Seq[Token], source: Source) {
         case _: Ident => (peek(1).kind match {
           case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> eff <~ `}`, span())
           case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template(splice).unspan, span())
-        }) labelled "extern body (string or block)"
+        }) `labelled` "extern body (string or block)"
         case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template(splice).unspan, span())
       }
 
@@ -875,7 +875,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     if peek(`:`) then  `:` ~> blockType()
     else fail("a type annotation", peek.kind)
 
-  def expr(): Term = exprOuter(None) labelled("expression")
+  def expr(): Term = exprOuter(None) `labelled`("expression")
 
   def ifExpr(): Term =
     nonterminal:
@@ -951,7 +951,7 @@ class Parser(tokens: Seq[Token], source: Source) {
         if !peek(`def`) then fail("Expected at least one operation definition to implement this interface.")
         tpe
       } map { tpe =>
-        Implementation(tpe, manyUntil(opClause() labelled "operation clause", `}`) <~ `}`, span())
+        Implementation(tpe, manyUntil(opClause() `labelled` "operation clause", `}`) <~ `}`, span())
       }
 
       // Interface[...] { () => ... }
@@ -964,7 +964,7 @@ class Parser(tokens: Seq[Token], source: Source) {
           Implementation(interface, List(operation), span())
       }
 
-      (emptyImplementation() orElse interfaceImplementation() getOrElse operationImplementation()) labelled "interface implementation (starting with its name)"
+      (emptyImplementation() `orElse` interfaceImplementation() `getOrElse` operationImplementation()) `labelled` "interface implementation (starting with its name)"
 
   def opClause(): OpClause =
     nonterminal:
@@ -1552,7 +1552,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       }
       else
         Effects(List(refType()), span())
-  } labelled "effect set"
+  } `labelled` "effect set"
 
   def maybeEffects(): Effects = {
     nonterminal:
@@ -1585,7 +1585,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     def functionTypeComplex: Maybe[Type] = backtrack {
       maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`)
     } map { case tparams ~ vparams ~ bparams =>
-      (atomicType() labelled "return type") ~ maybeEffects() match {
+      (atomicType() `labelled` "return type") ~ maybeEffects() match {
         case  t ~ effs => FunctionType(tparams, vparams, bparams, t, effs, span())
       }
     }
@@ -1599,7 +1599,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
     // Try to parse each function type variant, fall back to basic type if none match
     nonterminal:
-      functionTypeSimple orElse functionTypeComplex getOrElse atomicType()
+      functionTypeSimple `orElse` functionTypeComplex `getOrElse` atomicType()
   }
 
   // Parse boxed types and effectfuls (lowest precedence)
@@ -1611,7 +1611,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
       // TODO: these should probably be in a loop to parse as many `at`s and `\`s as possible?
       val boxed = when(`at`) {
-        BoxedType(tpe, captureSet() labelled "capture set", span())
+        BoxedType(tpe, captureSet() `labelled` "capture set", span())
       } {
         tpe
       }
@@ -1624,8 +1624,8 @@ class Parser(tokens: Seq[Token], source: Source) {
   }
 
   // NOTE: ValueType, BlockType are just aliases for Type.
-  def blockType(): BlockType = boxedType() labelled "block type"
-  def valueType(): ValueType = boxedType() labelled "value type"
+  def blockType(): BlockType = boxedType() `labelled` "block type"
+  def valueType(): ValueType = boxedType() `labelled` "value type"
 
   // Completely specialized for TypeRef: we only parse `refType` here, we don't go through the whole hierarchy.
   // This results in slightly worse errors, but massively simplifies the design.
@@ -1639,7 +1639,7 @@ class Parser(tokens: Seq[Token], source: Source) {
         case eff: Effectful => eff
         case tpe => {
           Effectful(tpe, Effects.Pure(Span(source, pos(), pos(), Synthesized)), span())
-        }) labelled "return-type and effects"
+        }) `labelled` "return-type and effects"
   }
 
   def maybeTypeParams(): Many[Id] =

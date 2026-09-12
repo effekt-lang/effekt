@@ -26,7 +26,7 @@ package object control {
     def map[B](f: A => B): Control[B] = flatMap { a => pure(f(a)) }
     def andThen[B](f: Control[B]): Control[B] = this flatMap { _ => f }
     def flatMap[B](f: A => Control[B]): Control[B] =
-      Computation { k => Impure(outer, k flatMap f) }
+      Computation { k => Impure(outer, k `flatMap` f) }
 
     def apply[R](k: MetaCont[A, R]): Result[R]
   }
@@ -56,9 +56,9 @@ package object control {
   }
 
   def use[A](c: Capability)(f: (A => Control[c.Res]) => Control[c.Res]): Control[A] = Computation { k =>
-    val (init, tail) = k splitAt c
+    val (init, tail) = k `splitAt` c
     val localCont: A => Control[c.Res] = a => Computation[c.Res] { k =>
-      val repushedPrompt = init append HandlerCont[c.Res, ω](c, k)
+      val repushedPrompt = init `append` HandlerCont[c.Res, ω](c, k)
       Impure(pure(a), repushedPrompt)
     }
     Impure(f(localCont), tail)
@@ -74,7 +74,7 @@ package object control {
   }
 
   final def lookup[V](key: AnyRef): Control[V] = Computation { k =>
-    Impure(pure((k lookup key).asInstanceOf[V]), k)
+    Impure(pure((k `lookup` key).asInstanceOf[V]), k)
   }
 
   // introduces a new scope
@@ -127,7 +127,7 @@ package object control {
   private[control] case class ReturnCont[-A, +B](f: A => B) extends MetaCont[A, B] {
     final def apply(a: A): Result[B] = Pure(f(a))
 
-    final def append[C](s: MetaCont[B, C]): MetaCont[A, C] = s map f
+    final def append[C](s: MetaCont[B, C]): MetaCont[A, C] = s `map` f
 
     final def splitAt(c: Capability) = sys error s"Prompt $c not found on the stack."
 
@@ -168,11 +168,11 @@ package object control {
       }
     }
 
-    final def append[D](s: MetaCont[C, D]): MetaCont[A, D] = FramesCont(frames, tail append s)
+    final def append[D](s: MetaCont[C, D]): MetaCont[A, D] = FramesCont(frames, tail `append` s)
     final def splitAt(c: Capability) = tail.splitAt(c) match {
       case (head, tail) => (FramesCont(frames, head), tail)
     }
-    final def lookup(key: AnyRef): Any = tail lookup key
+    final def lookup(key: AnyRef): Any = tail `lookup` key
     final def update(key: AnyRef, value: Any) = tail.update(key, value)
     override def flatMap[D](f: Frame[D, A]): MetaCont[D, C] = FramesCont(f.asInstanceOf[Frame[Any, Any]] :: frames, tail)
     override def toString = s"fs(${frames.size}) :: ${tail}"
@@ -183,12 +183,12 @@ package object control {
   //   otherwise the object lang. programs have to be written in CPS
   private[control] case class StateCont[-A, +B](bindings: mutable.Map[AnyRef, Any], tail: MetaCont[A, B]) extends MetaCont[A, B] {
     final def apply(a: A): Result[B] = tail(a)
-    final def append[C](s: MetaCont[B, C]): MetaCont[A, C] = StateCont(bindings.clone(), tail append s)
+    final def append[C](s: MetaCont[B, C]): MetaCont[A, C] = StateCont(bindings.clone(), tail `append` s)
     final def splitAt(c: Capability) = tail.splitAt(c) match {
       case (head, tail) => (StateCont(bindings, head), tail)
     }
     final def lookup(searched: AnyRef): Any =
-      bindings.getOrElse(searched, tail lookup searched)
+      bindings.getOrElse(searched, tail `lookup` searched)
 
     final def update(key: AnyRef, value: Any) =
       if (bindings.isDefinedAt(key)) {
@@ -205,7 +205,7 @@ package object control {
   private[effekt] case class HandlerCont[R, A](h: Capability { type Res = R }, tail: MetaCont[R, A]) extends MetaCont[R, A] {
     final def apply(r: R): Result[A] = tail(r)
 
-    final def append[C](s: MetaCont[A, C]): MetaCont[R, C] = HandlerCont(h, tail append s)
+    final def append[C](s: MetaCont[A, C]): MetaCont[R, C] = HandlerCont(h, tail `append` s)
 
     final def splitAt(c: Capability) =
 
@@ -218,7 +218,7 @@ package object control {
         case (head, tail) => (HandlerCont(h, head), tail)
       }
 
-    final def lookup(key: AnyRef): Any = tail lookup key
+    final def lookup(key: AnyRef): Any = tail `lookup` key
     final def update(key: AnyRef, value: Any) = tail.update(key, value)
 
     override def toString = s"${h} :: ${tail}"

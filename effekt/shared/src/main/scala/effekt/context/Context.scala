@@ -49,12 +49,12 @@ abstract class Context
   implicit val context: Context = this
 
   // the currently processed module
-  var module: Module = _
+  var module: Module = scala.compiletime.uninitialized
 
   // the currently processed node
-  var focus: Tree = _
+  var focus: Tree = scala.compiletime.uninitialized
 
-  var _config: EffektConfig = _
+  var _config: EffektConfig = scala.compiletime.uninitialized
   def config = _config
 
   // cache used by tasks to save their results (in addition to information in the AnnotationsDB)

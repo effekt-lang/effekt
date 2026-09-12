@@ -126,10 +126,10 @@ class CompileToCore extends Compiler[(Id, symbols.Module, ModuleDecl)] {
     Optimized.run(source).map { res => (Map.empty, res) }
 
   lazy val Core = Phase.cached("core") {
-    Frontend andThen Middleend
+    Frontend `andThen` Middleend
   }
 
-  lazy val Optimized = allToCore(Core) andThen Aggregate map {
+  lazy val Optimized = allToCore(Core) `andThen` Aggregate map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
       (mainSymbol, mod, core)

@@ -164,7 +164,6 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
 
   // TODO maybe replace region values by integers instead of Id
 
-  @tailrec
   private def returnWith(value: Value, env: Env, stack: Stack, heap: Heap): State =
     @tailrec
     def go(frames: List[Frame], prompt: Address, stack: Stack): State =
@@ -176,7 +175,11 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
         case Frame.Var(x, value) :: rest => go(rest, prompt, stack)
         // free the region
         case Frame.Region(x, values) :: rest => go(rest, prompt, stack)
-        case Nil => returnWith(value, env, stack, heap)
+        // this segment is exhausted, continue with the next one
+        case Nil => stack match {
+          case Stack.Empty => State.Done(value)
+          case Stack.Segment(frames, prompt, rest) => go(frames, prompt, rest)
+        }
       }
     stack match {
       case Stack.Empty => State.Done(value)
@@ -189,19 +192,22 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
     case Stack.Segment(frames, prompt, rest) => Stack.Segment(frame :: frames, prompt, rest)
   }
 
-  @tailrec
   private def findFirst[A](stack: Stack)(f: Frame ~> A): Option[A] =
+    @tailrec
+    def go(frames: List[Frame], stack: Stack): Option[A] =
+      frames match {
+        // this segment is exhausted, continue with the next one
+        case Nil => stack match {
+          case Stack.Empty => None
+          case Stack.Segment(frames, prompt, rest) => go(frames, rest)
+        }
+        case frame :: rest if f.isDefinedAt(frame) => Some(f(frame))
+        case frame :: rest => go(rest, stack)
+      }
     stack match {
       case Stack.Empty => None
       case Stack.Segment(frames, prompt, rest) =>
-        @tailrec
-        def go(frames: List[Frame]): Option[A] =
-          frames match {
-            case Nil => findFirst(rest)(f)
-            case frame :: rest if f.isDefinedAt(frame) => Some(f(frame))
-            case frame :: rest => go(rest)
-          }
-        go(frames)
+        go(frames, rest)
     }
 
   def updateOnce(stack: Stack)(f: Frame ~> Frame): Stack =

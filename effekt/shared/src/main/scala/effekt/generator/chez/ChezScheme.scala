@@ -55,12 +55,12 @@ trait ChezScheme extends Compiler[String] {
   // ------------------------
   // Source => Core => Chez
   lazy val Compile =
-    allToCore(Core) andThen Aggregate andThen Deadcode andThen core.Show andThen Optimizer andThen Chez map { case (main, expr) =>
+    allToCore(Core) `andThen` Aggregate `andThen` Deadcode `andThen` core.Show `andThen` Optimizer `andThen` Chez map { case (main, expr) =>
       (Map(main -> pretty(expr).layout), main)
     }
 
   lazy val Core = Phase.cached("core") {
-    Frontend andThen Middleend
+    Frontend `andThen` Middleend
   }
 
   lazy val Chez = Phase("chez") {
@@ -73,7 +73,7 @@ trait ChezScheme extends Compiler[String] {
   // The Compilation Pipeline for VSCode
   // -----------------------------------
   lazy val Separate =
-    allToCore(Core) map { all => all.main } andThen Chez map { case (_, expr) => expr }
+    allToCore(Core) map { all => all.main } `andThen` Chez map { case (_, expr) => expr }
 
   // Helpers
   // -------
