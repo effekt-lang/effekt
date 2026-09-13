@@ -64,6 +64,7 @@ enum TokenKind {
   case Integer(n: Long)
   case Float(d: Double)
   case Str(s: String, multiline: Boolean)
+  case RawStr(s: String, terminator: String)
   case HoleStr(s: String)
   case Chr(c: Int)
   case Byt(b: UByte)
@@ -90,6 +91,7 @@ enum TokenKind {
   case `{`
   case `}`
   case `}$`
+  case `$|`
   case `(`
   case `)`
   case `[`
@@ -276,12 +278,15 @@ class Lexer(source: Source) extends Iterator[Token] {
   enum Delimiter {
     //          "...",   """...""",      '...',    <"...">
     case SingleString, MultiString, CharString, HoleString
+    // #|...
+    case RawString
 
     def allowsInterpolation: Boolean = this match {
       case SingleString => true
       case MultiString => true
       case CharString => false
       case HoleString => true
+      case RawString => true
     }
 
     def isMultiline: Boolean = this match {
@@ -289,17 +294,19 @@ class Lexer(source: Source) extends Iterator[Token] {
       case MultiString => true
       case CharString => false
       case HoleString => true
+      case RawString => true
     }
 
     def allowsEscapes: Boolean = !this.isMultiline
 
-    def toTokenKind(cs: String): TokenKind = this match {
+    def toTokenKind(cs: String, terminator: String = ""): TokenKind = this match {
       case SingleString => TokenKind.Str(cs, multiline = false)
       case MultiString => TokenKind.Str(cs, multiline = true)
       case HoleString => TokenKind.HoleStr(cs)
       case CharString if cs.isEmpty => TokenKind.Error(LexerError.EmptyCharLiteral)
       case CharString if cs.codePointCount(0, cs.length) > 1 => TokenKind.Error(LexerError.MultipleCodePointsInChar)
       case CharString /* otherwise */ => TokenKind.Chr(cs.codePointAt(0))
+      case RawString => TokenKind.RawStr(cs, terminator)
     }
   }
   export Delimiter.*
@@ -381,6 +388,11 @@ class Lexer(source: Source) extends Iterator[Token] {
   private def isAtInterpolationBoundary: Boolean =
     interpolationDepths.nonEmpty && interpolationDepths.top == depthTracker.braces
 
+  private def newline(): TokenKind = {
+    delimiters.popWhile(_ == RawString)
+    TokenKind.Newline
+  }
+
   /**
    * "Main" function for getting the next token kind.
    * Wrapped on the outside by [[Lexer.next]] which handles whitespace.
@@ -397,8 +409,8 @@ class Lexer(source: Source) extends Iterator[Token] {
 
     (currentChar, nextChar) match {
       // Whitespace: first try matching newlines, then whitespace-like
-      case ('\n',    _) => advanceWith(TokenKind.Newline)
-      case ('\r', '\n') => advance2With(TokenKind.Newline)
+      case ('\n',    _) => advanceWith(newline())
+      case ('\r', '\n') => advance2With(newline())
       case (c, _) if c.isWhitespace => advanceSpaces()
 
       // Numbers
@@ -413,6 +425,8 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('"',   _)                        => advanceWith(stringLike(SingleString)) // " ... """
       case ('\'',  _)                        => advanceWith(stringLike(CharString))   // ' ... '
       case ('<', '"')                        => advance2With(stringLike(HoleString))  // <" ... ">
+      case ('#', '|')                        => advance2With(stringLike(RawString))   // #|...
+      case ('$', '|')                        => delimiters.push(RawString); advance2With(`$|`)
 
       // Comments
       case ('/', '*') => advance2With(multilineComment())
@@ -594,6 +608,7 @@ class Lexer(source: Source) extends Iterator[Token] {
     if !continued then delimiters.push(delimiter)
 
     val contents = StringBuilder()
+    var terminator = ""
 
     /**
      * Creates the correct token to be returned, takes care of the [[delimiters]] stack.
@@ -601,7 +616,7 @@ class Lexer(source: Source) extends Iterator[Token] {
     def close(shouldPop: Boolean = true, unterminated: Boolean = false) = {
       if shouldPop then delimiters.pop()
 
-      val kind = delimiter.toTokenKind(contents.toString)
+      val kind = delimiter.toTokenKind(contents.toString, terminator)
 
       if (unterminated) {
         TokenKind.Error(LexerError.UnterminatedStringLike(kind))
@@ -621,6 +636,16 @@ class Lexer(source: Source) extends Iterator[Token] {
           return advance2With(close())
         case ('\'', _) if delimiter == CharString =>
           return advanceWith(close())
+        case ('\n', _) if delimiter == RawString =>
+          delimiters.popWhile(_ == RawString)
+          // will be removed in Parser for the last line
+          terminator = "\n"
+          return advanceWith(close(shouldPop = false))
+        case ('\r', '\n') if delimiter == RawString =>
+          delimiters.popWhile(_ == RawString)
+          // will be removed in Parser for the last line
+          terminator = "\r\n"
+          return close(shouldPop = false)
 
         // escapes
         case ('\\', _) if delimiter.allowsEscapes =>
