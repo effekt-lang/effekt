@@ -17,6 +17,7 @@ lazy val bumpMinorVersion = taskKey[Unit]("Bumps the minor version number (used 
 lazy val testBackendJS = taskKey[Unit]("Run JavaScript backend tests")
 lazy val testBackendChez = taskKey[Unit]("Run Chez Scheme backend tests")
 lazy val testBackendLLVM = taskKey[Unit]("Run LLVM backend tests")
+lazy val testWindowsSmoke = taskKey[Unit]("Run the JavaScript backend tests checked on Windows")
 lazy val testRemaining = taskKey[Unit]("Run all non-backend tests (internal tests) on effektJVM")
 lazy val debugCompiler = settingKey[Boolean]("Enable compiler debugging")
 
@@ -235,6 +236,12 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
         " effekt.LLVMTests effekt.LLVMNoValgrindTests effekt.StdlibLLVMTests"
       ).value
     },
+
+    testWindowsSmoke := Def.sequential(
+      // Note: MUnit can apply only one `--tests` filter per run
+      (Test / testOnly).toTask(""" effekt.JavaScriptTests -- --tests=.*examples[\\/]*casestudies.*"""),
+      (Test / testOnly).toTask(""" effekt.JavaScriptTests -- --tests=.*examples[\\/]*neg[\\/]*coverage.*""")
+    ).value,
 
     testRemaining := Def.taskDyn {
       val log = streams.value.log
