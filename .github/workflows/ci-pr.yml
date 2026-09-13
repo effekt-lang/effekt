@@ -132,9 +132,17 @@ jobs:
         run: sbt testBackendChez
 
   llvm-tests:
-    name: "LLVM Backend"
+    name: "LLVM Backend (${{ matrix.configuration }})"
     needs: build-and-compile
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - configuration: default
+            envvars: ''
+          - configuration: debug & valgrind
+            envvars: 'EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -147,5 +155,5 @@ jobs:
 
       - uses: ./.github/actions/restore-build-cache
 
-      - name: Run LLVM backend tests (with debug & valgrind)
-        run: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt testBackendLLVM
+      - name: Run LLVM backend tests (${{ matrix.configuration }})
+        run: ${{ matrix.envvars }} sbt testBackendLLVM
