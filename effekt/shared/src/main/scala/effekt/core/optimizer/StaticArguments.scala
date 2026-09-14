@@ -156,16 +156,16 @@ object StaticArguments {
           }
         }
         val isValueStatic = vparams.zipWithIndex.collect {
-          case (param, index) => vargs.nonEmpty && vargs.map(args => args(index)).forall {
+          case (param, index) => (vargs.nonEmpty && vargs.map(args => args(index)).forall {
             case ValueVar(other, _) => param.id == other
             case _ => false
-          }
+          }) || !body.free.contains(param.id) // vparam not read by body is vacuously static
         }
         val isBlockStatic = bparams.zipWithIndex.collect {
-          case (param, index) => bargs.nonEmpty && bargs.map(args => args(index)).forall {
+          case (param, index) => (bargs.nonEmpty && bargs.map(args => args(index)).forall {
             case BlockVar(other, _, _) => param.id == other
             case _ => false
-          }
+          }) || !body.free.contains(param.id) // bparam not read by body is vacuously static
         }
         id -> IsStatic(isTypeStatic, isValueStatic, isBlockStatic)
     }.toMap

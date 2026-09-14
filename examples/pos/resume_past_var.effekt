@@ -1,0 +1,16 @@
+effect fresh(hint: String): String
+
+def main() = {
+  val a = try {
+    do fresh("x") ++ do fresh("y")
+  } with fresh { hint =>
+    // locals are private to the handler, resumption never seems them,
+    // so we should be able to count this as a tail resumption
+    var candidate = hint;
+    var i = 0;
+    i = i + 1;
+    candidate = candidate ++ "-" ++ i.show
+    resume(candidate)
+  }
+  println(a)
+}

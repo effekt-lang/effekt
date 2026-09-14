@@ -135,6 +135,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
     noshort = true,
     group = advanced
   )
+  val maxCarryingInlineSize: ScallopOption[Long] = opt(
+    "max-carrying-inline-size",
+    descr = "Maximum size (number of core tree-nodes) of a function inlined for carrying an operation to its handler",
+    default = Some(100L),
+    noshort = true,
+    group = advanced
+  )
 
   advanced.append(server)
 

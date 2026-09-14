@@ -1,0 +1,75 @@
+module sourcepos
+import io/error
+import io/filesystem
+import stringbuffer
+import tty
+
+def toGccStyleString(sp: SourcePosition): String = {
+  s"${sp.file}:${sp.startLine.show()}:${sp.startColumn.show()}"
+}
+def toClangStyleString = toGccStyleString
+def toMsvcStyleString(sp: SourcePosition): String = {
+  s"${sp.file}(${sp.startLine.show()},${sp.startColumn.show()})"
+}
+def toPythonStyleString(sp: SourcePosition): String = {
+  s"File \"${sp.file}\", line ${sp.startLine.show()}"
+}
+
+def getSourceLine(file: String, line: Int): String / {Exception[IOError], stop} = {
+  with stringBuffer
+  with readFileUTF8(file)
+  var currentLine = 1
+  while (currentLine < line) {
+    val c = do next()
+    if (c == '\n' || c == '\r') {
+      currentLine += 1
+    }
+  }
+  var c = do next()
+  while (c != '\n' && c != '\r') {
+    do write(c.toString)
+    c = do next()
+  }
+}
+def getSourceText(sp: SourcePosition): String / {Exception[IOError], stop} = {
+  with stringBuffer
+  with readFileUTF8(sp.file)
+  var currentLine = 1
+  var currentColumn = 1
+  while (currentLine < sp.startLine || currentColumn < sp.startColumn) {
+    val c = do next()
+    if (c == '\n' || c == '\r') {
+      currentLine += 1
+      currentColumn = 0
+    }
+  }
+  var c = do next()
+  while (currentLine <= sp.endLine && currentColumn <= sp.endColumn) {
+    do write(c.toString)
+    if (c == '\n' || c == '\r') {
+      currentLine += 1
+      currentColumn = 0
+    }
+    c = do next()
+  }
+}
+
+def getMarkedSource(sp: SourcePosition): String / Formatted = {
+  try {
+    if (sp.startLine == sp.endLine) {
+      val line = getSourceLine(sp.file, sp.startLine)
+      val mline = line.substring(0, sp.startColumn) ++ line.substring(sp.startColumn, sp.endColumn + 1).red ++ line.substring(sp.endColumn + 1)
+      return mline ++ "\n" ++ " ".repeat(sp.startColumn - 1) ++ "^".repeat(sp.endColumn - sp.startColumn)
+    } else {
+      val prefix = getSourceLine(sp.file, sp.startLine).substring(0, sp.startColumn)
+      val suffix = getSourceLine(sp.file, sp.endLine).substring(sp.endColumn + 1)
+      val text = getSourceText(sp)
+      return prefix ++ text.red ++ suffix
+    }
+  } with stop {
+    "(invalid source position)" 
+  } with Exception[IOError] { 
+    def raise(e, m) =
+      "(can't open source file: " ++ m ++ ")"
+  }
+}

@@ -1,6 +1,29 @@
 import args
 import bench
 
+// Volatile storage for `relevant`'s barrier
+extern js """
+  let $relevantSink;
+"""
+extern chez """
+  (define $relevant-sink (box 0))
+"""
+extern llvm """
+  @relevant_sink = global %Int 0
+"""
+
+/**
+ * A side-effect barrier ("do-not-optimize"): consumes `value` through a volatile write
+ * which no optimizer can prove unobservable, so the results ought not be omitted.
+ */
+extern def relevant(value: Int) at io: Unit =
+  js "($relevantSink = ${value}, $effekt.unit)"
+  chez "(begin (set-box! $relevant-sink ${value}) (void))"
+  llvm """
+    store volatile %Int ${value}, ptr @relevant_sink
+    ret %Pos zeroinitializer
+  """
+
 def benchmark(testSize: Int) { run: Int => Int }: Unit = commandLineArgs() match {
   // test mode
   case Nil() => println(run(testSize))
@@ -12,18 +35,12 @@ def benchmark(testSize: Int) { run: Int => Int }: Unit = commandLineArgs() match
     val n = problemSize.toInt
 
     val before = relativeTimestamp()
-    relevant(run(n))
+    val result = run(n)
     val after = relativeTimestamp()
+    relevant(result) // keep `result` alive, but don't measure the cost of keeping it alive
     val nanos = after - before
     println(nanos)
 }
 
-/**
- * The inliner might remove unused computation (if pure), which is not desired
- * for benchmarking. Since externs are opaque to the optimizer, just wrap the
- * result of the computation to benchmark in `relevant`.
- */
-extern def relevant(value: Int) at io: Unit =
-  default { () }
-
 def main() = ()
+

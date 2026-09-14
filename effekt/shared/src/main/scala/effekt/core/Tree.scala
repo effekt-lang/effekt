@@ -320,6 +320,10 @@ enum Stmt extends Tree {
 
   def show: String = util.show(this)
 }
+object Stmt {
+  /** Whether the body of a [[Stmt.Shift]] uses the resumption it binds. */
+  def demandsResumption(k: BlockParam, body: Stmt): Boolean = body.free.contains(k.id)
+}
 export Stmt.*
 
 
@@ -1308,6 +1312,9 @@ object sizes {
 }
 
 case class Free(values: DB[ValueType], blocks: DB[(BlockType, Captures)]) {
+
+  /** Whether [[id]] occurs free. Prefer this to `freeIds.contains`, which builds two sets to answer it. */
+  def contains(id: Id): Boolean = values.isDefinedAt(id) || blocks.isDefinedAt(id)
 
   def freeIds: Set[Id] = values.keySet ++ blocks.keySet
 

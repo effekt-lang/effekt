@@ -95,23 +95,11 @@ jobs:
   run-tests:
     name: Run tests
     needs: [check-release-needed]
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v7
-      with:
-        submodules: 'true'
-
-    - uses: ./.github/actions/setup-effekt
-      with:
-        install-dependencies: 'true'
-
-    - uses: ./.github/actions/run-effekt-tests
-      with:
-        full-test: 'true'
-        use-retry: 'true'
-          # Since we're on 'main', we can assume that the tests already passed.
-          # Therefore retrying is OK (to prevent flaky tests from cancelling the deploy).
+    uses: ./.github/workflows/tests.yml
+    with:
+      # Since we're on 'main', we can assume that the tests already passed.
+      # Therefore retrying is OK (to prevent flaky tests from cancelling the deploy).
+      max-attempts: 3
 
   set-version:
     name: Bump Version

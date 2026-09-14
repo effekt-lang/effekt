@@ -37,8 +37,8 @@ trait EffektConfig {
   def optimize() = true
 
   def maxInlineSize() = 50L
-
   def maxOnceInlineSize() = 5000L
+  def maxCarryingInlineSize() = 100L
 
   def timed() = false
 

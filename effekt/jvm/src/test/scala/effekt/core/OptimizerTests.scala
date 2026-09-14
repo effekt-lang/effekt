@@ -34,6 +34,9 @@ class OptimizerTests extends CoreTests {
       Deadcode.remove(Set(mainSymbol), tree)
     }
 
+  def removeTailResumptions(input: String, expected: String)(using munit.Location) =
+    assertTransformsTo(input, expected) { tree => RemoveTailResumptions(tree) }
+
   def normalizeWith(policy: InliningPolicy)(input: String, expected: String)(using munit.Location) =
     assertTransformsTo(input, expected) { tree =>
       val anfed = BindSubexpressions.transform(tree)
@@ -224,7 +227,7 @@ class OptimizerTests extends CoreTests {
       """ def main = { () => return 42 }
         |""".stripMargin
 
-    normalizeWith(Default(threshold = 0, onceLimit = None))(input, expected)
+    normalizeWith(Default(threshold = 0, onceLimit = None, carryingLimit = 0))(input, expected)
   }
 
   test("used once is not inlined once it exceeds the once-limit") {
@@ -233,7 +236,7 @@ class OptimizerTests extends CoreTests {
         | def main = { () => (foo : () => Int @ {})() }
         |""".stripMargin
 
-    normalizeWith(Default(threshold = 0, onceLimit = Some(0)))(input, input)
+    normalizeWith(Default(threshold = 0, onceLimit = Some(0), carryingLimit = 0))(input, input)
   }
 
   test("an object argument is known, so the callee is inlined") {
@@ -247,7 +250,7 @@ class OptimizerTests extends CoreTests {
         | def main = { () => def f = new Foo { def op() = return 42 } (f : Foo @ {}).op : () => Int () }
         |""".stripMargin
 
-    normalizeWith(Default(threshold = 0, onceLimit = Some(0)))(input, expected)
+    normalizeWith(Default(threshold = 0, onceLimit = Some(0), carryingLimit = 0))(input, expected)
   }
 
   test("a block variable argument is not known, so the callee is kept") {
@@ -256,7 +259,7 @@ class OptimizerTests extends CoreTests {
         | def main = { (){g: Foo} => ({ (){f: Foo} => (f : Foo @ {f}).op : () => Int () })(){ (g : Foo @ {g}) } }
         |""".stripMargin
 
-    normalizeWith(Default(threshold = 0, onceLimit = Some(0)))(input, input)
+    normalizeWith(Default(threshold = 0, onceLimit = Some(0), carryingLimit = 0))(input, input)
   }
 
   test("a used-once block that installs a scope is inlined where no prompt encloses it") {
@@ -269,7 +272,7 @@ class OptimizerTests extends CoreTests {
       """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => resume (k : Resume[Int, Int] @ {k}) { return 1 } } } }
         |""".stripMargin
 
-    normalizeWith(Default(threshold = 0, onceLimit = None))(input, expected)
+    normalizeWith(Default(threshold = 0, onceLimit = None, carryingLimit = 0))(input, expected)
   }
 
   test("the same block is kept when the call site is already under a prompt") {
@@ -278,7 +281,7 @@ class OptimizerTests extends CoreTests {
         | def main = { () => reset { (){q: Prompt[Int]} => shift (q : Prompt[Int] @ {q}) { {j: Resume[Int, Int]} => resume (j : Resume[Int, Int] @ {j}) { (foo : () => Int @ {})() } } } }
         |""".stripMargin
 
-    normalizeWith(Default(threshold = 0, onceLimit = None))(input, input)
+    normalizeWith(Default(threshold = 0, onceLimit = None, carryingLimit = 0))(input, input)
   }
 
   test("a known argument discounts the call, so an over-budget callee is inlined") {
@@ -291,7 +294,7 @@ class OptimizerTests extends CoreTests {
       """ def main = { () => return 1 }
         |""".stripMargin
 
-    normalizeWith(Default(threshold = 4, onceLimit = Some(0)))(input, expected)
+    normalizeWith(Default(threshold = 4, onceLimit = Some(0), carryingLimit = 0))(input, expected)
   }
 
   test("an unknown argument earns no discount, so the same callee is kept") {
@@ -300,6 +303,132 @@ class OptimizerTests extends CoreTests {
         | def main = { (x: Bool) => (foo : (Bool) => Int @ {})(x: Bool) }
         |""".stripMargin
 
-    normalizeWith(Default(threshold = 4, onceLimit = Some(0)))(input, input)
+    normalizeWith(Default(threshold = 4, onceLimit = Some(0), carryingLimit = 0))(input, input)
+  }
+
+  test("an aborting shift in tail position of its prompt becomes what it aborts with") {
+    val input =
+      """ def main = { (b: Bool) => reset { (){p: Prompt[Int]} => if (b: Bool) { return 1 } else { shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 2 } } } }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { (b: Bool) => reset { (){p: Prompt[Int]} => if (b: Bool) { return 1 } else { return 2 } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, expected)
+  }
+
+  test("a binder does not end tail position, so the abort behind one is still removed") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => let y = 7 shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 2 } } }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () => reset { (){p: Prompt[Int]} => let y = 7 return 2 } }
+        |""".stripMargin
+
+    removeTailResumptions(input, expected)
+  }
+
+  test("an aborting shift consumed by a val is not in tail position") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => val x = shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 2 }; return x:Int } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
+  }
+
+  test("a nested prompt stands between the abort and the prompt it names") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => reset { (){q: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 2 } } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
+  }
+
+  test("a resumption that resumes with something naming it again is not tail-resumptive") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => resume (k : Resume[Int, Int] @ {k}) { resume (k : Resume[Int, Int] @ {k}) { return 1 } } } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
+  }
+
+  test("an aborting shift that resumes on its way out is not tail-resumptive") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => shift (p : Prompt[Int] @ {p}) { {j: Resume[Nothing, Int]} => resume (k : Resume[Int, Int] @ {k}) { return 1 } } } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
+  }
+
+  test("a tail resumption crosses a variable its body cannot observe") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => var r @ c = 1; resume (k : Resume[Int, Int] @ {k}) { return 2 } } } }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () => reset { (){p: Prompt[Int]} => var r @ c = 1; return 2 } }
+        |""".stripMargin
+
+    removeTailResumptions(input, expected)
+  }
+
+  test("a tail resumption does not cross a variable its body can observe") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => var r @ c = 1; resume (k : Resume[Int, Int] @ {k}) { get y : Int = ! r @ c; return y:Int } } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
+  }
+
+  test("a resumption reached through a block that is only ever tail-called") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => def w = { () => resume (k : Resume[Int, Int] @ {k}) { return 1 } } (w : () => Int @ {})() } } }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () => reset { (){p: Prompt[Int]} => def w = { () => return 1 } (w : () => Int @ {})() } }
+        |""".stripMargin
+
+    removeTailResumptions(input, expected)
+  }
+
+  test("an abort behind a joinpoint in a tail-called worker is still in tail position") {
+    val input =
+      """ def main = { (b: Bool) => reset { (){p: Prompt[Int]} => def go = { (i: Int) => def k = { (x: Int) => (go : (Int) => Int @ {})(x: Int) } if (b: Bool) { shift (p : Prompt[Int] @ {p}) { {r: Resume[Int, Int]} => return 2 } } else { (k : (Int) => Int @ {})(i: Int) } } (go : (Int) => Int @ {})(1) } }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { (b: Bool) => reset { (){p: Prompt[Int]} => def go = { (i: Int) => def k = { (x: Int) => (go : (Int) => Int @ {})(x: Int) } if (b: Bool) { return 2 } else { (k : (Int) => Int @ {})(i: Int) } } (go : (Int) => Int @ {})(1) } }
+        |""".stripMargin
+
+    removeTailResumptions(input, expected)
+  }
+
+  test("a call carrying a capability to a prompt we are inside of is inlined past the normal budget") {
+    val input =
+      """ interface Exc { raise: () => Int }
+        | def foo = { (){e: Exc} => (e : Exc @ {e}).raise : () => Int () }
+        | def main = { () => reset { (){p: Prompt[Int]} => def e = new Exc { def raise() = shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 1 } } (foo : (){e : Exc} => Int @ {})(){ (e : Exc @ {e}) } } }
+        |""".stripMargin
+
+    // `foo` is inlined although it is over the "normal" budget (but inside the carryingLimit)
+    val expected =
+      """ interface Exc { raise: () => Int }
+        | def main = { () => reset { (){p: Prompt[Int]} => def e = new Exc { def raise() = shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 1 } } (e : Exc @ {e}).raise : () => Int () } }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 0, onceLimit = Some(0), carryingLimit = 100))(input, expected)
+  }
+
+  test("a call carrying a capability to a prompt we are inside of is kept when the carrying budget does not reach it") {
+    val input =
+      """ interface Exc { raise: () => Int }
+        | def foo = { (){e: Exc} => (e : Exc @ {e}).raise : () => Int () }
+        | def main = { () => reset { (){p: Prompt[Int]} => def e = new Exc { def raise() = shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => return 1 } } (foo : (){e : Exc} => Int @ {})(){ (e : Exc @ {e}) } } }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 0, onceLimit = Some(0), carryingLimit = 0))(input, input)
   }
 }
