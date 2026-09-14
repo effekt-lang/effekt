@@ -119,6 +119,9 @@ enum Expr {
 
   // e.g. x
   case Variable(name: JSName)
+
+  // e.g. /* Cons_0 */ { head_0: h }
+  case Ascription(constructor: JSName, value: Expr)
 }
 export Expr.*
 
@@ -133,6 +136,9 @@ implicit class JavaScriptInterpolator(private val sc: StringContext) extends Any
 enum Pattern {
   case Variable(name: JSName)
   case Array(ps: List[Pattern])
+
+  // e.g. { head_0: h, tail_0: t }
+  case Object(fields: List[(JSName, Pattern)])
 }
 
 enum Stmt {
@@ -170,6 +176,9 @@ enum Stmt {
 
   // e.g. if (<EXPR>) { <STMT> } else { <STMT> }
   case If(cond: Expr, thn: Stmt, els: Stmt)
+
+  // e.g. else /* Cons_0 */ { <STMT>* }
+  case Ascribed(constructor: JSName, stmt: Stmt)
 
   // e.g. try { <STMT>* } catch(x) { <STMT>* }
   case Try(prog: List[Stmt], name: JSName, handler: List[Stmt], fin: List[Stmt] = Nil)
@@ -226,6 +235,7 @@ def MaybeBlock(stmts: List[Stmt]): Stmt = stmts match {
 }
 
 val Undefined = RawLiteral("undefined")
+val Null = RawLiteral("null")
 
 def Lambda(params: List[JSName], stmts: List[Stmt]): Expr = stmts match {
   case Nil => sys error "Lambda should have at least one statement as body"
