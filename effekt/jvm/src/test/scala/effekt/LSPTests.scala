@@ -5,6 +5,7 @@ import effekt.Intelligence.{BindingInfo, BindingKind, BindingOrigin, Code, LSPLo
 import munit.FunSuite
 import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit}
 import org.eclipse.lsp4j.jsonrpc.messages
+import org.eclipse.lsp4j.jsonrpc.services.ServiceEndpoints
 
 import java.io.{PipedInputStream, PipedOutputStream}
 import java.util
@@ -78,6 +79,34 @@ class LSPTests extends FunSuite {
   //
   //
 
+  /**
+   * We declare the JSON-RPC methods explicitly, see the comment on [[Server]].
+   * This test checks that the names are correct and that we're not implementing things twice.
+   */
+  test("Server advertises exactly the implemented JSON-RPC methods") {
+    val advertised = ServiceEndpoints.getSupportedMethods(classOf[Server]).keySet.asScala.toSet
+    val expected = Set(
+      "initialize",
+      "initialized",
+      "shutdown",
+      "exit",
+      "$/setTrace",
+      "textDocument/didOpen",
+      "textDocument/didChange",
+      "textDocument/didSave",
+      "textDocument/didClose",
+      "textDocument/hover",
+      "textDocument/definition",
+      "textDocument/references",
+      "textDocument/documentSymbol",
+      "textDocument/codeAction",
+      "textDocument/inlayHint",
+      "workspace/didChangeConfiguration",
+      "workspace/didChangeWatchedFiles",
+    )
+    assertEquals(advertised, expected)
+  }
+
   test("Initialization works") {
     withClientAndServer { (client, server) =>
       val initializeResult = server.initialize(new InitializeParams()).get()
@@ -115,7 +144,7 @@ class LSPTests extends FunSuite {
     withClientAndServer { (client, server) =>
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(helloWorld)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val diagnostics = client.receivedDiagnostics()
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(helloWorld.getUri, new util.ArrayList())))
@@ -135,7 +164,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val diagnostic = new Diagnostic()
       diagnostic.setRange(range)
@@ -167,7 +196,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val diagnostic = new Diagnostic()
       diagnostic.setRange(range)
@@ -201,7 +230,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val diagnostic = new Diagnostic()
       diagnostic.setRange(range)
@@ -226,7 +255,7 @@ class LSPTests extends FunSuite {
     withClientAndServer { (client, server) =>
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(helloWorld)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val params = SetTraceParams("off")
       server.setTrace(params)
@@ -246,7 +275,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val diagnostic = new Diagnostic()
       diagnostic.setRange(range)
@@ -271,7 +300,7 @@ class LSPTests extends FunSuite {
     withClientAndServer { (client, server) =>
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(helloWorld)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
       // Pop the diagnostics from the queue before changing the document
       val _ = client.receivedDiagnostics()
 
@@ -280,7 +309,7 @@ class LSPTests extends FunSuite {
       val didChangeParams = new DidChangeTextDocumentParams()
       didChangeParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
       didChangeParams.setContentChanges(util.Arrays.asList(changeEvent))
-      server.getTextDocumentService().didChange(didChangeParams)
+      server.didChange(didChangeParams)
 
       val diagnostics = client.receivedDiagnostics()
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(textDoc.getUri, new util.ArrayList())))
@@ -291,7 +320,7 @@ class LSPTests extends FunSuite {
     withClientAndServer { (client, server) =>
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(helloWorld)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
       // Pop the diagnostics from the queue before changing the document
       val _ = client.receivedDiagnostics()
 
@@ -300,7 +329,7 @@ class LSPTests extends FunSuite {
       val didSaveParams = new DidSaveTextDocumentParams()
       didSaveParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
       didSaveParams.setText(textDoc.getText)
-      server.getTextDocumentService().didSave(didSaveParams)
+      server.didSave(didSaveParams)
 
       val diagnostics = client.receivedDiagnostics()
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(textDoc.getUri, new util.ArrayList())))
@@ -315,13 +344,13 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
       // Pop the diagnostics from the queue before closing the document
       val _ = client.receivedDiagnostics()
 
       val didCloseParams = new DidCloseTextDocumentParams()
       didCloseParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
-      server.getTextDocumentService().didClose(didCloseParams)
+      server.didClose(didCloseParams)
 
       val diagnostics = client.receivedDiagnostics()
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(textDoc.getUri, new util.ArrayList())))
@@ -332,7 +361,7 @@ class LSPTests extends FunSuite {
     withClientAndServer { (client, server) =>
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(helloWorld)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
       // Clear any initial diagnostics.
       val _ = client.receivedDiagnostics()
 
@@ -341,7 +370,7 @@ class LSPTests extends FunSuite {
       // The text is set to null
       didSaveParams.setText(null)
 
-      server.getTextDocumentService().didSave(didSaveParams)
+      server.didSave(didSaveParams)
     }
   }
 
@@ -364,10 +393,10 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
-      val hover = server.getTextDocumentService().hover(hoverParams).get()
+      val hover = server.hover(hoverParams).get()
 
       val expectedHover = new Hover()
       expectedHover.setRange(new Range(cursor, cursor))
@@ -395,10 +424,10 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
-      val hover = server.getTextDocumentService().hover(hoverParams).get()
+      val hover = server.hover(hoverParams).get()
 
       val expectedHover = new Hover()
       expectedHover.setRange(new Range(cursor, cursor))
@@ -427,10 +456,10 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
-      val hover = server.getTextDocumentService().hover(hoverParams).get()
+      val hover = server.hover(hoverParams).get()
 
       val expectedHover = new Hover()
       expectedHover.setRange(new Range(cursor, cursor))
@@ -459,10 +488,10 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
-      val hover = server.getTextDocumentService().hover(hoverParams).get()
+      val hover = server.hover(hoverParams).get()
 
       val expectedHover = new Hover()
       expectedHover.setRange(new Range(cursor, cursor))
@@ -481,10 +510,10 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
-      val hover = server.getTextDocumentService().hover(hoverParams).get()
+      val hover = server.hover(hoverParams).get()
 
       val expectedHover = new Hover()
       expectedHover.setRange(new Range(cursor, cursor))
@@ -505,10 +534,10 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
-      val hover = server.getTextDocumentService().hover(hoverParams).get()
+      val hover = server.hover(hoverParams).get()
 
       val expectedHover = new Hover()
       expectedHover.setRange(new Range(cursor, cursor))
@@ -535,10 +564,10 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
-      val hover = server.getTextDocumentService().hover(hoverParams).get()
+      val hover = server.hover(hoverParams).get()
 
       val expectedHover = new Hover()
       expectedHover.setRange(new Range(cursor, cursor))
@@ -572,15 +601,15 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val configParams = new DidChangeConfigurationParams()
       val settings: JsonElement = JsonParser.parseString("""{"effekt": {"showExplanations": true}}""")
       configParams.setSettings(settings)
-      server.getWorkspaceService().didChangeConfiguration(configParams)
+      server.didChangeConfiguration(configParams)
 
       val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
-      val hover = server.getTextDocumentService().hover(hoverParams).get()
+      val hover = server.hover(hoverParams).get()
 
       val expectedHover = new Hover()
       expectedHover.setRange(new Range(cursor, cursor))
@@ -608,10 +637,10 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, firstPos)
-      val hover = server.getTextDocumentService().hover(hoverParams).get()
+      val hover = server.hover(hoverParams).get()
 
       val expectedHover = (pos: Position) => {
         val expectedHover = new Hover()
@@ -636,10 +665,10 @@ class LSPTests extends FunSuite {
       val didChangeParams = new DidChangeTextDocumentParams()
       didChangeParams.setTextDocument(newTextDoc.versionedTextDocumentIdentifier)
       didChangeParams.setContentChanges(util.Arrays.asList(changeEvent))
-      server.getTextDocumentService().didChange(didChangeParams)
+      server.didChange(didChangeParams)
 
       val hoverParamsAfterChange = new HoverParams(newTextDoc.versionedTextDocumentIdentifier, secondPos)
-      val hoverAfterChange = server.getTextDocumentService().hover(hoverParamsAfterChange).get()
+      val hoverAfterChange = server.hover(hoverParamsAfterChange).get()
 
       assertEquals(hoverAfterChange, expectedHover(secondPos))
 
@@ -652,10 +681,10 @@ class LSPTests extends FunSuite {
       val didChangeParamsReverted = new DidChangeTextDocumentParams()
       didChangeParamsReverted.setTextDocument(revertedTextDoc.versionedTextDocumentIdentifier)
       didChangeParamsReverted.setContentChanges(util.Arrays.asList(revertedChangeEvent))
-      server.getTextDocumentService().didChange(didChangeParamsReverted)
+      server.didChange(didChangeParamsReverted)
 
       val hoverParamsAfterRevert = new HoverParams(revertedTextDoc.versionedTextDocumentIdentifier, firstPos)
-      val hoverAfterRevert = server.getTextDocumentService().hover(hoverParamsAfterRevert).get()
+      val hoverAfterRevert = server.hover(hoverParamsAfterRevert).get()
 
       assertEquals(hoverAfterRevert, expectedHover(firstPos))
     }
@@ -685,11 +714,11 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val params = new DocumentSymbolParams()
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
-      val actualSymbols = server.getTextDocumentService().documentSymbol(params).get()
+      val actualSymbols = server.documentSymbol(params).get()
       assertEquals(actualSymbols, expectedSymbols.asJava)
     }
   }
@@ -712,13 +741,13 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val params = new DefinitionParams()
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
       params.setPosition(positions(2))
 
-      val definition = server.getTextDocumentService().definition(params).get().getLeft.get(0)
+      val definition = server.definition(params).get().getLeft.get(0)
       assertEquals(definition.getRange, expectedRange)
     }
   }
@@ -737,13 +766,13 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val params = new DefinitionParams()
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
       params.setPosition(positions(2))
 
-      val definition = server.getTextDocumentService().definition(params).get().getLeft.get(0)
+      val definition = server.definition(params).get().getLeft.get(0)
       assertEquals(definition.getRange, expectedRange)
     }
   }
@@ -769,7 +798,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val params = new ReferenceParams()
       params.setPosition(positions(0))
@@ -778,7 +807,7 @@ class LSPTests extends FunSuite {
       params.setContext(context)
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
 
-      val references = server.getTextDocumentService().references(params).get()
+      val references = server.references(params).get()
       assertEquals(references.asScala.map(_.getRange).toList, expectedReferences)
     }
   }
@@ -818,13 +847,13 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val params = new InlayHintParams()
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
       params.setRange(new Range(positions(0), positions(2)))
 
-      val inlayHints = server.getTextDocumentService().inlayHint(params).get()
+      val inlayHints = server.inlayHint(params).get()
       assertEquals(inlayHints, expectedInlayHints.asJava)
     }
   }
@@ -858,13 +887,13 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val params = new InlayHintParams()
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
       params.setRange(new Range(positions(0), positions(2)))
 
-      val inlayHints = server.getTextDocumentService().inlayHint(params).get()
+      val inlayHints = server.inlayHint(params).get()
       assertEquals(inlayHints, expectedInlayHints.asJava)
     }
   }
@@ -910,13 +939,13 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val params = new InlayHintParams()
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
       params.setRange(new Range(positions(0), positions(2)))
 
-      val inlayHints = server.getTextDocumentService().inlayHint(params).get()
+      val inlayHints = server.inlayHint(params).get()
       assertEquals(inlayHints, expectedInlayHints.asJava)
     }
   }
@@ -952,13 +981,13 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val params = new InlayHintParams()
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
       params.setRange(new Range(positions(0), positions(2)))
 
-      val inlayHints = server.getTextDocumentService().inlayHint(params).get()
+      val inlayHints = server.inlayHint(params).get()
       assertEquals(inlayHints, expectedInlayHints.asJava)
 
       // First edit: now we add a blank line in front
@@ -978,7 +1007,7 @@ class LSPTests extends FunSuite {
       val didChangeParams = new DidChangeTextDocumentParams()
       didChangeParams.setTextDocument(newTextDoc.versionedTextDocumentIdentifier)
       didChangeParams.setContentChanges(util.Arrays.asList(changeEvent))
-      server.getTextDocumentService().didChange(didChangeParams)
+      server.didChange(didChangeParams)
 
       val paramsAfterChange = new InlayHintParams()
       paramsAfterChange.setTextDocument(newTextDoc.versionedTextDocumentIdentifier)
@@ -990,7 +1019,7 @@ class LSPTests extends FunSuite {
           new TextEdit(new Range(newPos, newPos), " at {io}")
         ).asJava
       )
-      val inlayHintsAfterChange = server.getTextDocumentService().inlayHint(paramsAfterChange).get()
+      val inlayHintsAfterChange = server.inlayHint(paramsAfterChange).get()
       assertEquals(inlayHintsAfterChange, expectedInlayHints.asJava)
 
       // Second edit: we revert the change
@@ -1003,7 +1032,7 @@ class LSPTests extends FunSuite {
       val didChangeParamsReverted = new DidChangeTextDocumentParams()
       didChangeParamsReverted.setTextDocument(revertedTextDoc.versionedTextDocumentIdentifier)
       didChangeParamsReverted.setContentChanges(util.Arrays.asList(revertedChangeEvent))
-      server.getTextDocumentService().didChange(didChangeParamsReverted)
+      server.didChange(didChangeParamsReverted)
 
       val paramsAfterRevert = new InlayHintParams()
       paramsAfterRevert.setTextDocument(revertedTextDoc.versionedTextDocumentIdentifier)
@@ -1014,7 +1043,7 @@ class LSPTests extends FunSuite {
           new TextEdit(new Range(positions(1), positions(1)), " at {io}")
         ).asJava
       )
-      val inlayHintsAfterRevert = server.getTextDocumentService().inlayHint(paramsAfterRevert).get()
+      val inlayHintsAfterRevert = server.inlayHint(paramsAfterRevert).get()
       assertEquals(inlayHintsAfterRevert, expectedInlayHints.asJava)
     }
 
@@ -1051,13 +1080,13 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val params = new InlayHintParams()
       params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
       params.setRange(new Range(positions(0), positions(2)))
 
-      val inlayHints = server.getTextDocumentService().inlayHint(params).get()
+      val inlayHints = server.inlayHint(params).get()
       assertEquals(inlayHints, expectedInlayHints.asJava)
 
       // Edit: now we add some invalid syntax to the end
@@ -1076,7 +1105,7 @@ class LSPTests extends FunSuite {
       val didChangeParams = new DidChangeTextDocumentParams()
       didChangeParams.setTextDocument(newTextDoc.versionedTextDocumentIdentifier)
       didChangeParams.setContentChanges(util.Arrays.asList(changeEvent))
-      server.getTextDocumentService().didChange(didChangeParams)
+      server.didChange(didChangeParams)
 
       val paramsAfterChange = new InlayHintParams()
       paramsAfterChange.setTextDocument(newTextDoc.versionedTextDocumentIdentifier)
@@ -1084,7 +1113,7 @@ class LSPTests extends FunSuite {
       // We use somewhat arbitrary values here.
       paramsAfterChange.setRange(new Range(positions(0), new Position(positions(2).getLine + 1, positions(2).getCharacter + 5)))
 
-      val inlayHintsAfterChange = server.getTextDocumentService().inlayHint(paramsAfterChange).get()
+      val inlayHintsAfterChange = server.inlayHint(paramsAfterChange).get()
       assertEquals(inlayHintsAfterChange, expectedInlayHints.asJava)
     }
   }
@@ -1104,7 +1133,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val codeActionParams = new CodeActionParams()
       codeActionParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
@@ -1150,7 +1179,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val codeActionParams = new CodeActionParams()
       codeActionParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
@@ -1208,11 +1237,11 @@ class LSPTests extends FunSuite {
 
       val didOpenParams1 = new DidOpenTextDocumentParams()
       didOpenParams1.setTextDocument(textDoc1)
-      server.getTextDocumentService().didOpen(didOpenParams1)
+      server.didOpen(didOpenParams1)
 
       val didOpenParams2 = new DidOpenTextDocumentParams()
       didOpenParams2.setTextDocument(textDoc2)
-      server.getTextDocumentService().didOpen(didOpenParams2)
+      server.didOpen(didOpenParams2)
 
       val codeActionParams1 = new CodeActionParams()
       codeActionParams1.setTextDocument(textDoc1.versionedTextDocumentIdentifier)
@@ -1291,7 +1320,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val codeActionParams = new CodeActionParams()
       codeActionParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
@@ -1337,7 +1366,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val codeActionParams = new CodeActionParams()
       codeActionParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
@@ -1389,7 +1418,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(source)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
 
       val expectedIRContents =
@@ -1479,7 +1508,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(helloWorld)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       // Receive the initial IR
       assertEquals(client.receivedIR().length, 1)
@@ -1489,13 +1518,13 @@ class LSPTests extends FunSuite {
       // we get a `DidChangeConfigurationParams` with the configuration nested under the "effekt" key.
       val settings: JsonElement = JsonParser.parseString("""{"effekt": {"showIR": "core", "showTree": true}}""")
       configParams.setSettings(settings)
-      server.getWorkspaceService().didChangeConfiguration(configParams)
+      server.didChangeConfiguration(configParams)
 
       // Send a didSave event to trigger recompilation and IR publication
       val didSaveParams = new DidSaveTextDocumentParams()
       didSaveParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
       didSaveParams.setText(textDoc.getText)
-      server.getTextDocumentService().didSave(didSaveParams)
+      server.didSave(didSaveParams)
 
       val expectedIRContents =
         raw"""ModuleDecl(
@@ -1535,7 +1564,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(source)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val expectedHoles = List()
 
@@ -1654,7 +1683,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(source)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val receivedHoles = client.receivedHoles()
       assertEquals(receivedHoles.length, 1)
@@ -1679,7 +1708,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(source)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val receivedHoles = client.receivedHoles()
       assertEquals(receivedHoles.length, 1)
@@ -1705,7 +1734,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(source)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val receivedHoles = client.receivedHoles()
       assertEquals(receivedHoles.length, 1)
@@ -1863,7 +1892,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(source)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val receivedHoles = client.receivedHoles()
       assertEquals(receivedHoles.length, 1)
@@ -1885,7 +1914,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(source)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val expectedBody = List(
         Code(
@@ -1923,7 +1952,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(source)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val expectedBody = List(
         NaturalLanguage(
@@ -1975,7 +2004,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(source)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val expectedBody = List(
         NaturalLanguage(
@@ -2022,7 +2051,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(source)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val receivedHoles = client.receivedHoles()
       assertEquals(receivedHoles.length, 1)
@@ -2072,7 +2101,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(source)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val expectedBindings = List(
         TypeBinding(
@@ -2248,7 +2277,7 @@ class LSPTests extends FunSuite {
       server.initialize(initializeParams).get()
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(source)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
       val receivedHoles = client.receivedHoles()
       assertEquals(receivedHoles.length, 1)
       assertEquals(receivedHoles.head.holes.length, 1)
@@ -2273,7 +2302,7 @@ class LSPTests extends FunSuite {
       server.initialize(initializeParams).get()
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(source)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
       val receivedHoles = client.receivedHoles()
       assertEquals(receivedHoles.length, 1)
     }
@@ -2295,7 +2324,7 @@ class LSPTests extends FunSuite {
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(source)
-      server.getTextDocumentService().didOpen(didOpenParams)
+      server.didOpen(didOpenParams)
 
       val receivedHoles = client.receivedHoles()
       assertEquals(receivedHoles.length, 1)

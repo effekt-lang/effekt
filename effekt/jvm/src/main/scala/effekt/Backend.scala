@@ -26,7 +26,7 @@ case class Backend[E](name: String, compiler: Compiler[E], runner: Runner[E])
 
 object Backend {
 
-  def backend(name: String): Backend[_] = name match {
+  def backend(name: String): Backend[?] = name match {
     case "js"           => Backend("js", js.JavaScriptNode(), JSNodeRunner)
     case "js-web"       => Backend("js-web", js.JavaScriptWeb(), JSWebRunner)
     case "chez-cps"     => Backend("chez-cps", chez.ChezSchemeCPS(), ChezCPSRunner)
