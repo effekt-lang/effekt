@@ -6,34 +6,8 @@ on:
       - main
 
 jobs:
-  full-test-suite:
-    name: Full Test Suite
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: 'true'
-
-      - uses: ./.github/actions/setup-effekt
-        with:
-          install-dependencies: 'true'
-          install-valgrind: 'true'
-
-      - uses: ./.github/actions/run-effekt-tests
-        with:
-          full-test: 'true'
-          use-retry: 'true'
-
-  windows-smoke-test:
-    name: Windows Smoke Test
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: 'true'
-
-      - uses: ./.github/actions/setup-effekt
-
-      - uses: ./.github/actions/run-effekt-tests
-        with:
-          full-test: 'false'
+  tests:
+    uses: ./.github/workflows/tests.yml
+    with:
+      # The change already passed tests on its PR; retrying keeps flaky tests from turning `main` red
+      max-attempts: 3
