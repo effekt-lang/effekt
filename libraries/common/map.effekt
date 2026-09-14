@@ -354,6 +354,18 @@ namespace returning {
   }
 }
 
+def reprBuiltin[K, V](m: Map[K, V])
+  { reprK: K => Unit / rose[Repr::Llabel, Unit] }
+  { reprV: V => Unit / rose[Repr::Llabel, Unit] }
+: Unit / rose[Repr::Llabel, Unit] =
+  do labelled[Repr::Llabel, Unit](Repr::Llabel::Assoc("Map")) {
+    m.foreach { (k, v) =>
+      do labelled(Repr::AssocProp()) {
+        reprK(k); reprV(v)
+      }
+    }
+  }
+
 // Internal tree representation
 
 /// Please don't directly use:

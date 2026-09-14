@@ -35,6 +35,7 @@ import queue
 import random
 import ref
 import regex
+import repr
 import resizable_array
 import result
 import scanner
