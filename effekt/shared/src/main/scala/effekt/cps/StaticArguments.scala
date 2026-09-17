@@ -39,7 +39,7 @@ object StaticArguments {
 
   /** The call information needed only by static-argument specialization. */
   private class CallAnalysis(
-    targetsByCall: IdentityHashMap[Stmt, Targets.CallTargets],
+    targetsByCall: IdentityHashMap[Stmt, GuardedEquality.CallTargets],
     val functions: mutable.Map[Id, FunctionInfo] = mutable.Map.empty,
     var stack: List[Id] = Nil
   ) {
@@ -149,9 +149,9 @@ object StaticArguments {
   private object CallAnalysis {
     def apply(
       module: ModuleDecl,
-      targetFlows: Vector[Targets.TargetResult]
+      targetFlows: Vector[GuardedEquality.TargetResult]
     ): CallAnalysis = {
-      val targetsByCall = new IdentityHashMap[Stmt, Targets.CallTargets]()
+      val targetsByCall = new IdentityHashMap[Stmt, GuardedEquality.CallTargets]()
       targetFlows.foreach(_.callTargets.foreach { targets =>
         targetsByCall.put(targets.call, targets)
       })
@@ -552,12 +552,12 @@ object StaticArguments {
     protectedDefinitions: Set[Id],
     cpsMetaContinuationsOnly: Boolean
   ): ModuleDecl = {
-    val targetFlows = m.definitions.map(Targets.targets).toVector
-    val analysis = CallAnalysis(m, targetFlows)
-    // Opaque control can hide the path back to a recursive call from the
-    // focused machine. In that case its must facts are vacuous; retain the
-    // syntactic equations collected above instead.
-    val pathStatics = StaticParameters.results(m)
+    val targets = m.definitions.map(GuardedEquality.targets).toVector
+    val analysis = CallAnalysis(m, targets)
+    val candidates = analysis.functions.iterator.collect {
+      case (id, info) if info.isRecursive && !protectedDefinitions(id) => id
+    }.toSet
+    val pathStatics = GuardedEquality.analyzeRecursion(m, candidates).staticParameters
     given ctx: Context = initializeContext(
       analysis,
       pathStatics,
@@ -569,7 +569,7 @@ object StaticArguments {
 
   private def initializeContext(
     analysis: CallAnalysis,
-    pathStatics: Map[Id, StaticParameters.Result],
+    pathStatics: Map[Id, Vector[Boolean]],
     protectedDefinitions: Set[Id],
     cpsMetaContinuationsOnly: Boolean
   ): Context = {
@@ -578,16 +578,8 @@ object StaticArguments {
 
     analysis.functions.foreach {
       case (id, info) if info.isRecursive && !protectedDefinitions.contains(id) =>
-        val syntacticStatics = info.staticArguments
-        val preciseStatics = pathStatics.get(id) match {
-          case Some(result) if result.recursive => result.parameters.toList
-          // Without a reached recursive call, positive must facts are
-          // vacuous. Negative facts are still conservative, so intersect
-          // the focused result with the syntactic recursive-call equations.
-          case Some(result) =>
-            result.parameters.zip(syntacticStatics).map(_ && _).toList
-          case None => syntacticStatics
-        }
+        val preciseStatics =
+          pathStatics.get(id).fold(info.staticArguments)(_.toList)
         val isInternallyStatic = info.admissibleStatics(preciseStatics)
 
         if cpsMetaContinuationsOnly then {
@@ -639,181 +631,5 @@ object StaticArguments {
       case _ => ()
     }
     new Context(statics.toMap, wrapperSpecializations.toSet)
-  }
-}
-
-/**
- * The relational, *must*-equality projection used by static-argument
- * specialization — the static (recursion-invariant) parameters — expressed on
- * [[AbstractMachine]].
- *
- * Two AAM ideas make this the same machine as [[PointsTo]], only re-knobbed:
- *
- *   - The value lattice is *symbolic* (Herbrand-flavoured), and the machine's
- *     `join` is used as the domain's *meet* (anti-unification): the store starts
- *     unwritten (`Nothing`, ⊥) and narrows toward `Anything` (⊤), keeping only
- *     agreements. That is a must analysis run on the may machine via the dual
- *     lattice.
- *   - The *focus* is the observed function: the analysis is run once per
- *     function, seeding its parameters with their own symbols. After the fixed
- *     point a parameter is static iff its address still holds that symbol — i.e.
- *     every reachable recursive call passed it unchanged.
- *
- * Calls to *known* functions resolve precisely through their closure values in
- * the store, so direct recursion is observed exactly; any other value used as a
- * callee is treated as opaque, and matches on symbolic scrutinees explore every
- * branch. Constructor values are reified to symbolic terms, so an argument that
- * rebuilds the same term counts as unchanged.
- */
-class StaticParameters(module: ModuleDecl, observed: Id, parameters: List[Id])
-    extends AbstractMachine(module) {
-
-  enum Sym {
-    case Nothing                 // ⊥: unwritten — identity for the dual join
-    case Symbol(id: Id)          // provably equal to a parameter/variable
-    case Term(expr: Expr)        // a specific pure term
-    case Closure(value: StaticParameters.this.Value.Closure)
-    case Anything                // ⊤: no equality known
-  }
-
-  type Property = Sym
-  type Context = Unit
-
-  def bottom: Sym = Sym.Nothing
-  def external: Sym = Sym.Anything
-
-  // The machine's `join` is the domain's meet: keep agreements, generalise
-  // disagreements to ⊤.
-  def join(left: Sym, right: Sym): Sym = (left, right) match {
-    case (Sym.Nothing, other) => other
-    case (other, Sym.Nothing) => other
-    case (Sym.Anything, _) | (_, Sym.Anything) => Sym.Anything
-    case (a, b) if a == b => a
-    case _ => Sym.Anything
-  }
-
-  def literal(value: Any, annotatedType: core.ValueType): Sym =
-    Sym.Term(Expr.Literal(value, annotatedType))
-
-  def closure(value: Value.Closure, context: Unit): Sym = Sym.Closure(value)
-
-  def instance(value: Value.Object, context: Unit): Sym = Sym.Anything
-
-  def constructor(value: Value.Constructor, context: Unit): Sym = {
-    val elements = value.fields.map(field => reify(valueAt(field).property))
-    if elements.forall(_.isDefined) then
-      Sym.Term(Expr.Make(value.tpe, value.tag, elements.map(_.get)))
-    else Sym.Anything
-  }
-
-  private def reify(value: Sym): Option[Expr] = value match {
-    case Sym.Symbol(id) => Some(Expr.Variable(id))
-    case Sym.Term(expr) => Some(expr)
-    case _ => None
-  }
-
-  def initialContext: Unit = ()
-  def tick(
-    call: Option[Stmt],
-    callee: Value.Closure,
-    arguments: List[Values],
-    caller: Unit
-  ): Unit = ()
-
-  override protected def registerNestedDefinitions: Boolean = true
-
-  // The focus: seed the observed function's parameters with their own symbols.
-  override protected def entryPoints: List[(Id, List[Values])] =
-    List(observed -> parameters.map { parameter =>
-      // The symbol records identity, not runtime shape. In particular, a
-      // symbolic scrutinee can be any constructor, so every match branch must
-      // remain reachable.
-      Values(Set.empty, open = true, Sym.Symbol(parameter))
-    })
-
-  private var recursive = false
-
-  override protected def observeApply(
-    statement: Stmt,
-    callee: Values,
-    targets: Set[Id],
-    arguments: List[Values],
-    context: Unit
-  ): Unit =
-    recursive ||= targets.contains(observed)
-
-  private lazy val computed: Unit = run()
-
-  /** For each parameter, whether every reachable recursive call passed it
-   *  unchanged (its address still holds its own symbol). This is vacuously
-   *  true when there is no recursive call; clients that distinguish that case
-   *  can inspect [[result]]. */
-  def staticParameters: Vector[Boolean] = result.parameters
-
-  private[cps] def result: StaticParameters.Result = {
-    computed
-    StaticParameters.Result(
-      parameters.map { parameter =>
-        parameterValue(parameter, ()).property == Sym.Symbol(parameter)
-      }.toVector,
-      recursive)
-  }
-}
-
-object StaticParameters {
-
-  private[cps] final case class Result(parameters: Vector[Boolean], recursive: Boolean)
-
-  /** The static parameters of every function, top-level and nested: each is
-   *  focused in turn, seeding its own parameters.
-   *
-   *  A focused run only follows the observed function's own (mutually) recursive
-   *  calls, so it cannot see the function being handed to unknown code. An
-   *  escaping function may be re-entered with arbitrary arguments, so none of its
-   *  parameters is recursion-invariant — gate those to all-varying. */
-  def analyze(module: ModuleDecl): Map[Id, Vector[Boolean]] = {
-    results(module).iterator.map { case (id, result) =>
-      id -> result.parameters
-    }.toMap
-  }
-
-  private[cps] def results(module: ModuleDecl): Map[Id, Result] = {
-    val escaped = new PointsTo(module).escapedFunctions
-    definitions(module).map { case (id, params) =>
-      val result =
-        if escaped.contains(id) then Result(Vector.fill(params.size)(false), recursive = false)
-        else new StaticParameters(module, id, params).result
-      id -> result
-    }.toMap
-  }
-
-  /** Every definition — top-level and nested — with its parameter list. */
-  private def definitions(module: ModuleDecl): List[(Id, List[Id])] = {
-    val out = mutable.ListBuffer.empty[(Id, List[Id])]
-    def go(stmt: Stmt): Unit = stmt match {
-      case Stmt.Def(id, params, body, rest) => out += ((id, params)); go(body); go(rest)
-      case Stmt.New(_, _, operations, rest) => operations.foreach(o => go(o.body)); go(rest)
-      case Stmt.Let(_, _, rest) => go(rest)
-      case Stmt.Call(_, _, _, _, _, rest) => go(rest)
-      case Stmt.Run(_, _, _, _, rest) => go(rest)
-      case Stmt.If(_, thn, els) => go(thn); go(els)
-      case Stmt.Match(_, clauses, default) =>
-        clauses.foreach { case (_, clause) => go(clause.body) }; default.foreach(go)
-      case Stmt.Region(_, _, rest) => go(rest)
-      case Stmt.Alloc(_, _, _, rest) => go(rest)
-      case Stmt.Var(_, _, _, rest) => go(rest)
-      case Stmt.Dealloc(_, rest) => go(rest)
-      case Stmt.Get(_, _, rest) => go(rest)
-      case Stmt.Put(_, _, rest) => go(rest)
-      case Stmt.Reset(_, _, _, body, _, _) => go(body)
-      case Stmt.Shift(_, _, _, _, body, _, _) => go(body)
-      case Stmt.Resume(_, _, _, body, _, _) => go(body)
-      case _: Stmt.App | _: Stmt.Invoke | _: Stmt.Return | _: Stmt.Hole => ()
-    }
-    module.definitions.foreach {
-      case ToplevelDefinition.Def(id, params, body) => out += ((id, params)); go(body)
-      case ToplevelDefinition.Val(_, _, _, binding) => go(binding)
-    }
-    out.toList
   }
 }
