@@ -43,7 +43,7 @@
       projects = builtins.removeAttrs inputs [ "self" "nixpkgs" "effekt-nix" ];
 
       version = "0.999.999+nightly";
-      depsSha256 = "sha256-4uHi4+ahCHXdGNUyJo9AEYeS4twTcELDl5iFs5lVsyQ=;
+      depsSha256 = "sha256-4uHi4+ahCHXdGNUyJo9AEYeS4twTcELDl5iFs5lVsyQ=";
 
       perSystem = forAllSystems (system:
         let
