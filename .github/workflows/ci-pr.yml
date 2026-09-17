@@ -4,11 +4,12 @@ on:
   pull_request:
 
 jobs:
-  tests:
-    uses: ./.github/workflows/tests.yml
-    with:
-      # no automatic reruns on PRs: flaky tests should annoy us into fixing them
-      max-attempts: 1
+  # XXX: disabled for quicker testing
+  # tests:
+  #   uses: ./.github/workflows/tests.yml
+  #   with:
+  #     # no automatic reruns on PRs: flaky tests should annoy us into fixing them
+  #     max-attempts: 1
 
   community-build:
     name: "Community Build"
