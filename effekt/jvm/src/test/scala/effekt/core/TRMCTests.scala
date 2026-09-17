@@ -1,6 +1,7 @@
 package effekt
 package core
 
+import effekt.core.optimizer.TRMC
 import effekt.core.BlockType.Function
 import effekt.core.ExternBody.StringExternBody
 import effekt.source.FeatureFlag.Default
@@ -71,14 +72,20 @@ class TRMCTests extends CoreTests {
     val renamed = renamer(pInput)
 
     val obtained = transform(renamed)
+    println(effekt.util.PrettyPrinter.format(obtained).layout)
     assertAlphaEquivalent(obtained, pExpected, "Not transformed to")
   }
 
-//  def transform(input: String, expected: String)(using munit.Location) = {
-//    assertTransformsTo(input, expected) { tree =>
-//      tree
-//    }
-//  }
+  def trmc(input: String, expected: String)(using munit.Location) = {
+    assertTransformsTo(input, expected) { tree =>
+      val functionLinks: Map[Id, Id] = tree.definitions.collect{
+        case Toplevel.Def(id, block) =>
+          val outputFunId = Id(id.name.name + "_trmc")
+          id -> outputFunId
+      }.toMap
+      TRMC.transform(tree, functionLinks, DC)
+    }
+  }
   enum TransformContext {
     case Outer(id: Id)
     case Val(id:Id, body: Stmt, next: TransformContext)
@@ -175,8 +182,37 @@ class TRMCTests extends CoreTests {
   def getType(vparam: ValueParam): ValueType = vparam.tpe
   def getType(bparam: BlockParam): BlockType = bparam.tpe
   
+  test("function call"){
+    val input =
+      """def f(n: Int) =
+        |  (f : (Int) => Int @ {})((sub: (Int, Int) => Int @ {})(n:Int, 1))
+        |""".stripMargin
+    val expected =
+      """def f(n: Int) =
+        |  (f : (Int) => Int @ {})((sub: (Int, Int) => Int @ {})(n:Int, 1))
+        |def f_trmc(n: Int, ctx: Context[Int, Int]) = {
+        |  (f_trmc : (Int, Context[Int, Int]) => Int @ {})((sub: (Int, Int) => Int @ {})(n: Int, 1), ctx: Context[Int, Int])
+        |}
+        |""".stripMargin
+    trmc(input, expected)
+  }
   
-  test("simple function call") {
+  test("infinite list"){
+    val input =
+      """def f(n: Int) =
+        |  make (Cons: (List[Int], List[Int]) => List[Int] @ {})(n:Int, (f : (Int) => Int @ {})((sub: (Int, Int) => Int @ {})(n:Int, 1)))
+        |""".stripMargin
+    val expected =
+      """def f(n: Int) =
+        |  (Cons: (List[Int], List[Int]) => List[Int] @ {})(n:Int, (f : (Int) => Int @ {})((sub: (Int, Int) => Int @ {})(n:Int, 1)))
+        |def f_trmc(n: Int, ctx: Context[List[Int],List[Int]) = {
+        |  
+        |}
+        |""".stripMargin //TODO
+    trmc(input, expected)
+  }
+  
+  test("simple function call"){
 
     val n: Id = Id("n")
     val f: Id = Id("f")
@@ -202,17 +238,6 @@ class TRMCTests extends CoreTests {
 
     val apptransformed = transform(app, f, f2,TransformContext.Outer(ctx), HoleContext(ATpe,Type.TInt))
 
-//    val input =
-//      """def f(n: Int) =
-//        |  (f : (Int) => Int @ {})((sub: (Int, Int) => Int @ {})(n:Int, 1))
-//        |""".stripMargin
-//
-//    val expected =
-//      """def f2(n: Int, ctx: Context[Int]) =
-//        |  (f2 : (Int) => Int @ {})((sub: (Int, Int) => Int @ {})(n:Int, 1), ctx: Context[Int])
-//        |""".stripMargin
-
-    //transform(input, expected)
     assertAlphaEquivalentStatements(apptransformed,appexpected)
   }
   

@@ -13,21 +13,31 @@ import effekt.util.messages.ErrorReporter
 
 object TRMC extends Phase[CoreTransformed, CoreTransformed]{
   val phaseName: String = "trmc"
-  
+  //TRMC-transforms all functions as far as currently implemented/possible, adding a new function with suffix -_trmc,
+  //rewrites the original functions to call the transformed ones wherever possible
+  //rewrites main() to just call main_trmc() and do nothing else
+  //we cannot just transform all functions and keep the name, because calls inside effects or regions would be untouched
   def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = {
     val CoreTransformed(source, tree, mod, modDec) = input
     //println(effekt.util.PrettyPrinter.format(modDec).layout)
     val DC = DeclarationContext(modDec.declarations, modDec.externs)
     
-    var transformedFunctions: List[Toplevel] = List()
-    
-    var functionLinks: Map[Id, Id] = modDec.definitions.collect{
+    val functionLinks: Map[Id, Id] = modDec.definitions.collect{
       case Toplevel.Def(id, block) =>
         val outputFunId = Id(id.name.name + "_trmc")
-        (id -> outputFunId)
-    }.toMap //TODO: exclude main?
+        id -> outputFunId
+    }.toMap 
     
-    
+    val transformed = Context.timed(phaseName, source.name) {
+      transform(modDec, functionLinks, DC)
+    }
+    //println(effekt.util.PrettyPrinter.format(transformed).layout)
+    Some(CoreTransformed(source, tree, mod, transformed))
+  }
+  
+  def transform(modDec: ModuleDecl, functionLinks: Map[Id, Id], DC: DeclarationContext)(using Context): ModuleDecl = {
+    var transformedFunctions: List[Toplevel] = List()
+    //TRMC-transforming all functions as far as currently possible/implemented
     object transform extends Tree.Rewrite {
       override def rewrite(t: Toplevel): Toplevel = t match {
         case Toplevel.Def(id, block) =>
@@ -39,12 +49,8 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
           Toplevel.Def(id, block)
         case Toplevel.Val(id, binding) => super.rewrite(t)
       }
-//      override def stmt: PartialFunction[Stmt, Stmt] = {
-//        case Def(id, block, body) if id.name.name == "simpleTRMC" =>
-//          trmc(id, block, body)
-//      }
     }
-    
+    //rewrite original functions to call trmc-transformed ones
     object rewriteOtherCalls extends Tree.Rewrite {
       override def rewrite(t: Toplevel): Toplevel = t match {
         case Toplevel.Def(id, block) => block match {
@@ -57,45 +63,41 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
         case _ => super.rewrite(t)
       }
     }
+    //making main() just call mainTRMC()
     object rewriteMain extends Tree.Rewrite {
-      override def rewrite(t:Toplevel): Toplevel = t match {
+      override def rewrite(t: Toplevel): Toplevel = t match {
         case Toplevel.Def(id, block) => block match {
           case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Toplevel.Def(id, block) //TODO: do BlockVar, Unbox and New actually happen?
           case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
             val calledContextTpe = ValueType.Data(builtins.ContextSymbol, List(body.tpe, body.tpe)) //TODO: parameters, if unequal
-            if(id.name.name == "main"){
+            if (id.name.name == "main") {
               functionLinks.get(id) match {
                 case Some(transformed) =>
                   Toplevel.Def(id, BlockLit(tparams, cparams, vparams, bparams, Stmt.App(
                     Block.BlockVar(
                       transformed,
-                      Function(tparams, cparams, vparams.map(p => p.tpe).appended(calledContextTpe), bparams.map(p => p.tpe), body.tpe), Set()),//TODO:capt? 
+                      Function(tparams, cparams, vparams.map(p => p.tpe).appended(calledContextTpe), bparams.map(p => p.tpe), body.tpe), Set()), //TODO:capt? 
                     List(),
-                    List(PureApp(blockVarFromExternDef("ctx_emptyContext", DC),List(body.tpe),Nil)),
+                    List(PureApp(blockVarFromExternDef("ctx_emptyContext", DC), List(body.tpe), Nil)),
                     List())))
                 case None => Context.panic("main should have been TRMC-transformed")
               }
-            }else{
+            } else {
               Toplevel.Def(id, block)
-            } 
+            }
           case Block.Unbox(pure) => Toplevel.Def(id, block)
           case Block.New(impl) => Toplevel.Def(id, block)
         }
         case _ => super.rewrite(t)
       }
     }
-
-    val transformed = Context.timed(phaseName, source.name) {
-      transform.rewrite(modDec)
-      val callsToTRMC = rewriteOtherCalls.rewrite(modDec)
-      val mainCallsMainTRMC = rewriteMain.rewrite(callsToTRMC)
-      mainCallsMainTRMC match {
-        case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-          ModuleDecl(path, includes, declarations, externs, definitions ++ transformedFunctions, exports)
-      }
+    transform.rewrite(modDec)
+    val callsToTRMC = rewriteOtherCalls.rewrite(modDec)
+    val mainCallsMainTRMC = rewriteMain.rewrite(callsToTRMC)
+    mainCallsMainTRMC match {
+      case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+        ModuleDecl(path, includes, declarations, externs, definitions ++ transformedFunctions, exports)
     }
-    //println(effekt.util.PrettyPrinter.format(transformed).layout)
-    Some(CoreTransformed(source, tree, mod, transformed))
   }
   
   def freeInStmt(id:Id, stmt: Stmt): Boolean = stmt.free.freeIds.contains(id)
@@ -112,9 +114,6 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
       case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
         val outputfun = functionLinks.get(id)
         if(id != transformedfun && outputfun.isDefined){ //TODO: do recursive calls have to be excluded?
-//          val ctxDecl: Declaration = DC.declarations.find(_.id.name.name == "HoleContext").getOrElse { //TODO: refactor duplicate code
-//            Context.panic(s"No declaration found for HoleContext.")
-//          }
           val calledContextTpe = ValueType.Data(builtins.ContextSymbol, List(stmt.tpe, stmt.tpe)) //TODO: parameters, if unequal
           annotatedTpe match {
             case Function(tparams, cparams, vparams, bparams, result) =>
@@ -149,8 +148,8 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
         }
       )
     case Stmt.Region(body) => stmt //TODO: rewrite blocks too?
-    case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, rewriteCalls(body, transformedfun, functionLinks, DC)) //TODO: body might be smth different?
-    case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, init, capture, rewriteCalls(body, transformedfun, functionLinks, DC)) //TODO: body might be smth different?
+    case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, rewriteCalls(body, transformedfun, functionLinks, DC))
+    case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, init, capture, rewriteCalls(body, transformedfun, functionLinks, DC)) 
     case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => Stmt.Get(id, annotatedTpe, ref, annotatedCapt, rewriteCalls(body, transformedfun, functionLinks, DC))
     case Stmt.Put(ref, annotatedCapt, value, body) => Stmt.Put(ref, annotatedCapt, value, rewriteCalls(body, transformedfun, functionLinks, DC))
     case Stmt.Reset(body) => stmt //TODO: rewrite blocks too?
@@ -162,9 +161,6 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
   private def trmc(id: Id, block: Block, outputfun: Id, functionLinks: Map[Id, Id], DC: DeclarationContext)(using Context): Toplevel = block match {
     case effekt.core.Block.BlockVar(id, annotatedTpe, annotatedCapt) => Toplevel.Def(id, block) //fallback to original function correct? //TODO: do BlockVar, Unbox and New actually happen?
     case effekt.core.Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-//      val ctxDecl: Declaration = DC.declarations.find(_.id.name.name == "HoleContext").getOrElse {
-//        Context.panic(s"No declaration found for HoleContext.")
-//      }
       val outerContextTpe = ValueType.Data(builtins.ContextSymbol, List(body.tpe, body.tpe)) //TODO: parameters, if unequal
       val ctxId = Id("ctx")
       Toplevel.Def(outputfun, BlockLit(tparams, cparams, vparams.appended(ValueParam(ctxId, outerContextTpe)), bparams,
@@ -191,7 +187,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
     }
     val consId: Id = listDecl match{
       case Data(id, tparams, List(Constructor(nilId, niltparams, nilFields),Constructor(consId, constparams, consfields))) => consId //TODO: could this be less ugly?
-      case _ => Context.panic("should have failed above while finding List or the pattern is incorrect")
+      case _ => Context.panic("should have failed above while finding List")
     }
     context match {
       case TransformContext.Outer(id) => (TailContext.Outer(id), None)
@@ -211,9 +207,6 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
   private def trmc(block: Block, functionLinks: Map[Id, Id], DC: DeclarationContext)(using Context): Block = block match {
     case effekt.core.Block.BlockVar(id, annotatedTpe, annotatedCapt) => block
     case effekt.core.Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-      //      val ctxDecl: Declaration = DC.declarations.find(_.id.name.name == "HoleContext").getOrElse {
-      //        Context.panic(s"No declaration found for HoleContext.")
-      //      }
       val outerContextTpe = ValueType.Data(builtins.ContextSymbol, List(body.tpe, body.tpe)) //TODO: parameters, if unequal
       val ctxId = Id("ctx")
       BlockLit(tparams, cparams, vparams.appended(ValueParam(ctxId, outerContextTpe)), bparams,
@@ -232,7 +225,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
           trmc(body,  context, outerContextTpe, updatedLinks, DC))) 
     case Stmt.Let(id, binding, body) => Stmt.Let(id, binding, trmc(body, context, outerContextTpe, functionLinks, DC))
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => Stmt.ImpureApp(id, callee, targs, vargs, bargs, trmc(body,  context, outerContextTpe, functionLinks, DC))
-    case Stmt.Return(expr) => reify(stmt, context,  outerContextTpe, functionLinks, DC) //probably works every time, original function must still exist in case inputfun is free in expr
+    case Stmt.Return(expr) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
     case Stmt.Val(id, binding, body) => trmc(binding,  TransformContext.Val(id,body,context), outerContextTpe, functionLinks, DC)
     case Stmt.App(callee, targs, vargs, bargs) => callee match {
       case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
@@ -247,24 +240,24 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
                     transformed,
                     Function(tparams, cparams, vparams.appended(calledContextTpe), bparams, result), annotatedCapt),//TODO:capt? 
                   targs,
-                  vargs.appended(innerReify(init, outerContextTpe, stmt.tpe, DC)), //is stmt.tpe always the correct resType?
+                  vargs.appended(innerReify(init, outerContextTpe, stmt.tpe, DC)), //TODO: is stmt.tpe always the correct resType?
                   bargs)
                 rest match {
                   case Some(rest) => reify(inner, rest,  outerContextTpe, functionLinks, DC)
                   case None => inner
                 }
               case _ => Context.panic("in an App() Statement a Function should be called")
-            }
-            // unknown calls, e.g. function arguments of higher order functions
+            } 
+          // unknown calls, e.g. function arguments of higher order functions
           case None => reify(stmt, context,  outerContextTpe, functionLinks, DC)
         }
       case Block.BlockLit(tparams, cparams, vparams, bparams, body) => reify(stmt, context,  outerContextTpe, functionLinks, DC) //TODO: do BLockLit, Unbox and New actually happen?
       case Block.Unbox(pure) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
       case Block.New(impl) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
     }
-    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => reify(stmt, context, outerContextTpe, functionLinks, DC)
     case Stmt.If(cond, thn, els) =>
-      Stmt.If(cond, //same caveat as Return()
+      Stmt.If(cond,
         trmc(thn,  context, outerContextTpe, functionLinks, DC),
         trmc(els,  context, outerContextTpe, functionLinks, DC))
     case Stmt.Match(scrutinee, annotatedTpe, clauses, default) =>
@@ -280,10 +273,10 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
         }
       )
     case Stmt.Region(body) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
-    case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, trmc(body,  context, outerContextTpe, functionLinks, DC))
-    case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, init, capture, trmc(body,  context, outerContextTpe, functionLinks, DC))
-    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => Stmt.Get(id, annotatedTpe, ref, annotatedCapt, trmc(body,  context, outerContextTpe, functionLinks, DC))
-    case Stmt.Put(ref, annotatedCapt, value, body) => Stmt.Put(ref, annotatedCapt, value, trmc(body,  context, outerContextTpe, functionLinks, DC))
+    case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, trmc(body, context, outerContextTpe, functionLinks, DC))
+    case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, init, capture, trmc(body, context, outerContextTpe, functionLinks, DC))
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) => Stmt.Get(id, annotatedTpe, ref, annotatedCapt, trmc(body, context, outerContextTpe, functionLinks, DC))
+    case Stmt.Put(ref, annotatedCapt, value, body) => Stmt.Put(ref, annotatedCapt, value, trmc(body, context, outerContextTpe, functionLinks, DC))
     case Stmt.Reset(body) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
     case Stmt.Shift(prompt, k, body) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
     case Stmt.Resume(k, body) => reify(stmt, context,  outerContextTpe, functionLinks, DC)
@@ -307,7 +300,7 @@ object TRMC extends Phase[CoreTransformed, CoreTransformed]{
   }
 
   def innerReify(context: TailContext, outerContextTpe: ValueType, resType: ValueType, DC: DeclarationContext)(using Context): Expr = context match {
-    case TailContext.Empty => PureApp(blockVarFromExternDef("ctx_emptyContext", DC),List(resType),Nil) 
+    case TailContext.Empty => PureApp(blockVarFromExternDef("ctx_emptyContext", DC), List(resType), Nil) 
     case TailContext.Outer(id) => Expr.ValueVar(id, outerContextTpe)
     case TailContext.Make(data, tag, targs, before, after) => MakeContext(data, tag, targs, before, after)
     case TailContext.Compose(first, second) => 
