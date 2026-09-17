@@ -9,3 +9,32 @@ jobs:
     with:
       # no automatic reruns on PRs: flaky tests should annoy us into fixing them
       max-attempts: 1
+
+  community-build:
+    name: "Community Build"
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: 'true'
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            accept-flake-config = true
+
+      - name: Set up nix-fast-build
+        run: nix profile install nixpkgs#nix-fast-build
+
+      - name: Lock the community projects at their current state
+        run: nix flake lock
+
+      - name: Build Effekt with Nix
+        run: nix-fast-build --no-nom --skip-cached --flake '.#packages.x86_64-linux.effekt'
+
+      - name: Build community projects with given Effekt
+        run: nix-fast-build --no-nom --skip-cached --flake '.#packages.x86_64-linux'
