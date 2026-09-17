@@ -4,23 +4,22 @@ on:
   pull_request:
 
 jobs:
-  # XXX: disabled for quicker testing
-  # tests:
-  #   uses: ./.github/workflows/tests.yml
-  #   with:
-  #     # no automatic reruns on PRs: flaky tests should annoy us into fixing them
-  #     max-attempts: 1
+  tests:
+    uses: ./.github/workflows/tests.yml
+    with:
+      # no automatic reruns on PRs: flaky tests should annoy us into fixing them
+      max-attempts: 1
 
   community-build:
     name: "Community Build"
-    # needs: tests # XXX: disabled for quicker testing
+    needs: tests
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
         with:
-          submodules: 'true' # the flake builds from `self`, which needs `kiama`
+          submodules: 'true'
 
       - name: Install Nix
         uses: cachix/install-nix-action@v31
@@ -34,8 +33,8 @@ jobs:
       - name: Lock the community projects at their current state
         run: nix flake lock
 
-      - name: Build the Effekt compiler
+      - name: Build Effekt with Nix
         run: nix-fast-build --no-nom --skip-cached --flake '.#packages.x86_64-linux.effekt'
 
-      - name: Build the community against it
+      - name: Build community projects with given Effekt
         run: nix-fast-build --no-nom --skip-cached --flake '.#packages.x86_64-linux'
