@@ -67,7 +67,7 @@ trait Driver { outer =>
             }
 
             // we are in one of four exclusive modes: Documenter, LSPServer, Compile, Run
-            if (config.documenter()) { documenter(source, config)(context) }
+            if (config.documenter()) { documenter(source, config)(using context) }
             else if (config.server()) { compiler.runFrontend(src) }
             else if (config.interpret()) { compile() foreach runner.eval }
             else if (config.build()) { compile() foreach runner.build }
@@ -88,11 +88,11 @@ trait Driver { outer =>
             context.info("  at " + line)
           }
       } finally {
-        outputTimes(src, config)(context)
-        showIR(src, config)(context)
-        writeIRs(src, config)(context)
+        outputTimes(src, config)(using context)
+        showIR(src, config)(using context)
+        writeIRs(src, config)(using context)
         // This reports error messages
-        afterCompilation(src, config)(context)
+        afterCompilation(src, config)(using context)
       }
   }
 

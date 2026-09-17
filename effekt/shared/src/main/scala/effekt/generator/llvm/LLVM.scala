@@ -40,12 +40,12 @@ class LLVM extends Compiler[String] {
   // The Compilation Pipeline
   // ------------------------
   // Source => Core => Machine => LLVM
-  lazy val Compile = steps.afterCore andThen Machine map {
+  lazy val Compile = steps.afterCore `andThen` Machine map {
     case (mod, main, prog) => (mod, llvm.Transformer.transform(prog))
   }
 
   lazy val Core = Phase.cached("core") {
-    Frontend andThen Middleend
+    Frontend `andThen` Middleend
   }
 
 
@@ -56,8 +56,8 @@ class LLVM extends Compiler[String] {
     // 1. Split off Deadcode from Optimizer
     // 2. Do Show (hope it still runs)
     // 3. Run Optimizer
-    val afterCore = allToCore(Core) andThen Aggregate andThen optimizer.Deadcode andThen core.Show andThen core.Mono andThen optimizer.Optimizer
-    val afterMachine = afterCore andThen Machine map { case (mod, main, prog) => prog }
+    val afterCore = allToCore(Core) `andThen` Aggregate `andThen` optimizer.Deadcode `andThen` core.Show `andThen` core.Mono `andThen` optimizer.Optimizer
+    val afterMachine = afterCore `andThen` Machine map { case (mod, main, prog) => prog }
     val afterLLVM = afterMachine map {
       case machine.Program(decls, defns, entry) =>
         // we don't print declarations here.

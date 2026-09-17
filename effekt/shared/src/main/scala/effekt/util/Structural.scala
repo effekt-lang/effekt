@@ -256,7 +256,7 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
     // Expr
     val fieldTypes: List[TypeRepr] = fields.map { f => tpt.memberType(f) }
     // e: Expr
-    val fieldSym = (fields zip fieldTypes).map { case (f, tpt) => Symbol.newBind(owner, f.name, Flags.Local, tpt) }
+    val fieldSym = (fields zip fieldTypes).map { case (f, tpt) => Symbol.newBind(owner, f.name, Flags.EmptyFlags, tpt) }
     // e @ _
     val bindFields = (fieldSym zip fieldTypes).map { case (f, tpt) => Bind(f, Wildcard()) }
 
@@ -274,7 +274,7 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
         Block(Nil, Apply(constructor, rewrittenFields)))
     } else {
       // case e @ Return.unapply(...) => e
-      val e = Symbol.newBind(owner, "e", Flags.Local, tpt)
+      val e = Symbol.newBind(owner, "e", Flags.EmptyFlags, tpt)
       CaseDef(Bind(e, TypedOrTest(Unapply(destructor, Nil, bindFields), TypeIdent(typeSym))), None,
         Block(Nil, Ref(e)))
     }
@@ -282,7 +282,7 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
   // case e: Expr => rewrite(e)
   def rewriteCaseTrait(typeSym: Symbol, owner: Symbol): CaseDef = {
     val tpt = typeSym.typeRef
-    val e = Symbol.newBind(owner, "e", Flags.Local, tpt)
+    val e = Symbol.newBind(owner, "e", Flags.EmptyFlags, tpt)
 
     // case e @ (_: Expr) => rewrite(e)
     CaseDef(Bind(e, Typed(Wildcard(), TypeIdent(typeSym))), None,
@@ -293,7 +293,7 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
   def rewriteCaseObject(typeSym: Symbol, owner: Symbol): CaseDef = {
     val tpe = Singleton(Ref(typeSym))
     val tpt = typeSym.termRef
-    val e = Symbol.newBind(owner, "e", Flags.Local, tpt)
+    val e = Symbol.newBind(owner, "e", Flags.EmptyFlags, tpt)
 
     // TODO this is not working, yet. It is still generating "Unreachable case".
     report.errorAndAbort(s"Case objects are not yet supported by structural rewrites: ${typeSym}")
@@ -341,7 +341,7 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
     // Expr
     val fieldTypes: List[TypeRepr] = fields.map { f => tpt.memberType(f) }
     // e: Expr
-    val fieldSym = (fields zip fieldTypes).map { case (f, tpt) => Symbol.newBind(owner, f.name, Flags.Local, tpt) }
+    val fieldSym = (fields zip fieldTypes).map { case (f, tpt) => Symbol.newBind(owner, f.name, Flags.EmptyFlags, tpt) }
     // e @ _
     val bindFields = (fieldSym zip fieldTypes).map { case (f, tpt) => Bind(f, Wildcard()) }
 
@@ -360,7 +360,7 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
 
   def queryCaseTrait(sym: Symbol, info: QueryInfo, owner: Symbol): CaseDef = {
     val tpt = sym.typeRef
-    val e = Symbol.newBind(owner, "e", Flags.Local, tpt)
+    val e = Symbol.newBind(owner, "e", Flags.EmptyFlags, tpt)
 
     // case e @ (_: Expr) => query(e)
     CaseDef(Bind(e, Typed(Wildcard(), TypeIdent(sym))), None,
@@ -412,14 +412,16 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
 
   // { (x: [[from]]) => [[body]](x) : [[to]] }
   def makeClosure(from: TypeRepr, to: TypeRepr, owner: Symbol, body: (Symbol, Term) => Term): Term = {
-    val methodSym = Symbol.newMethod(owner, rewriteName,
-      MethodType(List("t"))(m => List(from), m => to))
-    Block(List(
-      DefDef(methodSym, {
-        case List(List(t: Term)) => Some(body(methodSym, t))
-        case _ => ???
-      })
-    ), Closure(Ref(methodSym), None))
+    val mtpe =
+      MethodType(List("t"))(
+        _ => List(from),
+        _ => to
+      )
+  
+    Lambda(owner, mtpe, {
+      case (methodSym, List(t: Term)) => body(methodSym, t)
+      case _ => report.errorAndAbort("Unexpected lambda parameters")
+    })
   }
 }
 

@@ -169,7 +169,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               usingCapture(capt)
               TState.extractType(btpe)
           }
-          val Result(_, eff) = expr checkAgainst stTpe
+          val Result(_, eff) = expr `checkAgainst` stTpe
           Result(TUnit, eff)
       }
 
@@ -509,7 +509,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
               val Result(bodyType, bodyEffs) = Context.bindingCapabilities(d, capabilities) {
                 flowingInto(bodyRegion) {
-                  body checkAgainst tpe
+                  body `checkAgainst` tpe
                 }
               }
 
@@ -554,7 +554,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               }
               Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
 
-              body checkAgainst ret
+              body `checkAgainst` ret
           }
 
           handlerEffects = handlerEffects ++ effs
@@ -716,7 +716,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val stCapt = CaptureSet(sym.capture)
 
         val Result(tpeBind, effBind) = d.symbol.tpe match {
-          case Some(t) => binding checkAgainst t
+          case Some(t) => binding `checkAgainst` t
           case None    => checkStmt(binding, None)
         }
         val stTpe = TState(tpeBind)
@@ -857,7 +857,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
                 // block parameters and capabilities for effects are assumed bound
                 val Result(tpe, effs) = Context.bindingCapabilities(d, capabilities) {
-                   Context in { body checkAgainst annotated.result }
+                   Context in { body `checkAgainst` annotated.result }
                 }
                 Context.annotateInferredType(d, tpe)
                 Context.annotateInferredEffects(d, effs.toEffects)
@@ -904,7 +904,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case d @ source.ValDef(id, annot, binding, doc, span) =>
         val Result(t, effBinding) = d.symbol.tpe match {
           case Some(t) =>
-            val Result(_, eff) = binding checkAgainst t
+            val Result(_, eff) = binding `checkAgainst` t
             // use annotated, not inferred type
             Result(t, eff)
           case None => checkStmt(binding, None)
@@ -931,7 +931,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.bind(sym, stCapt)
 
         val Result(tpeBind, effBind) = d.symbol.tpe match {
-          case Some(t) => binding checkAgainst t
+          case Some(t) => binding `checkAgainst` t
           case None    => checkStmt(binding, None)
         }
         val stTpe = TState(tpeBind)
@@ -1029,7 +1029,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // (4) Check type annotations against declaration
       val valueTypes = (vparams zip vps) map {
         case (param, expected) =>
-          val adjusted = typeSubst substitute expected
+          val adjusted = typeSubst `substitute` expected
           // check given matches the expected, if given at all
           val tpe = param.symbol.tpe.map { got =>
             matchDeclared(got, adjusted, param);
@@ -1042,7 +1042,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       val blockTypes = (bparams zip bps) map {
         case (param, expTpe) =>
-          val adjusted = typeSubst substitute expTpe
+          val adjusted = typeSubst `substitute` expTpe
           val sym = param.symbol
           // check given matches the expected, if given at all
           val got = sym.tpe.map { got =>
@@ -1055,7 +1055,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       // (4) Bind capabilities for all effects "handled" by this function
-      val effects: ConcreteEffects = typeSubst substitute effs
+      val effects: ConcreteEffects = typeSubst `substitute` effs
       val capabilities = effects.canonical.map { tpe => Context.freshCapabilityFor(tpe) }
 
       // (5) Substitute capture params
@@ -1065,13 +1065,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // (6) Substitute both types and captures into expected return type
       val subst = typeSubst ++ captSubst
 
-      val expectedReturn = subst substitute tpe1
+      val expectedReturn = subst `substitute` tpe1
 
       // (7) Check function body
       val bodyRegion = Context.freshCaptVar(CaptUnificationVar.AnonymousFunctionRegion(arg))
 
       val Result(bodyType, bodyEffs) = Context.bindingCapabilities(decl, capabilities) {
-         flowingInto(bodyRegion) { body checkAgainst expectedReturn }
+         flowingInto(bodyRegion) { body `checkAgainst` expectedReturn }
       }
 
       usingCaptureWithout(bodyRegion) { captParams }

@@ -418,7 +418,7 @@ object TransformerCps extends Transformer {
 
     case cps.Stmt.Invoke(callee, method, vargs, bargs, ks, k) =>
       val args = vargs.map(toJS) ++ bargs.map(argumentToJS) ++ List(toJS(ks), toJS(k))
-      pure(js.Return(MethodCall(toJS(callee), memberNameRef(method), args:_*)) :: Nil)
+      pure(js.Return(MethodCall(toJS(callee), memberNameRef(method), args*)) :: Nil)
 
     // const r = REGION(ks); body
     case cps.Stmt.Region(id, ks, body) =>

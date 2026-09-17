@@ -200,17 +200,17 @@ trait Compiler[Executable] {
      * Parses a file to a syntax tree
      * [[Source]] --> [[Parsed]]
      */
-    Parser andThen
+    Parser `andThen`
       /**
        * Performs name analysis and associates Id-trees with symbols
        * [[Parsed]] --> [[NameResolved]]
        */
-      Namer andThen
+      Namer `andThen`
       /**
        * Explicit box transformation
        * [[NameResolved]] --> [[NameResolved]]
        */
-      UnboxInference andThen
+      UnboxInference `andThen`
       /**
        * Wellformedness checks (exhaustivity, non-escape)
        * [[Typechecked]] --> [[Typechecked]]
@@ -222,22 +222,22 @@ trait Compiler[Executable] {
    * Frontend
    */
   val Frontend = Phase.cached("frontend") {
-    ParserUntilTyper andThen
+    ParserUntilTyper `andThen`
       /**
        * Wellformedness checks (exhaustivity, non-escape)
        *   [[Typechecked]] --> [[Typechecked]]
        */
-      Wellformedness andThen
+      Wellformedness `andThen`
       /**
        * Resolves `extern`s for the current backend
        * [[Typechecked]] --> [[Typechecked]]
        */
-      ResolveExternDefs andThen
+      ResolveExternDefs `andThen`
       /**
        * Uses annotated effects to translate to explicit capability passing
        * [[Typechecked]] --> [[Typechecked]]
        */
-      ExplicitCapabilities andThen
+      ExplicitCapabilities `andThen`
       /**
        * Computes and annotates the capture of each subexpression
        * [[Typechecked]] --> [[Typechecked]]
