@@ -202,6 +202,17 @@ class CpsTests extends munit.FunSuite {
     })
   }
 
+  test("eta-reduction preserves callees bound by the function") {
+    val f = Id("f")
+    val x = Id("x")
+    for callee <- List(f, x) do {
+      val input = Stmt.Def(f, List(x),
+        Stmt.App(callee, List(Expr.Variable(x))),
+        Stmt.Return(List(Expr.Variable(f))))
+      assertEquals(Simplifier.rewrite(input), input)
+    }
+  }
+
   test("function usage of an object excludes its lexical remainder") {
     val module = parse("""
       def main(k) {
