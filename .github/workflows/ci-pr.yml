@@ -9,3 +9,29 @@ jobs:
     with:
       # no automatic reruns on PRs: flaky tests should annoy us into fixing them
       max-attempts: 1
+
+  community-build:
+    name: "Community Build"
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: 'true' # the flake builds from `self`, which needs `kiama`
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            accept-flake-config = true
+
+      - name: Set up nix-fast-build
+        run: nix profile install nixpkgs#nix-fast-build
+
+      - name: Build the Effekt compiler
+        run: nix-fast-build --no-nom --skip-cached --flake '.#packages.x86_64-linux.effekt'
+
+      - name: Build the community against it
+        run: nix-fast-build --no-nom --skip-cached --flake '.#packages.x86_64-linux'
