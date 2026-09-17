@@ -12,7 +12,7 @@ jobs:
 
   community-build:
     name: "Community Build"
-    needs: tests
+    # needs: tests # XXX: disabled for quicker testing
     runs-on: ubuntu-latest
     permissions:
       contents: read
