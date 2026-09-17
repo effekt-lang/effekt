@@ -21,11 +21,6 @@ jobs:
         with:
           submodules: 'true' # the flake builds from `self`, which needs `kiama`
 
-      - name: Fetch github over https
-        run: |
-          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
-
       - name: Install Nix
         uses: cachix/install-nix-action@v31
         with:
@@ -36,13 +31,7 @@ jobs:
         run: nix profile install nixpkgs#nix-fast-build
 
       - name: Build the Effekt compiler
-        run: |
-          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
-          nix-fast-build --no-nom --skip-cached --flake '.#packages.x86_64-linux.effekt'
+        run: nix-fast-build --no-nom --skip-cached --flake '.#packages.x86_64-linux.effekt'
 
       - name: Build the community against it
-        run: |
-          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
-          nix-fast-build --no-nom --skip-cached --flake '.#packages.x86_64-linux'
+        run: nix-fast-build --no-nom --skip-cached --flake '.#packages.x86_64-linux'
