@@ -21,6 +21,11 @@ jobs:
         with:
           submodules: 'true' # the flake builds from `self`, which needs `kiama`
 
+      - name: Fetch github over https
+        run: |
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+
       - name: Install Nix
         uses: cachix/install-nix-action@v31
         with:
