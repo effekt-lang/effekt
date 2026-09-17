@@ -527,8 +527,7 @@ object SafeEntries {
 
     /** Strongly connected components of the graph left after the currently
      *  selected adapters cut their safe incoming edges. */
-    def components(): Vector[Vector[Node]] = {
-      val active = activeEdges
+    def components(active: Vector[Edge]): Vector[Vector[Node]] = {
       val outgoing = active.groupMap(_.source)(identity).withDefaultValue(Vector.empty)
       val incoming = active.groupMap(_.target)(_.source).withDefaultValue(Vector.empty)
 
@@ -579,11 +578,23 @@ object SafeEntries {
 
     def findCuts(): Set[Cut] = {
       val active = activeEdges
+      val found = components(active)
 
-      components().iterator.flatMap { component =>
-        val members = component.toSet
-        val internal = active.filter(edge =>
-          members.contains(edge.source) && members.contains(edge.target))
+      val componentOf = Array.fill(nextNode)(-1)
+      found.zipWithIndex.foreach { case (component, index) =>
+        component.foreach(node => componentOf(node.ordinal) = index)
+      }
+
+      val internalEdges = Array.fill(found.size)(mutable.ArrayBuffer.empty[Edge])
+      val incoming = Array.fill(nextNode)(0)
+      active.foreach { edge =>
+        val source = componentOf(edge.source.ordinal)
+        if source == componentOf(edge.target.ordinal) then internalEdges(source) += edge
+        if edge.safe then incoming(edge.target.ordinal) += 1
+      }
+
+      found.iterator.zipWithIndex.flatMap { case (component, index) =>
+        val internal = internalEdges(index)
         val cyclic = component.size > 1 || internal.exists(edge => edge.source eq edge.target)
         val positive = internal.exists(_.addsFrame)
         // Only first-class entries have a runtime function value whose direct
@@ -603,21 +614,27 @@ object SafeEntries {
           // every indirect invocation of its target. Prefer the former as the
           // least global calling-convention change. The remaining ordering is
           // only a deterministic tie-breaker; iteration removes every cycle.
-          safeEntries.iterator.flatMap(_.callSite).toVector.distinct
-            .sortBy(site => {
-              val siteEdges = safeEntries.filter(_.callSite.contains(site))
-              (siteEdges.map(_.source.ordinal).min, siteEdges.map(_.target.ordinal).min)
-            }).headOption
+          val sites = mutable.LinkedHashMap.empty[CallSite, (Int, Int)]
+          safeEntries.foreach { edge =>
+            edge.callSite.foreach { site =>
+              val source = edge.source.ordinal
+              val target = edge.target.ordinal
+              sites(site) = sites.get(site) match {
+                case Some((previousSource, previousTarget)) =>
+                  math.min(previousSource, source) -> math.min(previousTarget, target)
+                case None => source -> target
+              }
+            }
+          }
+          sites.iterator.minByOption(_._2).map(_._1)
             .map(Bounce.apply)
             .orElse {
               // Adapting a node cuts every safe incoming edge to it. Choose
               // the node with the smallest such footprint in the current
               // graph; this preserves the greatest number of immediate value
               // entries. Ordinal is merely a deterministic tie-breaker.
-              val incoming = active.iterator.filter(_.safe).toVector
-                .groupMapReduce(_.target)(_ => 1)(_ + _)
               Some(Adapt(safeEntries.iterator.map(_.target).toSet.minBy(node =>
-                (incoming.getOrElse(node, 0), node.ordinal))))
+                (incoming(node.ordinal), node.ordinal))))
             }
         } else None
       }.toSet

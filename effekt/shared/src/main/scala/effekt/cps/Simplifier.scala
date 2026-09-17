@@ -10,8 +10,9 @@ object Simplifier {
 
     case Stmt.Def(id, params, body, rest) =>
       rewrite(body) match {
-        // eta-reduction
-        case Stmt.App(id2, args) if args == params.map(Expr.Variable(_)) =>
+        // Eta-reduction requires the callee to be in scope outside the function.
+        case Stmt.App(id2, args)
+            if id2 != id && !params.contains(id2) && args == params.map(Expr.Variable(_)) =>
           Stmt.Let(id, Expr.Variable(id2), rewrite(rest))
         case newBody =>
           Stmt.Def(id, params, newBody, rewrite(rest))

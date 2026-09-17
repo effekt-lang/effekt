@@ -17,6 +17,8 @@ object TransformerCps extends Transformer {
   val RESET = js.Variable(JSName("RESET"))
   val SHIFT = js.Variable(JSName("SHIFT"))
   val RESUME = js.Variable(JSName("RESUME"))
+  val VAR = js.Variable(JSName("VAR"))
+  val REGION = js.Variable(JSName("REGION"))
   val BOUNDARY_CONTINUATION = JSName("__boundary")
 
   // The `Return`/`Call` nodes carry a vector of result values so the CPS IR can
@@ -946,7 +948,7 @@ object TransformerCps extends Transformer {
 
     case cps.Stmt.Region(id, ks, rest) =>
       Binding { k =>
-        js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("newRegion"))) ::
+        js.Const(nameDef(id), js.Call(REGION, List(toJS(ks)))) ::
           toJS(rest).run(k)
       }
 
@@ -964,7 +966,7 @@ object TransformerCps extends Transformer {
 
     case cps.Stmt.Var(id, init, ks, rest) =>
       Binding { k =>
-        js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("fresh"), toValueJS(init))) ::
+        js.Const(nameDef(id), js.Call(VAR, List(toValueJS(init), toJS(ks)))) ::
           toJS(rest).run(k)
       }
 

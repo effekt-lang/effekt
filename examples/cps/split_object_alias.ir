@@ -7,7 +7,7 @@ def main(ks, k) {
   k(v, ks)
 }
 
-// The AAM observes the same object through both bindings. Object splitting is
+// The flow analysis observes the same object through both bindings. Object splitting is
 // therefore independent of the syntactic name used as the receiver.
 /// ARITY_RAISE
 

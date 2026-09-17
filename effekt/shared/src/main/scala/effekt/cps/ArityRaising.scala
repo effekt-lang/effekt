@@ -4,9 +4,9 @@ package cps
 import core.{ Id, ValueType }
 import scala.collection.mutable
 
-/** Monovariant unbundling of product representations.
+/** Monovariant arity raising.
  *
- *  One instance of [[AbstractMachine]] determines where a value has one known
+ *  One flow analysis determines where a value has one known
  *  constructor representation. Matches are representation demands: merely
  *  knowing a value's constructor does not justify changing its convention.
  *  Since compositional call remainders are reified as ordinary continuations,
@@ -34,7 +34,6 @@ object ArityRaising {
       }.mkString("\n")
   }
 
-  private case class Flow(var targets: Set[Id], var open: Boolean)
   private case class Plan(
     analysis: Analysis,
     calls: Map[Site[Stmt], Entry],
@@ -53,151 +52,30 @@ object ArityRaising {
   private def showEntry(entry: Entry): String =
     entry.map(showShape).mkString("<", ", ", ">")
 
-  /** The complete analysis for this transformation. The abstract machine
-   *  collects values, direct address flows, and representation observations
-   *  in one run; no additional syntax traversal is necessary. */
-  private class RepresentationAnalysis(
+  /** Collect values and representation observations once, then solve for one
+   *  representation per monovariant calling convention. */
+  private def representationPlan(
     module: ModuleDecl,
     roots: Set[Id]
-  ) extends AbstractMachine(module) {
+  ): Plan = {
+    val analysis = new FlowAnalysis(module, Some(roots), reifyCalls = true)
+    import analysis.{ Address, Value }
+    val flows = analysis.callFlows
+    val demanded = analysis.demandedAddresses
+    val successors = analysis.addressFlows
 
-    type Property = Set[Address]
-    type Context = Unit
-
-    def bottom: Property = Set.empty
-    def external: Property = Set.empty
-    def join(left: Property, right: Property): Property = left ++ right
-    def literal(value: Any, annotatedType: core.ValueType): Property = Set.empty
-    def closure(value: Value.Closure, context: Unit): Property = Set.empty
-    def instance(value: Value.Object, context: Unit): Property = Set.empty
-    def constructor(value: Value.Constructor, context: Unit): Property = Set.empty
-    def initialContext: Unit = ()
-    def tick(
-      call: Option[Stmt],
-      callee: Value.Closure,
-      arguments: List[Values],
-      caller: Unit
-    ): Unit = ()
-
-    private val predecessors = mutable.Map.empty[Address, mutable.Set[Address]]
-    private val successors = mutable.Map.empty[Address, mutable.Set[Address]]
-    private val demanded = mutable.Set.empty[Address]
-    private val pendingDemand = mutable.Queue.empty[Address]
-
-    private def demand(addresses: IterableOnce[Address]): Unit = {
-      addresses.iterator.foreach { address =>
-        if demanded.add(address) then pendingDemand.enqueue(address)
-      }
-      while pendingDemand.nonEmpty do {
-        val address = pendingDemand.dequeue()
-        predecessors.get(address).foreach { sources =>
-          sources.foreach { source =>
-            if demanded.add(source) then pendingDemand.enqueue(source)
-          }
-        }
-      }
-    }
-
-    private def flow(source: Address, target: Address): Unit = {
-      val incoming = predecessors.getOrElseUpdate(target, mutable.Set.empty)
-      if incoming.add(source) then {
-        successors.getOrElseUpdate(source, mutable.Set.empty) += target
-        if demanded.contains(target) then demand(List(source))
-      }
-    }
-
-    /** Properties denote the address from which a value was just read. They
-     *  are transient: a write records the direct flow edge and stores only the
-     *  collecting value. */
-    override protected def readValue(address: Address, value: Values): Values =
-      value.copy(property = Set(address))
-
-    override protected def writeValue(address: Address, value: Values): Values = {
-      address match {
-        case _: Address.Binding => value.property.foreach(flow(_, address))
-        case _ => ()
-      }
-      value.copy(property = Set.empty)
-    }
-
-    private val topLevelParameters: Map[Id, List[Id]] = module.definitions.map {
-      case ToplevelDefinition.Def(id, params, _) => id -> params
-      case ToplevelDefinition.Val(id, ks, k, _) => id -> List(ks, k)
-    }.toMap
-
-    private val flows = mutable.Map.empty[Site[Stmt], Flow]
-    private val functions = mutable.Set.empty[Id]
-    private val objectBindings = mutable.Set.empty[Id]
-    private val calls = new java.util.IdentityHashMap[Stmt.Call, java.lang.Boolean]()
-
-    private def record(statement: Stmt, targets: Set[Id], open: Boolean): Unit = {
-      val flow = flows.getOrElseUpdate(site(statement), Flow(Set.empty, open = false))
-      flow.targets ++= targets
-      flow.open ||= open
-      functions ++= targets
-      statement match {
-        case call: Stmt.Call => calls.put(call, java.lang.Boolean.TRUE)
-        case _ => ()
-      }
-    }
-
-    override protected def observeApply(
-      statement: Stmt,
-      callee: Values,
-      targets: Set[Id],
-      arguments: List[Values],
-      context: Unit
-    ): Unit = record(statement, targets, callee.open)
-
-    override protected def observeInvoke(
-      statement: Stmt,
-      receiver: Values,
-      method: Id,
-      targets: Set[Id],
-      arguments: List[Values],
-      context: Unit
-    ): Unit = {
-      demand(receiver.property)
-      record(statement, targets, receiver.open)
-    }
-
-    override protected def observeMatch(
-      statement: Stmt.Match,
-      scrutinee: Values,
-      context: Unit
-    ): Unit = demand(scrutinee.property)
-
-    override protected def observeNew(
-      statement: Stmt.New,
-      instance: Values,
-      context: Unit
-    ): Unit = objectBindings += statement.id
-
-    override protected def entryPoints: List[(Id, List[Values])] = {
-      val initializers = module.definitions.collect {
-        case ToplevelDefinition.Val(id, _, _, _) => id
-      }.toSet
-      val entries = roots ++ module.exports ++ initializers
-      functions ++= entries
-      entries.toList.flatMap { id =>
-        topLevelParameters.get(id).map { params =>
-          id -> List.fill(params.size)(Values(Set.empty, open = true, Set.empty))
-        }
-      }
-    }
-
-    private def meet(left: Entry, right: Entry): Entry =
+    def meet(left: Entry, right: Entry): Entry =
       if left.size != right.size then Vector.fill(left.size)(Shape.Unknown)
       else left.zip(right).map { case (l, r) => if l == r then l else Shape.Unknown }
 
-    private def meet(left: Shape, right: Shape): Shape =
+    def meetShape(left: Shape, right: Shape): Shape =
       if left == right then left else Shape.Unknown
 
-    private def address(id: Id): Address = Address.Binding(id, ())
+    def address(id: Id): Address = Address.Binding(id)
 
-    private def preferred(address: Address): Shape = address match {
-      case Address.Binding(_, _) if demanded.contains(address) =>
-        val values = valueAt(address)
+    def preferred(address: Address): Shape = address match {
+      case Address.Binding(_) if demanded.contains(address) =>
+        val values = analysis.valueAt(address)
         if values.open || values.values.isEmpty then Shape.Unknown
         else {
           val constructors = values.values.collect {
@@ -213,154 +91,149 @@ object ArityRaising {
       case _ => Shape.Unknown
     }
 
-    private lazy val computed: Plan = {
-      run()
-
-      val continuationIds = mutable.Set.empty[Id]
-      val continuationEntries = mutable.Map.empty[Site[Stmt], Entry]
-      val iterator = calls.keySet().iterator()
-      while iterator.hasNext do {
-        val call = iterator.next()
-        reifiedContinuationOf(call).foreach { id =>
-          continuationIds += id
-          functions += id
-        }
+    val continuationIds = mutable.Set.empty[Id]
+    val continuationEntries = mutable.Map.empty[Site[Stmt], Entry]
+    val initializers = module.definitions.collect {
+      case ToplevelDefinition.Val(id, _, _, _) => id
+    }.toSet
+    val functions = mutable.Set.from(
+      analysis.calledFunctions ++ roots ++ module.exports ++ initializers)
+    val calls = analysis.compositionalCalls
+    calls.foreach { call =>
+      analysis.reifiedContinuationOf(call).foreach { id =>
+        continuationIds += id
+        functions += id
       }
-
-      val definitions = functions.iterator.flatMap { id =>
-        val parameters = parameterListsOf(id)
-        Option.when(parameters.nonEmpty)(id -> parameters)
-      }.toMap
-
-      val addresses = mutable.Set.empty[Address]
-      definitions.valuesIterator.flatten.flatten.foreach(id => addresses += address(id))
-      successors.foreach { case (source, targets) =>
-        addresses += source
-        addresses ++= targets
-      }
-
-      // Equality of calling conventions generates an equivalence relation on
-      // addresses. Solve availability on its quotient rather than repeatedly
-      // propagating agreement between individual parameters.
-      val parent = mutable.Map.from(addresses.iterator.map(a => a -> a))
-      val rank = mutable.Map.empty[Address, Int].withDefaultValue(0)
-
-      def find(address: Address): Address = {
-        val next = parent.getOrElseUpdate(address, address)
-        if next == address then address
-        else {
-          val root = find(next)
-          parent(address) = root
-          root
-        }
-      }
-
-      def union(left: Address, right: Address): Unit = {
-        val l = find(left)
-        val r = find(right)
-        if l != r then {
-          if rank(l) < rank(r) then parent(l) = r
-          else {
-            parent(r) = l
-            if rank(l) == rank(r) then rank(l) += 1
-          }
-        }
-      }
-
-      val forced = mutable.Set.empty[Address]
-      def agree(parameterLists: Iterable[List[Id]], open: Boolean): Unit = {
-        val lists = parameterLists.toList
-        if lists.nonEmpty then {
-          if open || lists.map(_.size).distinct.size != 1 then
-            lists.flatten.foreach(id => forced += address(id))
-          else lists.transpose.foreach { parameters =>
-            val members = parameters.iterator.map(address).toList.distinct
-            members.tail.foreach(union(members.head, _))
-          }
-        }
-      }
-
-      // Definitions sharing a name (notably operations of one interface) and
-      // all targets of an indirect call must expose one representation.
-      definitions.values.foreach(agree(_, open = false))
-      flows.values.foreach { flow =>
-        agree(flow.targets.iterator.flatMap(id => definitions.getOrElse(id, Nil)).toList,
-          flow.open)
-      }
-      addresses ++= forced
-
-      val classes = addresses.groupBy(find)
-      val representations = mutable.Map.from(classes.iterator.map { case (root, members) =>
-        val shapes = members.iterator.map { member =>
-          if forced.contains(member) then Shape.Unknown else preferred(member)
-        }
-        root -> shapes.reduce(meet)
-      })
-      val quotient = mutable.Map.empty[Address, mutable.Set[Address]]
-      successors.foreach { case (source, targets) =>
-        val from = find(source)
-        targets.foreach { target =>
-          val to = find(target)
-          if from != to then quotient.getOrElseUpdate(from, mutable.Set.empty) += to
-        }
-      }
-
-      // A split producer can be materialized for a boxed consumer. The
-      // converse is unavailable without introducing a new match, hence the
-      // directed source-to-target constraint.
-      val pending = mutable.Queue.from(classes.keys)
-      val scheduled = mutable.Set.from(classes.keys)
-      while pending.nonEmpty do {
-        val source = pending.dequeue()
-        scheduled -= source
-        quotient.get(source).foreach { targets =>
-          targets.foreach { target =>
-            val previous = representations(target)
-            val next = meet(previous, representations(source))
-            if next != previous then {
-              representations(target) = next
-              if scheduled.add(target) then pending.enqueue(target)
-            }
-          }
-        }
-      }
-
-      def entry(parameters: List[Id]): Entry =
-        parameters.map(id => representations.getOrElse(find(address(id)), Shape.Unknown)).toVector
-
-      val entries = definitions.iterator.flatMap { case (id, parameterLists) =>
-        parameterLists.map(entry).reduceOption(meet).map(id -> _)
-      }.toMap
-
-      val callEntries = flows.iterator.flatMap { case (callSite, flow) =>
-        val targetEntries = flow.targets.flatMap(entries.get)
-        Option.when(!flow.open && targetEntries.size == 1) {
-          callSite -> targetEntries.head
-        }
-      }.toMap
-
-      val callIterator = calls.keySet().iterator()
-      while callIterator.hasNext do {
-        val call = callIterator.next()
-        reifiedContinuationOf(call).flatMap(entries.get).foreach { entry =>
-          continuationEntries(site(call)) = entry
-        }
-      }
-
-      val splitObjects = objectBindings.filter(id => demanded.contains(address(id))).toSet
-
-      Plan(
-        Analysis(entries.toMap -- continuationIds),
-        callEntries,
-        continuationEntries.toMap,
-        splitObjects)
     }
 
-    def result: Plan = computed
+    val definitions = functions.iterator.flatMap { id =>
+      val parameters = analysis.parameterListsOf(id)
+      Option.when(parameters.nonEmpty)(id -> parameters)
+    }.toMap
+
+    val addresses = mutable.Set.empty[Address]
+    definitions.valuesIterator.flatten.flatten.foreach(id => addresses += address(id))
+    successors.foreach { case (source, targets) =>
+      addresses += source
+      addresses ++= targets
+    }
+
+    // Equality of calling conventions generates an equivalence relation on
+    // addresses. Solve availability on its quotient rather than repeatedly
+    // propagating agreement between individual parameters.
+    val parent = mutable.Map.from(addresses.iterator.map(a => a -> a))
+    val rank = mutable.Map.empty[Address, Int].withDefaultValue(0)
+
+    def find(address: Address): Address = {
+      val next = parent.getOrElseUpdate(address, address)
+      if next == address then address
+      else {
+        val root = find(next)
+        parent(address) = root
+        root
+      }
+    }
+
+    def union(left: Address, right: Address): Unit = {
+      val l = find(left)
+      val r = find(right)
+      if l != r then {
+        if rank(l) < rank(r) then parent(l) = r
+        else {
+          parent(r) = l
+          if rank(l) == rank(r) then rank(l) += 1
+        }
+      }
+    }
+
+    val forced = mutable.Set.empty[Address]
+    def agree(parameterLists: Iterable[List[Id]], open: Boolean): Unit = {
+      val lists = parameterLists.toList
+      if lists.nonEmpty then {
+        if open || lists.map(_.size).distinct.size != 1 then
+          lists.flatten.foreach(id => forced += address(id))
+        else lists.transpose.foreach { parameters =>
+          val members = parameters.iterator.map(address).toList.distinct
+          members.tail.foreach(union(members.head, _))
+        }
+      }
+    }
+
+    // Definitions sharing a name (notably operations of one interface) and
+    // all targets of an indirect call must expose one representation.
+    definitions.values.foreach(agree(_, open = false))
+    flows.values.foreach { flow =>
+      agree(flow.targets.iterator.flatMap(id => definitions.getOrElse(id, Nil)).toList,
+        flow.open)
+    }
+    addresses ++= forced
+
+    val classes = addresses.groupBy(find)
+    val representations: mutable.Map[Address, Shape] =
+      mutable.Map.from(classes.iterator.map { case (root, members) =>
+      val shapes: Iterator[Shape] = members.iterator.map { member =>
+        if forced.contains(member) then Shape.Unknown: Shape else preferred(member)
+      }
+      root -> shapes.reduce(meetShape)
+    })
+    val quotient = mutable.Map.empty[Address, mutable.Set[Address]]
+    successors.foreach { case (source, targets) =>
+      val from = find(source)
+      targets.foreach { target =>
+        val to = find(target)
+        if from != to then quotient.getOrElseUpdate(from, mutable.Set.empty) += to
+      }
+    }
+
+    // A split producer can be materialized for a boxed consumer. The
+    // converse is unavailable without introducing a new match, hence the
+    // directed source-to-target constraint.
+    val pending = mutable.Queue.from(classes.keys)
+    val scheduled = mutable.Set.from(classes.keys)
+    while pending.nonEmpty do {
+      val source = pending.dequeue()
+      scheduled -= source
+      quotient.get(source).foreach { targets =>
+        targets.foreach { target =>
+          val previous = representations(target)
+          val next = meetShape(previous, representations(source))
+          if next != previous then {
+            representations(target) = next
+            if scheduled.add(target) then pending.enqueue(target)
+          }
+        }
+      }
+    }
+
+    def entry(parameters: List[Id]): Entry =
+      parameters.map(id => representations.getOrElse(find(address(id)), Shape.Unknown)).toVector
+
+    val entries = definitions.iterator.flatMap { case (id, parameterLists) =>
+      parameterLists.map(entry).reduceOption(meet).map(id -> _)
+    }.toMap
+
+    val callEntries = flows.iterator.flatMap { case (callSite, flow) =>
+      val targetEntries = flow.targets.flatMap(entries.get)
+      Option.when(!flow.open && targetEntries.size == 1) {
+        callSite -> targetEntries.head
+      }
+    }.toMap
+
+    calls.foreach { call =>
+      analysis.reifiedContinuationOf(call).flatMap(entries.get).foreach { entry =>
+        continuationEntries(site(call)) = entry
+      }
+    }
+
+    Plan(
+      Analysis(entries.toMap -- continuationIds),
+      callEntries,
+      continuationEntries.toMap,
+      analysis.splitObjects)
   }
 
   def analyze(module: ModuleDecl, entrypoints: Set[Id]): Analysis =
-    RepresentationAnalysis(module, entrypoints).result.analysis
+    representationPlan(module, entrypoints).analysis
 
   private enum KnownValue {
     case Whole(expression: Expr)
@@ -651,7 +524,7 @@ object ArityRaising {
   }
 
   def transform(module: ModuleDecl, entrypoints: Set[Id]): ModuleDecl = {
-    val plan = RepresentationAnalysis(module, entrypoints).result
+    val plan = representationPlan(module, entrypoints)
     Rewriter(plan).module(module)
   }
 }

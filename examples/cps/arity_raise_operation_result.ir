@@ -14,7 +14,7 @@ def main(ks, k) {
 }
 
 // Result representations flow through higher-order calls as part of the same
-// AAM solution. The unboxed pair remains in CPS because JavaScript's direct
+// flow analysis. The unboxed pair remains in CPS because JavaScript's direct
 // calling convention returns one value, whereas CPS supports multiple values
 // without allocating a tuple.
 /// ARITY_RAISE
