@@ -14,9 +14,8 @@ def main(ks, k) {
 }
 
 // Result representations flow through higher-order calls as part of the same
-// flow analysis. The unboxed pair remains in CPS because JavaScript's direct
-// calling convention returns one value, whereas CPS supports multiple values
-// without allocating a tuple.
+// flow analysis. The direct calling convention packages the unboxed pair only
+// while it crosses a JavaScript function boundary.
 /// ARITY_RAISE
 
 def produce(x, ks1, k1) {
@@ -32,4 +31,5 @@ def main(ks, k) {
 
 /// CALLING_CONVENTIONS
 
--
+direct
+  produce = 0 adapter

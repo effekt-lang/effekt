@@ -16,18 +16,13 @@ def main(value, ks, k) {
 /// JAVASCRIPT
 
 function main_0(value_0, ks_0, k_0) {
-  function k_1(a_0, b_0, ks_1) {
-    const s_0 = add_0(a_0, b_0);
-    return k_0(s_0, ks_0);
+  let a_0 = undefined;
+  let b_0 = undefined;
+  dup_return_0: {
+    const inc_0 = add_0(value_0, 1);
+    a_0 = value_0;
+    b_0 = inc_0;
   }
-  let x_0 = undefined;
-  let ks_2 = undefined;
-  let k_2 = undefined;
-  dup_0: {
-    x_0 = value_0;
-    ks_2 = ks_0;
-    k_2 = k_1;
-  }
-  const inc_0 = add_0(x_0, 1);
-  return k_2(x_0, inc_0, ks_2);
+  const s_0 = add_0(a_0, b_0);
+  return k_0(s_0, ks_0);
 }

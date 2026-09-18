@@ -58,6 +58,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Block(Some(label), stmts)     => toDoc(label) <> ":" <+> jsBlock(stmts map toDoc)
     case Block(None, stmts)            => jsBlock(stmts map toDoc)
     case Return(expr)                  => "return" <+> toDoc(expr) <> ";"
+    case ReturnVoid                    => "return;"
     case ExprStmt(expr)                => toDoc(expr) <> ";"
     case Const(id, expr)               => "const" <+> toDoc(id) <+> "=" <+> toDoc(expr) <> ";"
     case Let(id, expr)                 => "let" <+> toDoc(id) <+> "=" <+> toDoc(expr) <> ";"
