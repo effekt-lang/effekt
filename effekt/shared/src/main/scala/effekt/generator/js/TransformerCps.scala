@@ -21,25 +21,30 @@ object TransformerCps extends Transformer {
   val REGION = js.Variable(JSName("REGION"))
   val BOUNDARY_CONTINUATION = JSName("__boundary")
 
-  // The `Return`/`Call` nodes carry a vector of result values so the CPS IR can
-  // express multi-value returns. JavaScript has no native multi-value return,
-  // so materializing a result vector into JS is deferred to the arity-raising
-  // exploitation pass. Until that exists, every vector reaching lowering has
-  // exactly one element; these guards make that invariant explicit.
-  private def onlyResult(ids: List[Id]): Id = ids match {
-    case id :: Nil => id
-    case _ => sys.error(s"JavaScript backend cannot yet lower a multi-value call result: $ids")
-  }
-  private def onlyValue(values: List[cps.Expr]): cps.Expr = values match {
+  /** JavaScript's value-returning ABI: no payload for zero results, a scalar
+   *  for one result, and an array for several results. */
+  private def pack(values: List[js.Expr]): js.Expr = values match {
+    case Nil => js.Undefined
     case value :: Nil => value
-    case _ => sys.error(s"JavaScript backend cannot yet lower a multi-value return: $values")
+    case values => js.ArrayLiteral(values)
   }
+
+  private def bindNames(results: List[JSName], value: js.Expr): List[js.Stmt] = results match {
+    case Nil => List(js.ExprStmt(value))
+    case result :: Nil => List(js.Const(result, value))
+    case results => List(js.Const(
+      js.Pattern.Array(results.map(js.Pattern.Variable.apply)),
+      value))
+  }
+
+  private def bind(results: List[Id], value: js.Expr): List[js.Stmt] =
+    bindNames(results.map(nameDef), value)
 
   case class SecondClassDef(
     params: List[Id],
     loopified: Boolean,
     directBody: Option[cps.Stmt] = None,
-    directParameters: Map[Id, Int] = Map.empty)
+    directParameters: Map[Id, CallingConvention.FunctionSignature] = Map.empty)
 
   case class DispatchState(
     dispatch: Defunctionalization.ContinuationDispatch,
@@ -74,7 +79,7 @@ object TransformerCps extends Transformer {
     dispatches: Map[Id, DispatchState],
     renamedCaptures: Map[Id, Id],
     // Function values carried by these variables use the direct ABI.
-    directParameters: Map[Id, Int],
+    directParameters: Map[Id, CallingConvention.FunctionSignature],
     applying: Set[Id],
     directBody: Option[(Id, List[Id])],
     // Registers a value-returning body assigns before jumping to its label.
@@ -169,50 +174,73 @@ object TransformerCps extends Transformer {
         List(js.Function(nameDef(id), params.map(nameDef), body))
     }
 
-  /** Adapt a CPS function value to the value-returning ABI. */
-  private def toDirectFunction(callee: js.Expr, arity: Int): js.Expr = {
-    val arguments = List.fill(arity)(freshName("arg_"))
+  /** Run one CPS computation to its ordinary result vector. */
+  private def runCps(callee: js.Expr, arguments: List[js.Expr], results: Int): js.Expr = {
     val ks = freshName("ks_")
     val k = freshName("k_")
+    val resultNames = List.fill(results)(freshName("result_"))
+    val complete = if results == 1 then js.Variable(k) else
+      js.Lambda(
+        resultNames,
+        js.Return(js.Object(List(JSName("result") ->
+          pack(resultNames.map(js.Variable.apply))))))
     val computation = js.Lambda(
       List(ks, k),
       js.Return(js.Call(
         callee,
-        arguments.map(js.Variable.apply) ++ List(js.Variable(ks), js.Variable(k)))))
+        arguments ++ List(js.Variable(ks), complete))))
+    js.Call(RUN_TOPLEVEL, List(computation))
+  }
+
+  /** Adapt a CPS function value to the value-returning ABI. */
+  private def toDirectFunction(
+    callee: js.Expr,
+    signature: CallingConvention.FunctionSignature
+  ): js.Expr = {
+    val arguments = List.fill(signature.arguments)(freshName("arg_"))
     js.Lambda(
       arguments,
-      js.Return(js.Call(RUN_TOPLEVEL, List(computation))))
+      js.Return(runCps(callee, arguments.map(js.Variable.apply), signature.results)))
   }
 
   /** Adapt a value-returning function to the CPS ABI. The direct callee has a
    *  finite stack rank, and the continuation already has the stack-safe value
    *  representation, so this adapter need not introduce another bounce. */
-  private def toCpsFunction(callee: js.Expr, arity: Int): js.Expr = {
-    val arguments = List.fill(arity)(freshName("arg_"))
+  private def toCpsFunction(
+    callee: js.Expr,
+    signature: CallingConvention.FunctionSignature
+  ): js.Expr = {
+    val arguments = List.fill(signature.arguments)(freshName("arg_"))
     val ks = freshName("ks_")
     val k = freshName("k_")
-    val result = freshName("result_")
-    js.Lambda(arguments ++ List(ks, k), js.Block(None, List(
-      js.Const(result, js.Call(callee, arguments.map(js.Variable.apply))),
-      js.Return(js.Call(
-        js.Variable(k),
-        List(js.Variable(result), js.Variable(ks)))))))
+    val results = List.fill(signature.results)(freshName("result_"))
+    val call = js.Call(callee, arguments.map(js.Variable.apply))
+    js.Lambda(arguments ++ List(ks, k), js.Block(None,
+      bindNames(results, call) :+
+        js.Return(js.Call(js.Variable(k),
+          results.map(js.Variable.apply) :+ js.Variable(ks)))))
   }
 
   /** Coerce a function value to the direct ABI expected at a compositional
    *  call. Known direct definitions and direct parameters need no wrapper;
    *  an ordinary CPS value is run to completion locally. */
-  private def toDirectFunctionValue(value: cps.Expr, arity: Int)(using ctx: TransformerContext): js.Expr = value match {
+  private def toDirectFunctionValue(
+    value: cps.Expr,
+    signature: CallingConvention.FunctionSignature
+  )(using ctx: TransformerContext): js.Expr = value match {
     case cps.Expr.Variable(id) if ctx.callingConvention.isDirect(id) =>
-      val actual = ctx.callingConvention.original(id).params.size - 2
-      require(actual == arity, s"Direct function $id has arity $actual, expected $arity")
+      val arguments = ctx.callingConvention.original(id).params.size - 2
+      val results = ctx.callingConvention.resultArity(id)
+      require(arguments == signature.arguments && results.forall(_ == signature.results),
+        s"Direct function $id has signature ($arguments, $results), expected $signature")
       directResultRef(id)
     case cps.Expr.Variable(id) if ctx.directParameters.contains(id) =>
       val actual = ctx.directParameters(id)
-      require(actual == arity, s"Direct parameter $id has arity $actual, expected $arity")
+      require(actual == signature,
+        s"Direct parameter $id has signature $actual, expected $signature")
       valueRef(id)
     case _ =>
-      toDirectFunction(toValueJS(value), arity)
+      toDirectFunction(toValueJS(value), signature)
   }
 
   /** CPS-facing entry for a value-returning worker. Unknown calls enter this
@@ -220,16 +248,17 @@ object TransformerCps extends Transformer {
    *  selects the entry to break a synchronous cycle. */
   private def directAdapter(id: Id, params: List[Id], worker: JSName)(using ctx: TransformerContext): js.Stmt = {
     val List(ks, k) = ctx.callingConvention.original(id).params.takeRight(2).map(nameDef): @unchecked
-    val result = freshName("result_")
+    // A non-returning worker needs no result representation. If it ever did
+    // return, resuming with zero values is the least arbitrary fallback.
+    val results = List.fill(ctx.callingConvention.resultArity(id).getOrElse(0))(freshName("result_"))
     val workerArguments = params.zipWithIndex.map { case (param, position) =>
-      ctx.callingConvention.directParameterArity(id, position)
+      ctx.callingConvention.directParameterSignature(id, position)
         .fold(nameRef(param))(toDirectFunction(nameRef(param), _))
     }
     val workerCall = js.Call(js.Variable(worker), workerArguments)
-    val resume = js.Call(js.Variable(k), List(js.Variable(result), js.Variable(ks)))
-    val body = List(
-      js.Const(result, workerCall),
-      js.Return(resume))
+    val resume = js.Call(js.Variable(k),
+      results.map(js.Variable.apply) :+ js.Variable(ks))
+    val body = bindNames(results, workerCall) :+ js.Return(resume)
     val entry =
       if ctx.stackSafety.safeEntries.needsAdapter(id) then
         List(js.Return(js.Lambda(Nil, js.Block(None, body))))
@@ -248,13 +277,13 @@ object TransformerCps extends Transformer {
     continuation: Option[(JSName, JSName)] = None
   )(using ctx: TransformerContext): List[js.Stmt] = {
     val directParams = params
-    val parameterArities = directParams.zipWithIndex.flatMap { case (param, position) =>
-      ctx.callingConvention.directParameterArity(id, position).map(param -> _)
+    val parameterSignatures = directParams.zipWithIndex.flatMap { case (param, position) =>
+      ctx.callingConvention.directParameterSignature(id, position).map(param -> _)
     }.toMap
     val bodyCtx = functionBodyContext.copy(
       mutableParams = ctx.callingConvention.mutableParameters(id),
       renamedCaptures = ctx.renamedCaptures ++ renamings,
-      directParameters = ctx.directParameters ++ parameterArities,
+      directParameters = ctx.directParameters ++ parameterSignatures,
       directBody = Some((id, directParams)),
       directContinuation = continuation)
     val translated = toJS(body)(using bodyCtx).stmts
@@ -529,8 +558,9 @@ object TransformerCps extends Transformer {
    *  segment-boundary bounce. When it flows into an ordinary value position,
    *  expose the usual stack-safe function convention with a fixed arity.
    *
-   *  Continuations always receive a result and a meta-continuation. Functions
-   *  whose parameters were dropped simply ignore the extra arguments.
+   *  Continuations receive their result vector and a meta-continuation.
+   *  Functions whose parameters were dropped simply ignore the extra
+   *  arguments.
    */
   def toValueJS(e: cps.Expr)(using ctx: TransformerContext): js.Expr = e match {
     case Expr.Variable(id) if ctx.segmentEntries.contains(id) =>
@@ -592,13 +622,13 @@ object TransformerCps extends Transformer {
     val body = join.directBody.get
     val arguments = directArguments(call)
     val resultLabel = derivedName(id, "return")
-    val parameterArities = join.params.zipWithIndex.flatMap { case (param, position) =>
-      ctx.callingConvention.directParameterArity(id, position).map(param -> _)
+    val parameterSignatures = join.params.zipWithIndex.flatMap { case (param, position) =>
+      ctx.callingConvention.directParameterSignature(id, position).map(param -> _)
     }.toMap
     val aliases = Option.when(!join.loopified) {
       join.params.zipWithIndex.zip(call.args).collect {
         case ((param, position), cps.Expr.Variable(argument))
-            if !parameterArities.contains(param) ||
+            if !parameterSignatures.contains(param) ||
               ctx.callingConvention.isDirect(argument) ||
               ctx.directParameters.contains(argument) =>
           param -> ctx.renamedCaptures.getOrElse(argument, argument)
@@ -617,7 +647,7 @@ object TransformerCps extends Transformer {
       mutableParams = ctx.mutableParams ++ ctx.stackSafety.mutableParameters(id) ++
         ctx.callingConvention.mutableParameters(id),
       renamedCaptures = ctx.renamedCaptures ++ aliases,
-      directParameters = ctx.directParameters ++ parameterArities,
+      directParameters = ctx.directParameters ++ parameterSignatures,
       directBody = Some(id -> join.params),
       directResult = Some(targets -> resultLabel))
     val bodyStmts = toJS(body)(using bodyCtx).stmts
@@ -635,7 +665,7 @@ object TransformerCps extends Transformer {
     case cps.Stmt.Def(id, params, body, rest)
         if ctx.callingConvention.isSharedJoin(id) =>
       val directParameters = params.zipWithIndex.flatMap { case (param, position) =>
-        ctx.callingConvention.directParameterArity(id, position).map(param -> _)
+        ctx.callingConvention.directParameterSignature(id, position).map(param -> _)
       }.toMap
       secondClassDef(
         id,
@@ -760,12 +790,12 @@ object TransformerCps extends Transformer {
           Binding { k =>
             val target = callee match {
               case cps.Callee.Function(id) =>
-                toDirectFunctionValue(cps.Expr.Variable(id), args.size)
+                toDirectFunctionValue(cps.Expr.Variable(id),
+                  CallingConvention.FunctionSignature(args.size, result.size))
               case cps.Callee.Method(receiver, method) =>
                 js.Member(valueRef(receiver), memberNameRef(method))
             }
-            js.Const(nameDef(onlyResult(result)), js.Call(target, arguments)) ::
-              toJS(rest).run(k)
+            bind(result, js.Call(target, arguments)) ++ toJS(rest).run(k)
           }
       }
 
@@ -780,13 +810,7 @@ object TransformerCps extends Transformer {
           case cps.Callee.Method(receiver, method) =>
             js.Member(valueRef(receiver), memberNameRef(method))
         }
-        val ks = freshName("ks_")
-        val continuation = freshName("k_")
-        val computation = js.Lambda(
-          List(ks, continuation),
-          js.Return(js.Call(target,
-            args.map(toValueJS) ++ List(js.Variable(ks), js.Variable(continuation)))))
-        js.Const(nameDef(onlyResult(result)), js.Call(RUN_TOPLEVEL, List(computation))) ::
+        bind(result, runCps(target, args.map(toValueJS), result.size)) ++
           toJS(rest).run(k)
       }
 
@@ -794,12 +818,12 @@ object TransformerCps extends Transformer {
     // The explicit remainder is reified exactly once, here at the boundary.
     case cps.Stmt.Call(result, returnedKs, callee, args, ks, rest) =>
       Binding { k =>
-        val (backups, renamings) = backupMutableParams(rest, Set(onlyResult(result), returnedKs))
+        val (backups, renamings) = backupMutableParams(rest, result.toSet + returnedKs)
         val bodyCtx = functionBodyContext.copy(
           renamedCaptures = ctx.renamedCaptures ++ renamings)
         val continuationBody = toJS(rest)(using bodyCtx).stmts
         val continuation = js.Lambda(
-          List(nameDef(onlyResult(result)), nameDef(returnedKs)),
+          result.map(nameDef) :+ nameDef(returnedKs),
           js.Block(None, continuationBody))
         val loweredArgs =
           args.map(toValueJS) ++ List(toValueJS(ks), continuation)
@@ -905,11 +929,16 @@ object TransformerCps extends Transformer {
           case Some((ks, k)) =>
             pure(js.Return(js.Call(
               js.Variable(k),
-              List(toValueJS(onlyValue(values)), js.Variable(ks)))) :: Nil)
+              values.map(toValueJS) :+ js.Variable(ks))) :: Nil)
           case None if ctx.directBody.nonEmpty =>
-            pure(js.Return(toValueJS(onlyValue(values))) :: Nil)
+            values match {
+              case Nil => pure(js.ReturnVoid :: Nil)
+              case value :: Nil => pure(js.Return(toValueJS(value)) :: Nil)
+              case values => pure(js.Return(pack(values.map(toValueJS))) :: Nil)
+            }
           case None =>
-            pure(js.Return(js.Object(List(JSName("result") -> toValueJS(onlyValue(values))))) :: Nil)
+            pure(js.Return(js.Object(List(JSName("result") ->
+              pack(values.map(toValueJS))))) :: Nil)
         }
       }
 
@@ -1207,7 +1236,7 @@ object TransformerCps extends Transformer {
     body: cps.Stmt,
     rest: Option[cps.Stmt],
     loopified: Boolean,
-    directParameters: Map[Id, Int] = Map.empty
+    directParameters: Map[Id, CallingConvention.FunctionSignature] = Map.empty
   )(using ctx: TransformerContext): Binding[List[js.Stmt]] = {
     val label = nameDef(id)
     val sci = SecondClassDef(params, loopified, directParameters = directParameters)

@@ -39,22 +39,19 @@ def main(i, ks, k) {
 /// JAVASCRIPT
 
 function main_0(i_0, ks_0, k_0) {
-  function k_1(r_0, r_1, r_2, ks_1) {
-    const s_0 = add_0(r_0, r_1);
-    const total_0 = add_0(s_0, r_2);
-    return k_0(total_0, ks_0);
+  let r_0 = undefined;
+  let r_1 = undefined;
+  let r_2 = undefined;
+  make_return_0: {
+    const inc_0 = add_0(i_0, 1);
+    const inc_1 = add_0(inc_0, 1);
+    r_0 = i_0;
+    r_1 = inc_0;
+    r_2 = inc_1;
   }
-  let x_0 = undefined;
-  let ks_2 = undefined;
-  let k_2 = undefined;
-  make_0: {
-    x_0 = i_0;
-    ks_2 = ks_0;
-    k_2 = k_1;
-  }
-  const inc_0 = add_0(x_0, 1);
-  const inc_1 = add_0(inc_0, 1);
-  return k_2(x_0, inc_0, inc_1, ks_2);
+  const s_0 = add_0(r_0, r_1);
+  const total_0 = add_0(s_0, r_2);
+  return k_0(total_0, ks_0);
 }
 
 class Triple_0 {

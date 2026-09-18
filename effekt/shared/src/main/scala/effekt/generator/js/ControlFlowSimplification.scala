@@ -84,6 +84,7 @@ object ControlFlowSimplification {
 
     case Stmt.Return(expr) =>
       Stmt.Return(transform(expr))
+    case Stmt.ReturnVoid => Stmt.ReturnVoid
     case Stmt.RawStmt(raw, args) =>
       Stmt.RawStmt(raw, args.map(transform))
     case Stmt.Const(pattern, binding) =>

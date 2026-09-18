@@ -144,6 +144,9 @@ enum Stmt {
   // e.g. return <EXPR>
   case Return(expr: Expr)
 
+  // e.g. return
+  case ReturnVoid
+
   // A raw JS String
   case RawStmt(raw: List[String], args: List[Expr])
 

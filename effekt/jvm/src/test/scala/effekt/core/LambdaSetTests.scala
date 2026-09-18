@@ -18,6 +18,25 @@ class LambdaSetTests extends CoreTests {
     intercept[FatalPhaseError](LambdaSets.analyze(input))
   }
 
+  test("recursive lambda-set quotient terminates") {
+    // X = { a(Y, X), b(X, X) }
+    // Y = { a(X, X), e }
+    // Global recoloring alternates the colors of X and Y. Monotone
+    // refinement separates them once and never merges them again.
+    val colors = LambdaSets.stablePartition(2) { (id, colors) =>
+      id match {
+        case 0 => Set(
+          "a" -> Vector(colors(1), colors(0)),
+          "b" -> Vector(colors(0), colors(0)))
+        case 1 => Set(
+          "a" -> Vector(colors(0), colors(0)),
+          "e" -> Vector.empty)
+      }
+    }
+
+    assertNotEquals(colors(0), colors(1))
+  }
+
   private def show(input: ModuleDecl): String =
     LambdaSets.show(LambdaSets.analyze(input))
 
