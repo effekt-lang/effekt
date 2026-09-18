@@ -34,16 +34,25 @@ object CallingConvention {
     case cps.Callee.Method(receiver, method) => cps.Stmt.Invoke(receiver, method, arguments)
   }
 
-  /** A continuation application returns one value to `k`, optionally threading
-   *  the meta-continuation `ks`: `k(value)` or `k(value, ks)`. */
-  private def continuationResult(stmt: cps.Stmt): Option[(Id, cps.Expr, Option[Id])] =
-    stmt match {
-      case cps.Stmt.App(k, List(value)) => Some((k, value, None))
-      case cps.Stmt.App(k, List(value, cps.Expr.Variable(ks))) => Some((k, value, Some(ks)))
-      case _ => None
-    }
+  /** Whether a compositional remainder merely forwards all call results. */
+  private def forwards(
+    stmt: cps.Stmt,
+    results: List[Id],
+    returnedKs: Id,
+    ks: cps.Expr
+  ): Option[Id] = stmt match {
+    case cps.Stmt.App(k, arguments) =>
+      val values = results.map(cps.Expr.Variable.apply)
+      Option.when(
+        arguments == values :+ cps.Expr.Variable(returnedKs) ||
+          arguments == values :+ ks)(k)
+    case _ => None
+  }
 
   final case class OriginalDefinition(params: List[Id])
+
+  /** The value-level ABI of a function parameter. */
+  final case class FunctionSignature(arguments: Int, results: Int)
 
   private def returnParameters(plan: Plan, id: Id, params: List[Id]): Option[(Id, Id)] =
     Option.when(plan.isDirectEntry(id) && params.size >= 2)(
@@ -148,31 +157,27 @@ object CallingConvention {
       //
       // when the remainder simply forwards the result under the same
       // meta-continuation. Preserve the canonical tail call instead.
-      case cps.Stmt.Call(results, returnedKs, callee, arguments, ks, rest)
-          if continuationResult(rest).exists {
-            case (_, cps.Expr.Variable(_), None) => false
-            case (_, cps.Expr.Variable(returned), Some(restKs)) =>
-              results == List(returned) &&
-                (restKs == returnedKs || cps.Expr.Variable(restKs) == ks)
-            case _ => false
-          } =>
-        val (k, _, _) = continuationResult(rest).get
-        apply(callee, arguments ++ List(ks, cps.Expr.Variable(k)))
-
       case cps.Stmt.Call(results, returnedKs, callee, arguments, ks, rest) =>
-        val continuation = Id("k")
-        cps.Stmt.Def(
-          continuation,
-          results :+ returnedKs,
-          lowerStatement(rest, returns, directBody, plan),
-          apply(callee, arguments ++ List(ks, cps.Expr.Variable(continuation))))
+        forwards(rest, results, returnedKs, ks) match {
+          case Some(k) =>
+            apply(callee, arguments ++ List(ks, cps.Expr.Variable(k)))
+          case None =>
+            val continuation = Id("k")
+            cps.Stmt.Def(
+              continuation,
+              results :+ returnedKs,
+              lowerStatement(rest, returns, directBody, plan),
+              apply(callee, arguments ++ List(ks, cps.Expr.Variable(continuation))))
+        }
 
       case app: cps.Stmt.App =>
         val result = for
           (ks, k) <- returns
-          (callee, value, meta) <- continuationResult(app)
-          if callee == k && meta.forall(_ == ks)
-        yield cps.Stmt.Return(List(value))
+          if app.id == k
+        yield cps.Stmt.Return(app.args.lastOption match {
+          case Some(cps.Expr.Variable(meta)) if meta == ks => app.args.dropRight(1)
+          case _ => app.args
+        })
         result.getOrElse(app)
       case invoke: cps.Stmt.Invoke => invoke
       case returned: cps.Stmt.Return => returned
@@ -286,7 +291,8 @@ object CallingConvention {
 
   final class Plan private[CallingConvention] (
     val ranks: Map[Id, Int],
-    val parameterArities: Map[Id, Map[Int, Int]],
+    val parameterSignatures: Map[Id, Map[Int, FunctionSignature]],
+    val resultArities: Map[Id, Int],
     private val cpsEntries: Set[Id],
     private val originals: Map[Id, OriginalDefinition],
     private val sites: Map[List[Id], Site],
@@ -351,18 +357,22 @@ object CallingConvention {
     def targets(call: cps.Stmt.Call): Set[Id] =
       sites.get(call.ids).fold(Set.empty[Id])(_.targets)
 
-    /** The function-valued arguments of this call and their direct arities.
+    /** The function-valued arguments of this call and their direct signatures.
      *  All possible targets have the same map; this is precisely the ABI
      *  coherence condition for an indirect call. */
-    def directArguments(call: cps.Stmt.Call): Map[Int, Int] =
+    def directArguments(call: cps.Stmt.Call): Map[Int, FunctionSignature] =
       targets(call).headOption
-        .fold(Map.empty[Int, Int])(id => parameterArities.getOrElse(id, Map.empty))
+        .fold(Map.empty[Int, FunctionSignature])(id => parameterSignatures.getOrElse(id, Map.empty))
 
-    def directParameterArity(id: Id, position: Int): Option[Int] =
-      parameterArities.get(id).flatMap(_.get(position))
+    def directParameterSignature(id: Id, position: Int): Option[FunctionSignature] =
+      parameterSignatures.get(id).flatMap(_.get(position))
+
+    /** The unique result arity, if the function can return. A non-returning
+     *  function is compatible with every result arity. */
+    def resultArity(id: Id): Option[Int] = resultArities.get(id)
 
     def isFirstOrder(id: Id): Boolean =
-      parameterArities.getOrElse(id, Map.empty).isEmpty
+      parameterSignatures.getOrElse(id, Map.empty).isEmpty
 
     def isTailSelf(call: cps.Stmt.Call): Boolean =
       sites.get(call.ids).exists(_.tailSelf)
@@ -416,7 +426,7 @@ object CallingConvention {
             if !machineSites.contains(site.call.ids) then {
               assert(site.targets.forall(ranks.contains))
               assert(site.targets.iterator
-                .map(id => parameterArities.getOrElse(id, Map.empty))
+                .map(id => parameterSignatures.getOrElse(id, Map.empty))
                 .toSet.size == 1)
 
               if !site.tailSelf && !site.targets.subsetOf(joinDefinitions) then
@@ -432,7 +442,7 @@ object CallingConvention {
       val entries = ranks.keysIterator.toVector
         .sortBy(id => (id.name.name, id.id))
         .map { id =>
-          val direct = parameterArities.getOrElse(id, Map.empty).keySet.toVector.sorted
+          val direct = parameterSignatures.getOrElse(id, Map.empty).keySet.toVector.sorted
           val arguments = if direct.isEmpty then "" else s" [direct: ${direct.mkString(", ")}]"
           val adapter = if cpsEntries.contains(id) then " adapter" else ""
           val label = operationNames.getOrElse(id, id.name.name)
@@ -893,11 +903,11 @@ object CallingConvention {
       results: List[Id],
       returnedKs: Id,
       definition: Definition
-    ): Boolean = continuationResult(stmt).exists {
-      case (_, cps.Expr.Variable(_), None) => false
-      case (k, cps.Expr.Variable(value), Some(ks)) =>
-        k == definition.k && results == List(value) &&
-          (ks == definition.ks || ks == returnedKs)
+    ): Boolean = stmt match {
+      case cps.Stmt.App(k, arguments) if k == definition.k =>
+        val values = results.map(cps.Expr.Variable.apply)
+        arguments == values :+ cps.Expr.Variable(definition.ks) ||
+          arguments == values :+ cps.Expr.Variable(returnedKs)
       case _ => false
     }
 
@@ -1139,15 +1149,19 @@ object CallingConvention {
     }
 
     val returnBlocksByOwner = mutable.LinkedHashMap.empty[Id, Set[Id]]
+    val resultAritiesByOwner = mutable.LinkedHashMap.empty[Id, Int]
     val controlErasable = definitions.valuesIterator.flatMap { definition =>
       Option.when(definition.params.size >= 2) {
         inspect(definition.body, definition, Set(definition.ks))
-          // The value-returning JavaScript ABI is scalar. Keeping products in
-          // CPS preserves their allocation-free multiple-value convention.
-          .filter(_.resultArities.forall(_ == 1))
+          // A CPS definition has one continuation signature. A definition
+          // without a return path is polymorphic in its result arity.
+          .filter(_.resultArities.size <= 1)
           .map { result =>
             callsByOwner(definition.id) = result.calls
             returnBlocksByOwner(definition.id) = result.returnBlocks
+            result.resultArities.headOption.foreach { arity =>
+              resultAritiesByOwner(definition.id) = arity
+            }
             definition.id
           }
       }.flatten
@@ -1342,18 +1356,18 @@ object CallingConvention {
      * conventions of all their possible targets. Other representation
      * crossings are explicit coercions in JavaScript generation; they are not
      * reasons to reject the enclosing direct definition. */
-    def parameterRequirements(current: Set[Id]): (Map[Id, Map[Int, Int]], Set[Id]) = {
-      val requirements = mutable.Map.from(current.iterator.map(_ -> Map.empty[Int, Int]))
+    def parameterRequirements(current: Set[Id]): (Map[Id, Map[Int, FunctionSignature]], Set[Id]) = {
+      val requirements = mutable.Map.from(current.iterator.map(_ -> Map.empty[Int, FunctionSignature]))
       val invalid = mutable.Set.empty[Id]
 
-      def require(id: Id, position: Int, arity: Int): Boolean =
+      def require(id: Id, position: Int, signature: FunctionSignature): Boolean =
         requirements(id).get(position) match {
-          case Some(found) if found != arity =>
+          case Some(found) if found != signature =>
             invalid += id
             false
           case Some(_) => false
           case None =>
-            requirements(id) = requirements(id).updated(position, arity)
+            requirements(id) = requirements(id).updated(position, signature)
             true
         }
 
@@ -1365,7 +1379,8 @@ object CallingConvention {
           val parameterIndex = definition.directParams.zipWithIndex.toMap
           callsByOwner.getOrElse(owner, Vector.empty).foreach { site =>
             site.call.callee.function.flatMap(parameterIndex.get).foreach { position =>
-              changed = require(owner, position, site.call.args.size) || changed
+              changed = require(owner, position,
+                FunctionSignature(site.call.args.size, site.call.ids.size)) || changed
             }
 
             val byPosition = site.targets.iterator
@@ -1374,9 +1389,9 @@ object CallingConvention {
               .groupMap(_._1)(_._2)
             byPosition.foreach { case (position, arities) =>
               arities.distinct match {
-                case Vector(arity) =>
+                case Vector(signature) =>
                   site.targets.foreach { target =>
-                    changed = require(target, position, arity) || changed
+                    changed = require(target, position, signature) || changed
                   }
                 case _ => invalid += owner
               }
@@ -1387,7 +1402,7 @@ object CallingConvention {
       requirements.toMap -> invalid.toSet
     }
 
-    var requirements = Map.empty[Id, Map[Int, Int]]
+    var requirements = Map.empty[Id, Map[Int, FunctionSignature]]
     var stable = false
     while !stable do {
       val (nextRequirements, invalidRepresentations) = parameterRequirements(direct)
@@ -1577,6 +1592,7 @@ object CallingConvention {
     val plan = Plan(
       ranks.toMap,
       requirements,
+      resultAritiesByOwner.view.filterKeys(direct.contains).toMap,
       cpsEntries,
       originals,
       sites.toMap,

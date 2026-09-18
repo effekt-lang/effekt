@@ -365,6 +365,38 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
 
   private case class Specialization(blocks: Map[Id, Selection])
 
+  /** The coarsest stable partition induced by `signature`.
+    *
+    * Refining each current class separately is essential: rebuilding all
+    * classes from their signatures could merge classes again, and hence
+    * oscillate on recursive graphs.
+    */
+  private[core] def stablePartition[A](size: Int)(
+    signature: (Int, Vector[Int]) => A
+  ): Vector[Int] = {
+    var colors = Vector.fill(size)(0)
+    var stable = false
+
+    while !stable do {
+      val next = Array.fill(size)(-1)
+      var nextColor = 0
+
+      (0 until size).groupBy(colors).toList.sortBy(_._1).foreach {
+        case (_, members) =>
+          members.groupBy(id => signature(id, colors)).values.toList
+            .sortBy(_.min).foreach { refined =>
+              refined.foreach(next(_) = nextColor)
+              nextColor += 1
+            }
+      }
+
+      val refined = next.toVector
+      stable = refined == colors
+      colors = refined
+    }
+    colors
+  }
+
   /** Build and quotient a finite nominal graph. Projection and variant nodes
     * are allocated before their equations are filled, so recursive lambda-set
     * equations become ordinary graph cycles rather than recursive Scala
@@ -573,27 +605,13 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
       }
     }
 
-    private def blockKey(block: BlockCase): String = block match {
-      case BlockCase.Function(id) => s"f:${id.name.name}:${id.id}"
-      case BlockCase.Implementation(id) => s"i:${id.name.name}:${id.id}"
-      case BlockCase.Open => "?"
-    }
-
     private def quotient(): (Vector[Int], Map[LambdaSetId, LambdaSet]) = {
-      var colors = Vector.fill(nodes.size)(0)
-      var stable = false
-      while !stable do {
-        val signatures = nodes.indices.map { id =>
-          val node = nodes(id)
-          val cases = node.cases.toVector.map { c =>
-            blockKey(c.block) -> c.captures.map(colors)
-          }.sortBy { case (block, captures) => block + captures.mkString("[", ",", "]") }
-          (node.open, cases)
-        }.toVector
-        val palette = signatures.distinct.sortBy(_.toString).zipWithIndex.toMap
-        val next = signatures.map(palette)
-        stable = next == colors
-        colors = next
+      val colors = stablePartition(nodes.size) { (id, colors) =>
+        val node = nodes(id)
+        val cases = node.cases.iterator.map { c =>
+          c.block -> c.captures.map(colors)
+        }.toSet
+        node.open -> cases
       }
 
       val sets = nodes.indices.groupBy(colors).map { case (color, members) =>
@@ -1027,23 +1045,36 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
       case operation: Callable.Operation => this.operation(operation).capt
     }
 
-    private val setCaptures: Map[LambdaSetId, Captures] = {
-      val result = mutable.Map.from(erasableSets.map(_ -> Set.empty[Capture]))
+    /** Captures latent in a statically selected block value. Eliminating a
+      * block argument also eliminates its capture parameter, so the selected
+      * lambda set's captures have to be transferred to the specialized
+      * worker. The equations are monotone over finite sets of captures;
+      * iteration from the empty set therefore computes their least solution,
+      * including recursive and multi-case lambda sets.
+      */
+    private val captureSummaries: Map[LambdaSetId, Captures] = {
+      val selectedSets = graph.sets.keySet.filter(selectable)
+      val result = mutable.Map.from(selectedSets.map(_ -> Set.empty[Capture]))
       var changed = true
       while changed do {
         changed = false
-        erasableSets.foreach { set =>
-          val LambdaCase(block, captures) = graph(set).cases.head
-          val current = block match {
-            case BlockCase.Function(id) =>
-              val info = constraints.callables(Callable.Function(id))
-              val substitution = DB.from(info.captureIds zip captures.map(result))
-              Type.substitute(constraints.functions(id).literal.capt, substitution)
-            case BlockCase.Implementation(id) =>
-              val info = constraints.implementations(id)
-              val substitution = DB.from(info.captureIds zip captures.map(result))
-              Type.substitute(info.implementation.capt, substitution)
-            case BlockCase.Open => Set.empty
+        selectedSets.foreach { set =>
+          val current = graph(set).cases.foldLeft(Set.empty[Capture]) {
+            case (summary, LambdaCase(block, captures)) =>
+              val latent = block match {
+                case BlockCase.Function(id) =>
+                  val owner = Callable.Function(id)
+                  val info = constraints.callables(owner)
+                  val substitution = DB.from(info.captureIds zip captures.map(result))
+                  Type.substitute(originalCapture(owner), substitution)
+                case BlockCase.Implementation(id) =>
+                  val info = constraints.implementations(id)
+                  val substitution = DB.from(info.captureIds zip captures.map(result))
+                  Type.substitute(info.implementation.capt, substitution)
+                case BlockCase.Open =>
+                  Context.abort(pretty"Cannot summarize captures of an open lambda set")
+              }
+              summary ++ latent
           }
           if current != result(set) then {
             result(set) = current
@@ -1055,7 +1086,8 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
     }
 
     private def selectedCapture(set: LambdaSetId): Captures =
-      if erasable(set) then setCaptures(set) else Set.empty
+      captureSummaries.getOrElse(set,
+        Context.abort(pretty"Cannot summarize captures of an open lambda set"))
 
     /** The formal block types determine the representation at both ends of a
       * specialized call. The actual argument can use alpha-renamed capture
@@ -1105,12 +1137,18 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
       BlockVar(target, specializedType(owner, shape), specializedCapture(owner, shape))
 
     private def specializedCapture(owner: Callable, shape: Shape): Captures = {
+      val literal = originalLiteral(owner)
       val info = constraints.callables(owner)
+      val hidden = info.captureIds zip shape.take(info.captures.size)
+      val explicit = literal.cparams zip explicitShape(owner, shape)
       val captureSubstitution = DB.from(
-        (info.captureIds zip shape.take(info.captures.size)).collect {
+        (hidden ++ explicit).collect {
           case (capture, Some(set)) => capture -> selectedCapture(set)
         })
-      Type.substitute(originalCapture(owner), captureSubstitution)
+      val residual = explicit.collect {
+        case (capture, None) => capture
+      }.toSet
+      Type.substitute(literal.body.capt, captureSubstitution) -- residual
     }
 
     private def representative(set: LambdaSetId): Block = {

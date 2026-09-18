@@ -119,6 +119,8 @@ object FunctionFloating {
       val result = rewrite(expr)
       Result(List(Stmt.Return(result.expr)), result.floating)
 
+    case Stmt.ReturnVoid => Result(List(Stmt.ReturnVoid), Nil)
+
     case Stmt.RawStmt(raw, args) =>
       val result = rewrite(args)
       Result(List(Stmt.RawStmt(raw, result._1)), result._2)
@@ -334,6 +336,7 @@ object FunctionFloating {
   private def functions(stmt: Stmt): List[Stmt.Function] = stmt match {
     case Stmt.Block(_, stmts) => stmts.flatMap(functions)
     case Stmt.Return(expr) => functions(expr)
+    case Stmt.ReturnVoid => Nil
     case Stmt.RawStmt(_, args) => args.flatMap(functions)
     case Stmt.Const(_, binding) => functions(binding)
     case Stmt.Let(_, binding) => functions(binding)
@@ -373,6 +376,7 @@ object FunctionFloating {
   private def references(stmt: Stmt): List[JSName] = stmt match {
     case Stmt.Block(_, stmts) => stmts.flatMap(references)
     case Stmt.Return(expr) => references(expr)
+    case Stmt.ReturnVoid => Nil
     case Stmt.RawStmt(_, args) => args.flatMap(references)
     case Stmt.Const(_, binding) => references(binding)
     case Stmt.Let(_, binding) => references(binding)
@@ -430,6 +434,7 @@ object FunctionFloating {
   private def free(stmt: Stmt): Set[JSName] = stmt match {
     case Stmt.Block(_, stmts) => free(stmts)
     case Stmt.Return(expr) => free(expr)
+    case Stmt.ReturnVoid => Set.empty
     case Stmt.RawStmt(_, args) => args.flatMap(free).toSet
     case Stmt.Const(_, binding) => free(binding)
     case Stmt.Let(_, binding) => free(binding)
