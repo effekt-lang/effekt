@@ -231,7 +231,7 @@ object TransformerCps extends Transformer {
     case cps.Expr.Variable(id) if ctx.callingConvention.isDirect(id) =>
       val arguments = ctx.callingConvention.original(id).params.size - 2
       val results = ctx.callingConvention.resultArity(id)
-      require(arguments == signature.arguments && results.forall(_ == signature.results),
+      require(arguments == signature.arguments && results.accepts(signature.results),
         s"Direct function $id has signature ($arguments, $results), expected $signature")
       directResultRef(id)
     case cps.Expr.Variable(id) if ctx.directParameters.contains(id) =>
@@ -250,7 +250,7 @@ object TransformerCps extends Transformer {
     val List(ks, k) = ctx.callingConvention.original(id).params.takeRight(2).map(nameDef): @unchecked
     // A non-returning worker needs no result representation. If it ever did
     // return, resuming with zero values is the least arbitrary fallback.
-    val results = List.fill(ctx.callingConvention.resultArity(id).getOrElse(0))(freshName("result_"))
+    val results = List.fill(ctx.callingConvention.resultArity(id).exact.getOrElse(0))(freshName("result_"))
     val workerArguments = params.zipWithIndex.map { case (param, position) =>
       ctx.callingConvention.directParameterSignature(id, position)
         .fold(nameRef(param))(toDirectFunction(nameRef(param), _))

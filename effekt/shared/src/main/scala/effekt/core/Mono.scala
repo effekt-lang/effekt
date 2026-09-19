@@ -969,7 +969,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
         val reservedNames = solution.keys.map(_.name.name)
         val functionNames = new NameSupply(reservedNames)
         val typeNames = new NameSupply(reservedNames)
-        solution.toList.sortBy((id, _) => id.name.name).foreach((id, targs) =>
+        solution.toList.sortBy((id, _) => (id.name.name, id.id)).foreach((id, targs) =>
           if (dctx.findExternDef(id).isDefined) {
             targs.toList.sortBy(variantKey).foreach(vb => monoFunNames += ((id, vb) -> id))
           } else if (dctx.findData(id).isDefined) {
