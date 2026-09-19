@@ -1,0 +1,27 @@
+def main(x, ks, k) {
+  def plusOne(y, ks1, k1) {
+    run z = add(y, 1);
+    k1(z, ks1)
+  }
+  let first = plusOne!(x, ks, return);
+  run result = add(first, 2);
+  k(result, ks)
+}
+
+/// CALLING_CONVENTIONS
+
+direct
+  main = 0 adapter
+  plusOne = 0
+
+/// JAVASCRIPT
+
+function main_0(x_0, ks_0, k_0) {
+  let first_0 = undefined;
+  plusOne_return_0: {
+    const z_0 = add_0(x_0, 1);
+    first_0 = z_0;
+  }
+  const result_0 = add_0(first_0, 2);
+  return k_0(result_0, ks_0);
+}

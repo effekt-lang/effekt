@@ -1,0 +1,17 @@
+def apply(x: Int){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(x: Int)
+}
+
+def main(x: Int){f: (Int) => Int} = {
+  (apply: (Int){f: (Int) => Int} => Int @ {})(x: Int){
+    (f: (Int) => Int @ {f})
+  }
+}
+
+export main
+
+/// LAMBDA_SETS
+
+S = apply ↦ { <?> },
+    main ↦ { <?> }
+generic = { main }

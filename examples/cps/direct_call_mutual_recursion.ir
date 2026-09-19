@@ -1,0 +1,30 @@
+def even(i, ks, k) {
+  let result = odd!(i, ks, return);
+  k(result, ks)
+};
+def odd(i, ks, k) {
+  let result = even!(i, ks, return);
+  k(result, ks)
+};
+def main(i, ks, k) {
+  let result = even!(i, ks, return);
+  k(result, ks)
+}
+
+/// CALLING_CONVENTIONS
+
+-
+
+/// JAVASCRIPT
+
+function even_0(i_0, ks_0, k_0) {
+  return odd_0(i_0, ks_0, k_0);
+}
+
+function odd_0(i_1, ks_1, k_1) {
+  return () => even_0(i_1, ks_1, k_1);
+}
+
+function main_0(i_2, ks_2, k_2) {
+  return even_0(i_2, ks_2, k_2);
+}

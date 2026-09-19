@@ -1,0 +1,16 @@
+extern {} def consume(){f: (Int) => Int}: Unit = js ""
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def main() = {
+  (consume: (){f: (Int) => Int} => Unit @ {})(){
+    (inc: (Int) => Int @ {})
+  }
+}
+
+/// LAMBDA_SETS
+
+S = ∅
+generic = { inc }

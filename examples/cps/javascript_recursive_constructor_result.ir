@@ -1,0 +1,129 @@
+type TripleData { Triple(first: Int, second: Int, third: Int) }
+
+def main(i, ks, k) {
+  def boxed(i1, ks1, k1) {
+    run done = eq(i1, 0);
+    if (done) {
+      k1(make Triple(i1, i1, i1), ks1)
+    } else {
+      run previous = sub(i1, 1);
+      let recursive = boxed!(previous, ks1, return);
+      recursive match {
+        case Triple(value, second, third) => {
+          run next = add(value, 1);
+          k1(make Triple(next, second, third), ks1)
+        }
+      }
+    }
+  }
+  let result = boxed!(i, ks, return);
+  result match {
+    case Triple(value, second, third) => k(value, ks)
+  }
+}
+
+// The recursive result has one known constructor. JavaScript currently
+// allocates that constructor at the base case and again after every recursive
+// return, although each continuation immediately projects its fields.
+/// CALLING_CONVENTIONS
+
+direct
+  main = 0 adapter
+
+/// JAVASCRIPT
+
+function main_0(i_0, ks_0, k_0) {
+  const k_1 = { __tag: 0 };
+  const ks_1 = undefined;
+  let i_1 = undefined;
+  let k_2 = undefined;
+  let cont_1 = undefined;
+  let value_2 = undefined;
+  let value_3 = undefined;
+  boxed_worker_0: {
+    i_1 = i_0;
+    k_2 = k_1;
+  }
+  boxed_worker_0: while (true) {
+    apply_entry_4: {
+      const done_0 = eq_0(i_1, 0);
+      if (done_0) {
+        const next_cont_6 = k_2;
+        const next_arg_7 = new Triple_0(i_1, i_1, i_1);
+        const next_arg_8 = ks_1;
+        cont_1 = next_cont_6;
+        value_2 = next_arg_7;
+        value_3 = next_arg_8;
+      } else {
+        const previous_0 = sub_0(i_1, 1);
+        const k_3 = { __tag: 1, k_2: k_2 };
+        i_1 = previous_0;
+        k_2 = k_3;
+        continue boxed_worker_0;
+      }
+    }
+    apply_5: while (true) {
+      switch (cont_1.__tag) {
+        case 0:
+          {
+            const result_0 = value_2;
+            const ks_2 = value_3;
+            const value_0 = result_0.first_0;
+            return k_0(value_0, ks_0);
+          }
+        case 1:
+          {
+            const recursive_0 = value_2;
+            const ks_3 = value_3;
+            const frame_k_0 = cont_1.k_2;
+            const value_1 = recursive_0.first_0;
+            const second_1 = recursive_0.second_0;
+            const third_1 = recursive_0.third_0;
+            const next_0 = add_0(value_1, 1);
+            const next_cont_9 = frame_k_0;
+            const next_arg_10 = new Triple_0(next_0, second_1, third_1);
+            const next_arg_11 = ks_1;
+            cont_1 = next_cont_9;
+            value_2 = next_arg_10;
+            value_3 = next_arg_11;
+            continue apply_5;
+          }
+        default:  return $effekt.unreachable();
+      }
+    }
+  }
+}
+
+class Triple_0 {
+  constructor(first_0, second_0, third_0) {
+    this.__tag = 0;
+    this.first_0 = first_0;
+    this.second_0 = second_0;
+    this.third_0 = third_0;
+  }
+  __reflect() {
+    return {
+      __tag: 0,
+      __name: "Triple",
+      __data: [this.first_0, this.second_0, this.third_0]
+    };
+  }
+  __equals(other0) {
+    if (!other0) {
+      return false;
+    }
+    if (!($effekt.equals(this.__tag, other0.__tag))) {
+      return false;
+    }
+    if (!($effekt.equals(this.first_0, other0.first_0))) {
+      return false;
+    }
+    if (!($effekt.equals(this.second_0, other0.second_0))) {
+      return false;
+    }
+    if (!($effekt.equals(this.third_0, other0.third_0))) {
+      return false;
+    }
+    return true;
+  }
+}

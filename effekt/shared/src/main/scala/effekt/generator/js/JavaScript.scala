@@ -4,12 +4,19 @@ package js
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
+import effekt.core.Renamer
 import effekt.core.optimizer.{ Deadcode, DropBindings, Optimizer }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
 
 class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[String] {
+
+  private def optimize(target: js.Module): js.Module =
+    FunctionFloating.transform(ControlFlowSimplification.transform(target))
+
+  private def optimize(target: List[js.Stmt]): List[js.Stmt] =
+    FunctionFloating.transform(ControlFlowSimplification.transform(target))
 
   // Implementation of the Compiler Interface:
   // -----------------------------------------
@@ -44,7 +51,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
     Frontend andThen Middleend
   }
 
-  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Deadcode andThen core.Show andThen Optimizer andThen DropBindings map {
+  lazy val Optimized = allToCore(Core) andThen Aggregate andThen Deadcode andThen core.Show andThen core.Mono andThen core.LambdaSets andThen Optimizer andThen DropBindings map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
       val mainFile = path(mod)
@@ -52,15 +59,32 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
   }
 
   lazy val CPSTransformed = Optimized map {
-    case (mainSymbol, mainFile, core) =>
-      val cpsTransformed = effekt.cps.Transformer.transform(core)
-      val contified = cps.Contify.rewrite(cpsTransformed)
-      (mainSymbol, mainFile, core, contified)
+    case (mainId, mainFile, core) =>
+      // establish unique names
+      val renamed = new Renamer().apply(core)
+
+      var tree = effekt.cps.transform(renamed)
+
+      def optimize(input: effekt.cps.ModuleDecl) =
+        var tree = input
+        tree = effekt.cps.StaticArguments.transform(tree)
+        tree = effekt.cps.Inliner.transform(tree, mainId)
+        tree = effekt.cps.BlockSinking.transform(tree, mainId)
+        tree = effekt.cps.ParameterDropping.transform(tree)
+        tree = effekt.cps.Simplifier.transform(tree)
+        tree
+
+      tree = optimize(tree)
+      tree = effekt.cps.ArityRaising.transform(tree, Set(mainId))
+      tree = optimize(tree)
+
+      (mainId, mainFile, core, tree)
   }
 
   lazy val Compile = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val doc = pretty(TransformerCps.compile(cps, core, mainSymbol).commonjs)
+      val target = optimize(TransformerCps.compile(cps, core, mainSymbol))
+      val doc = pretty(target.commonjs)
       (Map(mainFile -> doc.layout), mainFile)
   }
 
@@ -69,7 +93,8 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
    */
   lazy val CompileWeb = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val doc = pretty(TransformerCps.compile(cps, core, mainSymbol).virtual)
+      val target = optimize(TransformerCps.compile(cps, core, mainSymbol))
+      val doc = pretty(target.virtual)
       (Map(mainFile -> doc.layout), mainFile)
   }
 
@@ -78,7 +103,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
    */
   lazy val CompileLSP = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      TransformerCps.compileLSP(cps, core)
+      optimize(TransformerCps.compileLSP(cps, core))
   }
 
   private def pretty(stmts: List[js.Stmt]): Document =

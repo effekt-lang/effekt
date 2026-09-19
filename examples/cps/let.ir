@@ -1,0 +1,24 @@
+def main(k) {
+  let l = k;
+  l(42)
+}
+
+/// FLOWS
+
+main
+---
+l_2 !-> k_1
+
+/// SINK_BLOCKS
+
+def main(k) {
+  let l = k;
+  l(42)
+}
+
+/// DROP_PARAMETERS
+
+def main(k) {
+  let l = k;
+  k(42)
+}

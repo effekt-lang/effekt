@@ -1,0 +1,77 @@
+def main(flag, x, ks, k) {
+  def inc(value, ks1, k1) {
+    run result = add(value, 1);
+    k1(result, ks1)
+  }
+  def applyDirect(f, value, ks2, k2) {
+    let result = f!(value, ks2, return);
+    k2(result, ks2)
+  }
+  def applyPlain(f, value, ks3, k3) {
+    run ignored = println(f);
+    k3(value, ks3)
+  }
+  def dispatch(target, f, value, ks4, k4) {
+    let result = target!(f, value, ks4, return);
+    k4(result, ks4)
+  }
+  if (flag) {
+    let result = dispatch!(applyDirect, inc, x, ks, return);
+    k(result, ks)
+  } else {
+    let result = dispatch!(applyPlain, inc, x, ks, return);
+    k(result, ks)
+  }
+}
+
+/// CALLING_CONVENTIONS
+
+direct
+  applyDirect = 1 [direct: 0]
+  applyPlain = 0 [direct: 0]
+  dispatch = 2 [direct: 0]
+  inc = 0 adapter
+  main = 0 adapter
+
+/// JAVASCRIPT
+
+function inc_0(value_0) {
+  const result_0 = add_0(value_0, 1);
+  return result_0;
+}
+
+function inc_cps_0(value_0, ks_1, k_1) {
+  const result_1 = inc_0(value_0);
+  return k_1(result_1, ks_1);
+}
+
+function applyDirect_0(f_0, value_1) {
+  const result_2 = f_0(value_1);
+  return result_2;
+}
+
+function applyPlain_0(f_1, value_2) {
+  const ignored_0 = println_0((arg_2, ks_3, k_4) => {
+    const result_5 = f_1(arg_2);
+    return k_4(result_5, ks_3);
+  });
+  return value_2;
+}
+
+function main_0(flag_0, x_0, ks_0, k_0) {
+  let target_0 = undefined;
+  let f_2 = undefined;
+  let value_3 = undefined;
+  if (flag_0) {
+    target_0 = applyDirect_0;
+    f_2 = inc_cps_0;
+    value_3 = x_0;
+  } else {
+    target_0 = applyPlain_0;
+    f_2 = inc_cps_0;
+    value_3 = x_0;
+  }
+  const result_3 = target_0((arg_6) =>
+    RUN_TOPLEVEL((ks_7, k_8) => f_2(arg_6, ks_7, k_8)), value_3);
+  return k_0(result_3, ks_0);
+}

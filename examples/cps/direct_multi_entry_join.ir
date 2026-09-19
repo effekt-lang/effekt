@@ -1,0 +1,37 @@
+def balance(flag, offset, balanceKs, balanceK) {
+    def join(size, joinKs, joinK) {
+      run result = add(size, offset);
+      joinK(result, joinKs)
+    }
+    if (flag) {
+        let result = join!(0, balanceKs, return);
+        balanceK(result, balanceKs)
+    } else {
+        let result = join!(1, balanceKs, return);
+        balanceK(result, balanceKs)
+    }
+}
+def main(choice, ks, k) {
+  balance(choice, 1, ks, k)
+}
+
+// `join` has one call in each branch. Both calls are known and converge on
+// the same body. Both calls are tail transfers from `balance`, so the body can
+// use a single lexical second-class representation instead of allocating a
+// JavaScript closure.
+/// JAVASCRIPT
+
+function balance_0(flag_0, offset_0, balanceKs_0, balanceK_0) {
+  let size_0 = undefined;
+  if (flag_0) {
+    size_0 = 0;
+  } else {
+    size_0 = 1;
+  }
+  const result_0 = add_0(size_0, offset_0);
+  return balanceK_0(result_0, balanceKs_0);
+}
+
+function main_0(choice_0, ks_0, k_0) {
+  return balance_0(choice_0, 1, ks_0, k_0);
+}

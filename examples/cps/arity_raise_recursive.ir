@@ -1,0 +1,25 @@
+type ListData { Nil() Cons(head: Int, tail: ListData) }
+
+def main(k) {
+  def loop(xs, k1) {
+    xs match {
+      case Nil() => k1(0)
+      case Cons(head, tail) => loop(make Cons(head, tail), k1)
+    }
+  }
+  loop(make Cons(1, make Nil()), k)
+}
+
+/// ARITY_SHAPES
+
+loop
+  <Cons(_, _), ?>
+
+/// ARITY_RAISE
+
+def main(k) {
+  def loop(xs_0, xs_1, k1) {
+    loop(xs_0, xs_1, k1)
+  }
+  loop(1, make Nil(), k)
+}
