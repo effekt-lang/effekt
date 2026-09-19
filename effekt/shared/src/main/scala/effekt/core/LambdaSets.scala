@@ -325,6 +325,18 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
   private def show(vector: Vector[BlockCase]): String =
     vector.map(show).mkString("<", ", ", ">")
 
+  private def ownerKey(owner: Callable): (Int, String, Int, String, Int) = owner match {
+    case Callable.Function(id) => (0, id.name.name, id.id, "", 0)
+    case Callable.Operation(implementation, method) =>
+      (1, implementation.name.name, implementation.id, method.name.name, method.id)
+  }
+
+  private def blockKey(block: BlockCase): String = block match {
+    case BlockCase.Function(id) => s"0:${id.name.name}:${id.id}"
+    case BlockCase.Implementation(id) => s"1:${id.name.name}:${id.id}"
+    case BlockCase.Open => "2"
+  }
+
   /** Nominal node in the finite lambda-set graph. Cases refer to other nodes;
     * lambda sets are never expanded structurally.
     */
@@ -421,14 +433,14 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
     private val openNode = fresh(open = true)
 
     private val orderedVariants = solution.variants.toList
-      .sortBy { case (owner, _) => show(owner) }
+      .sortBy { case (owner, _) => ownerKey(owner) }
       .flatMap { case (owner, variants) =>
-        variants.toList.sortBy(_.map(show).mkString("|")).map(owner -> _)
+        variants.toList.sortBy(_.map(blockKey).mkString("|")).map(owner -> _)
       }
 
     private val genericRaw: Map[Projection, RawId] =
       constraints.callables.toList
-        .sortBy { case (owner, _) => show(owner) }
+        .sortBy { case (owner, _) => ownerKey(owner) }
         .flatMap { case (owner, info) =>
           Vector.tabulate(info.arity)(position => Projection(owner, position) -> fresh())
         }.toMap
