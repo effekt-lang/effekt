@@ -54,6 +54,41 @@ object CallingConvention {
   /** The value-level ABI of a function parameter. */
   final case class FunctionSignature(arguments: Int, results: Int)
 
+  /** Result arities form the flat lattice
+   *
+   *                 Conflict
+   *                /   |   \
+   *           Exact(0) ... Exact(n)
+   *                \   |   /
+   *                  Never
+   *
+   * `Never` denotes a computation with no returning path. It is compatible
+   * with every result ABI; distinct returning arities join to `Conflict`.
+   */
+  enum ResultArity {
+    case Never
+    case Exact(size: Int)
+    case Conflict
+
+    def join(other: ResultArity): ResultArity = (this, other) match {
+      case (Never, result) => result
+      case (result, Never) => result
+      case (Exact(left), Exact(right)) if left == right => this
+      case _ => Conflict
+    }
+
+    def exact: Option[Int] = this match {
+      case Exact(size) => Some(size)
+      case _ => None
+    }
+
+    def accepts(size: Int): Boolean = this match {
+      case Never => true
+      case Exact(resultSize) => resultSize == size
+      case Conflict => false
+    }
+  }
+
   private def returnParameters(plan: Plan, id: Id, params: List[Id]): Option[(Id, Id)] =
     Option.when(plan.isDirectEntry(id) && params.size >= 2)(
       params(params.size - 2) -> params.last)
@@ -292,7 +327,7 @@ object CallingConvention {
   final class Plan private[CallingConvention] (
     val ranks: Map[Id, Int],
     val parameterSignatures: Map[Id, Map[Int, FunctionSignature]],
-    val resultArities: Map[Id, Int],
+    val resultArities: Map[Id, ResultArity],
     private val cpsEntries: Set[Id],
     private val originals: Map[Id, OriginalDefinition],
     private val sites: Map[List[Id], Site],
@@ -367,9 +402,7 @@ object CallingConvention {
     def directParameterSignature(id: Id, position: Int): Option[FunctionSignature] =
       parameterSignatures.get(id).flatMap(_.get(position))
 
-    /** The unique result arity, if the function can return. A non-returning
-     *  function is compatible with every result arity. */
-    def resultArity(id: Id): Option[Int] = resultArities.get(id)
+    def resultArity(id: Id): ResultArity = resultArities(id)
 
     def isFirstOrder(id: Id): Boolean =
       parameterSignatures.getOrElse(id, Map.empty).isEmpty
@@ -418,6 +451,8 @@ object CallingConvention {
       }
 
     def validate(): Unit = {
+      assert(resultArities.keySet == ranks.keySet)
+      assert(resultArities.valuesIterator.forall(_ != ResultArity.Conflict))
       ranks.keysIterator.foreach { source =>
         sites.valuesIterator
           .filter(_.owner == source)
@@ -1023,16 +1058,16 @@ object CallingConvention {
     final case class Inspection(
       calls: Vector[Site],
       returnBlocks: Set[Id],
-      resultArities: Set[Int]
+      resultArity: ResultArity
     ) {
       def ++(other: Inspection): Inspection =
         Inspection(
           calls ++ other.calls,
           returnBlocks ++ other.returnBlocks,
-          resultArities ++ other.resultArities)
+          resultArity.join(other.resultArity))
     }
 
-    val emptyInspection = Inspection(Vector.empty, Set.empty, Set.empty)
+    val emptyInspection = Inspection(Vector.empty, Set.empty, ResultArity.Never)
 
     /** Number of ordinary values returned to this definition's continuation.
      * Parameter dropping may already have removed the meta-continuation. */
@@ -1096,7 +1131,7 @@ object CallingConvention {
       case app @ cps.Stmt.App(id, arguments) =>
         returnArity(app, definition, stableKs, metaWitness) match {
           case Some(arity) =>
-            Some(emptyInspection.copy(resultArities = Set(arity)))
+            Some(emptyInspection.copy(resultArity = ResultArity.Exact(arity)))
           case None => definitions.get(id) match {
             case Some(target)
                 if !target.toplevel && !escaping.contains(id) &&
@@ -1149,19 +1184,17 @@ object CallingConvention {
     }
 
     val returnBlocksByOwner = mutable.LinkedHashMap.empty[Id, Set[Id]]
-    val resultAritiesByOwner = mutable.LinkedHashMap.empty[Id, Int]
+    val resultAritiesByOwner = mutable.LinkedHashMap.empty[Id, ResultArity]
     val controlErasable = definitions.valuesIterator.flatMap { definition =>
       Option.when(definition.params.size >= 2) {
         inspect(definition.body, definition, Set(definition.ks))
           // A CPS definition has one continuation signature. A definition
           // without a return path is polymorphic in its result arity.
-          .filter(_.resultArities.size <= 1)
+          .filter(_.resultArity != ResultArity.Conflict)
           .map { result =>
             callsByOwner(definition.id) = result.calls
             returnBlocksByOwner(definition.id) = result.returnBlocks
-            result.resultArities.headOption.foreach { arity =>
-              resultAritiesByOwner(definition.id) = arity
-            }
+            resultAritiesByOwner(definition.id) = result.resultArity
             definition.id
           }
       }.flatten
