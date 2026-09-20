@@ -36,7 +36,7 @@ class ScalaListTypeAdapter extends JsonSerializer[scala.collection.immutable.Lis
       case _                     => classOf[Object]
     }
 
-    val listType = TypeToken.getParameterized(classOf[java.util.List[_]], elemType).getType
+    val listType = TypeToken.getParameterized(classOf[java.util.List[?]], elemType).getType
     val javaList = context.deserialize[java.util.List[Any]](json, listType)
 
     javaList.asScala.toList
@@ -56,5 +56,5 @@ class ScalaListTypeAdapter extends JsonSerializer[scala.collection.immutable.Lis
  */
 extension (builder: GsonBuilder) def withScalaSupport: GsonBuilder =
   builder
-    .registerTypeHierarchyAdapter(classOf[Option[_]], new ScalaOptionTypeAdapter)
-    .registerTypeHierarchyAdapter(classOf[List[_]], new ScalaListTypeAdapter)
+    .registerTypeHierarchyAdapter(classOf[Option[?]], new ScalaOptionTypeAdapter)
+    .registerTypeHierarchyAdapter(classOf[List[?]], new ScalaListTypeAdapter)

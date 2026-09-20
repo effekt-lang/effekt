@@ -397,7 +397,7 @@ object LLVMRunner extends Runner[String] {
       clangArgs ++= Seq("-O3", "-flto=full")
     }
 
-    exec(clangArgs: _*)
+    exec(clangArgs*)
 
     Some(executableFile)
 }

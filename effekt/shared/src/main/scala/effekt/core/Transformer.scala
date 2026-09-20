@@ -51,8 +51,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case f @ source.FunDef(id, tps, vps, bps, cpt, ret, body, doc, span) =>
       val tparams = tps.map { p => p.symbol }
       val cparams = bps.map { b => b.symbol.capture }
-      val vparams = vps map transform
-      val bparams = bps map transform
+      val vparams = vps `map` transform
+      val bparams = bps `map` transform
       List(Toplevel.Def(f.symbol, BlockLit(tparams.unspan, cparams.unspan, vparams.unspan, bparams.unspan,
         insertBindings { transform(body) })))
 
@@ -164,8 +164,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case f @ source.FunDef(id, tps, vps, bps, cpt, ret, body, doc, span) =>
         val tparams = tps.map { p => p.symbol }
         val cparams = bps.map { b => b.symbol.capture }
-        val vparams = vps map transform
-        val bparams = bps map transform
+        val vparams = vps `map` transform
+        val bparams = bps `map` transform
         Context.emit(Binding.Def(f.symbol, BlockLit(tparams.unspan, cparams.unspan, vparams.unspan, bparams.unspan,
           insertBindings { transform(body) })))
 

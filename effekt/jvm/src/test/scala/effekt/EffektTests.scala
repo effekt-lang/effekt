@@ -13,6 +13,7 @@ import scala.sys.process.*
 import scala.language.implicitConversions
 
 trait EffektTests extends munit.FunSuite {
+  override val munitTimeout = scala.concurrent.duration.Duration(2, "m")
 
   // The name of the backend as it is passed to the --backend flag.
   def backendName: String
@@ -165,6 +166,7 @@ trait EffektTests extends munit.FunSuite {
           val severity = res.group(1) match {
             case "ERROR" => Severities.Error
             case "WARN" => Severities.Warning
+            case _ => fail("Internal error: Should not happen")
           }
           findError(severity, no + 1, res.group(2))
         }

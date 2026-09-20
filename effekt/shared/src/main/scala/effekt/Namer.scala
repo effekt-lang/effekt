@@ -152,15 +152,15 @@ object Namer extends Phase[Parsed, NameResolved] {
       val cpts = captures.map { resolve }.unspan
       // we create a new scope, since resolving type params introduces them in this scope
       val sym = Context scoped {
-        val tps = tparams map resolve
+        val tps = tparams `map` resolve
         // TODO resolve(ParamSection) loses structural information about value params and block params.
         //   we should refactor!
-        val vps = vparams map resolve
-        val bps = bparams map resolve
+        val vps = vparams `map` resolve
+        val bps = bparams `map` resolve
         val ret = Context scoped {
           Context.bindValues(vps)
           Context.bindBlocks(bps)
-          annot map resolve
+          annot `map` resolve
         }
         UserFunction(uniqueId, tps.unspan, vps.unspan, bps.unspan, cpts, ret.unspan.map { _._1 }, ret.unspan.map { _._2 }, f)
       }
@@ -171,7 +171,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val effectName = Context.nameFor(id)
       // we use the localName for effects, since they will be bound as capabilities
       val effectSym = Context scoped {
-        val tps = tparams map resolve
+        val tps = tparams `map` resolve
         // we do not resolve the effect operations here to allow them to refer to types that are defined
         // later in the file
         Interface(effectName, tps.unspan, List(), decl)
@@ -199,7 +199,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.DataDef(id, tparams, ctors, doc, span) =>
       Context.requireToplevel("Datatype")
       val typ = Context scoped {
-        val tps = tparams map resolve
+        val tps = tparams `map` resolve
         // we do not resolve the constructors here to allow them to refer to types that are defined
         // later in the file
         DataType(Context.nameFor(id), tps.unspan, List(), d)
@@ -209,7 +209,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.RecordDef(id, tparams, fields, doc, span) =>
       Context.requireToplevel("Record")
       lazy val sym: Record = {
-        val tps = Context scoped { tparams map resolve }
+        val tps = Context scoped { tparams `map` resolve }
         // we do not resolve the fields here to allow them to refer to types that are defined
         // later in the file
         Record(Context.nameFor(id), tps.unspan, null, d)
@@ -219,7 +219,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @source.ExternType(id, tparams, body, doc, span) =>
       Context.requireToplevel("Extern type")
       Context.define(id, Context scoped {
-        val tps = tparams map resolve
+        val tps = tparams `map` resolve
         ExternType(Context.nameFor(id), tps.unspan, d)
       })
 
@@ -235,9 +235,9 @@ object Namer extends Phase[Parsed, NameResolved] {
       val name = Context.nameFor(id)
       val capt = resolve(captures)
       Context.define(id, Context scoped {
-        val tps = tparams map resolve
-        val vps = vparams map resolve
-        val bps = bparams map resolve
+        val tps = tparams `map` resolve
+        val vps = vparams `map` resolve
+        val bps = bparams `map` resolve
 
         val (tpe, eff) = Context scoped {
           Context.bindBlocks(bps)
@@ -261,7 +261,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.ExternInclude(ff, path, None, _, doc, span) =>
       Context.requireToplevel("Extern include")
       // only load include if it is required by the backend.
-      if (ff matches Context.compiler.supportedFeatureFlags) {
+      if (ff `matches` Context.compiler.supportedFeatureFlags) {
         d.contents = Some(Context.contentsOf(path).getOrElse {
           Context.abort(s"Missing include: ${path}")
         })
@@ -379,7 +379,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             // the parameters of the interface are in scope
             interface.tparams.foreach { p => Context.bind(p) }
 
-            val tps = tparams map resolve
+            val tps = tparams `map` resolve
 
             val resVparams = vparams map resolve
             val resBparams = bparams map resolve
@@ -417,7 +417,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         case c @ source.Constructor(id, tparams, ps, doc, span) =>
           val constructor = Context scoped {
             val name = Context.nameFor(id)
-            val tps = tparams map resolve
+            val tps = tparams `map` resolve
             Constructor(name, data.tparams ++ tps.unspan, Nil, data, c)
           }
           // DataType::Constructor()
@@ -543,7 +543,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case source.Box(capt, block, _) =>
-      capt foreach resolve
+      capt `foreach` resolve
       resolve(block)
 
     // (2) === Bound Occurrences ===
@@ -924,7 +924,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(tpe: source.Effects)(using Context): Effects =
-    Effects(tpe.effs.flatMap(resolveWithAliases).toSeq: _*) // TODO this otherwise is calling the wrong apply
+    Effects(tpe.effs.flatMap(resolveWithAliases).toSeq*) // TODO this otherwise is calling the wrong apply
 
   def resolve(e: source.Effectful)(using Context): (ValueType, Effects) =
     (resolveValueType(e.tpe), resolve(e.eff))
@@ -994,7 +994,7 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * The state of the namer phase
    */
-  private var scope: Scoping = _
+  private var scope: Scoping = scala.compiletime.uninitialized
 
   private[namer] def initNamerstate(s: Scoping): Unit = {
     annotate(Annotations.HolesForFile, module.source, Nil)
