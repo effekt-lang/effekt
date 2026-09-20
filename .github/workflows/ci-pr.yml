@@ -12,7 +12,7 @@ jobs:
 
   community-build:
     name: "Community Build"
-    needs: tests
+    # needs: tests # Note: if we want to save CI minutes, then enable this. Otherwise the CI turnaround being faster by 15-20 minutes is very worth it.
     runs-on: ubuntu-latest
     permissions:
       contents: read
