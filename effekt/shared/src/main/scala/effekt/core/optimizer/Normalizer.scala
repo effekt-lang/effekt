@@ -31,13 +31,19 @@ import scala.collection.mutable
  */
 object Normalizer { normal =>
 
+  /** A pure extern application, without the variable it is bound to, so equal calls compare equal. */
+  case class PureCall(callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
+
+  /** Something a variable can be known to equal. */
+  type Fact = Expr | PureCall
+
   case class Context(
     blocks: Map[Id, Block],
     exprs: Map[Id, Expr],
     decls: DeclarationContext,     // for field selection
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
     policy: InliningPolicy,        // whether to inline a call (see [[InliningPolicy]])
-    facts: Map[Expr, Expr],        // maps a pure expression to something simpler it is known to equal
+    facts: Map[Fact, Expr],        // maps a pure expression or call to something simpler it is known to equal
     prompts: List[Id],             // the enclosing `Reset`s' prompts, innermost first
   ) {
     def enterPrompt(prompt: Id): Context = copy(prompts = prompt :: prompts)
@@ -48,6 +54,10 @@ object Normalizer { normal =>
       copy(exprs = exprs + (id -> expr), facts = known)
 
     def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
+
+    // knowing `x = f(y)` for a pure extern call, we also know `f(y) = x`
+    def bind(id: Id, call: PureCall, tpe: ValueType): Context =
+      if transparent(tpe)(using this) then copy(facts = facts + (call -> ValueVar(id, tpe))) else this
 
     /** Records that [[expr]] equals the simpler [[value]] for the subtree we normalize next. */
     def knowing(expr: Expr, value: Expr): Context = expr match {
@@ -244,6 +254,16 @@ object Normalizer { normal =>
         //          Stmt.Let(id, abort, Return(ValueVar(id, tpe)))
 
         case normalized => normalizeLet(id, normalized, body)
+      }
+
+    // [[ run x = f(y); body ]] = let x = z; [[ body ]]   if we already know `z = f(y)`
+    case app @ Stmt.ExternApp(id, Purity.Pure, callee, targs, vargs, bargs, body) =>
+      val call = PureCall(callee, targs, vargs.map(normalize), bargs.map(normalize))
+      C.facts.get(call) match {
+        case Some(known) => normalizeLet(id, known, body)
+        case None =>
+          val tpe = Type.bindingType(app)
+          Stmt.ExternApp(id, Purity.Pure, callee, targs, call.vargs, call.bargs, normalize(body)(using C.bind(id, call, tpe)))
       }
 
     case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
