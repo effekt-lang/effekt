@@ -78,11 +78,14 @@ class PatternMatchingTests extends CoreTests {
           Condition.Patterns(Map(sc -> Pattern.Ignore()))),
         b2, Nil, List())), TString)
 
+    // the remaining clauses are compiled once into a join point
+    val k = block("k")
     val expected =
       Val(p.id, trivalPredicate,
+      Def(k.id, BlockLit(Nil, Nil, Nil, Nil, jump(b2)),
       If(p,
         jump(b1, sc),
-        jump(b2)))
+        jump(k))))
 
     assertAlphaEquivalentStatements(result, expected)
 
@@ -133,14 +136,17 @@ class PatternMatchingTests extends CoreTests {
         b2, Nil, List())), TUnit)
 
     // opt match {
-    //   case Some(tmp) => val p = return v > 0; if (p) { b1(tmp) } else { b2() }
+    //   case Some(tmp) => val p = return v > 0; def k() = b2(); if (p) { b1(tmp) } else { k() }
     //   case _ => b2()
     // }
+    val k = block("k")
     val expected = Match(opt, TUnit,
       List((SomeC, BlockLit(Nil, Nil, List(ValueParam(tmp.id, tmp.tpe)), Nil,
-        Val(p.id, trivalPredicate, If(p,
-          App(b1, Nil, List(tmp), Nil),
-          App(b2, Nil, Nil, Nil)))))),
+        Val(p.id, trivalPredicate,
+          Def(k.id, BlockLit(Nil, Nil, Nil, Nil, App(b2, Nil, Nil, Nil)),
+          If(p,
+            App(b1, Nil, List(tmp), Nil),
+            App(k, Nil, Nil, Nil))))))),
       Some(App(b2, Nil, Nil, Nil)))
 
     assertAlphaEquivalentStatements(result, expected)
