@@ -114,8 +114,8 @@ class OptimizerTests extends CoreTests {
   test("drop pure let expressions"){
     val input =
       """ def main = { () =>
-        |   let ! x = (add : (Int, Int) => Int @ {})(1, 2)
-        |   let !! y = (println: (String) => Unit @ {io})("hello")
+        |   run x = (add : (Int, Int) => Int @ {})(1, 2)
+        |   run ! y = (println: (String) => Unit @ {io})("hello")
         |   let z = 7
         |   return z:Int
         | }
@@ -123,7 +123,7 @@ class OptimizerTests extends CoreTests {
 
     val expected =
       """ def main = { () =>
-        |   let ! y = (println: (String) => Unit @ {io})("hello")
+        |   run ! y = (println: (String) => Unit @ {io})("hello")
         |   let z = 7
         |   return z:Int
         | }

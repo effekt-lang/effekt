@@ -23,6 +23,7 @@ class Deadcode(reachable: Map[Id, Usage])
     // Remove local unused definitions
     case Stmt.Def(id, block, body) if unused(id) => rewrite(body)
     case Stmt.Let(id, binding, body) if unused(id) => rewrite(body)
+    case Stmt.ExternApp(id, Purity.Pure, callee, targs, vargs, bargs, body) if unused(id) => rewrite(body)
 
     // Remove local unused 'val's as long as they are pure calls.
     case Stmt.Val(id, binding, body) if unused(id) && isPureCall(binding) => rewrite(body)
