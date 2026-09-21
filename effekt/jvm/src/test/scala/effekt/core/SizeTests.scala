@@ -8,11 +8,12 @@ class SizeTests extends CoreTests {
   }
 
   test("Small program"){
-    assertSized(4) {
+    assertSized(5) {
       """module main
         |
         |def foo = { () =>
-        |  return (bar: (Int) => Int @ {})(baz:Int)
+        |  run x = (bar: (Int) => Int @ {})(baz:Int)
+        |  return x:Int
         |}
         |""".stripMargin
     }
