@@ -265,15 +265,14 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
 
     // Arguments to an unknown callee or receiver cross a representation
     // boundary even when the argument itself is statically known.
-    constraints.calls.foreach {
-      case Call.Apply(callee, arguments) =>
-        ground(callee +: arguments).foreach { case (resolved, _) =>
-          if resolved.head == BlockCase.Open then resolved.tail.foreach(retainGeneric)
-        }
-      case Call.Invoke(receiver, _, arguments) =>
-        ground(receiver +: arguments).foreach { case (resolved, _) =>
-          if resolved.head == BlockCase.Open then resolved.tail.foreach(retainGeneric)
-        }
+    constraints.calls.foreach { call =>
+      val (callee, arguments) = call match {
+        case Call.Apply(callee, arguments) => (callee, arguments)
+        case Call.Invoke(receiver, _, arguments) => (receiver, arguments)
+      }
+      ground(callee +: arguments).foreach { case (resolved, _) =>
+        if resolved.head == BlockCase.Open then resolved.tail.foreach(retainGeneric)
+      }
     }
 
     Solution(solution.toMap, genericCases.toSet)
@@ -1681,57 +1680,22 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
       layout.constructor -> BlockLit(Nil, Nil, layout.parameters, Nil, body)
     }
 
-    private def dispatcherDefinition(rep: Representation): Toplevel.Def = {
-      rep.block match {
-        case function @ BlockType.Function(_, cparams, _, _, result) =>
-          val layout = dispatcherLayout(rep, function)
-          val clauses = orderedCases(rep.set).map { lambda =>
-            lambda.block match {
-              case BlockCase.Function(id) =>
-                dispatcherClause(rep, lambda, Callable.Function(id), layout)
-              case BlockCase.Implementation(_) | BlockCase.Open =>
-                Context.abort(pretty"A function lambda set contains a non-function case")
-            }
-          }.toList
-          val body = Stmt.Match(
-            Expr.ValueVar(layout.closure.id, layout.closure.tpe),
-            result,
-            clauses,
-            None)
-          Toplevel.Def(
-            rep.dispatcher,
-            BlockLit(Nil, cparams, layout.closure :: layout.values, layout.blocks, body))
-
-        case _: BlockType.Interface =>
-          Context.abort(pretty"An implementation has one dispatcher per operation")
-      }
-    }
-
-    private def operationDispatcherDefinition(dispatcher: OperationDispatcher): Toplevel.Def = {
-      val rep = dispatcher.representation
-      val layout = dispatcherLayout(rep, dispatcher.function)
-      val result = dispatcher.function.result
+    private def dispatcherDefinition(
+      rep: Representation,
+      id: Id,
+      function: BlockType.Function
+    )(owner: BlockCase => Callable): Toplevel.Def = {
+      val layout = dispatcherLayout(rep, function)
       val clauses = orderedCases(rep.set).map { lambda =>
-        lambda.block match {
-          case BlockCase.Implementation(id) =>
-            val owner = constraints.operations.getOrElse(id -> dispatcher.method,
-              Context.abort(pretty"Missing operation '${dispatcher.method.name.name}'"))
-            dispatcherClause(rep, lambda, owner, layout)
-          case BlockCase.Function(_) | BlockCase.Open =>
-            Context.abort(pretty"An implementation lambda set contains a non-implementation case")
-        }
+        dispatcherClause(rep, lambda, owner(lambda.block), layout)
       }.toList
       val body = Stmt.Match(
         Expr.ValueVar(layout.closure.id, layout.closure.tpe),
-        result,
+        function.result,
         clauses,
         None)
-      dispatcher.function match {
-        case BlockType.Function(tparams, cparams, _, _, _) =>
-          Toplevel.Def(
-            dispatcher.id,
-            BlockLit(tparams, cparams, layout.closure :: layout.values, layout.blocks, body))
-      }
+      Toplevel.Def(id,
+        BlockLit(function.tparams, function.cparams, layout.closure :: layout.values, layout.blocks, body))
     }
 
     def result(): ModuleDecl = {
@@ -1744,12 +1708,23 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
           val rep = pendingRepresentations.dequeue()
           declarations += dataDeclaration(rep)
           rep.block match {
-            case _: BlockType.Function => workers += dispatcherDefinition(rep)
+            case function: BlockType.Function =>
+              workers += dispatcherDefinition(rep, rep.dispatcher, function) {
+                case BlockCase.Function(id) => Callable.Function(id)
+                case _ => Context.abort(pretty"A function lambda set contains a non-function case")
+              }
             case _: BlockType.Interface => ()
           }
         }
-        while pendingOperationDispatchers.nonEmpty do
-          workers += operationDispatcherDefinition(pendingOperationDispatchers.dequeue())
+        while pendingOperationDispatchers.nonEmpty do {
+          val dispatcher = pendingOperationDispatchers.dequeue()
+          workers += dispatcherDefinition(dispatcher.representation, dispatcher.id, dispatcher.function) {
+            case BlockCase.Implementation(id) =>
+              constraints.operations.getOrElse(id -> dispatcher.method,
+                Context.abort(pretty"Missing operation '${dispatcher.method.name.name}'"))
+            case _ => Context.abort(pretty"An implementation lambda set contains a non-implementation case")
+          }
+        }
       }
       module.copy(
         declarations = module.declarations ++ declarations,
