@@ -1,9 +1,9 @@
-def run(){f: ['A]('A) => 'A} = {
+def call(){f: ['A]('A) => 'A} = {
   (f: ['A]('A) => 'A @ {f})[Int](42)
 }
 
 def forward(){f: ['A]('A) => 'A} = {
-  (run: (){f: ['A]('A) => 'A} => Int @ {})(){
+  (call: (){f: ['A]('A) => 'A} => Int @ {})(){
     (f: ['A]('A) => 'A @ {f})
   }
 }
@@ -26,12 +26,12 @@ interface Poly {
   apply: ['A]('A) => 'A
 }
 
-def run(){f: Poly} = {
+def call(){f: Poly} = {
   (f: Poly @ {f}).apply: ['A]('A) => 'A[Int](42)
 }
 
 def forward(){f: Poly} = {
-  (run: (){f: Poly} => Int @ {})(){
+  (call: (){f: Poly} => Int @ {})(){
     (f: Poly @ {f})
   }
 }
@@ -53,15 +53,15 @@ def main() = {
 /// MONO_COLLECT_CONSTRAINTS
 
 <> <: Poly
+<> <: call
 <> <: forward
 <> <: forwardAgain
-<> <: run
 <Int> <: apply
 
 /// MONO_SOLVE
 
 S = Poly ↦ { <> },
     apply ↦ { <Int> },
+    call ↦ { <> },
     forward ↦ { <> },
-    forwardAgain ↦ { <> },
-    run ↦ { <> }
+    forwardAgain ↦ { <> }

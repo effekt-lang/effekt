@@ -75,7 +75,7 @@ object PatternMatchingCompiler {
     case Ignore()
     case Any(id: Id)
     case Or(patterns: List[Pattern])
-    case Literal(l: core.Literal, equals: (core.Expr, core.Expr) => core.Expr)
+    case Literal(l: core.Literal, equals: (core.Expr, core.Expr, core.ValueVar => core.Stmt) => core.Stmt)
   }
 
   /**
@@ -100,10 +100,11 @@ object PatternMatchingCompiler {
         return binding.toStmt(compile(Clause(rest, target, targs, args) :: remainingClauses, motif))
       // - We need to check a predicate
       case Clause(Condition.Predicate(pred) :: rest, target, targs, args) =>
-        return core.If(pred,
-          compile(Clause(rest, target, targs, args) :: remainingClauses, motif),
-          compile(remainingClauses, motif)
-        )
+        val blockLit = core.BlockLit(List(), List(), List(), List(), compile(remainingClauses, motif))
+        val blockVar: core.BlockVar = core.BlockVar(Id("k"), blockLit.tpe, blockLit.capt)
+        return core.Def(blockVar.id, blockLit, core.If(pred,
+          compile(Clause(rest, target, targs, args) :: Clause(Nil, blockVar, List(), List()) :: Nil, motif),
+          core.App(blockVar, List(), List(), List())))
       case Clause(Condition.Patterns(patterns) :: rest, target, targs, args) =>
         patterns
     }
@@ -121,7 +122,7 @@ object PatternMatchingCompiler {
     }
 
     // (3a) Match on a literal
-    def splitOnLiteral(lit: Literal, equals: (Expr, Expr) => Expr): core.Stmt = {
+    def splitOnLiteral(lit: Literal, equals: (Expr, Expr, ValueVar => Stmt) => Stmt): core.Stmt = {
       // the different literal values that we match on
       val variants: List[core.Literal] = normalized.collect {
         case Clause(Split(Pattern.Literal(lit, _), _, _), _, _, _) => lit
@@ -171,7 +172,7 @@ object PatternMatchingCompiler {
             case false =>
               core.If(scrutinee, elsStmt, thnStmt)
             case _ =>
-              core.If(equals(scrutinee, lit), thnStmt, elsStmt)
+              equals(scrutinee, lit, result => core.If(result, thnStmt, elsStmt))
           }
       }
     }

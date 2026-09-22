@@ -114,8 +114,8 @@ class OptimizerTests extends CoreTests {
   test("drop pure let expressions"){
     val input =
       """ def main = { () =>
-        |   let x = (add : (Int, Int) => Int @ {})(1, 2)
-        |   let ! y = (println: (String) => Unit @ {io})("hello")
+        |   run x = (add : (Int, Int) => Int @ {})(1, 2)
+        |   run ! y = (println: (String) => Unit @ {io})("hello")
         |   let z = 7
         |   return z:Int
         | }
@@ -123,7 +123,7 @@ class OptimizerTests extends CoreTests {
 
     val expected =
       """ def main = { () =>
-        |   let ! y = (println: (String) => Unit @ {io})("hello")
+        |   run ! y = (println: (String) => Unit @ {io})("hello")
         |   let z = 7
         |   return z:Int
         | }
@@ -165,6 +165,40 @@ class OptimizerTests extends CoreTests {
         |""".stripMargin
 
     normalize(input, expected)
+  }
+
+  test("the same pure extern call is shared"){
+    val input =
+      """ def main = { () =>
+        |   run x = (add : (Int, Int) => Int @ {})(1, 2)
+        |   run y = (add : (Int, Int) => Int @ {})(1, 2)
+        |   run z = (add : (Int, Int) => Int @ {})(x: Int, y: Int)
+        |   return z:Int
+        | }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () =>
+        |   run x = (add : (Int, Int) => Int @ {})(1, 2)
+        |   run z = (add : (Int, Int) => Int @ {})(x: Int, x: Int)
+        |   return z:Int
+        | }
+        |""".stripMargin
+
+    normalize(input, expected)
+  }
+
+  test("an impure extern call is not shared"){
+    val input =
+      """ def main = { () =>
+        |   run ! x = (random : () => Int @ {io})()
+        |   run ! y = (random : () => Int @ {io})()
+        |   run z = (add : (Int, Int) => Int @ {})(x: Int, y: Int)
+        |   return z:Int
+        | }
+        |""".stripMargin
+
+    normalize(input, input)
   }
 
   test("inline with argument"){

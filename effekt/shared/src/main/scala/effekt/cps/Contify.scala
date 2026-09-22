@@ -37,7 +37,6 @@ object Contify {
   def rewrite(pure: Expr): Expr = pure match {
     case Expr.ValueVar(id) => Expr.ValueVar(id)
     case Expr.Literal(value, tpe) => Expr.Literal(value, tpe)
-    case Expr.PureApp(id, vargs) => Expr.PureApp(id, vargs.map(rewrite))
     case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(rewrite))
     case Expr.Box(b) => Expr.Box(rewrite(b))
   }
@@ -126,8 +125,8 @@ object Contify {
     case Stmt.LetCont(id, binding, body) =>
       Stmt.LetCont(id, rewrite(binding), rewrite(body))
 
-    case Stmt.ImpureApp(id, callee, vargs, bargs, body) =>
-      Stmt.ImpureApp(id, callee, vargs.map(rewrite), bargs.map(rewrite), rewrite(body))
+    case Stmt.ExternApp(id, purity, callee, vargs, bargs, body) =>
+      Stmt.ExternApp(id, purity, callee, vargs.map(rewrite), bargs.map(rewrite), rewrite(body))
 
     case Stmt.Region(id, ks, body) =>
       Stmt.Region(id, ks, rewrite(body))
@@ -230,7 +229,7 @@ object Contify {
     case Stmt.LetDef(_, binding, body) => occurrences(id, binding) ++ occurrences(id, body)
     case Stmt.LetExpr(_, binding, body) => occurrences(id, binding) ++ occurrences(id, body)
     case Stmt.LetCont(_, binding, body) => occurrences(id, binding) ++ occurrences(id, body)
-    case Stmt.ImpureApp(_, callee, vargs, bargs, body) =>
+    case Stmt.ExternApp(_, purity, callee, vargs, bargs, body) =>
       all(vargs, occurrences(id, _)) ++ all(bargs, occurrences(id, _)) ++ occurrences(id, body)
     case Stmt.Region(_, _, body) => occurrences(id, body)
     case Stmt.Alloc(_, init, _, body) => occurrences(id, init) ++ occurrences(id, body)
@@ -255,7 +254,6 @@ object Contify {
   def occurrences(id: Id, e: Expr): Occurrences = e match {
     case Expr.ValueVar(_) => Occurrences.none
     case Expr.Literal(_, _) => Occurrences.none
-    case Expr.PureApp(_, vargs) => all(vargs, occurrences(id, _))
     case Expr.Make(_, _, vargs) => all(vargs, occurrences(id, _))
     case Expr.Box(b) => occurrences(id, b)
   }
@@ -296,8 +294,8 @@ object Contify {
     case Stmt.LetCont(id2, binding, body) =>
       Stmt.LetCont(id2, contify(id, binding), contify(id, body))
 
-    case Stmt.ImpureApp(id2, callee, vargs, bargs, body) =>
-      Stmt.ImpureApp(id2, callee, vargs.map(contify(id, _)), bargs.map(contify(id, _)), contify(id, body))
+    case Stmt.ExternApp(id2, purity, callee, vargs, bargs, body) =>
+      Stmt.ExternApp(id2, purity, callee, vargs.map(contify(id, _)), bargs.map(contify(id, _)), contify(id, body))
 
     case Stmt.Region(id2, ks, body) =>
       Stmt.Region(id2, ks, contify(id, body))
@@ -339,7 +337,6 @@ object Contify {
   def contify(id: Id, p: Expr): Expr = p match {
     case Expr.ValueVar(_) => p
     case Expr.Literal(_, _) => p
-    case Expr.PureApp(id2, vargs) => Expr.PureApp(id2, vargs.map(contify(id, _)))
     case Expr.Make(data, tag, vargs) => Expr.Make(data, tag, vargs.map(contify(id, _)))
     case Expr.Box(b) => Expr.Box(contify(id, b))
   }

@@ -51,9 +51,9 @@ object RemoveTailResumptions {
       Some(TailPositions(f => Stmt.Val(id, binding, f(body)), binding.free))
     case Stmt.Let(id, binding, body) =>
       Some(TailPositions(f => Stmt.Let(id, binding, f(body)), binding.free))
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+    case Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, body) =>
       val arguments = (vargs.map(_.free) ++ bargs.map(_.free)).foldLeft(callee.free)(_ ++ _)
-      Some(TailPositions(f => Stmt.ImpureApp(id, callee, targs, vargs, bargs, f(body)), arguments))
+      Some(TailPositions(f => Stmt.ExternApp(id, purity, callee, targs, vargs, bargs, f(body)), arguments))
     case Stmt.Def(id, block, body) =>
       Some(TailPositions(f => Stmt.Def(id, block, f(body)), block.free))
     case Stmt.Alloc(id, init, region, body) =>
