@@ -1,0 +1,39 @@
+extern {io} def touch(value: Int): Unit = js ""
+
+def apply(){action: () => Unit} = {
+  (action: () => Unit @ {action})()
+}
+
+def main(value: Int) = {
+  def effectfulAction() = {
+    (touch: (Int) => Unit @ {io})(value: Int)
+  }
+  (apply: (){action: () => Unit} => Unit @ {})(){
+    (effectfulAction: () => Unit @ {io})
+  }
+}
+
+// Eliminating action also eliminates its abstract capture parameter. Its
+// concrete capture must therefore move to the specialized worker.
+/// LAMBDA_SPECIALIZE
+
+extern {io} def touch(value: Int): Unit = js ""
+
+def apply(){action: () => Unit} = {
+  (action: () => Unit @ {action})()
+}
+
+def main(value: Int) = {
+  def effectfulAction() = {
+    (touch: (Int) => Unit @ {io})(value: Int)
+  }
+  (apply_effectfulAction: (Int) => Unit @ {io})(value: Int)
+}
+
+def apply_effectfulAction(action_environment: Int) = {
+  (effectfulAction_specialized: (Int) => Unit @ {io})(action_environment: Int)
+}
+
+def effectfulAction_specialized(value_captured: Int) = {
+  (touch: (Int) => Unit @ {io})(value_captured: Int)
+}

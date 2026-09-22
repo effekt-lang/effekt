@@ -874,7 +874,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
     private def representation(set: LambdaSetId, block: BlockType): Representation = {
       assert(lowerable(set))
       representations.get(set) match {
-        case Some(result) if result.block == block => result
+        case Some(result) if Type.equals(result.block, block) => result
         case Some(_) => Context.abort(pretty"One lambda set cannot represent different block types")
         case None =>
           val name = setName(set)
@@ -1289,7 +1289,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
         BlockVar(
           rep.dispatcher,
           BlockType.Function(Nil, cparams, rep.tpe :: vparams, bparams, result),
-          Set.empty)
+          selectedCapture(rep.set))
       case _: BlockType.Interface =>
         Context.abort(pretty"An implementation is dispatched through one of its operations")
     }
@@ -1326,27 +1326,31 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
             dispatcher.id,
             BlockType.Function(tparams, cparams,
               dispatcher.representation.tpe :: vparams, bparams, result),
-            Set.empty)
+            selectedCapture(dispatcher.representation.set))
       }
 
-    private def adapter(
-      set: LambdaSetId,
-      environment: List[Expr],
-      function: BlockType.Function
-    ): BlockLit = {
-      val BlockType.Function(tparams, cparams, vtypes, btypes, result) = function
+    private def etaExpand(function: BlockType.Function)(body: (List[Expr], List[Block]) => Stmt): BlockLit = {
+      val BlockType.Function(tparams, cparams, vtypes, btypes, _) = function
       val vparams = vtypes.zipWithIndex.map { case (tpe, index) =>
         ValueParam(Id(s"arg${index}"), tpe)
       }
       val bparams = btypes.zip(cparams).zipWithIndex.map { case ((tpe, capture), index) =>
         BlockParam(Id(s"block${index}"), tpe, Set(capture))
       }
-      val values = vparams.map(p => Expr.ValueVar(p.id, p.tpe))
-      val blocks = bparams.map(p => BlockVar(p.id, p.tpe, p.capt))
-      val body = singleton(set) match {
+      BlockLit(tparams, cparams, vparams, bparams, body(
+        vparams.map(p => Expr.ValueVar(p.id, p.tpe)),
+        bparams.map(p => BlockVar(p.id, p.tpe, p.capt))))
+    }
+
+    private def adapter(
+      set: LambdaSetId,
+      environment: List[Expr],
+      block: BlockType
+    ): Block = block match {
+      case function: BlockType.Function => etaExpand(function) { (values, blocks) => singleton(set) match {
         case Some(LambdaCase(BlockCase.Function(id), captures)) if erasable(set) || unboxed(set) =>
           val owner = Callable.Function(id)
-          val shape = captures.map(Some.apply) ++ Vector.fill(bparams.size)(None)
+          val shape = captures.map(Some.apply) ++ Vector.fill(blocks.size)(None)
           val target = request(owner, shape)
           Stmt.App(functionRef(owner, shape, target), Nil, values ++ environment, blocks)
 
@@ -1356,8 +1360,28 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
             case _ => Context.abort(pretty"A nominal closure requires exactly one representation value")
           }
           Stmt.App(dispatcherRef(representation(set, function)), Nil, closure :: values, blocks)
-      }
-      BlockLit(tparams, cparams, vparams, bparams, body)
+      }}
+      case interface: BlockType.Interface =>
+        val rep = representation(set, interface)
+        val closure = if erasable(set) then
+          Expr.Make(rep.tpe, constructor(rep, singleton(set).get), Nil, Nil)
+        else environment match {
+          case value :: Nil => value
+          case _ => Context.abort(pretty"A nominal closure requires exactly one representation value")
+        }
+        val definition = module.declarations.collectFirst {
+          case d: Declaration.Interface if d.id == interface.name => d
+        }.get
+        val operations = definition.properties.map { property =>
+          val function = property.tpe.asInstanceOf[BlockType.Function]
+          val dispatcher = operationDispatcher(rep, property.id, function)
+          val literal = etaExpand(function) { (values, blocks) =>
+            Stmt.App(operationDispatcherRef(dispatcher), Nil, closure :: values, blocks)
+          }
+          Operation(property.id, literal.tparams, literal.cparams,
+            literal.vparams, literal.bparams, literal.body)
+        }
+        New(Implementation(interface, operations))
     }
 
     private case class CaseLayout(
@@ -1426,10 +1450,10 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
         super.rewrite(block)
 
       override def rewrite(block: Block)(using context: Specialization): Block = block match {
-        case unbox @ Unbox(expr) => (set(unbox).filter(lowerable), unbox.tpe) match {
-          case (Some(set), function: BlockType.Function) =>
+        case unbox @ Unbox(expr) => set(unbox).filter(lowerable) match {
+          case Some(set) =>
             val environment = Option.when(!erasable(set))(rewrite(expr)).toList
-            adapter(set, environment, function)
+            adapter(set, environment, unbox.tpe)
           case _ => super.rewrite(block)
         }
         case other => super.rewrite(other)
@@ -1540,7 +1564,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
             block.id -> adapter(
               block.set,
               environment,
-              block.tpe.asInstanceOf[BlockType.Function])
+              block.tpe)
         })
       val valueSubstitution = DB.from(capturedValues.map { case (original, parameter) =>
         original.id -> Expr.ValueVar(parameter.id, parameter.tpe)
@@ -1640,11 +1664,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
           val block = selection match {
             case Selection.Known(set, _) if erasable(set) => representative(set)
             case Selection.Known(set, environment) =>
-              tpe match {
-                case function: BlockType.Function => adapter(set, environment, function)
-                case _: BlockType.Interface =>
-                  Context.abort(pretty"A represented implementation must be used through an invocation")
-              }
+              adapter(set, environment, tpe)
             case Selection.Dynamic =>
               Context.abort(pretty"A closure case cannot have a dynamic captured block")
           }
