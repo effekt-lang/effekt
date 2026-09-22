@@ -76,17 +76,15 @@ object StaticResumptions {
 
     /** Does every `resume(k){s}` resume with a value (i.e., not bidirectional). */
     def resumesWithValues: Boolean = {
-      var values = true
-      object check extends Tree.Rewrite {
-        override def rewrite(stmt: Stmt): Stmt = stmt match {
-          case Resume(resumed) =>
-            if (!resumed.isInstanceOf[Stmt.Return]) values = false
-            super.rewrite(stmt)
-          case other => super.rewrite(other)
+      object query extends Tree.Query[Unit, Boolean] {
+        def empty = true
+        def combine = _ && _
+        override def stmt(using Unit) = {
+          // a `return` holds an expression, so it cannot be hiding a resumption of its own
+          case Resume(resumed) => resumed.isInstanceOf[Stmt.Return]
         }
       }
-      check.rewrite(body)
-      values
+      query.query(body)(using ())
     }
 
     /** Whether a resumption in [[stmt]] can observe a segment known by [[names]]. */
