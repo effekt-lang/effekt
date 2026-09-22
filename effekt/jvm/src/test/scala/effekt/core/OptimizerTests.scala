@@ -337,7 +337,7 @@ class OptimizerTests extends CoreTests {
         |""".stripMargin
 
     val expected =
-      """ def main = { () => reset { (){p: Prompt[Int]} => def j = { (){s @ sc: () => Int} => reset { (){q: Prompt[Int]} => val x = (s : () => Int @ {sc})(); return x:Int } } return 2 } }
+      """ def main = { () => reset { (){p: Prompt[Int]} => def j = { (y: Int) => reset { (){q: Prompt[Int]} => val x = return y:Int; return x:Int } } return 2 } }
         |""".stripMargin
 
     removeTailResumptions(input, expected)
@@ -369,7 +369,7 @@ class OptimizerTests extends CoreTests {
         |""".stripMargin
 
     val expected =
-      """ def main = { () => reset { (){o: Prompt[Int]} => reset { (){p: Prompt[Int]} => def j = { (){s @ sc: () => Int} => reset { (){q: Prompt[Int]} => (s : () => Int @ {sc})() } } shift (o : Prompt[Int] @ {o}) { {i: Resume[Nothing, Int]} => (j : (){s: () => Int} => Int @ {})(){ () => return 1 } } } } }
+      """ def main = { () => reset { (){o: Prompt[Int]} => reset { (){p: Prompt[Int]} => def j = { (y: Int) => reset { (){q: Prompt[Int]} => return y:Int } } shift (o : Prompt[Int] @ {o}) { {i: Resume[Nothing, Int]} => (j : (Int) => Int @ {})(1) } } } }
         |""".stripMargin
 
     removeTailResumptions(input, expected)
@@ -441,7 +441,7 @@ class OptimizerTests extends CoreTests {
         |""".stripMargin
 
     val expected =
-      """ def main = { (b: Bool) => reset { (){p: Prompt[Int]} => def j = { (){s @ sc: () => Int} => reset { (){q: Prompt[Int]} => val x = (s : () => Int @ {sc})(); return x:Int } } if (b: Bool) { (j : (){s: () => Int} => Int @ {})(){ () => return 1 } } else { return 2 } } }
+      """ def main = { (b: Bool) => reset { (){p: Prompt[Int]} => def j = { (y: Int) => reset { (){q: Prompt[Int]} => val x = return y:Int; return x:Int } } if (b: Bool) { (j : (Int) => Int @ {})(1) } else { return 2 } } }
         |""".stripMargin
 
     removeTailResumptions(input, expected)
@@ -485,7 +485,7 @@ class OptimizerTests extends CoreTests {
         |""".stripMargin
 
     val expected =
-      """ def main = { () => reset { (){p: Prompt[Int]} => def j = { (){s @ sc: () => Int} => reset { (){q: Prompt[Int]} => val x = (s : () => Int @ {sc})(); return x:Int } } reset { (){r: Prompt[Int]} => def f = { () => shift (r : Prompt[Int] @ {r}) { {i: Resume[Int, Int]} => return 0 } } val a = (f : () => Int @ {r})(); (j : (){s: () => Int} => Int @ {})(){ () => return a:Int } } } }
+      """ def main = { () => reset { (){p: Prompt[Int]} => def j = { (y: Int) => reset { (){q: Prompt[Int]} => val x = return y:Int; return x:Int } } reset { (){r: Prompt[Int]} => def f = { () => shift (r : Prompt[Int] @ {r}) { {i: Resume[Int, Int]} => return 0 } } val a = (f : () => Int @ {r})(); (j : (Int) => Int @ {})(a:Int) } } }
         |""".stripMargin
 
     removeTailResumptions(input, expected)
@@ -521,7 +521,7 @@ class OptimizerTests extends CoreTests {
         |""".stripMargin
 
     val expected =
-      """ def main = { () => reset { (){p: Prompt[Int]} => def j = { (){s @ sc: () => Int} => reset { (){q: Prompt[Int]} => val x = (s : () => Int @ {sc})(); def j2 = { (){s2 @ sc2: () => Int} => reset { (){q2: Prompt[Int]} => val y = (s2 : () => Int @ {sc2})(); return y:Int } } val b = (j2 : (){s2: () => Int} => Int @ {})(){ () => return 2 }; return b:Int } } val a = (j : (){s: () => Int} => Int @ {})(){ () => return 1 }; return a:Int } }
+      """ def main = { () => reset { (){p: Prompt[Int]} => def j = { (y: Int) => reset { (){q: Prompt[Int]} => val x = return y:Int; def j2 = { (y2: Int) => reset { (){q2: Prompt[Int]} => val z = return y2:Int; return z:Int } } val b = (j2 : (Int) => Int @ {})(2); return b:Int } } val a = (j : (Int) => Int @ {})(1); return a:Int } }
         |""".stripMargin
 
     removeTailResumptions(input, expected)

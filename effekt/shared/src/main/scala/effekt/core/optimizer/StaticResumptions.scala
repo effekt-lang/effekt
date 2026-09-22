@@ -74,6 +74,21 @@ object StaticResumptions {
     /** Whether `k` occurs only as `resume(k){...}`. */
     def resumesOnly: Boolean = !replaceResumptions(identity).free.contains(k)
 
+    /** Does every `resume(k){s}` resume with a value (i.e., not bidirectional). */
+    def resumesWithValues: Boolean = {
+      var values = true
+      object check extends Tree.Rewrite {
+        override def rewrite(stmt: Stmt): Stmt = stmt match {
+          case Resume(resumed) =>
+            if (!resumed.isInstanceOf[Stmt.Return]) values = false
+            super.rewrite(stmt)
+          case other => super.rewrite(other)
+        }
+      }
+      check.rewrite(body)
+      values
+    }
+
     /** Whether a resumption in [[stmt]] can observe a segment known by [[names]]. */
     def observes(names: Set[Id], stmt: Stmt): Boolean = {
       object query extends Tree.Query[Unit, Boolean] {
@@ -149,8 +164,9 @@ object StaticResumptions {
     //    [[ val y = E[ shift(p) { {k} => b } ]; rest ]]
     //      ~> def j{s} = reset { p' => val y = s(); rest }; [[ E[ b[ resume(k){s} := j{s} ] ] ]]
     //    where every other leaf `l` of `E` becomes `j{ () => l }`
-    case Stmt.Val(y, binding, rest) if joinable && shiftsTo(d, binding) =>
-      joinpoint(Captured(d, Some(y -> rest)), binding.tpe, orElse = Stmt.Val(y, binding, underDelimiter(d, rest, joinable))) { jump =>
+    case Stmt.Val(y, binding, rest) if joinable && shiftsTo(d, binding).isDefined =>
+      joinpoint(Captured(d, Some(y -> rest)), binding.tpe, carries = !shiftsTo(d, binding).contains(true),
+                orElse = Stmt.Val(y, binding, underDelimiter(d, rest, joinable))) { jump =>
         underDelimiter(d, jumpsToJoin(d, binding, jump), joinable = true)
       }
 
@@ -168,11 +184,27 @@ object StaticResumptions {
      }
    }
 
-  /** Whether a shift to [[d]] that can be joined stands in [[stmt]] under `val` frames only. */
-  private def shiftsTo(d: Delimiter, stmt: Stmt): Boolean = stmt match {
-    case d.Shift(handler) => handler.resumesOnly
-    case Stmt.Val(_, binding, body) => shiftsTo(d, binding) || shiftsTo(d, body)
-    case other => tailPositions(other).exists(_.exists(shiftsTo(d, _)))
+  /**
+   * Whether a shift to [[d]] that can be joined stands in [[stmt]] under `val` frames only, and if so
+   * whether all of them resume with a value: `None` when there is none to join.
+   */
+  private def shiftsTo(d: Delimiter, stmt: Stmt): Option[Boolean] = stmt match {
+    case d.Shift(handler) if handler.resumesOnly => Some(handler.resumesWithValues)
+    case d.Shift(_) => None
+    case Stmt.Val(_, binding, body) => and(shiftsTo(d, binding), shiftsTo(d, body))
+    case other => tailPositions(other) match {
+      case Some(positions) =>
+        var found: Option[Boolean] = None
+        positions.rewrite { child => found = and(found, shiftsTo(d, child)); child }
+        found
+      case None => None
+    }
+  }
+
+  private def and(left: Option[Boolean], right: Option[Boolean]): Option[Boolean] = (left, right) match {
+    case (Some(x), Some(y)) => Some(x && y)
+    case (found, None) => found
+    case (None, found) => found
   }
 
   /**
@@ -192,14 +224,21 @@ object StaticResumptions {
         case Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, _), capt), targs, vargs, bargs) if transparent.contains(f) =>
           Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, d.answer), capt), targs, vargs, bargs)
 
-        case leaf => jump(leaf)
+        // a leaf produces the frame's value where it stands, so it jumps with that value: the frames
+        // moved into the join point, the leaf did not
+        case leaf: Stmt.Return => jump(leaf)
+        case leaf =>
+          val y = Id("y")
+          Stmt.Val(y, leaf, jump(Stmt.Return(Expr.ValueVar(y, leaf.tpe))))
       }
     }
 
   /** [[ shift(p) { {k} => b } ]] ~> def j{s} = reset { p' => s() }; b[ resume(k){s} := j{s} ]   if `k` is only resumed */
   private def join(captured: Captured, handler: Handler, orElse: => Stmt): Stmt =
     if (handler.resumesOnly) {
-      joinpoint(captured, handler.hole, orElse) { jump => handler.replaceResumptions(jump) }
+      joinpoint(captured, handler.hole, carries = !handler.resumesWithValues, orElse) { jump =>
+        handler.replaceResumptions(jump)
+      }
     } else {
       orElse
     }
@@ -211,11 +250,8 @@ object StaticResumptions {
    * the renamed binders may know the old name, neither inside the join point nor in what is passed to it.
    * Renaming would hide that, so it is checked on the free variables before renaming.
    */
-  private def joinpoint(captured: Captured, hole: ValueType, orElse: => Stmt)(scope: (Stmt => Stmt) => Stmt): Stmt = boundary {
-    val s = Id("s")
-    val sCapt = Id("sCapt")
-    val sParam = BlockParam(s, BlockType.Function(Nil, Nil, Nil, Nil, hole), Set(sCapt))
-
+  private def joinpoint(captured: Captured, hole: ValueType, carries: Boolean, orElse: => Stmt)
+                       (scope: (Stmt => Stmt) => Stmt): Stmt = boundary {
     val fresh: Map[Id, Id] = captured.names.map { id => id -> Id(id) }.toMap
     object renaming extends Tree.Rewrite {
       override def rewrite(id: Id): Id = fresh.getOrElse(id, id)
@@ -225,19 +261,48 @@ object StaticResumptions {
       free.blocks.toMap.exists { case (id, (tpe, capt)) => !fresh.contains(id) && (capt ++ captures(tpe)).exists(fresh.contains) } ||
         free.values.toMap.exists { case (id, tpe) => !fresh.contains(id) && captures(tpe).exists(fresh.contains) }
     }
+    if (captures(hole).exists(fresh.contains)) break(orElse)
 
-    val code = captured.fill(Stmt.App(Block.BlockVar(s, sParam.tpe, Set(sCapt)), Nil, Nil, Nil))
-    if (knowsOldName(code) || captures(hole).exists(fresh.contains)) break(orElse)
-
-    val jDef = BlockLit(Nil, List(sCapt), Nil, List(sParam), reduce.rewrite(renaming.rewrite(code)))
     val j = Id("j")
-    val jVar = Block.BlockVar(j, jDef.tpe, jDef.capt)
 
-    Stmt.Def(j, jDef, scope { stmt =>
-      // what runs inside the join point is not renamed, so any mention of the old name escapes
+    /** The join point's body: the continuation's frames. */
+    def frames(filled: Stmt): BlockLit = {
+      val code = captured.fill(filled)
+      if (knowsOldName(code)) break(orElse)
+      BlockLit(Nil, Nil, Nil, Nil, reduce.rewrite(renaming.rewrite(code)))
+    }
+
+    /** Nothing may enter the join point carrying a name the copy renamed. */
+    def entering(stmt: Stmt): Stmt = {
       if (stmt.capt.exists(fresh.contains) || knowsOldName(stmt)) break(orElse)
-      Stmt.App(jVar, Nil, Nil, List(BlockLit(Nil, Nil, Nil, Nil, stmt)))
-    })
+      stmt
+    }
+
+    /** `def j(y) = reset { p => E[return y] }` */
+    def takingAValue: Stmt = {
+      val y = ValueParam(Id("y"), hole)
+      val jDef = frames(Stmt.Return(Expr.ValueVar(y.id, y.tpe))).copy(vparams = List(y))
+      val jVar = Block.BlockVar(j, jDef.tpe, jDef.capt)
+      Stmt.Def(j, jDef, scope { stmt => entering(stmt) match {
+        case Stmt.Return(e) => Stmt.App(jVar, Nil, List(e), Nil)
+        case _ => break(orElse)
+      }})
+    }
+
+    /** `def j{s} = reset { p => E[s()] }` */
+    def takingAComputation: Stmt = {
+      val s = Id("s")
+      val sCapt = Id("sCapt")
+      val sParam = BlockParam(s, BlockType.Function(Nil, Nil, Nil, Nil, hole), Set(sCapt))
+      val jDef = frames(Stmt.App(Block.BlockVar(s, sParam.tpe, Set(sCapt)), Nil, Nil, Nil))
+        .copy(cparams = List(sCapt), bparams = List(sParam))
+      val jVar = Block.BlockVar(j, jDef.tpe, jDef.capt)
+      Stmt.Def(j, jDef, scope { stmt =>
+        Stmt.App(jVar, Nil, Nil, List(BlockLit(Nil, Nil, Nil, Nil, entering(stmt))))
+      })
+    }
+
+    if (carries) takingAComputation else takingAValue
   }
 
   /** The captures that occur in a type. */
