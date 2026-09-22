@@ -36,7 +36,7 @@ def generate(program: () => Unit / Yield at {}): Generator =
     program();
     Empty()
   } with Yield {
-    def yield(x) = Thunk(x, fun() { resume(()) })
+    def yield(x) = Thunk(x, box { resume(()) })
   }
 
 def sum(a: Int, g: Generator): Int =
@@ -46,7 +46,7 @@ def sum(a: Int, g: Generator): Int =
   }
 
 def run(n: Int): Int =
-  sum(0, generate(fun() { iterate(make(n)) }))
+  sum(0, generate(box { iterate(make(n)) }))
 
 def main() = benchmark(5){run}
 
