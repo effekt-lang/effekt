@@ -38,7 +38,7 @@ object Defunctionalization {
   final class Plan private[js] (
     val cases: Map[Id, ContinuationCase],
     val dispatches: Map[Id, ContinuationDispatch],
-    private val applications: IdentityHashMap[cps.Stmt, ContinuationDispatch],
+    private val applications: IdentityHashMap[cps.Stmt, Id],
     /** Stable local definitions referenced directly by relocated cases which
      *  must therefore retain a JavaScript function binding. */
     val firstClassRequirements: Set[Id],
@@ -53,7 +53,7 @@ object Defunctionalization {
     def caseOf(id: Id): Option[ContinuationCase] = cases.get(id)
     def dispatchFor(entry: Id): Option[ContinuationDispatch] = dispatches.get(entry)
     def dispatchFor(application: cps.Stmt): Option[ContinuationDispatch] =
-      Option(applications.get(application))
+      Option(applications.get(application)).flatMap(dispatches.get)
 
     /** Finalize frame layouts after loop lowering has identified mutable
      *  registers. A recoverable immutable binding is read from the lexical
@@ -68,14 +68,10 @@ object Defunctionalization {
       val refinedDispatches = dispatches.view.mapValues { dispatch =>
         dispatch.copy(cases = dispatch.cases.map(c => refinedCases(c.definition)))
       }.toMap
-      val refinedApplications = new IdentityHashMap[cps.Stmt, ContinuationDispatch]()
-      applications.forEach { (application, dispatch) =>
-        refinedApplications.put(application, refinedDispatches(dispatch.entry))
-      }
       new Plan(
         refinedCases,
         refinedDispatches,
-        refinedApplications,
+        applications,
         firstClassRequirements,
         reenteredDefinitions,
         recoverableCaptures)
@@ -351,7 +347,7 @@ object Defunctionalization {
     val locations = Locations(module, isSecondClass)
     val allCases = scala.collection.mutable.LinkedHashMap.empty[Id, ContinuationCase]
     val allDispatches = scala.collection.mutable.LinkedHashMap.empty[Id, ContinuationDispatch]
-    val allApplications = new IdentityHashMap[cps.Stmt, ContinuationDispatch]()
+    val allApplications = new IdentityHashMap[cps.Stmt, Id]()
     val firstClassRequirements = scala.collection.mutable.LinkedHashSet.empty[Id]
     val reenteredDefinitions = scala.collection.mutable.LinkedHashSet.empty[Id]
     var nextTag = 0
@@ -381,6 +377,14 @@ object Defunctionalization {
     module.definitions.zip(targetFlows).foreach { case (toplevel, flow) =>
       val definitions = flow.localDefinitions
       val definitionById = definitions.iterator.map(d => d.id -> d).toMap
+      val toplevelId = toplevel match {
+        case cps.ToplevelDefinition.Def(id, _, _) => id
+        case cps.ToplevelDefinition.Val(id, _, _, _) => id
+      }
+      // Selection and tag assignment follow syntax, not hash-map or symbol-ID order.
+      val entryOrder = (toplevelId +: definitions.map(_.id)).zipWithIndex.toMap
+      def placementOrder(candidate: Candidate): (Int, Int) =
+        locations.lexicalDepth(candidate.entry) -> entryOrder(candidate.entry)
 
       // A closed direct definition denotes code, not an activation-dependent
       // closure. Relocated continuation cases can name that code directly,
@@ -433,7 +437,7 @@ object Defunctionalization {
 
       val uniqueEntries = candidates.groupBy(_.entry).values.collect {
         case Vector(candidate) => candidate
-      }.toVector
+      }.toVector.sortBy(candidate => entryOrder(candidate.entry))
 
       /** Connected components are the maximal sets forced to share a frame
        *  representation: either an application can receive cases from both
@@ -469,26 +473,22 @@ object Defunctionalization {
           }
         }
 
-        @tailrec def collect(
-          remaining: Vector[Candidate],
-          result: Vector[Vector[Candidate]] = Vector.empty
-        ): Vector[Vector[Candidate]] =
-          if remaining.isEmpty then result
+        val seen = scala.collection.mutable.Set.empty[Id]
+        candidates.flatMap { candidate =>
+          if seen(candidate.entry) then None
           else {
-            val seen = scala.collection.mutable.LinkedHashSet.empty[Id]
-            val pending = scala.collection.mutable.Queue(remaining.head.entry)
+            val component = Vector.newBuilder[Candidate]
+            val pending = scala.collection.mutable.Queue(candidate.entry)
             while pending.nonEmpty do {
               val entry = pending.dequeue()
-              if seen.add(entry) then
-                adjacent(entry).filterNot(seen).foreach(pending.enqueue(_))
+              if seen.add(entry) then {
+                component += candidateByEntry(entry)
+                adjacent(entry).foreach(pending.enqueue(_))
+              }
             }
-            val component = seen.toVector.map(candidateByEntry)
-            collect(
-              remaining.filterNot(candidate => seen(candidate.entry)),
-              result :+ component)
+            Some(component.result().sortBy(candidate => entryOrder(candidate.entry)))
           }
-
-        collect(candidates)
+        }
       }
 
       /** Select and materialize one closed continuation family. */
@@ -509,19 +509,16 @@ object Defunctionalization {
           .values
           .map(_.toVector)
           .toVector
+          .sortBy(members => members.map(candidate => entryOrder(candidate.entry)).min)
         val groups = component.filter(_.boundary).map(Vector(_)) ++ closedGroups
-        val owners = groups.map { members =>
+        val owners = groups.flatMap { members =>
           val requiredCalls = members.flatMap(_.calls) ++ callsInsideCases
-          val dominating = members.filter { candidate =>
+          members.filter { candidate =>
             requiredCalls.forall(call =>
               locations.visibleFrom(call.call, candidate.entry, domain))
-          }
-          dominating
-            .minByOption(candidate =>
-              locations.lexicalDepth(candidate.entry) -> candidate.entry.id)
-            .getOrElse(members.minBy(candidate =>
-              locations.lexicalDepth(candidate.entry) -> candidate.entry.id)) -> members
+          }.minByOption(placementOrder).map(_ -> members)
         }
+        if owners.size != groups.size then return false
         val staticAtEveryDispatcher = owners.iterator
           .map { case (owner, _) => locations.staticAt(owner.entry) }
           .reduceOption(_ intersect _)
@@ -549,13 +546,7 @@ object Defunctionalization {
             !externalTargets.exists(allCases.contains)
         val eligible = representationAvailable &&
           component.map(_.arity).distinct.size == 1 && covered &&
-          labelsAvailableAtEveryDispatcher &&
-          owners.forall { case (owner, members) =>
-            members.flatMap(_.calls).forall(call =>
-              locations.visibleFrom(call.call, owner.entry, domain)) &&
-            callsInsideCases.forall(call =>
-              locations.visibleFrom(call.call, owner.entry, domain))
-        }
+          labelsAvailableAtEveryDispatcher
 
         if eligible then {
           // A stable definition can be referenced directly instead of stored
@@ -594,11 +585,7 @@ object Defunctionalization {
               cases)
             allDispatches(owner.entry) = dispatch
             members.flatMap(_.calls).foreach { call =>
-              call.call match {
-                case application @ cps.Stmt.Call(_, _, cps.ReturnPoint.Jump) =>
-                  allApplications.put(application, dispatch)
-                case _ => () // candidates contain terminal applications only
-              }
+              allApplications.put(call.call, owner.entry)
             }
 
             // Case bodies are emitted at the dispatcher rather than at their
@@ -638,8 +625,7 @@ object Defunctionalization {
             .flatMap(_.iterator.flatMap(_.externalTargets)).toSet
           localComponents
             .filterNot(_.exists(_.targets.exists(boundaries)))
-            .sortBy(_.map(candidate =>
-              locations.lexicalDepth(candidate.entry) -> candidate.entry.id).min)
+            .sortBy(_.map(placementOrder).min)
             .foreach(select)
         }
       }

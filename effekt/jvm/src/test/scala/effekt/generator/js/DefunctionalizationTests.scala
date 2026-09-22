@@ -79,6 +79,34 @@ class DefunctionalizationTests extends munit.FunSuite {
     assertEquals(result.cases.map(_.tag), Vector(0, 1))
   }
 
+  test("independent dispatches receive tags in definition order") {
+    val source = """
+      def main(seed, k) {
+        def doneA(x) { k(x) }
+        def first(i, c) {
+          if (true) { c(i) } else {
+            def nextA(x) { first(x, c) }
+            first(i, nextA)
+          }
+        }
+        def doneB(y) { k(y) }
+        def second(j, d) {
+          if (true) { d(j) } else {
+            def nextB(z) { second(z, d) }
+            second(j, nextB)
+          }
+        }
+        if (true) { first(seed, doneA) } else { second(seed, doneB) }
+      }
+    """
+    // Fresh parses allocate different symbol IDs, but must produce the same plan.
+    for _ <- 0 until 4 do {
+      val plan = analyze(source)
+      assertEquals(plan.cases.values.map(c => c.definition.name.name -> c.tag).toMap,
+        Map("doneA" -> 0, "nextA" -> 1, "doneB" -> 2, "nextB" -> 3))
+    }
+  }
+
   test("representation planning removes demands caused only by a continuation closure") {
     val plan = representations("""
       def main(n, k) {
