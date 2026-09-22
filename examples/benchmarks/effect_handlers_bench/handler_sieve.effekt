@@ -5,11 +5,11 @@ effect prime(e: Int): Bool
 def primes(i: Int, n: Int, a: Int): Int / prime =
   if (i >= n) {
     a
-  } else if(do prime(i)) {
+  } else if (do prime(i)) {
     try {
       primes(i + 1, n, a + i)
     } with prime { (e: Int) =>
-      if (mod(e, i) == 0) {
+      if (e.mod(i) == 0) {
         resume(false)
       } else {
         resume(do prime(e))
