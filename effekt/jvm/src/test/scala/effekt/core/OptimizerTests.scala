@@ -35,7 +35,7 @@ class OptimizerTests extends CoreTests {
     }
 
   def removeTailResumptions(input: String, expected: String)(using munit.Location) =
-    assertTransformsTo(input, expected) { tree => RemoveTailResumptions(tree) }
+    assertTransformsTo(input, expected) { tree => StaticResumptions(tree) }
 
   def normalizeWith(policy: InliningPolicy)(input: String, expected: String)(using munit.Location) =
     assertTransformsTo(input, expected) { tree =>
@@ -404,6 +404,62 @@ class OptimizerTests extends CoreTests {
         |""".stripMargin
 
     removeTailResumptions(input, expected)
+  }
+
+  test("a shift at its delimiter is erased although one of its exits returns") {
+    val input =
+      """ def main = { (b: Bool) => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => if (b: Bool) { resume (k : Resume[Int, Int] @ {k}) { return 1 } } else { return 2 } } } }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { (b: Bool) => reset { (){p: Prompt[Int]} => if (b: Bool) { return 1 } else { return 2 } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, expected)
+  }
+
+  test("the same shift away from its delimiter is kept, since its returning exit would land elsewhere") {
+    val input =
+      """ def main = { (b: Bool) => reset { (){p: Prompt[Int]} => val x = shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => if (b: Bool) { resume (k : Resume[Int, Int] @ {k}) { return 1 } } else { return 2 } }; return x:Int } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
+  }
+
+  test("a resumption handed to a tail-called block is not a tail resumption") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => def w = { (){r: Resume[Int, Int]} => return 1 } (w : (){r: Resume[Int, Int]} => Int @ {})(){ (k : Resume[Int, Int] @ {k}) } } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
+  }
+
+  test("a resumption under a nested prompt that the resumed statement shifts to is kept") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => reset { (){q: Prompt[Int]} => resume (k : Resume[Int, Int] @ {k}) { shift (q : Prompt[Int] @ {q}) { {j: Resume[Int, Int]} => return 0 } } } } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
+  }
+
+  test("a resumption under a nested prompt nobody resumes into is erased at the delimiter") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => reset { (){q: Prompt[Int]} => def f = { () => shift (q : Prompt[Int] @ {q}) { {j: Resume[Int, Int]} => return 0 } } val a = (f : () => Int @ {q})(); resume (k : Resume[Int, Int] @ {k}) { return a:Int } } } } }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () => reset { (){p: Prompt[Int]} => reset { (){q: Prompt[Int]} => def f = { () => shift (q : Prompt[Int] @ {q}) { {j: Resume[Int, Int]} => return 0 } } val a = (f : () => Int @ {q})(); return a:Int } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, expected)
+  }
+
+  test("the same nested prompt away from the delimiter is kept, since an abort to it is an exit by a value") {
+    val input =
+      """ def main = { () => reset { (){p: Prompt[Int]} => val x = shift (p : Prompt[Int] @ {p}) { {k: Resume[Int, Int]} => reset { (){q: Prompt[Int]} => def f = { () => shift (q : Prompt[Int] @ {q}) { {j: Resume[Int, Int]} => return 0 } } val a = (f : () => Int @ {q})(); resume (k : Resume[Int, Int] @ {k}) { return a:Int } } }; return x:Int } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
   }
 
   test("a call carrying a capability to a prompt we are inside of is inlined past the normal budget") {

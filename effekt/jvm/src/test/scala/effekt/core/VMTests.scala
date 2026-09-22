@@ -1455,6 +1455,22 @@ class VMTests extends munit.FunSuite {
     )),
 
     // issue 1272: Optimizing through useless constructs / obfuscated code (optimizer-wishlist)
+    examplesDir / "pos" / "resume_or_return.effekt" -> Some(Summary(
+      staticDispatches = 0,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 1,
+      pushedFrames = 0,
+      poppedFrames = 0,
+      allocations = 0,
+      closures = 0,
+      variableReads = 1,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
     examplesDir / "pos" / "with_val_else.effekt" -> Some(Summary(
       staticDispatches = 3,
       dynamicDispatches = 0,

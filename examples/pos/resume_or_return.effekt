@@ -1,0 +1,13 @@
+import args
+
+effect ask(): Int
+
+// The handler resumes on one path and answers directly on the other.
+def main() = {
+  // opaque to the optimizer
+  val n = commandLineArgs().size
+  val r = try { do ask() } with ask {
+    if (n == 0) resume(1) else 2
+  }
+  println(r)
+}
