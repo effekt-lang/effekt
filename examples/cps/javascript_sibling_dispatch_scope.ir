@@ -29,7 +29,7 @@ def main(flag, value, ks, k) {
 
 function main_0(flag_0, value_0, ks_0, k_0) {
   const k_1 = { __tag: 0 };
-  const ks_first_0 = undefined;
+  const ks_first_0 = TOPLEVEL_KS;
   let i_0 = undefined;
   let k_first_0 = undefined;
   let cont_0 = undefined;
@@ -61,7 +61,7 @@ function main_0(flag_0, value_0, ks_0, k_0) {
             const first_result_0 = value_1;
             const ks_1 = value_2;
             const k_3 = { __tag: 1 };
-            const ks_second_0 = undefined;
+            const ks_second_0 = TOPLEVEL_KS;
             let i_1 = undefined;
             let k_second_0 = undefined;
             second_worker_0: {

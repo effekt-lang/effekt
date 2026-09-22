@@ -136,25 +136,21 @@ object TransformerCps {
     chez.Block(Nil, List(expression), toChezExpr(rest))
   }
 
+  private def call(callee: Callee, args: List[chez.Expr]): chez.Expr = callee match {
+    case Callee.Function(id) => chez.Call(nameRef(id), args)
+    case Callee.Method(receiver, method) =>
+      chez.Call(chez.Call(nameRef(method), nameRef(receiver)), args)
+  }
+
   def toChezExpr(stmt: cps.Stmt): chez.Expr = stmt match {
-    case Stmt.Call(results, returnedKs, callee, args, ks, rest) =>
+    case Stmt.Call(callee, args, ReturnPoint.Bind(results, returnedKs, ks, rest)) =>
       val continuation = chez.Lambda(
         (results :+ returnedKs).map(nameDef),
         toChez(rest))
-      val lowered = args.map(toChez) ++ List(toChez(ks), continuation)
-      callee match {
-        case Callee.Function(id) => chez.Call(nameRef(id), lowered)
-        case Callee.Method(receiver, method) =>
-          val operation = chez.Call(nameRef(method), nameRef(receiver))
-          chez.Call(operation, lowered)
-      }
+      call(callee, args.map(toChez) ++ List(toChez(ks), continuation))
 
-    case Stmt.App(id, args) =>
-      chez.Call(nameRef(id), args.map(toChez))
-
-    case Stmt.Invoke(id, method, args) =>
-      val operation = chez.Call(nameRef(method), nameRef(id))
-      chez.Call(operation, args.map(toChez))
+    case application @ Stmt.Call(callee, _, _: ReturnPoint.Tail | ReturnPoint.Jump) =>
+      call(callee, application.knownArguments.map(toChez))
 
     case Stmt.Return(List(value)) =>
       toChez(value)

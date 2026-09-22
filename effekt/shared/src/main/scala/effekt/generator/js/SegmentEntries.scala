@@ -4,6 +4,7 @@ package js
 
 import effekt.core.Id
 import effekt.cps
+import effekt.cps.knownArguments
 
 import java.util.IdentityHashMap
 import scala.collection.mutable
@@ -24,13 +25,13 @@ object SegmentEntries {
 
   final class Plan private[SegmentEntries] (
     val entries: Set[Id],
-    private val preservingCalls: IdentityHashMap[cps.Stmt.App, java.lang.Boolean]
+    private val preservingCalls: IdentityHashMap[cps.Stmt, java.lang.Boolean]
   ) {
     def contains(id: Id): Boolean = entries.contains(id)
 
     /** All possible callees are internal definitions with matching arity, so
      *  their formal parameters can retain segment-entry provenance. */
-    def preserves(call: cps.Stmt.App): Boolean =
+    def preserves(call: cps.Stmt): Boolean =
       java.lang.Boolean.TRUE == preservingCalls.get(call)
   }
 
@@ -49,34 +50,46 @@ object SegmentEntries {
       parameters(definition.id) = definition.params
     })
 
-    val targetsByCall = new IdentityHashMap[cps.Stmt.App, cps.Targets.CallTargets]()
+    val targetsByCall = new IdentityHashMap[cps.Stmt, cps.Targets.CallTargets]()
     targetFlows.foreach(_.callTargets.foreach { targets =>
-      targets.call match {
-        case call: cps.Stmt.App => targetsByCall.put(call, targets)
-        case _: cps.Stmt.Call => ()
-        case _ => ()
-      }
+      targetsByCall.put(targets.call, targets)
     })
 
-    val preservingCalls = new IdentityHashMap[cps.Stmt.App, java.lang.Boolean]()
+    val preservingCalls = new IdentityHashMap[cps.Stmt, java.lang.Boolean]()
     val roots = mutable.LinkedHashSet.empty[Id]
     val edges = mutable.LinkedHashMap.empty[Id, mutable.LinkedHashSet[Id]]
 
     def edge(source: Id, target: Id): Unit =
       edges.getOrElseUpdate(source, mutable.LinkedHashSet.empty) += target
 
-    def closedTargets(call: cps.Stmt.App): Vector[Vector[Id]] =
-      parameters.get(call.id) match {
-        case Some(params) if params.size == call.args.size => Vector(params)
+    def closedTargets(
+      call: cps.Stmt,
+      callee: Id,
+      arguments: List[cps.Expr]
+    ): Vector[Vector[Id]] =
+      parameters.get(callee) match {
+        case Some(params) if params.size == arguments.size => Vector(params)
         case _ =>
           Option(targetsByCall.get(call)).filter(_.closed).fold(Vector.empty) { flow =>
             val targets = flow.targets.toVector
               .sortBy(id => (id.name.name, id.id))
               .flatMap(parameters.get)
-            if targets.nonEmpty && targets.forall(_.size == call.args.size) then targets
+            if targets.nonEmpty && targets.forall(_.size == arguments.size) then targets
             else Vector.empty
           }
       }
+
+    def visitTransfer(call: cps.Stmt, callee: Id, arguments: List[cps.Expr]): Unit = {
+      val targets = closedTargets(call, callee, arguments)
+      if targets.nonEmpty then {
+        preservingCalls.put(call, java.lang.Boolean.TRUE)
+        arguments.zipWithIndex.foreach {
+          case (cps.Expr.Variable(source), index) =>
+            targets.foreach(params => edge(source, params(index)))
+          case _ => ()
+        }
+      }
+    }
 
     def visit(stmt: cps.Stmt): Unit = stmt match {
       case cps.Stmt.Def(_, _, body, rest) => visit(body); visit(rest)
@@ -89,20 +102,13 @@ object SegmentEntries {
         visit(rest)
       case cps.Stmt.Let(_, _, rest) => visit(rest)
 
-      case cps.Stmt.Call(_, _, _, _, _, rest) => visit(rest)
+      case cps.Stmt.Call(_, _, cps.ReturnPoint.Bind(_, _, _, rest)) => visit(rest)
 
-      case call: cps.Stmt.App =>
-        val targets = closedTargets(call)
-        if targets.nonEmpty then {
-          preservingCalls.put(call, java.lang.Boolean.TRUE)
-          call.args.zipWithIndex.foreach {
-            case (cps.Expr.Variable(source), index) =>
-              targets.foreach(params => edge(source, params(index)))
-            case _ => ()
-          }
-        }
+      case call @ cps.Stmt.Call(cps.Callee.Function(callee), _,
+          _: cps.ReturnPoint.Tail | cps.ReturnPoint.Jump) =>
+        visitTransfer(call, callee, call.knownArguments)
 
-      case _: cps.Stmt.Invoke => ()
+      case _: cps.Stmt.Call => ()
       case _: cps.Stmt.Return => ()
       case cps.Stmt.Run(_, _, _, _, rest) => visit(rest)
       case cps.Stmt.If(_, thn, els) => visit(thn); visit(els)

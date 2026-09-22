@@ -114,7 +114,7 @@ object ParameterDropping {
       val fixed = mutable.Map.empty[Int, Set[Int]].withDefaultValue(Set.empty)
       flow.sites.iterator.zipWithIndex.foreach { case (call, site) =>
         call.stmt match {
-          case _: Stmt.Call =>
+          case Stmt.Call(_, _, ReturnPoint.Bind(_, _, _, _)) =>
             flow.targetsAt.getOrElse(site, Set.empty)
               .filter(definitions.contains)
               .foreach { target =>
@@ -165,6 +165,13 @@ object ParameterDropping {
     ): Map[Id, Vector[Boolean]] = {
       val result = mutable.Map.empty[Id, Vector[Boolean]]
 
+      def terminalFree(stmt: Stmt, callee: Callee, args: List[Expr]): Set[Id] = {
+        val mask = callMasks(flow.siteOf(stmt))
+        Set(callee.value) ++ args.zipWithIndex.iterator.collect {
+          case (arg, index) if !mask.lift(index).getOrElse(false) => arg.free
+        }.flatten
+      }
+
       def visit(stmt: Stmt): Set[Id] = stmt match {
         case Stmt.Def(id, params, functionBody, rest) =>
           val bodyFree = visit(functionBody)
@@ -193,7 +200,8 @@ object ParameterDropping {
 
         case Stmt.Let(id, binding, rest) => binding.free ++ (visit(rest) - id)
 
-        case call @ Stmt.Call(ids, returnedKs, callee @ Callee.Function(_), args, ks, rest) =>
+        case call @ Stmt.Call(callee @ Callee.Function(_), args,
+            ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
           val mask = callMasks(flow.siteOf(call))
           val ksFree =
             if mask.lift(args.size).getOrElse(false) then Set.empty else ks.free
@@ -203,17 +211,18 @@ object ParameterDropping {
             ksFree ++
             (visit(rest) -- ids.toSet - returnedKs)
 
-        case Stmt.Call(ids, returnedKs, callee @ Callee.Method(_, _), args, ks, rest) =>
+        case Stmt.Call(callee @ Callee.Method(_, _), args,
+            ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
           Set(callee.value) ++ args.flatMap(_.free) ++ ks.free ++
             (visit(rest) -- ids.toSet - returnedKs)
 
-        case app @ Stmt.App(id, args) =>
-          val mask = callMasks(flow.siteOf(app))
-          Set(id) ++ args.zipWithIndex.iterator.collect {
-            case (arg, index) if !mask.lift(index).getOrElse(false) => arg.free
-          }.flatten.toSet
+        case call @ Stmt.Call(callee @ Callee.Function(_), _,
+            _: ReturnPoint.Tail | ReturnPoint.Jump) =>
+          terminalFree(call, callee, call.knownArguments)
 
-        case Stmt.Invoke(id, _, args) => Set(id) ++ args.flatMap(_.free)
+        case call @ Stmt.Call(callee @ Callee.Method(_, _), _,
+            _: ReturnPoint.Tail | ReturnPoint.Jump) =>
+          Set(callee.value) ++ call.knownArguments.flatMap(_.free)
 
         case Stmt.Return(values) => values.flatMap(_.free).toSet
 
@@ -361,6 +370,14 @@ object ParameterDropping {
       case other => sys.error(s"A reference cannot be replaced by ${util.show(other)}")
     }
 
+  private def keptArguments(stmt: Stmt, args: List[Expr], info: DropInfo): List[Expr] = {
+    val mask = info.callMask(stmt)
+    args.zipWithIndex.collect {
+      case (argument, index) if !mask.lift(index).getOrElse(false) =>
+        transform(argument, info)
+    }
+  }
+
   private def transform(stmt: Stmt, info: DropInfo): Stmt = stmt match {
     case Stmt.Def(id, params, functionBody, rest) =>
       val mask = info.functions(id)
@@ -375,32 +392,43 @@ object ParameterDropping {
     case Stmt.Let(id, binding, rest) =>
       Stmt.Let(id, transform(binding, info), transform(rest, info))
 
-    case call @ Stmt.Call(id, returnedKs, callee @ Callee.Function(target), args, ks, rest) =>
+    case call @ Stmt.Call(callee @ Callee.Function(target), args,
+        ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
       val mask = info.callMask(call)
       val kept = args.zipWithIndex.collect {
         case (argument, index) if !mask.lift(index).getOrElse(false) =>
           transform(argument, info)
       }
-      Stmt.Call(id, returnedKs, Callee.Function(transformReference(target, info)), kept,
-        transform(ks, info), transform(rest, info))
+      Stmt.Call(Callee.Function(transformReference(target, info)), kept,
+        ReturnPoint.Bind(ids, returnedKs,
+          transform(ks, info), transform(rest, info)))
 
-    case Stmt.Call(id, returnedKs, Callee.Method(receiver, method), args, ks, rest) =>
-      Stmt.Call(id, returnedKs,
-        Callee.Method(transformReference(receiver, info), method),
+    case Stmt.Call(Callee.Method(receiver, method), args,
+        ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
+      Stmt.Call(Callee.Method(transformReference(receiver, info), method),
         args.map(transform(_, info)),
-        transform(ks, info), transform(rest, info))
+        ReturnPoint.Bind(ids, returnedKs,
+          transform(ks, info), transform(rest, info)))
 
-    case app @ Stmt.App(id, args) =>
-      val callee = transformReference(id, info)
-      val mask = info.callMask(app)
-      val kept = args.zipWithIndex.collect {
-        case (argument, index) if !mask.lift(index).getOrElse(false) =>
-          transform(argument, info)
-      }
-      Stmt.App(callee, kept)
+    case call @ Stmt.Call(Callee.Function(id), _, _: ReturnPoint.Tail) =>
+      val callee = Callee.Function(transformReference(id, info))
+      val mask = info.callMask(call)
+      val kept = keptArguments(call, call.knownArguments, info)
+      if mask.takeRight(2).contains(true) then Stmt.Call(callee, kept, ReturnPoint.Jump)
+      else Stmt.Call(callee, kept.dropRight(2),
+        ReturnPoint.Tail(kept(kept.size - 2), kept.last))
 
-    case Stmt.Invoke(id, method, args) =>
-      Stmt.Invoke(transformReference(id, info), method, args.map(transform(_, info)))
+    case Stmt.Call(Callee.Method(receiver, method), args, ReturnPoint.Tail(ks, k)) =>
+      Stmt.Call(Callee.Method(transformReference(receiver, info), method),
+        args.map(transform(_, info)), ReturnPoint.Tail(transform(ks, info), transform(k, info)))
+
+    case jump @ Stmt.Call(Callee.Function(id), args, ReturnPoint.Jump) =>
+      Stmt.Call(Callee.Function(transformReference(id, info)),
+        keptArguments(jump, args, info), ReturnPoint.Jump)
+
+    case Stmt.Call(Callee.Method(receiver, method), args, ReturnPoint.Jump) =>
+      Stmt.Call(Callee.Method(transformReference(receiver, info), method),
+        args.map(transform(_, info)), ReturnPoint.Jump)
 
     case Stmt.Return(values) =>
       Stmt.Return(values.map(transform(_, info)))

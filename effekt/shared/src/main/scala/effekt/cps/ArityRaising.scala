@@ -280,6 +280,26 @@ object ArityRaising {
         case _ => id
       }
 
+    private def rewriteCallee(
+      original: Callee,
+      values: KnownValues,
+      objects: Objects
+    ): (Callee, Option[Id]) = {
+      val target = original match {
+        case Callee.Function(id) => Some(id)
+        case Callee.Method(receiver, method) => objects.get(receiver).flatMap(_.get(method))
+      }
+      val rewritten = target match {
+        case Some(id) => Callee.Function(identifier(id, values))
+        case None => original match {
+          case Callee.Function(id) => Callee.Function(identifier(id, values))
+          case Callee.Method(receiver, method) =>
+            Callee.Method(identifier(receiver, values), method)
+        }
+      }
+      rewritten -> target
+    }
+
     private def expand(values: List[KnownValue], entry: List[Shape]): Option[List[Expr]] =
       (values, entry) match {
         case (Nil, Nil) => Some(Nil)
@@ -415,7 +435,8 @@ object ArityRaising {
           Stmt.Let(id, rewrittenBinding, rewrite(rest, values, objects))
       }
 
-      case call @ Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
+      case call @ Stmt.Call(callee, args,
+          ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
         val continuation = plan.continuations.get(site(call))
           .map(_.take(ids.size).toList)
           .getOrElse(List.fill(ids.size)(Shape.Unknown))
@@ -423,33 +444,22 @@ object ArityRaising {
         val rewrittenRest = materializeUsed(
           raised.materializations,
           rewrite(rest, raised.values, objects))
-        val rewrittenCallee = callee match {
-          case Callee.Function(id) => Callee.Function(identifier(id, values))
-          case Callee.Method(receiver, method) =>
-            objects.get(receiver).flatMap(_.get(method)) match {
-              case Some(target) => Callee.Function(target)
-              case None => Callee.Method(identifier(receiver, values), method)
-            }
-        }
-        Stmt.Call(
-          raised.ids,
-          returnedKs,
-          rewrittenCallee,
-          arguments(call, args, values, callee.function),
-          expression(ks, values),
-          rewrittenRest)
+        val (rewrittenCallee, target) = rewriteCallee(callee, values, objects)
+        Stmt.Call(rewrittenCallee,
+          arguments(call, args, values, target),
+          ReturnPoint.Bind(
+            raised.ids, returnedKs, expression(ks, values), rewrittenRest))
 
-      case app @ Stmt.App(id, args) =>
-        Stmt.App(identifier(id, values), arguments(app, args, values, Some(id)))
+      case call @ Stmt.Call(callee, _, _: ReturnPoint.Tail) =>
+        val (rewrittenCallee, target) = rewriteCallee(callee, values, objects)
+        val rewritten = arguments(call, call.knownArguments, values, target)
+        Stmt.Call(rewrittenCallee, rewritten.dropRight(2),
+          ReturnPoint.Tail(rewritten(rewritten.size - 2), rewritten.last))
 
-      case invocation @ Stmt.Invoke(receiver, method, args) =>
-        val target = objects.get(receiver).flatMap(_.get(method))
-        val rewrittenArguments = arguments(invocation, args, values, target)
-        target match {
-          case Some(id) => Stmt.App(id, rewrittenArguments)
-          case None => Stmt.Invoke(
-            identifier(receiver, values), method, rewrittenArguments)
-        }
+      case jump @ Stmt.Call(callee, args, ReturnPoint.Jump) =>
+        val (rewrittenCallee, target) = rewriteCallee(callee, values, objects)
+        Stmt.Call(rewrittenCallee,
+          arguments(jump, args, values, target), ReturnPoint.Jump)
 
       case Stmt.Return(results) => Stmt.Return(results.map(expression(_, values)))
 

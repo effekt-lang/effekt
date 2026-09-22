@@ -9,4 +9,7 @@ object Targets {
 
   def targets(definition: ToplevelDefinition): TargetResult =
     GuardedEquality.targets(definition)
+
+  def targets(definition: ToplevelDefinition, roots: Set[core.Id]): TargetResult =
+    GuardedEquality.targets(definition, roots)
 }

@@ -45,14 +45,11 @@ function main_0(flag_0, value_0, ks_0, k_0) {
         inner_return_0: {
           inner_0: while (true) {
             if (recur_0) {
-              const next_arg_0 = false;
-              recur_0 = next_arg_0;
+              recur_0 = false;
               continue inner_0;
             } else {
-              const next_arg_1 = false;
-              const next_arg_2 = nested_0;
-              active_0 = next_arg_1;
-              current_0 = next_arg_2;
+              active_0 = false;
+              current_0 = nested_0;
               continue outer_0;
             }
           }

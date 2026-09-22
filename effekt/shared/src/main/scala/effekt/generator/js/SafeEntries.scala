@@ -4,6 +4,7 @@ package js
 
 import effekt.core.Id
 import effekt.cps
+import effekt.cps.knownArguments
 
 import java.util.IdentityHashMap
 import scala.collection.mutable
@@ -112,12 +113,12 @@ object SafeEntries {
 
   /** Identity of a syntactic application whose finite target set is closed.
    *  All abstract edges contributed by one application are cut together. */
-  private final class CallSite(val application: cps.Stmt.App)
+  private final class CallSite(val application: cps.Stmt)
 
   final class Result private[SafeEntries] (
     val definitions: Set[Id],
     private val operations: IdentityHashMap[cps.Operation, java.lang.Boolean],
-    private val bounces: IdentityHashMap[cps.Stmt.App, java.lang.Boolean],
+    private val bounces: IdentityHashMap[cps.Stmt, java.lang.Boolean],
     val adapters: Vector[String]
   ) {
     def needsAdapter(id: Id): Boolean = definitions.contains(id)
@@ -125,7 +126,7 @@ object SafeEntries {
     def needsAdapter(operation: cps.Operation): Boolean =
       java.lang.Boolean.TRUE == operations.get(operation)
 
-    def bouncesAt(application: cps.Stmt.App): Boolean =
+    def bouncesAt(application: cps.Stmt): Boolean =
       java.lang.Boolean.TRUE == bounces.get(application)
 
     def show: String = if adapters.isEmpty then "-" else adapters.mkString("\n")
@@ -199,7 +200,7 @@ object SafeEntries {
         collect(rest)
 
       case cps.Stmt.Let(_, _, rest) => collect(rest)
-      case cps.Stmt.Call(_, _, _, _, _, rest) => collect(rest)
+      case cps.Stmt.Call(_, _, cps.ReturnPoint.Bind(_, _, _, rest)) => collect(rest)
       case cps.Stmt.Run(_, _, _, _, rest) => collect(rest)
       case cps.Stmt.If(_, thn, els) => collect(thn); collect(els)
       case cps.Stmt.Match(_, clauses, default) =>
@@ -214,7 +215,8 @@ object SafeEntries {
       case cps.Stmt.Reset(_, _, _, body, _, _) => collect(body)
       case cps.Stmt.Shift(_, _, _, _, body, _, _) => collect(body)
       case cps.Stmt.Resume(_, _, _, body, _, _) => collect(body)
-      case _: (cps.Stmt.App | cps.Stmt.Invoke | cps.Stmt.Return | cps.Stmt.Hole) => ()
+      case cps.Stmt.Call(_, _, _: cps.ReturnPoint.Tail | cps.ReturnPoint.Jump) |
+          _: cps.Stmt.Return | _: cps.Stmt.Hole => ()
     }
 
     module.definitions.foreach {
@@ -237,7 +239,7 @@ object SafeEntries {
     val pending = mutable.Queue.empty[Int]
     val queued = mutable.BitSet.empty
     val edges = mutable.LinkedHashSet.empty[Edge]
-    val callSites = new IdentityHashMap[cps.Stmt.App, CallSite]()
+    val callSites = new IdentityHashMap[cps.Stmt, CallSite]()
     val dataNodes = new IdentityHashMap[cps.Expr.Make, DataNode]()
     val cellNodes = new IdentityHashMap[cps.Stmt, CellNode]()
 
@@ -308,7 +310,7 @@ object SafeEntries {
       case other => other
     }
 
-    def callSite(application: cps.Stmt.App): CallSite = {
+    def callSite(application: cps.Stmt): CallSite = {
       val existing = callSites.get(application)
       if existing != null then existing
       else {
@@ -341,7 +343,9 @@ object SafeEntries {
         watch(dependency(binding)) { add(Variable(id), eval(binding)) }
         scan(rest, source)
 
-      case call @ cps.Stmt.Call(results, _, cps.Callee.Function(id), arguments, ks, rest) =>
+      case call @ cps.Stmt.Call(
+            cps.Callee.Function(id), arguments,
+            cps.ReturnPoint.Bind(results, _, ks, rest)) =>
         val supplied = arguments :+ ks
         val installedResults = mutable.Set.empty[Node]
         watch(Set(Variable(id)) ++ dependencies(supplied)) {
@@ -359,7 +363,9 @@ object SafeEntries {
         }
         scan(rest, source)
 
-      case cps.Stmt.Call(_, _, cps.Callee.Method(id, method), arguments, ks, rest) =>
+      case cps.Stmt.Call(
+            cps.Callee.Method(id, method), arguments,
+            cps.ReturnPoint.Bind(_, _, ks, rest)) =>
         val supplied = arguments :+ ks
         watch(Set(Variable(id)) ++ dependencies(supplied)) {
           values(Variable(id)).objects.foreach { obj =>
@@ -371,48 +377,9 @@ object SafeEntries {
         }
         scan(rest, source)
 
-      case app @ cps.Stmt.App(id, arguments) =>
-        watch(Set(Variable(id)) ++ dependencies(arguments)) {
-          val targetFlow = Option(targetsByCall.get(app))
-          val flowed = targetFlow.iterator
-            .flatMap(_.targets).flatMap(functions.get).map(valueEntry).toSet
-          val targets = values(Variable(id)).functions.map(valueEntry) ++ flowed
-          val exact = functions.get(id).map(valueEntry)
-          val transfer = transferOf(app)
-          val dispatched = defunctionalization.dispatchFor(app).isDefined
-
-          targets.foreach { target =>
-            val syntacticallyKnown = exact.exists(_ eq target)
-            // A closed feedback edge is already cut by a call-site bounce.
-            // This is equally true for named and indirect callees.
-            val bounced = transfer == StackSafety.Transfer.Bounce
-            if !bounced then {
-              val jump = dispatched || syntacticallyKnown && transfer == StackSafety.Transfer.Jump
-              // Only an indirect transfer enters a stack-safe value entry.
-              // A known safe edge has already been cut by its call-site bounce.
-              val safe = !dispatched && !syntacticallyKnown
-              // GuardedEquality certifies that every runtime callee is among
-              // the finite targets. Such an indirect edge can carry its own
-              // suspension instead of changing every entry to the callee.
-              val closed = targetFlow.exists(flow =>
-                flow.closed && flow.targets.nonEmpty &&
-                  flow.targets.forall(functions.contains))
-              val site = Option.when(safe && closed)(callSite(app))
-              edges += Edge(source, target, safe, addsFrame = !jump, site)
-            }
-            propagate(arguments, infos(target).params)
-          }
-        }
-
-      case cps.Stmt.Invoke(id, method, arguments) =>
-        watch(Set(Variable(id)) ++ dependencies(arguments)) {
-          values(Variable(id)).objects.foreach { obj =>
-            obj.methods.get(method).foreach { target =>
-              edges += Edge(source, target, safe = true, addsFrame = true)
-              propagate(arguments, infos(target).params)
-            }
-          }
-        }
+      case call @ cps.Stmt.Call(callee, _,
+          _: cps.ReturnPoint.Tail | cps.ReturnPoint.Jump) =>
+        scanTransfer(call, callee, call.knownArguments, source)
 
       case cps.Stmt.Return(values) =>
         watch(dependencies(values)) {
@@ -450,17 +417,21 @@ object SafeEntries {
         }
 
       case cps.Stmt.Region(_, _, rest) => scan(rest, source)
+
       case statement @ cps.Stmt.Alloc(id, init, _, rest) =>
         val cell = cellNode(statement)
         add(Variable(id), Value.cell(cell))
         watch(dependency(init)) { add(Cell(cell), eval(init)) }
         scan(rest, source)
+
       case statement @ cps.Stmt.Var(id, init, _, rest) =>
         val cell = cellNode(statement)
         add(Variable(id), Value.cell(cell))
         watch(dependency(init)) { add(Cell(cell), eval(init)) }
         scan(rest, source)
+
       case cps.Stmt.Dealloc(_, rest) => scan(rest, source)
+
       case cps.Stmt.Get(ref, id, rest) =>
         val installed = mutable.Set.empty[CellNode]
         watch(List(Variable(ref))) {
@@ -470,6 +441,7 @@ object SafeEntries {
           }
         }
         scan(rest, source)
+
       case cps.Stmt.Put(ref, value, rest) =>
         watch(Set(Variable(ref)) ++ dependency(value)) {
           values(Variable(ref)).cells.foreach(cell => add(Cell(cell), eval(value)))
@@ -479,8 +451,57 @@ object SafeEntries {
       case cps.Stmt.Reset(_, _, _, body, _, _) => scan(body, source)
       case cps.Stmt.Shift(_, _, _, _, body, _, _) => scan(body, source)
       case cps.Stmt.Resume(_, _, _, body, _, _) => scan(body, source)
-
       case _: cps.Stmt.Hole => ()
+    }
+
+    def scanTransfer(
+      call: cps.Stmt,
+      callee: cps.Callee,
+      arguments: List[cps.Expr],
+      source: Node
+    ): Unit = callee match {
+      case cps.Callee.Function(id) =>
+        watch(Set(Variable(id)) ++ dependencies(arguments)) {
+          val targetFlow = Option(targetsByCall.get(call))
+          val flowed = targetFlow.iterator
+            .flatMap(_.targets).flatMap(functions.get).map(valueEntry).toSet
+          val targets = values(Variable(id)).functions.map(valueEntry) ++ flowed
+          val exact = functions.get(id).map(valueEntry)
+          val transfer = transferOf(call)
+          val dispatched = defunctionalization.dispatchFor(call).isDefined
+
+          targets.foreach { target =>
+            val syntacticallyKnown = exact.exists(_ eq target)
+            // A closed feedback edge is already cut by a call-site bounce.
+            // This is equally true for named and indirect callees.
+            val bounced = transfer == StackSafety.Transfer.Bounce
+            if !bounced then {
+              val jump = dispatched || syntacticallyKnown && transfer == StackSafety.Transfer.Jump
+              // Only an indirect transfer enters a stack-safe value entry.
+              // A known safe edge has already been cut by its call-site bounce.
+              val safe = !dispatched && !syntacticallyKnown
+              // GuardedEquality certifies that every runtime callee is among
+              // the finite targets. Such an indirect edge can carry its own
+              // suspension instead of changing every entry to the callee.
+              val closed = targetFlow.exists(flow =>
+                flow.closed && flow.targets.nonEmpty &&
+                  flow.targets.forall(functions.contains))
+              val site = Option.when(safe && closed)(callSite(call))
+              edges += Edge(source, target, safe, addsFrame = !jump, site)
+            }
+            propagate(arguments, infos(target).params)
+          }
+        }
+
+      case cps.Callee.Method(id, method) =>
+        watch(Set(Variable(id)) ++ dependencies(arguments)) {
+          values(Variable(id)).objects.foreach { obj =>
+            obj.methods.get(method).foreach { target =>
+              edges += Edge(source, target, safe = true, addsFrame = true)
+              propagate(arguments, infos(target).params)
+            }
+          }
+        }
     }
 
     infos.valuesIterator.foreach(info => info.body.foreach(scan(_, info.node)))
@@ -658,7 +679,7 @@ object SafeEntries {
         unsafeOperations.put(node.operation, java.lang.Boolean.TRUE)
       case _ => ()
     }
-    val bouncedApplications = new IdentityHashMap[cps.Stmt.App, java.lang.Boolean]()
+    val bouncedApplications = new IdentityHashMap[cps.Stmt, java.lang.Boolean]()
     bounced.foreach(site =>
       bouncedApplications.put(site.application, java.lang.Boolean.TRUE))
     val adapters = unsafe.iterator.map {

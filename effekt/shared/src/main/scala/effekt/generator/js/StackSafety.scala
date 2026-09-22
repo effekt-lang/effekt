@@ -4,6 +4,7 @@ package js
 
 import effekt.core.Id
 import effekt.cps
+import effekt.cps.knownArguments
 
 import java.util.IdentityHashMap
 import scala.collection.mutable
@@ -52,14 +53,16 @@ object StackSafety {
             // JavaScript generation can bypass an adapter only for a
             // syntactically named entry. A closed indirect call still invokes
             // the value representation, even when its target set is known.
-            case cps.Stmt.App(id, _) if site.targets.contains(id) => Iterator.single(id)
+            case cps.Stmt.Call(cps.Callee.Function(id), _,
+                _: cps.ReturnPoint.Tail | cps.ReturnPoint.Jump)
+                if site.targets.contains(id) => Iterator.single(id)
             case _ => Iterator.empty
           }
         }
         .toSet
 
     def transferOf(stmt: cps.Stmt): Transfer = stmt match {
-      case application: cps.Stmt.App if safeEntries.bouncesAt(application) =>
+      case application if safeEntries.bouncesAt(application) =>
         Transfer.Bounce
       case _ => Option(transfers.get(stmt)).getOrElse(Transfer.Safe)
     }
@@ -188,7 +191,7 @@ object StackSafety {
     // The target analysis is deliberately kept separate from the stack
     // solver. A syntactic call site denotes one grouped set of transitions:
     // it can only be direct if all of those transitions decrease the rank.
-    val targetsByCall = new IdentityHashMap[cps.Stmt.App, cps.Targets.CallTargets]()
+    val targetsByCall = new IdentityHashMap[cps.Stmt, cps.Targets.CallTargets]()
     val parameters = mutable.LinkedHashMap.empty[Id, Vector[Id]]
 
     module.definitions.zip(targetFlows).foreach { case (toplevel, flow) =>
@@ -197,12 +200,7 @@ object StackSafety {
         case _: cps.ToplevelDefinition.Val => ()
       }
       flow.localDefinitions.foreach(definition => parameters(definition.id) = definition.params.toVector)
-      flow.callTargets.foreach { target =>
-        target.call match {
-          case call: cps.Stmt.App => targetsByCall.put(call, target)
-          case _ => ()
-        }
-      }
+      flow.callTargets.foreach(target => targetsByCall.put(target.call, target))
     }
 
     val loopMutations = mutable.LinkedHashMap.empty[Id, mutable.LinkedHashSet[Id]]
@@ -260,31 +258,13 @@ object StackSafety {
 
       case cps.Stmt.Let(_, _, rest) => visit(rest, owner, secondClass, insideBody, frameCaptures)
 
-      case cps.Stmt.Call(_, _, _, _, _, rest) =>
+      case cps.Stmt.Call(_, _, cps.ReturnPoint.Bind(_, _, _, rest)) =>
         visit(rest, owner, secondClass, insideBody, frameCaptures)
 
-      case app @ cps.Stmt.App(id, arguments) =>
-        val dispatch = defunctionalization.dispatchFor(app).isDefined
-        val selfJump = insideBody.contains(id)
-        val jump = dispatch || secondClass.contains(id) || selfJump
-        if selfJump then {
-          loopified += id
-          val params = parameters.getOrElse(id, Vector.empty)
-          val mutated = loopMutations.getOrElseUpdate(id, mutable.LinkedHashSet.empty)
-          if params.size != arguments.size then mutated ++= params
-          else params.zip(arguments).foreach {
-            // A case capture keeps its CPS id, but JavaScript reads it from
-            // the immutable frame rather than from the current loop register.
-            // Hence syntactic p := p is an update precisely in this case.
-            case (param, cps.Expr.Variable(argument))
-                if param == argument && !frameCaptures(argument) => ()
-            case (param, _) => mutated += param
-          }
-        }
-        recordCall(app, name(id), owner, jump)
-
-      case invoke @ cps.Stmt.Invoke(id, method, _) =>
-        recordCall(invoke, s"${name(id)}.${name(method)}", owner, jump = false)
+      case call @ cps.Stmt.Call(callee, _,
+          _: cps.ReturnPoint.Tail | cps.ReturnPoint.Jump) =>
+        visitTransfer(call, callee, call.knownArguments, owner,
+          secondClass, insideBody, frameCaptures)
 
       case _: cps.Stmt.Return => ()
 
@@ -310,6 +290,39 @@ object StackSafety {
       case cps.Stmt.Resume(_, _, _, body, _, _) =>
         visit(body, owner, secondClass, insideBody, frameCaptures)
       case _: cps.Stmt.Hole => ()
+    }
+
+    def visitTransfer(
+      statement: cps.Stmt,
+      callee: cps.Callee,
+      arguments: List[cps.Expr],
+      owner: Id,
+      secondClass: Set[Id],
+      insideBody: Set[Id],
+      frameCaptures: Set[Id]
+    ): Unit = callee match {
+      case cps.Callee.Function(id) =>
+        val dispatch = defunctionalization.dispatchFor(statement).isDefined
+        val selfJump = insideBody.contains(id)
+        val jump = dispatch || secondClass.contains(id) || selfJump
+        if selfJump then {
+          loopified += id
+          val params = parameters.getOrElse(id, Vector.empty)
+          val mutated = loopMutations.getOrElseUpdate(id, mutable.LinkedHashSet.empty)
+          if params.size != arguments.size then mutated ++= params
+          else params.zip(arguments).foreach {
+            // A case capture keeps its CPS id, but JavaScript reads it from
+            // the immutable frame rather than from the current loop register.
+            // Hence syntactic p := p is an update precisely in this case.
+            case (param, cps.Expr.Variable(argument))
+                if param == argument && !frameCaptures(argument) => ()
+            case (param, _) => mutated += param
+          }
+        }
+        recordCall(statement, name(id), owner, jump)
+
+      case cps.Callee.Method(id, method) =>
+        recordCall(statement, s"${name(id)}.${name(method)}", owner, jump = false)
     }
 
     module.definitions.foreach {
@@ -349,15 +362,20 @@ object StackSafety {
       if site.sources.isEmpty then {
         site.closed = true
         site.transfer = Transfer.Jump
-      } else site.stmt match {
-        case app @ cps.Stmt.App(id, args) =>
+      } else (site.stmt match {
+        case call @ cps.Stmt.Call(callee, _,
+            _: cps.ReturnPoint.Tail | cps.ReturnPoint.Jump) =>
+          Some(callee -> call.knownArguments)
+        case _ => None
+      }) match {
+        case Some((cps.Callee.Function(id), arguments)) =>
           parameters.get(id) match {
-            case Some(params) if params.size == args.size && !isSecondClass(id) && defunctionalization.caseOf(id).isEmpty =>
+            case Some(params) if params.size == arguments.size && !isSecondClass(id) && defunctionalization.caseOf(id).isEmpty =>
               site.targets = Vector(id)
               site.closed = true
 
             case _ =>
-              Option(targetsByCall.get(app)) match {
+              Option(targetsByCall.get(site.stmt)) match {
                 case Some(flow) =>
                   val ordered = flow.targets.toVector.sortBy(target => (name(target), target.id))
                   val representable = ordered.forall(target =>
@@ -372,13 +390,13 @@ object StackSafety {
               }
           }
 
-        case _: cps.Stmt.Invoke =>
+        case Some((_: cps.Callee.Method, _)) =>
           // Receiver-flow analysis can later turn this into a closed target
           // set. Until then invocation is an open control transfer.
           site.targets = Vector.empty
           site.closed = false
 
-        case _ => ()
+        case None => ()
       }
     }
 

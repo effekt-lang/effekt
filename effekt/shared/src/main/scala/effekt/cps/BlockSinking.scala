@@ -117,10 +117,12 @@ object BlockSinking {
     case Stmt.Let(id, binding, rest) =>
       Stmt.Let(id, binding, normalize(rest))
 
-    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
-      Stmt.Call(id, returnedKs, callee, args, ks, normalize(rest))
+    case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
+      Stmt.Call(callee, args,
+        ReturnPoint.Bind(ids, returnedKs, ks, normalize(rest)))
 
-    case Stmt.App(_, _) | Stmt.Invoke(_, _, _) | Stmt.Return(_) | Stmt.Hole(_) =>
+    case Stmt.Call(_, _, ReturnPoint.Tail(_, _) | ReturnPoint.Jump) |
+        Stmt.Return(_) | Stmt.Hole(_) =>
       stmt
 
     case Stmt.Run(id, callee, args, purity, rest) =>
@@ -176,9 +178,9 @@ object BlockSinking {
       case Stmt.New(id, interface, operations, rest) =>
         Stmt.New(id, interface, operations.map(op => op.copy(body = go(op.body))), go(rest))
       case Stmt.Let(id, binding, rest) => Stmt.Let(id, binding, go(rest))
-      case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
-        Stmt.Call(id, returnedKs, callee, args, ks, go(rest))
-      case terminal @ (Stmt.App(_, _) | Stmt.Invoke(_, _, _) |
+      case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
+        Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, go(rest)))
+      case terminal @ (Stmt.Call(_, _, ReturnPoint.Tail(_, _) | ReturnPoint.Jump) |
           Stmt.Return(_) | Stmt.Hole(_)) => terminal
       case Stmt.Run(id, callee, args, purity, rest) =>
         Stmt.Run(id, callee, args, purity, go(rest))
@@ -236,13 +238,14 @@ object BlockSinking {
         if (binding.free.contains(d.id)) bind(d, stmt)
         else Stmt.Let(id, binding, sink(d, rest))
 
-      case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
+      case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
         val usedImmediately = callee.value == d.id ||
           args.exists(_.free.contains(d.id)) || ks.free.contains(d.id)
         if (usedImmediately) bind(d, stmt)
-        else Stmt.Call(id, returnedKs, callee, args, ks, sink(d, rest))
+        else Stmt.Call(callee, args,
+          ReturnPoint.Bind(ids, returnedKs, ks, sink(d, rest)))
 
-      case Stmt.App(_, _) | Stmt.Invoke(_, _, _) | Stmt.Return(_) =>
+      case Stmt.Call(_, _, ReturnPoint.Tail(_, _) | ReturnPoint.Jump) | Stmt.Return(_) =>
         bind(d, stmt)
 
       case Stmt.Run(id, callee, args, purity, rest) =>

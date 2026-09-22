@@ -61,9 +61,8 @@ function main_0(n_0, k_0) {
           {
             const value_0 = value_1;
             const frame_next_0 = cont_0.next_0;
-            const tmp_next_0 = frame_next_0;
             i_0 = value_0;
-            next_0 = tmp_next_0;
+            next_0 = frame_next_0;
             continue loop_0;
           }
         default:  return $effekt.unreachable();

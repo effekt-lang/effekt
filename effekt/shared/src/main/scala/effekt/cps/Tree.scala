@@ -93,29 +93,18 @@ enum Callee {
 }
 export Callee.*
 
+enum ReturnPoint extends Tree {
+  case Tail(ks: MetaCont, k: Cont)
+  case Bind(results: List[Id], returnedKs: Id, ks: MetaCont, rest: Stmt)
+  case Jump
+}
+
 enum Stmt extends Tree {
   case Def(id: Id, params: List[Id], body: Stmt, rest: Stmt)
   case New(id: Id, interface: Id, operations: List[Operation], rest: Stmt)
-
   // also all continuations are named so that we can analyze their usage and jump to them as labels
   case Let(id: Id, binding: Expr, rest: Stmt)
-  /** A control-pure call whose result is consumed by `rest`. Unlike `App`,
-   *  this preserves the direct-style sequencing present in Core. The
-   *  remainder is its not-yet-reified continuation; `ks` is retained in case
-   *  the callee ultimately keeps the CPS calling convention. */
-  case Call(
-    ids: List[Id],
-    returnedKs: Id,
-    callee: Callee,
-    args: List[Expr],
-    ks: MetaCont,
-    rest: Stmt
-  )
-  case App(id: Id, args: List[Expr])
-  case Invoke(id: Id, method: Id, args: List[Expr])
-  /** Terminates the current computation with `values`. Under a direct calling
-   *  convention this is an ordinary (multi-value) return; under CPS it completes
-   *  the enclosing trampoline. */
+  case Call(callee: Callee, args: List[Expr], returnsTo: ReturnPoint)
   case Return(values: List[Expr])
   case Run(id: Id, callee: Id, args: List[Expr], purity: Purity, rest: Stmt)
 
@@ -160,6 +149,23 @@ enum Stmt extends Tree {
   lazy val refs: DB[Int] = references.refs(this)
 }
 export Stmt.*
+
+extension (call: Stmt.Call) {
+  /** All arguments represented explicitly at this call site. A binding return
+   *  point supplies its meta-continuation, while its continuation is the
+   *  remainder and therefore has no expression yet. */
+  def knownArguments: List[Expr] = call.returnsTo match {
+    case ReturnPoint.Bind(_, _, ks, _) => call.args :+ ks
+    case ReturnPoint.Tail(ks, k) => call.args ++ List(ks, k)
+    case ReturnPoint.Jump => call.args
+  }
+
+  /** The value supplied to each callee parameter, when syntactically known. */
+  def parameterArguments: List[Option[Expr]] = call.returnsTo match {
+    case _: ReturnPoint.Bind => call.knownArguments.map(Some(_)) :+ None
+    case _: ReturnPoint.Tail | ReturnPoint.Jump => call.knownArguments.map(Some(_))
+  }
+}
 
 case class Clause(params: List[Id], body: Stmt) extends Tree {
   lazy val free: Set[Id] = body.free -- params
@@ -276,15 +282,17 @@ object substitutions {
       Stmt.Let(id, substitute(binding),
         substitute(rest)(using subst.shadow(id)))
 
-    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
-      Stmt.Call(ids, returnedKs, substitute(callee), args.map(substitute), substitute(ks),
-        substitute(rest)(using subst.shadow(returnedKs :: ids)))
+    case Stmt.Call(callee, args, ReturnPoint.Tail(ks, k)) =>
+      Stmt.Call(substitute(callee), args.map(substitute),
+        ReturnPoint.Tail(substitute(ks), substitute(k)))
 
-    case Stmt.App(id, args) =>
-      Stmt.App(substituteAsVar(id), args.map(substitute))
+    case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
+      Stmt.Call(substitute(callee), args.map(substitute),
+        ReturnPoint.Bind(ids, returnedKs, substitute(ks),
+          substitute(rest)(using subst.shadow(returnedKs :: ids))))
 
-    case Stmt.Invoke(id, method, args) =>
-      Stmt.Invoke(substituteAsVar(id), method, args.map(substitute))
+    case Stmt.Call(callee, args, ReturnPoint.Jump) =>
+      Stmt.Call(substitute(callee), args.map(substitute), ReturnPoint.Jump)
 
     case Stmt.Return(values) =>
       Stmt.Return(values.map(substitute))
@@ -420,15 +428,12 @@ object freeVariables {
     case Stmt.Let(id, binding, rest) =>
       binding.free ++ (rest.free - id)
 
-    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
+    case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
       free(callee) ++ all(args, _.free) ++ ks.free ++
         (rest.free -- ids.toSet - returnedKs)
 
-    case Stmt.App(id, args) =>
-      free(id) ++ all(args, _.free)
-
-    case Stmt.Invoke(id, _, args) =>
-      free(id) ++ all(args, _.free)
+    case call @ Stmt.Call(callee, _, _: ReturnPoint.Tail | ReturnPoint.Jump) =>
+      free(callee) ++ all(call.knownArguments, _.free)
 
     case Stmt.Return(values) => all(values, _.free)
 
@@ -532,12 +537,8 @@ object functionUsage {
       rest.uses ++ all(operations, _.uses) + (id -> freeInOperations)
     case Stmt.Let(id, binding, rest) =>
       rest.uses
-    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
-      rest.uses
-    case Stmt.App(id, args) =>
-      DB.empty
-    case Stmt.Invoke(id, method, args) =>
-      DB.empty
+    case Stmt.Call(_, _, ReturnPoint.Bind(_, _, _, rest)) => rest.uses
+    case Stmt.Call(_, _, _: ReturnPoint.Tail | ReturnPoint.Jump) => DB.empty
     case Stmt.Return(values) =>
       DB.empty
     case Stmt.Run(id, callee, args, purity, rest) =>
@@ -651,15 +652,16 @@ object escapeAnalysis {
     // The callee does not escape unless `Toplevel` marks a direct-to-CPS
     // boundary: that boundary invokes the callee through RUN_TOPLEVEL and
     // therefore requires an actual function value.
-    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
+    case Stmt.Call(callee, args, ReturnPoint.Bind(_, _, ks, rest)) =>
       val boundary = if ks == Expr.Toplevel then Set(callee.value) else Set.empty
       args.flatMap(_.free).toSet ++ ks.free ++ boundary ++ rest.escapes
 
-    // callee does NOT escape
-    case Stmt.App(id, args) =>
-      args.flatMap(_.free).toSet
+    case Stmt.Call(callee, args, ReturnPoint.Tail(ks, k)) =>
+      val boundary = if ks == Expr.Toplevel then Set(callee.value) else Set.empty
+      args.flatMap(_.free).toSet ++ ks.free ++ k.free ++ boundary
 
-    case Stmt.Invoke(id, method, args) =>
+    // The callee of a transfer does not escape.
+    case Stmt.Call(_, args, ReturnPoint.Jump) =>
       args.flatMap(_.free).toSet
 
     case Stmt.Return(values) => values.flatMap(_.free).toSet
@@ -740,10 +742,10 @@ object references {
   }
 
   inline def refs(stmt: Stmt): DB[Int] = stmt match {
-    case Stmt.App(id, args) => use(id) ++ all(args, _.refs)
-    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
+    case Stmt.Call(callee, args, ReturnPoint.Bind(_, _, ks, rest)) =>
       refs(callee) ++ all(args, _.refs) ++ ks.refs ++ rest.refs
-    case Stmt.Invoke(id, method, args) => use(id) ++ all(args, _.refs)
+    case call @ Stmt.Call(callee, _, _: ReturnPoint.Tail | ReturnPoint.Jump) =>
+      refs(callee) ++ all(call.knownArguments, _.refs)
     case Stmt.Return(values) => all(values, _.refs)
     case Stmt.Alloc(id, init, region, rest) => use(region) ++ init.refs ++ rest.refs
     case Stmt.Dealloc(ref, rest) => use(ref) ++ rest.refs

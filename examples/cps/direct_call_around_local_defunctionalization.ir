@@ -32,7 +32,7 @@ direct
 
 function program_0(n_0) {
   const k_0 = { __tag: 0 };
-  const ks_0 = undefined;
+  const ks_0 = TOPLEVEL_KS;
   let i_0 = undefined;
   let k_1 = undefined;
   let cont_0 = undefined;
