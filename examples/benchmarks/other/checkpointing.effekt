@@ -1,0 +1,75 @@
+import examples/benchmarks/runner
+
+type Input {
+  Enter(n: Int)
+  Commit()
+  Undo()
+  Done()
+}
+
+effect read(): Input
+effect emit(value: Int): Unit
+effect save(): Unit
+effect retry(): Nothing
+
+def inputs[R](n: Int) { program: () => R / read }: R = {
+  var i = 0
+  try {
+    program()
+  } with read { () =>
+    i = i + 1
+    if (i < n) {
+      if (i.mod(3) == 0) {
+        resume(Commit())
+      } else if (i.mod(5) == 0) {
+        resume(Undo())
+      } else {
+        resume(Enter(i))
+      }
+    } else {
+      resume(Done())
+    }
+  }
+}
+
+def checkpointing[R] { program: () => R / {save, retry} }: R = {
+  var saved = None()
+  def restart(): R = {
+    try {
+      program()
+    } with save { () =>
+      saved = Some(box resume)
+      resume(())
+    } with retry { () =>
+      if (saved is Some(resumption)) {
+        resumption(())
+      } else {
+        restart()
+      }
+    }
+  }
+
+  restart()
+}
+
+def sum { stream: () => Unit / emit }: Int = {
+  var s = 0
+  try stream() with emit { v =>
+    s = s + v
+    resume(())
+  }
+  return s
+}
+
+def user(): Unit / {read, emit, save, retry} = do read() match {
+  case Enter(n) => do emit(n); user()
+  case Commit() => do save(); user()
+  case Undo() => do retry()
+  case Done() => ()
+}
+
+def run(n: Int) =
+  inputs(n) { checkpointing { sum { user() } } }
+
+def main() =
+  benchmark(10){run}

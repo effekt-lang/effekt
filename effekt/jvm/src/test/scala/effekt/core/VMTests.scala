@@ -511,6 +511,38 @@ class VMTests extends munit.FunSuite {
       resumes = 0
     )),
 
+    examplesDir / "benchmarks" / "effect_handlers_bench" / "generator.effekt" -> Some(Summary(
+      staticDispatches = 101,
+      dynamicDispatches = 31,
+      patternMatches = 95,
+      branches = 6,
+      pushedFrames = 102,
+      poppedFrames = 102,
+      allocations = 38,
+      closures = 31,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 1,
+      shifts = 31,
+      resumes = 31
+    )),
+
+    examplesDir / "benchmarks" / "effect_handlers_bench" / "handler_sieve.effekt" -> Some(Summary(
+      staticDispatches = 9,
+      dynamicDispatches = 21,
+      patternMatches = 0,
+      branches = 34,
+      pushedFrames = 9,
+      poppedFrames = 9,
+      allocations = 0,
+      closures = 5,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
     examplesDir / "benchmarks" / "effect_handlers_bench" / "iterator.effekt" -> Some(Summary(
       staticDispatches = 7,
       dynamicDispatches = 0,
@@ -1307,6 +1339,22 @@ class VMTests extends munit.FunSuite {
       resets = 0,
       shifts = 0,
       resumes = 0
+    )),
+
+    examplesDir / "benchmarks" / "other" / "checkpointing.effekt" -> Some(Summary(
+      staticDispatches = 11,
+      dynamicDispatches = 1,
+      patternMatches = 11,
+      branches = 25,
+      pushedFrames = 5,
+      poppedFrames = 6,
+      allocations = 14,
+      closures = 3,
+      variableReads = 47,
+      variableWrites = 18,
+      resets = 1,
+      shifts = 4,
+      resumes = 4
     )),
 
     examplesDir / "stdlib" / "stream" / "fix.effekt" -> Some(Summary(
