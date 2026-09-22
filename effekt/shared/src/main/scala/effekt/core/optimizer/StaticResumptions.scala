@@ -11,7 +11,7 @@ import scala.util.boundary.break
  *   [[ reset { p => E[ shift(p) { {k} => b } ] } ]] ~> b[ resume(k){s} := reset { p => E[s] } ]
  *
  * When `E` is syntactically known, the continuation is known, and we perform the call.
- *   - Reuse the continuation in-place ([[inPlace]]) when the resumption is its last use
+ *   - Reuse the continuation in-place ([[reuse]]) when the resumption is its last use
  *   - Otherwise copy it as code, renaming what it captures (as long as it captures it privately) ([[joinpoint]])
  *
  * Afterwards, `Deadcode` drops a `reset` once nothing shifts to its prompt, inliner works with the join points.
@@ -24,33 +24,39 @@ object StaticResumptions {
     override def rewrite(stmt: Stmt): Stmt = stmt match {
       // 0) a shift whose context is unknown (inside a call or a closure), inner shifts first:
       //    [[ shift(p) { {k} => B[resume(k){s}] } ]] ~> B[s]   if every exit resumes
-      case Handler(handler) =>
-        val inner = handler.withBody(rewrite(handler.body))
-        inPlace(inner, atDelimiter = false).getOrElse { inner.shift }
+      case Resumption(resumption) =>
+        val inner = resumption.withBody(rewrite(resumption.body))
+        reuse(inner, atPrompt = false).getOrElse { inner.shift }
 
       case Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt @ BlockParam(_, Type.TPrompt(answer), _)), body)) =>
         Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt),
-          underDelimiter(Delimiter(prompt, cparams.head, answer), rewrite(body), joinable = true)))
+          reduceShifts(Prompt(prompt, cparams.head, answer), rewrite(body), joinable = true)))
 
       case other => super.rewrite(other)
     }
   }
 
-  case class Delimiter(prompt: BlockParam, capture: Id, answer: ValueType) {
-    val id: Id = prompt.id
+  case class Prompt(param: BlockParam, capture: Id, answer: ValueType) {
+    val id: Id = param.id
 
-    /** A shift to this delimiter. */
+    object ShiftsWithin {
+      def unapply(stmt: Stmt): Option[List[Resumption]] = shiftsTo(Prompt.this, stmt) match {
+        case Nil => None
+        case shifts => Some(shifts)
+      }
+    }
+
     object Shift {
-      def unapply(stmt: Stmt): Option[Handler] = stmt match {
-        case Stmt.Shift(Block.BlockVar(p, _, _), _, _) if p == id => Handler.unapply(stmt)
+      def unapply(stmt: Stmt): Option[Resumption] = stmt match {
+        case Stmt.Shift(Block.BlockVar(p, _, _), _, _) if p == id => Resumption.unapply(stmt)
         case _ => None
       }
     }
   }
 
-  case class Handler(shift: Stmt.Shift, k: Id, hole: ValueType) {
+  case class Resumption(shift: Stmt.Shift, k: Id, result: ValueType) {
     def body: Stmt = shift.body
-    def withBody(body: Stmt): Handler = copy(shift = shift.copy(body = body))
+    def withBody(body: Stmt): Resumption = copy(shift = shift.copy(body = body))
 
     /** `resume(k){s}` */
     object Resume {
@@ -72,7 +78,20 @@ object StaticResumptions {
     }
 
     /** Whether `k` occurs only as `resume(k){...}`. */
-    def resumesOnly: Boolean = !replaceResumptions(identity).free.contains(k)
+    def resumesOnly: Boolean = {
+      object query extends Tree.Query[Unit, Boolean] {
+        def empty = true
+        def combine = _ && _
+        override def stmt(using Unit) = {
+          // the resumption's own mention of `k` is the use we allow; what it resumes with is not
+          case Resume(resumed) => this.query(resumed)
+        }
+        override def block(using Unit) = {
+          case Block.BlockVar(id, _, _) => id != k
+        }
+      }
+      query.query(body)(using ())
+    }
 
     /** Does every `resume(k){s}` resume with a value (i.e., not bidirectional). */
     def resumesWithValues: Boolean = {
@@ -99,9 +118,9 @@ object StaticResumptions {
       query.query(stmt)(using ())
     }
   }
-  object Handler {
-    def unapply(stmt: Stmt): Option[Handler] = stmt match {
-      case shift @ Stmt.Shift(_, BlockParam(k, Type.TResume(hole, _), _), _) => Some(Handler(shift, k, hole))
+  object Resumption {
+    def unapply(stmt: Stmt): Option[Resumption] = stmt match {
+      case shift @ Stmt.Shift(_, BlockParam(k, Type.TResume(result, _), _), _) => Some(Resumption(shift, k, result))
       case _ => None
     }
   }
@@ -127,17 +146,17 @@ object StaticResumptions {
 
   /**
    * The part of a continuation a join point re-creates.
-   * Has a [[delimiter]] and the `val` [[frame]] `val y = []; rest` if there is one.
+   * Has a [[prompt]] and the `val` [[frame]] `val y = []; rest` if there is one.
    */
-  case class Captured(d: Delimiter, frame: Option[(Id, Stmt)]) {
+  case class Captured(prompt: Prompt, frame: Option[(Id, Stmt)]) {
     /** What the continuation owns ~> what a copy must rename & must not escape. */
-    val names: Set[Id] = Set(d.id, d.capture)
+    val names: Set[Id] = Set(prompt.id, prompt.capture)
 
     /** [[ reset { p => val y = hole; rest } ]] */
-    def fill(hole: Stmt): Stmt =
-      Stmt.Reset(BlockLit(Nil, List(d.capture), Nil, List(d.prompt), frame match {
-        case Some((y, rest)) => Stmt.Val(y, hole, rest)
-        case None => hole
+    def fill(filling: Stmt): Stmt =
+      Stmt.Reset(BlockLit(Nil, List(prompt.capture), Nil, List(prompt.param), frame match {
+        case Some((y, rest)) => Stmt.Val(y, filling, rest)
+        case None => filling
       }))
   }
 
@@ -147,69 +166,70 @@ object StaticResumptions {
    *
    * @param joinable no `var` or `region` lies between [[d]] and here, so frames can still be copied
    */
-  def underDelimiter(d: Delimiter, stmt: Stmt, joinable: Boolean): Stmt = stmt match {
-    // 1) a shift to `d`, with nothing left between it and the delimiter
-    case d.Shift(handler) => inPlace(handler, atDelimiter = true) match {
+  def reduceShifts(prompt: Prompt, stmt: Stmt, joinable: Boolean): Stmt = stmt match {
+    // 1) a shift to `prompt`, with nothing left between it and the prompt
+    case prompt.Shift(resumption) => reuse(resumption, atPrompt = true) match {
       // 1a) in place, since any exit is the answer already
       case Some(reduced) => reduced
       // 1b) otherwise copied into a joinpoint, if no `var` or `region` lies above
-      case None if joinable => join(Captured(d, frame = None), handler, orElse = handler.shift)
+      case None if joinable => copy(Captured(prompt, frame = None), resumption, orElse = resumption.shift)
       // 1c) otherwise left alone
-      case None /* otherwise */ => handler.shift
+      case None /* otherwise */ => resumption.shift
     }
 
     // 2) a `val` frame over a shift to `d`, with no `var` or `region` above:
     //    [[ val y = E[ shift(p) { {k} => b } ]; rest ]]
     //      ~> def j(y) = reset { p' => rest }; [[ E[ b[ resume(k){return e} := j(e) ] ] ]]
     //    where every other leaf `l` of `E` becomes `val y = l; j(y)`
-    case Stmt.Val(y, binding @ d.Shifts(shifts), rest) if joinable =>
-      joinpoint(Captured(d, Some(y -> rest)), binding.tpe, carries = !shifts.forall(_.resumesWithValues),
-                orElse = Stmt.Val(y, binding, underDelimiter(d, rest, joinable))) { jump =>
-         underDelimiter(d, jumpsToJoin(d, binding, jump), joinable = true)
+    case Stmt.Val(y, binding @ prompt.ShiftsWithin(shifts), rest) if joinable =>
+      joinpoint(Captured(prompt, Some(y -> rest)), binding.tpe, shifts,
+                orElse = Stmt.Val(y, binding, reduceShifts(prompt, rest, joinable))) { jump =>
+         reduceShifts(prompt, jumpsToJoin(prompt, binding, jump), joinable = true)
        }
 
-    // 3) a `var` or `region` is popped by the answer, so the shifts below it still stand at the delimiter;
+    // 3) a `var` or `region` is popped by the answer, so the shifts below it still stand at the prompt;
     //    but it cannot be copied, so from here only 1a) applies
      //    [[ var x = e; s ]] ~> var x = e; [[ s ]]
      case Segment(segment) if !segment.isDelimiter =>
-      segment.rebuild(underDelimiter(d, segment.body, joinable = false))
+      segment.rebuild(reduceShifts(prompt, segment.body, joinable = false))
  
     // 4) anything else pushes nothing, so continue into its tail positions
      //    [[ T[s₁, …, sₙ] ]] ~> T[ [[ s₁ ]], …, [[ sₙ ]] ]
      case other => tailPositions(other) match {
-       case Some(positions) => positions.rewrite(underDelimiter(d, _, joinable))
+       case Some(positions) => positions.rewrite(reduceShifts(prompt, _, joinable))
        case None => other
      }
    }
 
   /** The shifts to [[d]] that can be joined, standing in [[stmt]] under `val` frames only. */
-  private def shiftsTo(d: Delimiter, stmt: Stmt): List[Handler] = stmt match {
-    case d.Shift(handler) => if (handler.resumesOnly) List(handler) else Nil
-    case Stmt.Val(_, binding, body) => shiftsTo(d, binding) ++ shiftsTo(d, body)
+  private def shiftsTo(prompt: Prompt, stmt: Stmt): List[Resumption] = stmt match {
+    case prompt.Shift(resumption) => if (resumption.resumesOnly) List(resumption) else Nil
+    case Stmt.Val(_, binding, body) => shiftsTo(prompt, binding) ++ shiftsTo(prompt, body)
     case other => tailPositions(other) match {
-      case Some(positions) => positions.tails.flatMap(shiftsTo(d, _))
+      case Some(positions) => positions.tails.flatMap(shiftsTo(prompt, _))
       case None => Nil
     }
+  }
 
   /**
-   * The binding of a joined `val`, now standing at the delimiter: every exit jumps to the join point.
+   * The binding of a joined `val`, now standing at the prompt: every exit jumps to the join point.
    *
    *   [[ shift(p) { {k} => b } ]] = b[ resume(k){s} := jump(s) ]
    *   [[ l ]]                     = jump(l)                         any other leaf, an untreatable shift included
    */
-  private def jumpsToJoin(d: Delimiter, stmt: Stmt, jump: Stmt => Stmt, transparent: Set[Id] = Set.empty): Stmt =
+  private def jumpsToJoin(prompt: Prompt, stmt: Stmt, jump: Stmt => Stmt, transparent: Set[Id] = Set.empty): Stmt =
     tailPositions(stmt) match {
       case Some(positions) =>
-        retypeAnswer(positions.rewrite(jumpsToJoin(d, _, jump, transparent ++ positions.transparent)), d.answer)
+        retypeAnswer(positions.rewrite(jumpsToJoin(prompt, _, jump, transparent ++ positions.transparent)), prompt.answer)
       case None => stmt match {
-        case d.Shift(handler) if handler.resumesOnly => handler.replaceResumptions(jump)
+        case prompt.Shift(resumption) if resumption.resumesOnly => resumption.replaceResumptions(jump)
 
         // [[ f(…) ]] = f(…)   a tail call to a block only ever tail-called
         case Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, _), capt), targs, vargs, bargs) if transparent.contains(f) =>
-          Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, d.answer), capt), targs, vargs, bargs)
+          Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, prompt.answer), capt), targs, vargs, bargs)
 
         // an exit that never returns is no exit
-        case leaf if leaf.tpe == Type.TBottom => retypeAnswer(leaf, d.answer)
+        case leaf if leaf.tpe == Type.TBottom => retypeAnswer(leaf, prompt.answer)
 
         // a leaf produces the frame's value where it stands, so it jumps with that value: the frames
         // moved into the join point, the leaf did not
@@ -221,10 +241,10 @@ object StaticResumptions {
     }
 
   /** [[ shift(p) { {k} => b } ]] ~> def j{s} = reset { p' => s() }; b[ resume(k){s} := j{s} ]   if `k` is only resumed */
-  private def join(captured: Captured, handler: Handler, orElse: => Stmt): Stmt =
-    if (handler.resumesOnly) {
-      joinpoint(captured, handler.hole, carries = !handler.resumesWithValues, orElse) { jump =>
-        handler.replaceResumptions(jump)
+  private def copy(captured: Captured, resumption: Resumption, orElse: => Stmt): Stmt =
+    if (resumption.resumesOnly) {
+      joinpoint(captured, resumption.result, List(resumption), orElse) { jump =>
+        resumption.replaceResumptions(jump)
       }
     } else {
       orElse
@@ -232,15 +252,15 @@ object StaticResumptions {
 
   /**
    * Binds `def j(y) = [[captured]].fill(return y)` around `scope(e => j(e))`, with the prompt renamed,
-   * or the thunked form when a resumption [[carries]] a computation.
-   *
-   * @param carries some resumption resumes with a statement rather than a value
+   * or [[takingAComputation]] the thunked form.
    *
    * The machine re-installs the *same* prompt on resume, a join point only a fresh one: nothing other than
    * the renamed binders may know the old name, neither inside the join point nor in what is passed to it.
    * Renaming would hide that, so it is checked on the free variables before renaming.
+   *
+   * @param shifts the shifts whose resumptions jump here, which decide the form it takes
    */
-  private def joinpoint(captured: Captured, hole: ValueType, carries: Boolean, orElse: => Stmt)
+  private def joinpoint(captured: Captured, result: ValueType, shifts: List[Resumption], orElse: => Stmt)
                        (scope: (Stmt => Stmt) => Stmt): Stmt = boundary {
     val fresh: Map[Id, Id] = captured.names.map { id => id -> Id(id) }.toMap
     object renaming extends Tree.Rewrite {
@@ -251,12 +271,12 @@ object StaticResumptions {
       free.blocks.toMap.exists { case (id, (tpe, capt)) => !fresh.contains(id) && (capt ++ captures(tpe)).exists(fresh.contains) } ||
         free.values.toMap.exists { case (id, tpe) => !fresh.contains(id) && captures(tpe).exists(fresh.contains) }
     }
-    if (captures(hole).exists(fresh.contains)) break(orElse)
+    if (captures(result).exists(fresh.contains)) break(orElse)
 
     val j = Id("j")
 
     /** The join point's body: the continuation's frames. */
-    def frames(filled: Stmt): BlockLit = {
+    def frames(filled: Stmt): Stmt = {
       val code = captured.fill(filled)
       if (knowsOldName(code)) break(orElse)
       reduce.rewrite(renaming.rewrite(code))
@@ -270,8 +290,8 @@ object StaticResumptions {
 
     /** `def j(y) = reset { p => E[return y] }` */
     def takingAValue: Stmt = {
-      val y = ValueParam(Id("y"), hole)
-      val jDef = frames(Stmt.Return(Expr.ValueVar(y.id, y.tpe))).copy(vparams = List(y))
+      val y = ValueParam(Id("y"), result)
+      val jDef = BlockLit(Nil, Nil, List(y), Nil, frames(Stmt.Return(Expr.ValueVar(y.id, y.tpe))))
       val jVar = Block.BlockVar(j, jDef.tpe, jDef.capt)
       Stmt.Def(j, jDef, scope { stmt => entering(stmt) match {
         case Stmt.Return(e) => Stmt.App(jVar, Nil, List(e), Nil)
@@ -283,16 +303,16 @@ object StaticResumptions {
     def takingAComputation: Stmt = {
       val s = Id("s")
       val sCapt = Id("sCapt")
-      val sParam = BlockParam(s, BlockType.Function(Nil, Nil, Nil, Nil, hole), Set(sCapt))
-      val jDef = frames(Stmt.App(Block.BlockVar(s, sParam.tpe, Set(sCapt)), Nil, Nil, Nil))
-        .copy(cparams = List(sCapt), bparams = List(sParam))
+      val sParam = BlockParam(s, BlockType.Function(Nil, Nil, Nil, Nil, result), Set(sCapt))
+      val jDef = BlockLit(Nil, List(sCapt), Nil, List(sParam),
+        frames(Stmt.App(Block.BlockVar(s, sParam.tpe, Set(sCapt)), Nil, Nil, Nil)))
       val jVar = Block.BlockVar(j, jDef.tpe, jDef.capt)
       Stmt.Def(j, jDef, scope { stmt =>
         Stmt.App(jVar, Nil, Nil, List(BlockLit(Nil, Nil, Nil, Nil, entering(stmt))))
       })
     }
 
-    if (carries) takingAComputation else takingAValue
+    if (shifts.forall(_.resumesWithValues)) takingAValue else takingAComputation
   }
 
   /** The captures that occur in a type. */
@@ -313,41 +333,41 @@ object StaticResumptions {
    *
    * Sound iff every use of `k` is a tail resumption,
    * reached only through segments no resumption observes,
-   * and every exit is one too (unless the shift is [[atDelimiter]], where any exit is the answer already).
+   * and every exit is one too (unless the shift is [[atPrompt]], where any exit is the answer already).
    */
-  def inPlace(handler: Handler, atDelimiter: Boolean): Option[Stmt] = boundary {
-    import handler.{ k, hole }
+  def reuse(resumption: Resumption, atPrompt: Boolean): Option[Stmt] = boundary {
+    import resumption.{ k, result }
 
     def go(stmt: Stmt, transparent: Set[Id]): Stmt = tailPositions(stmt) match {
       case Some(positions) =>
         // `k` escapes into a binding
         if (positions.before.contains(k)) break(None)
 
-        retypeAnswer(positions.rewrite(go(_, transparent ++ positions.transparent)), hole)
+        retypeAnswer(positions.rewrite(go(_, transparent ++ positions.transparent)), result)
 
       case None => stmt match {
         // [[ resume(k){s} ]] = s
-        case handler.Resume(s) if !s.free.contains(k) => s
+        case resumption.Resume(s) if !s.free.contains(k) => s
 
         // [[ var x = e; s ]] = var x = e; [[ s ]]   if no resumption observes it
-        // ... same for a region, and a nested reset at the delimiter only, since an abort to it is an exit by a value
-        case Segment(segment) if (!segment.isDelimiter || atDelimiter)
-            && !segment.before.contains(k) && !handler.observes(segment.names, segment.body) =>
+        // ... same for a region, and a nested reset at the prompt only, since an abort to it is an exit by a value
+        case Segment(segment) if (!segment.isDelimiter || atPrompt)
+            && !segment.before.contains(k) && !resumption.observes(segment.names, segment.body) =>
           segment.rebuild(go(segment.body, transparent))
 
         case other if other.free.contains(k) => break(None)
 
         // [[ f(…) ]] = f(…)   a tail call to a block only ever tail-called
         case Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, _), capt), targs, vargs, bargs) if transparent.contains(f) =>
-          Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, hole), capt), targs, vargs, bargs)
+          Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, result), capt), targs, vargs, bargs)
 
         // an exit that never returns is no exit
-        case h: Stmt.Hole => retypeAnswer(h, hole)
-        case exit if atDelimiter || exit.tpe == Type.TBottom => retypeAnswer(exit, hole)
+        case h: Stmt.Hole => retypeAnswer(h, result)
+        case exit if atPrompt || exit.tpe == Type.TBottom => retypeAnswer(exit, result)
         case _ => break(None)
       }
     }
-    Some(go(handler.body, Set.empty))
+    Some(go(resumption.body, Set.empty))
   }
 
   private def retypeAnswer(stmt: Stmt, tpe: ValueType): Stmt = stmt match {
