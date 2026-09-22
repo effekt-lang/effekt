@@ -1,0 +1,21 @@
+import dequeue
+
+effect suspend(): Unit
+
+def main() = region r {
+  var queue: Dequeue[() => Unit at {io, r}] in r = emptyQueue()
+  try {
+    println("a")
+    do suspend()
+    println("b")
+    do suspend()
+    println("c")
+  } with suspend {
+    queue = queue.pushFront(box { resume(()) })
+  }
+  def drain(): Unit = queue.popBack match {
+    case None() => ()
+    case Some((k, q)) => queue = q; k(); drain()
+  }
+  drain()
+}

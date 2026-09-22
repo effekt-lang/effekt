@@ -10,7 +10,11 @@ import scala.util.boundary.break
  *
  *   [[ reset { p => E[ shift(p) { {k} => b } ] } ]] ~> b[ resume(k){s} := reset { p => E[s] } ]
  *
- * Afterwards, `Deadcode` drops a `reset` once nothing shifts to its prompt.
+ * When `E` is syntactically known, the continuation is known, and we perform the call.
+ *   - Reuse the continuation in-place ([[inPlace]]) when the resumption is its last use
+ *   - Otherwise copy it as code, renaming what it captures (as long as it captures it privately) ([[joinpoint]])
+ *
+ * Afterwards, `Deadcode` drops a `reset` once nothing shifts to its prompt, inliner works with the join points.
  */
 object StaticResumptions {
 
@@ -18,16 +22,18 @@ object StaticResumptions {
 
   object reduce extends Tree.Rewrite {
     override def rewrite(stmt: Stmt): Stmt = stmt match {
-      // 0) a shift whose context is unknown (inside a call or a closure):
+      // 0) a shift whose context is unknown (inside a call or a closure), inner shifts first:
       //    [[ shift(p) { {k} => B[resume(k){s}] } ]] ~> B[s]   if every exit resumes
-      case Handler(handler) => inPlace(handler, atDelimiter = false) match {
-        case Some(reduced) => reduced
-        case None => handler.withBody(rewrite(handler.body)).shift
-      }
+      case Handler(handler) =>
+        val inner = handler.withBody(rewrite(handler.body))
+        inPlace(inner, atDelimiter = false) match {
+          case Some(reduced) => reduced
+          case None => inner.shift
+        }
 
       case Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt @ BlockParam(_, Type.TPrompt(answer), _)), body)) =>
         Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt),
-          underDelimiter(Delimiter(prompt, cparams.head, answer), rewrite(body))))
+          underDelimiter(Delimiter(prompt, cparams.head, answer), rewrite(body), joinable = true)))
 
       case other => super.rewrite(other)
     }
@@ -56,6 +62,19 @@ object StaticResumptions {
         case _ => None
       }
     }
+
+    /** [[ resume(k){s} ]] = by(s), everywhere in the body */
+    def replaceResumptions(by: Stmt => Stmt): Stmt =
+      object replace extends Tree.Rewrite {
+        override def rewrite(stmt: Stmt): Stmt = stmt match {
+          case Resume(resumed) => by(rewrite(resumed))
+          case other => super.rewrite(other)
+        }
+      }
+      replace.rewrite(body)
+
+    /** Whether `k` occurs only as `resume(k){...}`. */
+    def resumesOnly: Boolean = !replaceResumptions(identity).free.contains(k)
 
     /** Whether a resumption in [[stmt]] can observe a segment known by [[names]]. */
     def observes(names: Set[Id], stmt: Stmt): Boolean =
@@ -95,26 +114,132 @@ object StaticResumptions {
     }
   }
 
-  def underDelimiter(d: Delimiter, stmt: Stmt): Stmt = stmt match {
-    // 1) a shift to `d`, with nothing but popped segments left between it and the delimiter
+  /**
+   * The part of a continuation a join point re-creates.
+   * Has a [[delimiter]] and the `val` [[frame]] `val y = []; rest` if there is one.
+   */
+  case class Captured(d: Delimiter, frame: Option[(Id, Stmt)]) {
+    /** What the continuation owns ~> what a copy must rename & must not escape. */
+    val names: Set[Id] = Set(d.id, d.capture)
+
+    /** [[ reset { p => val y = hole; rest } ]] */
+    def fill(hole: Stmt): Stmt =
+      Stmt.Reset(BlockLit(Nil, List(d.capture), Nil, List(d.prompt), frame match {
+        case Some((y, rest)) => Stmt.Val(y, hole, rest)
+        case None => hole
+      }))
+  }
+
+
+  /**
+   * Walks the static context of [[d]] and treats every shift to it.
+   *
+   * @param joinable no `var` or `region` lies between [[d]] and here, so frames can still be copied
+   */
+  def underDelimiter(d: Delimiter, stmt: Stmt, joinable: Boolean): Stmt = stmt match {
+    // 1) a shift to `d`, with nothing left between it and the delimiter
     case d.Shift(handler) => inPlace(handler, atDelimiter = true) match {
       // 1a) in place, since any exit is the answer already
       case Some(reduced) => reduced
-      // 1b) otherwise left alone
-      case None => handler.shift
+      // 1b) otherwise copied into a joinpoint, if no `var` or `region` lies above; 1c) otherwise left alone
+      case None => if joinable then join(Captured(d, frame = None), handler, orElse = handler.shift) else handler.shift
     }
 
-    // 2) a `var` or `region` is popped by the answer, so the shifts below it still stand at the delimiter
-    //    [[ var x = e; s ]] ~> var x = e; [[ s ]]
-    case Segment(segment) if !segment.isDelimiter =>
-      segment.rebuild(underDelimiter(d, segment.body))
+    // 2) a `val` frame over a shift to `d`, with no `var` or `region` above:
+    //    [[ val y = E[ shift(p) { {k} => b } ]; rest ]]
+    //      ~> def j{s} = reset { p' => val y = s(); rest }; [[ E[ b[ resume(k){s} := j{s} ] ] ]]
+    //    where every other leaf `l` of `E` becomes `j{ () => l }`
+    case Stmt.Val(y, binding, rest) if joinable && shiftsTo(d, binding) =>
+      joinpoint(Captured(d, Some(y -> rest)), binding.tpe, orElse = Stmt.Val(y, binding, underDelimiter(d, rest, joinable))) { jump =>
+        underDelimiter(d, jumpsToJoin(d, binding, jump), joinable = true)
+      }
 
-    // 3) anything else pushes nothing, so continue into its tail positions
-    //    [[ T[s₁, …, sₙ] ]] ~> T[ [[ s₁ ]], …, [[ sₙ ]] ]
-    case other => tailPositions(other) match {
-      case Some(positions) => positions.rewrite(underDelimiter(d, _))
-      case None => other
+    // 3) a `var` or `region` is popped by the answer, so the shifts below it still stand at the delimiter;
+    //    but it cannot be copied, so from here only 1a) applies
+     //    [[ var x = e; s ]] ~> var x = e; [[ s ]]
+     case Segment(segment) if !segment.isDelimiter =>
+      segment.rebuild(underDelimiter(d, segment.body, joinable = false))
+ 
+    // 4) anything else pushes nothing, so continue into its tail positions
+     //    [[ T[s₁, …, sₙ] ]] ~> T[ [[ s₁ ]], …, [[ sₙ ]] ]
+     case other => tailPositions(other) match {
+       case Some(positions) => positions.rewrite(underDelimiter(d, _, joinable))
+       case None => other
+     }
+   }
+
+  /** Whether a shift to [[d]] that can be joined stands in [[stmt]] under `val` frames only. */
+  private def shiftsTo(d: Delimiter, stmt: Stmt): Boolean = stmt match {
+    case d.Shift(handler) => handler.resumesOnly
+    case Stmt.Val(_, binding, body) => shiftsTo(d, binding) || shiftsTo(d, body)
+    case other => tailPositions(other).exists(_.exists(shiftsTo(d, _)))
+  }
+
+  /**
+   * The binding of a joined `val`, now standing at the delimiter: every exit jumps to the join point.
+   *
+   *   [[ shift(p) { {k} => b } ]] = b[ resume(k){s} := jump(s) ]
+   *   [[ l ]]                     = jump(l)                         any other leaf, an untreatable shift included
+   */
+  private def jumpsToJoin(d: Delimiter, stmt: Stmt, jump: Stmt => Stmt): Stmt =
+    tailPositions(stmt) match {
+      case Some(positions) => retypeAnswer(positions.rewrite(jumpsToJoin(d, _, jump)), d.answer)
+      case None => stmt match {
+        case d.Shift(handler) if handler.resumesOnly => handler.replaceResumptions(jump)
+        case leaf => jump(leaf)
+      }
     }
+
+  /** [[ shift(p) { {k} => b } ]] ~> def j{s} = reset { p' => s() }; b[ resume(k){s} := j{s} ]   if `k` is only resumed */
+  private def join(captured: Captured, handler: Handler, orElse: => Stmt): Stmt =
+    if handler.resumesOnly then joinpoint(captured, handler.hole, orElse) { jump => handler.replaceResumptions(jump) }
+    else orElse
+
+  /**
+   * Binds `def j{s} = [[captured]].fill(s())` around `scope(s => j{ () => s })`, with the prompt renamed.
+   *
+   * The machine re-installs the *same* prompt on resume, a join point only a fresh one: nothing other than
+   * the renamed binders may know the old name, neither inside the join point nor in what is passed to it.
+   * Renaming would hide that, so it is checked on the free variables before renaming.
+   */
+  private def joinpoint(captured: Captured, hole: ValueType, orElse: => Stmt)(scope: (Stmt => Stmt) => Stmt): Stmt = boundary {
+    val s = Id("s"); val sCapt = Id("sCapt")
+    val sParam = BlockParam(s, BlockType.Function(Nil, Nil, Nil, Nil, hole), Set(sCapt))
+
+    val fresh: Map[Id, Id] = captured.names.map { id => id -> Id(id) }.toMap
+    object renaming extends Tree.Rewrite {
+      override def rewrite(id: Id): Id = fresh.getOrElse(id, id)
+    }
+    def knowsOldName(stmt: Stmt): Boolean =
+      val free = stmt.free
+      free.blocks.toMap.exists { case (id, (tpe, capt)) => !fresh.contains(id) && (capt ++ captures(tpe)).exists(fresh.contains) } ||
+        free.values.toMap.exists { case (id, tpe) => !fresh.contains(id) && captures(tpe).exists(fresh.contains) }
+
+    val code = captured.fill(Stmt.App(Block.BlockVar(s, sParam.tpe, Set(sCapt)), Nil, Nil, Nil))
+    if knowsOldName(code) || captures(hole).exists(fresh.contains) then break(orElse)
+
+    val jDef = BlockLit(Nil, List(sCapt), Nil, List(sParam), reduce.rewrite(renaming.rewrite(code)))
+    val j = Id("j")
+    val jVar = Block.BlockVar(j, jDef.tpe, jDef.capt)
+
+    Stmt.Def(j, jDef, scope { stmt =>
+      // what runs inside the join point is not renamed, so any mention of the old name escapes
+      if stmt.capt.exists(fresh.contains) || knowsOldName(stmt) then break(orElse)
+      Stmt.App(jVar, Nil, Nil, List(BlockLit(Nil, Nil, Nil, Nil, stmt)))
+    })
+  }
+
+  /** The captures that occur in a type. */
+  private def captures(tpe: ValueType): Captures = tpe match {
+    case ValueType.Var(_) => Set.empty
+    case ValueType.Data(_, targs) => targs.flatMap(captures).toSet
+    case ValueType.Boxed(tpe, capt) => capt ++ captures(tpe)
+  }
+
+  private def captures(tpe: BlockType): Captures = tpe match {
+    case BlockType.Function(_, cparams, vparams, bparams, result) =>
+      (vparams.flatMap(captures) ++ bparams.flatMap(captures) ++ captures(result)).toSet -- cparams
+    case BlockType.Interface(_, targs) => targs.flatMap(captures).toSet
   }
 
   /**

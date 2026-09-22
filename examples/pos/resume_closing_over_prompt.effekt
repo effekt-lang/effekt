@@ -1,0 +1,25 @@
+import dequeue
+
+effect yield(): Unit
+effect fork { child: () => Unit }: Unit
+
+def main() = region r {
+  var queue: Dequeue[() => Unit at {io, r}] in r = emptyQueue()
+  try {
+    do fork {
+      println("child")
+      do yield()
+      println("child again")
+    }
+    println("parent")
+  } with yield {
+    queue = queue.pushFront(box { resume(()) })
+  } with fork {
+    queue = queue.pushFront(box { resume { {child} => child() } })
+  }
+  def drain(): Unit = queue.popBack match {
+    case None() => ()
+    case Some((k, q)) => queue = q; k(); drain()
+  }
+  drain()
+}
