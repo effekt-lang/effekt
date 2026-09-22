@@ -181,11 +181,17 @@ object StaticResumptions {
    *   [[ shift(p) { {k} => b } ]] = b[ resume(k){s} := jump(s) ]
    *   [[ l ]]                     = jump(l)                         any other leaf, an untreatable shift included
    */
-  private def jumpsToJoin(d: Delimiter, stmt: Stmt, jump: Stmt => Stmt): Stmt =
+  private def jumpsToJoin(d: Delimiter, stmt: Stmt, jump: Stmt => Stmt, transparent: Set[Id] = Set.empty): Stmt =
     tailPositions(stmt) match {
-      case Some(positions) => retypeAnswer(positions.rewrite(jumpsToJoin(d, _, jump)), d.answer)
+      case Some(positions) =>
+        retypeAnswer(positions.rewrite(jumpsToJoin(d, _, jump, transparent ++ positions.transparent)), d.answer)
       case None => stmt match {
         case d.Shift(handler) if handler.resumesOnly => handler.replaceResumptions(jump)
+
+        // [[ f(…) ]] = f(…)   a tail call to a block only ever tail-called
+        case Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, _), capt), targs, vargs, bargs) if transparent.contains(f) =>
+          Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, d.answer), capt), targs, vargs, bargs)
+
         case leaf => jump(leaf)
       }
     }

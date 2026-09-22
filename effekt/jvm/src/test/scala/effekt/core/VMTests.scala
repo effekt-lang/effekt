@@ -1443,15 +1443,15 @@ class VMTests extends munit.FunSuite {
       dynamicDispatches = 0,
       patternMatches = 17,
       branches = 10,
-      pushedFrames = 28,
-      poppedFrames = 28,
+      pushedFrames = 12,
+      poppedFrames = 12,
       allocations = 16,
       closures = 0,
       variableReads = 0,
       variableWrites = 0,
-      resets = 1,
-      shifts = 5,
-      resumes = 5
+      resets = 0,
+      shifts = 0,
+      resumes = 0
     )),
 
     // issue 1272: Optimizing through useless constructs / obfuscated code (optimizer-wishlist)
