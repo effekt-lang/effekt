@@ -160,13 +160,13 @@ object StaticResumptions {
 
     // 2) a `val` frame over a shift to `d`, with no `var` or `region` above:
     //    [[ val y = E[ shift(p) { {k} => b } ]; rest ]]
-    //      ~> def j{s} = reset { p' => val y = s(); rest }; [[ E[ b[ resume(k){s} := j{s} ] ] ]]
-    //    where every other leaf `l` of `E` becomes `j{ () => l }`
-    case Stmt.Val(y, binding, rest) if joinable && shiftsTo(d, binding).isDefined =>
-      joinpoint(Captured(d, Some(y -> rest)), binding.tpe, carries = !shiftsTo(d, binding).contains(true),
+    //      ~> def j(y) = reset { p' => rest }; [[ E[ b[ resume(k){return e} := j(e) ] ] ]]
+    //    where every other leaf `l` of `E` becomes `val y = l; j(y)`
+    case Stmt.Val(y, binding @ d.Shifts(shifts), rest) if joinable =>
+      joinpoint(Captured(d, Some(y -> rest)), binding.tpe, carries = !shifts.forall(_.resumesWithValues),
                 orElse = Stmt.Val(y, binding, underDelimiter(d, rest, joinable))) { jump =>
-        underDelimiter(d, jumpsToJoin(d, binding, jump), joinable = true)
-      }
+         underDelimiter(d, jumpsToJoin(d, binding, jump), joinable = true)
+       }
 
     // 3) a `var` or `region` is popped by the answer, so the shifts below it still stand at the delimiter;
     //    but it cannot be copied, so from here only 1a) applies
@@ -182,28 +182,14 @@ object StaticResumptions {
      }
    }
 
-  /**
-   * Whether a shift to [[d]] that can be joined stands in [[stmt]] under `val` frames only, and if so
-   * whether all of them resume with a value: `None` when there is none to join.
-   */
-  private def shiftsTo(d: Delimiter, stmt: Stmt): Option[Boolean] = stmt match {
-    case d.Shift(handler) if handler.resumesOnly => Some(handler.resumesWithValues)
-    case d.Shift(_) => None
-    case Stmt.Val(_, binding, body) => and(shiftsTo(d, binding), shiftsTo(d, body))
+  /** The shifts to [[d]] that can be joined, standing in [[stmt]] under `val` frames only. */
+  private def shiftsTo(d: Delimiter, stmt: Stmt): List[Handler] = stmt match {
+    case d.Shift(handler) => if (handler.resumesOnly) List(handler) else Nil
+    case Stmt.Val(_, binding, body) => shiftsTo(d, binding) ++ shiftsTo(d, body)
     case other => tailPositions(other) match {
-      case Some(positions) =>
-        var found: Option[Boolean] = None
-        positions.rewrite { child => found = and(found, shiftsTo(d, child)); child }
-        found
-      case None => None
+      case Some(positions) => positions.tails.flatMap(shiftsTo(d, _))
+      case None => Nil
     }
-  }
-
-  private def and(left: Option[Boolean], right: Option[Boolean]): Option[Boolean] = (left, right) match {
-    case (Some(x), Some(y)) => Some(x && y)
-    case (found, None) => found
-    case (None, found) => found
-  }
 
   /**
    * The binding of a joined `val`, now standing at the delimiter: every exit jumps to the join point.
@@ -221,6 +207,9 @@ object StaticResumptions {
         // [[ f(…) ]] = f(…)   a tail call to a block only ever tail-called
         case Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, _), capt), targs, vargs, bargs) if transparent.contains(f) =>
           Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, d.answer), capt), targs, vargs, bargs)
+
+        // an exit that never returns is no exit
+        case leaf if leaf.tpe == Type.TBottom => retypeAnswer(leaf, d.answer)
 
         // a leaf produces the frame's value where it stands, so it jumps with that value: the frames
         // moved into the join point, the leaf did not
@@ -242,7 +231,10 @@ object StaticResumptions {
     }
 
   /**
-   * Binds `def j{s} = [[captured]].fill(s())` around `scope(s => j{ () => s })`, with the prompt renamed.
+   * Binds `def j(y) = [[captured]].fill(return y)` around `scope(e => j(e))`, with the prompt renamed,
+   * or the thunked form when a resumption [[carries]] a computation.
+   *
+   * @param carries some resumption resumes with a statement rather than a value
    *
    * The machine re-installs the *same* prompt on resume, a join point only a fresh one: nothing other than
    * the renamed binders may know the old name, neither inside the join point nor in what is passed to it.
@@ -267,7 +259,7 @@ object StaticResumptions {
     def frames(filled: Stmt): BlockLit = {
       val code = captured.fill(filled)
       if (knowsOldName(code)) break(orElse)
-      BlockLit(Nil, Nil, Nil, Nil, reduce.rewrite(renaming.rewrite(code)))
+      reduce.rewrite(renaming.rewrite(code))
     }
 
     /** Nothing may enter the join point carrying a name the copy renamed. */
@@ -372,12 +364,13 @@ object StaticResumptions {
    * @param transparent blocks only ever tail-called from here, whose tail positions are ours too
    */
   case class TailPositions(rewrite: (Stmt => Stmt) => Stmt, before: Free, transparent: Set[Id] = Set.empty) {
-    def forall(p: Stmt => Boolean): Boolean = {
-      var holds = true
-      rewrite { child => holds &&= p(child); child }
-      holds
-    }
-    def exists(p: Stmt => Boolean): Boolean = !forall(!p(_))
+    def tails: List[Stmt] = {
+      var found: List[Stmt] = Nil
+      rewrite { child => found = child :: found; child }
+      found.reverse
+     }
+    def forall(p: Stmt => Boolean): Boolean = tails.forall(p)
+    def exists(p: Stmt => Boolean): Boolean = tails.exists(p)
   }
 
   /**
