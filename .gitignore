@@ -19,3 +19,8 @@ bin
 notes/
 artwork/
 sbt-microsite-docs
+
+# Nix
+result
+result-*
+flake.lock # to keep community build _not_ fixed to a single set of inputs

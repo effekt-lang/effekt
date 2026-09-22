@@ -141,10 +141,20 @@ jobs:
           command: sbt testBackendJS
 
   chez-tests:
-    name: "Chez Backend"
+    name: "Chez ${{ matrix.configuration }} Backend"
     needs: build-and-compile
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - configuration: CallCC
+            command: 'testBackendChezCallCC'
+          - configuration: CPS
+            command: 'testBackendChezCPS'
+          - configuration: Monadic
+            command: 'testBackendChezMonadic'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -162,7 +172,7 @@ jobs:
           timeout_minutes: 120
           max_attempts: ${{ inputs.max-attempts }}
           retry_on: error
-          command: sbt testBackendChez
+          command: sbt ${{ matrix.command }}
 
   llvm-tests:
     name: "LLVM Backend (${{ matrix.configuration }})"

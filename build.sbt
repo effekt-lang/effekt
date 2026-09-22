@@ -15,7 +15,9 @@ lazy val generateDocumentation = taskKey[Unit]("Generates some documentation.")
 lazy val bumpMinorVersion = taskKey[Unit]("Bumps the minor version number (used in CI).")
 // custom test tasks for CI
 lazy val testBackendJS = taskKey[Unit]("Run JavaScript backend tests")
-lazy val testBackendChez = taskKey[Unit]("Run Chez Scheme backend tests")
+lazy val testBackendChezCallCC = taskKey[Unit]("Run Chez-CallCC backend tests")
+lazy val testBackendChezCPS = taskKey[Unit]("Run Chez-CPS backend tests")
+lazy val testBackendChezMonadic = taskKey[Unit]("Run Chez-Monadic backend tests")
 lazy val testBackendLLVM = taskKey[Unit]("Run LLVM backend tests")
 lazy val testWindowsSmoke = taskKey[Unit]("Run the JavaScript backend tests checked on Windows")
 lazy val testRemaining = taskKey[Unit]("Run all non-backend tests (internal tests) on effektJVM")
@@ -218,16 +220,28 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
       println(newVersion)
     },
+
     testBackendJS := {
       (Test / testOnly).toTask(
         " effekt.JavaScriptTests effekt.StdlibJavaScriptTests"
       ).value
     },
 
-    testBackendChez := {
+    testBackendChezCallCC := {
       (Test / testOnly).toTask(
-        " effekt.ChezSchemeMonadicTests effekt.ChezSchemeCallCCTests effekt.ChezSchemeCPSTests" +
-        " effekt.StdlibChezSchemeMonadicTests effekt.StdlibChezSchemeCallCCTests effekt.StdlibChezSchemeCPSTests"
+        " effekt.ChezSchemeCallCCTests effekt.StdlibChezSchemeCallCCTests"
+      ).value
+    },
+
+    testBackendChezCPS := {
+      (Test / testOnly).toTask(
+        " effekt.ChezSchemeCPSTests effekt.StdlibChezSchemeCPSTests"
+      ).value
+    },
+
+    testBackendChezMonadic := {
+      (Test / testOnly).toTask(
+        " effekt.ChezSchemeMonadicTests effekt.StdlibChezSchemeMonadicTests"
       ).value
     },
 
