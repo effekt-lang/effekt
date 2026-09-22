@@ -63,19 +63,21 @@ class TestRenamer {
         Stmt.Let(rewrite(id), newBinding, rewrite(rest))
       }
 
-    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
+    case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
       val newCallee = rewrite(callee)
       val newArgs = args.map(rewrite)
       val newKs = rewrite(ks)
       withBindings(ids :+ returnedKs) {
-        Stmt.Call(ids.map(rewrite), rewrite(returnedKs), newCallee, newArgs, newKs, rewrite(rest))
+        Stmt.Call(newCallee, newArgs,
+          ReturnPoint.Bind(ids.map(rewrite), rewrite(returnedKs), newKs, rewrite(rest)))
       }
 
-    case Stmt.App(id, args) =>
-      Stmt.App(rewrite(id), args.map(rewrite))
+    case Stmt.Call(callee, args, ReturnPoint.Tail(ks, k)) =>
+      Stmt.Call(rewrite(callee), args.map(rewrite),
+        ReturnPoint.Tail(rewrite(ks), rewrite(k)))
 
-    case Stmt.Invoke(id, method, args) =>
-      Stmt.Invoke(rewrite(id), rewrite(method), args.map(rewrite))
+    case Stmt.Call(callee, args, ReturnPoint.Jump) =>
+      Stmt.Call(rewrite(callee), args.map(rewrite), ReturnPoint.Jump)
 
     case Stmt.Return(values) =>
       Stmt.Return(values.map(rewrite))

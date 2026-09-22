@@ -208,6 +208,7 @@ class Parser(names: Names) extends Parsers {
     | resumeStmt
     | returnStmt
     | holeStmt
+    | tailCall
     | invokeOrApp
     | braces(stmt)
     )
@@ -268,7 +269,16 @@ class Parser(names: Names) extends Parsers {
   lazy val callStmt: P[Stmt] =
     `let` ~> resultBinding ~ (`|` ~> id).? ~ (`=` ~> callCallee <~ `!`) ~ callArguments ~ (`;` ~> stmt) ^^ {
       case names ~ returnedKs ~ callee ~ (args, ks) ~ rest =>
-        Stmt.Call(names, returnedKs.getOrElse(Id("ks")), callee, args, ks, rest)
+        Stmt.Call(callee, args,
+          ReturnPoint.Bind(names, returnedKs.getOrElse(Id("ks")), ks, rest))
+    }
+
+  // callee!(args) @ ks, k
+  lazy val tailCall: P[Stmt] =
+    (callCallee <~ `!`) ~ parens(commaList(expr)) ~
+      (`@` ~> expr <~ `,`) ~ expr ^^ {
+      case callee ~ args ~ ks ~ k =>
+        Stmt.Call(callee, args, ReturnPoint.Tail(ks, k))
     }
 
   // let id = expr;
@@ -366,11 +376,10 @@ class Parser(names: Names) extends Parsers {
   lazy val holeStmt: P[Stmt] =
     `<>` ^^^ Stmt.Hole(Span.missing)
 
-  // id.method(args) or id(args)
+  // A terminal transfer: id.method(args) or id(args)
   lazy val invokeOrApp: P[Stmt] =
-    id ~ (`.` ~> id).? ~ parens(commaList(expr)) ^^ {
-      case obj ~ Some(method) ~ args => Stmt.Invoke(obj, method, args)
-      case func ~ None ~ args => Stmt.App(func, args)
+    callCallee ~ parens(commaList(expr)) ^^ {
+      case callee ~ args => Stmt.Call(callee, args, ReturnPoint.Jump)
     }
 
   // === Entry points ===

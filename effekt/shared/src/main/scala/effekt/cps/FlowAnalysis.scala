@@ -57,6 +57,7 @@ final class FlowAnalysis(
     open: Boolean,
     sources: Set[Address]
   )
+
   enum Value {
     case Closure(
       function: Id,
@@ -292,7 +293,8 @@ final class FlowAnalysis(
     val previous = Option(flows.get(statement)).getOrElse(CallFlow(Set.empty, open = false))
     flows.put(statement, CallFlow(previous.targets ++ targets, previous.open || open))
     statement match {
-      case call: Stmt.Call => calls.put(call, java.lang.Boolean.TRUE)
+      case call @ Stmt.Call(_, _, ReturnPoint.Bind(_, _, _, _)) =>
+        calls.put(call, java.lang.Boolean.TRUE)
       case _ => ()
     }
   }
@@ -456,7 +458,8 @@ final class FlowAnalysis(
         write(address, eval(expression, environment))
         next(rest, environment + (id -> address))
 
-      case call @ Stmt.Call(results, returnedKs, callee, arguments, ks, rest) =>
+      case call @ Stmt.Call(callee, arguments,
+          ReturnPoint.Bind(results, returnedKs, ks, rest)) =>
         val values = arguments.map(eval(_, environment))
         val meta = eval(ks, environment)
         val continuation =
@@ -488,18 +491,14 @@ final class FlowAnalysis(
         if !reifyCalls then
           next(rest, unknown(results :+ returnedKs, environment))
 
-      case application @ Stmt.App(id, arguments) =>
-        applyValue(
-          application,
-          read(environment.getOrElse(id, Address.External)),
-          arguments.map(eval(_, environment)))
-
-      case invocation @ Stmt.Invoke(id, method, arguments) =>
-        invoke(
-          invocation,
-          read(environment.getOrElse(id, Address.External)),
-          method,
-          arguments.map(eval(_, environment)))
+      case call @ Stmt.Call(callee, _, _: ReturnPoint.Tail | ReturnPoint.Jump) =>
+        val supplied = call.knownArguments.map(eval(_, environment))
+        callee match {
+          case Callee.Function(id) =>
+            applyValue(call, read(environment.getOrElse(id, Address.External)), supplied)
+          case Callee.Method(receiver, method) =>
+            invoke(call, read(environment.getOrElse(receiver, Address.External)), method, supplied)
+        }
 
       case Stmt.Return(values) =>
         values.foreach(value => escape(eval(value, environment)))
@@ -520,7 +519,12 @@ final class FlowAnalysis(
           case constructor: Value.Constructor =>
             clauses.find(_._1 == constructor.tag) match {
               case Some((_, Clause(parameters, body))) =>
-                next(body, environment ++ parameters.zip(constructor.fields))
+                val bindings = parameters.zip(constructor.fields).map { (parameter, field) =>
+                  val address = binding(parameter)
+                  write(address, read(field))
+                  parameter -> address
+                }
+                next(body, environment ++ bindings)
               case None => default.foreach(next(_))
             }
           case _ => ()

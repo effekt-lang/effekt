@@ -1,0 +1,82 @@
+def compute(n, ks, k) {
+  def build(i, ks1, k1) {
+    run done = eq(i, 0);
+    if (done) {
+      k1(1, ks1)
+    } else {
+      run previous = sub(i, 1);
+      let left = build!(previous, ks1, return);
+      var remaining = previous @ ks1;
+      def again() {
+        get current = remaining;
+        run finished = eq(current, 0);
+        if (finished) {
+          k1(left, ks1)
+        } else {
+          let right = build!(previous, ks1, return);
+          put remaining = 0;
+          again()
+        }
+      }
+      again()
+    }
+  }
+  let value = build!(n, ks, return);
+  run result = add(value, 1);
+  k(result, ks)
+}
+def main(n, ks, k) {
+  let value = compute!(n, ks, return);
+  k(value, ks)
+}
+
+// The nested recursive loop keeps build in CPS. The enclosing direct worker
+// must complete that computation, and VAR requires a real meta-continuation.
+/// JAVASCRIPT
+
+function build_0(i_0, ks_0, k_0) {
+  build_0: while (true) {
+    const done_0 = eq_0(i_0, 0);
+    if (done_0) {
+      return () => k_0(1, ks_0);
+    } else {
+      function k_2(left_0, ks_2) {
+        function again_0() {
+          const current_0 = remaining_0.value;
+          const finished_0 = eq_0(current_0, 0);
+          if (finished_0) {
+            return () => backup_k_0(left_0, ks_0);
+          } else {
+            function k_1(right_0, ks_1) {
+              remaining_0.set(0);
+              return again_0();
+            }
+            return build_0(previous_0, ks_0, k_1);
+          }
+        }
+        const remaining_0 = VAR(previous_0, ks_0);
+        return () => again_0();
+      }
+      const previous_0 = sub_0(i_0, 1);
+      const backup_k_0 = k_0;
+      i_0 = previous_0;
+      k_0 = k_2;
+      continue build_0;
+    }
+  }
+}
+
+function k_3(value_0, ks_3) {
+  const result_0 = add_0(value_0, 1);
+  return { result: result_0 };
+}
+
+function compute_0(n_0) {
+  const result_1 = TRAMPOLINE(build_0(n_0, TOPLEVEL_KS, k_3));
+  return result_1;
+}
+
+function main_0(n_1, ks_4, k_4) {
+  const value_1 = compute_0(n_1);
+  return k_4(value_1, ks_4);
+}

@@ -228,6 +228,21 @@ object GuardedEquality {
     private def symbols(ids: IterableOnce[Id]): Map[Id, Origin] =
       ids.iterator.map(id => id -> Origin.Symbol(id)).toMap
 
+    private def collectTransfer(
+      stmt: Stmt,
+      callee: Callee,
+      args: List[Expr],
+      env: Map[Id, Origin]
+    ): Unit = callee match {
+      case Callee.Function(id) =>
+        callees += id
+        args.foreach(remember)
+        registerSite(stmt, id, args.map(eval(_, env)).toVector)
+      case Callee.Method(receiver, _) =>
+        callees += receiver
+        args.foreach(remember)
+    }
+
     private def collect(
       stmt: Stmt,
       scope: Vector[Id],
@@ -270,7 +285,8 @@ object GuardedEquality {
         }
         collect(rest, scope :+ id, env + (id -> value))
 
-      case call @ Stmt.Call(results, returnedKs, Callee.Function(id), args, ks, rest) =>
+      case call @ Stmt.Call(Callee.Function(id), args,
+          ReturnPoint.Bind(results, returnedKs, ks, rest)) =>
         callees += id
         args.foreach(remember)
         remember(ks)
@@ -279,20 +295,15 @@ object GuardedEquality {
         collect(rest, scope ++ (results :+ returnedKs),
           env ++ results.map(_ -> Unknown) ++ Map(returnedKs -> Unknown))
 
-      case Stmt.Call(results, returnedKs, Callee.Method(_, _), args, ks, rest) =>
+      case Stmt.Call(Callee.Method(_, _), args,
+          ReturnPoint.Bind(results, returnedKs, ks, rest)) =>
         args.foreach(remember)
         remember(ks)
         collect(rest, scope ++ (results :+ returnedKs),
           env ++ results.map(_ -> Unknown) ++ Map(returnedKs -> Unknown))
 
-      case app @ Stmt.App(id, args) =>
-        callees += id
-        args.foreach(remember)
-        registerSite(app, id, args.map(eval(_, env)).toVector)
-
-      case Stmt.Invoke(id, _, args) =>
-        callees += id
-        args.foreach(remember)
+      case call @ Stmt.Call(callee, _, _: ReturnPoint.Tail | ReturnPoint.Jump) =>
+        collectTransfer(call, callee, call.knownArguments, env)
 
       case Stmt.Return(values) =>
         values.foreach(remember)
@@ -376,7 +387,11 @@ object GuardedEquality {
     def function(id: Id): TargetValue = TargetValue(Set(id), unknown = false)
   }
 
-  private final class TargetAnalysis(meta: Metadata, toplevelParams: List[Id]) {
+  private final class TargetAnalysis(
+    meta: Metadata,
+    toplevelParams: List[Id],
+    roots: Set[Id] = Set.empty
+  ) {
     private val definitions = meta.definitions
     private val allocations = mutable.Map.empty[Id, Vector[TargetValue]]
     private val arguments = mutable.Map.empty[Id, Vector[TargetValue]]
@@ -391,6 +406,12 @@ object GuardedEquality {
 
     execute(meta.body, toplevelParams.iterator.map(_ -> TargetValue.Unknown).toMap)
     registerDirectTargets()
+    roots.iterator.flatMap(definitions.get).foreach { definition =>
+      addAllocation(definition.id,
+        Vector.fill(definition.captures.size)(TargetValue.Unknown))
+      addArguments(definition.id,
+        Vector.fill(definition.params.size)(TargetValue.Unknown))
+    }
     saturate()
 
     val targetsAt: Map[Int, Set[Id]] =
@@ -510,6 +531,20 @@ object GuardedEquality {
       }
     }
 
+    private def executeTransfer(
+      application: Stmt,
+      callee: Callee,
+      args: List[Expr],
+      env: Map[Id, TargetValue]
+    ): Unit = callee match {
+      case Callee.Function(id) =>
+        call(siteOf(application), env.getOrElse(id, TargetValue.Unknown),
+          args.map(eval(_, env)).toVector)
+      case Callee.Method(receiver, _) =>
+        escape(env.getOrElse(receiver, TargetValue.Unknown))
+        args.foreach(arg => escape(eval(arg, env)))
+    }
+
     private def execute(stmt: Stmt, env: Map[Id, TargetValue]): Unit = stmt match {
       case Stmt.Def(id, _, _, rest) =>
         val info = definitions(id)
@@ -525,7 +560,8 @@ object GuardedEquality {
       case Stmt.Let(id, binding, rest) =>
         execute(rest, env + (id -> eval(binding, env)))
 
-      case application @ Stmt.Call(results, returnedKs, Callee.Function(id), args, ks, rest) =>
+      case application @ Stmt.Call(Callee.Function(id), args,
+          ReturnPoint.Bind(results, returnedKs, ks, rest)) =>
         call(
           siteOf(application),
           env.getOrElse(id, TargetValue.Unknown),
@@ -534,17 +570,14 @@ object GuardedEquality {
         execute(rest, env ++ results.map(_ -> TargetValue.Unknown) ++ Map(
           returnedKs -> TargetValue.Unknown))
 
-      case Stmt.Call(results, returnedKs, Callee.Method(_, _), args, ks, rest) =>
+      case Stmt.Call(Callee.Method(_, _), args,
+          ReturnPoint.Bind(results, returnedKs, ks, rest)) =>
         (args.iterator.map(eval(_, env)) ++ Iterator.single(eval(ks, env))).foreach(escape)
         execute(rest, env ++ results.map(_ -> TargetValue.Unknown) ++ Map(
           returnedKs -> TargetValue.Unknown))
 
-      case app @ Stmt.App(id, args) =>
-        call(siteOf(app), env.getOrElse(id, TargetValue.Unknown), args.map(eval(_, env)).toVector)
-
-      case Stmt.Invoke(id, _, args) =>
-        escape(env.getOrElse(id, TargetValue.Unknown))
-        args.foreach(arg => escape(eval(arg, env)))
+      case application @ Stmt.Call(callee, _, _: ReturnPoint.Tail | ReturnPoint.Jump) =>
+        executeTransfer(application, callee, application.knownArguments, env)
 
       case Stmt.Return(values) =>
         values.foreach(v => escape(eval(v, env)))
@@ -860,6 +893,23 @@ object GuardedEquality {
       }
     }
 
+    private def executeTransfer(
+      application: Stmt,
+      callee: Callee,
+      args: List[Expr],
+      env: Map[Id, Origin],
+      onObservedCall: (Vector[Origin], Boolean) => Unit,
+      markUnsafe: () => Unit
+    ): Unit = callee match {
+      case Callee.Function(id) =>
+        executeCall(
+          application, id, args.map(eval(_, env)).toVector, env,
+          onObservedCall, markUnsafe)
+      case Callee.Method(receiver, _) =>
+        escape(env.get(receiver).iterator ++
+          args.iterator.map(eval(_, env)), markUnsafe)
+    }
+
     private def execute(
       stmt: Stmt,
       env: Map[Id, Origin],
@@ -889,7 +939,8 @@ object GuardedEquality {
       case Stmt.Let(id, binding, rest) =>
         execute(rest, env + (id -> eval(binding, env)), onObservedCall, markUnsafe)
 
-      case application @ Stmt.Call(results, returnedKs, Callee.Function(id), args, ks, rest) =>
+      case application @ Stmt.Call(Callee.Function(id), args,
+          ReturnPoint.Bind(results, returnedKs, ks, rest)) =>
         val arguments =
           args.map(eval(_, env)).toVector :+ eval(ks, env) :+ Unknown
         executeCall(application, id, arguments, env, onObservedCall, markUnsafe)
@@ -899,7 +950,8 @@ object GuardedEquality {
           onObservedCall,
           markUnsafe)
 
-      case Stmt.Call(results, returnedKs, Callee.Method(receiver, _), args, ks, rest) =>
+      case Stmt.Call(Callee.Method(receiver, _), args,
+          ReturnPoint.Bind(results, returnedKs, ks, rest)) =>
         escape(
           env.get(receiver).iterator ++
             args.iterator.map(eval(_, env)) ++ Iterator(eval(ks, env)),
@@ -910,13 +962,10 @@ object GuardedEquality {
           onObservedCall,
           markUnsafe)
 
-      case app @ Stmt.App(id, args) =>
-        executeCall(
-          app, id, args.map(eval(_, env)).toVector, env,
+      case application @ Stmt.Call(callee, _, _: ReturnPoint.Tail | ReturnPoint.Jump) =>
+        executeTransfer(
+          application, callee, application.knownArguments, env,
           onObservedCall, markUnsafe)
-
-      case Stmt.Invoke(id, _, args) =>
-        escape(env.get(id).iterator ++ args.iterator.map(eval(_, env)), markUnsafe)
 
       case Stmt.Return(values) =>
         escape(values.iterator.map(eval(_, env)), markUnsafe)
@@ -1152,13 +1201,16 @@ object GuardedEquality {
 
   /** The finite call-target projection, without solving relative equalities
    *  for every local definition. */
-  def targets(toplevel: ToplevelDefinition): TargetResult = {
+  def targets(toplevel: ToplevelDefinition): TargetResult =
+    targets(toplevel, Set.empty)
+
+  def targets(toplevel: ToplevelDefinition, roots: Set[Id]): TargetResult = {
     val (params, body) = toplevel match {
       case ToplevelDefinition.Def(_, params, body) => (params, body)
       case ToplevelDefinition.Val(_, ks, k, binding) => (List(ks, k), binding)
     }
     val meta = Metadata(params, body)
-    val targets = TargetAnalysis(meta, params)
+    val targets = TargetAnalysis(meta, params, roots)
     targetResult(meta, targets)
   }
 

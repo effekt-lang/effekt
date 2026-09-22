@@ -1,0 +1,39 @@
+def first(ks, k) {
+  run ignored = println(1);
+  k(ks)
+}
+def second(ks, k) {
+  run ignored = println(2);
+  k(ks)
+}
+def main(ks, k) {
+  let () = first!(ks, return);
+  let () = second!(ks, return);
+  k(42, ks)
+}
+
+// Both calls have an empty result vector, but demand different direct workers.
+/// CALLING_CONVENTIONS
+
+direct
+  first = 0
+  main = 1 adapter
+  second = 0
+
+/// JAVASCRIPT
+
+function first_0() {
+  const ignored_0 = println_0(1);
+  return;
+}
+
+function second_0() {
+  const ignored_1 = println_0(2);
+  return;
+}
+
+function main_0(ks_0, k_0) {
+  first_0();
+  second_0();
+  return k_0(42, ks_0);
+}

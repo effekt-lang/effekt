@@ -32,7 +32,7 @@ object Inliner {
    */
   private def isForwarder(id: Id, body: Stmt): Boolean =
     !body.free.contains(id) && (body match {
-      case Stmt.App(_, args) => args.forall(isTrivial)
+      case Stmt.Call(_, args, ReturnPoint.Jump) => args.forall(isTrivial)
       case _ => false
     })
 
@@ -62,9 +62,9 @@ object Inliner {
       Stmt.New(id, interface, operations, continueWith(remainder, results, rest))
     case Stmt.Let(id, binding, remainder) =>
       Stmt.Let(id, binding, continueWith(remainder, results, rest))
-    case Stmt.Call(id, returnedKs, callee, args, ks, remainder) =>
-      Stmt.Call(id, returnedKs, callee, args, ks,
-        continueWith(remainder, results, rest))
+    case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, remainder)) =>
+      Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks,
+        continueWith(remainder, results, rest)))
     case Stmt.Return(values) =>
       results.zip(values).foldRight(rest) { case ((result, value), remainder) =>
         if isTrivial(value) then substitute(remainder)(using Substitution(Map(result -> value)))
@@ -100,7 +100,7 @@ object Inliner {
     // A direct body cannot contain these control boundaries. Keeping them
     // unchanged makes this operation partial only at the point where the
     // calling-convention analysis already guarantees they are absent.
-    case terminal @ (Stmt.App(_, _) | Stmt.Invoke(_, _, _) |
+    case terminal @ (Stmt.Call(_, _, ReturnPoint.Tail(_, _) | ReturnPoint.Jump) |
         Stmt.Reset(_, _, _, _, _, _) | Stmt.Shift(_, _, _, _, _, _, _) |
         Stmt.Resume(_, _, _, _, _, _) | Stmt.Hole(_)) => terminal
   }
@@ -182,7 +182,8 @@ object Inliner {
     // can commute into its call site without code duplication. Before that
     // point definitions still have two additional CPS parameters, so this
     // case deliberately does not fire.
-    case Stmt.Call(ids, returnedKs, callee @ Callee.Function(target), args, ks, rest)
+    case Stmt.Call(callee @ Callee.Function(target), args,
+        ReturnPoint.Bind(ids, returnedKs, ks, rest))
         if context.definitions.get(target).exists(_.params.size == args.size) &&
           !expanding.contains(target) =>
       val args1 = args.map(rewrite(_, context))
@@ -192,25 +193,30 @@ object Inliner {
         context,
         expanding + target)
 
-    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
-      Stmt.Call(
-        ids,
-        returnedKs,
-        callee,
-        args.map(rewrite(_, context)),
-        rewrite(ks, context),
-        rewrite(rest, context, expanding))
+    case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
+      Stmt.Call(callee, args.map(rewrite(_, context)),
+        ReturnPoint.Bind(
+          ids, returnedKs, rewrite(ks, context),
+          rewrite(rest, context, expanding)))
 
-    case app @ Stmt.App(id, args)
+    case Stmt.Call(Callee.Function(id), args, ReturnPoint.Jump)
         if context.definitions.contains(id) && !expanding.contains(id) =>
       val args1 = args.map(rewrite(_, context))
       rewrite(reduce(context.definitions(id), args1), context, expanding + id)
 
-    case Stmt.App(id, args) =>
-      Stmt.App(id, args.map(rewrite(_, context)))
+    case Stmt.Call(Callee.Function(id), args, ReturnPoint.Tail(ks, k))
+        if context.definitions.get(id).exists(_.params.size == args.size + 2) &&
+          !expanding.contains(id) =>
+      val arguments = args.map(rewrite(_, context)) ++
+        List(rewrite(ks, context), rewrite(k, context))
+      rewrite(reduce(context.definitions(id), arguments), context, expanding + id)
 
-    case Stmt.Invoke(id, method, args) =>
-      Stmt.Invoke(id, method, args.map(rewrite(_, context)))
+    case Stmt.Call(callee, args, ReturnPoint.Tail(ks, k)) =>
+      Stmt.Call(callee, args.map(rewrite(_, context)),
+        ReturnPoint.Tail(rewrite(ks, context), rewrite(k, context)))
+
+    case Stmt.Call(callee, args, ReturnPoint.Jump) =>
+      Stmt.Call(callee, args.map(rewrite(_, context)), ReturnPoint.Jump)
 
     case Stmt.Return(values) =>
       Stmt.Return(values.map(rewrite(_, context)))

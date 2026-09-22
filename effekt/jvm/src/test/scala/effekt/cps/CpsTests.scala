@@ -207,7 +207,7 @@ class CpsTests extends munit.FunSuite {
     val x = Id("x")
     for callee <- List(f, x) do {
       val input = Stmt.Def(f, List(x),
-        Stmt.App(callee, List(Expr.Variable(x))),
+        Stmt.Call(Callee.Function(callee), List(Expr.Variable(x)), ReturnPoint.Jump),
         Stmt.Return(List(Expr.Variable(f))))
       assertEquals(Simplifier.rewrite(input), input)
     }

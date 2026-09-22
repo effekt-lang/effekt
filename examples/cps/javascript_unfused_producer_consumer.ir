@@ -38,7 +38,7 @@ direct
 
 function main_0(n_0, ks_0, k_0) {
   const k_1 = { __tag: 0 };
-  const ks_1 = undefined;
+  const ks_1 = TOPLEVEL_KS;
   let i_0 = undefined;
   let k_2 = undefined;
   let cont_2 = undefined;
@@ -73,7 +73,7 @@ function main_0(n_0, ks_0, k_0) {
             const values_0 = value_3;
             const ks_2 = value_4;
             const k_4 = { __tag: 1 };
-            const ks_3 = undefined;
+            const ks_3 = TOPLEVEL_KS;
             let xs_0 = undefined;
             let k_5 = undefined;
             consume_worker_0: {

@@ -2,7 +2,7 @@ def main(x, ks, k) {
   def identity(value, ks1, k1) {
     k1(value, ks1)
   }
-  identity(x, ks, k)
+  identity!(x) @ ks, k
 }
 
 // An ordinary known tail application is not yet part of calling-convention

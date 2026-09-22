@@ -67,7 +67,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(rest)
 
-    case Stmt.Call(ids, returnedKs, callee, args, ks, rest) =>
+    case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
       val returnDoc: Doc = "return"
       val binding = ids match {
         case List(one) => toDoc(one)
@@ -79,11 +79,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "let" <+> result <+> "=" <+> toDoc(callee) <> "!" <>
         parens(args.map(toDoc) ++ List(toDoc(ks), returnDoc)) <> ";" <> line <> toDoc(rest)
 
-    case Stmt.App(id, args) =>
-      toDoc(id) <> parens(args.map(toDoc))
+    case Stmt.Call(callee, args, ReturnPoint.Tail(ks, k)) =>
+      toDoc(callee) <> "!" <> parens(args.map(toDoc)) <+>
+        "@" <+> toDoc(ks) <> "," <+> toDoc(k)
 
-    case Stmt.Invoke(id, method, args) =>
-      toDoc(id) <> "." <> method.name.toString <> parens(args.map(toDoc))
+    case Stmt.Call(callee, args, ReturnPoint.Jump) =>
+      toDoc(callee) <> parens(args.map(toDoc))
 
     case Stmt.Return(values) =>
       "return" <> parens(values.map(toDoc))

@@ -4,6 +4,7 @@ package js
 
 import effekt.core.Id
 import effekt.cps
+import effekt.cps.knownArguments
 
 /**
  * Jointly chooses the runtime representation of local definitions.
@@ -159,7 +160,8 @@ object DefinitionPlanning {
           binding.free ++ (continuation.free - id),
           definitionsIn(binding.free) ++ continuation.functions)
 
-      case cps.Stmt.Call(ids, returnedKs, callee, arguments, ks, rest) =>
+      case cps.Stmt.Call(callee, arguments,
+          cps.ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
         val argumentFree = free(arguments) ++ ks.free
         val continuation = statement(rest)
         val boundary = ks match {
@@ -170,12 +172,10 @@ object DefinitionPlanning {
           argumentFree ++ (continuation.free -- ids.toSet - returnedKs) + callee.value,
           definitionsIn(argumentFree ++ boundary) ++ continuation.functions)
 
-      case cps.Stmt.App(callee, arguments) =>
-        val argumentFree = free(arguments)
-        Summary(argumentFree + callee, definitionsIn(argumentFree))
-      case cps.Stmt.Invoke(receiver, _, arguments) =>
-        val argumentFree = free(arguments)
-        Summary(argumentFree + receiver, definitionsIn(argumentFree))
+      case call @ cps.Stmt.Call(callee, _,
+          _: cps.ReturnPoint.Tail | cps.ReturnPoint.Jump) =>
+        val argumentFree = free(call.knownArguments)
+        Summary(argumentFree + callee.value, definitionsIn(argumentFree))
 
       case cps.Stmt.Return(values) =>
         val valuesFree = free(values)

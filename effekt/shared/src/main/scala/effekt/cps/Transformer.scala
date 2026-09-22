@@ -19,7 +19,7 @@ enum Continuation {
   case Static(hint: Id, k: (Expr, MetaContinuation) => Stmt)
 
   def apply(arg: Expr, ks: MetaContinuation): Stmt = this match {
-    case Dynamic(id) => Stmt.App(id, List(arg, ks.reify))
+    case Dynamic(id) => Stmt.Call(Callee.Function(id), List(arg, ks.reify), ReturnPoint.Jump)
     case Static(_, k) => k(arg, ks)
   }
 
@@ -237,16 +237,14 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
       if isControlPure(stmt.capt) then {
         val result = Id("result")
         val returnedKs = Id("ks")
-        Stmt.Call(
-          List(result),
-          returnedKs,
-          Callee.Function(calleeId),
-          args,
-          ks.reify,
-          k(Expr.Variable(result), ks))
+        Stmt.Call(Callee.Function(calleeId), args,
+          ReturnPoint.Bind(
+            List(result), returnedKs, ks.reify,
+            k(Expr.Variable(result), ks)))
       } else
         k.reify(stmt.tpe, cont =>
-          Stmt.App(calleeId, args ++ List(ks.reify, cont)))
+          Stmt.Call(Callee.Function(calleeId), args,
+            ReturnPoint.Tail(ks.reify, cont)))
     }
 
   // --- Invoke ---
@@ -258,13 +256,10 @@ def transform(stmt: core.Stmt, ks: MetaContinuation, k: Continuation)(using C: T
     } yield (calleeId, vs ++ bs)).run { case (calleeId, args) =>
       val result = Id("result")
       val returnedKs = Id("ks")
-      Stmt.Call(
-        List(result),
-        returnedKs,
-        Callee.Method(calleeId, method),
-        args,
-        ks.reify,
-        k(Expr.Variable(result), MetaContinuation.Dynamic(returnedKs)))
+      Stmt.Call(Callee.Method(calleeId, method), args,
+        ReturnPoint.Bind(
+          List(result), returnedKs, ks.reify,
+          k(Expr.Variable(result), MetaContinuation.Dynamic(returnedKs))))
     }
 
   // --- If ---
@@ -386,7 +381,8 @@ def transformToplevel(definition: core.Toplevel)(using C: TransformationContext)
         val ks = Id("ks")
         val k = Id("k")
         ToplevelDefinition.Val(id, ks, k,
-          Binding(bindings, Stmt.App(k, List(value, Expr.Variable(ks)))))
+          Binding(bindings,
+            Stmt.Call(Callee.Function(k), List(value, Expr.Variable(ks)), ReturnPoint.Jump)))
     }
 
   case core.Toplevel.Val(id, binding) =>

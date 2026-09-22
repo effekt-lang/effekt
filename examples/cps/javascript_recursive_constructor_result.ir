@@ -34,7 +34,7 @@ direct
 
 function main_0(i_0, ks_0, k_0) {
   const k_1 = { __tag: 0 };
-  const ks_1 = undefined;
+  const ks_1 = TOPLEVEL_KS;
   let i_1 = undefined;
   let k_2 = undefined;
   let cont_1 = undefined;

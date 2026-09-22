@@ -48,7 +48,8 @@ class FlowAnalysisTests extends munit.FunSuite {
         case Stmt.New(_, _, operations, rest) =>
           operations.foreach(operation => visit(operation.body)); visit(rest)
         case Stmt.Let(_, _, rest) => visit(rest)
-        case Stmt.Call(_, _, _, _, _, rest) => visit(rest)
+        case Stmt.Call(_, _, ReturnPoint.Bind(_, _, _, rest)) => visit(rest)
+        case Stmt.Call(_, _, ReturnPoint.Tail(_, _)) => ()
         case Stmt.Run(_, _, _, _, rest) => visit(rest)
         case Stmt.If(_, thn, els) => visit(thn); visit(els)
         case Stmt.Match(_, clauses, default) =>
@@ -63,7 +64,7 @@ class FlowAnalysisTests extends munit.FunSuite {
         case Stmt.Reset(_, _, _, body, _, _) => visit(body)
         case Stmt.Shift(_, _, _, _, body, _, _) => visit(body)
         case Stmt.Resume(_, _, _, body, _, _) => visit(body)
-        case _: Stmt.App | _: Stmt.Invoke | _: Stmt.Return | _: Stmt.Hole => ()
+        case Stmt.Call(_, _, ReturnPoint.Jump) | _: Stmt.Return | _: Stmt.Hole => ()
       }
     }
 
@@ -81,7 +82,7 @@ class FlowAnalysisTests extends munit.FunSuite {
     val pointsTo = new FlowAnalysis(module)
 
     val call = statements(module).collectFirst {
-      case app @ Stmt.App(id, _) if id == names("loop") => app
+      case jump @ Stmt.Call(Callee.Function(id), _, ReturnPoint.Jump) if id == names("loop") => jump
     }.getOrElse(fail("no recursive call found"))
     assertEquals(pointsTo.targetsAt(call), Set(names("loop")))
   }
@@ -103,7 +104,7 @@ class FlowAnalysisTests extends munit.FunSuite {
     """)
     val pointsTo = new FlowAnalysis(module)
     val indirect = statements(module).collectFirst {
-      case app @ Stmt.App(id, _) if named(id, "f") => app
+      case jump @ Stmt.Call(Callee.Function(id), _, ReturnPoint.Jump) if named(id, "f") => jump
     }.getOrElse(fail("no captured call found"))
 
     assert(pointsTo.targetsAt(indirect).exists(named(_, "target")))
@@ -130,7 +131,7 @@ class FlowAnalysisTests extends munit.FunSuite {
     """)
     val pointsTo = new FlowAnalysis(module)
     val indirect = statements(module).collectFirst {
-      case app @ Stmt.App(id, _) if named(id, "f") => app
+      case jump @ Stmt.Call(Callee.Function(id), _, ReturnPoint.Jump) if named(id, "f") => jump
     }.getOrElse(fail("no indirect call found"))
 
     assert(pointsTo.targetsAt(indirect).exists(named(_, "target")))
@@ -149,7 +150,7 @@ class FlowAnalysisTests extends munit.FunSuite {
     """)
     val pointsTo = new FlowAnalysis(module)
     val invocation = statements(module).collectFirst {
-      case invoke: Stmt.Invoke => invoke
+      case jump @ Stmt.Call(Callee.Method(_, _), _, ReturnPoint.Jump) => jump
     }.getOrElse(fail("no invocation found"))
 
     assert(pointsTo.targetsAt(invocation).exists(named(_, "operation")))
@@ -184,13 +185,13 @@ class FlowAnalysisTests extends munit.FunSuite {
     """)
     val pointsTo = new FlowAnalysis(module)
     val applications = statements(module).collect {
-      case app @ Stmt.App(id, _) if
-          named(id, "firstTarget") || named(id, "secondTarget") => app
+      case jump @ Stmt.Call(Callee.Function(id), _, ReturnPoint.Jump) if
+          named(id, "firstTarget") || named(id, "secondTarget") => jump
     }
 
     assertEquals(applications.size, 2)
     applications.foreach { application =>
-      val target = application.id
+      val Stmt.Call(Callee.Function(target), _, ReturnPoint.Jump) = application: @unchecked
       assert(pointsTo.targetsAt(application).contains(target))
     }
   }
@@ -211,7 +212,7 @@ class FlowAnalysisTests extends munit.FunSuite {
     """)
     val pointsTo = new FlowAnalysis(module)
     val application = statements(module).collectFirst {
-      case app @ Stmt.App(id, _) if named(id, "f") => app
+      case jump @ Stmt.Call(Callee.Function(id), _, ReturnPoint.Jump) if named(id, "f") => jump
     }.getOrElse(fail("no application of matched field found"))
 
     assert(pointsTo.targetsAt(application).exists(named(_, "target")))
@@ -232,7 +233,7 @@ class FlowAnalysisTests extends munit.FunSuite {
     """)
     val pointsTo = new FlowAnalysis(module, reifyCalls = true)
     val application = statements(module).collectFirst {
-      case app @ Stmt.App(id, _) if named(id, "result") => app
+      case jump @ Stmt.Call(Callee.Function(id), _, ReturnPoint.Jump) if named(id, "result") => jump
     }.getOrElse(fail("no application of returned value found"))
 
     assert(pointsTo.targetsAt(application).exists(named(_, "returned")))
@@ -270,13 +271,47 @@ class FlowAnalysisTests extends munit.FunSuite {
     """)
     val pointsTo = new FlowAnalysis(module)
     val calls = statements(module).collect {
-      case app @ Stmt.App(id, _) if named(id, "target") => app
+      case jump @ Stmt.Call(Callee.Function(id), _, ReturnPoint.Jump) if named(id, "target") => jump
     }
 
     assertEquals(calls.size, 2)
     calls.foreach { call =>
       assert(pointsTo.targetsAt(call).exists(named(_, "target")))
     }
+  }
+
+  test("pattern parameters have monovariant binding addresses") {
+    val module = parse("""
+      type BoxData { Box(value: Int) }
+
+      def main(flag, ks, k) {
+        let first = make Box(1);
+        let second = make Box(2);
+        def visit(box, ks1, k1) {
+          box match {
+            case Box(value) =>
+              def capture(ignored, ks2, k2) {
+                k2(value, ks2)
+              }
+              capture(value, ks1, k1)
+          }
+        }
+        if (flag) {
+          visit(first, ks, k)
+        } else {
+          visit(second, ks, k)
+        }
+      }
+    """)
+    val analysis = new FlowAnalysis(module)
+    val capture = statements(module).collectFirst {
+      case Stmt.Def(id, _, _, _) if named(id, "capture") => id
+    }.getOrElse(fail("no capture definition found"))
+    val closures = analysis.valueAt(analysis.Address.Binding(capture)).values.collect {
+      case closure: analysis.Value.Closure => closure
+    }
+
+    assertEquals(closures.size, 1)
   }
 
   test("compositional recursion changes its continuation but not its meta-continuation") {

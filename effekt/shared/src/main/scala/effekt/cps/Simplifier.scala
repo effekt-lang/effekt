@@ -11,7 +11,7 @@ object Simplifier {
     case Stmt.Def(id, params, body, rest) =>
       rewrite(body) match {
         // Eta-reduction requires the callee to be in scope outside the function.
-        case Stmt.App(id2, args)
+        case Stmt.Call(Callee.Function(id2), args, ReturnPoint.Jump)
             if id2 != id && !params.contains(id2) && args == params.map(Expr.Variable(_)) =>
           Stmt.Let(id, Expr.Variable(id2), rewrite(rest))
         case newBody =>
@@ -24,14 +24,15 @@ object Simplifier {
     case Stmt.Let(id, binding, rest) =>
       Stmt.Let(id, rewrite(binding), rewrite(rest))
 
-    case Stmt.Call(id, returnedKs, callee, args, ks, rest) =>
-      Stmt.Call(id, returnedKs, callee, args.map(rewrite), rewrite(ks), rewrite(rest))
+    case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
+      Stmt.Call(callee, args.map(rewrite),
+        ReturnPoint.Bind(ids, returnedKs, rewrite(ks), rewrite(rest)))
 
-    case Stmt.App(id, args) =>
-      Stmt.App(id, args.map(rewrite))
+    case Stmt.Call(callee, args, ReturnPoint.Tail(ks, k)) =>
+      Stmt.Call(callee, args.map(rewrite), ReturnPoint.Tail(rewrite(ks), rewrite(k)))
 
-    case Stmt.Invoke(id, method, args) =>
-      Stmt.Invoke(id, method, args.map(rewrite))
+    case Stmt.Call(callee, args, ReturnPoint.Jump) =>
+      Stmt.Call(callee, args.map(rewrite), ReturnPoint.Jump)
 
     case Stmt.Return(values) =>
       Stmt.Return(values.map(rewrite))

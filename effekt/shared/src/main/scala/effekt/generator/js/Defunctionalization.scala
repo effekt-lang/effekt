@@ -38,7 +38,7 @@ object Defunctionalization {
   final class Plan private[js] (
     val cases: Map[Id, ContinuationCase],
     val dispatches: Map[Id, ContinuationDispatch],
-    private val applications: IdentityHashMap[cps.Stmt.App, ContinuationDispatch],
+    private val applications: IdentityHashMap[cps.Stmt, ContinuationDispatch],
     /** Stable local definitions referenced directly by relocated cases which
      *  must therefore retain a JavaScript function binding. */
     val firstClassRequirements: Set[Id],
@@ -52,7 +52,7 @@ object Defunctionalization {
   ) {
     def caseOf(id: Id): Option[ContinuationCase] = cases.get(id)
     def dispatchFor(entry: Id): Option[ContinuationDispatch] = dispatches.get(entry)
-    def dispatchFor(application: cps.Stmt.App): Option[ContinuationDispatch] =
+    def dispatchFor(application: cps.Stmt): Option[ContinuationDispatch] =
       Option(applications.get(application))
 
     /** Finalize frame layouts after loop lowering has identified mutable
@@ -68,7 +68,7 @@ object Defunctionalization {
       val refinedDispatches = dispatches.view.mapValues { dispatch =>
         dispatch.copy(cases = dispatch.cases.map(c => refinedCases(c.definition)))
       }.toMap
-      val refinedApplications = new IdentityHashMap[cps.Stmt.App, ContinuationDispatch]()
+      val refinedApplications = new IdentityHashMap[cps.Stmt, ContinuationDispatch]()
       applications.forEach { (application, dispatch) =>
         refinedApplications.put(application, refinedDispatches(dispatch.entry))
       }
@@ -273,9 +273,11 @@ object Defunctionalization {
           visit(rest, scopes, static, repeated)
 
         case cps.Stmt.Let(_, _, rest) => visit(rest, scopes, static, repeated)
-        case cps.Stmt.Call(_, _, _, _, _, rest) => visit(rest, scopes, static, repeated)
-        case call: cps.Stmt.App => applications.put(call, scopes)
-        case _: cps.Stmt.Invoke => ()
+        case cps.Stmt.Call(_, _, cps.ReturnPoint.Bind(_, _, _, rest)) =>
+          visit(rest, scopes, static, repeated)
+        case call @ cps.Stmt.Call(_, _, cps.ReturnPoint.Jump) =>
+          applications.put(call, scopes)
+        case _: cps.Stmt.Call => ()
         case _: cps.Stmt.Return => ()
         case cps.Stmt.Run(_, _, _, _, rest) => visit(rest, scopes, static, repeated)
         case cps.Stmt.If(_, thn, els) =>
@@ -349,7 +351,7 @@ object Defunctionalization {
     val locations = Locations(module, isSecondClass)
     val allCases = scala.collection.mutable.LinkedHashMap.empty[Id, ContinuationCase]
     val allDispatches = scala.collection.mutable.LinkedHashMap.empty[Id, ContinuationDispatch]
-    val allApplications = new IdentityHashMap[cps.Stmt.App, ContinuationDispatch]()
+    val allApplications = new IdentityHashMap[cps.Stmt, ContinuationDispatch]()
     val firstClassRequirements = scala.collection.mutable.LinkedHashSet.empty[Id]
     val reenteredDefinitions = scala.collection.mutable.LinkedHashSet.empty[Id]
     var nextTag = 0
@@ -403,7 +405,10 @@ object Defunctionalization {
       val parameterOwner = localParameterOwner ++ toplevelParameterOwner
       // A `Call` has an explicit lexical remainder and is not a continuation
       // application. Only terminal CPS applications can form dispatches.
-      val calls = flow.callTargets.filter(_.call.isInstanceOf[cps.Stmt.App])
+      val calls = flow.callTargets.filter(_.call match {
+        case cps.Stmt.Call(_: cps.Callee.Function, _, cps.ReturnPoint.Jump) => true
+        case _ => false
+      })
 
       val candidates = calls.groupBy(_.callee).iterator.flatMap { case (callee, sites) =>
         parameterOwner.get(callee).flatMap { entry =>
@@ -590,7 +595,7 @@ object Defunctionalization {
             allDispatches(owner.entry) = dispatch
             members.flatMap(_.calls).foreach { call =>
               call.call match {
-                case application: cps.Stmt.App =>
+                case application @ cps.Stmt.Call(_, _, cps.ReturnPoint.Jump) =>
                   allApplications.put(application, dispatch)
                 case _ => () // candidates contain terminal applications only
               }
