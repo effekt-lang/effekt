@@ -1471,6 +1471,38 @@ class VMTests extends munit.FunSuite {
       resumes = 0
     )),
 
+    examplesDir / "pos" / "resume_inside_nested_reset.effekt" -> Some(Summary(
+      staticDispatches = 0,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 0,
+      pushedFrames = 1,
+      poppedFrames = 0,
+      allocations = 0,
+      closures = 0,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 2,
+      shifts = 2,
+      resumes = 1
+    )),
+
+    examplesDir / "pos" / "abort_inside_handler.effekt" -> Some(Summary(
+      staticDispatches = 5,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 5,
+      pushedFrames = 3,
+      poppedFrames = 1,
+      allocations = 0,
+      closures = 0,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 2,
+      shifts = 2,
+      resumes = 0
+    )),
+
     examplesDir / "pos" / "with_val_else.effekt" -> Some(Summary(
       staticDispatches = 3,
       dynamicDispatches = 0,

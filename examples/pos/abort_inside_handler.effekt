@@ -1,0 +1,19 @@
+effect op(): Int
+effect inner(): Int
+
+// abort hidden behind a call
+def compute(n: Int): Int / inner = if (n > 3) do inner() else compute(n + 1)
+
+// The handler for `op` computes what to resume with under a handler of its own
+// when that computation aborts, the abort's value is the handler's answer
+// and the continuation of `do op()` is never run.
+def main() = {
+  val x = try {
+    val r = do op()
+    println("resumed with " ++ r.show)
+    r + 1
+  } with op {
+    try { resume(compute(0)) } with inner { 100 }
+  }
+  println(x)
+}
