@@ -1293,6 +1293,21 @@ class VMTests extends munit.FunSuite {
       resumes = 0
     )),
 
+    examplesDir / "benchmarks" / "other" / "knuth_man_or_boy.effekt" -> Some(Summary(
+      staticDispatches = 2276,
+      dynamicDispatches = 1224,
+      patternMatches = 0,
+      branches = 1444,
+      pushedFrames = 1226,
+      poppedFrames = 1226,
+      allocations = 0,
+      closures = 1452,
+      variableReads = 1442,
+      variableWrites = 721,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
 
     examplesDir / "stdlib" / "stream" / "fix.effekt" -> Some(Summary(
       staticDispatches = 38,

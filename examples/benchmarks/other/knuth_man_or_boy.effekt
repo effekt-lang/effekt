@@ -1,0 +1,34 @@
+/// from issue #1398
+module benchmarks/other/knuth_man_or_boy
+
+import examples/benchmarks/runner
+
+def ref::a(k: Int) { x1: => Int } { x2: => Int } { x3: => Int } { x4: => Int } { x5: => Int }: Int = {
+  if (k <= 0) x4() + x5()
+  else {
+    val m = ref(k)
+    def b(): Int = {
+      m.set(m.get - 1)
+      ref::a(m.get) {b} {x1} {x2} {x3} {x4}
+    }
+    b()
+  }
+}
+
+def mut::a(k: Int) { x1: => Int } { x2: => Int } { x3: => Int } { x4: => Int } { x5: => Int }: Int = {
+  if (k <= 0) x4() + x5()
+  else {
+    var m = k
+    def b(): Int = {
+      m = m - 1
+      mut::a(m) {b} {x1} {x2} {x3} {x4}
+    }
+    b()
+  }
+}
+
+/// scales approximately O(1.618^k) in time
+def run(k: Int) =
+  ref::a(k) {1} {-1} {-1} {1} {0} - mut::a(k) {1} {-1} {-1} {1} {0}
+
+def main() = benchmark(10){run}
