@@ -26,10 +26,7 @@ object StaticResumptions {
       //    [[ shift(p) { {k} => B[resume(k){s}] } ]] ~> B[s]   if every exit resumes
       case Handler(handler) =>
         val inner = handler.withBody(rewrite(handler.body))
-        inPlace(inner, atDelimiter = false) match {
-          case Some(reduced) => reduced
-          case None => inner.shift
-        }
+        inPlace(inner, atDelimiter = false).getOrElse { inner.shift }
 
       case Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt @ BlockParam(_, Type.TPrompt(answer), _)), body)) =>
         Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt),
@@ -64,7 +61,7 @@ object StaticResumptions {
     }
 
     /** [[ resume(k){s} ]] = by(s), everywhere in the body */
-    def replaceResumptions(by: Stmt => Stmt): Stmt =
+    def replaceResumptions(by: Stmt => Stmt): Stmt = {
       object replace extends Tree.Rewrite {
         override def rewrite(stmt: Stmt): Stmt = stmt match {
           case Resume(resumed) => by(rewrite(resumed))
@@ -72,12 +69,13 @@ object StaticResumptions {
         }
       }
       replace.rewrite(body)
+    }
 
     /** Whether `k` occurs only as `resume(k){...}`. */
     def resumesOnly: Boolean = !replaceResumptions(identity).free.contains(k)
 
     /** Whether a resumption in [[stmt]] can observe a segment known by [[names]]. */
-    def observes(names: Set[Id], stmt: Stmt): Boolean =
+    def observes(names: Set[Id], stmt: Stmt): Boolean = {
       object query extends Tree.Query[Unit, Boolean] {
         def empty = false
         def combine = _ || _
@@ -86,8 +84,8 @@ object StaticResumptions {
         }
       }
       query.query(stmt)(using ())
+    }
   }
-
   object Handler {
     def unapply(stmt: Stmt): Option[Handler] = stmt match {
       case shift @ Stmt.Shift(_, BlockParam(k, Type.TResume(hole, _), _), _) => Some(Handler(shift, k, hole))
@@ -141,8 +139,10 @@ object StaticResumptions {
     case d.Shift(handler) => inPlace(handler, atDelimiter = true) match {
       // 1a) in place, since any exit is the answer already
       case Some(reduced) => reduced
-      // 1b) otherwise copied into a joinpoint, if no `var` or `region` lies above; 1c) otherwise left alone
-      case None => if joinable then join(Captured(d, frame = None), handler, orElse = handler.shift) else handler.shift
+      // 1b) otherwise copied into a joinpoint, if no `var` or `region` lies above
+      case None if joinable => join(Captured(d, frame = None), handler, orElse = handler.shift)
+      // 1c) otherwise left alone
+      case None /* otherwise */ => handler.shift
     }
 
     // 2) a `val` frame over a shift to `d`, with no `var` or `region` above:
@@ -198,8 +198,11 @@ object StaticResumptions {
 
   /** [[ shift(p) { {k} => b } ]] ~> def j{s} = reset { p' => s() }; b[ resume(k){s} := j{s} ]   if `k` is only resumed */
   private def join(captured: Captured, handler: Handler, orElse: => Stmt): Stmt =
-    if handler.resumesOnly then joinpoint(captured, handler.hole, orElse) { jump => handler.replaceResumptions(jump) }
-    else orElse
+    if (handler.resumesOnly) {
+      joinpoint(captured, handler.hole, orElse) { jump => handler.replaceResumptions(jump) }
+    } else {
+      orElse
+    }
 
   /**
    * Binds `def j{s} = [[captured]].fill(s())` around `scope(s => j{ () => s })`, with the prompt renamed.
@@ -209,20 +212,22 @@ object StaticResumptions {
    * Renaming would hide that, so it is checked on the free variables before renaming.
    */
   private def joinpoint(captured: Captured, hole: ValueType, orElse: => Stmt)(scope: (Stmt => Stmt) => Stmt): Stmt = boundary {
-    val s = Id("s"); val sCapt = Id("sCapt")
+    val s = Id("s")
+    val sCapt = Id("sCapt")
     val sParam = BlockParam(s, BlockType.Function(Nil, Nil, Nil, Nil, hole), Set(sCapt))
 
     val fresh: Map[Id, Id] = captured.names.map { id => id -> Id(id) }.toMap
     object renaming extends Tree.Rewrite {
       override def rewrite(id: Id): Id = fresh.getOrElse(id, id)
     }
-    def knowsOldName(stmt: Stmt): Boolean =
+    def knowsOldName(stmt: Stmt): Boolean = {
       val free = stmt.free
       free.blocks.toMap.exists { case (id, (tpe, capt)) => !fresh.contains(id) && (capt ++ captures(tpe)).exists(fresh.contains) } ||
         free.values.toMap.exists { case (id, tpe) => !fresh.contains(id) && captures(tpe).exists(fresh.contains) }
+    }
 
     val code = captured.fill(Stmt.App(Block.BlockVar(s, sParam.tpe, Set(sCapt)), Nil, Nil, Nil))
-    if knowsOldName(code) || captures(hole).exists(fresh.contains) then break(orElse)
+    if (knowsOldName(code) || captures(hole).exists(fresh.contains)) break(orElse)
 
     val jDef = BlockLit(Nil, List(sCapt), Nil, List(sParam), reduce.rewrite(renaming.rewrite(code)))
     val j = Id("j")
@@ -230,7 +235,7 @@ object StaticResumptions {
 
     Stmt.Def(j, jDef, scope { stmt =>
       // what runs inside the join point is not renamed, so any mention of the old name escapes
-      if stmt.capt.exists(fresh.contains) || knowsOldName(stmt) then break(orElse)
+      if (stmt.capt.exists(fresh.contains) || knowsOldName(stmt)) break(orElse)
       Stmt.App(jVar, Nil, Nil, List(BlockLit(Nil, Nil, Nil, Nil, stmt)))
     })
   }
@@ -261,7 +266,8 @@ object StaticResumptions {
     def go(stmt: Stmt, transparent: Set[Id]): Stmt = tailPositions(stmt) match {
       case Some(positions) =>
         // `k` escapes into a binding
-        if positions.before.contains(k) then break(None)
+        if (positions.before.contains(k)) break(None)
+
         retypeAnswer(positions.rewrite(go(_, transparent ++ positions.transparent)), hole)
 
       case None => stmt match {
@@ -341,10 +347,11 @@ object StaticResumptions {
     case Stmt.If(cond, thn, els) =>
       Some(TailPositions(f => Stmt.If(cond, f(thn), f(els)), cond.free))
     case Stmt.Match(scrutinee, tpe, clauses, default) =>
-      def rewrite(f: Stmt => Stmt): Stmt =
+      def rewrite(f: Stmt => Stmt): Stmt = {
         Stmt.Match(scrutinee, tpe, clauses.map {
           case (tag, BlockLit(tps, cps, vps, bps, body)) => tag -> BlockLit(tps, cps, vps, bps, f(body))
         }, default.map(f))
+      }
       Some(TailPositions(rewrite, scrutinee.free))
 
     case _ => None
