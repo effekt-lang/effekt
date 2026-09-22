@@ -40,6 +40,66 @@ class LambdaSetTests extends CoreTests {
   private def show(input: ModuleDecl): String =
     LambdaSets.show(LambdaSets.analyze(input))
 
+  private def mainCapture(module: ModuleDecl): Captures = module.definitions.collectFirst {
+    case Toplevel.Def(id, block) if id.name.name == "main" => block.capt
+  }.get
+
+  test("nominal dispatch preserves latent effects") {
+    val input = parse("""
+      module core/tests/dispatch_effects
+      extern {io} def touch(value: Int): Unit = js ""
+      def first() = { (touch: (Int) => Unit @ {io})(1) }
+      def second() = { (touch: (Int) => Unit @ {io})(2) }
+      def main(flag: Bool) = {
+        val action = if (flag: Bool) {
+          return box {io} (first: () => Unit @ {io})
+        } else {
+          return box {io} (second: () => Unit @ {io})
+        };
+        (unbox action: () => Unit at {io})()
+      }
+    """)
+    val result = specialize(input)
+    assertEquals(mainCapture(result), mainCapture(input))
+  }
+
+  test("unboxing a represented object reconstructs its block interface") {
+    val input = parse("""
+      module core/tests/boxed_object
+      interface Reader { read: () => Int }
+      extern {io} def touch(value: Int): Unit = js ""
+      def main(n: Int) = {
+        let boxed = box {io} new Reader {
+          def read() = {
+            val ignored = (touch: (Int) => Unit @ {io})(n: Int);
+            return n: Int
+          }
+        }
+        def reader = unbox boxed: Reader at {io}
+        (reader: Reader @ {io}).read: () => Int()
+      }
+    """)
+    assertEquals(mainCapture(specialize(input)), mainCapture(input))
+  }
+
+  test("nominal representations identify alpha-equivalent block types") {
+    val input = parse("""
+      module core/tests/boxed_alpha
+      def use(){action: (Int){f: (Int) => Int} => Int} = {
+        (action: (Int){f: (Int) => Int} => Int @ {action})(42){
+          (x: Int) => { return x: Int }
+        }
+      }
+      def main() = {
+        let boxed = box {} { (x: Int){ignored: (Int) => Int} => return x: Int }
+        (use: (){action: (Int){f: (Int) => Int} => Int} => Int @ {})(){
+          (unbox boxed: (Int){ignored: (Int) => Int} => Int at {})
+        }
+      }
+    """)
+    specialize(input)
+  }
+
   private def monomorphize(input: ModuleDecl): ModuleDecl = {
     val preprocessed = Mono.preprocess(input)
     Mono.specialize(preprocessed, Mono.solve(Mono.collect(preprocessed)))
