@@ -99,5 +99,7 @@ class LLVMNoValgrindTests extends EffektTests {
   override def valgrind = false
   override def debug = false
 
-  override lazy val positives: Set[File] = noValgrind(examplesDir)
+  // as of #1471, the optimizer can optimize `prompt-duplication` to `()`
+  // ... which is correct, but not helpful if we're testing if the reentrancy panic fires
+  override lazy val withoutOptimizations: Set[File] = noValgrind(examplesDir)
 }

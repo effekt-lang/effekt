@@ -612,15 +612,15 @@ class VMTests extends munit.FunSuite {
       dynamicDispatches = 0,
       patternMatches = 0,
       branches = 12001,
-      pushedFrames = 11001,
-      poppedFrames = 11001,
+      pushedFrames = 6001,
+      poppedFrames = 6001,
       allocations = 0,
       closures = 0,
       variableReads = 0,
       variableWrites = 0,
-      resets = 1000,
-      shifts = 5000,
-      resumes = 5000
+      resets = 0,
+      shifts = 0,
+      resumes = 0
     )),
 
     examplesDir / "benchmarks" / "effect_handlers_bench" / "tree_explore.effekt" -> Some(Summary(
@@ -690,19 +690,19 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "casestudies" / "scheduler.effekt.md" -> Some(Summary(
-      staticDispatches = 60,
+      staticDispatches = 70,
       dynamicDispatches = 7,
       patternMatches = 80,
       branches = 41,
-      pushedFrames = 57,
-      poppedFrames = 58,
+      pushedFrames = 51,
+      poppedFrames = 51,
       allocations = 48,
       closures = 7,
       variableReads = 29,
       variableWrites = 18,
-      resets = 1,
-      shifts = 6,
-      resumes = 7
+      resets = 0,
+      shifts = 0,
+      resumes = 0
     )),
 
     examplesDir / "casestudies" / "lexer.effekt.md" -> Some(Summary(
@@ -1491,18 +1491,130 @@ class VMTests extends munit.FunSuite {
       dynamicDispatches = 0,
       patternMatches = 17,
       branches = 10,
-      pushedFrames = 18,
-      poppedFrames = 18,
+      pushedFrames = 12,
+      poppedFrames = 12,
       allocations = 16,
       closures = 0,
       variableReads = 0,
       variableWrites = 0,
-      resets = 1,
-      shifts = 5,
-      resumes = 5
+      resets = 0,
+      shifts = 0,
+      resumes = 0
     )),
 
     // issue 1272: Optimizing through useless constructs / obfuscated code (optimizer-wishlist)
+    examplesDir / "pos" / "resume_or_return.effekt" -> Some(Summary(
+      staticDispatches = 0,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 1,
+      pushedFrames = 0,
+      poppedFrames = 0,
+      allocations = 0,
+      closures = 0,
+      variableReads = 1,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "resume_inside_nested_reset.effekt" -> Some(Summary(
+      staticDispatches = 0,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 0,
+      pushedFrames = 0,
+      poppedFrames = 0,
+      allocations = 0,
+      closures = 0,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "abort_inside_handler.effekt" -> Some(Summary(
+      staticDispatches = 5,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 5,
+      pushedFrames = 2,
+      poppedFrames = 1,
+      allocations = 0,
+      closures = 0,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 1,
+      shifts = 1,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "resume_twice_past_state.effekt" -> Some(Summary(
+      staticDispatches = 0,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 0,
+      pushedFrames = 4,
+      poppedFrames = 5,
+      allocations = 0,
+      closures = 0,
+      variableReads = 4,
+      variableWrites = 2,
+      resets = 1,
+      shifts = 1,
+      resumes = 2
+    )),
+
+    examplesDir / "pos" / "resume_after_handler.effekt" -> Some(Summary(
+      staticDispatches = 8,
+      dynamicDispatches = 2,
+      patternMatches = 15,
+      branches = 4,
+      pushedFrames = 4,
+      poppedFrames = 4,
+      allocations = 8,
+      closures = 2,
+      variableReads = 5,
+      variableWrites = 4,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "resume_closing_over_prompt.effekt" -> Some(Summary(
+      staticDispatches = 5,
+      dynamicDispatches = 2,
+      patternMatches = 15,
+      branches = 4,
+      pushedFrames = 7,
+      poppedFrames = 7,
+      allocations = 8,
+      closures = 2,
+      variableReads = 5,
+      variableWrites = 4,
+      resets = 1,
+      shifts = 2,
+      resumes = 2
+    )),
+
+    examplesDir / "pos" / "lambdas" / "scheduler.effekt" -> Some(Summary(
+      staticDispatches = 70,
+      dynamicDispatches = 7,
+      patternMatches = 80,
+      branches = 41,
+      pushedFrames = 50,
+      poppedFrames = 50,
+      allocations = 48,
+      closures = 7,
+      variableReads = 29,
+      variableWrites = 18,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
     examplesDir / "pos" / "with_val_else.effekt" -> Some(Summary(
       staticDispatches = 3,
       dynamicDispatches = 0,

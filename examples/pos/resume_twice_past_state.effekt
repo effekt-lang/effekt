@@ -1,0 +1,15 @@
+effect choose(): Int
+
+def main() = {
+  val r = try {
+    var x = 0
+    val y = do choose()
+    x = x + y
+    x
+  } with choose {
+    val a = resume(1)
+    val b = resume(2)
+    a + b
+  }
+  println(r)
+}

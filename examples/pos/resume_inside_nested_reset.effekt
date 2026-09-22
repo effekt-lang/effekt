@@ -1,0 +1,20 @@
+effect escape(): Nothing
+effect yield(): Unit
+effect bi(): Unit / yield
+
+// The escape must unwind the whole resumed continuation, so "after bi" is never printed.
+def test(): Unit = try {
+  do bi()
+  println("after bi")
+} with yield { 
+  println("yield"); resume(()) 
+} with bi {
+  try {
+    resume {
+      do yield()
+      do escape()
+    }
+  } with escape { println("escaped") }
+}
+
+def main() = test()
