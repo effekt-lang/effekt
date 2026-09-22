@@ -173,24 +173,22 @@ object StaticResumptions {
    */
   def reduceShifts(prompt: Prompt, stmt: Stmt, joinable: Boolean): Stmt = stmt match {
     // 1) a shift to `prompt`, with nothing left between it and the prompt
-    case prompt.Shift(shift) => reuse(shift, atPrompt = true) match {
+    case prompt.Shift(shift) =>
       // 1a) in place, since any exit is the answer already
-      case Some(reduced) => reduced
-      // 1b) otherwise copied into a joinpoint, if no `var` or `region` lies above
-      case None if joinable => copy(Continuation(prompt, binder = None), shift, orElse = shift.stmt)
-      // 1c) otherwise left alone
-      case None /* otherwise */ => shift.stmt
-    }
+      reuse(shift, atPrompt = true)
+        // 1b) else copied into a joinpoint, if no `var` or `region` lies above
+        .orElse(if (joinable) copy(Continuation(prompt, binder = None), shift) else None)
+        // 1c) else left alone
+        .getOrElse(shift.stmt)
 
     // 2) a `val` frame over a shift to `prompt`, with no `var` or `region` above:
     //    [[ val y = E[ shift(p) { {k} => b } ]; rest ]]
     //      ~> def j(y) = reset { p' => rest }; [[ E[ b[ resume(k){return e} := j(e) ] ] ]]
     //    where every other leaf `l` of `E` becomes `val y = l; j(y)`
     case Stmt.Val(y, binding @ prompt.ShiftsWithin(shifts), rest) if joinable =>
-      joinpoint(Continuation(prompt, Some(y -> rest)), binding.tpe, shifts,
-                orElse = Stmt.Val(y, binding, reduceShifts(prompt, rest, joinable))) { jump =>
-         reduceShifts(prompt, jumpsToJoin(prompt, binding, jump), joinable = true)
-       }
+      joinpoint(Continuation(prompt, Some(y -> rest)), binding.tpe, shifts) { jump =>
+        reduceShifts(prompt, jumpsToJoin(prompt, binding, jump), joinable = true)
+      }.getOrElse(Stmt.Val(y, binding, reduceShifts(prompt, rest, joinable)))
 
     // 3) a `var` or `region` is popped by the answer, so the shifts below it still stand at the prompt;
     //    but it cannot be copied, so from here only 1a) applies
@@ -211,7 +209,7 @@ object StaticResumptions {
     case prompt.Shift(shift) => if (shift.resumesOnly) List(shift) else Nil
     case Stmt.Val(_, binding, body) => shiftsTo(prompt, binding) ++ shiftsTo(prompt, body)
     case other => tailPositions(other) match {
-      case Some(positions) => positions.tails.flatMap(shiftsTo(prompt, _))
+      case Some(positions) => positions.flatMap(shiftsTo(prompt, _))
       case None => Nil
     }
   }
@@ -246,13 +244,13 @@ object StaticResumptions {
     }
 
   /** [[ shift(p) { {k} => b } ]] ~> def j(y) = reset { p' => return y }; b[ resume(k){return e} := j(e) ]   if `k` is only resumed */
-  private def copy(continuation: Continuation, shift: Shift, orElse: => Stmt): Stmt =
+  private def copy(continuation: Continuation, shift: Shift): Option[Stmt] =
     if (shift.resumesOnly) {
-      joinpoint(continuation, shift.result, List(shift), orElse) { jump =>
+      joinpoint(continuation, shift.result, List(shift)) { jump =>
         shift.replaceResumptions(jump)
       }
     } else {
-      orElse
+      None
     }
 
   /**
@@ -265,8 +263,8 @@ object StaticResumptions {
    *
    * @param shifts the shifts whose shifts jump here, which decide the form it takes
    */
-  private def joinpoint(continuation: Continuation, result: ValueType, shifts: List[Shift], orElse: => Stmt)
-                       (scope: (Stmt => Stmt) => Stmt): Stmt = boundary {
+  private def joinpoint(continuation: Continuation, result: ValueType, shifts: List[Shift])
+                       (scope: (Stmt => Stmt) => Stmt): Option[Stmt] = boundary {
     val fresh: Map[Id, Id] = continuation.prompt.names.map { id => id -> Id(id) }.toMap
     object renaming extends Tree.Rewrite {
       override def rewrite(id: Id): Id = fresh.getOrElse(id, id)
@@ -276,20 +274,20 @@ object StaticResumptions {
       free.blocks.toMap.exists { case (id, (tpe, capt)) => !fresh.contains(id) && (capt ++ captures(tpe)).exists(fresh.contains) } ||
         free.values.toMap.exists { case (id, tpe) => !fresh.contains(id) && captures(tpe).exists(fresh.contains) }
     }
-    if (captures(result).exists(fresh.contains)) break(orElse)
+    if (captures(result).exists(fresh.contains)) break(None)
 
     val j = Id("j")
 
     /** The join point's body: the continuation's frames. */
     def frames(filled: Stmt): Stmt = {
       val code = continuation.fill(filled)
-      if (knowsOldName(code)) break(orElse)
+      if (knowsOldName(code)) break(None)
       reduce.rewrite(renaming.rewrite(code))
     }
 
     /** Nothing may enter the join point carrying a name the copy renamed. */
     def entering(stmt: Stmt): Stmt = {
-      if (stmt.capt.exists(fresh.contains) || knowsOldName(stmt)) break(orElse)
+      if (stmt.capt.exists(fresh.contains) || knowsOldName(stmt)) break(None)
       stmt
     }
 
@@ -300,7 +298,7 @@ object StaticResumptions {
       val jVar = Block.BlockVar(j, jDef.tpe, jDef.capt)
       Stmt.Def(j, jDef, scope { stmt => entering(stmt) match {
         case Stmt.Return(e) => Stmt.App(jVar, Nil, List(e), Nil)
-        case _ => break(orElse)
+        case _ => break(None)
       }})
     }
 
@@ -317,7 +315,7 @@ object StaticResumptions {
       })
     }
 
-    if (shifts.forall(_.resumesWithValues)) takingAValue else takingAComputation
+    Some(if (shifts.forall(_.resumesWithValues)) takingAValue else takingAComputation)
   }
 
   /** The captures that occur in a type. */
@@ -389,13 +387,13 @@ object StaticResumptions {
    * @param transparent blocks only ever tail-called from here, whose tail positions are ours too
    */
   case class TailPositions(rewrite: (Stmt => Stmt) => Stmt, before: Free, transparent: Set[Id] = Set.empty) {
-    def tails: List[Stmt] = {
+    private def tails: List[Stmt] = {
       var found: List[Stmt] = Nil
       rewrite { child => found = child :: found; child }
       found.reverse
-     }
+    }
     def forall(p: Stmt => Boolean): Boolean = tails.forall(p)
-    def exists(p: Stmt => Boolean): Boolean = tails.exists(p)
+    def flatMap[A](f: Stmt => List[A]): List[A] = tails.flatMap(f)
   }
 
   /**
