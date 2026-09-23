@@ -74,8 +74,6 @@ enum Purity {
 type MetaCont = Expr
 type Cont = Expr
 
-/** A compositional call can target either a function value or an operation
- *  selected from an object value. */
 enum Callee {
   case Function(id: Id)
   case Method(receiver: Id, method: Id)
