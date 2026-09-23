@@ -1,0 +1,24 @@
+def use(reader, external, k) {
+  def done(value) { external(reader, value, k) }
+  reader.read(done)
+}
+def main(external0, k0) {
+  new source : Reader {
+    def read(done0) = { done0(42) }
+  }
+  use(source, external0, k0)
+}
+
+// A whole-object use reconstructs the interface from the operation parameter.
+/// ARITY_RAISE
+def use(reader_read, external, k) {
+  new reader : Reader {
+    def read(arg0) = { reader_read(arg0) }
+  }
+  def done(value) { external(reader, value, k) }
+  reader_read(done)
+}
+def main(external0, k0) {
+  def source_read(done0) { done0(42) }
+  use(source_read, external0, k0)
+}

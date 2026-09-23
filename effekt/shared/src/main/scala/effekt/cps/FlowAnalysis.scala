@@ -110,7 +110,7 @@ final class FlowAnalysis(
   private val demanded = mutable.Set.empty[Address]
   private val predecessors = mutable.Map.empty[Address, mutable.Set[Address]]
   private val successors = mutable.Map.empty[Address, mutable.Set[Address]]
-  private val objectBindings = mutable.Set.empty[Id]
+  private val recursiveObjects = mutable.Set.empty[Id]
   private val calls = new java.util.IdentityHashMap[Stmt.Call, java.lang.Boolean]()
 
   private lazy val computed: Unit = execute()
@@ -141,7 +141,7 @@ final class FlowAnalysis(
     computed
     successors.iterator.map((source, targets) => source -> targets.toSet).toMap
   }
-  def splitObjects: Set[Id] = { computed; objectBindings.filter(id => demanded(Address.Binding(id))).toSet }
+  def selfReferentialObjects: Set[Id] = { computed; recursiveObjects.toSet }
   def calledFunctions: Set[Id] = {
     computed
     val result = mutable.Set.empty[Id]
@@ -450,7 +450,7 @@ final class FlowAnalysis(
         }.toMap
         val value = Value.instance(interface, implementations)
         write(address, value)
-        objectBindings += id
+        if operations.exists(_.body.free.contains(id)) then recursiveObjects += id
         next(rest, scope)
 
       case Stmt.Let(id, expression, rest) =>

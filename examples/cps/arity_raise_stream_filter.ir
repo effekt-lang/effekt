@@ -1,0 +1,149 @@
+type ListData { Nil() Cons(head: Int, tail: ListData) }
+
+def main(ks0, k0) {
+  reset(p, ks, k) {
+    let input = make Cons(1, make Cons(2, make Nil()));
+    def stream(input1, ks1) {
+      input1 match {
+        case Nil() => k(make Nil(), ks1)
+        case Cons(x, xs) => {
+          run keep = eq(x, 2);
+          if (keep) {
+            def next(_, ks2) {
+              stream(xs, ks2)
+            }
+            shift(p) { resumeK, ks3, k3 =>
+              def prepend(tail, ks4) {
+                k3(make Cons(x, tail), ks4)
+              }
+              resume(resumeK) { ks5, k5 =>
+                k5((), ks5)
+              } @ ks3, prepend
+            } @ ks1, next
+          } else {
+            stream(xs, ks1)
+          }
+        }
+      }
+    }
+    stream(input, ks)
+  } @ ks0, k0
+}
+
+// This is the fused stream/filter/unstream worker produced for issue1064.
+// The recursive input can be either Nil or Cons, so monovariant arity raising
+// must retain its boxed list representation.
+/// ARITY_RAISE
+
+def main(ks0, k0) {
+  reset(p, ks, k) {
+    let input = make Cons(1, make Cons(2, make Nil()));
+    def stream(input1, ks1) {
+      input1 match {
+        case Nil() => k(make Nil(), ks1)
+        case Cons(x, xs) => {
+          run keep = eq(x, 2);
+          if (keep) {
+            def next(_, ks2) {
+              stream(xs, ks2)
+            }
+            shift(p) { resumeK, ks3, k3 =>
+              def prepend(tail, ks4) {
+                k3(make Cons(x, tail), ks4)
+              }
+              resume(resumeK) { ks5, k5 =>
+                k5((), ks5)
+              } @ ks3, prepend
+            } @ ks1, next
+          } else {
+            stream(xs, ks1)
+          }
+        }
+      }
+    }
+    stream(input, ks)
+  } @ ks0, k0
+}
+
+/// JAVASCRIPT
+function main_0(ks_0, k_0) {
+  {
+    function stream_0(input_1, ks_2) {
+      stream_0: while (true) {
+        switch (input_1.__tag) {
+          case 0:  return k_1(new Nil_0(), ks_2);
+          case 1:
+            const x_0 = input_1.head_0;
+            const xs_0 = input_1.tail_0;
+            const keep_0 = eq_0(x_0, 2);
+            if (keep_0) {
+              function next_0(_0, ks_3) {
+                return stream_0(xs_0, ks_3);
+              }
+              {
+                function prepend_0(tail_1, ks_5) {
+                  return () => k_2(new Cons_0(x_0, tail_1), ks_5);
+                }
+                const [resumeK_0, ks_4, k_2] = SHIFT(p_0, ks_2, next_0);
+                {
+                  const [ks_6, k_3] = RESUME(resumeK_0, ks_4, prepend_0);
+                  return () => k_3($effekt.unit, ks_6);
+                }
+              }
+            } else {
+              input_1 = xs_0;
+              continue stream_0;
+            }
+            break;
+        }
+      }
+    }
+    const [p_0, ks_1, k_1] = RESET(ks_0, k_0);
+    const input_0 = new Cons_0(1, new Cons_0(2, new Nil_0()));
+    return stream_0(input_0, ks_1);
+  }
+}
+
+class Nil_0 {
+  constructor() {
+    this.__tag = 0;
+  }
+  __reflect() {
+    return { __tag: 0, __name: "Nil", __data: [] };
+  }
+  __equals(other0) {
+    if (!other0) {
+      return false;
+    }
+    if (!($effekt.equals(this.__tag, other0.__tag))) {
+      return false;
+    }
+    return true;
+  }
+}
+
+class Cons_0 {
+  constructor(head_0, tail_0) {
+    this.__tag = 1;
+    this.head_0 = head_0;
+    this.tail_0 = tail_0;
+  }
+  __reflect() {
+    return { __tag: 1, __name: "Cons", __data: [this.head_0, this.tail_0] };
+  }
+  __equals(other1) {
+    if (!other1) {
+      return false;
+    }
+    if (!($effekt.equals(this.__tag, other1.__tag))) {
+      return false;
+    }
+    if (!($effekt.equals(this.head_0, other1.head_0))) {
+      return false;
+    }
+    if (!($effekt.equals(this.tail_0, other1.tail_0))) {
+      return false;
+    }
+    return true;
+  }
+}

@@ -1,0 +1,42 @@
+def inc(value, ks, k) {
+  run result = add(value, 1);
+  k(result, ks)
+}
+def invoke(g, value, ks, k) {
+  g(value, ks, k)
+}
+def use(f, external, value, ks, k) {
+  let result = f!(value, ks, return);
+  let forwarded = invoke!(f, result, ks, return);
+  external(forwarded, ks, k)
+}
+def main(external, value, ks, k) {
+  use(inc, external, value, ks, k)
+}
+
+// A direct parameter forwarded to a CPS parameter needs an adapter even
+// when the receiving function is statically known.
+/// JAVASCRIPT
+function inc_0(value_0) {
+  const result_0 = add_0(value_0, 1);
+  return result_0;
+}
+
+function invoke_0(g_0, value_1, ks_0, k_0) {
+  return g_0(value_1, ks_0, k_0);
+}
+
+function use_0(f_0, external_0, value_2, ks_1, k_1) {
+  function k_2(forwarded_0, ks_2) {
+    return external_0(forwarded_0, ks_1, k_1);
+  }
+  const result_1 = f_0(value_2);
+  return invoke_0((arg_0, ks_3, k_4) => {
+    const result_5 = f_0(arg_0);
+    return k_4(result_5, ks_3);
+  }, result_1, ks_1, k_2);
+}
+
+function main_0(external_1, value_3, ks_4, k_3) {
+  return use_0(inc_0, external_1, value_3, ks_4, k_3);
+}

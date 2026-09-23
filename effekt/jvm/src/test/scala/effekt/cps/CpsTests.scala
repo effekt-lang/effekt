@@ -183,7 +183,7 @@ class CpsTests extends munit.FunSuite {
     }
 
   def assertAlphaEquivalent(obtained: ModuleDecl, expected: ModuleDecl, clue: => Any)(using Location): Unit = {
-    val renamer = new TestRenamer
+    val renamer = new TestRenamer(normalizeGlobals = true)
     val obtainedRenamed = renamer(obtained)
     val expectedRenamed = renamer(expected)
     def obtainedStr = PrettyPrinter.format(obtainedRenamed).layout
@@ -200,6 +200,38 @@ class CpsTests extends munit.FunSuite {
          |$expectedStr
          |""".stripMargin
     })
+  }
+
+  test("CPS parameter conventions reject mixed targets and aggregate contents") {
+    val programs = List(
+      """
+        def inc(x, ks, k) { k(x, ks) }
+        def effect(y, ks1, k1) { external(y, ks1, k1) }
+        def use(f, value, ks2, k2) {
+          let result = f!(value, ks2, return);
+          external(result, ks2, k2)
+        }
+        def main(flag, x0, ks0, k0) {
+          if (flag) { use(inc, x0, ks0, k0) }
+          else { use(effect, x0, ks0, k0) }
+        }
+      """,
+      """
+        type Wrapper { Wrap(function: Any) }
+        def inc(x, ks, k) { k(x, ks) }
+        def use(box, ks1, k1) { external(box, ks1, k1) }
+        def main(ks0, k0) { use(make Wrap(inc), ks0, k0) }
+      """
+    )
+    programs.foreach { source =>
+      val module = parse(source)
+      val use = module.definitions.collectFirst {
+        case ToplevelDefinition.Def(id, _, _) if id.name.name == "use" => id
+      }.get
+      val plan = js.CallingConvention.analyze(module,
+        module.definitions.map(Targets.targets).toVector, Set(findMain(module)))
+      assertEquals(plan.directParameterSignature(use, 0), None)
+    }
   }
 
   test("eta-reduction preserves callees bound by the function") {
