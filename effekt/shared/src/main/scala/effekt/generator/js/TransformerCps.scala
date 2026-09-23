@@ -72,10 +72,6 @@ object TransformerCps extends Transformer {
     workers: Map[Id, JSName],
     directWorkers: Map[Id, JSName],
     directEntries: Map[Id, JSName],
-    segmentFlow: SegmentEntries.Plan,
-    // Continuations obtained by leaving or entering a delimited continuation
-    // segment. Applying one crosses a segment boundary and therefore bounces.
-    segmentEntries: Set[Id],
     dispatches: Map[Id, DispatchState],
     renamedCaptures: Map[Id, Id],
     // Function values carried by these variables use the direct ABI.
@@ -168,7 +164,7 @@ object TransformerCps extends Transformer {
       case Some(worker) => List(
         js.Function(worker, params.map(nameDef), body),
         safeEntry(id, params, worker))
-      case None if ctx.stackSafety.safeEntries.needsAdapter(id) =>
+      case None if ctx.stackSafety.needsAdapter(id) =>
         List(suspendedEntry(id, params, body))
       case None =>
         List(js.Function(nameDef(id), params.map(nameDef), body))
@@ -260,7 +256,7 @@ object TransformerCps extends Transformer {
       results.map(js.Variable.apply) :+ js.Variable(ks))
     val body = bindNames(results, workerCall) :+ js.Return(resume)
     val entry =
-      if ctx.stackSafety.safeEntries.needsAdapter(id) then
+      if ctx.stackSafety.needsAdapter(id) then
         List(js.Return(js.Lambda(Nil, js.Block(None, body))))
       else body
     js.Function(
@@ -314,7 +310,7 @@ object TransformerCps extends Transformer {
         val implementation = directImplementation(
           id, params, body, renamings, Some(ks -> k))
         val entry =
-          if ctx.stackSafety.safeEntries.needsAdapter(id) then
+          if ctx.stackSafety.needsAdapter(id) then
             List(js.Return(js.Lambda(Nil, js.Block(None, implementation))))
           else implementation
         List(js.Function(
@@ -412,8 +408,7 @@ object TransformerCps extends Transformer {
         }.toSet
         val defunctionalization = initialDefunctionalization
           .refineFrames(mutableFrameBindings)
-        val segmentFlow = SegmentEntries.analyze(lowered, targetFlows)
-        val workers = (stackSafety.safeEntries.definitions -- liveDirect)
+        val workers = (stackSafety.adapterDefinitions -- liveDirect)
           .filter(stackSafety.needsWorker).toVector
           .sortBy(id => (id.name.name, id.id))
           .map(id => id -> freshName("worker_"))
@@ -444,8 +439,6 @@ object TransformerCps extends Transformer {
           workers,
           directWorkers,
           directEntries,
-          segmentFlow,
-          segmentFlow.entries,
           Map.empty,
           Map.empty,
           Map.empty,
@@ -563,7 +556,7 @@ object TransformerCps extends Transformer {
    *  arguments.
    */
   def toValueJS(e: cps.Expr)(using ctx: TransformerContext): js.Expr = e match {
-    case Expr.Variable(id) if ctx.segmentEntries.contains(id) =>
+    case Expr.Variable(id) if ctx.stackSafety.isSegmentEntry(id) =>
       val value = freshName("value_")
       val ks = freshName("ks_")
       val call = js.Call(valueRef(id), List(js.Variable(value), js.Variable(ks)))
@@ -582,7 +575,9 @@ object TransformerCps extends Transformer {
    *  stack-safe value representation. */
   private def toArgumentJS(call: cps.Stmt, argument: cps.Expr)(using ctx: TransformerContext): js.Expr =
     argument match {
-      case Expr.Variable(id) if ctx.segmentEntries.contains(id) && ctx.segmentFlow.preserves(call) =>
+      case Expr.Variable(id)
+          if ctx.stackSafety.isSegmentEntry(id) &&
+            ctx.stackSafety.preservesSegments(call) =>
         toJS(argument)
       case _ => toValueJS(argument)
     }
@@ -758,7 +753,7 @@ object TransformerCps extends Transformer {
               .map(parameterSignatures(_, op.params)).getOrElse(Map.empty))
           val body = toJS(op.body)(using bodyCtx).stmts
           if !ctx.callingConvention.isDirectOperation(id, op.name) &&
-              ctx.stackSafety.safeEntries.needsAdapter(op) then {
+              ctx.stackSafety.needsAdapter(op) then {
             val entry = js.Lambda(
               op.params.map(nameDef),
               js.Lambda(Nil, body))
@@ -772,10 +767,11 @@ object TransformerCps extends Transformer {
         allBackups ++ workers ++ List(js.Const(nameDef(id), jsObj)) ++ toJS(rest).run(k)
       }
 
-    case cps.Stmt.Let(id, Expr.Variable(source), rest) if ctx.segmentEntries.contains(source) =>
+    case cps.Stmt.Let(id, Expr.Variable(source), rest)
+        if ctx.stackSafety.isSegmentEntry(source) =>
       Binding { k =>
         js.Const(nameDef(id), valueRef(source)) ::
-          toJS(rest)(using ctx.copy(segmentEntries = ctx.segmentEntries + id)).run(k)
+          toJS(rest).run(k)
       }
 
     case cps.Stmt.Let(id, binding, rest) =>
@@ -973,7 +969,7 @@ object TransformerCps extends Transformer {
           js.Const(
             js.Pattern.Array(List(resume, ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
             js.Call(SHIFT, valueRef(prompt), toJS(ks1), toJS(k1))) ::
-            toJS(body)(using ctx.copy(segmentEntries = ctx.segmentEntries + k)).run(next)))
+            toJS(body).run(next)))
       }
 
     case cps.Stmt.Resume(r, ks, k, body, ks1, k1) =>
@@ -982,7 +978,7 @@ object TransformerCps extends Transformer {
           js.Const(
             js.Pattern.Array(List(ks, k).map(id => js.Pattern.Variable(nameDef(id)))),
             js.Call(RESUME, valueRef(r), toJS(ks1), toJS(k1))) ::
-            toJS(body)(using ctx.copy(segmentEntries = ctx.segmentEntries + k)).run(next)))
+            toJS(body).run(next)))
       }
 
     case cps.Stmt.Hole(span) =>
@@ -1029,7 +1025,7 @@ object TransformerCps extends Transformer {
     case cps.Callee.Function(id) =>
       ctx.defunctionalization.dispatchFor(statement) match {
         case Some(dispatch) => dispatchCall(statement, id, args, dispatch)
-        case None if ctx.segmentEntries.contains(id) =>
+        case None if ctx.stackSafety.isSegmentEntry(id) =>
           val call = js.Call(valueRef(id), args.map(toValueJS))
           pure(returnCps(call, bounce = true))
         case None => ctx.secondClass.get(id) match {

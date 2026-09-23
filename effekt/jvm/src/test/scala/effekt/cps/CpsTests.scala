@@ -78,7 +78,7 @@ enum AnalysisPass(val header: String, val run: (String, ModuleDecl, Id) => Strin
         id => kinds.get(id).exists(_.isRecursive),
         id => kinds.get(id).exists(_.isSecondClass),
         representations.defunctionalization,
-        input.definitions.map(Targets.targets).toVector).safeEntries.show
+        input.definitions.map(Targets.targets).toVector).showSafeEntries
     })
   case JavaScript extends AnalysisPass("JAVASCRIPT",
     (_, input, mainId) => {
