@@ -1,0 +1,222 @@
+type ListInt {
+  Nil()
+  Cons(head: Int, tail: ListInt)
+}
+interface Emit {
+  emit: (Int) => Unit
+}
+
+def stream(input: ListInt){emit: Emit} = {
+  input: ListInt match[Unit] {
+    Nil : { () => return () }
+    Cons : { (x: Int, xs: ListInt) =>
+      val ignored = (emit: Emit @ {emit}).emit: (Int) => Unit(x: Int);
+      (stream: (ListInt){emit: Emit} => Unit @ {})(xs: ListInt){
+        (emit: Emit @ {emit})
+      }
+    }
+  }
+}
+
+def unstream(){producer: (){emit: Emit} => Unit} = {
+  reset { (){prompt: Prompt[ListInt]} =>
+    def emit = new Emit {
+      def emit(x: Int) = {
+        shift (prompt: Prompt[ListInt] @ {prompt}) {{continuation: Resume[Unit, ListInt]} =>
+          val tail = resume (continuation: Resume[Unit, ListInt] @ {continuation}) { return () };
+          return make ListInt Cons(x: Int, tail: ListInt)
+        }
+      }
+    }
+    val ignored = (producer: (){emit: Emit} => Unit @ {producer})(){
+      (emit: Emit @ {emit})
+    };
+    return make ListInt Nil()
+  }
+}
+
+def sfilter(){keep: (Int) => Bool} {producer: (){emit: Emit} => Unit} {emit: Emit} = {
+  def filtered = new Emit {
+    def emit(x: Int) = {
+      val retain = (keep: (Int) => Bool @ {keep})(x: Int);
+      if (retain: Bool) {
+        (emit: Emit @ {emit}).emit: (Int) => Unit(x: Int)
+      } else {
+        return ()
+      }
+    }
+  }
+  (producer: (){emit: Emit} => Unit @ {producer})(){
+    (filtered: Emit @ {filtered})
+  }
+}
+
+def filter(input: ListInt){keep: (Int) => Bool} = {
+  (unstream: (){producer: (){emit: Emit} => Unit} => ListInt @ {})(){
+    (){output: Emit} =>
+      (sfilter: (){keep: (Int) => Bool}{producer: (){emit: Emit} => Unit}{emit: Emit} => Unit @ {})(){
+        (keep: (Int) => Bool @ {keep})
+      }{
+        (){inputEmit: Emit} =>
+          (stream: (ListInt){emit: Emit} => Unit @ {})(input: ListInt){
+            (inputEmit: Emit @ {inputEmit})
+          }
+      }{
+        (output: Emit @ {output})
+      }
+  }
+}
+
+def main() = {
+  def even(x: Int) = { return true }
+  (filter: (ListInt){keep: (Int) => Bool} => ListInt @ {})(
+    make ListInt Cons(1, make ListInt Cons(2, make ListInt Nil()))){
+      (even: (Int) => Bool @ {})
+    }
+}
+
+/// LAMBDA_SETS
+
+S = emit.emit ↦ { <?> },
+    even ↦ { <> },
+    filter ↦ { <even> },
+    filtered.emit ↦ { <emit, even> },
+    lambda1 ↦ { <even, emit> },
+    lambda2 ↦ { <filtered> },
+    sfilter ↦ { <even, lambda2, emit> },
+    stream ↦ { <filtered> },
+    unstream ↦ { <lambda1> }
+
+/// LAMBDA_SPECIALIZE
+
+type ListInt_27 {
+  Nil_28()
+  Cons_29(head: Int, tail: ListInt_27)
+}
+interface Emit_32 {
+  emit_33: (Int) => Unit
+}
+
+def stream_34(input_35: ListInt_27){emit_33 @ emit_33: Emit_32} = {
+  input_35: ListInt_27 match[Unit] {
+    Nil_28 : { () => return () }
+    Cons_29 : { (x_36: Int, xs_37: ListInt_27) =>
+      val ignored_38 = emit_33: Emit_32 @ {emit_33}.emit_33: (Int) => Unit(x_36: Int);
+      stream_34: (ListInt_27){emit_33: Emit_32} => Unit @ {}(xs_37: ListInt_27){
+        emit_33: Emit_32 @ {emit_33}
+      }
+    }
+  }
+}
+def unstream_39(){producer_40 @ producer_40: (){emit_33: Emit_32} => Unit} = {
+  reset { (){prompt_41 @ prompt_41: Prompt[ListInt_27]} =>
+    def emit_33 = new Emit_32 {
+      def emit_33(x_36: Int) = {
+        shift (prompt_41: Prompt[ListInt_27] @ {prompt_41}) {{continuation_42: Resume[Unit, ListInt_27]} =>
+          val tail_31 = resume (continuation_42: Resume[Unit, ListInt_27] @ {continuation_42}) {
+            return ()
+          };
+          return make ListInt_27 Cons_29(x_36: Int, tail_31: ListInt_27)
+        }
+      }
+    }
+    val ignored_38 = producer_40: (){emit_33: Emit_32} => Unit @ {producer_40}(){
+      emit_33: Emit_32 @ {emit_33}
+    };
+    return make ListInt_27 Nil_28()
+  }
+}
+def sfilter_43(){keep_44 @ keep_44: (Int) => Bool} {producer_40 @ producer_40: (){emit_33: Emit_32} => Unit} {emit_33 @ emit_33: Emit_32} = {
+  def filtered_45 = new Emit_32 {
+    def emit_33(x_36: Int) = {
+      val retain_46 = keep_44: (Int) => Bool @ {keep_44}(x_36: Int);
+      if (retain_46: Bool) {
+        emit_33: Emit_32 @ {emit_33}.emit_33: (Int) => Unit(x_36: Int)
+      } else {
+        return ()
+      }
+    }
+  }
+  producer_40: (){emit_33: Emit_32} => Unit @ {producer_40}(){
+    filtered_45: Emit_32 @ {filtered_45}
+  }
+}
+def filter_47(input_35: ListInt_27){keep_44 @ keep_44: (Int) => Bool} = {
+  unstream_39: (){producer_40: (){emit_33: Emit_32} => Unit} => ListInt_27 @ {emit_33}(){
+    (){output_48 @ output_48: Emit_32} =>
+      sfilter_open_lambda2_open_56: (ListInt_27){keep_44: (Int) => Bool}{emit_33: Emit_32} => Unit @ {filtered}(input_35: ListInt_27){
+        keep_44: (Int) => Bool @ {keep_44}
+      }{
+        output_48: Emit_32 @ {output_48}
+      }
+  }
+}
+def main_50() = {
+  def even_51(x_36: Int) = { return true }
+  filter_even_57: (ListInt_27) => ListInt_27 @ {}(
+    make ListInt_27 Cons_29(1, make ListInt_27 Cons_29(2, make ListInt_27 Nil_28())))
+}
+def sfilter_open_lambda2_open_56(producer_environment0_62: ListInt_27){keep_63 @ keep_63: (Int) => Bool} {emit_64 @ emit_64: Emit_32} = {
+  def filtered_65 = new Emit_32 {
+    def emit_33(x_66: Int) = {
+      val retain_67 = keep_63: (Int) => Bool @ {keep_63}(x_66: Int);
+      if (retain_67: Bool) {
+        emit_64: Emit_32 @ {emit_64}.emit_64: (Int) => Unit(x_66: Int)
+      } else {
+        return ()
+      }
+    }
+  }
+  lambda2_open_59: (ListInt_27){inputEmit_49: Emit_32} => Unit @ {}(producer_environment0_62: ListInt_27){
+    filtered_65: Emit_32 @ {filtered_65}
+  }
+}
+def filter_even_57(input_69: ListInt_27) = {
+  unstream_lambda1_even_68: (ListInt_27) => ListInt_27 @ {emit_33}(input_69: ListInt_27)
+}
+def lambda2_open_59(input_captured_72: ListInt_27){inputEmit_73 @ inputEmit_73: Emit_32} = {
+  stream_34: (ListInt_27){emit_33: Emit_32} => Unit @ {}(input_captured_72: ListInt_27){
+    inputEmit_73: Emit_32 @ {inputEmit_73}
+  }
+}
+def unstream_lambda1_even_68(producer_environment0_76: ListInt_27) = {
+  reset { (){prompt_78 @ prompt_78: Prompt[ListInt_27]} =>
+    def emit_79 = new Emit_32 {
+      def emit_33(x_80: Int) = {
+        shift (prompt_78: Prompt[ListInt_27] @ {prompt_78}) {{continuation_81: Resume[Unit, ListInt_27]} =>
+          val tail_82 = resume (continuation_81: Resume[Unit, ListInt_27] @ {continuation_81}) {
+            return ()
+          };
+          return make ListInt_27 Cons_29(x_80: Int, tail_82: ListInt_27)
+        }
+      }
+    }
+    val ignored_83 = lambda1_even_open_75: (ListInt_27){output_48: Emit_32} => Unit @ {}(producer_environment0_76: ListInt_27){
+      emit_79: Emit_32 @ {emit_79}
+    };
+    return make ListInt_27 Nil_28()
+  }
+}
+def lambda1_even_open_75(input_captured_87: ListInt_27){output_88 @ output_88: Emit_32} = {
+  sfilter_even_lambda2_open_85: (ListInt_27){emit_33: Emit_32} => Unit @ {filtered}(input_captured_87: ListInt_27){
+    output_88: Emit_32 @ {output_88}
+  }
+}
+def sfilter_even_lambda2_open_85(producer_environment0_92: ListInt_27){emit_93 @ emit_93: Emit_32} = {
+  def filtered_94 = new Emit_32 {
+    def emit_33(x_95: Int) = {
+      val retain_96 = even_specialized_90: (Int) => Bool @ {}(x_95: Int);
+      if (retain_96: Bool) {
+        emit_93: Emit_32 @ {emit_93}.emit_93: (Int) => Unit(x_95: Int)
+      } else {
+        return ()
+      }
+    }
+  }
+  lambda2_open_59: (ListInt_27){inputEmit_49: Emit_32} => Unit @ {}(producer_environment0_92: ListInt_27){
+    filtered_94: Emit_32 @ {filtered_94}
+  }
+}
+def even_specialized_90(x_97: Int) = {
+  return true
+}

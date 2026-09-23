@@ -1,0 +1,30 @@
+def use(reader, flag, k) {
+  if (flag) { reader.first(k) } else { reader.second(k) }
+}
+def forward(object, flag1, k1) {
+  if (flag1) { forward(object, false, k1) } else { use(object, flag1, k1) }
+}
+def main(x, flag0, k0) {
+  new source : Pair {
+    def first(done1) = { done1(x) }
+    def second(done2) = { done2(2) }
+  }
+  forward(source, flag0, k0)
+}
+
+// Multiple operations, including their lexical captures, flow through a
+// recursive forwarding function without reconstructing the object.
+/// ARITY_RAISE
+def use(reader_first, reader_second, flag, k) {
+  if (flag) { reader_first(k) } else { reader_second(k) }
+}
+def forward(object_first, object_second, flag1, k1) {
+  if (flag1) {
+    forward(object_first, object_second, false, k1)
+  } else { use(object_first, object_second, flag1, k1) }
+}
+def main(x, flag0, k0) {
+  def source_first(done1) { done1(x) }
+  def source_second(done2) { done2(2) }
+  forward(source_first, source_second, flag0, k0)
+}

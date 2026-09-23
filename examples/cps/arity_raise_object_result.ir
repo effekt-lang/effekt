@@ -1,0 +1,21 @@
+def produce(seed, ks, k) {
+  new source : Reader {
+    def read(ks1, k1) = { k1(seed, ks1) }
+  }
+  k(source, ks)
+}
+def main(x, ks2, k2) {
+  let reader = produce!(x, ks2, return);
+  reader.read(ks2, k2)
+}
+
+// Object results use the same convention as object arguments.
+/// ARITY_RAISE
+def produce(seed, ks, k) {
+  def source_read(ks1, k1) { k1(seed, ks1) }
+  k(source_read, ks)
+}
+def main(x, ks2, k2) {
+  let reader_read = produce!(x, ks2, return);
+  reader_read(ks2, k2)
+}

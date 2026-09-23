@@ -33,3 +33,4 @@ def main(ks, k) {
 
 direct
   produce = 0 adapter
+  use = 1 [direct: 0] adapter

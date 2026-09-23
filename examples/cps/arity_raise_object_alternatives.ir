@@ -1,0 +1,32 @@
+def use(reader, k) {
+  reader.read(k)
+}
+def main(flag, k0) {
+  if (flag) {
+    new first : Reader {
+      def read(done1) = { done1(1) }
+    }
+    use(first, k0)
+  } else {
+    new second : Reader {
+      def read(done2) = { done2(2) }
+    }
+    use(second, k0)
+  }
+}
+
+// The interface determines the components, not the identity of its
+// implementation. Distinct implementations share one unbundled convention.
+/// ARITY_RAISE
+def use(reader_read, k) {
+  reader_read(k)
+}
+def main(flag, k0) {
+  if (flag) {
+    def first_read(done1) { done1(1) }
+    use(first_read, k0)
+  } else {
+    def second_read(done2) { done2(2) }
+    use(second_read, k0)
+  }
+}

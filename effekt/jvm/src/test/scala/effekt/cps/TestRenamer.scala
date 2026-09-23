@@ -3,10 +3,15 @@ package cps
 
 import effekt.core.Id
 
-class TestRenamer {
+class TestRenamer(normalizeGlobals: Boolean = false) {
 
   private var scopes: List[Map[Id, Id]] = List.empty
   private var counter: Int = 0
+  // Interfaces and operation labels are global names, not lexical binders.
+  // Keep their identity across independently parsed actual/expected trees.
+  private val globals = scala.collection.mutable.Map.empty[String, Id]
+  private def global(id: Id): Id =
+    if normalizeGlobals then globals.getOrElseUpdate(id.name.name, Id(id.name)) else id
 
   private def freshIdFor(id: Id): Id = {
     val n = counter
@@ -54,7 +59,7 @@ class TestRenamer {
 
     case Stmt.New(id, interface, operations, rest) =>
       withBinding(id) {
-        Stmt.New(rewrite(id), interface, operations.map(rewrite), rewrite(rest))
+        Stmt.New(rewrite(id), global(interface), operations.map(rewrite), rewrite(rest))
       }
 
     case Stmt.Let(id, binding, rest) =>
@@ -158,14 +163,14 @@ class TestRenamer {
   def rewrite(op: Operation): Operation = op match {
     case Operation(name, params, body) =>
       withBindings(params) {
-        Operation(rewrite(name), params.map(rewrite), rewrite(body))
+        Operation(global(rewrite(name)), params.map(rewrite), rewrite(body))
       }
   }
 
   def rewrite(callee: Callee): Callee = callee match {
     case Callee.Function(id) => Callee.Function(rewrite(id))
     case Callee.Method(receiver, method) =>
-      Callee.Method(rewrite(receiver), rewrite(method))
+      Callee.Method(rewrite(receiver), global(rewrite(method)))
   }
 
   def rewrite(cl: Clause): Clause = cl match {
