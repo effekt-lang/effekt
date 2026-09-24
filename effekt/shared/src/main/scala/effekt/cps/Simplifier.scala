@@ -6,6 +6,14 @@ package cps
 // - does some eta-reduction on function definitions
 object Simplifier {
 
+  def rewrite(returnsTo: ReturnPoint): ReturnPoint = returnsTo match {
+    case ReturnPoint.Bind(ids, returnedKs, ks, rest) =>
+      ReturnPoint.Bind(ids, returnedKs, rewrite(ks), rewrite(rest))
+    case ReturnPoint.Direct(ids, rest) => ReturnPoint.Direct(ids, rewrite(rest))
+    case ReturnPoint.Tail(ks, k) => ReturnPoint.Tail(rewrite(ks), rewrite(k))
+    case ReturnPoint.Jump => ReturnPoint.Jump
+  }
+
   def rewrite(s: Stmt): Stmt = s match {
 
     case Stmt.Def(id, params, body, rest) =>
@@ -24,15 +32,8 @@ object Simplifier {
     case Stmt.Let(id, binding, rest) =>
       Stmt.Let(id, rewrite(binding), rewrite(rest))
 
-    case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
-      Stmt.Call(callee, args.map(rewrite),
-        ReturnPoint.Bind(ids, returnedKs, rewrite(ks), rewrite(rest)))
-
-    case Stmt.Call(callee, args, ReturnPoint.Tail(ks, k)) =>
-      Stmt.Call(callee, args.map(rewrite), ReturnPoint.Tail(rewrite(ks), rewrite(k)))
-
-    case Stmt.Call(callee, args, ReturnPoint.Jump) =>
-      Stmt.Call(callee, args.map(rewrite), ReturnPoint.Jump)
+    case Stmt.Call(callee, args, returnsTo) =>
+      Stmt.Call(callee, args.map(rewrite), rewrite(returnsTo))
 
     case Stmt.Return(values) =>
       Stmt.Return(values.map(rewrite))

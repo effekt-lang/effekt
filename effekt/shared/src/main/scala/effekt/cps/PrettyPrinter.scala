@@ -79,6 +79,14 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "let" <+> result <+> "=" <+> toDoc(callee) <> "!" <>
         parens(args.map(toDoc) ++ List(toDoc(ks), returnDoc)) <> ";" <> line <> toDoc(rest)
 
+    case Stmt.Call(callee, args, ReturnPoint.Direct(ids, rest)) =>
+      val binding = ids match {
+        case List(one) => toDoc(one)
+        case _ => parens(ids.map(toDoc))
+      }
+      "let" <+> binding <+> "=" <+> toDoc(callee) <>
+        parens(args.map(toDoc)) <> ";" <> line <> toDoc(rest)
+
     case Stmt.Call(callee, args, ReturnPoint.Tail(ks, k)) =>
       toDoc(callee) <> "!" <> parens(args.map(toDoc)) <+>
         "@" <+> toDoc(ks) <> "," <+> toDoc(k)

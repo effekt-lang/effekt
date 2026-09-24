@@ -216,6 +216,9 @@ object ParameterDropping {
           Set(callee.value) ++ args.flatMap(_.free) ++ ks.free ++
             (visit(rest) -- ids.toSet - returnedKs)
 
+        case Stmt.Call(callee, args, ReturnPoint.Direct(ids, rest)) =>
+          Set(callee.value) ++ args.flatMap(_.free) ++ (visit(rest) -- ids)
+
         case call @ Stmt.Call(callee @ Callee.Function(_), _,
             _: ReturnPoint.Tail | ReturnPoint.Jump) =>
           terminalFree(call, callee, call.knownArguments)
@@ -409,6 +412,15 @@ object ParameterDropping {
         args.map(transform(_, info)),
         ReturnPoint.Bind(ids, returnedKs,
           transform(ks, info), transform(rest, info)))
+
+    case Stmt.Call(callee, args, ReturnPoint.Direct(ids, rest)) =>
+      val transformedCallee = callee match {
+        case Callee.Function(id) => Callee.Function(transformReference(id, info))
+        case Callee.Method(receiver, method) =>
+          Callee.Method(transformReference(receiver, info), method)
+      }
+      Stmt.Call(transformedCallee, args.map(transform(_, info)),
+        ReturnPoint.Direct(ids, transform(rest, info)))
 
     case call @ Stmt.Call(Callee.Function(id), _, _: ReturnPoint.Tail) =>
       val callee = Callee.Function(transformReference(id, info))

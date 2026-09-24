@@ -302,6 +302,10 @@ object GuardedEquality {
         collect(rest, scope ++ (results :+ returnedKs),
           env ++ results.map(_ -> Unknown) ++ Map(returnedKs -> Unknown))
 
+      case call @ Stmt.Call(callee, args, ReturnPoint.Direct(results, rest)) =>
+        collectTransfer(call, callee, args, env)
+        collect(rest, scope ++ results, env ++ results.map(_ -> Unknown))
+
       case call @ Stmt.Call(callee, _, _: ReturnPoint.Tail | ReturnPoint.Jump) =>
         collectTransfer(call, callee, call.knownArguments, env)
 
@@ -569,6 +573,10 @@ object GuardedEquality {
             eval(ks, env) :+ TargetValue.Unknown)
         execute(rest, env ++ results.map(_ -> TargetValue.Unknown) ++ Map(
           returnedKs -> TargetValue.Unknown))
+
+      case application @ Stmt.Call(callee, args, ReturnPoint.Direct(results, rest)) =>
+        executeTransfer(application, callee, args, env)
+        execute(rest, env ++ results.map(_ -> TargetValue.Unknown))
 
       case Stmt.Call(Callee.Method(_, _), args,
           ReturnPoint.Bind(results, returnedKs, ks, rest)) =>
@@ -959,6 +967,14 @@ object GuardedEquality {
         execute(
           rest,
           env ++ results.map(_ -> Unknown) ++ Map(returnedKs -> Unknown),
+          onObservedCall,
+          markUnsafe)
+
+      case application @ Stmt.Call(callee, args, ReturnPoint.Direct(results, rest)) =>
+        executeTransfer(application, callee, args, env, onObservedCall, markUnsafe)
+        execute(
+          rest,
+          env ++ results.map(_ -> Unknown),
           onObservedCall,
           markUnsafe)
 

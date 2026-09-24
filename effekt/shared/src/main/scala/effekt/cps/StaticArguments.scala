@@ -100,6 +100,9 @@ object StaticArguments {
       case Stmt.Call(Callee.Method(_, _), _, ReturnPoint.Bind(_, _, _, rest)) =>
         process(rest)
 
+      case Stmt.Call(_, _, ReturnPoint.Direct(_, rest)) =>
+        process(rest)
+
       case call @ Stmt.Call(Callee.Function(id), _, _: ReturnPoint.Tail) =>
         recordKnown(id, call.parameterArguments, compositional = false)
 
@@ -352,6 +355,7 @@ object StaticArguments {
     case Stmt.New(_, _, ops, rest) => ops.map(_.body) :+ rest
     case Stmt.Let(_, _, rest) => List(rest)
     case Stmt.Call(_, _, ReturnPoint.Bind(_, _, _, rest)) => List(rest)
+    case Stmt.Call(_, _, ReturnPoint.Direct(_, rest)) => List(rest)
     case Stmt.Call(_, _, _: ReturnPoint.Tail | ReturnPoint.Jump) => Nil
     case Stmt.Run(_, _, _, _, rest) => List(rest)
     case Stmt.If(_, thn, els) => List(thn, els)
@@ -445,6 +449,9 @@ object StaticArguments {
         ReturnPoint.Bind(result, returnedKs, ks, rest)) =>
       Stmt.Call(callee, args.map(rewrite),
         ReturnPoint.Bind(result, returnedKs, rewrite(ks), rewrite(rest)))
+
+    case Stmt.Call(callee, args, ReturnPoint.Direct(result, rest)) =>
+      Stmt.Call(callee, args.map(rewrite), ReturnPoint.Direct(result, rewrite(rest)))
 
     case call @ Stmt.Call(Callee.Function(id), args, ReturnPoint.Tail(ks, k)) =>
       rewriteKnown(id, call.parameterArguments)(

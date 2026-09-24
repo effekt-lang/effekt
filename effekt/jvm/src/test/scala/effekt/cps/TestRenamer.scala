@@ -48,6 +48,21 @@ class TestRenamer(normalizeGlobals: Boolean = false) {
     case Expr.Toplevel => e
   }
 
+  def rewrite(returnsTo: ReturnPoint): ReturnPoint = returnsTo match {
+    case ReturnPoint.Bind(ids, returnedKs, ks, rest) =>
+      val newKs = rewrite(ks)
+      withBindings(ids :+ returnedKs) {
+        ReturnPoint.Bind(ids.map(rewrite), rewrite(returnedKs), newKs, rewrite(rest))
+      }
+    case ReturnPoint.Direct(ids, rest) =>
+      withBindings(ids) {
+        ReturnPoint.Direct(ids.map(rewrite), rewrite(rest))
+      }
+    case ReturnPoint.Tail(ks, k) =>
+      ReturnPoint.Tail(rewrite(ks), rewrite(k))
+    case ReturnPoint.Jump => ReturnPoint.Jump
+  }
+
   def rewrite(s: Stmt): Stmt = s match {
     case Stmt.Def(id, params, body, rest) =>
       withBinding(id) {
@@ -68,21 +83,8 @@ class TestRenamer(normalizeGlobals: Boolean = false) {
         Stmt.Let(rewrite(id), newBinding, rewrite(rest))
       }
 
-    case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
-      val newCallee = rewrite(callee)
-      val newArgs = args.map(rewrite)
-      val newKs = rewrite(ks)
-      withBindings(ids :+ returnedKs) {
-        Stmt.Call(newCallee, newArgs,
-          ReturnPoint.Bind(ids.map(rewrite), rewrite(returnedKs), newKs, rewrite(rest)))
-      }
-
-    case Stmt.Call(callee, args, ReturnPoint.Tail(ks, k)) =>
-      Stmt.Call(rewrite(callee), args.map(rewrite),
-        ReturnPoint.Tail(rewrite(ks), rewrite(k)))
-
-    case Stmt.Call(callee, args, ReturnPoint.Jump) =>
-      Stmt.Call(rewrite(callee), args.map(rewrite), ReturnPoint.Jump)
+    case Stmt.Call(callee, args, returnsTo) =>
+      Stmt.Call(rewrite(callee), args.map(rewrite), rewrite(returnsTo))
 
     case Stmt.Return(values) =>
       Stmt.Return(values.map(rewrite))

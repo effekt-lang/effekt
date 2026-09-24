@@ -295,6 +295,9 @@ object StackSafety {
       case cps.Stmt.Call(_, _, cps.ReturnPoint.Bind(_, _, _, rest)) =>
         visit(rest, owner, secondClass, insideBody, frameCaptures)
 
+      case cps.Stmt.Call(_, _, cps.ReturnPoint.Direct(_, rest)) =>
+        visit(rest, owner, secondClass, insideBody, frameCaptures)
+
       case call @ cps.Stmt.Call(callee, _,
           _: cps.ReturnPoint.Tail | cps.ReturnPoint.Jump) =>
         visitTransfer(call, callee, call.knownArguments, owner,
@@ -725,6 +728,7 @@ private[js] object EntrySafety {
 
       case cps.Stmt.Let(_, _, rest) => collect(rest)
       case cps.Stmt.Call(_, _, cps.ReturnPoint.Bind(_, _, _, rest)) => collect(rest)
+      case cps.Stmt.Call(_, _, cps.ReturnPoint.Direct(_, rest)) => collect(rest)
       case cps.Stmt.Run(_, _, _, _, rest) => collect(rest)
       case cps.Stmt.If(_, thn, els) => collect(thn); collect(els)
       case cps.Stmt.Match(_, clauses, default) =>
@@ -904,6 +908,36 @@ private[js] object EntrySafety {
             obj.methods.get(method).foreach { target =>
               edges += Edge(source, target, safe = true, addsFrame = true)
               propagate(supplied, infos(target).params)
+            }
+          }
+        }
+        scan(rest, source)
+
+      case call @ cps.Stmt.Call(cps.Callee.Function(id), arguments,
+          cps.ReturnPoint.Direct(results, rest)) =>
+        val installedResults = mutable.Set.empty[Node]
+        watch(Set(Variable(id)) ++ dependencies(arguments)) {
+          val flowed = Option(targetsByCall.get(call)).iterator
+            .flatMap(_.targets).flatMap(functions.get).toSet
+          val targets = (values(Variable(id)).functions ++ flowed).map(worker)
+          targets.foreach { target =>
+            edges += Edge(source, target, safe = false, addsFrame = true)
+            propagate(arguments, infos(target).params)
+            if installedResults.add(target) then
+              watch(List(ReturnValue(target))) {
+                results.foreach(r => add(Variable(r), values(ReturnValue(target))))
+              }
+          }
+        }
+        scan(rest, source)
+
+      case cps.Stmt.Call(cps.Callee.Method(id, method), arguments,
+          cps.ReturnPoint.Direct(_, rest)) =>
+        watch(Set(Variable(id)) ++ dependencies(arguments)) {
+          values(Variable(id)).objects.foreach { obj =>
+            obj.methods.get(method).foreach { target =>
+              edges += Edge(source, target, safe = false, addsFrame = true)
+              propagate(arguments, infos(target).params)
             }
           }
         }

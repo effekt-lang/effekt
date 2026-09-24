@@ -172,6 +172,13 @@ object DefinitionPlanning {
           argumentFree ++ (continuation.free -- ids.toSet - returnedKs) + callee.value,
           definitionsIn(argumentFree ++ boundary) ++ continuation.functions)
 
+      case cps.Stmt.Call(callee, arguments, cps.ReturnPoint.Direct(ids, rest)) =>
+        val argumentFree = free(arguments)
+        val continuation = statement(rest)
+        Summary(
+          argumentFree ++ (continuation.free -- ids) + callee.value,
+          definitionsIn(argumentFree) ++ continuation.functions)
+
       case call @ cps.Stmt.Call(callee, _,
           _: cps.ReturnPoint.Tail | cps.ReturnPoint.Jump) =>
         val argumentFree = free(call.knownArguments)
