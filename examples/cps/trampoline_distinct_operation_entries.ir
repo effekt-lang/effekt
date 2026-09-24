@@ -1,0 +1,42 @@
+def invoke(object) {
+  object.operation()
+}
+def loop(flag, k) {
+  if (flag) {
+    new cyclic : Handler {
+      def operation() = { loop(false, k) }
+    }
+    invoke(cyclic)
+  } else {
+    k(0)
+  }
+}
+def main(flag, k) {
+  new harmless : Handler {
+    def operation() = { k(1) }
+  }
+  loop(flag, k)
+}
+
+// Operation names identify interface members, not implementations. The two
+// `operation` bodies therefore need distinct activation nodes: only the
+// implementation participating in the loop is a stack-safe entry.
+/// JAVASCRIPT
+
+function invoke_0(object_0) {
+  return object_0.operation_0();
+}
+
+function loop_0(flag_0, k_0) {
+  if (flag_0) {
+    const cyclic_0 = { operation_0: () => () => loop_0(false, k_0) };
+    return invoke_0(cyclic_0);
+  } else {
+    return k_0(0);
+  }
+}
+
+function main_0(flag_1, k_1) {
+  const harmless_0 = { operation_0: () => k_1(1) };
+  return loop_0(flag_1, k_1);
+}

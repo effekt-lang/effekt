@@ -367,11 +367,20 @@ object TransformerCps extends Transformer {
     val conventionFlows = module.definitions.map(Targets.targets).toVector
     val callingConvention = CallingConvention.analyze(
       module, conventionFlows, requiredCpsEntries)
-    val lowered = CallingConvention.lower(module, callingConvention)
+    val specialized = CallingConvention.specialize(module, callingConvention)
+    val introduced = specialized.uses.keys -- module.uses.keys
+    val nested = cps.BlockSinking.sinkIntroduced(specialized, introduced)
+    // Calling-convention specialization exposes path-static meta-continuations
+    // that were deliberately unavailable while `Call` fixed the callee's
+    // control parameters.
+    val lowered = cps.StaticArguments.specializeCpsMetaContinuations(
+      nested,
+      callingConvention.directDefinitions ++
+        callingConvention.parameterSignatures.keySet)
 
     lowered match {
       case cps.ModuleDecl(includes, declarations, externs, definitions, _) =>
-        val liveDefinitions = lowered.uses.toMap.keySet
+        val liveDefinitions = lowered.uses.keys
         val liveDirect = callingConvention.directDefinitions.intersect(liveDefinitions)
         val targetFlows = definitions.map(Targets.targets(_, liveDirect)).toVector
 
@@ -468,7 +477,7 @@ object TransformerCps extends Transformer {
     case cps.ToplevelDefinition.Def(id, params, body) =>
       // Reserve binder names before translating the body, as in the original
       // constructor expression. This keeps generated names independent of
-      // evaluation order inside the lowering implementation.
+      // evaluation order inside the translation.
       val functionName = nameDef(id)
       val parameterNames = params.map(nameDef)
       val implementation = secondClassDef(

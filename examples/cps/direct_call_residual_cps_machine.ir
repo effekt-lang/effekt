@@ -55,7 +55,7 @@ function build_0(i_0, ks_0, k_0) {
           }
         }
         const remaining_0 = VAR(previous_0, ks_0);
-        return () => again_0();
+        return again_0();
       }
       const previous_0 = sub_0(i_0, 1);
       const backup_k_0 = k_0;

@@ -10,23 +10,159 @@ import java.util.IdentityHashMap
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-/** Selects the value-returning calling convention.
+/** Recovers direct style from CPS where no control operator is required.
  *
- * This analysis deliberately separates two questions:
+ * Iterated CPS makes both the continuation `k` and the meta-continuation `ks`
+ * explicit. A uniform JavaScript translation would consequently represent
+ * ordinary functions, continuations, and join points by functions and calls,
+ * even when structured control flow suffices.
  *
- *   1. Can the continuation parameters be erased? This is a control-flow
- *      property. Its greatest solution determines the direct CPS-IR ABI.
- *   2. Can that ABI be implemented by nested JavaScript calls? This is a
- *      stack-space property. Positive recursive components remain in CPS;
- *      finite components carry a longest-path rank that bounds their use of
- *      the JavaScript stack.
+ * In the terminology of ''Back to Direct Style: Typed and Tight'', recovering
+ * structured control amounts to synthesizing a ''continuation output''. A CPS
+ * term has output `k` if it returns to the stack represented by `k`. A
+ * definition is pure when its body has its continuation parameter as output;
+ * that parameter can then be replaced by an ordinary return:
  *
- * A syntactic self-tail call has weight zero because JavaScript lowering turns
- * it into a loop. Every other direct call has weight one. The finite part of
- * this graph carries its longest-path rank as a checkable native-stack bound.
- * A closed positive-recursive local region is also a zero-cost boundary: it
- * keeps CPS internally, while its unique entry continuation becomes the
- * return case of the local defunctionalized dispatcher.
+ * {{{
+ * def inc(x, ks, k) {                 def inc(x) {
+ *   run y = add(x, 1)                   run y = add(x, 1)
+ *   k(y, ks)                            return(y)
+ * }                                   }
+ * let y = inc!(41, ks, return)        let y = inc!(41)
+ * }}}
+ *
+ * The paper gives a total translation: it inserts `suspend` and `run` when a
+ * term has a nontrivial continuation output. This pass does not attempt such
+ * a translation. It uses the continuation output only to identify a direct
+ * fragment and retains CPS everywhere else. The result is therefore a mixed
+ * CPS/direct-style program. In the direct fragment, the judgment proves that
+ * `ks` and `k` can be erased.
+ *
+ * Effekt's CPS language adds two details to this judgment. First, every
+ * return must preserve the meta-continuation `ks`. Second, all returning paths
+ * must agree on their number of values. [[ResultArity]] records this number;
+ * a computation without a returning path is compatible with every arity.
+ * JavaScript represents zero results by `undefined`, one result by the value
+ * itself, and several results by an array.
+ *
+ * == Higher-order control flow ==
+ *
+ * The local judgment above depends on the calling convention of callees. For
+ * example, `f` can return directly only if its call to `g` does:
+ *
+ * {{{
+ * def f(x, ks, k) {
+ *   let y = g!(x, ks, return)
+ *   k(y, ks)
+ * }
+ * def g(x, ks, k) { unknown(x, ks, k) }
+ * }}}
+ *
+ * The open call to `unknown` prevents `g` from returning directly, which in
+ * turn prevents `f` from doing so. Starting with all locally admissible
+ * definitions and repeatedly removing definitions such as `g` and then `f`
+ * computes the greatest set closed under calls. For an indirect call, the
+ * finite target sets from `cps.Targets` play the role of the known callee:
+ * every target must be in this set and must agree on the [[FunctionSignature]]
+ * of each function-valued parameter. Method calls impose the same condition
+ * on their possible operation implementations.
+ *
+ * == Stack safety ==
+ *
+ * A direct-style translation also has to respect the JavaScript stack. A
+ * self-tail call implemented by a loop and a transfer implemented by a
+ * lexical jump have cost zero; every other direct call has cost one. A
+ * positive recursive component remains in CPS. The longest-path `rank` of
+ * each remaining definition witnesses a finite bound on its stack use. A
+ * closed local component may likewise remain in CPS behind an immutable
+ * continuation dispatcher; its unique entry continuation is then the return
+ * case of that dispatcher.
+ *
+ * == Direct and CPS entries ==
+ *
+ * When a definition is used through both calling conventions, the backend
+ * emits two versions. The direct version contains the implementation; the
+ * CPS version is an adapter that invokes it and forwards its result:
+ *
+ * {{{
+ * function inc(x) { return x + 1 }
+ * function inc_cps(x, ks, k) { return k(inc(x), ks) }
+ * }}}
+ *
+ * Direct calls use `inc`; CPS calls and CPS function values use `inc_cps`.
+ * Thus the two versions do not duplicate the body.
+ *
+ * == Demanded entries ==
+ *
+ * Continuation-output and stack-safety analysis determine which definitions
+ * admit a direct version. They do not determine which version is needed.
+ * Consider a locally defined `inc` that is only passed to an unknown CPS
+ * function:
+ *
+ * {{{
+ * def main(use, x, ks, k) {
+ *   def inc(y, ks1, k1) { k1(y + 1, ks1) }
+ *   use(inc, x, ks, k)
+ * }
+ * }}}
+ *
+ * Although `inc` admits the direct convention, this program needs only its
+ * CPS version. If `main` also contains `let y = inc!(x, ks, return)`, that
+ * call demands the direct version; because `inc` is still passed to `use`,
+ * both versions are now needed. Starting with toplevel definitions, direct
+ * calls, and direct higher-order arguments, a least reachability fixed point
+ * retains exactly the demanded direct versions. The CPS version is retained
+ * independently for definitions observed through the CPS ABI.
+ *
+ * == Analysis result ==
+ *
+ * Let `A` be the greatest set satisfying continuation-output preservation,
+ * higher-order calling-convention coherence, and finite stack use. Let `R` be
+ * the least subset of `A` containing the demand roots and closed under direct
+ * calls. Restricting to `R` can invalidate a lexical join, so the final set
+ * `D` is the greatest admissible subset of `R`. [[analyze]] records the
+ * following finite judgments in a [[Plan]]:
+ *
+ *   - for every `d` in `D`, its result arity, stack rank, and direct
+ *     higher-order parameter signatures;
+ *   - the subsets of `D` requiring a separately named direct entry or a CPS
+ *     adapter;
+ *   - for every compositional call `c`, a [[ReturnConvention]] `return(c)`.
+ *
+ * `Direct` calls a value-returning implementation, `Join` jumps to a lexical
+ * block, `Machine` enters a local continuation dispatcher, and `CPS` retains
+ * the continuation. All later decisions about arguments, adapters, and calls
+ * use these judgments.
+ *
+ * == Specialization and code generation ==
+ *
+ * The backend consumes the plan in the following phases:
+ *
+ *   - [[specialize]] makes calling conventions explicit in CPS. Direct
+ *     definitions omit `ks` and `k`, applications of their return
+ *     continuation become `Return`, and compositional calls are rewritten
+ *     according to `return(c)`.
+ *
+ *   - `BlockSinking` and `StaticArguments` simplify the specialized CPS.
+ *     They localize definitions introduced by specialization and eliminate
+ *     meta-continuations that have become static.
+ *
+ *   - [[DefinitionPlanning]] chooses the representation of each local
+ *     definition. A first-class definition remains a JavaScript function; a
+ *     second-class definition becomes a labeled block or loop. A closed
+ *     continuation family becomes immutable tagged frames and a local
+ *     dispatch loop.
+ *
+ *   - [[StackSafety]] classifies each residual transfer. A `Jump` becomes a
+ *     `break` or `continue`; a `Direct` transfer calls its worker immediately;
+ *     a `Bounce` returns a thunk such as `() => f(x)`; and a `Safe` transfer
+ *     calls the stack-safe entry exposed as a function value.
+ *
+ *   - [[TransformerCps]] emits JavaScript by structural recursion over the
+ *     specialized CPS tree. It emits entries according to the calling-
+ *     convention plan, local definitions and dispatchers according to
+ *     `DefinitionPlanning`, and calls according to `ReturnConvention` and
+ *     `StackSafety.Transfer`. It does not reconstruct any of these judgments.
  */
 object CallingConvention {
 
@@ -97,12 +233,17 @@ object CallingConvention {
     }
   }
 
+  /** How a compositional application realizes its remainder. */
+  private enum ReturnConvention {
+    case CPS, Direct, Join, Machine
+  }
+
   private def returnParameters(plan: Plan, id: Id, params: List[Id]): Option[(Id, Id)] =
     Option.when(plan.isDirectEntry(id) && params.size >= 2)(
       params(params.size - 2) -> params.last)
 
-  /** Lower one lexical computation according to the selected convention. */
-  private def lowerStatement(
+  /** Specialize one lexical computation according to the selected convention. */
+  private def specializeStatement(
     stmt: cps.Stmt,
     returns: Option[(Id, Id)],
     directBody: Boolean,
@@ -121,8 +262,8 @@ object CallingConvention {
         cps.Stmt.Def(
           id,
           directParams,
-          lowerStatement(body, bodyReturns, bodyIsDirect, plan),
-          lowerStatement(rest, returns, directBody, plan))
+          specializeStatement(body, bodyReturns, bodyIsDirect, plan),
+          specializeStatement(rest, returns, directBody, plan))
       case cps.Stmt.New(id, interface, operations, rest) =>
         cps.Stmt.New(
           id,
@@ -134,82 +275,62 @@ object CallingConvention {
               .flatMap(operationId => returnParameters(plan, operationId, operation.params))
             operation.copy(
               params = if direct then operation.params.dropRight(2) else operation.params,
-              body = lowerStatement(operation.body, returns, direct, plan))
+              body = specializeStatement(operation.body, returns, direct, plan))
           },
-          lowerStatement(rest, returns, directBody, plan))
+          specializeStatement(rest, returns, directBody, plan))
       case cps.Stmt.Let(id, binding, rest) =>
-        cps.Stmt.Let(id, binding, lowerStatement(rest, returns, directBody, plan))
-
-      // A shared join is entered only in tail position. Its declaration is
-      // retained as a lexical labeled region, so the compositional call
-      // becomes an ordinary second-class jump after erasing control params.
-      case call @ cps.Stmt.Call(callee, arguments,
-          cps.ReturnPoint.Bind(_, _, _, _))
-          if plan.isSharedJoin(call) =>
-        jump(callee, arguments)
+        cps.Stmt.Let(id, binding, specializeStatement(rest, returns, directBody, plan))
 
       case call @ cps.Stmt.Call(callee, arguments,
-          cps.ReturnPoint.Bind(results, returnedKs, ks, rest))
-          if plan.isDirect(call) =>
-        val directRest = cps.substitutions.substitute(rest)(using
-          cps.substitutions.Substitution(Map(returnedKs -> ks)))
-        cps.Stmt.Call(callee, arguments,
-          cps.ReturnPoint.Bind(
-            results, returnedKs, ks,
-            lowerStatement(directRest, returns, directBody, plan)))
-
-      // A positive recursive local region retains CPS internally, but its
-      // closed continuation machine can return a value to a direct enclosing
-      // computation. Reify that remainder with `Toplevel` as the private
-      // meta-continuation; defunctionalization subsequently turns the entry
-      // continuation into the return case of the local dispatch loop.
-      case call @ cps.Stmt.Call(callee, arguments,
-          cps.ReturnPoint.Bind(results, returnedKs, _, rest))
-          if plan.isMachine(call) =>
-        val continuation = Id("k")
-        val directRest = cps.substitutions.substitute(rest)(using
-          cps.substitutions.Substitution(Map(returnedKs -> cps.Expr.Toplevel)))
-        cps.Stmt.Def(
-          continuation,
-          results :+ returnedKs,
-          lowerStatement(directRest, returns, directBody, plan),
-          jump(callee, arguments ++ List(
-            cps.Expr.Toplevel,
-            cps.Expr.Variable(continuation))))
-
-      // If a direct computation calls a region that retains CPS, run that
-      // region to completion and continue with its ordinary result. The
-      // JavaScript backend supplies fresh boundary continuations, so neither
-      // removed control parameter may remain free here.
-      case cps.Stmt.Call(callee, arguments,
-          cps.ReturnPoint.Bind(results, returnedKs, _, rest))
-          if directBody =>
-        val directRest = cps.substitutions.substitute(rest)(using
-          cps.substitutions.Substitution(Map(returnedKs -> cps.Expr.Toplevel)))
-        cps.Stmt.Call(callee, arguments,
-          cps.ReturnPoint.Bind(
-            results, returnedKs, cps.Expr.Toplevel,
-            lowerStatement(directRest, returns, directBody, plan)))
-
-      // Reifying an already-tail CPS call would introduce the eta expansion
-      //
-      //   def next(result, returnedKs) = k(result, ks)
-      //   callee(..., ks, next)
-      //
-      // when the remainder simply forwards the result under the same
-      // meta-continuation. Preserve the canonical tail call instead.
-      case cps.Stmt.Call(callee, arguments,
           cps.ReturnPoint.Bind(results, returnedKs, ks, rest)) =>
-        forwards(rest, results, returnedKs, ks) match {
-          case Some(k) =>
-            jump(callee, arguments ++ List(ks, cps.Expr.Variable(k)))
-          case None =>
+        plan.returnConvention(call) match {
+          // A shared join is a lexical labeled region.
+          case ReturnConvention.Join => jump(callee, arguments)
+
+          case ReturnConvention.Direct =>
+            val directRest = cps.substitutions.substitute(rest)(using
+              cps.substitutions.Substitution(Map(returnedKs -> ks)))
+            cps.Stmt.Call(callee, arguments,
+              cps.ReturnPoint.Bind(
+                results, returnedKs, ks,
+                specializeStatement(directRest, returns, directBody, plan)))
+
+          // A positive recursive local region retains CPS internally. Its
+          // entry continuation becomes the return case of its dispatcher.
+          case ReturnConvention.Machine =>
             val continuation = Id("k")
+            val directRest = cps.substitutions.substitute(rest)(using
+              cps.substitutions.Substitution(Map(returnedKs -> cps.Expr.Toplevel)))
             cps.Stmt.Def(
               continuation,
               results :+ returnedKs,
-              lowerStatement(rest, returns, directBody, plan),
-              jump(callee, arguments ++ List(ks, cps.Expr.Variable(continuation))))
+              specializeStatement(directRest, returns, directBody, plan),
+              jump(callee, arguments ++ List(
+                cps.Expr.Toplevel,
+                cps.Expr.Variable(continuation))))
+
+          // A direct computation runs a residual CPS computation to completion.
+          case ReturnConvention.CPS if directBody =>
+            val directRest = cps.substitutions.substitute(rest)(using
+              cps.substitutions.Substitution(Map(returnedKs -> cps.Expr.Toplevel)))
+            cps.Stmt.Call(callee, arguments,
+              cps.ReturnPoint.Bind(
+                results, returnedKs, cps.Expr.Toplevel,
+                specializeStatement(directRest, returns, directBody, plan)))
+
+          // Otherwise reify the remainder, except for an already-tail call.
+          case ReturnConvention.CPS =>
+            forwards(rest, results, returnedKs, ks) match {
+              case Some(k) =>
+                jump(callee, arguments ++ List(ks, cps.Expr.Variable(k)))
+              case None =>
+                val continuation = Id("k")
+                cps.Stmt.Def(
+                  continuation,
+                  results :+ returnedKs,
+                  specializeStatement(rest, returns, directBody, plan),
+                  jump(callee, arguments ++ List(ks, cps.Expr.Variable(continuation))))
+            }
         }
 
       case call @ cps.Stmt.Call(_, _, cps.ReturnPoint.Tail(_, _)) => call
@@ -229,26 +350,26 @@ object CallingConvention {
       case cps.Stmt.Run(id, callee, arguments, purity, rest) =>
         cps.Stmt.Run(
           id, callee, arguments, purity,
-          lowerStatement(rest, returns, directBody, plan))
+          specializeStatement(rest, returns, directBody, plan))
       case cps.Stmt.If(condition, thn, els) =>
         cps.Stmt.If(
           condition,
-          lowerStatement(thn, returns, directBody, plan),
-          lowerStatement(els, returns, directBody, plan))
+          specializeStatement(thn, returns, directBody, plan),
+          specializeStatement(els, returns, directBody, plan))
       case cps.Stmt.Match(scrutinee, clauses, default) =>
         cps.Stmt.Match(
           scrutinee,
           clauses.map { case (tag, clause) =>
             tag -> clause.copy(
-              body = lowerStatement(clause.body, returns, directBody, plan))
+              body = specializeStatement(clause.body, returns, directBody, plan))
           },
-          default.map(lowerStatement(_, returns, directBody, plan)))
+          default.map(specializeStatement(_, returns, directBody, plan)))
       case cps.Stmt.Region(id, ks, rest) =>
-        cps.Stmt.Region(id, ks, lowerStatement(rest, returns, directBody, plan))
+        cps.Stmt.Region(id, ks, specializeStatement(rest, returns, directBody, plan))
       case cps.Stmt.Alloc(id, init, region, rest) =>
         cps.Stmt.Alloc(
           id, init, region,
-          lowerStatement(rest, returns, directBody, plan))
+          specializeStatement(rest, returns, directBody, plan))
       case cps.Stmt.Var(id, init, ks, rest) =>
         // A selected direct definition can contain only local variables whose
         // reference and meta-continuation dependency were proved erasable.
@@ -256,27 +377,27 @@ object CallingConvention {
         // removed `ks` binder as a free variable.
         val loweredKs = if directBody then cps.Expr.Toplevel else ks
         cps.Stmt.Var(id, init, loweredKs,
-          lowerStatement(rest, returns, directBody, plan))
+          specializeStatement(rest, returns, directBody, plan))
       case cps.Stmt.Dealloc(ref, rest) =>
-        cps.Stmt.Dealloc(ref, lowerStatement(rest, returns, directBody, plan))
+        cps.Stmt.Dealloc(ref, specializeStatement(rest, returns, directBody, plan))
       case cps.Stmt.Get(ref, id, rest) =>
-        cps.Stmt.Get(ref, id, lowerStatement(rest, returns, directBody, plan))
+        cps.Stmt.Get(ref, id, specializeStatement(rest, returns, directBody, plan))
       case cps.Stmt.Put(ref, value, rest) =>
-        cps.Stmt.Put(ref, value, lowerStatement(rest, returns, directBody, plan))
+        cps.Stmt.Put(ref, value, specializeStatement(rest, returns, directBody, plan))
       case cps.Stmt.Reset(p, ks, k, body, ks1, k1) =>
         cps.Stmt.Reset(
           p, ks, k,
-          lowerStatement(body, None, false, plan),
+          specializeStatement(body, None, false, plan),
           ks1, k1)
       case cps.Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
         cps.Stmt.Shift(
           prompt, resume, ks, k,
-          lowerStatement(body, None, false, plan),
+          specializeStatement(body, None, false, plan),
           ks1, k1)
       case cps.Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
         cps.Stmt.Resume(
           resumption, ks, k,
-          lowerStatement(body, None, false, plan),
+          specializeStatement(body, None, false, plan),
           ks1, k1)
       case hole: cps.Stmt.Hole => hole
   }
@@ -284,8 +405,8 @@ object CallingConvention {
   /** Reify only the candidate remainders rejected by the plan. Selected calls
    *  stay compositional, and terminal applications of a selected definition's
    *  continuation become explicit `Return` statements. */
-  def lower(module: cps.ModuleDecl, plan: Plan): cps.ModuleDecl = {
-    val lowered = module.copy(definitions = module.definitions.map {
+  def specialize(module: cps.ModuleDecl, plan: Plan): cps.ModuleDecl = {
+    module.copy(definitions = module.definitions.map {
       case cps.ToplevelDefinition.Def(id, params, body) =>
         val directParams =
           if plan.isDirect(id) then params.dropRight(2)
@@ -293,7 +414,7 @@ object CallingConvention {
         cps.ToplevelDefinition.Def(
           id,
           directParams,
-          lowerStatement(
+          specializeStatement(
             body,
             returnParameters(plan, id, params),
             plan.isDirect(id),
@@ -301,15 +422,8 @@ object CallingConvention {
       case cps.ToplevelDefinition.Val(id, ks, k, binding) =>
         cps.ToplevelDefinition.Val(
           id, ks, k,
-          lowerStatement(binding, None, false, plan))
+          specializeStatement(binding, None, false, plan))
     })
-    val introduced = lowered.uses.toMap.keySet -- module.uses.toMap.keySet
-    val nested = cps.BlockSinking.sinkIntroduced(lowered, introduced)
-    // Lowering exposes path-static meta-continuations that were deliberately
-    // unavailable while `Call` fixed the callee's control parameters.
-    cps.StaticArguments.specializeCpsMetaContinuations(
-      nested,
-      plan.directDefinitions ++ plan.parameterSignatures.collect { case (id, parameters) if parameters.nonEmpty => id })
   }
 
   private final case class Definition(
@@ -334,46 +448,78 @@ object CallingConvention {
     known: Boolean
   )
 
+  private enum Representation {
+    case Function(loop: Boolean)
+    case Join(shared: Boolean, loop: Boolean)
+
+    /** Whether this definition is represented by structured control rather
+     *  than by a JavaScript function. */
+    def isJoin: Boolean = this match {
+      case Join(_, _) => true
+      case Function(_) => false
+    }
+
+    /** Whether the representation repeats, as a loop back edge. */
+    def loops: Boolean = this match {
+      case Function(loop) => loop
+      case Join(_, loop) => loop
+    }
+  }
+
+  private final case class Direct(
+    rank: Int,
+    results: ResultArity,
+    needsCpsEntry: Boolean,
+    representation: Representation
+  )
+
+  private final case class EntryPlan(
+    original: OriginalDefinition,
+    parameters: Map[Int, FunctionSignature],
+    direct: Option[Direct],
+    inheritsReturn: Boolean,
+    mutableParameters: Set[Id],
+    needsDirectWorker: Boolean
+  )
+
+  private final case class ApplicationPlan(
+    site: Site,
+    returns: ReturnConvention
+  )
+
   final class Plan private[CallingConvention] (
-    val ranks: Map[Id, Int],
-    val parameterSignatures: Map[Id, Map[Int, FunctionSignature]],
-    val resultArities: Map[Id, ResultArity],
-    private val cpsEntries: Set[Id],
-    private val originals: Map[Id, OriginalDefinition],
-    private val sites: Map[Id, Site],
-    private val machineSites: Set[Id],
-    val joinDefinitions: Set[Id],
-    val sharedJoinDefinitions: Set[Id],
-    private val joinLoops: Set[Id],
-    private val inheritedReturnDefinitions: Set[Id],
+    private val entries: Map[Id, EntryPlan],
+    private val applications: Map[Id, ApplicationPlan],
     private val cpsArgumentSignatures: Map[cps.Callee, Map[Int, FunctionSignature]],
-    private val directValues: Set[Id],
     private val operations: Map[(Id, String), Id],
     private val operationNames: Map[Id, String]
   ) {
+    val ranks: Map[Id, Int] = entries.collect {
+      case (id, EntryPlan(_, _, Some(direct), _, _, _)) => id -> direct.rank
+    }
+    val parameterSignatures: Map[Id, Map[Int, FunctionSignature]] =
+      entries.view.mapValues(_.parameters).filter(_._2.nonEmpty).toMap
+    val resultArities: Map[Id, ResultArity] = entries.collect {
+      case (id, EntryPlan(_, _, Some(direct), _, _, _)) => id -> direct.results
+    }
+
     private val operationIds = operations.values.toSet
     val directDefinitions: Set[Id] = ranks.keySet -- operationIds
     val directOperations: Set[Id] = ranks.keySet.intersect(operationIds)
-
-    private val loopMutations: Map[Id, Set[Id]] = {
-      val result = mutable.LinkedHashMap.empty[Id, mutable.LinkedHashSet[Id]]
-      sites.valuesIterator.filter(_.tailSelf).foreach { site =>
-        originals.get(site.owner).foreach { original =>
-          val params = original.params.dropRight(2)
-          val mutated = result.getOrElseUpdate(site.owner, mutable.LinkedHashSet.empty)
-          if params.size != site.call.args.size then mutated ++= params
-          else params.zip(site.call.args).foreach {
-            case (param, cps.Expr.Variable(argument)) if param == argument => ()
-            case (param, _) => mutated += param
-          }
-        }
-      }
-      result.iterator.map { case (id, params) => id -> params.toSet }.toMap
-    }
+    val joinDefinitions: Set[Id] = entries.collect {
+      case (id, EntryPlan(_, _, Some(Direct(_, _, _, Representation.Join(_, _))), _, _, _)) => id
+    }.toSet
+    val sharedJoinDefinitions: Set[Id] = entries.collect {
+      case (id, EntryPlan(_, _, Some(Direct(_, _, _, Representation.Join(true, _))), _, _, _)) => id
+    }.toSet
 
     def isDirect(id: Id): Boolean = directDefinitions.contains(id)
 
-    private[CallingConvention] def isDirectEntry(id: Id): Boolean = ranks.contains(id)
+    private[CallingConvention] def isDirectEntry(id: Id): Boolean =
+      entries.get(id).exists(_.direct.nonEmpty)
+
+    private def representation(id: Id): Option[Representation] =
+      entries.get(id).flatMap(_.direct).map(_.representation)
 
     def isDirectOperation(objectId: Id, method: Id): Boolean =
       operations.get(objectId -> method.name.name).exists(directOperations.contains)
@@ -384,22 +530,13 @@ object CallingConvention {
     private[js] def operationId(objectId: Id, method: Id): Option[Id] =
       operations.get(objectId -> method.name.name)
 
-    def needsCpsEntry(id: Id): Boolean = cpsEntries.contains(id)
+    def needsCpsEntry(id: Id): Boolean =
+      entries(id).direct.exists(_.needsCpsEntry)
 
-    def original(id: Id): OriginalDefinition = originals(id)
+    def original(id: Id): OriginalDefinition = entries(id).original
 
-    def isDirect(call: cps.Stmt.Call): Boolean = {
-      val site = sites.get(binding(call).returnedKs)
-      site.exists(site => site.closed && site.targets.nonEmpty &&
-        site.targets.forall(ranks.contains) &&
-        (site.known || ranks.contains(site.owner) ||
-          site.call.callee.function.exists(directParameterValues.contains))
-      )
-    }
-
-    private val directParameterValues = parameterSignatures.iterator.flatMap { case (id, positions) =>
-      originals.get(id).iterator.flatMap(original => positions.keysIterator.map(original.params))
-    }.toSet
+    def isDirect(call: cps.Stmt.Call): Boolean =
+      returnConvention(call) == ReturnConvention.Direct
 
     def cpsArguments(callee: cps.Callee): Map[Int, FunctionSignature] =
       cpsArgumentSignatures.getOrElse(callee, Map.empty)
@@ -407,28 +544,28 @@ object CallingConvention {
     /** A call implemented by a closed local continuation machine rather than
      *  by nested JavaScript calls. */
     def isMachine(call: cps.Stmt.Call): Boolean =
-      machineSites.contains(binding(call).returnedKs)
+      returnConvention(call) == ReturnConvention.Machine
+
+    private def application(call: cps.Stmt.Call): Option[ApplicationPlan] =
+      applications.get(binding(call).returnedKs)
 
     def targets(call: cps.Stmt.Call): Set[Id] =
-      sites.get(binding(call).returnedKs).fold(Set.empty[Id])(_.targets)
+      application(call).fold(Set.empty[Id])(_.site.targets)
 
     /** The function-valued arguments of this call and their direct signatures.
      *  All possible targets have the same map; this is precisely the ABI
      *  coherence condition for an indirect call. */
     def directArguments(call: cps.Stmt.Call): Map[Int, FunctionSignature] =
       targets(call).headOption
-        .fold(Map.empty[Int, FunctionSignature])(id => parameterSignatures.getOrElse(id, Map.empty))
+        .fold(Map.empty[Int, FunctionSignature])(id => entries(id).parameters)
 
     def directParameterSignature(id: Id, position: Int): Option[FunctionSignature] =
-      parameterSignatures.get(id).flatMap(_.get(position))
+      entries.get(id).flatMap(_.parameters.get(position))
 
     def resultArity(id: Id): ResultArity = resultArities(id)
 
-    def isFirstOrder(id: Id): Boolean =
-      parameterSignatures.getOrElse(id, Map.empty).isEmpty
-
     def isTailSelf(call: cps.Stmt.Call): Boolean =
-      sites.get(binding(call).returnedKs).exists(_.tailSelf)
+      application(call).exists(_.site.tailSelf)
 
     /** A selected local definition represented by structured control rather
      *  than by a JavaScript function. */
@@ -438,50 +575,50 @@ object CallingConvention {
      * definition, so every edge can jump to the one shared body. */
     def isSharedJoin(id: Id): Boolean = sharedJoinDefinitions.contains(id)
 
-    private[CallingConvention] def isSharedJoin(call: cps.Stmt.Call): Boolean =
-      sites.get(binding(call).returnedKs).exists(site =>
-        site.targets.nonEmpty && site.targets.subsetOf(sharedJoinDefinitions))
+    private[CallingConvention] def returnConvention(call: cps.Stmt.Call): ReturnConvention =
+      application(call).fold(ReturnConvention.CPS)(_.returns)
 
     /** Calls to an already active join are tail transfers to the same or an
      *  enclosing loop. */
     def isJoinBackEdge(call: cps.Stmt.Call): Boolean =
-      sites.get(binding(call).returnedKs).exists(site => site.tail &&
-        site.targets.nonEmpty && site.targets.subsetOf(joinDefinitions))
+      application(call).exists(plan => plan.site.tail &&
+        plan.site.targets.nonEmpty && plan.site.targets.subsetOf(joinDefinitions))
 
-    def isJoinLoop(id: Id): Boolean = joinLoops.contains(id)
+    def isJoinLoop(id: Id): Boolean =
+      representation(id).exists(r => r.isJoin && r.loops)
 
     /** A parameter-dropped local block executes in its enclosing direct
      * definition and therefore shares that definition's return convention. */
-    def inheritsReturn(id: Id): Boolean = inheritedReturnDefinitions.contains(id)
+    def inheritsReturn(id: Id): Boolean =
+      entries.get(id).exists(_.inheritsReturn)
 
     def isTailRecursive(id: Id): Boolean =
-      sites.valuesIterator.exists(site => site.owner == id && site.tailSelf)
+      representation(id).exists(r => !r.isJoin && r.loops)
 
     /** Parameters whose direct loop registers can receive a different value
      *  on a tail-self back edge. */
     def mutableParameters(id: Id): Set[Id] =
-      loopMutations.getOrElse(id, Set.empty)
+      entries.get(id).fold(Set.empty[Id])(_.mutableParameters)
 
     /** Whether a selected call enters this definition's value-returning
      *  implementation. Tail self calls become loop back-edges and therefore
      *  do not require a separately named worker. */
     def needsDirectWorker(id: Id): Boolean =
-      !isJoin(id) && (directValues(id) || sites.valuesIterator.exists { site =>
-        !site.tailSelf && site.targets.contains(id) && isDirect(site.call)
-      })
+      entries.get(id).exists(_.needsDirectWorker)
 
     def validate(): Unit = {
       assert(resultArities.keySet == ranks.keySet)
       assert(resultArities.valuesIterator.forall(_ != ResultArity.Conflict))
+      val applicationsByOwner = applications.values.groupBy(_.site.owner)
       ranks.keysIterator.foreach { source =>
-        sites.valuesIterator
-          .filter(_.owner == source)
-          .foreach { site =>
+        applicationsByOwner.getOrElse(source, Nil)
+          .foreach { application =>
+            val site = application.site
             assert(site.closed && site.targets.nonEmpty)
-            if !machineSites.contains(binding(site.call).returnedKs) then {
+            if application.returns != ReturnConvention.Machine then {
               assert(site.targets.forall(ranks.contains))
               assert(site.targets.iterator
-                .map(id => parameterSignatures.getOrElse(id, Map.empty))
+                .map(id => entries(id).parameters)
                 .toSet.size == 1)
 
               if !site.tailSelf && !site.targets.subsetOf(joinDefinitions) then
@@ -494,16 +631,17 @@ object CallingConvention {
     }
 
     def show: String = {
-      val entries = ranks.keysIterator.toVector
+      val lines = ranks.keysIterator.toVector
         .sortBy(id => (id.name.name, id.id))
         .map { id =>
-          val direct = parameterSignatures.getOrElse(id, Map.empty).keySet.toVector.sorted
+          val entry = entries(id)
+          val direct = entry.parameters.keySet.toVector.sorted
           val arguments = if direct.isEmpty then "" else s" [direct: ${direct.mkString(", ")}]"
-          val adapter = if cpsEntries.contains(id) then " adapter" else ""
+          val adapter = if entry.direct.exists(_.needsCpsEntry) then " adapter" else ""
           val label = operationNames.getOrElse(id, id.name.name)
-          s"  $label = ${ranks(id)}$arguments$adapter"
+          s"  $label = ${entry.direct.get.rank}$arguments$adapter"
         }
-      if entries.isEmpty then "-" else s"direct\n${entries.mkString("\n")}"
+      if lines.isEmpty then "-" else s"direct\n${lines.mkString("\n")}"
     }
   }
 
@@ -890,25 +1028,15 @@ object CallingConvention {
     require(module.definitions.size == targetFlows.size)
 
     val definitions = mutable.LinkedHashMap.empty[Id, Definition]
-    module.definitions.foreach {
-      case cps.ToplevelDefinition.Def(id, params, body) =>
-        definitions(id) = Definition(id, params.toVector, body, toplevel = true, None)
-      case _: cps.ToplevelDefinition.Val => ()
-    }
-    targetFlows.foreach(_.localDefinitions.foreach { definition =>
-      definitions(definition.id) = Definition(
-        definition.id,
-        definition.params,
-        definition.body,
-        toplevel = false,
-        parent = None)
-    })
-
     val operationInfos = mutable.LinkedHashMap.empty[(Id, String), OperationInfo]
 
-    def collectOperations(stmt: cps.Stmt): Unit = stmt match {
-      case cps.Stmt.Def(_, _, body, rest) =>
-        collectOperations(body); collectOperations(rest)
+    /** Index entries and their lexical parent in one structural traversal. */
+    def collect(stmt: cps.Stmt, parent: Option[Id]): Unit = stmt match {
+      case cps.Stmt.Def(id, params, body, rest) =>
+        definitions(id) = Definition(
+          id, params.toVector, body, toplevel = false, parent)
+        collect(body, Some(id))
+        collect(rest, parent)
       case cps.Stmt.New(objectId, _, implementations, rest) =>
         implementations.foreach { operation =>
           val id = Id(s"${operation.name.name.name}_operation")
@@ -916,34 +1044,37 @@ object CallingConvention {
           operationInfos(objectId -> operation.name.name.name) = info
           definitions(id) = Definition(
             id, operation.params.toVector, operation.body,
-            toplevel = false, parent = None)
-          collectOperations(operation.body)
+            toplevel = false, parent)
+          collect(operation.body, Some(id))
         }
-        collectOperations(rest)
-      case cps.Stmt.Let(_, _, rest) => collectOperations(rest)
+        collect(rest, parent)
+      case cps.Stmt.Let(_, _, rest) => collect(rest, parent)
       case cps.Stmt.Call(_, _, cps.ReturnPoint.Bind(_, _, _, rest)) =>
-        collectOperations(rest)
-      case cps.Stmt.Run(_, _, _, _, rest) => collectOperations(rest)
+        collect(rest, parent)
+      case cps.Stmt.Run(_, _, _, _, rest) => collect(rest, parent)
       case cps.Stmt.If(_, thn, els) =>
-        collectOperations(thn); collectOperations(els)
+        collect(thn, parent); collect(els, parent)
       case cps.Stmt.Match(_, clauses, default) =>
-        clauses.foreach { case (_, clause) => collectOperations(clause.body) }
-        default.foreach(collectOperations)
-      case cps.Stmt.Region(_, _, rest) => collectOperations(rest)
-      case cps.Stmt.Alloc(_, _, _, rest) => collectOperations(rest)
-      case cps.Stmt.Var(_, _, _, rest) => collectOperations(rest)
-      case cps.Stmt.Dealloc(_, rest) => collectOperations(rest)
-      case cps.Stmt.Get(_, _, rest) => collectOperations(rest)
-      case cps.Stmt.Put(_, _, rest) => collectOperations(rest)
-      case cps.Stmt.Reset(_, _, _, body, _, _) => collectOperations(body)
-      case cps.Stmt.Shift(_, _, _, _, body, _, _) => collectOperations(body)
-      case cps.Stmt.Resume(_, _, _, body, _, _) => collectOperations(body)
+        clauses.foreach { case (_, clause) => collect(clause.body, parent) }
+        default.foreach(collect(_, parent))
+      case cps.Stmt.Region(_, _, rest) => collect(rest, parent)
+      case cps.Stmt.Alloc(_, _, _, rest) => collect(rest, parent)
+      case cps.Stmt.Var(_, _, _, rest) => collect(rest, parent)
+      case cps.Stmt.Dealloc(_, rest) => collect(rest, parent)
+      case cps.Stmt.Get(_, _, rest) => collect(rest, parent)
+      case cps.Stmt.Put(_, _, rest) => collect(rest, parent)
+      case cps.Stmt.Reset(_, _, _, body, _, _) => collect(body, None)
+      case cps.Stmt.Shift(_, _, _, _, body, _, _) => collect(body, None)
+      case cps.Stmt.Resume(_, _, _, body, _, _) => collect(body, None)
       case _: cps.Stmt.Call | _: cps.Stmt.Return | _: cps.Stmt.Hole => ()
     }
 
     module.definitions.foreach {
-      case cps.ToplevelDefinition.Def(_, _, body) => collectOperations(body)
-      case cps.ToplevelDefinition.Val(_, _, _, binding) => collectOperations(binding)
+      case cps.ToplevelDefinition.Def(id, params, body) =>
+        definitions(id) = Definition(
+          id, params.toVector, body, toplevel = true, parent = None)
+        collect(body, Some(id))
+      case cps.ToplevelDefinition.Val(_, _, _, binding) => collect(binding, None)
     }
 
     val valueFlow = ValueFlow(
@@ -952,53 +1083,6 @@ object CallingConvention {
       operationInfos.toMap,
       targetFlows,
       requiredCpsEntries ++ module.exports)
-
-    // Lexical nesting is the dominance tree for local definitions. A transfer
-    // to the same or an enclosing definition can therefore be represented by
-    // a labeled continue in one JavaScript activation.
-    def recordParents(stmt: cps.Stmt, owner: Option[Id]): Unit = stmt match {
-      case cps.Stmt.Def(id, _, body, rest) =>
-        definitions.get(id).foreach { definition =>
-          definitions(id) = definition.copy(parent = owner)
-        }
-        recordParents(body, Some(id))
-        recordParents(rest, owner)
-      case cps.Stmt.New(objectId, _, implementations, rest) =>
-        implementations.foreach { operation =>
-          val operationId = operationInfos(objectId -> operation.name.name.name).id
-          definitions.get(operationId).foreach { definition =>
-            definitions(operationId) = definition.copy(parent = owner)
-          }
-          recordParents(operation.body, Some(operationId))
-        }
-        recordParents(rest, owner)
-      case cps.Stmt.Let(_, _, rest) => recordParents(rest, owner)
-      case cps.Stmt.Call(_, _, cps.ReturnPoint.Bind(_, _, _, rest)) =>
-        recordParents(rest, owner)
-      case cps.Stmt.Run(_, _, _, _, rest) => recordParents(rest, owner)
-      case cps.Stmt.If(_, thn, els) =>
-        recordParents(thn, owner)
-        recordParents(els, owner)
-      case cps.Stmt.Match(_, clauses, default) =>
-        clauses.foreach { case (_, clause) =>
-          recordParents(clause.body, owner)
-        }
-        default.foreach(recordParents(_, owner))
-      case cps.Stmt.Region(_, _, rest) => recordParents(rest, owner)
-      case cps.Stmt.Alloc(_, _, _, rest) => recordParents(rest, owner)
-      case cps.Stmt.Var(_, _, _, rest) => recordParents(rest, owner)
-      case cps.Stmt.Dealloc(_, rest) => recordParents(rest, owner)
-      case cps.Stmt.Get(_, _, rest) => recordParents(rest, owner)
-      case cps.Stmt.Put(_, _, rest) => recordParents(rest, owner)
-      case cps.Stmt.Reset(_, _, _, body, _, _) => recordParents(body, None)
-      case cps.Stmt.Shift(_, _, _, _, body, _, _) => recordParents(body, None)
-      case cps.Stmt.Resume(_, _, _, body, _, _) => recordParents(body, None)
-      case _: cps.Stmt.Call | _: cps.Stmt.Return | _: cps.Stmt.Hole => ()
-    }
-    module.definitions.foreach {
-      case cps.ToplevelDefinition.Def(id, _, body) => recordParents(body, Some(id))
-      case cps.ToplevelDefinition.Val(_, _, _, binding) => recordParents(binding, None)
-    }
 
     def returned(
       stmt: cps.Stmt,
@@ -1221,7 +1305,7 @@ object CallingConvention {
           }
         }
 
-      // Before convention lowering, `Return` means completion of the current
+      // Before convention specialization, `Return` means completion of the current
       // CPS computation, not application of this definition's continuation.
       // Treating it as an ordinary function return would change which
       // continuation receives the value.
@@ -1632,9 +1716,6 @@ object CallingConvention {
     val cpsRequirements = cpsParameters(direct)
     requirements = demandedRequirements ++ cpsRequirements
     val directValues = parameterTargets(cpsRequirements)
-    val directParameters = cpsRequirements.iterator.flatMap { case (id, positions) =>
-      positions.keysIterator.map(definitions(id).params)
-    }.toSet
     val cpsArguments = valueFlow.calls.iterator.map { case (callee, targets) =>
       callee -> targets.headOption.fold(Map.empty[Int, FunctionSignature]) { target =>
         cpsRequirements.getOrElse(target, Map.empty)
@@ -1645,6 +1726,29 @@ object CallingConvention {
     val shared = sharedJoinCandidates.intersect(joins)
     val joinLoops = joins.filter(id =>
       incoming.getOrElse(id, Vector.empty).exists(backEdge(_, id)))
+
+    val localMachines = machines(direct)
+    val machineSites = sites.valuesIterator
+      .filter(site => direct.contains(site.owner) && isMachine(site, localMachines))
+      .map(site => binding(site.call).returnedKs)
+      .toSet
+    val directParameterValues = requirements.iterator.flatMap { case (id, positions) =>
+      positions.keysIterator.map(definitions(id).params)
+    }.toSet
+    val returnConventions = sites.iterator.map { case (returnedKs, site) =>
+      val convention =
+        if site.targets.nonEmpty && site.targets.subsetOf(shared) then
+          ReturnConvention.Join
+        else if site.closed && site.targets.nonEmpty &&
+            site.targets.forall(direct.contains) &&
+            (site.known || direct.contains(site.owner) ||
+              site.call.callee.function.exists(directParameterValues.contains)) then
+          ReturnConvention.Direct
+        else if machineSites.contains(returnedKs) then
+          ReturnConvention.Machine
+        else ReturnConvention.CPS
+      returnedKs -> convention
+    }.toMap
 
     val native = direct
     val edges = native.iterator.map { source =>
@@ -1695,14 +1799,15 @@ object CallingConvention {
 
       case call @ cps.Stmt.Call(callee, arguments,
           cps.ReturnPoint.Bind(_, _, ks, rest)) =>
-        val selected = sites.get(binding(call).returnedKs).exists { site =>
-          eligible(site, direct) && (site.known || direct.contains(site.owner) ||
-            site.call.callee.function.exists(directParameters))
+        val returnedKs = binding(call).returnedKs
+        val directCall = returnConventions(returnedKs) match {
+          case ReturnConvention.Direct | ReturnConvention.Join => true
+          case ReturnConvention.CPS | ReturnConvention.Machine => false
         }
-        val emittedDirect = selected
-        val values = if emittedDirect then {
-          val directArguments = sites(binding(call).returnedKs).targets.headOption
-            .fold(Map.empty[Int, Int])(id => requirements.getOrElse(id, Map.empty))
+        val values = if directCall then {
+          val directArguments = sites(returnedKs).targets.headOption
+            .fold(Map.empty[Int, FunctionSignature])(id =>
+              requirements.getOrElse(id, Map.empty))
           arguments.zipWithIndex.iterator
             .filterNot { case (argument, position) =>
               directArguments.contains(position) &&
@@ -1713,7 +1818,7 @@ object CallingConvention {
           cpsArguments.getOrElse(callee, Map.empty).contains(position) &&
             hasDirectRepresentation(argument, owner)
         }.map(_._1) ++ Iterator.single(ks)
-        val calleeEntry = if emittedDirect then Set.empty else cpsCallee(callee.value)
+        val calleeEntry = if directCall then Set.empty else cpsCallee(callee.value)
         calleeEntry ++ ordinaryAll(values) ++ cpsReferences(rest, owner)
 
       case call @ cps.Stmt.Call(callee, _,
@@ -1753,35 +1858,62 @@ object CallingConvention {
     val cpsEntries = requiredCpsEntries.intersect(direct) ++ definitions.valuesIterator
       .flatMap(definition => cpsReferences(definition.body, Some(definition.id)))
       .toSet
-    val originals = definitions.iterator.map { case (id, definition) =>
-      id -> OriginalDefinition(definition.params.toList)
-    }.toMap
-    val localMachines = machines(direct)
-    val machineSites = sites.valuesIterator
-      .filter(site => direct.contains(site.owner) && isMachine(site, localMachines))
-      .map(site => binding(site.call).returnedKs)
-      .toSet
     val inheritedReturns = direct.iterator
       .flatMap(id => returnBlocksByOwner.getOrElse(id, Set.empty))
       .filterNot(direct)
       .toSet
 
+    val applications = sites.iterator.map { case (returnedKs, site) =>
+      returnedKs -> ApplicationPlan(
+        site.copy(tailSelf = nativeSelf(site, direct)),
+        returnConventions(returnedKs))
+    }.toMap
+
+    // Both facts below are properties of the application set, not of a single
+    // entry. Collecting them in one pass keeps plan construction linear.
+    val tailSelfSites = applications.valuesIterator.map(_.site).filter(_.tailSelf).toVector
+    val tailSelfOwners = tailSelfSites.iterator.map(_.owner).toSet
+    val directWorkerTargets = applications.valuesIterator.flatMap { application =>
+      if application.returns == ReturnConvention.Direct && !application.site.tailSelf
+      then application.site.targets.iterator
+      else Iterator.empty
+    }.toSet
+
+    val loopMutations = {
+      val result = mutable.LinkedHashMap.empty[Id, mutable.LinkedHashSet[Id]]
+      tailSelfSites.foreach { site =>
+        val params = definitions(site.owner).directParams
+        val mutated = result.getOrElseUpdate(site.owner, mutable.LinkedHashSet.empty)
+        if params.size != site.call.args.size then mutated ++= params
+        else params.zip(site.call.args).foreach {
+          case (param, cps.Expr.Variable(argument)) if param == argument => ()
+          case (param, _) => mutated += param
+        }
+      }
+      result.iterator.map { case (id, params) => id -> params.toSet }.toMap
+    }
+
+    val entryPlans = definitions.iterator.map { case (id, definition) =>
+      val representation =
+        if joins(id) then Representation.Join(shared(id), joinLoops(id))
+        else Representation.Function(tailSelfOwners.contains(id))
+      val needsDirectWorker = !joins(id) &&
+        (directValues(id) || directWorkerTargets.contains(id))
+
+      id -> EntryPlan(
+        OriginalDefinition(definition.params.toList),
+        requirements.getOrElse(id, Map.empty),
+        Option.when(direct(id))(Direct(
+          ranks(id), resultAritiesByOwner(id), cpsEntries(id), representation)),
+        inheritedReturns(id),
+        loopMutations.getOrElse(id, Set.empty),
+        needsDirectWorker)
+    }.toMap
+
     val plan = Plan(
-      ranks.toMap,
-      requirements,
-      resultAritiesByOwner.view.filterKeys(direct.contains).toMap,
-      cpsEntries,
-      originals,
-      sites.iterator.map { case (id, site) =>
-        id -> site.copy(tailSelf = nativeSelf(site, direct))
-      }.toMap,
-      machineSites,
-      joins,
-      shared,
-      joinLoops,
-      inheritedReturns,
+      entryPlans,
+      applications,
       cpsArguments,
-      directValues,
       operationInfos.valuesIterator.map { operation =>
         (operation.objectId -> operation.method.name.name) -> operation.id
       }.toMap,

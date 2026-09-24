@@ -34,8 +34,16 @@ object StackSafety {
     val sources = mutable.LinkedHashSet.empty[Id]
     var targets = Vector.empty[Id]
     var closed = false
+    var known = false
     var transfer = Transfer.Safe
   }
+
+  private[js] final case class ResidualCall(
+    statement: cps.Stmt,
+    sources: Set[Id],
+    targets: Vector[Id],
+    known: Boolean
+  )
 
   final class Plan private[StackSafety] (
     private val transfers: IdentityHashMap[cps.Stmt, Transfer],
@@ -61,11 +69,11 @@ object StackSafety {
         }
         .toSet
 
-    def transferOf(stmt: cps.Stmt): Transfer = stmt match {
-      case application if entries.bouncesAt(application) =>
-        Transfer.Bounce
-      case _ => Option(transfers.get(stmt)).getOrElse(Transfer.Safe)
-    }
+    // Every bounced application is an ordered site whose transfer was
+    // rewritten to `Bounce` before `transfers` was filled, so this map is the
+    // single source of truth.
+    def transferOf(stmt: cps.Stmt): Transfer =
+      Option(transfers.get(stmt)).getOrElse(Transfer.Safe)
 
     /** A stack-safe entry needs a separate immediate worker precisely when a
      *  known transfer bypasses it. Otherwise its adapter and body are one
@@ -218,6 +226,17 @@ object StackSafety {
     }
 
     val loopMutations = mutable.LinkedHashMap.empty[Id, mutable.LinkedHashSet[Id]]
+    val operationActivations = new IdentityHashMap[cps.Operation, Id]()
+
+    def operationActivation(operation: cps.Operation): Id = {
+      val existing = operationActivations.get(operation)
+      if existing != null then existing
+      else {
+        val created = Id(operation.name.name.name)
+        operationActivations.put(operation, created)
+        created
+      }
+    }
 
     final case class Host(owner: Id, secondClass: Set[Id], insideBody: Set[Id])
     val hosts = mutable.LinkedHashMap.empty[Id, Host]
@@ -265,8 +284,9 @@ object StackSafety {
 
       case cps.Stmt.New(_, _, operations, rest) =>
         operations.foreach { operation =>
-          nodeOrder += operation.name
-          visit(operation.body, operation.name, Set.empty, Set.empty, frameCaptures)
+          val activation = operationActivation(operation)
+          nodeOrder += activation
+          visit(operation.body, activation, Set.empty, Set.empty, frameCaptures)
         }
         visit(rest, owner, secondClass, insideBody, frameCaptures)
 
@@ -387,6 +407,7 @@ object StackSafety {
             case Some(params) if params.size == arguments.size && !isSecondClass(id) && defunctionalization.caseOf(id).isEmpty =>
               site.targets = Vector(id)
               site.closed = true
+              site.known = true
 
             case _ =>
               Option(targetsByCall.get(site.stmt)) match {
@@ -414,60 +435,34 @@ object StackSafety {
       }
     }
 
-    val candidates = orderedSites.filter(site => site.sources.nonEmpty && site.closed)
-    val adjacency = mutable.LinkedHashMap.empty[Id, mutable.ArrayBuffer[(Id, Site)]]
-    candidates.foreach { site =>
-      site.sources.foreach { source =>
-        val edges = adjacency.getOrElseUpdate(source, mutable.ArrayBuffer.empty)
-        site.targets.foreach { target =>
-          nodeOrder += target
-          edges += target -> site
-        }
-      }
-    }
-
-    // Directed DFS identifies a feedback edge in every cycle. A call site is
-    // grouped: if any of its possible edges is a back edge, the whole site
-    // bounces. Removing those groups leaves an acyclic direct-call graph.
-    enum Color { case White, Gray, Black }
-    val colors = mutable.Map.empty[Id, Color].withDefaultValue(Color.White)
-    val backSites = mutable.Set.empty[Site]
-    final case class Frame(node: Id, var next: Int)
-
-    nodeOrder.toVector.reverse.foreach { root =>
-      if colors(root) == Color.White then {
-        colors(root) = Color.Gray
-        val stack = mutable.ArrayBuffer(Frame(root, 0))
-        while stack.nonEmpty do {
-          val frame = stack.last
-          val edges = adjacency.getOrElse(frame.node, mutable.ArrayBuffer.empty)
-          if frame.next >= edges.size then {
-            colors(frame.node) = Color.Black
-            stack.remove(stack.size - 1)
-          } else {
-            val (target, site) = edges(frame.next)
-            frame.next += 1
-            colors(target) match {
-              case Color.Gray => backSites += site
-              case Color.White =>
-                colors(target) = Color.Gray
-                stack += Frame(target, 0)
-              case Color.Black => ()
-            }
-          }
-        }
-      }
-    }
-
+    // Jumps are already stack neutral. Every other closed transfer is
+    // provisionally immediate; EntrySafety chooses the necessary call-site
+    // and entry cuts on the complete higher-order activation graph below.
     orderedSites.foreach { site =>
       if site.sources.isEmpty then site.transfer = Transfer.Jump
-      else if site.closed && !backSites.contains(site) then site.transfer = Transfer.Direct
-      // A closed indirect call can break a feedback cycle at the call site:
-      // suspending `f(args)` is sound without knowing a syntactic worker name.
-      // This keeps every bounded target's value entry immediate. Only an open
-      // call must rely on the callee-side stack-safe convention.
-      else if site.closed then site.transfer = Transfer.Bounce
+      else if site.closed then site.transfer = Transfer.Direct
       else site.transfer = Transfer.Safe
+    }
+
+    val transfers = new IdentityHashMap[cps.Stmt, Transfer]()
+    orderedSites.foreach(site => transfers.put(site.stmt, site.transfer))
+    val entrySafety = EntrySafety.analyze(
+      module,
+      stmt => Option(transfers.get(stmt)).getOrElse(Transfer.Safe),
+      isSecondClass,
+      defunctionalization,
+      targetFlows,
+      directDefinitions,
+      directEntries,
+      operationActivations,
+      orderedSites.iterator.collect {
+        case site if site.closed && site.sources.nonEmpty => ResidualCall(
+          site.stmt, site.sources.toSet, site.targets, site.known)
+      }.toVector)
+
+    orderedSites.foreach { site =>
+      if entrySafety.bouncesAt(site.stmt) then site.transfer = Transfer.Bounce
+      transfers.put(site.stmt, site.transfer)
     }
 
     val directEdges = mutable.LinkedHashMap.empty[Id, mutable.LinkedHashSet[Id]]
@@ -507,16 +502,6 @@ object StackSafety {
       ranks(source) = rank
     }
 
-    val transfers = new IdentityHashMap[cps.Stmt, Transfer]()
-    orderedSites.foreach(site => transfers.put(site.stmt, site.transfer))
-    val entrySafety = EntrySafety.analyze(
-      module,
-      stmt => Option(transfers.get(stmt)).getOrElse(Transfer.Safe),
-      isSecondClass,
-      defunctionalization,
-      targetFlows,
-      directDefinitions,
-      directEntries)
     val plan = new Plan(
       transfers,
       ranks.toMap,
@@ -673,8 +658,10 @@ private[js] object EntrySafety {
     isSecondClass: Id => Boolean,
     defunctionalization: Defunctionalization.Plan,
     targetFlows: Vector[cps.Targets.TargetResult],
-    directDefinitions: Set[Id] = Set.empty,
-    directEntries: Map[Id, Vector[Id]] = Map.empty
+    directDefinitions: Set[Id],
+    directEntries: Map[Id, Vector[Id]],
+    operationActivations: IdentityHashMap[cps.Operation, Id],
+    residualCalls: Vector[StackSafety.ResidualCall]
   ): Result = {
     var nextNode = 0
     def freshOrdinal(): Int = {
@@ -688,6 +675,7 @@ private[js] object EntrySafety {
     // lets the cycle analysis decide whether the latter must suspend.
     val functions = mutable.LinkedHashMap.empty[Id, FunctionNode]
     val entries = mutable.LinkedHashMap.empty[Id, FunctionNode]
+    val operationNodes = mutable.LinkedHashMap.empty[Id, OperationNode]
     val objectNodes = new IdentityHashMap[cps.Stmt.New, ObjectNode]()
     val infos = mutable.LinkedHashMap.empty[Node, Info]
 
@@ -727,6 +715,7 @@ private[js] object EntrySafety {
       case statement @ cps.Stmt.New(_, _, operations, rest) =>
         val methods = operations.iterator.map { operation =>
           val node = new OperationNode(operation, freshOrdinal())
+          operationNodes(operationActivations.get(operation)) = node
           infos(node) = Info(node, operation.params.toVector, Some(operation.body))
           operation.name -> node
         }.toMap
@@ -764,6 +753,8 @@ private[js] object EntrySafety {
 
     val targetsByCall = new IdentityHashMap[cps.Stmt, cps.Targets.CallTargets]()
     targetFlows.foreach(_.callTargets.foreach(target => targetsByCall.put(target.call, target)))
+    val residualByCall = new IdentityHashMap[cps.Stmt, StackSafety.ResidualCall]()
+    residualCalls.foreach(call => residualByCall.put(call.statement, call))
 
     // ---------------------------------------------------------------------
     // Finite higher-order flow
@@ -1025,23 +1016,17 @@ private[js] object EntrySafety {
 
           targets.foreach { target =>
             val syntacticallyKnown = exact.exists(_ eq target)
-            // A closed feedback edge is already cut by a call-site bounce.
-            // This is equally true for named and indirect callees.
-            val bounced = transfer == StackSafety.Transfer.Bounce
-            if !bounced then {
-              val jump = dispatched || syntacticallyKnown && transfer == StackSafety.Transfer.Jump
-              // Only an indirect transfer enters a stack-safe value entry.
-              // A known safe edge has already been cut by its call-site bounce.
-              val safe = !dispatched && !syntacticallyKnown
-              // GuardedEquality certifies that every runtime callee is among
-              // the finite targets. Such an indirect edge can carry its own
-              // suspension instead of changing every entry to the callee.
-              val closed = targetFlow.exists(flow =>
-                flow.closed && flow.targets.nonEmpty &&
-                  flow.targets.forall(functions.contains))
-              val site = Option.when(safe && closed)(callSite(call))
-              edges += Edge(source, target, safe, addsFrame = !jump, site)
-            }
+            val jump = dispatched || syntacticallyKnown && transfer == StackSafety.Transfer.Jump
+            // Only an indirect transfer enters a stack-safe value entry.
+            val safe = !dispatched && !syntacticallyKnown
+            // Every closed application can suspend locally. For an indirect
+            // application GuardedEquality certifies the finite target set;
+            // a named definition is closed by construction.
+            // Closed residual calls are installed below with the source
+            // activation chosen by representation planning. This matters for
+            // continuation cases whose bodies move into a dispatcher.
+            if !residualByCall.containsKey(call) then
+              edges += Edge(source, target, safe, addsFrame = !jump)
             propagate(arguments, infos(target).params, preservesSegments)
           }
         }
@@ -1085,6 +1070,28 @@ private[js] object EntrySafety {
       val action = pending.dequeue()
       queued -= action
       actions(action)()
+    }
+
+    residualCalls.foreach { call =>
+      val site = callSite(call.statement)
+      call.sources.foreach { source =>
+        functions.get(source).orElse(operationNodes.get(source)).foreach { from =>
+          call.targets.foreach { target =>
+            val functionTarget = functions.get(target).map { node =>
+              // A named transfer bypasses a direct definition's CPS adapter;
+              // an indirect transfer invokes precisely that value entry.
+              if call.known then node else valueEntry(node)
+            }
+            functionTarget.orElse(operationNodes.get(target)).foreach { to =>
+              edges += Edge(
+                from, to,
+                safe = !call.known,
+                addsFrame = true,
+                callSite = Some(site))
+            }
+          }
+        }
+      }
     }
 
     // ---------------------------------------------------------------------
@@ -1161,10 +1168,18 @@ private[js] object EntrySafety {
 
       val internalEdges = Array.fill(found.size)(mutable.ArrayBuffer.empty[Edge])
       val incoming = Array.fill(nextNode)(0)
+      // A closed indirect site has one representation for its entire target
+      // set, so adaptability is a property of the site group rather than of
+      // any single edge in it.
+      val siteAdaptable = mutable.Map.empty[CallSite, Boolean]
       active.foreach { edge =>
         val source = componentOf(edge.source.ordinal)
         if source == componentOf(edge.target.ordinal) then internalEdges(source) += edge
         if edge.safe then incoming(edge.target.ordinal) += 1
+        edge.callSite.foreach { site =>
+          siteAdaptable(site) =
+            siteAdaptable.getOrElse(site, true) && edge.target.cuttable
+        }
       }
 
       found.iterator.zipWithIndex.flatMap { case (component, index) =>
@@ -1176,20 +1191,24 @@ private[js] object EntrySafety {
         // continuation case or a labeled block is represented by a frame or
         // a jump; a Safe edge to such a node is merely a 0-CFA artifact.
         val safeEntries = internal.filter(edge => edge.safe && edge.target.cuttable)
+        // Do not adapt or prefer only one alternative when another
+        // alternative is a second-class continuation state.
+        val adaptableEntries =
+          safeEntries.filter(_.callSite.forall(siteAdaptable.getOrElse(_, true)))
+        val localCuts = internal.filter(_.callSite.nonEmpty)
 
-        // StackSafety already certifies the graph that contains only Direct
-        // and Jump transfers. EntrySafety is responsible precisely for the
-        // additional cycles obtained by entering value-level Safe edges
-        // immediately. Ignoring an SCC without such an edge is important:
-        // 0-CFA can merge unrelated second-class continuation states into a
-        // spurious SCC, but none of those entries can or needs to be adapted.
-        if cyclic && positive && safeEntries.nonEmpty then {
+        // A positive cycle must be cut either at one closed application or at
+        // a first-class entry reached by an open value transfer. Ignoring an
+        // SCC without either kind of cut is important: 0-CFA can merge
+        // unrelated second-class continuation states into a spurious SCC,
+        // but none of those entries can or needs to be adapted.
+        if cyclic && positive && (localCuts.nonEmpty || adaptableEntries.nonEmpty) then {
           // A site cut changes one closed invocation; an entry cut changes
           // every indirect invocation of its target. Prefer the former as the
           // least global calling-convention change. The remaining ordering is
           // only a deterministic tie-breaker; iteration removes every cycle.
           val sites = mutable.LinkedHashMap.empty[CallSite, (Int, Int)]
-          safeEntries.foreach { edge =>
+          adaptableEntries.foreach { edge =>
             edge.callSite.foreach { site =>
               val source = edge.source.ordinal
               val target = edge.target.ordinal
@@ -1207,8 +1226,18 @@ private[js] object EntrySafety {
               // the node with the smallest such footprint in the current
               // graph; this preserves the greatest number of immediate value
               // entries. Ordinal is merely a deterministic tie-breaker.
-              Some(Adapt(safeEntries.iterator.map(_.target).toSet.minBy(node =>
-                (incoming(node.ordinal), node.ordinal))))
+              Option.when(adaptableEntries.nonEmpty)(Adapt(
+                adaptableEntries.iterator.map(_.target).toSet.minBy(node =>
+                  (incoming(node.ordinal), node.ordinal))))
+            }
+            .orElse {
+              // A cycle containing only statically known calls has no value
+              // entry to adapt. Cut one of its closed applications instead.
+              // Choosing the latest source matches the directed DFS order,
+              // while remaining independent of map iteration order.
+              localCuts.iterator.flatMap { edge =>
+                edge.callSite.map(_ -> (edge.source.ordinal, edge.target.ordinal))
+              }.maxByOption(_._2).map { case (site, _) => Bounce(site) }
             }
         } else None
       }.toSet
