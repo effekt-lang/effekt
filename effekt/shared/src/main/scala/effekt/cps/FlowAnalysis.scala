@@ -491,6 +491,16 @@ final class FlowAnalysis(
         if !reifyCalls then
           next(rest, unknown(results :+ returnedKs, environment))
 
+      case call @ Stmt.Call(callee, arguments, ReturnPoint.Direct(results, rest)) =>
+        val supplied = arguments.map(eval(_, environment))
+        callee match {
+          case Callee.Function(id) =>
+            applyValue(call, read(environment.getOrElse(id, Address.External)), supplied)
+          case Callee.Method(receiver, method) =>
+            invoke(call, read(environment.getOrElse(receiver, Address.External)), method, supplied)
+        }
+        next(rest, unknown(results, environment))
+
       case call @ Stmt.Call(callee, _, _: ReturnPoint.Tail | ReturnPoint.Jump) =>
         val supplied = call.knownArguments.map(eval(_, environment))
         callee match {

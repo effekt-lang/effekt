@@ -464,6 +464,11 @@ object ArityRaising {
           ReturnPoint.Bind(
             raised.ids, returnedKs, expression(ks, values), rewrittenRest))
 
+      case Stmt.Call(callee, args, ReturnPoint.Direct(ids, rest)) =>
+        val (rewrittenCallee, _) = rewriteCallee(callee, values)
+        Stmt.Call(rewrittenCallee, args.map(expression(_, values)),
+          ReturnPoint.Direct(ids, rewrite(rest, values)))
+
       case call @ Stmt.Call(callee, _, _: ReturnPoint.Tail) =>
         val (rewrittenCallee, target) = rewriteCallee(callee, values)
         val rewritten = arguments(call, call.knownArguments, values, target)

@@ -121,6 +121,9 @@ object BlockSinking {
       Stmt.Call(callee, args,
         ReturnPoint.Bind(ids, returnedKs, ks, normalize(rest)))
 
+    case Stmt.Call(callee, args, ReturnPoint.Direct(ids, rest)) =>
+      Stmt.Call(callee, args, ReturnPoint.Direct(ids, normalize(rest)))
+
     case Stmt.Call(_, _, ReturnPoint.Tail(_, _) | ReturnPoint.Jump) |
         Stmt.Return(_) | Stmt.Hole(_) =>
       stmt
@@ -180,6 +183,8 @@ object BlockSinking {
       case Stmt.Let(id, binding, rest) => Stmt.Let(id, binding, go(rest))
       case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
         Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, go(rest)))
+      case Stmt.Call(callee, args, ReturnPoint.Direct(ids, rest)) =>
+        Stmt.Call(callee, args, ReturnPoint.Direct(ids, go(rest)))
       case terminal @ (Stmt.Call(_, _, ReturnPoint.Tail(_, _) | ReturnPoint.Jump) |
           Stmt.Return(_) | Stmt.Hole(_)) => terminal
       case Stmt.Run(id, callee, args, purity, rest) =>
@@ -244,6 +249,11 @@ object BlockSinking {
         if (usedImmediately) bind(d, stmt)
         else Stmt.Call(callee, args,
           ReturnPoint.Bind(ids, returnedKs, ks, sink(d, rest)))
+
+      case Stmt.Call(callee, args, ReturnPoint.Direct(ids, rest)) =>
+        val usedImmediately = callee.value == d.id || args.exists(_.free.contains(d.id))
+        if (usedImmediately) bind(d, stmt)
+        else Stmt.Call(callee, args, ReturnPoint.Direct(ids, sink(d, rest)))
 
       case Stmt.Call(_, _, ReturnPoint.Tail(_, _) | ReturnPoint.Jump) | Stmt.Return(_) =>
         bind(d, stmt)

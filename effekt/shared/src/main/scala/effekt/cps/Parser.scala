@@ -195,6 +195,7 @@ class Parser(names: Names) extends Parsers {
     | getStmt
     | putStmt
     | callStmt
+    | directCallStmt
     | letStmt
     | runStmt
     | ifStmt
@@ -271,6 +272,13 @@ class Parser(names: Names) extends Parsers {
       case names ~ returnedKs ~ callee ~ (args, ks) ~ rest =>
         Stmt.Call(callee, args,
           ReturnPoint.Bind(names, returnedKs.getOrElse(Id("ks")), ks, rest))
+    }
+
+  // let results = callee(args);
+  lazy val directCallStmt: P[Stmt] =
+    `let` ~> resultBinding ~ (`=` ~> callCallee) ~ parens(commaList(expr)) ~ (`;` ~> stmt) ^^ {
+      case names ~ callee ~ args ~ rest =>
+        Stmt.Call(callee, args, ReturnPoint.Direct(names, rest))
     }
 
   // callee!(args) @ ks, k

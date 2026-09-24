@@ -65,6 +65,9 @@ object Inliner {
     case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, remainder)) =>
       Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks,
         continueWith(remainder, results, rest)))
+    case Stmt.Call(callee, args, ReturnPoint.Direct(ids, remainder)) =>
+      Stmt.Call(callee, args, ReturnPoint.Direct(ids,
+        continueWith(remainder, results, rest)))
     case Stmt.Return(values) =>
       results.zip(values).foldRight(rest) { case ((result, value), remainder) =>
         if isTrivial(value) then substitute(remainder)(using Substitution(Map(result -> value)))
@@ -140,6 +143,19 @@ object Inliner {
   // Rewriting
 
   private def rewrite(
+    returnsTo: ReturnPoint,
+    context: Context,
+    expanding: Set[Id]
+  ): ReturnPoint = returnsTo match {
+    case ReturnPoint.Bind(ids, returnedKs, ks, rest) =>
+      ReturnPoint.Bind(ids, returnedKs, rewrite(ks, context),
+        rewrite(rest, context, expanding))
+    case ReturnPoint.Direct(ids, rest) => ReturnPoint.Direct(ids, rewrite(rest, context, expanding))
+    case ReturnPoint.Tail(ks, k) => ReturnPoint.Tail(rewrite(ks, context), rewrite(k, context))
+    case ReturnPoint.Jump => ReturnPoint.Jump
+  }
+
+  private def rewrite(
     stmt: Stmt,
     context: Context,
     expanding: Set[Id] = Set.empty
@@ -193,12 +209,6 @@ object Inliner {
         context,
         expanding + target)
 
-    case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
-      Stmt.Call(callee, args.map(rewrite(_, context)),
-        ReturnPoint.Bind(
-          ids, returnedKs, rewrite(ks, context),
-          rewrite(rest, context, expanding)))
-
     case Stmt.Call(Callee.Function(id), args, ReturnPoint.Jump)
         if context.definitions.contains(id) && !expanding.contains(id) =>
       val args1 = args.map(rewrite(_, context))
@@ -211,12 +221,9 @@ object Inliner {
         List(rewrite(ks, context), rewrite(k, context))
       rewrite(reduce(context.definitions(id), arguments), context, expanding + id)
 
-    case Stmt.Call(callee, args, ReturnPoint.Tail(ks, k)) =>
+    case Stmt.Call(callee, args, returnsTo) =>
       Stmt.Call(callee, args.map(rewrite(_, context)),
-        ReturnPoint.Tail(rewrite(ks, context), rewrite(k, context)))
-
-    case Stmt.Call(callee, args, ReturnPoint.Jump) =>
-      Stmt.Call(callee, args.map(rewrite(_, context)), ReturnPoint.Jump)
+        rewrite(returnsTo, context, expanding))
 
     case Stmt.Return(values) =>
       Stmt.Return(values.map(rewrite(_, context)))

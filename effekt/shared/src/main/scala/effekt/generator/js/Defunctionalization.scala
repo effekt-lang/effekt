@@ -271,6 +271,8 @@ object Defunctionalization {
         case cps.Stmt.Let(_, _, rest) => visit(rest, scopes, static, repeated)
         case cps.Stmt.Call(_, _, cps.ReturnPoint.Bind(_, _, _, rest)) =>
           visit(rest, scopes, static, repeated)
+        case cps.Stmt.Call(_, _, cps.ReturnPoint.Direct(_, rest)) =>
+          visit(rest, scopes, static, repeated)
         case call @ cps.Stmt.Call(_, _, cps.ReturnPoint.Jump) =>
           applications.put(call, scopes)
         case _: cps.Stmt.Call => ()

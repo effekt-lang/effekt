@@ -234,6 +234,27 @@ class CpsTests extends munit.FunSuite {
     }
   }
 
+  test("calling convention specialization records direct calls in the CPS tree") {
+    val module = parse("""
+      def identity(x, ks, k) { k(x, ks) }
+      def main(x, ks, k) {
+        let result = identity!(x, ks, return);
+        k(result, ks)
+      }
+    """)
+    val plan = js.CallingConvention.analyze(
+      module, module.definitions.map(Targets.targets).toVector, Set(findMain(module)))
+    val specialized = js.CallingConvention.specialize(module, plan)
+    val body = specialized.definitions.collectFirst {
+      case ToplevelDefinition.Def(id, _, body) if id.name.name == "main" => body
+    }.get
+    assert(body match {
+      case Stmt.Call(Callee.Function(id), _, ReturnPoint.Direct(_, _)) =>
+        id.name.name == "identity"
+      case _ => false
+    })
+  }
+
   test("eta-reduction preserves callees bound by the function") {
     val f = Id("f")
     val x = Id("x")

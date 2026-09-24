@@ -140,8 +140,8 @@ import scala.collection.mutable
  *
  *   - [[specialize]] makes calling conventions explicit in CPS. Direct
  *     definitions omit `ks` and `k`, applications of their return
- *     continuation become `Return`, and compositional calls are rewritten
- *     according to `return(c)`.
+ *     continuation become `Return`, direct compositional calls use
+ *     `ReturnPoint.Direct`, and tail self-calls use `ReturnPoint.Jump`.
  *
  *   - `BlockSinking` and `StaticArguments` simplify the specialized CPS.
  *     They localize definitions introduced by specialization and eliminate
@@ -161,17 +161,16 @@ import scala.collection.mutable
  *   - [[TransformerCps]] emits JavaScript by structural recursion over the
  *     specialized CPS tree. It emits entries according to the calling-
  *     convention plan, local definitions and dispatchers according to
- *     `DefinitionPlanning`, and calls according to `ReturnConvention` and
- *     `StackSafety.Transfer`. It does not reconstruct any of these judgments.
+ *     `DefinitionPlanning`, direct calls according to their explicit return
+ *     point, and residual transfers according to `StackSafety.Transfer`. It
+ *     does not reconstruct any of these judgments.
  */
 object CallingConvention {
 
   private def binding(call: cps.Stmt.Call): cps.ReturnPoint.Bind =
     call.returnsTo match {
       case bind: cps.ReturnPoint.Bind => bind
-      case _: cps.ReturnPoint.Tail =>
-        sys.error("Expected a compositional call")
-      case cps.ReturnPoint.Jump =>
+      case _: cps.ReturnPoint.Tail | _: cps.ReturnPoint.Direct | cps.ReturnPoint.Jump =>
         sys.error("Expected a compositional call")
     }
 
@@ -290,10 +289,10 @@ object CallingConvention {
           case ReturnConvention.Direct =>
             val directRest = cps.substitutions.substitute(rest)(using
               cps.substitutions.Substitution(Map(returnedKs -> ks)))
-            cps.Stmt.Call(callee, arguments,
-              cps.ReturnPoint.Bind(
-                results, returnedKs, ks,
-                specializeStatement(directRest, returns, directBody, plan)))
+            if plan.isTailSelf(call) then jump(callee, arguments)
+            else cps.Stmt.Call(callee, arguments,
+              cps.ReturnPoint.Direct(
+                results, specializeStatement(directRest, returns, directBody, plan)))
 
           // A positive recursive local region retains CPS internally. Its
           // entry continuation becomes the return case of its dispatcher.
@@ -334,6 +333,11 @@ object CallingConvention {
         }
 
       case call @ cps.Stmt.Call(_, _, cps.ReturnPoint.Tail(_, _)) => call
+
+      case cps.Stmt.Call(callee, arguments, cps.ReturnPoint.Direct(results, rest)) =>
+        cps.Stmt.Call(callee, arguments,
+          cps.ReturnPoint.Direct(
+            results, specializeStatement(rest, returns, directBody, plan)))
 
       case jump @ cps.Stmt.Call(cps.Callee.Function(id), arguments,
           cps.ReturnPoint.Jump) =>
@@ -535,9 +539,6 @@ object CallingConvention {
 
     def original(id: Id): OriginalDefinition = entries(id).original
 
-    def isDirect(call: cps.Stmt.Call): Boolean =
-      returnConvention(call) == ReturnConvention.Direct
-
     def cpsArguments(callee: cps.Callee): Map[Int, FunctionSignature] =
       cpsArgumentSignatures.getOrElse(callee, Map.empty)
 
@@ -549,15 +550,13 @@ object CallingConvention {
     private def application(call: cps.Stmt.Call): Option[ApplicationPlan] =
       applications.get(binding(call).returnedKs)
 
-    def targets(call: cps.Stmt.Call): Set[Id] =
-      application(call).fold(Set.empty[Id])(_.site.targets)
-
     /** The function-valued arguments of this call and their direct signatures.
      *  All possible targets have the same map; this is precisely the ABI
      *  coherence condition for an indirect call. */
-    def directArguments(call: cps.Stmt.Call): Map[Int, FunctionSignature] =
-      targets(call).headOption
-        .fold(Map.empty[Int, FunctionSignature])(id => entries(id).parameters)
+    def directArguments(targets: Set[Id]): Map[Int, FunctionSignature] =
+      targets.headOption
+        .flatMap(entries.get)
+        .fold(Map.empty[Int, FunctionSignature])(_.parameters)
 
     def directParameterSignature(id: Id, position: Int): Option[FunctionSignature] =
       entries.get(id).flatMap(_.parameters.get(position))
@@ -577,12 +576,6 @@ object CallingConvention {
 
     private[CallingConvention] def returnConvention(call: cps.Stmt.Call): ReturnConvention =
       application(call).fold(ReturnConvention.CPS)(_.returns)
-
-    /** Calls to an already active join are tail transfers to the same or an
-     *  enclosing loop. */
-    def isJoinBackEdge(call: cps.Stmt.Call): Boolean =
-      application(call).exists(plan => plan.site.tail &&
-        plan.site.targets.nonEmpty && plan.site.targets.subsetOf(joinDefinitions))
 
     def isJoinLoop(id: Id): Boolean =
       representation(id).exists(r => r.isJoin && r.loops)
@@ -880,6 +873,24 @@ object CallingConvention {
         propagate(supplied, targets.targets)
         if closeOpenCalls && !targets.closed then
           supplied.foreach(argument => escape(eval(argument)))
+
+      case call @ cps.Stmt.Call(cps.Callee.Function(callee), arguments,
+          cps.ReturnPoint.Direct(results, rest)) =>
+        val (targets, closed) = resolveFunction(call, callee, arguments.size)
+        observed.put(call, MethodTargets(targets, closed, compositional = true))
+        propagate(arguments, targets)
+        if closeOpenCalls && !closed then arguments.foreach(argument => escape(eval(argument)))
+        results.foreach(add(_, FlowValue.Unknown))
+        scan(rest)
+
+      case call @ cps.Stmt.Call(cps.Callee.Method(receiver, method), arguments,
+          cps.ReturnPoint.Direct(results, rest)) =>
+        val targets = record(call, receiver, method, compositional = true)
+        propagate(arguments, targets.targets)
+        if closeOpenCalls && !targets.closed then
+          arguments.foreach(argument => escape(eval(argument)))
+        results.foreach(add(_, FlowValue.Unknown))
+        scan(rest)
 
       case cps.Stmt.Return(results) => results.foreach(r => escape(eval(r)))
 
@@ -1828,6 +1839,8 @@ object CallingConvention {
             hasDirectRepresentation(argument, owner)
         }.map(_._1)
         cpsCallee(callee.value) ++ ordinaryAll(arguments)
+      case cps.Stmt.Call(_, arguments, cps.ReturnPoint.Direct(_, rest)) =>
+        ordinaryAll(arguments) ++ cpsReferences(rest, owner)
       case cps.Stmt.Return(values) => ordinaryAll(values)
       case cps.Stmt.Run(_, callee, arguments, _, rest) =>
         cpsCallee(callee) ++ ordinaryAll(arguments) ++ cpsReferences(rest, owner)

@@ -92,8 +92,13 @@ enum Callee {
 export Callee.*
 
 enum ReturnPoint extends Tree {
+  /** A CPS call supplies both control arguments explicitly. */
   case Tail(ks: MetaCont, k: Cont)
+  /** A CPS call reifies its lexical remainder as the continuation argument. */
   case Bind(results: List[Id], returnedKs: Id, ks: MetaCont, rest: Stmt)
+  /** A direct call returns ordinary values to its lexical remainder. */
+  case Direct(results: List[Id], rest: Stmt)
+  /** A tail transfer between definitions with an already specialized ABI. */
   case Jump
 }
 
@@ -155,13 +160,14 @@ extension (call: Stmt.Call) {
   def knownArguments: List[Expr] = call.returnsTo match {
     case ReturnPoint.Bind(_, _, ks, _) => call.args :+ ks
     case ReturnPoint.Tail(ks, k) => call.args ++ List(ks, k)
-    case ReturnPoint.Jump => call.args
+    case _: ReturnPoint.Direct | ReturnPoint.Jump => call.args
   }
 
   /** The value supplied to each callee parameter, when syntactically known. */
   def parameterArguments: List[Option[Expr]] = call.returnsTo match {
     case _: ReturnPoint.Bind => call.knownArguments.map(Some(_)) :+ None
-    case _: ReturnPoint.Tail | ReturnPoint.Jump => call.knownArguments.map(Some(_))
+    case _: ReturnPoint.Tail | _: ReturnPoint.Direct | ReturnPoint.Jump =>
+      call.knownArguments.map(Some(_))
   }
 }
 
@@ -266,6 +272,17 @@ object substitutions {
       Callee.Method(substituteAsVar(receiver), method)
   }
 
+  def substitute(returnsTo: ReturnPoint)(using subst: Substitution): ReturnPoint =
+    returnsTo match {
+      case ReturnPoint.Tail(ks, k) => ReturnPoint.Tail(substitute(ks), substitute(k))
+      case ReturnPoint.Bind(ids, returnedKs, ks, rest) =>
+        ReturnPoint.Bind(ids, returnedKs, substitute(ks),
+          substitute(rest)(using subst.shadow(returnedKs :: ids)))
+      case ReturnPoint.Direct(ids, rest) =>
+        ReturnPoint.Direct(ids, substitute(rest)(using subst.shadow(ids)))
+      case ReturnPoint.Jump => ReturnPoint.Jump
+    }
+
   def substitute(s: Stmt)(using subst: Substitution): Stmt = rewriting(s) {
     case Stmt.Def(id, params, body, rest) =>
       Stmt.Def(id, params,
@@ -280,17 +297,8 @@ object substitutions {
       Stmt.Let(id, substitute(binding),
         substitute(rest)(using subst.shadow(id)))
 
-    case Stmt.Call(callee, args, ReturnPoint.Tail(ks, k)) =>
-      Stmt.Call(substitute(callee), args.map(substitute),
-        ReturnPoint.Tail(substitute(ks), substitute(k)))
-
-    case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
-      Stmt.Call(substitute(callee), args.map(substitute),
-        ReturnPoint.Bind(ids, returnedKs, substitute(ks),
-          substitute(rest)(using subst.shadow(returnedKs :: ids))))
-
-    case Stmt.Call(callee, args, ReturnPoint.Jump) =>
-      Stmt.Call(substitute(callee), args.map(substitute), ReturnPoint.Jump)
+    case Stmt.Call(callee, args, returnsTo) =>
+      Stmt.Call(substitute(callee), args.map(substitute), substitute(returnsTo))
 
     case Stmt.Return(values) =>
       Stmt.Return(values.map(substitute))
@@ -416,6 +424,14 @@ object freeVariables {
     case ToplevelDefinition.Val(id, ks, k, binding) => binding.free - ks - k
   }
 
+  inline def free(returnsTo: ReturnPoint): Set[Id] = returnsTo match {
+    case ReturnPoint.Tail(ks, k) => ks.free ++ k.free
+    case ReturnPoint.Bind(ids, returnedKs, ks, rest) =>
+      ks.free ++ (rest.free -- bound(ids) - returnedKs)
+    case ReturnPoint.Direct(ids, rest) => rest.free -- bound(ids)
+    case ReturnPoint.Jump => closed
+  }
+
   inline def free(s: Stmt): Set[Id] = s match {
     case Stmt.Def(id, params, body, rest) =>
       (body.free -- bound(params) - id) ++ (rest.free - id)
@@ -426,12 +442,8 @@ object freeVariables {
     case Stmt.Let(id, binding, rest) =>
       binding.free ++ (rest.free - id)
 
-    case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
-      free(callee) ++ all(args, _.free) ++ ks.free ++
-        (rest.free -- ids.toSet - returnedKs)
-
-    case call @ Stmt.Call(callee, _, _: ReturnPoint.Tail | ReturnPoint.Jump) =>
-      free(callee) ++ all(call.knownArguments, _.free)
+    case Stmt.Call(callee, args, returnsTo) =>
+      free(callee) ++ all(args, _.free) ++ free(returnsTo)
 
     case Stmt.Return(values) => all(values, _.free)
 
@@ -527,6 +539,12 @@ object functionUsage {
 
   inline def uses(op: Operation): DB[Set[Id]] = uses(op.body)
 
+  inline def uses(returnsTo: ReturnPoint): DB[Set[Id]] = returnsTo match {
+    case ReturnPoint.Bind(_, _, _, rest) => rest.uses
+    case ReturnPoint.Direct(_, rest) => rest.uses
+    case _: ReturnPoint.Tail | ReturnPoint.Jump => DB.empty
+  }
+
   inline def uses(stmt: Stmt): DB[Set[Id]] = stmt match {
     case Stmt.Def(id, params, body, rest) =>
       body.uses ++ rest.uses + (id -> (body.free -- params))
@@ -535,8 +553,7 @@ object functionUsage {
       rest.uses ++ all(operations, _.uses) + (id -> freeInOperations)
     case Stmt.Let(id, binding, rest) =>
       rest.uses
-    case Stmt.Call(_, _, ReturnPoint.Bind(_, _, _, rest)) => rest.uses
-    case Stmt.Call(_, _, _: ReturnPoint.Tail | ReturnPoint.Jump) => DB.empty
+    case Stmt.Call(_, _, returnsTo) => uses(returnsTo)
     case Stmt.Return(values) =>
       DB.empty
     case Stmt.Run(id, callee, args, purity, rest) =>
@@ -654,6 +671,9 @@ object escapeAnalysis {
       val boundary = if ks == Expr.Toplevel then Set(callee.value) else Set.empty
       args.flatMap(_.free).toSet ++ ks.free ++ boundary ++ rest.escapes
 
+    case Stmt.Call(_, args, ReturnPoint.Direct(_, rest)) =>
+      args.flatMap(_.free).toSet ++ rest.escapes
+
     case Stmt.Call(callee, args, ReturnPoint.Tail(ks, k)) =>
       val boundary = if ks == Expr.Toplevel then Set(callee.value) else Set.empty
       args.flatMap(_.free).toSet ++ ks.free ++ k.free ++ boundary
@@ -739,11 +759,16 @@ object references {
     case Expr.Toplevel => empty
   }
 
+  inline def refs(returnsTo: ReturnPoint): DB[Int] = returnsTo match {
+    case ReturnPoint.Bind(_, _, ks, rest) => ks.refs ++ rest.refs
+    case ReturnPoint.Direct(_, rest) => rest.refs
+    case ReturnPoint.Tail(ks, k) => ks.refs ++ k.refs
+    case ReturnPoint.Jump => empty
+  }
+
   inline def refs(stmt: Stmt): DB[Int] = stmt match {
-    case Stmt.Call(callee, args, ReturnPoint.Bind(_, _, ks, rest)) =>
-      refs(callee) ++ all(args, _.refs) ++ ks.refs ++ rest.refs
-    case call @ Stmt.Call(callee, _, _: ReturnPoint.Tail | ReturnPoint.Jump) =>
-      refs(callee) ++ all(call.knownArguments, _.refs)
+    case Stmt.Call(callee, args, returnsTo) =>
+      refs(callee) ++ all(args, _.refs) ++ refs(returnsTo)
     case Stmt.Return(values) => all(values, _.refs)
     case Stmt.Alloc(id, init, region, rest) => use(region) ++ init.refs ++ rest.refs
     case Stmt.Dealloc(ref, rest) => use(ref) ++ rest.refs

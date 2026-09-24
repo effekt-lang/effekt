@@ -149,6 +149,9 @@ object TransformerCps {
         toChez(rest))
       call(callee, args.map(toChez) ++ List(toChez(ks), continuation))
 
+    case Stmt.Call(_, _, ReturnPoint.Direct(_, _)) =>
+      sys.error("Direct return points are specific to JavaScript convention lowering")
+
     case application @ Stmt.Call(callee, _, _: ReturnPoint.Tail | ReturnPoint.Jump) =>
       call(callee, application.knownArguments.map(toChez))
 

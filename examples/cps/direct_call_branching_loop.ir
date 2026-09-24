@@ -47,18 +47,14 @@ function loop_0(base_0, exponent_0, acc_0) {
       if (even_0) {
         const squared_0 = add_0(base_0, base_0);
         const half_0 = sub_0(exponent_0, 1);
-        const next_arg_0 = squared_0;
-        const next_arg_1 = half_0;
-        base_0 = next_arg_0;
-        exponent_0 = next_arg_1;
+        base_0 = squared_0;
+        exponent_0 = half_0;
         continue loop_0;
       } else {
         const previous_0 = sub_0(exponent_0, 1);
         const product_0 = add_0(acc_0, base_0);
-        const next_arg_2 = previous_0;
-        const next_arg_3 = product_0;
-        exponent_0 = next_arg_2;
-        acc_0 = next_arg_3;
+        exponent_0 = previous_0;
+        acc_0 = product_0;
         continue loop_0;
       }
     }

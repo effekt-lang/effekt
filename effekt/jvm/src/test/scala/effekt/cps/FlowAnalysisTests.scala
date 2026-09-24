@@ -49,6 +49,7 @@ class FlowAnalysisTests extends munit.FunSuite {
           operations.foreach(operation => visit(operation.body)); visit(rest)
         case Stmt.Let(_, _, rest) => visit(rest)
         case Stmt.Call(_, _, ReturnPoint.Bind(_, _, _, rest)) => visit(rest)
+        case Stmt.Call(_, _, ReturnPoint.Direct(_, rest)) => visit(rest)
         case Stmt.Call(_, _, ReturnPoint.Tail(_, _)) => ()
         case Stmt.Run(_, _, _, _, rest) => visit(rest)
         case Stmt.If(_, thn, els) => visit(thn); visit(els)
