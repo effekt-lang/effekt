@@ -470,7 +470,7 @@ object GuardedEquality {
       case None => values
       case Some(before) =>
         if before.size != values.size then before
-        else before.zip(values).map(_ join _)
+        else before.zip(values).map { case (left, right) => left.join(right) }
     }
 
     private def schedule(id: Id): Unit =
@@ -511,7 +511,7 @@ object GuardedEquality {
       case Expr.Variable(id) => env.getOrElse(id, TargetValue.Unknown)
       case _: Expr.Literal => TargetValue.Empty
       case Expr.Make(_, _, args) =>
-        args.iterator.map(eval(_, env)).foldLeft(TargetValue.Empty)(_ join _)
+        args.iterator.map(eval(_, env)).foldLeft(TargetValue.Empty)(_.join(_))
       case Expr.Abort | Expr.Toplevel => TargetValue.Empty
     }
 

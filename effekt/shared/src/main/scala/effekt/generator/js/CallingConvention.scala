@@ -728,7 +728,7 @@ object CallingConvention {
     private def eval(expr: cps.Expr): FlowValue = expr match {
       case cps.Expr.Variable(id) => value(id)
       case cps.Expr.Make(_, _, arguments) =>
-        arguments.iterator.map(eval).foldLeft(FlowValue.Empty)(_ join _)
+        arguments.iterator.map(eval).foldLeft(FlowValue.Empty)(_.join(_))
       case _ => FlowValue.Empty
     }
 

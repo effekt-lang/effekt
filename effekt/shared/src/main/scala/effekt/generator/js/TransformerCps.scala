@@ -1065,7 +1065,7 @@ object TransformerCps extends Transformer {
 
     case cps.Callee.Method(receiver, method) =>
       val call = MethodCall(
-        valueRef(receiver), memberNameRef(method), cpsArguments(statement, args): _*)
+        valueRef(receiver), memberNameRef(method), cpsArguments(statement, args)*)
       pure(returnCps(call))
   }
 
