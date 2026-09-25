@@ -1,0 +1,95 @@
+def inc(x: Int) = {
+  return x: Int
+}
+
+def dec(x: Int) = {
+  return x: Int
+}
+
+def use(x: Int){k: (Int) => Int} = {
+  (k: (Int) => Int @ {k})(x: Int)
+}
+
+def outer(x: Int){f: (Int) => Int} = {
+  def k(y: Int) = {
+    (f: (Int) => Int @ {f})(y: Int)
+  }
+  (use: (Int){k: (Int) => Int} => Int @ {})(x: Int){
+    (k: (Int) => Int @ {f})
+  }
+}
+
+def main() = {
+  val first = (outer: (Int){f: (Int) => Int} => Int @ {})(0){
+    (inc: (Int) => Int @ {})
+  };
+  (outer: (Int){f: (Int) => Int} => Int @ {})(first: Int){
+    (dec: (Int) => Int @ {})
+  }
+}
+
+/// LAMBDA_SETS
+
+S = dec ↦ { <> },
+    inc ↦ { <> },
+    k ↦ { <dec>, <inc> },
+    outer ↦ { <dec>, <inc> },
+    use ↦ { <k> }
+
+/// LAMBDA_SPECIALIZE
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def dec(x: Int) = {
+  return x: Int
+}
+
+def use(x: Int){k: (Int) => Int} = {
+  (k: (Int) => Int @ {k})(x: Int)
+}
+
+def outer(x: Int){f: (Int) => Int} = {
+  def k(y: Int) = {
+    (f: (Int) => Int @ {f})(y: Int)
+  }
+  (use: (Int){k: (Int) => Int} => Int @ {})(x: Int){
+    (k: (Int) => Int @ {f})
+  }
+}
+
+def main() = {
+  val first = (outer_inc: (Int) => Int @ {})(0);
+  (outer_dec: (Int) => Int @ {})(first: Int)
+}
+
+def outer_inc(x: Int) = {
+  def k(y: Int) = {
+    (inc: (Int) => Int @ {})(y: Int)
+  }
+  (use_k_inc: (Int) => Int @ {})(x: Int)
+}
+
+def outer_dec(x: Int) = {
+  def k(y: Int) = {
+    (dec: (Int) => Int @ {})(y: Int)
+  }
+  (use_k_dec: (Int) => Int @ {})(x: Int)
+}
+
+def use_k_inc(x: Int) = {
+  (k_inc: (Int) => Int @ {})(x: Int)
+}
+
+def use_k_dec(x: Int) = {
+  (k_dec: (Int) => Int @ {})(x: Int)
+}
+
+def k_inc(y: Int) = {
+  (inc: (Int) => Int @ {})(y: Int)
+}
+
+def k_dec(y: Int) = {
+  (dec: (Int) => Int @ {})(y: Int)
+}

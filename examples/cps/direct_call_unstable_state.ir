@@ -1,0 +1,12 @@
+def main(value, otherKs, ks, k) {
+  var cell = value @ otherKs;
+  get result = cell;
+  k(result, ks)
+}
+
+// A local reference associated with an unrelated meta-continuation is not
+// eligible for control erasure, even though the reference itself does not
+// escape.
+/// CALLING_CONVENTIONS
+
+-

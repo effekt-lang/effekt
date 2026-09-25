@@ -1,0 +1,22 @@
+def main(value, ks, k) {
+  def dup(x, ks1, k1) {
+    run inc = add(x, 1);
+    k1(x, inc, ks1)
+  }
+  let (a, b) = dup!(value, ks, return);
+  k(a, ks)
+}
+
+// The second returned value `b` is never used. On the jump path an unused
+// result gets neither a register nor an assignment, so only `a_0` survives —
+// the returned `inc` value is simply dropped.
+/// JAVASCRIPT
+
+function main_0(value_0, ks_0, k_0) {
+  let a_0 = undefined;
+  dup_return_0: {
+    const inc_0 = add_0(value_0, 1);
+    a_0 = value_0;
+  }
+  return k_0(a_0, ks_0);
+}

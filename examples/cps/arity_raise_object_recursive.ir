@@ -1,0 +1,22 @@
+def use(reader, k) { reader.read(k) }
+def main(flag, k0) {
+  new source : Reader {
+    def read(done) = {
+      if (flag) { source.read(done) } else { done(1) }
+    }
+  }
+  use(source, k0)
+}
+
+// New supplies a recursive object binding. It cannot be replaced by a
+// telescope of non-mutually-recursive local definitions.
+/// ARITY_RAISE
+def use(reader, k) { reader.read(k) }
+def main(flag, k0) {
+  new source : Reader {
+    def read(done) = {
+      if (flag) { source.read(done) } else { done(1) }
+    }
+  }
+  use(source, k0)
+}

@@ -1,0 +1,28 @@
+def inc(x, ks, k) {
+  run y = add(x, 1);
+  k(y, ks)
+}
+def use(f, external, value, ks1, k1) {
+  let result = f!(value, ks1, return);
+  external(result, ks1, k1)
+}
+def main(external0, value0, ks0, k0) {
+  use(inc, external0, value0, ks0, k0)
+}
+
+// `use` must remain CPS because of `external`, but all values flowing into
+// `f` have the same bounded direct convention. No arity-raising pass is run.
+/// JAVASCRIPT
+function inc_0(x_0) {
+  const y_0 = add_0(x_0, 1);
+  return y_0;
+}
+
+function use_0(f_0, external_0, value_0, ks_0, k_0) {
+  const result_0 = f_0(value_0);
+  return external_0(result_0, ks_0, k_0);
+}
+
+function main_0(external_1, value_1, ks_1, k_1) {
+  return use_0(inc_0, external_1, value_1, ks_1, k_1);
+}

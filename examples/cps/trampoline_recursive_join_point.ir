@@ -1,0 +1,37 @@
+def main(again, k) {
+  def loop(flag) {
+    if (flag) {
+      loop(false)
+    } else {
+      k(0)
+    }
+  }
+  loop(again)
+}
+
+// A recursive nonescaping local definition is a labeled loop.
+/// CONTROL_FLOW
+
+ranks
+  main = 0
+transfers
+  main -> loop: jump
+  main -> loop: jump
+  main -> k: safe [?]
+
+/// JAVASCRIPT
+
+function main_0(again_0, k_0) {
+  let flag_0 = undefined;
+  loop_0: {
+    flag_0 = again_0;
+  }
+  loop_0: while (true) {
+    if (flag_0) {
+      flag_0 = false;
+      continue loop_0;
+    } else {
+      return k_0(0);
+    }
+  }
+}

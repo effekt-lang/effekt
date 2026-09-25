@@ -1,0 +1,29 @@
+def main(ks, k) {
+  def loop(i, ks1, k1) {
+    run done = eq(i, 0);
+    if (done) {
+      k1(i, ks1)
+    } else {
+      run next = sub(i, 1);
+      loop(next, ks1, k1)
+    }
+  }
+  let value = loop!(3, ks, return);
+  k(value, ks)
+}
+
+/// STATIC_ARGUMENTS
+
+def main(ks, k) {
+  def loop(i, ks1, k1) {
+    run done = eq(i, 0);
+    if (done) {
+      k1(i, ks1)
+    } else {
+      run next = sub(i, 1);
+      loop(next, ks1, k1)
+    }
+  }
+  let value = loop!(3, ks, return);
+  k(value, ks)
+}
