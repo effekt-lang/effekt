@@ -13,6 +13,7 @@ import kiama.util.{Position, Range, Source}
 
 import scala.annotation.{tailrec, targetName}
 import scala.collection.mutable.ListBuffer
+import scala.collection.mutable
 import scala.language.implicitConversions
 import scala.util.boundary
 import scala.util.boundary.break
@@ -157,7 +158,9 @@ class Parser(tokens: Seq[Token], source: Source) {
       if position < 0 then fail("Unexpected start of file")
 
       tokens(position).failOnErrorToken(position) match {
+        case token if token.kind == `$|` => go(position - 1)
         case token if isSpace(token.kind) && token.kind != Newline => go(position - 1)
+        case token if token.kind.isInstanceOf[RawStr] => true // raw string literals are always terminated by newline
         case token if token.kind == Newline => true
         case _ => false
       }
@@ -216,6 +219,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   def isSpace(kind: TokenKind): Boolean =
     kind match {
       case TokenKind.Space | TokenKind.Comment(_) | TokenKind.Newline => true
+      case TokenKind.`$|` if sawNewlineLast => true
       case _ => false
     }
 
@@ -769,13 +773,21 @@ class Parser(tokens: Seq[Token], source: Source) {
       case _                          => false
     }
 
+  private val _isInRawString = scala.util.DynamicVariable[Boolean](false)
+  private def rawStringNestingGuard[T](body: => T): T =
+    if(_isInRawString.value && isActualMultilineString()) {
+      softFailWith("Can't nest multiline strings in raw strings.")(body)
+    } else {
+      _isInRawString.withValue(isRawString())(body)
+    }
   def template[T](of: => T): SpannedTemplate[T] =
     nonterminal:
       // TODO handle case where the body is not a string, e.g.
       // Expected an extern definition, which can either be a single-line string (e.g., "x + y") or a multi-line string (e.g., """...""")
-      val first = spanned(string())
-      val (exprs, strs) = manyWhile((`${` ~> spanned(of) <~ `}$`, spanned(string())), `${`).unzip
-      SpannedTemplate(first :: strs, exprs)
+      rawStringNestingGuard:
+        val first = spanned(string())
+        val (exprs, strs) = manyWhile((`${` ~> spanned(of) <~ `}$`, spanned(string())), `${`).unzip
+        SpannedTemplate(first :: strs, exprs)
 
   def spanned[T](p: => T): Spanned[T] =
     nonterminal:
@@ -844,6 +856,23 @@ class Parser(tokens: Seq[Token], source: Source) {
   def string(): String =
     nonterminal:
       expect("string literal") {
+        case RawStr(fst, terminator) =>
+          val res = mutable.StringBuilder(fst)
+          var lastTerminator = terminator
+          @tailrec
+          def go(): String = {
+            peek.kind match {
+              case t@RawStr(s, terminator) =>
+                skip()
+                res.append(lastTerminator)
+                res.append(s)
+                lastTerminator = terminator
+                go()
+              case _ =>
+                res.mkString
+            }
+          }
+          go()
         case Str(s, _) => s
       }
 
@@ -1331,7 +1360,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     case _ if isVariable     =>
       val lhs = variable()
       peek.kind match {
-        case _: Str => templateString(Maybe.Some(lhs.id, lhs.id.span))
+        case _: (Str | RawStr) => templateString(Maybe.Some(lhs.id, lhs.id.span))
         case _ =>
           peek.kind match {
             case `+=` | `-=` | `*=` | `/=` =>
@@ -1434,8 +1463,16 @@ class Parser(tokens: Seq[Token], source: Source) {
   }
 
   def isString: Boolean = peek.kind match {
-    case _: Str => true
-    case _      => false
+    case _: (Str | RawStr) => true
+    case _                 => false
+  }
+  private def isRawString(): Boolean = peek.kind match {
+    case _: RawStr => true
+    case _ => false
+  }
+  private def isActualMultilineString(): Boolean = peek.kind match {
+    case Str(s, true) => s.contains("\n")
+    case _ => false
   }
 
   def templateString(splicer: Maybe[IdRef]): Term =
