@@ -363,10 +363,14 @@ object StaticResumptions {
 
   /** For every binder in [[body]], what does its definition mention. */
   private def mentions(prompt: Prompt, body: Stmt): DB[Set[Id]] = {
-    def unknown(vparams: List[ValueParam], bparams: List[BlockParam]): DB[Set[Id]] =
-      DB.from((bparams.map(_.id) ++ vparams.filter(p => mayHoldBlock(p.tpe)).map(_.id)).map(_ -> Set(prompt.id)))
-    def fresh(bparams: List[BlockParam]): DB[Set[Id]] =
-      DB.from(bparams.map(_.id -> Set.empty[Id]))
+    /** A parameter has no definition to follow: one that can hold a block is assumed to reach the prompt. */
+    def parameters(vparams: List[ValueParam], bparams: List[BlockParam]): DB[Set[Id]] = {
+      val holdingBlocks = bparams.map(_.id) ++ vparams.filter(p => mayHoldBlock(p.tpe)).map(_.id)
+      DB.from(holdingBlocks.map(_ -> Set(prompt.id)))
+    }
+
+    /** A nested prompt or a region is fresh: it mentions nothing. */
+    def fresh(bparams: List[BlockParam]): DB[Set[Id]] = DB.from(bparams.map(_.id -> Set.empty[Id]))
 
     object binders extends Tree.Query[Unit, DB[Set[Id]]] {
       def empty = DB.empty
@@ -385,10 +389,10 @@ object StaticResumptions {
         case Stmt.Region(block) => query(block) ++ fresh(block.bparams)
       }
       override def block(using Unit) = {
-        case BlockLit(_, _, vparams, bparams, body) => query(body) ++ unknown(vparams, bparams)
+        case BlockLit(_, _, vparams, bparams, body) => query(body) ++ parameters(vparams, bparams)
       }
       override def operation(using Unit) = {
-        case Operation(_, _, _, vparams, bparams, body) => query(body) ++ unknown(vparams, bparams)
+        case Operation(_, _, _, vparams, bparams, body) => query(body) ++ parameters(vparams, bparams)
       }
     }
     binders.query(body)(using ())
