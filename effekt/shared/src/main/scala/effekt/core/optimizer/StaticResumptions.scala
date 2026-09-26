@@ -173,9 +173,16 @@ object StaticResumptions {
   /** A joinpoint `def id = block`, bound around [[scope]], where the resumptions now call it. */
   case class Joinpoint(id: Id, block: Block, scope: Stmt)
 
-  /** The joinpoints built while one reset is reduced, checked by [[reduceReset]] once it is rewritten. */
-  class Joinpoints {
-    val built: mutable.ListBuffer[Joinpoint] = mutable.ListBuffer.empty
+  case class Context(
+    prompt: Prompt,
+    frames: List[Frame],
+    observed: Boolean, // whether a copy could observe that its prompt is not the old one
+    joinpoints: mutable.ListBuffer[Joinpoint]
+  ) {
+    def enter(frame: Frame): Context = copy(frames = frame :: frames)
+
+    /** If the continuation of a shift from here to the prompt can be copied */
+    def canCopyContinuation: Boolean = !observed && frames.isEmpty
   }
 
   /**
@@ -183,46 +190,44 @@ object StaticResumptions {
    * its prompt is not the old one; otherwise the shifts are treated in place only.
    */
   def reduceReset(prompt: Prompt, body: Stmt): Stmt = {
-    given joinpoints: Joinpoints = Joinpoints()
-    val joined = reduceShifts(prompt, body, joinable = true)
-    if (joinpoints.built.exists(observesOldPrompt(prompt, _, joined))) reduceShifts(prompt, body, joinable = false)
+    val joining = Context(prompt, Nil, observed = false, mutable.ListBuffer.empty)
+    val joined = reduceShifts(body)(using joining)
+    // a copy could observe the old prompt: reduce again, copying nothing
+    if (joining.joinpoints.exists(observesOldPrompt(prompt, _, joined)))
+      reduceShifts(body)(using Context(prompt, Nil, observed = true, mutable.ListBuffer.empty))
     else joined
   }
 
-  /**
-   * Walks the static context of [[prompt]] and processes every shift to it.
-   *
-   * @param joinable no `var` or `region` lies between [[prompt]] and here, so frames can still be copied
-   */
-  def reduceShifts(prompt: Prompt, stmt: Stmt, joinable: Boolean)(using Joinpoints): Stmt = stmt match {
-    // 1) a shift to `prompt`, with nothing left between it and the prompt
-    case prompt.Shift(shift) =>
+  /** Walks the static context of the prompt and processes every shift to it. */
+  def reduceShifts(stmt: Stmt)(using C: Context): Stmt = stmt match {
+    // 1) a shift to the prompt, with nothing left between it and the prompt
+    case C.prompt.Shift(shift) =>
       // 1a) in place, since any exit is the answer already
       reuse(shift, atPrompt = true)
-        // 1b) else copied into a joinpoint, if no `var` or `region` lies above
-        .orElse(if (joinable) copy(Continuation(prompt, binder = None), shift) else None)
+        // 1b) else copied into a joinpoint
+        .orElse(copy(Continuation(C.prompt, binder = None), shift))
         // 1c) else left alone
         .getOrElse(shift.stmt)
 
-    // 2) a `val` frame over a shift to `prompt`, with no `var` or `region` above:
+    // 2) a `val` frame over a shift to the prompt:
     //    [[ val y = E[ shift(p) { {k} => b } ]; rest ]]
     //      ~> def j(y) = reset { p' => rest }; [[ E[ b[ resume(k){return e} := j(e) ] ] ]]
     //    where every other leaf `l` of `E` becomes `val y = l; j(y)`
-    case Stmt.Val(y, binding @ prompt.ShiftsWithin(shifts), rest) if joinable =>
-      joinpoint(Continuation(prompt, Some(y -> rest)), binding.tpe, shifts) { jump =>
-        reduceShifts(prompt, jumpsToJoin(prompt, binding, jump), joinable = true)
-      }.getOrElse(Stmt.Val(y, binding, reduceShifts(prompt, rest, joinable)))
+    case Stmt.Val(y, binding @ C.prompt.ShiftsWithin(shifts), rest) =>
+      joinpoint(Continuation(C.prompt, Some(y -> rest)), binding.tpe, shifts) { jump =>
+        reduceShifts(jumpsToJoin(C.prompt, binding, jump))
+      }.getOrElse(Stmt.Val(y, binding, reduceShifts(rest)))
 
     // 3) a `var` or `region` is popped by the answer, so the shifts below it still stand at the prompt;
-    //    but it cannot be copied, so from here only 1a) applies
+    //    but a copy would not re-create it, so from here only 1a) applies
      //    [[ var x = e; s ]] ~> var x = e; [[ s ]]
      case Frame(frame) if !frame.isDelimiter =>
-      frame.rebuild(reduceShifts(prompt, frame.body, joinable = false))
+      frame.rebuild(reduceShifts(frame.body)(using C.enter(frame)))
  
     // 4) anything else pushes nothing, so continue into its tail positions
      //    [[ T[s₁, …, sₙ] ]] ~> T[ [[ s₁ ]], …, [[ sₙ ]] ]
      case other => tailPositions(other) match {
-       case Some(positions) => positions.rewrite(reduceShifts(prompt, _, joinable))
+       case Some(positions) => positions.rewrite(reduceShifts(_))
        case None => other
      }
    }
@@ -267,7 +272,7 @@ object StaticResumptions {
     }
 
   /** [[ shift(p) { {k} => b } ]] ~> def j(y) = reset { p' => return y }; b[ resume(k){return e} := j(e) ]   if `k` is only resumed */
-  private def copy(continuation: Continuation, shift: Shift)(using Joinpoints): Option[Stmt] =
+  private def copy(continuation: Continuation, shift: Shift)(using Context): Option[Stmt] =
     if (shift.resumesOnly) {
       joinpoint(continuation, shift.result, List(shift)) { jump =>
         shift.replaceResumptions(jump)
@@ -286,7 +291,9 @@ object StaticResumptions {
    * @param shifts the shifts whose shifts jump here, which decide the form it takes
    */
   private def joinpoint(continuation: Continuation, result: ValueType, shifts: List[Shift])
-                       (scope: (Stmt => Stmt) => Stmt)(using joinpoints: Joinpoints): Option[Stmt] = boundary {
+                       (scope: (Stmt => Stmt) => Stmt)(using C: Context): Option[Stmt] = boundary {
+    if (!C.canCopyContinuation) break(None)
+
     val fresh: Map[Id, Id] = continuation.prompt.names.map { id => id -> Id(id) }.toMap
     object renaming extends Tree.Rewrite {
       override def rewrite(id: Id): Id = fresh.getOrElse(id, id)
@@ -322,7 +329,7 @@ object StaticResumptions {
     }
 
     val built = if (shifts.forall(_.resumesWithValues)) takingAValue else takingAComputation
-    joinpoints.built += built
+    C.joinpoints += built
     Some(Stmt.Def(built.id, built.block, built.scope))
   }
 
