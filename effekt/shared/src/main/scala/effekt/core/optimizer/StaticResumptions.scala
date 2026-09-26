@@ -2,6 +2,8 @@ package effekt
 package core
 package optimizer
 
+import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.boundary
 import scala.util.boundary.break
 
@@ -30,7 +32,7 @@ object StaticResumptions {
 
       case Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt @ BlockParam(_, Type.TPrompt(answer), _)), body)) =>
         Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt),
-          reduceShifts(Prompt(prompt, cparams.head, answer), rewrite(body), joinable = true)))
+          reduceReset(Prompt(prompt, cparams.head, answer), rewrite(body))))
 
       case other => super.rewrite(other)
     }
@@ -166,12 +168,28 @@ object StaticResumptions {
   }
 
 
+  /** The joinpoints built while one reset is reduced, checked by [[reduceReset]] once it is rewritten. */
+  class Joinpoints {
+    val built: mutable.ListBuffer[Id] = mutable.ListBuffer.empty
+  }
+
   /**
-   * Walks the static context of [[d]] and treats every shift to it.
-   *
-   * @param joinable no `var` or `region` lies between [[d]] and here, so frames can still be copied
+   * Processes every shift to [[prompt]] in [[body]], keeping the joinpoints only if none of them can observe that
+   * its prompt is not the old one; otherwise the shifts are treated in place only.
    */
-  def reduceShifts(prompt: Prompt, stmt: Stmt, joinable: Boolean): Stmt = stmt match {
+  def reduceReset(prompt: Prompt, body: Stmt): Stmt = {
+    given joinpoints: Joinpoints = Joinpoints()
+    val joined = reduceShifts(prompt, body, joinable = true)
+    if (joinpoints.built.exists(observesOldPrompt(prompt, _, joined))) reduceShifts(prompt, body, joinable = false)
+    else joined
+  }
+
+  /**
+   * Walks the static context of [[prompt]] and processes every shift to it.
+   *
+   * @param joinable no `var` or `region` lies between [[prompt]] and here, so frames can still be copied
+   */
+  def reduceShifts(prompt: Prompt, stmt: Stmt, joinable: Boolean)(using Joinpoints): Stmt = stmt match {
     // 1) a shift to `prompt`, with nothing left between it and the prompt
     case prompt.Shift(shift) =>
       // 1a) in place, since any exit is the answer already
@@ -244,7 +262,7 @@ object StaticResumptions {
     }
 
   /** [[ shift(p) { {k} => b } ]] ~> def j(y) = reset { p' => return y }; b[ resume(k){return e} := j(e) ]   if `k` is only resumed */
-  private def copy(continuation: Continuation, shift: Shift): Option[Stmt] =
+  private def copy(continuation: Continuation, shift: Shift)(using Joinpoints): Option[Stmt] =
     if (shift.resumesOnly) {
       joinpoint(continuation, shift.result, List(shift)) { jump =>
         shift.replaceResumptions(jump)
@@ -257,49 +275,32 @@ object StaticResumptions {
    * Binds `def j(y) = [[continuation]].fill(return y)` around `scope(e => j(e))`, with the prompt renamed,
    * or [[takingAComputation]] the thunked form.
    *
-   * The machine re-installs the *same* prompt on resume, a join point only a fresh one: nothing other than
-   * the renamed binders may know the old name, neither inside the join point nor in what is passed to it.
-   * Renaming would hide that, so it is checked on the free variables before renaming.
+   * The machine re-installs the *same* prompt on resume, a join point a fresh one
+   * whether anything can distinguish that is decided once the whole reset is rewritten ([[reduceReset]]).
    *
    * @param shifts the shifts whose shifts jump here, which decide the form it takes
    */
   private def joinpoint(continuation: Continuation, result: ValueType, shifts: List[Shift])
-                       (scope: (Stmt => Stmt) => Stmt): Option[Stmt] = boundary {
+                       (scope: (Stmt => Stmt) => Stmt)(using joinpoints: Joinpoints): Option[Stmt] = boundary {
     val fresh: Map[Id, Id] = continuation.prompt.names.map { id => id -> Id(id) }.toMap
     object renaming extends Tree.Rewrite {
       override def rewrite(id: Id): Id = fresh.getOrElse(id, id)
     }
-    def knowsOldName(stmt: Stmt): Boolean = {
-      val free = stmt.free
-      free.blocks.toMap.exists { case (id, (tpe, capt)) => !fresh.contains(id) && (capt ++ captures(tpe)).exists(fresh.contains) } ||
-        free.values.toMap.exists { case (id, tpe) => !fresh.contains(id) && captures(tpe).exists(fresh.contains) }
-    }
-    if (captures(result).exists(fresh.contains)) break(None)
 
     val j = Id("j")
 
     /** The join point's body: the continuation's frames. */
-    def frames(filled: Stmt): Stmt = {
-      val code = continuation.fill(filled)
-      if (knowsOldName(code)) break(None)
-      reduce.rewrite(renaming.rewrite(code))
-    }
-
-    /** Nothing may enter the join point carrying a name the copy renamed. */
-    def entering(stmt: Stmt): Stmt = {
-      if (stmt.capt.exists(fresh.contains) || knowsOldName(stmt)) break(None)
-      stmt
-    }
+    def frames(filled: Stmt): Stmt = reduce.rewrite(renaming.rewrite(continuation.fill(filled)))
 
     /** `def j(y) = reset { p => E[return y] }` */
     def takingAValue: Stmt = {
       val y = ValueParam(Id("y"), result)
       val jDef = BlockLit(Nil, Nil, List(y), Nil, frames(Stmt.Return(Expr.ValueVar(y.id, y.tpe))))
       val jVar = Block.BlockVar(j, jDef.tpe, jDef.capt)
-      Stmt.Def(j, jDef, scope { stmt => entering(stmt) match {
+      Stmt.Def(j, jDef, scope {
         case Stmt.Return(e) => Stmt.App(jVar, Nil, List(e), Nil)
         case _ => break(None)
-      }})
+      })
     }
 
     /** `def j{s} = reset { p => E[s()] }` */
@@ -311,24 +312,79 @@ object StaticResumptions {
         frames(Stmt.App(Block.BlockVar(s, sParam.tpe, Set(sCapt)), Nil, Nil, Nil)))
       val jVar = Block.BlockVar(j, jDef.tpe, jDef.capt)
       Stmt.Def(j, jDef, scope { stmt =>
-        Stmt.App(jVar, Nil, Nil, List(BlockLit(Nil, Nil, Nil, Nil, entering(stmt))))
+        Stmt.App(jVar, Nil, Nil, List(BlockLit(Nil, Nil, Nil, Nil, stmt)))
       })
     }
 
-    Some(if (shifts.forall(_.resumesWithValues)) takingAValue else takingAComputation)
+    val built = if (shifts.forall(_.resumesWithValues)) takingAValue else takingAComputation
+    joinpoints.built += j
+    Some(built)
   }
 
-  /** The captures that occur in a type. */
-  private def captures(tpe: ValueType): Captures = tpe match {
-    case ValueType.Var(_) => Set.empty
-    case ValueType.Data(_, targs) => targs.flatMap(captures).toSet
-    case ValueType.Boxed(tpe, capt) => capt ++ captures(tpe)
+  /**
+   * Whether joinpoint [[j]] in [[body]] can observe that its prompt is a fresh copy of [[prompt]]'s.
+   *
+   * It cannot when it is only ever tail-called, since its prompt is then installed right where the old one is.
+   * Otherwise it can when anything running in it, or passed to it, reaches the old prompt through what [[body]] binds.
+   * This follows identifiers, not captures: the uses of a handler's capability carry its own capture, not the prompt's.
+   */
+  private def observesOldPrompt(prompt: Prompt, j: Id, body: Stmt): Boolean = {
+    // for every binder, what its definition mentions; a parameter mentions nothing that can be followed,
+    // so one that can hold a block could be anything -- except a nested prompt or a region, which is fresh
+    val mentions = mutable.Map.empty[Id, Set[Id]]
+    var definition: Option[(Block, Stmt)] = None
+    val entering = mutable.ListBuffer.empty[Id]
+
+    object bindings extends Tree.Query[Unit, Unit] {
+      def empty = ()
+      def combine = (_, _) => ()
+      def parameters(vparams: List[ValueParam], bparams: List[BlockParam]): Unit = {
+        bparams.foreach { p => mentions.getOrElseUpdate(p.id, Set(prompt.id)) }
+        vparams.foreach { p => if (mayHoldBlock(p.tpe)) mentions.getOrElseUpdate(p.id, Set(prompt.id)) }
+      }
+      override def visit[T](t: T)(visitor: Unit ?=> T => Unit)(using Unit): Unit = {
+        t match {
+          case Stmt.Def(id, block, rest) =>
+            mentions(id) = block.free.freeIds
+            if (id == j) definition = Some((block, rest))
+          case Stmt.Let(id, binding, _) => mentions(id) = binding.free.freeIds
+          case Stmt.Val(id, binding, _) => mentions(id) = binding.free.freeIds
+          case Stmt.ImpureApp(id, callee, _, vargs, bargs, _) =>
+            mentions(id) = callee.free.freeIds ++ vargs.flatMap(_.free.freeIds) ++ bargs.flatMap(_.free.freeIds)
+          // a cell may have been written anywhere
+          case Stmt.Get(id, tpe, _, _, _) => if (mayHoldBlock(tpe)) mentions(id) = Set(prompt.id)
+          case Stmt.App(Block.BlockVar(`j`, _, _), _, vargs, bargs) =>
+            entering ++= vargs.flatMap(_.free.freeIds) ++ bargs.flatMap(_.free.freeIds)
+          case Stmt.Reset(BlockLit(_, _, _, bparams, _)) => bparams.foreach { p => mentions(p.id) = Set.empty }
+          case Stmt.Region(BlockLit(_, _, _, bparams, _)) => bparams.foreach { p => mentions(p.id) = Set.empty }
+          case BlockLit(_, _, vparams, bparams, _) => parameters(vparams, bparams)
+          case Operation(_, _, _, vparams, bparams, _) => parameters(vparams, bparams)
+          case _ => ()
+        }
+        visitor(t)
+      }
+    }
+    bindings.query(body)(using ())
+
+    @tailrec
+    def reaches(todo: List[Id], seen: Set[Id]): Boolean = todo match {
+      case Nil => false
+      case id :: _ if id == prompt.id => true
+      case id :: rest if seen.contains(id) => reaches(rest, seen)
+      case id :: rest => reaches(mentions.getOrElse(id, Set.empty).toList ++ rest, seen + id)
+    }
+
+    definition match {
+      case Some((block, rest)) => !tailCalledOnly(j, rest) && reaches(block.free.freeIds.toList ++ entering, Set.empty)
+      case None => false
+    }
   }
 
-  private def captures(tpe: BlockType): Captures = tpe match {
-    case BlockType.Function(_, cparams, vparams, bparams, result) =>
-      (vparams.flatMap(captures) ++ bparams.flatMap(captures) ++ captures(result)).toSet -- cparams
-    case BlockType.Interface(_, targs) => targs.flatMap(captures).toSet
+  /** Whether a value of this type can hold a block, and so a closure over a prompt. */
+  private def mayHoldBlock(tpe: ValueType): Boolean = tpe match {
+    case ValueType.Var(_) => true
+    case ValueType.Data(_, targs) => targs.exists(mayHoldBlock)
+    case ValueType.Boxed(_, _) => true
   }
 
   /**

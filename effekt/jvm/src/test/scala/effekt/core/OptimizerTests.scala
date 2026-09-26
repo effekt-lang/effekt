@@ -535,6 +535,35 @@ class OptimizerTests extends CoreTests {
     removeTailResumptions(input, input)
   }
 
+  // A handler's capability is a `def` whose uses carry its own capture, never the prompt's (here `{fc}`).
+  test("a capability that shifts to the prompt must not be called in the frames of a join point") {
+    val input =
+      """ def main = { () => reset { (){p @ pc: Prompt[Int]} => def f = { () => shift (p : Prompt[Int] @ {pc}) { {i: Resume[Int, Int]} => return 0 } } val x = shift (p : Prompt[Int] @ {pc}) { {k: Resume[Int, Int]} => val a = resume (k : Resume[Int, Int] @ {k}) { return 1 }; return 7 }; val z = (f : () => Int @ {fc})(); return z:Int } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
+  }
+
+  test("a capability that shifts to the prompt must not be passed into a join point") {
+    val input =
+      """ def main = { () => reset { (){p @ pc: Prompt[Int]} => def f = { () => shift (p : Prompt[Int] @ {pc}) { {i: Resume[Int, Int]} => return 0 } } val x = shift (p : Prompt[Int] @ {pc}) { {k: Resume[Int, Int]} => val a = resume (k : Resume[Int, Int] @ {k}) { (f : () => Int @ {fc})() }; return 7 }; return x:Int } }
+        |""".stripMargin
+
+    removeTailResumptions(input, input)
+  }
+
+  test("a join point only ever tail-called may call a capability that shifts to the prompt") {
+    val input =
+      """ def main = { (b: Bool) => reset { (){p @ pc: Prompt[Int]} => def f = { () => shift (p : Prompt[Int] @ {pc}) { {i: Resume[Int, Int]} => return 0 } } val x = shift (p : Prompt[Int] @ {pc}) { {k: Resume[Int, Int]} => if (b: Bool) { resume (k : Resume[Int, Int] @ {k}) { return 1 } } else { return 5 } }; val z = (f : () => Int @ {fc})(); return z:Int } }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { (b: Bool) => reset { (){p @ pc: Prompt[Int]} => def f = { () => shift (p : Prompt[Int] @ {pc}) { {i: Resume[Int, Int]} => return 0 } } def j = { (y: Int) => reset { (){q @ qc: Prompt[Int]} => val x = return y:Int; val z = (f : () => Int @ {fc})(); return z:Int } } if (b: Bool) { (j : (Int) => Int @ {fc})(1) } else { return 5 } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, expected)
+  }
+
   test("a call carrying a capability to a prompt we are inside of is inlined past the normal budget") {
     val input =
       """ interface Exc { raise: () => Int }
