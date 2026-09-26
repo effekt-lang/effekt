@@ -2,6 +2,8 @@ package effekt
 package core
 package optimizer
 
+import effekt.util.DB
+
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.boundary
@@ -168,9 +170,12 @@ object StaticResumptions {
   }
 
 
+  /** A joinpoint `def id = block`, bound around [[scope]], where the resumptions now call it. */
+  case class Joinpoint(id: Id, block: Block, scope: Stmt)
+
   /** The joinpoints built while one reset is reduced, checked by [[reduceReset]] once it is rewritten. */
   class Joinpoints {
-    val built: mutable.ListBuffer[Id] = mutable.ListBuffer.empty
+    val built: mutable.ListBuffer[Joinpoint] = mutable.ListBuffer.empty
   }
 
   /**
@@ -293,91 +298,100 @@ object StaticResumptions {
     def frames(filled: Stmt): Stmt = reduce.rewrite(renaming.rewrite(continuation.fill(filled)))
 
     /** `def j(y) = reset { p => E[return y] }` */
-    def takingAValue: Stmt = {
+    def takingAValue: Joinpoint = {
       val y = ValueParam(Id("y"), result)
       val jDef = BlockLit(Nil, Nil, List(y), Nil, frames(Stmt.Return(Expr.ValueVar(y.id, y.tpe))))
       val jVar = Block.BlockVar(j, jDef.tpe, jDef.capt)
-      Stmt.Def(j, jDef, scope {
+      Joinpoint(j, jDef, scope {
         case Stmt.Return(e) => Stmt.App(jVar, Nil, List(e), Nil)
         case _ => break(None)
       })
     }
 
     /** `def j{s} = reset { p => E[s()] }` */
-    def takingAComputation: Stmt = {
+    def takingAComputation: Joinpoint = {
       val s = Id("s")
       val sCapt = Id("sCapt")
       val sParam = BlockParam(s, BlockType.Function(Nil, Nil, Nil, Nil, result), Set(sCapt))
       val jDef = BlockLit(Nil, List(sCapt), Nil, List(sParam),
         frames(Stmt.App(Block.BlockVar(s, sParam.tpe, Set(sCapt)), Nil, Nil, Nil)))
       val jVar = Block.BlockVar(j, jDef.tpe, jDef.capt)
-      Stmt.Def(j, jDef, scope { stmt =>
+      Joinpoint(j, jDef, scope { stmt =>
         Stmt.App(jVar, Nil, Nil, List(BlockLit(Nil, Nil, Nil, Nil, stmt)))
       })
     }
 
     val built = if (shifts.forall(_.resumesWithValues)) takingAValue else takingAComputation
-    joinpoints.built += j
-    Some(built)
+    joinpoints.built += built
+    Some(Stmt.Def(built.id, built.block, built.scope))
   }
 
   /**
-   * Whether joinpoint [[j]] in [[body]] can observe that its prompt is a fresh copy of [[prompt]]'s.
+   * Whether [[joinpoint]] can observe that its prompt is a fresh copy of [[prompt]]'s, in [[body]].
    *
    * It cannot when it is only ever tail-called, since its prompt is then installed right where the old one is.
    * Otherwise it can when anything running in it, or passed to it, reaches the old prompt through what [[body]] binds.
    * This follows identifiers, not captures: the uses of a handler's capability carry its own capture, not the prompt's.
    */
-  private def observesOldPrompt(prompt: Prompt, j: Id, body: Stmt): Boolean = {
-    // for every binder, what its definition mentions; a parameter mentions nothing that can be followed,
-    // so one that can hold a block could be anything -- except a nested prompt or a region, which is fresh
-    val mentions = mutable.Map.empty[Id, Set[Id]]
-    var definition: Option[(Block, Stmt)] = None
-    val entering = mutable.ListBuffer.empty[Id]
-
-    object bindings extends Tree.Query[Unit, Unit] {
-      def empty = ()
-      def combine = (_, _) => ()
-      def parameters(vparams: List[ValueParam], bparams: List[BlockParam]): Unit = {
-        bparams.foreach { p => mentions.getOrElseUpdate(p.id, Set(prompt.id)) }
-        vparams.foreach { p => if (mayHoldBlock(p.tpe)) mentions.getOrElseUpdate(p.id, Set(prompt.id)) }
-      }
-      override def visit[T](t: T)(visitor: Unit ?=> T => Unit)(using Unit): Unit = {
-        t match {
-          case Stmt.Def(id, block, rest) =>
-            mentions(id) = block.free.freeIds
-            if (id == j) definition = Some((block, rest))
-          case Stmt.Let(id, binding, _) => mentions(id) = binding.free.freeIds
-          case Stmt.Val(id, binding, _) => mentions(id) = binding.free.freeIds
-          case Stmt.ImpureApp(id, callee, _, vargs, bargs, _) =>
-            mentions(id) = callee.free.freeIds ++ vargs.flatMap(_.free.freeIds) ++ bargs.flatMap(_.free.freeIds)
-          // a cell may have been written anywhere
-          case Stmt.Get(id, tpe, _, _, _) => if (mayHoldBlock(tpe)) mentions(id) = Set(prompt.id)
-          case Stmt.App(Block.BlockVar(`j`, _, _), _, vargs, bargs) =>
-            entering ++= vargs.flatMap(_.free.freeIds) ++ bargs.flatMap(_.free.freeIds)
-          case Stmt.Reset(BlockLit(_, _, _, bparams, _)) => bparams.foreach { p => mentions(p.id) = Set.empty }
-          case Stmt.Region(BlockLit(_, _, _, bparams, _)) => bparams.foreach { p => mentions(p.id) = Set.empty }
-          case BlockLit(_, _, vparams, bparams, _) => parameters(vparams, bparams)
-          case Operation(_, _, _, vparams, bparams, _) => parameters(vparams, bparams)
-          case _ => ()
-        }
-        visitor(t)
-      }
-    }
-    bindings.query(body)(using ())
+  private def observesOldPrompt(prompt: Prompt, joinpoint: Joinpoint, body: Stmt): Boolean = {
+    lazy val mentioned = mentions(prompt, body)
 
     @tailrec
     def reaches(todo: List[Id], seen: Set[Id]): Boolean = todo match {
       case Nil => false
       case id :: _ if id == prompt.id => true
       case id :: rest if seen.contains(id) => reaches(rest, seen)
-      case id :: rest => reaches(mentions.getOrElse(id, Set.empty).toList ++ rest, seen + id)
+      case id :: rest => reaches(mentioned.getOrElse(id, Set.empty).toList ++ rest, seen + id)
     }
 
-    definition match {
-      case Some((block, rest)) => !tailCalledOnly(j, rest) && reaches(block.free.freeIds.toList ++ entering, Set.empty)
-      case None => false
+    !tailCalledOnly(joinpoint.id, joinpoint.scope) &&
+      reaches(joinpoint.block.free.freeIds.toList ++ arguments(joinpoint), Set.empty)
+  }
+
+  /** What is passed at the calls of [[joinpoint]], and thus runs inside of it. */
+  private def arguments(joinpoint: Joinpoint): List[Id] = {
+    object calls extends Tree.Query[Unit, List[Id]] {
+      def empty = Nil
+      def combine = _ ++ _
+      override def stmt(using Unit) = {
+        case Stmt.App(Block.BlockVar(id, _, _), _, vargs, bargs) if id == joinpoint.id =>
+          vargs.flatMap(_.free.freeIds) ++ bargs.flatMap(_.free.freeIds)
+      }
     }
+    calls.query(joinpoint.scope)(using ())
+  }
+
+  /** For every binder in [[body]], what does its definition mention. */
+  private def mentions(prompt: Prompt, body: Stmt): DB[Set[Id]] = {
+    def unknown(vparams: List[ValueParam], bparams: List[BlockParam]): DB[Set[Id]] =
+      DB.from((bparams.map(_.id) ++ vparams.filter(p => mayHoldBlock(p.tpe)).map(_.id)).map(_ -> Set(prompt.id)))
+    def fresh(bparams: List[BlockParam]): DB[Set[Id]] =
+      DB.from(bparams.map(_.id -> Set.empty[Id]))
+
+    object binders extends Tree.Query[Unit, DB[Set[Id]]] {
+      def empty = DB.empty
+      def combine = _ ++ _
+
+      override def stmt(using Unit) = {
+        case Stmt.Def(id, block, rest) => query(block) ++ query(rest) + (id -> block.free.freeIds)
+        case Stmt.Let(id, binding, rest) => query(binding) ++ query(rest) + (id -> binding.free.freeIds)
+        case Stmt.Val(id, binding, rest) => query(binding) ++ query(rest) + (id -> binding.free.freeIds)
+        case Stmt.ImpureApp(id, callee, _, vargs, bargs, rest) =>
+          val arguments = vargs.flatMap(_.free.freeIds) ++ bargs.flatMap(_.free.freeIds)
+          all(vargs, query) ++ all(bargs, query) ++ query(rest) + (id -> (callee.free.freeIds ++ arguments))
+        // a cell may have been written anywhere
+        case Stmt.Get(id, tpe, _, _, rest) if mayHoldBlock(tpe) => query(rest) + (id -> Set(prompt.id))
+        case Stmt.Reset(block) => query(block) ++ fresh(block.bparams)
+        case Stmt.Region(block) => query(block) ++ fresh(block.bparams)
+      }
+      override def block(using Unit) = {
+        case BlockLit(_, _, vparams, bparams, body) => query(body) ++ unknown(vparams, bparams)
+      }
+      override def operation(using Unit) = {
+        case Operation(_, _, _, vparams, bparams, body) => query(body) ++ unknown(vparams, bparams)
+      }
+    }
+    binders.query(body)(using ())
   }
 
   /** Whether a value of this type can hold a block, and so a closure over a prompt. */
