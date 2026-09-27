@@ -1000,9 +1000,10 @@ trait TransformerOps extends ContextOps { Context: Context =>
     val substitutionBefore = captureSubstitution
     val b = ListBuffer.empty[Binding]
     bindings = b
-    val result = block
-    bindings = before
-    captureSubstitution = substitutionBefore
+    val result = try block finally {
+      bindings = before
+      captureSubstitution = substitutionBefore
+    }
     (result, b.toList)
   }
 }
