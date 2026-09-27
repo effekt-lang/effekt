@@ -836,7 +836,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transform(capt: Captures)(using Context): core.Captures = capt match {
     case CaptUnificationVar(role) => Context.panic(pp"$capt should be a concrete capture set in this phase.")
-    case CaptureSet(captures) => captures.map(x => x: Symbol) // that is really a noop...
+    case CaptureSet(captures) => captures.flatMap(Context.substitute)
   }
 
   // Helpers
@@ -925,9 +925,23 @@ trait TransformerOps extends ContextOps { Context: Context =>
    * A _mutable_ ListBuffer that stores all bindings to be inserted at the current scope
    */
   private var bindings: ListBuffer[Binding] = ListBuffer()
+  private var captureSubstitution: Map[Capture, core.Captures] = Map.empty
 
   private[core] def initTransformerState() = {
     bindings = ListBuffer()
+    captureSubstitution = Map.empty
+  }
+
+  private[core] def substitute(capture: Capture): core.Captures =
+    captureSubstitution.getOrElse(capture, Set(capture))
+
+  private def record(binding: Binding): Unit = {
+    bindings += binding
+    binding match {
+      case Binding.Def(id: TrackedParam, block) =>
+        captureSubstitution = captureSubstitution.updated(id.capture, block.capt)
+      case _ => ()
+    }
   }
 
   /**
@@ -971,22 +985,25 @@ trait TransformerOps extends ContextOps { Context: Context =>
 
   private[core] def bind(name: BlockSymbol, b: Block): BlockVar = {
     val binding = Binding.Def(name, b)
-    bindings += binding
+    record(binding)
     BlockVar(name, b.tpe, b.capt)
   }
 
   private[core] def emit(binding: Binding): Unit =
-    bindings += binding
+    record(binding)
 
   private[core] def assertNoBindings(): Unit =
     util.assert(bindings.isEmpty, s"There should not be any bindings left on the toplevel! Got: ${bindings}")
 
   private[core] def withBindings[R](block: => R): (R, List[Binding]) = Context in {
     val before = bindings
+    val substitutionBefore = captureSubstitution
     val b = ListBuffer.empty[Binding]
     bindings = b
-    val result = block
-    bindings = before
+    val result = try block finally {
+      bindings = before
+      captureSubstitution = substitutionBefore
+    }
     (result, b.toList)
   }
 }
