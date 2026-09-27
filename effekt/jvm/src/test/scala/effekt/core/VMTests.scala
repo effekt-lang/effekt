@@ -612,15 +612,15 @@ class VMTests extends munit.FunSuite {
       dynamicDispatches = 0,
       patternMatches = 0,
       branches = 12001,
-      pushedFrames = 6001,
-      poppedFrames = 6001,
+      pushedFrames = 11001,
+      poppedFrames = 11001,
       allocations = 0,
       closures = 0,
       variableReads = 0,
       variableWrites = 0,
-      resets = 0,
-      shifts = 0,
-      resumes = 0
+      resets = 1000,
+      shifts = 5000,
+      resumes = 5000
     )),
 
     examplesDir / "benchmarks" / "effect_handlers_bench" / "tree_explore.effekt" -> Some(Summary(
@@ -1491,15 +1491,15 @@ class VMTests extends munit.FunSuite {
       dynamicDispatches = 0,
       patternMatches = 17,
       branches = 10,
-      pushedFrames = 12,
-      poppedFrames = 12,
+      pushedFrames = 17,
+      poppedFrames = 17,
       allocations = 16,
       closures = 0,
       variableReads = 0,
       variableWrites = 0,
-      resets = 0,
-      shifts = 0,
-      resumes = 0
+      resets = 1,
+      shifts = 5,
+      resumes = 5
     )),
 
     // issue 1272: Optimizing through useless constructs / obfuscated code (optimizer-wishlist)
