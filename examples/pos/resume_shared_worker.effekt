@@ -1,0 +1,15 @@
+// `tick`'s cont. is copied under a fresh prompt, the copy calls `countdown` again.
+effect tick(n: Int): Unit
+effect grab(n: Int): Unit
+
+def countdown(n: Int): Unit / {tick, grab} =
+  if (n > 0) {
+    if (n == 2) { var c = n; do grab(c) } else { do tick(n) }
+    countdown(n - 1)
+  }
+
+def main() = {
+  try countdown(3)
+  with tick { n => resume(()); println("after tick " ++ n.show) }
+  with grab { n => resume(()); println("after grab " ++ n.show) }
+}
