@@ -49,6 +49,7 @@ object TransformerCps extends Transformer {
     errors: Context
   )
   implicit def autoContext(using C: TransformerContext): Context = C.errors
+  implicit def autoDeclarations(using C: TransformerContext): DeclarationContext = C.declarations
 
 
   /**
@@ -158,12 +159,11 @@ object TransformerCps extends Transformer {
     js.RawExpr(t.strings, t.args.map(toJS))
 
   def toJS(d: core.Declaration): List[js.Stmt] = d match {
-    case core.Data(did, tparams, ctors) =>
-      ctors.zipWithIndex.map { case (ctor, index) => generateConstructor(ctor, index) }
+    // every value says which constructor it is at the moment
+    case core.Data(id, tparams, constructors) => Nil
 
     // interfaces are structurally typed at the moment, no need to generate anything.
-    case core.Interface(id, tparams, operations) =>
-      Nil
+    case core.Interface(id, tparams, operations) => Nil
   }
 
   def toJS(id: Id, b: cps.Block)(using TransformerContext): js.Expr = b match {
@@ -217,14 +217,15 @@ object TransformerCps extends Transformer {
   }
 
   def toJS(e: cps.Expr)(using D: TransformerContext): js.Expr = e match {
-    case Expr.ValueVar(id)           => nameRef(id)
-    case Expr.Literal((), core.Type.TUnit)            => $effekt.field("unit")
-    case Expr.Literal(s: String, core.Type.TString)     => JsString(escape(s))
-    case Expr.Literal(b: Byte, core.Type.TByte)       => js.RawExpr(UByte.unsafeFromByte(b).toHexString)
-    case literal: Expr.Literal       => js.RawExpr(literal.value.toString) // TODO This should match on the type...
-    case Expr.PureApp(id, vargs)     => inlineExtern(id, vargs)
-    case Expr.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
-    case Expr.Box(b)                 => argumentToJS(b)
+    case Expr.ValueVar(id)                          => nameRef(id)
+    case Expr.Literal((), core.Type.TUnit)          => $effekt.field("unit")
+    case Expr.Literal(s: String, core.Type.TString) => JsString(escape(s))
+    case Expr.Literal(b: Byte, core.Type.TByte)     => js.RawExpr(UByte.unsafeFromByte(b).toHexString)
+    case literal: Expr.Literal                      => js.RawExpr(literal.value.toString) // TODO This should match on the type...
+    case Expr.PureApp(id, vargs)                    => inlineExtern(id, vargs)
+    // /* Cons_0 */ { head_0: h, tail_0: t }
+    case Expr.Make(data, constructor, vargs)        => encodingFor(constructor).make(vargs map toJS)
+    case Expr.Box(b)                                => argumentToJS(b)
   }
 
   def toJS(s: cps.Stmt)(using D: TransformerContext): Binding[List[js.Stmt]] = s match {
@@ -291,30 +292,7 @@ object TransformerCps extends Transformer {
         js.Const(nameDef(id), js.Call(nameRef(callee), vargs.map(toJS) ++ bargs.map(argumentToJS))) :: toJS(body).run(k)
       }
 
-    case cps.Stmt.Match(sc, Nil, None) =>
-      pure(js.Return($effekt.call("unreachable")) :: Nil)
-
-    case cps.Stmt.Match(sc, List((tag, clause)), None) =>
-      val scrutinee = toJS(sc)
-      val (_, stmts) = toJS(scrutinee, tag, clause)
-      stmts
-
-    // (function () { switch (sc.tag) {  case 0: return f17.apply(null, sc.data) }
-    case cps.Stmt.Match(sc, clauses, default) =>
-      val scrutinee = toJS(sc)
-
-      pure(js.Switch(js.Member(scrutinee, `tag`),
-        clauses.map { case (tag, clause) =>
-          val (e, binding) = toJS(scrutinee, tag, clause);
-
-          val stmts = binding.stmts
-
-          stmts.lastOption match {
-            case Some(terminator : (js.Stmt.Return | js.Stmt.Break | js.Stmt.Continue)) => (e, stmts)
-            case other => (e, stmts :+ js.Break())
-          }
-        },
-        default.map { s => toJS(s).stmts }) :: Nil)
+    case m: cps.Stmt.Match => pure(toJS(m))
 
     case cps.Stmt.Jump(k, vargs, ks) if D.directStyle.exists(c => c.k == k) => D.directStyle match {
       case Some(ContinuationInfo(k2, params2, ks2)) =>
@@ -471,21 +449,111 @@ object TransformerCps extends Transformer {
       pure(js.Return($effekt.call("hole", JsString(span.range.from.format))) :: Nil)
   }
 
-  def toJS(scrutinee: js.Expr, variant: Id, clause: cps.Clause)(using C: TransformerContext): (js.Expr, Binding[List[js.Stmt]]) =
-    clause match {
-      case cps.Clause(vparams, body) =>
-        val fields = C.declarations.getConstructor(variant).fields.map(_.id)
-        val tag = js.RawExpr(C.declarations.getConstructorTag(variant).toString)
+  /** One arm of a match: the constructor it takes, how that constructor is written, and its body. */
+  case class Clause[+E <: Encoding](constructor: Id, encoding: E, vparams: List[Id], body: cps.Stmt)
 
-        val freeVars = cps.Variables.free(body)
-        def isUsed(x: Id) = freeVars contains x
+  /**
+   * The clauses of a match, in the order it writes them, and never none: `opens` is the one it tries
+   * first. [[absent]] and [[tagged]] are views of the same list, not a split of it, so the order is
+   * kept rather than recorded, and a `null` clause can never reach a `case` label.
+   */
+  case class Clauses(opens: Clause[Encoding], rest: List[Clause[Encoding]]) {
 
-        val extractedFields = (vparams zip fields).collect { case (p, f) if isUsed(p) =>
-          js.Const(nameDef(p), js.Member(scrutinee, memberNameRef(f)))
+    def all: List[Clause[Encoding]] = opens :: rest
+
+    /** The clauses whose values are `null`, which only a test finds. */
+    def absent: List[Clause[Encoding]] = all.collect { case c @ Clause(_, _: Encoding.AsNull, _, _) => c }
+
+    /** The clauses whose values write a tag, which is what a `case` label selects. */
+    def tagged: List[Clause[Tagged]] = all.collect {
+      case Clause(constructor, encoding: Tagged, vparams, body) =>
+        Clause(constructor, encoding, vparams, body)
+    }
+  }
+
+  object Clauses {
+    /** A match names at least one clause, and the caller has it, so it is passed rather than looked for. */
+    def of(opens: (Id, cps.Clause), rest: List[(Id, cps.Clause)])(using D: TransformerContext): Clauses =
+      def clause(named: (Id, cps.Clause)): Clause[Encoding] = named match {
+        case (constructor, cps.Clause(vparams, body)) =>
+          Clause(constructor, encodingFor(constructor), vparams, body)
+      }
+      Clauses(clause(opens), rest.map(clause))
+  }
+
+  def toJS(m: cps.Stmt.Match)(using D: TransformerContext): List[js.Stmt] =
+    val scrutinee = toJS(m.scrutinee)
+
+    def otherwise: List[js.Stmt] =
+      m.default.map { s => toJS(s).stmts } getOrElse (js.Return($effekt.call("unreachable")) :: Nil)
+
+    def bodyOf(clause: Clause[Encoding]): List[js.Stmt] = toJS(scrutinee, clause).stmts
+
+    // a match names each constructor once, so at most one clause applies; where one is named twice
+    // the first wins, as it would for a repeated `case` label
+    def first(clauses: List[Clause[Encoding]]): List[js.Stmt] =
+      clauses.headOption.map(bodyOf) getOrElse otherwise
+
+    def branch(dispatch: Dispatch, clauses: List[Clause[Encoding]]): js.Stmt = (dispatch, clauses) match {
+      // 1. one constructor left ~> ascribe the branch, but no switch needed
+      case (Dispatch.Known, one :: Nil)      => js.Ascribed(one.encoding.name, js.Block(bodyOf(one)))
+      // 2. no clause            ~> fallthrough to the `otherwise`
+      case (_             , Nil)             => js.Block(otherwise)
+      // 3. several clauses left ~> tell them apart according to `dispatch`
+      case (_             , opens :: others) => js.Block(select(dispatch, Clauses(opens, others)))
+    }
+
+    def select(dispatch: Dispatch, clauses: Clauses): List[js.Stmt] = dispatch match {
+      // const h = l.head_0; body
+      case Dispatch.Known => first(clauses.all)
+
+      // if (l === null) /* Nil_0 */ { ... } else /* Cons_0 */ { ... }, or `!==` with the branches
+      //   the other way round, so that the clauses stay in the order the match writes them.
+      case Dispatch.ByTest(rest) =>
+        val nothing = branch(Dispatch.Known, clauses.absent)
+        val present = branch(rest, clauses.tagged)
+
+        // Warning: no `break` may be emitted in either branch: it would bind to an enclosing loop.
+        clauses.opens.encoding match {
+          case _: Encoding.AsNull => js.If(js"${scrutinee} === ${js.Null}", nothing, present) :: Nil // first clause is the `null` one
+          case _                  => js.If(js"${scrutinee} !== ${js.Null}", present, nothing) :: Nil // first class is the tagged (non-`null`) one
         }
 
-        (tag, Binding { k => extractedFields ++ toJS(body).run(k) })
+      // switch (l.__tag) { case /* Cons_0 */ 1: const h = l.head_0; ...; default: ... }
+      case Dispatch.ByTag(tag) => clauses.tagged match {
+        case Nil => otherwise
+        case one :: Nil if m.default.isEmpty => bodyOf(one)
+        case tagged => js.Switch(tag.read(scrutinee), tagged.map { clause =>
+          val stmts = bodyOf(clause)
+          // a clause the switch would otherwise run on into needs the `break` it spells out
+          stmts.lastOption match {
+            case Some(terminator : (js.Stmt.Return | js.Stmt.Break | js.Stmt.Continue)) => (clause.encoding.label, stmts)
+            case other => (clause.encoding.label, stmts :+ js.Break())
+          }
+        }, m.default.map { s => toJS(s).stmts }) :: Nil
+      }
     }
+
+    // every clause of a match belongs to the same data type, so any one of them says how to tell them apart
+    m.clauses match {
+      case Nil => otherwise
+      case (opens @ (constructor, _)) :: rest => select(dispatchFor(constructor), Clauses.of(opens, rest))
+    }
+
+  // const h = l.head_0; const t = l.tail_0; body
+  def toJS(scrutinee: js.Expr, clause: Clause[Encoding])(using C: TransformerContext): Binding[List[js.Stmt]] =
+    val used = cps.Variables.free(clause.body)
+
+    val bound = (clause.vparams zip clause.encoding.members).collect {
+      case (p, field) if used contains p => field -> js.Pattern.Variable(nameDef(p))
+    }
+    val extractedFields = bound match {
+      case Nil                => Nil
+      case (field, p) :: Nil  => js.Const(p, js.Member(scrutinee, field)) :: Nil
+      case _                  => js.Const(js.Pattern.Object(bound), scrutinee) :: Nil
+    }
+
+    Binding { k => extractedFields ++ toJS(clause.body).run(k) }
 
   def toJS(d: cps.Def)(using D: TransformerContext): js.Stmt = d match {
     case cps.Def(id, block) =>
@@ -560,12 +628,12 @@ object TransformerCps extends Transformer {
   }
 
   private def canBeDirect(k: Id, stmt: Stmt)(using T: TransformerContext): Boolean =
-    def notIn(term: Stmt | Block | Expr | (Id, Clause) | Cont) =
+    def notIn(term: Stmt | Block | Expr | (Id, cps.Clause) | Cont) =
       val freeVars = term match {
         case s: Stmt => free(s)
         case b: Block => free(b)
         case p: Expr => free(p)
-        case (id, Clause(_, body)) => free(body)
+        case (id, cps.Clause(_, body)) => free(body)
         case c: Cont => free(c)
       }
       !freeVars.contains(k)
@@ -577,7 +645,7 @@ object TransformerCps extends Transformer {
       case Stmt.Invoke(callee, method, vargs, bargs, ks, k2) => notIn(stmt)
       case Stmt.If(cond, thn, els) => canBeDirect(k, thn) && canBeDirect(k, els)
       case Stmt.Match(scrutinee, clauses, default) => clauses.forall {
-        case (id, Clause(vparams, body)) => canBeDirect(k, body)
+        case (id, cps.Clause(vparams, body)) => canBeDirect(k, body)
       } && default.forall(body => canBeDirect(k, body))
       case Stmt.LetDef(id, binding, body) => notIn(binding) && canBeDirect(k, body)
       case Stmt.LetExpr(id, binding, body) => notIn(binding) && canBeDirect(k, body)
