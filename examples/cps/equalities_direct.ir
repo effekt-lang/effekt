@@ -1,0 +1,13 @@
+def main(seed, k) {
+  def f(x) {
+    k(x)
+  }
+  f(seed)
+}
+
+/// EQUALITIES
+
+main
+---
+f:
+  entry x = seed

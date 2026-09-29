@@ -1,0 +1,30 @@
+def main(ks, k) {
+  def loop(i, ks1, k1) {
+    run done = eq(i, 0);
+    if (done) {
+      k1(i, ks1)
+    } else {
+      run next = sub(i, 1);
+      loop!(next) @ ks1, k1
+    }
+  }
+  loop!(3) @ ks, k
+}
+
+// A tail call keeps its control arguments in `ReturnPoint.Tail`, rather than
+// among the ordinary call arguments. Static-argument specialization must
+// nevertheless bind invariant control parameters at the worker's entry.
+/// STATIC_ARGUMENTS
+
+def main_0(ks_1, k_2) {
+  def loop_worker_6706(i_6707) {
+    run done_7 = eq(i_6707, 0);
+    if (done_7) {
+      k_2(i_6707, ks_1)
+    } else {
+      run next_8 = sub(i_6707, 1);
+      loop_worker_6706(next_8)
+    }
+  }
+  loop_worker_6706(3)
+}

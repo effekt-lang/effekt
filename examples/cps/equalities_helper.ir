@@ -1,0 +1,18 @@
+def main(seed, k) {
+  def loop(x) {
+    def step(y) {
+      loop(y)
+    }
+    step(x)
+  }
+  loop(seed)
+}
+
+/// EQUALITIES
+
+main
+---
+loop:
+  entry x = seed
+step:
+  entry y = x

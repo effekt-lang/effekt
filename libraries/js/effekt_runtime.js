@@ -103,7 +103,7 @@ function restore(store, snap) {
 
 // Common Runtime
 // --------------
-const TOPLEVEL_K = (x, ks) => { throw { computationIsDone: true, result: x } }
+const TOPLEVEL_K = (x, ks) => ({ result: x })
 const TOPLEVEL_KS = { stack: null, prompt: Symbol("toplevel"), arena: null, rest: null }
 
 // The first variable in a scope creates its arena; until then `ks.arena` is null.
@@ -126,20 +126,23 @@ function CAPTURE(body) {
   return (ks, k) => {
     const res = body(x => TRAMPOLINE(() => k(x, ks)))
     if (typeof res === "function") return res
-    else throw { computationIsDone: true, result: $effekt.unit }
+    else return { result: $effekt.unit }
   }
 }
 
-const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
+// Returning from a reset crosses a continuation-segment boundary. The
+// boundary, rather than every continuation stored in the segment, resets the
+// native JavaScript stack.
+const RETURN = (x, ks) => () => ks.rest.stack(x, ks.rest)
 
-// HANDLE(ks, ks, (p, ks, k) => { STMT })
-function RESET(prog, ks, k) {
+// Creates a fresh prompt and returns the control state in which its body runs.
+function RESET(ks, k) {
   const prompt = Symbol(); // gensym
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  return prog(prompt, { stack: null, prompt, arena: null, rest }, RETURN)
+  return [prompt, { stack: null, prompt, arena: null, rest }, RETURN]
 }
 
-function SHIFT(p, body, ks, k) {
+function SHIFT(p, ks, k) {
 
   // TODO avoid constructing this object
   let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
@@ -159,11 +162,11 @@ function SHIFT(p, body, ks, k) {
 
   const k1 = meta.stack
   meta.stack = null
-  return body(cont, meta, k1)
+  return [cont, meta, k1]
 }
 
-// Rewind stack `cont` back onto `k` :: `ks` and resume with c
-function RESUME(cont, c, ks, k) {
+// Rewind stack `cont` back onto `k` :: `ks` and return the restored control state.
+function RESUME(cont, ks, k) {
   let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
   let toRewind = cont
   while (!!toRewind) {
@@ -174,30 +177,24 @@ function RESUME(cont, c, ks, k) {
 
   const k1 = meta.stack // TODO instead copy meta here, like elsewhere?
   meta.stack = null
-  return () => c(meta, k1)
+  return [meta, k1]
 }
 
 function RUN_TOPLEVEL(comp) {
-  try {
-    let a = comp(TOPLEVEL_KS, TOPLEVEL_K)
-    while (true) { a = a() }
-  } catch (e) {
-    if (e.computationIsDone) return e.result
-    else throw e
+  let step = comp(TOPLEVEL_KS, TOPLEVEL_K)
+  while (typeof step === "function") {
+    step = step()
   }
+  return step.result
 }
 
 // trampolines the given computation (like RUN_TOPLEVEL, but doesn't provide continuations)
 function TRAMPOLINE(comp) {
-  let a = comp;
-  try {
-    while (true) {
-      a = a()
-    }
-  } catch (e) {
-    if (e.computationIsDone) return e.result
-    else throw e
+  let step = comp
+  while (typeof step === "function") {
+    step = step()
   }
+  return step.result
 }
 
 // keeps the current trampoline going and dispatches the given task
@@ -207,7 +204,7 @@ function RUN(task) {
 
 // aborts the current continuation
 function ABORT(value) {
-  throw { computationIsDone: true, result: value }
+  return { result: value }
 }
 
 

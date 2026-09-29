@@ -1,0 +1,32 @@
+def main(n, ks, k) {
+  def loop(i, ks1, k1) {
+    def append(j, ks2, k2) {
+      run done = eq(j, 0);
+      if (done) {
+        k2(0, ks2)
+      } else {
+        run previous = sub(j, 1);
+        let rest = append!(previous, ks2, return);
+        run value = add(rest, 1);
+        k2(value, ks2)
+      }
+    }
+    let value = append!(i, ks1, return);
+    run finished = eq(i, 0);
+    if (finished) {
+      k1(value, ks1)
+    } else {
+      run previous = sub(i, 1);
+      let result = loop!(previous, ks1, return);
+      k1(result, ks1)
+    }
+  }
+  let result = loop!(n, ks, return);
+  k(result, ks)
+}
+
+// append's reified remainder contains the recursive call to loop. It cannot
+// jump to an enclosing JavaScript label, so that edge is not zero stack cost.
+/// CALLING_CONVENTIONS
+
+-

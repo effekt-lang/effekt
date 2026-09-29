@@ -1,0 +1,41 @@
+def main(choice, unknown, k) {
+  def local() {
+    k(0)
+  }
+  def apply(f) {
+    f()
+  }
+  if (choice) {
+    apply(local)
+  } else {
+    apply(unknown)
+  }
+}
+
+// One target is known, but the incoming function keeps the target set open.
+// The call therefore uses the stack-safe value-level entry.
+/// CONTROL_FLOW
+
+ranks
+  local = 0
+  main = 0
+transfers
+  local -> k: safe [?]
+  main -> apply: jump
+  main -> apply: jump
+  main -> f: safe [local, ?]
+
+/// JAVASCRIPT
+
+function main_0(choice_0, unknown_0, k_0) {
+  function local_0() {
+    return k_0(0);
+  }
+  let f_0 = undefined;
+  if (choice_0) {
+    f_0 = local_0;
+  } else {
+    f_0 = unknown_0;
+  }
+  return f_0();
+}

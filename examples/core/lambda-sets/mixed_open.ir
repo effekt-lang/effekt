@@ -1,0 +1,49 @@
+def inc(x: Int) = {
+  return x: Int
+}
+
+def compose(x: Int){g: (Int) => Int}{h: (Int) => Int} = {
+  val intermediate = (h: (Int) => Int @ {h})(x: Int);
+  (g: (Int) => Int @ {g})(intermediate: Int)
+}
+
+def main(x: Int){f: (Int) => Int} = {
+  (compose: (Int){g: (Int) => Int}{h: (Int) => Int} => Int @ {})(x: Int){
+    (inc: (Int) => Int @ {})
+  }{
+    (f: (Int) => Int @ {f})
+  }
+}
+
+export main
+
+/// LAMBDA_SETS
+
+S = compose ↦ { <inc, ?> },
+    inc ↦ { <> },
+    main ↦ { <?> }
+generic = { main }
+
+/// LAMBDA_SPECIALIZE
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def compose(x: Int){g: (Int) => Int}{h: (Int) => Int} = {
+  val intermediate = (h: (Int) => Int @ {h})(x: Int);
+  (g: (Int) => Int @ {g})(intermediate: Int)
+}
+
+def main(x: Int){f: (Int) => Int} = {
+  (compose_inc_open: (Int){h: (Int) => Int} => Int @ {})(x: Int){
+    (f: (Int) => Int @ {f})
+  }
+}
+
+def compose_inc_open(x: Int){h: (Int) => Int} = {
+  val intermediate = (h: (Int) => Int @ {h})(x: Int);
+  (inc: (Int) => Int @ {})(intermediate: Int)
+}
+
+export main

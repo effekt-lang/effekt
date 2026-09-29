@@ -1,0 +1,77 @@
+def go(x, ks1, k1) {
+  run tmp = eq(x, 0);
+  if (tmp) {
+    k1(0, ks1)
+  } else {
+    run tmp2 = sub(x, 1);
+    go(tmp2, ks1, k1)
+  }
+}
+def main(ks, k) {
+  go(10, ks, k)
+}
+
+/// FLOWS
+
+go
+---
+
+main
+---
+
+
+
+/// SINK_BLOCKS
+def main_1(ks_7, k_8) {
+  def go_0(x_2, ks1_3, k1_4) {
+    run tmp_5 = eq(x_2, 0);
+    if (tmp_5) {
+      k1_4(0, ks1_3)
+    } else {
+      run tmp2_6 = sub(x_2, 1);
+      go_0(tmp2_6, ks1_3, k1_4)
+    }
+  }
+  go_0(10, ks_7, k_8)
+}
+
+// we can specialize k1 and k, but not x
+/// FLOWS
+
+main
+---
+ks1_5 !-> ks_1
+k1_6 !-> k_2
+
+/// DROP_PARAMETERS
+def main(ks_1, k_2) {
+  def go(x_4) {
+    run tmp_7 = eq(x_4, 0);
+    if (tmp_7) {
+      k_2(0, ks_1)
+    } else {
+      run tmp2_8 = sub(x_4, 1);
+      go(tmp2_8)
+    }
+  }
+  go(10)
+}
+
+/// JAVASCRIPT
+
+function main_0(ks_0, k_0) {
+  let x_0 = undefined;
+  go_0: {
+    x_0 = 10;
+  }
+  go_0: while (true) {
+    const tmp_0 = eq_0(x_0, 0);
+    if (tmp_0) {
+      return k_0(0, ks_0);
+    } else {
+      const tmp_1 = sub_0(x_0, 1);
+      x_0 = tmp_1;
+      continue go_0;
+    }
+  }
+}

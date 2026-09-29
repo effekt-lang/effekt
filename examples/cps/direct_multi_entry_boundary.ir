@@ -1,0 +1,40 @@
+def main(flag, f, x, offset, ks, k) {
+  def join(value, joinKs, joinK) {
+    run result = add(value, offset);
+    joinK(result, joinKs)
+  }
+  if (flag) {
+    let value = f!(x, ks, return);
+    let result = join!(value, ks, return);
+    k(result, ks)
+  } else {
+    let value = f!(offset, ks, return);
+    let result = join!(value, ks, return);
+    k(result, ks)
+  }
+}
+
+// The unknown call reifies each remainder as a continuation closure. Those
+// closures cannot jump into a label in `main`'s activation, so `join` must
+// retain a function representation even though all of its calls are tail.
+/// JAVASCRIPT
+
+function main_0(flag_0, f_0, x_0, offset_0, ks_0, k_0) {
+  function join_0(value_0) {
+    const result_0 = add_0(value_0, offset_0);
+    return result_0;
+  }
+  if (flag_0) {
+    function k_1(value_1, ks_1) {
+      const result_1 = join_0(value_1);
+      return k_0(result_1, ks_0);
+    }
+    return f_0(x_0, ks_0, k_1);
+  } else {
+    function k_2(value_2, ks_2) {
+      const result_2 = join_0(value_2);
+      return k_0(result_2, ks_0);
+    }
+    return f_0(offset_0, ks_0, k_2);
+  }
+}

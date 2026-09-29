@@ -1,0 +1,61 @@
+def invoke(object) {
+  object.operation()
+}
+def loop(flag, k) {
+  if (flag) {
+    new object : Handler {
+      def operation() = { loop(false, k) }
+    }
+    invoke(object)
+  } else {
+    k(0)
+  }
+}
+def main(flag, k) {
+  loop(flag, k)
+}
+
+// The receiver is known compositionally at invoke's call site. The operation
+// entry, rather than either surrounding function, breaks the hidden cycle.
+// Its worker has no direct call site, however: the object contains only the
+// stack-safe adapter. The two closures can therefore be represented by one
+// stack-safe operation closure.
+// Moreover, the receiver analysis already establishes this operation as the
+// only target of invoke's property call, but JavaScript generation does not
+// yet use that result to devirtualize the invocation.
+/// CONTROL_FLOW
+
+ranks
+  main = 2
+  operation = 2
+  loop = 1
+  invoke = 0
+transfers
+  invoke -> object.operation: safe [?]
+  operation -> loop: direct [loop]
+  loop -> invoke: direct [invoke]
+  loop -> k: safe [?]
+  main -> loop: direct [loop]
+
+/// SAFE_ENTRIES
+
+operation operation
+
+/// JAVASCRIPT
+
+function invoke_0(object_0) {
+  return object_0.operation_0();
+}
+
+function loop_0(flag_0, k_0) {
+  if (flag_0) {
+    const object_1 = { operation_0: () => () => loop_0(false, k_0) };
+    return invoke_0(object_1);
+  } else {
+    return k_0(0);
+  }
+}
+
+function main_0(flag_1, k_1) {
+  return loop_0(flag_1, k_1);
+}

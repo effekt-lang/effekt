@@ -1,0 +1,94 @@
+def main(choice, k) {
+  def apply(f, x) {
+    f(x)
+  }
+  def inc(x_inc) {
+    k(x_inc)
+  }
+  def dec(x_dec) {
+    k(x_dec)
+  }
+  if (choice) {
+    apply(inc, 1)
+  } else {
+    apply(dec, 0)
+  }
+}
+
+// The call relation is { (inc, 1), (dec, 0) }, not the cartesian
+// approximation { inc, dec } x { 0, 1 }.
+/// FLOWS
+
+main
+---
+x_inc_7 !-> 1
+x_dec_9 !-> 0
+
+/// SINK_BLOCKS
+
+def main(choice, k) {
+  def apply(f, x) {
+    f(x)
+  }
+  if (choice) {
+    def inc(x_inc) {
+      k(x_inc)
+    }
+    apply(inc, 1)
+  } else {
+    def dec(x_dec) {
+      k(x_dec)
+    }
+    apply(dec, 0)
+  }
+}
+
+/// DROP_PARAMETERS
+
+def main(choice, k) {
+  def apply(f) {
+    f()
+  }
+  if (choice) {
+    def inc() {
+      k(1)
+    }
+    apply(inc)
+  } else {
+    def dec() {
+      k(0)
+    }
+    apply(dec)
+  }
+}
+
+/// CONTROL_FLOW
+
+ranks
+  main = 1
+  dec = 0
+  inc = 0
+transfers
+  inc -> k: safe [?]
+  main -> apply: jump
+  dec -> k: safe [?]
+  main -> apply: jump
+  main -> f: direct [dec, inc]
+
+/// JAVASCRIPT
+
+function main_0(choice_0, k_0) {
+  let f_0 = undefined;
+  if (choice_0) {
+    function inc_0() {
+      return k_0(1);
+    }
+    f_0 = inc_0;
+  } else {
+    function dec_0() {
+      return k_0(0);
+    }
+    f_0 = dec_0;
+  }
+  return f_0();
+}

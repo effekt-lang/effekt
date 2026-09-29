@@ -1,0 +1,32 @@
+def main(choice, k) {
+  def forward(x, y) {
+    k(y, x)
+  }
+  if (choice) {
+    forward(1, 2)
+  } else {
+    forward(3, 4)
+  }
+}
+
+// A forwarding definition can be threaded at multiple call sites without
+// duplicating its body: every call is replaced by exactly one remapped call.
+/// INLINE
+
+def main(choice, k) {
+  if (choice) {
+    k(2, 1)
+  } else {
+    k(4, 3)
+  }
+}
+
+/// JAVASCRIPT
+
+function main_0(choice_0, k_0) {
+  if (choice_0) {
+    return k_0(2, 1);
+  } else {
+    return k_0(4, 3);
+  }
+}

@@ -1,0 +1,99 @@
+interface Service {
+  run: (Int){f: (Int) => Int} => Int
+}
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def dec(x: Int) = {
+  return x: Int
+}
+
+def use(x: Int){service: Service}{f: (Int) => Int} = {
+  (service: Service @ {service}).run: (Int){f: (Int) => Int} => Int(x: Int){
+    (f: (Int) => Int @ {f})
+  }
+}
+
+def main() = {
+  def first = new Service {
+    def run(x: Int){f @ c: (Int) => Int} = {
+      (f: (Int) => Int @ {c})(x: Int)
+    }
+  }
+  def second = new Service {
+    def run(x: Int){f @ c: (Int) => Int} = {
+      (f: (Int) => Int @ {c})(x: Int)
+    }
+  }
+  val result = (use: (Int){service: Service}{f: (Int) => Int} => Int @ {})(0){
+    (first: Service @ {})
+  }{
+    (inc: (Int) => Int @ {})
+  };
+  (use: (Int){service: Service}{f: (Int) => Int} => Int @ {})(result: Int){
+    (second: Service @ {})
+  }{
+    (dec: (Int) => Int @ {})
+  }
+}
+
+/// LAMBDA_SETS
+
+S = dec ↦ { <> },
+    first.run ↦ { <inc> },
+    inc ↦ { <> },
+    second.run ↦ { <dec> },
+    use ↦ { <first, inc>, <second, dec> }
+
+/// LAMBDA_SPECIALIZE
+
+interface Service {
+  run: (Int){f: (Int) => Int} => Int
+}
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def dec(x: Int) = {
+  return x: Int
+}
+
+def use(x: Int){service: Service}{f: (Int) => Int} = {
+  (service: Service @ {service}).run: (Int){f: (Int) => Int} => Int(x: Int){
+    (f: (Int) => Int @ {f})
+  }
+}
+
+def main() = {
+  def first = new Service {
+    def run(x: Int){f @ c: (Int) => Int} = {
+      (f: (Int) => Int @ {c})(x: Int)
+    }
+  }
+  def second = new Service {
+    def run(x: Int){f @ c: (Int) => Int} = {
+      (f: (Int) => Int @ {c})(x: Int)
+    }
+  }
+  val result = (use_first_inc: (Int) => Int @ {})(0);
+  (use_second_dec: (Int) => Int @ {})(result: Int)
+}
+
+def use_first_inc(x: Int) = {
+  (first_run_inc: (Int) => Int @ {})(x: Int)
+}
+
+def use_second_dec(x: Int) = {
+  (second_run_dec: (Int) => Int @ {})(x: Int)
+}
+
+def first_run_inc(x: Int) = {
+  (inc: (Int) => Int @ {})(x: Int)
+}
+
+def second_run_dec(x: Int) = {
+  (dec: (Int) => Int @ {})(x: Int)
+}

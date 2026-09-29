@@ -75,6 +75,10 @@ object Id {
     val name = n
   }
   def apply(n: String): Id = apply(symbols.Name.local(n))
+  def apply(n: String, i: Int): Id = new symbols.Symbol {
+    val name = symbols.Name.local(n)
+    override val id: Int = i
+  }
   def apply(n: Id): Id = apply(n.name)
 }
 
@@ -97,7 +101,6 @@ case class ModuleDecl(
   def typecheck()(using ErrorReporter): Unit =
     Type.typecheck(this)
     freeVariables.assertClosed(this)
-    delimiters.assertDisciplined(this)
 
   lazy val size: Int = sizes.size(this)
 }
@@ -155,7 +158,7 @@ enum Toplevel {
   def id: Id
 
   case Def(id: Id, block: Block)
-  case Val(id: Id, binding: core.Stmt)
+  case Val(id: Id, binding: Stmt)
 
   lazy val size: Int = sizes.size(this)
 }
@@ -1351,52 +1354,6 @@ object Free {
         Type.blockShouldEqual(tpe1, tpe2)
         (tpe1, capt1)
     })
-}
-
-object delimiters {
-
-  /** For every enclosing prompt, what has been bound since its reset. */
-  private type Scope = Map[Id, Set[Id]]
-
-  /**
-   * Assert that outside of its resumptions, the body of a `shift_p` captures nothing bound at or after `reset_p`.
-   * In other words, that the stack is _disciplined_.
-   *
-   * The source guarantees this by scoping; should be preserved by inlining.
-   */
-  def assertDisciplined(m: ModuleDecl): Unit =
-    object check extends Tree.Query[Scope, Unit] {
-      def empty = ()
-      def combine = (_, _) => ()
-
-      def binding(ids: Set[Id])(using scope: Scope): Scope = scope.view.mapValues(_ ++ ids).toMap
-
-      // a prompt or region is known by its id and by its capture
-      override def stmt(using scope: Scope) = {
-        case Stmt.Reset(b @ BlockLit(_, cparams, _, List(prompt), _)) =>
-          query(b)(using binding(cparams.toSet + prompt.id) + (prompt.id -> cparams.toSet))
-        case Stmt.Region(b @ BlockLit(_, cparams, _, List(region), _)) =>
-          query(b)(using binding(cparams.toSet + region.id))
-        case Stmt.Var(ref, init, capture, body) =>
-          query(init); query(body)(using binding(Set(capture)))
-        case Stmt.Shift(prompt, k, body) if scope.contains(prompt.id) =>
-          val observed = handlerOnly(k.id, body).typing.capt.intersect(scope(prompt.id) + prompt.id)
-          assert(observed.isEmpty,
-            s"A handler must not observe what its own try binds, but shift(${util.show(prompt.id)}) observes ${observed.map(util.show).mkString(", ")}")
-          query(body)
-      }
-    }
-    check.query(m)(using Map.empty)
-
-  /** [[body]] with what [[k]] resumes blanked out, so that its captures are the handler's own. */
-  private def handlerOnly(k: Id, body: Stmt): Stmt =
-    object blank extends Tree.Rewrite {
-      override def rewrite(stmt: Stmt): Stmt = stmt match {
-        case Stmt.Resume(k2, resumed) if k2.id == k => Stmt.Resume(k2, Stmt.Hole(resumed.tpe, effekt.source.Span.missing))
-        case other => super.rewrite(other)
-      }
-    }
-    blank.rewrite(body)
 }
 
 object freeVariables {

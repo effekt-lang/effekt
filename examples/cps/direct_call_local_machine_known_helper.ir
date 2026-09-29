@@ -1,0 +1,27 @@
+def main(n, ks, k) {
+  def previous(i, ks1, k1) {
+    run result = sub(i, 1);
+    k1(result, ks1)
+  }
+  def build(i, ks2, k2) {
+    run done = eq(i, 0);
+    if (done) {
+      k2(i, ks2)
+    } else {
+      let before = previous!(i, ks2, return);
+      let value = build!(before, ks2, return);
+      run result = add(value, 1);
+      k2(result, ks2)
+    }
+  }
+  let result = build!(n, ks, return);
+  k(result, ks)
+}
+
+// A closed local machine may call a statically known finite-rank function:
+// that call uses the native convention and does not expose a frame to CPS.
+/// CALLING_CONVENTIONS
+
+direct
+  main = 0 adapter
+  previous = 0

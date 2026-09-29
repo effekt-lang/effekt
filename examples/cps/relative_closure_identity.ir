@@ -1,0 +1,29 @@
+def main(k) {
+  def outer(k_outer) {
+    def done() {
+      k_outer()
+    }
+    def call(f) {
+      f()
+    }
+    call(done)
+  }
+  outer(k)
+}
+
+// `done` and `call` are allocated again for every invocation of `outer`.
+// Nevertheless, `f` is always the `done` from the same lexical activation.
+/// DROP_PARAMETERS
+
+def main(k) {
+  def outer() {
+    def done() {
+      k()
+    }
+    def call() {
+      done()
+    }
+    call()
+  }
+  outer()
+}

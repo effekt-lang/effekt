@@ -1,0 +1,40 @@
+def execute(program, ks, k) {
+  new random : Random {
+    def random(ks1, k1) = { k1(1, ks1) }
+  }
+  program(random, ks, k)
+}
+
+def program(random, ks, k) {
+  let result | returnedKs = random.random!(ks, return);
+  k(result, returnedKs)
+}
+
+def main(ks, k) {
+  execute(program, ks, k)
+}
+
+// Function and receiver values share the same finite-flow equations. The
+// known callback carries `random` across the call to `execute`, so its operation
+// target remains closed and can use the value-returning ABI.
+/// CALLING_CONVENTIONS
+
+direct
+  program = 1 adapter
+  random.random = 0
+
+/// JAVASCRIPT
+
+function execute_0(program_0, ks_0, k_0) {
+  const random_0 = { random_0: () => 1 };
+  return program_0(random_0, ks_0, k_0);
+}
+
+function program_1(random_1, ks_1, k_1) {
+  const result_0 = random_1.random_1();
+  return k_1(result_0, ks_1);
+}
+
+function main_0(ks_2, k_2) {
+  return execute_0(program_1, ks_2, k_2);
+}

@@ -139,10 +139,13 @@ enum Pattern {
 
 enum Stmt {
   // e.g. { <STMT>* }
-  case Block(stmts: List[Stmt])
+  case Block(label: Option[JSName], stmts: List[Stmt])
 
   // e.g. return <EXPR>
   case Return(expr: Expr)
+
+  // e.g. return
+  case ReturnVoid
 
   // A raw JS String
   case RawStmt(raw: List[String], args: List[Expr])
@@ -180,10 +183,10 @@ enum Stmt {
   case Throw(expr: Expr)
 
   // label : while (<EXPR>) { <STMT>* }
-  case While(cond: Expr, stmts: List[Stmt], label: Option[JSName])
+  case While(label: Option[JSName], cond: Expr, stmts: List[Stmt])
 
   // e.g. break
-  case Break()
+  case Break(label: Option[JSName])
 
   // e.g. continue l
   case Continue(label: Option[JSName])
@@ -198,7 +201,7 @@ export Stmt.*
 // ------------------
 
 def Const(name: JSName, binding: Expr): Stmt = binding match {
-  case Expr.Lambda(params, Block(stmts)) => js.Function(name, params, stmts)
+  case Expr.Lambda(params, Block(None, stmts)) => js.Function(name, params, stmts)
   case Expr.Lambda(params, stmt) => js.Function(name, params, List(stmt))
   case _ => js.Const(Pattern.Variable(name), binding)
 }
@@ -224,7 +227,7 @@ def Object(properties: (JSName, Expr)*): Expr = Object(properties.toList)
 
 def MaybeBlock(stmts: List[Stmt]): Stmt = stmts match {
   case head :: Nil => head
-  case _ => js.Block(stmts)
+  case _ => js.Block(None, stmts)
 }
 
 val Undefined = RawLiteral("undefined")
@@ -233,7 +236,7 @@ def Lambda(params: List[JSName], stmts: List[Stmt]): Expr = stmts match {
   case Nil => sys error "Lambda should have at least one statement as body"
   case js.Return(e) :: Nil => Lambda(params, e)
   case stmt :: Nil => Lambda(params, stmt)
-  case stmts => Lambda(params, Block(stmts))
+  case stmts => Lambda(params, Block(None, stmts))
 }
 
 // Code generation monad
@@ -250,7 +253,7 @@ extension (b: Binding[List[js.Stmt]]) {
   def toExpr: js.Expr = b.stmts match {
     case Nil => ???
     case js.Return(e) :: Nil => e
-    case stmts => js.Call(js.Lambda(Nil, Block(stmts)), Nil)
+    case stmts => js.Call(js.Lambda(Nil, Block(None, stmts)), Nil)
   }
   def stmts: List[js.Stmt] = b.run(x => x)
 }

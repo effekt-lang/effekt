@@ -1,0 +1,42 @@
+def inc(x: Int) = {
+  return x: Int
+}
+
+def dec(x: Int) = {
+  return x: Int
+}
+
+def use(x: Int){k: (Int) => Int} = {
+  (k: (Int) => Int @ {k})(x: Int)
+}
+
+def outer(x: Int){f: (Int) => Int}{g: (Int) => Int} = {
+  def k(y: Int) = {
+    val first = (f: (Int) => Int @ {f})(y: Int);
+    (g: (Int) => Int @ {g})(first: Int)
+  }
+  (use: (Int){k: (Int) => Int} => Int @ {})(x: Int){
+    (k: (Int) => Int @ {f, g})
+  }
+}
+
+def main() = {
+  val first = (outer: (Int){f: (Int) => Int}{g: (Int) => Int} => Int @ {})(0){
+    (inc: (Int) => Int @ {})
+  }{
+    (dec: (Int) => Int @ {})
+  };
+  (outer: (Int){f: (Int) => Int}{g: (Int) => Int} => Int @ {})(first: Int){
+    (dec: (Int) => Int @ {})
+  }{
+    (inc: (Int) => Int @ {})
+  }
+}
+
+/// LAMBDA_SETS
+
+S = dec ↦ { <> },
+    inc ↦ { <> },
+    k ↦ { <dec, inc>, <inc, dec> },
+    outer ↦ { <dec, inc>, <inc, dec> },
+    use ↦ { <k> }

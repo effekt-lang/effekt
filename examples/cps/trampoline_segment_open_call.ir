@@ -1,0 +1,16 @@
+def main(p0, apply, ks0, k0) {
+  shift(p0) { r, ks, k =>
+    apply(k, 1, ks)
+  } @ ks0, k0
+}
+
+// An open call cannot communicate segment-entry provenance to an unknown
+// formal parameter, so it receives the fixed-arity stack-safe value.
+/// JAVASCRIPT
+
+function main_0(p_0, apply_0, ks_0, k_0) {
+  {
+    const [r_0, ks_1, k_1] = SHIFT(p_0, ks_0, k_0);
+    return apply_0((value_0, ks_2) => () => k_1(value_0, ks_2), 1, ks_1);
+  }
+}

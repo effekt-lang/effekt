@@ -1,0 +1,46 @@
+def main(n, ks, k) {
+  def countdown(i, acc, ks1, k1) {
+    run done = eq(i, 0);
+    if (done) {
+      k1(i, acc, ks1)
+    } else {
+      run i2 = sub(i, 1);
+      run acc2 = add(acc, i);
+      countdown(i2, acc2, ks1, k1)
+    }
+  }
+  let (final, sum) = countdown!(n, 0, ks, return);
+  run total = add(final, sum);
+  k(total, ks)
+}
+
+// A tail-recursive function returning two values. The recursion becomes a loop
+// and the two-value return `k1(i, acc, ks1)` writes both result registers
+// (`final_0`, `sum_0`) before breaking to the shared return label — no tuple is
+// allocated at the base case or across the iterations.
+/// JAVASCRIPT
+
+function main_0(n_0, ks_0, k_0) {
+  let i_0 = n_0;
+  let acc_0 = 0;
+  let final_0 = undefined;
+  let sum_0 = undefined;
+  countdown_return_0: {
+    countdown_0: while (true) {
+      const done_0 = eq_0(i_0, 0);
+      if (done_0) {
+        final_0 = i_0;
+        sum_0 = acc_0;
+        break countdown_return_0;
+      } else {
+        const i_1 = sub_0(i_0, 1);
+        const acc_1 = add_0(acc_0, i_0);
+        i_0 = i_1;
+        acc_0 = acc_1;
+        continue countdown_0;
+      }
+    }
+  }
+  const total_0 = add_0(final_0, sum_0);
+  return k_0(total_0, ks_0);
+}

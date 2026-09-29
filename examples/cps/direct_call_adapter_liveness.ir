@@ -1,0 +1,56 @@
+def main(x, ks, k) {
+  def inc(value, ks1, k1) {
+    run result = add(value, 1);
+    k1(result, ks1)
+  }
+  def twice(g, value, ks2, k2) {
+    let first = g!(value, ks2, return);
+    let second = g!(first, ks2, return);
+    k2(second, ks2)
+  }
+  def apply(f, value, ks3, k3) {
+    def go() {
+      let result = f!(inc, value, ks3, return);
+      k3(result, ks3)
+    }
+    go()
+  }
+  let result = apply!(twice, x, ks, return);
+  k(result, ks)
+}
+
+// The call through `f` uses the direct convention selected for that exact
+// application. Consequently `inc` is passed in its direct representation and
+// does not need a CPS adapter merely because the callee is a parameter.
+/// CALLING_CONVENTIONS
+
+direct
+  apply = 2 [direct: 0]
+  inc = 0
+  main = 0 adapter
+  twice = 1 [direct: 0]
+
+/// JAVASCRIPT
+
+function inc_0(value_0) {
+  const result_0 = add_0(value_0, 1);
+  return result_0;
+}
+
+function twice_0(g_0, value_1) {
+  const first_0 = g_0(value_1);
+  const second_0 = g_0(first_0);
+  return second_0;
+}
+
+function main_0(x_0, ks_0, k_0) {
+  let result_1 = undefined;
+  apply_return_0: {
+    go_0: {
+
+    }
+    const result_2 = twice_0(inc_0, x_0);
+    result_1 = result_2;
+  }
+  return k_0(result_1, ks_0);
+}

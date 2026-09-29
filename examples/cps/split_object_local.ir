@@ -1,0 +1,19 @@
+def main(ks, k) {
+  new box : Box {
+    def read(ks1, k1) = { k1(42, ks1) }
+  }
+  let v = box.read!(ks, return);
+  k(v, ks)
+}
+
+// `box` is only ever invoked, never observed whole, so the object is unbundled
+// into one block per operation and the method call becomes a direct call.
+/// ARITY_RAISE
+
+def main(ks, k) {
+  def box_read(ks1, k1) {
+    k1(42, ks1)
+  }
+  let v = box_read!(ks, return);
+  k(v, ks)
+}

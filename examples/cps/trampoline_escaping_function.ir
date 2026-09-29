@@ -1,0 +1,25 @@
+def main(use, k) {
+  def local(x) {
+    k(x)
+  }
+  use(local)
+}
+
+// Passing local as a value forces it to be represented by a JS function.
+/// CONTROL_FLOW
+
+ranks
+  local = 0
+  main = 0
+transfers
+  local -> k: safe [?]
+  main -> use: safe [?]
+
+/// JAVASCRIPT
+
+function main_0(use_0, k_0) {
+  function local_0(x_0) {
+    return k_0(x_0);
+  }
+  return use_0(local_0);
+}

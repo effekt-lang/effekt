@@ -1,0 +1,143 @@
+def eq(x: Int, y: Int) = {
+  return true
+}
+
+def sub(x: Int, y: Int) = {
+  return x: Int
+}
+
+def loop(n: Int){f: (Int) => Int}{g: (Bool) => Int} = {
+  val done = (eq: (Int, Int) => Bool @ {})(n: Int, 0);
+  if (done: Bool) {
+    (f: (Int) => Int @ {f})(0)
+  } else {
+    def nextF(x: Int) = {
+      (g: (Bool) => Int @ {g})(true)
+    }
+    def nextG(flag: Bool) = {
+      (f: (Int) => Int @ {f})(0)
+    }
+    val previous = (sub: (Int, Int) => Int @ {})(n: Int, 1);
+    (loop: (Int){f: (Int) => Int}{g: (Bool) => Int} => Int @ {})(previous: Int){
+      (nextF: (Int) => Int @ {g})
+    }{
+      (nextG: (Bool) => Int @ {f})
+    }
+  }
+}
+
+def main(n: Int) = {
+  def baseF(x: Int) = {
+    return x: Int
+  }
+  def baseG(flag: Bool) = {
+    return 0
+  }
+  (loop: (Int){f: (Int) => Int}{g: (Bool) => Int} => Int @ {})(n: Int){
+    (baseF: (Int) => Int @ {})
+  }{
+    (baseG: (Bool) => Int @ {})
+  }
+}
+
+/// LAMBDA_SETS
+
+S = baseF ↦ { <> },
+    baseG ↦ { <> },
+    eq ↦ { <> },
+    loop ↦ { <baseF, baseG>, <nextF, nextG> },
+    nextF ↦ { <nextG> },
+    nextG ↦ { <nextF> },
+    sub ↦ { <> }
+
+/// LAMBDA_SPECIALIZE
+
+type F {
+  BaseF()
+  NextF(g_captured: G)
+}
+
+type G {
+  BaseG()
+  NextG(f_captured: F)
+}
+
+def eq(x: Int, y: Int) = {
+  return true
+}
+
+def sub(x: Int, y: Int) = {
+  return x: Int
+}
+
+def loop(n: Int){f: (Int) => Int}{g: (Bool) => Int} = {
+  val done = (eq: (Int, Int) => Bool @ {})(n: Int, 0);
+  if (done: Bool) {
+    (f: (Int) => Int @ {f})(0)
+  } else {
+    def nextF(x: Int) = {
+      (g: (Bool) => Int @ {g})(true)
+    }
+    def nextG(flag: Bool) = {
+      (f: (Int) => Int @ {f})(0)
+    }
+    val previous = (sub: (Int, Int) => Int @ {})(n: Int, 1);
+    (loop: (Int){f: (Int) => Int}{g: (Bool) => Int} => Int @ {})(previous: Int){
+      (nextF: (Int) => Int @ {g})
+    }{
+      (nextG: (Bool) => Int @ {f})
+    }
+  }
+}
+
+def main(n: Int) = {
+  def baseF(x: Int) = {
+    return x: Int
+  }
+  def baseG(flag: Bool) = {
+    return 0
+  }
+  (loop_F_G: (Int, F, G) => Int @ {})(n: Int,
+    make F BaseF(),
+    make G BaseG())
+}
+
+def loop_F_G(n: Int, f: F, g: G) = {
+  val done = (eq: (Int, Int) => Bool @ {})(n: Int, 0);
+  if (done: Bool) {
+    (apply_F: (F, Int) => Int @ {})(f: F, 0)
+  } else {
+    def nextF(x: Int) = {
+      (apply_G: (G, Bool) => Int @ {})(g: G, true)
+    }
+    def nextG(flag: Bool) = {
+      (apply_F: (F, Int) => Int @ {})(f: F, 0)
+    }
+    val previous = (sub: (Int, Int) => Int @ {})(n: Int, 1);
+    (loop_F_G: (Int, F, G) => Int @ {})(previous: Int,
+      make F NextF(g: G),
+      make G NextG(f: F))
+  }
+}
+
+def apply_F(closure: F, argument: Int) = {
+  closure: F match[Int] {
+    BaseF : { () =>
+      return argument: Int
+    }
+    NextF : { (g_captured: G) =>
+      (apply_G: (G, Bool) => Int @ {})(g_captured: G, true)
+    }
+  }
+}
+
+def apply_G(closure: G, argument: Bool) = {
+  closure: G match[Int] {
+    BaseG : { () =>
+      return 0
+    }
+    NextG : { (f_captured: F) =>
+      (apply_F: (F, Int) => Int @ {})(f_captured: F, 0)
+    }
+  }
+}

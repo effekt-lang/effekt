@@ -1,0 +1,22 @@
+def main(p0, ks0, k0) {
+  shift(p0) { r, ks, k =>
+    var cell = 0 @ ks;
+    put cell = k;
+    get next = cell;
+    next(1, ks)
+  } @ ks0, k0
+}
+
+// Storing a segment entry in an ordinary mutable value exposes its stack-safe
+// entry. Loading it again therefore needs no special static provenance.
+/// JAVASCRIPT
+
+function main_0(p_0, ks_0, k_0) {
+  {
+    const [r_0, ks_1, k_1] = SHIFT(p_0, ks_0, k_0);
+    let cell_0 = 0;
+    cell_0 = (value_0, ks_2) => () => k_1(value_0, ks_2);
+    const next_0 = cell_0;
+    return next_0(1, ks_1);
+  }
+}

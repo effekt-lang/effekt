@@ -1,0 +1,41 @@
+type ListData { Nil() Cons(head: Int, tail: ListData) }
+
+def use(xs, ys, k) {
+  xs match {
+    case Nil() => k(0)
+    case Cons(x, xs1) => {
+      ys match {
+        case Nil() => k(x)
+        case Cons(y, ys1) => k(y)
+      }
+    }
+  }
+}
+def main(flag, k) {
+  if (flag) {
+    use(make Cons(1, make Nil()), make Nil(), k)
+  } else {
+    use(make Cons(1, make Nil()), make Cons(2, make Nil()), k)
+  }
+}
+
+/// ARITY_SHAPES
+
+use
+  <Cons(_, _), ?, ?>
+
+/// ARITY_RAISE
+
+def use(xs_0, xs_1, ys, k) {
+  ys match {
+    case Nil() => k(xs_0)
+    case Cons(y, ys1) => k(y)
+  }
+}
+def main(flag, k) {
+  if (flag) {
+    use(1, make Nil(), make Nil(), k)
+  } else {
+    use(1, make Nil(), make Cons(2, make Nil()), k)
+  }
+}

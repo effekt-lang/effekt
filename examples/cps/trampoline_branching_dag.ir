@@ -1,0 +1,66 @@
+def f0(choice, k) {
+  if (choice) { f1(choice, k) } else { f1(choice, k) }
+}
+def f1(choice, k) {
+  if (choice) { f2(choice, k) } else { f2(choice, k) }
+}
+def f2(choice, k) {
+  if (choice) { f3(choice, k) } else { f3(choice, k) }
+}
+def f3(choice, k) {
+  if (choice) { f4(choice, k) } else { f4(choice, k) }
+}
+def f4(choice, k) {
+  if (choice) { f5(choice, k) } else { f5(choice, k) }
+}
+def f5(choice, k) {
+  if (choice) { f6(choice, k) } else { f6(choice, k) }
+}
+def f6(choice, k) {
+  if (choice) { f7(choice, k) } else { f7(choice, k) }
+}
+def f7(choice, k) {
+  if (choice) { f8(choice, k) } else { f8(choice, k) }
+}
+def f8(choice, k) {
+  if (choice) { f9(choice, k) } else { f9(choice, k) }
+}
+def f9(choice, k) {
+  if (choice) { f10(choice, k) } else { f10(choice, k) }
+}
+def f10(choice, k) {
+  if (choice) { f11(choice, k) } else { f11(choice, k) }
+}
+def f11(choice, k) {
+  if (choice) { f12(choice, k) } else { f12(choice, k) }
+}
+def f12(choice, k) {
+  if (choice) { f13(choice, k) } else { f13(choice, k) }
+}
+def f13(choice, k) {
+  if (choice) { f14(choice, k) } else { f14(choice, k) }
+}
+def f14(choice, k) {
+  if (choice) { f15(choice, k) } else { f15(choice, k) }
+}
+def f15(choice, k) {
+  if (choice) { f16(choice, k) } else { f16(choice, k) }
+}
+def f16(choice, k) {
+  if (choice) { f17(choice, k) } else { f17(choice, k) }
+}
+def f17(choice, k) {
+  if (choice) { f18(choice, k) } else { f18(choice, k) }
+}
+def f18(choice, k) {
+  k(0)
+}
+def main(choice, k) {
+  f0(choice, k)
+}
+
+// This graph has only 19 nodes but 2^18 syntactic paths. The analysis must
+// summarize nodes rather than enumerate those paths.
+/// SAFE_ENTRIES
+
+-

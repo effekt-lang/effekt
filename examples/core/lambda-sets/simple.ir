@@ -1,0 +1,36 @@
+def inc(x: Int) = {
+  return x: Int
+}
+
+def apply(x: Int){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(x: Int)
+}
+
+def main() = {
+  (apply: (Int){f: (Int) => Int} => Int @ {})(42){
+    (inc: (Int) => Int @ {})
+  }
+}
+
+/// LAMBDA_SETS
+
+S = apply ↦ { <inc> },
+    inc ↦ { <> }
+
+/// LAMBDA_SPECIALIZE
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def apply(x: Int){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(x: Int)
+}
+
+def main() = {
+  (apply_inc: (Int) => Int @ {})(42)
+}
+
+def apply_inc(x: Int) = {
+  (inc: (Int) => Int @ {})(x: Int)
+}

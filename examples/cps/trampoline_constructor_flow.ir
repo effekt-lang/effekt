@@ -1,0 +1,27 @@
+def apply(box) {
+  box match {
+    case Box(k) => k()
+  } else {
+    apply(box)
+  }
+}
+def loop(flag, k) {
+  if (flag) {
+    def next() {
+      loop(false, k)
+    }
+    let box = make Box(next);
+    apply(box)
+  } else {
+    k(0)
+  }
+}
+def main(flag, k) {
+  loop(flag, k)
+}
+
+// The closure flows through an immutable constructor field. Recovering it in
+// the match exposes loop -> apply -> next -> loop.
+/// SAFE_ENTRIES
+
+function next
