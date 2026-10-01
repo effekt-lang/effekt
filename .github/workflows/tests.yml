@@ -54,7 +54,7 @@ jobs:
       - uses: ./.github/actions/restore-build-cache
 
       - name: Run internal tests
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 120
           max_attempts: ${{ inputs.max-attempts }}
@@ -86,7 +86,7 @@ jobs:
         run: sbt Test/compile
 
       - name: Run Windows smoke test
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 120
           max_attempts: ${{ inputs.max-attempts }}
@@ -111,7 +111,7 @@ jobs:
         run: sbt Test/compile
 
       - name: Run macOS LLVM smoke tests (with debug)
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 120
           max_attempts: ${{ inputs.max-attempts }}
@@ -133,7 +133,7 @@ jobs:
       - uses: ./.github/actions/restore-build-cache
 
       - name: Run JavaScript backend tests
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 120
           max_attempts: ${{ inputs.max-attempts }}
@@ -167,7 +167,7 @@ jobs:
       - uses: ./.github/actions/restore-build-cache
 
       - name: Run Chez Scheme backend tests
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 120
           max_attempts: ${{ inputs.max-attempts }}
@@ -200,7 +200,7 @@ jobs:
       - uses: ./.github/actions/restore-build-cache
 
       - name: Run LLVM backend tests (${{ matrix.configuration }})
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 120
           max_attempts: ${{ inputs.max-attempts }}
