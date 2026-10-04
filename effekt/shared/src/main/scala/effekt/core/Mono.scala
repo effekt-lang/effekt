@@ -1316,7 +1316,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
     }
 
     private def preferredMonoName(baseId: Id, tpes: Vector[GroundType]): String =
-      baseId.name.name + util.debug(tpes.map(typeName).mkString)("")
+      baseId.name.name + tpes.map(typeName).mkString
 
     private def typeName(tpe: GroundType): String = tpe match
       case MonoValueType.Var(impossible) => impossible
