@@ -13,10 +13,8 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 
   override def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = input match {
     case CoreTransformed(source, tree, mod, core) =>
-      val main = Context.ensureMainExists(mod)
-      val reachable = Deadcode.remove(main, core)
-      val bound = BindSubexpressions.transform(reachable)
-      val preprocessed = preprocess(Deadcode.remove(main, bound))
+      val bound = BindSubexpressions.transform(core)
+      val preprocessed = preprocess(bound)
       val constraints = collect(preprocessed)
       val solution = solve(constraints)
       Some(CoreTransformed(source, tree, mod, specialize(preprocessed, solution)))
@@ -921,18 +919,8 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case MonoBlockType.Interface(name, targs) =>
         s"${name.name.name}[${targs.map(typeKey).mkString(",")}]"
 
-    private class NameSupply(reserved: Iterable[String]) {
-      private val used = collection.mutable.Set.from(reserved)
-
-      def fresh(preferred: String): Id = {
-        var candidate = preferred
-        var index = 2
-        while used.contains(candidate) do
-          candidate = s"${preferred}_$index"
-          index += 1
-        used += candidate
-        Id(candidate)
-      }
+    def fresh(initial: String): Id = {
+      Id(initial)
     }
 
     case class State(
@@ -966,20 +954,17 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
         val dctx = DeclarationContext(declarations, externs)
         var monoFunNames: FunctionNames = Map.empty
         val monoTpeNames: MutableTypeNames = collection.mutable.Map.empty
-        val reservedNames = solution.keys.map(_.name.name)
-        val functionNames = new NameSupply(reservedNames)
-        val typeNames = new NameSupply(reservedNames)
         solution.toList.sortBy((id, _) => id.name.name).foreach((id, targs) =>
           if (dctx.findExternDef(id).isDefined) {
             targs.toList.sortBy(variantKey).foreach(vb => monoFunNames += ((id, vb) -> id))
           } else if (dctx.findData(id).isDefined) {
             val data = dctx.findData(id).get
-            targs.toList.sortBy(variantKey).foreach(vb => freshMonoTypeName(data.id, vb, monoTpeNames, typeNames))
+            targs.toList.sortBy(variantKey).foreach(vb => freshMonoTypeName(data.id, vb, monoTpeNames))
           } else {
             targs.toList.sortBy(variantKey).foreach { variant =>
               val name =
                 if variant.isEmpty || id == core.Type.ResumeSymbol || id == core.Type.PromptSymbol || id.isInstanceOf[symbols.ExternInterface] then id
-                else functionNames.fresh(preferredMonoName(id, variant))
+                else fresh(preferredMonoName(id, variant))
               monoFunNames += ((id, variant) -> name)
             }
           }
@@ -1321,18 +1306,17 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
     private def freshMonoTypeName(
       dataName: Id,
       tpes: Vector[GroundType],
-      monoTypeNames: MutableTypeNames,
-      names: NameSupply
+      monoTypeNames: MutableTypeNames
     ): ValueType.Data = {
       monoTypeNames.getOrElse((dataName, tpes), {
-        val monoData: ValueType.Data = ValueType.Data(names.fresh(preferredMonoName(dataName, tpes)), List.empty)
+        val monoData: ValueType.Data = ValueType.Data(fresh(preferredMonoName(dataName, tpes)), List.empty)
         monoTypeNames += ((dataName, tpes) -> monoData)
         monoData
       })
     }
 
     private def preferredMonoName(baseId: Id, tpes: Vector[GroundType]): String =
-      baseId.name.name + tpes.map(typeName).mkString
+      baseId.name.name + util.debug(tpes.map(typeName).mkString)("")
 
     private def typeName(tpe: GroundType): String = tpe match
       case MonoValueType.Var(impossible) => impossible
