@@ -8,8 +8,9 @@ declare void @c_io_println(%Pos)
 declare %Pos @c_io_readln()
 declare %Double @c_io_random()
 
-declare void @hole(i8*) cold
-declare void @duplicated_prompt() cold
+declare void @hole(i8*) cold noreturn
+declare void @duplicated_prompt() cold noreturn
+declare void @unmatched_tag() cold noreturn
 
 declare %Pos @c_ref_fresh(%Pos)
 declare %Pos @c_ref_get(%Pos)
