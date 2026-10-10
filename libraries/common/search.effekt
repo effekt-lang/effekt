@@ -1,0 +1,36 @@
+module search
+
+effect fork(): Bool
+
+def select[A] { stream: () => Unit / emit[A] }: A / {fork, fail} = {
+  def body(): A / emit[A] = {
+    stream()
+    do fail()
+  }
+  try {
+    body()
+  } with emit[A] { value =>
+    if (do fork()) {
+      return value
+    } else {
+      resume(())
+    }
+  }
+}
+
+def results[R] { query: () => R / {fork, fail} }: Unit / emit[R] =
+  try {
+    do emit(query())
+  } with fork { () =>
+    resume(true)
+    resume(false)
+  } with fail { () =>
+    ()
+  }
+
+def choose[A](items: List[A]): A / {fork, fail} =
+  select { items.each }
+
+def choice[A] { action1: () => A } { action2: () => A }: A / fork =
+  if (do fork()) { action1() } else { action2() }
+
