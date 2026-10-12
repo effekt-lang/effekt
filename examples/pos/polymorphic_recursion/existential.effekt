@@ -1,0 +1,19 @@
+module examples/pos/polymorphic_recursion/existential
+
+type Dynamic {
+  Hide[A](value: A)
+}
+
+type Box[A] {
+  Wrap(value: A)
+}
+
+def repack(value: Dynamic, depth: Int): Dynamic =
+  if (depth == 0) value
+  else value match {
+    case Hide(hidden) => repack(Hide(Wrap(hidden)), depth - 1)
+  }
+
+def main() = repack(Hide(0), 3) match {
+  case Hide(value) => println("repacked")
+}

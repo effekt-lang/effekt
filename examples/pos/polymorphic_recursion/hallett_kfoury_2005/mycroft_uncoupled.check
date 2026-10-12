@@ -1,0 +1,2 @@
+Cons(4, Cons(16, Nil()))
+Cons(false, Cons(true, Nil()))

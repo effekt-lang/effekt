@@ -1,0 +1,15 @@
+module examples/pos/polymorphic_recursion/hallett_kfoury_2005/mycroft_uncoupled
+
+// Hallett and Kfoury (2005), Section 3.2.2: Mycroft -- Uncoupled.
+def myMap[A, B](list: List[A]) { function: (A) => B }: List[B] = list match {
+  case Nil() => Nil()
+  case Cons(head, tail) => Cons(function(head), myMap(tail) { function })
+}
+
+def squareList(list: List[Int]): List[Int] = myMap(list) { x => x * x }
+def complementList(list: List[Bool]): List[Bool] = myMap(list) { x => if (x) false else true }
+
+def main() = {
+  println(squareList([2, 4]))
+  println(complementList([true, false]))
+}

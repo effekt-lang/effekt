@@ -1,0 +1,19 @@
+module examples/pos/polymorphic_recursion/raw_interface
+
+interface Wrapper[A] {
+  def number(): Int
+}
+
+def readNumber[A](wrapped: Wrapper[A] at {}): Int =
+  (unbox wrapped).number()
+
+def nest[A](value: A, depth: Int): Int =
+  if (depth == 0) 0
+  else {
+    val wrapped: Wrapper[A] at {} = box new Wrapper[A] {
+      def number() = depth
+    }
+    readNumber(wrapped) + nest[Wrapper[A] at {}](wrapped, depth - 1)
+  }
+
+def main() = println(nest[Int](42, 4))

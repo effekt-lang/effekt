@@ -1,0 +1,11 @@
+module examples/pos/polymorphic_recursion/hallett_kfoury_2005/sum_list
+
+// Hallett and Kfoury (2005), Section 3.3: Sum List.
+def identity[A](value: A): A = value
+
+def sumList(list: List[Int]): Int = list match {
+  case Nil() => 0
+  case Cons(head, tail) => identity(head) + sumList(identity(tail))
+}
+
+def main() = println(sumList([1, 2, 3]))

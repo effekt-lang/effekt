@@ -1,0 +1,20 @@
+module examples/pos/polymorphic_recursion/nested_tree
+
+type Two[A] {
+  Both(first: A, second: A)
+}
+
+type Tree[A] {
+  Leaf(value: A)
+  Branch(child: Tree[Two[A]])
+}
+
+def isLeaf[A](tree: Tree[A]): Bool = tree match {
+  case Leaf(value) => true
+  case Branch(child) => false
+}
+
+def main() = {
+  val tree: Tree[Int] = Branch(Leaf(Both(123, 456)))
+  println(isLeaf[Int](tree))
+}

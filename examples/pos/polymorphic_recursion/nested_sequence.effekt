@@ -1,0 +1,20 @@
+module examples/pos/polymorphic_recursion/nested_sequence
+
+type Two[A] {
+  Both(first: A, second: A)
+}
+
+type NestedSeq[A] {
+  Empty()
+  Node(head: A, tail: NestedSeq[Two[A]])
+}
+
+def size[A](seq: NestedSeq[A]): Int = seq match {
+  case Empty() => 0
+  case Node(head, tail) => 1 + 2 * size[Two[A]](tail)
+}
+
+def main() = {
+  val seq: NestedSeq[Int] = Node(1, Node(Both(2, 3), Empty()))
+  println(size[Int](seq))
+}

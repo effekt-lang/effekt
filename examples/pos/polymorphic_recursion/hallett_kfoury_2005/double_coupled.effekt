@@ -1,0 +1,13 @@
+module examples/pos/polymorphic_recursion/hallett_kfoury_2005/double_coupled
+
+// Hallett and Kfoury (2005), Section 3.1.1: Double -- Coupled.
+def double[A](value: A) { function: (A) => A }: A =
+  function(function(value))
+
+def foo(value: Int): Int = double(value) { x => x + 1 }
+def goo(value: Double): Double = double(value) { x => x / 2.0 }
+
+def main() = {
+  println(foo(3))
+  println(goo(16.0))
+}

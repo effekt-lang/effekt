@@ -1,0 +1,99 @@
+module examples/pos/polymorphic_recursion/finger_tree
+
+// Ported from the historical `seq.effekt` blob
+// 0bb8d96ca3c21b1190f99659a12f7f66cbe84b83.
+
+type Digit[A] {
+  One(value: A)
+  Two(first: A, second: A)
+  Three(first: A, second: A, third: A)
+  Four(first: A, second: A, third: A, fourth: A)
+}
+
+type Node[A] {
+  Node2(first: A, second: A)
+  Node3(first: A, second: A, third: A)
+}
+
+type Seq[A] {
+  Empty()
+  Single(value: A)
+  Deep(prefix: Digit[A], middle: Seq[Node[A]], suffix: Digit[A])
+}
+
+type View[A] {
+  Nil()
+  Split(head: A, tail: Seq[A])
+}
+
+def toDigit[A](node: Node[A]): Digit[A] = node match {
+  case Node2(a, b) => Two(a, b)
+  case Node3(a, b, c) => Three(a, b, c)
+}
+
+def toSeq[A](digit: Digit[A]): Seq[A] = digit match {
+  case One(a) => Single(a)
+  case Two(a, b) => Deep(One(a), Empty(), One(b))
+  case Three(a, b, c) => Deep(Two(a, b), Empty(), One(c))
+  case Four(a, b, c, d) => Deep(Three(a, b, c), Empty(), One(d))
+}
+
+def pushLeft[A](head: A, tail: Seq[A]): Seq[A] = tail match {
+  case Empty() => Single(head)
+  case Single(b) => Deep(One(head), Empty(), One(b))
+  case Deep(One(b), middle, suffix) =>
+    Deep(Two(head, b), middle, suffix)
+  case Deep(Two(b, c), middle, suffix) =>
+    Deep(Three(head, b, c), middle, suffix)
+  case Deep(Three(b, c, d), middle, suffix) =>
+    Deep(Four(head, b, c, d), middle, suffix)
+  case Deep(Four(b, c, d, e), middle, suffix) =>
+    Deep(Two(head, b), pushLeft[Node[A]](Node3(c, d, e), middle), suffix)
+}
+
+def pushRight[A](init: Seq[A], last: A): Seq[A] = init match {
+  case Empty() => Single(last)
+  case Single(b) => Deep(One(b), Empty(), One(last))
+  case Deep(prefix, middle, One(b)) =>
+    Deep(prefix, middle, Two(b, last))
+  case Deep(prefix, middle, Two(b, c)) =>
+    Deep(prefix, middle, Three(b, c, last))
+  case Deep(prefix, middle, Three(b, c, d)) =>
+    Deep(prefix, middle, Four(b, c, d, last))
+  case Deep(prefix, middle, Four(b, c, d, e)) =>
+    Deep(prefix, pushRight[Node[A]](middle, Node3(b, c, d)), Two(e, last))
+}
+
+def uncons[A](seq: Seq[A]): View[A] = seq match {
+  case Empty() => Nil()
+  case Single(a) => Split(a, Empty())
+  case Deep(One(a), middle, suffix) => Split(a, uncons[Node[A]](middle) match {
+    case Nil() => toSeq(suffix)
+    case Split(node, rest) => Deep(toDigit(node), rest, suffix)
+  })
+  case Deep(Two(a, b), middle, suffix) =>
+    Split(a, Deep(One(b), middle, suffix))
+  case Deep(Three(a, b, c), middle, suffix) =>
+    Split(a, Deep(Two(b, c), middle, suffix))
+  case Deep(Four(a, b, c, d), middle, suffix) =>
+    Split(a, Deep(Three(b, c, d), middle, suffix))
+}
+
+def prependDownTo(n: Int, seq: Seq[Int]): Seq[Int] =
+  if (n == 0) seq
+  else prependDownTo(n - 1, pushLeft(n, seq))
+
+def appendUpTo(n: Int, limit: Int, seq: Seq[Int]): Seq[Int] =
+  if (n > limit) seq
+  else appendUpTo(n + 1, limit, pushRight(seq, n))
+
+def sum(seq: Seq[Int]): Int = uncons(seq) match {
+  case Nil() => 0
+  case Split(head, tail) => head + sum(tail)
+}
+
+def main() = {
+  val firstHalf = prependDownTo(10, Empty())
+  val all = appendUpTo(11, 20, firstHalf)
+  println(sum(all))
+}
