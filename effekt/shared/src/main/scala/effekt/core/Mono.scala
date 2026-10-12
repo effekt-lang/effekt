@@ -19,7 +19,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       val preprocessed = preprocess(Deadcode.remove(main, bound))
       val constraints = collect(preprocessed)
       val declarations = DeclarationContext(preprocessed.declarations, preprocessed.externs)
-      val erased = decycle(constraints)(using declarations)
+      val erased = erase(constraints)(using declarations)
       val solution = solve(erased.constraints)
       Some(CoreTransformed(source, tree, mod, specialize(preprocessed, solution, erased.rawTypes)))
   }
@@ -64,7 +64,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
     * `rawTypes`. Erasure is global per declaration: once `Box` is selected,
     * every `Box[T]` in the constraint system becomes raw `Box`.
     */
-  object decycle {
+  object erase {
     case class Result(constraints: Flows, rawTypes: Set[Id])
 
     private case class Edge(
