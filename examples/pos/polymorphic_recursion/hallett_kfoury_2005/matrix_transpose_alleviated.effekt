@@ -1,0 +1,38 @@
+module examples/pos/polymorphic_recursion/hallett_kfoury_2005/matrix_transpose_alleviated
+
+// Hallett and Kfoury (2005), Section 4.1.2: Matrix Transpose -- Alleviated.
+interface Fn[A, B] { def apply(value: A): B }
+
+def myMap[A, B](function: Fn[A, B] at {}, list: List[A]): List[B] = list match {
+  case Nil() => Nil()
+  case Cons(head, tail) => Cons((unbox function).apply(head), myMap(function, tail))
+}
+
+def firstColumn[A](matrix: List[List[A]]): List[A] =
+  myMap(box new Fn[List[A], A] {
+    def apply(row) = row match {
+      case Cons(value, _) => value
+      case Nil() => valueFromEmpty(row)
+    }
+  }, matrix)
+
+def valueFromEmpty[A](list: List[A]): A = valueFromEmpty(list)
+
+def remainingColumns[A](matrix: List[List[A]]): List[List[A]] =
+  myMap(box new Fn[List[A], List[A]] {
+    def apply(row) = row match {
+      case Cons(_, rest) => rest
+      case Nil() => Nil()
+    }
+  }, matrix)
+
+def transpose[A](matrix: List[List[A]]): List[List[A]] = matrix match {
+  case Nil() => Nil()
+  case Cons(Nil(), _) => Nil()
+  case Cons(Cons(_, _), _) => Cons(firstColumn(matrix), transpose(remainingColumns(matrix)))
+}
+
+def main() = {
+  transpose[Int]([[1, 2], [3, 4]])
+  println("transposed")
+}

@@ -1,0 +1,37 @@
+module examples/pos/polymorphic_recursion/hallett_kfoury_2005/construct_list
+
+// Hallett and Kfoury (2005), Section 6.1: Construct List.
+interface Length { def apply[A](list: List[A]): Int }
+
+def length[A](list: List[A]): Int = list match {
+  case Nil() => 0
+  case Cons(_, tail) => 1 + length(tail)
+}
+
+def listLength(): Length at {} = box new Length {
+  def apply[A](list) = length(list)
+}
+
+def flatten[A](lists: List[List[A]]): List[A] = lists match {
+  case Nil() => Nil()
+  case Cons(head, tail) => head.append(flatten(tail))
+}
+
+def dropFirst[A](list: List[A]): List[A] = list match {
+  case Nil() => Nil()
+  case Cons(_, tail) => tail
+}
+
+def constList[A](value: A, n: Int): List[A] =
+  if (n == 0) [value, value]
+  else Cons(value, dropFirst(flatten(
+    constList[List[A]](constList[A](value, n - 1), n - 1))))
+
+def applyCL(left: List[Int], right: List[Bool], measure: Length at {}): (List[List[Int]], List[List[Bool]]) =
+  (constList(left, (unbox measure).apply(left)),
+   constList(right, (unbox measure).apply(right)))
+
+def main() = {
+  val result = applyCL([1, 2, 3], [true, false, true], listLength())
+  println("constructed")
+}

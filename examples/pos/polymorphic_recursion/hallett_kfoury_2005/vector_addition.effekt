@@ -1,0 +1,37 @@
+module examples/pos/polymorphic_recursion/hallett_kfoury_2005/vector_addition
+
+// Hallett and Kfoury (2005), Section 4.2: Vector Addition.
+interface Fn[A, B] { def apply(value: A): B }
+interface Mapper { def applyMap[A, B](function: Fn[A, B] at {}, list: List[A]): List[B] }
+
+def myMap[A, B](function: Fn[A, B] at {}, list: List[A]): List[B] = list match {
+  case Nil() => Nil()
+  case Cons(head, tail) => Cons((unbox function).apply(head), myMap(function, tail))
+}
+
+def mapper(): Mapper at {} = box new Mapper {
+  def applyMap[A, B](function, list) = myMap(function, list)
+}
+
+def sum(list: List[Int]): Int = list match {
+  case Nil() => 0
+  case Cons(head, tail) => head + sum(tail)
+}
+
+def first(): Fn[List[Int], Int] at {} = box new Fn[List[Int], Int] {
+  def apply(list) = list match { case Cons(value, _) => value case Nil() => 0 }
+}
+
+def rest(): Fn[List[Int], List[Int]] at {} = box new Fn[List[Int], List[Int]] {
+  def apply(list) = list match { case Cons(_, tail) => tail case Nil() => Nil() }
+}
+
+def addVectors(mapping: Mapper at {}, vectors: List[List[Int]]): List[Int] = vectors match {
+  case Nil() => Nil()
+  case Cons(Nil(), _) => Nil()
+  case Cons(Cons(_, _), _) => Cons(
+    sum((unbox mapping).applyMap(first(), vectors)),
+    addVectors(mapping, (unbox mapping).applyMap(rest(), vectors)))
+}
+
+def main() = println(addVectors(mapper(), [[1, 2, 3], [4, 5, 6]]))

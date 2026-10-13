@@ -1,0 +1,14 @@
+module examples/pos/polymorphic_recursion/type_splitting
+
+type Box[A] {
+  Wrap(value: A)
+}
+
+def nest[A](value: A, depth: Int): Int =
+  if (depth == 0) 0
+  else 1 + nest[Box[A]](Wrap(value), depth - 1)
+
+def main() = {
+  val value: Box[Int] = Wrap(1)
+  println(nest[Box[Int]](value, 3))
+}

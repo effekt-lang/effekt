@@ -1,0 +1,28 @@
+module examples/pos/polymorphic_recursion/hallett_kfoury_2005/isomorphic_compositions
+
+// Hallett and Kfoury (2005), Section 3.4: Isomorphic Compositions.
+interface Fn[A, B] { def apply(value: A): B }
+
+def compose[A, B, C](after: Fn[B, C] at {}, before: Fn[A, B] at {}): Fn[A, C] at {} =
+  box new Fn[A, C] {
+    def apply(value) = (unbox after).apply((unbox before).apply(value))
+  }
+
+def singleton[A](): Fn[A, List[A]] at {} = box new Fn[A, List[A]] {
+  def apply(value) = [value]
+}
+
+def head[A](): Fn[List[A], A] at {} = box new Fn[List[A], A] {
+  def apply(list) = list match {
+    case Cons(value, _) => value
+    case Nil() => (unbox head[A]()).apply(list)
+  }
+}
+
+def appComp(value: Int, list: List[Int]): Bool = {
+  val left = compose(head[Int](), singleton[Int]())
+  val right = compose(singleton[Int](), head[Int]())
+  (unbox left).apply(value) == (unbox head[Int]()).apply((unbox right).apply(list))
+}
+
+def main() = println(appComp(5, [5]))

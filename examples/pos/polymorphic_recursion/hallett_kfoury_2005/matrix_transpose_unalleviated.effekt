@@ -1,0 +1,41 @@
+module examples/pos/polymorphic_recursion/hallett_kfoury_2005/matrix_transpose_unalleviated
+
+// Hallett and Kfoury (2005), Section 4.1.1: Matrix Transpose -- Unalleviated.
+interface Fn[A, B] { def apply(value: A): B }
+interface Mapper { def applyMap[A, B](function: Fn[A, B] at {}, list: List[A]): List[B] }
+
+def myMap[A, B](function: Fn[A, B] at {}, list: List[A]): List[B] = list match {
+  case Nil() => Nil()
+  case Cons(head, tail) => Cons((unbox function).apply(head), myMap(function, tail))
+}
+
+def mapper(): Mapper at {} = box new Mapper {
+  def applyMap[A, B](function, list) = myMap(function, list)
+}
+
+def first[A](): Fn[List[A], A] at {} = box new Fn[List[A], A] {
+  def apply(list) = list match {
+    case Cons(value, _) => value
+    case Nil() => (unbox first[A]()).apply(list)
+  }
+}
+
+def rest[A](): Fn[List[A], List[A]] at {} = box new Fn[List[A], List[A]] {
+  def apply(list) = list match {
+    case Cons(_, tail) => tail
+    case Nil() => Nil()
+  }
+}
+
+def transpose[A](mapping: Mapper at {}, matrix: List[List[A]]): List[List[A]] = matrix match {
+  case Nil() => Nil()
+  case Cons(Nil(), _) => Nil()
+  case Cons(Cons(_, _), _) => Cons(
+    (unbox mapping).applyMap(first[A](), matrix),
+    transpose(mapping, (unbox mapping).applyMap(rest[A](), matrix)))
+}
+
+def main() = {
+  transpose[Int](mapper(), [[1, 2], [3, 4]])
+  println("transposed")
+}

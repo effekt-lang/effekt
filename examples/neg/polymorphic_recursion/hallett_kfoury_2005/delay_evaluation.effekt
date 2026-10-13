@@ -1,0 +1,15 @@
+module examples/neg/polymorphic_recursion/hallett_kfoury_2005/delay_evaluation
+
+// Hallett and Kfoury (2005), Section 7.1: Delay Evaluation.
+// This program is intentionally ill typed, as in the paper.
+interface Thunk[A] { def force(): A }
+
+def delay[A](value: A): Thunk[A] at {} = box new Thunk[A] {
+  def force() = value
+}
+
+def nDelays[A](n: Int, value: A): A =
+  if (n == 0) value
+  else nDelays[Thunk[A] at {}](n - 1, delay(value)) // ERROR Expected A but got Thunk[A]
+
+def main() = nDelays[Int](3, 1)
