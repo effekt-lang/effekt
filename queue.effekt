@@ -15,13 +15,18 @@ extern llvm """
     declare %Stack @c_message_continuation(%Pos)
 
     declare %Pos @c_actor_new(%Pos)
-    declare %Pos @c_actor_start(%Pos, %Stack)
+    declare %Pos @c_actor_start(%Pos, %Pos, %Pos, %Stack)
     declare void @c_actor_inspect_queue(%Pos)
     declare void @c_inspect_rc(%Pos)
     declare void @c_actor_share(%Pos)
     declare void @c_actor_erase(%Pos)
     declare void @c_thread_start(%Neg)
     declare void @c_thread_join(%Pos)
+
+    declare void @c_actor_rc_share(%Pos)
+    declare void @c_actor_rc_erase(%Pos)
+
+    declare void @c_dbg(%Int)
 
     declare void @sleep(i64)
 
@@ -109,33 +114,46 @@ extern def newActor(name: String): Actor = llvm """
 
 extern def inspectActor(actor: Actor): Unit = llvm """
   call void @c_actor_inspect_queue(%Pos ${actor})
+  call void @erasePositive(%Pos ${actor})
   ret %Pos zeroinitializer
 """
 
-extern def startActor(actor: Actor) at async: Unit = llvm """
-  call void @c_actor_start(%Pos ${actor}, %Stack %stack)
+extern def startActor(actor: Actor, handle: (Int) => Unit at {io, async}, handlers: List[Actor]) at async: Unit = llvm """
+  call void @c_actor_start(%Pos ${actor}, %Pos ${handle}, %Pos ${handlers}, %Stack %stack)
+  call void @erasePositive(%Pos ${actor})
   ret void
 """
 
 // TODO: Debug function, remove later
 extern def inspectRC(actor: Actor): Unit = llvm """
   call void @c_inspect_rc(%Pos ${actor})
+  call void @erasePositive(%Pos ${actor})
   ret %Pos zeroinitializer
 """
 
-def actorThreadStart(actor: Actor, handlers: List[Actor]) { f: () => Unit }: ThreadObject = {
+def actorThreadStart(actor: Actor, handle: (Int) => Unit at {io, async}, handlers: List[Actor]) { f: () => Unit }: ThreadObject = {
   startThread {
     // Handlers are other Actors that might receive "effects" from this actor  
     // increase RC for those Actors, so they don't terminate prematurely 
-    handlers.foreach { a => shareActor(a) }
+    handlers.foreach { a => shareRCActor(a) }
     // Starts eagerly checking messages for the actor 
-    // async, will resume back to "f" while putting the message loop next on the c-stack
-    startActor(actor)
+    // async, will resume back to "handle" while putting the message loop next on the c-stack
+    // 
+    // re-box "handle" to correctly keep track of RC, because "handle" might be bidirectional
+    def reHandle(i: Int) = {
+      shareRCActor(actor)
+      handlers.foreach { a => shareRCActor(a) }
+      handle(i)
+      handlers.foreach { a => eraseRCActor(a) }
+      eraseRCActor(actor)
+    } 
+    // Starts the actor message loop, will then jump back to after this line
+    startActor(actor, box reHandle, handlers)
     // Code the actor should run
     f()
     // Erase the actor and all handlers after the actor is done with its work
-    eraseActor(actor)
-    handlers.foreach { a => eraseActor(a) }
+    eraseRCActor(actor)
+    handlers.foreach { a => eraseRCActor(a) }
   }
 }
 
@@ -164,6 +182,18 @@ extern def shareActor(actor: Actor): Unit = llvm """
   ret %Pos zeroinitializer
 """
 
+extern def shareRCActor(actor: Actor): Unit = llvm """
+  call void @c_actor_rc_share(%Pos ${actor})
+  call void @erasePositive(%Pos ${actor})
+  ret %Pos zeroinitializer
+"""
+
+extern def eraseRCActor(actor: Actor): Unit = llvm """
+  call void @c_actor_rc_erase(%Pos ${actor})
+  call void @erasePositive(%Pos ${actor})
+  ret %Pos zeroinitializer
+"""
+
 extern def test(v: Int) { f: Int => Int } at async: Int = llvm """
   %vtable = extractvalue %Neg ${f}, 0
   %closure = extractvalue %Neg ${f}, 1
@@ -176,36 +206,32 @@ extern def test(v: Int) { f: Int => Int } at async: Int = llvm """
 """
 
 def main() = {
-  val handler = newActor("Handler")
-  val emitter = newActor("Emitter 1")
-  val emitter2 = newActor("Emitter 2")
+  // val handler = newActor("Handler")
+  // val handler2 = newActor("Handler 2")
+  // val emitter = newActor("Emitter 1")
+  // val emitter2 = newActor("Emitter 2")
 
-  val t1 = actorThreadStart(handler, []) {}
 
-  val t2 = actorThreadStart(emitter, [handler]) {
-    for { range(1, 10000) } { i => emitter.sendEmit(i, handler) }
-  }
+  // def handle(name: String, i: Int) = {
+  //   println(name ++ " from effekt " ++ i.show)
+  // }
+  // def noop(i: Int) = ()
 
-  val t3 = actorThreadStart(emitter2, [handler]) {
-    for { range(10000, 20000) } { i => emitter.sendEmit(i, handler) }
-  }
+  // val t1 = actorThreadStart(handler, box { i => handle("Handler", i) }, []) { sleep(1) }
+  // val h2 = actorThreadStart(handler2, box { i => handle("Handler 2", i) }, []) {}
 
-  joinThread(t1)
-  joinThread(t2)
-  joinThread(t3)
-  
-  // *********
-  // New stuff
-  // *********
-  
-  // val t1 = st1(fakeInt(10))
-  // val t2 = st2(fakeInt(42))
+  // val t2 = actorThreadStart(emitter, box noop, [handler]) {
+  //   for { range(1, 10) } { i => emitter.sendEmit(i, handler) }
+  // }
 
-  // println("Hello from main")
+  // val t3 = actorThreadStart(emitter2, box noop, [handler2]) {
+  //   for { range(10, 20) } { i => emitter.sendEmit(i, handler2) }
+  // }
+
   // joinThread(t1)
   // joinThread(t2)
-  // println("Threads joined")
-  
+  // joinThread(t3)
+  // joinThread(h2)
   
   // ************************
   // Reference counting tests
@@ -214,14 +240,48 @@ def main() = {
   // val a1 = newActor("A1")
   // val a2 = newActor("A2")
   
-  // val t1 = actorThreadStart(a1, [a2]) {
+  // val t1 = actorThreadStart(a1, box { _ => () }, [a2]) {
+  //   println("Start A1")
   //   sleep(1)
+  //   println("End A1")
   // }
 
-  // val t2 = actorThreadStart(a2, [a1]) {
-  //   sleep(2)
+  // val t2 = actorThreadStart(a2, box { _ => () }, [a1]) {
+  //   println("Start A2")
+  //   sleep(3)
+  //   println("End A2")
   // }
 
   // joinThread(t1)
   // joinThread(t2)
+  
+  // ************************
+  // Bidirectional actors
+  // ************************
+  
+  val a1 = newActor("A1")
+  val a2 = newActor("A2")
+
+  // with emit { i => ... }
+  def a1HandleEmit(i: Int) = {
+    println("A1 got " ++ i.show)
+  }
+  val t1 = actorThreadStart(a1, box a1HandleEmit, [a2]) { 
+    a1.sendEmit(1, a2) // do emit(1)    (with A2 as handler)
+    a1.sendEmit(2, a2) // do emit(2)
+    a1.sendEmit(3, a2) // do emit(3)
+    println("A1 done")
+  }
+  // with emit { i => ... }
+  def a2HandleEmit(i: Int) = {
+    println("A2 got " ++ i.show)
+    a2.sendEmit(i + 3, a1) // with emit { i => do emit(i + 3) }     (with A1 as handler)
+    a2.sendEmit(42, a1)
+  }
+  val t2 = actorThreadStart(a2, box a2HandleEmit, [a1]) {
+    println("A2 done")
+  }
+
+  joinThread(t1)
+  joinThread(t2)
 }

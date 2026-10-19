@@ -7,6 +7,7 @@
 
 enum MessageType {
     // "Special messages"
+    TERMINATE = -2,
     RESUME = -1,
     // Effects
     EMIT,
@@ -25,6 +26,8 @@ struct Actor {
     struct MessageQueue* queue;
     pthread_cond_t signal;
     pthread_mutex_t signal_mutex;
+    // store a custom RC for actors, based on if they are finished and any dependent actors
+    long reference_count;
 };
 typedef struct Actor actor_t;
 
@@ -47,7 +50,7 @@ void c_queue_free(struct MessageQueue* queue) {
 }
 
 void c_actor_free(void* actorPtr) {
-    // printf("Freeing actor: %p\n", actorPtr);
+    printf("Freeing actor: %p\n", actorPtr);
     struct Actor* actor = actorPtr;
     c_queue_free(actor->queue);
     free(actor->queue);
@@ -72,6 +75,8 @@ struct Actor c_actor_allocate() {
         .queue = c_queue_allocate(),
         .signal = PTHREAD_COND_INITIALIZER,
         .signal_mutex = PTHREAD_MUTEX_INITIALIZER,
+        // start off reference count at one, because this actor has not yet finished
+        .reference_count = 1,
     };
 }
 
@@ -93,8 +98,8 @@ struct Pos c_actor_new(struct Pos name) {
     printf("New actor '%s': %p\n", cname, objPtr);
     free(cname);
     struct Pos wrapped = (struct Pos) {
-      .tag = 0,
-      .obj = wrap_alloc,
+        .tag = 0, 
+        .obj = wrap_alloc,
     };
     return wrapped;
 }
@@ -130,6 +135,13 @@ struct MessageData c_message_effect(struct Pos reply_to, long effect, long messa
 }
 
 struct MessageData c_message_resume(Stack stack) {
+    return (struct MessageData) {
+        .tag = RESUME,
+        .continuation = stack,
+    };
+}
+
+struct MessageData c_message_terminate(Stack stack) {
     return (struct MessageData) {
         .tag = RESUME,
         .continuation = stack,
@@ -190,13 +202,28 @@ struct Actor* c_actor(struct Pos pos) {
 void c_queue_send_emit(struct Pos reply_to, long value, struct Pos handler_pos, Stack cont) {
     struct Actor* handler = c_actor(handler_pos);
     struct MessageData message = c_message_effect(reply_to, EMIT, value, cont);
+    // printf("Send emit: %ld, %p\n", value, cont);
     c_queue_unsafeEnqueue(handler->queue, c_message_wrap(message));
 }
 
 void c_queue_send_resume(struct Pos emitter_pos, Stack cont) {
     struct Actor* emitter = c_actor(emitter_pos);
     struct MessageData message = c_message_resume(cont);
+    // printf("Send resume: %p\n", cont);
     c_queue_unsafeEnqueue(emitter->queue, c_message_wrap(message));
+}
+
+void c_queue_send_terminate(struct Pos emitter_pos, Stack cont) {
+    struct Actor* emitter = c_actor(emitter_pos);
+    struct MessageData message = c_message_terminate(cont);
+    c_queue_unsafeEnqueue(emitter->queue, c_message_wrap(message)); 
+}
+
+void c_inspect_rc(struct Pos pos) {
+    struct Header* header = pos.obj;
+    struct Actor* actor = c_actor(pos);
+    printf("RC: %ld\n", header->rc);
+    printf("Custom RC: %ld\n", actor->reference_count);
 }
 
 void c_actor_share(struct Pos actor_pos) {
@@ -225,6 +252,26 @@ void c_actor_erase(struct Pos actor_pos) {
     pthread_mutex_unlock(&actor->queue->mutex);
 }
 
+void c_actor_rc_share(struct Pos actor_pos) {
+    struct Actor* actor = c_actor(actor_pos);
+
+    pthread_mutex_lock(&actor->queue->mutex);
+
+    actor->reference_count += 1;
+
+    pthread_mutex_unlock(&actor->queue->mutex);
+}
+
+void c_actor_rc_erase(struct Pos actor_pos) {
+    struct Actor* actor = c_actor(actor_pos);
+
+    pthread_mutex_lock(&actor->queue->mutex);
+
+    actor->reference_count -= 1;
+
+    pthread_mutex_unlock(&actor->queue->mutex);
+}
+
 void c_actor_inspect_queue(struct Pos actor_pos) {
     struct Actor* actor = c_actor(actor_pos);
 
@@ -242,21 +289,26 @@ void c_actor_inspect_queue(struct Pos actor_pos) {
     pthread_mutex_unlock(&actor->queue->mutex);
 }
 
-void c_inspect_rc(struct Pos pos) {
-    struct Header* header = pos.obj;
-    printf("RC: %ld\n", header->rc);
+void c_dbg(Int value) {
+    printf("%ld\n", value);
 }
 
-void c_actor_start(struct Pos actor_pos, Stack stack) {
-    struct Actor* actor = actor_pos.obj + sizeof(struct Header);
+void c_actor_start(struct Pos actor_pos, struct Pos handle, struct Pos handlers, Stack stack) {
+    struct Actor* actor = c_actor(actor_pos);
     // printf("Starting actor\n");
     resume_Pos(stack, Unit);
     while (true) {
-        struct Header* header = actor_pos.obj;
-        if (header->rc == 0) {
+        if (actor->reference_count == 0 && c_queue_isEmpty(actor->queue)) {
+            // if custom ref count is 0 the actor should be ready to terminate
+            // force free actor and pos, queue should also be empty
+            if (!c_queue_isEmpty(actor->queue)) {
+                printf("Actor out of references, but has queue\n");
+            }
+            erasePositive(handlers);
             erasePositive(actor_pos);
+            erasePositive(handle);
             return;
-        }
+        } 
         if (!c_queue_isEmpty(actor->queue)) {
             struct Pos message_pos = c_queue_unsafePop(actor->queue);
             struct MessageData* messagePtr = message_pos.obj + sizeof(struct Header);
@@ -264,12 +316,16 @@ void c_actor_start(struct Pos actor_pos, Stack stack) {
             erasePositive(message_pos);
             switch(message.tag) {
                 case RESUME:
-                    // printf("Resuming\n");
                     resume_Int(message.continuation, message.message);
                     continue;
+                case TERMINATE:
+                    c_actor_erase(actor_pos);
+                    return;
                 case EMIT:
                     // Handler things
-                    printf("Emit: %ld\n", message.message);
+                    // printf("Emit: %ld\n", message.message);
+                    sharePositive(handle);
+                    run_Int(handle, message.message);
                     // Resume
                     c_queue_send_resume(message.reply_to, message.continuation);
                     continue;
